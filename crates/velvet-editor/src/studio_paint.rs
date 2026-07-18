@@ -6,7 +6,19 @@
 use velvet_document::DesignerWidget;
 use velvet_story::{draw_text_line, fill_rect, pack_rgb};
 
-use crate::layers::{DesignSurface, LayerTreeRow, ScreenLayer};
+use crate::layers::{DesignSurface, LayerEdge, LayerTreeRow, ScreenLayer};
+use crate::vscript::{api_catalog, classify_line, SyntaxKind};
+
+/// Which center surface to paint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaintMode {
+    /// 1 Visual canvas.
+    Visual,
+    /// 2 VScript editor.
+    Script,
+    /// 3 Layer nodes graph.
+    Nodes,
+}
 
 /// Map design base scale (1 body / 2 title) through user UI zoom (1..=4).
 #[inline]
@@ -236,8 +248,13 @@ impl StudioLayout {
         x >= 0 && x < self.left_w && y >= self.top_h && y < self.wh - self.bot_h
     }
 
+    fn pill_w_scaled(&self) -> i32 {
+        (self.pill_w as f32 * 0.85).round() as i32
+    }
+
     fn toolbar_pill_x(&self) -> i32 {
-        self.ww - (self.pill_w * 2 + self.save_w + self.pad * 4 + 16)
+        let pw = self.pill_w_scaled();
+        self.ww - (pw * 3 + self.save_w + self.pad * 5 + 8)
     }
 
     /// Hit test toolbar mode pills / save. Returns action id.
@@ -250,17 +267,43 @@ impl StudioLayout {
             return None;
         }
         let pill_x = self.toolbar_pill_x();
+        let pw = self.pill_w_scaled();
         let gap = self.pad;
-        if x >= pill_x && x < pill_x + self.pill_w {
+        if x >= pill_x && x < pill_x + pw {
             return Some("mode_visual");
         }
-        let x2 = pill_x + self.pill_w + gap;
-        if x >= x2 && x < x2 + self.pill_w {
+        let x2 = pill_x + pw + gap;
+        if x >= x2 && x < x2 + pw {
             return Some("mode_script");
         }
-        let x3 = x2 + self.pill_w + gap;
-        if x >= x3 && x < x3 + self.save_w {
+        let x3 = x2 + pw + gap;
+        if x >= x3 && x < x3 + pw {
+            return Some("mode_nodes");
+        }
+        let x4 = x3 + pw + gap;
+        if x >= x4 && x < x4 + self.save_w {
             return Some("save");
+        }
+        None
+    }
+
+    /// Hit a graph node in Nodes mode (percent layout → screen via design surface full canvas).
+    pub fn hit_graph_node(
+        &self,
+        sx: f64,
+        sy: f64,
+        layout_nodes: &[(String, f32, f32)],
+    ) -> Option<String> {
+        let nw = 90 + 10 * self.zoom;
+        let nh = 36 + 8 * self.zoom;
+        for (id, px, py) in layout_nodes {
+            let x0 = self.canvas_x + ((*px / 100.0) * self.canvas_w as f32) as i32 - nw / 2;
+            let y0 = self.canvas_y + ((*py / 100.0) * self.canvas_h as f32) as i32 - nh / 2;
+            let x = sx as i32;
+            let y = sy as i32;
+            if x >= x0 && x < x0 + nw && y >= y0 && y < y0 + nh {
+                return Some(id.clone());
+            }
         }
         None
     }
@@ -467,6 +510,7 @@ fn draw_pill(
 pub struct LayerPaintView<'a> {
     pub layers: &'a [ScreenLayer],
     pub tree_rows: &'a [LayerTreeRow],
+    pub edges: &'a [LayerEdge],
     pub active_id: &'a str,
     pub breadcrumb: &'a str,
     pub res_w: f32,
@@ -474,13 +518,17 @@ pub struct LayerPaintView<'a> {
     pub animating: bool,
     pub editable: bool,
     pub pos_px: Option<(i32, i32)>,
+    pub connect_from: Option<&'a str>,
+    pub script_cursor_line: usize,
+    pub script_issues: &'a [String],
+    pub node_layout: &'a [(String, f32, f32)],
 }
 
 /// Paint full Studio chrome + simplified widgets or advanced script.
 pub fn paint_studio(
     buf: &mut [u32],
     layout: &StudioLayout,
-    mode_simplified: bool,
+    mode: PaintMode,
     project_name: &str,
     selected: Option<&str>,
     widgets: &[DesignerWidget],
@@ -492,6 +540,7 @@ pub fn paint_studio(
     ui_zoom: i32,
     layers: &LayerPaintView<'_>,
 ) {
+    let _mode = mode;
     let ww = layout.ww as u32;
     let wh = layout.wh as u32;
     let lay = *layout;
@@ -546,8 +595,9 @@ pub fn paint_studio(
         zoom,
     );
 
-    // Mode pills + Save (scaled)
-    let pill_x = lay.toolbar_pill_x();
+    // Mode pills + Save (1 Visual · 2 Script · 3 Nodes)
+    let pill_w = (lay.pill_w as f32 * 0.85).round() as i32;
+    let pill_x = lay.ww - (pill_w * 3 + lay.save_w + lay.pad * 5 + 8);
     let pill_y = (lay.top_h - lay.pill_h) / 2;
     draw_pill(
         buf,
@@ -555,26 +605,39 @@ pub fn paint_studio(
         wh,
         pill_x,
         pill_y,
-        pill_x + lay.pill_w,
+        pill_x + pill_w,
         pill_y + lay.pill_h,
-        mode_simplified,
-        "1 Visual",
+        mode == PaintMode::Visual,
+        "1 Vis",
         zoom,
     );
-    let pill2 = pill_x + lay.pill_w + lay.pad;
+    let pill2 = pill_x + pill_w + lay.pad;
     draw_pill(
         buf,
         ww,
         wh,
         pill2,
         pill_y,
-        pill2 + lay.pill_w,
+        pill2 + pill_w,
         pill_y + lay.pill_h,
-        !mode_simplified,
-        "2 Script",
+        mode == PaintMode::Script,
+        "2 Scr",
         zoom,
     );
-    let save_x = pill2 + lay.pill_w + lay.pad;
+    let pill3 = pill2 + pill_w + lay.pad;
+    draw_pill(
+        buf,
+        ww,
+        wh,
+        pill3,
+        pill_y,
+        pill3 + pill_w,
+        pill_y + lay.pill_h,
+        mode == PaintMode::Nodes,
+        "3 Nod",
+        zoom,
+    );
+    let save_x = pill3 + pill_w + lay.pad;
     fill_rect(
         buf,
         ww,
@@ -1333,7 +1396,7 @@ pub fn paint_studio(
         c_canvas(),
     );
 
-    if mode_simplified {
+    if mode == PaintMode::Visual {
         // Grid on design surface
         let step_x = (surface.w / 10).max(16);
         let mut gx = surface.x + step_x;
@@ -1568,73 +1631,282 @@ pub fn paint_studio(
                 zoom,
             );
         }
-    } else {
-        // Advanced script view
+    } else if mode == PaintMode::Script {
+        // VScript editor — full document + API strip
         fill_rect(
             buf,
             ww,
             wh,
-            lay.canvas_x + 6,
-            lay.canvas_y + 6,
-            lay.canvas_x + lay.canvas_w - 6,
-            lay.canvas_y + lay.canvas_h - 6,
+            lay.canvas_x + 4,
+            lay.canvas_y + 4,
+            lay.canvas_x + lay.canvas_w - 4,
+            lay.canvas_y + lay.canvas_h - 4,
             pack_rgb(10, 12, 18),
         );
         txt(
             buf,
             ww,
             wh,
-            lay.canvas_x + 14,
-            lay.canvas_y + 14,
-            "ADVANCED SCRIPT  —  same file, visual regions protected",
-            pack_rgb(100, 190, 140),
-            1, zoom,
+            lay.canvas_x + 12,
+            lay.canvas_y + 8,
+            "VSCRIPT  layer/button/game/scene  |  F2 validate  F3-F8 insert API",
+            pack_rgb(120, 220, 160),
+            1,
+            zoom,
         );
-        // gutter
+        let line_h = 10 + 6 * zoom;
+        let gutter_w = 28 + 8 * zoom;
         fill_rect(
             buf,
             ww,
             wh,
-            lay.canvas_x + 6,
-            lay.canvas_y + 36,
-            lay.canvas_x + 48,
-            lay.canvas_y + lay.canvas_h - 6,
+            lay.canvas_x + 4,
+            lay.canvas_y + 22 + 4 * zoom,
+            lay.canvas_x + 4 + gutter_w,
+            lay.canvas_y + lay.canvas_h - 4,
             pack_rgb(16, 18, 28),
         );
-        let max_lines = ((lay.canvas_h - 52) / 16).max(4) as usize;
+        let max_lines = ((lay.canvas_h - 40 - 8 * zoom) / line_h).max(4) as usize;
+        let api_h = 14 + 10 * zoom;
+        let text_bottom = lay.canvas_y + lay.canvas_h - 4 - api_h;
         for (i, line) in advanced_src.lines().take(max_lines).enumerate() {
+            let y = lay.canvas_y + 28 + 4 * zoom + i as i32 * line_h;
+            if y + line_h > text_bottom {
+                break;
+            }
             let ln = i + 1;
+            let is_cur = i == layers.script_cursor_line;
+            if is_cur {
+                fill_rect(
+                    buf,
+                    ww,
+                    wh,
+                    lay.canvas_x + 4 + gutter_w,
+                    y - 1,
+                    lay.canvas_x + lay.canvas_w - 4,
+                    y + line_h - 2,
+                    pack_rgb(30, 40, 60),
+                );
+            }
             txt(
                 buf,
                 ww,
                 wh,
-                lay.canvas_x + 14,
-                lay.canvas_y + 42 + i as i32 * 16,
+                lay.canvas_x + 8,
+                y,
                 &format!("{ln:>3}"),
-                c_text_dim(),
-                1, zoom,
+                if is_cur {
+                    c_cta_hi()
+                } else {
+                    c_text_dim()
+                },
+                1,
+                zoom,
             );
-            let muted = line.trim_start().starts_with("// @");
-            let col = if muted {
-                pack_rgb(110, 140, 200)
-            } else if line.contains("game.") || line.contains("scene.") {
-                pack_rgb(190, 150, 255)
-            } else if line.contains("text:") {
-                pack_rgb(180, 220, 160)
-            } else {
-                pack_rgb(170, 200, 175)
+            let kind = classify_line(line);
+            let col = match kind {
+                SyntaxKind::Comment => pack_rgb(120, 150, 200),
+                SyntaxKind::Keyword => pack_rgb(200, 160, 255),
+                SyntaxKind::Flow => pack_rgb(120, 220, 200),
+                SyntaxKind::String => pack_rgb(180, 220, 160),
+                SyntaxKind::Normal => pack_rgb(200, 210, 220),
             };
-            let clipped: String = line.chars().take(70).collect();
+            let max_c = lay.max_chars_in(lay.canvas_w - gutter_w - 24);
             txt(
                 buf,
                 ww,
                 wh,
-                lay.canvas_x + 56,
-                lay.canvas_y + 42 + i as i32 * 16,
-                &clipped,
+                lay.canvas_x + 8 + gutter_w,
+                y,
+                &line.chars().take(max_c).collect::<String>(),
                 col,
-                1, zoom,
+                1,
+                zoom,
             );
         }
+        // issues
+        if let Some(iss) = layers.script_issues.first() {
+            txt(
+                buf,
+                ww,
+                wh,
+                lay.canvas_x + 12,
+                text_bottom - line_h,
+                &format!("! {iss}").chars().take(60).collect::<String>(),
+                pack_rgb(255, 140, 120),
+                1,
+                zoom,
+            );
+        }
+        // API catalog strip
+        fill_rect(
+            buf,
+            ww,
+            wh,
+            lay.canvas_x + 4,
+            text_bottom,
+            lay.canvas_x + lay.canvas_w - 4,
+            lay.canvas_y + lay.canvas_h - 4,
+            pack_rgb(22, 28, 40),
+        );
+        let mut ax = lay.canvas_x + 10;
+        let ay = text_bottom + 4;
+        txt(buf, ww, wh, ax, ay, "API", c_text_dim(), 1, zoom);
+        ax += 28;
+        for (i, (cat, snip, _desc)) in api_catalog().iter().take(8).enumerate() {
+            let short: String = snip.chars().take(14).collect();
+            let label = format!("F{}:{cat}", i + 3);
+            txt(
+                buf,
+                ww,
+                wh,
+                ax,
+                ay,
+                &label,
+                pack_rgb(160, 200, 255),
+                1,
+                zoom,
+            );
+            ax += (label.len() as i32 + 2) * 6 * zoom;
+            let _ = short;
+            if ax > lay.canvas_x + lay.canvas_w - 80 {
+                break;
+            }
+        }
+    } else {
+        // Nodes mode — layer graph
+        fill_rect(
+            buf,
+            ww,
+            wh,
+            lay.canvas_x,
+            lay.canvas_y,
+            lay.canvas_x + lay.canvas_w,
+            lay.canvas_y + lay.canvas_h,
+            pack_rgb(14, 16, 24),
+        );
+        txt(
+            buf,
+            ww,
+            wh,
+            lay.canvas_x + 12,
+            lay.canvas_y + 8,
+            "NODES  click A then B to connect layers  |  Enter open layer  |  Del edge",
+            c_text(),
+            1,
+            zoom,
+        );
+        if let Some(from) = layers.connect_from {
+            txt(
+                buf,
+                ww,
+                wh,
+                lay.canvas_x + 12,
+                lay.canvas_y + 20 + 4 * zoom,
+                &format!("connecting from: {from}"),
+                c_cta_hi(),
+                1,
+                zoom,
+            );
+        }
+        let nw = 90 + 10 * zoom;
+        let nh = 36 + 8 * zoom;
+        // edges first
+        for e in layers.edges {
+            let a = layers.node_layout.iter().find(|(id, _, _)| id == &e.from);
+            let b = layers.node_layout.iter().find(|(id, _, _)| id == &e.to);
+            if let (Some((_, ax, ay)), Some((_, bx, by))) = (a, b) {
+                let x0 = lay.canvas_x + ((*ax / 100.0) * lay.canvas_w as f32) as i32;
+                let y0 = lay.canvas_y + ((*ay / 100.0) * lay.canvas_h as f32) as i32;
+                let x1 = lay.canvas_x + ((*bx / 100.0) * lay.canvas_w as f32) as i32;
+                let y1 = lay.canvas_y + ((*by / 100.0) * lay.canvas_h as f32) as i32;
+                // simple polyline (axis-aligned mid)
+                let mx = (x0 + x1) / 2;
+                fill_rect(buf, ww, wh, x0.min(mx), y0, x0.max(mx) + 1, y0 + 2, pack_rgb(90, 140, 200));
+                fill_rect(buf, ww, wh, mx, y0.min(y1), mx + 2, y0.max(y1) + 1, pack_rgb(90, 140, 200));
+                fill_rect(buf, ww, wh, mx.min(x1), y1, mx.max(x1) + 1, y1 + 2, pack_rgb(90, 140, 200));
+                if let Some(ref lab) = e.label {
+                    txt(
+                        buf,
+                        ww,
+                        wh,
+                        mx + 4,
+                        (y0 + y1) / 2 - 4,
+                        &lab.chars().take(12).collect::<String>(),
+                        c_text_muted(),
+                        1,
+                        zoom,
+                    );
+                }
+            }
+        }
+        for (id, px, py) in layers.node_layout {
+            let x0 = lay.canvas_x + ((*px / 100.0) * lay.canvas_w as f32) as i32 - nw / 2;
+            let y0 = lay.canvas_y + ((*py / 100.0) * lay.canvas_h as f32) as i32 - nh / 2;
+            let active = id == layers.active_id;
+            let from = layers.connect_from == Some(id.as_str());
+            let fill = if from {
+                pack_rgb(60, 100, 70)
+            } else if active {
+                pack_rgb(50, 70, 120)
+            } else {
+                pack_rgb(36, 42, 58)
+            };
+            fill_rect(buf, ww, wh, x0, y0, x0 + nw, y0 + nh, fill);
+            rect_outline(
+                buf,
+                ww,
+                wh,
+                x0,
+                y0,
+                x0 + nw,
+                y0 + nh,
+                if from || active {
+                    c_cta_hi()
+                } else {
+                    c_border()
+                },
+                2,
+            );
+            let layer = layers.layers.iter().find(|l| l.id == *id);
+            let name = layer.map(|l| l.name.as_str()).unwrap_or(id.as_str());
+            let res = layer
+                .map(|l| format!("{}x{}", l.width_px, l.height_px))
+                .unwrap_or_default();
+            txt(
+                buf,
+                ww,
+                wh,
+                x0 + 6,
+                y0 + 4,
+                &name.chars().take(12).collect::<String>(),
+                c_text(),
+                1,
+                zoom,
+            );
+            txt(
+                buf,
+                ww,
+                wh,
+                x0 + 6,
+                y0 + 4 + 10 * zoom,
+                &res,
+                c_text_dim(),
+                1,
+                zoom,
+            );
+        }
+        // edge count
+        txt(
+            buf,
+            ww,
+            wh,
+            lay.canvas_x + 12,
+            lay.canvas_y + lay.canvas_h - 16 - 4 * zoom,
+            &format!("{} edges  |  script: layer.open / button.press", layers.edges.len()),
+            c_text_muted(),
+            1,
+            zoom,
+        );
     }
 }
