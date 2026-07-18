@@ -1,0 +1,22 @@
+(
+    name: "Top-Down RPG Template",
+    identifier: "com.velvet.template_top_down_rpg",
+    version: "0.1.0",
+    modules: [
+        "play",
+        "rpg",
+        "story",
+    ],
+    entry_scene: "scripts/main.vel",
+    window: (
+        title: "Top-Down RPG Template",
+        width: 1280,
+        height: 720,
+        virtual_width: 1280,
+        virtual_height: 720,
+        fullscreen: false,
+        resizable: true,
+        vsync: true,
+    ),
+    assets_dir: "assets",
+)

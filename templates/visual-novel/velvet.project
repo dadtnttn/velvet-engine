@@ -1,0 +1,22 @@
+(
+    name: "Visual Novel Template",
+    identifier: "com.velvet.template_visual_novel",
+    version: "0.1.0",
+    modules: [
+        "story",
+        "ui",
+        "audio",
+    ],
+    entry_scene: "scripts/main.vel",
+    window: (
+        title: "Visual Novel Template",
+        width: 1280,
+        height: 720,
+        virtual_width: 1920,
+        virtual_height: 1080,
+        fullscreen: false,
+        resizable: true,
+        vsync: true,
+    ),
+    assets_dir: "assets",
+)

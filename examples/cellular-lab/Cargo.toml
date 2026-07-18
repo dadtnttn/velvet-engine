@@ -1,0 +1,16 @@
+[package]
+name = "cellular-lab"
+description = "Minimal headless lab for velvet-cellular (author core demo)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = []
+
+[[bin]]
+name = "cellular-lab"
+path = "src/main.rs"
+
+[dependencies]
+velvet-cellular = { workspace = true }
+anyhow = { workspace = true }

@@ -1,0 +1,20 @@
+[package]
+name = "velvet-bench"
+description = "Simple microbenchmarks for Velvet Engine hot paths"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "velvet-bench"
+path = "src/main.rs"
+
+[dependencies]
+velvet-script-compiler = { workspace = true }
+velvet-story = { workspace = true }
+velvet-play = { workspace = true }
+velvet-math = { workspace = true }
+velvet-ecs = { workspace = true }
+velvet-text = { workspace = true }

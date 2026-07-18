@@ -1,0 +1,17 @@
+[package]
+name = "velvet-math"
+description = "Math primitives for Velvet Engine (vectors, matrices, rects, colors, transforms)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

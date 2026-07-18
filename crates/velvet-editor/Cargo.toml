@@ -1,0 +1,43 @@
+[package]
+name = "velvet-editor"
+description = "Velvet Studio editor application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "velvet_editor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "velvet-studio"
+path = "src/main.rs"
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true }
+velvet-project = { workspace = true }
+velvet-build = { workspace = true }
+velvet-script-parser = { workspace = true }
+velvet-script-format = { workspace = true }
+velvet-script-lsp = { workspace = true }
+velvet-document = { workspace = true }
+velvet-ui = { workspace = true }
+velvet-story = { workspace = true }
+velvet-cellular = { workspace = true }
+velvet-ecs = { workspace = true }
+velvet-scene = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+camino = { workspace = true }
+walkdir = { workspace = true }
+winit = { workspace = true }
+tempfile = "3"
+
+[dev-dependencies]
+tempfile = "3"

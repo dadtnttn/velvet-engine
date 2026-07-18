@@ -1,0 +1,19 @@
+// Action level boot + briefings
+character radio { name: "Dispatch" }
+state {
+    score: int = 0
+    kills: int = 0
+}
+scene briefing {
+    radio "Clear the warehouse. Hostiles on patrol."
+    radio "Extract east when the door unlocks."
+}
+scene debrief {
+    radio "Score tallied. Live to extract."
+}
+function on_level_start() {
+    return 1
+}
+function on_enemy_down() {
+    return 1
+}

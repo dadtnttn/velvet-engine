@@ -1,0 +1,31 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Velvet local
+.velvet/
+*.log
+/dist/
+/export/
+/saves/
+
+# Coverage / profiling
+*.profraw
+*.profdata
+/coverage/
+lcov.info
+
+# OS
+desktop.ini
+
+# Generated reports (keep intentional ones under docs/reports)
+/tmp/

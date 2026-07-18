@@ -1,0 +1,50 @@
+// Main menu — shared visual/advanced document for Studio round-trip
+// Simplified mode edits only @visual regions.
+
+screen main_menu {
+    // @visual id=screen.main_menu
+    background: "assets/bg/menu.png"
+    music: "assets/music/menu.ogg"
+    // @end
+
+    // @visual id=button.start
+    button start {
+        text: "Nueva partida"
+        position: (50%, 58%)
+        image: "assets/ui/btn_start.png"
+    // @advanced id=button.start
+        on_pressed {
+            // Advanced: keep side effects and custom flow
+            game.new()
+            scene.open("scripts/main.vel")
+        }
+    // @end
+    }
+
+    // @visual id=button.continue
+    button continue {
+        text: "Continuar"
+        position: (50%, 68%)
+    // @advanced id=button.continue
+        on_pressed {
+            game.load_last()
+        }
+    // @end
+    }
+
+    // @visual id=button.quit
+    button quit {
+        text: "Salir"
+        position: (50%, 78%)
+    // @advanced id=button.quit
+        on_pressed {
+            game.quit()
+        }
+    // @end
+    }
+
+    // @protected id=plugin.hooks
+    // Plugin / external includes — visual mode must not edit
+    // include "plugins/analytics.vel"
+    // @end
+}

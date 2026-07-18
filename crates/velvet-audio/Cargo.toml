@@ -1,0 +1,21 @@
+[package]
+name = "velvet-audio"
+description = "Audio buses and playback for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true }
+velvet-time = { workspace = true }
+velvet-math = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+
+[features]
+default = []
+# Optional real backend later: kira = ["dep:kira"]

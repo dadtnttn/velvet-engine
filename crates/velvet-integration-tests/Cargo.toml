@@ -1,0 +1,27 @@
+[package]
+name = "velvet-integration-tests"
+description = "Cross-crate integration tests for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+velvet-math = { workspace = true }
+velvet-story = { workspace = true }
+velvet-play = { workspace = true }
+velvet-rpg = { workspace = true }
+velvet-action = { workspace = true }
+velvet-script-vm = { workspace = true }
+velvet-script-compiler = { workspace = true }
+velvet-text = { workspace = true }
+velvet-ui = { workspace = true }
+velvet-build = { workspace = true }
+velvet-input = { workspace = true }
+velvet-audio = { workspace = true }
+velvet-render = { workspace = true }
+velvet-ecs = { workspace = true }
+velvet-scene = { workspace = true }
+velvet-document = { workspace = true }
+serde_json = { workspace = true }

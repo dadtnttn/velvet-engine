@@ -1,0 +1,100 @@
+// Velvet Contract — short visual novel demo for Velvet Engine
+
+character narrator {
+    name: " "
+    color: "#cccccc"
+}
+
+character aria {
+    name: "Aria"
+    color: "#ff4f8b"
+    portrait: "characters/aria/neutral.png"
+}
+
+character kai {
+    name: "Kai"
+    color: "#4fc3ff"
+    portrait: "characters/kai/neutral.png"
+}
+
+state {
+    aria_trust: int = 0
+    met_kai: bool = false
+    player_name: string = "Alex"
+}
+
+scene apartment_night {
+    background "backgrounds/apartment_night.png"
+    music "music/night_city.ogg" fade_in 1.5
+
+    show aria.neutral at right
+
+    "Rain taps against the window of a too-small apartment."
+    aria "I thought you might not come, {player_name}."
+
+    choice {
+        "I keep my promises." {
+            aria_trust += 1
+            aria "…Then maybe this city hasn't ruined everything."
+            jump rooftop
+        }
+        "Traffic. Don't make it a thing." {
+            aria_trust -= 1
+            aria "As honest as ever."
+            jump rooftop
+        }
+    }
+}
+
+scene rooftop {
+    background "backgrounds/rooftop.png"
+    show aria.neutral at left
+
+    aria "Kai is waiting on the roof. He has the contract."
+    "You climb the stairwell. Neon pools on wet concrete."
+
+    show kai.neutral at right
+    kai "Sign, walk away, or bleed. Pick quickly."
+
+    choice {
+        "Ask Aria first" {
+            met_kai = true
+            jump ask_aria
+        }
+        "Sign the contract" {
+            met_kai = true
+            jump ending_deal
+        }
+        "Walk away" {
+            met_kai = true
+            jump ending_leave
+        }
+    }
+}
+
+scene ask_aria {
+    aria "If you sign, you buy us a week. If you leave, we run forever."
+    choice {
+        "Sign for Aria" {
+            aria_trust += 2
+            jump ending_deal
+        }
+        "Refuse and run" {
+            jump ending_leave
+        }
+    }
+}
+
+scene ending_deal {
+    background "backgrounds/contract.png"
+    kai "Ink dries faster than regret."
+    aria "We bought time. Don't waste it."
+    "Ending: The Velvet Contract — Signed."
+}
+
+scene ending_leave {
+    background "backgrounds/street_rain.png"
+    kai "Cowards live longer. Sometimes."
+    aria "Then we disappear before dawn."
+    "Ending: Ghosts in the Rain."
+}

@@ -1,0 +1,15 @@
+[package]
+name = "velvet-script-vm"
+description = "Sandboxed virtual machine for Velvet Script bytecode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-script-bytecode = { workspace = true }
+velvet-script-compiler = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

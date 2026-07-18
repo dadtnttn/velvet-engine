@@ -1,0 +1,20 @@
+[package]
+name = "velvet-scene"
+description = "Scene graph, load/unload, prefabs for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true }
+velvet-ecs = { workspace = true }
+velvet-math = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ron = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+indexmap = { workspace = true }
+uuid = { workspace = true }

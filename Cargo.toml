@@ -1,0 +1,144 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/velvet-math",
+    "crates/velvet-time",
+    "crates/velvet-events",
+    "crates/velvet-core",
+    "crates/velvet-app",
+    "crates/velvet-assets",
+    "crates/velvet-render",
+    "crates/velvet-text",
+    "crates/velvet-audio",
+    "crates/velvet-input",
+    "crates/velvet-ui",
+    "crates/velvet-ecs",
+    "crates/velvet-scene",
+    "crates/velvet-script-lexer",
+    "crates/velvet-script-syntax",
+    "crates/velvet-script-parser",
+    "crates/velvet-script-ast",
+    "crates/velvet-script-hir",
+    "crates/velvet-script-types",
+    "crates/velvet-script-bytecode",
+    "crates/velvet-script-compiler",
+    "crates/velvet-script-vm",
+    "crates/velvet-script-format",
+    "crates/velvet-script-lsp",
+    "crates/velvet-document",
+    "crates/velvet-story",
+    "crates/velvet-play",
+    "crates/velvet-rpg",
+    "crates/velvet-action",
+    "crates/velvet-cellular",
+    "crates/velvet-project",
+    "crates/velvet-build",
+    "crates/velvet-cli",
+    "crates/velvet-editor",
+    "crates/velvet-runtime",
+    "crates/velvet-test-utils",
+    "crates/velvet-integration-tests",
+    "crates/velvet-bench",
+    "examples/hello-velvet",
+    "examples/visual-novel",
+    "examples/branching-story",
+    "examples/top-down-rpg",
+    "examples/action-arena",
+    "examples/hybrid-demo",
+    "examples/cellular-lab",
+    "demos/cellular-arena",
+    "demos/velvet-novella",
+]
+default-members = [
+    "crates/velvet-cli",
+    "crates/velvet-runtime",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/hijosdelsol/velvet-engine"
+authors = ["Velvet Engine Contributors"]
+rust-version = "1.80"
+
+[workspace.dependencies]
+# Internal
+velvet-math = { path = "crates/velvet-math" }
+velvet-time = { path = "crates/velvet-time" }
+velvet-events = { path = "crates/velvet-events" }
+velvet-core = { path = "crates/velvet-core" }
+velvet-app = { path = "crates/velvet-app" }
+velvet-assets = { path = "crates/velvet-assets" }
+velvet-render = { path = "crates/velvet-render" }
+velvet-text = { path = "crates/velvet-text" }
+velvet-audio = { path = "crates/velvet-audio" }
+velvet-input = { path = "crates/velvet-input" }
+velvet-ui = { path = "crates/velvet-ui" }
+velvet-ecs = { path = "crates/velvet-ecs" }
+velvet-scene = { path = "crates/velvet-scene" }
+velvet-script-lexer = { path = "crates/velvet-script-lexer" }
+velvet-script-syntax = { path = "crates/velvet-script-syntax" }
+velvet-script-parser = { path = "crates/velvet-script-parser" }
+velvet-script-ast = { path = "crates/velvet-script-ast" }
+velvet-script-hir = { path = "crates/velvet-script-hir" }
+velvet-script-types = { path = "crates/velvet-script-types" }
+velvet-script-bytecode = { path = "crates/velvet-script-bytecode" }
+velvet-script-compiler = { path = "crates/velvet-script-compiler" }
+velvet-script-vm = { path = "crates/velvet-script-vm" }
+velvet-script-format = { path = "crates/velvet-script-format" }
+velvet-script-lsp = { path = "crates/velvet-script-lsp" }
+velvet-document = { path = "crates/velvet-document" }
+velvet-story = { path = "crates/velvet-story" }
+velvet-play = { path = "crates/velvet-play" }
+velvet-rpg = { path = "crates/velvet-rpg" }
+velvet-action = { path = "crates/velvet-action" }
+velvet-cellular = { path = "crates/velvet-cellular" }
+velvet-project = { path = "crates/velvet-project" }
+velvet-build = { path = "crates/velvet-build" }
+velvet-test-utils = { path = "crates/velvet-test-utils" }
+
+# External — foundation
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ron = "0.8"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+bitflags = "2"
+smallvec = { version = "1", features = ["serde"] }
+indexmap = { version = "2", features = ["serde"] }
+parking_lot = "0.12"
+uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
+camino = "1"
+once_cell = "1"
+slotmap = { version = "1", features = ["serde"] }
+
+# Platform / media (introduced as crates need them)
+winit = "0.30"
+wgpu = "24"
+bytemuck = { version = "1", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+pollster = "0.4"
+raw-window-handle = "0.6"
+
+# Tools
+clap = { version = "4", features = ["derive"] }
+walkdir = "2"
+toml = "0.8"
+
+# Testing
+pretty_assertions = "1"
+insta = "1"
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.bench]
+inherits = "release"

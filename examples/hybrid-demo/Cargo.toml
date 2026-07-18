@@ -1,0 +1,21 @@
+[package]
+name = "hybrid-demo"
+description = "Hybrid exploration + combat + narrative demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "hybrid-demo"
+path = "src/main.rs"
+
+[dependencies]
+velvet-play = { workspace = true }
+velvet-action = { workspace = true }
+velvet-story = { workspace = true }
+velvet-rpg = { workspace = true }
+velvet-math = { workspace = true }
+velvet-core = { workspace = true }
+anyhow = { workspace = true }

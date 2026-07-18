@@ -1,0 +1,10 @@
+[package]
+name = "velvet-events"
+description = "Typed double-buffered event queues for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+parking_lot = { workspace = true }

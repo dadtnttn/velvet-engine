@@ -1,0 +1,22 @@
+[package]
+name = "velvet-core"
+description = "Core types: errors, config, diagnostics, plugin IDs for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-math = { workspace = true }
+velvet-time = { workspace = true }
+velvet-events = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ron = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+parking_lot = { workspace = true }
+uuid = { workspace = true }
+camino = { workspace = true }
+sha2 = { workspace = true }

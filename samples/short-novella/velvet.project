@@ -1,0 +1,22 @@
+(
+    name: "Short Novella",
+    identifier: "com.velvet.sample_short_novella",
+    version: "0.1.0",
+    modules: [
+        "story",
+        "ui",
+        "audio",
+    ],
+    entry_scene: "scripts/main.vel",
+    window: (
+        title: "Short Novella — Velvet Sample",
+        width: 1280,
+        height: 720,
+        virtual_width: 1920,
+        virtual_height: 1080,
+        fullscreen: false,
+        resizable: true,
+        vsync: true,
+    ),
+    assets_dir: "assets",
+)

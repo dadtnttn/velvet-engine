@@ -1,0 +1,13 @@
+{
+  "main:2:dialogue": "Rain softens the city noise outside the window.",
+  "main:3:dialogue": "I said I'd be here. I meant it.",
+  "main:5:dialogue": "You always say that.",
+  "main:7:choice:0": "I keep my promises.",
+  "main:1:dialogue": "Fine. Keep it light.",
+  "main:7:choice:1": "Don't make this heavy.",
+  "ending_warm:1:dialogue": "Look — the clouds are breaking.",
+  "ending_warm:2:dialogue": "Stay a little longer.",
+  "ending_warm:3:dialogue": "Ending: Warm Lights",
+  "ending_cool:1:dialogue": "You walk home alone. The rain has stopped.",
+  "ending_cool:2:dialogue": "Ending: Cool Air"
+}

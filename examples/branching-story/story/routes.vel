@@ -1,0 +1,99 @@
+// Branching story with multiple endings and relationship vars
+
+character elena {
+    name: "Elena"
+    color: "#e8b4ff"
+}
+
+character marco {
+    name: "Marco"
+    color: "#ffd27a"
+}
+
+state {
+    elena_rel: int = 0
+    marco_rel: int = 0
+    has_key: bool = false
+    ending: string = "none"
+}
+
+scene intro {
+    "The station clock stops at 17:00. Forever, maybe."
+    elena "You're late. Or early for the end of the world."
+    choice {
+        "Joke about the clock" {
+            elena_rel += 1
+            elena "Bad joke. Good timing."
+            jump platform
+        }
+        "Ask about the key" {
+            marco_rel += 1
+            show marco.neutral at right
+            marco "She means the maintenance key. I... misplaced it."
+            jump platform
+        }
+    }
+}
+
+scene platform {
+    marco "Trains don't run. Stories do."
+    choice {
+        "Search with Elena" {
+            elena_rel += 1
+            jump search_elena
+        }
+        "Search with Marco" {
+            marco_rel += 1
+            jump search_marco
+        }
+        "Search alone" {
+            jump search_alone
+        }
+    }
+}
+
+scene search_elena {
+    elena "Locker 12. I heard it rattle."
+    has_key = true
+    "You find a brass key wrapped in a ribbon."
+    jump finale
+}
+
+scene search_marco {
+    marco "I hid it under the bench. Don't tell her."
+    has_key = true
+    marco_rel += 1
+    jump finale
+}
+
+scene search_alone {
+    "You find nothing but wet newspapers."
+    has_key = false
+    jump finale
+}
+
+scene finale {
+    "The service door waits."
+    choice {
+        "Open it (needs key)" {
+            jump ending_gate
+        }
+        "Stay on the platform" {
+            jump ending_wait
+        }
+    }
+}
+
+scene ending_gate {
+    // Runtime checks has_key via separate scenes after choice — simplified dual end
+    elena "If you have the key, we leave together."
+    marco "If not, we become part of the timetable."
+    "Ending: Threshold."
+    ending = "threshold"
+}
+
+scene ending_wait {
+    "The clock stays broken. So do you."
+    "Ending: Timeless."
+    ending = "timeless"
+}

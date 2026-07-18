@@ -1,0 +1,13 @@
+[package]
+name = "velvet-script-format"
+description = "Velvet Script code formatter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-script-lexer = { workspace = true }
+velvet-script-ast = { workspace = true }
+velvet-script-parser = { workspace = true }
+thiserror = { workspace = true }

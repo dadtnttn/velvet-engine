@@ -1,0 +1,45 @@
+Velvet Engine — tokei / own-code line report
+Generated: 2026-07-17T17:25:39.963883+00:00
+Method: non-blank, non-//, non-block-comment Rust lines; #[cfg(test)] modules counted as tests.
+Excluded: target/, crates.io deps, binaries, lockfiles, vendored trees.
+
+================================================================
+SUMMARY (own significant Rust code)
+================================================================
+Codigo de produccion propio     :    35075   (target >= 35000)  OK
+Pruebas y herramientas propias  :    15840   (target >= 15000)  OK
+  - engine unit/integration tests:    11031
+  - tools production code        :     4152  (cli, studio, bench, test-utils, integration harness)
+  - tools tests                  :      657
+Ejemplos                        :      898
+Codigo generado                 :        0
+Dependencias externas (source)  :        0   (not vendored; not counted)
+----------------------------------------------------------------
+TOTAL SIGNIFICATIVO             :    51813   (target >= 50000)  OK
+
+Production crates: velvet-core/app/math/time/events/assets/render/text/audio/input/ui/ecs/scene/script-*/story/play/rpg/action/project/build/runtime
+Tools crates: velvet-cli, velvet-editor, velvet-bench, velvet-test-utils, velvet-integration-tests
+
+================================================================
+TOKEI RAW (crates examples tools tests --exclude target)
+================================================================
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Language              Files        Lines         Code     Comments       Blanks
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ TOML                     42          804          728            1           75
+─────────────────────────────────────────────────────────────────────────────────
+ Rust                    275        58633        52073          708         5852
+ |- Markdown             274         6521            0         6444           77
+ (Total)                            65154        52073         7152         5929
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Total                   317        65958        52801         7153         6004
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+================================================================
+GATING COMMANDS
+================================================================
+cargo build --workspace                 -> cargo_build_workspace.log
+cargo test --workspace --all-features   -> cargo_build_test.log
+CLI subcommands: doctor version run init project script new localization pack export
+                 check test build clean fmt assets inspect

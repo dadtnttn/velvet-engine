@@ -1,0 +1,129 @@
+// Short Novella — multi-scene sample (S8)
+// Scenes: 8 | Choices: 5 decision points | Named endings: 3
+// Measured for RENPY_PARITY: not a 60-minute commercial script; multi-branch shippable sample.
+
+character narrator { name: " " color: "#cccccc" }
+character lea { name: "Lea" color: "#ff6b9d" }
+character june { name: "June" color: "#4fc3ff" }
+character radio { name: "Radio" color: "#c0c0c0" }
+
+state {
+    trust: int = 0
+    courage: int = 0
+    keys_found: int = 0
+    heard_song: bool = false
+}
+
+scene intro {
+    background "assets/bg/station.png"
+    music "assets/music/soft.ogg" fade_in 1.0
+    "Rain pins tickets to the platform boards. The last train is late."
+    show lea at left
+    lea "If we miss this one, the city keeps us for another night."
+    show june at right
+    june "Then we don't miss it."
+    choice {
+        "Hold her hand" {
+            trust += 1
+            jump platform
+        }
+        "Check the timetable alone" {
+            courage += 1
+            jump platform
+        }
+    }
+}
+
+scene platform {
+    background "assets/bg/platform.png"
+    lea "Look — platform three is open."
+    june "Or we take the underpass. Shorter. Darker."
+    choice {
+        "Platform three" {
+            jump train_car
+        }
+        "Underpass" {
+            courage += 1
+            jump underpass
+        }
+        "Wait and listen to the station radio" {
+            heard_song = true
+            jump radio_scene
+        }
+    }
+}
+
+scene radio_scene {
+    background "assets/bg/station.png"
+    show radio at center
+    radio "…and tonight's dedication goes to anyone still standing in the rain."
+    lea "That's our song."
+    trust += 1
+    hide radio
+    jump train_car
+}
+
+scene underpass {
+    background "assets/bg/tunnel.png"
+    "The underpass smells like wet copper."
+    june "Keys on the ground — someone's lucky day."
+    keys_found += 1
+    choice {
+        "Pick up the keys" {
+            keys_found += 1
+            jump train_car
+        }
+        "Leave them" {
+            jump train_car
+        }
+    }
+}
+
+scene train_car {
+    background "assets/bg/train.png"
+    music "assets/music/soft.ogg" fade_in 0.5
+    show lea at left
+    show june at right
+    lea "We made it."
+    june "Almost. Inspector's coming."
+    choice {
+        "Show empty pockets and smile" {
+            courage += 1
+            jump ending_free
+        }
+        "Offer the keys as if they open something" {
+            jump ending_keys
+        }
+        "Tell the truth about the missed stop" {
+            trust += 2
+            jump ending_together
+        }
+    }
+}
+
+scene ending_free {
+    background "assets/bg/city.png"
+    hide lea
+    hide june
+    "The inspector laughs and waves you on."
+    "You ride into neon without tickets or promises."
+    "Ending: Free Ride"
+}
+
+scene ending_keys {
+    background "assets/bg/rooftop.png"
+    show june at center
+    june "These open the locker at the old depot. I was going to tell you."
+    "Inside: two passports, one letter, no rain."
+    "Ending: Locker Light"
+}
+
+scene ending_together {
+    background "assets/bg/rooftop.png"
+    show lea at left
+    show june at right
+    lea "So we stay. One more night."
+    june "One more night."
+    "The city keeps you — and that is enough."
+    "Ending: Shared Rain"
+}

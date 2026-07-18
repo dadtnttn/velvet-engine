@@ -1,0 +1,255 @@
+// Luz de Estación — novela visual corta (Velvet Engine)
+// Varias escenas, decisiones y 3 finales.
+
+character narrator {
+    name: " "
+    color: "#c8c8d0"
+}
+
+character nora {
+    name: "Nora"
+    color: "#ff6b9d"
+}
+
+character june {
+    name: "June"
+    color: "#4fc3ff"
+}
+
+character guard {
+    name: "Inspector"
+    color: "#d0b070"
+}
+
+character radio {
+    name: "Radio"
+    color: "#a0a0a8"
+}
+
+state {
+    trust: int = 0
+    courage: int = 0
+    ticket: bool = false
+    keys: bool = false
+    heard_song: bool = false
+    ending: string = "none"
+}
+
+scene intro {
+    background "bg/rain_station"
+    music "music/soft.ogg" fade_in 1.0
+
+    "La lluvia clava los billetes a los tableros de la estación."
+    "El último tranvía de la noche ya debería haber llegado."
+
+    show nora at left
+    nora "Si perdemos este, la ciudad nos guarda otra noche."
+
+    show june at right
+    june "Entonces no lo perdemos."
+
+    "El andén brilla como un río de neón."
+
+    choice {
+        "Tomarle la mano a Nora" {
+            trust += 1
+            nora "…Gracias. El frío pesa menos."
+            jump platform
+        }
+        "Revisar sola el horario" {
+            courage += 1
+            june "Práctica. Me gusta."
+            jump platform
+        }
+        "Escuchar la radio de la estación" {
+            heard_song = true
+            jump radio_scene
+        }
+    }
+}
+
+scene radio_scene {
+    background "bg/rain_station"
+    show radio at center
+    radio "…y esta canción va para quien aún espera bajo la lluvia."
+    nora "Esa es nuestra canción."
+    trust += 1
+    hide radio
+    jump platform
+}
+
+scene platform {
+    background "bg/platform"
+    show nora at left
+    show june at right
+
+    nora "Mira — el andén tres está abierto."
+    june "O el paso subterráneo. Más corto. Más oscuro."
+
+    choice {
+        "Ir al andén tres" {
+            jump train_approach
+        }
+        "Bajar al paso subterráneo" {
+            courage += 1
+            jump underpass
+        }
+        "Buscar el billete en el bolso" {
+            ticket = true
+            nora "Aquí está. Debajo de la lista del súper."
+            jump train_approach
+        }
+    }
+}
+
+scene underpass {
+    background "bg/tunnel"
+    "El paso huele a cobre mojado y a trenes que ya no existen."
+    june "Hay llaves en el suelo. El día de alguien."
+
+    choice {
+        "Recoger las llaves" {
+            keys = true
+            courage += 1
+            june "Si abren algo, mejor en nuestras manos."
+            jump train_approach
+        }
+        "Dejarlas" {
+            trust += 1
+            nora "No son nuestras. Vamos."
+            jump train_approach
+        }
+    }
+}
+
+scene train_approach {
+    background "bg/platform"
+    "Las luces del tranvía cortan la lluvia como cuchillos blancos."
+    show nora at left
+    nora "Llegó."
+    show june at right
+    june "Subimos. Sin mirar atrás."
+
+    "Las puertas se abren con un suspiro hidráulico."
+    jump car
+}
+
+scene car {
+    background "bg/train"
+    show nora at left
+    show june at right
+
+    "El vagón está casi vacío. Asientos rojos. Anuncios borrosos."
+    nora "Casi. Viene el inspector."
+    show guard at center
+    guard "Billete."
+
+    choice {
+        "Mostrar el billete (si lo tienes)" {
+            jump ticket_check
+        }
+        "Sonreír y vaciar los bolsillos" {
+            courage += 1
+            jump bluff
+        }
+        "Ofrecer las llaves como si abrieran algo" {
+            jump keys_play
+        }
+        "Decir la verdad: casi perdemos el tren" {
+            trust += 2
+            jump honest
+        }
+    }
+}
+
+scene ticket_check {
+    if ticket {
+        nora "Aquí."
+        guard "En orden. Buen viaje."
+        hide guard
+        jump ending_home
+    }
+    nora "Yo… lo dejé en el andén."
+    guard "Una advertencia. La próxima, a pie."
+    hide guard
+    courage += 1
+    jump ending_home
+}
+
+scene bluff {
+    hide guard
+    june "Funcionó. No preguntes cómo."
+    nora "No pienso preguntar."
+    jump ending_free
+}
+
+scene keys_play {
+    if keys {
+        hide guard
+        guard "¿Llaves de servicio? No inventen."
+        "El inspector duda. June no parpadea."
+        june "Revise el inventario. O déjenos en paz."
+        courage += 2
+        jump ending_keys
+    }
+    hide guard
+    guard "No hay llaves. Solo excusas."
+    nora "Bajamos en la próxima."
+    jump ending_walk
+}
+
+scene honest {
+    hide guard
+    nora "Llegamos corriendo. Perdimos el de las diez."
+    guard "…La honestidad no paga, pero hoy alcanza."
+    trust += 1
+    jump ending_together
+}
+
+scene ending_home {
+    background "bg/city_lights"
+    ending = "home"
+    hide guard
+    show nora at left
+    show june at right
+    "La ciudad se estira en líneas de luz. El tranvía avanza."
+    nora "Tal vez llegar tarde también es llegar."
+    june "Mientras sea juntas."
+    "Final: Camino a casa."
+}
+
+scene ending_free {
+    background "bg/city_lights"
+    ending = "free"
+    "Nadie pide papeles. Nadie pregunta nombres."
+    june "Esta noche somos fantasmas con asiento preferente."
+    nora "Me gusta ser fantasma contigo."
+    "Final: Viajeras sin billete."
+}
+
+scene ending_keys {
+    background "bg/tunnel"
+    ending = "keys"
+    "Las llaves pesan en el bolsillo como una promesa."
+    june "Algún día abrirán la puerta correcta."
+    nora "O la incorrecta. Eso también es una historia."
+    "Final: Llaves de nadie."
+}
+
+scene ending_together {
+    background "bg/rain_station"
+    ending = "together"
+    "El inspector se aleja. La lluvia dibuja el cristal."
+    nora "Contarte la verdad me asusta menos que callar."
+    june "Entonces seguimos contándonos cosas."
+    "Final: La verdad en el andén."
+}
+
+scene ending_walk {
+    background "bg/street_rain"
+    ending = "walk"
+    "Bajan del tranvía. La lluvia encuentra los huecos del abrigo."
+    nora "Largo camino."
+    june "Pero no solas."
+    "Final: Caminata bajo la lluvia."
+}

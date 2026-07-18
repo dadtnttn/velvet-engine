@@ -1,0 +1,37 @@
+{
+  "name": "velvet-script",
+  "displayName": "Velvet Script",
+  "description": "Language support for Velvet Engine (.vel) via velvet-script-lsp stdio",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:velvet"],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "velvet",
+        "aliases": ["Velvet Script", "velvet"],
+        "extensions": [".vel", ".velscene", ".velui"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "velvet",
+        "scopeName": "source.velvet",
+        "path": "./syntaxes/velvet.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Velvet Script",
+      "properties": {
+        "velvet.lsp.path": {
+          "type": "string",
+          "default": "velvet-script-lsp",
+          "description": "Path to the velvet-script-lsp binary (on PATH or absolute)."
+        }
+      }
+    }
+  }
+}

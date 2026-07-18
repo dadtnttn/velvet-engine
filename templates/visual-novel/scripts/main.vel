@@ -1,0 +1,54 @@
+character narrator {
+    name: " "
+    color: "#cccccc"
+}
+
+character hero {
+    name: "Hero"
+    color: "#ff4f8b"
+}
+
+character friend {
+    name: "Mira"
+    color: "#4fc3ff"
+}
+
+state {
+    trust: int = 0
+    met_mira: bool = false
+}
+
+scene main {
+    background "assets/bg/room.png"
+    music "assets/music/soft.ogg" fade_in 1
+    "Rain softens the city noise outside the window."
+    hero "I said I'd be here. I meant it."
+    show friend at right
+    friend "You always say that."
+    met_mira = true
+    choice {
+        "I keep my promises." {
+            trust += 1
+            friend "…Then maybe tonight is different."
+            jump ending_warm
+        }
+        "Don't make this heavy." {
+            trust -= 1
+            friend "Fine. Keep it light."
+            jump ending_cool
+        }
+    }
+}
+
+scene ending_warm {
+    background "assets/bg/rooftop.png"
+    friend "Look — the clouds are breaking."
+    hero "Stay a little longer."
+    "Ending: Warm Lights"
+}
+
+scene ending_cool {
+    background "assets/bg/street.png"
+    "You walk home alone. The rain has stopped."
+    "Ending: Cool Air"
+}

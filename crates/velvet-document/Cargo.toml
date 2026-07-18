@@ -1,0 +1,16 @@
+[package]
+name = "velvet-document"
+description = "Preservable document model for visual/advanced/protected region round-trip"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

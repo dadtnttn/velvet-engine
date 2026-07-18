@@ -1,0 +1,14 @@
+[package]
+name = "velvet-time"
+description = "Time, clocks, and fixed/variable timesteps for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]

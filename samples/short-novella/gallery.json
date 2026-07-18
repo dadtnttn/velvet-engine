@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "id": "cg_station",
+      "title": "Rain Station",
+      "path": "assets/bg/station.png",
+      "group": "chapter1",
+      "sort_order": 0,
+      "unlocked_by_default": true
+    },
+    {
+      "id": "cg_train",
+      "title": "Last Train",
+      "path": "assets/bg/train.png",
+      "group": "chapter1",
+      "sort_order": 1,
+      "unlocked_by_default": false
+    },
+    {
+      "id": "cg_rooftop",
+      "title": "Shared Rain",
+      "path": "assets/bg/rooftop.png",
+      "group": "endings",
+      "sort_order": 2,
+      "unlocked_by_default": false
+    }
+  ]
+}

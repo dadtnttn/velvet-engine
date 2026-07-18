@@ -1,0 +1,28 @@
+[package]
+name = "velvet-story"
+description = "Narrative / visual novel systems for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true }
+velvet-time = { workspace = true }
+velvet-math = { workspace = true }
+velvet-script-ast = { workspace = true }
+velvet-script-parser = { workspace = true }
+velvet-text = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ron = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+indexmap = { workspace = true }
+sha2 = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = "3"
