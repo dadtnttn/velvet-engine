@@ -1,10 +1,12 @@
 [package]
 name = "velvet-cellular"
-description = "From-scratch cellular material simulation core for Noita-like / falling-sand games (author API, no external physics)"
-version.workspace = true
+description = "ALPHA — From-scratch cellular / falling-sand core for Noita-like games (author API, no external physics)"
+# Sand / cellular stack is explicitly alpha — not a stable product surface yet.
+version = "0.1.0-alpha.1"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 velvet-math = { workspace = true }

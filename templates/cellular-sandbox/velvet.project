@@ -1,6 +1,6 @@
 (
     name: "cellular-sandbox",
-    version: "0.1.0",
+    version: "0.1.0-alpha.1",
     entry_scene: "src/main.rs",
     template: "cellular-sandbox",
     modules: ["cellular"],

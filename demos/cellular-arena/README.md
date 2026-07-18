@@ -1,8 +1,10 @@
-# Cellular Arena GIANT — mini juego demo
+# Cellular Arena — mini juego demo (**ALPHA**)
 
-Sandbox **grande y legible** encima de **velvet-cellular**:
-jugador con cabeza, torso, brazos (apuntan al ratón), piernas con animación,
-enemigos con ojos, partículas densas (FX + sim), HUD de HP/tiempo/hechizos.
+> **Status: alpha** — stack de arena/cellular (`velvet-cellular`). APIs y demos
+> pueden cambiar; no es superficie estable de producto.
+
+Sandbox jugable encima de **velvet-cellular**:
+pradera → cueva, materiales, hechizos, enemigos, partículas, HUD de profundidad.
 
 ## Controles
 

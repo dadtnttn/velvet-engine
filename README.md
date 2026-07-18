@@ -8,6 +8,8 @@
 One shared core, installable modules, and a dedicated language: **Velvet Script**.
 
 > Status: early development. Phase roadmap lives in [`docs/architecture/ROADMAP.md`](docs/architecture/ROADMAP.md).
+>
+> **Sand / cellular (`velvet-cellular`) is ALPHA** — falling-sand stack may break between releases. See [`docs/architecture/CELLULAR.md`](docs/architecture/CELLULAR.md).
 
 ## Features (planned / in progress)
 
@@ -22,6 +24,7 @@ One shared core, installable modules, and a dedicated language: **Velvet Script*
 | Velvet Script | Narrative + gameplay language |
 | Velvet Studio | Visual editor |
 | Velvet CLI | `velvet` tooling |
+| **Velvet Cellular** | **ALPHA** — falling sand / Noita-like materials (`velvet-cellular`) |
 
 ## Quick start
 

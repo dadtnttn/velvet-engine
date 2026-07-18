@@ -1,4 +1,7 @@
-//! # velvet-cellular
+//! # velvet-cellular (**ALPHA**)
+//!
+//! **Stability: alpha.** Falling-sand / cellular APIs may break between 0.1.0-alpha
+//! releases. Not a stable product surface.
 //!
 //! Fully functional Noita-like **author core**: cellular materials, free particles
 //! that convert to grid, spells/wands, agents, fluid/electricity/growth systems,

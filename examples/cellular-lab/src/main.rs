@@ -1,9 +1,9 @@
-//! Full creator lab: brush, particles, spells, agents, enemies, perf markers.
+//! Full creator lab (**ALPHA**): brush, particles, spells, agents, enemies, perf.
 
 use velvet_cellular::prelude::*;
 
 fn main() -> anyhow::Result<()> {
-    println!("=== velvet-cellular full lab ===");
+    println!("=== velvet-cellular full lab (ALPHA) ===");
     let mut session = CellularSession::with_builtins(WorldConfig {
         max_loaded_chunks: 128,
         seed: 11,

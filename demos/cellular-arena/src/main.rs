@@ -1,4 +1,5 @@
-//! Cellular Arena — run real: pradera → cueva → descenso con bifurcaciones.
+//! Cellular Arena (**ALPHA** sand / cellular demo).
+//! Run: pradera → cueva → descenso con bifurcaciones.
 //!
 //! A/D move · Space jump · LMB dig · RMB place · F cast · 1/2/3 spells · R restart
 
