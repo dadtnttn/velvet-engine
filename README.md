@@ -8,6 +8,7 @@
   <a href="rust-toolchain.toml"><img src="https://img.shields.io/badge/rustc-1.80%2B-orange?style=for-the-badge&logo=rust&logoColor=white" alt="Rust 1.80+"/></a>
   <a href="docs/architecture/ROADMAP.md"><img src="https://img.shields.io/badge/status-early%20development-2A1545?style=for-the-badge" alt="Early development"/></a>
   <a href="docs/architecture/CELLULAR.md"><img src="https://img.shields.io/badge/cellular-alpha-E67E22?style=for-the-badge" alt="Cellular alpha"/></a>
+  <a href="docs/editor/STUDIO.md"><img src="https://img.shields.io/badge/studio-alpha-E67E22?style=for-the-badge" alt="Studio alpha"/></a>
 </p>
 
 <p align="center">
@@ -39,7 +40,8 @@ Velvet Engine is built for two experience families that share one core:
 Combine freely: an RPG can embed branching dialogue; a novel can host a minigame; action can cut to narrative.
 
 > **Status:** early development — see [`docs/architecture/ROADMAP.md`](docs/architecture/ROADMAP.md).<br/>
-> **Cellular / sand** is **alpha** (`0.1.0-alpha.x`); APIs may break. Details: [`docs/architecture/CELLULAR.md`](docs/architecture/CELLULAR.md).
+> **Cellular / sand** is **alpha** (`0.1.0-alpha.x`); APIs may break. Details: [`docs/architecture/CELLULAR.md`](docs/architecture/CELLULAR.md).<br/>
+> **Velvet Studio** is **alpha** (same maturity band as cellular): usable for prototyping; APIs, UI, and file formats may break. Details: [`docs/editor/STUDIO.md`](docs/editor/STUDIO.md).
 
 ---
 
@@ -57,7 +59,8 @@ Combine freely: an RPG can embed branching dialogue; a novel can host a minigame
 | **RPG** | Stats, inventory, quests, party | Active |
 | **Action** | Weapons, projectiles, perception | Active |
 | **Cellular** | Falling sand / materials author core | **Alpha** |
-| **Studio / CLI** | Project tools, play, export, editor shell | Active |
+| **Studio** | Softbuffer dual/triple-mode editor shell | **Alpha** |
+| **CLI** | Project tools, play, export | Active |
 
 ---
 
@@ -108,6 +111,7 @@ cargo run -p cellular-arena --release
 | Windowed novel | `cargo run -p velvet-novella --release` | Softbuffer VN UI |
 | Cellular arena | `cargo run -p cellular-arena --release` | **Alpha** sand / cave run |
 | Cellular lab | `cargo run -p cellular-lab --release` | Headless author lab |
+| Studio GUI *(alpha)* | `cargo run -p velvet-editor --release -- gui templates/visual-novel --interactive` | Visual / Script / Nodes |
 | Visual novel example | `cargo run -p visual-novel --release` | CLI story player |
 | Branching story | `cargo run -p branching-story --release` | Multi-ending checks |
 | Top-down RPG | `cargo run -p top-down-rpg --release` | Play + RPG loop |
@@ -132,6 +136,7 @@ cargo run -p velvet-cli --release -- play samples/short-novella --windowed --cho
 | Roadmap | [docs/architecture/ROADMAP.md](docs/architecture/ROADMAP.md) |
 | Velvet Script | [docs/language/VELVET_SCRIPT.md](docs/language/VELVET_SCRIPT.md) |
 | Cellular (alpha) | [docs/architecture/CELLULAR.md](docs/architecture/CELLULAR.md) |
+| Studio (alpha) | [docs/editor/STUDIO.md](docs/editor/STUDIO.md) |
 | Ren’Py parity notes | [docs/reports/RENPY_PARITY.md](docs/reports/RENPY_PARITY.md) |
 | Limitations (honest) | [docs/reports/LIMITATIONS.md](docs/reports/LIMITATIONS.md) |
 | Tutorials | [docs/tutorials/](docs/tutorials/) |
@@ -166,7 +171,7 @@ tokei crates demos examples docs tools tests templates --exclude target
 
 - **Modular:** install only the crates you need.
 - **Author-friendly:** narrative scripts and product play path first-class.
-- **Honest maturity:** alpha surfaces (cellular) are labeled; limitations documented.
+- **Honest maturity:** alpha surfaces (**cellular**, **Studio**) are labeled; limitations documented.
 - **Rust-native:** workspace crates, tests in-tree, dual license compatible with the ecosystem.
 
 ---
