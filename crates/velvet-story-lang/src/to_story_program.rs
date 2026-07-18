@@ -4,7 +4,8 @@
 
 use indexmap::IndexMap;
 use velvet_story::{
-    AssignOp, Character, StoryChoice, StoryOp, StoryProgram, StoryScene, StoryValue,
+    AssignOp, Character, StoryChoice, StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram,
+    StoryScene, StoryValue,
 };
 
 use crate::ast::{BinOp, Expr, Stmt, StoryFile, TopItem, UnaryOp};
@@ -182,18 +183,15 @@ fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
             else_body,
             span,
         } => {
-            // Prefer assign-temp for comparisons so If remains truthiness-based.
-            let (prelude, cond_var) = lower_condition(cond, span.line)?;
-            let mut ops = prelude;
-            ops.push(StoryOp::If {
-                cond_var,
+            let story_cond = expr_to_cond(cond, span.line)?;
+            vec![StoryOp::If {
+                cond: story_cond,
                 then_ops: lower_stmts(then_body)?,
                 else_ops: match else_body {
                     Some(e) => lower_stmts(e)?,
                     None => vec![],
                 },
-            });
-            ops
+            }]
         }
         Stmt::CallCommand { name, args, span } => {
             let mut map = IndexMap::new();
@@ -232,76 +230,87 @@ fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
     })
 }
 
-/// Lower condition to optional prelude assigns + cond_var for truthiness.
-fn lower_condition(e: &Expr, line: u32) -> Result<(Vec<StoryOp>, String), ToProgramError> {
+/// Lower a writer condition expression into product [`StoryCond`].
+fn expr_to_cond(e: &Expr, line: u32) -> Result<StoryCond, ToProgramError> {
     match e {
-        Expr::Ident(name, _) => Ok((vec![], name.clone())),
-        // `affection > 0` / `>= 1` / `!= 0` → truthiness of var (int)
-        Expr::Binary {
-            op: BinOp::Gt | BinOp::Ge | BinOp::Ne,
-            left,
-            right,
-            ..
-        } => match (left.as_ref(), right.as_ref()) {
-            (Expr::Ident(name, _), Expr::Int(0 | 1, _)) => Ok((vec![], name.clone())),
-            (Expr::Ident(name, _), Expr::Int(n, _)) => {
-                // Compare at lower time only if we cannot run expressions:
-                // store result in temp by evaluating is_truthy of (name - n) is hard.
-                // For general compare: set __cond from not supported fully —
-                // use name and document limit unless n==0.
-                if *n == 0 {
-                    Ok((vec![], name.clone()))
-                } else {
-                    Err(ToProgramError {
-                        message: format!(
-                            "if comparison against {n} not yet in StoryProgram; use `if {name}` or `if {name} > 0`"
-                        ),
-                        line,
-                    })
-                }
-            }
-            _ => Err(ToProgramError {
-                message: "if condition too complex for StoryProgram".into(),
-                line,
-            }),
-        },
-        Expr::Binary {
-            op: BinOp::Eq,
-            left,
-            right,
-            ..
-        } => match (left.as_ref(), right.as_ref()) {
-            // if flag == true → if flag
-            (Expr::Ident(name, _), Expr::Bool(true, _)) => Ok((vec![], name.clone())),
-            (Expr::Ident(name, _), Expr::Int(1, _)) => Ok((vec![], name.clone())),
-            _ => Err(ToProgramError {
-                message: "if equality only supports `var == true` / `var == 1` in StoryProgram".into(),
-                line,
-            }),
-        },
-        Expr::Binary {
-            op: BinOp::And | BinOp::Or,
-            ..
-        } => Err(ToProgramError {
-            message: "boolean and/or in if not yet lowered to StoryProgram".into(),
-            line,
-        }),
+        Expr::Ident(name, _) => Ok(StoryCond::Var { name: name.clone() }),
+        Expr::Bool(b, _) => Ok(StoryCond::Const { value: *b }),
         Expr::Unary {
             op: UnaryOp::Not,
             expr,
             ..
-        } => {
-            // not supported as first-class — reject rather than silent wrong
-            let _ = expr;
-            Err(ToProgramError {
-                message: "if not … not yet in StoryProgram; invert the branch bodies".into(),
-                line,
-            })
-        }
+        } => Ok(StoryCond::Not {
+            inner: Box::new(expr_to_cond(expr, line)?),
+        }),
+        Expr::Binary {
+            op: BinOp::And,
+            left,
+            right,
+            ..
+        } => Ok(StoryCond::And {
+            left: Box::new(expr_to_cond(left, line)?),
+            right: Box::new(expr_to_cond(right, line)?),
+        }),
+        Expr::Binary {
+            op: BinOp::Or,
+            left,
+            right,
+            ..
+        } => Ok(StoryCond::Or {
+            left: Box::new(expr_to_cond(left, line)?),
+            right: Box::new(expr_to_cond(right, line)?),
+        }),
+        Expr::Binary {
+            op:
+                op @ (BinOp::Eq
+                | BinOp::Ne
+                | BinOp::Lt
+                | BinOp::Le
+                | BinOp::Gt
+                | BinOp::Ge),
+            left,
+            right,
+            ..
+        } => Ok(StoryCond::Cmp {
+            left: expr_to_operand(left, line)?,
+            op: binop_to_cmp(*op)?,
+            right: expr_to_operand(right, line)?,
+        }),
         _ => Err(ToProgramError {
-            message: "if supports a variable (or `var > 0`) in StoryProgram path".into(),
+            message: "if condition must be a variable, not/and/or, or a comparison".into(),
             line,
         }),
+    }
+}
+
+fn binop_to_cmp(op: BinOp) -> Result<StoryCmpOp, ToProgramError> {
+    Ok(match op {
+        BinOp::Eq => StoryCmpOp::Eq,
+        BinOp::Ne => StoryCmpOp::Ne,
+        BinOp::Lt => StoryCmpOp::Lt,
+        BinOp::Le => StoryCmpOp::Le,
+        BinOp::Gt => StoryCmpOp::Gt,
+        BinOp::Ge => StoryCmpOp::Ge,
+        _ => {
+            return Err(ToProgramError {
+                message: "internal: not a comparison op".into(),
+                line: 0,
+            })
+        }
+    })
+}
+
+fn expr_to_operand(e: &Expr, line: u32) -> Result<StoryOperand, ToProgramError> {
+    // Identifiers are variables in conditions (not bare string literals).
+    match e {
+        Expr::Ident(name, _) => Ok(StoryOperand::var(name.clone())),
+        _ => match expr_to_value(e) {
+            Some(v) => Ok(StoryOperand::value(v)),
+            None => Err(ToProgramError {
+                message: "comparison operand must be a variable or literal".into(),
+                line,
+            }),
+        },
     }
 }
 
