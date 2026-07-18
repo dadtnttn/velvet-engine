@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 /// One screen / sub-screen node in the layer tree.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScreenLayer {
     pub id: String,
     pub name: String,
@@ -31,6 +31,9 @@ pub struct ScreenLayer {
     pub width_px: u32,
     pub height_px: u32,
     pub document_path: Option<PathBuf>,
+    /// Graph editor position (percent of Nodes canvas). `None` = auto layout.
+    pub graph_x: Option<f32>,
+    pub graph_y: Option<f32>,
 }
 
 impl ScreenLayer {
@@ -52,6 +55,8 @@ impl ScreenLayer {
             width_px: width_px.max(64),
             height_px: height_px.max(64),
             document_path: None,
+            graph_x: None,
+            graph_y: None,
         }
     }
 
@@ -74,6 +79,8 @@ impl ScreenLayer {
             width_px: width_px.max(64),
             height_px: height_px.max(64),
             document_path: None,
+            graph_x: None,
+            graph_y: None,
         }
     }
 
@@ -142,6 +149,38 @@ impl ResPreset {
             Self::Square => "720x720",
         }
     }
+}
+
+fn slugify(name: &str) -> String {
+    let s: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let s = s.trim_matches('_').to_string();
+    if s.is_empty() {
+        "screen".into()
+    } else {
+        s
+    }
+}
+
+fn dist_to_segment(px: f64, py: f64, x0: f64, y0: f64, x1: f64, y1: f64) -> f64 {
+    let dx = x1 - x0;
+    let dy = y1 - y0;
+    let len2 = dx * dx + dy * dy;
+    if len2 < 1e-6 {
+        return (px - x0).hypot(py - y0);
+    }
+    let t = (((px - x0) * dx + (py - y0) * dy) / len2).clamp(0.0, 1.0);
+    let qx = x0 + t * dx;
+    let qy = y0 + t * dy;
+    (px - qx).hypot(py - qy)
 }
 
 pub fn pct_to_px(x_pct: f32, y_pct: f32, width_px: u32, height_px: u32) -> (i32, i32) {
@@ -355,37 +394,219 @@ impl LayerStack {
         self.edges.len() < before
     }
 
+    /// Remove all edges touching a layer.
+    pub fn disconnect_all_for(&mut self, id: &str) -> usize {
+        let before = self.edges.len();
+        self.edges.retain(|e| e.from != id && e.to != id);
+        before - self.edges.len()
+    }
+
+    /// Toggle / cycle edge kind on existing edge.
+    pub fn cycle_edge_kind(&mut self, from: &str, to: &str) -> Option<LayerEdgeKind> {
+        if let Some(e) = self.edges.iter_mut().find(|e| e.from == from && e.to == to) {
+            e.kind = match e.kind {
+                LayerEdgeKind::Transition => LayerEdgeKind::Overlay,
+                LayerEdgeKind::Overlay => LayerEdgeKind::Back,
+                LayerEdgeKind::Back => LayerEdgeKind::Transition,
+            };
+            return Some(e.kind);
+        }
+        None
+    }
+
+    /// Set graph position for a node (percent 0..=100).
+    pub fn set_graph_pos(&mut self, id: &str, x: f32, y: f32) -> bool {
+        if let Some(l) = self.get_mut(id) {
+            l.graph_x = Some(x.clamp(6.0, 94.0));
+            l.graph_y = Some(y.clamp(10.0, 90.0));
+            return true;
+        }
+        false
+    }
+
+    /// Create a new root screen (pantalla) with unique id.
+    pub fn create_screen(&mut self, name: &str, w: u32, h: u32) -> Result<String, String> {
+        let base = slugify(name);
+        let mut id = base.clone();
+        let mut n = 1u32;
+        while self.get(&id).is_some() {
+            n += 1;
+            id = format!("{base}_{n}");
+        }
+        let z = self
+            .layers
+            .iter()
+            .filter(|l| l.parent.is_none())
+            .map(|l| l.z)
+            .max()
+            .unwrap_or(0)
+            + 10;
+        // place new node bottom-center-ish
+        let mut layer = ScreenLayer::root(&id, name, z, w.max(64), h.max(64));
+        layer.graph_x = Some(50.0 + (n as f32) * 3.0);
+        layer.graph_y = Some(72.0);
+        self.layers.push(layer);
+        self.set_active(&id)?;
+        Ok(id)
+    }
+
+    /// Create sublayer under parent (or active if parent None).
+    pub fn create_sub_screen(
+        &mut self,
+        parent: Option<&str>,
+        name: &str,
+    ) -> Result<String, String> {
+        let parent = parent
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| self.active_id.clone());
+        let p = self
+            .get(&parent)
+            .ok_or_else(|| format!("parent {parent} missing"))?
+            .clone();
+        let base = slugify(name);
+        let mut id = base.clone();
+        let mut n = 1u32;
+        while self.get(&id).is_some() {
+            n += 1;
+            id = format!("{base}_{n}");
+        }
+        self.add_child(&parent, &id, name, p.width_px, p.height_px)?;
+        if let Some(l) = self.get_mut(&id) {
+            l.graph_x = Some(p.graph_x.unwrap_or(40.0) + 8.0 + n as f32);
+            l.graph_y = Some(p.graph_y.unwrap_or(30.0) + 14.0);
+        }
+        Ok(id)
+    }
+
+    /// Delete a layer (and its edges). Fails if it has children.
+    pub fn remove_layer(&mut self, id: &str) -> Result<(), String> {
+        if self.has_children(id) {
+            return Err("remove children first".into());
+        }
+        if self.layers.len() <= 1 {
+            return Err("cannot remove last layer".into());
+        }
+        self.disconnect_all_for(id);
+        self.layers.retain(|l| l.id != id);
+        if self.active_id == id {
+            if let Some(first) = self.layers.first() {
+                self.active_id = first.id.clone();
+            }
+        }
+        Ok(())
+    }
+
     /// Layout positions for Nodes view (percent of canvas).
+    /// Prefer stored graph_x/y; otherwise auto-layout by tree.
     pub fn node_layout(&self) -> Vec<(String, f32, f32)> {
+        let mut auto: Vec<(String, f32, f32)> = Vec::new();
         let roots: Vec<_> = self.children_of(None);
-        let mut out = Vec::new();
         let n = roots.len().max(1) as f32;
         for (i, r) in roots.iter().enumerate() {
-            let x = 18.0 + (i as f32) * (70.0 / n);
-            let y = 20.0;
-            out.push((r.id.clone(), x.min(85.0), y));
+            let x = 14.0 + (i as f32 + 0.5) * (72.0 / n);
+            let y = 22.0;
+            auto.push((r.id.clone(), x.min(88.0), y));
             let kids = self.children_of(Some(&r.id));
+            let kn = kids.len().max(1) as f32;
             for (j, c) in kids.iter().enumerate() {
-                let kx = x + (j as f32) * 8.0 - 4.0;
-                let ky = 45.0 + (j as f32) * 12.0;
-                out.push((c.id.clone(), kx.clamp(8.0, 90.0), ky.clamp(30.0, 85.0)));
+                let kx = x - 12.0 + (j as f32) * (28.0 / kn).min(14.0);
+                let ky = 48.0 + (j as f32) * 11.0;
+                auto.push((c.id.clone(), kx.clamp(8.0, 92.0), ky.clamp(28.0, 88.0)));
+                // grandchildren one more level
+                for (k, g) in self.children_of(Some(&c.id)).iter().enumerate() {
+                    auto.push((
+                        g.id.clone(),
+                        (kx + 6.0 + k as f32 * 4.0).clamp(8.0, 92.0),
+                        (ky + 14.0).clamp(28.0, 90.0),
+                    ));
+                }
             }
         }
-        // any leftover nodes
         for l in &self.layers {
-            if !out.iter().any(|(id, _, _)| id == &l.id) {
-                out.push((l.id.clone(), 50.0, 70.0));
+            if !auto.iter().any(|(id, _, _)| id == &l.id) {
+                auto.push((l.id.clone(), 50.0, 75.0));
             }
         }
-        out
+        // override with manual positions
+        auto.into_iter()
+            .map(|(id, ax, ay)| {
+                if let Some(l) = self.get(&id) {
+                    (
+                        id,
+                        l.graph_x.unwrap_or(ax),
+                        l.graph_y.unwrap_or(ay),
+                    )
+                } else {
+                    (id, ax, ay)
+                }
+            })
+            .collect()
+    }
+
+    /// Screen-space rect helpers for graph hit tests (percent layout → canvas).
+    pub fn node_screen_rect(
+        canvas_x: i32,
+        canvas_y: i32,
+        canvas_w: i32,
+        canvas_h: i32,
+        px: f32,
+        py: f32,
+        zoom: i32,
+    ) -> (i32, i32, i32, i32) {
+        let nw = 100 + 12 * zoom;
+        let nh = 44 + 10 * zoom;
+        let x0 = canvas_x + ((px / 100.0) * canvas_w as f32) as i32 - nw / 2;
+        let y0 = canvas_y + ((py / 100.0) * canvas_h as f32) as i32 - nh / 2;
+        (x0, y0, nw, nh)
+    }
+
+    /// Hit-test edge near midpoint (for select/disconnect).
+    pub fn hit_edge(
+        &self,
+        sx: f64,
+        sy: f64,
+        canvas_x: i32,
+        canvas_y: i32,
+        canvas_w: i32,
+        canvas_h: i32,
+        zoom: i32,
+    ) -> Option<(String, String)> {
+        let layout = self.node_layout();
+        let thresh = (12 + 4 * zoom) as f64;
+        for e in &self.edges {
+            let a = layout.iter().find(|(id, _, _)| id == &e.from)?;
+            let b = layout.iter().find(|(id, _, _)| id == &e.to)?;
+            let (x0, y0, nw, nh) =
+                Self::node_screen_rect(canvas_x, canvas_y, canvas_w, canvas_h, a.1, a.2, zoom);
+            let (x1, y1, _nw1, nh1) =
+                Self::node_screen_rect(canvas_x, canvas_y, canvas_w, canvas_h, b.1, b.2, zoom);
+            // port centers: out right of A, in left of B
+            let ax = (x0 + nw) as f64;
+            let ay = (y0 + nh / 2) as f64;
+            let bx = x1 as f64;
+            let by = (y1 + nh1 / 2) as f64;
+            let mx = (ax + bx) * 0.5;
+            let my = (ay + by) * 0.5;
+            let dx = sx - mx;
+            let dy = sy - my;
+            if (dx * dx + dy * dy).sqrt() < thresh * 2.5 {
+                return Some((e.from.clone(), e.to.clone()));
+            }
+            // also along segments
+            if dist_to_segment(sx, sy, ax, ay, mx, my) < thresh
+                || dist_to_segment(sx, sy, mx, my, bx, by) < thresh
+            {
+                return Some((e.from.clone(), e.to.clone()));
+            }
+        }
+        None
     }
 
     /// VScript body for an edge (insert into button advanced).
     pub fn edge_script(edge: &LayerEdge) -> String {
         match edge.kind {
-            LayerEdgeKind::Transition | LayerEdgeKind::Back => {
-                format!("layer.open(\"{}\")\n", edge.to)
-            }
+            LayerEdgeKind::Transition => format!("layer.open(\"{}\")\n", edge.to),
+            LayerEdgeKind::Back => format!("layer.open(\"{}\") // back\n", edge.to),
             LayerEdgeKind::Overlay => format!("layer.show(\"{}\")\n", edge.to),
         }
     }
