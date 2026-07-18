@@ -6,18 +6,15 @@ use anyhow::{bail, Context, Result};
 use velvet_story_lang::commands::CommandRegistry;
 use velvet_story_lang::i18n_extract::{extract, to_catalog};
 use velvet_story_lang::pipeline::{
-    build_source, check_source, dump_ast_json, dump_lowered_text, run_source,
+    build_path, check_path, dump_ast_json, dump_lowered_text, run_path,
 };
 use velvet_story_lang::{format_source, is_idempotent};
 use velvet_story_lang::studio::{build_model, model_json};
 
 /// `velvet story check`
 pub fn cmd_story_check(path: PathBuf) -> Result<()> {
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
-    let file = path.to_string_lossy().to_string();
     let cmds = CommandRegistry::builtin();
-    let r = check_source(&source, &file, &cmds);
+    let r = check_path(&path, &cmds).map_err(|e| anyhow::anyhow!(e))?;
     for d in &r.diags {
         println!("{}", d.display());
     }
@@ -25,7 +22,6 @@ pub fn cmd_story_check(path: PathBuf) -> Result<()> {
         bail!("story check failed for {}", path.display());
     }
     let scenes = r
-        .parsed
         .file
         .items
         .iter()
@@ -37,11 +33,8 @@ pub fn cmd_story_check(path: PathBuf) -> Result<()> {
 
 /// `velvet story build`
 pub fn cmd_story_build(path: PathBuf) -> Result<()> {
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
-    let file = path.to_string_lossy().to_string();
     let cmds = CommandRegistry::builtin();
-    let r = build_source(&source, &file, &cmds);
+    let r = build_path(&path, &cmds).map_err(|e| anyhow::anyhow!(e))?;
     for d in &r.check.diags {
         println!("{}", d.display());
     }
@@ -60,11 +53,8 @@ pub fn cmd_story_build(path: PathBuf) -> Result<()> {
 
 /// `velvet story run`
 pub fn cmd_story_run(path: PathBuf, choice: usize) -> Result<()> {
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
-    let file = path.to_string_lossy().to_string();
     let cmds = CommandRegistry::builtin();
-    let r = run_source(&source, &file, &cmds, choice);
+    let r = run_path(&path, &cmds, choice).map_err(|e| anyhow::anyhow!(e))?;
     for d in &r.build.check.diags {
         if d.is_error() {
             println!("{}", d.display());

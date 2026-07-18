@@ -77,5 +77,69 @@ end
 "#;
     let cmds = CommandRegistry::builtin();
     assert!(check_source(src, "c.vstory", &cmds).ok);
-    assert!(run_source(src, "c.vstory", &cmds, 0).ok);
+    let r = run_source(src, "c.vstory", &cmds, 0);
+    assert!(r.ok);
+    assert!(
+        r.log.iter().any(|l| l.contains("command combat.start")),
+        "log={:?}",
+        r.log
+    );
+    assert!(r
+        .state
+        .iter()
+        .any(|(k, v)| k == "__last_command" && v.contains("combat.start")));
+}
+
+#[test]
+fn e2e_include_multi_file_goto() {
+    use std::fs;
+    use tempfile::tempdir;
+    use velvet_story_lang::pipeline::{check_path, run_path};
+
+    let dir = tempdir().unwrap();
+    let part = dir.path().join("part.vstory");
+    let main = dir.path().join("main.vstory");
+    fs::write(
+        &part,
+        "scene hallway\nnarrator:\n    En el pasillo.\nend\n",
+    )
+    .unwrap();
+    fs::write(
+        &main,
+        "include \"part.vstory\"\n\nscene start\nnarrator:\n    Inicio.\ngoto hallway\n",
+    )
+    .unwrap();
+    let cmds = CommandRegistry::builtin();
+    let c = check_path(&main, &cmds).unwrap();
+    assert!(c.ok, "{:?}", c.diags);
+    assert!(c
+        .file
+        .items
+        .iter()
+        .any(|i| matches!(i, velvet_story_lang::ast::TopItem::Scene(s) if s.name == "hallway")));
+    let r = run_path(&main, &cmds, 0).unwrap();
+    assert!(r.ok);
+    assert!(
+        r.dialogue.iter().any(|d| d.contains("pasillo") || d.contains("Inicio")),
+        "dialogue={:?}",
+        r.dialogue
+    );
+}
+
+#[test]
+fn e2e_bad_if_diag_points_to_vstory() {
+    let src = r#"
+scene start
+if "luna":
+    narrator:
+        bad
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    let c = check_source(src, "stories/chapter_1.vstory", &cmds);
+    assert!(!c.ok);
+    let d = c.diags.iter().find(|d| d.code == "VST030").unwrap();
+    let text = d.display();
+    assert!(text.contains("stories/chapter_1.vstory"));
+    assert!(text.contains("VST030"));
 }

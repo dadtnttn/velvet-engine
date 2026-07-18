@@ -1,0 +1,10 @@
+scene start
+set score = 0
+add score 2
+if score >= 2:
+    narrator:
+        Bien.
+goto end
+
+scene end
+end

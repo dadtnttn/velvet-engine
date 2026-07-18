@@ -346,7 +346,8 @@ fn lower_stmt(
             }
         }
         Stmt::CallCommand { name, args, span } => {
-            // Encode as Call with pool name + log via Print for observability
+            // Encode as single Call (host logs command name + args). Do not emit
+            // ActionFire after Call — that would re-pop stack arguments.
             let cid = unit.pool.intern(name.as_str());
             for (k, v) in args {
                 let _ = unit.pool.intern(k.as_str());
@@ -355,8 +356,6 @@ fn lower_stmt(
             let pc = unit.emit(
                 Vs2Instr::with_ab(OpVs2::Call, cid, args.len() as u32).at_line(span.line),
             );
-            // side-channel: ActionFire for host
-            unit.emit(Vs2Instr::with_a(OpVs2::ActionFire, cid).at_line(span.line));
             map.push(*span, "call", name.clone(), Some(pc));
         }
         Stmt::Pause { span, .. } => {

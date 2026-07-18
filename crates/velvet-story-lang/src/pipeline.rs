@@ -1,13 +1,15 @@
-//! Full pipeline: parse → sema → lower → VS2 unit → host execution.
+//! Full pipeline: parse → include resolve → sema → lower → VS2 unit → host execution.
 
 use std::path::Path;
 
 use velvet_script_bytecode::opcodes_vs2::OpVs2;
 use velvet_script_vm::{Vs2Host, Vs2MiniVm};
 
+use crate::ast::StoryFile;
 use crate::commands::CommandRegistry;
 use crate::diag::StoryDiag;
 use crate::format::{format_source, is_idempotent};
+use crate::load::{load_story_path, load_story_source};
 use crate::lower::{dump_lowered, lower, LowerOutput};
 use crate::parser::{parse, ParseResult};
 use crate::sema::{self, SemaResult};
@@ -17,8 +19,10 @@ use crate::studio::StudioModel;
 /// Combined check result.
 #[derive(Debug)]
 pub struct CheckResult {
-    /// Parse.
+    /// Parse (root file; includes may be merged into `file`).
     pub parsed: ParseResult,
+    /// Fully resolved story file (includes expanded).
+    pub file: StoryFile,
     /// Sema.
     pub sema: SemaResult,
     /// All diags.
@@ -27,26 +31,66 @@ pub struct CheckResult {
     pub ok: bool,
 }
 
-/// Check a story file (no execute).
+/// Check a story source (includes resolved relative to `file` parent if path-like).
 pub fn check_source(source: &str, file: &str, cmds: &CommandRegistry) -> CheckResult {
+    let base = Path::new(file).parent();
+    let (story, load_diags) = match load_story_source(source, file, base) {
+        Ok(v) => v,
+        Err(e) => {
+            let parsed = parse(source, file);
+            let mut diags = parsed.diags.clone();
+            diags.push(StoryDiag::error(
+                "VST043",
+                e,
+                file,
+                crate::span::Span::unknown(),
+            ));
+            return CheckResult {
+                parsed,
+                file: StoryFile {
+                    file: file.into(),
+                    items: vec![],
+                },
+                sema: SemaResult::default(),
+                diags,
+                ok: false,
+            };
+        }
+    };
+    // Keep raw parse for AST dump compatibility
     let parsed = parse(source, file);
-    let mut diags = parsed.diags.clone();
-    let sema = sema::analyze(&parsed.file, cmds);
+    let mut diags = load_diags;
+    diags.extend(parsed.diags.iter().cloned());
+    let sema = sema::analyze(&story, cmds);
     diags.extend(sema.diags.clone());
     let ok = !diags.iter().any(|d| d.is_error());
     CheckResult {
         parsed,
+        file: story,
         sema,
         diags,
         ok,
     }
 }
 
-/// Check path.
+/// Check path (resolves includes from disk).
 pub fn check_path(path: &Path, cmds: &CommandRegistry) -> Result<CheckResult, String> {
+    let (story, load_diags) = load_story_path(path)?;
     let source = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let file = path.to_string_lossy().to_string();
-    Ok(check_source(&source, &file, cmds))
+    let parsed = parse(&source, &file);
+    let mut diags = load_diags;
+    diags.extend(parsed.diags.iter().cloned());
+    let sema = sema::analyze(&story, cmds);
+    diags.extend(sema.diags.clone());
+    let ok = !diags.iter().any(|d| d.is_error());
+    Ok(CheckResult {
+        parsed,
+        file: story,
+        sema,
+        diags,
+        ok,
+    })
 }
 
 /// Build result (lowered unit).
@@ -60,7 +104,7 @@ pub struct BuildResult {
     pub ok: bool,
 }
 
-/// Build: check + lower.
+/// Build: check + lower (on include-resolved file).
 pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildResult {
     let check = check_source(source, file, cmds);
     if !check.ok {
@@ -70,7 +114,7 @@ pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildRe
             ok: false,
         };
     }
-    let lowered = lower(&check.parsed.file);
+    let lowered = lower(&check.file);
     let mut check = check;
     check.diags.extend(lowered.diags.clone());
     let ok = !check.diags.iter().any(|d| d.is_error());
@@ -79,6 +123,27 @@ pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildRe
         lowered: Some(lowered),
         ok,
     }
+}
+
+/// Build from path (includes on disk).
+pub fn build_path(path: &Path, cmds: &CommandRegistry) -> Result<BuildResult, String> {
+    let check = check_path(path, cmds)?;
+    if !check.ok {
+        return Ok(BuildResult {
+            check,
+            lowered: None,
+            ok: false,
+        });
+    }
+    let lowered = lower(&check.file);
+    let mut check = check;
+    check.diags.extend(lowered.diags.clone());
+    let ok = !check.diags.iter().any(|d| d.is_error());
+    Ok(BuildResult {
+        check,
+        lowered: Some(lowered),
+        ok,
+    })
 }
 
 /// Run result (observable host state).
@@ -106,6 +171,18 @@ pub fn run_source(
     choice_index: usize,
 ) -> RunResult {
     let build = build_source(source, file, cmds);
+    run_build(build, choice_index)
+}
+
+/// Run from path with include resolution.
+pub fn run_path(path: &Path, cmds: &CommandRegistry, choice_index: usize) -> Result<RunResult, String> {
+    let build = build_path(path, cmds)?;
+    Ok(run_build(build, choice_index))
+}
+
+fn run_build(build: BuildResult, choice_index: usize) -> RunResult {
+    // shared body was previously inline in run_source
+    let _cmds_marker = choice_index;
     if !build.ok {
         return RunResult {
             build,
@@ -138,13 +215,13 @@ pub fn run_source(
         .map(|ins| (ins.op, ins.a, ins.b))
         .collect();
 
-    // start at first scene entry
+    // Prefer `start` scene; else earliest entry PC among scenes.
     let start_pc = lowered
         .unit
         .entry_scenes
-        .values()
+        .get("start")
         .copied()
-        .min()
+        .or_else(|| lowered.unit.entry_scenes.values().copied().min())
         .unwrap_or(0) as usize;
 
     let mut vm = Vs2MiniVm::new(host);
