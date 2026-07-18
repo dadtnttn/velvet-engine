@@ -201,6 +201,52 @@ impl StudioLayout {
         }
         None
     }
+
+    pub fn contains_inspector(&self, sx: f64, sy: f64) -> bool {
+        let x = sx as i32;
+        let y = sy as i32;
+        x >= self.ww - self.right_w
+            && x < self.ww
+            && y >= self.top_h
+            && y < self.wh - self.bot_h
+    }
+
+    /// Hit editable inspector field when a widget is selected.
+    /// Row order: 0=id(ro), 1=kind(ro), 2=text, 3=pos, 4=size.
+    pub fn hit_inspector_field(&self, sx: f64, sy: f64) -> Option<InspectorField> {
+        if !self.contains_inspector(sx, sy) {
+            return None;
+        }
+        let y = sy as i32;
+        let base = self.top_h + 42;
+        // each field: label 16 + box 20 + gap ~12 → 48
+        let row_h = 48;
+        let row = ((y - base) / row_h) as i32;
+        match row {
+            2 => Some(InspectorField::Text),
+            3 => Some(InspectorField::Pos),
+            4 => Some(InspectorField::Size),
+            _ => None,
+        }
+    }
+}
+
+/// Editable inspector property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectorField {
+    Text,
+    Pos,
+    Size,
+}
+
+impl InspectorField {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Text => "TEXT",
+            Self::Pos => "POS",
+            Self::Size => "SIZE",
+        }
+    }
 }
 
 /// Whether a visual region should be drawn as a draggable widget (not screen chrome).
@@ -299,6 +345,8 @@ pub fn paint_studio(
     advanced_src: &str,
     status: &str,
     dragging: bool,
+    edit_field: Option<InspectorField>,
+    edit_buf: &str,
 ) {
     let ww = layout.ww as u32;
     let wh = layout.wh as u32;
@@ -439,24 +487,61 @@ pub fn paint_studio(
     let mut iy = lay.top_h + 42;
     if let Some(id) = selected {
         if let Some(w) = widgets.iter().find(|w| w.id == id) {
-            for (key, val) in [
-                ("ID", id.to_string()),
-                ("KIND", w.kind.clone()),
+            // Rows aligned with hit_inspector_field (row_h = 48)
+            let fields: [( &str, String, Option<InspectorField>, bool); 5] = [
+                ("ID", id.to_string(), None, false),
+                ("KIND", w.kind.clone(), None, false),
                 (
-                    "TEXT",
-                    w.text.as_deref().unwrap_or("").chars().take(22).collect(),
+                    "TEXT  (name)",
+                    w.text.as_deref().unwrap_or("").to_string(),
+                    Some(InspectorField::Text),
+                    true,
                 ),
                 (
-                    "POS",
-                    w.position.as_deref().unwrap_or("-").to_string(),
+                    "POS  x%,y%",
+                    w.position.as_deref().unwrap_or("(50%, 50%)").to_string(),
+                    Some(InspectorField::Pos),
+                    true,
                 ),
                 (
-                    "SIZE",
+                    "SIZE  w%,h%",
                     w.size.as_deref().unwrap_or("(18%, 8%)").to_string(),
+                    Some(InspectorField::Size),
+                    true,
                 ),
-            ] {
-                draw_text_line(buf, ww, wh, rx0 + 14, iy, key, c_text_dim(), 1);
+            ];
+            for (key, val, field, editable) in fields {
+                let editing = field.is_some() && edit_field == field;
+                draw_text_line(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 14,
+                    iy,
+                    key,
+                    if editable { c_text_muted() } else { c_text_dim() },
+                    1,
+                );
+                if editable {
+                    draw_text_line(
+                        buf,
+                        ww,
+                        wh,
+                        lay.ww - 52,
+                        iy,
+                        "edit",
+                        c_text_dim(),
+                        1,
+                    );
+                }
                 iy += 16;
+                let box_fill = if editing {
+                    pack_rgb(40, 50, 90)
+                } else if editable {
+                    c_surface_2()
+                } else {
+                    pack_rgb(24, 26, 38)
+                };
                 fill_rect(
                     buf,
                     ww,
@@ -464,24 +549,130 @@ pub fn paint_studio(
                     rx0 + 12,
                     iy - 2,
                     lay.ww - 12,
-                    iy + 18,
-                    c_surface_2(),
+                    iy + 20,
+                    box_fill,
+                );
+                if editing {
+                    rect_outline(
+                        buf,
+                        ww,
+                        wh,
+                        rx0 + 12,
+                        iy - 2,
+                        lay.ww - 12,
+                        iy + 20,
+                        c_accent_hi(),
+                        2,
+                    );
+                } else if editable {
+                    rect_outline(
+                        buf,
+                        ww,
+                        wh,
+                        rx0 + 12,
+                        iy - 2,
+                        lay.ww - 12,
+                        iy + 20,
+                        c_border(),
+                        1,
+                    );
+                }
+                let shown = if editing {
+                    format!("{edit_buf}|")
+                } else {
+                    val
+                };
+                draw_text_line(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 16,
+                    iy + 3,
+                    &shown.chars().take(26).collect::<String>(),
+                    if editing { c_cta_hi() } else { c_text() },
+                    1,
+                );
+                iy += 32; // total row ~48
+            }
+            iy += 4;
+            if edit_field.is_some() {
+                fill_rect(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 12,
+                    iy,
+                    lay.ww - 12,
+                    iy + 36,
+                    pack_rgb(30, 40, 55),
                 );
                 draw_text_line(
                     buf,
                     ww,
                     wh,
                     rx0 + 16,
-                    iy + 2,
-                    &val.chars().take(24).collect::<String>(),
-                    c_text(),
+                    iy + 6,
+                    "Enter apply  Esc cancel",
+                    c_text_muted(),
                     1,
                 );
-                iy += 32;
+                draw_text_line(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 16,
+                    iy + 20,
+                    "type to edit selected field",
+                    c_text_dim(),
+                    1,
+                );
+                iy += 44;
+            } else {
+                draw_text_line(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 14,
+                    iy,
+                    "Click field to edit",
+                    c_text_dim(),
+                    1,
+                );
+                iy += 16;
+                draw_text_line(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 14,
+                    iy,
+                    "T text  P pos  Z size",
+                    c_text_dim(),
+                    1,
+                );
+                iy += 16;
+                draw_text_line(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 14,
+                    iy,
+                    "Arrows nudge 1%",
+                    c_text_dim(),
+                    1,
+                );
+                iy += 20;
             }
             if dragging {
-                iy += 8;
-                fill_rect(buf, ww, wh, rx0 + 12, iy, lay.ww - 12, iy + 24, pack_rgb(40, 60, 50));
+                fill_rect(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 12,
+                    iy,
+                    lay.ww - 12,
+                    iy + 24,
+                    pack_rgb(40, 60, 50),
+                );
                 draw_text_line(buf, ww, wh, rx0 + 18, iy + 6, "DRAGGING...", c_cta_hi(), 1);
             }
         } else {
@@ -493,6 +684,17 @@ pub fn paint_studio(
         draw_text_line(buf, ww, wh, rx0 + 14, iy, "Click canvas widget", c_text_dim(), 1);
         iy += 18;
         draw_text_line(buf, ww, wh, rx0 + 14, iy, "or hierarchy row", c_text_dim(), 1);
+        iy += 24;
+        draw_text_line(
+            buf,
+            ww,
+            wh,
+            rx0 + 14,
+            iy,
+            "Then edit TEXT / POS / SIZE",
+            c_text_dim(),
+            1,
+        );
     }
 
     // ── Bottom console ─────────────────────────────────────────────────────
@@ -533,7 +735,7 @@ pub fn paint_studio(
         wh,
         lay.ww - 480,
         lay.wh - lay.bot_h + 26,
-        "Tab mode  |  click palette  |  drag widgets  |  Ctrl+S  |  Esc",
+        "Tab mode  |  palette  |  drag  |  edit TEXT/POS/SIZE  |  Ctrl+S  |  Esc",
         c_text_dim(),
         1,
     );

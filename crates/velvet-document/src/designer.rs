@@ -121,6 +121,14 @@ impl UiDesigner {
         )
     }
 
+    /// Resize widget: size string e.g. `(18%, 8%)`.
+    pub fn set_size(&mut self, region_id: &str, size: &str) -> Result<(), DocumentError> {
+        self.apply_props(
+            region_id,
+            vec![("size", PropertyValue::Raw(size.into()))],
+        )
+    }
+
     /// Drag a visual widget by delta (same units as stored position).
     ///
     /// This is the API the Studio canvas / GUI calls for drag-move.
