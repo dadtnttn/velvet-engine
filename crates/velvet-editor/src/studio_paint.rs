@@ -6,6 +6,8 @@
 use velvet_document::DesignerWidget;
 use velvet_story::{draw_text_line, fill_rect, pack_rgb};
 
+use crate::layers::{DesignSurface, ScreenLayer};
+
 /// Map design base scale (1 body / 2 title) through user UI zoom (1..=4).
 #[inline]
 fn txt(
@@ -100,6 +102,12 @@ pub struct StudioLayout {
     pub canvas_y: i32,
     pub canvas_w: i32,
     pub canvas_h: i32,
+    /// Y of LAYERS section header.
+    pub layers_y: i32,
+    /// Y of first layer row.
+    pub layers_rows_y: i32,
+    /// Max layer rows shown.
+    pub max_layers: usize,
     /// Y where palette section starts (for hit tests).
     pub palette_y: i32,
     /// Y of first hierarchy row.
@@ -140,17 +148,21 @@ impl StudioLayout {
         let pill_h = 18 + 6 * z;
         let save_w = 56 + 14 * z;
         let max_hier = match z {
-            1 | 2 => 6,
-            3 => 5,
-            _ => 4,
+            1 | 2 => 5,
+            3 => 4,
+            _ => 3,
         };
+        let max_layers = 4usize;
 
         let canvas_x = left_w + gap;
         let canvas_y = top_h + gap;
         let canvas_w = (ww - left_w - right_w - gap * 2).max(64);
         let canvas_h = (wh - top_h - bot_h - gap * 2).max(64);
 
-        let hierarchy_y = top_h + header_h + pad;
+        let layers_y = top_h;
+        let layers_rows_y = layers_y + header_h + pad / 2;
+        let layers_block = header_h + max_layers as i32 * row_h + pad;
+        let hierarchy_y = top_h + layers_block + header_h + pad / 2;
         let palette_y = hierarchy_y + max_hier as i32 * row_h + pad + 4;
 
         Self {
@@ -165,6 +177,9 @@ impl StudioLayout {
             canvas_y,
             canvas_w,
             canvas_h,
+            layers_y,
+            layers_rows_y,
+            max_layers,
             palette_y,
             hierarchy_y,
             header_h,
@@ -247,6 +262,20 @@ impl StudioLayout {
             return Some("save");
         }
         None
+    }
+
+    /// Hit layer row → index in sorted layer list.
+    pub fn hit_layer_row(&self, sy: f64, layer_count: usize) -> Option<usize> {
+        let y = sy as i32;
+        if y < self.layers_rows_y || y >= self.hierarchy_y - self.header_h {
+            return None;
+        }
+        let row = ((y - self.layers_rows_y) / self.row_h) as usize;
+        if row < layer_count.min(self.max_layers) {
+            Some(row)
+        } else {
+            None
+        }
     }
 
     /// Hit hierarchy row → widget index among canvas widgets (0-based).
@@ -433,6 +462,17 @@ fn draw_pill(
     );
 }
 
+/// Layer stack snapshot for paint (borrowed data).
+pub struct LayerPaintView<'a> {
+    pub layers: &'a [ScreenLayer],
+    pub active_id: &'a str,
+    pub res_w: f32,
+    pub res_h: f32,
+    pub animating: bool,
+    pub editable: bool,
+    pub pos_px: Option<(i32, i32)>,
+}
+
 /// Paint full Studio chrome + simplified widgets or advanced script.
 pub fn paint_studio(
     buf: &mut [u32],
@@ -447,6 +487,7 @@ pub fn paint_studio(
     edit_field: Option<InspectorField>,
     edit_buf: &str,
     ui_zoom: i32,
+    layers: &LayerPaintView<'_>,
 ) {
     let ww = layout.ww as u32;
     let wh = layout.wh as u32;
@@ -578,12 +619,82 @@ pub fn paint_studio(
         c_border_soft(),
     );
 
+    // ── Layers (pantallas) ─────────────────────────────────────────────────
     draw_panel_header(
         buf,
         ww,
         wh,
         0,
-        lay.top_h,
+        lay.layers_y,
+        lay.left_w,
+        "LAYERS",
+        lay.header_h,
+        zoom,
+    );
+    let mut sorted: Vec<&ScreenLayer> = layers.layers.iter().collect();
+    sorted.sort_by_key(|l| l.z);
+    let mut ly = lay.layers_rows_y;
+    for (i, layer) in sorted.iter().take(lay.max_layers).enumerate() {
+        let active = layer.id == layers.active_id;
+        let row_bot = ly + lay.row_h - 2;
+        if active {
+            fill_rect(
+                buf,
+                ww,
+                wh,
+                4,
+                ly,
+                lay.left_w - 4,
+                row_bot,
+                pack_rgb(50, 70, 50),
+            );
+            fill_rect(buf, ww, wh, 4, ly, 7, row_bot, c_cta());
+        }
+        let lock = if layer.locked { "L" } else { "·" };
+        let mark = format!("{lock}");
+        txt(
+            buf,
+            ww,
+            wh,
+            lay.pad,
+            ly + (lay.row_h - 8 * zoom).max(2) / 2,
+            &mark,
+            if layer.locked {
+                pack_rgb(220, 120, 100)
+            } else {
+                c_cta_hi()
+            },
+            1,
+            zoom,
+        );
+        let label = format!(
+            "{} {}x{}",
+            layer.name.chars().take(10).collect::<String>(),
+            layer.width_px,
+            layer.height_px
+        );
+        let lchars = lay.max_chars_in(lay.left_w - 28);
+        txt(
+            buf,
+            ww,
+            wh,
+            lay.pad + 10 + 4 * zoom,
+            ly + (lay.row_h - 8 * zoom).max(2) / 2,
+            &label.chars().take(lchars).collect::<String>(),
+            if active { c_text() } else { c_text_muted() },
+            1,
+            zoom,
+        );
+        ly += lay.row_h;
+        let _ = i;
+    }
+
+    draw_panel_header(
+        buf,
+        ww,
+        wh,
+        0,
+        lay.hierarchy_y - lay.header_h - lay.pad / 2,
         lay.left_w,
         "HIERARCHY",
         lay.header_h,
@@ -774,7 +885,7 @@ pub fn paint_studio(
                     true,
                 ),
                 (
-                    "POS",
+                    "POS %",
                     w.position.as_deref().unwrap_or("(50%, 50%)").to_string(),
                     Some(InspectorField::Pos),
                     true,
@@ -869,6 +980,63 @@ pub fn paint_studio(
                 );
                 iy = row_top + lay.insp_row_h;
             }
+            // Pixel coords for active layer resolution
+            if let Some((px, py)) = layers.pos_px {
+                txt(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + lay.pad,
+                    iy,
+                    "POS px",
+                    c_text_dim(),
+                    1,
+                    zoom,
+                );
+                iy += 8 * zoom + 2;
+                fill_rect(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + lay.pad,
+                    iy,
+                    lay.ww - lay.pad,
+                    iy + 10 + 4 * zoom,
+                    c_surface_2(),
+                );
+                txt(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + lay.pad + 6,
+                    iy + 2,
+                    &format!("{px}, {py}  ({}x{})", layers.res_w as i32, layers.res_h as i32),
+                    pack_rgb(180, 220, 255),
+                    1,
+                    zoom,
+                );
+                iy += 14 + 6 * zoom;
+            }
+            txt(
+                buf,
+                ww,
+                wh,
+                rx0 + lay.pad,
+                iy,
+                if layers.editable {
+                    "layer editable"
+                } else {
+                    "layer LOCKED"
+                },
+                if layers.editable {
+                    c_cta_hi()
+                } else {
+                    pack_rgb(220, 120, 100)
+                },
+                1,
+                zoom,
+            );
+            iy += lay.row_h;
             iy += lay.pad;
             if edit_field.is_some() {
                 fill_rect(
@@ -1023,8 +1191,7 @@ pub fn paint_studio(
         zoom,
     );
 
-    // ── Canvas frame ───────────────────────────────────────────────────────
-    // Outer chrome with soft border
+    // ── Canvas frame + letterboxed design surface (layer resolution) ───────
     fill_rect(
         buf,
         ww,
@@ -1039,88 +1206,156 @@ pub fn paint_studio(
         buf,
         ww,
         wh,
-        lay.canvas_x - 1,
-        lay.canvas_y - 1,
-        lay.canvas_x + lay.canvas_w + 1,
-        lay.canvas_y + lay.canvas_h + 1,
-        c_border_soft(),
+        lay.canvas_x,
+        lay.canvas_y,
+        lay.canvas_x + lay.canvas_w,
+        lay.canvas_y + lay.canvas_h,
+        pack_rgb(8, 9, 14),
+    );
+
+    let surface = DesignSurface::fit(
+        lay.canvas_x,
+        lay.canvas_y,
+        lay.canvas_w,
+        lay.canvas_h,
+        layers.res_w,
+        layers.res_h,
+    );
+
+    // Ghost lower layers (slightly inset outlines)
+    for (gi, gl) in layers
+        .layers
+        .iter()
+        .filter(|l| l.visible && l.id != layers.active_id && l.z < layers.layers.iter().find(|a| a.id == layers.active_id).map(|a| a.z).unwrap_or(0))
+        .enumerate()
+    {
+        let ghost = DesignSurface::fit(
+            lay.canvas_x,
+            lay.canvas_y,
+            lay.canvas_w,
+            lay.canvas_h,
+            gl.width_px as f32,
+            gl.height_px as f32,
+        );
+        let inset = (gi as i32 + 1) * 3;
+        rect_outline(
+            buf,
+            ww,
+            wh,
+            ghost.x + inset,
+            ghost.y + inset,
+            ghost.x + ghost.w - inset,
+            ghost.y + ghost.h - inset,
+            pack_rgb(40, 45, 60),
+            1,
+        );
+    }
+
+    // Active design surface
+    let border_c = if layers.animating {
+        pack_rgb(80, 200, 140)
+    } else if layers.editable {
+        c_border()
+    } else {
+        pack_rgb(120, 70, 70)
+    };
+    fill_rect(
+        buf,
+        ww,
+        wh,
+        surface.x - 2,
+        surface.y - 2,
+        surface.x + surface.w + 2,
+        surface.y + surface.h + 2,
+        border_c,
     );
     fill_rect(
         buf,
         ww,
         wh,
-        lay.canvas_x,
-        lay.canvas_y,
-        lay.canvas_x + lay.canvas_w,
-        lay.canvas_y + lay.canvas_h,
+        surface.x,
+        surface.y,
+        surface.x + surface.w,
+        surface.y + surface.h,
         c_canvas(),
     );
 
     if mode_simplified {
-        // Subtle grid (10% steps)
-        let step_x = (lay.canvas_w / 10).max(20);
-        let mut gx = lay.canvas_x + step_x;
-        while gx < lay.canvas_x + lay.canvas_w {
+        // Grid on design surface
+        let step_x = (surface.w / 10).max(16);
+        let mut gx = surface.x + step_x;
+        while gx < surface.x + surface.w {
             fill_rect(
                 buf,
                 ww,
                 wh,
                 gx,
-                lay.canvas_y,
+                surface.y,
                 gx + 1,
-                lay.canvas_y + lay.canvas_h,
+                surface.y + surface.h,
                 c_grid(),
             );
             gx += step_x;
         }
-        let step_y = (lay.canvas_h / 10).max(20);
-        let mut gy = lay.canvas_y + step_y;
-        while gy < lay.canvas_y + lay.canvas_h {
+        let step_y = (surface.h / 10).max(16);
+        let mut gy = surface.y + step_y;
+        while gy < surface.y + surface.h {
             fill_rect(
                 buf,
                 ww,
                 wh,
-                lay.canvas_x,
+                surface.x,
                 gy,
-                lay.canvas_x + lay.canvas_w,
+                surface.x + surface.w,
                 gy + 1,
                 c_grid(),
             );
             gy += step_y;
         }
-        // center crosshair guides (light)
-        let cx = lay.canvas_x + lay.canvas_w / 2;
-        let cy = lay.canvas_y + lay.canvas_h / 2;
+        let cx = surface.x + surface.w / 2;
+        let cy = surface.y + surface.h / 2;
         fill_rect(
             buf,
             ww,
             wh,
             cx,
-            lay.canvas_y,
+            surface.y,
             cx + 1,
-            lay.canvas_y + lay.canvas_h,
+            surface.y + surface.h,
             pack_rgb(45, 50, 70),
         );
         fill_rect(
             buf,
             ww,
             wh,
-            lay.canvas_x,
+            surface.x,
             cy,
-            lay.canvas_x + lay.canvas_w,
+            surface.x + surface.w,
             cy + 1,
             pack_rgb(45, 50, 70),
         );
 
+        let res_label = format!(
+            "{}  {}x{}px{}",
+            layers.active_id,
+            layers.res_w as i32,
+            layers.res_h as i32,
+            if layers.animating { "  anim…" } else { "" }
+        );
         txt(
             buf,
             ww,
             wh,
-            lay.canvas_x + 12,
-            lay.canvas_y + 10,
-            "CANVAS  —  drag to move, snap 1%",
-            c_text_dim(),
-            1, zoom,
+            surface.x + 8,
+            surface.y + 6,
+            &res_label.chars().take(lay.max_chars_in(surface.w - 16)).collect::<String>(),
+            if layers.animating {
+                c_cta_hi()
+            } else {
+                c_text_dim()
+            },
+            1,
+            zoom,
         );
 
         for w in canvas_widgets {
@@ -1130,11 +1365,14 @@ pub fn paint_studio(
             let min_w = (56 + 28 * zoom) as f32;
             let min_h = (22 + 14 * zoom) as f32;
             let max_h = (40 + 22 * zoom) as f32;
-            let bw = ((sw / 100.0) * lay.canvas_w as f32)
-                .clamp(min_w, lay.canvas_w as f32 * 0.6) as i32;
-            let bh = ((sh / 100.0) * lay.canvas_h as f32).clamp(min_h, max_h) as i32;
-            let px = lay.canvas_x + ((x / 100.0) * lay.canvas_w as f32) as i32 - bw / 2;
-            let py = lay.canvas_y + ((y / 100.0) * lay.canvas_h as f32) as i32 - bh / 2;
+            let bw = ((sw / 100.0) * surface.w as f32)
+                .clamp(min_w.min(surface.w as f32 * 0.5), surface.w as f32 * 0.7)
+                as i32;
+            let bh = ((sh / 100.0) * surface.h as f32)
+                .clamp(min_h.min(surface.h as f32 * 0.3), max_h.min(surface.h as f32 * 0.4))
+                as i32;
+            let px = surface.x + ((x / 100.0) * surface.w as f32) as i32 - bw / 2;
+            let py = surface.y + ((y / 100.0) * surface.h as f32) as i32 - bh / 2;
             let sel = selected == Some(w.id.as_str());
             let is_drag_sel = sel && dragging;
 
