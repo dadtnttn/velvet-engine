@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
-use crate::commands::CommandRegistry;
+use crate::commands::{CommandRegistry, ParamTy};
 use crate::diag::StoryDiag;
 use crate::span::Span;
 
@@ -135,8 +135,27 @@ fn walk_stmts(
                             );
                         }
                     }
-                    for (k, _) in args {
-                        if !spec.params.iter().any(|p| p.name == *k) {
+                    for (k, v) in args {
+                        if let Some(param) = spec.params.iter().find(|p| p.name == *k) {
+                            if let Some(got) = describe_arg_ty(v) {
+                                if !param_ty_matches(param.ty, v) {
+                                    r.diags.push(
+                                        StoryDiag::error_key(
+                                            "VST028",
+                                            &[
+                                                ("name", k.as_str()),
+                                                ("cmd", name.as_str()),
+                                                ("expected", param_ty_name(param.ty)),
+                                                ("got", got),
+                                            ],
+                                            &origin,
+                                            *span,
+                                        )
+                                        .with_node("call"),
+                                    );
+                                }
+                            }
+                        } else {
                             r.diags.push(
                                 StoryDiag::warning_key(
                                     "VST023",
@@ -215,6 +234,63 @@ fn check_if_cond(r: &mut SemaResult, file: &StoryFile, scene: &Scene, cond: &Exp
         )
         .with_node("if"),
     );
+}
+
+fn param_ty_name(ty: ParamTy) -> &'static str {
+    match ty {
+        ParamTy::Text => "text",
+        ParamTy::Int => "int",
+        ParamTy::Float => "float",
+        ParamTy::Bool => "bool",
+        ParamTy::Ident => "ident",
+    }
+}
+
+fn describe_arg_ty(e: &Expr) -> Option<&'static str> {
+    match e {
+        Expr::Int(_, _) => Some("int"),
+        Expr::Float(_, _) => Some("float"),
+        Expr::Bool(_, _) => Some("bool"),
+        Expr::Str(_, _) => Some("text"),
+        Expr::Ident(_, _) => Some("ident"),
+        Expr::Unary {
+            op: UnaryOp::Neg,
+            expr,
+            ..
+        } => match expr.as_ref() {
+            Expr::Int(_, _) => Some("int"),
+            Expr::Float(_, _) => Some("float"),
+            _ => Some("expr"),
+        },
+        _ => Some("expr"),
+    }
+}
+
+fn param_ty_matches(ty: ParamTy, e: &Expr) -> bool {
+    match ty {
+        ParamTy::Int => match e {
+            Expr::Int(_, _) => true,
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+                ..
+            } => matches!(expr.as_ref(), Expr::Int(_, _)),
+            _ => false,
+        },
+        ParamTy::Float => match e {
+            Expr::Float(_, _) | Expr::Int(_, _) => true,
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+                ..
+            } => matches!(expr.as_ref(), Expr::Float(_, _) | Expr::Int(_, _)),
+            _ => false,
+        },
+        ParamTy::Bool => matches!(e, Expr::Bool(_, _)),
+        ParamTy::Text => matches!(e, Expr::Str(_, _)),
+        // Bare identifier or string asset name.
+        ParamTy::Ident => matches!(e, Expr::Ident(_, _) | Expr::Str(_, _)),
+    }
 }
 
 fn cond_is_booleanish(e: &Expr) -> bool {

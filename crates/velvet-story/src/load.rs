@@ -159,7 +159,7 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
         }
         Stmt::Expr { expr, .. } => lower_expr_stmt(expr)?,
         Stmt::Let { name, init, .. } | Stmt::Const { name, init, .. } => {
-            let value = from_ast_expr(init).unwrap_or(StoryValue::Null);
+            let value = crate::ir::StoryExpr::value(from_ast_expr(init).unwrap_or(StoryValue::Null));
             vec![StoryOp::Assign {
                 name: name.clone(),
                 assign_op: AssignOp::Set,
@@ -220,7 +220,7 @@ fn lower_expr_stmt(expr: &Expr) -> Result<Vec<StoryOp>, LoadError> {
                 BinOp::SubAssign => AssignOp::Sub,
                 _ => return Ok(vec![StoryOp::Nop]),
             };
-            let value = from_ast_expr(right).unwrap_or(StoryValue::Null);
+            let value = crate::ir::StoryExpr::value(from_ast_expr(right).unwrap_or(StoryValue::Null));
             Ok(vec![StoryOp::Assign {
                 name,
                 assign_op,
