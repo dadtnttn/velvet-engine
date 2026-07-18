@@ -722,8 +722,9 @@ impl StoryPlayer {
                 }
             }
             SkipMode::ReadOnly => {
-                let key = format!("{}:{}", self.snapshot.scene, self.snapshot.op_index);
-                if self.seen_lines.contains(&key) && matches!(self.snapshot.wait, StoryWait::Line) {
+                if matches!(self.snapshot.wait, StoryWait::Line)
+                    && self.seen_lines.contains(&self.dialogue_seen_key())
+                {
                     self.advance();
                     true
                 } else {
@@ -731,6 +732,21 @@ impl StoryPlayer {
                 }
             }
         }
+    }
+
+    /// Stable key for a dialogue line (includes nested exec-frame path).
+    ///
+    /// Scene-level only `scene:op_index` is ambiguous when several nested
+    /// dialogues share the same scene cursor (e.g. choice arm body).
+    fn dialogue_seen_key(&self) -> String {
+        let mut key = format!("{}:{}", self.snapshot.scene, self.snapshot.op_index);
+        for (fi, frame) in self.exec_stack.iter().enumerate() {
+            // pump advances frame.index past the op before exec_op; the line
+            // we are viewing is the previous slot.
+            let at = frame.index.saturating_sub(1);
+            key.push_str(&format!("/f{fi}:{at}"));
+        }
+        key
     }
 
     /// Build a save game DTO.
@@ -903,7 +919,7 @@ impl StoryPlayer {
                 // Nested: frame IP already past this op → do not touch scene IP.
                 self.line_advances_scene = self.exec_stack.is_empty();
                 self.apply_dialogue(speaker, text);
-                let key = format!("{}:{}", self.snapshot.scene, self.snapshot.op_index);
+                let key = self.dialogue_seen_key();
                 self.seen_lines.insert(key);
                 self.snapshot.wait = StoryWait::Line;
                 false
@@ -1879,6 +1895,84 @@ scene start {
             "ops after nested if inside choice must still run"
         );
         assert_eq!(player.ending(), Some("done"));
+    }
+
+    /// Nested dialogues must not share one `scene:op_index` seen-line key
+    /// (skip-read-only would wrongly treat the second as already read).
+    #[test]
+    fn nested_dialogues_get_distinct_seen_line_keys() {
+        use crate::ir::{StoryChoice, StoryOp, StoryProgram, StoryScene};
+        use indexmap::IndexMap;
+
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::Choice {
+                        options: vec![StoryChoice {
+                            text: "Go".into(),
+                            body: vec![
+                                StoryOp::Dialogue {
+                                    speaker: None,
+                                    text: "Line A nested".into(),
+                                },
+                                StoryOp::Dialogue {
+                                    speaker: None,
+                                    text: "Line B nested".into(),
+                                },
+                            ],
+                            require: None,
+                            hidden_if_locked: false,
+                        }],
+                    },
+                    StoryOp::End { ending: None },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("seen_nest");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start(prog);
+        assert!(matches!(player.wait(), StoryWait::Choice));
+        player.choose(0).unwrap();
+        assert!(
+            matches!(player.wait(), StoryWait::Line),
+            "wait={:?}",
+            player.wait()
+        );
+        assert!(player.current_text().contains("Line A"));
+        let keys_after_a: Vec<String> = player.seen_line_keys().iter().cloned().collect();
+        assert_eq!(keys_after_a.len(), 1, "keys={keys_after_a:?}");
+
+        player.advance();
+        assert!(
+            matches!(player.wait(), StoryWait::Line),
+            "expected second nested line, wait={:?}",
+            player.wait()
+        );
+        assert!(player.current_text().contains("Line B"));
+        let keys: Vec<String> = player.seen_line_keys().iter().cloned().collect();
+        assert_eq!(
+            keys.len(),
+            2,
+            "two nested dialogues must produce two seen keys, got {keys:?}"
+        );
+        assert_ne!(keys[0], keys[1]);
+        // Nested path marker present (not only scene:ip).
+        assert!(
+            keys.iter().any(|k| k.contains("/f")),
+            "expected nested frame path in keys: {keys:?}"
+        );
+
+        // ReadOnly skip: on a first-time line should not auto-advance.
+        player.preferences_mut().skip_mode = crate::prefs::SkipMode::ReadOnly;
+        // Line B is current and already marked seen this run — try_skip may advance.
+        // Rebuild: first visit to Line B with empty seen for that key is tested via
+        // the distinct-keys assertion above.
+        let _ = player.try_skip();
     }
 
     #[test]
