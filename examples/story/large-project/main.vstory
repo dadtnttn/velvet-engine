@@ -1,0 +1,6 @@
+include "part_a.vstory"
+
+scene start
+narrator:
+    Comienza.
+goto forest

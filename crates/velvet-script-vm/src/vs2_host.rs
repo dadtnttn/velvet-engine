@@ -253,6 +253,26 @@ impl Vs2MiniVm {
                 let val = self.pop();
                 self.host.store_state(&key, &val);
             }
+            OpVs2::Call | OpVs2::ActionFire => {
+                // Registered story commands (e.g. combat.start) land here after lower.
+                let name = self.host.pool_str(a);
+                let argc = b;
+                let mut args = Vec::new();
+                for _ in 0..argc {
+                    args.push(self.pop());
+                }
+                args.reverse();
+                let arg_s = args.join(",");
+                self.host
+                    .log
+                    .push(format!("command {name} args=[{arg_s}]"));
+                self.host
+                    .store_state("__last_command", &name);
+                self.host
+                    .store_state(&format!("cmd.{name}"), "1");
+                // leave a unit-ish result for stack balance
+                self.push("ok");
+            }
             other => {
                 let top = self.stack.last().cloned();
                 self.host.exec_op(other, a, b, top.as_deref());

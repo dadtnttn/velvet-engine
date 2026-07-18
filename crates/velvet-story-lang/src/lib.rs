@@ -18,6 +18,7 @@ pub mod diag;
 pub mod format;
 pub mod i18n_extract;
 pub mod lexer;
+pub mod load;
 pub mod lower;
 pub mod parser;
 pub mod pipeline;
@@ -30,9 +31,10 @@ pub mod token;
 pub use commands::{CommandRegistry, CommandSpec};
 pub use diag::StoryDiag;
 pub use format::{format_source, is_idempotent};
+pub use load::{load_story_path, load_story_source};
 pub use pipeline::{
-    build_source, check_path, check_source, dump_ast_json, dump_lowered_text, run_source,
-    BuildResult, CheckResult, RunResult,
+    build_path, build_source, check_path, check_source, dump_ast_json, dump_lowered_text, run_path,
+    run_source, BuildResult, CheckResult, RunResult,
 };
 pub use studio::{build_model, StudioModel};
 
@@ -135,6 +137,29 @@ end
         assert!(c.ok, "{:?}", c.diags);
         let r = run_source(src, "combat.vstory", &cmds, 0);
         assert!(r.ok);
+        assert!(
+            r.log.iter().any(|l| l.contains("command combat.start")),
+            "expected host log for combat.start, got {:?}",
+            r.log
+        );
+        assert!(
+            r.state
+                .iter()
+                .any(|(k, v)| k == "__last_command" && v == "combat.start"),
+            "state={:?}",
+            r.state
+        );
+    }
+
+    #[test]
+    fn bad_if_string_condition_errors() {
+        let src = "scene a\nif \"luna\":\n    goto a\n";
+        let cmds = CommandRegistry::builtin();
+        let c = check_source(src, "badif.vstory", &cmds);
+        assert!(!c.ok);
+        let d = c.diags.iter().find(|d| d.code == "VST030").expect("VST030");
+        assert!(d.display().contains("badif.vstory"));
+        assert!(d.message.contains("verdadero o falso") || d.message.contains("texto"));
     }
 
     #[test]

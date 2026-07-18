@@ -1,0 +1,37 @@
+# Welcome sample â€” Velvet Story (writer layer over Velvet Script 2)
+
+scene start
+
+background bedroom
+show luna happy
+
+luna @line.luna_welcome:
+    Hola. Bienvenido a Velvet.
+
+set affection = 0
+
+choice:
+    "Saludar":
+        add affection 1
+
+        luna:
+            Me alegra verte.
+
+        goto ending
+
+    "No responder":
+        narrator:
+            Luna guarda silencio.
+
+        goto ending
+
+scene ending
+
+if affection > 0:
+    narrator:
+        Parece que esta historia empieza bien.
+else:
+    narrator:
+        QuizÃ¡s maÃ±ana sea diferente.
+
+end
