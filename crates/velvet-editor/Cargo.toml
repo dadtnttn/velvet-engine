@@ -37,6 +37,7 @@ serde_json = { workspace = true }
 camino = { workspace = true }
 walkdir = { workspace = true }
 winit = { workspace = true }
+softbuffer = "0.4"
 tempfile = "3"
 
 [dev-dependencies]
