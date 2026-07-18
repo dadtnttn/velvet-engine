@@ -3031,6 +3031,7 @@ dependencies = [
  "velvet-script-bytecode",
  "velvet-script-hir",
  "velvet-script-parser",
+ "velvet-script-syntax",
 ]
 
 [[package]]
@@ -3189,6 +3190,7 @@ dependencies = [
  "velvet-script-hir",
  "velvet-script-i18n",
  "velvet-script-vm",
+ "velvet-story",
 ]
 
 [[package]]
