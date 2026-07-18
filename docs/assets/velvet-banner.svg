@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 220" role="img" aria-label="Velvet Engine banner">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a0f2e"/>
+      <stop offset="50%" stop-color="#2a1545"/>
+      <stop offset="100%" stop-color="#120a1f"/>
+    </linearGradient>
+    <linearGradient id="vfill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e8c4ff"/>
+      <stop offset="100%" stop-color="#a56bcf"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6b2d8b" stop-opacity="0"/>
+      <stop offset="40%" stop-color="#c9a0dc" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#6b2d8b" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="220" fill="url(#bg)"/>
+  <!-- Soft grid -->
+  <g stroke="#4a2a6a" stroke-opacity="0.25" stroke-width="1">
+    <path d="M0 55 H960 M0 110 H960 M0 165 H960"/>
+    <path d="M120 0 V220 M240 0 V220 M360 0 V220 M480 0 V220 M600 0 V220 M720 0 V220 M840 0 V220"/>
+  </g>
+  <!-- Mark -->
+  <g transform="translate(72,46)">
+    <rect width="96" height="96" rx="22" fill="#3d1a5c"/>
+    <path d="M20 24 L36 24 L48 58 L60 24 L76 24 L52 76 L44 76 Z" fill="url(#vfill)"/>
+    <path d="M36 24 L48 58 L44 76 L30 40 Z" fill="#7a3f9e" opacity="0.9"/>
+  </g>
+  <!-- Title -->
+  <text x="200" y="100" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="48" font-weight="700" fill="#f5f0fa">Velvet Engine</text>
+  <text x="200" y="140" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#c9a0dc">Modular Rust engine for visual novels and 2D play</text>
+  <rect x="200" y="160" width="420" height="2" fill="url(#line)"/>
+  <text x="200" y="190" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#8a7a9a">Story · Script · Play · RPG · Action · Cellular (alpha)</text>
+</svg>
