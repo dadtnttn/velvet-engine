@@ -143,6 +143,13 @@ end
             r.log
         );
         assert!(
+            r.log
+                .iter()
+                .any(|l| l.contains("forest_guardian")),
+            "expected enemy ident forest_guardian in command args log, got {:?}",
+            r.log
+        );
+        assert!(
             r.state
                 .iter()
                 .any(|(k, v)| k == "__last_command" && v == "combat.start"),

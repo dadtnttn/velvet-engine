@@ -84,6 +84,11 @@ end
         "log={:?}",
         r.log
     );
+    assert!(
+        r.log.iter().any(|l| l.contains("forest_guardian")),
+        "bare Ident enemy must lower as LoadConst, log={:?}",
+        r.log
+    );
     assert!(r
         .state
         .iter()

@@ -348,10 +348,12 @@ fn lower_stmt(
         Stmt::CallCommand { name, args, span } => {
             // Encode as single Call (host logs command name + args). Do not emit
             // ActionFire after Call — that would re-pop stack arguments.
+            // Bare idents in kwargs are asset/keyword literals (LoadConst), unless
+            // the name was previously assigned with `set`/`add` (then LoadLocal).
             let cid = unit.pool.intern(name.as_str());
             for (k, v) in args {
                 let _ = unit.pool.intern(k.as_str());
-                emit_expr(v, unit, locals, next_local, local);
+                emit_cmd_arg(v, unit, locals, next_local, local);
             }
             let pc = unit.emit(
                 Vs2Instr::with_ab(OpVs2::Call, cid, args.len() as u32).at_line(span.line),
@@ -373,6 +375,28 @@ fn lower_stmt(
         Stmt::Comment { .. } => {}
     }
     *id += 1;
+}
+
+/// Emit a command kwarg value.
+/// Bare `Ident` is a literal asset/id name unless already assigned as a variable.
+fn emit_cmd_arg(
+    e: &Expr,
+    unit: &mut Vs2Unit,
+    locals: &mut HashMap<String, u32>,
+    next_local: &mut u32,
+    local: &mut dyn FnMut(&str, &mut HashMap<String, u32>, &mut u32) -> u32,
+) {
+    match e {
+        Expr::Ident(name, span) => {
+            if let Some(&slot) = locals.get(name) {
+                unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot).at_line(span.line));
+            } else {
+                let id = unit.pool.intern(name.as_str());
+                unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, id).at_line(span.line));
+            }
+        }
+        other => emit_expr(other, unit, locals, next_local, local),
+    }
 }
 
 fn emit_expr(
