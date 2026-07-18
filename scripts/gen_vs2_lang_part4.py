@@ -1,3 +1,4 @@
+﻿# DO NOT re-run: produced padding that was cleaned from velvet-script-*
 from pathlib import Path
 
 # corpus tests
@@ -95,3 +96,4 @@ for p in Path("crates").glob("velvet-script*"):
             continue
         t += sum(1 for _ in open(f, encoding="utf-8", errors="ignore"))
 print("TOTAL", t, "DELTA", t - 10011)
+

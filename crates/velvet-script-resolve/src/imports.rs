@@ -78,565 +78,45 @@ impl ImportGraph {
     }
 }
 
-pub fn chain_graph_0(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 0;
-    g
-}
 
-pub fn chain_graph_1(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 1;
-    g
-}
 
-pub fn chain_graph_2(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 2;
-    g
-}
 
-pub fn chain_graph_3(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 3;
-    g
-}
 
-pub fn chain_graph_4(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 4;
-    g
-}
 
-pub fn chain_graph_5(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 5;
-    g
-}
 
-pub fn chain_graph_6(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 6;
-    g
-}
 
-pub fn chain_graph_7(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 7;
-    g
-}
 
-pub fn chain_graph_8(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 8;
-    g
-}
 
-pub fn chain_graph_9(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 9;
-    g
-}
 
-pub fn chain_graph_10(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 10;
-    g
-}
 
-pub fn chain_graph_11(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 11;
-    g
-}
 
-pub fn chain_graph_12(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 12;
-    g
-}
 
-pub fn chain_graph_13(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 13;
-    g
-}
 
-pub fn chain_graph_14(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 14;
-    g
-}
 
-pub fn chain_graph_15(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 15;
-    g
-}
 
-pub fn chain_graph_16(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 16;
-    g
-}
 
-pub fn chain_graph_17(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 17;
-    g
-}
 
-pub fn chain_graph_18(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 18;
-    g
-}
 
-pub fn chain_graph_19(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 19;
-    g
-}
 
-pub fn chain_graph_20(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 20;
-    g
-}
 
-pub fn chain_graph_21(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 21;
-    g
-}
 
-pub fn chain_graph_22(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 22;
-    g
-}
 
-pub fn chain_graph_23(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 23;
-    g
-}
 
-pub fn chain_graph_24(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 24;
-    g
-}
 
-pub fn chain_graph_25(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 25;
-    g
-}
 
-pub fn chain_graph_26(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 26;
-    g
-}
 
-pub fn chain_graph_27(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 27;
-    g
-}
 
-pub fn chain_graph_28(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 28;
-    g
-}
 
-pub fn chain_graph_29(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 29;
-    g
-}
 
-pub fn chain_graph_30(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 30;
-    g
-}
 
-pub fn chain_graph_31(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 31;
-    g
-}
 
-pub fn chain_graph_32(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 32;
-    g
-}
 
-pub fn chain_graph_33(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 33;
-    g
-}
 
-pub fn chain_graph_34(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 34;
-    g
-}
 
-pub fn chain_graph_35(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 35;
-    g
-}
 
-pub fn chain_graph_36(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 36;
-    g
-}
 
-pub fn chain_graph_37(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 37;
-    g
-}
 
-pub fn chain_graph_38(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 38;
-    g
-}
 
-pub fn chain_graph_39(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let nlen = len.max(1);
-    for i in 0..nlen.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None, glob: false,
-        });
-    }
-    let _ = 39;
-    g
-}
 
 #[cfg(test)]
 mod tests {
@@ -657,3 +137,18 @@ mod tests {
     }
 }
 
+
+/// Build a linear import chain graph of length `len`.
+pub fn chain_graph(prefix: &str, len: usize) -> ImportGraph {
+    let mut g = ImportGraph::new();
+    let n = len.max(1);
+    for i in 0..n.saturating_sub(1) {
+        g.add(ImportEdge {
+            from: format!("{prefix}_{i}"),
+            to: format!("{prefix}_{}", i + 1),
+            alias: None,
+            glob: false,
+        });
+    }
+    g
+}
