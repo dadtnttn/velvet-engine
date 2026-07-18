@@ -81,10 +81,28 @@ pub struct StudioGuiSession {
     pub layers: LayerStack,
     /// Nodes mode: first endpoint when connecting (from).
     pub connect_from: Option<String>,
+    /// Nodes tool: select / connect / disconnect.
+    pub nodes_tool: NodesTool,
+    /// Selected graph edge (from, to).
+    pub selected_edge: Option<(String, String)>,
     /// Script mode: cursor line (0-based) into document_source.
     pub script_cursor_line: usize,
     /// Script mode: status of last validate.
     pub script_issues: Vec<String>,
+}
+
+/// Tool for Nodes graph mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NodesTool {
+    /// Click selects node/edge; drag moves node.
+    #[default]
+    Select,
+    /// Click A then B creates transition edge.
+    Connect,
+    /// Click edge or pair removes link.
+    Disconnect,
+    /// Click A then B creates overlay edge.
+    Overlay,
 }
 
 impl StudioGuiSession {
@@ -105,6 +123,8 @@ impl StudioGuiSession {
             drop_seq: 0,
             layers: LayerStack::vn_tree(),
             connect_from: None,
+            nodes_tool: NodesTool::Select,
+            selected_edge: None,
             script_cursor_line: 0,
             script_issues: Vec::new(),
         };
@@ -219,16 +239,27 @@ impl StudioGuiSession {
         self.insert_script_line(&format!("button.press(\"{button_id}\")"));
     }
 
-    /// Connect layers in graph; also can seed script snippet.
+    /// Connect layers in graph with kind.
     pub fn connect_layers(
         &mut self,
         from: &str,
         to: &str,
         label: Option<String>,
     ) -> Result<String, String> {
-        use crate::layers::LayerEdgeKind;
-        self.layers
-            .connect(from, to, label, LayerEdgeKind::Transition)?;
+        self.connect_layers_kind(from, to, label, crate::layers::LayerEdgeKind::Transition)
+    }
+
+    pub fn connect_layers_kind(
+        &mut self,
+        from: &str,
+        to: &str,
+        label: Option<String>,
+        kind: crate::layers::LayerEdgeKind,
+    ) -> Result<String, String> {
+        if from == to {
+            return Err("cannot connect node to itself".into());
+        }
+        self.layers.connect(from, to, label, kind)?;
         let edge = self
             .layers
             .edges
@@ -237,28 +268,105 @@ impl StudioGuiSession {
             .cloned()
             .ok_or_else(|| "edge missing after connect".to_string())?;
         let script = crate::layers::LayerStack::edge_script(&edge);
-        let msg = format!("connected {from} -> {to}");
-        self.log.push(format!("[studio-gui] {msg} script={script}"));
+        self.selected_edge = Some((from.into(), to.into()));
+        let msg = format!("connected {from} -> {to} ({})", kind.as_str());
+        self.log.push(format!("[studio-gui] {msg} | {script}"));
         Ok(msg)
     }
 
-    /// Apply connect_from click logic.
-    pub fn nodes_click_layer(&mut self, id: &str) -> String {
-        if self.connect_from.as_deref() == Some(id) {
-            self.connect_from = None;
-            return "connect cancelled".into();
+    pub fn disconnect_layers(&mut self, from: &str, to: &str) -> String {
+        if self.layers.disconnect(from, to) {
+            if self.selected_edge.as_ref().map(|(a, b)| (a.as_str(), b.as_str()))
+                == Some((from, to))
+            {
+                self.selected_edge = None;
+            }
+            let msg = format!("disconnected {from} -x- {to}");
+            self.log.push(format!("[studio-gui] {msg}"));
+            msg
+        } else {
+            format!("no edge {from} -> {to}")
         }
-        if let Some(from) = self.connect_from.take() {
-            match self.connect_layers(&from, id, None) {
-                Ok(m) => m,
-                Err(e) => {
-                    self.connect_from = Some(from);
-                    e
+    }
+
+    pub fn create_screen(&mut self, name: &str) -> Result<String, String> {
+        let (w, h) = self.layers.active_resolution();
+        let id = self.layers.create_screen(name, w, h)?;
+        self.selected_edge = None;
+        self.connect_from = None;
+        let msg = format!("created screen {id}");
+        self.log.push(format!("[studio-gui] {msg}"));
+        Ok(msg)
+    }
+
+    pub fn create_sub_screen(&mut self, name: &str) -> Result<String, String> {
+        let id = self.layers.create_sub_screen(None, name)?;
+        let msg = format!("created sublayer {id}");
+        self.log.push(format!("[studio-gui] {msg}"));
+        Ok(msg)
+    }
+
+    /// Nodes click handling based on current tool.
+    pub fn nodes_click_layer(&mut self, id: &str) -> String {
+        match self.nodes_tool {
+            NodesTool::Select => {
+                self.connect_from = None;
+                self.selected_edge = None;
+                let _ = self.layers.set_active(id);
+                format!("selected {id}")
+            }
+            NodesTool::Connect | NodesTool::Overlay => {
+                if self.connect_from.as_deref() == Some(id) {
+                    self.connect_from = None;
+                    return "connect cancelled".into();
+                }
+                if let Some(from) = self.connect_from.take() {
+                    let kind = if self.nodes_tool == NodesTool::Overlay {
+                        crate::layers::LayerEdgeKind::Overlay
+                    } else {
+                        crate::layers::LayerEdgeKind::Transition
+                    };
+                    match self.connect_layers_kind(&from, id, None, kind) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            self.connect_from = Some(from);
+                            e
+                        }
+                    }
+                } else {
+                    self.connect_from = Some(id.into());
+                    let _ = self.layers.set_active(id);
+                    format!("from {id} — click target")
                 }
             }
-        } else {
-            self.connect_from = Some(id.into());
-            format!("connect from {id} — click target")
+            NodesTool::Disconnect => {
+                if self.connect_from.as_deref() == Some(id) {
+                    self.connect_from = None;
+                    return "disconnect cancelled".into();
+                }
+                if let Some(from) = self.connect_from.take() {
+                    self.disconnect_layers(&from, id)
+                } else {
+                    // try reverse or clear all for node if single select
+                    self.connect_from = Some(id.into());
+                    format!("disconnect from {id} — click other end")
+                }
+            }
+        }
+    }
+
+    pub fn nodes_click_edge(&mut self, from: &str, to: &str) -> String {
+        match self.nodes_tool {
+            NodesTool::Disconnect => self.disconnect_layers(from, to),
+            NodesTool::Select | NodesTool::Connect | NodesTool::Overlay => {
+                self.selected_edge = Some((from.into(), to.into()));
+                if let Some(k) = self.layers.cycle_edge_kind(from, to) {
+                    // re-select after cycle - actually cycle already applied
+                    format!("edge {from}->{to} kind={}", k.as_str())
+                } else {
+                    format!("edge {from}->{to}")
+                }
+            }
         }
     }
 
@@ -869,6 +977,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         ui_zoom: i32,
         /// Last tick instant for layer resize animation.
         last_tick: std::time::Instant,
+        /// Nodes: dragging a node on the graph.
+        node_drag_id: Option<String>,
         status: String,
     }
 
@@ -1083,21 +1193,39 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             self.do_save();
                         }
                         KeyCode::Digit1 if !self.ctrl_held => {
-                            let _ = self.session.set_mode(StudioEditorMode::Simplified);
-                            self.sync_title();
-                            self.status = "Visual mode".into();
+                            if self.session.mode == StudioEditorMode::Nodes {
+                                self.session.nodes_tool = NodesTool::Select;
+                                self.session.connect_from = None;
+                                self.status = "tool: Select".into();
+                            } else {
+                                let _ = self.session.set_mode(StudioEditorMode::Simplified);
+                                self.sync_title();
+                                self.status = "Visual mode".into();
+                            }
                             self.redraw();
                         }
                         KeyCode::Digit2 if !self.ctrl_held => {
-                            let _ = self.session.set_mode(StudioEditorMode::Advanced);
-                            self.sync_title();
-                            self.status = "Script mode — F2 validate, F3+ insert API".into();
+                            if self.session.mode == StudioEditorMode::Nodes {
+                                self.session.nodes_tool = NodesTool::Connect;
+                                self.session.connect_from = None;
+                                self.status = "tool: Connect — click A then B".into();
+                            } else {
+                                let _ = self.session.set_mode(StudioEditorMode::Advanced);
+                                self.sync_title();
+                                self.status = "Script mode — F2 validate, F3+ insert API".into();
+                            }
                             self.redraw();
                         }
                         KeyCode::Digit3 if !self.ctrl_held => {
-                            let _ = self.session.set_mode(StudioEditorMode::Nodes);
-                            self.sync_title();
-                            self.status = "Nodes mode — click layers to connect".into();
+                            if self.session.mode == StudioEditorMode::Nodes {
+                                self.session.nodes_tool = NodesTool::Disconnect;
+                                self.session.connect_from = None;
+                                self.status = "tool: Disconnect".into();
+                            } else {
+                                let _ = self.session.set_mode(StudioEditorMode::Nodes);
+                                self.sync_title();
+                                self.status = "Nodes mode — tools below, N new screen".into();
+                            }
                             self.redraw();
                         }
                         KeyCode::F2 if self.session.mode == StudioEditorMode::Advanced => {
@@ -1168,12 +1296,70 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             self.redraw();
                         }
                         KeyCode::Enter if self.session.mode == StudioEditorMode::Nodes => {
-                            // open active layer (focus)
                             let id = self.session.layers.active_id.clone();
                             match self.session.set_layer(&id) {
                                 Ok(s) => self.status = s,
                                 Err(e) => self.status = e,
                             }
+                            self.redraw();
+                        }
+                        KeyCode::Digit4
+                            if self.session.mode == StudioEditorMode::Nodes && !self.ctrl_held =>
+                        {
+                            self.session.nodes_tool = NodesTool::Overlay;
+                            self.session.connect_from = None;
+                            self.status = "tool: Overlay link".into();
+                            self.redraw();
+                        }
+                        KeyCode::KeyN if self.session.mode == StudioEditorMode::Nodes => {
+                            let n = self.session.layers.layers.len() + 1;
+                            match self.session.create_screen(&format!("Pantalla {n}")) {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::KeyS
+                            if self.session.mode == StudioEditorMode::Nodes && !self.ctrl_held =>
+                        {
+                            let n = self.session.layers.layers.len() + 1;
+                            match self.session.create_sub_screen(&format!("Sub {n}")) {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::Delete | KeyCode::Backspace
+                            if self.session.mode == StudioEditorMode::Nodes =>
+                        {
+                            if let Some((a, b)) = self.session.selected_edge.clone() {
+                                self.status = self.session.disconnect_layers(&a, &b);
+                            } else {
+                                let id = self.session.layers.active_id.clone();
+                                match self.session.layers.remove_layer(&id) {
+                                    Ok(()) => self.status = format!("removed {id}"),
+                                    Err(e) => self.status = e,
+                                }
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::KeyX if self.session.mode == StudioEditorMode::Nodes => {
+                            if let Some((a, b)) = self.session.selected_edge.clone() {
+                                self.status = self.session.disconnect_layers(&a, &b);
+                            } else if let Some(from) = self.session.connect_from.clone() {
+                                let n = self.session.layers.disconnect_all_for(&from);
+                                self.status = format!("cut {n} edges on {from}");
+                                self.session.connect_from = None;
+                            } else {
+                                self.session.nodes_tool = NodesTool::Disconnect;
+                                self.status = "tool: Disconnect".into();
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::KeyC if self.session.mode == StudioEditorMode::Nodes => {
+                            self.session.nodes_tool = NodesTool::Connect;
+                            self.session.connect_from = None;
+                            self.status = "tool: Connect".into();
                             self.redraw();
                         }
                         // Layer stack
@@ -1295,18 +1481,91 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             return;
                         }
 
-                        // Nodes mode: click graph nodes to connect
+                        // Nodes mode: tools, edges, nodes, create screens
                         if self.session.mode == StudioEditorMode::Nodes {
+                            if let Some(tool) = crate::studio_paint::hit_nodes_toolbar(
+                                &layout,
+                                self.cursor.0,
+                                self.cursor.1,
+                                layout.zoom,
+                            ) {
+                                match tool {
+                                    "select" => {
+                                        self.session.nodes_tool = NodesTool::Select;
+                                        self.session.connect_from = None;
+                                        self.status = "tool: Select".into();
+                                    }
+                                    "connect" => {
+                                        self.session.nodes_tool = NodesTool::Connect;
+                                        self.session.connect_from = None;
+                                        self.status = "tool: Connect".into();
+                                    }
+                                    "disconnect" => {
+                                        self.session.nodes_tool = NodesTool::Disconnect;
+                                        self.session.connect_from = None;
+                                        self.status = "tool: Disconnect".into();
+                                    }
+                                    "overlay" => {
+                                        self.session.nodes_tool = NodesTool::Overlay;
+                                        self.session.connect_from = None;
+                                        self.status = "tool: Overlay".into();
+                                    }
+                                    "new" => {
+                                        let n = self.session.layers.layers.len() + 1;
+                                        match self.session.create_screen(&format!("Pantalla {n}")) {
+                                            Ok(s) => self.status = s,
+                                            Err(e) => self.status = e,
+                                        }
+                                    }
+                                    "sub" => {
+                                        let n = self.session.layers.layers.len() + 1;
+                                        match self.session.create_sub_screen(&format!("Sub {n}")) {
+                                            Ok(s) => self.status = s,
+                                            Err(e) => self.status = e,
+                                        }
+                                    }
+                                    "del" => {
+                                        if let Some((a, b)) = self.session.selected_edge.clone() {
+                                            self.status = self.session.disconnect_layers(&a, &b);
+                                        } else {
+                                            let id = self.session.layers.active_id.clone();
+                                            match self.session.layers.remove_layer(&id) {
+                                                Ok(()) => self.status = format!("removed {id}"),
+                                                Err(e) => self.status = e,
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                                self.redraw();
+                                return;
+                            }
+                            // edge hit first (for select/disconnect)
+                            if let Some((a, b)) = self.session.layers.hit_edge(
+                                self.cursor.0,
+                                self.cursor.1,
+                                layout.canvas_x,
+                                layout.canvas_y + 28 + 8 * layout.zoom + 4,
+                                layout.canvas_w,
+                                (layout.canvas_h - 28 - 8 * layout.zoom - 34 - 8 * layout.zoom - 8)
+                                    .max(40),
+                                layout.zoom,
+                            ) {
+                                self.status = self.session.nodes_click_edge(&a, &b);
+                                self.redraw();
+                                return;
+                            }
                             let layout_nodes = self.session.layers.node_layout();
                             if let Some(id) =
                                 layout.hit_graph_node(self.cursor.0, self.cursor.1, &layout_nodes)
                             {
+                                if self.session.nodes_tool == NodesTool::Select {
+                                    self.node_drag_id = Some(id.clone());
+                                }
                                 self.status = self.session.nodes_click_layer(&id);
-                                let _ = self.session.layers.set_active(&id);
                                 self.redraw();
                                 return;
                             }
-                            // also allow left-dock layer pick for connect
                             if layout.contains_left_dock(self.cursor.0, self.cursor.1) {
                                 let rows = self.session.layers.visible_tree_rows();
                                 if let Some(idx) = layout.hit_layer_row(self.cursor.1, rows.len()) {
@@ -1416,7 +1675,11 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         }
                         self.redraw();
                     } else {
-                        // Mouse up: end drag, snap final position message
+                        // Mouse up
+                        if self.node_drag_id.take().is_some() {
+                            self.status = "node moved".into();
+                            self.redraw();
+                        }
                         if self.dragging {
                             if let Some(id) = &self.session.selected_region {
                                 self.status = format!("placed {id}");
@@ -1430,6 +1693,20 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     self.cursor = (position.x, position.y);
+                    // Nodes: drag node positions
+                    if self.session.mode == StudioEditorMode::Nodes {
+                        if let Some(ref id) = self.node_drag_id.clone() {
+                            let layout = self.layout();
+                            let (gx, gy, gw, gh) = layout.graph_content_rect();
+                            let px = ((position.x as f32 - gx as f32) / gw as f32 * 100.0)
+                                .clamp(6.0, 94.0);
+                            let py = ((position.y as f32 - gy as f32) / gh as f32 * 100.0)
+                                .clamp(10.0, 90.0);
+                            self.session.layers.set_graph_pos(id, px, py);
+                            self.redraw();
+                        }
+                        return;
+                    }
                     if self.session.mode != StudioEditorMode::Simplified || !self.dragging {
                         return;
                     }
@@ -1691,6 +1968,13 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 StudioEditorMode::Advanced => crate::studio_paint::PaintMode::Script,
                 StudioEditorMode::Nodes => crate::studio_paint::PaintMode::Nodes,
             };
+            let nodes_tool = match self.session.nodes_tool {
+                NodesTool::Select => "select",
+                NodesTool::Connect => "connect",
+                NodesTool::Disconnect => "disconnect",
+                NodesTool::Overlay => "overlay",
+            };
+            let sel_edge = self.session.selected_edge.as_ref().map(|(a, b)| (a.as_str(), b.as_str()));
             let layer_view = crate::studio_paint::LayerPaintView {
                 layers: &self.session.layers.layers,
                 tree_rows: &tree_rows,
@@ -1706,6 +1990,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 script_cursor_line: self.session.script_cursor_line,
                 script_issues: &self.session.script_issues,
                 node_layout: &node_layout,
+                nodes_tool,
+                selected_edge: sel_edge,
             };
             crate::studio_paint::paint_studio(
                 &mut self.pixels,
@@ -1776,7 +2062,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         edit_buf: String::new(),
         ui_zoom: 2,
         last_tick: std::time::Instant::now(),
-        status: "ready — [ ] layers, M mobile, Ctrl+4 phone res, drag widgets".into(),
+        node_drag_id: None,
+        status: "ready — 1 Vis  2 Scr  3 Nod  |  N screen in Nodes".into(),
     };
     event_loop
         .run_app(&mut host)
@@ -1944,13 +2231,27 @@ button start {
             .any(|e| e.from == "menu_quit" && e.to == "hud"));
         let msg = session.nodes_click_layer("menu_settings");
         assert!(msg.contains("connect from") || msg.contains("menu_settings"));
+        session.nodes_tool = NodesTool::Connect;
         let msg2 = session.nodes_click_layer("scene_decisions");
         assert!(
             msg2.contains("connected")
                 || msg2.contains("exists")
                 || msg2.contains("scene")
                 || msg2.contains("decisions")
+                || msg2.contains("from")
         );
+        // create + disconnect
+        session.create_screen("Extra UI").unwrap();
+        assert!(session.layers.get("extra_ui").is_some() || session.layers.layers.iter().any(|l| l.name.contains("Extra")));
+        session.nodes_tool = NodesTool::Connect;
+        let _ = session.nodes_click_layer("extra_ui");
+        // if id was extra_ui_2 etc
+        let new_id = session.layers.active_id.clone();
+        session.nodes_tool = NodesTool::Connect;
+        session.connect_from = Some(new_id.clone());
+        let _ = session.connect_layers(&new_id, "hud", None);
+        assert!(session.disconnect_layers(&new_id, "hud").contains("disconnected")
+            || session.layers.edges.iter().all(|e| !(e.from == new_id && e.to == "hud")));
     }
 
     #[test]
