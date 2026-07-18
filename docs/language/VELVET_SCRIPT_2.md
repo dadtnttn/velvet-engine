@@ -8,7 +8,7 @@
 | **Extensions** | `.vel` |
 | **Pipeline** | source → lexer → parser → AST → **HIR** → **types** → bytecode / story IR → VM |
 | **Maturity** | **Alpha / partial pipeline** — **not finished**, not production-ready |
-| **Honest LOC** | After cleanup (2026), ~24k lines of `velvet-script-*` sources; earlier “+30k” counts included **padding** (markers, clone fixtures, fake aliases) that was **removed** |
+| **Honest LOC** | After cleanup (2026), ~**17k** lines of `velvet-script-*` sources (was ~42k with padding). Removed: `story_marker_*`, fake `alias_N`, `format_fixture_*`, `local_completions_N`, `Reserved72..399` opcodes, and numbered clone tests (`lower_scene_N`, `catalog_key_N`, `exclusive_kind_N`, …) |
 
 ## Status (audit-aligned)
 
