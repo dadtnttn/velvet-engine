@@ -44,6 +44,9 @@ pub struct Scene {
     pub body: Vec<Stmt>,
     /// Span of `scene name`.
     pub span: Span,
+    /// Origin file when loaded via `include` (for diagnostics / source maps).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_file: Option<String>,
 }
 
 /// Statement in a scene / block.

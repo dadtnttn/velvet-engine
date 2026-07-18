@@ -91,7 +91,6 @@ fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
             path: id.clone(),
             fade_in: None,
         }],
-        Stmt::Sound { .. } => vec![StoryOp::Nop],
         Stmt::Show {
             character,
             expression,
@@ -141,12 +140,12 @@ fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
         Stmt::CallScene { target, .. } => vec![StoryOp::Call {
             target: target.clone(),
         }],
-        Stmt::Return { .. } => vec![StoryOp::Nop],
+        Stmt::Return { .. } => vec![StoryOp::Return],
         Stmt::End { .. } => vec![StoryOp::End { ending: None }],
         Stmt::Label { name, .. } => vec![StoryOp::Label { name: name.clone() }],
         Stmt::Set { name, value, span } => {
             let v = expr_to_value(value).ok_or_else(|| ToProgramError {
-                message: format!("set `{name}` needs a literal value"),
+                message: format!("set `{name}` needs a literal or simple value"),
                 line: span.line,
             })?;
             vec![StoryOp::Assign {
@@ -183,19 +182,18 @@ fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
             else_body,
             span,
         } => {
-            // Product IR If is truthiness of a var. Map `if x > 0` / bare `if x` to that.
-            let cond_var = cond_to_var(cond).ok_or_else(|| ToProgramError {
-                message: "if supports a variable (or `var > 0`) in StoryProgram path".into(),
-                line: span.line,
-            })?;
-            vec![StoryOp::If {
+            // Prefer assign-temp for comparisons so If remains truthiness-based.
+            let (prelude, cond_var) = lower_condition(cond, span.line)?;
+            let mut ops = prelude;
+            ops.push(StoryOp::If {
                 cond_var,
                 then_ops: lower_stmts(then_body)?,
                 else_ops: match else_body {
                     Some(e) => lower_stmts(e)?,
                     None => vec![],
                 },
-            }]
+            });
+            ops
         }
         Stmt::CallCommand { name, args, span } => {
             let mut map = IndexMap::new();
@@ -211,29 +209,99 @@ fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
                 args: map,
             }]
         }
-        Stmt::Pause { .. } | Stmt::Transition { .. } | Stmt::Comment { .. } => {
-            vec![StoryOp::Nop]
+        Stmt::Sound { id, .. } => vec![StoryOp::Sound { path: id.clone() }],
+        Stmt::Pause { duration, span } => {
+            let seconds = match duration {
+                None => None,
+                Some(e) => match expr_to_value(e) {
+                    Some(StoryValue::Int(n)) => Some(n as f64),
+                    Some(StoryValue::Float(f)) => Some(f),
+                    _ => {
+                        return Err(ToProgramError {
+                            message: "pause duration must be a number".into(),
+                            line: span.line,
+                        });
+                    }
+                },
+            };
+            vec![StoryOp::Pause { seconds }]
         }
+        Stmt::Transition { name, .. } => vec![StoryOp::Transition { name: name.clone() }],
+        // Comments are authoring-only; not runtime ops (but stay in AST for format).
+        Stmt::Comment { .. } => vec![],
     })
 }
 
-fn cond_to_var(e: &Expr) -> Option<String> {
+/// Lower condition to optional prelude assigns + cond_var for truthiness.
+fn lower_condition(e: &Expr, line: u32) -> Result<(Vec<StoryOp>, String), ToProgramError> {
     match e {
-        Expr::Ident(name, _) => Some(name.clone()),
-        // `affection > 0` / `>= 1` → truthiness of affection (works for welcome sample)
+        Expr::Ident(name, _) => Ok((vec![], name.clone())),
+        // `affection > 0` / `>= 1` / `!= 0` → truthiness of var (int)
         Expr::Binary {
-            op: BinOp::Gt | BinOp::Ge,
+            op: BinOp::Gt | BinOp::Ge | BinOp::Ne,
             left,
             right,
             ..
         } => match (left.as_ref(), right.as_ref()) {
-            (Expr::Ident(name, _), Expr::Int(0 | 1, _)) => Some(name.clone()),
-            _ => None,
+            (Expr::Ident(name, _), Expr::Int(0 | 1, _)) => Ok((vec![], name.clone())),
+            (Expr::Ident(name, _), Expr::Int(n, _)) => {
+                // Compare at lower time only if we cannot run expressions:
+                // store result in temp by evaluating is_truthy of (name - n) is hard.
+                // For general compare: set __cond from not supported fully —
+                // use name and document limit unless n==0.
+                if *n == 0 {
+                    Ok((vec![], name.clone()))
+                } else {
+                    Err(ToProgramError {
+                        message: format!(
+                            "if comparison against {n} not yet in StoryProgram; use `if {name}` or `if {name} > 0`"
+                        ),
+                        line,
+                    })
+                }
+            }
+            _ => Err(ToProgramError {
+                message: "if condition too complex for StoryProgram".into(),
+                line,
+            }),
         },
+        Expr::Binary {
+            op: BinOp::Eq,
+            left,
+            right,
+            ..
+        } => match (left.as_ref(), right.as_ref()) {
+            // if flag == true → if flag
+            (Expr::Ident(name, _), Expr::Bool(true, _)) => Ok((vec![], name.clone())),
+            (Expr::Ident(name, _), Expr::Int(1, _)) => Ok((vec![], name.clone())),
+            _ => Err(ToProgramError {
+                message: "if equality only supports `var == true` / `var == 1` in StoryProgram".into(),
+                line,
+            }),
+        },
+        Expr::Binary {
+            op: BinOp::And | BinOp::Or,
+            ..
+        } => Err(ToProgramError {
+            message: "boolean and/or in if not yet lowered to StoryProgram".into(),
+            line,
+        }),
         Expr::Unary {
-            op: UnaryOp::Not, ..
-        } => None,
-        _ => None,
+            op: UnaryOp::Not,
+            expr,
+            ..
+        } => {
+            // not supported as first-class — reject rather than silent wrong
+            let _ = expr;
+            Err(ToProgramError {
+                message: "if not … not yet in StoryProgram; invert the branch bodies".into(),
+                line,
+            })
+        }
+        _ => Err(ToProgramError {
+            message: "if supports a variable (or `var > 0`) in StoryProgram path".into(),
+            line,
+        }),
     }
 }
 
@@ -245,6 +313,19 @@ fn expr_to_value(e: &Expr) -> Option<StoryValue> {
         Expr::Str(s, _) => Some(StoryValue::String(s.clone())),
         // bare ident in command kwargs is asset/id string
         Expr::Ident(s, _) => Some(StoryValue::String(s.clone())),
+        // unary negation of literal
+        Expr::Unary {
+            op: UnaryOp::Neg,
+            expr,
+            ..
+        } => match expr.as_ref() {
+            Expr::Int(n, _) => Some(StoryValue::Int(-n)),
+            Expr::Float(s, _) => s
+                .parse::<f64>()
+                .ok()
+                .map(|f| StoryValue::Float(-f)),
+            _ => None,
+        },
         _ => None,
     }
 }

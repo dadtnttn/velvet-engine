@@ -26,6 +26,7 @@ pub mod sema;
 pub mod source_map;
 pub mod span;
 pub mod studio;
+pub mod from_program;
 pub mod to_story_program;
 pub mod token;
 
