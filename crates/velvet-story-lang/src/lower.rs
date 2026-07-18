@@ -454,16 +454,23 @@ fn emit_expr(
             unit.emit(Vs2Instr::new(opc).at_line(span.line));
         }
         Expr::Unary { op, expr, span } => {
-            emit_expr(expr, unit, locals, next_local, local);
             match op {
                 UnaryOp::Not => {
+                    emit_expr(expr, unit, locals, next_local, local);
                     unit.emit(Vs2Instr::new(OpVs2::Not).at_line(span.line));
                 }
                 UnaryOp::Neg => {
-                    unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, 0).at_line(span.line));
-                    // swap not available: 0 - x needs x then 0 then sub with order fix
-                    // approximate: already have x; load 0; sub does l-r if we push 0 first wrong
-                    unit.emit(Vs2Instr::new(OpVs2::Sub).at_line(span.line));
+                    // Fold literals: -5 → const -5 (as string for host LoadConst).
+                    if let Expr::Int(n, _) = expr.as_ref() {
+                        let id = unit.pool.intern((-n).to_string());
+                        unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, id).at_line(span.line));
+                    } else {
+                        // Stack convention: Sub pops r then l → l - r. Emit 0, x, Sub → 0 - x.
+                        let z = unit.pool.intern("0");
+                        unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, z).at_line(span.line));
+                        emit_expr(expr, unit, locals, next_local, local);
+                        unit.emit(Vs2Instr::new(OpVs2::Sub).at_line(span.line));
+                    }
                 }
             }
         }
