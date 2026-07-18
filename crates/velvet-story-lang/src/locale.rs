@@ -2,12 +2,23 @@
 //!
 //! Stable `VSTxxx` codes stay fixed; only human text is localized.
 //! Default is Spanish for continuity with existing writer tooling.
-//! Override with [`set_diag_locale`], env `VELVET_STORY_LANG`, or CLI `--lang`.
+//!
+//! # Isolation (Studio / multi-doc)
+//!
+//! Prefer [`with_diag_locale`] or [`DiagLocaleGuard`] so concurrent checks with
+//! different languages do not race on a process-global lock alone. Catalog
+//! lookup is pure: [`diag_message_for`] / [`diag_suggestion_for`].
+//!
+//! CLI still may call [`set_diag_locale`] / env `VELVET_STORY_LANG` as the
+//! process default when no thread-local scope is active.
 
+use std::cell::RefCell;
 use std::sync::RwLock;
 
+use serde::{Deserialize, Serialize};
+
 /// Supported diagnostic UI languages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum DiagLocale {
     /// Español (default).
     #[default]
@@ -61,18 +72,62 @@ impl DiagLocale {
     }
 }
 
-static LOCALE: RwLock<DiagLocale> = RwLock::new(DiagLocale::Es);
+/// Process-wide default (CLI / single-consumer tools). Prefer thread-local
+/// scopes for multi-document concurrent validation.
+static DEFAULT_LOCALE: RwLock<DiagLocale> = RwLock::new(DiagLocale::Es);
 
-/// Set the process-wide diagnostic locale.
+thread_local! {
+    /// Stack of scoped locales for the current thread (Studio multi-doc safe).
+    static LOCALE_STACK: RefCell<Vec<DiagLocale>> = RefCell::new(Vec::new());
+}
+
+/// Set the process-wide **default** diagnostic locale (no active scope).
+///
+/// Does not override an active [`with_diag_locale`] / [`DiagLocaleGuard`] on
+/// this thread. Prefer scopes when multiple consumers share one process.
 pub fn set_diag_locale(locale: DiagLocale) {
-    if let Ok(mut g) = LOCALE.write() {
+    if let Ok(mut g) = DEFAULT_LOCALE.write() {
         *g = locale;
     }
 }
 
-/// Current diagnostic locale.
+/// Process-wide default locale (ignores thread-local stack).
+pub fn default_diag_locale() -> DiagLocale {
+    DEFAULT_LOCALE.read().map(|g| *g).unwrap_or_default()
+}
+
+/// Effective locale: top of thread-local stack, else process default.
 pub fn diag_locale() -> DiagLocale {
-    LOCALE.read().map(|g| *g).unwrap_or_default()
+    LOCALE_STACK.with(|s| s.borrow().last().copied()).unwrap_or_else(default_diag_locale)
+}
+
+/// RAII push of a thread-local diagnostic locale (pop on drop).
+#[derive(Debug)]
+pub struct DiagLocaleGuard {
+    _private: (),
+}
+
+impl Drop for DiagLocaleGuard {
+    fn drop(&mut self) {
+        LOCALE_STACK.with(|s| {
+            s.borrow_mut().pop();
+        });
+    }
+}
+
+/// Push `locale` for the current thread until the guard is dropped.
+pub fn push_diag_locale(locale: DiagLocale) -> DiagLocaleGuard {
+    LOCALE_STACK.with(|s| s.borrow_mut().push(locale));
+    DiagLocaleGuard { _private: () }
+}
+
+/// Run `f` with `locale` as the effective diagnostic language on this thread.
+///
+/// Nested scopes restore the previous locale on exit. Safe for concurrent
+/// threads each calling with a different locale (no cross-thread bleed).
+pub fn with_diag_locale<R>(locale: DiagLocale, f: impl FnOnce() -> R) -> R {
+    let _guard = push_diag_locale(locale);
+    f()
 }
 
 /// Apply `VELVET_STORY_LANG` if set and valid (ignores invalid values).
@@ -84,9 +139,9 @@ pub fn apply_locale_from_env() {
     }
 }
 
-/// Localized label before suggestion text (`Sugerencia:` / `Suggestion:` / …).
-pub fn suggestion_label() -> &'static str {
-    match diag_locale() {
+/// Localized label before suggestion text for a given locale.
+pub fn suggestion_label_for(locale: DiagLocale) -> &'static str {
+    match locale {
         DiagLocale::Es => "Sugerencia:",
         DiagLocale::En => "Suggestion:",
         DiagLocale::Ja => "提案:",
@@ -95,41 +150,73 @@ pub fn suggestion_label() -> &'static str {
     }
 }
 
-/// Localized primary message for a stable `VSTxxx` code.
+/// Localized label using the effective locale.
+pub fn suggestion_label() -> &'static str {
+    suggestion_label_for(diag_locale())
+}
+
+/// Pure catalog: primary message for `code` in `locale`.
 ///
 /// Placeholders: `{name}`, `{target}`, `{req}`, `{path}`, `{resolved}`, `{line}`,
 /// `{expected}`, `{indent}`, `{ch}`, `{speaker}`, `{hint}`, `{detail}`, `{err}`.
-pub fn diag_message(code: &str, args: &[(&str, &str)]) -> String {
-    fill(template_message(diag_locale(), code), args)
+pub fn diag_message_for(locale: DiagLocale, code: &str, args: &[(&str, &str)]) -> String {
+    fill(template_message(locale, code), args)
 }
 
-/// Localized suggestion body for a code, if any.
+/// Localized primary message using the effective locale.
+pub fn diag_message(code: &str, args: &[(&str, &str)]) -> String {
+    diag_message_for(diag_locale(), code, args)
+}
+
+/// Pure catalog: suggestion body for `code` in `locale`, if any.
+pub fn diag_suggestion_for(locale: DiagLocale, code: &str, args: &[(&str, &str)]) -> Option<String> {
+    template_suggestion(locale, code).map(|t| fill(t, args))
+}
+
+/// Localized suggestion using the effective locale.
 pub fn diag_suggestion(code: &str, args: &[(&str, &str)]) -> Option<String> {
-    template_suggestion(diag_locale(), code).map(|t| fill(t, args))
+    diag_suggestion_for(diag_locale(), code, args)
 }
 
 /// Hint fragment for invalid `if` conditions (used as `{hint}` in VST030).
+pub fn if_cond_hint_str_for(locale: DiagLocale, s: &str) -> String {
+    fill(template_hint(locale, "str"), &[("s", s)])
+}
+
+/// Hint fragment for invalid `if` conditions (effective locale).
 pub fn if_cond_hint_str(s: &str) -> String {
-    fill(
-        template_hint(diag_locale(), "str"),
-        &[("s", s)],
-    )
+    if_cond_hint_str_for(diag_locale(), s)
 }
 
 /// Hint for bare integer in `if`.
-pub fn if_cond_hint_int(n: i64) -> String {
+pub fn if_cond_hint_int_for(locale: DiagLocale, n: i64) -> String {
     let ns = n.to_string();
-    fill(template_hint(diag_locale(), "int"), &[("n", &ns)])
+    fill(template_hint(locale, "int"), &[("n", &ns)])
+}
+
+/// Hint for bare integer in `if` (effective locale).
+pub fn if_cond_hint_int(n: i64) -> String {
+    if_cond_hint_int_for(diag_locale(), n)
 }
 
 /// Hint for bare float text in `if`.
+pub fn if_cond_hint_float_for(locale: DiagLocale, s: &str) -> String {
+    fill(template_hint(locale, "float"), &[("s", s)])
+}
+
+/// Hint for bare float text in `if` (effective locale).
 pub fn if_cond_hint_float(s: &str) -> String {
-    fill(template_hint(diag_locale(), "float"), &[("s", s)])
+    if_cond_hint_float_for(diag_locale(), s)
 }
 
 /// Generic invalid-condition hint.
+pub fn if_cond_hint_other_for(locale: DiagLocale) -> String {
+    template_hint(locale, "other").to_string()
+}
+
+/// Generic invalid-condition hint (effective locale).
 pub fn if_cond_hint_other() -> String {
-    template_hint(diag_locale(), "other").to_string()
+    if_cond_hint_other_for(diag_locale())
 }
 
 fn fill(template: &str, args: &[(&str, &str)]) -> String {
@@ -559,17 +646,83 @@ mod tests {
 
     #[test]
     fn messages_differ_by_locale() {
-        set_diag_locale(DiagLocale::Es);
-        let es = diag_message("VST027", &[("target", "x")]);
-        set_diag_locale(DiagLocale::En);
-        let en = diag_message("VST027", &[("target", "x")]);
-        set_diag_locale(DiagLocale::Ja);
-        let ja = diag_message("VST027", &[("target", "x")]);
+        let es = diag_message_for(DiagLocale::Es, "VST027", &[("target", "x")]);
+        let en = diag_message_for(DiagLocale::En, "VST027", &[("target", "x")]);
+        let ja = diag_message_for(DiagLocale::Ja, "VST027", &[("target", "x")]);
         assert_ne!(es, en);
         assert_ne!(en, ja);
         assert!(es.contains("escena") || es.contains("etiqueta"));
         assert!(en.to_ascii_lowercase().contains("scene") || en.contains("label"));
-        // restore default
+    }
+
+    #[test]
+    fn scoped_locale_overrides_default_without_mutating_default() {
         set_diag_locale(DiagLocale::Es);
+        let es_default = diag_message("VST027", &[("target", "x")]);
+        let en_scoped = with_diag_locale(DiagLocale::En, || {
+            diag_message("VST027", &[("target", "x")])
+        });
+        // Default restored after scope
+        let es_after = diag_message("VST027", &[("target", "x")]);
+        assert_ne!(es_default, en_scoped);
+        assert_eq!(es_default, es_after);
+        assert_eq!(default_diag_locale(), DiagLocale::Es);
+        assert!(en_scoped.to_ascii_lowercase().contains("scene") || en_scoped.contains("label"));
+    }
+
+    #[test]
+    fn concurrent_threads_isolated_locales() {
+        use std::sync::mpsc;
+        use std::thread;
+
+        let (tx, rx) = mpsc::channel();
+        let pairs = [
+            (DiagLocale::En, "scene"),
+            (DiagLocale::Es, "escena"),
+            (DiagLocale::Ja, "シーン"),
+            (DiagLocale::De, "Szene"),
+            (DiagLocale::Zh, "场景"),
+        ];
+        let mut handles = Vec::new();
+        for (loc, cue) in pairs {
+            let tx = tx.clone();
+            handles.push(thread::spawn(move || {
+                // Intentional process-default noise — must not bleed into scoped checks.
+                set_diag_locale(DiagLocale::Es);
+                let msg = with_diag_locale(loc, || {
+                    // re-set default while scoped; scope must win
+                    set_diag_locale(DiagLocale::Zh);
+                    diag_message_for(diag_locale(), "VST027", &[("target", "missing")])
+                });
+                tx.send((loc.code(), msg, cue)).unwrap();
+            }));
+        }
+        drop(tx);
+        for h in handles {
+            h.join().unwrap();
+        }
+        set_diag_locale(DiagLocale::Es);
+        let mut got = Vec::new();
+        while let Ok((code, msg, cue)) = rx.recv() {
+            assert!(
+                msg.contains(cue) || msg.to_ascii_lowercase().contains(cue),
+                "locale {code}: expected cue `{cue}` in `{msg}`"
+            );
+            // Spanish-only bleed into English scope
+            if code == "en" {
+                assert!(
+                    !msg.contains("escena") && !msg.contains("etiqueta"),
+                    "English context bled Spanish: {msg}"
+                );
+            }
+            if code == "es" {
+                assert!(
+                    !msg.to_ascii_lowercase().contains("does not exist"),
+                    "Spanish context bled English: {msg}"
+                );
+            }
+            got.push(code.to_string());
+        }
+        assert_eq!(got.len(), 5);
     }
 }

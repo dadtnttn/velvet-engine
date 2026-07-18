@@ -1,6 +1,8 @@
 //! Writer-friendly diagnostics for Velvet Story.
 
-use crate::locale::{diag_message, diag_suggestion, suggestion_label};
+use crate::locale::{
+    diag_locale, diag_message_for, diag_suggestion_for, suggestion_label_for, DiagLocale,
+};
 use crate::span::{SourceLoc, Span};
 use serde::{Deserialize, Serialize};
 
@@ -30,19 +32,33 @@ pub struct StoryDiag {
     pub loc: SourceLoc,
     /// Related narrative node kind (scene, choice, …).
     pub node_kind: Option<String>,
+    /// Locale used when this diagnostic was emitted (for display labels).
+    #[serde(default)]
+    pub locale: DiagLocale,
 }
 
 impl StoryDiag {
-    /// Error from catalog key `code` with placeholder args.
+    /// Error from catalog key `code` with placeholder args (effective locale).
     pub fn error_key(
         code: impl Into<String>,
         args: &[(&str, &str)],
         file: impl Into<String>,
         span: Span,
     ) -> Self {
+        Self::error_key_locale(diag_locale(), code, args, file, span)
+    }
+
+    /// Error from catalog with an explicit locale (Studio multi-doc safe).
+    pub fn error_key_locale(
+        locale: DiagLocale,
+        code: impl Into<String>,
+        args: &[(&str, &str)],
+        file: impl Into<String>,
+        span: Span,
+    ) -> Self {
         let code = code.into();
-        let message = diag_message(&code, args);
-        let suggestion = diag_suggestion(&code, args);
+        let message = diag_message_for(locale, &code, args);
+        let suggestion = diag_suggestion_for(locale, &code, args);
         Self {
             code,
             severity: Severity::Error,
@@ -50,19 +66,31 @@ impl StoryDiag {
             suggestion,
             loc: SourceLoc::new(file, span),
             node_kind: None,
+            locale,
         }
     }
 
-    /// Warning from catalog.
+    /// Warning from catalog (effective locale).
     pub fn warning_key(
         code: impl Into<String>,
         args: &[(&str, &str)],
         file: impl Into<String>,
         span: Span,
     ) -> Self {
+        Self::warning_key_locale(diag_locale(), code, args, file, span)
+    }
+
+    /// Warning from catalog with an explicit locale.
+    pub fn warning_key_locale(
+        locale: DiagLocale,
+        code: impl Into<String>,
+        args: &[(&str, &str)],
+        file: impl Into<String>,
+        span: Span,
+    ) -> Self {
         let code = code.into();
-        let message = diag_message(&code, args);
-        let suggestion = diag_suggestion(&code, args);
+        let message = diag_message_for(locale, &code, args);
+        let suggestion = diag_suggestion_for(locale, &code, args);
         Self {
             code,
             severity: Severity::Warning,
@@ -70,6 +98,7 @@ impl StoryDiag {
             suggestion,
             loc: SourceLoc::new(file, span),
             node_kind: None,
+            locale,
         }
     }
 
@@ -87,6 +116,7 @@ impl StoryDiag {
             suggestion: None,
             loc: SourceLoc::new(file, span),
             node_kind: None,
+            locale: diag_locale(),
         }
     }
 
@@ -104,6 +134,7 @@ impl StoryDiag {
             suggestion: None,
             loc: SourceLoc::new(file, span),
             node_kind: None,
+            locale: diag_locale(),
         }
     }
 
@@ -119,12 +150,12 @@ impl StoryDiag {
         self
     }
 
-    /// Full writer-facing display (localized suggestion label).
+    /// Full writer-facing display (suggestion label matches emission locale).
     pub fn display(&self) -> String {
         let mut out = format!("{}: [{}] {}", self.loc.display(), self.code, self.message);
         if let Some(s) = &self.suggestion {
             out.push_str("\n\n");
-            out.push_str(suggestion_label());
+            out.push_str(suggestion_label_for(self.locale));
             out.push('\n');
             out.push_str(s);
         }
@@ -151,5 +182,6 @@ pub fn adapt_internal(file: &str, span: Span, internal: &str) -> StoryDiag {
 
 /// Re-export locale controls for callers.
 pub use crate::locale::{
-    apply_locale_from_env, diag_locale, set_diag_locale, DiagLocale,
+    apply_locale_from_env, default_diag_locale, push_diag_locale, set_diag_locale, with_diag_locale,
+    DiagLocaleGuard,
 };
