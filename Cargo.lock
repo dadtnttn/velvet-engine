@@ -2841,6 +2841,7 @@ dependencies = [
  "velvet-script-lsp",
  "velvet-script-parser",
  "velvet-story",
+ "velvet-story-lang",
  "velvet-ui",
  "walkdir",
  "winit",
