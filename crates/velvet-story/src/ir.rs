@@ -84,6 +84,14 @@ pub enum StoryOp {
         /// Ending id / name.
         ending: Option<String>,
     },
+    /// Registered host command from Velvet Story (`call combat.start: …`).
+    HostCall {
+        /// Command name e.g. `combat.start`.
+        name: String,
+        /// Named arguments (primitives only).
+        #[serde(default)]
+        args: IndexMap<String, StoryValue>,
+    },
     /// No-op / pause beat.
     Nop,
 }
