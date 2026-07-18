@@ -195,10 +195,12 @@ fn walk_stmts(
                 }
             }
             Stmt::If {
+                cond,
                 then_body,
                 else_body,
-                ..
+                span,
             } => {
+                check_if_cond(r, file, cond, *span);
                 walk_stmts(r, file, scene, then_body, cmds);
                 if let Some(e) = else_body {
                     walk_stmts(r, file, scene, e, cmds);
@@ -206,6 +208,56 @@ fn walk_stmts(
             }
             _ => {}
         }
+    }
+}
+
+/// Writer-facing: `if` needs a condition that can be true/false.
+fn check_if_cond(r: &mut SemaResult, file: &StoryFile, cond: &Expr, span: Span) {
+    if cond_is_booleanish(cond) {
+        return;
+    }
+    let hint = match cond {
+        Expr::Str(s, _) => format!("Actualmente estás usando el texto \"{s}\"."),
+        Expr::Int(n, _) => format!("Actualmente estás usando el número {n} sin comparar."),
+        Expr::Float(s, _) => format!("Actualmente estás usando el número {s} sin comparar."),
+        _ => "La condición no se puede interpretar como verdadero o falso.".into(),
+    };
+    r.diags.push(
+        StoryDiag::error(
+            "VST030",
+            format!(
+                "La condición de \"if\" debe producir verdadero o falso. {hint}"
+            ),
+            &file.file,
+            span,
+        )
+        .with_suggestion("if affection >= 3:\n# o una variable booleana: if has_key:")
+        .with_node("if"),
+    );
+}
+
+fn cond_is_booleanish(e: &Expr) -> bool {
+    match e {
+        // bare identifiers are allowed as truthy flags/vars
+        Expr::Ident(_, _) => true,
+        Expr::Bool(_, _) => true,
+        Expr::Unary {
+            op: UnaryOp::Not,
+            expr,
+            ..
+        } => cond_is_booleanish(expr),
+        Expr::Unary {
+            op: UnaryOp::Neg,
+            ..
+        } => false,
+        Expr::Binary { op, left, right, .. } => match op {
+            BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => true,
+            BinOp::And | BinOp::Or => cond_is_booleanish(left) && cond_is_booleanish(right),
+            // arithmetic alone is not a valid condition for writers
+            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => false,
+        },
+        // bare string / number / float alone → invalid
+        Expr::Str(_, _) | Expr::Int(_, _) | Expr::Float(_, _) => false,
     }
 }
 

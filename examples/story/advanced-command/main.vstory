@@ -1,0 +1,16 @@
+# External command registered for writers (implemented by programmers)
+
+scene start
+
+narrator:
+    Un enemigo aparece en el bosque.
+
+call combat.start:
+    enemy: forest_guardian
+    difficulty: 3
+    can_escape: true
+
+narrator:
+    El combate termina.
+
+end

@@ -1,0 +1,4 @@
+scene start
+luna @line.luna_intro_01:
+    Buenos dias.
+end
