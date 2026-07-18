@@ -6,7 +6,7 @@
 use velvet_document::DesignerWidget;
 use velvet_story::{draw_text_line, fill_rect, pack_rgb};
 
-use crate::layers::{DesignSurface, ScreenLayer};
+use crate::layers::{DesignSurface, LayerTreeRow, ScreenLayer};
 
 /// Map design base scale (1 body / 2 title) through user UI zoom (1..=4).
 #[inline]
@@ -29,29 +29,30 @@ fn txt(
 
 // ── Design tokens (ARGB via pack_rgb) ──────────────────────────────────────
 
+// High-contrast OLED tokens (readable body ≥ ~4.5:1 on surfaces)
 fn c_bg() -> u32 {
-    pack_rgb(15, 17, 26)
+    pack_rgb(12, 14, 20)
 }
 fn c_surface() -> u32 {
-    pack_rgb(22, 25, 38)
+    pack_rgb(24, 28, 40)
 }
 fn c_surface_2() -> u32 {
-    pack_rgb(30, 34, 52)
+    pack_rgb(36, 42, 58)
 }
 fn c_border() -> u32 {
-    pack_rgb(55, 62, 90)
+    pack_rgb(90, 100, 130)
 }
 fn c_border_soft() -> u32 {
-    pack_rgb(40, 45, 68)
+    pack_rgb(55, 62, 85)
 }
 fn c_text() -> u32 {
-    pack_rgb(240, 242, 250)
+    pack_rgb(248, 250, 255)
 }
 fn c_text_muted() -> u32 {
-    pack_rgb(140, 148, 175)
+    pack_rgb(190, 198, 220)
 }
 fn c_text_dim() -> u32 {
-    pack_rgb(100, 108, 135)
+    pack_rgb(160, 168, 190)
 }
 fn c_accent() -> u32 {
     pack_rgb(124, 92, 220)
@@ -152,7 +153,7 @@ impl StudioLayout {
             3 => 4,
             _ => 3,
         };
-        let max_layers = 4usize;
+        let max_layers = 10usize;
 
         let canvas_x = left_w + gap;
         let canvas_y = top_h + gap;
@@ -465,7 +466,9 @@ fn draw_pill(
 /// Layer stack snapshot for paint (borrowed data).
 pub struct LayerPaintView<'a> {
     pub layers: &'a [ScreenLayer],
+    pub tree_rows: &'a [LayerTreeRow],
     pub active_id: &'a str,
+    pub breadcrumb: &'a str,
     pub res_w: f32,
     pub res_h: f32,
     pub animating: bool,
@@ -619,7 +622,7 @@ pub fn paint_studio(
         c_border_soft(),
     );
 
-    // ── Layers (pantallas) ─────────────────────────────────────────────────
+    // ── Layers tree (pantallas + subcapas) ─────────────────────────────────
     draw_panel_header(
         buf,
         ww,
@@ -631,62 +634,101 @@ pub fn paint_studio(
         lay.header_h,
         zoom,
     );
-    let mut sorted: Vec<&ScreenLayer> = layers.layers.iter().collect();
-    sorted.sort_by_key(|l| l.z);
     let mut ly = lay.layers_rows_y;
-    for (i, layer) in sorted.iter().take(lay.max_layers).enumerate() {
-        let active = layer.id == layers.active_id;
+    for row in layers.tree_rows.iter().take(lay.max_layers) {
         let row_bot = ly + lay.row_h - 2;
-        if active {
+        if row.active {
             fill_rect(
                 buf,
                 ww,
                 wh,
-                4,
+                3,
                 ly,
-                lay.left_w - 4,
+                lay.left_w - 3,
                 row_bot,
-                pack_rgb(50, 70, 50),
+                pack_rgb(40, 70, 55),
             );
-            fill_rect(buf, ww, wh, 4, ly, 7, row_bot, c_cta());
+            fill_rect(buf, ww, wh, 3, ly, 6, row_bot, c_cta_hi());
+        } else if row.is_root {
+            fill_rect(
+                buf,
+                ww,
+                wh,
+                3,
+                ly,
+                lay.left_w - 3,
+                row_bot,
+                pack_rgb(28, 32, 46),
+            );
         }
-        let lock = if layer.locked { "L" } else { "·" };
-        let mark = format!("{lock}");
+        let indent = lay.pad + row.depth as i32 * (10 + 2 * zoom);
+        let ty = ly + (lay.row_h - 8 * zoom).max(2) / 2;
+        // expand marker
+        let mark = if row.has_children {
+            if row.expanded {
+                "-"
+            } else {
+                "+"
+            }
+        } else if row.depth > 0 {
+            "."
+        } else {
+            " "
+        };
         txt(
             buf,
             ww,
             wh,
-            lay.pad,
-            ly + (lay.row_h - 8 * zoom).max(2) / 2,
-            &mark,
-            if layer.locked {
-                pack_rgb(220, 120, 100)
+            indent,
+            ty,
+            mark,
+            c_text_muted(),
+            1,
+            zoom,
+        );
+        let lock = if row.locked { "#" } else { " " };
+        txt(
+            buf,
+            ww,
+            wh,
+            indent + 8 * zoom,
+            ty,
+            lock,
+            if row.locked {
+                pack_rgb(255, 140, 120)
             } else {
-                c_cta_hi()
+                c_text_dim()
             },
             1,
             zoom,
         );
-        let label = format!(
-            "{} {}x{}",
-            layer.name.chars().take(10).collect::<String>(),
-            layer.width_px,
-            layer.height_px
-        );
-        let lchars = lay.max_chars_in(lay.left_w - 28);
+        // name only (res on second visual line via short suffix)
+        let name_x = indent + 14 * zoom;
+        let avail = (lay.left_w - name_x - lay.pad).max(24);
+        let nchars = lay.max_chars_in(avail);
+        let label = if row.is_root {
+            format!("{} {}x{}", row.name, row.width_px, row.height_px)
+        } else {
+            row.name.clone()
+        };
         txt(
             buf,
             ww,
             wh,
-            lay.pad + 10 + 4 * zoom,
-            ly + (lay.row_h - 8 * zoom).max(2) / 2,
-            &label.chars().take(lchars).collect::<String>(),
-            if active { c_text() } else { c_text_muted() },
+            name_x,
+            ty,
+            &label.chars().take(nchars).collect::<String>(),
+            if row.active {
+                c_text()
+            } else if row.is_root {
+                c_text_muted()
+            } else {
+                pack_rgb(200, 210, 230)
+            },
             1,
             zoom,
         );
         ly += lay.row_h;
-        let _ = i;
     }
 
     draw_panel_header(
@@ -1177,7 +1219,7 @@ pub fn paint_studio(
         1,
         zoom,
     );
-    let help = "Ctrl+/- full UI zoom  |  drag  |  edit  |  Ctrl+S";
+    let help = "[ ] layers  N sublayer  M mobile  U lock  Ctrl+4 phone";
     let help_chars = lay.max_chars_in(lay.ww / 2 - lay.pad);
     txt(
         buf,
@@ -1186,7 +1228,7 @@ pub fn paint_studio(
         lay.ww / 2,
         status_y1,
         &help.chars().take(help_chars).collect::<String>(),
-        c_text_dim(),
+        c_text_muted(),
         1,
         zoom,
     );
@@ -1222,11 +1264,17 @@ pub fn paint_studio(
         layers.res_h,
     );
 
-    // Ghost lower layers (slightly inset outlines)
+    // Ghost other visible roots/siblings (dim outlines)
+    let active_z = layers
+        .layers
+        .iter()
+        .find(|l| l.id == layers.active_id)
+        .map(|l| l.z)
+        .unwrap_or(0);
     for (gi, gl) in layers
         .layers
         .iter()
-        .filter(|l| l.visible && l.id != layers.active_id && l.z < layers.layers.iter().find(|a| a.id == layers.active_id).map(|a| a.z).unwrap_or(0))
+        .filter(|l| l.visible && l.id != layers.active_id && l.parent.is_none())
         .enumerate()
     {
         let ghost = DesignSurface::fit(
@@ -1238,6 +1286,11 @@ pub fn paint_studio(
             gl.height_px as f32,
         );
         let inset = (gi as i32 + 1) * 3;
+        let col = if gl.z < active_z {
+            pack_rgb(50, 55, 75)
+        } else {
+            pack_rgb(70, 60, 90)
+        };
         rect_outline(
             buf,
             ww,
@@ -1246,7 +1299,7 @@ pub fn paint_studio(
             ghost.y + inset,
             ghost.x + ghost.w - inset,
             ghost.y + ghost.h - inset,
-            pack_rgb(40, 45, 60),
+            col,
             1,
         );
     }
@@ -1335,24 +1388,48 @@ pub fn paint_studio(
             pack_rgb(45, 50, 70),
         );
 
+        // Breadcrumb + resolution (high contrast strip)
+        fill_rect(
+            buf,
+            ww,
+            wh,
+            surface.x,
+            surface.y,
+            surface.x + surface.w,
+            surface.y + 12 + 8 * zoom,
+            pack_rgb(18, 22, 34),
+        );
         let res_label = format!(
-            "{}  {}x{}px{}",
-            layers.active_id,
+            "{}  |  {}x{}{}",
+            if layers.breadcrumb.is_empty() {
+                layers.active_id
+            } else {
+                layers.breadcrumb
+            },
             layers.res_w as i32,
             layers.res_h as i32,
-            if layers.animating { "  anim…" } else { "" }
+            if layers.animating {
+                " anim"
+            } else if layers.editable {
+                ""
+            } else {
+                " LOCK"
+            }
         );
         txt(
             buf,
             ww,
             wh,
             surface.x + 8,
-            surface.y + 6,
-            &res_label.chars().take(lay.max_chars_in(surface.w - 16)).collect::<String>(),
+            surface.y + 4,
+            &res_label
+                .chars()
+                .take(lay.max_chars_in(surface.w - 16))
+                .collect::<String>(),
             if layers.animating {
                 c_cta_hi()
             } else {
-                c_text_dim()
+                c_text()
             },
             1,
             zoom,

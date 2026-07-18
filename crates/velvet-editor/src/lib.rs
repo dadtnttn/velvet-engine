@@ -18,7 +18,7 @@ pub mod studio;
 pub mod studio_paint;
 
 pub use layers::{
-    pct_to_px, px_to_pct, DesignSurface, LayerStack, ResPreset, ScreenLayer,
+    pct_to_px, px_to_pct, DesignSurface, LayerStack, LayerTreeRow, ResPreset, ScreenLayer,
 };
 
 pub use document_edit::{
