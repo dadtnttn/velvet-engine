@@ -492,8 +492,12 @@ pub fn run_story_program(program: StoryProgram, choice: usize, max_steps: u32) -
                 let arm = player.choices().get(idx).map(|c| c.index).unwrap_or(0);
                 let _ = player.choose(arm);
             }
-            StoryWait::Ready => {
+            StoryWait::Ready | StoryWait::Pause { .. } => {
                 player.advance();
+            }
+            StoryWait::Host { token } => {
+                // Headless product path: auto-resume host waits.
+                let _ = player.resume_host(&token);
             }
         }
     }
