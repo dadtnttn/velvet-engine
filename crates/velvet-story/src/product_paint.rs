@@ -112,20 +112,116 @@ pub fn paint_product_frame(frame: &ProductUiFrame) -> ProductPaintList {
     paint_product_frame_at(frame, PRODUCT_VIRTUAL_W, PRODUCT_VIRTUAL_H)
 }
 
+/// Mood color from background asset path (no image load required).
+pub fn background_mood_color(path: Option<&str>) -> [f32; 4] {
+    let p = path.unwrap_or("").to_ascii_lowercase();
+    if p.contains("rain") || p.contains("station") {
+        [0.10, 0.12, 0.22, 1.0]
+    } else if p.contains("platform") {
+        [0.12, 0.13, 0.24, 1.0]
+    } else if p.contains("tunnel") || p.contains("under") {
+        [0.08, 0.07, 0.10, 1.0]
+    } else if p.contains("train") || p.contains("car") {
+        [0.14, 0.10, 0.16, 1.0]
+    } else if p.contains("city") || p.contains("light") {
+        [0.08, 0.10, 0.22, 1.0]
+    } else if p.contains("street") {
+        [0.09, 0.10, 0.15, 1.0]
+    } else {
+        [0.07, 0.06, 0.12, 1.0]
+    }
+}
+
+/// Character stand color from sprite id.
+pub fn sprite_stand_color(id: &str) -> [f32; 4] {
+    match id {
+        "nora" | "lea" | "aria" => [0.72, 0.28, 0.45, 1.0],
+        "june" | "kai" => [0.22, 0.48, 0.72, 1.0],
+        "guard" | "inspector" => [0.62, 0.50, 0.28, 1.0],
+        "radio" => [0.40, 0.40, 0.45, 1.0],
+        "hero" => [0.35, 0.55, 0.40, 1.0],
+        _ => [0.40, 0.35, 0.50, 1.0],
+    }
+}
+
 /// Build paint commands for a virtual resolution.
 pub fn paint_product_frame_at(frame: &ProductUiFrame, vw: f32, vh: f32) -> ProductPaintList {
     let mut commands = Vec::new();
 
-    // Background tint if present (full-screen dim under dialogue)
-    if frame.background.is_some() {
+    // Full-screen background (always — product stage)
+    let bg = background_mood_color(frame.background.as_deref());
+    commands.push(ProductPaintCmd::Quad {
+        id: "background".into(),
+        x: 0.0,
+        y: 0.0,
+        w: vw,
+        h: vh,
+        color: bg,
+        z: 0.0,
+    });
+    // Upper sheen band
+    commands.push(ProductPaintCmd::Quad {
+        id: "background_sheen".into(),
+        x: 0.0,
+        y: 0.0,
+        w: vw,
+        h: vh * 0.28,
+        color: [
+            (bg[0] + 0.06).min(1.0),
+            (bg[1] + 0.05).min(1.0),
+            (bg[2] + 0.10).min(1.0),
+            1.0,
+        ],
+        z: 0.5,
+    });
+
+    // Character stands from presentation sprite ids (left / center / right by order)
+    let n = frame.sprite_ids.len().max(1) as f32;
+    for (i, sid) in frame.sprite_ids.iter().enumerate() {
+        let t = if frame.sprite_ids.len() == 1 {
+            0.5
+        } else {
+            0.28 + 0.44 * (i as f32 / (n - 1.0).max(1.0))
+        };
+        let body_w = vw * 0.11;
+        let body_h = vh * 0.42;
+        let x = vw * t - body_w * 0.5;
+        let y = vh * 0.28;
+        let c = sprite_stand_color(sid);
         commands.push(ProductPaintCmd::Quad {
-            id: "background".into(),
-            x: 0.0,
-            y: 0.0,
-            w: vw,
-            h: vh,
-            color: [0.05, 0.05, 0.08, 1.0],
-            z: 0.0,
+            id: format!("sprite_{sid}"),
+            x,
+            y,
+            w: body_w,
+            h: body_h,
+            color: c,
+            z: 5.0 + i as f32,
+        });
+        // head
+        let hr = body_w * 0.45;
+        commands.push(ProductPaintCmd::Quad {
+            id: format!("sprite_head_{sid}"),
+            x: x + body_w * 0.5 - hr * 0.5,
+            y: y - hr * 0.85,
+            w: hr,
+            h: hr,
+            color: [
+                (c[0] + 0.12).min(1.0),
+                (c[1] + 0.10).min(1.0),
+                (c[2] + 0.08).min(1.0),
+                1.0,
+            ],
+            z: 5.5 + i as f32,
+        });
+        commands.push(ProductPaintCmd::Text {
+            id: format!("sprite_label_{sid}"),
+            x: x,
+            y: y + body_h + 8.0,
+            text: sid.clone(),
+            size: 16.0,
+            color: [0.85, 0.85, 0.92, 1.0],
+            z: 6.0 + i as f32,
+            width: body_w.max(40.0),
         });
     }
 

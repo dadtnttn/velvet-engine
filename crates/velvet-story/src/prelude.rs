@@ -17,6 +17,12 @@ pub use crate::product::{
     open_session_from_file, BgmController, BgmIntent, ChoiceScreen, ConfirmDialog, ConfirmKind,
     LayeredSprite, PresentationState, SayScreen, VnSession,
 };
+pub use crate::product_paint::{
+    paint_product_frame, paint_product_session, ProductPaintList, PRODUCT_VIRTUAL_H,
+    PRODUCT_VIRTUAL_W,
+};
+pub use crate::product_raster::rasterize_product_paint;
+pub use crate::product_ui::build_product_ui_frame;
 pub use crate::rollback::{RollbackRecorder, RollbackStack};
 pub use crate::runtime::{ChoiceOption, StoryEvent, StoryPlayer, StoryWait, VisibleCharacter};
 pub use crate::save::{SaveError, SaveGame, SaveMeta, SaveStore};
