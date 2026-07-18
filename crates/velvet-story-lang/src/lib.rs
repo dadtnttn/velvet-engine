@@ -1,12 +1,16 @@
 //! # velvet-story-lang
 //!
-//! **Velvet Story** — writer-friendly narrative language that lowers to
-//! **Velvet Script 2** (HIR + `OpVs2` + existing host/VM). No second bytecode VM.
+//! **Velvet Story** — writer-friendly narrative language. Product spine:
 //!
-//! Pipeline:
 //! ```text
-//! .vstory → lexer → parser → AST → sema → lower → Hir + Vs2Unit → Vs2Host
+//! .vstory → lexer → parser → AST → sema
+//!        → StoryProgram          ← canonical IR
+//!             ├→ StoryPlayer     ← product runtime (default)
+//!             └→ OpVs2 (derived) ← secondary / debug / fallback host
 //! ```
+//!
+//! Diagnostic locale is **context-scoped** ([`with_diag_locale`] /
+//! [`pipeline::CheckOptions`]) so concurrent multi-doc tools do not race.
 //!
 //! Maturity: **ALPHA** (authoring layer for writers).
 
@@ -35,13 +39,15 @@ pub use commands::{CommandRegistry, CommandSpec};
 pub use diag::StoryDiag;
 pub use format::{format_source, is_idempotent};
 pub use locale::{
-    apply_locale_from_env, diag_locale, set_diag_locale, DiagLocale,
+    apply_locale_from_env, default_diag_locale, diag_locale, diag_message_for, push_diag_locale,
+    set_diag_locale, with_diag_locale, DiagLocale, DiagLocaleGuard,
 };
 pub use load::{load_story_path, load_story_source};
 pub use pipeline::{
-    build_path, build_source, build_story_program, check_path, check_source, dump_ast_json,
-    dump_lowered_text, run_path, run_source, run_source_product, run_story_program, BuildResult,
-    CheckResult, ProgramRunResult, RunResult,
+    build_path, build_source, build_story_program, build_story_program_with, check_path,
+    check_path_with, check_source, check_source_with, dump_ast_json, dump_lowered_text, run_path,
+    run_path_product, run_source, run_source_product, run_source_product_with, run_story_program,
+    BuildResult, CheckOptions, CheckResult, ProgramRunResult, RunResult,
 };
 pub use studio::{build_model, StudioModel};
 pub use to_story_program::{to_story_program, ToProgramError};
@@ -168,10 +174,15 @@ end
 
     #[test]
     fn bad_if_string_condition_errors() {
-        set_diag_locale(DiagLocale::Es);
         let src = "scene a\nif \"luna\":\n    goto a\n";
         let cmds = CommandRegistry::builtin();
-        let c = check_source(src, "badif.vstory", &cmds);
+        // Scoped ES so parallel locale tests cannot bleed into this assert.
+        let c = check_source_with(
+            src,
+            "badif.vstory",
+            &cmds,
+            CheckOptions::new().with_locale(DiagLocale::Es),
+        );
         assert!(!c.ok);
         let d = c.diags.iter().find(|d| d.code == "VST030").expect("VST030");
         assert!(d.display().contains("badif.vstory"));
@@ -190,10 +201,16 @@ end
         let cmds = CommandRegistry::builtin();
         let mut texts = std::collections::BTreeMap::new();
         for loc in DiagLocale::all() {
-            set_diag_locale(*loc);
-            let c = check_source(src, "loc.vstory", &cmds);
+            // Scoped options — do not rely on process-global alone.
+            let c = check_source_with(
+                src,
+                "loc.vstory",
+                &cmds,
+                CheckOptions::new().with_locale(*loc),
+            );
             let d = c.diags.iter().find(|d| d.code == "VST027").expect("VST027");
             assert_eq!(d.code, "VST027");
+            assert_eq!(d.locale, *loc);
             assert!(
                 d.message.contains("missing_xyz"),
                 "locale {:?} msg={}",
@@ -223,10 +240,81 @@ end
         assert!(texts["ja"].contains("シーン") || texts["ja"].contains("ラベル"));
         assert!(texts["de"].contains("Szene") || texts["de"].contains("Label"));
         assert!(texts["zh"].contains("场景") || texts["zh"].contains("标签"));
-        // suggestion labels localized
+        // suggestion labels localized (from diag.locale, not process default)
         assert!(texts["es"].contains("Sugerencia:"));
         assert!(texts["en"].contains("Suggestion:"));
+    }
+
+    #[test]
+    fn concurrent_check_options_locales_no_bleed() {
+        use std::sync::mpsc;
+        use std::thread;
+
+        let src = "scene a\ngoto missing_xyz\n";
+        let (tx, rx) = mpsc::channel();
+        let mut handles = Vec::new();
+        for loc in [DiagLocale::En, DiagLocale::Es, DiagLocale::Ja] {
+            let tx = tx.clone();
+            let src = src.to_string();
+            handles.push(thread::spawn(move || {
+                // Global noise must not cross into scoped check.
+                set_diag_locale(DiagLocale::Zh);
+                let cmds = CommandRegistry::builtin();
+                let c = check_source_with(
+                    &src,
+                    "mt.vstory",
+                    &cmds,
+                    CheckOptions::new().with_locale(loc),
+                );
+                let d = c.diags.iter().find(|d| d.code == "VST027").expect("VST027");
+                tx.send((loc, d.message.clone(), d.display())).unwrap();
+            }));
+        }
+        drop(tx);
+        for h in handles {
+            h.join().unwrap();
+        }
         set_diag_locale(DiagLocale::Es);
+        let mut en_msg = None;
+        let mut es_msg = None;
+        while let Ok((loc, msg, display)) = rx.recv() {
+            match loc {
+                DiagLocale::En => {
+                    assert!(
+                        msg.to_ascii_lowercase().contains("scene") || msg.contains("label"),
+                        "{msg}"
+                    );
+                    assert!(!msg.contains("escena"), "en bled es: {msg}");
+                    assert!(!msg.contains("场景"), "en bled zh: {msg}");
+                    assert!(display.contains("Suggestion:"), "{display}");
+                    en_msg = Some(msg);
+                }
+                DiagLocale::Es => {
+                    assert!(msg.contains("escena") || msg.contains("etiqueta"), "{msg}");
+                    assert!(!msg.to_ascii_lowercase().contains("does not exist"), "{msg}");
+                    assert!(display.contains("Sugerencia:"), "{display}");
+                    es_msg = Some(msg);
+                }
+                DiagLocale::Ja => {
+                    assert!(msg.contains("シーン") || msg.contains("ラベル"), "{msg}");
+                    assert!(display.contains("提案:"), "{display}");
+                }
+                _ => {}
+            }
+        }
+        assert_ne!(en_msg, es_msg);
+    }
+
+    #[test]
+    fn product_run_is_primary_public_path() {
+        let cmds = CommandRegistry::builtin();
+        let r = run_source_product(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0)
+            .expect("product run");
+        assert!(!r.dialogue.is_empty(), "product dialogue empty");
+        assert!(r.steps > 0);
+        // VS2 secondary still works but is not required for product success.
+        let vs2 = run_source(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0);
+        assert!(vs2.ok, "secondary vs2 host should still succeed");
     }
 
     #[test]
