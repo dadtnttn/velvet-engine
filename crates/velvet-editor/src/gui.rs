@@ -598,6 +598,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         edit_field: Option<crate::studio_paint::InspectorField>,
         /// Live buffer while editing an inspector field.
         edit_buf: String,
+        /// UI text zoom level 1..=4 (Ctrl+/- or Ctrl+wheel). Default 2.
+        ui_zoom: i32,
         status: String,
     }
 
@@ -638,10 +640,56 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 WindowEvent::ModifiersChanged(mods) => {
                     self.ctrl_held = mods.state().control_key() || mods.state().super_key();
                 }
+                WindowEvent::MouseWheel { delta, .. } => {
+                    if !self.ctrl_held {
+                        return;
+                    }
+                    use winit::event::MouseScrollDelta;
+                    let dy = match delta {
+                        MouseScrollDelta::LineDelta(_, y) => y,
+                        MouseScrollDelta::PixelDelta(p) => {
+                            if p.y > 0.0 {
+                                1.0
+                            } else if p.y < 0.0 {
+                                -1.0
+                            } else {
+                                0.0
+                            }
+                        }
+                    };
+                    if dy > 0.0 {
+                        self.bump_zoom(1);
+                    } else if dy < 0.0 {
+                        self.bump_zoom(-1);
+                    }
+                }
                 WindowEvent::KeyboardInput { event, .. } => {
                     if event.state != ElementState::Pressed {
                         return;
                     }
+                    // Ctrl+/- always zooms UI text (even while editing)
+                    if self.ctrl_held {
+                        if let PhysicalKey::Code(c) = event.physical_key {
+                            match c {
+                                KeyCode::Equal | KeyCode::NumpadAdd => {
+                                    self.bump_zoom(1);
+                                    return;
+                                }
+                                KeyCode::Minus | KeyCode::NumpadSubtract => {
+                                    self.bump_zoom(-1);
+                                    return;
+                                }
+                                KeyCode::Digit0 | KeyCode::Numpad0 => {
+                                    self.ui_zoom = 2;
+                                    self.status = "UI zoom reset x2".into();
+                                    self.redraw();
+                                    return;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
                     // ── Inspector text editing takes keyboard focus ──
                     if self.edit_field.is_some() {
                         let PhysicalKey::Code(c) = event.physical_key else {
@@ -1016,6 +1064,21 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             self.edit_buf.clear();
         }
 
+        fn bump_zoom(&mut self, delta: i32) {
+            let next = (self.ui_zoom + delta).clamp(1, 4);
+            if next != self.ui_zoom {
+                self.ui_zoom = next;
+                self.status = format!(
+                    "UI zoom x{}  (Ctrl+wheel or Ctrl+/- , Ctrl+0 reset)",
+                    self.ui_zoom
+                );
+                self.redraw();
+            } else {
+                self.status = format!("UI zoom x{} (min 1 / max 4)", self.ui_zoom);
+                self.redraw();
+            }
+        }
+
         fn begin_edit(&mut self, field: crate::studio_paint::InspectorField) {
             use crate::studio_paint::InspectorField;
             let Some(id) = self.session.selected_region.clone() else {
@@ -1122,6 +1185,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 self.dragging,
                 self.edit_field,
                 &self.edit_buf,
+                self.ui_zoom,
             );
 
             let Some(surface) = self.surface.as_mut() else {
@@ -1175,7 +1239,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         ctrl_held: false,
         edit_field: None,
         edit_buf: String::new(),
-        status: "ready — select widget, click TEXT/POS/SIZE to edit".into(),
+        ui_zoom: 2,
+        status: "ready — Ctrl+wheel zoom text, select widget to edit".into(),
     };
     event_loop
         .run_app(&mut host)
