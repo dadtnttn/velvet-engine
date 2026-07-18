@@ -76,8 +76,10 @@ velvet-editor (lib + velvet-studio bin)
 velvet-studio gui ./my_game --headless --once --ready-log ready.log
 
 # Interactive dual-mode window (Tab = toggle, S = drop button, drag = move)
-velvet-studio gui ./my_game --window --once false
-# or once-only brief paint:
+velvet-studio gui ./my_game --interactive
+# equivalent: velvet-studio gui ./my_game --window --once=false
+
+# Brief OS window paint then exit (CI / probe)
 velvet-studio gui ./my_game --window --once
 ```
 
