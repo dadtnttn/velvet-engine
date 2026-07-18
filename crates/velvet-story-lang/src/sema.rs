@@ -20,6 +20,14 @@ pub struct SemaResult {
     pub variables: HashSet<String>,
 }
 
+/// File path used for diagnostics inside a scene (include origin when present).
+fn diag_file(file: &StoryFile, scene: &Scene) -> String {
+    scene
+        .origin_file
+        .clone()
+        .unwrap_or_else(|| file.file.clone())
+}
+
 /// Validate a story file.
 pub fn analyze(file: &StoryFile, cmds: &CommandRegistry) -> SemaResult {
     let mut r = SemaResult::default();
@@ -27,12 +35,13 @@ pub fn analyze(file: &StoryFile, cmds: &CommandRegistry) -> SemaResult {
 
     for item in &file.items {
         if let TopItem::Scene(sc) = item {
+            let origin = diag_file(file, sc);
             if let Some(prev) = scene_spans.insert(sc.name.clone(), sc.span) {
                 r.diags.push(
                     StoryDiag::error(
                         "VST020",
                         format!("La escena `{}` ya existe.", sc.name),
-                        &file.file,
+                        origin,
                         sc.span,
                     )
                     .with_suggestion(format!(
@@ -56,7 +65,7 @@ pub fn analyze(file: &StoryFile, cmds: &CommandRegistry) -> SemaResult {
     // second pass: gotos
     for item in &file.items {
         if let TopItem::Scene(sc) = item {
-            check_gotos(&mut r, file, &sc.body);
+            check_gotos(&mut r, file, sc, &sc.body);
         }
     }
 
@@ -97,6 +106,7 @@ fn walk_stmts(
     stmts: &[Stmt],
     cmds: &CommandRegistry,
 ) {
+    let origin = diag_file(file, scene);
     for st in stmts {
         match st {
             Stmt::Set { name, .. } => {
@@ -110,7 +120,7 @@ fn walk_stmts(
                             format!(
                                 "La variable `{name}` se modifica sin un `set` previo; se asumirá 0."
                             ),
-                            &file.file,
+                            &origin,
                             *span,
                         )
                         .with_suggestion(format!("set {name} = 0")),
@@ -128,7 +138,7 @@ fn walk_stmts(
                                     format!(
                                         "Al comando `{name}` le falta el parámetro obligatorio `{req}`."
                                     ),
-                                    &file.file,
+                                    &origin,
                                     *span,
                                 )
                                 .with_suggestion(format!("{req}: …"))
@@ -144,7 +154,7 @@ fn walk_stmts(
                                     format!(
                                         "El parámetro `{k}` no está documentado para `{name}`."
                                     ),
-                                    &file.file,
+                                    &origin,
                                     *span,
                                 )
                                 .with_node("call"),
@@ -158,7 +168,7 @@ fn walk_stmts(
                             format!(
                                 "No hay un comando registrado llamado `{name}`. Un programador debe exponerlo desde Velvet Script 2."
                             ),
-                            &file.file,
+                            &origin,
                             *span,
                         )
                         .with_node("call"),
@@ -171,7 +181,7 @@ fn walk_stmts(
                         StoryDiag::warning(
                             "VST025",
                             "Este diálogo no tiene texto.",
-                            &file.file,
+                            &origin,
                             *span,
                         )
                         .with_node("dialogue"),
@@ -184,7 +194,7 @@ fn walk_stmts(
                         StoryDiag::error(
                             "VST026",
                             "Un `choice` necesita al menos una opción.",
-                            &file.file,
+                            &origin,
                             *span,
                         )
                         .with_node("choice"),
@@ -200,7 +210,7 @@ fn walk_stmts(
                 else_body,
                 span,
             } => {
-                check_if_cond(r, file, cond, *span);
+                check_if_cond(r, file, scene, cond, *span);
                 walk_stmts(r, file, scene, then_body, cmds);
                 if let Some(e) = else_body {
                     walk_stmts(r, file, scene, e, cmds);
@@ -212,7 +222,7 @@ fn walk_stmts(
 }
 
 /// Writer-facing: `if` needs a condition that can be true/false.
-fn check_if_cond(r: &mut SemaResult, file: &StoryFile, cond: &Expr, span: Span) {
+fn check_if_cond(r: &mut SemaResult, file: &StoryFile, scene: &Scene, cond: &Expr, span: Span) {
     if cond_is_booleanish(cond) {
         return;
     }
@@ -228,7 +238,7 @@ fn check_if_cond(r: &mut SemaResult, file: &StoryFile, cond: &Expr, span: Span) 
             format!(
                 "La condición de \"if\" debe producir verdadero o falso. {hint}"
             ),
-            &file.file,
+            diag_file(file, scene),
             span,
         )
         .with_suggestion("if affection >= 3:\n# o una variable booleana: if has_key:")
@@ -261,7 +271,8 @@ fn cond_is_booleanish(e: &Expr) -> bool {
     }
 }
 
-fn check_gotos(r: &mut SemaResult, file: &StoryFile, stmts: &[Stmt]) {
+fn check_gotos(r: &mut SemaResult, file: &StoryFile, scene: &Scene, stmts: &[Stmt]) {
+    let origin = diag_file(file, scene);
     for st in stmts {
         match st {
             Stmt::Goto { target, span } | Stmt::CallScene { target, span } => {
@@ -272,7 +283,7 @@ fn check_gotos(r: &mut SemaResult, file: &StoryFile, stmts: &[Stmt]) {
                             format!(
                                 "No existe la escena o etiqueta `{target}`."
                             ),
-                            &file.file,
+                            &origin,
                             *span,
                         )
                         .with_suggestion("Revisa el nombre o crea la escena con `scene …`.")
@@ -282,7 +293,7 @@ fn check_gotos(r: &mut SemaResult, file: &StoryFile, stmts: &[Stmt]) {
             }
             Stmt::Choice { options, .. } => {
                 for o in options {
-                    check_gotos(r, file, &o.body);
+                    check_gotos(r, file, scene, &o.body);
                 }
             }
             Stmt::If {
@@ -290,9 +301,9 @@ fn check_gotos(r: &mut SemaResult, file: &StoryFile, stmts: &[Stmt]) {
                 else_body,
                 ..
             } => {
-                check_gotos(r, file, then_body);
+                check_gotos(r, file, scene, then_body);
                 if let Some(e) = else_body {
-                    check_gotos(r, file, e);
+                    check_gotos(r, file, scene, e);
                 }
             }
             _ => {}

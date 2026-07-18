@@ -173,8 +173,8 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
             else_body,
             ..
         } => {
-            let cond_var = match cond {
-                Expr::Ident { name, .. } => name.clone(),
+            let cond = match cond {
+                Expr::Ident { name, .. } => crate::ir::StoryCond::var(name.clone()),
                 _ => {
                     return Err(LoadError::Semantic(
                         "story if supports identifier conditions only in v1".into(),
@@ -187,7 +187,7 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
                 None => vec![],
             };
             vec![StoryOp::If {
-                cond_var,
+                cond,
                 then_ops,
                 else_ops,
             }]

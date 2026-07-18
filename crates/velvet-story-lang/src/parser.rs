@@ -69,6 +69,7 @@ impl Parser {
     }
 
     /// Skip newlines and comments (use only when comments must not enter the AST).
+    #[allow(dead_code)] // reserved for top-level contexts that must drop comments
     fn skip_nl_comments(&mut self) {
         loop {
             match self.peek_kind() {

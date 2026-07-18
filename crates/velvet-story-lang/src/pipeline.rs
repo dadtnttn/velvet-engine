@@ -272,9 +272,16 @@ fn run_build(build: BuildResult, choice_index: usize) -> RunResult {
             // resolve entry by pool name
             let name = vm.host.pool_str(a);
             if let Some(&pc) = lowered.unit.entry_scenes.get(&name) {
-                // patch-like: jump to scene entry
-                vm.pc += 1;
-                // manual jump
+                vm.pc = if b != 0 { b as usize } else { pc as usize };
+                steps += 1;
+                continue;
+            }
+        }
+        if op == OpVs2::CallScene {
+            let name = vm.host.pool_str(a);
+            if let Some(&pc) = lowered.unit.entry_scenes.get(&name) {
+                // return to next instruction after CallScene
+                vm.call_stack.push(vm.pc + 1);
                 vm.pc = if b != 0 { b as usize } else { pc as usize };
                 steps += 1;
                 continue;

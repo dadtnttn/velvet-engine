@@ -5,7 +5,7 @@
 
 use velvet_script_bytecode::opcodes_vs2::OpVs2;
 use velvet_script_compiler::vs2_codegen::{Vs2Instr, Vs2Unit};
-use velvet_story::{StoryOp, StoryProgram, StoryValue};
+use velvet_story::{StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram, StoryValue};
 
 /// Lower a product StoryProgram into a VS2 host unit (debug / fallback).
 pub fn story_program_to_vs2(program: &StoryProgram) -> Vs2Unit {
@@ -17,6 +17,7 @@ pub fn story_program_to_vs2(program: &StoryProgram) -> Vs2Unit {
         for op in &scene.ops {
             emit_op(&mut unit, op);
         }
+        // Scene fall-through ends with Ret: returns from CallScene or halts if root.
         unit.emit(Vs2Instr::new(OpVs2::Ret));
     }
     // link scene jumps
@@ -26,8 +27,12 @@ pub fn story_program_to_vs2(program: &StoryProgram) -> Vs2Unit {
 
 fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
     match op {
-        StoryOp::Nop | StoryOp::Label { .. } | StoryOp::Return => {
+        StoryOp::Nop | StoryOp::Label { .. } => {
             unit.emit(Vs2Instr::new(OpVs2::Nop));
+        }
+        // Explicit return from call_scene — same Ret opcode MiniVm uses with call_stack.
+        StoryOp::Return => {
+            unit.emit(Vs2Instr::new(OpVs2::Ret));
         }
         StoryOp::Background { path } => {
             let id = unit.pool.intern(path.as_str());
@@ -76,12 +81,11 @@ fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
             unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
         }
         StoryOp::If {
-            cond_var,
+            cond,
             then_ops,
             else_ops,
         } => {
-            let kid = unit.pool.intern(cond_var.as_str());
-            unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
+            emit_cond(unit, cond);
             // JumpIf jumps when falsy
             let j_else = unit.emit(Vs2Instr::with_a(OpVs2::JumpIf, 0));
             for o in then_ops {
@@ -123,6 +127,56 @@ fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
             let id = unit.pool.intern(name.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::TransitionPlay, id));
         }
+    }
+}
+
+fn emit_cond(unit: &mut Vs2Unit, cond: &StoryCond) {
+    match cond {
+        StoryCond::Var { name } => {
+            let kid = unit.pool.intern(name.as_str());
+            unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
+        }
+        StoryCond::Const { value } => {
+            let id = unit.pool.intern(if *value { "1" } else { "0" });
+            unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, id));
+        }
+        StoryCond::Not { inner } => {
+            emit_cond(unit, inner);
+            unit.emit(Vs2Instr::new(OpVs2::Not));
+        }
+        StoryCond::And { left, right } => {
+            emit_cond(unit, left);
+            emit_cond(unit, right);
+            unit.emit(Vs2Instr::new(OpVs2::And));
+        }
+        StoryCond::Or { left, right } => {
+            emit_cond(unit, left);
+            emit_cond(unit, right);
+            unit.emit(Vs2Instr::new(OpVs2::Or));
+        }
+        StoryCond::Cmp { left, op, right } => {
+            emit_operand(unit, left);
+            emit_operand(unit, right);
+            let opc = match op {
+                StoryCmpOp::Eq => OpVs2::Eq,
+                StoryCmpOp::Ne => OpVs2::Ne,
+                StoryCmpOp::Lt => OpVs2::Lt,
+                StoryCmpOp::Le => OpVs2::Le,
+                StoryCmpOp::Gt => OpVs2::Gt,
+                StoryCmpOp::Ge => OpVs2::Ge,
+            };
+            unit.emit(Vs2Instr::new(opc));
+        }
+    }
+}
+
+fn emit_operand(unit: &mut Vs2Unit, op: &StoryOperand) {
+    match op {
+        StoryOperand::Var { name } => {
+            let kid = unit.pool.intern(name.as_str());
+            unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
+        }
+        StoryOperand::Value { value } => emit_value(unit, value),
     }
 }
 
@@ -168,5 +222,39 @@ mod tests {
             .code
             .iter()
             .any(|i| matches!(i.op, OpVs2::Say | OpVs2::Background)));
+    }
+
+    #[test]
+    fn return_is_ret_not_nop() {
+        let src = r#"
+scene helper
+return
+
+scene start
+call scene helper
+end
+"#;
+        let cmds = CommandRegistry::builtin();
+        let prog = build_story_program(src, "r.vstory", &cmds, "r").unwrap();
+        let unit = story_program_to_vs2(&prog);
+        // Helper scene must contain an explicit Ret from StoryOp::Return (not only trailing Ret).
+        let helper_pc = *unit.entry_scenes.get("helper").unwrap() as usize;
+        let start_pc = *unit.entry_scenes.get("start").unwrap() as usize;
+        let helper_end = if helper_pc < start_pc {
+            start_pc
+        } else {
+            unit.code.len()
+        };
+        let helper_code = &unit.code[helper_pc..helper_end.min(unit.code.len())];
+        let rets = helper_code.iter().filter(|i| matches!(i.op, OpVs2::Ret)).count();
+        assert!(
+            rets >= 1,
+            "expected Ret from return in helper, got {:?}",
+            helper_code.iter().map(|i| i.op).collect::<Vec<_>>()
+        );
+        assert!(
+            !helper_code.iter().any(|i| matches!(i.op, OpVs2::Nop)),
+            "return must not lower to Nop"
+        );
     }
 }

@@ -38,7 +38,7 @@ pub use character::Character;
 pub use gallery::{Gallery, GalleryEntry, GalleryError};
 pub use glossary::{Glossary, GlossaryError, GlossaryTerm};
 pub use history::{History, HistoryEntry};
-pub use ir::{StoryChoice, StoryOp, StoryProgram, StoryScene};
+pub use ir::{StoryChoice, StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram, StoryScene};
 pub use load::{load_program_from_source, LoadError};
 pub use localization_hook::{
     catalog_to_po_template, choice_key, dialogue_key, extract_loc_keys, extract_scene_loc_keys,
