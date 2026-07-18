@@ -85,11 +85,13 @@ fn c_shadow() -> u32 {
     pack_rgb(4, 5, 10)
 }
 
-/// Layout metrics for the Studio window.
+/// Layout metrics for the Studio window (all sizes scale with `zoom`).
 #[derive(Debug, Clone, Copy)]
 pub struct StudioLayout {
     pub ww: i32,
     pub wh: i32,
+    /// UI zoom 1..=4 — same as text scale; layout metrics scale with this.
+    pub zoom: i32,
     pub left_w: i32,
     pub right_w: i32,
     pub top_h: i32,
@@ -102,28 +104,59 @@ pub struct StudioLayout {
     pub palette_y: i32,
     /// Y of first hierarchy row.
     pub hierarchy_y: i32,
+    pub header_h: i32,
+    pub row_h: i32,
+    pub pal_item_h: i32,
+    pub pal_gap: i32,
+    pub insp_row_h: i32,
+    pub pad: i32,
+    pub pill_w: i32,
+    pub pill_h: i32,
+    pub save_w: i32,
+    pub max_hier: usize,
 }
 
 impl StudioLayout {
-    pub fn new(ww: u32, wh: u32) -> Self {
+    /// Build layout. `zoom` is 1..=4 and scales chrome, rows, pills, and hit boxes.
+    pub fn new(ww: u32, wh: u32, zoom: i32) -> Self {
+        let z = zoom.clamp(1, 4);
         let ww = ww as i32;
         let wh = wh as i32;
-        let left_w = ((ww as f32 * 0.16).round() as i32).clamp(180, 260);
-        let right_w = ((ww as f32 * 0.19).round() as i32).clamp(200, 300);
-        let top_h = 48;
-        let bot_h = 52;
-        let gap = 10;
+        // Density scales with zoom so text never overflows chrome.
+        let left_w = ((ww as f32 * (0.14 + 0.02 * z as f32)).round() as i32)
+            .clamp(150 + 40 * z, 220 + 50 * z);
+        let right_w = ((ww as f32 * (0.17 + 0.02 * z as f32)).round() as i32)
+            .clamp(170 + 40 * z, 240 + 55 * z);
+        let top_h = 36 + 10 * z; // 46..76
+        let bot_h = 36 + 10 * z;
+        let gap = 6 + 2 * z;
+        let header_h = 22 + 6 * z;
+        let row_h = 14 + 8 * z; // hierarchy line height
+        let pal_item_h = 22 + 10 * z;
+        let pal_gap = 4 + 2 * z;
+        let insp_row_h = 28 + 14 * z; // label + edit box
+        let pad = 6 + 2 * z;
+        let pill_w = 72 + 18 * z;
+        let pill_h = 18 + 6 * z;
+        let save_w = 56 + 14 * z;
+        let max_hier = match z {
+            1 | 2 => 6,
+            3 => 5,
+            _ => 4,
+        };
+
         let canvas_x = left_w + gap;
         let canvas_y = top_h + gap;
-        let canvas_w = (ww - left_w - right_w - gap * 2).max(80);
-        let canvas_h = (wh - top_h - bot_h - gap * 2).max(80);
-        // Hierarchy header 28 + ~5 rows → palette below; fixed offset for hit-test
-        let hierarchy_y = top_h + 36;
-        // After ~6 hierarchy rows + header for palette
-        let palette_y = hierarchy_y + 6 * 24 + 36;
+        let canvas_w = (ww - left_w - right_w - gap * 2).max(64);
+        let canvas_h = (wh - top_h - bot_h - gap * 2).max(64);
+
+        let hierarchy_y = top_h + header_h + pad;
+        let palette_y = hierarchy_y + max_hier as i32 * row_h + pad + 4;
+
         Self {
             ww,
             wh,
+            zoom: z,
             left_w,
             right_w,
             top_h,
@@ -134,7 +167,26 @@ impl StudioLayout {
             canvas_h,
             palette_y,
             hierarchy_y,
+            header_h,
+            row_h,
+            pal_item_h,
+            pal_gap,
+            insp_row_h,
+            pad,
+            pill_w,
+            pill_h,
+            save_w,
+            max_hier,
         }
+    }
+
+    /// Approx glyph advance for body text at this zoom.
+    pub fn char_w(&self) -> i32 {
+        6 * self.zoom.max(1)
+    }
+
+    pub fn max_chars_in(&self, width_px: i32) -> usize {
+        ((width_px / self.char_w()).max(4)) as usize
     }
 
     /// Window pixel → canvas percent (0..=100).
@@ -168,21 +220,30 @@ impl StudioLayout {
         x >= 0 && x < self.left_w && y >= self.top_h && y < self.wh - self.bot_h
     }
 
+    fn toolbar_pill_x(&self) -> i32 {
+        self.ww - (self.pill_w * 2 + self.save_w + self.pad * 4 + 16)
+    }
+
     /// Hit test toolbar mode pills / save. Returns action id.
     pub fn hit_toolbar(&self, sx: f64, sy: f64) -> Option<&'static str> {
         let x = sx as i32;
         let y = sy as i32;
-        if y < 8 || y > 40 {
+        let py0 = (self.top_h - self.pill_h) / 2;
+        let py1 = py0 + self.pill_h;
+        if y < py0 || y > py1 {
             return None;
         }
-        let pill_x = self.ww - 380;
-        if x >= pill_x && x < pill_x + 100 {
+        let pill_x = self.toolbar_pill_x();
+        let gap = self.pad;
+        if x >= pill_x && x < pill_x + self.pill_w {
             return Some("mode_visual");
         }
-        if x >= pill_x + 108 && x < pill_x + 216 {
+        let x2 = pill_x + self.pill_w + gap;
+        if x >= x2 && x < x2 + self.pill_w {
             return Some("mode_script");
         }
-        if x >= pill_x + 230 && x < pill_x + 320 {
+        let x3 = x2 + self.pill_w + gap;
+        if x >= x3 && x < x3 + self.save_w {
             return Some("save");
         }
         None
@@ -191,27 +252,27 @@ impl StudioLayout {
     /// Hit hierarchy row → widget index among canvas widgets (0-based).
     pub fn hit_hierarchy(&self, sy: f64, widget_count: usize) -> Option<usize> {
         let y = sy as i32;
-        if y < self.hierarchy_y || y >= self.palette_y - 28 {
+        if y < self.hierarchy_y || y >= self.palette_y - 4 {
             return None;
         }
-        let row = ((y - self.hierarchy_y) / 24) as usize;
-        if row < widget_count.min(6) {
+        let row = ((y - self.hierarchy_y) / self.row_h) as usize;
+        if row < widget_count.min(self.max_hier) {
             Some(row)
         } else {
             None
         }
     }
 
-    /// Hit palette item: 0=button, 1=label, 2=panel.
+    /// Hit palette item: button / label / panel.
     pub fn hit_palette(&self, sx: f64, sy: f64) -> Option<&'static str> {
         let x = sx as i32;
         let y = sy as i32;
-        if x < 10 || x > self.left_w - 10 {
+        if x < self.pad || x > self.left_w - self.pad {
             return None;
         }
-        let base = self.palette_y + 34;
-        let h = 34;
-        let gap = 8;
+        let base = self.palette_y + self.header_h + self.pad;
+        let h = self.pal_item_h;
+        let gap = self.pal_gap;
         for (i, kind) in ["button", "label", "panel"].iter().enumerate() {
             let y0 = base + i as i32 * (h + gap);
             if y >= y0 && y < y0 + h {
@@ -237,10 +298,8 @@ impl StudioLayout {
             return None;
         }
         let y = sy as i32;
-        let base = self.top_h + 42;
-        // each field: label 16 + box 20 + gap ~12 → 48
-        let row_h = 48;
-        let row = ((y - base) / row_h) as i32;
+        let base = self.top_h + self.header_h + self.pad;
+        let row = ((y - base) / self.insp_row_h) as i32;
         match row {
             2 => Some(InspectorField::Text),
             3 => Some(InspectorField::Pos),
@@ -312,12 +371,31 @@ fn rect_outline(buf: &mut [u32], ww: u32, wh: u32, x0: i32, y0: i32, x1: i32, y1
     fill_rect(buf, ww, wh, x1 - t, y0, x1, y1, c);
 }
 
-fn draw_panel_header(buf: &mut [u32], ww: u32, wh: u32, x0: i32, y0: i32, x1: i32, title: &str, zoom: i32) {
-    fill_rect(buf, ww, wh, x0, y0, x1, y0 + 30, c_surface_2());
-    fill_rect(buf, ww, wh, x0, y0 + 29, x1, y0 + 30, c_border_soft());
-    // accent bar on left of header
-    fill_rect(buf, ww, wh, x0, y0, x0 + 3, y0 + 30, c_accent());
-    txt(buf, ww, wh, x0 + 12, y0 + 9, title, c_text_muted(), 2, zoom);
+fn draw_panel_header(
+    buf: &mut [u32],
+    ww: u32,
+    wh: u32,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    title: &str,
+    header_h: i32,
+    zoom: i32,
+) {
+    fill_rect(buf, ww, wh, x0, y0, x1, y0 + header_h, c_surface_2());
+    fill_rect(
+        buf,
+        ww,
+        wh,
+        x0,
+        y0 + header_h - 1,
+        x1,
+        y0 + header_h,
+        c_border_soft(),
+    );
+    fill_rect(buf, ww, wh, x0, y0, x0 + 3, y0 + header_h, c_accent());
+    let ty = y0 + (header_h - 8 * zoom).max(4) / 2;
+    txt(buf, ww, wh, x0 + 10, ty, title, c_text_muted(), 2, zoom);
 }
 
 fn draw_pill(
@@ -339,9 +417,9 @@ fn draw_pill(
     } else {
         rect_outline(buf, ww, wh, x0, y0, x1, y1, c_border(), 1);
     }
-    let tw = (label.len() as i32) * 7;
+    let tw = (label.len() as i32) * 6 * zoom;
     let tx = x0 + ((x1 - x0) - tw) / 2;
-    let ty = y0 + ((y1 - y0) - 10) / 2;
+    let ty = y0 + ((y1 - y0) - 8 * zoom).max(2) / 2;
     txt(
         buf,
         ww,
@@ -350,7 +428,8 @@ fn draw_pill(
         ty,
         label,
         if active { c_text() } else { c_text_muted() },
-        1, zoom,
+        1,
+        zoom,
     );
 }
 
@@ -372,7 +451,9 @@ pub fn paint_studio(
     let ww = layout.ww as u32;
     let wh = layout.wh as u32;
     let lay = *layout;
-    let zoom = ui_zoom.clamp(1, 4);
+    // Prefer layout zoom (scaled chrome) over raw param if they diverge.
+    let zoom = lay.zoom.clamp(1, 4);
+    let _ = ui_zoom;
 
     // App background
     fill_rect(buf, ww, wh, 0, 0, lay.ww, lay.wh, c_bg());
@@ -380,43 +461,109 @@ pub fn paint_studio(
     // ── Top toolbar ────────────────────────────────────────────────────────
     fill_rect(buf, ww, wh, 0, 0, lay.ww, lay.top_h, c_surface());
     fill_rect(buf, ww, wh, 0, lay.top_h - 1, lay.ww, lay.top_h, c_border());
-    // brand mark
-    fill_rect(buf, ww, wh, 12, 14, 28, 34, c_accent());
-    txt(buf, ww, wh, 36, 16, "VELVET STUDIO", c_text(), 2, zoom);
-    txt(buf, ww, wh, 210, 18, project_name, c_text_dim(), 2, zoom);
-    let zlabel = format!("Aa x{zoom}");
-    txt(buf, ww, wh, 210 + (project_name.len() as i32) * 8 + 16, 18, &zlabel, c_text_dim(), 1, zoom);
+    // brand mark scales with zoom
+    let mark = 8 + 4 * zoom;
+    let mark_y = (lay.top_h - mark) / 2;
+    fill_rect(buf, ww, wh, lay.pad, mark_y, lay.pad + mark, mark_y + mark, c_accent());
+    let title_y = (lay.top_h - 10 * zoom).max(4) / 2;
+    txt(
+        buf,
+        ww,
+        wh,
+        lay.pad + mark + 8,
+        title_y,
+        "VELVET STUDIO",
+        c_text(),
+        2,
+        zoom,
+    );
+    let name_x = lay.pad + mark + 8 + 14 * 6 * (zoom + 1) / 1;
+    txt(
+        buf,
+        ww,
+        wh,
+        name_x,
+        title_y + 2,
+        project_name,
+        c_text_dim(),
+        1,
+        zoom,
+    );
+    let zlabel = format!("x{zoom}");
+    txt(
+        buf,
+        ww,
+        wh,
+        name_x + (project_name.len() as i32 + 1) * lay.char_w(),
+        title_y + 2,
+        &zlabel,
+        c_text_dim(),
+        1,
+        zoom,
+    );
 
-    // Mode pills + Save
-    let pill_x = lay.ww - 380;
+    // Mode pills + Save (scaled)
+    let pill_x = lay.toolbar_pill_x();
+    let pill_y = (lay.top_h - lay.pill_h) / 2;
     draw_pill(
         buf,
         ww,
         wh,
         pill_x,
-        10,
-        pill_x + 100,
-        38,
+        pill_y,
+        pill_x + lay.pill_w,
+        pill_y + lay.pill_h,
         mode_simplified,
         "1 Visual",
         zoom,
     );
+    let pill2 = pill_x + lay.pill_w + lay.pad;
     draw_pill(
         buf,
         ww,
         wh,
-        pill_x + 108,
-        10,
-        pill_x + 216,
-        38,
+        pill2,
+        pill_y,
+        pill2 + lay.pill_w,
+        pill_y + lay.pill_h,
         !mode_simplified,
         "2 Script",
         zoom,
     );
-    // Save CTA
-    fill_rect(buf, ww, wh, pill_x + 230, 10, pill_x + 320, 38, c_cta());
-    rect_outline(buf, ww, wh, pill_x + 230, 10, pill_x + 320, 38, c_cta_hi(), 1);
-    txt(buf, ww, wh, pill_x + 250, 18, "Save", c_text(), 2, zoom);
+    let save_x = pill2 + lay.pill_w + lay.pad;
+    fill_rect(
+        buf,
+        ww,
+        wh,
+        save_x,
+        pill_y,
+        save_x + lay.save_w,
+        pill_y + lay.pill_h,
+        c_cta(),
+    );
+    rect_outline(
+        buf,
+        ww,
+        wh,
+        save_x,
+        pill_y,
+        save_x + lay.save_w,
+        pill_y + lay.pill_h,
+        c_cta_hi(),
+        1,
+    );
+    let save_ty = pill_y + (lay.pill_h - 8 * zoom).max(2) / 2;
+    txt(
+        buf,
+        ww,
+        wh,
+        save_x + lay.save_w / 2 - 2 * 6 * zoom,
+        save_ty,
+        "Save",
+        c_text(),
+        1,
+        zoom,
+    );
 
     // ── Left dock ──────────────────────────────────────────────────────────
     fill_rect(buf, ww, wh, 0, lay.top_h, lay.left_w, lay.wh - lay.bot_h, c_surface());
@@ -431,69 +578,162 @@ pub fn paint_studio(
         c_border_soft(),
     );
 
-    draw_panel_header(buf, ww, wh, 0, lay.top_h, lay.left_w, "HIERARCHY", zoom);
-    let canvas_widgets: Vec<&DesignerWidget> = widgets.iter().filter(|w| is_canvas_widget(w)).collect();
+    draw_panel_header(
+        buf,
+        ww,
+        wh,
+        0,
+        lay.top_h,
+        lay.left_w,
+        "HIERARCHY",
+        lay.header_h,
+        zoom,
+    );
+    let canvas_widgets: Vec<&DesignerWidget> =
+        widgets.iter().filter(|w| is_canvas_widget(w)).collect();
     let mut hy = lay.hierarchy_y;
-    for (i, w) in canvas_widgets.iter().take(6).enumerate() {
+    let hier_chars = lay.max_chars_in(lay.left_w - 36);
+    for (i, w) in canvas_widgets.iter().take(lay.max_hier).enumerate() {
         let sel = selected == Some(w.id.as_str());
+        let row_bot = hy + lay.row_h - 2;
         if sel {
-            fill_rect(buf, ww, wh, 4, hy - 2, lay.left_w - 4, hy + 18, pack_rgb(45, 55, 100));
-            fill_rect(buf, ww, wh, 4, hy - 2, 7, hy + 18, c_accent_hi());
+            fill_rect(
+                buf,
+                ww,
+                wh,
+                4,
+                hy,
+                lay.left_w - 4,
+                row_bot,
+                pack_rgb(45, 55, 100),
+            );
+            fill_rect(buf, ww, wh, 4, hy, 7, row_bot, c_accent_hi());
         }
         let kind_mark = match w.kind.as_str() {
             "label" => "L",
             "panel" => "P",
             _ => "B",
         };
-        fill_rect(buf, ww, wh, 12, hy, 26, hy + 14, c_surface_2());
-        txt(buf, ww, wh, 15, hy + 2, kind_mark, c_accent_hi(), 1, zoom);
+        let badge = 10 + 4 * zoom;
+        let by = hy + (lay.row_h - badge) / 2;
+        fill_rect(buf, ww, wh, 12, by, 12 + badge, by + badge, c_surface_2());
+        txt(
+            buf,
+            ww,
+            wh,
+            14,
+            by + 1,
+            kind_mark,
+            c_accent_hi(),
+            1,
+            zoom,
+        );
         let label = w.text.as_deref().unwrap_or(w.id.as_str());
         let line = format!("{}", label);
         txt(
             buf,
             ww,
             wh,
-            32,
-            hy + 2,
-            &line.chars().take(16).collect::<String>(),
+            16 + badge,
+            hy + (lay.row_h - 8 * zoom).max(2) / 2,
+            &line.chars().take(hier_chars).collect::<String>(),
             if sel { c_text() } else { c_text_muted() },
-            1, zoom,
+            1,
+            zoom,
         );
-        hy += 24;
+        hy += lay.row_h;
         let _ = i;
     }
     if canvas_widgets.is_empty() {
-        txt(buf, ww, wh, 14, hy, "No widgets yet", c_text_dim(), 1, zoom);
-        hy += 20;
-        txt(buf, ww, wh, 14, hy, "Use palette below", c_text_dim(), 1, zoom);
+        txt(
+            buf,
+            ww,
+            wh,
+            lay.pad,
+            hy,
+            "No widgets yet",
+            c_text_dim(),
+            1,
+            zoom,
+        );
+        hy += lay.row_h;
+        txt(
+            buf,
+            ww,
+            wh,
+            lay.pad,
+            hy,
+            "Use palette below",
+            c_text_dim(),
+            1,
+            zoom,
+        );
     }
 
     // Palette (aligned with hit_palette)
     let pal_y = lay.palette_y;
-    draw_panel_header(buf, ww, wh, 0, pal_y, lay.left_w, "PALETTE", zoom);
-    let mut py = pal_y + 34;
+    draw_panel_header(
+        buf,
+        ww,
+        wh,
+        0,
+        pal_y,
+        lay.left_w,
+        "PALETTE",
+        lay.header_h,
+        zoom,
+    );
+    let mut py = pal_y + lay.header_h + lay.pad;
     for (label, accent) in [
         ("Button", pack_rgb(90, 80, 160)),
         ("Label", pack_rgb(70, 110, 140)),
         ("Panel", pack_rgb(60, 90, 100)),
     ] {
-        // card-like palette item
-        fill_rect(buf, ww, wh, 10, py, lay.left_w - 10, py + 34, c_surface_2());
-        rect_outline(buf, ww, wh, 10, py, lay.left_w - 10, py + 34, c_border(), 1);
-        fill_rect(buf, ww, wh, 10, py, 14, py + 34, accent);
-        txt(buf, ww, wh, 24, py + 10, label, c_text(), 2, zoom);
-        txt(buf, ww, wh, lay.left_w - 48, py + 12, "drag", c_text_dim(), 1, zoom);
-        py += 42;
+        fill_rect(
+            buf,
+            ww,
+            wh,
+            lay.pad,
+            py,
+            lay.left_w - lay.pad,
+            py + lay.pal_item_h,
+            c_surface_2(),
+        );
+        rect_outline(
+            buf,
+            ww,
+            wh,
+            lay.pad,
+            py,
+            lay.left_w - lay.pad,
+            py + lay.pal_item_h,
+            c_border(),
+            1,
+        );
+        fill_rect(
+            buf,
+            ww,
+            wh,
+            lay.pad,
+            py,
+            lay.pad + 4,
+            py + lay.pal_item_h,
+            accent,
+        );
+        let ty = py + (lay.pal_item_h - 8 * zoom).max(2) / 2;
+        txt(buf, ww, wh, lay.pad + 10, ty, label, c_text(), 1, zoom);
+        py += lay.pal_item_h + lay.pal_gap;
     }
     txt(
         buf,
         ww,
         wh,
-        12,
-        py + 6,
-        "Click to place  B/L/P keys",
+        lay.pad,
+        py + 4,
+        "Click to place",
         c_text_dim(),
-        1, zoom,
+        1,
+        zoom,
     );
 
     // ── Right dock — inspector ─────────────────────────────────────────────
@@ -509,58 +749,65 @@ pub fn paint_studio(
         lay.wh - lay.bot_h,
         c_border_soft(),
     );
-    draw_panel_header(buf, ww, wh, rx0, lay.top_h, lay.ww, "INSPECTOR", zoom);
-    let mut iy = lay.top_h + 42;
+    draw_panel_header(
+        buf,
+        ww,
+        wh,
+        rx0,
+        lay.top_h,
+        lay.ww,
+        "INSPECTOR",
+        lay.header_h,
+        zoom,
+    );
+    let mut iy = lay.top_h + lay.header_h + lay.pad;
     if let Some(id) = selected {
         if let Some(w) = widgets.iter().find(|w| w.id == id) {
-            // Rows aligned with hit_inspector_field (row_h = 48)
-            let fields: [( &str, String, Option<InspectorField>, bool); 5] = [
+            // Rows aligned with hit_inspector_field (insp_row_h)
+            let fields: [(&str, String, Option<InspectorField>, bool); 5] = [
                 ("ID", id.to_string(), None, false),
                 ("KIND", w.kind.clone(), None, false),
                 (
-                    "TEXT  (name)",
+                    "TEXT",
                     w.text.as_deref().unwrap_or("").to_string(),
                     Some(InspectorField::Text),
                     true,
                 ),
                 (
-                    "POS  x%,y%",
+                    "POS",
                     w.position.as_deref().unwrap_or("(50%, 50%)").to_string(),
                     Some(InspectorField::Pos),
                     true,
                 ),
                 (
-                    "SIZE  w%,h%",
+                    "SIZE",
                     w.size.as_deref().unwrap_or("(18%, 8%)").to_string(),
                     Some(InspectorField::Size),
                     true,
                 ),
             ];
+            let insp_chars = lay.max_chars_in(lay.right_w - lay.pad * 3);
+            let label_h = 8 * zoom + 2;
+            let box_h = (lay.insp_row_h - label_h - 4).max(12 + 4 * zoom);
             for (key, val, field, editable) in fields {
                 let editing = field.is_some() && edit_field == field;
+                let row_top = iy;
                 txt(
                     buf,
                     ww,
                     wh,
-                    rx0 + 14,
-                    iy,
+                    rx0 + lay.pad,
+                    row_top,
                     key,
-                    if editable { c_text_muted() } else { c_text_dim() },
-                    1, zoom,
+                    if editable {
+                        c_text_muted()
+                    } else {
+                        c_text_dim()
+                    },
+                    1,
+                    zoom,
                 );
-                if editable {
-                    txt(
-                        buf,
-                        ww,
-                        wh,
-                        lay.ww - 52,
-                        iy,
-                        "edit",
-                        c_text_dim(),
-                        1, zoom,
-                    );
-                }
-                iy += 16;
+                let box_y = row_top + label_h;
                 let box_fill = if editing {
                     pack_rgb(40, 50, 90)
                 } else if editable {
@@ -572,10 +819,10 @@ pub fn paint_studio(
                     buf,
                     ww,
                     wh,
-                    rx0 + 12,
-                    iy - 2,
-                    lay.ww - 12,
-                    iy + 20,
+                    rx0 + lay.pad,
+                    box_y,
+                    lay.ww - lay.pad,
+                    box_y + box_h,
                     box_fill,
                 );
                 if editing {
@@ -583,10 +830,10 @@ pub fn paint_studio(
                         buf,
                         ww,
                         wh,
-                        rx0 + 12,
-                        iy - 2,
-                        lay.ww - 12,
-                        iy + 20,
+                        rx0 + lay.pad,
+                        box_y,
+                        lay.ww - lay.pad,
+                        box_y + box_h,
                         c_accent_hi(),
                         2,
                     );
@@ -595,10 +842,10 @@ pub fn paint_studio(
                         buf,
                         ww,
                         wh,
-                        rx0 + 12,
-                        iy - 2,
-                        lay.ww - 12,
-                        iy + 20,
+                        rx0 + lay.pad,
+                        box_y,
+                        lay.ww - lay.pad,
+                        box_y + box_h,
                         c_border(),
                         1,
                     );
@@ -608,19 +855,21 @@ pub fn paint_studio(
                 } else {
                     val
                 };
+                let t_y = box_y + (box_h - 8 * zoom).max(2) / 2;
                 txt(
                     buf,
                     ww,
                     wh,
-                    rx0 + 16,
-                    iy + 3,
-                    &shown.chars().take(26).collect::<String>(),
+                    rx0 + lay.pad + 6,
+                    t_y,
+                    &shown.chars().take(insp_chars).collect::<String>(),
                     if editing { c_cta_hi() } else { c_text() },
-                    1, zoom,
+                    1,
+                    zoom,
                 );
-                iy += 32; // total row ~48
+                iy = row_top + lay.insp_row_h;
             }
-            iy += 4;
+            iy += lay.pad;
             if edit_field.is_some() {
                 fill_rect(
                     buf,
@@ -735,35 +984,43 @@ pub fn paint_studio(
         lay.wh - lay.bot_h + 1,
         c_border(),
     );
+    let status_y0 = lay.wh - lay.bot_h + lay.pad;
+    let status_y1 = status_y0 + 8 * zoom + 4;
     txt(
         buf,
         ww,
         wh,
-        14,
-        lay.wh - lay.bot_h + 8,
+        lay.pad,
+        status_y0,
         "STATUS",
         c_text_dim(),
-        1, zoom,
+        1,
+        zoom,
     );
+    let status_chars = lay.max_chars_in(lay.ww / 2);
     txt(
         buf,
         ww,
         wh,
-        14,
-        lay.wh - lay.bot_h + 26,
-        &status.chars().take(80).collect::<String>(),
+        lay.pad,
+        status_y1,
+        &status.chars().take(status_chars).collect::<String>(),
         c_text_muted(),
-        1, zoom,
+        1,
+        zoom,
     );
+    let help = "Ctrl+/- full UI zoom  |  drag  |  edit  |  Ctrl+S";
+    let help_chars = lay.max_chars_in(lay.ww / 2 - lay.pad);
     txt(
         buf,
         ww,
         wh,
-        lay.ww - 480,
-        lay.wh - lay.bot_h + 26,
-        "Ctrl+/- zoom  |  palette  |  drag  |  edit  |  Ctrl+S  |  Esc",
+        lay.ww / 2,
+        status_y1,
+        &help.chars().take(help_chars).collect::<String>(),
         c_text_dim(),
-        1, zoom,
+        1,
+        zoom,
     );
 
     // ── Canvas frame ───────────────────────────────────────────────────────
@@ -869,9 +1126,13 @@ pub fn paint_studio(
         for w in canvas_widgets {
             let (x, y) = parse_pct_pair(w.position.as_deref().unwrap_or("(50%,50%)"));
             let (sw, sh) = parse_pct_pair(w.size.as_deref().unwrap_or("(18%,8%)"));
+            // Widget chrome scales with UI zoom so labels fit inside buttons.
+            let min_w = (56 + 28 * zoom) as f32;
+            let min_h = (22 + 14 * zoom) as f32;
+            let max_h = (40 + 22 * zoom) as f32;
             let bw = ((sw / 100.0) * lay.canvas_w as f32)
-                .clamp(80.0, lay.canvas_w as f32 * 0.55) as i32;
-            let bh = ((sh / 100.0) * lay.canvas_h as f32).clamp(40.0, 80.0) as i32;
+                .clamp(min_w, lay.canvas_w as f32 * 0.6) as i32;
+            let bh = ((sh / 100.0) * lay.canvas_h as f32).clamp(min_h, max_h) as i32;
             let px = lay.canvas_x + ((x / 100.0) * lay.canvas_w as f32) as i32 - bw / 2;
             let py = lay.canvas_y + ((y / 100.0) * lay.canvas_h as f32) as i32 - bh / 2;
             let sel = selected == Some(w.id.as_str());
@@ -910,7 +1171,7 @@ pub fn paint_studio(
                 px,
                 py,
                 px + bw,
-                py + 3,
+                py + (2 + zoom / 2),
                 if sel {
                     c_accent_hi()
                 } else {
@@ -930,8 +1191,8 @@ pub fn paint_studio(
                     c_sel_ring(),
                     2,
                 );
-                // corner handles
-                let hs = 8;
+                // corner handles scale with zoom
+                let hs = 6 + 2 * zoom;
                 for (hx, hy) in [
                     (px - 3, py - 3),
                     (px + bw - hs + 3, py - 3),
@@ -954,17 +1215,19 @@ pub fn paint_studio(
             }
 
             let label = w.text.as_deref().unwrap_or(w.id.as_str());
-            let text_x = px + 14;
-            let text_y = py + bh / 2 - 6;
+            let label_chars = lay.max_chars_in(bw - 20);
+            let text_x = px + 8 + 2 * zoom;
+            let text_y = py + (bh - 8 * zoom).max(2) / 2;
             txt(
                 buf,
                 ww,
                 wh,
                 text_x,
                 text_y,
-                &label.chars().take(18).collect::<String>(),
+                &label.chars().take(label_chars).collect::<String>(),
                 c_text(),
-                2, zoom,
+                1,
+                zoom,
             );
 
             // kind badge top-right of widget
@@ -973,19 +1236,21 @@ pub fn paint_studio(
                 "panel" => "PNL",
                 _ => "BTN",
             };
+            let badge_w = 3 * lay.char_w();
             txt(
                 buf,
                 ww,
                 wh,
-                px + bw - 36,
-                py + 6,
+                px + bw - badge_w - 4,
+                py + 2 + zoom,
                 badge,
                 if sel {
                     pack_rgb(200, 210, 255)
                 } else {
                     c_text_dim()
                 },
-                1, zoom,
+                1,
+                zoom,
             );
         }
     } else {
