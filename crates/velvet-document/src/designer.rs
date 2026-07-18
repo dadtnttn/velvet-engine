@@ -186,6 +186,113 @@ impl UiDesigner {
         )
     }
 
+    /// Delete a visual region (and any region with the same id, e.g. advanced twin).
+    pub fn delete_widget(&mut self, region_id: &str) -> Result<(), DocumentError> {
+        self.push_undo();
+        let mut doc = parse_document(&self.source)?;
+        let before = doc.regions.len();
+        doc.regions.retain(|r| r.id.as_str() != region_id);
+        if doc.regions.len() == before {
+            return Err(DocumentError::RegionNotFound(region_id.into()));
+        }
+        self.source = render_document(&doc);
+        Ok(())
+    }
+
+    /// Duplicate a visual widget with a new id (advanced is not copied).
+    pub fn duplicate_widget(
+        &mut self,
+        region_id: &str,
+        new_id: &str,
+    ) -> Result<String, DocumentError> {
+        let widgets = self.list_widgets()?;
+        let w = widgets
+            .iter()
+            .find(|w| w.id == region_id)
+            .ok_or_else(|| DocumentError::RegionNotFound(region_id.into()))?;
+        let kind = w.kind.as_str();
+        let (x, y) = {
+            let p = w.position.as_deref().unwrap_or("(50%,50%)");
+            let t = p.trim().trim_start_matches('(').trim_end_matches(')');
+            let mut parts = t.split(',');
+            let a: f32 = parts
+                .next()
+                .unwrap_or("50")
+                .trim()
+                .trim_end_matches('%')
+                .parse()
+                .unwrap_or(50.0);
+            let b: f32 = parts
+                .next()
+                .unwrap_or("50")
+                .trim()
+                .trim_end_matches('%')
+                .parse()
+                .unwrap_or(50.0);
+            (a + 3.0, b + 3.0)
+        };
+        self.add_widget(
+            kind,
+            new_id,
+            x.clamp(0.0, 100.0),
+            y.clamp(0.0, 100.0),
+            w.text.as_deref(),
+        )?;
+        let full = if new_id.contains('.') {
+            new_id.to_string()
+        } else {
+            format!("{kind}.{new_id}")
+        };
+        if let Some(ref size) = w.size {
+            let _ = self.set_size(&full, size);
+        }
+        Ok(full)
+    }
+
+    /// Insert a line into `on_pressed` of the advanced block, or create a minimal advanced block.
+    pub fn inject_advanced_line(
+        &mut self,
+        region_id: &str,
+        line: &str,
+    ) -> Result<(), DocumentError> {
+        self.push_undo();
+        let line = line.trim();
+        if line.is_empty() {
+            return Ok(());
+        }
+        let marker = format!("// @advanced id={region_id}");
+        if let Some(idx) = self.source.find(&marker) {
+            let after = &self.source[idx..];
+            if let Some(rel) = after.find("on_pressed") {
+                let from = idx + rel;
+                if let Some(brace) = self.source[from..].find('{') {
+                    let insert_at = from + brace + 1;
+                    let inject = format!("\n        {line}");
+                    self.source.insert_str(insert_at, &inject);
+                    let _ = parse_document(&self.source)?;
+                    return Ok(());
+                }
+            }
+        }
+        let vis = format!("// @visual id={region_id}");
+        if let Some(vidx) = self.source.find(&vis) {
+            if let Some(end_rel) = self.source[vidx..].find("// @end") {
+                let end_at = vidx + end_rel + "// @end".len();
+                let block = format!(
+                    "\n// @advanced id={region_id}\n    on_pressed {{\n        {line}\n    }}\n// @end\n"
+                );
+                self.source.insert_str(end_at, &block);
+                let _ = parse_document(&self.source)?;
+                return Ok(());
+            }
+        }
+        self.source.push_str(&format!(
+            "\n// @advanced id={region_id}\non_pressed {{\n    {line}\n}}\n// @end\n"
+        ));
+        let _ = parse_document(&self.source)?;
+        Ok(())
+    }
+
     fn apply_props(
         &mut self,
         region_id: &str,

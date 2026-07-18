@@ -47,8 +47,9 @@ Scratch root used for this verification pass:
 
 ### Studio product UI
 
-- **Docking panel model + canvas drag** are shipped (`velvet-studio gui`, `drag_visual_region`). Full themed GPU WYSIWYG chrome is not claimed; headless ready + model tests are the bar when no display.
-- Dual mode is **regions on one file**, not two separate GUI apps.
+- Softbuffer Studio ships **triple mode** (Visual / VScript / Nodes), per-screen documents, layer graph, save `velvet.studio.json`, delete/resize/undo, script typing, F9 play smoke.
+- **Not claimed:** full egui docking IDE, multi-select Figma tools, in-window LSP, or GPU WYSIWYG theme editor.
+- Dual-mode **regions** remain the document model (`@visual` / `@advanced`); each **pantalla/layer** has its own file under `scripts/screens/`.
 
 ### Language / tools
 

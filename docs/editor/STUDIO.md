@@ -169,6 +169,22 @@ velvet-studio gui ./my_game --window --once
 
 Mutations always go through `velvet-document` (`UiDesigner` / `drag_visual_region`) so `@advanced` is preserved.
 
+## Product surface (complete bar)
+
+| Feature | Keys / notes |
+|---------|----------------|
+| Per-screen documents | Empty on create; `scripts/screens/*.vel` |
+| Persist layers graph | `velvet.studio.json` on Save |
+| Visual: drag / drop / edit / delete | Del, drag, T/P/Z inspector |
+| Visual: resize / duplicate / undo | `[]` resize, Ctrl+D, Ctrl+Z/Y |
+| Script: type + snippets + validate | F2, F3–F10, type keys, O/I insert |
+| Bind button → layer | Ctrl+B (selected button) |
+| Nodes: connect / cut / overlay / create | tools 1–4, N/S, Del |
+| Nodes → Visual | Enter on node |
+| Edge wires VScript | `layer.open` + `connect` lines |
+| Play smoke | **F9** |
+| Assets cache | scanned on open |
+
 ## Status
 
 | Feature | Status |
@@ -178,8 +194,10 @@ Mutations always go through `velvet-document` (`UiDesigner` / `drag_visual_regio
 | Check diagnostics | Implemented |
 | Interactive shell | Implemented |
 | Docking panel model | Implemented |
-| Dual mode simplified/advanced | Implemented (`StudioEditorMode`) |
-| Visual canvas drag + palette drop | Implemented (session + window paint) |
+| Triple mode Visual/Script/Nodes | Implemented |
+| Visual canvas drag + palette drop | Implemented |
+| Per-screen empty documents | Implemented |
+| `velvet.studio.json` persist | Implemented |
 | Advanced region preserve on drag | Implemented |
-| Windowed dual-mode softbuffer host | Implemented |
-| Live GPU WYSIWYG theme editor | Not claimed (softbuffer dock paint is the bar) |
+| Windowed softbuffer host | Implemented |
+| Full egui GPU IDE | Not claimed |
