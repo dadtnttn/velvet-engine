@@ -57,7 +57,17 @@ pub fn lower(file: &StoryFile) -> LowerOutput {
         };
         let entry = unit.pc();
         unit.entry_scenes.insert(sc.name.clone(), entry);
-        map.push(sc.span, "scene", format!("scene {}", sc.name), Some(entry));
+        let origin = sc
+            .origin_file
+            .as_deref()
+            .unwrap_or(file.file.as_str());
+        map.push_in_file(
+            origin,
+            sc.span,
+            "scene",
+            format!("scene {}", sc.name),
+            Some(entry),
+        );
 
         // also HIR scene shell
         let mut hir_body = Vec::new();
@@ -75,7 +85,7 @@ pub fn lower(file: &StoryFile) -> LowerOutput {
                 &mut local,
                 &mut hir_body,
                 &mut id,
-                &file.file,
+                origin,
                 &sc.name,
             );
         }
@@ -132,7 +142,7 @@ fn lower_stmt(
         Stmt::Background { id: bg, span } => {
             let pid = unit.pool.intern(bg.as_str());
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::Background, pid).at_line(span.line));
-            map.push(*span, "background", bg.clone(), Some(pc));
+            map.push_in_file(file, *span, "background", bg.clone(), Some(pc));
             hir_body.push(HirStmt::Background {
                 path: bg.clone(),
                 span: to_hir_span(*span),
@@ -141,7 +151,7 @@ fn lower_stmt(
         Stmt::Music { id: m, span } => {
             let pid = unit.pool.intern(m.as_str());
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::Music, pid).at_line(span.line));
-            map.push(*span, "music", m.clone(), Some(pc));
+            map.push_in_file(file, *span, "music", m.clone(), Some(pc));
             hir_body.push(HirStmt::Music {
                 path: m.clone(),
                 fade_in: None,
@@ -151,7 +161,7 @@ fn lower_stmt(
         Stmt::Sound { id: s, span } => {
             let pid = unit.pool.intern(s.as_str());
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::PlaySfx, pid).at_line(span.line));
-            map.push(*span, "sound", s.clone(), Some(pc));
+            map.push_in_file(file, *span, "sound", s.clone(), Some(pc));
         }
         Stmt::Show {
             character,
@@ -165,7 +175,7 @@ fn lower_stmt(
                 .map(|a| unit.pool.intern(a.as_str()))
                 .unwrap_or(0);
             let pc = unit.emit(Vs2Instr::with_ab(OpVs2::ShowChar, cid, at_id).at_line(span.line));
-            map.push(*span, "show", character.clone(), Some(pc));
+            map.push_in_file(file, *span, "show", character.clone(), Some(pc));
             hir_body.push(HirStmt::Show {
                 character: character.clone(),
                 expr: expression.clone(),
@@ -176,7 +186,7 @@ fn lower_stmt(
         Stmt::Hide { character, span } => {
             let cid = unit.pool.intern(character.as_str());
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::HideChar, cid).at_line(span.line));
-            map.push(*span, "hide", character.clone(), Some(pc));
+            map.push_in_file(file, *span, "hide", character.clone(), Some(pc));
             hir_body.push(HirStmt::Hide {
                 character: character.clone(),
                 span: to_hir_span(*span),
@@ -198,7 +208,7 @@ fn lower_stmt(
             unit.pool.intern(text.as_str()); // ensure text exists
             let pc_load = unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mk).at_line(span.line));
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::Say, sp).at_line(span.line));
-            map.push(*span, "dialogue", mid.clone(), Some(pc));
+            map.push_in_file(file, *span, "dialogue", mid.clone(), Some(pc));
             let _ = pc_load;
             hir_body.push(HirStmt::Say {
                 speaker: Some(speaker.clone()),
@@ -212,7 +222,7 @@ fn lower_stmt(
         Stmt::Goto { target, span } => {
             let tid = unit.pool.intern(target.as_str());
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::JumpScene, tid).at_line(span.line));
-            map.push(*span, "goto", target.clone(), Some(pc));
+            map.push_in_file(file, *span, "goto", target.clone(), Some(pc));
             hir_body.push(HirStmt::Jump {
                 target: target.clone(),
                 span: to_hir_span(*span),
@@ -221,7 +231,7 @@ fn lower_stmt(
         Stmt::CallScene { target, span } => {
             let tid = unit.pool.intern(target.as_str());
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::CallScene, tid).at_line(span.line));
-            map.push(*span, "call_scene", target.clone(), Some(pc));
+            map.push_in_file(file, *span, "call_scene", target.clone(), Some(pc));
             hir_body.push(HirStmt::CallScene {
                 target: target.clone(),
                 span: to_hir_span(*span),
@@ -229,7 +239,7 @@ fn lower_stmt(
         }
         Stmt::Return { span } | Stmt::End { span } => {
             let pc = unit.emit(Vs2Instr::new(OpVs2::Ret).at_line(span.line));
-            map.push(*span, "end", "ret", Some(pc));
+            map.push_in_file(file, *span, "end", "ret", Some(pc));
             hir_body.push(HirStmt::Return {
                 value: None,
                 span: to_hir_span(*span),
@@ -243,7 +253,7 @@ fn lower_stmt(
             let kid = unit.pool.intern(name.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
             unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
-            map.push(*span, "set", name.clone(), Some(pc));
+            map.push_in_file(file, *span, "set", name.clone(), Some(pc));
             hir_body.push(HirStmt::Let {
                 name: name.clone(),
                 mutable: true,
@@ -261,7 +271,7 @@ fn lower_stmt(
             let kid = unit.pool.intern(name.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
             unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
-            map.push(*span, "add", name.clone(), Some(pc));
+            map.push_in_file(file, *span, "add", name.clone(), Some(pc));
         }
         Stmt::Sub { name, value, span } => {
             let slot = local(name, locals, next_local);
@@ -269,7 +279,7 @@ fn lower_stmt(
             emit_expr(value, unit, locals, next_local, local);
             unit.emit(Vs2Instr::new(OpVs2::Sub).at_line(span.line));
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::StoreLocal, slot).at_line(span.line));
-            map.push(*span, "sub", name.clone(), Some(pc));
+            map.push_in_file(file, *span, "sub", name.clone(), Some(pc));
         }
         Stmt::If {
             cond,
@@ -280,7 +290,7 @@ fn lower_stmt(
             emit_expr(cond, unit, locals, next_local, local);
             // JumpIf jumps when falsy
             let j_else = unit.emit(Vs2Instr::with_a(OpVs2::JumpIf, 0).at_line(span.line));
-            map.push(*span, "if", "cond", Some(j_else));
+            map.push_in_file(file, *span, "if", "cond", Some(j_else));
             for s in then_body {
                 lower_stmt(
                     s, unit, map, diags, msg_ids, locals, next_local, local, hir_body, id, file,
@@ -305,7 +315,7 @@ fn lower_stmt(
             let pc = unit.emit(
                 Vs2Instr::with_a(OpVs2::Menu, options.len() as u32).at_line(span.line),
             );
-            map.push(*span, "choice", "menu", Some(pc));
+            map.push_in_file(file, *span, "choice", "menu", Some(pc));
             // Selected index lives in host state `__choice` (set by runner / UI).
             let choice_key = unit.pool.intern("__choice");
             let choice_slot = local("__choice", locals, next_local);
@@ -358,19 +368,19 @@ fn lower_stmt(
             let pc = unit.emit(
                 Vs2Instr::with_ab(OpVs2::Call, cid, args.len() as u32).at_line(span.line),
             );
-            map.push(*span, "call", name.clone(), Some(pc));
+            map.push_in_file(file, *span, "call", name.clone(), Some(pc));
         }
         Stmt::Pause { span, .. } => {
             let pc = unit.emit(Vs2Instr::new(OpVs2::Await).at_line(span.line));
-            map.push(*span, "pause", "await", Some(pc));
+            map.push_in_file(file, *span, "pause", "await", Some(pc));
         }
         Stmt::Transition { name, span } => {
             let tid = unit.pool.intern(name.as_str());
             let pc = unit.emit(Vs2Instr::with_a(OpVs2::TransitionPlay, tid).at_line(span.line));
-            map.push(*span, "transition", name.clone(), Some(pc));
+            map.push_in_file(file, *span, "transition", name.clone(), Some(pc));
         }
         Stmt::Label { name, span } => {
-            map.push(*span, "label", name.clone(), Some(unit.pc()));
+            map.push_in_file(file, *span, "label", name.clone(), Some(unit.pc()));
         }
         Stmt::Comment { .. } => {}
     }

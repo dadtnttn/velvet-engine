@@ -333,6 +333,139 @@ end
 }
 
 #[test]
+fn vs2_add_sub_runtime_parity() {
+    use velvet_story_lang::pipeline::run_source;
+    let src = r#"
+scene start
+set score = 5
+add score 2
+sub score 1
+narrator:
+    done
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    // Product path
+    let prod = run_source_product(src, "as.vstory", &cmds, 0).unwrap();
+    let score_prod = prod
+        .vars
+        .iter()
+        .find(|(k, _)| k == "score")
+        .map(|(_, v)| v.as_str());
+    assert_eq!(score_prod, Some("6"), "product vars={:?}", prod.vars);
+    // VS2 fallback path
+    let vs2 = run_source(src, "as.vstory", &cmds, 0);
+    assert!(vs2.ok, "vs2 failed");
+    let score_vs2 = vs2
+        .state
+        .iter()
+        .find(|(k, _)| k == "score")
+        .map(|(_, v)| v.as_str());
+    assert_eq!(score_vs2, Some("6"), "vs2 state={:?}", vs2.state);
+}
+
+#[test]
+fn vs2_choice_runs_only_selected_arm() {
+    use velvet_story_lang::pipeline::run_source;
+    let src = r#"
+scene start
+choice:
+    "A":
+        set path = 1
+        narrator:
+            arm_a
+    "B":
+        set path = 2
+        narrator:
+            arm_b
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    let a = run_source(src, "ch.vstory", &cmds, 0);
+    assert!(a.ok);
+    let path_a = a
+        .state
+        .iter()
+        .find(|(k, _)| k == "path")
+        .map(|(_, v)| v.as_str());
+    assert_eq!(path_a, Some("1"), "choice0 state={:?}", a.state);
+    // Must not also run arm B (path would become 2 if both arms executed).
+    assert!(
+        !a.dialogue.iter().any(|l| l.contains("arm_b")),
+        "dialogue leaked arm B: {:?}",
+        a.dialogue
+    );
+    let b = run_source(src, "ch.vstory", &cmds, 1);
+    assert!(b.ok);
+    let path_b = b
+        .state
+        .iter()
+        .find(|(k, _)| k == "path")
+        .map(|(_, v)| v.as_str());
+    assert_eq!(path_b, Some("2"), "choice1 state={:?}", b.state);
+    assert!(
+        !b.dialogue.iter().any(|l| l.contains("arm_a")),
+        "dialogue leaked arm A: {:?}",
+        b.dialogue
+    );
+}
+
+#[test]
+fn build_path_uses_story_program_spine() {
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+    use velvet_script_bytecode::opcodes_vs2::OpVs2;
+    use velvet_story_lang::pipeline::build_path;
+
+    let mut f = NamedTempFile::new().unwrap();
+    write!(
+        f,
+        "scene start\nset score = 1\nadd score 3\nnarrator:\n    hi\nend\n"
+    )
+    .unwrap();
+    let cmds = CommandRegistry::builtin();
+    let b = build_path(f.path(), &cmds).unwrap();
+    assert!(b.ok, "{:?}", b.check.diags);
+    let unit = &b.lowered.as_ref().unwrap().unit;
+    assert!(
+        unit.code.iter().any(|i| matches!(i.op, OpVs2::Add)),
+        "build_path must emit Add via StoryProgram spine"
+    );
+}
+
+#[test]
+fn source_map_include_origin_not_only_root() {
+    use tempfile::tempdir;
+    use velvet_story_lang::pipeline::build_path;
+
+    let dir = tempdir().unwrap();
+    let child = dir.path().join("chapter2.vstory");
+    let root = dir.path().join("main.vstory");
+    std::fs::write(
+        &child,
+        "scene from_ch2\nnarrator:\n    inside_include\nend\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &root,
+        "include \"chapter2.vstory\"\n\nscene start\ngoto from_ch2\n",
+    )
+    .unwrap();
+    let cmds = CommandRegistry::builtin();
+    let b = build_path(&root, &cmds).unwrap();
+    assert!(b.ok, "{:?}", b.check.diags);
+    let map = &b.lowered.as_ref().unwrap().map;
+    assert!(
+        map.by_file_substring("chapter2").is_some(),
+        "source map must attribute include content to chapter2, entries={:?}",
+        map.entries
+            .iter()
+            .map(|e| e.origin.file.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn diag_five_locales_same_code_different_text() {
     use velvet_story_lang::pipeline::check_source;
     use velvet_story_lang::{set_diag_locale, DiagLocale};

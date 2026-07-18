@@ -5,7 +5,9 @@
 
 use velvet_script_bytecode::opcodes_vs2::OpVs2;
 use velvet_script_compiler::vs2_codegen::{Vs2Instr, Vs2Unit};
-use velvet_story::{StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram, StoryValue};
+use velvet_story::{
+    AssignOp, StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram, StoryValue,
+};
 
 /// Lower a product StoryProgram into a VS2 host unit (debug / fallback).
 pub fn story_program_to_vs2(program: &StoryProgram) -> Vs2Unit {
@@ -75,10 +77,31 @@ fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
             let id = unit.pool.intern(target.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::CallScene, id));
         }
-        StoryOp::Assign { name, value, .. } => {
+        StoryOp::Assign {
+            name,
+            assign_op,
+            value,
+        } => {
             let kid = unit.pool.intern(name.as_str());
-            emit_value(unit, value);
-            unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
+            match assign_op {
+                AssignOp::Set => {
+                    emit_value(unit, value);
+                    unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
+                }
+                AssignOp::Add => {
+                    // score += n  →  LoadState score; push n; Add; StoreState score
+                    unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
+                    emit_value(unit, value);
+                    unit.emit(Vs2Instr::new(OpVs2::Add));
+                    unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
+                }
+                AssignOp::Sub => {
+                    unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
+                    emit_value(unit, value);
+                    unit.emit(Vs2Instr::new(OpVs2::Sub));
+                    unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
+                }
+            }
         }
         StoryOp::If {
             cond,
@@ -101,13 +124,31 @@ fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
             unit.patch_a(j_end, end);
         }
         StoryOp::Choice { options } => {
+            // Match StoryPlayer: only the selected arm runs.
+            // Runner seeds host state `__choice` (see pipeline::run_build).
             unit.emit(Vs2Instr::with_a(OpVs2::Menu, options.len() as u32));
+            let choice_key = unit.pool.intern("__choice");
+            let mut end_jumps: Vec<u32> = Vec::new();
             for (i, arm) in options.iter().enumerate() {
                 let lid = unit.pool.intern(arm.text.as_str());
                 unit.emit(Vs2Instr::with_ab(OpVs2::Choice, lid, i as u32));
+                // if __choice != i → skip body (JumpIf when falsy)
+                unit.emit(Vs2Instr::with_a(OpVs2::LoadState, choice_key));
+                let idx = unit.pool.intern(i.to_string());
+                unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, idx));
+                unit.emit(Vs2Instr::new(OpVs2::Eq));
+                let j_skip = unit.emit(Vs2Instr::with_a(OpVs2::JumpIf, 0));
                 for o in &arm.body {
                     emit_op(unit, o);
                 }
+                let j_end = unit.emit(Vs2Instr::with_a(OpVs2::Jump, 0));
+                end_jumps.push(j_end);
+                let skip_pc = unit.pc();
+                unit.patch_a(j_skip, skip_pc);
+            }
+            let end_pc = unit.pc();
+            for j in end_jumps {
+                unit.patch_a(j, end_pc);
             }
         }
         StoryOp::End { .. } => {
@@ -222,6 +263,60 @@ mod tests {
             .code
             .iter()
             .any(|i| matches!(i.op, OpVs2::Say | OpVs2::Background)));
+    }
+
+    #[test]
+    fn assign_add_sub_emit_load_add_store() {
+        let src = r#"
+scene start
+set score = 5
+add score 2
+sub score 1
+end
+"#;
+        let cmds = CommandRegistry::builtin();
+        let prog = build_story_program(src, "as.vstory", &cmds, "as").unwrap();
+        let unit = story_program_to_vs2(&prog);
+        let ops: Vec<_> = unit.code.iter().map(|i| i.op).collect();
+        // Must load prior state before add/sub (not only StoreState of RHS).
+        assert!(
+            ops.iter().any(|o| matches!(o, OpVs2::Add)),
+            "expected Add in {ops:?}"
+        );
+        assert!(
+            ops.iter().any(|o| matches!(o, OpVs2::Sub)),
+            "expected Sub in {ops:?}"
+        );
+        assert!(
+            ops.iter().filter(|o| matches!(o, OpVs2::LoadState)).count() >= 2,
+            "add/sub need LoadState; ops={ops:?}"
+        );
+    }
+
+    #[test]
+    fn choice_emits_guards_not_only_sequential_bodies() {
+        let src = r#"
+scene start
+choice:
+    "A":
+        set path = 1
+    "B":
+        set path = 2
+end
+"#;
+        let cmds = CommandRegistry::builtin();
+        let prog = build_story_program(src, "ch.vstory", &cmds, "ch").unwrap();
+        let unit = story_program_to_vs2(&prog);
+        let ops: Vec<_> = unit.code.iter().map(|i| i.op).collect();
+        assert!(ops.iter().any(|o| matches!(o, OpVs2::Menu)));
+        assert!(
+            ops.iter().any(|o| matches!(o, OpVs2::Eq)),
+            "choice arms must compare __choice, got {ops:?}"
+        );
+        assert!(
+            ops.iter().filter(|o| matches!(o, OpVs2::JumpIf)).count() >= 2,
+            "each arm needs JumpIf skip, got {ops:?}"
+        );
     }
 
     #[test]

@@ -120,13 +120,36 @@ pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildRe
             ok: false,
         };
     }
-    // Single spine: AST → StoryProgram → OpVs2
-    let mut check = check;
+    // Single spine: AST → StoryProgram → OpVs2 (same as build_path).
+    let _ = source; // already consumed by check_source
+    finish_build(check, file)
+}
+
+/// Build from path (includes on disk).
+///
+/// Same spine as [`build_source`]: AST → StoryProgram → OpVs2 (not legacy direct lower).
+pub fn build_path(path: &Path, cmds: &CommandRegistry) -> Result<BuildResult, String> {
+    let file = path.to_string_lossy().to_string();
+    // check_path resolves includes from disk; then same StoryProgram → OpVs2 spine.
+    let check = check_path(path, cmds)?;
+    if !check.ok {
+        return Ok(BuildResult {
+            check,
+            lowered: None,
+            ok: false,
+        });
+    }
+    Ok(finish_build(check, &file))
+}
+
+/// Shared post-check spine: StoryProgram → OpVs2 (+ source map with include origins).
+fn finish_build(mut check: CheckResult, file: &str) -> BuildResult {
     let lowered = match to_story_program(&check.file, file) {
         Ok(prog) => {
             let unit = crate::from_program::story_program_to_vs2(&prog);
-            // Build a LowerOutput-compatible package via legacy helper + replace unit
             let mut lo = lower(&check.file);
+            // Prefer map rebuilt with include origins; keep legacy map as base fill.
+            lo.map = crate::source_map::map_from_story_file(&check.file);
             lo.unit = unit;
             lo
         }
@@ -138,7 +161,9 @@ pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildRe
                 file,
                 crate::span::Span::unknown(),
             ));
-            lower(&check.file)
+            let mut lo = lower(&check.file);
+            lo.map = crate::source_map::map_from_story_file(&check.file);
+            lo
         }
     };
     check.diags.extend(lowered.diags.clone());
@@ -148,27 +173,6 @@ pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildRe
         lowered: Some(lowered),
         ok,
     }
-}
-
-/// Build from path (includes on disk).
-pub fn build_path(path: &Path, cmds: &CommandRegistry) -> Result<BuildResult, String> {
-    let check = check_path(path, cmds)?;
-    if !check.ok {
-        return Ok(BuildResult {
-            check,
-            lowered: None,
-            ok: false,
-        });
-    }
-    let lowered = lower(&check.file);
-    let mut check = check;
-    check.diags.extend(lowered.diags.clone());
-    let ok = !check.diags.iter().any(|d| d.is_error());
-    Ok(BuildResult {
-        check,
-        lowered: Some(lowered),
-        ok,
-    })
 }
 
 /// Run result (observable host state).
