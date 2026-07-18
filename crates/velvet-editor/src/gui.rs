@@ -1026,7 +1026,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                     (s.width.max(1), s.height.max(1))
                 })
                 .unwrap_or((1280, 800));
-            crate::studio_paint::StudioLayout::new(ww, wh)
+            crate::studio_paint::StudioLayout::new(ww, wh, self.ui_zoom)
         }
 
         fn cursor_canvas_pct(&self) -> (f32, f32) {
@@ -1069,7 +1069,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             if next != self.ui_zoom {
                 self.ui_zoom = next;
                 self.status = format!(
-                    "UI zoom x{}  (Ctrl+wheel or Ctrl+/- , Ctrl+0 reset)",
+                    "UI zoom x{} — layout+text  (Ctrl+wheel / Ctrl+/- / Ctrl+0)",
                     self.ui_zoom
                 );
                 self.redraw();
@@ -1165,7 +1165,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             if self.pixels.len() != (ww * wh) as usize {
                 self.pixels.resize((ww * wh) as usize, 0);
             }
-            let layout = crate::studio_paint::StudioLayout::new(ww, wh);
+            let layout = crate::studio_paint::StudioLayout::new(ww, wh, self.ui_zoom);
             let widgets = self.session.list_widgets().unwrap_or_default();
             let project = self
                 .session
