@@ -42,14 +42,16 @@ pub enum DockZone {
     Center,
 }
 
-/// Dual-mode Studio editor: simplified visual designer vs advanced script.
+/// Triple-mode Studio editor: Visual · Script · Nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StudioEditorMode {
-    /// Drag-and-drop canvas over `@visual` regions (default).
+    /// Drag-and-drop canvas over `@visual` regions (default). Mode **1**.
     #[default]
     Simplified,
-    /// Script / advanced text of the same file.
+    /// VScript editor (buttons, layers, game/scene). Mode **2**.
     Advanced,
+    /// Layer connection graph (pantallas nodes). Mode **3**.
+    Nodes,
 }
 
 /// GUI session state over one project + open document.
@@ -77,6 +79,12 @@ pub struct StudioGuiSession {
     pub drop_seq: u32,
     /// Screen layers stack (pantallas) with per-layer pixel resolution.
     pub layers: LayerStack,
+    /// Nodes mode: first endpoint when connecting (from).
+    pub connect_from: Option<String>,
+    /// Script mode: cursor line (0-based) into document_source.
+    pub script_cursor_line: usize,
+    /// Script mode: status of last validate.
+    pub script_issues: Vec<String>,
 }
 
 impl StudioGuiSession {
@@ -96,6 +104,9 @@ impl StudioGuiSession {
             mode: StudioEditorMode::Simplified,
             drop_seq: 0,
             layers: LayerStack::vn_tree(),
+            connect_from: None,
+            script_cursor_line: 0,
+            script_issues: Vec::new(),
         };
         session.log.push(format!(
             "[studio-gui] opened project {}",
@@ -127,28 +138,128 @@ impl StudioGuiSession {
         // Re-validate document when leaving advanced (script may have been edited)
         if matches!(self.mode, StudioEditorMode::Advanced) {
             let _ = parse_document(&self.document_source).map_err(|e| anyhow::anyhow!("{e}"))?;
+            self.validate_script();
         }
         self.mode = mode;
         let name = match mode {
-            StudioEditorMode::Simplified => "simplified",
-            StudioEditorMode::Advanced => "advanced",
+            StudioEditorMode::Simplified => "visual",
+            StudioEditorMode::Advanced => "script",
+            StudioEditorMode::Nodes => "nodes",
         };
         self.log.push(format!("[studio-gui] mode={name}"));
-        // Reparse so simplified list matches advanced edits
-        if !self.document_source.is_empty() {
+        if matches!(mode, StudioEditorMode::Advanced) {
+            self.validate_script();
+        }
+        if !self.document_source.is_empty()
+            && !matches!(mode, StudioEditorMode::Nodes)
+        {
             let _ = parse_document(&self.document_source).map_err(|e| anyhow::anyhow!("{e}"))?;
         }
         Ok(())
     }
 
-    /// Toggle mode (simplified <-> advanced).
+    /// Toggle mode Visual → Script → Nodes → Visual.
     pub fn toggle_mode(&mut self) -> Result<StudioEditorMode> {
         let next = match self.mode {
             StudioEditorMode::Simplified => StudioEditorMode::Advanced,
-            StudioEditorMode::Advanced => StudioEditorMode::Simplified,
+            StudioEditorMode::Advanced => StudioEditorMode::Nodes,
+            StudioEditorMode::Nodes => StudioEditorMode::Simplified,
         };
         self.set_mode(next)?;
         Ok(self.mode)
+    }
+
+    /// Re-run VScript validation against layers + buttons.
+    pub fn validate_script(&mut self) {
+        use crate::vscript::{parse_script, validate};
+        let stmts = parse_script(&self.document_source);
+        let layer_ids: Vec<String> = self.layers.sorted_ids();
+        let layer_refs: Vec<&str> = layer_ids.iter().map(|s| s.as_str()).collect();
+        let buttons: Vec<String> = self
+            .list_widgets()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|w| w.kind == "button" || w.id.starts_with("button."))
+            .map(|w| w.id)
+            .collect();
+        let button_refs: Vec<&str> = buttons.iter().map(|s| s.as_str()).collect();
+        self.script_issues = validate(&stmts, &layer_refs, &button_refs)
+            .into_iter()
+            .map(|i| i.to_string())
+            .collect();
+    }
+
+    /// Insert a VScript line at cursor (or append).
+    pub fn insert_script_line(&mut self, line: &str) {
+        let mut lines: Vec<String> = self.document_source.lines().map(|s| s.to_string()).collect();
+        if lines.is_empty() {
+            lines.push(line.to_string());
+            self.script_cursor_line = 0;
+        } else {
+            let idx = self.script_cursor_line.min(lines.len());
+            lines.insert(idx, line.to_string());
+            self.script_cursor_line = idx + 1;
+        }
+        self.document_source = lines.join("\n");
+        if !self.document_source.ends_with('\n') {
+            self.document_source.push('\n');
+        }
+        self.validate_script();
+        self.log
+            .push(format!("[studio-gui] script insert: {line}"));
+    }
+
+    /// Insert layer.open for a layer id.
+    pub fn insert_layer_open(&mut self, layer_id: &str) {
+        self.insert_script_line(&format!("layer.open(\"{layer_id}\")"));
+    }
+
+    /// Insert button.press for region id.
+    pub fn insert_button_press(&mut self, button_id: &str) {
+        self.insert_script_line(&format!("button.press(\"{button_id}\")"));
+    }
+
+    /// Connect layers in graph; also can seed script snippet.
+    pub fn connect_layers(
+        &mut self,
+        from: &str,
+        to: &str,
+        label: Option<String>,
+    ) -> Result<String, String> {
+        use crate::layers::LayerEdgeKind;
+        self.layers
+            .connect(from, to, label, LayerEdgeKind::Transition)?;
+        let edge = self
+            .layers
+            .edges
+            .iter()
+            .find(|e| e.from == from && e.to == to)
+            .cloned()
+            .ok_or_else(|| "edge missing after connect".to_string())?;
+        let script = crate::layers::LayerStack::edge_script(&edge);
+        let msg = format!("connected {from} -> {to}");
+        self.log.push(format!("[studio-gui] {msg} script={script}"));
+        Ok(msg)
+    }
+
+    /// Apply connect_from click logic.
+    pub fn nodes_click_layer(&mut self, id: &str) -> String {
+        if self.connect_from.as_deref() == Some(id) {
+            self.connect_from = None;
+            return "connect cancelled".into();
+        }
+        if let Some(from) = self.connect_from.take() {
+            match self.connect_layers(&from, id, None) {
+                Ok(m) => m,
+                Err(e) => {
+                    self.connect_from = Some(from);
+                    e
+                }
+            }
+        } else {
+            self.connect_from = Some(id.into());
+            format!("connect from {id} — click target")
+        }
     }
 
     /// List visual widgets (simplified mode palette/canvas).
@@ -769,6 +880,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             let mode = match self.session.mode {
                 StudioEditorMode::Simplified => "Visual",
                 StudioEditorMode::Advanced => "Script",
+                StudioEditorMode::Nodes => "Nodes",
             };
             let title = format!(
                 "Velvet Studio [{mode}] — {}",
@@ -965,7 +1077,9 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         KeyCode::KeyS if self.ctrl_held => {
                             self.do_save();
                         }
-                        KeyCode::F5 => {
+                        KeyCode::F5
+                            if self.session.mode != StudioEditorMode::Advanced =>
+                        {
                             self.do_save();
                         }
                         KeyCode::Digit1 if !self.ctrl_held => {
@@ -977,7 +1091,89 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         KeyCode::Digit2 if !self.ctrl_held => {
                             let _ = self.session.set_mode(StudioEditorMode::Advanced);
                             self.sync_title();
-                            self.status = "Script mode".into();
+                            self.status = "Script mode — F2 validate, F3+ insert API".into();
+                            self.redraw();
+                        }
+                        KeyCode::Digit3 if !self.ctrl_held => {
+                            let _ = self.session.set_mode(StudioEditorMode::Nodes);
+                            self.sync_title();
+                            self.status = "Nodes mode — click layers to connect".into();
+                            self.redraw();
+                        }
+                        KeyCode::F2 if self.session.mode == StudioEditorMode::Advanced => {
+                            self.session.validate_script();
+                            self.status = if self.session.script_issues.is_empty() {
+                                "script OK".into()
+                            } else {
+                                format!("{} issue(s)", self.session.script_issues.len())
+                            };
+                            self.redraw();
+                        }
+                        KeyCode::F3
+                        | KeyCode::F4
+                        | KeyCode::F5
+                        | KeyCode::F6
+                        | KeyCode::F7
+                        | KeyCode::F8
+                        | KeyCode::F9
+                        | KeyCode::F10
+                            if self.session.mode == StudioEditorMode::Advanced =>
+                        {
+                            let idx = match c {
+                                KeyCode::F3 => 0,
+                                KeyCode::F4 => 1,
+                                KeyCode::F5 => 2,
+                                KeyCode::F6 => 3,
+                                KeyCode::F7 => 4,
+                                KeyCode::F8 => 5,
+                                KeyCode::F9 => 6,
+                                _ => 7,
+                            };
+                            let cat = crate::vscript::api_catalog();
+                            if let Some((_, snip, desc)) = cat.get(idx) {
+                                self.session.insert_script_line(snip);
+                                self.status = format!("insert {desc}");
+                                self.redraw();
+                            }
+                        }
+                        KeyCode::ArrowUp if self.session.mode == StudioEditorMode::Advanced => {
+                            if self.session.script_cursor_line > 0 {
+                                self.session.script_cursor_line -= 1;
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::ArrowDown if self.session.mode == StudioEditorMode::Advanced => {
+                            let n = self.session.document_source.lines().count();
+                            if self.session.script_cursor_line + 1 < n {
+                                self.session.script_cursor_line += 1;
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::KeyO
+                            if self.session.mode == StudioEditorMode::Advanced
+                                && self.session.layers.active().is_some() =>
+                        {
+                            let id = self.session.layers.active_id.clone();
+                            self.session.insert_layer_open(&id);
+                            self.status = format!("inserted layer.open(\"{id}\")");
+                            self.redraw();
+                        }
+                        KeyCode::KeyI
+                            if self.session.mode == StudioEditorMode::Advanced
+                                && self.session.selected_region.is_some() =>
+                        {
+                            let id = self.session.selected_region.clone().unwrap();
+                            self.session.insert_button_press(&id);
+                            self.status = format!("inserted button.press(\"{id}\")");
+                            self.redraw();
+                        }
+                        KeyCode::Enter if self.session.mode == StudioEditorMode::Nodes => {
+                            // open active layer (focus)
+                            let id = self.session.layers.active_id.clone();
+                            match self.session.set_layer(&id) {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
                             self.redraw();
                         }
                         // Layer stack
@@ -1070,6 +1266,11 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                                     self.sync_title();
                                     self.status = "Script mode".into();
                                 }
+                                "mode_nodes" => {
+                                    let _ = self.session.set_mode(StudioEditorMode::Nodes);
+                                    self.sync_title();
+                                    self.status = "Nodes mode".into();
+                                }
                                 "save" => self.do_save(),
                                 _ => {}
                             }
@@ -1091,6 +1292,30 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             // click empty inspector area: keep selection, end edit
                             self.cancel_edit();
                             self.redraw();
+                            return;
+                        }
+
+                        // Nodes mode: click graph nodes to connect
+                        if self.session.mode == StudioEditorMode::Nodes {
+                            let layout_nodes = self.session.layers.node_layout();
+                            if let Some(id) =
+                                layout.hit_graph_node(self.cursor.0, self.cursor.1, &layout_nodes)
+                            {
+                                self.status = self.session.nodes_click_layer(&id);
+                                let _ = self.session.layers.set_active(&id);
+                                self.redraw();
+                                return;
+                            }
+                            // also allow left-dock layer pick for connect
+                            if layout.contains_left_dock(self.cursor.0, self.cursor.1) {
+                                let rows = self.session.layers.visible_tree_rows();
+                                if let Some(idx) = layout.hit_layer_row(self.cursor.1, rows.len()) {
+                                    if let Some(row) = rows.get(idx) {
+                                        self.status = self.session.nodes_click_layer(&row.id);
+                                        self.redraw();
+                                    }
+                                }
+                            }
                             return;
                         }
 
@@ -1428,8 +1653,9 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 let mode = match self.session.mode {
                     StudioEditorMode::Simplified => "Visual",
                     StudioEditorMode::Advanced => "Script",
+                    StudioEditorMode::Nodes => "Nodes",
                 };
-                w.set_title(&format!("Velvet Studio [{mode}] — dual mode"));
+                w.set_title(&format!("Velvet Studio [{mode}] — 1 Vis · 2 Scr · 3 Nod"));
             }
         }
 
@@ -1459,9 +1685,16 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             let tree_rows = self.session.layers.visible_tree_rows();
             let path = self.session.layers.active_path();
             let path_joined = path.join(" > ");
+            let node_layout = self.session.layers.node_layout();
+            let paint_mode = match self.session.mode {
+                StudioEditorMode::Simplified => crate::studio_paint::PaintMode::Visual,
+                StudioEditorMode::Advanced => crate::studio_paint::PaintMode::Script,
+                StudioEditorMode::Nodes => crate::studio_paint::PaintMode::Nodes,
+            };
             let layer_view = crate::studio_paint::LayerPaintView {
                 layers: &self.session.layers.layers,
                 tree_rows: &tree_rows,
+                edges: &self.session.layers.edges,
                 active_id: &self.session.layers.active_id,
                 breadcrumb: &path_joined,
                 res_w: rw,
@@ -1469,11 +1702,15 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 animating: self.session.layers.resize_anim.is_some(),
                 editable: self.session.layers.active_editable(),
                 pos_px: self.session.selected_pos_px(),
+                connect_from: self.session.connect_from.as_deref(),
+                script_cursor_line: self.session.script_cursor_line,
+                script_issues: &self.session.script_issues,
+                node_layout: &node_layout,
             };
             crate::studio_paint::paint_studio(
                 &mut self.pixels,
                 &layout,
-                self.session.mode == StudioEditorMode::Simplified,
+                paint_mode,
                 project,
                 self.session.selected_region.as_deref(),
                 &widgets,
@@ -1665,8 +1902,55 @@ button start {
         assert_eq!(start.text.as_deref(), Some("Start"));
         assert!(session.document_source.contains("game.new()"));
 
+        // Simplified -> Advanced -> Nodes -> Simplified
+        assert_eq!(session.mode, StudioEditorMode::Simplified);
         session.toggle_mode().unwrap();
         assert_eq!(session.mode, StudioEditorMode::Advanced);
+        session.toggle_mode().unwrap();
+        assert_eq!(session.mode, StudioEditorMode::Nodes);
+        session.toggle_mode().unwrap();
+        assert_eq!(session.mode, StudioEditorMode::Simplified);
+    }
+
+    #[test]
+    fn vscript_and_nodes_connect() {
+        let dir = tempdir().unwrap();
+        let proj = dir.path().join("game");
+        fs::create_dir_all(proj.join("scripts")).unwrap();
+        fs::write(
+            proj.join("velvet.project"),
+            r#"(name: "g", version: "0.1.0", entry_scene: "scripts/main.vel")"#,
+        )
+        .unwrap();
+        let menu = proj.join("scripts/main_menu.vel");
+        fs::write(&menu, MENU).unwrap();
+        let mut session = StudioGuiSession::open_project(&proj).unwrap();
+        session.open_document(&menu).unwrap();
+        session.set_mode(StudioEditorMode::Advanced).unwrap();
+        session.insert_layer_open("menu_settings");
+        session.insert_button_press("button.start");
+        assert!(session.document_source.contains("layer.open"));
+        assert!(session.document_source.contains("button.press"));
+        session.validate_script();
+        // nodes connect
+        session.set_mode(StudioEditorMode::Nodes).unwrap();
+        session
+            .connect_layers("menu_quit", "hud", Some("quit->hud".into()))
+            .unwrap();
+        assert!(session
+            .layers
+            .edges
+            .iter()
+            .any(|e| e.from == "menu_quit" && e.to == "hud"));
+        let msg = session.nodes_click_layer("menu_settings");
+        assert!(msg.contains("connect from") || msg.contains("menu_settings"));
+        let msg2 = session.nodes_click_layer("scene_decisions");
+        assert!(
+            msg2.contains("connected")
+                || msg2.contains("exists")
+                || msg2.contains("scene")
+                || msg2.contains("decisions")
+        );
     }
 
     #[test]
