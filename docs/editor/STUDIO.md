@@ -64,6 +64,25 @@ velvet-editor (lib + velvet-studio bin)
   └── velvet-document — regions, UiDesigner, drag geometry
 ```
 
+## Dual mode (simplified + advanced)
+
+| Mode | Key / API | Role |
+|------|-----------|------|
+| **Simplified** | default; `1` in window | Drag-and-drop canvas on `@visual` regions |
+| **Advanced** | `2` / Tab toggle | Same `.vel` file as script buffer (`set_advanced_source`) |
+
+```bash
+# Headless dual-mode ready (CI)
+velvet-studio gui ./my_game --headless --once --ready-log ready.log
+
+# Interactive dual-mode window (Tab = toggle, S = drop button, drag = move)
+velvet-studio gui ./my_game --window --once false
+# or once-only brief paint:
+velvet-studio gui ./my_game --window --once
+```
+
+Mutations always go through `velvet-document` (`UiDesigner` / `drag_visual_region`) so `@advanced` is preserved.
+
 ## Status
 
 | Feature | Status |
@@ -73,6 +92,8 @@ velvet-editor (lib + velvet-studio bin)
 | Check diagnostics | Implemented |
 | Interactive shell | Implemented |
 | Docking panel model | Implemented |
-| Visual canvas drag | Implemented (data + session API; OS paint is brief window probe) |
+| Dual mode simplified/advanced | Implemented (`StudioEditorMode`) |
+| Visual canvas drag + palette drop | Implemented (session + window paint) |
 | Advanced region preserve on drag | Implemented |
-| Live GPU WYSIWYG theme editor | Not claimed (drag correctness + panels are the bar) |
+| Windowed dual-mode softbuffer host | Implemented |
+| Live GPU WYSIWYG theme editor | Not claimed (softbuffer dock paint is the bar) |
