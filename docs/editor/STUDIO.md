@@ -97,12 +97,37 @@ HUD / Overlay
 **main_menu** re-locks when another root branch is active. Resolution changes
 animate the canvas frame (~280ms).
 
-## Dual mode (simplified + advanced)
+## Triple mode (1 Visual · 2 Script · 3 Nodes)
 
-| Mode | Key / API | Role |
-|------|-----------|------|
-| **Simplified** | default; `1` in window | Drag-and-drop canvas on `@visual` regions |
-| **Advanced** | `2` / Tab toggle | Same `.vel` file as script buffer (`set_advanced_source`) |
+| Mode | Key | Role |
+|------|-----|------|
+| **1 Visual** | `1` | Drag-and-drop canvas on `@visual` regions |
+| **2 Script** | `2` | **VScript** editor — `layer.*`, `button.*`, `game.*`, `scene.*` |
+| **3 Nodes** | `3` | Graph of pantallas; click A then B to **connect** layers |
+
+Tab cycles Visual → Script → Nodes → Visual.
+
+### VScript (mode 2)
+
+Insert / call APIs:
+
+| Call | Meaning |
+|------|---------|
+| `layer.open("menu_settings")` | Switch to layer |
+| `layer.show` / `layer.hide` | Visibility |
+| `button.press("button.start")` | Fire button handler |
+| `button.set_text(id, "…")` | Change label |
+| `game.new()` / `game.quit()` | Game flow |
+| `scene.open("scripts/main.vel")` | Open scene |
+| `connect a -> b` | Record graph edge in script |
+| `jump` / `call` / `if` | Flow control |
+
+Shortcuts: **F2** validate · **F3–F10** insert API catalog · **O** insert `layer.open` active · **I** insert `button.press` selection · arrows move cursor line.
+
+### Nodes (mode 3)
+
+Click a layer node, then another, to create an edge. Edges emit scripts like
+`layer.open("target")` for wiring buttons to pantallas.
 
 ```bash
 # Headless dual-mode ready (CI)

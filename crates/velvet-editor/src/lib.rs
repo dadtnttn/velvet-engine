@@ -16,10 +16,13 @@ pub mod project_browser;
 pub mod script_panel;
 pub mod studio;
 pub mod studio_paint;
+pub mod vscript;
 
 pub use layers::{
-    pct_to_px, px_to_pct, DesignSurface, LayerStack, LayerTreeRow, ResPreset, ScreenLayer,
+    pct_to_px, px_to_pct, DesignSurface, LayerEdge, LayerEdgeKind, LayerStack, LayerTreeRow,
+    ResPreset, ScreenLayer,
 };
+pub use vscript::{api_catalog, parse_script, validate as validate_vscript, Stmt};
 
 pub use document_edit::{
     design_set_button, drag_region_on_disk, list_regions, require_file, set_visual_property,

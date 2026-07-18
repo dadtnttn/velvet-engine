@@ -208,12 +208,48 @@ impl LayerResizeAnim {
     }
 }
 
+/// Connection between layers (Nodes mode graph).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LayerEdge {
+    /// Source layer id.
+    pub from: String,
+    /// Target layer id.
+    pub to: String,
+    /// Optional label (button / choice).
+    pub label: Option<String>,
+    /// How the edge is triggered.
+    pub kind: LayerEdgeKind,
+}
+
+/// Kind of layer graph edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayerEdgeKind {
+    /// User navigates (button / UI).
+    Transition,
+    /// Opens as overlay on top.
+    Overlay,
+    /// Returns / back.
+    Back,
+}
+
+impl LayerEdgeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Transition => "go",
+            Self::Overlay => "overlay",
+            Self::Back => "back",
+        }
+    }
+}
+
 /// Stack / tree of screen layers.
 #[derive(Debug, Clone)]
 pub struct LayerStack {
     pub layers: Vec<ScreenLayer>,
     pub active_id: String,
     pub resize_anim: Option<LayerResizeAnim>,
+    /// Graph edges for Nodes mode (connect pantallas).
+    pub edges: Vec<LayerEdge>,
 }
 
 impl Default for LayerStack {
@@ -238,10 +274,37 @@ impl LayerStack {
             ScreenLayer::child("scene_decisions", "Decisions", "scene", 2, w, h),
             ScreenLayer::root("hud", "HUD / Overlay", 20, w, h).with_expanded(false),
         ];
+        let edges = vec![
+            LayerEdge {
+                from: "menu_new".into(),
+                to: "scene".into(),
+                label: Some("Nueva partida".into()),
+                kind: LayerEdgeKind::Transition,
+            },
+            LayerEdge {
+                from: "menu_continue".into(),
+                to: "scene_dialogue".into(),
+                label: Some("Continuar".into()),
+                kind: LayerEdgeKind::Transition,
+            },
+            LayerEdge {
+                from: "main_menu".into(),
+                to: "menu_settings".into(),
+                label: Some("Settings".into()),
+                kind: LayerEdgeKind::Overlay,
+            },
+            LayerEdge {
+                from: "scene_decisions".into(),
+                to: "scene_dialogue".into(),
+                label: Some("choice".into()),
+                kind: LayerEdgeKind::Transition,
+            },
+        ];
         Self {
             active_id: "main_menu".into(),
             layers,
             resize_anim: None,
+            edges,
         }
     }
 
@@ -254,6 +317,77 @@ impl LayerStack {
         let mut s = Self::vn_tree();
         let _ = s.add_child("main_menu", "mobile", "Mobile UI", 390, 844);
         s
+    }
+
+    /// Connect two layers (Nodes mode). Returns false if duplicate.
+    pub fn connect(
+        &mut self,
+        from: &str,
+        to: &str,
+        label: Option<String>,
+        kind: LayerEdgeKind,
+    ) -> Result<(), String> {
+        if self.get(from).is_none() {
+            return Err(format!("unknown from layer {from}"));
+        }
+        if self.get(to).is_none() {
+            return Err(format!("unknown to layer {to}"));
+        }
+        if self
+            .edges
+            .iter()
+            .any(|e| e.from == from && e.to == to && e.kind == kind)
+        {
+            return Err("edge already exists".into());
+        }
+        self.edges.push(LayerEdge {
+            from: from.into(),
+            to: to.into(),
+            label,
+            kind,
+        });
+        Ok(())
+    }
+
+    pub fn disconnect(&mut self, from: &str, to: &str) -> bool {
+        let before = self.edges.len();
+        self.edges.retain(|e| !(e.from == from && e.to == to));
+        self.edges.len() < before
+    }
+
+    /// Layout positions for Nodes view (percent of canvas).
+    pub fn node_layout(&self) -> Vec<(String, f32, f32)> {
+        let roots: Vec<_> = self.children_of(None);
+        let mut out = Vec::new();
+        let n = roots.len().max(1) as f32;
+        for (i, r) in roots.iter().enumerate() {
+            let x = 18.0 + (i as f32) * (70.0 / n);
+            let y = 20.0;
+            out.push((r.id.clone(), x.min(85.0), y));
+            let kids = self.children_of(Some(&r.id));
+            for (j, c) in kids.iter().enumerate() {
+                let kx = x + (j as f32) * 8.0 - 4.0;
+                let ky = 45.0 + (j as f32) * 12.0;
+                out.push((c.id.clone(), kx.clamp(8.0, 90.0), ky.clamp(30.0, 85.0)));
+            }
+        }
+        // any leftover nodes
+        for l in &self.layers {
+            if !out.iter().any(|(id, _, _)| id == &l.id) {
+                out.push((l.id.clone(), 50.0, 70.0));
+            }
+        }
+        out
+    }
+
+    /// VScript body for an edge (insert into button advanced).
+    pub fn edge_script(edge: &LayerEdge) -> String {
+        match edge.kind {
+            LayerEdgeKind::Transition | LayerEdgeKind::Back => {
+                format!("layer.open(\"{}\")\n", edge.to)
+            }
+            LayerEdgeKind::Overlay => format!("layer.show(\"{}\")\n", edge.to),
+        }
     }
 
     pub fn get(&self, id: &str) -> Option<&ScreenLayer> {
