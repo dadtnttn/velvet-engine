@@ -45,11 +45,13 @@ Scratch root used for this verification pass:
 
 ## Still incomplete / limited (honest)
 
-### Studio product UI
+### Studio product UI (**ALPHA** — same band as cellular)
 
+- **Maturity:** Studio is **alpha**, labeled the same way as cellular/sand. Expect breaking changes to GUI, VScript surface, and `velvet.studio.json` / `scripts/screens/*`.
 - Softbuffer Studio ships **triple mode** (Visual / VScript / Nodes), per-screen documents, layer graph, save `velvet.studio.json`, delete/resize/undo, script typing, F9 play smoke.
 - **Not claimed:** full egui docking IDE, multi-select Figma tools, in-window LSP, or GPU WYSIWYG theme editor.
 - Dual-mode **regions** remain the document model (`@visual` / `@advanced`); each **pantalla/layer** has its own file under `scripts/screens/`.
+- Details: [`docs/editor/STUDIO.md`](../editor/STUDIO.md).
 
 ### Language / tools
 
