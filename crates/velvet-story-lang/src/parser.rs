@@ -81,9 +81,9 @@ impl Parser {
         }
     }
 
-    fn error(&mut self, code: &str, msg: impl Into<String>, span: Span) {
+    fn error(&mut self, code: &str, args: &[(&str, &str)], span: Span) {
         self.diags
-            .push(StoryDiag::error(code, msg, self.file.clone(), span));
+            .push(StoryDiag::error_key(code, args, self.file.clone(), span));
     }
 
     fn parse_file(&mut self) -> Vec<TopItem> {
@@ -109,7 +109,7 @@ impl Parser {
                 None => {
                     // recovery: skip to next newline
                     let span = self.peek().span;
-                    self.error("VST010", "No se pudo interpretar esta línea.", span);
+                    self.error("VST010", &[], span);
                     while !matches!(
                         self.peek_kind(),
                         TokenKind::Newline | TokenKind::Eof | TokenKind::Dedent
@@ -155,7 +155,7 @@ impl Parser {
                         s
                     }
                     _ => {
-                        self.error("VST011", "Tras include hace falta una ruta.", t.span);
+                        self.error("VST011", &[], t.span);
                         return None;
                     }
                 };
@@ -350,11 +350,7 @@ impl Parser {
                                     }
                                     let key = self.expect_ident()?;
                                     if !matches!(self.peek_kind(), TokenKind::Colon) {
-                                        self.error(
-                                            "VST012",
-                                            "En call, usa `parametro: valor`.",
-                                            self.peek().span,
-                                        );
+                                        self.error("VST012", &[], self.peek().span);
                                         break;
                                     }
                                     self.bump();
@@ -395,7 +391,7 @@ impl Parser {
                         self.bump();
                         let var = self.expect_ident()?;
                         if !matches!(self.peek_kind(), TokenKind::Eq) {
-                            self.error("VST013", "Tras set usa `set nombre = valor`.", t.span);
+                            self.error("VST013", &[], t.span);
                         } else {
                             self.bump();
                         }
@@ -488,11 +484,7 @@ impl Parser {
                                         (s, None)
                                     }
                                     _ => {
-                                        self.error(
-                                            "VST014",
-                                            "Cada opción de choice debe ser un texto entre comillas.",
-                                            lab_tok.span,
-                                        );
+                                        self.error("VST014", &[], lab_tok.span);
                                         break;
                                     }
                                 };
@@ -552,9 +544,7 @@ impl Parser {
                         if !matches!(self.peek_kind(), TokenKind::Colon) {
                             self.error(
                                 "VST015",
-                                format!(
-                                    "Línea desconocida `{speaker}`. ¿Quisiste `speaker:` para diálogo?"
-                                ),
+                                &[("speaker", speaker.as_str())],
                                 t.span,
                             );
                             return None;
@@ -794,11 +784,7 @@ impl Parser {
                 Some(Expr::Ident(s, t.span))
             }
             _ => {
-                self.error(
-                    "VST016",
-                    "Se esperaba un valor (número, texto, true/false o variable).",
-                    t.span,
-                );
+                self.error("VST016", &[], t.span);
                 None
             }
         }
@@ -813,7 +799,7 @@ impl Parser {
             }
             _ => {
                 let sp = self.peek().span;
-                self.error("VST017", "Se esperaba un nombre.", sp);
+                self.error("VST017", &[], sp);
                 None
             }
         }
@@ -833,7 +819,7 @@ impl Parser {
             }
             _ => {
                 let sp = self.peek().span;
-                self.error("VST018", "Se esperaba un identificador o texto.", sp);
+                self.error("VST018", &[], sp);
                 None
             }
         }

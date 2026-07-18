@@ -58,15 +58,12 @@ pub fn lex(source: &str, file: &str) -> LexResult {
                 }
             }
             if tab_seen && space_seen {
-                diags.push(
-                    StoryDiag::error(
-                        "VST001",
-                        "No mezcles tabulaciones y espacios en la indentación.",
-                        file,
-                        Span::at(line, start_col, start_b, byte_at(ci)),
-                    )
-                    .with_suggestion("Usa solo espacios (4 por nivel)."),
-                );
+                diags.push(StoryDiag::error_key(
+                    "VST001",
+                    &[],
+                    file,
+                    Span::at(line, start_col, start_b, byte_at(ci)),
+                ));
             }
             if ci < chars.len() && (chars[ci].1 == '\n' || chars[ci].1 == '\r' || chars[ci].1 == '#')
             {
@@ -88,12 +85,11 @@ pub fn lex(source: &str, file: &str) -> LexResult {
                         ));
                     }
                     if *indent_stack.last().unwrap_or(&0) != indent {
-                        diags.push(StoryDiag::error(
+                        let expected = indent_stack.last().unwrap_or(&0).to_string();
+                        let found = indent.to_string();
+                        diags.push(StoryDiag::error_key(
                             "VST002",
-                            format!(
-                                "Indentación inconsistente (esperaba {} espacios, hay {indent}).",
-                                indent_stack.last().unwrap_or(&0)
-                            ),
+                            &[("expected", expected.as_str()), ("indent", found.as_str())],
                             file,
                             Span::at(line, start_col, start_b, byte_at(ci)),
                         ));
@@ -308,9 +304,10 @@ pub fn lex(source: &str, file: &str) -> LexResult {
                 Span::at(line, start_col, s, e),
             ));
         } else {
-            diags.push(StoryDiag::error(
+            let ch = format!("{c:?}");
+            diags.push(StoryDiag::error_key(
                 "VST003",
-                format!("Carácter no reconocido: {c:?}"),
+                &[("ch", ch.as_str())],
                 file,
                 Span::at(line, start_col, byte_start, byte_at(ci + 1)),
             ));

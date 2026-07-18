@@ -17,6 +17,7 @@ pub mod commands;
 pub mod diag;
 pub mod format;
 pub mod i18n_extract;
+pub mod locale;
 pub mod lexer;
 pub mod load;
 pub mod lower;
@@ -33,6 +34,9 @@ pub mod token;
 pub use commands::{CommandRegistry, CommandSpec};
 pub use diag::StoryDiag;
 pub use format::{format_source, is_idempotent};
+pub use locale::{
+    apply_locale_from_env, diag_locale, set_diag_locale, DiagLocale,
+};
 pub use load::{load_story_path, load_story_source};
 pub use pipeline::{
     build_path, build_source, build_story_program, check_path, check_source, dump_ast_json,
@@ -164,13 +168,65 @@ end
 
     #[test]
     fn bad_if_string_condition_errors() {
+        set_diag_locale(DiagLocale::Es);
         let src = "scene a\nif \"luna\":\n    goto a\n";
         let cmds = CommandRegistry::builtin();
         let c = check_source(src, "badif.vstory", &cmds);
         assert!(!c.ok);
         let d = c.diags.iter().find(|d| d.code == "VST030").expect("VST030");
         assert!(d.display().contains("badif.vstory"));
-        assert!(d.message.contains("verdadero o falso") || d.message.contains("texto"));
+        assert!(
+            d.message.contains("verdadero o falso")
+                || d.message.contains("texto")
+                || d.message.contains("true or false"),
+            "msg={}",
+            d.message
+        );
+    }
+
+    #[test]
+    fn diag_locale_switches_vst027_text() {
+        let src = "scene a\ngoto missing_xyz\n";
+        let cmds = CommandRegistry::builtin();
+        let mut texts = std::collections::BTreeMap::new();
+        for loc in DiagLocale::all() {
+            set_diag_locale(*loc);
+            let c = check_source(src, "loc.vstory", &cmds);
+            let d = c.diags.iter().find(|d| d.code == "VST027").expect("VST027");
+            assert_eq!(d.code, "VST027");
+            assert!(
+                d.message.contains("missing_xyz"),
+                "locale {:?} msg={}",
+                loc,
+                d.message
+            );
+            texts.insert(loc.code(), d.display());
+        }
+        // Spanish cue
+        assert!(
+            texts["es"].contains("escena") || texts["es"].contains("etiqueta"),
+            "{}",
+            texts["es"]
+        );
+        // English cue
+        assert!(
+            texts["en"].to_ascii_lowercase().contains("scene")
+                || texts["en"].contains("label"),
+            "{}",
+            texts["en"]
+        );
+        // Japanese / German / Chinese differ from English & Spanish
+        assert_ne!(texts["es"], texts["en"]);
+        assert_ne!(texts["en"], texts["ja"]);
+        assert_ne!(texts["en"], texts["de"]);
+        assert_ne!(texts["en"], texts["zh"]);
+        assert!(texts["ja"].contains("シーン") || texts["ja"].contains("ラベル"));
+        assert!(texts["de"].contains("Szene") || texts["de"].contains("Label"));
+        assert!(texts["zh"].contains("场景") || texts["zh"].contains("标签"));
+        // suggestion labels localized
+        assert!(texts["es"].contains("Sugerencia:"));
+        assert!(texts["en"].contains("Suggestion:"));
+        set_diag_locale(DiagLocale::Es);
     }
 
     #[test]

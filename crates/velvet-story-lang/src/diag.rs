@@ -1,5 +1,6 @@
 //! Writer-friendly diagnostics for Velvet Story.
 
+use crate::locale::{diag_message, diag_suggestion, suggestion_label};
 use crate::span::{SourceLoc, Span};
 use serde::{Deserialize, Serialize};
 
@@ -21,9 +22,9 @@ pub struct StoryDiag {
     pub code: String,
     /// Severity.
     pub severity: Severity,
-    /// Natural-language message.
+    /// Natural-language message (localized at emission time).
     pub message: String,
-    /// Optional suggestion block.
+    /// Optional suggestion block (localized at emission time).
     pub suggestion: Option<String>,
     /// Location in original `.vstory`.
     pub loc: SourceLoc,
@@ -32,7 +33,47 @@ pub struct StoryDiag {
 }
 
 impl StoryDiag {
-    /// Error helper.
+    /// Error from catalog key `code` with placeholder args.
+    pub fn error_key(
+        code: impl Into<String>,
+        args: &[(&str, &str)],
+        file: impl Into<String>,
+        span: Span,
+    ) -> Self {
+        let code = code.into();
+        let message = diag_message(&code, args);
+        let suggestion = diag_suggestion(&code, args);
+        Self {
+            code,
+            severity: Severity::Error,
+            message,
+            suggestion,
+            loc: SourceLoc::new(file, span),
+            node_kind: None,
+        }
+    }
+
+    /// Warning from catalog.
+    pub fn warning_key(
+        code: impl Into<String>,
+        args: &[(&str, &str)],
+        file: impl Into<String>,
+        span: Span,
+    ) -> Self {
+        let code = code.into();
+        let message = diag_message(&code, args);
+        let suggestion = diag_suggestion(&code, args);
+        Self {
+            code,
+            severity: Severity::Warning,
+            message,
+            suggestion,
+            loc: SourceLoc::new(file, span),
+            node_kind: None,
+        }
+    }
+
+    /// Error helper with an already-built message (prefer [`Self::error_key`]).
     pub fn error(
         code: impl Into<String>,
         message: impl Into<String>,
@@ -49,7 +90,7 @@ impl StoryDiag {
         }
     }
 
-    /// Warning helper.
+    /// Warning helper with an already-built message (prefer [`Self::warning_key`]).
     pub fn warning(
         code: impl Into<String>,
         message: impl Into<String>,
@@ -66,7 +107,7 @@ impl StoryDiag {
         }
     }
 
-    /// Attach suggestion.
+    /// Attach / replace suggestion.
     pub fn with_suggestion(mut self, s: impl Into<String>) -> Self {
         self.suggestion = Some(s.into());
         self
@@ -78,11 +119,13 @@ impl StoryDiag {
         self
     }
 
-    /// Full writer-facing display.
+    /// Full writer-facing display (localized suggestion label).
     pub fn display(&self) -> String {
         let mut out = format!("{}: [{}] {}", self.loc.display(), self.code, self.message);
         if let Some(s) = &self.suggestion {
-            out.push_str("\n\nSugerencia:\n");
+            out.push_str("\n\n");
+            out.push_str(suggestion_label());
+            out.push('\n');
             out.push_str(s);
         }
         out
@@ -98,27 +141,15 @@ impl StoryDiag {
 pub fn adapt_internal(file: &str, span: Span, internal: &str) -> StoryDiag {
     let lower = internal.to_ascii_lowercase();
     if lower.contains("type") || lower.contains("bool") || lower.contains("condition") {
-        return StoryDiag::error(
-            "VST050",
-            "La condición de \"if\" debe ser verdadero o falso (un número, una variable, o una comparación).",
-            file,
-            span,
-        )
-        .with_suggestion("if affection >= 3:")
-        .with_node("if");
+        return StoryDiag::error_key("VST050", &[], file, span).with_node("if");
     }
     if lower.contains("unresolved") || lower.contains("unbound") || lower.contains("unknown") {
-        return StoryDiag::error(
-            "VST051",
-            format!("No se pudo resolver un nombre interno. Detalle técnico: {internal}"),
-            file,
-            span,
-        );
+        return StoryDiag::error_key("VST051", &[("detail", internal)], file, span);
     }
-    StoryDiag::error(
-        "VST099",
-        format!("Error al preparar la historia. Detalle: {internal}"),
-        file,
-        span,
-    )
+    StoryDiag::error_key("VST099", &[("detail", internal)], file, span)
 }
+
+/// Re-export locale controls for callers.
+pub use crate::locale::{
+    apply_locale_from_env, diag_locale, set_diag_locale, DiagLocale,
+};
