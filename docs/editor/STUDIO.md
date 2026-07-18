@@ -97,6 +97,20 @@ HUD / Overlay
 **main_menu** re-locks when another root branch is active. Resolution changes
 animate the canvas frame (~280ms).
 
+### Una pantalla = un documento
+
+Each layer has its **own** `.vel` body (in memory: `layer_docs`; on disk:
+`scripts/screens/<id>.vel` unless bound by `open_document`).
+
+| Action | Result |
+|--------|--------|
+| Create screen (**N**) / sub (**S**) | Empty `screen {id} { }` — design from zero |
+| Switch layer | Loads that layer’s document only |
+| Drop widgets / script edit | Only mutates the **active** pantalla |
+| Save | Writes active + all layer docs |
+
+So Main Menu widgets never appear on a newly created screen.
+
 ## Triple mode (1 Visual · 2 Script · 3 Nodes)
 
 | Mode | Key | Role |

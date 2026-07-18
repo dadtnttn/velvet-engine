@@ -4,6 +4,7 @@
 //! canvas interaction state, and a launch path that either opens a short-lived
 //! window (when the display allows) or runs headless with a ready log.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -61,11 +62,15 @@ pub struct StudioGuiSession {
     pub root: PathBuf,
     /// Dock panels.
     pub panels: Vec<DockPanel>,
-    /// Path of the document open on the canvas (relative or absolute).
+    /// Path of the document open on the canvas (active layer file).
     pub document_path: Option<PathBuf>,
-    /// Source currently edited on the canvas.
+    /// Source currently edited on the canvas (**active layer only**).
     pub document_source: String,
-    /// Selected region id for drag.
+    /// Which layer id owns `document_source`.
+    pub document_layer_id: Option<String>,
+    /// Independent document body per layer id (each pantalla is its own canvas).
+    pub layer_docs: HashMap<String, String>,
+    /// Selected region id for drag (within active layer).
     pub selected_region: Option<String>,
     /// Ready flag after layout init.
     pub ready: bool,
@@ -115,6 +120,8 @@ impl StudioGuiSession {
             panels: default_dock_panels(),
             document_path: None,
             document_source: String::new(),
+            document_layer_id: None,
+            layer_docs: HashMap::new(),
             selected_region: None,
             ready: false,
             last_drag: None,
@@ -137,8 +144,11 @@ impl StudioGuiSession {
             l.locked = false;
             l.expanded = true;
         }
+        // Each layer starts as its own empty pantalla (except later open_document).
+        session.ensure_all_layer_docs();
+        session.activate_layer_document("main_menu")?;
         session.log.push(format!(
-            "[studio-gui] ready panels={} mode=simplified layers={}",
+            "[studio-gui] ready panels={} mode=simplified layers={} (per-screen docs)",
             session
                 .panels
                 .iter()
@@ -148,6 +158,99 @@ impl StudioGuiSession {
             session.layers.sorted_ids().join("/")
         ));
         Ok(session)
+    }
+
+    /// Empty screen template — blank canvas to design from zero.
+    pub fn empty_screen_source(id: &str, name: &str) -> String {
+        format!(
+            r#"// Screen: {name}
+// Empty pantallas — start from zero. Drop Button/Label/Panel from the palette.
+// Script mode: layer.open / button.press / game.* / scene.*
+
+screen {id} {{
+}}
+"#
+        )
+    }
+
+    fn layer_file_path(&self, layer_id: &str) -> PathBuf {
+        // Prefer explicit path on the layer; else scripts/screens/<id>.vel
+        if let Some(l) = self.layers.get(layer_id) {
+            if let Some(ref p) = l.document_path {
+                return if p.is_absolute() {
+                    p.clone()
+                } else {
+                    self.root.join(p)
+                };
+            }
+        }
+        self.root
+            .join("scripts")
+            .join("screens")
+            .join(format!("{layer_id}.vel"))
+    }
+
+    /// Ensure every layer has a document entry (empty if missing).
+    pub fn ensure_all_layer_docs(&mut self) {
+        let layers: Vec<(String, String)> = self
+            .layers
+            .layers
+            .iter()
+            .map(|l| (l.id.clone(), l.name.clone()))
+            .collect();
+        for (id, name) in layers {
+            self.layer_docs
+                .entry(id.clone())
+                .or_insert_with(|| Self::empty_screen_source(&id, &name));
+        }
+    }
+
+    /// Push current editor buffer into the map for its owning layer.
+    pub fn flush_active_document(&mut self) {
+        if let Some(ref lid) = self.document_layer_id.clone() {
+            self.layer_docs
+                .insert(lid.clone(), self.document_source.clone());
+        }
+    }
+
+    /// Load a layer's document into the editor canvas (isolated pantallas).
+    pub fn activate_layer_document(&mut self, layer_id: &str) -> Result<()> {
+        self.flush_active_document();
+        let name = self
+            .layers
+            .get(layer_id)
+            .map(|l| l.name.clone())
+            .unwrap_or_else(|| layer_id.to_string());
+        // Prefer in-memory map; else try disk once; else empty template.
+        if !self.layer_docs.contains_key(layer_id) {
+            let path = self.layer_file_path(layer_id);
+            if path.is_file() {
+                if let Ok(src) = fs::read_to_string(&path) {
+                    if parse_document(&src).is_ok() {
+                        self.layer_docs.insert(layer_id.to_string(), src);
+                    }
+                }
+            }
+        }
+        let source = self
+            .layer_docs
+            .entry(layer_id.to_string())
+            .or_insert_with(|| Self::empty_screen_source(layer_id, &name))
+            .clone();
+        let _ = parse_document(&source).map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.document_source = source;
+        self.document_layer_id = Some(layer_id.to_string());
+        self.document_path = Some(self.layer_file_path(layer_id));
+        self.selected_region = None;
+        self.script_cursor_line = 0;
+        self.log.push(format!(
+            "[studio-gui] active doc layer={layer_id} path={}",
+            self.document_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        ));
+        Ok(())
     }
 
     /// Toggle or set dual mode (simplified visual vs advanced script).
@@ -291,17 +394,28 @@ impl StudioGuiSession {
 
     pub fn create_screen(&mut self, name: &str) -> Result<String, String> {
         let (w, h) = self.layers.active_resolution();
+        self.flush_active_document();
         let id = self.layers.create_screen(name, w, h)?;
+        // Brand-new empty document for this pantallas
+        let empty = Self::empty_screen_source(&id, name);
+        self.layer_docs.insert(id.clone(), empty);
         self.selected_edge = None;
         self.connect_from = None;
-        let msg = format!("created screen {id}");
+        self.activate_layer_document(&id)
+            .map_err(|e| e.to_string())?;
+        let msg = format!("created empty screen {id} — design from zero");
         self.log.push(format!("[studio-gui] {msg}"));
         Ok(msg)
     }
 
     pub fn create_sub_screen(&mut self, name: &str) -> Result<String, String> {
+        self.flush_active_document();
         let id = self.layers.create_sub_screen(None, name)?;
-        let msg = format!("created sublayer {id}");
+        let empty = Self::empty_screen_source(&id, name);
+        self.layer_docs.insert(id.clone(), empty);
+        self.activate_layer_document(&id)
+            .map_err(|e| e.to_string())?;
+        let msg = format!("created empty sublayer {id}");
         self.log.push(format!("[studio-gui] {msg}"));
         Ok(msg)
     }
@@ -312,8 +426,10 @@ impl StudioGuiSession {
             NodesTool::Select => {
                 self.connect_from = None;
                 self.selected_edge = None;
-                let _ = self.layers.set_active(id);
-                format!("selected {id}")
+                match self.set_layer(id) {
+                    Ok(m) => m,
+                    Err(e) => format!("select {id}: {e}"),
+                }
             }
             NodesTool::Connect | NodesTool::Overlay => {
                 if self.connect_from.as_deref() == Some(id) {
@@ -481,7 +597,7 @@ impl StudioGuiSession {
         &self.document_source
     }
 
-    /// Open a `.vel` document onto the canvas (loads source).
+    /// Open a `.vel` document onto the **active** layer (other layers stay independent).
     pub fn open_document(&mut self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         let abs = if path.is_absolute() {
@@ -491,12 +607,20 @@ impl StudioGuiSession {
         };
         let source = fs::read_to_string(&abs)
             .with_context(|| format!("read document {}", abs.display()))?;
-        // Validate parse early
         let _ = parse_document(&source).map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.ensure_all_layer_docs();
+        let layer_id = self.layers.active_id.clone();
+        // Bind this file to the active layer (usually main_menu on first open).
+        if let Some(l) = self.layers.get_mut(&layer_id) {
+            l.document_path = Some(abs.clone());
+        }
+        self.layer_docs.insert(layer_id.clone(), source.clone());
         self.document_path = Some(abs);
         self.document_source = source;
+        self.document_layer_id = Some(layer_id.clone());
+        self.selected_region = None;
         self.log.push(format!(
-            "[studio-gui] document {}",
+            "[studio-gui] document layer={layer_id} {}",
             self.document_path.as_ref().unwrap().display()
         ));
         Ok(())
@@ -554,15 +678,45 @@ impl StudioGuiSession {
         Ok(Some(self.drag_region(None, dx, dy)?))
     }
 
-    /// Write document source back to disk (round-trip).
+    /// Write **active** layer document to disk.
     pub fn save_document(&self) -> Result<()> {
         let path = self
             .document_path
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("no document open"))?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("mkdir {}", parent.display()))?;
+        }
         fs::write(path, &self.document_source)
             .with_context(|| format!("write {}", path.display()))?;
         Ok(())
+    }
+
+    /// Flush + save every layer that has a path or non-empty content.
+    pub fn save_all_layer_documents(&mut self) -> Result<usize> {
+        self.flush_active_document();
+        let mut n = 0;
+        let ids: Vec<String> = self.layer_docs.keys().cloned().collect();
+        for id in ids {
+            let Some(src) = self.layer_docs.get(&id).cloned() else {
+                continue;
+            };
+            // skip pure empty templates that were never edited? still save if path exists
+            let path = self.layer_file_path(&id);
+            if let Some(parent) = path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            fs::write(&path, &src)
+                .with_context(|| format!("write {}", path.display()))?;
+            if let Some(l) = self.layers.get_mut(&id) {
+                l.document_path = Some(path);
+            }
+            n += 1;
+        }
+        self.log
+            .push(format!("[studio-gui] saved {n} layer documents"));
+        Ok(n)
     }
 
     /// Panel ids currently visible (for ready assertions).
@@ -590,13 +744,16 @@ impl StudioGuiSession {
         Some(pct_to_px(x, y, rw, rh))
     }
 
-    /// Switch layer; returns status string.
+    /// Switch layer; loads that pantalla's independent document (empty if new).
     pub fn set_layer(&mut self, id: &str) -> Result<String, String> {
         let prev = self.layers.active_id.clone();
-        self.layers.set_active(id)?;
+        self.layers.set_active(id).map_err(|e| e)?;
         self.apply_layer_lock_policy(&prev, id);
+        self.activate_layer_document(id)
+            .map_err(|e| e.to_string())?;
         let (w, h) = self.layers.active_resolution();
-        let msg = format!("layer={} {}x{}px", id, w, h);
+        let widgets = self.list_widgets().map(|v| v.len()).unwrap_or(0);
+        let msg = format!("layer={id} {w}x{h}px  widgets={widgets} (own document)");
         self.log.push(format!("[studio-gui] {msg}"));
         Ok(msg)
     }
@@ -654,9 +811,13 @@ impl StudioGuiSession {
         } else {
             self.layers.cycle_prev()?
         };
+        // cycle_next already set_active; load document + lock policy
         self.apply_layer_lock_policy(&prev, &id);
+        self.activate_layer_document(&id)
+            .map_err(|e| e.to_string())?;
         let (w, h) = self.layers.active_resolution();
-        let msg = format!("layer={} {}x{}px", id, w, h);
+        let widgets = self.list_widgets().map(|v| v.len()).unwrap_or(0);
+        let msg = format!("layer={id} {w}x{h}px widgets={widgets}");
         self.log.push(format!("[studio-gui] {msg}"));
         Ok(msg)
     }
@@ -676,19 +837,25 @@ impl StudioGuiSession {
 
     pub fn add_mobile_layer(&mut self) -> Result<String, String> {
         if self.layers.get("mobile").is_none() {
+            self.flush_active_document();
             self.layers
                 .add_child("main_menu", "mobile", "Mobile UI", 390, 844)?;
-        } else {
-            self.layers.set_active("mobile")?;
+            self.layer_docs.insert(
+                "mobile".into(),
+                Self::empty_screen_source("mobile", "Mobile UI"),
+            );
         }
         self.set_layer("mobile")
     }
 
     /// Add sublayer under active (or under parent if active is already a child).
     pub fn add_sublayer(&mut self, id: &str, name: &str) -> Result<String, String> {
+        self.flush_active_document();
         let parent = self.layers.active_id.clone();
         let (w, h) = self.layers.active_resolution();
         self.layers.add_child(&parent, id, name, w, h)?;
+        self.layer_docs
+            .insert(id.to_string(), Self::empty_screen_source(id, name));
         self.set_layer(id)
     }
 
@@ -1836,8 +2003,13 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             if self.edit_field.is_some() {
                 self.commit_edit();
             }
+            self.session.flush_active_document();
             match self.session.save_document() {
-                Ok(()) => self.status = "saved to disk".into(),
+                Ok(()) => {
+                    // also persist sibling screens if present
+                    let n = self.session.save_all_layer_documents().unwrap_or(1);
+                    self.status = format!("saved {n} screen(s)");
+                }
                 Err(e) => self.status = format!("save: {e}"),
             }
             self.redraw();
@@ -2240,18 +2412,75 @@ button start {
                 || msg2.contains("decisions")
                 || msg2.contains("from")
         );
-        // create + disconnect
+        // create empty screen + disconnect
         session.create_screen("Extra UI").unwrap();
-        assert!(session.layers.get("extra_ui").is_some() || session.layers.layers.iter().any(|l| l.name.contains("Extra")));
-        session.nodes_tool = NodesTool::Connect;
-        let _ = session.nodes_click_layer("extra_ui");
-        // if id was extra_ui_2 etc
         let new_id = session.layers.active_id.clone();
-        session.nodes_tool = NodesTool::Connect;
-        session.connect_from = Some(new_id.clone());
-        let _ = session.connect_layers(&new_id, "hud", None);
-        assert!(session.disconnect_layers(&new_id, "hud").contains("disconnected")
-            || session.layers.edges.iter().all(|e| !(e.from == new_id && e.to == "hud")));
+        let canvas_n = session
+            .list_widgets()
+            .unwrap()
+            .into_iter()
+            .filter(|w| crate::studio_paint::is_canvas_widget(w))
+            .count();
+        assert_eq!(canvas_n, 0, "new screen starts empty");
+        session.connect_layers(&new_id, "hud", None).unwrap();
+        assert!(session.disconnect_layers(&new_id, "hud").contains("disconnected"));
+    }
+
+    #[test]
+    fn each_screen_has_own_document() {
+        let dir = tempdir().unwrap();
+        let proj = dir.path().join("game");
+        fs::create_dir_all(proj.join("scripts")).unwrap();
+        fs::write(
+            proj.join("velvet.project"),
+            r#"(name: "g", version: "0.1.0", entry_scene: "scripts/main.vel")"#,
+        )
+        .unwrap();
+        let menu = proj.join("scripts/main_menu.vel");
+        fs::write(&menu, MENU).unwrap();
+        let mut session = StudioGuiSession::open_project(&proj).unwrap();
+        session.open_document(&menu).unwrap();
+        assert!(session
+            .list_widgets()
+            .unwrap()
+            .iter()
+            .any(|w| w.id == "button.start"));
+        // independent empty layer
+        session.set_layer("menu_settings").unwrap();
+        assert!(
+            !session
+                .list_widgets()
+                .unwrap()
+                .iter()
+                .any(|w| w.id == "button.start"),
+            "settings must not share main_menu widgets"
+        );
+        session.drop_widget("button", 40.0, 40.0).unwrap();
+        assert_eq!(
+            session
+                .list_widgets()
+                .unwrap()
+                .into_iter()
+                .filter(|w| crate::studio_paint::is_canvas_widget(w))
+                .count(),
+            1
+        );
+        // menu intact
+        session.set_layer("main_menu").unwrap();
+        assert!(session
+            .list_widgets()
+            .unwrap()
+            .iter()
+            .any(|w| w.id == "button.start"));
+        // brand-new screen from zero
+        session.create_screen("Tienda").unwrap();
+        let empty_count = session
+            .list_widgets()
+            .unwrap()
+            .into_iter()
+            .filter(|w| crate::studio_paint::is_canvas_widget(w))
+            .count();
+        assert_eq!(empty_count, 0, "new screen starts with zero canvas widgets");
     }
 
     #[test]
