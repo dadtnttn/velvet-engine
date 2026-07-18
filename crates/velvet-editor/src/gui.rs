@@ -10,9 +10,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use velvet_document::{
-    drag_visual_region, parse_document, region_rect, render_document, hit_test_visual,
+    drag_visual_region, hit_test_visual, parse_document, region_rect, render_document,
     DesignerWidget, UiDesigner, WidgetRect,
 };
+
+use crate::layers::{pct_to_px, DesignSurface, LayerStack, ResPreset};
 
 /// Named dock panel (left/right/bottom/center).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +75,8 @@ pub struct StudioGuiSession {
     pub mode: StudioEditorMode,
     /// Next drop id counter for palette widgets.
     pub drop_seq: u32,
+    /// Screen layers stack (pantallas) with per-layer pixel resolution.
+    pub layers: LayerStack,
 }
 
 impl StudioGuiSession {
@@ -91,20 +95,28 @@ impl StudioGuiSession {
             log: Vec::new(),
             mode: StudioEditorMode::Simplified,
             drop_seq: 0,
+            layers: LayerStack::desktop_menu_stack(),
         };
         session.log.push(format!(
             "[studio-gui] opened project {}",
             session.root.display()
         ));
         session.ready = true;
+        // Unlock main_menu when it is the only editable focus at open so users
+        // can drag immediately; keep locked=true as "default base layer" flag
+        // until they switch away (re-lock on deactivate is optional).
+        if let Some(l) = session.layers.get_mut("main_menu") {
+            l.locked = false;
+        }
         session.log.push(format!(
-            "[studio-gui] ready panels={} mode=simplified",
+            "[studio-gui] ready panels={} mode=simplified layers={}",
             session
                 .panels
                 .iter()
                 .map(|p| p.id.as_str())
                 .collect::<Vec<_>>()
-                .join(",")
+                .join(","),
+            session.layers.sorted_ids().join("/")
         ));
         Ok(session)
     }
@@ -344,6 +356,102 @@ impl StudioGuiSession {
             .map(|p| p.id.as_str())
             .collect()
     }
+
+    /// Active layer design surface letterboxed into layout canvas.
+    pub fn design_surface(&self, canvas_x: i32, canvas_y: i32, canvas_w: i32, canvas_h: i32) -> DesignSurface {
+        let (rw, rh) = self.layers.display_resolution();
+        DesignSurface::fit(canvas_x, canvas_y, canvas_w, canvas_h, rw, rh)
+    }
+
+    /// Pixel coordinates of selected widget center on the active layer.
+    pub fn selected_pos_px(&self) -> Option<(i32, i32)> {
+        let id = self.selected_region.as_ref()?;
+        let widgets = self.list_widgets().ok()?;
+        let w = widgets.iter().find(|w| w.id == *id)?;
+        let (x, y) = parse_pct_pair_loose(w.position.as_deref().unwrap_or("(50%,50%)"));
+        let (rw, rh) = self.layers.active_resolution();
+        Some(pct_to_px(x, y, rw, rh))
+    }
+
+    /// Switch layer; returns status string.
+    pub fn set_layer(&mut self, id: &str) -> Result<String, String> {
+        let prev = self.layers.active_id.clone();
+        self.layers.set_active(id)?;
+        self.apply_layer_lock_policy(&prev, id);
+        let (w, h) = self.layers.active_resolution();
+        let msg = format!("layer={} {}x{}px", id, w, h);
+        self.log.push(format!("[studio-gui] {msg}"));
+        Ok(msg)
+    }
+
+    fn apply_layer_lock_policy(&mut self, _prev: &str, id: &str) {
+        // Bottom main menu is locked whenever it is not the active layer.
+        let active_is_menu = id == "main_menu";
+        if let Some(l) = self.layers.get_mut("main_menu") {
+            l.locked = !active_is_menu;
+        }
+    }
+
+    pub fn cycle_layer(&mut self, forward: bool) -> Result<String, String> {
+        let prev = self.layers.active_id.clone();
+        let id = if forward {
+            self.layers.cycle_next()?
+        } else {
+            self.layers.cycle_prev()?
+        };
+        self.apply_layer_lock_policy(&prev, &id);
+        let (w, h) = self.layers.active_resolution();
+        let msg = format!("layer={} {}x{}px", id, w, h);
+        self.log.push(format!("[studio-gui] {msg}"));
+        Ok(msg)
+    }
+
+    pub fn set_layer_preset(&mut self, preset: ResPreset) -> Result<String, String> {
+        self.layers.apply_preset(preset)?;
+        let (w, h) = self.layers.active_resolution();
+        let msg = format!(
+            "layer {} res → {} ({})",
+            self.layers.active_id,
+            preset.label(),
+            format!("{w}x{h}")
+        );
+        self.log.push(format!("[studio-gui] {msg}"));
+        Ok(msg)
+    }
+
+    pub fn add_mobile_layer(&mut self) -> Result<String, String> {
+        if self.layers.get("mobile").is_none() {
+            self.layers
+                .add_layer("mobile", "Mobile UI", 390, 844)?;
+        } else {
+            self.layers.set_active("mobile")?;
+        }
+        self.set_layer("mobile")
+    }
+
+    pub fn tick_layers(&mut self, dt: f32) -> bool {
+        self.layers.tick_anim(dt)
+    }
+}
+
+fn parse_pct_pair_loose(s: &str) -> (f32, f32) {
+    let t = s.trim().trim_start_matches('(').trim_end_matches(')');
+    let mut parts = t.split(',');
+    let a = parts
+        .next()
+        .unwrap_or("50")
+        .trim()
+        .trim_end_matches('%')
+        .parse()
+        .unwrap_or(50.0);
+    let b = parts
+        .next()
+        .unwrap_or("50")
+        .trim()
+        .trim_end_matches('%')
+        .parse()
+        .unwrap_or(50.0);
+    (a, b)
 }
 
 /// Accept `50,62`, `50% 62%`, `(50%, 62%)` → `(50%, 62%)`.
@@ -600,6 +708,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         edit_buf: String,
         /// UI text zoom level 1..=4 (Ctrl+/- or Ctrl+wheel). Default 2.
         ui_zoom: i32,
+        /// Last tick instant for layer resize animation.
+        last_tick: std::time::Instant,
         status: String,
     }
 
@@ -810,16 +920,68 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         KeyCode::F5 => {
                             self.do_save();
                         }
-                        KeyCode::Digit1 => {
+                        KeyCode::Digit1 if !self.ctrl_held => {
                             let _ = self.session.set_mode(StudioEditorMode::Simplified);
                             self.sync_title();
                             self.status = "Visual mode".into();
                             self.redraw();
                         }
-                        KeyCode::Digit2 => {
+                        KeyCode::Digit2 if !self.ctrl_held => {
                             let _ = self.session.set_mode(StudioEditorMode::Advanced);
                             self.sync_title();
                             self.status = "Script mode".into();
+                            self.redraw();
+                        }
+                        // Layer stack
+                        KeyCode::BracketRight | KeyCode::PageDown => {
+                            match self.session.cycle_layer(true) {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::BracketLeft | KeyCode::PageUp => {
+                            match self.session.cycle_layer(false) {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::KeyU => {
+                            let locked = self.session.layers.toggle_lock_active();
+                            self.status = if locked {
+                                "layer locked".into()
+                            } else {
+                                "layer unlocked".into()
+                            };
+                            self.redraw();
+                        }
+                        KeyCode::KeyM => {
+                            match self.session.add_mobile_layer() {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::Digit3 if self.ctrl_held => {
+                            match self.session.set_layer_preset(ResPreset::DesktopHd) {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::Digit4 if self.ctrl_held => {
+                            match self.session.set_layer_preset(ResPreset::MobilePortrait) {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::Digit5 if self.ctrl_held => {
+                            match self.session.set_layer_preset(ResPreset::MobileLandscape) {
+                                Ok(s) => self.status = s,
+                                Err(e) => self.status = e,
+                            }
                             self.redraw();
                         }
                         KeyCode::Escape => el.exit(),
@@ -875,10 +1037,27 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             return;
                         }
 
-                        // Palette: click to drop at canvas center (or cursor if on canvas)
+                        // Left dock: layers / palette / hierarchy
                         if layout.contains_left_dock(self.cursor.0, self.cursor.1) {
                             self.cancel_edit();
+                            let mut sorted = self.session.layers.layers.clone();
+                            sorted.sort_by_key(|l| l.z);
+                            if let Some(idx) = layout.hit_layer_row(self.cursor.1, sorted.len()) {
+                                if let Some(layer) = sorted.get(idx) {
+                                    match self.session.set_layer(&layer.id) {
+                                        Ok(s) => self.status = s,
+                                        Err(e) => self.status = e,
+                                    }
+                                    self.redraw();
+                                }
+                                return;
+                            }
                             if let Some(kind) = layout.hit_palette(self.cursor.0, self.cursor.1) {
+                                if !self.session.layers.active_editable() {
+                                    self.status = "layer locked — U unlock or select layer".into();
+                                    self.redraw();
+                                    return;
+                                }
                                 match self.session.drop_widget(kind, 50.0, 50.0) {
                                     Ok(id) => {
                                         self.status = format!("placed {id} from palette");
@@ -888,7 +1067,6 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                                 self.redraw();
                                 return;
                             }
-                            // Hierarchy row select
                             let widgets = self
                                 .session
                                 .list_widgets()
@@ -907,17 +1085,26 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             return;
                         }
 
-                        // Canvas: select + begin drag
-                        if !layout.contains_canvas(self.cursor.0, self.cursor.1) {
+                        // Canvas: design surface hit + drag
+                        let surface = self.design_surface();
+                        if !surface.contains(self.cursor.0, self.cursor.1) {
                             self.dragging = false;
                             return;
                         }
+                        if !self.session.layers.active_editable() {
+                            self.status = "layer locked — press U to unlock or [ ] change layer".into();
+                            self.redraw();
+                            return;
+                        }
                         self.cancel_edit();
-                        let (cx, cy) = layout.screen_to_canvas_pct(self.cursor.0, self.cursor.1);
+                        let (cx, cy) = surface.screen_to_pct(self.cursor.0, self.cursor.1);
                         match self.session.canvas_pointer_down(cx, cy) {
                             Ok(Some(id)) => {
-                                self.status =
-                                    format!("selected {id} — drag / T edit text / click inspector");
+                                let (rw, rh) = self.session.layers.active_resolution();
+                                let (px, py) = pct_to_px(cx, cy, rw, rh);
+                                self.status = format!(
+                                    "selected {id} @ ({cx:.0}%,{cy:.0}%) = ({px},{py})px"
+                                );
                                 self.dragging = true;
                                 self.drag_last_px = Some(self.cursor);
                                 self.drag_acc_pct = (0.0, 0.0);
@@ -950,26 +1137,25 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                     if self.session.mode != StudioEditorMode::Simplified || !self.dragging {
                         return;
                     }
-                    let layout = self.layout();
+                    if !self.session.layers.active_editable() {
+                        return;
+                    }
+                    let surface = self.design_surface();
                     if let Some((lx, ly)) = self.drag_last_px {
                         let (dpx, dpy) =
-                            layout.screen_delta_to_pct(position.x - lx, position.y - ly);
+                            surface.screen_delta_to_pct(position.x - lx, position.y - ly);
                         self.drag_acc_pct.0 += dpx;
                         self.drag_acc_pct.1 += dpy;
-                        // 1% snap grid: apply when accumulated delta crosses 1%
                         let sx = self.drag_acc_pct.0.trunc();
                         let sy = self.drag_acc_pct.1.trunc();
                         if sx.abs() >= 1.0 || sy.abs() >= 1.0 {
                             match self.session.canvas_pointer_drag(sx, sy) {
                                 Ok(Some(r)) => {
+                                    let (rw, rh) = self.session.layers.active_resolution();
+                                    let (px, py) = pct_to_px(r.pos.x, r.pos.y, rw, rh);
                                     self.status = format!(
-                                        "drag {} → ({:.0}%, {:.0}%)",
-                                        self.session
-                                            .selected_region
-                                            .as_deref()
-                                            .unwrap_or("?"),
-                                        r.pos.x,
-                                        r.pos.y
+                                        "drag → ({:.0}%, {:.0}%) = ({px},{py})px / {rw}x{rh}",
+                                        r.pos.x, r.pos.y
                                     );
                                 }
                                 Ok(None) => {}
@@ -1001,6 +1187,15 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         }
 
         fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+            let now = std::time::Instant::now();
+            let dt = now.duration_since(self.last_tick).as_secs_f32().min(0.05);
+            self.last_tick = now;
+            let animating = self.session.tick_layers(dt);
+            if animating {
+                el.set_control_flow(ControlFlow::Poll);
+                self.redraw();
+                return;
+            }
             if self.interactive {
                 el.set_control_flow(ControlFlow::Wait);
                 return;
@@ -1029,10 +1224,16 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             crate::studio_paint::StudioLayout::new(ww, wh, self.ui_zoom)
         }
 
+        fn design_surface(&self) -> DesignSurface {
+            let lay = self.layout();
+            self.session
+                .design_surface(lay.canvas_x, lay.canvas_y, lay.canvas_w, lay.canvas_h)
+        }
+
         fn cursor_canvas_pct(&self) -> (f32, f32) {
-            let layout = self.layout();
-            if layout.contains_canvas(self.cursor.0, self.cursor.1) {
-                layout.screen_to_canvas_pct(self.cursor.0, self.cursor.1)
+            let surface = self.design_surface();
+            if surface.contains(self.cursor.0, self.cursor.1) {
+                surface.screen_to_pct(self.cursor.0, self.cursor.1)
             } else {
                 (50.0, 50.0)
             }
@@ -1040,9 +1241,19 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
 
         fn drop_at_cursor(&mut self, kind: &str) {
             self.cancel_edit();
+            if !self.session.layers.active_editable() {
+                self.status = "layer locked — U to unlock".into();
+                self.redraw();
+                return;
+            }
             let (cx, cy) = self.cursor_canvas_pct();
             match self.session.drop_widget(kind, cx, cy) {
-                Ok(id) => self.status = format!("dropped {id} at ({cx:.0}%, {cy:.0}%)"),
+                Ok(id) => {
+                    let (rw, rh) = self.session.layers.active_resolution();
+                    let (px, py) = pct_to_px(cx, cy, rw, rh);
+                    self.status =
+                        format!("dropped {id} at ({cx:.0}%,{cy:.0}%) = ({px},{py})px");
+                }
                 Err(e) => self.status = format!("drop failed: {e}"),
             }
             self.redraw();
@@ -1173,6 +1384,16 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("project");
+            let (rw, rh) = self.session.layers.display_resolution();
+            let layer_view = crate::studio_paint::LayerPaintView {
+                layers: &self.session.layers.layers,
+                active_id: &self.session.layers.active_id,
+                res_w: rw,
+                res_h: rh,
+                animating: self.session.layers.resize_anim.is_some(),
+                editable: self.session.layers.active_editable(),
+                pos_px: self.session.selected_pos_px(),
+            };
             crate::studio_paint::paint_studio(
                 &mut self.pixels,
                 &layout,
@@ -1186,6 +1407,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 self.edit_field,
                 &self.edit_buf,
                 self.ui_zoom,
+                &layer_view,
             );
 
             let Some(surface) = self.surface.as_mut() else {
@@ -1240,7 +1462,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         edit_field: None,
         edit_buf: String::new(),
         ui_zoom: 2,
-        status: "ready — Ctrl+wheel zoom text, select widget to edit".into(),
+        last_tick: std::time::Instant::now(),
+        status: "ready — [ ] layers, M mobile, Ctrl+4 phone res, drag widgets".into(),
     };
     event_loop
         .run_app(&mut host)
@@ -1403,5 +1626,31 @@ button start {
 
         assert!(normalize_pct_pair("50,62").unwrap().contains("50%"));
         assert!(normalize_pct_pair("bad").is_none());
+    }
+
+    #[test]
+    fn layer_stack_mobile_and_coords() {
+        let dir = tempdir().unwrap();
+        let proj = dir.path().join("game");
+        fs::create_dir_all(proj.join("scripts")).unwrap();
+        fs::write(
+            proj.join("velvet.project"),
+            r#"(name: "g", version: "0.1.0", entry_scene: "scripts/main.vel")"#,
+        )
+        .unwrap();
+        let mut session = StudioGuiSession::open_project(&proj).unwrap();
+        assert!(session.layers.get("main_menu").is_some());
+        session.add_mobile_layer().unwrap();
+        assert_eq!(session.layers.active_id, "mobile");
+        let (w, h) = session.layers.active_resolution();
+        assert_eq!((w, h), (390, 844));
+        // main menu re-locks when leaving
+        assert!(session.layers.get("main_menu").unwrap().locked);
+        session.set_layer("main_menu").unwrap();
+        assert!(!session.layers.get("main_menu").unwrap().locked);
+        session.set_layer_preset(ResPreset::DesktopFhd).unwrap();
+        assert_eq!(session.layers.active_resolution(), (1920, 1080));
+        let ds = session.design_surface(0, 0, 800, 600);
+        assert!(ds.w > 0 && ds.h > 0);
     }
 }

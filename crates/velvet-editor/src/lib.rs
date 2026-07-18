@@ -11,10 +11,15 @@ pub mod console;
 pub mod document_edit;
 pub mod gui;
 pub mod inspector;
+pub mod layers;
 pub mod project_browser;
 pub mod script_panel;
 pub mod studio;
 pub mod studio_paint;
+
+pub use layers::{
+    pct_to_px, px_to_pct, DesignSurface, LayerStack, ResPreset, ScreenLayer,
+};
 
 pub use document_edit::{
     design_set_button, drag_region_on_disk, list_regions, require_file, set_visual_property,
