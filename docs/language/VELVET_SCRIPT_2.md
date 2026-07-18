@@ -21,7 +21,7 @@
 - Coroutines, full LSP semantic model, structured multi-span diagnostics on `Vs2Unit` are partial or thin.
 - Generators under `scripts/gen_vs2_*` must **not** be re-run to reintroduce numbered padding (`story_marker_*`, `alias_N`, `format_fixture_N`, etc.).
 
-Velvet Story can lower onto VS2/host **with controlled scope**; VS2 is **not** a finished backbone.
+Velvet Story (2.5) prefers **`StoryProgram`** product IR; OpVs2/host remains a debug fallback. VS2 is **not** a finished backbone — see [VELVET_2_5.md](./VELVET_2_5.md).
 
 ## Design goals
 

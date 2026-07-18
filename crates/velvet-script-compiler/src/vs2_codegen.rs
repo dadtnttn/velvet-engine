@@ -9,8 +9,80 @@
 use std::collections::HashMap;
 use velvet_script_bytecode::opcodes_vs2::OpVs2;
 use velvet_script_hir::{
-    HirBinOp, HirExpr, HirItem, HirLit, HirModule, HirPath, HirStmt, HirTy, PrimTy,
+    HirBinOp, HirExpr, HirItem, HirLit, HirModule, HirPath, HirSpan, HirStmt, HirTy, PrimTy,
 };
+use velvet_script_syntax::DiagCode;
+
+/// Structured diagnostic for VS2 lower (file + span, not bare strings only).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Vs2Diag {
+    pub code: DiagCode,
+    pub message: String,
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    pub start: usize,
+    pub end: usize,
+    pub node_kind: Option<String>,
+}
+
+impl Vs2Diag {
+    pub fn unsupported(
+        file: impl Into<String>,
+        span: HirSpan,
+        construct: &str,
+        node_kind: &str,
+    ) -> Self {
+        Self {
+            code: DiagCode::UnsupportedHir,
+            message: format!(
+                "{}: {} (not lowered in VS2 2.5; will not silently compile)",
+                DiagCode::UnsupportedHir.message(),
+                construct
+            ),
+            file: file.into(),
+            line: span.line.max(1),
+            column: span.column.max(1),
+            start: span.start,
+            end: span.end,
+            node_kind: Some(node_kind.into()),
+        }
+    }
+
+    pub fn invalid_jump(file: impl Into<String>, span: HirSpan, label: &str) -> Self {
+        Self {
+            code: DiagCode::InvalidJumpTarget,
+            message: format!("unresolved label '{label}'"),
+            file: file.into(),
+            line: span.line.max(1),
+            column: span.column.max(1),
+            start: span.start,
+            end: span.end,
+            node_kind: Some("jump".into()),
+        }
+    }
+
+    pub fn display(&self) -> String {
+        format!(
+            "{}:{}:{}: [{}] {}",
+            self.file,
+            self.line,
+            self.column,
+            self.code.label(),
+            self.message
+        )
+    }
+}
+
+/// PC → original source location.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Vs2SourceMapEntry {
+    pub pc: u32,
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    pub node_kind: String,
+}
 
 /// One encoded instruction (opcode + up to 2 immediate operands).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,7 +177,12 @@ pub struct Vs2Unit {
     pub entry_scenes: HashMap<String, u32>,
     pub fn_entries: HashMap<String, u32>,
     pub local_slots: u32,
+    /// Structured diagnostics (preferred).
+    pub diags: Vec<Vs2Diag>,
+    /// Legacy string diagnostics (mirrors `diags` for older callers).
     pub diagnostics: Vec<String>,
+    /// PC → source map.
+    pub source_map: Vec<Vs2SourceMapEntry>,
 }
 
 impl Vs2Unit {
@@ -117,9 +194,42 @@ impl Vs2Unit {
             entry_scenes: HashMap::new(),
             fn_entries: HashMap::new(),
             local_slots: 0,
+            diags: Vec::new(),
             diagnostics: Vec::new(),
+            source_map: Vec::new(),
         }
     }
+
+    pub fn push_diag(&mut self, d: Vs2Diag) {
+        self.diagnostics.push(d.display());
+        self.diags.push(d);
+    }
+
+    pub fn has_errors(&self) -> bool {
+        !self.diags.is_empty()
+            || self
+                .diagnostics
+                .iter()
+                .any(|s| s.contains("unresolved") || s.contains("Unsupported") || s.contains("not yet"))
+    }
+
+    pub fn map_pc(&mut self, pc: u32, file: &str, span: HirSpan, node_kind: &str) {
+        self.source_map.push(Vs2SourceMapEntry {
+            pc,
+            file: file.into(),
+            line: span.line.max(1),
+            column: span.column.max(1),
+            node_kind: node_kind.into(),
+        });
+    }
+
+    pub fn lookup_pc(&self, pc: u32) -> Option<&Vs2SourceMapEntry> {
+        self.source_map
+            .iter()
+            .filter(|e| e.pc <= pc)
+            .max_by_key(|e| e.pc)
+    }
+
     pub fn emit(&mut self, instr: Vs2Instr) -> u32 {
         let pc = self.code.len() as u32;
         self.code.push(instr);
@@ -188,19 +298,55 @@ pub fn lower_module(m: &HirModule) -> Vs2Unit {
         .file
         .clone()
         .unwrap_or_else(|| format!("mod_e{}", m.edition));
+    let file = name.clone();
     let mut unit = Vs2Unit::new(name);
     let mut ctx = LowerCtx::new();
     for item in &m.items {
         match item {
-            HirItem::Fn(f) => lower_fn(&mut unit, &mut ctx, f),
-            HirItem::Scene(sc) => lower_scene(&mut unit, &mut ctx, sc),
-            HirItem::Struct(_)
-            | HirItem::Enum(_)
-            | HirItem::Character(_)
-            | HirItem::State { .. }
-            | HirItem::Screen(_)
-            | HirItem::Mod { .. }
-            | HirItem::Use { .. } => {}
+            HirItem::Fn(f) => lower_fn(&mut unit, &mut ctx, f, &file),
+            HirItem::Scene(sc) => lower_scene(&mut unit, &mut ctx, sc, &file),
+            HirItem::Struct(s) => unit.push_diag(Vs2Diag::unsupported(
+                &file,
+                s.span,
+                &format!("struct `{}`", s.name),
+                "struct",
+            )),
+            HirItem::Enum(e) => unit.push_diag(Vs2Diag::unsupported(
+                &file,
+                e.span,
+                &format!("enum `{}`", e.name),
+                "enum",
+            )),
+            HirItem::Character(c) => unit.push_diag(Vs2Diag::unsupported(
+                &file,
+                c.span,
+                &format!("character `{}`", c.name),
+                "character",
+            )),
+            HirItem::State { span, .. } => unit.push_diag(Vs2Diag::unsupported(
+                &file,
+                *span,
+                "state block",
+                "state",
+            )),
+            HirItem::Screen(s) => unit.push_diag(Vs2Diag::unsupported(
+                &file,
+                s.span,
+                &format!("screen `{}`", s.name),
+                "screen",
+            )),
+            HirItem::Mod { name, span, .. } => unit.push_diag(Vs2Diag::unsupported(
+                &file,
+                *span,
+                &format!("mod `{name}`"),
+                "mod",
+            )),
+            HirItem::Use { path, span } => unit.push_diag(Vs2Diag::unsupported(
+                &file,
+                *span,
+                &format!("use `{}`", path.display()),
+                "use",
+            )),
         }
     }
     let pending = ctx.pending_jumps.clone();
@@ -208,43 +354,58 @@ pub fn lower_module(m: &HirModule) -> Vs2Unit {
         if let Some(&target) = ctx.labels.get(&lab) {
             unit.patch_a(pc, target);
         } else {
-            unit.diagnostics
-                .push(format!("unresolved label '{lab}'"));
+            unit.push_diag(Vs2Diag::invalid_jump(
+                &file,
+                HirSpan::unknown(),
+                &lab,
+            ));
         }
     }
     unit.local_slots = ctx.next_local;
     unit
 }
 
-fn lower_fn(unit: &mut Vs2Unit, ctx: &mut LowerCtx, f: &velvet_script_hir::HirFn) {
+fn lower_fn(
+    unit: &mut Vs2Unit,
+    ctx: &mut LowerCtx,
+    f: &velvet_script_hir::HirFn,
+    file: &str,
+) {
     let entry = unit.pc();
     unit.fn_entries.insert(f.name.clone(), entry);
+    unit.map_pc(entry, file, f.span, "fn");
     for (name, _) in &f.params {
         let _ = ctx.local(name);
     }
-    lower_expr(unit, ctx, &f.body);
+    lower_expr(unit, ctx, &f.body, file);
     unit.emit(Vs2Instr::new(OpVs2::Ret));
 }
 
-fn lower_scene(unit: &mut Vs2Unit, ctx: &mut LowerCtx, sc: &velvet_script_hir::HirScene) {
+fn lower_scene(
+    unit: &mut Vs2Unit,
+    ctx: &mut LowerCtx,
+    sc: &velvet_script_hir::HirScene,
+    file: &str,
+) {
     let entry = unit.pc();
     unit.entry_scenes.insert(sc.name.clone(), entry);
+    unit.map_pc(entry, file, sc.span, "scene");
     ctx.bind_label(&sc.name, entry);
     for st in &sc.body {
-        lower_stmt(unit, ctx, st);
+        lower_stmt(unit, ctx, st, file);
     }
     unit.emit(Vs2Instr::new(OpVs2::Ret));
 }
 
-fn lower_stmt(unit: &mut Vs2Unit, ctx: &mut LowerCtx, st: &HirStmt) {
+fn lower_stmt(unit: &mut Vs2Unit, ctx: &mut LowerCtx, st: &HirStmt, file: &str) {
     match st {
         HirStmt::Expr { expr, .. } => {
-            lower_expr(unit, ctx, expr);
+            lower_expr(unit, ctx, expr, file);
             unit.emit(Vs2Instr::new(OpVs2::Pop));
         }
         HirStmt::Let { name, init, .. } => {
             if let Some(v) = init {
-                lower_expr(unit, ctx, v);
+                lower_expr(unit, ctx, v, file);
             } else {
                 let empty = unit.pool.intern("");
                 unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, empty));
@@ -253,14 +414,14 @@ fn lower_stmt(unit: &mut Vs2Unit, ctx: &mut LowerCtx, st: &HirStmt) {
             unit.emit(Vs2Instr::with_a(OpVs2::StoreLocal, slot));
         }
         HirStmt::Assign { target, value, .. } => {
-            lower_expr(unit, ctx, value);
+            lower_expr(unit, ctx, value, file);
             let name = target.display();
             let slot = ctx.local(&name);
             unit.emit(Vs2Instr::with_a(OpVs2::StoreLocal, slot));
         }
         HirStmt::Return { value, .. } => {
             if let Some(v) = value {
-                lower_expr(unit, ctx, v);
+                lower_expr(unit, ctx, v, file);
             }
             unit.emit(Vs2Instr::new(OpVs2::Ret));
         }
@@ -268,7 +429,7 @@ fn lower_stmt(unit: &mut Vs2Unit, ctx: &mut LowerCtx, st: &HirStmt) {
             let sp = unit
                 .pool
                 .intern(speaker.as_deref().unwrap_or("narrator"));
-            lower_expr(unit, ctx, msg);
+            lower_expr(unit, ctx, msg, file);
             unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
         }
         HirStmt::Jump { target, .. } => {
@@ -319,7 +480,7 @@ fn lower_stmt(unit: &mut Vs2Unit, ctx: &mut LowerCtx, st: &HirStmt) {
     }
 }
 
-fn lower_expr(unit: &mut Vs2Unit, ctx: &mut LowerCtx, e: &HirExpr) {
+fn lower_expr(unit: &mut Vs2Unit, ctx: &mut LowerCtx, e: &HirExpr, file: &str) {
     match e {
         HirExpr::Lit { lit, .. } => match lit {
             HirLit::Int(n) => {
@@ -352,8 +513,8 @@ fn lower_expr(unit: &mut Vs2Unit, ctx: &mut LowerCtx, e: &HirExpr) {
             unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
         }
         HirExpr::Binary { op, lhs, rhs, .. } => {
-            lower_expr(unit, ctx, lhs);
-            lower_expr(unit, ctx, rhs);
+            lower_expr(unit, ctx, lhs, file);
+            lower_expr(unit, ctx, rhs, file);
             let opc = match op {
                 HirBinOp::Add => OpVs2::Add,
                 HirBinOp::Sub => OpVs2::Sub,
@@ -373,7 +534,7 @@ fn lower_expr(unit: &mut Vs2Unit, ctx: &mut LowerCtx, e: &HirExpr) {
         }
         HirExpr::Call { callee, args, .. } => {
             for a in args {
-                lower_expr(unit, ctx, a);
+                lower_expr(unit, ctx, a, file);
             }
             let name = match callee.as_ref() {
                 HirExpr::Path { path, .. } => path.display(),
@@ -390,9 +551,18 @@ fn lower_expr(unit: &mut Vs2Unit, ctx: &mut LowerCtx, e: &HirExpr) {
             let lid = unit.pool.intern(id.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, lid));
         }
-        HirExpr::Field { base, .. } => {
-            lower_expr(unit, ctx, base);
-            // field access: leave base; host may refine later
+        HirExpr::Field { base, field, span, .. } => {
+            unit.push_diag(Vs2Diag::unsupported(
+                file,
+                *span,
+                &format!("field access `.{field}`"),
+                "field",
+            ));
+            // Do not silently compile as base-only.
+            lower_expr(unit, ctx, base, file);
+            unit.emit(Vs2Instr::new(OpVs2::Pop));
+            let z = unit.pool.intern("0");
+            unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, z));
         }
         HirExpr::If {
             cond,
@@ -400,14 +570,14 @@ fn lower_expr(unit: &mut Vs2Unit, ctx: &mut LowerCtx, e: &HirExpr) {
             else_br,
             ..
         } => {
-            lower_expr(unit, ctx, cond);
+            lower_expr(unit, ctx, cond, file);
             let j_else = unit.emit(Vs2Instr::with_a(OpVs2::JumpIf, 0));
-            lower_expr(unit, ctx, then_br);
+            lower_expr(unit, ctx, then_br, file);
             let j_end = unit.emit(Vs2Instr::with_a(OpVs2::Jump, 0));
             let else_pc = unit.pc();
             unit.patch_a(j_else, else_pc);
             if let Some(eb) = else_br {
-                lower_expr(unit, ctx, eb);
+                lower_expr(unit, ctx, eb, file);
             } else {
                 unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, 0));
             }
@@ -416,10 +586,10 @@ fn lower_expr(unit: &mut Vs2Unit, ctx: &mut LowerCtx, e: &HirExpr) {
         }
         HirExpr::Block { stmts, tail, .. } => {
             for s in stmts {
-                lower_stmt(unit, ctx, s);
+                lower_stmt(unit, ctx, s, file);
             }
             if let Some(t) = tail {
-                lower_expr(unit, ctx, t);
+                lower_expr(unit, ctx, t, file);
             } else {
                 unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, 0));
             }
@@ -1153,6 +1323,105 @@ mod tests {
         let u = lower_module(&m);
         assert!(u.code.is_empty());
         assert!(validate_unit(&u).is_ok());
+        assert!(!u.has_errors());
+    }
+
+    #[test]
+    fn unsupported_struct_enum_mod_use_exact() {
+        use velvet_script_hir::{HirEnum, HirPath, HirStruct, PathSeg};
+        let mut m = empty_mod();
+        m.file = Some("game.vel".into());
+        m.items.push(HirItem::Struct(HirStruct {
+            id: HirId(1),
+            name: "Foo".into(),
+            vis: Visibility::Public,
+            fields: vec![],
+            span: HirSpan::at(3, 1, 0, 10),
+        }));
+        m.items.push(HirItem::Enum(HirEnum {
+            id: HirId(2),
+            name: "E".into(),
+            vis: Visibility::Public,
+            variants: vec![],
+            span: HirSpan::at(4, 1, 0, 10),
+        }));
+        m.items.push(HirItem::Mod {
+            name: "inner".into(),
+            items: vec![],
+            span: HirSpan::at(5, 1, 0, 10),
+        });
+        m.items.push(HirItem::Use {
+            path: HirPath {
+                segs: vec![PathSeg("std".into())],
+            },
+            span: HirSpan::at(6, 1, 0, 10),
+        });
+        let u = lower_module(&m);
+        assert!(u.has_errors());
+        assert!(u.diags.len() >= 4);
+        for d in &u.diags {
+            assert_eq!(d.code, velvet_script_syntax::DiagCode::UnsupportedHir);
+            assert_eq!(d.file, "game.vel");
+            assert!(d.line >= 1);
+            assert!(d.display().contains("game.vel"));
+        }
+        let kinds: Vec<_> = u
+            .diags
+            .iter()
+            .filter_map(|d| d.node_kind.as_deref())
+            .collect();
+        assert!(kinds.contains(&"struct"));
+        assert!(kinds.contains(&"enum"));
+        assert!(kinds.contains(&"mod"));
+        assert!(kinds.contains(&"use"));
+    }
+
+    #[test]
+    fn field_access_unsupported_exact() {
+        let mut m = empty_mod();
+        m.file = Some("player.vel".into());
+        m.items.push(HirItem::Fn(HirFn {
+            id: HirId(1),
+            name: "main".into(),
+            vis: Visibility::Public,
+            params: vec![],
+            ret: HirTy::Prim(PrimTy::Unit),
+            body: HirExpr::Field {
+                base: Box::new(HirExpr::Path {
+                    path: velvet_script_hir::HirPath::parse("player"),
+                    span: HirSpan::at(2, 1, 0, 6),
+                }),
+                field: "health".into(),
+                span: HirSpan::at(2, 1, 0, 13),
+            },
+            span: HirSpan::at(1, 1, 0, 20),
+        }));
+        let u = lower_module(&m);
+        assert!(u
+            .diags
+            .iter()
+            .any(|d| d.node_kind.as_deref() == Some("field")
+                && d.code == velvet_script_syntax::DiagCode::UnsupportedHir
+                && d.file == "player.vel"
+                && d.message.contains("health")));
+    }
+
+    #[test]
+    fn source_map_records_scene_file_line() {
+        let mut m = empty_mod();
+        m.file = Some("story.vel".into());
+        m.items.push(HirItem::Scene(HirScene {
+            id: HirId(1),
+            name: "intro".into(),
+            body: vec![],
+            span: HirSpan::at(10, 2, 100, 110),
+        }));
+        let u = lower_module(&m);
+        let e = u.lookup_pc(0).expect("map entry");
+        assert_eq!(e.file, "story.vel");
+        assert_eq!(e.line, 10);
+        assert_eq!(e.column, 2);
+        assert_eq!(e.node_kind, "scene");
     }
 
     #[test]

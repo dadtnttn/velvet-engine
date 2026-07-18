@@ -609,6 +609,25 @@ impl StoryPlayer {
                 self.end_story(ending);
                 false
             }
+            StoryOp::HostCall { name, args } => {
+                // Observable effect for writer-registered commands (no second VM).
+                self.vars.set(
+                    "__last_command",
+                    StoryValue::String(name.clone()),
+                );
+                if let Some(StoryValue::String(enemy)) = args.get("enemy").cloned() {
+                    self.vars.set("cmd.enemy", StoryValue::String(enemy));
+                }
+                for (k, v) in args.iter() {
+                    self.vars
+                        .set(format!("cmd.{name}.{k}"), v.clone());
+                }
+                self.events.push(StoryEvent::Variable {
+                    name: "__last_command".into(),
+                    value: StoryValue::String(name),
+                });
+                true
+            }
         }
     }
 

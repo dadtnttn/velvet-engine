@@ -38,7 +38,7 @@ pub use character::Character;
 pub use gallery::{Gallery, GalleryEntry, GalleryError};
 pub use glossary::{Glossary, GlossaryError, GlossaryTerm};
 pub use history::{History, HistoryEntry};
-pub use ir::{StoryOp, StoryProgram, StoryScene};
+pub use ir::{StoryChoice, StoryOp, StoryProgram, StoryScene};
 pub use load::{load_program_from_source, LoadError};
 pub use localization_hook::{
     catalog_to_po_template, choice_key, dialogue_key, extract_loc_keys, extract_scene_loc_keys,
@@ -72,6 +72,6 @@ pub use save::{SaveError, SaveGame, SaveMeta, SaveStore};
 pub use skip::{count_skippable_read_lines, SkipConfig, SkipEngine, SkipResult};
 pub use transitions::{Transition, TransitionKind, TransitionQueue, WipeDirection};
 pub use value::StoryValue;
-pub use variables::StoryVariables;
+pub use variables::{AssignOp, StoryVariables};
 pub use voice::{VoiceClip, VoiceError, VoicePlayState, VoiceQueue};
 pub use web_story::program_to_web_json;
