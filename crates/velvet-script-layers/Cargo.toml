@@ -1,11 +1,11 @@
 [package]
-name = "velvet-script-types"
-description = "Velvet Script type checker"
+name = "velvet-script-layers"
+description = "Velvet Script layer stack types and pure runtime"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-velvet-script-hir = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }

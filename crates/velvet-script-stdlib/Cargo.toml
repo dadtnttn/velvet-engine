@@ -1,0 +1,12 @@
+[package]
+name = "velvet-script-stdlib"
+description = "Velvet Script 2 typed prelude / stdlib descriptors"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-script-hir = { workspace = true }
+velvet-script-layers = { workspace = true }
+velvet-script-i18n = { workspace = true }

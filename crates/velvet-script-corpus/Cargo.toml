@@ -1,0 +1,15 @@
+[package]
+name = "velvet-script-corpus"
+description = "Velvet Script 2 corpus tests and samples"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-script-hir = { workspace = true }
+velvet-script-types = { workspace = true }
+velvet-script-i18n = { workspace = true }
+velvet-script-layers = { workspace = true }
+velvet-script-syntax = { workspace = true }
+velvet-script-stdlib = { workspace = true }

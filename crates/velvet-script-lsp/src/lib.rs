@@ -693,3 +693,6 @@ function main() {
             .any(|t| t.kind == SemanticTokenKind::Number && t.text == "1"));
     }
 }
+
+/// VS2 IDE completions / hover.
+pub mod vs2_ide;

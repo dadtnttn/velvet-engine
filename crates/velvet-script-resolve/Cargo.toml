@@ -1,6 +1,6 @@
 [package]
-name = "velvet-script-types"
-description = "Velvet Script type checker"
+name = "velvet-script-resolve"
+description = "Name resolution and import graph for Velvet Script 2"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,3 +9,6 @@ rust-version.workspace = true
 [dependencies]
 velvet-script-hir = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

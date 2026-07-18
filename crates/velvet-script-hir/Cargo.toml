@@ -1,10 +1,9 @@
-﻿[package]
+[package]
 name = "velvet-script-hir"
-description = "High-level IR (Phase 4)"
+description = "Velvet Script high-level IR"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-thiserror = { workspace = true }

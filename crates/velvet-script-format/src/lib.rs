@@ -532,3 +532,6 @@ scene main {
         assert_eq!(once, twice);
     }
 }
+
+/// VS2 brace-aware format helpers.
+pub mod vs2_format;

@@ -11,3 +11,4 @@ velvet-script-ast = { workspace = true }
 velvet-script-bytecode = { workspace = true }
 velvet-script-parser = { workspace = true }
 thiserror = { workspace = true }
+velvet-script-hir = { workspace = true }
