@@ -6,6 +6,25 @@
 use velvet_document::DesignerWidget;
 use velvet_story::{draw_text_line, fill_rect, pack_rgb};
 
+/// Map design base scale (1 body / 2 title) through user UI zoom (1..=4).
+#[inline]
+fn txt(
+    buf: &mut [u32],
+    ww: u32,
+    wh: u32,
+    x: i32,
+    y: i32,
+    text: &str,
+    color: u32,
+    base: i32,
+    zoom: i32,
+) {
+    let z = zoom.clamp(1, 4);
+    let s = if base <= 1 { z } else { (z + 1).min(5) };
+    draw_text_line(buf, ww, wh, x, y, text, color, s);
+}
+
+
 // ── Design tokens (ARGB via pack_rgb) ──────────────────────────────────────
 
 fn c_bg() -> u32 {
@@ -293,12 +312,12 @@ fn rect_outline(buf: &mut [u32], ww: u32, wh: u32, x0: i32, y0: i32, x1: i32, y1
     fill_rect(buf, ww, wh, x1 - t, y0, x1, y1, c);
 }
 
-fn draw_panel_header(buf: &mut [u32], ww: u32, wh: u32, x0: i32, y0: i32, x1: i32, title: &str) {
+fn draw_panel_header(buf: &mut [u32], ww: u32, wh: u32, x0: i32, y0: i32, x1: i32, title: &str, zoom: i32) {
     fill_rect(buf, ww, wh, x0, y0, x1, y0 + 30, c_surface_2());
     fill_rect(buf, ww, wh, x0, y0 + 29, x1, y0 + 30, c_border_soft());
     // accent bar on left of header
     fill_rect(buf, ww, wh, x0, y0, x0 + 3, y0 + 30, c_accent());
-    draw_text_line(buf, ww, wh, x0 + 12, y0 + 9, title, c_text_muted(), 2);
+    txt(buf, ww, wh, x0 + 12, y0 + 9, title, c_text_muted(), 2, zoom);
 }
 
 fn draw_pill(
@@ -311,6 +330,7 @@ fn draw_pill(
     y1: i32,
     active: bool,
     label: &str,
+    zoom: i32,
 ) {
     let fill = if active { c_accent() } else { c_surface_2() };
     fill_rect(buf, ww, wh, x0, y0, x1, y1, fill);
@@ -322,7 +342,7 @@ fn draw_pill(
     let tw = (label.len() as i32) * 7;
     let tx = x0 + ((x1 - x0) - tw) / 2;
     let ty = y0 + ((y1 - y0) - 10) / 2;
-    draw_text_line(
+    txt(
         buf,
         ww,
         wh,
@@ -330,7 +350,7 @@ fn draw_pill(
         ty,
         label,
         if active { c_text() } else { c_text_muted() },
-        1,
+        1, zoom,
     );
 }
 
@@ -347,10 +367,12 @@ pub fn paint_studio(
     dragging: bool,
     edit_field: Option<InspectorField>,
     edit_buf: &str,
+    ui_zoom: i32,
 ) {
     let ww = layout.ww as u32;
     let wh = layout.wh as u32;
     let lay = *layout;
+    let zoom = ui_zoom.clamp(1, 4);
 
     // App background
     fill_rect(buf, ww, wh, 0, 0, lay.ww, lay.wh, c_bg());
@@ -360,8 +382,10 @@ pub fn paint_studio(
     fill_rect(buf, ww, wh, 0, lay.top_h - 1, lay.ww, lay.top_h, c_border());
     // brand mark
     fill_rect(buf, ww, wh, 12, 14, 28, 34, c_accent());
-    draw_text_line(buf, ww, wh, 36, 16, "VELVET STUDIO", c_text(), 2);
-    draw_text_line(buf, ww, wh, 210, 18, project_name, c_text_dim(), 2);
+    txt(buf, ww, wh, 36, 16, "VELVET STUDIO", c_text(), 2, zoom);
+    txt(buf, ww, wh, 210, 18, project_name, c_text_dim(), 2, zoom);
+    let zlabel = format!("Aa x{zoom}");
+    txt(buf, ww, wh, 210 + (project_name.len() as i32) * 8 + 16, 18, &zlabel, c_text_dim(), 1, zoom);
 
     // Mode pills + Save
     let pill_x = lay.ww - 380;
@@ -375,6 +399,7 @@ pub fn paint_studio(
         38,
         mode_simplified,
         "1 Visual",
+        zoom,
     );
     draw_pill(
         buf,
@@ -386,11 +411,12 @@ pub fn paint_studio(
         38,
         !mode_simplified,
         "2 Script",
+        zoom,
     );
     // Save CTA
     fill_rect(buf, ww, wh, pill_x + 230, 10, pill_x + 320, 38, c_cta());
     rect_outline(buf, ww, wh, pill_x + 230, 10, pill_x + 320, 38, c_cta_hi(), 1);
-    draw_text_line(buf, ww, wh, pill_x + 250, 18, "Save", c_text(), 2);
+    txt(buf, ww, wh, pill_x + 250, 18, "Save", c_text(), 2, zoom);
 
     // ── Left dock ──────────────────────────────────────────────────────────
     fill_rect(buf, ww, wh, 0, lay.top_h, lay.left_w, lay.wh - lay.bot_h, c_surface());
@@ -405,7 +431,7 @@ pub fn paint_studio(
         c_border_soft(),
     );
 
-    draw_panel_header(buf, ww, wh, 0, lay.top_h, lay.left_w, "HIERARCHY");
+    draw_panel_header(buf, ww, wh, 0, lay.top_h, lay.left_w, "HIERARCHY", zoom);
     let canvas_widgets: Vec<&DesignerWidget> = widgets.iter().filter(|w| is_canvas_widget(w)).collect();
     let mut hy = lay.hierarchy_y;
     for (i, w) in canvas_widgets.iter().take(6).enumerate() {
@@ -420,10 +446,10 @@ pub fn paint_studio(
             _ => "B",
         };
         fill_rect(buf, ww, wh, 12, hy, 26, hy + 14, c_surface_2());
-        draw_text_line(buf, ww, wh, 15, hy + 2, kind_mark, c_accent_hi(), 1);
+        txt(buf, ww, wh, 15, hy + 2, kind_mark, c_accent_hi(), 1, zoom);
         let label = w.text.as_deref().unwrap_or(w.id.as_str());
         let line = format!("{}", label);
-        draw_text_line(
+        txt(
             buf,
             ww,
             wh,
@@ -431,20 +457,20 @@ pub fn paint_studio(
             hy + 2,
             &line.chars().take(16).collect::<String>(),
             if sel { c_text() } else { c_text_muted() },
-            1,
+            1, zoom,
         );
         hy += 24;
         let _ = i;
     }
     if canvas_widgets.is_empty() {
-        draw_text_line(buf, ww, wh, 14, hy, "No widgets yet", c_text_dim(), 1);
+        txt(buf, ww, wh, 14, hy, "No widgets yet", c_text_dim(), 1, zoom);
         hy += 20;
-        draw_text_line(buf, ww, wh, 14, hy, "Use palette below", c_text_dim(), 1);
+        txt(buf, ww, wh, 14, hy, "Use palette below", c_text_dim(), 1, zoom);
     }
 
     // Palette (aligned with hit_palette)
     let pal_y = lay.palette_y;
-    draw_panel_header(buf, ww, wh, 0, pal_y, lay.left_w, "PALETTE");
+    draw_panel_header(buf, ww, wh, 0, pal_y, lay.left_w, "PALETTE", zoom);
     let mut py = pal_y + 34;
     for (label, accent) in [
         ("Button", pack_rgb(90, 80, 160)),
@@ -455,11 +481,11 @@ pub fn paint_studio(
         fill_rect(buf, ww, wh, 10, py, lay.left_w - 10, py + 34, c_surface_2());
         rect_outline(buf, ww, wh, 10, py, lay.left_w - 10, py + 34, c_border(), 1);
         fill_rect(buf, ww, wh, 10, py, 14, py + 34, accent);
-        draw_text_line(buf, ww, wh, 24, py + 10, label, c_text(), 2);
-        draw_text_line(buf, ww, wh, lay.left_w - 48, py + 12, "drag", c_text_dim(), 1);
+        txt(buf, ww, wh, 24, py + 10, label, c_text(), 2, zoom);
+        txt(buf, ww, wh, lay.left_w - 48, py + 12, "drag", c_text_dim(), 1, zoom);
         py += 42;
     }
-    draw_text_line(
+    txt(
         buf,
         ww,
         wh,
@@ -467,7 +493,7 @@ pub fn paint_studio(
         py + 6,
         "Click to place  B/L/P keys",
         c_text_dim(),
-        1,
+        1, zoom,
     );
 
     // ── Right dock — inspector ─────────────────────────────────────────────
@@ -483,7 +509,7 @@ pub fn paint_studio(
         lay.wh - lay.bot_h,
         c_border_soft(),
     );
-    draw_panel_header(buf, ww, wh, rx0, lay.top_h, lay.ww, "INSPECTOR");
+    draw_panel_header(buf, ww, wh, rx0, lay.top_h, lay.ww, "INSPECTOR", zoom);
     let mut iy = lay.top_h + 42;
     if let Some(id) = selected {
         if let Some(w) = widgets.iter().find(|w| w.id == id) {
@@ -512,7 +538,7 @@ pub fn paint_studio(
             ];
             for (key, val, field, editable) in fields {
                 let editing = field.is_some() && edit_field == field;
-                draw_text_line(
+                txt(
                     buf,
                     ww,
                     wh,
@@ -520,10 +546,10 @@ pub fn paint_studio(
                     iy,
                     key,
                     if editable { c_text_muted() } else { c_text_dim() },
-                    1,
+                    1, zoom,
                 );
                 if editable {
-                    draw_text_line(
+                    txt(
                         buf,
                         ww,
                         wh,
@@ -531,7 +557,7 @@ pub fn paint_studio(
                         iy,
                         "edit",
                         c_text_dim(),
-                        1,
+                        1, zoom,
                     );
                 }
                 iy += 16;
@@ -582,7 +608,7 @@ pub fn paint_studio(
                 } else {
                     val
                 };
-                draw_text_line(
+                txt(
                     buf,
                     ww,
                     wh,
@@ -590,7 +616,7 @@ pub fn paint_studio(
                     iy + 3,
                     &shown.chars().take(26).collect::<String>(),
                     if editing { c_cta_hi() } else { c_text() },
-                    1,
+                    1, zoom,
                 );
                 iy += 32; // total row ~48
             }
@@ -606,7 +632,7 @@ pub fn paint_studio(
                     iy + 36,
                     pack_rgb(30, 40, 55),
                 );
-                draw_text_line(
+                txt(
                     buf,
                     ww,
                     wh,
@@ -614,9 +640,9 @@ pub fn paint_studio(
                     iy + 6,
                     "Enter apply  Esc cancel",
                     c_text_muted(),
-                    1,
+                    1, zoom,
                 );
-                draw_text_line(
+                txt(
                     buf,
                     ww,
                     wh,
@@ -624,11 +650,11 @@ pub fn paint_studio(
                     iy + 20,
                     "type to edit selected field",
                     c_text_dim(),
-                    1,
+                    1, zoom,
                 );
                 iy += 44;
             } else {
-                draw_text_line(
+                txt(
                     buf,
                     ww,
                     wh,
@@ -636,10 +662,10 @@ pub fn paint_studio(
                     iy,
                     "Click field to edit",
                     c_text_dim(),
-                    1,
+                    1, zoom,
                 );
                 iy += 16;
-                draw_text_line(
+                txt(
                     buf,
                     ww,
                     wh,
@@ -647,10 +673,10 @@ pub fn paint_studio(
                     iy,
                     "T text  P pos  Z size",
                     c_text_dim(),
-                    1,
+                    1, zoom,
                 );
                 iy += 16;
-                draw_text_line(
+                txt(
                     buf,
                     ww,
                     wh,
@@ -658,7 +684,7 @@ pub fn paint_studio(
                     iy,
                     "Arrows nudge 1%",
                     c_text_dim(),
-                    1,
+                    1, zoom,
                 );
                 iy += 20;
             }
@@ -673,19 +699,19 @@ pub fn paint_studio(
                     iy + 24,
                     pack_rgb(40, 60, 50),
                 );
-                draw_text_line(buf, ww, wh, rx0 + 18, iy + 6, "DRAGGING...", c_cta_hi(), 1);
+                txt(buf, ww, wh, rx0 + 18, iy + 6, "DRAGGING...", c_cta_hi(), 1, zoom);
             }
         } else {
-            draw_text_line(buf, ww, wh, rx0 + 14, iy, id, c_text_muted(), 1);
+            txt(buf, ww, wh, rx0 + 14, iy, id, c_text_muted(), 1, zoom);
         }
     } else {
-        draw_text_line(buf, ww, wh, rx0 + 14, iy, "No selection", c_text_dim(), 1);
+        txt(buf, ww, wh, rx0 + 14, iy, "No selection", c_text_dim(), 1, zoom);
         iy += 22;
-        draw_text_line(buf, ww, wh, rx0 + 14, iy, "Click canvas widget", c_text_dim(), 1);
+        txt(buf, ww, wh, rx0 + 14, iy, "Click canvas widget", c_text_dim(), 1, zoom);
         iy += 18;
-        draw_text_line(buf, ww, wh, rx0 + 14, iy, "or hierarchy row", c_text_dim(), 1);
+        txt(buf, ww, wh, rx0 + 14, iy, "or hierarchy row", c_text_dim(), 1, zoom);
         iy += 24;
-        draw_text_line(
+        txt(
             buf,
             ww,
             wh,
@@ -693,7 +719,7 @@ pub fn paint_studio(
             iy,
             "Then edit TEXT / POS / SIZE",
             c_text_dim(),
-            1,
+            1, zoom,
         );
     }
 
@@ -709,7 +735,7 @@ pub fn paint_studio(
         lay.wh - lay.bot_h + 1,
         c_border(),
     );
-    draw_text_line(
+    txt(
         buf,
         ww,
         wh,
@@ -717,9 +743,9 @@ pub fn paint_studio(
         lay.wh - lay.bot_h + 8,
         "STATUS",
         c_text_dim(),
-        1,
+        1, zoom,
     );
-    draw_text_line(
+    txt(
         buf,
         ww,
         wh,
@@ -727,17 +753,17 @@ pub fn paint_studio(
         lay.wh - lay.bot_h + 26,
         &status.chars().take(80).collect::<String>(),
         c_text_muted(),
-        1,
+        1, zoom,
     );
-    draw_text_line(
+    txt(
         buf,
         ww,
         wh,
         lay.ww - 480,
         lay.wh - lay.bot_h + 26,
-        "Tab mode  |  palette  |  drag  |  edit TEXT/POS/SIZE  |  Ctrl+S  |  Esc",
+        "Ctrl+/- zoom  |  palette  |  drag  |  edit  |  Ctrl+S  |  Esc",
         c_text_dim(),
-        1,
+        1, zoom,
     );
 
     // ── Canvas frame ───────────────────────────────────────────────────────
@@ -829,7 +855,7 @@ pub fn paint_studio(
             pack_rgb(45, 50, 70),
         );
 
-        draw_text_line(
+        txt(
             buf,
             ww,
             wh,
@@ -837,7 +863,7 @@ pub fn paint_studio(
             lay.canvas_y + 10,
             "CANVAS  —  drag to move, snap 1%",
             c_text_dim(),
-            1,
+            1, zoom,
         );
 
         for w in canvas_widgets {
@@ -930,7 +956,7 @@ pub fn paint_studio(
             let label = w.text.as_deref().unwrap_or(w.id.as_str());
             let text_x = px + 14;
             let text_y = py + bh / 2 - 6;
-            draw_text_line(
+            txt(
                 buf,
                 ww,
                 wh,
@@ -938,7 +964,7 @@ pub fn paint_studio(
                 text_y,
                 &label.chars().take(18).collect::<String>(),
                 c_text(),
-                2,
+                2, zoom,
             );
 
             // kind badge top-right of widget
@@ -947,7 +973,7 @@ pub fn paint_studio(
                 "panel" => "PNL",
                 _ => "BTN",
             };
-            draw_text_line(
+            txt(
                 buf,
                 ww,
                 wh,
@@ -959,7 +985,7 @@ pub fn paint_studio(
                 } else {
                     c_text_dim()
                 },
-                1,
+                1, zoom,
             );
         }
     } else {
@@ -974,7 +1000,7 @@ pub fn paint_studio(
             lay.canvas_y + lay.canvas_h - 6,
             pack_rgb(10, 12, 18),
         );
-        draw_text_line(
+        txt(
             buf,
             ww,
             wh,
@@ -982,7 +1008,7 @@ pub fn paint_studio(
             lay.canvas_y + 14,
             "ADVANCED SCRIPT  —  same file, visual regions protected",
             pack_rgb(100, 190, 140),
-            1,
+            1, zoom,
         );
         // gutter
         fill_rect(
@@ -998,7 +1024,7 @@ pub fn paint_studio(
         let max_lines = ((lay.canvas_h - 52) / 16).max(4) as usize;
         for (i, line) in advanced_src.lines().take(max_lines).enumerate() {
             let ln = i + 1;
-            draw_text_line(
+            txt(
                 buf,
                 ww,
                 wh,
@@ -1006,7 +1032,7 @@ pub fn paint_studio(
                 lay.canvas_y + 42 + i as i32 * 16,
                 &format!("{ln:>3}"),
                 c_text_dim(),
-                1,
+                1, zoom,
             );
             let muted = line.trim_start().starts_with("// @");
             let col = if muted {
@@ -1019,7 +1045,7 @@ pub fn paint_studio(
                 pack_rgb(170, 200, 175)
             };
             let clipped: String = line.chars().take(70).collect();
-            draw_text_line(
+            txt(
                 buf,
                 ww,
                 wh,
@@ -1027,7 +1053,7 @@ pub fn paint_studio(
                 lay.canvas_y + 42 + i as i32 * 16,
                 &clipped,
                 col,
-                1,
+                1, zoom,
             );
         }
     }
