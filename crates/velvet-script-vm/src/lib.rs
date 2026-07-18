@@ -10,6 +10,7 @@ mod debugger;
 mod stdlib;
 mod value;
 mod vm;
+mod vs2_host;
 
 pub use coroutine::{Coroutine, CoroutineStatus};
 pub use debugger::{
@@ -20,3 +21,5 @@ pub use stdlib::{call_native, NativeOutput};
 pub use value::Value;
 pub use velvet_script_bytecode::{lookup_native, NativeId};
 pub use vm::{run_source, CallFrameView, Vm, VmError, VmLimits, VmOutput};
+
+pub use vs2_host::{DialogueLine, LayerEntry, MenuChoice, StageChar, Vs2Host, Vs2MiniVm};

@@ -1078,3 +1078,6 @@ mod tests {
         assert_eq!(Op::Yield.operand_len(), 0);
     }
 }
+
+/// VS2 opcode catalog.
+pub mod opcodes_vs2;

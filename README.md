@@ -134,7 +134,7 @@ cargo run -p velvet-cli --release -- play samples/short-novella --windowed --cho
 | Architecture | [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) |
 | Modules map | [docs/architecture/MODULES.md](docs/architecture/MODULES.md) |
 | Roadmap | [docs/architecture/ROADMAP.md](docs/architecture/ROADMAP.md) |
-| Velvet Script | [docs/language/VELVET_SCRIPT.md](docs/language/VELVET_SCRIPT.md) |
+| Velvet Script | [docs/language/VELVET_SCRIPT.md](docs/language/VELVET_SCRIPT.md) · **VS2 (alpha, rust-like):** [VELVET_SCRIPT_2.md](docs/language/VELVET_SCRIPT_2.md) |
 | Cellular (alpha) | [docs/architecture/CELLULAR.md](docs/architecture/CELLULAR.md) |
 | Studio (alpha) | [docs/editor/STUDIO.md](docs/editor/STUDIO.md) |
 | Ren’Py parity notes | [docs/reports/RENPY_PARITY.md](docs/reports/RENPY_PARITY.md) |
