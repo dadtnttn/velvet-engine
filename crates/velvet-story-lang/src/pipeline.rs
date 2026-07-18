@@ -368,8 +368,8 @@ fn run_build(build: BuildResult, choice_index: usize) -> RunResult {
             }
         }
         if op == OpVs2::Choice {
-            // only execute body of selected choice: skip others via heuristic
-            // bodies are sequential; for demo we run all (story may goto)
+            // Menu option labels only; arm selection is JumpIf-guarded in the
+            // StoryProgram → OpVs2 lower (see from_program choice emission).
             let _ = (a, b);
         }
         if !vm.step() {

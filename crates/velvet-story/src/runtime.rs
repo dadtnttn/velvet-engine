@@ -8,8 +8,10 @@ use crate::auto_mode::AutoModeController;
 use crate::character::Character;
 use crate::history::History;
 use crate::host::SharedCommandHost;
+use crate::host::CommandOutcome;
 use crate::ir::{
-    StoryArithOp, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand, StoryProgram,
+    StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand,
+    StoryProgram,
 };
 use crate::prefs::{SkipMode, StoryPreferences};
 use crate::save::SaveGame;
@@ -29,6 +31,16 @@ pub enum StoryWait {
     Choice,
     /// Story finished.
     Ended,
+    /// Timed narrative pause; remaining time in milliseconds.
+    Pause {
+        /// Remaining milliseconds.
+        remaining_ms: u64,
+    },
+    /// Waiting for an external host command to finish.
+    Host {
+        /// Opaque token from [`CommandOutcome::Wait`].
+        token: String,
+    },
 }
 
 /// Visible character on screen.
@@ -42,7 +54,27 @@ pub struct VisibleCharacter {
     pub at: Option<String>,
 }
 
-/// Serializable cursor for saves.
+/// Serializable nested block frame (ops + IP).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SavedExecFrame {
+    /// Body operations.
+    pub ops: Vec<StoryOp>,
+    /// Next op index within `ops`.
+    pub index: usize,
+}
+
+/// Serializable call continuation (return site + nested frames).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SavedCallContinuation {
+    /// Scene to return to.
+    pub scene: String,
+    /// Scene op index on return.
+    pub op_index: usize,
+    /// Nested exec stack at call time.
+    pub exec_stack: Vec<SavedExecFrame>,
+}
+
+/// Serializable cursor for saves (includes nested control flow).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StorySnapshot {
     /// Current scene name.
@@ -57,8 +89,29 @@ pub struct StorySnapshot {
     pub background: Option<String>,
     /// Current music path.
     pub music: Option<String>,
-    /// Call stack of (scene, return_index) for Call ops.
+    /// Call stack of (scene, return_index) for Call ops (legacy / display).
     pub call_stack: Vec<(String, usize)>,
+    /// Nested if/choice body frames.
+    #[serde(default)]
+    pub exec_stack: Vec<SavedExecFrame>,
+    /// Active choice menu arms while waiting on Choice.
+    #[serde(default)]
+    pub pending_menu: Option<Vec<StoryChoice>>,
+    /// Whether choose/advance past Choice advances scene IP.
+    #[serde(default)]
+    pub choice_advances_scene: bool,
+    /// Whether advance past Line advances scene IP.
+    #[serde(default)]
+    pub line_advances_scene: bool,
+    /// Whether finishing Pause advances scene IP.
+    #[serde(default)]
+    pub pause_advances_scene: bool,
+    /// Whether resume_host advances scene IP.
+    #[serde(default)]
+    pub host_advances_scene: bool,
+    /// Full call continuations with nested stacks.
+    #[serde(default)]
+    pub call_continuations: Vec<SavedCallContinuation>,
 }
 
 impl Default for StorySnapshot {
@@ -71,6 +124,13 @@ impl Default for StorySnapshot {
             background: None,
             music: None,
             call_stack: Vec::new(),
+            exec_stack: Vec::new(),
+            pending_menu: None,
+            choice_advances_scene: false,
+            line_advances_scene: false,
+            pause_advances_scene: false,
+            host_advances_scene: false,
+            call_continuations: Vec::new(),
         }
     }
 }
@@ -158,12 +218,46 @@ struct ExecFrame {
     index: usize,
 }
 
+impl ExecFrame {
+    fn to_saved(&self) -> SavedExecFrame {
+        SavedExecFrame {
+            ops: self.ops.clone(),
+            index: self.index,
+        }
+    }
+
+    fn from_saved(s: SavedExecFrame) -> Self {
+        Self {
+            ops: s.ops,
+            index: s.index,
+        }
+    }
+}
+
 /// Return continuation for `call` / `return` (includes nested exec stack).
 #[derive(Debug, Clone, PartialEq)]
 struct CallContinuation {
     scene: String,
     op_index: usize,
     exec_stack: Vec<ExecFrame>,
+}
+
+impl CallContinuation {
+    fn to_saved(&self) -> SavedCallContinuation {
+        SavedCallContinuation {
+            scene: self.scene.clone(),
+            op_index: self.op_index,
+            exec_stack: self.exec_stack.iter().map(ExecFrame::to_saved).collect(),
+        }
+    }
+
+    fn from_saved(s: SavedCallContinuation) -> Self {
+        Self {
+            scene: s.scene,
+            op_index: s.op_index,
+            exec_stack: s.exec_stack.into_iter().map(ExecFrame::from_saved).collect(),
+        }
+    }
 }
 
 /// Story runtime / player.
@@ -186,8 +280,13 @@ pub struct StoryPlayer {
     pending_menu: Option<Vec<crate::ir::StoryChoice>>,
     /// When true, [`Self::choose`] advances the scene IP past the Choice op.
     choice_advances_scene: bool,
-    /// Full call continuations (scene IP + nested exec stack). Kept in sync with
-    /// [`StorySnapshot::call_stack`] for saves (stack shape only).
+    /// When true, [`Self::advance`] on Line advances the scene IP.
+    line_advances_scene: bool,
+    /// When true, finishing a Pause advances the scene IP.
+    pause_advances_scene: bool,
+    /// When true, [`Self::resume_host`] advances the scene IP.
+    host_advances_scene: bool,
+    /// Full call continuations (scene IP + nested exec stack).
     call_continuations: Vec<CallContinuation>,
     /// Seen line keys `scene:op_index`.
     seen_lines: std::collections::BTreeSet<String>,
@@ -256,6 +355,9 @@ impl StoryPlayer {
             exec_stack: Vec::new(),
             pending_menu: None,
             choice_advances_scene: false,
+            line_advances_scene: false,
+            pause_advances_scene: false,
+            host_advances_scene: false,
             call_continuations: Vec::new(),
             seen_lines: std::collections::BTreeSet::new(),
             events: Vec::new(),
@@ -382,15 +484,58 @@ impl StoryPlayer {
         self.play_time_secs
     }
 
-    /// Advance clock. When auto-mode fires on a dialogue line, advances automatically.
+    /// Advance clock. Drives pause countdown and auto-mode line advance.
     pub fn tick(&mut self, dt: f32) {
         self.play_time_secs += f64::from(dt.max(0.0));
         let _ = self.voice.tick(dt);
         self.auto_mode
             .set_waiting_for_voice(self.prefs.wait_for_voice && self.voice.should_wait());
+        if let StoryWait::Pause { remaining_ms } = &mut self.snapshot.wait {
+            let dec = (dt.max(0.0) * 1000.0) as u64;
+            if *remaining_ms <= dec {
+                self.finish_pause();
+            } else {
+                *remaining_ms -= dec;
+            }
+            return;
+        }
         if matches!(self.snapshot.wait, StoryWait::Line) && self.auto_mode.tick(dt) {
             self.advance();
         }
+    }
+
+    /// Skip remaining pause time and continue (click-through).
+    pub fn skip_pause(&mut self) {
+        if matches!(self.snapshot.wait, StoryWait::Pause { .. }) {
+            self.finish_pause();
+        }
+    }
+
+    fn finish_pause(&mut self) {
+        self.snapshot.wait = StoryWait::Ready;
+        if self.pause_advances_scene {
+            self.snapshot.op_index += 1;
+        }
+        self.pause_advances_scene = false;
+        self.pump();
+    }
+
+    /// Resume after a host [`CommandOutcome::Wait`] with matching `token`.
+    pub fn resume_host(&mut self, token: &str) -> Result<(), String> {
+        match &self.snapshot.wait {
+            StoryWait::Host { token: t } if t == token => {}
+            StoryWait::Host { token: t } => {
+                return Err(format!("host wait token mismatch: expected `{t}`, got `{token}`"));
+            }
+            _ => return Err("not waiting on host command".into()),
+        }
+        self.snapshot.wait = StoryWait::Ready;
+        if self.host_advances_scene {
+            self.snapshot.op_index += 1;
+        }
+        self.host_advances_scene = false;
+        self.pump();
+        Ok(())
     }
 
     /// Auto-mode controller (for UI toggles / typewriter hooks).
@@ -431,9 +576,60 @@ impl StoryPlayer {
         std::mem::take(&mut self.events)
     }
 
-    /// Snapshot for save.
+    /// Snapshot for save (includes nested exec stack and call continuations).
     pub fn snapshot(&self) -> StorySnapshot {
-        self.snapshot.clone()
+        self.pack_snapshot()
+    }
+
+    fn pack_snapshot(&self) -> StorySnapshot {
+        let mut s = self.snapshot.clone();
+        s.exec_stack = self.exec_stack.iter().map(ExecFrame::to_saved).collect();
+        s.pending_menu = self.pending_menu.clone();
+        s.choice_advances_scene = self.choice_advances_scene;
+        s.line_advances_scene = self.line_advances_scene;
+        s.pause_advances_scene = self.pause_advances_scene;
+        s.host_advances_scene = self.host_advances_scene;
+        s.call_continuations = self
+            .call_continuations
+            .iter()
+            .map(CallContinuation::to_saved)
+            .collect();
+        // Keep call_stack aligned with continuations for older readers.
+        s.call_stack = self
+            .call_continuations
+            .iter()
+            .map(|c| (c.scene.clone(), c.op_index))
+            .collect();
+        s
+    }
+
+    fn unpack_snapshot(&mut self, s: StorySnapshot) {
+        self.exec_stack = s
+            .exec_stack
+            .iter()
+            .cloned()
+            .map(ExecFrame::from_saved)
+            .collect();
+        self.pending_menu = s.pending_menu.clone();
+        self.choice_advances_scene = s.choice_advances_scene;
+        self.line_advances_scene = s.line_advances_scene;
+        self.pause_advances_scene = s.pause_advances_scene;
+        self.host_advances_scene = s.host_advances_scene;
+        self.call_continuations = s
+            .call_continuations
+            .iter()
+            .cloned()
+            .map(CallContinuation::from_saved)
+            .collect();
+        self.snapshot = s;
+        // Prefer full continuations when present.
+        if !self.call_continuations.is_empty() {
+            self.snapshot.call_stack = self
+                .call_continuations
+                .iter()
+                .map(|c| (c.scene.clone(), c.op_index))
+                .collect();
+        }
     }
 
     /// Character by id.
@@ -443,14 +639,18 @@ impl StoryPlayer {
 
     /// Advance past current line / continue execution.
     pub fn advance(&mut self) {
-        match self.snapshot.wait {
+        match self.snapshot.wait.clone() {
             StoryWait::Line => {
                 self.snapshot.wait = StoryWait::Ready;
-                self.snapshot.op_index += 1;
+                if self.line_advances_scene {
+                    self.snapshot.op_index += 1;
+                }
+                self.line_advances_scene = false;
                 self.pump();
             }
+            StoryWait::Pause { .. } => self.skip_pause(),
             StoryWait::Ready => self.pump(),
-            StoryWait::Choice | StoryWait::Ended => {}
+            StoryWait::Choice | StoryWait::Ended | StoryWait::Host { .. } => {}
         }
     }
 
@@ -533,7 +733,7 @@ impl StoryPlayer {
             slot,
             self.title.clone(),
             &self.vars,
-            self.snapshot.clone(),
+            self.pack_snapshot(),
             self.history.clone(),
             self.seen_lines.iter().cloned().collect(),
             self.play_time_secs,
@@ -548,31 +748,74 @@ impl StoryPlayer {
         for (k, v) in save.persistent {
             self.vars.persistent.insert(k, v);
         }
-        self.snapshot = save.snapshot;
         self.history = save.history;
         self.seen_lines = save.seen_lines.into_iter().collect();
         self.play_time_secs = save.meta.play_time_secs;
         self.choices.clear();
-        self.exec_stack.clear();
-        self.pending_menu = None;
-        self.choice_advances_scene = false;
-        self.call_continuations.clear();
+        self.unpack_snapshot(save.snapshot);
         // Re-sync UI fields from current wait
-        if matches!(self.snapshot.wait, StoryWait::Line) {
-            // Re-run the dialogue op at current index for UI text
-            if let Some(scene) = self.program.scene(&self.snapshot.scene) {
-                if let Some(StoryOp::Dialogue { speaker, text }) =
-                    scene.ops.get(self.snapshot.op_index)
-                {
-                    self.apply_dialogue(speaker.clone(), text.clone());
+        match self.snapshot.wait.clone() {
+            StoryWait::Line => {
+                self.restore_dialogue_ui();
+            }
+            StoryWait::Choice => {
+                if self.pending_menu.is_some() {
+                    self.rebuild_choices_from_menu();
+                } else {
+                    self.rebuild_choices();
                 }
             }
-        } else if matches!(self.snapshot.wait, StoryWait::Choice) {
-            self.rebuild_choices();
-        } else if matches!(self.snapshot.wait, StoryWait::Ready) {
-            self.pump();
+            StoryWait::Ready => {
+                self.pump();
+            }
+            StoryWait::Pause { .. } | StoryWait::Host { .. } | StoryWait::Ended => {}
         }
         Ok(())
+    }
+
+    fn restore_dialogue_ui(&mut self) {
+        // Nested: dialogue was the op just before the frame IP.
+        if let Some(frame) = self.exec_stack.last() {
+            if frame.index > 0 {
+                if let Some(StoryOp::Dialogue { speaker, text }) =
+                    frame.ops.get(frame.index - 1)
+                {
+                    self.apply_dialogue(speaker.clone(), text.clone());
+                    return;
+                }
+            }
+        }
+        // Scene-level: cursor still on the Dialogue op.
+        if let Some(scene) = self.program.scene(&self.snapshot.scene) {
+            if let Some(StoryOp::Dialogue { speaker, text }) =
+                scene.ops.get(self.snapshot.op_index)
+            {
+                self.apply_dialogue(speaker.clone(), text.clone());
+            }
+        }
+    }
+
+    fn rebuild_choices_from_menu(&mut self) {
+        let Some(options) = self.pending_menu.as_ref() else {
+            return;
+        };
+        self.choices.clear();
+        for (i, arm) in options.iter().enumerate() {
+            let enabled = match &arm.require {
+                Some(v) => self.vars.get(v).is_truthy(),
+                None => true,
+            };
+            let hidden = !enabled && arm.hidden_if_locked;
+            if hidden {
+                continue;
+            }
+            self.choices.push(ChoiceOption {
+                index: i,
+                text: self.vars.interpolate(&arm.text),
+                enabled,
+                hidden: false,
+            });
+        }
     }
 
     /// Push a nested block body (if arm / choice arm). Empty bodies are no-ops.
@@ -650,6 +893,9 @@ impl StoryPlayer {
                 true
             }
             StoryOp::Dialogue { speaker, text } => {
+                // Scene-level: IP still on this op → advance on line dismiss.
+                // Nested: frame IP already past this op → do not touch scene IP.
+                self.line_advances_scene = self.exec_stack.is_empty();
                 self.apply_dialogue(speaker, text);
                 let key = format!("{}:{}", self.snapshot.scene, self.snapshot.op_index);
                 self.seen_lines.insert(key);
@@ -756,16 +1002,19 @@ impl StoryPlayer {
                     self.vars.set(format!("cmd.{name}.{k}"), v.clone());
                 }
                 self.last_host_error = None;
+                let mut outcome = CommandOutcome::Continue;
                 if let Some(host) = self.command_host.clone() {
-                    if let Err(e) = host.call(&name, &args, &mut self.vars) {
-                        self.last_host_error = Some(e.message.clone());
-                        self.vars.set(
-                            "__last_host_error",
-                            StoryValue::String(e.message),
-                        );
-                    } else {
-                        self.vars
-                            .set("__host_dispatched", StoryValue::String(name.clone()));
+                    match host.call(&name, &args, &mut self.vars) {
+                        Ok(o) => {
+                            self.vars
+                                .set("__host_dispatched", StoryValue::String(name.clone()));
+                            outcome = o;
+                        }
+                        Err(e) => {
+                            self.last_host_error = Some(e.message.clone());
+                            self.vars
+                                .set("__last_host_error", StoryValue::String(e.message));
+                        }
                     }
                 }
                 self.events.push(StoryEvent::HostCall {
@@ -776,7 +1025,25 @@ impl StoryPlayer {
                     name: "__last_command".into(),
                     value: StoryValue::String(name),
                 });
-                true
+                match outcome {
+                    CommandOutcome::Continue => true,
+                    CommandOutcome::Wait { token } => {
+                        self.host_advances_scene = self.exec_stack.is_empty();
+                        self.snapshot.wait = StoryWait::Host { token };
+                        false
+                    }
+                    CommandOutcome::Jump { target } => {
+                        self.exec_stack.clear();
+                        self.pending_menu = None;
+                        self.choice_advances_scene = false;
+                        self.jump_to(&target);
+                        false
+                    }
+                    CommandOutcome::End { ending } => {
+                        self.end_story(ending);
+                        false
+                    }
+                }
             }
             StoryOp::Sound { path } => {
                 self.vars
@@ -787,13 +1054,22 @@ impl StoryPlayer {
                 true
             }
             StoryOp::Pause { seconds } => {
-                if let Some(s) = seconds {
-                    self.vars.set("__last_pause", StoryValue::Float(s));
-                } else {
-                    self.vars.set("__last_pause", StoryValue::Float(0.0));
-                }
+                let secs = seconds.unwrap_or(0.0);
+                self.vars.set("__last_pause", StoryValue::Float(secs));
                 self.events.push(StoryEvent::Pause { seconds });
-                true
+                let ms = if secs <= 0.0 {
+                    0
+                } else {
+                    (secs * 1000.0).round() as u64
+                };
+                if ms == 0 {
+                    // Zero-length beat: event only, keep running.
+                    true
+                } else {
+                    self.pause_advances_scene = self.exec_stack.is_empty();
+                    self.snapshot.wait = StoryWait::Pause { remaining_ms: ms };
+                    false
+                }
             }
             StoryOp::Transition { name } => {
                 self.vars
@@ -1640,6 +1916,210 @@ scene start {
     }
 
     #[test]
+    fn save_load_nested_choice_if_dialogue_runs_tail() {
+        use crate::ir::{StoryChoice, StoryCond, StoryExpr, StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use crate::variables::AssignOp;
+        use indexmap::IndexMap;
+
+        let set = |name: &str, n: i64| StoryOp::Assign {
+            name: name.into(),
+            assign_op: AssignOp::Set,
+            value: StoryExpr::value(StoryValue::Int(n)),
+        };
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::Choice {
+                        options: vec![StoryChoice {
+                            text: "Entrar".into(),
+                            body: vec![
+                                set("entered", 1),
+                                StoryOp::If {
+                                    cond: StoryCond::var("has_key"),
+                                    then_ops: vec![StoryOp::Dialogue {
+                                        speaker: Some("luna".into()),
+                                        text: "Encontraste la llave.".into(),
+                                    }],
+                                    else_ops: vec![],
+                                },
+                                set("completed", 1),
+                            ],
+                            require: None,
+                            hidden_if_locked: false,
+                        }],
+                    },
+                    StoryOp::End {
+                        ending: Some("done".into()),
+                    },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("savenest");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        prog.initial_vars
+            .insert("has_key".into(), StoryValue::Int(1));
+
+        let mut player = StoryPlayer::start(prog.clone());
+        assert!(matches!(player.wait(), StoryWait::Choice));
+        player.choose(0).unwrap();
+        assert!(
+            matches!(player.wait(), StoryWait::Line),
+            "should wait on nested dialogue, wait={:?}",
+            player.wait()
+        );
+        assert!(player.current_text().contains("llave"));
+        assert_eq!(player.variables().get_int("completed", 0), 0);
+
+        let save = player.to_save("slot_nested");
+        assert!(
+            !save.snapshot.exec_stack.is_empty(),
+            "save must capture nested exec_stack"
+        );
+
+        let mut player2 = StoryPlayer::start(prog);
+        player2.load_save(save).unwrap();
+        assert!(matches!(player2.wait(), StoryWait::Line));
+        assert!(player2.current_text().contains("llave"));
+        assert_eq!(player2.variables().get_int("completed", 0), 0);
+
+        player2.advance();
+        let mut guard = 0;
+        while !player2.is_ended() && guard < 16 {
+            if matches!(player2.wait(), StoryWait::Line | StoryWait::Ready) {
+                player2.advance();
+            } else {
+                break;
+            }
+            guard += 1;
+        }
+        assert_eq!(
+            player2.variables().get_int("completed", 0),
+            1,
+            "tail after nested if must run after load"
+        );
+        assert_eq!(player2.variables().get_int("entered", 0), 1);
+        assert_eq!(player2.ending(), Some("done"));
+    }
+
+    #[test]
+    fn pause_blocks_until_tick_or_skip() {
+        use crate::ir::{StoryExpr, StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use crate::variables::AssignOp;
+        use indexmap::IndexMap;
+
+        let set = |name: &str, n: i64| StoryOp::Assign {
+            name: name.into(),
+            assign_op: AssignOp::Set,
+            value: StoryExpr::value(StoryValue::Int(n)),
+        };
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    set("before", 1),
+                    StoryOp::Pause {
+                        seconds: Some(3.0),
+                    },
+                    set("after", 1),
+                    StoryOp::End { ending: None },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("pause");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start(prog);
+        assert!(
+            matches!(player.wait(), StoryWait::Pause { remaining_ms } if *remaining_ms > 0),
+            "wait={:?}",
+            player.wait()
+        );
+        assert_eq!(player.variables().get_int("before", 0), 1);
+        assert_eq!(
+            player.variables().get_int("after", 0),
+            0,
+            "after must not run during pause"
+        );
+        player.tick(1.0);
+        assert!(matches!(player.wait(), StoryWait::Pause { .. }));
+        assert_eq!(player.variables().get_int("after", 0), 0);
+        player.skip_pause();
+        assert_eq!(player.variables().get_int("after", 0), 1);
+        assert!(player.is_ended() || matches!(player.wait(), StoryWait::Ended | StoryWait::Ready));
+    }
+
+    #[test]
+    fn host_wait_suspends_until_resume() {
+        use crate::host::{command_host_fn, CommandOutcome};
+        use crate::ir::{StoryExpr, StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use crate::variables::AssignOp;
+        use indexmap::IndexMap;
+
+        let host = command_host_fn(|name, _args, vars| {
+            assert_eq!(name, "combat.start");
+            vars.set("combat_phase", StoryValue::String("fighting".into()));
+            Ok(CommandOutcome::Wait {
+                token: "combat1".into(),
+            })
+        });
+        let set = |name: &str, n: i64| StoryOp::Assign {
+            name: name.into(),
+            assign_op: AssignOp::Set,
+            value: StoryExpr::value(StoryValue::Int(n)),
+        };
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::HostCall {
+                        name: "combat.start".into(),
+                        args: IndexMap::new(),
+                    },
+                    set("after_combat", 1),
+                    StoryOp::End {
+                        ending: Some("win".into()),
+                    },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("hostwait");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start_with_host(prog, host);
+        assert!(
+            matches!(player.wait(), StoryWait::Host { token } if token == "combat1"),
+            "wait={:?}",
+            player.wait()
+        );
+        assert_eq!(
+            player.variables().get_int("after_combat", 0),
+            0,
+            "must not continue past suspended HostCall"
+        );
+        assert_eq!(
+            player.variables().get("combat_phase").display_str(),
+            "fighting"
+        );
+        player.resume_host("combat1").unwrap();
+        assert_eq!(player.variables().get_int("after_combat", 0), 1);
+        assert_eq!(player.ending(), Some("win"));
+    }
+
+    #[test]
     fn command_host_handler_runs_on_host_call() {
         use crate::host::command_host_fn;
         use crate::ir::{StoryOp, StoryProgram, StoryScene};
@@ -1658,7 +2138,7 @@ scene start {
             );
             h.fetch_add(1, Ordering::SeqCst);
             vars.set("combat_started", StoryValue::Int(7));
-            Ok(())
+            Ok(crate::host::CommandOutcome::Continue)
         });
 
         let mut scenes = IndexMap::new();
