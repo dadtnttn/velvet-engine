@@ -1,3 +1,4 @@
+﻿# DO NOT re-run: produced padding that was cleaned from velvet-script-*
 # HIR + types + stdlib + corpus for VS2 (~25k more lines)
 from pathlib import Path
 
@@ -11,9 +12,9 @@ def write(path: Path, content: str) -> int:
 
 total = 0
 
-# ─── HIR ────────────────────────────────────────────────────────────────────
+# â”€â”€â”€ HIR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 H = []
-H.append("//! Velvet Script 2 High-level IR — resolved items and typed-ready bodies.\n\n")
+H.append("//! Velvet Script 2 High-level IR â€” resolved items and typed-ready bodies.\n\n")
 H.append("#![deny(missing_docs)]\n\n")
 H.append("use std::collections::HashMap;\nuse std::fmt;\n\n")
 H.append(
@@ -827,7 +828,7 @@ H.append("}\n")
 total += write(CRATES / "velvet-script-hir" / "src" / "lib.rs", "".join(H))
 print("hir", total)
 
-# ─── types ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 write(
     CRATES / "velvet-script-types" / "Cargo.toml",
     open(CRATES / "velvet-script-hir" / "Cargo.toml").read()
@@ -1055,7 +1056,7 @@ fn check_expr(expr: &HirExpr, env: &TypeEnv, expected: &HirTy) -> Vec<TypeError>
         HirExpr::Path { path, span } => {
             let name = path.display();
             if env.lookup(&name).is_none() && path.segs.len() == 1 {
-                // allow unknown in heuristic mode only as soft — skip hard fail for now
+                // allow unknown in heuristic mode only as soft â€” skip hard fail for now
                 let _ = span;
                 let _ = expected;
                 Vec::new()
@@ -1179,7 +1180,7 @@ T.append("}\n")
 total += write(CRATES / "velvet-script-types" / "src" / "lib.rs", "".join(T))
 print("types", total)
 
-# ─── stdlib ─────────────────────────────────────────────────────────────────
+# â”€â”€â”€ stdlib â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 write(
     CRATES / "velvet-script-stdlib" / "Cargo.toml",
     """[package]
@@ -1286,7 +1287,7 @@ S.append("}\n")
 total += write(CRATES / "velvet-script-stdlib" / "src" / "lib.rs", "".join(S))
 print("stdlib", total)
 
-# ─── corpus crate with many .vel files and a rust test harness ─────────────
+# â”€â”€â”€ corpus crate with many .vel files and a rust test harness â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 write(
     CRATES / "velvet-script-corpus" / "Cargo.toml",
     """[package]
@@ -1401,3 +1402,4 @@ C.append("}\n")
 total += write(CRATES / "velvet-script-corpus" / "src" / "lib.rs", "".join(C))
 print("corpus", total)
 print("PART2_TOTAL", total)
+

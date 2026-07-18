@@ -1,3 +1,4 @@
+﻿# DO NOT re-run: produced padding that was cleaned from velvet-script-*
 # Expand bytecode + vm + more corpus to push script LOC past +30k
 from pathlib import Path
 
@@ -144,3 +145,4 @@ for p in (ROOT / "crates").glob("velvet-script*"):
         total += sum(1 for _ in open(f, encoding="utf-8", errors="ignore"))
 print("TOTAL_SCRIPT_LOC", total)
 print("DELTA", total - 10011)
+

@@ -7,7 +7,21 @@
 | **Edition** | `// @edition 2` (default for new files once toolchain is stable) |
 | **Extensions** | `.vel` |
 | **Pipeline** | source → lexer → parser → AST → **HIR** → **types** → bytecode / story IR → VM |
-| **Maturity** | Alpha — language surface will break |
+| **Maturity** | **Alpha / partial pipeline** — **not finished**, not production-ready |
+| **Honest LOC** | After cleanup (2026), ~24k lines of `velvet-script-*` sources; earlier “+30k” counts included **padding** (markers, clone fixtures, fake aliases) that was **removed** |
+
+## Status (audit-aligned)
+
+**Real and useful today:** lexer/parser/AST, HIR story items, `OpVs2` + `vs2_codegen` for dialogue/scenes/jumps/layers/arithmetic, VM + `Vs2Host`, resolve/stdlib (trimmed).
+
+**Incomplete (do not treat as done):**
+
+- Typechecker is partial; many HIR items still need real checks.
+- Codegen no-ops or stubs for: `struct` / `enum` / `character` / `state` / `screen` / `mod` / `use`, and field access (`player.health` ≈ base only).
+- Coroutines, full LSP semantic model, structured multi-span diagnostics on `Vs2Unit` are partial or thin.
+- Generators under `scripts/gen_vs2_*` must **not** be re-run to reintroduce numbered padding (`story_marker_*`, `alias_N`, `format_fixture_N`, etc.).
+
+Velvet Story can lower onto VS2/host **with controlled scope**; VS2 is **not** a finished backbone.
 
 ## Design goals
 
@@ -137,6 +151,6 @@ velvet script dump-hir path.vel
 | `velvet-script-lsp` | LSP + VS2 completions/hover |
 | `velvet-script-corpus` | Sample corpus tests |
 
-**Honest maturity:** ALPHA — not Ren’Py, not Python; author capabilities class (dialogue, menus, layers, i18n) with rust-like types. Core engine beta is separate.
+**Honest maturity:** ALPHA / **partial** — not Ren’Py, not Python; not a finished language. Author capabilities class (dialogue, menus, layers, i18n) with rust-like *intent*; typeck/codegen still incomplete for several HIR items. Core engine beta is separate.
 
 See also: [VELVET_SCRIPT.md](./VELVET_SCRIPT.md) (v1 surface), Studio alpha docs.

@@ -161,616 +161,71 @@ pub fn looks_like_python(src: &str) -> bool {
     !has_brace && indent_lines > 3 && (src.contains("def ") || src.contains("elif "))
 }
 
+/// Sample used by tests (not N clones).
+pub fn format_sample_source() -> &'static str {
+    "// @edition 2\nfn main() {\n    let x = 1;\n    return x;\n}\n"
+}
+
 pub fn reject_python_style(src: &str) -> Result<(), String> {
     if looks_like_python(src) {
         Err("Velvet Script 2 is not Python: use braces `{}`, typed fn/struct, not def/elif indent".into())
     } else { Ok(()) }
 }
 
-pub fn format_fixture_0() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_0(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_1() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_1(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_2() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_2(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_3() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_3(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_4() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_4(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_5() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_5(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_6() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_6(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_7() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_7(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_8() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_8(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_9() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_9(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_10() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_10(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_11() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_11(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_12() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_12(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_13() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_13(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_14() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_14(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_15() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_15(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_16() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_16(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_17() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_17(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_18() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_18(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_19() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_19(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_20() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_20(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_21() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_21(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_22() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_22(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_23() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_23(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_24() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_24(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_25() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_25(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_26() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_26(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_27() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_27(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_28() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_28(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_29() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_29(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_30() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_30(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_31() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_31(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_32() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_32(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_33() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_33(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_34() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_34(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_35() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_35(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_36() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_36(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_37() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_37(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_38() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_38(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_39() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_39(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_40() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_40(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_41() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_41(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_42() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_42(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_43() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_43(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_44() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_44(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_45() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_45(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_46() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_46(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_47() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_47(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_48() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_48(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_49() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_49(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_50() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_50(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_51() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_51(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_52() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_52(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_53() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_53(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
-pub fn format_fixture_54() -> String {
-    let src = concat!(
-        "// @edition 2\n",
-        "fn f_54(x: i32) {\n",
-        "let y=x+1;\n",
-        "return y;\n",
-        "}\n",
-    );
-    format_vs2(src, &Vs2FormatOptions::default())
-}
 
 #[cfg(test)]
 mod tests {
@@ -789,6 +244,16 @@ mod tests {
         assert!(reject_python_style(py).is_err());
     }
     #[test]
-    fn fixture_0() { assert!(format_fixture_0().contains("fn")); }
+    fn format_sample_fn() {
+        let src = "fn main(){
+let x=1;
+}
+";
+        let out = format_vs2(src, &Vs2FormatOptions::default());
+        assert!(out.contains("fn main()"));
+        assert!(out.contains('{'));
+        let twice = format_vs2(&out, &Vs2FormatOptions::default());
+        assert_eq!(out, twice);
+    }
 }
 

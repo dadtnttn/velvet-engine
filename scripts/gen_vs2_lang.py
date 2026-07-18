@@ -1,3 +1,4 @@
+﻿# DO NOT re-run: produced padding that was cleaned from velvet-script-*
 # Generate Velvet Script 2 language expansion (substantial real modules + tests)
 from pathlib import Path
 
@@ -11,7 +12,7 @@ def write(path: Path, content: str) -> int:
 
 total = 0
 
-# ─── syntax ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ syntax â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 kw = [
     "as", "async", "await", "break", "call", "character", "const", "continue",
     "crate", "else", "enum", "extern", "false", "fn", "for", "function", "if",
@@ -172,7 +173,7 @@ parts.append("}\n")
 total += write(CRATES / "velvet-script-syntax" / "src" / "lib.rs", "".join(parts))
 print("syntax", total)
 
-# ─── layers ─────────────────────────────────────────────────────────────────
+# â”€â”€â”€ layers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 write(
     CRATES / "velvet-script-layers" / "Cargo.toml",
     """[package]
@@ -433,7 +434,7 @@ L.append("}\n")
 total += write(CRATES / "velvet-script-layers" / "src" / "lib.rs", "".join(L))
 print("layers", total)
 
-# ─── i18n ───────────────────────────────────────────────────────────────────
+# â”€â”€â”€ i18n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 write(
     CRATES / "velvet-script-i18n" / "Cargo.toml",
     """[package]
@@ -619,3 +620,4 @@ print("i18n", total)
 
 # Continue in same script - HIR, types, stdlib will be in part 2 if needed
 print("GEN_PARTIAL_OK", total)
+

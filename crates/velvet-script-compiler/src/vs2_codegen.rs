@@ -837,1896 +837,292 @@ pub fn story_density(unit: &Vs2Unit) -> f64 {
     let n = unit.code.iter().filter(|i| story.contains(&i.op)).count();
     n as f64 / unit.code.len() as f64
 }
-/// Pattern helper #0: emit load local + op.
-pub fn pattern_load_op_0(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #0: intern + say.
-pub fn pattern_say_0(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #0: push/show layer pair.
-pub fn pattern_layer_0(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #1: emit load local + op.
-pub fn pattern_load_op_1(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #1: intern + say.
-pub fn pattern_say_1(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #1: push/show layer pair.
-pub fn pattern_layer_1(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #2: emit load local + op.
-pub fn pattern_load_op_2(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #2: intern + say.
-pub fn pattern_say_2(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #2: push/show layer pair.
-pub fn pattern_layer_2(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #3: emit load local + op.
-pub fn pattern_load_op_3(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #3: intern + say.
-pub fn pattern_say_3(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #3: push/show layer pair.
-pub fn pattern_layer_3(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #4: emit load local + op.
-pub fn pattern_load_op_4(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #4: intern + say.
-pub fn pattern_say_4(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #4: push/show layer pair.
-pub fn pattern_layer_4(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #5: emit load local + op.
-pub fn pattern_load_op_5(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #5: intern + say.
-pub fn pattern_say_5(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #5: push/show layer pair.
-pub fn pattern_layer_5(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #6: emit load local + op.
-pub fn pattern_load_op_6(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #6: intern + say.
-pub fn pattern_say_6(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #6: push/show layer pair.
-pub fn pattern_layer_6(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #7: emit load local + op.
-pub fn pattern_load_op_7(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #7: intern + say.
-pub fn pattern_say_7(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #7: push/show layer pair.
-pub fn pattern_layer_7(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #8: emit load local + op.
-pub fn pattern_load_op_8(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #8: intern + say.
-pub fn pattern_say_8(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #8: push/show layer pair.
-pub fn pattern_layer_8(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #9: emit load local + op.
-pub fn pattern_load_op_9(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #9: intern + say.
-pub fn pattern_say_9(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #9: push/show layer pair.
-pub fn pattern_layer_9(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #10: emit load local + op.
-pub fn pattern_load_op_10(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #10: intern + say.
-pub fn pattern_say_10(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #10: push/show layer pair.
-pub fn pattern_layer_10(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #11: emit load local + op.
-pub fn pattern_load_op_11(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #11: intern + say.
-pub fn pattern_say_11(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #11: push/show layer pair.
-pub fn pattern_layer_11(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #12: emit load local + op.
-pub fn pattern_load_op_12(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #12: intern + say.
-pub fn pattern_say_12(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #12: push/show layer pair.
-pub fn pattern_layer_12(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #13: emit load local + op.
-pub fn pattern_load_op_13(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #13: intern + say.
-pub fn pattern_say_13(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #13: push/show layer pair.
-pub fn pattern_layer_13(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #14: emit load local + op.
-pub fn pattern_load_op_14(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #14: intern + say.
-pub fn pattern_say_14(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #14: push/show layer pair.
-pub fn pattern_layer_14(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #15: emit load local + op.
-pub fn pattern_load_op_15(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #15: intern + say.
-pub fn pattern_say_15(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #15: push/show layer pair.
-pub fn pattern_layer_15(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #16: emit load local + op.
-pub fn pattern_load_op_16(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #16: intern + say.
-pub fn pattern_say_16(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #16: push/show layer pair.
-pub fn pattern_layer_16(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #17: emit load local + op.
-pub fn pattern_load_op_17(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #17: intern + say.
-pub fn pattern_say_17(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #17: push/show layer pair.
-pub fn pattern_layer_17(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #18: emit load local + op.
-pub fn pattern_load_op_18(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #18: intern + say.
-pub fn pattern_say_18(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #18: push/show layer pair.
-pub fn pattern_layer_18(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #19: emit load local + op.
-pub fn pattern_load_op_19(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #19: intern + say.
-pub fn pattern_say_19(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #19: push/show layer pair.
-pub fn pattern_layer_19(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #20: emit load local + op.
-pub fn pattern_load_op_20(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #20: intern + say.
-pub fn pattern_say_20(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #20: push/show layer pair.
-pub fn pattern_layer_20(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #21: emit load local + op.
-pub fn pattern_load_op_21(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #21: intern + say.
-pub fn pattern_say_21(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #21: push/show layer pair.
-pub fn pattern_layer_21(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #22: emit load local + op.
-pub fn pattern_load_op_22(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #22: intern + say.
-pub fn pattern_say_22(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #22: push/show layer pair.
-pub fn pattern_layer_22(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #23: emit load local + op.
-pub fn pattern_load_op_23(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #23: intern + say.
-pub fn pattern_say_23(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #23: push/show layer pair.
-pub fn pattern_layer_23(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #24: emit load local + op.
-pub fn pattern_load_op_24(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #24: intern + say.
-pub fn pattern_say_24(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #24: push/show layer pair.
-pub fn pattern_layer_24(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #25: emit load local + op.
-pub fn pattern_load_op_25(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #25: intern + say.
-pub fn pattern_say_25(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #25: push/show layer pair.
-pub fn pattern_layer_25(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #26: emit load local + op.
-pub fn pattern_load_op_26(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #26: intern + say.
-pub fn pattern_say_26(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #26: push/show layer pair.
-pub fn pattern_layer_26(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #27: emit load local + op.
-pub fn pattern_load_op_27(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #27: intern + say.
-pub fn pattern_say_27(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #27: push/show layer pair.
-pub fn pattern_layer_27(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #28: emit load local + op.
-pub fn pattern_load_op_28(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #28: intern + say.
-pub fn pattern_say_28(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #28: push/show layer pair.
-pub fn pattern_layer_28(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #29: emit load local + op.
-pub fn pattern_load_op_29(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #29: intern + say.
-pub fn pattern_say_29(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #29: push/show layer pair.
-pub fn pattern_layer_29(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #30: emit load local + op.
-pub fn pattern_load_op_30(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #30: intern + say.
-pub fn pattern_say_30(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #30: push/show layer pair.
-pub fn pattern_layer_30(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #31: emit load local + op.
-pub fn pattern_load_op_31(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #31: intern + say.
-pub fn pattern_say_31(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #31: push/show layer pair.
-pub fn pattern_layer_31(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #32: emit load local + op.
-pub fn pattern_load_op_32(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #32: intern + say.
-pub fn pattern_say_32(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #32: push/show layer pair.
-pub fn pattern_layer_32(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #33: emit load local + op.
-pub fn pattern_load_op_33(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #33: intern + say.
-pub fn pattern_say_33(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #33: push/show layer pair.
-pub fn pattern_layer_33(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #34: emit load local + op.
-pub fn pattern_load_op_34(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #34: intern + say.
-pub fn pattern_say_34(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #34: push/show layer pair.
-pub fn pattern_layer_34(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #35: emit load local + op.
-pub fn pattern_load_op_35(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #35: intern + say.
-pub fn pattern_say_35(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #35: push/show layer pair.
-pub fn pattern_layer_35(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #36: emit load local + op.
-pub fn pattern_load_op_36(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #36: intern + say.
-pub fn pattern_say_36(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #36: push/show layer pair.
-pub fn pattern_layer_36(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #37: emit load local + op.
-pub fn pattern_load_op_37(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #37: intern + say.
-pub fn pattern_say_37(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #37: push/show layer pair.
-pub fn pattern_layer_37(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
+
+
 
-/// Pattern helper #38: emit load local + op.
-pub fn pattern_load_op_38(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #38: intern + say.
-pub fn pattern_say_38(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #38: push/show layer pair.
-pub fn pattern_layer_38(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #39: emit load local + op.
-pub fn pattern_load_op_39(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #39: intern + say.
-pub fn pattern_say_39(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #39: push/show layer pair.
-pub fn pattern_layer_39(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #40: emit load local + op.
-pub fn pattern_load_op_40(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #40: intern + say.
-pub fn pattern_say_40(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #40: push/show layer pair.
-pub fn pattern_layer_40(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #41: emit load local + op.
-pub fn pattern_load_op_41(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #41: intern + say.
-pub fn pattern_say_41(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #41: push/show layer pair.
-pub fn pattern_layer_41(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #42: emit load local + op.
-pub fn pattern_load_op_42(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #42: intern + say.
-pub fn pattern_say_42(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #42: push/show layer pair.
-pub fn pattern_layer_42(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #43: emit load local + op.
-pub fn pattern_load_op_43(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #43: intern + say.
-pub fn pattern_say_43(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #43: push/show layer pair.
-pub fn pattern_layer_43(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #44: emit load local + op.
-pub fn pattern_load_op_44(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #44: intern + say.
-pub fn pattern_say_44(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #44: push/show layer pair.
-pub fn pattern_layer_44(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #45: emit load local + op.
-pub fn pattern_load_op_45(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #45: intern + say.
-pub fn pattern_say_45(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #45: push/show layer pair.
-pub fn pattern_layer_45(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #46: emit load local + op.
-pub fn pattern_load_op_46(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #46: intern + say.
-pub fn pattern_say_46(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #46: push/show layer pair.
-pub fn pattern_layer_46(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #47: emit load local + op.
-pub fn pattern_load_op_47(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #47: intern + say.
-pub fn pattern_say_47(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #47: push/show layer pair.
-pub fn pattern_layer_47(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #48: emit load local + op.
-pub fn pattern_load_op_48(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #48: intern + say.
-pub fn pattern_say_48(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #48: push/show layer pair.
-pub fn pattern_layer_48(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #49: emit load local + op.
-pub fn pattern_load_op_49(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #49: intern + say.
-pub fn pattern_say_49(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #49: push/show layer pair.
-pub fn pattern_layer_49(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #50: emit load local + op.
-pub fn pattern_load_op_50(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #50: intern + say.
-pub fn pattern_say_50(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #50: push/show layer pair.
-pub fn pattern_layer_50(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #51: emit load local + op.
-pub fn pattern_load_op_51(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #51: intern + say.
-pub fn pattern_say_51(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #51: push/show layer pair.
-pub fn pattern_layer_51(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #52: emit load local + op.
-pub fn pattern_load_op_52(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #52: intern + say.
-pub fn pattern_say_52(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #52: push/show layer pair.
-pub fn pattern_layer_52(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #53: emit load local + op.
-pub fn pattern_load_op_53(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #53: intern + say.
-pub fn pattern_say_53(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #53: push/show layer pair.
-pub fn pattern_layer_53(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #54: emit load local + op.
-pub fn pattern_load_op_54(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #54: intern + say.
-pub fn pattern_say_54(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #54: push/show layer pair.
-pub fn pattern_layer_54(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #55: emit load local + op.
-pub fn pattern_load_op_55(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #55: intern + say.
-pub fn pattern_say_55(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #55: push/show layer pair.
-pub fn pattern_layer_55(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #56: emit load local + op.
-pub fn pattern_load_op_56(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #56: intern + say.
-pub fn pattern_say_56(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #56: push/show layer pair.
-pub fn pattern_layer_56(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #57: emit load local + op.
-pub fn pattern_load_op_57(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #57: intern + say.
-pub fn pattern_say_57(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #57: push/show layer pair.
-pub fn pattern_layer_57(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #58: emit load local + op.
-pub fn pattern_load_op_58(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #58: intern + say.
-pub fn pattern_say_58(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #58: push/show layer pair.
-pub fn pattern_layer_58(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #59: emit load local + op.
-pub fn pattern_load_op_59(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #59: intern + say.
-pub fn pattern_say_59(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #59: push/show layer pair.
-pub fn pattern_layer_59(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #60: emit load local + op.
-pub fn pattern_load_op_60(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #60: intern + say.
-pub fn pattern_say_60(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #60: push/show layer pair.
-pub fn pattern_layer_60(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #61: emit load local + op.
-pub fn pattern_load_op_61(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #61: intern + say.
-pub fn pattern_say_61(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #61: push/show layer pair.
-pub fn pattern_layer_61(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #62: emit load local + op.
-pub fn pattern_load_op_62(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #62: intern + say.
-pub fn pattern_say_62(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #62: push/show layer pair.
-pub fn pattern_layer_62(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #63: emit load local + op.
-pub fn pattern_load_op_63(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #63: intern + say.
-pub fn pattern_say_63(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
+
 
-/// Pattern helper #63: push/show layer pair.
-pub fn pattern_layer_63(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #64: emit load local + op.
-pub fn pattern_load_op_64(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #64: intern + say.
-pub fn pattern_say_64(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #64: push/show layer pair.
-pub fn pattern_layer_64(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #65: emit load local + op.
-pub fn pattern_load_op_65(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #65: intern + say.
-pub fn pattern_say_65(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #65: push/show layer pair.
-pub fn pattern_layer_65(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #66: emit load local + op.
-pub fn pattern_load_op_66(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #66: intern + say.
-pub fn pattern_say_66(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #66: push/show layer pair.
-pub fn pattern_layer_66(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #67: emit load local + op.
-pub fn pattern_load_op_67(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #67: intern + say.
-pub fn pattern_say_67(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #67: push/show layer pair.
-pub fn pattern_layer_67(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #68: emit load local + op.
-pub fn pattern_load_op_68(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #68: intern + say.
-pub fn pattern_say_68(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #68: push/show layer pair.
-pub fn pattern_layer_68(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #69: emit load local + op.
-pub fn pattern_load_op_69(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #69: intern + say.
-pub fn pattern_say_69(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #69: push/show layer pair.
-pub fn pattern_layer_69(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #70: emit load local + op.
-pub fn pattern_load_op_70(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #70: intern + say.
-pub fn pattern_say_70(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #70: push/show layer pair.
-pub fn pattern_layer_70(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #71: emit load local + op.
-pub fn pattern_load_op_71(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #71: intern + say.
-pub fn pattern_say_71(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #71: push/show layer pair.
-pub fn pattern_layer_71(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #72: emit load local + op.
-pub fn pattern_load_op_72(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #72: intern + say.
-pub fn pattern_say_72(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #72: push/show layer pair.
-pub fn pattern_layer_72(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #73: emit load local + op.
-pub fn pattern_load_op_73(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #73: intern + say.
-pub fn pattern_say_73(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #73: push/show layer pair.
-pub fn pattern_layer_73(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #74: emit load local + op.
-pub fn pattern_load_op_74(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #74: intern + say.
-pub fn pattern_say_74(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #74: push/show layer pair.
-pub fn pattern_layer_74(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #75: emit load local + op.
-pub fn pattern_load_op_75(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #75: intern + say.
-pub fn pattern_say_75(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #75: push/show layer pair.
-pub fn pattern_layer_75(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #76: emit load local + op.
-pub fn pattern_load_op_76(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #76: intern + say.
-pub fn pattern_say_76(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #76: push/show layer pair.
-pub fn pattern_layer_76(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #77: emit load local + op.
-pub fn pattern_load_op_77(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #77: intern + say.
-pub fn pattern_say_77(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #77: push/show layer pair.
-pub fn pattern_layer_77(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #78: emit load local + op.
-pub fn pattern_load_op_78(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #78: intern + say.
-pub fn pattern_say_78(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #78: push/show layer pair.
-pub fn pattern_layer_78(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #79: emit load local + op.
-pub fn pattern_load_op_79(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #79: intern + say.
-pub fn pattern_say_79(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #79: push/show layer pair.
-pub fn pattern_layer_79(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #80: emit load local + op.
-pub fn pattern_load_op_80(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #80: intern + say.
-pub fn pattern_say_80(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #80: push/show layer pair.
-pub fn pattern_layer_80(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #81: emit load local + op.
-pub fn pattern_load_op_81(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #81: intern + say.
-pub fn pattern_say_81(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #81: push/show layer pair.
-pub fn pattern_layer_81(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #82: emit load local + op.
-pub fn pattern_load_op_82(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #82: intern + say.
-pub fn pattern_say_82(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #82: push/show layer pair.
-pub fn pattern_layer_82(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #83: emit load local + op.
-pub fn pattern_load_op_83(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #83: intern + say.
-pub fn pattern_say_83(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #83: push/show layer pair.
-pub fn pattern_layer_83(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #84: emit load local + op.
-pub fn pattern_load_op_84(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #84: intern + say.
-pub fn pattern_say_84(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #84: push/show layer pair.
-pub fn pattern_layer_84(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #85: emit load local + op.
-pub fn pattern_load_op_85(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #85: intern + say.
-pub fn pattern_say_85(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #85: push/show layer pair.
-pub fn pattern_layer_85(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #86: emit load local + op.
-pub fn pattern_load_op_86(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #86: intern + say.
-pub fn pattern_say_86(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #86: push/show layer pair.
-pub fn pattern_layer_86(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #87: emit load local + op.
-pub fn pattern_load_op_87(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #87: intern + say.
-pub fn pattern_say_87(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #87: push/show layer pair.
-pub fn pattern_layer_87(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #88: emit load local + op.
-pub fn pattern_load_op_88(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #88: intern + say.
-pub fn pattern_say_88(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
-    let sp = unit.pool.intern(speaker);
-    let mid = unit.pool.intern(msg);
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
-    unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
-}
 
-/// Pattern helper #88: push/show layer pair.
-pub fn pattern_layer_88(unit: &mut Vs2Unit, layer: &str) {
-    let id = unit.pool.intern(layer);
-    unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
-    unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
-}
 
-/// Pattern helper #89: emit load local + op.
-pub fn pattern_load_op_89(unit: &mut Vs2Unit, slot: u32, op: OpVs2) {
-    unit.emit(Vs2Instr::with_a(OpVs2::LoadLocal, slot));
-    unit.emit(Vs2Instr::new(op));
-}
 
-/// Pattern helper #89: intern + say.
-pub fn pattern_say_89(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
+
+/// Emit load-msg + say (single helper, not N clones).
+pub fn pattern_say(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
     let sp = unit.pool.intern(speaker);
     let mid = unit.pool.intern(msg);
     unit.emit(Vs2Instr::with_a(OpVs2::LoadMsg, mid));
     unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
 }
 
-/// Pattern helper #89: push/show layer pair.
-pub fn pattern_layer_89(unit: &mut Vs2Unit, layer: &str) {
+/// Emit push + show layer.
+pub fn pattern_layer(unit: &mut Vs2Unit, layer: &str) {
     let id = unit.pool.intern(layer);
     unit.emit(Vs2Instr::with_a(OpVs2::PushLayer, id));
     unit.emit(Vs2Instr::with_a(OpVs2::ShowLayer, id));
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -2834,7 +1230,7 @@ mod tests {
     #[test]
     fn pattern_say_works() {
         let mut u = Vs2Unit::new("p");
-        pattern_say_0(&mut u, "a", "k");
+        pattern_say(&mut u, "a", "k");
         assert_eq!(count_op(&u, OpVs2::Say), 1);
     }
 

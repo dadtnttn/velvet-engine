@@ -140,205 +140,55 @@ pub fn check_name(r: &ResolveResult, name: &str, span: HirSpan, module: &str) ->
     Some(diag_e0001_unbound(name, span, module))
 }
 
-pub fn resolve_smoke_0(name: &str) -> bool {
-    is_prelude(name) || name.len() > 0
-}
 
-pub fn resolve_smoke_1(name: &str) -> bool {
-    is_prelude(name) || name.len() > 1
-}
 
-pub fn resolve_smoke_2(name: &str) -> bool {
-    is_prelude(name) || name.len() > 2
-}
 
-pub fn resolve_smoke_3(name: &str) -> bool {
-    is_prelude(name) || name.len() > 3
-}
 
-pub fn resolve_smoke_4(name: &str) -> bool {
-    is_prelude(name) || name.len() > 4
-}
 
-pub fn resolve_smoke_5(name: &str) -> bool {
-    is_prelude(name) || name.len() > 5
-}
 
-pub fn resolve_smoke_6(name: &str) -> bool {
-    is_prelude(name) || name.len() > 6
-}
 
-pub fn resolve_smoke_7(name: &str) -> bool {
-    is_prelude(name) || name.len() > 0
-}
 
-pub fn resolve_smoke_8(name: &str) -> bool {
-    is_prelude(name) || name.len() > 1
-}
 
-pub fn resolve_smoke_9(name: &str) -> bool {
-    is_prelude(name) || name.len() > 2
-}
 
-pub fn resolve_smoke_10(name: &str) -> bool {
-    is_prelude(name) || name.len() > 3
-}
 
-pub fn resolve_smoke_11(name: &str) -> bool {
-    is_prelude(name) || name.len() > 4
-}
 
-pub fn resolve_smoke_12(name: &str) -> bool {
-    is_prelude(name) || name.len() > 5
-}
 
-pub fn resolve_smoke_13(name: &str) -> bool {
-    is_prelude(name) || name.len() > 6
-}
 
-pub fn resolve_smoke_14(name: &str) -> bool {
-    is_prelude(name) || name.len() > 0
-}
 
-pub fn resolve_smoke_15(name: &str) -> bool {
-    is_prelude(name) || name.len() > 1
-}
 
-pub fn resolve_smoke_16(name: &str) -> bool {
-    is_prelude(name) || name.len() > 2
-}
 
-pub fn resolve_smoke_17(name: &str) -> bool {
-    is_prelude(name) || name.len() > 3
-}
 
-pub fn resolve_smoke_18(name: &str) -> bool {
-    is_prelude(name) || name.len() > 4
-}
 
-pub fn resolve_smoke_19(name: &str) -> bool {
-    is_prelude(name) || name.len() > 5
-}
 
-pub fn resolve_smoke_20(name: &str) -> bool {
-    is_prelude(name) || name.len() > 6
-}
 
-pub fn resolve_smoke_21(name: &str) -> bool {
-    is_prelude(name) || name.len() > 0
-}
 
-pub fn resolve_smoke_22(name: &str) -> bool {
-    is_prelude(name) || name.len() > 1
-}
 
-pub fn resolve_smoke_23(name: &str) -> bool {
-    is_prelude(name) || name.len() > 2
-}
 
-pub fn resolve_smoke_24(name: &str) -> bool {
-    is_prelude(name) || name.len() > 3
-}
 
-pub fn resolve_smoke_25(name: &str) -> bool {
-    is_prelude(name) || name.len() > 4
-}
 
-pub fn resolve_smoke_26(name: &str) -> bool {
-    is_prelude(name) || name.len() > 5
-}
 
-pub fn resolve_smoke_27(name: &str) -> bool {
-    is_prelude(name) || name.len() > 6
-}
 
-pub fn resolve_smoke_28(name: &str) -> bool {
-    is_prelude(name) || name.len() > 0
-}
 
-pub fn resolve_smoke_29(name: &str) -> bool {
-    is_prelude(name) || name.len() > 1
-}
 
-pub fn resolve_smoke_30(name: &str) -> bool {
-    is_prelude(name) || name.len() > 2
-}
 
-pub fn resolve_smoke_31(name: &str) -> bool {
-    is_prelude(name) || name.len() > 3
-}
 
-pub fn resolve_smoke_32(name: &str) -> bool {
-    is_prelude(name) || name.len() > 4
-}
 
-pub fn resolve_smoke_33(name: &str) -> bool {
-    is_prelude(name) || name.len() > 5
-}
 
-pub fn resolve_smoke_34(name: &str) -> bool {
-    is_prelude(name) || name.len() > 6
-}
 
-pub fn resolve_smoke_35(name: &str) -> bool {
-    is_prelude(name) || name.len() > 0
-}
 
-pub fn resolve_smoke_36(name: &str) -> bool {
-    is_prelude(name) || name.len() > 1
-}
 
-pub fn resolve_smoke_37(name: &str) -> bool {
-    is_prelude(name) || name.len() > 2
-}
 
-pub fn resolve_smoke_38(name: &str) -> bool {
-    is_prelude(name) || name.len() > 3
-}
 
-pub fn resolve_smoke_39(name: &str) -> bool {
-    is_prelude(name) || name.len() > 4
-}
 
-pub fn resolve_smoke_40(name: &str) -> bool {
-    is_prelude(name) || name.len() > 5
-}
 
-pub fn resolve_smoke_41(name: &str) -> bool {
-    is_prelude(name) || name.len() > 6
-}
 
-pub fn resolve_smoke_42(name: &str) -> bool {
-    is_prelude(name) || name.len() > 0
-}
 
-pub fn resolve_smoke_43(name: &str) -> bool {
-    is_prelude(name) || name.len() > 1
-}
 
-pub fn resolve_smoke_44(name: &str) -> bool {
-    is_prelude(name) || name.len() > 2
-}
 
-pub fn resolve_smoke_45(name: &str) -> bool {
-    is_prelude(name) || name.len() > 3
-}
 
-pub fn resolve_smoke_46(name: &str) -> bool {
-    is_prelude(name) || name.len() > 4
-}
 
-pub fn resolve_smoke_47(name: &str) -> bool {
-    is_prelude(name) || name.len() > 5
-}
 
-pub fn resolve_smoke_48(name: &str) -> bool {
-    is_prelude(name) || name.len() > 6
-}
 
-pub fn resolve_smoke_49(name: &str) -> bool {
-    is_prelude(name) || name.len() > 0
-}
 
 #[cfg(test)]
 mod tests {
