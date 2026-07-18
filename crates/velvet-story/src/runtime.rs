@@ -7,7 +7,7 @@ use tracing::debug;
 use crate::auto_mode::AutoModeController;
 use crate::character::Character;
 use crate::history::History;
-use crate::ir::{StoryOp, StoryProgram};
+use crate::ir::{StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram};
 use crate::prefs::{SkipMode, StoryPreferences};
 use crate::save::SaveGame;
 use crate::value::StoryValue;
@@ -592,11 +592,11 @@ impl StoryPlayer {
                 true
             }
             StoryOp::If {
-                cond_var,
+                cond,
                 then_ops,
                 else_ops,
             } => {
-                let body = if self.vars.get(&cond_var).is_truthy() {
+                let body = if self.eval_cond(&cond) {
                     then_ops
                 } else {
                     else_ops
@@ -667,6 +667,53 @@ impl StoryPlayer {
                     false
                 }
             }
+        }
+    }
+
+    /// Evaluate a narrative condition against current variables.
+    fn eval_cond(&self, cond: &StoryCond) -> bool {
+        match cond {
+            StoryCond::Var { name } => self.vars.get(name).is_truthy(),
+            StoryCond::Const { value } => *value,
+            StoryCond::Not { inner } => !self.eval_cond(inner),
+            StoryCond::And { left, right } => self.eval_cond(left) && self.eval_cond(right),
+            StoryCond::Or { left, right } => self.eval_cond(left) || self.eval_cond(right),
+            StoryCond::Cmp { left, op, right } => {
+                let l = self.resolve_operand(left);
+                let r = self.resolve_operand(right);
+                Self::cmp_values(&l, &r, *op)
+            }
+        }
+    }
+
+    fn resolve_operand(&self, op: &StoryOperand) -> StoryValue {
+        match op {
+            StoryOperand::Var { name } => self.vars.get(name),
+            StoryOperand::Value { value } => value.clone(),
+        }
+    }
+
+    fn cmp_values(left: &StoryValue, right: &StoryValue, op: StoryCmpOp) -> bool {
+        // Prefer numeric compare when both sides are numeric-ish.
+        if let (Some(lf), Some(rf)) = (left.as_f64(), right.as_f64()) {
+            return match op {
+                StoryCmpOp::Eq => (lf - rf).abs() < f64::EPSILON,
+                StoryCmpOp::Ne => (lf - rf).abs() >= f64::EPSILON,
+                StoryCmpOp::Lt => lf < rf,
+                StoryCmpOp::Le => lf <= rf,
+                StoryCmpOp::Gt => lf > rf,
+                StoryCmpOp::Ge => lf >= rf,
+            };
+        }
+        let ls = left.display_str();
+        let rs = right.display_str();
+        match op {
+            StoryCmpOp::Eq => ls == rs,
+            StoryCmpOp::Ne => ls != rs,
+            StoryCmpOp::Lt => ls < rs,
+            StoryCmpOp::Le => ls <= rs,
+            StoryCmpOp::Gt => ls > rs,
+            StoryCmpOp::Ge => ls >= rs,
         }
     }
 

@@ -70,10 +70,10 @@ pub enum StoryOp {
         /// Right-hand value.
         value: StoryValue,
     },
-    /// Conditional block (simple).
+    /// Conditional block with a full narrative condition (vars, not/and/or, compares).
     If {
-        /// Variable name to test truthiness.
-        cond_var: String,
+        /// Condition to evaluate at runtime.
+        cond: StoryCond,
         /// Ops if true.
         then_ops: Vec<StoryOp>,
         /// Ops if false.
@@ -111,6 +111,103 @@ pub enum StoryOp {
     Return,
     /// No-op / pause beat.
     Nop,
+}
+
+/// Operand for comparisons in [`StoryCond`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StoryOperand {
+    /// Load a play variable.
+    Var {
+        /// Variable name.
+        name: String,
+    },
+    /// Immediate literal value.
+    Value {
+        /// Literal.
+        value: StoryValue,
+    },
+}
+
+/// Comparison operator for narrative conditions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StoryCmpOp {
+    /// ==
+    Eq,
+    /// !=
+    Ne,
+    /// <
+    Lt,
+    /// <=
+    Le,
+    /// >
+    Gt,
+    /// >=
+    Ge,
+}
+
+/// Canonical condition tree for [`StoryOp::If`] (product runtime).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StoryCond {
+    /// Truthiness of a variable.
+    Var {
+        /// Variable name.
+        name: String,
+    },
+    /// Constant boolean (folded literals).
+    Const {
+        /// Literal value.
+        value: bool,
+    },
+    /// Logical not.
+    Not {
+        /// Inner condition.
+        inner: Box<StoryCond>,
+    },
+    /// Logical and (short-circuit at runtime).
+    And {
+        /// Left.
+        left: Box<StoryCond>,
+        /// Right.
+        right: Box<StoryCond>,
+    },
+    /// Logical or (short-circuit at runtime).
+    Or {
+        /// Left.
+        left: Box<StoryCond>,
+        /// Right.
+        right: Box<StoryCond>,
+    },
+    /// Ordered / equality comparison.
+    Cmp {
+        /// Left operand.
+        left: StoryOperand,
+        /// Operator.
+        op: StoryCmpOp,
+        /// Right operand.
+        right: StoryOperand,
+    },
+}
+
+impl StoryCond {
+    /// Convenience: truthiness of a single variable name.
+    pub fn var(name: impl Into<String>) -> Self {
+        Self::Var { name: name.into() }
+    }
+}
+
+impl StoryOperand {
+    /// Variable operand.
+    pub fn var(name: impl Into<String>) -> Self {
+        Self::Var { name: name.into() }
+    }
+
+    /// Literal operand.
+    pub fn value(v: StoryValue) -> Self {
+        Self::Value { value: v }
+    }
 }
 
 /// One choice arm.

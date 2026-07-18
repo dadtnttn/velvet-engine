@@ -51,12 +51,12 @@ fn op_to_json(op: &StoryOp) -> Value {
         StoryOp::Label { name } => json!({ "kind": "label", "name": name }),
         StoryOp::Assign { name, .. } => json!({ "kind": "assign", "name": name }),
         StoryOp::If {
-            cond_var,
+            cond,
             then_ops,
             else_ops,
         } => json!({
             "kind": "if",
-            "cond": cond_var,
+            "cond": format!("{cond:?}"),
             "then": then_ops.iter().map(op_to_json).collect::<Vec<_>>(),
             "else": else_ops.iter().map(op_to_json).collect::<Vec<_>>(),
         }),

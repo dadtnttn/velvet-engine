@@ -136,12 +136,15 @@ pub struct Vs2MiniVm {
     pub pc: usize,
     pub code: Vec<(OpVs2, u32, u32)>,
     pub halted: bool,
+    /// Return addresses for `CallScene` / `Ret` (narrative subroutines).
+    pub call_stack: Vec<usize>,
 }
 
 impl Vs2MiniVm {
     pub fn new(host: Vs2Host) -> Self { Self { host, ..Default::default() } }
     pub fn load(&mut self, code: Vec<(OpVs2, u32, u32)>) {
         self.code = code; self.pc = 0; self.halted = false; self.stack.clear();
+        self.call_stack.clear();
     }
     pub fn push(&mut self, v: impl Into<String>) { self.stack.push(v.into()); }
     pub fn pop(&mut self) -> String { self.stack.pop().unwrap_or_default() }
@@ -234,7 +237,30 @@ impl Vs2MiniVm {
                 let v = self.pop();
                 if v == "0" || v.is_empty() { self.pc = a as usize; }
             }
-            OpVs2::Ret => { self.halted = true; }
+            OpVs2::JumpScene => {
+                // `b` is linked entry PC when known (see link_scenes).
+                if b != 0 {
+                    self.pc = b as usize;
+                } else {
+                    self.host.log.push(format!("JumpScene unresolved {}", self.host.pool_str(a)));
+                }
+            }
+            OpVs2::CallScene => {
+                // Push return PC (already advanced past this instruction).
+                self.call_stack.push(self.pc);
+                if b != 0 {
+                    self.pc = b as usize;
+                } else {
+                    self.host.log.push(format!("CallScene unresolved {}", self.host.pool_str(a)));
+                }
+            }
+            OpVs2::Ret => {
+                if let Some(ret_pc) = self.call_stack.pop() {
+                    self.pc = ret_pc;
+                } else {
+                    self.halted = true;
+                }
+            }
             OpVs2::Print => {
                 let v = self.pop();
                 self.host.log.push(format!("print {v}"));
