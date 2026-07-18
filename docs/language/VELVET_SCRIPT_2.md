@@ -8,7 +8,7 @@
 | **Extensions** | `.vel` |
 | **Pipeline** | source → lexer → parser → AST → **HIR** → **types** → bytecode / story IR → VM |
 | **Maturity** | **Alpha / partial pipeline** — **not finished**, not production-ready |
-| **Honest LOC** | After cleanup (2026), ~**17k** lines of `velvet-script-*` sources (was ~42k with padding). Removed: `story_marker_*`, fake `alias_N`, `format_fixture_*`, `local_completions_N`, `Reserved72..399` opcodes, and numbered clone tests (`lower_scene_N`, `catalog_key_N`, `exclusive_kind_N`, …) |
+| **Honest LOC** | After cleanup (2026), ~**15k** lines of `velvet-script-*` sources (was ~42k with padding). Removed: `story_marker_*`, fake `alias_N`, `format_fixture_*`, `local_completions_N`, `Reserved72..399`, `DiagCode` E0001..E0500 stubs, `path_parse_N` / `lower_scene_N` / `catalog_key_N` / `kw_N` / `diag_eN` clone tests, inflated stdlib/corpus |
 
 ## Status (audit-aligned)
 
