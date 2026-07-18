@@ -16,6 +16,7 @@ pub mod project_browser;
 pub mod script_panel;
 pub mod studio;
 pub mod studio_paint;
+pub mod studio_project;
 pub mod vscript;
 
 pub use layers::{
