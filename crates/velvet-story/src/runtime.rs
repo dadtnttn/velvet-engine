@@ -126,6 +126,43 @@ pub enum StoryEvent {
         /// Value.
         value: StoryValue,
     },
+    /// One-shot SFX.
+    Sound {
+        /// Asset path / id.
+        path: String,
+    },
+    /// Narrative pause / beat.
+    Pause {
+        /// Optional duration in seconds.
+        seconds: Option<f64>,
+    },
+    /// Named transition.
+    Transition {
+        /// Transition id.
+        name: String,
+    },
+    /// External / host command (`call combat.start: …`).
+    HostCall {
+        /// Command name.
+        name: String,
+        /// Named arguments.
+        args: IndexMap<String, StoryValue>,
+    },
+}
+
+/// One nested block frame (if / choice arm body).
+#[derive(Debug, Clone, PartialEq)]
+struct ExecFrame {
+    ops: Vec<StoryOp>,
+    index: usize,
+}
+
+/// Return continuation for `call` / `return` (includes nested exec stack).
+#[derive(Debug, Clone, PartialEq)]
+struct CallContinuation {
+    scene: String,
+    op_index: usize,
+    exec_stack: Vec<ExecFrame>,
 }
 
 /// Story runtime / player.
@@ -142,9 +179,15 @@ pub struct StoryPlayer {
     current_text: String,
     /// Active choice options (when wait == Choice).
     choices: Vec<ChoiceOption>,
-    /// Pending choice arm body to inject.
-    pending_body: Vec<StoryOp>,
-    pending_body_index: usize,
+    /// Stack of nested block bodies (`if` / choice arms). Outer resumes after pop.
+    exec_stack: Vec<ExecFrame>,
+    /// Full menu arms while waiting on a choice (scene-level or nested).
+    pending_menu: Option<Vec<crate::ir::StoryChoice>>,
+    /// When true, [`Self::choose`] advances the scene IP past the Choice op.
+    choice_advances_scene: bool,
+    /// Full call continuations (scene IP + nested exec stack). Kept in sync with
+    /// [`StorySnapshot::call_stack`] for saves (stack shape only).
+    call_continuations: Vec<CallContinuation>,
     /// Seen line keys `scene:op_index`.
     seen_lines: std::collections::BTreeSet<String>,
     /// Events since last drain.
@@ -185,8 +228,10 @@ impl StoryPlayer {
             current_speaker_name: String::new(),
             current_text: String::new(),
             choices: Vec::new(),
-            pending_body: Vec::new(),
-            pending_body_index: 0,
+            exec_stack: Vec::new(),
+            pending_menu: None,
+            choice_advances_scene: false,
+            call_continuations: Vec::new(),
             seen_lines: std::collections::BTreeSet::new(),
             events: Vec::new(),
             play_time_secs: 0.0,
@@ -378,8 +423,12 @@ impl StoryPlayer {
             return Err("choice locked".into());
         }
         let arm_index = opt.index;
-        // Find body from current op
-        let body = {
+        let body = if let Some(menu) = self.pending_menu.take() {
+            menu.get(arm_index)
+                .map(|a| a.body.clone())
+                .ok_or("bad arm")?
+        } else {
+            // Fallback: scene-level cursor still on Choice.
             let scene = self
                 .program
                 .scene(&self.snapshot.scene)
@@ -398,11 +447,13 @@ impl StoryPlayer {
         };
         debug!(index = arm_index, "choice selected");
         self.choices.clear();
-        self.pending_body = body;
-        self.pending_body_index = 0;
+        if self.choice_advances_scene {
+            // Scene-level Choice: cursor still on the op; skip past it.
+            self.snapshot.op_index += 1;
+        }
+        self.choice_advances_scene = false;
+        self.push_exec_body(body);
         self.snapshot.wait = StoryWait::Ready;
-        // After choice body, continue past the choice op
-        self.snapshot.op_index += 1;
         self.pump();
         Ok(())
     }
@@ -457,8 +508,10 @@ impl StoryPlayer {
         self.seen_lines = save.seen_lines.into_iter().collect();
         self.play_time_secs = save.meta.play_time_secs;
         self.choices.clear();
-        self.pending_body.clear();
-        self.pending_body_index = 0;
+        self.exec_stack.clear();
+        self.pending_menu = None;
+        self.choice_advances_scene = false;
+        self.call_continuations.clear();
         // Re-sync UI fields from current wait
         if matches!(self.snapshot.wait, StoryWait::Line) {
             // Re-run the dialogue op at current index for UI text
@@ -477,19 +530,27 @@ impl StoryPlayer {
         Ok(())
     }
 
+    /// Push a nested block body (if arm / choice arm). Empty bodies are no-ops.
+    fn push_exec_body(&mut self, ops: Vec<StoryOp>) {
+        if !ops.is_empty() {
+            self.exec_stack.push(ExecFrame { ops, index: 0 });
+        }
+    }
+
     /// Execute until blocked on line/choice/end.
     fn pump(&mut self) {
         let mut guard = 0;
         while matches!(self.snapshot.wait, StoryWait::Ready) && guard < 10_000 {
             guard += 1;
-            if !self.pending_body.is_empty() {
-                if self.pending_body_index >= self.pending_body.len() {
-                    self.pending_body.clear();
-                    self.pending_body_index = 0;
+            // Nested blocks first (if / choice arms). Pop when exhausted so the
+            // outer frame resumes — critical for ops after a nested if/choice.
+            if let Some(frame) = self.exec_stack.last_mut() {
+                if frame.index >= frame.ops.len() {
+                    self.exec_stack.pop();
                     continue;
                 }
-                let op = self.pending_body[self.pending_body_index].clone();
-                self.pending_body_index += 1;
+                let op = frame.ops[frame.index].clone();
+                frame.index += 1;
                 self.exec_op(op);
                 continue;
             }
@@ -551,6 +612,11 @@ impl StoryPlayer {
                 false
             }
             StoryOp::Choice { options } => {
+                // Nested vs scene-level: when already inside an exec frame, the
+                // frame IP already advanced past this Choice — choose() must not
+                // also advance the scene cursor.
+                self.choice_advances_scene = self.exec_stack.is_empty();
+                self.pending_menu = Some(options.clone());
                 self.choices.clear();
                 for (i, arm) in options.iter().enumerate() {
                     let enabled = match &arm.require {
@@ -573,13 +639,35 @@ impl StoryPlayer {
                 false
             }
             StoryOp::Jump { target } => {
+                // Leaving the current control flow: discard nested bodies.
+                self.exec_stack.clear();
+                self.pending_menu = None;
+                self.choice_advances_scene = false;
                 self.jump_to(&target);
                 false
             }
             StoryOp::Call { target } => {
+                // Save scene IP + nested stack so return resumes the outer body.
+                let cont = if self.exec_stack.is_empty() {
+                    CallContinuation {
+                        scene: self.snapshot.scene.clone(),
+                        op_index: self.snapshot.op_index + 1,
+                        exec_stack: Vec::new(),
+                    }
+                } else {
+                    CallContinuation {
+                        scene: self.snapshot.scene.clone(),
+                        op_index: self.snapshot.op_index,
+                        exec_stack: self.exec_stack.clone(),
+                    }
+                };
                 self.snapshot
                     .call_stack
-                    .push((self.snapshot.scene.clone(), self.snapshot.op_index + 1));
+                    .push((cont.scene.clone(), cont.op_index));
+                self.call_continuations.push(cont);
+                self.exec_stack.clear();
+                self.pending_menu = None;
+                self.choice_advances_scene = false;
                 self.jump_to(&target);
                 false
             }
@@ -604,8 +692,8 @@ impl StoryPlayer {
                 } else {
                     else_ops
                 };
-                self.pending_body = body;
-                self.pending_body_index = 0;
+                // Push a new frame — never replace the outer body.
+                self.push_exec_body(body);
                 true
             }
             StoryOp::End { ending } => {
@@ -613,18 +701,19 @@ impl StoryPlayer {
                 false
             }
             StoryOp::HostCall { name, args } => {
-                // Observable effect for writer-registered commands (no second VM).
-                self.vars.set(
-                    "__last_command",
-                    StoryValue::String(name.clone()),
-                );
+                // Observable vars for tests + structured event for hosts/UI.
+                self.vars
+                    .set("__last_command", StoryValue::String(name.clone()));
                 if let Some(StoryValue::String(enemy)) = args.get("enemy").cloned() {
                     self.vars.set("cmd.enemy", StoryValue::String(enemy));
                 }
                 for (k, v) in args.iter() {
-                    self.vars
-                        .set(format!("cmd.{name}.{k}"), v.clone());
+                    self.vars.set(format!("cmd.{name}.{k}"), v.clone());
                 }
+                self.events.push(StoryEvent::HostCall {
+                    name: name.clone(),
+                    args: args.clone(),
+                });
                 self.events.push(StoryEvent::Variable {
                     name: "__last_command".into(),
                     value: StoryValue::String(name),
@@ -634,9 +723,8 @@ impl StoryPlayer {
             StoryOp::Sound { path } => {
                 self.vars
                     .set("__last_sfx", StoryValue::String(path.clone()));
-                self.events.push(StoryEvent::Variable {
-                    name: "__last_sfx".into(),
-                    value: StoryValue::String(path),
+                self.events.push(StoryEvent::Sound {
+                    path: path.clone(),
                 });
                 true
             }
@@ -646,26 +734,33 @@ impl StoryPlayer {
                 } else {
                     self.vars.set("__last_pause", StoryValue::Float(0.0));
                 }
+                self.events.push(StoryEvent::Pause { seconds });
                 true
             }
             StoryOp::Transition { name } => {
                 self.vars
                     .set("__last_transition", StoryValue::String(name.clone()));
-                self.events.push(StoryEvent::Variable {
-                    name: "__last_transition".into(),
-                    value: StoryValue::String(name),
+                self.events.push(StoryEvent::Transition {
+                    name: name.clone(),
                 });
                 true
             }
             StoryOp::Return => {
-                if let Some((scene, idx)) = self.snapshot.call_stack.pop() {
+                if let Some(cont) = self.call_continuations.pop() {
+                    let _ = self.snapshot.call_stack.pop();
+                    self.snapshot.scene = cont.scene;
+                    self.snapshot.op_index = cont.op_index;
+                    self.exec_stack = cont.exec_stack;
+                    self.snapshot.wait = StoryWait::Ready;
+                    false
+                } else if let Some((scene, idx)) = self.snapshot.call_stack.pop() {
+                    // Save-load path: snapshot only (no nested stack).
                     self.snapshot.scene = scene;
                     self.snapshot.op_index = idx;
+                    self.exec_stack.clear();
                     self.snapshot.wait = StoryWait::Ready;
-                    // do not auto-increment — we landed on the return index already
                     false
                 } else {
-                    // bare return with empty stack ≈ end of story branch
                     self.end_story(None);
                     false
                 }
@@ -811,6 +906,10 @@ impl StoryPlayer {
     }
 
     fn jump_to(&mut self, target: &str) {
+        // Jump abandons the current nested bodies (goto is non-local).
+        self.exec_stack.clear();
+        self.pending_menu = None;
+        self.choice_advances_scene = false;
         if let Some((scene, label)) = target.split_once(':') {
             if self.program.scenes.contains_key(scene) {
                 self.snapshot.scene = scene.to_string();
@@ -1278,5 +1377,280 @@ scene start {
         assert!(matches!(player.wait(), StoryWait::Choice));
         assert!(player.choose(99).is_err());
         assert!(player.choose(0).is_ok());
+    }
+
+    /// Build a product StoryProgram for nested control-flow tests.
+    fn nest_prog() -> crate::ir::StoryProgram {
+        use crate::ir::{StoryChoice, StoryCond, StoryExpr, StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use crate::variables::AssignOp;
+        use indexmap::IndexMap;
+
+        let set = |name: &str, n: i64| StoryOp::Assign {
+            name: name.into(),
+            assign_op: AssignOp::Set,
+            value: StoryExpr::value(StoryValue::Int(n)),
+        };
+
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::Choice {
+                        options: vec![StoryChoice {
+                            text: "Entrar".into(),
+                            body: vec![
+                                set("entered", 1),
+                                StoryOp::If {
+                                    cond: StoryCond::var("has_key"),
+                                    then_ops: vec![set("opened", 1)],
+                                    else_ops: vec![set("opened", 0)],
+                                },
+                                // Must still run after nested if (the bug under test).
+                                set("finished", 1),
+                            ],
+                            require: None,
+                            hidden_if_locked: false,
+                        }],
+                    },
+                    StoryOp::End {
+                        ending: Some("done".into()),
+                    },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("nest");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        prog.initial_vars
+            .insert("has_key".into(), StoryValue::Int(1));
+        prog
+    }
+
+    #[test]
+    fn nested_if_inside_choice_runs_tail_ops() {
+        let mut player = StoryPlayer::start(nest_prog());
+        assert!(matches!(player.wait(), StoryWait::Choice));
+        player.choose(0).unwrap();
+        let mut guard = 0;
+        while !player.is_ended() && guard < 32 {
+            if matches!(player.wait(), StoryWait::Line | StoryWait::Ready) {
+                player.advance();
+            } else {
+                break;
+            }
+            guard += 1;
+        }
+        assert_eq!(player.variables().get_int("entered", 0), 1);
+        assert_eq!(player.variables().get_int("opened", 0), 1);
+        assert_eq!(
+            player.variables().get_int("finished", 0),
+            1,
+            "ops after nested if inside choice must still run"
+        );
+        assert_eq!(player.ending(), Some("done"));
+    }
+
+    #[test]
+    fn nested_if_inside_if_runs_outer_tail() {
+        use crate::ir::{StoryCond, StoryExpr, StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use crate::variables::AssignOp;
+        use indexmap::IndexMap;
+
+        let set = |name: &str, n: i64| StoryOp::Assign {
+            name: name.into(),
+            assign_op: AssignOp::Set,
+            value: StoryExpr::value(StoryValue::Int(n)),
+        };
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    set("a", 1),
+                    StoryOp::If {
+                        cond: StoryCond::var("a"),
+                        then_ops: vec![
+                            set("b", 1),
+                            StoryOp::If {
+                                cond: StoryCond::var("b"),
+                                then_ops: vec![set("c", 1)],
+                                else_ops: vec![],
+                            },
+                            set("d", 1), // after inner if
+                        ],
+                        else_ops: vec![],
+                    },
+                    set("e", 1), // after outer if
+                    StoryOp::End {
+                        ending: Some("ok".into()),
+                    },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("nest2");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start(prog);
+        let mut guard = 0;
+        while !player.is_ended() && guard < 32 {
+            player.advance();
+            guard += 1;
+        }
+        assert_eq!(player.variables().get_int("c", 0), 1);
+        assert_eq!(player.variables().get_int("d", 0), 1);
+        assert_eq!(player.variables().get_int("e", 0), 1);
+        assert_eq!(player.ending(), Some("ok"));
+    }
+
+    #[test]
+    fn call_return_inside_choice_resumes_tail() {
+        use crate::ir::{StoryChoice, StoryExpr, StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use crate::variables::AssignOp;
+        use indexmap::IndexMap;
+
+        let set = |name: &str, n: i64| StoryOp::Assign {
+            name: name.into(),
+            assign_op: AssignOp::Set,
+            value: StoryExpr::value(StoryValue::Int(n)),
+        };
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "helper".into(),
+            StoryScene {
+                name: "helper".into(),
+                ops: vec![set("in_helper", 1), StoryOp::Return],
+                labels: IndexMap::new(),
+            },
+        );
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::Choice {
+                        options: vec![StoryChoice {
+                            text: "go".into(),
+                            body: vec![
+                                set("before", 1),
+                                StoryOp::Call {
+                                    target: "helper".into(),
+                                },
+                                set("after", 1),
+                            ],
+                            require: None,
+                            hidden_if_locked: false,
+                        }],
+                    },
+                    StoryOp::End {
+                        ending: Some("done".into()),
+                    },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("callnest");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start(prog);
+        assert!(matches!(player.wait(), StoryWait::Choice));
+        player.choose(0).unwrap();
+        let mut guard = 0;
+        while !player.is_ended() && guard < 64 {
+            if matches!(player.wait(), StoryWait::Line | StoryWait::Ready) {
+                player.advance();
+            } else {
+                break;
+            }
+            guard += 1;
+        }
+        assert_eq!(player.variables().get_int("before", 0), 1);
+        assert_eq!(player.variables().get_int("in_helper", 0), 1);
+        assert_eq!(
+            player.variables().get_int("after", 0),
+            1,
+            "ops after call/return inside choice must run"
+        );
+        assert_eq!(player.ending(), Some("done"));
+    }
+
+    #[test]
+    fn presentation_ops_emit_structured_events() {
+        use crate::ir::{StoryOp, StoryProgram, StoryScene};
+        use indexmap::IndexMap;
+
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::Sound {
+                        path: "click.ogg".into(),
+                    },
+                    StoryOp::Pause {
+                        seconds: Some(0.5),
+                    },
+                    StoryOp::Transition {
+                        name: "fade".into(),
+                    },
+                    StoryOp::HostCall {
+                        name: "combat.start".into(),
+                        args: {
+                            let mut m = IndexMap::new();
+                            m.insert(
+                                "enemy".into(),
+                                crate::value::StoryValue::String("goblin".into()),
+                            );
+                            m
+                        },
+                    },
+                    StoryOp::End { ending: None },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("fx");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start(prog);
+        let mut guard = 0;
+        while !player.is_ended() && guard < 16 {
+            player.advance();
+            guard += 1;
+        }
+        let events = player.drain_events();
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, StoryEvent::Sound { path } if path == "click.ogg")),
+            "{events:?}"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, StoryEvent::Pause { seconds: Some(0.5) })),
+            "{events:?}"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, StoryEvent::Transition { name } if name == "fade")),
+            "{events:?}"
+        );
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                StoryEvent::HostCall { name, .. } if name == "combat.start"
+            )),
+            "{events:?}"
+        );
     }
 }
