@@ -73,655 +73,55 @@ impl ScopeTree {
     pub fn is_empty(&self) -> bool { self.scopes.is_empty() }
 }
 
-pub fn scope_kind_label_0(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_1(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_2(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_3(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_4(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_5(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_6(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_7(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_8(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_9(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_10(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_11(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_12(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_13(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_14(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_15(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_16(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_17(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_18(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_19(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_20(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_21(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_22(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_23(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_24(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_25(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_26(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_27(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_28(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_29(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_30(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_31(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_32(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_33(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_34(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_35(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_36(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_37(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_38(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_39(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_40(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_41(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_42(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_43(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_44(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_45(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_46(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_47(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_48(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
-pub fn scope_kind_label_49(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -741,3 +141,16 @@ mod tests {
     }
 }
 
+
+pub fn scope_kind_label(k: ScopeKind) -> &'static str {
+    match k {
+        ScopeKind::Module => "module",
+        ScopeKind::Function => "function",
+        ScopeKind::Block => "block",
+        ScopeKind::Scene => "scene",
+        ScopeKind::Screen => "screen",
+        ScopeKind::Impl => "impl",
+        ScopeKind::MatchArm => "match_arm",
+        ScopeKind::Loop => "loop",
+    }
+}
