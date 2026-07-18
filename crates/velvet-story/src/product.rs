@@ -1298,10 +1298,7 @@ scene end_good {
             .any(|p| p == "ui/click.ogg"));
         assert_eq!(session.presentation.last_pause, Some(1.25));
         assert!(session.presentation.pause_pending);
-        assert!(matches!(
-            session.player().wait(),
-            StoryWait::Pause { .. }
-        ));
+        assert!(matches!(session.player().wait(), StoryWait::Pause { .. }));
         session.player_mut().skip_pause();
         session.ingest_events();
         assert_eq!(

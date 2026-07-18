@@ -109,7 +109,11 @@ where
 /// Convenience: host that always continues after running `f` side effects.
 pub fn command_host_continue<F>(f: F) -> SharedCommandHost
 where
-    F: Fn(&str, &IndexMap<String, StoryValue>, &mut StoryVariables) -> Result<(), StoryCommandError>
+    F: Fn(
+            &str,
+            &IndexMap<String, StoryValue>,
+            &mut StoryVariables,
+        ) -> Result<(), StoryCommandError>
         + Send
         + Sync
         + 'static,

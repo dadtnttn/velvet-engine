@@ -7,8 +7,8 @@ use tracing::debug;
 use crate::auto_mode::AutoModeController;
 use crate::character::Character;
 use crate::history::History;
-use crate::host::SharedCommandHost;
 use crate::host::CommandOutcome;
+use crate::host::SharedCommandHost;
 use crate::ir::{
     StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand,
     StoryProgram,
@@ -255,7 +255,11 @@ impl CallContinuation {
         Self {
             scene: s.scene,
             op_index: s.op_index,
-            exec_stack: s.exec_stack.into_iter().map(ExecFrame::from_saved).collect(),
+            exec_stack: s
+                .exec_stack
+                .into_iter()
+                .map(ExecFrame::from_saved)
+                .collect(),
         }
     }
 }
@@ -525,7 +529,9 @@ impl StoryPlayer {
         match &self.snapshot.wait {
             StoryWait::Host { token: t } if t == token => {}
             StoryWait::Host { token: t } => {
-                return Err(format!("host wait token mismatch: expected `{t}`, got `{token}`"));
+                return Err(format!(
+                    "host wait token mismatch: expected `{t}`, got `{token}`"
+                ));
             }
             _ => return Err("not waiting on host command".into()),
         }
@@ -777,9 +783,7 @@ impl StoryPlayer {
         // Nested: dialogue was the op just before the frame IP.
         if let Some(frame) = self.exec_stack.last() {
             if frame.index > 0 {
-                if let Some(StoryOp::Dialogue { speaker, text }) =
-                    frame.ops.get(frame.index - 1)
-                {
+                if let Some(StoryOp::Dialogue { speaker, text }) = frame.ops.get(frame.index - 1) {
                     self.apply_dialogue(speaker.clone(), text.clone());
                     return;
                 }
@@ -787,8 +791,7 @@ impl StoryPlayer {
         }
         // Scene-level: cursor still on the Dialogue op.
         if let Some(scene) = self.program.scene(&self.snapshot.scene) {
-            if let Some(StoryOp::Dialogue { speaker, text }) =
-                scene.ops.get(self.snapshot.op_index)
+            if let Some(StoryOp::Dialogue { speaker, text }) = scene.ops.get(self.snapshot.op_index)
             {
                 self.apply_dialogue(speaker.clone(), text.clone());
             }
@@ -849,7 +852,10 @@ impl StoryPlayer {
                 break;
             };
             if self.snapshot.op_index >= scene.ops.len() {
-                // Scene finished without jump
+                // End of scene: implicit return when called as subroutine.
+                if self.return_from_call() {
+                    continue;
+                }
                 self.end_story(None);
                 break;
             }
@@ -1048,9 +1054,7 @@ impl StoryPlayer {
             StoryOp::Sound { path } => {
                 self.vars
                     .set("__last_sfx", StoryValue::String(path.clone()));
-                self.events.push(StoryEvent::Sound {
-                    path: path.clone(),
-                });
+                self.events.push(StoryEvent::Sound { path: path.clone() });
                 true
             }
             StoryOp::Pause { seconds } => {
@@ -1074,31 +1078,42 @@ impl StoryPlayer {
             StoryOp::Transition { name } => {
                 self.vars
                     .set("__last_transition", StoryValue::String(name.clone()));
-                self.events.push(StoryEvent::Transition {
-                    name: name.clone(),
-                });
+                self.events
+                    .push(StoryEvent::Transition { name: name.clone() });
                 true
             }
             StoryOp::Return => {
-                if let Some(cont) = self.call_continuations.pop() {
-                    let _ = self.snapshot.call_stack.pop();
-                    self.snapshot.scene = cont.scene;
-                    self.snapshot.op_index = cont.op_index;
-                    self.exec_stack = cont.exec_stack;
-                    self.snapshot.wait = StoryWait::Ready;
-                    false
-                } else if let Some((scene, idx)) = self.snapshot.call_stack.pop() {
-                    // Save-load path: snapshot only (no nested stack).
-                    self.snapshot.scene = scene;
-                    self.snapshot.op_index = idx;
-                    self.exec_stack.clear();
-                    self.snapshot.wait = StoryWait::Ready;
+                if self.return_from_call() {
                     false
                 } else {
+                    // bare return with empty stack ≈ end of story branch
                     self.end_story(None);
                     false
                 }
             }
+        }
+    }
+
+    /// Pop a call frame and resume the caller. Returns false if stack empty.
+    ///
+    /// Used by explicit `return` and by fallthrough at end of a called scene.
+    fn return_from_call(&mut self) -> bool {
+        if let Some(cont) = self.call_continuations.pop() {
+            let _ = self.snapshot.call_stack.pop();
+            self.snapshot.scene = cont.scene;
+            self.snapshot.op_index = cont.op_index;
+            self.exec_stack = cont.exec_stack;
+            self.snapshot.wait = StoryWait::Ready;
+            true
+        } else if let Some((scene, idx)) = self.snapshot.call_stack.pop() {
+            // Legacy / v1 saves: flat call_stack only (no nested frames).
+            self.snapshot.scene = scene;
+            self.snapshot.op_index = idx;
+            self.exec_stack.clear();
+            self.snapshot.wait = StoryWait::Ready;
+            true
+        } else {
+            false
         }
     }
 
@@ -1518,6 +1533,76 @@ scene route_c {
         assert_eq!(player.ending(), Some("b"));
     }
 
+    /// Called scene that runs out of ops without an explicit `return` must
+    /// resume the caller (implicit return), not end the whole story.
+    #[test]
+    fn call_scene_fallthrough_returns_to_caller() {
+        use crate::ir::{StoryExpr, StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use crate::variables::AssignOp;
+        use indexmap::IndexMap;
+
+        let set = |name: &str, n: i64| StoryOp::Assign {
+            name: name.into(),
+            assign_op: AssignOp::Set,
+            value: StoryExpr::value(StoryValue::Int(n)),
+        };
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "helper".into(),
+            StoryScene {
+                name: "helper".into(),
+                ops: vec![
+                    set("in_helper", 1),
+                    // no StoryOp::Return — fall off end of scene
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    set("before", 1),
+                    StoryOp::Call {
+                        target: "helper".into(),
+                    },
+                    set("after", 1),
+                    StoryOp::End {
+                        ending: Some("main".into()),
+                    },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("call_fallthrough");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start(prog);
+        let mut guard = 0;
+        while !player.is_ended() && guard < 32 {
+            match player.wait().clone() {
+                StoryWait::Line | StoryWait::Ready | StoryWait::Pause { .. } => {
+                    player.advance();
+                }
+                StoryWait::Host { token } => {
+                    let _ = player.resume_host(&token);
+                }
+                StoryWait::Choice | StoryWait::Ended => break,
+            }
+            guard += 1;
+        }
+        assert_eq!(player.variables().get_int("before", 0), 1);
+        assert_eq!(player.variables().get_int("in_helper", 0), 1);
+        assert_eq!(
+            player.variables().get_int("after", 0),
+            1,
+            "fallthrough from called scene must resume caller (implicit return)"
+        );
+        assert_eq!(player.ending(), Some("main"));
+    }
+
     #[test]
     fn call_pushes_stack_and_jumps() {
         let src = r##"
@@ -1533,39 +1618,47 @@ scene sub {
 }
 "##;
         let prog = load_program_from_source(src, None, "call").unwrap();
+        assert!(prog_has_call(&prog));
         let mut player = StoryPlayer::start(prog);
         assert!(matches!(player.wait(), StoryWait::Line));
         assert!(player.current_text().contains("Before"));
         player.advance();
-        // After call, should be in sub (call_stack pushed).
-        // Depending on pump, we land on sub's line.
+        // Land in sub (call_stack pushed).
         let mut guard = 0;
         while player.scene_name() != "sub" && guard < 8 {
             if matches!(player.wait(), StoryWait::Line) {
-                // still advancing?
                 break;
             }
             player.advance();
             guard += 1;
         }
-        // call_stack should have been pushed when Call executed.
-        // If we're on sub, stack non-empty; if story ended after sub, stack may have been unused for return.
-        if player.scene_name() == "sub" {
-            assert!(
-                !player.snapshot().call_stack.is_empty(),
-                "call should push return frame"
-            );
-            assert!(
-                player.current_text().contains("Inside")
-                    || matches!(player.wait(), StoryWait::Line)
-            );
-            player.advance();
-            // Scene ends without return implementation → story ends.
-            assert!(player.is_ended() || player.scene_name() == "sub");
-        } else {
-            // Some loaders may inline differently; still assert Call was present in program.
-            assert!(prog_has_call(player.program()));
+        assert_eq!(player.scene_name(), "sub");
+        assert!(
+            !player.snapshot().call_stack.is_empty(),
+            "call should push return frame"
+        );
+        assert!(player.current_text().contains("Inside"));
+        player.advance();
+        // Fallthrough from sub resumes start after call.
+        let mut guard = 0;
+        while !player.is_ended() && guard < 16 {
+            if matches!(player.wait(), StoryWait::Line | StoryWait::Ready) {
+                if player.current_text().contains("After") {
+                    break;
+                }
+                player.advance();
+            } else {
+                break;
+            }
+            guard += 1;
         }
+        assert!(
+            player.current_text().contains("After") || player.ending() == Some("main"),
+            "implicit return should resume caller, scene={} text={} ending={:?}",
+            player.scene_name(),
+            player.current_text(),
+            player.ending()
+        );
     }
 
     fn prog_has_call(program: &crate::ir::StoryProgram) -> bool {
@@ -2026,9 +2119,7 @@ scene start {
                 name: "start".into(),
                 ops: vec![
                     set("before", 1),
-                    StoryOp::Pause {
-                        seconds: Some(3.0),
-                    },
+                    StoryOp::Pause { seconds: Some(3.0) },
                     set("after", 1),
                     StoryOp::End { ending: None },
                 ],
@@ -2190,9 +2281,7 @@ scene start {
                     StoryOp::Sound {
                         path: "click.ogg".into(),
                     },
-                    StoryOp::Pause {
-                        seconds: Some(0.5),
-                    },
+                    StoryOp::Pause { seconds: Some(0.5) },
                     StoryOp::Transition {
                         name: "fade".into(),
                     },

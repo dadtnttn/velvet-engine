@@ -5,8 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::product_ui::{build_product_ui_frame, ProductUiFrame};
 use crate::product::VnSession;
+use crate::product_ui::{build_product_ui_frame, ProductUiFrame};
 
 /// One paint primitive ready for GPU submission.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -84,9 +84,7 @@ impl ProductPaintList {
     /// True when say panel geometry was painted.
     pub fn has_say_geometry(&self) -> bool {
         self.commands.iter().any(|c| match c {
-            ProductPaintCmd::Quad { id, w, h, .. } => {
-                id == "say_panel" && *w > 0.0 && *h > 0.0
-            }
+            ProductPaintCmd::Quad { id, w, h, .. } => id == "say_panel" && *w > 0.0 && *h > 0.0,
             _ => false,
         })
     }
@@ -215,7 +213,7 @@ pub fn paint_product_frame_at(frame: &ProductUiFrame, vw: f32, vh: f32) -> Produ
         });
         commands.push(ProductPaintCmd::Text {
             id: format!("sprite_label_{sid}"),
-            x: x,
+            x,
             y: y + body_h + 8.0,
             text: sid.clone(),
             size: 16.0,
@@ -459,11 +457,15 @@ scene end { "Ending: Paint" }
         assert!(list.has_say_geometry(), "cmds={:?}", list.commands);
         let descs = paint_to_render_descriptors(&list);
         assert!(
-            descs.iter().any(|d| d.id == "say_panel" && d.w > 0.0 && d.h > 0.0),
+            descs
+                .iter()
+                .any(|d| d.id == "say_panel" && d.w > 0.0 && d.h > 0.0),
             "{descs:?}"
         );
         assert!(
-            descs.iter().any(|d| d.id == "body_text" || d.id == "body_geom"),
+            descs
+                .iter()
+                .any(|d| d.id == "body_text" || d.id == "body_geom"),
             "body geometry missing: {descs:?}"
         );
 
@@ -477,6 +479,12 @@ scene end { "Ending: Paint" }
         let list2 = paint_product_session(&session);
         assert!(list2.has_choice_geometry(), "{:?}", list2.commands);
         let descs2 = paint_to_render_descriptors(&list2);
-        assert!(descs2.iter().filter(|d| d.id.starts_with("choice_")).count() >= 2);
+        assert!(
+            descs2
+                .iter()
+                .filter(|d| d.id.starts_with("choice_"))
+                .count()
+                >= 2
+        );
     }
 }
