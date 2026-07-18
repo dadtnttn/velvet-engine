@@ -19,6 +19,7 @@ mod prefs;
 mod live2d;
 mod product;
 mod product_paint;
+mod product_raster;
 mod product_ui;
 mod rollback;
 mod runtime;
@@ -53,8 +54,13 @@ pub use product::{
 // VnSession::show_dialogue_line is the product path entry that applies say_plain_and_cps.
 pub use live2d::{Live2dModel, Live2dStage};
 pub use product_paint::{
-    paint_product_frame, paint_product_session, paint_to_render_descriptors, ProductPaintCmd,
-    ProductPaintList, RenderDrawDescriptor, PRODUCT_VIRTUAL_H, PRODUCT_VIRTUAL_W,
+    background_mood_color, paint_product_frame, paint_product_frame_at, paint_product_session,
+    paint_to_render_descriptors, sprite_stand_color, ProductPaintCmd, ProductPaintList,
+    RenderDrawDescriptor, PRODUCT_VIRTUAL_H, PRODUCT_VIRTUAL_W,
+};
+pub use product_raster::{
+    count_painted_pixels, draw_text_line, draw_text_wrapped, fill_rect, pack_rgb,
+    rasterize_product_paint,
 };
 pub use product_ui::{
     build_product_ui_frame, detect_script_family, dialogue_box_fields, measure_say_body,
