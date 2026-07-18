@@ -11,6 +11,7 @@ mod new_cmd;
 mod pack_cmd;
 mod play_cmd;
 mod script_cmd;
+mod story_cmd;
 mod workspace_cmd;
 
 use std::path::PathBuf;
@@ -32,6 +33,10 @@ use new_cmd::{cmd_init, cmd_new, cmd_project_info, cmd_template_install, cmd_tem
 use pack_cmd::cmd_pack;
 use play_cmd::{cmd_play_project_opts, cmd_play_story_product, cmd_recheck_replay};
 use script_cmd::{cmd_script_check, cmd_script_fmt, cmd_script_lsp, cmd_script_run};
+use story_cmd::{
+    cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_lowered,
+    cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
+};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]
@@ -80,6 +85,11 @@ enum Commands {
     Script {
         #[command(subcommand)]
         command: ScriptCommands,
+    },
+    /// Velvet Story tools (writer-friendly narrative language → VS2).
+    Story {
+        #[command(subcommand)]
+        command: StoryCommands,
     },
     /// Create a new project from a template.
     New {
@@ -413,6 +423,58 @@ enum ScriptCommands {
 }
 
 #[derive(Subcommand, Debug)]
+enum StoryCommands {
+    /// Validate a `.vstory` file (parse + semantics, no execute).
+    Check {
+        /// Path to `.vstory`.
+        path: PathBuf,
+    },
+    /// Lower to Velvet Script 2 IR / OpVs2 unit.
+    Build {
+        /// Path to `.vstory`.
+        path: PathBuf,
+    },
+    /// Execute via existing VS2 host (OpVs2), not a second VM.
+    Run {
+        /// Path to `.vstory`.
+        path: PathBuf,
+        /// Choice index when menus appear.
+        #[arg(long, default_value_t = 0)]
+        choice: usize,
+    },
+    /// Format a `.vstory` file in-place.
+    Format {
+        /// Path.
+        path: PathBuf,
+        /// Only check formatting.
+        #[arg(long, default_value_t = false)]
+        check: bool,
+    },
+    /// Dump narrative AST as JSON (developer tool).
+    #[command(name = "dump-ast")]
+    DumpAst {
+        path: PathBuf,
+    },
+    /// Dump lowered OpVs2 disassembly (developer tool).
+    #[command(name = "dump-lowered")]
+    DumpLowered {
+        path: PathBuf,
+    },
+    /// Emit Studio structured model JSON.
+    #[command(name = "studio-model")]
+    StudioModel {
+        path: PathBuf,
+    },
+    /// Extract localizable strings (stable msg ids).
+    #[command(name = "extract-loc")]
+    ExtractLoc {
+        path: PathBuf,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum LocCommands {
     /// Extract strings from a .vel file.
     Extract {
@@ -487,6 +549,30 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Script {
             command: ScriptCommands::Lsp { path },
         } => cmd_script_lsp(path),
+        Commands::Story {
+            command: StoryCommands::Check { path },
+        } => cmd_story_check(path),
+        Commands::Story {
+            command: StoryCommands::Build { path },
+        } => cmd_story_build(path),
+        Commands::Story {
+            command: StoryCommands::Run { path, choice },
+        } => cmd_story_run(path, choice),
+        Commands::Story {
+            command: StoryCommands::Format { path, check },
+        } => cmd_story_format(path, check),
+        Commands::Story {
+            command: StoryCommands::DumpAst { path },
+        } => cmd_story_dump_ast(path),
+        Commands::Story {
+            command: StoryCommands::DumpLowered { path },
+        } => cmd_story_dump_lowered(path),
+        Commands::Story {
+            command: StoryCommands::StudioModel { path },
+        } => cmd_story_studio_model(path),
+        Commands::Story {
+            command: StoryCommands::ExtractLoc { path, out },
+        } => cmd_story_extract_loc(path, out),
         Commands::New {
             name,
             template,
