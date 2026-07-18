@@ -218,12 +218,7 @@ pub fn draw_text_wrapped(
 ///
 /// Transparent quads (alpha ≈ 0) are skipped. Opaque/semi-opaque quads overwrite
 /// (no full blend for host simplicity).
-pub fn rasterize_product_paint(
-    list: &ProductPaintList,
-    buf: &mut [u32],
-    out_w: u32,
-    out_h: u32,
-) {
+pub fn rasterize_product_paint(list: &ProductPaintList, buf: &mut [u32], out_w: u32, out_h: u32) {
     let need = (out_w as usize).saturating_mul(out_h as usize);
     assert!(
         buf.len() >= need,
@@ -253,12 +248,7 @@ pub fn rasterize_product_paint(
     for c in cmds {
         match c {
             ProductPaintCmd::Quad {
-                x,
-                y,
-                w,
-                h,
-                color,
-                ..
+                x, y, w, h, color, ..
             } => {
                 if *w <= 0.0 || *h <= 0.0 || color[3] < 0.02 {
                     continue;
@@ -345,11 +335,15 @@ scene end { "Ending: Raster" }
         let list = paint_product_session(&session);
         assert!(list.has_say_geometry());
         assert!(
-            list.commands.iter().any(|c| matches!(c, ProductPaintCmd::Quad { id, .. } if id == "background")),
+            list.commands
+                .iter()
+                .any(|c| matches!(c, ProductPaintCmd::Quad { id, .. } if id == "background")),
             "background cmd required"
         );
         assert!(
-            list.commands.iter().any(|c| matches!(c, ProductPaintCmd::Quad { id, .. } if id.starts_with("sprite_"))),
+            list.commands.iter().any(
+                |c| matches!(c, ProductPaintCmd::Quad { id, .. } if id.starts_with("sprite_"))
+            ),
             "sprite stand from presentation"
         );
 
