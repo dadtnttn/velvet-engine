@@ -35,11 +35,22 @@ enum Commands {
         /// Do not attempt an OS window.
         #[arg(long, default_value_t = true)]
         headless: bool,
-        /// Attempt a brief OS window (overrides headless).
+        /// Attempt an OS window (overrides headless).
         #[arg(long, default_value_t = false)]
         window: bool,
-        /// Exit after init / demo drag.
-        #[arg(long, default_value_t = true)]
+        /// Interactive dual-mode window (implies --window; keeps running until Esc).
+        #[arg(long, default_value_t = false)]
+        interactive: bool,
+        /// Exit after init / brief paint. Use `--once=false` with `--window` for a short
+        /// non-interactive paint probe, or prefer `--interactive` for the full dual-mode loop.
+        #[arg(
+            long,
+            default_value = "true",
+            num_args = 0..=1,
+            default_missing_value = "true",
+            action = clap::ArgAction::Set,
+            value_parser = clap::builder::BoolishValueParser::new()
+        )]
         once: bool,
         /// Demo drag region id.
         #[arg(long)]
@@ -168,6 +179,7 @@ fn main() -> Result<()> {
             document,
             headless,
             window,
+            interactive,
             once,
             drag_region,
             dx,
@@ -175,11 +187,16 @@ fn main() -> Result<()> {
             save,
             ready_log,
         } => {
+            // --interactive => dual-mode window loop (once=false, window=true)
+            // --window --once=false => same interactive path
+            // --window (default once=true) => brief paint then exit
+            let want_window = window || interactive;
+            let want_once = if interactive { false } else { once };
             let status = run_studio_gui(StudioGuiConfig {
                 root: path,
                 document,
-                headless: if window { false } else { headless },
-                once,
+                headless: if want_window { false } else { headless },
+                once: want_once,
                 demo_drag_region: drag_region,
                 demo_dx: dx,
                 demo_dy: dy,
@@ -431,4 +448,57 @@ fn studio_launch(
     }
     println!("=== studio launch complete ===");
     Ok(())
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn gui_once_false_parses_interactive_window_path() {
+        let args = Args::try_parse_from([
+            "velvet-studio",
+            "gui",
+            ".",
+            "--window",
+            "--once=false",
+        ])
+        .expect("parse --once=false");
+        match args.command {
+            Commands::Gui {
+                window,
+                once,
+                interactive,
+                ..
+            } => {
+                assert!(window);
+                assert!(!once, "once=false must be false, got true");
+                assert!(!interactive);
+            }
+            _ => panic!("expected Gui"),
+        }
+    }
+
+    #[test]
+    fn gui_interactive_flag_implies_window_loop() {
+        let args = Args::try_parse_from(["velvet-studio", "gui", ".", "--interactive"])
+            .expect("parse --interactive");
+        match args.command {
+            Commands::Gui {
+                window,
+                interactive,
+                once,
+                ..
+            } => {
+                assert!(interactive);
+                // once default may still be true at parse; runtime forces once=false when interactive
+                let want_window = window || interactive;
+                let want_once = if interactive { false } else { once };
+                assert!(want_window);
+                assert!(!want_once);
+            }
+            _ => panic!("expected Gui"),
+        }
+    }
 }
