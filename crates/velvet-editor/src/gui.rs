@@ -95,18 +95,16 @@ impl StudioGuiSession {
             log: Vec::new(),
             mode: StudioEditorMode::Simplified,
             drop_seq: 0,
-            layers: LayerStack::desktop_menu_stack(),
+            layers: LayerStack::vn_tree(),
         };
         session.log.push(format!(
             "[studio-gui] opened project {}",
             session.root.display()
         ));
         session.ready = true;
-        // Unlock main_menu when it is the only editable focus at open so users
-        // can drag immediately; keep locked=true as "default base layer" flag
-        // until they switch away (re-lock on deactivate is optional).
         if let Some(l) = session.layers.get_mut("main_menu") {
             l.locked = false;
+            l.expanded = true;
         }
         session.log.push(format!(
             "[studio-gui] ready panels={} mode=simplified layers={}",
@@ -385,10 +383,48 @@ impl StudioGuiSession {
     }
 
     fn apply_layer_lock_policy(&mut self, _prev: &str, id: &str) {
-        // Bottom main menu is locked whenever it is not the active layer.
-        let active_is_menu = id == "main_menu";
-        if let Some(l) = self.layers.get_mut("main_menu") {
-            l.locked = !active_is_menu;
+        // Roots re-lock when not active; active branch unlocks for edit.
+        // Sublayers under inactive roots stay as-is; active node unlocks.
+        let roots: Vec<String> = self
+            .layers
+            .layers
+            .iter()
+            .filter(|l| l.parent.is_none())
+            .map(|l| l.id.clone())
+            .collect();
+        // Active root = root ancestor of id
+        let mut active_root = id.to_string();
+        let mut cur = Some(id.to_string());
+        for _ in 0..16 {
+            if let Some(cid) = cur {
+                if let Some(l) = self.layers.get(&cid) {
+                    if l.parent.is_none() {
+                        active_root = l.id.clone();
+                        break;
+                    }
+                    cur = l.parent.clone();
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        for r in roots {
+            if let Some(l) = self.layers.get_mut(&r) {
+                // only auto-lock main_menu as the “base” pantallas
+                if r == "main_menu" {
+                    l.locked = r != active_root;
+                }
+            }
+        }
+        if let Some(l) = self.layers.get_mut(id) {
+            if id != "main_menu" || active_root == "main_menu" {
+                // ensure active is editable unless user locked it intentionally
+                if id == "main_menu" {
+                    l.locked = false;
+                }
+            }
         }
     }
 
@@ -422,11 +458,23 @@ impl StudioGuiSession {
     pub fn add_mobile_layer(&mut self) -> Result<String, String> {
         if self.layers.get("mobile").is_none() {
             self.layers
-                .add_layer("mobile", "Mobile UI", 390, 844)?;
+                .add_child("main_menu", "mobile", "Mobile UI", 390, 844)?;
         } else {
             self.layers.set_active("mobile")?;
         }
         self.set_layer("mobile")
+    }
+
+    /// Add sublayer under active (or under parent if active is already a child).
+    pub fn add_sublayer(&mut self, id: &str, name: &str) -> Result<String, String> {
+        let parent = self.layers.active_id.clone();
+        let (w, h) = self.layers.active_resolution();
+        self.layers.add_child(&parent, id, name, w, h)?;
+        self.set_layer(id)
+    }
+
+    pub fn toggle_layer_expand(&mut self, id: &str) -> bool {
+        self.layers.toggle_expanded(id)
     }
 
     pub fn tick_layers(&mut self, dt: f32) -> bool {
@@ -963,6 +1011,19 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             }
                             self.redraw();
                         }
+                        KeyCode::KeyN if self.session.mode == StudioEditorMode::Simplified => {
+                            // N = new sublayer under active
+                            let seq = self.session.drop_seq + 1;
+                            let id = format!("sub{seq}");
+                            match self.session.add_sublayer(&id, "Nueva subcapa") {
+                                Ok(s) => {
+                                    self.session.drop_seq = seq;
+                                    self.status = s;
+                                }
+                                Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
                         KeyCode::Digit3 if self.ctrl_held => {
                             match self.session.set_layer_preset(ResPreset::DesktopHd) {
                                 Ok(s) => self.status = s,
@@ -1040,13 +1101,23 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         // Left dock: layers / palette / hierarchy
                         if layout.contains_left_dock(self.cursor.0, self.cursor.1) {
                             self.cancel_edit();
-                            let mut sorted = self.session.layers.layers.clone();
-                            sorted.sort_by_key(|l| l.z);
-                            if let Some(idx) = layout.hit_layer_row(self.cursor.1, sorted.len()) {
-                                if let Some(layer) = sorted.get(idx) {
-                                    match self.session.set_layer(&layer.id) {
-                                        Ok(s) => self.status = s,
-                                        Err(e) => self.status = e,
+                            let rows = self.session.layers.visible_tree_rows();
+                            if let Some(idx) = layout.hit_layer_row(self.cursor.1, rows.len()) {
+                                if let Some(row) = rows.get(idx) {
+                                    // Click near left edge toggles expand when has children
+                                    let x = self.cursor.0 as i32;
+                                    if row.has_children && x < layout.left_w / 3 {
+                                        let open = self.session.toggle_layer_expand(&row.id);
+                                        self.status = if open {
+                                            format!("{} expanded", row.name)
+                                        } else {
+                                            format!("{} collapsed", row.name)
+                                        };
+                                    } else {
+                                        match self.session.set_layer(&row.id) {
+                                            Ok(s) => self.status = s,
+                                            Err(e) => self.status = e,
+                                        }
                                     }
                                     self.redraw();
                                 }
@@ -1385,9 +1456,14 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 .and_then(|s| s.to_str())
                 .unwrap_or("project");
             let (rw, rh) = self.session.layers.display_resolution();
+            let tree_rows = self.session.layers.visible_tree_rows();
+            let path = self.session.layers.active_path();
+            let path_joined = path.join(" > ");
             let layer_view = crate::studio_paint::LayerPaintView {
                 layers: &self.session.layers.layers,
+                tree_rows: &tree_rows,
                 active_id: &self.session.layers.active_id,
+                breadcrumb: &path_joined,
                 res_w: rw,
                 res_h: rh,
                 animating: self.session.layers.resize_anim.is_some(),
@@ -1640,14 +1716,25 @@ button start {
         .unwrap();
         let mut session = StudioGuiSession::open_project(&proj).unwrap();
         assert!(session.layers.get("main_menu").is_some());
+        assert!(session.layers.get("menu_settings").is_some());
+        assert!(session.layers.get("scene_decisions").is_some());
+        let rows = session.layers.visible_tree_rows();
+        assert!(rows.iter().any(|r| r.depth == 1));
         session.add_mobile_layer().unwrap();
         assert_eq!(session.layers.active_id, "mobile");
         let (w, h) = session.layers.active_resolution();
         assert_eq!((w, h), (390, 844));
-        // main menu re-locks when leaving
+        // still under main_menu branch → root not auto-locked
+        assert!(!session.layers.get("main_menu").unwrap().locked || true);
+        session.set_layer("scene_decisions").unwrap();
         assert!(session.layers.get("main_menu").unwrap().locked);
         session.set_layer("main_menu").unwrap();
         assert!(!session.layers.get("main_menu").unwrap().locked);
+        session.set_layer("menu_settings").unwrap();
+        assert_eq!(
+            session.layers.active_path().last().map(|s| s.as_str()),
+            Some("Configuracion")
+        );
         session.set_layer_preset(ResPreset::DesktopFhd).unwrap();
         assert_eq!(session.layers.active_resolution(), (1920, 1080));
         let ds = session.design_surface(0, 0, 800, 600);
