@@ -3,7 +3,9 @@
 //! Mutates the shared document model (`@visual` regions) with undo/redo.
 //! Not a GPU canvas — the real data path Studio GUI will drive.
 
-use crate::model::{Document, DocumentError, PropertyValue, RegionId, RegionKind};
+use crate::model::{
+    Document, DocumentError, PropertyValue, Region, RegionId, RegionKind, VisualProperty,
+};
 use crate::mutate::{apply_visual_patch, VisualPatch, VisualPatchOp};
 use crate::parse::parse_document;
 use crate::render::render_document;
@@ -227,6 +229,109 @@ impl UiDesigner {
     pub fn save_source(&self) -> String {
         self.source.clone()
     }
+
+    /// Drop/create a new visual widget (simplified palette).
+    ///
+    /// Inserts a marked `@visual` region (and empty structure) without an
+    /// advanced block — authors can later switch to advanced mode to attach logic.
+    pub fn add_widget(
+        &mut self,
+        kind: &str,
+        id: &str,
+        x_pct: f32,
+        y_pct: f32,
+        text: Option<&str>,
+    ) -> Result<(), DocumentError> {
+        if id.is_empty() {
+            return Err(DocumentError::RegionNotFound("(empty id)".into()));
+        }
+        self.push_undo();
+        let mut doc = parse_document(&self.source)?;
+        if doc.find(RegionKind::Visual, id).is_some()
+            || doc.find(RegionKind::Visual, &format!("{}.{}", kind.to_ascii_lowercase(), id)).is_some()
+        {
+            return Err(DocumentError::InvalidPatch(format!("region already exists: {id}")));
+        }
+        let kind_l = kind.to_ascii_lowercase();
+        let kind_norm = match kind_l.as_str() {
+            "button" | "btn" => "button",
+            "label" | "text" => "label",
+            "panel" | "box" => "panel",
+            other => other,
+        };
+        let full_id = if id.contains('.') {
+            id.to_string()
+        } else {
+            format!("{kind_norm}.{id}")
+        };
+        let label = text.unwrap_or(match kind_norm {
+            "button" => "Button",
+            "label" => "Label",
+            "panel" => "Panel",
+            _ => "Widget",
+        });
+        let pos = format!("({x_pct:.0}%, {y_pct:.0}%)");
+        let size = match kind_norm {
+            "panel" => "(24%, 18%)",
+            "label" => "(20%, 6%)",
+            _ => "(18%, 8%)",
+        };
+        let body = format!(
+            "    text: \"{}\"\n    position: {pos}\n    size: {size}\n",
+            label.replace('"', "\\\"")
+        );
+        doc.regions.push(Region {
+            kind: RegionKind::Visual,
+            id: RegionId::new(full_id),
+            body,
+            properties: vec![
+                VisualProperty {
+                    key: "text".into(),
+                    value: PropertyValue::String(label.into()),
+                    indent: "    ".into(),
+                    trailing_comment: None,
+                },
+                VisualProperty {
+                    key: "position".into(),
+                    value: PropertyValue::Raw(pos),
+                    indent: "    ".into(),
+                    trailing_comment: None,
+                },
+                VisualProperty {
+                    key: "size".into(),
+                    value: PropertyValue::Raw(size.into()),
+                    indent: "    ".into(),
+                    trailing_comment: None,
+                },
+            ],
+            raw_lines: Vec::new(),
+            marked: true,
+        });
+        self.source = render_document(&doc);
+        Ok(())
+    }
+
+    /// Alias used by Studio palette drop (percent canvas coords).
+    pub fn drop_widget(
+        &mut self,
+        kind: &str,
+        id: &str,
+        canvas_x: f32,
+        canvas_y: f32,
+    ) -> Result<(), DocumentError> {
+        self.add_widget(kind, id, canvas_x, canvas_y, None)
+    }
+
+    /// Replace entire source (advanced mode save / reparse).
+    ///
+    /// Validates parse; on success replaces buffer (push undo).
+    pub fn set_source_advanced(&mut self, source: impl Into<String>) -> Result<(), DocumentError> {
+        let source = source.into();
+        let _ = parse_document(&source)?;
+        self.push_undo();
+        self.source = source;
+        Ok(())
+    }
 }
 
 /// Minimal action catalog for simplified mode (serialized into visual `action` prop).
@@ -336,5 +441,30 @@ button quit {
         let src = d.save_source();
         assert!(src.contains("game.new()") && src.contains("scene.open"));
         assert!(src.contains("45%") && src.contains("65%"), "{src}");
+    }
+
+    #[test]
+    fn drop_widget_then_drag_does_not_destroy_existing_advanced() {
+        let mut d = UiDesigner::open(MENU).unwrap();
+        d.drop_widget("button", "extra", 40.0, 50.0).unwrap();
+        let widgets = d.list_widgets().unwrap();
+        assert!(widgets.iter().any(|w| w.id == "button.extra"));
+        // Drag original; advanced body must remain
+        d.drag("button.start", 1.0, 0.0).unwrap();
+        let src = d.save_source();
+        assert!(src.contains("game.new()"), "advanced survived drop+drag: {src}");
+        assert!(src.contains("button.extra") || src.contains("id=button.extra"), "{src}");
+    }
+
+    #[test]
+    fn advanced_set_source_reparses_visual_widgets() {
+        let mut d = UiDesigner::open(MENU).unwrap();
+        let mut src = d.save_source();
+        src = src.replace("Iniciar", "Play");
+        d.set_source_advanced(src).unwrap();
+        let w = d.list_widgets().unwrap();
+        let start = w.iter().find(|w| w.id == "button.start").unwrap();
+        assert_eq!(start.text.as_deref(), Some("Play"));
+        assert!(d.save_source().contains("game.new()"));
     }
 }
