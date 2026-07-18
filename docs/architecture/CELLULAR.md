@@ -1,10 +1,18 @@
-# velvet-cellular — fully functional Noita-like author core
+# velvet-cellular — Noita-like author core (**ALPHA**)
+
+| | |
+|--|--|
+| **Status** | **Alpha** (`0.1.0-alpha.1`) |
+| **Crate** | `velvet-cellular` |
+| **Demos** | `demos/cellular-arena`, `examples/cellular-lab` |
+| **Template** | `templates/cellular-sandbox` |
+| **Stability** | APIs may break; not a stable product surface |
 
 ## Purpose
 
-Creation-focused cellular simulation so authors build falling-sand / pixel-material
-games **with free particles that couple back to the grid**, spells, agents, and
-efficient hot-chunk stepping. Not a commercial Noita clone.
+Creation-focused cellular / **falling-sand** simulation so authors build
+pixel-material games **with free particles that couple back to the grid**, spells,
+agents, and efficient hot-chunk stepping. Not a commercial Noita clone.
 
 ## Creator surface (shipped)
 

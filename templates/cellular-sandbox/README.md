@@ -1,4 +1,6 @@
-# Template: cellular-sandbox
+# Template: cellular-sandbox (**ALPHA**)
+
+> **Status: alpha** — part of the Velvet sand / cellular stack. Expect breaking changes.
 
 Author-facing starter for **velvet-cellular** (Noita-like / falling-sand core).
 

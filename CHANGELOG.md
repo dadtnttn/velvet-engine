@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - Unreleased
 
+### Changed
+
+- **Sand / cellular stack marked ALPHA** (`0.1.0-alpha.1`): `velvet-cellular`,
+  demos `cellular-arena`, example `cellular-lab`, template `cellular-sandbox`,
+  and docs (`CELLULAR.md`, MODULES, README). Not a stable product surface.
+
 ### Added
 
 - Phase 0: workspace, architecture docs, ADRs, CI skeleton, dual license.

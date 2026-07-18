@@ -18,7 +18,7 @@
 | **velvet-script-*** | Lexer → parser → AST → HIR/types → bytecode → VM → format/LSP |
 | **velvet-story** | VN runtime: dialogue, choices, saves, gallery, glossary |
 | **velvet-play** | 2D play: tilemaps, physics, AI, pathfinding, particles |
-| **velvet-cellular** | From-scratch cellular material sim (Noita-like author core, no external physics) |
+| **velvet-cellular** | **ALPHA** — falling-sand / cellular sim (Noita-like author core; APIs unstable) |
 | **velvet-rpg** | Stats, inventory, quests, shops, leveling, equipment |
 | **velvet-action** | Combat, weapons, projectiles, arena waves, dash/combo |
 | **velvet-project** | `velvet.project`, module graph, validation |
