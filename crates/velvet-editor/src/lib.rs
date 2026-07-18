@@ -14,6 +14,7 @@ pub mod inspector;
 pub mod project_browser;
 pub mod script_panel;
 pub mod studio;
+pub mod studio_paint;
 
 pub use document_edit::{
     design_set_button, drag_region_on_disk, list_regions, require_file, set_visual_property,

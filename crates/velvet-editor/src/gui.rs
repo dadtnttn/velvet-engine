@@ -519,8 +519,16 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         context: Option<SbContext<Arc<Window>>>,
         surface: Option<Surface<Arc<Window>, Arc<Window>>>,
         pixels: Vec<u32>,
-        drag_last: Option<(f64, f64)>,
+        /// Last cursor in window pixels.
+        cursor: (f64, f64),
+        /// Last cursor when drag started / previous move (window pixels).
+        drag_last_px: Option<(f64, f64)>,
         dragging: bool,
+        /// Accumulated percent delta for 1% snap (smooth feel, grid placement).
+        drag_acc_pct: (f32, f32),
+        /// Ctrl/Super held (tracked via ModifiersChanged — KeyEvent has no modifiers).
+        ctrl_held: bool,
+        status: String,
     }
 
     impl ApplicationHandler for Host {
@@ -529,8 +537,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 return;
             }
             let mode = match self.session.mode {
-                StudioEditorMode::Simplified => "Simplified",
-                StudioEditorMode::Advanced => "Advanced",
+                StudioEditorMode::Simplified => "Visual",
+                StudioEditorMode::Advanced => "Script",
             };
             let title = format!(
                 "Velvet Studio [{mode}] — {}",
@@ -542,14 +550,13 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             );
             let attrs = winit::window::Window::default_attributes()
                 .with_title(title)
-                .with_inner_size(LogicalSize::new(1100.0, 700.0));
+                .with_inner_size(LogicalSize::new(1280.0, 800.0));
             let window = Arc::new(el.create_window(attrs).expect("window"));
             let context = SbContext::new(window.clone()).expect("ctx");
             let surface = Surface::new(&context, window.clone()).expect("surface");
             self.context = Some(context);
             self.surface = Some(surface);
             self.window = Some(window);
-            // First paint so the window is not blank/closed-looking
             if let Some(w) = &self.window {
                 w.request_redraw();
             }
@@ -558,6 +565,9 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         fn window_event(&mut self, el: &ActiveEventLoop, _: WindowId, ev: WindowEvent) {
             match ev {
                 WindowEvent::CloseRequested => el.exit(),
+                WindowEvent::ModifiersChanged(mods) => {
+                    self.ctrl_held = mods.state().control_key() || mods.state().super_key();
+                }
                 WindowEvent::KeyboardInput { event, .. } => {
                     if event.state != ElementState::Pressed {
                         return;
@@ -568,38 +578,36 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                     match c {
                         KeyCode::Tab => {
                             let _ = self.session.toggle_mode();
-                            if let Some(w) = &self.window {
-                                let mode = match self.session.mode {
-                                    StudioEditorMode::Simplified => "Simplified",
-                                    StudioEditorMode::Advanced => "Advanced",
-                                };
-                                w.set_title(&format!(
-                                    "Velvet Studio [{mode}] — dual mode"
-                                ));
-                                w.request_redraw();
-                            }
+                            self.sync_title();
+                            self.status = format!("mode={:?}", self.session.mode);
+                            self.redraw();
                         }
-                        KeyCode::KeyS if self.session.mode == StudioEditorMode::Simplified => {
-                            // Drop a button at center
-                            let _ = self.session.drop_widget("button", 50.0, 50.0);
-                            if let Some(w) = &self.window {
-                                w.request_redraw();
-                            }
+                        KeyCode::KeyB if self.session.mode == StudioEditorMode::Simplified => {
+                            self.drop_at_cursor("button");
+                        }
+                        KeyCode::KeyL if self.session.mode == StudioEditorMode::Simplified => {
+                            self.drop_at_cursor("label");
+                        }
+                        KeyCode::KeyP if self.session.mode == StudioEditorMode::Simplified => {
+                            self.drop_at_cursor("panel");
+                        }
+                        KeyCode::KeyS if self.ctrl_held => {
+                            self.do_save();
+                        }
+                        KeyCode::F5 => {
+                            self.do_save();
                         }
                         KeyCode::Digit1 => {
                             let _ = self.session.set_mode(StudioEditorMode::Simplified);
-                            if let Some(w) = &self.window {
-                                w.request_redraw();
-                            }
+                            self.sync_title();
+                            self.status = "Visual mode".into();
+                            self.redraw();
                         }
                         KeyCode::Digit2 => {
                             let _ = self.session.set_mode(StudioEditorMode::Advanced);
-                            if let Some(w) = &self.window {
-                                w.request_redraw();
-                            }
-                        }
-                        KeyCode::KeyW if self.session.selected_region.is_some() => {
-                            let _ = self.session.save_document();
+                            self.sync_title();
+                            self.status = "Script mode".into();
+                            self.redraw();
                         }
                         KeyCode::Escape => el.exit(),
                         _ => {}
@@ -610,34 +618,134 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                     button: MouseButton::Left,
                     ..
                 } => {
-                    if self.session.mode != StudioEditorMode::Simplified {
-                        return;
-                    }
-                    self.dragging = state == ElementState::Pressed;
-                    if !self.dragging {
-                        self.drag_last = None;
+                    let layout = self.layout();
+                    if state == ElementState::Pressed {
+                        // Toolbar hits (mode / save) work in both modes
+                        if let Some(action) = layout.hit_toolbar(self.cursor.0, self.cursor.1) {
+                            match action {
+                                "mode_visual" => {
+                                    let _ = self.session.set_mode(StudioEditorMode::Simplified);
+                                    self.sync_title();
+                                    self.status = "Visual mode".into();
+                                }
+                                "mode_script" => {
+                                    let _ = self.session.set_mode(StudioEditorMode::Advanced);
+                                    self.sync_title();
+                                    self.status = "Script mode".into();
+                                }
+                                "save" => self.do_save(),
+                                _ => {}
+                            }
+                            self.redraw();
+                            return;
+                        }
+
+                        if self.session.mode != StudioEditorMode::Simplified {
+                            return;
+                        }
+
+                        // Palette: click to drop at canvas center (or cursor if on canvas)
+                        if layout.contains_left_dock(self.cursor.0, self.cursor.1) {
+                            if let Some(kind) = layout.hit_palette(self.cursor.0, self.cursor.1) {
+                                match self.session.drop_widget(kind, 50.0, 50.0) {
+                                    Ok(id) => {
+                                        self.status = format!("placed {id} from palette");
+                                    }
+                                    Err(e) => self.status = format!("drop failed: {e}"),
+                                }
+                                self.redraw();
+                                return;
+                            }
+                            // Hierarchy row select
+                            let widgets = self
+                                .session
+                                .list_widgets()
+                                .unwrap_or_default()
+                                .into_iter()
+                                .filter(|w| crate::studio_paint::is_canvas_widget(w))
+                                .collect::<Vec<_>>();
+                            if let Some(idx) = layout.hit_hierarchy(self.cursor.1, widgets.len()) {
+                                if let Some(w) = widgets.get(idx) {
+                                    self.session.selected_region = Some(w.id.clone());
+                                    self.status = format!("selected {}", w.id);
+                                    self.redraw();
+                                }
+                                return;
+                            }
+                            return;
+                        }
+
+                        // Canvas: select + begin drag
+                        if !layout.contains_canvas(self.cursor.0, self.cursor.1) {
+                            self.dragging = false;
+                            return;
+                        }
+                        let (cx, cy) = layout.screen_to_canvas_pct(self.cursor.0, self.cursor.1);
+                        match self.session.canvas_pointer_down(cx, cy) {
+                            Ok(Some(id)) => {
+                                self.status = format!("selected {id} — drag to move");
+                                self.dragging = true;
+                                self.drag_last_px = Some(self.cursor);
+                                self.drag_acc_pct = (0.0, 0.0);
+                            }
+                            Ok(None) => {
+                                self.session.selected_region = None;
+                                self.status = "canvas empty — click palette or press B".into();
+                                self.dragging = false;
+                                self.drag_last_px = None;
+                                self.drag_acc_pct = (0.0, 0.0);
+                            }
+                            Err(e) => self.status = format!("hit: {e}"),
+                        }
+                        self.redraw();
+                    } else {
+                        // Mouse up: end drag, snap final position message
+                        if self.dragging {
+                            if let Some(id) = &self.session.selected_region {
+                                self.status = format!("placed {id}");
+                            }
+                        }
+                        self.dragging = false;
+                        self.drag_last_px = None;
+                        self.drag_acc_pct = (0.0, 0.0);
+                        self.redraw();
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    if self.session.mode != StudioEditorMode::Simplified {
+                    self.cursor = (position.x, position.y);
+                    if self.session.mode != StudioEditorMode::Simplified || !self.dragging {
                         return;
                     }
-                    let Some(w) = &self.window else { return };
-                    let size = w.inner_size();
-                    let px = position.x / size.width.max(1) as f64 * 100.0;
-                    let py = position.y / size.height.max(1) as f64 * 100.0;
-                    if self.dragging {
-                        if let Some((lx, ly)) = self.drag_last {
-                            let dx = (px - lx) as f32;
-                            let dy = (py - ly) as f32;
-                            let _ = self.session.canvas_pointer_drag(dx, dy);
-                        } else {
-                            let _ = self.session.canvas_pointer_down(px as f32, py as f32);
+                    let layout = self.layout();
+                    if let Some((lx, ly)) = self.drag_last_px {
+                        let (dpx, dpy) =
+                            layout.screen_delta_to_pct(position.x - lx, position.y - ly);
+                        self.drag_acc_pct.0 += dpx;
+                        self.drag_acc_pct.1 += dpy;
+                        // 1% snap grid: apply when accumulated delta crosses 1%
+                        let sx = self.drag_acc_pct.0.trunc();
+                        let sy = self.drag_acc_pct.1.trunc();
+                        if sx.abs() >= 1.0 || sy.abs() >= 1.0 {
+                            match self.session.canvas_pointer_drag(sx, sy) {
+                                Ok(Some(r)) => {
+                                    self.status = format!(
+                                        "drag {} → ({:.0}%, {:.0}%)",
+                                        self.session
+                                            .selected_region
+                                            .as_deref()
+                                            .unwrap_or("?"),
+                                        r.pos.x,
+                                        r.pos.y
+                                    );
+                                }
+                                Ok(None) => {}
+                                Err(e) => self.status = format!("drag: {e}"),
+                            }
+                            self.drag_acc_pct.0 -= sx;
+                            self.drag_acc_pct.1 -= sy;
+                            self.redraw();
                         }
-                        self.drag_last = Some((px, py));
-                        if let Some(win) = &self.window {
-                            win.request_redraw();
-                        }
+                        self.drag_last_px = Some((position.x, position.y));
                     }
                 }
                 WindowEvent::RedrawRequested => {
@@ -659,10 +767,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         }
 
         fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-            // Interactive: idle until input/redraw. Brief: poll a few frames then exit.
             if self.interactive {
                 el.set_control_flow(ControlFlow::Wait);
-                // Do not force continuous redraw — keeps the window open and CPU calm.
                 return;
             }
             el.set_control_flow(ControlFlow::Poll);
@@ -677,8 +783,62 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
     }
 
     impl Host {
+        fn layout(&self) -> crate::studio_paint::StudioLayout {
+            let (ww, wh) = self
+                .window
+                .as_ref()
+                .map(|w| {
+                    let s = w.inner_size();
+                    (s.width.max(1), s.height.max(1))
+                })
+                .unwrap_or((1280, 800));
+            crate::studio_paint::StudioLayout::new(ww, wh)
+        }
+
+        fn cursor_canvas_pct(&self) -> (f32, f32) {
+            let layout = self.layout();
+            if layout.contains_canvas(self.cursor.0, self.cursor.1) {
+                layout.screen_to_canvas_pct(self.cursor.0, self.cursor.1)
+            } else {
+                (50.0, 50.0)
+            }
+        }
+
+        fn drop_at_cursor(&mut self, kind: &str) {
+            let (cx, cy) = self.cursor_canvas_pct();
+            match self.session.drop_widget(kind, cx, cy) {
+                Ok(id) => self.status = format!("dropped {id} at ({cx:.0}%, {cy:.0}%)"),
+                Err(e) => self.status = format!("drop failed: {e}"),
+            }
+            self.redraw();
+        }
+
+        fn do_save(&mut self) {
+            match self.session.save_document() {
+                Ok(()) => self.status = "saved to disk".into(),
+                Err(e) => self.status = format!("save: {e}"),
+            }
+            self.redraw();
+        }
+
+        fn redraw(&self) {
+            if let Some(w) = &self.window {
+                w.request_redraw();
+            }
+        }
+
+        fn sync_title(&self) {
+            if let Some(w) = &self.window {
+                let mode = match self.session.mode {
+                    StudioEditorMode::Simplified => "Visual",
+                    StudioEditorMode::Advanced => "Script",
+                };
+                w.set_title(&format!("Velvet Studio [{mode}] — dual mode"));
+            }
+        }
+
         fn paint_frame(&mut self) -> Result<()> {
-            use velvet_story::{draw_text_line, fill_rect, pack_rgb};
+            use velvet_story::pack_rgb;
             let Some(window) = self.window.clone() else {
                 return Ok(());
             };
@@ -691,153 +851,25 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             if self.pixels.len() != (ww * wh) as usize {
                 self.pixels.resize((ww * wh) as usize, 0);
             }
-            // chrome
-            fill_rect(
+            let layout = crate::studio_paint::StudioLayout::new(ww, wh);
+            let widgets = self.session.list_widgets().unwrap_or_default();
+            let project = self
+                .session
+                .root
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("project");
+            crate::studio_paint::paint_studio(
                 &mut self.pixels,
-                ww,
-                wh,
-                0,
-                0,
-                ww as i32,
-                wh as i32,
-                pack_rgb(22, 18, 32),
+                &layout,
+                self.session.mode == StudioEditorMode::Simplified,
+                project,
+                self.session.selected_region.as_deref(),
+                &widgets,
+                self.session.advanced_source(),
+                &self.status,
+                self.dragging,
             );
-            // left dock
-            fill_rect(
-                &mut self.pixels,
-                ww,
-                wh,
-                0,
-                0,
-                (ww as f32 * 0.18) as i32,
-                wh as i32,
-                pack_rgb(28, 24, 40),
-            );
-            // right dock
-            fill_rect(
-                &mut self.pixels,
-                ww,
-                wh,
-                (ww as f32 * 0.78) as i32,
-                0,
-                ww as i32,
-                wh as i32,
-                pack_rgb(28, 24, 40),
-            );
-            // bottom
-            fill_rect(
-                &mut self.pixels,
-                ww,
-                wh,
-                0,
-                (wh as f32 * 0.82) as i32,
-                ww as i32,
-                wh as i32,
-                pack_rgb(18, 16, 28),
-            );
-
-            let mode = match self.session.mode {
-                StudioEditorMode::Simplified => "SIMPLIFIED (Tab=advanced, S=drop button, drag=move)",
-                StudioEditorMode::Advanced => "ADVANCED (Tab=simplified; script buffer in session)",
-            };
-            draw_text_line(
-                &mut self.pixels,
-                ww,
-                wh,
-                12,
-                10,
-                mode,
-                pack_rgb(220, 200, 255),
-                2,
-            );
-            draw_text_line(
-                &mut self.pixels,
-                ww,
-                wh,
-                12,
-                36,
-                &format!(
-                    "panels={} sel={}",
-                    self.session.panel_ids().join(","),
-                    self.session
-                        .selected_region
-                        .as_deref()
-                        .unwrap_or("-")
-                ),
-                pack_rgb(160, 155, 180),
-                1,
-            );
-
-            let cx0 = (ww as f32 * 0.20) as i32;
-            let cy0 = (wh as f32 * 0.12) as i32;
-            let cw = (ww as f32 * 0.56) as i32;
-            let ch = (wh as f32 * 0.66) as i32;
-            fill_rect(
-                &mut self.pixels,
-                ww,
-                wh,
-                cx0,
-                cy0,
-                cx0 + cw,
-                cy0 + ch,
-                pack_rgb(12, 10, 20),
-            );
-
-            if self.session.mode == StudioEditorMode::Simplified {
-                if let Ok(widgets) = self.session.list_widgets() {
-                    for w in widgets {
-                        let (x, y) = parse_pct_pair(w.position.as_deref().unwrap_or("(50%,50%)"));
-                        let (sw, sh) = parse_pct_pair(w.size.as_deref().unwrap_or("(18%,8%)"));
-                        let px = cx0 + (x / 100.0 * cw as f32) as i32 - 40;
-                        let py = cy0 + (y / 100.0 * ch as f32) as i32 - 16;
-                        let bw = (sw / 100.0 * cw as f32).max(48.0) as i32;
-                        let bh = (sh / 100.0 * ch as f32).max(28.0) as i32;
-                        let sel = self.session.selected_region.as_deref() == Some(w.id.as_str());
-                        let col = if sel {
-                            pack_rgb(80, 120, 200)
-                        } else {
-                            pack_rgb(60, 50, 90)
-                        };
-                        fill_rect(
-                            &mut self.pixels,
-                            ww,
-                            wh,
-                            px,
-                            py,
-                            px + bw,
-                            py + bh,
-                            col,
-                        );
-                        let label = w.text.as_deref().unwrap_or(w.id.as_str());
-                        draw_text_line(
-                            &mut self.pixels,
-                            ww,
-                            wh,
-                            px + 6,
-                            py + 8,
-                            label,
-                            pack_rgb(240, 240, 250),
-                            1,
-                        );
-                    }
-                }
-            } else {
-                // Advanced: show first lines of script
-                let lines: Vec<&str> = self.session.document_source.lines().take(24).collect();
-                for (i, line) in lines.iter().enumerate() {
-                    let clipped: String = line.chars().take(70).collect();
-                    draw_text_line(
-                        &mut self.pixels,
-                        ww,
-                        wh,
-                        cx0 + 8,
-                        cy0 + 12 + i as i32 * 14,
-                        &clipped,
-                        pack_rgb(180, 220, 180),
-                        1,
-                    );
-                }
-            }
 
             let Some(surface) = self.surface.as_mut() else {
                 return Ok(());
@@ -854,35 +886,14 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             let mut buf = surface
                 .buffer_mut()
                 .map_err(|e| anyhow::anyhow!("buffer_mut: {e}"))?;
-            // softbuffer requires the full buffer written every frame
             if buf.len() != self.pixels.len() {
-                self.pixels.resize(buf.len(), pack_rgb(22, 18, 32));
+                self.pixels.resize(buf.len(), pack_rgb(15, 17, 26));
             }
             buf.copy_from_slice(&self.pixels);
             buf.present()
                 .map_err(|e| anyhow::anyhow!("present: {e}"))?;
             Ok(())
         }
-    }
-
-    fn parse_pct_pair(s: &str) -> (f32, f32) {
-        let t = s.trim().trim_start_matches('(').trim_end_matches(')');
-        let mut parts = t.split(',');
-        let a = parts
-            .next()
-            .unwrap_or("50")
-            .trim()
-            .trim_end_matches('%')
-            .parse()
-            .unwrap_or(50.0);
-        let b = parts
-            .next()
-            .unwrap_or("50")
-            .trim()
-            .trim_end_matches('%')
-            .parse()
-            .unwrap_or(50.0);
-        (a, b)
     }
 
     #[cfg(windows)]
@@ -904,8 +915,12 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         context: None,
         surface: None,
         pixels: Vec::new(),
-        drag_last: None,
+        cursor: (0.0, 0.0),
+        drag_last_px: None,
         dragging: false,
+        drag_acc_pct: (0.0, 0.0),
+        ctrl_held: false,
+        status: "ready — click palette, drag widgets, Ctrl+S save".into(),
     };
     event_loop
         .run_app(&mut host)
