@@ -12,6 +12,7 @@ velvet-script-bytecode = { workspace = true }
 velvet-script-compiler = { workspace = true }
 velvet-script-vm = { workspace = true }
 velvet-script-i18n = { workspace = true }
+velvet-story = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -60,6 +60,11 @@ fn op_to_json(op: &StoryOp) -> Value {
             "then": then_ops.iter().map(op_to_json).collect::<Vec<_>>(),
             "else": else_ops.iter().map(op_to_json).collect::<Vec<_>>(),
         }),
+        StoryOp::HostCall { name, args } => json!({
+            "kind": "host_call",
+            "name": name,
+            "args": args,
+        }),
         StoryOp::Nop => json!({ "kind": "nop" }),
     }
 }

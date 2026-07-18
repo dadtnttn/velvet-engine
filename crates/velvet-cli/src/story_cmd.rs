@@ -6,7 +6,8 @@ use anyhow::{bail, Context, Result};
 use velvet_story_lang::commands::CommandRegistry;
 use velvet_story_lang::i18n_extract::{extract, to_catalog};
 use velvet_story_lang::pipeline::{
-    build_path, check_path, dump_ast_json, dump_lowered_text, run_path,
+    build_path, build_story_program, check_path, dump_ast_json, dump_lowered_text, run_path,
+    run_source_product,
 };
 use velvet_story_lang::{format_source, is_idempotent};
 use velvet_story_lang::studio::{build_model, model_json};
@@ -31,46 +32,71 @@ pub fn cmd_story_check(path: PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// `velvet story build`
+/// `velvet story build` — product StoryProgram (+ optional OpVs2 unit).
 pub fn cmd_story_build(path: PathBuf) -> Result<()> {
     let cmds = CommandRegistry::builtin();
-    let r = build_path(&path, &cmds).map_err(|e| anyhow::anyhow!(e))?;
-    for d in &r.check.diags {
-        println!("{}", d.display());
-    }
-    if !r.ok {
-        bail!("story build failed for {}", path.display());
-    }
-    let unit = r.lowered.as_ref().unwrap();
+    let source = std::fs::read_to_string(&path)
+        .with_context(|| format!("read {}", path.display()))?;
+    let file = path.to_string_lossy().to_string();
+    // Primary: StoryProgram
+    let prog = build_story_program(&source, &file, &cmds, path.file_stem().and_then(|s| s.to_str()).unwrap_or("story"))
+        .map_err(|e| anyhow::anyhow!(e))?;
     println!(
-        "ok: {} instruction(s), {} scene entr(y/ies), {} msg id(s)",
-        unit.unit.code.len(),
-        unit.unit.entry_scenes.len(),
-        unit.msg_ids.len()
+        "ok: StoryProgram entry={} scenes={} (product IR)",
+        prog.entry,
+        prog.scenes.len()
     );
+    // Secondary: OpVs2 host unit
+    let r = build_path(&path, &cmds).map_err(|e| anyhow::anyhow!(e))?;
+    if let Some(unit) = r.lowered.as_ref() {
+        println!(
+            "ok: OpVs2 fallback {} instruction(s), {} scene entr(y/ies)",
+            unit.unit.code.len(),
+            unit.unit.entry_scenes.len()
+        );
+        if unit.unit.has_errors() {
+            for d in &unit.unit.diags {
+                println!("{}", d.display());
+            }
+        }
+    }
     Ok(())
 }
 
-/// `velvet story run`
+/// `velvet story run` — product StoryPlayer path (preferred Velvet 2.5).
 pub fn cmd_story_run(path: PathBuf, choice: usize) -> Result<()> {
     let cmds = CommandRegistry::builtin();
-    let r = run_path(&path, &cmds, choice).map_err(|e| anyhow::anyhow!(e))?;
-    for d in &r.build.check.diags {
-        if d.is_error() {
-            println!("{}", d.display());
+    let source = std::fs::read_to_string(&path)
+        .with_context(|| format!("read {}", path.display()))?;
+    let file = path.to_string_lossy().to_string();
+    match run_source_product(&source, &file, &cmds, choice) {
+        Ok(r) => {
+            for line in &r.dialogue {
+                println!("{line}");
+            }
+            println!(
+                "=> product steps={} ended={} vars={:?}",
+                r.steps, r.ended, r.vars
+            );
+            Ok(())
+        }
+        Err(e) => {
+            // Documented fallback: OpVs2 host
+            eprintln!("# product path failed ({e}); falling back to vs2-host");
+            let r = run_path(&path, &cmds, choice).map_err(|e| anyhow::anyhow!(e))?;
+            if !r.ok {
+                bail!("story run failed for {}", path.display());
+            }
+            for line in &r.dialogue {
+                println!("{line}");
+            }
+            for line in &r.log {
+                println!("# {line}");
+            }
+            println!("=> vs2-host steps={} state={:?}", r.steps, r.state);
+            Ok(())
         }
     }
-    if !r.ok {
-        bail!("story run failed for {}", path.display());
-    }
-    for line in &r.dialogue {
-        println!("{line}");
-    }
-    for line in &r.log {
-        println!("# {line}");
-    }
-    println!("=> steps={} state={:?}", r.steps, r.state);
-    Ok(())
 }
 
 /// `velvet story format`

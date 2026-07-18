@@ -15,6 +15,8 @@ use crate::parser::{parse, ParseResult};
 use crate::sema::{self, SemaResult};
 use crate::source_map::SourceMap;
 use crate::studio::StudioModel;
+use crate::to_story_program::to_story_program;
+use velvet_story::{StoryPlayer, StoryProgram, StoryWait};
 
 /// Combined check result.
 #[derive(Debug)]
@@ -325,6 +327,89 @@ pub fn dump_lowered_text(source: &str, file: &str, cmds: &CommandRegistry) -> Re
 /// Studio model from source.
 pub fn studio_model(source: &str, file: &str, cmds: &CommandRegistry) -> StudioModel {
     crate::studio::build_model(source, file, cmds)
+}
+
+/// Build product [`StoryProgram`] from writer source (Velvet 2.5 primary IR).
+pub fn build_story_program(
+    source: &str,
+    file: &str,
+    cmds: &CommandRegistry,
+    title: &str,
+) -> Result<StoryProgram, String> {
+    let check = check_source(source, file, cmds);
+    if !check.ok {
+        let msgs: Vec<_> = check.diags.iter().map(|d| d.display()).collect();
+        return Err(msgs.join("\n"));
+    }
+    to_story_program(&check.file, title).map_err(|e| e.to_string())
+}
+
+/// Result of running a StoryProgram on the product [`StoryPlayer`].
+/// Outcome of a product-path story run.
+#[derive(Debug)]
+pub struct ProgramRunResult {
+    /// Dialogue lines shown (`speaker: text`).
+    pub dialogue: Vec<String>,
+    /// Variable snapshot after run (play layer).
+    pub vars: Vec<(String, String)>,
+    /// Whether the story reached an end state.
+    pub ended: bool,
+    /// Steps advanced.
+    pub steps: u32,
+}
+
+/// Run StoryProgram headless via product StoryPlayer (preferred 2.5 path).
+pub fn run_story_program(program: StoryProgram, choice: usize, max_steps: u32) -> ProgramRunResult {
+    let mut player = StoryPlayer::start(program);
+    let mut dialogue = Vec::new();
+    let mut steps = 0u32;
+    while steps < max_steps {
+        steps += 1;
+        match player.wait().clone() {
+            StoryWait::Ended => break,
+            StoryWait::Line => {
+                let sp = player.current_speaker_name().to_string();
+                let tx = player.current_text().to_string();
+                if !tx.is_empty() {
+                    if sp.is_empty() {
+                        dialogue.push(format!("narrator: {tx}"));
+                    } else {
+                        dialogue.push(format!("{sp}: {tx}"));
+                    }
+                }
+                player.advance();
+            }
+            StoryWait::Choice => {
+                let idx = choice.min(player.choices().len().saturating_sub(1));
+                let arm = player.choices().get(idx).map(|c| c.index).unwrap_or(0);
+                let _ = player.choose(arm);
+            }
+            StoryWait::Ready => {
+                player.advance();
+            }
+        }
+    }
+    let mut vars = Vec::new();
+    for (k, v) in player.variables().play.iter() {
+        vars.push((k.clone(), v.display_str()));
+    }
+    ProgramRunResult {
+        dialogue,
+        vars,
+        ended: player.is_ended(),
+        steps,
+    }
+}
+
+/// Check → StoryProgram → product run (writer primary path).
+pub fn run_source_product(
+    source: &str,
+    file: &str,
+    cmds: &CommandRegistry,
+    choice: usize,
+) -> Result<ProgramRunResult, String> {
+    let prog = build_story_program(source, file, cmds, file)?;
+    Ok(run_story_program(prog, choice, 256))
 }
 
 /// Source map from build.

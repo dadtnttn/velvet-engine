@@ -26,6 +26,7 @@ pub mod sema;
 pub mod source_map;
 pub mod span;
 pub mod studio;
+pub mod to_story_program;
 pub mod token;
 
 pub use commands::{CommandRegistry, CommandSpec};
@@ -33,10 +34,12 @@ pub use diag::StoryDiag;
 pub use format::{format_source, is_idempotent};
 pub use load::{load_story_path, load_story_source};
 pub use pipeline::{
-    build_path, build_source, check_path, check_source, dump_ast_json, dump_lowered_text, run_path,
-    run_source, BuildResult, CheckResult, RunResult,
+    build_path, build_source, build_story_program, check_path, check_source, dump_ast_json,
+    dump_lowered_text, run_path, run_source, run_source_product, run_story_program, BuildResult,
+    CheckResult, ProgramRunResult, RunResult,
 };
 pub use studio::{build_model, StudioModel};
+pub use to_story_program::{to_story_program, ToProgramError};
 
 /// Welcome sample used in acceptance tests (from product requirements).
 pub const WELCOME_SAMPLE: &str = r#"scene start
