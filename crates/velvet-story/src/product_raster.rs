@@ -224,9 +224,16 @@ pub fn rasterize_product_paint(
     out_w: u32,
     out_h: u32,
 ) {
-    assert_eq!(buf.len(), (out_w * out_h) as usize);
-    // clear
-    buf.fill(pack_rgb(8, 6, 14));
+    let need = (out_w as usize).saturating_mul(out_h as usize);
+    assert!(
+        buf.len() >= need,
+        "buffer too small: len={} need={need} ({out_w}x{out_h})",
+        buf.len()
+    );
+    // clear only the used region
+    for p in buf.iter_mut().take(need) {
+        *p = pack_rgb(8, 6, 14);
+    }
 
     let sx = out_w as f32 / list.virtual_w.max(1.0);
     let sy = out_h as f32 / list.virtual_h.max(1.0);

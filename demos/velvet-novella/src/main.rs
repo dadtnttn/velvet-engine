@@ -278,8 +278,11 @@ impl ApplicationHandler for App {
         if self.headless {
             self.hframes += 1;
             self.session.tick(1.0 / 30.0);
-            // Exercise product paint path every few frames
+            // Exercise product paint path every few frames (fixed logical size)
             if self.hframes % 5 == 0 {
+                if self.pixels.len() != (WW * WH) as usize {
+                    self.pixels.resize((WW * WH) as usize, 0);
+                }
                 let _ = present_session(&self.session, &mut self.pixels, WW, WH);
             }
             match self.session.player().wait().clone() {
