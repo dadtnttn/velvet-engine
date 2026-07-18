@@ -1,0 +1,10 @@
+[package]
+name = "velvet-script-ast"
+description = "Typed AST for Velvet Script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-script-lexer = { workspace = true }

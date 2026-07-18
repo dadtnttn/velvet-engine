@@ -1,0 +1,17 @@
+﻿[package]
+name = "velvet-project"
+description = "Project model and velvet.project"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-core = { workspace = true }
+serde = { workspace = true }
+ron = { workspace = true }
+camino = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

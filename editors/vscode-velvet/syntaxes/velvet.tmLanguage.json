@@ -1,0 +1,9 @@
+{
+  "scopeName": "source.velvet",
+  "patterns": [
+    { "name": "comment.line.double-slash.velvet", "match": "//.*$" },
+    { "name": "keyword.control.velvet", "match": "\\b(function|scene|character|state|choice|jump|label|return|let|const|if|else|while|for|in|break|continue|show|hide|background|music|end|call)\\b" },
+    { "name": "string.quoted.double.velvet", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.velvet", "match": "\\\\." }] },
+    { "name": "constant.numeric.velvet", "match": "\\b[0-9]+(\\.[0-9]+)?\\b" }
+  ]
+}

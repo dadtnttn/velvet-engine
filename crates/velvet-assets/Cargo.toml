@@ -1,0 +1,22 @@
+[package]
+name = "velvet-assets"
+description = "Asset loading, handles, cache, and hot-reload for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ron = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+uuid = { workspace = true }
+camino = { workspace = true }
+sha2 = { workspace = true }
+indexmap = { workspace = true }
+slotmap = { workspace = true }

@@ -1,0 +1,81 @@
+character guide {
+    name: "Guide"
+    color: "#4fc3ff"
+}
+
+character stranger {
+    name: "Stranger"
+    color: "#c0a060"
+}
+
+state {
+    has_key: bool = false
+    forest_depth: int = 0
+    reputation: int = 0
+}
+
+scene main {
+    background "assets/bg/crossroads.png"
+    guide "Two paths. One toward the village smoke, one into the trees."
+    choice {
+        "Take the forest path" {
+            forest_depth += 1
+            jump forest_edge
+        }
+        "Head to the village" {
+            jump village_gate
+        }
+        "Wait and listen" {
+            guide "Wind. Distant bells. A crow that knows your name."
+            jump main
+        }
+    }
+}
+
+scene forest_edge {
+    background "assets/bg/forest.png"
+    "Moss drinks the sound of your steps."
+    stranger "Looking for the sealed door?"
+    choice {
+        "Ask about the key" {
+            stranger "Keys are earned, not found."
+            reputation += 1
+            jump forest_shrine
+        }
+        "Push past without a word" {
+            reputation -= 1
+            jump forest_shrine
+        }
+    }
+}
+
+scene forest_shrine {
+    "A stone plaque: only the patient may open what greed sealed."
+    if has_key {
+        jump ending_open
+    }
+    guide "Return when you carry more than courage."
+    jump main
+}
+
+scene village_gate {
+    background "assets/bg/village.png"
+    guide "The gatekeeper nods at familiar faces."
+    choice {
+        "Help mend the fence" {
+            reputation += 1
+            has_key = true
+            guide "He presses a cold iron key into your palm."
+            jump main
+        }
+        "Ask about the forest" {
+            guide "People vanish past the shrine. Take bread if you go."
+            jump main
+        }
+    }
+}
+
+scene ending_open {
+    "The sealed door yields. Beyond it: a quiet library of unfinished stories."
+    "Ending: Threshold"
+}

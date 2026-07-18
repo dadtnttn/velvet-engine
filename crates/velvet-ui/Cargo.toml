@@ -1,0 +1,19 @@
+[package]
+name = "velvet-ui"
+description = "UI layout and widgets for Velvet Engine games and tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-math = { workspace = true }
+velvet-text = { workspace = true }
+velvet-input = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+bitflags = { workspace = true }
+indexmap = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

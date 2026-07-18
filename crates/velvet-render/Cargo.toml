@@ -1,0 +1,29 @@
+[package]
+name = "velvet-render"
+description = "2D wgpu renderer for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true }
+velvet-math = { workspace = true }
+velvet-events = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+bytemuck = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+image = { workspace = true }
+raw-window-handle = { workspace = true }
+winit = { workspace = true, optional = true }
+
+[features]
+default = ["window"]
+window = ["dep:winit", "velvet-app/window"]
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

@@ -1,0 +1,7 @@
+(
+    name: "cellular-sandbox",
+    version: "0.1.0",
+    entry_scene: "src/main.rs",
+    template: "cellular-sandbox",
+    modules: ["cellular"],
+)

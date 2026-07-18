@@ -1,0 +1,24 @@
+function add(a, b) {
+    return a + b
+}
+
+function sum_to(n) {
+    let i = 0
+    let s = 0
+    while i < n {
+        i += 1
+        s += i
+    }
+    return s
+}
+
+state {
+    trust: int = 1
+}
+
+scene intro {
+    "Welcome to Velvet Script"
+    guide "You can compile and run this file with velvet script run"
+}
+
+let answer = add(2, 40)
