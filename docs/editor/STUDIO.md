@@ -64,6 +64,23 @@ velvet-editor (lib + velvet-studio bin)
   └── velvet-document — regions, UiDesigner, drag geometry
 ```
 
+## Screen layers (pantallas)
+
+Studio stacks **layers** as screens. Each layer has its own **pixel resolution**
+(e.g. 1280×720 desktop, 390×844 phone). The design surface is letterboxed to that
+aspect; widgets keep percent layout and the inspector also shows **pixel** coords.
+
+| Action | Control |
+|--------|---------|
+| Cycle layers | `[` `]` or PageUp / PageDown |
+| Click layer | Left **LAYERS** panel |
+| Unlock / lock | `U` |
+| Add mobile layer | `M` (390×844) |
+| Res presets | `Ctrl+3` HD · `Ctrl+4` phone portrait · `Ctrl+5` phone landscape |
+
+Bottom **main_menu** re-locks when you leave it (blocked while editing overlays).
+Switching to a different resolution plays a short **resize animation** on the canvas frame.
+
 ## Dual mode (simplified + advanced)
 
 | Mode | Key / API | Role |
