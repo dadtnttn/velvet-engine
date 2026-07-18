@@ -1,0 +1,22 @@
+[package]
+name = "velvet-story-lang"
+description = "Velvet Story — writer-friendly narrative language that lowers to Velvet Script 2"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-script-hir = { workspace = true }
+velvet-script-bytecode = { workspace = true }
+velvet-script-compiler = { workspace = true }
+velvet-script-vm = { workspace = true }
+velvet-script-i18n = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = "3"

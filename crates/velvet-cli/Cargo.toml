@@ -19,6 +19,7 @@ velvet-script-compiler = { workspace = true }
 velvet-script-vm = { workspace = true }
 velvet-script-format = { workspace = true }
 velvet-script-lsp = { workspace = true }
+velvet-story-lang = { workspace = true }
 velvet-document = { workspace = true }
 velvet-story = { workspace = true }
 velvet-audio = { workspace = true }

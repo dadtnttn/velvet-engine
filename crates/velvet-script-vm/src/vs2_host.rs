@@ -190,6 +190,36 @@ impl Vs2MiniVm {
                 let r = self.pop(); let l = self.pop();
                 self.push(if l == r { "1" } else { "0" });
             }
+            OpVs2::Ne => {
+                let r = self.pop(); let l = self.pop();
+                self.push(if l != r { "1" } else { "0" });
+            }
+            OpVs2::Lt | OpVs2::Le | OpVs2::Gt | OpVs2::Ge => {
+                let r = self.pop().parse::<f64>().unwrap_or(0.0);
+                let l = self.pop().parse::<f64>().unwrap_or(0.0);
+                let ok = match op {
+                    OpVs2::Lt => l < r,
+                    OpVs2::Le => l <= r,
+                    OpVs2::Gt => l > r,
+                    OpVs2::Ge => l >= r,
+                    _ => false,
+                };
+                self.push(if ok { "1" } else { "0" });
+            }
+            OpVs2::And => {
+                let r = self.pop();
+                let l = self.pop();
+                let lt = !(l == "0" || l.is_empty());
+                let rt = !(r == "0" || r.is_empty());
+                self.push(if lt && rt { "1" } else { "0" });
+            }
+            OpVs2::Or => {
+                let r = self.pop();
+                let l = self.pop();
+                let lt = !(l == "0" || l.is_empty());
+                let rt = !(r == "0" || r.is_empty());
+                self.push(if lt || rt { "1" } else { "0" });
+            }
             OpVs2::Not => {
                 let v = self.pop();
                 self.push(if v == "0" || v.is_empty() { "1" } else { "0" });
@@ -212,6 +242,16 @@ impl Vs2MiniVm {
             OpVs2::LoadMsg | OpVs2::Translate => {
                 let key = self.host.pool_str(a);
                 self.push(self.host.t(&key));
+            }
+            OpVs2::LoadState => {
+                let key = self.host.pool_str(a);
+                let v = self.host.load_state(&key).unwrap_or("0").to_string();
+                self.push(v);
+            }
+            OpVs2::StoreState => {
+                let key = self.host.pool_str(a);
+                let val = self.pop();
+                self.host.store_state(&key, &val);
             }
             other => {
                 let top = self.stack.last().cloned();
