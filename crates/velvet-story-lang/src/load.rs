@@ -98,10 +98,17 @@ fn merge_includes(
                 }
                 match load_recursive(&resolved, visited, diags, depth + 1) {
                     Ok(inc) => {
+                        let origin = resolved.to_string_lossy().to_string();
                         for it in inc.items {
                             // keep scenes/characters from included file; drop nested includes already expanded
                             match it {
                                 TopItem::Include { .. } => {}
+                                TopItem::Scene(mut sc) => {
+                                    if sc.origin_file.is_none() {
+                                        sc.origin_file = Some(origin.clone());
+                                    }
+                                    out_items.push(TopItem::Scene(sc));
+                                }
                                 other => out_items.push(other),
                             }
                         }

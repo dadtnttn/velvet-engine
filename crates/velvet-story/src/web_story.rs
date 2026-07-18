@@ -65,6 +65,10 @@ fn op_to_json(op: &StoryOp) -> Value {
             "name": name,
             "args": args,
         }),
+        StoryOp::Sound { path } => json!({ "kind": "sound", "path": path }),
+        StoryOp::Pause { seconds } => json!({ "kind": "pause", "seconds": seconds }),
+        StoryOp::Transition { name } => json!({ "kind": "transition", "name": name }),
+        StoryOp::Return => json!({ "kind": "return" }),
         StoryOp::Nop => json!({ "kind": "nop" }),
     }
 }

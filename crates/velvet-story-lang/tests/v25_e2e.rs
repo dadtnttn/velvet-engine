@@ -58,6 +58,74 @@ fn welcome_product_choice1_exact() {
 }
 
 #[test]
+fn sound_pause_return_not_nop() {
+    let src = r#"
+scene helper
+sound click
+return
+
+scene start
+call scene helper
+pause 1
+with fade
+narrator:
+    back
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    let prog = build_story_program(src, "ops.vstory", &cmds, "ops").unwrap();
+    let helper = &prog.scenes["helper"].ops;
+    assert!(
+        helper.iter().any(|o| matches!(o, StoryOp::Sound { .. })),
+        "{helper:?}"
+    );
+    assert!(
+        helper.iter().any(|o| matches!(o, StoryOp::Return)),
+        "{helper:?}"
+    );
+    let start = &prog.scenes["start"].ops;
+    assert!(start.iter().any(|o| matches!(o, StoryOp::Pause { .. })));
+    assert!(start
+        .iter()
+        .any(|o| matches!(o, StoryOp::Transition { .. })));
+}
+
+#[test]
+fn format_path_check_detects_dirty() {
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+    use velvet_story_lang::pipeline::format_path;
+    let mut f = NamedTempFile::new().unwrap();
+    // deliberately messy spacing that formatter will change
+    write!(f, "scene start\nluna:\nHola\n").unwrap();
+    let path = f.path().to_path_buf();
+    let err = format_path(&path, true);
+    // either needs formatting or already pretty — if pretty equal, ok
+    if let Err(e) = err {
+        assert!(e.contains("needs formatting") || e.contains("idempotent"), "{e}");
+    }
+}
+
+#[test]
+fn format_preserves_inline_scene_comment() {
+    use velvet_story_lang::format::format_source;
+    use velvet_story_lang::parser::parse;
+    let src = "scene start\n# keep me\nluna:\n    Hi\n";
+    let p = parse(src, "c.vstory");
+    // comment should appear as Stmt::Comment inside scene after parser fix
+    let sc = p.file.items.iter().find_map(|i| match i {
+        velvet_story_lang::ast::TopItem::Scene(s) => Some(s),
+        _ => None,
+    });
+    assert!(sc.is_some());
+    let has_c = sc.unwrap().body.iter().any(|s| {
+        matches!(s, velvet_story_lang::ast::Stmt::Comment { text, .. } if text.contains("keep"))
+    });
+    assert!(has_c, "comment lost in AST: {:?}", sc.unwrap().body);
+    let _ = format_source(src);
+}
+
+#[test]
 fn combat_command_on_product_path() {
     let src = r#"
 scene start

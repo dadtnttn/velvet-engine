@@ -8,7 +8,7 @@ use velvet_script_vm::{Vs2Host, Vs2MiniVm};
 use crate::ast::StoryFile;
 use crate::commands::CommandRegistry;
 use crate::diag::StoryDiag;
-use crate::format::{format_source, is_idempotent};
+use crate::format::format_source;
 use crate::load::{load_story_path, load_story_source};
 use crate::lower::{dump_lowered, lower, LowerOutput};
 use crate::parser::{parse, ParseResult};
@@ -107,6 +107,10 @@ pub struct BuildResult {
 }
 
 /// Build: check + lower (on include-resolved file).
+///
+/// Prefer **StoryProgram** as the canonical IR. The OpVs2 unit is derived from
+/// that program when possible (single spine); legacy direct HIR lower is only
+/// a last-resort fallback.
 pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildResult {
     let check = check_source(source, file, cmds);
     if !check.ok {
@@ -116,8 +120,26 @@ pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildRe
             ok: false,
         };
     }
-    let lowered = lower(&check.file);
+    // Single spine: AST → StoryProgram → OpVs2
     let mut check = check;
+    let lowered = match to_story_program(&check.file, file) {
+        Ok(prog) => {
+            let unit = crate::from_program::story_program_to_vs2(&prog);
+            // Build a LowerOutput-compatible package via legacy helper + replace unit
+            let mut lo = lower(&check.file);
+            lo.unit = unit;
+            lo
+        }
+        Err(e) => {
+            check.diags.push(crate::diag::StoryDiag::error(
+                "VST060",
+                e.to_string(),
+                file,
+                crate::span::Span::unknown(),
+            ));
+            lower(&check.file)
+        }
+    };
     check.diags.extend(lowered.diags.clone());
     let ok = !check.diags.iter().any(|d| d.is_error());
     BuildResult {
@@ -288,19 +310,21 @@ fn run_build(build: BuildResult, choice_index: usize) -> RunResult {
     }
 }
 
-/// Format path in place.
+/// Format path in place (or check-only).
+///
+/// `check_only`: returns `Err("needs formatting")` when formatted text differs
+/// from the file on disk (compares `pretty` to original `source`, not to itself).
 pub fn format_path(path: &Path, check_only: bool) -> Result<String, String> {
     let source = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let pretty = format_source(&source);
-    if !is_idempotent(&source) && format_source(&pretty) != pretty {
+    let twice = format_source(&pretty);
+    if twice != pretty {
         return Err("formatter not idempotent".into());
     }
     if check_only {
-        if pretty != source && pretty != format_source(&source) {
-            // compare normalized
-            if pretty.trim() != source.trim() {
-                return Err("needs formatting".into());
-            }
+        // Compare formatted output to original file contents.
+        if pretty != source {
+            return Err("needs formatting".into());
         }
         return Ok(pretty);
     }

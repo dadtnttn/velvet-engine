@@ -60,6 +60,15 @@ impl Parser {
         t
     }
 
+    /// Skip blank lines only — **comments are kept** so they become `Stmt::Comment`
+    /// and survive the formatter (Velvet 2.5).
+    fn skip_newlines(&mut self) {
+        while matches!(self.peek_kind(), TokenKind::Newline) {
+            self.bump();
+        }
+    }
+
+    /// Skip newlines and comments (use only when comments must not enter the AST).
     fn skip_nl_comments(&mut self) {
         loop {
             match self.peek_kind() {
@@ -78,11 +87,16 @@ impl Parser {
 
     fn parse_file(&mut self) -> Vec<TopItem> {
         let mut items = Vec::new();
-        self.skip_nl_comments();
+        self.skip_newlines();
         while !matches!(self.peek_kind(), TokenKind::Eof) {
-            self.skip_nl_comments();
+            self.skip_newlines();
             if matches!(self.peek_kind(), TokenKind::Eof) {
                 break;
+            }
+            // Top-level comments: discard (not attached to a scene).
+            if matches!(self.peek_kind(), TokenKind::Comment(_)) {
+                self.bump();
+                continue;
             }
             // recover from stray dedent
             if matches!(self.peek_kind(), TokenKind::Dedent) {
@@ -101,7 +115,7 @@ impl Parser {
                     ) {
                         self.bump();
                     }
-                    self.skip_nl_comments();
+                    self.skip_newlines();
                 }
             }
         }
@@ -109,7 +123,7 @@ impl Parser {
     }
 
     fn parse_top(&mut self) -> Option<TopItem> {
-        self.skip_nl_comments();
+        self.skip_newlines();
         let t = self.peek().clone();
         match &t.kind {
             TokenKind::Ident(name) if name == "scene" => {
@@ -119,7 +133,12 @@ impl Parser {
                 let span = t.span;
                 self.expect_newline_or_eof();
                 let body = self.parse_block_body();
-                Some(TopItem::Scene(Scene { name, body, span }))
+                Some(TopItem::Scene(Scene {
+                    name,
+                    body,
+                    span,
+                    origin_file: Some(self.file.clone()),
+                }))
             }
             TokenKind::Ident(name) if name == "include" => {
                 self.bump();
@@ -174,7 +193,7 @@ impl Parser {
         if matches!(self.peek_kind(), TokenKind::Indent(_)) {
             self.bump();
             loop {
-                self.skip_nl_comments();
+                self.skip_newlines();
                 if matches!(self.peek_kind(), TokenKind::Dedent) {
                     self.bump();
                     break;
@@ -192,13 +211,13 @@ impl Parser {
                     ) {
                         self.bump();
                     }
-                    self.skip_nl_comments();
+                    self.skip_newlines();
                 }
             }
         } else {
             // statements at same level until next scene/top or eof
             loop {
-                self.skip_nl_comments();
+                self.skip_newlines();
                 if matches!(self.peek_kind(), TokenKind::Eof) {
                     break;
                 }
@@ -221,13 +240,13 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self) -> Option<Stmt> {
-        self.skip_nl_comments();
+        self.skip_newlines();
         let t = self.peek().clone();
         match &t.kind {
             TokenKind::Comment(text) => {
                 let text = text.clone();
                 self.bump();
-                self.skip_nl_comments();
+                self.skip_newlines();
                 Some(Stmt::Comment {
                     text,
                     span: t.span,
@@ -320,7 +339,7 @@ impl Parser {
                             if matches!(self.peek_kind(), TokenKind::Indent(_)) {
                                 self.bump();
                                 loop {
-                                    self.skip_nl_comments();
+                                    self.skip_newlines();
                                     if matches!(self.peek_kind(), TokenKind::Dedent) {
                                         self.bump();
                                         break;
@@ -418,7 +437,7 @@ impl Parser {
                         self.expect_newline_or_eof();
                         let then_body = self.parse_block_body();
                         let mut else_body = None;
-                        self.skip_nl_comments();
+                        self.skip_newlines();
                         if let TokenKind::Ident(n) = self.peek_kind() {
                             if n == "else" {
                                 self.bump();
@@ -446,7 +465,7 @@ impl Parser {
                         if matches!(self.peek_kind(), TokenKind::Indent(_)) {
                             self.bump();
                             loop {
-                                self.skip_nl_comments();
+                                self.skip_newlines();
                                 if matches!(self.peek_kind(), TokenKind::Dedent) {
                                     self.bump();
                                     break;
@@ -552,7 +571,7 @@ impl Parser {
                                 self.bump();
                                 let mut lines = Vec::new();
                                 loop {
-                                    self.skip_nl_comments();
+                                    self.skip_newlines();
                                     if matches!(self.peek_kind(), TokenKind::Dedent) {
                                         self.bump();
                                         break;

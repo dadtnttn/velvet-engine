@@ -628,6 +628,45 @@ impl StoryPlayer {
                 });
                 true
             }
+            StoryOp::Sound { path } => {
+                self.vars
+                    .set("__last_sfx", StoryValue::String(path.clone()));
+                self.events.push(StoryEvent::Variable {
+                    name: "__last_sfx".into(),
+                    value: StoryValue::String(path),
+                });
+                true
+            }
+            StoryOp::Pause { seconds } => {
+                if let Some(s) = seconds {
+                    self.vars.set("__last_pause", StoryValue::Float(s));
+                } else {
+                    self.vars.set("__last_pause", StoryValue::Float(0.0));
+                }
+                true
+            }
+            StoryOp::Transition { name } => {
+                self.vars
+                    .set("__last_transition", StoryValue::String(name.clone()));
+                self.events.push(StoryEvent::Variable {
+                    name: "__last_transition".into(),
+                    value: StoryValue::String(name),
+                });
+                true
+            }
+            StoryOp::Return => {
+                if let Some((scene, idx)) = self.snapshot.call_stack.pop() {
+                    self.snapshot.scene = scene;
+                    self.snapshot.op_index = idx;
+                    self.snapshot.wait = StoryWait::Ready;
+                    // do not auto-increment — we landed on the return index already
+                    false
+                } else {
+                    // bare return with empty stack ≈ end of story branch
+                    self.end_story(None);
+                    false
+                }
+            }
         }
     }
 

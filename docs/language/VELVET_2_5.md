@@ -8,13 +8,16 @@ Velvet **2.5** no es “VS2 terminado” ni “+30k LOC”. Es el hito **post-li
 2. **Velvet Story** (`.vstory`) bajando a **`StoryProgram`** de producto (`velvet-story`).
 3. Pruebas e2e con **asserts exactos**, sin relleno.
 
-## Pipeline preferido (escritores)
+## Pipeline preferido (escritores) — columna única
 
 ```text
 .vstory → parser → AST → sema
-       → StoryProgram  → StoryPlayer / VnSession   ← preferido 2.5
-       → (fallback) OpVs2 + Vs2Host               ← debug / host
+       → StoryProgram          ← IR canónica
+            ├→ StoryPlayer / VnSession   ← runtime preferido
+            └→ OpVs2 (derivado de StoryProgram)  ← fallback; no es un lower paralelo
 ```
+
+Instrucciones de presentación (`sound`, `pause`, `with`/`transition`, `return`) ya bajan a `StoryOp` reales (no `Nop`).
 
 ```bash
 velvet story check stories/main.vstory

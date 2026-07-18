@@ -92,6 +92,23 @@ pub enum StoryOp {
         #[serde(default)]
         args: IndexMap<String, StoryValue>,
     },
+    /// Play one-shot SFX.
+    Sound {
+        /// Asset path / id.
+        path: String,
+    },
+    /// Pause / wait beat (seconds if known).
+    Pause {
+        /// Optional duration in seconds.
+        seconds: Option<f64>,
+    },
+    /// Named transition (fade, dissolve, …).
+    Transition {
+        /// Transition id.
+        name: String,
+    },
+    /// Return from a Call scene (pops call stack).
+    Return,
     /// No-op / pause beat.
     Nop,
 }
