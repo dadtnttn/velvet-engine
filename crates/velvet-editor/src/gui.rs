@@ -190,6 +190,50 @@ impl StudioGuiSession {
         Ok(())
     }
 
+    /// Set position string e.g. `(50%, 62%)` on selected/given region.
+    pub fn set_widget_position(&mut self, region_id: Option<&str>, position: &str) -> Result<()> {
+        let id = region_id
+            .map(|s| s.to_string())
+            .or_else(|| self.selected_region.clone())
+            .ok_or_else(|| anyhow::anyhow!("no region for position"))?;
+        let normalized = normalize_pct_pair(position)
+            .ok_or_else(|| anyhow::anyhow!("bad position (use 50,62 or (50%, 62%))"))?;
+        let mut d =
+            UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
+        d.set_position(&id, &normalized)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.document_source = d.save_source();
+        self.log
+            .push(format!("[studio-gui] set_position region={id} {normalized}"));
+        Ok(())
+    }
+
+    /// Set size string e.g. `(18%, 8%)` on selected/given region.
+    pub fn set_widget_size(&mut self, region_id: Option<&str>, size: &str) -> Result<()> {
+        let id = region_id
+            .map(|s| s.to_string())
+            .or_else(|| self.selected_region.clone())
+            .ok_or_else(|| anyhow::anyhow!("no region for size"))?;
+        let normalized = normalize_pct_pair(size)
+            .ok_or_else(|| anyhow::anyhow!("bad size (use 18,8 or (18%, 8%))"))?;
+        let mut d =
+            UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
+        d.set_size(&id, &normalized)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.document_source = d.save_source();
+        self.log
+            .push(format!("[studio-gui] set_size region={id} {normalized}"));
+        Ok(())
+    }
+
+    /// Nudge selected widget position by integer percent points.
+    pub fn nudge_selected(&mut self, dx: f32, dy: f32) -> Result<Option<WidgetRect>> {
+        if self.selected_region.is_none() {
+            return Ok(None);
+        }
+        Ok(Some(self.drag_region(None, dx, dy)?))
+    }
+
     /// Advanced mode: replace entire document source (must parse).
     pub fn set_advanced_source(&mut self, source: impl Into<String>) -> Result<()> {
         let source = source.into();
@@ -300,6 +344,28 @@ impl StudioGuiSession {
             .map(|p| p.id.as_str())
             .collect()
     }
+}
+
+/// Accept `50,62`, `50% 62%`, `(50%, 62%)` → `(50%, 62%)`.
+fn normalize_pct_pair(raw: &str) -> Option<String> {
+    let t = raw
+        .trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .replace('%', " ");
+    let parts: Vec<&str> = t
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let a: f32 = parts[0].parse().ok()?;
+    let b: f32 = parts[1].parse().ok()?;
+    if !a.is_finite() || !b.is_finite() {
+        return None;
+    }
+    Some(format!("({:.0}%, {:.0}%)", a.clamp(0.0, 100.0), b.clamp(0.0, 100.0)))
 }
 
 fn default_dock_panels() -> Vec<DockPanel> {
@@ -528,6 +594,10 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         drag_acc_pct: (f32, f32),
         /// Ctrl/Super held (tracked via ModifiersChanged — KeyEvent has no modifiers).
         ctrl_held: bool,
+        /// Inspector field being edited (TEXT / POS / SIZE).
+        edit_field: Option<crate::studio_paint::InspectorField>,
+        /// Live buffer while editing an inspector field.
+        edit_buf: String,
         status: String,
     }
 
@@ -572,6 +642,51 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                     if event.state != ElementState::Pressed {
                         return;
                     }
+                    // ── Inspector text editing takes keyboard focus ──
+                    if self.edit_field.is_some() {
+                        let PhysicalKey::Code(c) = event.physical_key else {
+                            // still accept text via event.text
+                            if let Some(t) = event.text.as_ref() {
+                                for ch in t.chars() {
+                                    if !ch.is_control() {
+                                        self.edit_buf.push(ch);
+                                    }
+                                }
+                                self.redraw();
+                            }
+                            return;
+                        };
+                        match c {
+                            KeyCode::Enter | KeyCode::NumpadEnter => {
+                                self.commit_edit();
+                            }
+                            KeyCode::Escape => {
+                                self.cancel_edit();
+                                self.status = "edit cancelled".into();
+                                self.redraw();
+                            }
+                            KeyCode::Backspace => {
+                                self.edit_buf.pop();
+                                self.redraw();
+                            }
+                            KeyCode::Delete => {
+                                self.edit_buf.clear();
+                                self.redraw();
+                            }
+                            _ => {
+                                if let Some(t) = event.text.as_ref() {
+                                    for ch in t.chars() {
+                                        if !ch.is_control() && self.edit_buf.len() < 64 {
+                                            self.edit_buf.push(ch);
+                                        }
+                                    }
+                                    self.redraw();
+                                }
+                            }
+                        }
+                        return;
+                    }
+
                     let PhysicalKey::Code(c) = event.physical_key else {
                         return;
                     };
@@ -588,8 +703,58 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         KeyCode::KeyL if self.session.mode == StudioEditorMode::Simplified => {
                             self.drop_at_cursor("label");
                         }
+                        // P = edit POS when selected, else drop panel
                         KeyCode::KeyP if self.session.mode == StudioEditorMode::Simplified => {
-                            self.drop_at_cursor("panel");
+                            if self.session.selected_region.is_some() {
+                                self.begin_edit(crate::studio_paint::InspectorField::Pos);
+                            } else {
+                                self.drop_at_cursor("panel");
+                            }
+                        }
+                        KeyCode::KeyT
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some() =>
+                        {
+                            self.begin_edit(crate::studio_paint::InspectorField::Text);
+                        }
+                        KeyCode::KeyZ
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some()
+                                && !self.ctrl_held =>
+                        {
+                            self.begin_edit(crate::studio_paint::InspectorField::Size);
+                        }
+                        KeyCode::ArrowLeft
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some() =>
+                        {
+                            let _ = self.session.nudge_selected(-1.0, 0.0);
+                            self.status = "nudge left".into();
+                            self.redraw();
+                        }
+                        KeyCode::ArrowRight
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some() =>
+                        {
+                            let _ = self.session.nudge_selected(1.0, 0.0);
+                            self.status = "nudge right".into();
+                            self.redraw();
+                        }
+                        KeyCode::ArrowUp
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some() =>
+                        {
+                            let _ = self.session.nudge_selected(0.0, -1.0);
+                            self.status = "nudge up".into();
+                            self.redraw();
+                        }
+                        KeyCode::ArrowDown
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some() =>
+                        {
+                            let _ = self.session.nudge_selected(0.0, 1.0);
+                            self.status = "nudge down".into();
+                            self.redraw();
                         }
                         KeyCode::KeyS if self.ctrl_held => {
                             self.do_save();
@@ -622,6 +787,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                     if state == ElementState::Pressed {
                         // Toolbar hits (mode / save) work in both modes
                         if let Some(action) = layout.hit_toolbar(self.cursor.0, self.cursor.1) {
+                            self.cancel_edit();
                             match action {
                                 "mode_visual" => {
                                     let _ = self.session.set_mode(StudioEditorMode::Simplified);
@@ -640,12 +806,30 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             return;
                         }
 
+                        // Inspector field click → start edit (needs selection)
+                        if self.session.mode == StudioEditorMode::Simplified
+                            && self.session.selected_region.is_some()
+                            && layout.contains_inspector(self.cursor.0, self.cursor.1)
+                        {
+                            if let Some(field) =
+                                layout.hit_inspector_field(self.cursor.0, self.cursor.1)
+                            {
+                                self.begin_edit(field);
+                                return;
+                            }
+                            // click empty inspector area: keep selection, end edit
+                            self.cancel_edit();
+                            self.redraw();
+                            return;
+                        }
+
                         if self.session.mode != StudioEditorMode::Simplified {
                             return;
                         }
 
                         // Palette: click to drop at canvas center (or cursor if on canvas)
                         if layout.contains_left_dock(self.cursor.0, self.cursor.1) {
+                            self.cancel_edit();
                             if let Some(kind) = layout.hit_palette(self.cursor.0, self.cursor.1) {
                                 match self.session.drop_widget(kind, 50.0, 50.0) {
                                     Ok(id) => {
@@ -680,10 +864,12 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             self.dragging = false;
                             return;
                         }
+                        self.cancel_edit();
                         let (cx, cy) = layout.screen_to_canvas_pct(self.cursor.0, self.cursor.1);
                         match self.session.canvas_pointer_down(cx, cy) {
                             Ok(Some(id)) => {
-                                self.status = format!("selected {id} — drag to move");
+                                self.status =
+                                    format!("selected {id} — drag / T edit text / click inspector");
                                 self.dragging = true;
                                 self.drag_last_px = Some(self.cursor);
                                 self.drag_acc_pct = (0.0, 0.0);
@@ -805,6 +991,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         }
 
         fn drop_at_cursor(&mut self, kind: &str) {
+            self.cancel_edit();
             let (cx, cy) = self.cursor_canvas_pct();
             match self.session.drop_widget(kind, cx, cy) {
                 Ok(id) => self.status = format!("dropped {id} at ({cx:.0}%, {cy:.0}%)"),
@@ -814,9 +1001,73 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         }
 
         fn do_save(&mut self) {
+            if self.edit_field.is_some() {
+                self.commit_edit();
+            }
             match self.session.save_document() {
                 Ok(()) => self.status = "saved to disk".into(),
                 Err(e) => self.status = format!("save: {e}"),
+            }
+            self.redraw();
+        }
+
+        fn cancel_edit(&mut self) {
+            self.edit_field = None;
+            self.edit_buf.clear();
+        }
+
+        fn begin_edit(&mut self, field: crate::studio_paint::InspectorField) {
+            use crate::studio_paint::InspectorField;
+            let Some(id) = self.session.selected_region.clone() else {
+                self.status = "select a widget first".into();
+                self.redraw();
+                return;
+            };
+            let widgets = self.session.list_widgets().unwrap_or_default();
+            let w = widgets.iter().find(|w| w.id == id);
+            let initial = match (field, w) {
+                (InspectorField::Text, Some(w)) => w.text.clone().unwrap_or_default(),
+                (InspectorField::Text, None) => String::new(),
+                (InspectorField::Pos, Some(w)) => w
+                    .position
+                    .clone()
+                    .unwrap_or_else(|| "(50%, 50%)".into()),
+                (InspectorField::Pos, None) => "(50%, 50%)".into(),
+                (InspectorField::Size, Some(w)) => w
+                    .size
+                    .clone()
+                    .unwrap_or_else(|| "(18%, 8%)".into()),
+                (InspectorField::Size, None) => "(18%, 8%)".into(),
+            };
+            self.edit_field = Some(field);
+            self.edit_buf = initial;
+            self.status = format!(
+                "editing {} — type, Enter apply, Esc cancel",
+                field.label()
+            );
+            self.redraw();
+        }
+
+        fn commit_edit(&mut self) {
+            use crate::studio_paint::InspectorField;
+            let Some(field) = self.edit_field else {
+                return;
+            };
+            let buf = self.edit_buf.clone();
+            let result = match field {
+                InspectorField::Text => self.session.set_widget_text(None, &buf),
+                InspectorField::Pos => self.session.set_widget_position(None, &buf),
+                InspectorField::Size => self.session.set_widget_size(None, &buf),
+            };
+            match result {
+                Ok(()) => {
+                    self.status = format!("{} updated", field.label());
+                    self.cancel_edit();
+                }
+                Err(e) => {
+                    self.status = format!("edit failed: {e}");
+                    // keep edit open so user can fix
+                }
             }
             self.redraw();
         }
@@ -869,6 +1120,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 self.session.advanced_source(),
                 &self.status,
                 self.dragging,
+                self.edit_field,
+                &self.edit_buf,
             );
 
             let Some(surface) = self.surface.as_mut() else {
@@ -920,7 +1173,9 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         dragging: false,
         drag_acc_pct: (0.0, 0.0),
         ctrl_held: false,
-        status: "ready — click palette, drag widgets, Ctrl+S save".into(),
+        edit_field: None,
+        edit_buf: String::new(),
+        status: "ready — select widget, click TEXT/POS/SIZE to edit".into(),
     };
     event_loop
         .run_app(&mut host)
@@ -1048,5 +1303,40 @@ button start {
 
         session.toggle_mode().unwrap();
         assert_eq!(session.mode, StudioEditorMode::Advanced);
+    }
+
+    #[test]
+    fn inspector_set_text_pos_size_and_normalize() {
+        let dir = tempdir().unwrap();
+        let proj = dir.path().join("game");
+        fs::create_dir_all(proj.join("scripts")).unwrap();
+        fs::write(
+            proj.join("velvet.project"),
+            r#"(name: "g", version: "0.1.0", entry_scene: "scripts/main.vel")"#,
+        )
+        .unwrap();
+        let menu = proj.join("scripts/main_menu.vel");
+        fs::write(&menu, MENU).unwrap();
+
+        let mut session = StudioGuiSession::open_project(&proj).unwrap();
+        session.open_document(&menu).unwrap();
+        session.select_region("button.start").unwrap();
+
+        session.set_widget_text(None, "Jugar ahora").unwrap();
+        session.set_widget_position(None, "40, 55").unwrap();
+        session.set_widget_size(None, "22% 10%").unwrap();
+        session.nudge_selected(1.0, -1.0).unwrap();
+
+        let src = &session.document_source;
+        assert!(src.contains("Jugar ahora"), "{src}");
+        assert!(
+            src.contains("position: (41%, 54%)") || src.contains("(41%, 54%)"),
+            "{src}"
+        );
+        assert!(src.contains("size:") && src.contains("22%"), "{src}");
+        assert!(src.contains("game.new()"), "advanced kept: {src}");
+
+        assert!(normalize_pct_pair("50,62").unwrap().contains("50%"));
+        assert!(normalize_pct_pair("bad").is_none());
     }
 }
