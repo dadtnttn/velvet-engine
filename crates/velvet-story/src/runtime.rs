@@ -7,6 +7,7 @@ use tracing::debug;
 use crate::auto_mode::AutoModeController;
 use crate::character::Character;
 use crate::history::History;
+use crate::host::SharedCommandHost;
 use crate::ir::{
     StoryArithOp, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand, StoryProgram,
 };
@@ -166,7 +167,7 @@ struct CallContinuation {
 }
 
 /// Story runtime / player.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StoryPlayer {
     program: StoryProgram,
     vars: StoryVariables,
@@ -202,11 +203,35 @@ pub struct StoryPlayer {
     auto_mode: AutoModeController,
     /// Optional voice line queue for wait-for-voice / skip hooks.
     voice: VoiceQueue,
+    /// Optional external command dispatcher (`call combat.start: …`).
+    command_host: Option<SharedCommandHost>,
+    /// Last host error message (if dispatch failed).
+    last_host_error: Option<String>,
+}
+
+impl std::fmt::Debug for StoryPlayer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StoryPlayer")
+            .field("scene", &self.snapshot.scene)
+            .field("op_index", &self.snapshot.op_index)
+            .field("wait", &self.snapshot.wait)
+            .field("has_command_host", &self.command_host.is_some())
+            .finish()
+    }
 }
 
 impl StoryPlayer {
     /// Start a program from the beginning.
     pub fn start(program: StoryProgram) -> Self {
+        Self::start_with_host_opt(program, None)
+    }
+
+    /// Start with a command host already attached (so first `HostCall` dispatches).
+    pub fn start_with_host(program: StoryProgram, host: SharedCommandHost) -> Self {
+        Self::start_with_host_opt(program, Some(host))
+    }
+
+    fn start_with_host_opt(program: StoryProgram, host: Option<SharedCommandHost>) -> Self {
         let entry = program.entry.clone();
         let title = program.title.clone();
         let mut vars = StoryVariables::new();
@@ -239,12 +264,32 @@ impl StoryPlayer {
             ending: None,
             auto_mode: AutoModeController::default(),
             voice: VoiceQueue::default(),
+            command_host: host,
+            last_host_error: None,
         };
         player.auto_mode.sync_prefs(&player.prefs);
         player.voice.wait_for_voice = player.prefs.wait_for_voice;
         player.voice.master_volume = player.prefs.voice_volume;
         player.pump();
         player
+    }
+
+    /// Attach an external command host (combat, inventory, …).
+    ///
+    /// Invoked for every [`StoryOp::HostCall`]. Without a host, HostCall still
+    /// emits events and debug variables.
+    pub fn set_command_host(&mut self, host: SharedCommandHost) {
+        self.command_host = Some(host);
+    }
+
+    /// Clear the command host.
+    pub fn clear_command_host(&mut self) {
+        self.command_host = None;
+    }
+
+    /// Last error from the command host, if any.
+    pub fn last_host_error(&self) -> Option<&str> {
+        self.last_host_error.as_deref()
     }
 
     /// Program reference.
@@ -709,6 +754,19 @@ impl StoryPlayer {
                 }
                 for (k, v) in args.iter() {
                     self.vars.set(format!("cmd.{name}.{k}"), v.clone());
+                }
+                self.last_host_error = None;
+                if let Some(host) = self.command_host.clone() {
+                    if let Err(e) = host.call(&name, &args, &mut self.vars) {
+                        self.last_host_error = Some(e.message.clone());
+                        self.vars.set(
+                            "__last_host_error",
+                            StoryValue::String(e.message),
+                        );
+                    } else {
+                        self.vars
+                            .set("__host_dispatched", StoryValue::String(name.clone()));
+                    }
                 }
                 self.events.push(StoryEvent::HostCall {
                     name: name.clone(),
@@ -1579,6 +1637,63 @@ scene start {
             "ops after call/return inside choice must run"
         );
         assert_eq!(player.ending(), Some("done"));
+    }
+
+    #[test]
+    fn command_host_handler_runs_on_host_call() {
+        use crate::host::command_host_fn;
+        use crate::ir::{StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use indexmap::IndexMap;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let hits = Arc::new(AtomicUsize::new(0));
+        let h = hits.clone();
+        let host = command_host_fn(move |name, args, vars| {
+            assert_eq!(name, "combat.start");
+            assert_eq!(
+                args.get("enemy"),
+                Some(&StoryValue::String("goblin".into()))
+            );
+            h.fetch_add(1, Ordering::SeqCst);
+            vars.set("combat_started", StoryValue::Int(7));
+            Ok(())
+        });
+
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::HostCall {
+                        name: "combat.start".into(),
+                        args: {
+                            let mut m = IndexMap::new();
+                            m.insert("enemy".into(), StoryValue::String("goblin".into()));
+                            m
+                        },
+                    },
+                    StoryOp::End { ending: None },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("host");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start_with_host(prog, host);
+        assert_eq!(hits.load(Ordering::SeqCst), 1, "handler must run");
+        assert_eq!(player.variables().get_int("combat_started", 0), 7);
+        assert_eq!(
+            player.variables().get("__host_dispatched").display_str(),
+            "combat.start"
+        );
+        assert!(player
+            .drain_events()
+            .iter()
+            .any(|e| matches!(e, StoryEvent::HostCall { name, .. } if name == "combat.start")));
     }
 
     #[test]

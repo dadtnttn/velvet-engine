@@ -14,6 +14,7 @@ pub mod inspector;
 pub mod layers;
 pub mod project_browser;
 pub mod script_panel;
+pub mod story_lang;
 pub mod studio;
 pub mod studio_paint;
 pub mod studio_project;
@@ -32,4 +33,5 @@ pub use gui::{
     run_studio_gui, DockPanel, NodesTool, StudioEditorMode, StudioGuiConfig, StudioGuiSession,
     StudioGuiStatus,
 };
+pub use story_lang::{story_studio_model, story_studio_model_path};
 pub use studio::StudioApp;

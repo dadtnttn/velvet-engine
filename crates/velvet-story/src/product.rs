@@ -185,6 +185,20 @@ pub struct PresentationState {
     pub transitions: TransitionQueue,
     /// Last placement move target (for move transition bookkeeping).
     pub last_move_to: Option<String>,
+    /// Last one-shot SFX path requested by story (host plays audio).
+    pub last_sfx: Option<String>,
+    /// Queue of SFX paths in order (cleared by host after play).
+    pub sfx_queue: Vec<String>,
+    /// Last pause duration in seconds (None = beat without duration).
+    pub last_pause: Option<f64>,
+    /// Whether a pause beat is pending presentation.
+    pub pause_pending: bool,
+    /// Last transition id from story ops.
+    pub last_transition_name: Option<String>,
+    /// Last host command name dispatched from story.
+    pub last_host_call: Option<String>,
+    /// Args of last host call (for debug / host reconcilation).
+    pub last_host_args: IndexMap<String, crate::value::StoryValue>,
 }
 
 impl PresentationState {
@@ -876,12 +890,31 @@ impl VnSession {
                     self.choice.close();
                 }
                 StoryEvent::Variable { .. } => {}
-                // Presentation hooks: hosts / audio layer subscribe via drain_events
-                // or override; product shell keeps vars for debugging.
-                StoryEvent::Sound { .. }
-                | StoryEvent::Pause { .. }
-                | StoryEvent::Transition { .. }
-                | StoryEvent::HostCall { .. } => {}
+                StoryEvent::Sound { path } => {
+                    self.presentation.last_sfx = Some(path.clone());
+                    self.presentation.sfx_queue.push(path);
+                }
+                StoryEvent::Pause { seconds } => {
+                    self.presentation.last_pause = seconds;
+                    self.presentation.pause_pending = true;
+                }
+                StoryEvent::Transition { name } => {
+                    self.presentation.last_transition_name = Some(name.clone());
+                    // Map common names onto the transition queue for the product shell.
+                    let lower = name.to_ascii_lowercase();
+                    if lower.contains("fade") {
+                        self.presentation.fade(0.35);
+                    } else if lower.contains("move") {
+                        // generic dissolve as stand-in when no sprite target
+                        self.presentation.dissolve(0.3);
+                    } else {
+                        self.presentation.dissolve(0.35);
+                    }
+                }
+                StoryEvent::HostCall { name, args } => {
+                    self.presentation.last_host_call = Some(name);
+                    self.presentation.last_host_args = args;
+                }
             }
         }
     }
@@ -1202,6 +1235,78 @@ scene end_good {
             s4.presentation.background.as_deref() == Some("assets/bg/room.png"),
             "background from script, got {:?}",
             s4.presentation.background
+        );
+    }
+
+    #[test]
+    fn presentation_hooks_apply_sound_pause_transition_host() {
+        use crate::ir::{StoryOp, StoryProgram, StoryScene};
+        use crate::value::StoryValue;
+        use indexmap::IndexMap;
+
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::Sound {
+                        path: "ui/click.ogg".into(),
+                    },
+                    StoryOp::Pause {
+                        seconds: Some(1.25),
+                    },
+                    StoryOp::Transition {
+                        name: "fade".into(),
+                    },
+                    StoryOp::HostCall {
+                        name: "combat.start".into(),
+                        args: {
+                            let mut m = IndexMap::new();
+                            m.insert("enemy".into(), StoryValue::String("wolf".into()));
+                            m
+                        },
+                    },
+                    StoryOp::End { ending: None },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("fx");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut session = VnSession::new(StoryPlayer::start(prog));
+        session.ingest_events();
+        assert_eq!(
+            session.presentation.last_sfx.as_deref(),
+            Some("ui/click.ogg")
+        );
+        assert!(session
+            .presentation
+            .sfx_queue
+            .iter()
+            .any(|p| p == "ui/click.ogg"));
+        assert_eq!(session.presentation.last_pause, Some(1.25));
+        assert!(session.presentation.pause_pending);
+        assert_eq!(
+            session.presentation.last_transition_name.as_deref(),
+            Some("fade")
+        );
+        assert!(
+            session.presentation.transitions.len() >= 1,
+            "fade transition should enqueue"
+        );
+        assert_eq!(
+            session.presentation.last_host_call.as_deref(),
+            Some("combat.start")
+        );
+        assert_eq!(
+            session
+                .presentation
+                .last_host_args
+                .get("enemy")
+                .map(|v| v.display_str()),
+            Some("wolf".into())
         );
     }
 

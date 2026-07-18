@@ -122,8 +122,9 @@ fn walk_stmts(
             }
             Stmt::CallCommand { name, args, span } => {
                 if let Some(spec) = cmds.get(name) {
-                    for req in &spec.required {
-                        if !args.iter().any(|(k, _)| k == req) {
+                    // Prefer param.required (synced into required_params on register).
+                    for req in cmds.required_params(name) {
+                        if !args.iter().any(|(k, _)| k == &req) {
                             r.diags.push(
                                 StoryDiag::error_key(
                                     "VST022",

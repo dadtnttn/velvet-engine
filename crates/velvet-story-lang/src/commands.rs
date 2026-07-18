@@ -141,7 +141,16 @@ impl CommandRegistry {
     }
 
     /// Register (replace if same name).
-    pub fn register(&mut self, spec: CommandSpec) {
+    ///
+    /// Synchronizes [`CommandSpec::required`] with each
+    /// [`CommandParam::required`] so writers cannot leave the two lists out of
+    /// sync.
+    pub fn register(&mut self, mut spec: CommandSpec) {
+        for p in &spec.params {
+            if p.required && !spec.required.iter().any(|n| n == &p.name) {
+                spec.required.push(p.name.clone());
+            }
+        }
         if let Some(i) = self.commands.iter().position(|c| c.name == spec.name) {
             self.commands[i] = spec;
         } else {
@@ -152,6 +161,66 @@ impl CommandRegistry {
     /// Lookup.
     pub fn get(&self, name: &str) -> Option<&CommandSpec> {
         self.commands.iter().find(|c| c.name == name)
+    }
+
+    /// Required parameter names (single source of truth after register).
+    pub fn required_params(&self, name: &str) -> Vec<String> {
+        self.get(name)
+            .map(|s| {
+                let mut names: Vec<String> = s
+                    .params
+                    .iter()
+                    .filter(|p| p.required)
+                    .map(|p| p.name.clone())
+                    .collect();
+                for r in &s.required {
+                    if !names.iter().any(|n| n == r) {
+                        names.push(r.clone());
+                    }
+                }
+                names
+            })
+            .unwrap_or_default()
+    }
+
+    /// Fill optional defaults into a kwargs map (does not override present keys).
+    pub fn apply_defaults(
+        &self,
+        name: &str,
+        args: &mut indexmap::IndexMap<String, velvet_story::StoryValue>,
+    ) {
+        let Some(spec) = self.get(name) else {
+            return;
+        };
+        for p in &spec.params {
+            if args.contains_key(&p.name) {
+                continue;
+            }
+            let Some(def) = p.default.as_ref() else {
+                continue;
+            };
+            let val = match p.ty {
+                ParamTy::Int => def
+                    .parse::<i64>()
+                    .ok()
+                    .map(velvet_story::StoryValue::Int),
+                ParamTy::Float => def
+                    .parse::<f64>()
+                    .ok()
+                    .map(velvet_story::StoryValue::Float),
+                ParamTy::Bool => match def.as_str() {
+                    "true" | "True" | "1" => Some(velvet_story::StoryValue::Bool(true)),
+                    "false" | "False" | "0" => Some(velvet_story::StoryValue::Bool(false)),
+                    _ => None,
+                },
+                ParamTy::Text | ParamTy::Ident => {
+                    Some(velvet_story::StoryValue::String(def.clone()))
+                }
+            };
+            if let Some(v) = val {
+                args.insert(p.name.clone(), v);
+            }
+        }
     }
 
     /// Completions for Studio.

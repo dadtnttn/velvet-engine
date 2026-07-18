@@ -25,6 +25,7 @@ velvet-script-lsp = { workspace = true }
 velvet-document = { workspace = true }
 velvet-ui = { workspace = true }
 velvet-story = { workspace = true }
+velvet-story-lang = { workspace = true }
 velvet-cellular = { workspace = true }
 velvet-ecs = { workspace = true }
 velvet-scene = { workspace = true }
