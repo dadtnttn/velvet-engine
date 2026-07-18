@@ -18,5 +18,7 @@ pub mod studio;
 pub use document_edit::{
     design_set_button, drag_region_on_disk, list_regions, require_file, set_visual_property,
 };
-pub use gui::{run_studio_gui, DockPanel, StudioGuiConfig, StudioGuiSession, StudioGuiStatus};
+pub use gui::{
+    run_studio_gui, DockPanel, StudioEditorMode, StudioGuiConfig, StudioGuiSession, StudioGuiStatus,
+};
 pub use studio::StudioApp;
