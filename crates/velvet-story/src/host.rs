@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 
 use crate::value::StoryValue;
 use crate::variables::StoryVariables;
@@ -31,10 +32,32 @@ impl std::fmt::Display for StoryCommandError {
 
 impl std::error::Error for StoryCommandError {}
 
+/// Result of a host command dispatch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CommandOutcome {
+    /// Continue narrative immediately after the call.
+    Continue,
+    /// Suspend narrative until [`crate::runtime::StoryPlayer::resume_host`].
+    Wait {
+        /// Opaque token returned to the host / UI.
+        token: String,
+    },
+    /// Jump to a scene (or `scene:label`).
+    Jump {
+        /// Target.
+        target: String,
+    },
+    /// End the story.
+    End {
+        /// Optional ending id.
+        ending: Option<String>,
+    },
+}
+
 /// Host that executes registered story commands against the game world.
 ///
-/// Implementors run combat, inventory, etc. The narrative runtime only
-/// dispatches name + args and mutates story variables when the host requests it.
+/// Implementors run combat, inventory, etc. Return [`CommandOutcome::Wait`] to
+/// pause the story across frames (e.g. until combat ends).
 pub trait StoryCommandHost: Send + Sync {
     /// Invoke `name` with `args`. May update `vars` for story-visible side effects.
     fn call(
@@ -42,7 +65,7 @@ pub trait StoryCommandHost: Send + Sync {
         name: &str,
         args: &IndexMap<String, StoryValue>,
         vars: &mut StoryVariables,
-    ) -> Result<(), StoryCommandError>;
+    ) -> Result<CommandOutcome, StoryCommandError>;
 }
 
 /// Shared handle for attaching a host to a [`crate::runtime::StoryPlayer`].
@@ -51,7 +74,11 @@ pub type SharedCommandHost = Arc<dyn StoryCommandHost>;
 /// Build a host from a closure (tests / simple games).
 pub fn command_host_fn<F>(f: F) -> SharedCommandHost
 where
-    F: Fn(&str, &IndexMap<String, StoryValue>, &mut StoryVariables) -> Result<(), StoryCommandError>
+    F: Fn(
+            &str,
+            &IndexMap<String, StoryValue>,
+            &mut StoryVariables,
+        ) -> Result<CommandOutcome, StoryCommandError>
         + Send
         + Sync
         + 'static,
@@ -63,7 +90,7 @@ where
                 &str,
                 &IndexMap<String, StoryValue>,
                 &mut StoryVariables,
-            ) -> Result<(), StoryCommandError>
+            ) -> Result<CommandOutcome, StoryCommandError>
             + Send
             + Sync,
     {
@@ -72,11 +99,25 @@ where
             name: &str,
             args: &IndexMap<String, StoryValue>,
             vars: &mut StoryVariables,
-        ) -> Result<(), StoryCommandError> {
+        ) -> Result<CommandOutcome, StoryCommandError> {
             (self.0)(name, args, vars)
         }
     }
     Arc::new(FnHost(f))
+}
+
+/// Convenience: host that always continues after running `f` side effects.
+pub fn command_host_continue<F>(f: F) -> SharedCommandHost
+where
+    F: Fn(&str, &IndexMap<String, StoryValue>, &mut StoryVariables) -> Result<(), StoryCommandError>
+        + Send
+        + Sync
+        + 'static,
+{
+    command_host_fn(move |n, a, v| {
+        f(n, a, v)?;
+        Ok(CommandOutcome::Continue)
+    })
 }
 
 #[cfg(test)]
@@ -90,7 +131,7 @@ mod tests {
     fn host_fn_invoked() {
         let hits = Arc::new(AtomicUsize::new(0));
         let h = hits.clone();
-        let host = command_host_fn(move |name, args, vars| {
+        let host = command_host_continue(move |name, args, vars| {
             assert_eq!(name, "combat.start");
             assert!(args.contains_key("enemy"));
             h.fetch_add(1, Ordering::SeqCst);
@@ -100,7 +141,8 @@ mod tests {
         let mut vars = StoryVariables::new();
         let mut args = IndexMap::new();
         args.insert("enemy".into(), StoryValue::String("x".into()));
-        host.call("combat.start", &args, &mut vars).unwrap();
+        let out = host.call("combat.start", &args, &mut vars).unwrap();
+        assert_eq!(out, CommandOutcome::Continue);
         assert_eq!(hits.load(Ordering::SeqCst), 1);
         assert_eq!(vars.get_int("host_ok", 0), 1);
     }

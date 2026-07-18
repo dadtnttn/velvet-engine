@@ -40,7 +40,8 @@ pub use gallery::{Gallery, GalleryEntry, GalleryError};
 pub use glossary::{Glossary, GlossaryError, GlossaryTerm};
 pub use history::{History, HistoryEntry};
 pub use host::{
-    command_host_fn, SharedCommandHost, StoryCommandError, StoryCommandHost,
+    command_host_continue, command_host_fn, CommandOutcome, SharedCommandHost, StoryCommandError,
+    StoryCommandHost,
 };
 pub use ir::{
     StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand,
@@ -74,7 +75,10 @@ pub use product_ui::{
     FontAttachment, ProductUiFrame,
 };
 pub use rollback::{RollbackFrame, RollbackRecorder, RollbackStack};
-pub use runtime::{ChoiceOption, StoryEvent, StoryPlayer, StoryWait, VisibleCharacter};
+pub use runtime::{
+    ChoiceOption, SavedCallContinuation, SavedExecFrame, StoryEvent, StoryPlayer, StorySnapshot,
+    StoryWait, VisibleCharacter,
+};
 pub use save::{SaveError, SaveGame, SaveMeta, SaveStore};
 pub use skip::{count_skippable_read_lines, SkipConfig, SkipEngine, SkipResult};
 pub use transitions::{Transition, TransitionKind, TransitionQueue, WipeDirection};

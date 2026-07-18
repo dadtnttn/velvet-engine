@@ -13,7 +13,8 @@ use crate::value::StoryValue;
 use crate::variables::StoryVariables;
 
 /// Current save format version.
-pub const SAVE_FORMAT_VERSION: u32 = 1;
+/// Save format version (`2` = nested exec stack + pause/host wait in snapshot).
+pub const SAVE_FORMAT_VERSION: u32 = 2;
 
 /// Save errors.
 #[derive(Debug, Error)]
@@ -207,7 +208,9 @@ impl SaveGame {
         Ok(save)
     }
 
-    /// Migrate older formats (v1 identity).
+    /// Migrate older formats.
+    ///
+    /// v1 → v2: nested exec fields default empty (scene-level resume only).
     pub fn migrate(mut self) -> Result<Self, SaveError> {
         if self.format_version == 0 {
             self.format_version = 1;
@@ -217,6 +220,10 @@ impl SaveGame {
                 found: self.format_version,
                 max: SAVE_FORMAT_VERSION,
             });
+        }
+        if self.format_version < 2 {
+            // serde defaults fill empty exec_stack / call_continuations.
+            self.format_version = 2;
         }
         self.checksum = self.compute_checksum();
         Ok(self)
@@ -342,10 +349,8 @@ mod tests {
             scene: "start".into(),
             op_index: 3,
             wait: crate::runtime::StoryWait::Line,
-            visible: Default::default(),
             background: Some("bg.png".into()),
-            music: None,
-            call_stack: vec![],
+            ..Default::default()
         };
         let save = SaveGame::from_parts(
             "slot_1",
@@ -372,10 +377,7 @@ mod tests {
             scene: "a".into(),
             op_index: 0,
             wait: crate::runtime::StoryWait::Ready,
-            visible: Default::default(),
-            background: None,
-            music: None,
-            call_stack: vec![],
+            ..Default::default()
         };
         let save = SaveGame::from_parts(
             "quick",
@@ -399,10 +401,7 @@ mod tests {
             scene: "start".into(),
             op_index: 0,
             wait: crate::runtime::StoryWait::Ready,
-            visible: Default::default(),
-            background: None,
-            music: None,
-            call_stack: vec![],
+            ..Default::default()
         };
         let save = SaveGame::from_parts(
             "slot_2",

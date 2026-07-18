@@ -115,6 +115,8 @@ pub fn build_product_ui_frame(session: &VnSession) -> ProductUiFrame {
         StoryWait::Choice => "choice",
         StoryWait::Ended => "ended",
         StoryWait::Ready => "ready",
+        StoryWait::Pause { .. } => "pause",
+        StoryWait::Host { .. } => "host",
     };
     // Prefer typewriter-visible text so product hosts can animate cps.
     let body = if session.say.text_complete || session.say.visible_text.is_empty() {
