@@ -555,12 +555,17 @@ fn dispatch(cli: Cli) -> Result<()> {
         } => cmd_script_lsp(path),
         Commands::Story { lang, command } => {
             velvet_story_lang::apply_locale_from_env();
-            if let Some(l) = lang {
+            let loc = if let Some(l) = lang {
                 let loc = velvet_story_lang::DiagLocale::parse(&l)
                     .map_err(|e| anyhow::anyhow!(e))?;
+                // Process default for tools that only call set_diag_locale,
+                // plus thread-scoped effective locale for isolation-safe paths.
                 velvet_story_lang::set_diag_locale(loc);
-            }
-            match command {
+                Some(loc)
+            } else {
+                None
+            };
+            let run = move || match command {
                 StoryCommands::Check { path } => cmd_story_check(path),
                 StoryCommands::Build { path } => cmd_story_build(path),
                 StoryCommands::Run { path, choice } => cmd_story_run(path, choice),
@@ -569,6 +574,10 @@ fn dispatch(cli: Cli) -> Result<()> {
                 StoryCommands::DumpLowered { path } => cmd_story_dump_lowered(path),
                 StoryCommands::StudioModel { path } => cmd_story_studio_model(path),
                 StoryCommands::ExtractLoc { path, out } => cmd_story_extract_loc(path, out),
+            };
+            match loc {
+                Some(l) => velvet_story_lang::with_diag_locale(l, run),
+                None => run(),
             }
         }
         Commands::New {

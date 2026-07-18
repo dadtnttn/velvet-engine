@@ -7,7 +7,7 @@ use velvet_story_lang::commands::CommandRegistry;
 use velvet_story_lang::i18n_extract::{extract, to_catalog};
 use velvet_story_lang::pipeline::{
     build_path, build_story_program, check_path, dump_ast_json, dump_lowered_text, run_path,
-    run_source_product,
+    run_path_product,
 };
 use velvet_story_lang::{format_source, is_idempotent};
 use velvet_story_lang::studio::{build_model, model_json};
@@ -63,13 +63,12 @@ pub fn cmd_story_build(path: PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// `velvet story run` — product StoryPlayer path (preferred Velvet 2.5).
+/// `velvet story run` — **product** StoryPlayer path (author default).
+///
+/// OpVs2 host is only used if the product path fails (documented fallback).
 pub fn cmd_story_run(path: PathBuf, choice: usize) -> Result<()> {
     let cmds = CommandRegistry::builtin();
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
-    let file = path.to_string_lossy().to_string();
-    match run_source_product(&source, &file, &cmds, choice) {
+    match run_path_product(&path, &cmds, choice) {
         Ok(r) => {
             for line in &r.dialogue {
                 println!("{line}");
@@ -81,8 +80,8 @@ pub fn cmd_story_run(path: PathBuf, choice: usize) -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            // Documented fallback: OpVs2 host
-            eprintln!("# product path failed ({e}); falling back to vs2-host");
+            // Documented secondary path only — not the happy path.
+            eprintln!("# product path failed ({e}); falling back to vs2-host (secondary)");
             let r = run_path(&path, &cmds, choice).map_err(|e| anyhow::anyhow!(e))?;
             if !r.ok {
                 bail!("story run failed for {}", path.display());

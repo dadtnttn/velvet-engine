@@ -467,24 +467,28 @@ fn source_map_include_origin_not_only_root() {
 
 #[test]
 fn diag_five_locales_same_code_different_text() {
-    use velvet_story_lang::pipeline::check_source;
-    use velvet_story_lang::{set_diag_locale, DiagLocale};
+    use velvet_story_lang::pipeline::{check_source_with, CheckOptions};
+    use velvet_story_lang::DiagLocale;
 
     let src = "scene start\ngoto no_such_scene\n";
     let cmds = CommandRegistry::builtin();
     let mut displays = Vec::new();
     for loc in DiagLocale::all() {
-        set_diag_locale(*loc);
-        let c = check_source(src, "i18n.vstory", &cmds);
+        let c = check_source_with(
+            src,
+            "i18n.vstory",
+            &cmds,
+            CheckOptions::new().with_locale(*loc),
+        );
         let d = c
             .diags
             .iter()
             .find(|d| d.code == "VST027")
             .expect("VST027");
         assert_eq!(d.code, "VST027");
+        assert_eq!(d.locale, *loc);
         displays.push((loc.code(), d.display()));
     }
-    set_diag_locale(DiagLocale::Es);
     let es = &displays.iter().find(|(c, _)| *c == "es").unwrap().1;
     let en = &displays.iter().find(|(c, _)| *c == "en").unwrap().1;
     let ja = &displays.iter().find(|(c, _)| *c == "ja").unwrap().1;
@@ -497,6 +501,50 @@ fn diag_five_locales_same_code_different_text() {
         en.to_ascii_lowercase().contains("scene") || en.contains("does not exist"),
         "{en}"
     );
+}
+
+#[test]
+fn concurrent_scoped_locales_shipped_check_path() {
+    use std::sync::mpsc;
+    use std::thread;
+    use velvet_story_lang::pipeline::{check_source_with, CheckOptions};
+    use velvet_story_lang::{set_diag_locale, DiagLocale};
+
+    let src = "scene start\ngoto no_such_scene\n";
+    let (tx, rx) = mpsc::channel();
+    let mut handles = Vec::new();
+    for (loc, must, must_not) in [
+        (DiagLocale::En, "scene", "escena"),
+        (DiagLocale::Es, "escena", "does not exist"),
+    ] {
+        let tx = tx.clone();
+        let src = src.to_string();
+        handles.push(thread::spawn(move || {
+            set_diag_locale(DiagLocale::Zh);
+            let cmds = CommandRegistry::builtin();
+            let c = check_source_with(
+                &src,
+                "iso.vstory",
+                &cmds,
+                CheckOptions::new().with_locale(loc),
+            );
+            let d = c.diags.iter().find(|d| d.code == "VST027").unwrap();
+            tx.send((loc, d.message.clone(), must, must_not)).unwrap();
+        }));
+    }
+    drop(tx);
+    for h in handles {
+        h.join().unwrap();
+    }
+    set_diag_locale(DiagLocale::Es);
+    while let Ok((loc, msg, must, must_not)) = rx.recv() {
+        let ok = msg.contains(must) || msg.to_ascii_lowercase().contains(must);
+        assert!(ok, "{loc:?}: missing `{must}` in {msg}");
+        assert!(
+            !msg.contains(must_not) && !msg.to_ascii_lowercase().contains(must_not),
+            "{loc:?}: unexpected `{must_not}` in {msg}"
+        );
+    }
 }
 
 #[test]
