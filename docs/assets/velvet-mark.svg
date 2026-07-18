@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Velvet Engine">
+  <defs>
+    <linearGradient id="velvet" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6b2d8b"/>
+      <stop offset="45%" stop-color="#3d1a5c"/>
+      <stop offset="100%" stop-color="#1a0f2e"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#c9a0dc" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#c9a0dc" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#velvet)"/>
+  <rect width="128" height="128" rx="28" fill="url(#sheen)"/>
+  <!-- Stylized V / fold -->
+  <path d="M28 34 L48 34 L64 78 L80 34 L100 34 L70 98 L58 98 Z" fill="#f3e8ff" opacity="0.95"/>
+  <path d="M48 34 L64 78 L58 98 L42 52 Z" fill="#9b6bb8" opacity="0.85"/>
+  <!-- Accent bar -->
+  <rect x="28" y="104" width="72" height="6" rx="3" fill="#e8c4ff" opacity="0.7"/>
+</svg>
