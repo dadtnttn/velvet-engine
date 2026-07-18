@@ -549,6 +549,10 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             self.context = Some(context);
             self.surface = Some(surface);
             self.window = Some(window);
+            // First paint so the window is not blank/closed-looking
+            if let Some(w) = &self.window {
+                w.request_redraw();
+            }
         }
 
         fn window_event(&mut self, el: &ActiveEventLoop, _: WindowId, ev: WindowEvent) {
@@ -572,17 +576,27 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                                 w.set_title(&format!(
                                     "Velvet Studio [{mode}] — dual mode"
                                 ));
+                                w.request_redraw();
                             }
                         }
                         KeyCode::KeyS if self.session.mode == StudioEditorMode::Simplified => {
                             // Drop a button at center
                             let _ = self.session.drop_widget("button", 50.0, 50.0);
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
                         }
                         KeyCode::Digit1 => {
                             let _ = self.session.set_mode(StudioEditorMode::Simplified);
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
                         }
                         KeyCode::Digit2 => {
                             let _ = self.session.set_mode(StudioEditorMode::Advanced);
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
                         }
                         KeyCode::KeyW if self.session.selected_region.is_some() => {
                             let _ = self.session.save_document();
@@ -621,13 +635,23 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             let _ = self.session.canvas_pointer_down(px as f32, py as f32);
                         }
                         self.drag_last = Some((px, py));
+                        if let Some(win) = &self.window {
+                            win.request_redraw();
+                        }
                     }
                 }
                 WindowEvent::RedrawRequested => {
                     self.frames += 1;
-                    self.paint_frame();
+                    if let Err(e) = self.paint_frame() {
+                        eprintln!("[studio-gui] paint error: {e}");
+                    }
                     if !self.interactive && self.frames >= 12 {
                         el.exit();
+                    }
+                }
+                WindowEvent::Resized(_) => {
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
                     }
                 }
                 _ => {}
@@ -635,25 +659,35 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
         }
 
         fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+            // Interactive: idle until input/redraw. Brief: poll a few frames then exit.
+            if self.interactive {
+                el.set_control_flow(ControlFlow::Wait);
+                // Do not force continuous redraw — keeps the window open and CPU calm.
+                return;
+            }
             el.set_control_flow(ControlFlow::Poll);
+            if self.frames >= 12 {
+                el.exit();
+                return;
+            }
             if let Some(w) = &self.window {
                 w.request_redraw();
-            }
-            if !self.interactive && self.frames >= 12 {
-                el.exit();
             }
         }
     }
 
     impl Host {
-        fn paint_frame(&mut self) {
+        fn paint_frame(&mut self) -> Result<()> {
             use velvet_story::{draw_text_line, fill_rect, pack_rgb};
             let Some(window) = self.window.clone() else {
-                return;
+                return Ok(());
             };
             let size = window.inner_size();
             let ww = size.width.max(1);
             let wh = size.height.max(1);
+            if ww < 2 || wh < 2 {
+                return Ok(());
+            }
             if self.pixels.len() != (ww * wh) as usize {
                 self.pixels.resize((ww * wh) as usize, 0);
             }
@@ -806,16 +840,28 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             }
 
             let Some(surface) = self.surface.as_mut() else {
-                return;
+                return Ok(());
             };
-            let _ = surface.resize(
-                NonZeroU32::new(ww).unwrap(),
-                NonZeroU32::new(wh).unwrap(),
-            );
-            let mut buf = surface.buffer_mut().unwrap();
-            let n = self.pixels.len().min(buf.len());
-            buf[..n].copy_from_slice(&self.pixels[..n]);
-            let _ = buf.present();
+            let Some(nw) = NonZeroU32::new(ww) else {
+                return Ok(());
+            };
+            let Some(nh) = NonZeroU32::new(wh) else {
+                return Ok(());
+            };
+            surface
+                .resize(nw, nh)
+                .map_err(|e| anyhow::anyhow!("surface resize: {e}"))?;
+            let mut buf = surface
+                .buffer_mut()
+                .map_err(|e| anyhow::anyhow!("buffer_mut: {e}"))?;
+            // softbuffer requires the full buffer written every frame
+            if buf.len() != self.pixels.len() {
+                self.pixels.resize(buf.len(), pack_rgb(22, 18, 32));
+            }
+            buf.copy_from_slice(&self.pixels);
+            buf.present()
+                .map_err(|e| anyhow::anyhow!("present: {e}"))?;
+            Ok(())
         }
     }
 
