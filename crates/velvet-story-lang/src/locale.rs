@@ -398,20 +398,21 @@ fn template_message(loc: DiagLocale, code: &str) -> &'static str {
             DiagLocale::Zh => "{detail}",
         },
         "VST050" => match loc {
+            // Matches writer rules: bare number/string alone is invalid; need var / not / and / or / compare.
             DiagLocale::Es => {
-                "La condición de \"if\" debe ser verdadero o falso (un número, una variable, o una comparación)."
+                "La condición de \"if\" debe ser una variable, not/and/or, o una comparación (no un número o texto sueltos)."
             }
             DiagLocale::En => {
-                "The \"if\" condition must be true or false (a number, variable, or comparison)."
+                "The \"if\" condition must be a variable, not/and/or, or a comparison (not a bare number or string)."
             }
             DiagLocale::Ja => {
-                "\"if\" の条件は真/偽（数値、変数、比較）である必要があります。"
+                "\"if\" の条件は変数、not/and/or、または比較である必要があります（裸の数値や文字列は不可）。"
             }
             DiagLocale::De => {
-                "Die \"if\"-Bedingung muss wahr/falsch sein (Zahl, Variable oder Vergleich)."
+                "Die \"if\"-Bedingung muss eine Variable, not/and/or oder ein Vergleich sein (keine bloße Zahl/Zeichenkette)."
             }
             DiagLocale::Zh => {
-                "\"if\" 条件必须为真/假（数字、变量或比较）。"
+                "\"if\" 条件必须是变量、not/and/or 或比较（不能是单独的数字或字符串）。"
             }
         },
         "VST051" => match loc {
