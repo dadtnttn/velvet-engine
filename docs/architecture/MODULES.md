@@ -24,7 +24,7 @@
 | **velvet-project** | `velvet.project`, module graph, validation |
 | **velvet-build** | Pack, localization, desktop export manifests |
 | **velvet-cli** | `velvet` CLI |
-| **velvet-editor** | `velvet-studio` tooling shell |
+| **velvet-editor** | **ALPHA** — `velvet-studio` softbuffer editor (Visual/Script/Nodes; APIs/UI unstable) |
 | **velvet-runtime** | Ship host binary |
 | **velvet-test-utils** | Shared headless helpers |
 | **velvet-integration-tests** | Cross-crate scenarios |

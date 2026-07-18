@@ -1,4 +1,15 @@
-# Velvet Studio
+# Velvet Studio (**ALPHA**)
+
+> **Status: alpha** — same maturity band as **velvet-cellular**.  
+> Usable for prototyping (Visual / Script / Nodes, per-screen docs, graph).  
+> **APIs, UI chrome, and `velvet.studio.json` / screen file layout may break.**  
+> Not a full egui IDE; softbuffer host is intentional for this alpha bar.
+
+| | |
+|--|--|
+| **Status** | **Alpha** (parity with cellular labeling) |
+| **Binary** | `velvet-studio` (`crates/velvet-editor`) |
+| **Docs peer** | Cellular alpha: [`CELLULAR.md`](../architecture/CELLULAR.md) |
 
 Velvet Studio is the project tooling surface for Velvet Engine. It ships as the `velvet-studio` binary with:
 
