@@ -37,17 +37,14 @@ pub fn analyze(file: &StoryFile, cmds: &CommandRegistry) -> SemaResult {
         if let TopItem::Scene(sc) = item {
             let origin = diag_file(file, sc);
             if let Some(prev) = scene_spans.insert(sc.name.clone(), sc.span) {
+                let line = prev.line.to_string();
                 r.diags.push(
-                    StoryDiag::error(
+                    StoryDiag::error_key(
                         "VST020",
-                        format!("La escena `{}` ya existe.", sc.name),
+                        &[("name", sc.name.as_str()), ("line", line.as_str())],
                         origin,
                         sc.span,
                     )
-                    .with_suggestion(format!(
-                        "Renombra una de las dos escenas. La primera estaba cerca de la línea {}.",
-                        prev.line
-                    ))
                     .with_node("scene"),
                 );
             }
@@ -114,17 +111,12 @@ fn walk_stmts(
             }
             Stmt::Add { name, span, .. } | Stmt::Sub { name, span, .. } => {
                 if !r.variables.contains(name) {
-                    r.diags.push(
-                        StoryDiag::warning(
-                            "VST021",
-                            format!(
-                                "La variable `{name}` se modifica sin un `set` previo; se asumirá 0."
-                            ),
-                            &origin,
-                            *span,
-                        )
-                        .with_suggestion(format!("set {name} = 0")),
-                    );
+                    r.diags.push(StoryDiag::warning_key(
+                        "VST021",
+                        &[("name", name.as_str())],
+                        &origin,
+                        *span,
+                    ));
                 }
                 r.variables.insert(name.clone());
             }
@@ -133,15 +125,12 @@ fn walk_stmts(
                     for req in &spec.required {
                         if !args.iter().any(|(k, _)| k == req) {
                             r.diags.push(
-                                StoryDiag::error(
+                                StoryDiag::error_key(
                                     "VST022",
-                                    format!(
-                                        "Al comando `{name}` le falta el parámetro obligatorio `{req}`."
-                                    ),
+                                    &[("name", name.as_str()), ("req", req.as_str())],
                                     &origin,
                                     *span,
                                 )
-                                .with_suggestion(format!("{req}: …"))
                                 .with_node("call"),
                             );
                         }
@@ -149,11 +138,9 @@ fn walk_stmts(
                     for (k, _) in args {
                         if !spec.params.iter().any(|p| p.name == *k) {
                             r.diags.push(
-                                StoryDiag::warning(
+                                StoryDiag::warning_key(
                                     "VST023",
-                                    format!(
-                                        "El parámetro `{k}` no está documentado para `{name}`."
-                                    ),
+                                    &[("name", k.as_str()), ("cmd", name.as_str())],
                                     &origin,
                                     *span,
                                 )
@@ -163,11 +150,9 @@ fn walk_stmts(
                     }
                 } else {
                     r.diags.push(
-                        StoryDiag::error(
+                        StoryDiag::error_key(
                             "VST024",
-                            format!(
-                                "No hay un comando registrado llamado `{name}`. Un programador debe exponerlo desde Velvet Script 2."
-                            ),
+                            &[("name", name.as_str())],
                             &origin,
                             *span,
                         )
@@ -178,26 +163,15 @@ fn walk_stmts(
             Stmt::Dialogue { text, span, .. } => {
                 if text.trim().is_empty() {
                     r.diags.push(
-                        StoryDiag::warning(
-                            "VST025",
-                            "Este diálogo no tiene texto.",
-                            &origin,
-                            *span,
-                        )
-                        .with_node("dialogue"),
+                        StoryDiag::warning_key("VST025", &[], &origin, *span)
+                            .with_node("dialogue"),
                     );
                 }
             }
             Stmt::Choice { options, span } => {
                 if options.is_empty() {
                     r.diags.push(
-                        StoryDiag::error(
-                            "VST026",
-                            "Un `choice` necesita al menos una opción.",
-                            &origin,
-                            *span,
-                        )
-                        .with_node("choice"),
+                        StoryDiag::error_key("VST026", &[], &origin, *span).with_node("choice"),
                     );
                 }
                 for o in options {
@@ -227,21 +201,18 @@ fn check_if_cond(r: &mut SemaResult, file: &StoryFile, scene: &Scene, cond: &Exp
         return;
     }
     let hint = match cond {
-        Expr::Str(s, _) => format!("Actualmente estás usando el texto \"{s}\"."),
-        Expr::Int(n, _) => format!("Actualmente estás usando el número {n} sin comparar."),
-        Expr::Float(s, _) => format!("Actualmente estás usando el número {s} sin comparar."),
-        _ => "La condición no se puede interpretar como verdadero o falso.".into(),
+        Expr::Str(s, _) => crate::locale::if_cond_hint_str(s),
+        Expr::Int(n, _) => crate::locale::if_cond_hint_int(*n),
+        Expr::Float(s, _) => crate::locale::if_cond_hint_float(s),
+        _ => crate::locale::if_cond_hint_other(),
     };
     r.diags.push(
-        StoryDiag::error(
+        StoryDiag::error_key(
             "VST030",
-            format!(
-                "La condición de \"if\" debe producir verdadero o falso. {hint}"
-            ),
+            &[("hint", hint.as_str())],
             diag_file(file, scene),
             span,
         )
-        .with_suggestion("if affection >= 3:\n# o una variable booleana: if has_key:")
         .with_node("if"),
     );
 }
@@ -278,15 +249,12 @@ fn check_gotos(r: &mut SemaResult, file: &StoryFile, scene: &Scene, stmts: &[Stm
             Stmt::Goto { target, span } | Stmt::CallScene { target, span } => {
                 if !r.scenes.contains(target) && !r.labels.contains(target) {
                     r.diags.push(
-                        StoryDiag::error(
+                        StoryDiag::error_key(
                             "VST027",
-                            format!(
-                                "No existe la escena o etiqueta `{target}`."
-                            ),
+                            &[("target", target.as_str())],
                             &origin,
                             *span,
                         )
-                        .with_suggestion("Revisa el nombre o crea la escena con `scene …`.")
                         .with_node("goto"),
                     );
                 }

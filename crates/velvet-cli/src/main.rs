@@ -88,6 +88,10 @@ enum Commands {
     },
     /// Velvet Story tools (writer-friendly narrative language → VS2).
     Story {
+        /// Diagnostic UI language: `es` | `en` | `ja` | `de` | `zh`.
+        /// Overrides env `VELVET_STORY_LANG`. Default: Spanish (`es`).
+        #[arg(long, global = true)]
+        lang: Option<String>,
         #[command(subcommand)]
         command: StoryCommands,
     },
@@ -549,30 +553,24 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Script {
             command: ScriptCommands::Lsp { path },
         } => cmd_script_lsp(path),
-        Commands::Story {
-            command: StoryCommands::Check { path },
-        } => cmd_story_check(path),
-        Commands::Story {
-            command: StoryCommands::Build { path },
-        } => cmd_story_build(path),
-        Commands::Story {
-            command: StoryCommands::Run { path, choice },
-        } => cmd_story_run(path, choice),
-        Commands::Story {
-            command: StoryCommands::Format { path, check },
-        } => cmd_story_format(path, check),
-        Commands::Story {
-            command: StoryCommands::DumpAst { path },
-        } => cmd_story_dump_ast(path),
-        Commands::Story {
-            command: StoryCommands::DumpLowered { path },
-        } => cmd_story_dump_lowered(path),
-        Commands::Story {
-            command: StoryCommands::StudioModel { path },
-        } => cmd_story_studio_model(path),
-        Commands::Story {
-            command: StoryCommands::ExtractLoc { path, out },
-        } => cmd_story_extract_loc(path, out),
+        Commands::Story { lang, command } => {
+            velvet_story_lang::apply_locale_from_env();
+            if let Some(l) = lang {
+                let loc = velvet_story_lang::DiagLocale::parse(&l)
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                velvet_story_lang::set_diag_locale(loc);
+            }
+            match command {
+                StoryCommands::Check { path } => cmd_story_check(path),
+                StoryCommands::Build { path } => cmd_story_build(path),
+                StoryCommands::Run { path, choice } => cmd_story_run(path, choice),
+                StoryCommands::Format { path, check } => cmd_story_format(path, check),
+                StoryCommands::DumpAst { path } => cmd_story_dump_ast(path),
+                StoryCommands::DumpLowered { path } => cmd_story_dump_lowered(path),
+                StoryCommands::StudioModel { path } => cmd_story_studio_model(path),
+                StoryCommands::ExtractLoc { path, out } => cmd_story_extract_loc(path, out),
+            }
+        }
         Commands::New {
             name,
             template,

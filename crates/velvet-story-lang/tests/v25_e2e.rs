@@ -333,6 +333,40 @@ end
 }
 
 #[test]
+fn diag_five_locales_same_code_different_text() {
+    use velvet_story_lang::pipeline::check_source;
+    use velvet_story_lang::{set_diag_locale, DiagLocale};
+
+    let src = "scene start\ngoto no_such_scene\n";
+    let cmds = CommandRegistry::builtin();
+    let mut displays = Vec::new();
+    for loc in DiagLocale::all() {
+        set_diag_locale(*loc);
+        let c = check_source(src, "i18n.vstory", &cmds);
+        let d = c
+            .diags
+            .iter()
+            .find(|d| d.code == "VST027")
+            .expect("VST027");
+        assert_eq!(d.code, "VST027");
+        displays.push((loc.code(), d.display()));
+    }
+    set_diag_locale(DiagLocale::Es);
+    let es = &displays.iter().find(|(c, _)| *c == "es").unwrap().1;
+    let en = &displays.iter().find(|(c, _)| *c == "en").unwrap().1;
+    let ja = &displays.iter().find(|(c, _)| *c == "ja").unwrap().1;
+    assert!(es.contains("[VST027]"));
+    assert!(en.contains("[VST027]"));
+    assert_ne!(es, en);
+    assert_ne!(en, ja);
+    assert!(es.contains("escena") || es.contains("etiqueta"), "{es}");
+    assert!(
+        en.to_ascii_lowercase().contains("scene") || en.contains("does not exist"),
+        "{en}"
+    );
+}
+
+#[test]
 fn include_error_attributes_origin_file() {
     use tempfile::tempdir;
     use velvet_story_lang::pipeline::check_path;

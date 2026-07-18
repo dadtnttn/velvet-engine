@@ -48,9 +48,10 @@ fn load_recursive(
     }
     let canon = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     if !visited.insert(canon.clone()) {
-        diags.push(StoryDiag::error(
+        let p = path.display().to_string();
+        diags.push(StoryDiag::error_key(
             "VST040",
-            format!("include circular: {}", path.display()),
+            &[("path", p.as_str())],
             path.to_string_lossy(),
             Span::unknown(),
         ));
@@ -81,17 +82,14 @@ fn merge_includes(
             TopItem::Include { path, span } => {
                 let resolved = resolve_include(base, &path);
                 if !resolved.exists() {
+                    let resolved_s = resolved.display().to_string();
                     diags.push(
-                        StoryDiag::error(
+                        StoryDiag::error_key(
                             "VST041",
-                            format!(
-                                "No se encuentra el archivo incluido `{path}` (buscado en {}).",
-                                resolved.display()
-                            ),
+                            &[("path", path.as_str()), ("resolved", resolved_s.as_str())],
                             &file.file,
                             span,
                         )
-                        .with_suggestion("Revisa la ruta relativa al archivo actual.")
                         .with_node("include"),
                     );
                     continue;
@@ -114,9 +112,9 @@ fn merge_includes(
                         }
                     }
                     Err(e) => {
-                        diags.push(StoryDiag::error(
+                        diags.push(StoryDiag::error_key(
                             "VST042",
-                            format!("Error al cargar include `{path}`: {e}"),
+                            &[("path", path.as_str()), ("err", e.as_str())],
                             &file.file,
                             span,
                         ));

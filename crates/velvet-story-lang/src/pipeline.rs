@@ -41,9 +41,9 @@ pub fn check_source(source: &str, file: &str, cmds: &CommandRegistry) -> CheckRe
         Err(e) => {
             let parsed = parse(source, file);
             let mut diags = parsed.diags.clone();
-            diags.push(StoryDiag::error(
+            diags.push(StoryDiag::error_key(
                 "VST043",
-                e,
+                &[("detail", e.as_str())],
                 file,
                 crate::span::Span::unknown(),
             ));
@@ -131,9 +131,10 @@ pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildRe
             lo
         }
         Err(e) => {
-            check.diags.push(crate::diag::StoryDiag::error(
+            let detail = e.to_string();
+            check.diags.push(crate::diag::StoryDiag::error_key(
                 "VST060",
-                e.to_string(),
+                &[("detail", detail.as_str())],
                 file,
                 crate::span::Span::unknown(),
             ));
