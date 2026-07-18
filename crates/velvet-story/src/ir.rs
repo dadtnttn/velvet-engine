@@ -67,8 +67,8 @@ pub enum StoryOp {
         name: String,
         /// Operator.
         assign_op: AssignOp,
-        /// Right-hand value.
-        value: StoryValue,
+        /// Right-hand expression (literal, variable, or simple arithmetic).
+        value: StoryExpr,
     },
     /// Conditional block with a full narrative condition (vars, not/and/or, compares).
     If {
@@ -111,6 +111,62 @@ pub enum StoryOp {
     Return,
     /// No-op / pause beat.
     Nop,
+}
+
+/// Arithmetic / value expression for assignment RHS (product IR).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StoryExpr {
+    /// Immediate literal.
+    Value {
+        /// Literal value.
+        value: StoryValue,
+    },
+    /// Load a play variable.
+    Var {
+        /// Variable name.
+        name: String,
+    },
+    /// Binary arithmetic (`+ - * /`).
+    Binary {
+        /// Operator.
+        op: StoryArithOp,
+        /// Left.
+        left: Box<StoryExpr>,
+        /// Right.
+        right: Box<StoryExpr>,
+    },
+    /// Unary numeric negation.
+    Neg {
+        /// Inner.
+        inner: Box<StoryExpr>,
+    },
+}
+
+impl StoryExpr {
+    /// Literal value.
+    pub fn value(v: StoryValue) -> Self {
+        Self::Value { value: v }
+    }
+
+    /// Variable reference.
+    pub fn var(name: impl Into<String>) -> Self {
+        Self::Var { name: name.into() }
+    }
+}
+
+/// Arithmetic operator for [`StoryExpr::Binary`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StoryArithOp {
+    /// +
+    Add,
+    /// -
+    Sub,
+    /// *
+    Mul,
+    /// /
+    Div,
 }
 
 /// Operand for comparisons in [`StoryCond`].

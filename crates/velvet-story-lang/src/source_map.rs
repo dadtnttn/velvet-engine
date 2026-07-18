@@ -71,11 +71,17 @@ impl SourceMap {
             .max_by_key(|e| e.pc.unwrap_or(0))
     }
 
-    /// Find by line.
+    /// Find by line in the root file only (ambiguous across includes).
     pub fn by_line(&self, line: u32) -> Option<&MapEntry> {
-        self.entries
-            .iter()
-            .find(|e| e.origin.span.line == line)
+        self.by_file_line(&self.file, line)
+            .or_else(|| self.entries.iter().find(|e| e.origin.span.line == line))
+    }
+
+    /// Find by origin file path (substring) and line — disambiguates includes.
+    pub fn by_file_line(&self, file_needle: &str, line: u32) -> Option<&MapEntry> {
+        self.entries.iter().find(|e| {
+            e.origin.file.contains(file_needle) && e.origin.span.line == line
+        })
     }
 
     /// Find first entry whose origin file path contains `needle`.
@@ -83,6 +89,11 @@ impl SourceMap {
         self.entries
             .iter()
             .find(|e| e.origin.file.contains(needle))
+    }
+
+    /// True if any entry has a real PC mapping.
+    pub fn has_pc_mappings(&self) -> bool {
+        self.entries.iter().any(|e| e.pc.is_some())
     }
 }
 
