@@ -11,6 +11,7 @@ use velvet_story::{
 };
 
 use crate::ast::{BinOp, Expr, Stmt, StoryFile, TopItem};
+use crate::commands::CommandRegistry;
 use crate::span::Span;
 
 /// Errors lowering to StoryProgram.
@@ -78,13 +79,23 @@ pub fn to_story_program(
     file: &StoryFile,
     title: impl Into<String>,
 ) -> Result<StoryProgram, ToProgramError> {
-    Ok(to_story_program_with_origins(file, title)?.program)
+    Ok(to_story_program_with_origins(file, title, None)?.program)
+}
+
+/// Lower with command registry (fills optional HostCall defaults).
+pub fn to_story_program_cmds(
+    file: &StoryFile,
+    title: impl Into<String>,
+    cmds: &CommandRegistry,
+) -> Result<StoryProgram, ToProgramError> {
+    Ok(to_story_program_with_origins(file, title, Some(cmds))?.program)
 }
 
 /// Lower with parallel origin tree for source maps.
 pub fn to_story_program_with_origins(
     file: &StoryFile,
     title: impl Into<String>,
+    cmds: Option<&CommandRegistry>,
 ) -> Result<ProgramWithOrigins, ToProgramError> {
     let mut program = StoryProgram::new(title);
     let mut origins: IndexMap<String, Vec<OpSrc>> = IndexMap::new();
@@ -100,7 +111,7 @@ pub fn to_story_program_with_origins(
                     .origin_file
                     .clone()
                     .unwrap_or_else(|| file.file.clone());
-                let (ops, srcs) = lower_stmts(&sc.body, &origin)?;
+                let (ops, srcs) = lower_stmts(&sc.body, &origin, cmds)?;
                 let mut scene = StoryScene {
                     name: sc.name.clone(),
                     ops,
@@ -142,11 +153,15 @@ pub fn to_story_program_with_origins(
     Ok(ProgramWithOrigins { program, origins })
 }
 
-fn lower_stmts(body: &[Stmt], origin: &str) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToProgramError> {
+fn lower_stmts(
+    body: &[Stmt],
+    origin: &str,
+    cmds: Option<&CommandRegistry>,
+) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToProgramError> {
     let mut ops = Vec::new();
     let mut srcs = Vec::new();
     for st in body {
-        let (o, s) = lower_stmt(st, origin)?;
+        let (o, s) = lower_stmt(st, origin, cmds)?;
         ops.extend(o);
         srcs.extend(s);
     }
@@ -162,7 +177,11 @@ fn leaf(origin: &str, span: Span, kind: &str, gen: impl Into<String>) -> OpSrc {
     }
 }
 
-fn lower_stmt(st: &Stmt, origin: &str) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToProgramError> {
+fn lower_stmt(
+    st: &Stmt,
+    origin: &str,
+    cmds: Option<&CommandRegistry>,
+) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToProgramError> {
     Ok(match st {
         Stmt::Background { id, span } => (
             vec![StoryOp::Background { path: id.clone() }],
@@ -224,7 +243,7 @@ fn lower_stmt(st: &Stmt, origin: &str) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToP
             let mut arms = Vec::new();
             let mut arm_srcs = Vec::new();
             for o in options {
-                let (body, srcs) = lower_stmts(&o.body, origin)?;
+                let (body, srcs) = lower_stmts(&o.body, origin, cmds)?;
                 arms.push(StoryChoice {
                     text: o.label.clone(),
                     body,
@@ -321,9 +340,9 @@ fn lower_stmt(st: &Stmt, origin: &str) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToP
             span,
         } => {
             let story_cond = expr_to_cond(cond, span.line)?;
-            let (then_ops, then_src) = lower_stmts(then_body, origin)?;
+            let (then_ops, then_src) = lower_stmts(then_body, origin, cmds)?;
             let (else_ops, else_src) = match else_body {
-                Some(e) => lower_stmts(e, origin)?,
+                Some(e) => lower_stmts(e, origin, cmds)?,
                 None => (vec![], vec![]),
             };
             (
@@ -349,6 +368,9 @@ fn lower_stmt(st: &Stmt, origin: &str) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToP
                     line: span.line,
                 })?;
                 map.insert(k.clone(), sv);
+            }
+            if let Some(reg) = cmds {
+                reg.apply_defaults(name, &mut map);
             }
             (
                 vec![StoryOp::HostCall {

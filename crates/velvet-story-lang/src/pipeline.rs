@@ -19,7 +19,7 @@ use crate::parser::{parse, ParseResult};
 use crate::sema::{self, SemaResult};
 use crate::source_map::SourceMap;
 use crate::studio::StudioModel;
-use crate::to_story_program::to_story_program;
+use crate::to_story_program::{to_story_program_cmds, to_story_program_with_origins};
 use velvet_story::{StoryPlayer, StoryProgram, StoryWait};
 
 /// Options for check/build that must be isolation-safe across concurrent docs.
@@ -182,7 +182,7 @@ pub fn build_source(source: &str, file: &str, cmds: &CommandRegistry) -> BuildRe
     }
     // Single spine: AST → StoryProgram → OpVs2 (same as build_path).
     let _ = source; // already consumed by check_source
-    finish_build(check, file)
+    finish_build(check, file, cmds)
 }
 
 /// Build from path (includes on disk).
@@ -199,12 +199,12 @@ pub fn build_path(path: &Path, cmds: &CommandRegistry) -> Result<BuildResult, St
             ok: false,
         });
     }
-    Ok(finish_build(check, &file))
+    Ok(finish_build(check, &file, cmds))
 }
 
 /// Shared post-check spine: StoryProgram → OpVs2 (+ PC-aware source map).
-fn finish_build(mut check: CheckResult, file: &str) -> BuildResult {
-    let lowered = match crate::to_story_program::to_story_program_with_origins(&check.file, file) {
+fn finish_build(mut check: CheckResult, file: &str, cmds: &CommandRegistry) -> BuildResult {
+    let lowered = match to_story_program_with_origins(&check.file, file, Some(cmds)) {
         Ok(with) => {
             let (unit, map) =
                 crate::from_program::story_program_to_vs2_mapped(&with.program, &with.origins);
@@ -447,13 +447,10 @@ pub fn build_story_program(
     cmds: &CommandRegistry,
     title: &str,
 ) -> Result<StoryProgram, String> {
-    let check = check_source(source, file, cmds);
-    if !check.ok {
-        let msgs: Vec<_> = check.diags.iter().map(|d| d.display()).collect();
-        return Err(msgs.join("\n"));
-    }
-    to_story_program(&check.file, title).map_err(|e| e.to_string())
+    build_story_program_with(source, file, cmds, title, CheckOptions::default())
 }
+
+// Note: build_story_program_with is defined below and applies command defaults.
 
 /// Result of running a StoryProgram on the product [`StoryPlayer`].
 /// Outcome of a product-path story run.
@@ -549,7 +546,7 @@ pub fn build_story_program_with(
         let msgs: Vec<_> = check.diags.iter().map(|d| d.display()).collect();
         return Err(msgs.join("\n"));
     }
-    to_story_program(&check.file, title).map_err(|e| e.to_string())
+    to_story_program_cmds(&check.file, title, cmds).map_err(|e| e.to_string())
 }
 
 /// Source map from build.
