@@ -16,6 +16,7 @@ use velvet_document::{
 };
 
 use crate::layers::{pct_to_px, DesignSurface, LayerStack, ResPreset};
+use crate::studio_project::StudioProjectFile;
 
 /// Named dock panel (left/right/bottom/center).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +95,20 @@ pub struct StudioGuiSession {
     pub script_cursor_line: usize,
     /// Script mode: status of last validate.
     pub script_issues: Vec<String>,
+    /// Undo stack of full document_source snapshots (active layer).
+    pub undo_stack: Vec<String>,
+    /// Redo stack.
+    pub redo_stack: Vec<String>,
+    /// Console scroll offset (log lines from end).
+    pub console_scroll: usize,
+    /// Asset paths cached for panel.
+    pub asset_paths: Vec<String>,
+    /// Script column cursor within line (for typing).
+    pub script_cursor_col: usize,
+    /// Visual snap percent (1 or 5).
+    pub snap_pct: f32,
+    /// Resize drag active (vs move).
+    pub resize_drag: bool,
 }
 
 /// Tool for Nodes graph mode.
@@ -134,19 +149,32 @@ impl StudioGuiSession {
             selected_edge: None,
             script_cursor_line: 0,
             script_issues: Vec::new(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            console_scroll: 0,
+            asset_paths: Vec::new(),
+            script_cursor_col: 0,
+            snap_pct: 1.0,
+            resize_drag: false,
         };
         session.log.push(format!(
             "[studio-gui] opened project {}",
             session.root.display()
         ));
         session.ready = true;
+        // Restore studio project if present
+        if let Ok(Some(proj)) = StudioProjectFile::load(&session.root) {
+            session.layers = proj.to_stack();
+            session.log.push("[studio-gui] loaded velvet.studio.json".into());
+        }
         if let Some(l) = session.layers.get_mut("main_menu") {
             l.locked = false;
             l.expanded = true;
         }
-        // Each layer starts as its own empty pantalla (except later open_document).
         session.ensure_all_layer_docs();
-        session.activate_layer_document("main_menu")?;
+        let active = session.layers.active_id.clone();
+        session.activate_layer_document(&active)?;
+        session.refresh_assets();
         session.log.push(format!(
             "[studio-gui] ready panels={} mode=simplified layers={} (per-screen docs)",
             session
@@ -158,6 +186,257 @@ impl StudioGuiSession {
             session.layers.sorted_ids().join("/")
         ));
         Ok(session)
+    }
+
+    pub fn refresh_assets(&mut self) {
+        self.asset_paths = crate::asset_panel::scan_assets(&self.root)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|e| {
+                matches!(
+                    e.kind,
+                    crate::asset_panel::AssetKind::Image
+                        | crate::asset_panel::AssetKind::Audio
+                        | crate::asset_panel::AssetKind::Script
+                )
+            })
+            .map(|e| e.path.to_string_lossy().into_owned())
+            .take(40)
+            .collect();
+    }
+
+    pub fn push_undo(&mut self) {
+        self.undo_stack.push(self.document_source.clone());
+        if self.undo_stack.len() > 64 {
+            self.undo_stack.remove(0);
+        }
+        self.redo_stack.clear();
+    }
+
+    pub fn undo(&mut self) -> bool {
+        if let Some(prev) = self.undo_stack.pop() {
+            self.redo_stack.push(self.document_source.clone());
+            self.document_source = prev;
+            self.flush_active_document();
+            self.selected_region = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn redo(&mut self) -> bool {
+        if let Some(next) = self.redo_stack.pop() {
+            self.undo_stack.push(self.document_source.clone());
+            self.document_source = next;
+            self.flush_active_document();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn delete_selected_widget(&mut self) -> Result<()> {
+        let id = self
+            .selected_region
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("no selection"))?;
+        self.push_undo();
+        let mut d =
+            UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
+        d.delete_widget(&id).map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.document_source = d.save_source();
+        self.flush_active_document();
+        self.selected_region = None;
+        self.log.push(format!("[studio-gui] delete {id}"));
+        Ok(())
+    }
+
+    pub fn duplicate_selected(&mut self) -> Result<String> {
+        let id = self
+            .selected_region
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("no selection"))?;
+        self.push_undo();
+        self.drop_seq += 1;
+        let new_id = format!("copy{}", self.drop_seq);
+        let mut d =
+            UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let full = d
+            .duplicate_widget(&id, &new_id)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.document_source = d.save_source();
+        self.flush_active_document();
+        self.selected_region = Some(full.clone());
+        self.log.push(format!("[studio-gui] duplicate {id} -> {full}"));
+        Ok(full)
+    }
+
+    pub fn inject_line_on_selected(&mut self, line: &str) -> Result<()> {
+        let id = self
+            .selected_region
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("no button selected for bind"))?;
+        self.push_undo();
+        let mut d =
+            UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
+        d.inject_advanced_line(&id, line)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.document_source = d.save_source();
+        self.flush_active_document();
+        self.log
+            .push(format!("[studio-gui] inject {id}: {line}"));
+        Ok(())
+    }
+
+    pub fn resize_selected(&mut self, dw: f32, dh: f32) -> Result<()> {
+        let id = self
+            .selected_region
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("no selection"))?;
+        self.push_undo();
+        let mut d =
+            UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
+        d.resize(&id, dw, dh).map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.document_source = d.save_source();
+        self.flush_active_document();
+        Ok(())
+    }
+
+    pub fn save_studio_project(&mut self) -> Result<()> {
+        self.flush_active_document();
+        let file = StudioProjectFile::from_stack(&self.layers);
+        file.save(&self.root)?;
+        let _ = self.save_all_layer_documents();
+        self.log
+            .push("[studio-gui] saved velvet.studio.json + screens".into());
+        Ok(())
+    }
+
+    pub fn play_project_smoke(&mut self) -> String {
+        use std::process::Command;
+        let root = self.root.clone();
+        // Prefer workspace velvet binary if present
+        let velvet = root
+            .join("target")
+            .join("release")
+            .join("velvet.exe");
+        let velvet = if velvet.is_file() {
+            velvet
+        } else {
+            PathBuf::from("velvet")
+        };
+        let out = Command::new(&velvet)
+            .arg("play")
+            .arg(&root)
+            .arg("--choice")
+            .arg("0")
+            .output();
+        match out {
+            Ok(o) => {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                let line = format!(
+                    "play exit={} {}",
+                    o.status.code().unwrap_or(-1),
+                    stdout.lines().last().unwrap_or(stderr.lines().last().unwrap_or(""))
+                );
+                self.log.push(format!("[play] {line}"));
+                line
+            }
+            Err(e) => {
+                let line = format!("play failed: {e} (build velvet or add to PATH)");
+                self.log.push(format!("[play] {line}"));
+                line
+            }
+        }
+    }
+
+    /// Edit script line at cursor: replace line content.
+    pub fn script_set_line(&mut self, line_idx: usize, content: &str) {
+        let mut lines: Vec<String> = self.document_source.lines().map(|s| s.to_string()).collect();
+        if lines.is_empty() {
+            lines.push(content.to_string());
+        } else if line_idx < lines.len() {
+            lines[line_idx] = content.to_string();
+        } else {
+            lines.push(content.to_string());
+        }
+        self.document_source = lines.join("\n");
+        if !self.document_source.ends_with('\n') {
+            self.document_source.push('\n');
+        }
+        self.flush_active_document();
+    }
+
+    pub fn script_current_line(&self) -> String {
+        self.document_source
+            .lines()
+            .nth(self.script_cursor_line)
+            .unwrap_or("")
+            .to_string()
+    }
+
+    pub fn script_type_char(&mut self, ch: char) {
+        let mut line = self.script_current_line();
+        let col = self.script_cursor_col.min(line.len());
+        line.insert(col, ch);
+        self.script_cursor_col = col + ch.len_utf8();
+        self.script_set_line(self.script_cursor_line, &line);
+    }
+
+    pub fn script_backspace(&mut self) {
+        let mut line = self.script_current_line();
+        if self.script_cursor_col > 0 && !line.is_empty() {
+            let col = self.script_cursor_col.min(line.len());
+            // remove previous char
+            let mut idx = col;
+            while idx > 0 && !line.is_char_boundary(idx - 1) {
+                idx -= 1;
+            }
+            if idx > 0 {
+                line.remove(idx - 1);
+                self.script_cursor_col = idx - 1;
+                self.script_set_line(self.script_cursor_line, &line);
+            }
+        } else if self.script_cursor_line > 0 {
+            // merge with previous line
+            self.push_undo();
+            let mut lines: Vec<String> =
+                self.document_source.lines().map(|s| s.to_string()).collect();
+            let cur = lines.remove(self.script_cursor_line);
+            self.script_cursor_line -= 1;
+            let prev_len = lines[self.script_cursor_line].len();
+            lines[self.script_cursor_line].push_str(&cur);
+            self.script_cursor_col = prev_len;
+            self.document_source = lines.join("\n");
+            if !self.document_source.ends_with('\n') {
+                self.document_source.push('\n');
+            }
+            self.flush_active_document();
+        }
+    }
+
+    pub fn script_newline(&mut self) {
+        let line = self.script_current_line();
+        let col = self.script_cursor_col.min(line.len());
+        let (left, right) = line.split_at(col);
+        self.push_undo();
+        let mut lines: Vec<String> = self.document_source.lines().map(|s| s.to_string()).collect();
+        if lines.is_empty() {
+            lines.push(left.to_string());
+            lines.push(right.to_string());
+        } else {
+            lines[self.script_cursor_line] = left.to_string();
+            lines.insert(self.script_cursor_line + 1, right.to_string());
+        }
+        self.script_cursor_line += 1;
+        self.script_cursor_col = 0;
+        self.document_source = lines.join("\n");
+        if !self.document_source.ends_with('\n') {
+            self.document_source.push('\n');
+        }
+        self.flush_active_document();
     }
 
     /// Empty screen template — blank canvas to design from zero.
@@ -370,10 +649,22 @@ screen {id} {{
             .find(|e| e.from == from && e.to == to)
             .cloned()
             .ok_or_else(|| "edge missing after connect".to_string())?;
-        let script = crate::layers::LayerStack::edge_script(&edge);
+        let script_line = crate::layers::LayerStack::edge_script(&edge)
+            .lines()
+            .next()
+            .unwrap_or("")
+            .to_string();
+        // Wire selected button on active screen if any
+        if self.selected_region.is_some() && !script_line.is_empty() {
+            let _ = self.inject_line_on_selected(&script_line);
+        }
+        self.insert_script_line(&format!("connect {from} -> {to}"));
+        if !script_line.is_empty() {
+            self.insert_script_line(&script_line);
+        }
         self.selected_edge = Some((from.into(), to.into()));
-        let msg = format!("connected {from} -> {to} ({})", kind.as_str());
-        self.log.push(format!("[studio-gui] {msg} | {script}"));
+        let msg = format!("connected {from} -> {to} ({}) wired script", kind.as_str());
+        self.log.push(format!("[studio-gui] {msg}"));
         Ok(msg)
     }
 
@@ -1237,6 +1528,134 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         }
                     }
 
+                    // Global edit shortcuts
+                    if self.ctrl_held {
+                        if let PhysicalKey::Code(c) = event.physical_key {
+                            match c {
+                                KeyCode::KeyZ => {
+                                    if self.session.undo() {
+                                        self.status = "undo".into();
+                                        self.redraw();
+                                    }
+                                    return;
+                                }
+                                KeyCode::KeyY => {
+                                    if self.session.redo() {
+                                        self.status = "redo".into();
+                                        self.redraw();
+                                    }
+                                    return;
+                                }
+                                KeyCode::KeyD
+                                    if self.session.mode == StudioEditorMode::Simplified =>
+                                {
+                                    match self.session.duplicate_selected() {
+                                        Ok(id) => self.status = format!("duplicated {id}"),
+                                        Err(e) => self.status = format!("dup: {e}"),
+                                    }
+                                    self.redraw();
+                                    return;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    if matches!(
+                        event.physical_key,
+                        PhysicalKey::Code(KeyCode::F9)
+                    ) {
+                        self.status = self.session.play_project_smoke();
+                        self.redraw();
+                        return;
+                    }
+
+                    // Script mode: type into document
+                    if self.session.mode == StudioEditorMode::Advanced
+                        && self.edit_field.is_none()
+                        && !self.ctrl_held
+                    {
+                        if let PhysicalKey::Code(c) = event.physical_key {
+                            match c {
+                                KeyCode::Enter | KeyCode::NumpadEnter => {
+                                    self.session.script_newline();
+                                    self.redraw();
+                                    return;
+                                }
+                                KeyCode::Backspace => {
+                                    self.session.script_backspace();
+                                    self.redraw();
+                                    return;
+                                }
+                                KeyCode::Home => {
+                                    self.session.script_cursor_col = 0;
+                                    self.redraw();
+                                    return;
+                                }
+                                KeyCode::End => {
+                                    self.session.script_cursor_col =
+                                        self.session.script_current_line().len();
+                                    self.redraw();
+                                    return;
+                                }
+                                KeyCode::ArrowLeft => {
+                                    if self.session.script_cursor_col > 0 {
+                                        self.session.script_cursor_col -= 1;
+                                    }
+                                    self.redraw();
+                                    return;
+                                }
+                                KeyCode::ArrowRight => {
+                                    let len = self.session.script_current_line().len();
+                                    if self.session.script_cursor_col < len {
+                                        self.session.script_cursor_col += 1;
+                                    }
+                                    self.redraw();
+                                    return;
+                                }
+                                KeyCode::Delete
+                                    if self.session.mode == StudioEditorMode::Simplified =>
+                                {
+                                    // handled below
+                                }
+                                _ => {
+                                    if let Some(t) = event.text.as_ref() {
+                                        for ch in t.chars() {
+                                            if !ch.is_control() {
+                                                self.session.script_type_char(ch);
+                                            }
+                                        }
+                                        self.redraw();
+                                        return;
+                                    }
+                                }
+                            }
+                        } else if let Some(t) = event.text.as_ref() {
+                            for ch in t.chars() {
+                                if !ch.is_control() {
+                                    self.session.script_type_char(ch);
+                                }
+                            }
+                            self.redraw();
+                            return;
+                        }
+                    }
+
+                    // Visual: delete selection
+                    if self.session.mode == StudioEditorMode::Simplified
+                        && matches!(
+                            event.physical_key,
+                            PhysicalKey::Code(KeyCode::Delete) | PhysicalKey::Code(KeyCode::Backspace)
+                        )
+                        && self.edit_field.is_none()
+                    {
+                        match self.session.delete_selected_widget() {
+                            Ok(()) => self.status = "deleted widget".into(),
+                            Err(e) => self.status = format!("delete: {e}"),
+                        }
+                        self.redraw();
+                        return;
+                    }
+
                     // ── Inspector text editing takes keyboard focus ──
                     if self.edit_field.is_some() {
                         let PhysicalKey::Code(c) = event.physical_key else {
@@ -1292,7 +1711,10 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             self.status = format!("mode={:?}", self.session.mode);
                             self.redraw();
                         }
-                        KeyCode::KeyB if self.session.mode == StudioEditorMode::Simplified => {
+                        KeyCode::KeyB
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && !self.ctrl_held =>
+                        {
                             self.drop_at_cursor("button");
                         }
                         KeyCode::KeyL if self.session.mode == StudioEditorMode::Simplified => {
@@ -1465,8 +1887,54 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         KeyCode::Enter if self.session.mode == StudioEditorMode::Nodes => {
                             let id = self.session.layers.active_id.clone();
                             match self.session.set_layer(&id) {
-                                Ok(s) => self.status = s,
+                                Ok(s) => {
+                                    let _ = self.session.set_mode(StudioEditorMode::Simplified);
+                                    self.sync_title();
+                                    self.status = format!("{s} — Visual");
+                                }
                                 Err(e) => self.status = e,
+                            }
+                            self.redraw();
+                        }
+                        KeyCode::BracketRight
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some() =>
+                        {
+                            // ] grow size
+                            let _ = self.session.resize_selected(2.0, 1.0);
+                            self.status = "resized +".into();
+                            self.redraw();
+                        }
+                        KeyCode::BracketLeft
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some() =>
+                        {
+                            let _ = self.session.resize_selected(-2.0, -1.0);
+                            self.status = "resized -".into();
+                            self.redraw();
+                        }
+                        KeyCode::KeyG if self.session.mode == StudioEditorMode::Simplified => {
+                            self.session.snap_pct = if (self.session.snap_pct - 1.0).abs() < 0.1 {
+                                5.0
+                            } else {
+                                1.0
+                            };
+                            self.status = format!("snap {}%", self.session.snap_pct);
+                            self.redraw();
+                        }
+                        KeyCode::KeyB
+                            if self.session.mode == StudioEditorMode::Simplified
+                                && self.session.selected_region.is_some()
+                                && self.ctrl_held =>
+                        {
+                            // Ctrl+B bind selected button to active layer open
+                            let lid = self.session.layers.active_id.clone();
+                            match self
+                                .session
+                                .inject_line_on_selected(&format!("layer.open(\"{lid}\")"))
+                            {
+                                Ok(()) => self.status = format!("bound button → layer.open({lid})"),
+                                Err(e) => self.status = format!("bind: {e}"),
                             }
                             self.redraw();
                         }
@@ -2004,13 +2472,15 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 self.commit_edit();
             }
             self.session.flush_active_document();
-            match self.session.save_document() {
-                Ok(()) => {
-                    // also persist sibling screens if present
-                    let n = self.session.save_all_layer_documents().unwrap_or(1);
-                    self.status = format!("saved {n} screen(s)");
+            match self.session.save_studio_project() {
+                Ok(()) => self.status = "saved velvet.studio.json + all screens".into(),
+                Err(e) => {
+                    // fallback single-file
+                    match self.session.save_document() {
+                        Ok(()) => self.status = format!("saved active screen ({e})"),
+                        Err(e2) => self.status = format!("save: {e2}"),
+                    }
                 }
-                Err(e) => self.status = format!("save: {e}"),
             }
             self.redraw();
         }
@@ -2481,6 +2951,43 @@ button start {
             .filter(|w| crate::studio_paint::is_canvas_widget(w))
             .count();
         assert_eq!(empty_count, 0, "new screen starts with zero canvas widgets");
+    }
+
+    #[test]
+    fn undo_delete_duplicate_and_studio_json() {
+        let dir = tempdir().unwrap();
+        let proj = dir.path().join("game");
+        fs::create_dir_all(proj.join("scripts")).unwrap();
+        fs::write(
+            proj.join("velvet.project"),
+            r#"(name: "g", version: "0.1.0", entry_scene: "scripts/main.vel")"#,
+        )
+        .unwrap();
+        let menu = proj.join("scripts/main_menu.vel");
+        fs::write(&menu, MENU).unwrap();
+        let mut session = StudioGuiSession::open_project(&proj).unwrap();
+        session.open_document(&menu).unwrap();
+        let n0 = session.list_widgets().unwrap().len();
+        session.drop_widget("button", 20.0, 20.0).unwrap();
+        assert!(session.list_widgets().unwrap().len() > n0);
+        session.push_undo(); // ensure stack
+        let id = session.selected_region.clone().unwrap();
+        session.delete_selected_widget().unwrap();
+        assert!(!session
+            .list_widgets()
+            .unwrap()
+            .iter()
+            .any(|w| w.id == id));
+        // inject advanced
+        session.select_region("button.start").unwrap();
+        session
+            .inject_line_on_selected("layer.open(\"scene\")")
+            .unwrap();
+        assert!(session.document_source.contains("layer.open"));
+        session.save_studio_project().unwrap();
+        assert!(proj.join("velvet.studio.json").is_file());
+        let reopened = StudioGuiSession::open_project(&proj).unwrap();
+        assert!(reopened.layers.get("main_menu").is_some());
     }
 
     #[test]
