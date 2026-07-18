@@ -1,0 +1,23 @@
+[package]
+name = "hello-velvet"
+description = "Hello Velvet demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "hello-velvet"
+path = "src/main.rs"
+
+[dependencies]
+velvet-app = { workspace = true }
+velvet-core = { workspace = true }
+velvet-math = { workspace = true }
+velvet-input = { workspace = true }
+velvet-assets = { workspace = true }
+velvet-audio = { workspace = true }
+velvet-render = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

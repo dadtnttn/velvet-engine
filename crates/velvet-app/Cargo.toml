@@ -1,0 +1,25 @@
+[package]
+name = "velvet-app"
+description = "Application builder, plugins, schedules, and main loop for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-time = { workspace = true }
+velvet-events = { workspace = true }
+velvet-math = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+winit = { workspace = true, optional = true }
+
+[features]
+default = ["window"]
+window = ["dep:winit"]
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

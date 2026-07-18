@@ -1,0 +1,18 @@
+﻿[package]
+name = "velvet-runtime"
+description = "Velvet Engine game runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "velvet-runtime"
+path = "src/main.rs"
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

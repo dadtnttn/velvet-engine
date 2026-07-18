@@ -1,0 +1,20 @@
+[package]
+name = "velvet-ecs"
+description = "Entity component system for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true }
+velvet-math = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+slotmap = { workspace = true }
+parking_lot = { workspace = true }
+indexmap = { workspace = true }
+smallvec = { workspace = true }

@@ -1,0 +1,24 @@
+[package]
+name = "velvet-script-lsp"
+description = "Language server helpers and diagnostics for Velvet Script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "velvet-script-lsp"
+path = "src/main.rs"
+
+[dependencies]
+velvet-script-ast = { workspace = true }
+velvet-script-parser = { workspace = true }
+velvet-script-compiler = { workspace = true }
+velvet-script-format = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[[test]]
+name = "lsp_stdio_protocol"
+path = "tests/lsp_stdio_protocol.rs"

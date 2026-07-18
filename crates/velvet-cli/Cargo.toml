@@ -1,0 +1,40 @@
+﻿[package]
+name = "velvet-cli"
+description = "Velvet Engine command-line interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "velvet"
+path = "src/main.rs"
+
+[dependencies]
+velvet-core = { workspace = true }
+velvet-app = { workspace = true, features = ["window"] }
+velvet-project = { workspace = true }
+velvet-script-parser = { workspace = true }
+velvet-script-compiler = { workspace = true }
+velvet-script-vm = { workspace = true }
+velvet-script-format = { workspace = true }
+velvet-script-lsp = { workspace = true }
+velvet-document = { workspace = true }
+velvet-story = { workspace = true }
+velvet-audio = { workspace = true }
+velvet-build = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+camino = { workspace = true }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["window"]
+window = ["velvet-app/window"]

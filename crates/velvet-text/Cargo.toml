@@ -1,0 +1,18 @@
+[package]
+name = "velvet-text"
+description = "Rich text layout and typewriter for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-math = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+unicode-segmentation = "1"
+unicode-width = "0.2"
+rustybuzz = "0.20"
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

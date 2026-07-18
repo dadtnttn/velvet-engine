@@ -1,0 +1,23 @@
+[package]
+name = "visual-novel"
+description = "Velvet Engine visual novel demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "visual-novel"
+path = "src/main.rs"
+
+[dependencies]
+velvet-app = { workspace = true }
+velvet-core = { workspace = true }
+velvet-story = { workspace = true }
+velvet-input = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+tempfile = "3"

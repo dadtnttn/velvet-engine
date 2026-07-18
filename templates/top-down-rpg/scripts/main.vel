@@ -1,0 +1,35 @@
+// RPG narrative entry — dialogue + quest hooks
+character villager { name: "Mira" color: "#88cc88" }
+character elder { name: "Elder" color: "#ccaa66" }
+state {
+    has_key: bool = false
+    quest_started: bool = false
+    gold: int = 20
+}
+scene talk_mira {
+    villager "The dungeon door is sealed. Find the key in the woods."
+    quest_started = true
+    choice {
+        "I'll find it." { jump woods_hint }
+        "Not my problem." { jump talk_end }
+    }
+}
+scene woods_hint {
+    villager "Check the hollow stump east of town."
+}
+scene talk_elder {
+    elder "Trade: 10 gold for a map scrap."
+    choice {
+        "Buy scrap" {
+            gold -= 10
+            has_key = true
+            elder "May it open what was closed."
+        }
+        "Leave" {
+            elder "Coin talks louder than courage."
+        }
+    }
+}
+scene talk_end {
+    "You walk away. The door stays shut."
+}

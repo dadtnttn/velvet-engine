@@ -1,0 +1,21 @@
+(
+    name: "Top-Down Action Template",
+    identifier: "com.velvet.template_top_down_action",
+    version: "0.1.0",
+    modules: [
+        "play",
+        "action",
+    ],
+    entry_scene: "scripts/main.vel",
+    window: (
+        title: "Top-Down Action Template",
+        width: 1280,
+        height: 720,
+        virtual_width: 1280,
+        virtual_height: 720,
+        fullscreen: false,
+        resizable: true,
+        vsync: true,
+    ),
+    assets_dir: "assets",
+)

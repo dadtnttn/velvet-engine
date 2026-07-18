@@ -1,0 +1,13 @@
+{
+  "main:2:dialogue": "La lluvia suaviza el ruido de la ciudad tras la ventana.",
+  "main:3:dialogue": "Dije que estaria aqui. Lo decia en serio.",
+  "main:5:dialogue": "Siempre dices eso.",
+  "main:7:choice:0": "Cumplo mis promesas.",
+  "main:1:dialogue": "Vale. Mantengamoslo ligero.",
+  "main:7:choice:1": "No lo pongas tan pesado.",
+  "ending_warm:1:dialogue": "Mira: se abren las nubes.",
+  "ending_warm:2:dialogue": "Quedate un poco mas.",
+  "ending_warm:3:dialogue": "Final: Luces calidas",
+  "ending_cool:1:dialogue": "Vuelves solo a casa. La lluvia ha parado.",
+  "ending_cool:2:dialogue": "Final: Aire fresco"
+}

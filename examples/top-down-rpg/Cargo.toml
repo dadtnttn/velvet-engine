@@ -1,0 +1,21 @@
+[package]
+name = "top-down-rpg"
+description = "Top-down RPG demo for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "top-down-rpg"
+path = "src/main.rs"
+
+[dependencies]
+velvet-play = { workspace = true }
+velvet-rpg = { workspace = true }
+velvet-story = { workspace = true }
+velvet-math = { workspace = true }
+velvet-core = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
