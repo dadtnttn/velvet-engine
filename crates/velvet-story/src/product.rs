@@ -661,7 +661,14 @@ impl VnSession {
                 self.sync_ui_from_wait();
                 self.push_rollback_frame();
             }
-            StoryWait::Choice | StoryWait::Ended => {}
+            StoryWait::Pause { .. } => {
+                self.push_rollback_frame();
+                self.player.skip_pause();
+                self.ingest_events();
+                self.sync_ui_from_wait();
+                self.push_rollback_frame();
+            }
+            StoryWait::Choice | StoryWait::Ended | StoryWait::Host { .. } => {}
         }
     }
 
@@ -771,10 +778,7 @@ impl VnSession {
         }
         if !matches!(self.player.wait(), StoryWait::Line) && self.say.visible {
             // may have auto-advanced off line
-            if matches!(
-                self.player.wait(),
-                StoryWait::Choice | StoryWait::Ended | StoryWait::Ready
-            ) {
+            if !matches!(self.player.wait(), StoryWait::Line) {
                 self.ingest_events();
                 self.sync_ui_from_wait();
             }
@@ -797,12 +801,12 @@ impl VnSession {
                     self.ingest_events();
                     n += 1;
                 }
-                StoryWait::Ready => {
+                StoryWait::Ready | StoryWait::Pause { .. } => {
                     self.player.advance();
                     self.ingest_events();
                     n += 1;
                 }
-                StoryWait::Choice | StoryWait::Ended => break,
+                StoryWait::Choice | StoryWait::Ended | StoryWait::Host { .. } => break,
             }
         }
         self.sync_ui_from_wait();
@@ -832,8 +836,13 @@ impl VnSession {
                     let arm = self.player.choices().get(idx).map(|c| c.index).unwrap_or(0);
                     let _ = self.choose_arm(arm);
                 }
-                StoryWait::Ready => {
+                StoryWait::Ready | StoryWait::Pause { .. } => {
                     self.player.advance();
+                    self.ingest_events();
+                }
+                StoryWait::Host { token } => {
+                    // Headless: auto-resume hosts so scripts don't hang tests.
+                    let _ = self.player.resume_host(&token);
                     self.ingest_events();
                 }
             }
@@ -963,7 +972,7 @@ impl VnSession {
                 self.say.visible = false;
                 self.choice.close();
             }
-            StoryWait::Ready => {}
+            StoryWait::Ready | StoryWait::Pause { .. } | StoryWait::Host { .. } => {}
         }
         // Presentation mirrors player if empty
         if self.presentation.background.is_none() {
@@ -1277,6 +1286,7 @@ scene end_good {
         prog.scenes = scenes;
         let mut session = VnSession::new(StoryPlayer::start(prog));
         session.ingest_events();
+        // Pause blocks; first ingest sees Sound + Pause only.
         assert_eq!(
             session.presentation.last_sfx.as_deref(),
             Some("ui/click.ogg")
@@ -1288,6 +1298,12 @@ scene end_good {
             .any(|p| p == "ui/click.ogg"));
         assert_eq!(session.presentation.last_pause, Some(1.25));
         assert!(session.presentation.pause_pending);
+        assert!(matches!(
+            session.player().wait(),
+            StoryWait::Pause { .. }
+        ));
+        session.player_mut().skip_pause();
+        session.ingest_events();
         assert_eq!(
             session.presentation.last_transition_name.as_deref(),
             Some("fade")
