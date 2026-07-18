@@ -1,10 +1,11 @@
-﻿[package]
+[package]
 name = "velvet-script-types"
-description = "Type checker (Phase 4)"
+description = "Velvet Script type checker"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+velvet-script-hir = { workspace = true }
 thiserror = { workspace = true }
