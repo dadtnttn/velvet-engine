@@ -466,6 +466,133 @@ fn source_map_include_origin_not_only_root() {
 }
 
 #[test]
+fn source_map_product_spine_has_real_pcs_and_include_by_pc() {
+    use tempfile::tempdir;
+    use velvet_story_lang::pipeline::build_path;
+
+    let dir = tempdir().unwrap();
+    let child = dir.path().join("chapter2.vstory");
+    let root = dir.path().join("main.vstory");
+    std::fs::write(
+        &child,
+        "scene from_ch2\nnarrator:\n    inside_include\nset flag = 1\nend\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &root,
+        "include \"chapter2.vstory\"\n\nscene start\ngoto from_ch2\n",
+    )
+    .unwrap();
+    let cmds = CommandRegistry::builtin();
+    let b = build_path(&root, &cmds).unwrap();
+    assert!(b.ok, "{:?}", b.check.diags);
+    let lo = b.lowered.as_ref().unwrap();
+    let map = &lo.map;
+    let unit = &lo.unit;
+    assert!(
+        map.has_pc_mappings(),
+        "product spine map must set real PCs, entries={:?}",
+        map.entries
+    );
+    let with_pc = map
+        .entries
+        .iter()
+        .find(|e| e.pc.is_some() && e.origin.file.contains("chapter2"))
+        .expect("chapter2 entry with pc");
+    let pc = with_pc.pc.unwrap();
+    assert!(
+        (pc as usize) < unit.code.len(),
+        "pc {pc} out of range len={}",
+        unit.code.len()
+    );
+    let hit = map.by_pc(pc).expect("by_pc");
+    assert!(
+        hit.origin.file.contains("chapter2"),
+        "by_pc must resolve include origin, got {}",
+        hit.origin.file
+    );
+}
+
+#[test]
+fn command_param_ty_rejects_wrong_types() {
+    use velvet_story_lang::pipeline::check_source;
+
+    let bad = r#"
+scene start
+call combat.start:
+    enemy: forest_guardian
+    difficulty: "muy difícil"
+    can_escape: 42
+end
+"#;
+    let good = r#"
+scene start
+call combat.start:
+    enemy: forest_guardian
+    difficulty: 3
+    can_escape: true
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    let c_bad = check_source(bad, "bad_cmd.vstory", &cmds);
+    assert!(!c_bad.ok, "expected type errors");
+    assert!(
+        c_bad.diags.iter().any(|d| d.code == "VST028"),
+        "expected VST028, diags={:?}",
+        c_bad.diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+    );
+    let c_good = check_source(good, "good_cmd.vstory", &cmds);
+    assert!(c_good.ok, "{:?}", c_good.diags);
+}
+
+#[test]
+fn product_arithmetic_and_var_refs_exact() {
+    use velvet_story_lang::pipeline::run_source_product;
+
+    let src = r#"
+scene start
+set score = 5
+set bonus = 2
+set total = score + bonus
+add score bonus
+set half = total / 2
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    let r = run_source_product(src, "arith.vstory", &cmds, 0).expect("product run");
+    let get = |k: &str| {
+        r.vars
+            .iter()
+            .find(|(n, _)| n == k)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(get("total"), "7", "vars={:?}", r.vars);
+    assert_eq!(get("score"), "7", "vars={:?}", r.vars);
+    assert_eq!(get("half"), "3", "vars={:?}", r.vars);
+}
+
+#[test]
+fn studio_model_includes_child_scene() {
+    use tempfile::tempdir;
+    use velvet_story_lang::studio::build_model;
+
+    let dir = tempdir().unwrap();
+    let child = dir.path().join("part.vstory");
+    let root = dir.path().join("root.vstory");
+    std::fs::write(&child, "scene child_scene\nnarrator:\n    x\nend\n").unwrap();
+    let root_src = "include \"part.vstory\"\n\nscene start\nend\n";
+    std::fs::write(&root, root_src).unwrap();
+    let cmds = CommandRegistry::builtin();
+    let model = build_model(root_src, root.to_str().unwrap(), &cmds);
+    assert!(
+        model.scenes.iter().any(|s| s.name == "child_scene"),
+        "scenes={:?}",
+        model.scenes.iter().map(|s| &s.name).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn diag_five_locales_same_code_different_text() {
     use velvet_story_lang::pipeline::{check_source_with, CheckOptions};
     use velvet_story_lang::DiagLocale;

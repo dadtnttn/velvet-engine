@@ -1,6 +1,6 @@
 [package]
 name = "velvet-story-lang"
-description = "Velvet Story — writer-friendly narrative language that lowers to Velvet Script 2"
+description = "Velvet Story — writer language: StoryProgram product IR + StoryPlayer; OpVs2 secondary"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

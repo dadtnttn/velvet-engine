@@ -7,7 +7,9 @@ use tracing::debug;
 use crate::auto_mode::AutoModeController;
 use crate::character::Character;
 use crate::history::History;
-use crate::ir::{StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram};
+use crate::ir::{
+    StoryArithOp, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand, StoryProgram,
+};
 use crate::prefs::{SkipMode, StoryPreferences};
 use crate::save::SaveGame;
 use crate::value::StoryValue;
@@ -586,7 +588,8 @@ impl StoryPlayer {
                 assign_op,
                 value,
             } => {
-                self.vars.apply_assign(&name, assign_op, value.clone());
+                let rhs = self.eval_expr(&value);
+                self.vars.apply_assign(&name, assign_op, rhs);
                 let v = self.vars.get(&name);
                 self.events.push(StoryEvent::Variable { name, value: v });
                 true
@@ -683,6 +686,68 @@ impl StoryPlayer {
                 let r = self.resolve_operand(right);
                 Self::cmp_values(&l, &r, *op)
             }
+        }
+    }
+
+    fn eval_expr(&self, expr: &StoryExpr) -> StoryValue {
+        match expr {
+            StoryExpr::Value { value } => value.clone(),
+            StoryExpr::Var { name } => self.vars.get(name),
+            StoryExpr::Neg { inner } => {
+                let v = self.eval_expr(inner);
+                if let Some(i) = v.as_i64() {
+                    StoryValue::Int(-i)
+                } else if let Some(f) = v.as_f64() {
+                    StoryValue::Float(-f)
+                } else {
+                    StoryValue::Null
+                }
+            }
+            StoryExpr::Binary { op, left, right } => {
+                let l = self.eval_expr(left);
+                let r = self.eval_expr(right);
+                Self::arith_values(&l, &r, *op)
+            }
+        }
+    }
+
+    fn arith_values(left: &StoryValue, right: &StoryValue, op: StoryArithOp) -> StoryValue {
+        if let (Some(a), Some(b)) = (left.as_i64(), right.as_i64()) {
+            return match op {
+                StoryArithOp::Add => StoryValue::Int(a.saturating_add(b)),
+                StoryArithOp::Sub => StoryValue::Int(a.saturating_sub(b)),
+                StoryArithOp::Mul => StoryValue::Int(a.saturating_mul(b)),
+                StoryArithOp::Div => {
+                    if b == 0 {
+                        StoryValue::Int(0)
+                    } else {
+                        StoryValue::Int(a / b)
+                    }
+                }
+            };
+        }
+        if let (Some(a), Some(b)) = (left.as_f64(), right.as_f64()) {
+            return match op {
+                StoryArithOp::Add => StoryValue::Float(a + b),
+                StoryArithOp::Sub => StoryValue::Float(a - b),
+                StoryArithOp::Mul => StoryValue::Float(a * b),
+                StoryArithOp::Div => {
+                    if b == 0.0 {
+                        StoryValue::Float(0.0)
+                    } else {
+                        StoryValue::Float(a / b)
+                    }
+                }
+            };
+        }
+        match op {
+            StoryArithOp::Add => {
+                if let (StoryValue::String(s), t) = (left, right) {
+                    return StoryValue::String(format!("{s}{}", t.display_str()));
+                }
+                StoryValue::Null
+            }
+            _ => StoryValue::Null,
         }
     }
 

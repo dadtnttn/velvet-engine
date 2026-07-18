@@ -1,6 +1,8 @@
 //! # velvet-story-lang
 //!
-//! **Velvet Story** — writer-friendly narrative language. Product spine:
+//! **Velvet Story** — writer-friendly narrative language.
+//!
+//! # Product spine (canonical)
 //!
 //! ```text
 //! .vstory → lexer → parser → AST → sema
@@ -8,6 +10,9 @@
 //!             ├→ StoryPlayer     ← product runtime (default)
 //!             └→ OpVs2 (derived) ← secondary / debug / fallback host
 //! ```
+//!
+//! The primary execution path is **StoryProgram → StoryPlayer**. OpVs2 / Vs2Host
+//! are **not** the primary product pipeline; they are derived for dump/fallback.
 //!
 //! Diagnostic locale is **context-scoped** ([`with_diag_locale`] /
 //! [`pipeline::CheckOptions`]) so concurrent multi-doc tools do not race.

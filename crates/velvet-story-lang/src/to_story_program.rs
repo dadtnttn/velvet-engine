@@ -1,14 +1,17 @@
 //! Lower Velvet Story AST → product [`StoryProgram`] (velvet-story IR).
 //!
 //! Preferred product path for Velvet 2.5 writers (not a second VM).
+//! Also builds parallel [`OpSrc`] trees so StoryProgram → OpVs2 can emit
+//! source maps with real PCs and include-aware origins.
 
 use indexmap::IndexMap;
 use velvet_story::{
-    AssignOp, Character, StoryChoice, StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram,
-    StoryScene, StoryValue,
+    AssignOp, Character, StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryOp,
+    StoryOperand, StoryProgram, StoryScene, StoryValue,
 };
 
-use crate::ast::{BinOp, Expr, Stmt, StoryFile, TopItem, UnaryOp};
+use crate::ast::{BinOp, Expr, Stmt, StoryFile, TopItem};
+use crate::span::Span;
 
 /// Errors lowering to StoryProgram.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,9 +28,66 @@ impl std::fmt::Display for ToProgramError {
     }
 }
 
-/// Lower a resolved story file to product IR.
-pub fn to_story_program(file: &StoryFile, title: impl Into<String>) -> Result<StoryProgram, ToProgramError> {
+/// Origin of one [`StoryOp`] (mirrors nested If/Choice structure).
+#[derive(Debug, Clone)]
+pub enum OpSrc {
+    /// Leaf op (dialogue, assign, jump, …).
+    Leaf {
+        /// Origin file (include-aware).
+        file: String,
+        /// Writer span.
+        span: Span,
+        /// Node kind for maps.
+        kind: String,
+        /// Generated note.
+        gen: String,
+    },
+    /// Conditional block.
+    If {
+        /// Origin file.
+        file: String,
+        /// Span of `if`.
+        span: Span,
+        /// Then-arm origins (parallel to then_ops).
+        then: Vec<OpSrc>,
+        /// Else-arm origins.
+        else_ops: Vec<OpSrc>,
+    },
+    /// Choice menu.
+    Choice {
+        /// Origin file.
+        file: String,
+        /// Span of `choice`.
+        span: Span,
+        /// Per-arm body origins.
+        arms: Vec<Vec<OpSrc>>,
+    },
+}
+
+/// Product IR plus source origins for PC-aware maps.
+#[derive(Debug, Clone)]
+pub struct ProgramWithOrigins {
+    /// StoryProgram.
+    pub program: StoryProgram,
+    /// Per-scene op origins (same order/shape as scene.ops).
+    pub origins: IndexMap<String, Vec<OpSrc>>,
+}
+
+/// Lower a resolved story file to product IR (origins discarded).
+pub fn to_story_program(
+    file: &StoryFile,
+    title: impl Into<String>,
+) -> Result<StoryProgram, ToProgramError> {
+    Ok(to_story_program_with_origins(file, title)?.program)
+}
+
+/// Lower with parallel origin tree for source maps.
+pub fn to_story_program_with_origins(
+    file: &StoryFile,
+    title: impl Into<String>,
+) -> Result<ProgramWithOrigins, ToProgramError> {
     let mut program = StoryProgram::new(title);
+    let mut origins: IndexMap<String, Vec<OpSrc>> = IndexMap::new();
     let mut first_scene = None;
 
     for item in &file.items {
@@ -36,13 +96,19 @@ pub fn to_story_program(file: &StoryFile, title: impl Into<String>) -> Result<St
                 if first_scene.is_none() {
                     first_scene = Some(sc.name.clone());
                 }
+                let origin = sc
+                    .origin_file
+                    .clone()
+                    .unwrap_or_else(|| file.file.clone());
+                let (ops, srcs) = lower_stmts(&sc.body, &origin)?;
                 let mut scene = StoryScene {
                     name: sc.name.clone(),
-                    ops: lower_stmts(&sc.body)?,
+                    ops,
                     labels: IndexMap::new(),
                 };
                 scene.reindex_labels();
                 program.scenes.insert(sc.name.clone(), scene);
+                origins.insert(sc.name.clone(), srcs);
             }
             TopItem::CharacterDecl { name, display, .. } => {
                 let mut ch = Character::new(name.clone(), name.clone());
@@ -70,112 +136,183 @@ pub fn to_story_program(file: &StoryFile, title: impl Into<String>) -> Result<St
             line: 1,
         });
     }
-    // Prefer start scene as entry when present
     if program.scenes.contains_key("start") {
         program.entry = "start".into();
     }
-    Ok(program)
+    Ok(ProgramWithOrigins { program, origins })
 }
 
-fn lower_stmts(body: &[Stmt]) -> Result<Vec<StoryOp>, ToProgramError> {
+fn lower_stmts(body: &[Stmt], origin: &str) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToProgramError> {
     let mut ops = Vec::new();
+    let mut srcs = Vec::new();
     for st in body {
-        ops.extend(lower_stmt(st)?);
+        let (o, s) = lower_stmt(st, origin)?;
+        ops.extend(o);
+        srcs.extend(s);
     }
-    Ok(ops)
+    Ok((ops, srcs))
 }
 
-fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
+fn leaf(origin: &str, span: Span, kind: &str, gen: impl Into<String>) -> OpSrc {
+    OpSrc::Leaf {
+        file: origin.into(),
+        span,
+        kind: kind.into(),
+        gen: gen.into(),
+    }
+}
+
+fn lower_stmt(st: &Stmt, origin: &str) -> Result<(Vec<StoryOp>, Vec<OpSrc>), ToProgramError> {
     Ok(match st {
-        Stmt::Background { id, .. } => vec![StoryOp::Background { path: id.clone() }],
-        Stmt::Music { id, .. } => vec![StoryOp::Music {
-            path: id.clone(),
-            fade_in: None,
-        }],
+        Stmt::Background { id, span } => (
+            vec![StoryOp::Background { path: id.clone() }],
+            vec![leaf(origin, *span, "background", id.clone())],
+        ),
+        Stmt::Music { id, span } => (
+            vec![StoryOp::Music {
+                path: id.clone(),
+                fade_in: None,
+            }],
+            vec![leaf(origin, *span, "music", id.clone())],
+        ),
         Stmt::Show {
             character,
             expression,
             at,
-            ..
+            span,
         } => {
             let target = match expression {
                 Some(e) => format!("{character}.{e}"),
                 None => character.clone(),
             };
-            vec![StoryOp::Show {
-                target,
-                at: at.clone(),
-            }]
+            (
+                vec![StoryOp::Show {
+                    target: target.clone(),
+                    at: at.clone(),
+                }],
+                vec![leaf(origin, *span, "show", target)],
+            )
         }
-        Stmt::Hide { character, .. } => vec![StoryOp::Hide {
-            target: character.clone(),
-        }],
+        Stmt::Hide { character, span } => (
+            vec![StoryOp::Hide {
+                target: character.clone(),
+            }],
+            vec![leaf(origin, *span, "hide", character.clone())],
+        ),
         Stmt::Dialogue {
-            speaker, text, ..
+            speaker,
+            text,
+            span,
+            ..
         } => {
-            let speaker = if speaker == "narrator" {
+            let sp = if speaker == "narrator" {
                 None
             } else {
                 Some(speaker.clone())
             };
-            vec![StoryOp::Dialogue {
-                speaker,
-                text: text.clone(),
-            }]
+            (
+                vec![StoryOp::Dialogue {
+                    speaker: sp,
+                    text: text.clone(),
+                }],
+                vec![leaf(origin, *span, "dialogue", speaker.clone())],
+            )
         }
-        Stmt::Choice { options, .. } => {
+        Stmt::Choice {
+            options, span, ..
+        } => {
             let mut arms = Vec::new();
+            let mut arm_srcs = Vec::new();
             for o in options {
+                let (body, srcs) = lower_stmts(&o.body, origin)?;
                 arms.push(StoryChoice {
                     text: o.label.clone(),
-                    body: lower_stmts(&o.body)?,
+                    body,
                     require: None,
                     hidden_if_locked: false,
                 });
+                arm_srcs.push(srcs);
             }
-            vec![StoryOp::Choice { options: arms }]
+            (
+                vec![StoryOp::Choice { options: arms }],
+                vec![OpSrc::Choice {
+                    file: origin.into(),
+                    span: *span,
+                    arms: arm_srcs,
+                }],
+            )
         }
-        Stmt::Goto { target, .. } => vec![StoryOp::Jump {
-            target: target.clone(),
-        }],
-        Stmt::CallScene { target, .. } => vec![StoryOp::Call {
-            target: target.clone(),
-        }],
-        Stmt::Return { .. } => vec![StoryOp::Return],
-        Stmt::End { .. } => vec![StoryOp::End { ending: None }],
-        Stmt::Label { name, .. } => vec![StoryOp::Label { name: name.clone() }],
+        Stmt::Goto { target, span } => (
+            vec![StoryOp::Jump {
+                target: target.clone(),
+            }],
+            vec![leaf(origin, *span, "goto", target.clone())],
+        ),
+        Stmt::CallScene { target, span } => (
+            vec![StoryOp::Call {
+                target: target.clone(),
+            }],
+            vec![leaf(origin, *span, "call_scene", target.clone())],
+        ),
+        Stmt::Return { span } => (
+            vec![StoryOp::Return],
+            vec![leaf(origin, *span, "return", "return")],
+        ),
+        Stmt::End { span } => (
+            vec![StoryOp::End { ending: None }],
+            vec![leaf(origin, *span, "end", "end")],
+        ),
+        Stmt::Label { name, span } => (
+            vec![StoryOp::Label { name: name.clone() }],
+            vec![leaf(origin, *span, "label", name.clone())],
+        ),
         Stmt::Set { name, value, span } => {
-            let v = expr_to_value(value).ok_or_else(|| ToProgramError {
-                message: format!("set `{name}` needs a literal or simple value"),
+            let v = expr_to_story_expr(value).ok_or_else(|| ToProgramError {
+                message: format!(
+                    "set `{name}` needs a literal, variable, or arithmetic expression"
+                ),
                 line: span.line,
             })?;
-            vec![StoryOp::Assign {
-                name: name.clone(),
-                assign_op: AssignOp::Set,
-                value: v,
-            }]
+            (
+                vec![StoryOp::Assign {
+                    name: name.clone(),
+                    assign_op: AssignOp::Set,
+                    value: v,
+                }],
+                vec![leaf(origin, *span, "set", name.clone())],
+            )
         }
         Stmt::Add { name, value, span } => {
-            let v = expr_to_value(value).ok_or_else(|| ToProgramError {
-                message: format!("add `{name}` needs a literal value"),
+            let v = expr_to_story_expr(value).ok_or_else(|| ToProgramError {
+                message: format!(
+                    "add `{name}` needs a literal, variable, or arithmetic expression"
+                ),
                 line: span.line,
             })?;
-            vec![StoryOp::Assign {
-                name: name.clone(),
-                assign_op: AssignOp::Add,
-                value: v,
-            }]
+            (
+                vec![StoryOp::Assign {
+                    name: name.clone(),
+                    assign_op: AssignOp::Add,
+                    value: v,
+                }],
+                vec![leaf(origin, *span, "add", name.clone())],
+            )
         }
         Stmt::Sub { name, value, span } => {
-            let v = expr_to_value(value).ok_or_else(|| ToProgramError {
-                message: format!("sub `{name}` needs a literal value"),
+            let v = expr_to_story_expr(value).ok_or_else(|| ToProgramError {
+                message: format!(
+                    "sub `{name}` needs a literal, variable, or arithmetic expression"
+                ),
                 line: span.line,
             })?;
-            vec![StoryOp::Assign {
-                name: name.clone(),
-                assign_op: AssignOp::Sub,
-                value: v,
-            }]
+            (
+                vec![StoryOp::Assign {
+                    name: name.clone(),
+                    assign_op: AssignOp::Sub,
+                    value: v,
+                }],
+                vec![leaf(origin, *span, "sub", name.clone())],
+            )
         }
         Stmt::If {
             cond,
@@ -184,34 +321,51 @@ fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
             span,
         } => {
             let story_cond = expr_to_cond(cond, span.line)?;
-            vec![StoryOp::If {
-                cond: story_cond,
-                then_ops: lower_stmts(then_body)?,
-                else_ops: match else_body {
-                    Some(e) => lower_stmts(e)?,
-                    None => vec![],
-                },
-            }]
+            let (then_ops, then_src) = lower_stmts(then_body, origin)?;
+            let (else_ops, else_src) = match else_body {
+                Some(e) => lower_stmts(e, origin)?,
+                None => (vec![], vec![]),
+            };
+            (
+                vec![StoryOp::If {
+                    cond: story_cond,
+                    then_ops,
+                    else_ops,
+                }],
+                vec![OpSrc::If {
+                    file: origin.into(),
+                    span: *span,
+                    then: then_src,
+                    else_ops: else_src,
+                }],
+            )
         }
         Stmt::CallCommand { name, args, span } => {
             let mut map = IndexMap::new();
             for (k, v) in args {
-                let sv = expr_to_value(v).ok_or_else(|| ToProgramError {
+                // Command kwargs: bare idents stay string ids (enemy: forest_guardian).
+                let sv = expr_to_literal_value(v).ok_or_else(|| ToProgramError {
                     message: format!("command arg `{k}` must be a literal"),
                     line: span.line,
                 })?;
                 map.insert(k.clone(), sv);
             }
-            vec![StoryOp::HostCall {
-                name: name.clone(),
-                args: map,
-            }]
+            (
+                vec![StoryOp::HostCall {
+                    name: name.clone(),
+                    args: map,
+                }],
+                vec![leaf(origin, *span, "call", name.clone())],
+            )
         }
-        Stmt::Sound { id, .. } => vec![StoryOp::Sound { path: id.clone() }],
+        Stmt::Sound { id, span } => (
+            vec![StoryOp::Sound { path: id.clone() }],
+            vec![leaf(origin, *span, "sound", id.clone())],
+        ),
         Stmt::Pause { duration, span } => {
             let seconds = match duration {
                 None => None,
-                Some(e) => match expr_to_value(e) {
+                Some(e) => match expr_to_literal_value(e) {
                     Some(StoryValue::Int(n)) => Some(n as f64),
                     Some(StoryValue::Float(f)) => Some(f),
                     _ => {
@@ -222,11 +376,16 @@ fn lower_stmt(st: &Stmt) -> Result<Vec<StoryOp>, ToProgramError> {
                     }
                 },
             };
-            vec![StoryOp::Pause { seconds }]
+            (
+                vec![StoryOp::Pause { seconds }],
+                vec![leaf(origin, *span, "pause", "await")],
+            )
         }
-        Stmt::Transition { name, .. } => vec![StoryOp::Transition { name: name.clone() }],
-        // Comments are authoring-only; not runtime ops (but stay in AST for format).
-        Stmt::Comment { .. } => vec![],
+        Stmt::Transition { name, span } => (
+            vec![StoryOp::Transition { name: name.clone() }],
+            vec![leaf(origin, *span, "transition", name.clone())],
+        ),
+        Stmt::Comment { .. } => (vec![], vec![]),
     })
 }
 
@@ -283,6 +442,8 @@ fn expr_to_cond(e: &Expr, line: u32) -> Result<StoryCond, ToProgramError> {
     }
 }
 
+use crate::ast::UnaryOp;
+
 fn binop_to_cmp(op: BinOp) -> Result<StoryCmpOp, ToProgramError> {
     Ok(match op {
         BinOp::Eq => StoryCmpOp::Eq,
@@ -301,10 +462,9 @@ fn binop_to_cmp(op: BinOp) -> Result<StoryCmpOp, ToProgramError> {
 }
 
 fn expr_to_operand(e: &Expr, line: u32) -> Result<StoryOperand, ToProgramError> {
-    // Identifiers are variables in conditions (not bare string literals).
     match e {
         Expr::Ident(name, _) => Ok(StoryOperand::var(name.clone())),
-        _ => match expr_to_value(e) {
+        _ => match expr_to_literal_value(e) {
             Some(v) => Ok(StoryOperand::value(v)),
             None => Err(ToProgramError {
                 message: "comparison operand must be a variable or literal".into(),
@@ -314,25 +474,56 @@ fn expr_to_operand(e: &Expr, line: u32) -> Result<StoryOperand, ToProgramError> 
     }
 }
 
-fn expr_to_value(e: &Expr) -> Option<StoryValue> {
+/// Assignment / arithmetic RHS: idents are **variables**.
+fn expr_to_story_expr(e: &Expr) -> Option<StoryExpr> {
+    match e {
+        Expr::Int(n, _) => Some(StoryExpr::value(StoryValue::Int(*n))),
+        Expr::Float(s, _) => s.parse().ok().map(|f| StoryExpr::value(StoryValue::Float(f))),
+        Expr::Bool(b, _) => Some(StoryExpr::value(StoryValue::Bool(*b))),
+        Expr::Str(s, _) => Some(StoryExpr::value(StoryValue::String(s.clone()))),
+        Expr::Ident(name, _) => Some(StoryExpr::var(name.clone())),
+        Expr::Unary {
+            op: UnaryOp::Neg,
+            expr,
+            ..
+        } => Some(StoryExpr::Neg {
+            inner: Box::new(expr_to_story_expr(expr)?),
+        }),
+        Expr::Binary {
+            op: op @ (BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div),
+            left,
+            right,
+            ..
+        } => Some(StoryExpr::Binary {
+            op: match op {
+                BinOp::Add => StoryArithOp::Add,
+                BinOp::Sub => StoryArithOp::Sub,
+                BinOp::Mul => StoryArithOp::Mul,
+                BinOp::Div => StoryArithOp::Div,
+                _ => unreachable!(),
+            },
+            left: Box::new(expr_to_story_expr(left)?),
+            right: Box::new(expr_to_story_expr(right)?),
+        }),
+        _ => None,
+    }
+}
+
+/// Command kwargs / pause: idents are **string ids**, not variables.
+fn expr_to_literal_value(e: &Expr) -> Option<StoryValue> {
     match e {
         Expr::Int(n, _) => Some(StoryValue::Int(*n)),
         Expr::Float(s, _) => s.parse().ok().map(StoryValue::Float),
         Expr::Bool(b, _) => Some(StoryValue::Bool(*b)),
         Expr::Str(s, _) => Some(StoryValue::String(s.clone())),
-        // bare ident in command kwargs is asset/id string
         Expr::Ident(s, _) => Some(StoryValue::String(s.clone())),
-        // unary negation of literal
         Expr::Unary {
             op: UnaryOp::Neg,
             expr,
             ..
         } => match expr.as_ref() {
             Expr::Int(n, _) => Some(StoryValue::Int(-n)),
-            Expr::Float(s, _) => s
-                .parse::<f64>()
-                .ok()
-                .map(|f| StoryValue::Float(-f)),
+            Expr::Float(s, _) => s.parse::<f64>().ok().map(|f| StoryValue::Float(-f)),
             _ => None,
         },
         _ => None,
@@ -410,6 +601,41 @@ end
             StoryOp::HostCall { name, args }
                 if name == "combat.start"
                     && args.get("enemy") == Some(&StoryValue::String("forest_guardian".into()))
+        )));
+    }
+
+    #[test]
+    fn arithmetic_set_and_var_add() {
+        let src = r#"
+scene start
+set score = 5
+set bonus = 2
+set total = score + bonus
+add score bonus
+set half = total / 2
+end
+"#;
+        let cmds = CommandRegistry::builtin();
+        let c = check_source(src, "e.vstory", &cmds);
+        assert!(c.ok, "{:?}", c.diags);
+        let prog = to_story_program(&c.file, "e").unwrap();
+        let sc = prog.scenes.get("start").unwrap();
+        assert!(sc.ops.iter().any(|op| matches!(
+            op,
+            StoryOp::Assign {
+                name,
+                value: StoryExpr::Binary { .. },
+                ..
+            } if name == "total"
+        )));
+        assert!(sc.ops.iter().any(|op| matches!(
+            op,
+            StoryOp::Assign {
+                name,
+                assign_op: AssignOp::Add,
+                value: StoryExpr::Var { name: v },
+                ..
+            } if name == "score" && v == "bonus"
         )));
     }
 }

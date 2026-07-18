@@ -424,6 +424,21 @@ fn template_message(loc: DiagLocale, code: &str) -> &'static str {
             DiagLocale::De => "Ein `choice` braucht mindestens eine Option.",
             DiagLocale::Zh => "`choice` 至少需要一个选项。",
         },
+        "VST028" => match loc {
+            DiagLocale::Es => {
+                "El parámetro `{name}` de `{cmd}` espera {expected}, pero se recibió {got}."
+            }
+            DiagLocale::En => {
+                "Parameter `{name}` of `{cmd}` expects {expected}, but got {got}."
+            }
+            DiagLocale::Ja => {
+                "`{cmd}` の引数 `{name}` は {expected} が必要ですが {got} でした。"
+            }
+            DiagLocale::De => {
+                "Parameter `{name}` von `{cmd}` erwartet {expected}, erhalten wurde {got}."
+            }
+            DiagLocale::Zh => "命令 `{cmd}` 的参数 `{name}` 需要 {expected}，实际为 {got}。",
+        },
         "VST027" => match loc {
             DiagLocale::Es => "No existe la escena o etiqueta `{target}`.",
             DiagLocale::En => "Scene or label `{target}` does not exist.",
@@ -567,6 +582,13 @@ fn template_suggestion(loc: DiagLocale, code: &str) -> Option<&'static str> {
         }),
         "VST021" => Some("set {name} = 0"),
         "VST022" => Some("{req}: …"),
+        "VST028" => Some(match loc {
+            DiagLocale::Es => "Usa un valor del tipo declarado en el comando.",
+            DiagLocale::En => "Use a value matching the command parameter type.",
+            DiagLocale::Ja => "コマンドが宣言した型の値を使ってください。",
+            DiagLocale::De => "Verwenden Sie einen Wert des deklarierten Parametertyps.",
+            DiagLocale::Zh => "请使用与命令参数类型匹配的值。",
+        }),
         "VST027" => Some(match loc {
             DiagLocale::Es => "Revisa el nombre o crea la escena con `scene …`.",
             DiagLocale::En => "Check the name or create the scene with `scene …`.",

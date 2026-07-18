@@ -3,28 +3,144 @@
 //! Prefer product `StoryPlayer` for execution. This path exists so the alternate
 //! backend is **derived** from the same IR, not a second independent lower.
 
+use indexmap::IndexMap;
 use velvet_script_bytecode::opcodes_vs2::OpVs2;
 use velvet_script_compiler::vs2_codegen::{Vs2Instr, Vs2Unit};
 use velvet_story::{
-    AssignOp, StoryCmpOp, StoryCond, StoryOp, StoryOperand, StoryProgram, StoryValue,
+    AssignOp, StoryArithOp, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand, StoryProgram,
+    StoryValue,
 };
+
+use crate::source_map::SourceMap;
+use crate::to_story_program::OpSrc;
 
 /// Lower a product StoryProgram into a VS2 host unit (debug / fallback).
 pub fn story_program_to_vs2(program: &StoryProgram) -> Vs2Unit {
+    story_program_to_vs2_mapped(program, &IndexMap::new()).0
+}
+
+/// Lower StoryProgram → OpVs2 **and** a PC-aware source map from parallel origins.
+pub fn story_program_to_vs2_mapped(
+    program: &StoryProgram,
+    origins: &IndexMap<String, Vec<OpSrc>>,
+) -> (Vs2Unit, SourceMap) {
     let mut unit = Vs2Unit::new(program.title.clone());
-    // entry: prefer program.entry
+    let mut map = SourceMap::new(program.title.clone());
     for (name, scene) in &program.scenes {
         let entry = unit.pc();
         unit.entry_scenes.insert(name.clone(), entry);
-        for op in &scene.ops {
-            emit_op(&mut unit, op);
+        // Scene boundary entry (file from first op origin when available).
+        let scene_file = origins
+            .get(name)
+            .and_then(|s| s.first())
+            .map(|s| match s {
+                OpSrc::Leaf { file, .. }
+                | OpSrc::If { file, .. }
+                | OpSrc::Choice { file, .. } => file.clone(),
+            })
+            .unwrap_or_else(|| program.title.clone());
+        map.push_in_file(
+            scene_file,
+            crate::span::Span::at(1, 1, 0, 0),
+            "scene",
+            format!("scene {name}"),
+            Some(entry),
+        );
+        let srcs = origins.get(name);
+        for (i, op) in scene.ops.iter().enumerate() {
+            let src = srcs.and_then(|s| s.get(i));
+            emit_op_mapped(&mut unit, &mut map, op, src);
         }
-        // Scene fall-through ends with Ret: returns from CallScene or halts if root.
         unit.emit(Vs2Instr::new(OpVs2::Ret));
     }
-    // link scene jumps
     velvet_script_compiler::vs2_codegen::link_scenes(&mut unit);
-    unit
+    (unit, map)
+}
+
+fn map_leaf(map: &mut SourceMap, src: Option<&OpSrc>, pc: u32) {
+    match src {
+        Some(OpSrc::Leaf {
+            file,
+            span,
+            kind,
+            gen,
+        }) => {
+            map.push_in_file(file.clone(), *span, kind.clone(), gen.clone(), Some(pc));
+        }
+        Some(OpSrc::If { file, span, .. }) => {
+            map.push_in_file(file.clone(), *span, "if", "cond", Some(pc));
+        }
+        Some(OpSrc::Choice { file, span, .. }) => {
+            map.push_in_file(file.clone(), *span, "choice", "menu", Some(pc));
+        }
+        None => {}
+    }
+}
+
+fn emit_op_mapped(unit: &mut Vs2Unit, map: &mut SourceMap, op: &StoryOp, src: Option<&OpSrc>) {
+    let pc = unit.pc();
+    map_leaf(map, src, pc);
+    match (op, src) {
+        (
+            StoryOp::If {
+                cond,
+                then_ops,
+                else_ops,
+            },
+            Some(OpSrc::If {
+                then, else_ops: e_src, ..
+            }),
+        ) => {
+            emit_cond(unit, cond);
+            let j_else = unit.emit(Vs2Instr::with_a(OpVs2::JumpIf, 0));
+            for (o, s) in then_ops.iter().zip(then.iter()) {
+                emit_op_mapped(unit, map, o, Some(s));
+            }
+            // leftover ops if origins shorter
+            for o in then_ops.iter().skip(then.len()) {
+                emit_op(unit, o);
+            }
+            let j_end = unit.emit(Vs2Instr::with_a(OpVs2::Jump, 0));
+            let else_pc = unit.pc();
+            unit.patch_a(j_else, else_pc);
+            for (o, s) in else_ops.iter().zip(e_src.iter()) {
+                emit_op_mapped(unit, map, o, Some(s));
+            }
+            for o in else_ops.iter().skip(e_src.len()) {
+                emit_op(unit, o);
+            }
+            let end = unit.pc();
+            unit.patch_a(j_end, end);
+        }
+        (StoryOp::Choice { options }, Some(OpSrc::Choice { arms, .. })) => {
+            unit.emit(Vs2Instr::with_a(OpVs2::Menu, options.len() as u32));
+            let choice_key = unit.pool.intern("__choice");
+            let mut end_jumps: Vec<u32> = Vec::new();
+            for (i, arm) in options.iter().enumerate() {
+                let lid = unit.pool.intern(arm.text.as_str());
+                unit.emit(Vs2Instr::with_ab(OpVs2::Choice, lid, i as u32));
+                unit.emit(Vs2Instr::with_a(OpVs2::LoadState, choice_key));
+                let idx = unit.pool.intern(i.to_string());
+                unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, idx));
+                unit.emit(Vs2Instr::new(OpVs2::Eq));
+                let j_skip = unit.emit(Vs2Instr::with_a(OpVs2::JumpIf, 0));
+                let arm_src = arms.get(i);
+                for (j, o) in arm.body.iter().enumerate() {
+                    let s = arm_src.and_then(|a| a.get(j));
+                    emit_op_mapped(unit, map, o, s);
+                }
+                let j_end = unit.emit(Vs2Instr::with_a(OpVs2::Jump, 0));
+                end_jumps.push(j_end);
+                let skip_pc = unit.pc();
+                unit.patch_a(j_skip, skip_pc);
+            }
+            let end_pc = unit.pc();
+            for j in end_jumps {
+                unit.patch_a(j, end_pc);
+            }
+        }
+        _ => emit_op(unit, op),
+    }
 }
 
 fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
@@ -85,19 +201,19 @@ fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
             let kid = unit.pool.intern(name.as_str());
             match assign_op {
                 AssignOp::Set => {
-                    emit_value(unit, value);
+                    emit_expr(unit, value);
                     unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
                 }
                 AssignOp::Add => {
                     // score += n  →  LoadState score; push n; Add; StoreState score
                     unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
-                    emit_value(unit, value);
+                    emit_expr(unit, value);
                     unit.emit(Vs2Instr::new(OpVs2::Add));
                     unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
                 }
                 AssignOp::Sub => {
                     unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
-                    emit_value(unit, value);
+                    emit_expr(unit, value);
                     unit.emit(Vs2Instr::new(OpVs2::Sub));
                     unit.emit(Vs2Instr::with_a(OpVs2::StoreState, kid));
                 }
@@ -218,6 +334,33 @@ fn emit_operand(unit: &mut Vs2Unit, op: &StoryOperand) {
             unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
         }
         StoryOperand::Value { value } => emit_value(unit, value),
+    }
+}
+
+fn emit_expr(unit: &mut Vs2Unit, e: &StoryExpr) {
+    match e {
+        StoryExpr::Value { value } => emit_value(unit, value),
+        StoryExpr::Var { name } => {
+            let kid = unit.pool.intern(name.as_str());
+            unit.emit(Vs2Instr::with_a(OpVs2::LoadState, kid));
+        }
+        StoryExpr::Neg { inner } => {
+            let z = unit.pool.intern("0");
+            unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, z));
+            emit_expr(unit, inner);
+            unit.emit(Vs2Instr::new(OpVs2::Sub));
+        }
+        StoryExpr::Binary { op, left, right } => {
+            emit_expr(unit, left);
+            emit_expr(unit, right);
+            let opc = match op {
+                StoryArithOp::Add => OpVs2::Add,
+                StoryArithOp::Sub => OpVs2::Sub,
+                StoryArithOp::Mul => OpVs2::Mul,
+                StoryArithOp::Div => OpVs2::Div,
+            };
+            unit.emit(Vs2Instr::new(opc));
+        }
     }
 }
 

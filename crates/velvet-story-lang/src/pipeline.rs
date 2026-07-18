@@ -202,14 +202,15 @@ pub fn build_path(path: &Path, cmds: &CommandRegistry) -> Result<BuildResult, St
     Ok(finish_build(check, &file))
 }
 
-/// Shared post-check spine: StoryProgram → OpVs2 (+ source map with include origins).
+/// Shared post-check spine: StoryProgram → OpVs2 (+ PC-aware source map).
 fn finish_build(mut check: CheckResult, file: &str) -> BuildResult {
-    let lowered = match to_story_program(&check.file, file) {
-        Ok(prog) => {
-            let unit = crate::from_program::story_program_to_vs2(&prog);
+    let lowered = match crate::to_story_program::to_story_program_with_origins(&check.file, file) {
+        Ok(with) => {
+            let (unit, map) =
+                crate::from_program::story_program_to_vs2_mapped(&with.program, &with.origins);
             let mut lo = lower(&check.file);
-            // Prefer map rebuilt with include origins; keep legacy map as base fill.
-            lo.map = crate::source_map::map_from_story_file(&check.file);
+            // Map built simultaneously with OpVs2 emission (real PCs + include origins).
+            lo.map = map;
             lo.unit = unit;
             lo
         }
