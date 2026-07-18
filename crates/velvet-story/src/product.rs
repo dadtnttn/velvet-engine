@@ -876,6 +876,12 @@ impl VnSession {
                     self.choice.close();
                 }
                 StoryEvent::Variable { .. } => {}
+                // Presentation hooks: hosts / audio layer subscribe via drain_events
+                // or override; product shell keeps vars for debugging.
+                StoryEvent::Sound { .. }
+                | StoryEvent::Pause { .. }
+                | StoryEvent::Transition { .. }
+                | StoryEvent::HostCall { .. } => {}
             }
         }
     }

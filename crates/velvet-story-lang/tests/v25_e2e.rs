@@ -573,6 +573,40 @@ end
 }
 
 #[test]
+fn nested_if_inside_choice_product_tail_runs() {
+    use velvet_story_lang::pipeline::run_source_product;
+
+    let src = r#"
+scene start
+set has_key = 1
+choice:
+    "Entrar":
+        set entered = 1
+        if has_key:
+            set opened = 1
+        set finished = 1
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    let r = run_source_product(src, "nest.vstory", &cmds, 0).expect("product");
+    let get = |k: &str| {
+        r.vars
+            .iter()
+            .find(|(n, _)| n == k)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(get("entered"), "1");
+    assert_eq!(get("opened"), "1");
+    assert_eq!(
+        get("finished"),
+        "1",
+        "tail after nested if inside choice must run; vars={:?}",
+        r.vars
+    );
+}
+
+#[test]
 fn studio_model_includes_child_scene() {
     use tempfile::tempdir;
     use velvet_story_lang::studio::build_model;
