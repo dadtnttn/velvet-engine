@@ -126,8 +126,20 @@ Shortcuts: **F2** validate · **F3–F10** insert API catalog · **O** insert `l
 
 ### Nodes (mode 3)
 
-Click a layer node, then another, to create an edge. Edges emit scripts like
-`layer.open("target")` for wiring buttons to pantallas.
+Polished pantallas graph with connect / disconnect / create screens.
+
+| Tool / key | Action |
+|------------|--------|
+| **1 Select** | Select node, **drag** to reposition |
+| **2 Connect** | Click A then B → transition (`layer.open`) |
+| **3 Cut** | Click edge or A then B → remove link |
+| **4 Overlay** | Click A then B → overlay (`layer.show`) |
+| **N Screen** | Create new root pantalla |
+| **S Sub** | Create sublayer under active |
+| **Del / X** | Delete selected edge (or node if no edge) |
+| Click edge | Select + cycle kind: go / overlay / back |
+
+Toolbar at bottom of the canvas; ports show in (left) / out (right).
 
 ```bash
 # Headless dual-mode ready (CI)
