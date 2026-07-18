@@ -116,8 +116,13 @@ pub fn build_product_ui_frame(session: &VnSession) -> ProductUiFrame {
         StoryWait::Ended => "ended",
         StoryWait::Ready => "ready",
     };
-    let body = session.say.full_text.clone();
-    let (body_width, body_height) = measure_say_body(&body, 28.0);
+    // Prefer typewriter-visible text so product hosts can animate cps.
+    let body = if session.say.text_complete || session.say.visible_text.is_empty() {
+        session.say.full_text.clone()
+    } else {
+        session.say.visible_text.clone()
+    };
+    let (body_width, body_height) = measure_say_body(&session.say.full_text, 28.0);
     let font = detect_script_family(&body);
     let choices: Vec<String> = session
         .choice
