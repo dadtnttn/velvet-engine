@@ -55,7 +55,7 @@ pub use pipeline::{
     BuildResult, CheckOptions, CheckResult, ProgramRunResult, RunResult,
 };
 pub use studio::{build_model, StudioModel};
-pub use to_story_program::{to_story_program, ToProgramError};
+pub use to_story_program::{to_story_program, to_story_program_cmds, ToProgramError};
 
 /// Welcome sample used in acceptance tests (from product requirements).
 pub const WELCOME_SAMPLE: &str = r#"scene start

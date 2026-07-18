@@ -11,6 +11,7 @@ mod character;
 mod gallery;
 mod glossary;
 mod history;
+mod host;
 mod ir;
 mod load;
 mod localization_hook;
@@ -38,6 +39,9 @@ pub use character::Character;
 pub use gallery::{Gallery, GalleryEntry, GalleryError};
 pub use glossary::{Glossary, GlossaryError, GlossaryTerm};
 pub use history::{History, HistoryEntry};
+pub use host::{
+    command_host_fn, SharedCommandHost, StoryCommandError, StoryCommandHost,
+};
 pub use ir::{
     StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand,
     StoryProgram, StoryScene,

@@ -573,6 +573,57 @@ end
 }
 
 #[test]
+fn command_defaults_filled_on_host_call() {
+    use velvet_story::{StoryOp, StoryValue};
+    use velvet_story_lang::pipeline::build_story_program;
+
+    // difficulty and can_escape omitted → defaults 1 and true from registry.
+    let src = r#"
+scene start
+call combat.start:
+    enemy: forest_guardian
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    let prog = build_story_program(src, "def.vstory", &cmds, "def").unwrap();
+    let sc = prog.scenes.get("start").unwrap();
+    let host = sc
+        .ops
+        .iter()
+        .find_map(|op| match op {
+            StoryOp::HostCall { name, args } if name == "combat.start" => Some(args),
+            _ => None,
+        })
+        .expect("HostCall");
+    assert_eq!(
+        host.get("enemy"),
+        Some(&StoryValue::String("forest_guardian".into()))
+    );
+    assert_eq!(host.get("difficulty"), Some(&StoryValue::Int(1)));
+    assert_eq!(host.get("can_escape"), Some(&StoryValue::Bool(true)));
+}
+
+#[test]
+fn command_required_still_errors_without_enemy() {
+    use velvet_story_lang::pipeline::check_source;
+
+    let src = r#"
+scene start
+call combat.start:
+    difficulty: 2
+end
+"#;
+    let cmds = CommandRegistry::builtin();
+    let c = check_source(src, "req.vstory", &cmds);
+    assert!(!c.ok);
+    assert!(
+        c.diags.iter().any(|d| d.code == "VST022"),
+        "expected VST022 missing required, got {:?}",
+        c.diags.iter().map(|d| &d.code).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn nested_if_inside_choice_product_tail_runs() {
     use velvet_story_lang::pipeline::run_source_product;
 
