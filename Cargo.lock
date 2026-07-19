@@ -3215,9 +3215,12 @@ name = "velvet-stakes"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "image",
  "softbuffer",
+ "velvet-anim",
  "velvet-cards",
  "velvet-core",
+ "velvet-math",
  "velvet-story",
  "winit",
 ]
