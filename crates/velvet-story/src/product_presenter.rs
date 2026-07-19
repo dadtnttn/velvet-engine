@@ -211,6 +211,45 @@ impl ProductPresenter {
         self.last_paint.as_ref().expect("present_session set paint")
     }
 
+    /// Extract product text paint commands as GPU layout inputs
+    /// `(text, x, y, size, color, z)`.
+    pub fn text_layout_items(&self) -> Vec<(String, f32, f32, f32, [f32; 4], f32)> {
+        let Some(list) = self.last_paint.as_ref() else {
+            return Vec::new();
+        };
+        list.commands
+            .iter()
+            .filter_map(|c| match c {
+                crate::product_paint::ProductPaintCmd::Text {
+                    text,
+                    x,
+                    y,
+                    size,
+                    color,
+                    z,
+                    ..
+                } if !text.is_empty() && *size > 0.0 => {
+                    Some((text.clone(), *x, *y, *size, *color, *z))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Layout last paint text with velvet-text GPU rasterizer (product path).
+    ///
+    /// Returns `None` if no font is available or there is no text.
+    pub fn layout_gpu_text(
+        &self,
+        raster: &mut velvet_text::GpuTextRasterizer,
+    ) -> Option<Vec<velvet_text::GpuTextRun>> {
+        let items = self.text_layout_items();
+        if items.is_empty() {
+            return None;
+        }
+        Some(velvet_text::layout_product_text_items(raster, &items))
+    }
+
     /// Summary line for logs / headless ASSERT_OK.
     pub fn status_line(&self) -> String {
         let paint_n = self.last_paint.as_ref().map(|p| p.len()).unwrap_or(0);
@@ -307,5 +346,32 @@ scene main {
         p.set_phase_play();
         let s = p.status_line();
         assert!(s.contains("wgpu") || s.contains("softbuffer"), "{s}");
+    }
+
+    #[test]
+    fn product_text_uses_velvet_text_gpu_path() {
+        let session = sample_session();
+        let mut p = ProductPresenter::hybrid();
+        p.set_phase_play();
+        let _ = p.present_session(&session);
+        let items = p.text_layout_items();
+        assert!(
+            !items.is_empty(),
+            "expected product text items, descs={:?}",
+            p.last_descriptors()
+        );
+        let Ok(mut raster) = velvet_text::GpuTextRasterizer::from_system_ui() else {
+            eprintln!("phase2: skip layout — no system font");
+            return;
+        };
+        let runs = p.layout_gpu_text(&mut raster).expect("text runs");
+        let flat = velvet_text::flatten_glyph_quads(&runs);
+        assert!(
+            !flat.is_empty(),
+            "velvet-text GPU path must produce glyph quads"
+        );
+        // Not softbuffer bitmap: real atlas coverage
+        let atlas = raster.atlas();
+        assert!(atlas.rgba.iter().skip(3).step_by(4).any(|&a| a > 16));
     }
 }
