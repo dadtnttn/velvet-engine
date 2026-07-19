@@ -1,77 +1,36 @@
-# Velvet Anim — **tools**, not premade cutscenes
+# Velvet Anim — runtime tools (motion driven by `.vcss`)
 
-Crate: **`velvet-anim`**. Building blocks so *you* invent flips, pack reveals, shop spins, etc.
+Crate: **`velvet-anim`**.
 
-Premade pack-open sequences are **not** the API. Optional samples: `velvet_anim::recipes`.
+**Author language for motion is `.vcss`** (`@keyframes` / `animation` in
+[`VELVET_STYLE.md`](./VELVET_STYLE.md)). This crate is the **runtime toolbox**:
+poses, tweens, timelines, 3D billboard projection.
 
-## Tool stack
+## Prefer
 
-| Tool | Role |
-|------|------|
-| `AnimPose` / `FloatTween` / `AnimDirector` | 2D targets by id |
-| `Pose3D` + `Pose3DChannel` | yaw, pitch, roll, foil, depth, … **you set** |
-| `project_image` / `ImageBillboard` | perspective quad from **your** image size |
-| `ChannelTrack` + `Timeline` | keyframes **you** author |
-| Story: `anim.billboard`, `anim.pose3d`, `anim.track` | drive tools from `.vstory` |
-| `recipes::*` | optional examples — copy/adapt, not required |
-
-## Compose a card flip yourself (Rust)
+```css
+@keyframes deal {
+  from { opacity: 0; scale: 0.65; yaw: 0.9; }
+  to   { opacity: 1; scale: 1;    yaw: 0; }
+}
+.card.deal { animation: deal 0.35s cubic_out; }
+```
 
 ```rust
-use velvet_anim::{
-    ChannelTrack, Timeline, Pose3D, Pose3DChannel, project_image, Fx3dCamera,
-};
-use velvet_math::{Ease, Vec2};
-
-let mut tl = Timeline::new().with_channel(
-    ChannelTrack::new(Pose3DChannel::Yaw)
-        .key(0.0, 0.0, Ease::Linear)
-        .key(0.4, std::f32::consts::PI, Ease::CubicInOut),
-);
-// each frame:
-tl.tick(dt);
-let pose = tl.sample_pose(Pose3D::flat(Vec2::new(200.0, 300.0)));
-let quad = project_image(&pose, 70.0, 100.0, &Fx3dCamera::default());
-// draw YOUR texture on quad.tl/tr/br/bl; use pose.foil for holofoil UVs
+let plan = velvet_style::plan_animation(&sheet, &query)?;
+let tl = velvet_anim::timeline_from_plan(&plan);
 ```
 
-## Story language (generic tools)
+## Legacy
 
-```text
-call anim.billboard:
-    target: card0
-    x: 200
-    y: 300
-    half_w: 70
-    half_h: 100
-    front: "art/strike"
-    back: "art/card_back"
+Line-oriented `.vanim` scripts still parse for compatibility; convert with
+`velvet_style::vanim_to_vcss` or load via `style.play` / `anim.script` (auto-detect).
 
-call anim.track:
-    target: card0
-    channel: yaw
-    from: 0
-    to: 3.14159
-    duration: 0.45
-    ease: cubic_in_out
+## Runtime tools (not a second style language)
 
-call anim.pose3d:
-    target: card0
-    foil: 0.6
-    pitch: -0.1
-```
-
-Host: `AnimStoryHost` — `tick(dt)` then `project_all()` for quads.
-
-## Optional recipes
-
-```rust
-use velvet_anim::recipes::{recipe_card_flip, recipe_card_emerge};
-// These return Timeline tools you can edit or ignore.
-```
-
-## What this is *not*
-
-- Not a fixed “pack open game mode”
-- Not glTF / full 3D meshes (billboard projection tools only)
-- Not “one command does the whole TCG shop” — you compose channels
+| API | Role |
+|-----|------|
+| `Pose3D` / `project_image` | Billboard projection |
+| `Timeline` / `ChannelTrack` | Keyframe runner |
+| `AnimDirector` | Multi-target 2D tweens |
+| `timeline_from_plan` | Bridge from `.vcss` |

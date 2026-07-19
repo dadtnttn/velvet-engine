@@ -6,6 +6,25 @@ use velvet_math::Ease;
 use crate::fx3d::{Pose3D, Pose3DChannel};
 use crate::tween::parse_ease;
 
+/// Build a [`Timeline`] from a unified `.vcss` animation plan (`velvet_style::TimelinePlan`).
+pub fn timeline_from_plan(plan: &velvet_style::TimelinePlan) -> Timeline {
+    let mut tl = Timeline::new();
+    tl.duration = plan.duration;
+    tl.playing = true;
+    for ch in &plan.channels {
+        let Some(channel) = Pose3DChannel::parse(&ch.channel) else {
+            continue;
+        };
+        let ease = parse_ease(&ch.ease);
+        let mut track = ChannelTrack::new(channel);
+        for (t, v) in &ch.keys {
+            track = track.key(*t, *v, ease);
+        }
+        tl.channels.push(track);
+    }
+    tl
+}
+
 /// One keyframe on a channel.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Keyframe {
