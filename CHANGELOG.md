@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   **deferred / future** (`docs/architecture/ROADMAP.md`).
 - Demo **card-duel** (`demos/card-duel`): windowed card duel with title menu,
   how-to, battle, pause, and result screens (uses `velvet-cards` zones).
+- Demo **velvet-stakes** (`demos/velvet-stakes`): Balatro-like poker (chips×mult,
+  blinds, select/play/discard) with menus — fan pre-alpha, not affiliated.
 - Phase 0: workspace, architecture docs, ADRs, CI skeleton, dual license.
 - Phase 1 (core): `velvet-math`, `velvet-time`, `velvet-events`, `velvet-core`, `velvet-app`
   (plugins, schedules, resources, headless + winit window runners).

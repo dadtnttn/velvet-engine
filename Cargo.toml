@@ -57,6 +57,7 @@ members = [
     "demos/cellular-arena",
     "demos/velvet-novella",
     "demos/card-duel",
+    "demos/velvet-stakes",
 ]
 default-members = [
     "crates/velvet-cli",
