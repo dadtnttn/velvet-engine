@@ -26,9 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **velvet-anim** animation/VFX tools: poses, tweens, presets (deal, fade, shake…),
   multi-target director, `.vanim` scripts, story host `anim.fx` / `anim.move` /
   `anim.script` (docs: `docs/language/VELVET_ANIM.md`).
-- **3D image FX** in `velvet-anim`: perspective billboards (`Pose3D`,
-  `project_image`), foil phase, card flip helper, **pack-open generator**
-  (`PackOpenFx`) + story `call anim.pack_open` for TCG-style pack reveals.
+- **3D image tools** in `velvet-anim`: `Pose3D` channels, `project_image`,
+  `ImageBillboard`, keyframe `Timeline` / `ChannelTrack`, story
+  `anim.billboard` / `anim.pose3d` / `anim.track`. Premade pack cutscenes
+  removed from the host API; optional samples only under `recipes`.
 - Phase 0: workspace, architecture docs, ADRs, CI skeleton, dual license.
 - Phase 1 (core): `velvet-math`, `velvet-time`, `velvet-events`, `velvet-core`, `velvet-app`
   (plugins, schedules, resources, headless + winit window runners).

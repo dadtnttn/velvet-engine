@@ -72,17 +72,6 @@ pub enum AnimOp {
         /// Seconds.
         secs: f32,
     },
-    /// Start a 3D pack-open generator (host / external runner applies).
-    PackOpen {
-        /// Center x.
-        x: f32,
-        /// Center y.
-        y: f32,
-        /// Card count.
-        cards: usize,
-        /// Duration.
-        duration: f32,
-    },
 }
 
 /// Parsed program.
@@ -228,25 +217,6 @@ pub fn parse_anim_script(source: &str) -> Result<AnimProgram, AnimScriptError> {
                     secs: parts[1].parse().unwrap_or(0.0),
                 });
             }
-            "pack_open" => {
-                // pack_open x y [cards] [duration]
-                if parts.len() < 3 {
-                    return Err(AnimScriptError::Line {
-                        line: line_no,
-                        msg: "pack_open x y [cards] [duration]".into(),
-                    });
-                }
-                let x: f32 = parts[1].parse().unwrap_or(0.0);
-                let y: f32 = parts[2].parse().unwrap_or(0.0);
-                let cards: usize = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(5);
-                let duration: f32 = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(2.2);
-                ops.push(AnimOp::PackOpen {
-                    x,
-                    y,
-                    cards: cards.max(1),
-                    duration: duration.max(0.5),
-                });
-            }
             other => {
                 return Err(AnimScriptError::Line {
                     line: line_no,
@@ -281,8 +251,6 @@ pub fn apply_program_immediate(dir: &mut AnimDirector, program: &AnimProgram) ->
             }
             AnimOp::Stop { id } => dir.stop(id),
             AnimOp::Wait { secs } => wait += *secs,
-            // Pack open needs AnimStoryHost / PackOpenFx — skip here, count duration as wait.
-            AnimOp::PackOpen { duration, .. } => wait += *duration,
         }
     }
     wait
@@ -341,11 +309,6 @@ impl AnimScriptRunner {
                 AnimOp::Stop { id } => dir.stop(&id),
                 AnimOp::Wait { secs } => {
                     self.wait_left = secs;
-                    break;
-                }
-                AnimOp::PackOpen { duration, .. } => {
-                    // Signal via wait; host should spawn PackOpenFx separately if needed.
-                    self.wait_left = duration;
                     break;
                 }
             }
