@@ -85,9 +85,23 @@
   gold: #ebc878;
 }
 
+/* Vector title — multi-path Art-Deco wordmark (see data/ui/logo_title.svg).
+ * Runtime paints via velvet_image::rasterize_simple_svg (procedural paths in
+ * wordmark_svg.rs keep the lobby title sharp without a bitmap plate). */
+@svg logo_title {
+  viewBox: 0 0 720 240;
+  fill: #e8c078;
+  stroke: #f0d8a0;
+  stroke-width: 1.2;
+  /* Badge-style single glyph (full title is multipath SVG file / procedural) */
+  path: "M 36 28 L 70 28 L 100 100 L 130 28 L 164 28 L 110 118 L 90 118 Z";
+}
+
 .logo-title {
-  /* copper / rose-gold wordmark (reference Nightfall title) */
-  color: #d4a06a;
+  color: #e8c078;
+  background-image: svg(logo_title);
+  width: 560;
+  height: 150;
 }
 
 .logo-sub {

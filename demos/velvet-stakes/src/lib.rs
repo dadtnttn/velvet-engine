@@ -12,6 +12,8 @@ pub mod logo;
 pub mod render;
 /// Title / lobby / modal UI paint + theme.
 pub mod ui;
+/// SVG title wordmark (vector paths → raster via velvet-image).
+pub mod wordmark_svg;
 
 pub use live_dev::{
     load_rgb_buf, reload_stylesheet, ImageSlot, LiveDevApply, LiveDevSession, WatchKind,
@@ -23,4 +25,8 @@ pub use logo::{
 pub use render::{load_rgb, ArtBank, RgbImage};
 pub use ui::{
     paint_collection, paint_options, paint_shop, paint_title_menu, theme, TITLE_ITEMS, WW, WH,
+};
+pub use wordmark_svg::{
+    load_title_wordmark_svg, rasterize_svg_wordmark, rasterize_title_wordmark, resolve_title_wordmark,
+    title_path_d, title_wordmark_svg_xml, TITLE_RASTER_H, TITLE_RASTER_W,
 };

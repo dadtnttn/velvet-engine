@@ -24,6 +24,7 @@ velvet-story = { workspace = true }
 velvet-story-lang = { workspace = true }
 velvet-assets = { workspace = true }
 velvet-core = { workspace = true }
+velvet-image = { workspace = true }
 anyhow = { workspace = true }
 indexmap = { workspace = true }
 winit = { workspace = true }

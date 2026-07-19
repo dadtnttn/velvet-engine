@@ -113,8 +113,12 @@ impl App {
         }
         let ui = ui_dir(&root);
         let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
-        // Soft-keyed wordmark (same path as live-dev apply)
-        let logo_title = load_title_wordmark(&ui.join("logo_title.png"));
+        // Prefer SVG wordmark (vector); PNG only as last-resort soft-key fallback
+        let logo_title = velvet_stakes::resolve_title_wordmark(
+            None, // stylesheet applied after boot; paint resolves @svg live
+            &ui,
+            load_title_wordmark(&ui.join("logo_title.png")),
+        );
         let portrait = load_rgb(&ui.join("portrait_collector.jpg"));
 
         let world = StakesWorld::new(stats, deck.cards, root.clone());

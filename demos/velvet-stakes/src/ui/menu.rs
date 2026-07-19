@@ -72,7 +72,8 @@ pub fn paint_title_menu(
     paint_daily_ritual(pixels, theme, sheet);
 }
 
-/// Centered elegant wordmark (black background burned out via alpha).
+/// Centered elegant wordmark from **SVG** (`@svg logo_title` / `logo_title.svg` /
+/// procedural paths), with optional PNG only as last-resort fallback.
 fn paint_centered_logo_title(
     pixels: &mut [u32],
     theme: &Theme,
@@ -82,8 +83,16 @@ fn paint_centered_logo_title(
     // Slightly right of center so left button column stays clear
     let cx = (WW as i32 * 58) / 100;
 
-    if let Some(logo) = logo_title {
-        // Content is already cropped; keep the title readable and fully on-screen
+    // 1) Author SVG from stylesheet  2) pre-raster buffer  3) procedural SVG
+    let from_sheet = sheet.svgs.get("logo_title").map(|d| d.to_svg_xml());
+    let owned = crate::wordmark_svg::resolve_title_wordmark(
+        from_sheet.as_deref(),
+        &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/ui"),
+        None,
+    );
+    let logo_ref: Option<&RgbaBuf> = owned.as_ref().or(logo_title);
+
+    if let Some(logo) = logo_ref {
         let max_w = 560i32;
         let max_h = 150i32;
         let (sw, sh, _, _) = *logo;
@@ -93,13 +102,10 @@ fn paint_centered_logo_title(
         let scale = (max_w as f32 / sw as f32).min(max_h as f32 / sh as f32);
         let dw = ((sw as f32 * scale) as i32).max(1);
         let dh = ((sh as f32 * scale) as i32).max(1);
-        // Clamp fully inside frame (with margin)
         let dx = (cx - dw / 2).clamp(420, WW as i32 - dw - 24);
         let dy = 118;
 
-        // Subtle warm halo — small so it does not smear the letters
         paint_logo_halo(pixels, dx + dw / 2, dy + dh / 2, dw / 2 + 16, dh / 2 + 10);
-
         blit_rgba_bilinear(pixels, WW, WH, logo, dx, dy, dw, dh, 1.0);
 
         let sub_style = resolve(sheet, &StyleQuery::class("logo-sub"));
@@ -109,7 +115,6 @@ fn paint_centered_logo_title(
             .and_then(|v| v.as_color())
             .map(|c| c.rgb_tuple())
             .unwrap_or(theme.gold_soft);
-        // ASCII only — softbuffer bitmap font has no middle-dot glyphs
         let sub = "NIGHTFALL CASINO";
         let sub_w = estimate_text_w(sub, 1);
         let sx = (dx + dw / 2 - sub_w / 2).clamp(8, WW as i32 - sub_w - 8);
@@ -479,7 +484,6 @@ fn blend_dark(dst: u32, a: f32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logo::load_title_wordmark;
     use crate::render::load_rgb;
     use std::path::PathBuf;
     use velvet_style::parse_stylesheet;
@@ -500,21 +504,21 @@ mod tests {
     fn paint_frame(sel: usize) -> Vec<u32> {
         let ui = data_ui();
         let bg = load_rgb(&ui.join("menu_bg.jpg"));
-        let logo = load_title_wordmark(&ui.join("logo_title.png"));
         let portrait = load_rgb(&ui.join("portrait_collector.jpg"));
         assert!(bg.is_some(), "menu_bg.jpg must exist for title paint tests");
-        assert!(
-            logo.is_some(),
-            "logo_title.png must exist for title paint tests"
-        );
         let sheet = load_sheet();
+        // SVG title from @svg logo_title in casino.vcss (primary path)
+        assert!(
+            sheet.svgs.contains_key("logo_title"),
+            "casino.vcss must define @svg logo_title"
+        );
         let theme = Theme::default();
         let mut pixels = vec![0u32; (WW * WH) as usize];
         paint_title_menu(
             &mut pixels,
             &theme,
             bg.as_ref(),
-            logo.as_ref(),
+            None, // paint resolves SVG from sheet
             portrait.as_ref(),
             &sheet,
             sel,
@@ -605,14 +609,15 @@ mod tests {
     }
 
     #[test]
-    fn title_missing_logo_marker_absent_with_asset() {
-        // Structural: paint path uses real logo; marker constant is only for fallback
+    fn title_svg_wordmark_from_stylesheet() {
         let _ = LOGO_MISSING_MARKER;
-        let logo = load_title_wordmark(&data_ui().join("logo_title.png")).expect("logo");
+        let sheet = load_sheet();
+        let def = sheet.svgs.get("logo_title").expect("@svg logo_title");
+        let xml = def.to_svg_xml();
+        let logo = crate::rasterize_svg_wordmark(&xml, 720, 240).expect("raster svg");
         assert!(logo.0 > 10 && logo.1 > 10);
-        // Soft alpha from black key means wordmark is not a solid rectangle
-        let soft = crate::count_soft_alpha(&logo.3);
-        assert!(soft > 50, "soft-keyed logo expected soft>{soft}");
+        let solid = logo.3.iter().filter(|&&v| v > 200).count();
+        assert!(solid > 200, "SVG title should paint solid letter pixels, got {solid}");
     }
 
     #[test]
