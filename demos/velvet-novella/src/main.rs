@@ -108,19 +108,24 @@ impl App {
         let session = open_session(&story_path)?;
         let menu_bg = load_rgb(&ui_dir().join("menu_bg.jpg"));
         let mut presenter = ProductPresenter::hybrid();
-        // Probe headless wgpu so play can honestly report GPU availability.
-        match velvet_render::GpuContext::headless() {
-            Ok(g) => {
-                eprintln!(
-                    "[presenter] wgpu available (probe): {}",
-                    g.adapter_info
-                );
-                presenter.set_gpu_available(true, None::<String>);
+        // Interactive: no headless GPU probe (avoids WARP + Vulkan layer spam).
+        // Hybrid still prefers wgpu IR on play; window present stays softbuffer.
+        // Headless: optional quiet probe for ASSERT logs.
+        if headless {
+            match velvet_render::GpuContext::headless() {
+                Ok(g) => {
+                    eprintln!("[presenter] wgpu probe: {}", g.adapter_info);
+                    presenter.set_gpu_available(true, None::<String>);
+                }
+                Err(e) => {
+                    eprintln!("[presenter] wgpu probe failed → softbuffer play: {e}");
+                    presenter.set_gpu_available(false, Some(e.to_string()));
+                }
             }
-            Err(e) => {
-                eprintln!("[presenter] wgpu probe failed, play will softbuffer: {e}");
-                presenter.set_gpu_available(false, Some(e.to_string()));
-            }
+        } else {
+            eprintln!(
+                "[presenter] hybrid: menú softbuffer · juego paint IR wgpu · ventana softbuffer"
+            );
         }
         presenter.set_phase_title();
         Ok(Self {
@@ -494,7 +499,10 @@ impl ApplicationHandler for App {
 }
 
 fn main() -> Result<()> {
-    velvet_core::init_tracing_default("velvet_novella=info,info");
+    // Keep wgpu/Vulkan/naga quiet unless RUST_LOG overrides (probe dumps shaders otherwise).
+    velvet_core::init_tracing_default(
+        "velvet_novella=info,wgpu_hal=error,wgpu_core=error,wgpu=error,naga=error,warn",
+    );
     let headless = std::env::args().any(|a| a == "--headless");
     println!("=== Luz de Estación — novela visual ===");
     println!("render: internal {WW}x{WH} (4K UHD) → bilinear to window");
