@@ -128,6 +128,92 @@ pub fn call_native(id: u16, args: &[Value]) -> Result<NativeOutput, String> {
                 printed: None,
             })
         }
+        NativeId::Sin => {
+            expect_argc("sin", args, 1)?;
+            let f = args[0]
+                .as_f64()
+                .ok_or_else(|| "sin expects a number".to_string())?;
+            Ok(NativeOutput {
+                value: Value::Float(f.sin()),
+                printed: None,
+            })
+        }
+        NativeId::Cos => {
+            expect_argc("cos", args, 1)?;
+            let f = args[0]
+                .as_f64()
+                .ok_or_else(|| "cos expects a number".to_string())?;
+            Ok(NativeOutput {
+                value: Value::Float(f.cos()),
+                printed: None,
+            })
+        }
+        NativeId::Sqrt => {
+            expect_argc("sqrt", args, 1)?;
+            let f = args[0]
+                .as_f64()
+                .ok_or_else(|| "sqrt expects a number".to_string())?;
+            Ok(NativeOutput {
+                value: Value::Float(f.sqrt()),
+                printed: None,
+            })
+        }
+        NativeId::Pow => {
+            expect_argc("pow", args, 2)?;
+            let a = args[0]
+                .as_f64()
+                .ok_or_else(|| "pow expects numbers".to_string())?;
+            let b = args[1]
+                .as_f64()
+                .ok_or_else(|| "pow expects numbers".to_string())?;
+            Ok(NativeOutput {
+                value: Value::Float(a.powf(b)),
+                printed: None,
+            })
+        }
+        NativeId::Lerp => {
+            expect_argc("lerp", args, 3)?;
+            let a = args[0]
+                .as_f64()
+                .ok_or_else(|| "lerp expects numbers".to_string())?;
+            let b = args[1]
+                .as_f64()
+                .ok_or_else(|| "lerp expects numbers".to_string())?;
+            let t = args[2]
+                .as_f64()
+                .ok_or_else(|| "lerp expects numbers".to_string())?;
+            Ok(NativeOutput {
+                value: Value::Float(a + (b - a) * t),
+                printed: None,
+            })
+        }
+        NativeId::HashSha256 => {
+            expect_argc("hash_sha256", args, 1)?;
+            let s = args[0].to_string();
+            let hex = velvet_crypto::hash_sha256_hex(s.as_bytes())
+                .map_err(|e| e.to_string())?;
+            Ok(NativeOutput {
+                value: Value::String(Rc::from(hex)),
+                printed: None,
+            })
+        }
+        NativeId::HexEncode => {
+            expect_argc("hex_encode", args, 1)?;
+            let s = args[0].to_string();
+            Ok(NativeOutput {
+                value: Value::String(Rc::from(velvet_crypto::hex_encode(s.as_bytes()))),
+                printed: None,
+            })
+        }
+        NativeId::Base64Encode => {
+            expect_argc("base64_encode", args, 1)?;
+            let s = args[0].to_string();
+            let b64 = velvet_crypto::base64_encode(s.as_bytes()).map_err(|e| e.to_string())?;
+            Ok(NativeOutput {
+                value: Value::String(Rc::from(b64)),
+                printed: None,
+            })
+        }
     }
 }
 
@@ -243,7 +329,22 @@ mod tests {
     fn lookup_names() {
         assert_eq!(lookup_native("abs"), Some(NativeId::Abs));
         assert!(lookup_native("nope").is_none());
-        assert_eq!(NativeId::all().len(), 10);
+        assert_eq!(NativeId::all().len(), 18);
+        assert_eq!(lookup_native("sin"), Some(NativeId::Sin));
+        assert_eq!(lookup_native("hash_sha256"), Some(NativeId::HashSha256));
+    }
+
+    #[test]
+    fn hash_sha256_native() {
+        let out = call_native(
+            NativeId::HashSha256.as_u16(),
+            &[Value::String(Rc::from(""))],
+        )
+        .unwrap();
+        assert_eq!(
+            out.value.as_str(),
+            Some("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+        );
     }
 
     #[test]

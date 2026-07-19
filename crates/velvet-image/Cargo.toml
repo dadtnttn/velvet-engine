@@ -1,0 +1,15 @@
+[package]
+name = "velvet-image"
+description = "Image probe/decode/encode tools for Velvet (VS2 + style hosts)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+image = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

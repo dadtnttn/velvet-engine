@@ -39,6 +39,8 @@ members = [
     "crates/velvet-cards",
     "crates/velvet-anim",
     "crates/velvet-style",
+    "crates/velvet-image",
+    "crates/velvet-crypto",
     "crates/velvet-cellular",
     "crates/velvet-project",
     "crates/velvet-build",
@@ -114,6 +116,8 @@ velvet-action = { path = "crates/velvet-action" }
 velvet-cards = { path = "crates/velvet-cards" }
 velvet-anim = { path = "crates/velvet-anim" }
 velvet-style = { path = "crates/velvet-style" }
+velvet-image = { path = "crates/velvet-image" }
+velvet-crypto = { path = "crates/velvet-crypto" }
 velvet-cellular = { path = "crates/velvet-cellular" }
 velvet-project = { path = "crates/velvet-project" }
 velvet-build = { path = "crates/velvet-build" }

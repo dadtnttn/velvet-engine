@@ -57,6 +57,10 @@ pub enum StyleValue {
     String(String),
     /// Custom property reference: `var(--name)`.
     Var(String),
+    /// Asset / resource URL: `url("path")` or `svg(name)`.
+    Url(String),
+    /// Named inline SVG from `@svg name { … }`.
+    SvgRef(String),
 }
 
 impl StyleValue {
@@ -183,6 +187,28 @@ pub fn parse_value(raw: &str) -> StyleValue {
                 format!("--{name}")
             };
             return StyleValue::Var(canonical);
+        }
+    }
+    // url("path") / url('path')
+    if let Some(inner) = s
+        .strip_prefix("url(")
+        .and_then(|t| t.strip_suffix(')'))
+        .map(|t| t.trim())
+    {
+        let path = inner.trim_matches(|c| c == '"' || c == '\'');
+        if !path.is_empty() {
+            return StyleValue::Url(path.to_string());
+        }
+    }
+    // svg(name)
+    if let Some(inner) = s
+        .strip_prefix("svg(")
+        .and_then(|t| t.strip_suffix(')'))
+        .map(|t| t.trim())
+    {
+        let name = inner.trim_matches(|c| c == '"' || c == '\'');
+        if !name.is_empty() {
+            return StyleValue::SvgRef(name.to_string());
         }
     }
     if let Some(c) = parse_color(s) {
