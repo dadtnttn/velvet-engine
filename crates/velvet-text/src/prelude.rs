@@ -1,5 +1,8 @@
 //! Text prelude.
 
+pub use crate::gpu_text::{
+    flatten_glyph_quads, GlyphAtlas, GpuGlyphQuad, GpuTextRasterizer, GpuTextRun,
+};
 pub use crate::icon::{IconGlyphMap, IconSpan};
 pub use crate::layout::{AlignedLine, TextAlign, TextLayout};
 pub use crate::markup::{parse_rich_text, RichSpan, RichText};
