@@ -477,4 +477,92 @@ function clamp01(x) {
             Value::Int(1)
         );
     }
+
+    // ── Phase 3: host tool natives ──────────────────────────────────────
+
+    const NATIVES: &str = r#"
+// @edition 3
+
+function half_turn_sin() {
+    // sin(pi/2) ≈ 1
+    return sin(1.5707963267948966)
+}
+
+function empty_sha() {
+    return hash_sha256("")
+}
+
+function add_then_abs(a, b) {
+    return abs(a + b)
+}
+"#;
+
+    #[test]
+    fn native_sin_matches_rust() {
+        let v = eval_call(NATIVES, Some("nat.vel"), "half_turn_sin", &[]).unwrap();
+        match v {
+            Value::Float(f) => {
+                let expected = 1.5707963267948966_f64.sin();
+                assert!(
+                    (f - expected).abs() < 1e-9,
+                    "sin native {f} vs rust {expected}"
+                );
+            }
+            other => panic!("expected float, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn native_hash_sha256_empty_matches_crypto_tool() {
+        let v = eval_call(NATIVES, Some("nat.vel"), "empty_sha", &[]).unwrap();
+        let expected = velvet_crypto::hash_sha256_hex(b"").unwrap();
+        match v {
+            Value::String(s) => assert_eq!(&*s, expected.as_str()),
+            other => panic!("expected string hex, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn native_abs_on_sum() {
+        let v = eval_call(NATIVES, Some("nat.vel"), "add_then_abs", &[int(-3), int(-4)]).unwrap();
+        assert_eq!(v, Value::Int(7));
+    }
+
+    // ── Phase 4: structured diagnostics ─────────────────────────────────
+
+    #[test]
+    fn parse_error_has_location() {
+        let src = "// @edition 3\nfunction bad( {\n  return 1\n}\n";
+        let err = compile(src, Some("bad.vel")).unwrap_err();
+        match &err {
+            Vs3Error::Compile(diags) => {
+                assert!(!diags.is_empty());
+                assert!(
+                    diags.iter().any(|d| d.loc.line > 0),
+                    "expected line > 0 in diags: {diags:?}"
+                );
+                assert!(diags.iter().any(|d| !d.message.is_empty()));
+            }
+            other => panic!("expected Compile diags, got {other:?}"),
+        }
+        assert!(err.has_located_diagnostic() || err.to_string().contains(':'));
+    }
+
+    #[test]
+    fn empty_functions_is_error_with_location() {
+        let src = "// @edition 3\n// no functions\n";
+        let err = compile(src, Some("empty.vel")).unwrap_err();
+        let diags = err.diagnostics();
+        assert!(!diags.is_empty());
+        assert!(diags[0].loc.line >= 1);
+        assert!(diags[0].message.contains("no callable"));
+    }
+
+    #[test]
+    fn unknown_function_runtime_fails() {
+        let m = compile(SAMPLE, Some("logic.vel")).unwrap();
+        let err = m.call("does_not_exist", &[]).unwrap_err();
+        assert!(matches!(err, Vs3Error::Runtime { .. }));
+        assert!(!err.to_string().is_empty());
+    }
 }
