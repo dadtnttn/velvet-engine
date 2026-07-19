@@ -1,0 +1,27 @@
+// @edition 3
+// Presentation host bridge — logics only (show / set_bg / ui_flag).
+// Host applies PresentHostState; this module never draws.
+
+// present_show/present_hide (classic reserves bare show/hide as story stmts).
+// Paths avoid `//` inside strings (line-comment lexer).
+function intro_stage() {
+    set_bg("bg:station.png")
+    present_show("nora", "neutral", "left")
+    ui_flag("say_visible", true)
+    ui_flag("choice_open", false)
+    return ui_flag_get("say_visible")
+}
+
+function open_choice() {
+    ui_flag("choice_open", true)
+    ui_flag("say_visible", false)
+    return ui_flag_get("choice_open")
+}
+
+function clear_stage() {
+    present_hide("nora")
+    set_bg("bg:black.png")
+    ui_flag("say_visible", false)
+    ui_flag("choice_open", false)
+    return 1
+}

@@ -190,8 +190,7 @@ pub fn call_native(id: u16, args: &[Value]) -> Result<NativeOutput, String> {
         NativeId::HashSha256 => {
             expect_argc("hash_sha256", args, 1)?;
             let s = args[0].to_string();
-            let hex = velvet_crypto::hash_sha256_hex(s.as_bytes())
-                .map_err(|e| e.to_string())?;
+            let hex = velvet_crypto::hash_sha256_hex(s.as_bytes()).map_err(|e| e.to_string())?;
             Ok(NativeOutput {
                 value: Value::String(Rc::from(hex)),
                 printed: None,
@@ -214,6 +213,82 @@ pub fn call_native(id: u16, args: &[Value]) -> Result<NativeOutput, String> {
                 printed: None,
             })
         }
+        // Presentation host natives — mutate PresentHostState (no drawing).
+        NativeId::PresentShow => {
+            if args.is_empty() || args.len() > 3 {
+                return Err(format!(
+                    "present_show expected 1..=3 arguments (id [, expression [, at]]), got {}",
+                    args.len()
+                ));
+            }
+            let id = args[0].to_string();
+            let expression = args.get(1).map(|v| v.to_string()).filter(|s| !s.is_empty());
+            let at = args.get(2).map(|v| v.to_string()).filter(|s| !s.is_empty());
+            crate::present_host::present_host_mut(|h| {
+                h.show(id, expression, at);
+            });
+            Ok(NativeOutput {
+                value: Value::Null,
+                printed: None,
+            })
+        }
+        NativeId::PresentHide => {
+            expect_argc("present_hide", args, 1)?;
+            let id = args[0].to_string();
+            crate::present_host::present_host_mut(|h| {
+                h.hide(&id);
+            });
+            Ok(NativeOutput {
+                value: Value::Null,
+                printed: None,
+            })
+        }
+        NativeId::PresentSetBg => {
+            expect_argc("set_bg", args, 1)?;
+            let path = args[0].to_string();
+            crate::present_host::present_host_mut(|h| {
+                h.set_bg(path);
+            });
+            Ok(NativeOutput {
+                value: Value::Null,
+                printed: None,
+            })
+        }
+        NativeId::PresentUiFlag => {
+            expect_argc("ui_flag", args, 2)?;
+            let name = args[0].to_string();
+            let on = value_as_bool(&args[1])?;
+            crate::present_host::present_host_mut(|h| {
+                h.set_ui_flag(name, on);
+            });
+            Ok(NativeOutput {
+                value: Value::Null,
+                printed: None,
+            })
+        }
+        NativeId::PresentUiFlagGet => {
+            expect_argc("ui_flag_get", args, 1)?;
+            let name = args[0].to_string();
+            let on = crate::present_host::present_host_mut(|h| h.ui_flag(&name));
+            Ok(NativeOutput {
+                value: Value::Bool(on),
+                printed: None,
+            })
+        }
+    }
+}
+
+fn value_as_bool(v: &Value) -> Result<bool, String> {
+    match v {
+        Value::Bool(b) => Ok(*b),
+        Value::Int(i) => Ok(*i != 0),
+        Value::Float(f) => Ok(*f != 0.0),
+        Value::String(s) => {
+            let t = s.as_ref();
+            Ok(t == "true" || t == "1" || t.eq_ignore_ascii_case("yes"))
+        }
+        Value::Null => Ok(false),
+        _ => Err("ui_flag expects a bool-ish second argument".into()),
     }
 }
 
