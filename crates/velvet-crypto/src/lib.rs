@@ -1,10 +1,20 @@
 //! # velvet-crypto
 //!
-//! Game-oriented crypto/codec **tools** for VS2 (checksums, HMAC, RNG, base64/hex).
+//! Game-oriented crypto/codec **tools** for VS2:
+//! - Hash / HMAC / RNG / base64 / hex
+//! - **Hybrid classical + post-quantum** seal (X25519 + ML-KEM-768 + ChaCha20-Poly1305)
 //!
 //! Not a FIPS product. Hard limits apply to reduce DoS from scripts.
 
 #![deny(missing_docs)]
+
+mod hybrid;
+
+pub use hybrid::{
+    hybrid_decapsulate, hybrid_encapsulate, hybrid_generate, hybrid_open,
+    hybrid_public_fingerprint, hybrid_seal, HybridKemCiphertext, HybridKeyPair, HybridPublicKey,
+    HybridSealed, HybridSecretKey, HYBRID_MAGIC, HYBRID_SECRET_MAGIC, HYBRID_VERSION,
+};
 
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
@@ -12,7 +22,7 @@ use thiserror::Error;
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Max input bytes for hash/hmac/codec.
+/// Max input bytes for hash/hmac/codec/seal plaintext.
 pub const MAX_CRYPTO_INPUT: usize = 1 * 1024 * 1024;
 /// Max random_bytes length.
 pub const MAX_RANDOM_BYTES: usize = 64 * 1024;
@@ -31,7 +41,7 @@ pub enum CryptoError {
     Msg(String),
 }
 
-fn check_len(n: usize) -> Result<(), CryptoError> {
+pub(crate) fn check_len(n: usize) -> Result<(), CryptoError> {
     if n > MAX_CRYPTO_INPUT {
         return Err(CryptoError::TooLarge {
             max: MAX_CRYPTO_INPUT,

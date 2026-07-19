@@ -33,8 +33,33 @@ Game tools for VS2 — **not** FIPS. Caps: 1 MiB hash input, 64 KiB random.
 | `constant_time_eq` | secret compare |
 | `hex_encode` / `hex_decode` | display |
 | `base64_encode` / `base64_decode` | payloads |
+| **Hybrid seal** | classical + post-quantum **together** |
 
-VS2 natives: `hash_sha256`, `hex_encode`, `base64_encode`, plus math `sin`/`cos`/`sqrt`/`pow`/`lerp`.
+### Hybrid classical + post-quantum
+
+Both schemes run **at the same time** so security does not depend on only one remaining unbroken:
+
+| Layer | Algorithm |
+|-------|-----------|
+| Classical KEM | X25519 ECDH (ephemeral) |
+| Post-quantum KEM | ML-KEM-768 (FIPS 203) |
+| Combiner | HKDF-SHA256 over both shared secrets (`VELVET-HYBRID-V1`) |
+| Payload AEAD | ChaCha20-Poly1305 |
+
+Rust API: `hybrid_generate`, `hybrid_encapsulate` / `hybrid_decapsulate`, `hybrid_seal` / `hybrid_open`.
+
+CLI:
+
+```text
+velvet crypto hybrid keygen --public hybrid.pub --secret hybrid.sec
+velvet crypto hybrid seal --public hybrid.pub plain.bin sealed.bin
+velvet crypto hybrid open --secret hybrid.sec sealed.bin out.bin
+velvet crypto hybrid fingerprint hybrid.pub
+```
+
+Wire format magic: public/sealed `VHYB`, secret `VHYS` (v1).
+
+VS2 natives: `hash_sha256`, `hex_encode`, `base64_encode`, plus math `sin`/`cos`/`sqrt`/`pow`/`lerp`. Hybrid seal is host/CLI (binary keys); not exposed as a sandboxed script native yet.
 
 ## SVG in `.vcss`
 

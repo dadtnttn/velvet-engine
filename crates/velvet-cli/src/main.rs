@@ -1,9 +1,11 @@
 //! Velvet CLI — `velvet` command entry point.
 
 mod cards_cmd;
+mod crypto_cmd;
 mod doctor;
 mod document_cmd;
 mod export_cmd;
+mod image_cmd;
 mod launch_cmd;
 mod loc_cmd;
 mod menu_cmd;
@@ -14,7 +16,6 @@ mod play_cmd;
 mod script_cmd;
 mod story_cmd;
 mod style_cmd;
-mod image_cmd;
 mod workspace_cmd;
 
 use std::path::PathBuf;
@@ -40,6 +41,9 @@ use script_cmd::{cmd_script_check, cmd_script_fmt, cmd_script_lsp, cmd_script_ru
 use story_cmd::{
     cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_lowered,
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
+};
+use crypto_cmd::{
+    cmd_hybrid_fingerprint, cmd_hybrid_keygen, cmd_hybrid_open, cmd_hybrid_seal,
 };
 use image_cmd::{cmd_image_convert, cmd_image_info};
 use style_cmd::{cmd_style_check, cmd_style_dump};
@@ -315,6 +319,58 @@ enum Commands {
     Image {
         #[command(subcommand)]
         command: ImageCommands,
+    },
+    /// Crypto tools (hash helpers live in VS2; hybrid PQ+classical seal here).
+    Crypto {
+        #[command(subcommand)]
+        command: CryptoCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum CryptoCommands {
+    /// Hybrid classical (X25519) + post-quantum (ML-KEM-768) seal.
+    Hybrid {
+        #[command(subcommand)]
+        command: HybridCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum HybridCommands {
+    /// Generate hybrid keypair files (public + secret).
+    Keygen {
+        /// Public key output path.
+        #[arg(long, default_value = "hybrid.pub")]
+        public: PathBuf,
+        /// Secret key output path (keep private).
+        #[arg(long, default_value = "hybrid.sec")]
+        secret: PathBuf,
+    },
+    /// Seal a file to a hybrid ciphertext blob.
+    Seal {
+        /// Hybrid public key file.
+        #[arg(long)]
+        public: PathBuf,
+        /// Plaintext input.
+        input: PathBuf,
+        /// Sealed output.
+        output: PathBuf,
+    },
+    /// Open a hybrid sealed blob.
+    Open {
+        /// Hybrid secret key file.
+        #[arg(long)]
+        secret: PathBuf,
+        /// Sealed input.
+        input: PathBuf,
+        /// Plaintext output.
+        output: PathBuf,
+    },
+    /// Print SHA-256 fingerprint of a hybrid public key.
+    Fingerprint {
+        /// Hybrid public key file.
+        public: PathBuf,
     },
 }
 
@@ -854,6 +910,34 @@ fn dispatch(cli: Cli) -> Result<()> {
                     png_level,
                 },
         } => cmd_image_convert(input, output, quality, png_level),
+        Commands::Crypto {
+            command: CryptoCommands::Hybrid {
+                command: HybridCommands::Keygen { public, secret },
+            },
+        } => cmd_hybrid_keygen(public, secret),
+        Commands::Crypto {
+            command: CryptoCommands::Hybrid {
+                command: HybridCommands::Seal {
+                    public,
+                    input,
+                    output,
+                },
+            },
+        } => cmd_hybrid_seal(public, input, output),
+        Commands::Crypto {
+            command: CryptoCommands::Hybrid {
+                command: HybridCommands::Open {
+                    secret,
+                    input,
+                    output,
+                },
+            },
+        } => cmd_hybrid_open(secret, input, output),
+        Commands::Crypto {
+            command: CryptoCommands::Hybrid {
+                command: HybridCommands::Fingerprint { public },
+            },
+        } => cmd_hybrid_fingerprint(public),
     }
 }
 
