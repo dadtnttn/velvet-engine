@@ -24,9 +24,9 @@ velvet-story = { workspace = true }
 velvet-story-lang = { workspace = true }
 velvet-assets = { workspace = true }
 velvet-core = { workspace = true }
-velvet-image = { workspace = true }
 anyhow = { workspace = true }
 indexmap = { workspace = true }
 winit = { workspace = true }
 softbuffer = "0.4"
 image = { workspace = true }
+fontdue = "0.9"

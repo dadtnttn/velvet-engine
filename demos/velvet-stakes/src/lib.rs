@@ -10,10 +10,10 @@ pub mod live_dev;
 pub mod logo;
 /// Softbuffer helpers shared with the demo bin.
 pub mod render;
+/// Serif title wordmark (real font via fontdue).
+pub mod title_font;
 /// Title / lobby / modal UI paint + theme.
 pub mod ui;
-/// SVG title wordmark (vector paths → raster via velvet-image).
-pub mod wordmark_svg;
 
 pub use live_dev::{
     load_rgb_buf, reload_stylesheet, ImageSlot, LiveDevApply, LiveDevSession, WatchKind,
@@ -23,10 +23,7 @@ pub use logo::{
     probe_scaled_soft_alpha, RgbaBuf,
 };
 pub use render::{load_rgb, ArtBank, RgbImage};
+pub use title_font::{paint_title_wordmark, title_font, TITLE_LINE1, TITLE_LINE2, TITLE_SUB};
 pub use ui::{
     paint_collection, paint_options, paint_shop, paint_title_menu, theme, TITLE_ITEMS, WW, WH,
-};
-pub use wordmark_svg::{
-    load_title_wordmark_svg, rasterize_svg_wordmark, rasterize_title_wordmark, resolve_title_wordmark,
-    title_path_d, title_wordmark_svg_xml, TITLE_RASTER_H, TITLE_RASTER_W,
 };
