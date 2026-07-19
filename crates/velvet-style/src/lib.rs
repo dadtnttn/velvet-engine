@@ -45,6 +45,7 @@ mod animation;
 mod host;
 mod parse;
 mod resolve;
+mod runtime;
 mod script;
 mod value;
 
@@ -53,13 +54,19 @@ pub use animation::{
     ChannelPlan, KeyframeStop, Keyframes, TimelinePlan,
 };
 pub use host::StyleStoryHost;
-pub use parse::{parse_stylesheet, StyleParseError, StyleRule, Stylesheet};
+pub use parse::{
+    parse_stylesheet, parse_stylesheet_with_imports, StyleParseError, StyleRule, Stylesheet,
+};
 pub use resolve::{
     expand_box_shorthands, resolve, resolve_expanded, ComputedStyle, StyleQuery, StyleRegistry,
 };
+pub use runtime::{
+    computed_number, is_numeric_style_value, plan_channel_tween, plan_transition, StyleRuntime,
+};
 pub use script::{
-    actions_to_timelines, eval_script_fn, parse_script, run_event, run_function, EventHandler,
-    Function, JsValue, ScriptError, ScriptModule, ScriptRun, StyleAction,
+    actions_to_timelines, eval_script_fn, parse_script, run_event, run_function,
+    run_function_with_runtime, EventHandler, Function, JsValue, ScriptError, ScriptModule,
+    ScriptRun, StyleAction,
 };
 pub use value::{parse_color, parse_value, Color, StyleValue, KNOWN_PROPERTIES};
 
@@ -70,6 +77,55 @@ pub fn call_style_fn(
     args: &[JsValue],
 ) -> Result<ScriptRun, ScriptError> {
     run_function(&sheet.script, Some(sheet), name, args)
+}
+
+/// Run script fn with a mutable [`StyleRuntime`] for `set`/`query`.
+pub fn call_style_fn_rt(
+    sheet: &Stylesheet,
+    name: &str,
+    args: &[JsValue],
+    runtime: &mut StyleRuntime,
+) -> Result<ScriptRun, ScriptError> {
+    run_function_with_runtime(&sheet.script, Some(sheet), name, args, Some(runtime))
+}
+
+/// Parse summary for CLI / tooling.
+#[derive(Debug, Clone)]
+pub struct StyleCheckReport {
+    /// Rules count.
+    pub rules: usize,
+    /// Keyframes count.
+    pub keyframes: usize,
+    /// Script functions.
+    pub functions: usize,
+    /// Import paths.
+    pub imports: usize,
+    /// Whether parse succeeded.
+    pub ok: bool,
+    /// Error message if any.
+    pub error: Option<String>,
+}
+
+/// Check a `.vcss` source string (shipped CLI path).
+pub fn check_stylesheet(source: &str) -> StyleCheckReport {
+    match parse_stylesheet(source) {
+        Ok(s) => StyleCheckReport {
+            rules: s.rules.len(),
+            keyframes: s.keyframes.len(),
+            functions: s.script.functions.len(),
+            imports: s.imports.len(),
+            ok: true,
+            error: None,
+        },
+        Err(e) => StyleCheckReport {
+            rules: 0,
+            keyframes: 0,
+            functions: 0,
+            imports: 0,
+            ok: false,
+            error: Some(e.to_string()),
+        },
+    }
 }
 
 /// Dispatch `on("event", …)` handlers defined in the stylesheet script.

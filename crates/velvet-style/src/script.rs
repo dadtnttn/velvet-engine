@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use crate::animation::{plan_from_spec, AnimationSpec, TimelinePlan};
 use crate::parse::Stylesheet;
+use crate::runtime::StyleRuntime;
 
 /// Script parse/eval error.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -139,6 +140,15 @@ pub enum StyleAction {
         event: String,
         /// Optional payload string.
         payload: Option<String>,
+    },
+    /// Set a numeric style channel on a target (`set("#id", "opacity", 0.5)`).
+    Set {
+        /// Target id (no `#`).
+        target: String,
+        /// Channel / property name.
+        prop: String,
+        /// Value.
+        value: f32,
     },
 }
 
@@ -1162,6 +1172,7 @@ struct Vm<'a> {
     module: &'a ScriptModule,
     env: IndexMap<String, JsValue>,
     actions: Vec<StyleAction>,
+    runtime: Option<&'a mut StyleRuntime>,
 }
 
 impl<'a> Vm<'a> {
@@ -1462,6 +1473,107 @@ impl<'a> Vm<'a> {
                     .unwrap_or(0.0)
                     .ceil(),
             )),
+            "sin" => Ok(JsValue::Number(
+                args.first()
+                    .and_then(|v| v.as_f32())
+                    .unwrap_or(0.0)
+                    .sin(),
+            )),
+            "cos" => Ok(JsValue::Number(
+                args.first()
+                    .and_then(|v| v.as_f32())
+                    .unwrap_or(0.0)
+                    .cos(),
+            )),
+            "clamp" => {
+                let x = args.first().and_then(|v| v.as_f32()).unwrap_or(0.0);
+                let lo = args.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0);
+                let hi = args.get(2).and_then(|v| v.as_f32()).unwrap_or(1.0);
+                Ok(JsValue::Number(x.clamp(lo.min(hi), lo.max(hi))))
+            }
+            "lerp" => {
+                let a = args.first().and_then(|v| v.as_f32()).unwrap_or(0.0);
+                let b = args.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0);
+                let t = args.get(2).and_then(|v| v.as_f32()).unwrap_or(0.0);
+                Ok(JsValue::Number(a + (b - a) * t))
+            }
+            "rand" => {
+                // simple LCG from env seed or time-ish counter
+                let seed = self
+                    .env
+                    .get("__rand_seed")
+                    .and_then(|v| v.as_f32())
+                    .unwrap_or(1.0);
+                let next = (seed * 1103515245.0 + 12345.0) % 2147483648.0;
+                self.env
+                    .insert("__rand_seed".into(), JsValue::Number(next.abs()));
+                let u = (next.abs() % 10000.0) / 10000.0;
+                let lo = args.first().and_then(|v| v.as_f32());
+                let hi = args.get(1).and_then(|v| v.as_f32());
+                Ok(JsValue::Number(match (lo, hi) {
+                    (Some(a), Some(b)) => a + (b - a) * u,
+                    (Some(a), None) => a * u,
+                    _ => u,
+                }))
+            }
+            "pick" => {
+                let arr = args.first().cloned().unwrap_or(JsValue::Null);
+                match arr {
+                    JsValue::Array(items) if !items.is_empty() => {
+                        let seed = self
+                            .env
+                            .get("__rand_seed")
+                            .and_then(|v| v.as_f32())
+                            .unwrap_or(3.0);
+                        let next = (seed * 1103515245.0 + 12345.0) % 2147483648.0;
+                        self.env
+                            .insert("__rand_seed".into(), JsValue::Number(next.abs()));
+                        let i = (next.abs() as usize) % items.len();
+                        Ok(items[i].clone())
+                    }
+                    _ => Ok(JsValue::Null),
+                }
+            }
+            "set" => {
+                // set(target, prop, value)
+                let target = args
+                    .first()
+                    .map(|v| strip_hash(&v.as_string()))
+                    .unwrap_or_default();
+                let prop = args
+                    .get(1)
+                    .map(|v| v.as_string())
+                    .unwrap_or_else(|| "opacity".into());
+                let value = args.get(2).and_then(|v| v.as_f32()).unwrap_or(0.0);
+                if !target.is_empty() {
+                    self.actions.push(StyleAction::Set {
+                        target: target.clone(),
+                        prop: prop.clone(),
+                        value,
+                    });
+                    if let Some(rt) = self.runtime.as_mut() {
+                        rt.set(&target, &prop, value);
+                    }
+                }
+                Ok(JsValue::Null)
+            }
+            "query" | "get" => {
+                // query(target, prop) → number from runtime
+                let target = args
+                    .first()
+                    .map(|v| strip_hash(&v.as_string()))
+                    .unwrap_or_default();
+                let prop = args
+                    .get(1)
+                    .map(|v| v.as_string())
+                    .unwrap_or_else(|| "opacity".into());
+                let v = self
+                    .runtime
+                    .as_ref()
+                    .map(|rt| rt.get(&target, &prop))
+                    .unwrap_or(0.0);
+                Ok(JsValue::Number(v))
+            }
             other if self.module.functions.contains_key(other) => self.run_fn(other, args),
             other => Err(ScriptError::Runtime(format!("unknown function `{other}`"))),
         }
@@ -1559,21 +1671,36 @@ pub fn run_function(
     name: &str,
     args: &[JsValue],
 ) -> Result<ScriptRun, ScriptError> {
+    run_function_with_runtime(module, sheet, name, args, None)
+}
+
+/// Like [`run_function`] but `set`/`query` touch a [`StyleRuntime`].
+pub fn run_function_with_runtime(
+    module: &ScriptModule,
+    sheet: Option<&Stylesheet>,
+    name: &str,
+    args: &[JsValue],
+    mut runtime: Option<&mut StyleRuntime>,
+) -> Result<ScriptRun, ScriptError> {
     let mut env = IndexMap::new();
-    // seed globals
-    let mut seed_vm = Vm {
-        module,
-        env: IndexMap::new(),
-        actions: Vec::new(),
-    };
-    for (k, expr) in &module.globals {
-        let v = seed_vm.eval(expr)?;
-        env.insert(k.clone(), v);
+    // seed globals (no runtime needed)
+    {
+        let mut seed_vm = Vm {
+            module,
+            env: IndexMap::new(),
+            actions: Vec::new(),
+            runtime: None,
+        };
+        for (k, expr) in &module.globals {
+            let v = seed_vm.eval(expr)?;
+            env.insert(k.clone(), v);
+        }
     }
     let mut vm = Vm {
         module,
         env,
         actions: Vec::new(),
+        runtime: runtime.as_deref_mut(),
     };
     let value = vm.run_fn(name, args)?;
     let actions = vm.actions;
@@ -1660,7 +1787,9 @@ pub fn actions_to_timelines(
                     });
                 }
             }
-            StyleAction::Wait { .. } | StyleAction::Emit { .. } => {}
+            StyleAction::Wait { .. }
+            | StyleAction::Emit { .. }
+            | StyleAction::Set { .. } => {}
         }
     }
     out
@@ -1753,5 +1882,24 @@ mod tests {
         assert_eq!(module.handlers.len(), 1);
         let run = run_event(&module, None, "menu.open", &[]).unwrap();
         assert!(matches!(run.actions[0], StyleAction::Emit { .. }));
+    }
+
+    #[test]
+    fn set_query_math_helpers() {
+        use crate::runtime::StyleRuntime;
+        let src = r#"
+            fn go() {
+                set("card0", "opacity", clamp(lerp(0, 1, 0.5), 0, 1));
+                let o = query("card0", "opacity");
+                return o;
+            }
+        "#;
+        let module = parse_script(src).unwrap();
+        let mut rt = StyleRuntime::new();
+        let run =
+            run_function_with_runtime(&module, None, "go", &[], Some(&mut rt)).unwrap();
+        assert!(matches!(run.actions[0], StyleAction::Set { .. }));
+        assert!((rt.get("card0", "opacity") - 0.5).abs() < 1e-4);
+        assert!((run.value.as_f32().unwrap_or(0.0) - 0.5).abs() < 1e-4);
     }
 }

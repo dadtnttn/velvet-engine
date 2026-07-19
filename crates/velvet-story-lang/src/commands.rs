@@ -625,6 +625,61 @@ impl CommandRegistry {
             snippet: "call style.emit:\n    event: menu.open\n".into(),
             error_help: "call style.emit:\n    event: menu.open".into(),
         });
+        r.register(CommandSpec {
+            name: "style.set".into(),
+            category: "style".into(),
+            description: "Set a style channel intent (target/prop/value → story vars).".into(),
+            params: vec![
+                CommandParam {
+                    name: "target".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "Target id".into(),
+                },
+                CommandParam {
+                    name: "prop".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "Property / channel".into(),
+                },
+                CommandParam {
+                    name: "value".into(),
+                    ty: ParamTy::Float,
+                    required: true,
+                    default: None,
+                    doc: "Numeric value".into(),
+                },
+            ],
+            required: vec!["target".into(), "prop".into(), "value".into()],
+            snippet: "call style.set:\n    target: card0\n    prop: opacity\n    value: 1\n".into(),
+            error_help: "call style.set:\n    target: card0\n    prop: opacity\n    value: 1".into(),
+        });
+        r.register(CommandSpec {
+            name: "style.dump".into(),
+            category: "style".into(),
+            description: "Debug resolve class/state into style.dump.* vars.".into(),
+            params: vec![
+                CommandParam {
+                    name: "class".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: Some("button".into()),
+                    doc: "Class".into(),
+                },
+                CommandParam {
+                    name: "state".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: None,
+                    doc: "State hover/selected/…".into(),
+                },
+            ],
+            required: vec![],
+            snippet: "call style.dump:\n    class: button\n    state: selected\n".into(),
+            error_help: "call style.dump:\n    class: button".into(),
+        });
         r
     }
 
