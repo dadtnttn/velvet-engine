@@ -427,7 +427,8 @@ impl App {
         let ui = ui_dir();
         let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
         let logo_emblem = load_rgb(&ui.join("logo_emblem.jpg"));
-        let button_chrome = ButtonChrome::load(&ui.join("buttons"));
+        // Procedural ornate buttons (reference style); JPEG chrome optional/off.
+        let button_chrome = ButtonChrome::load_with_art(&ui.join("buttons"), false);
         Ok(Self {
             screen: Screen::Title,
             menu_sel: 0,
