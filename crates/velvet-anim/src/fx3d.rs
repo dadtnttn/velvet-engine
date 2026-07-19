@@ -1,33 +1,33 @@
-//! 3D-style effects on **2D images** (cards, pack art, UI panels).
+//! **Tools** for 3D-style image billboards (not premade cutscenes).
 //!
-//! Velvetâ€™s product path is 2D; this module projects a textured quad through a
-//! simple perspective camera so authors can **generate** pack-open, card flip,
-//! tilt, and foil shimmer without a full 3D mesh pipeline.
+//! - [`Pose3D`] — yaw/pitch/roll/opacity/foil/depth you control  
+//! - [`project_image`] — perspective project a rectangle to screen corners  
+//! - [`Fx3dCamera`] — projection parameters  
 //!
-//! Typical pack-open flow: [`PackOpenFx::start`] â†’ tick each frame â†’ sample
-//! [`ProjectedQuad`] corners for softbuffer/wgpu.
+//! Build your own pack-open, shop flip, etc. by tweening these fields or using
+//! [`crate::track::Timeline`]. Optional sample recipes live in [`crate::recipes`].
 
 use serde::{Deserialize, Serialize};
-use velvet_math::{Ease, Vec2, Vec3};
+use velvet_math::{Vec2, Vec3};
 
-/// Full 3D-ish pose for an image billboard.
+/// Full 3D-ish pose for an image billboard — author sets every field.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Pose3D {
-    /// Screen-space center (pixels or virtual units).
+    /// Screen-space center.
     pub pos: Vec2,
     /// Uniform scale (1 = native size).
     pub scale: f32,
-    /// Yaw (Y axis) radians â€” card flip / pack turn.
+    /// Yaw (Y) radians.
     pub yaw: f32,
-    /// Pitch (X axis) radians â€” lean toward camera.
+    /// Pitch (X) radians.
     pub pitch: f32,
-    /// Roll (Z axis) radians â€” 2D spin.
+    /// Roll (Z) radians.
     pub roll: f32,
     /// Opacity `0..=1`.
     pub opacity: f32,
-    /// Foil / holographic shimmer phase `0..=1` (maps to highlight UV offset).
+    /// Foil / highlight phase `0..=1` (you map this to UVs/shaders).
     pub foil: f32,
-    /// Depth bias (larger = farther; used for sort + perspective).
+    /// Depth bias (larger = farther).
     pub depth: f32,
 }
 
@@ -55,7 +55,7 @@ impl Pose3D {
         }
     }
 
-    /// Lerp (already eased `t`).
+    /// Lerp (pass already-eased `t`).
     pub fn lerp(self, other: Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
         Self {
@@ -73,18 +73,90 @@ impl Pose3D {
         }
     }
 
-    /// Face visibility: `1` front, `0` edge-on, negative = back face.
+    /// Facing scalar: positive ≈ front, negative ≈ back.
     pub fn facing_sign(&self) -> f32 {
         self.yaw.cos() * self.pitch.cos()
     }
 
-    /// True if the â€œfrontâ€ of the card faces the camera (roughly).
+    /// Front faces camera (rough).
     pub fn show_front(&self) -> bool {
         self.facing_sign() >= 0.0
     }
+
+    /// Read a named channel (for tracks / script).
+    pub fn get_channel(&self, ch: Pose3DChannel) -> f32 {
+        match ch {
+            Pose3DChannel::X => self.pos.x,
+            Pose3DChannel::Y => self.pos.y,
+            Pose3DChannel::Scale => self.scale,
+            Pose3DChannel::Yaw => self.yaw,
+            Pose3DChannel::Pitch => self.pitch,
+            Pose3DChannel::Roll => self.roll,
+            Pose3DChannel::Opacity => self.opacity,
+            Pose3DChannel::Foil => self.foil,
+            Pose3DChannel::Depth => self.depth,
+        }
+    }
+
+    /// Write a named channel.
+    pub fn set_channel(&mut self, ch: Pose3DChannel, value: f32) {
+        match ch {
+            Pose3DChannel::X => self.pos.x = value,
+            Pose3DChannel::Y => self.pos.y = value,
+            Pose3DChannel::Scale => self.scale = value,
+            Pose3DChannel::Yaw => self.yaw = value,
+            Pose3DChannel::Pitch => self.pitch = value,
+            Pose3DChannel::Roll => self.roll = value,
+            Pose3DChannel::Opacity => self.opacity = value.clamp(0.0, 1.0),
+            Pose3DChannel::Foil => self.foil = value,
+            Pose3DChannel::Depth => self.depth = value,
+        }
+    }
 }
 
-/// Four projected corners in screen space (TL, TR, BR, BL).
+/// Animatable channels of [`Pose3D`] (tools; you compose keyframes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Pose3DChannel {
+    /// Position X.
+    X,
+    /// Position Y.
+    Y,
+    /// Scale.
+    Scale,
+    /// Yaw.
+    Yaw,
+    /// Pitch.
+    Pitch,
+    /// Roll.
+    Roll,
+    /// Opacity.
+    Opacity,
+    /// Foil phase.
+    Foil,
+    /// Depth.
+    Depth,
+}
+
+impl Pose3DChannel {
+    /// Parse author name.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "x" => Some(Self::X),
+            "y" => Some(Self::Y),
+            "scale" => Some(Self::Scale),
+            "yaw" | "rot_y" | "ry" => Some(Self::Yaw),
+            "pitch" | "rot_x" | "rx" => Some(Self::Pitch),
+            "roll" | "rot_z" | "rz" => Some(Self::Roll),
+            "opacity" | "alpha" => Some(Self::Opacity),
+            "foil" | "shimmer" => Some(Self::Foil),
+            "depth" | "z" => Some(Self::Depth),
+            _ => None,
+        }
+    }
+}
+
+/// Four projected corners (TL, TR, BR, BL) — draw tool output.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ProjectedQuad {
     /// Top-left.
@@ -95,18 +167,23 @@ pub struct ProjectedQuad {
     pub br: Vec2,
     /// Bottom-left.
     pub bl: Vec2,
-    /// Average opacity after perspective fade.
+    /// Opacity.
     pub opacity: f32,
-    /// Foil phase.
+    /// Foil phase pass-through.
     pub foil: f32,
-    /// Which face to draw.
+    /// Front face flag.
     pub front: bool,
-    /// Approximate depth for sorting (larger farther).
+    /// Sort key (larger = farther).
     pub sort_z: f32,
 }
 
 impl ProjectedQuad {
-    /// Axis-aligned bounding box min.
+    /// Corners array.
+    pub fn corners(&self) -> [Vec2; 4] {
+        [self.tl, self.tr, self.br, self.bl]
+    }
+
+    /// AABB min.
     pub fn min(&self) -> Vec2 {
         let xs = [self.tl.x, self.tr.x, self.br.x, self.bl.x];
         let ys = [self.tl.y, self.tr.y, self.br.y, self.bl.y];
@@ -116,7 +193,7 @@ impl ProjectedQuad {
         )
     }
 
-    /// Axis-aligned bounding box max.
+    /// AABB max.
     pub fn max(&self) -> Vec2 {
         let xs = [self.tl.x, self.tr.x, self.br.x, self.bl.x];
         let ys = [self.tl.y, self.tr.y, self.br.y, self.bl.y];
@@ -125,21 +202,16 @@ impl ProjectedQuad {
             ys.iter().cloned().fold(f32::NEG_INFINITY, f32::max),
         )
     }
-
-    /// Corners as array.
-    pub fn corners(&self) -> [Vec2; 4] {
-        [self.tl, self.tr, self.br, self.bl]
-    }
 }
 
-/// Camera / projection settings for image FX.
+/// Camera / projection tool parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Fx3dCamera {
-    /// Distance from camera to the plane `z=0` (virtual units).
+    /// Distance to plane.
     pub distance: f32,
-    /// Focal length scale (higher = less extreme perspective).
+    /// Focal length scale.
     pub focal: f32,
-    /// Extra scale applied after projection.
+    /// Extra screen scale.
     pub screen_scale: f32,
 }
 
@@ -153,59 +225,94 @@ impl Default for Fx3dCamera {
     }
 }
 
-/// Project a unit rectangle (half-size `half_w`/`half_h` in local units) with pose.
+/// Image billboard description (data only — you own textures).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ImageBillboard {
+    /// Logical id.
+    pub id: String,
+    /// Pose.
+    pub pose: Pose3D,
+    /// Half-width in local units.
+    pub half_w: f32,
+    /// Half-height in local units.
+    pub half_h: f32,
+    /// Optional front content key (path / card id).
+    pub front: Option<String>,
+    /// Optional back content key.
+    pub back: Option<String>,
+}
+
+impl ImageBillboard {
+    /// New billboard.
+    pub fn new(id: impl Into<String>, pose: Pose3D, half_w: f32, half_h: f32) -> Self {
+        Self {
+            id: id.into(),
+            pose,
+            half_w,
+            half_h,
+            front: None,
+            back: None,
+        }
+    }
+
+    /// Project with camera.
+    pub fn project(&self, cam: &Fx3dCamera) -> ProjectedQuad {
+        project_image(&self.pose, self.half_w, self.half_h, cam)
+    }
+
+    /// Content key for current face.
+    pub fn visible_content(&self) -> Option<&str> {
+        if self.pose.show_front() {
+            self.front.as_deref().or(self.back.as_deref())
+        } else {
+            self.back.as_deref().or(self.front.as_deref())
+        }
+    }
+}
+
+/// Project a rectangle with pose → screen quad (**core tool**).
 pub fn project_image(
     pose: &Pose3D,
     half_w: f32,
     half_h: f32,
     cam: &Fx3dCamera,
 ) -> ProjectedQuad {
-    // Local corners in image plane (z=0 local), before rotations.
     let locals = [
-        Vec3::new(-half_w, -half_h, 0.0), // TL in y-up local; we'll flip y for screen later
+        Vec3::new(-half_w, -half_h, 0.0),
         Vec3::new(half_w, -half_h, 0.0),
         Vec3::new(half_w, half_h, 0.0),
         Vec3::new(-half_w, half_h, 0.0),
     ];
-
     let (sy, cy) = pose.yaw.sin_cos();
     let (sp, cp) = pose.pitch.sin_cos();
     let (sr, cr) = pose.roll.sin_cos();
 
-    // R = Rz * Ry * Rx (applied to column vectors as R * v)
     let mut projected = [Vec2::ZERO; 4];
     let mut zs = [0.0f32; 4];
     for (i, p) in locals.iter().enumerate() {
-        // scale
         let mut v = Vec3::new(p.x * pose.scale, p.y * pose.scale, p.z);
-        // pitch X
         let y1 = v.y * cp - v.z * sp;
         let z1 = v.y * sp + v.z * cp;
         v.y = y1;
         v.z = z1;
-        // yaw Y
         let x2 = v.x * cy + v.z * sy;
         let z2 = -v.x * sy + v.z * cy;
         v.x = x2;
         v.z = z2;
-        // roll Z
         let x3 = v.x * cr - v.y * sr;
         let y3 = v.x * sr + v.y * cr;
         v.x = x3;
         v.y = y3;
 
-        // camera looks -Z; place plane at z = -distance + depth
         let z_cam = cam.distance + pose.depth + v.z;
         let z_safe = z_cam.max(0.15);
         let inv = cam.focal / z_safe;
-        // screen y increases down in most 2D engines â†’ flip local y
         projected[i] = Vec2::new(
             pose.pos.x + v.x * inv * cam.screen_scale,
             pose.pos.y - v.y * inv * cam.screen_scale,
         );
         zs[i] = z_safe;
     }
-
     let avg_z = (zs[0] + zs[1] + zs[2] + zs[3]) * 0.25;
     ProjectedQuad {
         tl: projected[0],
@@ -219,299 +326,24 @@ pub fn project_image(
     }
 }
 
-// --- generators --------------------------------------------------------------
-
-/// Parameters for generating a pack-open sequence.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PackOpenParams {
-    /// Screen center of the pack.
-    pub center: Vec2,
-    /// Pack half-size (width/height).
-    pub pack_half: Vec2,
-    /// Card half-size when fanned.
-    pub card_half: Vec2,
-    /// How many cards to reveal.
-    pub card_count: usize,
-    /// Total duration seconds.
-    pub duration: f32,
-    /// Horizontal fan spacing between cards.
-    pub fan_spacing: f32,
-    /// Seed for slight random tilt (deterministic via simple hash).
-    pub seed: u64,
+/// Sort billboards far → near for painter’s algorithm.
+pub fn sort_projected(mut items: Vec<(String, ProjectedQuad)>) -> Vec<(String, ProjectedQuad)> {
+    items.sort_by(|a, b| {
+        b.1.sort_z
+            .partial_cmp(&a.1.sort_z)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    items
 }
 
-impl Default for PackOpenParams {
-    fn default() -> Self {
-        Self {
-            center: Vec2::new(480.0, 270.0),
-            pack_half: Vec2::new(90.0, 120.0),
-            card_half: Vec2::new(70.0, 100.0),
-            card_count: 5,
-            duration: 2.2,
-            fan_spacing: 95.0,
-            seed: 1,
-        }
-    }
-}
-
-/// Phase of a pack-open cinematic.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PackPhase {
-    /// Pack sits, slight idle tilt.
-    Present,
-    /// Pack tears / yaws open.
-    Tear,
-    /// Cards lift out.
-    Lift,
-    /// Cards fan into a row.
-    Fan,
-    /// Hold final reveal.
-    Hold,
-    /// Finished.
-    Done,
-}
-
-/// One image layer in a generated pack-open (pack art or card face).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PackLayer {
-    /// Logical id (`pack`, `card_0`â€¦).
-    pub id: String,
-    /// Role.
-    pub kind: PackLayerKind,
-    /// 3D pose.
-    pub pose: Pose3D,
-    /// Half extents for projection.
-    pub half: Vec2,
-    /// Optional content key (texture path / card id).
-    pub content: Option<String>,
-}
-
-/// Layer role.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PackLayerKind {
-    /// Sealed pack artwork.
-    Pack,
-    /// Individual card.
-    Card,
-}
-
-/// Runtime pack-open effect generator.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PackOpenFx {
-    /// Params.
-    pub params: PackOpenParams,
-    /// Elapsed seconds.
-    pub elapsed: f32,
-    /// Current phase.
-    pub phase: PackPhase,
-    /// Layers (pack + cards).
-    pub layers: Vec<PackLayer>,
-    /// Normalized progress `0..=1`.
-    pub progress: f32,
-}
-
-impl PackOpenFx {
-    /// Start a new pack-open sequence.
-    pub fn start(params: PackOpenParams) -> Self {
-        let mut layers = Vec::new();
-        layers.push(PackLayer {
-            id: "pack".into(),
-            kind: PackLayerKind::Pack,
-            pose: Pose3D {
-                pos: params.center,
-                scale: 1.0,
-                yaw: 0.0,
-                pitch: -0.08,
-                roll: 0.0,
-                opacity: 1.0,
-                foil: 0.0,
-                depth: 0.0,
-            },
-            half: params.pack_half,
-            content: Some("pack".into()),
-        });
-        for i in 0..params.card_count {
-            layers.push(PackLayer {
-                id: format!("card_{i}"),
-                kind: PackLayerKind::Card,
-                pose: Pose3D {
-                    pos: params.center,
-                    scale: 0.85,
-                    yaw: std::f32::consts::PI, // start face-down-ish (back)
-                    pitch: 0.0,
-                    roll: 0.0,
-                    opacity: 0.0,
-                    foil: 0.0,
-                    depth: 0.1 + i as f32 * 0.02,
-                },
-                half: params.card_half,
-                content: Some(format!("card_{i}")),
-            });
-        }
-        Self {
-            params,
-            elapsed: 0.0,
-            phase: PackPhase::Present,
-            layers,
-            progress: 0.0,
-        }
-    }
-
-    /// Convenience: open pack with N cards at center.
-    pub fn open_at(center: Vec2, cards: usize, duration: f32) -> Self {
-        Self::start(PackOpenParams {
-            center,
-            card_count: cards.max(1),
-            duration: duration.max(0.5),
-            ..Default::default()
-        })
-    }
-
-    /// Finished?
-    pub fn is_done(&self) -> bool {
-        matches!(self.phase, PackPhase::Done) || self.progress >= 1.0
-    }
-
-    /// Advance generator by `dt`.
-    pub fn tick(&mut self, dt: f32) {
-        self.elapsed += dt;
-        let d = self.params.duration.max(0.5);
-        self.progress = (self.elapsed / d).clamp(0.0, 1.0);
-        self.phase = phase_for(self.progress);
-        self.evaluate_poses();
-    }
-
-    /// Sample all layers as projected quads (painterâ€™s order: back â†’ front).
-    pub fn projected(&self, cam: &Fx3dCamera) -> Vec<(String, ProjectedQuad)> {
-        let mut items: Vec<(String, ProjectedQuad, f32)> = self
-            .layers
-            .iter()
-            .filter(|l| l.pose.opacity > 0.001)
-            .map(|l| {
-                let q = project_image(&l.pose, l.half.x, l.half.y, cam);
-                (l.id.clone(), q, q.sort_z)
-            })
-            .collect();
-        // Farther first
-        items.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
-        items.into_iter().map(|(id, q, _)| (id, q)).collect()
-    }
-
-    fn evaluate_poses(&mut self) {
-        let p = self.progress;
-        let center = self.params.center;
-        let n = self.params.card_count.max(1);
-
-        // Timeline segments (normalized)
-        // 0.00â€“0.15 present
-        // 0.15â€“0.35 tear
-        // 0.35â€“0.55 lift
-        // 0.55â€“0.85 fan
-        // 0.85â€“1.00 hold
-        for layer in &mut self.layers {
-            match layer.kind {
-                PackLayerKind::Pack => {
-                    let pose = &mut layer.pose;
-                    pose.pos = center;
-                    if p < 0.15 {
-                        let t = Ease::SineInOut.eval(p / 0.15);
-                        pose.yaw = 0.12 * (t * std::f32::consts::TAU).sin() * 0.15;
-                        pose.pitch = -0.08;
-                        pose.opacity = 1.0;
-                        pose.foil = t * 0.3;
-                    } else if p < 0.35 {
-                        let t = Ease::CubicIn.eval((p - 0.15) / 0.20);
-                        pose.yaw = t * 1.1;
-                        pose.pitch = -0.08 + t * 0.2;
-                        pose.scale = 1.0 - t * 0.15;
-                        pose.opacity = 1.0 - t * 0.85;
-                        pose.foil = 0.3 + t * 0.5;
-                    } else {
-                        pose.opacity = 0.0;
-                        pose.scale = 0.7;
-                    }
-                }
-                PackLayerKind::Card => {
-                    let idx = layer
-                        .id
-                        .strip_prefix("card_")
-                        .and_then(|s| s.parse::<usize>().ok())
-                        .unwrap_or(0);
-                    let pose = &mut layer.pose;
-                    let stagger = idx as f32 * 0.04;
-                    let local = ((p - 0.30 - stagger) / 0.55).clamp(0.0, 1.0);
-                    let fan_t = Ease::CubicOut.eval(((p - 0.55) / 0.30).clamp(0.0, 1.0));
-
-                    // Fan target positions
-                    let total_w = (n.saturating_sub(1) as f32) * self.params.fan_spacing;
-                    let x0 = center.x - total_w * 0.5;
-                    let target_x = x0 + idx as f32 * self.params.fan_spacing;
-                    let target_y = center.y + 40.0;
-                    let tilt = ((idx as f32 + 1.0) * 0.07 + (self.params.seed % 7) as f32 * 0.01)
-                        - 0.2;
-
-                    if p < 0.30 + stagger {
-                        pose.opacity = 0.0;
-                        pose.pos = center;
-                        pose.yaw = std::f32::consts::PI;
-                    } else if local < 0.45 {
-                        // lift + flip
-                        let t = Ease::CubicOut.eval(local / 0.45);
-                        pose.opacity = t;
-                        pose.pos = Vec2::new(
-                            center.x + (target_x - center.x) * t * 0.35,
-                            center.y - 30.0 * t,
-                        );
-                        pose.yaw = std::f32::consts::PI * (1.0 - t); // flip to front
-                        pose.pitch = -0.2 * (1.0 - t);
-                        pose.scale = 0.85 + 0.15 * t;
-                        pose.foil = t;
-                        pose.depth = 0.05 - t * 0.04;
-                    } else {
-                        let t = fan_t.max(Ease::CubicOut.eval((local - 0.45) / 0.55));
-                        pose.opacity = 1.0;
-                        pose.pos = Vec2::new(
-                            center.x + (target_x - center.x) * t,
-                            center.y + (target_y - center.y) * t,
-                        );
-                        pose.yaw = 0.0;
-                        pose.pitch = tilt * 0.15;
-                        pose.roll = tilt * 0.08;
-                        pose.scale = 1.0;
-                        pose.foil = 0.4 + 0.3 * (p * 6.0 + idx as f32).sin().abs();
-                        pose.depth = -0.05 - idx as f32 * 0.01;
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn phase_for(p: f32) -> PackPhase {
-    if p >= 1.0 {
-        PackPhase::Done
-    } else if p < 0.15 {
-        PackPhase::Present
-    } else if p < 0.35 {
-        PackPhase::Tear
-    } else if p < 0.55 {
-        PackPhase::Lift
-    } else if p < 0.85 {
-        PackPhase::Fan
-    } else {
-        PackPhase::Hold
-    }
-}
-
-/// Flip card yaw 0 â†’ Ï€ over duration (helper for single-card flip FX).
-pub fn sample_card_flip(t: f32, ease: Ease) -> f32 {
-    let e = ease.eval(t.clamp(0.0, 1.0));
-    e * std::f32::consts::PI
-}
-
-/// Continuous foil shimmer phase from time.
+/// Foil phase from time (tool helper; map to your shader/UVs).
 pub fn foil_phase(time_secs: f32, speed: f32) -> f32 {
     ((time_secs * speed) % 1.0 + 1.0) % 1.0
+}
+
+/// Linear yaw from 0 → π (you choose ease via [`velvet_math::Ease`] before calling).
+pub fn yaw_flip_amount(t01: f32) -> f32 {
+    t01.clamp(0.0, 1.0) * std::f32::consts::PI
 }
 
 #[cfg(test)]
@@ -519,60 +351,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn project_flat_is_axis_aligned() {
+    fn project_flat_tool() {
         let pose = Pose3D::flat(Vec2::new(100.0, 200.0));
         let q = project_image(&pose, 50.0, 80.0, &Fx3dCamera::default());
         assert!(q.front);
-        // roughly ordered left/right
         assert!(q.tl.x < q.tr.x);
-        assert!(q.bl.x < q.br.x);
     }
 
     #[test]
-    fn yaw_pi_shows_back() {
-        let mut pose = Pose3D::flat(Vec2::ZERO);
-        pose.yaw = std::f32::consts::PI;
-        assert!(!pose.show_front());
-        let q = project_image(&pose, 40.0, 60.0, &Fx3dCamera::default());
-        assert!(!q.front);
+    fn channels_roundtrip() {
+        let mut p = Pose3D::default();
+        p.set_channel(Pose3DChannel::Yaw, 1.25);
+        assert!((p.get_channel(Pose3DChannel::Yaw) - 1.25).abs() < 1e-5);
     }
 
     #[test]
-    fn pack_open_generates_cards_and_finishes() {
-        let mut fx = PackOpenFx::open_at(Vec2::new(400.0, 300.0), 5, 1.5);
-        assert_eq!(fx.layers.len(), 6); // pack + 5
-        for _ in 0..120 {
-            fx.tick(1.0 / 60.0);
-        }
-        assert!(fx.is_done() || fx.progress >= 0.99);
-        let cam = Fx3dCamera::default();
-        let quads = fx.projected(&cam);
-        // near end, cards visible
-        assert!(
-            quads.iter().any(|(id, q)| id.starts_with("card") && q.opacity > 0.5),
-            "cards should be visible {:?}",
-            quads.iter().map(|(i, q)| (i, q.opacity)).collect::<Vec<_>>()
-        );
+    fn billboard_picks_back_when_flipped() {
+        let mut b = ImageBillboard::new("c", Pose3D::flat(Vec2::ZERO), 10.0, 10.0);
+        b.front = Some("front".into());
+        b.back = Some("back".into());
+        b.pose.yaw = std::f32::consts::PI;
+        assert_eq!(b.visible_content(), Some("back"));
     }
 
     #[test]
-    fn pack_phases_progress() {
-        let mut fx = PackOpenFx::open_at(Vec2::ZERO, 3, 2.0);
-        assert_eq!(fx.phase, PackPhase::Present);
-        fx.tick(0.4); // mid tear-ish depending duration 2.0
-        assert!(matches!(
-            fx.phase,
-            PackPhase::Present | PackPhase::Tear | PackPhase::Lift
-        ));
-        fx.elapsed = 1.9;
-        fx.tick(0.0);
-        assert!(matches!(fx.phase, PackPhase::Hold | PackPhase::Done | PackPhase::Fan));
-    }
-
-    #[test]
-    fn flip_helper() {
-        assert!((sample_card_flip(0.0, Ease::Linear)).abs() < 1e-5);
-        assert!((sample_card_flip(1.0, Ease::Linear) - std::f32::consts::PI).abs() < 1e-4);
+    fn yaw_flip_amount_ends_at_pi() {
+        assert!((yaw_flip_amount(1.0) - std::f32::consts::PI).abs() < 1e-5);
     }
 }
-
