@@ -1,6 +1,6 @@
 [package]
 name = "velvet-crypto"
-description = "Sandbox crypto/codec tools for VS2 (hash, HMAC, random, base64/hex)"
+description = "Sandbox crypto tools for VS2: hash/HMAC + hybrid classical+PQ seal"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,9 +9,15 @@ rust-version.workspace = true
 [dependencies]
 sha2 = { workspace = true }
 hmac = "0.12"
+hkdf = "0.12"
 thiserror = { workspace = true }
 serde = { workspace = true }
 getrandom = "0.2"
+# Hybrid: classical X25519 + post-quantum ML-KEM (FIPS 203)
+x25519-dalek = { version = "2", features = ["static_secrets", "getrandom"] }
+ml-kem = "0.2"
+chacha20poly1305 = "0.10"
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
