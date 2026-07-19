@@ -25,7 +25,7 @@ use velvet_cards::{validate_deck, DeckRules};
 use velvet_stakes::render::{blit_card, fill, load_rgb, rect, text, ArtBank, RgbImage};
 use velvet_stakes::ui::theme::{Theme, TITLE_ITEMS, WW, WH};
 use velvet_stakes::ui::{paint_collection, paint_options, paint_shop, paint_title_menu};
-use velvet_stakes::{ImageSlot, LiveDevSession, RgbaBuf};
+use velvet_stakes::{load_title_wordmark, ImageSlot, LiveDevSession, RgbaBuf};
 use velvet_story::{StoryPlayer, StoryValue, StoryWait};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -113,8 +113,8 @@ impl App {
         }
         let ui = ui_dir(&root);
         let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
-        // Title is painted with a serif font (fontdue); no logo plate required
-        let logo_title: Option<RgbaBuf> = None;
+        // Authored copper wordmark — soft black-key + supersampled blit (smooth edges)
+        let logo_title = load_title_wordmark(&ui.join("logo_title.png"));
         let portrait = load_rgb(&ui.join("portrait_collector.jpg"));
 
         let world = StakesWorld::new(stats, deck.cards, root.clone());

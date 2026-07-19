@@ -27,7 +27,7 @@ cargo run -p velvet-stakes --release -- --dev
 |-------|------|-----------|
 | Style | `data/styles/casino.vcss` | Reparse; UI/motion use new sheet (bad parse keeps last good) |
 | Images | `data/ui/*`, `data/art/*.jpg` | Reload buffer for next paint |
-| Title | Serif font (Georgia Bold / Times via **fontdue**) | `VELVET` / `ARCANA` + Nightfall subtitle |
+| Title | `data/ui/logo_title.png` soft-key + 2×2 supersample blit | Font fallback if plate missing |
 | Menu BG | `data/ui/menu_bg.jpg` | Cinematic Nightfall Casino lobby (16:9) |
 | Story | `data/story/main.vstory` | Soft re-boot when on title (or flagged until title) |
 

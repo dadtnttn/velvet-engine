@@ -13,7 +13,7 @@ pub type RgbaBuf = (u32, u32, Vec<u32>, Vec<u8>);
 /// Load title wordmark from disk.
 ///
 /// - PNG/WebP with alpha: keep alpha, then soft-feather.
-/// - JPG / opaque: burn near-black to soft alpha.
+/// - JPG / opaque: burn near-black to soft alpha (refined edges, no square stairs).
 pub fn load_title_wordmark(path: &Path) -> Option<RgbaBuf> {
     let img = image::open(path).ok()?;
     let rgba = img.to_rgba8();
@@ -30,14 +30,16 @@ pub fn load_title_wordmark(path: &Path) -> Option<RgbaBuf> {
         a.push(alpha);
     }
     if !has_real_alpha {
-        // Opaque file (typical JPG/PNG black plate) — key by luminance.
-        // Tight cut so dark copper serifs survive; short soft ramp for edges.
-        a = key_black_soft(&rgb, w, h, 18, 28);
+        // Wider soft ramp so letter edges are anti-aliased, not hard 0/255 steps.
+        a = key_black_soft(&rgb, w, h, 12, 56);
     }
+    // Two-pass feather: kill square pixel corners on serifs
     feather_alpha(&mut a, w as usize, h as usize, 1);
+    feather_alpha(&mut a, w as usize, h as usize, 2);
+    refine_alpha_edges(&mut a, w as usize, h as usize);
     // Crop empty black margins so scale fits the wordmark, not 16:9 padding
     let full = (w, h, rgb, a);
-    Some(crop_to_content(&full, 20, 12))
+    Some(crop_to_content(&full, 16, 16))
 }
 
 /// Soft black-key: pure black → 0, copper glow → soft ramp (not hard 0/255).
@@ -97,6 +99,53 @@ pub fn feather_alpha(a: &mut [u8], w: usize, h: usize, radius: usize) {
             // blend toward neighborhood so hard corners soften without bloating
             let blended = (src[i] as i32 * 2 + avg + maxv) / 4;
             a[i] = blended.clamp(0, 255) as u8;
+        }
+    }
+}
+
+/// Round off remaining binary stair-steps: if a solid pixel sits next to empty,
+/// pull its alpha down; if empty sits next to solid, lift slightly (AA ring).
+pub fn refine_alpha_edges(a: &mut [u8], w: usize, h: usize) {
+    if w == 0 || h == 0 {
+        return;
+    }
+    let src = a.to_vec();
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            let v = src[i] as i32;
+            let mut min_n = v;
+            let mut max_n = v;
+            let mut sum = 0i32;
+            let mut n = 0i32;
+            for dy in -1i32..=1 {
+                for dx in -1i32..=1 {
+                    let nx = x as i32 + dx;
+                    let ny = y as i32 + dy;
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                        continue;
+                    }
+                    let nv = src[ny as usize * w + nx as usize] as i32;
+                    min_n = min_n.min(nv);
+                    max_n = max_n.max(nv);
+                    sum += nv;
+                    n += 1;
+                }
+            }
+            let avg = if n > 0 { sum / n } else { v };
+            // Interior solid stays solid; pure empty stays empty; boundary softens
+            if v >= 250 && min_n < 40 {
+                // hard outer corner of a letter — round it
+                a[i] = ((v * 2 + avg) / 3).clamp(0, 220) as u8;
+            } else if v <= 8 && max_n > 180 {
+                // gap next to solid — add soft fringe instead of a square step
+                a[i] = ((avg + max_n) / 4).clamp(0, 90) as u8;
+            } else if (40..220).contains(&v) {
+                // already soft — bias toward smoothstep midtones
+                let t = v as f32 / 255.0;
+                let s = t * t * (3.0 - 2.0 * t);
+                a[i] = (s * 255.0) as u8;
+            }
         }
     }
 }
@@ -216,6 +265,23 @@ pub fn blit_rgba_bilinear(
     dh: i32,
     opacity: f32,
 ) {
+    // 2×2 supersample reduces residual stair-steps on serifs when downscaling
+    blit_rgba_filtered(pixels, ww, wh, art, dx, dy, dw, dh, opacity, 2);
+}
+
+/// Filtered blit with `samples`×`samples` supersampling per destination pixel.
+pub fn blit_rgba_filtered(
+    pixels: &mut [u32],
+    ww: u32,
+    wh: u32,
+    art: &RgbaBuf,
+    dx: i32,
+    dy: i32,
+    dw: i32,
+    dh: i32,
+    opacity: f32,
+    samples: u32,
+) {
     if dw <= 1 || dh <= 1 || opacity <= 0.01 {
         return;
     }
@@ -224,26 +290,51 @@ pub fn blit_rgba_bilinear(
         return;
     }
     let op = opacity.clamp(0.0, 1.0);
+    let n = samples.max(1);
+    let inv = 1.0 / (n * n) as f32;
     for row in 0..dh {
         let py = dy + row;
         if py < 0 || py >= wh as i32 {
             continue;
         }
-        // sample at pixel centers
-        let sy = (row as f32 + 0.5) * (*sh as f32) / dh as f32 - 0.5;
         for col in 0..dw {
             let px = dx + col;
             if px < 0 || px >= ww as i32 {
                 continue;
             }
-            let sx = (col as f32 + 0.5) * (*sw as f32) / dw as f32 - 0.5;
-            let (sc, sa) = sample_bilinear(rgb, alpha, *sw, *sh, sx, sy);
-            let a = sa * op;
-            if a < 0.02 {
+            let mut ar = 0.0f32;
+            let mut ag = 0.0f32;
+            let mut ab = 0.0f32;
+            let mut aa = 0.0f32;
+            for syi in 0..n {
+                for sxi in 0..n {
+                    let u = (col as f32 + (sxi as f32 + 0.5) / n as f32) * (*sw as f32) / dw as f32
+                        - 0.5;
+                    let v = (row as f32 + (syi as f32 + 0.5) / n as f32) * (*sh as f32) / dh as f32
+                        - 0.5;
+                    let (sc, sa) = sample_bilinear(rgb, alpha, *sw, *sh, u, v);
+                    if sa < 0.001 {
+                        continue;
+                    }
+                    ar += ((sc >> 16) & 0xFF) as f32 * sa;
+                    ag += ((sc >> 8) & 0xFF) as f32 * sa;
+                    ab += (sc & 0xFF) as f32 * sa;
+                    aa += sa;
+                }
+            }
+            ar *= inv;
+            ag *= inv;
+            ab *= inv;
+            aa *= inv;
+            if aa < 0.02 {
                 continue;
             }
+            // premultiplied → straight for blend
+            let r = (ar / aa.max(1e-4)).clamp(0.0, 255.0) as u8;
+            let g = (ag / aa.max(1e-4)).clamp(0.0, 255.0) as u8;
+            let b = (ab / aa.max(1e-4)).clamp(0.0, 255.0) as u8;
             let di = (py as u32 * ww + px as u32) as usize;
-            pixels[di] = blend(pixels[di], sc, a);
+            pixels[di] = blend(pixels[di], pack_rgb(r, g, b), (aa * op).clamp(0.0, 1.0));
         }
     }
 }

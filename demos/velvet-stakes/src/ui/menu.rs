@@ -13,7 +13,7 @@ pub fn paint_title_menu(
     pixels: &mut [u32],
     theme: &Theme,
     menu_bg: Option<&RgbImage>,
-    _logo_title: Option<&RgbaBuf>,
+    logo_title: Option<&RgbaBuf>,
     portrait: Option<&RgbImage>,
     sheet: &Stylesheet,
     menu_sel: usize,
@@ -52,8 +52,8 @@ pub fn paint_title_menu(
         0.62,
     );
 
-    // Serif font title (not SVG / not bitmap plate)
-    paint_centered_logo_title(pixels, theme, sheet);
+    // Prefer authored image wordmark (soft-key + supersampled blit); font fallback
+    paint_centered_logo_title(pixels, theme, logo_title, sheet);
 
     // Buttons lower-left — leave room for all 5 rows + daily panel (no overlap)
     let layout = ButtonColumnLayout {
@@ -69,18 +69,18 @@ pub fn paint_title_menu(
     paint_daily_ritual(pixels, theme, sheet);
 }
 
-/// Centered elegant wordmark using a real **serif font** (fontdue).
-fn paint_centered_logo_title(pixels: &mut [u32], theme: &Theme, sheet: &Stylesheet) {
+/// Centered elegant wordmark: **image** (`logo_title.png`) with refined edges,
+/// or serif font if the plate is missing.
+fn paint_centered_logo_title(
+    pixels: &mut [u32],
+    theme: &Theme,
+    logo_title: Option<&RgbaBuf>,
+    sheet: &Stylesheet,
+) {
     // Slightly right of center so left button column stays clear
     let cx = (WW as i32 * 58) / 100;
     let top_y = 108;
 
-    let gold = resolve(sheet, &StyleQuery::class("logo-title"))
-        .props
-        .get("color")
-        .and_then(|v| v.as_color())
-        .map(|c| c.rgb_tuple())
-        .unwrap_or(theme.gold);
     let gold_soft = resolve(sheet, &StyleQuery::class("logo-sub"))
         .props
         .get("color")
@@ -88,24 +88,47 @@ fn paint_centered_logo_title(pixels: &mut [u32], theme: &Theme, sheet: &Styleshe
         .map(|c| c.rgb_tuple())
         .unwrap_or(theme.gold_soft);
 
-    // Soft halo behind type
-    paint_logo_halo(pixels, cx, top_y + 70, 220, 70);
+    let (block_cx, block_bottom) = if let Some(logo) = logo_title {
+        let max_w = 560i32;
+        let max_h = 160i32;
+        let (sw, sh, _, _) = *logo;
+        if sw == 0 || sh == 0 {
+            return;
+        }
+        let scale = (max_w as f32 / sw as f32).min(max_h as f32 / sh as f32);
+        let dw = ((sw as f32 * scale) as i32).max(1);
+        let dh = ((sh as f32 * scale) as i32).max(1);
+        let dx = (cx - dw / 2).clamp(400, WW as i32 - dw - 24);
+        let dy = top_y;
 
-    let (_lx, _ly, block_w, block_h) =
-        crate::title_font::paint_title_wordmark(pixels, cx, top_y, gold, gold);
+        // Soft halo under the plate (not on the letters themselves)
+        paint_logo_halo(pixels, dx + dw / 2, dy + dh / 2, dw / 2 + 20, dh / 2 + 12);
+        // Supersampled bilinear — smooth serifs, no square pixel corners
+        crate::logo::blit_rgba_filtered(pixels, WW, WH, logo, dx, dy, dw, dh, 1.0, 2);
+        (dx + dw / 2, dy + dh)
+    } else {
+        let gold = resolve(sheet, &StyleQuery::class("logo-title"))
+            .props
+            .get("color")
+            .and_then(|v| v.as_color())
+            .map(|c| c.rgb_tuple())
+            .unwrap_or(theme.gold);
+        paint_logo_halo(pixels, cx, top_y + 70, 220, 70);
+        let (_lx, _ly, _bw, bh) =
+            crate::title_font::paint_title_wordmark(pixels, cx, top_y, gold, gold);
+        (cx, top_y + bh)
+    };
 
-    let sub_col = gold_soft;
-    let sub = crate::title_font::TITLE_SUB;
+    let sub = "NIGHTFALL CASINO";
     let sub_w = estimate_text_w(sub, 1);
-    let sx = (cx - sub_w / 2).clamp(8, WW as i32 - sub_w - 8);
-    let sy = top_y + block_h + 6;
+    let sx = (block_cx - sub_w / 2).clamp(8, WW as i32 - sub_w - 8);
+    let sy = block_bottom + 8;
     let rule_y = sy + 6;
     paint_gold_rule(pixels, sx - 72, rule_y, sx - 12, theme.gold);
     paint_mini_diamond(pixels, sx - 8, rule_y, theme.gold);
-    text(pixels, WW, WH, sx, sy, sub, sub_col, 1);
+    text(pixels, WW, WH, sx, sy, sub, gold_soft, 1);
     paint_mini_diamond(pixels, sx + sub_w + 6, rule_y, theme.gold);
     paint_gold_rule(pixels, sx + sub_w + 14, rule_y, sx + sub_w + 72, theme.gold);
-    let _ = block_w;
 }
 
 fn paint_daily_ritual(pixels: &mut [u32], theme: &Theme, sheet: &Stylesheet) {
@@ -473,8 +496,15 @@ mod tests {
     fn paint_frame(sel: usize) -> Vec<u32> {
         let ui = data_ui();
         let bg = load_rgb(&ui.join("menu_bg.jpg"));
+        let logo = crate::logo::load_title_wordmark(&ui.join("logo_title.png"));
         let portrait = load_rgb(&ui.join("portrait_collector.jpg"));
         assert!(bg.is_some(), "menu_bg.jpg must exist for title paint tests");
+        assert!(logo.is_some(), "logo_title.png must load for title paint");
+        let soft = crate::count_soft_alpha(&logo.as_ref().unwrap().3);
+        assert!(
+            soft > 80,
+            "logo should have soft alpha edges (not square), soft={soft}"
+        );
         let sheet = load_sheet();
         let theme = Theme::default();
         let mut pixels = vec![0u32; (WW * WH) as usize];
@@ -482,7 +512,7 @@ mod tests {
             &mut pixels,
             &theme,
             bg.as_ref(),
-            None,
+            logo.as_ref(),
             portrait.as_ref(),
             &sheet,
             sel,
