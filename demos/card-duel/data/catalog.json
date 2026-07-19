@@ -1,0 +1,52 @@
+{
+  "cards": {
+    "strike": {
+      "id": "strike",
+      "name": "Strike",
+      "cost": 1,
+      "tags": ["attack", "basic"],
+      "card_type": "attack",
+      "text": "Deal 5 damage."
+    },
+    "guard": {
+      "id": "guard",
+      "name": "Guard",
+      "cost": 1,
+      "tags": ["defense", "basic"],
+      "card_type": "skill",
+      "text": "Gain 4 block."
+    },
+    "fireball": {
+      "id": "fireball",
+      "name": "Fireball",
+      "cost": 3,
+      "tags": ["spell", "fire"],
+      "card_type": "spell",
+      "text": "Deal 9 damage."
+    },
+    "draw_two": {
+      "id": "draw_two",
+      "name": "Focus",
+      "cost": 1,
+      "tags": ["skill", "draw"],
+      "card_type": "skill",
+      "text": "Draw 2 cards."
+    },
+    "bash": {
+      "id": "bash",
+      "name": "Bash",
+      "cost": 2,
+      "tags": ["attack"],
+      "card_type": "attack",
+      "text": "Deal 8 damage."
+    },
+    "fortify": {
+      "id": "fortify",
+      "name": "Fortify",
+      "cost": 2,
+      "tags": ["defense"],
+      "card_type": "skill",
+      "text": "Gain 7 block."
+    }
+  }
+}

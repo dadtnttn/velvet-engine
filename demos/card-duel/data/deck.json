@@ -1,0 +1,11 @@
+{
+  "name": "starter_duel",
+  "cards": [
+    "strike", "strike", "strike", "strike",
+    "guard", "guard", "guard",
+    "bash", "bash",
+    "fortify",
+    "draw_two", "draw_two",
+    "fireball", "fireball"
+  ]
+}
