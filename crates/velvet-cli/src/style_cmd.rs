@@ -9,8 +9,7 @@ use velvet_style::{
 
 /// Parse and report a stylesheet file.
 pub fn cmd_style_check(path: PathBuf) -> Result<()> {
-    let src = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let src = std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let report = if let Some(parent) = path.parent() {
         match parse_stylesheet_with_imports(&src, parent) {
             Ok(sheet) => {
@@ -56,8 +55,7 @@ pub fn cmd_style_check(path: PathBuf) -> Result<()> {
 
 /// Resolve a class (+ optional state) and print props.
 pub fn cmd_style_dump(path: PathBuf, class: String, state: Option<String>) -> Result<()> {
-    let src = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let src = std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let sheet = if let Some(parent) = path.parent() {
         parse_stylesheet_with_imports(&src, parent).or_else(|_| parse_stylesheet(&src))?
     } else {
@@ -68,12 +66,7 @@ pub fn cmd_style_dump(path: PathBuf, class: String, state: Option<String>) -> Re
         q = q.with_state(s);
     }
     let c = resolve(&sheet, &q);
-    println!(
-        "dump {} class={} state={:?}",
-        path.display(),
-        class,
-        state
-    );
+    println!("dump {} class={} state={:?}", path.display(), class, state);
     for (k, v) in &c.props {
         println!("  {k}: {v:?}");
     }

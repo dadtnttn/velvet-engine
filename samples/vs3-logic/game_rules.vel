@@ -1,0 +1,25 @@
+// @edition 3
+// VS3 sample — pure game logics (no prefab genre system)
+
+function can_play_card(hand_size, cost, energy) {
+    return hand_size > 0 && energy >= cost
+}
+
+function apply_damage(hp, dmg) {
+    if dmg >= hp {
+        return 0
+    }
+    return hp - dmg
+}
+
+function score_bonus(combo, mult) {
+    return combo * mult
+}
+
+function use_math_tool(x) {
+    return abs(x)
+}
+
+function fingerprint(s) {
+    return hash_sha256(s)
+}
