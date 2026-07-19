@@ -30,6 +30,7 @@ use winit::window::{Window, WindowId};
 
 use catalog::{make_catalog_and_deck, score_played, CardStats, HandScore};
 use render::{blit_card, fill, load_rgb, rect, text, ArtBank, RgbImage};
+use ui::buttons::ButtonChrome;
 use ui::theme::{Theme, TITLE_ITEMS, WW, WH};
 use ui::{paint_collection, paint_options, paint_shop, paint_title_menu};
 
@@ -362,8 +363,8 @@ struct App {
     art: ArtBank,
     /// Original generated lobby background (not the user reference file).
     menu_bg: Option<RgbImage>,
-    menu_panel: Option<RgbImage>,
     logo_emblem: Option<RgbImage>,
+    button_chrome: ButtonChrome,
     theme: Theme,
     /// Meta stats shown on title HUD (flavor / progress).
     meta_chips: i64,
@@ -425,8 +426,8 @@ impl App {
         }
         let ui = ui_dir();
         let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
-        let menu_panel = load_rgb(&ui.join("menu_panel.jpg"));
         let logo_emblem = load_rgb(&ui.join("logo_emblem.jpg"));
+        let button_chrome = ButtonChrome::load(&ui.join("buttons"));
         Ok(Self {
             screen: Screen::Title,
             menu_sel: 0,
@@ -438,8 +439,8 @@ impl App {
             deck_ids: deck.cards,
             art,
             menu_bg,
-            menu_panel,
             logo_emblem,
+            button_chrome,
             theme: Theme::default(),
             meta_chips: 12_450,
             meta_crystals: 870,
@@ -505,8 +506,8 @@ impl App {
                     &mut self.pixels,
                     &self.theme,
                     self.menu_bg.as_ref(),
-                    self.menu_panel.as_ref(),
                     self.logo_emblem.as_ref(),
+                    &self.button_chrome,
                     self.menu_sel,
                     self.meta_chips,
                     self.meta_crystals,
@@ -1184,12 +1185,12 @@ fn main() -> Result<()> {
     let headless = std::env::args().any(|a| a == "--headless");
     let mut app = App::new(headless)?;
     println!(
-        "Velvet Arcana LOCAL — cards={} deck={} bg={} panel={} logo={}",
+        "Velvet Arcana LOCAL — cards={} deck={} bg={} logo={} buttons={}",
         app.art.images.len(),
         app.deck_ids.len(),
         app.menu_bg.is_some(),
-        app.menu_panel.is_some(),
-        app.logo_emblem.is_some()
+        app.logo_emblem.is_some(),
+        app.button_chrome.ready()
     );
     if headless {
         println!("headless smoke…");

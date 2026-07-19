@@ -12,7 +12,8 @@ pub struct Theme {
     pub void: (u8, u8, u8),
     /// Panel fill.
     pub panel: (u8, u8, u8),
-    /// Selected panel fill.
+    /// Selected panel fill (fallback plates).
+    #[allow(dead_code)]
     pub panel_sel: (u8, u8, u8),
     /// Gold accent (titles, selection).
     pub gold: (u8, u8, u8),

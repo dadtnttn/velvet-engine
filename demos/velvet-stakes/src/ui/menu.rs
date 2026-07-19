@@ -1,18 +1,17 @@
 //! Title menu and lobby sub-screens (Velvet Arcana).
 
-use crate::render::{
-    blit_card, blit_cover, fill, outline, panel, text, ArtBank, RgbImage,
-};
+use crate::render::{blit_card, blit_cover, fill, outline, panel, text, ArtBank, RgbImage};
+use crate::ui::buttons::{paint_button_column, ButtonChrome, ButtonColumnLayout};
 use crate::ui::hud::paint_meta_hud;
-use crate::ui::theme::{MenuItem, Theme, TITLE_ITEMS, WW, WH};
+use crate::ui::theme::{Theme, WW, WH};
 
 /// Full title / lobby paint.
 pub fn paint_title_menu(
     pixels: &mut [u32],
     theme: &Theme,
     menu_bg: Option<&RgbImage>,
-    menu_panel: Option<&RgbImage>,
     logo: Option<&RgbImage>,
+    chrome: &ButtonChrome,
     menu_sel: usize,
     chips: i64,
     crystals: i64,
@@ -24,9 +23,9 @@ pub fn paint_title_menu(
         fill(pixels, WW, WH, theme.void);
     }
 
-    // Left readability vignette
-    for x in 0..460 {
-        let a = (1.0 - x as f32 / 460.0) * 0.5;
+    // Left vignette for button readability
+    for x in 0..480 {
+        let a = (1.0 - x as f32 / 480.0) * 0.48;
         for y in 0..WH as i32 {
             let i = (y as u32 * WW + x as u32) as usize;
             pixels[i] = blend_dark(pixels[i], a);
@@ -43,55 +42,21 @@ pub fn paint_title_menu(
         "High Roller  ·  Lvl 17",
     );
 
-    // Logo emblem
     if let Some(lg) = logo {
         blit_card(pixels, WW, WH, lg, 48, 88, 72, 72, 0.95);
     }
 
     text(pixels, WW, WH, 130, 100, "VELVET ARCANA", theme.gold, 3);
-    text(
+    text(pixels, WW, WH, 132, 142, "NIGHTFALL CASINO", theme.neon, 1);
+
+    // Ornate buttons matching screenshot style
+    paint_button_column(
         pixels,
-        WW,
-        WH,
-        132,
-        142,
-        "NIGHTFALL CASINO",
-        theme.neon,
-        1,
+        theme,
+        chrome,
+        &ButtonColumnLayout::default(),
+        menu_sel,
     );
-
-    // Optional panel texture behind buttons
-    let btn_x = 48;
-    let btn_w = 360;
-    let btn_h = 50;
-    let btn_y0 = 200;
-    let panel_h = TITLE_ITEMS.len() as i32 * (btn_h + 12) + 16;
-    if let Some(p) = menu_panel {
-        blit_card(
-            pixels,
-            WW,
-            WH,
-            p,
-            btn_x - 12,
-            btn_y0 - 12,
-            btn_w + 24,
-            panel_h + 8,
-            0.55,
-        );
-    }
-
-    for (i, item) in TITLE_ITEMS.iter().enumerate() {
-        paint_menu_button(
-            pixels,
-            theme,
-            btn_x,
-            btn_y0 + i as i32 * (btn_h + 12),
-            btn_w,
-            btn_h,
-            item,
-            i == menu_sel,
-        );
-    }
 
     // Daily ritual
     panel(
@@ -145,69 +110,6 @@ pub fn paint_title_menu(
         "\"FORTUNE FAVORS THE BOLD.\"",
         theme.muted,
         1,
-    );
-}
-
-fn paint_menu_button(
-    pixels: &mut [u32],
-    theme: &Theme,
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
-    item: &MenuItem,
-    selected: bool,
-) {
-    let fill_c = if selected {
-        theme.panel_sel
-    } else {
-        theme.panel
-    };
-    let border = if selected {
-        theme.gold
-    } else {
-        theme.neon
-    };
-    panel(
-        pixels,
-        WW,
-        WH,
-        x,
-        y,
-        w,
-        h,
-        fill_c,
-        if selected { 0.9 } else { 0.78 },
-    );
-    outline(
-        pixels,
-        WW,
-        WH,
-        x,
-        y,
-        w,
-        h,
-        border,
-        if selected { 2 } else { 1 },
-    );
-    let label = if selected {
-        format!(">  {}", item.label)
-    } else {
-        format!("   {}", item.label)
-    };
-    text(
-        pixels,
-        WW,
-        WH,
-        x + 20,
-        y + 14,
-        &label,
-        if selected {
-            theme.gold
-        } else {
-            theme.text
-        },
-        2,
     );
 }
 

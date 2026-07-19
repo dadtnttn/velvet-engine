@@ -19,12 +19,14 @@ cargo run -p velvet-stakes -- --headless
 ## Menu (módulos propios)
 
 UI en `src/ui/` (`theme`, `menu`, `hud`).  
-Arte **original** generado (la imagen de referencia solo inspiró el estilo):
+Arte **original** (referencias de estilo; no se empaquetan capturas del usuario):
 
 - `data/ui/menu_bg.jpg` — lobby  
-- `data/ui/menu_panel.jpg` — columna de botones  
 - `data/ui/logo_emblem.jpg` — emblema  
+- `data/ui/buttons/plate_selected.jpg` / `plate_normal.jpg`  
+- `data/ui/buttons/icon_*.jpg` — star / cards / chip / gear / power  
 
+Módulo `src/ui/buttons.rs`: placas + iconos + marco dorado con diamantes.  
 Botones: **START RUN · COLLECTION · SHOP · OPTIONS · QUIT**
 
 ## Cards
