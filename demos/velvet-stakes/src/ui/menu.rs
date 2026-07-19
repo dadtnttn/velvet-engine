@@ -1,7 +1,9 @@
 //! Title menu and lobby — layout matching Nightfall Casino reference art:
 //! profile HUD · centered logo wordmark · ornate buttons · daily ritual.
 
-use crate::render::{blit_card, blit_cover, fill, outline, panel, text, ArtBank, RgbImage};
+use crate::render::{
+    blit_card, blit_cover, blit_rgba, fill, outline, panel, text, ArtBank, RgbImage, RgbaImage,
+};
 use crate::ui::buttons::{paint_button_column, ButtonColumnLayout};
 use crate::ui::hud::paint_meta_hud;
 use crate::ui::theme::{Theme, WW, WH};
@@ -12,7 +14,7 @@ pub fn paint_title_menu(
     pixels: &mut [u32],
     theme: &Theme,
     menu_bg: Option<&RgbImage>,
-    logo: Option<&RgbImage>,
+    logo_title: Option<&RgbaImage>,
     portrait: Option<&RgbImage>,
     sheet: &Stylesheet,
     menu_sel: usize,
@@ -56,12 +58,13 @@ pub fn paint_title_menu(
         0.62,
     );
 
-    paint_centered_logo(pixels, theme, logo, sheet);
+    // Wordmark image only — no procedural title letters
+    paint_centered_logo_title(pixels, theme, logo_title, sheet);
 
-    // Buttons lower-left (reference arcade lobby)
+    // Buttons lower-left (below wordmark)
     let layout = ButtonColumnLayout {
         x: 48,
-        y0: 300,
+        y0: 340,
         w: 400,
         h: 50,
         gap: 10,
@@ -71,80 +74,57 @@ pub fn paint_title_menu(
     paint_daily_ritual(pixels, theme, sheet);
 }
 
-/// Centered VELVET ARCANA wordmark + diamond ornament (screenshot style).
-fn paint_centered_logo(
+/// Centered elegant wordmark (black background burned out via alpha).
+fn paint_centered_logo_title(
     pixels: &mut [u32],
     theme: &Theme,
-    logo: Option<&RgbImage>,
+    logo_title: Option<&RgbaImage>,
     sheet: &Stylesheet,
 ) {
-    let title_style = resolve(sheet, &StyleQuery::class("logo-title"));
-    let sub_style = resolve(sheet, &StyleQuery::class("logo-sub"));
-    let title_col = title_style.color_text().rgb_tuple();
-    let sub_col = sub_style
-        .props
-        .get("color")
-        .and_then(|v| v.as_color())
-        .map(|c| c.rgb_tuple())
-        .unwrap_or(theme.neon);
-
     let cx = WW as i32 / 2;
 
-    // Ornament diamond above title
-    let orn_y = 118;
-    paint_ornament_diamond(pixels, cx, orn_y, 14, theme.gold);
-    // side flourishes
-    paint_flourish_line(pixels, cx - 120, orn_y, cx - 28, theme.gold);
-    paint_flourish_line(pixels, cx + 28, orn_y, cx + 120, theme.gold);
+    if let Some(logo) = logo_title {
+        // Fit wordmark across center of lobby (wide copper title)
+        let max_w = 640i32;
+        let max_h = 200i32;
+        let (sw, sh, _, _) = *logo;
+        let scale = (max_w as f32 / sw as f32).min(max_h as f32 / sh as f32);
+        let dw = (sw as f32 * scale) as i32;
+        let dh = (sh as f32 * scale) as i32;
+        let dx = cx - dw / 2;
+        let dy = 108;
+        blit_rgba(pixels, WW, WH, logo, dx, dy, dw, dh, 1.0);
 
-    // Optional emblem behind title
-    if let Some(lg) = logo {
-        blit_card(pixels, WW, WH, lg, cx - 40, 90, 80, 80, 0.35);
+        // Subtitle sits just under the image wordmark
+        let sub_style = resolve(sheet, &StyleQuery::class("logo-sub"));
+        let sub_col = sub_style
+            .props
+            .get("color")
+            .and_then(|v| v.as_color())
+            .map(|c| c.rgb_tuple())
+            .unwrap_or(theme.gold_soft);
+        let sub = "NIGHTFALL CASINO";
+        let sub_w = estimate_text_w(sub, 1);
+        let sx = cx - sub_w / 2;
+        let sy = dy + dh - 8;
+        let rule_y = sy + 6;
+        paint_gold_rule(pixels, sx - 80, rule_y, sx - 14, theme.gold);
+        paint_mini_diamond(pixels, sx - 10, rule_y, theme.gold);
+        text(pixels, WW, WH, sx, sy, sub, sub_col, 1);
+        paint_mini_diamond(pixels, sx + sub_w + 8, rule_y, theme.gold);
+        paint_gold_rule(pixels, sx + sub_w + 16, rule_y, sx + sub_w + 80, theme.gold);
+    } else {
+        text(
+            pixels,
+            WW,
+            WH,
+            cx - 80,
+            180,
+            "(logo_title missing)",
+            theme.muted,
+            1,
+        );
     }
-
-    // Main title — multi-pass for serif weight / copper glow
-    let title = "VELVET ARCANA";
-    let title_w = estimate_text_w(title, 4);
-    let tx = cx - title_w / 2;
-    let ty = 150;
-    // glow
-    text(pixels, WW, WH, tx + 2, ty + 2, title, (80, 40, 20), 4);
-    text(pixels, WW, WH, tx + 1, ty + 1, title, (140, 80, 40), 4);
-    text(pixels, WW, WH, tx, ty, title, title_col, 4);
-    // copper highlight top
-    text(
-        pixels,
-        WW,
-        WH,
-        tx,
-        ty - 1,
-        title,
-        (
-            title_col.0.saturating_add(25),
-            title_col.1.saturating_add(20),
-            title_col.2.saturating_add(10),
-        ),
-        4,
-    );
-
-    // Subtitle with decorative rules
-    let sub = "NIGHTFALL CASINO";
-    let sub_w = estimate_text_w(sub, 1);
-    let sx = cx - sub_w / 2;
-    let sy = 210;
-    let rule_y = sy + 6;
-    let rule_gap = 18;
-    paint_gold_rule(pixels, sx - 90, rule_y, sx - rule_gap, theme.gold);
-    paint_mini_diamond(pixels, sx - rule_gap - 6, rule_y, theme.gold);
-    text(pixels, WW, WH, sx, sy, sub, sub_col, 1);
-    paint_mini_diamond(pixels, sx + sub_w + rule_gap - 2, rule_y, theme.gold);
-    paint_gold_rule(
-        pixels,
-        sx + sub_w + rule_gap + 8,
-        rule_y,
-        sx + sub_w + 90,
-        theme.gold,
-    );
 }
 
 fn paint_daily_ritual(pixels: &mut [u32], theme: &Theme, sheet: &Stylesheet) {
@@ -184,32 +164,6 @@ fn paint_daily_ritual(pixels: &mut [u32], theme: &Theme, sheet: &Stylesheet) {
         theme.muted,
         1,
     );
-}
-
-fn paint_ornament_diamond(pixels: &mut [u32], cx: i32, cy: i32, size: i32, gold: (u8, u8, u8)) {
-    // outer ring
-    for r in (size - 2)..=(size + 2) {
-        for a in 0..64 {
-            let ang = a as f32 / 64.0 * std::f32::consts::TAU;
-            let px = cx + (ang.cos() * r as f32) as i32;
-            let py = cy + (ang.sin() * r as f32) as i32;
-            put(pixels, px, py, gold, 0.55);
-        }
-    }
-    paint_mini_diamond(pixels, cx, cy, gold);
-    // tiny satellites
-    paint_mini_diamond(pixels, cx - size - 4, cy, gold);
-    paint_mini_diamond(pixels, cx + size + 4, cy, gold);
-}
-
-fn paint_flourish_line(pixels: &mut [u32], x0: i32, y: i32, x1: i32, gold: (u8, u8, u8)) {
-    let (x0, x1) = if x0 < x1 { (x0, x1) } else { (x1, x0) };
-    for x in x0..=x1 {
-        let t = (x - x0) as f32 / (x1 - x0).max(1) as f32;
-        let wave = ((t * std::f32::consts::PI).sin() * 1.5) as i32;
-        put(pixels, x, y + wave, gold, 0.75);
-        put(pixels, x, y + wave - 1, gold, 0.35);
-    }
 }
 
 fn paint_gold_rule(pixels: &mut [u32], x0: i32, y: i32, x1: i32, gold: (u8, u8, u8)) {

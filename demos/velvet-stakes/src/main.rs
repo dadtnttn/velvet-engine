@@ -36,7 +36,10 @@ use winit::window::{Window, WindowId};
 use catalog::make_catalog_and_deck;
 use game::{Outcome, Screen};
 use host::{StakesHost, StakesWorld};
-use render::{blit_card, fill, load_rgb, rect, text, ArtBank, RgbImage};
+use render::{
+    blit_card, fill, load_rgb, load_rgb_key_black, load_rgba, rect, text, ArtBank, RgbImage,
+    RgbaImage,
+};
 use story_boot::boot_player;
 use ui::theme::{Theme, TITLE_ITEMS, WW, WH};
 use ui::{paint_collection, paint_options, paint_shop, paint_title_menu};
@@ -46,7 +49,8 @@ struct App {
     player: StoryPlayer,
     art: ArtBank,
     menu_bg: Option<RgbImage>,
-    logo_emblem: Option<RgbImage>,
+    /// Elegant title wordmark (black keyed / alpha).
+    logo_title: Option<RgbaImage>,
     portrait: Option<RgbImage>,
     theme: Theme,
     /// Live author hot-reload (`--dev`).
@@ -114,7 +118,10 @@ impl App {
         }
         let ui = ui_dir(&root);
         let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
-        let logo_emblem = load_rgb(&ui.join("logo_emblem.jpg"));
+        // Prefer pre-keyed PNG; else burn black from elegant sample
+        let logo_title = load_rgba(&ui.join("logo_title.png")).or_else(|| {
+            load_rgb_key_black(&ui.join("sample_type_elegant_black.jpg"), 18)
+        });
         let portrait = load_rgb(&ui.join("portrait_collector.jpg"));
 
         let world = StakesWorld::new(stats, deck.cards, root.clone());
@@ -132,7 +139,7 @@ impl App {
             player,
             art,
             menu_bg,
-            logo_emblem,
+            logo_title,
             portrait,
             theme: Theme::default(),
             live_dev,
@@ -171,13 +178,27 @@ impl App {
         for (slot, buf) in apply.images {
             match slot {
                 ImageSlot::MenuBg => self.menu_bg = Some(buf),
-                ImageSlot::Logo => self.logo_emblem = Some(buf),
+                ImageSlot::Logo => {
+                    // Live path gives RGB — re-key black if it looks like a wordmark file
+                    // Prefer reloading logo_title via path in next polish; for now store as RGB card unused
+                    let _ = buf;
+                }
                 ImageSlot::Portrait => self.portrait = Some(buf),
                 ImageSlot::Card(id) => {
                     self.art.images.insert(id, buf);
                 }
             }
             self.status_line = "dev: image live".into();
+        }
+        // Reload title logo from disk if watched path changed
+        if apply.reloaded.iter().any(|k| k.contains("logo") || k.contains("title")) {
+            let ui = ui_dir(&self.data_root);
+            if let Some(lt) = load_rgba(&ui.join("logo_title.png")).or_else(|| {
+                load_rgb_key_black(&ui.join("sample_type_elegant_black.jpg"), 18)
+            }) {
+                self.logo_title = Some(lt);
+                self.status_line = "dev: logo_title live".into();
+            }
         }
         if apply.story_reload {
             // Soft re-boot only when sitting on title wait (safe)
@@ -257,7 +278,7 @@ impl App {
                     &mut self.pixels,
                     &self.theme,
                     self.menu_bg.as_ref(),
-                    self.logo_emblem.as_ref(),
+                    self.logo_title.as_ref(),
                     self.portrait.as_ref(),
                     &sheet,
                     sel,
