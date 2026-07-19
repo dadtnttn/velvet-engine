@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **velvet-stakes driven by `.vstory` + `.vcss`**: flow in
+  `demos/velvet-stakes/data/story/main.vstory`; casino look/motion in
+  `casino.vcss`; Rust host exposes `stakes.*` and forwards `style.*`
+  (`dealHand` deal, `menu.open` emit).
 - **`.vcss` = CSS + JS-lite**: stylesheets combine CSS (selectors, `@keyframes`,
   cascade) with `@script` (`let`/`fn`/`for`/`play`/`animate`/`on`). Story
   `style.call` / `style.emit`. Docs: `docs/language/VELVET_STYLE.md`.
