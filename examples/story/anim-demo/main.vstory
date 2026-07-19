@@ -1,49 +1,39 @@
-# Animation demo for writers — needs AnimStoryHost at runtime
+# Animation tools demo — compose your own 3D image motion (no premade pack cutscene)
 
 scene start
 
 narrator:
-    Las cartas aparecen con estilo.
+    Billboard + track tools: tu defines el motion.
 
-call anim.fx:
+call anim.billboard:
     target: card0
-    effect: deal
-    x: 180
-    y: 360
-    duration: 0.4
-
-call anim.fx:
-    target: card1
-    effect: deal
     x: 300
-    y: 360
-    duration: 0.4
-    delay: 0.1
+    y: 280
+    half_w: 70
+    half_h: 100
+    front: "art/demo_front"
+    back: "art/demo_back"
 
-call anim.fx:
-    target: card2
-    effect: deal
-    x: 420
-    y: 360
-    duration: 0.4
-    delay: 0.2
+call anim.track:
+    target: card0
+    channel: yaw
+    from: 3.14159
+    to: 0
+    duration: 0.5
+    ease: cubic_out
 
-narrator:
-    Y un aviso hace punch.
-
-call anim.fx:
-    target: banner
-    effect: punch
+call anim.track:
+    target: card0
+    channel: opacity
+    from: 0
+    to: 1
     duration: 0.25
-    strength: 0.25
+
+call anim.pose3d:
+    target: card0
+    foil: 0.4
 
 narrator:
-    Ahora un sobre se abre en 3D.
-
-call anim.pack_open:
-    x: 480
-    y: 270
-    cards: 5
-    duration: 2.0
+    El render lee project_all() y pinta tus imagenes.
 
 end

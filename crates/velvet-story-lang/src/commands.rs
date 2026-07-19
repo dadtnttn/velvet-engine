@@ -274,67 +274,188 @@ impl CommandRegistry {
                 ty: ParamTy::Text,
                 required: true,
                 default: None,
-                doc: "Texto del script (fx, move, wait, spawn, pack_open)".into(),
+                doc: "Texto del script (fx, move, wait, spawn)".into(),
             }],
             required: vec!["body".into()],
             snippet: "call anim.script:\n    body: \"fx card0 deal 200 360 0.3\"\n".into(),
             error_help: "call anim.script:\n    body: \"fx card0 fade_in\"".into(),
         });
+        // Generic 3D image tools (compose your own motions — no premade pack cutscene)
         r.register(CommandSpec {
-            name: "anim.pack_open".into(),
+            name: "anim.billboard".into(),
             category: "animation".into(),
-            description:
-                "Genera un efecto 3D de abrir sobre (pack) y abanico de cartas (billboards)."
-                    .into(),
+            description: "Crea/actualiza un billboard 3D (imagen) con tamaño y contenido."
+                .into(),
             params: vec![
+                CommandParam {
+                    name: "target".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "Id del billboard".into(),
+                },
                 CommandParam {
                     name: "x".into(),
                     ty: ParamTy::Float,
                     required: false,
-                    default: Some("480".into()),
-                    doc: "Centro X del sobre".into(),
+                    default: None,
+                    doc: "Posición X".into(),
                 },
                 CommandParam {
                     name: "y".into(),
                     ty: ParamTy::Float,
                     required: false,
-                    default: Some("270".into()),
-                    doc: "Centro Y del sobre".into(),
+                    default: None,
+                    doc: "Posición Y".into(),
                 },
                 CommandParam {
-                    name: "cards".into(),
-                    ty: ParamTy::Int,
+                    name: "half_w".into(),
+                    ty: ParamTy::Float,
                     required: false,
-                    default: Some("5".into()),
-                    doc: "Cartas a revelar".into(),
+                    default: Some("70".into()),
+                    doc: "Semi-ancho local".into(),
+                },
+                CommandParam {
+                    name: "half_h".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("100".into()),
+                    doc: "Semi-alto local".into(),
+                },
+                CommandParam {
+                    name: "front".into(),
+                    ty: ParamTy::Text,
+                    required: false,
+                    default: None,
+                    doc: "Clave de imagen frontal".into(),
+                },
+                CommandParam {
+                    name: "back".into(),
+                    ty: ParamTy::Text,
+                    required: false,
+                    default: None,
+                    doc: "Clave de imagen trasera".into(),
+                },
+            ],
+            required: vec!["target".into()],
+            snippet:
+                "call anim.billboard:\n    target: card0\n    x: 200\n    y: 300\n    front: \"art/card\"\n"
+                    .into(),
+            error_help: "call anim.billboard:\n    target: card0".into(),
+        });
+        r.register(CommandSpec {
+            name: "anim.pose3d".into(),
+            category: "animation".into(),
+            description: "Ajusta canales 3D del billboard (yaw, pitch, roll, foil, …).".into(),
+            params: vec![
+                CommandParam {
+                    name: "target".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "Id".into(),
+                },
+                CommandParam {
+                    name: "yaw".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: None,
+                    doc: "Rotación Y (rad)".into(),
+                },
+                CommandParam {
+                    name: "pitch".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: None,
+                    doc: "Rotación X".into(),
+                },
+                CommandParam {
+                    name: "roll".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: None,
+                    doc: "Rotación Z".into(),
+                },
+                CommandParam {
+                    name: "opacity".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: None,
+                    doc: "Opacidad".into(),
+                },
+                CommandParam {
+                    name: "foil".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: None,
+                    doc: "Fase holofoil 0..1".into(),
+                },
+            ],
+            required: vec!["target".into()],
+            snippet: "call anim.pose3d:\n    target: card0\n    yaw: 1.2\n    foil: 0.5\n".into(),
+            error_help: "call anim.pose3d:\n    target: card0\n    yaw: 0".into(),
+        });
+        r.register(CommandSpec {
+            name: "anim.track".into(),
+            category: "animation".into(),
+            description: "Keyframe tool: anima un canal (yaw/x/opacity…) con from/to o keys."
+                .into(),
+            params: vec![
+                CommandParam {
+                    name: "target".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "Id del billboard".into(),
+                },
+                CommandParam {
+                    name: "channel".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "yaw | pitch | roll | x | y | scale | opacity | foil | depth".into(),
+                },
+                CommandParam {
+                    name: "from".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("0".into()),
+                    doc: "Valor inicial".into(),
+                },
+                CommandParam {
+                    name: "to".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("0".into()),
+                    doc: "Valor final".into(),
                 },
                 CommandParam {
                     name: "duration".into(),
                     ty: ParamTy::Float,
                     required: false,
-                    default: Some("2.2".into()),
-                    doc: "Duración total de la secuencia".into(),
+                    default: Some("0.4".into()),
+                    doc: "Duración".into(),
                 },
                 CommandParam {
-                    name: "seed".into(),
-                    ty: ParamTy::Int,
+                    name: "keys".into(),
+                    ty: ParamTy::Text,
                     required: false,
-                    default: Some("1".into()),
-                    doc: "Semilla de variación de tilt".into(),
+                    default: None,
+                    doc: "Pares t v: \"0 0 0.4 3.14\"".into(),
                 },
                 CommandParam {
-                    name: "fan_spacing".into(),
-                    ty: ParamTy::Float,
+                    name: "ease".into(),
+                    ty: ParamTy::Ident,
                     required: false,
-                    default: Some("95".into()),
-                    doc: "Separación horizontal del abanico".into(),
+                    default: Some("cubic_out".into()),
+                    doc: "Easing".into(),
                 },
             ],
-            required: vec![],
+            required: vec!["target".into(), "channel".into()],
             snippet:
-                "call anim.pack_open:\n    x: 480\n    y: 270\n    cards: 5\n    duration: 2.0\n"
+                "call anim.track:\n    target: card0\n    channel: yaw\n    from: 0\n    to: 3.14\n    duration: 0.4\n"
                     .into(),
-            error_help: "call anim.pack_open:\n    cards: 5".into(),
+            error_help: "call anim.track:\n    target: card0\n    channel: yaw\n    from: 0\n    to: 3.14".into(),
         });
         r
     }
