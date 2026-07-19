@@ -1,11 +1,12 @@
-//! Velvet Novella — product VN windowed host (`VnSession` + product paint + softbuffer).
+//! Velvet Novella — **Luz de Estación**
 //!
-//! Presentation is driven by the same product UI/paint path as `velvet play`
-//! (`build_product_ui_frame` / `paint_product_session` / `rasterize_product_paint`).
+//! Title menu → product VN host (`VnSession` + product paint + softbuffer).
 //!
-//! Click / Space / Enter: advance  
-//! Up/Down or W/S: move choice · Enter/Click: confirm  
-//! R: restart · Esc: quit · `--headless`: auto-play to ending
+//! Title: ↑↓ Enter · Esc  
+//! Play: Space/Click advance · ↑↓ choices · R restart to menu · Esc quit  
+//! `--headless`: title auto-start + auto-play to ending
+
+mod menu;
 
 use std::num::NonZeroU32;
 use std::path::PathBuf;
@@ -22,10 +23,18 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
-const WW: u32 = 960;
-const WH: u32 = 540;
+use menu::{load_rgb, paint_novel_menu, move_sel, RgbImage, MENU_ITEMS, WW, WH};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Screen {
+    Title,
+    Play,
+}
 
 struct App {
+    screen: Screen,
+    menu_sel: usize,
+    menu_bg: Option<RgbImage>,
     session: VnSession,
     story_path: PathBuf,
     window: Option<Arc<Window>>,
@@ -34,7 +43,8 @@ struct App {
     last: Instant,
     headless: bool,
     hframes: u32,
-    /// Reused CPU framebuffer (ARGB softbuffer pixels).
+    headless_done: bool,
+    /// Logical framebuffer (title always 1280×720; play may letterbox into window).
     pixels: Vec<u32>,
 }
 
@@ -48,6 +58,18 @@ fn story_path() -> PathBuf {
         .into_iter()
         .find(|p| p.exists())
         .unwrap_or_else(|| PathBuf::from("story/main.vel"))
+}
+
+fn ui_dir() -> PathBuf {
+    let candidates = [
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/ui"),
+        PathBuf::from("demos/velvet-novella/data/ui"),
+        PathBuf::from("data/ui"),
+    ];
+    candidates
+        .into_iter()
+        .find(|p| p.join("menu_bg.jpg").exists())
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/ui"))
 }
 
 fn open_session(path: &PathBuf) -> Result<VnSession> {
@@ -67,11 +89,35 @@ fn present_session(session: &VnSession, pixels: &mut [u32], ww: u32, wh: u32) ->
     list
 }
 
+fn letterbox_present(src: &[u32], sw: u32, sh: u32, dw: u32, dh: u32, void: u32) -> Vec<u32> {
+    let mut out = vec![void; (dw * dh) as usize];
+    if sw == 0 || sh == 0 {
+        return out;
+    }
+    let scale = (dw as f32 / sw as f32).min(dh as f32 / sh as f32);
+    let tw = ((sw as f32 * scale).round() as u32).max(1).min(dw);
+    let th = ((sh as f32 * scale).round() as u32).max(1).min(dh);
+    let ox = (dw - tw) / 2;
+    let oy = (dh - th) / 2;
+    for y in 0..th {
+        let sy = y * sh / th;
+        for x in 0..tw {
+            let sx = x * sw / tw;
+            out[((oy + y) * dw + (ox + x)) as usize] = src[(sy * sw + sx) as usize];
+        }
+    }
+    out
+}
+
 impl App {
     fn new(headless: bool) -> Result<Self> {
         let story_path = story_path();
         let session = open_session(&story_path)?;
+        let menu_bg = load_rgb(&ui_dir().join("menu_bg.jpg"));
         Ok(Self {
+            screen: Screen::Title,
+            menu_sel: 0,
+            menu_bg,
             session,
             story_path,
             window: None,
@@ -80,35 +126,30 @@ impl App {
             last: Instant::now(),
             headless,
             hframes: 0,
+            headless_done: false,
             pixels: vec![0; (WW * WH) as usize],
         })
     }
 
-    fn restart(&mut self) {
+    fn start_game(&mut self) {
         if let Ok(s) = open_session(&self.story_path) {
             self.session = s;
         }
+        self.screen = Screen::Play;
     }
 
-    fn tick(&mut self, dt: f32) {
-        self.session.tick(dt);
-        if let Some(w) = &self.window {
-            let frame = build_product_ui_frame(&self.session);
-            let title = if frame.wait == "ended" {
-                "Luz de Estación — FIN (R restart · Esc quit)".into()
-            } else if frame.choice_visible {
-                format!(
-                    "Luz de Estación — choice {}/{}",
-                    frame.selected_choice + 1,
-                    frame.choices.len().max(1)
-                )
-            } else if !frame.namebox.trim().is_empty() {
-                format!("Luz de Estación — {}", frame.namebox)
-            } else {
-                "Luz de Estación".into()
-            };
-            w.set_title(&title);
-            w.request_redraw();
+    fn to_title(&mut self) {
+        self.screen = Screen::Title;
+        self.menu_sel = 0;
+    }
+
+    fn confirm_menu(&mut self, el: &ActiveEventLoop) {
+        match self.menu_sel {
+            0 => self.start_game(),
+            4 => el.exit(),
+            _ => {
+                // stubs: Continuar / Galería / Opciones
+            }
         }
     }
 
@@ -127,66 +168,102 @@ impl App {
             return;
         };
         let size = window.inner_size();
-        let ww = size.width.max(1);
-        let wh = size.height.max(1);
-        if self.pixels.len() != (ww * wh) as usize {
-            self.pixels.resize((ww * wh) as usize, 0);
+        let dw = size.width.max(1);
+        let dh = size.height.max(1);
+
+        match self.screen {
+            Screen::Title => {
+                if self.pixels.len() != (WW * WH) as usize {
+                    self.pixels.resize((WW * WH) as usize, 0);
+                }
+                paint_novel_menu(&mut self.pixels, self.menu_bg.as_ref(), self.menu_sel);
+                window.set_title("Luz de Estación — menú");
+            }
+            Screen::Play => {
+                if self.pixels.len() != (WW * WH) as usize {
+                    self.pixels.resize((WW * WH) as usize, 0);
+                }
+                let list = present_session(&self.session, &mut self.pixels, WW, WH);
+                let _ = list;
+                if matches!(self.session.player().wait(), StoryWait::Ended) {
+                    let end = self
+                        .session
+                        .player()
+                        .variables()
+                        .get("ending")
+                        .display_str();
+                    let msg = format!("FIN  ending={end}  (R menu)");
+                    velvet_story::draw_text_line(
+                        &mut self.pixels,
+                        WW,
+                        WH,
+                        40,
+                        (WH / 3) as i32,
+                        "=== FIN ===",
+                        velvet_story::pack_rgb(255, 220, 120),
+                        3,
+                    );
+                    velvet_story::draw_text_line(
+                        &mut self.pixels,
+                        WW,
+                        WH,
+                        40,
+                        (WH / 3) as i32 + 36,
+                        &msg,
+                        velvet_story::pack_rgb(220, 220, 235),
+                        2,
+                    );
+                }
+                velvet_story::draw_text_line(
+                    &mut self.pixels,
+                    WW,
+                    WH,
+                    12,
+                    10,
+                    "Space/Click  |  Up/Down  |  R menu  |  Esc quit",
+                    velvet_story::pack_rgb(150, 145, 165),
+                    1,
+                );
+                let frame = build_product_ui_frame(&self.session);
+                let title = if frame.wait == "ended" {
+                    "Luz de Estación — FIN".into()
+                } else if frame.choice_visible {
+                    format!(
+                        "Luz de Estación — choice {}/{}",
+                        frame.selected_choice + 1,
+                        frame.choices.len().max(1)
+                    )
+                } else if !frame.namebox.trim().is_empty() {
+                    format!("Luz de Estación — {}", frame.namebox)
+                } else {
+                    "Luz de Estación".into()
+                };
+                window.set_title(&title);
+            }
         }
 
-        let list = present_session(&self.session, &mut self.pixels, ww, wh);
-        // Ending overlay text (extra host chrome on top of product paint)
-        if matches!(self.session.player().wait(), StoryWait::Ended) {
-            let end = self
-                .session
-                .player()
-                .variables()
-                .get("ending")
-                .display_str();
-            let msg = format!("FIN  ending={end}  (R restart)");
-            velvet_story::draw_text_line(
-                &mut self.pixels,
-                ww,
-                wh,
-                40,
-                (wh / 3) as i32,
-                "=== FIN ===",
-                velvet_story::pack_rgb(255, 220, 120),
-                3,
-            );
-            velvet_story::draw_text_line(
-                &mut self.pixels,
-                ww,
-                wh,
-                40,
-                (wh / 3) as i32 + 36,
-                &msg,
-                velvet_story::pack_rgb(220, 220, 235),
-                2,
-            );
-        }
-        // Hint bar
-        velvet_story::draw_text_line(
-            &mut self.pixels,
-            ww,
-            wh,
-            12,
-            10,
-            "Space/Click advance | Up/Down choices | R restart | Esc quit",
-            velvet_story::pack_rgb(150, 145, 165),
-            1,
-        );
-        let _ = list; // keep paint list for possible debug
+        let present = if dw == WW && dh == WH {
+            self.pixels.clone()
+        } else {
+            letterbox_present(
+                &self.pixels,
+                WW,
+                WH,
+                dw,
+                dh,
+                velvet_story::pack_rgb(8, 6, 14),
+            )
+        };
 
         let Some(surface) = self.surface.as_mut() else {
             return;
         };
-        let _ = surface.resize(
-            NonZeroU32::new(ww).unwrap(),
-            NonZeroU32::new(wh).unwrap(),
-        );
-        let mut buf = surface.buffer_mut().unwrap();
-        buf[..self.pixels.len()].copy_from_slice(&self.pixels);
-        let _ = buf.present();
+        let _ = surface.resize(NonZeroU32::new(dw).unwrap(), NonZeroU32::new(dh).unwrap());
+        if let Ok(mut buf) = surface.buffer_mut() {
+            let n = present.len().min(buf.len());
+            buf[..n].copy_from_slice(&present[..n]);
+            let _ = buf.present();
+        }
     }
 }
 
@@ -217,43 +294,61 @@ impl ApplicationHandler for App {
                 let PhysicalKey::Code(c) = event.physical_key else {
                     return;
                 };
-                match c {
-                    KeyCode::Space | KeyCode::Enter | KeyCode::NumpadEnter => {
-                        self.advance_or_choose();
-                    }
-                    KeyCode::ArrowUp | KeyCode::KeyW => {
-                        if self.session.choice.open {
-                            self.session.choice.move_sel(-1);
+                match self.screen {
+                    Screen::Title => match c {
+                        KeyCode::ArrowUp | KeyCode::KeyW => {
+                            self.menu_sel = move_sel(self.menu_sel, -1);
                         }
-                    }
-                    KeyCode::ArrowDown | KeyCode::KeyS => {
-                        if self.session.choice.open {
-                            self.session.choice.move_sel(1);
+                        KeyCode::ArrowDown | KeyCode::KeyS => {
+                            self.menu_sel = move_sel(self.menu_sel, 1);
                         }
-                    }
-                    KeyCode::Digit1 | KeyCode::Numpad1 => {
-                        if self.session.choice.open {
-                            let _ = self.session.choose_arm(0);
+                        KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
+                            self.confirm_menu(el);
                         }
-                    }
-                    KeyCode::Digit2 | KeyCode::Numpad2 => {
-                        if self.session.choice.open {
-                            let _ = self.session.choose_arm(1);
+                        KeyCode::Escape => el.exit(),
+                        _ => {}
+                    },
+                    Screen::Play => match c {
+                        KeyCode::Space | KeyCode::Enter | KeyCode::NumpadEnter => {
+                            self.advance_or_choose();
                         }
-                    }
-                    KeyCode::Digit3 | KeyCode::Numpad3 => {
-                        if self.session.choice.open {
-                            let _ = self.session.choose_arm(2);
+                        KeyCode::ArrowUp | KeyCode::KeyW => {
+                            if self.session.choice.open {
+                                self.session.choice.move_sel(-1);
+                            }
                         }
-                    }
-                    KeyCode::Digit4 | KeyCode::Numpad4 => {
-                        if self.session.choice.open {
-                            let _ = self.session.choose_arm(3);
+                        KeyCode::ArrowDown | KeyCode::KeyS => {
+                            if self.session.choice.open {
+                                self.session.choice.move_sel(1);
+                            }
                         }
-                    }
-                    KeyCode::KeyR => self.restart(),
-                    KeyCode::Escape => el.exit(),
-                    _ => {}
+                        KeyCode::Digit1 | KeyCode::Numpad1 => {
+                            if self.session.choice.open {
+                                let _ = self.session.choose_arm(0);
+                            }
+                        }
+                        KeyCode::Digit2 | KeyCode::Numpad2 => {
+                            if self.session.choice.open {
+                                let _ = self.session.choose_arm(1);
+                            }
+                        }
+                        KeyCode::Digit3 | KeyCode::Numpad3 => {
+                            if self.session.choice.open {
+                                let _ = self.session.choose_arm(2);
+                            }
+                        }
+                        KeyCode::Digit4 | KeyCode::Numpad4 => {
+                            if self.session.choice.open {
+                                let _ = self.session.choose_arm(3);
+                            }
+                        }
+                        KeyCode::KeyR => self.to_title(),
+                        KeyCode::Escape => el.exit(),
+                        _ => {}
+                    },
+                }
+                if let Some(w) = &self.window {
+                    w.request_redraw();
                 }
             }
             WindowEvent::MouseInput {
@@ -261,13 +356,21 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
-                self.advance_or_choose();
+                match self.screen {
+                    Screen::Title => self.confirm_menu(el),
+                    Screen::Play => self.advance_or_choose(),
+                }
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
             }
             WindowEvent::RedrawRequested => {
                 let now = Instant::now();
                 let dt = (now - self.last).as_secs_f32().min(0.05);
                 self.last = now;
-                self.tick(dt);
+                if self.screen == Screen::Play {
+                    self.session.tick(dt);
+                }
                 self.paint();
             }
             _ => {}
@@ -276,37 +379,63 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         if self.headless {
-            self.hframes += 1;
-            self.session.tick(1.0 / 30.0);
-            // Exercise product paint path every few frames (fixed logical size)
-            if self.hframes % 5 == 0 {
-                if self.pixels.len() != (WW * WH) as usize {
-                    self.pixels.resize((WW * WH) as usize, 0);
-                }
-                let _ = present_session(&self.session, &mut self.pixels, WW, WH);
+            if self.headless_done {
+                el.exit();
+                return;
             }
-            match self.session.player().wait().clone() {
-                StoryWait::Line | StoryWait::Ready => self.session.advance(),
-                StoryWait::Choice => {
-                    let _ = self.session.choose_arm(0);
+            self.hframes += 1;
+            match self.screen {
+                Screen::Title => {
+                    // Auto-start after a few frames (paint title path first)
+                    if self.hframes == 3 {
+                        if self.pixels.len() != (WW * WH) as usize {
+                            self.pixels.resize((WW * WH) as usize, 0);
+                        }
+                        paint_novel_menu(&mut self.pixels, self.menu_bg.as_ref(), 0);
+                        println!(
+                            "headless title_menu painted items={} bg={}",
+                            MENU_ITEMS.len(),
+                            self.menu_bg.is_some()
+                        );
+                    }
+                    if self.hframes >= 5 {
+                        self.start_game();
+                        println!("headless start Nueva partida");
+                    }
                 }
-                StoryWait::Ended => {
-                    let end = self
-                        .session
-                        .player()
-                        .variables()
-                        .get("ending")
-                        .display_str();
-                    let list = paint_product_session(&self.session);
-                    println!(
-                        "headless ending={end} steps={} paint_cmds={} say_geom={}",
-                        self.hframes,
-                        list.len(),
-                        list.has_say_geometry() || list.commands.iter().any(|_| true)
-                    );
-                    println!("ASSERT_OK velvet_novella_product_paint");
-                    el.exit();
-                    return;
+                Screen::Play => {
+                    self.session.tick(1.0 / 30.0);
+                    if self.hframes % 5 == 0 {
+                        if self.pixels.len() != (WW * WH) as usize {
+                            self.pixels.resize((WW * WH) as usize, 0);
+                        }
+                        let _ = present_session(&self.session, &mut self.pixels, WW, WH);
+                    }
+                    match self.session.player().wait().clone() {
+                        StoryWait::Line | StoryWait::Ready => self.session.advance(),
+                        StoryWait::Choice => {
+                            let _ = self.session.choose_arm(0);
+                        }
+                        StoryWait::Ended => {
+                            let end = self
+                                .session
+                                .player()
+                                .variables()
+                                .get("ending")
+                                .display_str();
+                            let list = paint_product_session(&self.session);
+                            println!(
+                                "headless ending={end} steps={} paint_cmds={}",
+                                self.hframes,
+                                list.len()
+                            );
+                            println!("ASSERT_OK velvet_novella_title_and_play");
+                            self.headless_done = true;
+                            el.exit();
+                            return;
+                        }
+                        _ => {}
+                    }
                 }
             }
             if self.hframes > 5000 {
@@ -327,8 +456,8 @@ impl ApplicationHandler for App {
 fn main() -> Result<()> {
     velvet_core::init_tracing_default("velvet_novella=info,info");
     let headless = std::env::args().any(|a| a == "--headless");
-    println!("=== Luz de Estación — product VN host ===");
-    println!("paint path: VnSession -> ProductUiFrame -> ProductPaintList -> softbuffer");
+    println!("=== Luz de Estación — novela visual ===");
+    println!("menu: Nueva partida · Continuar · Galeria · Opciones · Salir");
     println!("story: demos/velvet-novella/story/main.vel");
 
     let el = EventLoop::new()?;
@@ -355,7 +484,13 @@ mod host_tests {
         let list = present_session(&session, &mut pixels, 320, 180);
         assert!(list.has_say_geometry() || session.say.visible);
         assert!(!list.is_empty());
-        let painted = pixels.iter().filter(|&&p| p != 0 && p != velvet_story::pack_rgb(8, 6, 14)).count();
-        assert!(painted > 100, "rasterized product frame should paint pixels, got {painted}");
+        let painted = pixels
+            .iter()
+            .filter(|&&p| p != 0 && p != velvet_story::pack_rgb(8, 6, 14))
+            .count();
+        assert!(
+            painted > 100,
+            "rasterized product frame should paint pixels, got {painted}"
+        );
     }
 }

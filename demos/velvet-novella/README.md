@@ -1,10 +1,8 @@
-# Velvet Novella — product VN windowed host
+# Velvet Novella — Luz de Estación
 
-**Luz de Estación** demo driven by the shared product presentation path:
+Novela visual corta con **menú de título** y host de producto:
 
-`VnSession` → `build_product_ui_frame` → `paint_product_session` → `rasterize_product_paint` → softbuffer
-
-Same story-state source as `velvet play` (`[ui]` / `[gpu-paint]`).
+`Title menu` → `VnSession` → `paint_product_session` → softbuffer
 
 ## Run
 
@@ -13,16 +11,34 @@ cargo run -p velvet-novella --release
 cargo run -p velvet-novella --release -- --headless
 ```
 
-Or `run.bat` from the repo root.
+Or `run.bat` from the demo folder / repo root.
 
-## Controls
+## Title menu
+
+| Input | Action |
+|-------|--------|
+| ↑ / ↓ (W/S) | Mover selección |
+| Enter / Space / Click | Confirmar |
+| Esc | Salir |
+
+Opciones:
+
+1. **Nueva partida** — entra a la historia  
+2. Continuar — (stub)  
+3. Galería — (stub)  
+4. Opciones — (stub)  
+5. **Salir**
+
+Art: `data/ui/menu_bg.jpg` · título con fuente serif (Georgia/Times vía fontdue).
+
+## In-game controls
 
 | Input | Action |
 |-------|--------|
 | Space / Click / Enter | Advance or confirm choice |
 | Up / Down (W/S) | Move choice |
 | 1–4 | Select choice arm |
-| R | Restart |
+| R | Volver al menú |
 | Esc | Quit |
 
 ## Story
