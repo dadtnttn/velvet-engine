@@ -1,0 +1,33 @@
+{
+  "cards": {
+    "strike": {
+      "id": "strike",
+      "name": "Strike",
+      "cost": 1,
+      "tags": ["attack", "basic"],
+      "card_type": "attack"
+    },
+    "guard": {
+      "id": "guard",
+      "name": "Guard",
+      "cost": 1,
+      "tags": ["defense", "basic"],
+      "card_type": "skill"
+    },
+    "fireball": {
+      "id": "fireball",
+      "name": "Fireball",
+      "cost": 3,
+      "tags": ["spell", "fire"],
+      "card_type": "spell",
+      "text": "Deal 6 damage."
+    },
+    "draw_two": {
+      "id": "draw_two",
+      "name": "Draw Two",
+      "cost": 2,
+      "tags": ["skill"],
+      "card_type": "skill"
+    }
+  }
+}
