@@ -5,7 +5,8 @@
 //! Rust host: window, paint, input → story resume + `stakes.*` / `style.*`
 //!
 //! Controls: menus ↑↓ Enter · Play: 1–8 select · P play · D discard · Esc  
-//! `--headless`: auto smoke
+//! `--headless`: auto smoke  
+//! `--dev`: live reload styles / images / story from disk (no full restart)
 
 mod catalog;
 mod game;
@@ -23,6 +24,7 @@ use anyhow::{bail, Result};
 use softbuffer::{Context as SbContext, Surface};
 use velvet_anim::Pose3D;
 use velvet_cards::{validate_deck, DeckRules};
+use velvet_stakes::{ImageSlot, LiveDevSession};
 use velvet_story::{StoryPlayer, StoryValue, StoryWait};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -47,6 +49,9 @@ struct App {
     logo_emblem: Option<RgbImage>,
     portrait: Option<RgbImage>,
     theme: Theme,
+    /// Live author hot-reload (`--dev`).
+    live_dev: Option<LiveDevSession>,
+    data_root: PathBuf,
     window: Option<Arc<Window>>,
     context: Option<SbContext<Arc<Window>>>,
     surface: Option<Surface<Arc<Window>, Arc<Window>>>,
@@ -54,6 +59,7 @@ struct App {
     headless: bool,
     hframes: u32,
     pixels: Vec<u32>,
+    status_line: String,
 }
 
 fn data_root() -> PathBuf {
@@ -87,7 +93,7 @@ fn ui_dir(root: &std::path::Path) -> PathBuf {
 }
 
 impl App {
-    fn new(headless: bool) -> Result<Self> {
+    fn new(headless: bool, dev: bool) -> Result<Self> {
         let root = data_root();
         let art_path = art_dir(&root);
         let (cat, deck, stats) = make_catalog_and_deck(&art_path);
@@ -115,6 +121,12 @@ impl App {
         let host = Arc::new(StakesHost::new(world));
         let player = boot_player(host.clone(), &root)?;
 
+        let live_dev = if dev {
+            Some(LiveDevSession::watch_stakes_tree(&root))
+        } else {
+            None
+        };
+
         Ok(Self {
             host,
             player,
@@ -123,6 +135,8 @@ impl App {
             logo_emblem,
             portrait,
             theme: Theme::default(),
+            live_dev,
+            data_root: root,
             window: None,
             context: None,
             surface: None,
@@ -130,7 +144,67 @@ impl App {
             headless,
             hframes: 0,
             pixels: vec![0; (WW * WH) as usize],
+            status_line: if dev {
+                "DEV live-reload on".into()
+            } else {
+                String::new()
+            },
         })
+    }
+
+    /// Poll watched author files and apply (no process restart).
+    fn tick_live_dev(&mut self) {
+        let Some(dev) = self.live_dev.as_mut() else {
+            return;
+        };
+        let apply = dev.tick();
+        if apply.reloaded.is_empty() && apply.stylesheet.is_none() && apply.images.is_empty() {
+            return;
+        }
+        if let Some((name, sheet)) = apply.stylesheet {
+            if let Err(e) = self.host.apply_stylesheet(&name, sheet) {
+                eprintln!("dev: apply stylesheet failed: {e}");
+            } else {
+                self.status_line = format!("dev: style `{name}` live");
+            }
+        }
+        for (slot, buf) in apply.images {
+            match slot {
+                ImageSlot::MenuBg => self.menu_bg = Some(buf),
+                ImageSlot::Logo => self.logo_emblem = Some(buf),
+                ImageSlot::Portrait => self.portrait = Some(buf),
+                ImageSlot::Card(id) => {
+                    self.art.images.insert(id, buf);
+                }
+            }
+            self.status_line = "dev: image live".into();
+        }
+        if apply.story_reload {
+            // Soft re-boot only when sitting on title wait (safe)
+            let phase = match self.player.wait() {
+                StoryWait::Host { token } => Some(token.as_str()),
+                _ => None,
+            };
+            if matches!(phase, Some("title") | None) {
+                match boot_player(self.host.clone(), &self.data_root) {
+                    Ok(p) => {
+                        self.player = p;
+                        self.status_line = "dev: story reloaded".into();
+                        eprintln!("dev: .vstory soft-reloaded");
+                    }
+                    Err(e) => eprintln!("dev: story reload failed (kept previous): {e}"),
+                }
+            } else {
+                self.status_line = "dev: story changed (reload on title)".into();
+                eprintln!("dev: story file changed — will soft-reload when back on title");
+            }
+        }
+        for line in apply.log {
+            // already eprinted inside session; keep last for window title
+            if line.contains("reloaded") {
+                self.status_line = line;
+            }
+        }
     }
 
     fn with_world_mut<R>(&self, f: impl FnOnce(&mut StakesWorld) -> R) -> R {
@@ -614,8 +688,14 @@ impl App {
         }
         let screen = self.with_world(|w| w.screen);
         let phase = self.wait_phase().unwrap_or_default();
+        let dev = if self.live_dev.is_some() { " · DEV" } else { "" };
+        let extra = if self.status_line.is_empty() {
+            String::new()
+        } else {
+            format!(" · {}", self.status_line.chars().take(48).collect::<String>())
+        };
         window.set_title(&format!(
-            "Velvet Arcana — {:?} · story:{phase}",
+            "Velvet Arcana — {:?} · story:{phase}{dev}{extra}",
             screen
         ));
     }
@@ -997,6 +1077,8 @@ impl ApplicationHandler for App {
         let dt = now.duration_since(self.last).as_secs_f32().min(0.05);
         self.last = now;
         self.hframes += 1;
+        // Live author reload (styles / images / story) — like HTML live refresh
+        self.tick_live_dev();
         self.with_world_mut(|w| {
             if let Some(r) = w.run.as_mut() {
                 r.tick_anims(dt);
@@ -1020,9 +1102,11 @@ impl ApplicationHandler for App {
 
 fn main() -> Result<()> {
     velvet_core::init_tracing_default("velvet_stakes=info,info");
-    let headless = std::env::args().any(|a| a == "--headless");
-    let mut app = App::new(headless)?;
-    let (cards, deck, rules, fns, phase) = {
+    let args: Vec<String> = std::env::args().collect();
+    let headless = args.iter().any(|a| a == "--headless");
+    let dev = args.iter().any(|a| a == "--dev");
+    let mut app = App::new(headless, dev)?;
+    let (cards, deck, rules, fns, phase, watches) = {
         let w = app.host.world.lock().unwrap();
         (
             app.art.images.len(),
@@ -1030,15 +1114,22 @@ fn main() -> Result<()> {
             w.stylesheet.rules.len(),
             w.stylesheet.script.functions.len(),
             app.wait_phase(),
+            app.live_dev.as_ref().map(|d| d.watch_count()).unwrap_or(0),
         )
     };
     println!(
-        "Velvet Arcana LOCAL — story=.vstory style=.vcss cards={cards} deck={deck} vcss_rules={rules} vcss_fns={fns} phase={phase:?}"
+        "Velvet Arcana LOCAL — story=.vstory style=.vcss cards={cards} deck={deck} vcss_rules={rules} vcss_fns={fns} phase={phase:?} dev={} watches={watches}",
+        if dev { "on" } else { "off" }
     );
     if headless {
         println!("headless smoke…");
+    } else if dev {
+        println!(
+            "DEV live-reload: edit data/styles/*.vcss, data/ui/*, data/art/*, data/story/*.vstory — no restart"
+        );
     } else {
         println!("Lobby driven by data/story/main.vstory · motion by data/styles/casino.vcss");
+        println!("Tip: cargo run -p velvet-stakes -- --dev   for live style/image reload");
     }
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Poll);

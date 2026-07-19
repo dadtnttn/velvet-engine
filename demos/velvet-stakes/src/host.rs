@@ -175,6 +175,19 @@ impl StakesHost {
         }
     }
 
+    /// Apply a reparsed stylesheet from live-dev (or tools) without restarting.
+    pub fn apply_stylesheet(&self, name: &str, sheet: Stylesheet) -> Result<(), String> {
+        let mut w = self.world.lock().map_err(|e| e.to_string())?;
+        w.stylesheet = sheet.clone();
+        let mut reg = self
+            .style
+            .registry
+            .lock()
+            .map_err(|e| e.to_string())?;
+        reg.insert(name, sheet);
+        Ok(())
+    }
+
     fn load_vcss_into(&self, w: &mut StakesWorld, name: &str, src: &str) -> Result<(), String> {
         let sheet = parse_stylesheet(src).map_err(|e| e.to_string())?;
         w.stylesheet = sheet.clone();

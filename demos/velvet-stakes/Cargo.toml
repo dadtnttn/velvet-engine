@@ -7,6 +7,10 @@ license.workspace = true
 rust-version.workspace = true
 publish = false
 
+[lib]
+name = "velvet_stakes"
+path = "src/lib.rs"
+
 [[bin]]
 name = "velvet-stakes"
 path = "src/main.rs"
@@ -18,6 +22,7 @@ velvet-style = { workspace = true }
 velvet-math = { workspace = true }
 velvet-story = { workspace = true }
 velvet-story-lang = { workspace = true }
+velvet-assets = { workspace = true }
 velvet-core = { workspace = true }
 anyhow = { workspace = true }
 indexmap = { workspace = true }

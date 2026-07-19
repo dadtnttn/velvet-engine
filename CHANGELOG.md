@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **velvet-stakes `--dev` live reload**: watches `data/styles/*.vcss`,
+  `data/ui/*`, `data/art/*`, `data/story/*.vstory` via `HotReloader` +
+  `LiveDevSession` — reapply styles/images (and soft story re-boot on title)
+  without process restart. `cargo test -p velvet-stakes` covers the path.
 - **velvet-stakes driven by `.vstory` + `.vcss`**: flow in
   `demos/velvet-stakes/data/story/main.vstory`; casino look/motion in
   `casino.vcss`; Rust host exposes `stakes.*` and forwards `style.*`

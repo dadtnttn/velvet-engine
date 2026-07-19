@@ -15,10 +15,35 @@ cd C:\Hijosdelsol\VelvetEngine
 cargo run -p velvet-stakes --release
 ```
 
+### Dev / live reload (HTML-like)
+
+Keep the game open and edit author files on disk — no quit/relaunch for styles, images, or story:
+
+```powershell
+cargo run -p velvet-stakes --release -- --dev
+```
+
+| Watch | Path | On change |
+|-------|------|-----------|
+| Style | `data/styles/casino.vcss` | Reparse; UI/motion use new sheet (bad parse keeps last good) |
+| Images | `data/ui/*`, `data/art/*.jpg` | Reload buffer for next paint |
+| Story | `data/story/main.vstory` | Soft re-boot when on title (or flagged until title) |
+
+Console prints `dev: reloaded …` lines; window title shows `DEV`.
+
+> Rust `.rs` still needs a rebuild — live mode is for **author assets** (`.vcss`, images, `.vstory`), not cargo recompile.
+
 Headless:
 
 ```powershell
 cargo run -p velvet-stakes -- --headless
+cargo run -p velvet-stakes -- --headless --dev
+```
+
+Lib tests (reload path):
+
+```powershell
+cargo test -p velvet-stakes
 ```
 
 ## Story ↔ CSS wiring
