@@ -54,12 +54,14 @@ pub use animation::{
 };
 pub use host::StyleStoryHost;
 pub use parse::{parse_stylesheet, StyleParseError, StyleRule, Stylesheet};
-pub use resolve::{resolve, ComputedStyle, StyleQuery, StyleRegistry};
+pub use resolve::{
+    expand_box_shorthands, resolve, resolve_expanded, ComputedStyle, StyleQuery, StyleRegistry,
+};
 pub use script::{
     actions_to_timelines, eval_script_fn, parse_script, run_event, run_function, EventHandler,
     Function, JsValue, ScriptError, ScriptModule, ScriptRun, StyleAction,
 };
-pub use value::{parse_color, parse_value, Color, StyleValue};
+pub use value::{parse_color, parse_value, Color, StyleValue, KNOWN_PROPERTIES};
 
 /// Run a named `@script` function from a parsed stylesheet.
 pub fn call_style_fn(

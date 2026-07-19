@@ -192,25 +192,110 @@ fn split_ident(s: &str) -> (&str, &str) {
 }
 
 /// Resolve computed style from sheet + query (cascade by specificity then order).
+///
+/// Custom properties (`--name`) are collected from `:root` and matched rules, then
+/// `var(--name)` values are substituted (one-level; missing vars stay as [`StyleValue::Var`]).
 pub fn resolve(sheet: &Stylesheet, query: &StyleQuery) -> ComputedStyle {
     let mut matched: Vec<(usize, (u16, u16, u16), &StyleRule, &str)> = Vec::new();
     for (order, rule) in sheet.rules.iter().enumerate() {
         for sel in &rule.selectors {
-            if selector_matches(sel, query) {
-                matched.push((order, specificity(sel), rule, sel.as_str()));
+            let is_root = sel.trim() == ":root";
+            if is_root || selector_matches(sel, query) {
+                // :root always participates (for tokens); specificity stays low
+                let spec = if is_root {
+                    (0, 0, 0)
+                } else {
+                    specificity(sel)
+                };
+                matched.push((order, spec, rule, sel.as_str()));
             }
         }
     }
-    matched.sort_by(|a, b| {
-        a.1.cmp(&b.1).then(a.0.cmp(&b.0))
-    });
+    matched.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
     let mut props = IndexMap::new();
-    for (_, _, rule, _) in matched {
+    for (_, _, rule, _) in &matched {
         for (k, v) in &rule.declarations {
             props.insert(k.clone(), v.clone());
         }
     }
-    ComputedStyle { props }
+    // Custom property map (also includes non-var props named --x)
+    let mut vars = IndexMap::new();
+    for (k, v) in &props {
+        if k.starts_with("--") {
+            vars.insert(k.clone(), v.clone());
+        }
+    }
+    // Substitute var()
+    let mut resolved = IndexMap::new();
+    for (k, v) in props {
+        resolved.insert(k, resolve_var_value(&v, &vars, 0));
+    }
+    ComputedStyle { props: resolved }
+}
+
+fn resolve_var_value(
+    value: &StyleValue,
+    vars: &IndexMap<String, StyleValue>,
+    depth: u8,
+) -> StyleValue {
+    if depth > 8 {
+        return value.clone();
+    }
+    match value {
+        StyleValue::Var(name) => {
+            let key = if name.starts_with("--") {
+                name.clone()
+            } else {
+                format!("--{name}")
+            };
+            if let Some(v) = vars.get(&key) {
+                // Allow var pointing at another var
+                resolve_var_value(v, vars, depth + 1)
+            } else {
+                StyleValue::Var(key)
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+/// Expand shorthand box props on a computed style (margin/padding).
+pub fn expand_box_shorthands(style: &mut ComputedStyle) {
+    expand_quad_shorthand(style, "margin");
+    expand_quad_shorthand(style, "padding");
+}
+
+fn expand_quad_shorthand(style: &mut ComputedStyle, base: &str) {
+    let Some(v) = style.props.get(base).cloned() else {
+        return;
+    };
+    let n = v.as_f32().unwrap_or(0.0);
+    // 1-value: all sides
+    for side in ["top", "right", "bottom", "left"] {
+        let key = format!("{base}-{side}");
+        style
+            .props
+            .entry(key)
+            .or_insert(StyleValue::Number(n));
+    }
+    // convenience x/y if missing
+    let x_key = format!("{base}-x");
+    let y_key = format!("{base}-y");
+    style
+        .props
+        .entry(x_key)
+        .or_insert(StyleValue::Number(n));
+    style
+        .props
+        .entry(y_key)
+        .or_insert(StyleValue::Number(n));
+}
+
+/// Resolve then expand box shorthands.
+pub fn resolve_expanded(sheet: &Stylesheet, query: &StyleQuery) -> ComputedStyle {
+    let mut c = resolve(sheet, query);
+    expand_box_shorthands(&mut c);
+    c
 }
 
 /// Registry of named sheets for runtime invoke.
@@ -300,5 +385,38 @@ mod tests {
         let c = resolve(&sheet, &StyleQuery::default().with_id("start"));
         assert_eq!(c.keyword("icon", ""), "star");
         assert_eq!(c.number("height", 0.0), 52.0);
+    }
+
+    #[test]
+    fn css_variables_from_root() {
+        let sheet = parse_stylesheet(
+            r#"
+            :root {
+              --gold: #ebc878;
+              --pad: 14;
+            }
+            .button {
+              color: var(--gold);
+              padding-x: var(--pad);
+              height: 52;
+            }
+            "#,
+        )
+        .unwrap();
+        let c = resolve(&sheet, &StyleQuery::class("button"));
+        let col = c.color_text();
+        assert_eq!(col.r, 0xeb);
+        assert_eq!(col.g, 0xc8);
+        assert_eq!(c.number("padding-x", 0.0), 14.0);
+        assert_eq!(c.number("height", 0.0), 52.0);
+    }
+
+    #[test]
+    fn margin_shorthand_expands() {
+        let sheet = parse_stylesheet(".box { margin: 8; width: 100; }").unwrap();
+        let c = resolve_expanded(&sheet, &StyleQuery::class("box"));
+        assert_eq!(c.number("margin-top", 0.0), 8.0);
+        assert_eq!(c.number("margin-x", 0.0), 8.0);
+        assert_eq!(c.number("width", 0.0), 100.0);
     }
 }

@@ -18,11 +18,19 @@ Legacy **`.vanim`** line scripts convert with `vanim_to_vcss`.
 ## CSS side
 
 ```css
+:root {
+  --gold: #ebc878;
+  --btn-height: 52;
+}
+
 .button {
   background: #0a0c16;
   border-color: #b9964b;
-  color: #d2af64;
-  height: 52;
+  color: var(--gold);
+  height: var(--btn-height);
+  padding-x: 14;
+  gap: 12;
+  border-radius: 4;
 }
 .button:selected {
   background: #501e78;
@@ -43,6 +51,25 @@ Legacy **`.vanim`** line scripts convert with `vanim_to_vcss`.
   animation-delay: 0.08s;
 }
 ```
+
+### Custom properties
+
+- On `:root` (or any matched rule): `--name: value;`
+- Use: `var(--name)` — substituted when resolving cascade
+- Missing vars remain as unresolved `StyleValue::Var`
+
+### Property groups (game UI)
+
+| Group | Properties |
+|-------|------------|
+| Color / chrome | `background`, `color`, `border-color`, `border-width`, `border-radius`, `glow`, `glow-strength`, `opacity` |
+| Box | `width`, `height`, `margin` (+ sides / `*-x`), `padding` (+ sides / `padding-x`), `gap` |
+| Type | `font-size`, `font-family`, `font-weight`, `letter-spacing`, `text-align` |
+| Motion static | `x`, `y`, `scale`, `rotate` / `yaw` |
+| Animation | `animation`, `animation-*`, `transition*` |
+| Game | `icon`, `icon-size`, `gold`, `neon`, `foil` |
+
+List for tooling: `KNOWN_PROPERTIES` in `velvet-style`. Hosts may ignore props they do not paint yet.
 
 ### Animation properties
 
