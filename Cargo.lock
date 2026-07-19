@@ -3199,6 +3199,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-stakes"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "softbuffer",
+ "velvet-cards",
+ "velvet-core",
+ "velvet-story",
+ "winit",
+]
+
+[[package]]
 name = "velvet-story"
 version = "0.1.0"
 dependencies = [
