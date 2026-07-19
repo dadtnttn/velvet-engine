@@ -29,3 +29,8 @@ desktop.ini
 
 # Generated reports (keep intentional ones under docs/reports)
 /tmp/
+
+# Local autonomous / agent scratch (do not publish)
+docs/engineering/AUTONOMOUS_STATUS.md
+**/AUTONOMOUS_STATUS.md
+
