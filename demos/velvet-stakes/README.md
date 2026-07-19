@@ -16,10 +16,16 @@ Headless:
 cargo run -p velvet-stakes -- --headless
 ```
 
-## Menu
+## Menu (módulos propios)
 
-Background: `data/ui/menu_bg.png`  
-Buttons: **START RUN · COLLECTION · SHOP · OPTIONS · QUIT**
+UI en `src/ui/` (`theme`, `menu`, `hud`).  
+Arte **original** generado (la imagen de referencia solo inspiró el estilo):
+
+- `data/ui/menu_bg.jpg` — lobby  
+- `data/ui/menu_panel.jpg` — columna de botones  
+- `data/ui/logo_emblem.jpg` — emblema  
+
+Botones: **START RUN · COLLECTION · SHOP · OPTIONS · QUIT**
 
 ## Cards
 

@@ -8,6 +8,7 @@
 
 mod catalog;
 mod render;
+mod ui;
 
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -28,12 +29,10 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
 use catalog::{make_catalog_and_deck, score_played, CardStats, HandScore};
-use render::{
-    blit_card, blit_cover, fill, load_rgb, outline, panel, rect, text, ArtBank, RgbImage,
-};
+use render::{blit_card, fill, load_rgb, rect, text, ArtBank, RgbImage};
+use ui::theme::{Theme, TITLE_ITEMS, WW, WH};
+use ui::{paint_collection, paint_options, paint_shop, paint_title_menu};
 
-const WW: u32 = 1280;
-const WH: u32 = 720;
 const HAND_SIZE: usize = 8;
 const MAX_SELECT: usize = 5;
 
@@ -361,7 +360,11 @@ struct App {
     stats: HashMap<String, CardStats>,
     deck_ids: Vec<String>,
     art: ArtBank,
+    /// Original generated lobby background (not the user reference file).
     menu_bg: Option<RgbImage>,
+    menu_panel: Option<RgbImage>,
+    logo_emblem: Option<RgbImage>,
+    theme: Theme,
     /// Meta stats shown on title HUD (flavor / progress).
     meta_chips: i64,
     meta_crystals: i64,
@@ -397,7 +400,7 @@ fn ui_dir() -> PathBuf {
     ];
     candidates
         .into_iter()
-        .find(|p| p.join("menu_bg.png").exists())
+        .find(|p| p.join("menu_bg.jpg").exists())
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/ui"))
 }
 
@@ -420,7 +423,10 @@ impl App {
                 art.images.len()
             );
         }
-        let menu_bg = load_rgb(&ui_dir().join("menu_bg.png"));
+        let ui = ui_dir();
+        let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
+        let menu_panel = load_rgb(&ui.join("menu_panel.jpg"));
+        let logo_emblem = load_rgb(&ui.join("logo_emblem.jpg"));
         Ok(Self {
             screen: Screen::Title,
             menu_sel: 0,
@@ -432,6 +438,9 @@ impl App {
             deck_ids: deck.cards,
             art,
             menu_bg,
+            menu_panel,
+            logo_emblem,
+            theme: Theme::default(),
             meta_chips: 12_450,
             meta_crystals: 870,
             meta_mult: 3.2,
@@ -446,17 +455,6 @@ impl App {
             hframes: 0,
             pixels: vec![0; (WW * WH) as usize],
         })
-    }
-
-    /// Nightfall Casino main menu (matches reference layout).
-    fn title_items() -> &'static [&'static str] {
-        &[
-            "START RUN",
-            "COLLECTION",
-            "SHOP",
-            "OPTIONS",
-            "QUIT",
-        ]
     }
 
     fn begin_run(&mut self) {
@@ -502,16 +500,33 @@ impl App {
 
     fn paint(&mut self) {
         match self.screen {
-            Screen::Title => self.paint_title(),
-            Screen::Collection => self.paint_stub_panel(
-                "COLLECTION",
-                "Your illustrated set — Strike Guard Fireball Focus Bash",
-            ),
-            Screen::Shop => self.paint_stub_panel(
-                "SHOP",
-                "Night market soon — packs jokers and foils (tools only for now)",
-            ),
-            Screen::Options => self.paint_howto(),
+            Screen::Title => {
+                paint_title_menu(
+                    &mut self.pixels,
+                    &self.theme,
+                    self.menu_bg.as_ref(),
+                    self.menu_panel.as_ref(),
+                    self.logo_emblem.as_ref(),
+                    self.menu_sel,
+                    self.meta_chips,
+                    self.meta_crystals,
+                    self.meta_mult,
+                );
+            }
+            Screen::Collection => {
+                paint_collection(
+                    &mut self.pixels,
+                    &self.theme,
+                    self.menu_bg.as_ref(),
+                    &self.art,
+                );
+            }
+            Screen::Shop => {
+                paint_shop(&mut self.pixels, &self.theme, self.menu_bg.as_ref());
+            }
+            Screen::Options => {
+                paint_options(&mut self.pixels, &self.theme, self.menu_bg.as_ref());
+            }
             Screen::BlindInfo => self.paint_blind(),
             Screen::Play | Screen::Pause => {
                 self.paint_play();
@@ -522,335 +537,6 @@ impl App {
             Screen::Result => self.paint_result(),
         }
         self.present();
-    }
-
-    fn paint_title(&mut self) {
-        // Full-bleed casino background (reference art)
-        if let Some(bg) = &self.menu_bg {
-            blit_cover(&mut self.pixels, WW, WH, bg);
-        } else {
-            fill(&mut self.pixels, WW, WH, (12, 8, 24));
-        }
-
-        // Soft left vignette so buttons stay readable
-        for x in 0..420 {
-            let a = (1.0 - x as f32 / 420.0) * 0.55;
-            for y in 0..WH as i32 {
-                let i = (y as u32 * WW + x as u32) as usize;
-                self.pixels[i] = blend_u32(self.pixels[i], pack_dark(), a);
-            }
-        }
-
-        // Top-left profile chip
-        panel(
-            &mut self.pixels,
-            WW,
-            WH,
-            28,
-            24,
-            260,
-            56,
-            (20, 12, 36),
-            0.72,
-        );
-        outline(
-            &mut self.pixels,
-            WW,
-            WH,
-            28,
-            24,
-            260,
-            56,
-            (160, 100, 220),
-            1,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            40,
-            34,
-            "The Collector",
-            (230, 200, 120),
-            1,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            40,
-            52,
-            "High Roller  ·  Lvl 17",
-            (180, 160, 200),
-            1,
-        );
-
-        // Top-right meta HUD
-        panel(
-            &mut self.pixels,
-            WW,
-            WH,
-            WW as i32 - 360,
-            20,
-            330,
-            44,
-            (16, 10, 28),
-            0.7,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            WW as i32 - 340,
-            32,
-            &format!(
-                "CHIPS {}  ·  CRYSTALS {}  ·  x{:.1}",
-                self.meta_chips, self.meta_crystals, self.meta_mult
-            ),
-            (220, 200, 255),
-            1,
-        );
-
-        // Logo block
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            48,
-            110,
-            "VELVET ARCANA",
-            (235, 200, 120),
-            3,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            52,
-            150,
-            "NIGHTFALL CASINO",
-            (180, 150, 220),
-            1,
-        );
-
-        // Menu buttons (left column, casino style)
-        let btn_x = 48;
-        let btn_w = 340;
-        let btn_h = 48;
-        let btn_y0 = 200;
-        for (i, item) in Self::title_items().iter().enumerate() {
-            let y = btn_y0 + i as i32 * (btn_h + 10);
-            let sel = i == self.menu_sel;
-            let fill_c = if sel {
-                (70, 30, 110)
-            } else {
-                (18, 12, 32)
-            };
-            let border = if sel {
-                (255, 200, 80)
-            } else {
-                (120, 70, 180)
-            };
-            panel(
-                &mut self.pixels,
-                WW,
-                WH,
-                btn_x,
-                y,
-                btn_w,
-                btn_h,
-                fill_c,
-                if sel { 0.88 } else { 0.75 },
-            );
-            outline(
-                &mut self.pixels,
-                WW,
-                WH,
-                btn_x,
-                y,
-                btn_w,
-                btn_h,
-                border,
-                if sel { 2 } else { 1 },
-            );
-            let label = if sel {
-                format!(">  {item}")
-            } else {
-                format!("   {item}")
-            };
-            text(
-                &mut self.pixels,
-                WW,
-                WH,
-                btn_x + 18,
-                y + 14,
-                &label,
-                if sel {
-                    (255, 230, 160)
-                } else {
-                    (210, 195, 230)
-                },
-                2,
-            );
-        }
-
-        // Daily ritual / footer flavor
-        panel(
-            &mut self.pixels,
-            WW,
-            WH,
-            40,
-            WH as i32 - 90,
-            320,
-            52,
-            (20, 12, 36),
-            0.7,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            52,
-            WH as i32 - 78,
-            "Daily Ritual  ·  Play 3 Hands",
-            (200, 180, 230),
-            1,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            52,
-            WH as i32 - 58,
-            "REWARD  150 crystals",
-            (180, 160, 120),
-            1,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            48,
-            WH as i32 - 28,
-            "\"FORTUNE FAVORS THE BOLD.\"",
-            (160, 140, 100),
-            1,
-        );
-    }
-
-    fn paint_stub_panel(&mut self, title: &str, body: &str) {
-        if let Some(bg) = &self.menu_bg {
-            blit_cover(&mut self.pixels, WW, WH, bg);
-        } else {
-            fill(&mut self.pixels, WW, WH, (12, 8, 24));
-        }
-        panel(
-            &mut self.pixels,
-            WW,
-            WH,
-            200,
-            120,
-            880,
-            420,
-            (12, 8, 28),
-            0.88,
-        );
-        outline(
-            &mut self.pixels,
-            WW,
-            WH,
-            200,
-            120,
-            880,
-            420,
-            (180, 120, 255),
-            2,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            240,
-            160,
-            title,
-            (255, 210, 120),
-            3,
-        );
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            240,
-            230,
-            body,
-            (210, 200, 230),
-            1,
-        );
-        // Mini collection strip
-        if matches!(self.screen, Screen::Collection) {
-            let ids = ["strike", "guard", "fireball", "focus", "bash"];
-            for (i, id) in ids.iter().enumerate() {
-                if let Some(art) = self.art.images.get(*id) {
-                    let x = 240 + i as i32 * 150;
-                    blit_card(&mut self.pixels, WW, WH, art, x, 280, 130, 180, 1.0);
-                    text(
-                        &mut self.pixels,
-                        WW,
-                        WH,
-                        x + 8,
-                        470,
-                        id,
-                        (220, 200, 160),
-                        1,
-                    );
-                }
-            }
-        }
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            240,
-            500,
-            "Enter / Esc = back to casino lobby",
-            (160, 150, 180),
-            1,
-        );
-    }
-
-    fn paint_howto(&mut self) {
-        fill(&mut self.pixels, WW, WH, (12, 14, 20));
-        text(
-            &mut self.pixels,
-            WW,
-            WH,
-            40,
-            30,
-            "COMO JUGAR",
-            (255, 210, 100),
-            3,
-        );
-        let lines = [
-            "Elige hasta 5 cartas (1-8) y pulsa P para jugarlas.",
-            "Suma CHIPS x MULT (combos: dobles, assaults, spellblade...).",
-            "Llega al TARGET de la ciega antes de quedarte sin manos.",
-            "D = descartar seleccion. Focus en la jugada roba extra.",
-            "Ilustraciones locales + animacion de reparto (velvet-anim).",
-            "",
-            "Enter / Esc = volver",
-        ];
-        for (i, l) in lines.iter().enumerate() {
-            text(
-                &mut self.pixels,
-                WW,
-                WH,
-                40,
-                100 + i as i32 * 32,
-                l,
-                (210, 210, 220),
-                1,
-            );
-        }
     }
 
     fn paint_blind(&mut self) {
@@ -1259,7 +945,7 @@ impl App {
                     self.menu_sel = self.menu_sel.saturating_sub(1);
                 }
                 KeyCode::ArrowDown | KeyCode::KeyS => {
-                    if self.menu_sel + 1 < Self::title_items().len() {
+                    if self.menu_sel + 1 < TITLE_ITEMS.len() {
                         self.menu_sel += 1;
                     }
                 }
@@ -1418,25 +1104,6 @@ impl App {
     }
 }
 
-fn pack_dark() -> u32 {
-    velvet_story::pack_rgb(8, 4, 18)
-}
-
-fn blend_u32(dst: u32, src: u32, t: f32) -> u32 {
-    let t = t.clamp(0.0, 1.0);
-    let dr = ((dst >> 16) & 0xFF) as f32;
-    let dg = ((dst >> 8) & 0xFF) as f32;
-    let db = (dst & 0xFF) as f32;
-    let sr = ((src >> 16) & 0xFF) as f32;
-    let sg = ((src >> 8) & 0xFF) as f32;
-    let sb = (src & 0xFF) as f32;
-    velvet_story::pack_rgb(
-        (dr + (sr - dr) * t) as u8,
-        (dg + (sg - dg) * t) as u8,
-        (db + (sb - db) * t) as u8,
-    )
-}
-
 fn scale_nearest(src: &[u32], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<u32> {
     let mut out = vec![0u32; (dw * dh) as usize];
     for y in 0..dh {
@@ -1517,10 +1184,12 @@ fn main() -> Result<()> {
     let headless = std::env::args().any(|a| a == "--headless");
     let mut app = App::new(headless)?;
     println!(
-        "Velvet Arcana LOCAL — art cards={} deck={} menu_bg={}",
+        "Velvet Arcana LOCAL — cards={} deck={} bg={} panel={} logo={}",
         app.art.images.len(),
         app.deck_ids.len(),
-        app.menu_bg.is_some()
+        app.menu_bg.is_some(),
+        app.menu_panel.is_some(),
+        app.logo_emblem.is_some()
     );
     if headless {
         println!("headless smoke…");
