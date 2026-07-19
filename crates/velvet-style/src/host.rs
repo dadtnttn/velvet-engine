@@ -221,6 +221,42 @@ impl StoryCommandHost for StyleStoryHost {
                 );
                 Ok(CommandOutcome::Continue)
             }
+            "style.set" => {
+                // Records intent in story vars (host games apply to StyleRuntime).
+                let target = arg_str(args, "target").unwrap_or_default();
+                let prop = arg_str(args, "prop")
+                    .or_else(|| arg_str(args, "property"))
+                    .unwrap_or_else(|| "opacity".into());
+                let value = arg_str(args, "value")
+                    .and_then(|s| s.parse::<f32>().ok())
+                    .unwrap_or(0.0);
+                vars.set("style.set.target", StoryValue::String(target));
+                vars.set("style.set.prop", StoryValue::String(prop));
+                vars.set("style.set.value", StoryValue::Float(value as f64));
+                Ok(CommandOutcome::Continue)
+            }
+            "style.dump" => {
+                let class = arg_str(args, "class").unwrap_or_else(|| "button".into());
+                let state = arg_str(args, "state");
+                let mut q = crate::StyleQuery::class(class);
+                if let Some(s) = state {
+                    q = q.with_state(s);
+                }
+                let reg = self
+                    .registry
+                    .lock()
+                    .map_err(|e| StoryCommandError::new(e.to_string()))?;
+                let computed = reg.resolve(&q);
+                vars.set(
+                    "style.dump.height",
+                    StoryValue::Float(computed.number("height", 0.0) as f64),
+                );
+                vars.set(
+                    "style.dump.props",
+                    StoryValue::Int(computed.props.len() as i64),
+                );
+                Ok(CommandOutcome::Continue)
+            }
             _ => Ok(CommandOutcome::Continue),
         }
     }

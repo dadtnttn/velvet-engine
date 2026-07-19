@@ -13,6 +13,7 @@ mod pack_cmd;
 mod play_cmd;
 mod script_cmd;
 mod story_cmd;
+mod style_cmd;
 mod workspace_cmd;
 
 use std::path::PathBuf;
@@ -39,6 +40,7 @@ use story_cmd::{
     cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_lowered,
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
 };
+use style_cmd::{cmd_style_check, cmd_style_dump};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]
@@ -301,6 +303,31 @@ enum Commands {
     Cards {
         #[command(subcommand)]
         command: CardsCommands,
+    },
+    /// Velvet Style (`.vcss`) author tools.
+    Style {
+        #[command(subcommand)]
+        command: StyleCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum StyleCommands {
+    /// Parse-check a `.vcss` file (rules / keyframes / script fns).
+    Check {
+        /// Path to stylesheet.
+        path: PathBuf,
+    },
+    /// Resolve a class (+ optional state) and print properties.
+    Dump {
+        /// Path to stylesheet.
+        path: PathBuf,
+        /// Class name without `.`.
+        #[arg(long, default_value = "button")]
+        class: String,
+        /// Pseudo state (`selected`, `hover`, …).
+        #[arg(long)]
+        state: Option<String>,
     },
 }
 
@@ -776,6 +803,16 @@ fn dispatch(cli: Cli) -> Result<()> {
                     discard_hand,
                 },
         } => cmd_cards_zones(catalog, deck, seed, draw, discard_hand),
+        Commands::Style {
+            command: StyleCommands::Check { path },
+        } => cmd_style_check(path),
+        Commands::Style {
+            command: StyleCommands::Dump {
+                path,
+                class,
+                state,
+            },
+        } => cmd_style_dump(path, class, state),
     }
 }
 

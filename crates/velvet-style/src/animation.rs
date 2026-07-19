@@ -264,6 +264,14 @@ fn is_anim_channel(name: &str) -> bool {
             | "height"
             | "translate-x"
             | "translate-y"
+            | "glow-strength"
+            | "blur"
+            | "skew"
+            | "border-radius"
+            | "margin"
+            | "padding"
+            | "padding-x"
+            | "gap"
     )
 }
 

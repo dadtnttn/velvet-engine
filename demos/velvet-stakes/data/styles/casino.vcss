@@ -29,7 +29,7 @@
   background: var(--panel);
   border-color: #b9964b;
   border-width: 1;
-  border-radius: 4;
+  border-radius: 6;
   color: var(--gold-soft);
   height: var(--btn-height);
   gap: var(--btn-gap);
@@ -37,6 +37,13 @@
   icon-size: var(--icon-size);
   glow: transparent;
   glow-strength: 0;
+  transition: glow-strength 0.18s cubic_out;
+}
+
+.button:hover {
+  border-color: var(--gold);
+  glow-strength: 0.35;
+  glow: var(--neon);
 }
 
 .button:selected {
@@ -46,6 +53,12 @@
   glow: var(--selected-glow);
   glow-strength: 0.85;
   border-width: 1;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  color: #666666;
+  glow-strength: 0;
 }
 
 #start {

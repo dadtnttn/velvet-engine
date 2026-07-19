@@ -419,4 +419,27 @@ mod tests {
         assert_eq!(c.number("margin-x", 0.0), 8.0);
         assert_eq!(c.number("width", 0.0), 100.0);
     }
+
+    #[test]
+    fn hover_and_disabled_states() {
+        let sheet = parse_stylesheet(
+            r#"
+            .button { color: #aaaaaa; }
+            .button:hover { color: #ffffff; }
+            .button:disabled { color: #444444; opacity: 0.4; }
+            "#,
+        )
+        .unwrap();
+        let hover = resolve(
+            &sheet,
+            &StyleQuery::class("button").with_state("hover"),
+        );
+        assert_eq!(hover.color_text().r, 0xff);
+        let dis = resolve(
+            &sheet,
+            &StyleQuery::class("button").with_state("disabled"),
+        );
+        assert_eq!(dis.color_text().r, 0x44);
+        assert!((dis.number("opacity", 1.0) - 0.4).abs() < 1e-4);
+    }
 }

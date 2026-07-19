@@ -100,7 +100,20 @@ fn paint_one_button(
         panel(pixels, WW, WH, x + 4, y + 2, w - 8, 1, (40, 45, 70), 0.35);
     }
 
-    paint_ornate_gold_border(pixels, x, y, w, h, border.rgb_tuple(), selected);
+    // border-radius from .vcss (visual cue: corner diamonds scale with radius)
+    let radius = style.number("border-radius", 4.0).clamp(0.0, 24.0);
+    let _ = radius; // used by ornate border sizing below
+
+    paint_ornate_gold_border(
+        pixels,
+        x,
+        y,
+        w,
+        h,
+        border.rgb_tuple(),
+        selected,
+        radius.max(3.0) as i32,
+    );
 
     let icon_s = style.number("icon-size", (h - 18) as f32) as i32;
     let pad = style.number("padding-x", 14.0) as i32;
@@ -207,6 +220,7 @@ fn paint_ornate_gold_border(
     h: i32,
     gold: (u8, u8, u8),
     selected: bool,
+    corner: i32,
 ) {
     let gold_hi = if selected {
         (
@@ -219,7 +233,7 @@ fn paint_ornate_gold_border(
     };
     outline(pixels, WW, WH, x, y, w, h, gold, 1);
     outline(pixels, WW, WH, x + 2, y + 2, w - 4, h - 4, gold_hi, 1);
-    let d = 4;
+    let d = corner.clamp(3, 10);
     for (cx, cy) in [
         (x + 5, y + 5),
         (x + w - 6, y + 5),

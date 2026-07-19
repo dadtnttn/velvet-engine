@@ -44,6 +44,8 @@ pub struct Stylesheet {
     pub keyframes: IndexMap<String, Keyframes>,
     /// JS-lite motion/orchestration (`@script` blocks, merged).
     pub script: ScriptModule,
+    /// Relative `@import` paths (order preserved).
+    pub imports: Vec<String>,
     /// Optional source name.
     pub source: Option<String>,
 }
@@ -61,6 +63,7 @@ impl Stylesheet {
             self.keyframes.insert(k, v);
         }
         self.script.extend(other.script);
+        // imports already resolved when using parse_stylesheet_with_imports
     }
 }
 
@@ -92,11 +95,15 @@ fn strip_comments(source: &str) -> String {
 }
 
 /// Parse full stylesheet text (CSS rules + `@keyframes` + `@script`).
+///
+/// `@import "path";` lines are recorded on the sheet as [`Stylesheet::imports`]
+/// (not auto-loaded — use [`parse_stylesheet_with_imports`]).
 pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
     let source = strip_comments(source);
     let mut rules = Vec::new();
     let mut keyframes = IndexMap::new();
     let mut script = ScriptModule::default();
+    let mut imports = Vec::new();
     let mut i = 0;
     let bytes = source.as_bytes();
     let mut line = 1usize;
@@ -115,6 +122,32 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
         }
         if i >= bytes.len() {
             break;
+        }
+
+        // @import "path";  (no block)
+        if source[i..].starts_with("@import") {
+            let imp_line = line;
+            let start = i;
+            while i < bytes.len() && bytes[i] != b';' {
+                if bytes[i] == b'\n' {
+                    line += 1;
+                }
+                i += 1;
+            }
+            if i >= bytes.len() {
+                return Err(StyleParseError::AtLine {
+                    line: imp_line,
+                    msg: "@import needs trailing `;`".into(),
+                });
+            }
+            let stmt = source[start..i].trim();
+            i += 1; // ;
+            let path = extract_import_path(stmt).ok_or_else(|| StyleParseError::AtLine {
+                line: imp_line,
+                msg: format!("bad @import `{stmt}`"),
+            })?;
+            imports.push(path);
+            continue;
         }
 
         // selector / @rule header until {
@@ -222,8 +255,67 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
         rules,
         keyframes,
         script,
+        imports,
         source: None,
     })
+}
+
+fn extract_import_path(stmt: &str) -> Option<String> {
+    let rest = stmt.strip_prefix("@import")?.trim();
+    if let Some(q) = rest.strip_prefix('"').and_then(|s| s.split('"').next()) {
+        return Some(q.to_string());
+    }
+    if let Some(q) = rest.strip_prefix('\'').and_then(|s| s.split('\'').next()) {
+        return Some(q.to_string());
+    }
+    if let Some(q) = rest.strip_prefix("url(").and_then(|s| s.strip_suffix(')')) {
+        let q = q.trim().trim_matches(|c| c == '"' || c == '\'');
+        return Some(q.to_string());
+    }
+    None
+}
+
+/// Parse a file and recursively load `@import` relatives against `base_dir`.
+pub fn parse_stylesheet_with_imports(
+    source: &str,
+    base_dir: &std::path::Path,
+) -> Result<Stylesheet, StyleParseError> {
+    parse_with_imports_inner(source, base_dir, &mut Vec::new(), 0)
+}
+
+fn parse_with_imports_inner(
+    source: &str,
+    base_dir: &std::path::Path,
+    stack: &mut Vec<std::path::PathBuf>,
+    depth: u8,
+) -> Result<Stylesheet, StyleParseError> {
+    if depth > 16 {
+        return Err(StyleParseError::AtLine {
+            line: 1,
+            msg: "@import nesting too deep".into(),
+        });
+    }
+    let mut sheet = parse_stylesheet(source)?;
+    let import_list = std::mem::take(&mut sheet.imports);
+    let mut merged = Stylesheet::new();
+    for rel in import_list {
+        let path = base_dir.join(&rel);
+        let canon = path.canonicalize().unwrap_or(path.clone());
+        if stack.iter().any(|p| p == &canon) {
+            continue; // cycle
+        }
+        let text = std::fs::read_to_string(&path).map_err(|e| StyleParseError::AtLine {
+            line: 1,
+            msg: format!("@import `{}`: {e}", path.display()),
+        })?;
+        let parent = path.parent().unwrap_or(base_dir);
+        stack.push(canon);
+        let child = parse_with_imports_inner(&text, parent, stack, depth + 1)?;
+        stack.pop();
+        merged.extend(child);
+    }
+    merged.extend(sheet);
+    Ok(merged)
 }
 
 fn parse_keyframes_body(
@@ -380,6 +472,19 @@ mod tests {
             sheet.rules[2].declarations.get("icon"),
             Some(StyleValue::Keyword(_))
         ));
+    }
+
+    #[test]
+    fn parse_import_statement() {
+        let sheet = parse_stylesheet(
+            r#"
+            @import "base.vcss";
+            .x { color: #fff; }
+            "#,
+        )
+        .unwrap();
+        assert_eq!(sheet.imports, vec!["base.vcss".to_string()]);
+        assert_eq!(sheet.rules.len(), 1);
     }
 
     #[test]
