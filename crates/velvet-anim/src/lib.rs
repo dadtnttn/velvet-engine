@@ -51,5 +51,5 @@ pub use script::{
     apply_program_immediate, parse_anim_script, AnimOp, AnimProgram, AnimScriptError,
     AnimScriptRunner,
 };
-pub use track::{parse_track_line, ChannelTrack, Keyframe, Timeline};
+pub use track::{parse_track_line, timeline_from_plan, ChannelTrack, Keyframe, Timeline};
 pub use tween::{apply_field, parse_ease, read_field, FloatTween};

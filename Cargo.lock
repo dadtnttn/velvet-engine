@@ -2683,6 +2683,7 @@ dependencies = [
  "thiserror 2.0.18",
  "velvet-math",
  "velvet-story",
+ "velvet-style",
 ]
 
 [[package]]

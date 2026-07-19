@@ -70,3 +70,31 @@
   color: #c8b4e6;
   gold: #c8a078;
 }
+
+/* Motion lives in the same language as style (no separate .vanim) */
+@keyframes deal {
+  from {
+    opacity: 0;
+    scale: 0.65;
+    yaw: 0.9;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    yaw: 0;
+  }
+}
+
+.card.deal {
+  animation: deal 0.32s cubic_out;
+}
+
+@keyframes punch {
+  0% { scale: 1; }
+  45% { scale: 1.12; }
+  100% { scale: 1; }
+}
+
+.card.punch {
+  animation: punch 0.22s back_out;
+}

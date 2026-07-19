@@ -3,6 +3,7 @@
 use indexmap::IndexMap;
 use thiserror::Error;
 
+use crate::animation::{KeyframeStop, Keyframes};
 use crate::value::{parse_value, StyleValue};
 
 /// Parse error.
@@ -27,11 +28,13 @@ pub struct StyleRule {
     pub declarations: IndexMap<String, StyleValue>,
 }
 
-/// Parsed stylesheet.
+/// Parsed stylesheet (visual rules + `@keyframes` motion — one style language).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Stylesheet {
     /// Rules in cascade order.
     pub rules: Vec<StyleRule>,
+    /// Named keyframe animations (replaces separate `.vanim`).
+    pub keyframes: IndexMap<String, Keyframes>,
     /// Optional source name.
     pub source: Option<String>,
 }
@@ -45,6 +48,9 @@ impl Stylesheet {
     /// Merge another sheet (appended, later wins on same specificity ties).
     pub fn extend(&mut self, other: Stylesheet) {
         self.rules.extend(other.rules);
+        for (k, v) in other.keyframes {
+            self.keyframes.insert(k, v);
+        }
     }
 }
 
@@ -79,31 +85,19 @@ fn strip_comments(source: &str) -> String {
 pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
     let source = strip_comments(source);
     let mut rules = Vec::new();
+    let mut keyframes = IndexMap::new();
     let mut i = 0;
     let bytes = source.as_bytes();
     let mut line = 1usize;
 
     while i < bytes.len() {
-        // skip whitespace / comments
+        // skip whitespace
         while i < bytes.len() {
             if bytes[i] == b'\n' {
                 line += 1;
                 i += 1;
             } else if bytes[i].is_ascii_whitespace() {
                 i += 1;
-            } else if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'*' {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    if bytes[i] == b'\n' {
-                        line += 1;
-                    }
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-            } else if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
-                while i < bytes.len() && bytes[i] != b'\n' {
-                    i += 1;
-                }
             } else {
                 break;
             }
@@ -112,7 +106,7 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
             break;
         }
 
-        // selector list until {
+        // selector / @keyframes header until {
         let sel_start = i;
         let sel_line = line;
         while i < bytes.len() && bytes[i] != b'{' {
@@ -153,6 +147,19 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
         let body = source[decl_start..i].trim();
         i += 1; // }
 
+        if let Some(rest) = sel_raw.strip_prefix("@keyframes") {
+            let name = rest.trim();
+            if name.is_empty() {
+                return Err(StyleParseError::AtLine {
+                    line: sel_line,
+                    msg: "@keyframes needs a name".into(),
+                });
+            }
+            let kf = parse_keyframes_body(name, body, sel_line)?;
+            keyframes.insert(name.to_string(), kf);
+            continue;
+        }
+
         let selectors: Vec<String> = sel_raw
             .split(',')
             .map(|s| s.trim().to_string())
@@ -174,8 +181,86 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
 
     Ok(Stylesheet {
         rules,
+        keyframes,
         source: None,
     })
+}
+
+fn parse_keyframes_body(
+    name: &str,
+    body: &str,
+    base_line: usize,
+) -> Result<Keyframes, StyleParseError> {
+    let mut stops = Vec::new();
+    let mut i = 0;
+    let b = body.as_bytes();
+    let mut line = base_line;
+    while i < b.len() {
+        while i < b.len() && b[i].is_ascii_whitespace() {
+            if b[i] == b'\n' {
+                line += 1;
+            }
+            i += 1;
+        }
+        if i >= b.len() {
+            break;
+        }
+        let start = i;
+        while i < b.len() && b[i] != b'{' {
+            if b[i] == b'\n' {
+                line += 1;
+            }
+            i += 1;
+        }
+        if i >= b.len() {
+            break;
+        }
+        let offset_raw = body[start..i].trim();
+        i += 1;
+        let body_start = i;
+        let mut depth = 1i32;
+        while i < b.len() && depth > 0 {
+            if b[i] == b'{' {
+                depth += 1;
+            } else if b[i] == b'}' {
+                depth -= 1;
+            } else if b[i] == b'\n' {
+                line += 1;
+            }
+            if depth > 0 {
+                i += 1;
+            }
+        }
+        let stop_body = body[body_start..i].trim();
+        i += 1;
+        let offset = parse_keyframe_offset(offset_raw).ok_or_else(|| StyleParseError::AtLine {
+            line,
+            msg: format!("bad keyframe offset `{offset_raw}`"),
+        })?;
+        let props = parse_declarations(stop_body, line)?;
+        stops.push(KeyframeStop { offset, props });
+    }
+    stops.sort_by(|a, b| a.offset.partial_cmp(&b.offset).unwrap());
+    Ok(Keyframes {
+        name: name.into(),
+        stops,
+    })
+}
+
+fn parse_keyframe_offset(raw: &str) -> Option<f32> {
+    let s = raw.trim();
+    if s.eq_ignore_ascii_case("from") {
+        return Some(0.0);
+    }
+    if s.eq_ignore_ascii_case("to") {
+        return Some(1.0);
+    }
+    if let Some(p) = s.strip_suffix('%') {
+        let v: f32 = p.trim().parse().ok()?;
+        return Some((v / 100.0).clamp(0.0, 1.0));
+    }
+    let v: f32 = s.parse().ok()?;
+    Some(v.clamp(0.0, 1.0))
 }
 
 fn parse_declarations(

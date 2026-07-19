@@ -1,14 +1,11 @@
-//! Small author-facing animation script (`.vanim` / inline).
+//! Legacy `.vanim` line scripts — **converted to `.vcss`**.
 //!
-//! Example:
-//! ```text
-//! # deal three cards
-//! fx card0 deal 120 400 0.35
-//! fx card1 deal 240 400 0.35 delay 0.08
-//! fx card2 deal 360 400 0.35 delay 0.16
-//! move banner 0 20 0.4 ease cubic_out
-//! wait 0.5
-//! ```
+//! Prefer writing motion in the unified stylesheet language:
+//! `@keyframes` + `animation:` in `.vcss` (see `velvet_style` / `VELVET_STYLE.md`).
+//!
+//! This module remains as a thin compatibility path:
+//! `parse_anim_script` still works; new code should use `velvet_style::vanim_to_vcss`
+//! or author `.vcss` directly.
 
 use thiserror::Error;
 use velvet_math::Vec2;
