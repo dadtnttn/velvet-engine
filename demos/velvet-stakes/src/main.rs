@@ -684,10 +684,11 @@ impl App {
         let size = window.inner_size();
         let ww = size.width.max(1);
         let wh = size.height.max(1);
-        let present = if ww != WW || wh != WH {
-            scale_nearest(&self.pixels, WW, WH, ww, wh)
-        } else {
+        // Letterbox scale — never stretch 1280×720 into a wrong aspect (looks broken)
+        let present = if ww == WW && wh == WH {
             self.pixels.clone()
+        } else {
+            scale_letterbox(&self.pixels, WW, WH, ww, wh, 0x0a0614)
         };
         let Some(surface) = self.surface.as_mut() else {
             return;
@@ -1036,6 +1037,26 @@ fn scale_nearest(src: &[u32], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<u32> {
         for x in 0..dw {
             let sx = x * sw / dw;
             out[(y * dw + x) as usize] = src[(sy * sw + sx) as usize];
+        }
+    }
+    out
+}
+
+/// Fit source into dest preserving aspect ratio; fill bars with `void`.
+fn scale_letterbox(src: &[u32], sw: u32, sh: u32, dw: u32, dh: u32, void: u32) -> Vec<u32> {
+    let mut out = vec![void; (dw * dh) as usize];
+    if sw == 0 || sh == 0 || dw == 0 || dh == 0 {
+        return out;
+    }
+    let scale = (dw as f32 / sw as f32).min(dh as f32 / sh as f32);
+    let tw = ((sw as f32 * scale).round() as u32).max(1).min(dw);
+    let th = ((sh as f32 * scale).round() as u32).max(1).min(dh);
+    let ox = (dw - tw) / 2;
+    let oy = (dh - th) / 2;
+    let scaled = scale_nearest(src, sw, sh, tw, th);
+    for y in 0..th {
+        for x in 0..tw {
+            out[((oy + y) * dw + (ox + x)) as usize] = scaled[(y * tw + x) as usize];
         }
     }
     out

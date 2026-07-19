@@ -17,7 +17,8 @@ pub use live_dev::{
     load_rgb_buf, reload_stylesheet, ImageSlot, LiveDevApply, LiveDevSession, WatchKind,
 };
 pub use logo::{
-    blit_rgba_bilinear, count_soft_alpha, load_title_wordmark, probe_scaled_soft_alpha, RgbaBuf,
+    blit_rgba_bilinear, content_bounds, count_soft_alpha, crop_to_content, load_title_wordmark,
+    probe_scaled_soft_alpha, RgbaBuf,
 };
 pub use render::{load_rgb, ArtBank, RgbImage};
 pub use ui::{

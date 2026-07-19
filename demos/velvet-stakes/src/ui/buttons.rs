@@ -127,34 +127,18 @@ fn paint_one_button(
     let icon_name = style.keyword("icon", icon_fallback(index));
     paint_menu_icon(pixels, theme, icon_x, icon_y, icon_s, icon_name, selected);
 
-    let label_x = icon_x + icon_s + 16;
-    let label_y = y + h / 2 - 7;
-    let gold = fg.rgb_tuple();
+    let label_x = icon_x + icon_s + 14;
+    let label_y = y + h / 2 - 6;
+    // Single clean label — multi-pass offset text looks garbled with bitmap fonts
+    let gold = if selected {
+        (255, 232, 160)
+    } else {
+        fg.rgb_tuple()
+    };
     if selected {
-        // Magenta selection glow under label + bright gold face
-        text(
-            pixels,
-            WW,
-            WH,
-            label_x + 1,
-            label_y + 1,
-            item.label,
-            glow.rgb_tuple(),
-            2,
-        );
-        text(
-            pixels,
-            WW,
-            WH,
-            label_x - 1,
-            label_y,
-            item.label,
-            (255, 180, 255),
-            2,
-        );
-        // Left accent bar for selected row
-        panel(pixels, WW, WH, x + 2, y + 6, 4, h - 12, glow.rgb_tuple(), 0.9);
-        panel(pixels, WW, WH, x + 2, y + 6, 4, h - 12, theme.gold, 0.55);
+        // Left accent bar only (glow fill already painted)
+        panel(pixels, WW, WH, x + 3, y + 8, 3, h - 16, theme.gold, 0.9);
+        panel(pixels, WW, WH, x + 3, y + 8, 3, h - 16, glow.rgb_tuple(), 0.45);
     }
     text(pixels, WW, WH, label_x, label_y, item.label, gold, 2);
 }
@@ -200,20 +184,8 @@ fn paint_selected_fill(
             pixels[i] = blend(pixels[i], pack_rgb(r, gr, b), a);
         }
     }
-    let sparks: [(i32, i32); 12] = [
-        (38, 12),
-        (72, 28),
-        (110, 18),
-        (155, 32),
-        (190, 14),
-        (230, 26),
-        (270, 16),
-        (310, 30),
-        (350, 20),
-        (95, 36),
-        (210, 38),
-        (60, 20),
-    ];
+    // A few soft highlights — not a starfield of noise on the label
+    let sparks: [(i32, i32); 4] = [(48, 14), (120, 30), (220, 16), (300, 28)];
     for (sx, sy) in sparks {
         if sx < w - 8 && sy < h - 4 {
             panel(
@@ -224,8 +196,8 @@ fn paint_selected_fill(
                 y + sy,
                 2,
                 2,
-                (255, 200, 255),
-                0.7 * strength,
+                (255, 210, 255),
+                0.35 * strength,
             );
         }
     }

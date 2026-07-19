@@ -30,14 +30,20 @@ pub fn load_title_wordmark(path: &Path) -> Option<RgbaBuf> {
         a.push(alpha);
     }
     if !has_real_alpha {
-        // Opaque file (typical JPG black plate) — key by luminance
-        a = key_black_soft(&rgb, w, h, 14, 48);
+        // Opaque file (typical JPG/PNG black plate) — key by luminance.
+        // Tight cut so dark copper serifs survive; short soft ramp for edges.
+        a = key_black_soft(&rgb, w, h, 18, 28);
     }
     feather_alpha(&mut a, w as usize, h as usize, 1);
-    Some((w, h, rgb, a))
+    // Crop empty black margins so scale fits the wordmark, not 16:9 padding
+    let full = (w, h, rgb, a);
+    Some(crop_to_content(&full, 20, 12))
 }
 
 /// Soft black-key: pure black → 0, copper glow → soft ramp (not hard 0/255).
+///
+/// Uses max-channel so warm gold / copper serifs stay solid; keeps a soft
+/// ramp only near pure black so letter interiors are not eaten.
 pub fn key_black_soft(rgb: &[u32], _w: u32, _h: u32, cut: u8, soft: u8) -> Vec<u8> {
     let cut = cut as f32;
     let soft = soft.max(1) as f32;
@@ -46,6 +52,7 @@ pub fn key_black_soft(rgb: &[u32], _w: u32, _h: u32, cut: u8, soft: u8) -> Vec<u
             let r = ((c >> 16) & 0xFF) as f32;
             let g = ((c >> 8) & 0xFF) as f32;
             let b = (c & 0xFF) as f32;
+            // Gold wordmarks: max channel preserves copper; mean was too aggressive
             let lum = r.max(g).max(b);
             if lum <= cut {
                 0
@@ -97,6 +104,62 @@ pub fn feather_alpha(a: &mut [u8], w: usize, h: usize, radius: usize) {
 /// Count alpha samples that are soft (1..=254) — used by tests / diagnostics.
 pub fn count_soft_alpha(a: &[u8]) -> usize {
     a.iter().filter(|&&v| (1..=254).contains(&v)).count()
+}
+
+/// Axis-aligned bounds of opaque content: `(x, y, w, h)` or `None` if empty.
+pub fn content_bounds(art: &RgbaBuf, alpha_min: u8) -> Option<(u32, u32, u32, u32)> {
+    let (w, h, _, a) = art;
+    let w = *w as usize;
+    let h = *h as usize;
+    let mut min_x = w;
+    let mut min_y = h;
+    let mut max_x = 0usize;
+    let mut max_y = 0usize;
+    let mut any = false;
+    for y in 0..h {
+        for x in 0..w {
+            if a[y * w + x] >= alpha_min {
+                any = true;
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+    }
+    if !any {
+        return None;
+    }
+    Some((
+        min_x as u32,
+        min_y as u32,
+        (max_x - min_x + 1) as u32,
+        (max_y - min_y + 1) as u32,
+    ))
+}
+
+/// Crop RGBA buffer to content bounds + padding (clamped to image).
+pub fn crop_to_content(art: &RgbaBuf, alpha_min: u8, pad: u32) -> RgbaBuf {
+    let (w, h, rgb, a) = art;
+    let Some((cx, cy, cw, ch)) = content_bounds(art, alpha_min) else {
+        return art.clone();
+    };
+    let x0 = cx.saturating_sub(pad);
+    let y0 = cy.saturating_sub(pad);
+    let x1 = (cx + cw + pad).min(*w);
+    let y1 = (cy + ch + pad).min(*h);
+    let nw = x1 - x0;
+    let nh = y1 - y0;
+    let mut nrgb = Vec::with_capacity((nw * nh) as usize);
+    let mut na = Vec::with_capacity((nw * nh) as usize);
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let i = (y * *w + x) as usize;
+            nrgb.push(rgb[i]);
+            na.push(a[i]);
+        }
+    }
+    (nw, nh, nrgb, na)
 }
 
 /// Bilinear sample of RGBA buffer at continuous source coords.

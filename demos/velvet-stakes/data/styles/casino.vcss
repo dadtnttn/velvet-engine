@@ -12,10 +12,10 @@
   --neon: #aa64ff;
   --selected-bg: #501e78;
   --selected-glow: #dc50dc;
-  --btn-height: 52;
-  --btn-gap: 12;
+  --btn-height: 46;
+  --btn-gap: 8;
   --btn-pad-x: 14;
-  --icon-size: 34;
+  --icon-size: 28;
 }
 
 .theme {

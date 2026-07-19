@@ -30,17 +30,16 @@ pub fn paint_title_menu(
         fill(pixels, WW, WH, theme.void);
     }
 
-    // Layered vignette: left column for buttons, top for HUD, bottom for daily
-    paint_left_vignette(pixels, 460, 0.48);
-    paint_top_vignette(pixels, 130, 0.40);
-    paint_bottom_vignette(pixels, 140, 0.38);
-    // Soft radial darken around edges so the center wordmark pops
-    paint_edge_glow(pixels, theme);
+    // Vignettes: keep the *center* clean for the wordmark — darken only
+    // the button column band and HUD strip, not the whole left half.
+    paint_button_column_shade(pixels, 48, 280, 430, 300, 0.40);
+    paint_top_vignette(pixels, 110, 0.32);
+    paint_bottom_vignette(pixels, 120, 0.30);
 
-    // Ornate screen frame
+    // Ornate screen frame (subtle)
     paint_screen_frame(pixels, theme);
 
-    // Ambient casino sparkles (deterministic positions)
+    // Sparse sparkles (avoid noisy mess over the logo)
     paint_ambient_sparkles(pixels, theme);
 
     paint_meta_hud(
@@ -59,20 +58,18 @@ pub fn paint_title_menu(
     // Wordmark image only — no procedural title letters
     paint_centered_logo_title(pixels, theme, logo_title, sheet);
 
-    // Buttons lower-left (below wordmark)
+    // Buttons lower-left — leave room for all 5 rows + daily panel (no overlap)
     let layout = ButtonColumnLayout {
-        x: 52,
-        y0: 328,
-        w: 420,
-        h: 54,
-        gap: 12,
+        x: 56,
+        y0: 292,
+        w: 400,
+        h: 46,
+        gap: 8,
     };
+    // 5 * (46+8) - 8 = 262 → ends ~554; daily starts ~608
     paint_button_column(pixels, theme, sheet, &layout, menu_sel);
 
     paint_daily_ritual(pixels, theme, sheet);
-
-    // Bottom gold rule across lobby
-    paint_gold_rule(pixels, 40, WH as i32 - 14, WW as i32 - 40, theme.gold);
 }
 
 /// Centered elegant wordmark (black background burned out via alpha).
@@ -82,26 +79,29 @@ fn paint_centered_logo_title(
     logo_title: Option<&RgbaBuf>,
     sheet: &Stylesheet,
 ) {
-    let cx = WW as i32 / 2;
+    // Slightly right of center so left button column stays clear
+    let cx = (WW as i32 * 58) / 100;
 
     if let Some(logo) = logo_title {
-        // Fit wordmark across center of lobby (wide copper title)
-        let max_w = 720i32;
-        let max_h = 220i32;
+        // Content is already cropped; keep the title readable and fully on-screen
+        let max_w = 560i32;
+        let max_h = 150i32;
         let (sw, sh, _, _) = *logo;
+        if sw == 0 || sh == 0 {
+            return;
+        }
         let scale = (max_w as f32 / sw as f32).min(max_h as f32 / sh as f32);
-        let dw = (sw as f32 * scale) as i32;
-        let dh = (sh as f32 * scale) as i32;
-        let dx = cx - dw / 2;
-        let dy = 100;
+        let dw = ((sw as f32 * scale) as i32).max(1);
+        let dh = ((sh as f32 * scale) as i32).max(1);
+        // Clamp fully inside frame (with margin)
+        let dx = (cx - dw / 2).clamp(420, WW as i32 - dw - 24);
+        let dy = 118;
 
-        // Soft purple/gold halo behind wordmark
-        paint_logo_halo(pixels, cx, dy + dh / 2, dw / 2 + 40, dh / 2 + 20);
+        // Subtle warm halo — small so it does not smear the letters
+        paint_logo_halo(pixels, dx + dw / 2, dy + dh / 2, dw / 2 + 16, dh / 2 + 10);
 
-        // Bilinear filter — smooth serifs (no square pixel corners)
         blit_rgba_bilinear(pixels, WW, WH, logo, dx, dy, dw, dh, 1.0);
 
-        // Subtitle sits just under the image wordmark
         let sub_style = resolve(sheet, &StyleQuery::class("logo-sub"));
         let sub_col = sub_style
             .props
@@ -109,16 +109,17 @@ fn paint_centered_logo_title(
             .and_then(|v| v.as_color())
             .map(|c| c.rgb_tuple())
             .unwrap_or(theme.gold_soft);
+        // ASCII only — softbuffer bitmap font has no middle-dot glyphs
         let sub = "NIGHTFALL CASINO";
         let sub_w = estimate_text_w(sub, 1);
-        let sx = cx - sub_w / 2;
-        let sy = dy + dh - 6;
+        let sx = (dx + dw / 2 - sub_w / 2).clamp(8, WW as i32 - sub_w - 8);
+        let sy = dy + dh + 10;
         let rule_y = sy + 6;
-        paint_gold_rule(pixels, sx - 100, rule_y, sx - 16, theme.gold);
-        paint_mini_diamond(pixels, sx - 12, rule_y, theme.gold);
+        paint_gold_rule(pixels, sx - 72, rule_y, sx - 12, theme.gold);
+        paint_mini_diamond(pixels, sx - 8, rule_y, theme.gold);
         text(pixels, WW, WH, sx, sy, sub, sub_col, 1);
-        paint_mini_diamond(pixels, sx + sub_w + 10, rule_y, theme.gold);
-        paint_gold_rule(pixels, sx + sub_w + 18, rule_y, sx + sub_w + 100, theme.gold);
+        paint_mini_diamond(pixels, sx + sub_w + 6, rule_y, theme.gold);
+        paint_gold_rule(pixels, sx + sub_w + 14, rule_y, sx + sub_w + 72, theme.gold);
     } else {
         text(
             pixels,
@@ -146,9 +147,10 @@ fn paint_daily_ritual(pixels: &mut [u32], theme: &Theme, sheet: &Stylesheet) {
         .unwrap_or(theme.gold_soft);
 
     let x = 40;
-    let y = WH as i32 - 108;
+    // Below last menu button (layout ends ~554)
+    let y = WH as i32 - 96;
     let w = 380;
-    let h = 64;
+    let h = 56;
     // Outer glow
     panel(pixels, WW, WH, x - 2, y - 2, w + 4, h + 4, theme.neon, 0.12);
     panel(pixels, WW, WH, x, y, w, h, bg, 0.82);
@@ -166,7 +168,7 @@ fn paint_daily_ritual(pixels: &mut [u32], theme: &Theme, sheet: &Stylesheet) {
         WH,
         x + 20,
         y + 14,
-        "Daily Ritual  ·  Play 3 Hands",
+        "Daily Ritual - Play 3 Hands",
         fg,
         1,
     );
@@ -193,11 +195,23 @@ fn paint_daily_ritual(pixels: &mut [u32], theme: &Theme, sheet: &Stylesheet) {
     );
 }
 
-fn paint_left_vignette(pixels: &mut [u32], width: i32, strength: f32) {
-    for x in 0..width {
-        let a = (1.0 - x as f32 / width as f32) * strength;
-        for y in 140..WH as i32 {
-            let i = (y as u32 * WW + x as u32) as usize;
+/// Darken only the button column rectangle (not the logo zone).
+fn paint_button_column_shade(
+    pixels: &mut [u32],
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    strength: f32,
+) {
+    for row in y.max(0)..(y + h).min(WH as i32) {
+        let vy = (row - y) as f32 / h.max(1) as f32;
+        let edge_y = (1.0 - (vy - 0.5).abs() * 1.4).clamp(0.35, 1.0);
+        for col in x.max(0)..(x + w).min(WW as i32) {
+            let vx = (col - x) as f32 / w.max(1) as f32;
+            let edge_x = (1.0 - vx * 0.85).clamp(0.0, 1.0);
+            let a = strength * edge_x * edge_y;
+            let i = (row as u32 * WW + col as u32) as usize;
             pixels[i] = blend_dark(pixels[i], a);
         }
     }
@@ -221,26 +235,6 @@ fn paint_bottom_vignette(pixels: &mut [u32], height: i32, strength: f32) {
             let i = (py as u32 * WW + x as u32) as usize;
             pixels[i] = blend_dark(pixels[i], a * 0.55);
         }
-    }
-}
-
-fn paint_edge_glow(pixels: &mut [u32], theme: &Theme) {
-    // Subtle gold corner flares
-    let corners = [
-        (24, 24),
-        (WW as i32 - 24, 24),
-        (24, WH as i32 - 24),
-        (WW as i32 - 24, WH as i32 - 24),
-    ];
-    for (cx, cy) in corners {
-        for r in (4..28).rev() {
-            let a = 0.04 * (1.0 - r as f32 / 28.0);
-            put(pixels, cx, cy - r, theme.gold, a);
-            put(pixels, cx, cy + r, theme.gold, a);
-            put(pixels, cx - r, cy, theme.gold, a);
-            put(pixels, cx + r, cy, theme.gold, a);
-        }
-        paint_mini_diamond(pixels, cx, cy, theme.gold);
     }
 }
 
@@ -286,53 +280,36 @@ fn paint_logo_halo(pixels: &mut [u32], cx: i32, cy: i32, rx: i32, ry: i32) {
             if d > 1.0 {
                 continue;
             }
-            let a = (1.0 - d) * (1.0 - d) * 0.22;
-            // warm gold center, purple rim
+            // Soft, low-opacity — must not wash out or fragment the wordmark
+            let a = (1.0 - d) * (1.0 - d) * 0.10;
             let t = d;
-            let r = (255.0 * (1.0 - t) + 120.0 * t) as u8;
-            let g = (200.0 * (1.0 - t) + 40.0 * t) as u8;
-            let b = (80.0 * (1.0 - t) + 180.0 * t) as u8;
+            let r = (220.0 * (1.0 - t) + 100.0 * t) as u8;
+            let g = (160.0 * (1.0 - t) + 40.0 * t) as u8;
+            let b = (60.0 * (1.0 - t) + 140.0 * t) as u8;
             put(pixels, cx + dx, cy + dy, (r, g, b), a);
         }
     }
 }
 
 fn paint_ambient_sparkles(pixels: &mut [u32], theme: &Theme) {
-    // Deterministic pseudo-random sparkles so selection tests stay stable
-    let seeds: [(i32, i32, f32); 28] = [
-        (180, 150, 0.55),
-        (920, 140, 0.45),
-        (640, 90, 0.65),
-        (1100, 200, 0.4),
-        (250, 280, 0.35),
-        (1050, 320, 0.5),
-        (700, 250, 0.3),
-        (400, 180, 0.4),
-        (980, 480, 0.35),
-        (150, 500, 0.25),
-        (1200, 100, 0.4),
-        (800, 160, 0.5),
-        (560, 300, 0.28),
-        (300, 420, 0.32),
-        (1150, 550, 0.3),
-        (90, 360, 0.28),
-        (500, 120, 0.42),
-        (880, 380, 0.33),
-        (200, 620, 0.25),
-        (1000, 600, 0.3),
-        (720, 520, 0.28),
-        (440, 560, 0.26),
-        (610, 200, 0.48),
-        (950, 90, 0.55),
-        (320, 90, 0.4),
-        (1080, 420, 0.35),
-        (760, 640, 0.22),
-        (160, 220, 0.38),
+    // Few sparkles away from logo center and button labels
+    let seeds: [(i32, i32, f32); 12] = [
+        (980, 120, 0.4),
+        (1100, 200, 0.35),
+        (1050, 480, 0.3),
+        (1180, 360, 0.28),
+        (900, 560, 0.25),
+        (200, 160, 0.3),
+        (120, 500, 0.22),
+        (320, 620, 0.2),
+        (720, 90, 0.35),
+        (850, 640, 0.2),
+        (1080, 600, 0.25),
+        (160, 280, 0.22),
     ];
     for (x, y, a) in seeds {
         put(pixels, x, y, theme.gold_soft, a);
-        put(pixels, x + 1, y, (255, 240, 200), a * 0.5);
-        put(pixels, x, y + 1, theme.neon, a * 0.35);
+        put(pixels, x + 1, y, (255, 240, 200), a * 0.45);
     }
 }
 
