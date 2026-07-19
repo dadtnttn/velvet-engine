@@ -50,6 +50,7 @@ members = [
     "examples/branching-story",
     "examples/top-down-rpg",
     "examples/action-arena",
+    "examples/hotline-rush",
     "examples/hybrid-demo",
     "examples/cellular-lab",
     "demos/cellular-arena",

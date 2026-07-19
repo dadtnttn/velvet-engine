@@ -2,6 +2,9 @@
 //!
 //! Top-down action: weapons, projectiles, perception, enemies, score, combos,
 //! dash, arena waves, hitstop, quick restart.
+//!
+//! Also includes a **Hotline Miami–like** spine ([`hotline`]): top-down action
+//! shooter with free aim, one-hit fragility, melee/guns, pickups, and room clear.
 
 #![deny(missing_docs)]
 
@@ -11,6 +14,7 @@ mod combo;
 mod dash;
 mod enemy;
 mod hitstop;
+mod hotline;
 mod perception;
 mod plugin;
 mod projectile;
@@ -26,6 +30,11 @@ pub use combo::{AttackCombo, ComboEvent, ComboInput, ComboPhase, ComboStep};
 pub use dash::{DashConfig, DashState};
 pub use enemy::{EnemyAi, EnemyKind, PatrolPath};
 pub use hitstop::{Hitstop, HitstopConfig};
+pub use hotline::{
+    apply_fragile_damage, hitscan_first, throw_held, try_attack, try_pickup, AimFacing,
+    AttackOutcome, Fragility, FragilityHit, GroundWeapon, HotlineLoadout, HotlinePhase,
+    HotlinePresets, HotlineRun, KillStyle, PICKUP_RADIUS,
+};
 pub use perception::{hear, see_target, Perception, PerceptionConfig};
 pub use plugin::ActionPlugin;
 pub use projectile::{Projectile, ProjectileSystem};

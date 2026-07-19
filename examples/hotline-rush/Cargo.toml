@@ -1,0 +1,19 @@
+[package]
+name = "hotline-rush"
+description = "Pre-alpha Hotline Miami–like top-down action shooter demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "hotline-rush"
+path = "src/main.rs"
+
+[dependencies]
+velvet-play = { workspace = true }
+velvet-action = { workspace = true }
+velvet-math = { workspace = true }
+velvet-core = { workspace = true }
+anyhow = { workspace = true }
