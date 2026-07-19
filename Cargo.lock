@@ -3220,6 +3220,7 @@ dependencies = [
  "indexmap",
  "softbuffer",
  "velvet-anim",
+ "velvet-assets",
  "velvet-cards",
  "velvet-core",
  "velvet-math",
