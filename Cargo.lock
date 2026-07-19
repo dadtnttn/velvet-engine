@@ -3217,12 +3217,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "image",
+ "indexmap",
  "softbuffer",
  "velvet-anim",
  "velvet-cards",
  "velvet-core",
  "velvet-math",
  "velvet-story",
+ "velvet-story-lang",
  "velvet-style",
  "winit",
 ]
