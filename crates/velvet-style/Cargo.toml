@@ -1,0 +1,16 @@
+[package]
+name = "velvet-style"
+description = "CSS-like stylesheet tools for Velvet UI (parse, resolve, invoke)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+indexmap = { workspace = true }
+velvet-story = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
