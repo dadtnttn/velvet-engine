@@ -7,17 +7,46 @@
 //! - Edition gate, structured diagnostics, and a clean `compile` / `call` API.
 //!
 //! Not a genre prefab. Not Web3. Logics only.
+//!
+//! ## Proven language surface (must match tests)
+//!
+//! | Area | Supported |
+//! |------|-----------|
+//! | Edition | `// @edition 3` required |
+//! | Functions | `function name(args) { ... return ... }` |
+//! | Values | `int`, `bool`, `float`, `string` (via literals / natives) |
+//! | Arithmetic | `+ - * / %` unary `-` |
+//! | Compare | `== != < <= > >=` |
+//! | Logic | `&& \|\| !` |
+//! | Control | `if` / `else`, `while`, locals `let` |
+//! | Host tools | `abs`, `min`, `max`, `clamp`, `sin`, `cos`, `sqrt`, `pow`, `lerp`, `hash_sha256`, `len`, `concat`, `str`, … |
+//!
+//! Typed `fn f(x: int) -> bool` syntax is **not** claimed until tests prove it.
 
 #![deny(missing_docs)]
 
 use thiserror::Error;
 use velvet_script_ast::{Diagnostic, Severity, SourceLoc};
-use velvet_script_lexer::Span;
 use velvet_script_compiler::{compile_source, CompileError, CompileResult};
+use velvet_script_lexer::Span;
 use velvet_script_vm::{Vm, VmError, VmLimits};
 
 /// Runtime value (re-export for hosts / CLI).
 pub use velvet_script_vm::Value;
+
+/// Human-readable list of the **proven** VS3 surface (docs / tooling).
+pub const SUPPORTED_SURFACE: &[&str] = &[
+    "edition: // @edition 3",
+    "function name(params) { body }",
+    "return expr",
+    "let name = expr",
+    "if cond { } else { }",
+    "while cond { }",
+    "int/bool/float/string values",
+    "ops: + - * / % == != < <= > >= && || !",
+    "natives: abs min max clamp sin cos sqrt pow lerp hash_sha256 len concat str",
+    "call via Vs3Module::call / eval_call / velvet vs3 run",
+];
 
 /// Parsed source edition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -583,5 +612,171 @@ function add_then_abs(a, b) {
         let err = m.call("does_not_exist", &[]).unwrap_err();
         assert!(matches!(err, Vs3Error::Runtime { .. }));
         assert!(!err.to_string().is_empty());
+    }
+
+    // ── Language surface expansion ──────────────────────────────────────
+
+    const SURFACE: &str = r#"
+// @edition 3
+
+function arith(a, b) {
+    return (a + b) * (a - b) / 2 + a % b
+}
+
+function compares(a, b) {
+    return a < b && a <= b && !(a > b) && a != b || a == a
+}
+
+function with_else(x) {
+    if x > 0 {
+        return 1
+    } else {
+        if x < 0 {
+            return -1
+        } else {
+            return 0
+        }
+    }
+}
+
+function sum_while(n) {
+    let i = 0
+    let s = 0
+    while i < n {
+        i += 1
+        s += i
+    }
+    return s
+}
+
+function join_labels(a, b) {
+    return concat(a, b)
+}
+
+function label_len(s) {
+    return len(s)
+}
+
+function float_half(x) {
+    return x / 2.0
+}
+
+function tool_clamp(x, lo, hi) {
+    return clamp(x, lo, hi)
+}
+
+function tool_min_max(a, b) {
+    return max(min(a, b), 0)
+}
+"#;
+
+    #[test]
+    fn surface_arithmetic_ops() {
+        // (7+3)*(7-3)/2 + 7%3 = 10*4/2 + 1 = 20+1 = 21
+        let v = eval_call(SURFACE, Some("s.vel"), "arith", &[int(7), int(3)]).unwrap();
+        assert_eq!(v, Value::Int(21));
+    }
+
+    #[test]
+    fn surface_comparisons_and_logic() {
+        let v = eval_call(SURFACE, Some("s.vel"), "compares", &[int(2), int(5)]).unwrap();
+        assert_eq!(v, Value::Bool(true));
+        let v = eval_call(SURFACE, Some("s.vel"), "compares", &[int(9), int(1)]).unwrap();
+        // 9<1 false → whole && chain false; then || a==a → true
+        assert_eq!(v, Value::Bool(true));
+    }
+
+    #[test]
+    fn surface_if_else_nested() {
+        assert_eq!(
+            eval_call(SURFACE, Some("s.vel"), "with_else", &[int(3)]).unwrap(),
+            Value::Int(1)
+        );
+        assert_eq!(
+            eval_call(SURFACE, Some("s.vel"), "with_else", &[int(-2)]).unwrap(),
+            Value::Int(-1)
+        );
+        assert_eq!(
+            eval_call(SURFACE, Some("s.vel"), "with_else", &[int(0)]).unwrap(),
+            Value::Int(0)
+        );
+    }
+
+    #[test]
+    fn surface_while_loop_sum() {
+        // 1+2+3+4+5 = 15
+        let v = eval_call(SURFACE, Some("s.vel"), "sum_while", &[int(5)]).unwrap();
+        assert_eq!(v, Value::Int(15));
+        let v = eval_call(SURFACE, Some("s.vel"), "sum_while", &[int(0)]).unwrap();
+        assert_eq!(v, Value::Int(0));
+        let v = eval_call(SURFACE, Some("s.vel"), "sum_while", &[int(1)]).unwrap();
+        assert_eq!(v, Value::Int(1));
+    }
+
+    #[test]
+    fn surface_string_concat_and_len() {
+        let v = eval_call(
+            SURFACE,
+            Some("s.vel"),
+            "join_labels",
+            &[string_val("vel"), string_val("vet")],
+        )
+        .unwrap();
+        match v {
+            Value::String(s) => assert_eq!(&*s, "velvet"),
+            other => panic!("expected string, got {other:?}"),
+        }
+        let v = eval_call(SURFACE, Some("s.vel"), "label_len", &[string_val("abc")]).unwrap();
+        assert_eq!(v, Value::Int(3));
+    }
+
+    #[test]
+    fn surface_float_div() {
+        let v = eval_call(SURFACE, Some("s.vel"), "float_half", &[float_val(8.0)]).unwrap();
+        match v {
+            Value::Float(f) => assert!((f - 4.0).abs() < 1e-9),
+            Value::Int(i) => assert_eq!(i, 4), // if coerced
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn surface_natives_clamp_min_max() {
+        assert_eq!(
+            eval_call(
+                SURFACE,
+                Some("s.vel"),
+                "tool_clamp",
+                &[int(50), int(0), int(10)]
+            )
+            .unwrap(),
+            Value::Int(10)
+        );
+        assert_eq!(
+            eval_call(SURFACE, Some("s.vel"), "tool_min_max", &[int(-3), int(5)]).unwrap(),
+            Value::Int(0)
+        );
+        assert_eq!(
+            eval_call(SURFACE, Some("s.vel"), "tool_min_max", &[int(4), int(9)]).unwrap(),
+            Value::Int(4)
+        );
+    }
+
+    #[test]
+    fn arity_mismatch_fails_honestly() {
+        let m = compile(SAMPLE, Some("logic.vel")).unwrap();
+        let err = m.call("apply_damage", &[int(1)]).unwrap_err();
+        assert!(matches!(err, Vs3Error::Runtime { .. }));
+        assert!(
+            err.to_string().contains("arg") || err.to_string().contains("expected"),
+            "arity error should mention args: {err}"
+        );
+    }
+
+    #[test]
+    fn supported_surface_table_is_nonempty() {
+        assert!(SUPPORTED_SURFACE.len() >= 8);
+        assert!(SUPPORTED_SURFACE.iter().any(|s| s.contains("@edition 3")));
+        assert!(SUPPORTED_SURFACE.iter().any(|s| s.contains("while")));
     }
 }

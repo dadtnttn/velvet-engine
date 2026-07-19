@@ -61,22 +61,53 @@ Minimum for “we can write game logic in VS3 and run it”:
 
 **Explicitly later:** full borrow checker, full Studio IDE, web export, Web3, complete type system parity with Rust.
 
-## What authors write (spirit)
+## Proven surface (matches tests — do not overclaim)
+
+| Area | Syntax / tools |
+|------|----------------|
+| Edition | `// @edition 3` (required for VS3 API) |
+| Functions | `function name(a, b) { … return … }` |
+| Locals | `let x = expr` |
+| Control | `if` / `else`, `while` |
+| Values | ints, bools, floats, strings |
+| Operators | `+ - * / %` `== != < <= > >=` `&& \|\| !` |
+| Host tools | `abs` `min` `max` `clamp` `sin` `cos` `sqrt` `pow` `lerp` `hash_sha256` `len` `concat` `str` |
+| Entry | `velvet vs3 check\|run`, `velvet_script_vs3::eval_call` |
+
+**Not yet claimed:** typed params `x: int`, `->` return types, `struct`/`enum`, full typeck, Web3.
+
+## What authors write (proven form)
 
 ```text
 // @edition 3
 // Logic only — presentation stays story/vcss/hosts
 
-fn can_play_card(hand_size: int, cost: int, energy: int) -> bool {
-    hand_size > 0 && energy >= cost
+function can_play_card(hand_size, cost, energy) {
+    return hand_size > 0 && energy >= cost
 }
 
-fn apply_damage(hp: int, dmg: int) -> int {
-    if dmg >= hp { 0 } else { hp - dmg }
+function apply_damage(hp, dmg) {
+    if dmg >= hp {
+        return 0
+    } else {
+        return hp - dmg
+    }
+}
+
+function sum_to(n) {
+    let i = 0
+    let s = 0
+    while i < n {
+        i += 1
+        s += i
+    }
+    return s
 }
 ```
 
 Hosts (Rust / play / story) **call** these logics; they don’t hide a prefabricated combat game inside the language.
+
+Sample file: `samples/vs3-logic/game_rules.vel`.
 
 ## Pipeline (target)
 
