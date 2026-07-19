@@ -384,8 +384,7 @@ pub fn paint_novel_menu_size(
     sel: usize,
 ) {
     assert!(pixels.len() >= (ww * wh) as usize);
-    let s = (ww as f32 / WW as f32).min(wh as f32 / WH as f32);
-    // Prefer filling width for novel letterbox feel
+    // Scale design (1280×720) to the real framebuffer (native DPI = no upscale blur)
     let s = ww as f32 / WW as f32;
     let ox = 0.0f32;
     let oy = ((wh as f32 - WH as f32 * s) * 0.5).max(0.0);
