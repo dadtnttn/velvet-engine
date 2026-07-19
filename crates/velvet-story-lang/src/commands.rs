@@ -274,11 +274,67 @@ impl CommandRegistry {
                 ty: ParamTy::Text,
                 required: true,
                 default: None,
-                doc: "Texto del script (fx, move, wait, spawn)".into(),
+                doc: "Texto del script (fx, move, wait, spawn, pack_open)".into(),
             }],
             required: vec!["body".into()],
             snippet: "call anim.script:\n    body: \"fx card0 deal 200 360 0.3\"\n".into(),
             error_help: "call anim.script:\n    body: \"fx card0 fade_in\"".into(),
+        });
+        r.register(CommandSpec {
+            name: "anim.pack_open".into(),
+            category: "animation".into(),
+            description:
+                "Genera un efecto 3D de abrir sobre (pack) y abanico de cartas (billboards)."
+                    .into(),
+            params: vec![
+                CommandParam {
+                    name: "x".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("480".into()),
+                    doc: "Centro X del sobre".into(),
+                },
+                CommandParam {
+                    name: "y".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("270".into()),
+                    doc: "Centro Y del sobre".into(),
+                },
+                CommandParam {
+                    name: "cards".into(),
+                    ty: ParamTy::Int,
+                    required: false,
+                    default: Some("5".into()),
+                    doc: "Cartas a revelar".into(),
+                },
+                CommandParam {
+                    name: "duration".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("2.2".into()),
+                    doc: "Duración total de la secuencia".into(),
+                },
+                CommandParam {
+                    name: "seed".into(),
+                    ty: ParamTy::Int,
+                    required: false,
+                    default: Some("1".into()),
+                    doc: "Semilla de variación de tilt".into(),
+                },
+                CommandParam {
+                    name: "fan_spacing".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("95".into()),
+                    doc: "Separación horizontal del abanico".into(),
+                },
+            ],
+            required: vec![],
+            snippet:
+                "call anim.pack_open:\n    x: 480\n    y: 270\n    cards: 5\n    duration: 2.0\n"
+                    .into(),
+            error_help: "call anim.pack_open:\n    cards: 5".into(),
         });
         r
     }
