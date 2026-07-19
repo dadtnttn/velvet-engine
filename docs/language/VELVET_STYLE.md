@@ -1,12 +1,21 @@
-# Velvet Style (`.vcss`) — **one** language for look + motion
+# Velvet Style (`.vcss`) — CSS + JS for look & motion
 
 Crate: **`velvet-style`**.
 
-Visual style **and** animation share this format. The old separate **`.vanim`**
-mini-language is folded in: use `@keyframes` + `animation`, or convert legacy
-vanim with `vanim_to_vcss`.
+**One author language.** `.vcss` mixes:
 
-## Style (UI)
+| Layer | Role | Syntax |
+|-------|------|--------|
+| **CSS** | Look, cascade, `@keyframes` | selectors, properties, animation |
+| **JS-lite** | Orchestration | `@script { let, fn, for, play, animate, on }` |
+
+Runtime playback is **velvet-anim** (`timeline_from_plan`) — not a second style language.
+
+Legacy **`.vanim`** line scripts convert with `vanim_to_vcss`.
+
+---
+
+## CSS side
 
 ```css
 .button {
@@ -23,11 +32,7 @@ vanim with `vanim_to_vcss`.
   color: #ffe496;
 }
 #start { icon: star; }
-```
 
-## Motion (was `.vanim`)
-
-```css
 @keyframes deal {
   from { opacity: 0; y: -80; scale: 0.65; yaw: 0.9; }
   to   { opacity: 1; y: 0;   scale: 1;    yaw: 0; }
@@ -54,25 +59,91 @@ vanim with `vanim_to_vcss`.
 
 `opacity`, `x`, `y`, `scale`, `yaw`, `pitch`, `roll`, `foil`, `depth`, …
 
-## Rust
+---
+
+## JS-lite side (`@script`)
+
+```css
+@script {
+  let stagger = 0.08;
+
+  fn dealHand(count) {
+    for (let i = 0; i < count; i = i + 1) {
+      play("deal", {
+        target: "card" + i,
+        delay: i * stagger,
+        duration: 0.32,
+        ease: "cubic_out"
+      });
+    }
+  }
+
+  fn punchCard(id) {
+    play("punch", { target: id, duration: 0.22 });
+  }
+
+  // tween without named keyframes
+  fn logoIn() {
+    animate("#logo", { opacity: [0, 1], y: [-24, 0] }, 0.45, "cubic_out");
+  }
+
+  on("menu.open", fn () {
+    logoIn();
+  });
+
+  on("hand.deal", dealHand);
+}
+```
+
+### Built-ins
+
+| Call | Effect |
+|------|--------|
+| `play(name, { target, delay, duration, ease })` | Run `@keyframes name` → `StyleAction::Play` + timeline |
+| `animate(target, { prop: [from,to], … }, dur, ease?)` | Imperative channels |
+| `wait(secs)` | Sequencing hint for hosts |
+| `emit(event, payload?)` | Host-visible signal |
+| `len` / `min` / `max` / `abs` / `floor` / `ceil` | helpers |
+
+Supports: `let`, `fn`/`function`, `for`, `if`/`else`, `return`, numbers (optional `s` unit: `0.35s`), strings, arrays, objects, `+ - * / %`, comparisons, `&&` `||` `!`, string concat with `+`.
+
+---
+
+## Rust API
 
 ```rust
-use velvet_style::{parse_stylesheet, plan_animation, StyleQuery};
+use velvet_style::{
+    parse_stylesheet, plan_animation, call_style_fn, emit_style_event,
+    StyleQuery, JsValue,
+};
 use velvet_anim::timeline_from_plan;
 
 let sheet = parse_stylesheet(src)?;
+
+// CSS path
 let plan = plan_animation(&sheet, &StyleQuery::class("card").with_class("deal"))?;
 let timeline = timeline_from_plan(&plan);
+
+// JS path
+let run = call_style_fn(&sheet, "dealHand", &[JsValue::num(5)])?;
+for tl in &run.timelines {
+    let _ = timeline_from_plan(tl);
+}
+
+// Event handlers from @script on(...)
+let _ = emit_style_event(&sheet, "menu.open", &[])?;
 ```
 
-## Legacy `.vanim`
+Story commands: `style.load`, `style.use`, `style.resolve`, `style.play`, **`style.call`**, **`style.emit`**.
 
-```rust
-let vcss = velvet_style::vanim_to_vcss("fx card0 deal 200 360 0.3\n")?;
-```
-
-Story: `style.load`, `style.use`, `style.play` (also accepts old vanim body).
+---
 
 ## Language count
 
-Styles + motion = **one** author language (`.vcss`), not two.
+| Author language | Extension | Role |
+|-----------------|-----------|------|
+| Velvet Story | `.vstory` | narrative |
+| Velvet Script | `.vel` | general scripting |
+| **Velvet Style** | **`.vcss`** | **UI + motion (CSS+JS)** |
+
+Styles + motion + orchestration = **one** style language, not CSS + vanim + extra.

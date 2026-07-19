@@ -1,4 +1,4 @@
-//! Optional story host for `style.load` / `style.use`.
+//! Optional story host for `style.load` / `style.use` / `style.call` / `style.emit`.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -9,6 +9,7 @@ use velvet_story::{
 };
 
 use crate::resolve::{StyleQuery, StyleRegistry};
+use crate::script::JsValue;
 
 /// Shared style registry for narrative hosts.
 pub struct StyleStoryHost {
@@ -111,11 +112,14 @@ impl StoryCommandHost for StyleStoryHost {
                 Ok(CommandOutcome::Continue)
             }
             "style.play" | "anim.script" => {
-                // Unified: body can be .vcss or legacy .vanim (auto-converted)
+                // Unified: body can be .vcss (CSS+JS) or legacy .vanim (auto-converted)
                 let body = arg_str(args, "body")
                     .or_else(|| arg_str(args, "code"))
                     .unwrap_or_default();
-                let vcss = if body.contains('{') || body.contains("@keyframes") {
+                let vcss = if body.contains('{')
+                    || body.contains("@keyframes")
+                    || body.contains("@script")
+                {
                     body
                 } else {
                     crate::animation::vanim_to_vcss(&body)
@@ -138,9 +142,102 @@ impl StoryCommandHost for StyleStoryHost {
                             .sum(),
                     ),
                 );
+                vars.set(
+                    "style.fns",
+                    StoryValue::Int(
+                        reg.sheets
+                            .values()
+                            .map(|s| s.script.functions.len() as i64)
+                            .sum(),
+                    ),
+                );
+                Ok(CommandOutcome::Continue)
+            }
+            "style.call" => {
+                // style.call: fn: dealHand, arg0: 5  (optional sheet=)
+                let fn_name = arg_str(args, "fn")
+                    .or_else(|| arg_str(args, "function"))
+                    .ok_or_else(|| StoryCommandError::new("style.call needs fn="))?;
+                let sheet_override = arg_str(args, "sheet");
+                let mut js_args = Vec::new();
+                for i in 0..8 {
+                    let key = format!("arg{i}");
+                    if let Some(v) = args.get(&key) {
+                        js_args.push(story_to_js(v));
+                    }
+                }
+                if js_args.is_empty() {
+                    if let Some(c) = arg_str(args, "count").and_then(|s| s.parse::<f32>().ok()) {
+                        js_args.push(JsValue::Number(c));
+                    } else if let Some(t) = arg_str(args, "target") {
+                        js_args.push(JsValue::String(t));
+                    }
+                }
+                let reg = self
+                    .registry
+                    .lock()
+                    .map_err(|e| StoryCommandError::new(e.to_string()))?;
+                let sheet_key = sheet_override
+                    .or_else(|| reg.active.clone())
+                    .ok_or_else(|| StoryCommandError::new("no active stylesheet"))?;
+                let sheet = reg.sheets.get(&sheet_key).ok_or_else(|| {
+                    StoryCommandError::new(format!("unknown stylesheet `{sheet_key}`"))
+                })?;
+                let run = crate::call_style_fn(sheet, &fn_name, &js_args)
+                    .map_err(|e| StoryCommandError::new(e.to_string()))?;
+                vars.set(
+                    "style.actions",
+                    StoryValue::Int(run.actions.len() as i64),
+                );
+                vars.set(
+                    "style.timelines",
+                    StoryValue::Int(run.timelines.len() as i64),
+                );
+                Ok(CommandOutcome::Continue)
+            }
+            "style.emit" => {
+                let event = arg_str(args, "event")
+                    .or_else(|| arg_str(args, "name"))
+                    .ok_or_else(|| StoryCommandError::new("style.emit needs event="))?;
+                let mut js_args = Vec::new();
+                if let Some(p) = arg_str(args, "payload") {
+                    js_args.push(JsValue::String(p));
+                }
+                let reg = self
+                    .registry
+                    .lock()
+                    .map_err(|e| StoryCommandError::new(e.to_string()))?;
+                let sheet_name = reg.active.clone().ok_or_else(|| {
+                    StoryCommandError::new("no active stylesheet")
+                })?;
+                let sheet = reg.sheets.get(&sheet_name).ok_or_else(|| {
+                    StoryCommandError::new(format!("unknown stylesheet `{sheet_name}`"))
+                })?;
+                let run = crate::emit_style_event(sheet, &event, &js_args)
+                    .map_err(|e| StoryCommandError::new(e.to_string()))?;
+                vars.set(
+                    "style.actions",
+                    StoryValue::Int(run.actions.len() as i64),
+                );
                 Ok(CommandOutcome::Continue)
             }
             _ => Ok(CommandOutcome::Continue),
+        }
+    }
+}
+
+fn story_to_js(v: &StoryValue) -> JsValue {
+    match v {
+        StoryValue::Null => JsValue::Null,
+        StoryValue::Int(i) => JsValue::Number(*i as f32),
+        StoryValue::Float(f) => JsValue::Number(*f as f32),
+        StoryValue::Bool(b) => JsValue::Bool(*b),
+        StoryValue::String(s) => {
+            if let Ok(n) = s.parse::<f32>() {
+                JsValue::Number(n)
+            } else {
+                JsValue::String(s.clone())
+            }
         }
     }
 }

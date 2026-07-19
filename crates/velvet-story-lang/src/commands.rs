@@ -539,7 +539,7 @@ impl CommandRegistry {
             name: "style.play".into(),
             category: "style".into(),
             description:
-                "Carga motion+style unificado (.vcss con @keyframes, o legacy .vanim auto-convertido)."
+                "Carga .vcss (CSS + JS-lite @script / @keyframes), o legacy .vanim auto-convertido."
                     .into(),
             params: vec![
                 CommandParam {
@@ -554,14 +554,76 @@ impl CommandRegistry {
                     ty: ParamTy::Text,
                     required: true,
                     default: None,
-                    doc: "Fuente .vcss o líneas .vanim legacy".into(),
+                    doc: "Fuente .vcss (CSS+JS) o líneas .vanim legacy".into(),
                 },
             ],
             required: vec!["body".into()],
             snippet:
-                "call style.play:\n    body: \"@keyframes fade { from { opacity: 0 } to { opacity: 1 } }\\n.x { animation: fade 0.3s }\"\n"
+                "call style.play:\n    body: \"@keyframes fade { from { opacity: 0 } to { opacity: 1 } }\\n@script { fn go() { play(\\\"fade\\\", { target: \\\"x\\\" }); } }\"\n"
                     .into(),
-            error_help: "call style.play:\n    body: \"…vcss o vanim…\"".into(),
+            error_help: "call style.play:\n    body: \"…vcss…\"".into(),
+        });
+        r.register(CommandSpec {
+            name: "style.call".into(),
+            category: "style".into(),
+            description: "Ejecuta una fn de @script en la hoja activa (play/animate → actions).".into(),
+            params: vec![
+                CommandParam {
+                    name: "fn".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "Nombre de función JS-lite".into(),
+                },
+                CommandParam {
+                    name: "sheet".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: None,
+                    doc: "Hoja (default: activa)".into(),
+                },
+                CommandParam {
+                    name: "arg0".into(),
+                    ty: ParamTy::Text,
+                    required: false,
+                    default: None,
+                    doc: "Primer argumento".into(),
+                },
+                CommandParam {
+                    name: "count".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: None,
+                    doc: "Atajo numérico si no hay arg0".into(),
+                },
+            ],
+            required: vec!["fn".into()],
+            snippet: "call style.call:\n    fn: dealHand\n    arg0: 5\n".into(),
+            error_help: "call style.call:\n    fn: dealHand\n    count: 5".into(),
+        });
+        r.register(CommandSpec {
+            name: "style.emit".into(),
+            category: "style".into(),
+            description: "Dispara handlers on(\"event\") del @script de la hoja activa.".into(),
+            params: vec![
+                CommandParam {
+                    name: "event".into(),
+                    ty: ParamTy::Text,
+                    required: true,
+                    default: None,
+                    doc: "Nombre de evento (menu.open, …)".into(),
+                },
+                CommandParam {
+                    name: "payload".into(),
+                    ty: ParamTy::Text,
+                    required: false,
+                    default: None,
+                    doc: "Payload opcional".into(),
+                },
+            ],
+            required: vec!["event".into()],
+            snippet: "call style.emit:\n    event: menu.open\n".into(),
+            error_help: "call style.emit:\n    event: menu.open".into(),
         });
         r
     }
