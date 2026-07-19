@@ -535,6 +535,34 @@ impl CommandRegistry {
             snippet: "call style.resolve:\n    class: button\n    state: selected\n".into(),
             error_help: "call style.resolve:\n    class: button".into(),
         });
+        r.register(CommandSpec {
+            name: "style.play".into(),
+            category: "style".into(),
+            description:
+                "Carga motion+style unificado (.vcss con @keyframes, o legacy .vanim auto-convertido)."
+                    .into(),
+            params: vec![
+                CommandParam {
+                    name: "name".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: Some("anim".into()),
+                    doc: "Nombre de hoja".into(),
+                },
+                CommandParam {
+                    name: "body".into(),
+                    ty: ParamTy::Text,
+                    required: true,
+                    default: None,
+                    doc: "Fuente .vcss o líneas .vanim legacy".into(),
+                },
+            ],
+            required: vec!["body".into()],
+            snippet:
+                "call style.play:\n    body: \"@keyframes fade { from { opacity: 0 } to { opacity: 1 } }\\n.x { animation: fade 0.3s }\"\n"
+                    .into(),
+            error_help: "call style.play:\n    body: \"…vcss o vanim…\"".into(),
+        });
         r
     }
 

@@ -1,77 +1,78 @@
-# Velvet Style (`.vcss`) — CSS-like tools
+# Velvet Style (`.vcss`) — **one** language for look + motion
 
-Crate: **`velvet-style`**. Author stylesheets, resolve classes/states, paint UI.
+Crate: **`velvet-style`**.
 
-## Syntax (subset)
+Visual style **and** animation share this format. The old separate **`.vanim`**
+mini-language is folded in: use `@keyframes` + `animation`, or convert legacy
+vanim with `vanim_to_vcss`.
+
+## Style (UI)
 
 ```css
-/* comments */
 .button {
   background: #0a0c16;
   border-color: #b9964b;
-  border-width: 1;
   color: #d2af64;
   height: 52;
-  padding-x: 14;
-  icon-size: 34;
 }
-
 .button:selected {
   background: #501e78;
   border-color: #ffdc96;
   glow: #dc50dc;
-  color: #ffe496;
   glow-strength: 0.85;
+  color: #ffe496;
+}
+#start { icon: star; }
+```
+
+## Motion (was `.vanim`)
+
+```css
+@keyframes deal {
+  from { opacity: 0; y: -80; scale: 0.65; yaw: 0.9; }
+  to   { opacity: 1; y: 0;   scale: 1;    yaw: 0; }
 }
 
-#start {
-  icon: star;
+.card.deal {
+  animation: deal 0.35s cubic_out;
+  animation-delay: 0.08s;
 }
 ```
 
-### Selectors
+### Animation properties
 
-| Form | Meaning |
-|------|---------|
-| `.class` | class |
-| `.class:state` | class + pseudo (`selected`, `hover`, …) |
-| `#id` | element id |
+| Property | Meaning |
+|----------|---------|
+| `animation` | shorthand: `name duration ease delay` |
+| `animation-name` | keyframes name |
+| `animation-duration` | seconds |
+| `animation-delay` | seconds |
+| `animation-timing-function` / `animation-ease` | e.g. `cubic_out` |
+| `animation-target` | optional id |
 
-### Values
+### Animatable channels in keyframes
 
-- Colors: `#rgb`, `#rrggbb`, `rgb()`, `rgba()`, names (`gold`, `neon`, …)
-- Numbers / lengths: `52`, `1.5`, `12px`
-- Keywords: `star`, `none`, …
+`opacity`, `x`, `y`, `scale`, `yaw`, `pitch`, `roll`, `foil`, `depth`, …
 
-## Rust API
+## Rust
 
 ```rust
-use velvet_style::{parse_stylesheet, resolve, StyleQuery, StyleRegistry};
+use velvet_style::{parse_stylesheet, plan_animation, StyleQuery};
+use velvet_anim::timeline_from_plan;
 
-let mut reg = StyleRegistry::new();
-reg.load_str("casino", include_str!("casino.vcss"))?;
-
-let style = reg.resolve(
-    &StyleQuery::class("button").with_state("selected").with_id("start")
-);
-let bg = style.background().rgb_tuple();
-let color = style.color_text().rgb_tuple();
+let sheet = parse_stylesheet(src)?;
+let plan = plan_animation(&sheet, &StyleQuery::class("card").with_class("deal"))?;
+let timeline = timeline_from_plan(&plan);
 ```
 
-## Story language (invoke)
+## Legacy `.vanim`
 
-```text
-call style.load:
-    name: casino
-    path: styles/casino.vcss
-
-call style.use:
-    name: casino
+```rust
+let vcss = velvet_style::vanim_to_vcss("fx card0 deal 200 360 0.3\n")?;
 ```
 
-(Host wires `StyleRegistry` like `AnimStoryHost`.)
+Story: `style.load`, `style.use`, `style.play` (also accepts old vanim body).
 
-## Design rules
+## Language count
 
-- **Tools**: parse + resolve only; your renderer applies properties.
-- Demos may ship a default `.vcss`; authors override freely.
+Styles + motion = **one** author language (`.vcss`), not two.

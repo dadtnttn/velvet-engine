@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 velvet-math = { workspace = true }
 velvet-story = { workspace = true }
+velvet-style = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 indexmap = { workspace = true }

@@ -110,6 +110,36 @@ impl StoryCommandHost for StyleStoryHost {
                 );
                 Ok(CommandOutcome::Continue)
             }
+            "style.play" | "anim.script" => {
+                // Unified: body can be .vcss or legacy .vanim (auto-converted)
+                let body = arg_str(args, "body")
+                    .or_else(|| arg_str(args, "code"))
+                    .unwrap_or_default();
+                let vcss = if body.contains('{') || body.contains("@keyframes") {
+                    body
+                } else {
+                    crate::animation::vanim_to_vcss(&body)
+                        .map_err(|e| StoryCommandError::new(e))?
+                };
+                let sheet_name = arg_str(args, "name").unwrap_or_else(|| "anim".into());
+                let mut reg = self
+                    .registry
+                    .lock()
+                    .map_err(|e| StoryCommandError::new(e.to_string()))?;
+                reg.load_str(&sheet_name, &vcss)
+                    .map_err(|e| StoryCommandError::new(e.to_string()))?;
+                vars.set("style.active", StoryValue::String(sheet_name));
+                vars.set(
+                    "style.keyframes",
+                    StoryValue::Int(
+                        reg.sheets
+                            .values()
+                            .map(|s| s.keyframes.len() as i64)
+                            .sum(),
+                    ),
+                );
+                Ok(CommandOutcome::Continue)
+            }
             _ => Ok(CommandOutcome::Continue),
         }
     }
