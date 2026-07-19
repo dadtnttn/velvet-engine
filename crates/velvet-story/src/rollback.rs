@@ -141,7 +141,7 @@ impl RollbackStack {
         save.persistent = frame.variables.persistent.clone().into_iter().collect();
         save.meta.play_time_secs = frame.play_time_secs;
         save.meta.preview = frame.current_text.clone();
-        player.load_save(save)
+        player.load_save(save).map_err(|e| e.to_string())
     }
 
     /// Convenience: push current, then later `step_back` restores previous.

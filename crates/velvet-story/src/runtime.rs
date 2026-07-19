@@ -14,7 +14,7 @@ use crate::ir::{
     StoryProgram,
 };
 use crate::prefs::{SkipMode, StoryPreferences};
-use crate::save::SaveGame;
+use crate::save::{SaveError, SaveGame};
 use crate::value::StoryValue;
 use crate::variables::StoryVariables;
 use crate::voice::VoiceQueue;
@@ -765,17 +765,19 @@ impl StoryPlayer {
     }
 
     /// Restore from save (program must match / be reloaded).
-    pub fn load_save(&mut self, save: SaveGame) -> Result<(), String> {
-        let save = save.migrate().map_err(|e| e.to_string())?;
+    ///
+    /// Returns [`SaveError::ProgramMismatch`] when the save was written against
+    /// a different narrative program (non-empty `program_hash`).
+    pub fn load_save(&mut self, save: SaveGame) -> Result<(), SaveError> {
+        let save = save.migrate()?;
         // Identity check: reject saves written against a different story program.
         if !save.program_hash.is_empty() {
             let current = self.program.content_hash();
             if save.program_hash != current {
-                return Err(format!(
-                    "program hash mismatch (save is for a different story script): save={} current={}",
-                    &save.program_hash[..save.program_hash.len().min(12)],
-                    &current[..current.len().min(12)]
-                ));
+                return Err(SaveError::ProgramMismatch {
+                    saved: save.program_hash,
+                    current,
+                });
             }
         }
         self.vars.play = save.variables.into_iter().collect();
@@ -1958,14 +1960,14 @@ scene start {
             .load_save(save.clone())
             .expect("same program content should load");
 
-        // Different program: reject
+        // Different program: reject with structured error
         let mut player_b = StoryPlayer::start(prog_b);
         let err = player_b
             .load_save(save)
             .expect_err("mismatched program must fail");
         assert!(
-            err.contains("program hash mismatch") || err.contains("hash"),
-            "err={err}"
+            matches!(err, crate::save::SaveError::ProgramMismatch { .. }),
+            "err={err:?}"
         );
     }
 
