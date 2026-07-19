@@ -1,11 +1,14 @@
-//! Named effect presets (cards, UI, sprites).
+//! 2D tween **builders** + optional named kinds used by recipes / `anim.fx`.
+//!
+//! Prefer composing [`FloatTween`] yourself. [`EffectKind`] / [`build_effect`]
+//! are convenience recipes kept for story snippets — not the only path.
 
 use velvet_math::{Ease, Vec2};
 
 use crate::pose::{AnimField, AnimPose};
 use crate::tween::{apply_field, read_field, FloatTween};
 
-/// Built-in effect kinds authors reference from script.
+/// Convenience kind names (recipe layer; compose tweens directly if you prefer).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EffectKind {
     /// Fade opacity 0 → 1.

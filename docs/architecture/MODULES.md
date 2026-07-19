@@ -21,9 +21,9 @@
 | **velvet-play** | 2D play: tilemaps, physics, AI, pathfinding, particles |
 | **velvet-cellular** | **ALPHA** — falling-sand / cellular sim (Noita-like author core; APIs unstable) |
 | **velvet-rpg** | Stats, inventory, quests, shops, leveling, equipment |
-| **velvet-action** | Combat, weapons, projectiles, arena waves, dash/combo; Hotline spine (`hotline`) deferred on roadmap |
-| **velvet-cards** | **Tools**: card catalog, deck list validation, seeded shuffle, draw/discard zones — not a card game |
-| **velvet-anim** | **Tools**: poses, tweens, VFX presets, director, `.vanim` + story `anim.*` host |
+| **velvet-action** | **Tools**: weapons, projectiles, aim/loadout/hitscan, arena, dash; optional `recipes` room loop |
+| **velvet-cards** | **Tools**: catalog, deck validation, zones (not a game) |
+| **velvet-anim** | **Tools**: tweens, director, Pose3D, project_image, Timeline; optional `recipes` |
 | **velvet-project** | `velvet.project`, module graph, validation |
 | **velvet-build** | Pack, localization, desktop export manifests |
 | **velvet-cli** | `velvet` CLI |

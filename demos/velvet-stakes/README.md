@@ -1,9 +1,10 @@
-# Velvet Stakes — demo estilo Balatro
+# Velvet Stakes — **demo** (no es una tool del engine)
 
-Demo **fan / pre-alpha** de poker con puntuación **chips × mult** y **ciegas**
-(blinds). No está afiliado a LocalThunk ni a Balatro.
+Ejemplo jugable estilo Balatro que **compone** herramientas (`velvet-cards`
+zones + evaluación de manos en este binario). El API del engine son las tools,
+no este loop de ciegas.
 
-Usa `velvet-cards` para mazo / mano / descarte y ventana softbuffer.
+Fan / pre-alpha — no afiliado a LocalThunk ni a Balatro.
 
 ## Pantallas
 

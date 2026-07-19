@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ImageBillboard`, keyframe `Timeline` / `ChannelTrack`, story
   `anim.billboard` / `anim.pose3d` / `anim.track`. Premade pack cutscenes
   removed from the host API; optional samples only under `recipes`.
+- **Tools-first across cards / action / anim**: `docs/architecture/TOOLS.md`;
+  Hotline room loop → `velvet_action::recipes`; `WeaponLoadout` / `WeaponKits`
+  as tools; demos stay examples only.
 - Phase 0: workspace, architecture docs, ADRs, CI skeleton, dual license.
 - Phase 1 (core): `velvet-math`, `velvet-time`, `velvet-events`, `velvet-core`, `velvet-app`
   (plugins, schedules, resources, headless + winit window runners).

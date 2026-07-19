@@ -1,8 +1,7 @@
-# Card Duel — demo de menús + duelo de cartas
+# Card Duel — **demo** de menús + duelo
 
-Demo **con ventana** sobre Velvet Engine y las herramientas `velvet-cards`
-(catálogo, mazo, zonas library/hand/discard). No es un TCG completo: es un
-esqueleto jugable con pantallas de menú.
+Ejemplo con ventana que **usa** `velvet-cards` (tools). No define el API de
+cartas del engine; las tools son catalog/deck/zones.
 
 ## Pantallas
 

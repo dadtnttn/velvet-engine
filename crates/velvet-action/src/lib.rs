@@ -1,10 +1,10 @@
 //! # velvet-action
 //!
-//! Top-down action: weapons, projectiles, perception, enemies, score, combos,
-//! dash, arena waves, hitstop, quick restart.
+//! **Tools** for top-down action: weapons, projectiles, perception, enemies,
+//! score, combos, dash, arena, hitstop, aim/loadout/hitscan.
 //!
-//! Also includes a **Hotline Miami–like** spine ([`hotline`]): top-down action
-//! shooter with free aim, one-hit fragility, melee/guns, pickups, and room clear.
+//! Optional room-loop glue lives in [`recipes`] (not required).
+//! Demos (`examples/hotline-rush`) show composition — they are not the API.
 
 #![deny(missing_docs)]
 
@@ -18,6 +18,8 @@ mod hotline;
 mod perception;
 mod plugin;
 mod projectile;
+/// Optional sample compositions of tools.
+pub mod recipes;
 mod score;
 mod story_host;
 mod weapon;
@@ -32,9 +34,11 @@ pub use enemy::{EnemyAi, EnemyKind, PatrolPath};
 pub use hitstop::{Hitstop, HitstopConfig};
 pub use hotline::{
     apply_fragile_damage, hitscan_first, throw_held, try_attack, try_pickup, AimFacing,
-    AttackOutcome, Fragility, FragilityHit, GroundWeapon, HotlineLoadout, HotlinePhase,
-    HotlinePresets, HotlineRun, KillStyle, PICKUP_RADIUS,
+    AttackOutcome, Fragility, FragilityHit, GroundWeapon, HotlineLoadout, HotlinePresets,
+    WeaponKits, WeaponLoadout, PICKUP_RADIUS,
 };
+// Recipe re-exports for older demos (prefer tools + your own loop).
+pub use recipes::{HotlinePhase, HotlineRun, KillStyle, RoomPhase, RoomRun};
 pub use perception::{hear, see_target, Perception, PerceptionConfig};
 pub use plugin::ActionPlugin;
 pub use projectile::{Projectile, ProjectileSystem};
