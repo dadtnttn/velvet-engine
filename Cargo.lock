@@ -2674,6 +2674,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-anim"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "pretty_assertions",
+ "serde",
+ "thiserror 2.0.18",
+ "velvet-math",
+ "velvet-story",
+]
+
+[[package]]
 name = "velvet-app"
 version = "0.1.0"
 dependencies = [

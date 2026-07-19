@@ -23,6 +23,7 @@
 | **velvet-rpg** | Stats, inventory, quests, shops, leveling, equipment |
 | **velvet-action** | Combat, weapons, projectiles, arena waves, dash/combo; Hotline spine (`hotline`) deferred on roadmap |
 | **velvet-cards** | **Tools**: card catalog, deck list validation, seeded shuffle, draw/discard zones — not a card game |
+| **velvet-anim** | **Tools**: poses, tweens, VFX presets, director, `.vanim` + story `anim.*` host |
 | **velvet-project** | `velvet.project`, module graph, validation |
 | **velvet-build** | Pack, localization, desktop export manifests |
 | **velvet-cli** | `velvet` CLI |

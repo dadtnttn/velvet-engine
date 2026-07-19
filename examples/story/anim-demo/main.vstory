@@ -1,0 +1,40 @@
+# Animation demo for writers — needs AnimStoryHost at runtime
+
+scene start
+
+narrator:
+    Las cartas aparecen con estilo.
+
+call anim.fx:
+    target: card0
+    effect: deal
+    x: 180
+    y: 360
+    duration: 0.4
+
+call anim.fx:
+    target: card1
+    effect: deal
+    x: 300
+    y: 360
+    duration: 0.4
+    delay: 0.1
+
+call anim.fx:
+    target: card2
+    effect: deal
+    x: 420
+    y: 360
+    duration: 0.4
+    delay: 0.2
+
+narrator:
+    Y un aviso hace punch.
+
+call anim.fx:
+    target: banner
+    effect: punch
+    duration: 0.25
+    strength: 0.25
+
+end
