@@ -60,7 +60,8 @@ fn load_recursive(
             items: vec![],
         });
     }
-    let source = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let source =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let file_s = path.to_string_lossy().to_string();
     let parsed = parse(&source, &file_s);
     diags.extend(parsed.diags);
@@ -147,22 +148,14 @@ mod tests {
         let dir = tempdir().unwrap();
         let inc = dir.path().join("part.vstory");
         let root = dir.path().join("main.vstory");
-        std::fs::write(
-            &inc,
-            "scene hallway\nnarrator:\n    Pasillo.\nend\n",
-        )
-        .unwrap();
+        std::fs::write(&inc, "scene hallway\nnarrator:\n    Pasillo.\nend\n").unwrap();
         std::fs::write(
             &root,
             "include \"part.vstory\"\n\nscene start\ngoto hallway\n",
         )
         .unwrap();
         let (file, diags) = load_story_path(&root).unwrap();
-        assert!(
-            !diags.iter().any(|d| d.is_error()),
-            "{:?}",
-            diags
-        );
+        assert!(!diags.iter().any(|d| d.is_error()), "{:?}", diags);
         let names: Vec<_> = file
             .items
             .iter()

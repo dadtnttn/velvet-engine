@@ -1,11 +1,9 @@
 //! Velvet 2.5 e2e: .vstory → StoryProgram → product StoryPlayer.
 
-use velvet_story_lang::commands::CommandRegistry;
-use velvet_story_lang::pipeline::{
-    build_story_program, run_source_product, run_story_program,
-};
-use velvet_story_lang::WELCOME_SAMPLE;
 use velvet_story::StoryOp;
+use velvet_story_lang::commands::CommandRegistry;
+use velvet_story_lang::pipeline::{build_story_program, run_source_product, run_story_program};
+use velvet_story_lang::WELCOME_SAMPLE;
 
 #[test]
 fn welcome_product_choice0_exact() {
@@ -17,7 +15,9 @@ fn welcome_product_choice0_exact() {
         r.dialogue
     );
     assert!(
-        r.dialogue.iter().any(|l| l.contains("Me alegra") || l.contains("alegra")),
+        r.dialogue
+            .iter()
+            .any(|l| l.contains("Me alegra") || l.contains("alegra")),
         "expected greet branch: {:?}",
         r.dialogue
     );
@@ -102,7 +102,10 @@ fn format_path_check_detects_dirty() {
     let err = format_path(&path, true);
     // either needs formatting or already pretty — if pretty equal, ok
     if let Err(e) = err {
-        assert!(e.contains("needs formatting") || e.contains("idempotent"), "{e}");
+        assert!(
+            e.contains("needs formatting") || e.contains("idempotent"),
+            "{e}"
+        );
     }
 }
 
@@ -317,16 +320,12 @@ end
     let vs2 = run_source(src, "ret.vstory", &cmds, 0);
     assert!(vs2.ok, "vs2 fallback run failed");
     assert!(
-        vs2.state
-            .iter()
-            .any(|(k, v)| k == "marker" && v == "7"),
+        vs2.state.iter().any(|(k, v)| k == "marker" && v == "7"),
         "vs2 state={:?}",
         vs2.state
     );
     assert!(
-        vs2.dialogue
-            .iter()
-            .any(|l| l.contains("back_from_helper")),
+        vs2.dialogue.iter().any(|l| l.contains("back_from_helper")),
         "vs2 dialogue={:?} (return must resume caller)",
         vs2.dialogue
     );
@@ -692,11 +691,7 @@ fn diag_five_locales_same_code_different_text() {
             &cmds,
             CheckOptions::new().with_locale(*loc),
         );
-        let d = c
-            .diags
-            .iter()
-            .find(|d| d.code == "VST027")
-            .expect("VST027");
+        let d = c.diags.iter().find(|d| d.code == "VST027").expect("VST027");
         assert_eq!(d.code, "VST027");
         assert_eq!(d.locale, *loc);
         displays.push((loc.code(), d.display()));
@@ -793,8 +788,7 @@ fn include_error_attributes_origin_file() {
         d.loc.file
     );
     assert!(
-        !d.loc.file.ends_with("root.vstory")
-            || d.loc.file.contains("child_broken"),
+        !d.loc.file.ends_with("root.vstory") || d.loc.file.contains("child_broken"),
         "must not only blame root: {}",
         d.loc.file
     );

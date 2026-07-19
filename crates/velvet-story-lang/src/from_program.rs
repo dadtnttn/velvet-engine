@@ -34,9 +34,9 @@ pub fn story_program_to_vs2_mapped(
             .get(name)
             .and_then(|s| s.first())
             .map(|s| match s {
-                OpSrc::Leaf { file, .. }
-                | OpSrc::If { file, .. }
-                | OpSrc::Choice { file, .. } => file.clone(),
+                OpSrc::Leaf { file, .. } | OpSrc::If { file, .. } | OpSrc::Choice { file, .. } => {
+                    file.clone()
+                }
             })
             .unwrap_or_else(|| program.title.clone());
         map.push_in_file(
@@ -88,7 +88,9 @@ fn emit_op_mapped(unit: &mut Vs2Unit, map: &mut SourceMap, op: &StoryOp, src: Op
                 else_ops,
             },
             Some(OpSrc::If {
-                then, else_ops: e_src, ..
+                then,
+                else_ops: e_src,
+                ..
             }),
         ) => {
             emit_cond(unit, cond);
@@ -177,9 +179,7 @@ fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
             unit.emit(Vs2Instr::with_a(OpVs2::HideChar, id));
         }
         StoryOp::Dialogue { speaker, text } => {
-            let sp = unit
-                .pool
-                .intern(speaker.as_deref().unwrap_or("narrator"));
+            let sp = unit.pool.intern(speaker.as_deref().unwrap_or("narrator"));
             let mid = unit.pool.intern(text.as_str());
             // Use LoadConst of text then Say (msg id = full text for host t fallback)
             unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, mid));
@@ -484,7 +484,10 @@ end
             unit.code.len()
         };
         let helper_code = &unit.code[helper_pc..helper_end.min(unit.code.len())];
-        let rets = helper_code.iter().filter(|i| matches!(i.op, OpVs2::Ret)).count();
+        let rets = helper_code
+            .iter()
+            .filter(|i| matches!(i.op, OpVs2::Ret))
+            .count();
         assert!(
             rets >= 1,
             "expected Ret from return in helper, got {:?}",

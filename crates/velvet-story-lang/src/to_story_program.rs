@@ -107,10 +107,7 @@ pub fn to_story_program_with_origins(
                 if first_scene.is_none() {
                     first_scene = Some(sc.name.clone());
                 }
-                let origin = sc
-                    .origin_file
-                    .clone()
-                    .unwrap_or_else(|| file.file.clone());
+                let origin = sc.origin_file.clone().unwrap_or_else(|| file.file.clone());
                 let (ops, srcs) = lower_stmts(&sc.body, &origin, cmds)?;
                 let mut scene = StoryScene {
                     name: sc.name.clone(),
@@ -237,9 +234,7 @@ fn lower_stmt(
                 vec![leaf(origin, *span, "dialogue", speaker.clone())],
             )
         }
-        Stmt::Choice {
-            options, span, ..
-        } => {
+        Stmt::Choice { options, span, .. } => {
             let mut arms = Vec::new();
             let mut arm_srcs = Vec::new();
             for o in options {
@@ -442,13 +437,7 @@ fn expr_to_cond(e: &Expr, line: u32) -> Result<StoryCond, ToProgramError> {
             right: Box::new(expr_to_cond(right, line)?),
         }),
         Expr::Binary {
-            op:
-                op @ (BinOp::Eq
-                | BinOp::Ne
-                | BinOp::Lt
-                | BinOp::Le
-                | BinOp::Gt
-                | BinOp::Ge),
+            op: op @ (BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge),
             left,
             right,
             ..
@@ -500,7 +489,10 @@ fn expr_to_operand(e: &Expr, line: u32) -> Result<StoryOperand, ToProgramError> 
 fn expr_to_story_expr(e: &Expr) -> Option<StoryExpr> {
     match e {
         Expr::Int(n, _) => Some(StoryExpr::value(StoryValue::Int(*n))),
-        Expr::Float(s, _) => s.parse().ok().map(|f| StoryExpr::value(StoryValue::Float(f))),
+        Expr::Float(s, _) => s
+            .parse()
+            .ok()
+            .map(|f| StoryExpr::value(StoryValue::Float(f))),
         Expr::Bool(b, _) => Some(StoryExpr::value(StoryValue::Bool(*b))),
         Expr::Str(s, _) => Some(StoryExpr::value(StoryValue::String(s.clone()))),
         Expr::Ident(name, _) => Some(StoryExpr::var(name.clone())),

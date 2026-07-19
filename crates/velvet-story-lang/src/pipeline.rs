@@ -268,7 +268,11 @@ pub fn run_source(
 }
 
 /// Secondary VS2 host run from path (includes on disk). Prefer [`run_path_product`].
-pub fn run_path(path: &Path, cmds: &CommandRegistry, choice_index: usize) -> Result<RunResult, String> {
+pub fn run_path(
+    path: &Path,
+    cmds: &CommandRegistry,
+    choice_index: usize,
+) -> Result<RunResult, String> {
     let build = build_path(path, cmds)?;
     Ok(run_build(build, choice_index))
 }
@@ -333,8 +337,7 @@ fn run_build(build: BuildResult, choice_index: usize) -> RunResult {
     vm.pc = start_pc;
 
     // Seed choice before run so LoadState("__choice") works on first Menu.
-    vm.host
-        .store_state("__choice", &choice_index.to_string());
+    vm.host.store_state("__choice", &choice_index.to_string());
     // Also prime local slot  if lower stored choice early — host state is enough.
 
     let mut steps = 0usize;
@@ -345,8 +348,7 @@ fn run_build(build: BuildResult, choice_index: usize) -> RunResult {
         }
         let (op, a, b) = vm.code[vm.pc];
         if op == OpVs2::Menu {
-            vm.host
-                .store_state("__choice", &choice_index.to_string());
+            vm.host.store_state("__choice", &choice_index.to_string());
         }
         if op == OpVs2::JumpScene {
             // resolve entry by pool name
@@ -426,7 +428,11 @@ pub fn dump_ast_json(source: &str, file: &str) -> Result<String, String> {
 }
 
 /// Dump lowered disasm.
-pub fn dump_lowered_text(source: &str, file: &str, cmds: &CommandRegistry) -> Result<String, String> {
+pub fn dump_lowered_text(
+    source: &str,
+    file: &str,
+    cmds: &CommandRegistry,
+) -> Result<String, String> {
     let b = build_source(source, file, cmds);
     if !b.ok {
         let msgs: Vec<_> = b.check.diags.iter().map(|d| d.display()).collect();

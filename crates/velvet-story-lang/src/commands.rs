@@ -200,14 +200,8 @@ impl CommandRegistry {
                 continue;
             };
             let val = match p.ty {
-                ParamTy::Int => def
-                    .parse::<i64>()
-                    .ok()
-                    .map(velvet_story::StoryValue::Int),
-                ParamTy::Float => def
-                    .parse::<f64>()
-                    .ok()
-                    .map(velvet_story::StoryValue::Float),
+                ParamTy::Int => def.parse::<i64>().ok().map(velvet_story::StoryValue::Int),
+                ParamTy::Float => def.parse::<f64>().ok().map(velvet_story::StoryValue::Float),
                 ParamTy::Bool => match def.as_str() {
                     "true" | "True" | "1" => Some(velvet_story::StoryValue::Bool(true)),
                     "false" | "False" | "0" => Some(velvet_story::StoryValue::Bool(false)),
