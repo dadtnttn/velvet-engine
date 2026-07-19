@@ -6,6 +6,10 @@ pub use crate::combo::{AttackCombo, ComboInput, ComboStep};
 pub use crate::dash::{DashConfig, DashState};
 pub use crate::enemy::{EnemyAi, EnemyKind, PatrolPath};
 pub use crate::hitstop::{Hitstop, HitstopConfig};
+pub use crate::hotline::{
+    AimFacing, AttackOutcome, Fragility, GroundWeapon, HotlineLoadout, HotlinePhase,
+    HotlinePresets, HotlineRun, KillStyle,
+};
 pub use crate::perception::{hear, see_target, Perception, PerceptionConfig};
 pub use crate::plugin::ActionPlugin;
 pub use crate::projectile::{Projectile, ProjectileSystem};
