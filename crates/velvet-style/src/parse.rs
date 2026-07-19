@@ -1,9 +1,13 @@
-//! Parse a CSS-like subset (`.vcss` / Velvet Style Sheets).
+//! Parse a CSS + JS-lite hybrid (`.vcss` / Velvet Style Sheets).
+//!
+//! - **CSS side:** selectors, declarations, `@keyframes`
+//! - **JS side:** `@script { let / fn / for / play / animate / on }`
 
 use indexmap::IndexMap;
 use thiserror::Error;
 
 use crate::animation::{KeyframeStop, Keyframes};
+use crate::script::{parse_script, ScriptError, ScriptModule};
 use crate::value::{parse_value, StyleValue};
 
 /// Parse error.
@@ -17,6 +21,9 @@ pub enum StyleParseError {
         /// Detail.
         msg: String,
     },
+    /// JS-lite `@script` error.
+    #[error("style script error: {0}")]
+    Script(#[from] ScriptError),
 }
 
 /// One rule: selectors + declarations.
@@ -28,13 +35,15 @@ pub struct StyleRule {
     pub declarations: IndexMap<String, StyleValue>,
 }
 
-/// Parsed stylesheet (visual rules + `@keyframes` motion — one style language).
+/// Parsed stylesheet — CSS look/motion + optional JS-lite script module.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Stylesheet {
     /// Rules in cascade order.
     pub rules: Vec<StyleRule>,
     /// Named keyframe animations (replaces separate `.vanim`).
     pub keyframes: IndexMap<String, Keyframes>,
+    /// JS-lite motion/orchestration (`@script` blocks, merged).
+    pub script: ScriptModule,
     /// Optional source name.
     pub source: Option<String>,
 }
@@ -51,6 +60,7 @@ impl Stylesheet {
         for (k, v) in other.keyframes {
             self.keyframes.insert(k, v);
         }
+        self.script.extend(other.script);
     }
 }
 
@@ -81,11 +91,12 @@ fn strip_comments(source: &str) -> String {
     out
 }
 
-/// Parse full stylesheet text.
+/// Parse full stylesheet text (CSS rules + `@keyframes` + `@script`).
 pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
     let source = strip_comments(source);
     let mut rules = Vec::new();
     let mut keyframes = IndexMap::new();
+    let mut script = ScriptModule::default();
     let mut i = 0;
     let bytes = source.as_bytes();
     let mut line = 1usize;
@@ -106,7 +117,7 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
             break;
         }
 
-        // selector / @keyframes header until {
+        // selector / @rule header until {
         let sel_start = i;
         let sel_line = line;
         while i < bytes.len() && bytes[i] != b'{' {
@@ -126,12 +137,34 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
 
         let decl_start = i;
         let mut depth = 1i32;
+        // Inside @script, strings may contain `{`/`}` — track quotes for script only.
+        let is_script = sel_raw == "@script" || sel_raw.starts_with("@script ");
+        let mut in_str: Option<u8> = None;
+        let mut escape = false;
         while i < bytes.len() && depth > 0 {
-            if bytes[i] == b'{' {
+            let c = bytes[i];
+            if is_script {
+                if escape {
+                    escape = false;
+                } else if in_str.is_some() {
+                    if c == b'\\' {
+                        escape = true;
+                    } else if Some(c) == in_str {
+                        in_str = None;
+                    }
+                } else if c == b'"' || c == b'\'' {
+                    in_str = Some(c);
+                } else if c == b'{' {
+                    depth += 1;
+                } else if c == b'}' {
+                    depth -= 1;
+                }
+            } else if c == b'{' {
                 depth += 1;
-            } else if bytes[i] == b'}' {
+            } else if c == b'}' {
                 depth -= 1;
-            } else if bytes[i] == b'\n' {
+            }
+            if c == b'\n' {
                 line += 1;
             }
             if depth > 0 {
@@ -146,6 +179,12 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
         }
         let body = source[decl_start..i].trim();
         i += 1; // }
+
+        if sel_raw == "@script" || sel_raw.starts_with("@script ") {
+            let modu = parse_script(body)?;
+            script.extend(modu);
+            continue;
+        }
 
         if let Some(rest) = sel_raw.strip_prefix("@keyframes") {
             let name = rest.trim();
@@ -182,6 +221,7 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
     Ok(Stylesheet {
         rules,
         keyframes,
+        script,
         source: None,
     })
 }
@@ -334,5 +374,43 @@ mod tests {
             sheet.rules[2].declarations.get("icon"),
             Some(StyleValue::Keyword(_))
         ));
+    }
+
+    #[test]
+    fn parse_css_plus_script() {
+        let src = r#"
+        .card.deal { animation: deal 0.32s cubic_out; }
+        @keyframes deal {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @script {
+          let stagger = 0.08;
+          fn dealHand(n) {
+            for (let i = 0; i < n; i = i + 1) {
+              play("deal", { target: "card" + i, delay: i * stagger });
+            }
+          }
+        }
+        "#;
+        let sheet = parse_stylesheet(src).expect("parse hybrid");
+        assert_eq!(sheet.rules.len(), 1);
+        assert!(sheet.keyframes.contains_key("deal"));
+        assert!(sheet.script.functions.contains_key("dealHand"));
+        assert!(sheet.script.globals.contains_key("stagger"));
+    }
+
+    #[test]
+    fn casino_vcss_css_plus_js() {
+        let src = include_str!("../../../demos/velvet-stakes/data/styles/casino.vcss");
+        let sheet = parse_stylesheet(src).expect("casino.vcss");
+        assert!(sheet.keyframes.contains_key("deal"));
+        assert!(sheet.script.functions.contains_key("dealHand"));
+        assert!(sheet.script.functions.contains_key("logoEnter"));
+        assert!(!sheet.script.handlers.is_empty());
+        let run = crate::call_style_fn(&sheet, "dealHand", &[crate::JsValue::num(5.0)])
+            .expect("dealHand");
+        assert_eq!(run.actions.len(), 5);
+        assert_eq!(run.timelines.len(), 5);
     }
 }

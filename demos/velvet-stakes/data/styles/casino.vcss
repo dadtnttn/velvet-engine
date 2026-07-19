@@ -1,4 +1,6 @@
-/* Velvet Arcana — Nightfall Casino UI styles (authorable .vcss tools) */
+/* Velvet Arcana — Nightfall Casino
+ * .vcss = CSS (look + @keyframes) + JS-lite (@script orchestration)
+ */
 
 :root {
   /* theme tokens (resolved as classes) */
@@ -71,7 +73,7 @@
   gold: #c8a078;
 }
 
-/* Motion lives in the same language as style (no separate .vanim) */
+/* ── CSS motion (keyframes) ── */
 @keyframes deal {
   from {
     opacity: 0;
@@ -97,4 +99,51 @@
 
 .card.punch {
   animation: punch 0.22s back_out;
+}
+
+@keyframes logoIn {
+  from { opacity: 0; y: -24; }
+  to   { opacity: 1; y: 0; }
+}
+
+.logo-title.enter {
+  animation: logoIn 0.45s cubic_out;
+}
+
+/* ── JS-lite orchestration (same file) ── */
+@script {
+  let stagger = 0.08;
+  let dealDur = 0.32;
+
+  // Staggered deal: play("deal") for card0..cardN-1
+  fn dealHand(count) {
+    for (let i = 0; i < count; i = i + 1) {
+      play("deal", {
+        target: "card" + i,
+        delay: i * stagger,
+        duration: dealDur,
+        ease: "cubic_out"
+      });
+    }
+  }
+
+  fn punchCard(id) {
+    play("punch", { target: id, duration: 0.22, ease: "back_out" });
+  }
+
+  // Imperative tween without a named keyframe
+  fn logoEnter() {
+    animate("#logo", {
+      opacity: [0, 1],
+      y: [-24, 0]
+    }, 0.45, "cubic_out");
+  }
+
+  on("menu.open", fn () {
+    logoEnter();
+  });
+
+  on("hand.deal", fn (n) {
+    dealHand(n);
+  });
 }

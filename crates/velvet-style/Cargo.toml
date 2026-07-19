@@ -1,6 +1,6 @@
 [package]
 name = "velvet-style"
-description = "CSS-like stylesheet tools for Velvet UI (parse, resolve, invoke)"
+description = "Velvet Style (.vcss): CSS + JS-lite for UI look and motion orchestration"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
