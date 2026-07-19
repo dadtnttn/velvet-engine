@@ -59,11 +59,12 @@
 }
 
 .logo-title {
-  color: #ebc878;
+  /* copper / rose-gold wordmark (reference Nightfall title) */
+  color: #d4a06a;
 }
 
 .logo-sub {
-  color: #aa64ff;
+  color: #c9b896;
 }
 
 .daily {

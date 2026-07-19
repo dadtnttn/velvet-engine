@@ -45,6 +45,7 @@ struct App {
     art: ArtBank,
     menu_bg: Option<RgbImage>,
     logo_emblem: Option<RgbImage>,
+    portrait: Option<RgbImage>,
     theme: Theme,
     window: Option<Arc<Window>>,
     context: Option<SbContext<Arc<Window>>>,
@@ -108,6 +109,7 @@ impl App {
         let ui = ui_dir(&root);
         let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
         let logo_emblem = load_rgb(&ui.join("logo_emblem.jpg"));
+        let portrait = load_rgb(&ui.join("portrait_collector.jpg"));
 
         let world = StakesWorld::new(stats, deck.cards, root.clone());
         let host = Arc::new(StakesHost::new(world));
@@ -119,6 +121,7 @@ impl App {
             art,
             menu_bg,
             logo_emblem,
+            portrait,
             theme: Theme::default(),
             window: None,
             context: None,
@@ -181,6 +184,7 @@ impl App {
                     &self.theme,
                     self.menu_bg.as_ref(),
                     self.logo_emblem.as_ref(),
+                    self.portrait.as_ref(),
                     &sheet,
                     sel,
                     chips,
