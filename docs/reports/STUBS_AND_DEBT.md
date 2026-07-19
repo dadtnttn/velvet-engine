@@ -24,7 +24,6 @@
 | Warnings `dead_code` residuales en paneles Studio | Baja |
 | Cross-export real (no dry-run) sin toolchains locales | Media (entorno) |
 | Zip no firmado / no multi-OS installer | Producto (fuera de scope) |
-| **Historial GitHub:** scripts Python `scripts/gen_vs2_lang*` / cleanup de padding **ya borrados del tree actual**, pero siguen en commits antiguos de `origin/main` | Baja (hacer **luego**: rewrite/`git filter-repo` o BFG al publicar limpio — **no reescribir historial hasta decidir push**) |
 
 ## No implementado (visión producto)
 

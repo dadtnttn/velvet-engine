@@ -293,14 +293,6 @@ mod tests {
     fn load_real_logo_title_if_present() {
         let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/ui/logo_title.png");
         if !p.exists() {
-            let p2 = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("data/ui/sample_type_elegant_black.jpg");
-            if !p2.exists() {
-                return;
-            }
-            let logo = load_title_wordmark(&p2).expect("jpg wordmark");
-            assert!(logo.0 > 10 && logo.1 > 10);
-            assert!(count_soft_alpha(&logo.3) > 50);
             return;
         }
         let logo = load_title_wordmark(&p).expect("png wordmark");

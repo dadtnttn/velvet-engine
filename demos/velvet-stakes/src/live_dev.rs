@@ -127,14 +127,11 @@ impl LiveDevSession {
             ImageSlot::MenuBg,
             data_root.join("ui/menu_bg.jpg"),
         );
-        // Title wordmark (prefer transparent PNG; black-key JPG fallback)
-        let logo_png = data_root.join("ui/logo_title.png");
-        let logo_jpg = data_root.join("ui/sample_type_elegant_black.jpg");
-        if logo_png.exists() {
-            s.watch_image("img:logo_title", ImageSlot::Logo, logo_png);
-        } else {
-            s.watch_image("img:logo_title", ImageSlot::Logo, logo_jpg);
-        }
+        s.watch_image(
+            "img:logo_title",
+            ImageSlot::Logo,
+            data_root.join("ui/logo_title.png"),
+        );
         s.watch_image(
             "img:portrait",
             ImageSlot::Portrait,
