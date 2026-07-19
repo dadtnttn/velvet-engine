@@ -1,7 +1,12 @@
 # Velvet Arcana — Nightfall Casino (local)
 
-Balatro-style demo with **casino title menu** (reference art), illustrated cards,
-and deal animation.
+Balatro-style demo. **Author languages** drive the product:
+
+| Layer | File | Role |
+|-------|------|------|
+| **Velvet Story** | `data/story/main.vstory` | Flow: title → blinds → play → result |
+| **Velvet Style** | `data/styles/casino.vcss` | CSS look + JS-lite `@script` (`dealHand`, `menu.open`) |
+| **Rust host** | `src/` | Window, paint, input, `stakes.*` + `style.*` commands |
 
 ## Run (local)
 
@@ -16,18 +21,19 @@ Headless:
 cargo run -p velvet-stakes -- --headless
 ```
 
-## Menu (módulos propios)
+## Story ↔ CSS wiring
 
-UI en `src/ui/` (`theme`, `menu`, `hud`).  
-Arte **original** (referencias de estilo; no se empaquetan capturas del usuario):
+1. `.vstory` calls `stakes.boot` → loads `casino.vcss`
+2. `style.emit` / `event: "menu.open"` → `@script on("menu.open")`
+3. `stakes.deal` → `@script fn dealHand` + `@keyframes deal`
+4. Menu/HUD resolve `.button` / `.button:selected` from the same sheet
 
-- `data/ui/menu_bg.jpg` — lobby  
-- `data/ui/logo_emblem.jpg` — emblema  
-- `data/ui/buttons/plate_selected.jpg` / `plate_normal.jpg`  
-- `data/ui/buttons/icon_*.jpg` — star / cards / chip / gear / power  
+## Menu
 
-Módulo `src/ui/buttons.rs`: placas + iconos + marco dorado con diamantes.  
-Botones: **START RUN · COLLECTION · SHOP · OPTIONS · QUIT**
+UI paint in `src/ui/` (`theme`, `menu`, `hud`, `buttons`).  
+Art under `data/ui/` (original assets).
+
+Buttons: **START RUN · COLLECTION · SHOP · OPTIONS · QUIT**
 
 ## Cards
 
@@ -37,7 +43,7 @@ Botones: **START RUN · COLLECTION · SHOP · OPTIONS · QUIT**
 
 | Key | Action |
 |-----|--------|
-| ↑↓ / Enter | Menu |
+| ↑↓ / Enter | Menu (story resume) |
 | 1–8 | Select |
 | P | Play hand |
 | D | Discard |

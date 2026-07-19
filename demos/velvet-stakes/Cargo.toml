@@ -17,8 +17,10 @@ velvet-anim = { workspace = true }
 velvet-style = { workspace = true }
 velvet-math = { workspace = true }
 velvet-story = { workspace = true }
+velvet-story-lang = { workspace = true }
 velvet-core = { workspace = true }
 anyhow = { workspace = true }
+indexmap = { workspace = true }
 winit = { workspace = true }
 softbuffer = "0.4"
 image = { workspace = true }

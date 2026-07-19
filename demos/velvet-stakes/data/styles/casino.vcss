@@ -110,12 +110,13 @@
   animation: logoIn 0.45s cubic_out;
 }
 
-/* ── JS-lite orchestration (same file) ── */
+/* ── JS-lite orchestration (same file) — called from .vstory via style.* / stakes.deal ── */
 @script {
   let stagger = 0.08;
   let dealDur = 0.32;
 
   // Staggered deal: play("deal") for card0..cardN-1
+  // Host maps timelines onto hand slots (x/y layout stays runtime).
   fn dealHand(count) {
     for (let i = 0; i < count; i = i + 1) {
       play("deal", {

@@ -1,0 +1,93 @@
+# Velvet Arcana — flow in Velvet Story (.vstory)
+# Look + motion: data/styles/casino.vcss (CSS + @script)
+
+scene start
+
+call stakes.boot:
+
+call style.emit:
+    event: "menu.open"
+
+call stakes.set_screen:
+    id: title
+
+call stakes.wait:
+    phase: title
+
+if menu_action == 0:
+    goto blind
+if menu_action == 1:
+    goto collection
+if menu_action == 2:
+    goto shop
+if menu_action == 3:
+    goto options
+if menu_action == 4:
+    goto quit
+
+goto start
+
+scene collection
+call stakes.set_screen:
+    id: collection
+call stakes.wait:
+    phase: submenu
+goto start
+
+scene shop
+call stakes.set_screen:
+    id: shop
+call stakes.wait:
+    phase: submenu
+goto start
+
+scene options
+call stakes.set_screen:
+    id: options
+call stakes.wait:
+    phase: submenu
+goto start
+
+scene blind
+call stakes.begin_run:
+call stakes.set_screen:
+    id: blind_info
+call stakes.wait:
+    phase: blind
+call stakes.enter_play:
+call stakes.deal:
+call stakes.set_screen:
+    id: play
+call stakes.wait:
+    phase: play
+goto result
+
+scene result
+call stakes.set_screen:
+    id: result
+call stakes.wait:
+    phase: result
+if stakes_outcome == "win":
+    if result_action == 0:
+        goto next_blind
+    goto start
+if result_action == 0:
+    goto blind
+goto start
+
+scene next_blind
+call stakes.set_screen:
+    id: blind_info
+call stakes.wait:
+    phase: blind
+call stakes.enter_play:
+call stakes.deal:
+call stakes.set_screen:
+    id: play
+call stakes.wait:
+    phase: play
+goto result
+
+scene quit
+call stakes.quit:
+end
