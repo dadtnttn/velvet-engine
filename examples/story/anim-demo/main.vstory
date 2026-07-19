@@ -37,4 +37,13 @@ call anim.fx:
     duration: 0.25
     strength: 0.25
 
+narrator:
+    Ahora un sobre se abre en 3D.
+
+call anim.pack_open:
+    x: 480
+    y: 270
+    cards: 5
+    duration: 2.0
+
 end

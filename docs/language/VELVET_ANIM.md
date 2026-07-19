@@ -88,7 +88,59 @@ dir.tick(1.0 / 60.0);
 let pose = dir.pose("card0").unwrap(); // draw card at pose.pos, scale, opacity
 ```
 
+## 3D image FX (pack open, flip, foil)
+
+Velvet renders 2D, but **`Pose3D` + `project_image`** turn any image (card art,
+pack PNG) into a **perspective quad** (yaw/pitch/roll). No full 3D mesh engine
+required.
+
+| API | Role |
+|-----|------|
+| `Pose3D` | pos, scale, yaw/pitch/roll, opacity, foil shimmer |
+| `project_image` | → `ProjectedQuad` (4 corners + front face flag) |
+| `PackOpenFx` | **Generator** for sealed pack → tear → lift → fan cards |
+| `anim.pack_open` | Story command to start the generator |
+
+### Story — open a pack
+
+```text
+call anim.pack_open:
+    x: 480
+    y: 270
+    cards: 5
+    duration: 2.0
+```
+
+Host: `AnimStoryHost` stores `PackOpenFx`. Each frame:
+
+```rust
+host.tick(dt);
+for (id, quad) in host.pack_projected() {
+    // draw textured quad with corners tl/tr/br/bl
+    // if !quad.front { draw card back }
+    // use quad.foil for holographic highlight UV
+}
+```
+
+### `.vanim`
+
+```text
+pack_open 480 270 5 2.0
+```
+
+### Single card flip
+
+```rust
+use velvet_anim::{project_image, sample_card_flip, Fx3dCamera, Pose3D};
+use velvet_math::{Ease, Vec2};
+
+let mut pose = Pose3D::flat(Vec2::new(200.0, 300.0));
+pose.yaw = sample_card_flip(t, Ease::CubicInOut);
+let quad = project_image(&pose, 70.0, 100.0, &Fx3dCamera::default());
+```
+
 ## Notes
 
 - Not a full Timeline editor GUI yet — tools first.
 - UI crate has its own small tweens; `velvet-anim` is the **shared product spine** for games/cards/story.
+- 3D FX are **billboard projections**, not glTF/scene meshes (future work if needed).
