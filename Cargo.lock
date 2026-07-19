@@ -3222,6 +3222,7 @@ dependencies = [
  "velvet-core",
  "velvet-math",
  "velvet-story",
+ "velvet-style",
  "winit",
 ]
 
@@ -3263,6 +3264,17 @@ dependencies = [
  "velvet-script-hir",
  "velvet-script-i18n",
  "velvet-script-vm",
+ "velvet-story",
+]
+
+[[package]]
+name = "velvet-style"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "pretty_assertions",
+ "serde",
+ "thiserror 2.0.18",
  "velvet-story",
 ]
 
