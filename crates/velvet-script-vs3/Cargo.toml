@@ -1,0 +1,18 @@
+[package]
+name = "velvet-script-vs3"
+description = "Velvet Script 3 — official general game-logic language (usable MVP)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+velvet-script-ast = { workspace = true }
+velvet-script-lexer = { workspace = true }
+velvet-script-compiler = { workspace = true }
+velvet-script-vm = { workspace = true }
+velvet-script-bytecode = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
