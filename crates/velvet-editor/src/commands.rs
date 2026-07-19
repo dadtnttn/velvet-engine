@@ -12,6 +12,7 @@ use crate::console::{Console, LogLevel};
 use crate::inspector::{self, Selection};
 use crate::project_browser::{list_files, load_project_info, scaffold_project};
 use crate::script_panel::{self, ScriptPanel};
+use crate::story_lang;
 
 /// Result of running a palette command.
 #[derive(Debug, Clone)]
@@ -73,6 +74,8 @@ pub enum CommandId {
     Help,
     /// Analyze open / path script.
     Analyze,
+    /// Outline a `.vstory` via velvet-story-lang Studio model.
+    StoryOutline,
 }
 
 impl CommandId {
@@ -89,6 +92,9 @@ impl CommandId {
             "console" | "log" => Some(Self::Console),
             "help" | "?" => Some(Self::Help),
             "analyze" | "lsp" => Some(Self::Analyze),
+            "story-outline" | "story_outline" | "vstory" | "outline-story" => {
+                Some(Self::StoryOutline)
+            }
             _ => None,
         }
     }
@@ -105,6 +111,7 @@ impl CommandId {
             Self::Console => "console",
             Self::Help => "help",
             Self::Analyze => "analyze",
+            Self::StoryOutline => "story-outline",
         }
     }
 
@@ -120,6 +127,7 @@ impl CommandId {
             Self::Console => "Show console lines (optional level filter)",
             Self::Help => "List palette commands",
             Self::Analyze => "Analyze a script file",
+            Self::StoryOutline => "Outline a .vstory (scenes, diags, includes)",
         }
     }
 }
@@ -136,6 +144,7 @@ pub fn all_commands() -> &'static [CommandId] {
         CommandId::NewProject,
         CommandId::Console,
         CommandId::Analyze,
+        CommandId::StoryOutline,
         CommandId::Help,
     ]
 }
@@ -169,7 +178,53 @@ pub fn dispatch(
         CommandId::NewProject => cmd_new_project(ctx, args),
         CommandId::Console => cmd_console(ctx, args),
         CommandId::Analyze => cmd_analyze(ctx, args),
+        CommandId::StoryOutline => cmd_story_outline(ctx, args),
     }
+}
+
+fn cmd_story_outline(ctx: &mut CommandContext<'_>, args: &[&str]) -> Result<CommandResult> {
+    let rel = args.first().copied().unwrap_or("stories/main.vstory");
+    let path = if Path::new(rel).is_absolute() {
+        PathBuf::from(rel)
+    } else {
+        ctx.root.join(rel)
+    };
+    if !path.exists() {
+        bail!("story file not found: {}", path.display());
+    }
+    let model = story_lang::story_studio_model_path(&path)
+        .map_err(|e| anyhow::anyhow!("story model: {e}"))?;
+    let mut details: Vec<String> = model
+        .scenes
+        .iter()
+        .map(|s| {
+            let origin = s
+                .origin_file
+                .as_deref()
+                .unwrap_or(model.file.as_str());
+            format!("scene {} @ {} (line {})", s.name, origin, s.line)
+        })
+        .collect();
+    for d in &model.diagnostics {
+        details.push(format!("diag [{}] {}", d.code, d.message));
+    }
+    ctx.console.log(
+        LogLevel::Info,
+        format!(
+            "story-outline {} scenes={} diags={}",
+            path.display(),
+            model.scenes.len(),
+            model.diagnostics.len()
+        ),
+    );
+    Ok(CommandResult::ok_details(
+        format!(
+            "outline {} ({} scene(s))",
+            path.display(),
+            model.scenes.len()
+        ),
+        details,
+    ))
 }
 
 fn help_result() -> CommandResult {
@@ -544,5 +599,45 @@ mod tests {
         assert!(!all.is_empty());
         let help = filter_commands("hel");
         assert!(help.contains(&CommandId::Help) || !help.is_empty());
+    }
+
+    #[test]
+    fn dispatch_story_outline_includes_child_scene() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let stories = root.join("stories");
+        fs::create_dir_all(&stories).unwrap();
+        fs::write(
+            stories.join("part.vstory"),
+            "scene from_include\nnarrator:\n    hi\nend\n",
+        )
+        .unwrap();
+        fs::write(
+            stories.join("main.vstory"),
+            "include \"part.vstory\"\n\nscene start\nnarrator:\n    root\nend\n",
+        )
+        .unwrap();
+        let mut console = Console::default();
+        let mut selection = Selection::None;
+        let mut scripts = ScriptPanel::new();
+        let mut ctx = CommandContext {
+            root,
+            console: &mut console,
+            selection: &mut selection,
+            scripts: &mut scripts,
+        };
+        let r = dispatch(
+            &mut ctx,
+            CommandId::StoryOutline,
+            &["stories/main.vstory"],
+        )
+        .unwrap();
+        assert!(r.ok, "{}", r.message);
+        let blob = r.details.join("\n");
+        assert!(
+            blob.contains("from_include"),
+            "outline must list included scene: {blob}"
+        );
+        assert!(blob.contains("start"), "outline must list root scene: {blob}");
     }
 }

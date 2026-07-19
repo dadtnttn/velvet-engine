@@ -1,8 +1,9 @@
-//! Bridge RPG talk targets to velvet-story scene ids.
+//! Bridge RPG talk targets to velvet-story scene ids / live players.
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use velvet_story::StoryPlayer;
 
 /// Dialogue bridge errors.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -235,6 +236,18 @@ impl DialogueBridge {
         }
     }
 
+    /// Resolve a talk target and jump a live [`StoryPlayer`] to that scene.
+    pub fn start_dialogue(
+        &self,
+        target_id: &str,
+        ctx: &DialogueResolveContext,
+        player: &mut StoryPlayer,
+    ) -> Result<String, DialogueBridgeError> {
+        let scene = self.resolve_scene(target_id, ctx)?;
+        player.jump_to_scene(&scene);
+        Ok(scene)
+    }
+
     /// Build a map of target → best available jump target for UI prompts.
     pub fn available_targets(&self, ctx: &DialogueResolveContext) -> IndexMap<String, String> {
         let mut out = IndexMap::new();
@@ -285,6 +298,53 @@ mod tests {
         };
         let scene2 = bridge.resolve_scene("npc_mira", &ctx2).unwrap();
         assert_eq!(scene2, "mira_intro");
+    }
+
+    #[test]
+    fn start_dialogue_jumps_story_player() {
+        use indexmap::IndexMap;
+        use velvet_story::{StoryOp, StoryProgram, StoryScene, StoryWait};
+
+        let mut bridge = DialogueBridge::new();
+        bridge.register(DialogueMapping::new("npc_mira", "mira_intro"));
+
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "hub".into(),
+            StoryScene {
+                name: "hub".into(),
+                ops: vec![StoryOp::End { ending: None }],
+                labels: IndexMap::new(),
+            },
+        );
+        scenes.insert(
+            "mira_intro".into(),
+            StoryScene {
+                name: "mira_intro".into(),
+                ops: vec![
+                    StoryOp::Dialogue {
+                        speaker: Some("mira".into()),
+                        text: "Hello traveler.".into(),
+                    },
+                    StoryOp::End { ending: None },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("bridge");
+        prog.entry = "hub".into();
+        prog.scenes = scenes;
+        let mut player = StoryPlayer::start(prog);
+        assert_eq!(player.scene_name(), "hub");
+
+        let ctx = DialogueResolveContext::default();
+        let jumped = bridge
+            .start_dialogue("npc_mira", &ctx, &mut player)
+            .unwrap();
+        assert_eq!(jumped, "mira_intro");
+        assert_eq!(player.scene_name(), "mira_intro");
+        assert!(matches!(player.wait(), StoryWait::Line));
+        assert!(player.current_text().contains("Hello traveler"));
     }
 
     #[test]

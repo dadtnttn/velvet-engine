@@ -38,7 +38,10 @@ fn play_with_choices(choices: &[usize]) -> Result<(String, i64, i64, bool)> {
                 player.choose(pick).map_err(|e| anyhow::anyhow!(e))?;
             }
             StoryWait::Ended => break,
-            StoryWait::Ready => player.advance(),
+            StoryWait::Ready | StoryWait::Pause { .. } => player.advance(),
+            StoryWait::Host { token } => {
+                let _ = player.resume_host(&token);
+            }
         }
     }
 

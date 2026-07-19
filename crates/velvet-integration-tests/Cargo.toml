@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 velvet-math = { workspace = true }
 velvet-story = { workspace = true }
+velvet-story-lang = { workspace = true }
 velvet-play = { workspace = true }
 velvet-rpg = { workspace = true }
 velvet-action = { workspace = true }
@@ -25,3 +26,5 @@ velvet-ecs = { workspace = true }
 velvet-scene = { workspace = true }
 velvet-document = { workspace = true }
 serde_json = { workspace = true }
+tempfile = "3"
+indexmap = { workspace = true }

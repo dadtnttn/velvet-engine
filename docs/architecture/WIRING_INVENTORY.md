@@ -2,20 +2,24 @@
 
 Status legend: **wired** · **orphan** · **partial** · **intentional**
 
-| API / surface | Owner crate | Consumer today | Status | Owner of connection |
-|---------------|-------------|----------------|--------|---------------------|
-| `.vstory` → `StoryProgram` | `velvet-story-lang` | `velvet story run/check`, tests | **wired** | CLI story_cmd |
-| `.vel` story → `StoryProgram` | `velvet-story::load` | `velvet play`, `open_session_from_file` | **wired** (legacy path) | CLI play_cmd |
-| Unified boot `.vstory` **and** `.vel` | — | play used only `.vel` loader | **partial** → fix PR1 | CLI/runtime boot |
-| `StoryPlayer` / nested save / host wait | `velvet-story` | unit tests, story run | **wired** | story runtime |
-| `StoryCommandHost` / `combat.start` | `velvet-story` | unit tests only | **orphan** (game host) | demos / action+rpg host |
-| `StoryEvent` → BGM/SFX | `velvet-story` product | CLI HostAudio (BGM), sfx_queue fields | **partial** | play_cmd + product |
-| `DialogueBridge` | `velvet-rpg` | map only; no StoryPlayer start | **orphan** | integration / hybrid demo |
-| `story_studio_model*` | `velvet-editor` | lib test only | **orphan** (GUI) | editor panel / CLI studio-model already exists |
-| `velvet story studio-model` | CLI | command exists | **wired** | story_cmd |
-| `StoryPlugin` | `velvet-story` | windowed tick smoke | **partial** | demos |
-| `velvet-runtime` bin | runtime | 1-frame app smoke | **orphan** (no story) | runtime + boot |
-| VS2 script check/run | script crates | `velvet script *` | **wired** | CLI (logic layer, not VN IR) |
+| API / surface | Owner crate | Consumer today | Status | Connection owner |
+|---------------|-------------|----------------|--------|------------------|
+| `.vstory` → `StoryProgram` | `velvet-story-lang` | CLI story, boot, tests | **wired** | `boot`, story_cmd |
+| Unified boot `.vstory`/`.vel` | `velvet-story-lang::boot` | `velvet play`, `velvet-runtime` | **wired** | play_cmd, runtime |
+| `StoryPlayer` nested/save/host | `velvet-story` | unit + product tests | **wired** | runtime |
+| `StoryCommandHost` / `combat.start` | `velvet-action::CombatStoryHost` | action unit test + games | **wired** | story_host.rs |
+| `StoryEvent` Music/Sound | product `VnSession` | `music_and_sound_wire_to_product_signals`, CLI HostAudio | **wired** | product ingest |
+| `DialogueBridge` → player | `velvet-rpg` | `start_dialogue` + test | **wired** | dialogue_bridge |
+| Studio model API | `velvet-story-lang` / editor | CLI `studio-model`, palette `story-outline` | **wired** | commands + CLI |
+| `StoryPlugin` | `velvet-story` | windowed play tick, docs | **wired** | plugin + docs |
 | OpVs2 from StoryProgram | story-lang | dump-lowered / fallback | **intentional** secondary | pipeline |
+| Full Studio visual edit | editor | limited | **intentional** residual | future GUI work |
 
-Updated as wiring PRs land. Do not invent second narrative VMs.
+## Spine (product)
+
+```text
+.vstory → story-lang boot → StoryProgram → StoryPlayer / VnSession
+                              ├─ CombatStoryHost (action)
+                              ├─ StoryEvent → BGM/SFX presentation
+                              └─ DialogueBridge.start_dialogue (rpg)
+```

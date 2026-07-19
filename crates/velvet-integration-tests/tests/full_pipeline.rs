@@ -119,6 +119,7 @@ fn drain_until_end(player: &mut StoryPlayer) {
             StoryWait::Line | StoryWait::Ready => player.advance(),
             StoryWait::Choice => break,
             StoryWait::Ended => break,
+            StoryWait::Pause { .. } | StoryWait::Host { .. } => break,
         }
         steps += 1;
     }

@@ -160,7 +160,10 @@ fn main() -> Result<()> {
                     .map_err(|e| anyhow::anyhow!("choice: {e}"))?;
             }
             StoryWait::Ended => break,
-            StoryWait::Ready => player.advance(),
+            StoryWait::Ready | StoryWait::Pause { .. } => player.advance(),
+            StoryWait::Host { token } => {
+                let _ = player.resume_host(&token);
+            }
         }
     }
 
