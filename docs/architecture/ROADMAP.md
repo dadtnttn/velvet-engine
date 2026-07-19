@@ -23,11 +23,14 @@ Phases are sequential. Keep the tree compiling after every phase.
 | Priority | Item | Status | Notes |
 |----------|------|--------|-------|
 | **Policy** | **Tools first** | **active** | See `docs/architecture/TOOLS.md`. Crates = tools; `demos/` = examples; `recipes` = optional samples. |
+| **Language** | **VS3 official general logic** | **active** | `docs/language/VELVET_SCRIPT_3.md` + ADR 0008. Classic story kept; VS2 not official product name. |
+| **Language** | Classic `.vel` / StoryProgram | **supported** | Novels / product VN path; do not break. |
 | **Now** | **Card tools** (`velvet-cards`) | **active** | Catalog, deck validate, zones, CLI — not a card game. |
 | **Now** | **Anim / 3D image tools** (`velvet-anim`) | **active** | Timeline, Pose3D, project_image, story track/pose3d — not premade cutscenes. |
 | **Now** | **Action tools** (`velvet-action`) | **active** | Aim, loadout, hitscan, weapons, combat — room loop only in `recipes` / demos. |
-| Demo | `velvet-stakes` / `card-duel` / `hotline-rush` | **examples** | Illustrate tools; not the API. |
+| Demo | `velvet-stakes` / `card-duel` / `hotline-rush` / `velvet-novella` | **examples** | Illustrate tools; not the API. |
 | Later | Full TCG rules / Hotline product game | **out of scope near-term** | Games are built *with* tools, not shipped as the engine surface. |
+| Later | Web / multi-target hosts (incl. web-oriented) | **design only** | VS3 game logic first; no Web3 product in first usable cut. |
 
 ## Parallelizable work (within a phase)
 

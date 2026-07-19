@@ -1,4 +1,8 @@
-# Velvet Script 2 — Typed, Rust-like author language (**ALPHA**)
+# Velvet Script 2 — Typed, Rust-like author language (**ALPHA — superseded as official target**)
+
+> **Official general language is now [VS3](./VELVET_SCRIPT_3.md)** (`// @edition 3`).  
+> VS2 is **not** the product name we finish. Useful VS2 code may be absorbed into VS3; do not expand the “VS2 finished” promise.  
+> Classic product `.vel` / `StoryProgram` remains supported.
 
 > **Not Python. Not Ren’Py.** Same *authoring capabilities* class (dialogue, menus, layers, screens, i18n), different design: **static types**, explicit modules, no hidden globals, no `$ python` blocks.
 
@@ -12,12 +16,12 @@
 
 ## Status (audit-aligned)
 
-**Real and useful today:** lexer/parser/AST, HIR story items, `OpVs2` + `vs2_codegen` for dialogue/scenes/jumps/layers/arithmetic, VM + `Vs2Host`, resolve/stdlib (trimmed).
+**Real and useful today:** lexer/parser/AST, validated declarative `screen` blueprints, HIR story items, `OpVs2` + `vs2_codegen` for dialogue/scenes/jumps/layers/arithmetic, VM + `Vs2Host`, resolve/stdlib (trimmed).
 
 **Incomplete (do not treat as done):**
 
 - Typechecker is partial; many HIR items still need real checks.
-- Codegen no-ops or stubs for: `struct` / `enum` / `character` / `state` / `screen` / `mod` / `use`, and field access (`player.health` ≈ base only).
+- Codegen no-ops or stubs for: `struct` / `enum` / `character` / `state` / `mod` / `use`, and field access (`player.health` ≈ base only). Declarative `screen` items compile to host-neutral blueprints, but do not emit v1 bytecode.
 - Coroutines, full LSP semantic model, structured multi-span diagnostics on `Vs2Unit` are partial or thin.
 - Generators under `scripts/gen_vs2_*` must **not** be re-run to reintroduce numbered padding (`story_marker_*`, `alias_N`, `format_fixture_N`, etc.).
 
@@ -52,6 +56,39 @@ Both lower to the same HIR and typechecker.
 | `screen Name { ... }` | Typed declarative UI (not Python Screen Language) |
 
 Studio’s pantallas (`velvet.studio.json`) should use the same `LayerId` vocabulary.
+
+## Declarative screens
+
+Structure, copy, stable actions, classes, shortcuts, and enabled state can live in
+VS2 while VCSS owns layout and presentation:
+
+```velvet
+// @edition 2
+screen title_menu {
+    class: "title-menu"
+    title: "VELVET ARCANA"
+    subtitle: "NIGHTFALL CASINO"
+    eyebrow: "THE VELVET TABLE"
+    footer: "ARROWS NAVIGATE   ENTER CONFIRMS"
+
+    button start {
+        label: "NEW RUN"
+        description: "Challenge the first blind."
+        action: "start"
+        icon: "play"
+        class: "primary"
+        hotkey: "ENTER"
+        badge: "READY"
+        enabled: true
+    }
+}
+```
+
+Rust hosts use `velvet_script_layers::parse_screen_source` to obtain validated
+`ScreenBlueprint` and `ScreenButtonSpec` values. Screen names, button ids, and
+properties must be unique; button `label` and `action` are required. Parser,
+formatter, compiler acceptance, LSP symbols/completions, and source diagnostics
+all understand the syntax. Host rendering and action routing remain explicit.
 
 ## Story capabilities (Ren’Py-class, not clone)
 
