@@ -21,7 +21,8 @@
 | **velvet-play** | 2D play: tilemaps, physics, AI, pathfinding, particles |
 | **velvet-cellular** | **ALPHA** — falling-sand / cellular sim (Noita-like author core; APIs unstable) |
 | **velvet-rpg** | Stats, inventory, quests, shops, leveling, equipment |
-| **velvet-action** | Combat, weapons, projectiles, arena waves, dash/combo |
+| **velvet-action** | Combat, weapons, projectiles, arena waves, dash/combo; Hotline spine (`hotline`) deferred on roadmap |
+| **velvet-cards** | **Tools**: card catalog, deck list validation, seeded shuffle, draw/discard zones — not a card game |
 | **velvet-project** | `velvet.project`, module graph, validation |
 | **velvet-build** | Pack, localization, desktop export manifests |
 | **velvet-cli** | `velvet` CLI |
@@ -31,4 +32,4 @@
 | **velvet-integration-tests** | Cross-crate scenarios |
 | **velvet-bench** | Wall-clock microbenchmarks |
 
-Products: **Velvet Engine**, **Velvet Story**, **Velvet Play**, **Velvet RPG**, **Velvet Action**, **Velvet Script**, **Velvet Studio**, **Velvet CLI**, **Velvet Runtime**.
+Products: **Velvet Engine**, **Velvet Story**, **Velvet Play**, **Velvet RPG**, **Velvet Action**, **Velvet Cards** (authoring tools), **Velvet Script**, **Velvet Studio**, **Velvet CLI**, **Velvet Runtime**.
