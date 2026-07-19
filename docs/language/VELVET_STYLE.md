@@ -161,7 +161,40 @@ for tl in &run.timelines {
 let _ = emit_style_event(&sheet, "menu.open", &[])?;
 ```
 
-Story commands: `style.load`, `style.use`, `style.resolve`, `style.play`, **`style.call`**, **`style.emit`**.
+Story commands: `style.load`, `style.use`, `style.resolve`, `style.play`,
+`style.call`, `style.emit`, `style.set`, `style.dump`.
+
+CLI:
+
+```bash
+velvet style check demos/velvet-stakes/data/styles/casino.vcss
+velvet style dump demos/velvet-stakes/data/styles/casino.vcss --class button --state selected
+```
+
+### Transitions
+
+```css
+.button { transition: opacity 0.2s cubic_out; }
+.button:selected { opacity: 1; }
+```
+
+Rust: `plan_transition(&from, &to, Some("id"))` → `TimelinePlan`.
+
+### StyleRuntime
+
+```rust
+let mut rt = StyleRuntime::new();
+call_style_fn_rt(&sheet, "go", &[], &mut rt)?;
+// set/query in @script touch rt
+```
+
+### @import
+
+```css
+@import "base.vcss";
+```
+
+Use `parse_stylesheet_with_imports(src, base_dir)`.
 
 ---
 
