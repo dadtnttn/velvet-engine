@@ -457,6 +457,84 @@ impl CommandRegistry {
                     .into(),
             error_help: "call anim.track:\n    target: card0\n    channel: yaw\n    from: 0\n    to: 3.14".into(),
         });
+        // CSS-like style tools (.vcss)
+        r.register(CommandSpec {
+            name: "style.load".into(),
+            category: "style".into(),
+            description: "Carga una hoja .vcss (CSS-like) en el registro de estilos.".into(),
+            params: vec![
+                CommandParam {
+                    name: "name".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: Some("default".into()),
+                    doc: "Nombre de la hoja".into(),
+                },
+                CommandParam {
+                    name: "path".into(),
+                    ty: ParamTy::Text,
+                    required: false,
+                    default: None,
+                    doc: "Ruta al archivo .vcss".into(),
+                },
+                CommandParam {
+                    name: "body".into(),
+                    ty: ParamTy::Text,
+                    required: false,
+                    default: None,
+                    doc: "Fuente inline".into(),
+                },
+            ],
+            required: vec![],
+            snippet: "call style.load:\n    name: casino\n    path: styles/casino.vcss\n".into(),
+            error_help: "call style.load:\n    name: casino\n    path: styles/casino.vcss".into(),
+        });
+        r.register(CommandSpec {
+            name: "style.use".into(),
+            category: "style".into(),
+            description: "Activa una hoja de estilos ya cargada.".into(),
+            params: vec![CommandParam {
+                name: "name".into(),
+                ty: ParamTy::Ident,
+                required: true,
+                default: None,
+                doc: "Nombre".into(),
+            }],
+            required: vec!["name".into()],
+            snippet: "call style.use:\n    name: casino\n".into(),
+            error_help: "call style.use:\n    name: casino".into(),
+        });
+        r.register(CommandSpec {
+            name: "style.resolve".into(),
+            category: "style".into(),
+            description: "Resuelve class/state y deja style.bg / style.color en variables.".into(),
+            params: vec![
+                CommandParam {
+                    name: "class".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: Some("button".into()),
+                    doc: "Clase CSS".into(),
+                },
+                CommandParam {
+                    name: "state".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: None,
+                    doc: "Pseudo estado (selected, …)".into(),
+                },
+                CommandParam {
+                    name: "id".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: None,
+                    doc: "Id elemento".into(),
+                },
+            ],
+            required: vec![],
+            snippet: "call style.resolve:\n    class: button\n    state: selected\n".into(),
+            error_help: "call style.resolve:\n    class: button".into(),
+        });
         r
     }
 

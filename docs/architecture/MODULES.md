@@ -24,6 +24,7 @@
 | **velvet-action** | **Tools**: weapons, projectiles, aim/loadout/hitscan, arena, dash; optional `recipes` room loop |
 | **velvet-cards** | **Tools**: catalog, deck validation, zones (not a game) |
 | **velvet-anim** | **Tools**: tweens, director, Pose3D, project_image, Timeline; optional `recipes` |
+| **velvet-style** | **Tools**: CSS-like `.vcss` parse/resolve/cascade; story `style.load` |
 | **velvet-project** | `velvet.project`, module graph, validation |
 | **velvet-build** | Pack, localization, desktop export manifests |
 | **velvet-cli** | `velvet` CLI |

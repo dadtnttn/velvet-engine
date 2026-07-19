@@ -30,9 +30,9 @@ use winit::window::{Window, WindowId};
 
 use catalog::{make_catalog_and_deck, score_played, CardStats, HandScore};
 use render::{blit_card, fill, load_rgb, rect, text, ArtBank, RgbImage};
-use ui::buttons::ButtonChrome;
 use ui::theme::{Theme, TITLE_ITEMS, WW, WH};
 use ui::{paint_collection, paint_options, paint_shop, paint_title_menu};
+use velvet_style::{parse_stylesheet, Stylesheet};
 
 const HAND_SIZE: usize = 8;
 const MAX_SELECT: usize = 5;
@@ -364,7 +364,8 @@ struct App {
     /// Original generated lobby background (not the user reference file).
     menu_bg: Option<RgbImage>,
     logo_emblem: Option<RgbImage>,
-    button_chrome: ButtonChrome,
+    /// CSS-like styles for lobby UI.
+    stylesheet: Stylesheet,
     theme: Theme,
     /// Meta stats shown on title HUD (flavor / progress).
     meta_chips: i64,
@@ -380,6 +381,23 @@ struct App {
     headless: bool,
     hframes: u32,
     pixels: Vec<u32>,
+}
+
+fn load_casino_stylesheet() -> Stylesheet {
+    const EMBEDDED: &str = include_str!("../data/styles/casino.vcss");
+    let paths = [
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/styles/casino.vcss"),
+        PathBuf::from("demos/velvet-stakes/data/styles/casino.vcss"),
+        PathBuf::from("data/styles/casino.vcss"),
+    ];
+    for p in &paths {
+        if let Ok(src) = std::fs::read_to_string(p) {
+            if let Ok(sheet) = parse_stylesheet(&src) {
+                return sheet;
+            }
+        }
+    }
+    parse_stylesheet(EMBEDDED).unwrap_or_default()
 }
 
 fn art_dir() -> PathBuf {
@@ -427,8 +445,7 @@ impl App {
         let ui = ui_dir();
         let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
         let logo_emblem = load_rgb(&ui.join("logo_emblem.jpg"));
-        // Procedural ornate buttons (reference style); JPEG chrome optional/off.
-        let button_chrome = ButtonChrome::load_with_art(&ui.join("buttons"), false);
+        let stylesheet = load_casino_stylesheet();
         Ok(Self {
             screen: Screen::Title,
             menu_sel: 0,
@@ -441,7 +458,7 @@ impl App {
             art,
             menu_bg,
             logo_emblem,
-            button_chrome,
+            stylesheet,
             theme: Theme::default(),
             meta_chips: 12_450,
             meta_crystals: 870,
@@ -508,7 +525,7 @@ impl App {
                     &self.theme,
                     self.menu_bg.as_ref(),
                     self.logo_emblem.as_ref(),
-                    &self.button_chrome,
+                    &self.stylesheet,
                     self.menu_sel,
                     self.meta_chips,
                     self.meta_crystals,
@@ -1186,12 +1203,12 @@ fn main() -> Result<()> {
     let headless = std::env::args().any(|a| a == "--headless");
     let mut app = App::new(headless)?;
     println!(
-        "Velvet Arcana LOCAL — cards={} deck={} bg={} logo={} buttons={}",
+        "Velvet Arcana LOCAL — cards={} deck={} bg={} logo={} vcss_rules={}",
         app.art.images.len(),
         app.deck_ids.len(),
         app.menu_bg.is_some(),
         app.logo_emblem.is_some(),
-        app.button_chrome.ready()
+        app.stylesheet.rules.len()
     );
     if headless {
         println!("headless smoke…");

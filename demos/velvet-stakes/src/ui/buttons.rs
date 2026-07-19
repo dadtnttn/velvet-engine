@@ -1,58 +1,9 @@
-//! Casino menu buttons — drawn to match the Nightfall reference look.
-//!
-//! Original assets are optional; the **primary** path is a careful procedural
-//! recreation (thin gold frames, diamond corners, selected magenta glow).
-//! User screenshots are never shipped as game files.
+//! Casino menu buttons driven by **velvet-style** (`.vcss`) + procedural chrome.
 
-use std::path::Path;
-
-use crate::render::{blit_card, load_rgb, outline, panel, text, RgbImage};
+use crate::render::{outline, panel, text};
 use crate::ui::theme::{MenuItem, Theme, TITLE_ITEMS, WW, WH};
 use velvet_story::pack_rgb;
-
-/// Optional decorative plates/icons (never required).
-pub struct ButtonChrome {
-    pub plate_selected: Option<RgbImage>,
-    pub plate_normal: Option<RgbImage>,
-    pub icons: [Option<RgbImage>; 5],
-    /// Prefer procedural drawing (true = match reference closely).
-    pub procedural: bool,
-}
-
-impl ButtonChrome {
-    pub fn load(dir: &Path) -> Self {
-        let _ = dir; // art optional; we draw the real look in code
-        Self {
-            plate_selected: None,
-            plate_normal: None,
-            icons: [None, None, None, None, None],
-            procedural: true,
-        }
-    }
-
-    /// Load optional plates if present (still may force procedural).
-    pub fn load_with_art(dir: &Path, use_art: bool) -> Self {
-        if !use_art {
-            return Self::load(dir);
-        }
-        Self {
-            plate_selected: load_rgb(&dir.join("plate_selected.jpg")),
-            plate_normal: load_rgb(&dir.join("plate_normal.jpg")),
-            icons: [
-                load_rgb(&dir.join("icon_start.jpg")),
-                load_rgb(&dir.join("icon_collection.jpg")),
-                load_rgb(&dir.join("icon_shop.jpg")),
-                load_rgb(&dir.join("icon_options.jpg")),
-                load_rgb(&dir.join("icon_quit.jpg")),
-            ],
-            procedural: true, // always procedural for fidelity
-        }
-    }
-
-    pub fn ready(&self) -> bool {
-        true
-    }
-}
+use velvet_style::{resolve, Color, ComputedStyle, StyleQuery, Stylesheet};
 
 /// Layout for the main menu button column.
 pub struct ButtonColumnLayout {
@@ -65,7 +16,6 @@ pub struct ButtonColumnLayout {
 
 impl Default for ButtonColumnLayout {
     fn default() -> Self {
-        // Proportions close to the reference: long thin bars, tight gaps
         Self {
             x: 52,
             y0: 204,
@@ -76,28 +26,28 @@ impl Default for ButtonColumnLayout {
     }
 }
 
-/// Draw the full START RUN / COLLECTION / … column.
+/// Draw START RUN / COLLECTION / … using stylesheet rules.
 pub fn paint_button_column(
     pixels: &mut [u32],
     theme: &Theme,
-    chrome: &ButtonChrome,
+    sheet: &Stylesheet,
     layout: &ButtonColumnLayout,
     selected: usize,
 ) {
-    let _ = chrome;
+    // layout height/gap from .button if present
+    let base = resolve(sheet, &StyleQuery::class("button"));
+    let h = base.number("height", layout.h as f32) as i32;
+    let gap = base.number("gap", layout.gap as f32) as i32;
+    let w = layout.w;
+
     for (i, item) in TITLE_ITEMS.iter().enumerate() {
-        let y = layout.y0 + i as i32 * (layout.h + layout.gap);
-        paint_one_button(
-            pixels,
-            theme,
-            layout.x,
-            y,
-            layout.w,
-            layout.h,
-            item,
-            i,
-            i == selected,
-        );
+        let y = layout.y0 + i as i32 * (h + gap);
+        let mut q = StyleQuery::class("button").with_id(item.id);
+        if i == selected {
+            q = q.with_state("selected");
+        }
+        let style = resolve(sheet, &q);
+        paint_one_button(pixels, theme, layout.x, y, w, h, item, i, i == selected, &style);
     }
 }
 
@@ -111,49 +61,58 @@ fn paint_one_button(
     item: &MenuItem,
     index: usize,
     selected: bool,
+    style: &ComputedStyle,
 ) {
-    // Outer soft shadow
-    panel(
-        pixels,
-        WW,
-        WH,
-        x + 3,
-        y + 4,
-        w,
-        h,
-        (0, 0, 0),
-        0.35,
-    );
+    // shadow
+    panel(pixels, WW, WH, x + 3, y + 4, w, h, (0, 0, 0), 0.35);
 
-    // Fill
-    if selected {
-        paint_selected_fill(pixels, x, y, w, h);
+    let bg = style.background();
+    let fg = style.color_text();
+    let border = style.border_color();
+    let glow = style.color("glow", Color::rgba(0, 0, 0, 0.0));
+    let glow_s = style.number("glow-strength", if selected { 0.85 } else { 0.0 });
+
+    if selected && glow_s > 0.05 {
+        paint_selected_fill(pixels, x, y, w, h, bg, glow, glow_s);
+        outline(
+            pixels,
+            WW,
+            WH,
+            x,
+            y,
+            w,
+            h,
+            glow.rgb_tuple(),
+            1,
+        );
     } else {
-        // near-black navy bar
-        panel(pixels, WW, WH, x, y, w, h, (10, 12, 22), 0.94);
-        // slight top highlight
+        panel(
+            pixels,
+            WW,
+            WH,
+            x,
+            y,
+            w,
+            h,
+            bg.rgb_tuple(),
+            bg.a.clamp(0.5, 1.0),
+        );
         panel(pixels, WW, WH, x + 4, y + 2, w - 8, 1, (40, 45, 70), 0.35);
     }
 
-    // Gold double frame + diamonds (core of the reference look)
-    paint_ornate_gold_border(pixels, x, y, w, h, selected);
+    paint_ornate_gold_border(pixels, x, y, w, h, border.rgb_tuple(), selected);
 
-    // Icon circle area
-    let icon_s = h - 18;
-    let icon_x = x + 14;
+    let icon_s = style.number("icon-size", (h - 18) as f32) as i32;
+    let pad = style.number("padding-x", 14.0) as i32;
+    let icon_x = x + pad;
     let icon_y = y + (h - icon_s) / 2;
-    paint_menu_icon(pixels, theme, icon_x, icon_y, icon_s, index, selected);
+    let icon_name = style.keyword("icon", icon_fallback(index));
+    paint_menu_icon(pixels, theme, icon_x, icon_y, icon_s, icon_name, selected);
 
-    // Gold label (reference uses elegant gold — we approximate with pixel font)
     let label_x = icon_x + icon_s + 16;
     let label_y = y + h / 2 - 7;
-    let gold = if selected {
-        (255, 228, 150)
-    } else {
-        (210, 175, 100)
-    };
+    let gold = fg.rgb_tuple();
     if selected {
-        // magenta bloom behind text
         text(
             pixels,
             WW,
@@ -161,43 +120,55 @@ fn paint_one_button(
             label_x + 1,
             label_y + 1,
             item.label,
-            (160, 50, 200),
+            glow.rgb_tuple(),
             2,
         );
     }
     text(pixels, WW, WH, label_x, label_y, item.label, gold, 2);
-
-    let _ = theme;
 }
 
-/// Selected bar: purple nebula sweep left→right + sparkles.
-fn paint_selected_fill(pixels: &mut [u32], x: i32, y: i32, w: i32, h: i32) {
-    // base black
+fn icon_fallback(index: usize) -> &'static str {
+    match index {
+        0 => "star",
+        1 => "cards",
+        2 => "chip",
+        3 => "gear",
+        _ => "power",
+    }
+}
+
+fn paint_selected_fill(
+    pixels: &mut [u32],
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    bg: Color,
+    glow: Color,
+    strength: f32,
+) {
     panel(pixels, WW, WH, x, y, w, h, (6, 4, 14), 0.96);
     for col in 0..w {
         let t = col as f32 / w as f32;
-        // bright magenta-purple near left-center, fade to dark on right
-        let glow = (1.0 - (t - 0.22).abs() * 1.6).clamp(0.0, 1.0);
-        let glow = glow * glow;
-        let r = (25.0 + 160.0 * glow) as u8;
-        let g = (8.0 + 30.0 * glow) as u8;
-        let b = (55.0 + 160.0 * glow) as u8;
-        // vertical soft falloff
+        let g = (1.0 - (t - 0.22).abs() * 1.6).clamp(0.0, 1.0);
+        let g = g * g * strength;
+        let r = (bg.r as f32 * (1.0 - g) + glow.r as f32 * g) as u8;
+        let gr = (bg.g as f32 * (1.0 - g) + glow.g as f32 * g) as u8;
+        let b = (bg.b as f32 * (1.0 - g) + glow.b as f32 * g) as u8;
         for row in 0..h {
             let v = 1.0 - ((row as f32 / h as f32) - 0.5).abs() * 1.2;
             let v = v.clamp(0.15, 1.0);
-            let a = 0.55 + 0.4 * glow * v;
+            let a = 0.5 + 0.45 * g * v;
             let px = x + col;
             let py = y + row;
             if px < 0 || py < 0 || px >= WW as i32 || py >= WH as i32 {
                 continue;
             }
             let i = (py as u32 * WW + px as u32) as usize;
-            pixels[i] = blend(pixels[i], pack_rgb(r, g, b), a * 0.85);
+            pixels[i] = blend(pixels[i], pack_rgb(r, gr, b), a);
         }
     }
-    // sparkles
-    let sparks: [(i32, i32); 14] = [
+    let sparks: [(i32, i32); 12] = [
         (38, 12),
         (72, 28),
         (110, 18),
@@ -209,8 +180,6 @@ fn paint_selected_fill(pixels: &mut [u32], x: i32, y: i32, w: i32, h: i32) {
         (350, 20),
         (95, 36),
         (210, 38),
-        (290, 10),
-        (330, 34),
         (60, 20),
     ];
     for (sx, sy) in sparks {
@@ -224,13 +193,10 @@ fn paint_selected_fill(pixels: &mut [u32], x: i32, y: i32, w: i32, h: i32) {
                 2,
                 2,
                 (255, 200, 255),
-                0.75,
+                0.7 * strength,
             );
         }
     }
-    // pink outer rim (reference selected has magenta edge)
-    outline(pixels, WW, WH, x, y, w, h, (220, 80, 220), 1);
-    outline(pixels, WW, WH, x + 1, y + 1, w - 2, h - 2, (140, 40, 180), 1);
 }
 
 fn paint_ornate_gold_border(
@@ -239,22 +205,20 @@ fn paint_ornate_gold_border(
     y: i32,
     w: i32,
     h: i32,
+    gold: (u8, u8, u8),
     selected: bool,
 ) {
-    let gold = if selected {
-        (235, 200, 110)
-    } else {
-        (185, 150, 75)
-    };
     let gold_hi = if selected {
-        (255, 230, 160)
+        (
+            gold.0.saturating_add(20),
+            gold.1.saturating_add(20),
+            gold.2.saturating_add(20),
+        )
     } else {
-        (210, 175, 95)
+        gold
     };
-    // double frame
     outline(pixels, WW, WH, x, y, w, h, gold, 1);
     outline(pixels, WW, WH, x + 2, y + 2, w - 4, h - 4, gold_hi, 1);
-    // corner diamonds (outside-ish)
     let d = 4;
     for (cx, cy) in [
         (x + 5, y + 5),
@@ -264,7 +228,6 @@ fn paint_ornate_gold_border(
     ] {
         paint_diamond(pixels, cx, cy, d, gold_hi);
     }
-    // mid-edge diamonds
     paint_diamond(pixels, x + w / 2, y + 3, 3, gold);
     paint_diamond(pixels, x + w / 2, y + h - 4, 3, gold);
     paint_diamond(pixels, x + 3, y + h / 2, 3, gold);
@@ -288,14 +251,13 @@ fn paint_diamond(pixels: &mut [u32], cx: i32, cy: i32, size: i32, rgb: (u8, u8, 
     }
 }
 
-/// Clean gold line-icons (no JPEG black boxes).
 fn paint_menu_icon(
     pixels: &mut [u32],
     theme: &Theme,
     x: i32,
     y: i32,
     size: i32,
-    index: usize,
+    icon: &str,
     selected: bool,
 ) {
     let gold = if selected {
@@ -307,28 +269,15 @@ fn paint_menu_icon(
     let cx = x + size / 2;
     let cy = y + size / 2;
     let s = size / 2 - 2;
+    let kind = icon.to_ascii_lowercase();
 
-    match index {
-        0 => {
-            // four-point star
+    match kind.as_str() {
+        "star" => {
             if selected {
-                // glow
                 for r in (2..s + 4).rev() {
-                    let a = 0.08;
-                    panel(
-                        pixels,
-                        WW,
-                        WH,
-                        cx - r,
-                        cy - 1,
-                        r * 2,
-                        3,
-                        pink,
-                        a,
-                    );
+                    panel(pixels, WW, WH, cx - r, cy - 1, r * 2, 3, pink, 0.08);
                 }
             }
-            // vertical + horizontal diamond points
             for i in 0..=s {
                 let t = 1 + (s - i) / 3;
                 panel(pixels, WW, WH, cx - t / 2, cy - s + i, t.max(1), 1, gold, 0.95);
@@ -338,8 +287,7 @@ fn paint_menu_icon(
             }
             panel(pixels, WW, WH, cx - 1, cy - 1, 3, 3, (255, 240, 200), 0.95);
         }
-        1 => {
-            // two cards
+        "cards" => {
             outline(pixels, WW, WH, x + 6, y + 8, size / 2 + 2, size - 14, gold, 1);
             outline(
                 pixels,
@@ -352,27 +300,12 @@ fn paint_menu_icon(
                 gold,
                 1,
             );
-            panel(
-                pixels,
-                WW,
-                WH,
-                x + size / 3 + 4,
-                y + 12,
-                3,
-                3,
-                gold,
-                0.9,
-            );
         }
-        2 => {
-            // chip ring
-            let r = s - 1;
-            draw_circle_outline(pixels, cx, cy, r, gold, 2);
-            draw_circle_outline(pixels, cx, cy, r / 2, gold, 1);
-            panel(pixels, WW, WH, cx - 1, cy - 1, 3, 3, gold, 0.9);
+        "chip" => {
+            draw_circle_outline(pixels, cx, cy, s - 1, gold, 2);
+            draw_circle_outline(pixels, cx, cy, s / 2, gold, 1);
         }
-        3 => {
-            // gear (octagon-ish)
+        "gear" => {
             outline(
                 pixels,
                 WW,
@@ -385,25 +318,10 @@ fn paint_menu_icon(
                 2,
             );
             panel(pixels, WW, WH, cx - 2, cy - 2, 5, 5, gold, 0.85);
-            for (dx, dy) in [(-s, 0), (s, 0), (0, -s), (0, s)] {
-                panel(pixels, WW, WH, cx + dx - 1, cy + dy - 1, 3, 3, gold, 0.9);
-            }
         }
         _ => {
-            // power: circle + stem
             draw_circle_outline(pixels, cx, cy + 1, s - 2, gold, 2);
-            // gap at top
-            panel(
-                pixels,
-                WW,
-                WH,
-                cx - 3,
-                cy - s + 2,
-                7,
-                5,
-                (8, 6, 16),
-                1.0,
-            );
+            panel(pixels, WW, WH, cx - 3, cy - s + 2, 7, 5, (8, 6, 16), 1.0);
             panel(pixels, WW, WH, cx - 1, cy - s + 2, 3, s, gold, 0.95);
         }
     }

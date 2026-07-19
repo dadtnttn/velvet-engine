@@ -1,9 +1,10 @@
 //! Title menu and lobby sub-screens (Velvet Arcana).
 
 use crate::render::{blit_card, blit_cover, fill, outline, panel, text, ArtBank, RgbImage};
-use crate::ui::buttons::{paint_button_column, ButtonChrome, ButtonColumnLayout};
+use crate::ui::buttons::{paint_button_column, ButtonColumnLayout};
 use crate::ui::hud::paint_meta_hud;
 use crate::ui::theme::{Theme, WW, WH};
+use velvet_style::Stylesheet;
 
 /// Full title / lobby paint.
 pub fn paint_title_menu(
@@ -11,7 +12,7 @@ pub fn paint_title_menu(
     theme: &Theme,
     menu_bg: Option<&RgbImage>,
     logo: Option<&RgbImage>,
-    chrome: &ButtonChrome,
+    sheet: &Stylesheet,
     menu_sel: usize,
     chips: i64,
     crystals: i64,
@@ -49,11 +50,11 @@ pub fn paint_title_menu(
     text(pixels, WW, WH, 130, 100, "VELVET ARCANA", theme.gold, 3);
     text(pixels, WW, WH, 132, 142, "NIGHTFALL CASINO", theme.neon, 1);
 
-    // Ornate buttons matching screenshot style
+    // Buttons from .vcss (.button / .button:selected)
     paint_button_column(
         pixels,
         theme,
-        chrome,
+        sheet,
         &ButtonColumnLayout::default(),
         menu_sel,
     );

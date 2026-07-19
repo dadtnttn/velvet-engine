@@ -1,0 +1,72 @@
+/* Velvet Arcana — Nightfall Casino UI styles (authorable .vcss tools) */
+
+:root {
+  /* theme tokens (resolved as classes) */
+}
+
+.theme {
+  background: #0a0614;
+  color: #dcd2eb;
+  gold: #ebc878;
+  neon: #aa64ff;
+}
+
+.button {
+  background: #0a0c16;
+  border-color: #b9964b;
+  border-width: 1;
+  color: #d2af64;
+  height: 52;
+  gap: 12;
+  padding-x: 14;
+  icon-size: 34;
+  glow: transparent;
+  glow-strength: 0;
+}
+
+.button:selected {
+  background: #501e78;
+  border-color: #ffdc96;
+  color: #ffe496;
+  glow: #dc50dc;
+  glow-strength: 0.85;
+  border-width: 1;
+}
+
+#start {
+  icon: star;
+}
+#collection {
+  icon: cards;
+}
+#shop {
+  icon: chip;
+}
+#options {
+  icon: gear;
+}
+#quit {
+  icon: power;
+}
+
+.hud {
+  background: #120c22;
+  border-color: #aa64ff;
+  color: #dcd2eb;
+  gold: #ebc878;
+}
+
+.logo-title {
+  color: #ebc878;
+}
+
+.logo-sub {
+  color: #aa64ff;
+}
+
+.daily {
+  background: #140c24;
+  border-color: #aa64ff;
+  color: #c8b4e6;
+  gold: #c8a078;
+}
