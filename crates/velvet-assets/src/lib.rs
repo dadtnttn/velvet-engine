@@ -8,6 +8,7 @@ mod async_queue;
 mod bundle;
 mod handle;
 mod hot_reload;
+mod image_asset;
 mod loader;
 mod missing;
 mod path;
@@ -23,6 +24,11 @@ pub use async_queue::{AsyncLoadQueue, LoadPriority, QueueItem, QueuePhase};
 pub use bundle::{AssetBundle, BundleEntry, BundleError};
 pub use handle::{AssetId, AssetState, Handle, StrongHandle};
 pub use hot_reload::HotReloader;
+pub use image_asset::{
+    decode_image_bytes, register_image_loaders, role_from_path, AtlasFrame, AtlasFrameJson,
+    AtlasJson, AtlasLoader, ImageAsset, ImageLoader, ImageRole, PresentAssetCatalog,
+    SpriteAtlasAsset,
+};
 pub use loader::{AssetLoader, DependencyGraph, LoadError, LoadRequest, LoaderRegistry};
 pub use missing::{
     pink_checker_rgba8, resolve_missing, MissingAssetConfig, MissingAssetPolicy, MissingResolution,
