@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 velvet-script-bytecode = { workspace = true }
 velvet-script-compiler = { workspace = true }
+velvet-crypto = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

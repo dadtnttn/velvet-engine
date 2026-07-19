@@ -14,6 +14,7 @@ mod play_cmd;
 mod script_cmd;
 mod story_cmd;
 mod style_cmd;
+mod image_cmd;
 mod workspace_cmd;
 
 use std::path::PathBuf;
@@ -40,6 +41,7 @@ use story_cmd::{
     cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_lowered,
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
 };
+use image_cmd::{cmd_image_convert, cmd_image_info};
 use style_cmd::{cmd_style_check, cmd_style_dump};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
@@ -308,6 +310,33 @@ enum Commands {
     Style {
         #[command(subcommand)]
         command: StyleCommands,
+    },
+    /// Image tools (types + compression encode) for packs / VS2 hosts.
+    Image {
+        #[command(subcommand)]
+        command: ImageCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ImageCommands {
+    /// Probe image kind and dimensions.
+    Info {
+        /// Input path.
+        path: PathBuf,
+    },
+    /// Re-encode image (JPEG quality / PNG); not encryption.
+    Convert {
+        /// Input path.
+        input: PathBuf,
+        /// Output path (.png / .jpg).
+        output: PathBuf,
+        /// JPEG quality 1–100.
+        #[arg(long, default_value_t = 85)]
+        quality: u8,
+        /// PNG level hint 0–9.
+        #[arg(long, default_value_t = 6)]
+        png_level: u8,
     },
 }
 
@@ -813,6 +842,18 @@ fn dispatch(cli: Cli) -> Result<()> {
                 state,
             },
         } => cmd_style_dump(path, class, state),
+        Commands::Image {
+            command: ImageCommands::Info { path },
+        } => cmd_image_info(path),
+        Commands::Image {
+            command:
+                ImageCommands::Convert {
+                    input,
+                    output,
+                    quality,
+                    png_level,
+                },
+        } => cmd_image_convert(input, output, quality, png_level),
     }
 }
 

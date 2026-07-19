@@ -38,6 +38,22 @@ pub enum NativeId {
     Concat = 8,
     /// `str(x)`
     Str = 9,
+    /// `sin(x)`
+    Sin = 10,
+    /// `cos(x)`
+    Cos = 11,
+    /// `sqrt(x)`
+    Sqrt = 12,
+    /// `pow(x, y)`
+    Pow = 13,
+    /// `lerp(a, b, t)`
+    Lerp = 14,
+    /// `hash_sha256(s) -> hex str`
+    HashSha256 = 15,
+    /// `hex_encode(s)` (utf-8 bytes)
+    HexEncode = 16,
+    /// `base64_encode(s)`
+    Base64Encode = 17,
 }
 
 impl NativeId {
@@ -54,6 +70,14 @@ impl NativeId {
             7 => Self::Len,
             8 => Self::Concat,
             9 => Self::Str,
+            10 => Self::Sin,
+            11 => Self::Cos,
+            12 => Self::Sqrt,
+            13 => Self::Pow,
+            14 => Self::Lerp,
+            15 => Self::HashSha256,
+            16 => Self::HexEncode,
+            17 => Self::Base64Encode,
             _ => return None,
         })
     }
@@ -76,6 +100,14 @@ impl NativeId {
             Self::Len => "len",
             Self::Concat => "concat",
             Self::Str => "str",
+            Self::Sin => "sin",
+            Self::Cos => "cos",
+            Self::Sqrt => "sqrt",
+            Self::Pow => "pow",
+            Self::Lerp => "lerp",
+            Self::HashSha256 => "hash_sha256",
+            Self::HexEncode => "hex_encode",
+            Self::Base64Encode => "base64_encode",
         }
     }
 
@@ -92,6 +124,14 @@ impl NativeId {
             Self::Len,
             Self::Concat,
             Self::Str,
+            Self::Sin,
+            Self::Cos,
+            Self::Sqrt,
+            Self::Pow,
+            Self::Lerp,
+            Self::HashSha256,
+            Self::HexEncode,
+            Self::Base64Encode,
         ]
     }
 }
@@ -109,6 +149,14 @@ pub fn lookup_native(name: &str) -> Option<NativeId> {
         "len" => Some(NativeId::Len),
         "concat" => Some(NativeId::Concat),
         "str" => Some(NativeId::Str),
+        "sin" => Some(NativeId::Sin),
+        "cos" => Some(NativeId::Cos),
+        "sqrt" => Some(NativeId::Sqrt),
+        "pow" => Some(NativeId::Pow),
+        "lerp" => Some(NativeId::Lerp),
+        "hash_sha256" => Some(NativeId::HashSha256),
+        "hex_encode" => Some(NativeId::HexEncode),
+        "base64_encode" => Some(NativeId::Base64Encode),
         _ => None,
     }
 }
