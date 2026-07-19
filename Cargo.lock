@@ -2818,6 +2818,7 @@ dependencies = [
  "velvet-script-vm",
  "velvet-story",
  "velvet-story-lang",
+ "velvet-style",
  "walkdir",
 ]
 
