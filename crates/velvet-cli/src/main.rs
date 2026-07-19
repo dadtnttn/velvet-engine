@@ -1,5 +1,6 @@
 //! Velvet CLI — `velvet` command entry point.
 
+mod cards_cmd;
 mod doctor;
 mod document_cmd;
 mod export_cmd;
@@ -22,6 +23,7 @@ use tracing::info;
 use velvet_app::prelude::*;
 use velvet_core::{engine_version, RunMode};
 
+use cards_cmd::{cmd_cards_validate, cmd_cards_zones};
 use doctor::cmd_doctor;
 use document_cmd::{cmd_document_patch, cmd_document_regions};
 use export_cmd::cmd_export;
@@ -295,6 +297,11 @@ enum Commands {
         #[command(subcommand)]
         command: LevelCommands,
     },
+    /// Card authoring tools (catalog / deck / zones) — not a playable card game.
+    Cards {
+        #[command(subcommand)]
+        command: CardsCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -469,6 +476,42 @@ enum StoryCommands {
         path: PathBuf,
         #[arg(long)]
         out: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum CardsCommands {
+    /// Validate a deck list JSON against a catalog JSON.
+    Validate {
+        /// Catalog JSON path.
+        catalog: PathBuf,
+        /// Deck list JSON path.
+        deck: PathBuf,
+        /// Max copies of any single card id.
+        #[arg(long)]
+        max_copies: Option<usize>,
+        /// Minimum deck size.
+        #[arg(long)]
+        min_size: Option<usize>,
+        /// Maximum deck size.
+        #[arg(long)]
+        max_size: Option<usize>,
+    },
+    /// Seeded shuffle + draw/discard zone dump (tooling only, not a match).
+    Zones {
+        /// Catalog JSON path.
+        catalog: PathBuf,
+        /// Deck list JSON path.
+        deck: PathBuf,
+        /// RNG seed for reproducible shuffle.
+        #[arg(long, default_value_t = 42)]
+        seed: u64,
+        /// Draw this many into hand after shuffle.
+        #[arg(long, default_value_t = 0)]
+        draw: usize,
+        /// If set, discard hand\[index\] after draw.
+        #[arg(long)]
+        discard_hand: Option<usize>,
     },
 }
 
@@ -713,6 +756,26 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Level {
             command: LevelCommands::Mutate { path, entity, x, y },
         } => cmd_level_mutate(path, entity, x, y),
+        Commands::Cards {
+            command:
+                CardsCommands::Validate {
+                    catalog,
+                    deck,
+                    max_copies,
+                    min_size,
+                    max_size,
+                },
+        } => cmd_cards_validate(catalog, deck, max_copies, min_size, max_size),
+        Commands::Cards {
+            command:
+                CardsCommands::Zones {
+                    catalog,
+                    deck,
+                    seed,
+                    draw,
+                    discard_hand,
+                },
+        } => cmd_cards_zones(catalog, deck, seed, draw, discard_hand),
     }
 }
 
