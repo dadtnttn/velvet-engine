@@ -1,6 +1,7 @@
 //! Velvet Novella — **Luz de Estación**
 //!
-//! Title menu (internal **4K** paint) → product VN host (`VnSession` + softbuffer).
+//! Title menu (internal **4K** paint, softbuffer) → product VN host
+//! (`VnSession` + hybrid presenter: menu softbuffer, play prefers wgpu descriptors).
 //!
 //! ## Language / pipeline (honest)
 //! Story is `story/main.vel` loaded via `open_session_from_file` →
@@ -61,6 +62,8 @@ struct App {
     /// Last title paint size (native window or 4K).
     title_w: u32,
     title_h: u32,
+    /// Hybrid product presenter (title softbuffer / play wgpu IR).
+    presenter: ProductPresenter,
 }
 
 fn story_path() -> PathBuf {
@@ -97,13 +100,6 @@ fn open_session(path: &PathBuf) -> Result<VnSession> {
     .with_context(|| format!("load {}", path.display()))
 }
 
-/// Shared product presentation path: session → UI frame → paint list → pixels.
-fn present_session(session: &VnSession, pixels: &mut [u32], ww: u32, wh: u32) -> ProductPaintList {
-    let list = paint_product_session(session);
-    rasterize_product_paint(&list, pixels, ww, wh);
-    list
-}
-
 // presentation scale is bilinear — see menu::letterbox_bilinear
 
 impl App {
@@ -111,6 +107,22 @@ impl App {
         let story_path = story_path();
         let session = open_session(&story_path)?;
         let menu_bg = load_rgb(&ui_dir().join("menu_bg.jpg"));
+        let mut presenter = ProductPresenter::hybrid();
+        // Probe headless wgpu so play can honestly report GPU availability.
+        match velvet_render::GpuContext::headless() {
+            Ok(g) => {
+                eprintln!(
+                    "[presenter] wgpu available (probe): {}",
+                    g.adapter_info
+                );
+                presenter.set_gpu_available(true, None::<String>);
+            }
+            Err(e) => {
+                eprintln!("[presenter] wgpu probe failed, play will softbuffer: {e}");
+                presenter.set_gpu_available(false, Some(e.to_string()));
+            }
+        }
+        presenter.set_phase_title();
         Ok(Self {
             screen: Screen::Title,
             menu_sel: 0,
@@ -127,6 +139,7 @@ impl App {
             pixels: vec![0; (WW * WH) as usize],
             title_w: WW,
             title_h: WH,
+            presenter,
         })
     }
 
@@ -135,11 +148,14 @@ impl App {
             self.session = s;
         }
         self.screen = Screen::Play;
+        self.presenter.set_phase_play();
+        eprintln!("[presenter] {}", self.presenter.status_line());
     }
 
     fn to_title(&mut self) {
         self.screen = Screen::Title;
         self.menu_sel = 0;
+        self.presenter.set_phase_title();
     }
 
     fn confirm_menu(&mut self, el: &ActiveEventLoop) {
@@ -182,14 +198,19 @@ impl App {
                 window.set_title("Luz de Estación — menú (4K compose)");
             }
             Screen::Play => {
-                // Product VN path also composed at 4K for sharpness
+                // Product VN path: build GPU descriptors + softbuffer present
+                // (hybrid: wgpu IR always; pixels via softbuffer until windowed surface).
                 if self.pixels.len() != (WW * WH) as usize {
                     self.pixels.resize((WW * WH) as usize, 0);
                 }
                 self.title_w = WW;
                 self.title_h = WH;
-                let list = present_session(&self.session, &mut self.pixels, WW, WH);
-                let _ = list;
+                let _list = self.presenter.present_session_softbuffer(
+                    &self.session,
+                    &mut self.pixels,
+                    WW,
+                    WH,
+                );
                 if matches!(self.session.player().wait(), StoryWait::Ended) {
                     let end = self
                         .session

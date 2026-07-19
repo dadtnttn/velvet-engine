@@ -21,6 +21,7 @@ pub use crate::product_paint::{
     paint_product_frame, paint_product_session, ProductPaintList, PRODUCT_VIRTUAL_H,
     PRODUCT_VIRTUAL_W,
 };
+pub use crate::product_presenter::{PresenterBackend, PresenterPhase, ProductPresenter};
 pub use crate::product_raster::rasterize_product_paint;
 pub use crate::product_ui::build_product_ui_frame;
 pub use crate::rollback::{RollbackRecorder, RollbackStack};

@@ -20,6 +20,7 @@ mod plugin;
 mod prefs;
 mod product;
 mod product_paint;
+mod product_presenter;
 mod product_raster;
 mod product_ui;
 mod rollback;
@@ -66,6 +67,7 @@ pub use product_paint::{
     paint_to_render_descriptors, sprite_stand_color, ProductPaintCmd, ProductPaintList,
     RenderDrawDescriptor, PRODUCT_VIRTUAL_H, PRODUCT_VIRTUAL_W,
 };
+pub use product_presenter::{PresenterBackend, PresenterPhase, ProductPresenter};
 pub use product_raster::{
     count_painted_pixels, draw_text_line, draw_text_wrapped, fill_rect, pack_rgb,
     rasterize_product_paint,
