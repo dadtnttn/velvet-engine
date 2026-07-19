@@ -10,6 +10,9 @@ pub use crate::letterbox::{compute_letterbox, Letterbox, ScalingMode};
 pub use crate::particles::{Particle, ParticleBatch};
 pub use crate::plugin::{RenderConfig, RenderFrame, RenderPlugin};
 pub use crate::postprocess::{PostEffect, PostProcessStack};
+pub use crate::product_batch::{
+    count_positive_quads, fill_batch_from_product_quads, ProductGpuQuad,
+};
 pub use crate::profile::RenderProfile;
 pub use crate::sprite::{Sprite, SpriteFlip, SpriteInstance};
 pub use crate::stats::RenderStats;
