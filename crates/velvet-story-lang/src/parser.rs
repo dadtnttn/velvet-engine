@@ -43,9 +43,9 @@ struct Parser {
 
 impl Parser {
     fn peek(&self) -> &Token {
-        self.tokens.get(self.i).unwrap_or_else(|| {
-            self.tokens.last().expect("eof token")
-        })
+        self.tokens
+            .get(self.i)
+            .unwrap_or_else(|| self.tokens.last().expect("eof token"))
     }
 
     fn peek_kind(&self) -> &TokenKind {
@@ -160,10 +160,7 @@ impl Parser {
                     }
                 };
                 self.expect_newline_or_eof();
-                Some(TopItem::Include {
-                    path,
-                    span: t.span,
-                })
+                Some(TopItem::Include { path, span: t.span })
             }
             TokenKind::Ident(name) if name == "character" => {
                 self.bump();
@@ -248,10 +245,7 @@ impl Parser {
                 let text = text.clone();
                 self.bump();
                 self.skip_newlines();
-                Some(Stmt::Comment {
-                    text,
-                    span: t.span,
-                })
+                Some(Stmt::Comment { text, span: t.span })
             }
             TokenKind::Ident(name) => {
                 let name = name.clone();
@@ -382,10 +376,7 @@ impl Parser {
                         self.bump();
                         let name = self.expect_ident()?;
                         self.expect_newline_or_eof();
-                        Some(Stmt::Label {
-                            name,
-                            span: t.span,
-                        })
+                        Some(Stmt::Label { name, span: t.span })
                     }
                     "set" => {
                         self.bump();
@@ -526,10 +517,7 @@ impl Parser {
                         self.bump();
                         let name = self.expect_ident_or_string()?;
                         self.expect_newline_or_eof();
-                        Some(Stmt::Transition {
-                            name,
-                            span: t.span,
-                        })
+                        Some(Stmt::Transition { name, span: t.span })
                     }
                     // dialogue: speaker [@id]:
                     _ => {
@@ -542,11 +530,7 @@ impl Parser {
                             msg_id = self.expect_ident();
                         }
                         if !matches!(self.peek_kind(), TokenKind::Colon) {
-                            self.error(
-                                "VST015",
-                                &[("speaker", speaker.as_str())],
-                                t.span,
-                            );
+                            self.error("VST015", &[("speaker", speaker.as_str())], t.span);
                             return None;
                         }
                         self.bump();

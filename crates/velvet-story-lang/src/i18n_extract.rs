@@ -116,8 +116,11 @@ pub fn missing_keys(source: &ExtractedMessages, target: &MessageCatalog) -> Vec<
 
 /// Detect obsolete keys in target not present in source.
 pub fn obsolete_keys(source: &ExtractedMessages, target: &MessageCatalog) -> Vec<String> {
-    let live: std::collections::HashSet<_> =
-        source.entries.iter().map(|e| e.id.as_str().to_string()).collect();
+    let live: std::collections::HashSet<_> = source
+        .entries
+        .iter()
+        .map(|e| e.id.as_str().to_string())
+        .collect();
     target
         .messages
         .keys()

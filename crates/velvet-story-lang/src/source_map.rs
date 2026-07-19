@@ -79,16 +79,14 @@ impl SourceMap {
 
     /// Find by origin file path (substring) and line — disambiguates includes.
     pub fn by_file_line(&self, file_needle: &str, line: u32) -> Option<&MapEntry> {
-        self.entries.iter().find(|e| {
-            e.origin.file.contains(file_needle) && e.origin.span.line == line
-        })
+        self.entries
+            .iter()
+            .find(|e| e.origin.file.contains(file_needle) && e.origin.span.line == line)
     }
 
     /// Find first entry whose origin file path contains `needle`.
     pub fn by_file_substring(&self, needle: &str) -> Option<&MapEntry> {
-        self.entries
-            .iter()
-            .find(|e| e.origin.file.contains(needle))
+        self.entries.iter().find(|e| e.origin.file.contains(needle))
     }
 
     /// True if any entry has a real PC mapping.
@@ -105,10 +103,7 @@ pub fn map_from_story_file(file: &StoryFile) -> SourceMap {
         let TopItem::Scene(sc) = item else {
             continue;
         };
-        let origin = sc
-            .origin_file
-            .clone()
-            .unwrap_or_else(|| file.file.clone());
+        let origin = sc.origin_file.clone().unwrap_or_else(|| file.file.clone());
         map.push_in_file(
             origin.clone(),
             sc.span,
@@ -127,7 +122,9 @@ fn walk_stmts(map: &mut SourceMap, origin: &str, scene: &str, stmts: &[Stmt]) {
             Stmt::Background { span, id } => ("background", id.clone(), *span),
             Stmt::Music { span, id } => ("music", id.clone(), *span),
             Stmt::Sound { span, id } => ("sound", id.clone(), *span),
-            Stmt::Show { span, character, .. } => ("show", character.clone(), *span),
+            Stmt::Show {
+                span, character, ..
+            } => ("show", character.clone(), *span),
             Stmt::Hide { span, character } => ("hide", character.clone(), *span),
             Stmt::Dialogue { span, speaker, .. } => ("dialogue", speaker.clone(), *span),
             Stmt::Goto { span, target } => ("goto", target.clone(), *span),

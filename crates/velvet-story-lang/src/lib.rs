@@ -22,13 +22,15 @@
 #![deny(missing_docs)]
 
 pub mod ast;
+pub mod boot;
 pub mod commands;
 pub mod diag;
 pub mod format;
+pub mod from_program;
 pub mod i18n_extract;
-pub mod locale;
 pub mod lexer;
 pub mod load;
+pub mod locale;
 pub mod lower;
 pub mod parser;
 pub mod pipeline;
@@ -36,18 +38,21 @@ pub mod sema;
 pub mod source_map;
 pub mod span;
 pub mod studio;
-pub mod from_program;
 pub mod to_story_program;
 pub mod token;
 
+pub use boot::{
+    is_vstory_path, load_story_program_from_path, open_session_from_story_path,
+    run_story_path_headless, start_player_from_path, BootError,
+};
 pub use commands::{CommandRegistry, CommandSpec};
 pub use diag::StoryDiag;
 pub use format::{format_source, is_idempotent};
+pub use load::{load_story_path, load_story_source};
 pub use locale::{
     apply_locale_from_env, default_diag_locale, diag_locale, diag_message_for, push_diag_locale,
     set_diag_locale, with_diag_locale, DiagLocale, DiagLocaleGuard,
 };
-pub use load::{load_story_path, load_story_source};
 pub use pipeline::{
     build_path, build_source, build_story_program, build_story_program_with, check_path,
     check_path_with, check_source, check_source_with, dump_ast_json, dump_lowered_text, run_path,
@@ -138,7 +143,10 @@ mod tests {
         let c = check_source(src, "bad.vstory", &cmds);
         assert!(!c.ok);
         assert!(c.diags.iter().any(|d| d.code == "VST027"));
-        assert!(c.diags.iter().any(|d| d.display().contains("missing_scene")));
+        assert!(c
+            .diags
+            .iter()
+            .any(|d| d.display().contains("missing_scene")));
     }
 
     #[test]
@@ -162,9 +170,7 @@ end
             r.log
         );
         assert!(
-            r.log
-                .iter()
-                .any(|l| l.contains("forest_guardian")),
+            r.log.iter().any(|l| l.contains("forest_guardian")),
             "expected enemy ident forest_guardian in command args log, got {:?}",
             r.log
         );
@@ -232,8 +238,7 @@ end
         );
         // English cue
         assert!(
-            texts["en"].to_ascii_lowercase().contains("scene")
-                || texts["en"].contains("label"),
+            texts["en"].to_ascii_lowercase().contains("scene") || texts["en"].contains("label"),
             "{}",
             texts["en"]
         );
@@ -296,7 +301,10 @@ end
                 }
                 DiagLocale::Es => {
                     assert!(msg.contains("escena") || msg.contains("etiqueta"), "{msg}");
-                    assert!(!msg.to_ascii_lowercase().contains("does not exist"), "{msg}");
+                    assert!(
+                        !msg.to_ascii_lowercase().contains("does not exist"),
+                        "{msg}"
+                    );
                     assert!(display.contains("Sugerencia:"), "{display}");
                     es_msg = Some(msg);
                 }
@@ -313,8 +321,8 @@ end
     #[test]
     fn product_run_is_primary_public_path() {
         let cmds = CommandRegistry::builtin();
-        let r = run_source_product(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0)
-            .expect("product run");
+        let r =
+            run_source_product(WELCOME_SAMPLE, "welcome.vstory", &cmds, 0).expect("product run");
         assert!(!r.dialogue.is_empty(), "product dialogue empty");
         assert!(r.steps > 0);
         // VS2 secondary still works but is not required for product success.

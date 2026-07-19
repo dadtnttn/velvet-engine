@@ -65,7 +65,8 @@ pub fn lex(source: &str, file: &str) -> LexResult {
                     Span::at(line, start_col, start_b, byte_at(ci)),
                 ));
             }
-            if ci < chars.len() && (chars[ci].1 == '\n' || chars[ci].1 == '\r' || chars[ci].1 == '#')
+            if ci < chars.len()
+                && (chars[ci].1 == '\n' || chars[ci].1 == '\r' || chars[ci].1 == '#')
             {
                 at_line_start = false;
             } else {
@@ -349,6 +350,9 @@ mod tests {
     fn lex_utf8_dialogue() {
         let src = "scene a\nluna:\n    ¿Dormiste bien?\n";
         let r = lex(src, "u.vstory");
-        assert!(!r.diags.iter().any(|d| d.code == "VST003" && d.message.contains("boundary")));
+        assert!(!r
+            .diags
+            .iter()
+            .any(|d| d.code == "VST003" && d.message.contains("boundary")));
     }
 }

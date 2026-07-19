@@ -16,7 +16,8 @@
 | **velvet-ecs** | Entities, components, queries, events, change detection |
 | **velvet-scene** | Scenes, hierarchy, prefabs, transitions, async load FSM |
 | **velvet-script-*** | Lexer → parser → AST → HIR/types → bytecode → VM → format/LSP |
-| **velvet-story** | VN runtime: dialogue, choices, saves, gallery, glossary |
+| **velvet-story** | VN runtime: `StoryProgram` / `StoryPlayer` / saves / gallery |
+| **velvet-story-lang** | Writer `.vstory` → `StoryProgram` (product IR); Studio model; **boot** for CLI/runtime |
 | **velvet-play** | 2D play: tilemaps, physics, AI, pathfinding, particles |
 | **velvet-cellular** | **ALPHA** — falling-sand / cellular sim (Noita-like author core; APIs unstable) |
 | **velvet-rpg** | Stats, inventory, quests, shops, leveling, equipment |

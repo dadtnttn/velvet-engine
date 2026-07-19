@@ -170,21 +170,15 @@ fn walk_stmts(
                     }
                 } else {
                     r.diags.push(
-                        StoryDiag::error_key(
-                            "VST024",
-                            &[("name", name.as_str())],
-                            &origin,
-                            *span,
-                        )
-                        .with_node("call"),
+                        StoryDiag::error_key("VST024", &[("name", name.as_str())], &origin, *span)
+                            .with_node("call"),
                     );
                 }
             }
             Stmt::Dialogue { text, span, .. } => {
                 if text.trim().is_empty() {
                     r.diags.push(
-                        StoryDiag::warning_key("VST025", &[], &origin, *span)
-                            .with_node("dialogue"),
+                        StoryDiag::warning_key("VST025", &[], &origin, *span).with_node("dialogue"),
                     );
                 }
             }
@@ -305,10 +299,11 @@ fn cond_is_booleanish(e: &Expr) -> bool {
             ..
         } => cond_is_booleanish(expr),
         Expr::Unary {
-            op: UnaryOp::Neg,
-            ..
+            op: UnaryOp::Neg, ..
         } => false,
-        Expr::Binary { op, left, right, .. } => match op {
+        Expr::Binary {
+            op, left, right, ..
+        } => match op {
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => true,
             BinOp::And | BinOp::Or => cond_is_booleanish(left) && cond_is_booleanish(right),
             // arithmetic alone is not a valid condition for writers

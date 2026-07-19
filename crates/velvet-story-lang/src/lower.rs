@@ -3,9 +3,7 @@
 use std::collections::HashMap;
 
 use velvet_script_bytecode::opcodes_vs2::OpVs2;
-use velvet_script_compiler::vs2_codegen::{
-    lower_module as hir_to_unit, Vs2Instr, Vs2Unit,
-};
+use velvet_script_compiler::vs2_codegen::{lower_module as hir_to_unit, Vs2Instr, Vs2Unit};
 use velvet_script_hir::{
     HirExpr, HirId, HirItem, HirLit, HirModule, HirPath, HirScene, HirSpan, HirStmt, PathSeg,
 };
@@ -57,10 +55,7 @@ pub fn lower(file: &StoryFile) -> LowerOutput {
         };
         let entry = unit.pc();
         unit.entry_scenes.insert(sc.name.clone(), entry);
-        let origin = sc
-            .origin_file
-            .as_deref()
-            .unwrap_or(file.file.as_str());
+        let origin = sc.origin_file.as_deref().unwrap_or(file.file.as_str());
         map.push_in_file(
             origin,
             sc.span,
@@ -312,9 +307,8 @@ fn lower_stmt(
             unit.patch_a(j_end, end);
         }
         Stmt::Choice { options, span } => {
-            let pc = unit.emit(
-                Vs2Instr::with_a(OpVs2::Menu, options.len() as u32).at_line(span.line),
-            );
+            let pc =
+                unit.emit(Vs2Instr::with_a(OpVs2::Menu, options.len() as u32).at_line(span.line));
             map.push_in_file(file, *span, "choice", "menu", Some(pc));
             // Selected index lives in host state `__choice` (set by runner / UI).
             let choice_key = unit.pool.intern("__choice");
@@ -365,9 +359,8 @@ fn lower_stmt(
                 let _ = unit.pool.intern(k.as_str());
                 emit_cmd_arg(v, unit, locals, next_local, local);
             }
-            let pc = unit.emit(
-                Vs2Instr::with_ab(OpVs2::Call, cid, args.len() as u32).at_line(span.line),
-            );
+            let pc = unit
+                .emit(Vs2Instr::with_ab(OpVs2::Call, cid, args.len() as u32).at_line(span.line));
             map.push_in_file(file, *span, "call", name.clone(), Some(pc));
         }
         Stmt::Pause { span, .. } => {

@@ -42,10 +42,7 @@ pub fn format_source_with(source: &str, file: &str, opt: &FormatOptions) -> Stri
 }
 
 fn normalize_whitespace(source: &str) -> String {
-    let mut lines: Vec<String> = source
-        .lines()
-        .map(|l| l.trim_end().to_string())
-        .collect();
+    let mut lines: Vec<String> = source.lines().map(|l| l.trim_end().to_string()).collect();
     while lines.last().map(|l| l.is_empty()).unwrap_or(false) {
         lines.pop();
     }
@@ -123,7 +120,11 @@ fn format_stmt(st: &Stmt, out: &mut String, level: usize, opt: &FormatOptions) {
         Stmt::Choice { options, .. } => {
             out.push_str(&format!("{i}choice:\n"));
             for o in options {
-                out.push_str(&format!("{}\"{}\":\n", ind(opt, level + 1), escape_str(&o.label)));
+                out.push_str(&format!(
+                    "{}\"{}\":\n",
+                    ind(opt, level + 1),
+                    escape_str(&o.label)
+                ));
                 for s in &o.body {
                     format_stmt(s, out, level + 2, opt);
                 }

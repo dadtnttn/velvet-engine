@@ -98,7 +98,9 @@ pub fn default_diag_locale() -> DiagLocale {
 
 /// Effective locale: top of thread-local stack, else process default.
 pub fn diag_locale() -> DiagLocale {
-    LOCALE_STACK.with(|s| s.borrow().last().copied()).unwrap_or_else(default_diag_locale)
+    LOCALE_STACK
+        .with(|s| s.borrow().last().copied())
+        .unwrap_or_else(default_diag_locale)
 }
 
 /// RAII push of a thread-local diagnostic locale (pop on drop).
@@ -169,7 +171,11 @@ pub fn diag_message(code: &str, args: &[(&str, &str)]) -> String {
 }
 
 /// Pure catalog: suggestion body for `code` in `locale`, if any.
-pub fn diag_suggestion_for(locale: DiagLocale, code: &str, args: &[(&str, &str)]) -> Option<String> {
+pub fn diag_suggestion_for(
+    locale: DiagLocale,
+    code: &str,
+    args: &[(&str, &str)],
+) -> Option<String> {
     template_suggestion(locale, code).map(|t| fill(t, args))
 }
 
@@ -567,18 +573,12 @@ fn template_suggestion(loc: DiagLocale, code: &str) -> Option<&'static str> {
             DiagLocale::Es => {
                 "Renombra una de las dos escenas. La primera estaba cerca de la línea {line}."
             }
-            DiagLocale::En => {
-                "Rename one of the two scenes. The first was near line {line}."
-            }
+            DiagLocale::En => "Rename one of the two scenes. The first was near line {line}.",
             DiagLocale::Ja => {
                 "どちらかのシーン名を変えてください。最初は {line} 行付近にあります。"
             }
-            DiagLocale::De => {
-                "Benenne eine der beiden Szenen um. Die erste lag bei Zeile {line}."
-            }
-            DiagLocale::Zh => {
-                "请重命名其中一个场景。第一个约在第 {line} 行。"
-            }
+            DiagLocale::De => "Benenne eine der beiden Szenen um. Die erste lag bei Zeile {line}.",
+            DiagLocale::Zh => "请重命名其中一个场景。第一个约在第 {line} 行。",
         }),
         "VST021" => Some("set {name} = 0"),
         "VST022" => Some("{req}: …"),
@@ -597,21 +597,11 @@ fn template_suggestion(loc: DiagLocale, code: &str) -> Option<&'static str> {
             DiagLocale::Zh => "检查名称，或用 `scene …` 创建场景。",
         }),
         "VST030" | "VST050" => Some(match loc {
-            DiagLocale::Es => {
-                "if affection >= 3:\n# o una variable booleana: if has_key:"
-            }
-            DiagLocale::En => {
-                "if affection >= 3:\n# or a boolean variable: if has_key:"
-            }
-            DiagLocale::Ja => {
-                "if affection >= 3:\n# または真偽変数: if has_key:"
-            }
-            DiagLocale::De => {
-                "if affection >= 3:\n# oder boolesche Variable: if has_key:"
-            }
-            DiagLocale::Zh => {
-                "if affection >= 3:\n# 或布尔变量: if has_key:"
-            }
+            DiagLocale::Es => "if affection >= 3:\n# o una variable booleana: if has_key:",
+            DiagLocale::En => "if affection >= 3:\n# or a boolean variable: if has_key:",
+            DiagLocale::Ja => "if affection >= 3:\n# または真偽変数: if has_key:",
+            DiagLocale::De => "if affection >= 3:\n# oder boolesche Variable: if has_key:",
+            DiagLocale::Zh => "if affection >= 3:\n# 或布尔变量: if has_key:",
         }),
         "VST041" => Some(match loc {
             DiagLocale::Es => "Revisa la ruta relativa al archivo actual.",

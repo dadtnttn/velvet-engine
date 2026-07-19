@@ -13,6 +13,11 @@ path = "src/main.rs"
 [dependencies]
 velvet-core = { workspace = true }
 velvet-app = { workspace = true }
+velvet-story = { workspace = true }
+velvet-story-lang = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

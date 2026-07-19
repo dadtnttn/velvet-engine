@@ -62,7 +62,10 @@ fn e2e_source_map_points_to_vstory() {
     let map = &build.lowered.unwrap().map;
     assert_eq!(map.file, "stories/welcome.vstory");
     assert!(map.entries.iter().any(|e| e.node_kind == "scene"));
-    assert!(map.entries.iter().any(|e| e.origin.file.contains("welcome")));
+    assert!(map
+        .entries
+        .iter()
+        .any(|e| e.origin.file.contains("welcome")));
 }
 
 #[test]
@@ -104,11 +107,7 @@ fn e2e_include_multi_file_goto() {
     let dir = tempdir().unwrap();
     let part = dir.path().join("part.vstory");
     let main = dir.path().join("main.vstory");
-    fs::write(
-        &part,
-        "scene hallway\nnarrator:\n    En el pasillo.\nend\n",
-    )
-    .unwrap();
+    fs::write(&part, "scene hallway\nnarrator:\n    En el pasillo.\nend\n").unwrap();
     fs::write(
         &main,
         "include \"part.vstory\"\n\nscene start\nnarrator:\n    Inicio.\ngoto hallway\n",
@@ -125,7 +124,9 @@ fn e2e_include_multi_file_goto() {
     let r = run_path(&main, &cmds, 0).unwrap();
     assert!(r.ok);
     assert!(
-        r.dialogue.iter().any(|d| d.contains("pasillo") || d.contains("Inicio")),
+        r.dialogue
+            .iter()
+            .any(|d| d.contains("pasillo") || d.contains("Inicio")),
         "dialogue={:?}",
         r.dialogue
     );
