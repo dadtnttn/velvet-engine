@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   library/hand/discard zones) + CLI `velvet cards validate|zones` — tools for
   authors, not a playable card game. Hotline Miami–like remains roadmap
   **deferred / future** (`docs/architecture/ROADMAP.md`).
+- Demo **card-duel** (`demos/card-duel`): windowed card duel with title menu,
+  how-to, battle, pause, and result screens (uses `velvet-cards` zones).
 - Phase 0: workspace, architecture docs, ADRs, CI skeleton, dual license.
 - Phase 1 (core): `velvet-math`, `velvet-time`, `velvet-events`, `velvet-core`, `velvet-app`
   (plugins, schedules, resources, headless + winit window runners).
