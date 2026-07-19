@@ -1290,6 +1290,54 @@ scene end_good {
         );
     }
 
+    /// Music + Sound leave checkable product presentation/audio records.
+    #[test]
+    fn music_and_sound_wire_to_product_signals() {
+        use crate::ir::{StoryOp, StoryProgram, StoryScene};
+        use indexmap::IndexMap;
+
+        let mut scenes = IndexMap::new();
+        scenes.insert(
+            "start".into(),
+            StoryScene {
+                name: "start".into(),
+                ops: vec![
+                    StoryOp::Music {
+                        path: "assets/music/theme.ogg".into(),
+                        fade_in: Some(0.5),
+                    },
+                    StoryOp::Sound {
+                        path: "assets/sfx/ping.ogg".into(),
+                    },
+                    StoryOp::End { ending: None },
+                ],
+                labels: IndexMap::new(),
+            },
+        );
+        let mut prog = StoryProgram::new("audio_wire");
+        prog.entry = "start".into();
+        prog.scenes = scenes;
+        let mut session = VnSession::new(StoryPlayer::start(prog));
+        session.ingest_events();
+        let intents = session.bgm.drain_intents();
+        assert!(
+            intents.iter().any(|i| matches!(
+                i,
+                BgmIntent::Play { path, .. } if path.contains("theme.ogg")
+            )),
+            "music must produce BgmIntent::Play, intents={intents:?}"
+        );
+        assert_eq!(
+            session.presentation.last_sfx.as_deref(),
+            Some("assets/sfx/ping.ogg")
+        );
+        assert!(session
+            .presentation
+            .sfx_queue
+            .iter()
+            .any(|p| p.contains("ping.ogg")));
+    }
+
     #[test]
     fn presentation_hooks_apply_sound_pause_transition_host() {
         use crate::ir::{StoryOp, StoryProgram, StoryScene};

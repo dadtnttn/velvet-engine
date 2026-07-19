@@ -468,6 +468,21 @@ impl StoryPlayer {
         &self.snapshot.scene
     }
 
+    /// Jump to a scene or `scene:label`, clearing nested bodies, then pump.
+    ///
+    /// Used by RPG dialogue bridges and external navigation.
+    pub fn jump_to_scene(&mut self, target: &str) {
+        self.exec_stack.clear();
+        self.pending_menu = None;
+        self.choice_advances_scene = false;
+        self.line_advances_scene = false;
+        self.jump_to(target);
+        if !matches!(self.snapshot.wait, StoryWait::Ended) {
+            self.snapshot.wait = StoryWait::Ready;
+            self.pump();
+        }
+    }
+
     /// Whether finished.
     pub fn is_ended(&self) -> bool {
         matches!(self.snapshot.wait, StoryWait::Ended)

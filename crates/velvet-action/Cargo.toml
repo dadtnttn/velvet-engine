@@ -12,6 +12,7 @@ velvet-app = { workspace = true }
 velvet-play = { workspace = true }
 velvet-math = { workspace = true }
 velvet-time = { workspace = true }
+velvet-story = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
