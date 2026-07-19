@@ -15,6 +15,7 @@ mod perception;
 mod plugin;
 mod projectile;
 mod score;
+mod story_host;
 mod weapon;
 
 pub mod prelude;
@@ -29,4 +30,5 @@ pub use perception::{hear, see_target, Perception, PerceptionConfig};
 pub use plugin::ActionPlugin;
 pub use projectile::{Projectile, ProjectileSystem};
 pub use score::{ComboState, ScoreBoard};
+pub use story_host::{finish_combat, CombatHostState, CombatStoryHost};
 pub use weapon::{Weapon, WeaponId, WeaponKind};

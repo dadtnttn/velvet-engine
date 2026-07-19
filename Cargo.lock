@@ -2645,6 +2645,7 @@ dependencies = [
  "velvet-core",
  "velvet-math",
  "velvet-play",
+ "velvet-story",
  "velvet-time",
 ]
 
@@ -2875,7 +2876,9 @@ dependencies = [
 name = "velvet-integration-tests"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "serde_json",
+ "tempfile",
  "velvet-action",
  "velvet-audio",
  "velvet-build",
@@ -2890,6 +2893,7 @@ dependencies = [
  "velvet-script-compiler",
  "velvet-script-vm",
  "velvet-story",
+ "velvet-story-lang",
  "velvet-text",
  "velvet-ui",
 ]

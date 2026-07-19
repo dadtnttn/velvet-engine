@@ -1,4 +1,14 @@
 //! Story plugin for App integration.
+//!
+//! # How hosts wire into the core
+//!
+//! 1. Load a program (`velvet-story-lang` boot for `.vstory`, or `load_program_from_source`).
+//! 2. `StoryPlayer::start` / `start_with_host` — register [`crate::StoryCommandHost`]
+//!    (e.g. `velvet_action::CombatStoryHost`) on the player **before** play.
+//! 3. Insert `StoryPlayer` or product [`VnSession`] as an app resource.
+//! 4. `app.add_plugin(StoryPlugin)` so Update ticks pause/auto/presentation.
+//!
+//! The plugin does **not** invent a game host; games supply `StoryCommandHost`.
 
 use velvet_app::{App, Plugin, ScheduleLabel};
 use velvet_core::plugin::PluginError;
