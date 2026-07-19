@@ -14,7 +14,10 @@ use thiserror::Error;
 use velvet_script_ast::{Diagnostic, Severity, SourceLoc};
 use velvet_script_lexer::Span;
 use velvet_script_compiler::{compile_source, CompileError, CompileResult};
-use velvet_script_vm::{Value, Vm, VmError, VmLimits};
+use velvet_script_vm::{Vm, VmError, VmLimits};
+
+/// Runtime value (re-export for hosts / CLI).
+pub use velvet_script_vm::Value;
 
 /// Parsed source edition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -14,6 +14,7 @@ mod new_cmd;
 mod pack_cmd;
 mod play_cmd;
 mod script_cmd;
+mod vs3_cmd;
 mod story_cmd;
 mod style_cmd;
 mod workspace_cmd;
@@ -27,9 +28,11 @@ use velvet_app::prelude::*;
 use velvet_core::{engine_version, RunMode};
 
 use cards_cmd::{cmd_cards_validate, cmd_cards_zones};
+use crypto_cmd::{cmd_hybrid_fingerprint, cmd_hybrid_keygen, cmd_hybrid_open, cmd_hybrid_seal};
 use doctor::cmd_doctor;
 use document_cmd::{cmd_document_patch, cmd_document_regions};
 use export_cmd::cmd_export;
+use image_cmd::{cmd_image_convert, cmd_image_info};
 use loc_cmd::{
     cmd_loc_convert, cmd_loc_extract, cmd_loc_extract_story, cmd_loc_langs, cmd_loc_validate,
 };
@@ -38,14 +41,11 @@ use new_cmd::{cmd_init, cmd_new, cmd_project_info, cmd_template_install, cmd_tem
 use pack_cmd::cmd_pack;
 use play_cmd::{cmd_play_project_opts, cmd_play_story_product, cmd_recheck_replay};
 use script_cmd::{cmd_script_check, cmd_script_fmt, cmd_script_lsp, cmd_script_run};
+use vs3_cmd::{cmd_vs3_check, cmd_vs3_run};
 use story_cmd::{
     cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_lowered,
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
 };
-use crypto_cmd::{
-    cmd_hybrid_fingerprint, cmd_hybrid_keygen, cmd_hybrid_open, cmd_hybrid_seal,
-};
-use image_cmd::{cmd_image_convert, cmd_image_info};
 use style_cmd::{cmd_style_check, cmd_style_dump};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
@@ -95,6 +95,11 @@ enum Commands {
     Script {
         #[command(subcommand)]
         command: ScriptCommands,
+    },
+    /// Velvet Script 3 — official general **game logic** language.
+    Vs3 {
+        #[command(subcommand)]
+        command: Vs3Commands,
     },
     /// Velvet Story tools (writer-friendly narrative language → VS2).
     Story {
@@ -546,6 +551,26 @@ enum ScriptCommands {
 }
 
 #[derive(Subcommand, Debug)]
+enum Vs3Commands {
+    /// Check a VS3 logic file (`// @edition 3` required).
+    Check {
+        /// Path to `.vel` with `@edition 3`.
+        path: PathBuf,
+    },
+    /// Compile and call a VS3 function.
+    Run {
+        /// Path to VS3 source.
+        path: PathBuf,
+        /// Function name to call.
+        #[arg(long)]
+        call: String,
+        /// Arguments: `i:N`, `b:true`, `s:text`, or bare int.
+        #[arg(long = "arg")]
+        args: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum StoryCommands {
     /// Validate a `.vstory` file (parse + semantics, no execute).
     Check {
@@ -702,6 +727,12 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Script {
             command: ScriptCommands::Lsp { path },
         } => cmd_script_lsp(path),
+        Commands::Vs3 {
+            command: Vs3Commands::Check { path },
+        } => cmd_vs3_check(path),
+        Commands::Vs3 {
+            command: Vs3Commands::Run { path, call, args },
+        } => cmd_vs3_run(path, call, args),
         Commands::Story { lang, command } => {
             velvet_story_lang::apply_locale_from_env();
             let loc = if let Some(l) = lang {
@@ -892,11 +923,7 @@ fn dispatch(cli: Cli) -> Result<()> {
             command: StyleCommands::Check { path },
         } => cmd_style_check(path),
         Commands::Style {
-            command: StyleCommands::Dump {
-                path,
-                class,
-                state,
-            },
+            command: StyleCommands::Dump { path, class, state },
         } => cmd_style_dump(path, class, state),
         Commands::Image {
             command: ImageCommands::Info { path },
@@ -911,32 +938,38 @@ fn dispatch(cli: Cli) -> Result<()> {
                 },
         } => cmd_image_convert(input, output, quality, png_level),
         Commands::Crypto {
-            command: CryptoCommands::Hybrid {
-                command: HybridCommands::Keygen { public, secret },
-            },
+            command:
+                CryptoCommands::Hybrid {
+                    command: HybridCommands::Keygen { public, secret },
+                },
         } => cmd_hybrid_keygen(public, secret),
         Commands::Crypto {
-            command: CryptoCommands::Hybrid {
-                command: HybridCommands::Seal {
-                    public,
-                    input,
-                    output,
+            command:
+                CryptoCommands::Hybrid {
+                    command:
+                        HybridCommands::Seal {
+                            public,
+                            input,
+                            output,
+                        },
                 },
-            },
         } => cmd_hybrid_seal(public, input, output),
         Commands::Crypto {
-            command: CryptoCommands::Hybrid {
-                command: HybridCommands::Open {
-                    secret,
-                    input,
-                    output,
+            command:
+                CryptoCommands::Hybrid {
+                    command:
+                        HybridCommands::Open {
+                            secret,
+                            input,
+                            output,
+                        },
                 },
-            },
         } => cmd_hybrid_open(secret, input, output),
         Commands::Crypto {
-            command: CryptoCommands::Hybrid {
-                command: HybridCommands::Fingerprint { public },
-            },
+            command:
+                CryptoCommands::Hybrid {
+                    command: HybridCommands::Fingerprint { public },
+                },
         } => cmd_hybrid_fingerprint(public),
     }
 }

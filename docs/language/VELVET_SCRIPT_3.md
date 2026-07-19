@@ -8,7 +8,7 @@
 | **Edition** | `// @edition 3` |
 | **Extension** | `.vel` (edition marker selects semantics) |
 | **Role** | General **game logic** language (later: broader creation targets) |
-| **Maturity** | **Specified / early build** — not finished; this doc is the contract |
+| **Maturity** | **Usable MVP** — edition gate, pure logics, host natives (`sin`/`hash_sha256`), CLI `velvet vs3` |
 | **Policy** | Tools & logics first — **no prefabricated games as the language API** |
 
 ## Why VS3 (not “finish VS2”)
@@ -102,12 +102,23 @@ Classic product path remains:
 - **Move** new work under VS3 docs and edition 3.
 - Breaking cleanups allowed if classic demos stay green.
 
+## CLI
+
+```bash
+velvet vs3 check samples/vs3-logic/game_rules.vel
+velvet vs3 run samples/vs3-logic/game_rules.vel --call can_play_card --arg 5 --arg 3 --arg 3
+velvet vs3 run samples/vs3-logic/game_rules.vel --call apply_damage --arg i:10 --arg i:3
+velvet vs3 run samples/vs3-logic/game_rules.vel --call fingerprint --arg s:hello
+```
+
+Library: `velvet_script_vs3::{compile, eval_call, detect_edition}`.
+
 ## Success criteria (first usable VS3)
 
-1. A small **logic-only** sample compiles and runs with tests.
-2. At least **two engine tools** bound as natives (e.g. math + one gameplay query).
-3. Docs state clearly: classic for story product, VS3 for general logic.
-4. No demo depends on unfinished VS3 features claimed as done.
+1. A small **logic-only** sample compiles and runs with tests. ✅ `samples/vs3-logic/game_rules.vel`
+2. At least **two engine tools** bound as natives (e.g. math + hash). ✅ `sin`, `hash_sha256`, `abs`
+3. Docs state clearly: classic for story product, VS3 for general logic. ✅
+4. No demo depends on unfinished VS3 features claimed as done. ✅
 
 ## Non-goals (first cut)
 

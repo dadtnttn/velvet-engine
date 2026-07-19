@@ -17,6 +17,7 @@ velvet-project = { workspace = true }
 velvet-script-parser = { workspace = true }
 velvet-script-compiler = { workspace = true }
 velvet-script-vm = { workspace = true }
+velvet-script-vs3 = { workspace = true }
 velvet-script-format = { workspace = true }
 velvet-script-lsp = { workspace = true }
 velvet-story-lang = { workspace = true }

@@ -3051,6 +3051,7 @@ dependencies = [
  "velvet-script-lsp",
  "velvet-script-parser",
  "velvet-script-vm",
+ "velvet-script-vs3",
  "velvet-story",
  "velvet-story-lang",
  "velvet-style",
@@ -3477,6 +3478,20 @@ dependencies = [
  "velvet-crypto",
  "velvet-script-bytecode",
  "velvet-script-compiler",
+]
+
+[[package]]
+name = "velvet-script-vs3"
+version = "0.1.0"
+dependencies = [
+ "pretty_assertions",
+ "thiserror 2.0.18",
+ "velvet-crypto",
+ "velvet-script-ast",
+ "velvet-script-bytecode",
+ "velvet-script-compiler",
+ "velvet-script-lexer",
+ "velvet-script-vm",
 ]
 
 [[package]]

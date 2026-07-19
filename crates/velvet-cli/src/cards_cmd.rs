@@ -48,7 +48,10 @@ pub fn cmd_cards_validate(
         }
     }
     if !v.ok {
-        bail!("deck validation failed ({} violation(s))", v.violations.len());
+        bail!(
+            "deck validation failed ({} violation(s))",
+            v.violations.len()
+        );
     }
     println!("validate: OK");
     Ok(())
