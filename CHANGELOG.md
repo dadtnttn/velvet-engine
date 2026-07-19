@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`.vcss` = CSS + JS-lite**: stylesheets combine CSS (selectors, `@keyframes`,
+  cascade) with `@script` (`let`/`fn`/`for`/`play`/`animate`/`on`). Story
+  `style.call` / `style.emit`. Docs: `docs/language/VELVET_STYLE.md`.
 - **velvet-cards** authoring tools (catalog, deck validation, seeded shuffle,
   library/hand/discard zones) + CLI `velvet cards validate|zones` — tools for
   authors, not a playable card game. Hotline Miami–like remains roadmap

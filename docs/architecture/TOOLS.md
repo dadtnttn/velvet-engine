@@ -21,7 +21,7 @@ Policy for authors and crate design:
 |-------|--------|
 | `velvet-cards` | Catalog, deck list, validation, shuffle, zones |
 | `velvet-anim` | Tweens, director, Pose3D, project_image, Timeline tracks, story host |
-| `velvet-style` | CSS-like `.vcss` stylesheets, class/state resolve, `style.load` |
+| `velvet-style` | `.vcss` = CSS + JS-lite (look, `@keyframes`, `@script` play/animate); `style.load` / `style.call` |
 | `velvet-action` | Weapons, combat queries, aim, fragility, loadout, pickup; arena/dash as systems |
 | `velvet-story` + `velvet-story-lang` | StoryProgram/player, boot, command registry |
 | Script crates | Language pipeline (not a finished game) |
