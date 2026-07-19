@@ -20,3 +20,4 @@ camino = { workspace = true }
 sha2 = { workspace = true }
 indexmap = { workspace = true }
 slotmap = { workspace = true }
+image = { workspace = true }
