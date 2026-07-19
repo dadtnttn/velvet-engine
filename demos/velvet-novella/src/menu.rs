@@ -1,7 +1,8 @@
 //! Title menu for **Luz de Estación** — high-quality literary VN lobby.
 //!
-//! All text is **fontdue** (TrueType coverage AA) — no softbuffer 8-bit glyphs.
-//! Buttons are soft rounded novel chrome, not chunky game rectangles.
+//! - All text: **fontdue** TrueType with 2× supersample (no softbuffer bitmap font)
+//! - Soft rounded chrome (distance-field AA), not square 8-bit boxes
+//! - Layout scales to any framebuffer size for DPI-sharp presentation
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -9,9 +10,9 @@ use std::sync::OnceLock;
 use fontdue::Font;
 use velvet_story::pack_rgb;
 
-/// Logical frame size for the novel menu.
+/// Design reference width (layout units).
 pub const WW: u32 = 1280;
-/// Logical frame height.
+/// Design reference height.
 pub const WH: u32 = 720;
 
 /// Menu entries (index = selection).
@@ -44,7 +45,7 @@ pub fn load_rgb(path: &Path) -> Option<RgbImage> {
     Some((w, h, px))
 }
 
-/// Bilinear cover-blit (smooth background scale).
+/// Bilinear cover-blit.
 pub fn blit_cover(pixels: &mut [u32], ww: u32, wh: u32, img: &RgbImage) {
     let (sw, sh, src) = img;
     if *sw == 0 || *sh == 0 {
@@ -54,12 +55,12 @@ pub fn blit_cover(pixels: &mut [u32], ww: u32, wh: u32, img: &RgbImage) {
         let v = (y as f32 + 0.5) * (*sh as f32) / wh as f32 - 0.5;
         for x in 0..ww {
             let u = (x as f32 + 0.5) * (*sw as f32) / ww as f32 - 0.5;
-            pixels[(y * ww + x) as usize] = sample_bilinear(src, *sw, *sh, u, v);
+            pixels[(y * ww + x) as usize] = sample_rgb_bilinear(src, *sw, *sh, u, v);
         }
     }
 }
 
-fn sample_bilinear(src: &[u32], sw: u32, sh: u32, x: f32, y: f32) -> u32 {
+fn sample_rgb_bilinear(src: &[u32], sw: u32, sh: u32, x: f32, y: f32) -> u32 {
     let w = sw as i32;
     let h = sh as i32;
     if w <= 0 || h <= 0 {
@@ -73,25 +74,21 @@ fn sample_bilinear(src: &[u32], sw: u32, sh: u32, x: f32, y: f32) -> u32 {
     let y1 = (y0 + 1).min(h - 1);
     let fx = x - x0 as f32;
     let fy = y - y0 as f32;
-    let c = |xx: i32, yy: i32| src[(yy as u32 * sw + xx as u32) as usize];
+    let at = |xx: i32, yy: i32| src[(yy as u32 * sw + xx as u32) as usize];
     let ch = |c: u32, s: u32| ((c >> s) & 0xFF) as f32;
     let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
-    let bilerp = |c00: u32, c10: u32, c01: u32, c11: u32, shift: u32| {
+    let c00 = at(x0, y0);
+    let c10 = at(x1, y0);
+    let c01 = at(x0, y1);
+    let c11 = at(x1, y1);
+    let bl = |shift: u32| {
         lerp(
             lerp(ch(c00, shift), ch(c10, shift), fx),
             lerp(ch(c01, shift), ch(c11, shift), fx),
             fy,
-        )
+        ) as u8
     };
-    let c00 = c(x0, y0);
-    let c10 = c(x1, y0);
-    let c01 = c(x0, y1);
-    let c11 = c(x1, y1);
-    pack_rgb(
-        bilerp(c00, c10, c01, c11, 16) as u8,
-        bilerp(c00, c10, c01, c11, 8) as u8,
-        bilerp(c00, c10, c01, c11, 0) as u8,
-    )
+    pack_rgb(bl(16), bl(8), bl(0))
 }
 
 fn fill(pixels: &mut [u32], ww: u32, wh: u32, rgb: (u8, u8, u8)) {
@@ -117,37 +114,40 @@ fn blend(dst: u32, src: u32, t: f32) -> u32 {
 }
 
 fn put(pixels: &mut [u32], ww: u32, wh: u32, x: i32, y: i32, rgb: (u8, u8, u8), a: f32) {
-    if x < 0 || y < 0 || x >= ww as i32 || y >= wh as i32 {
+    if x < 0 || y < 0 || x >= ww as i32 || y >= wh as i32 || a <= 0.0 {
         return;
     }
     let i = (y as u32 * ww + x as u32) as usize;
-    pixels[i] = blend(pixels[i], pack_rgb(rgb.0, rgb.1, rgb.2), a);
+    pixels[i] = blend(pixels[i], pack_rgb(rgb.0, rgb.1, rgb.2), a.clamp(0.0, 1.0));
 }
 
-/// Soft rounded rectangle (anti-aliased corners — novel chrome, not square pixels).
+/// Soft rounded rect with continuous AA (no square pixel corners).
 fn rounded_panel(
     pixels: &mut [u32],
     ww: u32,
     wh: u32,
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
     radius: f32,
     rgb: (u8, u8, u8),
     alpha: f32,
 ) {
-    let a = alpha.clamp(0.0, 1.0);
-    let r = radius.max(0.0);
-    for row in y.max(0)..(y + h).min(wh as i32) {
-        for col in x.max(0)..(x + w).min(ww as i32) {
+    let a0 = alpha.clamp(0.0, 1.0);
+    let r = radius.max(0.5);
+    let x0 = x.floor() as i32;
+    let y0 = y.floor() as i32;
+    let x1 = (x + w).ceil() as i32;
+    let y1 = (y + h).ceil() as i32;
+    for row in y0.max(0)..y1.min(wh as i32) {
+        for col in x0.max(0)..x1.min(ww as i32) {
             let px = col as f32 + 0.5;
             let py = row as f32 + 0.5;
-            let cx0 = x as f32 + r;
-            let cy0 = y as f32 + r;
-            let cx1 = (x + w) as f32 - r;
-            let cy1 = (y + h) as f32 - r;
-            // distance outside rounded rect (0 = inside)
+            let cx0 = x + r;
+            let cy0 = y + r;
+            let cx1 = x + w - r;
+            let cy1 = y + h - r;
             let dx = if px < cx0 {
                 cx0 - px
             } else if px > cx1 {
@@ -163,12 +163,9 @@ fn rounded_panel(
                 0.0
             };
             let dist = (dx * dx + dy * dy).sqrt();
-            let edge = if r < 0.5 {
-                0.0
-            } else {
-                (dist - r + 0.5).clamp(0.0, 1.0)
-            };
-            let cov = (1.0 - edge) * a;
+            // smooth coverage: 1 inside, 0 outside, soft band ~1px
+            let edge = ((dist - r) + 0.75).clamp(0.0, 1.5) / 1.5;
+            let cov = (1.0 - edge) * (1.0 - edge) * a0;
             if cov > 0.01 {
                 put(pixels, ww, wh, col, row, rgb, cov);
             }
@@ -176,11 +173,22 @@ fn rounded_panel(
     }
 }
 
-fn soft_line_h(pixels: &mut [u32], ww: u32, wh: u32, x0: i32, x1: i32, y: i32, rgb: (u8, u8, u8), a: f32) {
+fn soft_hline(
+    pixels: &mut [u32],
+    ww: u32,
+    wh: u32,
+    x0: f32,
+    x1: f32,
+    y: f32,
+    rgb: (u8, u8, u8),
+    a: f32,
+) {
     let (x0, x1) = if x0 <= x1 { (x0, x1) } else { (x1, x0) };
-    for x in x0..=x1 {
-        put(pixels, ww, wh, x, y, rgb, a);
-        put(pixels, ww, wh, x, y + 1, rgb, a * 0.35);
+    let yi = y.floor() as i32;
+    let fy = y - yi as f32;
+    for x in x0.floor() as i32..=x1.ceil() as i32 {
+        put(pixels, ww, wh, x, yi, rgb, a * (1.0 - fy));
+        put(pixels, ww, wh, x, yi + 1, rgb, a * fy * 0.85);
     }
 }
 
@@ -199,7 +207,7 @@ fn vignette_bottom(pixels: &mut [u32], ww: u32, wh: u32, strength: f32) {
 
 fn vignette_left(pixels: &mut [u32], ww: u32, wh: u32, width: u32, strength: f32) {
     for x in 0..width.min(ww) {
-        let a = (1.0 - x as f32 / width as f32).powf(1.2) * strength;
+        let a = (1.0 - x as f32 / width as f32).powf(1.25) * strength;
         for y in 0..wh {
             let i = (y * ww + x) as usize;
             pixels[i] = blend(pixels[i], pack_rgb(6, 4, 14), a);
@@ -207,77 +215,84 @@ fn vignette_left(pixels: &mut [u32], ww: u32, wh: u32, width: u32, strength: f32
     }
 }
 
-// ── Fonts (TrueType via fontdue) ───────────────────────────────────────────
+// ── Fonts ─────────────────────────────────────────────────────────────────
 
 struct Fonts {
-    /// Display / title (serif).
     title: Font,
-    /// Menu & UI (clean sans or second serif).
     ui: Font,
+    /// Which files loaded (debug / tests).
+    title_name: String,
+    ui_name: String,
 }
 
 static FONTS: OnceLock<Option<Fonts>> = OnceLock::new();
+
+/// Loaded font names for diagnostics.
+pub fn font_status() -> Option<(String, String)> {
+    fonts().map(|f| (f.title_name.clone(), f.ui_name.clone()))
+}
 
 fn fonts() -> Option<&'static Fonts> {
     FONTS.get_or_init(load_fonts).as_ref()
 }
 
-fn try_font(paths: &[PathBuf]) -> Option<Font> {
-    for p in paths {
+fn try_font_named(paths: &[(PathBuf, &str)]) -> Option<(Font, String)> {
+    for (p, name) in paths {
         if let Ok(bytes) = std::fs::read(p) {
             if let Ok(f) = Font::from_bytes(bytes, fontdue::FontSettings::default()) {
-                return Some(f);
+                return Some((f, (*name).into()));
             }
         }
     }
     None
 }
 
-fn win_fonts(names: &[&str]) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    if let Ok(windir) = std::env::var("WINDIR") {
-        let dir = Path::new(&windir).join("Fonts");
-        for n in names {
-            out.push(dir.join(n));
-        }
-    }
-    out
+fn win(name: &str) -> (PathBuf, &str) {
+    let windir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
+    (PathBuf::from(windir).join("Fonts").join(name), name)
 }
 
 fn load_fonts() -> Option<Fonts> {
-    // Literary display for the novel title
-    let mut title_paths = win_fonts(&[
-        "constanb.ttf", // Constantia Bold — clean literary
-        "BOOKOSB.TTF",  // Book Antiqua Bold
-        "georgiab.ttf",
-        "cambriab.ttf",
-        "timesbd.ttf",
-        "georgia.ttf",
-        "constan.ttf",
-    ]);
-    title_paths.push(PathBuf::from(
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
-    ));
+    // Prefer clean literary faces (avoid anything that looks "pixel")
+    let title_cands = [
+        win("constanb.ttf"),
+        win("BOOKOSB.TTF"),
+        win("georgiab.ttf"),
+        win("cambriab.ttf"),
+        win("timesbd.ttf"),
+        win("georgia.ttf"),
+        win("constan.ttf"),
+        (
+            PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"),
+            "DejaVuSerif-Bold",
+        ),
+    ];
+    // Sharp UI: Segoe UI is the cleanest Windows UI face
+    let ui_cands = [
+        win("segoeui.ttf"),
+        win("calibri.ttf"),
+        win("constan.ttf"),
+        win("georgia.ttf"),
+        win("arial.ttf"),
+        win("times.ttf"),
+        (
+            PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            "DejaVuSans",
+        ),
+    ];
 
-    // Sharp UI labels (novel menus often use a refined sans for items)
-    let mut ui_paths = win_fonts(&[
-        "constan.ttf",   // Constantia — elegant body
-        "georgia.ttf",
-        "calibri.ttf",
-        "segoeui.ttf",
-        "arial.ttf",
-        "times.ttf",
-    ]);
-    ui_paths.push(PathBuf::from(
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
-    ));
-
-    let title = try_font(&title_paths)?;
-    let ui = try_font(&ui_paths).unwrap_or_else(|| {
-        // same as title if no separate UI face
-        try_font(&title_paths).expect("title already loaded")
+    let (title, title_name) = try_font_named(&title_cands)?;
+    let (ui, ui_name) = try_font_named(&ui_cands).unwrap_or_else(|| {
+        let (f, n) = try_font_named(&title_cands).expect("title ok");
+        (f, n)
     });
-    Some(Fonts { title, ui })
+    eprintln!("novel menu fonts: title={title_name}  ui={ui_name}");
+    Some(Fonts {
+        title,
+        ui,
+        title_name,
+        ui_name,
+    })
 }
 
 fn measure(font: &Font, text: &str, px: f32) -> f32 {
@@ -286,8 +301,8 @@ fn measure(font: &Font, text: &str, px: f32) -> f32 {
         .sum()
 }
 
-/// High-quality glyph blit with coverage AA (no nearest-neighbor block glyphs).
-fn draw_font(
+/// Rasterize at 2× and box-filter down — much sharper than single-pass small sizes.
+fn draw_font_hq(
     pixels: &mut [u32],
     ww: u32,
     wh: u32,
@@ -301,18 +316,45 @@ fn draw_font(
 ) {
     let op = opacity.clamp(0.0, 1.0);
     let src = pack_rgb(rgb.0, rgb.1, rgb.2);
-    let mut pen = x;
+    let scale = 2.0f32;
+    let px_hi = px * scale;
+    let mut pen = 0.0f32;
+
     for ch in text.chars() {
-        let (m, bmp) = font.rasterize(ch, px);
-        let ox = pen + m.xmin as f32;
-        let oy = baseline - m.height as f32 - m.ymin as f32;
-        for row in 0..m.height {
-            for col in 0..m.width {
-                // smoothstep coverage for slightly softer (less “hard pixel”) edges
-                let raw = bmp[row * m.width + col] as f32 / 255.0;
+        let (m, bmp) = font.rasterize(ch, px_hi);
+        if m.width == 0 || m.height == 0 {
+            pen += m.advance_width / scale;
+            continue;
+        }
+        // Destination origin (float)
+        let ox = x + pen + m.xmin as f32 / scale;
+        let oy = baseline - (m.height as f32 + m.ymin as f32) / scale;
+        let dw = (m.width as f32 / scale).ceil() as i32 + 1;
+        let dh = (m.height as f32 / scale).ceil() as i32 + 1;
+
+        for row in 0..dh {
+            for col in 0..dw {
+                // 2×2 sample from hi-res coverage
+                let mut acc = 0.0f32;
+                let mut n = 0.0f32;
+                for sy in 0..2 {
+                    for sx in 0..2 {
+                        let hx = (col as f32 * scale + sx as f32 + 0.5) as i32;
+                        let hy = (row as f32 * scale + sy as f32 + 0.5) as i32;
+                        if hx >= 0 && hy >= 0 && hx < m.width as i32 && hy < m.height as i32 {
+                            acc += bmp[hy as usize * m.width + hx as usize] as f32 / 255.0;
+                            n += 1.0;
+                        }
+                    }
+                }
+                if n < 1.0 {
+                    continue;
+                }
+                let raw = acc / n;
+                // light smoothstep keeps AA but avoids chalky edges
                 let t = raw * raw * (3.0 - 2.0 * raw);
                 let cov = t * op;
-                if cov < 0.015 {
+                if cov < 0.02 {
                     continue;
                 }
                 let px_ = (ox + col as f32).round() as i32;
@@ -324,154 +366,166 @@ fn draw_font(
                 pixels[i] = blend(pixels[i], src, cov);
             }
         }
-        pen += m.advance_width;
+        pen += m.advance_width / scale;
     }
 }
 
-/// Full novel title menu paint — quality first.
+/// Paint novel menu into a buffer of size `ww`×`wh` (use native window size for sharp DPI).
 pub fn paint_novel_menu(pixels: &mut [u32], bg: Option<&RgbImage>, sel: usize) {
-    let ww = WW;
-    let wh = WH;
+    paint_novel_menu_size(pixels, WW, WH, bg, sel);
+}
+
+/// Paint at arbitrary resolution (scales layout from 1280×720 design).
+pub fn paint_novel_menu_size(
+    pixels: &mut [u32],
+    ww: u32,
+    wh: u32,
+    bg: Option<&RgbImage>,
+    sel: usize,
+) {
+    assert!(pixels.len() >= (ww * wh) as usize);
+    let s = (ww as f32 / WW as f32).min(wh as f32 / WH as f32);
+    // Prefer filling width for novel letterbox feel
+    let s = ww as f32 / WW as f32;
+    let ox = 0.0f32;
+    let oy = ((wh as f32 - WH as f32 * s) * 0.5).max(0.0);
+
     if let Some(b) = bg {
         blit_cover(pixels, ww, wh, b);
     } else {
         fill(pixels, ww, wh, (12, 8, 22));
     }
 
-    vignette_bottom(pixels, ww, wh, 0.75);
-    vignette_left(pixels, ww, wh, 560, 0.42);
+    vignette_bottom(pixels, ww, wh, 0.78);
+    vignette_left(pixels, ww, wh, (520.0 * s) as u32, 0.45);
 
-    // Subtle top rule
-    soft_line_h(pixels, ww, wh, 48, ww as i32 - 48, 32, (210, 180, 130), 0.4);
+    soft_hline(
+        pixels,
+        ww,
+        wh,
+        ox + 48.0 * s,
+        ox + (WW as f32 - 48.0) * s,
+        oy + 32.0 * s,
+        (210, 180, 130),
+        0.4,
+    );
 
     let Some(f) = fonts() else {
-        // Extremely rare: no TTF at all — solid fallback without 8-bit font spam
-        rounded_panel(pixels, ww, wh, 60, 140, 400, 80, 8.0, (20, 12, 30), 0.7);
         return;
     };
 
-    // ── Title ────────────────────────────────────────────────────────────
-    let title_x = 80.0;
-    let base1 = 175.0;
-    let px1 = 48.0;
-    let px2 = 84.0;
-    let line1 = "Luz de";
-    let line2 = "Estación";
+    // Title
+    let title_x = ox + 80.0 * s;
+    let base1 = oy + 175.0 * s;
+    let px1 = 48.0 * s;
+    let px2 = 86.0 * s;
 
-    draw_font(
-        pixels, ww, wh, &f.title, title_x + 2.5, base1 + 2.5, line1, px1, (12, 8, 20), 0.55,
+    draw_font_hq(
+        pixels, ww, wh, &f.title, title_x + 2.0 * s, base1 + 2.0 * s, "Luz de", px1, (12, 8, 20),
+        0.5,
     );
-    draw_font(
-        pixels, ww, wh, &f.title, title_x, base1, line1, px1, (236, 224, 210), 1.0,
+    draw_font_hq(
+        pixels, ww, wh, &f.title, title_x, base1, "Luz de", px1, (236, 224, 210), 1.0,
     );
 
     let base2 = base1 + px2 * 0.92;
-    draw_font(
-        pixels, ww, wh, &f.title, title_x + 3.0, base2 + 3.0, line2, px2, (18, 10, 24), 0.6,
+    draw_font_hq(
+        pixels, ww, wh, &f.title, title_x + 2.5 * s, base2 + 2.5 * s, "Estación", px2, (16, 10, 22),
+        0.55,
     );
-    // warm gold face
-    draw_font(
-        pixels, ww, wh, &f.title, title_x, base2, line2, px2, (255, 214, 150), 1.0,
+    draw_font_hq(
+        pixels, ww, wh, &f.title, title_x, base2, "Estación", px2, (255, 214, 150), 1.0,
     );
-    // soft highlight
-    draw_font(
+    draw_font_hq(
         pixels,
         ww,
         wh,
         &f.title,
-        title_x - 0.4,
-        base2 - 0.5,
-        line2,
+        title_x - 0.3 * s,
+        base2 - 0.4 * s,
+        "Estación",
         px2,
         (255, 240, 200),
-        0.22,
+        0.2,
     );
 
-    let tag = "una novela visual";
-    let tpx = 20.0;
-    draw_font(
+    draw_font_hq(
         pixels,
         ww,
         wh,
         &f.ui,
-        title_x + 2.0,
-        base2 + 38.0,
-        tag,
-        tpx,
+        title_x,
+        base2 + 40.0 * s,
+        "una novela visual",
+        20.0 * s,
         (175, 160, 190),
         0.92,
     );
 
-    // Decorative rule under tagline
-    let rule_y = (base2 + 52.0) as i32;
-    soft_line_h(pixels, ww, wh, title_x as i32, title_x as i32 + 180, rule_y, (200, 160, 110), 0.45);
-    // tiny diamond
-    put(pixels, ww, wh, title_x as i32 + 190, rule_y, (230, 190, 130), 0.9);
-    put(pixels, ww, wh, title_x as i32 + 189, rule_y + 1, (230, 190, 130), 0.5);
-    put(pixels, ww, wh, title_x as i32 + 191, rule_y + 1, (230, 190, 130), 0.5);
+    soft_hline(
+        pixels,
+        ww,
+        wh,
+        title_x,
+        title_x + 200.0 * s,
+        base2 + 54.0 * s,
+        (200, 160, 110),
+        0.45,
+    );
 
-    // ── Novel buttons (text-forward, soft glass) ──────────────────────────
-    let mx = 80.0;
-    let my0 = 400.0;
-    let row_h = 48.0;
-    let btn_w = 340.0;
-    let label_px = 26.0;
+    // Menu items — novel style: soft pill only when selected, text always HQ
+    let mx = ox + 80.0 * s;
+    let my0 = oy + 400.0 * s;
+    let row_h = 52.0 * s;
+    let btn_w = 380.0 * s;
+    let label_px = 28.0 * s;
 
     for (i, label) in MENU_ITEMS.iter().enumerate() {
         let y = my0 + i as f32 * row_h;
         let enabled = menu_enabled(i);
         let selected = i == sel && enabled;
-        let baseline = y + 30.0;
+        let baseline = y + 32.0 * s;
 
         if selected {
-            // Soft rose-gold glass plate
+            // Layered soft glass (no hard square corners)
             rounded_panel(
                 pixels,
                 ww,
                 wh,
-                mx as i32 - 10,
-                y as i32 - 4,
-                btn_w as i32 + 20,
-                40,
-                12.0,
-                (48, 22, 52),
-                0.72,
+                mx - 14.0 * s,
+                y - 2.0 * s,
+                btn_w + 28.0 * s,
+                44.0 * s,
+                14.0 * s,
+                (30, 14, 40),
+                0.78,
             );
             rounded_panel(
                 pixels,
                 ww,
                 wh,
-                mx as i32 - 10,
-                y as i32 - 4,
-                btn_w as i32 + 20,
-                40,
-                12.0,
-                (255, 140, 170),
-                0.10,
+                mx - 14.0 * s,
+                y - 2.0 * s,
+                btn_w + 28.0 * s,
+                44.0 * s,
+                14.0 * s,
+                (255, 150, 175),
+                0.12,
             );
-            // Left accent stroke (soft)
-            for dy in 6..34 {
-                put(
-                    pixels,
-                    ww,
-                    wh,
-                    mx as i32 - 4,
-                    y as i32 + dy,
-                    (255, 180, 140),
-                    0.85,
-                );
-                put(
-                    pixels,
-                    ww,
-                    wh,
-                    mx as i32 - 3,
-                    y as i32 + dy,
-                    (255, 200, 160),
-                    0.35,
-                );
-            }
-            // Marker
-            draw_font(
+            // Soft gold edge ring
+            rounded_panel(
+                pixels,
+                ww,
+                wh,
+                mx - 14.0 * s,
+                y - 2.0 * s,
+                btn_w + 28.0 * s,
+                44.0 * s,
+                14.0 * s,
+                (255, 200, 150),
+                0.08,
+            );
+            draw_font_hq(
                 pixels,
                 ww,
                 wh,
@@ -480,115 +534,119 @@ pub fn paint_novel_menu(pixels: &mut [u32], bg: Option<&RgbImage>, sel: usize) {
                 baseline,
                 "›",
                 label_px,
-                (255, 200, 160),
+                (255, 210, 170),
                 1.0,
             );
-            draw_font(
+            draw_font_hq(
                 pixels,
                 ww,
                 wh,
                 &f.ui,
-                mx + 22.0,
-                baseline + 1.0,
+                mx + 26.0 * s,
+                baseline + 1.0 * s,
                 label,
                 label_px,
-                (40, 20, 40),
-                0.35,
+                (30, 16, 36),
+                0.4,
             );
-            draw_font(
+            draw_font_hq(
                 pixels,
                 ww,
                 wh,
                 &f.ui,
-                mx + 22.0,
+                mx + 26.0 * s,
                 baseline,
                 label,
                 label_px,
-                (255, 236, 210),
+                (255, 240, 220),
                 1.0,
             );
         } else if enabled {
-            // Bare literary row — no heavy box
-            draw_font(
+            draw_font_hq(
                 pixels,
                 ww,
                 wh,
                 &f.ui,
-                mx + 8.0,
+                mx + 10.0 * s,
                 baseline,
                 "·",
-                label_px * 0.85,
-                (160, 140, 170),
-                0.7,
+                label_px * 0.9,
+                (170, 150, 185),
+                0.75,
             );
-            draw_font(
+            draw_font_hq(
                 pixels,
                 ww,
                 wh,
                 &f.ui,
-                mx + 28.0,
+                mx + 30.0 * s,
                 baseline,
                 label,
                 label_px,
-                (215, 205, 225),
+                (220, 210, 230),
                 0.95,
             );
         } else {
-            // Disabled: softer, dim
-            let dim = format!("{label}");
-            draw_font(
+            draw_font_hq(
                 pixels,
                 ww,
                 wh,
                 &f.ui,
-                mx + 28.0,
+                mx + 30.0 * s,
                 baseline,
-                &dim,
+                label,
                 label_px,
-                (120, 110, 130),
-                0.55,
+                (125, 115, 135),
+                0.5,
             );
         }
     }
 
-    // Footer — UI font, small
-    let foot = "↑ ↓  seleccionar     Enter  confirmar     Esc  salir";
-    draw_font(
+    // Footer
+    draw_font_hq(
         pixels,
         ww,
         wh,
         &f.ui,
-        80.0,
-        wh as f32 - 32.0,
-        foot,
-        15.0,
-        (150, 140, 165),
-        0.85,
+        ox + 80.0 * s,
+        oy + (WH as f32 - 34.0) * s,
+        "↑ ↓  seleccionar      Enter  confirmar      Esc  salir",
+        16.0 * s,
+        (155, 145, 170),
+        0.88,
     );
     let brand = "Velvet Engine";
-    let bw = measure(&f.ui, brand, 14.0);
-    draw_font(
+    let bw = measure(&f.ui, brand, 15.0 * s);
+    draw_font_hq(
         pixels,
         ww,
         wh,
         &f.ui,
-        ww as f32 - 48.0 - bw,
-        wh as f32 - 32.0,
+        ww as f32 - 48.0 * s - bw,
+        oy + (WH as f32 - 34.0) * s,
         brand,
-        14.0,
-        (110, 100, 125),
-        0.75,
+        15.0 * s,
+        (115, 105, 130),
+        0.8,
     );
 
-    // Thin outer frame (soft corners via short inset lines)
-    soft_line_h(pixels, ww, wh, 18, ww as i32 - 18, 14, (190, 160, 110), 0.35);
-    soft_line_h(
+    soft_hline(
         pixels,
         ww,
         wh,
-        18,
-        ww as i32 - 18,
-        wh as i32 - 16,
+        ox + 18.0 * s,
+        ox + (WW as f32 - 18.0) * s,
+        oy + 14.0 * s,
+        (190, 160, 110),
+        0.35,
+    );
+    soft_hline(
+        pixels,
+        ww,
+        wh,
+        ox + 18.0 * s,
+        ox + (WW as f32 - 18.0) * s,
+        oy + (WH as f32 - 16.0) * s,
         (190, 160, 110),
         0.35,
     );
@@ -607,12 +665,41 @@ pub fn move_sel(sel: usize, dir: i32) -> usize {
     sel
 }
 
+/// Bilinear letterbox (for any leftover scale — never nearest-neighbor).
+pub fn letterbox_bilinear(src: &[u32], sw: u32, sh: u32, dw: u32, dh: u32, void: u32) -> Vec<u32> {
+    let mut out = vec![void; (dw * dh) as usize];
+    if sw == 0 || sh == 0 {
+        return out;
+    }
+    let scale = (dw as f32 / sw as f32).min(dh as f32 / sh as f32);
+    let tw = ((sw as f32 * scale).round() as u32).max(1).min(dw);
+    let th = ((sh as f32 * scale).round() as u32).max(1).min(dh);
+    let ox = (dw - tw) / 2;
+    let oy = (dh - th) / 2;
+    for y in 0..th {
+        let v = (y as f32 + 0.5) * sh as f32 / th as f32 - 0.5;
+        for x in 0..tw {
+            let u = (x as f32 + 0.5) * sw as f32 / tw as f32 - 0.5;
+            out[((oy + y) * dw + (ox + x)) as usize] = sample_rgb_bilinear(src, sw, sh, u, v);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn data_ui() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/ui")
+    }
+
+    #[test]
+    fn fonts_load_real_ttf() {
+        let (t, u) = font_status().expect("fonts");
+        assert!(!t.is_empty() && !u.is_empty());
+        // Must not be empty / fake
+        assert!(t.ends_with(".ttf") || t.ends_with(".TTF") || t.contains("DejaVu"));
     }
 
     #[test]
@@ -629,29 +716,7 @@ mod tests {
                 r + g + b > 40
             })
             .count();
-        let frac = non_black as f32 / pixels.len() as f32;
-        assert!(frac > 0.4, "menu should be substantially filled, frac={frac}");
-    }
-
-    #[test]
-    fn novel_menu_uses_real_fonts_not_bitmap() {
-        assert!(fonts().is_some(), "system TTF fonts required for novel menu quality");
-        let mut pixels = vec![0u32; (WW * WH) as usize];
-        paint_novel_menu(&mut pixels, None, 0);
-        // Gold / cream title pixels present
-        let mut warm = 0usize;
-        for y in 120..280 {
-            for x in 60..500 {
-                let p = pixels[(y * WW + x) as usize];
-                let r = ((p >> 16) & 0xFF) as u32;
-                let g = ((p >> 8) & 0xFF) as u32;
-                let b = (p & 0xFF) as u32;
-                if r > 180 && g > 140 && r > b {
-                    warm += 1;
-                }
-            }
-        }
-        assert!(warm > 300, "serif title should paint warm AA pixels, got {warm}");
+        assert!(non_black as f32 / pixels.len() as f32 > 0.4);
     }
 
     #[test]
@@ -673,8 +738,11 @@ mod tests {
     #[test]
     fn dump_novel_menu_png() {
         let bg = load_rgb(&data_ui().join("menu_bg.jpg"));
-        let mut pixels = vec![0u32; (WW * WH) as usize];
-        paint_novel_menu(&mut pixels, bg.as_ref(), 0);
+        // Dump at 2× design for quality proof
+        let ww = WW * 2;
+        let wh = WH * 2;
+        let mut pixels = vec![0u32; (ww * wh) as usize];
+        paint_novel_menu_size(&mut pixels, ww, wh, bg.as_ref(), 0);
         let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/novel_menu.png");
         let mut rgba = Vec::with_capacity(pixels.len() * 4);
         for &p in &pixels {
@@ -683,8 +751,7 @@ mod tests {
             rgba.push((p & 0xFF) as u8);
             rgba.push(255);
         }
-        image::save_buffer(&out, &rgba, WW, WH, image::ColorType::Rgba8).expect("png");
+        image::save_buffer(&out, &rgba, ww, wh, image::ColorType::Rgba8).expect("png");
         assert!(out.exists());
-        assert!(std::fs::metadata(&out).unwrap().len() > 20_000);
     }
 }

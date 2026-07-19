@@ -23,7 +23,10 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
-use menu::{load_rgb, paint_novel_menu, move_sel, RgbImage, MENU_ITEMS, WW, WH};
+use menu::{
+    font_status, letterbox_bilinear, load_rgb, move_sel, paint_novel_menu,
+    paint_novel_menu_size, RgbImage, MENU_ITEMS, WW, WH,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -89,25 +92,7 @@ fn present_session(session: &VnSession, pixels: &mut [u32], ww: u32, wh: u32) ->
     list
 }
 
-fn letterbox_present(src: &[u32], sw: u32, sh: u32, dw: u32, dh: u32, void: u32) -> Vec<u32> {
-    let mut out = vec![void; (dw * dh) as usize];
-    if sw == 0 || sh == 0 {
-        return out;
-    }
-    let scale = (dw as f32 / sw as f32).min(dh as f32 / sh as f32);
-    let tw = ((sw as f32 * scale).round() as u32).max(1).min(dw);
-    let th = ((sh as f32 * scale).round() as u32).max(1).min(dh);
-    let ox = (dw - tw) / 2;
-    let oy = (dh - th) / 2;
-    for y in 0..th {
-        let sy = y * sh / th;
-        for x in 0..tw {
-            let sx = x * sw / tw;
-            out[((oy + y) * dw + (ox + x)) as usize] = src[(sy * sw + sx) as usize];
-        }
-    }
-    out
-}
+// presentation scale is bilinear — see menu::letterbox_bilinear
 
 impl App {
     fn new(headless: bool) -> Result<Self> {
@@ -173,13 +158,21 @@ impl App {
 
         match self.screen {
             Screen::Title => {
-                if self.pixels.len() != (WW * WH) as usize {
-                    self.pixels.resize((WW * WH) as usize, 0);
+                // Paint at *native* window size so DPI never nearest-upsamples fonts
+                if self.pixels.len() != (dw * dh) as usize {
+                    self.pixels.resize((dw * dh) as usize, 0);
                 }
-                paint_novel_menu(&mut self.pixels, self.menu_bg.as_ref(), self.menu_sel);
+                paint_novel_menu_size(
+                    &mut self.pixels,
+                    dw,
+                    dh,
+                    self.menu_bg.as_ref(),
+                    self.menu_sel,
+                );
                 window.set_title("Luz de Estación — menú");
             }
             Screen::Play => {
+                // Product path still uses design res; bilinear letterbox to window
                 if self.pixels.len() != (WW * WH) as usize {
                     self.pixels.resize((WW * WH) as usize, 0);
                 }
@@ -242,17 +235,25 @@ impl App {
             }
         }
 
-        let present = if dw == WW && dh == WH {
-            self.pixels.clone()
-        } else {
-            letterbox_present(
-                &self.pixels,
-                WW,
-                WH,
-                dw,
-                dh,
-                velvet_story::pack_rgb(8, 6, 14),
-            )
+        let present = match self.screen {
+            Screen::Title => {
+                // Already painted at native size
+                self.pixels.clone()
+            }
+            Screen::Play => {
+                if dw == WW && dh == WH {
+                    self.pixels.clone()
+                } else {
+                    letterbox_bilinear(
+                        &self.pixels,
+                        WW,
+                        WH,
+                        dw,
+                        dh,
+                        velvet_story::pack_rgb(8, 6, 14),
+                    )
+                }
+            }
         };
 
         let Some(surface) = self.surface.as_mut() else {
@@ -392,8 +393,11 @@ impl ApplicationHandler for App {
                             self.pixels.resize((WW * WH) as usize, 0);
                         }
                         paint_novel_menu(&mut self.pixels, self.menu_bg.as_ref(), 0);
+                        let fonts = font_status()
+                            .map(|(t, u)| format!("title={t} ui={u}"))
+                            .unwrap_or_else(|| "fonts=MISSING".into());
                         println!(
-                            "headless title_menu painted items={} bg={}",
+                            "headless title_menu painted items={} bg={} {fonts}",
                             MENU_ITEMS.len(),
                             self.menu_bg.is_some()
                         );
@@ -457,7 +461,12 @@ fn main() -> Result<()> {
     velvet_core::init_tracing_default("velvet_novella=info,info");
     let headless = std::env::args().any(|a| a == "--headless");
     println!("=== Luz de Estación — novela visual ===");
-    println!("menu: Nueva partida · Continuar · Galeria · Opciones · Salir");
+    println!("menu: Nueva partida · Continuar · Galería · Opciones · Salir");
+    if let Some((t, u)) = font_status() {
+        println!("fonts: title={t}  ui={u}  (TrueType AA, native DPI paint)");
+    } else {
+        println!("WARNING: no TTF fonts loaded — menu quality degraded");
+    }
     println!("story: demos/velvet-novella/story/main.vel");
 
     let el = EventLoop::new()?;
