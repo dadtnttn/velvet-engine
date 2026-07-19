@@ -138,9 +138,19 @@ pub struct Vs3Module {
 }
 
 impl Vs3Module {
-    /// Exported function names.
+    /// Exported user function names (excludes the synthetic `<script>` entry).
     pub fn function_names(&self) -> Vec<String> {
-        self.bytecode.exports.keys().cloned().collect()
+        self.bytecode
+            .exports
+            .keys()
+            .filter(|n| n.as_str() != "<script>")
+            .cloned()
+            .collect()
+    }
+
+    /// Count of callable user functions.
+    pub fn user_function_count(&self) -> usize {
+        self.function_names().len()
     }
 
     /// Call a pure logic function by name with arguments.
@@ -287,8 +297,14 @@ pub fn compile(source: &str, file: Option<&str>) -> Result<Vs3Module, Vs3Error> 
         .map(ast_diag_to_vs3)
         .collect();
 
-    // Reject empty logic unit (no functions) as useless for VS3
-    if compiled.module.exports.is_empty() {
+    // Reject empty logic unit (only synthetic <script>, no user fns)
+    let user_fns = compiled
+        .module
+        .exports
+        .keys()
+        .filter(|n| n.as_str() != "<script>")
+        .count();
+    if user_fns == 0 {
         diags.push(Vs3Diagnostic {
             message: "VS3 logic unit has no callable functions".into(),
             loc: loc_at(file, 1, 1),
