@@ -263,21 +263,47 @@ fn looks_like_svg(bytes: &[u8]) -> bool {
     t.starts_with("<svg") || t.starts_with("<?xml") && t.contains("<svg")
 }
 
-/// Very small SVG path rasterizer for `M/L/Z` polygons (game icons).
+/// SVG path rasterizer for game UI (`@svg` badges, title wordmarks).
 ///
-/// Full SVG: prefer file raster via external tooling later; this covers `@svg` badges.
+/// Supports: `viewBox`, multiple `path d="…"` elements, multi-subpath `M…Z`,
+/// `M/L/H/V/C/Q/Z` (cubics/quads tessellated), fill + optional stroke.
+/// Transparent background (alpha). Not a full SVG 2 engine.
 pub fn rasterize_simple_svg(svg: &str, width: u32, height: u32) -> Result<RgbaImage, ImageError> {
     if width == 0 || height == 0 || width > 4096 || height > 4096 {
         return Err(ImageError::Msg("invalid svg raster size".into()));
     }
     let mut img = RgbaImage::new(width, height);
-    // parse fill color
+    let (vb_w, vb_h) = parse_viewbox(svg).unwrap_or((64.0, 64.0));
     let fill = parse_svg_color_attr(svg, "fill").unwrap_or([235, 200, 120, 255]);
-    let path = extract_path_d(svg).unwrap_or_default();
-    let poly = parse_path_points(&path);
-    if poly.len() >= 3 {
-        fill_polygon(&mut img, &poly, fill);
-    } else {
+    let stroke = parse_svg_color_attr(svg, "stroke");
+    let stroke_w = parse_stroke_width(svg).unwrap_or(0.0);
+
+    let paths = extract_all_path_d(svg);
+    let mut any = false;
+    for d in &paths {
+        // All subpaths in one `d` use even-odd together (letter holes)
+        let mut polys_vb: Vec<Vec<(f32, f32)>> = Vec::new();
+        for sub in split_subpaths(d) {
+            let poly = parse_path_points(&sub);
+            if poly.len() >= 3 {
+                polys_vb.push(poly);
+            }
+        }
+        if !polys_vb.is_empty() {
+            fill_polygons_vb_evenodd(&mut img, &polys_vb, vb_w, vb_h, fill);
+            any = true;
+            if stroke_w > 0.05 {
+                if let Some(sc) = stroke {
+                    if sc[3] > 0 {
+                        for poly in &polys_vb {
+                            stroke_polyline_vb(&mut img, poly, vb_w, vb_h, sc, stroke_w, true);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if !any {
         // fallback: filled rect inset
         fill_rect(
             &mut img,
@@ -291,69 +317,290 @@ pub fn rasterize_simple_svg(svg: &str, width: u32, height: u32) -> Result<RgbaIm
     Ok(img)
 }
 
-fn parse_svg_color_attr(svg: &str, attr: &str) -> Option<[u8; 4]> {
-    let key = format!("{attr}=\"");
-    let i = svg.find(&key)?;
+fn parse_viewbox(svg: &str) -> Option<(f32, f32)> {
+    let key = "viewBox=\"";
+    let i = svg.find(key).or_else(|| svg.find("viewbox=\""))?;
     let rest = &svg[i + key.len()..];
     let end = rest.find('"')?;
-    let c = rest[..end].trim();
-    if c.starts_with('#') && c.len() >= 7 {
-        let r = u8::from_str_radix(&c[1..3], 16).ok()?;
-        let g = u8::from_str_radix(&c[3..5], 16).ok()?;
-        let b = u8::from_str_radix(&c[5..7], 16).ok()?;
-        return Some([r, g, b, 255]);
+    let nums: Vec<f32> = rest[..end]
+        .split(|c: char| c.is_whitespace() || c == ',')
+        .filter_map(|t| t.parse().ok())
+        .collect();
+    if nums.len() >= 4 {
+        Some((nums[2].max(1.0), nums[3].max(1.0)))
+    } else {
+        None
+    }
+}
+
+fn parse_stroke_width(svg: &str) -> Option<f32> {
+    for key in ["stroke-width=\"", "stroke_width=\""] {
+        if let Some(i) = svg.find(key) {
+            let rest = &svg[i + key.len()..];
+            let end = rest.find('"')?;
+            return rest[..end].parse().ok();
+        }
     }
     None
 }
 
-fn extract_path_d(svg: &str) -> Option<String> {
-    let i = svg.find("d=\"")?;
-    let rest = &svg[i + 3..];
-    let end = rest.find('"')?;
-    Some(rest[..end].to_string())
+fn parse_svg_color_attr(svg: &str, attr: &str) -> Option<[u8; 4]> {
+    let key = format!("{attr}=\"");
+    // last occurrence wins (path can override root); scan all
+    let mut last = None;
+    let mut search = svg;
+    while let Some(i) = search.find(&key) {
+        let rest = &search[i + key.len()..];
+        let end = rest.find('"')?;
+        let c = rest[..end].trim();
+        if c.eq_ignore_ascii_case("none") || c.eq_ignore_ascii_case("transparent") {
+            last = Some([0, 0, 0, 0]);
+        } else if c.starts_with('#') && c.len() >= 7 {
+            let r = u8::from_str_radix(&c[1..3], 16).ok()?;
+            let g = u8::from_str_radix(&c[3..5], 16).ok()?;
+            let b = u8::from_str_radix(&c[5..7], 16).ok()?;
+            last = Some([r, g, b, 255]);
+        }
+        search = &rest[end + 1..];
+    }
+    last
+}
+
+fn extract_all_path_d(svg: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut search = svg;
+    while let Some(i) = search.find("d=\"") {
+        let rest = &search[i + 3..];
+        if let Some(end) = rest.find('"') {
+            out.push(rest[..end].to_string());
+            search = &rest[end + 1..];
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// Split a path `d` into subpaths starting at each absolute/relative moveto.
+fn split_subpaths(d: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut cur = String::new();
+    let mut chars = d.chars().peekable();
+    while let Some(c) = chars.next() {
+        if (c == 'M' || c == 'm') && !cur.is_empty() {
+            parts.push(cur);
+            cur = String::new();
+        }
+        cur.push(c);
+    }
+    if !cur.trim().is_empty() {
+        parts.push(cur);
+    }
+    if parts.is_empty() {
+        parts.push(d.to_string());
+    }
+    parts
 }
 
 fn parse_path_points(d: &str) -> Vec<(f32, f32)> {
     let mut pts = Vec::new();
     let mut cur = (0.0f32, 0.0f32);
-    let tokens: Vec<&str> = d
-        .split(|c: char| c == ',' || c.is_whitespace())
-        .filter(|t| !t.is_empty())
-        .collect();
+    let mut start = (0.0f32, 0.0f32);
+    // Tokenize: commands and numbers (including negatives / decimals)
+    let tokens = tokenize_path(d);
     let mut i = 0;
+    let mut cmd = 'M';
     while i < tokens.len() {
-        let t = tokens[i];
-        if t == "M" || t == "L" || t == "m" || t == "l" {
+        let t = &tokens[i];
+        if t.len() == 1 && t.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false) {
+            cmd = t.chars().next().unwrap();
             i += 1;
-            if i + 1 < tokens.len() {
-                if let (Ok(x), Ok(y)) = (tokens[i].parse::<f32>(), tokens[i + 1].parse::<f32>()) {
-                    cur = if t == "m" || t == "l" {
-                        (cur.0 + x, cur.1 + y)
-                    } else {
-                        (x, y)
-                    };
-                    pts.push(cur);
-                    i += 2;
+        }
+        match cmd {
+            'M' | 'm' | 'L' | 'l' => {
+                if i + 1 >= tokens.len() {
+                    break;
+                }
+                let Ok(x) = tokens[i].parse::<f32>() else {
+                    i += 1;
                     continue;
+                };
+                let Ok(y) = tokens[i + 1].parse::<f32>() else {
+                    i += 1;
+                    continue;
+                };
+                cur = if cmd == 'm' || cmd == 'l' {
+                    (cur.0 + x, cur.1 + y)
+                } else {
+                    (x, y)
+                };
+                if cmd == 'M' || cmd == 'm' {
+                    start = cur;
+                }
+                pts.push(cur);
+                i += 2;
+                // subsequent pairs after M are implicit L
+                if cmd == 'M' {
+                    cmd = 'L';
+                }
+                if cmd == 'm' {
+                    cmd = 'l';
                 }
             }
-        } else if t == "Z" || t == "z" {
-            i += 1;
-        } else if let Ok(x) = t.parse::<f32>() {
-            if i + 1 < tokens.len() {
-                if let Ok(y) = tokens[i + 1].parse::<f32>() {
-                    cur = (x, y);
-                    pts.push(cur);
-                    i += 2;
-                    continue;
+            'H' | 'h' => {
+                if i >= tokens.len() {
+                    break;
                 }
+                let Ok(x) = tokens[i].parse::<f32>() else {
+                    i += 1;
+                    continue;
+                };
+                cur.0 = if cmd == 'h' { cur.0 + x } else { x };
+                pts.push(cur);
+                i += 1;
             }
-            i += 1;
-        } else {
-            i += 1;
+            'V' | 'v' => {
+                if i >= tokens.len() {
+                    break;
+                }
+                let Ok(y) = tokens[i].parse::<f32>() else {
+                    i += 1;
+                    continue;
+                };
+                cur.1 = if cmd == 'v' { cur.1 + y } else { y };
+                pts.push(cur);
+                i += 1;
+            }
+            'C' | 'c' => {
+                if i + 5 >= tokens.len() {
+                    break;
+                }
+                let nums: Result<Vec<f32>, _> = tokens[i..i + 6].iter().map(|s| s.parse()).collect();
+                let Ok(n) = nums else {
+                    i += 1;
+                    continue;
+                };
+                let (x1, y1, x2, y2, x, y) = if cmd == 'c' {
+                    (
+                        cur.0 + n[0],
+                        cur.1 + n[1],
+                        cur.0 + n[2],
+                        cur.1 + n[3],
+                        cur.0 + n[4],
+                        cur.1 + n[5],
+                    )
+                } else {
+                    (n[0], n[1], n[2], n[3], n[4], n[5])
+                };
+                tessellate_cubic(&mut pts, cur, (x1, y1), (x2, y2), (x, y), 12);
+                cur = (x, y);
+                i += 6;
+            }
+            'Q' | 'q' => {
+                if i + 3 >= tokens.len() {
+                    break;
+                }
+                let nums: Result<Vec<f32>, _> = tokens[i..i + 4].iter().map(|s| s.parse()).collect();
+                let Ok(n) = nums else {
+                    i += 1;
+                    continue;
+                };
+                let (x1, y1, x, y) = if cmd == 'q' {
+                    (cur.0 + n[0], cur.1 + n[1], cur.0 + n[2], cur.1 + n[3])
+                } else {
+                    (n[0], n[1], n[2], n[3])
+                };
+                tessellate_quad(&mut pts, cur, (x1, y1), (x, y), 10);
+                cur = (x, y);
+                i += 4;
+            }
+            'Z' | 'z' => {
+                pts.push(start);
+                cur = start;
+                // Z consumes no coords
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
     pts
+}
+
+fn tokenize_path(d: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut num = String::new();
+    let flush = |num: &mut String, out: &mut Vec<String>| {
+        if !num.is_empty() {
+            out.push(std::mem::take(num));
+        }
+    };
+    let bytes: Vec<char> = d.chars().collect();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c.is_ascii_alphabetic() {
+            flush(&mut num, &mut out);
+            out.push(c.to_string());
+            i += 1;
+        } else if c == ',' || c.is_whitespace() {
+            flush(&mut num, &mut out);
+            i += 1;
+        } else if c == '-' || c == '+' || c == '.' || c.is_ascii_digit() {
+            // number; '-' starts new number unless mid-exponent
+            if c == '-' || c == '+' {
+                if !num.is_empty() && !num.ends_with('e') && !num.ends_with('E') {
+                    flush(&mut num, &mut out);
+                }
+            }
+            num.push(c);
+            i += 1;
+        } else {
+            flush(&mut num, &mut out);
+            i += 1;
+        }
+    }
+    flush(&mut num, &mut out);
+    out
+}
+
+fn tessellate_cubic(
+    pts: &mut Vec<(f32, f32)>,
+    p0: (f32, f32),
+    p1: (f32, f32),
+    p2: (f32, f32),
+    p3: (f32, f32),
+    steps: usize,
+) {
+    for s in 1..=steps {
+        let t = s as f32 / steps as f32;
+        let u = 1.0 - t;
+        let x = u * u * u * p0.0
+            + 3.0 * u * u * t * p1.0
+            + 3.0 * u * t * t * p2.0
+            + t * t * t * p3.0;
+        let y = u * u * u * p0.1
+            + 3.0 * u * u * t * p1.1
+            + 3.0 * u * t * t * p2.1
+            + t * t * t * p3.1;
+        pts.push((x, y));
+    }
+}
+
+fn tessellate_quad(
+    pts: &mut Vec<(f32, f32)>,
+    p0: (f32, f32),
+    p1: (f32, f32),
+    p2: (f32, f32),
+    steps: usize,
+) {
+    for s in 1..=steps {
+        let t = s as f32 / steps as f32;
+        let u = 1.0 - t;
+        let x = u * u * p0.0 + 2.0 * u * t * p1.0 + t * t * p2.0;
+        let y = u * u * p0.1 + 2.0 * u * t * p1.1 + t * t * p2.1;
+        pts.push((x, y));
+    }
 }
 
 fn fill_rect(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, rgba: [u8; 4]) {
@@ -364,24 +611,63 @@ fn fill_rect(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, rgba: [u8; 4])
     }
 }
 
-fn fill_polygon(img: &mut RgbaImage, pts: &[(f32, f32)], rgba: [u8; 4]) {
-    // scale path from viewBox-ish 0..64 into image
-    let max_x = pts.iter().map(|p| p.0).fold(1.0f32, f32::max);
-    let max_y = pts.iter().map(|p| p.1).fold(1.0f32, f32::max);
-    let sx = (img.width as f32) / max_x.max(1.0);
-    let sy = (img.height as f32) / max_y.max(1.0);
-    let scaled: Vec<(f32, f32)> = pts.iter().map(|(x, y)| (x * sx, y * sy)).collect();
-    let min_y = scaled.iter().map(|p| p.1).fold(f32::MAX, f32::min).floor() as i32;
-    let max_y = scaled.iter().map(|p| p.1).fold(f32::MIN, f32::max).ceil() as i32;
+fn map_vb(x: f32, y: f32, vb_w: f32, vb_h: f32, img: &RgbaImage) -> (f32, f32) {
+    let sx = img.width as f32 / vb_w.max(1.0);
+    let sy = img.height as f32 / vb_h.max(1.0);
+    (x * sx, y * sy)
+}
+
+fn fill_polygons_vb_evenodd(
+    img: &mut RgbaImage,
+    polys: &[Vec<(f32, f32)>],
+    vb_w: f32,
+    vb_h: f32,
+    rgba: [u8; 4],
+) {
+    if rgba[3] == 0 {
+        return;
+    }
+    let scaled: Vec<Vec<(f32, f32)>> = polys
+        .iter()
+        .filter(|p| p.len() >= 3)
+        .map(|pts| {
+            pts.iter()
+                .map(|(x, y)| map_vb(*x, *y, vb_w, vb_h, img))
+                .collect()
+        })
+        .collect();
+    fill_polygons_evenodd(img, &scaled, rgba);
+}
+
+/// Even-odd fill across one or more closed contours (supports letter counters / holes).
+fn fill_polygons_evenodd(img: &mut RgbaImage, polys: &[Vec<(f32, f32)>], rgba: [u8; 4]) {
+    if polys.is_empty() {
+        return;
+    }
+    let mut min_y = f32::MAX;
+    let mut max_y = f32::MIN;
+    for scaled in polys {
+        for p in scaled {
+            min_y = min_y.min(p.1);
+            max_y = max_y.max(p.1);
+        }
+    }
+    let min_y = min_y.floor() as i32;
+    let max_y = max_y.ceil() as i32;
     for y in min_y..=max_y {
         let mut nodes = Vec::new();
-        let n = scaled.len();
-        for i in 0..n {
-            let (x1, y1) = scaled[i];
-            let (x2, y2) = scaled[(i + 1) % n];
-            if (y1 <= y as f32 && y2 > y as f32) || (y2 <= y as f32 && y1 > y as f32) {
-                let t = (y as f32 - y1) / (y2 - y1);
-                nodes.push(x1 + t * (x2 - x1));
+        for scaled in polys {
+            let n = scaled.len();
+            if n < 2 {
+                continue;
+            }
+            for i in 0..n {
+                let (x1, y1) = scaled[i];
+                let (x2, y2) = scaled[(i + 1) % n];
+                if (y1 <= y as f32 && y2 > y as f32) || (y2 <= y as f32 && y1 > y as f32) {
+                    let t = (y as f32 - y1) / (y2 - y1 + 1e-6);
+                    nodes.push(x1 + t * (x2 - x1));
+                }
             }
         }
         nodes.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -399,13 +685,83 @@ fn fill_polygon(img: &mut RgbaImage, pts: &[(f32, f32)], rgba: [u8; 4]) {
     }
 }
 
+fn stroke_polyline_vb(
+    img: &mut RgbaImage,
+    pts: &[(f32, f32)],
+    vb_w: f32,
+    vb_h: f32,
+    rgba: [u8; 4],
+    width: f32,
+    closed: bool,
+) {
+    if pts.len() < 2 || rgba[3] == 0 {
+        return;
+    }
+    let scaled: Vec<(f32, f32)> = pts
+        .iter()
+        .map(|(x, y)| map_vb(*x, *y, vb_w, vb_h, img))
+        .collect();
+    let n = scaled.len();
+    let segs = if closed { n } else { n - 1 };
+    let half = (width * img.width as f32 / vb_w.max(1.0) * 0.5).max(0.6);
+    for i in 0..segs {
+        let a = scaled[i];
+        let b = scaled[(i + 1) % n];
+        stroke_segment(img, a, b, half, rgba);
+    }
+}
+
+fn stroke_segment(img: &mut RgbaImage, a: (f32, f32), b: (f32, f32), half: f32, rgba: [u8; 4]) {
+    let dx = b.0 - a.0;
+    let dy = b.1 - a.1;
+    let len = (dx * dx + dy * dy).sqrt().max(1e-3);
+    let steps = (len * 1.5).ceil() as i32;
+    let nx = -dy / len * half;
+    let ny = dx / len * half;
+    for s in 0..=steps {
+        let t = s as f32 / steps.max(1) as f32;
+        let cx = a.0 + dx * t;
+        let cy = a.1 + dy * t;
+        // thick stroke as small disk
+        let r = half.ceil() as i32;
+        for oy in -r..=r {
+            for ox in -r..=r {
+                if (ox * ox + oy * oy) as f32 <= half * half + 0.5 {
+                    let x = (cx + ox as f32).round() as i32;
+                    let y = (cy + oy as f32).round() as i32;
+                    if x >= 0 && y >= 0 && (x as u32) < img.width && (y as u32) < img.height {
+                        put(img, x as u32, y as u32, rgba);
+                    }
+                }
+            }
+        }
+        let _ = (nx, ny);
+    }
+}
+
 fn put(img: &mut RgbaImage, x: u32, y: u32, rgba: [u8; 4]) {
     let i = ((y * img.width + x) * 4) as usize;
     if i + 3 < img.pixels.len() {
-        img.pixels[i] = rgba[0];
-        img.pixels[i + 1] = rgba[1];
-        img.pixels[i + 2] = rgba[2];
-        img.pixels[i + 3] = rgba[3];
+        // alpha over
+        let sa = rgba[3] as f32 / 255.0;
+        if sa >= 0.99 {
+            img.pixels[i] = rgba[0];
+            img.pixels[i + 1] = rgba[1];
+            img.pixels[i + 2] = rgba[2];
+            img.pixels[i + 3] = rgba[3];
+        } else if sa > 0.01 {
+            let da = img.pixels[i + 3] as f32 / 255.0;
+            let out_a = sa + da * (1.0 - sa);
+            if out_a > 0.001 {
+                for c in 0..3 {
+                    let s = rgba[c] as f32;
+                    let d = img.pixels[i + c] as f32;
+                    img.pixels[i + c] =
+                        ((s * sa + d * da * (1.0 - sa)) / out_a).round().clamp(0.0, 255.0) as u8;
+                }
+                img.pixels[i + 3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
+            }
+        }
     }
 }
 
@@ -420,6 +776,26 @@ pub fn build_svg_document(
 ) -> String {
     format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {view_w} {view_h}"><path d="{path_d}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}"/></svg>"#
+    )
+}
+
+/// Build a multi-path SVG (each path is a full `d` subpath string).
+pub fn build_svg_multipath(
+    view_w: u32,
+    view_h: u32,
+    fill: &str,
+    stroke: &str,
+    stroke_width: f32,
+    paths: &[&str],
+) -> String {
+    let mut body = String::new();
+    for d in paths {
+        body.push_str(&format!(
+            r#"<path d="{d}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}"/>"#
+        ));
+    }
+    format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {view_w} {view_h}">{body}</svg>"#
     )
 }
 
