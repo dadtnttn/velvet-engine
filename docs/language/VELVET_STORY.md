@@ -44,6 +44,8 @@ velvet story check stories/main.vstory
 velvet story --lang en check stories/main.vstory   # diags es|en|ja|de|zh
 velvet story build stories/main.vstory              # StoryProgram + OpVs2 summary
 velvet story run stories/main.vstory --choice 0     # product path first
+velvet play stories/main.vstory                     # same product boot (.vstory via story-lang)
+velvet-runtime stories/main.vstory 0 256            # packaged host headless play
 velvet story format stories/main.vstory
 velvet story dump-ast stories/main.vstory
 velvet story dump-lowered stories/main.vstory       # secondary OpVs2 dump

@@ -182,6 +182,6 @@ pub fn adapt_internal(file: &str, span: Span, internal: &str) -> StoryDiag {
 
 /// Re-export locale controls for callers.
 pub use crate::locale::{
-    apply_locale_from_env, default_diag_locale, push_diag_locale, set_diag_locale, with_diag_locale,
-    DiagLocaleGuard,
+    apply_locale_from_env, default_diag_locale, push_diag_locale, set_diag_locale,
+    with_diag_locale, DiagLocaleGuard,
 };

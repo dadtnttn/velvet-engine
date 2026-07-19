@@ -122,12 +122,9 @@ pub fn cmd_play_story_product(
         .map(|p| p.join("saves"))
         .unwrap_or_else(|| PathBuf::from("saves"));
 
-    let mut session = open_session_from_file(
-        &path,
-        path.file_stem().and_then(|s| s.to_str()).unwrap_or("story"),
-        Some(save_dir),
-    )
-    .map_err(|e| anyhow::anyhow!("{e}"))?;
+    // Unified boot: `.vstory` via story-lang pipeline; `.vel` via legacy load.
+    let mut session = velvet_story_lang::open_session_from_story_path(&path, Some(save_dir))
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
 
     if lang != "en" && !lang.is_empty() {
         session
@@ -232,6 +229,21 @@ pub fn cmd_play_story_product(
             }
             StoryWait::Ready => {
                 session.advance();
+                host_audio.apply_session_bgm(&mut session);
+            }
+            StoryWait::Pause { .. } => {
+                println!("  [pause] skip");
+                session.player_mut().skip_pause();
+                session.ingest_events();
+                host_audio.apply_session_bgm(&mut session);
+            }
+            StoryWait::Host { token } => {
+                println!("  [host] auto-resume token={token}");
+                session
+                    .player_mut()
+                    .resume_host(&token)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+                session.ingest_events();
                 host_audio.apply_session_bgm(&mut session);
             }
         }
