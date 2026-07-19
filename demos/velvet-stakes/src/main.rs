@@ -11,9 +11,7 @@
 mod catalog;
 mod game;
 mod host;
-mod render;
 mod story_boot;
-mod ui;
 
 use std::num::NonZeroU32;
 use std::path::PathBuf;
@@ -24,8 +22,10 @@ use anyhow::{bail, Result};
 use softbuffer::{Context as SbContext, Surface};
 use velvet_anim::Pose3D;
 use velvet_cards::{validate_deck, DeckRules};
-use velvet_stakes::{ImageSlot, LiveDevSession};
-use velvet_stakes::{load_title_wordmark, RgbaBuf};
+use velvet_stakes::render::{blit_card, fill, load_rgb, rect, text, ArtBank, RgbImage};
+use velvet_stakes::ui::theme::{Theme, TITLE_ITEMS, WW, WH};
+use velvet_stakes::ui::{paint_collection, paint_options, paint_shop, paint_title_menu};
+use velvet_stakes::{load_title_wordmark, ImageSlot, LiveDevSession, RgbaBuf};
 use velvet_story::{StoryPlayer, StoryValue, StoryWait};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -37,10 +37,7 @@ use winit::window::{Window, WindowId};
 use catalog::make_catalog_and_deck;
 use game::{Outcome, Screen};
 use host::{StakesHost, StakesWorld};
-use render::{blit_card, fill, load_rgb, rect, text, ArtBank, RgbImage};
 use story_boot::boot_player;
-use ui::theme::{Theme, TITLE_ITEMS, WW, WH};
-use ui::{paint_collection, paint_options, paint_shop, paint_title_menu};
 
 struct App {
     host: Arc<StakesHost>,

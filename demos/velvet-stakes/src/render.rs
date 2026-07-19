@@ -10,10 +10,12 @@ pub type RgbImage = (u32, u32, Vec<u32>);
 
 /// Preloaded card art as ARGB u32 rows.
 pub struct ArtBank {
+    /// Card id → image buffer.
     pub images: HashMap<String, RgbImage>,
 }
 
 impl ArtBank {
+    /// Load art from (id, path) pairs.
     pub fn load(stats_art: &[(String, std::path::PathBuf)]) -> Self {
         let mut images = HashMap::new();
         for (id, path) in stats_art {
@@ -24,6 +26,7 @@ impl ArtBank {
         Self { images }
     }
 
+    /// Load `{id}.jpg` files from a catalog directory.
     pub fn from_catalog_dir(art_dir: &Path, ids: &[&str]) -> Self {
         let pairs: Vec<_> = ids
             .iter()
@@ -94,6 +97,7 @@ pub fn outline(
     rect(pixels, ww, wh, x + w - t, y, t, h, rgb);
 }
 
+/// Solid fill of the whole frame.
 pub fn fill(pixels: &mut [u32], ww: u32, wh: u32, rgb: (u8, u8, u8)) {
     let c = pack_rgb(rgb.0, rgb.1, rgb.2);
     let n = (ww * wh) as usize;
@@ -102,6 +106,7 @@ pub fn fill(pixels: &mut [u32], ww: u32, wh: u32, rgb: (u8, u8, u8)) {
     }
 }
 
+/// Opaque axis-aligned rectangle.
 pub fn rect(pixels: &mut [u32], ww: u32, wh: u32, x: i32, y: i32, w: i32, h: i32, rgb: (u8, u8, u8)) {
     let c = pack_rgb(rgb.0, rgb.1, rgb.2);
     let ww = ww as i32;
@@ -113,6 +118,7 @@ pub fn rect(pixels: &mut [u32], ww: u32, wh: u32, x: i32, y: i32, w: i32, h: i32
     }
 }
 
+/// Bitmap font text line (softbuffer-style).
 pub fn text(
     pixels: &mut [u32],
     ww: u32,

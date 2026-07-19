@@ -8,7 +8,7 @@ use velvet_math::{Ease, Vec2};
 use velvet_style::{call_style_fn, JsValue, Stylesheet};
 
 use crate::catalog::{score_played, CardStats, HandScore};
-use crate::ui::theme::{WW, WH};
+use velvet_stakes::ui::theme::{WW, WH};
 
 pub const HAND_SIZE: usize = 8;
 pub const MAX_SELECT: usize = 5;

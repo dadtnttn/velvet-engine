@@ -7,10 +7,15 @@ use velvet_style::{resolve, Color, ComputedStyle, StyleQuery, Stylesheet};
 
 /// Layout for the main menu button column.
 pub struct ButtonColumnLayout {
+    /// Left edge of the column.
     pub x: i32,
+    /// Top of the first button.
     pub y0: i32,
+    /// Button width.
     pub w: i32,
+    /// Button height (may be overridden by `.vcss`).
     pub h: i32,
+    /// Vertical gap between buttons.
     pub gap: i32,
 }
 
@@ -126,6 +131,7 @@ fn paint_one_button(
     let label_y = y + h / 2 - 7;
     let gold = fg.rgb_tuple();
     if selected {
+        // Magenta selection glow under label + bright gold face
         text(
             pixels,
             WW,
@@ -136,6 +142,19 @@ fn paint_one_button(
             glow.rgb_tuple(),
             2,
         );
+        text(
+            pixels,
+            WW,
+            WH,
+            label_x - 1,
+            label_y,
+            item.label,
+            (255, 180, 255),
+            2,
+        );
+        // Left accent bar for selected row
+        panel(pixels, WW, WH, x + 2, y + 6, 4, h - 12, glow.rgb_tuple(), 0.9);
+        panel(pixels, WW, WH, x + 2, y + 6, 4, h - 12, theme.gold, 0.55);
     }
     text(pixels, WW, WH, label_x, label_y, item.label, gold, 2);
 }
