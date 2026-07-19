@@ -1,11 +1,11 @@
 //! # velvet-cards
 //!
-//! **Authoring tools** for card catalogs, deck lists, and pure zone math.
+//! **Authoring tools only** (see `docs/architecture/TOOLS.md`).
 //!
-//! This crate is **not** a playable card game: no AI, no turn engine, no match UI.
-//! Games and Studio panels can build on these APIs later.
+//! - Not a playable card game, TCG rules engine, AI, or match UI  
+//! - Demos (`card-duel`, `velvet-stakes`) compose these tools; they are not this crate  
 //!
-//! ## Spine
+//! ## Tools
 //!
 //! 1. [`CardCatalog`] — define cards (id, name, cost, tags/types).
 //! 2. [`DeckList`] — ordered multiset of card ids + [`validate_deck`].

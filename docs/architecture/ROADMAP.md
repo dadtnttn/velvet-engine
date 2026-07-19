@@ -22,11 +22,12 @@ Phases are sequential. Keep the tree compiling after every phase.
 
 | Priority | Item | Status | Notes |
 |----------|------|--------|-------|
-| **Now** | **Card authoring tools** (`velvet-cards`) | **active** | Catalog, deck lists, validation, seeded shuffle, draw/discard **zones** — **tools for authors**, not a finished card *game* (no AI, no match UI, no TCG rules parity). CLI: `velvet cards …`. |
-| Demo | **Balatro-like** (`demos/velvet-stakes`) | **pre-alpha** | Poker chips×mult, blinds, hand select — fan demo; jokers/shop later. |
-| **Now** | **Animation / VFX tools** (`velvet-anim`) | **active** | Tweens, effect presets (deal/fade/shake…), director, `.vanim`, story `call anim.*` — for cards, UI, stage. |
-| Later | Hotline Miami–like (top-down action shooter) | **deferred / future** | Pre-alpha spine exists (`velvet-action::hotline`, `examples/hotline-rush`). **Not current priority** — leave on roadmap until card tooling matures; further Hotline (windowed input, levels, masks) is future work. |
-| Later | Full CCG/TCG rules engine / match loop | **out of scope near-term** | Optional consumers may use zones later; success bar is tools, not “win a match”. |
+| **Policy** | **Tools first** | **active** | See `docs/architecture/TOOLS.md`. Crates = tools; `demos/` = examples; `recipes` = optional samples. |
+| **Now** | **Card tools** (`velvet-cards`) | **active** | Catalog, deck validate, zones, CLI — not a card game. |
+| **Now** | **Anim / 3D image tools** (`velvet-anim`) | **active** | Timeline, Pose3D, project_image, story track/pose3d — not premade cutscenes. |
+| **Now** | **Action tools** (`velvet-action`) | **active** | Aim, loadout, hitscan, weapons, combat — room loop only in `recipes` / demos. |
+| Demo | `velvet-stakes` / `card-duel` / `hotline-rush` | **examples** | Illustrate tools; not the API. |
+| Later | Full TCG rules / Hotline product game | **out of scope near-term** | Games are built *with* tools, not shipped as the engine surface. |
 
 ## Parallelizable work (within a phase)
 

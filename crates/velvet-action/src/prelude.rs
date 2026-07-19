@@ -1,4 +1,4 @@
-//! Action prelude.
+//! Action prelude — **tools** (plus recipe aliases used by demos).
 
 pub use crate::arena::{ArenaController, ArenaPhase, WaveDef};
 pub use crate::combat::{apply_damage, melee_targets, DamageEvent, DeathEvent};
@@ -7,11 +7,12 @@ pub use crate::dash::{DashConfig, DashState};
 pub use crate::enemy::{EnemyAi, EnemyKind, PatrolPath};
 pub use crate::hitstop::{Hitstop, HitstopConfig};
 pub use crate::hotline::{
-    AimFacing, AttackOutcome, Fragility, GroundWeapon, HotlineLoadout, HotlinePhase,
-    HotlinePresets, HotlineRun, KillStyle,
+    AimFacing, AttackOutcome, Fragility, GroundWeapon, HotlineLoadout, HotlinePresets, WeaponKits,
+    WeaponLoadout, PICKUP_RADIUS,
 };
 pub use crate::perception::{hear, see_target, Perception, PerceptionConfig};
 pub use crate::plugin::ActionPlugin;
 pub use crate::projectile::{Projectile, ProjectileSystem};
+pub use crate::recipes::{HotlinePhase, HotlineRun, KillStyle, RoomRun};
 pub use crate::score::{ComboState, ScoreBoard};
 pub use crate::weapon::{Weapon, WeaponId, WeaponKind};

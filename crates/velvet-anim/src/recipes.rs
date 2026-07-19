@@ -1,12 +1,20 @@
 //! **Optional recipes** built *from* tools — not the product API.
 //!
-//! Prefer [`crate::track::Timeline`] + [`crate::fx3d::project_image`] for your own
-//! effects. These functions only show how to compose the tools.
+//! Prefer [`crate::track::Timeline`] + [`crate::fx3d::project_image`] and raw
+//! [`crate::tween::FloatTween`] for your own effects.
 
 use velvet_math::{Ease, Vec2};
 
+use crate::effect::{build_effect, EffectKind, EffectParams};
 use crate::fx3d::{Pose3D, Pose3DChannel};
+use crate::pose::AnimPose;
 use crate::track::{ChannelTrack, Timeline};
+use crate::tween::FloatTween;
+
+/// Recipe: named 2D effect → list of tweens (same as historical `anim.fx` presets).
+pub fn recipe_fx_tweens(kind: EffectKind, pose: &AnimPose, params: EffectParams) -> Vec<FloatTween> {
+    build_effect(kind, pose, params)
+}
 
 /// Example: build a **custom** single-card flip timeline (you own the result).
 ///

@@ -1,8 +1,6 @@
-//! Hotline Rush — pre-alpha top-down action shooter (Hotline Miami–like).
+//! Hotline Rush — **demo** composing action **tools** (not the engine API).
 //!
-//! Genre: **top-down action shooter** / neo-noir top-down combat.
-//! Free aim, one-hit death, melee + guns, pickups, room clear, quick restart.
-//! Headless scripted smoke (no window required).
+//! Uses aim/loadout/hitscan tools + optional `RoomRun` recipe. Headless smoke.
 
 use anyhow::Result;
 use velvet_action::prelude::*;
