@@ -55,7 +55,7 @@ pub use animation::{
 };
 pub use host::StyleStoryHost;
 pub use parse::{
-    parse_stylesheet, parse_stylesheet_with_imports, StyleParseError, StyleRule, Stylesheet,
+    parse_stylesheet, parse_stylesheet_with_imports, StyleParseError, StyleRule, Stylesheet, SvgDef,
 };
 pub use resolve::{
     expand_box_shorthands, resolve, resolve_expanded, ComputedStyle, StyleQuery, StyleRegistry,

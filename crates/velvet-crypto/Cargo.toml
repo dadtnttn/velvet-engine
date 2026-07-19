@@ -1,16 +1,17 @@
 [package]
-name = "velvet-script-vm"
-description = "Sandboxed virtual machine for Velvet Script bytecode"
+name = "velvet-crypto"
+description = "Sandbox crypto/codec tools for VS2 (hash, HMAC, random, base64/hex)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-velvet-script-bytecode = { workspace = true }
-velvet-script-compiler = { workspace = true }
-velvet-crypto = { workspace = true }
+sha2 = { workspace = true }
+hmac = "0.12"
 thiserror = { workspace = true }
+serde = { workspace = true }
+getrandom = "0.2"
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

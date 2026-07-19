@@ -11,6 +11,7 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 indexmap = { workspace = true }
 velvet-story = { workspace = true }
+velvet-image = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

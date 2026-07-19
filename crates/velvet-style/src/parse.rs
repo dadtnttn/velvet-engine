@@ -46,8 +46,51 @@ pub struct Stylesheet {
     pub script: ScriptModule,
     /// Relative `@import` paths (order preserved).
     pub imports: Vec<String>,
+    /// Named SVG snippets from `@svg name { … }`.
+    pub svgs: IndexMap<String, SvgDef>,
     /// Optional source name.
     pub source: Option<String>,
+}
+
+/// Inline SVG definition authored in `.vcss`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SvgDef {
+    /// Name.
+    pub name: String,
+    /// viewBox width (default 64).
+    pub view_w: u32,
+    /// viewBox height (default 64).
+    pub view_h: u32,
+    /// Fill color string (#rrggbb or keyword).
+    pub fill: String,
+    /// Stroke color.
+    pub stroke: String,
+    /// Stroke width.
+    pub stroke_width: f32,
+    /// Path `d` attribute.
+    pub path: String,
+}
+
+impl SvgDef {
+    /// Emit SVG XML document.
+    pub fn to_svg_xml(&self) -> String {
+        velvet_image::build_svg_document(
+            self.view_w.max(1),
+            self.view_h.max(1),
+            if self.fill.is_empty() {
+                "#ebc878"
+            } else {
+                &self.fill
+            },
+            if self.stroke.is_empty() {
+                "none"
+            } else {
+                &self.stroke
+            },
+            self.stroke_width,
+            &self.path,
+        )
+    }
 }
 
 impl Stylesheet {
@@ -63,6 +106,9 @@ impl Stylesheet {
             self.keyframes.insert(k, v);
         }
         self.script.extend(other.script);
+        for (k, v) in other.svgs {
+            self.svgs.insert(k, v);
+        }
         // imports already resolved when using parse_stylesheet_with_imports
     }
 }
@@ -104,6 +150,7 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
     let mut keyframes = IndexMap::new();
     let mut script = ScriptModule::default();
     let mut imports = Vec::new();
+    let mut svgs: IndexMap<String, SvgDef> = IndexMap::new();
     let mut i = 0;
     let bytes = source.as_bytes();
     let mut line = 1usize;
@@ -219,6 +266,19 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
             continue;
         }
 
+        if let Some(rest) = sel_raw.strip_prefix("@svg") {
+            let name = rest.trim();
+            if name.is_empty() {
+                return Err(StyleParseError::AtLine {
+                    line: sel_line,
+                    msg: "@svg needs a name".into(),
+                });
+            }
+            let def = parse_svg_def(name, body);
+            svgs.insert(name.to_string(), def);
+            continue;
+        }
+
         if let Some(rest) = sel_raw.strip_prefix("@keyframes") {
             let name = rest.trim();
             if name.is_empty() {
@@ -256,8 +316,52 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
         keyframes,
         script,
         imports,
+        svgs,
         source: None,
     })
+}
+
+fn parse_svg_def(name: &str, body: &str) -> SvgDef {
+    let mut def = SvgDef {
+        name: name.into(),
+        view_w: 64,
+        view_h: 64,
+        fill: "#ebc878".into(),
+        stroke: "none".into(),
+        stroke_width: 0.0,
+        path: String::new(),
+    };
+    for part in body.split(';') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let Some((k, v)) = part.split_once(':') else {
+            continue;
+        };
+        let k = k.trim().to_ascii_lowercase();
+        let v = v.trim().trim_matches(|c| c == '"' || c == '\'');
+        match k.as_str() {
+            "viewbox" => {
+                let nums: Vec<f32> = v
+                    .split_whitespace()
+                    .filter_map(|t| t.parse().ok())
+                    .collect();
+                if nums.len() >= 4 {
+                    def.view_w = nums[2].max(1.0) as u32;
+                    def.view_h = nums[3].max(1.0) as u32;
+                }
+            }
+            "fill" => def.fill = v.to_string(),
+            "stroke" => def.stroke = v.to_string(),
+            "stroke-width" => def.stroke_width = v.parse().unwrap_or(0.0),
+            "path" | "d" => def.path = v.to_string(),
+            "width" => def.view_w = v.parse().unwrap_or(64),
+            "height" => def.view_h = v.parse().unwrap_or(64),
+            _ => {}
+        }
+    }
+    def
 }
 
 fn extract_import_path(stmt: &str) -> Option<String> {
@@ -485,6 +589,43 @@ mod tests {
         .unwrap();
         assert_eq!(sheet.imports, vec!["base.vcss".to_string()]);
         assert_eq!(sheet.rules.len(), 1);
+    }
+
+    #[test]
+    fn parse_svg_block_and_url() {
+        let sheet = parse_stylesheet(
+            r#"
+            @svg badge {
+              viewBox: 0 0 64 64;
+              fill: #ebc878;
+              path: "M0,32 L32,0 L64,32 L32,64 Z";
+            }
+            .chip {
+              background-image: svg(badge);
+              width: 64;
+              height: 64;
+            }
+            .panel {
+              background-image: url("ui/bg.png");
+            }
+            "#,
+        )
+        .unwrap();
+        assert!(sheet.svgs.contains_key("badge"));
+        assert!(!sheet.svgs["badge"].path.is_empty());
+        let chip = sheet.rules.iter().find(|r| r.selectors[0] == ".chip").unwrap();
+        assert!(matches!(
+            chip.declarations.get("background-image"),
+            Some(StyleValue::SvgRef(n)) if n == "badge"
+        ));
+        let panel = sheet.rules.iter().find(|r| r.selectors[0] == ".panel").unwrap();
+        assert!(matches!(
+            panel.declarations.get("background-image"),
+            Some(StyleValue::Url(u)) if u == "ui/bg.png"
+        ));
+        let xml = sheet.svgs["badge"].to_svg_xml();
+        let img = velvet_image::rasterize_simple_svg(&xml, 32, 32).unwrap();
+        assert!(img.pixels.iter().any(|&b| b != 0));
     }
 
     #[test]

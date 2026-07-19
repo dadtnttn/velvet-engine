@@ -1,16 +1,15 @@
 [package]
-name = "velvet-script-vm"
-description = "Sandboxed virtual machine for Velvet Script bytecode"
+name = "velvet-image"
+description = "Image probe/decode/encode tools for Velvet (VS2 + style hosts)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-velvet-script-bytecode = { workspace = true }
-velvet-script-compiler = { workspace = true }
-velvet-crypto = { workspace = true }
+image = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

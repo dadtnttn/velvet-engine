@@ -21,7 +21,9 @@ Policy for authors and crate design:
 |-------|--------|
 | `velvet-cards` | Catalog, deck list, validation, shuffle, zones |
 | `velvet-anim` | Tweens, director, Pose3D, project_image, Timeline tracks, story host |
-| `velvet-style` | `.vcss` CSS+JS (vars, states, transition, `@script` set/query); CLI `velvet style check`; story `style.*` |
+| `velvet-style` | `.vcss` CSS+JS (vars, states, transition, `@script`, `url`/`@svg`); CLI `velvet style check` |
+| `velvet-image` | Image probe/decode/encode (PNG/JPEG quality); simple SVG raster; CLI `velvet image` |
+| `velvet-crypto` | VS2 tools: sha256, hmac, random_bytes, base64/hex (sandbox limits) |
 | `velvet-action` | Weapons, combat queries, aim, fragility, loadout, pickup; arena/dash as systems |
 | `velvet-story` + `velvet-story-lang` | StoryProgram/player, boot, command registry |
 | Script crates | Language pipeline (not a finished game) |

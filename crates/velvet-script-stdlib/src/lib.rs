@@ -73,6 +73,64 @@ pub static STDLIB: &[StdFn] = &[
         ret: "f64",
         doc: "Square root",
     },
+    StdFn {
+        name: "sin",
+        module: "math",
+        params: &["x"],
+        ret: "f64",
+        doc: "Sine (radians)",
+    },
+    StdFn {
+        name: "cos",
+        module: "math",
+        params: &["x"],
+        ret: "f64",
+        doc: "Cosine (radians)",
+    },
+    StdFn {
+        name: "pow",
+        module: "math",
+        params: &["x", "y"],
+        ret: "f64",
+        doc: "Power x^y",
+    },
+    StdFn {
+        name: "lerp",
+        module: "math",
+        params: &["a", "b", "t"],
+        ret: "f64",
+        doc: "Linear interpolate",
+    },
+    // crypto / codec (game tools — not FIPS)
+    StdFn {
+        name: "hash_sha256",
+        module: "crypto",
+        params: &["s"],
+        ret: "str",
+        doc: "SHA-256 hex of string utf-8 bytes",
+    },
+    StdFn {
+        name: "hex_encode",
+        module: "codec",
+        params: &["s"],
+        ret: "str",
+        doc: "Hex-encode utf-8 bytes of string",
+    },
+    StdFn {
+        name: "base64_encode",
+        module: "codec",
+        params: &["s"],
+        ret: "str",
+        doc: "Base64-encode utf-8 bytes of string",
+    },
+    // image tools (host may bind file I/O; pure descriptors here)
+    StdFn {
+        name: "image_kind",
+        module: "image",
+        params: &["path"],
+        ret: "str",
+        doc: "Probe image kind from path (host)",
+    },
     // string
     StdFn {
         name: "len",
