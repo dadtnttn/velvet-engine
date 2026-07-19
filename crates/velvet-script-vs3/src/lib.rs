@@ -45,7 +45,8 @@ pub const SUPPORTED_SURFACE: &[&str] = &[
     "int/bool/float/string values",
     "ops: + - * / % == != < <= > >= && || !",
     "natives: abs min max clamp sin cos sqrt pow lerp hash_sha256 len concat str",
-    "call via Vs3Module::call / eval_call / velvet vs3 run",
+    "present natives: present_show set_bg present_hide ui_flag ui_flag_get (state only)",
+    "call via Vs3Module::call / call_with_present / eval_call / velvet vs3 run",
 ];
 
 /// Parsed source edition.
@@ -191,7 +192,24 @@ impl Vs3Module {
         // Bind natives into globals (Vm::new already does this)
         vm.call_name(name, args).map_err(map_vm_err)
     }
+
+    /// Call with a presentation host bridge (`show` / `set_bg` / `ui_flag` natives).
+    ///
+    /// Returns the function value plus the final [`PresentHostState`] (state only —
+    /// no drawing). Hosts apply this to `PresentationState` / GPU presenters.
+    pub fn call_with_present(
+        &self,
+        name: &str,
+        args: &[Value],
+    ) -> Result<(Value, velvet_script_vm::PresentHostState), Vs3Error> {
+        let (result, state) = velvet_script_vm::with_present_host(|| self.call(name, args));
+        let value = result?;
+        Ok((value, state))
+    }
 }
+
+/// Re-export presentation host state for VS3 hosts.
+pub use velvet_script_vm::{PresentHostState, PresentSprite};
 
 fn map_vm_err(e: VmError) -> Vs3Error {
     match e {
@@ -778,5 +796,66 @@ function tool_min_max(a, b) {
         assert!(SUPPORTED_SURFACE.len() >= 8);
         assert!(SUPPORTED_SURFACE.iter().any(|s| s.contains("@edition 3")));
         assert!(SUPPORTED_SURFACE.iter().any(|s| s.contains("while")));
+        assert!(SUPPORTED_SURFACE.iter().any(|s| s.contains("set_bg")));
+    }
+
+    // ── Presentation host natives (state only) ──────────────────────────
+
+    // Note: classic reserves `show`/`hide` as story stmts → use present_show/present_hide.
+    // Also avoid `//` inside string literals (line-comment lexer).
+    const PRESENT: &str = r#"
+// @edition 3
+
+function setup_scene() {
+    set_bg("bg:station.png")
+    present_show("nora", "happy", "left")
+    present_show("june", "neutral", "right")
+    ui_flag("say_visible", true)
+    ui_flag("choice_open", false)
+    return ui_flag_get("say_visible")
+}
+
+function teardown() {
+    present_hide("nora")
+    present_hide("june")
+    ui_flag("say_visible", false)
+    return 1
+}
+"#;
+
+    #[test]
+    fn present_natives_show_set_bg_ui_flags() {
+        let m = compile(PRESENT, Some("present.vel")).unwrap();
+        let (v, host) = m.call_with_present("setup_scene", &[]).unwrap();
+        assert_eq!(v, Value::Bool(true));
+        assert_eq!(host.background.as_deref(), Some("bg:station.png"));
+        assert_eq!(host.sprites.len(), 2);
+        assert_eq!(
+            host.sprites.get("nora").and_then(|s| s.expression.as_deref()),
+            Some("happy")
+        );
+        assert_eq!(
+            host.sprites.get("nora").and_then(|s| s.at.as_deref()),
+            Some("left")
+        );
+        assert!(host.ui_flag("say_visible"));
+        assert!(!host.ui_flag("choice_open"));
+        assert!(host.log.iter().any(|l| l.starts_with("set_bg")));
+        assert!(host.log.iter().any(|l| l.starts_with("show")));
+        // No drawing API leaked into host state — only paths and flags.
+        assert!(host.background.as_ref().unwrap().contains("station"));
+    }
+
+    #[test]
+    fn present_hide_clears_sprites() {
+        let m = compile(PRESENT, Some("present.vel")).unwrap();
+        let (_, host) = m.call_with_present("setup_scene", &[]).unwrap();
+        assert_eq!(host.sprites.len(), 2);
+        // Continue with installed host for teardown
+        velvet_script_vm::install_present_host(host);
+        let _ = m.call("teardown", &[]).unwrap();
+        let after = velvet_script_vm::take_present_host();
+        assert!(after.sprites.is_empty(), "sprites={:?}", after.sprites);
+        assert!(!after.ui_flag("say_visible"));
     }
 }

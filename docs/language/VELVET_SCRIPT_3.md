@@ -72,7 +72,8 @@ Minimum for “we can write game logic in VS3 and run it”:
 | Values | ints, bools, floats, strings |
 | Operators | `+ - * / %` `== != < <= > >=` `&& \|\| !` |
 | Host tools | `abs` `min` `max` `clamp` `sin` `cos` `sqrt` `pow` `lerp` `hash_sha256` `len` `concat` `str` |
-| Entry | `velvet vs3 check\|run`, `velvet_script_vs3::eval_call` |
+| Presentation (state only) | `present_show` `present_hide` `set_bg` `ui_flag` `ui_flag_get` → `PresentHostState` via `call_with_present` |
+| Entry | `velvet vs3 check\|run`, `velvet_script_vs3::eval_call` / `call_with_present` |
 
 **Not yet claimed:** typed params `x: int`, `->` return types, `struct`/`enum`, full typeck, Web3.
 
