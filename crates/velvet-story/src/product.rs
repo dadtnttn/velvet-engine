@@ -587,9 +587,8 @@ impl VnSession {
         })?;
         let store = SaveStore::new(dir);
         let save = store.read(slot)?;
-        self.player
-            .load_save(save)
-            .map_err(|e| SaveError::Io(std::io::Error::other(e)))?;
+        // Propagate ProgramMismatch (and other SaveError) without wrapping as Io.
+        self.player.load_save(save)?;
         self.rollback.clear();
         self.push_rollback_frame();
         self.presentation = PresentationState::default();
@@ -1244,6 +1243,50 @@ scene end_good {
             s4.presentation.background.as_deref() == Some("assets/bg/room.png"),
             "background from script, got {:?}",
             s4.presentation.background
+        );
+    }
+
+    #[test]
+    fn load_slot_surfaces_program_mismatch() {
+        use crate::ir::{StoryOp, StoryProgram, StoryScene};
+        use crate::save::SaveError;
+        use indexmap::IndexMap;
+        use tempfile::tempdir;
+
+        let make = |line: &str| {
+            let mut scenes = IndexMap::new();
+            scenes.insert(
+                "start".into(),
+                StoryScene {
+                    name: "start".into(),
+                    ops: vec![
+                        StoryOp::Dialogue {
+                            speaker: None,
+                            text: line.into(),
+                        },
+                        StoryOp::End { ending: None },
+                    ],
+                    labels: IndexMap::new(),
+                },
+            );
+            let mut p = StoryProgram::new("prod_hash");
+            p.entry = "start".into();
+            p.scenes = scenes;
+            p
+        };
+
+        let dir = tempdir().unwrap();
+        let session_a =
+            VnSession::new(StoryPlayer::start(make("script A"))).with_save_dir(dir.path());
+        session_a.save_slot("s1").unwrap();
+
+        // Open same slot with a different program.
+        let mut session_b =
+            VnSession::new(StoryPlayer::start(make("script B — other"))).with_save_dir(dir.path());
+        let err = session_b.load_slot("s1").expect_err("must reject");
+        assert!(
+            matches!(err, SaveError::ProgramMismatch { .. }),
+            "product API must surface ProgramMismatch, got {err:?}"
         );
     }
 
