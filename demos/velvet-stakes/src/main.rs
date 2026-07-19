@@ -25,6 +25,7 @@ use softbuffer::{Context as SbContext, Surface};
 use velvet_anim::Pose3D;
 use velvet_cards::{validate_deck, DeckRules};
 use velvet_stakes::{ImageSlot, LiveDevSession};
+use velvet_stakes::{load_title_wordmark, RgbaBuf};
 use velvet_story::{StoryPlayer, StoryValue, StoryWait};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -36,10 +37,7 @@ use winit::window::{Window, WindowId};
 use catalog::make_catalog_and_deck;
 use game::{Outcome, Screen};
 use host::{StakesHost, StakesWorld};
-use render::{
-    blit_card, fill, load_rgb, load_rgb_key_black, load_rgba, rect, text, ArtBank, RgbImage,
-    RgbaImage,
-};
+use render::{blit_card, fill, load_rgb, rect, text, ArtBank, RgbImage};
 use story_boot::boot_player;
 use ui::theme::{Theme, TITLE_ITEMS, WW, WH};
 use ui::{paint_collection, paint_options, paint_shop, paint_title_menu};
@@ -49,8 +47,8 @@ struct App {
     player: StoryPlayer,
     art: ArtBank,
     menu_bg: Option<RgbImage>,
-    /// Elegant title wordmark (black keyed / alpha).
-    logo_title: Option<RgbaImage>,
+    /// Elegant title wordmark (black keyed / alpha) — live-dev reloads this.
+    logo_title: Option<RgbaBuf>,
     portrait: Option<RgbImage>,
     theme: Theme,
     /// Live author hot-reload (`--dev`).
@@ -118,9 +116,9 @@ impl App {
         }
         let ui = ui_dir(&root);
         let menu_bg = load_rgb(&ui.join("menu_bg.jpg"));
-        // Prefer pre-keyed PNG; else burn black from elegant sample
-        let logo_title = load_rgba(&ui.join("logo_title.png")).or_else(|| {
-            load_rgb_key_black(&ui.join("sample_type_elegant_black.jpg"), 18)
+        // Soft-keyed wordmark (same path as live-dev apply)
+        let logo_title = load_title_wordmark(&ui.join("logo_title.png")).or_else(|| {
+            load_title_wordmark(&ui.join("sample_type_elegant_black.jpg"))
         });
         let portrait = load_rgb(&ui.join("portrait_collector.jpg"));
 
@@ -165,7 +163,12 @@ impl App {
             return;
         };
         let apply = dev.tick();
-        if apply.reloaded.is_empty() && apply.stylesheet.is_none() && apply.images.is_empty() {
+        if apply.reloaded.is_empty()
+            && apply.stylesheet.is_none()
+            && apply.images.is_empty()
+            && apply.logo_title.is_none()
+            && !apply.story_reload
+        {
             return;
         }
         if let Some((name, sheet)) = apply.stylesheet {
@@ -175,12 +178,15 @@ impl App {
                 self.status_line = format!("dev: style `{name}` live");
             }
         }
+        if let Some(logo) = apply.logo_title {
+            self.logo_title = Some(logo);
+            self.status_line = "dev: logo_title live".into();
+        }
         for (slot, buf) in apply.images {
             match slot {
                 ImageSlot::MenuBg => self.menu_bg = Some(buf),
                 ImageSlot::Logo => {
-                    // Live path gives RGB — re-key black if it looks like a wordmark file
-                    // Prefer reloading logo_title via path in next polish; for now store as RGB card unused
+                    // Handled via apply.logo_title (RGBA soft-key path)
                     let _ = buf;
                 }
                 ImageSlot::Portrait => self.portrait = Some(buf),
@@ -189,16 +195,6 @@ impl App {
                 }
             }
             self.status_line = "dev: image live".into();
-        }
-        // Reload title logo from disk if watched path changed
-        if apply.reloaded.iter().any(|k| k.contains("logo") || k.contains("title")) {
-            let ui = ui_dir(&self.data_root);
-            if let Some(lt) = load_rgba(&ui.join("logo_title.png")).or_else(|| {
-                load_rgb_key_black(&ui.join("sample_type_elegant_black.jpg"), 18)
-            }) {
-                self.logo_title = Some(lt);
-                self.status_line = "dev: logo_title live".into();
-            }
         }
         if apply.story_reload {
             // Soft re-boot only when sitting on title wait (safe)

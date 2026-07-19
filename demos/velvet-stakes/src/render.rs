@@ -8,9 +8,6 @@ use velvet_story::{draw_text_line, pack_rgb};
 /// Image buffer: width, height, packed RGB.
 pub type RgbImage = (u32, u32, Vec<u32>);
 
-/// Image with per-pixel alpha 0..=255 (for keyed logos).
-pub type RgbaImage = (u32, u32, Vec<u32>, Vec<u8>);
-
 /// Preloaded card art as ARGB u32 rows.
 pub struct ArtBank {
     pub images: HashMap<String, RgbImage>,
@@ -47,49 +44,6 @@ pub fn load_rgb(path: &Path) -> Option<RgbImage> {
         px.push(pack_rgb(r, g, b));
     }
     Some((w, h, px))
-}
-
-/// Load RGBA (preserves alpha for transparent logos).
-pub fn load_rgba(path: &Path) -> Option<RgbaImage> {
-    let img = image::open(path).ok()?;
-    let rgba = img.to_rgba8();
-    let (w, h) = rgba.dimensions();
-    let mut rgb = Vec::with_capacity((w * h) as usize);
-    let mut a = Vec::with_capacity((w * h) as usize);
-    for p in rgba.pixels() {
-        let [r, g, b, alpha] = p.0;
-        rgb.push(pack_rgb(r, g, b));
-        a.push(alpha);
-    }
-    Some((w, h, rgb, a))
-}
-
-/// Load RGB and **burn pure/near-black to alpha** (for black-bg wordmarks).
-///
-/// Dark pixels become transparent; copper/gold lettering stays opaque.
-pub fn load_rgb_key_black(path: &Path, black_cut: u8) -> Option<RgbaImage> {
-    let img = image::open(path).ok()?;
-    let rgba = img.to_rgba8();
-    let (w, h) = rgba.dimensions();
-    let mut rgb = Vec::with_capacity((w * h) as usize);
-    let mut a = Vec::with_capacity((w * h) as usize);
-    let cut = black_cut as u32;
-    for p in rgba.pixels() {
-        let [r, g, b, src_a] = p.0;
-        let lum = r.max(g).max(b) as u32;
-        let alpha = if lum <= cut {
-            0u8
-        } else if lum < cut + 36 {
-            // soft edge so glow keys cleanly
-            let t = (lum - cut) as f32 / 36.0;
-            ((t * t) * 255.0) as u8
-        } else {
-            src_a.max(240)
-        };
-        rgb.push(pack_rgb(r, g, b));
-        a.push(alpha);
-    }
-    Some((w, h, rgb, a))
 }
 
 /// Stretch image to full frame (menu background).
@@ -217,46 +171,6 @@ pub fn blit_card(
             } else {
                 pixels[di] = blend(pixels[di], sc, op);
             }
-        }
-    }
-}
-
-/// Blit RGBA image (alpha 0..=255) with nearest filter — for keyed title logos.
-pub fn blit_rgba(
-    pixels: &mut [u32],
-    ww: u32,
-    wh: u32,
-    art: &RgbaImage,
-    dx: i32,
-    dy: i32,
-    dw: i32,
-    dh: i32,
-    opacity: f32,
-) {
-    if dw <= 2 || dh <= 2 || opacity <= 0.01 {
-        return;
-    }
-    let (sw, sh, src, alpha) = art;
-    let op = opacity.clamp(0.0, 1.0);
-    for row in 0..dh {
-        let sy = (row as u32 * sh) / dh as u32;
-        let py = dy + row;
-        if py < 0 || py >= wh as i32 {
-            continue;
-        }
-        for col in 0..dw {
-            let sx = (col as u32 * sw) / dw as u32;
-            let px = dx + col;
-            if px < 0 || px >= ww as i32 {
-                continue;
-            }
-            let si = (sy * sw + sx) as usize;
-            let a = (alpha[si] as f32 / 255.0) * op;
-            if a < 0.02 {
-                continue;
-            }
-            let di = (py as u32 * ww + px as u32) as usize;
-            pixels[di] = blend(pixels[di], src[si], a);
         }
     }
 }

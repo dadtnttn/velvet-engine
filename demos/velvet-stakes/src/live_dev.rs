@@ -15,6 +15,8 @@ use velvet_assets::HotReloader;
 use velvet_style::{parse_stylesheet, Stylesheet};
 use velvet_story::pack_rgb;
 
+use crate::logo::{load_title_wordmark, RgbaBuf};
+
 /// What kind of author asset a watch key maps to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WatchKind {
@@ -52,6 +54,8 @@ pub struct LiveDevApply {
     pub stylesheet: Option<(String, Stylesheet)>,
     /// Reloaded images.
     pub images: Vec<(ImageSlot, RgbBuf)>,
+    /// Title wordmark with soft-keyed alpha (live without restart).
+    pub logo_title: Option<RgbaBuf>,
     /// Story file changed — host may soft re-boot.
     pub story_reload: bool,
     /// Keys that changed this tick.
@@ -253,28 +257,56 @@ impl LiveDevSession {
                         }
                     }
                 },
-                WatchKind::Image { slot } => match load_rgb_buf(&path) {
-                    Some(buf) => {
-                        let (w, h) = (buf.0, buf.1);
-                        out.images.push((slot.clone(), buf));
-                        self.reload_count += 1;
-                        let msg = format!(
-                            "dev: reloaded image {:?} {}x{} from {}",
-                            slot,
-                            w,
-                            h,
-                            path.display()
-                        );
-                        out.log.push(msg.clone());
-                        self.push_log(msg);
+                WatchKind::Image { slot } => {
+                    // Title logo: full soft-key RGBA path (not plain RGB)
+                    if matches!(slot, ImageSlot::Logo) {
+                        match load_title_wordmark(&path) {
+                            Some(buf) => {
+                                let (w, h) = (buf.0, buf.1);
+                                out.logo_title = Some(buf);
+                                self.reload_count += 1;
+                                let msg = format!(
+                                    "dev: reloaded logo_title {}x{} from {}",
+                                    w,
+                                    h,
+                                    path.display()
+                                );
+                                out.log.push(msg.clone());
+                                self.push_log(msg);
+                            }
+                            None => {
+                                let msg =
+                                    format!("dev: logo_title load failed: {}", path.display());
+                                out.errors.push(msg.clone());
+                                out.log.push(msg.clone());
+                                self.push_log(msg);
+                            }
+                        }
+                        continue;
                     }
-                    None => {
-                        let msg = format!("dev: image load failed: {}", path.display());
-                        out.errors.push(msg.clone());
-                        out.log.push(msg.clone());
-                        self.push_log(msg);
+                    match load_rgb_buf(&path) {
+                        Some(buf) => {
+                            let (w, h) = (buf.0, buf.1);
+                            out.images.push((slot.clone(), buf));
+                            self.reload_count += 1;
+                            let msg = format!(
+                                "dev: reloaded image {:?} {}x{} from {}",
+                                slot,
+                                w,
+                                h,
+                                path.display()
+                            );
+                            out.log.push(msg.clone());
+                            self.push_log(msg);
+                        }
+                        None => {
+                            let msg = format!("dev: image load failed: {}", path.display());
+                            out.errors.push(msg.clone());
+                            out.log.push(msg.clone());
+                            self.push_log(msg);
+                        }
                     }
-                },
+                }
                 WatchKind::Story => {
                     out.story_reload = true;
                     self.reload_count += 1;
@@ -522,6 +554,61 @@ mod tests {
         // filesystem load, not include_str-only
         let p = dev.path_of("style:casino").unwrap();
         assert!(p.ends_with("casino.vcss"));
+        // title logo is watched for live apply
+        assert!(
+            dev.path_of("img:logo_title").is_some(),
+            "logo_title must be watched for live reload"
+        );
+    }
+
+    #[test]
+    fn logo_title_force_tick_fills_apply_logo_without_restart() {
+        let dir = temp_dir("logo_live");
+        let path = dir.join("ui/logo_title.png");
+        // black plate + copper rect
+        {
+            let mut img = image::RgbaImage::new(64, 32);
+            for p in img.pixels_mut() {
+                *p = image::Rgba([0, 0, 0, 255]);
+            }
+            for y in 8..24 {
+                for x in 12..52 {
+                    img.put_pixel(x, y, image::Rgba([200, 140, 80, 255]));
+                }
+            }
+            img.save(&path).unwrap();
+        }
+        let mut dev = LiveDevSession::new(&dir);
+        dev.watch_image("img:logo_title", ImageSlot::Logo, &path);
+        let apply = dev.force_tick_key("img:logo_title");
+        let logo = apply.logo_title.expect("logo_title applied via shipped tick");
+        assert_eq!(logo.0, 64);
+        assert_eq!(logo.1, 32);
+        // black keyed out on corners
+        assert_eq!(logo.3[0], 0);
+        // interior copper not fully transparent
+        let mid = (16 * 64 + 32) as usize;
+        assert!(logo.3[mid] > 100);
+        // mutate and reload
+        {
+            let mut img = image::RgbaImage::new(64, 32);
+            for p in img.pixels_mut() {
+                *p = image::Rgba([0, 0, 0, 255]);
+            }
+            for y in 4..28 {
+                for x in 8..56 {
+                    img.put_pixel(x, y, image::Rgba([100, 200, 255, 255]));
+                }
+            }
+            img.save(&path).unwrap();
+        }
+        let apply2 = dev.force_tick_key("img:logo_title");
+        let logo2 = apply2.logo_title.expect("second logo apply");
+        // pixel color should differ (blue-ish vs copper)
+        let mid_rgb1 = logo.2[mid];
+        let mid_rgb2 = logo2.2[mid];
+        assert_ne!(mid_rgb1, mid_rgb2, "live reload must refresh wordmark bytes");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -27,6 +27,7 @@ cargo run -p velvet-stakes --release -- --dev
 |-------|------|-----------|
 | Style | `data/styles/casino.vcss` | Reparse; UI/motion use new sheet (bad parse keeps last good) |
 | Images | `data/ui/*`, `data/art/*.jpg` | Reload buffer for next paint |
+| Title logo | `data/ui/logo_title.png` (or elegant black JPG) | Soft black-key + bilinear blit; **no restart** |
 | Story | `data/story/main.vstory` | Soft re-boot when on title (or flagged until title) |
 
 Console prints `dev: reloaded …` lines; window title shows `DEV`.

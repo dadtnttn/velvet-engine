@@ -1,12 +1,11 @@
 //! Title menu and lobby — layout matching Nightfall Casino reference art:
 //! profile HUD · centered logo wordmark · ornate buttons · daily ritual.
 
-use crate::render::{
-    blit_card, blit_cover, blit_rgba, fill, outline, panel, text, ArtBank, RgbImage, RgbaImage,
-};
+use crate::render::{blit_card, blit_cover, fill, outline, panel, text, ArtBank, RgbImage};
 use crate::ui::buttons::{paint_button_column, ButtonColumnLayout};
 use crate::ui::hud::paint_meta_hud;
 use crate::ui::theme::{Theme, WW, WH};
+use velvet_stakes::{blit_rgba_bilinear, RgbaBuf};
 use velvet_style::{resolve, StyleQuery, Stylesheet};
 
 /// Full title / lobby paint (reference-faithful chrome).
@@ -14,7 +13,7 @@ pub fn paint_title_menu(
     pixels: &mut [u32],
     theme: &Theme,
     menu_bg: Option<&RgbImage>,
-    logo_title: Option<&RgbaImage>,
+    logo_title: Option<&RgbaBuf>,
     portrait: Option<&RgbImage>,
     sheet: &Stylesheet,
     menu_sel: usize,
@@ -78,7 +77,7 @@ pub fn paint_title_menu(
 fn paint_centered_logo_title(
     pixels: &mut [u32],
     theme: &Theme,
-    logo_title: Option<&RgbaImage>,
+    logo_title: Option<&RgbaBuf>,
     sheet: &Stylesheet,
 ) {
     let cx = WW as i32 / 2;
@@ -93,7 +92,8 @@ fn paint_centered_logo_title(
         let dh = (sh as f32 * scale) as i32;
         let dx = cx - dw / 2;
         let dy = 108;
-        blit_rgba(pixels, WW, WH, logo, dx, dy, dw, dh, 1.0);
+        // Bilinear filter — smooth serifs (no square pixel corners)
+        blit_rgba_bilinear(pixels, WW, WH, logo, dx, dy, dw, dh, 1.0);
 
         // Subtitle sits just under the image wordmark
         let sub_style = resolve(sheet, &StyleQuery::class("logo-sub"));
