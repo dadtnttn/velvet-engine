@@ -319,6 +319,24 @@ pub struct StoryProgram {
 }
 
 impl StoryProgram {
+    /// Stable content hash for save/load identity checks (sha256 hex).
+    ///
+    /// Covers entry, title, scenes (ops/labels), and initial vars — enough to
+    /// detect when a save is reopened against a different narrative program.
+    pub fn content_hash(&self) -> String {
+        use sha2::{Digest, Sha256};
+        // JSON is deterministic enough for IndexMap (insertion order) + serde.
+        let payload = serde_json::json!({
+            "entry": &self.entry,
+            "title": &self.title,
+            "scenes": &self.scenes,
+            "initial_vars": &self.initial_vars,
+        });
+        let bytes = serde_json::to_vec(&payload).unwrap_or_default();
+        let hash = Sha256::digest(&bytes);
+        hash.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
     /// Create empty program.
     pub fn new(title: impl Into<String>) -> Self {
         Self {

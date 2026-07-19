@@ -761,11 +761,23 @@ impl StoryPlayer {
             self.play_time_secs,
             self.current_text.clone(),
         )
+        .with_program_hash(self.program.content_hash())
     }
 
     /// Restore from save (program must match / be reloaded).
     pub fn load_save(&mut self, save: SaveGame) -> Result<(), String> {
         let save = save.migrate().map_err(|e| e.to_string())?;
+        // Identity check: reject saves written against a different story program.
+        if !save.program_hash.is_empty() {
+            let current = self.program.content_hash();
+            if save.program_hash != current {
+                return Err(format!(
+                    "program hash mismatch (save is for a different story script): save={} current={}",
+                    &save.program_hash[..save.program_hash.len().min(12)],
+                    &current[..current.len().min(12)]
+                ));
+            }
+        }
         self.vars.play = save.variables.into_iter().collect();
         for (k, v) in save.persistent {
             self.vars.persistent.insert(k, v);
@@ -1895,6 +1907,66 @@ scene start {
             "ops after nested if inside choice must still run"
         );
         assert_eq!(player.ending(), Some("done"));
+    }
+
+    #[test]
+    fn load_save_rejects_mismatched_program_hash() {
+        use crate::ir::{StoryOp, StoryProgram, StoryScene};
+        use indexmap::IndexMap;
+
+        let make = |line: &str| {
+            let mut scenes = IndexMap::new();
+            scenes.insert(
+                "start".into(),
+                StoryScene {
+                    name: "start".into(),
+                    ops: vec![
+                        StoryOp::Dialogue {
+                            speaker: None,
+                            text: line.into(),
+                        },
+                        StoryOp::End { ending: None },
+                    ],
+                    labels: IndexMap::new(),
+                },
+            );
+            let mut p = StoryProgram::new("id");
+            p.entry = "start".into();
+            p.scenes = scenes;
+            p
+        };
+
+        let prog_a = make("Version A dialogue");
+        let prog_b = make("Version B dialogue — different script");
+        assert_ne!(
+            prog_a.content_hash(),
+            prog_b.content_hash(),
+            "different scripts must hash differently"
+        );
+
+        let player_a = StoryPlayer::start(prog_a);
+        assert!(matches!(player_a.wait(), StoryWait::Line));
+        let save = player_a.to_save("slot_hash");
+        assert!(
+            !save.program_hash.is_empty(),
+            "to_save must stamp program_hash"
+        );
+
+        // Same program: ok
+        let mut player_a2 = StoryPlayer::start(make("Version A dialogue"));
+        player_a2
+            .load_save(save.clone())
+            .expect("same program content should load");
+
+        // Different program: reject
+        let mut player_b = StoryPlayer::start(prog_b);
+        let err = player_b
+            .load_save(save)
+            .expect_err("mismatched program must fail");
+        assert!(
+            err.contains("program hash mismatch") || err.contains("hash"),
+            "err={err}"
+        );
     }
 
     /// Nested dialogues must not share one `scene:op_index` seen-line key
