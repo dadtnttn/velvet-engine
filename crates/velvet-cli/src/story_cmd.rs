@@ -9,8 +9,8 @@ use velvet_story_lang::pipeline::{
     build_path, build_story_program, check_path, dump_ast_json, dump_lowered_text, run_path,
     run_path_product,
 };
-use velvet_story_lang::{format_source, is_idempotent};
 use velvet_story_lang::studio::{build_model, model_json};
+use velvet_story_lang::{format_source, is_idempotent};
 
 /// `velvet story check`
 pub fn cmd_story_check(path: PathBuf) -> Result<()> {
@@ -35,12 +35,17 @@ pub fn cmd_story_check(path: PathBuf) -> Result<()> {
 /// `velvet story build` — product StoryProgram (+ optional OpVs2 unit).
 pub fn cmd_story_build(path: PathBuf) -> Result<()> {
     let cmds = CommandRegistry::builtin();
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let source =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let file = path.to_string_lossy().to_string();
     // Primary: StoryProgram
-    let prog = build_story_program(&source, &file, &cmds, path.file_stem().and_then(|s| s.to_str()).unwrap_or("story"))
-        .map_err(|e| anyhow::anyhow!(e))?;
+    let prog = build_story_program(
+        &source,
+        &file,
+        &cmds,
+        path.file_stem().and_then(|s| s.to_str()).unwrap_or("story"),
+    )
+    .map_err(|e| anyhow::anyhow!(e))?;
     println!(
         "ok: StoryProgram entry={} scenes={} (product IR)",
         prog.entry,
@@ -100,8 +105,8 @@ pub fn cmd_story_run(path: PathBuf, choice: usize) -> Result<()> {
 
 /// `velvet story format`
 pub fn cmd_story_format(path: PathBuf, check: bool) -> Result<()> {
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let source =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let pretty = format_source(&source);
     if !is_idempotent(&source) {
         // still write if format produces stable output
@@ -121,8 +126,8 @@ pub fn cmd_story_format(path: PathBuf, check: bool) -> Result<()> {
 
 /// `velvet story dump-ast`
 pub fn cmd_story_dump_ast(path: PathBuf) -> Result<()> {
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let source =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let file = path.to_string_lossy().to_string();
     let json = dump_ast_json(&source, &file).map_err(|e| anyhow::anyhow!(e))?;
     println!("{json}");
@@ -131,8 +136,8 @@ pub fn cmd_story_dump_ast(path: PathBuf) -> Result<()> {
 
 /// `velvet story dump-lowered`
 pub fn cmd_story_dump_lowered(path: PathBuf) -> Result<()> {
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let source =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let file = path.to_string_lossy().to_string();
     let cmds = CommandRegistry::builtin();
     let text = dump_lowered_text(&source, &file, &cmds).map_err(|e| anyhow::anyhow!(e))?;
@@ -142,8 +147,8 @@ pub fn cmd_story_dump_lowered(path: PathBuf) -> Result<()> {
 
 /// `velvet story studio-model` (JSON for Studio).
 pub fn cmd_story_studio_model(path: PathBuf) -> Result<()> {
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let source =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let file = path.to_string_lossy().to_string();
     let cmds = CommandRegistry::builtin();
     let model = build_model(&source, &file, &cmds);
@@ -153,8 +158,8 @@ pub fn cmd_story_studio_model(path: PathBuf) -> Result<()> {
 
 /// `velvet story extract-loc`
 pub fn cmd_story_extract_loc(path: PathBuf, out: Option<PathBuf>) -> Result<()> {
-    let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let source =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let file = path.to_string_lossy().to_string();
     let extracted = extract(&source, &file);
     let cat = to_catalog(&extracted, "source");

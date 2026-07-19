@@ -456,19 +456,13 @@ enum StoryCommands {
     },
     /// Dump narrative AST as JSON (developer tool).
     #[command(name = "dump-ast")]
-    DumpAst {
-        path: PathBuf,
-    },
+    DumpAst { path: PathBuf },
     /// Dump lowered OpVs2 disassembly (developer tool).
     #[command(name = "dump-lowered")]
-    DumpLowered {
-        path: PathBuf,
-    },
+    DumpLowered { path: PathBuf },
     /// Emit Studio structured model JSON.
     #[command(name = "studio-model")]
-    StudioModel {
-        path: PathBuf,
-    },
+    StudioModel { path: PathBuf },
     /// Extract localizable strings (stable msg ids).
     #[command(name = "extract-loc")]
     ExtractLoc {
@@ -556,8 +550,8 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Story { lang, command } => {
             velvet_story_lang::apply_locale_from_env();
             let loc = if let Some(l) = lang {
-                let loc = velvet_story_lang::DiagLocale::parse(&l)
-                    .map_err(|e| anyhow::anyhow!(e))?;
+                let loc =
+                    velvet_story_lang::DiagLocale::parse(&l).map_err(|e| anyhow::anyhow!(e))?;
                 // Process default for tools that only call set_diag_locale,
                 // plus thread-scoped effective locale for isolation-safe paths.
                 velvet_story_lang::set_diag_locale(loc);

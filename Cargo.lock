@@ -2986,10 +2986,13 @@ name = "velvet-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
  "velvet-app",
  "velvet-core",
+ "velvet-story",
+ "velvet-story-lang",
 ]
 
 [[package]]
