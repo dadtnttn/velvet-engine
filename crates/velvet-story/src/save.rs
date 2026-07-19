@@ -39,6 +39,14 @@ pub enum SaveError {
     /// Slot missing.
     #[error("save slot not found: {0}")]
     NotFound(String),
+    /// Save was written against a different story program.
+    #[error("program hash mismatch (save is for a different story script)")]
+    ProgramMismatch {
+        /// Hash stored in the save.
+        saved: String,
+        /// Hash of the program currently loaded.
+        current: String,
+    },
 }
 
 /// Metadata shown in load menus.
@@ -88,6 +96,10 @@ pub struct SaveGame {
     /// Unlocked glossary term ids (optional; empty if unused).
     #[serde(default)]
     pub glossary_unlocked: BTreeSet<String>,
+    /// Narrative program content hash ([`crate::ir::StoryProgram::content_hash`]).
+    /// Empty = legacy save (skip identity check on load).
+    #[serde(default)]
+    pub program_hash: String,
     /// Payload checksum (hex), computed over canonical body without this field.
     #[serde(default)]
     pub checksum: String,
@@ -136,10 +148,18 @@ impl SaveGame {
             seen_lines,
             gallery_unlocked: BTreeSet::new(),
             glossary_unlocked: BTreeSet::new(),
+            program_hash: String::new(),
             checksum: String::new(),
         };
         save.checksum = save.compute_checksum();
         save
+    }
+
+    /// Attach program content hash and recompute payload checksum.
+    pub fn with_program_hash(mut self, hash: impl Into<String>) -> Self {
+        self.program_hash = hash.into();
+        self.checksum = self.compute_checksum();
+        self
     }
 
     /// Attach gallery unlock set and recompute checksum.
