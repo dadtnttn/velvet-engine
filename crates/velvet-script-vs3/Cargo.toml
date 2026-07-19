@@ -16,3 +16,4 @@ velvet-script-bytecode = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
+velvet-crypto = { workspace = true }
