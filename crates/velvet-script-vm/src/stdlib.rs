@@ -404,7 +404,13 @@ mod tests {
     fn lookup_names() {
         assert_eq!(lookup_native("abs"), Some(NativeId::Abs));
         assert!(lookup_native("nope").is_none());
-        assert_eq!(NativeId::all().len(), 18);
+        // Print..Base64Encode (18) + present_show/set_bg/ui_flag/ui_flag_get/present_hide (5) = 23
+        assert_eq!(NativeId::all().len(), 23);
+        assert!(lookup_native("present_show").is_some());
+        assert!(lookup_native("set_bg").is_some());
+        assert!(lookup_native("ui_flag").is_some());
+        assert!(lookup_native("ui_flag_get").is_some());
+        assert!(lookup_native("present_hide").is_some());
         assert_eq!(lookup_native("sin"), Some(NativeId::Sin));
         assert_eq!(lookup_native("hash_sha256"), Some(NativeId::HashSha256));
     }
