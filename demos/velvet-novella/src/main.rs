@@ -34,8 +34,8 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
 use menu::{
-    font_status, letterbox_bilinear, load_rgb, move_sel, paint_novel_menu, paint_novel_menu_size,
-    RgbImage, MENU_ITEMS, WW, WH,
+    font_status, letterbox_bilinear, load_rgb, move_sel, paint_novel_menu, RgbImage, MENU_ITEMS,
+    WW, WH,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -443,8 +443,13 @@ impl ApplicationHandler for App {
                         if self.pixels.len() != (WW * WH) as usize {
                             self.pixels.resize((WW * WH) as usize, 0);
                         }
-                        // Product path also at 4K
-                        let _ = present_session(&self.session, &mut self.pixels, WW, WH);
+                        // Product path also at 4K via hybrid presenter
+                        let _ = self.presenter.present_session_softbuffer(
+                            &self.session,
+                            &mut self.pixels,
+                            WW,
+                            WH,
+                        );
                     }
                     match self.session.player().wait().clone() {
                         StoryWait::Line | StoryWait::Ready => self.session.advance(),
