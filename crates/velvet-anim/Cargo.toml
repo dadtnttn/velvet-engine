@@ -1,0 +1,17 @@
+[package]
+name = "velvet-anim"
+description = "Animation and VFX tools: tweens, poses, effects, scriptable director"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-math = { workspace = true }
+velvet-story = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+indexmap = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
