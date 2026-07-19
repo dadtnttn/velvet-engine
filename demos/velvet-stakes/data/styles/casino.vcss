@@ -3,34 +3,47 @@
  */
 
 :root {
-  /* theme tokens (resolved as classes) */
+  --void: #0a0614;
+  --panel: #0a0c16;
+  --text: #dcd2eb;
+  --gold: #ebc878;
+  --gold-soft: #d2af64;
+  --gold-hot: #ffdc96;
+  --neon: #aa64ff;
+  --selected-bg: #501e78;
+  --selected-glow: #dc50dc;
+  --btn-height: 52;
+  --btn-gap: 12;
+  --btn-pad-x: 14;
+  --icon-size: 34;
 }
 
 .theme {
-  background: #0a0614;
-  color: #dcd2eb;
-  gold: #ebc878;
-  neon: #aa64ff;
+  background: var(--void);
+  color: var(--text);
+  gold: var(--gold);
+  neon: var(--neon);
 }
 
 .button {
-  background: #0a0c16;
+  background: var(--panel);
   border-color: #b9964b;
   border-width: 1;
-  color: #d2af64;
-  height: 52;
-  gap: 12;
-  padding-x: 14;
-  icon-size: 34;
+  border-radius: 4;
+  color: var(--gold-soft);
+  height: var(--btn-height);
+  gap: var(--btn-gap);
+  padding-x: var(--btn-pad-x);
+  icon-size: var(--icon-size);
   glow: transparent;
   glow-strength: 0;
 }
 
 .button:selected {
-  background: #501e78;
-  border-color: #ffdc96;
+  background: var(--selected-bg);
+  border-color: var(--gold-hot);
   color: #ffe496;
-  glow: #dc50dc;
+  glow: var(--selected-glow);
   glow-strength: 0.85;
   border-width: 1;
 }

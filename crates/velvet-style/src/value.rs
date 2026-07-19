@@ -55,6 +55,8 @@ pub enum StyleValue {
     Keyword(String),
     /// String (quoted).
     String(String),
+    /// Custom property reference: `var(--name)`.
+    Var(String),
 }
 
 impl StyleValue {
@@ -79,6 +81,15 @@ impl StyleValue {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::Keyword(s) | Self::String(s) => Some(s),
+            Self::Var(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Custom property name if this is a `var(--…)`.
+    pub fn as_var(&self) -> Option<&str> {
+        match self {
+            Self::Var(s) => Some(s.as_str()),
             _ => None,
         }
     }
@@ -157,6 +168,23 @@ fn parse_named_color(name: &str) -> Option<Color> {
 /// Parse a single property value token string.
 pub fn parse_value(raw: &str) -> StyleValue {
     let s = raw.trim().trim_end_matches(';').trim();
+    // var(--token) or var(--token, fallback) — fallback parsed if present
+    if let Some(inner) = s
+        .strip_prefix("var(")
+        .and_then(|t| t.strip_suffix(')'))
+        .map(|t| t.trim())
+    {
+        let name = inner.split(',').next().unwrap_or(inner).trim();
+        let name = name.trim_matches(|c| c == '"' || c == '\'');
+        if !name.is_empty() {
+            let canonical = if name.starts_with("--") {
+                name.to_string()
+            } else {
+                format!("--{name}")
+            };
+            return StyleValue::Var(canonical);
+        }
+    }
     if let Some(c) = parse_color(s) {
         return StyleValue::Color(c);
     }
@@ -165,9 +193,10 @@ pub fn parse_value(raw: &str) -> StyleValue {
             if s.ends_with("px") || !s.contains(char::is_alphabetic) {
                 return if s.ends_with("px") {
                     StyleValue::Length(v)
-                } else if s.contains('.') || s.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '.')
+                } else if s.contains('.')
+                    || s.chars()
+                        .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
                 {
-                    // bare number: length if looks like size context — keep as Number
                     StyleValue::Number(v)
                 } else {
                     StyleValue::Number(v)
@@ -180,3 +209,80 @@ pub fn parse_value(raw: &str) -> StyleValue {
     }
     StyleValue::Keyword(s.to_string())
 }
+
+/// Known game-UI property names (documentation / tooling).
+pub const KNOWN_PROPERTIES: &[&str] = &[
+    // colors / chrome
+    "background",
+    "background-image",
+    "background-size",
+    "color",
+    "border-color",
+    "border-width",
+    "border-radius",
+    "border-style",
+    "glow",
+    "glow-strength",
+    "box-shadow",
+    "opacity",
+    // box
+    "width",
+    "height",
+    "min-width",
+    "min-height",
+    "max-width",
+    "max-height",
+    "margin",
+    "margin-x",
+    "margin-y",
+    "margin-top",
+    "margin-right",
+    "margin-bottom",
+    "margin-left",
+    "padding",
+    "padding-x",
+    "padding-y",
+    "padding-top",
+    "padding-right",
+    "padding-bottom",
+    "padding-left",
+    "gap",
+    // type
+    "font-size",
+    "font-family",
+    "font-weight",
+    "letter-spacing",
+    "text-align",
+    "line-height",
+    // transform / motion static
+    "x",
+    "y",
+    "scale",
+    "rotate",
+    "yaw",
+    "pitch",
+    "roll",
+    "translate-x",
+    "translate-y",
+    // animation
+    "animation",
+    "animation-name",
+    "animation-duration",
+    "animation-delay",
+    "animation-timing-function",
+    "animation-ease",
+    "animation-iteration-count",
+    "animation-fill-mode",
+    "animation-target",
+    "transition",
+    "transition-duration",
+    "transition-property",
+    "transition-timing-function",
+    // game chrome
+    "icon",
+    "icon-size",
+    "gold",
+    "neon",
+    "foil",
+    "depth",
+];

@@ -320,7 +320,13 @@ fn parse_declarations(
             line,
             msg: format!("expected `property: value` in `{part}`"),
         })?;
-        let name = name.trim().to_ascii_lowercase();
+        let name = name.trim();
+        // Custom props keep --name; other names lowercased
+        let name = if name.starts_with("--") {
+            name.to_string()
+        } else {
+            name.to_ascii_lowercase()
+        };
         if name.is_empty() {
             return Err(StyleParseError::AtLine {
                 line,
