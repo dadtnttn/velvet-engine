@@ -54,6 +54,16 @@ pub enum NativeId {
     HexEncode = 16,
     /// `base64_encode(s)`
     Base64Encode = 17,
+    /// `show(id [, expression [, at]])` — presentation host: show sprite (state only).
+    PresentShow = 18,
+    /// `set_bg(path)` — presentation host: set background path.
+    PresentSetBg = 19,
+    /// `ui_flag(name, on)` — presentation host: set UI flag (bool).
+    PresentUiFlag = 20,
+    /// `ui_flag_get(name) -> bool` — read UI flag.
+    PresentUiFlagGet = 21,
+    /// `hide(id)` — hide / remove shown sprite.
+    PresentHide = 22,
 }
 
 impl NativeId {
@@ -78,6 +88,11 @@ impl NativeId {
             15 => Self::HashSha256,
             16 => Self::HexEncode,
             17 => Self::Base64Encode,
+            18 => Self::PresentShow,
+            19 => Self::PresentSetBg,
+            20 => Self::PresentUiFlag,
+            21 => Self::PresentUiFlagGet,
+            22 => Self::PresentHide,
             _ => return None,
         })
     }
@@ -108,6 +123,12 @@ impl NativeId {
             Self::HashSha256 => "hash_sha256",
             Self::HexEncode => "hex_encode",
             Self::Base64Encode => "base64_encode",
+            // Classic lexer reserves `show`/`hide` as story statements — use present_*.
+            Self::PresentShow => "present_show",
+            Self::PresentSetBg => "set_bg",
+            Self::PresentUiFlag => "ui_flag",
+            Self::PresentUiFlagGet => "ui_flag_get",
+            Self::PresentHide => "present_hide",
         }
     }
 
@@ -132,6 +153,11 @@ impl NativeId {
             Self::HashSha256,
             Self::HexEncode,
             Self::Base64Encode,
+            Self::PresentShow,
+            Self::PresentSetBg,
+            Self::PresentUiFlag,
+            Self::PresentUiFlagGet,
+            Self::PresentHide,
         ]
     }
 }
@@ -157,6 +183,11 @@ pub fn lookup_native(name: &str) -> Option<NativeId> {
         "hash_sha256" => Some(NativeId::HashSha256),
         "hex_encode" => Some(NativeId::HexEncode),
         "base64_encode" => Some(NativeId::Base64Encode),
+        "present_show" | "show_sprite" => Some(NativeId::PresentShow),
+        "set_bg" => Some(NativeId::PresentSetBg),
+        "ui_flag" => Some(NativeId::PresentUiFlag),
+        "ui_flag_get" => Some(NativeId::PresentUiFlagGet),
+        "present_hide" | "hide_sprite" => Some(NativeId::PresentHide),
         _ => None,
     }
 }

@@ -7,6 +7,7 @@
 
 mod coroutine;
 mod debugger;
+mod present_host;
 mod stdlib;
 mod value;
 mod vm;
@@ -16,6 +17,10 @@ pub use coroutine::{Coroutine, CoroutineStatus};
 pub use debugger::{
     debug_run, inspect_locals, inspect_stack_trace, Breakpoint, DebugStopReason, Debugger,
     FrameSnapshot, LocalSnapshot, StepMode,
+};
+pub use present_host::{
+    install_present_host, present_host_mut, reset_present_host, take_present_host, with_present_host,
+    PresentHostState, PresentSprite,
 };
 pub use stdlib::{call_native, NativeOutput};
 pub use value::Value;
