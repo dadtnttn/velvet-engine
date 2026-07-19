@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   how-to, battle, pause, and result screens (uses `velvet-cards` zones).
 - Demo **velvet-stakes** (`demos/velvet-stakes`): Balatro-like poker (chips×mult,
   blinds, select/play/discard) with menus — fan pre-alpha, not affiliated.
+- **velvet-anim** animation/VFX tools: poses, tweens, presets (deal, fade, shake…),
+  multi-target director, `.vanim` scripts, story host `anim.fx` / `anim.move` /
+  `anim.script` (docs: `docs/language/VELVET_ANIM.md`).
 - Phase 0: workspace, architecture docs, ADRs, CI skeleton, dual license.
 - Phase 1 (core): `velvet-math`, `velvet-time`, `velvet-events`, `velvet-core`, `velvet-app`
   (plugins, schedules, resources, headless + winit window runners).

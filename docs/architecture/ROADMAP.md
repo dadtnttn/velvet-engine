@@ -24,6 +24,7 @@ Phases are sequential. Keep the tree compiling after every phase.
 |----------|------|--------|-------|
 | **Now** | **Card authoring tools** (`velvet-cards`) | **active** | Catalog, deck lists, validation, seeded shuffle, draw/discard **zones** — **tools for authors**, not a finished card *game* (no AI, no match UI, no TCG rules parity). CLI: `velvet cards …`. |
 | Demo | **Balatro-like** (`demos/velvet-stakes`) | **pre-alpha** | Poker chips×mult, blinds, hand select — fan demo; jokers/shop later. |
+| **Now** | **Animation / VFX tools** (`velvet-anim`) | **active** | Tweens, effect presets (deal/fade/shake…), director, `.vanim`, story `call anim.*` — for cards, UI, stage. |
 | Later | Hotline Miami–like (top-down action shooter) | **deferred / future** | Pre-alpha spine exists (`velvet-action::hotline`, `examples/hotline-rush`). **Not current priority** — leave on roadmap until card tooling matures; further Hotline (windowed input, levels, masks) is future work. |
 | Later | Full CCG/TCG rules engine / match loop | **out of scope near-term** | Optional consumers may use zones later; success bar is tools, not “win a match”. |
 

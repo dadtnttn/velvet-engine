@@ -137,6 +137,149 @@ impl CommandRegistry {
             snippet: "call flag.set:\n    name: met_luna\n    value: true\n".into(),
             error_help: "call flag.set:\n    name: met_luna".into(),
         });
+        // Animation / VFX (implemented by velvet-anim::AnimStoryHost)
+        r.register(CommandSpec {
+            name: "anim.fx".into(),
+            category: "animation".into(),
+            description: "Reproduce un efecto (deal, fade_in, shake, punch, …) en un target."
+                .into(),
+            params: vec![
+                CommandParam {
+                    name: "target".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "Id del objeto (card0, hero, ui.banner…)".into(),
+                },
+                CommandParam {
+                    name: "effect".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "deal | fade_in | fade_out | move | punch | shake | bounce | pop".into(),
+                },
+                CommandParam {
+                    name: "x".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("0".into()),
+                    doc: "Destino X / origen según efecto".into(),
+                },
+                CommandParam {
+                    name: "y".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("0".into()),
+                    doc: "Destino Y".into(),
+                },
+                CommandParam {
+                    name: "duration".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("0.35".into()),
+                    doc: "Duración en segundos".into(),
+                },
+                CommandParam {
+                    name: "delay".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("0".into()),
+                    doc: "Retraso antes de empezar".into(),
+                },
+                CommandParam {
+                    name: "strength".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("8".into()),
+                    doc: "Fuerza (shake px / punch scale)".into(),
+                },
+                CommandParam {
+                    name: "ease".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: Some("cubic_out".into()),
+                    doc: "Curva: linear, cubic_out, back_out, bounce, …".into(),
+                },
+            ],
+            required: vec!["target".into(), "effect".into()],
+            snippet: "call anim.fx:\n    target: card0\n    effect: deal\n    x: 200\n    y: 360\n    duration: 0.35\n".into(),
+            error_help: "call anim.fx:\n    target: card0\n    effect: deal".into(),
+        });
+        r.register(CommandSpec {
+            name: "anim.move".into(),
+            category: "animation".into(),
+            description: "Mueve un target a (x,y) con tween.".into(),
+            params: vec![
+                CommandParam {
+                    name: "target".into(),
+                    ty: ParamTy::Ident,
+                    required: true,
+                    default: None,
+                    doc: "Id del objeto".into(),
+                },
+                CommandParam {
+                    name: "x".into(),
+                    ty: ParamTy::Float,
+                    required: true,
+                    default: None,
+                    doc: "X destino".into(),
+                },
+                CommandParam {
+                    name: "y".into(),
+                    ty: ParamTy::Float,
+                    required: true,
+                    default: None,
+                    doc: "Y destino".into(),
+                },
+                CommandParam {
+                    name: "duration".into(),
+                    ty: ParamTy::Float,
+                    required: false,
+                    default: Some("0.3".into()),
+                    doc: "Segundos".into(),
+                },
+                CommandParam {
+                    name: "ease".into(),
+                    ty: ParamTy::Ident,
+                    required: false,
+                    default: Some("cubic_out".into()),
+                    doc: "Easing".into(),
+                },
+            ],
+            required: vec!["target".into(), "x".into(), "y".into()],
+            snippet: "call anim.move:\n    target: card0\n    x: 100\n    y: 200\n    duration: 0.25\n".into(),
+            error_help: "call anim.move:\n    target: card0\n    x: 0\n    y: 0".into(),
+        });
+        r.register(CommandSpec {
+            name: "anim.stop".into(),
+            category: "animation".into(),
+            description: "Detiene tweens del target (congela la pose).".into(),
+            params: vec![CommandParam {
+                name: "target".into(),
+                ty: ParamTy::Ident,
+                required: true,
+                default: None,
+                doc: "Id del objeto".into(),
+            }],
+            required: vec!["target".into()],
+            snippet: "call anim.stop:\n    target: card0\n".into(),
+            error_help: "call anim.stop:\n    target: card0".into(),
+        });
+        r.register(CommandSpec {
+            name: "anim.script".into(),
+            category: "animation".into(),
+            description: "Ejecuta un mini-script .vanim en el argumento body/code.".into(),
+            params: vec![CommandParam {
+                name: "body".into(),
+                ty: ParamTy::Text,
+                required: true,
+                default: None,
+                doc: "Texto del script (fx, move, wait, spawn)".into(),
+            }],
+            required: vec!["body".into()],
+            snippet: "call anim.script:\n    body: \"fx card0 deal 200 360 0.3\"\n".into(),
+            error_help: "call anim.script:\n    body: \"fx card0 fade_in\"".into(),
+        });
         r
     }
 
