@@ -10,10 +10,15 @@ use std::sync::OnceLock;
 use fontdue::Font;
 use velvet_story::pack_rgb;
 
-/// Design reference width (layout units).
-pub const WW: u32 = 1280;
+/// Design reference width (layout units — UI is authored against this).
+pub const DESIGN_W: u32 = 1280;
 /// Design reference height.
-pub const WH: u32 = 720;
+pub const DESIGN_H: u32 = 720;
+
+/// Internal render width — **4K UHD** (menu paints here for max sharpness).
+pub const WW: u32 = 3840;
+/// Internal render height — **4K UHD**.
+pub const WH: u32 = 2160;
 
 /// Menu entries (index = selection).
 pub const MENU_ITEMS: &[&str] = &[
@@ -370,12 +375,12 @@ fn draw_font_hq(
     }
 }
 
-/// Paint novel menu into a buffer of size `ww`×`wh` (use native window size for sharp DPI).
+/// Paint novel menu at full **4K** (`WW`×`WH` = 3840×2160).
 pub fn paint_novel_menu(pixels: &mut [u32], bg: Option<&RgbImage>, sel: usize) {
     paint_novel_menu_size(pixels, WW, WH, bg, sel);
 }
 
-/// Paint at arbitrary resolution (scales layout from 1280×720 design).
+/// Paint at arbitrary resolution (scales layout from 1280×720 design space).
 pub fn paint_novel_menu_size(
     pixels: &mut [u32],
     ww: u32,
@@ -384,10 +389,10 @@ pub fn paint_novel_menu_size(
     sel: usize,
 ) {
     assert!(pixels.len() >= (ww * wh) as usize);
-    // Scale design (1280×720) to the real framebuffer (native DPI = no upscale blur)
-    let s = ww as f32 / WW as f32;
+    // Map design 1280×720 → framebuffer (default 4K = 3×)
+    let s = ww as f32 / DESIGN_W as f32;
     let ox = 0.0f32;
-    let oy = ((wh as f32 - WH as f32 * s) * 0.5).max(0.0);
+    let oy = ((wh as f32 - DESIGN_H as f32 * s) * 0.5).max(0.0);
 
     if let Some(b) = bg {
         blit_cover(pixels, ww, wh, b);
@@ -403,7 +408,7 @@ pub fn paint_novel_menu_size(
         ww,
         wh,
         ox + 48.0 * s,
-        ox + (WW as f32 - 48.0) * s,
+        ox + (DESIGN_W as f32 - 48.0) * s,
         oy + 32.0 * s,
         (210, 180, 130),
         0.4,
@@ -608,7 +613,7 @@ pub fn paint_novel_menu_size(
         wh,
         &f.ui,
         ox + 80.0 * s,
-        oy + (WH as f32 - 34.0) * s,
+        oy + (DESIGN_H as f32 - 34.0) * s,
         "↑ ↓  seleccionar      Enter  confirmar      Esc  salir",
         16.0 * s,
         (155, 145, 170),
@@ -622,7 +627,7 @@ pub fn paint_novel_menu_size(
         wh,
         &f.ui,
         ww as f32 - 48.0 * s - bw,
-        oy + (WH as f32 - 34.0) * s,
+        oy + (DESIGN_H as f32 - 34.0) * s,
         brand,
         15.0 * s,
         (115, 105, 130),
@@ -634,7 +639,7 @@ pub fn paint_novel_menu_size(
         ww,
         wh,
         ox + 18.0 * s,
-        ox + (WW as f32 - 18.0) * s,
+        ox + (DESIGN_W as f32 - 18.0) * s,
         oy + 14.0 * s,
         (190, 160, 110),
         0.35,
@@ -644,8 +649,8 @@ pub fn paint_novel_menu_size(
         ww,
         wh,
         ox + 18.0 * s,
-        ox + (WW as f32 - 18.0) * s,
-        oy + (WH as f32 - 16.0) * s,
+        ox + (DESIGN_W as f32 - 18.0) * s,
+        oy + (DESIGN_H as f32 - 16.0) * s,
         (190, 160, 110),
         0.35,
     );
@@ -737,11 +742,9 @@ mod tests {
     #[test]
     fn dump_novel_menu_png() {
         let bg = load_rgb(&data_ui().join("menu_bg.jpg"));
-        // Dump at 2× design for quality proof
-        let ww = WW * 2;
-        let wh = WH * 2;
-        let mut pixels = vec![0u32; (ww * wh) as usize];
-        paint_novel_menu_size(&mut pixels, ww, wh, bg.as_ref(), 0);
+        // Full 4K dump
+        let mut pixels = vec![0u32; (WW * WH) as usize];
+        paint_novel_menu(&mut pixels, bg.as_ref(), 0);
         let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/novel_menu.png");
         let mut rgba = Vec::with_capacity(pixels.len() * 4);
         for &p in &pixels {
@@ -750,7 +753,16 @@ mod tests {
             rgba.push((p & 0xFF) as u8);
             rgba.push(255);
         }
-        image::save_buffer(&out, &rgba, ww, wh, image::ColorType::Rgba8).expect("png");
+        image::save_buffer(&out, &rgba, WW, WH, image::ColorType::Rgba8).expect("png");
         assert!(out.exists());
+        assert_eq!((WW, WH), (3840, 2160));
+    }
+
+    #[test]
+    fn internal_buffer_is_4k() {
+        assert_eq!(WW, 3840);
+        assert_eq!(WH, 2160);
+        assert_eq!(DESIGN_W, 1280);
+        assert_eq!(DESIGN_H, 720);
     }
 }

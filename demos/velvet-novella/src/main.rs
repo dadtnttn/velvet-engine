@@ -1,9 +1,18 @@
 //! Velvet Novella — **Luz de Estación**
 //!
-//! Title menu → product VN host (`VnSession` + product paint + softbuffer).
+//! Title menu (internal **4K** paint) → product VN host (`VnSession` + softbuffer).
+//!
+//! ## Language / pipeline (honest)
+//! Story is `story/main.vel` loaded via `open_session_from_file` →
+//! `velvet_script_parser` AST → lower to **`StoryProgram`** (product IR) →
+//! `VnSession` / `StoryPlayer`.
+//!
+//! That is **not** the full VS2 stack (HIR → types → `OpVs2` bytecode → VM).
+//! VS2 (`.vel` edition 2, typed VM) is **alpha / partial** and is **not** the
+//! runtime driving this demo today. Same file extension (`.vel`), different depth.
 //!
 //! Title: ↑↓ Enter · Esc  
-//! Play: Space/Click advance · ↑↓ choices · R restart to menu · Esc quit  
+//! Play: Space/Click · ↑↓ choices · R menu · Esc quit  
 //! `--headless`: title auto-start + auto-play to ending
 
 mod menu;
@@ -24,8 +33,8 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
 use menu::{
-    font_status, letterbox_bilinear, load_rgb, move_sel, paint_novel_menu,
-    paint_novel_menu_size, RgbImage, MENU_ITEMS, WW, WH,
+    font_status, letterbox_bilinear, load_rgb, move_sel, paint_novel_menu, paint_novel_menu_size,
+    RgbImage, MENU_ITEMS, WW, WH,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,8 +56,11 @@ struct App {
     headless: bool,
     hframes: u32,
     headless_done: bool,
-    /// Logical framebuffer (title always 1280×720; play may letterbox into window).
+    /// Framebuffer: title paints at **4K** (3840×2160); play uses product paint then scale.
     pixels: Vec<u32>,
+    /// Last title paint size (native window or 4K).
+    title_w: u32,
+    title_h: u32,
 }
 
 fn story_path() -> PathBuf {
@@ -113,6 +125,8 @@ impl App {
             hframes: 0,
             headless_done: false,
             pixels: vec![0; (WW * WH) as usize],
+            title_w: WW,
+            title_h: WH,
         })
     }
 
@@ -158,24 +172,22 @@ impl App {
 
         match self.screen {
             Screen::Title => {
-                // Paint at *native* window size so DPI never nearest-upsamples fonts
-                if self.pixels.len() != (dw * dh) as usize {
-                    self.pixels.resize((dw * dh) as usize, 0);
-                }
-                paint_novel_menu_size(
-                    &mut self.pixels,
-                    dw,
-                    dh,
-                    self.menu_bg.as_ref(),
-                    self.menu_sel,
-                );
-                window.set_title("Luz de Estación — menú");
-            }
-            Screen::Play => {
-                // Product path still uses design res; bilinear letterbox to window
+                // Always compose the menu in **4K**, then bilinear → window
                 if self.pixels.len() != (WW * WH) as usize {
                     self.pixels.resize((WW * WH) as usize, 0);
                 }
+                self.title_w = WW;
+                self.title_h = WH;
+                paint_novel_menu(&mut self.pixels, self.menu_bg.as_ref(), self.menu_sel);
+                window.set_title("Luz de Estación — menú (4K compose)");
+            }
+            Screen::Play => {
+                // Product VN path also composed at 4K for sharpness
+                if self.pixels.len() != (WW * WH) as usize {
+                    self.pixels.resize((WW * WH) as usize, 0);
+                }
+                self.title_w = WW;
+                self.title_h = WH;
                 let list = present_session(&self.session, &mut self.pixels, WW, WH);
                 let _ = list;
                 if matches!(self.session.player().wait(), StoryWait::Ended) {
@@ -186,36 +198,37 @@ impl App {
                         .get("ending")
                         .display_str();
                     let msg = format!("FIN  ending={end}  (R menu)");
+                    // Ending overlay still uses product bitmap font (story path); title menu is TTF
                     velvet_story::draw_text_line(
                         &mut self.pixels,
                         WW,
                         WH,
-                        40,
+                        120,
                         (WH / 3) as i32,
                         "=== FIN ===",
                         velvet_story::pack_rgb(255, 220, 120),
-                        3,
+                        6,
                     );
                     velvet_story::draw_text_line(
                         &mut self.pixels,
                         WW,
                         WH,
-                        40,
-                        (WH / 3) as i32 + 36,
+                        120,
+                        (WH / 3) as i32 + 72,
                         &msg,
                         velvet_story::pack_rgb(220, 220, 235),
-                        2,
+                        4,
                     );
                 }
                 velvet_story::draw_text_line(
                     &mut self.pixels,
                     WW,
                     WH,
-                    12,
-                    10,
+                    36,
+                    30,
                     "Space/Click  |  Up/Down  |  R menu  |  Esc quit",
                     velvet_story::pack_rgb(150, 145, 165),
-                    1,
+                    2,
                 );
                 let frame = build_product_ui_frame(&self.session);
                 let title = if frame.wait == "ended" {
@@ -235,25 +248,18 @@ impl App {
             }
         }
 
-        let present = match self.screen {
-            Screen::Title => {
-                // Already painted at native size
-                self.pixels.clone()
-            }
-            Screen::Play => {
-                if dw == WW && dh == WH {
-                    self.pixels.clone()
-                } else {
-                    letterbox_bilinear(
-                        &self.pixels,
-                        WW,
-                        WH,
-                        dw,
-                        dh,
-                        velvet_story::pack_rgb(8, 6, 14),
-                    )
-                }
-            }
+        // 4K compose → bilinear letterbox into the real window (never nearest-neighbor)
+        let present = if dw == self.title_w && dh == self.title_h {
+            self.pixels.clone()
+        } else {
+            letterbox_bilinear(
+                &self.pixels,
+                self.title_w,
+                self.title_h,
+                dw,
+                dh,
+                velvet_story::pack_rgb(8, 6, 14),
+            )
         };
 
         let Some(surface) = self.surface.as_mut() else {
@@ -273,9 +279,10 @@ impl ApplicationHandler for App {
         if self.window.is_some() {
             return;
         }
+        // Default window 1080p; internal compose is always 4K (sharp downscale)
         let attrs = Window::default_attributes()
             .with_title("Luz de Estación — Velvet Novella")
-            .with_inner_size(LogicalSize::new(WW, WH));
+            .with_inner_size(LogicalSize::new(1920, 1080));
         let window = Arc::new(el.create_window(attrs).expect("window"));
         let context = SbContext::new(window.clone()).expect("ctx");
         let surface = Surface::new(&context, window.clone()).expect("surface");
@@ -397,7 +404,9 @@ impl ApplicationHandler for App {
                             .map(|(t, u)| format!("title={t} ui={u}"))
                             .unwrap_or_else(|| "fonts=MISSING".into());
                         println!(
-                            "headless title_menu painted items={} bg={} {fonts}",
+                            "headless title_menu 4K={}x{} items={} bg={} {fonts}",
+                            WW,
+                            WH,
                             MENU_ITEMS.len(),
                             self.menu_bg.is_some()
                         );
@@ -413,6 +422,7 @@ impl ApplicationHandler for App {
                         if self.pixels.len() != (WW * WH) as usize {
                             self.pixels.resize((WW * WH) as usize, 0);
                         }
+                        // Product path also at 4K
                         let _ = present_session(&self.session, &mut self.pixels, WW, WH);
                     }
                     match self.session.player().wait().clone() {
@@ -461,13 +471,16 @@ fn main() -> Result<()> {
     velvet_core::init_tracing_default("velvet_novella=info,info");
     let headless = std::env::args().any(|a| a == "--headless");
     println!("=== Luz de Estación — novela visual ===");
+    println!("render: internal {WW}x{WH} (4K UHD) → bilinear to window");
     println!("menu: Nueva partida · Continuar · Galería · Opciones · Salir");
     if let Some((t, u)) = font_status() {
-        println!("fonts: title={t}  ui={u}  (TrueType AA, native DPI paint)");
+        println!("fonts: title={t}  ui={u}  (TrueType AA)");
     } else {
         println!("WARNING: no TTF fonts loaded — menu quality degraded");
     }
     println!("story: demos/velvet-novella/story/main.vel");
+    println!("pipeline: .vel → parser AST → StoryProgram (product IR) → VnSession");
+    println!("VS2 status: NOT the runtime of this demo (VS2 HIR/bytecode/VM is alpha)");
 
     let el = EventLoop::new()?;
     el.set_control_flow(ControlFlow::Poll);
