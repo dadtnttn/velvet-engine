@@ -30,6 +30,7 @@ members = [
     "crates/velvet-script-stdlib",
     "crates/velvet-script-corpus",
     "crates/velvet-script-resolve",
+    "crates/velvet-script-vs3",
     "crates/velvet-story-lang",
     "crates/velvet-document",
     "crates/velvet-story",
@@ -107,6 +108,7 @@ velvet-script-i18n = { path = "crates/velvet-script-i18n" }
 velvet-script-stdlib = { path = "crates/velvet-script-stdlib" }
 velvet-script-corpus = { path = "crates/velvet-script-corpus" }
 velvet-script-resolve = { path = "crates/velvet-script-resolve" }
+velvet-script-vs3 = { path = "crates/velvet-script-vs3" }
 velvet-story-lang = { path = "crates/velvet-story-lang" }
 velvet-document = { path = "crates/velvet-document" }
 velvet-story = { path = "crates/velvet-story" }
