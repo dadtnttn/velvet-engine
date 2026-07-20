@@ -9,21 +9,22 @@ Novela visual corta con **menú de título** y host de producto.
 | Archivo | `story/main.vel` |
 | Parse | `velvet_script_parser` (AST) |
 | Runtime | **`StoryProgram` + `VnSession`** (product IR) |
-| Paint | menú 4K TTF · juego `paint_product_session` |
+| Paint | menú TTF a resolución de ventana · juego `paint_product_session` |
 | **VS2** (HIR → types → OpVs2 → VM) | **No** es el runtime de este demo (VS2 sigue en alpha) |
 
 Misma extensión `.vel`, pero **no** es “todo el juego en VS2 completo”.
 
 ```
-Title menu (4K compose)
+Title menu (compose = tamaño ventana, máx. 1920 arista)
   → VnSession / StoryPlayer (product)
-  → paint_product_session → softbuffer (bilinear from 4K)
+  → paint_product_session → softbuffer (1:1 o letterbox si cap)
 ```
 
 ## Render
 
-- **Internal:** `3840×2160` (4K UHD) for menu + product paint  
-- **Window default:** 1920×1080, letterbox **bilinear** from 4K  
+- **Compose:** tamaño de la ventana (adaptativo), arista máx. 1920 px (softbuffer CPU)  
+- **Ventana:** arranca **maximizada** a la pantalla primaria  
+- **Sin 4K fijo** (evita lag al mover/redimensionar)  
 - Menu fonts: Constantia / Segoe UI via **fontdue** (not 8-bit bitmap)
 
 ## Run

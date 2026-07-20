@@ -15,10 +15,28 @@ pub const DESIGN_W: u32 = 1280;
 /// Design reference height.
 pub const DESIGN_H: u32 = 720;
 
-/// Internal render width — **4K UHD** (menu paints here for max sharpness).
-pub const WW: u32 = 3840;
-/// Internal render height — **4K UHD**.
-pub const WH: u32 = 2160;
+/// Default / headless compose width (Full HD — sharp enough, softbuffer-friendly).
+pub const WW: u32 = 1920;
+/// Default / headless compose height.
+pub const WH: u32 = 1080;
+
+/// Softbuffer CPU budget: longest edge of the compose buffer (window may be larger).
+pub const MAX_COMPOSE_EDGE: u32 = 1920;
+
+/// Compose size for a physical window: 1:1 when ≤ [`MAX_COMPOSE_EDGE`], else scaled down.
+pub fn compose_size_for_window(dw: u32, dh: u32) -> (u32, u32) {
+    let dw = dw.max(1);
+    let dh = dh.max(1);
+    let max_dim = dw.max(dh);
+    if max_dim <= MAX_COMPOSE_EDGE {
+        return (dw, dh);
+    }
+    let scale = MAX_COMPOSE_EDGE as f32 / max_dim as f32;
+    (
+        ((dw as f32) * scale).round().max(1.0) as u32,
+        ((dh as f32) * scale).round().max(1.0) as u32,
+    )
+}
 
 /// Menu entries (index = selection).
 pub const MENU_ITEMS: &[&str] = &[
@@ -375,7 +393,7 @@ fn draw_font_hq(
     }
 }
 
-/// Paint novel menu at full **4K** (`WW`×`WH` = 3840×2160).
+/// Paint novel menu at default [`WW`]×[`WH`].
 pub fn paint_novel_menu(pixels: &mut [u32], bg: Option<&RgbImage>, sel: usize) {
     paint_novel_menu_size(pixels, WW, WH, bg, sel);
 }
@@ -389,7 +407,7 @@ pub fn paint_novel_menu_size(
     sel: usize,
 ) {
     assert!(pixels.len() >= (ww * wh) as usize);
-    // Map design 1280×720 → framebuffer (default 4K = 3×)
+    // Map design 1280×720 → framebuffer (scale by width; letterbox if aspect differs)
     let s = ww as f32 / DESIGN_W as f32;
     let ox = 0.0f32;
     let oy = ((wh as f32 - DESIGN_H as f32 * s) * 0.5).max(0.0);
@@ -742,7 +760,6 @@ mod tests {
     #[test]
     fn dump_novel_menu_png() {
         let bg = load_rgb(&data_ui().join("menu_bg.jpg"));
-        // Full 4K dump
         let mut pixels = vec![0u32; (WW * WH) as usize];
         paint_novel_menu(&mut pixels, bg.as_ref(), 0);
         let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/novel_menu.png");
@@ -755,14 +772,31 @@ mod tests {
         }
         image::save_buffer(&out, &rgba, WW, WH, image::ColorType::Rgba8).expect("png");
         assert!(out.exists());
-        assert_eq!((WW, WH), (3840, 2160));
+        assert_eq!((WW, WH), (1920, 1080));
     }
 
     #[test]
-    fn internal_buffer_is_4k() {
-        assert_eq!(WW, 3840);
-        assert_eq!(WH, 2160);
+    fn default_buffer_is_full_hd() {
+        assert_eq!(WW, 1920);
+        assert_eq!(WH, 1080);
         assert_eq!(DESIGN_W, 1280);
         assert_eq!(DESIGN_H, 720);
+    }
+
+    #[test]
+    fn compose_size_matches_window_until_cap() {
+        assert_eq!(compose_size_for_window(1280, 720), (1280, 720));
+        assert_eq!(compose_size_for_window(1920, 1080), (1920, 1080));
+        let (w, h) = compose_size_for_window(3840, 2160);
+        assert_eq!(w.max(h), MAX_COMPOSE_EDGE);
+        assert!((w as f32 / h as f32 - 16.0 / 9.0).abs() < 0.02);
+    }
+
+    #[test]
+    fn paint_at_window_size_works() {
+        let (w, h) = (960u32, 540u32);
+        let mut pixels = vec![0u32; (w * h) as usize];
+        paint_novel_menu_size(&mut pixels, w, h, None, 0);
+        assert!(pixels.iter().any(|&p| p != 0));
     }
 }

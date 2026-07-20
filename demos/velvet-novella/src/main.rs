@@ -1,6 +1,6 @@
 //! Velvet Novella — **Luz de Estación**
 //!
-//! Title menu (internal **4K** paint, softbuffer) → product VN host
+//! Title menu (softbuffer, resolution = window) → product VN host
 //! (`VnSession` + hybrid presenter: menu softbuffer, play prefers wgpu descriptors).
 //!
 //! ## Language / pipeline (honest)
@@ -34,8 +34,8 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
 use menu::{
-    font_status, letterbox_bilinear, load_rgb, move_sel, paint_novel_menu, RgbImage, MENU_ITEMS,
-    WW, WH,
+    compose_size_for_window, font_status, letterbox_bilinear, load_rgb, move_sel,
+    paint_novel_menu, paint_novel_menu_size, RgbImage, MENU_ITEMS, MAX_COMPOSE_EDGE, WW, WH,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,13 +57,15 @@ struct App {
     headless: bool,
     hframes: u32,
     headless_done: bool,
-    /// Framebuffer: title paints at **4K** (3840×2160); play uses product paint then scale.
+    /// Compose framebuffer (window size, capped — not fixed 4K).
     pixels: Vec<u32>,
-    /// Last title paint size (native window or 4K).
-    title_w: u32,
-    title_h: u32,
+    /// Last compose width/height.
+    compose_w: u32,
+    compose_h: u32,
     /// Hybrid product presenter (title softbuffer / play wgpu IR).
     presenter: ProductPresenter,
+    /// Dirty: need paint on next redraw.
+    needs_paint: bool,
 }
 
 fn story_path() -> PathBuf {
@@ -100,8 +102,6 @@ fn open_session(path: &PathBuf) -> Result<VnSession> {
     .with_context(|| format!("load {}", path.display()))
 }
 
-// presentation scale is bilinear — see menu::letterbox_bilinear
-
 impl App {
     fn new(headless: bool) -> Result<Self> {
         let story_path = story_path();
@@ -109,8 +109,6 @@ impl App {
         let menu_bg = load_rgb(&ui_dir().join("menu_bg.jpg"));
         let mut presenter = ProductPresenter::hybrid();
         // Interactive: no headless GPU probe (avoids WARP + Vulkan layer spam).
-        // Hybrid still prefers wgpu IR on play; window present stays softbuffer.
-        // Headless: optional quiet probe for ASSERT logs.
         if headless {
             match velvet_render::GpuContext::headless() {
                 Ok(g) => {
@@ -142,9 +140,10 @@ impl App {
             hframes: 0,
             headless_done: false,
             pixels: vec![0; (WW * WH) as usize],
-            title_w: WW,
-            title_h: WH,
+            compose_w: WW,
+            compose_h: WH,
             presenter,
+            needs_paint: true,
         })
     }
 
@@ -154,6 +153,7 @@ impl App {
         }
         self.screen = Screen::Play;
         self.presenter.set_phase_play();
+        self.needs_paint = true;
         eprintln!("[presenter] {}", self.presenter.status_line());
     }
 
@@ -161,16 +161,16 @@ impl App {
         self.screen = Screen::Title;
         self.menu_sel = 0;
         self.presenter.set_phase_title();
+        self.needs_paint = true;
     }
 
     fn confirm_menu(&mut self, el: &ActiveEventLoop) {
         match self.menu_sel {
             0 => self.start_game(),
             4 => el.exit(),
-            _ => {
-                // stubs: Continuar / Galería / Opciones
-            }
+            _ => {}
         }
+        self.needs_paint = true;
     }
 
     fn advance_or_choose(&mut self) {
@@ -181,6 +181,16 @@ impl App {
         } else {
             self.session.advance();
         }
+        self.needs_paint = true;
+    }
+
+    fn ensure_compose_buf(&mut self, cw: u32, ch: u32) {
+        let n = (cw * ch) as usize;
+        if self.pixels.len() != n {
+            self.pixels.resize(n, 0);
+        }
+        self.compose_w = cw;
+        self.compose_h = ch;
     }
 
     fn paint(&mut self) {
@@ -190,31 +200,28 @@ impl App {
         let size = window.inner_size();
         let dw = size.width.max(1);
         let dh = size.height.max(1);
+        let (cw, ch) = compose_size_for_window(dw, dh);
+        self.ensure_compose_buf(cw, ch);
 
         match self.screen {
             Screen::Title => {
-                // Always compose the menu in **4K**, then bilinear → window
-                if self.pixels.len() != (WW * WH) as usize {
-                    self.pixels.resize((WW * WH) as usize, 0);
-                }
-                self.title_w = WW;
-                self.title_h = WH;
-                paint_novel_menu(&mut self.pixels, self.menu_bg.as_ref(), self.menu_sel);
-                window.set_title("Luz de Estación — menú (4K compose)");
+                paint_novel_menu_size(
+                    &mut self.pixels,
+                    cw,
+                    ch,
+                    self.menu_bg.as_ref(),
+                    self.menu_sel,
+                );
+                window.set_title(&format!(
+                    "Luz de Estación — menú ({cw}×{ch} → ventana {dw}×{dh})"
+                ));
             }
             Screen::Play => {
-                // Product VN path: build GPU descriptors + softbuffer present
-                // (hybrid: wgpu IR always; pixels via softbuffer until windowed surface).
-                if self.pixels.len() != (WW * WH) as usize {
-                    self.pixels.resize((WW * WH) as usize, 0);
-                }
-                self.title_w = WW;
-                self.title_h = WH;
                 let _list = self.presenter.present_session_softbuffer(
                     &self.session,
                     &mut self.pixels,
-                    WW,
-                    WH,
+                    cw,
+                    ch,
                 );
                 if matches!(self.session.player().wait(), StoryWait::Ended) {
                     let end = self
@@ -224,37 +231,38 @@ impl App {
                         .get("ending")
                         .display_str();
                     let msg = format!("FIN  ending={end}  (R menu)");
-                    // Ending overlay still uses product bitmap font (story path); title menu is TTF
+                    let scale = (cw / 640).max(1) as i32;
                     velvet_story::draw_text_line(
                         &mut self.pixels,
-                        WW,
-                        WH,
-                        120,
-                        (WH / 3) as i32,
+                        cw,
+                        ch,
+                        40,
+                        (ch / 3) as i32,
                         "=== FIN ===",
                         velvet_story::pack_rgb(255, 220, 120),
-                        6,
+                        scale * 2,
                     );
                     velvet_story::draw_text_line(
                         &mut self.pixels,
-                        WW,
-                        WH,
-                        120,
-                        (WH / 3) as i32 + 72,
+                        cw,
+                        ch,
+                        40,
+                        (ch / 3) as i32 + 28 * scale,
                         &msg,
                         velvet_story::pack_rgb(220, 220, 235),
-                        4,
+                        scale,
                     );
                 }
+                let hint_scale = (cw / 960).max(1) as i32;
                 velvet_story::draw_text_line(
                     &mut self.pixels,
-                    WW,
-                    WH,
-                    36,
-                    30,
+                    cw,
+                    ch,
+                    16,
+                    12,
                     "Space/Click  |  Up/Down  |  R menu  |  Esc quit",
                     velvet_story::pack_rgb(150, 145, 165),
-                    2,
+                    hint_scale,
                 );
                 let frame = build_product_ui_frame(&self.session);
                 let title = if frame.wait == "ended" {
@@ -274,29 +282,30 @@ impl App {
             }
         }
 
-        // 4K compose → bilinear letterbox into the real window (never nearest-neighbor)
-        let present = if dw == self.title_w && dh == self.title_h {
-            self.pixels.clone()
-        } else {
-            letterbox_bilinear(
-                &self.pixels,
-                self.title_w,
-                self.title_h,
-                dw,
-                dh,
-                velvet_story::pack_rgb(8, 6, 14),
-            )
-        };
-
         let Some(surface) = self.surface.as_mut() else {
             return;
         };
         let _ = surface.resize(NonZeroU32::new(dw).unwrap(), NonZeroU32::new(dh).unwrap());
         if let Ok(mut buf) = surface.buffer_mut() {
-            let n = present.len().min(buf.len());
-            buf[..n].copy_from_slice(&present[..n]);
+            // 1:1 → direct copy (no bilinear letterbox). Else scale once.
+            if dw == cw && dh == ch {
+                let n = self.pixels.len().min(buf.len());
+                buf[..n].copy_from_slice(&self.pixels[..n]);
+            } else {
+                let present = letterbox_bilinear(
+                    &self.pixels,
+                    cw,
+                    ch,
+                    dw,
+                    dh,
+                    velvet_story::pack_rgb(8, 6, 14),
+                );
+                let n = present.len().min(buf.len());
+                buf[..n].copy_from_slice(&present[..n]);
+            }
             let _ = buf.present();
         }
+        self.needs_paint = false;
     }
 }
 
@@ -305,22 +314,43 @@ impl ApplicationHandler for App {
         if self.window.is_some() {
             return;
         }
-        // Default window 1080p; internal compose is always 4K (sharp downscale)
-        let attrs = Window::default_attributes()
+        // Prefer primary monitor size; start maximized so resolution = pantalla.
+        let mut attrs = Window::default_attributes()
             .with_title("Luz de Estación — Velvet Novella")
-            .with_inner_size(LogicalSize::new(1920, 1080));
+            .with_inner_size(LogicalSize::new(1280, 720))
+            .with_min_inner_size(LogicalSize::new(640, 360))
+            .with_maximized(true);
+        if let Some(monitor) = el.primary_monitor() {
+            let size = monitor.size();
+            // Logical size hint before maximize (some platforms use it for restore).
+            attrs = attrs.with_inner_size(LogicalSize::new(
+                size.width.max(800),
+                size.height.max(600),
+            ));
+        }
         let window = Arc::new(el.create_window(attrs).expect("window"));
+        window.set_maximized(true);
         let context = SbContext::new(window.clone()).expect("ctx");
         let surface = Surface::new(&context, window.clone()).expect("surface");
         self.context = Some(context);
         self.surface = Some(surface);
         self.window = Some(window);
         self.last = Instant::now();
+        self.needs_paint = true;
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, _: WindowId, ev: WindowEvent) {
         match ev {
             WindowEvent::CloseRequested => el.exit(),
+            WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                self.needs_paint = true;
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state != ElementState::Pressed {
                     return;
@@ -332,9 +362,11 @@ impl ApplicationHandler for App {
                     Screen::Title => match c {
                         KeyCode::ArrowUp | KeyCode::KeyW => {
                             self.menu_sel = move_sel(self.menu_sel, -1);
+                            self.needs_paint = true;
                         }
                         KeyCode::ArrowDown | KeyCode::KeyS => {
                             self.menu_sel = move_sel(self.menu_sel, 1);
+                            self.needs_paint = true;
                         }
                         KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
                             self.confirm_menu(el);
@@ -349,31 +381,37 @@ impl ApplicationHandler for App {
                         KeyCode::ArrowUp | KeyCode::KeyW => {
                             if self.session.choice.open {
                                 self.session.choice.move_sel(-1);
+                                self.needs_paint = true;
                             }
                         }
                         KeyCode::ArrowDown | KeyCode::KeyS => {
                             if self.session.choice.open {
                                 self.session.choice.move_sel(1);
+                                self.needs_paint = true;
                             }
                         }
                         KeyCode::Digit1 | KeyCode::Numpad1 => {
                             if self.session.choice.open {
                                 let _ = self.session.choose_arm(0);
+                                self.needs_paint = true;
                             }
                         }
                         KeyCode::Digit2 | KeyCode::Numpad2 => {
                             if self.session.choice.open {
                                 let _ = self.session.choose_arm(1);
+                                self.needs_paint = true;
                             }
                         }
                         KeyCode::Digit3 | KeyCode::Numpad3 => {
                             if self.session.choice.open {
                                 let _ = self.session.choose_arm(2);
+                                self.needs_paint = true;
                             }
                         }
                         KeyCode::Digit4 | KeyCode::Numpad4 => {
                             if self.session.choice.open {
                                 let _ = self.session.choose_arm(3);
+                                self.needs_paint = true;
                             }
                         }
                         KeyCode::KeyR => self.to_title(),
@@ -381,8 +419,10 @@ impl ApplicationHandler for App {
                         _ => {}
                     },
                 }
-                if let Some(w) = &self.window {
-                    w.request_redraw();
+                if self.needs_paint {
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
                 }
             }
             WindowEvent::MouseInput {
@@ -404,8 +444,12 @@ impl ApplicationHandler for App {
                 self.last = now;
                 if self.screen == Screen::Play {
                     self.session.tick(dt);
+                    // Typewriter / auto may need continuous frames while playing.
+                    self.needs_paint = true;
                 }
-                self.paint();
+                if self.needs_paint || self.screen == Screen::Play {
+                    self.paint();
+                }
             }
             _ => {}
         }
@@ -420,17 +464,14 @@ impl ApplicationHandler for App {
             self.hframes += 1;
             match self.screen {
                 Screen::Title => {
-                    // Auto-start after a few frames (paint title path first)
                     if self.hframes == 3 {
-                        if self.pixels.len() != (WW * WH) as usize {
-                            self.pixels.resize((WW * WH) as usize, 0);
-                        }
+                        self.ensure_compose_buf(WW, WH);
                         paint_novel_menu(&mut self.pixels, self.menu_bg.as_ref(), 0);
                         let fonts = font_status()
                             .map(|(t, u)| format!("title={t} ui={u}"))
                             .unwrap_or_else(|| "fonts=MISSING".into());
                         println!(
-                            "headless title_menu 4K={}x{} items={} bg={} {fonts}",
+                            "headless title_menu {}x{} items={} bg={} {fonts}",
                             WW,
                             WH,
                             MENU_ITEMS.len(),
@@ -445,10 +486,7 @@ impl ApplicationHandler for App {
                 Screen::Play => {
                     self.session.tick(1.0 / 30.0);
                     if self.hframes % 5 == 0 {
-                        if self.pixels.len() != (WW * WH) as usize {
-                            self.pixels.resize((WW * WH) as usize, 0);
-                        }
-                        // Product path also at 4K via hybrid presenter
+                        self.ensure_compose_buf(WW, WH);
                         let _ = self.presenter.present_session_softbuffer(
                             &self.session,
                             &mut self.pixels,
@@ -489,23 +527,34 @@ impl ApplicationHandler for App {
             }
             return;
         }
-        el.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + Duration::from_millis(16),
-        ));
-        if let Some(w) = &self.window {
-            w.request_redraw();
+
+        // Title: sleep until input (no full-repaint storm while dragging).
+        // Play: ~60 Hz for typewriter; still much cheaper than 4K×every poll.
+        match self.screen {
+            Screen::Title => {
+                el.set_control_flow(ControlFlow::Wait);
+            }
+            Screen::Play => {
+                el.set_control_flow(ControlFlow::WaitUntil(
+                    Instant::now() + Duration::from_millis(16),
+                ));
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
         }
     }
 }
 
 fn main() -> Result<()> {
-    // Keep wgpu/Vulkan/naga quiet unless RUST_LOG overrides (probe dumps shaders otherwise).
     velvet_core::init_tracing_default(
         "velvet_novella=info,wgpu_hal=error,wgpu_core=error,wgpu=error,naga=error,warn",
     );
     let headless = std::env::args().any(|a| a == "--headless");
     println!("=== Luz de Estación — novela visual ===");
-    println!("render: internal {WW}x{WH} (4K UHD) → bilinear to window");
+    println!(
+        "render: resolución = ventana (máx. arista {MAX_COMPOSE_EDGE}px) · arranque maximizado"
+    );
     println!("menu: Nueva partida · Continuar · Galería · Opciones · Salir");
     if let Some((t, u)) = font_status() {
         println!("fonts: title={t}  ui={u}  (TrueType AA)");
@@ -517,7 +566,7 @@ fn main() -> Result<()> {
     println!("VS2 status: NOT the runtime of this demo (VS2 HIR/bytecode/VM is alpha)");
 
     let el = EventLoop::new()?;
-    el.set_control_flow(ControlFlow::Poll);
+    el.set_control_flow(ControlFlow::Wait);
     let mut app = App::new(headless)?;
     el.run_app(&mut app)?;
     Ok(())
@@ -536,14 +585,10 @@ mod host_tests {
             session.advance();
             g += 1;
         }
-        let mut pixels = vec![0u32; (320 * 180) as usize];
-        let list = present_session(&session, &mut pixels, 320, 180);
-        assert!(list.has_say_geometry() || session.say.visible);
-        assert!(!list.is_empty());
-        let painted = pixels
-            .iter()
-            .filter(|&&p| p != 0 && p != velvet_story::pack_rgb(8, 6, 14))
-            .count();
+        let mut pixels = vec![0u32; (1280 * 720) as usize];
+        let list = paint_product_session(&session);
+        rasterize_product_paint(&list, &mut pixels, 1280, 720);
+        let painted = pixels.iter().filter(|&&p| p != 0).count();
         assert!(
             painted > 100,
             "rasterized product frame should paint pixels, got {painted}"
