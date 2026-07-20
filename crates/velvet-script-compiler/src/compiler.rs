@@ -215,7 +215,10 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
                         .push(Diagnostic::error(e.to_string(), stmt.loc().clone()));
                 }
             }
-            Item::Function { .. } => {}
+            Item::Function { .. } | Item::Screen { .. } => {
+                // Declarative screens compile through `velvet-script-layers`.
+                // They intentionally add no executable v1 bytecode.
+            }
         }
     }
     main.emit_op(Op::Null);
@@ -533,6 +536,34 @@ impl FnCompiler<'_> {
                 self.chunk.emit_op(Op::Call);
                 self.chunk.emit_u8(0);
                 self.chunk.emit_op(Op::Pop);
+            }
+            Stmt::HostCall { name, loc, .. } => {
+                // Classic host commands are story-runtime only; bytecode prints intent.
+                self.chunk.map_source(loc.line, loc.column);
+                self.chunk
+                    .emit_constant(Constant::String(format!("host {name}")));
+                self.chunk.emit_op(Op::Print);
+            }
+            Stmt::Transition { name, loc } => {
+                self.chunk.map_source(loc.line, loc.column);
+                self.chunk
+                    .emit_constant(Constant::String(format!("transition {name}")));
+                self.chunk.emit_op(Op::Print);
+            }
+            Stmt::Sound { path, loc } => {
+                self.chunk.map_source(loc.line, loc.column);
+                self.chunk
+                    .emit_constant(Constant::String(format!("sound {path}")));
+                self.chunk.emit_op(Op::Print);
+            }
+            Stmt::Pause { seconds, loc } => {
+                self.chunk.map_source(loc.line, loc.column);
+                let msg = match seconds {
+                    Some(s) => format!("pause {s}"),
+                    None => "pause".into(),
+                };
+                self.chunk.emit_constant(Constant::String(msg));
+                self.chunk.emit_op(Op::Print);
             }
             Stmt::For {
                 name,
@@ -1327,5 +1358,19 @@ function f(a, b) {
                 chunk.code
             );
         }
+    }
+
+    #[test]
+    fn declarative_screen_is_accepted_without_v1_bytecode() {
+        let source = r#"
+screen main_menu {
+    title: "VELVET ARCANA"
+    button start { label: "START"; action: "start_run"; }
+}
+function helper() { return 1 }
+"#;
+        let compiled = compile_source(source, Some("menu.vel")).unwrap();
+        assert!(compiled.module.exports.contains_key("helper"));
+        assert!(!compiled.module.exports.contains_key("main_menu"));
     }
 }

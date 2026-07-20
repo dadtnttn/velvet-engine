@@ -1,0 +1,60 @@
+// Classic Velvet Script — novel surface showcase (product IR path).
+// Diagnostics, labels/jump/if/choice, presentation, host tools.
+
+character nora {
+    name: "Nora"
+    color: "#c45"
+}
+
+state {
+    trust: int = 0
+    path: int = 0
+}
+
+scene main {
+    background "bg/station.png"
+    transition fade
+    show nora.happy at left
+    sound "sfx/train.ogg"
+    nora "Rain on the glass.\nAnother train."
+    nora "{cps=28}{b}Stay{/b} with me?"
+    label fork:
+    if trust > 0 {
+        jump good
+    } else {
+        jump choose
+    }
+}
+
+scene choose {
+    "What do you do?"
+    choice {
+        "Help her" {
+            trust += 1
+            path = 1
+            call ui.flag name "say_visible" on true
+            jump good
+        }
+        "Walk away" {
+            path = 2
+            jump bad
+        }
+        "Stay silent" {
+            path = 3
+            jump bad
+        }
+    }
+}
+
+scene good {
+    label win:
+    hide nora
+    "You stay. Ending good."
+    end good_end
+}
+
+scene bad {
+    hide nora
+    "The doors close. Ending bad."
+    end bad_end
+}
