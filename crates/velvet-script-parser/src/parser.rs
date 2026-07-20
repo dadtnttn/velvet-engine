@@ -2,7 +2,8 @@
 
 use thiserror::Error;
 use velvet_script_ast::{
-    BinOp, ChoiceArm, Diagnostic, Expr, Item, Module, Param, SourceLoc, StateBinding, Stmt, UnaryOp,
+    BinOp, ChoiceArm, Diagnostic, Expr, Item, Module, Param, ScreenButton, ScreenProperty,
+    SourceLoc, StateBinding, Stmt, UnaryOp,
 };
 use velvet_script_lexer::{lex, LexedToken, LexerError, Span, Token};
 
@@ -175,6 +176,7 @@ impl Parser {
                 | "character"
                 | "state"
                 | "scene"
+                | "screen"
                 | "let"
                 | "const"
                 | "if"
@@ -190,6 +192,9 @@ impl Parser {
                 | "music"
                 | "end"
                 | "call"
+                | "transition"
+                | "sound"
+                | "pause"
                 | "break"
                 | "continue"
         )
@@ -202,7 +207,7 @@ impl Parser {
             if let Some(Token::Ident(s)) = self.peek_token() {
                 if matches!(
                     s.as_str(),
-                    "function" | "fn" | "character" | "state" | "scene"
+                    "function" | "fn" | "character" | "state" | "scene" | "screen"
                 ) {
                     return;
                 }
@@ -259,6 +264,9 @@ impl Parser {
         }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "scene")) {
             return self.parse_scene();
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "screen")) {
+            return self.parse_screen();
         }
         Ok(Item::Stmt(self.parse_stmt()?))
     }
@@ -356,6 +364,65 @@ impl Parser {
         })
     }
 
+    fn parse_screen(&mut self) -> Result<Item, String> {
+        let start = self.peek_loc();
+        self.advance(); // screen
+        let (name, _) = self.expect_ident()?;
+        self.expect(
+            |t| matches!(t, Token::LBrace),
+            "expected '{' after screen name",
+        )?;
+
+        let mut properties = Vec::new();
+        let mut buttons = Vec::new();
+        while !self.is_at_end() && !self.check(|t| matches!(t, Token::RBrace)) {
+            if self.check(|t| matches!(t, Token::Ident(s) if s == "button")) {
+                buttons.push(self.parse_screen_button()?);
+            } else {
+                properties.push(self.parse_screen_property()?);
+            }
+            let _ = self.match_token(|t| matches!(t, Token::Comma | Token::Semi));
+        }
+        self.expect(|t| matches!(t, Token::RBrace), "expected '}' after screen")?;
+        Ok(Item::Screen {
+            name,
+            properties,
+            buttons,
+            loc: start,
+        })
+    }
+
+    fn parse_screen_button(&mut self) -> Result<ScreenButton, String> {
+        let start = self.peek_loc();
+        self.advance(); // button
+        let (id, _) = self.expect_ident()?;
+        self.expect(
+            |t| matches!(t, Token::LBrace),
+            "expected '{' after button id",
+        )?;
+        let mut properties = Vec::new();
+        while !self.is_at_end() && !self.check(|t| matches!(t, Token::RBrace)) {
+            properties.push(self.parse_screen_property()?);
+            let _ = self.match_token(|t| matches!(t, Token::Comma | Token::Semi));
+        }
+        self.expect(|t| matches!(t, Token::RBrace), "expected '}' after button")?;
+        Ok(ScreenButton {
+            id,
+            properties,
+            loc: start,
+        })
+    }
+
+    fn parse_screen_property(&mut self) -> Result<ScreenProperty, String> {
+        let (name, loc) = self.expect_ident()?;
+        self.expect(
+            |t| matches!(t, Token::Colon),
+            "expected ':' after screen property",
+        )?;
+        let value = self.parse_expression()?;
+        Ok(ScreenProperty { name, value, loc })
+    }
+
     fn parse_block_stmts(&mut self) -> Result<Vec<Stmt>, String> {
         self.expect(|t| matches!(t, Token::LBrace), "expected '{'")?;
         let mut body = Vec::new();
@@ -415,10 +482,16 @@ impl Parser {
             return Ok(Stmt::Jump { label, loc });
         }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "call")) {
-            let loc = self.peek_loc();
-            self.advance();
-            let (target, _) = self.expect_ident()?;
-            return Ok(Stmt::Call { target, loc });
+            return self.parse_call_stmt();
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "transition")) {
+            return self.parse_transition();
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "sound")) {
+            return self.parse_sound();
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "pause")) {
+            return self.parse_pause();
         }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "end")) {
             let loc = self.peek_loc();
@@ -746,6 +819,102 @@ impl Parser {
             };
         }
         Ok(Stmt::Music { path, fade_in, loc })
+    }
+
+    /// Dotted name: `combat.start` or plain `side_scene`.
+    fn parse_dotted_name(&mut self) -> Result<String, String> {
+        let (mut name, _) = self.expect_ident()?;
+        while self.match_token(|t| matches!(t, Token::Dot)) {
+            let (part, _) = self.expect_ident()?;
+            name.push('.');
+            name.push_str(&part);
+        }
+        Ok(name)
+    }
+
+    /// `call scene` or host `call combat.start key "val"`.
+    ///
+    /// Host commands **must** use a dotted name (`pkg.cmd`) so plain
+    /// `call sub` never steals the next dialogue line as an arg.
+    fn parse_call_stmt(&mut self) -> Result<Stmt, String> {
+        let loc = self.peek_loc();
+        self.advance(); // call
+        let name = self.parse_dotted_name()?;
+        if !name.contains('.') {
+            return Ok(Stmt::Call { target: name, loc });
+        }
+        let mut args: Vec<(String, Expr)> = Vec::new();
+        // Optional named literal args: `key <expr>` until statement boundary.
+        while self.check(|t| matches!(t, Token::Ident(s) if !Self::is_statement_start_ident(s))) {
+            let save = self.pos;
+            let (key, _) = self.expect_ident()?;
+            // Speaker dialogue is `ident string` — but host args are also `ident string`.
+            // After a dotted host name we accept key/value; stop if value is missing.
+            if self.check(|t| {
+                matches!(
+                    t,
+                    Token::String(_)
+                        | Token::Int(_)
+                        | Token::Float(_)
+                        | Token::True
+                        | Token::False
+                )
+            }) {
+                let val = self.parse_primary()?;
+                args.push((key, val));
+            } else if self.check(|t| matches!(t, Token::Ident(s) if !Self::is_statement_start_ident(s)))
+            {
+                // bare ident value (rare)
+                let val = self.parse_primary()?;
+                args.push((key, val));
+            } else {
+                self.pos = save;
+                break;
+            }
+        }
+        Ok(Stmt::HostCall { name, args, loc })
+    }
+
+    fn parse_transition(&mut self) -> Result<Stmt, String> {
+        let loc = self.peek_loc();
+        self.advance();
+        let name = if self.check(|t| matches!(t, Token::String(_))) {
+            let t = self.advance().unwrap().clone();
+            match t.token {
+                Token::String(s) => s,
+                _ => unreachable!(),
+            }
+        } else {
+            self.parse_dotted_name()?
+        };
+        Ok(Stmt::Transition { name, loc })
+    }
+
+    fn parse_sound(&mut self) -> Result<Stmt, String> {
+        let loc = self.peek_loc();
+        self.advance();
+        let t = self.expect(|t| matches!(t, Token::String(_)), "expected string path")?;
+        let path = match t.token {
+            Token::String(s) => s,
+            _ => unreachable!(),
+        };
+        Ok(Stmt::Sound { path, loc })
+    }
+
+    fn parse_pause(&mut self) -> Result<Stmt, String> {
+        let loc = self.peek_loc();
+        self.advance();
+        let seconds = if self.check(|t| matches!(t, Token::Int(_) | Token::Float(_))) {
+            let n = self.parse_primary()?;
+            match n {
+                Expr::Float { value, .. } => Some(value),
+                Expr::Int { value, .. } => Some(value as f64),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        Ok(Stmt::Pause { seconds, loc })
     }
 
     // ---- expressions (Pratt-ish via precedence climbing) ----
@@ -1973,5 +2142,61 @@ function f(n) {
 }
 "#;
         let _ = parse_ok(src);
+    }
+
+    #[test]
+    fn parse_declarative_screen_with_buttons() {
+        let src = r#"
+screen main_menu {
+    class: "title-menu"
+    title: "VELVET ARCANA"
+
+    button start {
+        label: "START RUN"
+        description: "Begin a new high-stakes run"
+        action: "start_run"
+        icon: "play"
+        enabled: true
+    }
+
+    button quit {
+        label: "QUIT"
+        action: "quit"
+    }
+}
+"#;
+        let r = parse_ok(src);
+        match &r.module.items[0] {
+            Item::Screen {
+                name,
+                properties,
+                buttons,
+                ..
+            } => {
+                assert_eq!(name, "main_menu");
+                assert_eq!(properties.len(), 2);
+                assert_eq!(buttons.len(), 2);
+                assert_eq!(buttons[0].id, "start");
+                assert!(buttons[0]
+                    .properties
+                    .iter()
+                    .any(|p| p.name == "description"));
+                assert_eq!(buttons[1].id, "quit");
+            }
+            other => panic!("expected screen, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_screen_keeps_following_scene() {
+        let src = r#"
+screen pause {
+    button resume { label: "RESUME"; action: "resume"; }
+}
+scene start { "ready" }
+"#;
+        let r = parse_ok(src);
+        assert!(matches!(r.module.items[0], Item::Screen { .. }));
+        assert!(matches!(r.module.items[1], Item::Scene { .. }));
     }
 }

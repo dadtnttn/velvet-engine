@@ -359,6 +359,36 @@ pub enum Stmt {
         /// Location.
         loc: SourceLoc,
     },
+    /// Host command: `call combat.start enemy "goblin"` (dotted name → host).
+    HostCall {
+        /// Command name e.g. `combat.start` or `ui.flag`.
+        name: String,
+        /// Named literal args (`key` then value expression).
+        args: Vec<(String, Expr)>,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `transition fade` / `transition dissolve`.
+    Transition {
+        /// Transition id.
+        name: String,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `sound "path"`.
+    Sound {
+        /// Asset path.
+        path: String,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `pause` or `pause 0.5`.
+    Pause {
+        /// Optional seconds.
+        seconds: Option<f64>,
+        /// Location.
+        loc: SourceLoc,
+    },
     /// `for name in expr { body }` (desugared by compiler / lowered carefully).
     For {
         /// Loop variable.
@@ -403,6 +433,10 @@ impl Stmt {
             | Self::Hide { loc, .. }
             | Self::End { loc, .. }
             | Self::Call { loc, .. }
+            | Self::HostCall { loc, .. }
+            | Self::Transition { loc, .. }
+            | Self::Sound { loc, .. }
+            | Self::Pause { loc, .. }
             | Self::For { loc, .. }
             | Self::Break { loc, .. }
             | Self::Continue { loc, .. } => loc,
@@ -418,6 +452,28 @@ pub struct ChoiceArm {
     /// Body statements.
     pub body: Vec<Stmt>,
     /// Location.
+    pub loc: SourceLoc,
+}
+
+/// Named value inside a declarative VS2 screen or widget.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScreenProperty {
+    /// Property name, for example `title`, `class`, or `description`.
+    pub name: String,
+    /// Property expression. Screen compilation currently accepts literal values.
+    pub value: Expr,
+    /// Source location of the property name.
+    pub loc: SourceLoc,
+}
+
+/// Declarative button inside a VS2 [`Item::Screen`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScreenButton {
+    /// Stable widget id used by actions and VCSS `#id` selectors.
+    pub id: String,
+    /// Button properties such as `label`, `action`, `icon`, and `class`.
+    pub properties: Vec<ScreenProperty>,
+    /// Source location of the `button` declaration.
     pub loc: SourceLoc,
 }
 
@@ -457,6 +513,17 @@ pub enum Item {
         name: String,
         /// Body.
         body: Vec<Stmt>,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// Declarative UI screen.
+    Screen {
+        /// Stable screen name.
+        name: String,
+        /// Screen-level properties such as `class`, `title`, and `subtitle`.
+        properties: Vec<ScreenProperty>,
+        /// Interactive buttons in author order.
+        buttons: Vec<ScreenButton>,
         /// Location.
         loc: SourceLoc,
     },

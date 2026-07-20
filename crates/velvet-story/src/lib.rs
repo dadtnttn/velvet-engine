@@ -7,6 +7,8 @@
 #![deny(missing_docs)]
 
 mod auto_mode;
+#[cfg(test)]
+mod classic_vel_tests;
 mod character;
 mod gallery;
 mod glossary;
@@ -31,6 +33,7 @@ mod transitions;
 mod value;
 mod variables;
 mod voice;
+mod vs3_bridge;
 mod web_story;
 
 pub mod prelude;
@@ -48,7 +51,7 @@ pub use ir::{
     StoryArithOp, StoryChoice, StoryCmpOp, StoryCond, StoryExpr, StoryOp, StoryOperand,
     StoryProgram, StoryScene,
 };
-pub use load::{load_program_from_source, LoadError};
+pub use load::{load_program_from_source, lower_module, LoadError, StoryDiagnostic};
 pub use localization_hook::{
     catalog_to_po_template, choice_key, dialogue_key, extract_loc_keys, extract_scene_loc_keys,
     load_tl_table, program_for_language, slugify_text, speakers_in_program, write_tl_scaffold,
@@ -57,8 +60,9 @@ pub use localization_hook::{
 pub use plugin::StoryPlugin;
 pub use prefs::{SkipMode, StoryPreferences, TextSpeed};
 pub use product::{
-    open_session_from_file, say_plain_and_cps, BgmController, BgmIntent, ChoiceScreen,
-    ConfirmDialog, ConfirmKind, LayeredSprite, PresentationState, SayScreen, VnSession,
+    join_dialogue_lines, open_session_from_file, say_plain_and_cps, BgmController, BgmIntent,
+    ChoiceScreen, ConfirmDialog, ConfirmKind, LayeredSprite, PresentationState, SayScreen,
+    VnSession,
 };
 // VnSession::show_dialogue_line is the product path entry that applies say_plain_and_cps.
 pub use live2d::{Live2dModel, Live2dStage};
@@ -87,4 +91,5 @@ pub use transitions::{Transition, TransitionKind, TransitionQueue, WipeDirection
 pub use value::StoryValue;
 pub use variables::{AssignOp, StoryVariables};
 pub use voice::{VoiceClip, VoiceError, VoicePlayState, VoiceQueue};
+pub use vs3_bridge::{call_vs3_logic, Vs3BridgeError, VS3_HOST_CMD};
 pub use web_story::program_to_web_json;

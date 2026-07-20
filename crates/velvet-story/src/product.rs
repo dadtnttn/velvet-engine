@@ -1035,10 +1035,14 @@ impl VnSession {
     }
 }
 
-/// Strip/parse simple rich-text tags for say display (`{color=#fff}…{/color}`, `{cps=20}`).
-/// Uses shipped `velvet_text` helpers when the feature path is wired via plain tag strip fallback.
+/// Strip/parse simple rich-text tags for say display.
+///
+/// Proven light subset on the product path:
+/// - `{cps=N}` → optional typewriter rate
+/// - `{color=…}` / `{/color}`, `{b}`/`{/b}`, `{i}`/`{/i}`, `{size=…}` → stripped
+/// - `{w}` / `{w=0.5}` wait/pause markers → stripped (host may use pauses separately)
+/// - real newlines (`\n`) preserved for multiline dialogue bodies
 pub fn say_plain_and_cps(markup: &str) -> (String, Option<f32>) {
-    // Prefer real rich-text parse if markup has braces.
     if markup.contains('{') {
         if let Ok(rich) = try_parse_rich(markup) {
             return rich;
@@ -1047,28 +1051,48 @@ pub fn say_plain_and_cps(markup: &str) -> (String, Option<f32>) {
     (markup.to_string(), None)
 }
 
+/// Join multiple dialogue body lines into one product string (explicit multiline).
+pub fn join_dialogue_lines(lines: &[&str]) -> String {
+    lines
+        .iter()
+        .map(|s| s.trim_end())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn try_parse_rich(markup: &str) -> Result<(String, Option<f32>), ()> {
-    // Lightweight local parse: strip tags, detect {cps=N}
     let mut plain = String::new();
     let mut cps = None;
     let mut i = 0;
-    let b = markup.as_bytes();
-    while i < b.len() {
-        if b[i] == b'{' {
-            if let Some(end) = markup[i..].find('}') {
-                let tag = &markup[i + 1..i + end];
-                if let Some(rest) = tag.strip_prefix("cps=") {
+    let chars: Vec<char> = markup.chars().collect();
+    while i < chars.len() {
+        if chars[i] == '{' {
+            if let Some(rel) = chars[i..].iter().position(|&c| c == '}') {
+                let tag: String = chars[i + 1..i + rel].iter().collect();
+                let t = tag.trim();
+                if let Some(rest) = t.strip_prefix("cps=") {
                     if let Ok(v) = rest.parse::<f32>() {
                         cps = Some(v);
                     }
                 }
-                // color/pause/size tags ignored in plain extract
-                i += end + 1;
+                // Strip presentation-only tags; keep content outside braces.
+                // Known tags: color, /color, b, /b, i, /i, size=…, w, w=…
+                let _known = t == "b"
+                    || t == "/b"
+                    || t == "i"
+                    || t == "/i"
+                    || t == "/color"
+                    || t.starts_with("color")
+                    || t.starts_with("size=")
+                    || t == "w"
+                    || t.starts_with("w=");
+                i += rel + 1;
                 continue;
             }
         }
-        plain.push(markup[i..].chars().next().unwrap());
-        i += markup[i..].chars().next().unwrap().len_utf8();
+        plain.push(chars[i]);
+        i += 1;
     }
     Ok((plain, cps))
 }

@@ -26,6 +26,25 @@ Source (.vel)
 
 Story modules can also be **lowered** into `StoryProgram` IR (`velvet-story`) without executing arbitrary bytecode for dialogue lines.
 
+**Classic product path (novels):** `.vel` → parser → `load_program_from_source` → `StoryProgram` / `VnSession`.  
+**VS3 (logic only):** `// @edition 3` — see `VELVET_SCRIPT_3.md`. Do not use VS3 as the novel guion.
+
+### Classic novel surface (proven product IR)
+
+| Feature | Syntax | Notes |
+|---------|--------|--------|
+| Diagnostics | load/parse errors | `file:line:col` via `LoadError` / `StoryDiagnostic` |
+| Labels / jump | `label fork:` · `jump good` | Scene or `scene:label` |
+| Call scene | `call sub` | Return stack; plain name only |
+| Host tools | `call combat.start enemy "x"` | **Dotted** name → host (no draw API) |
+| Story `if` | `if trust > 0 { } else { }` | Vars, `!` `&&` `\|\|`, comparisons |
+| Multi-arm choice | `choice { "A" {…} "B" {…} }` | Inline body + jump |
+| Show / hide / bg | `show nora.happy at left` | Expression via `id.expr` |
+| Transition / sound / pause | `transition fade` · `sound "…"` · `pause 0.5` | Presentation **state** |
+| Markup | `{cps=N}` `{b}` `{i}` `{color=…}` `{w}` | Stripped on say path; `\n` multiline |
+| Loc keys | extract/apply | `extract_loc_keys` / `apply_to_program` |
+| VS3 from host | `call_vs3_logic` / host `vs3.run` | Pure logic return → story vars |
+
 ## Top-level items
 
 | Construct | Purpose |
