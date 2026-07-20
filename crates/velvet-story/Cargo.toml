@@ -13,6 +13,7 @@ velvet-time = { workspace = true }
 velvet-math = { workspace = true }
 velvet-script-ast = { workspace = true }
 velvet-script-parser = { workspace = true }
+velvet-script-vs3 = { workspace = true }
 velvet-text = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
