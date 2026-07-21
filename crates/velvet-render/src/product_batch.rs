@@ -71,9 +71,9 @@ pub fn count_positive_quads(quads: &[ProductGpuQuad]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gpu::GpuContext;
     use crate::batch::SpriteBatch;
     use crate::camera::Camera2D;
+    use crate::gpu::GpuContext;
     use velvet_math::Vec2;
 
     #[test]
@@ -131,8 +131,7 @@ mod tests {
         assert!(batch.len() >= 2);
         eprintln!(
             "phase1_gpu_env: ok adapter={} sprites_in_batch={}",
-            gpu.adapter_info,
-            n
+            gpu.adapter_info, n
         );
     }
 }

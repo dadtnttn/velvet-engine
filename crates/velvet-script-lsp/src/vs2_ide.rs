@@ -252,14 +252,7 @@ pub fn local_completions(
 pub fn classify_word(word: &str) -> &'static str {
     if VS2_KEYWORDS.contains(&word) {
         "keyword"
-    } else if VS2_TYPES.contains(&word) {
-        "type"
-    } else if word
-        .chars()
-        .next()
-        .map(|c| c.is_uppercase())
-        .unwrap_or(false)
-    {
+    } else if VS2_TYPES.contains(&word) || word.chars().next().is_some_and(char::is_uppercase) {
         "type"
     } else {
         "variable"

@@ -393,7 +393,7 @@ pub fn snippet_connect_and_open(from: &str, to: &str) -> String {
     format!("connect {from} -> {to}\nlayer.open(\"{to}\")\n")
 }
 
-fn strip_call<'a>(line: &'a str, name: &str) -> Option<String> {
+fn strip_call(line: &str, name: &str) -> Option<String> {
     let line = line.trim();
     let prefix = format!("{name}(");
     if let Some(rest) = line.strip_prefix(&prefix) {
@@ -410,9 +410,9 @@ fn parse_string_arg(inner: &str) -> Option<String> {
         return None;
     }
     // first string or bare ident
-    if t.starts_with('"') {
-        let end = t[1..].find('"')?;
-        return Some(t[1..1 + end].to_string());
+    if let Some(stripped) = t.strip_prefix('"') {
+        let end = stripped.find('"')?;
+        return Some(stripped[..end].to_string());
     }
     let ident = t.split(',').next()?.trim();
     if !ident.is_empty() {

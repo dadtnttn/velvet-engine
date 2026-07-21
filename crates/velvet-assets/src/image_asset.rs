@@ -9,7 +9,9 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::loader::{AssetLoader, LoadError};
-use crate::path::{AssetPath, VirtualPath};
+use crate::path::AssetPath;
+#[cfg(test)]
+use crate::path::VirtualPath;
 
 /// Decoded raster image (RGBA8).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -433,10 +435,7 @@ mod tests {
         }
         let mut buf = Vec::new();
         image::DynamicImage::ImageRgba8(img)
-            .write_to(
-                &mut std::io::Cursor::new(&mut buf),
-                image::ImageFormat::Png,
-            )
+            .write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
             .expect("encode png");
         buf
     }

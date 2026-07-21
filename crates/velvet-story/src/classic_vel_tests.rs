@@ -29,7 +29,6 @@ fn pump_to_end(player: &mut StoryPlayer, max: usize) {
             StoryWait::Host { token } => {
                 let _ = player.resume_host(&token);
             }
-            other => panic!("unexpected wait {other:?}"),
         }
     }
 }
@@ -103,10 +102,7 @@ scene main {
 
 #[test]
 fn phase4_multiline_and_markup_and_loc() {
-    let multi = join_dialogue_lines(&[
-        "First line of thought.",
-        "Second line still hers.",
-    ]);
+    let multi = join_dialogue_lines(&["First line of thought.", "Second line still hers."]);
     assert!(multi.contains('\n'));
     assert_eq!(multi.lines().count(), 2);
 

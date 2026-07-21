@@ -1,6 +1,6 @@
 //! Optional **recipes** built from action tools — not the product API.
 //!
-//! Prefer composing [`crate::hotline`] tools (aim, loadout, hitscan, fragility)
+//! Prefer composing the `hotline` tools (aim, loadout, hitscan, fragility)
 //! yourself. These helpers only show one way to glue a room loop.
 
 use serde::{Deserialize, Serialize};

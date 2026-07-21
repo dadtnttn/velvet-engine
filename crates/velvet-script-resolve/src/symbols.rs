@@ -135,6 +135,11 @@ impl SymbolTable {
     }
 }
 
+/// Construct a symbol (replaces numbered make_sym_N clones).
+pub fn make_sym(name: &str, module: &str, kind: SymbolKind) -> Symbol {
+    Symbol::new(SymbolId(0), name, kind, module)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,9 +150,4 @@ mod tests {
         assert_eq!(t.lookup_qual("m", "foo"), Some(id));
         assert_eq!(t.count_kind(SymbolKind::Fn), 1);
     }
-}
-
-/// Construct a symbol (replaces numbered make_sym_N clones).
-pub fn make_sym(name: &str, module: &str, kind: SymbolKind) -> Symbol {
-    Symbol::new(SymbolId(0), name, kind, module)
 }

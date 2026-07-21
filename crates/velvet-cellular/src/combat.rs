@@ -156,12 +156,11 @@ pub fn melee_splash(
         .map(|e| e.id)
         .collect();
     for id in ids {
-        if enemies.damage(id, damage, world, physics) || true {
-            hits += 1;
-            let blood = world.mat("blood");
-            if !blood.is_air() {
-                particles.burst_blood(x, y, blood, 6);
-            }
+        enemies.damage(id, damage, world, physics);
+        hits += 1;
+        let blood = world.mat("blood");
+        if !blood.is_air() {
+            particles.burst_blood(x, y, blood, 6);
         }
     }
     hits

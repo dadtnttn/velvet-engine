@@ -5,7 +5,7 @@ use velvet_math::Vec2;
 
 use crate::camera::PlayCamera;
 
-/// Trauma-based camera shake (as popularized by juice talks: trauma ∈ [0,1]).
+/// Trauma-based camera shake (as popularized by juice talks: trauma ∈ `0..=1`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CameraShake {
     /// Current trauma 0..=1.

@@ -7,9 +7,9 @@
 #![deny(missing_docs)]
 
 mod auto_mode;
+mod character;
 #[cfg(test)]
 mod classic_vel_tests;
-mod character;
 mod gallery;
 mod glossary;
 mod history;

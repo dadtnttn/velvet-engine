@@ -71,13 +71,8 @@ impl Parser {
     /// Skip newlines and comments (use only when comments must not enter the AST).
     #[allow(dead_code)] // reserved for top-level contexts that must drop comments
     fn skip_nl_comments(&mut self) {
-        loop {
-            match self.peek_kind() {
-                TokenKind::Newline | TokenKind::Comment(_) => {
-                    self.bump();
-                }
-                _ => break,
-            }
+        while matches!(self.peek_kind(), TokenKind::Newline | TokenKind::Comment(_)) {
+            self.bump();
         }
     }
 
@@ -810,22 +805,12 @@ impl Parser {
     }
 
     fn expect_newline_or_eof(&mut self) {
-        loop {
-            match self.peek_kind() {
-                TokenKind::Newline => {
-                    self.bump();
-                }
-                TokenKind::Comment(_) => {
-                    self.bump();
-                }
-                TokenKind::Eof | TokenKind::Dedent | TokenKind::Indent(_) => break,
-                TokenKind::Ident(_) | TokenKind::String(_) if false => break,
-                _ => break,
-            }
-            // only consume one newline typically
-            break;
+        // A comment encountered before the newline is trailing the current
+        // statement. After consuming the newline, stop: a following comment
+        // belongs to the next statement/body and must remain in the AST.
+        if matches!(self.peek_kind(), TokenKind::Comment(_)) {
+            self.bump();
         }
-        // actually consume one newline if present
         if matches!(self.peek_kind(), TokenKind::Newline) {
             self.bump();
         }

@@ -243,11 +243,6 @@ pub fn parse_value(raw: &str) -> StyleValue {
             if s.ends_with("px") || !s.contains(char::is_alphabetic) {
                 return if s.ends_with("px") {
                     StyleValue::Length(v)
-                } else if s.contains('.')
-                    || s.chars()
-                        .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
-                {
-                    StyleValue::Number(v)
                 } else {
                     StyleValue::Number(v)
                 };

@@ -418,7 +418,6 @@ impl ParticleWorld {
             end: ParticleEnd::HeatOnly,
             gravity_scale: 0.3,
             temp: 900.0,
-            ..Default::default()
         })
     }
 
@@ -438,7 +437,6 @@ impl ParticleWorld {
             end: ParticleEnd::ClearCell,
             gravity_scale: 0.2,
             temp: 20.0,
-            ..Default::default()
         })
     }
 

@@ -200,8 +200,8 @@ fn shape_engine(text: &str, style: &TextStyle) -> ShapeResult {
 fn cluster_advance(cluster: &str, style: &TextStyle) -> f32 {
     let size = style.size;
     let mut adv = 0.0f32;
-    let mut chars = cluster.chars().peekable();
-    while let Some(ch) = chars.next() {
+    let chars = cluster.chars().peekable();
+    for ch in chars {
         let u = ch as u32;
         // Virama itself does not add width when combining into a conjunct
         if u == 0x094D {

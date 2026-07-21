@@ -124,6 +124,11 @@ impl ProjectileWorld {
         self.items.iter().filter(|p| p.alive).count()
     }
 
+    /// Return whether no live projectiles remain.
+    pub fn is_empty(&self) -> bool {
+        self.items.iter().all(|projectile| !projectile.alive)
+    }
+
     /// Step projectiles.
     pub fn step(
         &mut self,
@@ -321,8 +326,8 @@ mod tests {
         // stone should be heated or chipped or fire present
         let hot = world.get(5, 0).temp > 20.0
             || world.get(6, 0).temp > 20.0
-            || particles.len() > 0
-            || pw.len() == 0;
+            || !particles.is_empty()
+            || pw.is_empty();
         assert!(hot);
     }
 }

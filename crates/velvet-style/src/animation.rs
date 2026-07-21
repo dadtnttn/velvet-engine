@@ -87,7 +87,7 @@ pub fn animation_spec_from_computed(style: &ComputedStyle) -> Option<AnimationSp
     let name = style
         .props
         .get("animation")
-        .and_then(|v| parse_animation_shorthand(v))
+        .and_then(parse_animation_shorthand)
         .map(|(n, _, _, _)| n)
         .or_else(|| {
             style
@@ -229,7 +229,7 @@ pub fn plan_from_spec(sheet: &Stylesheet, spec: &AnimationSpec) -> Option<Timeli
                 keys.push((t, v));
             }
         }
-        if keys.len() >= 1 {
+        if !keys.is_empty() {
             // ensure sorted
             keys.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
             channels.push(ChannelPlan {

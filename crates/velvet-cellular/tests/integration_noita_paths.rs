@@ -28,7 +28,10 @@ fn particle_to_grid_to_fluid_to_dig() {
     // add water and run fluid pass
     s.world.paint_rect(-4, 2, 4, 6, s.mat("water"));
     let stats = fluid_pass(&mut s.world, 40);
-    assert!(stats.blob_count >= 1 || stats.falling_liquid >= 0);
+    assert!(
+        stats.blob_count >= 1,
+        "painted water should produce a tracked liquid blob: {stats:?}"
+    );
 
     // dig into terrain
     dig_at(&mut s.world, &mut s.particles, 0, 3, 3);
@@ -102,9 +105,11 @@ fn growth_reaction_chain_light() {
     let mut s = CellularSession::with_builtins(WorldConfig::default());
     s.world.paint_rect(-3, 0, 3, 1, s.mat("bedrock"));
     plant_seed(&mut s.world, 0, 1);
-    let mut gcfg = GrowthConfig::default();
-    gcfg.seed_sprout = 1.0;
-    gcfg.vine_up = 1.0;
+    let gcfg = GrowthConfig {
+        seed_sprout: 1.0,
+        vine_up: 1.0,
+        ..GrowthConfig::default()
+    };
     for _ in 0..15 {
         growth_pass(&mut s.world, -3, 0, 3, 20, &gcfg);
     }

@@ -354,7 +354,7 @@ pub fn cmd_recheck_replay(
     }
 }
 
-/// Attempt a **real** [`WindowRunner`] with a short max_frames budget and wall timeout.
+/// Attempt a **real** `WindowRunner` with a short max-frames budget and wall timeout.
 ///
 /// Returns Ok with a success message only if the window event loop ran and exited 0.
 /// On missing display / hang / event-loop failure returns Err (caller must not claim window success).

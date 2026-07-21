@@ -49,9 +49,7 @@ pub fn astar(
     goal: (i32, i32),
     max_expand: usize,
 ) -> Option<Vec<(i32, i32)>> {
-    if enter_cost(world, goal.0, goal.1).is_none() {
-        return None;
-    }
+    enter_cost(world, goal.0, goal.1)?;
     let mut open = BinaryHeap::new();
     let mut g_score: HashMap<(i32, i32), i32> = HashMap::new();
     let mut came: HashMap<(i32, i32), (i32, i32)> = HashMap::new();

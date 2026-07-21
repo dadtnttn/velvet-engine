@@ -139,7 +139,12 @@ fn map_parse_err(e: ParseError, file: Option<&str>) -> LoadError {
                 sl = sl.with_file(f);
             } else if let Some((f, rest)) = loc.split_once(':') {
                 // loc may be "file.vel:3:5"
-                if rest.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+                if rest
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_digit())
+                    .unwrap_or(false)
+                {
                     sl = SourceLoc::at(line, column, Default::default()).with_file(f);
                 }
             }
@@ -159,7 +164,7 @@ fn map_parse_err(e: ParseError, file: Option<&str>) -> LoadError {
 
 fn parse_line_col(s: &str) -> (u32, u32) {
     // Find first `digits:digits` pattern
-    let parts: Vec<&str> = s.split(|c: char| c == ':' || c == ' ').collect();
+    let parts: Vec<&str> = s.split([':', ' ']).collect();
     let mut nums = Vec::new();
     for p in parts {
         if let Ok(n) = p.parse::<u32>() {
@@ -291,9 +296,7 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
         }
         Stmt::Transition { name, .. } => vec![StoryOp::Transition { name: name.clone() }],
         Stmt::Sound { path, .. } => vec![StoryOp::Sound { path: path.clone() }],
-        Stmt::Pause { seconds, .. } => vec![StoryOp::Pause {
-            seconds: *seconds,
-        }],
+        Stmt::Pause { seconds, .. } => vec![StoryOp::Pause { seconds: *seconds }],
         Stmt::Dialogue { speaker, text, .. } => vec![StoryOp::Dialogue {
             speaker: speaker.clone(),
             text: text.clone(),
@@ -316,8 +319,7 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
         }
         Stmt::Expr { expr, .. } => lower_expr_stmt(expr)?,
         Stmt::Let { name, init, .. } | Stmt::Const { name, init, .. } => {
-            let value =
-                StoryExpr::value(from_ast_expr(init).unwrap_or(StoryValue::Null));
+            let value = StoryExpr::value(from_ast_expr(init).unwrap_or(StoryValue::Null));
             vec![StoryOp::Assign {
                 name: name.clone(),
                 assign_op: AssignOp::Set,
@@ -332,9 +334,8 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
             loc,
             ..
         } => {
-            let cond = lower_cond(cond).map_err(|m| {
-                LoadError::Diagnostics(vec![StoryDiagnostic::new(m, loc.clone())])
-            })?;
+            let cond = lower_cond(cond)
+                .map_err(|m| LoadError::Diagnostics(vec![StoryDiagnostic::new(m, loc.clone())]))?;
             let then_ops = lower_stmt(then_body)?;
             let else_ops = match else_body {
                 Some(e) => lower_stmt(e)?,
@@ -435,8 +436,7 @@ fn lower_expr_stmt(expr: &Expr) -> Result<Vec<StoryOp>, LoadError> {
                 BinOp::SubAssign => AssignOp::Sub,
                 _ => return Ok(vec![StoryOp::Nop]),
             };
-            let value =
-                StoryExpr::value(from_ast_expr(right).unwrap_or(StoryValue::Null));
+            let value = StoryExpr::value(from_ast_expr(right).unwrap_or(StoryValue::Null));
             Ok(vec![StoryOp::Assign {
                 name,
                 assign_op,
@@ -586,7 +586,11 @@ scene bad {
             match player.wait().clone() {
                 StoryWait::Line | StoryWait::Ready => player.advance(),
                 StoryWait::Choice => {
-                    assert!(player.choices().len() >= 3, "multi-arm {:?}", player.choices());
+                    assert!(
+                        player.choices().len() >= 3,
+                        "multi-arm {:?}",
+                        player.choices()
+                    );
                     player.choose(0).unwrap(); // Help her
                 }
                 StoryWait::Ended => break,
@@ -631,12 +635,20 @@ scene main {
 "#;
         let program = load_program_from_source(src, Some("pres.vel"), "P").unwrap();
         let ops = &program.scenes["main"].ops;
-        assert!(ops.iter().any(|o| matches!(o, StoryOp::Background { path } if path.contains("rain"))));
-        assert!(ops.iter().any(|o| matches!(o, StoryOp::Transition { name } if name == "fade")));
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::Background { path } if path.contains("rain"))));
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::Transition { name } if name == "fade")));
         assert!(ops.iter().any(|o| matches!(o, StoryOp::Show { target, at } if target == "hero.angry" && at.as_deref() == Some("right"))));
         assert!(ops.iter().any(|o| matches!(o, StoryOp::Sound { .. })));
-        assert!(ops.iter().any(|o| matches!(o, StoryOp::Pause { seconds: Some(0.1) })));
-        assert!(ops.iter().any(|o| matches!(o, StoryOp::Hide { target } if target == "hero")));
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::Pause { seconds: Some(0.1) })));
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::Hide { target } if target == "hero")));
     }
 
     #[test]

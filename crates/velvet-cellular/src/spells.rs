@@ -556,7 +556,6 @@ pub fn cast_recipe(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 0.8,
                 temp: 20.0,
-                ..Default::default()
             });
             true
         }
@@ -602,7 +601,6 @@ pub fn cast_recipe(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 1.5,
                 temp: 1200.0,
-                ..Default::default()
             });
             true
         }
@@ -678,7 +676,6 @@ pub fn cast_recipe(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 0.5,
                 temp: 20.0,
-                ..Default::default()
             });
             true
         }
@@ -698,7 +695,6 @@ pub fn cast_recipe(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 0.6,
                 temp: 15.0,
-                ..Default::default()
             });
             true
         }
@@ -718,7 +714,6 @@ pub fn cast_recipe(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 1.0,
                 temp: 1000.0,
-                ..Default::default()
             });
             true
         }
@@ -747,6 +742,6 @@ mod tests {
         assert_eq!(book.len(), BUILTIN_SPELL_COUNT);
         assert!(book.cast("spark_bolt", &mut world, &mut particles, 0.0, 10.0));
         assert!(book.cast("water_ball", &mut world, &mut particles, 2.0, 8.0));
-        assert!(particles.len() > 0 || world.occupied_cells() > 0);
+        assert!(!particles.is_empty() || world.occupied_cells() > 0);
     }
 }
