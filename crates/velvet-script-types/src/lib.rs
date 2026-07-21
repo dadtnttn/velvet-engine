@@ -228,7 +228,10 @@ fn check_expr(expr: &HirExpr, env: &TypeEnv, expected: &HirTy) -> Vec<TypeError>
             }
         }
         HirExpr::Translate { .. } => {
-            if matches!(expected, HirTy::MsgId | HirTy::Infer | HirTy::Prim(PrimTy::Str)) {
+            if matches!(
+                expected,
+                HirTy::MsgId | HirTy::Infer | HirTy::Prim(PrimTy::Str)
+            ) {
                 Vec::new()
             } else {
                 vec![TypeError::Mismatch {
@@ -322,7 +325,6 @@ mod tests {
         let m = HirModule::new(2);
         assert_eq!(typeck_module(&m).len(), 0);
     }
-
 }
 
 /// VS1 compat tables.

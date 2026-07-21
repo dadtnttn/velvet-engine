@@ -51,12 +51,24 @@ pub enum StyleValue {
     Length(f32),
     /// Number (opacity, scale, …).
     Number(f32),
+    /// Time in seconds (`s` and `ms` inputs normalize to this variant).
+    Time(f32),
     /// Keyword / string token.
     Keyword(String),
     /// String (quoted).
     String(String),
     /// Custom property reference: `var(--name)`.
     Var(String),
+    /// Custom property reference with a fallback: `var(--name, fallback)`.
+    ///
+    /// The existing [`StyleValue::Var`] variant remains the representation for
+    /// references without a fallback.
+    VarFallback {
+        /// Canonical custom property name, including the `--` prefix.
+        name: String,
+        /// Value used when the custom property is missing or cyclic.
+        fallback: Box<StyleValue>,
+    },
     /// Asset / resource URL: `url("path")` or `svg(name)`.
     Url(String),
     /// Named inline SVG from `@svg name { … }`.
@@ -76,7 +88,7 @@ impl StyleValue {
     /// As f32 (length or number).
     pub fn as_f32(&self) -> Option<f32> {
         match self {
-            Self::Length(v) | Self::Number(v) => Some(*v),
+            Self::Length(v) | Self::Number(v) | Self::Time(v) => Some(*v),
             _ => None,
         }
     }
@@ -85,7 +97,7 @@ impl StyleValue {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::Keyword(s) | Self::String(s) => Some(s),
-            Self::Var(s) => Some(s.as_str()),
+            Self::Var(s) | Self::VarFallback { name: s, .. } => Some(s.as_str()),
             _ => None,
         }
     }
@@ -93,7 +105,7 @@ impl StyleValue {
     /// Custom property name if this is a `var(--…)`.
     pub fn as_var(&self) -> Option<&str> {
         match self {
-            Self::Var(s) => Some(s.as_str()),
+            Self::Var(s) | Self::VarFallback { name: s, .. } => Some(s.as_str()),
             _ => None,
         }
     }
@@ -172,13 +184,14 @@ fn parse_named_color(name: &str) -> Option<Color> {
 /// Parse a single property value token string.
 pub fn parse_value(raw: &str) -> StyleValue {
     let s = raw.trim().trim_end_matches(';').trim();
-    // var(--token) or var(--token, fallback) — fallback parsed if present
+    // var(--token) or var(--token, fallback)
     if let Some(inner) = s
         .strip_prefix("var(")
         .and_then(|t| t.strip_suffix(')'))
         .map(|t| t.trim())
     {
-        let name = inner.split(',').next().unwrap_or(inner).trim();
+        let (name, fallback) = split_top_level_comma(inner);
+        let name = name.trim();
         let name = name.trim_matches(|c| c == '"' || c == '\'');
         if !name.is_empty() {
             let canonical = if name.starts_with("--") {
@@ -186,6 +199,12 @@ pub fn parse_value(raw: &str) -> StyleValue {
             } else {
                 format!("--{name}")
             };
+            if let Some(fallback) = fallback.filter(|value| !value.trim().is_empty()) {
+                return StyleValue::VarFallback {
+                    name: canonical,
+                    fallback: Box::new(parse_value(fallback)),
+                };
+            }
             return StyleValue::Var(canonical);
         }
     }
@@ -214,6 +233,11 @@ pub fn parse_value(raw: &str) -> StyleValue {
     if let Some(c) = parse_color(s) {
         return StyleValue::Color(c);
     }
+    if has_time_suffix(s) {
+        if let Some(seconds) = parse_time_seconds_token(s) {
+            return StyleValue::Time(seconds);
+        }
+    }
     if let Some(num) = s.strip_suffix("px").or(Some(s)) {
         if let Ok(v) = num.trim().parse::<f32>() {
             if s.ends_with("px") || !s.contains(char::is_alphabetic) {
@@ -234,6 +258,56 @@ pub fn parse_value(raw: &str) -> StyleValue {
         return StyleValue::String(s[1..s.len() - 1].to_string());
     }
     StyleValue::Keyword(s.to_string())
+}
+
+fn has_time_suffix(raw: &str) -> bool {
+    raw.strip_suffix("ms").is_some() || raw.strip_suffix('s').is_some()
+}
+
+/// Parse a time token into seconds.
+///
+/// Unitless tokens retain the historical shorthand behavior and are interpreted
+/// as seconds. Full declaration values only become [`StyleValue::Time`] when a
+/// `s` or `ms` suffix is present.
+pub(crate) fn parse_time_seconds_token(raw: &str) -> Option<f32> {
+    let raw = raw.trim();
+    if let Some(ms) = raw.strip_suffix("ms") {
+        return ms.trim().parse::<f32>().ok().map(|value| value / 1000.0);
+    }
+    if let Some(seconds) = raw.strip_suffix('s') {
+        return seconds.trim().parse::<f32>().ok();
+    }
+    raw.parse::<f32>().ok()
+}
+
+fn split_top_level_comma(input: &str) -> (&str, Option<&str>) {
+    let mut quote = None;
+    let mut escaped = false;
+    let mut depth = 0u32;
+    for (index, ch) in input.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if let Some(end_quote) = quote {
+            if ch == '\\' {
+                escaped = true;
+            } else if ch == end_quote {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '"' | '\'' => quote = Some(ch),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                return (&input[..index], Some(&input[index + ch.len_utf8()..]));
+            }
+            _ => {}
+        }
+    }
+    (input, None)
 }
 
 /// Known game-UI property names (documentation / tooling).
@@ -312,3 +386,30 @@ pub const KNOWN_PROPERTIES: &[&str] = &[
     "foil",
     "depth",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_seconds_and_milliseconds() {
+        assert_eq!(parse_value("0.25s"), StyleValue::Time(0.25));
+        assert_eq!(parse_value("180ms"), StyleValue::Time(0.18));
+        assert_eq!(parse_value("12"), StyleValue::Number(12.0));
+    }
+
+    #[test]
+    fn parses_var_fallback_without_changing_plain_var() {
+        assert_eq!(parse_value("var(--gold)"), StyleValue::Var("--gold".into()));
+        assert_eq!(
+            parse_value("var(--gold, var(--accent, #ffffff))"),
+            StyleValue::VarFallback {
+                name: "--gold".into(),
+                fallback: Box::new(StyleValue::VarFallback {
+                    name: "--accent".into(),
+                    fallback: Box::new(StyleValue::Color(Color::rgb(255, 255, 255))),
+                }),
+            }
+        );
+    }
+}

@@ -110,9 +110,8 @@ impl StoryCommandHost for AnimStoryHost {
             "anim.fx" => {
                 let target = arg_str(args, "target").unwrap_or_else(|| "default".into());
                 let effect = arg_str(args, "effect").unwrap_or_else(|| "fade_in".into());
-                let kind = EffectKind::parse(&effect).ok_or_else(|| {
-                    StoryCommandError::new(format!("unknown effect `{effect}`"))
-                })?;
+                let kind = EffectKind::parse(&effect)
+                    .ok_or_else(|| StoryCommandError::new(format!("unknown effect `{effect}`")))?;
                 let params = EffectParams {
                     to: Vec2::new(
                         arg_f32(args, "x").unwrap_or(0.0),
@@ -218,12 +217,10 @@ impl StoryCommandHost for AnimStoryHost {
                 // append one channel keyframe track to a named timeline
                 // target, channel, t0, v0, t1, v1, ease?
                 let id = arg_str(args, "target").unwrap_or_else(|| "card0".into());
-                let ch_name = arg_str(args, "channel").ok_or_else(|| {
-                    StoryCommandError::new("anim.track requires channel")
-                })?;
-                let channel = Pose3DChannel::parse(&ch_name).ok_or_else(|| {
-                    StoryCommandError::new(format!("bad channel `{ch_name}`"))
-                })?;
+                let ch_name = arg_str(args, "channel")
+                    .ok_or_else(|| StoryCommandError::new("anim.track requires channel"))?;
+                let channel = Pose3DChannel::parse(&ch_name)
+                    .ok_or_else(|| StoryCommandError::new(format!("bad channel `{ch_name}`")))?;
                 let ease = parse_ease(&arg_str(args, "ease").unwrap_or_else(|| "cubic_out".into()));
                 // keys as t0 v0 t1 v1 in args keys "k0","k1"... or body "0 0 0.4 3.14"
                 let body = arg_str(args, "keys").unwrap_or_default();

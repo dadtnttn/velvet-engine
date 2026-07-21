@@ -123,10 +123,7 @@ impl UiDesigner {
 
     /// Resize widget: size string e.g. `(18%, 8%)`.
     pub fn set_size(&mut self, region_id: &str, size: &str) -> Result<(), DocumentError> {
-        self.apply_props(
-            region_id,
-            vec![("size", PropertyValue::Raw(size.into()))],
-        )
+        self.apply_props(region_id, vec![("size", PropertyValue::Raw(size.into()))])
     }
 
     /// Drag a visual widget by delta (same units as stored position).
@@ -363,9 +360,16 @@ impl UiDesigner {
         self.push_undo();
         let mut doc = parse_document(&self.source)?;
         if doc.find(RegionKind::Visual, id).is_some()
-            || doc.find(RegionKind::Visual, &format!("{}.{}", kind.to_ascii_lowercase(), id)).is_some()
+            || doc
+                .find(
+                    RegionKind::Visual,
+                    &format!("{}.{}", kind.to_ascii_lowercase(), id),
+                )
+                .is_some()
         {
-            return Err(DocumentError::InvalidPatch(format!("region already exists: {id}")));
+            return Err(DocumentError::InvalidPatch(format!(
+                "region already exists: {id}"
+            )));
         }
         let kind_l = kind.to_ascii_lowercase();
         let kind_norm = match kind_l.as_str() {
@@ -567,8 +571,14 @@ button quit {
         // Drag original; advanced body must remain
         d.drag("button.start", 1.0, 0.0).unwrap();
         let src = d.save_source();
-        assert!(src.contains("game.new()"), "advanced survived drop+drag: {src}");
-        assert!(src.contains("button.extra") || src.contains("id=button.extra"), "{src}");
+        assert!(
+            src.contains("game.new()"),
+            "advanced survived drop+drag: {src}"
+        );
+        assert!(
+            src.contains("button.extra") || src.contains("id=button.extra"),
+            "{src}"
+        );
     }
 
     #[test]

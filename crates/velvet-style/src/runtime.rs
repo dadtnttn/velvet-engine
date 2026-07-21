@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use crate::animation::{ChannelPlan, TimelinePlan};
 use crate::resolve::ComputedStyle;
 use crate::script::StyleAction;
-use crate::value::StyleValue;
+use crate::value::{parse_time_seconds_token, StyleValue};
 
 /// Per-target numeric style channels (opacity, x, y, scale, …).
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -85,8 +85,7 @@ pub fn plan_transition(
     {
         // shorthand: [property] duration [ease]
         for part in v.split_whitespace() {
-            let p = part.strip_suffix('s').unwrap_or(part);
-            if let Ok(n) = p.parse::<f32>() {
+            if let Some(n) = parse_time_seconds_token(part) {
                 duration = n;
             } else if part.contains("ease")
                 || part.contains("linear")
@@ -226,14 +225,45 @@ mod tests {
         )
         .unwrap();
         let from = resolve(&sheet, &StyleQuery::class("a"));
-        let to = resolve(
-            &sheet,
-            &StyleQuery::class("a").with_state("selected"),
-        );
+        let to = resolve(&sheet, &StyleQuery::class("a").with_state("selected"));
         let plan = plan_transition(&from, &to, Some("btn")).unwrap();
         assert!((plan.duration - 0.25).abs() < 1e-4);
         assert_eq!(plan.channels[0].channel, "opacity");
         assert_eq!(plan.target.as_deref(), Some("btn"));
+    }
+
+    #[test]
+    fn transition_time_supports_milliseconds() {
+        let sheet = parse_stylesheet(
+            r#"
+            .a {
+              opacity: 0;
+              transition-property: opacity;
+              transition-duration: 180ms;
+            }
+            .a:selected { opacity: 1; }
+            "#,
+        )
+        .unwrap();
+        let from = resolve(&sheet, &StyleQuery::class("a"));
+        let to = resolve(&sheet, &StyleQuery::class("a").with_state("selected"));
+        let plan = plan_transition(&from, &to, None).unwrap();
+        assert!((plan.duration - 0.18).abs() < 1e-4);
+    }
+
+    #[test]
+    fn transition_shorthand_supports_milliseconds() {
+        let sheet = parse_stylesheet(
+            r#"
+            .a { opacity: 0; transition: opacity 180ms cubic_out; }
+            .a:selected { opacity: 1; }
+            "#,
+        )
+        .unwrap();
+        let from = resolve(&sheet, &StyleQuery::class("a"));
+        let to = resolve(&sheet, &StyleQuery::class("a").with_state("selected"));
+        let plan = plan_transition(&from, &to, None).unwrap();
+        assert!((plan.duration - 0.18).abs() < 1e-4);
     }
 
     #[test]

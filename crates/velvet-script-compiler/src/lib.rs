@@ -8,6 +8,6 @@ mod compiler;
 
 pub use compiler::{compile, compile_source, CompileError, CompileResult};
 
+pub mod vs2_codegen;
 /// VS2 HIR helpers.
 pub mod vs2_lower;
-pub mod vs2_codegen;

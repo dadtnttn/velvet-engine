@@ -40,10 +40,7 @@ pub fn rule_fire(ctx: &mut RuleCtx<'_>) -> bool {
                 c.life -= 1;
             }
             if c.life == 0 {
-                let to = def
-                    .reaction
-                    .burn_residue
-                    .unwrap_or(MaterialId::AIR);
+                let to = def.reaction.burn_residue.unwrap_or(MaterialId::AIR);
                 let prev = c.material;
                 c = Cell::of(to);
                 ctx.set_here(c);
@@ -62,7 +59,8 @@ pub fn rule_fire(ctx: &mut RuleCtx<'_>) -> bool {
             if let Some(prod) = def.reaction.burn_product {
                 let above = ctx.get(ctx.x, ctx.y + 1);
                 if above.is_air() && ctx.chance(0.15) {
-                    ctx.world.set(ctx.x, ctx.y + 1, Cell::of(prod).with_life(30));
+                    ctx.world
+                        .set(ctx.x, ctx.y + 1, Cell::of(prod).with_life(30));
                 }
             }
             return false;
@@ -77,10 +75,7 @@ pub fn rule_fire(ctx: &mut RuleCtx<'_>) -> bool {
         }
         c.temp += def.reaction.burn_heat;
         if c.life == 0 {
-            let to = def
-                .reaction
-                .burn_residue
-                .unwrap_or(MaterialId::AIR);
+            let to = def.reaction.burn_residue.unwrap_or(MaterialId::AIR);
             let prev = c.material;
             ctx.set_here(Cell::of(to));
             ctx.world.events.push(SimEvent::MaterialChanged {
@@ -139,7 +134,8 @@ fn try_ignite(ctx: &mut RuleCtx<'_>, x: i32, y: i32) {
     if def.phase != Phase::Plasma {
         if let Ok(fire_id) = ctx.world.materials.id("fire") {
             let life = def.reaction.burn_life;
-            ctx.world.set(x, y, Cell::of(fire_id).with_life(life).with_temp(800.0));
+            ctx.world
+                .set(x, y, Cell::of(fire_id).with_life(life).with_temp(800.0));
             // mark burning on fire
             let mut f = ctx.world.get(x, y);
             f.flags.insert(CellFlags::BURNING);

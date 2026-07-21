@@ -3,19 +3,22 @@
  */
 
 :root {
-  --void: #0a0614;
-  --panel: #0a0c16;
-  --text: #dcd2eb;
-  --gold: #ebc878;
-  --gold-soft: #d2af64;
-  --gold-hot: #ffdc96;
-  --neon: #aa64ff;
-  --selected-bg: #501e78;
-  --selected-glow: #dc50dc;
-  --btn-height: 46;
+  --void: #050208;
+  --panel: #08060ef2;
+  --panel-raised: #12091be8;
+  --text: #e9d7cf;
+  --text-muted: #b58a7b;
+  --gold: #c68b59;
+  --gold-soft: #a6653a;
+  --gold-hot: #e2975b;
+  --neon: #ae49f6;
+  --selected-bg: #25083ff2;
+  --selected-glow: #ea31a9;
+  --danger: #d87585;
+  --btn-height: 56;
   --btn-gap: 8;
   --btn-pad-x: 14;
-  --icon-size: 28;
+  --icon-size: 31;
 }
 
 .theme {
@@ -25,41 +28,73 @@
   neon: var(--neon);
 }
 
-.button {
+.title-menu {
+  menu-x: 52;
+  menu-y: 244;
+  menu-width: 374;
+  menu-height: var(--btn-height);
+  menu-gap: var(--btn-gap);
+}
+
+/* Descendant selectors keep title-menu styling isolated from in-game buttons. */
+.title-menu .menu-item {
   background: var(--panel);
-  border-color: #b9964b;
+  border-color: var(--gold-soft);
   border-width: 1;
   border-radius: 6;
-  color: var(--gold-soft);
+  color: var(--gold);
+  description-color: var(--text-muted);
+  hotkey-color: #c9b896;
+  badge-color: var(--gold);
   height: var(--btn-height);
   gap: var(--btn-gap);
   padding-x: var(--btn-pad-x);
   icon-size: var(--icon-size);
   glow: transparent;
   glow-strength: 0;
-  transition: glow-strength 0.18s cubic_out;
+  shadow-color: #02030a;
+  shadow-opacity: 0.68;
+  shadow-offset-x: 3;
+  shadow-offset-y: 4;
+  transition-property: glow-strength opacity;
+  transition-duration: 180ms;
+  transition-timing-function: cubic_out;
 }
 
-.button:hover {
-  border-color: var(--gold);
-  glow-strength: 0.35;
-  glow: var(--neon);
+.title-menu .menu-item:hover {
+  border-color: var(--gold-hot);
+  background: #160b20f2;
+  glow-strength: 0.25;
+  glow: var(--selected-glow);
 }
 
-.button:selected {
+.title-menu .menu-item:focus,
+.title-menu .menu-item:selected {
   background: var(--selected-bg);
   border-color: var(--gold-hot);
-  color: #ffe496;
+  color: #e9b477;
+  description-color: #eee5f4;
   glow: var(--selected-glow);
-  glow-strength: 0.95;
-  border-width: 2;
-  border-radius: 8;
+  glow-strength: 0.88;
+  border-width: 1;
+  border-radius: 6;
 }
 
-.button:disabled {
+.title-menu .menu-item:active {
+  background: #6a2f76;
+  glow-strength: 1;
+  scale: 0.985;
+}
+
+.title-menu .menu-item:disabled {
   opacity: 0.45;
-  color: #666666;
+  color: #77717f;
+  description-color: #65606d;
   glow-strength: 0;
+}
+
+.title-menu .menu-item.primary {
+  border-color: var(--gold);
 }
 
 #start {
@@ -87,18 +122,24 @@
 
 /* Title wordmark is painted with a real serif font (fontdue), not SVG/image. */
 .logo-title {
-  color: #e8c078;
+  color: #d99a65;
 }
 
 .logo-sub {
-  color: #c9b896;
+  color: #b9784f;
 }
 
 .daily {
-  background: #140c24;
-  border-color: #aa64ff;
-  color: #c8b4e6;
-  gold: #c8a078;
+  background: #08060ef2;
+  border-color: #6f4938;
+  color: #e9d7cf;
+  gold: var(--gold);
+  progress-track: #241021;
+  progress-fill: #ea31a9;
+  x: 52;
+  y: 576;
+  width: 374;
+  height: 68;
 }
 
 /* ── CSS motion (keyframes) ── */

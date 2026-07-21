@@ -31,7 +31,14 @@ impl Default for GrowthConfig {
 }
 
 /// One growth pass over a region.
-pub fn growth_pass(world: &mut World, x0: i32, y0: i32, x1: i32, y1: i32, cfg: &GrowthConfig) -> usize {
+pub fn growth_pass(
+    world: &mut World,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    cfg: &GrowthConfig,
+) -> usize {
     let mut ops = 0usize;
     let vine = world.mat("vine");
     let moss = world.mat("moss");
@@ -49,7 +56,10 @@ pub fn growth_pass(world: &mut World, x0: i32, y0: i32, x1: i32, y1: i32, cfg: &
                 continue;
             }
             let key = world.materials.get(c.material).key.as_str();
-            if matches!(key, "vine" | "moss" | "grass" | "seed" | "mushroom" | "spore") {
+            if matches!(
+                key,
+                "vine" | "moss" | "grass" | "seed" | "mushroom" | "spore"
+            ) {
                 candidates.push((x, y, key.to_string()));
             }
         }
@@ -62,7 +72,15 @@ pub fn growth_pass(world: &mut World, x0: i32, y0: i32, x1: i32, y1: i32, cfg: &
         match key.as_str() {
             "vine" | "grass" => {
                 if !vine.is_air() && world.get(x, y + 1).is_air() && world.chance(cfg.vine_up) {
-                    world.set(x, y + 1, Cell::of(if key == "grass" && !grass.is_air() { grass } else { vine }));
+                    world.set(
+                        x,
+                        y + 1,
+                        Cell::of(if key == "grass" && !grass.is_air() {
+                            grass
+                        } else {
+                            vine
+                        }),
+                    );
                     ops += 1;
                 }
             }
@@ -73,14 +91,16 @@ pub fn growth_pass(world: &mut World, x0: i32, y0: i32, x1: i32, y1: i32, cfg: &
                 for (dx, dy) in [(-1, 0), (1, 0), (0, 1)] {
                     if world.chance(cfg.moss_spread) && world.get(x + dx, y + dy).is_air() {
                         // moss prefers solid neighbor
-                        let solid_near = [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|&(ox, oy)| {
-                            let m = world.get(x + dx + ox, y + dy + oy).material;
-                            !m.is_air()
-                                && matches!(
-                                    world.materials.phase(m),
-                                    crate::material::Phase::Solid | crate::material::Phase::Static
-                                )
-                        });
+                        let solid_near =
+                            [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|&(ox, oy)| {
+                                let m = world.get(x + dx + ox, y + dy + oy).material;
+                                !m.is_air()
+                                    && matches!(
+                                        world.materials.phase(m),
+                                        crate::material::Phase::Solid
+                                            | crate::material::Phase::Static
+                                    )
+                            });
                         if solid_near {
                             world.set(x + dx, y + dy, Cell::of(moss));
                             ops += 1;
@@ -103,9 +123,9 @@ pub fn growth_pass(world: &mut World, x0: i32, y0: i32, x1: i32, y1: i32, cfg: &
                                 | crate::material::Phase::Powder
                         )
                 };
-                let wet = [(-1, 0), (1, 0), (0, -1), (0, 1), (0, 1)].iter().any(|&(dx, dy)| {
-                    world.get(x + dx, y + dy).material == water
-                });
+                let wet = [(-1, 0), (1, 0), (0, -1), (0, 1), (0, 1)]
+                    .iter()
+                    .any(|&(dx, dy)| world.get(x + dx, y + dy).material == water);
                 if on_solid && wet && world.chance(cfg.seed_sprout) {
                     let grow = if !vine.is_air() {
                         vine

@@ -136,14 +136,7 @@ impl RoomRun {
         point: Vec2,
         player_id: usize,
     ) -> FragilityHit {
-        let hit = apply_fragile_damage(
-            health,
-            &self.fragility,
-            player_id,
-            source,
-            amount,
-            point,
-        );
+        let hit = apply_fragile_damage(health, &self.fragility, player_id, source, amount, point);
         if hit.death.is_some() {
             self.phase = RoomPhase::Dead;
             self.score.add_death();

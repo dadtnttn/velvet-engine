@@ -111,12 +111,7 @@ impl Vs2Instr {
         }
     }
     pub fn with_ab(op: OpVs2, a: u32, b: u32) -> Self {
-        Self {
-            op,
-            a,
-            b,
-            line: 0,
-        }
+        Self { op, a, b, line: 0 }
     }
     pub fn at_line(mut self, line: u32) -> Self {
         self.line = line;
@@ -207,10 +202,9 @@ impl Vs2Unit {
 
     pub fn has_errors(&self) -> bool {
         !self.diags.is_empty()
-            || self
-                .diagnostics
-                .iter()
-                .any(|s| s.contains("unresolved") || s.contains("Unsupported") || s.contains("not yet"))
+            || self.diagnostics.iter().any(|s| {
+                s.contains("unresolved") || s.contains("Unsupported") || s.contains("not yet")
+            })
     }
 
     pub fn map_pc(&mut self, pc: u32, file: &str, span: HirSpan, node_kind: &str) {
@@ -323,12 +317,9 @@ pub fn lower_module(m: &HirModule) -> Vs2Unit {
                 &format!("character `{}`", c.name),
                 "character",
             )),
-            HirItem::State { span, .. } => unit.push_diag(Vs2Diag::unsupported(
-                &file,
-                *span,
-                "state block",
-                "state",
-            )),
+            HirItem::State { span, .. } => {
+                unit.push_diag(Vs2Diag::unsupported(&file, *span, "state block", "state"))
+            }
             HirItem::Screen(s) => unit.push_diag(Vs2Diag::unsupported(
                 &file,
                 s.span,
@@ -354,23 +345,14 @@ pub fn lower_module(m: &HirModule) -> Vs2Unit {
         if let Some(&target) = ctx.labels.get(&lab) {
             unit.patch_a(pc, target);
         } else {
-            unit.push_diag(Vs2Diag::invalid_jump(
-                &file,
-                HirSpan::unknown(),
-                &lab,
-            ));
+            unit.push_diag(Vs2Diag::invalid_jump(&file, HirSpan::unknown(), &lab));
         }
     }
     unit.local_slots = ctx.next_local;
     unit
 }
 
-fn lower_fn(
-    unit: &mut Vs2Unit,
-    ctx: &mut LowerCtx,
-    f: &velvet_script_hir::HirFn,
-    file: &str,
-) {
+fn lower_fn(unit: &mut Vs2Unit, ctx: &mut LowerCtx, f: &velvet_script_hir::HirFn, file: &str) {
     let entry = unit.pc();
     unit.fn_entries.insert(f.name.clone(), entry);
     unit.map_pc(entry, file, f.span, "fn");
@@ -426,9 +408,7 @@ fn lower_stmt(unit: &mut Vs2Unit, ctx: &mut LowerCtx, st: &HirStmt, file: &str) 
             unit.emit(Vs2Instr::new(OpVs2::Ret));
         }
         HirStmt::Say { speaker, msg, .. } => {
-            let sp = unit
-                .pool
-                .intern(speaker.as_deref().unwrap_or("narrator"));
+            let sp = unit.pool.intern(speaker.as_deref().unwrap_or("narrator"));
             lower_expr(unit, ctx, msg, file);
             unit.emit(Vs2Instr::with_a(OpVs2::Say, sp));
         }
@@ -440,9 +420,7 @@ fn lower_stmt(unit: &mut Vs2Unit, ctx: &mut LowerCtx, st: &HirStmt, file: &str) 
             let id = unit.pool.intern(target.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::CallScene, id));
         }
-        HirStmt::Show {
-            character, at, ..
-        } => {
+        HirStmt::Show { character, at, .. } => {
             let id = unit.pool.intern(character.as_str());
             let at_id = at
                 .as_ref()
@@ -551,7 +529,9 @@ fn lower_expr(unit: &mut Vs2Unit, ctx: &mut LowerCtx, e: &HirExpr, file: &str) {
             let lid = unit.pool.intern(id.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::LoadConst, lid));
         }
-        HirExpr::Field { base, field, span, .. } => {
+        HirExpr::Field {
+            base, field, span, ..
+        } => {
             unit.push_diag(Vs2Diag::unsupported(
                 file,
                 *span,
@@ -915,7 +895,6 @@ pub fn emit_make_array(unit: &mut Vs2Unit, a: u32, b: u32) -> u32 {
     unit.emit(Vs2Instr::with_ab(OpVs2::MakeArray, a, b))
 }
 
-
 /// Peephole: remove Nop chains.
 pub fn peephole_remove_nops(unit: &mut Vs2Unit) {
     unit.code.retain(|i| i.op != OpVs2::Nop);
@@ -1008,277 +987,6 @@ pub fn story_density(unit: &Vs2Unit) -> f64 {
     n as f64 / unit.code.len() as f64
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /// Emit load-msg + say (single helper, not N clones).
 pub fn pattern_say(unit: &mut Vs2Unit, speaker: &str, msg: &str) {
     let sp = unit.pool.intern(speaker);
@@ -1298,8 +1006,8 @@ pub fn pattern_layer(unit: &mut Vs2Unit, layer: &str) {
 mod tests {
     use super::*;
     use velvet_script_hir::{
-        HirExpr, HirId, HirItem, HirLit, HirModule, HirScene, HirSpan, HirStmt, HirFn,
-        Visibility, HirTy, PrimTy,
+        HirExpr, HirFn, HirId, HirItem, HirLit, HirModule, HirScene, HirSpan, HirStmt, HirTy,
+        PrimTy, Visibility,
     };
 
     fn empty_mod() -> HirModule {

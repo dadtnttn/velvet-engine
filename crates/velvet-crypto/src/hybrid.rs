@@ -265,10 +265,7 @@ pub fn hybrid_generate() -> Result<HybridKeyPair, CryptoError> {
             classical: classical_pub.to_bytes(),
             pq,
         },
-        secret: HybridSecretKey {
-            classical,
-            pq_dk,
-        },
+        secret: HybridSecretKey { classical, pq_dk },
     })
 }
 

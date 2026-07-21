@@ -118,9 +118,7 @@ enum Commands {
         name: String,
     },
     /// List @visual/@advanced/@protected regions in a document.
-    Regions {
-        file: PathBuf,
-    },
+    Regions { file: PathBuf },
     /// Set a visual property without destroying advanced/protected regions.
     PatchVisual {
         file: PathBuf,
@@ -457,14 +455,8 @@ mod cli_tests {
 
     #[test]
     fn gui_once_false_parses_interactive_window_path() {
-        let args = Args::try_parse_from([
-            "velvet-studio",
-            "gui",
-            ".",
-            "--window",
-            "--once=false",
-        ])
-        .expect("parse --once=false");
+        let args = Args::try_parse_from(["velvet-studio", "gui", ".", "--window", "--once=false"])
+            .expect("parse --once=false");
         match args.command {
             Commands::Gui {
                 window,

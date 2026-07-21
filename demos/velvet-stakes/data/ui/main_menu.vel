@@ -1,0 +1,64 @@
+// @edition 2
+// Velvet Stakes title menu. Structure and copy live in VS2; look lives in casino.vcss.
+screen title_menu {
+    class: "title-menu"
+    eyebrow: ""
+    title: "VELVET ARCANA"
+    subtitle: "NIGHTFALL CASINO"
+    footer: "“FORTUNE FAVORS THE BOLD.”"
+
+    button start {
+        label: "START RUN"
+        description: "Take a fresh seat and challenge the first blind."
+        action: "start"
+        icon: "star"
+        class: "primary"
+        hotkey: "ENTER"
+        badge: ""
+        enabled: true
+    }
+
+    button collection {
+        label: "COLLECTION"
+        description: "Inspect discovered cards, finishes, and table relics."
+        action: "collection"
+        icon: "cards"
+        class: "secondary"
+        hotkey: "C"
+        badge: ""
+        enabled: true
+    }
+
+    button shop {
+        label: "SHOP"
+        description: "Browse packs, charms, and limited-edition foils."
+        action: "shop"
+        icon: "chip"
+        class: "secondary"
+        hotkey: "S"
+        badge: ""
+        enabled: true
+    }
+
+    button options {
+        label: "OPTIONS"
+        description: "Controls, accessibility, audio, and table rules."
+        action: "options"
+        icon: "gear"
+        class: "secondary"
+        hotkey: "O"
+        badge: ""
+        enabled: true
+    }
+
+    button quit {
+        label: "QUIT"
+        description: "Cash out safely and return to the night."
+        action: "quit"
+        icon: "power"
+        class: "danger"
+        hotkey: "ESC"
+        badge: ""
+        enabled: true
+    }
+}

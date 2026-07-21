@@ -22,6 +22,7 @@ velvet-style = { workspace = true }
 velvet-math = { workspace = true }
 velvet-story = { workspace = true }
 velvet-story-lang = { workspace = true }
+velvet-script-layers = { workspace = true }
 velvet-assets = { workspace = true }
 velvet-core = { workspace = true }
 anyhow = { workspace = true }

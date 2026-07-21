@@ -38,7 +38,6 @@ fn txt(
     draw_text_line(buf, ww, wh, x, y, text, color, s);
 }
 
-
 // ── Design tokens (ARGB via pack_rgb) ──────────────────────────────────────
 
 // High-contrast OLED tokens (readable body ≥ ~4.5:1 on surfaces)
@@ -368,10 +367,7 @@ impl StudioLayout {
     pub fn contains_inspector(&self, sx: f64, sy: f64) -> bool {
         let x = sx as i32;
         let y = sy as i32;
-        x >= self.ww - self.right_w
-            && x < self.ww
-            && y >= self.top_h
-            && y < self.wh - self.bot_h
+        x >= self.ww - self.right_w && x < self.ww && y >= self.top_h && y < self.wh - self.bot_h
     }
 
     /// Hit editable inspector field when a widget is selected.
@@ -416,15 +412,13 @@ pub fn is_canvas_widget(w: &DesignerWidget) -> bool {
     if id.starts_with("screen.") || id.starts_with("plugin.") {
         return false;
     }
-    matches!(
-        w.kind.as_str(),
-        "button" | "label" | "panel" | "widget"
-    ) && (id.starts_with("button.")
-        || id.starts_with("label.")
-        || id.starts_with("panel.")
-        || w.kind == "button"
-        || w.kind == "label"
-        || w.kind == "panel")
+    matches!(w.kind.as_str(), "button" | "label" | "panel" | "widget")
+        && (id.starts_with("button.")
+            || id.starts_with("label.")
+            || id.starts_with("panel.")
+            || w.kind == "button"
+            || w.kind == "label"
+            || w.kind == "panel")
 }
 
 fn parse_pct_pair(s: &str) -> (f32, f32) {
@@ -447,7 +441,17 @@ fn parse_pct_pair(s: &str) -> (f32, f32) {
     (a, b)
 }
 
-fn rect_outline(buf: &mut [u32], ww: u32, wh: u32, x0: i32, y0: i32, x1: i32, y1: i32, c: u32, t: i32) {
+fn rect_outline(
+    buf: &mut [u32],
+    ww: u32,
+    wh: u32,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    c: u32,
+    t: i32,
+) {
     fill_rect(buf, ww, wh, x0, y0, x1, y0 + t, c);
     fill_rect(buf, ww, wh, x0, y1 - t, x1, y1, c);
     fill_rect(buf, ww, wh, x0, y0, x0 + t, y1, c);
@@ -571,7 +575,16 @@ pub fn paint_studio(
     // brand mark scales with zoom
     let mark = 8 + 4 * zoom;
     let mark_y = (lay.top_h - mark) / 2;
-    fill_rect(buf, ww, wh, lay.pad, mark_y, lay.pad + mark, mark_y + mark, c_accent());
+    fill_rect(
+        buf,
+        ww,
+        wh,
+        lay.pad,
+        mark_y,
+        lay.pad + mark,
+        mark_y + mark,
+        c_accent(),
+    );
     let title_y = (lay.top_h - 10 * zoom).max(4) / 2;
     txt(
         buf,
@@ -687,7 +700,16 @@ pub fn paint_studio(
     );
 
     // ── Left dock ──────────────────────────────────────────────────────────
-    fill_rect(buf, ww, wh, 0, lay.top_h, lay.left_w, lay.wh - lay.bot_h, c_surface());
+    fill_rect(
+        buf,
+        ww,
+        wh,
+        0,
+        lay.top_h,
+        lay.left_w,
+        lay.wh - lay.bot_h,
+        c_surface(),
+    );
     fill_rect(
         buf,
         ww,
@@ -752,17 +774,7 @@ pub fn paint_studio(
         } else {
             " "
         };
-        txt(
-            buf,
-            ww,
-            wh,
-            indent,
-            ty,
-            mark,
-            c_text_muted(),
-            1,
-            zoom,
-        );
+        txt(buf, ww, wh, indent, ty, mark, c_text_muted(), 1, zoom);
         let lock = if row.locked { "#" } else { " " };
         txt(
             buf,
@@ -847,17 +859,7 @@ pub fn paint_studio(
         let badge = 10 + 4 * zoom;
         let by = hy + (lay.row_h - badge) / 2;
         fill_rect(buf, ww, wh, 12, by, 12 + badge, by + badge, c_surface_2());
-        txt(
-            buf,
-            ww,
-            wh,
-            14,
-            by + 1,
-            kind_mark,
-            c_accent_hi(),
-            1,
-            zoom,
-        );
+        txt(buf, ww, wh, 14, by + 1, kind_mark, c_accent_hi(), 1, zoom);
         let label = w.text.as_deref().unwrap_or(w.id.as_str());
         let line = format!("{}", label);
         txt(
@@ -968,7 +970,16 @@ pub fn paint_studio(
 
     // ── Right dock — inspector ─────────────────────────────────────────────
     let rx0 = lay.ww - lay.right_w;
-    fill_rect(buf, ww, wh, rx0, lay.top_h, lay.ww, lay.wh - lay.bot_h, c_surface());
+    fill_rect(
+        buf,
+        ww,
+        wh,
+        rx0,
+        lay.top_h,
+        lay.ww,
+        lay.wh - lay.bot_h,
+        c_surface(),
+    );
     fill_rect(
         buf,
         ww,
@@ -1080,11 +1091,7 @@ pub fn paint_studio(
                         1,
                     );
                 }
-                let shown = if editing {
-                    format!("{edit_buf}|")
-                } else {
-                    val
-                };
+                let shown = if editing { format!("{edit_buf}|") } else { val };
                 let t_y = box_y + (box_h - 8 * zoom).max(2) / 2;
                 txt(
                     buf,
@@ -1129,7 +1136,10 @@ pub fn paint_studio(
                     wh,
                     rx0 + lay.pad + 6,
                     iy + 2,
-                    &format!("{px}, {py}  ({}x{})", layers.res_w as i32, layers.res_h as i32),
+                    &format!(
+                        "{px}, {py}  ({}x{})",
+                        layers.res_w as i32, layers.res_h as i32
+                    ),
                     pack_rgb(180, 220, 255),
                     1,
                     zoom,
@@ -1176,7 +1186,8 @@ pub fn paint_studio(
                     iy + 6,
                     "Enter apply  Esc cancel",
                     c_text_muted(),
-                    1, zoom,
+                    1,
+                    zoom,
                 );
                 txt(
                     buf,
@@ -1186,7 +1197,8 @@ pub fn paint_studio(
                     iy + 20,
                     "type to edit selected field",
                     c_text_dim(),
-                    1, zoom,
+                    1,
+                    zoom,
                 );
                 iy += 44;
             } else {
@@ -1198,7 +1210,8 @@ pub fn paint_studio(
                     iy,
                     "Click field to edit",
                     c_text_dim(),
-                    1, zoom,
+                    1,
+                    zoom,
                 );
                 iy += 16;
                 txt(
@@ -1209,7 +1222,8 @@ pub fn paint_studio(
                     iy,
                     "T text  P pos  Z size",
                     c_text_dim(),
-                    1, zoom,
+                    1,
+                    zoom,
                 );
                 iy += 16;
                 txt(
@@ -1220,7 +1234,8 @@ pub fn paint_studio(
                     iy,
                     "Arrows nudge 1%",
                     c_text_dim(),
-                    1, zoom,
+                    1,
+                    zoom,
                 );
                 iy += 20;
             }
@@ -1235,17 +1250,57 @@ pub fn paint_studio(
                     iy + 24,
                     pack_rgb(40, 60, 50),
                 );
-                txt(buf, ww, wh, rx0 + 18, iy + 6, "DRAGGING...", c_cta_hi(), 1, zoom);
+                txt(
+                    buf,
+                    ww,
+                    wh,
+                    rx0 + 18,
+                    iy + 6,
+                    "DRAGGING...",
+                    c_cta_hi(),
+                    1,
+                    zoom,
+                );
             }
         } else {
             txt(buf, ww, wh, rx0 + 14, iy, id, c_text_muted(), 1, zoom);
         }
     } else {
-        txt(buf, ww, wh, rx0 + 14, iy, "No selection", c_text_dim(), 1, zoom);
+        txt(
+            buf,
+            ww,
+            wh,
+            rx0 + 14,
+            iy,
+            "No selection",
+            c_text_dim(),
+            1,
+            zoom,
+        );
         iy += 22;
-        txt(buf, ww, wh, rx0 + 14, iy, "Click canvas widget", c_text_dim(), 1, zoom);
+        txt(
+            buf,
+            ww,
+            wh,
+            rx0 + 14,
+            iy,
+            "Click canvas widget",
+            c_text_dim(),
+            1,
+            zoom,
+        );
         iy += 18;
-        txt(buf, ww, wh, rx0 + 14, iy, "or hierarchy row", c_text_dim(), 1, zoom);
+        txt(
+            buf,
+            ww,
+            wh,
+            rx0 + 14,
+            iy,
+            "or hierarchy row",
+            c_text_dim(),
+            1,
+            zoom,
+        );
         iy += 24;
         txt(
             buf,
@@ -1255,12 +1310,22 @@ pub fn paint_studio(
             iy,
             "Then edit TEXT / POS / SIZE",
             c_text_dim(),
-            1, zoom,
+            1,
+            zoom,
         );
     }
 
     // ── Bottom console ─────────────────────────────────────────────────────
-    fill_rect(buf, ww, wh, 0, lay.wh - lay.bot_h, lay.ww, lay.wh, pack_rgb(10, 12, 18));
+    fill_rect(
+        buf,
+        ww,
+        wh,
+        0,
+        lay.wh - lay.bot_h,
+        lay.ww,
+        lay.wh,
+        pack_rgb(10, 12, 18),
+    );
     fill_rect(
         buf,
         ww,
@@ -1522,9 +1587,10 @@ pub fn paint_studio(
             let bw = ((sw / 100.0) * surface.w as f32)
                 .clamp(min_w.min(surface.w as f32 * 0.5), surface.w as f32 * 0.7)
                 as i32;
-            let bh = ((sh / 100.0) * surface.h as f32)
-                .clamp(min_h.min(surface.h as f32 * 0.3), max_h.min(surface.h as f32 * 0.4))
-                as i32;
+            let bh = ((sh / 100.0) * surface.h as f32).clamp(
+                min_h.min(surface.h as f32 * 0.3),
+                max_h.min(surface.h as f32 * 0.4),
+            ) as i32;
             let px = surface.x + ((x / 100.0) * surface.w as f32) as i32 - bw / 2;
             let py = surface.y + ((y / 100.0) * surface.h as f32) as i32 - bh / 2;
             let sel = selected == Some(w.id.as_str());
@@ -1709,11 +1775,7 @@ pub fn paint_studio(
                 lay.canvas_x + 8,
                 y,
                 &format!("{ln:>3}"),
-                if is_cur {
-                    c_cta_hi()
-                } else {
-                    c_text_dim()
-                },
+                if is_cur { c_cta_hi() } else { c_text_dim() },
                 1,
                 zoom,
             );
@@ -1793,7 +1855,16 @@ pub fn paint_studio(
         let cy0 = lay.canvas_y;
         let cw = lay.canvas_w;
         let ch = lay.canvas_h;
-        fill_rect(buf, ww, wh, cx0, cy0, cx0 + cw, cy0 + ch, pack_rgb(12, 14, 22));
+        fill_rect(
+            buf,
+            ww,
+            wh,
+            cx0,
+            cy0,
+            cx0 + cw,
+            cy0 + ch,
+            pack_rgb(12, 14, 22),
+        );
         // subtle dotted grid
         let gstep = 32 + 4 * zoom;
         let mut gx = cx0 + gstep;
@@ -1809,7 +1880,16 @@ pub fn paint_studio(
 
         // Top bar
         let top_bar = 28 + 8 * zoom;
-        fill_rect(buf, ww, wh, cx0, cy0, cx0 + cw, cy0 + top_bar, pack_rgb(20, 24, 36));
+        fill_rect(
+            buf,
+            ww,
+            wh,
+            cx0,
+            cy0,
+            cx0 + cw,
+            cy0 + top_bar,
+            pack_rgb(20, 24, 36),
+        );
         fill_rect(
             buf,
             ww,
@@ -1866,7 +1946,16 @@ pub fn paint_studio(
         // Bottom tools strip
         let bot_h = 34 + 8 * zoom;
         let by0 = cy0 + ch - bot_h;
-        fill_rect(buf, ww, wh, cx0, by0, cx0 + cw, cy0 + ch, pack_rgb(18, 22, 34));
+        fill_rect(
+            buf,
+            ww,
+            wh,
+            cx0,
+            by0,
+            cx0 + cw,
+            cy0 + ch,
+            pack_rgb(18, 22, 34),
+        );
         fill_rect(buf, ww, wh, cx0, by0, cx0 + cw, by0 + 1, c_border_soft());
         let tools = [
             ("1 Select", "select"),
@@ -1898,20 +1987,14 @@ pub fn paint_studio(
                 by0 + 6,
                 tx + tw,
                 by0 + bot_h - 6,
-                if tool == id { c_accent_hi() } else { c_border() },
+                if tool == id {
+                    c_accent_hi()
+                } else {
+                    c_border()
+                },
                 1,
             );
-            txt(
-                buf,
-                ww,
-                wh,
-                tx + 6,
-                by0 + 10,
-                label,
-                c_text(),
-                1,
-                zoom,
-            );
+            txt(buf, ww, wh, tx + 6, by0 + 10, label, c_text(), 1, zoom);
             let _ = active;
             tx += tw + 8;
         }
@@ -2123,11 +2206,7 @@ pub fn paint_studio(
                 1,
                 zoom,
             );
-            let sub = if locked {
-                format!("{res} #")
-            } else {
-                res
-            };
+            let sub = if locked { format!("{res} #") } else { res };
             txt(
                 buf,
                 ww,

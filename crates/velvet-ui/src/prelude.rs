@@ -10,4 +10,5 @@ pub use crate::scroll::ScrollView;
 pub use crate::style::UiStyle;
 pub use crate::theme::Theme;
 pub use crate::tree::{HitResult, UiContext, UiTree};
+pub use crate::vcss::{apply_computed_style, resolve_node_style, style_query_for_node};
 pub use crate::widget::{Button, Label, WidgetKind};

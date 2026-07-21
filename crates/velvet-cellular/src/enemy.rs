@@ -191,13 +191,7 @@ impl EnemyWorld {
     }
 
     /// Spawn from def key at position. Returns enemy id.
-    pub fn spawn(
-        &mut self,
-        key: &str,
-        x: f32,
-        y: f32,
-        physics: &mut PhysicsWorld,
-    ) -> Option<u32> {
+    pub fn spawn(&mut self, key: &str, x: f32, y: f32, physics: &mut PhysicsWorld) -> Option<u32> {
         let def = self.def(key)?.clone();
         let id = self.next_id;
         self.next_id += 1;

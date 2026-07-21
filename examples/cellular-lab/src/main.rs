@@ -18,7 +18,10 @@ fn main() -> anyhow::Result<()> {
     session.brush_up();
 
     let n = session.particle_burst(0.0, 28.0, "sand", 40);
-    println!("particle_burst sand n={n} live={}", session.particle_count());
+    println!(
+        "particle_burst sand n={n} live={}",
+        session.particle_count()
+    );
     session.particle_blood(4.0, 18.0, 24);
     play_preset(
         &session.world,
@@ -66,6 +69,9 @@ fn main() -> anyhow::Result<()> {
     // second pass marker for dual-run verification
     session.particle_burst(1.0, 25.0, "water", 10);
     session.step_n(5);
-    println!("ASSERT_OK cellular_full_pass2 particles={}", session.particle_count());
+    println!(
+        "ASSERT_OK cellular_full_pass2 particles={}",
+        session.particle_count()
+    );
     Ok(())
 }

@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 
 use crate::parse::Stylesheet;
 use crate::resolve::{resolve, ComputedStyle, StyleQuery};
-use crate::value::StyleValue;
+use crate::value::{parse_time_seconds_token, StyleValue};
 
 /// One stop inside `@keyframes`.
 #[derive(Debug, Clone, PartialEq)]
@@ -103,7 +103,11 @@ pub fn animation_spec_from_computed(style: &ComputedStyle) -> Option<AnimationSp
         name,
         ..Default::default()
     };
-    if let Some(v) = style.props.get("animation-duration").and_then(|v| v.as_f32()) {
+    if let Some(v) = style
+        .props
+        .get("animation-duration")
+        .and_then(|v| v.as_f32())
+    {
         spec.duration = v;
     }
     if let Some(v) = style.props.get("animation-delay").and_then(|v| v.as_f32()) {
@@ -117,7 +121,11 @@ pub fn animation_spec_from_computed(style: &ComputedStyle) -> Option<AnimationSp
     {
         spec.easing = v.to_string();
     }
-    if let Some(v) = style.props.get("animation-iteration-count").and_then(|v| v.as_f32()) {
+    if let Some(v) = style
+        .props
+        .get("animation-iteration-count")
+        .and_then(|v| v.as_f32())
+    {
         spec.iterations = v;
     }
     if let Some(v) = style
@@ -127,11 +135,7 @@ pub fn animation_spec_from_computed(style: &ComputedStyle) -> Option<AnimationSp
     {
         spec.fill_mode = v.to_string();
     }
-    if let Some(v) = style
-        .props
-        .get("animation-target")
-        .and_then(|v| v.as_str())
-    {
+    if let Some(v) = style.props.get("animation-target").and_then(|v| v.as_str()) {
         spec.target = Some(v.to_string());
     }
     // shorthand may also set duration/ease
@@ -172,8 +176,7 @@ fn parse_animation_shorthand_str(s: &str) -> Option<(String, f32, String, f32)> 
     let mut delay = 0.0f32;
     let mut nums = 0u32;
     for p in parts.iter().skip(1) {
-        let p = p.strip_suffix('s').unwrap_or(p);
-        if let Ok(n) = p.parse::<f32>() {
+        if let Some(n) = parse_time_seconds_token(p) {
             if nums == 0 {
                 duration = n;
             } else {
@@ -430,6 +433,37 @@ mod tests {
         assert_eq!(plan.channels.len(), 1);
         assert_eq!(plan.channels[0].channel, "opacity");
         assert!((plan.duration - 0.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn animation_time_longhands_support_seconds_and_milliseconds() {
+        let src = r#"
+        @keyframes fade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .intro {
+          animation-name: fade;
+          animation-duration: 180ms;
+          animation-delay: 0.02s;
+        }
+        "#;
+        let sheet = parse_stylesheet(src).unwrap();
+        let plan = plan_animation(&sheet, &StyleQuery::class("intro")).unwrap();
+        assert!((plan.duration - 0.2).abs() < 1e-4);
+        assert!((plan.channels[0].keys[0].0 - 0.02).abs() < 1e-4);
+        assert!((plan.channels[0].keys[1].0 - 0.2).abs() < 1e-4);
+    }
+
+    #[test]
+    fn animation_shorthand_supports_milliseconds() {
+        let src = r#"
+        @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+        .intro { animation: fade 180ms cubic_out 20ms; }
+        "#;
+        let sheet = parse_stylesheet(src).unwrap();
+        let plan = plan_animation(&sheet, &StyleQuery::class("intro")).unwrap();
+        assert!((plan.duration - 0.2).abs() < 1e-4);
     }
 
     #[test]

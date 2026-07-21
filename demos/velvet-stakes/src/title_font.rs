@@ -1,6 +1,6 @@
 //! Title wordmark painted with a real **serif font** (not SVG paths, not bitmap plate).
 //!
-//! Loads Georgia Bold / Times Bold from the OS fonts folder when available;
+//! Loads an elegant Georgia / Constantia / Times serif from OS fonts when available;
 //! falls back to large softbuffer bitmap glyphs so headless CI still paints.
 
 use std::path::PathBuf;
@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 use fontdue::Font;
 use velvet_story::pack_rgb;
 
-use crate::ui::theme::{WW, WH};
+use crate::ui::theme::{WH, WW};
 
 /// Logical title lines.
 pub const TITLE_LINE1: &str = "VELVET";
@@ -19,12 +19,16 @@ pub const TITLE_LINE2: &str = "ARCANA";
 pub const TITLE_SUB: &str = "NIGHTFALL CASINO";
 
 static TITLE_FONT: OnceLock<Option<Font>> = OnceLock::new();
+static UI_FONT: OnceLock<Option<Font>> = OnceLock::new();
 
-/// Load a display serif once (Georgia Bold → Times Bold → Constantia Bold → …).
+/// Load a display serif once (Georgia → Constantia → Times → bold fallbacks).
 pub fn title_font() -> Option<&'static Font> {
-    TITLE_FONT
-        .get_or_init(|| load_display_serif())
-        .as_ref()
+    TITLE_FONT.get_or_init(|| load_display_serif()).as_ref()
+}
+
+/// Load a readable sans-serif UI font once for menu labels and supporting copy.
+pub fn ui_font() -> Option<&'static Font> {
+    UI_FONT.get_or_init(load_ui_sans).as_ref()
 }
 
 fn load_display_serif() -> Option<Font> {
@@ -40,6 +44,19 @@ fn load_display_serif() -> Option<Font> {
     None
 }
 
+fn load_ui_sans() -> Option<Font> {
+    for path in ui_font_candidates() {
+        if let Ok(bytes) = std::fs::read(&path) {
+            if let Ok(font) = Font::from_bytes(bytes, fontdue::FontSettings::default()) {
+                eprintln!("ui font: {}", path.display());
+                return Some(font);
+            }
+        }
+    }
+    eprintln!("ui font: no system sans found - bitmap fallback");
+    None
+}
+
 fn font_candidates() -> Vec<PathBuf> {
     let mut out = Vec::new();
     // Bundled optional font under data/fonts/
@@ -48,7 +65,9 @@ fn font_candidates() -> Vec<PathBuf> {
         "Cinzel-Bold.ttf",
         "PlayfairDisplay-Bold.ttf",
         "Georgia-Bold.ttf",
+        "georgia.ttf",
         "georgiab.ttf",
+        "times.ttf",
         "timesbd.ttf",
     ] {
         out.push(bundled.join(name));
@@ -57,14 +76,14 @@ fn font_candidates() -> Vec<PathBuf> {
     if let Ok(windir) = std::env::var("WINDIR") {
         let fonts = PathBuf::from(windir).join("Fonts");
         for name in [
-            "georgiab.ttf",
             "georgia.ttf",
-            "timesbd.ttf",
-            "times.ttf",
-            "constanb.ttf",
             "constan.ttf",
-            "cambriab.ttf",
             "GARA.TTF",
+            "times.ttf",
+            "georgiab.ttf",
+            "constanb.ttf",
+            "timesbd.ttf",
+            "cambriab.ttf",
             "garabd.ttf",
         ] {
             out.push(fonts.join(name));
@@ -72,19 +91,47 @@ fn font_candidates() -> Vec<PathBuf> {
     }
     // Linux common
     for p in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSerifBold.ttf",
     ] {
         out.push(PathBuf::from(p));
     }
     // macOS
     for p in [
-        "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
-        "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Georgia.ttf",
+        "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
         "/Library/Fonts/Georgia Bold.ttf",
     ] {
         out.push(PathBuf::from(p));
+    }
+    out
+}
+
+fn ui_font_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/fonts");
+    for name in [
+        "Inter-SemiBold.ttf",
+        "SourceSans3-Semibold.ttf",
+        "SegoeUI.ttf",
+    ] {
+        out.push(bundled.join(name));
+    }
+    if let Ok(windir) = std::env::var("WINDIR") {
+        let fonts = PathBuf::from(windir).join("Fonts");
+        for name in ["seguisb.ttf", "segoeui.ttf", "arial.ttf", "calibri.ttf"] {
+            out.push(fonts.join(name));
+        }
+    }
+    for path in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+    ] {
+        out.push(PathBuf::from(path));
     }
     out
 }
@@ -212,8 +259,26 @@ fn paint_serif_title(
 
     // Soft shadow / purple rim for casino depth
     let shadow = (40, 20, 60);
-    draw_font_text(pixels, font, x1 + 3.0, baseline1 + 3.0, TITLE_LINE1, px1, shadow, 0.45);
-    draw_font_text(pixels, font, x2 + 3.0, baseline2 + 3.0, TITLE_LINE2, px2, shadow, 0.45);
+    draw_font_text(
+        pixels,
+        font,
+        x1 + 3.0,
+        baseline1 + 3.0,
+        TITLE_LINE1,
+        px1,
+        shadow,
+        0.45,
+    );
+    draw_font_text(
+        pixels,
+        font,
+        x2 + 3.0,
+        baseline2 + 3.0,
+        TITLE_LINE2,
+        px2,
+        shadow,
+        0.45,
+    );
     // Warm under-glow
     draw_font_text(
         pixels,
@@ -237,15 +302,42 @@ fn paint_serif_title(
     );
     // Main gold face
     draw_font_text(pixels, font, x1, baseline1, TITLE_LINE1, px1, gold, 1.0);
-    draw_font_text(pixels, font, x2, baseline2, TITLE_LINE2, px2, gold_soft, 1.0);
+    draw_font_text(
+        pixels,
+        font,
+        x2,
+        baseline2,
+        TITLE_LINE2,
+        px2,
+        gold_soft,
+        1.0,
+    );
     // Subtle highlight pass (slightly brighter, upper bias via 0 offset)
     let hi = (
         gold.0.saturating_add(25),
         gold.1.saturating_add(20),
         gold.2.saturating_add(10),
     );
-    draw_font_text(pixels, font, x1 - 0.5, baseline1 - 0.5, TITLE_LINE1, px1, hi, 0.22);
-    draw_font_text(pixels, font, x2 - 0.5, baseline2 - 0.5, TITLE_LINE2, px2, hi, 0.22);
+    draw_font_text(
+        pixels,
+        font,
+        x1 - 0.5,
+        baseline1 - 0.5,
+        TITLE_LINE1,
+        px1,
+        hi,
+        0.22,
+    );
+    draw_font_text(
+        pixels,
+        font,
+        x2 - 0.5,
+        baseline2 - 0.5,
+        TITLE_LINE2,
+        px2,
+        hi,
+        0.22,
+    );
 
     let left = (cx as f32 - block_w * 0.5) as i32;
     let h = (baseline2 - top_y as f32 + 12.0) as i32;
@@ -267,10 +359,28 @@ fn paint_bitmap_title(
     let w2 = TITLE_LINE2.chars().count() as i32 * advance;
     let x1 = cx - w1 / 2;
     let x2 = cx - w2 / 2;
-    text(pixels, WW, WH, x1 + 2, top_y + 2, TITLE_LINE1, (40, 20, 60), scale);
+    text(
+        pixels,
+        WW,
+        WH,
+        x1 + 2,
+        top_y + 2,
+        TITLE_LINE1,
+        (40, 20, 60),
+        scale,
+    );
     text(pixels, WW, WH, x1, top_y, TITLE_LINE1, gold, scale);
     let y2 = top_y + 9 * scale + 8;
-    text(pixels, WW, WH, x2 + 2, y2 + 2, TITLE_LINE2, (40, 20, 60), scale);
+    text(
+        pixels,
+        WW,
+        WH,
+        x2 + 2,
+        y2 + 2,
+        TITLE_LINE2,
+        (40, 20, 60),
+        scale,
+    );
     text(pixels, WW, WH, x2, y2, TITLE_LINE2, gold_soft, scale);
     let block_w = w1.max(w2);
     (cx - block_w / 2, top_y, block_w, y2 - top_y + 9 * scale)
@@ -283,8 +393,13 @@ mod tests {
     #[test]
     fn title_font_paints_gold_band() {
         let mut pixels = vec![0u32; (WW * WH) as usize];
-        let (_x, _y, w, h) =
-            paint_title_wordmark(&mut pixels, WW as i32 / 2 + 80, 110, (232, 192, 120), (240, 210, 160));
+        let (_x, _y, w, h) = paint_title_wordmark(
+            &mut pixels,
+            WW as i32 / 2 + 80,
+            110,
+            (232, 192, 120),
+            (240, 210, 160),
+        );
         assert!(w > 80 && h > 40, "wordmark size {w}x{h}");
         let mut gold = 0usize;
         for y in 100..280 {
@@ -298,6 +413,9 @@ mod tests {
                 }
             }
         }
-        assert!(gold > 400, "serif/bitmap title should paint gold pixels, got {gold}");
+        assert!(
+            gold > 400,
+            "serif/bitmap title should paint gold pixels, got {gold}"
+        );
     }
 }

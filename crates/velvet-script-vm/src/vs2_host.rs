@@ -7,16 +7,31 @@ use std::collections::HashMap;
 use velvet_script_bytecode::opcodes_vs2::OpVs2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DialogueLine { pub speaker: String, pub text: String, pub msg_id: Option<String> }
+pub struct DialogueLine {
+    pub speaker: String,
+    pub text: String,
+    pub msg_id: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MenuChoice { pub label: String, pub index: u32 }
+pub struct MenuChoice {
+    pub label: String,
+    pub index: u32,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StageChar { pub name: String, pub at: Option<String>, pub visible: bool }
+pub struct StageChar {
+    pub name: String,
+    pub at: Option<String>,
+    pub visible: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LayerEntry { pub id: String, pub visible: bool, pub z: i32 }
+pub struct LayerEntry {
+    pub id: String,
+    pub visible: bool,
+    pub z: i32,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Vs2Host {
@@ -36,55 +51,106 @@ pub struct Vs2Host {
 }
 
 impl Vs2Host {
-    pub fn new() -> Self { Self { locale: "en".into(), ..Default::default() } }
-    pub fn with_pool(pool: Vec<String>) -> Self { let mut h = Self::new(); h.pool = pool; h }
-    pub fn pool_str(&self, id: u32) -> String { self.pool.get(id as usize).cloned().unwrap_or_default() }
+    pub fn new() -> Self {
+        Self {
+            locale: "en".into(),
+            ..Default::default()
+        }
+    }
+    pub fn with_pool(pool: Vec<String>) -> Self {
+        let mut h = Self::new();
+        h.pool = pool;
+        h
+    }
+    pub fn pool_str(&self, id: u32) -> String {
+        self.pool.get(id as usize).cloned().unwrap_or_default()
+    }
     pub fn set_translation(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.translations.insert(key.into(), value.into());
     }
     pub fn t(&self, key: &str) -> String {
-        self.translations.get(key).cloned().unwrap_or_else(|| format!("[{key}]"))
+        self.translations
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| format!("[{key}]"))
     }
     pub fn push_layer(&mut self, id: impl Into<String>) {
         let id = id.into();
-        self.layers.push(LayerEntry { id: id.clone(), visible: true, z: self.layers.len() as i32 });
+        self.layers.push(LayerEntry {
+            id: id.clone(),
+            visible: true,
+            z: self.layers.len() as i32,
+        });
         self.log.push(format!("push_layer {id}"));
     }
     pub fn pop_layer(&mut self) -> Option<LayerEntry> {
         let e = self.layers.pop();
-        if let Some(ref e) = e { self.log.push(format!("pop_layer {}", e.id)); }
+        if let Some(ref e) = e {
+            self.log.push(format!("pop_layer {}", e.id));
+        }
         e
     }
     pub fn show_layer(&mut self, id: &str) {
-        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) { l.visible = true; }
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            l.visible = true;
+        }
         self.log.push(format!("show_layer {id}"));
     }
     pub fn hide_layer(&mut self, id: &str) {
-        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) { l.visible = false; }
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            l.visible = false;
+        }
         self.log.push(format!("hide_layer {id}"));
     }
     pub fn set_layer_z(&mut self, id: &str, z: i32) {
-        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) { l.z = z; }
+        if let Some(l) = self.layers.iter_mut().find(|l| l.id == id) {
+            l.z = z;
+        }
     }
     pub fn say(&mut self, speaker: &str, text: &str) {
-        self.dialogue.push(DialogueLine { speaker: speaker.into(), text: text.into(), msg_id: None });
+        self.dialogue.push(DialogueLine {
+            speaker: speaker.into(),
+            text: text.into(),
+            msg_id: None,
+        });
         self.log.push(format!("say {speaker}: {text}"));
     }
     pub fn say_msg(&mut self, speaker: &str, msg_id: &str) {
         let text = self.t(msg_id);
-        self.dialogue.push(DialogueLine { speaker: speaker.into(), text, msg_id: Some(msg_id.into()) });
+        self.dialogue.push(DialogueLine {
+            speaker: speaker.into(),
+            text,
+            msg_id: Some(msg_id.into()),
+        });
         self.log.push(format!("say_msg {speaker}: {msg_id}"));
     }
     pub fn show_char(&mut self, name: &str, at: Option<&str>) {
-        self.characters.insert(name.into(), StageChar { name: name.into(), at: at.map(|s| s.into()), visible: true });
+        self.characters.insert(
+            name.into(),
+            StageChar {
+                name: name.into(),
+                at: at.map(|s| s.into()),
+                visible: true,
+            },
+        );
     }
     pub fn hide_char(&mut self, name: &str) {
-        if let Some(c) = self.characters.get_mut(name) { c.visible = false; }
+        if let Some(c) = self.characters.get_mut(name) {
+            c.visible = false;
+        }
     }
-    pub fn set_bg(&mut self, name: &str) { self.background = Some(name.into()); }
-    pub fn set_music(&mut self, name: &str) { self.music = Some(name.into()); }
-    pub fn store_state(&mut self, key: &str, val: &str) { self.state.insert(key.into(), val.into()); }
-    pub fn load_state(&self, key: &str) -> Option<&str> { self.state.get(key).map(|s| s.as_str()) }
+    pub fn set_bg(&mut self, name: &str) {
+        self.background = Some(name.into());
+    }
+    pub fn set_music(&mut self, name: &str) {
+        self.music = Some(name.into());
+    }
+    pub fn store_state(&mut self, key: &str, val: &str) {
+        self.state.insert(key.into(), val.into());
+    }
+    pub fn load_state(&self, key: &str) -> Option<&str> {
+        self.state.get(key).map(|s| s.as_str())
+    }
     pub fn exec_op(&mut self, op: OpVs2, a: u32, b: u32, stack_top: Option<&str>) {
         match op {
             OpVs2::Say => {
@@ -92,8 +158,13 @@ impl Vs2Host {
                 let text = stack_top.unwrap_or("").to_string();
                 self.say(&speaker, &text);
             }
-            OpVs2::LoadMsg | OpVs2::Translate => { let _ = self.t(&self.pool_str(a)); }
-            OpVs2::Menu => { self.pending_menu.clear(); self.log.push(format!("menu choices={a}")); }
+            OpVs2::LoadMsg | OpVs2::Translate => {
+                let _ = self.t(&self.pool_str(a));
+            }
+            OpVs2::Menu => {
+                self.pending_menu.clear();
+                self.log.push(format!("menu choices={a}"));
+            }
             OpVs2::Choice => {
                 let label = self.pool_str(a);
                 self.pending_menu.push(MenuChoice { label, index: b });
@@ -107,7 +178,9 @@ impl Vs2Host {
             OpVs2::Background => self.set_bg(&self.pool_str(a)),
             OpVs2::Music => self.set_music(&self.pool_str(a)),
             OpVs2::PushLayer => self.push_layer(self.pool_str(a)),
-            OpVs2::PopLayer => { let _ = self.pop_layer(); }
+            OpVs2::PopLayer => {
+                let _ = self.pop_layer();
+            }
             OpVs2::ShowLayer => self.show_layer(&self.pool_str(a)),
             OpVs2::HideLayer => self.hide_layer(&self.pool_str(a)),
             OpVs2::SetLayerZ => self.set_layer_z(&self.pool_str(a), b as i32),
@@ -117,14 +190,28 @@ impl Vs2Host {
             _ => {}
         }
     }
-    pub fn visible_layers(&self) -> Vec<&LayerEntry> { self.layers.iter().filter(|l| l.visible).collect() }
-    pub fn visible_chars(&self) -> Vec<&StageChar> { self.characters.values().filter(|c| c.visible).collect() }
-    pub fn last_line(&self) -> Option<&DialogueLine> { self.dialogue.last() }
-    pub fn clear_dialogue(&mut self) { self.dialogue.clear(); }
+    pub fn visible_layers(&self) -> Vec<&LayerEntry> {
+        self.layers.iter().filter(|l| l.visible).collect()
+    }
+    pub fn visible_chars(&self) -> Vec<&StageChar> {
+        self.characters.values().filter(|c| c.visible).collect()
+    }
+    pub fn last_line(&self) -> Option<&DialogueLine> {
+        self.dialogue.last()
+    }
+    pub fn clear_dialogue(&mut self) {
+        self.dialogue.clear();
+    }
     pub fn reset_stage(&mut self) {
-        self.dialogue.clear(); self.pending_menu.clear(); self.characters.clear();
-        self.background = None; self.music = None; self.layers.clear();
-        self.yielded = false; self.await_clicks = 0; self.log.clear();
+        self.dialogue.clear();
+        self.pending_menu.clear();
+        self.characters.clear();
+        self.background = None;
+        self.music = None;
+        self.layers.clear();
+        self.yielded = false;
+        self.await_clicks = 0;
+        self.log.clear();
     }
 }
 
@@ -141,22 +228,41 @@ pub struct Vs2MiniVm {
 }
 
 impl Vs2MiniVm {
-    pub fn new(host: Vs2Host) -> Self { Self { host, ..Default::default() } }
+    pub fn new(host: Vs2Host) -> Self {
+        Self {
+            host,
+            ..Default::default()
+        }
+    }
     pub fn load(&mut self, code: Vec<(OpVs2, u32, u32)>) {
-        self.code = code; self.pc = 0; self.halted = false; self.stack.clear();
+        self.code = code;
+        self.pc = 0;
+        self.halted = false;
+        self.stack.clear();
         self.call_stack.clear();
     }
-    pub fn push(&mut self, v: impl Into<String>) { self.stack.push(v.into()); }
-    pub fn pop(&mut self) -> String { self.stack.pop().unwrap_or_default() }
+    pub fn push(&mut self, v: impl Into<String>) {
+        self.stack.push(v.into());
+    }
+    pub fn pop(&mut self) -> String {
+        self.stack.pop().unwrap_or_default()
+    }
     pub fn step(&mut self) -> bool {
-        if self.halted || self.pc >= self.code.len() { self.halted = true; return false; }
+        if self.halted || self.pc >= self.code.len() {
+            self.halted = true;
+            return false;
+        }
         let (op, a, b) = self.code[self.pc];
         self.pc += 1;
         match op {
             OpVs2::Nop => {}
             OpVs2::LoadConst => {
                 let s = self.host.pool_str(a);
-                if s.is_empty() { self.push(a.to_string()); } else { self.push(s); }
+                if s.is_empty() {
+                    self.push(a.to_string());
+                } else {
+                    self.push(s);
+                }
             }
             OpVs2::LoadLocal => {
                 let v = self.locals.get(a as usize).cloned().unwrap_or_default();
@@ -165,14 +271,19 @@ impl Vs2MiniVm {
             OpVs2::StoreLocal => {
                 let v = self.pop();
                 let idx = a as usize;
-                if self.locals.len() <= idx { self.locals.resize(idx + 1, String::new()); }
+                if self.locals.len() <= idx {
+                    self.locals.resize(idx + 1, String::new());
+                }
                 self.locals[idx] = v;
             }
             OpVs2::Add => {
-                let r = self.pop(); let l = self.pop();
+                let r = self.pop();
+                let l = self.pop();
                 if let (Ok(li), Ok(ri)) = (l.parse::<i64>(), r.parse::<i64>()) {
                     self.push((li + ri).to_string());
-                } else { self.push(format!("{l}{r}")); }
+                } else {
+                    self.push(format!("{l}{r}"));
+                }
             }
             OpVs2::Sub => {
                 let r = self.pop().parse::<i64>().unwrap_or(0);
@@ -190,11 +301,13 @@ impl Vs2MiniVm {
                 self.push(if r == 0 { 0 } else { l / r }.to_string());
             }
             OpVs2::Eq => {
-                let r = self.pop(); let l = self.pop();
+                let r = self.pop();
+                let l = self.pop();
                 self.push(if l == r { "1" } else { "0" });
             }
             OpVs2::Ne => {
-                let r = self.pop(); let l = self.pop();
+                let r = self.pop();
+                let l = self.pop();
                 self.push(if l != r { "1" } else { "0" });
             }
             OpVs2::Lt | OpVs2::Le | OpVs2::Gt | OpVs2::Ge => {
@@ -227,22 +340,30 @@ impl Vs2MiniVm {
                 let v = self.pop();
                 self.push(if v == "0" || v.is_empty() { "1" } else { "0" });
             }
-            OpVs2::Pop => { let _ = self.pop(); }
+            OpVs2::Pop => {
+                let _ = self.pop();
+            }
             OpVs2::Dup => {
                 let v = self.stack.last().cloned().unwrap_or_default();
                 self.push(v);
             }
-            OpVs2::Jump => { self.pc = a as usize; }
+            OpVs2::Jump => {
+                self.pc = a as usize;
+            }
             OpVs2::JumpIf => {
                 let v = self.pop();
-                if v == "0" || v.is_empty() { self.pc = a as usize; }
+                if v == "0" || v.is_empty() {
+                    self.pc = a as usize;
+                }
             }
             OpVs2::JumpScene => {
                 // `b` is linked entry PC when known (see link_scenes).
                 if b != 0 {
                     self.pc = b as usize;
                 } else {
-                    self.host.log.push(format!("JumpScene unresolved {}", self.host.pool_str(a)));
+                    self.host
+                        .log
+                        .push(format!("JumpScene unresolved {}", self.host.pool_str(a)));
                 }
             }
             OpVs2::CallScene => {
@@ -251,7 +372,9 @@ impl Vs2MiniVm {
                 if b != 0 {
                     self.pc = b as usize;
                 } else {
-                    self.host.log.push(format!("CallScene unresolved {}", self.host.pool_str(a)));
+                    self.host
+                        .log
+                        .push(format!("CallScene unresolved {}", self.host.pool_str(a)));
                 }
             }
             OpVs2::Ret => {
@@ -289,13 +412,9 @@ impl Vs2MiniVm {
                 }
                 args.reverse();
                 let arg_s = args.join(",");
-                self.host
-                    .log
-                    .push(format!("command {name} args=[{arg_s}]"));
-                self.host
-                    .store_state("__last_command", &name);
-                self.host
-                    .store_state(&format!("cmd.{name}"), "1");
+                self.host.log.push(format!("command {name} args=[{arg_s}]"));
+                self.host.store_state("__last_command", &name);
+                self.host.store_state(&format!("cmd.{name}"), "1");
                 // leave a unit-ish result for stack balance
                 self.push("ok");
             }
@@ -308,151 +427,12 @@ impl Vs2MiniVm {
     }
     pub fn run(&mut self, max_steps: usize) -> usize {
         let mut n = 0;
-        while n < max_steps && self.step() { n += 1; }
+        while n < max_steps && self.step() {
+            n += 1;
+        }
         n
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// Build a tiny dialogue + layer scenario (one helper).
 pub fn scenario(speaker: &str, msg_key: &str, layer: &str, line: &str) -> Vs2MiniVm {
@@ -515,4 +495,3 @@ mod tests {
         assert!(!h.characters["hero"].visible);
     }
 }
-

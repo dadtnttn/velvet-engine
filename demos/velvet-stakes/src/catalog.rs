@@ -13,6 +13,8 @@ pub struct CardStats {
     pub cost: i32,
     pub chips: i64,
     pub mult: i64,
+    /// Extra cards drawn after this card is played.
+    pub bonus_draw: usize,
     pub kind: CardKind,
     /// Path to illustration (loaded via ArtBank).
     #[allow(dead_code)]
@@ -38,6 +40,20 @@ impl CardKind {
     }
 }
 
+impl CardStats {
+    /// Compact rules copy for the gameplay card footer/tooltip.
+    pub fn rules_text(&self) -> String {
+        let mut parts = vec![format!("+{} chips", self.chips)];
+        if self.mult > 1 {
+            parts.push(format!("+{} mult", self.mult - 1));
+        }
+        if self.bonus_draw > 0 {
+            parts.push(format!("draw {}", self.bonus_draw));
+        }
+        parts.join(" · ")
+    }
+}
+
 /// Built-in illustrated set (5 cards).
 pub fn illustrated_stats(art_dir: &Path) -> Vec<CardStats> {
     vec![
@@ -47,6 +63,7 @@ pub fn illustrated_stats(art_dir: &Path) -> Vec<CardStats> {
             cost: 1,
             chips: 18,
             mult: 1,
+            bonus_draw: 0,
             kind: CardKind::Attack,
             art: art_dir.join("strike.jpg"),
         },
@@ -56,6 +73,7 @@ pub fn illustrated_stats(art_dir: &Path) -> Vec<CardStats> {
             cost: 1,
             chips: 12,
             mult: 1,
+            bonus_draw: 0,
             kind: CardKind::Defense,
             art: art_dir.join("guard.jpg"),
         },
@@ -65,6 +83,7 @@ pub fn illustrated_stats(art_dir: &Path) -> Vec<CardStats> {
             cost: 3,
             chips: 35,
             mult: 2,
+            bonus_draw: 0,
             kind: CardKind::Spell,
             art: art_dir.join("fireball.jpg"),
         },
@@ -74,6 +93,7 @@ pub fn illustrated_stats(art_dir: &Path) -> Vec<CardStats> {
             cost: 1,
             chips: 8,
             mult: 1,
+            bonus_draw: 1,
             kind: CardKind::Skill,
             art: art_dir.join("focus.jpg"),
         },
@@ -83,6 +103,7 @@ pub fn illustrated_stats(art_dir: &Path) -> Vec<CardStats> {
             cost: 2,
             chips: 28,
             mult: 1,
+            bonus_draw: 0,
             kind: CardKind::Attack,
             art: art_dir.join("bash.jpg"),
         },
@@ -90,7 +111,9 @@ pub fn illustrated_stats(art_dir: &Path) -> Vec<CardStats> {
 }
 
 /// Catalog for velvet-cards validation + starter deck list.
-pub fn make_catalog_and_deck(art_dir: &Path) -> (CardCatalog, DeckList, HashMap<String, CardStats>) {
+pub fn make_catalog_and_deck(
+    art_dir: &Path,
+) -> (CardCatalog, DeckList, HashMap<String, CardStats>) {
     let stats = illustrated_stats(art_dir);
     let mut map = HashMap::new();
     let mut cat = CardCatalog::new();
@@ -104,12 +127,9 @@ pub fn make_catalog_and_deck(art_dir: &Path) -> (CardCatalog, DeckList, HashMap<
     }
     // Balanced starter deck (20 cards)
     let deck = DeckList::from_ids([
-        "strike", "strike", "strike", "strike",
-        "guard", "guard", "guard",
-        "bash", "bash", "bash",
-        "focus", "focus", "focus",
-        "fireball", "fireball",
-        "strike", "guard", "bash", "focus", "fireball",
+        "strike", "strike", "strike", "strike", "guard", "guard", "guard", "bash", "bash", "bash",
+        "focus", "focus", "focus", "fireball", "fireball", "strike", "guard", "bash", "focus",
+        "fireball",
     ]);
     (cat, deck, map)
 }
@@ -216,10 +236,54 @@ fn combo_label(a: u32, d: u32, s: u32, k: u32, copies: u32) -> String {
     "Play".into()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HandScore {
     pub chips: i64,
     pub mult: i64,
     pub total: i64,
     pub label: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stats() -> HashMap<String, CardStats> {
+        illustrated_stats(Path::new("."))
+            .into_iter()
+            .map(|card| (card.id.clone(), card))
+            .collect()
+    }
+
+    #[test]
+    fn empty_selection_has_zero_total() {
+        assert_eq!(
+            score_played(&[], &stats()),
+            HandScore {
+                chips: 0,
+                mult: 1,
+                total: 0,
+                label: "Empty".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn preview_reports_pair_and_spellblade_combos() {
+        let stats = stats();
+        let pair = score_played(&["strike".into(), "strike".into()], &stats);
+        assert_eq!(pair.label, "Twin Strike");
+        assert_eq!(pair.total, 168);
+
+        let spellblade = score_played(&["strike".into(), "fireball".into()], &stats);
+        assert_eq!(spellblade.label, "Spellblade");
+        assert_eq!(spellblade.total, 204);
+    }
+
+    #[test]
+    fn card_rules_copy_matches_runtime_effects() {
+        let stats = stats();
+        assert_eq!(stats["focus"].rules_text(), "+8 chips · draw 1");
+        assert_eq!(stats["fireball"].rules_text(), "+35 chips · +1 mult");
+    }
 }

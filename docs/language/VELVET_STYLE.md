@@ -56,7 +56,25 @@ Legacy **`.vanim`** line scripts convert with `vanim_to_vcss`.
 
 - On `:root` (or any matched rule): `--name: value;`
 - Use: `var(--name)` — substituted when resolving cascade
+- Fallback: `var(--name, fallback)` — nested fallbacks are supported
 - Missing vars remain as unresolved `StyleValue::Var`
+- `:root` exports custom properties only; ordinary declarations there do not leak into every element
+
+### Selectors and context
+
+Simple compounds (`button.primary:hover`, `#start.button`) and descendant
+selectors (`.menu .panel .button`) are supported. Descendant selectors require
+explicit ancestry on the query, ordered from root to direct parent:
+
+```rust
+let query = StyleQuery::class("button")
+    .with_element("button")
+    .with_ancestor_class("menu")
+    .with_ancestor(StyleScope::class("panel"));
+```
+
+Unsupported combinators and attribute/pseudo-function selectors do not partially
+match. Use classes and descendant scopes for portable game UI styling.
 
 ### Property groups (game UI)
 
@@ -77,8 +95,8 @@ List for tooling: `KNOWN_PROPERTIES` in `velvet-style`. Hosts may ignore props t
 |----------|---------|
 | `animation` | shorthand: `name duration ease delay` |
 | `animation-name` | keyframes name |
-| `animation-duration` | seconds |
-| `animation-delay` | seconds |
+| `animation-duration` | time (`s` or `ms`, normalized to seconds) |
+| `animation-delay` | time (`s` or `ms`, normalized to seconds) |
 | `animation-timing-function` / `animation-ease` | e.g. `cubic_out` |
 | `animation-target` | optional id |
 
@@ -141,7 +159,7 @@ Supports: `let`, `fn`/`function`, `for`, `if`/`else`, `return`, numbers (optiona
 ```rust
 use velvet_style::{
     parse_stylesheet, plan_animation, call_style_fn, emit_style_event,
-    StyleQuery, JsValue,
+    StyleQuery, StyleScope, JsValue,
 };
 use velvet_anim::timeline_from_plan;
 
@@ -179,6 +197,22 @@ velvet style dump demos/velvet-stakes/data/styles/casino.vcss --class button --s
 ```
 
 Rust: `plan_transition(&from, &to, Some("id"))` → `TimelinePlan`.
+
+### `velvet-ui` bridge
+
+Retained UI nodes can resolve VCSS directly. `UiNode::name` is the selector
+id, `UiNode::classes` supplies classes, widget kind supplies the element name,
+and parent nodes provide descendant-selector context. Focus, hover, active, and
+disabled states become live pseudo states:
+
+```rust
+let style = tree.vcss_style(button_id, &sheet)?;
+```
+
+The adapter maps colors, border, radius, opacity, typography, size constraints,
+margin, padding, flex growth, and `gap` into `UiStyle`. Row, column, and grid
+layouts consume the resolved gap. Resolution is non-mutating so transient pseudo
+states do not become sticky.
 
 ### StyleRuntime
 

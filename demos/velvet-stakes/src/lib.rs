@@ -16,7 +16,8 @@ pub mod title_font;
 pub mod ui;
 
 pub use live_dev::{
-    load_rgb_buf, reload_stylesheet, ImageSlot, LiveDevApply, LiveDevSession, WatchKind,
+    load_rgb_buf, reload_screen, reload_stylesheet, ImageSlot, LiveDevApply, LiveDevSession,
+    WatchKind,
 };
 pub use logo::{
     blit_rgba_bilinear, content_bounds, count_soft_alpha, crop_to_content, load_title_wordmark,
@@ -24,6 +25,4 @@ pub use logo::{
 };
 pub use render::{load_rgb, ArtBank, RgbImage};
 pub use title_font::{paint_title_wordmark, title_font, TITLE_LINE1, TITLE_LINE2, TITLE_SUB};
-pub use ui::{
-    paint_collection, paint_options, paint_shop, paint_title_menu, theme, TITLE_ITEMS, WW, WH,
-};
+pub use ui::{paint_collection, paint_options, paint_shop, paint_title_menu, theme, WH, WW};

@@ -91,7 +91,11 @@ impl SpatialHash {
 }
 
 /// Pairwise soft separation for overlapping free particles (prevents stacking glitches).
-pub fn separate_particles(particles: &mut [FreeParticle], hash: &SpatialHash, min_dist: f32) -> u32 {
+pub fn separate_particles(
+    particles: &mut [FreeParticle],
+    hash: &SpatialHash,
+    min_dist: f32,
+) -> u32 {
     let min_dist2 = min_dist * min_dist;
     let mut fixes = 0u32;
     let snapshot: Vec<(usize, f32, f32)> = particles

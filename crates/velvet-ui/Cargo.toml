@@ -10,6 +10,7 @@ rust-version.workspace = true
 velvet-math = { workspace = true }
 velvet-text = { workspace = true }
 velvet-input = { workspace = true }
+velvet-style = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 bitflags = { workspace = true }

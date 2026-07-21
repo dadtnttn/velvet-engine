@@ -72,7 +72,10 @@ pub fn export_material_pack(reg: &MaterialRegistry, name: &str) -> MaterialPack 
 }
 
 /// Write pack to path.
-pub fn write_material_pack(pack: &MaterialPack, path: impl AsRef<Path>) -> Result<(), MaterialIoError> {
+pub fn write_material_pack(
+    pack: &MaterialPack,
+    path: impl AsRef<Path>,
+) -> Result<(), MaterialIoError> {
     let s = serde_json::to_string_pretty(pack)?;
     fs::write(path, s)?;
     Ok(())

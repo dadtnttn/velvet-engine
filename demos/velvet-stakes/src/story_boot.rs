@@ -29,15 +29,11 @@ pub fn story_path(data_root: &Path) -> PathBuf {
 pub fn boot_player(host: Arc<StakesHost>, data_root: &Path) -> Result<StoryPlayer> {
     let path = story_path(data_root);
     let source = if path.exists() {
-        std::fs::read_to_string(&path)
-            .with_context(|| format!("read story {}", path.display()))?
+        std::fs::read_to_string(&path).with_context(|| format!("read story {}", path.display()))?
     } else {
         EMBEDDED_STORY.to_string()
     };
-    let file = path
-        .to_str()
-        .unwrap_or("main.vstory")
-        .to_string();
+    let file = path.to_str().unwrap_or("main.vstory").to_string();
 
     let mut cmds = CommandRegistry::builtin();
     register_stakes_commands(&mut cmds);
@@ -52,5 +48,3 @@ pub fn boot_player(host: Arc<StakesHost>, data_root: &Path) -> Result<StoryPlaye
     let shared: SharedCommandHost = host;
     Ok(StoryPlayer::start_with_host(program, shared))
 }
-
-

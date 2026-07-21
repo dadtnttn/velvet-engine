@@ -96,10 +96,7 @@ pub fn generate_caves(world: &mut World, opt: &CaveOptions) {
     let t = opt.border_thickness;
     for y in opt.y0..opt.y1 {
         for x in opt.x0..opt.x1 {
-            let edge = x < opt.x0 + t
-                || x >= opt.x1 - t
-                || y < opt.y0 + t
-                || y >= opt.y1 - t;
+            let edge = x < opt.x0 + t || x >= opt.x1 - t || y < opt.y0 + t || y >= opt.y1 - t;
             if edge {
                 world.set(x, y, Cell::of(border));
                 continue;
@@ -196,7 +193,15 @@ pub fn generate_platforms(
 }
 
 /// Cellular automata smooth pass (open/close caves).
-pub fn cave_smooth(world: &mut World, x0: i32, y0: i32, x1: i32, y1: i32, solid: MaterialId, iterations: u32) {
+pub fn cave_smooth(
+    world: &mut World,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    solid: MaterialId,
+    iterations: u32,
+) {
     for _ in 0..iterations {
         let mut changes: Vec<(i32, i32, bool)> = Vec::new();
         for y in (y0 + 1)..(y1 - 1) {

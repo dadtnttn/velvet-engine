@@ -173,7 +173,10 @@ impl HirTy {
             Self::Array(t) => format!("Array<{}>", t.display()),
             Self::Tuple(ts) => format!(
                 "({})",
-                ts.iter().map(|t| t.display()).collect::<Vec<_>>().join(", ")
+                ts.iter()
+                    .map(|t| t.display())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             Self::Fn(a, r) => format!(
                 "fn({}) -> {}",
@@ -790,7 +793,10 @@ use game::audio;
     }
     #[test]
     fn ty_display() {
-        let t = HirTy::Result(Box::new(HirTy::Prim(PrimTy::I32)), Box::new(HirTy::Path(HirPath::parse("ScriptError"))));
+        let t = HirTy::Result(
+            Box::new(HirTy::Prim(PrimTy::I32)),
+            Box::new(HirTy::Path(HirPath::parse("ScriptError"))),
+        );
         assert!(t.display().contains("Result"));
     }
 

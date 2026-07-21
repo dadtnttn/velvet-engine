@@ -99,7 +99,12 @@ impl NetPeer {
     }
 
     /// Send a message to another peer (loopback: pushes into their inbox).
-    pub fn send_to(&mut self, other: &mut NetPeer, channel: u16, body: impl Into<String>) -> Result<u32, NetError> {
+    pub fn send_to(
+        &mut self,
+        other: &mut NetPeer,
+        channel: u16,
+        body: impl Into<String>,
+    ) -> Result<u32, NetError> {
         if self.closed || other.closed {
             return Err(NetError::Closed);
         }
@@ -149,9 +154,7 @@ pub fn loopback_roundtrip(body: &str) -> Result<NetMessage, NetError> {
     }
     // echo back
     let _ = b.send_to(&mut a, 1, format!("ack:{}", msg.body))?;
-    let ack = a
-        .poll()?
-        .ok_or_else(|| NetError::Decode("no ack".into()))?;
+    let ack = a.poll()?.ok_or_else(|| NetError::Decode("no ack".into()))?;
     if !ack.body.starts_with("ack:") {
         return Err(NetError::Decode("bad ack".into()));
     }

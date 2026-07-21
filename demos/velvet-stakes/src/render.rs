@@ -107,7 +107,16 @@ pub fn fill(pixels: &mut [u32], ww: u32, wh: u32, rgb: (u8, u8, u8)) {
 }
 
 /// Opaque axis-aligned rectangle.
-pub fn rect(pixels: &mut [u32], ww: u32, wh: u32, x: i32, y: i32, w: i32, h: i32, rgb: (u8, u8, u8)) {
+pub fn rect(
+    pixels: &mut [u32],
+    ww: u32,
+    wh: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    rgb: (u8, u8, u8),
+) {
     let c = pack_rgb(rgb.0, rgb.1, rgb.2);
     let ww = ww as i32;
     let wh = wh as i32;

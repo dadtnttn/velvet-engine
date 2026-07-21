@@ -290,6 +290,9 @@ mod tests {
         let style = TextStyle::default();
         let w = crate::measure::measure_width("你好", &style);
         let s = shape_measure_width("你好", &style);
-        assert!((w - s).abs() < 0.01, "measure_width should equal shape width");
+        assert!(
+            (w - s).abs() < 0.01,
+            "measure_width should equal shape width"
+        );
     }
 }

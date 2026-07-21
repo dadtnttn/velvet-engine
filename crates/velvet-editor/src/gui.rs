@@ -165,7 +165,9 @@ impl StudioGuiSession {
         // Restore studio project if present
         if let Ok(Some(proj)) = StudioProjectFile::load(&session.root) {
             session.layers = proj.to_stack();
-            session.log.push("[studio-gui] loaded velvet.studio.json".into());
+            session
+                .log
+                .push("[studio-gui] loaded velvet.studio.json".into());
         }
         if let Some(l) = session.layers.get_mut("main_menu") {
             l.locked = false;
@@ -268,7 +270,8 @@ impl StudioGuiSession {
         self.document_source = d.save_source();
         self.flush_active_document();
         self.selected_region = Some(full.clone());
-        self.log.push(format!("[studio-gui] duplicate {id} -> {full}"));
+        self.log
+            .push(format!("[studio-gui] duplicate {id} -> {full}"));
         Ok(full)
     }
 
@@ -284,8 +287,7 @@ impl StudioGuiSession {
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         self.document_source = d.save_source();
         self.flush_active_document();
-        self.log
-            .push(format!("[studio-gui] inject {id}: {line}"));
+        self.log.push(format!("[studio-gui] inject {id}: {line}"));
         Ok(())
     }
 
@@ -317,10 +319,7 @@ impl StudioGuiSession {
         use std::process::Command;
         let root = self.root.clone();
         // Prefer workspace velvet binary if present
-        let velvet = root
-            .join("target")
-            .join("release")
-            .join("velvet.exe");
+        let velvet = root.join("target").join("release").join("velvet.exe");
         let velvet = if velvet.is_file() {
             velvet
         } else {
@@ -339,7 +338,10 @@ impl StudioGuiSession {
                 let line = format!(
                     "play exit={} {}",
                     o.status.code().unwrap_or(-1),
-                    stdout.lines().last().unwrap_or(stderr.lines().last().unwrap_or(""))
+                    stdout
+                        .lines()
+                        .last()
+                        .unwrap_or(stderr.lines().last().unwrap_or(""))
                 );
                 self.log.push(format!("[play] {line}"));
                 line
@@ -354,7 +356,11 @@ impl StudioGuiSession {
 
     /// Edit script line at cursor: replace line content.
     pub fn script_set_line(&mut self, line_idx: usize, content: &str) {
-        let mut lines: Vec<String> = self.document_source.lines().map(|s| s.to_string()).collect();
+        let mut lines: Vec<String> = self
+            .document_source
+            .lines()
+            .map(|s| s.to_string())
+            .collect();
         if lines.is_empty() {
             lines.push(content.to_string());
         } else if line_idx < lines.len() {
@@ -402,8 +408,11 @@ impl StudioGuiSession {
         } else if self.script_cursor_line > 0 {
             // merge with previous line
             self.push_undo();
-            let mut lines: Vec<String> =
-                self.document_source.lines().map(|s| s.to_string()).collect();
+            let mut lines: Vec<String> = self
+                .document_source
+                .lines()
+                .map(|s| s.to_string())
+                .collect();
             let cur = lines.remove(self.script_cursor_line);
             self.script_cursor_line -= 1;
             let prev_len = lines[self.script_cursor_line].len();
@@ -422,7 +431,11 @@ impl StudioGuiSession {
         let col = self.script_cursor_col.min(line.len());
         let (left, right) = line.split_at(col);
         self.push_undo();
-        let mut lines: Vec<String> = self.document_source.lines().map(|s| s.to_string()).collect();
+        let mut lines: Vec<String> = self
+            .document_source
+            .lines()
+            .map(|s| s.to_string())
+            .collect();
         if lines.is_empty() {
             lines.push(left.to_string());
             lines.push(right.to_string());
@@ -552,9 +565,7 @@ screen {id} {{
         if matches!(mode, StudioEditorMode::Advanced) {
             self.validate_script();
         }
-        if !self.document_source.is_empty()
-            && !matches!(mode, StudioEditorMode::Nodes)
-        {
+        if !self.document_source.is_empty() && !matches!(mode, StudioEditorMode::Nodes) {
             let _ = parse_document(&self.document_source).map_err(|e| anyhow::anyhow!("{e}"))?;
         }
         Ok(())
@@ -593,7 +604,11 @@ screen {id} {{
 
     /// Insert a VScript line at cursor (or append).
     pub fn insert_script_line(&mut self, line: &str) {
-        let mut lines: Vec<String> = self.document_source.lines().map(|s| s.to_string()).collect();
+        let mut lines: Vec<String> = self
+            .document_source
+            .lines()
+            .map(|s| s.to_string())
+            .collect();
         if lines.is_empty() {
             lines.push(line.to_string());
             self.script_cursor_line = 0;
@@ -607,8 +622,7 @@ screen {id} {{
             self.document_source.push('\n');
         }
         self.validate_script();
-        self.log
-            .push(format!("[studio-gui] script insert: {line}"));
+        self.log.push(format!("[studio-gui] script insert: {line}"));
     }
 
     /// Insert layer.open for a layer id.
@@ -670,7 +684,10 @@ screen {id} {{
 
     pub fn disconnect_layers(&mut self, from: &str, to: &str) -> String {
         if self.layers.disconnect(from, to) {
-            if self.selected_edge.as_ref().map(|(a, b)| (a.as_str(), b.as_str()))
+            if self
+                .selected_edge
+                .as_ref()
+                .map(|(a, b)| (a.as_str(), b.as_str()))
                 == Some((from, to))
             {
                 self.selected_edge = None;
@@ -782,7 +799,8 @@ screen {id} {{
         if self.document_source.is_empty() {
             return Ok(Vec::new());
         }
-        let d = UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let d =
+            UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
         d.list_widgets().map_err(|e| anyhow::anyhow!("{e}"))
     }
 
@@ -806,8 +824,9 @@ screen {id} {{
             format!("{k}.{id}")
         };
         self.selected_region = Some(full.clone());
-        self.log
-            .push(format!("[studio-gui] drop kind={kind} id={full} at ({x_pct},{y_pct})"));
+        self.log.push(format!(
+            "[studio-gui] drop kind={kind} id={full} at ({x_pct},{y_pct})"
+        ));
         Ok(full)
     }
 
@@ -839,8 +858,9 @@ screen {id} {{
         d.set_position(&id, &normalized)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         self.document_source = d.save_source();
-        self.log
-            .push(format!("[studio-gui] set_position region={id} {normalized}"));
+        self.log.push(format!(
+            "[studio-gui] set_position region={id} {normalized}"
+        ));
         Ok(())
     }
 
@@ -873,8 +893,8 @@ screen {id} {{
     /// Advanced mode: replace entire document source (must parse).
     pub fn set_advanced_source(&mut self, source: impl Into<String>) -> Result<()> {
         let source = source.into();
-        let mut d = UiDesigner::open(self.document_source.clone())
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let mut d =
+            UiDesigner::open(self.document_source.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
         d.set_source_advanced(source)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         self.document_source = d.save_source();
@@ -896,8 +916,8 @@ screen {id} {{
         } else {
             self.root.join(path)
         };
-        let source = fs::read_to_string(&abs)
-            .with_context(|| format!("read document {}", abs.display()))?;
+        let source =
+            fs::read_to_string(&abs).with_context(|| format!("read document {}", abs.display()))?;
         let _ = parse_document(&source).map_err(|e| anyhow::anyhow!("{e}"))?;
         self.ensure_all_layer_docs();
         let layer_id = self.layers.active_id.clone();
@@ -928,12 +948,7 @@ screen {id} {{
     }
 
     /// Drag the selected (or given) region by delta — **the shipped drag path**.
-    pub fn drag_region(
-        &mut self,
-        region_id: Option<&str>,
-        dx: f32,
-        dy: f32,
-    ) -> Result<WidgetRect> {
+    pub fn drag_region(&mut self, region_id: Option<&str>, dx: f32, dy: f32) -> Result<WidgetRect> {
         let id = region_id
             .map(|s| s.to_string())
             .or_else(|| self.selected_region.clone())
@@ -976,8 +991,7 @@ screen {id} {{
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("no document open"))?;
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("mkdir {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| format!("mkdir {}", parent.display()))?;
         }
         fs::write(path, &self.document_source)
             .with_context(|| format!("write {}", path.display()))?;
@@ -998,8 +1012,7 @@ screen {id} {{
             if let Some(parent) = path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            fs::write(&path, &src)
-                .with_context(|| format!("write {}", path.display()))?;
+            fs::write(&path, &src).with_context(|| format!("write {}", path.display()))?;
             if let Some(l) = self.layers.get_mut(&id) {
                 l.document_path = Some(path);
             }
@@ -1020,7 +1033,13 @@ screen {id} {{
     }
 
     /// Active layer design surface letterboxed into layout canvas.
-    pub fn design_surface(&self, canvas_x: i32, canvas_y: i32, canvas_w: i32, canvas_h: i32) -> DesignSurface {
+    pub fn design_surface(
+        &self,
+        canvas_x: i32,
+        canvas_y: i32,
+        canvas_w: i32,
+        canvas_h: i32,
+    ) -> DesignSurface {
         let (rw, rh) = self.layers.display_resolution();
         DesignSurface::fit(canvas_x, canvas_y, canvas_w, canvas_h, rw, rh)
     }
@@ -1198,7 +1217,11 @@ fn normalize_pct_pair(raw: &str) -> Option<String> {
     if !a.is_finite() || !b.is_finite() {
         return None;
     }
-    Some(format!("({:.0}%, {:.0}%)", a.clamp(0.0, 100.0), b.clamp(0.0, 100.0)))
+    Some(format!(
+        "({:.0}%, {:.0}%)",
+        a.clamp(0.0, 100.0),
+        b.clamp(0.0, 100.0)
+    ))
 }
 
 fn default_dock_panels() -> Vec<DockPanel> {
@@ -1400,9 +1423,9 @@ pub fn run_studio_gui(cfg: StudioGuiConfig) -> Result<StudioGuiStatus> {
 ///
 /// When `interactive` is false, opens briefly then exits (CI / `--once`).
 fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Result<()> {
+    use softbuffer::{Context as SbContext, Surface};
     use std::num::NonZeroU32;
     use std::sync::Arc;
-    use softbuffer::{Context as SbContext, Surface};
     use winit::application::ApplicationHandler;
     use winit::dpi::LogicalSize;
     use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -1560,10 +1583,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             }
                         }
                     }
-                    if matches!(
-                        event.physical_key,
-                        PhysicalKey::Code(KeyCode::F9)
-                    ) {
+                    if matches!(event.physical_key, PhysicalKey::Code(KeyCode::F9)) {
                         self.status = self.session.play_project_smoke();
                         self.redraw();
                         return;
@@ -1644,7 +1664,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                     if self.session.mode == StudioEditorMode::Simplified
                         && matches!(
                             event.physical_key,
-                            PhysicalKey::Code(KeyCode::Delete) | PhysicalKey::Code(KeyCode::Backspace)
+                            PhysicalKey::Code(KeyCode::Delete)
+                                | PhysicalKey::Code(KeyCode::Backspace)
                         )
                         && self.edit_field.is_none()
                     {
@@ -1776,9 +1797,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                         KeyCode::KeyS if self.ctrl_held => {
                             self.do_save();
                         }
-                        KeyCode::F5
-                            if self.session.mode != StudioEditorMode::Advanced =>
-                        {
+                        KeyCode::F5 if self.session.mode != StudioEditorMode::Advanced => {
                             self.do_save();
                         }
                         KeyCode::Digit1 if !self.ctrl_held => {
@@ -2282,7 +2301,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             return;
                         }
                         if !self.session.layers.active_editable() {
-                            self.status = "layer locked — press U to unlock or [ ] change layer".into();
+                            self.status =
+                                "layer locked — press U to unlock or [ ] change layer".into();
                             self.redraw();
                             return;
                         }
@@ -2292,9 +2312,8 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                             Ok(Some(id)) => {
                                 let (rw, rh) = self.session.layers.active_resolution();
                                 let (px, py) = pct_to_px(cx, cy, rw, rh);
-                                self.status = format!(
-                                    "selected {id} @ ({cx:.0}%,{cy:.0}%) = ({px},{py})px"
-                                );
+                                self.status =
+                                    format!("selected {id} @ ({cx:.0}%,{cy:.0}%) = ({px},{py})px");
                                 self.dragging = true;
                                 self.drag_last_px = Some(self.cursor);
                                 self.drag_acc_pct = (0.0, 0.0);
@@ -2459,8 +2478,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 Ok(id) => {
                     let (rw, rh) = self.session.layers.active_resolution();
                     let (px, py) = pct_to_px(cx, cy, rw, rh);
-                    self.status =
-                        format!("dropped {id} at ({cx:.0}%,{cy:.0}%) = ({px},{py})px");
+                    self.status = format!("dropped {id} at ({cx:.0}%,{cy:.0}%) = ({px},{py})px");
                 }
                 Err(e) => self.status = format!("drop failed: {e}"),
             }
@@ -2517,23 +2535,18 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
             let initial = match (field, w) {
                 (InspectorField::Text, Some(w)) => w.text.clone().unwrap_or_default(),
                 (InspectorField::Text, None) => String::new(),
-                (InspectorField::Pos, Some(w)) => w
-                    .position
-                    .clone()
-                    .unwrap_or_else(|| "(50%, 50%)".into()),
+                (InspectorField::Pos, Some(w)) => {
+                    w.position.clone().unwrap_or_else(|| "(50%, 50%)".into())
+                }
                 (InspectorField::Pos, None) => "(50%, 50%)".into(),
-                (InspectorField::Size, Some(w)) => w
-                    .size
-                    .clone()
-                    .unwrap_or_else(|| "(18%, 8%)".into()),
+                (InspectorField::Size, Some(w)) => {
+                    w.size.clone().unwrap_or_else(|| "(18%, 8%)".into())
+                }
                 (InspectorField::Size, None) => "(18%, 8%)".into(),
             };
             self.edit_field = Some(field);
             self.edit_buf = initial;
-            self.status = format!(
-                "editing {} — type, Enter apply, Esc cancel",
-                field.label()
-            );
+            self.status = format!("editing {} — type, Enter apply, Esc cancel", field.label());
             self.redraw();
         }
 
@@ -2616,7 +2629,11 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 NodesTool::Disconnect => "disconnect",
                 NodesTool::Overlay => "overlay",
             };
-            let sel_edge = self.session.selected_edge.as_ref().map(|(a, b)| (a.as_str(), b.as_str()));
+            let sel_edge = self
+                .session
+                .selected_edge
+                .as_ref()
+                .map(|(a, b)| (a.as_str(), b.as_str()));
             let layer_view = crate::studio_paint::LayerPaintView {
                 layers: &self.session.layers.layers,
                 tree_rows: &tree_rows,
@@ -2670,8 +2687,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                 self.pixels.resize(buf.len(), pack_rgb(15, 17, 26));
             }
             buf.copy_from_slice(&self.pixels);
-            buf.present()
-                .map_err(|e| anyhow::anyhow!("present: {e}"))?;
+            buf.present().map_err(|e| anyhow::anyhow!("present: {e}"))?;
             Ok(())
         }
     }
@@ -2893,7 +2909,9 @@ button start {
             .count();
         assert_eq!(canvas_n, 0, "new screen starts empty");
         session.connect_layers(&new_id, "hud", None).unwrap();
-        assert!(session.disconnect_layers(&new_id, "hud").contains("disconnected"));
+        assert!(session
+            .disconnect_layers(&new_id, "hud")
+            .contains("disconnected"));
     }
 
     #[test]
@@ -2973,11 +2991,7 @@ button start {
         session.push_undo(); // ensure stack
         let id = session.selected_region.clone().unwrap();
         session.delete_selected_widget().unwrap();
-        assert!(!session
-            .list_widgets()
-            .unwrap()
-            .iter()
-            .any(|w| w.id == id));
+        assert!(!session.list_widgets().unwrap().iter().any(|w| w.id == id));
         // inject advanced
         session.select_region("button.start").unwrap();
         session

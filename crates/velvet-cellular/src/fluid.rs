@@ -126,7 +126,14 @@ fn write_cell_pressure(world: &mut World, x: i32, y: i32, cell: Cell) {
 }
 
 /// Try to level liquid surface: move top liquid into lower air pockets under same blob.
-pub fn equalize_liquid_columns(world: &mut World, x0: i32, y0: i32, x1: i32, y1: i32, max_moves: usize) -> usize {
+pub fn equalize_liquid_columns(
+    world: &mut World,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    max_moves: usize,
+) -> usize {
     let blobs = find_liquid_blobs(world, x0, y0, x1, y1, 32);
     let mut moves = 0usize;
     for blob in blobs {
@@ -242,9 +249,9 @@ pub fn drain_liquid(
                     continue;
                 }
                 // near hole or air
-                let near_air = [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|&(dx, dy)| {
-                    world.get(x + dx, y + dy).is_air()
-                });
+                let near_air = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                    .iter()
+                    .any(|&(dx, dy)| world.get(x + dx, y + dy).is_air());
                 if near_air || (x - hole_x).abs() + (y - hole_y).abs() <= 2 {
                     found = Some((x, y));
                     break;

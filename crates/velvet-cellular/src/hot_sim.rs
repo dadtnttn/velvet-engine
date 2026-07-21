@@ -34,7 +34,10 @@ impl HotChunkTracker {
         // neighbors
         for dy in -1..=1 {
             for dx in -1..=1 {
-                self.hot.insert(ChunkCoord::from_cell(x + dx * CHUNK_SIZE as i32 / 2, y + dy * CHUNK_SIZE as i32 / 2));
+                self.hot.insert(ChunkCoord::from_cell(
+                    x + dx * CHUNK_SIZE as i32 / 2,
+                    y + dy * CHUNK_SIZE as i32 / 2,
+                ));
             }
         }
     }
@@ -84,12 +87,7 @@ pub fn step_hot(world: &mut World, cfg: &SimConfig, tracker: &mut HotChunkTracke
 }
 
 /// Timed multi-step for perf tests. Returns elapsed milliseconds.
-pub fn timed_steps(
-    world: &mut World,
-    cfg: &SimConfig,
-    steps: u32,
-    use_hot: bool,
-) -> f64 {
+pub fn timed_steps(world: &mut World, cfg: &SimConfig, steps: u32, use_hot: bool) -> f64 {
     let mut tracker = HotChunkTracker::new();
     // seed hot from all loaded
     for c in world.loaded_chunks() {
@@ -107,7 +105,12 @@ pub fn timed_steps(
 }
 
 /// Fill two chunks with mixed materials for perf scenes.
-pub fn fill_perf_scene(world: &mut World, sand: crate::cell::MaterialId, water: crate::cell::MaterialId, stone: crate::cell::MaterialId) {
+pub fn fill_perf_scene(
+    world: &mut World,
+    sand: crate::cell::MaterialId,
+    water: crate::cell::MaterialId,
+    stone: crate::cell::MaterialId,
+) {
     // chunk (0,0) and (1,0) — 64*64*2 cells
     for y in 0..CHUNK_SIZE as i32 {
         for x in 0..(CHUNK_SIZE as i32 * 2) {

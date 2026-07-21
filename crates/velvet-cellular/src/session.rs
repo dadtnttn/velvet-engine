@@ -353,7 +353,17 @@ impl CellularSession {
         let m = self.mat(key);
         let seed = self.world.config.seed;
         if let Some((x0, y0, x1, y1)) = self.world.loaded_bounds() {
-            scatter_blobs(&mut self.world, x0, y0, x1, y1, m, count, radius, seed ^ 0xABC);
+            scatter_blobs(
+                &mut self.world,
+                x0,
+                y0,
+                x1,
+                y1,
+                m,
+                count,
+                radius,
+                seed ^ 0xABC,
+            );
         } else {
             scatter_blobs(&mut self.world, -40, 0, 40, 40, m, count, radius, seed);
         }
@@ -369,12 +379,10 @@ impl CellularSession {
         } else {
             step(&mut self.world, &self.sim);
         }
-        self.forces
-            .apply(&mut self.world, &mut self.particles, dt);
+        self.forces.apply(&mut self.world, &mut self.particles, dt);
         self.particles.step(&mut self.world, dt);
         self.physics.step(&mut self.world, dt);
-        self.enemies
-            .step(&mut self.world, &mut self.physics, dt);
+        self.enemies.step(&mut self.world, &mut self.physics, dt);
         let inputs = std::mem::take(&mut self.agent_inputs);
         self.agents.step(
             &mut self.world,
@@ -613,7 +621,8 @@ mod tests {
         s.world.paint_rect(-8, 0, 8, 1, bed);
         s.world.set(0, 12, Cell::of(sand));
         s.world.set(3, 3, Cell::of(wood));
-        s.world.set(3, 4, Cell::of(fire).with_life(20).with_temp(900.0));
+        s.world
+            .set(3, 4, Cell::of(fire).with_life(20).with_temp(900.0));
         s.world.paint_rect(-4, 1, -1, 4, stone);
         let before_stone = s.world.occupied_cells();
         s.step_n(30);

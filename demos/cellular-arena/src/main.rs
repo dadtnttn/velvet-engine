@@ -136,11 +136,7 @@ fn mat_rgb(key: &str, x: i32, y: i32) -> (u8, u8, u8) {
         "water" => {
             // subtle horizontal bands
             let band = ((y.wrapping_mul(3) + (h as i32 & 3)) & 7) as u8;
-            (
-                d(40 + band, 4),
-                d(100 + band * 2, 6),
-                d(220 - band, 8),
-            )
+            (d(40 + band, 4), d(100 + band * 2, 6), d(220 - band, 8))
         }
         "oil" => (d2(38, 4), d2(30, 3), d2(24, 3)),
         "lava" => {
@@ -282,7 +278,8 @@ fn new_world() -> (CellularSession, u32) {
     // ═══════════════════════════════════════════════════════════════════
 
     // Solid fill underground + mountain body (everything is rock first)
-    s.world.paint_rect(MAP_X0, MAP_Y0, MAP_X1, SURFACE_Y + 2, rock);
+    s.world
+        .paint_rect(MAP_X0, MAP_Y0, MAP_X1, SURFACE_Y + 2, rock);
     // deeper basalt band
     s.world.paint_rect(MAP_X0, MAP_Y0, MAP_X1, 55, deep_rock);
     // bedrock shell
@@ -366,7 +363,7 @@ fn new_world() -> (CellularSession, u32) {
         (CAVE_MOUTH_X + 12, CAVE_MOUTH_Y - 10, 5), // just inside
         (48, 125, 5),
         (42, 110, 6),
-        (55, 95, 7),  // widens
+        (55, 95, 7), // widens
         (38, 80, 8),
         (60, 65, 9),
         (45, 50, 10),
@@ -384,23 +381,23 @@ fn new_world() -> (CellularSession, u32) {
     // Bifurcations (side branches) — deeper = longer/wider
     let branches: &[(i32, i32, i32, i32, i32)] = &[
         // (from_x, from_y, to_x, to_y, radius)
-        (42, 110, 18, 108, 4),   // left spur early
-        (42, 110, 68, 112, 4),   // right spur early
-        (55, 95, 80, 90, 5),     // right mid
-        (55, 95, 28, 88, 5),     // left mid
-        (38, 80, 10, 75, 6),     // left lower
+        (42, 110, 18, 108, 4), // left spur early
+        (42, 110, 68, 112, 4), // right spur early
+        (55, 95, 80, 90, 5),   // right mid
+        (55, 95, 28, 88, 5),   // left mid
+        (38, 80, 10, 75, 6),   // left lower
         (38, 80, 72, 78, 5),
-        (60, 65, 90, 60, 6),     // right deep
+        (60, 65, 90, 60, 6), // right deep
         (60, 65, 25, 58, 6),
-        (45, 50, 15, 45, 7),     // left deep chamber
-        (45, 50, 85, 48, 7),     // right deep chamber
+        (45, 50, 15, 45, 7), // left deep chamber
+        (45, 50, 85, 48, 7), // right deep chamber
         (52, 35, 20, 30, 8),
         (52, 35, 90, 32, 8),
     ];
     for &(x0, y0, x1, y1, r) in branches {
         carve_tunnel(&mut s.world, x0, y0, x1, y1, r);
         s.world.erase_circle(x1, y1, r + 2); // room at end of branch
-        // small ledge / floor at branch tips so enemies stand
+                                             // small ledge / floor at branch tips so enemies stand
         s.world.paint_rect(x1 - 4, y1 - 5, x1 + 4, y1 - 3, stone);
     }
 
@@ -454,8 +451,10 @@ fn new_world() -> (CellularSession, u32) {
     }
 
     // wooden props near entrance (campsite feel on prairie)
-    s.world.paint_rect(-55, SURFACE_Y + 1, -52, SURFACE_Y + 4, wood);
-    s.world.paint_rect(-25, SURFACE_Y + 1, -22, SURFACE_Y + 3, wood);
+    s.world
+        .paint_rect(-55, SURFACE_Y + 1, -52, SURFACE_Y + 4, wood);
+    s.world
+        .paint_rect(-25, SURFACE_Y + 1, -22, SURFACE_Y + 3, wood);
 
     // emitters only near active play (perf)
     let _ = s.add_emitter(70.0, 94.0, "water", 6.0);
@@ -855,18 +854,13 @@ impl Game {
                 let key = if cell.is_air() {
                     "air"
                 } else {
-                    self.session
-                        .world
-                        .materials
-                        .get(cell.material)
-                        .key
-                        .as_str()
+                    self.session.world.materials.get(cell.material).key.as_str()
                 };
                 let (mut r, mut g, mut b) = mat_rgb(key, wx, wy);
 
                 if cell.flags.contains(velvet_cellular::CellFlags::BURNING) {
-                    let flicker = ((hash2(wx, wy.wrapping_add((self.time * 12.0) as i32)) >> 24)
-                        & 40) as u8;
+                    let flicker =
+                        ((hash2(wx, wy.wrapping_add((self.time * 12.0) as i32)) >> 24) & 40) as u8;
                     r = 255;
                     g = 100 + flicker;
                     b = 15;
@@ -1081,10 +1075,7 @@ impl Game {
         let Some(surface) = self.surface.as_mut() else {
             return;
         };
-        let _ = surface.resize(
-            NonZeroU32::new(ww).unwrap(),
-            NonZeroU32::new(wh).unwrap(),
-        );
+        let _ = surface.resize(NonZeroU32::new(ww).unwrap(), NonZeroU32::new(wh).unwrap());
         let mut buf = surface.buffer_mut().unwrap();
         // nearest-neighbor upscale (keeps hard pixels)
         for y in 0..wh {
@@ -1254,10 +1245,24 @@ fn draw_wizard(fb: &mut [u8], sx: i32, sy: i32, face: i32, aim: f32, walk: f32, 
     for y in 0..6 {
         // left
         put(fb, sx - 2 + stride, sy + 3 + y, boot.0, boot.1, boot.2);
-        put(fb, sx - 1 + stride, sy + 3 + y, robe_d.0, robe_d.1, robe_d.2);
+        put(
+            fb,
+            sx - 1 + stride,
+            sy + 3 + y,
+            robe_d.0,
+            robe_d.1,
+            robe_d.2,
+        );
         // right
         put(fb, sx + 1 - stride, sy + 3 + y, boot.0, boot.1, boot.2);
-        put(fb, sx + 2 - stride, sy + 3 + y, robe_d.0, robe_d.1, robe_d.2);
+        put(
+            fb,
+            sx + 2 - stride,
+            sy + 3 + y,
+            robe_d.0,
+            robe_d.1,
+            robe_d.2,
+        );
     }
 
     // robe body (taller silhouette)
@@ -1324,7 +1329,14 @@ fn draw_wizard(fb: &mut [u8], sx: i32, sy: i32, face: i32, aim: f32, walk: f32, 
             put(fb, ax as i32, ay as i32, skin.0, skin.1, skin.2);
             put(fb, ax as i32, ay as i32 + 1, skin_d.0, skin_d.1, skin_d.2);
         } else {
-            put(fb, ax as i32, ay as i32, wand_wood.0, wand_wood.1, wand_wood.2);
+            put(
+                fb,
+                ax as i32,
+                ay as i32,
+                wand_wood.0,
+                wand_wood.1,
+                wand_wood.2,
+            );
             put(
                 fb,
                 ax as i32,
@@ -1463,7 +1475,10 @@ fn main() -> Result<()> {
     println!("=== Cave Run: pradera → boca de cueva → descenso con ramas ===");
     println!("Objetivo: entra a la CUEVA (derecha) y baja hasta el oro del fondo");
     println!("A/D move | Space jump | LMB dig | RMB place | F cast | 1/2/3 spells | R restart");
-    println!("Window {}x{}  internal {}x{}  cell {}px", WIN_W, WIN_H, GW, GH, CELL_PX);
+    println!(
+        "Window {}x{}  internal {}x{}  cell {}px",
+        WIN_W, WIN_H, GW, GH, CELL_PX
+    );
 
     let el = EventLoop::new()?;
     el.set_control_flow(ControlFlow::Poll);

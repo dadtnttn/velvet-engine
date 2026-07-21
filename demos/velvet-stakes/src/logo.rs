@@ -239,9 +239,8 @@ fn sample_bilinear(rgb: &[u32], a: &[u8], w: u32, h: u32, x: f32, y: f32) -> (u3
 
     let ch = |c: u32, shift: u32| -> f32 { ((c >> shift) & 0xFF) as f32 };
     let lerp = |p: f32, q: f32, t: f32| p + (q - p) * t;
-    let bilerp = |v00: f32, v10: f32, v01: f32, v11: f32| {
-        lerp(lerp(v00, v10, fx), lerp(v01, v11, fx), fy)
-    };
+    let bilerp =
+        |v00: f32, v10: f32, v01: f32, v11: f32| lerp(lerp(v00, v10, fx), lerp(v01, v11, fx), fy);
 
     let r = bilerp(ch(c00, 16), ch(c10, 16), ch(c01, 16), ch(c11, 16));
     let g = bilerp(ch(c00, 8), ch(c10, 8), ch(c01, 8), ch(c11, 8));
@@ -382,12 +381,8 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static N: AtomicU64 = AtomicU64::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "velvet_logo_{}_{}_{}",
-            std::process::id(),
-            tag,
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("velvet_logo_{}_{}_{}", std::process::id(), tag, n));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("word.png");
         // 32x16 black plate with a soft copper disc (letter-like blob)
@@ -451,7 +446,10 @@ mod tests {
         }
         let logo = load_title_wordmark(&p).expect("png wordmark");
         assert!(logo.0 > 10 && logo.1 > 10);
-        assert!(count_soft_alpha(&logo.3) > 50, "real logo should have soft alpha");
+        assert!(
+            count_soft_alpha(&logo.3) > 50,
+            "real logo should have soft alpha"
+        );
     }
 
     #[test]

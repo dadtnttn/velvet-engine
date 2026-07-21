@@ -41,37 +41,3 @@ impl Default for Theme {
         }
     }
 }
-
-/// Main menu entries (order = selection index).
-pub const TITLE_ITEMS: &[MenuItem] = &[
-    MenuItem {
-        id: "start",
-        label: "START RUN",
-    },
-    MenuItem {
-        id: "collection",
-        label: "COLLECTION",
-    },
-    MenuItem {
-        id: "shop",
-        label: "SHOP",
-    },
-    MenuItem {
-        id: "options",
-        label: "OPTIONS",
-    },
-    MenuItem {
-        id: "quit",
-        label: "QUIT",
-    },
-];
-
-/// One menu row.
-#[derive(Debug, Clone, Copy)]
-pub struct MenuItem {
-    /// Stable id (for future routing / analytics).
-    #[allow(dead_code)]
-    pub id: &'static str,
-    /// Display label.
-    pub label: &'static str,
-}

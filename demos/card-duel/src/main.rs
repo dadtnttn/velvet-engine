@@ -136,7 +136,8 @@ impl Battle {
             }
             return;
         }
-        if tags.iter().any(|t| t == "defense") || ctype == "skill" && tags.iter().any(|t| t == "defense")
+        if tags.iter().any(|t| t == "defense")
+            || ctype == "skill" && tags.iter().any(|t| t == "defense")
         {
             let block = match id {
                 "fortify" => 7,
@@ -179,7 +180,8 @@ impl Battle {
         } else if !self.zones.discard.is_empty() {
             // recycle discard → library
             self.zones.library.append(&mut self.zones.discard);
-            self.zones.shuffle_library(self.seed.wrapping_add(self.turn as u64));
+            self.zones
+                .shuffle_library(self.seed.wrapping_add(self.turn as u64));
             let _ = self.zones.draw(1);
             self.push_log("Recycled discard into library.");
         }
@@ -250,8 +252,8 @@ impl App {
         let (catalog_path, deck_path) = data_paths();
         let catalog = load_catalog_json(&catalog_path)
             .with_context(|| format!("catalog {}", catalog_path.display()))?;
-        let deck = load_deck_json(&deck_path)
-            .with_context(|| format!("deck {}", deck_path.display()))?;
+        let deck =
+            load_deck_json(&deck_path).with_context(|| format!("deck {}", deck_path.display()))?;
         let v = validate_deck(&catalog, &deck, &DeckRules::open());
         if !v.ok {
             bail!("starter deck invalid: {:?}", v.violations);
@@ -408,14 +410,7 @@ impl App {
         );
     }
 
-    fn paint_menu_list(
-        &mut self,
-        title: &str,
-        items: &[&str],
-        sel: usize,
-        hint: &str,
-        y0: i32,
-    ) {
+    fn paint_menu_list(&mut self, title: &str, items: &[&str], sel: usize, hint: &str, y0: i32) {
         self.text(48, 36, title, (255, 230, 160), 3);
         self.text(48, 72, "Velvet Engine · velvet-cards", (160, 155, 180), 1);
         for (i, item) in items.iter().enumerate() {
@@ -635,7 +630,13 @@ impl App {
             let prefix = if selected { "> " } else { "  " };
             self.text(56, y, &format!("{prefix}{item}"), (240, 235, 220), 2);
         }
-        self.text(48, (WH as i32) - 40, "Enter seleccionar", (140, 135, 155), 1);
+        self.text(
+            48,
+            (WH as i32) - 40,
+            "Enter seleccionar",
+            (140, 135, 155),
+            1,
+        );
     }
 
     fn paint(&mut self) {
@@ -669,10 +670,7 @@ impl App {
             buf[..n].copy_from_slice(&present[..n]);
             let _ = buf.present();
         }
-        window.set_title(&format!(
-            "Card Duel — {:?} — {}",
-            self.screen, self.status
-        ));
+        window.set_title(&format!("Card Duel — {:?} — {}", self.screen, self.status));
     }
 
     /// Headless automation: open start → play cards until result or timeout.
@@ -702,10 +700,7 @@ impl App {
                 }
             }
             Screen::Result if self.auto_step > 2 => {
-                println!(
-                    "headless result={:?} frames={}",
-                    self.result, self.hframes
-                );
+                println!("headless result={:?} frames={}", self.result, self.hframes);
                 el.exit();
             }
             Screen::HowTo | Screen::Pause | Screen::Title => {}

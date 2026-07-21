@@ -247,7 +247,9 @@ impl CommandRegistry {
                 },
             ],
             required: vec!["target".into(), "x".into(), "y".into()],
-            snippet: "call anim.move:\n    target: card0\n    x: 100\n    y: 200\n    duration: 0.25\n".into(),
+            snippet:
+                "call anim.move:\n    target: card0\n    x: 100\n    y: 200\n    duration: 0.25\n"
+                    .into(),
             error_help: "call anim.move:\n    target: card0\n    x: 0\n    y: 0".into(),
         });
         r.register(CommandSpec {
@@ -566,7 +568,8 @@ impl CommandRegistry {
         r.register(CommandSpec {
             name: "style.call".into(),
             category: "style".into(),
-            description: "Ejecuta una fn de @script en la hoja activa (play/animate → actions).".into(),
+            description: "Ejecuta una fn de @script en la hoja activa (play/animate → actions)."
+                .into(),
             params: vec![
                 CommandParam {
                     name: "fn".into(),
@@ -654,7 +657,8 @@ impl CommandRegistry {
             ],
             required: vec!["target".into(), "prop".into(), "value".into()],
             snippet: "call style.set:\n    target: card0\n    prop: opacity\n    value: 1\n".into(),
-            error_help: "call style.set:\n    target: card0\n    prop: opacity\n    value: 1".into(),
+            error_help: "call style.set:\n    target: card0\n    prop: opacity\n    value: 1"
+                .into(),
         });
         r.register(CommandSpec {
             name: "style.dump".into(),

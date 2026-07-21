@@ -23,11 +23,11 @@
 pub mod agent;
 pub mod biome;
 pub mod brush;
-pub mod combat;
 pub mod builtin;
 pub mod cell;
 pub mod chunk;
 pub mod chunk_codec;
+pub mod combat;
 pub mod electricity;
 pub mod enemy;
 pub mod events;
@@ -64,10 +64,7 @@ pub mod world_query;
 
 pub use agent::{dig_at, Agent, AgentInput, AgentWorld};
 pub use biome::{stamp_biome, stamp_desert, stamp_forest, BiomeStamp, BiomeStats};
-pub use combat::{fire_hitscan, hitscan, knockback, melee_splash, HitScan};
-pub use brush::{
-    apply_preset, default_brush_presets, Brush, BrushMode, BrushPreset, BrushShape,
-};
+pub use brush::{apply_preset, default_brush_presets, Brush, BrushMode, BrushPreset, BrushShape};
 pub use builtin::{builtin_registry, register_builtin_materials, BuiltinIds};
 pub use cell::{Cell, CellFlags, MaterialId};
 pub use chunk::{Chunk, ChunkCoord, CHUNK_CELLS, CHUNK_SIZE};
@@ -75,6 +72,7 @@ pub use chunk_codec::{
     compress_chunk, compress_world_chunks, compression_ratio, decompress_chunk, roundtrip_ok,
     ChunkRle,
 };
+pub use combat::{fire_hitscan, hitscan, knockback, melee_splash, HitScan};
 pub use electricity::{
     diffuse_charge, find_conductive_path, inject_charge, is_conductive, shock_path, try_arc,
 };
@@ -93,26 +91,15 @@ pub use forces::{
 pub use growth::{growth_pass, plant_seed, GrowthConfig};
 pub use hot_sim::{fill_perf_scene, step_hot, timed_steps, HotChunkTracker};
 pub use lighting::{average_light, bake_light, cell_opacity, is_emissive, LightMap};
-pub use multi_layer::{sample_parallax, LayerKind, LayerStack, WorldLayer};
-pub use reaction_chain::{
-    apply_reaction_chains, count_reactive_contacts, extinguish_radius, ReactionRule, CHAIN_RULES,
-};
-pub use sim_debug::{
-    active_chunk_ratio, ascii_window, check_integrity, chunk_layout_ok, count_burning,
-    material_diversity, IntegrityReport,
-};
 pub use material::{
     MaterialDef, MaterialError, MaterialRegistry, Phase, PhysicalProps, ReactionProps,
 };
-pub use material_catalog::{
-    catalog_keys, register_catalog_materials, CATALOG_ROW_COUNT,
-};
+pub use material_catalog::{catalog_keys, register_catalog_materials, CATALOG_ROW_COUNT};
 pub use material_io::{
     export_material_pack, load_material_pack, write_material_pack, MaterialIoError, MaterialPack,
 };
-pub use particle_presets::{
-    all_presets, attach_emitter_preset, play_preset, ParticlePreset,
-};
+pub use multi_layer::{sample_parallax, LayerKind, LayerStack, WorldLayer};
+pub use particle_presets::{all_presets, attach_emitter_preset, play_preset, ParticlePreset};
 pub use particles::{
     FreeParticle, ParticleBurst, ParticleConfig, ParticleEmitter, ParticleEnd, ParticleWorld,
 };
@@ -122,6 +109,9 @@ pub use procgen::{
     cave_smooth, generate_arena, generate_caves, generate_platforms, scatter_blobs, CaveOptions,
 };
 pub use projectile::{Projectile, ProjectileKind, ProjectileWorld};
+pub use reaction_chain::{
+    apply_reaction_chains, count_reactive_contacts, extinguish_radius, ReactionRule, CHAIN_RULES,
+};
 pub use render_buf::{opaque_pixel_count, render_chunk, render_world_window, ColorBuffer};
 pub use replay::{
     apply_action, particle_fingerprint, play_log, world_fingerprint, ReplayAction, ReplayLog,
@@ -130,14 +120,16 @@ pub use rules::splatter_blood;
 pub use save::{load_world, save_world, SaveError, WorldSave};
 pub use session::CellularSession;
 pub use sim::{step, step_chunks, step_n, SimConfig};
+pub use sim_debug::{
+    active_chunk_ratio, ascii_window, check_integrity, chunk_layout_ok, count_burning,
+    material_diversity, IntegrityReport,
+};
 pub use spatial::{average_bucket_load, separate_particles, HashKey, SpatialHash};
 pub use spells::{
     cast_recipe, register_builtin_spells, SpellBook, SpellEffect, SpellRecipe, BUILTIN_SPELL_COUNT,
 };
 pub use status::{StatusEffect, StatusKind, StatusWorld};
-pub use wand::{
-    cast_wand, resolve_wand, starter_wands, CastPlan, Wand, WandModifier, WandSlot,
-};
+pub use wand::{cast_wand, resolve_wand, starter_wands, CastPlan, Wand, WandModifier, WandSlot};
 pub use world::{World, WorldConfig};
 pub use world_query::{
     find_material, histogram, nearest_material, non_air_bounds, phase_counts, surface_profile,

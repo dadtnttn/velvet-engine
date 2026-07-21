@@ -3,6 +3,7 @@
 //! Watches filesystem paths under the demo `data/` tree and reloads without
 //! process restart:
 //! - `.vcss` → reparse stylesheet (previous good sheet kept on parse error)
+//! - VS2 menu `.vel` → reparse screen blueprint (previous good screen kept)
 //! - images (`.jpg`/`.png`) → re-decode into RGB buffers
 //! - `.vstory` → soft-reload flag for host re-boot
 //!
@@ -12,8 +13,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use velvet_assets::HotReloader;
-use velvet_style::{parse_stylesheet, Stylesheet};
+use velvet_script_layers::{parse_screen_source, ScreenBlueprint};
 use velvet_story::pack_rgb;
+use velvet_style::{parse_stylesheet, Stylesheet};
 
 use crate::logo::{load_title_wordmark, RgbaBuf};
 
@@ -23,6 +25,11 @@ pub enum WatchKind {
     /// Named stylesheet (e.g. `casino`).
     Stylesheet {
         /// Registry / world name.
+        name: String,
+    },
+    /// Named declarative VS2 screen (e.g. `main_menu`).
+    Screen {
+        /// Stable logical name used by the last-good cache.
         name: String,
     },
     /// Image slot consumed by the title / cards paint path.
@@ -39,6 +46,10 @@ pub enum WatchKind {
 pub enum ImageSlot {
     /// Lobby background.
     MenuBg,
+    /// Gameplay duel background.
+    GameplayBg,
+    /// Night Market environment background.
+    MarketBg,
     /// Logo emblem.
     Logo,
     /// Profile portrait.
@@ -52,6 +63,8 @@ pub enum ImageSlot {
 pub struct LiveDevApply {
     /// New stylesheet if a `.vcss` reloaded successfully.
     pub stylesheet: Option<(String, Stylesheet)>,
+    /// New declarative VS2 menu screen, or the previous good screen after a bad edit.
+    pub screen: Option<ScreenBlueprint>,
     /// Reloaded images.
     pub images: Vec<(ImageSlot, RgbBuf)>,
     /// Title wordmark with soft-keyed alpha (live without restart).
@@ -76,6 +89,8 @@ pub struct LiveDevSession {
     kinds: HashMap<String, WatchKind>,
     /// Last good stylesheet by name (for fallback after bad parse).
     good_sheets: HashMap<String, Stylesheet>,
+    /// Last good declarative screen by logical name.
+    good_screens: HashMap<String, ScreenBlueprint>,
     /// Accumulated log (capped).
     pub log: Vec<String>,
     /// data root being watched.
@@ -91,6 +106,7 @@ impl LiveDevSession {
             reloader: HotReloader::new(),
             kinds: HashMap::new(),
             good_sheets: HashMap::new(),
+            good_screens: HashMap::new(),
             log: Vec::new(),
             data_root: data_root.into(),
             reload_count: 0,
@@ -122,10 +138,25 @@ impl LiveDevSession {
             "casino",
             data_root.join("styles/casino.vcss"),
         );
+        s.watch_screen(
+            "screen:main_menu",
+            "main_menu",
+            data_root.join("ui/main_menu.vel"),
+        );
         s.watch_image(
             "img:menu_bg",
             ImageSlot::MenuBg,
-            data_root.join("ui/menu_bg.jpg"),
+            data_root.join("ui/menu_bg_city.png"),
+        );
+        s.watch_image(
+            "img:gameplay_bg",
+            ImageSlot::GameplayBg,
+            data_root.join("ui/gameplay_bg_night_broker.png"),
+        );
+        s.watch_image(
+            "img:market_bg",
+            ImageSlot::MarketBg,
+            data_root.join("ui/night_market_bg.png"),
         );
         s.watch_image(
             "img:logo_title",
@@ -170,8 +201,25 @@ impl LiveDevSession {
             }
         }
         self.reloader.watch(key.clone(), path);
-        self.kinds
-            .insert(key, WatchKind::Stylesheet { name });
+        self.kinds.insert(key, WatchKind::Stylesheet { name });
+    }
+
+    /// Watch a declarative VS2 screen source.
+    pub fn watch_screen(
+        &mut self,
+        key: impl Into<String>,
+        name: impl Into<String>,
+        path: impl Into<PathBuf>,
+    ) {
+        let key = key.into();
+        let name = name.into();
+        let path = path.into();
+        // Seed last-good so a broken first edit still leaves a usable menu.
+        if let Ok(screen) = reload_screen(&path) {
+            self.good_screens.insert(name.clone(), screen);
+        }
+        self.reloader.watch(key.clone(), path);
+        self.kinds.insert(key, WatchKind::Screen { name });
     }
 
     /// Watch an image path.
@@ -254,6 +302,29 @@ impl LiveDevSession {
                         }
                     }
                 },
+                WatchKind::Screen { name } => match reload_screen(&path) {
+                    Ok(screen) => {
+                        self.good_screens.insert(name.clone(), screen.clone());
+                        out.screen = Some(screen);
+                        self.reload_count += 1;
+                        let msg =
+                            format!("dev: reloaded VS2 screen `{name}` from {}", path.display());
+                        out.log.push(msg.clone());
+                        self.push_log(msg);
+                    }
+                    Err(e) => {
+                        let msg = format!(
+                            "dev: VS2 screen parse failed (kept previous): {} — {e}",
+                            path.display()
+                        );
+                        out.errors.push(msg.clone());
+                        out.log.push(msg.clone());
+                        self.push_log(msg);
+                        if let Some(good) = self.good_screens.get(&name) {
+                            out.screen = Some(good.clone());
+                        }
+                    }
+                },
                 WatchKind::Image { slot } => {
                     // Title logo: full soft-key RGBA path (not plain RGB)
                     if matches!(slot, ImageSlot::Logo) {
@@ -329,12 +400,32 @@ impl LiveDevSession {
     pub fn good_sheet(&self, name: &str) -> Option<&Stylesheet> {
         self.good_sheets.get(name)
     }
+
+    /// Last-good declarative screen by logical name.
+    pub fn good_screen(&self, name: &str) -> Option<&ScreenBlueprint> {
+        self.good_screens.get(name)
+    }
 }
 
 /// Load + parse a stylesheet from disk (shipped path used by dev + boot).
 pub fn reload_stylesheet(path: &Path) -> Result<Stylesheet, String> {
     let src = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     parse_stylesheet(&src).map_err(|e| e.to_string())
+}
+
+/// Load + parse a declarative VS2 screen from disk.
+pub fn reload_screen(path: &Path) -> Result<ScreenBlueprint, String> {
+    let src = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let file = path.to_string_lossy();
+    let mut screens = parse_screen_source(&src, Some(file.as_ref())).map_err(|e| e.to_string())?;
+    if screens.len() != 1 {
+        return Err(format!(
+            "expected exactly one VS2 screen in {}, found {}",
+            path.display(),
+            screens.len()
+        ));
+    }
+    Ok(screens.remove(0))
 }
 
 /// Decode image file to packed RGB (same packing as demo renderer).
@@ -357,11 +448,8 @@ mod tests {
     use std::time::Duration;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "velvet_live_dev_{}_{}",
-            name,
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("velvet_live_dev_{}_{}", name, std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::create_dir_all(dir.join("styles"));
         let _ = std::fs::create_dir_all(dir.join("ui"));
@@ -463,6 +551,95 @@ mod tests {
     }
 
     #[test]
+    fn vs2_screen_reload_applies_new_blueprint() {
+        let dir = temp_dir("screen");
+        let path = dir.join("ui/main_menu.vel");
+        write_file(
+            &path,
+            r#"
+            screen title_menu {
+                class: "title-menu"
+                title: "FIRST TITLE"
+                button start {
+                    label: "START"
+                    action: "start"
+                    enabled: true
+                }
+            }
+            "#,
+        );
+        let mut dev = LiveDevSession::new(&dir);
+        dev.watch_screen("screen:main_menu", "main_menu", &path);
+        let baseline = dev.good_screen("main_menu").expect("screen seeded");
+        assert_eq!(baseline.name, "title_menu");
+        assert_eq!(baseline.buttons.len(), 1);
+
+        write_file(
+            &path,
+            r#"
+            screen title_menu {
+                class: "title-menu"
+                title: "RELOADED TITLE"
+                button start {
+                    label: "NEW RUN"
+                    action: "start"
+                    enabled: true
+                }
+                button collection {
+                    label: "COLLECTION"
+                    action: "collection"
+                    enabled: true
+                }
+            }
+            "#,
+        );
+        let apply = dev.force_tick_key("screen:main_menu");
+        let screen = apply.screen.expect("VS2 screen reloaded");
+        assert_eq!(screen.title, "RELOADED TITLE");
+        assert_eq!(screen.buttons.len(), 2);
+        assert_eq!(screen.buttons[1].id, "collection");
+        assert!(apply.errors.is_empty());
+        assert_eq!(dev.reload_count, 1);
+        assert_eq!(dev.good_screen("main_menu").unwrap().buttons.len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bad_vs2_screen_keeps_previous_good_blueprint() {
+        let dir = temp_dir("bad_screen");
+        let path = dir.join("ui/main_menu.vel");
+        write_file(
+            &path,
+            r#"
+            screen title_menu {
+                title: "STABLE TITLE"
+                button start { label: "START"; action: "start"; }
+            }
+            "#,
+        );
+        let mut dev = LiveDevSession::new(&dir);
+        dev.watch_screen("screen:main_menu", "main_menu", &path);
+        let baseline = dev.good_screen("main_menu").expect("screen seeded");
+        assert_eq!(baseline.title, "STABLE TITLE");
+        assert_eq!(baseline.buttons.len(), 1);
+
+        write_file(&path, "screen title_menu { button start { label:");
+        let apply = dev.force_tick_key("screen:main_menu");
+        assert!(
+            !apply.errors.is_empty(),
+            "broken VS2 must report its parse error"
+        );
+        let restored = apply.screen.expect("last-good screen restored");
+        assert_eq!(restored.name, "title_menu");
+        assert_eq!(restored.title, "STABLE TITLE");
+        assert_eq!(restored.buttons.len(), 1);
+        assert_eq!(restored.buttons[0].id, "start");
+        assert_eq!(dev.good_screen("main_menu").unwrap().title, "STABLE TITLE");
+        assert_eq!(dev.reload_count, 0, "failed reload is not successful");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn image_reload_changes_pixel_buffer() {
         let dir = temp_dir("img");
         let path = dir.join("ui/menu_bg.jpg");
@@ -548,6 +725,10 @@ mod tests {
         assert!(dev.watch_count() >= 5);
         assert!(dev.path_of("style:casino").unwrap().exists());
         assert!(dev.good_sheet("casino").is_some());
+        assert!(dev.path_of("screen:main_menu").unwrap().exists());
+        assert!(dev.good_screen("main_menu").is_some());
+        assert!(dev.path_of("img:gameplay_bg").unwrap().exists());
+        assert!(dev.path_of("img:market_bg").unwrap().exists());
         // filesystem load, not include_str-only
         let p = dev.path_of("style:casino").unwrap();
         assert!(p.ends_with("casino.vcss"));
@@ -578,7 +759,9 @@ mod tests {
         let mut dev = LiveDevSession::new(&dir);
         dev.watch_image("img:logo_title", ImageSlot::Logo, &path);
         let apply = dev.force_tick_key("img:logo_title");
-        let logo = apply.logo_title.expect("logo_title applied via shipped tick");
+        let logo = apply
+            .logo_title
+            .expect("logo_title applied via shipped tick");
         assert_eq!(logo.0, 64);
         assert_eq!(logo.1, 32);
         // black keyed out on corners
@@ -604,7 +787,10 @@ mod tests {
         // pixel color should differ (blue-ish vs copper)
         let mid_rgb1 = logo.2[mid];
         let mid_rgb2 = logo2.2[mid];
-        assert_ne!(mid_rgb1, mid_rgb2, "live reload must refresh wordmark bytes");
+        assert_ne!(
+            mid_rgb1, mid_rgb2,
+            "live reload must refresh wordmark bytes"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

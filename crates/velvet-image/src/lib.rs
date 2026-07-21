@@ -80,7 +80,9 @@ pub struct RgbaImage {
 impl RgbaImage {
     /// Empty.
     pub fn new(width: u32, height: u32) -> Self {
-        let n = (width as usize).saturating_mul(height as usize).saturating_mul(4);
+        let n = (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(4);
         Self {
             width,
             height,
@@ -412,7 +414,12 @@ fn parse_path_points(d: &str) -> Vec<(f32, f32)> {
     let mut cmd = 'M';
     while i < tokens.len() {
         let t = &tokens[i];
-        if t.len() == 1 && t.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false) {
+        if t.len() == 1
+            && t.chars()
+                .next()
+                .map(|c| c.is_ascii_alphabetic())
+                .unwrap_or(false)
+        {
             cmd = t.chars().next().unwrap();
             i += 1;
         }
@@ -475,7 +482,8 @@ fn parse_path_points(d: &str) -> Vec<(f32, f32)> {
                 if i + 5 >= tokens.len() {
                     break;
                 }
-                let nums: Result<Vec<f32>, _> = tokens[i..i + 6].iter().map(|s| s.parse()).collect();
+                let nums: Result<Vec<f32>, _> =
+                    tokens[i..i + 6].iter().map(|s| s.parse()).collect();
                 let Ok(n) = nums else {
                     i += 1;
                     continue;
@@ -500,7 +508,8 @@ fn parse_path_points(d: &str) -> Vec<(f32, f32)> {
                 if i + 3 >= tokens.len() {
                     break;
                 }
-                let nums: Result<Vec<f32>, _> = tokens[i..i + 4].iter().map(|s| s.parse()).collect();
+                let nums: Result<Vec<f32>, _> =
+                    tokens[i..i + 4].iter().map(|s| s.parse()).collect();
                 let Ok(n) = nums else {
                     i += 1;
                     continue;
@@ -575,14 +584,10 @@ fn tessellate_cubic(
     for s in 1..=steps {
         let t = s as f32 / steps as f32;
         let u = 1.0 - t;
-        let x = u * u * u * p0.0
-            + 3.0 * u * u * t * p1.0
-            + 3.0 * u * t * t * p2.0
-            + t * t * t * p3.0;
-        let y = u * u * u * p0.1
-            + 3.0 * u * u * t * p1.1
-            + 3.0 * u * t * t * p2.1
-            + t * t * t * p3.1;
+        let x =
+            u * u * u * p0.0 + 3.0 * u * u * t * p1.0 + 3.0 * u * t * t * p2.0 + t * t * t * p3.0;
+        let y =
+            u * u * u * p0.1 + 3.0 * u * u * t * p1.1 + 3.0 * u * t * t * p2.1 + t * t * t * p3.1;
         pts.push((x, y));
     }
 }
@@ -756,8 +761,9 @@ fn put(img: &mut RgbaImage, x: u32, y: u32, rgba: [u8; 4]) {
                 for c in 0..3 {
                     let s = rgba[c] as f32;
                     let d = img.pixels[i + c] as f32;
-                    img.pixels[i + c] =
-                        ((s * sa + d * da * (1.0 - sa)) / out_a).round().clamp(0.0, 255.0) as u8;
+                    img.pixels[i + c] = ((s * sa + d * da * (1.0 - sa)) / out_a)
+                        .round()
+                        .clamp(0.0, 255.0) as u8;
                 }
                 img.pixels[i + 3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
             }

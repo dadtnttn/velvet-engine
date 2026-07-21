@@ -5,7 +5,11 @@
 use velvet_script_hir::HirSpan;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResolveSeverity { Error, Warning, Note }
+pub enum ResolveSeverity {
+    Error,
+    Warning,
+    Note,
+}
 
 #[derive(Debug, Clone)]
 pub struct ResolveDiag {
@@ -17,16 +21,46 @@ pub struct ResolveDiag {
 }
 
 impl ResolveDiag {
-    pub fn error(code: &'static str, message: impl Into<String>, span: HirSpan, module: impl Into<String>) -> Self {
-        Self { code, severity: ResolveSeverity::Error, message: message.into(), span, module: module.into() }
+    pub fn error(
+        code: &'static str,
+        message: impl Into<String>,
+        span: HirSpan,
+        module: impl Into<String>,
+    ) -> Self {
+        Self {
+            code,
+            severity: ResolveSeverity::Error,
+            message: message.into(),
+            span,
+            module: module.into(),
+        }
     }
-    pub fn warning(code: &'static str, message: impl Into<String>, span: HirSpan, module: impl Into<String>) -> Self {
-        Self { code, severity: ResolveSeverity::Warning, message: message.into(), span, module: module.into() }
+    pub fn warning(
+        code: &'static str,
+        message: impl Into<String>,
+        span: HirSpan,
+        module: impl Into<String>,
+    ) -> Self {
+        Self {
+            code,
+            severity: ResolveSeverity::Warning,
+            message: message.into(),
+            span,
+            module: module.into(),
+        }
     }
     pub fn display(&self) -> String {
-        format!("{}:{}: [{}] {}", self.module, self.span.display(), self.code, self.message)
+        format!(
+            "{}:{}: [{}] {}",
+            self.module,
+            self.span.display(),
+            self.code,
+            self.message
+        )
     }
-    pub fn is_error(&self) -> bool { matches!(self.severity, ResolveSeverity::Error) }
+    pub fn is_error(&self) -> bool {
+        matches!(self.severity, ResolveSeverity::Error)
+    }
 }
 
 pub const RESOLVE_CODES: &[&str] = &[
@@ -49,9 +83,12 @@ pub const RESOLVE_CODES: &[&str] = &[
     "E0017_character_unbound",
     "E0018_trait_unbound",
     "E0019_impl_orphan",
-    "E0020_use_star_empty",];
+    "E0020_use_star_empty",
+];
 
-pub fn code_known(code: &str) -> bool { RESOLVE_CODES.contains(&code) }
+pub fn code_known(code: &str) -> bool {
+    RESOLVE_CODES.contains(&code)
+}
 
 pub fn diag_e0001_unbound(name: &str, span: HirSpan, module: &str) -> ResolveDiag {
     ResolveDiag::error("E0001_unbound", name, span, module)
@@ -133,86 +170,6 @@ pub fn diag_e0020_use_star_empty(name: &str, span: HirSpan, module: &str) -> Res
     ResolveDiag::error("E0020_use_star_empty", name, span, module)
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,4 +189,3 @@ mod tests {
         assert!(d.is_error());
     }
 }
-

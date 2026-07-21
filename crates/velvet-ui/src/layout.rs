@@ -63,7 +63,7 @@ pub fn layout_children(
         LayoutType::Row => {
             let mut x = content.pos.x;
             let mut max_h = 0.0f32;
-            let gap = 8.0;
+            let gap = parent.style.gap.max(0.0);
             for c in children.iter_mut() {
                 let m = c.style.margin;
                 let size = measure_child(c, content.size);
@@ -78,7 +78,7 @@ pub fn layout_children(
         }
         LayoutType::Column => {
             let mut y = content.pos.y;
-            let gap = 8.0;
+            let gap = parent.style.gap.max(0.0);
             for c in children.iter_mut() {
                 let m = c.style.margin;
                 let size = measure_child(c, content.size);
@@ -91,7 +91,7 @@ pub fn layout_children(
         }
         LayoutType::Grid { columns } => {
             let cols = columns.max(1) as f32;
-            let gap = 8.0;
+            let gap = parent.style.gap.max(0.0);
             let cell_w = ((content.size.x - gap * (cols - 1.0)) / cols).max(0.0);
             for (i, c) in children.iter_mut().enumerate() {
                 let col = (i as u32) % columns.max(1);

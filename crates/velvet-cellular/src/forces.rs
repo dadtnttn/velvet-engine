@@ -231,6 +231,10 @@ mod tests {
             pw.step(&mut world, 1.0 / 60.0);
         }
         // particle should have moved right-ish or still alive
-        assert!(pw.particles.iter().any(|p| p.alive) || (pw.particles[0].x - x0).abs() > 0.01 || pw.conversions > 0);
+        assert!(
+            pw.particles.iter().any(|p| p.alive)
+                || (pw.particles[0].x - x0).abs() > 0.01
+                || pw.conversions > 0
+        );
     }
 }

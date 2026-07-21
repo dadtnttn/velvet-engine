@@ -203,9 +203,7 @@ pub fn apply_reaction_chains(
             if product.is_air() {
                 world.set(rx, ry, Cell::air());
             } else {
-                let mut cell = Cell::of(product).with_temp(
-                    world.get(rx, ry).temp + rule.heat,
-                );
+                let mut cell = Cell::of(product).with_temp(world.get(rx, ry).temp + rule.heat);
                 if rule.product == "fire" {
                     cell.flags.insert(CellFlags::BURNING);
                     cell.life = 16;

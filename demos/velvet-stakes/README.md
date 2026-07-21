@@ -4,7 +4,8 @@ Balatro-style demo. **Author languages** drive the product:
 
 | Layer | File | Role |
 |-------|------|------|
-| **Velvet Story** | `data/story/main.vstory` | Flow: title → blinds → play → result |
+| **Velvet Script 2** | `data/ui/main_menu.vel` | Typed menu structure, copy, actions, icons, shortcuts, enabled state |
+| **Velvet Story** | `data/story/main.vstory` | Flow: title → play → Night Market → next blind → settlement |
 | **Velvet Style** | `data/styles/casino.vcss` | CSS look + JS-lite `@script` (`dealHand`, `menu.open`) |
 | **Rust host** | `src/` | Window, paint, input, `stakes.*` + `style.*` commands |
 
@@ -17,7 +18,7 @@ cargo run -p velvet-stakes --release
 
 ### Dev / live reload (HTML-like)
 
-Keep the game open and edit author files on disk — no quit/relaunch for styles, images, or story:
+Keep the game open and edit author files on disk — no quit/relaunch for the VS2 menu, styles, images, or story:
 
 ```powershell
 cargo run -p velvet-stakes --release -- --dev
@@ -25,10 +26,13 @@ cargo run -p velvet-stakes --release -- --dev
 
 | Watch | Path | On change |
 |-------|------|-----------|
+| VS2 menu | `data/ui/main_menu.vel` | Reparse typed blueprint; bad edits keep the last valid menu |
 | Style | `data/styles/casino.vcss` | Reparse; UI/motion use new sheet (bad parse keeps last good) |
 | Images | `data/ui/*`, `data/art/*.jpg` | Reload buffer for next paint |
-| Title | `data/ui/logo_title.png` soft-key + 2×2 supersample blit | Font fallback if plate missing |
-| Menu BG | `data/ui/menu_bg.jpg` | Cinematic Nightfall Casino lobby (16:9) |
+| Title | VS2 copy + system display serif | One-line art-deco wordmark anchored at left |
+| Menu BG | `data/ui/menu_bg_city.png` | Panoramic neon skyline, lounge, bar, and card table (16:9) |
+| Gameplay BG | `data/ui/gameplay_bg_night_broker.png` | Clean neon duel plate behind the live HUD and cards |
+| Market BG | `data/ui/night_market_bg.png` | Clean shopkeeper environment behind live stock and controls |
 | Story | `data/story/main.vstory` | Soft re-boot when on title (or flagged until title) |
 
 Console prints `dev: reloaded …` lines; window title shows `DEV`.
@@ -50,17 +54,18 @@ cargo test -p velvet-stakes
 
 ## Story ↔ CSS wiring
 
-1. `.vstory` calls `stakes.boot` → loads `casino.vcss`
-2. `style.emit` / `event: "menu.open"` → `@script on("menu.open")`
-3. `stakes.deal` → `@script fn dealHand` + `@keyframes deal`
-4. Menu/HUD resolve `.button` / `.button:selected` from the same sheet
+1. `main_menu.vel` compiles to a typed `ScreenBlueprint`
+2. `.vstory` calls `stakes.boot` → loads `casino.vcss`
+3. VS2 button actions route story by stable names, independent of visual order
+4. Menu buttons resolve descendant selectors and `:hover`, `:focus`, `:active`, `:disabled`
+5. `stakes.deal` → `@script fn dealHand` + `@keyframes deal`
 
 ## Menu
 
 UI paint in `src/ui/` (`theme`, `menu`, `hud`, `buttons`).  
 Art under `data/ui/` (original assets).
 
-Buttons: **START RUN · COLLECTION · SHOP · OPTIONS · QUIT**
+Buttons: **NEW RUN · COLLECTION · NIGHT MARKET · OPTIONS · LEAVE TABLE**
 
 ## Cards
 
@@ -70,8 +75,13 @@ Buttons: **START RUN · COLLECTION · SHOP · OPTIONS · QUIT**
 
 | Key | Action |
 |-----|--------|
-| ↑↓ / Enter | Menu (story resume) |
+| Mouse / ↑↓ / W S / Enter | Hover, navigate, and activate menu |
+| C / S / O / Esc | Authored menu shortcuts |
 | 1–8 | Select |
 | P | Play hand |
 | D | Discard |
 | Esc | Pause / back |
+| Mouse | Select cards; Play Hand, Discard, and Pause buttons |
+| Market: ←→ / A D / Enter | Select and buy a card |
+| Market: R | Reroll stock with progressive cash cost |
+| Market: C / Space | Continue to the next blind |

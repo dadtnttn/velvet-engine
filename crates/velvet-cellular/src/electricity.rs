@@ -16,7 +16,15 @@ pub fn is_conductive(world: &World, id: MaterialId) -> bool {
     // salt water / shock gel
     matches!(
         def.key.as_str(),
-        "copper" | "iron" | "steel" | "gold" | "silver" | "copper_wire" | "water_salt" | "shock_gel" | "metal"
+        "copper"
+            | "iron"
+            | "steel"
+            | "gold"
+            | "silver"
+            | "copper_wire"
+            | "water_salt"
+            | "shock_gel"
+            | "metal"
     ) || (def.phase == Phase::Liquid && def.physics.conductivity > 0.5)
 }
 
@@ -120,7 +128,11 @@ pub fn try_arc(
         if path.len() <= max_len {
             shock_path(world, &path, energy);
             // paint plasma trail on air neighbors
-            if let Ok(plasma) = world.materials.id("plasma_arc").or_else(|_| world.materials.id("fire")) {
+            if let Ok(plasma) = world
+                .materials
+                .id("plasma_arc")
+                .or_else(|_| world.materials.id("fire"))
+            {
                 for &(x, y) in path.iter().step_by(2) {
                     if world.get(x, y + 1).is_air() {
                         world.set(x, y + 1, Cell::of(plasma).with_life(6).with_temp(800.0));

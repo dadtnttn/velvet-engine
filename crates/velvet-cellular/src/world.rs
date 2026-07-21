@@ -231,9 +231,7 @@ impl World {
 
     /// Material id by key.
     pub fn mat(&self, key: &str) -> MaterialId {
-        self.materials
-            .id(key)
-            .unwrap_or(MaterialId::AIR)
+        self.materials.id(key).unwrap_or(MaterialId::AIR)
     }
 
     /// Paint filled rectangle [x0,x1) × [y0,y1).

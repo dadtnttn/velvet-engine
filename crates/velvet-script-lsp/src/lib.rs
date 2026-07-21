@@ -49,7 +49,7 @@ pub struct Diagnostic {
 pub struct DocumentSymbol {
     /// Name.
     pub name: String,
-    /// Kind: function, scene, character, variable.
+    /// Kind: function, scene, screen, character, variable.
     pub kind: String,
     /// Line 0-based.
     pub line: u32,
@@ -174,6 +174,12 @@ pub fn analyze(source: &str, file: Option<&str>) -> Analysis {
                 line: loc.line.saturating_sub(1),
                 character: loc.column.saturating_sub(1),
             }),
+            Item::Screen { name, loc, .. } => analysis.symbols.push(DocumentSymbol {
+                name: name.clone(),
+                kind: "screen".into(),
+                line: loc.line.saturating_sub(1),
+                character: loc.column.saturating_sub(1),
+            }),
             Item::Character { name, loc, .. } => analysis.symbols.push(DocumentSymbol {
                 name: name.clone(),
                 kind: "character".into(),
@@ -232,6 +238,8 @@ pub fn completions(source: &str, _line: u32, _character: u32) -> Vec<String> {
     let mut items = vec![
         "function".into(),
         "scene".into(),
+        "screen".into(),
+        "button".into(),
         "character".into(),
         "state".into(),
         "choice".into(),
@@ -480,6 +488,8 @@ pub fn semantic_tokens(source: &str) -> Vec<SemanticToken> {
     const KEYWORDS: &[&str] = &[
         "function",
         "scene",
+        "screen",
+        "button",
         "character",
         "state",
         "choice",
@@ -622,6 +632,25 @@ function f() { return 1 }
             .any(|s| s.kind == "scene" && s.name == "main"));
         assert!(a.symbols.iter().any(|s| s.kind == "function"));
         assert!(a.symbols.iter().any(|s| s.kind == "character"));
+    }
+
+    #[test]
+    fn analyzes_declarative_screen_symbol_without_compiler_error() {
+        let source = r#"
+screen main_menu {
+    button start { label: "START"; action: "start_run"; }
+}
+"#;
+        let analysis = analyze(source, Some("menu.vel"));
+        assert!(analysis
+            .symbols
+            .iter()
+            .any(|symbol| symbol.kind == "screen" && symbol.name == "main_menu"));
+        assert!(
+            analysis.diagnostics.is_empty(),
+            "{:?}",
+            analysis.diagnostics
+        );
     }
 
     #[test]

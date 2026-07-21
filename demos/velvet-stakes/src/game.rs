@@ -8,7 +8,7 @@ use velvet_math::{Ease, Vec2};
 use velvet_style::{call_style_fn, JsValue, Stylesheet};
 
 use crate::catalog::{score_played, CardStats, HandScore};
-use velvet_stakes::ui::theme::{WW, WH};
+use velvet_stakes::ui::theme::{WH, WW};
 
 pub const HAND_SIZE: usize = 8;
 pub const MAX_SELECT: usize = 5;
@@ -125,7 +125,8 @@ pub struct Run {
 
 impl Run {
     pub fn start(ante: usize, deck_cards: &[String], seed: u64, money: i64) -> Self {
-        let blind = &BLINDS[ante.min(BLINDS.len() - 1)];
+        let ante = ante.min(BLINDS.len() - 1);
+        let blind = &BLINDS[ante];
         let mut ids = deck_cards.to_vec();
         shuffle_in_place(&mut ids, seed);
         let mut zones = CardZones {
@@ -156,9 +157,10 @@ impl Run {
 
     pub fn hand_slot_pos(i: usize, n: usize) -> Vec2 {
         let n = n.max(1) as f32;
-        let total_w = (n - 1.0) * 108.0;
-        let x0 = (WW as f32 - total_w) * 0.5 - 40.0;
-        Vec2::new(x0 + i as f32 * 108.0, 200.0)
+        let total_w = (n - 1.0) * 91.0;
+        let table_center_x = (351.0 + 988.0) * 0.5;
+        let x0 = table_center_x - total_w * 0.5;
+        Vec2::new(x0 + i as f32 * 91.0, 506.0)
     }
 
     /// Rebuild hand visuals. When `animate_deal`, prefers `.vcss` `@script dealHand` timelines.
@@ -255,8 +257,8 @@ impl Run {
         for (i, v) in self.visuals.iter_mut().enumerate() {
             if self.selected.get(i).copied().unwrap_or(false) {
                 if v.timeline.finished() || !v.timeline.playing {
-                    v.pose.pos.y = v.rest.y - 18.0;
-                    v.pose.scale = 1.06;
+                    v.pose.pos.y = v.rest.y - 20.0;
+                    v.pose.scale = 1.04;
                 }
             } else if v.timeline.finished() || !v.timeline.playing {
                 v.pose.pos = v.rest;
@@ -299,6 +301,69 @@ impl Run {
             .collect()
     }
 
+    /// Zero-based index of the active blind, clamped to the shipped run.
+    pub fn round_index(&self) -> usize {
+        self.ante.min(BLINDS.len() - 1)
+    }
+
+    /// One-based round number suitable for the HUD.
+    pub fn round_number(&self) -> usize {
+        self.round_index() + 1
+    }
+
+    /// Total number of blinds in a complete run.
+    pub fn round_count(&self) -> usize {
+        BLINDS.len()
+    }
+
+    /// Normalized blind progress for bars and opponent health displays.
+    pub fn progress_ratio(&self) -> f32 {
+        if self.target <= 0 {
+            return 1.0;
+        }
+        (self.score.max(0) as f32 / self.target as f32).clamp(0.0, 1.0)
+    }
+
+    /// Score still required to defeat the active blind.
+    pub fn score_remaining(&self) -> i64 {
+        self.target.saturating_sub(self.score).max(0)
+    }
+
+    /// Number of selected cards, capped by [`MAX_SELECT`] through [`Self::toggle`].
+    pub fn selected_count(&self) -> usize {
+        self.selected.iter().filter(|selected| **selected).count()
+    }
+
+    /// Current terminal state, if the blind has ended.
+    pub fn pending_outcome(&self) -> Option<Outcome> {
+        if self.score >= self.target {
+            Some(if self.round_number() >= self.round_count() {
+                Outcome::RunClear
+            } else {
+                Outcome::WinBlind
+            })
+        } else if self.hands_left == 0 {
+            Some(Outcome::LoseBlind)
+        } else {
+            None
+        }
+    }
+
+    /// Whether the primary play action can currently resolve.
+    pub fn can_play(&self) -> bool {
+        self.pending_outcome().is_none() && self.hands_left > 0 && self.selected_count() > 0
+    }
+
+    /// Whether the discard action can currently resolve.
+    pub fn can_discard(&self) -> bool {
+        self.pending_outcome().is_none() && self.discards_left > 0 && self.selected_count() > 0
+    }
+
+    /// Cash paid once when this blind is defeated.
+    pub fn blind_reward(&self) -> i64 {
+        4 + self.round_index() as i64 * 2
+    }
+
     pub fn preview_score(&self, stats: &HashMap<String, CardStats>) -> HandScore {
         score_played(&self.selected_ids(), stats)
     }
@@ -308,12 +373,12 @@ impl Run {
         stats: &HashMap<String, CardStats>,
         sheet: Option<&Stylesheet>,
     ) -> Option<Outcome> {
+        if let Some(outcome) = self.pending_outcome() {
+            return Some(outcome);
+        }
         let ids = self.selected_ids();
         if ids.is_empty() {
             self.push_log("Select 1–5 cards");
-            return None;
-        }
-        if self.hands_left == 0 {
             return None;
         }
         let sc = score_played(&ids, stats);
@@ -322,7 +387,11 @@ impl Run {
         self.last = format!("{}  {}×{} = +{}", sc.label, sc.chips, sc.mult, sc.total);
         self.push_log(self.last.clone());
 
-        let focus_n = ids.iter().filter(|id| id.as_str() == "focus").count();
+        let bonus_draw = ids
+            .iter()
+            .filter_map(|id| stats.get(id))
+            .map(|card| card.bonus_draw)
+            .sum();
 
         let mut idxs: Vec<usize> = self
             .selected
@@ -335,24 +404,22 @@ impl Run {
         for i in idxs.into_iter().rev() {
             let _ = self.zones.discard_from_hand(i);
         }
-        self.refill(focus_n);
+        self.refill(bonus_draw);
         self.rebuild_visuals(true, sheet);
 
-        if self.score >= self.target {
-            self.money += 4 + self.ante as i64 * 2;
-            return Some(if self.ante + 1 >= BLINDS.len() {
-                Outcome::RunClear
-            } else {
-                Outcome::WinBlind
-            });
-        }
-        if self.hands_left == 0 {
-            return Some(Outcome::LoseBlind);
+        if let Some(outcome) = self.pending_outcome() {
+            if matches!(outcome, Outcome::WinBlind | Outcome::RunClear) {
+                self.money += self.blind_reward();
+            }
+            return Some(outcome);
         }
         None
     }
 
     pub fn discard_selected(&mut self, sheet: Option<&Stylesheet>) {
+        if self.pending_outcome().is_some() {
+            return;
+        }
         if self.discards_left == 0 {
             self.push_log("No discards");
             return;
@@ -387,14 +454,110 @@ impl Run {
                     break;
                 }
                 self.zones.library.append(&mut self.zones.discard);
-                shuffle_in_place(
-                    &mut self.zones.library,
-                    0xDEC_A_DE + self.hands_left as u64,
-                );
+                shuffle_in_place(&mut self.zones.library, 0xDEC_A_DE + self.hands_left as u64);
                 self.push_log("Shuffled discard");
             }
             let _ = self.zones.draw(1);
         }
         self.selected = vec![false; self.zones.hand.len()];
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::catalog::illustrated_stats;
+    use std::path::Path;
+
+    fn stats() -> HashMap<String, CardStats> {
+        illustrated_stats(Path::new("."))
+            .into_iter()
+            .map(|card| (card.id.clone(), card))
+            .collect()
+    }
+
+    fn deck(id: &str) -> Vec<String> {
+        std::iter::repeat(id.to_string()).take(20).collect()
+    }
+
+    #[test]
+    fn progress_and_round_api_are_hud_ready() {
+        let mut run = Run::start(1, &deck("strike"), 7, 4);
+        assert_eq!(run.round_number(), 2);
+        assert_eq!(run.round_count(), 3);
+        assert_eq!(run.score_remaining(), 700);
+        assert_eq!(run.progress_ratio(), 0.0);
+
+        run.score = 350;
+        assert_eq!(run.score_remaining(), 350);
+        assert!((run.progress_ratio() - 0.5).abs() < f32::EPSILON);
+
+        run.score = 900;
+        assert_eq!(run.score_remaining(), 0);
+        assert_eq!(run.progress_ratio(), 1.0);
+        assert_eq!(run.pending_outcome(), Some(Outcome::WinBlind));
+    }
+
+    #[test]
+    fn eight_card_hand_uses_gameplay_table_slots() {
+        let first = Run::hand_slot_pos(0, HAND_SIZE);
+        let last = Run::hand_slot_pos(HAND_SIZE - 1, HAND_SIZE);
+        assert_eq!(first, Vec2::new(351.0, 506.0));
+        assert_eq!(last, Vec2::new(988.0, 506.0));
+    }
+
+    #[test]
+    fn final_hand_resolves_loss_when_target_is_missed() {
+        let stats = stats();
+        let mut run = Run::start(0, &deck("strike"), 3, 4);
+        run.target = 10_000;
+        run.hands_left = 1;
+        run.toggle(0);
+
+        assert!(run.can_play());
+        assert_eq!(run.play_selected(&stats, None), Some(Outcome::LoseBlind));
+        assert_eq!(run.hands_left, 0);
+        assert!(!run.can_play());
+        assert!(!run.can_discard());
+    }
+
+    #[test]
+    fn win_and_run_clear_pay_once() {
+        let stats = stats();
+        let mut run = Run::start(0, &deck("fireball"), 11, 4);
+        run.toggle(0);
+        run.toggle(1);
+        run.toggle(2);
+
+        assert_eq!(run.play_selected(&stats, None), Some(Outcome::WinBlind));
+        assert_eq!(run.money, 8);
+        assert_eq!(run.play_selected(&stats, None), Some(Outcome::WinBlind));
+        assert_eq!(run.money, 8, "terminal input must not pay twice");
+
+        let mut boss = Run::start(2, &deck("fireball"), 13, 10);
+        boss.target = 1;
+        boss.toggle(0);
+        assert_eq!(boss.play_selected(&stats, None), Some(Outcome::RunClear));
+        assert_eq!(boss.money, 18);
+    }
+
+    #[test]
+    fn focus_draw_comes_from_card_data() {
+        let stats = stats();
+        let mut run = Run::start(0, &deck("focus"), 17, 4);
+        run.target = 10_000;
+        run.toggle(0);
+        assert_eq!(run.zones.hand.len(), HAND_SIZE);
+
+        assert_eq!(run.play_selected(&stats, None), None);
+        assert_eq!(run.zones.hand.len(), HAND_SIZE + 1);
+    }
+
+    #[test]
+    fn out_of_range_round_clamps_to_final_blind() {
+        let run = Run::start(usize::MAX, &deck("strike"), 19, 4);
+        assert_eq!(run.ante, BLINDS.len() - 1);
+        assert_eq!(run.round_number(), BLINDS.len());
+        assert_eq!(run.blind_name, "Boss Blind");
     }
 }

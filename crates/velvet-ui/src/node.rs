@@ -43,6 +43,9 @@ pub struct UiNode {
     pub id: NodeId,
     /// Optional name.
     pub name: String,
+    /// VCSS class names without the leading `.`.
+    #[serde(default)]
+    pub classes: Vec<String>,
     /// Widget.
     pub widget: WidgetKind,
     /// Style.
@@ -78,6 +81,7 @@ impl UiNode {
         Self {
             id,
             name: name.into(),
+            classes: Vec::new(),
             widget,
             style: UiStyle::default(),
             layout: LayoutType::Stack,
@@ -89,5 +93,39 @@ impl UiNode {
             focusable,
             data: IndexMap::new(),
         }
+    }
+
+    /// Add a VCSS class if it is not already present.
+    ///
+    /// Returns `true` when the class list changed.
+    pub fn add_class(&mut self, class: impl Into<String>) -> bool {
+        let class = class.into();
+        if self.classes.iter().any(|current| current == &class) {
+            return false;
+        }
+        self.classes.push(class);
+        true
+    }
+
+    /// Builder-style VCSS class addition.
+    pub fn with_class(mut self, class: impl Into<String>) -> Self {
+        self.add_class(class);
+        self
+    }
+
+    /// Remove a VCSS class.
+    ///
+    /// Returns `true` when the class existed.
+    pub fn remove_class(&mut self, class: &str) -> bool {
+        let Some(index) = self.classes.iter().position(|current| current == class) else {
+            return false;
+        };
+        self.classes.remove(index);
+        true
+    }
+
+    /// Whether this node has a VCSS class.
+    pub fn has_class(&self, class: &str) -> bool {
+        self.classes.iter().any(|current| current == class)
     }
 }

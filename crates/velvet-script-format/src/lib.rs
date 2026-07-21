@@ -107,6 +107,49 @@ fn format_item(item: &Item, out: &mut String, level: usize) {
             indent(out, level);
             out.push('}');
         }
+        Item::Screen {
+            name,
+            properties,
+            buttons,
+            ..
+        } => {
+            indent(out, level);
+            out.push_str("screen ");
+            out.push_str(name);
+            out.push_str(" {\n");
+            for property in properties {
+                indent(out, level + 1);
+                out.push_str(&property.name);
+                out.push_str(": ");
+                format_expr(&property.value, out, 0);
+                out.push('\n');
+            }
+            if !properties.is_empty() && !buttons.is_empty() {
+                out.push('\n');
+            }
+            for (index, button) in buttons.iter().enumerate() {
+                indent(out, level + 1);
+                out.push_str("button ");
+                out.push_str(&button.id);
+                out.push_str(" {\n");
+                for property in &button.properties {
+                    indent(out, level + 2);
+                    out.push_str(&property.name);
+                    out.push_str(": ");
+                    format_expr(&property.value, out, 0);
+                    out.push('\n');
+                }
+                indent(out, level + 1);
+                out.push('}');
+                if index + 1 < buttons.len() {
+                    out.push_str("\n\n");
+                } else {
+                    out.push('\n');
+                }
+            }
+            indent(out, level);
+            out.push('}');
+        }
         Item::Stmt(s) => format_stmt(s, out, level),
     }
 }
@@ -530,6 +573,18 @@ scene main {
         let once = format_source(src).unwrap();
         let twice = format_source(&once).unwrap();
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn formats_declarative_screen_stably() {
+        let source = r#"screen main_menu{title:"PLAY" button start{label:"START" action:"go" enabled:true}button quit{label:"QUIT" action:"quit"}}"#;
+        let once = format_source(source).unwrap();
+        assert!(once.contains("screen main_menu {"));
+        assert!(once.contains("    title: \"PLAY\""));
+        assert!(once.contains("    button start {"));
+        assert!(once.contains("        enabled: true"));
+        assert!(once.contains("    }\n\n    button quit {"));
+        assert_eq!(format_source(&once).unwrap(), once);
     }
 }
 

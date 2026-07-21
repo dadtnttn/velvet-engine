@@ -28,6 +28,9 @@ pub struct UiStyle {
     pub padding: (f32, f32, f32, f32),
     /// Margin.
     pub margin: (f32, f32, f32, f32),
+    /// Gap between children in row, column, and grid layouts.
+    #[serde(default = "default_gap")]
+    pub gap: f32,
     /// Min size.
     pub min_size: (f32, f32),
     /// Max size (0 = none).
@@ -51,6 +54,7 @@ impl Default for UiStyle {
             radius: 6.0,
             padding: (8.0, 8.0, 8.0, 8.0),
             margin: (0.0, 0.0, 0.0, 0.0),
+            gap: default_gap(),
             min_size: (0.0, 0.0),
             max_size: (0.0, 0.0),
             flex_grow: 0.0,
@@ -59,6 +63,10 @@ impl Default for UiStyle {
             font_size: 18.0,
         }
     }
+}
+
+fn default_gap() -> f32 {
+    8.0
 }
 
 impl UiStyle {

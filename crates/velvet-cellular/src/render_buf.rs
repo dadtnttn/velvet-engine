@@ -75,7 +75,8 @@ pub fn render_world_window(
             // meta variance
             if def.color_variance > 0 {
                 let v = def.color_variance;
-                let j = ((wx.wrapping_mul(374761393) ^ wy.wrapping_mul(668265263)) as u32) % (v as u32 * 2 + 1);
+                let j = ((wx.wrapping_mul(374761393) ^ wy.wrapping_mul(668265263)) as u32)
+                    % (v as u32 * 2 + 1);
                 let d = j as i16 - v as i16;
                 for k in 0..3 {
                     rgba[k] = (rgba[k] as i16 + d).clamp(0, 255) as u8;

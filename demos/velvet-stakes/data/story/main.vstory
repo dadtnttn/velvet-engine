@@ -14,27 +14,29 @@ call stakes.set_screen:
 call stakes.wait:
     phase: title
 
-if menu_action == 0:
+if menu_action == "start":
     goto blind
-if menu_action == 1:
+if menu_action == "collection":
     goto collection
-if menu_action == 2:
+if menu_action == "shop":
     goto shop
-if menu_action == 3:
+if menu_action == "options":
     goto options
-if menu_action == 4:
+if menu_action == "quit":
     goto quit
 
 goto start
 
 scene collection
+call stakes.open_collection:
 call stakes.set_screen:
     id: collection
 call stakes.wait:
-    phase: submenu
+    phase: collection
 goto start
 
 scene shop
+call stakes.open_market:
 call stakes.set_screen:
     id: shop
 call stakes.wait:
@@ -50,10 +52,6 @@ goto start
 
 scene blind
 call stakes.begin_run:
-call stakes.set_screen:
-    id: blind_info
-call stakes.wait:
-    phase: blind
 call stakes.enter_play:
 call stakes.deal:
 call stakes.set_screen:
@@ -63,23 +61,26 @@ call stakes.wait:
 goto result
 
 scene result
+if stakes_outcome == "win":
+    goto market
 call stakes.set_screen:
     id: result
 call stakes.wait:
     phase: result
-if stakes_outcome == "win":
-    if result_action == 0:
-        goto next_blind
-    goto start
 if result_action == 0:
     goto blind
 goto start
 
-scene next_blind
+scene market
+call stakes.open_market:
 call stakes.set_screen:
-    id: blind_info
+    id: shop
 call stakes.wait:
-    phase: blind
+    phase: market
+goto next_blind
+
+scene next_blind
+call stakes.advance_blind:
 call stakes.enter_play:
 call stakes.deal:
 call stakes.set_screen:

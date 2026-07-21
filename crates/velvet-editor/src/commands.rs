@@ -198,10 +198,7 @@ fn cmd_story_outline(ctx: &mut CommandContext<'_>, args: &[&str]) -> Result<Comm
         .scenes
         .iter()
         .map(|s| {
-            let origin = s
-                .origin_file
-                .as_deref()
-                .unwrap_or(model.file.as_str());
+            let origin = s.origin_file.as_deref().unwrap_or(model.file.as_str());
             format!("scene {} @ {} (line {})", s.name, origin, s.line)
         })
         .collect();
@@ -626,18 +623,16 @@ mod tests {
             selection: &mut selection,
             scripts: &mut scripts,
         };
-        let r = dispatch(
-            &mut ctx,
-            CommandId::StoryOutline,
-            &["stories/main.vstory"],
-        )
-        .unwrap();
+        let r = dispatch(&mut ctx, CommandId::StoryOutline, &["stories/main.vstory"]).unwrap();
         assert!(r.ok, "{}", r.message);
         let blob = r.details.join("\n");
         assert!(
             blob.contains("from_include"),
             "outline must list included scene: {blob}"
         );
-        assert!(blob.contains("start"), "outline must list root scene: {blob}");
+        assert!(
+            blob.contains("start"),
+            "outline must list root scene: {blob}"
+        );
     }
 }

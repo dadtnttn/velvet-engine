@@ -109,7 +109,9 @@ fn dirs_next_home() -> Option<PathBuf> {
 }
 
 /// Export Android package layout (+ optional real build).
-pub fn export_android(opts: &AndroidExportOptions) -> Result<AndroidExportReport, AndroidExportError> {
+pub fn export_android(
+    opts: &AndroidExportOptions,
+) -> Result<AndroidExportReport, AndroidExportError> {
     let out = ensure_dir(&opts.out_dir).map_err(|e| AndroidExportError::Message(e.to_string()))?;
     let mut log = Vec::new();
     log.push(format!("android export out={}", out.display()));
@@ -213,9 +215,8 @@ pub fn export_android(opts: &AndroidExportOptions) -> Result<AndroidExportReport
     } else {
         match sdk {
             None => {
-                let note = String::from(
-                    "ANDROID_HOME/SDK not found; scaffold written, APK not built",
-                );
+                let note =
+                    String::from("ANDROID_HOME/SDK not found; scaffold written, APK not built");
                 log.push(note.clone());
                 note
             }
@@ -233,8 +234,8 @@ pub fn export_android(opts: &AndroidExportOptions) -> Result<AndroidExportReport
                         .output();
                     match output {
                         Ok(o) if o.status.success() => {
-                            let candidate = out
-                                .join("app/build/outputs/apk/release/app-release.apk");
+                            let candidate =
+                                out.join("app/build/outputs/apk/release/app-release.apk");
                             if candidate.is_file() {
                                 apk_built = true;
                                 apk_path = Some(candidate);
@@ -243,10 +244,7 @@ pub fn export_android(opts: &AndroidExportOptions) -> Result<AndroidExportReport
                                 "gradle ok but APK path missing".into()
                             }
                         }
-                        Ok(o) => format!(
-                            "gradle failed: {}",
-                            String::from_utf8_lossy(&o.stderr)
-                        ),
+                        Ok(o) => format!("gradle failed: {}", String::from_utf8_lossy(&o.stderr)),
                         Err(e) => format!("gradle invoke error: {e}"),
                     }
                 } else {
@@ -292,15 +290,15 @@ pub fn try_cross_compile_linux(
     fs::create_dir_all(out_dir)?;
     let triple = "x86_64-unknown-linux-gnu";
     let mut log = Vec::new();
-    log.push(format!("cross package={package} triple={triple} dry_run={dry_run}"));
+    log.push(format!(
+        "cross package={package} triple={triple} dry_run={dry_run}"
+    ));
 
     if dry_run {
         let meta = out_dir.join("cross-linux-dry-run.json");
         fs::write(
             &meta,
-            format!(
-                r#"{{"package":"{package}","target":"{triple}","dry_run":true}}"#
-            ),
+            format!(r#"{{"package":"{package}","target":"{triple}","dry_run":true}}"#),
         )?;
         return Ok(CrossCompileReport {
             target: triple.into(),
@@ -336,14 +334,7 @@ pub fn try_cross_compile_linux(
     }
 
     let output = Command::new("cargo")
-        .args([
-            "build",
-            "-p",
-            package,
-            "--release",
-            "--target",
-            triple,
-        ])
+        .args(["build", "-p", package, "--release", "--target", triple])
         .output()
         .map_err(|e| AndroidExportError::Message(format!("cargo: {e}")))?;
     let stdout = String::from_utf8_lossy(&output.stdout);

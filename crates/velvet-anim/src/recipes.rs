@@ -12,7 +12,11 @@ use crate::track::{ChannelTrack, Timeline};
 use crate::tween::FloatTween;
 
 /// Recipe: named 2D effect → list of tweens (same as historical `anim.fx` presets).
-pub fn recipe_fx_tweens(kind: EffectKind, pose: &AnimPose, params: EffectParams) -> Vec<FloatTween> {
+pub fn recipe_fx_tweens(
+    kind: EffectKind,
+    pose: &AnimPose,
+    params: EffectParams,
+) -> Vec<FloatTween> {
     build_effect(kind, pose, params)
 }
 
@@ -38,12 +42,7 @@ pub fn recipe_card_flip(duration: f32) -> Timeline {
 /// Example: one card “comes out of a pack” motion (position + flip + fade).
 ///
 /// Compose more cards yourself with different delays/positions.
-pub fn recipe_card_emerge(
-    from: Vec2,
-    to: Vec2,
-    duration: f32,
-    start_yaw: f32,
-) -> Timeline {
+pub fn recipe_card_emerge(from: Vec2, to: Vec2, duration: f32, start_yaw: f32) -> Timeline {
     let d = duration.max(0.05);
     Timeline::new()
         .with_channel(

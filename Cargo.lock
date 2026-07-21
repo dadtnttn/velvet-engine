@@ -2940,6 +2940,7 @@ name = "velvet-assets"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "image",
  "indexmap",
  "parking_lot",
  "ron",
@@ -3231,6 +3232,7 @@ dependencies = [
  "softbuffer",
  "tracing",
  "velvet-core",
+ "velvet-render",
  "velvet-story",
  "winit",
 ]
@@ -3473,6 +3475,7 @@ dependencies = [
 name = "velvet-script-vm"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "pretty_assertions",
  "thiserror 2.0.18",
  "velvet-crypto",
@@ -3534,6 +3537,7 @@ dependencies = [
  "velvet-math",
  "velvet-script-ast",
  "velvet-script-parser",
+ "velvet-script-vs3",
  "velvet-text",
  "velvet-time",
 ]
@@ -3580,6 +3584,7 @@ dependencies = [
 name = "velvet-text"
 version = "0.1.0"
 dependencies = [
+ "fontdue",
  "pretty_assertions",
  "rustybuzz",
  "serde",
