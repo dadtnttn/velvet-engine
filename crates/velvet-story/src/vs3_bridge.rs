@@ -37,9 +37,8 @@ pub fn call_vs3_logic(
     fn_name: &str,
     args: &[StoryValue],
 ) -> Result<StoryValue, Vs3BridgeError> {
-    let module = velvet_script_vs3::compile(source, file).map_err(|e| {
-        Vs3BridgeError::new(format!("vs3 compile: {e}"))
-    })?;
+    let module = velvet_script_vs3::compile(source, file)
+        .map_err(|e| Vs3BridgeError::new(format!("vs3 compile: {e}")))?;
     let vs_args: Vec<velvet_script_vs3::Value> = args.iter().map(story_to_vs3).collect();
     let out = module
         .call(fn_name, &vs_args)
@@ -54,7 +53,6 @@ fn story_to_vs3(v: &StoryValue) -> velvet_script_vs3::Value {
         StoryValue::Int(i) => velvet_script_vs3::Value::Int(*i),
         StoryValue::Float(f) => velvet_script_vs3::Value::Float(*f),
         StoryValue::String(s) => velvet_script_vs3::Value::String(std::rc::Rc::from(s.as_str())),
-        other => velvet_script_vs3::Value::String(std::rc::Rc::from(other.display_str())),
     }
 }
 
@@ -79,8 +77,6 @@ mod tests {
     use crate::load::load_program_from_source;
     use crate::runtime::{StoryPlayer, StoryWait};
     use crate::value::StoryValue;
-    use indexmap::IndexMap;
-    use std::sync::Arc;
 
     const LOGIC: &str = r#"
 // @edition 3
@@ -95,16 +91,20 @@ function apply_damage(hp, dmg) {
 
     #[test]
     fn call_vs3_pure_fn_from_bridge() {
-        let v = call_vs3_logic(LOGIC, Some("rules.vel"), "apply_damage", &[
-            StoryValue::Int(10),
-            StoryValue::Int(3),
-        ])
+        let v = call_vs3_logic(
+            LOGIC,
+            Some("rules.vel"),
+            "apply_damage",
+            &[StoryValue::Int(10), StoryValue::Int(3)],
+        )
         .unwrap();
         assert_eq!(v, StoryValue::Int(7));
-        let v = call_vs3_logic(LOGIC, Some("rules.vel"), "apply_damage", &[
-            StoryValue::Int(2),
-            StoryValue::Int(9),
-        ])
+        let v = call_vs3_logic(
+            LOGIC,
+            Some("rules.vel"),
+            "apply_damage",
+            &[StoryValue::Int(2), StoryValue::Int(9)],
+        )
         .unwrap();
         assert_eq!(v, StoryValue::Int(0));
     }
@@ -127,10 +127,12 @@ scene main {
         let host = command_host_continue(move |name, _args, vars| {
             assert_eq!(name, "vs3.run");
             let hp = vars.get_int("hp", 0);
-            let out = call_vs3_logic(&logic, Some("rules.vel"), "apply_damage", &[
-                StoryValue::Int(hp),
-                StoryValue::Int(4),
-            ])
+            let out = call_vs3_logic(
+                &logic,
+                Some("rules.vel"),
+                "apply_damage",
+                &[StoryValue::Int(hp), StoryValue::Int(4)],
+            )
             .map_err(|e| crate::host::StoryCommandError::new(e.message))?;
             vars.set("hp", out);
             vars.set("ui.say_visible", StoryValue::Bool(true));
@@ -150,13 +152,13 @@ scene main {
         assert_eq!(player.variables().get_int("hp", -1), 6);
         assert!(player.variables().get("ui.say_visible").is_truthy());
         // HostCall must not invent draw ops
-        assert!(player
-            .variables()
-            .get("__last_command")
-            .display_str()
-            .contains("vs3")
-            || player.variables().get_int("hp", 0) == 6);
-        let _ = Arc::new(()); // silence unused if any
-        let _ = IndexMap::<String, StoryValue>::new();
+        assert!(
+            player
+                .variables()
+                .get("__last_command")
+                .display_str()
+                .contains("vs3")
+                || player.variables().get_int("hp", 0) == 6
+        );
     }
 }

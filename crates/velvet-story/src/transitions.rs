@@ -43,7 +43,7 @@ pub struct Transition {
     pub elapsed: f32,
     /// Wipe direction (if applicable).
     pub wipe: WipeDirection,
-    /// Optional solid color for fade (RGBA 0..=1 components packed as [r,g,b,a]).
+    /// Optional solid color for fade (RGBA 0..=1 components packed as `[r, g, b, a]`).
     pub fade_color: [f32; 4],
 }
 

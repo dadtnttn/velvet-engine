@@ -34,8 +34,8 @@ impl LayerKind {
             Self::Audio => "audio",
         }
     }
-    /// Parse.
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse a stable serialized layer-kind name.
+    pub fn from_name(s: &str) -> Option<Self> {
         match s {
             "story" => Some(Self::Story),
             "ui" => Some(Self::Ui),

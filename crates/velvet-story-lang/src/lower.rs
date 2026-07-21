@@ -13,6 +13,8 @@ use crate::diag::{adapt_internal, StoryDiag};
 use crate::source_map::SourceMap;
 use crate::span::Span;
 
+type LocalAllocator<'a> = dyn FnMut(&str, &mut HashMap<String, u32>, &mut u32) -> u32 + 'a;
+
 /// Lowering output.
 #[derive(Debug)]
 pub struct LowerOutput {
@@ -73,7 +75,6 @@ pub fn lower(file: &StoryFile) -> LowerOutput {
                 st,
                 &mut unit,
                 &mut map,
-                &mut diags,
                 &mut msg_ids,
                 &mut locals,
                 &mut next_local,
@@ -123,11 +124,10 @@ fn lower_stmt(
     st: &Stmt,
     unit: &mut Vs2Unit,
     map: &mut SourceMap,
-    diags: &mut Vec<StoryDiag>,
     msg_ids: &mut Vec<(String, String)>,
     locals: &mut HashMap<String, u32>,
     next_local: &mut u32,
-    local: &mut dyn FnMut(&str, &mut HashMap<String, u32>, &mut u32) -> u32,
+    local: &mut LocalAllocator<'_>,
     hir_body: &mut Vec<HirStmt>,
     id: &mut u32,
     file: &str,
@@ -288,8 +288,7 @@ fn lower_stmt(
             map.push_in_file(file, *span, "if", "cond", Some(j_else));
             for s in then_body {
                 lower_stmt(
-                    s, unit, map, diags, msg_ids, locals, next_local, local, hir_body, id, file,
-                    scene,
+                    s, unit, map, msg_ids, locals, next_local, local, hir_body, id, file, scene,
                 );
             }
             let j_end = unit.emit(Vs2Instr::with_a(OpVs2::Jump, 0).at_line(span.line));
@@ -298,8 +297,7 @@ fn lower_stmt(
             if let Some(eb) = else_body {
                 for s in eb {
                     lower_stmt(
-                        s, unit, map, diags, msg_ids, locals, next_local, local, hir_body, id,
-                        file, scene,
+                        s, unit, map, msg_ids, locals, next_local, local, hir_body, id, file, scene,
                     );
                 }
             }
@@ -335,8 +333,7 @@ fn lower_stmt(
                 let j_skip = unit.emit(Vs2Instr::with_a(OpVs2::JumpIf, 0).at_line(opt.span.line));
                 for s in &opt.body {
                     lower_stmt(
-                        s, unit, map, diags, msg_ids, locals, next_local, local, hir_body, id,
-                        file, scene,
+                        s, unit, map, msg_ids, locals, next_local, local, hir_body, id, file, scene,
                     );
                 }
                 let j_end = unit.emit(Vs2Instr::with_a(OpVs2::Jump, 0).at_line(opt.span.line));
@@ -387,7 +384,7 @@ fn emit_cmd_arg(
     unit: &mut Vs2Unit,
     locals: &mut HashMap<String, u32>,
     next_local: &mut u32,
-    local: &mut dyn FnMut(&str, &mut HashMap<String, u32>, &mut u32) -> u32,
+    local: &mut LocalAllocator<'_>,
 ) {
     match e {
         Expr::Ident(name, span) => {
@@ -407,7 +404,7 @@ fn emit_expr(
     unit: &mut Vs2Unit,
     locals: &mut HashMap<String, u32>,
     next_local: &mut u32,
-    local: &mut dyn FnMut(&str, &mut HashMap<String, u32>, &mut u32) -> u32,
+    local: &mut LocalAllocator<'_>,
 ) {
     match e {
         Expr::Int(n, span) => {

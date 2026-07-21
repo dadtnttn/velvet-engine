@@ -378,7 +378,7 @@ impl StudioLayout {
         }
         let y = sy as i32;
         let base = self.top_h + self.header_h + self.pad;
-        let row = ((y - base) / self.insp_row_h) as i32;
+        let row = (y - base) / self.insp_row_h;
         match row {
             2 => Some(InspectorField::Text),
             3 => Some(InspectorField::Pos),
@@ -543,6 +543,8 @@ pub struct LayerPaintView<'a> {
 }
 
 /// Paint full Studio chrome + simplified widgets or advanced script.
+// This is the final renderer boundary; the flat arguments avoid allocating a transient frame object.
+#[allow(clippy::too_many_arguments)]
 pub fn paint_studio(
     buf: &mut [u32],
     layout: &StudioLayout,
@@ -597,7 +599,7 @@ pub fn paint_studio(
         2,
         zoom,
     );
-    let name_x = lay.pad + mark + 8 + 14 * 6 * (zoom + 1) / 1;
+    let name_x = lay.pad + mark + 8 + (14 * 6 * (zoom + 1));
     txt(
         buf,
         ww,
@@ -861,7 +863,7 @@ pub fn paint_studio(
         fill_rect(buf, ww, wh, 12, by, 12 + badge, by + badge, c_surface_2());
         txt(buf, ww, wh, 14, by + 1, kind_mark, c_accent_hi(), 1, zoom);
         let label = w.text.as_deref().unwrap_or(w.id.as_str());
-        let line = format!("{}", label);
+        let line = label.to_string();
         txt(
             buf,
             ww,
@@ -1968,10 +1970,7 @@ pub fn paint_studio(
         ];
         let mut tx = cx0 + 8;
         for (label, id) in tools {
-            let active = tool == id
-                || (id == "new" && false)
-                || (id == "sub" && false)
-                || (id == "del" && false);
+            let active = tool == id;
             let tw = (label.len() as i32) * 6 * zoom + 16;
             let fill = if tool == id {
                 c_accent()
@@ -2025,7 +2024,7 @@ pub fn paint_studio(
                 let (x1, y1, _nw1, nh1) = crate::layers::LayerStack::node_screen_rect(
                     cx0, graph_top, cw, graph_h, *bx, *by, zoom,
                 );
-                let axp = (x0 + nw) as i32;
+                let axp = x0 + nw;
                 let ayp = y0 + nh / 2;
                 let bxp = x1;
                 let byp = y1 + nh1 / 2;

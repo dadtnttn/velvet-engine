@@ -120,7 +120,7 @@ impl StoryCommandHost for StyleStoryHost {
                 {
                     body
                 } else {
-                    crate::animation::vanim_to_vcss(&body).map_err(|e| StoryCommandError::new(e))?
+                    crate::animation::vanim_to_vcss(&body).map_err(StoryCommandError::new)?
                 };
                 let sheet_name = arg_str(args, "name").unwrap_or_else(|| "anim".into());
                 let mut reg = self

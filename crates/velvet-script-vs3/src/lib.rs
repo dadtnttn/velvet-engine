@@ -214,14 +214,12 @@ pub use velvet_script_vm::{PresentHostState, PresentSprite};
 fn map_vm_err(e: VmError) -> Vs3Error {
     match e {
         VmError::Runtime {
-            message,
-            location,
-            ..
+            message, location, ..
         } => Vs3Error::Runtime {
             message,
             loc: location
                 .as_ref()
-                .map(|l| format!("{l}"))
+                .map(|l| l.to_string())
                 .unwrap_or_else(|| "<runtime>".into()),
         },
         other => Vs3Error::Runtime {
@@ -246,10 +244,7 @@ fn map_compile_err(e: CompileError, file: Option<&str>) -> Vs3Error {
         CompileError::Parse(msg) => {
             // Try to pull line from "at L:C" patterns; else line 1
             let loc = parse_loc_from_message(&msg, file);
-            diags.push(Vs3Diagnostic {
-                message: msg,
-                loc,
-            });
+            diags.push(Vs3Diagnostic { message: msg, loc });
         }
         CompileError::Codegen { message, loc } => {
             diags.push(Vs3Diagnostic {
@@ -258,9 +253,7 @@ fn map_compile_err(e: CompileError, file: Option<&str>) -> Vs3Error {
             });
         }
         CompileError::Many {
-            diagnostics,
-            first,
-            ..
+            diagnostics, first, ..
         } => {
             if diagnostics.is_empty() {
                 diags.push(Vs3Diagnostic {
@@ -288,7 +281,10 @@ fn parse_loc_from_message(msg: &str, file: Option<&str>) -> SourceLoc {
     // e.g. "unexpected input at 3:5: ..."
     if let Some(idx) = msg.find(" at ") {
         let rest = &msg[idx + 4..];
-        let nums: String = rest.chars().take_while(|c| c.is_ascii_digit() || *c == ':').collect();
+        let nums: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == ':')
+            .collect();
         let mut parts = nums.split(':');
         let line = parts.next().and_then(|s| s.parse().ok()).unwrap_or(1);
         let column = parts.next().and_then(|s| s.parse().ok()).unwrap_or(1);
@@ -337,7 +333,8 @@ pub fn compile(source: &str, file: Option<&str>) -> Result<Vs3Module, Vs3Error> 
         }
     }
 
-    let compiled: CompileResult = compile_source(source, file).map_err(|e| map_compile_err(e, file))?;
+    let compiled: CompileResult =
+        compile_source(source, file).map_err(|e| map_compile_err(e, file))?;
 
     // Surface hard diagnostics as failure
     let mut diags: Vec<Vs3Diagnostic> = compiled
@@ -383,7 +380,12 @@ pub fn compile(source: &str, file: Option<&str>) -> Result<Vs3Module, Vs3Error> 
 }
 
 /// Compile and call in one step (library entry for tests / hosts).
-pub fn eval_call(source: &str, file: Option<&str>, name: &str, args: &[Value]) -> Result<Value, Vs3Error> {
+pub fn eval_call(
+    source: &str,
+    file: Option<&str>,
+    name: &str,
+    args: &[Value],
+) -> Result<Value, Vs3Error> {
     let module = compile(source, file)?;
     module.call(name, args)
 }
@@ -453,9 +455,18 @@ function clamp01(x) {
 
     #[test]
     fn detect_edition_3() {
-        assert_eq!(detect_edition("// @edition 3\nfunction f() { return 1 }\n"), Edition::Vs3);
-        assert_eq!(detect_edition("// @edition 2\nfunction f() { return 1 }\n"), Edition::Vs2);
-        assert_eq!(detect_edition("function f() { return 1 }\n"), Edition::Classic);
+        assert_eq!(
+            detect_edition("// @edition 3\nfunction f() { return 1 }\n"),
+            Edition::Vs3
+        );
+        assert_eq!(
+            detect_edition("// @edition 2\nfunction f() { return 1 }\n"),
+            Edition::Vs2
+        );
+        assert_eq!(
+            detect_edition("function f() { return 1 }\n"),
+            Edition::Classic
+        );
     }
 
     #[test]
@@ -516,7 +527,13 @@ function clamp01(x) {
 
     #[test]
     fn apply_damage_clamps_to_zero() {
-        let v = eval_call(SAMPLE, Some("logic.vel"), "apply_damage", &[int(10), int(3)]).unwrap();
+        let v = eval_call(
+            SAMPLE,
+            Some("logic.vel"),
+            "apply_damage",
+            &[int(10), int(3)],
+        )
+        .unwrap();
         assert_eq!(v, Value::Int(7));
         let v = eval_call(SAMPLE, Some("logic.vel"), "apply_damage", &[int(5), int(5)]).unwrap();
         assert_eq!(v, Value::Int(0));
@@ -568,7 +585,7 @@ function add_then_abs(a, b) {
         let v = eval_call(NATIVES, Some("nat.vel"), "half_turn_sin", &[]).unwrap();
         match v {
             Value::Float(f) => {
-                let expected = 1.5707963267948966_f64.sin();
+                let expected = std::f64::consts::FRAC_PI_2.sin();
                 assert!(
                     (f - expected).abs() < 1e-9,
                     "sin native {f} vs rust {expected}"
@@ -590,7 +607,13 @@ function add_then_abs(a, b) {
 
     #[test]
     fn native_abs_on_sum() {
-        let v = eval_call(NATIVES, Some("nat.vel"), "add_then_abs", &[int(-3), int(-4)]).unwrap();
+        let v = eval_call(
+            NATIVES,
+            Some("nat.vel"),
+            "add_then_abs",
+            &[int(-3), int(-4)],
+        )
+        .unwrap();
         assert_eq!(v, Value::Int(7));
     }
 
@@ -831,7 +854,9 @@ function teardown() {
         assert_eq!(host.background.as_deref(), Some("bg:station.png"));
         assert_eq!(host.sprites.len(), 2);
         assert_eq!(
-            host.sprites.get("nora").and_then(|s| s.expression.as_deref()),
+            host.sprites
+                .get("nora")
+                .and_then(|s| s.expression.as_deref()),
             Some("happy")
         );
         assert_eq!(

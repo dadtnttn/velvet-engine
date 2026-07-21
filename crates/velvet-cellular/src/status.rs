@@ -314,7 +314,7 @@ mod tests {
         let hp1 = enemies.get(id).map(|e| e.hp).unwrap_or(0.0);
         assert!(hp1 < hp0 || enemies.get(id).is_none());
         st.apply_enemy(id, StatusKind::Wet, 1.0, 0.0);
-        assert!(st.enemy_has(id, StatusKind::Wet) || st.active_count() >= 0);
+        assert!(st.enemy_has(id, StatusKind::Wet));
         st.clear_enemy(id);
         assert!(!st.enemy_has(id, StatusKind::Wet));
     }

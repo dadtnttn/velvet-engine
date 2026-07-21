@@ -233,7 +233,6 @@ pub fn nearest_material(
 mod tests {
     use super::*;
     use crate::builtin::builtin_registry;
-    use crate::cell::Cell;
     use crate::world::WorldConfig;
 
     #[test]

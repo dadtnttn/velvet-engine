@@ -1,6 +1,5 @@
 //! Named particle FX presets for authors (blood, sparks, dig, spells).
 
-use crate::cell::MaterialId;
 use crate::particles::{ParticleBurst, ParticleEmitter, ParticleEnd, ParticleWorld};
 use crate::world::World;
 
@@ -102,7 +101,6 @@ pub fn play_preset(
                 end: ParticleEnd::HeatOnly,
                 gravity_scale: 0.8,
                 temp: 700.0,
-                ..Default::default()
             })
         }
         ParticlePreset::SandDump => {
@@ -121,7 +119,6 @@ pub fn play_preset(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 1.2,
                 temp: 20.0,
-                ..Default::default()
             })
         }
         ParticlePreset::WaterSplash => {
@@ -157,7 +154,6 @@ pub fn play_preset(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 0.9,
                 temp: 20.0,
-                ..Default::default()
             })
         }
         ParticlePreset::DigDebris => particles.burst_dig(x, y, count(16)),
@@ -212,7 +208,6 @@ pub fn play_preset(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 1.0,
                 temp: 20.0,
-                ..Default::default()
             })
         }
         ParticlePreset::LavaSpit => {
@@ -231,7 +226,6 @@ pub fn play_preset(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 1.0,
                 temp: 1100.0,
-                ..Default::default()
             })
         }
         ParticlePreset::SteamJet => {
@@ -250,7 +244,6 @@ pub fn play_preset(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: -0.4,
                 temp: 130.0,
-                ..Default::default()
             })
         }
         ParticlePreset::PoisonCloud => {
@@ -287,7 +280,6 @@ pub fn play_preset(
                 end: ParticleEnd::ConvertToCell,
                 gravity_scale: 0.4,
                 temp: -5.0,
-                ..Default::default()
             })
         }
         ParticlePreset::BoneShards => {
@@ -481,7 +473,7 @@ mod tests {
             let before = pw.len() + pw.spawns as usize;
             play_preset(&world, &mut pw, *p, 0.0, 10.0, 1.0);
             assert!(
-                pw.len() > 0 || pw.spawns as usize > before,
+                !pw.is_empty() || pw.spawns as usize > before,
                 "preset {p:?} should spawn"
             );
         }

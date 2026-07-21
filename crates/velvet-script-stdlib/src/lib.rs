@@ -259,11 +259,10 @@ mod tests {
         assert!(STDLIB.len() < 80, "stdlib must not be padded with clones");
         let mut names = std::collections::HashSet::new();
         for f in STDLIB {
-            assert!(
-                !f.name.contains('_') || !f.name.chars().last().unwrap().is_ascii_digit(),
-                "padded name rejected: {}",
-                f.name
-            );
+            let numeric_padding_suffix = f.name.rsplit_once('_').is_some_and(|(_, suffix)| {
+                !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit())
+            });
+            assert!(!numeric_padding_suffix, "padded name rejected: {}", f.name);
             assert!(names.insert(f.name), "duplicate std name {}", f.name);
         }
         assert!(find_std("abs").is_some());

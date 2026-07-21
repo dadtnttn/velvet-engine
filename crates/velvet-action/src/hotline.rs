@@ -154,10 +154,9 @@ impl WeaponLoadout {
 
     /// Active mut.
     pub fn active_mut(&mut self) -> &mut Weapon {
-        if self.held.is_some() {
-            self.held.as_mut().unwrap()
-        } else {
-            &mut self.fists
+        match self.held.as_mut() {
+            Some(weapon) => weapon,
+            None => &mut self.fists,
         }
     }
 

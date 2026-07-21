@@ -78,8 +78,8 @@ pub fn render_world_window(
                 let j = ((wx.wrapping_mul(374761393) ^ wy.wrapping_mul(668265263)) as u32)
                     % (v as u32 * 2 + 1);
                 let d = j as i16 - v as i16;
-                for k in 0..3 {
-                    rgba[k] = (rgba[k] as i16 + d).clamp(0, 255) as u8;
+                for channel in rgba.iter_mut().take(3) {
+                    *channel = (*channel as i16 + d).clamp(0, 255) as u8;
                 }
             }
             buf.set_rgba(px, py, rgba[0], rgba[1], rgba[2], rgba[3]);

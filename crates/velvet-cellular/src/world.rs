@@ -108,8 +108,8 @@ impl World {
 
     /// Ensure chunk loaded (creates empty).
     pub fn ensure_chunk(&mut self, coord: ChunkCoord) -> &mut Chunk {
-        if !self.chunks.contains_key(&coord) {
-            self.chunks.insert(coord, Chunk::empty(coord));
+        if let std::collections::hash_map::Entry::Vacant(e) = self.chunks.entry(coord) {
+            e.insert(Chunk::empty(coord));
             self.lru.push_back(coord);
             self.events.push(SimEvent::ChunkLoaded {
                 cx: coord.x,
@@ -331,10 +331,6 @@ impl World {
     /// Snapshot of chunk map for save.
     pub(crate) fn chunks_map(&self) -> &HashMap<ChunkCoord, Chunk> {
         &self.chunks
-    }
-
-    pub(crate) fn chunks_map_mut(&mut self) -> &mut HashMap<ChunkCoord, Chunk> {
-        &mut self.chunks
     }
 
     /// Replace chunk storage (load).
