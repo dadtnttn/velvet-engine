@@ -162,7 +162,10 @@ mod tests {
         assert!(hook.set_achievement("FIRST_ENDING"));
         assert!(hook.is_achievement_unlocked("FIRST_ENDING"));
         assert!(hook.set_presence("story", "chapter_1"));
-        assert!(hook.presence().iter().any(|(k, v)| k == "story" && v == "chapter_1"));
+        assert!(hook
+            .presence()
+            .iter()
+            .any(|(k, v)| k == "story" && v == "chapter_1"));
         assert!(!hook.set_achievement(""));
     }
 

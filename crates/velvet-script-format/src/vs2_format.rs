@@ -15,25 +15,53 @@ pub struct Vs2FormatOptions {
 
 impl Default for Vs2FormatOptions {
     fn default() -> Self {
-        Self { indent_width: 4, use_tabs: false, max_width: 100,
-               trailing_comma: true, space_before_brace: true, newline_eof: true }
+        Self {
+            indent_width: 4,
+            use_tabs: false,
+            max_width: 100,
+            trailing_comma: true,
+            space_before_brace: true,
+            newline_eof: true,
+        }
     }
 }
 
 impl Vs2FormatOptions {
     pub fn indent_str(&self, level: usize) -> String {
-        if self.use_tabs { "\t".repeat(level) } else { " ".repeat(self.indent_width * level) }
+        if self.use_tabs {
+            "\t".repeat(level)
+        } else {
+            " ".repeat(self.indent_width * level)
+        }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Vs2TokKind {
-    Ident, Number, String, LBrace, RBrace, LParen, RParen, LBracket, RBracket,
-    Comma, Semi, Colon, PathSep, Op, Comment, Newline, Other,
+    Ident,
+    Number,
+    String,
+    LBrace,
+    RBrace,
+    LParen,
+    RParen,
+    LBracket,
+    RBracket,
+    Comma,
+    Semi,
+    Colon,
+    PathSep,
+    Op,
+    Comment,
+    Newline,
+    Other,
 }
 
 #[derive(Debug, Clone)]
-pub struct Vs2Tok { pub kind: Vs2TokKind, pub text: String }
+pub struct Vs2Tok {
+    pub kind: Vs2TokKind,
+    pub text: String,
+}
 
 pub fn lex_format(src: &str) -> Vec<Vs2Tok> {
     let mut out = Vec::new();
@@ -42,56 +70,108 @@ pub fn lex_format(src: &str) -> Vec<Vs2Tok> {
     while i < b.len() {
         let c = b[i] as char;
         if c == '\n' {
-            out.push(Vs2Tok { kind: Vs2TokKind::Newline, text: "\n".into() });
-            i += 1; continue;
+            out.push(Vs2Tok {
+                kind: Vs2TokKind::Newline,
+                text: "\n".into(),
+            });
+            i += 1;
+            continue;
         }
-        if c.is_whitespace() { i += 1; continue; }
+        if c.is_whitespace() {
+            i += 1;
+            continue;
+        }
         if c == '/' && i + 1 < b.len() && b[i + 1] as char == '/' {
-            let start = i; i += 2;
-            while i < b.len() && b[i] as char != '\n' { i += 1; }
-            out.push(Vs2Tok { kind: Vs2TokKind::Comment, text: src[start..i].to_string() });
+            let start = i;
+            i += 2;
+            while i < b.len() && b[i] as char != '\n' {
+                i += 1;
+            }
+            out.push(Vs2Tok {
+                kind: Vs2TokKind::Comment,
+                text: src[start..i].to_string(),
+            });
             continue;
         }
         if c == '"' {
-            let start = i; i += 1;
+            let start = i;
+            i += 1;
             while i < b.len() {
-                if b[i] as char == '\\' && i + 1 < b.len() { i += 2; continue; }
-                if b[i] as char == '"' { i += 1; break; }
+                if b[i] as char == '\\' && i + 1 < b.len() {
+                    i += 2;
+                    continue;
+                }
+                if b[i] as char == '"' {
+                    i += 1;
+                    break;
+                }
                 i += 1;
             }
-            out.push(Vs2Tok { kind: Vs2TokKind::String, text: src[start..i].to_string() });
+            out.push(Vs2Tok {
+                kind: Vs2TokKind::String,
+                text: src[start..i].to_string(),
+            });
             continue;
         }
         if c.is_ascii_alphabetic() || c == '_' {
-            let start = i; i += 1;
+            let start = i;
+            i += 1;
             while i < b.len() {
                 let ch = b[i] as char;
-                if ch.is_ascii_alphanumeric() || ch == '_' { i += 1; } else { break; }
+                if ch.is_ascii_alphanumeric() || ch == '_' {
+                    i += 1;
+                } else {
+                    break;
+                }
             }
-            out.push(Vs2Tok { kind: Vs2TokKind::Ident, text: src[start..i].to_string() });
+            out.push(Vs2Tok {
+                kind: Vs2TokKind::Ident,
+                text: src[start..i].to_string(),
+            });
             continue;
         }
         if c.is_ascii_digit() {
-            let start = i; i += 1;
-            while i < b.len() && ((b[i] as char).is_ascii_digit() || b[i] as char == '.') { i += 1; }
-            out.push(Vs2Tok { kind: Vs2TokKind::Number, text: src[start..i].to_string() });
+            let start = i;
+            i += 1;
+            while i < b.len() && ((b[i] as char).is_ascii_digit() || b[i] as char == '.') {
+                i += 1;
+            }
+            out.push(Vs2Tok {
+                kind: Vs2TokKind::Number,
+                text: src[start..i].to_string(),
+            });
             continue;
         }
         if c == ':' && i + 1 < b.len() && b[i + 1] as char == ':' {
-            out.push(Vs2Tok { kind: Vs2TokKind::PathSep, text: "::".into() });
-            i += 2; continue;
+            out.push(Vs2Tok {
+                kind: Vs2TokKind::PathSep,
+                text: "::".into(),
+            });
+            i += 2;
+            continue;
         }
         let (kind, text) = match c {
-            '{' => (Vs2TokKind::LBrace, "{"), '}' => (Vs2TokKind::RBrace, "}"),
-            '(' => (Vs2TokKind::LParen, "("), ')' => (Vs2TokKind::RParen, ")"),
-            '[' => (Vs2TokKind::LBracket, "["), ']' => (Vs2TokKind::RBracket, "]"),
-            ',' => (Vs2TokKind::Comma, ","), ';' => (Vs2TokKind::Semi, ";"),
-            ':' => (Vs2TokKind::Colon, ":"), _ => (Vs2TokKind::Op, ""),
+            '{' => (Vs2TokKind::LBrace, "{"),
+            '}' => (Vs2TokKind::RBrace, "}"),
+            '(' => (Vs2TokKind::LParen, "("),
+            ')' => (Vs2TokKind::RParen, ")"),
+            '[' => (Vs2TokKind::LBracket, "["),
+            ']' => (Vs2TokKind::RBracket, "]"),
+            ',' => (Vs2TokKind::Comma, ","),
+            ';' => (Vs2TokKind::Semi, ";"),
+            ':' => (Vs2TokKind::Colon, ":"),
+            _ => (Vs2TokKind::Op, ""),
         };
         if kind == Vs2TokKind::Op {
-            out.push(Vs2Tok { kind, text: c.to_string() });
+            out.push(Vs2Tok {
+                kind,
+                text: c.to_string(),
+            });
         } else {
-            out.push(Vs2Tok { kind, text: text.into() });
+            out.push(Vs2Tok {
+                kind,
+                text: text.into(),
+            });
         }
         i += 1;
     }
@@ -107,15 +187,24 @@ pub fn format_vs2(src: &str, opt: &Vs2FormatOptions) -> String {
     while i < toks.len() {
         let t = &toks[i];
         match t.kind {
-            Vs2TokKind::Newline => { out.push('\n'); at_line_start = true; }
+            Vs2TokKind::Newline => {
+                out.push('\n');
+                at_line_start = true;
+            }
             Vs2TokKind::RBrace => {
                 level = (level - 1).max(0);
-                if at_line_start { out.push_str(&opt.indent_str(level as usize)); }
+                if at_line_start {
+                    out.push_str(&opt.indent_str(level as usize));
+                }
                 out.push('}');
                 at_line_start = false;
             }
             Vs2TokKind::LBrace => {
-                if opt.space_before_brace && !at_line_start && !out.ends_with(' ') && !out.ends_with('\n') {
+                if opt.space_before_brace
+                    && !at_line_start
+                    && !out.ends_with(' ')
+                    && !out.ends_with('\n')
+                {
                     out.push(' ');
                 }
                 out.push('{');
@@ -123,7 +212,9 @@ pub fn format_vs2(src: &str, opt: &Vs2FormatOptions) -> String {
                 at_line_start = false;
             }
             Vs2TokKind::Comment => {
-                if at_line_start { out.push_str(&opt.indent_str(level as usize)); }
+                if at_line_start {
+                    out.push_str(&opt.indent_str(level as usize));
+                }
                 out.push_str(&t.text);
                 at_line_start = false;
             }
@@ -139,25 +230,52 @@ pub fn format_vs2(src: &str, opt: &Vs2FormatOptions) -> String {
         }
         i += 1;
     }
-    if opt.newline_eof && !out.ends_with('\n') { out.push('\n'); }
+    if opt.newline_eof && !out.ends_with('\n') {
+        out.push('\n');
+    }
     out
 }
 
 fn needs_space_before(toks: &[Vs2Tok], i: usize) -> bool {
-    if i == 0 { return false; }
+    if i == 0 {
+        return false;
+    }
     let prev = &toks[i - 1];
     let cur = &toks[i];
-    if matches!(prev.kind, Vs2TokKind::LParen | Vs2TokKind::LBracket | Vs2TokKind::PathSep) { return false; }
-    if matches!(cur.kind, Vs2TokKind::RParen | Vs2TokKind::RBracket | Vs2TokKind::Comma | Vs2TokKind::Semi | Vs2TokKind::Colon) { return false; }
-    if prev.kind == Vs2TokKind::Ident && cur.kind == Vs2TokKind::LParen { return false; }
-    if prev.kind == Vs2TokKind::Ident && cur.kind == Vs2TokKind::PathSep { return false; }
-    if prev.kind == Vs2TokKind::PathSep { return false; }
+    if matches!(
+        prev.kind,
+        Vs2TokKind::LParen | Vs2TokKind::LBracket | Vs2TokKind::PathSep
+    ) {
+        return false;
+    }
+    if matches!(
+        cur.kind,
+        Vs2TokKind::RParen
+            | Vs2TokKind::RBracket
+            | Vs2TokKind::Comma
+            | Vs2TokKind::Semi
+            | Vs2TokKind::Colon
+    ) {
+        return false;
+    }
+    if prev.kind == Vs2TokKind::Ident && cur.kind == Vs2TokKind::LParen {
+        return false;
+    }
+    if prev.kind == Vs2TokKind::Ident && cur.kind == Vs2TokKind::PathSep {
+        return false;
+    }
+    if prev.kind == Vs2TokKind::PathSep {
+        return false;
+    }
     true
 }
 
 pub fn looks_like_python(src: &str) -> bool {
     let has_brace = src.contains('{');
-    let indent_lines = src.lines().filter(|l| l.starts_with("    ") || l.starts_with('\t')).count();
+    let indent_lines = src
+        .lines()
+        .filter(|l| l.starts_with("    ") || l.starts_with('\t'))
+        .count();
     !has_brace && indent_lines > 3 && (src.contains("def ") || src.contains("elif "))
 }
 
@@ -168,64 +286,14 @@ pub fn format_sample_source() -> &'static str {
 
 pub fn reject_python_style(src: &str) -> Result<(), String> {
     if looks_like_python(src) {
-        Err("Velvet Script 2 is not Python: use braces `{}`, typed fn/struct, not def/elif indent".into())
-    } else { Ok(()) }
+        Err(
+            "Velvet Script 2 is not Python: use braces `{}`, typed fn/struct, not def/elif indent"
+                .into(),
+        )
+    } else {
+        Ok(())
+    }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -256,4 +324,3 @@ let x=1;
         assert_eq!(out, twice);
     }
 }
-

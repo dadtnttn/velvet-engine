@@ -150,11 +150,7 @@ impl DeckValidation {
 }
 
 /// Validate `deck` against `catalog` and optional `rules`.
-pub fn validate_deck(
-    catalog: &CardCatalog,
-    deck: &DeckList,
-    rules: &DeckRules,
-) -> DeckValidation {
+pub fn validate_deck(catalog: &CardCatalog, deck: &DeckList, rules: &DeckRules) -> DeckValidation {
     let mut violations = Vec::new();
     let size = deck.len();
 
@@ -162,9 +158,10 @@ pub fn validate_deck(
         if !catalog.contains(id) {
             // One violation per first occurrence of each unknown id is nicer,
             // but listing every index is more precise for tooling — report first only per id.
-            if !violations.iter().any(|v| {
-                matches!(v, DeckViolation::UnknownCard { id: u, .. } if u == id)
-            }) {
+            if !violations
+                .iter()
+                .any(|v| matches!(v, DeckViolation::UnknownCard { id: u, .. } if u == id))
+            {
                 violations.push(DeckViolation::UnknownCard {
                     id: id.clone(),
                     index,

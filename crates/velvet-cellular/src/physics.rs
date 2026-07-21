@@ -74,7 +74,12 @@ impl RigidBody {
 
     /// AABB min/max.
     pub fn bounds(&self) -> (f32, f32, f32, f32) {
-        (self.x - self.hw, self.y - self.hh, self.x + self.hw, self.y + self.hh)
+        (
+            self.x - self.hw,
+            self.y - self.hh,
+            self.x + self.hw,
+            self.y + self.hh,
+        )
     }
 }
 
@@ -106,8 +111,7 @@ impl PhysicsWorld {
     pub fn spawn_dynamic(&mut self, x: f32, y: f32, w: f32, h: f32, mass: f32) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
-        self.bodies
-            .push(RigidBody::dynamic(id, x, y, w, h, mass));
+        self.bodies.push(RigidBody::dynamic(id, x, y, w, h, mass));
         id
     }
 
@@ -174,10 +178,9 @@ impl PhysicsWorld {
             }
         }
         for (id, speed) in contacts {
-            world.events.push(SimEvent::BodyContact {
-                body_id: id,
-                speed,
-            });
+            world
+                .events
+                .push(SimEvent::BodyContact { body_id: id, speed });
         }
     }
 
@@ -303,7 +306,11 @@ fn resolve_grid(body: &mut RigidBody, world: &World) -> Option<f32> {
 }
 
 /// Dig / excavate: destroy solid cells under body footprint (player tool).
-pub fn excavate_under_body(world: &mut World, body: &RigidBody, material_filter: Option<MaterialId>) {
+pub fn excavate_under_body(
+    world: &mut World,
+    body: &RigidBody,
+    material_filter: Option<MaterialId>,
+) {
     let (x0, y0, x1, y1) = body.bounds();
     for iy in (y0.floor() as i32)..=(y1.ceil() as i32) {
         for ix in (x0.floor() as i32)..=(x1.ceil() as i32) {

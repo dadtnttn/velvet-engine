@@ -7,9 +7,7 @@ pub use crate::brush::{
 pub use crate::builtin::{builtin_registry, register_builtin_materials, BuiltinIds};
 pub use crate::cell::{Cell, CellFlags, MaterialId};
 pub use crate::chunk::{Chunk, ChunkCoord, CHUNK_CELLS, CHUNK_SIZE};
-pub use crate::chunk_codec::{
-    compress_chunk, decompress_chunk, roundtrip_ok, ChunkRle,
-};
+pub use crate::chunk_codec::{compress_chunk, decompress_chunk, roundtrip_ok, ChunkRle};
 pub use crate::electricity::{find_conductive_path, try_arc};
 pub use crate::enemy::{
     enemy_at, register_builtin_enemies, Enemy, EnemyAi, EnemyBodyKind, EnemyDef, EnemyWorld,
@@ -25,9 +23,7 @@ pub use crate::lighting::{average_light, bake_light, LightMap};
 pub use crate::material::{
     MaterialDef, MaterialError, MaterialRegistry, Phase, PhysicalProps, ReactionProps,
 };
-pub use crate::material_catalog::{
-    catalog_keys, register_catalog_materials, CATALOG_ROW_COUNT,
-};
+pub use crate::material_catalog::{catalog_keys, register_catalog_materials, CATALOG_ROW_COUNT};
 pub use crate::material_io::{
     export_material_pack, load_material_pack, write_material_pack, MaterialIoError, MaterialPack,
 };

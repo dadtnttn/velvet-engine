@@ -63,12 +63,7 @@ pub fn require_file(path: &Path) -> Result<()> {
 /// Drag a visual region on disk by delta (Studio canvas / CLI shared path).
 ///
 /// Returns the new position string and leaves advanced/protected regions intact.
-pub fn drag_region_on_disk(
-    path: &Path,
-    region_id: &str,
-    dx: f32,
-    dy: f32,
-) -> Result<String> {
+pub fn drag_region_on_disk(path: &Path, region_id: &str, dx: f32, dy: f32) -> Result<String> {
     require_file(path)?;
     let source = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let mut doc = parse_document(&source).map_err(|e| anyhow::anyhow!("{e}"))?;

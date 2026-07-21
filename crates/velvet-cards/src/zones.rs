@@ -198,8 +198,7 @@ mod tests {
     #[test]
     fn move_library_to_hand() {
         let mut z = CardZones::from_deck_list(&DeckList::from_ids(["x", "y"]));
-        z.move_card(ZoneKind::Library, ZoneKind::Hand, 0)
-            .unwrap();
+        z.move_card(ZoneKind::Library, ZoneKind::Hand, 0).unwrap();
         assert_eq!(z.library, vec!["y"]);
         assert_eq!(z.hand, vec!["x"]);
     }

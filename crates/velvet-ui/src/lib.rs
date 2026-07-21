@@ -14,6 +14,7 @@ mod scroll;
 mod style;
 mod theme;
 mod tree;
+mod vcss;
 mod widget;
 
 pub mod prelude;
@@ -30,4 +31,5 @@ pub use scroll::{clamp_scroll_offset, ScrollView};
 pub use style::{UiColor, UiStyle};
 pub use theme::Theme;
 pub use tree::{HitResult, UiContext, UiTree};
+pub use vcss::{apply_computed_style, resolve_node_style, style_query_for_node};
 pub use widget::{Button, ImageBox, Label, Panel, ProgressBar, Slider, Toggle, WidgetKind};

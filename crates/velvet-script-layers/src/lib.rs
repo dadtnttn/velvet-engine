@@ -2,8 +2,12 @@
 
 #![deny(missing_docs)]
 
+mod screen;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+pub use screen::{parse_screen_source, ScreenBlueprint, ScreenButtonSpec, ScreenCompileError};
 
 /// Kind of game layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -253,7 +257,8 @@ mod tests {
     #[test]
     fn exclusive_push_real() {
         let mut s = LayerStack::new();
-        s.push_layer("dialogue", LayerKind::Story, 10, false).unwrap();
+        s.push_layer("dialogue", LayerKind::Story, 10, false)
+            .unwrap();
         s.push_layer("settings", LayerKind::Ui, 100, true).unwrap();
         // exclusive UI should be on top and visible
         assert!(s.visible_ids().contains(&"settings"));
@@ -264,7 +269,8 @@ mod tests {
     #[test]
     fn stack_basic() {
         let mut s = LayerStack::new();
-        s.push_layer("dialogue", LayerKind::Story, 10, false).unwrap();
+        s.push_layer("dialogue", LayerKind::Story, 10, false)
+            .unwrap();
         s.push_layer("settings", LayerKind::Ui, 100, true).unwrap();
         assert!(s.visible_ids().contains(&"settings"));
         s.hide("settings").unwrap();

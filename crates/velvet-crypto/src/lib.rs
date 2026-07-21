@@ -70,8 +70,7 @@ pub fn hash_sha256_hex(data: &[u8]) -> Result<String, CryptoError> {
 pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> Result<[u8; 32], CryptoError> {
     check_len(key.len())?;
     check_len(msg.len())?;
-    let mut mac =
-        HmacSha256::new_from_slice(key).map_err(|e| CryptoError::Msg(e.to_string()))?;
+    let mut mac = HmacSha256::new_from_slice(key).map_err(|e| CryptoError::Msg(e.to_string()))?;
     mac.update(msg);
     let out = mac.finalize().into_bytes();
     let mut arr = [0u8; 32];
@@ -150,8 +149,7 @@ fn hex_val(c: u8) -> Result<u8, CryptoError> {
 /// Base64 encode (standard alphabet, no pad option — with padding).
 pub fn base64_encode(data: &[u8]) -> Result<String, CryptoError> {
     check_len(data.len())?;
-    const T: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
     let mut i = 0;
     while i < data.len() {

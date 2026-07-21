@@ -29,11 +29,7 @@ pub fn rule_gravity(ctx: &mut RuleCtx<'_>) -> bool {
     // Diagonal fall for powders / free liquids
     if matches!(phase, Phase::Powder | Phase::Liquid | Phase::Plasma) {
         let prefer_right = ctx.chance(0.5);
-        let order = if prefer_right {
-            [1, -1]
-        } else {
-            [-1, 1]
-        };
+        let order = if prefer_right { [1, -1] } else { [-1, 1] };
         for dx in order {
             let nx = ctx.x + dx;
             let ny = ctx.y - 1;
@@ -49,11 +45,7 @@ pub fn rule_gravity(ctx: &mut RuleCtx<'_>) -> bool {
     // Liquids spread horizontally when blocked
     if phase == Phase::Liquid {
         let prefer_right = ctx.chance(0.5);
-        let order = if prefer_right {
-            [1, -1]
-        } else {
-            [-1, 1]
-        };
+        let order = if prefer_right { [1, -1] } else { [-1, 1] };
         for dx in order {
             let nx = ctx.x + dx;
             let n = ctx.get(nx, ctx.y);
@@ -91,7 +83,11 @@ pub fn rule_gravity(ctx: &mut RuleCtx<'_>) -> bool {
     false
 }
 
-fn can_fall_into(ctx: &RuleCtx<'_>, self_mat: crate::cell::MaterialId, into: crate::cell::Cell) -> bool {
+fn can_fall_into(
+    ctx: &RuleCtx<'_>,
+    self_mat: crate::cell::MaterialId,
+    into: crate::cell::Cell,
+) -> bool {
     if into.flags.contains(CellFlags::MOVED) {
         return false;
     }
@@ -116,7 +112,9 @@ fn mark_moved(ctx: &mut RuleCtx<'_>, x: i32, y: i32) {
         let lx = (x - ox) as usize;
         let ly = (y - oy) as usize;
         if lx < crate::chunk::CHUNK_SIZE && ly < crate::chunk::CHUNK_SIZE {
-            ch.cells[crate::chunk::Chunk::idx(lx, ly)].flags.insert(CellFlags::MOVED);
+            ch.cells[crate::chunk::Chunk::idx(lx, ly)]
+                .flags
+                .insert(CellFlags::MOVED);
             ch.active = true;
         }
     }

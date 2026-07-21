@@ -73,7 +73,8 @@ impl ChannelTrack {
     /// Builder push.
     pub fn key(mut self, time: f32, value: f32, ease: Ease) -> Self {
         self.keys.push(Keyframe::eased(time, value, ease));
-        self.keys.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        self.keys
+            .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
         self
     }
 
@@ -146,7 +147,9 @@ impl Timeline {
 
     /// Finished (non-looping).
     pub fn finished(&self) -> bool {
-        !self.looping && self.elapsed >= self.effective_duration() && self.effective_duration() > 0.0
+        !self.looping
+            && self.elapsed >= self.effective_duration()
+            && self.effective_duration() > 0.0
     }
 
     /// Tick clock.
@@ -190,7 +193,8 @@ pub fn parse_track_line(parts: &[&str]) -> Result<ChannelTrack, String> {
     if parts.len() < 4 {
         return Err("track channel t0 v0 [t1 v1 …] [ease name]".into());
     }
-    let channel = Pose3DChannel::parse(parts[1]).ok_or_else(|| format!("bad channel {}", parts[1]))?;
+    let channel =
+        Pose3DChannel::parse(parts[1]).ok_or_else(|| format!("bad channel {}", parts[1]))?;
     let mut ease = Ease::CubicOut;
     let mut end = parts.len();
     if parts.len() >= 2 && parts[parts.len() - 2] == "ease" {

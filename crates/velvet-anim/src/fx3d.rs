@@ -271,12 +271,7 @@ impl ImageBillboard {
 }
 
 /// Project a rectangle with pose → screen quad (**core tool**).
-pub fn project_image(
-    pose: &Pose3D,
-    half_w: f32,
-    half_h: f32,
-    cam: &Fx3dCamera,
-) -> ProjectedQuad {
+pub fn project_image(pose: &Pose3D, half_w: f32, half_h: f32, cam: &Fx3dCamera) -> ProjectedQuad {
     let locals = [
         Vec3::new(-half_w, -half_h, 0.0),
         Vec3::new(half_w, -half_h, 0.0),

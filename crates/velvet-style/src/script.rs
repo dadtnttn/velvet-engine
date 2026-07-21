@@ -486,8 +486,7 @@ impl<'a> Lexer<'a> {
             }
             // optional trailing `s` for seconds (JS-ish CSS hybrid): 0.35s
             if self.peek() == b's'
-                && (self.i + 1 >= self.src.len()
-                    || !self.src[self.i + 1].is_ascii_alphanumeric())
+                && (self.i + 1 >= self.src.len() || !self.src[self.i + 1].is_ascii_alphanumeric())
             {
                 // swallow unit, value already pure number
                 let raw = std::str::from_utf8(&self.src[start..self.i]).unwrap_or("0");
@@ -596,10 +595,7 @@ impl Parser {
     }
 
     fn peek(&self) -> &Tok {
-        self.tokens
-            .get(self.i)
-            .map(|(t, _)| t)
-            .unwrap_or(&Tok::Eof)
+        self.tokens.get(self.i).map(|(t, _)| t).unwrap_or(&Tok::Eof)
     }
 
     fn line(&self) -> usize {
@@ -607,7 +603,11 @@ impl Parser {
     }
 
     fn bump(&mut self) -> Tok {
-        let t = self.tokens.get(self.i).map(|(t, _)| t.clone()).unwrap_or(Tok::Eof);
+        let t = self
+            .tokens
+            .get(self.i)
+            .map(|(t, _)| t.clone())
+            .unwrap_or(Tok::Eof);
         if self.i < self.tokens.len() {
             self.i += 1;
         }
@@ -703,10 +703,8 @@ impl Parser {
                         Tok::Ident(s) if s == "fn" || s == "function" => {
                             // inline fn — hoist as __on_{event}
                             self.bump();
-                            let inline = format!(
-                                "__on_{}",
-                                event.replace('.', "_").replace('-', "_")
-                            );
+                            let inline =
+                                format!("__on_{}", event.replace('.', "_").replace('-', "_"));
                             self.expect(&Tok::LParen)?;
                             let mut params = Vec::new();
                             if !matches!(self.peek(), Tok::RParen) {
@@ -1186,10 +1184,7 @@ impl<'a> Vm<'a> {
         // bind params
         let mut frame = self.env.clone();
         for (i, p) in func.params.iter().enumerate() {
-            frame.insert(
-                p.clone(),
-                args.get(i).cloned().unwrap_or(JsValue::Null),
-            );
+            frame.insert(p.clone(), args.get(i).cloned().unwrap_or(JsValue::Null));
         }
         let prev = std::mem::replace(&mut self.env, frame);
         let result = self.exec_block(&func.body)?;
@@ -1273,11 +1268,7 @@ impl<'a> Vm<'a> {
             Expr::Number(n) => Ok(JsValue::Number(*n)),
             Expr::String(s) => Ok(JsValue::String(s.clone())),
             Expr::Bool(b) => Ok(JsValue::Bool(*b)),
-            Expr::Ident(name) => Ok(self
-                .env
-                .get(name)
-                .cloned()
-                .unwrap_or(JsValue::Null)),
+            Expr::Ident(name) => Ok(self.env.get(name).cloned().unwrap_or(JsValue::Null)),
             Expr::Array(items) => {
                 let mut out = Vec::new();
                 for it in items {
@@ -1326,10 +1317,9 @@ impl<'a> Vm<'a> {
                     (JsValue::Object(map), JsValue::String(k)) => {
                         map.get(k).cloned().unwrap_or(JsValue::Null)
                     }
-                    (JsValue::Array(arr), JsValue::Number(n)) => arr
-                        .get(*n as usize)
-                        .cloned()
-                        .unwrap_or(JsValue::Null),
+                    (JsValue::Array(arr), JsValue::Number(n)) => {
+                        arr.get(*n as usize).cloned().unwrap_or(JsValue::Null)
+                    }
                     (JsValue::String(s), JsValue::Number(n)) => s
                         .chars()
                         .nth(*n as usize)
@@ -1348,11 +1338,7 @@ impl<'a> Vm<'a> {
         }
     }
 
-    fn call_builtin_or_fn(
-        &mut self,
-        name: &str,
-        args: &[JsValue],
-    ) -> Result<JsValue, ScriptError> {
+    fn call_builtin_or_fn(&mut self, name: &str, args: &[JsValue]) -> Result<JsValue, ScriptError> {
         match name {
             "play" => {
                 // play("deal", { target, delay, duration, ease })
@@ -1422,15 +1408,9 @@ impl<'a> Vm<'a> {
                 Ok(JsValue::Null)
             }
             "emit" => {
-                let event = args
-                    .first()
-                    .map(|v| v.as_string())
-                    .unwrap_or_default();
+                let event = args.first().map(|v| v.as_string()).unwrap_or_default();
                 let payload = args.get(1).map(|v| v.as_string());
-                self.actions.push(StyleAction::Emit {
-                    event,
-                    payload,
-                });
+                self.actions.push(StyleAction::Emit { event, payload });
                 Ok(JsValue::Null)
             }
             "str" | "String" => Ok(JsValue::String(
@@ -1462,28 +1442,16 @@ impl<'a> Vm<'a> {
                 args.first().and_then(|v| v.as_f32()).unwrap_or(0.0).abs(),
             )),
             "floor" => Ok(JsValue::Number(
-                args.first()
-                    .and_then(|v| v.as_f32())
-                    .unwrap_or(0.0)
-                    .floor(),
+                args.first().and_then(|v| v.as_f32()).unwrap_or(0.0).floor(),
             )),
             "ceil" => Ok(JsValue::Number(
-                args.first()
-                    .and_then(|v| v.as_f32())
-                    .unwrap_or(0.0)
-                    .ceil(),
+                args.first().and_then(|v| v.as_f32()).unwrap_or(0.0).ceil(),
             )),
             "sin" => Ok(JsValue::Number(
-                args.first()
-                    .and_then(|v| v.as_f32())
-                    .unwrap_or(0.0)
-                    .sin(),
+                args.first().and_then(|v| v.as_f32()).unwrap_or(0.0).sin(),
             )),
             "cos" => Ok(JsValue::Number(
-                args.first()
-                    .and_then(|v| v.as_f32())
-                    .unwrap_or(0.0)
-                    .cos(),
+                args.first().and_then(|v| v.as_f32()).unwrap_or(0.0).cos(),
             )),
             "clamp" => {
                 let x = args.first().and_then(|v| v.as_f32()).unwrap_or(0.0);
@@ -1787,9 +1755,7 @@ pub fn actions_to_timelines(
                     });
                 }
             }
-            StyleAction::Wait { .. }
-            | StyleAction::Emit { .. }
-            | StyleAction::Set { .. } => {}
+            StyleAction::Wait { .. } | StyleAction::Emit { .. } | StyleAction::Set { .. } => {}
         }
     }
     out
@@ -1829,9 +1795,7 @@ mod tests {
         let run = eval_script_fn(src, None, "dealHand", &[JsValue::num(3.0)]).unwrap();
         assert_eq!(run.actions.len(), 3);
         match &run.actions[2] {
-            StyleAction::Play {
-                target, delay, ..
-            } => {
+            StyleAction::Play { target, delay, .. } => {
                 assert_eq!(target.as_deref(), Some("card2"));
                 assert!((*delay - 0.16).abs() < 1e-4);
             }
@@ -1896,8 +1860,7 @@ mod tests {
         "#;
         let module = parse_script(src).unwrap();
         let mut rt = StyleRuntime::new();
-        let run =
-            run_function_with_runtime(&module, None, "go", &[], Some(&mut rt)).unwrap();
+        let run = run_function_with_runtime(&module, None, "go", &[], Some(&mut rt)).unwrap();
         assert!(matches!(run.actions[0], StyleAction::Set { .. }));
         assert!((rt.get("card0", "opacity") - 0.5).abs() < 1e-4);
         assert!((run.value.as_f32().unwrap_or(0.0) - 0.5).abs() < 1e-4);

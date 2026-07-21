@@ -9,3 +9,5 @@ rust-version.workspace = true
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+velvet-script-ast = { workspace = true }
+velvet-script-parser = { workspace = true }

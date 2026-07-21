@@ -54,10 +54,7 @@ impl StatusWorld {
 
     /// Apply or refresh effect on enemy.
     pub fn apply_enemy(&mut self, id: u32, kind: StatusKind, duration: f32, power: f32) {
-        let entry = self
-            .enemies
-            .iter_mut()
-            .find(|(i, _)| *i == id);
+        let entry = self.enemies.iter_mut().find(|(i, _)| *i == id);
         if let Some((_, list)) = entry {
             if let Some(e) = list.iter_mut().find(|e| e.kind == kind) {
                 e.remaining = e.remaining.max(duration);
@@ -119,13 +116,17 @@ impl StatusWorld {
     ) {
         // wet extinguishes burning
         for (_, list) in &mut self.enemies {
-            let wet = list.iter().any(|e| e.kind == StatusKind::Wet && e.remaining > 0.0);
+            let wet = list
+                .iter()
+                .any(|e| e.kind == StatusKind::Wet && e.remaining > 0.0);
             if wet {
                 list.retain(|e| e.kind != StatusKind::Burning);
             }
         }
         for (_, list) in &mut self.agents {
-            let wet = list.iter().any(|e| e.kind == StatusKind::Wet && e.remaining > 0.0);
+            let wet = list
+                .iter()
+                .any(|e| e.kind == StatusKind::Wet && e.remaining > 0.0);
             if wet {
                 list.retain(|e| e.kind != StatusKind::Burning);
             }
@@ -241,12 +242,7 @@ impl StatusWorld {
     }
 
     /// Infer status from standing cell material.
-    pub fn sample_environment(
-        &mut self,
-        world: &World,
-        enemies: &EnemyWorld,
-        agents: &AgentWorld,
-    ) {
+    pub fn sample_environment(&mut self, world: &World, enemies: &EnemyWorld, agents: &AgentWorld) {
         for e in &enemies.enemies {
             if !e.alive {
                 continue;
@@ -254,9 +250,7 @@ impl StatusWorld {
             let c = world.get(e.x.floor() as i32, e.y.floor() as i32);
             let key = world.materials.get(c.material).key.as_str();
             match key {
-                "fire" | "lava" | "napalm" => {
-                    self.apply_enemy(e.id, StatusKind::Burning, 2.0, 8.0)
-                }
+                "fire" | "lava" | "napalm" => self.apply_enemy(e.id, StatusKind::Burning, 2.0, 8.0),
                 "water" | "water_salt" | "coolant" => {
                     self.apply_enemy(e.id, StatusKind::Wet, 1.5, 0.0)
                 }

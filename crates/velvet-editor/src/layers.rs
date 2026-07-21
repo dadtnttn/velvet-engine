@@ -531,11 +531,7 @@ impl LayerStack {
         auto.into_iter()
             .map(|(id, ax, ay)| {
                 if let Some(l) = self.get(&id) {
-                    (
-                        id,
-                        l.graph_x.unwrap_or(ax),
-                        l.graph_y.unwrap_or(ay),
-                    )
+                    (id, l.graph_x.unwrap_or(ax), l.graph_y.unwrap_or(ay))
                 } else {
                     (id, ax, ay)
                 }
@@ -844,8 +840,7 @@ impl LayerStack {
             .max()
             .unwrap_or(0)
             + 10;
-        self.layers
-            .push(ScreenLayer::root(id, name, z, w, h));
+        self.layers.push(ScreenLayer::root(id, name, z, w, h));
         self.set_active(id)?;
         Ok(())
     }
@@ -1032,13 +1027,19 @@ mod tests {
         let rows = s.visible_tree_rows();
         assert!(rows.iter().any(|r| r.id == "main_menu" && r.depth == 0));
         assert!(rows.iter().any(|r| r.id == "menu_settings" && r.depth == 1));
-        assert!(rows.iter().any(|r| r.id == "scene_decisions" && r.depth == 1));
+        assert!(rows
+            .iter()
+            .any(|r| r.id == "scene_decisions" && r.depth == 1));
     }
 
     #[test]
     fn collapse_hides_children() {
         let mut s = LayerStack::vn_tree();
-        assert!(s.toggle_expanded("main_menu") == false || !s.get("main_menu").unwrap().expanded || true);
+        assert!(
+            s.toggle_expanded("main_menu") == false
+                || !s.get("main_menu").unwrap().expanded
+                || true
+        );
         s.get_mut("main_menu").unwrap().expanded = false;
         let rows = s.visible_tree_rows();
         assert!(!rows.iter().any(|r| r.id == "menu_settings"));

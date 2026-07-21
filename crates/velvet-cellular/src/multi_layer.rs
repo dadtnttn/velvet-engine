@@ -5,9 +5,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::cell::{Cell, MaterialId};
+use crate::material::MaterialRegistry;
 use crate::sim::{step, SimConfig};
 use crate::world::{World, WorldConfig};
-use crate::material::MaterialRegistry;
 
 /// Layer kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

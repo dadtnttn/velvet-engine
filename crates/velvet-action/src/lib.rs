@@ -38,10 +38,10 @@ pub use hotline::{
     WeaponKits, WeaponLoadout, PICKUP_RADIUS,
 };
 // Recipe re-exports for older demos (prefer tools + your own loop).
-pub use recipes::{HotlinePhase, HotlineRun, KillStyle, RoomPhase, RoomRun};
 pub use perception::{hear, see_target, Perception, PerceptionConfig};
 pub use plugin::ActionPlugin;
 pub use projectile::{Projectile, ProjectileSystem};
+pub use recipes::{HotlinePhase, HotlineRun, KillStyle, RoomPhase, RoomRun};
 pub use score::{ComboState, ScoreBoard};
 pub use story_host::{finish_combat, CombatHostState, CombatStoryHost};
 pub use weapon::{Weapon, WeaponId, WeaponKind};

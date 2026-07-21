@@ -116,25 +116,60 @@ impl Stylesheet {
 /// Strip `/* … */` and `//` comments, preserving newlines for line numbers.
 fn strip_comments(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
-    let b = source.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
-            i += 2;
-            while i + 1 < b.len() && !(b[i] == b'*' && b[i + 1] == b'/') {
-                if b[i] == b'\n' {
-                    out.push('\n');
+    let mut chars = source.chars().peekable();
+    let mut quote = None;
+    let mut escaped = false;
+
+    while let Some(ch) = chars.next() {
+        if escaped {
+            out.push(ch);
+            escaped = false;
+            continue;
+        }
+        if let Some(end_quote) = quote {
+            out.push(ch);
+            if ch == '\\' {
+                escaped = true;
+            } else if ch == end_quote {
+                quote = None;
+            }
+            continue;
+        }
+        if ch == '"' || ch == '\'' {
+            quote = Some(ch);
+            out.push(ch);
+            continue;
+        }
+        if ch != '/' {
+            out.push(ch);
+            continue;
+        }
+        match chars.peek().copied() {
+            Some('*') => {
+                chars.next();
+                out.push(' ');
+                let mut previous = '\0';
+                for comment_ch in chars.by_ref() {
+                    if comment_ch == '\n' {
+                        out.push('\n');
+                    }
+                    if previous == '*' && comment_ch == '/' {
+                        break;
+                    }
+                    previous = comment_ch;
                 }
-                i += 1;
             }
-            i = (i + 2).min(b.len());
-        } else if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
-            while i < b.len() && b[i] != b'\n' {
-                i += 1;
+            Some('/') => {
+                chars.next();
+                out.push(' ');
+                for comment_ch in chars.by_ref() {
+                    if comment_ch == '\n' {
+                        out.push('\n');
+                        break;
+                    }
+                }
             }
-        } else {
-            out.push(b[i] as char);
-            i += 1;
+            _ => out.push(ch),
         }
     }
     out
@@ -217,28 +252,21 @@ pub fn parse_stylesheet(source: &str) -> Result<Stylesheet, StyleParseError> {
 
         let decl_start = i;
         let mut depth = 1i32;
-        // Inside @script, strings may contain `{`/`}` — track quotes for script only.
-        let is_script = sel_raw == "@script" || sel_raw.starts_with("@script ");
+        // Strings in CSS values, SVG paths, and scripts may contain braces.
         let mut in_str: Option<u8> = None;
         let mut escape = false;
         while i < bytes.len() && depth > 0 {
             let c = bytes[i];
-            if is_script {
-                if escape {
-                    escape = false;
-                } else if in_str.is_some() {
-                    if c == b'\\' {
-                        escape = true;
-                    } else if Some(c) == in_str {
-                        in_str = None;
-                    }
-                } else if c == b'"' || c == b'\'' {
-                    in_str = Some(c);
-                } else if c == b'{' {
-                    depth += 1;
-                } else if c == b'}' {
-                    depth -= 1;
+            if escape {
+                escape = false;
+            } else if in_str.is_some() {
+                if c == b'\\' {
+                    escape = true;
+                } else if Some(c) == in_str {
+                    in_str = None;
                 }
+            } else if c == b'"' || c == b'\'' {
+                in_str = Some(c);
             } else if c == b'{' {
                 depth += 1;
             } else if c == b'}' {
@@ -455,12 +483,26 @@ fn parse_keyframes_body(
         i += 1;
         let body_start = i;
         let mut depth = 1i32;
+        let mut in_str: Option<u8> = None;
+        let mut escaped = false;
         while i < b.len() && depth > 0 {
-            if b[i] == b'{' {
+            let ch = b[i];
+            if escaped {
+                escaped = false;
+            } else if in_str.is_some() {
+                if ch == b'\\' {
+                    escaped = true;
+                } else if Some(ch) == in_str {
+                    in_str = None;
+                }
+            } else if ch == b'"' || ch == b'\'' {
+                in_str = Some(ch);
+            } else if ch == b'{' {
                 depth += 1;
-            } else if b[i] == b'}' {
+            } else if ch == b'}' {
                 depth -= 1;
-            } else if b[i] == b'\n' {
+            }
+            if ch == b'\n' {
                 line += 1;
             }
             if depth > 0 {
@@ -504,34 +546,77 @@ fn parse_declarations(
     base_line: usize,
 ) -> Result<IndexMap<String, StyleValue>, StyleParseError> {
     let mut map = IndexMap::new();
+    let mut start = 0usize;
+    let mut part_line = base_line;
     let mut line = base_line;
-    for part in body.split(';') {
-        let line_inc = part.chars().filter(|c| *c == '\n').count();
-        let part = part.trim();
-        line += line_inc;
-        if part.is_empty() {
+    let mut quote = None;
+    let mut escaped = false;
+    let mut nesting = 0u32;
+
+    for (index, ch) in body.char_indices() {
+        if ch == '\n' {
+            line += 1;
+        }
+        if escaped {
+            escaped = false;
             continue;
         }
-        let (name, value) = part.split_once(':').ok_or_else(|| StyleParseError::AtLine {
+        if let Some(end_quote) = quote {
+            if ch == '\\' {
+                escaped = true;
+            } else if ch == end_quote {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '"' | '\'' => quote = Some(ch),
+            '(' | '[' | '{' => nesting += 1,
+            ')' | ']' | '}' => nesting = nesting.saturating_sub(1),
+            ';' if nesting == 0 => {
+                parse_declaration_part(&body[start..index], part_line, &mut map)?;
+                start = index + ch.len_utf8();
+                part_line = line;
+            }
+            _ => {}
+        }
+    }
+    parse_declaration_part(&body[start..], part_line, &mut map)?;
+    Ok(map)
+}
+
+fn parse_declaration_part(
+    raw: &str,
+    base_line: usize,
+    map: &mut IndexMap<String, StyleValue>,
+) -> Result<(), StyleParseError> {
+    let leading = raw.len() - raw.trim_start().len();
+    let line = base_line + raw[..leading].chars().filter(|ch| *ch == '\n').count();
+    let part = raw.trim();
+    if part.is_empty() {
+        return Ok(());
+    }
+    let (name, value) = part
+        .split_once(':')
+        .ok_or_else(|| StyleParseError::AtLine {
             line,
             msg: format!("expected `property: value` in `{part}`"),
         })?;
-        let name = name.trim();
-        // Custom props keep --name; other names lowercased
-        let name = if name.starts_with("--") {
-            name.to_string()
-        } else {
-            name.to_ascii_lowercase()
-        };
-        if name.is_empty() {
-            return Err(StyleParseError::AtLine {
-                line,
-                msg: "empty property name".into(),
-            });
-        }
-        map.insert(name, parse_value(value));
+    let name = name.trim();
+    // Custom props keep --name; other names lowercased
+    let name = if name.starts_with("--") {
+        name.to_string()
+    } else {
+        name.to_ascii_lowercase()
+    };
+    if name.is_empty() {
+        return Err(StyleParseError::AtLine {
+            line,
+            msg: "empty property name".into(),
+        });
     }
-    Ok(map)
+    map.insert(name, parse_value(value));
+    Ok(())
 }
 
 #[cfg(test)]
@@ -579,6 +664,61 @@ mod tests {
     }
 
     #[test]
+    fn preserves_utf8_and_comment_markers_inside_strings() {
+        let sheet = parse_stylesheet(
+            r#"
+            .leyenda {
+              content: "Niño // listo; cierre } /* literal */";
+              font-family: 'Señal';
+            }
+            "#,
+        )
+        .unwrap();
+        let declarations = &sheet.rules[0].declarations;
+        assert_eq!(
+            declarations.get("content"),
+            Some(&StyleValue::String(
+                "Niño // listo; cierre } /* literal */".into()
+            ))
+        );
+        assert_eq!(
+            declarations.get("font-family"),
+            Some(&StyleValue::String("Señal".into()))
+        );
+    }
+
+    #[test]
+    fn declarations_allow_semicolons_inside_strings() {
+        let sheet =
+            parse_stylesheet(r#".asset { source: "https://cdn.example/a;b.png"; color: #fff; }"#)
+                .unwrap();
+        let declarations = &sheet.rules[0].declarations;
+        assert_eq!(
+            declarations.get("source"),
+            Some(&StyleValue::String("https://cdn.example/a;b.png".into()))
+        );
+        assert!(declarations.get("color").unwrap().as_color().is_some());
+    }
+
+    #[test]
+    fn script_strings_preserve_urls_and_semicolons() {
+        let sheet = parse_stylesheet(
+            r#"
+            @script {
+              let endpoint = "https://api.example/v1;a=b";
+              fn readEndpoint() { return endpoint; }
+            }
+            "#,
+        )
+        .unwrap();
+        let run = crate::call_style_fn(&sheet, "readEndpoint", &[]).unwrap();
+        assert_eq!(
+            run.value,
+            crate::script::JsValue::String("https://api.example/v1;a=b".into())
+        );
+    }
+
+    #[test]
     fn parse_import_statement() {
         let sheet = parse_stylesheet(
             r#"
@@ -613,12 +753,20 @@ mod tests {
         .unwrap();
         assert!(sheet.svgs.contains_key("badge"));
         assert!(!sheet.svgs["badge"].path.is_empty());
-        let chip = sheet.rules.iter().find(|r| r.selectors[0] == ".chip").unwrap();
+        let chip = sheet
+            .rules
+            .iter()
+            .find(|r| r.selectors[0] == ".chip")
+            .unwrap();
         assert!(matches!(
             chip.declarations.get("background-image"),
             Some(StyleValue::SvgRef(n)) if n == "badge"
         ));
-        let panel = sheet.rules.iter().find(|r| r.selectors[0] == ".panel").unwrap();
+        let panel = sheet
+            .rules
+            .iter()
+            .find(|r| r.selectors[0] == ".panel")
+            .unwrap();
         assert!(matches!(
             panel.declarations.get("background-image"),
             Some(StyleValue::Url(u)) if u == "ui/bg.png"

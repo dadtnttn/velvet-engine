@@ -104,7 +104,13 @@ pub fn step_chunks(world: &mut World, cfg: &SimConfig, coords: &[ChunkCoord]) {
     }
 }
 
-fn step_chunk(world: &mut World, cfg: &SimConfig, cc: ChunkCoord, reverse_x: bool, reverse_y: bool) {
+fn step_chunk(
+    world: &mut World,
+    cfg: &SimConfig,
+    cc: ChunkCoord,
+    reverse_x: bool,
+    reverse_y: bool,
+) {
     let (ox, oy) = cc.origin_cell();
     let xs: Vec<usize> = if reverse_x {
         (0..CHUNK_SIZE).rev().collect()
@@ -171,7 +177,11 @@ fn parallel_step_chunks(
     reverse_y: bool,
 ) {
     for parity in [0i32, 1] {
-        for cc in ordered.iter().copied().filter(|c| c.x.rem_euclid(2) == parity) {
+        for cc in ordered
+            .iter()
+            .copied()
+            .filter(|c| c.x.rem_euclid(2) == parity)
+        {
             step_chunk(world, cfg, cc, reverse_x, reverse_y);
         }
     }

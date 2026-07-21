@@ -30,11 +30,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let child = dir.path().join("chapter.vstory");
         let root = dir.path().join("main.vstory");
-        std::fs::write(
-            &child,
-            "scene from_include\nnarrator:\n    hi\nend\n",
-        )
-        .unwrap();
+        std::fs::write(&child, "scene from_include\nnarrator:\n    hi\nend\n").unwrap();
         let root_src = "include \"chapter.vstory\"\n\nscene start\nnarrator:\n    root\nend\n";
         std::fs::write(&root, root_src).unwrap();
 

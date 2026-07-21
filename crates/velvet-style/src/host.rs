@@ -60,9 +60,7 @@ impl StoryCommandHost for StyleStoryHost {
                     self.load_path(&sheet_name, Path::new(&path))
                         .map_err(StoryCommandError::new)?;
                 } else {
-                    return Err(StoryCommandError::new(
-                        "style.load needs path= or body=",
-                    ));
+                    return Err(StoryCommandError::new("style.load needs path= or body="));
                 }
                 vars.set("style.active", StoryValue::String(sheet_name));
                 Ok(CommandOutcome::Continue)
@@ -122,8 +120,7 @@ impl StoryCommandHost for StyleStoryHost {
                 {
                     body
                 } else {
-                    crate::animation::vanim_to_vcss(&body)
-                        .map_err(|e| StoryCommandError::new(e))?
+                    crate::animation::vanim_to_vcss(&body).map_err(|e| StoryCommandError::new(e))?
                 };
                 let sheet_name = arg_str(args, "name").unwrap_or_else(|| "anim".into());
                 let mut reg = self
@@ -135,12 +132,7 @@ impl StoryCommandHost for StyleStoryHost {
                 vars.set("style.active", StoryValue::String(sheet_name));
                 vars.set(
                     "style.keyframes",
-                    StoryValue::Int(
-                        reg.sheets
-                            .values()
-                            .map(|s| s.keyframes.len() as i64)
-                            .sum(),
-                    ),
+                    StoryValue::Int(reg.sheets.values().map(|s| s.keyframes.len() as i64).sum()),
                 );
                 vars.set(
                     "style.fns",
@@ -185,10 +177,7 @@ impl StoryCommandHost for StyleStoryHost {
                 })?;
                 let run = crate::call_style_fn(sheet, &fn_name, &js_args)
                     .map_err(|e| StoryCommandError::new(e.to_string()))?;
-                vars.set(
-                    "style.actions",
-                    StoryValue::Int(run.actions.len() as i64),
-                );
+                vars.set("style.actions", StoryValue::Int(run.actions.len() as i64));
                 vars.set(
                     "style.timelines",
                     StoryValue::Int(run.timelines.len() as i64),
@@ -207,18 +196,16 @@ impl StoryCommandHost for StyleStoryHost {
                     .registry
                     .lock()
                     .map_err(|e| StoryCommandError::new(e.to_string()))?;
-                let sheet_name = reg.active.clone().ok_or_else(|| {
-                    StoryCommandError::new("no active stylesheet")
-                })?;
+                let sheet_name = reg
+                    .active
+                    .clone()
+                    .ok_or_else(|| StoryCommandError::new("no active stylesheet"))?;
                 let sheet = reg.sheets.get(&sheet_name).ok_or_else(|| {
                     StoryCommandError::new(format!("unknown stylesheet `{sheet_name}`"))
                 })?;
                 let run = crate::emit_style_event(sheet, &event, &js_args)
                     .map_err(|e| StoryCommandError::new(e.to_string()))?;
-                vars.set(
-                    "style.actions",
-                    StoryValue::Int(run.actions.len() as i64),
-                );
+                vars.set("style.actions", StoryValue::Int(run.actions.len() as i64));
                 Ok(CommandOutcome::Continue)
             }
             "style.set" => {

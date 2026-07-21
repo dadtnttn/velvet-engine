@@ -221,14 +221,7 @@ impl Brush {
     }
 
     /// Rectangle stamp (axis-aligned).
-    pub fn apply_rect(
-        &mut self,
-        world: &mut World,
-        x0: i32,
-        y0: i32,
-        x1: i32,
-        y1: i32,
-    ) -> u32 {
+    pub fn apply_rect(&mut self, world: &mut World, x0: i32, y0: i32, x1: i32, y1: i32) -> u32 {
         let (x0, x1) = if x0 <= x1 { (x0, x1) } else { (x1, x0) };
         let (y0, y1) = if y0 <= y1 { (y0, y1) } else { (y1, y0) };
         let mut n = 0u32;
