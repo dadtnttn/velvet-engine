@@ -104,10 +104,8 @@ pub fn splatter_blood(world: &mut crate::world::World, x: i32, y: i32, radius: i
             }
         }
     }
-    world.events.push(crate::events::SimEvent::BloodSplatter {
-        x,
-        y,
-        radius,
-    });
+    world
+        .events
+        .push(crate::events::SimEvent::BloodSplatter { x, y, radius });
     let _ = MaterialId::AIR;
 }

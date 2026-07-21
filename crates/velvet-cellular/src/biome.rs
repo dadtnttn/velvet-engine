@@ -153,14 +153,7 @@ pub fn stamp_biome(world: &mut World, stamp: &BiomeStamp) -> BiomeStats {
         };
         gcfg.max_ops = 128;
         for _ in 0..5 {
-            stats.growth_ops += growth_pass(
-                world,
-                stamp.x0,
-                stamp.y0,
-                stamp.x1,
-                stamp.y1,
-                &gcfg,
-            );
+            stats.growth_ops += growth_pass(world, stamp.x0, stamp.y0, stamp.x1, stamp.y1, &gcfg);
         }
     }
 

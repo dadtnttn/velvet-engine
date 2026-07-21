@@ -469,14 +469,7 @@ mod tests {
         assert!(matches!(out, AttackOutcome::HitscanHit { target: 2, .. }));
 
         let mut hp = Health::full(100.0);
-        let hit = apply_fragile_damage(
-            &mut hp,
-            &Fragility::one_hit(),
-            1,
-            9,
-            1.0,
-            Vec2::ZERO,
-        );
+        let hit = apply_fragile_damage(&mut hp, &Fragility::one_hit(), 1, 9, 1.0, Vec2::ZERO);
         assert!(hit.one_hit_kill);
         assert!(hit.death.is_some());
     }

@@ -32,10 +32,7 @@ pub fn histogram(world: &World, x0: i32, y0: i32, x1: i32, y1: i32) -> MaterialH
             }
         }
     }
-    let mut counts: Vec<_> = map
-        .into_iter()
-        .map(|(id, n)| (MaterialId(id), n))
-        .collect();
+    let mut counts: Vec<_> = map.into_iter().map(|(id, n)| (MaterialId(id), n)).collect();
     counts.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
     MaterialHistogram {
         counts,
@@ -247,7 +244,10 @@ mod tests {
         world.paint_circle(0, 5, 3, ids.sand);
         let h = histogram(&world, -10, 0, 10, 12);
         assert!(h.solidish > 0);
-        assert!(h.counts.iter().any(|(m, _)| *m == ids.sand || *m == ids.bedrock));
+        assert!(h
+            .counts
+            .iter()
+            .any(|(m, _)| *m == ids.sand || *m == ids.bedrock));
         let surf = surface_profile(&world, -5, 5, 0, 12);
         assert!(!surf.is_empty());
         let pc = phase_counts(&world, -10, 0, 10, 12);

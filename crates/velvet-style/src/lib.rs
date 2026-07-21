@@ -59,6 +59,7 @@ pub use parse::{
 };
 pub use resolve::{
     expand_box_shorthands, resolve, resolve_expanded, ComputedStyle, StyleQuery, StyleRegistry,
+    StyleScope,
 };
 pub use runtime::{
     computed_number, is_numeric_style_value, plan_channel_tween, plan_transition, StyleRuntime,

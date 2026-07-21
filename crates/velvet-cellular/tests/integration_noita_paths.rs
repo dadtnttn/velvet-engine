@@ -117,4 +117,3 @@ fn growth_reaction_chain_light() {
     let map = bake_light(&s.world, -8, 0, 16, 16, 30);
     assert!(average_light(&map) >= 0.0);
 }
-

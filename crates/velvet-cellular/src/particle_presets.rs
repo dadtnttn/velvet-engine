@@ -1,7 +1,7 @@
 //! Named particle FX presets for authors (blood, sparks, dig, spells).
 
 use crate::cell::MaterialId;
-use crate::particles::{ParticleBurst, ParticleEnd, ParticleEmitter, ParticleWorld};
+use crate::particles::{ParticleBurst, ParticleEmitter, ParticleEnd, ParticleWorld};
 use crate::world::World;
 
 /// Preset identifier.
@@ -394,19 +394,41 @@ pub fn attach_emitter_preset(
         ParticlePreset::FireSparks | ParticlePreset::EmberRain | ParticlePreset::MetalSparks => {
             (world.mat("fire"), ParticleEnd::HeatOnly, 0.3, 800.0, 1.57)
         }
-        ParticlePreset::BloodGush | ParticlePreset::BloodMist => {
-            (world.mat("blood"), ParticleEnd::ConvertToCell, 1.0, 36.0, -1.2)
-        }
-        ParticlePreset::WaterSplash => {
-            (world.mat("water"), ParticleEnd::ConvertToCell, 1.0, 15.0, 1.0)
-        }
-        ParticlePreset::SteamJet => {
-            (world.mat("steam"), ParticleEnd::ConvertToCell, -0.3, 120.0, 1.57)
-        }
-        ParticlePreset::SmokePuff => {
-            (world.mat("smoke"), ParticleEnd::ConvertToCell, -0.2, 40.0, 1.4)
-        }
-        _ => (world.mat("sand"), ParticleEnd::ConvertToCell, 1.0, 20.0, -1.57),
+        ParticlePreset::BloodGush | ParticlePreset::BloodMist => (
+            world.mat("blood"),
+            ParticleEnd::ConvertToCell,
+            1.0,
+            36.0,
+            -1.2,
+        ),
+        ParticlePreset::WaterSplash => (
+            world.mat("water"),
+            ParticleEnd::ConvertToCell,
+            1.0,
+            15.0,
+            1.0,
+        ),
+        ParticlePreset::SteamJet => (
+            world.mat("steam"),
+            ParticleEnd::ConvertToCell,
+            -0.3,
+            120.0,
+            1.57,
+        ),
+        ParticlePreset::SmokePuff => (
+            world.mat("smoke"),
+            ParticleEnd::ConvertToCell,
+            -0.2,
+            40.0,
+            1.4,
+        ),
+        _ => (
+            world.mat("sand"),
+            ParticleEnd::ConvertToCell,
+            1.0,
+            20.0,
+            -1.57,
+        ),
     };
     let mut e = ParticleEmitter::new(0, x, y, mat, rate);
     e.end = end;

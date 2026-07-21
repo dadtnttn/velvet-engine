@@ -128,9 +128,7 @@ pub fn region_rect(doc: &Document, region_id: &str) -> Result<WidgetRect, Docume
             y: 50.0,
             percent: true,
         });
-    let size = get("size")
-        .and_then(parse_size)
-        .unwrap_or_default();
+    let size = get("size").and_then(parse_size).unwrap_or_default();
     Ok(WidgetRect { pos, size })
 }
 
@@ -189,11 +187,7 @@ pub fn resize_visual_region(
 }
 
 /// Hit-test: return region id whose rect contains canvas point (percent space).
-pub fn hit_test_visual(
-    doc: &Document,
-    canvas_x: f32,
-    canvas_y: f32,
-) -> Option<String> {
+pub fn hit_test_visual(doc: &Document, canvas_x: f32, canvas_y: f32) -> Option<String> {
     let mut hits: Vec<(String, f32)> = Vec::new();
     for r in doc.regions.iter().filter(|r| r.kind == RegionKind::Visual) {
         let id = r.id.as_str();
@@ -215,11 +209,7 @@ pub fn hit_test_visual(
             // Position is center-ish in designer UX: expand half size.
             let left = x - w * 0.5;
             let top = y - h * 0.5;
-            if canvas_x >= left
-                && canvas_x <= left + w
-                && canvas_y >= top
-                && canvas_y <= top + h
-            {
+            if canvas_x >= left && canvas_x <= left + w && canvas_y >= top && canvas_y <= top + h {
                 hits.push((id.to_string(), w * h));
             }
         }

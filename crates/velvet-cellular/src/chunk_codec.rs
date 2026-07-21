@@ -96,9 +96,7 @@ pub fn compression_ratio(chunk: &Chunk) -> f32 {
 }
 
 /// Encode many chunks.
-pub fn compress_world_chunks<'a>(
-    chunks: impl Iterator<Item = &'a Chunk>,
-) -> Vec<ChunkRle> {
+pub fn compress_world_chunks<'a>(chunks: impl Iterator<Item = &'a Chunk>) -> Vec<ChunkRle> {
     chunks.map(compress_chunk).collect()
 }
 

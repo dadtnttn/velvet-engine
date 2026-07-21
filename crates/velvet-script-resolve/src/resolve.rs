@@ -2,12 +2,14 @@
 
 #![allow(missing_docs)]
 
-use velvet_script_hir::{HirItem, HirModule, HirSpan, Visibility};
-use crate::diagnostics::{diag_e0001_unbound, diag_e0002_duplicate, diag_e0003_import_cycle, ResolveDiag};
+use crate::diagnostics::{
+    diag_e0001_unbound, diag_e0002_duplicate, diag_e0003_import_cycle, ResolveDiag,
+};
 use crate::imports::{ImportEdge, ImportGraph};
 use crate::prelude_names::is_prelude;
 use crate::scope::{ScopeKind, ScopeTree};
 use crate::symbols::{Symbol, SymbolId, SymbolKind, SymbolTable};
+use velvet_script_hir::{HirItem, HirModule, HirSpan, Visibility};
 
 #[derive(Debug, Default)]
 pub struct ResolveResult {
@@ -18,12 +20,18 @@ pub struct ResolveResult {
 }
 
 impl ResolveResult {
-    pub fn ok(&self) -> bool { !self.diags.iter().any(|d| d.is_error()) }
-    pub fn error_count(&self) -> usize { self.diags.iter().filter(|d| d.is_error()).count() }
+    pub fn ok(&self) -> bool {
+        !self.diags.iter().any(|d| d.is_error())
+    }
+    pub fn error_count(&self) -> usize {
+        self.diags.iter().filter(|d| d.is_error()).count()
+    }
 }
 
 fn module_name(m: &HirModule) -> String {
-    m.file.clone().unwrap_or_else(|| format!("mod_e{}", m.edition))
+    m.file
+        .clone()
+        .unwrap_or_else(|| format!("mod_e{}", m.edition))
 }
 
 pub fn resolve_module(m: &HirModule) -> ResolveResult {
@@ -44,7 +52,11 @@ pub fn resolve_module(m: &HirModule) -> ResolveResult {
         }
     }
     if r.imports.has_cycle() {
-        r.diags.push(diag_e0003_import_cycle("cycle", HirSpan::unknown(), &mod_name));
+        r.diags.push(diag_e0003_import_cycle(
+            "cycle",
+            HirSpan::unknown(),
+            &mod_name,
+        ));
     }
     r
 }
@@ -57,61 +69,69 @@ fn define_item(r: &mut ResolveResult, module: &str, item: &HirItem) {
             }
             let id = r.table.insert(
                 Symbol::new(SymbolId(0), f.name.clone(), SymbolKind::Fn, module)
-                    .with_vis(f.vis).with_span(f.span)
+                    .with_vis(f.vis)
+                    .with_span(f.span),
             );
             r.scopes.define(f.name.clone(), id);
         }
         HirItem::Struct(s) => {
             let id = r.table.insert(
                 Symbol::new(SymbolId(0), s.name.clone(), SymbolKind::Struct, module)
-                    .with_vis(s.vis).with_span(s.span)
+                    .with_vis(s.vis)
+                    .with_span(s.span),
             );
             r.scopes.define(s.name.clone(), id);
         }
         HirItem::Enum(e) => {
             let id = r.table.insert(
                 Symbol::new(SymbolId(0), e.name.clone(), SymbolKind::Enum, module)
-                    .with_vis(e.vis).with_span(e.span)
+                    .with_vis(e.vis)
+                    .with_span(e.span),
             );
             r.scopes.define(e.name.clone(), id);
         }
         HirItem::Scene(sc) => {
             let id = r.table.insert(
                 Symbol::new(SymbolId(0), sc.name.clone(), SymbolKind::Scene, module)
-                    .with_vis(Visibility::Public).with_span(sc.span)
+                    .with_vis(Visibility::Public)
+                    .with_span(sc.span),
             );
             r.scopes.define(sc.name.clone(), id);
         }
         HirItem::Character(c) => {
             let id = r.table.insert(
                 Symbol::new(SymbolId(0), c.name.clone(), SymbolKind::Character, module)
-                    .with_vis(Visibility::Public).with_span(c.span)
+                    .with_vis(Visibility::Public)
+                    .with_span(c.span),
             );
             r.scopes.define(c.name.clone(), id);
         }
         HirItem::Screen(s) => {
             let id = r.table.insert(
                 Symbol::new(SymbolId(0), s.name.clone(), SymbolKind::Screen, module)
-                    .with_vis(Visibility::Public).with_span(s.span)
+                    .with_vis(Visibility::Public)
+                    .with_span(s.span),
             );
             r.scopes.define(s.name.clone(), id);
         }
         HirItem::Mod { name, items, .. } => {
             let id = r.table.insert(
                 Symbol::new(SymbolId(0), name.clone(), SymbolKind::Module, module)
-                    .with_vis(Visibility::Public)
+                    .with_vis(Visibility::Public),
             );
             r.scopes.define(name.clone(), id);
             let child = format!("{module}::{name}");
             r.scopes.push(ScopeKind::Module, &child);
-            for it in items { define_item(r, &child, it); }
+            for it in items {
+                define_item(r, &child, it);
+            }
             r.scopes.pop();
         }
         HirItem::State { fields, span } => {
             for f in fields {
                 let id = r.table.insert(
                     Symbol::new(SymbolId(0), f.name.clone(), SymbolKind::StateField, module)
-                        .with_span(*span)
+                        .with_span(*span),
                 );
                 r.scopes.define(f.name.clone(), id);
             }
@@ -124,76 +144,45 @@ pub fn resolve_workspace(modules: &[HirModule]) -> ResolveResult {
     let mut r = ResolveResult::default();
     for m in modules {
         let one = resolve_module(m);
-        for sym in one.table.symbols { r.table.insert(sym); }
-        for e in one.imports.edges { r.imports.add(e); }
+        for sym in one.table.symbols {
+            r.table.insert(sym);
+        }
+        for e in one.imports.edges {
+            r.imports.add(e);
+        }
         r.diags.extend(one.diags);
     }
     if r.imports.has_cycle() {
-        r.diags.push(diag_e0003_import_cycle("workspace cycle", HirSpan::unknown(), "<workspace>"));
+        r.diags.push(diag_e0003_import_cycle(
+            "workspace cycle",
+            HirSpan::unknown(),
+            "<workspace>",
+        ));
     }
     r
 }
 
-pub fn check_name(r: &ResolveResult, name: &str, span: HirSpan, module: &str) -> Option<ResolveDiag> {
-    if r.scopes.resolve(name).is_some() || is_prelude(name) { return None; }
-    if r.table.lookup_qual(module, name).is_some() { return None; }
+pub fn check_name(
+    r: &ResolveResult,
+    name: &str,
+    span: HirSpan,
+    module: &str,
+) -> Option<ResolveDiag> {
+    if r.scopes.resolve(name).is_some() || is_prelude(name) {
+        return None;
+    }
+    if r.table.lookup_qual(module, name).is_some() {
+        return None;
+    }
     Some(diag_e0001_unbound(name, span, module))
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use velvet_script_hir::{HirExpr, HirFn, HirId, HirItem, HirModule, HirScene, HirSpan, HirTy, PrimTy, Visibility};
+    use velvet_script_hir::{
+        HirExpr, HirFn, HirId, HirItem, HirModule, HirScene, HirSpan, HirTy, PrimTy, Visibility,
+    };
 
     #[test]
     fn define_fn_and_scene() {
@@ -205,7 +194,11 @@ mod tests {
             vis: Visibility::Public,
             params: vec![],
             ret: HirTy::Prim(PrimTy::Unit),
-            body: HirExpr::Block { stmts: vec![], tail: None, span: HirSpan::unknown() },
+            body: HirExpr::Block {
+                stmts: vec![],
+                tail: None,
+                span: HirSpan::unknown(),
+            },
             span: HirSpan::unknown(),
         }));
         m.items.push(HirItem::Scene(HirScene {
@@ -220,4 +213,3 @@ mod tests {
         assert!(r.table.lookup_qual("game.vel", "start").is_some());
     }
 }
-

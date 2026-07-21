@@ -91,7 +91,10 @@ pub fn run_corpus() -> usize {
         let (m, _) = lower_source_heuristic(&src, 2);
         let _ = typeck_module(&m);
         let _ = extract_msg_ids(&src);
-        assert!(m.item_count() >= 1 || src.contains("fn "), "empty sample {i}");
+        assert!(
+            m.item_count() >= 1 || src.contains("fn "),
+            "empty sample {i}"
+        );
         ok += 1;
     }
     ok

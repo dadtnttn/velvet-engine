@@ -472,7 +472,6 @@ impl Op {
     }
 }
 
-
 /// Stable diagnostic codes with real messages (not E0001..E0500 padding).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u16)]

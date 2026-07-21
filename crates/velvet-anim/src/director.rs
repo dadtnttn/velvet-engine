@@ -90,17 +90,14 @@ impl AnimDirector {
     }
 
     /// Play a named effect on a target.
-    pub fn play_effect(
-        &mut self,
-        id: &str,
-        kind: EffectKind,
-        params: EffectParams,
-    ) -> bool {
+    pub fn play_effect(&mut self, id: &str, kind: EffectKind, params: EffectParams) -> bool {
         let target = self.ensure(id);
         let tweens = build_effect(kind, &target.pose, params);
         // For deal/fade_in, seed opacity if needed
-        if matches!(kind, EffectKind::FadeIn | EffectKind::Deal | EffectKind::PopIn | EffectKind::BounceIn)
-        {
+        if matches!(
+            kind,
+            EffectKind::FadeIn | EffectKind::Deal | EffectKind::PopIn | EffectKind::BounceIn
+        ) {
             target.pose.opacity = 0.0;
         }
         if matches!(kind, EffectKind::Deal) {

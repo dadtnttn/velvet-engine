@@ -60,10 +60,7 @@ impl StoryCommandHost for CombatStoryHost {
                     .get("enemy")
                     .map(|v| v.display_str())
                     .unwrap_or_else(|| "unknown".into());
-                let difficulty = args
-                    .get("difficulty")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(1);
+                let difficulty = args.get("difficulty").and_then(|v| v.as_i64()).unwrap_or(1);
                 if let Ok(mut st) = self.state.lock() {
                     st.last_enemy = Some(enemy.clone());
                     st.last_difficulty = difficulty;

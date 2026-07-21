@@ -118,21 +118,14 @@ pub fn fire_hitscan(
     } else {
         // chip terrain
         let c = world.get(hit.x, hit.y);
-        if !c.is_air()
-            && world.materials.phase(c.material) != crate::material::Phase::Static
-        {
+        if !c.is_air() && world.materials.phase(c.material) != crate::material::Phase::Static {
             let mat = c.material;
             world.set(hit.x, hit.y, Cell::air());
             particles.spawn(
-                crate::particles::FreeParticle::new(
-                    0,
-                    hit.x as f32 + 0.5,
-                    hit.y as f32 + 0.5,
-                    mat,
-                )
-                .with_vel(aim.cos() * -2.0, aim.sin() * -2.0 + 3.0)
-                .with_life(0.6)
-                .with_end(ParticleEnd::ConvertToCell),
+                crate::particles::FreeParticle::new(0, hit.x as f32 + 0.5, hit.y as f32 + 0.5, mat)
+                    .with_vel(aim.cos() * -2.0, aim.sin() * -2.0 + 3.0)
+                    .with_life(0.6)
+                    .with_end(ParticleEnd::ConvertToCell),
             );
         }
     }

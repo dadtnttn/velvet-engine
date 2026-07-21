@@ -102,7 +102,12 @@ impl Agent {
 
     /// Bounds.
     pub fn bounds(&self) -> (f32, f32, f32, f32) {
-        (self.x - self.hw, self.y - self.hh, self.x + self.hw, self.y + self.hh)
+        (
+            self.x - self.hw,
+            self.y - self.hh,
+            self.x + self.hw,
+            self.y + self.hh,
+        )
     }
 }
 
@@ -216,11 +221,9 @@ impl AgentWorld {
                 particles.burst_blood(a.x, a.y, blood, 40);
                 world.paint_circle(a.x as i32, a.y as i32, 3, blood);
             }
-            world.events.push(SimEvent::AgentDied {
-                id,
-                x: a.x,
-                y: a.y,
-            });
+            world
+                .events
+                .push(SimEvent::AgentDied { id, x: a.x, y: a.y });
             return true;
         }
         false
@@ -263,7 +266,9 @@ fn step_agent(
     // grounded probe
     let foot_y = (agent.y - agent.hh - 0.05).floor() as i32;
     let fx = agent.x.floor() as i32;
-    agent.grounded = is_solid(world, fx, foot_y) || is_solid(world, fx - 1, foot_y) || is_solid(world, fx + 1, foot_y);
+    agent.grounded = is_solid(world, fx, foot_y)
+        || is_solid(world, fx - 1, foot_y)
+        || is_solid(world, fx + 1, foot_y);
 
     let aim_x = agent.x + input.aim.cos() * 2.0;
     let aim_y = agent.y + input.aim.sin() * 2.0;

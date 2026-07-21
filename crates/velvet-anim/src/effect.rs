@@ -88,11 +88,7 @@ impl Default for EffectParams {
 }
 
 /// Build tweens for an effect applied to `pose` (current).
-pub fn build_effect(
-    kind: EffectKind,
-    pose: &AnimPose,
-    params: EffectParams,
-) -> Vec<FloatTween> {
+pub fn build_effect(kind: EffectKind, pose: &AnimPose, params: EffectParams) -> Vec<FloatTween> {
     let d = params.duration.max(1e-4);
     let delay = params.delay;
     let mut out = Vec::new();
@@ -106,21 +102,13 @@ pub fn build_effect(
             out.push(t);
         }
         EffectKind::FadeOut => {
-            let mut t = FloatTween::new(
-                AnimField::Opacity,
-                pose.opacity,
-                0.0,
-                d,
-                params.ease,
-            );
+            let mut t = FloatTween::new(AnimField::Opacity, pose.opacity, 0.0, d, params.ease);
             t.delay = delay;
             out.push(t);
         }
         EffectKind::MoveTo => {
-            let mut tx =
-                FloatTween::new(AnimField::X, pose.pos.x, params.to.x, d, params.ease);
-            let mut ty =
-                FloatTween::new(AnimField::Y, pose.pos.y, params.to.y, d, params.ease);
+            let mut tx = FloatTween::new(AnimField::X, pose.pos.x, params.to.x, d, params.ease);
+            let mut ty = FloatTween::new(AnimField::Y, pose.pos.y, params.to.y, d, params.ease);
             tx.delay = delay;
             ty.delay = delay;
             out.push(tx);
@@ -129,11 +117,9 @@ pub fn build_effect(
         EffectKind::Punch => {
             let peak = 1.0 + params.strength.max(0.05);
             let half = d * 0.45;
-            let mut up =
-                FloatTween::new(AnimField::Scale, pose.scale, peak, half, Ease::BackOut);
+            let mut up = FloatTween::new(AnimField::Scale, pose.scale, peak, half, Ease::BackOut);
             up.delay = delay;
-            let mut down =
-                FloatTween::new(AnimField::Scale, peak, 1.0, d - half, Ease::CubicOut);
+            let mut down = FloatTween::new(AnimField::Scale, peak, 1.0, d - half, Ease::CubicOut);
             down.delay = delay + half;
             out.push(up);
             out.push(down);
@@ -145,11 +131,15 @@ pub fn build_effect(
             let seg = d / 4.0;
             let mut t0 = FloatTween::new(AnimField::X, base, base + amp, seg, Ease::SineOut);
             t0.delay = delay;
-            let mut t1 =
-                FloatTween::new(AnimField::X, base + amp, base - amp, seg * 2.0, Ease::SineInOut);
+            let mut t1 = FloatTween::new(
+                AnimField::X,
+                base + amp,
+                base - amp,
+                seg * 2.0,
+                Ease::SineInOut,
+            );
             t1.delay = delay + seg;
-            let mut t2 =
-                FloatTween::new(AnimField::X, base - amp, base, seg, Ease::SineIn);
+            let mut t2 = FloatTween::new(AnimField::X, base - amp, base, seg, Ease::SineIn);
             t2.delay = delay + seg * 3.0;
             out.push(t0);
             out.push(t1);
@@ -166,8 +156,7 @@ pub fn build_effect(
             let mut ox = FloatTween::new(AnimField::X, start.x, dest.x, d, Ease::CubicOut);
             let mut oy = FloatTween::new(AnimField::Y, start.y, dest.y, d, Ease::BackOut);
             let mut op = FloatTween::new(AnimField::Opacity, 0.0, 1.0, d * 0.7, Ease::QuadOut);
-            let mut sc =
-                FloatTween::new(AnimField::Scale, 0.85, 1.0, d, Ease::BackOut);
+            let mut sc = FloatTween::new(AnimField::Scale, 0.85, 1.0, d, Ease::BackOut);
             ox.delay = delay;
             oy.delay = delay;
             op.delay = delay;
@@ -178,8 +167,7 @@ pub fn build_effect(
             out.push(sc);
         }
         EffectKind::BounceIn => {
-            let mut t =
-                FloatTween::new(AnimField::Scale, 0.0, 1.0, d, Ease::BounceOut);
+            let mut t = FloatTween::new(AnimField::Scale, 0.0, 1.0, d, Ease::BounceOut);
             t.delay = delay;
             let mut o = FloatTween::new(AnimField::Opacity, 0.0, 1.0, d * 0.5, Ease::QuadOut);
             o.delay = delay;

@@ -140,7 +140,9 @@ impl Stmt {
 pub fn parse_line(line: &str) -> Stmt {
     let t = line.trim();
     if t.is_empty() {
-        return Stmt::Raw { line: String::new() };
+        return Stmt::Raw {
+            line: String::new(),
+        };
     }
     if let Some(rest) = t.strip_prefix("//") {
         return Stmt::Comment {
@@ -282,11 +284,7 @@ impl fmt::Display for ScriptIssue {
 }
 
 /// Validate statements against known layers and button ids.
-pub fn validate(
-    stmts: &[Stmt],
-    known_layers: &[&str],
-    known_buttons: &[&str],
-) -> Vec<ScriptIssue> {
+pub fn validate(stmts: &[Stmt], known_layers: &[&str], known_buttons: &[&str]) -> Vec<ScriptIssue> {
     let mut issues = Vec::new();
     for (i, s) in stmts.iter().enumerate() {
         let line = i + 1;
@@ -302,7 +300,9 @@ pub fn validate(
                     });
                 }
             }
-            Stmt::ButtonPress { id } | Stmt::ButtonFocus { id } | Stmt::ButtonSetText { id, .. } => {
+            Stmt::ButtonPress { id }
+            | Stmt::ButtonFocus { id }
+            | Stmt::ButtonSetText { id, .. } => {
                 if !known_buttons.is_empty() && !known_buttons.iter().any(|k| *k == id) {
                     issues.push(ScriptIssue {
                         line,
@@ -350,7 +350,11 @@ pub fn api_catalog() -> &'static [(&'static str, &'static str, &'static str)] {
         ("game", "game.quit()", "Quit application"),
         ("game", "game.save()", "Save game"),
         ("game", "game.load(\"slot1\")", "Load named slot"),
-        ("scene", "scene.open(\"scripts/main.vel\")", "Open scene file"),
+        (
+            "scene",
+            "scene.open(\"scripts/main.vel\")",
+            "Open scene file",
+        ),
         ("flow", "jump chapter_2", "Jump to label/scene"),
         ("flow", "call subroutine", "Call subroutine"),
         ("layer", "layer.open(\"menu_settings\")", "Switch to layer"),
@@ -358,14 +362,22 @@ pub fn api_catalog() -> &'static [(&'static str, &'static str, &'static str)] {
         ("layer", "layer.hide(\"hud\")", "Hide layer"),
         ("layer", "layer.lock(\"main_menu\")", "Lock layer"),
         ("layer", "layer.unlock(\"main_menu\")", "Unlock layer"),
-        ("button", "button.press(\"button.start\")", "Fire button handler"),
+        (
+            "button",
+            "button.press(\"button.start\")",
+            "Fire button handler",
+        ),
         ("button", "button.focus(\"button.start\")", "Focus button"),
         (
             "button",
             "button.set_text(\"button.start\", \"Play\")",
             "Change button label",
         ),
-        ("graph", "connect main_menu -> scene", "Link layers in graph"),
+        (
+            "graph",
+            "connect main_menu -> scene",
+            "Link layers in graph",
+        ),
         ("logic", "if flags.met_aria {", "Conditional branch"),
         ("vars", "flags.met_aria = true", "Set variable"),
     ]
@@ -489,7 +501,12 @@ mod tests {
     #[test]
     fn parse_emit_layer_button() {
         let s = parse_line("layer.open(\"menu_settings\")");
-        assert_eq!(s, Stmt::LayerOpen { id: "menu_settings".into() });
+        assert_eq!(
+            s,
+            Stmt::LayerOpen {
+                id: "menu_settings".into()
+            }
+        );
         assert_eq!(s.emit(), "layer.open(\"menu_settings\")");
 
         let b = parse_line("button.press(\"button.start\")");
