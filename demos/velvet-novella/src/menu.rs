@@ -39,13 +39,7 @@ pub fn compose_size_for_window(dw: u32, dh: u32) -> (u32, u32) {
 }
 
 /// Menu entries (index = selection).
-pub const MENU_ITEMS: &[&str] = &[
-    "Nueva partida",
-    "Continuar",
-    "Galería",
-    "Opciones",
-    "Salir",
-];
+pub const MENU_ITEMS: &[&str] = &["Nueva partida", "Continuar", "Galería", "Opciones", "Salir"];
 
 /// Which indices are currently interactive.
 pub fn menu_enabled(i: usize) -> bool {
@@ -443,20 +437,54 @@ pub fn paint_novel_menu_size(
     let px2 = 86.0 * s;
 
     draw_font_hq(
-        pixels, ww, wh, &f.title, title_x + 2.0 * s, base1 + 2.0 * s, "Luz de", px1, (12, 8, 20),
+        pixels,
+        ww,
+        wh,
+        &f.title,
+        title_x + 2.0 * s,
+        base1 + 2.0 * s,
+        "Luz de",
+        px1,
+        (12, 8, 20),
         0.5,
     );
     draw_font_hq(
-        pixels, ww, wh, &f.title, title_x, base1, "Luz de", px1, (236, 224, 210), 1.0,
+        pixels,
+        ww,
+        wh,
+        &f.title,
+        title_x,
+        base1,
+        "Luz de",
+        px1,
+        (236, 224, 210),
+        1.0,
     );
 
     let base2 = base1 + px2 * 0.92;
     draw_font_hq(
-        pixels, ww, wh, &f.title, title_x + 2.5 * s, base2 + 2.5 * s, "Estación", px2, (16, 10, 22),
+        pixels,
+        ww,
+        wh,
+        &f.title,
+        title_x + 2.5 * s,
+        base2 + 2.5 * s,
+        "Estación",
+        px2,
+        (16, 10, 22),
         0.55,
     );
     draw_font_hq(
-        pixels, ww, wh, &f.title, title_x, base2, "Estación", px2, (255, 214, 150), 1.0,
+        pixels,
+        ww,
+        wh,
+        &f.title,
+        title_x,
+        base2,
+        "Estación",
+        px2,
+        (255, 214, 150),
+        1.0,
     );
     draw_font_hq(
         pixels,
@@ -732,9 +760,9 @@ mod tests {
         let non_black = pixels
             .iter()
             .filter(|&&p| {
-                let r = ((p >> 16) & 0xFF) as u32;
-                let g = ((p >> 8) & 0xFF) as u32;
-                let b = (p & 0xFF) as u32;
+                let r = (p >> 16) & 0xFF;
+                let g = (p >> 8) & 0xFF;
+                let b = p & 0xFF;
                 r + g + b > 40
             })
             .count();

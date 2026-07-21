@@ -1,5 +1,7 @@
 # Velvet Engine — Module map
 
+This file is the compact inventory. The responsibility, retention rule, dependency direction and cross-crate proof for every family are documented in [INTEGRATION_MATRIX.md](INTEGRATION_MATRIX.md). A crate is not justified by line count alone.
+
 | Crate | Role |
 |-------|------|
 | **velvet-core** | Config, errors, plugins, diagnostics, profiling |

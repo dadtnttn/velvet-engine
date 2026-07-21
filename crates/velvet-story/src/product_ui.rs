@@ -159,7 +159,7 @@ pub fn build_product_ui_frame(session: &VnSession) -> ProductUiFrame {
     }
 }
 
-/// Sync a [`velvet_ui::DialogueBox`] from session product state (optional host bridge).
+/// Sync a `velvet_ui::DialogueBox` from session product state (optional host bridge).
 /// Kept free of hard dependency: returns fields the host can apply.
 pub fn dialogue_box_fields(session: &VnSession) -> (Option<String>, String, Vec<String>, usize) {
     let frame = build_product_ui_frame(session);

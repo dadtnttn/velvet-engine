@@ -1,6 +1,6 @@
 //! Hot-chunk efficient stepping — only simulate active regions.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use crate::chunk::{ChunkCoord, CHUNK_SIZE};
@@ -12,54 +12,91 @@ use crate::world::World;
 pub struct HotChunkTracker {
     /// Chunks that must simulate this frame.
     hot: HashSet<ChunkCoord>,
-    /// Frames since last activity per chunk (approx).
-    cool: Vec<(ChunkCoord, u32)>,
+    /// Consecutive inactive frames per chunk before it is allowed to sleep.
+    cool: HashMap<ChunkCoord, u32>,
     /// Max cool frames before sleep.
     pub sleep_after: u32,
 }
 
 impl HotChunkTracker {
-    /// New.
+    /// New tracker with a short grace period before inactive chunks sleep.
     pub fn new() -> Self {
         Self {
             hot: HashSet::new(),
-            cool: Vec::new(),
+            cool: HashMap::new(),
             sleep_after: 30,
         }
     }
 
-    /// Mark world position hot.
+    /// Mark world position hot, including its neighboring chunk region.
     pub fn touch(&mut self, x: i32, y: i32) {
-        self.hot.insert(ChunkCoord::from_cell(x, y));
-        // neighbors
         for dy in -1..=1 {
             for dx in -1..=1 {
-                self.hot.insert(ChunkCoord::from_cell(
+                let coord = ChunkCoord::from_cell(
                     x + dx * CHUNK_SIZE as i32 / 2,
                     y + dy * CHUNK_SIZE as i32 / 2,
-                ));
+                );
+                self.hot.insert(coord);
+                self.cool.remove(&coord);
             }
         }
     }
 
-    /// Mark chunk hot.
-    pub fn touch_chunk(&mut self, c: ChunkCoord) {
-        self.hot.insert(c);
+    /// Mark chunk hot and reset its cooling age.
+    pub fn touch_chunk(&mut self, coord: ChunkCoord) {
+        self.hot.insert(coord);
+        self.cool.remove(&coord);
     }
 
-    /// Collect hot list from world activity + tracker.
+    /// Collect hot chunks from explicit touches and currently active world chunks.
     pub fn collect(&mut self, world: &World) -> Vec<ChunkCoord> {
-        for c in world.active_chunk_coords() {
-            self.hot.insert(c);
+        for coord in world.active_chunk_coords() {
+            self.hot.insert(coord);
+            self.cool.remove(&coord);
         }
-        let mut v: Vec<_> = self.hot.iter().copied().collect();
-        v.sort_by_key(|c| (c.y, c.x));
-        v
+        let mut coords: Vec<_> = self.hot.iter().copied().collect();
+        coords.sort_by_key(|coord| (coord.y, coord.x));
+        coords
     }
 
-    /// Clear hot set (after step).
+    /// Clear explicitly tracked hot chunks.
     pub fn clear_hot(&mut self) {
         self.hot.clear();
+    }
+
+    fn finish_step(&mut self, world: &mut World, stepped: &[ChunkCoord]) {
+        self.hot.clear();
+        let sleep_after = self.sleep_after.max(1);
+
+        for &coord in stepped {
+            let active = world
+                .chunk(coord)
+                .is_some_and(|chunk| chunk.active && !chunk.sleeping);
+            if active {
+                self.cool.remove(&coord);
+                self.hot.insert(coord);
+                continue;
+            }
+
+            let age = self.cool.entry(coord).or_insert(0);
+            *age = age.saturating_add(1);
+            if *age < sleep_after {
+                // `step_chunks` puts inactive chunks to sleep immediately. The tracker
+                // re-opens them during the grace period so slow reactions can settle.
+                if let Some(chunk) = world.chunk_mut(coord) {
+                    chunk.sleeping = false;
+                }
+                self.hot.insert(coord);
+            } else {
+                self.cool.remove(&coord);
+            }
+        }
+
+        // Cross-chunk movement may activate neighbors not present in `stepped`.
+        for coord in world.active_chunk_coords() {
+            self.cool.remove(&coord);
+            self.hot.insert(coord);
+        }
     }
 }
 
@@ -71,29 +108,27 @@ pub fn step_hot(world: &mut World, cfg: &SimConfig, tracker: &mut HotChunkTracke
         world.tick = world.tick.wrapping_add(1);
         return;
     }
-    // Tracker touch must be able to wake sleeping static terrain (dig, cast, etc.).
-    for c in &coords {
-        if let Some(ch) = world.chunk_mut(*c) {
-            ch.sleeping = false;
+
+    // Explicit touches must be able to wake sleeping static terrain before a dig,
+    // spell, reaction, or neighboring material update is processed.
+    for coord in &coords {
+        if let Some(chunk) = world.chunk_mut(*coord) {
+            chunk.sleeping = false;
         }
     }
+
     crate::sim::step_chunks(world, cfg, &coords);
-    tracker.clear_hot();
-    // re-touch chunks that remained active (moved this step)
-    for c in world.active_chunk_coords() {
-        tracker.touch_chunk(c);
-    }
+    tracker.finish_step(world, &coords);
     world.tick = world.tick.wrapping_add(1);
 }
 
 /// Timed multi-step for perf tests. Returns elapsed milliseconds.
 pub fn timed_steps(world: &mut World, cfg: &SimConfig, steps: u32, use_hot: bool) -> f64 {
     let mut tracker = HotChunkTracker::new();
-    // seed hot from all loaded
-    for c in world.loaded_chunks() {
-        tracker.touch_chunk(c);
+    for coord in world.loaded_chunks() {
+        tracker.touch_chunk(coord);
     }
-    let t0 = Instant::now();
+    let started = Instant::now();
     for _ in 0..steps {
         if use_hot {
             step_hot(world, cfg, &mut tracker);
@@ -101,7 +136,7 @@ pub fn timed_steps(world: &mut World, cfg: &SimConfig, steps: u32, use_hot: bool
             crate::sim::step(world, cfg);
         }
     }
-    t0.elapsed().as_secs_f64() * 1000.0
+    started.elapsed().as_secs_f64() * 1000.0
 }
 
 /// Fill two chunks with mixed materials for perf scenes.
@@ -111,16 +146,13 @@ pub fn fill_perf_scene(
     water: crate::cell::MaterialId,
     stone: crate::cell::MaterialId,
 ) {
-    // chunk (0,0) and (1,0) — 64*64*2 cells
     for y in 0..CHUNK_SIZE as i32 {
         for x in 0..(CHUNK_SIZE as i32 * 2) {
             let cell = if y < 3 {
                 stone
             } else if (x + y) % 7 == 0 {
                 water
-            } else if (x * 3 + y) % 5 == 0 {
-                sand
-            } else if y > 40 && (x % 11 == 0) {
+            } else if (x * 3 + y) % 5 == 0 || (y > 40 && x % 11 == 0) {
                 sand
             } else {
                 continue;
@@ -138,9 +170,9 @@ mod tests {
 
     #[test]
     fn perf_two_chunks_under_budget() {
-        let (reg, ids) = builtin_registry();
+        let (registry, ids) = builtin_registry();
         let mut world = World::new(
-            reg,
+            registry,
             WorldConfig {
                 max_loaded_chunks: 64,
                 ..WorldConfig::default()
@@ -152,31 +184,29 @@ mod tests {
             occupied >= CHUNK_SIZE * 2,
             "need substantial cells, got {occupied}"
         );
-        let cfg = SimConfig {
+        let config = SimConfig {
             parallel: false,
             ..SimConfig::default()
         };
-        // 30 steps on 2 chunks — budget generous for debug builds
-        let ms = timed_steps(&mut world, &cfg, 30, true);
-        // 15 seconds hard budget so cold debug CI still passes
+        let elapsed_ms = timed_steps(&mut world, &config, 30, true);
         assert!(
-            ms < 15_000.0,
-            "perf budget exceeded: {ms:.1}ms for 30 steps, occupied={occupied}"
+            elapsed_ms < 15_000.0,
+            "perf budget exceeded: {elapsed_ms:.1}ms for 30 steps, occupied={occupied}"
         );
-        eprintln!("PERF_OK hot_steps=30 occupied={occupied} ms={ms:.2}");
+        eprintln!("PERF_OK hot_steps=30 occupied={occupied} ms={elapsed_ms:.2}");
     }
 
     #[test]
     fn hot_step_moves_sand() {
-        let (reg, ids) = builtin_registry();
-        let mut world = World::new(reg, WorldConfig::default());
+        let (registry, ids) = builtin_registry();
+        let mut world = World::new(registry, WorldConfig::default());
         world.paint_rect(-5, 0, 5, 1, ids.bedrock);
         world.set(0, 15, crate::cell::Cell::of(ids.sand));
         let mut tracker = HotChunkTracker::new();
         tracker.touch(0, 15);
-        let cfg = SimConfig::default();
+        let config = SimConfig::default();
         for _ in 0..40 {
-            step_hot(&mut world, &cfg, &mut tracker);
+            step_hot(&mut world, &config, &mut tracker);
             tracker.touch(0, 5);
         }
         let mut found = false;
@@ -187,5 +217,35 @@ mod tests {
             }
         }
         assert!(found);
+    }
+
+    #[test]
+    fn inactive_chunk_uses_cooldown_before_sleeping() {
+        let (registry, ids) = builtin_registry();
+        let mut world = World::new(registry, WorldConfig::default());
+        world.set(0, 0, crate::cell::Cell::of(ids.bedrock));
+        let coord = ChunkCoord::new(0, 0);
+        let mut tracker = HotChunkTracker::new();
+        tracker.sleep_after = 2;
+        tracker.touch_chunk(coord);
+        let config = SimConfig {
+            gravity: false,
+            density: false,
+            temperature: false,
+            fire: false,
+            dissolve: false,
+            pressure: false,
+            alternate_scan: false,
+            parallel: false,
+        };
+
+        step_hot(&mut world, &config, &mut tracker);
+        assert!(!world.chunk(coord).unwrap().sleeping);
+        assert!(tracker.hot.contains(&coord));
+
+        step_hot(&mut world, &config, &mut tracker);
+        assert!(world.chunk(coord).unwrap().sleeping);
+        assert!(!tracker.hot.contains(&coord));
+        assert!(!tracker.cool.contains_key(&coord));
     }
 }

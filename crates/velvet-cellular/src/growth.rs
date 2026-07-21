@@ -199,9 +199,11 @@ mod tests {
         let vine = world.mat("vine");
         assert!(!vine.is_air());
         world.set(0, 1, Cell::of(vine));
-        let mut cfg = GrowthConfig::default();
-        cfg.vine_up = 1.0; // force
-        cfg.max_ops = 32;
+        let cfg = GrowthConfig {
+            vine_up: 1.0, // force
+            max_ops: 32,
+            ..GrowthConfig::default()
+        };
         let mut total = 0;
         for _ in 0..20 {
             total += growth_pass(&mut world, -2, 0, 2, 20, &cfg);

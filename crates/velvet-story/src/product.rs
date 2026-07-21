@@ -1421,7 +1421,7 @@ scene end_good {
             Some("fade")
         );
         assert!(
-            session.presentation.transitions.len() >= 1,
+            !session.presentation.transitions.is_empty(),
             "fade transition should enqueue"
         );
         assert_eq!(

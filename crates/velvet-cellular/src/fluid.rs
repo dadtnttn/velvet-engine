@@ -31,56 +31,48 @@ pub fn find_liquid_blobs(
     y1: i32,
     max_blobs: usize,
 ) -> Vec<LiquidBlob> {
-    let mut seen = std::collections::HashSet::new();
+    use std::collections::HashSet;
+
+    let mut seen = HashSet::new();
     let mut blobs = Vec::new();
     for y in y0..y1 {
         for x in x0..x1 {
-            if !seen.insert((x, y)) {
+            if seen.contains(&(x, y)) {
                 continue;
             }
-            let c = world.get(x, y);
-            if c.is_air() || world.materials.phase(c.material) != Phase::Liquid {
+            let seed = world.get(x, y);
+            if seed.is_air() || world.materials.phase(seed.material) != Phase::Liquid {
+                seen.insert((x, y));
                 continue;
             }
-            let mat = c.material;
+
+            let material = seed.material;
             let mut stack = vec![(x, y)];
             let mut cells = Vec::new();
             let mut min_y = y;
             let mut max_y = y;
             while let Some((cx, cy)) = stack.pop() {
-                if cx < x0 || cy < y0 || cx >= x1 || cy >= y1 {
+                if cx < x0 || cy < y0 || cx >= x1 || cy >= y1 || seen.contains(&(cx, cy)) {
                     continue;
-                }
-                if !seen.insert((cx, cy)) && !(cx == x && cy == y) {
-                    // already processed unless seed
                 }
                 let cell = world.get(cx, cy);
-                if cell.material != mat {
+                if cell.material != material {
                     continue;
                 }
-                if cells.iter().any(|&p| p == (cx, cy)) {
-                    continue;
-                }
+
+                seen.insert((cx, cy));
                 cells.push((cx, cy));
                 min_y = min_y.min(cy);
                 max_y = max_y.max(cy);
                 for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                    let nx = cx + dx;
-                    let ny = cy + dy;
-                    if nx < x0 || ny < y0 || nx >= x1 || ny >= y1 {
-                        continue;
-                    }
-                    let n = world.get(nx, ny);
-                    if n.material == mat && !cells.iter().any(|&p| p == (nx, ny)) {
-                        stack.push((nx, ny));
-                        seen.insert((nx, ny));
-                    }
+                    stack.push((cx + dx, cy + dy));
                 }
             }
+
             if cells.len() >= 2 {
                 let volume = cells.len();
                 blobs.push(LiquidBlob {
-                    material: mat,
+                    material,
                     cells,
                     min_y,
                     max_y,
@@ -234,15 +226,20 @@ pub fn drain_liquid(
 ) -> usize {
     let mut removed = 0usize;
     // open hole
-    if !world.get(hole_x, hole_y).is_air() {
-        if world.materials.phase(world.get(hole_x, hole_y).material) != Phase::Static {
-            world.set(hole_x, hole_y, Cell::air());
-        }
+    if !world.get(hole_x, hole_y).is_air()
+        && world.materials.phase(world.get(hole_x, hole_y).material) != Phase::Static
+    {
+        world.set(hole_x, hole_y, Cell::air());
     }
-    // repeatedly remove liquid adjacent to hole / air near bottom
+    // repeatedly remove liquid adjacent to the hole / air near the bottom,
+    // respecting the caller-provided region bounds.
+    let scan_top = hole_y.min(y1.saturating_sub(1));
+    if scan_top < y0 {
+        return removed;
+    }
     for _ in 0..budget {
         let mut found = None;
-        for y in y0..=hole_y {
+        for y in y0..=scan_top {
             for x in x0..x1 {
                 let c = world.get(x, y);
                 if world.materials.phase(c.material) != Phase::Liquid {
@@ -378,6 +375,10 @@ mod tests {
             step(&mut world, &cfg);
         }
         let stats = fluid_pass(&mut world, 20);
-        assert!(stats.settled_ratio >= 0.0);
+        assert!(
+            stats.blob_count >= 1,
+            "water blob should survive the pass: {stats:?}"
+        );
+        assert!((0.0..=1.0).contains(&stats.settled_ratio));
     }
 }

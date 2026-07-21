@@ -246,7 +246,7 @@ impl LiveDevSession {
         self.reloader.path_of(key)
     }
 
-    /// Force mark a key dirty (tests) then [`tick`].
+    /// Force mark a key dirty (tests) then [`Self::tick`].
     pub fn force_tick_key(&mut self, key: &str) -> LiveDevApply {
         self.reloader.mark_changed(key);
         self.apply_keys(vec![key.to_string()])

@@ -116,7 +116,10 @@ scene chat {
                         let _ = story.choose(0);
                     }
                     StoryWait::Ended => break,
-                    StoryWait::Ready => story.advance(),
+                    StoryWait::Ready | StoryWait::Pause { .. } => story.advance(),
+                    StoryWait::Host { token } => {
+                        let _ = story.resume_host(&token);
+                    }
                 }
             }
             journal.progress("village_help", "talk", 1);

@@ -301,7 +301,7 @@ mod tests {
         a2.insert("target".into(), StoryValue::String("c0".into()));
         a2.insert("channel".into(), StoryValue::String("yaw".into()));
         a2.insert("from".into(), StoryValue::Float(0.0));
-        a2.insert("to".into(), StoryValue::Float(3.1415));
+        a2.insert("to".into(), StoryValue::Float(std::f64::consts::PI));
         a2.insert("duration".into(), StoryValue::Float(0.3));
         ops.push(StoryOp::HostCall {
             name: "anim.track".into(),

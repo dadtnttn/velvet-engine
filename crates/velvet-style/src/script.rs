@@ -620,19 +620,19 @@ impl Parser {
             && !(matches!(want, Tok::Ident(_)) && matches!(got, Tok::Ident(_)))
         {
             // exact match for simple tokens
-            let ok = match (want, &got) {
+            let ok = matches!(
+                (want, &got),
                 (Tok::LParen, Tok::LParen)
-                | (Tok::RParen, Tok::RParen)
-                | (Tok::LBrace, Tok::LBrace)
-                | (Tok::RBrace, Tok::RBrace)
-                | (Tok::LBracket, Tok::LBracket)
-                | (Tok::RBracket, Tok::RBracket)
-                | (Tok::Comma, Tok::Comma)
-                | (Tok::Colon, Tok::Colon)
-                | (Tok::Semi, Tok::Semi)
-                | (Tok::Assign, Tok::Assign) => true,
-                _ => false,
-            };
+                    | (Tok::RParen, Tok::RParen)
+                    | (Tok::LBrace, Tok::LBrace)
+                    | (Tok::RBrace, Tok::RBrace)
+                    | (Tok::LBracket, Tok::LBracket)
+                    | (Tok::RBracket, Tok::RBracket)
+                    | (Tok::Comma, Tok::Comma)
+                    | (Tok::Colon, Tok::Colon)
+                    | (Tok::Semi, Tok::Semi)
+                    | (Tok::Assign, Tok::Assign)
+            );
             if !ok {
                 return Err(ScriptError::Parse {
                     line: self.line(),
@@ -696,15 +696,11 @@ impl Parser {
                     };
                     self.expect(&Tok::Comma)?;
                     let fn_name = match self.peek() {
-                        Tok::Ident(s) if s != "fn" && s != "function" => {
-                            let n = self.expect_ident()?;
-                            n
-                        }
+                        Tok::Ident(s) if s != "fn" && s != "function" => self.expect_ident()?,
                         Tok::Ident(s) if s == "fn" || s == "function" => {
                             // inline fn — hoist as __on_{event}
                             self.bump();
-                            let inline =
-                                format!("__on_{}", event.replace('.', "_").replace('-', "_"));
+                            let inline = format!("__on_{}", event.replace(['.', '-'], "_"));
                             self.expect(&Tok::LParen)?;
                             let mut params = Vec::new();
                             if !matches!(self.peek(), Tok::RParen) {
@@ -1648,7 +1644,7 @@ pub fn run_function_with_runtime(
     sheet: Option<&Stylesheet>,
     name: &str,
     args: &[JsValue],
-    mut runtime: Option<&mut StyleRuntime>,
+    runtime: Option<&mut StyleRuntime>,
 ) -> Result<ScriptRun, ScriptError> {
     let mut env = IndexMap::new();
     // seed globals (no runtime needed)
@@ -1668,7 +1664,7 @@ pub fn run_function_with_runtime(
         module,
         env,
         actions: Vec::new(),
-        runtime: runtime.as_deref_mut(),
+        runtime,
     };
     let value = vm.run_fn(name, args)?;
     let actions = vm.actions;

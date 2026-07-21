@@ -39,26 +39,15 @@ impl PresentHostState {
     }
 
     /// `show(id [, expression [, at]])`
-    pub fn show(
-        &mut self,
-        id: impl Into<String>,
-        expression: Option<String>,
-        at: Option<String>,
-    ) {
+    pub fn show(&mut self, id: impl Into<String>, expression: Option<String>, at: Option<String>) {
         let id = id.into();
         self.log.push(format!(
             "show {id} expr={} at={}",
             expression.as_deref().unwrap_or("-"),
             at.as_deref().unwrap_or("-")
         ));
-        self.sprites.insert(
-            id.clone(),
-            PresentSprite {
-                id,
-                expression,
-                at,
-            },
-        );
+        self.sprites
+            .insert(id.clone(), PresentSprite { id, expression, at });
     }
 
     /// `hide(id)`

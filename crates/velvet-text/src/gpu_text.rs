@@ -272,12 +272,15 @@ impl GpuTextRasterizer {
     }
 }
 
+/// Product text descriptor: text, x, y, size, RGBA color, and draw order.
+pub type ProductTextItem = (String, f32, f32, f32, [f32; 4], f32);
+
 /// Convert product-style text descriptors into GPU runs.
 ///
 /// `items` are (text, x, y, size, color, z).
 pub fn layout_product_text_items(
     raster: &mut GpuTextRasterizer,
-    items: &[(String, f32, f32, f32, [f32; 4], f32)],
+    items: &[ProductTextItem],
 ) -> Vec<GpuTextRun> {
     items
         .iter()
@@ -377,6 +380,10 @@ mod tests {
         let t = "station";
         let m = r.measure_width(t, 24.0);
         let run = r.layout_line(t, 0.0, 0.0, 24.0, [1.0, 1.0, 1.0, 1.0], 0.0);
-        assert!((m - run.width).abs() < 0.5, "measure={m} layout={}", run.width);
+        assert!(
+            (m - run.width).abs() < 0.5,
+            "measure={m} layout={}",
+            run.width
+        );
     }
 }

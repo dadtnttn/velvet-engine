@@ -313,6 +313,8 @@ fn compound_matches(
         .any(|required| !states.iter().any(|actual| actual == required))
 }
 
+type MatchedRule<'a> = (usize, (u16, u16, u16), &'a StyleRule, &'a str);
+
 /// Resolve computed style from sheet + query (cascade by specificity then order).
 ///
 /// Custom properties (`--name`) are collected from `:root` and matched rules, then
@@ -320,7 +322,7 @@ fn compound_matches(
 /// a fallback stay as [`StyleValue::Var`]. Only custom properties from `:root`
 /// participate in element resolution.
 pub fn resolve(sheet: &Stylesheet, query: &StyleQuery) -> ComputedStyle {
-    let mut matched: Vec<(usize, (u16, u16, u16), &StyleRule, &str)> = Vec::new();
+    let mut matched: Vec<MatchedRule<'_>> = Vec::new();
     for (order, rule) in sheet.rules.iter().enumerate() {
         for sel in &rule.selectors {
             let is_root = sel.trim() == ":root";

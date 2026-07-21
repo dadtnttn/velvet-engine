@@ -23,7 +23,7 @@ use thiserror::Error;
 type HmacSha256 = Hmac<Sha256>;
 
 /// Max input bytes for hash/hmac/codec/seal plaintext.
-pub const MAX_CRYPTO_INPUT: usize = 1 * 1024 * 1024;
+pub const MAX_CRYPTO_INPUT: usize = 1024 * 1024;
 /// Max random_bytes length.
 pub const MAX_RANDOM_BYTES: usize = 64 * 1024;
 

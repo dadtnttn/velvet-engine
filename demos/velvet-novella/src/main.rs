@@ -19,7 +19,7 @@
 mod menu;
 
 use std::num::NonZeroU32;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -34,8 +34,8 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
 use menu::{
-    compose_size_for_window, font_status, letterbox_bilinear, load_rgb, move_sel,
-    paint_novel_menu, paint_novel_menu_size, RgbImage, MENU_ITEMS, MAX_COMPOSE_EDGE, WW, WH,
+    compose_size_for_window, font_status, letterbox_bilinear, load_rgb, move_sel, paint_novel_menu,
+    paint_novel_menu_size, RgbImage, MAX_COMPOSE_EDGE, MENU_ITEMS, WH, WW,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,7 +92,7 @@ fn ui_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/ui"))
 }
 
-fn open_session(path: &PathBuf) -> Result<VnSession> {
+fn open_session(path: &Path) -> Result<VnSession> {
     open_session_from_file(
         path,
         "Luz de Estación",
@@ -157,7 +157,7 @@ impl App {
         eprintln!("[presenter] {}", self.presenter.status_line());
     }
 
-    fn to_title(&mut self) {
+    fn return_to_title(&mut self) {
         self.screen = Screen::Title;
         self.menu_sel = 0;
         self.presenter.set_phase_title();
@@ -323,10 +323,8 @@ impl ApplicationHandler for App {
         if let Some(monitor) = el.primary_monitor() {
             let size = monitor.size();
             // Logical size hint before maximize (some platforms use it for restore).
-            attrs = attrs.with_inner_size(LogicalSize::new(
-                size.width.max(800),
-                size.height.max(600),
-            ));
+            attrs =
+                attrs.with_inner_size(LogicalSize::new(size.width.max(800), size.height.max(600)));
         }
         let window = Arc::new(el.create_window(attrs).expect("window"));
         window.set_maximized(true);
@@ -414,7 +412,7 @@ impl ApplicationHandler for App {
                                 self.needs_paint = true;
                             }
                         }
-                        KeyCode::KeyR => self.to_title(),
+                        KeyCode::KeyR => self.return_to_title(),
                         KeyCode::Escape => el.exit(),
                         _ => {}
                     },

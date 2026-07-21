@@ -227,7 +227,7 @@ impl Keyword {
         }
     }
     /// Lookup.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_keyword(s: &str) -> Option<Self> {
         match s {
             "as" => Some(Self::AsKw),
             "async" => Some(Self::AsyncKw),
@@ -575,7 +575,7 @@ mod tests {
     #[test]
     fn keywords_roundtrip() {
         for k in Keyword::all() {
-            assert_eq!(Keyword::from_str(k.as_str()), Some(*k));
+            assert_eq!(Keyword::from_keyword(k.as_str()), Some(*k));
         }
         assert!(Keyword::all().len() > 20);
         assert!(Keyword::all().len() < 120);

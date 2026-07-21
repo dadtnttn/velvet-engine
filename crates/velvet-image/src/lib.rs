@@ -387,8 +387,7 @@ fn extract_all_path_d(svg: &str) -> Vec<String> {
 fn split_subpaths(d: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut cur = String::new();
-    let mut chars = d.chars().peekable();
-    while let Some(c) = chars.next() {
+    for c in d.chars() {
         if (c == 'M' || c == 'm') && !cur.is_empty() {
             parts.push(cur);
             cur = String::new();
@@ -557,10 +556,12 @@ fn tokenize_path(d: &str) -> Vec<String> {
             i += 1;
         } else if c == '-' || c == '+' || c == '.' || c.is_ascii_digit() {
             // number; '-' starts new number unless mid-exponent
-            if c == '-' || c == '+' {
-                if !num.is_empty() && !num.ends_with('e') && !num.ends_with('E') {
-                    flush(&mut num, &mut out);
-                }
+            if (c == '-' || c == '+')
+                && !num.is_empty()
+                && !num.ends_with('e')
+                && !num.ends_with('E')
+            {
+                flush(&mut num, &mut out);
             }
             num.push(c);
             i += 1;
@@ -758,10 +759,10 @@ fn put(img: &mut RgbaImage, x: u32, y: u32, rgba: [u8; 4]) {
             let da = img.pixels[i + 3] as f32 / 255.0;
             let out_a = sa + da * (1.0 - sa);
             if out_a > 0.001 {
-                for c in 0..3 {
-                    let s = rgba[c] as f32;
-                    let d = img.pixels[i + c] as f32;
-                    img.pixels[i + c] = ((s * sa + d * da * (1.0 - sa)) / out_a)
+                for (channel, &source) in rgba.iter().take(3).enumerate() {
+                    let s = source as f32;
+                    let d = img.pixels[i + channel] as f32;
+                    img.pixels[i + channel] = ((s * sa + d * da * (1.0 - sa)) / out_a)
                         .round()
                         .clamp(0.0, 255.0) as u8;
                 }

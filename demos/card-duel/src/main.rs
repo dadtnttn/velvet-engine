@@ -294,7 +294,7 @@ impl App {
     }
 
     fn start_battle(&mut self) {
-        match Battle::start(self.catalog.clone(), &self.deck, 0xC4_2D_0E11) {
+        match Battle::start(self.catalog.clone(), &self.deck, 0xC42D_0E11) {
             Ok(b) => {
                 self.battle = Some(b);
                 self.screen = Screen::Battle;

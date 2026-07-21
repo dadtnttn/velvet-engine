@@ -53,7 +53,7 @@ impl DeckList {
 }
 
 /// Optional constraints applied during validation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct DeckRules {
     /// Maximum total cards (None = unlimited).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -64,16 +64,6 @@ pub struct DeckRules {
     /// Maximum copies of any single card id (None = unlimited).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_copies: Option<usize>,
-}
-
-impl Default for DeckRules {
-    fn default() -> Self {
-        Self {
-            max_size: None,
-            min_size: None,
-            max_copies: None,
-        }
-    }
 }
 
 impl DeckRules {

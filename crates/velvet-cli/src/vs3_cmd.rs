@@ -63,9 +63,7 @@ fn parse_args(args: &[String]) -> Result<Vec<Value>> {
     let mut out = Vec::new();
     for a in args {
         if let Some(rest) = a.strip_prefix("i:") {
-            let n: i64 = rest
-                .parse()
-                .with_context(|| format!("bad int arg {a}"))?;
+            let n: i64 = rest.parse().with_context(|| format!("bad int arg {a}"))?;
             out.push(Value::Int(n));
         } else if let Some(rest) = a.strip_prefix("b:") {
             let b = match rest {

@@ -132,6 +132,7 @@ cargo run -p velvet-cli --release -- play samples/short-novella --windowed --cho
 |-------|------|
 | Vision | [docs/architecture/VISION.md](docs/architecture/VISION.md) |
 | Architecture | [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) |
+| Integration / crate justification | [docs/architecture/INTEGRATION_MATRIX.md](docs/architecture/INTEGRATION_MATRIX.md) |
 | Modules map | [docs/architecture/MODULES.md](docs/architecture/MODULES.md) |
 | Roadmap | [docs/architecture/ROADMAP.md](docs/architecture/ROADMAP.md) |
 | Velvet Script | [docs/language/VELVET_SCRIPT.md](docs/language/VELVET_SCRIPT.md) · **VS2 (alpha, rust-like):** [VELVET_SCRIPT_2.md](docs/language/VELVET_SCRIPT_2.md) |
@@ -163,8 +164,23 @@ editors/     VS Code language support
 Measure lines of code (optional, [tokei](https://github.com/XAMPPRocky/tokei)):
 
 ```bash
-tokei crates demos examples docs tools tests templates --exclude target
+tokei crates demos examples samples templates editors --exclude target
 ```
+
+---
+
+## Workspace quality gate
+
+Every crate, binary, demo, example and test target must pass the same repository gate:
+
+```bash
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --all-features
+cargo test --workspace --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+```
+
+The cross-crate scenarios live in `crates/velvet-integration-tests/tests/`. See the [integration and crate-justification matrix](docs/architecture/INTEGRATION_MATRIX.md) for the dependency direction and the proof attached to each subsystem.
 
 ---
 

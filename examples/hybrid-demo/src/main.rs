@@ -131,7 +131,11 @@ scene after {
                                 }
                                 let _ = story.choose(idx);
                             }
-                            StoryWait::Ended | StoryWait::Ready => story.advance(),
+                            StoryWait::Ended => break,
+                            StoryWait::Ready | StoryWait::Pause { .. } => story.advance(),
+                            StoryWait::Host { token } => {
+                                let _ = story.resume_host(&token);
+                            }
                         }
                     }
                     story_done = true;

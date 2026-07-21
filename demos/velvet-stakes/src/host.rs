@@ -304,7 +304,7 @@ impl StakesWorld {
         self.market_offers = offers;
     }
 
-    pub fn to_title(&mut self) {
+    pub fn return_to_title(&mut self) {
         self.run = None;
         self.result = None;
         self.screen = Screen::Title;
@@ -536,7 +536,7 @@ impl StoryCommandHost for StakesHost {
                 Ok(CommandOutcome::Continue)
             }
             "stakes.to_title" => {
-                w.to_title();
+                w.return_to_title();
                 w.sync_vars(vars);
                 Ok(CommandOutcome::Continue)
             }
@@ -720,7 +720,7 @@ mod tests {
         assert!(world.buy_market_offer(0));
         assert_eq!(world.deck_ids.len(), 21);
 
-        world.to_title();
+        world.return_to_title();
         world.begin_run();
         assert_eq!(world.deck_ids.len(), 20);
     }

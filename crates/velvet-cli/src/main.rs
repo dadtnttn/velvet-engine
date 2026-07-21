@@ -14,9 +14,9 @@ mod new_cmd;
 mod pack_cmd;
 mod play_cmd;
 mod script_cmd;
-mod vs3_cmd;
 mod story_cmd;
 mod style_cmd;
+mod vs3_cmd;
 mod workspace_cmd;
 
 use std::path::PathBuf;
@@ -41,12 +41,12 @@ use new_cmd::{cmd_init, cmd_new, cmd_project_info, cmd_template_install, cmd_tem
 use pack_cmd::cmd_pack;
 use play_cmd::{cmd_play_project_opts, cmd_play_story_product, cmd_recheck_replay};
 use script_cmd::{cmd_script_check, cmd_script_fmt, cmd_script_lsp, cmd_script_run};
-use vs3_cmd::{cmd_vs3_check, cmd_vs3_run};
 use story_cmd::{
     cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_lowered,
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
 };
 use style_cmd::{cmd_style_check, cmd_style_dump};
+use vs3_cmd::{cmd_vs3_check, cmd_vs3_run};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]

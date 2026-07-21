@@ -157,11 +157,7 @@ fn mat_rgb(key: &str, x: i32, y: i32) -> (u8, u8, u8) {
         "copper" | "metal" | "steel" | "iron" => (d2(155, 10), d2(150, 10), d2(160, 10)),
         "gold" => {
             let spark = if (h & 0xff) > 220 { 40u8 } else { 0 };
-            (
-                (230 + spark).min(255) as u8,
-                (190 + spark / 2).min(255) as u8,
-                40,
-            )
+            ((230 + spark) as u8, (190 + spark / 2) as u8, 40)
         }
         "gunpowder" => (d2(45, 5), d2(42, 5), d2(40, 5)),
         "flesh" => (d2(170, 10), d2(70, 8), d2(75, 8)),
@@ -193,21 +189,6 @@ fn mat_rgb(key: &str, x: i32, y: i32) -> (u8, u8, u8) {
         "mushroom" => (d2(155, 10), d2(90, 8), d2(135, 10)),
         _ => (d2(95, 8), d2(90, 8), d2(100, 8)),
     }
-}
-
-/// Seeded LCG for map decoration.
-fn rng_next(state: &mut u64) -> u32 {
-    let mut x = *state;
-    x ^= x >> 12;
-    x ^= x << 25;
-    x ^= x >> 27;
-    *state = x;
-    (x.wrapping_mul(0x2545F4914F6CDD1D) >> 32) as u32
-}
-
-fn rng_range(state: &mut u64, lo: i32, hi: i32) -> i32 {
-    let span = (hi - lo).max(1) as u32;
-    lo + (rng_next(state) % span) as i32
 }
 
 /// Carve a thick tunnel segment (Bresenham-ish disks).
@@ -902,7 +883,7 @@ impl Game {
                 let gx0 = cx * CELL_PX;
                 let gy0 = (VIEW_H - 1 - cy) * CELL_PX;
                 // solid fill + 1px darker edge (cheap cell border)
-                let (er, eg, eb) = if key != "air" && key != "" {
+                let (er, eg, eb) = if key != "air" && !key.is_empty() {
                     (
                         (r as u16 * 210 / 255) as u8,
                         (g as u16 * 210 / 255) as u8,
@@ -1040,8 +1021,8 @@ impl Game {
 
         // precomputed vignette (8-bit scale, 255 = full)
         let vig = &self.vignette;
-        for i in 0..(GW * GH) as usize {
-            let m = vig[i] as u32;
+        for (i, &mask) in vig.iter().enumerate().take((GW * GH) as usize) {
+            let m = mask as u32;
             if m < 250 {
                 let j = i * 4;
                 self.fb[j] = ((self.fb[j] as u32 * m) >> 8) as u8;

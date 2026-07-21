@@ -78,7 +78,7 @@ static DEFAULT_LOCALE: RwLock<DiagLocale> = RwLock::new(DiagLocale::Es);
 
 thread_local! {
     /// Stack of scoped locales for the current thread (Studio multi-doc safe).
-    static LOCALE_STACK: RefCell<Vec<DiagLocale>> = RefCell::new(Vec::new());
+    static LOCALE_STACK: RefCell<Vec<DiagLocale>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Set the process-wide **default** diagnostic locale (no active scope).

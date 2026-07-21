@@ -454,7 +454,10 @@ impl Run {
                     break;
                 }
                 self.zones.library.append(&mut self.zones.discard);
-                shuffle_in_place(&mut self.zones.library, 0xDEC_A_DE + self.hands_left as u64);
+                shuffle_in_place(
+                    &mut self.zones.library,
+                    0x00DE_CADE + self.hands_left as u64,
+                );
                 self.push_log("Shuffled discard");
             }
             let _ = self.zones.draw(1);

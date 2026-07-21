@@ -1410,7 +1410,7 @@ impl App {
             .variables_mut()
             .set("result_action", StoryValue::Int(index as i64));
         if index == 1 {
-            self.with_world_mut(|world| world.to_title());
+            self.with_world_mut(|world| world.return_to_title());
         }
         self.result_hovered = None;
         self.result_pressed = None;
@@ -1769,7 +1769,7 @@ impl App {
                     if sel == 0 {
                         self.with_world_mut(|w| w.screen = Screen::Play);
                     } else {
-                        self.with_world_mut(|w| w.to_title());
+                        self.with_world_mut(|w| w.return_to_title());
                         self.player
                             .variables_mut()
                             .set("menu_action", StoryValue::Int(-1));
@@ -1874,7 +1874,7 @@ impl App {
             Some("blind") => match c {
                 KeyCode::Enter | KeyCode::Space => self.resume("blind"),
                 KeyCode::Escape => {
-                    self.with_world_mut(|w| w.to_title());
+                    self.with_world_mut(|w| w.return_to_title());
                     self.player
                         .variables_mut()
                         .set("menu_action", StoryValue::Int(-1));

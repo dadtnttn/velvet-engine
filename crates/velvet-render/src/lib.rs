@@ -41,9 +41,7 @@ pub use material::{BlendMode, Material};
 pub use particles::{Particle, ParticleBatch, ParticleEmitter, ParticleGpu};
 pub use plugin::RenderPlugin;
 pub use postprocess::{PostEffect, PostProcessStack};
-pub use product_batch::{
-    count_positive_quads, fill_batch_from_product_quads, ProductGpuQuad,
-};
+pub use product_batch::{count_positive_quads, fill_batch_from_product_quads, ProductGpuQuad};
 pub use profile::RenderProfile;
 pub use render_plan::{CameraPass, ClearMode, RenderPlan, Viewport};
 pub use sort_key::{

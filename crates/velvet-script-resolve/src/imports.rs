@@ -102,6 +102,21 @@ impl ImportGraph {
     }
 }
 
+/// Build a linear import chain graph of length `len`.
+pub fn chain_graph(prefix: &str, len: usize) -> ImportGraph {
+    let mut g = ImportGraph::new();
+    let n = len.max(1);
+    for i in 0..n.saturating_sub(1) {
+        g.add(ImportEdge {
+            from: format!("{prefix}_{i}"),
+            to: format!("{prefix}_{}", i + 1),
+            alias: None,
+            glob: false,
+        });
+    }
+    g
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,19 +149,4 @@ mod tests {
         assert!(!g.has_cycle());
         assert!(g.topological().unwrap().contains(&"a".into()));
     }
-}
-
-/// Build a linear import chain graph of length `len`.
-pub fn chain_graph(prefix: &str, len: usize) -> ImportGraph {
-    let mut g = ImportGraph::new();
-    let n = len.max(1);
-    for i in 0..n.saturating_sub(1) {
-        g.add(ImportEdge {
-            from: format!("{prefix}_{i}"),
-            to: format!("{prefix}_{}", i + 1),
-            alias: None,
-            glob: false,
-        });
-    }
-    g
 }

@@ -64,12 +64,10 @@ pub fn rule_gravity(ctx: &mut RuleCtx<'_>) -> bool {
     // Plasma / fire rises
     if phase == Phase::Plasma {
         let above = ctx.get(ctx.x, ctx.y + 1);
-        if above.is_air() || ctx.phase(above.material) == Phase::Gas {
-            if ctx.chance(0.7) {
-                ctx.swap(ctx.x, ctx.y + 1);
-                mark_moved(ctx, ctx.x, ctx.y + 1);
-                return true;
-            }
+        if (above.is_air() || ctx.phase(above.material) == Phase::Gas) && ctx.chance(0.7) {
+            ctx.swap(ctx.x, ctx.y + 1);
+            mark_moved(ctx, ctx.x, ctx.y + 1);
+            return true;
         }
         let dx = if ctx.chance(0.5) { 1 } else { -1 };
         let n = ctx.get(ctx.x + dx, ctx.y + 1);

@@ -316,6 +316,39 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
             out.push_str(target);
             out.push('\n');
         }
+        Stmt::HostCall { name, args, .. } => {
+            indent(out, level);
+            out.push_str("call ");
+            out.push_str(name);
+            for (key, value) in args {
+                out.push(' ');
+                out.push_str(key);
+                out.push(' ');
+                format_expr(value, out, 0);
+            }
+            out.push('\n');
+        }
+        Stmt::Transition { name, .. } => {
+            indent(out, level);
+            out.push_str("transition ");
+            out.push_str(name);
+            out.push('\n');
+        }
+        Stmt::Sound { path, .. } => {
+            indent(out, level);
+            out.push_str("sound \"");
+            out.push_str(&escape(path));
+            out.push_str("\"\n");
+        }
+        Stmt::Pause { seconds, .. } => {
+            indent(out, level);
+            out.push_str("pause");
+            if let Some(seconds) = seconds {
+                out.push(' ');
+                out.push_str(&seconds.to_string());
+            }
+            out.push('\n');
+        }
         Stmt::For {
             name, iter, body, ..
         } => {
@@ -573,6 +606,22 @@ scene main {
         let once = format_source(src).unwrap();
         let twice = format_source(&once).unwrap();
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn formats_host_and_presentation_commands_stably() {
+        let source = r#"scene main {
+            call combat.start enemy "goblin" count 2
+            transition dissolve
+            sound "audio/hit.ogg"
+            pause 0.5
+        }"#;
+        let once = format_source(source).unwrap();
+        assert!(once.contains("call combat.start enemy \"goblin\" count 2"));
+        assert!(once.contains("transition dissolve"));
+        assert!(once.contains("sound \"audio/hit.ogg\""));
+        assert!(once.contains("pause 0.5"));
+        assert_eq!(format_source(&once).unwrap(), once);
     }
 
     #[test]

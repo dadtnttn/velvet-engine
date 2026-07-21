@@ -1,7 +1,7 @@
 //! Chunk RLE compression for saves / network / streaming.
 
 use crate::cell::{Cell, CellFlags, MaterialId};
-use crate::chunk::{Chunk, ChunkCoord, CHUNK_CELLS, CHUNK_SIZE};
+use crate::chunk::{Chunk, ChunkCoord, CHUNK_CELLS};
 
 /// Run-length encoded chunk payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +118,7 @@ pub fn roundtrip_ok(chunk: &Chunk) -> bool {
 mod tests {
     use super::*;
     use crate::builtin::builtin_registry;
+    use crate::chunk::CHUNK_SIZE;
     use crate::world::{World, WorldConfig};
 
     #[test]

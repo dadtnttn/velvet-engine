@@ -1035,12 +1035,8 @@ mod tests {
     #[test]
     fn collapse_hides_children() {
         let mut s = LayerStack::vn_tree();
-        assert!(
-            s.toggle_expanded("main_menu") == false
-                || !s.get("main_menu").unwrap().expanded
-                || true
-        );
-        s.get_mut("main_menu").unwrap().expanded = false;
+        assert!(!s.toggle_expanded("main_menu"));
+        assert!(!s.get("main_menu").unwrap().expanded);
         let rows = s.visible_tree_rows();
         assert!(!rows.iter().any(|r| r.id == "menu_settings"));
         assert!(rows.iter().any(|r| r.id == "main_menu"));

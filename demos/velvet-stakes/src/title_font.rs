@@ -23,7 +23,7 @@ static UI_FONT: OnceLock<Option<Font>> = OnceLock::new();
 
 /// Load a display serif once (Georgia → Constantia → Times → bold fallbacks).
 pub fn title_font() -> Option<&'static Font> {
-    TITLE_FONT.get_or_init(|| load_display_serif()).as_ref()
+    TITLE_FONT.get_or_init(load_display_serif).as_ref()
 }
 
 /// Load a readable sans-serif UI font once for menu labels and supporting copy.
@@ -405,9 +405,9 @@ mod tests {
         for y in 100..280 {
             for x in 400..1100 {
                 let p = pixels[(y * WW + x) as usize];
-                let r = ((p >> 16) & 0xFF) as u32;
-                let g = ((p >> 8) & 0xFF) as u32;
-                let b = (p & 0xFF) as u32;
+                let r = (p >> 16) & 0xFF;
+                let g = (p >> 8) & 0xFF;
+                let b = p & 0xFF;
                 if r > 120 && g > 70 && r > b {
                     gold += 1;
                 }

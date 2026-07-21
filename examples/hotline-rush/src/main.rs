@@ -40,7 +40,7 @@ fn spawn_room() -> Vec<Hostile> {
     ]
 }
 
-fn nearest<'a>(hostiles: &'a [Hostile], from: Vec2) -> Option<&'a Hostile> {
+fn nearest(hostiles: &[Hostile], from: Vec2) -> Option<&Hostile> {
     hostiles
         .iter()
         .filter(|h| h.health.is_alive())
@@ -119,7 +119,7 @@ fn main() -> Result<()> {
             let to_drop = pistol_pos - player_pos;
             let d = to_drop.length();
             if d > PICKUP_RADIUS {
-                player_pos = player_pos + (to_drop / d) * (180.0 * dt).min(d);
+                player_pos += (to_drop / d) * (180.0 * dt).min(d);
             } else if let Some(id) = run.pickup(player_pos) {
                 println!("[frame {frames}] picked up weapon drop id={id}");
             }
@@ -133,7 +133,7 @@ fn main() -> Result<()> {
         let dist = to.length();
         let speed = 200.0;
         if dist > engage {
-            player_pos = player_pos + (to / dist) * (speed * dt).min(dist - engage + 1.0);
+            player_pos += (to / dist) * (speed * dt).min(dist - engage + 1.0);
         }
 
         // Attack every few frames once in range.

@@ -100,10 +100,8 @@ impl AnimDirector {
         ) {
             target.pose.opacity = 0.0;
         }
-        if matches!(kind, EffectKind::Deal) {
-            if params.to.length_squared() > 1e-6 {
-                // leave pose; tweens drive from offset
-            }
+        if matches!(kind, EffectKind::Deal) && params.to.length_squared() > 1e-6 {
+            // leave pose; tweens drive from offset
         }
         target.play_tweens(tweens);
         self.log.push(format!(

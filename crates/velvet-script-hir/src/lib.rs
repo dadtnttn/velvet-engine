@@ -789,7 +789,10 @@ use game::audio;
 "#;
         let (m, d) = lower_source_heuristic(src, 2);
         assert!(m.item_count() >= 4);
-        assert!(d.is_empty() || true);
+        assert!(
+            d.is_empty(),
+            "recognized source should lower without diagnostics: {d:?}"
+        );
     }
     #[test]
     fn ty_display() {

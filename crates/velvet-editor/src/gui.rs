@@ -1057,7 +1057,7 @@ screen {id} {{
     /// Switch layer; loads that pantalla's independent document (empty if new).
     pub fn set_layer(&mut self, id: &str) -> Result<String, String> {
         let prev = self.layers.active_id.clone();
-        self.layers.set_active(id).map_err(|e| e)?;
+        self.layers.set_active(id)?;
         self.apply_layer_lock_policy(&prev, id);
         self.activate_layer_document(id)
             .map_err(|e| e.to_string())?;
@@ -1136,10 +1136,9 @@ screen {id} {{
         self.layers.apply_preset(preset)?;
         let (w, h) = self.layers.active_resolution();
         let msg = format!(
-            "layer {} res → {} ({})",
+            "layer {} res → {} ({w}x{h})",
             self.layers.active_id,
-            preset.label(),
-            format!("{w}x{h}")
+            preset.label()
         );
         self.log.push(format!("[studio-gui] {msg}"));
         Ok(msg)
@@ -2281,7 +2280,7 @@ fn try_open_studio_window(session: &StudioGuiSession, interactive: bool) -> Resu
                                 .list_widgets()
                                 .unwrap_or_default()
                                 .into_iter()
-                                .filter(|w| crate::studio_paint::is_canvas_widget(w))
+                                .filter(crate::studio_paint::is_canvas_widget)
                                 .collect::<Vec<_>>();
                             if let Some(idx) = layout.hit_hierarchy(self.cursor.1, widgets.len()) {
                                 if let Some(w) = widgets.get(idx) {
@@ -2905,7 +2904,7 @@ button start {
             .list_widgets()
             .unwrap()
             .into_iter()
-            .filter(|w| crate::studio_paint::is_canvas_widget(w))
+            .filter(crate::studio_paint::is_canvas_widget)
             .count();
         assert_eq!(canvas_n, 0, "new screen starts empty");
         session.connect_layers(&new_id, "hud", None).unwrap();
@@ -2949,7 +2948,7 @@ button start {
                 .list_widgets()
                 .unwrap()
                 .into_iter()
-                .filter(|w| crate::studio_paint::is_canvas_widget(w))
+                .filter(crate::studio_paint::is_canvas_widget)
                 .count(),
             1
         );
@@ -2966,7 +2965,7 @@ button start {
             .list_widgets()
             .unwrap()
             .into_iter()
-            .filter(|w| crate::studio_paint::is_canvas_widget(w))
+            .filter(crate::studio_paint::is_canvas_widget)
             .count();
         assert_eq!(empty_count, 0, "new screen starts with zero canvas widgets");
     }
@@ -3059,8 +3058,8 @@ button start {
         assert_eq!(session.layers.active_id, "mobile");
         let (w, h) = session.layers.active_resolution();
         assert_eq!((w, h), (390, 844));
-        // still under main_menu branch → root not auto-locked
-        assert!(!session.layers.get("main_menu").unwrap().locked || true);
+        // Still under the main_menu branch: its root remains editable.
+        assert!(!session.layers.get("main_menu").unwrap().locked);
         session.set_layer("scene_decisions").unwrap();
         assert!(session.layers.get("main_menu").unwrap().locked);
         session.set_layer("main_menu").unwrap();

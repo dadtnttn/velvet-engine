@@ -107,6 +107,19 @@ impl ScopeTree {
     }
 }
 
+pub fn scope_kind_label(k: ScopeKind) -> &'static str {
+    match k {
+        ScopeKind::Module => "module",
+        ScopeKind::Function => "function",
+        ScopeKind::Block => "block",
+        ScopeKind::Scene => "scene",
+        ScopeKind::Screen => "screen",
+        ScopeKind::Impl => "impl",
+        ScopeKind::MatchArm => "match_arm",
+        ScopeKind::Loop => "loop",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,18 +135,5 @@ mod tests {
         assert_eq!(t.resolve("x"), Some(SymbolId(1)));
         t.pop();
         assert_eq!(t.resolve("y"), None);
-    }
-}
-
-pub fn scope_kind_label(k: ScopeKind) -> &'static str {
-    match k {
-        ScopeKind::Module => "module",
-        ScopeKind::Function => "function",
-        ScopeKind::Block => "block",
-        ScopeKind::Scene => "scene",
-        ScopeKind::Screen => "screen",
-        ScopeKind::Impl => "impl",
-        ScopeKind::MatchArm => "match_arm",
-        ScopeKind::Loop => "loop",
     }
 }

@@ -853,16 +853,13 @@ impl Parser {
             if self.check(|t| {
                 matches!(
                     t,
-                    Token::String(_)
-                        | Token::Int(_)
-                        | Token::Float(_)
-                        | Token::True
-                        | Token::False
+                    Token::String(_) | Token::Int(_) | Token::Float(_) | Token::True | Token::False
                 )
             }) {
                 let val = self.parse_primary()?;
                 args.push((key, val));
-            } else if self.check(|t| matches!(t, Token::Ident(s) if !Self::is_statement_start_ident(s)))
+            } else if self
+                .check(|t| matches!(t, Token::Ident(s) if !Self::is_statement_start_ident(s)))
             {
                 // bare ident value (rare)
                 let val = self.parse_primary()?;

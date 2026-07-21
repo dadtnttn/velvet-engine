@@ -11,6 +11,8 @@ use velvet_script_layers::ScreenBlueprint;
 use velvet_style::{resolve, StyleQuery, Stylesheet};
 
 /// Full title / lobby paint (reference-faithful chrome + spectacular polish).
+// Public immediate-mode paint boundary; arguments mirror independent live UI inputs.
+#[allow(clippy::too_many_arguments)]
 pub fn paint_title_menu(
     pixels: &mut [u32],
     theme: &Theme,
