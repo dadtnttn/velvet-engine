@@ -205,7 +205,7 @@ impl Edition {
     }
 }
 
-/// Detect `// @edition N` (or `# @edition N`) from the first ~40 lines / 2 KiB.
+/// Detect `// @edition N` (or `# @edition N`) from the first 40 lines.
 pub fn detect_edition(source: &str) -> Edition {
     let head = source.lines().take(40);
     for line in head {
@@ -371,16 +371,8 @@ pub struct HostRequest {
 }
 
 impl HostRequest {
-    /// Create a request.
-    pub fn new(service: impl Into<String>, payload: Value) -> Self {
-        Self {
-            service: service.into(),
-            payload,
-        }
-    }
-
     /// Create a request after validating its service identifier.
-    pub fn try_new(service: impl Into<String>, payload: Value) -> Result<Self, Vs3Error> {
+    pub fn new(service: impl Into<String>, payload: Value) -> Result<Self, Vs3Error> {
         let service = service.into();
         if !valid_service_name(&service) {
             return Err(Vs3Error::Task(format!(
@@ -388,6 +380,12 @@ impl HostRequest {
             )));
         }
         Ok(Self { service, payload })
+    }
+
+    /// Compatibility alias for [`Self::new`].
+    #[deprecated(note = "use HostRequest::new")]
+    pub fn try_new(service: impl Into<String>, payload: Value) -> Result<Self, Vs3Error> {
+        Self::new(service, payload)
     }
 
     /// Decode the canonical `[service, payload]` wire value.
@@ -416,11 +414,22 @@ impl HostRequest {
 }
 
 fn valid_service_name(service: &str) -> bool {
-    !service.is_empty()
-        && service.len() <= 128
-        && service
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    !service.is_empty() && service.len() <= 128 && service.split('.').all(valid_service_segment)
+}
+
+fn valid_service_segment(segment: &str) -> bool {
+    let mut bytes = segment.bytes();
+    let Some(first) = bytes.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == b'_')
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
+fn valid_service_pattern(pattern: &str) -> bool {
+    pattern
+        .strip_suffix(".*")
+        .map_or_else(|| valid_service_name(pattern), valid_service_name)
 }
 
 /// Capability allowlist and request budget for host-driven tasks.
@@ -448,16 +457,25 @@ impl Vs3HostPolicy {
         }
     }
 
-    /// Grant one exact service or a namespace wildcard such as `audio.*`.
-    pub fn allow(mut self, service: impl Into<String>) -> Self {
+    /// Grant one exact service or a final namespace wildcard such as `audio.*`.
+    pub fn allow(mut self, service: impl Into<String>) -> Result<Self, Vs3Error> {
+        let service = service.into();
+        if !valid_service_pattern(&service) {
+            return Err(Vs3Error::Task(format!(
+                "invalid host capability pattern `{service}`"
+            )));
+        }
         self.allowed
             .get_or_insert_with(BTreeSet::new)
-            .insert(service.into());
-        self
+            .insert(service);
+        Ok(self)
     }
 
-    /// Whether a service is granted by this policy.
+    /// Whether a syntactically valid service is granted by this policy.
     pub fn permits(&self, service: &str) -> bool {
+        if !valid_service_name(service) {
+            return false;
+        }
         match &self.allowed {
             None => true,
             Some(allowed) => {
@@ -524,30 +542,40 @@ pub enum Vs3TaskStatus {
 pub struct Vs3Task {
     coroutine: Coroutine,
     pending: Option<(String, HostRequest)>,
+    complete: bool,
 }
 
 impl Vs3Task {
     /// Resume without replacing the previous yielded expression value.
     pub fn resume(&mut self) -> Result<Vs3TaskStatus, Vs3Error> {
+        self.ensure_running()?;
         if self.pending.is_some() {
             return Err(Vs3Error::Task(
                 "task is waiting for a host ticket; use resume_host".into(),
             ));
         }
-        self.coroutine.resume().map(task_status).map_err(map_vm_err)
+        let status = self
+            .coroutine
+            .resume()
+            .map(task_status)
+            .map_err(map_vm_err)?;
+        Ok(self.track_completion(status))
     }
 
     /// Resume an explicit `yield(value)` with a replacement value.
     pub fn resume_with(&mut self, value: Value) -> Result<Vs3TaskStatus, Vs3Error> {
+        self.ensure_running()?;
         if self.pending.is_some() {
             return Err(Vs3Error::Task(
                 "task is waiting for a host ticket; use resume_host".into(),
             ));
         }
-        self.coroutine
+        let status = self
+            .coroutine
             .resume_with(value)
             .map(task_status)
-            .map_err(map_vm_err)
+            .map_err(map_vm_err)?;
+        Ok(self.track_completion(status))
     }
 
     /// Drive the task through immediately available generic host services.
@@ -597,10 +625,11 @@ impl Vs3Task {
                             status = self.resume_with(response)?;
                         }
                         HostOutcome::Pending { ticket } => {
-                            if ticket.is_empty() {
-                                return Err(Vs3Error::Task(
-                                    "host returned an empty pending ticket".into(),
-                                ));
+                            if ticket.trim().is_empty() {
+                                return Err(Vs3Error::Host {
+                                    service: request.service,
+                                    message: "pending host ticket cannot be empty".into(),
+                                });
                             }
                             self.pending = Some((ticket.clone(), request.clone()));
                             return Ok(Vs3TaskStatus::Waiting { ticket, request });
@@ -624,6 +653,7 @@ impl Vs3Task {
         ticket: &str,
         response: Value,
     ) -> Result<Vs3TaskStatus, Vs3Error> {
+        self.ensure_running()?;
         let Some((expected, request)) = self.pending.take() else {
             return Err(Vs3Error::Task("task has no pending host request".into()));
         };
@@ -633,10 +663,27 @@ impl Vs3Task {
                 "host ticket mismatch: expected `{expected}`, got `{ticket}`"
             )));
         }
-        self.coroutine
+        let status = self
+            .coroutine
             .resume_with(response)
             .map(task_status)
-            .map_err(map_vm_err)
+            .map_err(map_vm_err)?;
+        Ok(self.track_completion(status))
+    }
+
+    fn ensure_running(&self) -> Result<(), Vs3Error> {
+        if self.complete {
+            Err(Vs3Error::Task("task is already complete".into()))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn track_completion(&mut self, status: Vs3TaskStatus) -> Vs3TaskStatus {
+        if matches!(status, Vs3TaskStatus::Complete(_)) {
+            self.complete = true;
+        }
+        status
     }
 
     /// Whether this task is waiting for an asynchronous host response.
@@ -870,6 +917,7 @@ impl Vs3Module {
         Ok(Vs3Task {
             coroutine,
             pending: None,
+            complete: false,
         })
     }
 
@@ -1119,15 +1167,21 @@ fn compile_ast_module(
     requested_entrypoints: Option<BTreeMap<String, String>>,
 ) -> Result<Vs3Module, Vs3Error> {
     let mut semantic = semantic::validate(&module);
-    let mut frontend_diagnostics: Vec<Vs3Diagnostic> = module
+    let mut frontend_errors: Vec<Vs3Diagnostic> = module
         .diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.severity == Severity::Error)
         .map(ast_diag_to_vs3)
         .collect();
-    frontend_diagnostics.append(&mut semantic.diagnostics);
-    if !frontend_diagnostics.is_empty() {
-        return Err(Vs3Error::Compile(frontend_diagnostics));
+    let mut soft: Vec<Vs3Diagnostic> = module
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity != Severity::Error)
+        .map(ast_diag_to_vs3)
+        .collect();
+    frontend_errors.append(&mut semantic.diagnostics);
+    if !frontend_errors.is_empty() {
+        return Err(Vs3Error::Compile(frontend_errors));
     }
 
     let mut compiled: CompileResult =
@@ -1192,12 +1246,13 @@ fn compile_ast_module(
                 .map(|signature| (logical.clone(), signature))
         })
         .collect();
-    let soft = compiled
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity != Severity::Error)
-        .map(ast_diag_to_vs3)
-        .collect();
+    soft.extend(
+        compiled
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity != Severity::Error)
+            .map(ast_diag_to_vs3),
+    );
 
     Ok(Vs3Module {
         edition: Edition::Vs3,
@@ -2447,7 +2502,7 @@ function delayed_dialogue(text) {
         assert!(matches!(error, Vs3Error::Permission { .. }));
 
         let mut allowed = module.start("service_request", &[int(21)]).unwrap();
-        let policy = Vs3HostPolicy::deny_all().allow("math.*");
+        let policy = Vs3HostPolicy::deny_all().allow("math.*").unwrap();
         assert_eq!(
             allowed.drive_host_with_policy(&mut host, &policy).unwrap(),
             Vs3TaskStatus::Complete(int(42))
@@ -2496,11 +2551,123 @@ function delayed_dialogue(text) {
                 list_val(vec![string_val("Yes"), string_val("No")]),
             ),
         ]);
-        let request = HostRequest::new("ui.choice.open", payload);
+        let request = HostRequest::new("ui.choice.open", payload).unwrap();
         assert_eq!(
             HostRequest::from_value(&request.clone().into_value()),
             Some(request)
         );
+    }
+
+    #[test]
+    fn host_boundaries_reject_malformed_names_and_patterns() {
+        for invalid in ["", ".audio", "audio.", "audio..play", "-audio", "audio.*"] {
+            assert!(
+                HostRequest::new(invalid, Value::Null).is_err(),
+                "accepted invalid service `{invalid}`"
+            );
+        }
+        for valid in [
+            "audio.play",
+            "ui.dialogue.open",
+            "_internal.tick",
+            "asset-cache.load",
+        ] {
+            assert!(
+                HostRequest::new(valid, Value::Null).is_ok(),
+                "rejected valid service `{valid}`"
+            );
+        }
+
+        for invalid in [
+            "",
+            ".*",
+            ".audio.*",
+            "audio..*",
+            "audio.play.*.extra",
+            "-audio.*",
+        ] {
+            assert!(
+                Vs3HostPolicy::deny_all().allow(invalid).is_err(),
+                "accepted invalid capability `{invalid}`"
+            );
+        }
+        let policy = Vs3HostPolicy::deny_all().allow("audio.*").unwrap();
+        assert!(policy.permits("audio.play"));
+        assert!(!policy.permits("audio"));
+        assert!(!policy.permits("audio..play"));
+    }
+
+    #[test]
+    fn zero_immediate_host_budget_rejects_first_request() {
+        let module = compile(TASKS, Some("tasks.vel")).unwrap();
+        let mut task = module.start("service_request", &[int(21)]).unwrap();
+        let mut host = MathHost;
+        let mut policy = Vs3HostPolicy::allow_all();
+        policy.max_immediate_requests = 0;
+        let error = task.drive_host_with_policy(&mut host, &policy).unwrap_err();
+        assert!(matches!(error, Vs3Error::Task(message) if message.contains("budget exceeded")));
+    }
+
+    struct EmptyTicketHost;
+
+    impl Vs3Host for EmptyTicketHost {
+        fn call(&mut self, _request: &HostRequest) -> HostOutcome {
+            HostOutcome::Pending {
+                ticket: "   ".into(),
+            }
+        }
+    }
+
+    #[test]
+    fn pending_host_ticket_cannot_be_blank() {
+        let module = compile(TASKS, Some("tasks.vel")).unwrap();
+        let mut task = module
+            .start("delayed_dialogue", &[string_val("Hello")])
+            .unwrap();
+        let error = task.drive_host(&mut EmptyTicketHost).unwrap_err();
+        assert!(matches!(
+            error,
+            Vs3Error::Host { message, .. } if message.contains("cannot be empty")
+        ));
+        assert!(!task.is_waiting_for_host());
+    }
+
+    #[test]
+    fn completed_task_cannot_be_resumed() {
+        let module = compile(TASKS, Some("tasks.vel")).unwrap();
+        let mut task = module.start("raw_yield", &[int(1)]).unwrap();
+        assert!(matches!(
+            task.resume().unwrap(),
+            Vs3TaskStatus::Yielded(Value::Int(1))
+        ));
+        assert!(matches!(
+            task.resume_with(int(2)).unwrap(),
+            Vs3TaskStatus::Complete(Value::Int(2))
+        ));
+        assert!(task.resume().is_err());
+        assert!(task.resume_with(int(3)).is_err());
+    }
+
+    #[test]
+    fn frontend_warnings_are_preserved_on_compiled_modules() {
+        let source = "// @edition 3\nfunction ok() { return 1 }\n";
+        let mut parsed = parse_file(source, Some("warning.vel")).unwrap();
+        parsed.module.diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            message: "synthetic frontend warning".into(),
+            loc: loc_at(Some("warning.vel"), 2, 1),
+        });
+        let module = compile_ast_module(
+            parsed.module,
+            fnv1a64(source.as_bytes()),
+            Some("warning.vel"),
+            None,
+        )
+        .unwrap();
+        assert!(module
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message == "synthetic frontend warning"));
     }
 
     #[test]
