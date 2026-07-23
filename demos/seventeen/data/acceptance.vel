@@ -1,24 +1,24 @@
 // Deterministic hooks used by the headless acceptance path.
 
-function verify_force_death() {
+export function verify_force_death() {
     phase = "playing"
     begin_death()
     return snapshot()
 }
 
-function verify_clear_room() {
+export function verify_clear_room() {
     for enemy in enemies { enemy.alive = false }
     update_room_state()
     return snapshot()
 }
 
-function verify_enter_room(index: int) {
+export function verify_enter_room(index: int) {
     phase = "playing"
     setup_room(clamp(index, 1, 5))
     return snapshot()
 }
 
-function verify_collect_all_memories() {
+export function verify_collect_all_memories() {
     memories = [true, true, true]
     weapons.pistol = true
     weapons.shotgun = true
@@ -27,7 +27,7 @@ function verify_collect_all_memories() {
     return snapshot()
 }
 
-function verify_choose(remember: bool) {
+export function verify_choose(remember: bool) {
     phase = "choice"
     if remember && memory_count() == 3 {
         endings.remember_all = true

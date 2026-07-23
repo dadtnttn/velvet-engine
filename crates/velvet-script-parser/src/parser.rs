@@ -172,6 +172,7 @@ impl Parser {
         matches!(
             s,
             "import"
+                | "export"
                 | "function"
                 | "fn"
                 | "character"
@@ -208,7 +209,14 @@ impl Parser {
             if let Some(Token::Ident(s)) = self.peek_token() {
                 if matches!(
                     s.as_str(),
-                    "import" | "function" | "fn" | "character" | "state" | "scene" | "screen"
+                    "import"
+                        | "export"
+                        | "function"
+                        | "fn"
+                        | "character"
+                        | "state"
+                        | "scene"
+                        | "screen"
                 ) {
                     return;
                 }
@@ -257,8 +265,11 @@ impl Parser {
         if self.check(|t| matches!(t, Token::Ident(s) if s == "import")) {
             return self.parse_import();
         }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "export")) {
+            return self.parse_export();
+        }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "function" || s == "fn")) {
-            return self.parse_function();
+            return self.parse_function(false);
         }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "character")) {
             return self.parse_character();
@@ -296,7 +307,17 @@ impl Parser {
         Ok(Item::Import { path, alias, loc })
     }
 
-    fn parse_function(&mut self) -> Result<Item, String> {
+    fn parse_export(&mut self) -> Result<Item, String> {
+        self.advance(); // export
+        if !self.check(
+            |token| matches!(token, Token::Ident(name) if name == "function" || name == "fn"),
+        ) {
+            return Err("expected `function` after `export`".into());
+        }
+        self.parse_function(true)
+    }
+
+    fn parse_function(&mut self, exported: bool) -> Result<Item, String> {
         let start = self.peek_loc();
         self.advance(); // function/fn
         let (name, _) = self.expect_ident()?;
@@ -320,6 +341,7 @@ impl Parser {
         self.expect(|t| matches!(t, Token::RParen), "expected ')'")?;
         let body = self.parse_block_stmts()?;
         Ok(Item::Function {
+            exported,
             name,
             params,
             body,
@@ -1283,6 +1305,19 @@ mod tests {
             &parsed.module.items[1],
             Item::Import { path, alias: Some(alias), .. }
                 if path == "combat.vel" && alias == "combat"
+        ));
+    }
+
+    #[test]
+    fn parse_exported_function() {
+        let parsed = parse_ok("export function public_value() { return 17 }");
+        assert!(matches!(
+            &parsed.module.items[0],
+            Item::Function {
+                exported: true,
+                name,
+                ..
+            } if name == "public_value"
         ));
     }
 

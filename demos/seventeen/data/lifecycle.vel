@@ -1,6 +1,6 @@
 // New/load/save, phase flow, main tick and presentation snapshot.
 
-function new_game(seed: int) {
+export function new_game(seed: int) {
     game_seed = seed
     random = rng_new(seed)
     phase = "intro"
@@ -32,7 +32,7 @@ function new_game(seed: int) {
     return snapshot()
 }
 
-function load_game(data: map) {
+export function load_game(data: map) {
     game_seed = data.seed
     random = rng_new(game_seed + data.deaths * 7919)
     death_count = data.deaths
@@ -55,7 +55,7 @@ function load_game(data: map) {
     return snapshot()
 }
 
-function export_save() {
+export function export_save() {
     return {
         "version": 1,
         "seed": game_seed,
@@ -114,7 +114,7 @@ function update_phase_only(dt: float, input: map) {
     return false
 }
 
-function tick(dt: float, input: map) {
+export function tick(dt: float, input: map) {
     events = []
     let step = clamp(dt, 0.0, 0.05)
     if slow_timer > 0.0 {

@@ -39,14 +39,22 @@ enum SymbolKind {
 struct SymbolInfo {
     actual: String,
     kind: SymbolKind,
+    exported: bool,
     loc: SourceLoc,
 }
 
 #[derive(Debug, Default)]
 struct OwnerInfo {
     nominal: bool,
+    explicit_exports: bool,
     aliases: BTreeMap<String, String>,
     symbols: BTreeMap<String, SymbolInfo>,
+}
+
+impl OwnerInfo {
+    fn function_is_public(&self, symbol: &SymbolInfo) -> bool {
+        symbol.kind == SymbolKind::Function && (!self.explicit_exports || symbol.exported)
+    }
 }
 
 pub(crate) fn build<K, V, I>(root: &str, sources: I) -> Result<BundleAst, Vs3Error>
@@ -102,6 +110,7 @@ where
             .entry(owner.clone())
             .or_insert_with(|| OwnerInfo {
                 nominal: owner != &root,
+                explicit_exports: false,
                 aliases: aliases_by_owner.remove(owner).unwrap_or_default(),
                 symbols: BTreeMap::new(),
             });
@@ -157,7 +166,7 @@ where
         .expect("root owner metadata must exist");
     let mut entrypoints = BTreeMap::new();
     for (name, symbol) in &root_info.symbols {
-        if symbol.kind == SymbolKind::Function {
+        if root_info.function_is_public(symbol) {
             entrypoints.insert(name.clone(), symbol.actual.clone());
         }
     }
@@ -166,7 +175,7 @@ where
             .get(target_owner)
             .expect("module alias target metadata must exist");
         for (name, symbol) in &target.symbols {
-            if symbol.kind == SymbolKind::Function {
+            if target.function_is_public(symbol) {
                 entrypoints.insert(format!("{alias}.{name}"), symbol.actual.clone());
             }
         }
@@ -388,14 +397,23 @@ fn collect_symbols(
 ) {
     for item in &module.items {
         match item {
-            Item::Function { name, loc, .. } => insert_symbol(
-                owner,
-                owner_name,
+            Item::Function {
+                exported,
                 name,
-                SymbolKind::Function,
                 loc,
-                diagnostics,
-            ),
+                ..
+            } => {
+                owner.explicit_exports |= *exported;
+                insert_symbol(
+                    owner,
+                    owner_name,
+                    name,
+                    SymbolKind::Function,
+                    *exported,
+                    loc,
+                    diagnostics,
+                );
+            }
             Item::State { bindings, .. } => {
                 for binding in bindings {
                     insert_symbol(
@@ -403,6 +421,7 @@ fn collect_symbols(
                         owner_name,
                         &binding.name,
                         SymbolKind::State,
+                        false,
                         &binding.loc,
                         diagnostics,
                     );
@@ -414,6 +433,7 @@ fn collect_symbols(
                     owner_name,
                     name,
                     SymbolKind::Global,
+                    false,
                     loc,
                     diagnostics,
                 )
@@ -428,6 +448,7 @@ fn insert_symbol(
     owner_name: &str,
     name: &str,
     kind: SymbolKind,
+    exported: bool,
     loc: &SourceLoc,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -439,6 +460,7 @@ fn insert_symbol(
     let symbol = SymbolInfo {
         actual,
         kind,
+        exported,
         loc: loc.clone(),
     };
     if let Some(previous) = owner.symbols.insert(name.to_string(), symbol) {
@@ -717,7 +739,16 @@ impl<'a> Rewriter<'a> {
             .get(target_owner)
             .expect("alias target owner metadata exists");
         match target.symbols.get(function) {
-            Some(symbol) if symbol.kind == SymbolKind::Function => Some(symbol.actual.clone()),
+            Some(symbol) if target.function_is_public(symbol) => Some(symbol.actual.clone()),
+            Some(symbol) if symbol.kind == SymbolKind::Function => {
+                self.diagnostics.push(Diagnostic::error(
+                    format!(
+                        "function `{alias}.{function}` is private; declare `export function {function}(...)` in module `{target_owner}`"
+                    ),
+                    loc.clone(),
+                ));
+                None
+            }
             Some(_) => {
                 self.diagnostics.push(Diagnostic::error(
                     format!(
@@ -774,6 +805,7 @@ fn is_reserved(name: &str) -> bool {
     matches!(
         name,
         "as" | "import"
+            | "export"
             | "function"
             | "fn"
             | "state"

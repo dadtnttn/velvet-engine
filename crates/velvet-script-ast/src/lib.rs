@@ -499,6 +499,8 @@ pub enum Item {
     },
     /// Function definition.
     Function {
+        /// Whether the function is explicitly exported from its source module.
+        exported: bool,
         /// Name.
         name: String,
         /// Parameters.

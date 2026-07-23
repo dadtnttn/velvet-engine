@@ -85,9 +85,12 @@ El módulo nominal `game`, iniciado por [`data/game.vel`](data/game.vel), es la 
 
 El host Rust no decide resultados de combate ni progresión. Consume `snapshot()` y convierte eventos abstractos en imagen, sonido y vibración visual. Esta separación mantiene VS3 como lenguaje general: no se añadieron palabras clave de escena, sprite, enemigo o arma.
 
-Rust llama exports como `game.new_game`, `game.tick` y `game.export_save`. Los
-fragmentos internos comparten únicamente el espacio privado del módulo `game`;
-otro módulo puede reutilizar nombres como `tick`, `player` o `score` sin colisión.
+Rust llama únicamente las funciones declaradas con `export function`, como
+`game.new_game`, `game.tick` y `game.export_save`. Helpers como `snapshot`,
+`update_enemies` o `room_name` siguen disponibles dentro de `game`, pero no
+aparecen en la API del host ni pueden llamarse desde otro módulo. Los fragmentos
+internos comparten únicamente el espacio privado del módulo `game`; otro módulo
+puede reutilizar nombres como `tick`, `player` o `score` sin colisión.
 
 Las mejoras generales al lenguaje/motor realizadas para esta demo son:
 
