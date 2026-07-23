@@ -1,0 +1,134 @@
+// Room content, encounter setup and room-clear progression.
+
+function setup_room(index: int) {
+    room = index
+    room_time = 0.0
+    room_clear = false
+    boss_phase_announced = false
+    clear_list(enemies)
+    clear_list(bullets)
+    clear_list(obstacles)
+    clear_list(pickups)
+    clear_list(hazards)
+
+    player.pos = vec2(64, 180)
+    player.prev_pos = player.pos
+    player.velocity = vec2(0, 0)
+    player.hp = player.max_hp
+    player.alive = true
+    player.invulnerable = 0.8
+    player.cooldown = 0.0
+    player.reload_timer = 0.0
+    player.dash_timer = 0.0
+    player.dash_cooldown = 0.0
+
+    if player.weapon == "none" && weapons.pistol { player.weapon = "pistol" }
+
+    if room == 1 {
+        add_obstacle(205, 70, 34, 92, "containment")
+        add_obstacle(205, 218, 34, 72, "containment")
+        add_obstacle(420, 95, 92, 28, "terminal")
+        add_obstacle(420, 238, 92, 28, "terminal")
+        if !weapons.pistol {
+            add_pickup("pistol", vec2(320, 180), 0, true)
+        } else {
+            room_clear = true
+        }
+        say("RADIO", "Ya lo intentaste dieciseis veces.", 5.5)
+    } else {
+        if room == 2 {
+            add_obstacle(175, 95, 68, 34, "cover")
+            add_obstacle(320, 225, 72, 34, "cover")
+            add_obstacle(470, 92, 58, 38, "cover")
+            spawn_enemy("vigilante", vec2(300, 105), 70.0)
+            spawn_enemy("vigilante", vec2(500, 250), 70.0)
+            add_pickup("shotgun", vec2(330, 180), 0, false)
+            if death_count < 3 {
+                say("RADIO", "Control registra cada muerte. Intenta no darle otra.", 5.0)
+            } else {
+                say("VIGILANTE", "Otra vez tu. Esta vez apuntaremos donde vas a estar.", 5.0)
+            }
+        } else {
+            if room == 3 {
+                add_obstacle(145, 72, 36, 216, "archive")
+                add_obstacle(285, 72, 36, 90, "archive")
+                add_obstacle(285, 220, 36, 68, "archive")
+                add_obstacle(430, 72, 36, 216, "archive")
+                add_pickup("memory", vec2(225, 105), 0, !memories[0])
+                add_pickup("memory", vec2(365, 255), 1, !memories[1])
+                add_pickup("memory", vec2(535, 120), 2, !memories[2])
+                add_pickup("blade", vec2(535, 255), 0, !weapons.blade)
+                room_clear = true
+                if death_count < 3 {
+                    say("17", "Conozco estos pasillos. Mi cuerpo llega antes que el recuerdo.", 5.0)
+                } else {
+                    say("RADIO", "No leas los archivos. Ya sabes por que.", 5.0)
+                }
+            } else {
+                if room == 4 {
+                    if is_even(death_count) {
+                        add_obstacle(165, 80, 42, 135, "purge")
+                        add_obstacle(305, 205, 80, 40, "purge")
+                        add_obstacle(480, 72, 44, 145, "purge")
+                        add_hazard(245, 75, 38, 72)
+                        add_hazard(410, 240, 46, 54)
+                    } else {
+                        add_obstacle(150, 215, 90, 38, "purge")
+                        add_obstacle(310, 75, 42, 150, "purge")
+                        add_obstacle(465, 220, 88, 36, "purge")
+                        add_hazard(225, 82, 45, 58)
+                        add_hazard(385, 235, 48, 58)
+                    }
+                    spawn_enemy("vigilante", vec2(260, 95), 80.0)
+                    spawn_enemy("vigilante", vec2(500, 270), 80.0)
+                    spawn_enemy("hound", vec2(350, 90), 90.0)
+                    spawn_enemy("hound", vec2(420, 275), 90.0)
+                    if death_count >= 6 {
+                        spawn_enemy("echo", vec2(570, 180), 110.0)
+                    }
+                    say("RADIO", "La purga conserva tus patrones. Cambia o repitelos para siempre.", 5.5)
+                } else {
+                    add_obstacle(250, 70, 36, 90, "zero")
+                    add_obstacle(250, 220, 36, 70, "zero")
+                    add_obstacle(455, 70, 36, 90, "zero")
+                    add_obstacle(455, 220, 36, 70, "zero")
+                    let boss_hp = 520.0 + min(death_count, 10) * 12.0
+                    spawn_enemy("zero", vec2(500, 180), boss_hp)
+                    if memory_count() == 3 {
+                        say("CERO", "Trajiste todos los recuerdos. Entonces ya sabes quien construyo esto.", 6.0)
+                    } else {
+                        say("CERO", "Yo tambien fui diecisiete. Luego aprendi a recordar.", 6.0)
+                    }
+                }
+            }
+        }
+    }
+    save_revision += 1
+    emit("room_enter", player.pos, room * 1.0)
+}
+
+function update_room_state() {
+    let alive = alive_enemy_count()
+    if room == 2 && alive == 0 && !room_clear {
+        room_clear = true
+        slow_timer = 0.32
+        for pickup in pickups {
+            if pickup.kind == "shotgun" { pickup.active = !weapons.shotgun }
+        }
+        say("RADIO", "Control despejado. La puerta recuerda tu pulso.", 4.0)
+        emit("room_clear", player.pos, 1.0)
+    }
+    if room == 4 && alive == 0 && !room_clear {
+        room_clear = true
+        slow_timer = 0.32
+        say("17", "La purga termino. No siento alivio. Solo familiaridad.", 4.5)
+        emit("room_clear", player.pos, 1.2)
+    }
+    if room == 5 && alive == 0 && phase == "playing" {
+        phase = "choice"
+        player.pos = vec2(320, 260)
+        clear_list(bullets)
+        say("CERO", "Elige. Olvidar y salir, o recordar por que empezaste.", 6.0)
+        emit("room_clear", player.pos, 2.0)
+    }
+}

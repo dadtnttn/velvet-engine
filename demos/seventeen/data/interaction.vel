@@ -1,0 +1,98 @@
+// Pickups, prompts, doors and final choice interaction.
+
+function collect_pickup(pickup: map) {
+    pickup.active = false
+    if pickup.kind == "pistol" {
+        weapons.pistol = true
+        player.weapon = "pistol"
+        room_clear = true
+        say("RADIO", "Pistola de pulsos enlazada. Siete disparos. Haz que cuenten.", 4.5)
+    }
+    if pickup.kind == "shotgun" {
+        weapons.shotgun = true
+        player.weapon = "shotgun"
+        say("17", "Escopeta magnetica. Esto tambien lo recuerdo.", 4.0)
+    }
+    if pickup.kind == "blade" {
+        weapons.blade = true
+        player.weapon = "blade"
+        say("17", "La hoja vibra con una version anterior de mi mano.", 4.0)
+    }
+    if pickup.kind == "memory" {
+        memories[pickup.index] = true
+        memory_timer = 12.0
+        if pickup.index == 0 {
+            memory_text = "MEMORIA I — Firmaste el protocolo. Nadie te obligo a entrar."
+        }
+        if pickup.index == 1 {
+            memory_text = "MEMORIA II — Cero no era un prisionero. Era el primer respaldo."
+        }
+        if pickup.index == 2 {
+            memory_text = "MEMORIA III — Construiste el ciclo para recordar a alguien perdido."
+        }
+        say("ARCHIVO", concat("Fragmento recuperado: ", str(pickup.index + 1)), 3.0)
+    }
+    score += 150
+    save_revision += 1
+    emit("pickup", pickup.pos, 1.0)
+}
+
+function update_prompt() {
+    prompt = ""
+    for pickup in pickups {
+        if pickup.active && distance(player.pos, pickup.pos) < 32.0 {
+            if pickup.kind == "memory" { prompt = "E  RECONSTRUIR MEMORIA" }
+            if pickup.kind == "pistol" { prompt = "E  TOMAR PISTOLA DE PULSOS" }
+            if pickup.kind == "shotgun" { prompt = "E  TOMAR ESCOPETA MAGNETICA" }
+            if pickup.kind == "blade" { prompt = "E  TOMAR HOJA DE FASE" }
+        }
+    }
+    if player.pos.x > 565.0 && room < 5 && room_clear {
+        prompt = "E  CRUZAR PUERTA"
+    }
+    if phase == "choice" {
+        if distance(player.pos, vec2(205, 180)) < 60.0 { prompt = "E  DESTRUIR EL NUCLEO" }
+        if distance(player.pos, vec2(435, 180)) < 60.0 {
+            if memory_count() == 3 { prompt = "E  CONECTAR Y RECORDAR" }
+            else { prompt = "REQUIERE 3 MEMORIAS" }
+        }
+    }
+}
+
+function handle_interaction(input: map) {
+    if !input.interact { return }
+    for pickup in pickups {
+        if pickup.active && distance(player.pos, pickup.pos) < 32.0 {
+            collect_pickup(pickup)
+            return
+        }
+    }
+    if room < 5 && room_clear && player.pos.x > 565.0 {
+        score += max(100, 800 - room_deaths * 120)
+        emit("door", player.pos, 1.0)
+        room_deaths = 0
+        setup_room(room + 1)
+        return
+    }
+    if phase == "choice" {
+        if distance(player.pos, vec2(205, 180)) < 60.0 {
+            endings.break_cycle = true
+            ending_variant = "fragmentado"
+            if death_count <= 2 { ending_variant = "lucido" }
+            phase = "ending_a"
+            phase_timer = 0.0
+            save_revision += 1
+            emit("ending", player.pos, 2.0)
+            return
+        }
+        if distance(player.pos, vec2(435, 180)) < 60.0 && memory_count() == 3 {
+            endings.remember_all = true
+            ending_variant = "completo"
+            if death_count > 8 { ending_variant = "inestable" }
+            phase = "ending_b"
+            phase_timer = 0.0
+            save_revision += 1
+            emit("ending", player.pos, 2.0)
+        }
+    }
+}

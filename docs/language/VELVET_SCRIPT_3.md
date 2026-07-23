@@ -193,13 +193,28 @@ Runtime errors retain their source location and script stack trace. `VmLimits`
 is re-exported by the VS3 crate for explicit instruction, memory, recursion,
 stack, and sandbox configuration.
 
-### Multi-file packages
+### Multi-file source bundles and packages
 
-`Vs3Package::compile_modules` organizes independent source files under stable
-names. Calls use `module::function`, and `Vs3PackageSession` preserves separate
-state for every module. This is useful for host-owned package boundaries today;
-source-level `import` syntax and direct cross-module calls remain a compatible
-future extension.
+A root file can compose one shared module from relative source fragments:
+
+```velvet
+// @edition 3
+import "state.vel"
+import "combat/weapons.vel"
+
+function start() { return new_player() }
+```
+
+`compile_bundle` resolves embedded sources, while `compile_path` resolves files
+from disk. Imports are textual, recursive, included once, cycle-checked, and
+restricted to relative paths. Every imported function and `state` declaration
+joins the root module's single namespace. This is ideal for splitting one game
+without moving decisions into the Rust host.
+
+`Vs3Package::compile_modules` remains the separate-state option: it organizes
+independent modules under stable names, calls use `module::function`, and
+`Vs3PackageSession` preserves state per module. Nominal source namespaces and
+direct bytecode linking are still future work.
 
 ## Tooling
 
@@ -213,9 +228,9 @@ future extension.
 
 ## Boundaries and next compatible extensions
 
-The current alpha deliberately does not claim source-level imports,
-nominal structs/enums, pattern matching, generics, return-type syntax, or a
-borrow checker. Today, records and tagged variants are represented with maps
+The current alpha provides textual source imports, but deliberately does not claim
+nominal module namespaces, structs/enums, pattern matching, generics, return-type
+syntax, or a borrow checker. Today, records and tagged variants are represented with maps
 and dispatched with ordinary conditionals. These features should extend the
 same semantic frontend and bytecode versioning instead of creating a parallel
 language pipeline.

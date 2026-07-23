@@ -1,0 +1,156 @@
+// Enemy perception, patrol, pursuit and boss behavior.
+
+function enemy_shoot(enemy: map, direction: vec2, speed: float, damage: float) {
+    spawn_bullet("enemy", enemy.pos + direction * 12.0, direction, speed, damage, 2.2)
+    emit("enemy_shot", enemy.pos, 0.55)
+}
+
+function can_see_player(enemy: map, max_distance: float) {
+    let delta = player.pos - enemy.pos
+    if length(delta) > max_distance { return false }
+    let sample = 1
+    while sample <= 7 {
+        let point = enemy.pos + delta * (sample / 8.0)
+        for obstacle in obstacles {
+            if point_in_rect(point, obstacle, 1.0) { return false }
+        }
+        sample += 1
+    }
+    return true
+}
+
+function patrol_enemy(enemy: map, dt: float, speed: float) {
+    enemy.think -= dt
+    if enemy.think <= 0.0 {
+        enemy.think = rng_range_float(random, 0.8, 1.8)
+        let angle = rng_range_float(random, 0.0, TAU)
+        enemy.aim = vec2(cos(angle), sin(angle))
+    }
+    enemy.velocity = enemy.aim * speed
+    let next = move_position(enemy.pos, enemy.velocity * dt, 10.0)
+    if distance(next, enemy.pos) < 0.2 { enemy.aim = -enemy.aim }
+    enemy.pos = next
+}
+
+function update_vigilante(enemy: map, dt: float) {
+    let to_player = player.pos - enemy.pos
+    let d = length(to_player)
+    if d < 0.001 { return }
+    let dir = normalize(to_player)
+    let sees = can_see_player(enemy, 330.0)
+    if enemy.state == "patrol" && sees { enemy.state = "pursuit" }
+    if enemy.state == "pursuit" && !sees && d > 355.0 { enemy.state = "patrol" }
+    if enemy.state == "patrol" {
+        patrol_enemy(enemy, dt, 28.0)
+        return
+    }
+    let lead = player.velocity * min(0.28, death_count * 0.025)
+    let aim_target = player.pos + lead
+    enemy.aim = normalize(aim_target - enemy.pos)
+    let strafe_sign = -1.0
+    if is_even(enemy.id + death_count) { strafe_sign = 1.0 }
+    let strafe = vec2(-dir.y, dir.x) * strafe_sign
+    let velocity = strafe * 48.0
+    if d > 175.0 { velocity += dir * 72.0 }
+    if d < 105.0 { velocity -= dir * 90.0 }
+    enemy.velocity = velocity
+    enemy.pos = move_position(enemy.pos, velocity * dt, 10.0)
+    if enemy.cooldown <= 0.0 && d < 330.0 {
+        enemy_shoot(enemy, enemy.aim, 300.0 + death_count * 3.0, 48.0)
+        enemy.cooldown = max(0.58, 1.15 - death_count * 0.035)
+    }
+}
+
+function update_hound(enemy: map, dt: float) {
+    let to_player = player.pos - enemy.pos
+    let d = length(to_player)
+    if d < 0.001 { return }
+    let dir = normalize(to_player)
+    let sees = can_see_player(enemy, 285.0)
+    if enemy.state == "patrol" && sees { enemy.state = "pursuit" }
+    if enemy.state == "pursuit" && !sees && d > 320.0 { enemy.state = "patrol" }
+    if enemy.state == "patrol" {
+        patrol_enemy(enemy, dt, 38.0)
+        return
+    }
+    let flank_sign = -1.0
+    if is_even(enemy.id + death_count) { flank_sign = 1.0 }
+    let flank = vec2(-dir.y, dir.x) * flank_sign
+    let velocity = normalize(dir + flank * min(0.7, d / 240.0)) * (145.0 + min(death_count, 8) * 4.0)
+    enemy.velocity = velocity
+    enemy.aim = dir
+    enemy.pos = move_position(enemy.pos, velocity * dt, 10.0)
+    if d < 24.0 && enemy.cooldown <= 0.0 {
+        hurt_player(72.0, enemy.pos)
+        enemy.cooldown = 0.85
+        emit("hound", enemy.pos, 1.0)
+    }
+}
+
+function update_echo(enemy: map, dt: float) {
+    let target = player.pos
+    if len(echo_path) > 0 {
+        let index = enemy.path_index
+        if index >= len(echo_path) { index = 0 }
+        target = echo_path[index]
+        enemy.path_index = index + 1
+    }
+    let to_target = target - enemy.pos
+    if length(to_target) > 4.0 {
+        enemy.velocity = normalize(to_target) * 138.0
+        enemy.pos = move_position(enemy.pos, enemy.velocity * dt, 10.0)
+    }
+    let to_player = player.pos - enemy.pos
+    if length(to_player) > 0.001 { enemy.aim = normalize(to_player) }
+    if enemy.cooldown <= 0.0 && distance(enemy.pos, player.pos) < 260.0 {
+        enemy_shoot(enemy, enemy.aim, 340.0, 52.0)
+        enemy.cooldown = 0.78
+    }
+}
+
+function update_zero(enemy: map, dt: float) {
+    let to_player = player.pos - enemy.pos
+    let d = length(to_player)
+    if d < 0.001 { return }
+    let dir = normalize(to_player)
+    enemy.aim = dir
+    if enemy.hp <= enemy.max_hp * 0.5 && enemy.phase == 1 {
+        enemy.phase = 2
+        emit("boss_phase", enemy.pos, 2.0)
+        say("CERO", "Tus rutas siguen dentro de mi.", 4.0)
+        if len(echo_path) > 0 { spawn_enemy("echo_clone", enemy.pos + vec2(-35, 24), 75.0) }
+        spawn_enemy("echo_clone", enemy.pos + vec2(35, -24), 75.0)
+    }
+    let side_sign = -1.0
+    if sin(elapsed * 5.0) >= 0.0 { side_sign = 1.0 }
+    let side = vec2(-dir.y, dir.x) * side_sign
+    let boss_speed = 82.0
+    if enemy.phase != 1 { boss_speed = 125.0 }
+    let velocity = side * boss_speed
+    if d > 190.0 { velocity += dir * 75.0 }
+    if d < 105.0 { velocity -= dir * 100.0 }
+    enemy.velocity = velocity
+    enemy.pos = move_position(enemy.pos, velocity * dt, 13.0)
+    if enemy.cooldown <= 0.0 {
+        let spread = 0.12
+        if enemy.phase != 1 { spread = 0.2 }
+        enemy_shoot(enemy, rotate_direction(dir, -spread), 335.0, 55.0)
+        enemy_shoot(enemy, dir, 365.0, 55.0)
+        enemy_shoot(enemy, rotate_direction(dir, spread), 335.0, 55.0)
+        enemy.cooldown = 0.92
+        if enemy.phase != 1 { enemy.cooldown = 0.62 }
+    }
+}
+
+function update_enemies(dt: float) {
+    for enemy in enemies {
+        if enemy.alive {
+            enemy.cooldown = max(0.0, enemy.cooldown - dt)
+            enemy.hit_flash = max(0.0, enemy.hit_flash - dt)
+            if enemy.kind == "vigilante" { update_vigilante(enemy, dt) }
+            if enemy.kind == "hound" { update_hound(enemy, dt) }
+            if enemy.kind == "echo" || enemy.kind == "echo_clone" { update_echo(enemy, dt) }
+            if enemy.kind == "zero" { update_zero(enemy, dt) }
+        }
+    }
+}

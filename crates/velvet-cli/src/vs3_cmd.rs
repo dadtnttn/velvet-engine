@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use velvet_script_vs3::{compile, detect_edition, Value, Vs3Package, Vs3TaskStatus};
+use velvet_script_vs3::{compile_path, detect_edition, Value, Vs3Package, Vs3TaskStatus};
 
 /// Parse/compile a VS3 file (`// @edition 3` required).
 pub fn cmd_vs3_check(path: PathBuf) -> Result<()> {
@@ -11,10 +11,7 @@ pub fn cmd_vs3_check(path: PathBuf) -> Result<()> {
         let mut package = Vs3Package::new();
         let mut function_count = 0usize;
         for file_path in vs3_files(&path)? {
-            let source = std::fs::read_to_string(&file_path)
-                .with_context(|| format!("read {}", file_path.display()))?;
-            let file = file_path.to_string_lossy();
-            let module = compile(&source, Some(file.as_ref())).map_err(|error| {
+            let module = compile_path(&file_path).map_err(|error| {
                 for diagnostic in error.diagnostics() {
                     eprintln!("{}", diagnostic.display());
                 }
@@ -36,8 +33,7 @@ pub fn cmd_vs3_check(path: PathBuf) -> Result<()> {
         std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let ed = detect_edition(&source);
     println!("edition={}", ed.as_str());
-    let file = path.to_string_lossy();
-    match compile(&source, Some(file.as_ref())) {
+    match compile_path(&path) {
         Ok(m) => {
             let mut names = m.function_names();
             names.sort();
@@ -73,10 +69,7 @@ pub fn cmd_vs3_run(
     cooperative: bool,
     responses: Vec<String>,
 ) -> Result<()> {
-    let source =
-        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
-    let file = path.to_string_lossy();
-    let module = compile(&source, Some(file.as_ref())).map_err(|e| {
+    let module = compile_path(&path).map_err(|e| {
         for d in e.diagnostics() {
             eprintln!("{}", d.display());
         }

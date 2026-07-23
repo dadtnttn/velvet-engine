@@ -1,0 +1,40 @@
+// Shared persistent simulation state for the Seventeen bundle.
+
+state {
+    game_seed: int = 17
+    random: rng = rng_new(17)
+    phase: string = "idle"
+    room: int = 1
+    death_count: int = 0
+    room_deaths: int = 0
+    score: int = 0
+    next_id: int = 1
+    elapsed: float = 0.0
+    room_time: float = 0.0
+    phase_timer: float = 0.0
+    death_timer: float = 0.0
+    path_timer: float = 0.0
+    memory_timer: float = 0.0
+    message_timer: float = 0.0
+    slow_timer: float = 0.0
+    save_revision: int = 0
+    room_clear: bool = false
+    boss_phase_announced: bool = false
+    message: string = ""
+    speaker: string = "RADIO"
+    prompt: string = ""
+    memory_text: string = ""
+    ending_variant: string = ""
+    player: map = {"pos": vec2(80, 180), "aim": vec2(1, 0), "hp": 100.0}
+    enemies: list = []
+    bullets: list = []
+    obstacles: list = []
+    pickups: list = []
+    hazards: list = []
+    events: list = []
+    current_path: list = []
+    echo_path: list = []
+    memories: list = [false, false, false]
+    weapons: map = {"pistol": false, "shotgun": false, "blade": false}
+    endings: map = {"break_cycle": false, "remember_all": false}
+}

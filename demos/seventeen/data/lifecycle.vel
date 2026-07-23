@@ -1,0 +1,198 @@
+// New/load/save, phase flow, main tick and presentation snapshot.
+
+function new_game(seed: int) {
+    game_seed = seed
+    random = rng_new(seed)
+    phase = "intro"
+    room = 1
+    death_count = 0
+    room_deaths = 0
+    score = 0
+    elapsed = 0.0
+    next_id = 1
+    phase_timer = 0.0
+    death_timer = 0.0
+    memory_timer = 0.0
+    message_timer = 0.0
+    slow_timer = 0.0
+    save_revision = 1
+    memories = [false, false, false]
+    weapons = {"pistol": false, "shotgun": false, "blade": false}
+    endings = {"break_cycle": false, "remember_all": false}
+    current_path = []
+    echo_path = []
+    events = []
+    player = make_player()
+    clear_list(enemies)
+    clear_list(bullets)
+    clear_list(obstacles)
+    clear_list(pickups)
+    clear_list(hazards)
+    say("RADIO", "Sujeto 17. Pulso estable. Memoria... incompleta.", 5.0)
+    return snapshot()
+}
+
+function load_game(data: map) {
+    game_seed = data.seed
+    random = rng_new(game_seed + data.deaths * 7919)
+    death_count = data.deaths
+    score = data.score
+    memories = [data.memory0, data.memory1, data.memory2]
+    weapons = {"pistol": data.pistol, "shotgun": data.shotgun, "blade": data.blade}
+    endings = {"break_cycle": data.ending_a, "remember_all": data.ending_b}
+    player = make_player()
+    if weapons.blade { player.weapon = "blade" }
+    if weapons.shotgun { player.weapon = "shotgun" }
+    if weapons.pistol && player.weapon == "none" { player.weapon = "pistol" }
+    phase = "playing"
+    current_path = []
+    echo_path = []
+    events = []
+    room_deaths = 0
+    slow_timer = 0.0
+    setup_room(clamp(data.room, 1, 5))
+    say("RADIO", "Continuidad restaurada. Tus recuerdos no tuvieron tanta suerte.", 5.0)
+    return snapshot()
+}
+
+function export_save() {
+    return {
+        "version": 1,
+        "seed": game_seed,
+        "room": room,
+        "deaths": death_count,
+        "score": score,
+        "memory0": memories[0],
+        "memory1": memories[1],
+        "memory2": memories[2],
+        "pistol": weapons.pistol,
+        "shotgun": weapons.shotgun,
+        "blade": weapons.blade,
+        "ending_a": endings.break_cycle,
+        "ending_b": endings.remember_all
+    }
+}
+
+function update_phase_only(dt: float, input: map) {
+    phase_timer += dt
+    if phase == "intro" {
+        if phase_timer > 4.5 || input.interact {
+            phase = "playing"
+            phase_timer = 0.0
+            setup_room(1)
+        }
+        return true
+    }
+    if phase == "dead" {
+        death_timer -= dt
+        if death_timer <= 0.0 {
+            phase = "playing"
+            setup_room(room)
+            if death_count >= 9 {
+                say("RADIO", "La geometria ya no coincide con los planos.", 4.0)
+            } else {
+                say("RADIO", "Reconstruccion completa.", 2.5)
+            }
+            emit("respawn", player.pos, 1.5)
+        }
+        return true
+    }
+    if phase == "ending_a" || phase == "ending_b" {
+        if phase_timer > 8.0 || input.interact {
+            phase = "credits"
+            phase_timer = 0.0
+        }
+        return true
+    }
+    if phase == "credits" {
+        if phase_timer > 11.0 || input.interact {
+            phase = "complete"
+            phase_timer = 0.0
+        }
+        return true
+    }
+    return false
+}
+
+function tick(dt: float, input: map) {
+    events = []
+    let step = clamp(dt, 0.0, 0.05)
+    if slow_timer > 0.0 {
+        slow_timer -= step
+        step *= 0.28
+    }
+    elapsed += step
+    if message_timer > 0.0 { message_timer -= step }
+    if memory_timer > 0.0 {
+        memory_timer -= step
+        if input.interact { memory_timer = 0.0 }
+        return snapshot()
+    }
+    if update_phase_only(step, input) { return snapshot() }
+    if phase != "playing" && phase != "choice" { return snapshot() }
+
+    room_time += step
+    update_player(step, input)
+    if phase == "playing" {
+        update_enemies(step)
+        update_bullets(step)
+        record_path(step)
+        update_room_state()
+    }
+    update_prompt()
+    handle_interaction(input)
+    return snapshot()
+}
+
+function snapshot() {
+    let boss_hp = 0.0
+    let boss_max = 0.0
+    for enemy in enemies {
+        if enemy.kind == "zero" && enemy.alive {
+            boss_hp = enemy.hp
+            boss_max = enemy.max_hp
+        }
+    }
+    let distortion = clamp(death_count / 10.0, 0.0, 1.0)
+    if phase == "dead" { distortion = 1.0 }
+    let visible_message = ""
+    if message_timer > 0.0 { visible_message = message }
+    let visible_memory = ""
+    if memory_timer > 0.0 { visible_memory = memory_text }
+    return {
+        "phase": phase,
+        "room": room,
+        "room_name": room_name(),
+        "room_time": room_time,
+        "deaths": death_count,
+        "score": score,
+        "player": player,
+        "enemies": enemies,
+        "bullets": bullets,
+        "obstacles": obstacles,
+        "pickups": pickups,
+        "hazards": hazards,
+        "events": events,
+        "memories": memories,
+        "weapons": weapons,
+        "endings": endings,
+        "memory_count": memory_count(),
+        "message": visible_message,
+        "speaker": speaker,
+        "prompt": prompt,
+        "memory_text": visible_memory,
+        "memory_timer": memory_timer,
+        "room_clear": room_clear,
+        "door_open": room_clear && room < 5,
+        "ammo": current_ammo(),
+        "magazine": current_magazine(),
+        "weapon": player.weapon,
+        "boss_hp": boss_hp,
+        "boss_max": boss_max,
+        "distortion": distortion,
+        "death_timer": death_timer,
+        "ending_variant": ending_variant,
+        "save_revision": save_revision,
+        "instructions_hint": len(enemies) + len(bullets)
+    }
+}

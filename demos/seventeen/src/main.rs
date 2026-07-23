@@ -18,7 +18,7 @@ use render::{scale_nearest_letterbox, Renderer, HEIGHT, WIDTH};
 use save::{SaveData, SaveStore};
 use softbuffer::{Context as SoftContext, Surface};
 use velvet_script_vs3::{
-    bool_val, compile, float_val, int, map_val, vec2_val, Vs3Module, Vs3Session,
+    bool_val, compile_bundle, float_val, int, map_val, vec2_val, Vs3Module, Vs3Session,
 };
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
@@ -27,7 +27,17 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode as WinitKeyCode, PhysicalKey};
 use winit::window::{Fullscreen, Window, WindowId};
 
-const SCRIPT: &str = include_str!("../data/game.vel");
+const GAME_SOURCES: &[(&str, &str)] = &[
+    ("game.vel", include_str!("../data/game.vel")),
+    ("state.vel", include_str!("../data/state.vel")),
+    ("core.vel", include_str!("../data/core.vel")),
+    ("rooms.vel", include_str!("../data/rooms.vel")),
+    ("combat.vel", include_str!("../data/combat.vel")),
+    ("ai.vel", include_str!("../data/ai.vel")),
+    ("interaction.vel", include_str!("../data/interaction.vel")),
+    ("lifecycle.vel", include_str!("../data/lifecycle.vel")),
+    ("acceptance.vel", include_str!("../data/acceptance.vel")),
+];
 const FRAME_TIME: Duration = Duration::from_micros(16_667);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,7 +61,7 @@ struct Game {
 
 impl Game {
     fn compile() -> Result<Self> {
-        let module = compile(SCRIPT, Some("demos/seventeen/data/game.vel"))?;
+        let module = compile_bundle("game.vel", GAME_SOURCES.iter().copied())?;
         let session = module.session()?;
         Ok(Self {
             module,

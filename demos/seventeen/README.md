@@ -54,8 +54,16 @@ cargo run -p seventeen -- --capture artifacts/seventeen.png
 
 ```text
 demos/seventeen/
-  data/game.vel   simulación, contenido, IA y narrativa VS3
-  src/main.rs     ciclo de aplicación y puente VS3
+  data/game.vel          raíz VS3 con imports
+  data/state.vel         estado persistente compartido
+  data/core.vel          datos, geometría y eventos
+  data/rooms.vel         contenido y progresión de salas
+  data/combat.vel        movimiento, armas, daño y proyectiles
+  data/ai.vel            percepción e IA enemiga
+  data/interaction.vel   objetos, puertas y decisiones
+  data/lifecycle.vel     carga, guardado, tick y snapshot
+  data/acceptance.vel    verificación determinista
+  src/main.rs            ciclo de aplicación y puente VS3
   src/input.rs    teclado, ratón y mando
   src/model.rs    snapshots tipados recibidos desde VS3
   src/render.rs   raster procedural, HUD y efectos
@@ -65,7 +73,7 @@ demos/seventeen/
 
 ## Contrato VS3-first
 
-[`data/game.vel`](data/game.vel) es la autoridad sobre:
+El bundle iniciado por [`data/game.vel`](data/game.vel) es la autoridad sobre:
 
 - estado del jugador, armas, munición y puntuación;
 - salas, colisiones y progresión;
@@ -95,7 +103,7 @@ Las mejoras generales al lenguaje/motor realizadas para esta demo son:
 
 ## Agregar una habitación
 
-1. Añade el nombre a `room_name()` y su definición a `setup_room()` en `data/game.vel`.
+1. Añade el nombre a `room_name()` en `data/core.vel` y su definición a `setup_room()` en `data/rooms.vel`.
 2. Define enemigos, obstáculos, peligros, objetos y diálogo usando las funciones generales ya existentes.
 3. Añade su condición de cierre a `update_room_state()`.
 4. Amplía el límite de transición y guardado, actualmente `5`, y agrega el índice al recorrido de `run_headless()`.

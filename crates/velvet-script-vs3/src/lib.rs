@@ -13,6 +13,7 @@
 mod semantic;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 use velvet_script_ast::{Diagnostic, Severity, SourceLoc};
@@ -162,6 +163,7 @@ pub const SUPPORTED_SURFACE: &[&str] = &[
     "const name = expr",
     "persistent state through Vs3Session",
     "multi-file packages with module::function calls",
+    "source bundles with import \"relative/path.vel\" directives",
     "if cond { } else { }",
     "while cond { }",
     "for value in collection with break and continue",
@@ -224,6 +226,254 @@ pub fn detect_edition(source: &str) -> Edition {
     Edition::Classic
 }
 
+/// Compile an embedded source bundle whose root may use textual imports.
+///
+/// Import directives are standalone lines such as `import "logic/combat.vel"`.
+/// Paths are resolved relative to the importing file, expanded exactly once,
+/// and compiled as one VS3 module, so all fragments share functions and state.
+/// This is intentionally a source-composition feature rather than nominal
+/// cross-module linking.
+pub fn compile_bundle<K, V, I>(root: &str, sources: I) -> Result<Vs3Module, Vs3Error>
+where
+    I: IntoIterator<Item = (K, V)>,
+    K: Into<String>,
+    V: Into<String>,
+{
+    let root = normalize_bundle_path("", root).map_err(|message| Vs3Error::Bundle {
+        path: root.to_string(),
+        message,
+    })?;
+    let mut source_map = BTreeMap::new();
+    for (name, source) in sources {
+        let original = name.into();
+        let normalized =
+            normalize_bundle_path("", &original).map_err(|message| Vs3Error::Bundle {
+                path: original.clone(),
+                message,
+            })?;
+        if source_map
+            .insert(normalized.clone(), source.into())
+            .is_some()
+        {
+            return Err(Vs3Error::Bundle {
+                path: normalized,
+                message: "duplicate source path".into(),
+            });
+        }
+    }
+    let root_source = source_map.get(&root).ok_or_else(|| Vs3Error::Bundle {
+        path: root.clone(),
+        message: "root source is missing from the bundle".into(),
+    })?;
+    if detect_edition(root_source) != Edition::Vs3 {
+        return Err(Vs3Error::Edition(format!(
+            "VS3 bundle root `{root}` requires `// @edition 3`"
+        )));
+    }
+
+    let mut output = String::from("// @edition 3\n");
+    let mut expanded = BTreeSet::new();
+    let mut visiting = Vec::new();
+    expand_bundle_source(
+        &root,
+        &source_map,
+        &mut expanded,
+        &mut visiting,
+        &mut output,
+    )?;
+    compile(&output, Some(&root))
+}
+
+/// Compile a filesystem VS3 root and every relative import reachable from it.
+///
+/// Imports are restricted to the root file's directory tree; a path that would
+/// escape that directory is rejected before any file is read.
+pub fn compile_path(path: impl AsRef<Path>) -> Result<Vs3Module, Vs3Error> {
+    let path = path.as_ref();
+    let root_dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let root_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| Vs3Error::Bundle {
+            path: path.display().to_string(),
+            message: "root path has no UTF-8 file name".into(),
+        })?;
+    let root_name = normalize_bundle_path("", root_name).map_err(|message| Vs3Error::Bundle {
+        path: path.display().to_string(),
+        message,
+    })?;
+    let mut sources = BTreeMap::new();
+    collect_bundle_files(root_dir, &root_name, &mut sources, &mut BTreeSet::new())?;
+    compile_bundle(&root_name, sources)
+}
+
+fn collect_bundle_files(
+    root_dir: &Path,
+    virtual_path: &str,
+    sources: &mut BTreeMap<String, String>,
+    visiting: &mut BTreeSet<String>,
+) -> Result<(), Vs3Error> {
+    if sources.contains_key(virtual_path) {
+        return Ok(());
+    }
+    if !visiting.insert(virtual_path.to_string()) {
+        return Err(Vs3Error::Bundle {
+            path: virtual_path.to_string(),
+            message: "cyclic import while loading filesystem sources".into(),
+        });
+    }
+    let actual_path = root_dir.join(PathBuf::from(virtual_path));
+    let source = std::fs::read_to_string(&actual_path).map_err(|error| Vs3Error::Bundle {
+        path: virtual_path.to_string(),
+        message: format!("cannot read {}: {error}", actual_path.display()),
+    })?;
+    for (line_index, line) in source.lines().enumerate() {
+        let target = parse_bundle_import(line).map_err(|message| Vs3Error::Bundle {
+            path: virtual_path.to_string(),
+            message: format!("line {}: {message}", line_index + 1),
+        })?;
+        if let Some(target) = target {
+            let resolved = normalize_bundle_path(virtual_path, target).map_err(|message| {
+                Vs3Error::Bundle {
+                    path: virtual_path.to_string(),
+                    message: format!("line {}: {message}", line_index + 1),
+                }
+            })?;
+            collect_bundle_files(root_dir, &resolved, sources, visiting)?;
+        }
+    }
+    visiting.remove(virtual_path);
+    sources.insert(virtual_path.to_string(), source);
+    Ok(())
+}
+
+fn expand_bundle_source(
+    path: &str,
+    sources: &BTreeMap<String, String>,
+    expanded: &mut BTreeSet<String>,
+    visiting: &mut Vec<String>,
+    output: &mut String,
+) -> Result<(), Vs3Error> {
+    if expanded.contains(path) {
+        return Ok(());
+    }
+    if let Some(index) = visiting.iter().position(|item| item == path) {
+        let mut cycle = visiting[index..].to_vec();
+        cycle.push(path.to_string());
+        return Err(Vs3Error::Bundle {
+            path: path.to_string(),
+            message: format!("cyclic import: {}", cycle.join(" -> ")),
+        });
+    }
+    let source = sources.get(path).ok_or_else(|| Vs3Error::Bundle {
+        path: path.to_string(),
+        message: "imported source is missing from the bundle".into(),
+    })?;
+    visiting.push(path.to_string());
+    output.push_str("// @vs3-bundle begin ");
+    output.push_str(path);
+    output.push('\n');
+    for (line_index, line) in source.lines().enumerate() {
+        let target = parse_bundle_import(line).map_err(|message| Vs3Error::Bundle {
+            path: path.to_string(),
+            message: format!("line {}: {message}", line_index + 1),
+        })?;
+        if let Some(target) = target {
+            let resolved =
+                normalize_bundle_path(path, target).map_err(|message| Vs3Error::Bundle {
+                    path: path.to_string(),
+                    message: format!("line {}: {message}", line_index + 1),
+                })?;
+            expand_bundle_source(&resolved, sources, expanded, visiting, output)?;
+        } else if !is_edition_directive(line) {
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+    output.push_str("// @vs3-bundle end ");
+    output.push_str(path);
+    output.push('\n');
+    visiting.pop();
+    expanded.insert(path.to_string());
+    Ok(())
+}
+
+fn parse_bundle_import(line: &str) -> Result<Option<&str>, String> {
+    let trimmed = line.trim();
+    let Some(rest) = trimmed.strip_prefix("import") else {
+        return Ok(None);
+    };
+    if rest
+        .chars()
+        .next()
+        .is_some_and(|character| !character.is_whitespace())
+    {
+        return Ok(None);
+    }
+    let rest = rest.trim();
+    if !rest.starts_with('"') {
+        return Err("imports use `import \"relative/path.vel\"`".into());
+    }
+    let quoted = &rest[1..];
+    let Some(end) = quoted.find('"') else {
+        return Err("unterminated import path".into());
+    };
+    let target = &quoted[..end];
+    if target.is_empty() {
+        return Err("import path cannot be empty".into());
+    }
+    let tail = quoted[end + 1..].trim();
+    let tail = tail.strip_prefix(';').unwrap_or(tail).trim();
+    if !tail.is_empty() && !tail.starts_with("//") {
+        return Err("unexpected text after import path".into());
+    }
+    Ok(Some(target))
+}
+
+fn is_edition_directive(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed
+        .strip_prefix("//")
+        .or_else(|| trimmed.strip_prefix('#'))
+        .is_some_and(|body| body.trim_start().starts_with("@edition"))
+}
+
+fn normalize_bundle_path(current: &str, target: &str) -> Result<String, String> {
+    let target = target.replace('\\', "/");
+    if target.is_empty() || target.starts_with('/') || target.contains(':') {
+        return Err(format!("invalid relative import path `{target}`"));
+    }
+    let mut parts = Vec::new();
+    if let Some((parent, _)) = current.rsplit_once('/') {
+        parts.extend(
+            parent
+                .split('/')
+                .filter(|part| !part.is_empty())
+                .map(str::to_string),
+        );
+    }
+    for part in target.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if parts.pop().is_none() {
+                    return Err(format!("import path escapes the bundle root: `{target}`"));
+                }
+            }
+            value if value.contains('\0') => return Err("import path contains NUL".into()),
+            value => parts.push(value.to_string()),
+        }
+    }
+    if parts.is_empty() {
+        return Err(format!("invalid relative import path `{target}`"));
+    }
+    let normalized = parts.join("/");
+    if normalized.len() > 512 {
+        return Err("import path exceeds 512 bytes".into());
+    }
+    Ok(normalized)
+}
+
 /// VS3 diagnostic with source location.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Vs3Diagnostic {
@@ -249,6 +499,14 @@ pub enum Vs3Error {
     /// Compile / parse failure with structured diagnostics.
     #[error("{}", display_diags(.0))]
     Compile(Vec<Vs3Diagnostic>),
+    /// Source-bundle loading or import-resolution failure.
+    #[error("source bundle `{path}`: {message}")]
+    Bundle {
+        /// Virtual or filesystem-relative source path.
+        path: String,
+        /// Controlled loader or resolver message.
+        message: String,
+    },
     /// Runtime failure.
     #[error("{loc}: {message}{}", display_stack(.stack_trace))]
     Runtime {
@@ -1443,6 +1701,59 @@ function bounded_index(data: map) { return clamp(data.index, 0, 5) }
         assert!(error.to_string().contains("not part of VS3"), "{error}");
     }
 
+    #[test]
+    fn source_bundle_imports_share_functions_and_state() {
+        let module = compile_bundle(
+            "game.vel",
+            [
+                (
+                    "game.vel",
+                    "// @edition 3\nimport \"state.vel\"\nimport \"logic/combat.vel\"\nfunction score() { return hits }\n",
+                ),
+                ("state.vel", "state { hits: int = 0 }\n"),
+                (
+                    "logic/combat.vel",
+                    "import \"../shared.vel\"\nfunction attack(value: int) { hits += bounded(value); return hits }\n",
+                ),
+                (
+                    "shared.vel",
+                    "function bounded(value: int) { return clamp(value, 0, 10) }\n",
+                ),
+            ],
+        )
+        .unwrap();
+        let mut session = module.session().unwrap();
+        assert_eq!(session.call("attack", &[int(4)]).unwrap(), int(4));
+        assert_eq!(session.call("attack", &[int(20)]).unwrap(), int(14));
+        assert_eq!(session.call("score", &[]).unwrap(), int(14));
+    }
+
+    #[test]
+    fn source_bundle_rejects_cycles_and_missing_sources() {
+        let cycle = compile_bundle(
+            "game.vel",
+            [
+                (
+                    "game.vel",
+                    "// @edition 3\nimport \"a.vel\"\nfunction main() { return 1 }\n",
+                ),
+                ("a.vel", "import \"game.vel\"\n"),
+            ],
+        )
+        .unwrap_err();
+        assert!(cycle.to_string().contains("cyclic import"), "{cycle}");
+
+        let missing = compile_bundle(
+            "game.vel",
+            [(
+                "game.vel",
+                "// @edition 3\nimport \"missing.vel\"\nfunction main() { return 1 }\n",
+            )],
+        )
+        .unwrap_err();
+        assert!(missing.to_string().contains("missing"), "{missing}");
+    }
+
     // ── Phase 2: pure logic execution ───────────────────────────────────
 
     #[test]
@@ -1917,7 +2228,7 @@ function for_demo() {
         );
         assert_eq!(
             SUPPORTED_SURFACE.len(),
-            22,
+            23,
             "update this contract with every capability change"
         );
         for required in [
@@ -1928,6 +2239,7 @@ function for_demo() {
             "indexing and mutable list/map values",
             "persistent state through Vs3Session",
             "multi-file packages with module::function calls",
+            "source bundles with import \"relative/path.vel\" directives",
             "for value in collection with break and continue",
             "host capability policies and immediate request budgets",
         ] {

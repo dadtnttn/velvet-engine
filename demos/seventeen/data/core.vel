@@ -1,0 +1,167 @@
+// Shared data constructors, geometry, events and small queries.
+
+function clear_list(items: list) {
+    while len(items) > 0 {
+        list_pop(items)
+    }
+}
+
+function emit(kind: string, pos: vec2, power: float) {
+    list_push(events, {"kind": kind, "pos": pos, "power": power})
+}
+
+function say(who: string, line: string, seconds: float) {
+    speaker = who
+    message = line
+    message_timer = seconds
+}
+
+function room_name() {
+    if room == 1 { return "DESPERTAR" }
+    if room == 2 { return "CONTROL" }
+    if room == 3 { return "ARCHIVO" }
+    if room == 4 { return "PURGA" }
+    return "CAMARA CERO"
+}
+
+function memory_count() {
+    let count = 0
+    for found in memories {
+        if found { count += 1 }
+    }
+    return count
+}
+
+function make_player() {
+    return {
+        "pos": vec2(70, 180),
+        "prev_pos": vec2(70, 180),
+        "velocity": vec2(0, 0),
+        "aim": vec2(1, 0),
+        "hp": 100.0,
+        "max_hp": 100.0,
+        "alive": true,
+        "weapon": "none",
+        "ammo_pistol": 7,
+        "ammo_shotgun": 2,
+        "cooldown": 0.0,
+        "reload_timer": 0.0,
+        "dash_timer": 0.0,
+        "dash_cooldown": 0.0,
+        "dash_dir": vec2(1, 0),
+        "invulnerable": 0.0,
+        "hit_flash": 0.0
+    }
+}
+
+function add_obstacle(x: float, y: float, w: float, h: float, kind: string) {
+    list_push(obstacles, {"x": x, "y": y, "w": w, "h": h, "kind": kind})
+}
+
+function add_hazard(x: float, y: float, w: float, h: float) {
+    list_push(hazards, {"x": x, "y": y, "w": w, "h": h})
+}
+
+function add_pickup(kind: string, pos: vec2, index: int, active: bool) {
+    list_push(pickups, {
+        "kind": kind,
+        "pos": pos,
+        "index": index,
+        "active": active,
+        "pulse": rng_range_float(random, 0.0, TAU)
+    })
+}
+
+function spawn_enemy(kind: string, pos: vec2, hp: float) {
+    let enemy = {
+        "id": next_id,
+        "kind": kind,
+        "pos": pos,
+        "velocity": vec2(0, 0),
+        "aim": vec2(-1, 0),
+        "hp": hp,
+        "max_hp": hp,
+        "alive": true,
+        "cooldown": rng_range_float(random, 0.15, 0.75),
+        "think": rng_range_float(random, 0.0, 1.0),
+        "state": "patrol",
+        "home": pos,
+        "phase": 1,
+        "path_index": 0,
+        "hit_flash": 0.0
+    }
+    next_id += 1
+    list_push(enemies, enemy)
+}
+
+function spawn_bullet(owner: string, pos: vec2, direction: vec2, speed: float, damage: float, life: float) {
+    let dir = direction
+    if length(dir) < 0.001 { dir = vec2(1, 0) }
+    dir = normalize(dir)
+    list_push(bullets, {
+        "owner": owner,
+        "pos": pos,
+        "velocity": dir * speed,
+        "damage": damage,
+        "life": life,
+        "radius": 3.0,
+        "alive": true
+    })
+}
+
+function rotate_direction(direction: vec2, angle: float) {
+    let c = cos(angle)
+    let s = sin(angle)
+    return vec2(direction.x * c - direction.y * s, direction.x * s + direction.y * c)
+}
+
+function point_in_rect(pos: vec2, rect: map, margin: float) {
+    return pos.x >= rect.x - margin && pos.x <= rect.x + rect.w + margin && pos.y >= rect.y - margin && pos.y <= rect.y + rect.h + margin
+}
+
+function position_blocked(pos: vec2, radius: float) {
+    if pos.x < 22 + radius || pos.x > 618 - radius || pos.y < 42 + radius || pos.y > 318 - radius {
+        return true
+    }
+    for obstacle in obstacles {
+        if point_in_rect(pos, obstacle, radius) { return true }
+    }
+    return false
+}
+
+function move_position(pos: vec2, delta: vec2, radius: float) {
+    let result = pos
+    let horizontal = vec2(pos.x + delta.x, pos.y)
+    if !position_blocked(horizontal, radius) { result = horizontal }
+    let vertical = vec2(result.x, result.y + delta.y)
+    if !position_blocked(vertical, radius) { result = vertical }
+    return result
+}
+
+function current_ammo() {
+    if player.weapon == "pistol" { return player.ammo_pistol }
+    if player.weapon == "shotgun" { return player.ammo_shotgun }
+    return -1
+}
+
+function current_magazine() {
+    if player.weapon == "pistol" { return 7 }
+    if player.weapon == "shotgun" { return 2 }
+    return -1
+}
+
+function alive_enemy_count() {
+    let count = 0
+    for enemy in enemies {
+        if enemy.alive { count += 1 }
+    }
+    return count
+}
+
+function record_path(dt: float) {
+    path_timer -= dt
+    if path_timer <= 0.0 {
+        path_timer = 0.12
+        if len(current_path) < 240 { list_push(current_path, player.pos) }
+    }
+}
