@@ -1405,6 +1405,35 @@ function clamp01(x) {
     }
 
     #[test]
+    fn dynamic_collection_values_work_in_typed_math_calls() {
+        let module = compile(
+            r#"// @edition 3
+function move(pos: vec2, delta: vec2) { return pos + delta }
+function from_map(entity: map) {
+    let next = entity.pos + entity.velocity * 0.5
+    return move(next, entity.velocity)
+}
+function bounded_index(data: map) { return clamp(data.index, 0, 5) }
+"#,
+            Some("dynamic-math.vel"),
+        )
+        .unwrap();
+        assert!(module
+            .function_names()
+            .iter()
+            .any(|name| name == "from_map"));
+    }
+
+    #[test]
+    fn integer_min_max_and_clamp_preserve_static_integer_type() {
+        compile(
+            "// @edition 3\nfunction bounded(value: int) { let out: int = clamp(value, 0, 5); return max(1, out) }\n",
+            Some("integer-math.vel"),
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn vs3_rejects_narrative_surface_even_beside_functions() {
         let error = compile(
             "// @edition 3\nfunction f() { return 1 }\nscene intro { \"hello\" }\n",

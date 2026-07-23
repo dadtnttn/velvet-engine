@@ -380,6 +380,11 @@ impl Validator {
                 let left_ty = self.check_expr(left);
                 let right_ty = self.check_expr(right);
                 match op {
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem
+                        if left_ty == Some(Vs3Type::Any) || right_ty == Some(Vs3Type::Any) =>
+                    {
+                        Some(Vs3Type::Any)
+                    }
                     BinOp::Add => {
                         if left_ty == Some(Vs3Type::String) || right_ty == Some(Vs3Type::String) {
                             Some(Vs3Type::String)
@@ -519,7 +524,7 @@ impl Validator {
                     }
                     Some(Vs3Type::Float)
                 } else {
-                    None
+                    Some(Vs3Type::Any)
                 }
             }
             Expr::Index { object, index, .. } => {
@@ -528,7 +533,7 @@ impl Validator {
                 if object_type.is_some_and(|ty| is_vector_or_quat(ty) || is_matrix(ty)) {
                     Some(Vs3Type::Float)
                 } else {
-                    None
+                    Some(Vs3Type::Any)
                 }
             }
         }
@@ -668,7 +673,9 @@ impl Validator {
 }
 
 fn numeric_result(left: Option<Vs3Type>, right: Option<Vs3Type>) -> Option<Vs3Type> {
-    if left == Some(Vs3Type::Float) || right == Some(Vs3Type::Float) {
+    if left == Some(Vs3Type::Any) || right == Some(Vs3Type::Any) {
+        Some(Vs3Type::Any)
+    } else if left == Some(Vs3Type::Float) || right == Some(Vs3Type::Float) {
         Some(Vs3Type::Float)
     } else if left == Some(Vs3Type::Int) && right == Some(Vs3Type::Int) {
         Some(Vs3Type::Int)
@@ -680,6 +687,18 @@ fn numeric_result(left: Option<Vs3Type>, right: Option<Vs3Type>) -> Option<Vs3Ty
 fn native_result_type(native: NativeId, arguments: &[Option<Vs3Type>]) -> Option<Vs3Type> {
     use NativeId as N;
     match native {
+        N::Abs | N::Min | N::Max | N::Clamp => {
+            if arguments
+                .iter()
+                .all(|argument| *argument == Some(Vs3Type::Int))
+            {
+                Some(Vs3Type::Int)
+            } else if arguments.contains(&Some(Vs3Type::Any)) {
+                Some(Vs3Type::Any)
+            } else {
+                Some(Vs3Type::Float)
+            }
+        }
         N::Normalize
         | N::Reflect
         | N::Refract

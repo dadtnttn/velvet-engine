@@ -1,0 +1,30 @@
+[package]
+name = "seventeen"
+description = "17 — complete VS3-first top-down action narrative game"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "17"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+velvet-core = { workspace = true }
+velvet-input = { workspace = true }
+velvet-math = { workspace = true }
+velvet-script-vs3 = { workspace = true }
+velvet-story = { workspace = true }
+winit = { workspace = true }
+softbuffer = { workspace = true }
+image = { workspace = true }
+zip = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+rodio = { workspace = true }
+gilrs = { workspace = true }

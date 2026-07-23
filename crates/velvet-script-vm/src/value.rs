@@ -304,6 +304,33 @@ impl Value {
         }
     }
 
+    /// Clone the items of a list for a host boundary.
+    ///
+    /// Returning owned values prevents a host from holding a `RefCell` borrow
+    /// while it invokes more script code.
+    pub fn list_items(&self) -> Result<Vec<Value>, String> {
+        match self {
+            Self::List(items) => Ok(items.borrow().clone()),
+            _ => Err("list_items on non-list".into()),
+        }
+    }
+
+    /// Clone all entries of a map for a host boundary.
+    pub fn map_entries(&self) -> Result<BTreeMap<String, Value>, String> {
+        match self {
+            Self::Map(entries) => Ok(entries.borrow().clone()),
+            _ => Err("map_entries on non-map".into()),
+        }
+    }
+
+    /// Clone one named map field for a host boundary.
+    pub fn map_get(&self, key: &str) -> Result<Option<Value>, String> {
+        match self {
+            Self::Map(entries) => Ok(entries.borrow().get(key).cloned()),
+            _ => Err("map_get on non-map".into()),
+        }
+    }
+
     /// Concatenate two values as strings.
     pub fn concat_str(a: &Value, b: &Value) -> Value {
         Value::String(Rc::from(format!("{a}{b}")))
@@ -557,5 +584,18 @@ mod tests {
     fn maps_have_deterministic_key_order() {
         let map = Value::map([("z".into(), Value::Int(1)), ("a".into(), Value::Int(2))]);
         assert_eq!(map.to_string(), "{a: 2, z: 1}");
+    }
+
+    #[test]
+    fn host_collection_views_are_owned_and_non_borrowing() {
+        let list = Value::list(vec![Value::Int(1)]);
+        let mut items = list.list_items().unwrap();
+        items.push(Value::Int(2));
+        assert_eq!(list.len(), Some(1));
+
+        let map = Value::map([("score".into(), Value::Int(17))]);
+        assert_eq!(map.map_get("score").unwrap(), Some(Value::Int(17)));
+        let entries = map.map_entries().unwrap();
+        assert_eq!(entries.get("score"), Some(&Value::Int(17)));
     }
 }

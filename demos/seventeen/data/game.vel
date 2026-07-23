@@ -1,0 +1,1063 @@
+// @edition 3
+// "17" — complete deterministic game simulation.
+// The host only supplies input and presents this returned state.
+
+// Shared persistent simulation state for the Seventeen bundle.
+
+state {
+    game_seed: int = 17
+    random: rng = rng_new(17)
+    phase: string = "idle"
+    room: int = 1
+    death_count: int = 0
+    room_deaths: int = 0
+    score: int = 0
+    next_id: int = 1
+    elapsed: float = 0.0
+    room_time: float = 0.0
+    phase_timer: float = 0.0
+    death_timer: float = 0.0
+    path_timer: float = 0.0
+    memory_timer: float = 0.0
+    message_timer: float = 0.0
+    slow_timer: float = 0.0
+    save_revision: int = 0
+    room_clear: bool = false
+    boss_phase_announced: bool = false
+    message: string = ""
+    speaker: string = "RADIO"
+    prompt: string = ""
+    memory_text: string = ""
+    ending_variant: string = ""
+    player: map = {"pos": vec2(80, 180), "aim": vec2(1, 0), "hp": 100.0}
+    enemies: list = []
+    bullets: list = []
+    obstacles: list = []
+    pickups: list = []
+    hazards: list = []
+    events: list = []
+    current_path: list = []
+    echo_path: list = []
+    memories: list = [false, false, false]
+    weapons: map = {"pistol": false, "shotgun": false, "blade": false}
+    endings: map = {"break_cycle": false, "remember_all": false}
+}
+
+// Shared data constructors, geometry, events and small queries.
+
+function clear_list(items: list) {
+    while len(items) > 0 {
+        list_pop(items)
+    }
+}
+
+function emit(kind: string, pos: vec2, power: float) {
+    list_push(events, {"kind": kind, "pos": pos, "power": power})
+}
+
+function say(who: string, line: string, seconds: float) {
+    speaker = who
+    message = line
+    message_timer = seconds
+}
+
+function room_name() {
+    if room == 1 { return "DESPERTAR" }
+    if room == 2 { return "CONTROL" }
+    if room == 3 { return "ARCHIVO" }
+    if room == 4 { return "PURGA" }
+    return "CAMARA CERO"
+}
+
+function memory_count() {
+    let count = 0
+    for found in memories {
+        if found { count += 1 }
+    }
+    return count
+}
+
+function make_player() {
+    return {
+        "pos": vec2(70, 180),
+        "prev_pos": vec2(70, 180),
+        "velocity": vec2(0, 0),
+        "aim": vec2(1, 0),
+        "hp": 100.0,
+        "max_hp": 100.0,
+        "alive": true,
+        "weapon": "none",
+        "ammo_pistol": 7,
+        "ammo_shotgun": 2,
+        "cooldown": 0.0,
+        "reload_timer": 0.0,
+        "dash_timer": 0.0,
+        "dash_cooldown": 0.0,
+        "dash_dir": vec2(1, 0),
+        "invulnerable": 0.0,
+        "hit_flash": 0.0
+    }
+}
+
+function add_obstacle(x: float, y: float, w: float, h: float, kind: string) {
+    list_push(obstacles, {"x": x, "y": y, "w": w, "h": h, "kind": kind})
+}
+
+function add_hazard(x: float, y: float, w: float, h: float) {
+    list_push(hazards, {"x": x, "y": y, "w": w, "h": h})
+}
+
+function add_pickup(kind: string, pos: vec2, index: int, active: bool) {
+    list_push(pickups, {
+        "kind": kind,
+        "pos": pos,
+        "index": index,
+        "active": active,
+        "pulse": rng_range_float(random, 0.0, TAU)
+    })
+}
+
+function spawn_enemy(kind: string, pos: vec2, hp: float) {
+    let enemy = {
+        "id": next_id,
+        "kind": kind,
+        "pos": pos,
+        "velocity": vec2(0, 0),
+        "aim": vec2(-1, 0),
+        "hp": hp,
+        "max_hp": hp,
+        "alive": true,
+        "cooldown": rng_range_float(random, 0.15, 0.75),
+        "think": rng_range_float(random, 0.0, 1.0),
+        "state": "patrol",
+        "home": pos,
+        "phase": 1,
+        "path_index": 0,
+        "hit_flash": 0.0
+    }
+    next_id += 1
+    list_push(enemies, enemy)
+}
+
+function spawn_bullet(owner: string, pos: vec2, direction: vec2, speed: float, damage: float, life: float) {
+    let dir = direction
+    if length(dir) < 0.001 { dir = vec2(1, 0) }
+    dir = normalize(dir)
+    list_push(bullets, {
+        "owner": owner,
+        "pos": pos,
+        "velocity": dir * speed,
+        "damage": damage,
+        "life": life,
+        "radius": 3.0,
+        "alive": true
+    })
+}
+
+function rotate_direction(direction: vec2, angle: float) {
+    let c = cos(angle)
+    let s = sin(angle)
+    return vec2(direction.x * c - direction.y * s, direction.x * s + direction.y * c)
+}
+
+function point_in_rect(pos: vec2, rect: map, margin: float) {
+    return pos.x >= rect.x - margin && pos.x <= rect.x + rect.w + margin && pos.y >= rect.y - margin && pos.y <= rect.y + rect.h + margin
+}
+
+function position_blocked(pos: vec2, radius: float) {
+    if pos.x < 22 + radius || pos.x > 618 - radius || pos.y < 42 + radius || pos.y > 318 - radius {
+        return true
+    }
+    for obstacle in obstacles {
+        if point_in_rect(pos, obstacle, radius) { return true }
+    }
+    return false
+}
+
+function move_position(pos: vec2, delta: vec2, radius: float) {
+    let result = pos
+    let horizontal = vec2(pos.x + delta.x, pos.y)
+    if !position_blocked(horizontal, radius) { result = horizontal }
+    let vertical = vec2(result.x, result.y + delta.y)
+    if !position_blocked(vertical, radius) { result = vertical }
+    return result
+}
+
+function current_ammo() {
+    if player.weapon == "pistol" { return player.ammo_pistol }
+    if player.weapon == "shotgun" { return player.ammo_shotgun }
+    return -1
+}
+
+function current_magazine() {
+    if player.weapon == "pistol" { return 7 }
+    if player.weapon == "shotgun" { return 2 }
+    return -1
+}
+
+function alive_enemy_count() {
+    let count = 0
+    for enemy in enemies {
+        if enemy.alive { count += 1 }
+    }
+    return count
+}
+
+function record_path(dt: float) {
+    path_timer -= dt
+    if path_timer <= 0.0 {
+        path_timer = 0.12
+        if len(current_path) < 240 { list_push(current_path, player.pos) }
+    }
+}
+
+// Room content, encounter setup and room-clear progression.
+
+function setup_room(index: int) {
+    room = index
+    room_time = 0.0
+    room_clear = false
+    boss_phase_announced = false
+    clear_list(enemies)
+    clear_list(bullets)
+    clear_list(obstacles)
+    clear_list(pickups)
+    clear_list(hazards)
+
+    player.pos = vec2(64, 180)
+    player.prev_pos = player.pos
+    player.velocity = vec2(0, 0)
+    player.hp = player.max_hp
+    player.alive = true
+    player.invulnerable = 0.8
+    player.cooldown = 0.0
+    player.reload_timer = 0.0
+    player.dash_timer = 0.0
+    player.dash_cooldown = 0.0
+
+    if player.weapon == "none" && weapons.pistol { player.weapon = "pistol" }
+
+    if room == 1 {
+        add_obstacle(205, 70, 34, 92, "containment")
+        add_obstacle(205, 218, 34, 72, "containment")
+        add_obstacle(420, 95, 92, 28, "terminal")
+        add_obstacle(420, 238, 92, 28, "terminal")
+        if !weapons.pistol {
+            add_pickup("pistol", vec2(320, 180), 0, true)
+        } else {
+            room_clear = true
+        }
+        say("RADIO", "Ya lo intentaste dieciseis veces.", 5.5)
+    } else {
+        if room == 2 {
+            add_obstacle(175, 95, 68, 34, "cover")
+            add_obstacle(320, 225, 72, 34, "cover")
+            add_obstacle(470, 92, 58, 38, "cover")
+            spawn_enemy("vigilante", vec2(300, 105), 70.0)
+            spawn_enemy("vigilante", vec2(500, 250), 70.0)
+            add_pickup("shotgun", vec2(330, 180), 0, false)
+            if death_count < 3 {
+                say("RADIO", "Control registra cada muerte. Intenta no darle otra.", 5.0)
+            } else {
+                say("VIGILANTE", "Otra vez tu. Esta vez apuntaremos donde vas a estar.", 5.0)
+            }
+        } else {
+            if room == 3 {
+                add_obstacle(145, 72, 36, 216, "archive")
+                add_obstacle(285, 72, 36, 90, "archive")
+                add_obstacle(285, 220, 36, 68, "archive")
+                add_obstacle(430, 72, 36, 216, "archive")
+                add_pickup("memory", vec2(225, 105), 0, !memories[0])
+                add_pickup("memory", vec2(365, 255), 1, !memories[1])
+                add_pickup("memory", vec2(535, 120), 2, !memories[2])
+                add_pickup("blade", vec2(535, 255), 0, !weapons.blade)
+                room_clear = true
+                if death_count < 3 {
+                    say("17", "Conozco estos pasillos. Mi cuerpo llega antes que el recuerdo.", 5.0)
+                } else {
+                    say("RADIO", "No leas los archivos. Ya sabes por que.", 5.0)
+                }
+            } else {
+                if room == 4 {
+                    if is_even(death_count) {
+                        add_obstacle(165, 80, 42, 135, "purge")
+                        add_obstacle(305, 205, 80, 40, "purge")
+                        add_obstacle(480, 72, 44, 145, "purge")
+                        add_hazard(245, 75, 38, 72)
+                        add_hazard(410, 240, 46, 54)
+                    } else {
+                        add_obstacle(150, 215, 90, 38, "purge")
+                        add_obstacle(310, 75, 42, 150, "purge")
+                        add_obstacle(465, 220, 88, 36, "purge")
+                        add_hazard(225, 82, 45, 58)
+                        add_hazard(385, 235, 48, 58)
+                    }
+                    spawn_enemy("vigilante", vec2(260, 95), 80.0)
+                    spawn_enemy("vigilante", vec2(500, 270), 80.0)
+                    spawn_enemy("hound", vec2(350, 90), 90.0)
+                    spawn_enemy("hound", vec2(420, 275), 90.0)
+                    if death_count >= 6 {
+                        spawn_enemy("echo", vec2(570, 180), 110.0)
+                    }
+                    say("RADIO", "La purga conserva tus patrones. Cambia o repitelos para siempre.", 5.5)
+                } else {
+                    add_obstacle(250, 70, 36, 90, "zero")
+                    add_obstacle(250, 220, 36, 70, "zero")
+                    add_obstacle(455, 70, 36, 90, "zero")
+                    add_obstacle(455, 220, 36, 70, "zero")
+                    let boss_hp = 520.0 + min(death_count, 10) * 12.0
+                    spawn_enemy("zero", vec2(500, 180), boss_hp)
+                    if memory_count() == 3 {
+                        say("CERO", "Trajiste todos los recuerdos. Entonces ya sabes quien construyo esto.", 6.0)
+                    } else {
+                        say("CERO", "Yo tambien fui diecisiete. Luego aprendi a recordar.", 6.0)
+                    }
+                }
+            }
+        }
+    }
+    save_revision += 1
+    emit("room_enter", player.pos, room * 1.0)
+}
+
+function update_room_state() {
+    let alive = alive_enemy_count()
+    if room == 2 && alive == 0 && !room_clear {
+        room_clear = true
+        slow_timer = 0.32
+        for pickup in pickups {
+            if pickup.kind == "shotgun" { pickup.active = !weapons.shotgun }
+        }
+        say("RADIO", "Control despejado. La puerta recuerda tu pulso.", 4.0)
+        emit("room_clear", player.pos, 1.0)
+    }
+    if room == 4 && alive == 0 && !room_clear {
+        room_clear = true
+        slow_timer = 0.32
+        say("17", "La purga termino. No siento alivio. Solo familiaridad.", 4.5)
+        emit("room_clear", player.pos, 1.2)
+    }
+    if room == 5 && alive == 0 && phase == "playing" {
+        phase = "choice"
+        player.pos = vec2(320, 260)
+        clear_list(bullets)
+        say("CERO", "Elige. Olvidar y salir, o recordar por que empezaste.", 6.0)
+        emit("room_clear", player.pos, 2.0)
+    }
+}
+
+// Player movement, weapons, damage, death and projectiles.
+
+function finish_reload() {
+    if player.weapon == "pistol" { player.ammo_pistol = 7 }
+    if player.weapon == "shotgun" { player.ammo_shotgun = 2 }
+    emit("reload_complete", player.pos, 1.0)
+}
+
+function start_reload() {
+    if player.reload_timer > 0.0 { return }
+    if player.weapon == "pistol" && player.ammo_pistol < 7 {
+        player.reload_timer = 0.75
+        emit("reload", player.pos, 0.7)
+    }
+    if player.weapon == "shotgun" && player.ammo_shotgun < 2 {
+        player.reload_timer = 1.45
+        emit("reload", player.pos, 1.0)
+    }
+}
+
+function hurt_enemy(enemy: map, damage: float, hit_pos: vec2) {
+    if !enemy.alive { return }
+    enemy.hp -= damage
+    enemy.hit_flash = 0.12
+    emit("impact", hit_pos, damage / 50.0)
+    if enemy.hp <= 0.0 {
+        enemy.alive = false
+        score += 100
+        if enemy.kind == "zero" { score += 1700 }
+        emit("enemy_down", enemy.pos, 1.0)
+    }
+}
+
+function blade_attack() {
+    let hit_any = false
+    for enemy in enemies {
+        if enemy.alive {
+            let to_enemy = enemy.pos - player.pos
+            let d = length(to_enemy)
+            if d <= 54.0 && d > 0.001 && dot(normalize(to_enemy), player.aim) > 0.15 {
+                hurt_enemy(enemy, 62.0, enemy.pos)
+                hit_any = true
+            }
+        }
+    }
+    for bullet in bullets {
+        if bullet.alive && bullet.owner == "enemy" && distance(bullet.pos, player.pos) <= 55.0 {
+            bullet.owner = "player"
+            bullet.velocity = reflect(bullet.velocity, player.aim)
+            bullet.damage = 55.0
+            hit_any = true
+            emit("deflect", bullet.pos, 1.0)
+        }
+    }
+    let blade_power = 0.5
+    if hit_any { blade_power = 1.0 }
+    emit("blade", player.pos + player.aim * 24.0, blade_power)
+}
+
+function try_fire() {
+    if player.cooldown > 0.0 || player.reload_timer > 0.0 || player.weapon == "none" { return }
+    if player.weapon == "blade" {
+        player.cooldown = 0.32
+        blade_attack()
+        return
+    }
+    if player.weapon == "pistol" {
+        if player.ammo_pistol <= 0 {
+            emit("empty", player.pos, 0.5)
+            start_reload()
+            player.cooldown = 0.18
+            return
+        }
+        player.ammo_pistol -= 1
+        player.cooldown = 0.19
+        spawn_bullet("player", player.pos + player.aim * 14.0, player.aim, 520.0, 38.0, 1.4)
+        emit("pistol", player.pos, 0.75)
+        if player.ammo_pistol == 0 { start_reload() }
+        return
+    }
+    if player.ammo_shotgun <= 0 {
+        emit("empty", player.pos, 0.6)
+        start_reload()
+        player.cooldown = 0.25
+        return
+    }
+    player.ammo_shotgun -= 1
+    player.cooldown = 0.68
+    for spread in [-0.18, -0.09, 0.0, 0.09, 0.18] {
+        spawn_bullet("player", player.pos + player.aim * 15.0, rotate_direction(player.aim, spread), 470.0, 28.0, 0.55)
+    }
+    emit("shotgun", player.pos, 1.4)
+    if player.ammo_shotgun == 0 { start_reload() }
+}
+
+function begin_death() {
+    if phase == "dead" { return }
+    player.alive = false
+    death_count += 1
+    room_deaths += 1
+    death_timer = 1.35
+    phase = "dead"
+    echo_path = current_path
+    current_path = []
+    save_revision += 1
+    emit("death", player.pos, 2.0)
+    if death_count <= 2 {
+        say("RADIO", concat("Muerte ", str(death_count)), 2.0)
+    } else {
+        if death_count <= 5 {
+            say("VIGILANTE", "Ya conocemos esa ruta.", 2.5)
+        } else {
+            if death_count <= 8 {
+                say("ECO", "Yo tambien recuerdo morir aqui.", 2.5)
+            } else {
+                say("CERO", "El mundo se rompe antes que nosotros.", 2.5)
+            }
+        }
+    }
+}
+
+function hurt_player(damage: float, source: vec2) {
+    if !player.alive || player.invulnerable > 0.0 { return }
+    player.hp -= damage
+    player.hit_flash = 0.16
+    emit("player_hit", source, damage / 50.0)
+    if player.hp <= 0.0 { begin_death() }
+}
+
+function update_player(dt: float, input: map) {
+    player.prev_pos = player.pos
+    player.cooldown = max(0.0, player.cooldown - dt)
+    player.dash_cooldown = max(0.0, player.dash_cooldown - dt)
+    player.invulnerable = max(0.0, player.invulnerable - dt)
+    player.hit_flash = max(0.0, player.hit_flash - dt)
+
+    if player.reload_timer > 0.0 {
+        player.reload_timer -= dt
+        if player.reload_timer <= 0.0 { finish_reload() }
+    }
+
+    if input.weapon == 1 && weapons.pistol { player.weapon = "pistol" }
+    if input.weapon == 2 && weapons.shotgun { player.weapon = "shotgun" }
+    if input.weapon == 3 && weapons.blade { player.weapon = "blade" }
+
+    if length(input.aim) > 0.1 { player.aim = normalize(input.aim) }
+
+    let movement = input.move
+    if length(movement) > 1.0 { movement = normalize(movement) }
+    player.velocity = movement * 168.0
+
+    if input.dash && player.dash_cooldown <= 0.0 {
+        let dash_dir = movement
+        if length(dash_dir) < 0.1 { dash_dir = player.aim }
+        player.dash_dir = normalize(dash_dir)
+        player.dash_timer = 0.13
+        player.dash_cooldown = 0.72
+        player.invulnerable = 0.19
+        emit("dash", player.pos, 1.0)
+    }
+
+    if player.dash_timer > 0.0 {
+        player.dash_timer -= dt
+        player.velocity = player.dash_dir * 620.0
+    }
+
+    player.pos = move_position(player.pos, player.velocity * dt, 9.0)
+
+    if input.reload { start_reload() }
+    if input.fire { try_fire() }
+
+    for hazard in hazards {
+        if point_in_rect(player.pos, hazard, 6.0) {
+            hurt_player(95.0 * dt, player.pos)
+        }
+    }
+}
+
+function bullet_hits_obstacle(pos: vec2) {
+    for obstacle in obstacles {
+        if point_in_rect(pos, obstacle, 0.0) { return true }
+    }
+    return false
+}
+
+function update_bullets(dt: float) {
+    for bullet in bullets {
+        if bullet.alive {
+            bullet.life -= dt
+            bullet.pos += bullet.velocity * dt
+            if bullet.life <= 0.0 || bullet_hits_obstacle(bullet.pos) {
+                bullet.alive = false
+                emit("spark", bullet.pos, 0.35)
+            } else {
+                if bullet.owner == "player" {
+                    for enemy in enemies {
+                        if bullet.alive && enemy.alive && distance(bullet.pos, enemy.pos) <= 12.0 {
+                            hurt_enemy(enemy, bullet.damage, bullet.pos)
+                            bullet.alive = false
+                        }
+                    }
+                } else {
+                    if distance(bullet.pos, player.pos) <= 11.0 {
+                        hurt_player(bullet.damage, bullet.pos)
+                        bullet.alive = false
+                    }
+                }
+            }
+        }
+    }
+    let active = []
+    for bullet in bullets {
+        if bullet.alive { list_push(active, bullet) }
+    }
+    bullets = active
+}
+
+// Enemy perception, patrol, pursuit and boss behavior.
+
+function enemy_shoot(enemy: map, direction: vec2, speed: float, damage: float) {
+    spawn_bullet("enemy", enemy.pos + direction * 12.0, direction, speed, damage, 2.2)
+    emit("enemy_shot", enemy.pos, 0.55)
+}
+
+function can_see_player(enemy: map, max_distance: float) {
+    let delta = player.pos - enemy.pos
+    if length(delta) > max_distance { return false }
+    let sample = 1
+    while sample <= 7 {
+        let point = enemy.pos + delta * (sample / 8.0)
+        for obstacle in obstacles {
+            if point_in_rect(point, obstacle, 1.0) { return false }
+        }
+        sample += 1
+    }
+    return true
+}
+
+function patrol_enemy(enemy: map, dt: float, speed: float) {
+    enemy.think -= dt
+    if enemy.think <= 0.0 {
+        enemy.think = rng_range_float(random, 0.8, 1.8)
+        let angle = rng_range_float(random, 0.0, TAU)
+        enemy.aim = vec2(cos(angle), sin(angle))
+    }
+    enemy.velocity = enemy.aim * speed
+    let next = move_position(enemy.pos, enemy.velocity * dt, 10.0)
+    if distance(next, enemy.pos) < 0.2 { enemy.aim = -enemy.aim }
+    enemy.pos = next
+}
+
+function update_vigilante(enemy: map, dt: float) {
+    let to_player = player.pos - enemy.pos
+    let d = length(to_player)
+    if d < 0.001 { return }
+    let dir = normalize(to_player)
+    let sees = can_see_player(enemy, 330.0)
+    if enemy.state == "patrol" && sees { enemy.state = "pursuit" }
+    if enemy.state == "pursuit" && !sees && d > 355.0 { enemy.state = "patrol" }
+    if enemy.state == "patrol" {
+        patrol_enemy(enemy, dt, 28.0)
+        return
+    }
+    let lead = player.velocity * min(0.28, death_count * 0.025)
+    let aim_target = player.pos + lead
+    enemy.aim = normalize(aim_target - enemy.pos)
+    let strafe_sign = -1.0
+    if is_even(enemy.id + death_count) { strafe_sign = 1.0 }
+    let strafe = vec2(-dir.y, dir.x) * strafe_sign
+    let velocity = strafe * 48.0
+    if d > 175.0 { velocity += dir * 72.0 }
+    if d < 105.0 { velocity -= dir * 90.0 }
+    enemy.velocity = velocity
+    enemy.pos = move_position(enemy.pos, velocity * dt, 10.0)
+    if enemy.cooldown <= 0.0 && d < 330.0 {
+        enemy_shoot(enemy, enemy.aim, 300.0 + death_count * 3.0, 48.0)
+        enemy.cooldown = max(0.58, 1.15 - death_count * 0.035)
+    }
+}
+
+function update_hound(enemy: map, dt: float) {
+    let to_player = player.pos - enemy.pos
+    let d = length(to_player)
+    if d < 0.001 { return }
+    let dir = normalize(to_player)
+    let sees = can_see_player(enemy, 285.0)
+    if enemy.state == "patrol" && sees { enemy.state = "pursuit" }
+    if enemy.state == "pursuit" && !sees && d > 320.0 { enemy.state = "patrol" }
+    if enemy.state == "patrol" {
+        patrol_enemy(enemy, dt, 38.0)
+        return
+    }
+    let flank_sign = -1.0
+    if is_even(enemy.id + death_count) { flank_sign = 1.0 }
+    let flank = vec2(-dir.y, dir.x) * flank_sign
+    let velocity = normalize(dir + flank * min(0.7, d / 240.0)) * (145.0 + min(death_count, 8) * 4.0)
+    enemy.velocity = velocity
+    enemy.aim = dir
+    enemy.pos = move_position(enemy.pos, velocity * dt, 10.0)
+    if d < 24.0 && enemy.cooldown <= 0.0 {
+        hurt_player(72.0, enemy.pos)
+        enemy.cooldown = 0.85
+        emit("hound", enemy.pos, 1.0)
+    }
+}
+
+function update_echo(enemy: map, dt: float) {
+    let target = player.pos
+    if len(echo_path) > 0 {
+        let index = enemy.path_index
+        if index >= len(echo_path) { index = 0 }
+        target = echo_path[index]
+        enemy.path_index = index + 1
+    }
+    let to_target = target - enemy.pos
+    if length(to_target) > 4.0 {
+        enemy.velocity = normalize(to_target) * 138.0
+        enemy.pos = move_position(enemy.pos, enemy.velocity * dt, 10.0)
+    }
+    let to_player = player.pos - enemy.pos
+    if length(to_player) > 0.001 { enemy.aim = normalize(to_player) }
+    if enemy.cooldown <= 0.0 && distance(enemy.pos, player.pos) < 260.0 {
+        enemy_shoot(enemy, enemy.aim, 340.0, 52.0)
+        enemy.cooldown = 0.78
+    }
+}
+
+function update_zero(enemy: map, dt: float) {
+    let to_player = player.pos - enemy.pos
+    let d = length(to_player)
+    if d < 0.001 { return }
+    let dir = normalize(to_player)
+    enemy.aim = dir
+    if enemy.hp <= enemy.max_hp * 0.5 && enemy.phase == 1 {
+        enemy.phase = 2
+        emit("boss_phase", enemy.pos, 2.0)
+        say("CERO", "Tus rutas siguen dentro de mi.", 4.0)
+        if len(echo_path) > 0 { spawn_enemy("echo_clone", enemy.pos + vec2(-35, 24), 75.0) }
+        spawn_enemy("echo_clone", enemy.pos + vec2(35, -24), 75.0)
+    }
+    let side_sign = -1.0
+    if sin(elapsed * 5.0) >= 0.0 { side_sign = 1.0 }
+    let side = vec2(-dir.y, dir.x) * side_sign
+    let boss_speed = 82.0
+    if enemy.phase != 1 { boss_speed = 125.0 }
+    let velocity = side * boss_speed
+    if d > 190.0 { velocity += dir * 75.0 }
+    if d < 105.0 { velocity -= dir * 100.0 }
+    enemy.velocity = velocity
+    enemy.pos = move_position(enemy.pos, velocity * dt, 13.0)
+    if enemy.cooldown <= 0.0 {
+        let spread = 0.12
+        if enemy.phase != 1 { spread = 0.2 }
+        enemy_shoot(enemy, rotate_direction(dir, -spread), 335.0, 55.0)
+        enemy_shoot(enemy, dir, 365.0, 55.0)
+        enemy_shoot(enemy, rotate_direction(dir, spread), 335.0, 55.0)
+        enemy.cooldown = 0.92
+        if enemy.phase != 1 { enemy.cooldown = 0.62 }
+    }
+}
+
+function update_enemies(dt: float) {
+    for enemy in enemies {
+        if enemy.alive {
+            enemy.cooldown = max(0.0, enemy.cooldown - dt)
+            enemy.hit_flash = max(0.0, enemy.hit_flash - dt)
+            if enemy.kind == "vigilante" { update_vigilante(enemy, dt) }
+            if enemy.kind == "hound" { update_hound(enemy, dt) }
+            if enemy.kind == "echo" || enemy.kind == "echo_clone" { update_echo(enemy, dt) }
+            if enemy.kind == "zero" { update_zero(enemy, dt) }
+        }
+    }
+}
+
+// Pickups, prompts, doors and final choice interaction.
+
+function collect_pickup(pickup: map) {
+    pickup.active = false
+    if pickup.kind == "pistol" {
+        weapons.pistol = true
+        player.weapon = "pistol"
+        room_clear = true
+        say("RADIO", "Pistola de pulsos enlazada. Siete disparos. Haz que cuenten.", 4.5)
+    }
+    if pickup.kind == "shotgun" {
+        weapons.shotgun = true
+        player.weapon = "shotgun"
+        say("17", "Escopeta magnetica. Esto tambien lo recuerdo.", 4.0)
+    }
+    if pickup.kind == "blade" {
+        weapons.blade = true
+        player.weapon = "blade"
+        say("17", "La hoja vibra con una version anterior de mi mano.", 4.0)
+    }
+    if pickup.kind == "memory" {
+        memories[pickup.index] = true
+        memory_timer = 12.0
+        if pickup.index == 0 {
+            memory_text = "MEMORIA I — Firmaste el protocolo. Nadie te obligo a entrar."
+        }
+        if pickup.index == 1 {
+            memory_text = "MEMORIA II — Cero no era un prisionero. Era el primer respaldo."
+        }
+        if pickup.index == 2 {
+            memory_text = "MEMORIA III — Construiste el ciclo para recordar a alguien perdido."
+        }
+        say("ARCHIVO", concat("Fragmento recuperado: ", str(pickup.index + 1)), 3.0)
+    }
+    score += 150
+    save_revision += 1
+    emit("pickup", pickup.pos, 1.0)
+}
+
+function update_prompt() {
+    prompt = ""
+    for pickup in pickups {
+        if pickup.active && distance(player.pos, pickup.pos) < 32.0 {
+            if pickup.kind == "memory" { prompt = "E  RECONSTRUIR MEMORIA" }
+            if pickup.kind == "pistol" { prompt = "E  TOMAR PISTOLA DE PULSOS" }
+            if pickup.kind == "shotgun" { prompt = "E  TOMAR ESCOPETA MAGNETICA" }
+            if pickup.kind == "blade" { prompt = "E  TOMAR HOJA DE FASE" }
+        }
+    }
+    if player.pos.x > 565.0 && room < 5 && room_clear {
+        prompt = "E  CRUZAR PUERTA"
+    }
+    if phase == "choice" {
+        if distance(player.pos, vec2(205, 180)) < 60.0 { prompt = "E  DESTRUIR EL NUCLEO" }
+        if distance(player.pos, vec2(435, 180)) < 60.0 {
+            if memory_count() == 3 { prompt = "E  CONECTAR Y RECORDAR" }
+            else { prompt = "REQUIERE 3 MEMORIAS" }
+        }
+    }
+}
+
+function handle_interaction(input: map) {
+    if !input.interact { return }
+    for pickup in pickups {
+        if pickup.active && distance(player.pos, pickup.pos) < 32.0 {
+            collect_pickup(pickup)
+            return
+        }
+    }
+    if room < 5 && room_clear && player.pos.x > 565.0 {
+        score += max(100, 800 - room_deaths * 120)
+        emit("door", player.pos, 1.0)
+        room_deaths = 0
+        setup_room(room + 1)
+        return
+    }
+    if phase == "choice" {
+        if distance(player.pos, vec2(205, 180)) < 60.0 {
+            endings.break_cycle = true
+            ending_variant = "fragmentado"
+            if death_count <= 2 { ending_variant = "lucido" }
+            phase = "ending_a"
+            phase_timer = 0.0
+            save_revision += 1
+            emit("ending", player.pos, 2.0)
+            return
+        }
+        if distance(player.pos, vec2(435, 180)) < 60.0 && memory_count() == 3 {
+            endings.remember_all = true
+            ending_variant = "completo"
+            if death_count > 8 { ending_variant = "inestable" }
+            phase = "ending_b"
+            phase_timer = 0.0
+            save_revision += 1
+            emit("ending", player.pos, 2.0)
+        }
+    }
+}
+
+// New/load/save, phase flow, main tick and presentation snapshot.
+
+function new_game(seed: int) {
+    game_seed = seed
+    random = rng_new(seed)
+    phase = "intro"
+    room = 1
+    death_count = 0
+    room_deaths = 0
+    score = 0
+    elapsed = 0.0
+    next_id = 1
+    phase_timer = 0.0
+    death_timer = 0.0
+    memory_timer = 0.0
+    message_timer = 0.0
+    slow_timer = 0.0
+    save_revision = 1
+    memories = [false, false, false]
+    weapons = {"pistol": false, "shotgun": false, "blade": false}
+    endings = {"break_cycle": false, "remember_all": false}
+    current_path = []
+    echo_path = []
+    events = []
+    player = make_player()
+    clear_list(enemies)
+    clear_list(bullets)
+    clear_list(obstacles)
+    clear_list(pickups)
+    clear_list(hazards)
+    say("RADIO", "Sujeto 17. Pulso estable. Memoria... incompleta.", 5.0)
+    return snapshot()
+}
+
+function load_game(data: map) {
+    game_seed = data.seed
+    random = rng_new(game_seed + data.deaths * 7919)
+    death_count = data.deaths
+    score = data.score
+    memories = [data.memory0, data.memory1, data.memory2]
+    weapons = {"pistol": data.pistol, "shotgun": data.shotgun, "blade": data.blade}
+    endings = {"break_cycle": data.ending_a, "remember_all": data.ending_b}
+    player = make_player()
+    if weapons.blade { player.weapon = "blade" }
+    if weapons.shotgun { player.weapon = "shotgun" }
+    if weapons.pistol && player.weapon == "none" { player.weapon = "pistol" }
+    phase = "playing"
+    current_path = []
+    echo_path = []
+    events = []
+    room_deaths = 0
+    slow_timer = 0.0
+    setup_room(clamp(data.room, 1, 5))
+    say("RADIO", "Continuidad restaurada. Tus recuerdos no tuvieron tanta suerte.", 5.0)
+    return snapshot()
+}
+
+function export_save() {
+    return {
+        "version": 1,
+        "seed": game_seed,
+        "room": room,
+        "deaths": death_count,
+        "score": score,
+        "memory0": memories[0],
+        "memory1": memories[1],
+        "memory2": memories[2],
+        "pistol": weapons.pistol,
+        "shotgun": weapons.shotgun,
+        "blade": weapons.blade,
+        "ending_a": endings.break_cycle,
+        "ending_b": endings.remember_all
+    }
+}
+
+function update_phase_only(dt: float, input: map) {
+    phase_timer += dt
+    if phase == "intro" {
+        if phase_timer > 4.5 || input.interact {
+            phase = "playing"
+            phase_timer = 0.0
+            setup_room(1)
+        }
+        return true
+    }
+    if phase == "dead" {
+        death_timer -= dt
+        if death_timer <= 0.0 {
+            phase = "playing"
+            setup_room(room)
+            if death_count >= 9 {
+                say("RADIO", "La geometria ya no coincide con los planos.", 4.0)
+            } else {
+                say("RADIO", "Reconstruccion completa.", 2.5)
+            }
+            emit("respawn", player.pos, 1.5)
+        }
+        return true
+    }
+    if phase == "ending_a" || phase == "ending_b" {
+        if phase_timer > 8.0 || input.interact {
+            phase = "credits"
+            phase_timer = 0.0
+        }
+        return true
+    }
+    if phase == "credits" {
+        if phase_timer > 11.0 || input.interact {
+            phase = "complete"
+            phase_timer = 0.0
+        }
+        return true
+    }
+    return false
+}
+
+function tick(dt: float, input: map) {
+    events = []
+    let step = clamp(dt, 0.0, 0.05)
+    if slow_timer > 0.0 {
+        slow_timer -= step
+        step *= 0.28
+    }
+    elapsed += step
+    if message_timer > 0.0 { message_timer -= step }
+    if memory_timer > 0.0 {
+        memory_timer -= step
+        if input.interact { memory_timer = 0.0 }
+        return snapshot()
+    }
+    if update_phase_only(step, input) { return snapshot() }
+    if phase != "playing" && phase != "choice" { return snapshot() }
+
+    room_time += step
+    update_player(step, input)
+    if phase == "playing" {
+        update_enemies(step)
+        update_bullets(step)
+        record_path(step)
+        update_room_state()
+    }
+    update_prompt()
+    handle_interaction(input)
+    return snapshot()
+}
+
+function snapshot() {
+    let boss_hp = 0.0
+    let boss_max = 0.0
+    for enemy in enemies {
+        if enemy.kind == "zero" && enemy.alive {
+            boss_hp = enemy.hp
+            boss_max = enemy.max_hp
+        }
+    }
+    let distortion = clamp(death_count / 10.0, 0.0, 1.0)
+    if phase == "dead" { distortion = 1.0 }
+    let visible_message = ""
+    if message_timer > 0.0 { visible_message = message }
+    let visible_memory = ""
+    if memory_timer > 0.0 { visible_memory = memory_text }
+    return {
+        "phase": phase,
+        "room": room,
+        "room_name": room_name(),
+        "room_time": room_time,
+        "deaths": death_count,
+        "score": score,
+        "player": player,
+        "enemies": enemies,
+        "bullets": bullets,
+        "obstacles": obstacles,
+        "pickups": pickups,
+        "hazards": hazards,
+        "events": events,
+        "memories": memories,
+        "weapons": weapons,
+        "endings": endings,
+        "memory_count": memory_count(),
+        "message": visible_message,
+        "speaker": speaker,
+        "prompt": prompt,
+        "memory_text": visible_memory,
+        "memory_timer": memory_timer,
+        "room_clear": room_clear,
+        "door_open": room_clear && room < 5,
+        "ammo": current_ammo(),
+        "magazine": current_magazine(),
+        "weapon": player.weapon,
+        "boss_hp": boss_hp,
+        "boss_max": boss_max,
+        "distortion": distortion,
+        "death_timer": death_timer,
+        "ending_variant": ending_variant,
+        "save_revision": save_revision,
+        "instructions_hint": len(enemies) + len(bullets)
+    }
+}
+
+// Deterministic hooks used by the headless acceptance path.
+
+function verify_force_death() {
+    phase = "playing"
+    begin_death()
+    return snapshot()
+}
+
+function verify_clear_room() {
+    for enemy in enemies { enemy.alive = false }
+    update_room_state()
+    return snapshot()
+}
+
+function verify_enter_room(index: int) {
+    phase = "playing"
+    setup_room(clamp(index, 1, 5))
+    return snapshot()
+}
+
+function verify_collect_all_memories() {
+    memories = [true, true, true]
+    weapons.pistol = true
+    weapons.shotgun = true
+    weapons.blade = true
+    save_revision += 1
+    return snapshot()
+}
+
+function verify_choose(remember: bool) {
+    phase = "choice"
+    if remember && memory_count() == 3 {
+        endings.remember_all = true
+        ending_variant = "completo"
+        phase = "ending_b"
+    } else {
+        endings.break_cycle = true
+        ending_variant = "fragmentado"
+        phase = "ending_a"
+    }
+    save_revision += 1
+    return snapshot()
+}
