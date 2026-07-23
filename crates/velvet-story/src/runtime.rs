@@ -2329,7 +2329,8 @@ scene start {
         assert_eq!(player.variables().get_int("after", 0), 0);
         player.skip_pause();
         assert_eq!(player.variables().get_int("after", 0), 1);
-        assert!(player.is_ended() || matches!(player.wait(), StoryWait::Ended | StoryWait::Ready));
+        assert!(player.is_ended());
+        assert_eq!(*player.wait(), StoryWait::Ended);
     }
 
     #[test]

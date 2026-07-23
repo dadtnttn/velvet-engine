@@ -46,7 +46,7 @@ use story_cmd::{
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
 };
 use style_cmd::{cmd_style_check, cmd_style_dump};
-use vs3_cmd::{cmd_vs3_check, cmd_vs3_run};
+use vs3_cmd::{cmd_vs3_check, cmd_vs3_fmt, cmd_vs3_run};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]
@@ -554,19 +554,30 @@ enum ScriptCommands {
 enum Vs3Commands {
     /// Check a VS3 logic file (`// @edition 3` required).
     Check {
-        /// Path to `.vel` with `@edition 3`.
+        /// Edition-3 `.vel` file or package directory.
         path: PathBuf,
     },
     /// Compile and call a VS3 function.
     Run {
-        /// Path to VS3 source.
+        /// Edition-3 `.vel` file.
         path: PathBuf,
         /// Function name to call.
         #[arg(long)]
         call: String,
-        /// Arguments: `i:N`, `b:true`, `s:text`, or bare int.
+        /// Arguments: scalars, `v2:`/`v3:`/`v4:`, `q:`, `m3:`/`m4:`, or `j:JSON`.
         #[arg(long = "arg")]
         args: Vec<String>,
+        /// Run as a cooperative task so `yield` suspends visibly.
+        #[arg(long)]
+        cooperative: bool,
+        /// Values injected into consecutive yields (same syntax as `--arg`).
+        #[arg(long = "resume")]
+        responses: Vec<String>,
+    },
+    /// Format a VS3 file in place without dropping its edition/comments.
+    Fmt {
+        /// Edition-3 `.vel` file or directory.
+        path: PathBuf,
     },
 }
 
@@ -731,8 +742,18 @@ fn dispatch(cli: Cli) -> Result<()> {
             command: Vs3Commands::Check { path },
         } => cmd_vs3_check(path),
         Commands::Vs3 {
-            command: Vs3Commands::Run { path, call, args },
-        } => cmd_vs3_run(path, call, args),
+            command:
+                Vs3Commands::Run {
+                    path,
+                    call,
+                    args,
+                    cooperative,
+                    responses,
+                },
+        } => cmd_vs3_run(path, call, args, cooperative, responses),
+        Commands::Vs3 {
+            command: Vs3Commands::Fmt { path },
+        } => cmd_vs3_fmt(path),
         Commands::Story { lang, command } => {
             velvet_story_lang::apply_locale_from_env();
             let loc = if let Some(l) = lang {

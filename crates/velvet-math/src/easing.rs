@@ -619,7 +619,7 @@ mod tests {
             );
         }
         assert!((ping_pong(0.0) - 0.0).abs() < 1e-5);
-        assert!((ping_pong(1.0) - 1.0).abs() < 1e-5 || (ping_pong(1.0) - 1.0).abs() < 1e-4);
+        assert!((ping_pong(1.0) - 1.0).abs() < 1e-5);
         assert!((repeat(2.0)).abs() < 1e-5);
         assert!((repeat(-0.25) - 0.75).abs() < 1e-4);
     }
@@ -629,8 +629,8 @@ mod tests {
         for t in [-1.0_f32, 0.0, 0.25, 0.5, 0.75, 1.0, 2.0] {
             let s = smootherstep(t);
             let sm = crate::easing::smoothstep(t);
-            assert!((0.0..=1.0).contains(&s) || s.abs() < 1e-5 || (s - 1.0).abs() < 1e-5);
-            assert!((0.0..=1.0).contains(&sm) || sm.abs() < 1e-5 || (sm - 1.0).abs() < 1e-5);
+            assert!((0.0..=1.0).contains(&s), "smootherstep({t})={s}");
+            assert!((0.0..=1.0).contains(&sm), "smoothstep({t})={sm}");
         }
         // Smootherstep has flatter ends than smoothstep near 0.
         assert!(smootherstep(0.1) < crate::easing::smoothstep(0.1) + 1e-3);

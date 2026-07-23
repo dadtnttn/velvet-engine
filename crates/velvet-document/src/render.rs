@@ -55,6 +55,7 @@ text: "hi"
         let doc2 = parse_document(&out).unwrap();
         assert_eq!(doc.regions.len(), doc2.regions.len());
         assert!(out.contains("text: \"hi\""));
-        assert!(out.contains("// header") || out.contains("header"));
+        assert!(out.contains("// header"));
+        assert!(out.contains("// footer"));
     }
 }

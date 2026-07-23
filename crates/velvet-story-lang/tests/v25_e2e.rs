@@ -53,8 +53,8 @@ fn welcome_product_choice1_exact() {
         .find(|(k, _)| k == "affection")
         .map(|(_, v)| v.as_str())
         .unwrap_or("0");
-    // no add on this branch — 0 or unset treated as 0 path
-    assert!(aff == "0" || aff.is_empty(), "aff={aff}");
+    // No add on this branch: an unset value is normalized to the numeric default.
+    assert_eq!(aff, "0");
 }
 
 #[test]
@@ -99,14 +99,12 @@ fn format_path_check_detects_dirty() {
     // deliberately messy spacing that formatter will change
     write!(f, "scene start\nluna:\nHola\n").unwrap();
     let path = f.path().to_path_buf();
-    let err = format_path(&path, true);
-    // either needs formatting or already pretty — if pretty equal, ok
-    if let Err(e) = err {
-        assert!(
-            e.contains("needs formatting") || e.contains("idempotent"),
-            "{e}"
-        );
-    }
+    let error = format_path(&path, true).expect_err("messy source must fail check-only mode");
+    assert_eq!(error, "needs formatting");
+
+    let formatted = format_path(&path, false).expect("formatter must rewrite the file");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), formatted);
+    assert_eq!(format_path(&path, true).unwrap(), formatted);
 }
 
 #[test]
@@ -125,7 +123,21 @@ fn format_preserves_inline_scene_comment() {
         matches!(s, velvet_story_lang::ast::Stmt::Comment { text, .. } if text.contains("keep"))
     });
     assert!(has_c, "comment lost in AST: {:?}", sc.unwrap().body);
-    let _ = format_source(src);
+    let formatted = format_source(src);
+    assert!(formatted.contains("# keep me"), "formatted={formatted:?}");
+    let reparsed = parse(&formatted, "formatted.vstory");
+    let formatted_scene = reparsed
+        .file
+        .items
+        .iter()
+        .find_map(|item| match item {
+            velvet_story_lang::ast::TopItem::Scene(scene) => Some(scene),
+            _ => None,
+        })
+        .expect("formatted scene");
+    assert!(formatted_scene.body.iter().any(|stmt| {
+        matches!(stmt, velvet_story_lang::ast::Stmt::Comment { text, .. } if text.contains("keep me"))
+    }));
 }
 
 #[test]

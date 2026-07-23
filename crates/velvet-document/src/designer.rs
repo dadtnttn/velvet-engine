@@ -532,7 +532,11 @@ button quit {
         );
 
         assert!(d.undo());
-        assert!(d.source().contains("text: \"Jugar\"") || !d.source().contains("action:"));
+        assert!(d.source().contains("text: \"Jugar\""));
+        assert!(
+            !d.source().contains("action:"),
+            "undo must remove the last action edit"
+        );
         // undo once more toward original text
         let _ = d.undo();
         assert!(d.redo());

@@ -137,8 +137,16 @@ mod tests {
         assert!(rep.ok);
         assert!(rep.occupied >= 1);
         let dump = ascii_window(&world, -4, 0, 8, 6);
-        assert!(dump.contains('X') || dump.contains('#'));
-        assert!(dump.contains('*') || dump.contains('.'));
+        assert!(
+            dump.contains('X'),
+            "bedrock missing from dump:
+{dump}"
+        );
+        assert!(
+            dump.contains('*'),
+            "sand missing from dump:
+{dump}"
+        );
         assert!(material_diversity(&world) >= 1);
     }
 }

@@ -328,7 +328,14 @@ scene main {
         p.set_phase_play();
         let list = p.present_session(&session);
         assert!(!list.is_empty());
-        assert!(list.has_say_geometry() || !p.last_descriptors().is_empty());
+        assert!(
+            list.has_say_geometry(),
+            "paint list lacks dialogue geometry"
+        );
+        assert!(
+            !p.last_descriptors().is_empty(),
+            "presenter lacks GPU descriptors"
+        );
         assert!(
             !p.gpu_quad_descriptors().is_empty(),
             "expected GPU quads, status={}",
@@ -345,7 +352,10 @@ scene main {
         let mut p = ProductPresenter::hybrid();
         p.set_phase_play();
         let s = p.status_line();
-        assert!(s.contains("wgpu") || s.contains("softbuffer"), "{s}");
+        assert!(
+            s.contains("wgpu"),
+            "play phase should advertise active wgpu backend: {s}"
+        );
     }
 
     #[test]

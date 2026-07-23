@@ -212,7 +212,9 @@ scene end { "Done" end }
         let json = dir.path().join("loc.json");
         cmd_loc_extract(vel, json.clone(), "json").unwrap();
         let text = fs::read_to_string(json).unwrap();
-        assert!(text.contains("Hello") || text.contains("World") || text.contains("Yes"));
+        for expected in ["Hello", "World", "Yes", "No", "Done"] {
+            assert!(text.contains(expected), "missing {expected} in {text}");
+        }
     }
 
     #[test]

@@ -284,7 +284,7 @@ mod tests {
         }
         assert_eq!(c.len(), 16);
         let first = c.iter().next().unwrap();
-        assert!(first.message.starts_with("m4") || first.message == "m4");
+        assert_eq!(first.message, "m4");
     }
 
     #[test]

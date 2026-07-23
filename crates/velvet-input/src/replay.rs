@@ -226,7 +226,8 @@ mod tests {
         assert_eq!(rec.len(), 2);
         let mut play = InputPlayback::from_recorder(&rec);
         assert!(play.advance());
-        assert!(play.just_pressed(builtin::CONFIRM) || play.action(builtin::CONFIRM).active);
+        assert!(play.action(builtin::CONFIRM).active);
+        assert!(play.just_pressed(builtin::CONFIRM));
         assert!(play.advance());
         // Second frame still held — just_pressed false
         assert!(play.action(builtin::CONFIRM).active);

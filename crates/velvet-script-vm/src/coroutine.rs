@@ -12,6 +12,7 @@ pub struct Coroutine {
     vm: Vm,
     done: bool,
     last_yield: Value,
+    waiting_for_resume: bool,
     /// Soft instruction budget per `resume` when no explicit `Yield` fires.
     pub slice_budget: u64,
 }
@@ -39,6 +40,7 @@ impl Coroutine {
             stack_trace: vec![],
         })?;
         let mut vm = Vm::new(module, limits);
+        vm.initialize()?;
         for a in args {
             vm.push_value(a.clone())?;
         }
@@ -47,6 +49,7 @@ impl Coroutine {
             vm,
             done: false,
             last_yield: Value::Null,
+            waiting_for_resume: false,
             slice_budget: 10_000,
         })
     }
@@ -83,8 +86,51 @@ impl Coroutine {
         &mut self.vm
     }
 
+    /// Whether execution is stopped at an explicit `yield` expression.
+    pub fn is_waiting_for_resume(&self) -> bool {
+        self.waiting_for_resume
+    }
+
     /// Resume until `Yield`, return, soft budget, error, or cancel.
+    ///
+    /// After an explicit yield this keeps the yielded value as the expression
+    /// result. Use [`Self::resume_with`] when a host needs to inject a response.
     pub fn resume(&mut self) -> Result<CoroutineStatus, VmError> {
+        self.prepare_resume(None)?;
+        self.run_until_stop()
+    }
+
+    /// Resume an explicitly yielded expression with a host-provided value.
+    ///
+    /// The response replaces the yielded payload on the VM stack, so code such
+    /// as `let response = yield(request)` continues with `response`.
+    pub fn resume_with(&mut self, value: Value) -> Result<CoroutineStatus, VmError> {
+        if !self.waiting_for_resume {
+            return Err(VmError::Runtime {
+                message: "coroutine is not waiting at an explicit yield".into(),
+                location: None,
+                stack_trace: vec![],
+            });
+        }
+        self.prepare_resume(Some(value))?;
+        self.run_until_stop()
+    }
+
+    fn prepare_resume(&mut self, replacement: Option<Value>) -> Result<(), VmError> {
+        if self.done {
+            return Ok(());
+        }
+        if self.waiting_for_resume {
+            if let Some(value) = replacement {
+                let _ = self.vm.pop_value();
+                self.vm.push_value(value)?;
+            }
+            self.waiting_for_resume = false;
+        }
+        Ok(())
+    }
+
+    fn run_until_stop(&mut self) -> Result<CoroutineStatus, VmError> {
         if self.done {
             return Ok(CoroutineStatus::Complete(self.last_yield.clone()));
         }
@@ -95,8 +141,9 @@ impl Coroutine {
             }
             match self.vm.step_instruction() {
                 Ok(true) => {
-                    // Op::Yield: top of stack is yield value (left on stack by convention).
+                    // Op::Yield: top of stack is the request payload.
                     self.last_yield = self.vm.peek_value(0).cloned().unwrap_or(Value::Null);
+                    self.waiting_for_resume = true;
                     return Ok(CoroutineStatus::Yielded(self.last_yield.clone()));
                 }
                 Ok(false) => {
@@ -110,6 +157,7 @@ impl Coroutine {
             }
         }
         self.done = true;
+        self.waiting_for_resume = false;
         let value = self.vm.pop_value().unwrap_or(Value::Null);
         self.last_yield = value.clone();
         Ok(CoroutineStatus::Complete(value))
@@ -284,5 +332,75 @@ function add(a, b) {
             other => panic!("{other:?}"),
         }
         assert!(co.is_done());
+    }
+
+    #[test]
+    fn source_yield_can_receive_a_host_response() {
+        let src = r#"
+function request() {
+    let response = yield(["math.double", 21])
+    return response * 2
+}
+"#;
+        let mut co =
+            Coroutine::from_source(src, None, "request", &[], VmLimits::default()).unwrap();
+        match co.resume().unwrap() {
+            CoroutineStatus::Yielded(Value::List(items)) => {
+                let items = items.borrow();
+                assert_eq!(items[0].as_str(), Some("math.double"));
+                assert_eq!(items[1], Value::Int(21));
+            }
+            other => panic!("expected service request, got {other:?}"),
+        }
+        assert!(co.is_waiting_for_resume());
+        match co.resume_with(Value::Int(21)).unwrap() {
+            CoroutineStatus::Complete(value) => assert_eq!(value, Value::Int(42)),
+            other => panic!("expected completion, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn independent_coroutines_keep_independent_resume_values() {
+        let src = r#"
+function ask(seed) {
+    let response = yield(["test.echo", seed])
+    return response
+}
+"#;
+        let mut a = Coroutine::from_source(src, None, "ask", &[Value::Int(1)], VmLimits::default())
+            .unwrap();
+        let mut b = Coroutine::from_source(src, None, "ask", &[Value::Int(2)], VmLimits::default())
+            .unwrap();
+
+        assert!(matches!(a.resume().unwrap(), CoroutineStatus::Yielded(_)));
+        assert!(matches!(b.resume().unwrap(), CoroutineStatus::Yielded(_)));
+
+        assert_eq!(
+            a.resume_with(Value::String("alpha".into())).unwrap(),
+            CoroutineStatus::Complete(Value::String("alpha".into()))
+        );
+        assert_eq!(
+            b.resume_with(Value::String("beta".into())).unwrap(),
+            CoroutineStatus::Complete(Value::String("beta".into()))
+        );
+    }
+
+    #[test]
+    fn coroutine_initializes_state_before_calling_export() {
+        let src = r#"
+state {
+    counter = 40
+}
+function bump() {
+    counter += 2
+    return counter
+}
+"#;
+        let mut coroutine =
+            Coroutine::from_source(src, None, "bump", &[], VmLimits::default()).unwrap();
+        assert_eq!(
+            coroutine.resume().unwrap(),
+            CoroutineStatus::Complete(Value::Int(42))
+        );
     }
 }

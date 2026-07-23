@@ -263,9 +263,11 @@ mod tests {
     #[test]
     fn reveals_over_time() {
         let mut tw = Typewriter::new("Hello", 10.0);
-        let _ = tw.tick(0.15);
-        assert!(!tw.visible_text().is_empty());
-        assert!(tw.visible_text().len() < 5 || tw.is_finished());
+        let events = tw.tick(0.15);
+        assert_eq!(tw.visible_text(), "H");
+        assert_eq!(tw.revealed_count(), 1);
+        assert_eq!(events, vec![TypewriterEvent::Char('H')]);
+        assert!(!tw.is_finished());
         tw.skip();
         assert_eq!(tw.visible_text(), "Hello");
         assert!(tw.is_finished());
@@ -274,10 +276,13 @@ mod tests {
     #[test]
     fn respects_pause_tag() {
         let mut tw = Typewriter::new("A{pause=1.0}B", 100.0);
-        let ev = tw.tick(0.05);
-        // Should reveal A then pause
-        let _ = ev;
-        assert!(tw.visible_text().starts_with('A') || tw.visible_text().is_empty());
+        let events = tw.tick(0.05);
+        assert_eq!(tw.visible_text(), "A");
+        assert_eq!(
+            events,
+            vec![TypewriterEvent::Char('A'), TypewriterEvent::Pause(1.0)]
+        );
+        assert!(!tw.is_finished());
     }
 
     #[test]

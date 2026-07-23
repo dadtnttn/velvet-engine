@@ -64,7 +64,8 @@ fn main() -> anyhow::Result<()> {
         session.world.materials.len(),
         opaque
     );
-    assert!(session.world.occupied_cells() > 0 || opaque > 0);
+    assert!(session.world.occupied_cells() > 0);
+    assert!(opaque > 0, "render buffer must contain visible material");
     println!("ASSERT_OK cellular_full");
     // second pass marker for dual-run verification
     session.particle_burst(1.0, 25.0, "water", 10);
