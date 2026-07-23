@@ -392,14 +392,29 @@ mod tests {
         fs::create_dir_all(&nested).unwrap();
         // If parent chain has no workspace Cargo.toml, returns None.
         // (tempdir root has no Cargo.toml)
-        let found = find_workspace_root(&nested);
-        assert!(found.is_none() || found.unwrap() != nested);
+        assert_eq!(find_workspace_root(&nested), None);
     }
 
     #[test]
-    fn expected_lists_nonempty() {
-        assert!(EXPECTED_CRATES.len() >= 10);
-        assert!(EXPECTED_TEMPLATES.contains(&"visual-novel"));
-        assert!(EXPECTED_CRATES.contains(&"velvet-core"));
+    fn doctor_catalogs_are_unique_and_synced_with_project_templates() {
+        let crates: std::collections::HashSet<_> = EXPECTED_CRATES.iter().copied().collect();
+        assert_eq!(
+            crates.len(),
+            EXPECTED_CRATES.len(),
+            "duplicate expected crate"
+        );
+        for required in [
+            "velvet-core",
+            "velvet-script-compiler",
+            "velvet-script-vm",
+            "velvet-story",
+            "velvet-editor",
+        ] {
+            assert!(
+                crates.contains(required),
+                "doctor omits critical crate {required}"
+            );
+        }
+        assert_eq!(EXPECTED_TEMPLATES, crate::new_cmd::known_templates());
     }
 }

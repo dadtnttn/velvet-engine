@@ -406,12 +406,12 @@ mod tests {
         assert!(html.contains("player.mjs"));
         let browser = fs::read_to_string(&report.browser_js).unwrap();
         assert!(browser.contains("createPlayer"));
-        assert!(browser.contains("pickChoice") || browser.contains("choose"));
+        assert!(
+            browser.contains("pickChoice"),
+            "browser runtime lacks choice bridge"
+        );
         let (out, code) = run_web_player_node(&report.play_js, 0).unwrap();
         assert_eq!(code, 0, "stdout={out}");
-        assert!(
-            out.contains("Ending: Web Lights") || out.contains("ending reached"),
-            "{out}"
-        );
+        assert!(out.contains("Ending: Web Lights"), "{out}");
     }
 }

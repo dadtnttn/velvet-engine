@@ -7,6 +7,7 @@
 
 mod coroutine;
 mod debugger;
+mod math;
 mod present_host;
 mod stdlib;
 mod value;
@@ -24,7 +25,9 @@ pub use present_host::{
 };
 pub use stdlib::{call_native, NativeOutput};
 pub use value::Value;
-pub use velvet_script_bytecode::{lookup_native, NativeId};
+pub use velvet_script_bytecode::{
+    lookup_math_constant, lookup_native, NativeId, NativePurity, NativeSpec, NativeType,
+};
 pub use vm::{run_source, CallFrameView, Vm, VmError, VmLimits, VmOutput};
 
 pub use vs2_host::{DialogueLine, LayerEntry, MenuChoice, StageChar, Vs2Host, Vs2MiniVm};

@@ -312,14 +312,26 @@ mod tests {
         let buf = panel.active_mut().unwrap();
         assert!(buf.dirty);
         assert!(buf.line_count() >= 1);
-        let diags = buf.diagnostic_count();
-        // may or may not have diags depending on parser recovery
-        let _ = diags;
+        assert_eq!(
+            buf.diagnostic_count(),
+            0,
+            "formatted valid source must be clean"
+        );
+        assert_eq!(
+            buf.symbols().len(),
+            2,
+            "character and scene symbols expected"
+        );
         buf.save().unwrap();
         assert!(!buf.dirty);
 
         let a = analyze_file_on_disk(&path).unwrap();
-        assert!(!a.symbols.is_empty() || a.diagnostics.is_empty() || !a.diagnostics.is_empty());
+        assert!(a.diagnostics.is_empty(), "diagnostics={:?}", a.diagnostics);
+        assert_eq!(
+            a.symbols.len(),
+            2,
+            "disk analysis must preserve both symbols"
+        );
     }
 
     #[test]
@@ -340,7 +352,11 @@ mod tests {
         panel.open(dir.path(), Path::new("fmt.vel")).unwrap();
         panel.format_active().unwrap();
         let buf = panel.active_mut().unwrap();
-        assert!(buf.dirty || buf.line_count() >= 1);
+        assert!(
+            buf.dirty,
+            "formatting the compact source must mark the buffer dirty"
+        );
+        assert!(buf.text.contains("function f() {"));
         buf.save().unwrap();
         assert!(!buf.dirty);
         assert!(path.exists());
@@ -354,9 +370,17 @@ mod tests {
         let mut panel = ScriptPanel::new();
         panel.open(dir.path(), Path::new("a.vel")).unwrap();
         panel.open(dir.path(), Path::new("b.vel")).unwrap();
-        assert!(panel.len() >= 2);
-        let n = panel.len();
-        assert!(n >= 2);
+        assert_eq!(panel.len(), 2);
+        assert_eq!(panel.active, Some(1));
+        let paths = panel.list_paths();
+        assert_eq!(
+            paths[0].1.file_name().and_then(|s| s.to_str()),
+            Some("a.vel")
+        );
+        assert_eq!(
+            paths[1].1.file_name().and_then(|s| s.to_str()),
+            Some("b.vel")
+        );
     }
 
     #[test]
@@ -376,6 +400,7 @@ scene main {
         )
         .unwrap();
         let a = analyze_file_on_disk(&path).unwrap();
-        assert!(!a.symbols.is_empty() || a.diagnostics.is_empty() || !a.diagnostics.is_empty());
+        assert!(a.diagnostics.is_empty(), "diagnostics={:?}", a.diagnostics);
+        assert_eq!(a.symbols.len(), 2, "function and scene symbols expected");
     }
 }

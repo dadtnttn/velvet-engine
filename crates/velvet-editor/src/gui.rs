@@ -2800,7 +2800,7 @@ button start {
         .unwrap();
         assert!(status.session.ready);
         let text = fs::read_to_string(&log).unwrap();
-        assert!(text.contains("ready=true") || text.contains("[studio-gui] ready"));
+        assert!(text.contains("ready=true"), "ready log={text}");
         assert!(text.contains("canvas"));
     }
 
@@ -2823,7 +2823,7 @@ button start {
 
         // Drop new button
         let id = session.drop_widget("button", 30.0, 40.0).unwrap();
-        assert!(id.contains("button") || id.starts_with("button."));
+        assert!(id.starts_with("button."), "generated id={id}");
 
         // Drag original; advanced must survive
         session.select_region("button.start").unwrap();

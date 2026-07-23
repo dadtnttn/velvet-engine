@@ -241,7 +241,8 @@ mod tests {
         assert!(f0 > 0.0);
         d.tick(0.5);
         let f1 = d.cooldown_fraction();
-        assert!(f1 < f0 || f1 <= 0.5);
+        assert!(f1 < f0, "cooldown fraction did not decrease: {f0} -> {f1}");
+        assert!(f1 <= 0.5 + f32::EPSILON);
         d.tick(1.0);
         assert!(d.can_dash());
         assert_eq!(d.cooldown_fraction(), 0.0);
@@ -256,8 +257,11 @@ mod tests {
             iframe_secs: 0.0,
             normalize_dir: false,
         });
-        // If implementation still moves along dir, just ensure dash starts.
-        assert!(d.try_dash(Vec2::new(2.0, 0.0)) || d.try_dash(Vec2::X));
-        assert!(d.is_dashing() || d.try_dash(Vec2::X));
+        assert!(d.try_dash(Vec2::new(2.0, 0.0)));
+        assert!(d.is_dashing());
+        assert_eq!(d.direction, Vec2::new(2.0, 0.0));
+        let delta = d.tick(0.1);
+        assert!((delta.x - 40.0).abs() < 1e-4, "delta={delta:?}");
+        assert!(delta.y.abs() < 1e-6);
     }
 }

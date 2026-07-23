@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 use serde::{Deserialize, Serialize};
 
 /// Bytecode format version carried in module metadata.
-pub const BYTECODE_VERSION: u16 = 1;
+pub const BYTECODE_VERSION: u16 = 2;
 
 /// Native host function identifiers shared by compiler and VM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -64,6 +64,250 @@ pub enum NativeId {
     PresentUiFlagGet = 21,
     /// `hide(id)` — hide / remove shown sprite.
     PresentHide = 22,
+    /// `type_of(value) -> string`.
+    TypeOf = 23,
+    /// `list_push(list, value) -> list`.
+    ListPush = 24,
+    /// `list_pop(list) -> value|null`.
+    ListPop = 25,
+    /// `map_has(map, key) -> bool`.
+    MapHas = 26,
+    /// `map_keys(map) -> list<string>`.
+    MapKeys = 27,
+    /// `assert(condition [, message])`.
+    Assert = 28,
+    /// `fail(message)` raises a runtime error.
+    Fail = 29,
+    /// `tan(x)`.
+    Tan = 30,
+    /// `asin(x)`.
+    Asin = 31,
+    /// `acos(x)`.
+    Acos = 32,
+    /// `atan(x)`.
+    Atan = 33,
+    /// `atan2(y, x)`.
+    Atan2 = 34,
+    /// `exp(x)`.
+    Exp = 35,
+    /// `ln(x)`.
+    Ln = 36,
+    /// `log2(x)`.
+    Log2 = 37,
+    /// `log10(x)`.
+    Log10 = 38,
+    /// `cbrt(x)`.
+    Cbrt = 39,
+    /// `round(x)`.
+    Round = 40,
+    /// `trunc(x)`.
+    Trunc = 41,
+    /// `fract(x)`.
+    Fract = 42,
+    /// `sign(x)`.
+    Sign = 43,
+    /// `hypot(x, y)`.
+    Hypot = 44,
+    /// `degrees(radians)`.
+    Degrees = 45,
+    /// `radians(degrees)`.
+    Radians = 46,
+    /// `inverse_lerp(a, b, value)`.
+    InverseLerp = 47,
+    /// `remap(value, in_min, in_max, out_min, out_max)`.
+    Remap = 48,
+    /// `smoothstep(edge0, edge1, value)`.
+    Smoothstep = 49,
+    /// `is_finite(x)`.
+    IsFinite = 50,
+    /// `is_nan(x)`.
+    IsNan = 51,
+    /// `is_infinite(x)`.
+    IsInfinite = 52,
+    /// `approx_eq(a, b [, epsilon])`.
+    ApproxEq = 53,
+    /// `gcd(a, b)`.
+    Gcd = 54,
+    /// `lcm(a, b)`.
+    Lcm = 55,
+    /// `vec2(x [, y])`.
+    Vec2 = 56,
+    /// `vec3(x [, y [, z]])`.
+    Vec3 = 57,
+    /// `vec4(x [, y [, z [, w]]])`.
+    Vec4 = 58,
+    /// `dot(a, b)`.
+    Dot = 59,
+    /// `cross(a, b)`.
+    Cross = 60,
+    /// `length(v)`.
+    Length = 61,
+    /// `normalize(v)`.
+    Normalize = 62,
+    /// `distance(a, b)`.
+    Distance = 63,
+    /// `angle_between(a, b)`.
+    AngleBetween = 64,
+    /// `reflect(v, normal)`.
+    Reflect = 65,
+    /// `project(v, onto)`.
+    Project = 66,
+    /// `vec_lerp(a, b, t)`.
+    VecLerp = 67,
+    /// `mat3_identity()`.
+    Mat3Identity = 68,
+    /// `mat4_identity()`.
+    Mat4Identity = 69,
+    /// `mat3(...)` from nine column-major numbers.
+    Mat3 = 70,
+    /// `mat4(...)` from sixteen column-major numbers.
+    Mat4 = 71,
+    /// `mat_mul(a, b)`.
+    MatMul = 72,
+    /// `mat_transpose(m)`.
+    MatTranspose = 73,
+    /// `mat_determinant(m)`.
+    MatDeterminant = 74,
+    /// `mat_inverse(m)`.
+    MatInverse = 75,
+    /// `transform_point(m, point)`.
+    TransformPoint = 76,
+    /// `transform_vector(m, vector)`.
+    TransformVector = 77,
+    /// `quat(x, y, z, w)`.
+    Quat = 78,
+    /// `quat_identity()`.
+    QuatIdentity = 79,
+    /// `quat_axis_angle(axis, radians)`.
+    QuatAxisAngle = 80,
+    /// `quat_mul(a, b)`.
+    QuatMul = 81,
+    /// `quat_rotate(q, vector)`.
+    QuatRotate = 82,
+    /// `quat_normalize(q)`.
+    QuatNormalize = 83,
+    /// `quat_inverse(q)`.
+    QuatInverse = 84,
+    /// `quat_slerp(a, b, t)`.
+    QuatSlerp = 85,
+    /// `rng_new(seed)`.
+    RngNew = 86,
+    /// `rng_next_float(rng)`.
+    RngNextFloat = 87,
+    /// `rng_range_int(rng, min, max)`.
+    RngRangeInt = 88,
+    /// `rng_range_float(rng, min, max)`.
+    RngRangeFloat = 89,
+    /// `rng_bool(rng, probability)`.
+    RngBool = 90,
+    /// `shuffle(rng, list)`.
+    Shuffle = 91,
+    /// `choose(rng, list)`.
+    Choose = 92,
+    /// `weighted_choose(rng, weights)`.
+    WeightedChoose = 93,
+    /// `noise1(x, seed)`.
+    Noise1 = 94,
+    /// `noise2(x, y, seed)`.
+    Noise2 = 95,
+    /// `fbm2(x, y, seed, octaves [, lacunarity [, gain]])`.
+    Fbm2 = 96,
+    /// `sum(values)`.
+    Sum = 97,
+    /// `product(values)`.
+    Product = 98,
+    /// `mean(values)`.
+    Mean = 99,
+    /// `median(values)`.
+    Median = 100,
+    /// `variance(values [, sample])`.
+    Variance = 101,
+    /// `stddev(values [, sample])`.
+    Stddev = 102,
+    /// `quantile(values, q)`.
+    Quantile = 103,
+    /// `covariance(a, b [, sample])`.
+    Covariance = 104,
+    /// `correlation(a, b)`.
+    Correlation = 105,
+    /// `moving_average(values, window)`.
+    MovingAverage = 106,
+    /// `poly_eval(coefficients, x)`.
+    PolyEval = 107,
+    /// `integrate_trapezoid(samples, step)`.
+    IntegrateTrapezoid = 108,
+    /// `integrate_simpson(samples, step)`.
+    IntegrateSimpson = 109,
+    /// `poly_root_bisection(coefficients, lo, hi [, iterations [, tolerance]])`.
+    PolyRootBisection = 110,
+    /// `quadratic_bezier(p0, p1, p2, t)`.
+    QuadraticBezier = 111,
+    /// `cubic_bezier(p0, p1, p2, p3, t)`.
+    CubicBezier = 112,
+    /// `catmull_rom(p0, p1, p2, p3, t)`.
+    CatmullRom = 113,
+    /// `hermite(p0, tangent0, p1, tangent1, t)`.
+    Hermite = 114,
+    /// `closest_point_segment(point, a, b)`.
+    ClosestPointSegment = 115,
+    /// `segment_intersection2(a0, a1, b0, b1)`.
+    SegmentIntersection2 = 116,
+    /// `refract(v, normal, eta)`.
+    Refract = 117,
+    /// `mat3_translation(vec2)`.
+    Mat3Translation = 118,
+    /// `mat3_scale(vec2)`.
+    Mat3Scale = 119,
+    /// `mat3_rotation(radians)`.
+    Mat3Rotation = 120,
+    /// `mat4_translation(vec3)`.
+    Mat4Translation = 121,
+    /// `mat4_scale(vec3)`.
+    Mat4Scale = 122,
+    /// `mat4_rotation_x(radians)`.
+    Mat4RotationX = 123,
+    /// `mat4_rotation_y(radians)`.
+    Mat4RotationY = 124,
+    /// `mat4_rotation_z(radians)`.
+    Mat4RotationZ = 125,
+    /// `mat4_orthographic(left, right, bottom, top, near, far)`.
+    Mat4Orthographic = 126,
+    /// `mat4_perspective(fov_y, aspect, near, far)`.
+    Mat4Perspective = 127,
+    /// `mat4_look_at(eye, target, up)`.
+    Mat4LookAt = 128,
+    /// `rng_gaussian(rng, mean, stddev)`.
+    RngGaussian = 129,
+    /// `rng_exponential(rng, rate)`.
+    RngExponential = 130,
+    /// `perlin2(x, y, seed)`.
+    Perlin2 = 131,
+    /// `turbulence2(x, y, seed, octaves [, lacunarity [, gain]])`.
+    Turbulence2 = 132,
+    /// `domain_warp2(x, y, seed, octaves, strength)`.
+    DomainWarp2 = 133,
+    /// `mode(values)`.
+    Mode = 134,
+    /// `histogram(values, bins)`.
+    Histogram = 135,
+    /// `ema(values, alpha)`.
+    Ema = 136,
+    /// `is_even(value)`.
+    IsEven = 137,
+    /// `is_odd(value)`.
+    IsOdd = 138,
+    /// `pow_int(base, exponent)`.
+    PowInt = 139,
+    /// `vec_min(a, b)`.
+    VecMin = 140,
+    /// `vec_max(a, b)`.
+    VecMax = 141,
+    /// `clamp_length(vector, max)`.
+    ClampLength = 142,
+    /// `quat_euler(x, y, z)`.
+    QuatEuler = 143,
+    /// `ray_plane_intersection(origin, direction, plane_point, plane_normal)`.
+    RayPlaneIntersection = 144,
 }
 
 impl NativeId {
@@ -93,6 +337,128 @@ impl NativeId {
             20 => Self::PresentUiFlag,
             21 => Self::PresentUiFlagGet,
             22 => Self::PresentHide,
+            23 => Self::TypeOf,
+            24 => Self::ListPush,
+            25 => Self::ListPop,
+            26 => Self::MapHas,
+            27 => Self::MapKeys,
+            28 => Self::Assert,
+            29 => Self::Fail,
+            30 => Self::Tan,
+            31 => Self::Asin,
+            32 => Self::Acos,
+            33 => Self::Atan,
+            34 => Self::Atan2,
+            35 => Self::Exp,
+            36 => Self::Ln,
+            37 => Self::Log2,
+            38 => Self::Log10,
+            39 => Self::Cbrt,
+            40 => Self::Round,
+            41 => Self::Trunc,
+            42 => Self::Fract,
+            43 => Self::Sign,
+            44 => Self::Hypot,
+            45 => Self::Degrees,
+            46 => Self::Radians,
+            47 => Self::InverseLerp,
+            48 => Self::Remap,
+            49 => Self::Smoothstep,
+            50 => Self::IsFinite,
+            51 => Self::IsNan,
+            52 => Self::IsInfinite,
+            53 => Self::ApproxEq,
+            54 => Self::Gcd,
+            55 => Self::Lcm,
+            56 => Self::Vec2,
+            57 => Self::Vec3,
+            58 => Self::Vec4,
+            59 => Self::Dot,
+            60 => Self::Cross,
+            61 => Self::Length,
+            62 => Self::Normalize,
+            63 => Self::Distance,
+            64 => Self::AngleBetween,
+            65 => Self::Reflect,
+            66 => Self::Project,
+            67 => Self::VecLerp,
+            68 => Self::Mat3Identity,
+            69 => Self::Mat4Identity,
+            70 => Self::Mat3,
+            71 => Self::Mat4,
+            72 => Self::MatMul,
+            73 => Self::MatTranspose,
+            74 => Self::MatDeterminant,
+            75 => Self::MatInverse,
+            76 => Self::TransformPoint,
+            77 => Self::TransformVector,
+            78 => Self::Quat,
+            79 => Self::QuatIdentity,
+            80 => Self::QuatAxisAngle,
+            81 => Self::QuatMul,
+            82 => Self::QuatRotate,
+            83 => Self::QuatNormalize,
+            84 => Self::QuatInverse,
+            85 => Self::QuatSlerp,
+            86 => Self::RngNew,
+            87 => Self::RngNextFloat,
+            88 => Self::RngRangeInt,
+            89 => Self::RngRangeFloat,
+            90 => Self::RngBool,
+            91 => Self::Shuffle,
+            92 => Self::Choose,
+            93 => Self::WeightedChoose,
+            94 => Self::Noise1,
+            95 => Self::Noise2,
+            96 => Self::Fbm2,
+            97 => Self::Sum,
+            98 => Self::Product,
+            99 => Self::Mean,
+            100 => Self::Median,
+            101 => Self::Variance,
+            102 => Self::Stddev,
+            103 => Self::Quantile,
+            104 => Self::Covariance,
+            105 => Self::Correlation,
+            106 => Self::MovingAverage,
+            107 => Self::PolyEval,
+            108 => Self::IntegrateTrapezoid,
+            109 => Self::IntegrateSimpson,
+            110 => Self::PolyRootBisection,
+            111 => Self::QuadraticBezier,
+            112 => Self::CubicBezier,
+            113 => Self::CatmullRom,
+            114 => Self::Hermite,
+            115 => Self::ClosestPointSegment,
+            116 => Self::SegmentIntersection2,
+            117 => Self::Refract,
+            118 => Self::Mat3Translation,
+            119 => Self::Mat3Scale,
+            120 => Self::Mat3Rotation,
+            121 => Self::Mat4Translation,
+            122 => Self::Mat4Scale,
+            123 => Self::Mat4RotationX,
+            124 => Self::Mat4RotationY,
+            125 => Self::Mat4RotationZ,
+            126 => Self::Mat4Orthographic,
+            127 => Self::Mat4Perspective,
+            128 => Self::Mat4LookAt,
+            129 => Self::RngGaussian,
+            130 => Self::RngExponential,
+            131 => Self::Perlin2,
+            132 => Self::Turbulence2,
+            133 => Self::DomainWarp2,
+            134 => Self::Mode,
+            135 => Self::Histogram,
+            136 => Self::Ema,
+            137 => Self::IsEven,
+            138 => Self::IsOdd,
+            139 => Self::PowInt,
+            140 => Self::VecMin,
+            141 => Self::VecMax,
+            142 => Self::ClampLength,
+            143 => Self::QuatEuler,
+            144 => Self::RayPlaneIntersection,
             _ => return None,
         })
     }
@@ -129,6 +495,128 @@ impl NativeId {
             Self::PresentUiFlag => "ui_flag",
             Self::PresentUiFlagGet => "ui_flag_get",
             Self::PresentHide => "present_hide",
+            Self::TypeOf => "type_of",
+            Self::ListPush => "list_push",
+            Self::ListPop => "list_pop",
+            Self::MapHas => "map_has",
+            Self::MapKeys => "map_keys",
+            Self::Assert => "assert",
+            Self::Fail => "fail",
+            Self::Tan => "tan",
+            Self::Asin => "asin",
+            Self::Acos => "acos",
+            Self::Atan => "atan",
+            Self::Atan2 => "atan2",
+            Self::Exp => "exp",
+            Self::Ln => "ln",
+            Self::Log2 => "log2",
+            Self::Log10 => "log10",
+            Self::Cbrt => "cbrt",
+            Self::Round => "round",
+            Self::Trunc => "trunc",
+            Self::Fract => "fract",
+            Self::Sign => "sign",
+            Self::Hypot => "hypot",
+            Self::Degrees => "degrees",
+            Self::Radians => "radians",
+            Self::InverseLerp => "inverse_lerp",
+            Self::Remap => "remap",
+            Self::Smoothstep => "smoothstep",
+            Self::IsFinite => "is_finite",
+            Self::IsNan => "is_nan",
+            Self::IsInfinite => "is_infinite",
+            Self::ApproxEq => "approx_eq",
+            Self::Gcd => "gcd",
+            Self::Lcm => "lcm",
+            Self::Vec2 => "vec2",
+            Self::Vec3 => "vec3",
+            Self::Vec4 => "vec4",
+            Self::Dot => "dot",
+            Self::Cross => "cross",
+            Self::Length => "length",
+            Self::Normalize => "normalize",
+            Self::Distance => "distance",
+            Self::AngleBetween => "angle_between",
+            Self::Reflect => "reflect",
+            Self::Project => "project",
+            Self::VecLerp => "vec_lerp",
+            Self::Mat3Identity => "mat3_identity",
+            Self::Mat4Identity => "mat4_identity",
+            Self::Mat3 => "mat3",
+            Self::Mat4 => "mat4",
+            Self::MatMul => "mat_mul",
+            Self::MatTranspose => "mat_transpose",
+            Self::MatDeterminant => "mat_determinant",
+            Self::MatInverse => "mat_inverse",
+            Self::TransformPoint => "transform_point",
+            Self::TransformVector => "transform_vector",
+            Self::Quat => "quat",
+            Self::QuatIdentity => "quat_identity",
+            Self::QuatAxisAngle => "quat_axis_angle",
+            Self::QuatMul => "quat_mul",
+            Self::QuatRotate => "quat_rotate",
+            Self::QuatNormalize => "quat_normalize",
+            Self::QuatInverse => "quat_inverse",
+            Self::QuatSlerp => "quat_slerp",
+            Self::RngNew => "rng_new",
+            Self::RngNextFloat => "rng_next_float",
+            Self::RngRangeInt => "rng_range_int",
+            Self::RngRangeFloat => "rng_range_float",
+            Self::RngBool => "rng_bool",
+            Self::Shuffle => "shuffle",
+            Self::Choose => "choose",
+            Self::WeightedChoose => "weighted_choose",
+            Self::Noise1 => "noise1",
+            Self::Noise2 => "noise2",
+            Self::Fbm2 => "fbm2",
+            Self::Sum => "sum",
+            Self::Product => "product",
+            Self::Mean => "mean",
+            Self::Median => "median",
+            Self::Variance => "variance",
+            Self::Stddev => "stddev",
+            Self::Quantile => "quantile",
+            Self::Covariance => "covariance",
+            Self::Correlation => "correlation",
+            Self::MovingAverage => "moving_average",
+            Self::PolyEval => "poly_eval",
+            Self::IntegrateTrapezoid => "integrate_trapezoid",
+            Self::IntegrateSimpson => "integrate_simpson",
+            Self::PolyRootBisection => "poly_root_bisection",
+            Self::QuadraticBezier => "quadratic_bezier",
+            Self::CubicBezier => "cubic_bezier",
+            Self::CatmullRom => "catmull_rom",
+            Self::Hermite => "hermite",
+            Self::ClosestPointSegment => "closest_point_segment",
+            Self::SegmentIntersection2 => "segment_intersection2",
+            Self::Refract => "refract",
+            Self::Mat3Translation => "mat3_translation",
+            Self::Mat3Scale => "mat3_scale",
+            Self::Mat3Rotation => "mat3_rotation",
+            Self::Mat4Translation => "mat4_translation",
+            Self::Mat4Scale => "mat4_scale",
+            Self::Mat4RotationX => "mat4_rotation_x",
+            Self::Mat4RotationY => "mat4_rotation_y",
+            Self::Mat4RotationZ => "mat4_rotation_z",
+            Self::Mat4Orthographic => "mat4_orthographic",
+            Self::Mat4Perspective => "mat4_perspective",
+            Self::Mat4LookAt => "mat4_look_at",
+            Self::RngGaussian => "rng_gaussian",
+            Self::RngExponential => "rng_exponential",
+            Self::Perlin2 => "perlin2",
+            Self::Turbulence2 => "turbulence2",
+            Self::DomainWarp2 => "domain_warp2",
+            Self::Mode => "mode",
+            Self::Histogram => "histogram",
+            Self::Ema => "ema",
+            Self::IsEven => "is_even",
+            Self::IsOdd => "is_odd",
+            Self::PowInt => "pow_int",
+            Self::VecMin => "vec_min",
+            Self::VecMax => "vec_max",
+            Self::ClampLength => "clamp_length",
+            Self::QuatEuler => "quat_euler",
+            Self::RayPlaneIntersection => "ray_plane_intersection",
         }
     }
 
@@ -158,6 +646,128 @@ impl NativeId {
             Self::PresentUiFlag,
             Self::PresentUiFlagGet,
             Self::PresentHide,
+            Self::TypeOf,
+            Self::ListPush,
+            Self::ListPop,
+            Self::MapHas,
+            Self::MapKeys,
+            Self::Assert,
+            Self::Fail,
+            Self::Tan,
+            Self::Asin,
+            Self::Acos,
+            Self::Atan,
+            Self::Atan2,
+            Self::Exp,
+            Self::Ln,
+            Self::Log2,
+            Self::Log10,
+            Self::Cbrt,
+            Self::Round,
+            Self::Trunc,
+            Self::Fract,
+            Self::Sign,
+            Self::Hypot,
+            Self::Degrees,
+            Self::Radians,
+            Self::InverseLerp,
+            Self::Remap,
+            Self::Smoothstep,
+            Self::IsFinite,
+            Self::IsNan,
+            Self::IsInfinite,
+            Self::ApproxEq,
+            Self::Gcd,
+            Self::Lcm,
+            Self::Vec2,
+            Self::Vec3,
+            Self::Vec4,
+            Self::Dot,
+            Self::Cross,
+            Self::Length,
+            Self::Normalize,
+            Self::Distance,
+            Self::AngleBetween,
+            Self::Reflect,
+            Self::Project,
+            Self::VecLerp,
+            Self::Mat3Identity,
+            Self::Mat4Identity,
+            Self::Mat3,
+            Self::Mat4,
+            Self::MatMul,
+            Self::MatTranspose,
+            Self::MatDeterminant,
+            Self::MatInverse,
+            Self::TransformPoint,
+            Self::TransformVector,
+            Self::Quat,
+            Self::QuatIdentity,
+            Self::QuatAxisAngle,
+            Self::QuatMul,
+            Self::QuatRotate,
+            Self::QuatNormalize,
+            Self::QuatInverse,
+            Self::QuatSlerp,
+            Self::RngNew,
+            Self::RngNextFloat,
+            Self::RngRangeInt,
+            Self::RngRangeFloat,
+            Self::RngBool,
+            Self::Shuffle,
+            Self::Choose,
+            Self::WeightedChoose,
+            Self::Noise1,
+            Self::Noise2,
+            Self::Fbm2,
+            Self::Sum,
+            Self::Product,
+            Self::Mean,
+            Self::Median,
+            Self::Variance,
+            Self::Stddev,
+            Self::Quantile,
+            Self::Covariance,
+            Self::Correlation,
+            Self::MovingAverage,
+            Self::PolyEval,
+            Self::IntegrateTrapezoid,
+            Self::IntegrateSimpson,
+            Self::PolyRootBisection,
+            Self::QuadraticBezier,
+            Self::CubicBezier,
+            Self::CatmullRom,
+            Self::Hermite,
+            Self::ClosestPointSegment,
+            Self::SegmentIntersection2,
+            Self::Refract,
+            Self::Mat3Translation,
+            Self::Mat3Scale,
+            Self::Mat3Rotation,
+            Self::Mat4Translation,
+            Self::Mat4Scale,
+            Self::Mat4RotationX,
+            Self::Mat4RotationY,
+            Self::Mat4RotationZ,
+            Self::Mat4Orthographic,
+            Self::Mat4Perspective,
+            Self::Mat4LookAt,
+            Self::RngGaussian,
+            Self::RngExponential,
+            Self::Perlin2,
+            Self::Turbulence2,
+            Self::DomainWarp2,
+            Self::Mode,
+            Self::Histogram,
+            Self::Ema,
+            Self::IsEven,
+            Self::IsOdd,
+            Self::PowInt,
+            Self::VecMin,
+            Self::VecMax,
+            Self::ClampLength,
+            Self::QuatEuler,
+            Self::RayPlaneIntersection,
         ]
     }
 }
@@ -188,7 +798,524 @@ pub fn lookup_native(name: &str) -> Option<NativeId> {
         "ui_flag" => Some(NativeId::PresentUiFlag),
         "ui_flag_get" => Some(NativeId::PresentUiFlagGet),
         "present_hide" | "hide_sprite" => Some(NativeId::PresentHide),
+        "type_of" => Some(NativeId::TypeOf),
+        "list_push" => Some(NativeId::ListPush),
+        "list_pop" => Some(NativeId::ListPop),
+        "map_has" => Some(NativeId::MapHas),
+        "map_keys" => Some(NativeId::MapKeys),
+        "assert" => Some(NativeId::Assert),
+        "fail" => Some(NativeId::Fail),
+        "tan" => Some(NativeId::Tan),
+        "asin" => Some(NativeId::Asin),
+        "acos" => Some(NativeId::Acos),
+        "atan" => Some(NativeId::Atan),
+        "atan2" => Some(NativeId::Atan2),
+        "exp" => Some(NativeId::Exp),
+        "ln" => Some(NativeId::Ln),
+        "log2" => Some(NativeId::Log2),
+        "log10" => Some(NativeId::Log10),
+        "cbrt" => Some(NativeId::Cbrt),
+        "round" => Some(NativeId::Round),
+        "trunc" => Some(NativeId::Trunc),
+        "fract" => Some(NativeId::Fract),
+        "sign" => Some(NativeId::Sign),
+        "hypot" => Some(NativeId::Hypot),
+        "degrees" => Some(NativeId::Degrees),
+        "radians" => Some(NativeId::Radians),
+        "inverse_lerp" => Some(NativeId::InverseLerp),
+        "remap" => Some(NativeId::Remap),
+        "smoothstep" => Some(NativeId::Smoothstep),
+        "is_finite" => Some(NativeId::IsFinite),
+        "is_nan" => Some(NativeId::IsNan),
+        "is_infinite" => Some(NativeId::IsInfinite),
+        "approx_eq" => Some(NativeId::ApproxEq),
+        "gcd" => Some(NativeId::Gcd),
+        "lcm" => Some(NativeId::Lcm),
+        "vec2" => Some(NativeId::Vec2),
+        "vec3" => Some(NativeId::Vec3),
+        "vec4" => Some(NativeId::Vec4),
+        "dot" => Some(NativeId::Dot),
+        "cross" => Some(NativeId::Cross),
+        "length" => Some(NativeId::Length),
+        "normalize" => Some(NativeId::Normalize),
+        "distance" => Some(NativeId::Distance),
+        "angle_between" => Some(NativeId::AngleBetween),
+        "reflect" => Some(NativeId::Reflect),
+        "project" => Some(NativeId::Project),
+        "vec_lerp" => Some(NativeId::VecLerp),
+        "mat3_identity" => Some(NativeId::Mat3Identity),
+        "mat4_identity" => Some(NativeId::Mat4Identity),
+        "mat3" => Some(NativeId::Mat3),
+        "mat4" => Some(NativeId::Mat4),
+        "mat_mul" => Some(NativeId::MatMul),
+        "mat_transpose" => Some(NativeId::MatTranspose),
+        "mat_determinant" => Some(NativeId::MatDeterminant),
+        "mat_inverse" => Some(NativeId::MatInverse),
+        "transform_point" => Some(NativeId::TransformPoint),
+        "transform_vector" => Some(NativeId::TransformVector),
+        "quat" => Some(NativeId::Quat),
+        "quat_identity" => Some(NativeId::QuatIdentity),
+        "quat_axis_angle" => Some(NativeId::QuatAxisAngle),
+        "quat_mul" => Some(NativeId::QuatMul),
+        "quat_rotate" => Some(NativeId::QuatRotate),
+        "quat_normalize" => Some(NativeId::QuatNormalize),
+        "quat_inverse" => Some(NativeId::QuatInverse),
+        "quat_slerp" => Some(NativeId::QuatSlerp),
+        "rng_new" => Some(NativeId::RngNew),
+        "rng_next_float" => Some(NativeId::RngNextFloat),
+        "rng_range_int" => Some(NativeId::RngRangeInt),
+        "rng_range_float" => Some(NativeId::RngRangeFloat),
+        "rng_bool" => Some(NativeId::RngBool),
+        "shuffle" => Some(NativeId::Shuffle),
+        "choose" => Some(NativeId::Choose),
+        "weighted_choose" => Some(NativeId::WeightedChoose),
+        "noise1" => Some(NativeId::Noise1),
+        "noise2" => Some(NativeId::Noise2),
+        "fbm2" => Some(NativeId::Fbm2),
+        "sum" => Some(NativeId::Sum),
+        "product" => Some(NativeId::Product),
+        "mean" => Some(NativeId::Mean),
+        "median" => Some(NativeId::Median),
+        "variance" => Some(NativeId::Variance),
+        "stddev" => Some(NativeId::Stddev),
+        "quantile" => Some(NativeId::Quantile),
+        "covariance" => Some(NativeId::Covariance),
+        "correlation" => Some(NativeId::Correlation),
+        "moving_average" => Some(NativeId::MovingAverage),
+        "poly_eval" => Some(NativeId::PolyEval),
+        "integrate_trapezoid" => Some(NativeId::IntegrateTrapezoid),
+        "integrate_simpson" => Some(NativeId::IntegrateSimpson),
+        "poly_root_bisection" => Some(NativeId::PolyRootBisection),
+        "quadratic_bezier" => Some(NativeId::QuadraticBezier),
+        "cubic_bezier" => Some(NativeId::CubicBezier),
+        "catmull_rom" => Some(NativeId::CatmullRom),
+        "hermite" => Some(NativeId::Hermite),
+        "closest_point_segment" => Some(NativeId::ClosestPointSegment),
+        "segment_intersection2" => Some(NativeId::SegmentIntersection2),
+        "refract" => Some(NativeId::Refract),
+        "mat3_translation" => Some(NativeId::Mat3Translation),
+        "mat3_scale" => Some(NativeId::Mat3Scale),
+        "mat3_rotation" => Some(NativeId::Mat3Rotation),
+        "mat4_translation" => Some(NativeId::Mat4Translation),
+        "mat4_scale" => Some(NativeId::Mat4Scale),
+        "mat4_rotation_x" => Some(NativeId::Mat4RotationX),
+        "mat4_rotation_y" => Some(NativeId::Mat4RotationY),
+        "mat4_rotation_z" => Some(NativeId::Mat4RotationZ),
+        "mat4_orthographic" => Some(NativeId::Mat4Orthographic),
+        "mat4_perspective" => Some(NativeId::Mat4Perspective),
+        "mat4_look_at" => Some(NativeId::Mat4LookAt),
+        "rng_gaussian" => Some(NativeId::RngGaussian),
+        "rng_exponential" => Some(NativeId::RngExponential),
+        "perlin2" => Some(NativeId::Perlin2),
+        "turbulence2" => Some(NativeId::Turbulence2),
+        "domain_warp2" => Some(NativeId::DomainWarp2),
+        "mode" => Some(NativeId::Mode),
+        "histogram" => Some(NativeId::Histogram),
+        "ema" => Some(NativeId::Ema),
+        "is_even" => Some(NativeId::IsEven),
+        "is_odd" => Some(NativeId::IsOdd),
+        "pow_int" => Some(NativeId::PowInt),
+        "vec_min" => Some(NativeId::VecMin),
+        "vec_max" => Some(NativeId::VecMax),
+        "clamp_length" => Some(NativeId::ClampLength),
+        "quat_euler" => Some(NativeId::QuatEuler),
+        "ray_plane_intersection" => Some(NativeId::RayPlaneIntersection),
         _ => None,
+    }
+}
+
+/// Resolve a reserved VS3 mathematical constant.
+pub fn lookup_math_constant(name: &str) -> Option<f64> {
+    Some(match name {
+        "PI" => std::f64::consts::PI,
+        "TAU" => std::f64::consts::TAU,
+        "E" => std::f64::consts::E,
+        "EPSILON" => f64::EPSILON,
+        "INFINITY" => f64::INFINITY,
+        "NAN" => f64::NAN,
+        _ => return None,
+    })
+}
+
+/// Coarse runtime value kinds used by native metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NativeType {
+    /// Any value.
+    Any,
+    /// Integer or float.
+    Number,
+    /// Null.
+    Null,
+    /// Boolean.
+    Bool,
+    /// Signed integer.
+    Int,
+    /// Floating point.
+    Float,
+    /// String.
+    String,
+    /// List.
+    List,
+    /// Map.
+    Map,
+    /// Two-component vector.
+    Vec2,
+    /// Three-component vector.
+    Vec3,
+    /// Four-component vector.
+    Vec4,
+    /// Any vector dimension.
+    Vector,
+    /// 3x3 matrix.
+    Mat3,
+    /// 4x4 matrix.
+    Mat4,
+    /// Either matrix dimension.
+    Matrix,
+    /// Quaternion.
+    Quat,
+    /// Deterministic random stream.
+    Rng,
+}
+
+/// Observable-effect classification for a native function.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NativePurity {
+    /// No mutation or output.
+    Pure,
+    /// Mutates state, prints, fails, or talks to presentation state.
+    Impure,
+}
+
+/// Shared metadata consumed by semantic analysis, VM, and tooling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NativeSpec {
+    /// Stable id.
+    pub id: NativeId,
+    /// Script-visible name.
+    pub name: &'static str,
+    /// Minimum arguments.
+    pub min_args: u8,
+    /// Maximum arguments.
+    pub max_args: u8,
+    /// Positional types. The final entry repeats for variadic calls.
+    pub parameters: &'static [NativeType],
+    /// Coarse result type.
+    pub result: NativeType,
+    /// Purity classification.
+    pub purity: NativePurity,
+    /// Base instruction charge.
+    pub base_cost: u16,
+}
+
+impl NativeId {
+    /// Shared native metadata.
+    pub fn spec(self) -> NativeSpec {
+        use NativeId as N;
+        use NativePurity::{Impure, Pure};
+        use NativeType as T;
+
+        let (min_args, max_args) = match self {
+            N::Print | N::Concat => (0, u8::MAX),
+            N::Mat3Identity | N::Mat4Identity | N::QuatIdentity => (0, 0),
+            N::PresentShow => (1, 3),
+            N::Assert | N::Variance | N::Stddev => (1, 2),
+            N::ApproxEq => (2, 3),
+            N::Vec2 => (1, 2),
+            N::Vec3 => (1, 3),
+            N::Vec4 => (1, 4),
+            N::Fbm2 | N::Turbulence2 => (4, 6),
+            N::Covariance => (2, 3),
+            N::PolyRootBisection => (3, 5),
+            N::Mat3 => (9, 9),
+            N::Mat4 => (16, 16),
+            N::Remap | N::CubicBezier | N::CatmullRom | N::Hermite | N::DomainWarp2 => (5, 5),
+            N::Mat4Orthographic => (6, 6),
+            N::QuadraticBezier => (4, 4),
+            N::Clamp
+            | N::Lerp
+            | N::InverseLerp
+            | N::Smoothstep
+            | N::VecLerp
+            | N::RngRangeInt
+            | N::RngRangeFloat
+            | N::QuatSlerp
+            | N::Noise2
+            | N::ClosestPointSegment
+            | N::Refract
+            | N::Mat4LookAt
+            | N::RngGaussian
+            | N::Perlin2
+            | N::QuatEuler => (3, 3),
+            N::Quat | N::SegmentIntersection2 | N::Mat4Perspective | N::RayPlaneIntersection => {
+                (4, 4)
+            }
+            N::Min
+            | N::Max
+            | N::Pow
+            | N::Atan2
+            | N::Hypot
+            | N::Gcd
+            | N::Lcm
+            | N::Dot
+            | N::Cross
+            | N::Distance
+            | N::AngleBetween
+            | N::Reflect
+            | N::Project
+            | N::MatMul
+            | N::TransformPoint
+            | N::TransformVector
+            | N::QuatAxisAngle
+            | N::QuatMul
+            | N::QuatRotate
+            | N::RngBool
+            | N::Shuffle
+            | N::Choose
+            | N::WeightedChoose
+            | N::Noise1
+            | N::Quantile
+            | N::Correlation
+            | N::MovingAverage
+            | N::PolyEval
+            | N::IntegrateTrapezoid
+            | N::IntegrateSimpson
+            | N::MapHas
+            | N::ListPush
+            | N::PresentUiFlag
+            | N::RngExponential
+            | N::Histogram
+            | N::Ema
+            | N::PowInt
+            | N::VecMin
+            | N::VecMax
+            | N::ClampLength => (2, 2),
+            _ => (1, 1),
+        };
+
+        let parameters: &'static [T] = match self {
+            N::Print | N::Concat => &[T::Any],
+            N::Min | N::Max | N::Pow | N::Atan2 | N::Hypot => &[T::Number, T::Number],
+            N::Clamp | N::Lerp | N::InverseLerp | N::Smoothstep => {
+                &[T::Number, T::Number, T::Number]
+            }
+            N::Remap => &[T::Number, T::Number, T::Number, T::Number, T::Number],
+            N::Vec2 => &[T::Number, T::Number],
+            N::Vec3 => &[T::Number, T::Number, T::Number],
+            N::Vec4 | N::Quat => &[T::Number, T::Number, T::Number, T::Number],
+            N::Dot | N::Cross | N::Distance | N::AngleBetween | N::Reflect | N::Project => {
+                &[T::Vector, T::Vector]
+            }
+            N::Normalize | N::Length => &[T::Any],
+            N::VecLerp => &[T::Vector, T::Vector, T::Number],
+            N::Refract => &[T::Vector, T::Vector, T::Number],
+            N::Mat3 | N::Mat4 => &[T::Number],
+            N::MatMul => &[T::Matrix, T::Matrix],
+            N::MatTranspose | N::MatDeterminant | N::MatInverse => &[T::Matrix],
+            N::Mat3Translation | N::Mat3Scale => &[T::Vec2],
+            N::Mat3Rotation | N::Mat4RotationX | N::Mat4RotationY | N::Mat4RotationZ => {
+                &[T::Number]
+            }
+            N::Mat4Translation | N::Mat4Scale => &[T::Vec3],
+            N::Mat4Orthographic => &[
+                T::Number,
+                T::Number,
+                T::Number,
+                T::Number,
+                T::Number,
+                T::Number,
+            ],
+            N::Mat4Perspective => &[T::Number, T::Number, T::Number, T::Number],
+            N::Mat4LookAt => &[T::Vec3, T::Vec3, T::Vec3],
+            N::TransformPoint | N::TransformVector => &[T::Matrix, T::Vector],
+            N::QuatAxisAngle => &[T::Vec3, T::Number],
+            N::QuatMul => &[T::Quat, T::Quat],
+            N::QuatRotate => &[T::Quat, T::Vec3],
+            N::QuatNormalize | N::QuatInverse => &[T::Quat],
+            N::QuatSlerp => &[T::Quat, T::Quat, T::Number],
+            N::RngNew => &[T::Int],
+            N::RngNextFloat => &[T::Rng],
+            N::RngRangeInt => &[T::Rng, T::Int, T::Int],
+            N::RngRangeFloat => &[T::Rng, T::Number, T::Number],
+            N::RngBool => &[T::Rng, T::Number],
+            N::RngGaussian => &[T::Rng, T::Number, T::Number],
+            N::RngExponential => &[T::Rng, T::Number],
+            N::Shuffle | N::Choose | N::WeightedChoose => &[T::Rng, T::List],
+            N::Noise1 => &[T::Number, T::Int],
+            N::Noise2 => &[T::Number, T::Number, T::Int],
+            N::Perlin2 => &[T::Number, T::Number, T::Int],
+            N::Fbm2 => &[T::Number, T::Number, T::Int, T::Int, T::Number, T::Number],
+            N::Turbulence2 => &[T::Number, T::Number, T::Int, T::Int, T::Number, T::Number],
+            N::DomainWarp2 => &[T::Number, T::Number, T::Int, T::Int, T::Number],
+            N::Sum | N::Product | N::Mean | N::Median => &[T::List],
+            N::Variance | N::Stddev => &[T::List, T::Bool],
+            N::Quantile => &[T::List, T::Number],
+            N::Covariance => &[T::List, T::List, T::Bool],
+            N::Correlation => &[T::List, T::List],
+            N::MovingAverage => &[T::List, T::Int],
+            N::Mode => &[T::List],
+            N::Histogram => &[T::List, T::Int],
+            N::Ema => &[T::List, T::Number],
+            N::IsEven | N::IsOdd => &[T::Int],
+            N::PowInt => &[T::Int, T::Int],
+            N::VecMin | N::VecMax => &[T::Vector, T::Vector],
+            N::ClampLength => &[T::Vector, T::Number],
+            N::QuatEuler => &[T::Number, T::Number, T::Number],
+            N::PolyEval => &[T::List, T::Number],
+            N::IntegrateTrapezoid | N::IntegrateSimpson => &[T::List, T::Number],
+            N::PolyRootBisection => &[T::List, T::Number, T::Number, T::Int, T::Number],
+            N::QuadraticBezier => &[T::Vector, T::Vector, T::Vector, T::Number],
+            N::CubicBezier | N::CatmullRom | N::Hermite => {
+                &[T::Vector, T::Vector, T::Vector, T::Vector, T::Number]
+            }
+            N::ClosestPointSegment => &[T::Vector, T::Vector, T::Vector],
+            N::SegmentIntersection2 => &[T::Vec2, T::Vec2, T::Vec2, T::Vec2],
+            N::RayPlaneIntersection => &[T::Vector, T::Vector, T::Vector, T::Vector],
+            _ => &[T::Any],
+        };
+
+        let result = match self {
+            N::Print
+            | N::PresentShow
+            | N::PresentSetBg
+            | N::PresentUiFlag
+            | N::PresentHide
+            | N::Assert
+            | N::Fail => T::Null,
+            N::Str | N::Concat | N::HashSha256 | N::HexEncode | N::Base64Encode | N::TypeOf => {
+                T::String
+            }
+            N::IsFinite
+            | N::IsNan
+            | N::IsInfinite
+            | N::ApproxEq
+            | N::RngBool
+            | N::MapHas
+            | N::IsEven
+            | N::IsOdd => T::Bool,
+            N::Len | N::Gcd | N::Lcm | N::RngRangeInt | N::WeightedChoose | N::PowInt => T::Int,
+            N::Abs | N::Min | N::Max | N::Clamp => T::Number,
+            N::Vec2 => T::Vec2,
+            N::Vec3 | N::QuatRotate => T::Vec3,
+            N::Vec4 => T::Vec4,
+            N::Reflect
+            | N::Project
+            | N::VecLerp
+            | N::QuadraticBezier
+            | N::CubicBezier
+            | N::CatmullRom
+            | N::Hermite
+            | N::ClosestPointSegment
+            | N::TransformPoint
+            | N::TransformVector
+            | N::Refract
+            | N::VecMin
+            | N::VecMax
+            | N::ClampLength => T::Vector,
+            N::Mat3Identity | N::Mat3 | N::Mat3Translation | N::Mat3Scale | N::Mat3Rotation => {
+                T::Mat3
+            }
+            N::Mat4Identity
+            | N::Mat4
+            | N::Mat4Translation
+            | N::Mat4Scale
+            | N::Mat4RotationX
+            | N::Mat4RotationY
+            | N::Mat4RotationZ
+            | N::Mat4Orthographic
+            | N::Mat4Perspective
+            | N::Mat4LookAt => T::Mat4,
+            N::MatMul | N::MatTranspose | N::MatInverse => T::Matrix,
+            N::Quat
+            | N::QuatIdentity
+            | N::QuatAxisAngle
+            | N::QuatMul
+            | N::QuatNormalize
+            | N::QuatInverse
+            | N::QuatSlerp => T::Quat,
+            N::QuatEuler => T::Quat,
+            N::RngNew => T::Rng,
+            N::ListPush | N::MapKeys | N::Shuffle | N::MovingAverage | N::Histogram | N::Ema => {
+                T::List
+            }
+            N::ListPop
+            | N::Choose
+            | N::Normalize
+            | N::Cross
+            | N::SegmentIntersection2
+            | N::RayPlaneIntersection => T::Any,
+            _ => T::Float,
+        };
+
+        let purity = if matches!(
+            self,
+            N::Print
+                | N::PresentShow
+                | N::PresentSetBg
+                | N::PresentUiFlag
+                | N::PresentUiFlagGet
+                | N::PresentHide
+                | N::ListPush
+                | N::ListPop
+                | N::Assert
+                | N::Fail
+                | N::RngNextFloat
+                | N::RngRangeInt
+                | N::RngRangeFloat
+                | N::RngBool
+                | N::RngGaussian
+                | N::RngExponential
+                | N::Shuffle
+                | N::Choose
+                | N::WeightedChoose
+        ) {
+            Impure
+        } else {
+            Pure
+        };
+        let base_cost = match self {
+            N::MatInverse | N::PolyRootBisection | N::Fbm2 | N::Turbulence2 | N::DomainWarp2 => 24,
+            N::MatMul | N::QuatSlerp | N::Correlation => 8,
+            N::Noise2
+            | N::Perlin2
+            | N::CubicBezier
+            | N::CatmullRom
+            | N::Hermite
+            | N::IntegrateSimpson => 7,
+            N::Median
+            | N::Variance
+            | N::Stddev
+            | N::Quantile
+            | N::Covariance
+            | N::MovingAverage
+            | N::TransformPoint
+            | N::TransformVector => 5,
+            N::Sin
+            | N::Cos
+            | N::Tan
+            | N::Asin
+            | N::Acos
+            | N::Atan
+            | N::Atan2
+            | N::Exp
+            | N::Ln
+            | N::Log2
+            | N::Log10
+            | N::Pow
+            | N::Sqrt => 3,
+            _ => 1,
+        };
+
+        NativeSpec {
+            id: self,
+            name: self.name(),
+            min_args,
+            max_args,
+            parameters,
+            result,
+            purity,
+            base_cost,
+        }
     }
 }
 
@@ -274,6 +1401,8 @@ pub enum Op {
     Len = 38,
     /// Build map with u16 entry count (2*count stack values: k,v pairs).
     MakeMap = 39,
+    /// Compound index update: container, index, rhs; followed by arithmetic opcode byte.
+    UpdateIndex = 40,
 }
 
 impl Op {
@@ -319,6 +1448,7 @@ impl Op {
             37 => Self::SetIndex,
             38 => Self::Len,
             39 => Self::MakeMap,
+            40 => Self::UpdateIndex,
             _ => return None,
         })
     }
@@ -370,6 +1500,7 @@ impl Op {
             Self::SetIndex => "SET_INDEX",
             Self::Len => "LEN",
             Self::MakeMap => "MAKE_MAP",
+            Self::UpdateIndex => "UPDATE_INDEX",
         }
     }
 
@@ -386,7 +1517,7 @@ impl Op {
             | Self::Loop
             | Self::MakeList
             | Self::MakeMap => 2,
-            Self::GetLocal | Self::SetLocal | Self::Call => 1,
+            Self::GetLocal | Self::SetLocal | Self::Call | Self::UpdateIndex => 1,
             Self::NativeCall => 3, // u16 id + u8 argc
             _ => 0,
         }
@@ -976,6 +2107,17 @@ pub fn disassemble_chunk(chunk: &Chunk) -> String {
                 ip += 1;
                 let _ = writeln!(out, "{start:04X}  {} {}{line_note}", op.mnemonic(), slot);
             }
+            Op::UpdateIndex => {
+                let arithmetic = chunk.code.get(ip).copied().unwrap_or(0);
+                ip += 1;
+                let arithmetic = Op::from_u8(arithmetic).map(Op::mnemonic).unwrap_or("<bad>");
+                let _ = writeln!(
+                    out,
+                    "{start:04X}  {} {}{line_note}",
+                    op.mnemonic(),
+                    arithmetic
+                );
+            }
             Op::NativeCall => {
                 let id = read_u16(&chunk.code, &mut ip);
                 let argc = chunk.code.get(ip).copied().unwrap_or(0);
@@ -1065,13 +2207,13 @@ mod tests {
 
     #[test]
     fn op_roundtrip_all() {
-        for b in 1u8..=39 {
+        for b in 1u8..=40 {
             let op = Op::from_u8(b).expect("op defined");
             assert_eq!(op.to_u8(), b);
             assert!(!op.mnemonic().is_empty());
         }
         assert!(Op::from_u8(0).is_none());
-        assert!(Op::from_u8(40).is_none());
+        assert!(Op::from_u8(41).is_none());
     }
 
     #[test]
@@ -1154,7 +2296,26 @@ mod tests {
         assert_eq!(Op::NativeCall.operand_len(), 3);
         assert_eq!(Op::Constant.operand_len(), 2);
         assert_eq!(Op::Call.operand_len(), 1);
+        assert_eq!(Op::UpdateIndex.operand_len(), 1);
         assert_eq!(Op::Yield.operand_len(), 0);
+    }
+
+    #[test]
+    fn native_registry_is_contiguous_typed_and_backward_compatible() {
+        for (index, native) in NativeId::all().iter().copied().enumerate() {
+            assert_eq!(native.as_u16(), index as u16);
+            assert_eq!(NativeId::from_u16(index as u16), Some(native));
+            assert_eq!(lookup_native(native.name()), Some(native));
+            let spec = native.spec();
+            assert_eq!(spec.id, native);
+            assert_eq!(spec.name, native.name());
+            assert!(spec.min_args <= spec.max_args);
+            assert!(spec.base_cost > 0);
+        }
+        assert_eq!(NativeId::Fail.as_u16(), 29);
+        assert_eq!(NativeId::Tan.as_u16(), 30);
+        assert_eq!(NativeId::RayPlaneIntersection.as_u16(), 144);
+        assert_eq!(lookup_math_constant("PI"), Some(std::f64::consts::PI));
     }
 }
 

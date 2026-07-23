@@ -1,6 +1,6 @@
 // @edition 3
-// VS3 sample — pure game logics (no prefab genre system)
-// Proven surface: functions, if/else, while, arithmetic, strings, host tools
+// VS3 sample: pure game logic, not a genre-specific prefab.
+// Proven surface: types, functions, loops, maps, collections, and host tools.
 
 function can_play_card(hand_size, cost, energy) {
     return hand_size > 0 && energy >= cost
@@ -14,7 +14,7 @@ function apply_damage(hp, dmg) {
     }
 }
 
-function score_bonus(combo, mult) {
+function score_bonus(combo: int, mult: int) {
     return combo * mult
 }
 
@@ -54,4 +54,12 @@ function fingerprint(s) {
 
 function label_join(a, b) {
     return concat(a, b)
+}
+
+function inventory_summary(items: list) {
+    let summary: map = {"count": len(items), "empty": len(items) == 0}
+    if len(items) > 0 {
+        summary.first = items[0]
+    }
+    return summary
 }

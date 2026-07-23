@@ -110,8 +110,7 @@ mod tests {
         let path = dir.path().join("t.vel");
         // Prefer a form the compiler accepts — function body is more reliably bytecode
         fs::write(&path, "function main() {\n  return 1\n}\n").unwrap();
-        // check may succeed or soft-fail depending on language features; just ensure no panic
-        let _ = cmd_script_check(path);
+        cmd_script_check(path).expect("valid function script must pass script check");
     }
 
     #[test]
@@ -144,7 +143,7 @@ scene main {
     #[test]
     fn significant_lines_ignores_blanks_and_comments() {
         let src = "\n// c\n\nfunction f() {\n  // inner\n  return 1\n}\n\n";
-        assert!(count_significant_lines(src) >= 3);
+        assert_eq!(count_significant_lines(src), 3);
         assert_eq!(count_significant_lines(""), 0);
         assert_eq!(count_significant_lines("// only\n// comments\n"), 0);
     }
@@ -154,12 +153,8 @@ scene main {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("a.vel"), "function a() { return 1 }\n").unwrap();
         fs::write(dir.path().join("b.vel"), "function b() { return 2 }\n").unwrap();
-        // If cmd accepts dirs, great; else check each file.
-        let a = cmd_script_check(dir.path().join("a.vel"));
-        let b = cmd_script_check(dir.path().join("b.vel"));
-        assert!(a.is_ok() || a.is_err());
-        assert!(b.is_ok() || b.is_err());
-        // At least files exist and check is callable.
-        assert!(dir.path().join("a.vel").exists());
+        cmd_script_check(dir.path().join("a.vel")).expect("a.vel must compile");
+        cmd_script_check(dir.path().join("b.vel")).expect("b.vel must compile");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
     }
 }

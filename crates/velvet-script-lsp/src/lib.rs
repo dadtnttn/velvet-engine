@@ -9,6 +9,7 @@ pub mod stdio;
 
 use serde::{Deserialize, Serialize};
 use velvet_script_ast::Item;
+use velvet_script_bytecode::{lookup_math_constant, lookup_native, NativeId, NativePurity};
 use velvet_script_compiler::compile_source;
 use velvet_script_parser::parse_file;
 
@@ -200,7 +201,35 @@ pub fn analyze(source: &str, file: Option<&str>) -> Analysis {
         }
     }
 
-    if let Err(e) = compile_source(source, file) {
+    if velvet_script_vs3::is_vs3_source(source) {
+        if let Err(error) = velvet_script_vs3::compile(source, file) {
+            if error.diagnostics().is_empty() {
+                analysis.diagnostics.push(Diagnostic {
+                    line: 0,
+                    character: 0,
+                    end_line: 0,
+                    end_character: 1,
+                    message: error.to_string(),
+                    severity: Severity::Error,
+                    source: "velvet-vs3".into(),
+                });
+            } else {
+                for diagnostic in error.diagnostics() {
+                    let line = diagnostic.loc.line.saturating_sub(1);
+                    let character = diagnostic.loc.column.saturating_sub(1);
+                    analysis.diagnostics.push(Diagnostic {
+                        line,
+                        character,
+                        end_line: line,
+                        end_character: character.saturating_add(1),
+                        message: diagnostic.message.clone(),
+                        severity: Severity::Error,
+                        source: "velvet-vs3".into(),
+                    });
+                }
+            }
+        }
+    } else if let Err(e) = compile_source(source, file) {
         // Prefer structured multi-error when available.
         let diags = e.diagnostics();
         if !diags.is_empty() {
@@ -235,34 +264,55 @@ pub fn analyze(source: &str, file: Option<&str>) -> Analysis {
 
 /// Completion items at a cursor (keyword / symbol heuristic).
 pub fn completions(source: &str, _line: u32, _character: u32) -> Vec<String> {
-    let mut items = vec![
-        "function".into(),
-        "scene".into(),
-        "screen".into(),
-        "button".into(),
-        "character".into(),
-        "state".into(),
-        "choice".into(),
-        "jump".into(),
-        "label".into(),
-        "return".into(),
-        "let".into(),
-        "if".into(),
-        "while".into(),
-        "background".into(),
-        "music".into(),
-        "show".into(),
-        "abs".into(),
-        "min".into(),
-        "max".into(),
-        "floor".into(),
-        "ceil".into(),
-        "clamp".into(),
-        "len".into(),
-        "concat".into(),
-        "print".into(),
-        "str".into(),
-    ];
+    let mut items: Vec<String> = if velvet_script_vs3::is_vs3_source(source) {
+        let mut items = [
+            "function", "state", "return", "let", "const", "if", "else", "while", "for", "in",
+            "break", "continue", "yield", "null", "true", "false", "int", "float", "bool",
+            "string", "list", "map", "vec2", "vec3", "vec4", "mat3", "mat4", "quat", "rng", "PI",
+            "TAU", "E", "EPSILON", "INFINITY", "NAN",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+        items.extend(
+            NativeId::all()
+                .iter()
+                .map(|native| native.name().to_string()),
+        );
+        items
+    } else {
+        [
+            "function",
+            "scene",
+            "screen",
+            "button",
+            "character",
+            "state",
+            "choice",
+            "jump",
+            "label",
+            "return",
+            "let",
+            "if",
+            "while",
+            "background",
+            "music",
+            "show",
+            "abs",
+            "min",
+            "max",
+            "floor",
+            "ceil",
+            "clamp",
+            "len",
+            "concat",
+            "print",
+            "str",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+    };
     let analysis = analyze(source, None);
     for s in analysis.symbols {
         items.push(s.name);
@@ -297,7 +347,28 @@ pub fn find_references(source: &str, symbol: &str) -> Vec<TextRange> {
             continue;
         }
         let mut i = 0usize;
+        let mut in_string = false;
+        let mut escaped = false;
         while i + sym.len() <= chars.len() {
+            if in_string {
+                if escaped {
+                    escaped = false;
+                } else if chars[i] == '\\' {
+                    escaped = true;
+                } else if chars[i] == '"' {
+                    in_string = false;
+                }
+                i += 1;
+                continue;
+            }
+            if chars[i] == '"' {
+                in_string = true;
+                i += 1;
+                continue;
+            }
+            if chars[i] == '/' && chars.get(i + 1) == Some(&'/') {
+                break;
+            }
             if chars[i..i + sym.len()] == sym[..] {
                 let before_ok =
                     i == 0 || !(chars[i - 1].is_ascii_alphanumeric() || chars[i - 1] == '_');
@@ -419,6 +490,28 @@ pub fn hover(source: &str, line: u32, character: u32) -> Option<HoverInfo> {
 }
 
 fn keyword_or_native_hover(word: &str) -> Option<String> {
+    if let Some(native) = lookup_native(word) {
+        let spec = native.spec();
+        let arity = if spec.min_args == spec.max_args {
+            spec.min_args.to_string()
+        } else {
+            format!("{}..={}", spec.min_args, spec.max_args)
+        };
+        let result = format!("{:?}", spec.result).to_ascii_lowercase();
+        let purity = match spec.purity {
+            NativePurity::Pure => "pure",
+            NativePurity::Impure => "stateful",
+        };
+        return Some(format!(
+            "**{word}** — native `{word}({arity} args) -> {result}`; {purity}; base cost {}.",
+            spec.base_cost
+        ));
+    }
+    if let Some(value) = lookup_math_constant(word) {
+        return Some(format!(
+            "**{word}** — reserved `float` mathematical constant (`{value}`)."
+        ));
+    }
     let text = match word {
         "function" => "Declare a function.",
         "scene" => "Declare a narrative scene.",
@@ -427,18 +520,10 @@ fn keyword_or_native_hover(word: &str) -> Option<String> {
         "let" => "Bind a local or global variable.",
         "return" => "Return from a function.",
         "if" | "else" | "while" => "Control flow.",
+        "for" | "break" | "continue" => "Loop control.",
+        "yield" => "Suspend a cooperative VS3 task and optionally receive a response.",
         "jump" => "Jump to a scene or label.",
         "choice" => "Present player choices.",
-        "print" => "Native: print values to the VM output capture.",
-        "abs" => "Native: absolute value.",
-        "min" => "Native: minimum of two numbers.",
-        "max" => "Native: maximum of two numbers.",
-        "floor" => "Native: floor toward -∞.",
-        "ceil" => "Native: ceil toward +∞.",
-        "clamp" => "Native: clamp(x, lo, hi).",
-        "len" => "Native: length of string, list, or map.",
-        "concat" => "Native: concatenate arguments as strings.",
-        "str" => "Native: convert value to string.",
         _ => return None,
     };
     Some(format!("**{word}** — {text}"))
@@ -501,12 +586,30 @@ pub fn semantic_tokens(source: &str) -> Vec<SemanticToken> {
         "if",
         "else",
         "while",
+        "for",
+        "in",
+        "break",
+        "continue",
+        "yield",
         "background",
         "music",
         "show",
         "true",
         "false",
         "null",
+        "int",
+        "float",
+        "bool",
+        "string",
+        "list",
+        "map",
+        "vec2",
+        "vec3",
+        "vec4",
+        "mat3",
+        "mat4",
+        "quat",
+        "rng",
     ];
 
     let mut tokens = Vec::new();
@@ -515,6 +618,19 @@ pub fn semantic_tokens(source: &str) -> Vec<SemanticToken> {
         let mut i = 0usize;
         let bytes = line.as_bytes();
         while i < bytes.len() {
+            if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') {
+                tokens.push(SemanticToken {
+                    range: TextRange {
+                        line: line_idx as u32,
+                        character: i as u32,
+                        end_line: line_idx as u32,
+                        end_character: bytes.len() as u32,
+                    },
+                    kind: SemanticTokenKind::Comment,
+                    text: line[i..].to_string(),
+                });
+                break;
+            }
             if bytes[i] == b'"' {
                 let start = i;
                 i += 1;
@@ -693,13 +809,58 @@ function main() {
     }
 
     #[test]
+    fn references_ignore_strings_and_comments() {
+        let source = r#"function add(a, b) { return a + b }
+// add must not change here
+let label = "add"
+let value = add(1, 2)
+"#;
+        let edits = rename_prepare(source, "add", "sum");
+        let output = apply_text_edits(source, edits);
+        assert!(output.contains("function sum"));
+        assert!(output.contains("sum(1, 2)"));
+        assert!(output.contains("// add must not change here"));
+        assert!(output.contains("\"add\""));
+    }
+
+    #[test]
+    fn edition_three_uses_vs3_semantic_diagnostics_and_completions() {
+        let source = "// @edition 3\nfunction f() { return missing }\n";
+        let analysis = analyze(source, Some("logic.vel"));
+        assert!(analysis
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.source == "velvet-vs3"
+                && diagnostic.message.contains("unknown name")));
+        let completions = completions(source, 1, 0);
+        assert!(completions.iter().any(|item| item == "yield"));
+        assert!(completions.iter().any(|item| item == "map_keys"));
+        assert!(completions.iter().any(|item| item == "vec3"));
+        assert!(completions.iter().any(|item| item == "mat4_perspective"));
+        assert!(completions.iter().any(|item| item == "perlin2"));
+        assert!(completions.iter().any(|item| item == "correlation"));
+        assert!(!completions.iter().any(|item| item == "scene"));
+    }
+
+    #[test]
+    fn advanced_native_hover_uses_registry_metadata() {
+        let hover = keyword_or_native_hover("mat_inverse").unwrap();
+        assert!(hover.contains("matrix"), "{hover}");
+        assert!(hover.contains("pure"), "{hover}");
+        assert!(hover.contains("base cost"), "{hover}");
+        let constant = keyword_or_native_hover("PI").unwrap();
+        assert!(constant.contains("mathematical constant"), "{constant}");
+    }
+
+    #[test]
     fn hover_on_function() {
         let src = "function add(a, b) { return a + b }\n";
         // Find "add" position.
         let line = src.lines().next().unwrap();
         let col = line.find("add").unwrap() as u32;
         let h = hover(src, 0, col).unwrap();
-        assert!(h.contents.contains("add") || h.kind.as_deref() == Some("function"));
+        assert!(h.contents.contains("add"), "hover={h:?}");
+        assert_eq!(h.kind.as_deref(), Some("function"));
     }
 
     #[test]

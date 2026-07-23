@@ -10,7 +10,8 @@ use velvet_script_parser::{parse_file, ParseError};
 /// Format source; returns pretty string or parse error.
 pub fn format_source(source: &str) -> Result<String, ParseError> {
     let parsed = parse_file(source, None)?;
-    Ok(format_module(&parsed.module))
+    let mut comments = CommentCursor::from_source(source);
+    Ok(format_module_with_comments(&parsed.module, &mut comments))
 }
 
 /// Format a module AST.
@@ -18,18 +19,108 @@ pub fn format_source(source: &str) -> Result<String, ParseError> {
 /// Top-level items are separated by a blank line. Blocks are indented with
 /// four spaces. Binary operators are padded with spaces.
 pub fn format_module(module: &Module) -> String {
+    format_module_with_comments(module, &mut CommentCursor::default())
+}
+
+fn format_module_with_comments(module: &Module, comments: &mut CommentCursor) -> String {
     let mut out = String::new();
     for (i, item) in module.items.iter().enumerate() {
         if i > 0 {
             // Blank line between top-level items.
             out.push('\n');
         }
-        format_item(item, &mut out, 0);
+        format_item(item, &mut out, 0, comments);
         if !out.ends_with('\n') {
             out.push('\n');
         }
     }
+    comments.flush(&mut out);
     out
+}
+
+#[derive(Debug, Default)]
+struct CommentCursor {
+    comments: Vec<LineComment>,
+    next: usize,
+}
+
+#[derive(Debug)]
+struct LineComment {
+    line: u32,
+    indent: String,
+    text: String,
+}
+
+impl CommentCursor {
+    fn from_source(source: &str) -> Self {
+        let comments = source
+            .lines()
+            .enumerate()
+            .filter_map(|(index, line)| {
+                comment_start(line).map(|start| LineComment {
+                    line: index as u32 + 1,
+                    indent: line[..start]
+                        .chars()
+                        .take_while(|character| character.is_whitespace())
+                        .collect(),
+                    text: line[start..].trim_end().to_string(),
+                })
+            })
+            .collect();
+        Self { comments, next: 0 }
+    }
+
+    fn emit_before(&mut self, line: u32, out: &mut String) {
+        while self
+            .comments
+            .get(self.next)
+            .is_some_and(|comment| comment.line < line)
+        {
+            self.emit_next(out);
+        }
+    }
+
+    fn flush(&mut self, out: &mut String) {
+        while self.next < self.comments.len() {
+            self.emit_next(out);
+        }
+    }
+
+    fn emit_next(&mut self, out: &mut String) {
+        let comment = &self.comments[self.next];
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(&comment.indent);
+        out.push_str(&comment.text);
+        out.push('\n');
+        self.next += 1;
+    }
+}
+
+fn comment_start(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let mut quote = None;
+    let mut escaped = false;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' && quote.is_some() {
+            escaped = true;
+        } else if matches!(byte, b'\'' | b'"') {
+            if quote == Some(byte) {
+                quote = None;
+            } else if quote.is_none() {
+                quote = Some(byte);
+            }
+        } else if byte == b'/' && bytes.get(index + 1) == Some(&b'/') && quote.is_none() {
+            return Some(index);
+        }
+        index += 1;
+    }
+    None
 }
 
 fn indent(out: &mut String, level: usize) {
@@ -38,7 +129,8 @@ fn indent(out: &mut String, level: usize) {
     }
 }
 
-fn format_item(item: &Item, out: &mut String, level: usize) {
+fn format_item(item: &Item, out: &mut String, level: usize, comments: &mut CommentCursor) {
+    comments.emit_before(item_line(item), out);
     match item {
         Item::Function {
             name, params, body, ..
@@ -59,7 +151,7 @@ fn format_item(item: &Item, out: &mut String, level: usize) {
             }
             out.push_str(") {\n");
             for s in body {
-                format_stmt(s, out, level + 1);
+                format_stmt(s, out, level + 1, comments);
             }
             indent(out, level);
             out.push('}');
@@ -70,6 +162,7 @@ fn format_item(item: &Item, out: &mut String, level: usize) {
             out.push_str(name);
             out.push_str(" {\n");
             for (k, v) in fields {
+                comments.emit_before(v.loc().line, out);
                 indent(out, level + 1);
                 out.push_str(k);
                 out.push_str(": ");
@@ -83,6 +176,7 @@ fn format_item(item: &Item, out: &mut String, level: usize) {
             indent(out, level);
             out.push_str("state {\n");
             for b in bindings {
+                comments.emit_before(b.loc.line, out);
                 indent(out, level + 1);
                 out.push_str(&b.name);
                 if let Some(t) = &b.ty {
@@ -102,7 +196,7 @@ fn format_item(item: &Item, out: &mut String, level: usize) {
             out.push_str(name);
             out.push_str(" {\n");
             for s in body {
-                format_stmt(s, out, level + 1);
+                format_stmt(s, out, level + 1, comments);
             }
             indent(out, level);
             out.push('}');
@@ -118,6 +212,7 @@ fn format_item(item: &Item, out: &mut String, level: usize) {
             out.push_str(name);
             out.push_str(" {\n");
             for property in properties {
+                comments.emit_before(property.loc.line, out);
                 indent(out, level + 1);
                 out.push_str(&property.name);
                 out.push_str(": ");
@@ -128,11 +223,13 @@ fn format_item(item: &Item, out: &mut String, level: usize) {
                 out.push('\n');
             }
             for (index, button) in buttons.iter().enumerate() {
+                comments.emit_before(button.loc.line, out);
                 indent(out, level + 1);
                 out.push_str("button ");
                 out.push_str(&button.id);
                 out.push_str(" {\n");
                 for property in &button.properties {
+                    comments.emit_before(property.loc.line, out);
                     indent(out, level + 2);
                     out.push_str(&property.name);
                     out.push_str(": ");
@@ -150,11 +247,23 @@ fn format_item(item: &Item, out: &mut String, level: usize) {
             indent(out, level);
             out.push('}');
         }
-        Item::Stmt(s) => format_stmt(s, out, level),
+        Item::Stmt(s) => format_stmt(s, out, level, comments),
     }
 }
 
-fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
+fn item_line(item: &Item) -> u32 {
+    match item {
+        Item::Function { loc, .. }
+        | Item::Character { loc, .. }
+        | Item::State { loc, .. }
+        | Item::Scene { loc, .. }
+        | Item::Screen { loc, .. } => loc.line,
+        Item::Stmt(stmt) => stmt.loc().line,
+    }
+}
+
+fn format_stmt(stmt: &Stmt, out: &mut String, level: usize, comments: &mut CommentCursor) {
+    comments.emit_before(stmt.loc().line, out);
     match stmt {
         Stmt::Expr { expr, .. } => {
             indent(out, level);
@@ -185,7 +294,7 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
             indent(out, level);
             out.push_str("{\n");
             for s in body {
-                format_stmt(s, out, level + 1);
+                format_stmt(s, out, level + 1, comments);
             }
             indent(out, level);
             out.push_str("}\n");
@@ -200,7 +309,7 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
             out.push_str("if ");
             format_expr(cond, out, 0);
             out.push(' ');
-            format_stmt_blockish(then_body, out, level);
+            format_stmt_blockish(then_body, out, level, comments);
             if let Some(e) = else_body {
                 // else attaches to previous block end; ensure we're on a fresh line.
                 if !out.ends_with('\n') {
@@ -208,7 +317,7 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
                 }
                 indent(out, level);
                 out.push_str("else ");
-                format_stmt_blockish(e, out, level);
+                format_stmt_blockish(e, out, level, comments);
             }
         }
         Stmt::While { cond, body, .. } => {
@@ -216,7 +325,7 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
             out.push_str("while ");
             format_expr(cond, out, 0);
             out.push(' ');
-            format_stmt_blockish(body, out, level);
+            format_stmt_blockish(body, out, level, comments);
         }
         Stmt::Return { value, .. } => {
             indent(out, level);
@@ -253,12 +362,13 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
             indent(out, level);
             out.push_str("choice {\n");
             for arm in options {
+                comments.emit_before(arm.loc.line, out);
                 indent(out, level + 1);
                 out.push('"');
                 out.push_str(&escape(&arm.text));
                 out.push_str("\" {\n");
                 for s in &arm.body {
-                    format_stmt(s, out, level + 2);
+                    format_stmt(s, out, level + 2, comments);
                 }
                 indent(out, level + 1);
                 out.push_str("}\n");
@@ -358,7 +468,7 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
             out.push_str(" in ");
             format_expr(iter, out, 0);
             out.push(' ');
-            format_stmt_blockish(body, out, level);
+            format_stmt_blockish(body, out, level, comments);
         }
         Stmt::Break { .. } => {
             indent(out, level);
@@ -371,19 +481,19 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize) {
     }
 }
 
-fn format_stmt_blockish(stmt: &Stmt, out: &mut String, level: usize) {
+fn format_stmt_blockish(stmt: &Stmt, out: &mut String, level: usize, comments: &mut CommentCursor) {
     match stmt {
         Stmt::Block { body, .. } => {
             out.push_str("{\n");
             for s in body {
-                format_stmt(s, out, level + 1);
+                format_stmt(s, out, level + 1, comments);
             }
             indent(out, level);
             out.push_str("}\n");
         }
         other => {
             out.push('\n');
-            format_stmt(other, out, level + 1);
+            format_stmt(other, out, level + 1, comments);
         }
     }
 }
@@ -440,6 +550,19 @@ fn format_expr(expr: &Expr, out: &mut String, parent_prec: u8) {
                 format_expr(e, out, 0);
             }
             out.push(']');
+        }
+        Expr::Map { entries, .. } => {
+            out.push('{');
+            for (index, (key, value)) in entries.iter().enumerate() {
+                if index > 0 {
+                    out.push_str(", ");
+                }
+                out.push('"');
+                out.push_str(&escape(key));
+                out.push_str("\": ");
+                format_expr(value, out, 0);
+            }
+            out.push('}');
         }
         Expr::Unary { op, expr, .. } => {
             out.push(match op {
@@ -569,7 +692,7 @@ mod tests {
     fn spaces_around_operators() {
         let src = "function f(){return 1+2*3}";
         let pretty = format_source(src).unwrap();
-        assert!(pretty.contains("1 + 2 * 3") || pretty.contains("1 + (2 * 3)"));
+        assert!(pretty.contains("return 1 + 2 * 3"), "pretty={pretty:?}");
     }
 
     #[test]
@@ -589,7 +712,7 @@ mod tests {
         let pretty = format_source(src).unwrap();
         assert!(pretty.contains("[1, 2]"), "pretty={pretty:?}");
         assert!(pretty.contains("abs("));
-        assert!(pretty.contains("xs[0]") || pretty.contains("xs[0]"));
+        assert!(pretty.contains("return abs(xs[0])"), "pretty={pretty:?}");
     }
 
     #[test]
@@ -606,6 +729,32 @@ scene main {
         let once = format_source(src).unwrap();
         let twice = format_source(&once).unwrap();
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn preserves_vs3_edition_and_comments_idempotently() {
+        let source = r#"// @edition 3
+// module documentation
+function add(a,b) {
+    // keep this explanation
+    return a+b // and this trailing note
+}
+"#;
+        let once = format_source(source).unwrap();
+        assert!(once.starts_with("// @edition 3"), "formatted={once:?}");
+        assert!(once.contains("// module documentation"));
+        assert!(once.contains("// keep this explanation"));
+        assert!(once.contains("// and this trailing note"));
+        assert_eq!(format_source(&once).unwrap(), once);
+    }
+
+    #[test]
+    fn does_not_treat_url_inside_string_as_comment() {
+        let source = r#"// @edition 3
+function url() { return "https://velvet.dev/docs" }
+"#;
+        let formatted = format_source(source).unwrap();
+        assert!(formatted.contains("\"https://velvet.dev/docs\""));
     }
 
     #[test]

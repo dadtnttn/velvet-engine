@@ -150,6 +150,13 @@ pub enum Expr {
         /// Location.
         loc: SourceLoc,
     },
+    /// String-keyed map literal `{ "key": value }`.
+    Map {
+        /// Entries in source order.
+        entries: Vec<(String, Expr)>,
+        /// Location.
+        loc: SourceLoc,
+    },
     /// Unary.
     Unary {
         /// Operator.
@@ -210,6 +217,7 @@ impl Expr {
             | Self::String { loc, .. }
             | Self::Ident { loc, .. }
             | Self::List { loc, .. }
+            | Self::Map { loc, .. }
             | Self::Unary { loc, .. }
             | Self::Binary { loc, .. }
             | Self::Call { loc, .. }

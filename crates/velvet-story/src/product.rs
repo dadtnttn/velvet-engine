@@ -1180,7 +1180,8 @@ scene end_good {
             guard += 1;
         }
         assert!(session.say.visible, "say screen should show dialogue");
-        assert!(!session.say.namebox.is_empty() || !session.say.full_text.is_empty());
+        assert_eq!(session.say.namebox, "Hero");
+        assert_eq!(session.say.full_text, "Hello there.");
         // advance through lines to choice
         while !matches!(session.player().wait(), StoryWait::Choice) && guard < 50 {
             session.advance();
@@ -1190,15 +1191,9 @@ scene end_good {
         assert!(session.choice.options.len() >= 2);
         session.choose_arm(0).unwrap();
         let ending = session.run_to_ending(80, 0);
-        assert!(
-            ending
-                .as_deref()
-                .map(|e| e.contains("Warm") || e.contains("Ending") || session.is_ended())
-                .unwrap_or(session.is_ended()),
-            "ending={ending:?} text={}",
-            session.player().current_text()
-        );
-        assert!(session.is_ended() || ending.is_some());
+        assert_eq!(ending.as_deref(), Some("Ending: Warm Lights"));
+        assert!(session.is_ended());
+        assert_eq!(session.player().variables().get_int("trust", 0), 1);
     }
 
     #[test]
@@ -1225,14 +1220,24 @@ scene end_good {
         prefs.auto_mode = true;
         prefs.fullscreen = true;
         session.set_prefs(prefs.clone());
-        assert!(
-            (session.bgm.volume - 0.4).abs() < 0.01
-                || (session.bgm.volume - 0.5 * 0.8).abs() < 0.01
-        );
+        assert!((session.bgm.volume - 0.4).abs() < 0.01);
         session.advance();
 
-        // History non-empty after dialogue
-        assert!(!session.history_entries().is_empty() || !text_before.is_empty());
+        // Advancing preserves the previous line and appends the next one in order.
+        let history: Vec<_> = session
+            .history_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let previous = history
+            .iter()
+            .position(|text| *text == text_before)
+            .expect("saved dialogue must remain in history");
+        let next = history
+            .iter()
+            .position(|text| *text == "Hi.")
+            .expect("advancing must append the next dialogue");
+        assert!(previous < next, "history order={history:?}");
 
         // Confirm quit flow
         session.request_quit();
@@ -1251,18 +1256,10 @@ scene end_good {
 
         // BGM must come from the sample music op (no OR with background).
         let mut s4 = VnSession::new(StoryPlayer::start(sample_program()));
-        assert!(
-            s4.bgm.path.as_deref() == Some("assets/music/soft.ogg") || s4.bgm.playing,
-            "music op must set bgm path/playing, got path={:?} playing={} intents={:?}",
-            s4.bgm.path,
-            s4.bgm.playing,
-            s4.bgm.intents
-        );
+        assert_eq!(s4.bgm.path.as_deref(), Some("assets/music/soft.ogg"));
+        assert!(s4.bgm.playing);
         let intents = s4.bgm.drain_intents();
-        assert!(
-            !intents.is_empty() || s4.bgm.path.is_some(),
-            "expected BGM intent or retained path after music op"
-        );
+        assert!(!intents.is_empty(), "music op must emit a BGM intent");
         assert!(
             s4.presentation.background.as_deref() == Some("assets/bg/room.png"),
             "background from script, got {:?}",
@@ -1600,16 +1597,12 @@ scene end_good {
 
         // Two choice arms → two ending names on sample program
         let mut s0 = VnSession::new(StoryPlayer::start(sample_program()));
-        let e0 = s0.run_to_ending(80, 0).unwrap_or_default();
-        let t0 = format!("{e0} {}", s0.player().current_text());
+        let e0 = s0.run_to_ending(80, 0).expect("warm route ending");
         let mut s1 = VnSession::new(StoryPlayer::start(sample_program()));
-        let e1 = s1.run_to_ending(80, 1).unwrap_or_default();
-        let t1 = format!("{e1} {}", s1.player().current_text());
-        assert!(t0.contains("Warm") || t0.contains("Ending"), "{t0}");
-        assert!(
-            t1.contains("Cool") || t1.contains("Ending") || t1 != t0,
-            "second path should differ or be Cool Air: {t1}"
-        );
+        let e1 = s1.run_to_ending(80, 1).expect("cool route ending");
+        assert_eq!(e0, "Ending: Warm Lights");
+        assert_eq!(e1, "Ending: Cool Air");
+        assert_ne!(e0, e1);
     }
 
     #[test]

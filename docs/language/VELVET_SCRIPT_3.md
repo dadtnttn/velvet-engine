@@ -1,167 +1,254 @@
-# Velvet Script 3 — official general language (**target: usable**)
+# Velvet Script 3
 
-> **VS3 is the official line** for general game **logic**.  
-> Classic story/product `.vel` stays. **VS2 is not the official product** — its useful code may feed VS3; the “finish VS2” goal is retired.
+Advanced mathematics contract: [VS3_MATH_SPEC.md](VS3_MATH_SPEC.md).
 
-| | |
-|--|--|
-| **Edition** | `// @edition 3` |
-| **Extension** | `.vel` (edition marker selects semantics) |
-| **Role** | General **game logic** language (later: broader creation targets) |
-| **Maturity** | **Usable MVP** — edition gate, pure logics, host natives (`sin`/`hash_sha256`), CLI `velvet vs3` |
-| **Policy** | Tools & logics first — **no prefabricated games as the language API** |
+Evolution plan: [VS3_ROADMAP.md](VS3_ROADMAP.md). Engine integrations must
+follow [VS3_ENGINE_RULES.md](../architecture/VS3_ENGINE_RULES.md).
 
-## Why VS3 (not “finish VS2”)
+Velvet Script 3 (VS3) is the official general-purpose game-logic language in
+Velvet Engine. A source file opts in with `// @edition 3`. Classic `.vel` story
+files remain a separate, supported product path.
 
-- VS2 aimed high (typed, Rust-like, VM) but stayed **alpha** and was never the runtime of shipping demos.
-- We need a **clear official name** and a **usable** bar: real run path, real diagnostics, real game logic — not silent no-ops.
-- **Classic** remains the stable path for novels (`StoryProgram` / `VnSession`).
-- **VS3** is where we invest for a **general logic language** (game first; web/other hosts later).
+| Property | Current contract |
+|---|---|
+| Edition | `// @edition 3` |
+| Extension | `.vel` |
+| Status | Usable alpha; real compiler, VM, CLI, LSP, tests, and host ABI |
+| Scope | General deterministic logic; product features arrive through host services |
+| Runtime | Sandboxed by default, bounded by instruction/memory/stack limits |
 
-## Language map (honest)
+VS3 does not encode a novel, card game, RPG, renderer, or network stack into
+the language. Those systems are libraries and host services. This keeps game
+rules portable and testable.
 
-| Language | Extension / marker | Official? | Use |
-|----------|-------------------|-----------|-----|
-| Classic Script / product story | `.vel` (no edition 3) | **Yes — stable narrative/product** | VN, dialogue, choices → `StoryProgram` |
-| **VS3** | `.vel` + `// @edition 3` | **Yes — general logic (target)** | Game rules, systems, data, events |
-| VS2 | `// @edition 2` | **No — superseded as product name** | Legacy alpha; absorb, don’t expand brand |
-| Velvet Story | `.vstory` | Writer narrative | Lowers to product IR |
-| Velvet Style | `.vcss` | Look / motion | Separate from logic |
+## Current language surface
 
-## Design pillars
+### Declarations and state
 
-1. **Logics, not prefabs**  
-   The language exposes **compositional logics** (when X, do Y; score; inventory rules; AI checks). It does **not** ship “the only way is this Balatro/RPG/Hotline template.” Demos may show logics; they are not the API.
-
-2. **Game logic first**  
-   Near term: state, events, pure functions, host-called tools (math, queries, cards, combat, story hooks).  
-   Later: broader creation / multi-target (including web-oriented hosts). **Web3 is out of scope for the first usable cut.**
-
-3. **One honest runtime**  
-   Every claimed feature runs or fails with a **structured diagnostic**. No silent `Nop` for “done” features.
-
-4. **Interop with classic**  
-   Novels keep classic. Over time: classic scenes may **call** VS3 modules; VS3 may **signal** presentation hosts. Not required on day one.
-
-5. **Same engineering discipline as the engine**  
-   Tests on the real path, tools-first crates, no fake LOC.
-
-## Near-term MVP (usable “logic language”)
-
-Minimum for “we can write game logic in VS3 and run it”:
-
-| # | Capability | Notes |
-|---|------------|--------|
-| 1 | Edition gate | `// @edition 3` recognized; classic unchanged |
-| 2 | Values & functions | Numbers, bools, strings, structs-as-data; pure `fn` |
-| 3 | Control flow | `if` / `match` / loops with clear bounds |
-| 4 | Host surface | Register engine **tools** as natives (no genre kits) |
-| 5 | Run | CLI or demo: compile + execute a logic unit with asserts |
-| 6 | Diagnostics | file:line:col on errors |
-
-**Explicitly later:** full borrow checker, full Studio IDE, web export, Web3, complete type system parity with Rust.
-
-## Proven surface (matches tests — do not overclaim)
-
-| Area | Syntax / tools |
-|------|----------------|
-| Edition | `// @edition 3` (required for VS3 API) |
-| Functions | `function name(a, b) { … return … }` |
-| Locals | `let x = expr` |
-| Control | `if` / `else`, `while` |
-| Values | ints, bools, floats, strings |
-| Operators | `+ - * / %` `== != < <= > >=` `&& \|\| !` |
-| Host tools | `abs` `min` `max` `clamp` `sin` `cos` `sqrt` `pow` `lerp` `hash_sha256` `len` `concat` `str` |
-| Presentation (state only) | `present_show` `present_hide` `set_bg` `ui_flag` `ui_flag_get` → `PresentHostState` via `call_with_present` |
-| Entry | `velvet vs3 check\|run`, `velvet_script_vs3::eval_call` / `call_with_present` |
-
-**Not yet claimed:** typed params `x: int`, `->` return types, `struct`/`enum`, full typeck, Web3.
-
-## What authors write (proven form)
-
-```text
+```velvet
 // @edition 3
-// Logic only — presentation stays story/vcss/hosts
 
-function can_play_card(hand_size, cost, energy) {
-    return hand_size > 0 && energy >= cost
+state {
+    runs: int = 0
 }
 
-function apply_damage(hp, dmg) {
-    if dmg >= hp {
-        return 0
-    } else {
-        return hp - dmg
-    }
-}
-
-function sum_to(n) {
-    let i = 0
-    let s = 0
-    while i < n {
-        i += 1
-        s += i
-    }
-    return s
+function register_run(score: int) {
+    runs += 1
+    return {"runs": runs, "score": score}
 }
 ```
 
-Hosts (Rust / play / story) **call** these logics; they don’t hide a prefabricated combat game inside the language.
+- Functions: `function name(parameters) { ... }` or `fn`.
+- Mutable bindings: `let name = value`.
+- Immutable bindings: `const name = value`.
+- Persistent module state: `state { name: type = value }`.
+- Parameter, local, and state annotations: `any`, `null`, `bool`, `int`/`i64`,
+  `float`/`f64`, `string`/`str`, `list`, and `map`.
+- A `Vs3Session` initializes state once and preserves it across calls.
+  `Vs3Module::call` is intentionally isolated and creates a fresh session.
 
-Sample file: `samples/vs3-logic/game_rules.vel`.
+Unknown names, duplicate definitions, invalid assignment targets, writes to a
+`const`, wrong arity, unknown types, and statically visible type mismatches are
+compile errors with source locations. Annotated function parameters are also
+checked at the Rust/CLI call boundary.
 
-## Pipeline (target)
+### Values and operators
 
-```text
-.vel (@edition 3)
-  → lexer / parser (shared DNA with classic where safe)
-  → HIR + types (strict enough to be useful)
-  → bytecode / IR
-  → VS3 runtime (evolve from VM work; rename as it stabilizes)
-  → host bindings (engine tools)
+- Values: `null`, booleans, signed 64-bit integers, 64-bit floats, strings,
+  mutable lists, and mutable string-keyed maps.
+- List literals: `[1, 2, 3]`.
+- Map literals: `{"name": "Ada", "score": 42}`; identifier keys are accepted
+  and the formatter emits quoted keys.
+- Indexing and mutation: `items[0]`, `profile["score"] = 42`. Map fields also
+  support record-style sugar: `profile.score += 1`.
+- Arithmetic: `+ - * / %` and unary `-`.
+- Compound assignment: `+= -= *= /=`, including indexed values.
+- Comparison: `== != < <= > >=`.
+- Logic: `&& || !` with short-circuit execution.
+
+Integer overflow, division overflow, and division by zero are runtime errors;
+they never panic the Rust host. Maps use deterministic key order. Cyclic list
+or map values are safe to compare, format, and account against memory limits.
+
+### Control flow
+
+```velvet
+function sum_even(values: list) {
+    let total = 0
+    for value in values {
+        if value % 2 != 0 { continue }
+        total += value
+        if total >= 100 { break }
+    }
+    return total
+}
 ```
+
+VS3 supports `if`/`else`, `while`, `for value in collection`, `break`,
+`continue`, block scopes, and `return`.
+
+Narrative declarations and commands such as `scene`, `character`, dialogue,
+`choice`, and `background` are rejected in edition 3. Use the classic story
+runtime or a host service. This prevents silent print/no-op lowering from being
+mistaken for general-language semantics.
+
+### Standard library
+
+| Area | Functions |
+|---|---|
+| Scalar math | Trigonometry, logarithms, powers, interpolation, range conversion, finite checks, GCD/LCM and checked integer powers |
+| Linear algebra | `vec2`/`vec3`/`vec4`, `mat3`/`mat4`, `quat`, operators, transforms, projection and geometry |
+| Procedural | Seeded PCG streams, distributions, value/gradient noise, fBm, turbulence and domain warp |
+| Statistics | Aggregates, quantiles, variance, covariance, correlation, histograms and smoothing |
+| Numerical | Polynomial evaluation/root solving and sample-based trapezoid/Simpson integration |
+| Values | `len`, `concat`, `str`, `type_of` |
+| Collections | `list_push`, `list_pop`, `map_has`, `map_keys` |
+| Errors | `assert(condition, message?)`, `fail(message)` |
+| Data tools | `hash_sha256`, `hex_encode`, `base64_encode` |
+| Debug output | `print` (captured by the VM, not written directly by the runtime) |
+
+See the complete contracts, signatures, failure modes, and examples in
+[VS3 Advanced Mathematics](VS3_MATH_SPEC.md).
+
+The legacy presentation adapter (`present_show`, `present_hide`, `set_bg`,
+`ui_flag`, `ui_flag_get`) requires `sandbox: false`. New integrations should
+prefer the generic host ABI.
+
+## Cooperative tasks and host ABI
+
+`yield(value)` is an expression. It is valid only in a cooperative task created
+with `Vs3Module::start`; a normal call returns a clear runtime error instead of
+silently continuing.
+
+The canonical host request is `[service, payload]`:
+
+```velvet
+// @edition 3
+
+function load_profile(user_id: int) {
+    let profile = yield(["storage.profile.load", user_id])
+    return profile
+}
+```
+
+A `Vs3Host` returns:
+
+- `HostOutcome::Ready(value)` for an immediate response;
+- `HostOutcome::Pending { ticket }` for later completion;
+- `HostOutcome::Failed(message)` for a controlled error.
+
+Use `drive_host_with_policy` and `Vs3HostPolicy` in production. Policies can
+grant exact services (`storage.profile.load`) or namespaces (`storage.*`) and
+bound the number of immediate requests per drive call. `Vs3HostPolicy::default`
+denies all services. Service names are validated and limited to 128 ASCII
+letters, digits, dots, underscores, or hyphens.
+
+## CLI
+
+```powershell
+# Validate and list exports
+velvet vs3 check samples/vs3-logic/game_rules.vel
+
+# Validate every edition-3 module in a directory as a package
+velvet vs3 check samples/vs3-logic
+
+# Format in place; comments and the edition marker are preserved
+velvet vs3 fmt samples/vs3-logic/game_rules.vel
+
+# One isolated call
+velvet vs3 run samples/vs3-logic/game_rules.vel `
+  --call can_play_card --arg i:5 --arg i:3 --arg i:3
+
+# Structured arguments: float, null, or JSON list/map
+velvet vs3 run logic.vel --call score `
+  --arg f:0.75 --arg null --arg 'j:{"difficulty":"hard"}'
+
+# Observe and optionally answer consecutive yields
+velvet vs3 run samples/vs3-logic/host_services.vel `
+  --call load_profile --arg i:7 --cooperative --resume 'j:{"name":"Ada"}'
+```
+
+Argument prefixes are `i:`, `f:`, `b:`, `s:`, and `j:`. Bare integers,
+floats, booleans, `null`, and strings are also accepted.
+
+## Rust API
+
+```rust
+use velvet_script_vs3::{compile, int, Vs3HostPolicy};
+
+let module = compile(source, Some("rules.vel"))?;
+
+// Persistent game/tool instance.
+let mut session = module.session()?;
+let first = session.call("register_run", &[int(100)])?;
+let second = session.call("register_run", &[int(200)])?;
+
+// Cooperative task with an explicit host capability policy.
+let mut task = module.start("load_profile", &[int(7)])?;
+let policy = Vs3HostPolicy::deny_all().allow("storage.profile.*");
+let status = task.drive_host_with_policy(&mut host, &policy)?;
+```
+
+Runtime errors retain their source location and script stack trace. `VmLimits`
+is re-exported by the VS3 crate for explicit instruction, memory, recursion,
+stack, and sandbox configuration.
+
+### Multi-file packages
+
+`Vs3Package::compile_modules` organizes independent source files under stable
+names. Calls use `module::function`, and `Vs3PackageSession` preserves separate
+state for every module. This is useful for host-owned package boundaries today;
+source-level `import` syntax and direct cross-module calls remain a compatible
+future extension.
+
+## Tooling
+
+- `velvet-script-lsp` uses the VS3 semantic frontend for edition-3 files.
+- Completions are edition-aware and do not suggest narrative syntax in VS3.
+- Rename ignores comments and string contents.
+- Semantic tokens include comments, VS3 control flow, types, literals, and
+  identifiers.
+- The VS Code extension under `editors/vscode-velvet` declares and locks its
+  language-client dependency with pnpm.
+
+## Boundaries and next compatible extensions
+
+The current alpha deliberately does not claim source-level imports,
+nominal structs/enums, pattern matching, generics, return-type syntax, or a
+borrow checker. Today, records and tagged variants are represented with maps
+and dispatched with ordinary conditionals. These features should extend the
+same semantic frontend and bytecode versioning instead of creating a parallel
+language pipeline.
+
+Engine concepts remain external modules. New scene, ECS, render, audio, input,
+asset, physics, or UI integrations must not add edition-3 keywords or global
+natives. The roadmap introduces typed, registrable modules while preserving the
+generic capability-limited host ABI.
 
 Classic product path remains:
 
 ```text
-.vel / .vstory → StoryProgram → VnSession   (unchanged support)
+.vel / .vstory -> StoryProgram -> VnSession
 ```
 
-## Relationship to VS2 code
+VS3 logic path is:
 
-- **Keep** useful crates and tests.
-- **Stop** marketing or roadmap items as “complete VS2”.
-- **Move** new work under VS3 docs and edition 3.
-- Breaking cleanups allowed if classic demos stay green.
-
-## CLI
-
-```bash
-velvet vs3 check samples/vs3-logic/game_rules.vel
-velvet vs3 run samples/vs3-logic/game_rules.vel --call can_play_card --arg 5 --arg 3 --arg 3
-velvet vs3 run samples/vs3-logic/game_rules.vel --call apply_damage --arg i:10 --arg i:3
-velvet vs3 run samples/vs3-logic/game_rules.vel --call fingerprint --arg s:hello
+```text
+.vel (@edition 3)
+  -> shared lexer/parser AST
+  -> VS3 semantic validation (names, scopes, const, arity, annotations)
+  -> bytecode v2
+  -> bounded VM / persistent session / cooperative task
+  -> capability-limited host services
 ```
 
-Library: `velvet_script_vs3::{compile, eval_call, detect_edition}`.
+## Samples and related documents
 
-## Success criteria (first usable VS3)
-
-1. A small **logic-only** sample compiles and runs with tests. ✅ `samples/vs3-logic/game_rules.vel`
-2. At least **two engine tools** bound as natives (e.g. math + hash). ✅ `sin`, `hash_sha256`, `abs`
-3. Docs state clearly: classic for story product, VS3 for general logic. ✅
-4. No demo depends on unfinished VS3 features claimed as done. ✅
-
-## Non-goals (first cut)
-
-- Replacing `velvet-novella` classic story overnight.
-- Web3 wallets, chains, or token APIs.
-- Full Ren’Py/Unity-script parity.
-- Genre frameworks as language builtins.
-
-## See also
-
-- ADR: `docs/adr/0008-velvet-script-3-official.md`
-- Tools policy: `docs/architecture/TOOLS.md`
-- Classic script: `docs/language/VELVET_SCRIPT.md`
-- VS2 historical alpha: `docs/language/VELVET_SCRIPT_2.md`
+- `samples/vs3-logic/game_rules.vel`
+- `samples/vs3-logic/host_services.vel`
+- `samples/vs3-logic/present_bridge.vel`
+- `docs/adr/0008-velvet-script-3-official.md`
+- `docs/language/VS3_ROADMAP.md`
+- `docs/architecture/VS3_ENGINE_RULES.md`
+- `docs/language/VELVET_SCRIPT.md`
+- `docs/language/VELVET_SCRIPT_2.md`

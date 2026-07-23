@@ -125,7 +125,10 @@ mod tests {
         assert!(!hits.contains(&3));
         // Wide arc should include angled target.
         let wide = melee_targets(origin, facing, 20.0, 1.2, &candidates);
-        assert!(wide.contains(&4) || wide.contains(&1));
+        assert!(wide.contains(&1));
+        assert!(wide.contains(&4), "wide arc misses angled target: {wide:?}");
+        assert!(!wide.contains(&2));
+        assert!(!wide.contains(&3));
     }
 
     #[test]
@@ -148,6 +151,7 @@ mod tests {
             }
         }
         assert_eq!(deaths, 1);
-        assert!(!h.is_alive() || h.current <= 0.0 || deaths == 1);
+        assert!(!h.is_alive());
+        assert_eq!(h.current, 0.0);
     }
 }

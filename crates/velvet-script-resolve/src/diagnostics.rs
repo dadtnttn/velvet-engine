@@ -175,12 +175,34 @@ mod tests {
     use super::*;
     use velvet_script_hir::HirSpan;
     #[test]
-    fn catalog_nonempty() {
-        // Real resolve codes only (no E2xxx_resolve_ext padding).
-        assert!(RESOLVE_CODES.len() >= 15);
-        assert!(RESOLVE_CODES.len() < 40);
-        assert!(code_known("E0001_unbound"));
-        assert!(!RESOLVE_CODES.iter().any(|c| c.contains("resolve_ext")));
+    fn diagnostic_catalog_matches_the_public_resolver_contract() {
+        let expected = [
+            "E0001_unbound",
+            "E0002_duplicate",
+            "E0003_import_cycle",
+            "E0004_private",
+            "E0005_not_a_type",
+            "E0006_not_a_value",
+            "E0007_ambiguous",
+            "E0008_bad_path",
+            "E0009_missing_mod",
+            "E0010_shadow_prelude",
+            "E0011_mut_required",
+            "E0012_const_assign",
+            "E0013_scene_unbound",
+            "E0014_layer_unbound",
+            "E0015_msg_unbound",
+            "E0016_screen_unbound",
+            "E0017_character_unbound",
+            "E0018_trait_unbound",
+            "E0019_impl_orphan",
+            "E0020_use_star_empty",
+        ];
+        assert_eq!(RESOLVE_CODES, expected);
+        let unique: std::collections::HashSet<_> = RESOLVE_CODES.iter().copied().collect();
+        assert_eq!(unique.len(), expected.len());
+        assert!(expected.iter().all(|code| code_known(code)));
+        assert!(!code_known("E9999_unknown"));
     }
     #[test]
     fn display_has_code() {

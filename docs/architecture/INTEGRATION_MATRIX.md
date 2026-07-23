@@ -86,7 +86,7 @@ Each compiler phase has a narrow data contract. This is deliberately modular, bu
 | `velvet-script-lsp` | Editor protocol projection | Keeps protocol dependencies out of compiler core; completion/hover tests |
 | `velvet-script-i18n` | Script diagnostic/localization vocabulary | Keeps locale data out of parser/compiler logic; crate tests |
 | `velvet-script-corpus` | Shared valid/invalid language fixtures | Reused regression corpus; merge if it stops serving multiple phases |
-| `velvet-script-vs3` | Experimental next-generation typed execution surface | Explicitly experimental; isolated so it cannot destabilize the product VM |
+| `velvet-script-vs3` | Official general game-logic language; usable alpha | Edition-gated semantic frontend, bytecode v2, bounded VM, persistent sessions, cooperative tasks, and capability-limited host ABI; classic story runtime remains separate |
 | `velvet-script-layers` | Typed story/UI/world/fx/audio layer stack | Shared by Studio and product UI; stack and screen-blueprint tests |
 
 ## Narrative and presentation

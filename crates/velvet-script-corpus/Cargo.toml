@@ -1,6 +1,6 @@
 [package]
 name = "velvet-script-corpus"
-description = "Velvet Script 2 corpus tests and samples"
+description = "Velvet Script corpus tests and distinct VS2/VS3 samples"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,3 +13,4 @@ velvet-script-i18n = { workspace = true }
 velvet-script-layers = { workspace = true }
 velvet-script-syntax = { workspace = true }
 velvet-script-stdlib = { workspace = true }
+velvet-script-vs3 = { workspace = true }

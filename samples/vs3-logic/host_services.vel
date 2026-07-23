@@ -1,0 +1,18 @@
+// @edition 3
+// General engine services: no product or genre syntax is built into VS3.
+
+function request_service(service: string, payload: any) {
+    return yield([service, payload])
+}
+
+function load_profile(user_id: int) {
+    return request_service("storage.profile.load", user_id)
+}
+
+function play_sound(asset_id: string) {
+    return request_service("audio.sound.play", asset_id)
+}
+
+function show_dialogue(line: string) {
+    return request_service("ui.dialogue.open", line)
+}

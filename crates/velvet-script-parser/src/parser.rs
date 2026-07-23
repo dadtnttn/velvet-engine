@@ -922,12 +922,23 @@ impl Parser {
 
     fn parse_assignment(&mut self) -> Result<Expr, String> {
         let mut expr = self.parse_or()?;
-        if self.check(|t| matches!(t, Token::Assign | Token::PlusAssign | Token::MinusAssign)) {
+        if self.check(|t| {
+            matches!(
+                t,
+                Token::Assign
+                    | Token::PlusAssign
+                    | Token::MinusAssign
+                    | Token::StarAssign
+                    | Token::SlashAssign
+            )
+        }) {
             let op_tok = self.advance().unwrap().clone();
             let op = match op_tok.token {
                 Token::Assign => BinOp::Assign,
                 Token::PlusAssign => BinOp::AddAssign,
                 Token::MinusAssign => BinOp::SubAssign,
+                Token::StarAssign => BinOp::MulAssign,
+                Token::SlashAssign => BinOp::DivAssign,
                 _ => unreachable!(),
             };
             let right = self.parse_assignment()?;
@@ -1163,7 +1174,11 @@ impl Parser {
             Token::Ident(name) => {
                 let name = name.clone();
                 self.advance();
-                Ok(Expr::Ident { name, loc })
+                if name == "null" {
+                    Ok(Expr::Null { loc })
+                } else {
+                    Ok(Expr::Ident { name, loc })
+                }
             }
             Token::LParen => {
                 self.advance();
@@ -1185,6 +1200,27 @@ impl Parser {
                 }
                 self.expect(|t| matches!(t, Token::RBracket), "expected ']'")?;
                 Ok(Expr::List { elements, loc })
+            }
+            Token::LBrace => {
+                self.advance();
+                let mut entries = Vec::new();
+                while !self.check(|token| matches!(token, Token::RBrace)) {
+                    let key = match self.advance().cloned() {
+                        Some(LexedToken {
+                            token: Token::String(key) | Token::Ident(key),
+                            ..
+                        }) => key,
+                        _ => return Err("expected string or identifier map key".into()),
+                    };
+                    self.expect(|token| matches!(token, Token::Colon), "expected ':'")?;
+                    let value = self.parse_expression()?;
+                    entries.push((key, value));
+                    if !self.match_token(|token| matches!(token, Token::Comma)) {
+                        break;
+                    }
+                }
+                self.expect(|token| matches!(token, Token::RBrace), "expected '}'")?;
+                Ok(Expr::Map { entries, loc })
             }
             _ => Err(format!(
                 "unexpected token in expression at {}",
@@ -1288,18 +1324,24 @@ scene apartment_night {
     #[test]
     fn parse_error_has_line_column() {
         let r = parse("let = 1").unwrap();
-        assert!(
-            r.module.has_errors() || !r.module.diagnostics.is_empty(),
-            "expected recovery diagnostics"
-        );
+        assert!(r.module.has_errors(), "expected recovery diagnostics");
+        assert!(r
+            .module
+            .diagnostics
+            .iter()
+            .all(|d| d.loc.line > 0 && d.loc.column > 0));
         let r = parse("1 +").unwrap();
         assert!(
-            r.module.has_errors()
-                || r.module
-                    .diagnostics
-                    .iter()
-                    .any(|d| d.message.contains("unexpected") || d.message.contains("end")),
+            r.module.has_errors(),
             "expected diagnostics, got {:?}",
+            r.module.diagnostics
+        );
+        assert!(
+            r.module
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("unexpected") || d.message.contains("end")),
+            "diagnostics must explain the incomplete expression: {:?}",
             r.module.diagnostics
         );
         for d in &r.module.diagnostics {
@@ -1570,8 +1612,11 @@ function good() {
 }
 "#;
         let r = parse(src).unwrap();
-        assert!(r.module.has_errors() || !r.module.items.is_empty());
-        // At least one function should survive recovery.
+        assert!(
+            r.module.has_errors(),
+            "broken declaration must emit a diagnostic"
+        );
+        // The valid function after the error must survive recovery.
         let funcs: Vec<_> = r
             .module
             .items
@@ -1582,7 +1627,7 @@ function good() {
             })
             .collect();
         assert!(
-            funcs.contains(&"good") || funcs.contains(&"broken") || !funcs.is_empty(),
+            funcs.contains(&"good"),
             "funcs={funcs:?} diags={:?}",
             r.module.diagnostics
         );
@@ -2091,7 +2136,15 @@ scene s {
     #[test]
     fn fixture_error_unclosed_brace() {
         let r = parse("function f() { let x = 1").unwrap();
-        assert!(r.module.has_errors() || !r.module.diagnostics.is_empty());
+        assert!(r.module.has_errors());
+        assert!(
+            r.module
+                .diagnostics
+                .iter()
+                .all(|d| !d.message.trim().is_empty() && d.loc.line > 0 && d.loc.column > 0),
+            "diagnostics must be actionable and located: {:?}",
+            r.module.diagnostics
+        );
     }
 
     #[test]

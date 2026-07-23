@@ -153,6 +153,11 @@ pub fn call_native(id: u16, args: &[Value]) -> Result<NativeOutput, String> {
             let f = args[0]
                 .as_f64()
                 .ok_or_else(|| "sqrt expects a number".to_string())?;
+            if !f.is_finite() || f < 0.0 {
+                return Err(format!(
+                    "sqrt domain error: expected finite x >= 0, received {f}"
+                ));
+            }
             Ok(NativeOutput {
                 value: Value::Float(f.sqrt()),
                 printed: None,
@@ -166,8 +171,14 @@ pub fn call_native(id: u16, args: &[Value]) -> Result<NativeOutput, String> {
             let b = args[1]
                 .as_f64()
                 .ok_or_else(|| "pow expects numbers".to_string())?;
+            let result = a.powf(b);
+            if !result.is_finite() {
+                return Err(format!(
+                    "pow domain error: ({a}, {b}) produced a non-finite result"
+                ));
+            }
             Ok(NativeOutput {
-                value: Value::Float(a.powf(b)),
+                value: Value::Float(result),
                 printed: None,
             })
         }
@@ -212,6 +223,72 @@ pub fn call_native(id: u16, args: &[Value]) -> Result<NativeOutput, String> {
                 value: Value::String(Rc::from(b64)),
                 printed: None,
             })
+        }
+        NativeId::TypeOf => {
+            expect_argc("type_of", args, 1)?;
+            Ok(NativeOutput {
+                value: Value::String(Rc::from(args[0].type_name())),
+                printed: None,
+            })
+        }
+        NativeId::ListPush => {
+            expect_argc("list_push", args, 2)?;
+            args[0].list_push(args[1].clone())?;
+            Ok(NativeOutput {
+                value: args[0].clone(),
+                printed: None,
+            })
+        }
+        NativeId::ListPop => {
+            expect_argc("list_pop", args, 1)?;
+            Ok(NativeOutput {
+                value: args[0].list_pop()?,
+                printed: None,
+            })
+        }
+        NativeId::MapHas => {
+            expect_argc("map_has", args, 2)?;
+            let key = args[1]
+                .as_str()
+                .ok_or_else(|| "map_has expects a string key".to_string())?;
+            Ok(NativeOutput {
+                value: Value::Bool(args[0].map_has(key)?),
+                printed: None,
+            })
+        }
+        NativeId::MapKeys => {
+            expect_argc("map_keys", args, 1)?;
+            let keys = args[0]
+                .map_keys()?
+                .into_iter()
+                .map(|key| Value::String(Rc::from(key)))
+                .collect();
+            Ok(NativeOutput {
+                value: Value::list(keys),
+                printed: None,
+            })
+        }
+        NativeId::Assert => {
+            if args.is_empty() || args.len() > 2 {
+                return Err(format!(
+                    "assert expected 1 or 2 arguments, got {}",
+                    args.len()
+                ));
+            }
+            if !args[0].is_truthy() {
+                return Err(args
+                    .get(1)
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "assertion failed".into()));
+            }
+            Ok(NativeOutput {
+                value: Value::Null,
+                printed: None,
+            })
+        }
+        NativeId::Fail => {
+            expect_argc("fail", args, 1)?;
+            Err(args[0].to_string())
         }
         // Presentation host natives — mutate PresentHostState (no drawing).
         NativeId::PresentShow => {
@@ -275,6 +352,7 @@ pub fn call_native(id: u16, args: &[Value]) -> Result<NativeOutput, String> {
                 printed: None,
             })
         }
+        native => crate::math::call_math_native(native, args),
     }
 }
 
@@ -404,8 +482,9 @@ mod tests {
     fn lookup_names() {
         assert_eq!(lookup_native("abs"), Some(NativeId::Abs));
         assert!(lookup_native("nope").is_none());
-        // Print..Base64Encode (18) + present_show/set_bg/ui_flag/ui_flag_get/present_hide (5) = 23
-        assert_eq!(NativeId::all().len(), 23);
+        assert_eq!(NativeId::all().len(), 145);
+        assert_eq!(NativeId::Fail.as_u16(), 29);
+        assert_eq!(NativeId::Tan.as_u16(), 30);
         assert!(lookup_native("present_show").is_some());
         assert!(lookup_native("set_bg").is_some());
         assert!(lookup_native("ui_flag").is_some());
@@ -413,6 +492,8 @@ mod tests {
         assert!(lookup_native("present_hide").is_some());
         assert_eq!(lookup_native("sin"), Some(NativeId::Sin));
         assert_eq!(lookup_native("hash_sha256"), Some(NativeId::HashSha256));
+        assert_eq!(lookup_native("type_of"), Some(NativeId::TypeOf));
+        assert_eq!(lookup_native("fail"), Some(NativeId::Fail));
     }
 
     #[test]
@@ -549,5 +630,38 @@ mod tests {
         assert!(lookup_native("str").is_some());
         assert!(lookup_native("floor").is_some());
         assert!(lookup_native("ceil").is_some());
+    }
+
+    #[test]
+    fn collection_and_error_natives() {
+        let list = Value::list(vec![Value::Int(1)]);
+        call_native(NativeId::ListPush.as_u16(), &[list.clone(), Value::Int(2)]).unwrap();
+        assert_eq!(list.len(), Some(2));
+        assert_eq!(
+            call_native(NativeId::ListPop.as_u16(), &[list])
+                .unwrap()
+                .value,
+            Value::Int(2)
+        );
+
+        let map = Value::map([("z".into(), Value::Int(1)), ("a".into(), Value::Int(2))]);
+        assert_eq!(
+            call_native(
+                NativeId::MapHas.as_u16(),
+                &[map.clone(), Value::String(Rc::from("a"))]
+            )
+            .unwrap()
+            .value,
+            Value::Bool(true)
+        );
+        let keys = call_native(NativeId::MapKeys.as_u16(), &[map])
+            .unwrap()
+            .value;
+        assert_eq!(keys.to_string(), "[a, z]");
+        assert!(call_native(
+            NativeId::Assert.as_u16(),
+            &[Value::Bool(false), Value::String(Rc::from("bad state"))]
+        )
+        .is_err());
     }
 }
