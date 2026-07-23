@@ -10,9 +10,11 @@ rust-version.workspace = true
 thiserror = { workspace = true }
 velvet-script-ast = { workspace = true }
 velvet-script-lexer = { workspace = true }
+velvet-script-parser = { workspace = true }
 velvet-script-compiler = { workspace = true }
 velvet-script-vm = { workspace = true }
 velvet-script-bytecode = { workspace = true }
+velvet-math = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

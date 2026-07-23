@@ -374,7 +374,6 @@ pub fn probe_scaled_soft_alpha(art: &RgbaBuf, dw: i32, dh: i32) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use std::path::PathBuf;
 
     fn temp_png_black_plate(tag: &str) -> PathBuf {
@@ -450,13 +449,5 @@ mod tests {
             count_soft_alpha(&logo.3) > 50,
             "real logo should have soft alpha"
         );
-    }
-
-    #[test]
-    fn write_helper_compiles() {
-        let f = std::env::temp_dir().join("velvet_logo_touch.txt");
-        let mut file = std::fs::File::create(&f).unwrap();
-        writeln!(file, "ok").unwrap();
-        let _ = std::fs::remove_file(&f);
     }
 }

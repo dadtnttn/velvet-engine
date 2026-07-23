@@ -480,9 +480,10 @@ choice_text "Yes"
     fn fallback_t_returns_source() {
         let mut cat = LocalizationCatalog::new("en");
         cat.insert("k", "Hello", "ctx");
-        // No translation set — t should return source or key.
-        let v = cat.t("k");
-        assert!(v == "Hello" || v == "k" || !v.is_empty());
+        // Existing untranslated keys fall back to source; unknown keys fall back to the key.
+        assert_eq!(cat.t("k"), "Hello");
+        cat.set_translation("k", "Hola");
+        assert_eq!(cat.t("k"), "Hola");
         assert_eq!(cat.t("missing"), "missing");
     }
 }

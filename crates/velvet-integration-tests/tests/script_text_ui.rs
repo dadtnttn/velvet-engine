@@ -2,7 +2,7 @@
 
 use velvet_math::Vec2;
 use velvet_script_compiler::compile_source;
-use velvet_script_vm::{run_source, VmLimits};
+use velvet_script_vm::{run_source, Value, Vm, VmLimits};
 use velvet_text::{parse_rich_text, Typewriter};
 use velvet_ui::prelude::*;
 
@@ -14,18 +14,19 @@ print("hello")
 let x = 40 + 2
 "#;
     let out = run_source(src, Some("t.vel"), VmLimits::default()).expect("run");
-    assert!(
-        out.printed.iter().any(|l| l.contains("hello")) || out.instructions > 0,
-        "vm should execute; printed={:?}",
-        out.printed
-    );
+    assert_eq!(out.printed, vec!["hello".to_string()]);
+    assert!(out.instructions > 0, "the VM must execute bytecode");
 
     let rich = parse_rich_text("Wait{pause=0.1}... {color=#ff0000}go{/color}").unwrap();
     let mut tw = Typewriter::from_rich(rich, 1000.0);
     for _ in 0..30 {
         tw.tick(0.05);
     }
-    assert!(tw.is_finished() || !tw.visible_text().is_empty());
+    assert!(
+        tw.is_finished(),
+        "high-speed typewriter must finish within the budget"
+    );
+    assert_eq!(tw.visible_text(), "Wait... go");
 }
 
 #[test]
@@ -50,8 +51,11 @@ function add(a, b) {
 }
 "#;
     let compiled = compile_source(src, Some("s.vel")).expect("compile");
-    assert!(
-        !compiled.module.functions.is_empty() || !compiled.module.exports.is_empty(),
-        "should produce bytecode functions or exports"
+    assert!(compiled.module.exports.contains_key("add"));
+    let mut vm = Vm::new(compiled.module, VmLimits::default());
+    assert_eq!(
+        vm.call_name("add", &[Value::Int(2), Value::Int(3)])
+            .unwrap(),
+        Value::Int(5)
     );
 }

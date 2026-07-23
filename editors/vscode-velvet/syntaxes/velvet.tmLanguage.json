@@ -2,7 +2,11 @@
   "scopeName": "source.velvet",
   "patterns": [
     { "name": "comment.line.double-slash.velvet", "match": "//.*$" },
-    { "name": "keyword.control.velvet", "match": "\\b(function|scene|character|state|choice|jump|label|return|let|const|if|else|while|for|in|break|continue|show|hide|background|music|end|call)\\b" },
+    { "name": "keyword.control.velvet", "match": "\\b(function|fn|scene|screen|button|character|state|choice|jump|label|return|let|const|if|else|while|for|in|break|continue|yield|show|hide|background|music|end|call)\\b" },
+    { "name": "storage.type.velvet", "match": "\\b(any|bool|int|i64|float|f64|number|string|str|list|array|map|vec2|vec3|vec4|mat3|mat4|quat|quaternion|rng|random)\\b" },
+    { "name": "support.function.builtin.velvet", "match": "\\b(abs|min|max|floor|ceil|clamp|len|concat|print|str|sin|cos|sqrt|pow|lerp|hash_sha256|hex_encode|base64_encode|type_of|list_push|list_pop|map_has|map_keys|assert|fail|tan|asin|acos|atan|atan2|exp|ln|log2|log10|cbrt|round|trunc|fract|sign|hypot|degrees|radians|inverse_lerp|remap|smoothstep|is_finite|is_nan|is_infinite|approx_eq|gcd|lcm|vec2|vec3|vec4|dot|cross|length|normalize|distance|angle_between|reflect|project|vec_lerp|mat3_identity|mat4_identity|mat3|mat4|mat_mul|mat_transpose|mat_determinant|mat_inverse|transform_point|transform_vector|quat|quat_identity|quat_axis_angle|quat_mul|quat_rotate|quat_normalize|quat_inverse|quat_slerp|rng_new|rng_next_float|rng_range_int|rng_range_float|rng_bool|shuffle|choose|weighted_choose|noise1|noise2|fbm2|sum|product|mean|median|variance|stddev|quantile|covariance|correlation|moving_average|poly_eval|integrate_trapezoid|integrate_simpson|poly_root_bisection|quadratic_bezier|cubic_bezier|catmull_rom|hermite|closest_point_segment|segment_intersection2)\\b" },
+    { "name": "support.function.builtin.velvet", "match": "\\b(refract|mat3_translation|mat3_scale|mat3_rotation|mat4_translation|mat4_scale|mat4_rotation_x|mat4_rotation_y|mat4_rotation_z|mat4_orthographic|mat4_perspective|mat4_look_at|rng_gaussian|rng_exponential|perlin2|turbulence2|domain_warp2|mode|histogram|ema|is_even|is_odd|pow_int|vec_min|vec_max|clamp_length|quat_euler|ray_plane_intersection)\\b" },
+    { "name": "constant.language.velvet", "match": "\\b(true|false|null|PI|TAU|E|EPSILON|INFINITY|NAN)\\b" },
     { "name": "string.quoted.double.velvet", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.velvet", "match": "\\\\." }] },
     { "name": "constant.numeric.velvet", "match": "\\b[0-9]+(\\.[0-9]+)?\\b" }
   ]

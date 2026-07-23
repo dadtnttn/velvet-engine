@@ -117,6 +117,7 @@ pub struct Vm {
     frames: Vec<CallFrame>,
     limits: VmLimits,
     instructions: u64,
+    total_instructions: u64,
     memory_units: usize,
     printed: Vec<String>,
     cancelled: bool,
@@ -156,6 +157,7 @@ impl Vm {
             frames: Vec::new(),
             limits,
             instructions: 0,
+            total_instructions: 0,
             memory_units: 0,
             printed: Vec::new(),
             cancelled: false,
@@ -190,6 +192,11 @@ impl Vm {
     /// Instructions executed so far.
     pub fn instructions(&self) -> u64 {
         self.instructions
+    }
+
+    /// Instructions executed over the lifetime of this VM.
+    pub fn total_instructions(&self) -> u64 {
+        self.total_instructions
     }
 
     /// Value stack (for debugger).
@@ -250,6 +257,7 @@ impl Vm {
 
     /// Run the main `<script>` function.
     pub fn run(&mut self) -> Result<VmOutput, VmError> {
+        self.reset_execution_budget();
         let main = self.module.main_index().ok_or_else(|| VmError::Runtime {
             message: "no main chunk".into(),
             location: None,
@@ -265,8 +273,29 @@ impl Vm {
         })
     }
 
+    /// Run the synthetic `<script>` initializer once when the module has one.
+    ///
+    /// Compiled modules use this chunk to initialize top-level and `state`
+    /// globals. Hand-built bytecode modules without `<script>` need no setup.
+    pub fn initialize(&mut self) -> Result<(), VmError> {
+        if !self.frames.is_empty() {
+            return Err(self.runtime_err("cannot initialize while code is running"));
+        }
+        let Some(&main) = self.module.exports.get("<script>") else {
+            return Ok(());
+        };
+        self.reset_execution_budget();
+        self.call_function(main, 0)?;
+        self.execute()?;
+        let _ = self.stack.pop();
+        Ok(())
+    }
+
     /// Call a named export with args (pushed left-to-right).
     pub fn call_name(&mut self, name: &str, args: &[Value]) -> Result<Value, VmError> {
+        if self.frames.is_empty() {
+            self.reset_execution_budget();
+        }
         let fidx = *self
             .module
             .exports
@@ -296,6 +325,7 @@ impl Vm {
             return Err(VmError::Cancelled);
         }
         self.instructions += 1;
+        self.total_instructions += 1;
         if self.instructions > self.limits.max_instructions {
             return Err(VmError::InstructionLimit {
                 limit: self.limits.max_instructions,
@@ -391,9 +421,13 @@ impl Vm {
             Op::Neg => {
                 let a = self.pop()?;
                 let v = match a {
-                    Value::Int(i) => Value::Int(-i),
+                    Value::Int(i) => Value::Int(
+                        i.checked_neg()
+                            .ok_or_else(|| self.runtime_err("integer overflow"))?,
+                    ),
                     Value::Float(f) => Value::Float(-f),
-                    _ => return Err(self.runtime_err("negate on non-number")),
+                    value => crate::math::negate_math(&value)
+                        .ok_or_else(|| self.runtime_err("negate on non-number"))?,
                 };
                 self.push(v)?;
             }
@@ -499,6 +533,23 @@ impl Vm {
                     .map_err(|m| self.runtime_err(m))?;
                 self.push(stored)?;
             }
+            Op::UpdateIndex => {
+                let arithmetic = Op::from_u8(self.read_u8()?)
+                    .filter(|op| matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div))
+                    .ok_or_else(|| self.runtime_err("invalid compound index operator"))?;
+                let right = self.pop()?;
+                let index = self.pop()?;
+                let container = self.pop()?;
+                let current = container
+                    .get_index(&index)
+                    .map_err(|message| self.runtime_err(message))?;
+                let updated = binary_num(arithmetic, &current, &right)
+                    .map_err(|message| self.runtime_err(message))?;
+                let stored = container
+                    .set_index(&index, updated)
+                    .map_err(|message| self.runtime_err(message))?;
+                self.push(stored)?;
+            }
             Op::Len => {
                 let v = self.pop()?;
                 let n = v
@@ -523,11 +574,11 @@ impl Vm {
 
     fn execute(&mut self) -> Result<(), VmError> {
         while !self.frames.is_empty() {
-            // Full run ignores cooperative Yield (treat as no-op leave value).
             let yielded = self.step_instruction()?;
             if yielded {
-                // In non-coroutine run, Yield just continues with value on stack.
-                continue;
+                return Err(self.runtime_err(
+                    "yield requires cooperative execution; use Coroutine or Vs3Module::start",
+                ));
             }
         }
         Ok(())
@@ -567,12 +618,54 @@ impl Vm {
         let start = self.stack.len() - argc;
         let args: Vec<Value> = self.stack[start..].to_vec();
         self.stack.truncate(start);
+        let native = NativeId::from_u16(id)
+            .ok_or_else(|| self.runtime_err(format!("unknown native id {id}")))?;
+        if self.limits.sandbox
+            && matches!(
+                native,
+                NativeId::PresentShow
+                    | NativeId::PresentSetBg
+                    | NativeId::PresentUiFlag
+                    | NativeId::PresentUiFlagGet
+                    | NativeId::PresentHide
+            )
+        {
+            return Err(self.runtime_err(format!(
+                "native `{}` requires host permissions (sandbox is enabled)",
+                native.name()
+            )));
+        }
+        let spec = native.spec();
+        let cost = u64::from(spec.base_cost)
+            .saturating_add(crate::math::dynamic_cost(native, &args))
+            .saturating_sub(1);
+        self.charge_instructions(cost)?;
         let out = stdlib::call_native(id, &args).map_err(|m| self.runtime_err(m))?;
         if let Some(line) = out.printed {
             self.printed.push(line);
         }
         self.push(out.value)?;
         Ok(())
+    }
+
+    fn charge_instructions(&mut self, extra: u64) -> Result<(), VmError> {
+        self.instructions = self.instructions.saturating_add(extra);
+        self.total_instructions = self.total_instructions.saturating_add(extra);
+        if self.instructions > self.limits.max_instructions {
+            return Err(VmError::InstructionLimit {
+                limit: self.limits.max_instructions,
+            });
+        }
+        Ok(())
+    }
+
+    fn reset_execution_budget(&mut self) {
+        self.instructions = 0;
+        self.memory_units = self
+            .globals
+            .iter()
+            .map(|value| value.memory_units().saturating_sub(1))
+            .sum();
     }
 
     fn chunk(&self, idx: u16) -> &Chunk {
@@ -712,26 +805,26 @@ fn binary_num(op: Op, a: &Value, b: &Value) -> Result<Value, String> {
             return Ok(Value::String(std::rc::Rc::from(format!("{a}{s}"))));
         }
     }
+    if let Some(result) = crate::math::binary_math(op, a, b) {
+        return result;
+    }
     if let (Some(ai), Some(bi)) = (a.as_i64(), b.as_i64()) {
         if !matches!(a, Value::Float(_)) && !matches!(b, Value::Float(_)) {
             let v = match op {
-                Op::Add => ai + bi,
-                Op::Sub => ai - bi,
-                Op::Mul => ai * bi,
-                Op::Div => {
-                    if bi == 0 {
-                        return Err("division by zero".into());
-                    }
-                    ai / bi
-                }
-                Op::Rem => {
-                    if bi == 0 {
-                        return Err("division by zero".into());
-                    }
-                    ai % bi
-                }
+                Op::Add => ai.checked_add(bi),
+                Op::Sub => ai.checked_sub(bi),
+                Op::Mul => ai.checked_mul(bi),
+                Op::Div => ai.checked_div(bi),
+                Op::Rem => ai.checked_rem(bi),
                 _ => return Err("bad numeric op".into()),
-            };
+            }
+            .ok_or_else(|| {
+                if bi == 0 && matches!(op, Op::Div | Op::Rem) {
+                    "division by zero".to_string()
+                } else {
+                    "integer overflow".to_string()
+                }
+            })?;
             return Ok(Value::Int(v));
         }
     }
@@ -891,7 +984,12 @@ function bad() {
                 stack_trace,
             } => {
                 assert!(message.contains("division"));
-                assert!(location.is_some() || !stack_trace.is_empty());
+                let location = location.expect("runtime errors must retain source location");
+                assert!(location.contains("err.vel"), "location={location}");
+                assert!(
+                    stack_trace.iter().any(|frame| frame.contains("bad")),
+                    "stack={stack_trace:?}"
+                );
             }
             other => panic!("unexpected {other:?}"),
         }

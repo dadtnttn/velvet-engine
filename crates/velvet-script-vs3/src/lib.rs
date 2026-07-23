@@ -1,52 +1,181 @@
 //! # velvet-script-vs3
 //!
-//! **Official general game-logic language** (`// @edition 3`).
+//! Official general game-logic language selected by `// @edition 3`.
+//! Classic product story files stay on their separate `StoryProgram` path.
 //!
-//! - Classic product story (`.vel` without edition 3 → `StoryProgram`) stays separate.
-//! - VS3 reuses the solid classic compile+VM path for **real** function execution.
-//! - Edition gate, structured diagnostics, and a clean `compile` / `call` API.
-//!
-//! Not a genre prefab. Not Web3. Logics only.
-//!
-//! ## Proven language surface (must match tests)
-//!
-//! | Area | Supported |
-//! |------|-----------|
-//! | Edition | `// @edition 3` required |
-//! | Functions | `function name(args) { ... return ... }` |
-//! | Values | `int`, `bool`, `float`, `string` (via literals / natives) |
-//! | Arithmetic | `+ - * / %` unary `-` |
-//! | Compare | `== != < <= > >=` |
-//! | Logic | `&& \|\| !` |
-//! | Control | `if` / `else`, `while`, locals `let` |
-//! | Host tools | `abs`, `min`, `max`, `clamp`, `sin`, `cos`, `sqrt`, `pow`, `lerp`, `hash_sha256`, `len`, `concat`, `str`, … |
-//!
-//! Typed `fn f(x: int) -> bool` syntax is **not** claimed until tests prove it.
+//! VS3 provides real functions and persistent state, checked annotations,
+//! mutable lists/maps, structured loop control, bounded bytecode execution,
+//! cooperative tasks, and a capability-limited host ABI. Engine features are
+//! libraries and services built on general values, not genre-specific syntax.
 
 #![deny(missing_docs)]
 
+mod semantic;
+
+use std::collections::{BTreeMap, BTreeSet};
+
 use thiserror::Error;
 use velvet_script_ast::{Diagnostic, Severity, SourceLoc};
-use velvet_script_compiler::{compile_source, CompileError, CompileResult};
+use velvet_script_bytecode::fnv1a64;
+use velvet_script_compiler::{compile as compile_ast, CompileError, CompileResult};
 use velvet_script_lexer::Span;
-use velvet_script_vm::{Vm, VmError, VmLimits};
+use velvet_script_parser::parse_file;
+use velvet_script_vm::{Coroutine, CoroutineStatus, Vm, VmError};
 
-/// Runtime value (re-export for hosts / CLI).
-pub use velvet_script_vm::Value;
+/// Runtime values, limits, and native metadata re-exported for hosts and tooling.
+pub use velvet_script_vm::{NativeId, NativePurity, NativeSpec, NativeType, Value, VmLimits};
+
+/// Runtime-checkable VS3 type annotation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Vs3Type {
+    /// `any` accepts every value.
+    Any,
+    /// `null`.
+    Null,
+    /// `bool`.
+    Bool,
+    /// Signed 64-bit `int`.
+    Int,
+    /// 64-bit `float`; integer values are accepted at boundaries.
+    Float,
+    /// UTF-8 `string` / `str`.
+    String,
+    /// Mutable `list`.
+    List,
+    /// Mutable string-keyed `map`.
+    Map,
+    /// Immutable two-component vector.
+    Vec2,
+    /// Immutable three-component vector.
+    Vec3,
+    /// Immutable four-component vector.
+    Vec4,
+    /// Immutable 3x3 matrix.
+    Mat3,
+    /// Immutable 4x4 matrix.
+    Mat4,
+    /// Immutable quaternion.
+    Quat,
+    /// Mutable deterministic random stream.
+    Rng,
+}
+
+impl Vs3Type {
+    fn parse(name: &str) -> Option<Self> {
+        Some(match name {
+            "any" => Self::Any,
+            "null" => Self::Null,
+            "bool" => Self::Bool,
+            "int" | "i64" => Self::Int,
+            "float" | "f64" | "number" => Self::Float,
+            "string" | "str" => Self::String,
+            "list" | "array" => Self::List,
+            "map" => Self::Map,
+            "vec2" => Self::Vec2,
+            "vec3" => Self::Vec3,
+            "vec4" => Self::Vec4,
+            "mat3" => Self::Mat3,
+            "mat4" => Self::Mat4,
+            "quat" | "quaternion" => Self::Quat,
+            "rng" | "random" => Self::Rng,
+            _ => return None,
+        })
+    }
+
+    /// Canonical source spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Any => "any",
+            Self::Null => "null",
+            Self::Bool => "bool",
+            Self::Int => "int",
+            Self::Float => "float",
+            Self::String => "string",
+            Self::List => "list",
+            Self::Map => "map",
+            Self::Vec2 => "vec2",
+            Self::Vec3 => "vec3",
+            Self::Vec4 => "vec4",
+            Self::Mat3 => "mat3",
+            Self::Mat4 => "mat4",
+            Self::Quat => "quat",
+            Self::Rng => "rng",
+        }
+    }
+
+    fn accepts(self, found: Self) -> bool {
+        self == Self::Any
+            || found == Self::Any
+            || self == found
+            || (self == Self::Float && found == Self::Int)
+    }
+
+    fn accepts_value(self, value: &Value) -> bool {
+        self == Self::Any
+            || matches!(
+                (self, value),
+                (Self::Null, Value::Null)
+                    | (Self::Bool, Value::Bool(_))
+                    | (Self::Int, Value::Int(_))
+                    | (Self::Float, Value::Int(_) | Value::Float(_))
+                    | (Self::String, Value::String(_))
+                    | (Self::List, Value::List(_))
+                    | (Self::Map, Value::Map(_))
+                    | (Self::Vec2, Value::Vec2(_))
+                    | (Self::Vec3, Value::Vec3(_))
+                    | (Self::Vec4, Value::Vec4(_))
+                    | (Self::Mat3, Value::Mat3(_))
+                    | (Self::Mat4, Value::Mat4(_))
+                    | (Self::Quat, Value::Quat(_))
+                    | (Self::Rng, Value::Rng(_))
+            )
+    }
+
+    fn from_native(native: NativeType) -> Option<Self> {
+        Some(match native {
+            NativeType::Any | NativeType::Vector | NativeType::Matrix => Self::Any,
+            NativeType::Number | NativeType::Float => Self::Float,
+            NativeType::Null => Self::Null,
+            NativeType::Bool => Self::Bool,
+            NativeType::Int => Self::Int,
+            NativeType::String => Self::String,
+            NativeType::List => Self::List,
+            NativeType::Map => Self::Map,
+            NativeType::Vec2 => Self::Vec2,
+            NativeType::Vec3 => Self::Vec3,
+            NativeType::Vec4 => Self::Vec4,
+            NativeType::Mat3 => Self::Mat3,
+            NativeType::Mat4 => Self::Mat4,
+            NativeType::Quat => Self::Quat,
+            NativeType::Rng => Self::Rng,
+        })
+    }
+}
 
 /// Human-readable list of the **proven** VS3 surface (docs / tooling).
 pub const SUPPORTED_SURFACE: &[&str] = &[
     "edition: // @edition 3",
     "function name(params) { body }",
+    "checked annotations: any null bool int float string list map vec2 vec3 vec4 mat3 mat4 quat rng",
     "return expr",
     "let name = expr",
+    "const name = expr",
+    "persistent state through Vs3Session",
+    "multi-file packages with module::function calls",
     "if cond { } else { }",
     "while cond { }",
-    "int/bool/float/string values",
-    "ops: + - * / % == != < <= > >= && || !",
-    "natives: abs min max clamp sin cos sqrt pow lerp hash_sha256 len concat str",
-    "present natives: present_show set_bg present_hide ui_flag ui_flag_get (state only)",
-    "call via Vs3Module::call / call_with_present / eval_call / velvet vs3 run",
+    "for value in collection with break and continue",
+    "null/int/bool/float/string/list/map literals",
+    "indexing and mutable list/map values",
+    "ops: + - * / % += -= *= /= == != < <= > >= && || !",
+    "cooperative tasks: yield(value), resume, resume_with",
+    "generic host ABI: yield [service, payload] and resume with Value",
+    "host capability policies and immediate request budgets",
+    "natives: advanced math vectors matrices quaternions rng noise statistics curves data collections",
+    "deterministic maps and cycle-safe structured values",
+    "bounded sandbox runtime with checked integer arithmetic",
+    "compatibility adapter: present_show set_bg present_hide ui_flag ui_flag_get",
+    "call via Vs3Module::call/session/start / eval_call / velvet vs3",
 ];
 
 /// Parsed source edition.
@@ -121,13 +250,32 @@ pub enum Vs3Error {
     #[error("{}", display_diags(.0))]
     Compile(Vec<Vs3Diagnostic>),
     /// Runtime failure.
-    #[error("{loc}: {message}")]
+    #[error("{loc}: {message}{}", display_stack(.stack_trace))]
     Runtime {
         /// Message.
         message: String,
         /// Location display.
         loc: String,
+        /// Innermost-to-outermost script frames.
+        stack_trace: Vec<String>,
     },
+    /// A generic engine/host service failed.
+    #[error("host service `{service}` failed: {message}")]
+    Host {
+        /// Service identifier requested by the script.
+        service: String,
+        /// Host-provided error message.
+        message: String,
+    },
+    /// Script requested a service outside its granted capabilities.
+    #[error("host service `{service}` is not permitted")]
+    Permission {
+        /// Denied service identifier.
+        service: String,
+    },
+    /// Invalid task state or host-resume protocol.
+    #[error("task error: {0}")]
+    Task(String),
 }
 
 fn display_diags(diags: &[Vs3Diagnostic]) -> String {
@@ -139,6 +287,14 @@ fn display_diags(diags: &[Vs3Diagnostic]) -> String {
         .map(Vs3Diagnostic::display)
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn display_stack(stack: &[String]) -> String {
+    if stack.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", stack.join("\n"))
+    }
 }
 
 impl Vs3Error {
@@ -157,6 +313,301 @@ impl Vs3Error {
     }
 }
 
+/// Generic request emitted by VS3 code to an engine host.
+///
+/// The source-level wire format is a two-item list: `[service, payload]`.
+/// This keeps VS3 independent from rendering, audio, novels, cards, or any
+/// other product domain.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HostRequest {
+    /// Stable service identifier such as `audio.play` or `ui.dialogue.open`.
+    pub service: String,
+    /// Arbitrary structured VS3 payload.
+    pub payload: Value,
+}
+
+impl HostRequest {
+    /// Create a request.
+    pub fn new(service: impl Into<String>, payload: Value) -> Self {
+        Self {
+            service: service.into(),
+            payload,
+        }
+    }
+
+    /// Create a request after validating its service identifier.
+    pub fn try_new(service: impl Into<String>, payload: Value) -> Result<Self, Vs3Error> {
+        let service = service.into();
+        if !valid_service_name(&service) {
+            return Err(Vs3Error::Task(format!(
+                "invalid host service identifier `{service}`"
+            )));
+        }
+        Ok(Self { service, payload })
+    }
+
+    /// Decode the canonical `[service, payload]` wire value.
+    pub fn from_value(value: &Value) -> Option<Self> {
+        let Value::List(values) = value else {
+            return None;
+        };
+        let values = values.borrow();
+        if values.len() != 2 {
+            return None;
+        }
+        let service = values[0].as_str()?.to_string();
+        if !valid_service_name(&service) {
+            return None;
+        }
+        Some(Self {
+            service,
+            payload: values[1].clone(),
+        })
+    }
+
+    /// Encode this request as the canonical VS3 list value.
+    pub fn into_value(self) -> Value {
+        Value::list(vec![string_val(self.service), self.payload])
+    }
+}
+
+fn valid_service_name(service: &str) -> bool {
+    !service.is_empty()
+        && service.len() <= 128
+        && service
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+/// Capability allowlist and request budget for host-driven tasks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Vs3HostPolicy {
+    allowed: Option<BTreeSet<String>>,
+    /// Maximum immediately-completed requests handled by one drive call.
+    pub max_immediate_requests: usize,
+}
+
+impl Vs3HostPolicy {
+    /// Permit every syntactically valid service.
+    pub fn allow_all() -> Self {
+        Self {
+            allowed: None,
+            max_immediate_requests: 1_024,
+        }
+    }
+
+    /// Deny every service until explicitly added.
+    pub fn deny_all() -> Self {
+        Self {
+            allowed: Some(BTreeSet::new()),
+            max_immediate_requests: 1_024,
+        }
+    }
+
+    /// Grant one exact service or a namespace wildcard such as `audio.*`.
+    pub fn allow(mut self, service: impl Into<String>) -> Self {
+        self.allowed
+            .get_or_insert_with(BTreeSet::new)
+            .insert(service.into());
+        self
+    }
+
+    /// Whether a service is granted by this policy.
+    pub fn permits(&self, service: &str) -> bool {
+        match &self.allowed {
+            None => true,
+            Some(allowed) => {
+                allowed.contains(service)
+                    || allowed.iter().any(|entry| {
+                        entry.strip_suffix(".*").is_some_and(|prefix| {
+                            service.starts_with(prefix)
+                                && service.as_bytes().get(prefix.len()) == Some(&b'.')
+                        })
+                    })
+            }
+        }
+    }
+}
+
+impl Default for Vs3HostPolicy {
+    fn default() -> Self {
+        Self::deny_all()
+    }
+}
+
+/// Result returned by a general engine host.
+#[derive(Debug, Clone, PartialEq)]
+pub enum HostOutcome {
+    /// Service completed immediately.
+    Ready(Value),
+    /// Service will complete later; the ticket identifies that operation.
+    Pending {
+        /// Opaque host ticket.
+        ticket: String,
+    },
+    /// Service failed without panicking the VM.
+    Failed(String),
+}
+
+/// General VS3 host interface.
+///
+/// Implementations may route service names to rendering, audio, storage,
+/// networking, UI, gameplay systems, or test doubles. VS3 itself does not
+/// know what those services mean.
+pub trait Vs3Host {
+    /// Handle one request emitted by a VS3 task.
+    fn call(&mut self, request: &HostRequest) -> HostOutcome;
+}
+
+/// Observable state of a cooperative VS3 task.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Vs3TaskStatus {
+    /// Script yielded a value that is not a canonical host request.
+    Yielded(Value),
+    /// Host accepted a request and will answer later.
+    Waiting {
+        /// Opaque host ticket.
+        ticket: String,
+        /// Request associated with the ticket.
+        request: HostRequest,
+    },
+    /// Function returned normally.
+    Complete(Value),
+}
+
+/// Suspensible VS3 function invocation.
+#[derive(Debug)]
+pub struct Vs3Task {
+    coroutine: Coroutine,
+    pending: Option<(String, HostRequest)>,
+}
+
+impl Vs3Task {
+    /// Resume without replacing the previous yielded expression value.
+    pub fn resume(&mut self) -> Result<Vs3TaskStatus, Vs3Error> {
+        if self.pending.is_some() {
+            return Err(Vs3Error::Task(
+                "task is waiting for a host ticket; use resume_host".into(),
+            ));
+        }
+        self.coroutine.resume().map(task_status).map_err(map_vm_err)
+    }
+
+    /// Resume an explicit `yield(value)` with a replacement value.
+    pub fn resume_with(&mut self, value: Value) -> Result<Vs3TaskStatus, Vs3Error> {
+        if self.pending.is_some() {
+            return Err(Vs3Error::Task(
+                "task is waiting for a host ticket; use resume_host".into(),
+            ));
+        }
+        self.coroutine
+            .resume_with(value)
+            .map(task_status)
+            .map_err(map_vm_err)
+    }
+
+    /// Drive the task through immediately available generic host services.
+    ///
+    /// Non-request yields are returned to the caller. Pending services return
+    /// [`Vs3TaskStatus::Waiting`] and must later be completed with
+    /// [`Self::resume_host`].
+    pub fn drive_host<H: Vs3Host>(&mut self, host: &mut H) -> Result<Vs3TaskStatus, Vs3Error> {
+        self.drive_host_with_policy(host, &Vs3HostPolicy::allow_all())
+    }
+
+    /// Drive through host services under an explicit capability policy.
+    pub fn drive_host_with_policy<H: Vs3Host>(
+        &mut self,
+        host: &mut H,
+        policy: &Vs3HostPolicy,
+    ) -> Result<Vs3TaskStatus, Vs3Error> {
+        if let Some((ticket, request)) = &self.pending {
+            return Ok(Vs3TaskStatus::Waiting {
+                ticket: ticket.clone(),
+                request: request.clone(),
+            });
+        }
+
+        let mut status = self.resume()?;
+        let mut immediate_requests = 0usize;
+        loop {
+            match status {
+                Vs3TaskStatus::Yielded(value) => {
+                    let Some(request) = HostRequest::from_value(&value) else {
+                        return Ok(Vs3TaskStatus::Yielded(value));
+                    };
+                    if !policy.permits(&request.service) {
+                        return Err(Vs3Error::Permission {
+                            service: request.service,
+                        });
+                    }
+                    immediate_requests += 1;
+                    if immediate_requests > policy.max_immediate_requests {
+                        return Err(Vs3Error::Task(format!(
+                            "host request budget exceeded ({})",
+                            policy.max_immediate_requests
+                        )));
+                    }
+                    match host.call(&request) {
+                        HostOutcome::Ready(response) => {
+                            status = self.resume_with(response)?;
+                        }
+                        HostOutcome::Pending { ticket } => {
+                            if ticket.is_empty() {
+                                return Err(Vs3Error::Task(
+                                    "host returned an empty pending ticket".into(),
+                                ));
+                            }
+                            self.pending = Some((ticket.clone(), request.clone()));
+                            return Ok(Vs3TaskStatus::Waiting { ticket, request });
+                        }
+                        HostOutcome::Failed(message) => {
+                            return Err(Vs3Error::Host {
+                                service: request.service,
+                                message,
+                            });
+                        }
+                    }
+                }
+                other => return Ok(other),
+            }
+        }
+    }
+
+    /// Deliver the result for a previously pending host request.
+    pub fn resume_host(
+        &mut self,
+        ticket: &str,
+        response: Value,
+    ) -> Result<Vs3TaskStatus, Vs3Error> {
+        let Some((expected, request)) = self.pending.take() else {
+            return Err(Vs3Error::Task("task has no pending host request".into()));
+        };
+        if expected != ticket {
+            self.pending = Some((expected.clone(), request));
+            return Err(Vs3Error::Task(format!(
+                "host ticket mismatch: expected `{expected}`, got `{ticket}`"
+            )));
+        }
+        self.coroutine
+            .resume_with(response)
+            .map(task_status)
+            .map_err(map_vm_err)
+    }
+
+    /// Whether this task is waiting for an asynchronous host response.
+    pub fn is_waiting_for_host(&self) -> bool {
+        self.pending.is_some()
+    }
+}
+
+fn task_status(status: CoroutineStatus) -> Vs3TaskStatus {
+    match status {
+        CoroutineStatus::Yielded(value) => Vs3TaskStatus::Yielded(value),
+        CoroutineStatus::Complete(value) => Vs3TaskStatus::Complete(value),
+    }
+}
+
 /// Compiled VS3 logic unit (callable functions).
 #[derive(Debug, Clone)]
 pub struct Vs3Module {
@@ -168,6 +619,139 @@ pub struct Vs3Module {
     pub diagnostics: Vec<Vs3Diagnostic>,
     /// Source file name if known.
     pub file: Option<String>,
+    signatures: BTreeMap<String, Vec<Option<Vs3Type>>>,
+}
+
+/// Initialized, persistent VS3 runtime session.
+///
+/// A session runs the module initializer once, then preserves `state` globals
+/// across calls. Create separate sessions for isolated games, tools, or tests.
+#[derive(Debug)]
+pub struct Vs3Session {
+    vm: Vm,
+    signatures: BTreeMap<String, Vec<Option<Vs3Type>>>,
+}
+
+/// A named collection of independently compiled VS3 modules.
+#[derive(Debug, Clone, Default)]
+pub struct Vs3Package {
+    modules: BTreeMap<String, Vs3Module>,
+}
+
+/// Persistent sessions for every module in a [`Vs3Package`].
+#[derive(Debug, Default)]
+pub struct Vs3PackageSession {
+    modules: BTreeMap<String, Vs3Session>,
+}
+
+impl Vs3Package {
+    /// Create an empty package.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Compile named source modules into a package.
+    pub fn compile_modules(
+        modules: impl IntoIterator<Item = (String, String)>,
+    ) -> Result<Self, Vs3Error> {
+        let mut package = Self::new();
+        for (name, source) in modules {
+            let module = compile(&source, Some(&name))?;
+            package.insert(name, module)?;
+        }
+        Ok(package)
+    }
+
+    /// Insert a compiled module under a stable package name.
+    pub fn insert(&mut self, name: impl Into<String>, module: Vs3Module) -> Result<(), Vs3Error> {
+        let name = name.into();
+        if !valid_module_name(&name) {
+            return Err(Vs3Error::Task(format!("invalid module name `{name}`")));
+        }
+        if self.modules.insert(name.clone(), module).is_some() {
+            return Err(Vs3Error::Task(format!("duplicate module `{name}`")));
+        }
+        Ok(())
+    }
+
+    /// Borrow a named module.
+    pub fn module(&self, name: &str) -> Option<&Vs3Module> {
+        self.modules.get(name)
+    }
+
+    /// Sorted module names.
+    pub fn module_names(&self) -> Vec<&str> {
+        self.modules.keys().map(String::as_str).collect()
+    }
+
+    /// Call `module::function` in a fresh isolated module session.
+    pub fn call(&self, qualified: &str, args: &[Value]) -> Result<Value, Vs3Error> {
+        let (module, function) = split_qualified(qualified)?;
+        self.modules
+            .get(module)
+            .ok_or_else(|| Vs3Error::Task(format!("unknown module `{module}`")))?
+            .call(function, args)
+    }
+
+    /// Initialize one persistent session for every package module.
+    pub fn session(&self) -> Result<Vs3PackageSession, Vs3Error> {
+        let mut modules = BTreeMap::new();
+        for (name, module) in &self.modules {
+            modules.insert(name.clone(), module.session()?);
+        }
+        Ok(Vs3PackageSession { modules })
+    }
+}
+
+impl Vs3PackageSession {
+    /// Call `module::function` while preserving that module's state.
+    pub fn call(&mut self, qualified: &str, args: &[Value]) -> Result<Value, Vs3Error> {
+        let (module, function) = split_qualified(qualified)?;
+        self.modules
+            .get_mut(module)
+            .ok_or_else(|| Vs3Error::Task(format!("unknown module `{module}`")))?
+            .call(function, args)
+    }
+}
+
+fn valid_module_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
+fn split_qualified(qualified: &str) -> Result<(&str, &str), Vs3Error> {
+    let Some((module, function)) = qualified.split_once("::") else {
+        return Err(Vs3Error::Task(format!(
+            "expected qualified function `module::function`, got `{qualified}`"
+        )));
+    };
+    if !valid_module_name(module) || function.is_empty() || function.contains("::") {
+        return Err(Vs3Error::Task(format!(
+            "invalid qualified function `{qualified}`"
+        )));
+    }
+    Ok((module, function))
+}
+
+impl Vs3Session {
+    /// Call an exported function while preserving module state.
+    pub fn call(&mut self, name: &str, args: &[Value]) -> Result<Value, Vs3Error> {
+        validate_runtime_args(&self.signatures, name, args)?;
+        self.vm.call_name(name, args).map_err(map_vm_err)
+    }
+
+    /// Drain lines captured by the `print` native.
+    pub fn take_printed(&mut self) -> Vec<String> {
+        self.vm.take_printed()
+    }
+
+    /// Total instructions executed by this session.
+    pub fn instructions(&self) -> u64 {
+        self.vm.total_instructions()
+    }
 }
 
 impl Vs3Module {
@@ -186,14 +770,66 @@ impl Vs3Module {
         self.function_names().len()
     }
 
-    /// Call a pure logic function by name with arguments.
-    pub fn call(&self, name: &str, args: &[Value]) -> Result<Value, Vs3Error> {
-        let mut vm = Vm::new(self.bytecode.clone(), VmLimits::default());
-        // Bind natives into globals (Vm::new already does this)
-        vm.call_name(name, args).map_err(map_vm_err)
+    /// Parameter annotations for an exported function.
+    pub fn function_signature(&self, name: &str) -> Option<&[Option<Vs3Type>]> {
+        self.signatures.get(name).map(Vec::as_slice)
     }
 
-    /// Call with a presentation host bridge (`show` / `set_bg` / `ui_flag` natives).
+    /// Call a pure logic function by name with arguments.
+    pub fn call(&self, name: &str, args: &[Value]) -> Result<Value, Vs3Error> {
+        self.call_with_limits(name, args, VmLimits::default())
+    }
+
+    /// Call once with explicit runtime limits.
+    ///
+    /// This creates an isolated session, initializes module state, performs the
+    /// call, and then discards that state.
+    pub fn call_with_limits(
+        &self,
+        name: &str,
+        args: &[Value],
+        limits: VmLimits,
+    ) -> Result<Value, Vs3Error> {
+        self.session_with_limits(limits)?.call(name, args)
+    }
+
+    /// Create an initialized persistent session with default sandbox limits.
+    pub fn session(&self) -> Result<Vs3Session, Vs3Error> {
+        self.session_with_limits(VmLimits::default())
+    }
+
+    /// Create an initialized persistent session with explicit limits.
+    pub fn session_with_limits(&self, limits: VmLimits) -> Result<Vs3Session, Vs3Error> {
+        let mut vm = Vm::new(self.bytecode.clone(), limits);
+        vm.initialize().map_err(map_vm_err)?;
+        Ok(Vs3Session {
+            vm,
+            signatures: self.signatures.clone(),
+        })
+    }
+
+    /// Start a cooperative function invocation that may use `yield(value)`.
+    pub fn start(&self, name: &str, args: &[Value]) -> Result<Vs3Task, Vs3Error> {
+        self.start_with_limits(name, args, VmLimits::default())
+    }
+
+    /// Start a cooperative invocation with explicit runtime limits.
+    pub fn start_with_limits(
+        &self,
+        name: &str,
+        args: &[Value],
+        limits: VmLimits,
+    ) -> Result<Vs3Task, Vs3Error> {
+        validate_runtime_args(&self.signatures, name, args)?;
+        let coroutine = Coroutine::from_function(self.bytecode.clone(), name, args, limits)
+            .map_err(map_vm_err)?;
+        Ok(Vs3Task {
+            coroutine,
+            pending: None,
+        })
+    }
+
+    /// Call with the legacy presentation compatibility bridge.
     ///
     /// Returns the function value plus the final [`PresentHostState`] (state only —
     /// no drawing). Hosts apply this to `PresentationState` / GPU presenters.
@@ -202,29 +838,74 @@ impl Vs3Module {
         name: &str,
         args: &[Value],
     ) -> Result<(Value, velvet_script_vm::PresentHostState), Vs3Error> {
-        let (result, state) = velvet_script_vm::with_present_host(|| self.call(name, args));
+        let limits = VmLimits {
+            sandbox: false,
+            ..VmLimits::default()
+        };
+        let (result, state) =
+            velvet_script_vm::with_present_host(|| self.call_with_limits(name, args, limits));
         let value = result?;
         Ok((value, state))
     }
 }
 
-/// Re-export presentation host state for VS3 hosts.
+/// Re-export legacy presentation state for compatibility adapters.
 pub use velvet_script_vm::{PresentHostState, PresentSprite};
+
+fn validate_runtime_args(
+    signatures: &BTreeMap<String, Vec<Option<Vs3Type>>>,
+    name: &str,
+    args: &[Value],
+) -> Result<(), Vs3Error> {
+    let Some(signature) = signatures.get(name) else {
+        return Ok(());
+    };
+    if signature.len() != args.len() {
+        return Err(Vs3Error::Runtime {
+            message: format!(
+                "function `{name}` expects {} arguments, got {}",
+                signature.len(),
+                args.len()
+            ),
+            loc: "<call>".into(),
+            stack_trace: vec![],
+        });
+    }
+    for (index, (expected, value)) in signature.iter().zip(args).enumerate() {
+        if expected.is_some_and(|expected| !expected.accepts_value(value)) {
+            return Err(Vs3Error::Runtime {
+                message: format!(
+                    "argument {} of `{name}` expects `{}`, got `{}`",
+                    index + 1,
+                    expected.unwrap().as_str(),
+                    value.type_name()
+                ),
+                loc: "<call>".into(),
+                stack_trace: vec![],
+            });
+        }
+    }
+    Ok(())
+}
 
 fn map_vm_err(e: VmError) -> Vs3Error {
     match e {
         VmError::Runtime {
-            message, location, ..
+            message,
+            location,
+            stack_trace,
         } => Vs3Error::Runtime {
             message,
             loc: location
                 .as_ref()
                 .map(|l| l.to_string())
                 .unwrap_or_else(|| "<runtime>".into()),
+            stack_trace,
         },
         other => Vs3Error::Runtime {
             message: other.to_string(),
             loc: "<runtime>".into(),
+            stack_trace: vec![],
         },
     }
 }
@@ -333,8 +1014,27 @@ pub fn compile(source: &str, file: Option<&str>) -> Result<Vs3Module, Vs3Error> 
         }
     }
 
-    let compiled: CompileResult =
-        compile_source(source, file).map_err(|e| map_compile_err(e, file))?;
+    let parsed = parse_file(source, file)
+        .map_err(|error| map_compile_err(CompileError::Parse(error.to_string()), file))?;
+    let mut semantic = semantic::validate(&parsed.module);
+    let mut frontend_diagnostics: Vec<Vs3Diagnostic> = parsed
+        .module
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .map(ast_diag_to_vs3)
+        .collect();
+    frontend_diagnostics.append(&mut semantic.diagnostics);
+    if !frontend_diagnostics.is_empty() {
+        return Err(Vs3Error::Compile(frontend_diagnostics));
+    }
+    let mut compiled: CompileResult =
+        compile_ast(&parsed.module).map_err(|e| map_compile_err(e, file))?;
+    compiled.module.metadata.source_hash = Some(fnv1a64(source.as_bytes()));
+    if let Some(file) = file {
+        compiled.module.metadata.source_path = Some(file.to_string());
+        compiled.module.file = Some(file.to_string());
+    }
 
     // Surface hard diagnostics as failure
     let mut diags: Vec<Vs3Diagnostic> = compiled
@@ -376,6 +1076,7 @@ pub fn compile(source: &str, file: Option<&str>) -> Result<Vs3Module, Vs3Error> 
         bytecode: compiled.module,
         diagnostics: soft,
         file: file.map(|s| s.to_string()),
+        signatures: semantic.signatures,
     })
 }
 
@@ -421,6 +1122,176 @@ pub fn string_val(s: impl Into<String>) -> Value {
 /// Float argument.
 pub fn float_val(v: f64) -> Value {
     Value::Float(v)
+}
+
+/// Construct a mutable VS3 list value.
+pub fn list_val(items: Vec<Value>) -> Value {
+    Value::list(items)
+}
+
+/// Construct a mutable VS3 map value for hosts and runtime libraries.
+pub fn map_val(entries: impl IntoIterator<Item = (String, Value)>) -> Value {
+    Value::map(entries)
+}
+
+/// Construct an immutable VS3 `vec2` for host calls.
+pub fn vec2_val(x: f64, y: f64) -> Value {
+    Value::Vec2([x, y])
+}
+
+/// Construct an immutable VS3 `vec3` for host calls.
+pub fn vec3_val(x: f64, y: f64, z: f64) -> Value {
+    Value::Vec3([x, y, z])
+}
+
+/// Construct an immutable VS3 `vec4` for host calls.
+pub fn vec4_val(x: f64, y: f64, z: f64, w: f64) -> Value {
+    Value::Vec4([x, y, z, w])
+}
+
+/// Construct an immutable column-major VS3 `mat3` for host calls.
+pub fn mat3_val(columns: [f64; 9]) -> Value {
+    Value::Mat3(columns)
+}
+
+/// Construct an immutable column-major VS3 `mat4` for host calls.
+pub fn mat4_val(columns: [f64; 16]) -> Value {
+    Value::Mat4(columns)
+}
+
+/// Construct an immutable VS3 quaternion `(x, y, z, w)` for host calls.
+pub fn quat_val(x: f64, y: f64, z: f64, w: f64) -> Value {
+    Value::Quat([x, y, z, w])
+}
+
+/// Failure converting a precision-preserving VS3 value to engine `f32` math.
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum Vs3MathBridgeError {
+    /// Runtime value has the wrong mathematical type.
+    #[error("expected `{expected}`, found `{found}`")]
+    Type {
+        /// Required VS3 type.
+        expected: &'static str,
+        /// Actual VS3 type.
+        found: &'static str,
+    },
+    /// A component cannot be represented as finite `f32`.
+    #[error("{kind} component {index} is outside finite f32 range: {value}")]
+    Range {
+        /// Mathematical value kind.
+        kind: &'static str,
+        /// Zero-based component index.
+        index: usize,
+        /// Rejected value.
+        value: f64,
+    },
+}
+
+/// Promote an engine `f32` vector to a VS3 `f64` vector.
+pub fn from_engine_vec2(value: velvet_math::Vec2) -> Value {
+    vec2_val(f64::from(value.x), f64::from(value.y))
+}
+
+/// Promote an engine `f32` vector to a VS3 `f64` vector.
+pub fn from_engine_vec3(value: velvet_math::Vec3) -> Value {
+    vec3_val(f64::from(value.x), f64::from(value.y), f64::from(value.z))
+}
+
+/// Promote an engine column-major `f32` matrix to VS3 `f64`.
+pub fn from_engine_mat3(value: velvet_math::Mat3) -> Value {
+    mat3_val([
+        value.x_axis[0] as f64,
+        value.x_axis[1] as f64,
+        value.x_axis[2] as f64,
+        value.y_axis[0] as f64,
+        value.y_axis[1] as f64,
+        value.y_axis[2] as f64,
+        value.z_axis[0] as f64,
+        value.z_axis[1] as f64,
+        value.z_axis[2] as f64,
+    ])
+}
+
+/// Promote an engine column-major `f32` matrix to VS3 `f64`.
+pub fn from_engine_mat4(value: velvet_math::Mat4) -> Value {
+    let mut output = [0.0; 16];
+    for (target, source) in output.iter_mut().zip(
+        value
+            .x_axis
+            .into_iter()
+            .chain(value.y_axis)
+            .chain(value.z_axis)
+            .chain(value.w_axis),
+    ) {
+        *target = f64::from(source);
+    }
+    mat4_val(output)
+}
+
+/// Convert a VS3 `vec2` to finite engine `f32` components.
+pub fn to_engine_vec2(value: &Value) -> Result<velvet_math::Vec2, Vs3MathBridgeError> {
+    let Value::Vec2(values) = value else {
+        return Err(bridge_type("vec2", value));
+    };
+    let values = to_f32_array("vec2", values)?;
+    Ok(velvet_math::Vec2::new(values[0], values[1]))
+}
+
+/// Convert a VS3 `vec3` to finite engine `f32` components.
+pub fn to_engine_vec3(value: &Value) -> Result<velvet_math::Vec3, Vs3MathBridgeError> {
+    let Value::Vec3(values) = value else {
+        return Err(bridge_type("vec3", value));
+    };
+    let values = to_f32_array("vec3", values)?;
+    Ok(velvet_math::Vec3::new(values[0], values[1], values[2]))
+}
+
+/// Convert a VS3 column-major `mat3` to finite engine `f32` components.
+pub fn to_engine_mat3(value: &Value) -> Result<velvet_math::Mat3, Vs3MathBridgeError> {
+    let Value::Mat3(values) = value else {
+        return Err(bridge_type("mat3", value));
+    };
+    let values = to_f32_array("mat3", values)?;
+    Ok(velvet_math::Mat3::from_cols(
+        values[0..3].try_into().unwrap(),
+        values[3..6].try_into().unwrap(),
+        values[6..9].try_into().unwrap(),
+    ))
+}
+
+/// Convert a VS3 column-major `mat4` to finite engine `f32` components.
+pub fn to_engine_mat4(value: &Value) -> Result<velvet_math::Mat4, Vs3MathBridgeError> {
+    let Value::Mat4(values) = value else {
+        return Err(bridge_type("mat4", value));
+    };
+    Ok(velvet_math::Mat4::from_cols_array(to_f32_array(
+        "mat4", values,
+    )?))
+}
+
+fn bridge_type(expected: &'static str, value: &Value) -> Vs3MathBridgeError {
+    Vs3MathBridgeError::Type {
+        expected,
+        found: value.type_name(),
+    }
+}
+
+fn to_f32_array<const N: usize>(
+    kind: &'static str,
+    values: &[f64; N],
+) -> Result<[f32; N], Vs3MathBridgeError> {
+    let mut output = [0.0; N];
+    for (index, (target, value)) in output.iter_mut().zip(values).enumerate() {
+        if !value.is_finite() || value.abs() > f64::from(f32::MAX) {
+            return Err(Vs3MathBridgeError::Range {
+                kind,
+                index,
+                value: *value,
+            });
+        }
+        *target = *value as f32;
+    }
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -490,6 +1361,57 @@ function clamp01(x) {
         let names = m.function_names();
         assert!(names.iter().any(|n| n == "can_play_card"));
         assert!(names.iter().any(|n| n == "apply_damage"));
+    }
+
+    #[test]
+    fn semantic_frontend_rejects_unknown_names_and_const_assignment() {
+        let unknown = compile(
+            "// @edition 3\nfunction f() { return missing + 1 }\n",
+            Some("unknown.vel"),
+        )
+        .unwrap_err();
+        assert!(unknown.to_string().contains("unknown name `missing`"));
+
+        let immutable = compile(
+            "// @edition 3\nfunction f() { const answer = 42; answer = 0; return answer }\n",
+            Some("const.vel"),
+        )
+        .unwrap_err();
+        assert!(immutable
+            .to_string()
+            .contains("cannot assign to immutable `answer`"));
+    }
+
+    #[test]
+    fn type_annotations_are_checked_statically_and_at_host_boundary() {
+        let mismatch = compile(
+            "// @edition 3\nfunction f() { let count: int = \"many\"; return count }\n",
+            Some("types.vel"),
+        )
+        .unwrap_err();
+        assert!(mismatch.to_string().contains("type mismatch"));
+
+        let module = compile(
+            "// @edition 3\nfunction double(value: int) { return value * 2 }\n",
+            Some("typed.vel"),
+        )
+        .unwrap();
+        assert_eq!(
+            module.function_signature("double"),
+            Some([Some(Vs3Type::Int)].as_slice())
+        );
+        let error = module.call("double", &[string_val("wrong")]).unwrap_err();
+        assert!(error.to_string().contains("expects `int`"), "{error}");
+    }
+
+    #[test]
+    fn vs3_rejects_narrative_surface_even_beside_functions() {
+        let error = compile(
+            "// @edition 3\nfunction f() { return 1 }\nscene intro { \"hello\" }\n",
+            Some("mixed.vel"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("not part of VS3"), "{error}");
     }
 
     // ── Phase 2: pure logic execution ───────────────────────────────────
@@ -634,7 +1556,8 @@ function add_then_abs(a, b) {
             }
             other => panic!("expected Compile diags, got {other:?}"),
         }
-        assert!(err.has_located_diagnostic() || err.to_string().contains(':'));
+        assert!(err.has_located_diagnostic());
+        assert!(err.to_string().contains("bad.vel"), "error={err}");
     }
 
     #[test]
@@ -653,6 +1576,94 @@ function add_then_abs(a, b) {
         let err = m.call("does_not_exist", &[]).unwrap_err();
         assert!(matches!(err, Vs3Error::Runtime { .. }));
         assert!(!err.to_string().is_empty());
+    }
+
+    #[test]
+    fn integer_overflow_is_a_runtime_error_not_a_panic() {
+        let source = r#"
+// @edition 3
+function multiply(a, b) { return a * b }
+function negate(a) { return -a }
+function literal() { return 9223372036854775807 + 1 }
+"#;
+        let module = compile(source, Some("overflow.vel")).unwrap();
+        let error = module
+            .call("multiply", &[int(i64::MAX), int(2)])
+            .unwrap_err();
+        assert!(error.to_string().contains("integer overflow"), "{error}");
+        let error = module.call("negate", &[int(i64::MIN)]).unwrap_err();
+        assert!(error.to_string().contains("integer overflow"), "{error}");
+        let error = module.call("literal", &[]).unwrap_err();
+        assert!(error.to_string().contains("integer overflow"), "{error}");
+    }
+
+    #[test]
+    fn one_shot_call_rejects_yield_and_points_to_task_api() {
+        let module = compile(TASKS, Some("tasks.vel")).unwrap();
+        let error = module.call("raw_yield", &[int(1)]).unwrap_err();
+        assert!(error.to_string().contains("Vs3Module::start"), "{error}");
+    }
+
+    #[test]
+    fn runtime_errors_keep_script_stack_trace() {
+        let source = r#"
+// @edition 3
+function inner() { fail("broken invariant") }
+function outer() { return inner() }
+"#;
+        let module = compile(source, Some("trace.vel")).unwrap();
+        let error = module.call("outer", &[]).unwrap_err().to_string();
+        assert!(error.contains("broken invariant"), "{error}");
+        assert!(error.contains("in inner"), "{error}");
+        assert!(error.contains("in outer"), "{error}");
+    }
+
+    #[test]
+    fn persistent_session_initializes_and_preserves_state() {
+        let source = r#"
+// @edition 3
+state { counter = 40 }
+function bump() {
+    counter += 1
+    return counter
+}
+"#;
+        let module = compile(source, Some("state.vel")).unwrap();
+        let mut session = module.session().unwrap();
+        assert_eq!(session.call("bump", &[]).unwrap(), int(41));
+        assert_eq!(session.call("bump", &[]).unwrap(), int(42));
+        assert_eq!(module.call("bump", &[]).unwrap(), int(41));
+
+        let mut bounded = module
+            .session_with_limits(VmLimits {
+                max_instructions: 12,
+                ..VmLimits::default()
+            })
+            .unwrap();
+        for expected in 41..=45 {
+            assert_eq!(bounded.call("bump", &[]).unwrap(), int(expected));
+        }
+        assert!(bounded.instructions() > 12);
+    }
+
+    #[test]
+    fn package_qualifies_modules_and_preserves_each_state() {
+        let counter = |initial| {
+            format!(
+                "// @edition 3\nstate {{ value: int = {initial} }}\nfunction next() {{ value += 1; return value }}\n"
+            )
+        };
+        let package = Vs3Package::compile_modules([
+            ("game.score".into(), counter(0)),
+            ("ui.flow".into(), counter(100)),
+        ])
+        .unwrap();
+        assert_eq!(package.module_names(), vec!["game.score", "ui.flow"]);
+        let mut session = package.session().unwrap();
+        assert_eq!(session.call("game.score::next", &[]).unwrap(), int(1));
+        assert_eq!(session.call("game.score::next", &[]).unwrap(), int(2));
+        assert_eq!(session.call("ui.flow::next", &[]).unwrap(), int(101));
+        assert!(session.call("missing::next", &[]).is_err());
     }
 
     // ── Language surface expansion ──────────────────────────────────────
@@ -755,6 +1766,59 @@ function tool_min_max(a, b) {
     }
 
     #[test]
+    fn map_literals_null_and_compound_assignment_work() {
+        let source = r#"
+// @edition 3
+function profile(multiplier: int) {
+    let data: map = {"name": "Ada", "score": 7, "note": null}
+    data.score *= multiplier
+    data.bonus = 1
+    return data
+}
+"#;
+        let module = compile(source, Some("maps.vel")).unwrap();
+        let value = module.call("profile", &[int(6)]).unwrap();
+        assert_eq!(
+            value.get_index(&string_val("name")).unwrap(),
+            string_val("Ada")
+        );
+        assert_eq!(value.get_index(&string_val("score")).unwrap(), int(42));
+        assert_eq!(value.get_index(&string_val("bonus")).unwrap(), int(1));
+        assert_eq!(value.get_index(&string_val("note")).unwrap(), Value::Null);
+    }
+
+    #[test]
+    fn break_and_continue_work_in_while_and_for_loops() {
+        let source = r#"
+// @edition 3
+function while_demo() {
+    let i = 0
+    let total = 0
+    while i < 20 {
+        i += 1
+        if i % 2 != 0 { continue }
+        total += i
+        if total >= 12 { break }
+    }
+    return total
+}
+
+function for_demo() {
+    let total = 0
+    for value in [1, 2, 3, 4, 5] {
+        if value == 2 { continue }
+        if value == 5 { break }
+        total += value
+    }
+    return total
+}
+"#;
+        let module = compile(source, Some("loops.vel")).unwrap();
+        assert_eq!(module.call("while_demo", &[]).unwrap(), int(12));
+        assert_eq!(module.call("for_demo", &[]).unwrap(), int(8));
+    }
+
+    #[test]
     fn surface_string_concat_and_len() {
         let v = eval_call(
             SURFACE,
@@ -815,11 +1879,34 @@ function tool_min_max(a, b) {
     }
 
     #[test]
-    fn supported_surface_table_is_nonempty() {
-        assert!(SUPPORTED_SURFACE.len() >= 8);
-        assert!(SUPPORTED_SURFACE.iter().any(|s| s.contains("@edition 3")));
-        assert!(SUPPORTED_SURFACE.iter().any(|s| s.contains("while")));
-        assert!(SUPPORTED_SURFACE.iter().any(|s| s.contains("set_bg")));
+    fn supported_surface_table_is_unique_and_covers_runtime_contracts() {
+        let unique: std::collections::HashSet<_> = SUPPORTED_SURFACE.iter().copied().collect();
+        assert_eq!(
+            unique.len(),
+            SUPPORTED_SURFACE.len(),
+            "duplicate capability entry"
+        );
+        assert_eq!(
+            SUPPORTED_SURFACE.len(),
+            22,
+            "update this contract with every capability change"
+        );
+        for required in [
+            "edition: // @edition 3",
+            "while cond { }",
+            "cooperative tasks: yield(value), resume, resume_with",
+            "generic host ABI: yield [service, payload] and resume with Value",
+            "indexing and mutable list/map values",
+            "persistent state through Vs3Session",
+            "multi-file packages with module::function calls",
+            "for value in collection with break and continue",
+            "host capability policies and immediate request budgets",
+        ] {
+            assert!(
+                unique.contains(required),
+                "missing VS3 capability: {required}"
+            );
+        }
     }
 
     // ── Presentation host natives (state only) ──────────────────────────
@@ -878,9 +1965,327 @@ function teardown() {
         assert_eq!(host.sprites.len(), 2);
         // Continue with installed host for teardown
         velvet_script_vm::install_present_host(host);
-        let _ = m.call("teardown", &[]).unwrap();
+        let limits = VmLimits {
+            sandbox: false,
+            ..VmLimits::default()
+        };
+        let _ = m.call_with_limits("teardown", &[], limits).unwrap();
         let after = velvet_script_vm::take_present_host();
         assert!(after.sprites.is_empty(), "sprites={:?}", after.sprites);
         assert!(!after.ui_flag("say_visible"));
+    }
+
+    #[test]
+    fn presentation_natives_require_explicit_permission() {
+        let module = compile(PRESENT, Some("present.vel")).unwrap();
+        let error = module.call("setup_scene", &[]).unwrap_err();
+        assert!(error.to_string().contains("sandbox is enabled"), "{error}");
+    }
+
+    // ── Cooperative tasks and generic host ABI ─────────────────────────
+
+    const TASKS: &str = r#"
+// @edition 3
+
+function raw_yield(value) {
+    let answer = yield(value)
+    return answer
+}
+
+function service_request(value) {
+    return yield(["math.double", value])
+}
+
+function delayed_dialogue(text) {
+    return yield(["ui.dialogue.open", text])
+}
+"#;
+
+    #[test]
+    fn task_yield_is_an_expression_and_accepts_resume_value() {
+        let module = compile(TASKS, Some("tasks.vel")).unwrap();
+        let mut task = module.start("raw_yield", &[string_val("request")]).unwrap();
+        assert_eq!(
+            task.resume().unwrap(),
+            Vs3TaskStatus::Yielded(string_val("request"))
+        );
+        assert_eq!(
+            task.resume_with(int(42)).unwrap(),
+            Vs3TaskStatus::Complete(int(42))
+        );
+    }
+
+    struct MathHost;
+
+    impl Vs3Host for MathHost {
+        fn call(&mut self, request: &HostRequest) -> HostOutcome {
+            match request.service.as_str() {
+                "math.double" => match request.payload {
+                    Value::Int(value) => HostOutcome::Ready(Value::Int(value * 2)),
+                    _ => HostOutcome::Failed("expected integer payload".into()),
+                },
+                _ => HostOutcome::Failed("unknown service".into()),
+            }
+        }
+    }
+
+    #[test]
+    fn generic_host_can_complete_a_service_immediately() {
+        let module = compile(TASKS, Some("tasks.vel")).unwrap();
+        let mut task = module.start("service_request", &[int(21)]).unwrap();
+        let mut host = MathHost;
+        assert_eq!(
+            task.drive_host(&mut host).unwrap(),
+            Vs3TaskStatus::Complete(int(42))
+        );
+    }
+
+    #[test]
+    fn host_policy_denies_ungranted_services_and_accepts_namespaces() {
+        let module = compile(TASKS, Some("tasks.vel")).unwrap();
+        let mut denied = module.start("service_request", &[int(21)]).unwrap();
+        let mut host = MathHost;
+        let error = denied
+            .drive_host_with_policy(&mut host, &Vs3HostPolicy::deny_all())
+            .unwrap_err();
+        assert!(matches!(error, Vs3Error::Permission { .. }));
+
+        let mut allowed = module.start("service_request", &[int(21)]).unwrap();
+        let policy = Vs3HostPolicy::deny_all().allow("math.*");
+        assert_eq!(
+            allowed.drive_host_with_policy(&mut host, &policy).unwrap(),
+            Vs3TaskStatus::Complete(int(42))
+        );
+    }
+
+    struct PendingHost;
+
+    impl Vs3Host for PendingHost {
+        fn call(&mut self, request: &HostRequest) -> HostOutcome {
+            assert_eq!(request.service, "ui.dialogue.open");
+            HostOutcome::Pending {
+                ticket: "dialogue:1".into(),
+            }
+        }
+    }
+
+    #[test]
+    fn pending_host_service_resumes_by_ticket() {
+        let module = compile(TASKS, Some("tasks.vel")).unwrap();
+        let mut task = module
+            .start("delayed_dialogue", &[string_val("Hello")])
+            .unwrap();
+        let mut host = PendingHost;
+        match task.drive_host(&mut host).unwrap() {
+            Vs3TaskStatus::Waiting { ticket, request } => {
+                assert_eq!(ticket, "dialogue:1");
+                assert_eq!(request.payload, string_val("Hello"));
+            }
+            other => panic!("expected pending host request, got {other:?}"),
+        }
+        assert!(task.is_waiting_for_host());
+        assert!(task.resume_host("wrong", Value::Bool(true)).is_err());
+        assert_eq!(
+            task.resume_host("dialogue:1", Value::Bool(true)).unwrap(),
+            Vs3TaskStatus::Complete(Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn host_request_and_structured_value_helpers_roundtrip() {
+        let payload = map_val([
+            ("speaker".into(), string_val("Nora")),
+            (
+                "choices".into(),
+                list_val(vec![string_val("Yes"), string_val("No")]),
+            ),
+        ]);
+        let request = HostRequest::new("ui.choice.open", payload);
+        assert_eq!(
+            HostRequest::from_value(&request.clone().into_value()),
+            Some(request)
+        );
+    }
+
+    #[test]
+    fn advanced_vector_matrix_and_curve_surface_executes() {
+        let source = r#"// @edition 3
+function vector_score() {
+    let a: vec3 = vec3(1, 2, 3)
+    let b: vec3 = vec3(4, 5, 6)
+    let c: vec3 = a + b * 2
+    return dot(c, vec3(1)) + c.y
+}
+
+function matrix_roundtrip() {
+    let m: mat3 = mat3(2, 0, 0, 0, 4, 0, 0, 0, 1)
+    return approx_eq(mat_mul(m, mat_inverse(m)), mat3_identity(), 0.000000001)
+}
+
+function curve_midpoint() {
+    return quadratic_bezier(vec2(0, 0), vec2(1, 2), vec2(2, 0), 0.5)
+}
+
+function constants_work() {
+    return approx_eq(sin(PI / 2), 1)
+}
+"#;
+        let module = compile(source, Some("advanced_math.vel")).unwrap();
+        assert_eq!(
+            module.call("vector_score", &[]).unwrap(),
+            Value::Float(48.0)
+        );
+        assert_eq!(
+            module.call("matrix_roundtrip", &[]).unwrap(),
+            Value::Bool(true)
+        );
+        assert_eq!(
+            module.call("curve_midpoint", &[]).unwrap(),
+            Value::Vec2([1.0, 1.0])
+        );
+        assert_eq!(
+            module.call("constants_work", &[]).unwrap(),
+            Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn rng_noise_statistics_and_numerics_are_available_and_repeatable() {
+        let source = r#"// @edition 3
+state {
+    random: rng = rng_new(1234)
+}
+
+function next_random() {
+    return rng_next_float(random)
+}
+
+function analysis() {
+    let values = [1, 2, 3, 4]
+    return [mean(values), median(values), variance(values), quantile(values, 0.25)]
+}
+
+function root() {
+    return poly_root_bisection([1, 0, -2], 0, 2)
+}
+
+function terrain() {
+    return fbm2(1.25, -3.5, 7, 4)
+}
+"#;
+        let module = compile(source, Some("numeric_toolkit.vel")).unwrap();
+        let mut first = module.session().unwrap();
+        let mut second = module.session().unwrap();
+        assert_eq!(
+            first.call("next_random", &[]).unwrap(),
+            second.call("next_random", &[]).unwrap()
+        );
+        assert_eq!(
+            first.call("next_random", &[]).unwrap(),
+            second.call("next_random", &[]).unwrap()
+        );
+
+        let analysis = module.call("analysis", &[]).unwrap();
+        assert_eq!(
+            analysis,
+            Value::list(vec![
+                Value::Float(2.5),
+                Value::Float(2.5),
+                Value::Float(1.25),
+                Value::Float(1.75),
+            ])
+        );
+        let root = module.call("root", &[]).unwrap().as_f64().unwrap();
+        assert!((root - 2.0_f64.sqrt()).abs() < 1e-8);
+        assert!(module
+            .call("terrain", &[])
+            .unwrap()
+            .as_f64()
+            .unwrap()
+            .is_finite());
+    }
+
+    #[test]
+    fn collection_math_is_metered_by_input_size() {
+        let module = compile(
+            "// @edition 3\nfunction average(values: list) { return mean(values) }\n",
+            Some("metered_math.vel"),
+        )
+        .unwrap();
+        let values = Value::list((0..100).map(Value::Int).collect());
+        let error = module
+            .call_with_limits(
+                "average",
+                &[values],
+                VmLimits {
+                    max_instructions: 20,
+                    ..VmLimits::default()
+                },
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("instruction limit"), "{error}");
+    }
+
+    #[test]
+    fn advanced_math_diagnostics_cover_arity_types_and_immutability() {
+        let error = compile(
+            r#"// @edition 3
+function bad() {
+    let value: vec2 = vec2(1, 2)
+    value.x = 9
+    let missing = value.z
+    return dot(value)
+}
+"#,
+            Some("bad_math.vel"),
+        )
+        .unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("immutable"), "{message}");
+        assert!(message.contains("no component `z`"), "{message}");
+        assert!(message.contains("expects 2 arguments"), "{message}");
+
+        let error = compile(
+            "// @edition 3\nfunction bad(seed: string) { return rng_new(seed) }\n",
+            Some("bad_rng.vel"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("expected `int`"), "{error}");
+    }
+
+    #[test]
+    fn engine_math_bridge_is_explicit_checked_and_column_major() {
+        let engine_vector = velvet_math::Vec3::new(1.25, -2.5, 3.75);
+        let script_vector = from_engine_vec3(engine_vector);
+        assert_eq!(script_vector, Value::Vec3([1.25, -2.5, 3.75]));
+        assert_eq!(to_engine_vec3(&script_vector).unwrap(), engine_vector);
+
+        let script_matrix = mat3_val([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]);
+        let engine_matrix = to_engine_mat3(&script_matrix).unwrap();
+        assert_eq!(from_engine_mat3(engine_matrix), script_matrix);
+
+        assert!(matches!(
+            to_engine_vec2(&Value::Vec3([0.0; 3])),
+            Err(Vs3MathBridgeError::Type {
+                expected: "vec2",
+                found: "vec3"
+            })
+        ));
+        assert!(matches!(
+            to_engine_vec2(&Value::Vec2([f64::MAX, 0.0])),
+            Err(Vs3MathBridgeError::Range {
+                kind: "vec2",
+                index: 0,
+                ..
+            })
+        ));
+        assert!(matches!(
+            to_engine_vec2(&Value::Vec2([f64::NAN, 0.0])),
+            Err(Vs3MathBridgeError::Range {
+                kind: "vec2",
+                index: 0,
+                ..
+            })
+        ));
     }
 }

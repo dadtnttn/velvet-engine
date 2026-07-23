@@ -1,11 +1,12 @@
-//! AST â†’ bytecode.
+//! AST to bytecode.
 
 use std::collections::HashMap;
 
 use thiserror::Error;
 use velvet_script_ast::{BinOp, Diagnostic, Expr, Item, Module, SourceLoc, Stmt, UnaryOp};
 use velvet_script_bytecode::{
-    fnv1a64, lookup_native, BytecodeModule, Chunk, Constant, ModuleMetadata, Op,
+    fnv1a64, lookup_math_constant, lookup_native, BytecodeModule, Chunk, Constant, ModuleMetadata,
+    Op,
 };
 use velvet_script_parser::{parse_file, ParseError};
 
@@ -135,6 +136,7 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
         globals: &mut cx.globals,
         module_globals: &mut cx.module.globals,
         errors: &mut cx.errors,
+        loops: Vec::new(),
     };
 
     for item in &ast.items {
@@ -188,6 +190,7 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
                         globals: main_cx.globals,
                         module_globals: main_cx.module_globals,
                         errors: main_cx.errors,
+                        loops: Vec::new(),
                     };
                     sc.chunk.map_source(loc.line, loc.column);
                     for stmt in body {
@@ -286,6 +289,7 @@ impl Compiler {
             globals: &mut self.globals,
             module_globals: &mut self.module.globals,
             errors: &mut self.errors,
+            loops: Vec::new(),
         };
         fc.chunk.map_source(loc.line, loc.column);
         for p in params {
@@ -321,6 +325,14 @@ struct FnCompiler<'a> {
     globals: &'a mut HashMap<String, u16>,
     module_globals: &'a mut Vec<String>,
     errors: &'a mut Vec<Diagnostic>,
+    loops: Vec<LoopContext>,
+}
+
+struct LoopContext {
+    continue_target: Option<usize>,
+    continue_jumps: Vec<usize>,
+    break_jumps: Vec<usize>,
+    scope_depth: i32,
 }
 
 impl FnCompiler<'_> {
@@ -341,6 +353,20 @@ impl FnCompiler<'_> {
             self.chunk.emit_op(Op::Pop);
         }
         self.scope_depth -= 1;
+    }
+
+    fn emit_scope_cleanup(&mut self, target_depth: i32) {
+        for local in self.locals.iter().rev() {
+            if local.depth <= target_depth {
+                break;
+            }
+            self.chunk.emit_op(Op::Pop);
+        }
+    }
+
+    fn patch_forward_jump(&mut self, operand: usize, target: usize) {
+        let offset = target.saturating_sub(operand + 2);
+        self.chunk.patch_u16(operand, offset as u16);
     }
 
     fn add_local(&mut self, name: &str) {
@@ -392,9 +418,13 @@ impl FnCompiler<'_> {
             Stmt::Const { name, init, loc } => {
                 self.chunk.map_source(loc.line, loc.column);
                 self.compile_expr(init)?;
-                let idx = self.global_index(name);
-                self.chunk.emit_op(Op::DefineGlobal);
-                self.chunk.emit_u16(idx);
+                if self.scope_depth > 0 {
+                    self.add_local(name);
+                } else {
+                    let idx = self.global_index(name);
+                    self.chunk.emit_op(Op::DefineGlobal);
+                    self.chunk.emit_u16(idx);
+                }
             }
             Stmt::Block { body, .. } => {
                 self.begin_scope();
@@ -437,6 +467,12 @@ impl FnCompiler<'_> {
                 let exit_jump = self.chunk.len();
                 self.chunk.emit_u16(0);
                 self.chunk.emit_op(Op::Pop);
+                self.loops.push(LoopContext {
+                    continue_target: Some(loop_start),
+                    continue_jumps: Vec::new(),
+                    break_jumps: Vec::new(),
+                    scope_depth: self.scope_depth,
+                });
                 self.compile_stmt(body)?;
                 self.chunk.emit_op(Op::Loop);
                 let back = self.chunk.len() + 2 - loop_start;
@@ -444,6 +480,11 @@ impl FnCompiler<'_> {
                 let exit_off = self.chunk.len() - (exit_jump + 2);
                 self.chunk.patch_u16(exit_jump, exit_off as u16);
                 self.chunk.emit_op(Op::Pop);
+                let break_target = self.chunk.len();
+                let loop_context = self.loops.pop().expect("while loop context");
+                for jump in loop_context.break_jumps {
+                    self.patch_forward_jump(jump, break_target);
+                }
             }
             Stmt::Return { value, loc } => {
                 self.chunk.map_source(loc.line, loc.column);
@@ -610,10 +651,26 @@ impl FnCompiler<'_> {
                 self.chunk.emit_op(Op::GetIndex);
                 self.add_local(name);
 
+                self.loops.push(LoopContext {
+                    continue_target: None,
+                    continue_jumps: Vec::new(),
+                    break_jumps: Vec::new(),
+                    // `name` lives in the per-iteration scope and must be
+                    // removed on both continue and break.
+                    scope_depth: self.scope_depth - 1,
+                });
                 self.compile_stmt(body)?;
                 self.end_scope();
 
                 // __i += 1
+                let continue_target = self.chunk.len();
+                if let Some(context) = self.loops.last_mut() {
+                    context.continue_target = Some(continue_target);
+                    let jumps = std::mem::take(&mut context.continue_jumps);
+                    for jump in jumps {
+                        self.patch_forward_jump(jump, continue_target);
+                    }
+                }
                 self.chunk.emit_op(Op::GetLocal);
                 self.chunk.emit_u8(i_slot);
                 self.chunk.emit_constant(Constant::Int(1));
@@ -628,14 +685,46 @@ impl FnCompiler<'_> {
                 let exit_off = self.chunk.len() - (exit_jump + 2);
                 self.chunk.patch_u16(exit_jump, exit_off as u16);
                 self.chunk.emit_op(Op::Pop);
+                let break_target = self.chunk.len();
+                let loop_context = self.loops.pop().expect("for loop context");
+                for jump in loop_context.break_jumps {
+                    self.patch_forward_jump(jump, break_target);
+                }
                 self.end_scope();
             }
-            Stmt::Break { loc } | Stmt::Continue { loc } => {
-                // Loop control needs jump patching across scopes; emit soft error + no-op.
-                self.error(
-                    "break/continue require structured loop context (not fully wired in bytecode v1)",
-                    loc,
-                );
+            Stmt::Break { loc } => {
+                let Some(context) = self.loops.last() else {
+                    self.error("break used outside a loop", loc);
+                    return Ok(());
+                };
+                let scope_depth = context.scope_depth;
+                self.emit_scope_cleanup(scope_depth);
+                self.chunk.emit_op(Op::Jump);
+                let jump = self.chunk.len();
+                self.chunk.emit_u16(0);
+                self.loops.last_mut().unwrap().break_jumps.push(jump);
+            }
+            Stmt::Continue { loc } => {
+                let Some(context) = self.loops.last() else {
+                    self.error("continue used outside a loop", loc);
+                    return Ok(());
+                };
+                let scope_depth = context.scope_depth;
+                let continue_target = context.continue_target;
+                self.emit_scope_cleanup(scope_depth);
+                match continue_target {
+                    Some(target) if target <= self.chunk.len() => {
+                        self.chunk.emit_op(Op::Loop);
+                        let back = self.chunk.len() + 2 - target;
+                        self.chunk.emit_u16(back as u16);
+                    }
+                    _ => {
+                        self.chunk.emit_op(Op::Jump);
+                        let jump = self.chunk.len();
+                        self.chunk.emit_u16(0);
+                        self.loops.last_mut().unwrap().continue_jumps.push(jump);
+                    }
+                }
             }
         }
         Ok(())
@@ -683,6 +772,8 @@ impl FnCompiler<'_> {
                 if let Some(slot) = self.resolve_local(name) {
                     self.chunk.emit_op(Op::GetLocal);
                     self.chunk.emit_u8(slot);
+                } else if let Some(value) = lookup_math_constant(name) {
+                    self.chunk.emit_constant(Constant::Float(value));
                 } else if let Some(native) = lookup_native(name) {
                     // Push native as a first-class value.
                     self.chunk.emit_constant(Constant::Native(native.as_u16()));
@@ -700,6 +791,15 @@ impl FnCompiler<'_> {
                 self.chunk.emit_op(Op::MakeList);
                 self.chunk.emit_u16(elements.len() as u16);
             }
+            Expr::Map { entries, loc } => {
+                self.chunk.map_source(loc.line, loc.column);
+                for (key, value) in entries {
+                    self.chunk.emit_constant(Constant::String(key.clone()));
+                    self.compile_expr(value)?;
+                }
+                self.chunk.emit_op(Op::MakeMap);
+                self.chunk.emit_u16(entries.len() as u16);
+            }
             Expr::Unary { op, expr, loc } => {
                 self.chunk.map_source(loc.line, loc.column);
                 self.compile_expr(expr)?;
@@ -716,35 +816,60 @@ impl FnCompiler<'_> {
             } => {
                 self.chunk.map_source(loc.line, loc.column);
                 match op {
-                    BinOp::Assign => {
-                        if let Expr::Index {
+                    BinOp::Assign => match left.as_ref() {
+                        Expr::Index {
                             object,
                             index,
                             loc: iloc,
-                        } = left.as_ref()
-                        {
-                            // stack order for SetIndex: container, index, value
+                        } => {
                             self.chunk.map_source(iloc.line, iloc.column);
                             self.compile_expr(object)?;
                             self.compile_expr(index)?;
                             self.compile_expr(right)?;
                             self.chunk.emit_op(Op::SetIndex);
-                        } else {
+                        }
+                        Expr::Field { object, field, loc } => {
+                            self.chunk.map_source(loc.line, loc.column);
+                            self.compile_expr(object)?;
+                            self.chunk.emit_constant(Constant::String(field.clone()));
+                            self.compile_expr(right)?;
+                            self.chunk.emit_op(Op::SetIndex);
+                        }
+                        _ => {
                             self.compile_expr(right)?;
                             self.compile_assign_target(left)?;
                         }
-                    }
+                    },
                     BinOp::AddAssign | BinOp::SubAssign | BinOp::MulAssign | BinOp::DivAssign => {
-                        self.compile_expr(left)?;
-                        self.compile_expr(right)?;
-                        self.chunk.emit_op(match op {
+                        let arithmetic = match op {
                             BinOp::AddAssign => Op::Add,
                             BinOp::SubAssign => Op::Sub,
                             BinOp::MulAssign => Op::Mul,
                             BinOp::DivAssign => Op::Div,
                             _ => unreachable!(),
-                        });
-                        self.compile_assign_target(left)?;
+                        };
+                        match left.as_ref() {
+                            Expr::Index { object, index, .. } => {
+                                self.compile_expr(object)?;
+                                self.compile_expr(index)?;
+                                self.compile_expr(right)?;
+                                self.chunk.emit_op(Op::UpdateIndex);
+                                self.chunk.emit_u8(arithmetic.to_u8());
+                            }
+                            Expr::Field { object, field, .. } => {
+                                self.compile_expr(object)?;
+                                self.chunk.emit_constant(Constant::String(field.clone()));
+                                self.compile_expr(right)?;
+                                self.chunk.emit_op(Op::UpdateIndex);
+                                self.chunk.emit_u8(arithmetic.to_u8());
+                            }
+                            _ => {
+                                self.compile_expr(left)?;
+                                self.compile_expr(right)?;
+                                self.chunk.emit_op(arithmetic);
+                                self.compile_assign_target(left)?;
+                            }
+                        }
                     }
                     BinOp::And => {
                         self.compile_expr(left)?;
@@ -789,8 +914,24 @@ impl FnCompiler<'_> {
             }
             Expr::Call { callee, args, loc } => {
                 self.chunk.map_source(loc.line, loc.column);
-                // Direct native call when callee is a known stdlib name.
                 if let Expr::Ident { name, .. } = callee.as_ref() {
+                    // `yield(value)` is a general cooperative suspension primitive.
+                    // The yielded value stays on the stack and becomes the expression
+                    // result when a coroutine resumes (optionally replaced by the host).
+                    if name == "yield" {
+                        match args.as_slice() {
+                            [] => self.chunk.emit_op(Op::Null),
+                            [value] => self.compile_expr(value)?,
+                            _ => {
+                                self.error("yield expects zero or one argument", loc);
+                                self.chunk.emit_op(Op::Null);
+                            }
+                        }
+                        self.chunk.emit_op(Op::Yield);
+                        return Ok(());
+                    }
+
+                    // Direct native call when callee is a known stdlib name.
                     if let Some(native) = lookup_native(name) {
                         for a in args {
                             self.compile_expr(a)?;
@@ -808,12 +949,10 @@ impl FnCompiler<'_> {
                 self.chunk.emit_u8(args.len() as u8);
             }
             Expr::Field { object, field, loc } => {
-                // v1: field access not fully supported â€” collect error, emit nullish path.
-                self.error(
-                    format!("field access '.{field}' not supported in bytecode v1"),
-                    loc,
-                );
+                self.chunk.map_source(loc.line, loc.column);
                 self.compile_expr(object)?;
+                self.chunk.emit_constant(Constant::String(field.clone()));
+                self.chunk.emit_op(Op::GetIndex);
             }
             Expr::Index { object, index, loc } => {
                 self.chunk.map_source(loc.line, loc.column);
@@ -845,30 +984,30 @@ impl FnCompiler<'_> {
                 // We need: container, index, value
                 // Rotate by compiling object/index then using stack juggling:
                 // Dup is only top. Use: store value pattern:
-                // Actually: compile object, compile index â†’ stack: value, object, index
+                // Actually: compile object, compile index -> stack: value, object, index
                 // Then we need SetIndex expecting container, index, value.
                 // Swap: emit sequence carefully.
                 //
                 // value
-                // compile object â†’ value, object
-                // compile index â†’ value, object, index
+                // compile object -> value, object
+                // compile index -> value, object, index
                 // We need object, index, value. Rotate 3:
                 // Not available. Alternative: compile object, index first in Assign path.
                 //
                 // For now: stack is value; compile object and index then use a local pattern:
-                // value; object; index â†’ swap with SetIndex that accepts value, object, index order.
+                // value; object; index -> SetIndex accepts value, object, index order.
                 //
                 // Define SetIndex as: pop index, pop container, pop value? No current is container, index, value.
                 //
                 // Emit: temporary rotation via Dup/not available for mid-stack.
-                // Recompile assignment specially â€” caller for Assign already did right first.
+                // Recompile assignment specially; caller for Assign already did right first.
                 //
                 // Work around: pop value into... we don't have stores.
                 // Compile as: object, index, value by reordering at assign site.
                 //
                 // Fallback approach: leave value, compile object, compile index,
                 // then call a helper that treats stack as [value, container, index]
-                // â€” change VM? Keep VM as container,index,value and fix here by
+                // Keep VM as container,index,value and fix here by
                 // not using compile_assign_target for Index from Assign.
 
                 self.error("internal: index assign should use specialized path", loc);
@@ -884,7 +1023,7 @@ impl FnCompiler<'_> {
 
 // Specialized assign handling for index is done by overriding Binary Assign path.
 // Patch compile_expr Assign branch by handling Index left specially via a free function
-// called from compile_expr â€” we need to fix the Assign branch above.
+// called from compile_expr; the Assign branch handles it above.
 
 /// Folded constant value.
 #[derive(Debug, Clone, PartialEq)]
@@ -906,7 +1045,7 @@ fn try_fold_const(expr: &Expr) -> Option<Folded> {
         Expr::Unary { op, expr, .. } => {
             let v = try_fold_const(expr)?;
             match (op, v) {
-                (UnaryOp::Neg, Folded::Int(i)) => Some(Folded::Int(-i)),
+                (UnaryOp::Neg, Folded::Int(i)) => i.checked_neg().map(Folded::Int),
                 (UnaryOp::Neg, Folded::Float(f)) => Some(Folded::Float(-f)),
                 (UnaryOp::Not, Folded::Bool(b)) => Some(Folded::Bool(!b)),
                 (UnaryOp::Not, Folded::Null) => Some(Folded::Bool(true)),
@@ -941,7 +1080,7 @@ fn try_fold_const(expr: &Expr) -> Option<Folded> {
 fn fold_binary(op: BinOp, l: Folded, r: Folded) -> Option<Folded> {
     match op {
         BinOp::Add => match (l, r) {
-            (Folded::Int(a), Folded::Int(b)) => Some(Folded::Int(a.wrapping_add(b))),
+            (Folded::Int(a), Folded::Int(b)) => a.checked_add(b).map(Folded::Int),
             (Folded::Float(a), Folded::Float(b)) => Some(Folded::Float(a + b)),
             (Folded::Int(a), Folded::Float(b)) => Some(Folded::Float(a as f64 + b)),
             (Folded::Float(a), Folded::Int(b)) => Some(Folded::Float(a + b as f64)),
@@ -950,17 +1089,17 @@ fn fold_binary(op: BinOp, l: Folded, r: Folded) -> Option<Folded> {
             (l, Folded::String(b)) => Some(Folded::String(format!("{}{b}", folded_display(&l)))),
             _ => None,
         },
-        BinOp::Sub => num2(l, r, |a, b| a - b, |a, b| a.wrapping_sub(b)),
-        BinOp::Mul => num2(l, r, |a, b| a * b, |a, b| a.wrapping_mul(b)),
+        BinOp::Sub => num2(l, r, |a, b| a - b, i64::checked_sub),
+        BinOp::Mul => num2(l, r, |a, b| a * b, i64::checked_mul),
         BinOp::Div => match (l, r) {
-            (Folded::Int(a), Folded::Int(b)) if b != 0 => Some(Folded::Int(a / b)),
+            (Folded::Int(a), Folded::Int(b)) => a.checked_div(b).map(Folded::Int),
             (Folded::Float(a), Folded::Float(b)) if b != 0.0 => Some(Folded::Float(a / b)),
             (Folded::Int(a), Folded::Float(b)) if b != 0.0 => Some(Folded::Float(a as f64 / b)),
             (Folded::Float(a), Folded::Int(b)) if b != 0 => Some(Folded::Float(a / b as f64)),
             _ => None,
         },
         BinOp::Rem => match (l, r) {
-            (Folded::Int(a), Folded::Int(b)) if b != 0 => Some(Folded::Int(a % b)),
+            (Folded::Int(a), Folded::Int(b)) => a.checked_rem(b).map(Folded::Int),
             (Folded::Float(a), Folded::Float(b)) if b != 0.0 => Some(Folded::Float(a % b)),
             _ => None,
         },
@@ -978,10 +1117,10 @@ fn num2(
     l: Folded,
     r: Folded,
     f: impl Fn(f64, f64) -> f64,
-    i: impl Fn(i64, i64) -> i64,
+    i: impl Fn(i64, i64) -> Option<i64>,
 ) -> Option<Folded> {
     match (l, r) {
-        (Folded::Int(a), Folded::Int(b)) => Some(Folded::Int(i(a, b))),
+        (Folded::Int(a), Folded::Int(b)) => i(a, b).map(Folded::Int),
         (Folded::Float(a), Folded::Float(b)) => Some(Folded::Float(f(a, b))),
         (Folded::Int(a), Folded::Float(b)) => Some(Folded::Float(f(a as f64, b))),
         (Folded::Float(a), Folded::Int(b)) => Some(Folded::Float(f(a, b as f64))),
@@ -1068,7 +1207,7 @@ function f() {
 "#;
         let r = compile_source(src, None).unwrap();
         let chunk = r.module.functions.iter().find(|c| c.name == "f").unwrap();
-        // Folded to 7: CONSTANT, Return path â€” no ADD/MUL opcodes.
+        // Folded to 7: CONSTANT, Return path; no ADD/MUL opcodes.
         assert!(
             !chunk
                 .code
@@ -1113,7 +1252,7 @@ function f() {
     }
 
     #[test]
-    fn multiple_field_errors_collected() {
+    fn field_access_lowers_to_string_indexing() {
         let src = r#"
 function f() {
     let a = x.y
@@ -1121,20 +1260,21 @@ function f() {
     return a
 }
 "#;
-        let err = compile_source(src, None).unwrap_err();
-        match err {
-            CompileError::Many {
-                count, diagnostics, ..
-            } => {
-                assert!(count >= 2);
-                assert!(diagnostics.len() >= 2);
-            }
-            CompileError::Codegen { message, .. } => {
-                // If only one recovered depending on parse, still ok if field error present.
-                assert!(message.contains("field") || message.contains("not supported"));
-            }
-            other => panic!("unexpected {other:?}"),
-        }
+        let compiled = compile_source(src, None).unwrap();
+        let chunk = compiled
+            .module
+            .functions
+            .iter()
+            .find(|chunk| chunk.name == "f")
+            .unwrap();
+        assert_eq!(
+            chunk
+                .code
+                .iter()
+                .filter(|&&byte| byte == Op::GetIndex.to_u8())
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -1298,7 +1438,7 @@ scene end {
     }
 
     #[test]
-    fn break_continue_soft_errors() {
+    fn break_continue_compile_as_structured_jumps() {
         let src = r#"
 function f() {
     while true {
@@ -1307,12 +1447,11 @@ function f() {
     }
 }
 "#;
-        let err = compile_source(src, None).unwrap_err();
-        let text = err.to_string();
-        assert!(
-            text.contains("break") || text.contains("continue") || text.contains("compile"),
-            "{text}"
-        );
+        let compiled = compile_source(src, None).unwrap();
+        let function =
+            &compiled.module.functions[*compiled.module.exports.get("f").unwrap() as usize];
+        assert!(function.code.contains(&Op::Jump.to_u8()));
+        assert!(function.code.contains(&Op::Loop.to_u8()));
     }
 
     #[test]
@@ -1372,5 +1511,40 @@ function helper() { return 1 }
         let compiled = compile_source(source, Some("menu.vel")).unwrap();
         assert!(compiled.module.exports.contains_key("helper"));
         assert!(!compiled.module.exports.contains_key("main_menu"));
+    }
+
+    #[test]
+    fn yield_call_emits_cooperative_opcode() {
+        let src = r#"
+function request() {
+    let answer = yield(["math.double", 21])
+    return answer
+}
+"#;
+        let r = compile_source(src, None).unwrap();
+        let chunk = r
+            .module
+            .functions
+            .iter()
+            .find(|c| c.name == "request")
+            .unwrap();
+        assert!(
+            chunk.code.contains(&(Op::Yield as u8)),
+            "yield call should lower to Op::Yield: {:?}",
+            chunk.code
+        );
+    }
+
+    #[test]
+    fn yield_rejects_more_than_one_argument() {
+        let src = r#"
+function bad() {
+    return yield(1, 2)
+}
+"#;
+        let error = compile_source(src, None).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("yield expects zero or one argument"));
     }
 }

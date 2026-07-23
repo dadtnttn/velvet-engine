@@ -117,7 +117,8 @@ end
             "dialogue={:?}",
             r.dialogue
         );
-        assert!(r.ended || r.steps > 0);
+        assert!(r.ended, "headless run must reach the scene end: {r:?}");
+        assert!(r.steps > 0);
     }
 
     #[test]

@@ -404,9 +404,35 @@ mod tests {
     }
 
     #[test]
-    fn template_scripts_non_empty() {
-        for t in known_templates() {
-            assert!(!template_main_script(t).is_empty());
+    fn built_in_template_scripts_parse_cleanly_and_contain_their_entry_scene() {
+        let cases = [
+            ("visual-novel", "scene main", 8usize),
+            ("narrative-adventure", "scene main", 4usize),
+            ("top-down-rpg", "scene talk_mira", 5usize),
+            ("top-down-action", "scene briefing", 5usize),
+        ];
+        assert_eq!(known_templates().len(), cases.len());
+        for (template, required_source, min_items) in cases {
+            let source = template_main_script(template);
+            assert!(
+                source.contains(required_source),
+                "{template} lacks {required_source}"
+            );
+            assert!(
+                !source.contains("TODO"),
+                "{template} ships an unfinished placeholder"
+            );
+            let parsed = velvet_script_parser::parse_file(source, Some(template)).unwrap();
+            assert!(
+                !parsed.module.has_errors(),
+                "{template}: {:?}",
+                parsed.module.diagnostics
+            );
+            assert!(
+                parsed.module.items.len() >= min_items,
+                "{template} has only {} items",
+                parsed.module.items.len()
+            );
         }
     }
 }

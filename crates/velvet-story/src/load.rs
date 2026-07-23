@@ -517,7 +517,9 @@ scene broken {
 character hero { name: "H" }
 "#;
         let err = load_program_from_source(src, Some("empty.vel"), "E").unwrap_err();
-        assert!(!err.diagnostics().is_empty() || err.to_string().contains("no scenes"));
+        assert_eq!(err.diagnostics().len(), 1);
+        assert_eq!(err.diagnostics()[0].message, "no scenes in story script");
+        assert_eq!(err.diagnostics()[0].loc.line, 1);
     }
 
     #[test]

@@ -698,7 +698,7 @@ state { trust: int = 0 }
 
         let src = doc.to_source();
         assert!(src.contains("scene apartment"));
-        assert!(src.contains("aria \"Pensé que no vendrías.\"") || src.contains("Pensé"));
+        assert!(src.contains("aria \"Pensé que no vendrías.\""));
         assert!(src.contains("choice"));
         assert!(src.contains("jump conversation"));
         assert!(src.contains("jump hallway"));
@@ -711,7 +711,8 @@ state { trust: int = 0 }
         assert!(again.scenes.iter().any(|s| s.name == "apartment"));
         assert!(again.scenes.iter().any(|s| s.name == "conversation"));
         let src2 = again.to_source();
-        assert!(src2.contains("jump conversation") || src2.contains("conversation"));
+        assert!(src2.contains("jump conversation"));
+        assert!(src2.contains("jump hallway"));
     }
 
     #[test]

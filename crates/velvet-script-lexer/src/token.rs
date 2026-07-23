@@ -112,6 +112,10 @@ pub enum Token {
     PlusAssign,
     /// `-=`
     MinusAssign,
+    /// `*=`
+    StarAssign,
+    /// `/=`
+    SlashAssign,
     /// `&&`
     AndAnd,
     /// `||`
@@ -177,6 +181,10 @@ pub enum TokenKind {
     PlusAssign,
     #[token("-=")]
     MinusAssign,
+    #[token("*=")]
+    StarAssign,
+    #[token("/=")]
+    SlashAssign,
     #[token("&&")]
     AndAnd,
     #[token("||")]
@@ -244,6 +252,8 @@ impl TokenKind {
             TokenKind::Ge => Token::Ge,
             TokenKind::PlusAssign => Token::PlusAssign,
             TokenKind::MinusAssign => Token::MinusAssign,
+            TokenKind::StarAssign => Token::StarAssign,
+            TokenKind::SlashAssign => Token::SlashAssign,
             TokenKind::AndAnd => Token::AndAnd,
             TokenKind::OrOr => Token::OrOr,
             TokenKind::Arrow => Token::Arrow,

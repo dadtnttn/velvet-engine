@@ -160,9 +160,13 @@ mod tests {
         let mut h = SpatialHash::new(2.0);
         h.rebuild(&parts);
         let q = h.query(0.0, 0.0, 2.0);
+        assert_eq!(q.len(), 2, "query={q:?}");
         assert!(q.contains(&0) && q.contains(&1));
-        assert!(!q.contains(&3) || q.len() >= 2);
+        assert!(!q.contains(&2), "distant particle leaked into query: {q:?}");
         let fixes = separate_particles(&mut parts, &h, 1.0);
-        assert!(fixes >= 1 || (parts[0].x - parts[1].x).abs() > 0.01);
+        assert!(fixes >= 1);
+        let dx = parts[0].x - parts[1].x;
+        let dy = parts[0].y - parts[1].y;
+        assert!((dx * dx + dy * dy).sqrt() >= 1.0 - 1e-4);
     }
 }

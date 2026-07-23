@@ -23,7 +23,7 @@ Phases are sequential. Keep the tree compiling after every phase.
 | Priority | Item | Status | Notes |
 |----------|------|--------|-------|
 | **Policy** | **Tools first** | **active** | See `docs/architecture/TOOLS.md`. Crates = tools; `demos/` = examples; `recipes` = optional samples. |
-| **Language** | **VS3 official general logic** | **active** | `docs/language/VELVET_SCRIPT_3.md` + ADR 0008. Classic story kept; VS2 not official product name. |
+| **Language** | **VS3 official general logic** | **active** | `docs/language/VELVET_SCRIPT_3.md` + `docs/language/VS3_ROADMAP.md` + ADR 0008. Engine bindings follow `docs/architecture/VS3_ENGINE_RULES.md`; classic story stays supported. |
 | **Language** | Classic `.vel` / StoryProgram | **supported** | Novels / product VN path; do not break. |
 | **Now** | **Card tools** (`velvet-cards`) | **active** | Catalog, deck validate, zones, CLI — not a card game. |
 | **Now** | **Anim / 3D image tools** (`velvet-anim`) | **active** | Timeline, Pose3D, project_image, story track/pose3d — not premade cutscenes. |

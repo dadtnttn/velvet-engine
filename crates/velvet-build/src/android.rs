@@ -397,7 +397,7 @@ mod tests {
         .unwrap();
         assert!(report.android_manifest.is_file());
         let xml = fs::read_to_string(&report.android_manifest).unwrap();
-        assert!(xml.contains("AndroidManifest") || xml.contains("manifest"));
+        assert!(xml.contains("<manifest"), "xml={xml}");
         assert!(xml.contains("MainActivity"));
         assert!(report.manifest_path.is_file());
         assert!(!report.apk_built);

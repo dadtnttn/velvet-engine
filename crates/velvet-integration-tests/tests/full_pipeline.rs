@@ -4,7 +4,7 @@
 
 use velvet_math::Vec2;
 use velvet_play::prelude::*;
-use velvet_play::{apply_autotile4, flood_fill_walkable};
+use velvet_play::{apply_autotile4, flood_fill_walkable, RegionEventKind};
 use velvet_rpg::prelude::*;
 use velvet_script_compiler::compile_source;
 use velvet_script_vm::{Value, Vm, VmLimits};
@@ -188,13 +188,19 @@ fn save_load_preserves_choice_outcome() {
     let mut player = StoryPlayer::start(program.clone());
     run_to_choice(&mut player);
     player.choose(0).unwrap();
-    // Advance one line into aftermath
-    if matches!(player.wait(), StoryWait::Line) {
-        // ok
-    }
+    assert_eq!(
+        *player.wait(),
+        StoryWait::Line,
+        "choice must enter aftermath dialogue"
+    );
+    assert_eq!(player.current_text(), "Very well.");
     let save = player.to_save("slot_pipeline");
     let json = serde_json::to_string_pretty(&save).expect("json");
-    assert!(json.contains("has_key") || json.contains("snapshot"));
+    assert!(json.contains("slot_pipeline"), "json={json}");
+    assert!(
+        json.contains("has_key"),
+        "choice state missing from save: {json}"
+    );
 
     let loaded: SaveGame = serde_json::from_str(&json).expect("deserialize");
     let mut player2 = StoryPlayer::start(program);
@@ -202,7 +208,8 @@ fn save_load_preserves_choice_outcome() {
     assert!(flag(&player2, "has_key"));
     // Finish remaining
     drain_until_end(&mut player2);
-    assert!(player2.is_ended() || flag(&player2, "has_key"));
+    assert!(player2.is_ended());
+    assert_eq!(player2.ending(), Some("with_key"));
 }
 
 // ---------------------------------------------------------------------------
@@ -257,20 +264,22 @@ fn skip_engine_fast_forwards_all_mode() {
 #[test]
 fn rollback_can_step_back_one_line() {
     let mut player = StoryPlayer::start(load_story());
-    let mut recorder = RollbackRecorder::new(32);
+    run_to_choice(&mut player);
+    player.choose(0).expect("key route");
     assert_eq!(*player.wait(), StoryWait::Line);
+    assert_eq!(player.current_text(), "Very well.");
+
+    let mut recorder = RollbackRecorder::new(32);
     recorder.observe(&player);
-    let first = player.current_text().to_string();
     player.advance();
-    // May hit choice quickly depending on ops; keep observing
+    assert_eq!(*player.wait(), StoryWait::Line);
+    assert_eq!(player.current_text(), "You pocket the key.");
     recorder.observe(&player);
-    if matches!(player.wait(), StoryWait::Line) {
-        let second = player.current_text().to_string();
-        assert_ne!(first, second);
-        let ok = recorder.back(&mut player).unwrap();
-        assert!(ok);
-        assert_eq!(*player.wait(), StoryWait::Line);
-    }
+
+    assert!(recorder.back(&mut player).unwrap());
+    assert_eq!(*player.wait(), StoryWait::Line);
+    assert_eq!(player.current_text(), "Very well.");
+    assert!(flag(&player, "has_key"));
 }
 
 // ---------------------------------------------------------------------------
@@ -322,9 +331,22 @@ fn play_regions_and_key_door() {
         alive: true,
     });
 
-    let events = regions.update_actor("player", Vec2::new(24.0, 40.0));
-    // May or may not enter trigger depending on coords; just ensure API works
-    let _ = events;
+    let events = regions.update_actor("player", Vec2::new(56.0, 56.0));
+    assert!(
+        events.iter().any(|event| {
+            event.region == "door_zone"
+                && event.actor == "player"
+                && event.kind == RegionEventKind::Enter
+        }),
+        "events={events:?}"
+    );
+    assert!(regions
+        .occupied_by("player")
+        .iter()
+        .any(|name| name == "door_zone"));
+    assert!(regions
+        .update_actor("player", Vec2::new(56.0, 56.0))
+        .is_empty());
 
     world.try_player_interact(true);
     assert!(
@@ -426,8 +448,12 @@ fn rpg_quest_fails_objective_without_key() {
 #[test]
 fn compile_story_source_as_bytecode() {
     let compiled = compile_source(BRANCHING_STORY, Some("pipeline.vel")).expect("compile story");
-    // Scenes exported as functions
-    assert!(compiled.module.exports.contains_key("start") || !compiled.module.functions.is_empty());
+    // Story scenes compile to callable exports and preserve source identity.
+    assert!(
+        compiled.module.exports.contains_key("start"),
+        "exports={:?}",
+        compiled.module.exports.keys().collect::<Vec<_>>()
+    );
     assert!(compiled.module.metadata.source_hash.is_some());
 }
 
@@ -525,12 +551,9 @@ fn full_chain_compile_story_play_save_quest() {
     // 3) VM reward
     let reward = vm
         .call_name("reward", &[Value::Bool(true)])
-        .unwrap_or(Value::Int(100));
-    let reward_i = match reward {
-        Value::Int(n) => n,
-        Value::Bool(true) => 100,
-        _ => 100,
-    };
+        .expect("reward function must execute");
+    assert_eq!(reward, Value::Int(100));
+    let reward_i = 100;
 
     // 4) Save
     let save = player.to_save("chain");

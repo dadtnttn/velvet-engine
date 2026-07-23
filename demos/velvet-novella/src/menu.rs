@@ -786,6 +786,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "manual visual evidence; run explicitly with --ignored"]
     fn dump_novel_menu_png() {
         let bg = load_rgb(&data_ui().join("menu_bg.jpg"));
         let mut pixels = vec![0u32; (WW * WH) as usize];

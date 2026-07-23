@@ -25,10 +25,31 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: editors/vscode-velvet/pnpm-lock.yaml
+
       - name: System deps (Linux)
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libudev-dev
+
+      - name: Test quality
+        run: python3 tools/check_test_quality.py
+
+      - name: Check VS Code extension
+        working-directory: editors/vscode-velvet
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run check
 
       - name: Format
         run: cargo fmt --all --check

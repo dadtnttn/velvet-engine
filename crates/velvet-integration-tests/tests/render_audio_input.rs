@@ -19,7 +19,8 @@ fn camera_frustum_culls_batch() {
     let far = Aabb2::from_center_extents(Vec2::new(50_000.0, 50_000.0), Vec2::splat(5.0));
     let edge = Aabb2::from_center_extents(frustum.bounds.center(), Vec2::splat(1.0));
 
-    assert!(frustum.cull_aabb(near).is_visible() || frustum.cull_point(Vec2::ZERO).is_visible());
+    assert!(frustum.cull_aabb(near).is_visible());
+    assert!(frustum.cull_point(Vec2::ZERO).is_visible());
     assert_eq!(frustum.cull_aabb(far), CullResult::Outside);
     assert!(frustum.cull_aabb(edge).is_visible());
 
@@ -81,7 +82,8 @@ fn audio_play_tick_and_bus_gain() {
 
     eng.set_bus_muted(BusKind::Effects, true);
     let muted_gain = eng.effective_gain(&BusId::from_kind(BusKind::Effects));
-    assert!(muted_gain == 0.0 || muted_gain < gain);
+    assert_eq!(muted_gain, 0.0);
+    assert!(muted_gain < gain);
 }
 
 #[test]
@@ -111,14 +113,12 @@ fn input_key_resolves_move_and_confirm() {
     input.end_frame();
 
     assert!(input.key_held(KeyCode::W));
-    assert!(input.key_just_pressed(KeyCode::W) || input.key_held(KeyCode::W));
-    assert!(
-        input.pressed(builtin::CONFIRM)
-            || input.just_pressed(builtin::CONFIRM)
-            || input.pressed(builtin::MOVE_UP)
-            || input.key_held(KeyCode::W),
-        "expected confirm or move_up from defaults"
-    );
+    assert!(input.key_just_pressed(KeyCode::W));
+    let movement = input.axis2(builtin::MOVE);
+    assert!(movement.y > 0.99, "movement={movement:?}");
+    assert!(movement.x.abs() < f32::EPSILON, "movement={movement:?}");
+    assert!(input.pressed(builtin::CONFIRM));
+    assert!(input.just_pressed(builtin::CONFIRM));
 
     input.begin_frame();
     input.key_up(KeyCode::W);
@@ -132,7 +132,8 @@ fn input_frame_edges_clear() {
     input.begin_frame();
     input.key_down(KeyCode::A);
     input.end_frame();
-    assert!(input.key_just_pressed(KeyCode::A) || input.key_held(KeyCode::A));
+    assert!(input.key_just_pressed(KeyCode::A));
+    assert!(input.key_held(KeyCode::A));
     input.begin_frame();
     // Pressed edge clears after begin_frame.
     assert!(!input.key_just_pressed(KeyCode::A));
@@ -165,8 +166,13 @@ fn typewriter_reveals_and_finishes() {
             break;
         }
     }
-    assert!(chars >= 5, "chars={chars}");
-    assert!(tw.is_finished() || finished);
+    assert_eq!(chars, "Hello Velvet".chars().count());
+    assert!(tw.is_finished());
+    assert_eq!(tw.visible_text(), "Hello Velvet");
+    assert!(
+        !finished,
+        "completion is represented by VM state after the last char"
+    );
 }
 
 #[test]
@@ -199,7 +205,8 @@ fn dialogue_line_audio_and_input_advance() {
     input.begin_frame();
     input.key_down(KeyCode::Enter);
     input.end_frame();
-    assert!(input.just_pressed(builtin::CONFIRM) || input.pressed(builtin::CONFIRM));
+    assert!(input.pressed(builtin::CONFIRM));
+    assert!(input.just_pressed(builtin::CONFIRM));
     tw.skip();
     assert!(tw.is_finished());
 

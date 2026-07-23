@@ -730,6 +730,8 @@ mod tests {
             let s = format!("{p:?}");
             assert!(!s.is_empty());
         }
-        assert!(ExportPlatform::parse("host").is_some() || ExportPlatform::parse("Host").is_some());
+        assert_eq!(ExportPlatform::parse("host"), Some(ExportPlatform::Host));
+        assert_eq!(ExportPlatform::parse("Host"), Some(ExportPlatform::Host));
+        assert_eq!(ExportPlatform::parse("unknown"), None);
     }
 }

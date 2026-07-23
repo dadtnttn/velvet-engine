@@ -2377,6 +2377,7 @@ mod flow_tests {
     }
 
     #[test]
+    #[ignore = "manual visual evidence; run explicitly with --ignored"]
     fn dump_styled_blind_fallback_for_evidence() {
         let mut app = App::new(true, false).expect("boot demo");
         app.with_world_mut(|world| world.begin_run());

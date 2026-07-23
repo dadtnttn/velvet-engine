@@ -864,6 +864,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "manual visual evidence; run explicitly with --ignored"]
     fn dump_title_menu_png_for_evidence() {
         let pixels = paint_frame(0);
         // Optional dump path via env; always write under target/ for local inspect

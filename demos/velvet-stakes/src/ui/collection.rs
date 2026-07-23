@@ -1600,6 +1600,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "manual visual evidence; run explicitly with --ignored"]
     fn dump_collection_png_for_evidence() {
         let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data");
         let background = load_rgb(&data.join("ui/menu_bg_city.png"));

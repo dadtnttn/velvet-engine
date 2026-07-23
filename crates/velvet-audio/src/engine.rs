@@ -420,7 +420,8 @@ mod tests {
             .unwrap();
         assert_eq!(eng.active_voices(), 1);
         eng.tick(0.1);
-        assert!(eng.voices().iter().all(|v| v.id != id) || eng.active_voices() == 0);
+        assert_eq!(eng.active_voices(), 0);
+        assert!(eng.voices().iter().all(|voice| voice.id != id));
     }
 
     #[test]

@@ -83,7 +83,12 @@ mod tests {
         let out = dir.path().join("out.json");
         cmd_pack(dir.path().to_path_buf(), out.clone(), vec![], vec![]).unwrap();
         let text = fs::read_to_string(&out).unwrap();
-        assert!(text.contains("hero.png") || text.contains("sprites"));
+        assert!(text.contains("hero.png"), "manifest={text}");
+        assert!(text.contains("sprites"), "nested path lost: {text}");
+        assert!(
+            text.contains("readme.md"),
+            "unfiltered file missing: {text}"
+        );
         assert!(out.exists());
     }
 }

@@ -538,9 +538,14 @@ mod tests {
             // force path for stubborn mtime
             apply = dev.force_tick_key("style:x");
         }
+        assert_eq!(
+            apply.errors.len(),
+            1,
+            "broken edit must report one parse error"
+        );
         assert!(
-            !apply.errors.is_empty() || apply.stylesheet.is_some(),
-            "should report error or restore good"
+            apply.stylesheet.is_some(),
+            "last-good stylesheet must be restored"
         );
         // last-good still 1 rule
         assert_eq!(dev.good_sheet("x").unwrap().rules.len(), 1);
@@ -795,11 +800,17 @@ mod tests {
     }
 
     #[test]
-    fn bump_helper_compiles() {
+    fn bump_mtime_rewrites_the_asset_and_keeps_it_parseable() {
         let dir = temp_dir("bump");
         let path = dir.join("styles/a.vcss");
         write_file(&path, ".a { color: #111111; }\n");
         bump_mtime(&path, ".a { color: #222222; }\n");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            ".a { color: #222222; }\n"
+        );
+        let sheet = reload_stylesheet(&path).expect("rewritten stylesheet must parse");
+        assert_eq!(sheet.rules.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

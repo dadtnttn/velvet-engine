@@ -532,8 +532,8 @@ scene end {
         let po = catalog_to_po_template(&cat);
         assert!(po.contains("msgctxt"));
         assert!(po.contains("msgid"));
-        // Escaped quote present or source embedded.
-        assert!(po.contains("hi") || po.contains(r#"\""#));
+        assert!(po.contains("He said"), "po={po}");
+        assert!(po.contains(r#"\"hi\""#), "quotes must be PO-escaped: {po}");
     }
 
     #[test]

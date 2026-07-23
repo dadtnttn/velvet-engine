@@ -511,8 +511,9 @@ mod tests {
         let dir = tempdir().unwrap();
         scaffold_project("demo", "visual-novel", dir.path()).unwrap();
         let root = dir.path().join("demo");
-        let (n, _issues, _) = check_all_scripts(&root).unwrap();
-        assert!(n >= 1);
+        let (n, issues, details) = check_all_scripts(&root).unwrap();
+        assert_eq!(n, 1, "Studio scaffold contains one main story script");
+        assert_eq!(issues, 0, "details={details:?}");
 
         let path = create_scene_stub(&root, "intro").unwrap();
         assert!(path.exists());
@@ -536,10 +537,17 @@ mod tests {
         };
         let r = dispatch(&mut ctx, CommandId::Help, &[]).unwrap();
         assert!(r.ok);
-        assert!(!r.details.is_empty());
+        assert_eq!(r.message, "palette commands");
+        assert_eq!(r.details.len(), all_commands().len());
+        assert!(r.details.iter().any(|line| line.starts_with("check —")));
 
         let r = dispatch(&mut ctx, CommandId::Assets, &["script"]).unwrap();
         assert!(r.ok);
+        assert!(r.message.ends_with("asset(s)"));
+        assert!(r
+            .details
+            .iter()
+            .all(|line| line.contains("Script") || line.contains("script")));
     }
 
     #[test]
@@ -553,10 +561,9 @@ mod tests {
         let dir = tempdir().unwrap();
         scaffold_project("vn", "visual-novel", dir.path()).unwrap();
         let root = dir.path().join("vn");
-        let (n, issues, _) = check_all_scripts(&root).unwrap();
-        assert!(n >= 1, "expected at least one script");
-        // Issues may be empty for valid template scripts.
-        let _ = issues;
+        let (n, issues, details) = check_all_scripts(&root).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(issues, 0, "details={details:?}");
     }
 
     #[test]
@@ -567,9 +574,10 @@ mod tests {
         let path = create_scene_stub(&root, "chapter_two").unwrap();
         assert!(path.exists());
         let text = fs::read_to_string(&path).unwrap();
-        assert!(text.contains("scene chapter_two") || text.contains("chapter_two"));
-        let (n, _, _) = check_all_scripts(&root).unwrap();
-        assert!(n >= 2);
+        assert!(text.contains("scene chapter_two {"));
+        let (n, issues, details) = check_all_scripts(&root).unwrap();
+        assert_eq!(n, 2);
+        assert_eq!(issues, 0, "details={details:?}");
     }
 
     #[test]
@@ -587,15 +595,17 @@ mod tests {
             scripts: &mut scripts,
         };
         let r = dispatch(&mut ctx, CommandId::Check, &[]).unwrap();
-        assert!(r.ok || !r.details.is_empty());
+        assert!(r.ok);
+        assert_eq!(r.message, "checked 1 script(s), 0 issue(s)");
+        assert!(r.details.is_empty());
     }
 
     #[test]
     fn filter_commands_empty_and_partial() {
         let all = filter_commands("");
-        assert!(!all.is_empty());
+        assert_eq!(all, all_commands());
         let help = filter_commands("hel");
-        assert!(help.contains(&CommandId::Help) || !help.is_empty());
+        assert_eq!(help, vec![CommandId::Help]);
     }
 
     #[test]

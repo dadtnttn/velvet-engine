@@ -3371,6 +3371,7 @@ dependencies = [
  "velvet-script-stdlib",
  "velvet-script-syntax",
  "velvet-script-types",
+ "velvet-script-vs3",
 ]
 
 [[package]]
@@ -3423,9 +3424,11 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "velvet-script-ast",
+ "velvet-script-bytecode",
  "velvet-script-compiler",
  "velvet-script-format",
  "velvet-script-parser",
+ "velvet-script-vs3",
 ]
 
 [[package]]
@@ -3490,10 +3493,12 @@ dependencies = [
  "pretty_assertions",
  "thiserror 2.0.18",
  "velvet-crypto",
+ "velvet-math",
  "velvet-script-ast",
  "velvet-script-bytecode",
  "velvet-script-compiler",
  "velvet-script-lexer",
+ "velvet-script-parser",
  "velvet-script-vm",
 ]
 

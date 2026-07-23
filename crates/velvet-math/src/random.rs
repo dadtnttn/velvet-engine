@@ -371,7 +371,7 @@ mod tests {
         for max in [1usize, 2, 7, 100] {
             for _ in 0..200 {
                 let i = rng.gen_index(max);
-                assert!(i < max || max == 0);
+                assert!(i < max, "gen_index({max}) returned {i}");
             }
         }
         let mut trues = 0u32;
@@ -437,17 +437,27 @@ mod tests {
     }
 
     #[test]
-    fn property_hash_mix_seed_stable() {
-        assert_eq!(hash_u64(0), hash_u64(0));
-        assert_ne!(hash_u64(1), hash_u64(2));
-        assert_eq!(mix_seed(1, 2), mix_seed(1, 2));
+    fn hash_and_seed_mixing_match_stable_vectors_and_avalanche() {
+        let vectors = [
+            (0, 0x0000_0000_0000_0000),
+            (1, 0x5692_161d_100b_05e5),
+            (2, 0xdbd2_3897_3a2b_148a),
+            (u64::MAX, 0xb4d0_55fc_f2cb_bd7b),
+        ];
+        for (input, expected) in vectors {
+            assert_eq!(hash_u64(input), expected, "input={input:#x}");
+        }
+        assert_eq!(mix_seed(1, 2), 0xf282_6f98_653e_9e57);
+        assert_eq!(mix_seed(2, 1), 0x081a_5c13_7785_6b73);
         assert_ne!(mix_seed(1, 2), mix_seed(2, 1));
-        // Avalanche-ish: flipping one bit changes output a lot.
+
         let a = hash_u64(0x1000);
         let b = hash_u64(0x1001);
-        assert_ne!(a, b);
         let bits = (a ^ b).count_ones();
-        assert!(bits > 8, "bits flipped={bits}");
+        assert!(
+            bits > 24,
+            "single-bit input change flipped only {bits} output bits"
+        );
     }
 
     #[test]

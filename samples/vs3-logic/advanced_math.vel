@@ -1,0 +1,41 @@
+// @edition 3
+
+state {
+    random: rng = rng_new(2026)
+}
+
+function steer(position: vec3, target: vec3, speed: float) {
+    let direction: vec3 = normalize(target - position)
+    return position + direction * speed
+}
+
+function rotate_forward(axis: vec3, angle: float) {
+    let rotation: quat = quat_axis_angle(axis, angle)
+    return quat_rotate(rotation, vec3(0, 0, 1))
+}
+
+function transform_position(transform: mat4, position: vec3) {
+    return transform_point(transform, position)
+}
+
+function terrain_height(x: float, y: float) {
+    return fbm2(x, y, 77, 5, 2, 0.5)
+}
+
+function next_spawn_index(count: int) {
+    return rng_range_int(random, 0, count)
+}
+
+function analyze_frame_times(samples: list) {
+    return {
+        "mean": mean(samples),
+        "stddev": stddev(samples),
+        "p90": quantile(samples, 0.9),
+        "smoothed": moving_average(samples, 3),
+    }
+}
+
+function solve_example() {
+    // x^2 - 2 = 0 in [0, 2].
+    return poly_root_bisection([1, 0, -2], 0, 2, 64, 0.000000001)
+}

@@ -304,7 +304,12 @@ mod tests {
         // Inspector
         app.selection = Selection::Project;
         let report = inspector::inspect(&app.root, &app.selection).unwrap();
-        assert!(report.title.contains("Project") || !report.lines.is_empty());
+        assert!(report.title.contains("Project"), "title={}", report.title);
+        assert!(
+            report.lines.iter().any(|line| line.contains("demo")),
+            "lines={:?}",
+            report.lines
+        );
 
         // Console ring
         app.console.warn("test warn");

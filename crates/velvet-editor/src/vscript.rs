@@ -549,7 +549,26 @@ mod tests {
     }
 
     #[test]
-    fn catalog_nonempty() {
-        assert!(api_catalog().len() >= 10);
+    fn api_catalog_snippets_are_unique_parseable_and_documented() {
+        let catalog = api_catalog();
+        let snippets: std::collections::HashSet<_> =
+            catalog.iter().map(|(_, snippet, _)| *snippet).collect();
+        assert_eq!(snippets.len(), catalog.len(), "duplicate insertion snippet");
+        for (category, snippet, description) in catalog {
+            assert!(!category.is_empty());
+            assert!(!description.is_empty());
+            assert!(
+                !matches!(parse_line(snippet), Stmt::Raw { .. }),
+                "catalog snippet is not parsed: {snippet}"
+            );
+        }
+        for required in [
+            "game", "scene", "flow", "layer", "button", "graph", "logic", "vars",
+        ] {
+            assert!(
+                catalog.iter().any(|(category, _, _)| *category == required),
+                "missing category {required}"
+            );
+        }
     }
 }
