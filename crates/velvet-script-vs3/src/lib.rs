@@ -11,7 +11,14 @@
 #![deny(missing_docs)]
 
 mod bundle;
+mod lockfile;
+mod manifest;
 mod semantic;
+
+pub use lockfile::{Vs3LockedPackage, Vs3PackageLock, VS3_PACKAGE_LOCK};
+pub use manifest::{
+    Vs3Dependency, Vs3PackageFormatError, Vs3PackageManifest, VS3_PACKAGE_MANIFEST,
+};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
