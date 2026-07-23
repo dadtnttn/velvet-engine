@@ -40,7 +40,7 @@ Ya disponible:
 
 Deuda conocida:
 
-- Aún no existe `import` en código fuente ni resolución completa de módulos.
+- Ya existe `import "ruta.vel"` textual para bundles con estado compartido; aún falta resolución nominal completa de módulos.
 - Las firmas de servicios externos no forman todavía un registro tipado común.
 - `velvet-script-vs3` contiene un puente directo hacia `velvet-math`.
 - Las nativas antiguas `present_*`, `set_bg` y `ui_flag*` siguen disponibles
@@ -83,7 +83,7 @@ Criterio de salida:
 
 Entregables:
 
-- Sintaxis `import` y exportaciones explícitas.
+- Evolucionar el import textual actual hacia imports nominales y exportaciones explícitas.
 - Resolución de nombres entre archivos sin depender de rutas internas del host.
 - Identidad canónica `paquete.modulo`, alias y detección de ciclos.
 - Manifest de paquete con versión de lenguaje y dependencias.
