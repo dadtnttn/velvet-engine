@@ -222,9 +222,31 @@ function attack() {
 Nominal modules have isolated names and persistent state. Functions are called
 with `module.function(...)`; state and top-level bindings are private and must
 be exposed through functions. Different modules may therefore define the same
-function or state names without collision. Imports may be nested, are loaded
-once, and cycles, missing sources, invalid aliases, ambiguous ownership, and
-attempts to access private state are diagnosed before bytecode generation.
+function or state names without collision.
+
+Public APIs can be declared explicitly:
+
+```velvet
+import "combat.vel" as combat
+
+export function attack(target: map) {
+    return combat.resolve_hit(target)
+}
+
+function normalize_target(target: map) {
+    return target
+}
+```
+
+As soon as a source module declares at least one `export function`, only its
+exported functions are visible to other modules, Rust hosts, and the CLI.
+Unexported functions remain callable inside their own module. For compatibility,
+a module with no `export` declarations keeps the older all-functions-public
+behavior, allowing existing projects to migrate one file at a time.
+
+Imports may be nested, are loaded once, and cycles, missing sources, invalid
+aliases, ambiguous ownership, private function calls, and attempts to access
+private state are diagnosed before bytecode generation.
 
 `compile_bundle` resolves embedded source graphs and `compile_path` resolves
 files from disk. Filesystem resolution canonicalizes every path and rejects
@@ -249,13 +271,13 @@ available for host-owned collections of separately compiled modules using
 
 ## Boundaries and next compatible extensions
 
-The current alpha provides shared source fragments and nominal module namespaces,
-but deliberately does not yet claim explicit per-symbol exports, package manifests,
-structs/enums, pattern matching, generics, return-type syntax, or a borrow checker.
-Today every function in a nominal module is callable through its alias, while state
-remains private. Records and tagged variants are represented with maps and dispatched
-with ordinary conditionals. Future features should extend the same semantic frontend
-and bytecode versioning instead of creating a parallel language pipeline.
+The current alpha provides shared source fragments, nominal module namespaces,
+and explicit function exports, but deliberately does not yet claim package
+manifests, imports by package identity, structs/enums, pattern matching, generics,
+return-type syntax, or a borrow checker. Records and tagged variants are represented
+with maps and dispatched with ordinary conditionals. Future features should extend
+the same semantic frontend and bytecode versioning instead of creating a parallel
+language pipeline.
 
 Engine concepts remain external modules. New scene, ECS, render, audio, input,
 asset, physics, or UI integrations must not add edition-3 keywords or global

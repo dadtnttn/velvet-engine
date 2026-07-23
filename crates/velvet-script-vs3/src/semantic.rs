@@ -161,6 +161,7 @@ impl Validator {
                 params,
                 body,
                 loc,
+                ..
             } => {
                 let signature = self.signatures.get(name).cloned().unwrap_or_default();
                 self.scopes.push(HashMap::new());

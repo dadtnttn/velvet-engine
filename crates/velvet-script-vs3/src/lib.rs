@@ -166,6 +166,7 @@ pub const SUPPORTED_SURFACE: &[&str] = &[
     "multi-file packages with module::function calls",
     "legacy shared imports: import \"relative/path.vel\"",
     "nominal modules: import \"relative/path.vel\" as module and module.function()",
+    "explicit function exports with private module helpers",
     "if cond { } else { }",
     "while cond { }",
     "for value in collection with break and continue",
@@ -1091,7 +1092,24 @@ pub fn compile(source: &str, file: Option<&str>) -> Result<Vs3Module, Vs3Error> 
     if !unresolved.is_empty() {
         return Err(Vs3Error::Compile(unresolved));
     }
-    compile_ast_module(parsed.module, fnv1a64(source.as_bytes()), file, None)
+    let entrypoints = explicit_source_entrypoints(&parsed.module);
+    compile_ast_module(parsed.module, fnv1a64(source.as_bytes()), file, entrypoints)
+}
+
+fn explicit_source_entrypoints(module: &Module) -> Option<BTreeMap<String, String>> {
+    let exports = module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Function {
+                exported: true,
+                name,
+                ..
+            } => Some((name.clone(), name.clone())),
+            _ => None,
+        })
+        .collect::<BTreeMap<_, _>>();
+    (!exports.is_empty()).then_some(exports)
 }
 
 fn compile_ast_module(
@@ -1649,6 +1667,78 @@ function score(value: int) { return math.double(value) }
     }
 
     #[test]
+    fn explicit_exports_hide_private_functions() {
+        let module = compile_bundle(
+            "game.vel",
+            [
+                (
+                    "game.vel",
+                    r#"// @edition 3
+import "math.vel" as math
+export function run(value: int) { return math.double(value) + helper() }
+function helper() { return 1 }
+"#,
+                ),
+                (
+                    "math.vel",
+                    r#"export function double(value: int) { return hidden(value) }
+function hidden(value: int) { return value * 2 }
+"#,
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(module.function_names(), vec!["math.double", "run"]);
+        assert_eq!(module.call("run", &[int(20)]).unwrap(), int(41));
+        assert!(module.call("helper", &[]).is_err());
+        assert!(module.call("math.hidden", &[int(1)]).is_err());
+    }
+
+    #[test]
+    fn cross_module_private_function_is_rejected() {
+        let error = compile_bundle(
+            "game.vel",
+            [
+                (
+                    "game.vel",
+                    r#"// @edition 3
+import "math.vel" as math
+function run() { return math.hidden(17) }
+"#,
+                ),
+                (
+                    "math.vel",
+                    r#"export function visible() { return hidden(1) }
+function hidden(value: int) { return value }
+"#,
+                ),
+            ],
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("function `math.hidden` is private"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn single_source_explicit_exports_hide_private_functions() {
+        let module = compile(
+            r#"// @edition 3
+export function public_value() { return private_value() }
+function private_value() { return 17 }
+"#,
+            Some("logic.vel"),
+        )
+        .unwrap();
+        assert_eq!(module.function_names(), vec!["public_value"]);
+        assert_eq!(module.call("public_value", &[]).unwrap(), int(17));
+        assert!(module.call("private_value", &[]).is_err());
+    }
+
+    #[test]
     fn nominal_module_state_is_private() {
         let error = compile_bundle(
             "game.vel",
@@ -2190,7 +2280,7 @@ function for_demo() {
         );
         assert_eq!(
             SUPPORTED_SURFACE.len(),
-            24,
+            25,
             "update this contract with every capability change"
         );
         for required in [
@@ -2203,6 +2293,8 @@ function for_demo() {
             "multi-file packages with module::function calls",
             "legacy shared imports: import \"relative/path.vel\"",
             "nominal modules: import \"relative/path.vel\" as module and module.function()",
+            "explicit function exports with private module helpers",
+            "explicit function exports with private module helpers",
             "for value in collection with break and continue",
             "host capability policies and immediate request budgets",
         ] {
