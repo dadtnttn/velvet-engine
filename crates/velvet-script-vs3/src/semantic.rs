@@ -81,6 +81,21 @@ impl Validator {
     fn collect_globals(&mut self, module: &Module) {
         for item in &module.items {
             match item {
+                Item::Import {
+                    alias: Some(alias),
+                    loc,
+                    ..
+                } => {
+                    self.define_global(
+                        alias,
+                        Binding {
+                            ty: Some(Vs3Type::Any),
+                            mutable: false,
+                        },
+                        loc,
+                    );
+                }
+                Item::Import { .. } => {}
                 Item::Function {
                     name, params, loc, ..
                 } => {
@@ -140,6 +155,7 @@ impl Validator {
 
     fn check_item(&mut self, item: &Item) {
         match item {
+            Item::Import { .. } => {}
             Item::Function {
                 name,
                 params,

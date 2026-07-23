@@ -488,6 +488,15 @@ pub struct ScreenButton {
 /// Top-level item.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
+    /// Source import. `alias` is present for nominal module imports.
+    Import {
+        /// Relative source path.
+        path: String,
+        /// Optional local module alias from `import "path" as alias`.
+        alias: Option<String>,
+        /// Location.
+        loc: SourceLoc,
+    },
     /// Function definition.
     Function {
         /// Name.

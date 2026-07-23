@@ -132,6 +132,16 @@ fn indent(out: &mut String, level: usize) {
 fn format_item(item: &Item, out: &mut String, level: usize, comments: &mut CommentCursor) {
     comments.emit_before(item_line(item), out);
     match item {
+        Item::Import { path, alias, .. } => {
+            indent(out, level);
+            out.push_str("import \"");
+            out.push_str(&escape(path));
+            out.push('\"');
+            if let Some(alias) = alias {
+                out.push_str(" as ");
+                out.push_str(alias);
+            }
+        }
         Item::Function {
             name, params, body, ..
         } => {
@@ -253,7 +263,8 @@ fn format_item(item: &Item, out: &mut String, level: usize, comments: &mut Comme
 
 fn item_line(item: &Item) -> u32 {
     match item {
-        Item::Function { loc, .. }
+        Item::Import { loc, .. }
+        | Item::Function { loc, .. }
         | Item::Character { loc, .. }
         | Item::State { loc, .. }
         | Item::Scene { loc, .. }
@@ -652,6 +663,14 @@ fn escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_nominal_imports() {
+        let source = "import \"logic/combat.vel\" as combat\nfunction run(){return combat.fire()}";
+        let once = format_source(source).unwrap();
+        assert!(once.contains("import \"logic/combat.vel\" as combat"));
+        assert_eq!(format_source(&once).unwrap(), once);
+    }
 
     #[test]
     fn formats_function() {

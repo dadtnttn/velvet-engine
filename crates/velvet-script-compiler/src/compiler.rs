@@ -218,7 +218,7 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
                         .push(Diagnostic::error(e.to_string(), stmt.loc().clone()));
                 }
             }
-            Item::Function { .. } | Item::Screen { .. } => {
+            Item::Import { .. } | Item::Function { .. } | Item::Screen { .. } => {
                 // Declarative screens compile through `velvet-script-layers`.
                 // They intentionally add no executable v1 bytecode.
             }
