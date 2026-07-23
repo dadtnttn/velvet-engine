@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **VS3 explicit function exports**: `export function` defines the public
+  module/host API while unexported helpers remain private; modules without exports
+  retain the legacy all-functions-public behavior for gradual migration.
 - **VS3 nominal source modules**: `import "path.vel" as module`, nested
   `module.function()` calls, isolated private state, deterministic internal names,
   cycle/path diagnostics, filesystem root containment, CLI support, formatter/LSP

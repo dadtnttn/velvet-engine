@@ -272,10 +272,10 @@ pub fn analyze(source: &str, file: Option<&str>) -> Analysis {
 pub fn completions(source: &str, _line: u32, _character: u32) -> Vec<String> {
     let mut items: Vec<String> = if velvet_script_vs3::is_vs3_source(source) {
         let mut items = [
-            "function", "state", "return", "let", "const", "if", "else", "while", "for", "in",
-            "break", "continue", "yield", "null", "true", "false", "int", "float", "bool",
-            "string", "list", "map", "vec2", "vec3", "vec4", "mat3", "mat4", "quat", "rng", "PI",
-            "TAU", "E", "EPSILON", "INFINITY", "NAN",
+            "import", "export", "function", "state", "return", "let", "const", "if", "else",
+            "while", "for", "in", "break", "continue", "yield", "null", "true", "false", "int",
+            "float", "bool", "string", "list", "map", "vec2", "vec3", "vec4", "mat3", "mat4",
+            "quat", "rng", "PI", "TAU", "E", "EPSILON", "INFINITY", "NAN",
         ]
         .into_iter()
         .map(str::to_string)
@@ -519,6 +519,8 @@ fn keyword_or_native_hover(word: &str) -> Option<String> {
         ));
     }
     let text = match word {
+        "import" => "Import a relative VS3 source, optionally under a module alias.",
+        "export" => "Expose a function from its source module.",
         "function" => "Declare a function.",
         "scene" => "Declare a narrative scene.",
         "character" => "Declare a character.",
@@ -577,6 +579,8 @@ fn word_range_on_line(source: &str, line: u32, word: &str) -> Option<TextRange> 
 /// Collect simple keyword / identifier / literal semantic token ranges.
 pub fn semantic_tokens(source: &str) -> Vec<SemanticToken> {
     const KEYWORDS: &[&str] = &[
+        "import",
+        "export",
         "function",
         "scene",
         "screen",
@@ -840,6 +844,8 @@ let value = add(1, 2)
                 && diagnostic.message.contains("unknown name")));
         let completions = completions(source, 1, 0);
         assert!(completions.iter().any(|item| item == "yield"));
+        assert!(completions.iter().any(|item| item == "import"));
+        assert!(completions.iter().any(|item| item == "export"));
         assert!(completions.iter().any(|item| item == "map_keys"));
         assert!(completions.iter().any(|item| item == "vec3"));
         assert!(completions.iter().any(|item| item == "mat4_perspective"));
@@ -871,11 +877,14 @@ let value = add(1, 2)
 
     #[test]
     fn semantic_tokens_keywords_and_idents() {
-        let src = "function add(a, b) { return a + 1 }\n";
+        let src = "export function add(a, b) { return a + 1 }\n";
         let toks = semantic_tokens(src);
         assert!(toks
             .iter()
             .any(|t| t.kind == SemanticTokenKind::Keyword && t.text == "function"));
+        assert!(toks
+            .iter()
+            .any(|t| t.kind == SemanticTokenKind::Keyword && t.text == "export"));
         assert!(toks
             .iter()
             .any(|t| t.kind == SemanticTokenKind::Keyword && t.text == "return"));

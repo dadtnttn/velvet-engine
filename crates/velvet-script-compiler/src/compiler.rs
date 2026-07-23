@@ -117,6 +117,7 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
             params,
             body,
             loc,
+            ..
         } = item
         {
             // Soft-fail: keep compiling other functions after errors.

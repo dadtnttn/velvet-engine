@@ -143,9 +143,16 @@ fn format_item(item: &Item, out: &mut String, level: usize, comments: &mut Comme
             }
         }
         Item::Function {
-            name, params, body, ..
+            exported,
+            name,
+            params,
+            body,
+            ..
         } => {
             indent(out, level);
+            if *exported {
+                out.push_str("export ");
+            }
             out.push_str("function ");
             out.push_str(name);
             out.push('(');
@@ -669,6 +676,14 @@ mod tests {
         let source = "import \"logic/combat.vel\" as combat\nfunction run(){return combat.fire()}";
         let once = format_source(source).unwrap();
         assert!(once.contains("import \"logic/combat.vel\" as combat"));
+        assert_eq!(format_source(&once).unwrap(), once);
+    }
+
+    #[test]
+    fn formats_exported_function() {
+        let source = "export function answer(){return 42}";
+        let once = format_source(source).unwrap();
+        assert!(once.contains("export function answer()"));
         assert_eq!(format_source(&once).unwrap(), once);
     }
 
