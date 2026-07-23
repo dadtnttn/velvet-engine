@@ -185,7 +185,7 @@ let second = session.call("register_run", &[int(200)])?;
 
 // Cooperative task with an explicit host capability policy.
 let mut task = module.start("load_profile", &[int(7)])?;
-let policy = Vs3HostPolicy::deny_all().allow("storage.profile.*");
+let policy = Vs3HostPolicy::deny_all().allow("storage.profile.*")?;
 let status = task.drive_host_with_policy(&mut host, &policy)?;
 ```
 
