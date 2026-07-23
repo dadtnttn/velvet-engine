@@ -40,7 +40,7 @@ Ya disponible:
 
 Deuda conocida:
 
-- Ya existe `import "ruta.vel"` textual para bundles con estado compartido; aún falta resolución nominal completa de módulos.
+- Ya existen imports compartidos y módulos nominales con alias, llamadas `modulo.funcion()`, estado privado, resolución recursiva y detección de ciclos.
 - Las firmas de servicios externos no forman todavía un registro tipado común.
 - `velvet-script-vs3` contiene un puente directo hacia `velvet-math`.
 - Las nativas antiguas `present_*`, `set_bg` y `ui_flag*` siguen disponibles
@@ -83,22 +83,26 @@ Criterio de salida:
 
 Entregables:
 
-- Evolucionar el import textual actual hacia imports nominales y exportaciones explícitas.
-- Resolución de nombres entre archivos sin depender de rutas internas del host.
-- Identidad canónica `paquete.modulo`, alias y detección de ciclos.
-- Manifest de paquete con versión de lenguaje y dependencias.
-- Compilación incremental y caché por hash de fuente y dependencias.
+- [x] Imports nominales con alias y llamadas `modulo.funcion()`.
+- [x] Resolución de nombres entre archivos, estado privado y detección de ciclos.
+- [x] Identidad interna determinista independiente de nombres globales del host.
+- [ ] Exportaciones explícitas por símbolo e identidad pública `paquete.modulo`.
+- [ ] Manifest de paquete con versión de lenguaje y dependencias.
+- [ ] Compilación incremental y caché por hash de fuente y dependencias.
 
 Ejemplo objetivo:
 
 ```velvet
-import std.math
-import game.rules as rules
+// @edition 3
+import "game/rules.vel" as rules
 
-export function score(input: rules.Input) {
+function score(input: map) {
     return rules.calculate(input)
 }
 ```
+
+La sintaxis anterior ya funciona para funciones. `export`, tipos nominales y
+resolución de paquetes sin rutas relativas pertenecen a la siguiente extensión.
 
 Criterio de salida:
 

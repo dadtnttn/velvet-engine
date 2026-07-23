@@ -29,6 +29,7 @@ use winit::window::{Fullscreen, Window, WindowId};
 
 const GAME_SOURCES: &[(&str, &str)] = &[
     ("game.vel", include_str!("../data/game.vel")),
+    ("module.vel", include_str!("../data/module.vel")),
     ("state.vel", include_str!("../data/state.vel")),
     ("core.vel", include_str!("../data/core.vel")),
     ("rooms.vel", include_str!("../data/rooms.vel")),
@@ -80,14 +81,14 @@ impl Game {
 
     fn new_game(&mut self, seed: i64) -> Result<()> {
         self.reset_session()?;
-        let value = self.session.call("new_game", &[int(seed)])?;
+        let value = self.session.call("game.new_game", &[int(seed)])?;
         self.frame = Some(FrameView::parse(&value)?);
         Ok(())
     }
 
     fn load_game(&mut self, save: &SaveData) -> Result<()> {
         self.reset_session()?;
-        let value = self.session.call("load_game", &[save.to_vs3()])?;
+        let value = self.session.call("game.load_game", &[save.to_vs3()])?;
         self.frame = Some(FrameView::parse(&value)?);
         Ok(())
     }
@@ -108,13 +109,15 @@ impl Game {
             ("reload".into(), bool_val(input.reload)),
             ("weapon".into(), int(input.weapon)),
         ]);
-        let value = self.session.call("tick", &[float_val(dt as f64), input])?;
+        let value = self
+            .session
+            .call("game.tick", &[float_val(dt as f64), input])?;
         self.frame = Some(FrameView::parse(&value)?);
         Ok(())
     }
 
     fn export_save(&mut self) -> Result<SaveData> {
-        SaveData::from_vs3(&self.session.call("export_save", &[])?)
+        SaveData::from_vs3(&self.session.call("game.export_save", &[])?)
     }
 
     fn acceptance_call(
@@ -122,7 +125,8 @@ impl Game {
         name: &str,
         args: &[velvet_script_vs3::Value],
     ) -> Result<FrameView> {
-        let frame = FrameView::parse(&self.session.call(name, args)?)?;
+        let qualified = format!("game.{name}");
+        let frame = FrameView::parse(&self.session.call(&qualified, args)?)?;
         self.frame = Some(frame.clone());
         Ok(frame)
     }

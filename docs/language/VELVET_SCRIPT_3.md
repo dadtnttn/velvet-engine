@@ -193,9 +193,10 @@ Runtime errors retain their source location and script stack trace. `VmLimits`
 is re-exported by the VS3 crate for explicit instruction, memory, recursion,
 stack, and sandbox configuration.
 
-### Multi-file source bundles and packages
+### Multi-file source bundles and nominal modules
 
-A root file can compose one shared module from relative source fragments:
+An unaliased import keeps the compatibility behavior and composes source
+fragments into the current module's shared namespace:
 
 ```velvet
 // @edition 3
@@ -205,16 +206,36 @@ import "combat/weapons.vel"
 function start() { return new_player() }
 ```
 
-`compile_bundle` resolves embedded sources, while `compile_path` resolves files
-from disk. Imports are textual, recursive, included once, cycle-checked, and
-restricted to relative paths. Every imported function and `state` declaration
-joins the root module's single namespace. This is ideal for splitting one game
-without moving decisions into the Rust host.
+An aliased import creates a nominal module:
 
-`Vs3Package::compile_modules` remains the separate-state option: it organizes
-independent modules under stable names, calls use `module::function`, and
-`Vs3PackageSession` preserves state per module. Nominal source namespaces and
-direct bytecode linking are still future work.
+```velvet
+// @edition 3
+import "combat.vel" as combat
+import "inventory.vel" as inventory
+
+function attack() {
+    let weapon = inventory.active_weapon()
+    return combat.resolve_hit(weapon)
+}
+```
+
+Nominal modules have isolated names and persistent state. Functions are called
+with `module.function(...)`; state and top-level bindings are private and must
+be exposed through functions. Different modules may therefore define the same
+function or state names without collision. Imports may be nested, are loaded
+once, and cycles, missing sources, invalid aliases, ambiguous ownership, and
+attempts to access private state are diagnosed before bytecode generation.
+
+`compile_bundle` resolves embedded source graphs and `compile_path` resolves
+files from disk. Filesystem resolution canonicalizes every path and rejects
+imports that escape the root directory, including through symlinks. The CLI
+commands `velvet vs3 check` and `velvet vs3 run` use the same resolver.
+
+The public Rust/CLI names of functions imported directly by the root are
+`module.function`. Internal bytecode symbols are deterministically mangled and
+are not part of the source or host API. The older `Vs3Package` API remains
+available for host-owned collections of separately compiled modules using
+`module::function`; source modules use the dot syntax.
 
 ## Tooling
 
@@ -228,12 +249,13 @@ direct bytecode linking are still future work.
 
 ## Boundaries and next compatible extensions
 
-The current alpha provides textual source imports, but deliberately does not claim
-nominal module namespaces, structs/enums, pattern matching, generics, return-type
-syntax, or a borrow checker. Today, records and tagged variants are represented with maps
-and dispatched with ordinary conditionals. These features should extend the
-same semantic frontend and bytecode versioning instead of creating a parallel
-language pipeline.
+The current alpha provides shared source fragments and nominal module namespaces,
+but deliberately does not yet claim explicit per-symbol exports, package manifests,
+structs/enums, pattern matching, generics, return-type syntax, or a borrow checker.
+Today every function in a nominal module is callable through its alias, while state
+remains private. Records and tagged variants are represented with maps and dispatched
+with ordinary conditionals. Future features should extend the same semantic frontend
+and bytecode versioning instead of creating a parallel language pipeline.
 
 Engine concepts remain external modules. New scene, ECS, render, audio, input,
 asset, physics, or UI integrations must not add edition-3 keywords or global

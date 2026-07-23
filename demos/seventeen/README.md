@@ -54,7 +54,8 @@ cargo run -p seventeen -- --capture artifacts/seventeen.png
 
 ```text
 demos/seventeen/
-  data/game.vel          raíz VS3 con imports
+  data/game.vel          raíz VS3; importa el módulo nominal `game`
+  data/module.vel        composición interna privada del módulo `game`
   data/state.vel         estado persistente compartido
   data/core.vel          datos, geometría y eventos
   data/rooms.vel         contenido y progresión de salas
@@ -73,7 +74,7 @@ demos/seventeen/
 
 ## Contrato VS3-first
 
-El bundle iniciado por [`data/game.vel`](data/game.vel) es la autoridad sobre:
+El módulo nominal `game`, iniciado por [`data/game.vel`](data/game.vel), es la autoridad sobre:
 
 - estado del jugador, armas, munición y puntuación;
 - salas, colisiones y progresión;
@@ -83,6 +84,10 @@ El bundle iniciado por [`data/game.vel`](data/game.vel) es la autoridad sobre:
 - eventos abstractos de presentación como `pistol`, `death` o `boss_phase`.
 
 El host Rust no decide resultados de combate ni progresión. Consume `snapshot()` y convierte eventos abstractos en imagen, sonido y vibración visual. Esta separación mantiene VS3 como lenguaje general: no se añadieron palabras clave de escena, sprite, enemigo o arma.
+
+Rust llama exports como `game.new_game`, `game.tick` y `game.export_save`. Los
+fragmentos internos comparten únicamente el espacio privado del módulo `game`;
+otro módulo puede reutilizar nombres como `tick`, `player` o `score` sin colisión.
 
 Las mejoras generales al lenguaje/motor realizadas para esta demo son:
 

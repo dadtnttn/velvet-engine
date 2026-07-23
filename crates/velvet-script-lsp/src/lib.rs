@@ -163,6 +163,12 @@ pub fn analyze(source: &str, file: Option<&str>) -> Analysis {
 
     for item in &parsed.module.items {
         match item {
+            Item::Import { path, alias, loc } => analysis.symbols.push(DocumentSymbol {
+                name: alias.clone().unwrap_or_else(|| path.clone()),
+                kind: "module".into(),
+                line: loc.line.saturating_sub(1),
+                character: loc.column.saturating_sub(1),
+            }),
             Item::Function { name, loc, .. } => analysis.symbols.push(DocumentSymbol {
                 name: name.clone(),
                 kind: "function".into(),

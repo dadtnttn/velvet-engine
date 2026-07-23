@@ -171,7 +171,8 @@ impl Parser {
     fn is_statement_start_ident(s: &str) -> bool {
         matches!(
             s,
-            "function"
+            "import"
+                | "function"
                 | "fn"
                 | "character"
                 | "state"
@@ -207,7 +208,7 @@ impl Parser {
             if let Some(Token::Ident(s)) = self.peek_token() {
                 if matches!(
                     s.as_str(),
-                    "function" | "fn" | "character" | "state" | "scene" | "screen"
+                    "import" | "function" | "fn" | "character" | "state" | "scene" | "screen"
                 ) {
                     return;
                 }
@@ -253,6 +254,9 @@ impl Parser {
     }
 
     fn parse_item(&mut self) -> Result<Item, String> {
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "import")) {
+            return self.parse_import();
+        }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "function" || s == "fn")) {
             return self.parse_function();
         }
@@ -269,6 +273,27 @@ impl Parser {
             return self.parse_screen();
         }
         Ok(Item::Stmt(self.parse_stmt()?))
+    }
+
+    fn parse_import(&mut self) -> Result<Item, String> {
+        let loc = self.peek_loc();
+        self.advance(); // import
+        let token = self.expect(
+            |token| matches!(token, Token::String(_)),
+            "expected quoted import path",
+        )?;
+        let path = match token.token {
+            Token::String(path) => path,
+            _ => unreachable!(),
+        };
+        let alias = if self.check(|token| matches!(token, Token::Ident(name) if name == "as")) {
+            self.advance();
+            Some(self.expect_ident()?.0)
+        } else {
+            None
+        };
+        let _ = self.match_token(|token| matches!(token, Token::Semi));
+        Ok(Item::Import { path, alias, loc })
     }
 
     fn parse_function(&mut self) -> Result<Item, String> {
@@ -1243,6 +1268,22 @@ mod tests {
             r.module.diagnostics
         );
         r
+    }
+
+    #[test]
+    fn parse_imports_with_and_without_aliases() {
+        let parsed = parse_ok(
+            "import \"shared.vel\"\nimport \"combat.vel\" as combat\nfunction run() { return combat.fire() }",
+        );
+        assert!(matches!(
+            &parsed.module.items[0],
+            Item::Import { path, alias: None, .. } if path == "shared.vel"
+        ));
+        assert!(matches!(
+            &parsed.module.items[1],
+            Item::Import { path, alias: Some(alias), .. }
+                if path == "combat.vel" && alias == "combat"
+        ));
     }
 
     #[test]

@@ -234,7 +234,7 @@ pub fn lower_module(module: &Module, title: String) -> Result<StoryProgram, Load
                 scene.reindex_labels();
                 program.scenes.insert(name.clone(), scene);
             }
-            Item::Function { .. } | Item::Screen { .. } | Item::Stmt(_) => {
+            Item::Import { .. } | Item::Function { .. } | Item::Screen { .. } | Item::Stmt(_) => {
                 // Non-story items ignored for VN IR (can still run via script VM).
             }
         }

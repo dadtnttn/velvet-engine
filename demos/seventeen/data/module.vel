@@ -1,0 +1,9 @@
+// Internal fragments of the nominal `game` module share one private namespace.
+import "state.vel"
+import "core.vel"
+import "rooms.vel"
+import "combat.vel"
+import "ai.vel"
+import "interaction.vel"
+import "lifecycle.vel"
+import "acceptance.vel"
