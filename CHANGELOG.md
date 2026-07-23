@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **VS3 nominal source modules**: `import "path.vel" as module`, nested
+  `module.function()` calls, isolated private state, deterministic internal names,
+  cycle/path diagnostics, filesystem root containment, CLI support, formatter/LSP
+  awareness, and `Seventeen` as the product-level integration proof.
 - **velvet-stakes `--dev` live reload**: watches `data/styles/*.vcss`,
   `data/ui/*`, `data/art/*`, `data/story/*.vstory` via `HotReloader` +
   `LiveDevSession` — reapply styles/images (and soft story re-boot on title)
