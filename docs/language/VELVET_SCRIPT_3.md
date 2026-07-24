@@ -253,11 +253,51 @@ files from disk. Filesystem resolution canonicalizes every path and rejects
 imports that escape the root directory, including through symlinks. The CLI
 commands `velvet vs3 check` and `velvet vs3 run` use the same resolver.
 
-The public Rust/CLI names of functions imported directly by the root are
-`module.function`. Internal bytecode symbols are deterministically mangled and
-are not part of the source or host API. The older `Vs3Package` API remains
-available for host-owned collections of separately compiled modules using
-`module::function`; source modules use the dot syntax.
+### Versioned packages and reproducible locks
+
+A package directory owns `velvet.package.toml`:
+
+```toml
+[package]
+name = "game"
+version = "1.0.0"
+edition = 3
+root = "game.entry"
+
+[modules]
+"game.entry" = "entry.vel"
+
+[dependencies]
+math = { version = "^2.0", path = "../math" }
+```
+
+Package code imports stable module identities instead of dependency paths:
+
+```velvet
+// @edition 3
+import "math.core" as math
+
+export function run(value: int) {
+    return math.double(value) + 1
+}
+```
+
+`velvet vs3 lock <package>` resolves explicit local path dependencies, checks
+semantic-version requirements, detects package cycles, hashes each manifest and
+all reachable `.vel` sources, and writes canonical `velvet.lock`.
+`velvet vs3 check <package>` and `compile_package_path` refuse to compile when
+the lockfile is missing or stale. Public names are canonical, for example
+`game.entry.run` and `math.core.double`.
+
+Resolution is deliberately offline: this version does not download packages,
+contact a registry, or trust a mutable global cache. Each package confines its
+source graph to its canonical directory. The lock records exact versions,
+source paths, dependency edges, and SHA-256 checksums.
+
+Ordinary source roots still expose `module.function`; package compilation
+exposes `package.module.function`. Internal bytecode names remain private. The
+older `Vs3Package` API remains available for host-owned module collections
+using `module::function`.
 
 ## Tooling
 
@@ -272,9 +312,10 @@ available for host-owned collections of separately compiled modules using
 ## Boundaries and next compatible extensions
 
 The current alpha provides shared source fragments, nominal module namespaces,
-and explicit function exports, but deliberately does not yet claim package
-manifests, imports by package identity, structs/enums, pattern matching, generics,
-return-type syntax, or a borrow checker. Records and tagged variants are represented
+explicit function exports, stable local package identities, semantic-version
+requirements, and reproducible offline lockfiles. It deliberately does not yet
+claim remote registries, network downloads, signed package provenance,
+structs/enums, pattern matching, generics, return-type syntax, or a borrow checker. Records and tagged variants are represented
 with maps and dispatched with ordinary conditionals. Future features should extend
 the same semantic frontend and bytecode versioning instead of creating a parallel
 language pipeline.

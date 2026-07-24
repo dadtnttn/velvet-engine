@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **VS3 versioned local packages**: `velvet.package.toml`, stable
+  `package.module` imports, semantic-version constraints, offline path dependency
+  resolution, canonical `velvet.lock`, SHA-256 source integrity, stale-lock
+  rejection, CLI `vs3 lock`, and `Seventeen` as a locked package proof.
+- **VS3 host/task hardening**: strict capability/service identifiers, validated
+  request construction, non-empty pending tickets, terminal task state, preserved
+  frontend warnings, and boundary tests for zero request budgets.
 - **VS3 explicit function exports**: `export function` defines the public
   module/host API while unexported helpers remain private; modules without exports
   retain the legacy all-functions-public behavior for gradual migration.
