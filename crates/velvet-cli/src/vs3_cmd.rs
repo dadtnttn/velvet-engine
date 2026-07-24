@@ -3,10 +3,16 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use velvet_script_vs3::{compile_path, detect_edition, Value, Vs3Package, Vs3TaskStatus};
+use velvet_script_vs3::{
+    compile_path, detect_edition, update_package_lock, Value, Vs3Package, Vs3TaskStatus,
+    VS3_PACKAGE_MANIFEST,
+};
 
 /// Parse/compile a VS3 file (`// @edition 3` required).
 pub fn cmd_vs3_check(path: PathBuf) -> Result<()> {
+    if is_package_target(&path) {
+        return check_package(path);
+    }
     if path.is_dir() {
         let mut package = Vs3Package::new();
         let mut function_count = 0usize;
@@ -56,6 +62,62 @@ pub fn cmd_vs3_check(path: PathBuf) -> Result<()> {
             }
             bail!("vs3 check failed for {}", path.display());
         }
+    }
+}
+
+/// Resolve local package dependencies and write a canonical `velvet.lock`.
+pub fn cmd_vs3_lock(path: PathBuf) -> Result<()> {
+    let lock = update_package_lock(&path).map_err(|error| anyhow::anyhow!("{error}"))?;
+    println!(
+        "locked {} VS3 packages in {}",
+        lock.packages.len(),
+        lock_path_for(&path).display()
+    );
+    for package in &lock.packages {
+        println!("{} {} {}", package.name, package.version, package.checksum);
+    }
+    Ok(())
+}
+
+fn check_package(path: PathBuf) -> Result<()> {
+    match compile_path(&path) {
+        Ok(module) => {
+            let mut names = module.function_names();
+            names.sort();
+            println!(
+                "ok: locked vs3 package  functions={}  [{}]",
+                names.len(),
+                names.join(", ")
+            );
+            for diagnostic in &module.diagnostics {
+                println!("warn: {}", diagnostic.display());
+            }
+            Ok(())
+        }
+        Err(error) => {
+            for diagnostic in error.diagnostics() {
+                println!("{}", diagnostic.display());
+            }
+            if error.diagnostics().is_empty() {
+                println!("{error}");
+            }
+            bail!("vs3 package check failed for {}", path.display());
+        }
+    }
+}
+
+fn is_package_target(path: &std::path::Path) -> bool {
+    path.file_name().and_then(|name| name.to_str()) == Some(VS3_PACKAGE_MANIFEST)
+        || path.is_dir() && path.join(VS3_PACKAGE_MANIFEST).is_file()
+}
+
+fn lock_path_for(path: &std::path::Path) -> PathBuf {
+    if path.is_dir() {
+        path.join(velvet_script_vs3::VS3_PACKAGE_LOCK)
+    } else {
+        path.parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join(velvet_script_vs3::VS3_PACKAGE_LOCK)
     }
 }
 

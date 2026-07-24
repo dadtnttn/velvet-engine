@@ -175,6 +175,8 @@ pub const SUPPORTED_SURFACE: &[&str] = &[
     "legacy shared imports: import \"relative/path.vel\"",
     "nominal modules: import \"relative/path.vel\" as module and module.function()",
     "explicit function exports with private module helpers",
+    "versioned local packages with stable package.module identities",
+    "reproducible velvet.lock graphs with semantic version checks and SHA-256",
     "if cond { } else { }",
     "while cond { }",
     "for value in collection with break and continue",
@@ -2396,7 +2398,7 @@ function for_demo() {
         );
         assert_eq!(
             SUPPORTED_SURFACE.len(),
-            25,
+            27,
             "update this contract with every capability change"
         );
         for required in [
@@ -2410,7 +2412,8 @@ function for_demo() {
             "legacy shared imports: import \"relative/path.vel\"",
             "nominal modules: import \"relative/path.vel\" as module and module.function()",
             "explicit function exports with private module helpers",
-            "explicit function exports with private module helpers",
+            "versioned local packages with stable package.module identities",
+            "reproducible velvet.lock graphs with semantic version checks and SHA-256",
             "for value in collection with break and continue",
             "host capability policies and immediate request budgets",
         ] {

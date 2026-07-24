@@ -74,7 +74,11 @@ demos/seventeen/
 
 ## Contrato VS3-first
 
-El módulo nominal `game`, iniciado por [`data/game.vel`](data/game.vel), es la autoridad sobre:
+El paquete [`data/velvet.package.toml`](data/velvet.package.toml) fija la
+identidad pública `seventeen.game`, y
+[`data/velvet.lock`](data/velvet.lock) registra la versión y el SHA-256 exacto
+del grafo VS3. El módulo nominal `game`, iniciado por
+[`data/game.vel`](data/game.vel), es la autoridad sobre:
 
 - estado del jugador, armas, munición y puntuación;
 - salas, colisiones y progresión;
@@ -85,8 +89,11 @@ El módulo nominal `game`, iniciado por [`data/game.vel`](data/game.vel), es la 
 
 El host Rust no decide resultados de combate ni progresión. Consume `snapshot()` y convierte eventos abstractos en imagen, sonido y vibración visual. Esta separación mantiene VS3 como lenguaje general: no se añadieron palabras clave de escena, sprite, enemigo o arma.
 
-Rust llama únicamente las funciones declaradas con `export function`, como
-`game.new_game`, `game.tick` y `game.export_save`. Helpers como `snapshot`,
+El ejecutable embebido llama únicamente las funciones declaradas con
+`export function`, como `game.new_game`, `game.tick` y `game.export_save`.
+La interfaz de paquete/CLI publica los mismos exports como
+`seventeen.game.new_game`, `seventeen.game.tick` y
+`seventeen.game.export_save`. Helpers como `snapshot`,
 `update_enemies` o `room_name` siguen disponibles dentro de `game`, pero no
 aparecen en la API del host ni pueden llamarse desde otro módulo. Los fragmentos
 internos comparten únicamente el espacio privado del módulo `game`; otro módulo
@@ -97,6 +104,16 @@ Las mejoras generales al lenguaje/motor realizadas para esta demo son:
 - vistas clonadas seguras de `list` y `map` para hosts (`list_items`, `map_entries`, `map_get`);
 - análisis correcto de valores dinámicos obtenidos de colecciones en aritmética y llamadas tipadas;
 - conservación estática de enteros en `abs`, `min`, `max` y `clamp` cuando todos sus argumentos son enteros.
+
+Para regenerar y verificar el lockfile:
+
+```text
+cargo run -p velvet-cli -- vs3 lock demos/seventeen/data
+cargo run -p velvet-cli -- vs3 check demos/seventeen/data
+```
+
+El segundo comando falla si cambia el manifest o cualquier fuente VS3 alcanzable
+sin actualizar `velvet.lock`.
 
 ## Criterio de aceptación automatizado
 

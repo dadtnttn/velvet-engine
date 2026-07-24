@@ -87,8 +87,10 @@ Entregables:
 - [x] Resolución de nombres entre archivos, estado privado y detección de ciclos.
 - [x] Identidad interna determinista independiente de nombres globales del host.
 - [x] Exportaciones explícitas de funciones con helpers privados y migración compatible.
-- [ ] Identidad pública `paquete.modulo` e imports sin rutas relativas.
-- [ ] Manifest de paquete con versión de lenguaje y dependencias.
+- [x] Identidad pública `paquete.modulo` e imports estables entre paquetes.
+- [x] Manifest con versión de lenguaje, módulos y dependencias locales con semver.
+- [x] `velvet.lock` canónico con versiones exactas, grafo y SHA-256.
+- [ ] Registro remoto, descarga, firmas y caché global verificable.
 - [ ] Compilación incremental y caché por hash de fuente y dependencias.
 
 Ejemplo objetivo:
@@ -196,8 +198,9 @@ Criterio de salida:
 
 Entregables:
 
-- Gestor y lockfile de paquetes VS3 reproducibles.
-- Versionado semántico y restricciones de compatibilidad por módulo.
+- [x] Resolución offline y lockfile de paquetes VS3 reproducibles.
+- [x] Versionado semántico y restricciones de compatibilidad por paquete.
+- [ ] Registro remoto, descarga autenticada y procedencia firmada.
 - SDK documentado para hosts Rust y, después, ABI estable para otros lenguajes.
 - Runner independiente para validar que la biblioteca estándar es portable.
 - LSP con imports, firmas externas, permisos, documentación y navegación.
