@@ -13,6 +13,7 @@
 mod bundle;
 mod lockfile;
 mod manifest;
+mod package_resolver;
 mod semantic;
 
 pub use lockfile::{Vs3LockedPackage, Vs3PackageLock, VS3_PACKAGE_LOCK};
@@ -257,14 +258,67 @@ where
     )
 }
 
-/// Compile a filesystem VS3 root and all relative imports reachable from it.
+/// Compile a filesystem VS3 source root or a locked package directory.
 ///
-/// Resolved files must remain inside the root file's directory, including
-/// after canonicalization, so symlinks cannot escape the bundle boundary.
+/// Ordinary `.vel` roots resolve relative imports inside their directory.
+/// A directory or `velvet.package.toml` path requires a current `velvet.lock`
+/// and resolves the complete versioned dependency graph offline.
 pub fn compile_path(path: impl AsRef<Path>) -> Result<Vs3Module, Vs3Error> {
     let path = path.as_ref();
+    if path.is_dir()
+        || path.file_name().and_then(|name| name.to_str()) == Some(VS3_PACKAGE_MANIFEST)
+    {
+        return compile_package_path(path);
+    }
     let (root, sources) = bundle::load_path(path)?;
     compile_bundle(&root, sources)
+}
+
+/// Resolve a package graph and write its canonical `velvet.lock`.
+pub fn update_package_lock(path: impl AsRef<Path>) -> Result<Vs3PackageLock, Vs3Error> {
+    package_resolver::update_lock(path.as_ref())
+}
+
+/// Compile a package only when its dependency graph matches `velvet.lock`.
+pub fn compile_package_path(path: impl AsRef<Path>) -> Result<Vs3Module, Vs3Error> {
+    let graph = package_resolver::resolve_locked(path.as_ref())?;
+    compile_resolved_package(graph)
+}
+
+fn compile_resolved_package(
+    graph: package_resolver::ResolvedPackageGraph,
+) -> Result<Vs3Module, Vs3Error> {
+    let mut module = compile_bundle(&graph.bundle_root, graph.sources)?;
+    let entrypoints = std::mem::take(&mut module.entrypoints);
+    let signatures = std::mem::take(&mut module.signatures);
+    for (logical, actual) in entrypoints {
+        let Some((alias, function)) = logical.split_once('.') else {
+            return Err(Vs3Error::Bundle {
+                path: graph.manifest.name.clone(),
+                message: format!("package entrypoint `{logical}` has no module alias"),
+            });
+        };
+        let identity = graph.aliases.get(alias).ok_or_else(|| Vs3Error::Bundle {
+            path: graph.manifest.name.clone(),
+            message: format!("unknown synthetic package alias `{alias}`"),
+        })?;
+        let canonical = format!("{identity}.{function}");
+        if module
+            .entrypoints
+            .insert(canonical.clone(), actual)
+            .is_some()
+        {
+            return Err(Vs3Error::Bundle {
+                path: graph.manifest.name.clone(),
+                message: format!("duplicate public package function `{canonical}`"),
+            });
+        }
+        if let Some(signature) = signatures.get(&logical) {
+            module.signatures.insert(canonical, signature.clone());
+        }
+    }
+    module.file = Some(VS3_PACKAGE_MANIFEST.into());
+    Ok(module)
 }
 
 /// VS3 diagnostic with source location.
