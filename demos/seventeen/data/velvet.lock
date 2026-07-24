@@ -1,0 +1,8 @@
+version = 1
+
+[[package]]
+name = "seventeen"
+version = "0.1.0"
+source = "path+."
+checksum = "sha256:0466289c7fbc031c842f886c8d21fd02aa3579fa1a56ae8974e61713ec246ecc"
+dependencies = []

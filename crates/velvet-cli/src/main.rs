@@ -46,7 +46,7 @@ use story_cmd::{
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
 };
 use style_cmd::{cmd_style_check, cmd_style_dump};
-use vs3_cmd::{cmd_vs3_check, cmd_vs3_fmt, cmd_vs3_run};
+use vs3_cmd::{cmd_vs3_check, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_run};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]
@@ -552,6 +552,11 @@ enum ScriptCommands {
 
 #[derive(Subcommand, Debug)]
 enum Vs3Commands {
+    /// Resolve versioned local dependencies and update `velvet.lock`.
+    Lock {
+        /// Package directory or `velvet.package.toml`.
+        path: PathBuf,
+    },
     /// Check a VS3 logic file (`// @edition 3` required).
     Check {
         /// Edition-3 `.vel` file or package directory.
@@ -738,6 +743,9 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Script {
             command: ScriptCommands::Lsp { path },
         } => cmd_script_lsp(path),
+        Commands::Vs3 {
+            command: Vs3Commands::Lock { path },
+        } => cmd_vs3_lock(path),
         Commands::Vs3 {
             command: Vs3Commands::Check { path },
         } => cmd_vs3_check(path),
