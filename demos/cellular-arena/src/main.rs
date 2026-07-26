@@ -157,7 +157,7 @@ fn mat_rgb(key: &str, x: i32, y: i32) -> (u8, u8, u8) {
         "copper" | "metal" | "steel" | "iron" => (d2(155, 10), d2(150, 10), d2(160, 10)),
         "gold" => {
             let spark = if (h & 0xff) > 220 { 40u8 } else { 0 };
-            ((230 + spark) as u8, (190 + spark / 2) as u8, 40)
+            (230 + spark, 190 + spark / 2, 40)
         }
         "gunpowder" => (d2(45, 5), d2(42, 5), d2(40, 5)),
         "flesh" => (d2(170, 10), d2(70, 8), d2(75, 8)),
@@ -1393,11 +1393,7 @@ impl ApplicationHandler for Game {
                             self.keys.restart = true;
                         }
                     }
-                    KeyCode::Escape => {
-                        if d {
-                            el.exit();
-                        }
-                    }
+                    KeyCode::Escape if d => el.exit(),
                     _ => {}
                 }
             }
