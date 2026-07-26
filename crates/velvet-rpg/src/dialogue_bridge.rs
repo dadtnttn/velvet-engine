@@ -208,7 +208,7 @@ impl DialogueBridge {
         if candidates.is_empty() {
             return Err(DialogueBridgeError::UnknownTarget(target_id.into()));
         }
-        candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
+        candidates.sort_by_key(|mapping| std::cmp::Reverse(mapping.priority));
         for m in &candidates {
             if ctx.allows(&m.gate) {
                 return Ok(m);
