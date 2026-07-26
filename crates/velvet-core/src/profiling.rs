@@ -189,7 +189,7 @@ impl Profiler {
     /// Sorted report lines by inclusive time descending.
     pub fn report_lines(&self) -> Vec<String> {
         let mut rows: Vec<_> = self.stats.iter().collect();
-        rows.sort_by(|a, b| b.1.inclusive.cmp(&a.1.inclusive));
+        rows.sort_by_key(|row| std::cmp::Reverse(row.1.inclusive));
         rows.into_iter()
             .map(|(name, s)| {
                 format!(

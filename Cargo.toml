@@ -64,6 +64,9 @@ members = [
     "demos/card-duel",
     "demos/velvet-stakes",
     "demos/seventeen",
+    "demos/echo-xp",
+    "demos/rpg-quest",
+    "demos/sam-tomboy",
 ]
 default-members = [
     "crates/velvet-cli",
