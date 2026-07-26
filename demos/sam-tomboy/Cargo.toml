@@ -1,0 +1,22 @@
+[package]
+name = "sam-tomboy"
+description = "Sam: Honest Stranger — VN + map + social survival demo for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "sam-tomboy"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+fontdue = "0.9"
+image = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+softbuffer = "0.4"
+winit = { workspace = true }
+velvet-script-vs3 = { workspace = true }

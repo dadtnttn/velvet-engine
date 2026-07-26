@@ -1,0 +1,128 @@
+// @edition 3
+// Sam: Honest Stranger — social survival state reference.
+// The graphical host validates this module at startup. The next VS3 migration
+// can move the complete location flow behind these state operations.
+
+state {
+    money: int = 6
+    hunger: int = 28
+    energy: int = 86
+    trust: int = 0
+    day_slot: int = 0
+    has_room: bool = false
+    job_offer: bool = false
+    truth_moments: int = 0
+    ending: string = "none"
+}
+
+function new_game() {
+    money = 6
+    hunger = 28
+    energy = 86
+    trust = 0
+    day_slot = 0
+    has_room = false
+    job_offer = false
+    truth_moments = 0
+    ending = "none"
+    return money
+}
+
+function record_truth() {
+    truth_moments = truth_moments + 1
+    trust = trust + 1
+    return trust
+}
+
+function earn(amount: int) {
+    money = money + amount
+    energy = energy - 15
+    hunger = hunger + 10
+    return money
+}
+
+function spend(amount: int) {
+    if money >= amount {
+        money = money - amount
+        return true
+    }
+    return false
+}
+
+function eat(value: int) {
+    hunger = hunger - value
+    if hunger < 0 {
+        hunger = 0
+    }
+    return hunger
+}
+
+function advance_time() {
+    day_slot = day_slot + 1
+    hunger = hunger + 12
+    energy = energy - 7
+    if hunger > 100 {
+        hunger = 100
+    }
+    if energy < 0 {
+        energy = 0
+    }
+    return day_slot
+}
+
+function accept_job() {
+    job_offer = true
+    trust = trust + 2
+    return job_offer
+}
+
+function secure_room(cost: int) {
+    if money >= cost {
+        money = money - cost
+        has_room = true
+        return true
+    }
+    return false
+}
+
+function grant_room_for_help() {
+    if trust >= 3 {
+        has_room = true
+        energy = energy - 12
+        return true
+    }
+    return false
+}
+
+function finish_day() {
+    if has_room {
+        if job_offer {
+            ending = "honest_work"
+        } else {
+            ending = "safe_room"
+        }
+    } else {
+        ending = "street_promise"
+    }
+    return ending
+}
+
+function get_money() {
+    return money
+}
+
+function get_hunger() {
+    return hunger
+}
+
+function get_energy() {
+    return energy
+}
+
+function get_trust() {
+    return trust
+}
+
+function get_ending() {
+    return ending
+}

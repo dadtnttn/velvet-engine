@@ -43,9 +43,17 @@ pub struct SaveData {
     pub memory0: bool,
     pub memory1: bool,
     pub memory2: bool,
+    #[serde(default)]
+    pub memory3: bool,
+    #[serde(default)]
+    pub memory4: bool,
     pub pistol: bool,
     pub shotgun: bool,
     pub blade: bool,
+    #[serde(default)]
+    pub plasma: bool,
+    #[serde(default)]
+    pub grenade: bool,
     pub ending_a: bool,
     pub ending_b: bool,
 }
@@ -62,7 +70,7 @@ impl SaveData {
         let b = |key| -> Result<bool> {
             match value.map_get(key).map_err(anyhow::Error::msg)? {
                 Some(Value::Bool(flag)) => Ok(flag),
-                _ => anyhow::bail!("save field `{key}` is not a boolean"),
+                _ => Ok(false),
             }
         };
         Ok(Self {
@@ -74,9 +82,13 @@ impl SaveData {
             memory0: b("memory0")?,
             memory1: b("memory1")?,
             memory2: b("memory2")?,
+            memory3: b("memory3")?,
+            memory4: b("memory4")?,
             pistol: b("pistol")?,
             shotgun: b("shotgun")?,
             blade: b("blade")?,
+            plasma: b("plasma")?,
+            grenade: b("grenade")?,
             ending_a: b("ending_a")?,
             ending_b: b("ending_b")?,
         })
@@ -86,15 +98,19 @@ impl SaveData {
         map_val([
             ("version".into(), int(self.version)),
             ("seed".into(), int(self.seed)),
-            ("room".into(), int(self.room.clamp(1, 5))),
+            ("room".into(), int(self.room.clamp(1, 6))),
             ("deaths".into(), int(self.deaths.max(0))),
             ("score".into(), int(self.score.max(0))),
             ("memory0".into(), bool_val(self.memory0)),
             ("memory1".into(), bool_val(self.memory1)),
             ("memory2".into(), bool_val(self.memory2)),
+            ("memory3".into(), bool_val(self.memory3)),
+            ("memory4".into(), bool_val(self.memory4)),
             ("pistol".into(), bool_val(self.pistol)),
             ("shotgun".into(), bool_val(self.shotgun)),
             ("blade".into(), bool_val(self.blade)),
+            ("plasma".into(), bool_val(self.plasma)),
+            ("grenade".into(), bool_val(self.grenade)),
             ("ending_a".into(), bool_val(self.ending_a)),
             ("ending_b".into(), bool_val(self.ending_b)),
         ])
@@ -204,7 +220,7 @@ mod tests {
     #[test]
     fn save_round_trips_through_vs3_value() {
         let input = SaveData {
-            version: 1,
+            version: 2,
             seed: 17,
             room: 4,
             deaths: 3,
@@ -212,9 +228,13 @@ mod tests {
             memory0: true,
             memory1: false,
             memory2: true,
+            memory3: false,
+            memory4: false,
             pistol: true,
             shotgun: true,
             blade: false,
+            plasma: true,
+            grenade: false,
             ending_a: false,
             ending_b: false,
         };

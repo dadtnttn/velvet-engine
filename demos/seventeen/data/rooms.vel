@@ -5,6 +5,7 @@ function setup_room(index: int) {
     room_time = 0.0
     room_clear = false
     boss_phase_announced = false
+    terminal_active = false
     clear_list(enemies)
     clear_list(bullets)
     clear_list(obstacles)
@@ -41,8 +42,8 @@ function setup_room(index: int) {
             add_obstacle(320, 225, 72, 34, "cover")
             add_obstacle(470, 92, 58, 38, "cover")
             spawn_enemy("vigilante", vec2(300, 105), 70.0)
-            spawn_enemy("vigilante", vec2(500, 250), 70.0)
-            add_pickup("shotgun", vec2(330, 180), 0, false)
+            spawn_enemy("shielder", vec2(500, 250), 110.0)
+            add_pickup("shotgun", vec2(330, 180), 0, !weapons.shotgun)
             if death_count < 3 {
                 say("RADIO", "Control registra cada muerte. Intenta no darle otra.", 5.0)
             } else {
@@ -58,6 +59,7 @@ function setup_room(index: int) {
                 add_pickup("memory", vec2(365, 255), 1, !memories[1])
                 add_pickup("memory", vec2(535, 120), 2, !memories[2])
                 add_pickup("blade", vec2(535, 255), 0, !weapons.blade)
+                add_pickup("plasma", vec2(365, 120), 0, !weapons.plasma)
                 room_clear = true
                 if death_count < 3 {
                     say("17", "Conozco estos pasillos. Mi cuerpo llega antes que el recuerdo.", 5.0)
@@ -80,7 +82,7 @@ function setup_room(index: int) {
                         add_hazard(385, 235, 48, 58)
                     }
                     spawn_enemy("vigilante", vec2(260, 95), 80.0)
-                    spawn_enemy("vigilante", vec2(500, 270), 80.0)
+                    spawn_enemy("sniper", vec2(500, 270), 85.0)
                     spawn_enemy("hound", vec2(350, 90), 90.0)
                     spawn_enemy("hound", vec2(420, 275), 90.0)
                     if death_count >= 6 {
@@ -88,47 +90,61 @@ function setup_room(index: int) {
                     }
                     say("RADIO", "La purga conserva tus patrones. Cambia o repitelos para siempre.", 5.5)
                 } else {
-                    add_obstacle(250, 70, 36, 90, "zero")
-                    add_obstacle(250, 220, 36, 70, "zero")
-                    add_obstacle(455, 70, 36, 90, "zero")
-                    add_obstacle(455, 220, 36, 70, "zero")
-                    let boss_hp = 520.0 + min(death_count, 10) * 12.0
-                    spawn_enemy("zero", vec2(500, 180), boss_hp)
-                    if memory_count() == 3 {
-                        say("CERO", "Trajiste todos los recuerdos. Entonces ya sabes quien construyo esto.", 6.0)
+                    if room == 5 {
+                        // Room 5: Sector 6 - Nucleo Inestable
+                        add_obstacle(210, 70, 40, 120, "nucleus")
+                        add_obstacle(210, 220, 40, 70, "nucleus")
+                        add_obstacle(440, 70, 40, 120, "nucleus")
+                        add_obstacle(440, 220, 40, 70, "nucleus")
+                        add_hazard(280, 140, 120, 80)
+                        spawn_enemy("sniper", vec2(340, 90), 95.0)
+                        spawn_enemy("shielder", vec2(480, 250), 125.0)
+                        spawn_enemy("vigilante", vec2(520, 100), 90.0)
+                        add_pickup("grenade", vec2(340, 260), 0, !weapons.grenade)
+                        add_pickup("memory", vec2(160, 250), 3, !memories[3])
+                        add_pickup("memory", vec2(520, 180), 4, !memories[4])
+                        say("RADIO", "Sector 6: El Nucleo Inestable. Sobrevive a la radiacion electromagnetica.", 6.0)
                     } else {
-                        say("CERO", "Yo tambien fui diecisiete. Luego aprendi a recordar.", 6.0)
+                        // Room 6: Camara Cero
+                        add_obstacle(250, 70, 36, 90, "zero")
+                        add_obstacle(250, 220, 36, 70, "zero")
+                        add_obstacle(455, 70, 36, 90, "zero")
+                        add_obstacle(455, 220, 36, 70, "zero")
+                        let boss_hp = 680.0 + min(death_count, 10) * 15.0
+                        spawn_enemy("zero", vec2(500, 180), boss_hp)
+                        if memory_count() == 5 {
+                            say("CERO", "Trajiste los 5 recuerdos. Entonces ya sabes quien construyo este ciclo.", 6.0)
+                        } else {
+                            say("CERO", "Yo tambien fui diecisiete. Luego aprendi a recordar.", 6.0)
+                        }
                     }
                 }
             }
         }
     }
-    save_revision += 1
-    emit("room_enter", player.pos, room * 1.0)
 }
 
 function update_room_state() {
     let alive = alive_enemy_count()
-    if room == 2 && alive == 0 && !room_clear {
-        room_clear = true
-        slow_timer = 0.32
-        for pickup in pickups {
-            if pickup.kind == "shotgun" { pickup.active = !weapons.shotgun }
+    if room == 1 {
+        room_clear = weapons.pistol
+    } else {
+        if room == 3 {
+            room_clear = true
+        } else {
+            if alive == 0 {
+                if !room_clear {
+                    room_clear = true
+                    slow_timer = 0.40
+                    say("RADIO", "Sector despejado.", 2.5)
+                    emit("room_clear", player.pos, 1.0)
+                }
+            }
         }
-        say("RADIO", "Control despejado. La puerta recuerda tu pulso.", 4.0)
-        emit("room_clear", player.pos, 1.0)
     }
-    if room == 4 && alive == 0 && !room_clear {
-        room_clear = true
-        slow_timer = 0.32
-        say("17", "La purga termino. No siento alivio. Solo familiaridad.", 4.5)
-        emit("room_clear", player.pos, 1.2)
-    }
-    if room == 5 && alive == 0 && phase == "playing" {
+    if room == 6 && room_clear && phase == "playing" {
         phase = "choice"
-        player.pos = vec2(320, 260)
-        clear_list(bullets)
-        say("CERO", "Elige. Olvidar y salir, o recordar por que empezaste.", 6.0)
-        emit("room_clear", player.pos, 2.0)
+        phase_timer = 0.0
+        say("17", "El nucleo esta expuesto. Eleccion final.", 6.0)
     }
 }

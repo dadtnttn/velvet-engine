@@ -17,6 +17,9 @@ state {
     memory_timer: float = 0.0
     message_timer: float = 0.0
     slow_timer: float = 0.0
+    overdrive_timer: float = 0.0
+    combo_count: int = 0
+    terminal_active: bool = false
     save_revision: int = 0
     room_clear: bool = false
     boss_phase_announced: bool = false
@@ -34,7 +37,7 @@ state {
     events: list = []
     current_path: list = []
     echo_path: list = []
-    memories: list = [false, false, false]
-    weapons: map = {"pistol": false, "shotgun": false, "blade": false}
+    memories: list = [false, false, false, false, false]
+    weapons: map = {"pistol": false, "shotgun": false, "blade": false, "plasma": false, "grenade": false}
     endings: map = {"break_cycle": false, "remember_all": false}
 }

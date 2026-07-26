@@ -1,0 +1,28 @@
+// Dynamic anomaly triggers for ECHO//XP
+
+export function check_anomalies() {
+    let count = 0
+    if mail_read { count += 1 }
+    if case_file_read { count += 1 }
+    if photo_inspected { count += 1 }
+    if tape_listened { count += 1 }
+    if deleted_file_found { count += 1 }
+
+    anomaly_level = count
+
+    if mail_read && tape_listened {
+        subject_changed = true
+    }
+
+    if photo_inspected && tape_listened {
+        name_swap = true
+        extra_icon = true
+    }
+
+    if count >= 3 && clippy_state != "weird" && clippy_state != "eyes" {
+        clippy_state = "think"
+        clippy_dialog = "Look closely at the photo. Is that a shadow behind her?"
+    }
+
+    return snapshot()
+}

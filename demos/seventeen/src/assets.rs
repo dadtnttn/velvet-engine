@@ -9,6 +9,9 @@ const NEO_ZERO_ARCHIVE: &str = "neo_zero_V1.0.zip";
 const CHARACTER_SHEET: &str = "neo_zero_char_01.png";
 const BOT_WHEEL_ARCHIVE: &str = "Bot Wheel.zip";
 
+// Optional art packs are intentionally not stored in this repository. Point
+// SEVENTEEN_ASSET_DIR at your own licensed files or use the procedural renderer.
+
 #[derive(Debug)]
 pub struct BotWheelArt {
     pub idle: SpriteSheet,
@@ -21,7 +24,7 @@ pub struct BotWheelArt {
     pub charge: SpriteSheet,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SpriteSheet {
     pub width: u32,
     pub height: u32,
@@ -29,9 +32,28 @@ pub struct SpriteSheet {
 }
 
 #[derive(Debug, Default)]
+pub struct UiArt {
+    pub frame_1: Option<SpriteSheet>,
+    pub frame_2: Option<SpriteSheet>,
+    pub button_normal: Option<SpriteSheet>,
+    pub button_hover: Option<SpriteSheet>,
+    pub bar_bg: Option<SpriteSheet>,
+    pub bar_fill: Option<SpriteSheet>,
+    pub slot_frame: Option<SpriteSheet>,
+    pub travel_popup: Option<SpriteSheet>,
+    pub icon_new: Option<SpriteSheet>,
+    pub icon_save: Option<SpriteSheet>,
+    pub icon_help: Option<SpriteSheet>,
+    pub icon_settings: Option<SpriteSheet>,
+    pub icon_exit: Option<SpriteSheet>,
+    pub icon_memory: Option<SpriteSheet>,
+}
+
+#[derive(Debug, Default)]
 pub struct LocalArt {
     pub characters: Option<SpriteSheet>,
     pub bot_wheel: Option<BotWheelArt>,
+    pub ui: UiArt,
     source_dir: Option<PathBuf>,
     warning: Option<String>,
 }
@@ -75,7 +97,42 @@ impl LocalArt {
                 }
             }
 
-            if art.neo_zero_loaded() && art.bot_wheel_loaded() {
+            // Discover UI assets
+            let flat_dir = directory
+                .join("Complete_UI_Essential_Pack_Free")
+                .join("01_Flat_Theme")
+                .join("Sprites");
+            if flat_dir.is_dir() {
+                art.ui.frame_1 = load_png_file(&flat_dir.join("UI_Flat_Frame01a.png")).ok();
+                art.ui.frame_2 = load_png_file(&flat_dir.join("UI_Flat_Frame02a.png")).ok();
+                art.ui.button_normal =
+                    load_png_file(&flat_dir.join("UI_Flat_Button01a_1.png")).ok();
+                art.ui.button_hover = load_png_file(&flat_dir.join("UI_Flat_Button01a_2.png")).ok();
+                art.ui.bar_bg = load_png_file(&flat_dir.join("UI_Flat_Bar01a.png")).ok();
+                art.ui.bar_fill = load_png_file(&flat_dir.join("UI_Flat_BarFill01a.png")).ok();
+                art.ui.slot_frame = load_png_file(&flat_dir.join("UI_Flat_FrameSlot01a.png")).ok();
+            }
+
+            let book_dir = directory
+                .join("Complete_UI_Book_Styles_Pack_Free_v1.0")
+                .join("01_TravelBookLite")
+                .join("Sprites");
+            if book_dir.is_dir() {
+                art.ui.travel_popup =
+                    load_png_file(&book_dir.join("UI_TravelBook_Popup01a.png")).ok();
+            }
+
+            let icons_dir = directory.join("Icons_Essential").join("v1.2").join("Icons");
+            if icons_dir.is_dir() {
+                art.ui.icon_new = load_png_file(&icons_dir.join("Enter.png")).ok();
+                art.ui.icon_save = load_png_file(&icons_dir.join("FloppyDisk.png")).ok();
+                art.ui.icon_help = load_png_file(&icons_dir.join("Gamepad.png")).ok();
+                art.ui.icon_settings = load_png_file(&icons_dir.join("Battery.png")).ok();
+                art.ui.icon_exit = load_png_file(&icons_dir.join("Exit.png")).ok();
+                art.ui.icon_memory = load_png_file(&icons_dir.join("Document.png")).ok();
+            }
+
+            if art.neo_zero_loaded() && art.bot_wheel_loaded() && art.ui.frame_1.is_some() {
                 break;
             }
         }
@@ -122,15 +179,27 @@ fn candidate_directories() -> Vec<PathBuf> {
     if let Some(path) = std::env::var_os(ASSET_DIR_ENV).filter(|value| !value.is_empty()) {
         candidates.push(PathBuf::from(path));
     }
+    if let Ok(current) = std::env::current_dir() {
+        candidates.push(current.join("demos").join("seventeen").join("assets"));
+        candidates.push(current.join("assets"));
+    }
     if let Some(profile) = std::env::var_os("USERPROFILE").filter(|value| !value.is_empty()) {
         candidates.push(PathBuf::from(profile).join("Downloads").join("assets"));
     }
-    if let Ok(current) = std::env::current_dir() {
-        candidates.push(current.join("assets"));
-        candidates.push(current.join("demos").join("seventeen").join("assets"));
-    }
     candidates.dedup();
     candidates
+}
+
+fn load_png_file(path: &Path) -> Result<SpriteSheet> {
+    let decoded = image::open(path)
+        .with_context(|| format!("abrir PNG en {}", path.display()))?
+        .to_rgba8();
+    let (width, height) = decoded.dimensions();
+    Ok(SpriteSheet {
+        width,
+        height,
+        rgba: decoded.into_raw(),
+    })
 }
 
 fn load_bot_wheel(archive: &Path) -> Result<BotWheelArt> {

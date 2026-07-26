@@ -3,6 +3,8 @@
 function finish_reload() {
     if player.weapon == "pistol" { player.ammo_pistol = 7 }
     if player.weapon == "shotgun" { player.ammo_shotgun = 2 }
+    if player.weapon == "plasma" { player.ammo_plasma = 3 }
+    if player.weapon == "grenade" { player.ammo_grenade = 1 }
     emit("reload_complete", player.pos, 1.0)
 }
 
@@ -16,16 +18,54 @@ function start_reload() {
         player.reload_timer = 1.45
         emit("reload", player.pos, 1.0)
     }
+    if player.weapon == "plasma" && player.ammo_plasma < 3 {
+        player.reload_timer = 1.80
+        emit("reload", player.pos, 1.2)
+    }
+    if player.weapon == "grenade" && player.ammo_grenade < 1 {
+        player.reload_timer = 2.10
+        emit("reload", player.pos, 1.4)
+    }
 }
 
-function hurt_enemy(enemy: map, damage: float, hit_pos: vec2) {
+function trigger_aoe_damage(center: vec2, radius: float, damage: float, is_emp: bool) {
+    for enemy in enemies {
+        if enemy.alive && distance(enemy.pos, center) <= radius {
+            enemy.hp -= damage
+            enemy.hit_flash = 0.18
+            if is_emp {
+                enemy.stun_timer = 3.5
+                emit("emp_stun", enemy.pos, 1.2)
+            } else {
+                emit("impact", enemy.pos, damage / 40.0)
+            }
+            if enemy.hp <= 0.0 {
+                enemy.alive = false
+                score += 120
+                if enemy.kind == "zero" { score += 1700 }
+                emit("enemy_down", enemy.pos, 1.0)
+            }
+        }
+    }
+}
+
+function hurt_enemy(enemy: map, damage: float, hit_pos: vec2, bullet_owner: string) {
     if !enemy.alive { return }
+    if enemy.kind == "shielder" && enemy.shield_active {
+        let to_bullet = hit_pos - enemy.pos
+        if length(to_bullet) > 0.001 && dot(enemy.aim, normalize(to_bullet)) > 0.25 {
+            emit("shield_block", hit_pos, 1.2)
+            return
+        }
+    }
     enemy.hp -= damage
     enemy.hit_flash = 0.12
     emit("impact", hit_pos, damage / 50.0)
     if enemy.hp <= 0.0 {
         enemy.alive = false
         score += 100
+        combo_count += 1
+        overdrive_timer = 4.0
         if enemy.kind == "zero" { score += 1700 }
         emit("enemy_down", enemy.pos, 1.0)
     }
@@ -38,16 +78,16 @@ function blade_attack() {
             let to_enemy = enemy.pos - player.pos
             let d = length(to_enemy)
             if d <= 54.0 && d > 0.001 && dot(normalize(to_enemy), player.aim) > 0.15 {
-                hurt_enemy(enemy, 62.0, enemy.pos)
+                hurt_enemy(enemy, 68.0, enemy.pos, "blade")
                 hit_any = true
             }
         }
     }
     for bullet in bullets {
-        if bullet.alive && bullet.owner == "enemy" && distance(bullet.pos, player.pos) <= 55.0 {
+        if bullet.alive && bullet.owner != "player" && bullet.owner != "plasma" && bullet.owner != "grenade" && distance(bullet.pos, player.pos) <= 58.0 {
             bullet.owner = "player"
             bullet.velocity = reflect(bullet.velocity, player.aim)
-            bullet.damage = 55.0
+            bullet.damage = 60.0
             hit_any = true
             emit("deflect", bullet.pos, 1.0)
         }
@@ -59,8 +99,12 @@ function blade_attack() {
 
 function try_fire() {
     if player.cooldown > 0.0 || player.reload_timer > 0.0 || player.weapon == "none" { return }
+
+    let cooldown_mult = 1.0
+    if overdrive_timer > 0.0 { cooldown_mult = 0.70 }
+
     if player.weapon == "blade" {
-        player.cooldown = 0.32
+        player.cooldown = 0.32 * cooldown_mult
         blade_attack()
         return
     }
@@ -72,25 +116,56 @@ function try_fire() {
             return
         }
         player.ammo_pistol -= 1
-        player.cooldown = 0.19
+        player.cooldown = 0.19 * cooldown_mult
         spawn_bullet("player", player.pos + player.aim * 14.0, player.aim, 520.0, 38.0, 1.4)
         emit("pistol", player.pos, 0.75)
         if player.ammo_pistol == 0 { start_reload() }
         return
     }
-    if player.ammo_shotgun <= 0 {
-        emit("empty", player.pos, 0.6)
-        start_reload()
-        player.cooldown = 0.25
+    if player.weapon == "shotgun" {
+        if player.ammo_shotgun <= 0 {
+            emit("empty", player.pos, 0.6)
+            start_reload()
+            player.cooldown = 0.25
+            return
+        }
+        player.ammo_shotgun -= 1
+        player.cooldown = 0.68 * cooldown_mult
+        for spread in [-0.18, -0.09, 0.0, 0.09, 0.18] {
+            spawn_bullet("player", player.pos + player.aim * 15.0, rotate_direction(player.aim, spread), 470.0, 28.0, 0.55)
+        }
+        emit("shotgun", player.pos, 1.4)
+        if player.ammo_shotgun == 0 { start_reload() }
         return
     }
-    player.ammo_shotgun -= 1
-    player.cooldown = 0.68
-    for spread in [-0.18, -0.09, 0.0, 0.09, 0.18] {
-        spawn_bullet("player", player.pos + player.aim * 15.0, rotate_direction(player.aim, spread), 470.0, 28.0, 0.55)
+    if player.weapon == "plasma" {
+        if player.ammo_plasma <= 0 {
+            emit("empty", player.pos, 0.6)
+            start_reload()
+            player.cooldown = 0.30
+            return
+        }
+        player.ammo_plasma -= 1
+        player.cooldown = 0.85 * cooldown_mult
+        spawn_bullet("plasma", player.pos + player.aim * 16.0, player.aim, 380.0, 75.0, 1.1)
+        emit("plasma", player.pos, 1.5)
+        if player.ammo_plasma == 0 { start_reload() }
+        return
     }
-    emit("shotgun", player.pos, 1.4)
-    if player.ammo_shotgun == 0 { start_reload() }
+    if player.weapon == "grenade" {
+        if player.ammo_grenade <= 0 {
+            emit("empty", player.pos, 0.6)
+            start_reload()
+            player.cooldown = 0.35
+            return
+        }
+        player.ammo_grenade -= 1
+        player.cooldown = 1.10 * cooldown_mult
+        spawn_bullet("emp_grenade", player.pos + player.aim * 16.0, player.aim, 320.0, 30.0, 0.85)
+        emit("grenade", player.pos, 1.8)
+        if player.ammo_grenade == 0 { start_reload() }
+        return
+    }
 }
 
 function begin_death() {
@@ -98,119 +173,147 @@ function begin_death() {
     player.alive = false
     death_count += 1
     room_deaths += 1
-    death_timer = 1.35
+    death_timer = 1.4
     phase = "dead"
-    echo_path = current_path
-    current_path = []
-    save_revision += 1
+    combo_count = 0
+    overdrive_timer = 0.0
     emit("death", player.pos, 2.0)
-    if death_count <= 2 {
-        say("RADIO", concat("Muerte ", str(death_count)), 2.0)
-    } else {
-        if death_count <= 5 {
-            say("VIGILANTE", "Ya conocemos esa ruta.", 2.5)
-        } else {
-            if death_count <= 8 {
-                say("ECO", "Yo tambien recuerdo morir aqui.", 2.5)
-            } else {
-                say("CERO", "El mundo se rompe antes que nosotros.", 2.5)
-            }
-        }
-    }
 }
 
-function hurt_player(damage: float, source: vec2) {
-    if !player.alive || player.invulnerable > 0.0 { return }
+function hurt_player(damage: float, source_pos: vec2) {
+    if !player.alive || player.invulnerable > 0.0 || player.dash_timer > 0.0 { return }
     player.hp -= damage
-    player.hit_flash = 0.16
-    emit("player_hit", source, damage / 50.0)
-    if player.hp <= 0.0 { begin_death() }
-}
-
-function update_player(dt: float, input: map) {
-    player.prev_pos = player.pos
-    player.cooldown = max(0.0, player.cooldown - dt)
-    player.dash_cooldown = max(0.0, player.dash_cooldown - dt)
-    player.invulnerable = max(0.0, player.invulnerable - dt)
-    player.hit_flash = max(0.0, player.hit_flash - dt)
-
-    if player.reload_timer > 0.0 {
-        player.reload_timer -= dt
-        if player.reload_timer <= 0.0 { finish_reload() }
-    }
-
-    if input.weapon == 1 && weapons.pistol { player.weapon = "pistol" }
-    if input.weapon == 2 && weapons.shotgun { player.weapon = "shotgun" }
-    if input.weapon == 3 && weapons.blade { player.weapon = "blade" }
-
-    if length(input.aim) > 0.1 { player.aim = normalize(input.aim) }
-
-    let movement = input.move
-    if length(movement) > 1.0 { movement = normalize(movement) }
-    player.velocity = movement * 168.0
-
-    if input.dash && player.dash_cooldown <= 0.0 {
-        let dash_dir = movement
-        if length(dash_dir) < 0.1 { dash_dir = player.aim }
-        player.dash_dir = normalize(dash_dir)
-        player.dash_timer = 0.13
-        player.dash_cooldown = 0.72
-        player.invulnerable = 0.19
-        emit("dash", player.pos, 1.0)
-    }
-
-    if player.dash_timer > 0.0 {
-        player.dash_timer -= dt
-        player.velocity = player.dash_dir * 620.0
-    }
-
-    player.pos = move_position(player.pos, player.velocity * dt, 9.0)
-
-    if input.reload { start_reload() }
-    if input.fire { try_fire() }
-
-    for hazard in hazards {
-        if point_in_rect(player.pos, hazard, 6.0) {
-            hurt_player(95.0 * dt, player.pos)
-        }
+    player.hit_flash = 0.20
+    player.invulnerable = 0.35
+    combo_count = 0
+    overdrive_timer = 0.0
+    emit("player_hit", player.pos, damage / 50.0)
+    if player.hp <= 0.0 {
+        player.hp = 0.0
+        begin_death()
     }
 }
 
-function bullet_hits_obstacle(pos: vec2) {
-    for obstacle in obstacles {
-        if point_in_rect(pos, obstacle, 0.0) { return true }
-    }
-    return false
+function try_dash(direction: vec2) {
+    if player.dash_cooldown > 0.0 || !player.alive || player.reload_timer > 0.0 { return }
+    let dir = direction
+    if length(dir) < 0.001 { dir = player.aim }
+    dir = normalize(dir)
+    player.dash_dir = dir
+    player.dash_timer = 0.22
+    player.dash_cooldown = 0.75
+    player.dash_shield = 0.35
+    emit("dash", player.pos, 1.0)
 }
 
 function update_bullets(dt: float) {
     for bullet in bullets {
         if bullet.alive {
             bullet.life -= dt
-            bullet.pos += bullet.velocity * dt
-            if bullet.life <= 0.0 || bullet_hits_obstacle(bullet.pos) {
+            if bullet.life <= 0.0 {
                 bullet.alive = false
-                emit("spark", bullet.pos, 0.35)
+                if bullet.owner == "plasma" {
+                    trigger_aoe_damage(bullet.pos, 65.0, 85.0, false)
+                    emit("plasma_explode", bullet.pos, 1.8)
+                }
+                if bullet.owner == "emp_grenade" {
+                    trigger_aoe_damage(bullet.pos, 85.0, 45.0, true)
+                    emit("emp_explode", bullet.pos, 2.0)
+                }
             } else {
-                if bullet.owner == "player" {
-                    for enemy in enemies {
-                        if bullet.alive && enemy.alive && distance(bullet.pos, enemy.pos) <= 12.0 {
-                            hurt_enemy(enemy, bullet.damage, bullet.pos)
-                            bullet.alive = false
-                        }
+                let next = bullet.pos + bullet.velocity * dt
+                if position_blocked(next, bullet.radius) {
+                    bullet.alive = false
+                    if bullet.owner == "plasma" {
+                        trigger_aoe_damage(next, 65.0, 85.0, false)
+                        emit("plasma_explode", next, 1.8)
+                    } else if bullet.owner == "emp_grenade" {
+                        trigger_aoe_damage(next, 85.0, 45.0, true)
+                        emit("emp_explode", next, 2.0)
+                    } else {
+                        emit("impact", next, 0.4)
                     }
                 } else {
-                    if distance(bullet.pos, player.pos) <= 11.0 {
-                        hurt_player(bullet.damage, bullet.pos)
-                        bullet.alive = false
+                    bullet.pos = next
+                    if bullet.owner == "player" || bullet.owner == "plasma" {
+                        for enemy in enemies {
+                            if enemy.alive && distance(bullet.pos, enemy.pos) <= bullet.radius + 12.0 {
+                                bullet.alive = false
+                                if bullet.owner == "plasma" {
+                                    trigger_aoe_damage(bullet.pos, 65.0, 85.0, false)
+                                    emit("plasma_explode", bullet.pos, 1.8)
+                                } else {
+                                    hurt_enemy(enemy, bullet.damage, bullet.pos, bullet.owner)
+                                }
+                            }
+                        }
+                    }
+                    if bullet.owner == "enemy" || bullet.owner == "sniper" {
+                        if distance(bullet.pos, player.pos) <= bullet.radius + 10.0 {
+                            if player.dash_shield > 0.0 {
+                                bullet.owner = "player"
+                                bullet.velocity = -bullet.velocity * 1.2
+                                emit("deflect", bullet.pos, 1.2)
+                            } else {
+                                bullet.alive = false
+                                hurt_player(bullet.damage, bullet.pos)
+                            }
+                        }
                     }
                 }
             }
         }
     }
-    let active = []
-    for bullet in bullets {
-        if bullet.alive { list_push(active, bullet) }
+}
+
+function update_combat(dt: float, input: map) {
+    if player.invulnerable > 0.0 { player.invulnerable -= dt }
+    if player.hit_flash > 0.0 { player.hit_flash -= dt }
+    if player.cooldown > 0.0 { player.cooldown -= dt }
+    if player.dash_cooldown > 0.0 { player.dash_cooldown -= dt }
+    if player.dash_shield > 0.0 { player.dash_shield -= dt }
+    if overdrive_timer > 0.0 { overdrive_timer -= dt }
+
+    if player.reload_timer > 0.0 {
+        player.reload_timer -= dt
+        if player.reload_timer <= 0.0 { finish_reload() }
     }
-    bullets = active
+
+    let speed = 150.0
+    if overdrive_timer > 0.0 { speed = 195.0 }
+
+    let move_dir = input.move
+    if length(move_dir) > 0.001 { move_dir = normalize(move_dir) }
+
+    if input.dash { try_dash(move_dir) }
+    if input.weapon_1 && weapons.pistol { player.weapon = "pistol" }
+    if input.weapon_2 && weapons.shotgun { player.weapon = "shotgun" }
+    if input.weapon_3 && weapons.blade { player.weapon = "blade" }
+    if input.weapon_4 && weapons.plasma { player.weapon = "plasma" }
+    if input.weapon_5 && weapons.grenade { player.weapon = "grenade" }
+
+    if player.dash_timer > 0.0 {
+        player.dash_timer -= dt
+        player.velocity = player.dash_dir * 380.0
+        player.pos = move_position(player.pos, player.velocity * dt, 10.0)
+    } else {
+        if length(move_dir) > 0.001 {
+            player.velocity = move_dir * speed
+            player.pos = move_position(player.pos, player.velocity * dt, 10.0)
+        } else {
+            player.velocity = vec2(0, 0)
+        }
+    }
+
+    if length(input.aim) > 0.001 { player.aim = normalize(input.aim) }
+    if input.reload { start_reload() }
+    if input.attack { try_fire() }
+
+    update_bullets(dt)
+
+    for hazard in hazards {
+        if point_in_rect(player.pos, hazard, 6.0) {
+            hurt_player(28.0 * dt, player.pos)
+        }
+    }
 }

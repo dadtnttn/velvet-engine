@@ -130,7 +130,7 @@ impl Renderer {
 
     fn consume_event(&mut self, event: &EventView, settings: &Settings) {
         match event.kind.as_str() {
-            "pistol" | "shotgun" | "blade" => self.player_shoot = 0.28,
+            "pistol" | "shotgun" | "blade" | "plasma" | "grenade" => self.player_shoot = 0.28,
             "dash" => self.player_dash = 0.24,
             "respawn" => self.player_respawn = 0.52,
             _ => {}
@@ -139,6 +139,13 @@ impl Renderer {
             "pistol" => (8, GOLD, 55.0, 0.22),
             "shotgun" => (18, GOLD, 85.0, 0.3),
             "blade" => (14, CYAN, 70.0, 0.24),
+            "plasma" => (16, VIOLET, 90.0, 0.4),
+            "grenade" => (12, STEEL_LIGHT, 60.0, 0.35),
+            "plasma_explode" => (35, VIOLET, 140.0, 0.65),
+            "emp_explode" => (40, CYAN, 160.0, 0.70),
+            "emp_stun" => (15, CYAN, 50.0, 0.40),
+            "shield_block" => (18, STEEL_LIGHT, 80.0, 0.30),
+            "sniper_shot" => (20, RED, 150.0, 0.50),
             "deflect" => (16, WHITE, 90.0, 0.3),
             "impact" => (12, RED, 70.0, 0.34),
             "enemy_down" => (24, RED, 105.0, 0.52),
@@ -155,7 +162,12 @@ impl Renderer {
         if settings.screen_shake
             && matches!(
                 event.kind.as_str(),
-                "shotgun" | "player_hit" | "death" | "boss_phase"
+                "shotgun"
+                    | "plasma_explode"
+                    | "emp_explode"
+                    | "player_hit"
+                    | "death"
+                    | "boss_phase"
             )
         {
             self.shake = self.shake.max(event.power.clamp(0.5, 2.0) * 3.0);
@@ -209,13 +221,30 @@ impl Renderer {
             "AJUSTES",
             "SALIR",
         ];
+        let option_icons = [
+            self.art.ui.icon_new.clone(),
+            self.art.ui.icon_save.clone(),
+            self.art.ui.icon_help.clone(),
+            self.art.ui.icon_settings.clone(),
+            self.art.ui.icon_exit.clone(),
+        ];
         for (index, option) in options.iter().enumerate() {
             let y = 246 + index as i32 * 46;
             let disabled = index == 1 && !can_continue;
+
             if index == selected {
-                self.rect(72, y - 9, 350, 34, (38, 24, 47));
-                self.rect(72, y - 9, 4, 34, if disabled { MUTED } else { RED });
+                self.rect(72, y - 8, 350, 36, (48, 22, 58));
+                self.rect(72, y - 8, 4, 36, if disabled { MUTED } else { RED });
+                self.rect(76, y - 8, 346, 2, (140, 50, 90));
+            } else {
+                self.rect(72, y - 8, 350, 36, (18, 16, 26));
+                self.rect(72, y - 8, 2, 36, (40, 35, 52));
             }
+
+            if let Some(icon) = &option_icons[index] {
+                self.blit_ui_texture(84, y - 2, 22, 22, icon);
+            }
+
             let color = if disabled {
                 (72, 69, 79)
             } else if index == selected {
@@ -223,7 +252,7 @@ impl Renderer {
             } else {
                 MUTED
             };
-            self.text(92, y, option, color, 2);
+            self.text(118, y, option, color, 2);
         }
         self.panel(560, 434, 376, 82);
         self.text(580, 448, "ENTER  SELECCIONAR", WHITE, 1);
@@ -279,7 +308,13 @@ impl Renderer {
             self.text(505, 142 + index as i32 * 28, line, MUTED, 1);
         }
         self.panel(54, 386, 850, 98);
-        self.text(75, 405, "1 PISTOLA   2 ESCOPETA   3 HOJA DE FASE", WHITE, 1);
+        self.text(
+            75,
+            405,
+            "1 PISTOLA  2 ESCOPETA  3 HOJA  4 PLASMA  5 EMP",
+            WHITE,
+            1,
+        );
         self.text(
             75,
             431,
@@ -439,7 +474,7 @@ impl Renderer {
 
     pub fn paint_memories(&mut self, frame: &FrameView) {
         self.fill(BLACK);
-        self.text(54, 42, "ARCHIVO DE MEMORIAS", WHITE, 4);
+        self.text(54, 32, "ARCHIVO DE MEMORIAS", WHITE, 4);
         let entries = [
             ("MEMORIA 01", "El sujeto eligio este nombre: Diecisiete."),
             (
@@ -450,19 +485,37 @@ impl Renderer {
                 "MEMORIA 03",
                 "El ciclo no evita la muerte. Alimenta el archivo.",
             ),
+            (
+                "MEMORIA 04",
+                "El Nucleo almacena las directivas de sobreescritura.",
+            ),
+            (
+                "MEMORIA 05",
+                "Tu identidad completa era el codigo de apagado final.",
+            ),
         ];
+        let travel_popup = self.art.ui.travel_popup.clone();
+        let icon_memory = self.art.ui.icon_memory.clone();
         for (index, (title, body)) in entries.iter().enumerate() {
-            let y = 120 + index as i32 * 112;
-            self.panel(54, y, 850, 88);
-            if frame.memories[index] {
-                self.text(76, y + 18, title, CYAN, 2);
-                self.text(76, y + 51, body, WHITE, 1);
+            let y = 88 + index as i32 * 78;
+            if let Some(popup) = &travel_popup {
+                self.blit_ui_texture(54, y, 850, 72, popup);
             } else {
-                self.text(76, y + 18, "[DATOS AUSENTES]", (72, 69, 79), 2);
+                self.panel(54, y, 850, 72);
+            }
+            if let Some(icon) = &icon_memory {
+                self.blit_ui_texture(66, y + 14, 22, 22, icon);
+            }
+            let is_recovered = frame.memories.get(index).copied().unwrap_or(false);
+            if is_recovered {
+                self.text(96, y + 14, title, CYAN, 2);
+                self.text(96, y + 42, body, WHITE, 1);
+            } else {
+                self.text(96, y + 14, "[DATOS AUSENTES]", (72, 69, 79), 2);
                 self.text(
-                    76,
-                    y + 51,
-                    "Busca una fractura luminosa en el Archivo.",
+                    96,
+                    y + 42,
+                    "Busca una fractura luminosa en el sector.",
                     MUTED,
                     1,
                 );
@@ -471,7 +524,7 @@ impl Renderer {
         self.text(
             56,
             494,
-            &format!("RECOBRADAS  {}/3", frame.memory_count),
+            &format!("RECOBRADAS  {}/5", frame.memory_count),
             GOLD,
             2,
         );
@@ -1228,6 +1281,8 @@ impl Renderer {
             "pistol" => ("PISTOLA", "DISPARO PRECISO"),
             "shotgun" => ("ESCOPETA", "DISPERSION CORTA"),
             "blade" => ("HOJA", "CUERPO A CUERPO"),
+            "plasma" => ("CANON PLASMA", "DANO EN AREA"),
+            "grenade" => ("LANZAGRANADAS", "PULSO EMP"),
             _ => ("SIN ARMA", "BUSCA EQUIPO"),
         };
         self.text(708, 38, weapon, GOLD, 2);
@@ -1267,9 +1322,9 @@ impl Renderer {
             } else {
                 match frame.room {
                     1 => "OBJETIVO  ENCUENTRA LA SALIDA".to_string(),
-                    2 | 4 => format!("OBJETIVO  AMENAZAS {alive:02}"),
-                    3 => format!("MEMORIAS {}/3  //  EXPLORA", frame.memory_count),
-                    5 => "OBJETIVO  DERROTA A CERO".to_string(),
+                    2 | 4 | 5 => format!("OBJETIVO  AMENAZAS {alive:02}"),
+                    3 => format!("MEMORIAS {}/5  //  EXPLORA", frame.memory_count),
+                    6 => "OBJETIVO  DERROTA A CERO".to_string(),
                     _ => "OBJETIVO  AVANZA".to_string(),
                 }
             };
@@ -1289,7 +1344,7 @@ impl Renderer {
         self.text(
             40,
             492,
-            &format!("MEMORIAS {}/3", frame.memory_count),
+            &format!("MEMORIAS {}/5", frame.memory_count),
             CYAN,
             1,
         );
@@ -1474,7 +1529,7 @@ impl Renderer {
         self.text(
             324,
             290,
-            &format!("MEMORIAS    {}/3", frame.memory_count),
+            &format!("MEMORIAS    {}/5", frame.memory_count),
             CYAN,
             2,
         );
@@ -1483,6 +1538,43 @@ impl Renderer {
 
     fn fill(&mut self, color: (u8, u8, u8)) {
         self.pixels.fill(pack_rgb(color.0, color.1, color.2));
+    }
+
+    fn blit_ui_texture(&mut self, x: i32, y: i32, w: i32, h: i32, sheet: &SpriteSheet) {
+        let dest_x = x.div_euclid(PIXEL_SCALE);
+        let dest_y = y.div_euclid(PIXEL_SCALE);
+        let dest_w = ((w + PIXEL_SCALE - 1) / PIXEL_SCALE).max(1);
+        let dest_h = ((h + PIXEL_SCALE - 1) / PIXEL_SCALE).max(1);
+        for py in 0..dest_h {
+            let sy = (py as u64 * sheet.height as u64 / dest_h as u64) as u32;
+            for px in 0..dest_w {
+                let sx = (px as u64 * sheet.width as u64 / dest_w as u64) as u32;
+                let src_idx = ((sy * sheet.width + sx) * 4) as usize;
+                let alpha = sheet.rgba[src_idx + 3] as f32 / 255.0;
+                if alpha > 0.05 {
+                    let r = sheet.rgba[src_idx];
+                    let g = sheet.rgba[src_idx + 1];
+                    let b = sheet.rgba[src_idx + 2];
+                    let dx = dest_x + px;
+                    let dy = dest_y + py;
+                    if dx >= 0 && dx < PIXEL_WIDTH as i32 && dy >= 0 && dy < PIXEL_HEIGHT as i32 {
+                        let idx = (dy as u32 * PIXEL_WIDTH + dx as u32) as usize;
+                        if alpha >= 0.95 {
+                            self.pixels[idx] = pack_rgb(r, g, b);
+                        } else {
+                            let old = self.pixels[idx];
+                            let old_r = ((old >> 16) & 255) as f32;
+                            let old_g = ((old >> 8) & 255) as f32;
+                            let old_b = (old & 255) as f32;
+                            let new_r = (r as f32 * alpha + old_r * (1.0 - alpha)) as u8;
+                            let new_g = (g as f32 * alpha + old_g * (1.0 - alpha)) as u8;
+                            let new_b = (b as f32 * alpha + old_b * (1.0 - alpha)) as u8;
+                            self.pixels[idx] = pack_rgb(new_r, new_g, new_b);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn panel(&mut self, x: i32, y: i32, w: i32, h: i32) {

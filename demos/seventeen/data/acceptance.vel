@@ -14,22 +14,24 @@ export function verify_clear_room() {
 
 export function verify_enter_room(index: int) {
     phase = "playing"
-    setup_room(clamp(index, 1, 5))
+    setup_room(clamp(index, 1, 6))
     return snapshot()
 }
 
 export function verify_collect_all_memories() {
-    memories = [true, true, true]
+    memories = [true, true, true, true, true]
     weapons.pistol = true
     weapons.shotgun = true
     weapons.blade = true
+    weapons.plasma = true
+    weapons.grenade = true
     save_revision += 1
     return snapshot()
 }
 
 export function verify_choose(remember: bool) {
     phase = "choice"
-    if remember && memory_count() == 3 {
+    if remember && memory_count() == 5 {
         endings.remember_all = true
         ending_variant = "completo"
         phase = "ending_b"

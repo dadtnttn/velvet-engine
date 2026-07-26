@@ -1,0 +1,2 @@
+// @edition 3
+import "module.vel" as game

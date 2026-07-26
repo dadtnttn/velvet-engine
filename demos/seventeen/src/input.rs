@@ -210,6 +210,10 @@ impl Controls {
             || rising(self.pad.right, self.previous_pad.right)
         {
             3
+        } else if self.state.key_just_pressed(KeyCode::Digit4) {
+            4
+        } else if self.state.key_just_pressed(KeyCode::Digit5) {
+            5
         } else {
             0
         };

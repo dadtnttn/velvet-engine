@@ -1,0 +1,15 @@
+[
+  {
+    "id": "tape_c17",
+    "filename": "C17_RECOVERED_02.wav",
+    "duration": 12.0,
+    "transcript": [
+      {"time": 0.0, "speaker": "VOICE 1", "text": "How many children lived in the house?"},
+      {"time": 3.0, "speaker": "VOICE 2", "text": "Two."},
+      {"time": 5.0, "speaker": "VOICE 1", "text": "The registry lists one."},
+      {"time": 7.5, "speaker": "VOICE 2", "text": "It listed two yesterday."},
+      {"time": 9.5, "speaker": "NOISE", "text": "[static interference]"},
+      {"time": 10.5, "speaker": "UNKNOWN", "text": "Mara is the one who stayed."}
+    ]
+  }
+]

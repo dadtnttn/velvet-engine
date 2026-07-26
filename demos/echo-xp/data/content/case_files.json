@@ -1,0 +1,44 @@
+[
+  {
+    "id": "CASE_001_MARA_V",
+    "title": "CASE 001 — MARA V.",
+    "subject_name": "Mara Valen",
+    "subject_id": "MV-1407",
+    "registered_age": 24,
+    "status": "Missing",
+    "last_location": "Residence C-17",
+    "incident_date": "14/07/2004",
+    "initial_classification": "Pending",
+    "official_record": "Official records state Mara Valen was an only child raised at Residence C-17.",
+    "discrepancies": "Contradictory records recovered from site C-17 mention a sister named Elisa. Physical census logs list two occupants in 2003, but single occupancy in 2004 without death/relocation certificates.",
+    "evidence_references": ["PHOTO_EVID_01.png", "C17_RECOVERED_02.wav"]
+  },
+  {
+    "id": "ARCHIVE_PROTOCOL",
+    "title": "ARCHIVE PROTOCOL",
+    "subject_name": "Protocol Standard",
+    "subject_id": "AP-000",
+    "registered_age": 0,
+    "status": "Active",
+    "last_location": "Terminal",
+    "incident_date": "01/01/2004",
+    "initial_classification": "Standard",
+    "official_record": "Inspect all evidence carefully before submitting classification. Discrepancies in temporal continuity indicate MANDELA-CLASS INTRUSION events.",
+    "discrepancies": "Do not attempt to restore deleted local files without authorization.",
+    "evidence_references": []
+  },
+  {
+    "id": "OPERATOR_GUIDE",
+    "title": "OPERATOR GUIDE",
+    "subject_name": "Guide",
+    "subject_id": "OG-001",
+    "registered_age": 0,
+    "status": "Active",
+    "last_location": "Terminal",
+    "incident_date": "01/01/2004",
+    "initial_classification": "Standard",
+    "official_record": "Double-click desktop icons to launch applications. Use Tape Player to inspect recovered recordings.",
+    "discrepancies": "If terminal output degrades or alters user metadata, report immediately to Archive Control.",
+    "evidence_references": []
+  }
+]

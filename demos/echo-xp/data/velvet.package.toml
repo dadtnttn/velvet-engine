@@ -1,0 +1,8 @@
+[package]
+name = "echo-xp"
+version = "0.1.0"
+edition = 3
+root = "echo_xp.game"
+
+[modules]
+"echo_xp.game" = "module.vel"

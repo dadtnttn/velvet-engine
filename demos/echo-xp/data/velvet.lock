@@ -1,0 +1,8 @@
+version = 1
+
+[[package]]
+name = "echo-xp"
+version = "0.1.0"
+source = "path+."
+checksum = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+dependencies = []

@@ -104,10 +104,20 @@ impl Game {
                 vec2_val(input.aim.x as f64, input.aim.y as f64),
             ),
             ("fire".into(), bool_val(input.fire)),
+            ("attack".into(), bool_val(input.fire)),
             ("dash".into(), bool_val(input.dash)),
             ("interact".into(), bool_val(input.interact)),
             ("reload".into(), bool_val(input.reload)),
             ("weapon".into(), int(input.weapon)),
+            ("weapon_1".into(), bool_val(input.weapon == 1)),
+            ("weapon_2".into(), bool_val(input.weapon == 2)),
+            ("weapon_3".into(), bool_val(input.weapon == 3)),
+            ("weapon_4".into(), bool_val(input.weapon == 4)),
+            ("weapon_5".into(), bool_val(input.weapon == 5)),
+            ("move_left".into(), bool_val(input.movement.x < -0.1)),
+            ("move_right".into(), bool_val(input.movement.x > 0.1)),
+            ("move_up".into(), bool_val(input.movement.y < -0.1)),
+            ("move_down".into(), bool_val(input.movement.y > 0.1)),
         ]);
         let value = self
             .session
@@ -602,7 +612,7 @@ fn run_headless(capture: Option<&Path>) -> Result<()> {
         bail!("resurrection did not complete");
     }
 
-    for room in 1..=5 {
+    for room in 1..=6 {
         let frame = game.acceptance_call("verify_enter_room", &[int(room)])?;
         if frame.room != room {
             bail!("room {room} did not load");
@@ -613,12 +623,12 @@ fn run_headless(capture: Option<&Path>) -> Result<()> {
     }
     game.acceptance_call("verify_collect_all_memories", &[])?;
     let ending_b = game.acceptance_call("verify_choose", &[bool_val(true)])?;
-    if ending_b.phase != "ending_b" || ending_b.memory_count != 3 {
+    if ending_b.phase != "ending_b" || ending_b.memory_count != 5 {
         bail!("memory ending failed");
     }
 
     game.new_game(17)?;
-    game.acceptance_call("verify_enter_room", &[int(5)])?;
+    game.acceptance_call("verify_enter_room", &[int(6)])?;
     let ending_a = game.acceptance_call("verify_choose", &[bool_val(false)])?;
     if ending_a.phase != "ending_a" {
         bail!("break-cycle ending failed");
@@ -626,13 +636,13 @@ fn run_headless(capture: Option<&Path>) -> Result<()> {
 
     let save = game.export_save()?;
     let round_trip = SaveData::from_vs3(&save.to_vs3())?;
-    if round_trip.room != 5 {
+    if round_trip.room != 6 {
         bail!("save round trip failed");
     }
 
     if let Some(path) = capture {
         game.acceptance_call("verify_collect_all_memories", &[])?;
-        game.acceptance_call("verify_enter_room", &[int(4)])?;
+        game.acceptance_call("verify_enter_room", &[int(5)])?;
         let frame = game.frame.as_ref().context("capture frame")?;
         let mut renderer = Renderer::new();
         renderer.paint_game(frame, &Default::default());
@@ -641,7 +651,7 @@ fn run_headless(capture: Option<&Path>) -> Result<()> {
     }
 
     println!(
-        "17 headless OK: VS3 rooms=5 death=respawn memories=3 endings=2 save=ok instructions={}",
+        "17 headless OK: VS3 rooms=6 death=respawn memories=5 endings=2 save=ok instructions={}",
         game.session.instructions()
     );
     Ok(())
@@ -694,7 +704,7 @@ fn run_screen_capture(screen: &str, path: &Path) -> Result<()> {
             ..Default::default()
         },
         memory_count: 3,
-        memories: [true, true, true],
+        memories: vec![true, true, true, false, false],
         deaths: 4,
         score: 3500,
         magazine: 7,

@@ -1,0 +1,38 @@
+// Shared state definition for ECHO//XP
+
+state {
+    game_seed: int = 1407
+    phase: string = "boot"
+    case_id: string = "CASE_001"
+    operator_name: string = "OPERATOR"
+    boot_complete: bool = false
+    logged_in: bool = false
+
+    mail_read: bool = false
+    case_file_read: bool = false
+    photo_inspected: bool = false
+    tape_listened: bool = false
+    deleted_file_found: bool = false
+
+    classification: string = ""
+    classification_attempts: int = 0
+    case_complete: bool = false
+    truth_unlocked: bool = false
+
+    anomaly_level: int = 0
+    system_corruption: float = 0.0
+    save_revision: int = 0
+
+    message: string = ""
+    message_kind: string = ""
+    events: list = []
+
+    clippy_state: string = "idle"
+    clippy_dialog: string = "You have one unread assignment. Double-click Inbox to begin."
+
+    name_swap: bool = false
+    time_glitch: bool = false
+    extra_icon: bool = false
+    subject_changed: bool = false
+    operator_compromised: bool = false
+}

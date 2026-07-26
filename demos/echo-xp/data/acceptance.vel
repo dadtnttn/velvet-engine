@@ -1,0 +1,42 @@
+// Snapshot builder for ECHO//XP
+
+export function snapshot() {
+    let collected_count = 0
+    if mail_read { collected_count += 1 }
+    if case_file_read { collected_count += 1 }
+    if photo_inspected { collected_count += 1 }
+    if tape_listened { collected_count += 1 }
+
+    return {
+        "phase": phase,
+        "case_id": case_id,
+        "operator_name": operator_name,
+        "boot_complete": boot_complete,
+        "logged_in": logged_in,
+        "mail_read": mail_read,
+        "case_file_read": case_file_read,
+        "photo_inspected": photo_inspected,
+        "tape_listened": tape_listened,
+        "deleted_file_found": deleted_file_found,
+        "classification": classification,
+        "classification_attempts": classification_attempts,
+        "case_complete": case_complete,
+        "truth_unlocked": truth_unlocked,
+        "anomaly_level": anomaly_level,
+        "system_corruption": system_corruption,
+        "can_classify": mail_read && case_file_read && photo_inspected && tape_listened,
+        "required_evidence": 4,
+        "collected_evidence": collected_count,
+        "current_message": message,
+        "message_kind": message_kind,
+        "events": events,
+        "save_revision": save_revision,
+        "clippy_state": clippy_state,
+        "clippy_dialog": clippy_dialog,
+        "name_swap": name_swap,
+        "time_glitch": time_glitch,
+        "extra_icon": extra_icon,
+        "subject_changed": subject_changed,
+        "operator_compromised": operator_compromised
+    }
+}

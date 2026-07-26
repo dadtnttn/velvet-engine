@@ -857,6 +857,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edf234dd1594d6dd434a8fb8cada51ddbbc593e40e4a01556a0b31c62da2775b"
 
 [[package]]
+name = "echo-xp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "rodio",
+ "serde",
+ "serde_json",
+ "softbuffer",
+ "velvet-core",
+ "velvet-input",
+ "velvet-math",
+ "velvet-script-vs3",
+ "winit",
+]
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2496,6 +2513,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rpg-quest"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fontdue",
+ "image",
+ "softbuffer",
+ "velvet-math",
+ "velvet-play",
+ "velvet-rpg",
+ "winit",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2558,6 +2589,20 @@ dependencies = [
  "unicode-ccc",
  "unicode-properties",
  "unicode-script",
+]
+
+[[package]]
+name = "sam-tomboy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fontdue",
+ "image",
+ "serde",
+ "serde_json",
+ "softbuffer",
+ "velvet-script-vs3",
+ "winit",
 ]
 
 [[package]]

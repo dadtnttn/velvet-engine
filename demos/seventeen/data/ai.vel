@@ -1,4 +1,4 @@
-// Enemy perception, patrol, pursuit and boss behavior.
+// Enemy perception, patrol, pursuit, sniper, shielder and boss behavior.
 
 function enemy_shoot(enemy: map, direction: vec2, speed: float, damage: float) {
     spawn_bullet("enemy", enemy.pos + direction * 12.0, direction, speed, damage, 2.2)
@@ -87,6 +87,48 @@ function update_hound(enemy: map, dt: float) {
     }
 }
 
+function update_sniper(enemy: map, dt: float) {
+    let to_player = player.pos - enemy.pos
+    let d = length(to_player)
+    if d < 0.001 { return }
+    let dir = normalize(to_player)
+    let sees = can_see_player(enemy, 450.0)
+    if enemy.state == "patrol" && sees { enemy.state = "aiming" }
+    if enemy.state == "aiming" && !sees { enemy.state = "patrol" }
+    if enemy.state == "patrol" {
+        patrol_enemy(enemy, dt, 20.0)
+        return
+    }
+    enemy.aim = dir
+    enemy.velocity = vec2(0, 0)
+    enemy.charge_timer += dt
+    emit("sniper_charge", enemy.pos, enemy.charge_timer / 1.2)
+    if enemy.charge_timer >= 1.2 {
+        enemy.charge_timer = 0.0
+        spawn_bullet("sniper", enemy.pos + dir * 14.0, dir, 750.0, 65.0, 1.8)
+        emit("sniper_shot", enemy.pos, 1.8)
+        enemy.state = "patrol"
+        enemy.cooldown = 1.5
+    }
+}
+
+function update_shielder(enemy: map, dt: float) {
+    let to_player = player.pos - enemy.pos
+    let d = length(to_player)
+    if d < 0.001 { return }
+    let dir = normalize(to_player)
+    enemy.aim = dir
+    enemy.shield_active = true
+    let velocity = dir * 42.0
+    enemy.velocity = velocity
+    enemy.pos = move_position(enemy.pos, velocity * dt, 12.0)
+    if d < 32.0 && enemy.cooldown <= 0.0 {
+        hurt_player(45.0, enemy.pos)
+        enemy.cooldown = 1.0
+        emit("shield_bash", enemy.pos, 1.2)
+    }
+}
+
 function update_echo(enemy: map, dt: float) {
     let target = player.pos
     if len(echo_path) > 0 {
@@ -98,59 +140,94 @@ function update_echo(enemy: map, dt: float) {
     let to_target = target - enemy.pos
     if length(to_target) > 4.0 {
         enemy.velocity = normalize(to_target) * 138.0
+        enemy.aim = normalize(to_target)
         enemy.pos = move_position(enemy.pos, enemy.velocity * dt, 10.0)
     }
-    let to_player = player.pos - enemy.pos
-    if length(to_player) > 0.001 { enemy.aim = normalize(to_player) }
-    if enemy.cooldown <= 0.0 && distance(enemy.pos, player.pos) < 260.0 {
-        enemy_shoot(enemy, enemy.aim, 340.0, 52.0)
-        enemy.cooldown = 0.78
+    if distance(enemy.pos, player.pos) < 22.0 && enemy.cooldown <= 0.0 {
+        hurt_player(42.0, enemy.pos)
+        enemy.cooldown = 0.65
+        emit("echo_hit", enemy.pos, 1.0)
     }
 }
 
-function update_zero(enemy: map, dt: float) {
-    let to_player = player.pos - enemy.pos
+function update_boss(boss: map, dt: float) {
+    let hp_ratio = boss.hp / boss.max_hp
+    if hp_ratio > 0.66 { boss.phase = 1 }
+    else {
+        if hp_ratio > 0.33 { boss.phase = 2 }
+        else { boss.phase = 3 }
+    }
+    let to_player = player.pos - boss.pos
     let d = length(to_player)
     if d < 0.001 { return }
     let dir = normalize(to_player)
-    enemy.aim = dir
-    if enemy.hp <= enemy.max_hp * 0.5 && enemy.phase == 1 {
-        enemy.phase = 2
-        emit("boss_phase", enemy.pos, 2.0)
-        say("CERO", "Tus rutas siguen dentro de mi.", 4.0)
-        if len(echo_path) > 0 { spawn_enemy("echo_clone", enemy.pos + vec2(-35, 24), 75.0) }
-        spawn_enemy("echo_clone", enemy.pos + vec2(35, -24), 75.0)
-    }
-    let side_sign = -1.0
-    if sin(elapsed * 5.0) >= 0.0 { side_sign = 1.0 }
-    let side = vec2(-dir.y, dir.x) * side_sign
-    let boss_speed = 82.0
-    if enemy.phase != 1 { boss_speed = 125.0 }
-    let velocity = side * boss_speed
-    if d > 190.0 { velocity += dir * 75.0 }
-    if d < 105.0 { velocity -= dir * 100.0 }
-    enemy.velocity = velocity
-    enemy.pos = move_position(enemy.pos, velocity * dt, 13.0)
-    if enemy.cooldown <= 0.0 {
-        let spread = 0.12
-        if enemy.phase != 1 { spread = 0.2 }
-        enemy_shoot(enemy, rotate_direction(dir, -spread), 335.0, 55.0)
-        enemy_shoot(enemy, dir, 365.0, 55.0)
-        enemy_shoot(enemy, rotate_direction(dir, spread), 335.0, 55.0)
-        enemy.cooldown = 0.92
-        if enemy.phase != 1 { enemy.cooldown = 0.62 }
+    boss.aim = dir
+
+    if boss.phase == 1 {
+        let strafe = vec2(-dir.y, dir.x)
+        boss.velocity = strafe * 55.0
+        if d > 200.0 { boss.velocity += dir * 45.0 }
+        boss.pos = move_position(boss.pos, boss.velocity * dt, 14.0)
+        if boss.cooldown <= 0.0 {
+            enemy_shoot(boss, dir, 320.0, 42.0)
+            enemy_shoot(boss, rotate_direction(dir, 0.15), 320.0, 42.0)
+            enemy_shoot(boss, rotate_direction(dir, -0.15), 320.0, 42.0)
+            boss.cooldown = 0.90
+        }
+    } else {
+        if boss.phase == 2 {
+            if !boss_phase_announced {
+                boss_phase_announced = true
+                slow_timer = 0.35
+                say("CERO", "Segunda fase. Adaptacion activada.", 3.5)
+                emit("boss_phase", boss.pos, 1.5)
+            }
+            boss.velocity = dir * 85.0
+            boss.pos = move_position(boss.pos, boss.velocity * dt, 14.0)
+            if boss.cooldown <= 0.0 {
+                let ring = 0
+                while ring < 12 {
+                    let angle = ring * (TAU / 12.0)
+                    let shoot_dir = vec2(cos(angle), sin(angle))
+                    enemy_shoot(boss, shoot_dir, 260.0, 36.0)
+                    ring += 1
+                }
+                boss.cooldown = 1.65
+            }
+        } else {
+            // Phase 3: Spiral Bullet Hell + Echo Support
+            boss.velocity = dir * 105.0
+            boss.pos = move_position(boss.pos, boss.velocity * dt, 14.0)
+            if boss.cooldown <= 0.0 {
+                let spiral = 0
+                while spiral < 16 {
+                    let angle = elapsed * 2.0 + spiral * (TAU / 16.0)
+                    let shoot_dir = vec2(cos(angle), sin(angle))
+                    enemy_shoot(boss, shoot_dir, 290.0, 38.0)
+                    spiral += 1
+                }
+                boss.cooldown = 1.10
+            }
+        }
     }
 }
 
 function update_enemies(dt: float) {
     for enemy in enemies {
         if enemy.alive {
-            enemy.cooldown = max(0.0, enemy.cooldown - dt)
-            enemy.hit_flash = max(0.0, enemy.hit_flash - dt)
-            if enemy.kind == "vigilante" { update_vigilante(enemy, dt) }
-            if enemy.kind == "hound" { update_hound(enemy, dt) }
-            if enemy.kind == "echo" || enemy.kind == "echo_clone" { update_echo(enemy, dt) }
-            if enemy.kind == "zero" { update_zero(enemy, dt) }
+            if enemy.hit_flash > 0.0 { enemy.hit_flash -= dt }
+            if enemy.cooldown > 0.0 { enemy.cooldown -= dt }
+            if enemy.stun_timer > 0.0 {
+                enemy.stun_timer -= dt
+                enemy.velocity = vec2(0, 0)
+            } else {
+                if enemy.kind == "vigilante" { update_vigilante(enemy, dt) }
+                if enemy.kind == "hound" { update_hound(enemy, dt) }
+                if enemy.kind == "sniper" { update_sniper(enemy, dt) }
+                if enemy.kind == "shielder" { update_shielder(enemy, dt) }
+                if enemy.kind == "echo" { update_echo(enemy, dt) }
+                if enemy.kind == "zero" { update_boss(enemy, dt) }
+            }
         }
     }
 }

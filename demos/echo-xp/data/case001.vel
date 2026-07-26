@@ -1,0 +1,44 @@
+// Case 001 Mara V. narrative rules and classification engine
+
+export function can_classify() {
+    return mail_read && case_file_read && photo_inspected && tape_listened
+}
+
+export function submit_classification(submitted: string) {
+    if !can_classify() {
+        message = "EVIDENCE INCOMPLETE. CANNOT SUBMIT CLASSIFICATION."
+        message_kind = "warning"
+        events = [{"kind": "sound", "name": "warning"}]
+        return snapshot()
+    }
+
+    classification = submitted
+    classification_attempts += 1
+
+    if submitted == "MANDELA-CLASS INTRUSION" || submitted == "MANDELA_CLASS_INTRUSION" {
+        case_complete = true
+        truth_unlocked = true
+        phase = "complete"
+        system_corruption = 0.35
+        anomaly_level = 3
+        operator_name = "MARA"
+        operator_compromised = true
+        clippy_state = "eyes"
+        clippy_dialog = "Good work, Operator. The case is closed. The system is not."
+        message = "CASE 001 ACCEPTED. MANDELA-CLASS INTRUSION VERIFIED."
+        message_kind = "critical"
+        events = [{"kind": "sound", "name": "critical"}]
+    } else {
+        message = "CLASSIFICATION REJECTED: DISCREPANCY UNRESOLVED. RE-EVALUATE EVIDENCE."
+        message_kind = "error"
+        events = [{"kind": "sound", "name": "error"}]
+        if classification_attempts >= 2 {
+            time_glitch = true
+            anomaly_level += 1
+            clippy_state = "weird"
+            clippy_dialog = "I remember her. Why did you delete me?"
+        }
+    }
+
+    return snapshot()
+}

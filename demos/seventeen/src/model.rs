@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use velvet_script_vs3::Value;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -82,7 +82,7 @@ pub struct FrameView {
     pub hazards: Vec<RectView>,
     pub pickups: Vec<PickupView>,
     pub events: Vec<EventView>,
-    pub memories: [bool; 3],
+    pub memories: Vec<bool>,
     pub memory_count: i64,
     pub message: String,
     pub speaker: String,
@@ -202,16 +202,13 @@ fn parse_event(value: &Value) -> Result<EventView> {
     })
 }
 
-fn parse_memories(value: &Value) -> Result<[bool; 3]> {
+fn parse_memories(value: &Value) -> Result<Vec<bool>> {
     let items = value.list_items().map_err(|error| anyhow!(error))?;
-    if items.len() != 3 {
-        bail!("memories must contain three values");
+    let mut flags = Vec::new();
+    for item in items {
+        flags.push(item.is_truthy());
     }
-    Ok([
-        items[0].is_truthy(),
-        items[1].is_truthy(),
-        items[2].is_truthy(),
-    ])
+    Ok(flags)
 }
 
 fn list<T>(root: &Value, key: &str, parse: fn(&Value) -> Result<T>) -> Result<Vec<T>> {

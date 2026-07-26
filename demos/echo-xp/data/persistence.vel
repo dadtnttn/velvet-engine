@@ -1,0 +1,50 @@
+// Save/Load state serialisation for ECHO//XP
+
+export function export_save() {
+    return {
+        "version": 1,
+        "seed": game_seed,
+        "phase": phase,
+        "operator_name": operator_name,
+        "mail_read": mail_read,
+        "case_file_read": case_file_read,
+        "photo_inspected": photo_inspected,
+        "tape_listened": tape_listened,
+        "deleted_file_found": deleted_file_found,
+        "classification": classification,
+        "classification_attempts": classification_attempts,
+        "case_complete": case_complete,
+        "truth_unlocked": truth_unlocked,
+        "anomaly_level": anomaly_level,
+        "system_corruption": system_corruption,
+        "name_swap": name_swap,
+        "time_glitch": time_glitch,
+        "extra_icon": extra_icon,
+        "save_revision": save_revision
+    }
+}
+
+export function load_game(data: map) {
+    game_seed = data.seed
+    phase = data.phase
+    operator_name = data.operator_name
+    mail_read = data.mail_read
+    case_file_read = data.case_file_read
+    photo_inspected = data.photo_inspected
+    tape_listened = data.tape_listened
+    deleted_file_found = data.deleted_file_found
+    classification = data.classification
+    classification_attempts = data.classification_attempts
+    case_complete = data.case_complete
+    truth_unlocked = data.truth_unlocked
+    anomaly_level = data.anomaly_level
+    system_corruption = data.system_corruption
+    name_swap = data.name_swap
+    time_glitch = data.time_glitch
+    extra_icon = data.extra_icon
+    save_revision = data.save_revision + 1
+
+    message = "SAVE STATE RESTORED"
+    message_kind = "info"
+    return snapshot()
+}

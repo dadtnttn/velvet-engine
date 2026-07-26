@@ -1,0 +1,116 @@
+// Flow control and transition logic for ECHO//XP
+
+export function new_game(seed: int) {
+    game_seed = seed
+    phase = "boot"
+    case_id = "CASE_001"
+    operator_name = "OPERATOR"
+    boot_complete = false
+    logged_in = false
+
+    mail_read = false
+    case_file_read = false
+    photo_inspected = false
+    tape_listened = false
+    deleted_file_found = false
+
+    classification = ""
+    classification_attempts = 0
+    case_complete = false
+    truth_unlocked = false
+
+    anomaly_level = 0
+    system_corruption = 0.0
+    save_revision = 1
+
+    message = "SYSTEM INITIALIZED"
+    message_kind = "info"
+    events = []
+
+    clippy_state = "idle"
+    clippy_dialog = "You have one unread assignment. Double-click Inbox to begin."
+
+    name_swap = false
+    time_glitch = false
+    extra_icon = false
+    subject_changed = false
+    operator_compromised = false
+
+    return snapshot()
+}
+
+export function complete_boot() {
+    boot_complete = true
+    phase = "login"
+    message = "WELCOME OPERATOR"
+    message_kind = "info"
+    return snapshot()
+}
+
+export function login() {
+    logged_in = true
+    phase = "desktop"
+    message = "SESSION STARTED"
+    message_kind = "info"
+    return snapshot()
+}
+
+export function open_app(app_id: string) {
+    events = [{"kind": "sound", "name": "menu"}]
+    if app_id == "inbox" {
+        clippy_state = "read"
+    }
+    return snapshot()
+}
+
+export function read_mail(mail_id: string) {
+    if mail_id == "mail_001" {
+        mail_read = true
+        events = [{"kind": "sound", "name": "notify"}]
+        check_anomalies()
+    }
+    return snapshot()
+}
+
+export function read_case_file(file_id: string) {
+    if file_id == "CASE_001_MARA_V" {
+        case_file_read = true
+        check_anomalies()
+    }
+    return snapshot()
+}
+
+export function inspect_photo(photo_id: string) {
+    if photo_id == "photo_mara_01" {
+        photo_inspected = true
+        check_anomalies()
+    }
+    return snapshot()
+}
+
+export function listen_tape(tape_id: string, progress: float) {
+    if tape_id == "tape_c17" && progress >= 0.5 {
+        tape_listened = true
+        check_anomalies()
+    }
+    return snapshot()
+}
+
+export function restore_deleted_file(file_id: string) {
+    if file_id == "ELISA_V_2004.tmp" {
+        deleted_file_found = true
+        anomaly_level += 1
+        name_swap = true
+        clippy_state = "weird"
+        clippy_dialog = "There has always been a second file."
+    }
+    return snapshot()
+}
+
+export function tick(dt: float, input: map) {
+    events = []
+    if system_corruption > 0.0 && phase == "complete" {
+        system_corruption = clamp(system_corruption + dt * 0.05, 0.0, 1.0)
+    }
+    return snapshot()
+}
