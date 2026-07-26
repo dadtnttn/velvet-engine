@@ -819,9 +819,9 @@ mod tests {
         for y in y0..y1 {
             for x in x0..x1 {
                 let p = pixels[(y * WW + x) as usize];
-                let r = ((p >> 16) & 0xFF) as u32;
-                let g = ((p >> 8) & 0xFF) as u32;
-                let b = (p & 0xFF) as u32;
+                let r = (p >> 16) & 0xFF;
+                let g = (p >> 8) & 0xFF;
+                let b = p & 0xFF;
                 if r > 120 && g > 70 && r > b {
                     copperish += 1;
                 }
