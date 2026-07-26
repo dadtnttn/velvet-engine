@@ -326,14 +326,17 @@ pub fn validate(stmts: &[Stmt], known_layers: &[&str], known_buttons: &[&str]) -
                     }
                 }
             }
-            Stmt::Raw { line: raw } if !raw.is_empty() && !raw.starts_with('}') => {
-                // soft warn only for obvious typos
-                if raw.contains("layer.") && !raw.contains('(') {
-                    issues.push(ScriptIssue {
-                        line,
-                        message: format!("looks incomplete: {raw}"),
-                    });
-                }
+            // Soft warn only for obvious typos.
+            Stmt::Raw { line: raw }
+                if !raw.is_empty()
+                    && !raw.starts_with('}')
+                    && raw.contains("layer.")
+                    && !raw.contains('(') =>
+            {
+                issues.push(ScriptIssue {
+                    line,
+                    message: format!("looks incomplete: {raw}"),
+                });
             }
             _ => {}
         }
