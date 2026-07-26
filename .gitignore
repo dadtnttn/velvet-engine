@@ -6,6 +6,9 @@ Cargo.lock.bak
 # IDE
 .idea/
 .vscode/
+node_modules/
+__pycache__/
+*.py[cod]
 *.swp
 *.swo
 .DS_Store
@@ -29,6 +32,20 @@ desktop.ini
 
 # Generated reports (keep intentional ones under docs/reports)
 /tmp/
+
+# Local demo media and generated captures (not distributed with the source)
+/artifacts/
+/demos/echo-xp/data/assets/
+/demos/rpg-quest/assets/
+/demos/sam-tomboy/data/assets/
+/demos/seventeen/assets/
+/tmp_pc_test.txt
+
+# Local-only asset preparation and model-training helpers
+/demos/echo-xp/tools/generate_win7_svg_assets.py
+/demos/rpg-quest/check_sam_training.ps1
+/demos/rpg-quest/patch_bottom_hud.py
+/demos/sam-tomboy/tools/
 
 # Local autonomous / agent scratch (do not publish)
 docs/engineering/AUTONOMOUS_STATUS.md
