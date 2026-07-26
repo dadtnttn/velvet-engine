@@ -134,10 +134,8 @@ pub fn build_model(source: &str, file: &str, cmds: &CommandRegistry) -> StudioMo
                     choices,
                 });
             }
-            TopItem::CharacterDecl { name, .. } => {
-                if !characters.contains(name) {
-                    characters.push(name.clone());
-                }
+            TopItem::CharacterDecl { name, .. } if !characters.contains(name) => {
+                characters.push(name.clone());
             }
             _ => {}
         }
