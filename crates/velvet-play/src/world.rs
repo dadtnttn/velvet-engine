@@ -227,11 +227,15 @@ impl PlayWorld {
             Vec2::ZERO,
             Vec2::new(self.map.world_width(), self.map.world_height()),
         );
-        // Use high ids for tiles
-        let mut tile_id = 1_000_000usize;
-        for (pos, col) in self.map.solid_colliders_in_aabb(world_rect) {
+        // Use high ids for tiles.
+        for (index, (pos, col)) in self
+            .map
+            .solid_colliders_in_aabb(world_rect)
+            .into_iter()
+            .enumerate()
+        {
+            let tile_id = 1_000_000usize + index;
             self.physics.push_solid(tile_id, pos, col);
-            tile_id += 1;
         }
         for e in self.entities.values() {
             if !e.alive {

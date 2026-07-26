@@ -103,7 +103,7 @@ impl SpriteBatch {
 
     /// Sort commands by z then texture id (stable batching).
     pub fn sort(&mut self) {
-        self.commands.sort_by(|a, b| a.sort_key.cmp(&b.sort_key));
+        self.commands.sort_by_key(|command| command.sort_key);
     }
 
     /// Iterate sorted commands, grouping consecutive same-texture runs.
@@ -168,7 +168,7 @@ impl SpriteBatch {
 
     /// Sort using expanded keys already stored on commands.
     pub fn sort_stable(&mut self) {
-        self.commands.sort_by(|a, b| a.sort_key.cmp(&b.sort_key));
+        self.commands.sort_by_key(|command| command.sort_key);
     }
 }
 

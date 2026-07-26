@@ -330,7 +330,7 @@ impl SaveStore {
                 }
             }
         }
-        out.sort_by(|a, b| b.saved_at_unix.cmp(&a.saved_at_unix));
+        out.sort_by_key(|save| std::cmp::Reverse(save.saved_at_unix));
         Ok(out)
     }
 
