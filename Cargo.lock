@@ -2527,6 +2527,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rpg-quest-vs3"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "velvet-script-vs3",
+ "velvet-vs3-app",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2924,6 +2933,20 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "summoner-emporium"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fontdue",
+ "image",
+ "serde",
+ "serde_json",
+ "softbuffer",
+ "velvet-script-vs3",
+ "winit",
+]
 
 [[package]]
 name = "symphonia"
@@ -3619,6 +3642,7 @@ dependencies = [
  "velvet-story",
  "velvet-story-lang",
  "velvet-style",
+ "velvet-vs3-app",
  "walkdir",
 ]
 
@@ -4186,6 +4210,19 @@ dependencies = [
  "velvet-math",
  "velvet-style",
  "velvet-text",
+]
+
+[[package]]
+name = "velvet-vs3-app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fontdue",
+ "image",
+ "softbuffer",
+ "tempfile",
+ "velvet-script-vs3",
+ "winit",
 ]
 
 [[package]]

@@ -1,0 +1,18 @@
+[package]
+name = "velvet-vs3-app"
+description = "Declarative VS3 application runtime: windows, resources, input and 2D primitives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+fontdue = "0.9"
+image = { workspace = true }
+softbuffer = { workspace = true }
+velvet-script-vs3 = { workspace = true }
+winit = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

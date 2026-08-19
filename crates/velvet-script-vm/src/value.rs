@@ -85,6 +85,32 @@ impl Value {
         self.memory_units_inner(&mut HashSet::new())
     }
 
+    /// O(1) cost for a value reference held on the VM stack.
+    ///
+    /// Lists and maps are shared `Rc<RefCell<_>>` handles. Charging their full
+    /// recursive graph every time the handle crosses the stack makes native
+    /// calls such as `list_push` quadratic. Persistent roots are still measured
+    /// deeply through [`Self::memory_units`].
+    pub fn stack_units(&self) -> usize {
+        match self {
+            Self::Null
+            | Self::Bool(_)
+            | Self::Int(_)
+            | Self::Float(_)
+            | Self::Function(_)
+            | Self::Native(_) => 1,
+            Self::Vec2(_) => 2,
+            Self::Vec3(_) => 3,
+            Self::Vec4(_) | Self::Quat(_) => 4,
+            Self::Mat3(_) => 9,
+            Self::Mat4(_) => 16,
+            Self::String(value) => 1 + value.len() / 8,
+            Self::List(values) => 1 + values.borrow().len(),
+            Self::Map(values) => 1 + values.borrow().len(),
+            Self::Rng(_) => 2,
+        }
+    }
+
     fn memory_units_inner(&self, seen: &mut HashSet<(u8, usize)>) -> usize {
         match self {
             Self::Null
