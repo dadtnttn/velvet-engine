@@ -1,5 +1,6 @@
 //! Velvet CLI — `velvet` command entry point.
 
+mod app_cmd;
 mod cards_cmd;
 mod crypto_cmd;
 mod doctor;
@@ -27,6 +28,7 @@ use tracing::info;
 use velvet_app::prelude::*;
 use velvet_core::{engine_version, RunMode};
 
+use app_cmd::{cmd_app_capture, cmd_app_check, cmd_app_run};
 use cards_cmd::{cmd_cards_validate, cmd_cards_zones};
 use crypto_cmd::{cmd_hybrid_fingerprint, cmd_hybrid_keygen, cmd_hybrid_open, cmd_hybrid_seal};
 use doctor::cmd_doctor;
@@ -100,6 +102,11 @@ enum Commands {
     Vs3 {
         #[command(subcommand)]
         command: Vs3Commands,
+    },
+    /// Run or validate a declarative Velvet Script 3 application.
+    App {
+        #[command(subcommand)]
+        command: AppCommands,
     },
     /// Velvet Story tools (writer-friendly narrative language → VS2).
     Story {
@@ -551,6 +558,39 @@ enum ScriptCommands {
 }
 
 #[derive(Subcommand, Debug)]
+enum AppCommands {
+    /// Validate the VS3 app contract, manifest, resources, and initial frame.
+    Check {
+        /// Package directory or `velvet.package.toml`.
+        path: PathBuf,
+    },
+    /// Run the package through the generic window/resource/render host.
+    Run {
+        /// Package directory or `velvet.package.toml`.
+        path: PathBuf,
+        /// Run without creating an OS window.
+        #[arg(long)]
+        headless: bool,
+        /// Number of headless frames; zero uses 60.
+        #[arg(long, default_value_t = 0)]
+        frames: u64,
+    },
+    /// Render a VS3 frame packet to a PNG without creating a window.
+    Capture {
+        /// Package directory or `velvet.package.toml`.
+        path: PathBuf,
+        /// PNG output path.
+        output: PathBuf,
+        /// Update this many frames before rendering.
+        #[arg(long, default_value_t = 0)]
+        frames: u64,
+        /// Invoke one declarative app action before rendering.
+        #[arg(long)]
+        action: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum Vs3Commands {
     /// Resolve versioned local dependencies and update `velvet.lock`.
     Lock {
@@ -762,6 +802,26 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Vs3 {
             command: Vs3Commands::Fmt { path },
         } => cmd_vs3_fmt(path),
+        Commands::App {
+            command: AppCommands::Check { path },
+        } => cmd_app_check(path),
+        Commands::App {
+            command:
+                AppCommands::Run {
+                    path,
+                    headless,
+                    frames,
+                },
+        } => cmd_app_run(path, headless, frames),
+        Commands::App {
+            command:
+                AppCommands::Capture {
+                    path,
+                    output,
+                    frames,
+                    action,
+                },
+        } => cmd_app_capture(path, output, frames, action),
         Commands::Story { lang, command } => {
             velvet_story_lang::apply_locale_from_env();
             let loc = if let Some(l) = lang {

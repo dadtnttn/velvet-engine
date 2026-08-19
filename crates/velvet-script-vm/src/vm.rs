@@ -242,7 +242,7 @@ impl Vm {
 
     /// Pop a value.
     pub fn pop_value(&mut self) -> Option<Value> {
-        self.stack.pop()
+        self.pop().ok()
     }
 
     /// Peek value from top (`distance` 0 = top).
@@ -265,7 +265,7 @@ impl Vm {
         })?;
         self.call_function(main, 0)?;
         self.execute()?;
-        let value = self.stack.pop().unwrap_or(Value::Null);
+        let value = self.pop().unwrap_or(Value::Null);
         Ok(VmOutput {
             value,
             printed: std::mem::take(&mut self.printed),
@@ -287,7 +287,7 @@ impl Vm {
         self.reset_execution_budget();
         self.call_function(main, 0)?;
         self.execute()?;
-        let _ = self.stack.pop();
+        let _ = self.pop();
         Ok(())
     }
 
@@ -310,7 +310,7 @@ impl Vm {
         }
         self.call_function(fidx, args.len() as u8)?;
         self.execute()?;
-        Ok(self.stack.pop().unwrap_or(Value::Null))
+        Ok(self.pop().unwrap_or(Value::Null))
     }
 
     /// Execute a single instruction.
@@ -360,10 +360,7 @@ impl Vm {
             Op::DefineGlobal => {
                 let idx = self.read_u16()? as usize;
                 let v = self.pop()?;
-                if idx >= self.globals.len() {
-                    self.globals.resize(idx + 1, Value::Null);
-                }
-                self.globals[idx] = v;
+                self.set_global_value(idx, v);
             }
             Op::GetGlobal => {
                 let idx = self.read_u16()? as usize;
@@ -389,10 +386,7 @@ impl Vm {
             Op::SetGlobal => {
                 let idx = self.read_u16()? as usize;
                 let v = self.peek(0)?.clone();
-                if idx >= self.globals.len() {
-                    self.globals.resize(idx + 1, Value::Null);
-                }
-                self.globals[idx] = v;
+                self.set_global_value(idx, v);
             }
             Op::GetLocal => {
                 let slot = self.read_u8()? as usize;
@@ -411,6 +405,11 @@ impl Vm {
                 if base + slot >= self.stack.len() {
                     return Err(self.runtime_err("bad local set"));
                 }
+                let old_units = self.stack[base + slot].stack_units();
+                let new_units = v.stack_units();
+                self.memory_units = self.memory_units.saturating_sub(old_units);
+                self.memory_units = self.memory_units.saturating_add(new_units);
+                self.ensure_memory_limit()?;
                 self.stack[base + slot] = v;
             }
             Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem => {
@@ -482,8 +481,8 @@ impl Vm {
             Op::Return => {
                 let result = self.pop()?;
                 let frame = self.frames.pop().unwrap();
-                // Trim stack to base (drop locals)
-                self.stack.truncate(frame.stack_base);
+                // Trim stack to base (drop locals) and release their budget.
+                self.truncate_stack(frame.stack_base);
                 self.push(result)?;
             }
             Op::MakeList => {
@@ -594,13 +593,15 @@ impl Vm {
             Value::Function(fidx) => {
                 let args_start = self.stack.len() - argc as usize;
                 let callee_idx = args_start - 1;
-                self.stack.remove(callee_idx);
+                let removed = self.stack.remove(callee_idx);
+                self.memory_units = self.memory_units.saturating_sub(removed.stack_units());
                 self.call_function(fidx, argc)?;
             }
             Value::Native(id) => {
                 let args_start = self.stack.len() - argc as usize;
                 let callee_idx = args_start - 1;
-                self.stack.remove(callee_idx);
+                let removed = self.stack.remove(callee_idx);
+                self.memory_units = self.memory_units.saturating_sub(removed.stack_units());
                 self.invoke_native(id, argc)?;
             }
             other => {
@@ -617,7 +618,7 @@ impl Vm {
         }
         let start = self.stack.len() - argc;
         let args: Vec<Value> = self.stack[start..].to_vec();
-        self.stack.truncate(start);
+        self.truncate_stack(start);
         let native = NativeId::from_u16(id)
             .ok_or_else(|| self.runtime_err(format!("unknown native id {id}")))?;
         if self.limits.sandbox
@@ -676,20 +677,48 @@ impl Vm {
         if self.stack.len() >= self.limits.max_stack {
             return Err(self.runtime_err("stack overflow"));
         }
-        self.memory_units += v.memory_units();
-        if self.memory_units > self.limits.max_memory_units {
-            return Err(VmError::MemoryLimit {
-                limit: self.limits.max_memory_units,
-            });
-        }
+        self.memory_units = self.memory_units.saturating_add(v.stack_units());
+        self.ensure_memory_limit()?;
         self.stack.push(v);
         Ok(())
     }
 
     fn pop(&mut self) -> Result<Value, VmError> {
-        self.stack
+        let value = self
+            .stack
             .pop()
-            .ok_or_else(|| self.runtime_err("stack underflow"))
+            .ok_or_else(|| self.runtime_err("stack underflow"))?;
+        self.memory_units = self.memory_units.saturating_sub(value.stack_units());
+        Ok(value)
+    }
+
+    fn truncate_stack(&mut self, new_len: usize) {
+        if new_len >= self.stack.len() {
+            return;
+        }
+        let released: usize = self.stack[new_len..].iter().map(Value::stack_units).sum();
+        self.memory_units = self.memory_units.saturating_sub(released);
+        self.stack.truncate(new_len);
+    }
+
+    fn set_global_value(&mut self, index: usize, value: Value) {
+        if index >= self.globals.len() {
+            self.globals.resize(index + 1, Value::Null);
+        }
+        let old_units = self.globals[index].memory_units().saturating_sub(1);
+        let new_units = value.memory_units().saturating_sub(1);
+        self.memory_units = self.memory_units.saturating_sub(old_units);
+        self.memory_units = self.memory_units.saturating_add(new_units);
+        self.globals[index] = value;
+    }
+
+    fn ensure_memory_limit(&self) -> Result<(), VmError> {
+        if self.memory_units > self.limits.max_memory_units {
+            return Err(VmError::MemoryLimit {
+                limit: self.limits.max_memory_units,
+            });
+        }
+        Ok(())
     }
 
     fn peek(&self, distance: usize) -> Result<&Value, VmError> {
@@ -1086,6 +1115,32 @@ function talk() {
             .and_then(|_| vm2.push_value(Value::String(std::rc::Rc::from("1234567890"))))
             .and_then(|_| vm2.push_value(Value::String(std::rc::Rc::from("1234567890"))));
         assert!(err.is_err(), "expected memory limit error, got {err:?}");
+    }
+
+    #[test]
+    fn large_shared_list_stack_accounting_is_linear() {
+        let src = r#"
+function build(n) {
+    let xs = []
+    let i = 0
+    while i < n {
+        list_push(xs, {"index": i, "label": concat("item-", str(i))})
+        i += 1
+    }
+    return len(xs)
+}
+"#;
+        let compiled = compile_source(src, None).unwrap();
+        let mut vm = Vm::new(
+            compiled.module,
+            VmLimits {
+                max_memory_units: 100_000,
+                max_instructions: 2_000_000,
+                ..Default::default()
+            },
+        );
+        let value = vm.call_name("build", &[Value::Int(2_000)]).unwrap();
+        assert_eq!(value, Value::Int(2_000));
     }
 
     #[test]
