@@ -1,0 +1,12 @@
+[package]
+name = "velvet-script-vs3-engine"
+description = "Optional VelvetEngine adapters for VS3: engine math conversions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+velvet-script-vs3 = { workspace = true }
+velvet-math = { workspace = true }
