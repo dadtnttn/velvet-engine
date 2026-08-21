@@ -35,9 +35,14 @@ desktop.ini
 
 # Local demo media and generated captures (not distributed with the source)
 /artifacts/
+/.local-tests/
+/output_sam_menu_v15_fixed_preview.png
 /demos/echo-xp/data/assets/
 /demos/rpg-quest/assets/
 /demos/sam-tomboy/data/assets/
+/demos/sam-tomboy/data/owned-assets/cg/
+/demos/sam-tomboy/artifacts/
+/demos/sam-tomboy/.local-tests/
 /demos/seventeen/assets/
 /tmp_pc_test.txt
 
