@@ -4084,13 +4084,21 @@ dependencies = [
  "thiserror 2.0.18",
  "toml",
  "velvet-crypto",
- "velvet-math",
  "velvet-script-ast",
  "velvet-script-bytecode",
  "velvet-script-compiler",
  "velvet-script-lexer",
  "velvet-script-parser",
  "velvet-script-vm",
+]
+
+[[package]]
+name = "velvet-script-vs3-engine"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
+ "velvet-math",
+ "velvet-script-vs3",
 ]
 
 [[package]]

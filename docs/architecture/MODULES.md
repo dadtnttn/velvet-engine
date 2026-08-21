@@ -18,6 +18,7 @@ This file is the compact inventory. The responsibility, retention rule, dependen
 | **velvet-ecs** | Entities, components, queries, events, change detection |
 | **velvet-scene** | Scenes, hierarchy, prefabs, transitions, async load FSM |
 | **velvet-script-*** | Lexer → parser → AST → HIR/types → bytecode → VM → format/LSP |
+| **velvet-script-vs3-engine** | **Optional** engine adapters for VS3: checked `velvet-math` conversions |
 | **velvet-story** | VN runtime: `StoryProgram` / `StoryPlayer` / saves / gallery |
 | **velvet-story-lang** | Writer `.vstory` → `StoryProgram` (product IR); Studio model; **boot** for CLI/runtime |
 | **velvet-play** | 2D play: tilemaps, physics, AI, pathfinding, particles |

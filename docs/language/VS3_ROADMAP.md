@@ -42,9 +42,11 @@ Deuda conocida:
 
 - Ya existen imports compartidos, módulos nominales con alias, llamadas `modulo.funcion()`, exportaciones explícitas, estado privado, resolución recursiva y detección de ciclos.
 - Las firmas de servicios externos no forman todavía un registro tipado común.
-- `velvet-script-vs3` contiene un puente directo hacia `velvet-math`.
+- Las conversiones `velvet-math` viven ahora en el adaptador opcional
+  `velvet-script-vs3-engine`; el núcleo ya no depende de `velvet-math`.
 - Las nativas antiguas `present_*`, `set_bg` y `ui_flag*` siguen disponibles
-  como adaptador heredado.
+  como adaptador heredado dentro de la VM; su extracción a módulo registrable
+  está pendiente.
 - `yield([service, payload])` es portable, pero poco descubrible sin esquemas.
 
 Estas excepciones no deben expandirse.
