@@ -21,9 +21,10 @@ pub use component::{Component, ComponentId, ComponentStorage};
 pub use entity::{Entity, EntityMeta};
 pub use events::{EventQueue, EventReader, EventWriter, Events};
 pub use query::{
-    all_with, any_with, collect_cloned, count_with, entities_with, entities_with2,
-    entities_with2_without, entities_with_without, find_with, first_with, for_each_mut,
-    map_components, partition_with, query2, query3, query4, Query, QueryIter,
+    all_with, any_with, collect_cloned, count_changed, count_with, entities_with, entities_with2,
+    entities_with2_without, entities_with_without, find_with, first_with, for_each_changed_mut,
+    for_each_mut, iter_changed, map_changed, map_components, partition_with, query2,
+    query2_changed, query3, query4, ChangedCursor, Query, QueryIter,
 };
 pub use registry::{ComponentMeta, ComponentRegistry, RegistryManifest};
 pub use world::World;

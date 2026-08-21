@@ -5,6 +5,6 @@ pub use crate::commands::{Command, CommandQueue};
 pub use crate::component::{Component, ComponentId};
 pub use crate::entity::{Entity, EntityMeta};
 pub use crate::events::{EventQueue, Events};
-pub use crate::query::{query2, query3, Query};
+pub use crate::query::{query2, query2_changed, query3, ChangedCursor, Query};
 pub use crate::registry::{ComponentMeta, ComponentRegistry};
 pub use crate::world::World;
