@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - Unreleased
 
+### Added
+
+- **Typed application states** (`velvet-app`): `init_state` / `set_state` /
+  `state` / `in_state`, pending transitions applied at frame start with
+  `StateTransitioned` events through the double-buffered registry.
+- **Change-filtered ECS queries** (`velvet-ecs`): `iter_changed`,
+  `query2_changed`, `map_changed`, `for_each_changed_mut`, `count_changed`,
+  and the reusable `ChangedCursor` over existing per-entity tick tracking.
+- **VS3 typed ABI slice**: `ModuleDescriptor` / `FunctionDescriptor` (params,
+  result type, purity, sync, cost, capabilities), `AbiRegistry` with
+  duplicate-service rejection, request validation, and a `SimulatedHost`
+  proven end-to-end driving real VS3 tasks without VelvetEngine.
+
 ### Fixed
 
 - **Workspace quality gate restored for demos**: removed invisible U+200B
