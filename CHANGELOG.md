@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - Unreleased
 
+### Fixed
+
+- **Workspace quality gate restored for demos**: removed invisible U+200B
+  characters from `sam-tomboy` localization strings, fixed rustfmt drift in
+  `sam-tomboy` / `summoner-emporium`, and cleared all clippy warnings so the
+  full workspace passes `clippy -D warnings` again.
+
 ### Changed
 
 - **Sand / cellular stack marked ALPHA** (`0.1.0-alpha.1`): `velvet-cellular`,
