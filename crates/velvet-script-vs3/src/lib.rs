@@ -10,11 +10,17 @@
 
 #![deny(missing_docs)]
 
+mod abi;
 mod bundle;
 mod lockfile;
 mod manifest;
 mod package_resolver;
 mod semantic;
+
+pub use abi::{
+    matches_abi_type, validate_request, AbiRegistry, CostClass, FunctionDescriptor,
+    ModuleDescriptor, ParamDescriptor, Purity, SimulatedHost, SyncKind, Vs3AbiType,
+};
 
 pub use lockfile::{Vs3LockedPackage, Vs3PackageLock, VS3_PACKAGE_LOCK};
 pub use manifest::{
@@ -476,11 +482,11 @@ impl HostRequest {
     }
 }
 
-fn valid_service_name(service: &str) -> bool {
+pub(crate) fn valid_service_name(service: &str) -> bool {
     !service.is_empty() && service.len() <= 128 && service.split('.').all(valid_service_segment)
 }
 
-fn valid_service_segment(segment: &str) -> bool {
+pub(crate) fn valid_service_segment(segment: &str) -> bool {
     let mut bytes = segment.bytes();
     let Some(first) = bytes.next() else {
         return false;
