@@ -21,6 +21,7 @@ mod ordering;
 mod plugin;
 mod schedule;
 mod stage;
+mod states;
 mod system;
 mod world_resources;
 
@@ -36,6 +37,7 @@ pub use ordering::{labels as system_labels, OrderError, SystemLabel, SystemOrder
 pub use plugin::{Plugin, PluginGroup, PluginRegistration};
 pub use schedule::{IntoSystemConfigs, ScheduleLabel, Schedules, SystemStage};
 pub use stage::{StageEdge, StageFrameStats, StageId, StageKey, StageSchedule};
+pub use states::{State, StateError, StateTransitioned, States};
 pub use system::{BoxedSystem, SystemFn, SystemId};
 pub use world_resources::{Res, ResMut, Resource, ResourceId, Resources};
 

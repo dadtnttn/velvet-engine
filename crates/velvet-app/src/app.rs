@@ -17,6 +17,7 @@ use crate::exclusive::{run_exclusive_commands, ExclusiveSystemQueue};
 use crate::ordering::SystemOrderGraph;
 use crate::plugin::{Plugin, PluginRegistration};
 use crate::schedule::{ScheduleLabel, Schedules};
+use crate::states::{State, StateError, StateFlusher, StateTransitioned, States};
 use crate::system::SystemId;
 use crate::world_resources::Resources;
 
@@ -85,6 +86,8 @@ pub struct App {
     exclusive_queue: ExclusiveSystemQueue,
     /// Resource change ticks.
     change_ticks: ChangeTicks,
+    /// Per-state-type flushers applied at frame start.
+    pub(crate) state_flushers: Vec<StateFlusher>,
 }
 
 impl Default for App {
@@ -114,6 +117,7 @@ impl App {
             order_graph: SystemOrderGraph::new(),
             exclusive_queue: ExclusiveSystemQueue::new(),
             change_ticks: ChangeTicks::new(),
+            state_flushers: Vec::new(),
         };
         app.resources.insert(Time::new());
         app.resources.insert(FixedTime::default());
@@ -205,6 +209,57 @@ impl App {
     /// Mark resource `T` as changed at the current tick.
     pub fn mark_resource_changed<T: crate::world_resources::Resource>(&mut self) {
         self.change_ticks.mark_changed::<T>();
+    }
+
+    /// Register a typed application state starting at `initial`.
+    ///
+    /// Idempotent: re-calling keeps the existing state untouched.
+    pub fn init_state<S: State>(&mut self, initial: S) -> &mut Self {
+        if !self.resources.contains::<States<S>>() {
+            self.resources.insert(States::new(initial));
+            self.events.add_event::<StateTransitioned<S>>();
+            self.state_flushers.push(Box::new(|app| {
+                let transition = match app.resources.get_mut::<States<S>>() {
+                    Some(container) => container
+                        .take_pending()
+                        .and_then(|next| container.apply(next)),
+                    None => return,
+                };
+                if let Some((from, to)) = transition {
+                    let writer = app.events.writer::<StateTransitioned<S>>();
+                    writer.send(StateTransitioned { from, to });
+                }
+            }));
+        }
+        self
+    }
+
+    /// Current value of state type `S`, if registered.
+    pub fn state<S: State>(&self) -> Option<&S> {
+        self.resources.get::<States<S>>().map(States::get)
+    }
+
+    /// Full state container for type `S` (current/previous/pending).
+    pub fn state_container<S: State>(&self) -> Option<&States<S>> {
+        self.resources.get::<States<S>>()
+    }
+
+    /// Queue a transition for state type `S`; applied on the next frame start.
+    pub fn set_state<S: State>(&mut self, next: S) -> Result<(), StateError> {
+        match self.resources.get_mut::<States<S>>() {
+            Some(container) => {
+                container.set(next);
+                Ok(())
+            }
+            None => Err(StateError {
+                type_name: std::any::type_name::<S>(),
+            }),
+        }
+    }
+
+    /// Whether state type `S` currently equals `value`.
+    pub fn in_state<S: State>(&self, value: &S) -> bool {
+        self.state::<S>().map(|s| s == value).unwrap_or(false)
     }
 
     /// Immutable resource.
@@ -408,6 +463,7 @@ impl App {
     /// Advance one frame with the given raw delta seconds.
     pub fn tick_frame(&mut self, raw_delta_secs: f32) {
         self.change_ticks.advance_world();
+        crate::states::flush_registered_states(self);
 
         {
             let time = self.resources.get_mut::<Time>().expect("Time resource");
