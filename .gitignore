@@ -56,3 +56,6 @@ desktop.ini
 docs/engineering/AUTONOMOUS_STATUS.md
 **/AUTONOMOUS_STATUS.md
 
+
+# Demon queen local run artifacts
+demos/demon-queen/.headless-ok
