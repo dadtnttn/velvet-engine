@@ -731,6 +731,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fontdue",
+ "image",
  "softbuffer",
  "velvet-script-vs3",
  "winit",
