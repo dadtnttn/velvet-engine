@@ -71,6 +71,7 @@ members = [
     "demos/rpg-quest-vs3",
     "demos/sam-tomboy",
     "demos/summoner-emporium",
+    "demos/demon-queen",
 ]
 default-members = [
     "crates/velvet-cli",
