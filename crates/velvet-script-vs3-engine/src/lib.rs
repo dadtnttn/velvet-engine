@@ -14,6 +14,10 @@
 
 #![deny(missing_docs)]
 
+mod host_modules;
+
+pub use host_modules::{input_module, time_module, InputModuleHost, TimeModuleHost};
+
 use thiserror::Error;
 use velvet_script_vs3::{mat3_val, mat4_val, vec2_val, vec3_val, Value};
 

@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   result type, purity, sync, cost, capabilities), `AbiRegistry` with
   duplicate-service rejection, request validation, and a `SimulatedHost`
   proven end-to-end driving real VS3 tasks without VelvetEngine.
+- **VS3 engine adapters crate** (`velvet-script-vs3-engine`): the checked
+  `velvet-math` bridge moved out of the language core (VS3 roadmap phase 3),
+  plus first host modules `velvet.time` and `velvet.input`: typed descriptors
+  with reference snapshot hosts validated per request, driven end-to-end by
+  real tasks under capability policies.
 
 ### Fixed
 
