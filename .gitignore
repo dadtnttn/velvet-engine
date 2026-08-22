@@ -59,3 +59,7 @@ docs/engineering/AUTONOMOUS_STATUS.md
 
 # Demon queen local run artifacts
 demos/demon-queen/.headless-ok
+
+# Demon queen local media
+/demos/demon-queen/data/assets/
+/demos/demon-queen/.local-tests/
