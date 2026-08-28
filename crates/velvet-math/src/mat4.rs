@@ -98,6 +98,83 @@ impl Mat4 {
         }
     }
 
+    /// Rotation from a normalized `(x, y, z, w)` quaternion.
+    pub fn from_quaternion(quaternion: [f32; 4]) -> Self {
+        let [x, y, z, w] = quaternion;
+        let length = (x * x + y * y + z * z + w * w).sqrt();
+        if length <= 1e-8 {
+            return Self::IDENTITY;
+        }
+        let x = x / length;
+        let y = y / length;
+        let z = z / length;
+        let w = w / length;
+        let xx = x * x;
+        let yy = y * y;
+        let zz = z * z;
+        let xy = x * y;
+        let xz = x * z;
+        let yz = y * z;
+        let wx = w * x;
+        let wy = w * y;
+        let wz = w * z;
+        Self {
+            x_axis: [1.0 - 2.0 * (yy + zz), 2.0 * (xy + wz), 2.0 * (xz - wy), 0.0],
+            y_axis: [2.0 * (xy - wz), 1.0 - 2.0 * (xx + zz), 2.0 * (yz + wx), 0.0],
+            z_axis: [2.0 * (xz + wy), 2.0 * (yz - wx), 1.0 - 2.0 * (xx + yy), 0.0],
+            w_axis: [0.0, 0.0, 0.0, 1.0],
+        }
+    }
+
+    /// Rotation about X (right-handed, radians).
+    pub fn from_rotation_x(radians: f32) -> Self {
+        let (s, c) = radians.sin_cos();
+        Self {
+            x_axis: [1.0, 0.0, 0.0, 0.0],
+            y_axis: [0.0, c, s, 0.0],
+            z_axis: [0.0, -s, c, 0.0],
+            w_axis: [0.0, 0.0, 0.0, 1.0],
+        }
+    }
+
+    /// Rotation about Y (right-handed, radians).
+    pub fn from_rotation_y(radians: f32) -> Self {
+        let (s, c) = radians.sin_cos();
+        Self {
+            x_axis: [c, 0.0, -s, 0.0],
+            y_axis: [0.0, 1.0, 0.0, 0.0],
+            z_axis: [s, 0.0, c, 0.0],
+            w_axis: [0.0, 0.0, 0.0, 1.0],
+        }
+    }
+
+    /// Right-handed perspective projection for wgpu's `[0, 1]` depth range.
+    pub fn perspective_rh(fov_y_radians: f32, aspect: f32, near: f32, far: f32) -> Self {
+        let aspect = aspect.max(1e-6);
+        let near = near.max(1e-5);
+        let far = far.max(near + 1e-5);
+        let f = 1.0 / (fov_y_radians * 0.5).tan().max(1e-6);
+        Self {
+            x_axis: [f / aspect, 0.0, 0.0, 0.0],
+            y_axis: [0.0, f, 0.0, 0.0],
+            z_axis: [0.0, 0.0, far / (near - far), -1.0],
+            w_axis: [0.0, 0.0, (near * far) / (near - far), 0.0],
+        }
+    }
+
+    /// Right-handed look-at view matrix.
+    pub fn look_at_rh(eye: Vec3, target: Vec3, up: Vec3) -> Self {
+        let forward = (target - eye).normalize_or_zero();
+        let right = forward.cross(up).normalize_or_zero();
+        let up = right.cross(forward);
+        Self {
+            x_axis: [right.x, up.x, -forward.x, 0.0],
+            y_axis: [right.y, up.y, -forward.y, 0.0],
+            z_axis: [right.z, up.z, -forward.z, 0.0],
+            w_axis: [-right.dot(eye), -up.dot(eye), forward.dot(eye), 1.0],
+        }
+    }
+
     /// TRS for 2D: translate * rotate_z * scale.
     pub fn from_scale_angle_translation_2d(scale: Vec2, angle: f32, translation: Vec2) -> Self {
         Self::from_translation_2d(translation)
@@ -127,6 +204,31 @@ impl Mat4 {
                 -(far + near) / fn_,
                 1.0,
             ],
+        }
+    }
+
+    /// Right-handed orthographic projection using wgpu's `[0, 1]` depth range.
+    ///
+    /// View-space points in front of the camera have negative Z. `-near` maps
+    /// to depth `0`, while `-far` maps to depth `1`.
+    pub fn orthographic_rh_zo(
+        left: f32,
+        right: f32,
+        bottom: f32,
+        top: f32,
+        near: f32,
+        far: f32,
+    ) -> Self {
+        let rl = (right - left).max(1e-6);
+        let tb = (top - bottom).max(1e-6);
+        let near = near.max(0.0);
+        let far = far.max(near + 1e-6);
+        let nf = near - far;
+        Self {
+            x_axis: [2.0 / rl, 0.0, 0.0, 0.0],
+            y_axis: [0.0, 2.0 / tb, 0.0, 0.0],
+            z_axis: [0.0, 0.0, 1.0 / nf, 0.0],
+            w_axis: [-(right + left) / rl, -(top + bottom) / tb, near / nf, 1.0],
         }
     }
 
@@ -198,6 +300,15 @@ impl Mat4 {
         } else {
             Vec3::new(x, y, z)
         }
+    }
+
+    /// Transform a 3D direction (w=0), ignoring translation.
+    pub fn transform_vector3(self, v: Vec3) -> Vec3 {
+        Vec3::new(
+            self.x_axis[0] * v.x + self.y_axis[0] * v.y + self.z_axis[0] * v.z,
+            self.x_axis[1] * v.x + self.y_axis[1] * v.y + self.z_axis[1] * v.z,
+            self.x_axis[2] * v.x + self.y_axis[2] * v.y + self.z_axis[2] * v.z,
+        )
     }
 
     /// Transform a 2D vector (w=0).
@@ -437,6 +548,15 @@ mod tests {
         assert!(p.y.abs() < 1e-4);
         let edge = m.transform_point2(Vec2::new(50.0, 0.0));
         assert!((edge.x - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn orthographic_zero_to_one_maps_depth_planes() {
+        let projection = Mat4::orthographic_rh_zo(-2.0, 2.0, -1.0, 1.0, 0.5, 20.0);
+        let near = projection.transform_point3(Vec3::new(0.0, 0.0, -0.5));
+        let far = projection.transform_point3(Vec3::new(0.0, 0.0, -20.0));
+        assert!(near.z.abs() < 1e-5, "near depth={}", near.z);
+        assert!((far.z - 1.0).abs() < 1e-5, "far depth={}", far.z);
     }
 
     #[test]
