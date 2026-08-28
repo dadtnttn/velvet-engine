@@ -1,7 +1,7 @@
 //! # velvet-render
 //!
-//! Modern 2D renderer built on `wgpu`: sprites, cameras, virtual resolution,
-//! batching, and named quality profiles.
+//! Modern 2D/3D renderer built on `wgpu`: sprites, meshes, cameras, virtual
+//! resolution, batching, depth testing, and named quality profiles.
 
 #![deny(missing_docs)]
 
@@ -14,12 +14,14 @@ mod debug_overlay;
 mod gpu;
 mod letterbox;
 mod material;
+mod mesh3d;
 mod particles;
 mod plugin;
 mod postprocess;
 mod product_batch;
 mod profile;
 mod render_plan;
+mod software;
 mod sort_key;
 mod sprite;
 mod stats;
@@ -38,12 +40,18 @@ pub use debug_overlay::{DebugOverlay, DebugShape, DebugTextLine};
 pub use gpu::{GpuContext, GpuError, RenderSurface, SurfaceFrame};
 pub use letterbox::{compute_letterbox, Letterbox, ScalingMode};
 pub use material::{BlendMode, Material};
+pub use mesh3d::{
+    AnimationClip3D, Camera3D, GltfModel, Lighting3D, Material3D, Mesh3D, MeshDraw3D, MeshHandle,
+    MeshVertex3D, Render3DError, SkinWeights3D, TextureData3D, TextureHandle, Transform3D,
+    Wgpu3DRenderer,
+};
 pub use particles::{Particle, ParticleBatch, ParticleEmitter, ParticleGpu};
 pub use plugin::RenderPlugin;
 pub use postprocess::{PostEffect, PostProcessStack};
 pub use product_batch::{count_positive_quads, fill_batch_from_product_quads, ProductGpuQuad};
 pub use profile::RenderProfile;
 pub use render_plan::{CameraPass, ClearMode, RenderPlan, Viewport};
+pub use software::{SoftwarePresenter, SoftwareScalingFilter, SoftwareViewport};
 pub use sort_key::{
     build_sort_key, cmp_sort_keys, pack_z_texture, quantize_y_key, sort_by_key, SortLayers,
 };
