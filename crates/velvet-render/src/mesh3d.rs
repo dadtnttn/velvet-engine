@@ -356,6 +356,304 @@ impl Default for Atmosphere3D {
     }
 }
 
+/// Reusable visual mood for a 3D scene.
+///
+/// Presets only describe lighting, fog, and the clear colour.  They do not
+/// select meshes or materials, so a game can swap the atmosphere without
+/// rebuilding its world assets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnvironmentPreset3D {
+    /// Lush, misty daylight used by the living nature scene.
+    Lived,
+    /// Purple/red nightfall suited to demonic rooms and battlefields.
+    Demonic,
+}
+
+impl Default for EnvironmentPreset3D {
+    fn default() -> Self {
+        Self::Lived
+    }
+}
+
+impl EnvironmentPreset3D {
+    /// Human-readable name suitable for a debug title or settings menu.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Lived => "Vivida",
+            Self::Demonic => "Demoníaca",
+        }
+    }
+
+    /// Sample this preset at a point in the day/night cycle.
+    ///
+    /// `phase` wraps at one: `0.0` is midnight, `0.5` is noon.  Values outside
+    /// that range are accepted, which makes callers free to feed an unwrapped
+    /// clock directly into the sampler.
+    pub fn sample(self, phase: f32) -> EnvironmentFrame3D {
+        let phase = if phase.is_finite() {
+            phase.rem_euclid(1.0)
+        } else {
+            0.5
+        };
+        let daylight = daylight_factor(phase);
+        match self {
+            Self::Lived => environment_frame(
+                Lighting3D {
+                    direction_to_light: Vec3::new(-0.42, 0.96, 0.24),
+                    key_color: [1.30, 1.18, 0.88],
+                    ambient_color: [0.35, 0.45, 0.32],
+                    bounce_color: [0.12, 0.22, 0.10],
+                    shadow_extent: 28.0,
+                },
+                Lighting3D {
+                    direction_to_light: Vec3::new(0.24, 0.55, -0.62),
+                    key_color: [0.18, 0.26, 0.42],
+                    ambient_color: [0.08, 0.14, 0.22],
+                    bounce_color: [0.06, 0.10, 0.14],
+                    shadow_extent: 24.0,
+                },
+                Atmosphere3D {
+                    fog_color: [0.20, 0.31, 0.25],
+                    fog_start: 19.0,
+                    fog_end: 54.0,
+                    fog_density: 0.0028,
+                    height_falloff: 0.016,
+                },
+                Atmosphere3D {
+                    fog_color: [0.06, 0.09, 0.16],
+                    fog_start: 12.0,
+                    fog_end: 42.0,
+                    fog_density: 0.004,
+                    height_falloff: 0.024,
+                },
+                [0.035, 0.080, 0.095, 1.0],
+                [0.006, 0.012, 0.035, 1.0],
+                daylight,
+            ),
+            Self::Demonic => environment_frame(
+                Lighting3D {
+                    direction_to_light: Vec3::new(-0.56, 0.86, 0.18),
+                    key_color: [1.22, 0.70, 0.78],
+                    ambient_color: [0.30, 0.12, 0.38],
+                    bounce_color: [0.24, 0.035, 0.16],
+                    shadow_extent: 28.0,
+                },
+                Lighting3D {
+                    direction_to_light: Vec3::new(0.24, 0.48, -0.60),
+                    key_color: [0.32, 0.07, 0.18],
+                    ambient_color: [0.11, 0.03, 0.20],
+                    bounce_color: [0.17, 0.015, 0.08],
+                    shadow_extent: 24.0,
+                },
+                Atmosphere3D {
+                    fog_color: [0.24, 0.07, 0.19],
+                    fog_start: 15.0,
+                    fog_end: 48.0,
+                    fog_density: 0.004,
+                    height_falloff: 0.022,
+                },
+                Atmosphere3D {
+                    fog_color: [0.08, 0.008, 0.075],
+                    fog_start: 9.0,
+                    fog_end: 38.0,
+                    fog_density: 0.006,
+                    height_falloff: 0.032,
+                },
+                [0.12, 0.018, 0.12, 1.0],
+                [0.018, 0.002, 0.035, 1.0],
+                daylight,
+            ),
+        }
+    }
+}
+
+/// Lighting and atmospheric values resolved for one instant.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EnvironmentFrame3D {
+    /// Directional, ambient, and bounce lighting for the frame.
+    pub lighting: Lighting3D,
+    /// Distance haze for the frame.
+    pub atmosphere: Atmosphere3D,
+    /// RGBA clear colour in linear-ish 0..=1 components.
+    pub clear_color: [f32; 4],
+}
+
+impl Default for EnvironmentFrame3D {
+    fn default() -> Self {
+        EnvironmentPreset3D::Lived.sample(0.5)
+    }
+}
+
+/// Small reusable day/night clock that resolves an [`EnvironmentPreset3D`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DayNightCycle3D {
+    preset: EnvironmentPreset3D,
+    phase: f32,
+    cycle_seconds: f32,
+}
+
+impl Default for DayNightCycle3D {
+    fn default() -> Self {
+        Self::new(EnvironmentPreset3D::Lived, 180.0)
+    }
+}
+
+impl DayNightCycle3D {
+    /// Create a cycle beginning at noon.
+    ///
+    /// A cycle shorter than one second is clamped to one second to keep an
+    /// accidental zero duration from producing infinities.
+    pub fn new(preset: EnvironmentPreset3D, cycle_seconds: f32) -> Self {
+        Self {
+            preset,
+            phase: 0.5,
+            cycle_seconds: sanitize_cycle_seconds(cycle_seconds),
+        }
+    }
+
+    /// Preset currently resolved by this cycle.
+    pub const fn preset(self) -> EnvironmentPreset3D {
+        self.preset
+    }
+
+    /// Select a different visual preset without changing time of day.
+    pub fn set_preset(&mut self, preset: EnvironmentPreset3D) {
+        self.preset = preset;
+    }
+
+    /// Normalized clock phase (`0.0` midnight, `0.5` noon).
+    pub const fn phase(self) -> f32 {
+        self.phase
+    }
+
+    /// Set the normalized clock phase. Non-finite values are ignored.
+    pub fn set_phase(&mut self, phase: f32) {
+        if phase.is_finite() {
+            self.phase = phase.rem_euclid(1.0);
+        }
+    }
+
+    /// Duration of one complete day/night cycle in seconds.
+    pub const fn cycle_seconds(self) -> f32 {
+        self.cycle_seconds
+    }
+
+    /// Set the cycle duration, clamped to at least one second.
+    pub fn set_cycle_seconds(&mut self, cycle_seconds: f32) {
+        if cycle_seconds.is_finite() {
+            self.cycle_seconds = cycle_seconds.max(1.0);
+        }
+    }
+
+    /// Advance the clock by elapsed seconds and wrap at one day.
+    pub fn advance(&mut self, delta_seconds: f32) {
+        if delta_seconds.is_finite() {
+            self.phase = (self.phase + delta_seconds / self.cycle_seconds).rem_euclid(1.0);
+        }
+    }
+
+    /// Resolve the current preset and phase into render-ready values.
+    pub fn sample(self) -> EnvironmentFrame3D {
+        self.preset.sample(self.phase)
+    }
+}
+
+fn sanitize_cycle_seconds(seconds: f32) -> f32 {
+    if seconds.is_finite() {
+        seconds.max(1.0)
+    } else {
+        180.0
+    }
+}
+
+fn daylight_factor(phase: f32) -> f32 {
+    let sun = ((phase * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2).sin() * 0.5 + 0.5)
+        .clamp(0.0, 1.0);
+    let t = ((sun - 0.08) / 0.84).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+fn mix_f32(day: f32, night: f32, daylight: f32) -> f32 {
+    night + (day - night) * daylight
+}
+
+fn mix_color3(day: [f32; 3], night: [f32; 3], daylight: f32) -> [f32; 3] {
+    [
+        mix_f32(day[0], night[0], daylight),
+        mix_f32(day[1], night[1], daylight),
+        mix_f32(day[2], night[2], daylight),
+    ]
+}
+
+fn mix_vec3(day: Vec3, night: Vec3, daylight: f32) -> Vec3 {
+    day.lerp(night, 1.0 - daylight).normalize_or_zero()
+}
+
+fn environment_frame(
+    day_lighting: Lighting3D,
+    night_lighting: Lighting3D,
+    day_atmosphere: Atmosphere3D,
+    night_atmosphere: Atmosphere3D,
+    day_clear: [f32; 4],
+    night_clear: [f32; 4],
+    daylight: f32,
+) -> EnvironmentFrame3D {
+    EnvironmentFrame3D {
+        lighting: Lighting3D {
+            direction_to_light: mix_vec3(
+                day_lighting.direction_to_light,
+                night_lighting.direction_to_light,
+                daylight,
+            ),
+            key_color: mix_color3(day_lighting.key_color, night_lighting.key_color, daylight),
+            ambient_color: mix_color3(
+                day_lighting.ambient_color,
+                night_lighting.ambient_color,
+                daylight,
+            ),
+            bounce_color: mix_color3(
+                day_lighting.bounce_color,
+                night_lighting.bounce_color,
+                daylight,
+            ),
+            shadow_extent: mix_f32(
+                day_lighting.shadow_extent,
+                night_lighting.shadow_extent,
+                daylight,
+            ),
+        },
+        atmosphere: Atmosphere3D {
+            fog_color: mix_color3(
+                day_atmosphere.fog_color,
+                night_atmosphere.fog_color,
+                daylight,
+            ),
+            fog_start: mix_f32(
+                day_atmosphere.fog_start,
+                night_atmosphere.fog_start,
+                daylight,
+            ),
+            fog_end: mix_f32(day_atmosphere.fog_end, night_atmosphere.fog_end, daylight),
+            fog_density: mix_f32(
+                day_atmosphere.fog_density,
+                night_atmosphere.fog_density,
+                daylight,
+            ),
+            height_falloff: mix_f32(
+                day_atmosphere.height_falloff,
+                night_atmosphere.height_falloff,
+                daylight,
+            ),
+        },
+        clear_color: [
+            mix_f32(day_clear[0], night_clear[0], daylight),
+            mix_f32(day_clear[1], night_clear[1], daylight),
+            mix_f32(day_clear[2], night_clear[2], daylight),
+            mix_f32(day_clear[3], night_clear[3], daylight),
+        ],
+    }
+}
+
 /// A mesh uploaded to the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MeshHandle(u32);
@@ -1136,9 +1434,13 @@ impl Wgpu3DRenderer {
             });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("velvet-3d-linear-sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            // World surfaces deliberately use UVs outside 0..1 so a small
+            // 1K albedo can tile across a large terrain without stretching.
+            // Repeating is also the conventional glTF default for authored
+            // material UVs; assets that stay inside 0..1 render unchanged.
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::FilterMode::Linear,
@@ -1503,6 +1805,39 @@ impl Wgpu3DRenderer {
             Atmosphere3D::default(),
             draws,
             clear,
+        );
+    }
+
+    /// Render one 3D pass from a resolved environment frame.
+    ///
+    /// This is the one-call path for games that use [`DayNightCycle3D`]: the
+    /// renderer applies its lighting, fog, and clear colour together so each
+    /// scene does not need to duplicate conversion glue.
+    pub fn render_with_environment(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: &wgpu::TextureView,
+        size: (u32, u32),
+        camera: Camera3D,
+        environment: EnvironmentFrame3D,
+        draws: &[MeshDraw3D],
+    ) {
+        self.render_with_atmosphere(
+            device,
+            queue,
+            target,
+            size,
+            camera,
+            environment.lighting,
+            environment.atmosphere,
+            draws,
+            wgpu::Color {
+                r: f64::from(environment.clear_color[0]),
+                g: f64::from(environment.clear_color[1]),
+                b: f64::from(environment.clear_color[2]),
+                a: f64::from(environment.clear_color[3]),
+            },
         );
     }
 
@@ -1905,6 +2240,43 @@ mod tests {
         let camera = Camera3D::default();
         let values = camera.view_projection(16.0 / 9.0).to_cols_array();
         assert!(values.iter().all(|value| value.is_finite()));
+    }
+
+    #[test]
+    fn environment_presets_have_distinct_palettes() {
+        let lived = EnvironmentPreset3D::Lived.sample(0.5);
+        let demonic = EnvironmentPreset3D::Demonic.sample(0.5);
+        assert_eq!(EnvironmentPreset3D::Lived.label(), "Vivida");
+        assert_eq!(EnvironmentPreset3D::Demonic.label(), "Demoníaca");
+        assert_ne!(lived.clear_color, demonic.clear_color);
+        assert_ne!(lived.atmosphere.fog_color, demonic.atmosphere.fog_color);
+        assert_ne!(lived.lighting.ambient_color, demonic.lighting.ambient_color);
+    }
+
+    #[test]
+    fn day_night_cycle_wraps_phase() {
+        let mut cycle = DayNightCycle3D::new(EnvironmentPreset3D::Lived, 10.0);
+        cycle.set_phase(0.95);
+        cycle.advance(1.0);
+        assert!((cycle.phase() - 0.05).abs() < 1e-6);
+        cycle.advance(f32::NAN);
+        assert!((cycle.phase() - 0.05).abs() < 1e-6);
+    }
+
+    #[test]
+    fn environment_samples_stay_finite_across_cycle() {
+        for preset in [EnvironmentPreset3D::Lived, EnvironmentPreset3D::Demonic] {
+            for phase in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                let frame = preset.sample(phase);
+                assert!(frame.lighting.direction_to_light.length() > 0.99);
+                assert!(frame.clear_color.iter().all(|value| value.is_finite()));
+                assert!(frame
+                    .atmosphere
+                    .fog_color
+                    .iter()
+                    .all(|value| value.is_finite()));
+            }
+        }
     }
 
     #[test]
