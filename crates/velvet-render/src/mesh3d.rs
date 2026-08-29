@@ -325,6 +325,37 @@ impl Default for Lighting3D {
     }
 }
 
+/// Distance-based atmospheric haze for a 3D pass.
+///
+/// The default keeps the renderer backwards-compatible: fog starts beyond the
+/// practical camera range and density is zero.  Callers that want a visible
+/// atmosphere can use [`Wgpu3DRenderer::render_with_atmosphere`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Atmosphere3D {
+    /// Linear RGB color that distant geometry fades toward.
+    pub fog_color: [f32; 3],
+    /// Distance where the linear haze ramp begins.
+    pub fog_start: f32,
+    /// Distance where the linear haze ramp reaches full strength.
+    pub fog_end: f32,
+    /// Exponential distance haze contribution.
+    pub fog_density: f32,
+    /// Extra haze applied to tall silhouettes, useful for treelines/mist.
+    pub height_falloff: f32,
+}
+
+impl Default for Atmosphere3D {
+    fn default() -> Self {
+        Self {
+            fog_color: [0.0, 0.0, 0.0],
+            fog_start: 100_000.0,
+            fog_end: 100_001.0,
+            fog_density: 0.0,
+            height_falloff: 0.0,
+        }
+    }
+}
+
 /// A mesh uploaded to the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MeshHandle(u32);
@@ -408,6 +439,8 @@ struct CameraUniform {
     light_color: [f32; 4],
     ambient_color: [f32; 4],
     bounce_color: [f32; 4],
+    fog_color: [f32; 4],
+    fog_params: [f32; 4],
 }
 
 #[repr(C)]
@@ -928,7 +961,33 @@ fn parse_gltf(
         .iter()
         .map(|clip| clip.name.clone())
         .collect();
-    let textures = images.into_iter().map(texture_data).collect();
+    // Keep only images that are actually used as base colour textures. glTF
+    // files commonly include normal/ORM maps as separate images, while this
+    // deliberately small renderer currently consumes albedo only. Compacting
+    // here keeps mesh texture indices valid and avoids retaining/uploading
+    // several unused full-resolution maps per prop.
+    let mut image_remap = vec![None; images.len()];
+    let mut used_images = Vec::new();
+    for mesh in &meshes {
+        let Some(source_index) = mesh.texture_index else {
+            continue;
+        };
+        if source_index < image_remap.len() && image_remap[source_index].is_none() {
+            image_remap[source_index] = Some(used_images.len());
+            used_images.push(source_index);
+        }
+    }
+    for mesh in &mut meshes {
+        mesh.texture_index = mesh
+            .texture_index
+            .and_then(|source_index| image_remap.get(source_index).copied().flatten());
+    }
+    let mut images = images.into_iter().map(Some).collect::<Vec<_>>();
+    let textures = used_images
+        .into_iter()
+        .filter_map(|source_index| images.get_mut(source_index)?.take())
+        .map(texture_data)
+        .collect();
     Ok(GltfModel {
         meshes,
         animations,
@@ -1434,6 +1493,32 @@ impl Wgpu3DRenderer {
         draws: &[MeshDraw3D],
         clear: wgpu::Color,
     ) {
+        self.render_with_atmosphere(
+            device,
+            queue,
+            target,
+            size,
+            camera,
+            lighting,
+            Atmosphere3D::default(),
+            draws,
+            clear,
+        );
+    }
+
+    /// Render one 3D pass with distance and height-based atmospheric haze.
+    pub fn render_with_atmosphere(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: &wgpu::TextureView,
+        size: (u32, u32),
+        camera: Camera3D,
+        lighting: Lighting3D,
+        atmosphere: Atmosphere3D,
+        draws: &[MeshDraw3D],
+        clear: wgpu::Color,
+    ) {
         self.resize(device, size);
         self.ensure_object_capacity(device, draws.len());
         let aspect = size.0.max(1) as f32 / size.1.max(1) as f32;
@@ -1474,6 +1559,20 @@ impl Wgpu3DRenderer {
                 lighting.bounce_color[1],
                 lighting.bounce_color[2],
                 1.0,
+            ],
+            fog_color: [
+                atmosphere.fog_color[0],
+                atmosphere.fog_color[1],
+                atmosphere.fog_color[2],
+                1.0,
+            ],
+            fog_params: [
+                atmosphere.fog_start.max(0.0),
+                atmosphere
+                    .fog_end
+                    .max(atmosphere.fog_start.max(0.0) + 0.001),
+                atmosphere.fog_density.max(0.0),
+                atmosphere.height_falloff.max(0.0),
             ],
         };
         queue.write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
@@ -1680,6 +1779,8 @@ struct Camera {
     light_color: vec4<f32>,
     ambient_color: vec4<f32>,
     bounce_color: vec4<f32>,
+    fog_color: vec4<f32>,
+    fog_params: vec4<f32>,
 };
 struct Object { model: mat4x4<f32>, base_color: vec4<f32>, };
 @group(0) @binding(0) var<uniform> camera: Camera;
@@ -1757,7 +1858,14 @@ fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
     let rim = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.10;
     let albedo = textureSample(albedo_texture, albedo_sampler, input.uv);
     let base = object.base_color.rgb * input.color.rgb * albedo.rgb;
-    let color = base * (sky + bounce + direct) + camera.light_color.rgb * specular + camera.ambient_color.rgb * rim;
+    let lit_color = base * (sky + bounce + direct) + camera.light_color.rgb * specular + camera.ambient_color.rgb * rim;
+    let distance_to_camera = length(camera.camera_position.xyz - input.world_position);
+    let fog_span = max(camera.fog_params.y - camera.fog_params.x, 0.001);
+    let linear_fog = clamp((distance_to_camera - camera.fog_params.x) / fog_span, 0.0, 1.0);
+    let exponential_fog = 1.0 - exp(-distance_to_camera * max(camera.fog_params.z, 0.0));
+    let height_fog = clamp(max(input.world_position.y - 0.15, 0.0) * camera.fog_params.w, 0.0, 1.0);
+    let fog_factor = clamp(max(linear_fog, exponential_fog * 0.55) + linear_fog * height_fog * 0.35, 0.0, 1.0);
+    let color = mix(lit_color, camera.fog_color.rgb, fog_factor);
     return vec4<f32>(color, object.base_color.a * input.color.a * albedo.a);
 }
 "#;
@@ -1771,6 +1879,8 @@ struct Camera {
     light_color: vec4<f32>,
     ambient_color: vec4<f32>,
     bounce_color: vec4<f32>,
+    fog_color: vec4<f32>,
+    fog_params: vec4<f32>,
 };
 struct Object { model: mat4x4<f32>, base_color: vec4<f32>, };
 @group(0) @binding(0) var<uniform> camera: Camera;
