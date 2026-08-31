@@ -41,10 +41,10 @@ pub use gpu::{GpuContext, GpuError, RenderSurface, SurfaceFrame};
 pub use letterbox::{compute_letterbox, Letterbox, ScalingMode};
 pub use material::{BlendMode, Material};
 pub use mesh3d::{
-    AnimationClip3D, Atmosphere3D, Camera3D, DayNightCycle3D, EnvironmentFrame3D,
+    AnimationClip3D, Atmosphere3D, Camera3D, Celestial3D, DayNightCycle3D, EnvironmentFrame3D,
     EnvironmentPreset3D, GltfModel, Lighting3D, Material3D, Mesh3D, MeshDraw3D, MeshHandle,
-    MeshVertex3D, Render3DError, SkinWeights3D, TextureData3D, TextureHandle, Transform3D,
-    Wgpu3DRenderer,
+    MeshVertex3D, PointLight3D, Render3DError, SkinWeights3D, TextureData3D, TextureHandle,
+    Transform3D, Wgpu3DRenderer,
 };
 pub use particles::{Particle, ParticleBatch, ParticleEmitter, ParticleGpu};
 pub use plugin::RenderPlugin;
