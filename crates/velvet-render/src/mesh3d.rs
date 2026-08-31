@@ -166,6 +166,52 @@ impl Mesh3D {
             skinning: None,
         }
     }
+
+    /// Build a low-poly UV sphere centered on the origin.
+    ///
+    /// The primitive is intentionally modest (latitudinal rings and a
+    /// longitudinal seam) so it is suitable for distant sun/moon discs and
+    /// other lightweight atmospheric props.
+    pub fn uv_sphere(radius: f32, segments: usize, rings: usize, material: Material3D) -> Self {
+        let radius = radius.max(0.01);
+        let segments = segments.max(8);
+        let rings = rings.max(4);
+        let mut vertices = Vec::with_capacity((segments + 1) * (rings + 1));
+        let mut indices = Vec::with_capacity(segments * rings * 6);
+        for ring in 0..=rings {
+            let v = ring as f32 / rings as f32;
+            let theta = v * std::f32::consts::PI;
+            let (sin_theta, cos_theta) = theta.sin_cos();
+            for segment in 0..=segments {
+                let u = segment as f32 / segments as f32;
+                let phi = u * std::f32::consts::TAU;
+                let (sin_phi, cos_phi) = phi.sin_cos();
+                let normal = [sin_theta * cos_phi, cos_theta, sin_theta * sin_phi];
+                vertices.push(MeshVertex3D::new(
+                    [normal[0] * radius, normal[1] * radius, normal[2] * radius],
+                    normal,
+                    [u, v],
+                ));
+            }
+        }
+        let row = segments + 1;
+        for ring in 0..rings {
+            for segment in 0..segments {
+                let a = (ring * row + segment) as u32;
+                let b = a + 1;
+                let c = ((ring + 1) * row + segment) as u32;
+                let d = c + 1;
+                indices.extend_from_slice(&[a, b, c, b, d, c]);
+            }
+        }
+        Self {
+            vertices,
+            indices,
+            material,
+            texture_index: None,
+            skinning: None,
+        }
+    }
 }
 
 /// Simple material consumed by the built-in lit shader.
@@ -175,6 +221,10 @@ pub struct Material3D {
     pub base_color: [f32; 4],
     /// GPU texture override. `None` uses a white texture.
     pub texture: Option<TextureHandle>,
+    /// Optional local screen-space occlusion window.  The first two values
+    /// are reserved for future per-material offsets; `z` is the soft radius
+    /// in NDC and `w` is the transparency strength at its centre.
+    pub occlusion_window: [f32; 4],
 }
 
 impl Material3D {
@@ -183,6 +233,7 @@ impl Material3D {
         Self {
             base_color: [r, g, b, 1.0],
             texture: None,
+            occlusion_window: [0.0; 4],
         }
     }
 }
@@ -325,6 +376,86 @@ impl Default for Lighting3D {
     }
 }
 
+/// Compact local light used by the forward 3D pass.
+///
+/// The renderer keeps a small fixed GPU budget and ignores lights beyond the
+/// nearest scene-authored set supplied by the caller. This makes candles,
+/// torches, and magical props illuminate dense rooms without requiring a
+/// deferred G-buffer or hardware ray tracing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PointLight3D {
+    /// World-space centre of the light.
+    pub position: Vec3,
+    /// Linear RGB light colour.
+    pub color: [f32; 3],
+    /// Radiant intensity multiplier.
+    pub intensity: f32,
+    /// Smooth cutoff radius in world units.
+    pub radius: f32,
+}
+
+impl PointLight3D {
+    /// Create a local light with sanitized intensity and radius.
+    pub fn new(position: Vec3, color: [f32; 3], intensity: f32, radius: f32) -> Self {
+        Self {
+            position,
+            color,
+            intensity: intensity.max(0.0),
+            radius: radius.max(0.05),
+        }
+    }
+}
+
+/// Celestial lighting and horizon colour resolved for one environment frame.
+///
+/// The values are deliberately independent from the mesh list. A game can
+/// reuse the same frame for a forest, a castle, or a completely different
+/// world while the renderer supplies soft moon light, lunar reflections, and
+/// twilight colour grading.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Celestial3D {
+    /// Normalized direction from a surface toward the sun.
+    pub sun_direction: Vec3,
+    /// Visibility of the sun above the horizon (`0..=1`).
+    pub sun_visibility: f32,
+    /// Normalized direction from a surface toward the moon.
+    pub moon_direction: Vec3,
+    /// Visibility of the moon in the sky (`0..=1`).
+    pub moon_visibility: f32,
+    /// Normalized lunar phase (`0.0` new moon, `0.5` full moon).
+    pub moon_phase: f32,
+    /// Linear RGB colour of the moon light.
+    pub moon_color: [f32; 3],
+    /// Intensity of the moon light after phase and horizon attenuation.
+    pub moon_intensity: f32,
+    /// Linear RGB tint reflected by cool surfaces at night.
+    pub reflection_color: [f32; 3],
+    /// Strength of the lunar reflection contribution.
+    pub reflection_strength: f32,
+    /// Warm/cool tint used around sunrise and sunset.
+    pub horizon_tint: [f32; 3],
+    /// Strength of the horizon tint (`0..=1`).
+    pub horizon_strength: f32,
+}
+
+impl Default for Celestial3D {
+    fn default() -> Self {
+        Self {
+            sun_direction: Vec3::new(-0.42, 0.96, 0.24),
+            sun_visibility: 1.0,
+            moon_direction: Vec3::new(0.24, 0.55, -0.62),
+            moon_visibility: 0.0,
+            moon_phase: 0.5,
+            moon_color: [0.32, 0.42, 0.70],
+            moon_intensity: 0.0,
+            reflection_color: [0.12, 0.20, 0.42],
+            reflection_strength: 0.0,
+            horizon_tint: [1.0, 0.32, 0.08],
+            horizon_strength: 0.0,
+        }
+    }
+}
+
 /// Distance-based atmospheric haze for a 3D pass.
 ///
 /// The default keeps the renderer backwards-compatible: fog starts beyond the
@@ -358,9 +489,9 @@ impl Default for Atmosphere3D {
 
 /// Reusable visual mood for a 3D scene.
 ///
-/// Presets only describe lighting, fog, and the clear colour.  They do not
-/// select meshes or materials, so a game can swap the atmosphere without
-/// rebuilding its world assets.
+/// Presets only describe lighting, fog, the clear colour, and celestial
+/// timing. They do not select meshes or materials, so a game can swap the
+/// atmosphere without rebuilding its world assets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvironmentPreset3D {
     /// Lush, misty daylight used by the living nature scene.
@@ -390,13 +521,28 @@ impl EnvironmentPreset3D {
     /// that range are accepted, which makes callers free to feed an unwrapped
     /// clock directly into the sampler.
     pub fn sample(self, phase: f32) -> EnvironmentFrame3D {
+        self.sample_with_moon_phase(phase, 0.5)
+    }
+
+    /// Sample this preset with an explicit lunar phase.
+    ///
+    /// `moon_phase` wraps at one: `0.0` is a new moon and `0.5` is a full
+    /// moon. Keeping this input separate from the daily phase lets a game run
+    /// a long lunar calendar while its day/night clock loops every few
+    /// minutes.
+    pub fn sample_with_moon_phase(self, phase: f32, moon_phase: f32) -> EnvironmentFrame3D {
         let phase = if phase.is_finite() {
             phase.rem_euclid(1.0)
         } else {
             0.5
         };
+        let moon_phase = if moon_phase.is_finite() {
+            moon_phase.rem_euclid(1.0)
+        } else {
+            0.5
+        };
         let daylight = daylight_factor(phase);
-        match self {
+        let mut frame = match self {
             Self::Lived => environment_frame(
                 Lighting3D {
                     direction_to_light: Vec3::new(-0.42, 0.96, 0.24),
@@ -463,7 +609,20 @@ impl EnvironmentPreset3D {
                 [0.018, 0.002, 0.035, 1.0],
                 daylight,
             ),
-        }
+        };
+        frame.celestial = celestial_for_phase(self, phase, moon_phase);
+        // Rotate the directional shadow caster with the sun through the same
+        // eased visibility curve used by the sky. At night the preset's
+        // authored key direction remains as a quiet fill light; the blend
+        // prevents a one-frame shadow snap at either horizon.
+        let shadow_mix = frame.celestial.sun_visibility * 0.95;
+        frame.lighting.direction_to_light = frame
+            .lighting
+            .direction_to_light
+            .lerp(frame.celestial.sun_direction, shadow_mix)
+            .normalize_or_zero();
+        apply_twilight(&mut frame);
+        frame
     }
 }
 
@@ -476,6 +635,8 @@ pub struct EnvironmentFrame3D {
     pub atmosphere: Atmosphere3D,
     /// RGBA clear colour in linear-ish 0..=1 components.
     pub clear_color: [f32; 4],
+    /// Sun/moon positions and transient horizon lighting for the frame.
+    pub celestial: Celestial3D,
 }
 
 impl Default for EnvironmentFrame3D {
@@ -490,6 +651,8 @@ pub struct DayNightCycle3D {
     preset: EnvironmentPreset3D,
     phase: f32,
     cycle_seconds: f32,
+    lunar_phase: f32,
+    lunar_cycle_days: f32,
 }
 
 impl Default for DayNightCycle3D {
@@ -508,6 +671,9 @@ impl DayNightCycle3D {
             preset,
             phase: 0.5,
             cycle_seconds: sanitize_cycle_seconds(cycle_seconds),
+            // Start at full moon so the first night is legible in a preview.
+            lunar_phase: 0.5,
+            lunar_cycle_days: 28.0,
         }
     }
 
@@ -545,16 +711,44 @@ impl DayNightCycle3D {
         }
     }
 
+    /// Normalized lunar phase (`0.0` new moon, `0.5` full moon).
+    pub const fn lunar_phase(self) -> f32 {
+        self.lunar_phase
+    }
+
+    /// Set the normalized lunar phase. Non-finite values are ignored.
+    pub fn set_lunar_phase(&mut self, lunar_phase: f32) {
+        if lunar_phase.is_finite() {
+            self.lunar_phase = lunar_phase.rem_euclid(1.0);
+        }
+    }
+
+    /// Number of day/night loops in one complete lunar cycle.
+    pub const fn lunar_cycle_days(self) -> f32 {
+        self.lunar_cycle_days
+    }
+
+    /// Set the lunar cycle length, clamped to one day.
+    pub fn set_lunar_cycle_days(&mut self, lunar_cycle_days: f32) {
+        if lunar_cycle_days.is_finite() {
+            self.lunar_cycle_days = lunar_cycle_days.max(1.0);
+        }
+    }
+
     /// Advance the clock by elapsed seconds and wrap at one day.
     pub fn advance(&mut self, delta_seconds: f32) {
         if delta_seconds.is_finite() {
             self.phase = (self.phase + delta_seconds / self.cycle_seconds).rem_euclid(1.0);
+            self.lunar_phase = (self.lunar_phase
+                + delta_seconds / (self.cycle_seconds * self.lunar_cycle_days))
+                .rem_euclid(1.0);
         }
     }
 
     /// Resolve the current preset and phase into render-ready values.
     pub fn sample(self) -> EnvironmentFrame3D {
-        self.preset.sample(self.phase)
+        self.preset
+            .sample_with_moon_phase(self.phase, self.lunar_phase)
     }
 }
 
@@ -567,10 +761,96 @@ fn sanitize_cycle_seconds(seconds: f32) -> f32 {
 }
 
 fn daylight_factor(phase: f32) -> f32 {
-    let sun = ((phase * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2).sin() * 0.5 + 0.5)
-        .clamp(0.0, 1.0);
-    let t = ((sun - 0.08) / 0.84).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
+    let sun_height = (phase * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2).sin();
+    // Blend over a broad elevation interval. The sun is still below the
+    // horizon while the world is in blue hour, so using the full interval
+    // avoids the old day/night palette feeling like a binary toggle.
+    smoothstep01((sun_height + 0.68) / 1.18)
+}
+
+fn smoothstep01(value: f32) -> f32 {
+    let value = value.clamp(0.0, 1.0);
+    value * value * (3.0 - 2.0 * value)
+}
+
+fn celestial_for_phase(preset: EnvironmentPreset3D, phase: f32, moon_phase: f32) -> Celestial3D {
+    let solar_angle = phase * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
+    let (solar_sin, solar_cos) = solar_angle.sin_cos();
+    let sun_height = solar_sin;
+    let sun_direction =
+        Vec3::new(-solar_cos * 0.72, sun_height * 0.82, solar_sin * 0.72).normalize_or_zero();
+    let moon_direction =
+        Vec3::new(solar_cos * 0.62, (-sun_height).max(0.05), -solar_sin * 0.62).normalize_or_zero();
+    // Bodies ease through the horizon rather than popping on/off at a single
+    // elevation. The wider band also gives the fog and shadow blend time to
+    // settle as the camera watches the sky.
+    let sun_visibility = smoothstep01((sun_height + 0.10) / 0.72);
+    let moon_visibility = smoothstep01((-sun_height + 0.10) / 0.72);
+    // Golden/blue hour spans both sides of the horizon. Two eased edges keep
+    // sunset colour present while the sun sinks, and likewise during the
+    // first minutes before sunrise.
+    let twilight_in = smoothstep01((sun_height + 0.75) / 0.45);
+    let twilight_out = 1.0 - smoothstep01((sun_height - 0.20) / 0.45);
+    let twilight_strength = (twilight_in * twilight_out).clamp(0.0, 1.0);
+    let illumination = 0.5 - 0.5 * (moon_phase * std::f32::consts::TAU).cos();
+    let night_illumination = moon_visibility * illumination;
+    let (moon_color, reflection_color, horizon_tint) = match preset {
+        EnvironmentPreset3D::Lived => ([0.34, 0.48, 0.82], [0.10, 0.22, 0.48], [1.00, 0.30, 0.08]),
+        EnvironmentPreset3D::Demonic => {
+            ([0.58, 0.16, 0.58], [0.42, 0.035, 0.26], [0.96, 0.08, 0.24])
+        }
+    };
+    Celestial3D {
+        sun_direction,
+        sun_visibility,
+        moon_direction,
+        moon_visibility,
+        moon_phase,
+        moon_color,
+        moon_intensity: 0.26 * night_illumination,
+        reflection_color,
+        reflection_strength: 0.38 * night_illumination,
+        horizon_tint,
+        horizon_strength: 0.42 * twilight_strength,
+    }
+}
+
+fn apply_twilight(frame: &mut EnvironmentFrame3D) {
+    let strength = frame.celestial.horizon_strength;
+    if strength <= f32::EPSILON {
+        return;
+    }
+    let tint = frame.celestial.horizon_tint;
+    let warm_key = [
+        1.06 + tint[0] * 0.20,
+        0.18 + tint[1] * 0.72,
+        0.05 + tint[2] * 0.58,
+    ];
+    let warm_ambient = [
+        0.10 + tint[0] * 0.12,
+        0.03 + tint[1] * 0.20,
+        0.04 + tint[2] * 0.18,
+    ];
+    frame.lighting.key_color = mix_color3(warm_key, frame.lighting.key_color, strength * 0.32);
+    frame.lighting.ambient_color =
+        mix_color3(warm_ambient, frame.lighting.ambient_color, strength * 0.24);
+    let warm_fog = [
+        0.025 + tint[0] * 0.11,
+        0.010 + tint[1] * 0.048,
+        0.018 + tint[2] * 0.050,
+    ];
+    frame.atmosphere.fog_color = mix_color3(warm_fog, frame.atmosphere.fog_color, strength * 0.18);
+    let horizon_clear = [
+        0.018 + tint[0] * 0.105,
+        0.006 + tint[1] * 0.038,
+        0.012 + tint[2] * 0.040,
+    ];
+    for (channel, target) in frame.clear_color[..3]
+        .iter_mut()
+        .zip(horizon_clear.into_iter())
+    {
+        *channel = mix_f32(target, *channel, strength * 0.28);
+    }
 }
 
 fn mix_f32(day: f32, night: f32, daylight: f32) -> f32 {
@@ -651,6 +931,7 @@ fn environment_frame(
             mix_f32(day_clear[2], night_clear[2], daylight),
             mix_f32(day_clear[3], night_clear[3], daylight),
         ],
+        celestial: Celestial3D::default(),
     }
 }
 
@@ -724,6 +1005,11 @@ struct GpuMesh3D {
 struct GpuTexture3D {
     #[allow(dead_code)]
     texture: wgpu::Texture,
+    /// Optional tangent-space normal map paired with the albedo.  Keeping it
+    /// in the same bind group means existing [`MeshDraw3D`] callers keep their
+    /// lightweight API while textured meshes can opt into normal detail.
+    #[allow(dead_code)]
+    normal_texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
 }
 
@@ -737,8 +1023,22 @@ struct CameraUniform {
     light_color: [f32; 4],
     ambient_color: [f32; 4],
     bounce_color: [f32; 4],
+    moon_direction: [f32; 4],
+    moon_color: [f32; 4],
+    reflection_color: [f32; 4],
+    horizon_tint: [f32; 4],
     fog_color: [f32; 4],
     fog_params: [f32; 4],
+    /// World-space point the camera is framing.  The final component carries
+    /// the viewport aspect so the shader can keep the reveal circular.
+    focus_position: [f32; 4],
+    viewport_size: [f32; 4],
+    /// `x` stores the active local-light count.
+    local_light_meta: [f32; 4],
+    /// World position in xyz and cutoff radius in w.
+    local_light_positions: [[f32; 4]; MAX_POINT_LIGHTS_3D],
+    /// Linear RGB in xyz and intensity in w.
+    local_light_colors: [[f32; 4]; MAX_POINT_LIGHTS_3D],
 }
 
 #[repr(C)]
@@ -746,10 +1046,12 @@ struct CameraUniform {
 struct ObjectUniform {
     model: [f32; 16],
     base_color: [f32; 4],
+    occlusion_window: [f32; 4],
 }
 
 const OBJECT_UNIFORM_CAPACITY: usize = 256;
 const SHADOW_MAP_SIZE: u32 = 2048;
+const MAX_POINT_LIGHTS_3D: usize = 16;
 
 /// Errors returned by the 3D asset and renderer layer.
 #[derive(Debug, Error)]
@@ -1192,6 +1494,7 @@ fn parse_gltf(
                 material: Material3D {
                     base_color,
                     texture: None,
+                    occlusion_window: [0.0; 4],
                 },
                 texture_index,
                 skinning,
@@ -1408,6 +1711,20 @@ impl Wgpu3DRenderer {
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
+                    // The normal map shares the albedo sampler.  Every
+                    // texture pair gets a flat [0.5, 0.5, 1] fallback when no
+                    // authored normal is supplied, so legacy assets remain
+                    // visually unchanged.
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
                 ],
             });
         let shadow_bind_group_layout =
@@ -1532,7 +1849,12 @@ impl Wgpu3DRenderer {
                 }],
                 compilation_options: Default::default(),
             },
-            fragment: None,
+            fragment: Some(wgpu::FragmentState {
+                module: &shadow_shader,
+                entry_point: Some("fs_shadow"),
+                targets: &[],
+                compilation_options: Default::default(),
+            }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 cull_mode: Some(wgpu::Face::Back),
@@ -1594,12 +1916,18 @@ impl Wgpu3DRenderer {
             height: 1,
             rgba: vec![255, 255, 255, 255],
         };
+        let flat_normal_texture = TextureData3D {
+            width: 1,
+            height: 1,
+            rgba: vec![128, 128, 255, 255],
+        };
         let white_gpu = create_gpu_texture(
             device,
             queue,
             &texture_bind_group_layout,
             &sampler,
             &white_texture,
+            Some(&flat_normal_texture),
         );
         let (depth_texture, depth_view) = create_depth_texture(device, size);
         let shadow_texture = create_shadow_texture(device);
@@ -1764,12 +2092,25 @@ impl Wgpu3DRenderer {
         queue: &wgpu::Queue,
         texture: &TextureData3D,
     ) -> Result<TextureHandle, Render3DError> {
-        let expected = texture.width.max(1) as usize * texture.height.max(1) as usize * 4;
-        if texture.rgba.len() < expected {
-            return Err(Render3DError::Gpu(format!(
-                "texture buffer too small: {} < {expected}",
-                texture.rgba.len()
-            )));
+        self.upload_texture_with_normal(device, queue, texture, None)
+    }
+
+    /// Upload an albedo texture and a paired tangent-space normal map.
+    ///
+    /// A missing normal map uses a flat normal automatically, preserving the
+    /// old forward-renderer appearance for all existing assets.  Normal maps
+    /// are uploaded as linear UNORM data; unlike albedo, they must not receive
+    /// sRGB decoding.
+    pub fn upload_texture_with_normal(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture: &TextureData3D,
+        normal: Option<&TextureData3D>,
+    ) -> Result<TextureHandle, Render3DError> {
+        validate_texture_data(texture)?;
+        if let Some(normal) = normal {
+            validate_texture_data(normal)?;
         }
         let gpu = create_gpu_texture(
             device,
@@ -1777,6 +2118,7 @@ impl Wgpu3DRenderer {
             &self.texture_bind_group_layout,
             &self.sampler,
             texture,
+            normal,
         );
         let handle = TextureHandle(self.textures.len() as u32);
         self.textures.push(gpu);
@@ -1823,7 +2165,35 @@ impl Wgpu3DRenderer {
         environment: EnvironmentFrame3D,
         draws: &[MeshDraw3D],
     ) {
-        self.render_with_atmosphere(
+        self.render_with_environment_and_lights(
+            device,
+            queue,
+            target,
+            size,
+            camera,
+            environment,
+            &[],
+            draws,
+        );
+    }
+
+    /// Render a resolved environment plus a compact set of local lights.
+    ///
+    /// Up to sixteen lights are uploaded in one camera uniform. Extra lights
+    /// are ignored deliberately, keeping frame cost deterministic for dense
+    /// authored worlds.
+    pub fn render_with_environment_and_lights(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: &wgpu::TextureView,
+        size: (u32, u32),
+        camera: Camera3D,
+        environment: EnvironmentFrame3D,
+        local_lights: &[PointLight3D],
+        draws: &[MeshDraw3D],
+    ) {
+        self.render_with_atmosphere_and_celestial(
             device,
             queue,
             target,
@@ -1831,6 +2201,8 @@ impl Wgpu3DRenderer {
             camera,
             environment.lighting,
             environment.atmosphere,
+            environment.celestial,
+            local_lights,
             draws,
             wgpu::Color {
                 r: f64::from(environment.clear_color[0]),
@@ -1854,6 +2226,35 @@ impl Wgpu3DRenderer {
         draws: &[MeshDraw3D],
         clear: wgpu::Color,
     ) {
+        self.render_with_atmosphere_and_celestial(
+            device,
+            queue,
+            target,
+            size,
+            camera,
+            lighting,
+            atmosphere,
+            Celestial3D::default(),
+            &[],
+            draws,
+            clear,
+        );
+    }
+
+    fn render_with_atmosphere_and_celestial(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: &wgpu::TextureView,
+        size: (u32, u32),
+        camera: Camera3D,
+        lighting: Lighting3D,
+        atmosphere: Atmosphere3D,
+        celestial: Celestial3D,
+        local_lights: &[PointLight3D],
+        draws: &[MeshDraw3D],
+        clear: wgpu::Color,
+    ) {
         self.resize(device, size);
         self.ensure_object_capacity(device, draws.len());
         let aspect = size.0.max(1) as f32 / size.1.max(1) as f32;
@@ -1872,6 +2273,38 @@ impl Wgpu3DRenderer {
             0.1,
             45.0,
         ) * Mat4::look_at_rh(light_position, light_target, Vec3::Y);
+        let mut local_light_positions = [[0.0; 4]; MAX_POINT_LIGHTS_3D];
+        let mut local_light_colors = [[0.0; 4]; MAX_POINT_LIGHTS_3D];
+        let mut local_light_count = 0usize;
+        for light in local_lights {
+            if local_light_count >= MAX_POINT_LIGHTS_3D {
+                break;
+            }
+            if ![light.position.x, light.position.y, light.position.z]
+                .iter()
+                .all(|component| component.is_finite())
+                || !light.color.iter().all(|channel| channel.is_finite())
+                || !light.intensity.is_finite()
+                || !light.radius.is_finite()
+                || light.intensity <= 0.0
+                || light.radius <= 0.05
+            {
+                continue;
+            }
+            local_light_positions[local_light_count] = [
+                light.position.x,
+                light.position.y,
+                light.position.z,
+                light.radius.clamp(0.05, 128.0),
+            ];
+            local_light_colors[local_light_count] = [
+                light.color[0].max(0.0),
+                light.color[1].max(0.0),
+                light.color[2].max(0.0),
+                light.intensity.clamp(0.0, 128.0),
+            ];
+            local_light_count += 1;
+        }
         let camera_uniform = CameraUniform {
             view_projection: camera.view_projection(aspect).to_cols_array(),
             light_view_projection: light_view_projection.to_cols_array(),
@@ -1895,6 +2328,30 @@ impl Wgpu3DRenderer {
                 lighting.bounce_color[2],
                 1.0,
             ],
+            moon_direction: [
+                celestial.moon_direction.x,
+                celestial.moon_direction.y,
+                celestial.moon_direction.z,
+                celestial.moon_visibility,
+            ],
+            moon_color: [
+                celestial.moon_color[0],
+                celestial.moon_color[1],
+                celestial.moon_color[2],
+                celestial.moon_intensity,
+            ],
+            reflection_color: [
+                celestial.reflection_color[0],
+                celestial.reflection_color[1],
+                celestial.reflection_color[2],
+                celestial.reflection_strength,
+            ],
+            horizon_tint: [
+                celestial.horizon_tint[0],
+                celestial.horizon_tint[1],
+                celestial.horizon_tint[2],
+                celestial.horizon_strength,
+            ],
             fog_color: [
                 atmosphere.fog_color[0],
                 atmosphere.fog_color[1],
@@ -1909,12 +2366,18 @@ impl Wgpu3DRenderer {
                 atmosphere.fog_density.max(0.0),
                 atmosphere.height_falloff.max(0.0),
             ],
+            focus_position: [camera.target.x, camera.target.y, camera.target.z, aspect],
+            viewport_size: [size.0.max(1) as f32, size.1.max(1) as f32, 0.0, 0.0],
+            local_light_meta: [local_light_count as f32, 0.0, 0.0, 0.0],
+            local_light_positions,
+            local_light_colors,
         };
         queue.write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
         for (draw_index, draw) in draws.iter().enumerate() {
             let object = ObjectUniform {
                 model: draw.transform.to_cols_array(),
                 base_color: draw.material.base_color,
+                occlusion_window: draw.material.occlusion_window,
             };
             let offset = self.object_stride * draw_index as u64;
             queue.write_buffer(&self.object_buffer, offset, bytemuck::bytes_of(&object));
@@ -1940,6 +2403,13 @@ impl Wgpu3DRenderer {
             shadow_pass.set_pipeline(&self.shadow_pipeline);
             shadow_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             for (draw_index, draw) in draws.iter().enumerate() {
+                // Translucent geometry (interaction markers and particles)
+                // should not cast an opaque shadow. Revealed walls still enter
+                // this pass: the shadow shader cuts only their matching local
+                // circle instead of deleting the asset's complete shadow.
+                if draw.material.base_color[3] < 0.95 {
+                    continue;
+                }
                 let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) else {
                     continue;
                 };
@@ -2042,12 +2512,24 @@ fn align_uniform_offset(size: u64, alignment: u64) -> u64 {
     size.div_ceil(alignment) * alignment
 }
 
+fn validate_texture_data(texture: &TextureData3D) -> Result<(), Render3DError> {
+    let expected = texture.width.max(1) as usize * texture.height.max(1) as usize * 4;
+    if texture.rgba.len() < expected {
+        return Err(Render3DError::Gpu(format!(
+            "texture buffer too small: {} < {expected}",
+            texture.rgba.len()
+        )));
+    }
+    Ok(())
+}
+
 fn create_gpu_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
     sampler: &wgpu::Sampler,
     data: &TextureData3D,
+    normal_data: Option<&TextureData3D>,
 ) -> GpuTexture3D {
     let width = data.width.max(1);
     let height = data.height.max(1);
@@ -2084,7 +2566,57 @@ fn create_gpu_texture(
             depth_or_array_layers: 1,
         },
     );
+    // A flat tangent-space normal is the identity perturbation.  Create it
+    // lazily for ordinary albedo uploads; terrain can pass a real map through
+    // `upload_texture_with_normal`.
+    let flat_normal;
+    let normal_data = if let Some(normal_data) = normal_data {
+        normal_data
+    } else {
+        flat_normal = TextureData3D {
+            width: 1,
+            height: 1,
+            rgba: vec![128, 128, 255, 255],
+        };
+        &flat_normal
+    };
+    let normal_width = normal_data.width.max(1);
+    let normal_height = normal_data.height.max(1);
+    let normal_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("velvet-3d-normal"),
+        size: wgpu::Extent3d {
+            width: normal_width,
+            height: normal_height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &normal_texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &normal_data.rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(normal_width * 4),
+            rows_per_image: Some(normal_height),
+        },
+        wgpu::Extent3d {
+            width: normal_width,
+            height: normal_height,
+            depth_or_array_layers: 1,
+        },
+    );
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let normal_view = normal_texture.create_view(&wgpu::TextureViewDescriptor::default());
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("velvet-3d-albedo-bind-group"),
         layout,
@@ -2097,10 +2629,15 @@ fn create_gpu_texture(
                 binding: 1,
                 resource: wgpu::BindingResource::Sampler(sampler),
             },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&normal_view),
+            },
         ],
     });
     GpuTexture3D {
         texture,
+        normal_texture,
         bind_group,
     }
 }
@@ -2114,14 +2651,28 @@ struct Camera {
     light_color: vec4<f32>,
     ambient_color: vec4<f32>,
     bounce_color: vec4<f32>,
+    moon_direction: vec4<f32>,
+    moon_color: vec4<f32>,
+    reflection_color: vec4<f32>,
+    horizon_tint: vec4<f32>,
     fog_color: vec4<f32>,
     fog_params: vec4<f32>,
+    focus_position: vec4<f32>,
+    viewport_size: vec4<f32>,
+    local_light_meta: vec4<f32>,
+    local_light_positions: array<vec4<f32>, 16>,
+    local_light_colors: array<vec4<f32>, 16>,
 };
-struct Object { model: mat4x4<f32>, base_color: vec4<f32>, };
+struct Object {
+    model: mat4x4<f32>,
+    base_color: vec4<f32>,
+    occlusion_window: vec4<f32>,
+};
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(1) @binding(0) var<uniform> object: Object;
 @group(2) @binding(0) var albedo_texture: texture_2d<f32>;
 @group(2) @binding(1) var albedo_sampler: sampler;
+@group(2) @binding(2) var normal_texture: texture_2d<f32>;
 @group(3) @binding(0) var shadow_texture: texture_depth_2d;
 @group(3) @binding(1) var shadow_sampler: sampler_comparison;
 
@@ -2177,31 +2728,220 @@ fn shadow_visibility(light_clip: vec4<f32>, normal: vec3<f32>) -> f32 {
     return visibility / 9.0;
 }
 
+// Reconstruct a tangent frame from screen-space derivatives so meshes that
+// only provide positions, normals and UVs (including the generated meadow)
+// can still use a tangent-space normal map. A flat [0.5, 0.5, 1] sample falls
+// back to the authored geometric normal without changing legacy materials.
+fn normal_from_map(input: VertexOut) -> vec3<f32> {
+    let base_normal = normalize(input.normal);
+    let sampled = textureSample(normal_texture, albedo_sampler, input.uv).xyz * 2.0
+        - vec3<f32>(1.0, 1.0, 1.0);
+    let position_dx = dpdx(input.world_position);
+    let position_dy = dpdy(input.world_position);
+    let uv_dx = dpdx(input.uv);
+    let uv_dy = dpdy(input.uv);
+    let determinant = uv_dx.x * uv_dy.y - uv_dx.y * uv_dy.x;
+    if (abs(determinant) < 0.00001) {
+        return base_normal;
+    }
+    var tangent = (position_dx * uv_dy.y - position_dy * uv_dx.y) / determinant;
+    tangent = normalize(tangent - base_normal * dot(base_normal, tangent));
+    if (length(tangent) < 0.00001) {
+        return base_normal;
+    }
+    var bitangent = normalize(cross(base_normal, tangent));
+    let expected_bitangent = (position_dy * uv_dx.x - position_dx * uv_dy.x) / determinant;
+    if (dot(bitangent, expected_bitangent) < 0.0) {
+        bitangent = -bitangent;
+    }
+    // Keep the detail readable but avoid turning high-frequency grass pixels
+    // into a faceted surface. The normal map itself remains full strength
+    // data and can be reused by scenes with a different tuning later.
+    let mapped = normalize(vec3<f32>(sampled.xy * 0.72, max(sampled.z, 0.28)));
+    return normalize(tangent * mapped.x + bitangent * mapped.y + base_normal * mapped.z);
+}
+
+fn fresnel_schlick(cos_theta: f32, f0: vec3<f32>) -> vec3<f32> {
+    return f0 + (vec3<f32>(1.0) - f0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
+}
+
+fn distribution_ggx(normal: vec3<f32>, halfway: vec3<f32>, roughness: f32) -> f32 {
+    let alpha = roughness * roughness;
+    let alpha2 = alpha * alpha;
+    let ndoth = max(dot(normal, halfway), 0.0);
+    let denominator = ndoth * ndoth * (alpha2 - 1.0) + 1.0;
+    return alpha2 / max(3.14159265 * denominator * denominator, 0.0001);
+}
+
+fn geometry_schlick_ggx(ndot: f32, roughness: f32) -> f32 {
+    let k = ((roughness + 1.0) * (roughness + 1.0)) / 8.0;
+    return ndot / max(ndot * (1.0 - k) + k, 0.0001);
+}
+
+fn evaluate_brdf(
+    albedo: vec3<f32>,
+    normal: vec3<f32>,
+    view_dir: vec3<f32>,
+    light_dir: vec3<f32>,
+    radiance: vec3<f32>,
+    roughness: f32,
+) -> vec3<f32> {
+    let ndotl = max(dot(normal, light_dir), 0.0);
+    let ndotv = max(dot(normal, view_dir), 0.001);
+    if (ndotl <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let halfway = normalize(view_dir + light_dir);
+    let f0 = vec3<f32>(0.04);
+    let fresnel = fresnel_schlick(max(dot(halfway, view_dir), 0.0), f0);
+    let distribution = distribution_ggx(normal, halfway, roughness);
+    let geometry = geometry_schlick_ggx(ndotv, roughness)
+        * geometry_schlick_ggx(ndotl, roughness);
+    let specular = distribution * geometry * fresnel
+        / max(4.0 * ndotv * ndotl, 0.001);
+    let diffuse_weight = (vec3<f32>(1.0) - fresnel) * 0.96;
+    let diffuse = diffuse_weight * albedo / 3.14159265;
+    return (diffuse + specular) * radiance * ndotl;
+}
+
+fn local_lighting(
+    albedo: vec3<f32>,
+    normal: vec3<f32>,
+    view_dir: vec3<f32>,
+    world_position: vec3<f32>,
+    roughness: f32,
+) -> vec3<f32> {
+    var total = vec3<f32>(0.0);
+    let count = u32(clamp(camera.local_light_meta.x, 0.0, 16.0));
+    for (var index: u32 = 0u; index < 16u; index = index + 1u) {
+        if (index >= count) {
+            break;
+        }
+        let packed_position = camera.local_light_positions[index];
+        let packed_color = camera.local_light_colors[index];
+        let to_light = packed_position.xyz - world_position;
+        let distance_squared = max(dot(to_light, to_light), 0.0001);
+        let distance = sqrt(distance_squared);
+        let radius = max(packed_position.w, 0.05);
+        if (distance >= radius) {
+            continue;
+        }
+        let normalized_distance = distance / radius;
+        let cutoff = max(1.0 - normalized_distance * normalized_distance
+            * normalized_distance * normalized_distance, 0.0);
+        let attenuation = cutoff * cutoff / (1.0 + distance_squared * 0.22);
+        let radiance = packed_color.rgb * packed_color.w * attenuation;
+        total = total + evaluate_brdf(
+            albedo,
+            normal,
+            view_dir,
+            to_light / distance,
+            radiance,
+            roughness,
+        );
+    }
+    return total;
+}
+
+fn aces_film(color: vec3<f32>) -> vec3<f32> {
+    let a = 2.51;
+    let b = 0.03;
+    let c = 2.43;
+    let d = 0.59;
+    let e = 0.14;
+    return clamp((color * (a * color + vec3<f32>(b)))
+        / (color * (c * color + vec3<f32>(d)) + vec3<f32>(e)),
+        vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 @fragment
 fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
-    let normal = normalize(input.normal);
+    let normal = normal_from_map(input);
     let light_dir = normalize(camera.light_direction.xyz);
     let view_dir = normalize(camera.camera_position.xyz - input.world_position);
-    let diffuse = max(dot(normal, light_dir), 0.0);
     let visibility = shadow_visibility(input.light_clip, normal);
     let hemisphere = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
     let sky = camera.ambient_color.rgb * (0.52 + hemisphere * 0.48);
     let bounce = camera.bounce_color.rgb * (1.0 - hemisphere) * 0.62;
-    let direct = camera.light_color.rgb * diffuse * mix(0.13, 1.0, visibility);
-    let halfway = normalize(light_dir + view_dir);
-    let specular = pow(max(dot(normal, halfway), 0.0), 48.0) * 0.18 * visibility;
-    let rim = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.10;
+    let moon_dir = normalize(camera.moon_direction.xyz);
+    let reflection_band = max(normal.y, 0.0)
+        * (0.35 + 0.65 * pow(max(dot(normal, moon_dir), 0.0), 2.0));
+    let lunar_reflection = camera.reflection_color.rgb
+        * camera.reflection_color.a
+        * reflection_band;
+    let twilight = camera.horizon_tint.rgb
+        * camera.horizon_tint.a
+        * (1.0 - hemisphere)
+        * 0.35;
     let albedo = textureSample(albedo_texture, albedo_sampler, input.uv);
     let base = object.base_color.rgb * input.color.rgb * albedo.rgb;
-    let lit_color = base * (sky + bounce + direct) + camera.light_color.rgb * specular + camera.ambient_color.rgb * rim;
+    let luminance = dot(base, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let roughness = clamp(0.74 - luminance * 0.18, 0.48, 0.78);
+    let contact = exp(-max(input.world_position.y, 0.0) * 2.1);
+    let contact_ao = 1.0 - contact * (0.10 + 0.08 * (1.0 - abs(normal.y)));
+    let direct = evaluate_brdf(
+        base,
+        normal,
+        view_dir,
+        light_dir,
+        camera.light_color.rgb * 2.35 * mix(0.24, 1.0, visibility),
+        roughness,
+    );
+    let moon = evaluate_brdf(
+        base,
+        normal,
+        view_dir,
+        moon_dir,
+        camera.moon_color.rgb * camera.moon_color.a * 1.8,
+        roughness,
+    );
+    let local = local_lighting(base, normal, view_dir, input.world_position, roughness);
+    let rim = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.065;
+    let indirect = base * (sky + bounce + lunar_reflection + twilight) * contact_ao;
+    let lit_color = indirect + direct + moon + local + camera.ambient_color.rgb * rim;
     let distance_to_camera = length(camera.camera_position.xyz - input.world_position);
     let fog_span = max(camera.fog_params.y - camera.fog_params.x, 0.001);
     let linear_fog = clamp((distance_to_camera - camera.fog_params.x) / fog_span, 0.0, 1.0);
     let exponential_fog = 1.0 - exp(-distance_to_camera * max(camera.fog_params.z, 0.0));
     let height_fog = clamp(max(input.world_position.y - 0.15, 0.0) * camera.fog_params.w, 0.0, 1.0);
     let fog_factor = clamp(max(linear_fog, exponential_fog * 0.55) + linear_fog * height_fog * 0.35, 0.0, 1.0);
-    let color = mix(lit_color, camera.fog_color.rgb, fog_factor);
-    return vec4<f32>(color, object.base_color.a * input.color.a * albedo.a);
+    let color = aces_film(max(mix(lit_color, camera.fog_color.rgb, fog_factor) * 1.12, vec3<f32>(0.0)));
+    var alpha = object.base_color.a * input.color.a * albedo.a;
+    // A wall keeps its full shape and lighting; only a soft screen-space
+    // window centred on the camera focus lets the Queen read through it. The
+    // aspect correction makes the window circular even on a widescreen view.
+    let window = object.occlusion_window;
+    if (window.z > 0.0 && window.w > 0.0) {
+        let focus_clip = camera.view_projection * vec4<f32>(camera.focus_position.xyz, 1.0);
+        if (focus_clip.w > 0.0001) {
+            let focus_ndc = focus_clip.xy / focus_clip.w;
+            // Fragment-stage `position` is in viewport pixels, not the clip
+            // coordinates emitted by the vertex stage. Convert it explicitly
+            // before comparing it with the projected focus point.
+            let viewport = max(camera.viewport_size.xy, vec2<f32>(1.0, 1.0));
+            let fragment_ndc = vec2<f32>(
+                input.clip.x / viewport.x * 2.0 - 1.0,
+                1.0 - input.clip.y / viewport.y * 2.0,
+            );
+            let aspect = max(camera.focus_position.w, 0.01);
+            let delta = vec2<f32>(
+                (fragment_ndc.x - focus_ndc.x) * aspect,
+                fragment_ndc.y - focus_ndc.y,
+            );
+            let distance_to_focus = length(delta);
+            let inner = window.z * 0.46;
+            let feather = 1.0 - smoothstep(inner, window.z, distance_to_focus);
+            alpha = alpha * (1.0 - feather * clamp(window.w, 0.0, 1.0));
+            // Do not let the fully transparent centre keep writing depth. It
+            // would hide props submitted behind the wall even though the
+            // colour has been removed. The feathered rim remains blended and
+            // keeps the reveal polished instead of looking like a hard cut.
+            if alpha < 0.035 {
+                discard;
+            }
+        }
+    }
+    return vec4<f32>(color, alpha);
 }
 "#;
 
@@ -2214,10 +2954,23 @@ struct Camera {
     light_color: vec4<f32>,
     ambient_color: vec4<f32>,
     bounce_color: vec4<f32>,
+    moon_direction: vec4<f32>,
+    moon_color: vec4<f32>,
+    reflection_color: vec4<f32>,
+    horizon_tint: vec4<f32>,
     fog_color: vec4<f32>,
     fog_params: vec4<f32>,
+    focus_position: vec4<f32>,
+    viewport_size: vec4<f32>,
+    local_light_meta: vec4<f32>,
+    local_light_positions: array<vec4<f32>, 16>,
+    local_light_colors: array<vec4<f32>, 16>,
 };
-struct Object { model: mat4x4<f32>, base_color: vec4<f32>, };
+struct Object {
+    model: mat4x4<f32>,
+    base_color: vec4<f32>,
+    occlusion_window: vec4<f32>,
+};
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(1) @binding(0) var<uniform> object: Object;
 
@@ -2225,9 +2978,43 @@ struct VertexIn {
     @location(0) position: vec3<f32>,
 };
 
+struct ShadowOut {
+    @builtin(position) light_clip: vec4<f32>,
+    @location(0) camera_clip: vec4<f32>,
+};
+
 @vertex
-fn vs_shadow(input: VertexIn) -> @builtin(position) vec4<f32> {
-    return camera.light_view_projection * object.model * vec4<f32>(input.position, 1.0);
+fn vs_shadow(input: VertexIn) -> ShadowOut {
+    let world = object.model * vec4<f32>(input.position, 1.0);
+    var out: ShadowOut;
+    out.light_clip = camera.light_view_projection * world;
+    out.camera_clip = camera.view_projection * world;
+    return out;
+}
+
+@fragment
+fn fs_shadow(input: ShadowOut) {
+    let window = object.occlusion_window;
+    if (window.z <= 0.0 || window.w <= 0.0 || input.camera_clip.w <= 0.0001) {
+        return;
+    }
+    let focus_clip = camera.view_projection * vec4<f32>(camera.focus_position.xyz, 1.0);
+    if (focus_clip.w <= 0.0001) {
+        return;
+    }
+    let fragment_ndc = input.camera_clip.xy / input.camera_clip.w;
+    let focus_ndc = focus_clip.xy / focus_clip.w;
+    let aspect = max(camera.focus_position.w, 0.01);
+    let delta = vec2<f32>(
+        (fragment_ndc.x - focus_ndc.x) * aspect,
+        fragment_ndc.y - focus_ndc.y,
+    );
+    // Shadow maps cannot blend a feather. Remove only the fully transparent
+    // centre and retain the surrounding penumbra, so activating the reveal
+    // never makes an entire wall's shadow pop out of existence.
+    if (length(delta) < window.z * 0.62) {
+        discard;
+    }
 }
 "#;
 
@@ -2280,10 +3067,67 @@ mod tests {
     }
 
     #[test]
+    fn celestial_cycle_exposes_moon_and_twilight() {
+        let midnight = EnvironmentPreset3D::Lived.sample_with_moon_phase(0.0, 0.5);
+        let noon = EnvironmentPreset3D::Lived.sample_with_moon_phase(0.5, 0.5);
+        let dawn = EnvironmentPreset3D::Lived.sample_with_moon_phase(0.25, 0.5);
+        assert!(midnight.celestial.moon_intensity > noon.celestial.moon_intensity);
+        assert!(midnight.celestial.reflection_strength > noon.celestial.reflection_strength);
+        assert!(dawn.celestial.horizon_strength > noon.celestial.horizon_strength);
+        assert!((midnight.celestial.moon_phase - 0.5).abs() < 1e-6);
+
+        let new_moon = EnvironmentPreset3D::Lived.sample_with_moon_phase(0.0, 0.0);
+        assert!(new_moon.celestial.moon_intensity < midnight.celestial.moon_intensity);
+    }
+
+    #[test]
+    fn environment_cycle_changes_are_continuous() {
+        let mut previous = EnvironmentPreset3D::Lived.sample(0.0);
+        for index in 1..=240 {
+            let frame = EnvironmentPreset3D::Lived.sample(index as f32 / 240.0);
+            let clear_delta = frame
+                .clear_color
+                .iter()
+                .zip(previous.clear_color)
+                .map(|(current, old)| (current - old).abs())
+                .fold(0.0, f32::max);
+            let light_delta = frame
+                .lighting
+                .ambient_color
+                .iter()
+                .zip(previous.lighting.ambient_color)
+                .map(|(current, old)| (current - old).abs())
+                .fold(0.0, f32::max);
+            assert!(
+                clear_delta < 0.05,
+                "clear jump at phase {index}: {clear_delta:?} {:?} -> {:?}",
+                previous.clear_color,
+                frame.clear_color
+            );
+            assert!(
+                light_delta < 0.05,
+                "light jump at phase {index}: {light_delta:?}"
+            );
+            previous = frame;
+        }
+    }
+
+    #[test]
     fn cube_has_indexed_triangles() {
         let mesh = Mesh3D::cube(1.0, Material3D::default());
         assert_eq!(mesh.vertices.len(), 24);
         assert_eq!(mesh.indices.len(), 36);
+        assert!(mesh
+            .indices
+            .iter()
+            .all(|index| (*index as usize) < mesh.vertices.len()));
+    }
+
+    #[test]
+    fn uv_sphere_has_indexed_triangles() {
+        let mesh = Mesh3D::uv_sphere(1.0, 12, 6, Material3D::default());
+        assert_eq!(mesh.vertices.len(), (12 + 1) * (6 + 1));
+        assert_eq!(mesh.indices.len(), 12 * 6 * 6);
         assert!(mesh
             .indices
             .iter()
