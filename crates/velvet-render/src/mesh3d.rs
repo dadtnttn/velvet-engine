@@ -2407,7 +2407,11 @@ impl Wgpu3DRenderer {
                 // should not cast an opaque shadow. Revealed walls still enter
                 // this pass: the shadow shader cuts only their matching local
                 // circle instead of deleting the asset's complete shadow.
-                if draw.material.base_color[3] < 0.95 {
+                // A negative occlusion-window X is reserved for authored floor
+                // receivers. Floors stay lit by the key/ambient passes but do
+                // not write themselves into the directional map, which avoids
+                // coplanar tile variants producing a black cell.
+                if draw.material.base_color[3] < 0.95 || draw.material.occlusion_window[0] < -0.5 {
                     continue;
                 }
                 let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) else {
@@ -2859,7 +2863,13 @@ fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
     let normal = normal_from_map(input);
     let light_dir = normalize(camera.light_direction.xyz);
     let view_dir = normalize(camera.camera_position.xyz - input.world_position);
-    let visibility = shadow_visibility(input.light_clip, normal);
+    // Authored floor receivers use the same sentinel as the shadow pass. They
+    // remain fully key-lit so a bad/coplanar shadow sample cannot turn an
+    // entire room floor black; contact AO still anchors props to the tiles.
+    var visibility = shadow_visibility(input.light_clip, normal);
+    if (object.occlusion_window.x < -0.5) {
+        visibility = 1.0;
+    }
     let hemisphere = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
     let sky = camera.ambient_color.rgb * (0.52 + hemisphere * 0.48);
     let bounce = camera.bounce_color.rgb * (1.0 - hemisphere) * 0.62;
