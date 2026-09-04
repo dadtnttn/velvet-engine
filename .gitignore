@@ -63,3 +63,12 @@ demos/demon-queen/.headless-ok
 # Demon queen local media
 /demos/demon-queen/data/assets/
 /demos/demon-queen/.local-tests/
+
+# Untracked local content (purged from history)
+/demos/
+/*.png
+/*.log
+fx_export/*.png
+templates/visual-novel/assets/bg/
+templates/visual-novel/assets/cg/
+templates/visual-novel/assets/characters/
