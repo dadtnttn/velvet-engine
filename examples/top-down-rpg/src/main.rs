@@ -117,6 +117,9 @@ scene chat {
                     }
                     StoryWait::Ended => break,
                     StoryWait::Ready | StoryWait::Pause { .. } => story.advance(),
+                    StoryWait::ScreenCall { .. } => {
+                        let _ = story.return_from_screen(velvet_story::StoryValue::Null);
+                    }
                     StoryWait::Host { token } => {
                         let _ = story.resume_host(&token);
                     }

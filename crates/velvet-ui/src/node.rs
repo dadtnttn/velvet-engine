@@ -58,6 +58,9 @@ pub struct UiNode {
     pub parent: Option<NodeId>,
     /// Computed rect.
     pub rect: UiRect,
+    /// Scroll offset consumed by `LayoutType::Scroll` containers.
+    #[serde(default)]
+    pub scroll: Vec2,
     /// Visible.
     pub visible: bool,
     /// Enabled.
@@ -77,7 +80,11 @@ impl UiNode {
                 | WidgetKind::Slider { .. }
                 | WidgetKind::Toggle { .. }
                 | WidgetKind::TextField { .. }
+                | WidgetKind::Dropdown { .. }
+                | WidgetKind::Tabs { .. }
         );
+        // Tooltips start hidden until their target hovers (see process()).
+        let visible = !matches!(&widget, WidgetKind::Tooltip { .. });
         Self {
             id,
             name: name.into(),
@@ -88,7 +95,8 @@ impl UiNode {
             children: Vec::new(),
             parent: None,
             rect: UiRect::default(),
-            visible: true,
+            scroll: Vec2::ZERO,
+            visible,
             enabled: true,
             focusable,
             data: IndexMap::new(),

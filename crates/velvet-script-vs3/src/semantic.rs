@@ -191,7 +191,10 @@ impl Validator {
                 "only declarations and expressions are allowed at VS3 module scope",
                 stmt.loc(),
             ),
-            Item::Character { loc, .. } | Item::Scene { loc, .. } | Item::Screen { loc, .. } => {
+            Item::Character { loc, .. }
+            | Item::Scene { loc, .. }
+            | Item::Screen { loc, .. }
+            | Item::Transform { loc, .. } => {
                 self.error(
                     "narrative declarations are not part of VS3; use the story runtime or a host service",
                     loc,
@@ -319,6 +322,10 @@ impl Validator {
             | Stmt::Label { loc, .. }
             | Stmt::Choice { loc, .. }
             | Stmt::Show { loc, .. }
+            | Stmt::Screen { loc, .. }
+            | Stmt::Unlock { loc, .. }
+            | Stmt::Movie { loc, .. }
+            | Stmt::ScreenAction { loc, .. }
             | Stmt::Background { loc, .. }
             | Stmt::Music { loc, .. }
             | Stmt::Hide { loc, .. }
@@ -356,7 +363,10 @@ impl Validator {
             Expr::Ident { name, loc } => match self.lookup(name) {
                 Some(binding) => binding.ty,
                 None => {
-                    self.error(format!("unknown name `{name}`"), loc);
+                    self.error(
+                        format!("unknown name `{name}`{}", self.did_you_mean(name)),
+                        loc,
+                    );
                     None
                 }
             },
@@ -566,7 +576,13 @@ impl Validator {
                     binding.ty
                 }
                 None => {
-                    self.error(format!("unknown assignment target `{name}`"), loc);
+                    self.error(
+                        format!(
+                            "unknown assignment target `{name}`{}",
+                            self.did_you_mean(name)
+                        ),
+                        loc,
+                    );
                     None
                 }
             },
@@ -616,10 +632,33 @@ impl Validator {
         match Vs3Type::parse(ty) {
             Some(ty) => Some(ty),
             None => {
-                self.error(format!("unknown type `{ty}`"), loc);
+                let hint = suggest_name(ty, VS3_TYPE_NAMES.iter().copied())
+                    .map(|s| format!(" (did you mean `{s}`?)"))
+                    .unwrap_or_default();
+                self.error(format!("unknown type `{ty}`{hint}"), loc);
                 None
             }
         }
+    }
+
+    /// All names visible at the cursor (locals shadow globals).
+    fn visible_names(&self) -> Vec<&str> {
+        let mut names: Vec<&str> = self.globals.keys().map(String::as_str).collect();
+        for scope in &self.scopes {
+            for name in scope.keys() {
+                if !names.contains(&name.as_str()) {
+                    names.push(name.as_str());
+                }
+            }
+        }
+        names
+    }
+
+    /// ` (did you mean `x`?)` suffix when a close name exists.
+    fn did_you_mean(&self, name: &str) -> String {
+        suggest_name(name, self.visible_names())
+            .map(|s| format!(" (did you mean `{s}`?)"))
+            .unwrap_or_default()
     }
 
     fn check_compatible(
@@ -687,6 +726,58 @@ impl Validator {
             loc: loc.clone(),
         });
     }
+}
+
+/// Canonical VS3 type spellings for `did you mean` on unknown types.
+const VS3_TYPE_NAMES: &[&str] = &[
+    "any", "null", "bool", "int", "i64", "float", "f64", "string", "str", "list", "map", "vec2",
+    "vec3", "vec4", "mat3", "mat4", "quat", "rng",
+];
+
+/// Closest candidate within edit distance 3, if any.
+fn suggest_name<'a>(
+    wanted: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let mut best: Option<(&'a str, usize)> = None;
+    for candidate in candidates {
+        if candidate == wanted {
+            continue;
+        }
+        // cheap pre-filter on length before the DP table
+        if candidate.len().abs_diff(wanted.len()) > 3 {
+            continue;
+        }
+        let dist = edit_distance(wanted, candidate);
+        if dist <= 3 && best.map_or(true, |(_, d)| dist < d) {
+            best = Some((candidate, dist));
+        }
+    }
+    best.map(|(name, _)| name)
+}
+
+/// Levenshtein distance over chars (inputs are short identifiers).
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    if a.is_empty() {
+        return b.len();
+    }
+    if b.is_empty() {
+        return a.len();
+    }
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut curr = vec![0; b.len() + 1];
+    for (i, &ca) in a.iter().enumerate() {
+        curr[0] = i + 1;
+        for (j, &cb) in b.iter().enumerate() {
+            curr[j + 1] = (prev[j] + usize::from(ca != cb))
+                .min(prev[j + 1] + 1)
+                .min(curr[j] + 1);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[b.len()]
 }
 
 fn numeric_result(left: Option<Vs3Type>, right: Option<Vs3Type>) -> Option<Vs3Type> {

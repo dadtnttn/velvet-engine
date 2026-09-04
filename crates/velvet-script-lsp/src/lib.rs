@@ -187,6 +187,12 @@ pub fn analyze(source: &str, file: Option<&str>) -> Analysis {
                 line: loc.line.saturating_sub(1),
                 character: loc.column.saturating_sub(1),
             }),
+            Item::Transform { name, loc, .. } => analysis.symbols.push(DocumentSymbol {
+                name: name.clone(),
+                kind: "transform".into(),
+                line: loc.line.saturating_sub(1),
+                character: loc.column.saturating_sub(1),
+            }),
             Item::Character { name, loc, .. } => analysis.symbols.push(DocumentSymbol {
                 name: name.clone(),
                 kind: "character".into(),

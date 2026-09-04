@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use crate::history::HistoryEntry;
 use crate::prefs::{SkipMode, StoryPreferences, TextSpeed};
 use crate::rollback::RollbackStack;
-use crate::runtime::{ChoiceOption, StoryEvent, StoryPlayer, StoryWait, VisibleCharacter};
+use crate::runtime::{
+    ActiveGameScreen, ChoiceOption, StoryEvent, StoryPlayer, StoryWait, VisibleCharacter,
+};
 use crate::save::{SaveError, SaveGame, SaveMeta, SaveStore};
 use crate::transitions::{Transition, TransitionQueue, WipeDirection};
 
@@ -161,6 +163,46 @@ impl ConfirmDialog {
     }
 }
 
+/// Active mini-ATL motion on a sprite (elapsed since `show ... with ...`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ActiveMotion {
+    /// Motion detail.
+    pub motion: crate::atl::SpriteMotion,
+    /// Elapsed seconds.
+    pub elapsed: f32,
+}
+
+impl ActiveMotion {
+    /// Start a motion.
+    pub fn start(motion: crate::atl::SpriteMotion) -> Self {
+        Self {
+            motion,
+            elapsed: 0.0,
+        }
+    }
+
+    /// Finished?
+    pub fn is_finished(&self) -> bool {
+        self.elapsed >= self.motion.duration
+    }
+}
+
+/// Enter fade seconds for `with` on screen show/call.
+pub const SCREEN_ENTER_SECS: f32 = 0.30;
+/// Exit fade seconds for `with` on screen hide.
+pub const SCREEN_EXIT_SECS: f32 = 0.35;
+
+/// A dismissed game screen still playing its exit fade.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GameScreenExit {
+    /// Resolved frame (frozen reveal).
+    pub frame: crate::product_ui::GameScreenFrame,
+    /// Seconds since dismissal.
+    pub clock: f32,
+    /// Exit transition name (`with` motion or transform).
+    pub exit: Option<String>,
+}
+
 /// Sprite on a presentation layer with z-order.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LayeredSprite {
@@ -199,6 +241,8 @@ pub struct PresentationState {
     pub last_host_call: Option<String>,
     /// Args of last host call (for debug / host reconcilation).
     pub last_host_args: IndexMap<String, crate::value::StoryValue>,
+    /// Active mini-ATL motions by sprite id.
+    pub motions: IndexMap<String, ActiveMotion>,
 }
 
 impl PresentationState {
@@ -236,6 +280,42 @@ impl PresentationState {
     /// Hide.
     pub fn hide(&mut self, id: &str) {
         self.sprites.shift_remove(id);
+        self.motions.shift_remove(id);
+    }
+
+    /// Register a mini-ATL motion on a sprite (restarts elapsed).
+    pub fn register_motion(&mut self, id: &str, motion: crate::atl::SpriteMotion) {
+        self.motions
+            .insert(id.to_string(), ActiveMotion::start(motion));
+    }
+
+    /// Active motion for a sprite, if any.
+    pub fn motion_for(&self, id: &str) -> Option<&ActiveMotion> {
+        self.motions.get(id)
+    }
+
+    /// X offset px for shake (0 when no shake motion).
+    pub fn shake_offset(&self, id: &str) -> f32 {
+        self.motions
+            .get(id)
+            .map(|a| a.motion.shake_offset(a.elapsed))
+            .unwrap_or(0.0)
+    }
+
+    /// Scale multiplier for zoom (1.0 when no zoom motion).
+    pub fn zoom_scale(&self, id: &str) -> f32 {
+        self.motions
+            .get(id)
+            .map(|a| a.motion.zoom_scale(a.elapsed))
+            .unwrap_or(1.0)
+    }
+
+    /// Opacity for fade (1.0 when no fade motion).
+    pub fn fade_alpha(&self, id: &str) -> f32 {
+        self.motions
+            .get(id)
+            .map(|a| a.motion.fade_alpha(a.elapsed))
+            .unwrap_or(1.0)
     }
 
     /// Queue dissolve.
@@ -260,9 +340,14 @@ impl PresentationState {
             .push(Transition::r#move(duration, WipeDirection::LeftToRight));
     }
 
-    /// Tick transitions.
+    /// Tick transitions + mini-ATL motions (finished motions are dropped).
     pub fn tick(&mut self, dt: f32) {
         self.transitions.tick(dt);
+        let dt = dt.max(0.0);
+        for active in self.motions.values_mut() {
+            active.elapsed += dt;
+        }
+        self.motions.retain(|_, a| !a.is_finished());
     }
 }
 
@@ -393,6 +478,46 @@ pub struct VnSession {
     pub rollback: RollbackStack,
     /// Optional gallery for sample/replay unlocks.
     pub gallery: crate::gallery::Gallery,
+    /// Music-room catalog (BGM unlocks + play counts).
+    pub music_room: crate::music_room::MusicRoom,
+    /// Active screen layout preset (say/menu/nvl in 3 lines).
+    pub screen: crate::screens::ScreenLayout,
+    /// Active screen preset id (`say_classic` default).
+    pub screen_id: String,
+    /// Game screens currently shown (mirrors the player stack, top = last).
+    pub game_screens: Vec<ActiveGameScreen>,
+    /// Seconds since each shown screen appeared (enter fade clock).
+    pub screen_enter: IndexMap<String, f32>,
+    /// Enter transition name by screen id (`with` motion or transform).
+    pub screen_enters: IndexMap<String, String>,
+    /// Screens playing their exit fade (removed after the fade).
+    pub screen_exiting: IndexMap<String, GameScreenExit>,
+    /// Typewriter reveal (chars shown) by game-screen id.
+    pub screen_reveal: IndexMap<String, usize>,
+    /// Named ATL transforms by sprite id (`show … with <transform>`).
+    pub sprite_transforms: IndexMap<String, String>,
+    /// Transform clock (seconds since attach) by sprite id.
+    pub transform_clocks: IndexMap<String, f32>,
+    /// Picked `choice` variant by sprite id.
+    pub transform_variants: IndexMap<String, usize>,
+    /// Seed for [`crate::atl::next_variant`] (hosts can reset for replays).
+    pub transform_seed: u64,
+    /// NVL page buffer for full-page mode.
+    pub nvl: crate::screens::NvlPage,
+    /// Voice cast per character.
+    pub voice_cast: crate::voice_cast::VoiceCast,
+    /// Accessibility prefs (font size, contrast, reduced motion).
+    pub accessibility: crate::accessibility::AccessibilityPrefs,
+    /// Auto-save policy (scene -> `auto_<scene>` slots).
+    pub autosave: crate::save_photo::AutoSavePolicy,
+    /// Recent auto-save slot ids (oldest first).
+    pub autosaves: Vec<String>,
+    /// Cinema playback (`movie` ops). Click skips, auto waits.
+    pub video: crate::video_state::VideoState,
+    /// Live2D stage (params, motions, blink/breath/lip-sync tick here).
+    pub live2d: crate::live2d::Live2dStage,
+    /// Achievements (auto-granted on gallery/music/ending events).
+    pub achievements: crate::achievements::AchievementState,
     /// Save directory (optional until bound).
     save_dir: Option<PathBuf>,
     /// Whether user requested quit (after confirm).
@@ -405,13 +530,21 @@ pub struct VnSession {
 
 impl VnSession {
     /// Start from a story player (already loaded program).
+    ///
+    /// Prefer [`Self::new_with_root`] when media (cinema clips, …) must
+    /// resolve during the very first ingest.
     pub fn new(player: StoryPlayer) -> Self {
+        Self::new_with_root(player, None)
+    }
+
+    /// Start with a project root bound before the first ingest.
+    pub fn new_with_root(player: StoryPlayer, project_root: Option<PathBuf>) -> Self {
         let base_program = player.program().clone();
         let mut s = Self {
             base_program,
             player,
             language: "en".into(),
-            project_root: None,
+            project_root,
             say: SayScreen::default(),
             choice: ChoiceScreen::default(),
             confirm: ConfirmDialog::default(),
@@ -419,6 +552,26 @@ impl VnSession {
             bgm: BgmController::default(),
             rollback: RollbackStack::with_capacity(100),
             gallery: crate::gallery::Gallery::default(),
+            music_room: crate::music_room::MusicRoom::new(),
+            screen: crate::screens::ScreenLayout::say_classic(),
+            screen_id: "say_classic".into(),
+            game_screens: Vec::new(),
+            screen_enter: IndexMap::new(),
+            screen_enters: IndexMap::new(),
+            screen_exiting: IndexMap::new(),
+            screen_reveal: IndexMap::new(),
+            sprite_transforms: IndexMap::new(),
+            transform_clocks: IndexMap::new(),
+            transform_variants: IndexMap::new(),
+            transform_seed: 0x9E3779B97F4A7C15,
+            nvl: crate::screens::NvlPage::new(24),
+            voice_cast: crate::voice_cast::VoiceCast::new(),
+            accessibility: crate::accessibility::AccessibilityPrefs::default(),
+            autosave: crate::save_photo::AutoSavePolicy::default(),
+            autosaves: Vec::new(),
+            video: crate::video_state::VideoState::default(),
+            live2d: crate::live2d::Live2dStage::default(),
+            achievements: crate::achievements::AchievementState::new(),
             save_dir: None,
             quit_requested: false,
             cps: 40.0,
@@ -438,6 +591,10 @@ impl VnSession {
     }
 
     /// Bind project root (for `tl/` language packs).
+    ///
+    /// Late binding: media ops already ingested (e.g. an opening `movie`)
+    /// will already have resolved without it. Prefer
+    /// [`Self::new_with_root`] at boot.
     pub fn with_project_root(mut self, root: impl Into<PathBuf>) -> Self {
         self.project_root = Some(root.into());
         self
@@ -462,6 +619,17 @@ impl VnSession {
         self.player.sync_presentation_prefs();
         self.say.clear();
         self.choice.close();
+        self.screen = crate::screens::ScreenLayout::say_classic();
+        self.screen_id = "say_classic".into();
+        self.game_screens.clear();
+        self.screen_reveal.clear();
+        self.screen_enter.clear();
+        self.screen_enters.clear();
+        self.screen_exiting.clear();
+        self.sprite_transforms.clear();
+        self.transform_clocks.clear();
+        self.transform_variants.clear();
+        self.nvl = crate::screens::NvlPage::new(24);
         self.presentation = PresentationState::default();
         self.bgm = BgmController::default();
         self.rollback.clear();
@@ -550,7 +718,13 @@ impl VnSession {
             ))
         })?;
         let store = SaveStore::new(dir);
-        let save = self.player.to_save(slot);
+        let mut save = self
+            .player
+            .to_save(slot)
+            .with_gallery_unlocks(self.gallery.unlock_set())
+            .with_music_unlocks(self.music_room.unlock_set());
+        save.achievements_earned = self.achievements.earned_set();
+        save.checksum = save.compute_checksum();
         store.write(&save)?;
         Ok(save)
     }
@@ -571,7 +745,13 @@ impl VnSession {
             self.confirm.ask_overwrite(slot);
             Ok(())
         } else {
-            let save = self.player.to_save(slot);
+            let mut save = self
+                .player
+                .to_save(slot)
+                .with_gallery_unlocks(self.gallery.unlock_set())
+                .with_music_unlocks(self.music_room.unlock_set());
+            save.achievements_earned = self.achievements.earned_set();
+            save.checksum = save.compute_checksum();
             store.write(&save)?;
             Ok(())
         }
@@ -587,6 +767,12 @@ impl VnSession {
         })?;
         let store = SaveStore::new(dir);
         let save = store.read(slot)?;
+        // Restore collection unlocks (union — achievements never un-unlock).
+        self.gallery.apply_unlock_set(save.gallery_unlocked.clone());
+        self.music_room
+            .apply_unlock_set(save.music_unlocked.clone());
+        self.achievements
+            .apply_earned(save.achievements_earned.clone());
         // Propagate ProgramMismatch (and other SaveError) without wrapping as Io.
         self.player.load_save(save)?;
         self.rollback.clear();
@@ -598,6 +784,7 @@ impl VnSession {
         for (_, vis) in self.player.visible() {
             self.presentation.show(vis.clone());
         }
+        self.restore_screen_and_motions();
         self.ingest_events();
         self.sync_ui_from_wait();
         Ok(())
@@ -635,8 +822,18 @@ impl VnSession {
     }
 
     /// Advance dialogue / continue (click-to-advance).
+    ///
+    /// A playing cinema clip eats the click (skip) instead of advancing text.
     pub fn advance(&mut self) {
         if self.confirm.open {
+            return;
+        }
+        if self.video.skip_current() {
+            let (prefs, text) = (
+                self.player.preferences().clone(),
+                self.say.full_text.clone(),
+            );
+            self.player.auto_mode_mut().on_video_finished(&text, &prefs);
             return;
         }
         match self.player.wait().clone() {
@@ -667,7 +864,10 @@ impl VnSession {
                 self.sync_ui_from_wait();
                 self.push_rollback_frame();
             }
-            StoryWait::Choice | StoryWait::Ended | StoryWait::Host { .. } => {}
+            StoryWait::Choice
+            | StoryWait::ScreenCall { .. }
+            | StoryWait::Ended
+            | StoryWait::Host { .. } => {}
         }
     }
 
@@ -687,7 +887,175 @@ impl VnSession {
         self.choice.close();
         self.ingest_events();
         self.sync_ui_from_wait();
+        self.push_rollback_frame();
         Ok(())
+    }
+
+    /// Jump to a scene, abandoning modal calls (hosts should prefer this
+    /// over `player.jump_to_scene` so session mirrors stay coherent).
+    pub fn jump_to_scene(&mut self, target: &str) {
+        self.push_rollback_frame();
+        self.player.jump_to_scene(target);
+        // The player keeps modeless screens but drops modals; mirror it.
+        let live: std::collections::HashSet<String> = self
+            .player
+            .game_screens()
+            .iter()
+            .map(|s| s.id.clone())
+            .collect();
+        self.game_screens.retain(|s| live.contains(&s.id));
+        self.screen_reveal.retain(|id, _| live.contains(id));
+        self.screen_enter.retain(|id, _| live.contains(id));
+        self.screen_enters.retain(|id, _| live.contains(id));
+        self.screen_exiting.clear();
+        self.ingest_events();
+        self.sync_ui_from_wait();
+        self.push_rollback_frame();
+    }
+
+    /// Return a value to a modal `screen call` (host: user picked an action).
+    ///
+    /// The value lands in the `_return` variable; the modal screen is
+    /// dismissed and the story resumes.
+    pub fn return_from_screen(&mut self, value: crate::value::StoryValue) -> Result<(), String> {
+        self.push_rollback_frame();
+        let modal = self.player.pending_screen_call().map(str::to_string);
+        self.player.return_from_screen(value)?;
+        // The player dismisses the modal silently (no event); mirror it.
+        if let Some(id) = modal {
+            self.game_screens.retain(|s| s.id != id);
+            self.screen_reveal.shift_remove(&id);
+            self.screen_enter.shift_remove(&id);
+            self.screen_enters.shift_remove(&id);
+            self.screen_exiting.shift_remove(&id);
+        }
+        self.ingest_events();
+        self.sync_ui_from_wait();
+        self.push_rollback_frame();
+        Ok(())
+    }
+
+    /// Reveal all text of a game screen at once (click-to-complete).
+    pub fn reveal_game_screen(&mut self, id: &str) {
+        self.screen_reveal.insert(id.to_string(), usize::MAX);
+    }
+
+    /// Voice clips for a shown screen's texts + labels.
+    ///
+    /// Mirrors dialogue routing: the screen id acts as speaker key in
+    /// `voice_cast.json`, slot index as line number. Hosts enqueue the
+    /// returned clip ids like any other voice line.
+    pub fn voice_clips_for_screen(&self, id: &str) -> Vec<(String, Option<String>)> {
+        let mut out = Vec::new();
+        let frame = crate::product_ui::game_screen_frames(self)
+            .into_iter()
+            .find(|f| f.id == id);
+        let Some(frame) = frame else {
+            return out;
+        };
+        for (slot, text) in frame.texts.iter().chain(frame.labels.iter()).enumerate() {
+            out.push((text.clone(), self.voice_cast.clip_for_line(id, slot as u32)));
+        }
+        out
+    }
+
+    /// Called screen id while waiting on a modal `screen call`.
+    pub fn pending_screen_call(&self) -> Option<&str> {
+        self.player.pending_screen_call()
+    }
+
+    /// Mirror of the player slot rule: showing replaces the same id or
+    /// any shown screen sharing its non-empty `tag:`.
+    fn retain_game_screen_slot(&mut self, id: &str) {
+        let tag = self
+            .player
+            .program()
+            .screens
+            .get(id)
+            .and_then(|d| d.tag.clone());
+        let live: std::collections::HashSet<String> = self
+            .game_screens
+            .iter()
+            .filter(|s| {
+                if s.id == id {
+                    return false;
+                }
+                match &tag {
+                    Some(t) if !t.is_empty() => {
+                        self.player
+                            .program()
+                            .screens
+                            .get(s.id.as_str())
+                            .and_then(|d| d.tag.as_ref())
+                            != Some(t)
+                    }
+                    _ => true,
+                }
+            })
+            .map(|s| s.id.clone())
+            .collect();
+        self.game_screens.retain(|s| live.contains(&s.id));
+        self.screen_reveal.retain(|id, _| live.contains(id));
+        self.screen_enter.retain(|id, _| live.contains(id));
+        self.screen_enters.retain(|id, _| live.contains(id));
+        self.screen_exiting.retain(|id, _| live.contains(id));
+    }
+
+    /// Lowered definition of a game screen, if declared.
+    pub fn game_screen_def(&self, id: &str) -> Option<&crate::screens::ScreenDef> {
+        self.player.program().screens.get(id)
+    }
+
+    /// Resolve one currently-shown screen into a display frame.
+    pub fn resolved_screen_frame(&self, id: &str) -> Option<crate::product_ui::GameScreenFrame> {
+        self.game_screens
+            .iter()
+            .find(|s| s.id == id)
+            .map(|shown| crate::product_ui::game_screen_frame(self, shown))
+    }
+
+    /// Record a shown screen's texts in dialogue history (speaker = title
+    /// or screen id), so backlog/search see game-screen content too.
+    pub fn push_screen_history(&mut self, id: &str) {
+        let Some(frame) = self.resolved_screen_frame(id) else {
+            return;
+        };
+        let speaker = if frame.title.trim().is_empty() {
+            frame.id.clone()
+        } else {
+            frame.title.clone()
+        };
+        let scene = self.player.scene_name().to_string();
+        for text in &frame.texts {
+            if !text.trim().is_empty() {
+                self.player
+                    .history_mut()
+                    .push(speaker.clone(), text.clone(), scene.clone());
+            }
+        }
+    }
+
+    /// Resolve a screen value for display: literals interpolate `{vars}`
+    /// and strip rich markup (same as dialogue), expressions read the
+    /// session variable when one exists, else show source.
+    pub fn resolve_screen_value(&self, value: &crate::screens::ScreenValueRt) -> String {
+        match value {
+            crate::screens::ScreenValueRt::Lit { value } => {
+                let rendered = match value {
+                    crate::value::StoryValue::String(s) => self.player.variables().interpolate(s),
+                    other => other.display_str(),
+                };
+                say_plain_and_cps(&rendered).0
+            }
+            crate::screens::ScreenValueRt::Expr { source } => {
+                let v = self.player.variables().get(source);
+                if matches!(v, crate::value::StoryValue::Null) {
+                    source.clone()
+                } else {
+                    v.display_str()
+                }
+            }
+        }
     }
 
     /// Rollback one step.
@@ -701,10 +1069,83 @@ impl VnSession {
             for (_, vis) in self.player.visible() {
                 self.presentation.show(vis.clone());
             }
+            self.restore_screen_and_motions();
             self.ingest_events();
             self.sync_ui_from_wait();
         }
         Ok(ok)
+    }
+
+    /// Re-apply screen preset + motions + game screens from the player
+    /// snapshot (used after rollback / load so presentation matches logic).
+    ///
+    /// Transform clocks restart at 0 (documented: named transforms replay
+    /// their `on show` + main steps after a load, like Ren'Py re-showing).
+    pub fn restore_screen_and_motions(&mut self) {
+        let screen = self.player.snapshot_screen().to_string();
+        if !screen.is_empty() {
+            self.apply_screen(&screen);
+        }
+        for (id, motion) in self.player.snapshot_motions() {
+            if let Some(kind) = crate::atl::MotionKind::parse(&motion.kind) {
+                self.presentation.register_motion(
+                    id,
+                    crate::atl::SpriteMotion::new(kind, motion.duration_secs, motion.amount),
+                );
+            }
+        }
+        self.sprite_transforms = self.player.snapshot_transforms().clone();
+        self.transform_clocks = self
+            .sprite_transforms
+            .keys()
+            .map(|id| (id.clone(), 0.0))
+            .collect();
+        self.game_screens = self.player.game_screens().to_vec();
+        let shown: std::collections::HashSet<&str> =
+            self.game_screens.iter().map(|s| s.id.as_str()).collect();
+        self.screen_reveal
+            .retain(|id, _| shown.contains(id.as_str()));
+        self.screen_enter
+            .retain(|id, _| shown.contains(id.as_str()));
+        self.screen_enters
+            .retain(|id, _| shown.contains(id.as_str()));
+        // Exiting fades do not survive a load/rollback (documented: the
+        // screen is already logically gone, so it stays gone).
+        self.screen_exiting.clear();
+    }
+
+    /// Current ATL pose for a sprite with a named transform.
+    ///
+    /// Plays `on show` first, then the main steps (offsets from placement;
+    /// base channels start at 0). Returns None without a known transform.
+    /// Frozen at the start pose while `reduced_motion` is on.
+    pub fn transform_pose(&self, sprite: &str) -> Option<Vec<(String, f32)>> {
+        let name = self.sprite_transforms.get(sprite)?;
+        let def = self.player.program().transforms.get(name)?;
+        let variant = self.transform_variants.get(sprite).copied().unwrap_or(0);
+        let mut clock = self.transform_clocks.get(sprite).copied().unwrap_or(0.0);
+        if self.accessibility.reduced_motion {
+            clock = 0.0;
+        }
+        let show_dur = def
+            .handler_duration(crate::atl::AtlEvent::Show)
+            .unwrap_or(0.0);
+        if !def.handler(crate::atl::AtlEvent::Show).is_empty() && clock < show_dur {
+            Some(crate::atl::sample_transform_on(
+                def,
+                crate::atl::AtlEvent::Show,
+                &[],
+                clock,
+                variant,
+            ))
+        } else {
+            let t = if def.handler(crate::atl::AtlEvent::Show).is_empty() {
+                clock
+            } else {
+                (clock - show_dur).max(0.0)
+            };
+            Some(crate::atl::sample_transform(def, &[], t, variant))
+        }
     }
 
     /// Enable skip and try one skip advance.
@@ -736,6 +1177,58 @@ impl VnSession {
 
     /// Tick (typewriter, auto, transitions, bgm).
     pub fn tick(&mut self, dt: f32) {
+        // Cinema first: progress, auto-skip while skip-bursting, gate auto.
+        self.video.tick(dt);
+        if self.player.preferences().skip_mode != SkipMode::Off {
+            self.video.skip_current();
+        }
+        let was_waiting = self.player.auto_mode().is_waiting_for_video();
+        let playing = self.video.is_playing();
+        self.player.auto_mode_mut().set_waiting_for_video(playing);
+        if was_waiting && !playing {
+            let (prefs, text) = (
+                self.player.preferences().clone(),
+                self.say.full_text.clone(),
+            );
+            self.player.auto_mode_mut().on_video_finished(&text, &prefs);
+        }
+        // Named-transform clocks (frozen while reduced motion is on).
+        if !self.accessibility.reduced_motion {
+            let dt = dt.max(0.0);
+            for clock in self.transform_clocks.values_mut() {
+                *clock += dt;
+            }
+        }
+        // Screen enter/exit fade clocks (exits finish and drop).
+        if self.accessibility.reduced_motion {
+            self.screen_exiting.clear();
+        } else {
+            let dt = dt.max(0.0);
+            for clock in self.screen_enter.values_mut() {
+                *clock += dt;
+            }
+            for exit in self.screen_exiting.values_mut() {
+                exit.clock += dt;
+            }
+            self.screen_exiting
+                .retain(|_, exit| exit.clock < SCREEN_EXIT_SECS);
+        }
+        // Game-screen typewriter (instant when cps is 0).
+        if self.cps > 0.0 {
+            let n = (dt.max(0.0) * self.cps).floor() as usize;
+            if n > 0 {
+                for shown in &self.game_screens {
+                    let entry = self.screen_reveal.entry(shown.id.clone()).or_insert(0);
+                    if *entry != usize::MAX {
+                        *entry = entry.saturating_add(n);
+                    }
+                }
+            }
+        } else {
+            for shown in &self.game_screens {
+                self.screen_reveal.insert(shown.id.clone(), usize::MAX);
+            }
+        }
         // Typewriter
         if self.say.visible && !self.say.text_complete && self.cps > 0.0 {
             self.type_acc += dt * self.cps;
@@ -785,6 +1278,9 @@ impl VnSession {
 
         self.presentation.tick(dt);
         self.bgm.tick(dt);
+        let voice_playing = self.player.voice().is_playing();
+        self.live2d.tick(dt, voice_playing);
+        self.live2d.sync_presentation(&mut self.presentation);
         self.ingest_events();
     }
 
@@ -805,7 +1301,10 @@ impl VnSession {
                     self.ingest_events();
                     n += 1;
                 }
-                StoryWait::Choice | StoryWait::Ended | StoryWait::Host { .. } => break,
+                StoryWait::Choice
+                | StoryWait::ScreenCall { .. }
+                | StoryWait::Ended
+                | StoryWait::Host { .. } => break,
             }
         }
         self.sync_ui_from_wait();
@@ -844,6 +1343,10 @@ impl VnSession {
                     let _ = self.player.resume_host(&token);
                     self.ingest_events();
                 }
+                StoryWait::ScreenCall { .. } => {
+                    // Headless: return null so modal screens don't hang tests.
+                    let _ = self.return_from_screen(crate::value::StoryValue::Null);
+                }
             }
         }
         None
@@ -874,8 +1377,131 @@ impl VnSession {
                 StoryEvent::Show(v) => {
                     self.presentation.show(v);
                 }
+                StoryEvent::Motion { target, motion } => {
+                    if let Some(kind) = crate::atl::MotionKind::parse(&motion.kind) {
+                        let duration = if self.accessibility.reduced_motion {
+                            0.0
+                        } else {
+                            motion.duration_secs
+                        };
+                        self.presentation.register_motion(
+                            &target,
+                            crate::atl::SpriteMotion::new(kind, duration, motion.amount),
+                        );
+                    }
+                }
+                StoryEvent::Screen(id) => {
+                    self.apply_screen(&id);
+                }
+                StoryEvent::GameScreenShow {
+                    id,
+                    args,
+                    motion,
+                    transform,
+                } => {
+                    self.retain_game_screen_slot(&id);
+                    self.screen_reveal.insert(id.clone(), 0);
+                    self.screen_enter.insert(id.clone(), 0.0);
+                    if let Some(name) = transform
+                        .clone()
+                        .or_else(|| motion.as_ref().map(|m| m.kind.clone()))
+                    {
+                        self.screen_enters.insert(id.clone(), name);
+                    }
+                    self.game_screens.push(ActiveGameScreen {
+                        id: id.clone(),
+                        args,
+                        modal: false,
+                    });
+                    self.push_screen_history(&id);
+                }
+                StoryEvent::GameScreenHide {
+                    id,
+                    motion,
+                    transform,
+                } => {
+                    let exit = transform
+                        .clone()
+                        .or_else(|| motion.as_ref().map(|m| m.kind.clone()));
+                    // Resolve before removal so the exit fade freezes the
+                    // last revealed frame.
+                    let frame = self.resolved_screen_frame(&id);
+                    self.game_screens.retain(|s| s.id != id);
+                    self.screen_reveal.shift_remove(&id);
+                    self.screen_enter.shift_remove(&id);
+                    self.screen_enters.shift_remove(&id);
+                    if exit.is_some() && !self.accessibility.reduced_motion {
+                        if let Some(frame) = frame {
+                            self.screen_exiting.insert(
+                                id,
+                                GameScreenExit {
+                                    frame,
+                                    clock: 0.0,
+                                    exit,
+                                },
+                            );
+                        }
+                    } else {
+                        self.screen_exiting.shift_remove(&id);
+                    }
+                }
+                StoryEvent::GameScreenCall {
+                    id,
+                    args,
+                    motion,
+                    transform,
+                } => {
+                    self.retain_game_screen_slot(&id);
+                    self.screen_reveal.insert(id.clone(), 0);
+                    self.screen_enter.insert(id.clone(), 0.0);
+                    if let Some(name) = transform
+                        .clone()
+                        .or_else(|| motion.as_ref().map(|m| m.kind.clone()))
+                    {
+                        self.screen_enters.insert(id.clone(), name);
+                    }
+                    self.game_screens.push(ActiveGameScreen {
+                        id: id.clone(),
+                        args,
+                        modal: true,
+                    });
+                    self.push_screen_history(&id);
+                }
+                StoryEvent::Transform { target, name } => {
+                    let variant = self
+                        .player
+                        .program()
+                        .transforms
+                        .get(&name)
+                        .map(crate::atl::transform_variants)
+                        .map(|n| crate::atl::next_variant(n, &mut self.transform_seed))
+                        .unwrap_or(0);
+                    self.sprite_transforms.insert(target.clone(), name);
+                    self.transform_clocks.insert(target.clone(), 0.0);
+                    self.transform_variants.insert(target, variant);
+                }
+                StoryEvent::Unlock { catalog, id } => {
+                    // Monotonic achievement: unknown ids are ignored so a
+                    // catalog edited later never breaks an old playthrough.
+                    if catalog == "music" {
+                        self.unlock_music(&id);
+                    } else {
+                        self.unlock_gallery(&id);
+                    }
+                    self.achievements.grant_for(&catalog, &id);
+                }
+                StoryEvent::Ended { ending } => {
+                    if let Some(id) = ending {
+                        self.achievements.grant_for("ending", &id);
+                    }
+                    self.say.visible = false;
+                    self.choice.close();
+                }
                 StoryEvent::Hide(id) => {
                     self.presentation.hide(&id);
+                    self.sprite_transforms.shift_remove(&id);
+                    self.transform_clocks.shift_remove(&id);
+                    self.transform_variants.shift_remove(&id);
                 }
                 StoryEvent::Dialogue {
                     speaker_name, text, ..
@@ -892,10 +1518,6 @@ impl VnSession {
                 StoryEvent::Choices(opts) => {
                     self.say.visible = false;
                     self.choice.open_with(opts);
-                }
-                StoryEvent::Ended { .. } => {
-                    self.say.visible = false;
-                    self.choice.close();
                 }
                 StoryEvent::Variable { .. } => {}
                 StoryEvent::Sound { path } => {
@@ -922,6 +1544,9 @@ impl VnSession {
                 StoryEvent::HostCall { name, args } => {
                     self.presentation.last_host_call = Some(name);
                     self.presentation.last_host_args = args;
+                }
+                StoryEvent::Movie { path, loop_clip } => {
+                    self.play_movie(&path, loop_clip);
                 }
             }
         }
@@ -966,6 +1591,11 @@ impl VnSession {
                 if !self.choice.open {
                     self.choice.open_with(self.player.choices().to_vec());
                 }
+            }
+            StoryWait::ScreenCall { .. } => {
+                // Modal game screen stays up; say/choice hidden like a menu.
+                self.say.visible = false;
+                self.choice.close();
             }
             StoryWait::Ended => {
                 self.say.visible = false;
@@ -1032,6 +1662,168 @@ impl VnSession {
     /// Unlock a gallery entry after an ending (replay/gallery path).
     pub fn unlock_gallery(&mut self, id: &str) -> bool {
         self.gallery.unlock_if_known(id)
+    }
+
+    /// Load music-room catalog from project `music.json` if present.
+    pub fn load_music_from_project(&mut self) -> Result<usize, String> {
+        let root = self
+            .project_root
+            .as_ref()
+            .ok_or_else(|| "no project root".to_string())?;
+        let path = root.join("music.json");
+        if !path.is_file() {
+            return Ok(0);
+        }
+        self.music_room =
+            crate::music_room::MusicRoom::from_path(&path).map_err(|e| e.to_string())?;
+        Ok(self.music_room.tracks.len())
+    }
+
+    /// Load voice cast from project `voice_cast.json` if present.
+    pub fn load_voice_cast_from_project(&mut self) -> Result<usize, String> {
+        let root = self
+            .project_root
+            .as_ref()
+            .ok_or_else(|| "no project root".to_string())?;
+        let path = root.join("voice_cast.json");
+        if !path.is_file() {
+            return Ok(0);
+        }
+        self.voice_cast = crate::voice_cast::VoiceCast::from_path(&path)?;
+        Ok(self.voice_cast.voices.len())
+    }
+
+    /// Apply a 3-line screen preset (`say_classic` / `say_minimal` / `nvl_page` / `menu`).
+    pub fn apply_screen(&mut self, id: &str) -> bool {
+        if let Some(preset) = crate::screens::ScreenPreset::from_id(id) {
+            self.screen = preset.layout;
+            self.screen_id = preset.id;
+            if self.screen.mode == crate::screens::ScreenMode::Nvl {
+                self.nvl = crate::screens::NvlPage::new(self.screen.max_lines);
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Show with mini-ATL in one line: `luna happy at left with shake 0.4 10`.
+    pub fn show_with_motion(&mut self, line: &str) -> Option<crate::atl::SpriteMotion> {
+        let (target, place, motion) = crate::atl::parse_show_with_motion(line);
+        if target.is_empty() {
+            return None;
+        }
+        let (id, expr) = match target.split_once(' ') {
+            Some((a, b)) => (a, Some(b)),
+            None => (target.as_str(), None),
+        };
+        // reduced motion => instant show, no shake offset
+        let secs = motion
+            .as_ref()
+            .map(|m| self.accessibility.transition_secs(m.duration))
+            .unwrap_or(0.0);
+        if secs > 0.0 {
+            self.presentation
+                .move_to(id, place.as_deref().unwrap_or("center"), secs);
+        }
+        self.apply_show(id, expr, place.as_deref());
+        if let Some(m) = &motion {
+            self.presentation
+                .register_motion(id, crate::atl::SpriteMotion::new(m.kind, secs, m.amount));
+        }
+        // push NVL line when in NVL mode
+        if self.screen.mode == crate::screens::ScreenMode::Nvl {
+            self.nvl.push(id, "(entra en escena)");
+        }
+        motion
+    }
+
+    /// Unlock a music-room track.
+    pub fn unlock_music(&mut self, id: &str) -> bool {
+        self.music_room.unlock_if_known(id)
+    }
+
+    /// Load achievements from project `achievements.json` if present.
+    pub fn load_achievements_from_project(&mut self) -> Result<usize, String> {
+        let root = self
+            .project_root
+            .as_ref()
+            .ok_or_else(|| "no project root".to_string())?;
+        let path = root.join("achievements.json");
+        if !path.is_file() {
+            return Ok(0);
+        }
+        let earned = std::mem::take(&mut self.achievements.earned);
+        let mut loaded =
+            crate::achievements::AchievementState::from_path(&path).map_err(|e| e.to_string())?;
+        loaded.apply_earned(earned);
+        self.achievements = loaded;
+        Ok(self.achievements.defs.len())
+    }
+
+    /// Voice clip id for a speaker line (per-character routing).
+    pub fn voice_clip_for(&self, speaker: &str, line_no: u32) -> Option<String> {
+        self.voice_cast.clip_for_line(speaker, line_no)
+    }
+
+    /// Estimated voice seconds for auto-advance when clip length unknown.
+    pub fn voice_estimate(&self, speaker: &str, text: &str) -> f32 {
+        let cps = match self.player.preferences().text_speed {
+            crate::prefs::TextSpeed::Instant => 60.0,
+            crate::prefs::TextSpeed::Cps(c) => c.max(1.0),
+        };
+        self.voice_cast
+            .duration_for_text(speaker, text)
+            .max(crate::rich_text::estimate_voice_secs(text, cps, 1.0) * 0.5)
+    }
+
+    /// Start a cinema clip (`movie` op). Missing dirs record a note instead
+    /// of failing the playthrough; the story continues on next advance.
+    pub fn play_movie(&mut self, path: &str, loop_clip: bool) {
+        let full = match &self.project_root {
+            Some(root) => root.join(path),
+            None => std::path::PathBuf::from(path),
+        };
+        match velvet_video::VideoClip::scan_dir(&full) {
+            Ok(mut clip) => {
+                if loop_clip {
+                    clip.manifest.loop_clip = true;
+                }
+                self.video
+                    .play(velvet_video::VideoPlayer::new(clip), path.to_string());
+            }
+            Err(e) => self.video.fail(format!("{path}: {e}")),
+        }
+    }
+
+    /// Auto-save slot for the current scene (`auto_<scene>`), tracking recents.
+    pub fn autosave_slot(&mut self) -> Option<String> {
+        let scene = self.player.scene_name().to_string();
+        let slot = self.autosave.slot_for_scene(&scene)?;
+        if !self.autosaves.contains(&slot) {
+            self.autosaves.push(slot.clone());
+        }
+        let mut slots = std::mem::take(&mut self.autosaves);
+        let _evicted = self.autosave.trim_slots(&mut slots);
+        self.autosaves = slots;
+        Some(slot)
+    }
+
+    /// Branch map for the loaded program (unreachable endings / broken jumps).
+    pub fn branch_map(&self) -> crate::branch_map::BranchMap {
+        crate::branch_map::BranchMap::analyze(self.player.program())
+    }
+
+    /// Attach thumbnail hash to a save (photo lives in sidecar).
+    pub fn attach_thumbnail_hash(
+        &self,
+        save: crate::save::SaveGame,
+        hash: String,
+    ) -> crate::save::SaveGame {
+        let mut s = save;
+        s.meta.thumbnail = hash.clone();
+        s.thumbnail_hash = hash;
+        s.checksum = s.compute_checksum();
+        s
     }
 }
 
@@ -1108,17 +1900,16 @@ pub fn open_session_from_file(
     let program =
         crate::load::load_program_from_source(&source, Some(&path.to_string_lossy()), title)?;
     let player = StoryPlayer::start(program);
-    let mut session = VnSession::new(player);
+    let root = path.parent().map(|parent| {
+        if parent.file_name().and_then(|s| s.to_str()) == Some("scripts") {
+            parent.parent().unwrap_or(parent).to_path_buf()
+        } else {
+            parent.to_path_buf()
+        }
+    });
+    let mut session = VnSession::new_with_root(player, root);
     if let Some(dir) = save_dir {
         session = session.with_save_dir(dir);
-    }
-    if let Some(parent) = path.parent() {
-        let root = if parent.file_name().and_then(|s| s.to_str()) == Some("scripts") {
-            parent.parent().unwrap_or(parent)
-        } else {
-            parent
-        };
-        session = session.with_project_root(root.to_path_buf());
     }
     Ok(session)
 }
@@ -1168,6 +1959,266 @@ scene end_good {
 }
 "#;
         load_program_from_source(src, Some("test.vel"), "Test VN").unwrap()
+    }
+
+    #[test]
+    fn transform_pose_plays_show_then_main() {
+        let src = r#"
+transform pop {
+  on show {
+    scale 1.2 0.2
+  }
+  y -4 1.0 linear
+}
+scene main {
+  show luna with pop
+  "x"
+}
+"#;
+        let program = load_program_from_source(src, Some("tp.vel"), "TP").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        let pose_value = |session: &VnSession, channel: &str| {
+            session
+                .transform_pose("luna")
+                .and_then(|pose| pose.into_iter().find(|(c, _)| c == channel))
+                .map(|(_, v)| v)
+                .unwrap_or(f32::NAN)
+        };
+        // In `on show` (0.2s): scale ramps 0 -> 1.2.
+        assert!((pose_value(&session, "scale") - 0.0).abs() < 1e-5);
+        session.tick(0.1);
+        assert!((pose_value(&session, "scale") - 0.6).abs() < 1e-4);
+        // Past the handler: main steps run (clock 0.3, handler 0.2,
+        // so y ramps 0 -> -4 for 0.1s of its 1s).
+        session.tick(0.2);
+        assert!((pose_value(&session, "y") - -0.4).abs() < 1e-4);
+    }
+
+    #[test]
+    fn same_tag_screens_replace_each_other() {
+        let src = r#"
+screen a {
+  tag: "panel"
+  text "A"
+}
+screen b {
+  tag: "panel"
+  text "B"
+}
+scene main {
+  screen show a
+  screen show b
+  "x"
+}
+"#;
+        let program = load_program_from_source(src, Some("tg.vel"), "TG").unwrap();
+        let session = VnSession::new(StoryPlayer::start(program));
+        let ids: Vec<&str> = session.game_screens.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["b"]);
+        assert_eq!(
+            session.game_screen_def("b").and_then(|d| d.tag.clone()),
+            Some("panel".to_string())
+        );
+    }
+
+    #[test]
+    fn game_screen_typewriter_and_voice() {
+        let src = r#"
+screen help {
+  title: "Help"
+  text "Read me."
+  textbutton "OK" action Return("ok")
+}
+scene main {
+  screen show help
+  "x"
+}
+"#;
+        let program = load_program_from_source(src, Some("sv.vel"), "SV").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        // Starts hidden, types in with ticks.
+        let frame = |session: &VnSession| {
+            crate::product_ui::game_screen_frames(session)
+                .into_iter()
+                .next()
+                .unwrap()
+        };
+        assert!(!frame(&session).text_complete);
+        assert!(frame(&session).revealed_texts[0].is_empty());
+        // Partial progress shows a strict prefix (not all-or-nothing).
+        session.tick(0.05);
+        let partial = frame(&session).revealed_texts[0].clone();
+        assert!(!partial.is_empty() && partial.len() < "Read me.".len());
+        assert!("Read me.".starts_with(&partial));
+        session.tick(10.0);
+        assert!(frame(&session).text_complete);
+        assert_eq!(frame(&session).revealed_texts, vec!["Read me.".to_string()]);
+        assert_eq!(frame(&session).revealed_labels, vec!["OK".to_string()]);
+        // Click-to-complete path.
+        session.screen_reveal.insert("help".into(), 0);
+        session.reveal_game_screen("help");
+        assert!(frame(&session).text_complete);
+        // Voice routing mirrors dialogue: screen id is the speaker key.
+        session
+            .voice_cast
+            .register(crate::voice_cast::CharacterVoice {
+                speaker: "help".into(),
+                clip_prefix: "help".into(),
+                volume: 1.0,
+                rate: 1.0,
+                pitch: 1.0,
+            });
+        let clips = session.voice_clips_for_screen("help");
+        assert_eq!(clips.len(), 2);
+        assert_eq!(clips[0].1.as_deref(), Some("help_0000"));
+        assert_eq!(clips[1].1.as_deref(), Some("help_0001"));
+        assert!(session.voice_clips_for_screen("nope").is_empty());
+    }
+
+    #[test]
+    fn screen_enter_exit_fades_and_history() {
+        let src = r#"
+screen help {
+  title: "Help"
+  text "Read {b}me{/b}."
+}
+scene main {
+  screen show help with fade
+  "middle"
+  screen hide help with fade
+  "x"
+}
+"#;
+        let program = load_program_from_source(src, Some("fx.vel"), "FX").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        // Just shown: enter fade starts transparent (rich markup stripped).
+        let frame = crate::product_ui::game_screen_frames(&session);
+        assert_eq!(frame.len(), 1);
+        assert_eq!(frame[0].alpha, 0.0);
+        assert_eq!(frame[0].texts, vec!["Read me.".to_string()]);
+        assert_eq!(frame[0].enter.as_deref(), Some("fade"));
+        // History recorded the screen text.
+        assert!(session
+            .player()
+            .history()
+            .entries()
+            .iter()
+            .any(|e| e.text == "Read me." && e.speaker == "Help"));
+        // Enter completes with ticks, then the hide starts the exit fade.
+        session.tick(1.0);
+        let frame = crate::product_ui::game_screen_frames(&session);
+        assert_eq!(frame[0].alpha, 1.0);
+        session.say.reveal_all();
+        session.advance();
+        session.say.reveal_all();
+        session.advance();
+        let frame = crate::product_ui::game_screen_frames(&session);
+        assert_eq!(frame.len(), 1);
+        assert_eq!(frame[0].alpha, 1.0);
+        session.tick(0.1);
+        let frame = crate::product_ui::game_screen_frames(&session);
+        assert!(frame[0].alpha < 1.0, "exiting: {}", frame[0].alpha);
+        session.tick(1.0);
+        assert!(crate::product_ui::game_screen_frames(&session).is_empty());
+    }
+
+    #[test]
+    fn paint_scales_glyphs_with_font_scale() {
+        let src = "scene main {\n hero \"Hi.\"\n}\n";
+        let program = load_program_from_source(src, Some("fs.vel"), "FS").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        let mut g = 0;
+        while !matches!(session.player().wait(), StoryWait::Line) && g < 10 {
+            session.advance();
+            g += 1;
+        }
+        session.accessibility.font_scale = 2.0;
+        let frame = crate::product_ui::build_product_ui_frame(&session);
+        let list = crate::product_paint::paint_product_frame(&frame);
+        let body = list
+            .commands
+            .iter()
+            .find(|c| matches!(c, crate::product_paint::ProductPaintCmd::Text { id, .. } if id == "body_text"))
+            .unwrap();
+        match body {
+            crate::product_paint::ProductPaintCmd::Text { size, .. } => {
+                assert!((size - 56.0).abs() < 1e-4, "{size}");
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn rollback_restores_modal_call() {
+        let src = r#"
+screen pick {
+  textbutton a action Return("a")
+}
+scene main {
+  screen call pick into choice
+  "after"
+  end "done"
+}
+"#;
+        let program = load_program_from_source(src, Some("rb.vel"), "RB").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        let mut g = 0;
+        while !matches!(session.player().wait(), StoryWait::ScreenCall { .. }) && g < 16 {
+            session.advance();
+            g += 1;
+        }
+        assert!(session.pending_screen_call().is_some());
+        session
+            .return_from_screen(crate::value::StoryValue::String("a".into()))
+            .unwrap();
+        assert_eq!(
+            session.player.variables().get("choice").display_str(),
+            "a".to_string()
+        );
+        // Roll back before the return: modal wait is back, binding cleared.
+        assert!(session.rollback_step().unwrap());
+        session.ingest_events();
+        session.sync_ui_from_wait();
+        assert!(matches!(
+            session.player().wait(),
+            StoryWait::ScreenCall { .. }
+        ));
+        assert!(matches!(
+            session.player.variables().get("choice"),
+            crate::value::StoryValue::Null
+        ));
+        assert!(session.pending_screen_call().is_some());
+    }
+
+    #[test]
+    fn jump_abandons_modal_call() {
+        let src = r#"
+screen pick {
+  textbutton a action Return("a")
+}
+scene main {
+  screen call pick
+  "after"
+}
+scene other {
+  "elsewhere"
+  end "o"
+}
+"#;
+        let program = load_program_from_source(src, Some("j.vel"), "J").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        let mut g = 0;
+        while !matches!(session.player().wait(), StoryWait::ScreenCall { .. }) && g < 16 {
+            session.advance();
+            g += 1;
+        }
+        session.jump_to_scene("other");
+        assert!(!matches!(
+            session.player().wait(),
+            StoryWait::ScreenCall { .. }
+        ));
+        assert!(session.pending_screen_call().is_none());
+        assert!(session.game_screens.iter().all(|s| !s.modal));
     }
 
     #[test]

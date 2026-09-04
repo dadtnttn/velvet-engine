@@ -76,6 +76,12 @@ pub enum CommandId {
     Analyze,
     /// Outline a `.vstory` via velvet-story-lang Studio model.
     StoryOutline,
+    /// Branch map for a classic `.vel` story (reachable endings, broken jumps).
+    Branches,
+    /// Check story asset references exist under the project.
+    CheckAssets,
+    /// Dry-run dialogue preview (no window).
+    VnPreview,
 }
 
 impl CommandId {
@@ -95,6 +101,9 @@ impl CommandId {
             "story-outline" | "story_outline" | "vstory" | "outline-story" => {
                 Some(Self::StoryOutline)
             }
+            "branches" | "branch" | "branch-map" | "branch_map" => Some(Self::Branches),
+            "check-assets" | "check_assets" | "assets-check" => Some(Self::CheckAssets),
+            "vn-preview" | "vn_preview" | "preview-vn" | "preview" => Some(Self::VnPreview),
             _ => None,
         }
     }
@@ -112,6 +121,9 @@ impl CommandId {
             Self::Help => "help",
             Self::Analyze => "analyze",
             Self::StoryOutline => "story-outline",
+            Self::Branches => "branches",
+            Self::CheckAssets => "check-assets",
+            Self::VnPreview => "vn-preview",
         }
     }
 
@@ -128,6 +140,9 @@ impl CommandId {
             Self::Help => "List palette commands",
             Self::Analyze => "Analyze a script file",
             Self::StoryOutline => "Outline a .vstory (scenes, diags, includes)",
+            Self::Branches => "Branch map for a .vel story (branches <file>)",
+            Self::CheckAssets => "Check .vel asset refs exist (check-assets [file|dir])",
+            Self::VnPreview => "Dialogue dry-run preview (vn-preview <file> [lines])",
         }
     }
 }
@@ -145,6 +160,9 @@ pub fn all_commands() -> &'static [CommandId] {
         CommandId::Console,
         CommandId::Analyze,
         CommandId::StoryOutline,
+        CommandId::Branches,
+        CommandId::CheckAssets,
+        CommandId::VnPreview,
         CommandId::Help,
     ]
 }
@@ -179,6 +197,9 @@ pub fn dispatch(
         CommandId::Console => cmd_console(ctx, args),
         CommandId::Analyze => cmd_analyze(ctx, args),
         CommandId::StoryOutline => cmd_story_outline(ctx, args),
+        CommandId::Branches => cmd_branches(ctx, args),
+        CommandId::CheckAssets => cmd_check_assets(ctx, args),
+        CommandId::VnPreview => cmd_vn_preview(ctx, args),
     }
 }
 
@@ -220,6 +241,153 @@ fn cmd_story_outline(ctx: &mut CommandContext<'_>, args: &[&str]) -> Result<Comm
             path.display(),
             model.scenes.len()
         ),
+        details,
+    ))
+}
+
+fn resolve_vel(ctx: &CommandContext<'_>, arg: Option<&str>, default: &str) -> PathBuf {
+    let rel = arg.unwrap_or(default);
+    if Path::new(rel).is_absolute() {
+        PathBuf::from(rel)
+    } else {
+        ctx.root.join(rel)
+    }
+}
+
+fn cmd_branches(ctx: &mut CommandContext<'_>, args: &[&str]) -> Result<CommandResult> {
+    let path = resolve_vel(ctx, args.first().copied(), "scripts/main.vel");
+    let source = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let file = path.to_string_lossy().to_string();
+    let program = velvet_story::load_program_from_source(&source, Some(&file), "branches")
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let map = velvet_story::BranchMap::analyze(&program);
+    let mut details = vec![map.to_text().trim().to_string()];
+    for e in &map.edges {
+        details.push(format!("{} -> {} ({})", e.from, e.to, e.reason));
+    }
+    ctx.console.log(
+        LogLevel::Info,
+        format!("branches {} endings={}", path.display(), map.endings.len()),
+    );
+    if !map.broken_jumps.is_empty() {
+        return Ok(CommandResult {
+            message: format!("branches: BROKEN {}", map.broken_jumps.join(", ")),
+            ok: false,
+            details,
+        });
+    }
+    Ok(CommandResult::ok_details(
+        format!(
+            "branches {} ({} scenes, {} endings)",
+            path.display(),
+            map.scenes.len(),
+            map.endings.len()
+        ),
+        details,
+    ))
+}
+
+fn cmd_check_assets(ctx: &mut CommandContext<'_>, args: &[&str]) -> Result<CommandResult> {
+    let rel = args.first().copied().unwrap_or("scripts/main.vel");
+    let p = resolve_vel(ctx, Some(rel), "scripts/main.vel");
+    let (root, vel) = if p.is_file() {
+        let root = p
+            .parent()
+            .and_then(|q| {
+                if q.file_name().map(|n| n == "scripts").unwrap_or(false) {
+                    q.parent()
+                } else {
+                    Some(q)
+                }
+            })
+            .map(|q| q.to_path_buf())
+            .unwrap_or_else(|| ctx.root.to_path_buf());
+        (root, p)
+    } else {
+        (p.clone(), p.join("scripts/main.vel"))
+    };
+    let source = fs::read_to_string(&vel).with_context(|| format!("read {}", vel.display()))?;
+    let file = vel.to_string_lossy().to_string();
+    let program = velvet_story::load_program_from_source(&source, Some(&file), "assets")
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let report = velvet_story::check_project_assets(&root, &program);
+    let details: Vec<String> = report
+        .missing
+        .iter()
+        .map(|m| format!("missing: {}", m.display()))
+        .collect();
+    ctx.console.log(
+        LogLevel::Info,
+        format!(
+            "check-assets {} checked={} missing={}",
+            vel.display(),
+            report.checked,
+            report.missing.len()
+        ),
+    );
+    if !report.is_ok() {
+        return Ok(CommandResult {
+            message: format!("assets: {} missing", report.missing.len()),
+            ok: false,
+            details,
+        });
+    }
+    Ok(CommandResult::ok(format!(
+        "assets ok ({} checked)",
+        report.checked
+    )))
+}
+
+fn cmd_vn_preview(ctx: &mut CommandContext<'_>, args: &[&str]) -> Result<CommandResult> {
+    let path = resolve_vel(ctx, args.first().copied(), "scripts/main.vel");
+    let lines: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(12);
+    let source = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let file = path.to_string_lossy().to_string();
+    let program = velvet_story::load_program_from_source(&source, Some(&file), "preview")
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let mut player = velvet_story::StoryPlayer::start(program);
+    let mut details = Vec::new();
+    let mut steps = 0usize;
+    while details.len() < lines.max(1) && steps < 2000 {
+        steps += 1;
+        match player.wait().clone() {
+            velvet_story::StoryWait::Line => {
+                let (plain, _) = velvet_story::say_plain_and_cps(player.current_text());
+                details.push(format!(
+                    "[{}] {}: {}",
+                    player.scene_name(),
+                    player.current_speaker_name(),
+                    plain.replace('\n', " / ")
+                ));
+                player.advance();
+            }
+            velvet_story::StoryWait::Choice => {
+                let opts: Vec<String> = player.choices().iter().map(|c| c.text.clone()).collect();
+                details.push(format!("choice: {}", opts.join(" | ")));
+                if player.choose(0).is_err() {
+                    break;
+                }
+            }
+            velvet_story::StoryWait::Ready => player.advance(),
+            velvet_story::StoryWait::Pause { .. } => player.skip_pause(),
+            velvet_story::StoryWait::ScreenCall { id } => {
+                details.push(format!("screen call: {id}"));
+                if player
+                    .return_from_screen(velvet_story::StoryValue::Null)
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            velvet_story::StoryWait::Host { .. } | velvet_story::StoryWait::Ended => break,
+        }
+    }
+    ctx.console.log(
+        LogLevel::Info,
+        format!("vn-preview {} lines={}", path.display(), details.len()),
+    );
+    Ok(CommandResult::ok_details(
+        format!("preview {} ({} lines)", path.display(), details.len()),
         details,
     ))
 }
@@ -606,6 +774,56 @@ mod tests {
         assert_eq!(all, all_commands());
         let help = filter_commands("hel");
         assert_eq!(help, vec![CommandId::Help]);
+    }
+
+    #[test]
+    fn dispatch_branches_and_preview_on_scaffold() {
+        let dir = tempdir().unwrap();
+        scaffold_project("p3", "visual-novel", dir.path()).unwrap();
+        let root = dir.path().join("p3");
+        let mut console = Console::default();
+        let mut selection = Selection::None;
+        let mut scripts = ScriptPanel::new();
+        let mut ctx = CommandContext {
+            root: &root,
+            console: &mut console,
+            selection: &mut selection,
+            scripts: &mut scripts,
+        };
+        let r = dispatch(&mut ctx, CommandId::Branches, &["scripts/main.vel"]).unwrap();
+        assert!(r.ok, "{}", r.message);
+        assert!(r.details.iter().any(|l| l.starts_with("scenes=")));
+        let r = dispatch(&mut ctx, CommandId::VnPreview, &["scripts/main.vel", "4"]).unwrap();
+        assert!(r.ok, "{}", r.message);
+        assert!(!r.details.is_empty());
+        // complete scaffold ships placeholder art: check-assets passes;
+        // the embedded fallback (no templates/ dir) still reports honestly
+        let r = dispatch(&mut ctx, CommandId::CheckAssets, &["scripts/main.vel"]).unwrap();
+        if root.join("gallery.json").exists() {
+            assert!(r.ok, "{}", r.message);
+        } else {
+            assert!(!r.ok);
+            assert!(r.details.iter().any(|l| l.starts_with("missing:")));
+        }
+    }
+
+    #[test]
+    fn scaffold_copies_catalogs_and_placeholder_assets() {
+        let dir = tempdir().unwrap();
+        let root = scaffold_project("p4", "visual-novel", dir.path()).unwrap();
+        // full copy only when the workspace templates/ dir is reachable;
+        // otherwise the embedded minimal fallback has no catalogs to check
+        if !root.join("gallery.json").exists() {
+            return;
+        }
+        for f in [
+            "music.json",
+            "voice_cast.json",
+            "assets/bg/room.png",
+            "assets/music/soft.wav",
+        ] {
+            assert!(root.join(f).exists(), "missing scaffold file {f}");
+        }
     }
 
     #[test]

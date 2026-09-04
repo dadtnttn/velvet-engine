@@ -193,6 +193,8 @@ pub const SUPPORTED_SURFACE: &[&str] = &[
     "generic host ABI: yield [service, payload] and resume with Value",
     "host capability policies and immediate request budgets",
     "natives: advanced math vectors matrices quaternions rng noise statistics curves data collections",
+    "natives: strings upper lower trim split join contains replace starts_with ends_with",
+    "natives: lists contains index_of reverse sort slice and maps values remove merge",
     "deterministic maps and cycle-safe structured values",
     "bounded sandbox runtime with checked integer arithmetic",
     "compatibility adapter: present_show set_bg present_hide ui_flag ui_flag_get",
@@ -1487,6 +1489,85 @@ function clamp01(x) {
     }
 
     #[test]
+    fn collection_string_natives_end_to_end() {
+        let module = compile(
+            r#"// @edition 3
+function slug(title: string) {
+    return str_lower(str_replace(str_trim(title), " ", "-"))
+}
+function csv_total(csv: string) {
+    let parts = str_split(csv, ",")
+    return len(parts)
+}
+function top3(scores: list) {
+    let ordered = list_sort(scores)
+    let reversed = list_reverse(ordered)
+    return list_slice(reversed, 0, 3)
+}
+function without_banned(profile: map) {
+    map_remove(profile, "banned")
+    return map_has(profile, "banned")
+}
+function display_name(user: map) {
+    let merged = map_merge({"name": "Anon"}, user)
+    return merged["name"]
+}
+"#,
+            Some("collections.vel"),
+        )
+        .unwrap();
+        assert_eq!(
+            module
+                .call("slug", &[string_val("  Hello World  ")])
+                .unwrap()
+                .to_string(),
+            "hello-world"
+        );
+        assert_eq!(
+            module.call("csv_total", &[string_val("a,b,c")]).unwrap(),
+            int(3)
+        );
+        let scores = list_val(vec![int(3), int(9), int(1), int(7)]);
+        assert_eq!(
+            module.call("top3", &[scores]).unwrap().to_string(),
+            "[9, 7, 3]"
+        );
+        let profile = map_val([("banned".into(), bool_val(true))]);
+        assert_eq!(
+            module.call("without_banned", &[profile]).unwrap(),
+            bool_val(false)
+        );
+        let user = map_val([("name".into(), string_val("Ada"))]);
+        assert_eq!(
+            module.call("display_name", &[user]).unwrap().to_string(),
+            "Ada"
+        );
+    }
+
+    #[test]
+    fn unknown_names_suggest_close_matches() {
+        let err = compile(
+            "// @edition 3\nfunction f(count: int) { return coutn + 1 }\n",
+            Some("typo.vel"),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("did you mean `count`?"), "{err}");
+        let err = compile(
+            "// @edition 3\nfunction f() { let x: strign = 1\n return x }\n",
+            Some("typo2.vel"),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("did you mean `string`?"), "{err}");
+        // far-away names get no suggestion (no noise)
+        let err = compile(
+            "// @edition 3\nfunction f() { return zzzzzqqq }\n",
+            Some("far.vel"),
+        )
+        .unwrap_err();
+        assert!(!err.to_string().contains("did you mean"), "{err}");
+    }
+
+    #[test]
     fn semantic_frontend_rejects_unknown_names_and_const_assignment() {
         let unknown = compile(
             "// @edition 3\nfunction f() { return missing + 1 }\n",
@@ -1549,11 +1630,23 @@ function bounded_index(data: map) { return clamp(data.index, 0, 5) }
 
     #[test]
     fn integer_min_max_and_clamp_preserve_static_integer_type() {
-        compile(
+        let module = compile(
             "// @edition 3\nfunction bounded(value: int) { let out: int = clamp(value, 0, 5); return max(1, out) }\n",
             Some("integer-math.vel"),
         )
         .unwrap();
+        // The parameter stays statically `int` through clamp/max.
+        let sig = module.function_signature("bounded").expect("bounded");
+        assert_eq!(sig, &[Some(Vs3Type::Int)], "signature drifted: {sig:?}");
+        // And the runtime result is an integer (9 clamps to 5, max keeps ≥1).
+        assert_eq!(
+            module.call("bounded", &[Value::Int(9)]).unwrap(),
+            Value::Int(5)
+        );
+        assert_eq!(
+            module.call("bounded", &[Value::Int(-3)]).unwrap(),
+            Value::Int(1)
+        );
     }
 
     #[test]
@@ -2274,7 +2367,7 @@ function for_demo() {
         );
         assert_eq!(
             SUPPORTED_SURFACE.len(),
-            27,
+            29,
             "update this contract with every capability change"
         );
         for required in [

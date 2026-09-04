@@ -72,8 +72,34 @@ fn print_project(p: &velvet_project::VelvetProject) {
     println!("assets     : {}", p.assets_dir);
 }
 
+/// Normalize a `tl/<lang>/` code (`fr`, `pt-br`, `ja`).
+/// Fails fast before anything is created.
+pub fn normalize_lang_code(raw: &str) -> Result<String> {
+    let lang = raw.trim().to_ascii_lowercase();
+    if lang.len() < 2
+        || lang.len() > 8
+        || !lang
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        bail!("bad language code `{raw}` (use 2-8 letters/digits, e.g. fr, pt-br, ja)");
+    }
+    Ok(lang)
+}
+
 /// Create a new project from a template.
-pub fn cmd_new(name: String, template: String, out: PathBuf) -> Result<()> {
+///
+/// `langs` adds extra story languages (`tl/<lang>/strings.json` prefilled
+/// with English source so the game runs day one; translate at leisure).
+/// Visual-novel always ships `en` + `es`.
+pub fn cmd_new(name: String, template: String, out: PathBuf, langs: &[String]) -> Result<()> {
+    let mut extra_langs: Vec<String> = Vec::new();
+    for raw in langs {
+        let lang = normalize_lang_code(raw)?;
+        if lang != "en" && lang != "es" && !extra_langs.contains(&lang) {
+            extra_langs.push(lang);
+        }
+    }
     let dir = out.join(&name);
     if dir.exists() {
         bail!("already exists: {}", dir.display());
@@ -105,13 +131,45 @@ pub fn cmd_new(name: String, template: String, out: PathBuf) -> Result<()> {
             std::fs::write(dir.join("scenes/warehouse.level.json"), json)?;
         }
     }
+    let mut langs_line = "en, es".to_string();
+    for lang in &extra_langs {
+        langs_line.push_str(", ");
+        langs_line.push_str(lang);
+    }
     std::fs::write(
         dir.join("README.md"),
         format!(
-            "# {name}\n\nVelvet project from template `{template}`.\n\n## Run\n\n```bash\nvelvet script check scripts/main.vel\nvelvet play .\nvelvet play . --lang es\nvelvet launch .\nvelvet document regions scripts/main_menu.vel\n```\n"
+            "# {name}\n\nVelvet project from template `{template}`.\n\n## Run\n\n```bash\nvelvet script check scripts/main.vel\nvelvet play .\nvelvet play . --lang es\nvelvet launch .\nvelvet document regions scripts/main_menu.vel\n```\n\n## VN comfort\n\n```bash\nvelvet narrative preview scripts/main.vel --lines 10\nvelvet narrative branches scripts/main.vel\nvelvet narrative check-assets .\n```\n\nScreens (`screen say_classic|say_minimal|nvl_page|menu`), game screens (`screen show|hide|call`, see commented demo in `scripts/main.vel`), mini-ATL (`show x at left with shake 0.4 10`, `hide x with fade`), named transforms (`transform bob {{ … }}` + `show x with bob`), `gallery.json`, `music.json` and `voice_cast.json` ship with this template.\n\n## Languages ({langs_line})\n\nAdd yours any time (game falls back to English for untranslated lines):\n\n```bash\nvelvet localization extract-story scripts/main.vel --project . --lang fr\n# translate tl/fr/strings.json, validate against the script, play:\nvelvet localization validate-story . --lang fr\nvelvet play . --lang fr\n```\n"
         ),
     )?;
-    // EN+ES localization scaffold for visual-novel (S6).
+    // VN comfort catalogs: gallery + music-room + voice cast.
+    if template == "visual-novel" {
+        std::fs::write(
+            dir.join("gallery.json"),
+            "{\"entries\": [{\"group\": \"endings\", \"id\": \"cg_rooftop\", \"path\": \"assets/cg/rooftop.png\", \"sort_order\": 1, \"title\": \"Rooftop Break\"}]}",
+        )?;
+        std::fs::write(
+            dir.join("music.json"),
+            "{\"tracks\": [{\"group\": \"main\", \"id\": \"soft\", \"path\": \"assets/music/soft.wav\", \"sort_order\": 1, \"title\": \"Soft Rain\", \"unlocked_by_default\": true}]}",
+        )?;
+        std::fs::write(
+            dir.join("voice_cast.json"),
+            "{\"default_volume\": 1.0, \"voices\": [{\"clip_prefix\": \"hero\", \"speaker\": \"hero\", \"volume\": 1.0}, {\"clip_prefix\": \"mira\", \"speaker\": \"friend\", \"volume\": 0.9}, {\"clip_prefix\": \"kai\", \"speaker\": \"rival\", \"volume\": 0.9}]}",
+        )?;
+        // Placeholder art + audio so check-assets + play work out of the box.
+        // Replace every file under assets/ with your own art.
+        for (rel, bytes) in VN_PLACEHOLDER_ASSETS {
+            let out = dir.join(rel);
+            if let Some(parent) = out.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(out, bytes)?;
+        }
+        // Example stylesheet (try `velvet style check styles/ui.vcss`).
+        std::fs::create_dir_all(dir.join("styles"))?;
+        std::fs::write(dir.join("styles/ui.vcss"), VN_EXAMPLE_STYLE)?;
+    }
+    // EN+ES localization scaffold for visual-novel (S6) + any extra langs.
     if template == "visual-novel" {
         if let Ok(program) = velvet_story::load_program_from_source(
             &std::fs::read_to_string(dir.join("scripts/main.vel")).unwrap_or_default(),
@@ -125,21 +183,42 @@ pub fn cmd_new(name: String, template: String, out: PathBuf) -> Result<()> {
                 es.insert(e.key.clone(), t);
             }
             let _ = velvet_story::write_tl_scaffold(&dir, &program, "es", &es);
+            // Extra languages prefilled with English source: playable day one.
+            for lang in &extra_langs {
+                let mut table = velvet_story::TranslationTable::new();
+                for e in &cat.entries {
+                    table.insert(e.key.clone(), e.source.clone());
+                }
+                let _ = velvet_story::write_tl_scaffold(&dir, &program, lang, &table);
+            }
         }
     }
-    println!("created {}", dir.display());
+    println!("created {} (langs: {langs_line})", dir.display());
     Ok(())
 }
 
 fn spanish_hint(en: &str) -> String {
     match en {
+        "Rain softens the city noise outside the window." => {
+            "La lluvia suaviza el ruido de la ciudad tras la ventana.".into()
+        }
         "I said I'd be here." => "Dije que estaria aqui.".into(),
+        "I said I'd be here. I meant it." => "Dije que estaria aqui. Lo decia en serio.".into(),
         "You always say that." => "Siempre dices eso.".into(),
+        "This {b}city{/b} never sleeps, {i}does it?{/i}" => {
+            "Esta {b}ciudad{/b} nunca duerme, {i}verdad?{/i}".into()
+        }
         "I keep promises." => "Cumplo mis promesas.".into(),
+        "I keep my promises." => "Cumplo mis promesas.".into(),
         "Don't make this heavy." => "No lo pongas tan pesado.".into(),
         "Ask about Kai." => "Pregunta por Kai.".into(),
         "Then maybe tonight is different." => "Entonces tal vez esta noche sea distinta.".into(),
+        "Look — the clouds are breaking." => "Mira, las nubes se abren.".into(),
+        "Stay a little longer." => "Quedate un poco mas.".into(),
         "You walk home alone." => "Vuelves a casa solo.".into(),
+        "You walk home alone. The rain has stopped." => {
+            "Caminas solo a casa. La lluvia ha parado.".into()
+        }
         "Still playing house?" => "Sigues jugando a la casita?".into(),
         "Stand with Mira" => "Quedate con Mira".into(),
         "Leave" => "Marchate".into(),
@@ -148,6 +227,46 @@ fn spanish_hint(en: &str) -> String {
         other => format!("ES: {other}"),
     }
 }
+
+/// Placeholder art + audio embedded from `templates/visual-novel/assets`
+/// so `velvet new` works offline with zero downloads.
+const VN_PLACEHOLDER_ASSETS: &[(&str, &[u8])] = &[
+    (
+        "assets/bg/room.png",
+        include_bytes!("../../../templates/visual-novel/assets/bg/room.png"),
+    ),
+    (
+        "assets/bg/rooftop.png",
+        include_bytes!("../../../templates/visual-novel/assets/bg/rooftop.png"),
+    ),
+    (
+        "assets/bg/street.png",
+        include_bytes!("../../../templates/visual-novel/assets/bg/street.png"),
+    ),
+    (
+        "assets/characters/hero.png",
+        include_bytes!("../../../templates/visual-novel/assets/characters/hero.png"),
+    ),
+    (
+        "assets/characters/friend.png",
+        include_bytes!("../../../templates/visual-novel/assets/characters/friend.png"),
+    ),
+    (
+        "assets/cg/rooftop.png",
+        include_bytes!("../../../templates/visual-novel/assets/cg/rooftop.png"),
+    ),
+    (
+        "assets/music/soft.wav",
+        include_bytes!("../../../templates/visual-novel/assets/music/soft.wav"),
+    ),
+    (
+        "assets/sfx/chime.wav",
+        include_bytes!("../../../templates/visual-novel/assets/sfx/chime.wav"),
+    ),
+];
+
+/// Example stylesheet embedded from `templates/visual-novel/styles`.
+const VN_EXAMPLE_STYLE: &str = include_str!("../../../templates/visual-novel/styles/ui.vcss");
 
 /// Main menu document with visual/advanced regions (round-trip ready).
 pub fn template_main_menu_script() -> &'static str {
@@ -182,19 +301,31 @@ screen main_menu {
 pub fn template_main_script(template: &str) -> &'static str {
     match template {
         "visual-novel" => {
-            r##"character hero { name: "Hero" color: "#ff4f8b" }
-character friend { name: "Mira" color: "#4fc3ff" }
+            r##"character hero { name: "Hero" color: "#ff4f8b" portrait: "assets/characters/hero.png" }
+character friend { name: "Mira" color: "#4fc3ff" portrait: "assets/characters/friend.png" }
 character rival { name: "Kai" color: "#ffaa44" }
 state {
     trust: int = 0
     chapter: int = 1
 }
 scene main {
+    screen say_classic
     background "assets/bg/room.png"
-    music "assets/music/soft.ogg" fade_in 1.0
+    music "assets/music/soft.wav" fade_in 1.0
     hero "I said I'd be here."
-    show friend at right
+    show friend at right with fade
     friend "You always say that."
+    // Game screens + named transforms (uncomment to try):
+    // transform nod {
+    //   y -6 0.8 ease_in_out, y 0 0.8 ease_in_out, repeat
+    // }
+    // screen ticket {
+    //   title: "Ticket"
+    //   textbutton keep action Return("keep")
+    // }
+    // show friend at right with nod
+    // screen call ticket
+    sound "assets/sfx/chime.wav"
     choice {
         "I keep promises." {
             trust += 1
@@ -231,10 +362,16 @@ scene rival_path {
     }
 }
 scene ending_good {
+    show friend.happy at center with zoom 0.3 0.2
     "Ending: Warm Lights"
+    unlock gallery cg_rooftop
+    unlock music soft
+    end "good"
 }
 scene ending_lonely {
     "Ending: Cool Air"
+    unlock music soft
+    end "lonely"
 }
 "##
         }
@@ -366,14 +503,19 @@ pub fn cmd_template_list() -> Result<()> {
 }
 
 /// Install/copy a template into a new project directory (alias of `new`).
-pub fn cmd_template_install(name: String, template: String, out: PathBuf) -> Result<()> {
+pub fn cmd_template_install(
+    name: String,
+    template: String,
+    out: PathBuf,
+    langs: &[String],
+) -> Result<()> {
     if !known_templates().contains(&template.as_str()) {
         bail!(
             "unknown template `{template}`; known: {}",
             known_templates().join(", ")
         );
     }
-    cmd_new(name, template, out)
+    cmd_new(name, template, out, langs)
 }
 
 #[cfg(test)]
@@ -388,6 +530,7 @@ mod tests {
             "demo".into(),
             "visual-novel".into(),
             dir.path().to_path_buf(),
+            &[],
         )
         .unwrap();
         let root = dir.path().join("demo");
@@ -401,6 +544,144 @@ mod tests {
         let p = velvet_project::VelvetProject::from_ron(&text).unwrap();
         assert_eq!(p.name, "demo");
         assert!(p.has_module("story"));
+    }
+
+    #[test]
+    fn visual_novel_extra_langs_are_prefilled_and_playable() {
+        let dir = tempdir().unwrap();
+        cmd_new(
+            "demo".into(),
+            "visual-novel".into(),
+            dir.path().to_path_buf(),
+            &["fr".to_string(), " JA ".to_string(), "es".to_string()],
+        )
+        .unwrap();
+        let root = dir.path().join("demo");
+        // es + normalized extras exist; en always exists
+        for lang in ["es", "fr", "ja"] {
+            assert!(root.join("tl").join(lang).join("strings.json").exists());
+        }
+        // extras prefill English source (playable day one), same keys as en
+        let en: std::collections::BTreeMap<String, String> = serde_json::from_str(
+            &std::fs::read_to_string(root.join("tl/en/strings.json")).unwrap(),
+        )
+        .unwrap();
+        let fr: std::collections::BTreeMap<String, String> = serde_json::from_str(
+            &std::fs::read_to_string(root.join("tl/fr/strings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(fr.keys().collect::<Vec<_>>(), en.keys().collect::<Vec<_>>());
+        assert_eq!(
+            fr.values().collect::<Vec<_>>(),
+            en.values().collect::<Vec<_>>()
+        );
+        // es keeps real translations, not prefills
+        let es = std::fs::read_to_string(root.join("tl/es/strings.json")).unwrap();
+        assert!(es.contains("Cumplo mis promesas."));
+        // fr actually plays to an ending
+        let source = std::fs::read_to_string(root.join("scripts/main.vel")).unwrap();
+        let program =
+            velvet_story::load_program_from_source(&source, Some("main.vel"), "demo").unwrap();
+        let mut session = velvet_story::VnSession::new(velvet_story::StoryPlayer::start(program))
+            .with_project_root(&root);
+        session.set_language("fr").unwrap();
+        let mut steps = 0usize;
+        loop {
+            steps += 1;
+            assert!(steps < 200, "fr playthrough did not end");
+            match session.player().wait().clone() {
+                velvet_story::StoryWait::Line => session.advance(),
+                velvet_story::StoryWait::Choice => {
+                    session.choose_arm(0).unwrap();
+                }
+                velvet_story::StoryWait::Ready => session.advance(),
+                velvet_story::StoryWait::Ended => break,
+                velvet_story::StoryWait::Pause { .. } => session.advance(),
+                velvet_story::StoryWait::ScreenCall { .. } => {
+                    session
+                        .return_from_screen(velvet_story::StoryValue::Null)
+                        .unwrap();
+                }
+                velvet_story::StoryWait::Host { .. } => break,
+            }
+        }
+    }
+
+    #[test]
+    fn new_rejects_bad_lang_before_creating_anything() {
+        let dir = tempdir().unwrap();
+        let err = cmd_new(
+            "demo".into(),
+            "visual-novel".into(),
+            dir.path().to_path_buf(),
+            &["xx!".to_string()],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("bad language code"));
+        assert!(!dir.path().join("demo").exists());
+        assert!(normalize_lang_code("PT-BR").unwrap() == "pt-br");
+    }
+
+    #[test]
+    fn visual_novel_scaffold_is_complete_and_playable() {
+        let dir = tempdir().unwrap();
+        cmd_new(
+            "demo".into(),
+            "visual-novel".into(),
+            dir.path().to_path_buf(),
+            &[],
+        )
+        .unwrap();
+        let root = dir.path().join("demo");
+        // catalogs + placeholder art ship with the scaffold
+        for f in [
+            "gallery.json",
+            "music.json",
+            "voice_cast.json",
+            "assets/bg/room.png",
+            "assets/characters/hero.png",
+            "assets/cg/rooftop.png",
+            "assets/music/soft.wav",
+            "assets/sfx/chime.wav",
+        ] {
+            assert!(root.join(f).exists(), "missing {f}");
+        }
+        // every referenced asset exists
+        crate::narrative_cmd::cmd_narrative_check_assets(root.clone()).unwrap();
+        // branches are clean with named endings
+        crate::narrative_cmd::cmd_narrative_branches(root.join("scripts/main.vel"), false).unwrap();
+        // play to an ending, unlocks fire, saves persist them
+        let source = std::fs::read_to_string(root.join("scripts/main.vel")).unwrap();
+        let program =
+            velvet_story::load_program_from_source(&source, Some("main.vel"), "demo").unwrap();
+        let mut session = velvet_story::VnSession::new(velvet_story::StoryPlayer::start(program));
+        session.gallery = velvet_story::Gallery::from_path(&root.join("gallery.json")).unwrap();
+        session.music_room = velvet_story::MusicRoom::from_path(&root.join("music.json")).unwrap();
+        let mut steps = 0usize;
+        loop {
+            steps += 1;
+            assert!(steps < 200, "story did not end");
+            match session.player().wait().clone() {
+                velvet_story::StoryWait::Line => session.advance(),
+                velvet_story::StoryWait::Choice => {
+                    session.choose_arm(0).unwrap();
+                }
+                velvet_story::StoryWait::Ready => session.advance(),
+                velvet_story::StoryWait::Ended => break,
+                velvet_story::StoryWait::Pause { .. } => session.advance(),
+                velvet_story::StoryWait::ScreenCall { .. } => {
+                    session
+                        .return_from_screen(velvet_story::StoryValue::Null)
+                        .unwrap();
+                }
+                velvet_story::StoryWait::Host { .. } => break,
+            }
+        }
+        assert!(session.gallery.is_unlocked("cg_rooftop"));
+        assert!(session.music_room.is_unlocked("soft"));
+        let session = session.with_save_dir(dir.path().join("saves"));
+        let save = session.save_slot("slot_1").unwrap();
+        assert!(save.gallery_unlocked.contains("cg_rooftop"));
     }
 
     #[test]

@@ -10,7 +10,8 @@ This file is the compact inventory. The responsibility, retention rule, dependen
 | **velvet-time** | Time, fixed step, timers, pause layers, frame limiter |
 | **velvet-events** | Typed event channels, history, registry |
 | **velvet-assets** | Handles, loaders, hot reload, bundles, missing policy |
-| **velvet-render** | wgpu 2D: batch, camera, letterbox, particles, post stack |
+| **velvet-render** | wgpu 2D (batch, camera, letterbox, particles, post stack) + 3D forward (`mesh3d`, `scene_bridge`) |
+| **velvet-scene3d** | Declarative 3D scenes, AABB physics, anim blending, 3D particles, 3D saves |
 | **velvet-text** | Rich markup, typewriter, layout, RTL/ruby/icon helpers |
 | **velvet-audio** | Buses, mixer, music crossfade, spatial 2D, DSP helpers |
 | **velvet-input** | Actions, bindings, replay, chords, virtual controls |

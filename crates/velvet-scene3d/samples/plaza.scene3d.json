@@ -1,0 +1,45 @@
+{
+  "name": "plaza",
+  "nodes": [
+    {
+      "id": "ground",
+      "mesh": { "kind": "plane" },
+      "transform": { "position": [0, 0, 0], "scale": [20, 1, 20] },
+      "material": { "base_color": [0.35, 0.55, 0.4, 1.0] }
+    },
+    {
+      "id": "sun_post",
+      "mesh": { "kind": "cube" },
+      "transform": { "position": [-3, 1, -2], "scale": [0.3, 2, 0.3] }
+    },
+    {
+      "id": "hero",
+      "mesh": { "kind": "gltf", "path": "models/hero.glb" },
+      "transform": { "position": [1, 0, 2], "rotation_deg": [0, 45, 0] },
+      "children": [
+        {
+          "id": "sword",
+          "mesh": { "kind": "cube" },
+          "transform": { "position": [0.4, 1.0, 0], "scale": [0.08, 0.9, 0.08] }
+        }
+      ]
+    },
+    {
+      "id": "torch",
+      "mesh": { "kind": "sphere", "segments": 12 },
+      "transform": { "position": [3, 1.5, 1] }
+    }
+  ],
+  "camera": { "position": [4.5, 3.2, 5.0], "target": [0, 1, 0] },
+  "lights": [
+    { "kind": "directional" },
+    {
+      "kind": "point",
+      "position": [3, 2, 1],
+      "color": [1.0, 0.6, 0.3],
+      "intensity": 2.0,
+      "radius": 8.0
+    }
+  ],
+  "environment": { "fog_color": [0.1, 0.12, 0.2], "fog_start": 30.0, "fog_end": 90.0 }
+}

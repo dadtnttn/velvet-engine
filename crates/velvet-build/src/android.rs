@@ -28,6 +28,113 @@ pub enum AndroidExportError {
     Toolchain(String),
 }
 
+/// APK signing mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AndroidSignMode {
+    /// No signing (unsigned scaffold / CI metadata).
+    #[default]
+    None,
+    /// Debug key: auto-creates `debug.keystore` via `keytool` when missing.
+    /// Produces an installable, non-publishable signed APK.
+    Debug,
+    /// Release key from an existing keystore (never generated for you).
+    Release,
+}
+
+/// Keystore signing configuration (passwords come from env, never from logs).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AndroidSigning {
+    /// Signing mode.
+    pub mode: AndroidSignMode,
+    /// Keystore path (release). Defaults to `<out>/release.keystore` when unset.
+    #[serde(default)]
+    pub keystore: Option<PathBuf>,
+    /// Key alias (release).
+    #[serde(default)]
+    pub alias: Option<String>,
+}
+
+impl AndroidSigning {
+    /// None (unsigned).
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// Debug signing.
+    pub fn debug() -> Self {
+        Self {
+            mode: AndroidSignMode::Debug,
+            ..Default::default()
+        }
+    }
+
+    /// Env names carrying the secrets (values never logged).
+    pub const STORE_PASS_ENV: &'static str = "VELVET_KEYSTORE_PASS";
+    /// Env names carrying the secrets (values never logged).
+    pub const KEY_PASS_ENV: &'static str = "VELVET_KEY_PASS";
+
+    /// keytool args to create a debug keystore (no secrets on the command
+    /// line beyond the well-known `android` debug password).
+    pub fn debug_keytool_args(keystore: &Path) -> Vec<String> {
+        vec![
+            "-genkeypair".into(),
+            "-keystore".into(),
+            keystore.display().to_string(),
+            "-alias".into(),
+            "androiddebugkey".into(),
+            "-keyalg".into(),
+            "RSA".into(),
+            "-keysize".into(),
+            "2048".into(),
+            "-validity".into(),
+            "10950".into(),
+            "-storepass".into(),
+            "android".into(),
+            "-keypass".into(),
+            "android".into(),
+            "-dname".into(),
+            "CN=Velvet Debug, OU=Velvet, O=Velvet, L=Local, ST=Local, C=US".into(),
+        ]
+    }
+
+    /// Gradle `signingConfigs` block for `app/build.gradle`.
+    pub fn gradle_signing_block(&self, out_dir: &Path) -> String {
+        match self.mode {
+            AndroidSignMode::None => String::new(),
+            AndroidSignMode::Debug => r#"    signingConfigs {
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+"#
+            .into(),
+            AndroidSignMode::Release => {
+                let store = self
+                    .keystore
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| out_dir.join("release.keystore").display().to_string());
+                let alias = self.alias.as_deref().unwrap_or("velvet");
+                format!(
+                    r#"    signingConfigs {{
+        release {{
+            storeFile file("{store}")
+            storePassword System.getenv("VELVET_KEYSTORE_PASS")
+            keyAlias "{alias}"
+            keyPassword System.getenv("VELVET_KEY_PASS")
+        }}
+    }}
+"#
+                )
+            }
+        }
+    }
+}
+
 /// Options for Android export.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AndroidExportOptions {
@@ -45,6 +152,9 @@ pub struct AndroidExportOptions {
     pub dry_run: bool,
     /// Target ABI list.
     pub abis: Vec<String>,
+    /// APK signing.
+    #[serde(default)]
+    pub signing: AndroidSigning,
 }
 
 impl Default for AndroidExportOptions {
@@ -57,6 +167,7 @@ impl Default for AndroidExportOptions {
             version_code: 1,
             dry_run: true,
             abis: vec!["arm64-v8a".into(), "x86_64".into()],
+            signing: AndroidSigning::none(),
         }
     }
 }
@@ -74,6 +185,12 @@ pub struct AndroidExportReport {
     pub apk_built: bool,
     /// APK path if built.
     pub apk_path: Option<PathBuf>,
+    /// Whether the APK carries a signature (`apksigner verify` passed).
+    #[serde(default)]
+    pub apk_signed: bool,
+    /// Signature note (verified cert / reason unverified).
+    #[serde(default)]
+    pub sign_note: String,
     /// Log lines.
     pub log: Vec<String>,
     /// Toolchain notes / errors.
@@ -159,13 +276,33 @@ pub fn export_android(
 
     let build_gradle = out.join("app/build.gradle");
     fs::create_dir_all(out.join("app"))?;
+    let signing_block = opts.signing.gradle_signing_block(&out);
+    let build_types = match opts.signing.mode {
+        AndroidSignMode::None => String::new(),
+        AndroidSignMode::Debug => r#"    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
+    }
+"#
+        .to_string(),
+        AndroidSignMode::Release => r#"    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+"#
+        .to_string(),
+    };
     fs::write(
         &build_gradle,
         format!(
             r#"android {{
     namespace "{pkg}"
     compileSdk 34
-    defaultConfig {{
+{signing_block}    defaultConfig {{
         applicationId "{pkg}"
         minSdk 24
         targetSdk 34
@@ -173,7 +310,7 @@ pub fn export_android(
         versionName "{ver}"
         ndk {{ abiFilters {abis} }}
     }}
-}}
+{build_types}}}
 "#,
             pkg = opts.application_id,
             code = opts.version_code,
@@ -196,6 +333,7 @@ pub fn export_android(
         "version_code": opts.version_code,
         "abis": opts.abis,
         "dry_run": opts.dry_run,
+        "signing": format!("{:?}", opts.signing.mode),
     });
     let manifest_path = out.join("android-export.json");
     fs::write(&manifest_path, serde_json::to_string_pretty(&meta).unwrap())?;
@@ -204,6 +342,21 @@ pub fn export_android(
     let sdk = detect_android_sdk();
     let mut apk_built = false;
     let mut apk_path = None;
+    let mut apk_signed = false;
+    let mut sign_note = String::from("unsigned (signing mode none)");
+
+    // Pre-flight signing setup (never logs secret values).
+    let mut preflight_error: Option<String> = None;
+    if !opts.dry_run && opts.signing.mode != AndroidSignMode::None {
+        match prepare_signing(&opts.signing, &out) {
+            Ok(note) => log.push(note),
+            Err(note) => {
+                log.push(note.clone());
+                sign_note = note.clone();
+                preflight_error = Some(note);
+            }
+        }
+    }
 
     let toolchain_note = if opts.dry_run {
         let note = match &sdk {
@@ -211,7 +364,16 @@ pub fn export_android(
             None => "dry_run=true; ANDROID_HOME/SDK not found".into(),
         };
         log.push(note.clone());
+        if opts.signing.mode != AndroidSignMode::None {
+            sign_note = format!(
+                "dry-run: signing configured ({:?}), not executed",
+                opts.signing.mode
+            );
+        }
         note
+    } else if let Some(err) = preflight_error {
+        log.push(err.clone());
+        err
     } else {
         match sdk {
             None => {
@@ -238,7 +400,21 @@ pub fn export_android(
                                 out.join("app/build/outputs/apk/release/app-release.apk");
                             if candidate.is_file() {
                                 apk_built = true;
-                                apk_path = Some(candidate);
+                                apk_path = Some(candidate.clone());
+                                // Verify signature when signing was requested.
+                                if opts.signing.mode != AndroidSignMode::None {
+                                    match verify_apk_signature(&sdk_path, &candidate) {
+                                        Ok(digest) => {
+                                            apk_signed = true;
+                                            sign_note = format!("apksigner verify ok ({digest})");
+                                        }
+                                        Err(e) => {
+                                            sign_note = format!("apksigner verify failed: {e}");
+                                        }
+                                    }
+                                } else {
+                                    sign_note = "unsigned build (no signing requested)".into();
+                                }
                                 "gradle assembleRelease ok".into()
                             } else {
                                 "gradle ok but APK path missing".into()
@@ -254,6 +430,9 @@ pub fn export_android(
                     )
                 };
                 log.push(note.clone());
+                if apk_built {
+                    log.push(format!("sign: {sign_note}"));
+                }
                 note
             }
         }
@@ -275,9 +454,113 @@ pub fn export_android(
         android_manifest: manifest_xml,
         apk_built,
         apk_path,
+        apk_signed,
+        sign_note,
         log,
         toolchain_note,
     })
+}
+
+/// Prepare signing material before invoking gradle.
+///
+/// - Debug: ensures `<out>/debug.keystore` exists via `keytool`
+///   (auto-created, installable locally, never publishable).
+/// - Release: requires the keystore file plus `VELVET_KEYSTORE_PASS` /
+///   `VELVET_KEY_PASS` in the environment. Secret values are never logged.
+///
+/// Returns a human note on success, or a honest failure note.
+fn prepare_signing(signing: &AndroidSigning, out: &Path) -> Result<String, String> {
+    match signing.mode {
+        AndroidSignMode::None => Ok("signing disabled".into()),
+        AndroidSignMode::Debug => {
+            let ks = out.join("debug.keystore");
+            if ks.is_file() {
+                return Ok(format!("debug keystore present at {}", ks.display()));
+            }
+            let status = Command::new("keytool")
+                .args(AndroidSigning::debug_keytool_args(&ks))
+                .output()
+                .map_err(|e| {
+                    format!("keytool not found ({e}); install a JDK to sign debug builds")
+                })?;
+            if status.status.success() && ks.is_file() {
+                Ok(format!("created debug keystore at {}", ks.display()))
+            } else {
+                Err(format!(
+                    "keytool failed: {}",
+                    String::from_utf8_lossy(&status.stderr).trim()
+                ))
+            }
+        }
+        AndroidSignMode::Release => {
+            let ks = signing
+                .keystore
+                .clone()
+                .unwrap_or_else(|| out.join("release.keystore"));
+            if !ks.is_file() {
+                return Err(format!(
+                    "release keystore missing at {}; create one with keytool -genkeypair (never auto-generated)",
+                    ks.display()
+                ));
+            }
+            if signing.alias.as_deref().unwrap_or("").trim().is_empty() {
+                return Err("release signing needs --alias".into());
+            }
+            for var in [AndroidSigning::STORE_PASS_ENV, AndroidSigning::KEY_PASS_ENV] {
+                if std::env::var_os(var).is_none() {
+                    return Err(format!("release signing needs {var} in the environment"));
+                }
+            }
+            Ok(format!("release keystore ok at {}", ks.display()))
+        }
+    }
+}
+
+/// Locate `apksigner` inside the SDK build-tools (newest version first).
+fn find_apksigner(sdk: &Path) -> Option<PathBuf> {
+    let tools = sdk.join("build-tools");
+    let mut versions: Vec<PathBuf> = std::fs::read_dir(tools)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    versions.sort();
+    versions.reverse();
+    let exe = if cfg!(windows) {
+        "apksigner.bat"
+    } else {
+        "apksigner"
+    };
+    versions.iter().map(|v| v.join(exe)).find(|p| p.is_file())
+}
+
+/// Verify an APK signature. Returns the signer SHA-256 digest line on success.
+fn verify_apk_signature(sdk: &Path, apk: &Path) -> Result<String, String> {
+    let tool = find_apksigner(sdk)
+        .ok_or_else(|| "apksigner not found under SDK build-tools".to_string())?;
+    let out = Command::new(tool)
+        .args(["verify", "--print-certs"])
+        .arg(apk)
+        .output()
+        .map_err(|e| format!("apksigner invoke error: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "not signed: {}",
+            String::from_utf8_lossy(&out.stdout).trim()
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let digest = stdout
+        .lines()
+        .find_map(|l| {
+            l.trim()
+                .strip_prefix("Signer #1 certificate SHA-256 digest:")
+                .map(str::trim)
+        })
+        .unwrap_or("verified")
+        .to_string();
+    Ok(digest)
 }
 
 /// Attempt linux-x64 cross compile of a workspace binary.
@@ -402,6 +685,62 @@ mod tests {
         assert!(report.manifest_path.is_file());
         assert!(!report.apk_built);
         assert!(!report.toolchain_note.contains("todo!"));
+    }
+
+    #[test]
+    fn signing_block_and_keytool_args() {
+        let debug = AndroidSigning::debug();
+        let block = debug.gradle_signing_block(std::path::Path::new("out"));
+        assert!(block.contains("signingConfigs"));
+        assert!(block.contains("debug.keystore"));
+        assert!(!block.contains("VELVET_KEYSTORE_PASS"));
+        let release = AndroidSigning {
+            mode: AndroidSignMode::Release,
+            keystore: None,
+            alias: Some("velvet".into()),
+        };
+        let block = release.gradle_signing_block(std::path::Path::new("out"));
+        assert!(block.contains("System.getenv(\"VELVET_KEYSTORE_PASS\")"));
+        assert!(!block.contains("hunter2"));
+        let args = AndroidSigning::debug_keytool_args(std::path::Path::new("out/debug.keystore"));
+        assert!(args.contains(&"-genkeypair".to_string()));
+        assert!(args.contains(&"androiddebugkey".to_string()));
+    }
+
+    #[test]
+    fn release_without_keystore_fails_honestly() {
+        let dir = tempdir().unwrap();
+        let report = export_android(&AndroidExportOptions {
+            out_dir: dir.path().join("apk"),
+            dry_run: false,
+            signing: AndroidSigning {
+                mode: AndroidSignMode::Release,
+                keystore: Some(dir.path().join("nope.keystore")),
+                alias: Some("velvet".into()),
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(!report.apk_built);
+        assert!(!report.apk_signed);
+        assert!(report.sign_note.contains("missing"));
+        assert!(!report.sign_note.contains("VELVET_KEYSTORE_PASS="));
+    }
+
+    #[test]
+    fn debug_dry_run_reports_signing() {
+        let dir = tempdir().unwrap();
+        let report = export_android(&AndroidExportOptions {
+            out_dir: dir.path().join("apk"),
+            dry_run: true,
+            signing: AndroidSigning::debug(),
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(!report.apk_built);
+        assert!(report.sign_note.contains("Debug"));
+        let gradle = std::fs::read_to_string(dir.path().join("apk/app/build.gradle")).unwrap();
+        assert!(gradle.contains("signingConfigs"));
     }
 
     #[test]

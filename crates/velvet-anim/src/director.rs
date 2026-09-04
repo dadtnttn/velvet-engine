@@ -57,6 +57,8 @@ impl AnimTarget {
 pub struct AnimDirector {
     /// Targets by id.
     pub targets: IndexMap<String, AnimTarget>,
+    /// Active path motions by target id.
+    pub paths: IndexMap<String, crate::path::PathTween>,
     /// Log of recent effect spawns (script/debug).
     pub log: Vec<String>,
 }
@@ -131,11 +133,28 @@ impl AnimDirector {
         );
     }
 
-    /// Stop tweens on target (pose freezes).
+    /// Move target along waypoints over duration (Catmull-Rom chain).
+    ///
+    /// Empty/single-point chains finish immediately without moving.
+    pub fn move_along(&mut self, id: &str, points: Vec<Vec2>, duration: f32, ease: &str) {
+        use crate::tween::parse_ease;
+        self.paths.insert(
+            id.into(),
+            crate::path::PathTween::new(points, duration, parse_ease(ease)),
+        );
+        self.log.push(format!("path {id} d={duration:.2}"));
+        if self.log.len() > 64 {
+            let n = self.log.len() - 64;
+            self.log.drain(0..n);
+        }
+    }
+
+    /// Stop tweens and path motion on target (pose freezes).
     pub fn stop(&mut self, id: &str) {
         if let Some(t) = self.targets.get_mut(id) {
             t.tweens.clear();
         }
+        self.paths.shift_remove(id);
     }
 
     /// Remove target.
@@ -151,6 +170,20 @@ impl AnimDirector {
             }
             tick_tweens(&mut t.pose, &mut t.tweens, dt);
             t.prune_finished();
+        }
+        let mut done = Vec::new();
+        for (id, path) in self.paths.iter_mut() {
+            if let Some(pos) = path.tick(dt) {
+                if let Some(t) = self.targets.get_mut(id) {
+                    t.pose.pos = pos;
+                }
+            }
+            if path.finished {
+                done.push(id.clone());
+            }
+        }
+        for id in done {
+            self.paths.shift_remove(&id);
         }
     }
 

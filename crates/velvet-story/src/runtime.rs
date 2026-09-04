@@ -19,6 +19,19 @@ use crate::value::StoryValue;
 use crate::variables::StoryVariables;
 use crate::voice::VoiceQueue;
 
+/// One game screen shown by the player (`screen show/call`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ActiveGameScreen {
+    /// Screen id.
+    pub id: String,
+    /// Positional argument values.
+    #[serde(default)]
+    pub args: Vec<StoryValue>,
+    /// True for modal `screen call` (blocks until return).
+    #[serde(default)]
+    pub modal: bool,
+}
+
 /// What the player is waiting on.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum StoryWait {
@@ -29,6 +42,11 @@ pub enum StoryWait {
     Line,
     /// Waiting for a choice selection.
     Choice,
+    /// Waiting for a modal `screen call` return.
+    ScreenCall {
+        /// Called screen id.
+        id: String,
+    },
     /// Story finished.
     Ended,
     /// Timed narrative pause; remaining time in milliseconds.
@@ -112,6 +130,27 @@ pub struct StorySnapshot {
     /// Full call continuations with nested stacks.
     #[serde(default)]
     pub call_continuations: Vec<SavedCallContinuation>,
+    /// Active VN screen preset id (`say_classic` default; set by `screen` op).
+    #[serde(default)]
+    pub screen: String,
+    /// Active mini-ATL motions by sprite id (set by `show ... with ...`).
+    #[serde(default)]
+    pub motions: IndexMap<String, crate::ir::ShowMotion>,
+    /// Named ATL transforms by sprite id (`show … with <transform>`).
+    #[serde(default)]
+    pub transforms: IndexMap<String, String>,
+    /// Game screens currently shown (stack, top = last).
+    #[serde(default)]
+    pub game_screens: Vec<ActiveGameScreen>,
+    /// Called screen id while waiting on a modal `screen call`.
+    #[serde(default)]
+    pub pending_screen_call: Option<String>,
+    /// Result variable for the pending call (`into <var>`).
+    #[serde(default)]
+    pub pending_screen_result: Option<String>,
+    /// Whether return_from_screen advances the scene IP.
+    #[serde(default)]
+    pub screen_call_advances_scene: bool,
 }
 
 impl Default for StorySnapshot {
@@ -131,6 +170,13 @@ impl Default for StorySnapshot {
             pause_advances_scene: false,
             host_advances_scene: false,
             call_continuations: Vec::new(),
+            screen: String::new(),
+            motions: IndexMap::new(),
+            transforms: IndexMap::new(),
+            game_screens: Vec::new(),
+            pending_screen_call: None,
+            pending_screen_result: None,
+            screen_call_advances_scene: false,
         }
     }
 }
@@ -209,6 +255,69 @@ pub enum StoryEvent {
         /// Named arguments.
         args: IndexMap<String, StoryValue>,
     },
+    /// Gallery / music unlock (`unlock gallery <id>`). Applied by the
+    /// session (monotonic achievement); saves persist the unlock sets.
+    Unlock {
+        /// Catalog: `gallery` or `music`.
+        catalog: String,
+        /// Entry id.
+        id: String,
+    },
+    /// Cinema clip started (`movie "dir"`). The session plays it; the
+    /// player itself never blocks on video.
+    Movie {
+        /// Clip directory path (project-relative).
+        path: String,
+        /// Loop instead of finishing.
+        loop_clip: bool,
+    },
+    /// Mini-ATL motion started on a sprite (`show ... with ...`).
+    Motion {
+        /// Sprite id.
+        target: String,
+        /// Motion detail.
+        motion: crate::ir::ShowMotion,
+    },
+    /// VN screen preset applied (`screen nvl_page`).
+    Screen(String),
+    /// Game screen shown (`screen show <id>`).
+    GameScreenShow {
+        /// Screen id.
+        id: String,
+        /// Positional argument values.
+        args: Vec<StoryValue>,
+        /// Enter mini-ATL motion (`with …`).
+        motion: Option<crate::ir::ShowMotion>,
+        /// Enter named ATL transform (`with <name>`).
+        transform: Option<String>,
+    },
+    /// Game screen hidden (`screen hide <id>`).
+    GameScreenHide {
+        /// Screen id.
+        id: String,
+        /// Exit mini-ATL motion (`with …`).
+        motion: Option<crate::ir::ShowMotion>,
+        /// Exit named ATL transform (`with <name>`).
+        transform: Option<String>,
+    },
+    /// Game screen called modally (`screen call <id>` — player waits).
+    GameScreenCall {
+        /// Screen id.
+        id: String,
+        /// Positional argument values.
+        args: Vec<StoryValue>,
+        /// Enter mini-ATL motion (`with …`).
+        motion: Option<crate::ir::ShowMotion>,
+        /// Enter named ATL transform (`with <name>`).
+        transform: Option<String>,
+    },
+    /// Named ATL transform started on a sprite (`show … with <transform>`).
+    Transform {
+        /// Sprite id.
+        target: String,
+        /// Transform name.
+        name: String,
+    },
 }
 
 /// One nested block frame (if / choice arm body).
@@ -284,6 +393,12 @@ pub struct StoryPlayer {
     pending_menu: Option<Vec<crate::ir::StoryChoice>>,
     /// When true, [`Self::choose`] advances the scene IP past the Choice op.
     choice_advances_scene: bool,
+    /// Called screen id while waiting on a modal `screen call`.
+    pending_screen_call: Option<String>,
+    /// Result variable for the pending call (`into <var>`).
+    pending_screen_result: Option<String>,
+    /// When true, [`Self::return_from_screen`] advances the scene IP.
+    screen_call_advances_scene: bool,
     /// When true, [`Self::advance`] on Line advances the scene IP.
     line_advances_scene: bool,
     /// When true, finishing a Pause advances the scene IP.
@@ -359,6 +474,9 @@ impl StoryPlayer {
             exec_stack: Vec::new(),
             pending_menu: None,
             choice_advances_scene: false,
+            pending_screen_call: None,
+            pending_screen_result: None,
+            screen_call_advances_scene: false,
             line_advances_scene: false,
             pause_advances_scene: false,
             host_advances_scene: false,
@@ -428,6 +546,11 @@ impl StoryPlayer {
         &self.history
     }
 
+    /// Mutable history (sessions record game-screen texts here).
+    pub fn history_mut(&mut self) -> &mut History {
+        &mut self.history
+    }
+
     /// Wait state.
     pub fn wait(&self) -> &StoryWait {
         &self.snapshot.wait
@@ -468,6 +591,21 @@ impl StoryPlayer {
         &self.snapshot.scene
     }
 
+    /// Active screen preset id from `screen` ops (empty = default).
+    pub fn snapshot_screen(&self) -> &str {
+        &self.snapshot.screen
+    }
+
+    /// Active mini-ATL motions by sprite id.
+    pub fn snapshot_motions(&self) -> &IndexMap<String, crate::ir::ShowMotion> {
+        &self.snapshot.motions
+    }
+
+    /// Named ATL transforms by sprite id (`show … with <transform>`).
+    pub fn snapshot_transforms(&self) -> &IndexMap<String, String> {
+        &self.snapshot.transforms
+    }
+
     /// Jump to a scene or `scene:label`, clearing nested bodies, then pump.
     ///
     /// Used by RPG dialogue bridges and external navigation.
@@ -476,6 +614,15 @@ impl StoryPlayer {
         self.pending_menu = None;
         self.choice_advances_scene = false;
         self.line_advances_scene = false;
+        // A jump abandons modal calls (their return site is gone);
+        // modeless screens stay up (global layer, like Ren'Py).
+        self.pending_screen_call = None;
+        self.pending_screen_result = None;
+        self.screen_call_advances_scene = false;
+        self.snapshot.pending_screen_call = None;
+        self.snapshot.pending_screen_result = None;
+        self.snapshot.screen_call_advances_scene = false;
+        self.snapshot.game_screens.retain(|s| !s.modal);
         self.jump_to(target);
         if !matches!(self.snapshot.wait, StoryWait::Ended) {
             self.snapshot.wait = StoryWait::Ready;
@@ -607,6 +754,9 @@ impl StoryPlayer {
         s.exec_stack = self.exec_stack.iter().map(ExecFrame::to_saved).collect();
         s.pending_menu = self.pending_menu.clone();
         s.choice_advances_scene = self.choice_advances_scene;
+        s.pending_screen_call = self.pending_screen_call.clone();
+        s.pending_screen_result = self.pending_screen_result.clone();
+        s.screen_call_advances_scene = self.screen_call_advances_scene;
         s.line_advances_scene = self.line_advances_scene;
         s.pause_advances_scene = self.pause_advances_scene;
         s.host_advances_scene = self.host_advances_scene;
@@ -633,6 +783,9 @@ impl StoryPlayer {
             .collect();
         self.pending_menu = s.pending_menu.clone();
         self.choice_advances_scene = s.choice_advances_scene;
+        self.pending_screen_call = s.pending_screen_call.clone();
+        self.pending_screen_result = s.pending_screen_result.clone();
+        self.screen_call_advances_scene = s.screen_call_advances_scene;
         self.line_advances_scene = s.line_advances_scene;
         self.pause_advances_scene = s.pause_advances_scene;
         self.host_advances_scene = s.host_advances_scene;
@@ -671,7 +824,10 @@ impl StoryPlayer {
             }
             StoryWait::Pause { .. } => self.skip_pause(),
             StoryWait::Ready => self.pump(),
-            StoryWait::Choice | StoryWait::Ended | StoryWait::Host { .. } => {}
+            StoryWait::Choice
+            | StoryWait::ScreenCall { .. }
+            | StoryWait::Ended
+            | StoryWait::Host { .. } => {}
         }
     }
 
@@ -722,6 +878,66 @@ impl StoryPlayer {
         self.snapshot.wait = StoryWait::Ready;
         self.pump();
         Ok(())
+    }
+
+    /// Return from a modal `screen call`, resuming the story.
+    ///
+    /// The value lands in the `_return` variable (Ren'Py convention) plus
+    /// the `into <var>` binding when the call declared one, and the modal
+    /// screen is dismissed. Errors when not waiting on a call.
+    pub fn return_from_screen(&mut self, value: StoryValue) -> Result<(), String> {
+        let id = match self.snapshot.wait.clone() {
+            StoryWait::ScreenCall { id } => id,
+            _ => return Err("not waiting for a screen call".into()),
+        };
+        self.vars.set("_return".to_string(), value.clone());
+        if let Some(var) = self.pending_screen_result.clone() {
+            self.vars.set(var, value);
+        }
+        self.snapshot
+            .game_screens
+            .retain(|s| !(s.id == id && s.modal));
+        self.pending_screen_call = None;
+        self.snapshot.pending_screen_call = None;
+        self.pending_screen_result = None;
+        self.snapshot.pending_screen_result = None;
+        if self.screen_call_advances_scene {
+            self.snapshot.op_index += 1;
+        }
+        self.screen_call_advances_scene = false;
+        self.snapshot.screen_call_advances_scene = false;
+        self.snapshot.wait = StoryWait::Ready;
+        self.pump();
+        Ok(())
+    }
+
+    /// Drop shown screens sharing the id or a non-empty `tag:` with `id`.
+    fn retain_game_screen_slot(&mut self, id: &str) {
+        let tag = self.program.screens.get(id).and_then(|d| d.tag.clone());
+        self.snapshot.game_screens.retain(|s| {
+            if s.id == id {
+                return false;
+            }
+            match (&tag, &s.id) {
+                (Some(t), other) => {
+                    if t.is_empty() {
+                        return true;
+                    }
+                    self.program.screens.get(other).and_then(|d| d.tag.as_ref()) != Some(t)
+                }
+                (None, _) => true,
+            }
+        });
+    }
+
+    /// Game screens currently shown (stack, top = last).
+    pub fn game_screens(&self) -> &[ActiveGameScreen] {
+        &self.snapshot.game_screens
+    }
+
+    /// Called screen id while waiting on a modal `screen call`.
+    pub fn pending_screen_call(&self) -> Option<&str> {
+        self.pending_screen_call.as_deref()
     }
 
     /// Skip according to preferences (returns true if advanced).
@@ -818,6 +1034,9 @@ impl StoryPlayer {
             }
             StoryWait::Ready => {
                 self.pump();
+            }
+            StoryWait::ScreenCall { .. } => {
+                // Modal screen stays up across save/load; host returns a value.
             }
             StoryWait::Pause { .. } | StoryWait::Host { .. } | StoryWait::Ended => {}
         }
@@ -926,21 +1145,141 @@ impl StoryPlayer {
                 self.events.push(StoryEvent::Music { path, fade_in });
                 true
             }
-            StoryOp::Show { target, at } => {
+            StoryOp::Show {
+                target,
+                at,
+                motion,
+                transform,
+            } => {
                 let (id, expression) = split_target(&target);
                 let vis = VisibleCharacter {
                     id: id.clone(),
                     expression,
                     at,
                 };
-                self.snapshot.visible.insert(id, vis.clone());
+                self.snapshot.visible.insert(id.clone(), vis.clone());
                 self.events.push(StoryEvent::Show(vis));
+                if let Some(m) = motion {
+                    self.snapshot.motions.insert(id.clone(), m.clone());
+                    self.events.push(StoryEvent::Motion {
+                        target: id.clone(),
+                        motion: m.clone(),
+                    });
+                }
+                if let Some(t) = transform {
+                    self.snapshot.transforms.insert(id.clone(), t.clone());
+                    self.events.push(StoryEvent::Transform {
+                        target: id,
+                        name: t.clone(),
+                    });
+                }
                 true
             }
-            StoryOp::Hide { target } => {
+            StoryOp::Screen { id } => {
+                self.snapshot.screen = id.clone();
+                self.events.push(StoryEvent::Screen(id.clone()));
+                true
+            }
+            StoryOp::ShowGameScreen {
+                id,
+                args,
+                motion,
+                transform,
+            } => {
+                self.retain_game_screen_slot(id.as_str());
+                self.snapshot.game_screens.push(ActiveGameScreen {
+                    id: id.clone(),
+                    args: args.clone(),
+                    modal: false,
+                });
+                self.events.push(StoryEvent::GameScreenShow {
+                    id: id.clone(),
+                    args: args.clone(),
+                    motion: motion.clone(),
+                    transform: transform.clone(),
+                });
+                true
+            }
+            StoryOp::HideGameScreen {
+                id,
+                motion,
+                transform,
+            } => {
+                self.snapshot.game_screens.retain(|s| s.id != *id);
+                self.events.push(StoryEvent::GameScreenHide {
+                    id: id.clone(),
+                    motion: motion.clone(),
+                    transform: transform.clone(),
+                });
+                true
+            }
+            StoryOp::CallGameScreen {
+                id,
+                args,
+                motion,
+                transform,
+                result,
+            } => {
+                self.retain_game_screen_slot(id.as_str());
+                self.snapshot.game_screens.push(ActiveGameScreen {
+                    id: id.clone(),
+                    args: args.clone(),
+                    modal: true,
+                });
+                self.screen_call_advances_scene = self.exec_stack.is_empty();
+                self.snapshot.screen_call_advances_scene = self.screen_call_advances_scene;
+                self.pending_screen_call = Some(id.clone());
+                self.snapshot.pending_screen_call = Some(id.clone());
+                self.pending_screen_result = result.clone();
+                self.snapshot.pending_screen_result = result.clone();
+                self.events.push(StoryEvent::GameScreenCall {
+                    id: id.clone(),
+                    args: args.clone(),
+                    motion: motion.clone(),
+                    transform: transform.clone(),
+                });
+                self.snapshot.wait = StoryWait::ScreenCall { id: id.clone() };
+                false
+            }
+            StoryOp::Unlock { catalog, id } => {
+                self.events.push(StoryEvent::Unlock {
+                    catalog: catalog.clone(),
+                    id: id.clone(),
+                });
+                true
+            }
+            StoryOp::Movie { path, loop_clip } => {
+                self.events.push(StoryEvent::Movie {
+                    path: path.clone(),
+                    loop_clip,
+                });
+                true
+            }
+            StoryOp::Hide {
+                target,
+                motion,
+                transform,
+            } => {
                 let (id, _) = split_target(&target);
                 self.snapshot.visible.shift_remove(&id);
-                self.events.push(StoryEvent::Hide(id));
+                self.snapshot.motions.shift_remove(&id);
+                self.snapshot.transforms.shift_remove(&id);
+                self.events.push(StoryEvent::Hide(id.clone()));
+                // Exit motion plays on the way out (host animates, then drops).
+                if let Some(m) = motion {
+                    self.snapshot.motions.insert(id.clone(), m.clone());
+                    self.events.push(StoryEvent::Motion {
+                        target: id.clone(),
+                        motion: m.clone(),
+                    });
+                }
+                if let Some(t) = transform {
+                    self.snapshot.transforms.insert(id.clone(), t.clone());
+                    self.events.push(StoryEvent::Transform {
+                        target: id,
+                        name: t.clone(),
+                    });
+                }
                 true
             }
             StoryOp::Dialogue { speaker, text } => {
@@ -1633,6 +1972,9 @@ scene route_c {
                 }
                 StoryWait::Host { token } => {
                     let _ = player.resume_host(&token);
+                }
+                StoryWait::ScreenCall { .. } => {
+                    let _ = player.return_from_screen(StoryValue::Null);
                 }
                 StoryWait::Choice | StoryWait::Ended => break,
             }

@@ -720,7 +720,9 @@ pub fn lower_source_heuristic(source: &str, edition: u32) -> (HirModule, Vec<Hir
                     span: HirSpan::at(line_no, 1, 0, 0),
                 }));
             }
-        } else if t.starts_with("screen ") {
+        } else if t.starts_with("screen ") && t.trim_end().ends_with('{') {
+            // Top-level `screen name {` only: scene-level `screen <preset>`
+            // statements have no brace.
             let name = t
                 .strip_prefix("screen ")
                 .unwrap_or("")

@@ -46,8 +46,52 @@ fn op_to_json(op: &StoryOp) -> Value {
             "path": path,
             "fade_in": fade_in,
         }),
-        StoryOp::Show { target, at } => json!({ "kind": "show", "target": target, "at": at }),
-        StoryOp::Hide { target } => json!({ "kind": "hide", "target": target }),
+        StoryOp::Show {
+            target,
+            at,
+            motion,
+            transform,
+        } => {
+            json!({ "kind": "show", "target": target, "at": at, "motion": motion, "transform": transform })
+        }
+        StoryOp::Screen { id } => json!({ "kind": "screen", "id": id }),
+        StoryOp::ShowGameScreen {
+            id,
+            args,
+            motion,
+            transform,
+        } => {
+            json!({ "kind": "show_game_screen", "id": id, "args": args, "motion": motion, "transform": transform })
+        }
+        StoryOp::HideGameScreen {
+            id,
+            motion,
+            transform,
+        } => {
+            json!({ "kind": "hide_game_screen", "id": id, "motion": motion, "transform": transform })
+        }
+        StoryOp::CallGameScreen {
+            id,
+            args,
+            motion,
+            transform,
+            result,
+        } => {
+            json!({ "kind": "call_game_screen", "id": id, "args": args, "motion": motion, "transform": transform, "result": result })
+        }
+        StoryOp::Unlock { catalog, id } => {
+            json!({ "kind": "unlock", "catalog": catalog, "id": id })
+        }
+        StoryOp::Movie { path, loop_clip } => {
+            json!({ "kind": "movie", "path": path, "loop_clip": loop_clip })
+        }
+        StoryOp::Hide {
+            target,
+            motion,
+            transform,
+        } => {
+            json!({ "kind": "hide", "target": target, "motion": motion, "transform": transform })
+        }
         StoryOp::Label { name } => json!({ "kind": "label", "name": name }),
         StoryOp::Assign { name, .. } => json!({ "kind": "assign", "name": name }),
         StoryOp::If {

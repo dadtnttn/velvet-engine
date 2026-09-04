@@ -149,6 +149,129 @@ fn draw_char(
     }
 }
 
+/// Parse `#rrggbb` / `#rgb` / a few named colors into RGB.
+pub fn parse_text_color(spec: &str) -> Option<(u8, u8, u8)> {
+    let s = spec.trim().to_ascii_lowercase();
+    let had_hash = s.starts_with('#');
+    let s = s.strip_prefix('#').unwrap_or(&s);
+    let is_hex = |t: &str| t.chars().all(|c| c.is_ascii_hexdigit());
+    if had_hash && s.len() == 6 && is_hex(s) {
+        let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+        return Some((r, g, b));
+    }
+    if had_hash && s.len() == 3 && is_hex(s) {
+        let r = u8::from_str_radix(&s[0..1], 16).ok()?;
+        let g = u8::from_str_radix(&s[1..2], 16).ok()?;
+        let b = u8::from_str_radix(&s[2..3], 16).ok()?;
+        return Some((r * 17, g * 17, b * 17));
+    }
+    match s {
+        "red" => Some((255, 70, 70)),
+        "green" => Some((90, 220, 90)),
+        "blue" => Some((110, 170, 255)),
+        "yellow" => Some((255, 225, 90)),
+        "white" => Some((255, 255, 255)),
+        "black" => Some((0, 0, 0)),
+        "gray" | "grey" => Some((150, 150, 160)),
+        "pink" => Some((255, 120, 170)),
+        _ => None,
+    }
+}
+
+/// Draw rich markup (`{b}{i}{color=..}{ruby=..}`) with per-span color and
+/// furigana above ruby spans. Unknown glyphs (emoji) use the box fallback
+/// from the internal glyph atlas. Returns width px drawn.
+pub fn draw_text_rich(
+    buf: &mut [u32],
+    out_w: u32,
+    out_h: u32,
+    x: i32,
+    y: i32,
+    markup: &str,
+    base_color: u32,
+    scale: i32,
+) -> i32 {
+    let line = crate::rich_text::parse_rich_line(markup);
+    let s = scale.max(1);
+    let adv = 6 * s;
+    let mut cx = x;
+    let start = x;
+    for span in &line.spans {
+        let col = span
+            .color
+            .as_deref()
+            .and_then(parse_text_color)
+            .map(|(r, g, b)| pack_rgb(r, g, b))
+            .unwrap_or(base_color);
+        // ruby reading above the span (smaller, dimmed toward white)
+        if let Some(ruby) = &span.ruby {
+            let shrink = (s - 1).max(1);
+            let mut rx = cx;
+            for ch in ruby.chars() {
+                draw_char(buf, out_w, out_h, rx, y - 8 * shrink, ch, col, shrink);
+                rx += 6 * shrink;
+                if rx > out_w as i32 - 8 {
+                    break;
+                }
+            }
+        }
+        for ch in span.text.chars() {
+            if ch == '\n' {
+                continue;
+            }
+            if span.style.italic {
+                // slant: top rows shift right (5x7 hosts can't do TTF italics)
+                draw_char_slanted(buf, out_w, out_h, cx, y, ch, col, s);
+            } else {
+                draw_char(buf, out_w, out_h, cx, y, ch, col, s);
+            }
+            if span.style.bold {
+                // bold = second strike one px right
+                draw_char(buf, out_w, out_h, cx + 1, y, ch, col, s);
+            }
+            cx += adv;
+            if cx > out_w as i32 - 8 {
+                break;
+            }
+        }
+    }
+    cx - start
+}
+
+/// Slanted glyph draw for `{i}` (top rows shift right).
+fn draw_char_slanted(
+    buf: &mut [u32],
+    out_w: u32,
+    out_h: u32,
+    x: i32,
+    y: i32,
+    c: char,
+    color: u32,
+    scale: i32,
+) {
+    let rows = glyph(c);
+    let s = scale.max(1);
+    for (row, bits) in rows.iter().enumerate() {
+        let slant = ((6 - row as i32) / 3).max(0);
+        for col in 0..5 {
+            if bits & (1 << (4 - col)) != 0 {
+                fill_rect(
+                    buf,
+                    out_w,
+                    out_h,
+                    x + col * s + slant,
+                    y + row as i32 * s,
+                    x + col * s + slant + s,
+                    y + row as i32 * s + s,
+                    color,
+                );
+            }
+        }
+    }
+}
+
 /// Draw a single line of text (no wrap).
 pub fn draw_text_line(
     buf: &mut [u32],
@@ -323,6 +446,32 @@ mod tests {
         for symbol in ['<', '+', '=', '%', '_', '#', '*'] {
             assert_ne!(glyph(symbol), glyph('@'), "{symbol} used fallback glyph");
         }
+    }
+
+    #[test]
+    fn rich_text_paints_color_and_ruby() {
+        let ww = 320u32;
+        let wh = 60u32;
+        let mut buf = vec![pack_rgb(8, 6, 14); (ww * wh) as usize];
+        let w = draw_text_rich(
+            &mut buf,
+            ww,
+            wh,
+            10,
+            20,
+            "Hi {b}bold{/b} {color=#ff0000}red{ruby=furi}X{/ruby}",
+            pack_rgb(220, 220, 230),
+            2,
+        );
+        assert!(w > 40, "rich line should advance, got {w}");
+        let painted = count_painted_pixels(&buf, pack_rgb(8, 6, 14));
+        assert!(painted > 60, "rich spans should paint, got {painted}");
+        // red span present
+        let red = pack_rgb(255, 0, 0);
+        assert!(buf.contains(&red), "color span should use exact red");
+        assert_eq!(parse_text_color("#0f0"), Some((0, 255, 0)));
+        assert_eq!(parse_text_color("red"), Some((255, 70, 70)));
+        assert!(parse_text_color("nope").is_none());
     }
 
     #[test]

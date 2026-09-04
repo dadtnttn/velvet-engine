@@ -182,9 +182,13 @@ fn parse_line_col(s: &str) -> (u32, u32) {
 }
 
 /// Lower an already-parsed module.
+///
+/// Two passes: screens/transforms/characters/state first (so scenes can
+/// reference them regardless of author order), then scenes.
 pub fn lower_module(module: &Module, title: String) -> Result<StoryProgram, LoadError> {
     let mut program = StoryProgram::new(title);
-    let mut first_scene = None;
+    let mut first_scene: Option<String> = None;
+    let mut scene_bodies: Vec<(String, Vec<Stmt>)> = Vec::new();
 
     for item in &module.items {
         match item {
@@ -226,18 +230,76 @@ pub fn lower_module(module: &Module, title: String) -> Result<StoryProgram, Load
                 if first_scene.is_none() {
                     first_scene = Some(name.clone());
                 }
-                let mut scene = StoryScene {
-                    name: name.clone(),
-                    ops: lower_stmts(body)?,
-                    labels: IndexMap::new(),
-                };
-                scene.reindex_labels();
-                program.scenes.insert(name.clone(), scene);
+                scene_bodies.push((name.clone(), body.clone()));
             }
-            Item::Import { .. } | Item::Function { .. } | Item::Screen { .. } | Item::Stmt(_) => {
+            Item::Screen {
+                name,
+                properties,
+                buttons,
+                params,
+                children,
+                loc,
+            } => {
+                if program.screens.contains_key(name) {
+                    return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                        format!("duplicate screen `{name}`"),
+                        loc.clone(),
+                    )]));
+                }
+                let def = crate::screens::lower_screen(name, properties, buttons, params, children)
+                    .map_err(|m| {
+                        LoadError::Diagnostics(vec![StoryDiagnostic::new(m, loc.clone())])
+                    })?;
+                program.screens.insert(name.clone(), def);
+            }
+            Item::Transform { name, steps, loc } => {
+                if program.transforms.contains_key(name) {
+                    return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                        format!("duplicate transform `{name}`"),
+                        loc.clone(),
+                    )]));
+                }
+                let def = crate::atl::lower_transform(name, steps).map_err(|m| {
+                    LoadError::Diagnostics(vec![StoryDiagnostic::new(m, loc.clone())])
+                })?;
+                program.transforms.insert(name.clone(), def);
+            }
+            Item::Import { .. } | Item::Function { .. } | Item::Stmt(_) => {
                 // Non-story items ignored for VN IR (can still run via script VM).
             }
         }
+    }
+    // Screen `use` targets must exist (checked after all screens collected).
+    for def in program.screens.values() {
+        for (target, args_len) in def.uses() {
+            let Some(target_def) = program.screens.get(&target) else {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    format!("screen `{}` uses unknown screen `{target}`", def.name),
+                    SourceLoc::unknown(),
+                )]));
+            };
+            if let Err(m) = crate::screens::check_call_arity(&target, &target_def.params, args_len)
+            {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    format!("screen `{}`: {m}", def.name),
+                    SourceLoc::unknown(),
+                )]));
+            }
+        }
+    }
+
+    let ctx = LowerCtx {
+        screens: &program.screens,
+        transforms: &program.transforms,
+    };
+    for (name, body) in &scene_bodies {
+        let mut scene = StoryScene {
+            name: name.clone(),
+            ops: lower_stmts(body, &ctx)?,
+            labels: IndexMap::new(),
+        };
+        scene.reindex_labels();
+        program.scenes.insert(name.clone(), scene);
     }
 
     if program.entry == "main" && !program.scenes.contains_key("main") {
@@ -251,31 +313,329 @@ pub fn lower_module(module: &Module, title: String) -> Result<StoryProgram, Load
             SourceLoc::at(1, 1, Default::default()),
         )]));
     }
+    validate_screen_actions(&program)?;
     Ok(program)
 }
 
-fn lower_stmts(stmts: &[Stmt]) -> Result<Vec<StoryOp>, LoadError> {
+/// Validate known `textbutton … action …` calls inside game screens.
+///
+/// Known actions keep their contract (`Return(x)`, `Jump("scene")`,
+/// `Show("screen")` / `Hide("screen")`, `Set("var", value)`); unknown
+/// action names are custom host actions and pass through untouched.
+fn validate_screen_actions(program: &StoryProgram) -> Result<(), LoadError> {
+    for def in program.screens.values() {
+        check_screen_children(program, &def.name, &def.children)?;
+    }
+    Ok(())
+}
+
+fn check_screen_children(
+    program: &StoryProgram,
+    screen: &str,
+    children: &[crate::screens::ScreenChildRt],
+) -> Result<(), LoadError> {
+    for child in children {
+        // Actions live in `textbutton` (`action:`) and generic `button`
+        // widgets; both lower the label/action pair the same way.
+        if child.kind == "textbutton" || child.kind == "button" {
+            if let Some(action) = child.props.iter().find(|p| p.name == "action") {
+                check_screen_action(program, screen, &action.value)?;
+            }
+        }
+        check_screen_children(program, screen, &child.children)?;
+    }
+    Ok(())
+}
+
+fn check_screen_action(
+    program: &StoryProgram,
+    screen: &str,
+    value: &crate::screens::ScreenValueRt,
+) -> Result<(), LoadError> {
+    // Only literal actions validate; dynamic expressions resolve at the host.
+    let source = match value {
+        crate::screens::ScreenValueRt::Lit {
+            value: crate::value::StoryValue::String(s),
+        } => s.clone(),
+        crate::screens::ScreenValueRt::Expr { source } => source.clone(),
+        _ => return Ok(()),
+    };
+    let Some(call) = crate::screens::parse_screen_action(&source) else {
+        // Not a call (plain ident / string): host-resolved, skip.
+        return Ok(());
+    };
+    let bad = |message: String| {
+        LoadError::Diagnostics(vec![StoryDiagnostic::new(
+            format!("screen `{screen}` action: {message}"),
+            SourceLoc::unknown(),
+        )])
+    };
+    match call.name.as_str() {
+        "Return" => {
+            if call.args.len() != 1 {
+                return Err(bad(format!(
+                    "Return needs 1 argument, got {}",
+                    call.args.len()
+                )));
+            }
+        }
+        "Jump" => {
+            let target = match call.args.as_slice() {
+                [crate::value::StoryValue::String(t)] => t.clone(),
+                _ => {
+                    return Err(bad("Jump needs 1 scene name, e.g. `Jump(\"start\")`".into()));
+                }
+            };
+            if !program.scenes.contains_key(&target) {
+                return Err(bad(format!("Jump targets unknown scene `{target}`")));
+            }
+        }
+        "Show" | "Hide" => {
+            let target = match call.args.as_slice() {
+                [crate::value::StoryValue::String(t)] => t.clone(),
+                _ => {
+                    return Err(bad(format!(
+                        "{} needs 1 screen id, e.g. `{}( \"help\" )`",
+                        call.name, call.name
+                    )));
+                }
+            };
+            if !program.screens.contains_key(&target) {
+                return Err(bad(format!(
+                    "{} targets unknown screen `{target}`",
+                    call.name
+                )));
+            }
+        }
+        "Set" => match call.args.as_slice() {
+            [crate::value::StoryValue::String(var), _] if is_var_name(var) => {}
+            _ => {
+                return Err(bad(
+                    "Set needs a variable name and a value, e.g. `Set(\"gold\", 5)`".into(),
+                ));
+            }
+        },
+        // Custom host actions pass through.
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Tables scenes may reference (collected before scene lowering).
+struct LowerCtx<'a> {
+    screens: &'a IndexMap<String, crate::screens::ScreenDef>,
+    transforms: &'a IndexMap<String, crate::atl::TransformDef>,
+}
+
+fn lower_stmts(stmts: &[Stmt], ctx: &LowerCtx) -> Result<Vec<StoryOp>, LoadError> {
     let mut ops = Vec::new();
     for s in stmts {
-        ops.extend(lower_stmt(s)?);
+        ops.extend(lower_stmt(s, ctx)?);
     }
     Ok(ops)
 }
 
-fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
+/// Plain variable name check for `into <var>` bindings.
+fn is_var_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Resolve a `with <mini-motion|transform>` suffix shared by show/hide.
+fn lower_with(
+    with: &Option<String>,
+    ctx: &LowerCtx,
+    loc: &SourceLoc,
+) -> Result<(Option<crate::ir::ShowMotion>, Option<String>), LoadError> {
+    // `with <mini-motion>` wins; otherwise it names an ATL transform.
+    match with {
+        Some(w) => match crate::atl::parse_motion_words(w) {
+            Some(m) => Ok((
+                Some(crate::ir::ShowMotion::new(
+                    m.kind.as_str(),
+                    m.duration,
+                    m.amount,
+                )),
+                None,
+            )),
+            None => {
+                if !ctx.transforms.contains_key(w) {
+                    return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                        format!(
+                            "unknown motion or transform `{w}` (expected move, zoom, shake, fade, or a `transform` name)"
+                        ),
+                        loc.clone(),
+                    )]));
+                }
+                Ok((None, Some(w.clone())))
+            }
+        },
+        None => Ok((None, None)),
+    }
+}
+
+fn lower_stmt(stmt: &Stmt, ctx: &LowerCtx) -> Result<Vec<StoryOp>, LoadError> {
     Ok(match stmt {
         Stmt::Background { path, .. } => vec![StoryOp::Background { path: path.clone() }],
         Stmt::Music { path, fade_in, .. } => vec![StoryOp::Music {
             path: path.clone(),
             fade_in: *fade_in,
         }],
-        Stmt::Show { target, at, .. } => vec![StoryOp::Show {
-            target: target.clone(),
-            at: at.clone(),
-        }],
-        Stmt::Hide { target, .. } => vec![StoryOp::Hide {
-            target: target.clone(),
-        }],
+        Stmt::Show {
+            target,
+            at,
+            with,
+            loc,
+        } => {
+            let (motion, transform) = lower_with(with, ctx, loc)?;
+            vec![StoryOp::Show {
+                target: target.clone(),
+                at: at.clone(),
+                motion,
+                transform,
+            }]
+        }
+        Stmt::ScreenAction {
+            action,
+            id,
+            args,
+            with,
+            result,
+            loc,
+        } => {
+            let Some(def) = ctx.screens.get(id) else {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    format!("unknown screen `{id}` (declare it with `screen {id} {{ … }}`)"),
+                    loc.clone(),
+                )]));
+            };
+            let mut values = Vec::new();
+            for e in args {
+                match from_ast_expr(e) {
+                    Some(v) => values.push(v),
+                    None => {
+                        return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                            format!(
+                                "screen `{id}` arguments must be literals (got a dynamic expression)"
+                            ),
+                            loc.clone(),
+                        )]));
+                    }
+                }
+            }
+            if !matches!(action, velvet_script_ast::ScreenActionKind::Hide) {
+                if let Err(m) = crate::screens::check_call_arity(id, &def.params, values.len()) {
+                    return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                        m,
+                        loc.clone(),
+                    )]));
+                }
+            }
+            if matches!(action, velvet_script_ast::ScreenActionKind::Hide) && !values.is_empty() {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    format!("screen hide `{id}` takes no arguments"),
+                    loc.clone(),
+                )]));
+            }
+            // `into` only makes sense for modal calls (show/hide return nothing).
+            if result.is_some() && !matches!(action, velvet_script_ast::ScreenActionKind::Call) {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    format!(
+                        "screen {} `{id}` takes no `into` (only `screen call` returns a value)",
+                        action.as_str()
+                    ),
+                    loc.clone(),
+                )]));
+            }
+            if let Some(var) = result {
+                if !is_var_name(var) {
+                    return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                        format!("`into` needs a variable name, got `{var}`"),
+                        loc.clone(),
+                    )]));
+                }
+            }
+            let (motion, transform) = lower_with(with, ctx, loc)?;
+            match action {
+                velvet_script_ast::ScreenActionKind::Show => vec![StoryOp::ShowGameScreen {
+                    id: id.clone(),
+                    args: values,
+                    motion,
+                    transform,
+                }],
+                velvet_script_ast::ScreenActionKind::Hide => vec![StoryOp::HideGameScreen {
+                    id: id.clone(),
+                    motion,
+                    transform,
+                }],
+                velvet_script_ast::ScreenActionKind::Call => vec![StoryOp::CallGameScreen {
+                    id: id.clone(),
+                    args: values,
+                    motion,
+                    transform,
+                    result: result.clone(),
+                }],
+            }
+        }
+        Stmt::Screen { id, loc } => {
+            if crate::screens::ScreenPreset::from_id(id).is_none() {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    format!(
+                        "unknown screen preset `{id}` (expected say_classic, say_minimal, nvl_page or menu)"
+                    ),
+                    loc.clone(),
+                )]));
+            }
+            vec![StoryOp::Screen { id: id.clone() }]
+        }
+        Stmt::Unlock { kind, id, loc } => {
+            let kind_lower = kind.to_ascii_lowercase();
+            if kind_lower != "gallery" && kind_lower != "music" {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    format!("unknown unlock catalog `{kind}` (expected gallery or music)"),
+                    loc.clone(),
+                )]));
+            }
+            if id.trim().is_empty() {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    "unlock needs an entry id, e.g. `unlock gallery cg_rooftop`".to_string(),
+                    loc.clone(),
+                )]));
+            }
+            vec![StoryOp::Unlock {
+                catalog: kind_lower,
+                id: id.clone(),
+            }]
+        }
+        Stmt::Movie {
+            path,
+            loop_clip,
+            loc,
+        } => {
+            if path.trim().is_empty() {
+                return Err(LoadError::Diagnostics(vec![StoryDiagnostic::new(
+                    "movie needs a clip directory, e.g. `movie \"assets/video/opening\"`"
+                        .to_string(),
+                    loc.clone(),
+                )]));
+            }
+            vec![StoryOp::Movie {
+                path: path.clone(),
+                loop_clip: *loop_clip,
+            }]
+        }
+        Stmt::Hide { target, with, loc } => {
+            let (motion, transform) = lower_with(with, ctx, loc)?;
+            vec![StoryOp::Hide {
+                target: target.clone(),
+                motion,
+                transform,
+            }]
+        }
         Stmt::End { ending, .. } => vec![StoryOp::End {
             ending: ending.clone(),
         }],
@@ -310,7 +670,7 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
             for arm in options {
                 arms.push(StoryChoice {
                     text: arm.text.clone(),
-                    body: lower_stmts(&arm.body)?,
+                    body: lower_stmts(&arm.body, ctx)?,
                     require: None,
                     hidden_if_locked: false,
                 });
@@ -326,7 +686,7 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
                 value,
             }]
         }
-        Stmt::Block { body, .. } => lower_stmts(body)?,
+        Stmt::Block { body, .. } => lower_stmts(body, ctx)?,
         Stmt::If {
             cond,
             then_body,
@@ -336,9 +696,9 @@ fn lower_stmt(stmt: &Stmt) -> Result<Vec<StoryOp>, LoadError> {
         } => {
             let cond = lower_cond(cond)
                 .map_err(|m| LoadError::Diagnostics(vec![StoryDiagnostic::new(m, loc.clone())]))?;
-            let then_ops = lower_stmt(then_body)?;
+            let then_ops = lower_stmt(then_body, ctx)?;
             let else_ops = match else_body {
-                Some(e) => lower_stmt(e)?,
+                Some(e) => lower_stmt(e, ctx)?,
                 None => vec![],
             };
             vec![StoryOp::If {
@@ -643,14 +1003,295 @@ scene main {
         assert!(ops
             .iter()
             .any(|o| matches!(o, StoryOp::Transition { name } if name == "fade")));
-        assert!(ops.iter().any(|o| matches!(o, StoryOp::Show { target, at } if target == "hero.angry" && at.as_deref() == Some("right"))));
+        assert!(ops.iter().any(|o| matches!(o, StoryOp::Show { target, at, .. } if target == "hero.angry" && at.as_deref() == Some("right"))));
         assert!(ops.iter().any(|o| matches!(o, StoryOp::Sound { .. })));
         assert!(ops
             .iter()
             .any(|o| matches!(o, StoryOp::Pause { seconds: Some(0.1) })));
         assert!(ops
             .iter()
-            .any(|o| matches!(o, StoryOp::Hide { target } if target == "hero")));
+            .any(|o| matches!(o, StoryOp::Hide { target, .. } if target == "hero")));
+    }
+
+    #[test]
+    fn show_with_and_screen_lower() {
+        let src = r#"
+scene main {
+    screen nvl_page
+    show luna.happy at left with shake 0.4 10
+    show luna with move
+    "done"
+    end
+}
+"#;
+        let program = load_program_from_source(src, Some("m.vel"), "M").unwrap();
+        let ops = &program.scenes["main"].ops;
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::Screen { id } if id == "nvl_page")));
+        let motions: Vec<_> = ops
+            .iter()
+            .filter_map(|o| match o {
+                StoryOp::Show { motion, .. } => motion.clone(),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(motions.len(), 2);
+        assert_eq!(motions[0].kind, "shake");
+        assert!((motions[0].duration_secs - 0.4).abs() < 1e-5);
+        assert_eq!(motions[1].kind, "move");
+    }
+
+    #[test]
+    fn hide_with_lowers_motion_or_transform() {
+        let src = "transform bob {\n y 0 1.0 linear\n}\nscene main {\n hide luna with fade\n hide kai with bob\n \"x\"\n}\n";
+        let program = load_program_from_source(src, Some("h.vel"), "H").unwrap();
+        let ops = &program.scenes["main"].ops;
+        assert!(ops.iter().any(
+            |o| matches!(o, StoryOp::Hide { target, motion: Some(m), .. } if target == "luna" && m.kind == "fade")
+        ));
+        assert!(ops.iter().any(
+            |o| matches!(o, StoryOp::Hide { target, transform: Some(t), .. } if target == "kai" && t == "bob")
+        ));
+        let bad = "scene main {\n hide luna with wobble\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err
+            .primary_message()
+            .contains("unknown motion or transform"));
+    }
+
+    #[test]
+    fn screen_action_with_into_and_validator() {
+        let src = r#"
+screen help {
+  title: "Help"
+  textbutton go action Jump("next")
+}
+screen bad {
+  textbutton x action Jump("nowhere")
+}
+scene main {
+  screen show help with fade
+  screen call help into pick
+  "x"
+}
+scene next {
+  "y"
+}
+"#;
+        // The bad screen fails first: Jump to an unknown scene.
+        let err = load_program_from_source(src, Some("v.vel"), "V").unwrap_err();
+        assert!(err.primary_message().contains("unknown scene `nowhere`"));
+        let src = src.replace(
+            "screen bad {\n  textbutton x action Jump(\"nowhere\")\n}\n",
+            "",
+        );
+        let program = load_program_from_source(&src, Some("v.vel"), "V").unwrap();
+        let ops = &program.scenes["main"].ops;
+        assert!(ops.iter().any(
+            |o| matches!(o, StoryOp::ShowGameScreen { id, motion: Some(m), .. } if id == "help" && m.kind == "fade")
+        ));
+        assert!(ops.iter().any(
+            |o| matches!(o, StoryOp::CallGameScreen { id, result: Some(r), .. } if id == "help" && r == "pick")
+        ));
+        // `into` on show is rejected.
+        let bad = "screen a {\n text \"x\"\n}\nscene main {\n screen show a into pick\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err.primary_message().contains("takes no `into`"));
+        // Bad action arity is rejected.
+        let bad = "screen a {\n textbutton x action Return(\"a\", \"b\")\n}\nscene main {\n screen show a\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err.primary_message().contains("Return needs 1 argument"));
+        // Unknown action names pass through for custom hosts.
+        let src = "screen a {\n textbutton x action Dance(\"wild\")\n}\nscene main {\n screen show a\n \"x\"\n}\n";
+        load_program_from_source(src, Some("ok.vel"), "OK").unwrap();
+    }
+
+    #[test]
+    fn into_binding_lands_in_variable() {
+        let src = r#"
+screen pick {
+  textbutton a action Return("a")
+}
+scene main {
+  screen call pick into choice
+  "after"
+  end "done"
+}
+"#;
+        let program = load_program_from_source(src, Some("c.vel"), "C").unwrap();
+        let mut player = StoryPlayer::start(program);
+        let mut guard = 0;
+        while !matches!(player.wait(), StoryWait::ScreenCall { .. }) && guard < 16 {
+            player.advance();
+            guard += 1;
+        }
+        player
+            .return_from_screen(StoryValue::String("a".into()))
+            .unwrap();
+        assert_eq!(
+            player.variables().get("choice").display_str(),
+            "a".to_string()
+        );
+        assert_eq!(
+            player.variables().get("_return").display_str(),
+            "a".to_string()
+        );
+    }
+
+    #[test]
+    fn movie_lowers_with_loop_flag() {
+        let src = "scene main {\n movie \"assets/video/opening\" loop\n \"x\"\n}\n";
+        let program = load_program_from_source(src, Some("m.vel"), "M").unwrap();
+        assert!(program.scenes["main"]
+            .ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::Movie { path, loop_clip }
+                if path == "assets/video/opening" && *loop_clip)));
+        let bad = "scene main {\n movie \"\"\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err
+            .primary_message()
+            .contains("movie needs a clip directory"));
+    }
+
+    #[test]
+    fn unlock_lowers_and_validates_catalog() {
+        let src = "scene main {\n unlock gallery cg_a\n unlock music bgm_b\n \"x\"\n}\n";
+        let program = load_program_from_source(src, Some("u.vel"), "U").unwrap();
+        let ops = &program.scenes["main"].ops;
+        assert!(ops.iter().any(
+            |o| matches!(o, StoryOp::Unlock { catalog, id } if catalog == "gallery" && id == "cg_a")
+        ));
+        assert!(ops.iter().any(
+            |o| matches!(o, StoryOp::Unlock { catalog, id } if catalog == "music" && id == "bgm_b")
+        ));
+        let bad = "scene main {\n unlock video v1\n}\n";
+        let err = load_program_from_source(bad, Some("v.vel"), "V").unwrap_err();
+        assert!(err.primary_message().contains("unknown unlock catalog"));
+    }
+
+    #[test]
+    fn game_screens_and_transforms_lower() {
+        let src = r#"
+screen inv(items, gold = 0) {
+  title: "Bag"
+  text "Loot:"
+  textbutton done action Return("ok")
+}
+transform bob {
+  y -8 1.2 ease_in_out, y 0 1.2 ease_in_out, repeat
+}
+scene main {
+  show luna.happy at left with bob
+  screen show inv ("sword", 5)
+  screen call inv ("sword")
+  screen hide inv
+  "done"
+  end
+}
+"#;
+        let program = load_program_from_source(src, Some("g.vel"), "G").unwrap();
+        let inv = &program.screens["inv"];
+        assert_eq!(inv.params.len(), 2);
+        assert_eq!(inv.children.len(), 2);
+        let bob = &program.transforms["bob"];
+        assert_eq!(bob.duration(), None);
+        let ops = &program.scenes["main"].ops;
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::Show { transform: Some(t), .. } if t == "bob")));
+        assert!(ops.iter().any(
+            |o| matches!(o, StoryOp::ShowGameScreen { id, args, .. } if id == "inv" && args.len() == 2)
+        ));
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::CallGameScreen { id, .. } if id == "inv")));
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, StoryOp::HideGameScreen { id, .. } if id == "inv")));
+    }
+
+    #[test]
+    fn game_screen_errors_diagnose() {
+        // Unknown screen.
+        let bad = "scene main {\n screen show nope\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err.primary_message().contains("unknown screen `nope`"));
+        // Unknown transform in `with`.
+        let bad = "scene main {\n show luna with wobble\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err
+            .primary_message()
+            .contains("unknown motion or transform"));
+        // Arity: `inv` needs 1 arg.
+        let bad = "screen inv(items) {\n text items\n}\nscene main {\n screen show inv\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err.primary_message().contains("needs 1 argument"));
+        // Duplicate screen.
+        let bad =
+            "screen a {\n text \"x\"\n}\nscreen a {\n text \"y\"\n}\nscene main {\n \"z\"\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err.primary_message().contains("duplicate screen `a`"));
+        // `use` of an unknown screen.
+        let bad = "screen a {\n use nope\n}\nscene main {\n screen show a\n}\n";
+        let err = load_program_from_source(bad, Some("b.vel"), "B").unwrap_err();
+        assert!(err.primary_message().contains("uses unknown screen"));
+    }
+
+    #[test]
+    fn screen_call_blocks_until_return() {
+        let src = r#"
+screen pick {
+  textbutton a action Return("a")
+}
+scene main {
+  screen call pick
+  "after"
+  end "done"
+}
+"#;
+        let program = load_program_from_source(src, Some("c.vel"), "C").unwrap();
+        let mut player = StoryPlayer::start(program);
+        let mut guard = 0;
+        while !matches!(player.wait(), StoryWait::ScreenCall { .. }) && guard < 16 {
+            player.advance();
+            guard += 1;
+        }
+        assert!(matches!(player.wait(), StoryWait::ScreenCall { .. }));
+        assert_eq!(player.game_screens().len(), 1);
+        assert!(player.game_screens()[0].modal);
+        assert!(player
+            .return_from_screen(StoryValue::String("a".into()))
+            .is_ok());
+        assert!(player.variables().get("_return").is_truthy());
+        assert!(player.game_screens().is_empty());
+        let mut steps = 0;
+        while !player.is_ended() && steps < 16 {
+            match player.wait().clone() {
+                StoryWait::Line | StoryWait::Ready | StoryWait::Pause { .. } => player.advance(),
+                StoryWait::ScreenCall { .. } => {
+                    player.return_from_screen(StoryValue::Null).unwrap();
+                }
+                StoryWait::Host { token } => {
+                    let _ = player.resume_host(&token);
+                }
+                StoryWait::Choice | StoryWait::Ended => break,
+            }
+            steps += 1;
+        }
+        assert_eq!(player.ending(), Some("done"));
+    }
+
+    #[test]
+    fn unknown_motion_and_screen_diagnose() {
+        let bad_motion = "scene main {\n show luna with spin\n}\n";
+        let err = load_program_from_source(bad_motion, Some("b.vel"), "B").unwrap_err();
+        assert!(err.has_located_diagnostic());
+        assert!(err.primary_message().contains("unknown motion"));
+        let bad_screen = "scene main {\n screen cinema\n}\n";
+        let err = load_program_from_source(bad_screen, Some("c.vel"), "C").unwrap_err();
+        assert!(err.primary_message().contains("unknown screen preset"));
     }
 
     #[test]

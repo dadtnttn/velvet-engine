@@ -49,8 +49,9 @@ function register_run(score: int) {
 
 Unknown names, duplicate definitions, invalid assignment targets, writes to a
 `const`, wrong arity, unknown types, and statically visible type mismatches are
-compile errors with source locations. Annotated function parameters are also
-checked at the Rust/CLI call boundary.
+compile errors with source locations. Unknown names and types include a
+`(did you mean \`x\`?)` hint when a close identifier is visible. Annotated
+function parameters are also checked at the Rust/CLI call boundary.
 
 ### Values and operators
 
@@ -102,7 +103,8 @@ mistaken for general-language semantics.
 | Statistics | Aggregates, quantiles, variance, covariance, correlation, histograms and smoothing |
 | Numerical | Polynomial evaluation/root solving and sample-based trapezoid/Simpson integration |
 | Values | `len`, `concat`, `str`, `type_of` |
-| Collections | `list_push`, `list_pop`, `map_has`, `map_keys` |
+| Strings | `str_upper`, `str_lower`, `str_trim`, `str_split`, `str_join`, `str_contains`, `str_replace`, `str_starts_with`, `str_ends_with` |
+| Collections | `list_push`, `list_pop`, `list_contains`, `list_index_of`, `list_reverse`, `list_sort`, `list_slice`, `map_has`, `map_keys`, `map_values`, `map_remove`, `map_merge` |
 | Errors | `assert(condition, message?)`, `fail(message)` |
 | Data tools | `hash_sha256`, `hex_encode`, `base64_encode` |
 | Debug output | `print` (captured by the VM, not written directly by the runtime) |
@@ -154,6 +156,10 @@ velvet vs3 check samples/vs3-logic
 
 # Format in place; comments and the edition marker are preserved
 velvet vs3 fmt samples/vs3-logic/game_rules.vel
+
+# List script-visible natives (optional --prefix str_)
+velvet vs3 natives
+velvet vs3 natives --prefix list_
 
 # One isolated call
 velvet vs3 run samples/vs3-logic/game_rules.vel `

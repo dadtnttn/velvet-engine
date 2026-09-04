@@ -1,9 +1,10 @@
 //! Nine-patch layout math (source UVs and destination rects).
 
+use serde::{Deserialize, Serialize};
 use velvet_math::{Rect, Vec2};
 
 /// Nine-patch margins in pixels (source texture space).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct NinePatchMargins {
     /// Left border width.
     pub left: f32,
@@ -80,12 +81,25 @@ pub fn layout_nine_patch(
     margins: NinePatchMargins,
     dst: Rect,
 ) -> [NinePatchQuad; 9] {
+    layout_nine_patch_with_destination_margins(src_size, margins, dst, margins)
+}
+
+/// Compute nine quads with independent source-pixel and destination-space margins.
+///
+/// This is the form used by VCSS: `nine-slice` identifies fixed regions in the
+/// source texture while `nine-slice-width` controls their rendered thickness.
+pub fn layout_nine_patch_with_destination_margins(
+    src_size: Vec2,
+    source: NinePatchMargins,
+    dst: Rect,
+    destination: NinePatchMargins,
+) -> [NinePatchQuad; 9] {
     let sw = src_size.x.max(1.0);
     let sh = src_size.y.max(1.0);
-    let ml = margins.left.min(sw * 0.5);
-    let mr = margins.right.min(sw * 0.5);
-    let mt = margins.top.min(sh * 0.5);
-    let mb = margins.bottom.min(sh * 0.5);
+    let ml = source.left.min(sw * 0.5);
+    let mr = source.right.min(sw * 0.5);
+    let mt = source.top.min(sh * 0.5);
+    let mb = source.bottom.min(sh * 0.5);
 
     // Source splits
     let sx0 = 0.0;
@@ -101,10 +115,10 @@ pub fn layout_nine_patch(
     let dw = dst.width().max(0.0);
     let dh = dst.height().max(0.0);
     // Shrink margins if dest smaller than borders.
-    let dl = ml.min(dw * 0.5);
-    let dr = mr.min(dw * 0.5);
-    let dt = mt.min(dh * 0.5);
-    let db = mb.min(dh * 0.5);
+    let dl = destination.left.min(dw * 0.5);
+    let dr = destination.right.min(dw * 0.5);
+    let dt = destination.top.min(dh * 0.5);
+    let db = destination.bottom.min(dh * 0.5);
 
     let dx0 = dst.min.x;
     let dx1 = dst.min.x + dl;
@@ -226,6 +240,21 @@ mod tests {
         assert!((tl.dst.height() - 8.0).abs() < 1e-4);
         let center = quads[4];
         assert!(center.dst.width() > 100.0);
+    }
+
+    #[test]
+    fn source_and_destination_margins_are_independent() {
+        let dst = Rect::from_pos_size(Vec2::ZERO, Vec2::new(300.0, 50.0));
+        let quads = layout_nine_patch_with_destination_margins(
+            Vec2::new(900.0, 300.0),
+            NinePatchMargins::uniform(100.0),
+            dst,
+            NinePatchMargins::new(24.0, 12.0, 24.0, 12.0),
+        );
+        assert_eq!(quads[0].src.width(), 100.0);
+        assert_eq!(quads[0].dst.width(), 24.0);
+        assert_eq!(quads[0].dst.height(), 12.0);
+        assert_eq!(quads[4].dst.width(), 252.0);
     }
 
     #[test]

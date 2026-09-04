@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 velvet-core = { workspace = true }
+velvet-scene3d = { workspace = true }
 velvet-app = { workspace = true }
 velvet-math = { workspace = true }
 velvet-events = { workspace = true }

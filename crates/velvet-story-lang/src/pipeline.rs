@@ -20,7 +20,7 @@ use crate::sema::{self, SemaResult};
 use crate::source_map::SourceMap;
 use crate::studio::StudioModel;
 use crate::to_story_program::{to_story_program_cmds, to_story_program_with_origins};
-use velvet_story::{StoryPlayer, StoryProgram, StoryWait};
+use velvet_story::{StoryPlayer, StoryProgram, StoryValue, StoryWait};
 
 /// Options for check/build that must be isolation-safe across concurrent docs.
 #[derive(Debug, Clone, Copy, Default)]
@@ -500,6 +500,10 @@ pub fn run_story_program(program: StoryProgram, choice: usize, max_steps: u32) -
             }
             StoryWait::Ready | StoryWait::Pause { .. } => {
                 player.advance();
+            }
+            StoryWait::ScreenCall { .. } => {
+                // Headless product path: modal screens return null.
+                let _ = player.return_from_screen(StoryValue::Null);
             }
             StoryWait::Host { token } => {
                 // Headless product path: auto-resume host waits.

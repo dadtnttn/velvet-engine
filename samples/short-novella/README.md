@@ -28,6 +28,20 @@ velvet play samples/short-novella --lang es --choice 0
 Unlocks are exercised in unit tests via `Gallery` API (`velvet-story`) with ids:
 `cg_station`, `cg_train`, `cg_rooftop`.
 
+## Music + voices
+
+`music.json` (music-room tracks) and `voice_cast.json` (per-character clip
+routing, e.g. `lea_0042` for Lea) load via
+`VnSession::load_music_from_project` / `load_voice_cast_from_project`.
+
+## Author checks
+
+```bash
+velvet narrative branches samples/short-novella/scripts/main.vel
+velvet narrative preview samples/short-novella/scripts/main.vel --lines 8
+velvet narrative check-assets samples/short-novella
+```
+
 ## Launch flow
 
 ```bash

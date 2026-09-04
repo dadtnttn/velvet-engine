@@ -21,6 +21,7 @@ mod postprocess;
 mod product_batch;
 mod profile;
 mod render_plan;
+pub mod scene_bridge;
 mod software;
 mod sort_key;
 mod sprite;
@@ -52,6 +53,7 @@ pub use postprocess::{PostEffect, PostProcessStack};
 pub use product_batch::{count_positive_quads, fill_batch_from_product_quads, ProductGpuQuad};
 pub use profile::RenderProfile;
 pub use render_plan::{CameraPass, ClearMode, RenderPlan, Viewport};
+pub use scene_bridge::{material_from_doc, scene_draws, upload_scene_meshes, SceneMeshCache};
 pub use software::{SoftwarePresenter, SoftwareScalingFilter, SoftwareViewport};
 pub use sort_key::{
     build_sort_key, cmp_sort_keys, pack_z_texture, quantize_y_key, sort_by_key, SortLayers,

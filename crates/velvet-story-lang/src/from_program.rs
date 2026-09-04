@@ -166,7 +166,7 @@ fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
             let id = unit.pool.intern(path.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::PlaySfx, id));
         }
-        StoryOp::Show { target, at } => {
+        StoryOp::Show { target, at, .. } => {
             let id = unit.pool.intern(target.as_str());
             let at_id = at
                 .as_ref()
@@ -174,7 +174,23 @@ fn emit_op(unit: &mut Vs2Unit, op: &StoryOp) {
                 .unwrap_or(0);
             unit.emit(Vs2Instr::with_ab(OpVs2::ShowChar, id, at_id));
         }
-        StoryOp::Hide { target } => {
+        // Screen presets, game screens and mini-ATL motions/transforms are
+        // product-shell concerns; the Vs2 fallback keeps narrative flow.
+        StoryOp::Screen { .. }
+        | StoryOp::ShowGameScreen { .. }
+        | StoryOp::HideGameScreen { .. }
+        | StoryOp::CallGameScreen { .. } => {
+            unit.emit(Vs2Instr::new(OpVs2::Nop));
+        }
+        // Gallery/music unlocks are session achievements; Vs2 keeps flow.
+        StoryOp::Unlock { .. } => {
+            unit.emit(Vs2Instr::new(OpVs2::Nop));
+        }
+        // Cinema needs a decoder host; Vs2 keeps narrative flow.
+        StoryOp::Movie { .. } => {
+            unit.emit(Vs2Instr::new(OpVs2::Nop));
+        }
+        StoryOp::Hide { target, .. } => {
             let id = unit.pool.intern(target.as_str());
             unit.emit(Vs2Instr::with_a(OpVs2::HideChar, id));
         }

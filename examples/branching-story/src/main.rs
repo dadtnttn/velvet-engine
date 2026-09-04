@@ -39,6 +39,9 @@ fn play_with_choices(choices: &[usize]) -> Result<(String, i64, i64, bool)> {
             }
             StoryWait::Ended => break,
             StoryWait::Ready | StoryWait::Pause { .. } => player.advance(),
+            StoryWait::ScreenCall { .. } => {
+                let _ = player.return_from_screen(velvet_story::StoryValue::Null);
+            }
             StoryWait::Host { token } => {
                 let _ = player.resume_host(&token);
             }

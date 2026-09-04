@@ -120,6 +120,9 @@ fn drain_until_end(player: &mut StoryPlayer) {
             StoryWait::Choice => break,
             StoryWait::Ended => break,
             StoryWait::Pause { .. } | StoryWait::Host { .. } => break,
+            StoryWait::ScreenCall { .. } => {
+                let _ = player.return_from_screen(velvet_story::StoryValue::Null);
+            }
         }
         steps += 1;
     }

@@ -155,10 +155,12 @@ pub enum StyleAction {
 /// Registered event handler reference.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EventHandler {
-    /// Event name (`menu.open`, `hand.deal`, …).
+    /// Event name (`menu.open`, `hand.deal`, .).
     pub event: String,
     /// Function name to call.
     pub fn_name: String,
+    /// One-shot: removed after the first fire by [`run_event_drain`].
+    pub once: bool,
 }
 
 /// Compiled script module from one or more `@script` blocks.
@@ -240,6 +242,23 @@ pub enum Stmt {
         /// Else branch.
         else_body: Vec<Stmt>,
     },
+    /// `while (cond) { … }` (same 100000-iteration guard as `for`).
+    While {
+        /// Continue while truthy.
+        cond: Expr,
+        /// Body.
+        body: Vec<Stmt>,
+    },
+    /// `switch (disc) { case a: …; default: … }` — first match wins,
+    /// no fallthrough (there is no `break`; use if/else for ranges).
+    Switch {
+        /// Discriminant.
+        disc: Expr,
+        /// `(case value, body)` in source order.
+        cases: Vec<(Expr, Vec<Stmt>)>,
+        /// `default:` body (empty when absent).
+        default: Vec<Stmt>,
+    },
     /// `return expr;`
     Return(Option<Expr>),
 }
@@ -276,6 +295,15 @@ pub enum Expr {
         op: BinOp,
         /// right
         right: Box<Expr>,
+    },
+    /// `cond ? then : els`
+    Ternary {
+        /// condition
+        cond: Box<Expr>,
+        /// value when truthy
+        then: Box<Expr>,
+        /// value otherwise
+        els: Box<Expr>,
     },
     /// `fn(a, b)` or method-less call
     Call {
@@ -333,6 +361,8 @@ pub enum BinOp {
     And,
     /// ||
     Or,
+    /// `??` (right used only when left is null/undefined; short-circuits)
+    Nullish,
 }
 
 // ─── Lexer ───────────────────────────────────────────────────────────────────
@@ -369,8 +399,23 @@ enum Tok {
     AndAnd,
     OrOr,
     Bang,
+    /// `?` (ternary)
+    Question,
+    /// `??` (nullish coalescing)
+    QuestionQuestion,
+    /// `` `lit${expr}lit` `` template (lexer splits literal/expr parts)
+    Template(Vec<TemplatePart>),
     // keywords as idents handled in parser
     Eof,
+}
+
+/// One part of a backtick template literal.
+#[derive(Debug, Clone, PartialEq)]
+enum TemplatePart {
+    /// Literal text (escapes resolved).
+    Lit(String),
+    /// `${…}` source (parsed as an expression by the parser).
+    Expr(String),
 }
 
 struct Lexer<'a> {
@@ -441,6 +486,12 @@ impl<'a> Lexer<'a> {
             return Ok((Tok::Eof, line));
         }
         let c = self.peek();
+        // template literal (backticks, with ${expr} holes)
+        if c == b'`' {
+            return self
+                .lex_template(line)
+                .map(|parts| (Tok::Template(parts), line));
+        }
         // string
         if c == b'"' || c == b'\'' {
             let quote = self.bump();
@@ -541,6 +592,11 @@ impl<'a> Lexer<'a> {
                 self.bump();
                 Tok::OrOr
             }
+            (b'?', b'?') => {
+                self.bump();
+                Tok::QuestionQuestion
+            }
+            (b'?', _) => Tok::Question,
             (b'(', _) => Tok::LParen,
             (b')', _) => Tok::RParen,
             (b'{', _) => Tok::LBrace,
@@ -569,6 +625,185 @@ impl<'a> Lexer<'a> {
         };
         Ok((tok, line))
     }
+
+    /// Lex a backtick template (opening backtick already peeked).
+    ///
+    /// Literal runs are sliced as UTF-8 (unlike the legacy `"…"` path);
+    /// `${…}` holes capture balanced source for the parser.
+    fn lex_template(&mut self, line: usize) -> Result<Vec<TemplatePart>, ScriptError> {
+        self.bump(); // consume `
+        let mut parts = Vec::new();
+        let mut lit = String::new();
+        loop {
+            // Literal run up to `` ` ``, `\` or `${`.
+            let start = self.i;
+            while self.i < self.src.len() {
+                let c = self.src[self.i];
+                if c == b'`'
+                    || c == b'\\'
+                    || (c == b'$' && self.i + 1 < self.src.len() && self.src[self.i + 1] == b'{')
+                {
+                    break;
+                }
+                if c == b'\n' {
+                    self.line += 1;
+                }
+                self.i += 1;
+            }
+            let chunk =
+                std::str::from_utf8(&self.src[start..self.i]).map_err(|_| ScriptError::Parse {
+                    line,
+                    msg: "invalid utf-8 in template literal".into(),
+                })?;
+            lit.push_str(chunk);
+            if self.i >= self.src.len() {
+                return Err(ScriptError::Parse {
+                    line,
+                    msg: "unterminated template literal".into(),
+                });
+            }
+            match self.src[self.i] {
+                b'`' => {
+                    self.i += 1;
+                    break;
+                }
+                b'\\' => {
+                    self.i += 1;
+                    if self.i >= self.src.len() {
+                        return Err(ScriptError::Parse {
+                            line,
+                            msg: "unterminated template literal".into(),
+                        });
+                    }
+                    let e = self.src[self.i];
+                    self.i += 1;
+                    if e == b'\n' {
+                        self.line += 1;
+                    }
+                    match e {
+                        b'n' => lit.push('\n'),
+                        b't' => lit.push('\t'),
+                        b'r' => lit.push('\r'),
+                        b'\\' => lit.push('\\'),
+                        b'`' => lit.push('`'),
+                        b'$' => lit.push('$'),
+                        b'\'' => lit.push('\''),
+                        b'"' => lit.push('"'),
+                        _ => lit.push_str(std::str::from_utf8(&[e]).unwrap_or("\u{FFFD}")),
+                    }
+                }
+                // `${hole}`
+                _ => {
+                    self.i += 2;
+                    let hole_line = self.line;
+                    let start = self.i;
+                    self.skip_rest_of_brace_group()?;
+                    let src = std::str::from_utf8(&self.src[start..self.i - 1]).map_err(|_| {
+                        ScriptError::Parse {
+                            line: hole_line,
+                            msg: "invalid utf-8 in template hole".into(),
+                        }
+                    })?;
+                    if !lit.is_empty() {
+                        parts.push(TemplatePart::Lit(std::mem::take(&mut lit)));
+                    }
+                    parts.push(TemplatePart::Expr(src.to_string()));
+                }
+            }
+        }
+        if !lit.is_empty() {
+            parts.push(TemplatePart::Lit(lit));
+        }
+        Ok(parts)
+    }
+
+    /// Skip a `{…}` group when the opening brace was just consumed.
+    fn skip_brace_group(&mut self) -> Result<(), ScriptError> {
+        self.i += 1; // consume {
+        self.skip_rest_of_brace_group()
+    }
+
+    /// Skip to the brace closing the current depth (depth starts at 1).
+    ///
+    /// Strings, nested templates and both comment forms are skipped so
+    /// stray braces inside them never unbalance the hole.
+    fn skip_rest_of_brace_group(&mut self) -> Result<(), ScriptError> {
+        let mut depth = 1u32;
+        while self.i < self.src.len() && depth > 0 {
+            let c = self.src[self.i];
+            match c {
+                b'\'' | b'"' | b'`' => self.skip_quoted(c)?,
+                b'{' => {
+                    depth += 1;
+                    self.i += 1;
+                }
+                b'}' => {
+                    depth -= 1;
+                    self.i += 1;
+                }
+                b'\n' => {
+                    self.line += 1;
+                    self.i += 1;
+                }
+                b'/' if self.i + 1 < self.src.len() && self.src[self.i + 1] == b'/' => {
+                    while self.i < self.src.len() && self.src[self.i] != b'\n' {
+                        self.i += 1;
+                    }
+                }
+                b'/' if self.i + 1 < self.src.len() && self.src[self.i + 1] == b'*' => {
+                    self.i += 2;
+                    while self.i + 1 < self.src.len()
+                        && !(self.src[self.i] == b'*' && self.src[self.i + 1] == b'/')
+                    {
+                        if self.src[self.i] == b'\n' {
+                            self.line += 1;
+                        }
+                        self.i += 1;
+                    }
+                    self.i = (self.i + 2).min(self.src.len());
+                }
+                _ => {
+                    self.i += 1;
+                }
+            }
+        }
+        if depth > 0 {
+            return Err(ScriptError::Parse {
+                line: self.line,
+                msg: "unterminated ${…} in template literal".into(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Skip a quoted string/template starting at the quote (escapes honored;
+    /// `${…}` holes inside nested templates are skipped balanced).
+    fn skip_quoted(&mut self, quote: u8) -> Result<(), ScriptError> {
+        self.i += 1; // consume quote
+        loop {
+            if self.i >= self.src.len() {
+                return Err(ScriptError::Parse {
+                    line: self.line,
+                    msg: "unterminated string in template hole".into(),
+                });
+            }
+            let c = self.src[self.i];
+            if c == b'\\' {
+                self.i = (self.i + 2).min(self.src.len());
+                continue;
+            }
+            if c == b'\n' {
+                self.line += 1;
+            }
+            self.i += 1;
+            if c == quote {
+                return Ok(());
+            }
+            if quote == b'`' && c == b'$' && self.i < self.src.len() && self.src[self.i] == b'{' {
+                self.skip_brace_group()?;
+            }
+        }
+    }
 }
 
 // ─── Parser ──────────────────────────────────────────────────────────────────
@@ -596,6 +831,13 @@ impl Parser {
 
     fn peek(&self) -> &Tok {
         self.tokens.get(self.i).map(|(t, _)| t).unwrap_or(&Tok::Eof)
+    }
+
+    fn peek2(&self) -> &Tok {
+        self.tokens
+            .get(self.i + 1)
+            .map(|(t, _)| t)
+            .unwrap_or(&Tok::Eof)
     }
 
     fn line(&self) -> usize {
@@ -680,8 +922,10 @@ impl Parser {
                     let body = self.parse_block()?;
                     module.functions.insert(name, Function { params, body });
                 }
-                Tok::Ident(id) if id == "on" => {
-                    // on("event", handlerName) or on("event", fn name() {})
+                Tok::Ident(id) if id == "on" || id == "once" => {
+                    // on("event", handlerName), once("event", handlerName),
+                    // or on("event", fn name() {}) — inline fns hoist.
+                    let once = id == "once";
                     self.bump();
                     self.expect(&Tok::LParen)?;
                     let event = match self.bump() {
@@ -690,7 +934,7 @@ impl Parser {
                         other => {
                             return Err(ScriptError::Parse {
                                 line: self.line(),
-                                msg: format!("on() event must be string, got {other:?}"),
+                                msg: format!("on()/once() event must be string, got {other:?}"),
                             });
                         }
                     };
@@ -723,13 +967,17 @@ impl Parser {
                         other => {
                             return Err(ScriptError::Parse {
                                 line: self.line(),
-                                msg: format!("on() handler must be fn name, got {other:?}"),
+                                msg: format!("on()/once() handler must be fn name, got {other:?}"),
                             });
                         }
                     };
                     self.expect(&Tok::RParen)?;
                     self.eat_semi();
-                    module.handlers.push(EventHandler { event, fn_name });
+                    module.handlers.push(EventHandler {
+                        event,
+                        fn_name,
+                        once,
+                    });
                 }
                 Tok::Semi => {
                     self.bump();
@@ -777,6 +1025,8 @@ impl Parser {
             }
             Tok::Ident(id) if id == "for" => self.parse_for(),
             Tok::Ident(id) if id == "if" => self.parse_if(),
+            Tok::Ident(id) if id == "while" => self.parse_while(),
+            Tok::Ident(id) if id == "switch" => self.parse_switch(),
             Tok::Ident(id) if id == "return" => {
                 self.bump();
                 let e = if matches!(self.peek(), Tok::Semi | Tok::RBrace) {
@@ -887,18 +1137,119 @@ impl Parser {
         })
     }
 
+    fn parse_while(&mut self) -> Result<Stmt, ScriptError> {
+        self.bump(); // while
+        self.expect(&Tok::LParen)?;
+        let cond = self.parse_expr()?;
+        self.expect(&Tok::RParen)?;
+        let body = self.parse_block()?;
+        Ok(Stmt::While { cond, body })
+    }
+
+    fn parse_switch(&mut self) -> Result<Stmt, ScriptError> {
+        self.bump(); // switch
+        self.expect(&Tok::LParen)?;
+        let disc = self.parse_expr()?;
+        self.expect(&Tok::RParen)?;
+        self.expect(&Tok::LBrace)?;
+        let mut cases = Vec::new();
+        let mut default = Vec::new();
+        let mut has_default = false;
+        while !matches!(self.peek(), Tok::RBrace | Tok::Eof) {
+            match self.peek() {
+                Tok::Ident(id) if id == "case" && !matches!(self.peek2(), Tok::Assign) => {
+                    self.bump();
+                    let value = self.parse_expr()?;
+                    self.expect(&Tok::Colon)?;
+                    cases.push((value, self.parse_case_body()?));
+                }
+                Tok::Ident(id) if id == "default" && matches!(self.peek2(), Tok::Colon) => {
+                    self.bump();
+                    self.expect(&Tok::Colon)?;
+                    if has_default {
+                        return Err(ScriptError::Parse {
+                            line: self.line(),
+                            msg: "duplicate default: in switch".into(),
+                        });
+                    }
+                    has_default = true;
+                    default = self.parse_case_body()?;
+                }
+                _ => {
+                    return Err(ScriptError::Parse {
+                        line: self.line(),
+                        msg: "expected case <expr>: or default: in switch".into(),
+                    });
+                }
+            }
+        }
+        self.expect(&Tok::RBrace)?;
+        Ok(Stmt::Switch {
+            disc,
+            cases,
+            default,
+        })
+    }
+
+    /// Statements of one `case:`/`default:` label: everything up to the
+    /// next label or `}`.
+    fn parse_case_body(&mut self) -> Result<Vec<Stmt>, ScriptError> {
+        let mut body = Vec::new();
+        loop {
+            match self.peek() {
+                Tok::RBrace | Tok::Eof => break,
+                Tok::Ident(id) if id == "case" && !matches!(self.peek2(), Tok::Assign) => break,
+                Tok::Ident(id) if id == "default" && matches!(self.peek2(), Tok::Colon) => break,
+                _ => body.push(self.parse_stmt()?),
+            }
+        }
+        Ok(body)
+    }
+
     fn parse_expr(&mut self) -> Result<Expr, ScriptError> {
-        self.parse_or()
+        self.parse_ternary()
+    }
+
+    /// `cond ? then : els` (right-associative, lowest precedence).
+    fn parse_ternary(&mut self) -> Result<Expr, ScriptError> {
+        let cond = self.parse_or()?;
+        if !matches!(self.peek(), Tok::Question) {
+            return Ok(cond);
+        }
+        self.bump();
+        let then = self.parse_ternary()?;
+        self.expect(&Tok::Colon)?;
+        let els = self.parse_ternary()?;
+        Ok(Expr::Ternary {
+            cond: Box::new(cond),
+            then: Box::new(then),
+            els: Box::new(els),
+        })
     }
 
     fn parse_or(&mut self) -> Result<Expr, ScriptError> {
-        let mut left = self.parse_and()?;
+        let mut left = self.parse_nullish()?;
         while matches!(self.peek(), Tok::OrOr) {
+            self.bump();
+            let right = self.parse_nullish()?;
+            left = Expr::Binary {
+                left: Box::new(left),
+                op: BinOp::Or,
+                right: Box::new(right),
+            };
+        }
+        Ok(left)
+    }
+
+    /// `a ?? b` — `b` only when `a` is null/undefined (never other falsies).
+    fn parse_nullish(&mut self) -> Result<Expr, ScriptError> {
+        let mut left = self.parse_and()?;
+        while matches!(self.peek(), Tok::QuestionQuestion) {
             self.bump();
             let right = self.parse_and()?;
             left = Expr::Binary {
                 left: Box::new(left),
-                op: BinOp::Or,
+                op: BinOp::Nullish,
                 right: Box::new(right),
             };
         }
@@ -1073,10 +1424,61 @@ impl Parser {
         Ok(expr)
     }
 
+    /// Parse one expression from source (template `${…}` holes).
+    ///
+    /// `base_line` re-bases error lines onto the enclosing script.
+    fn parse_expr_str(src: &str, base_line: usize) -> Result<Expr, ScriptError> {
+        let mut lex = Lexer::new(src);
+        let mut tokens = Vec::new();
+        loop {
+            let (t, line) = lex.next_tok().map_err(|e| match e {
+                ScriptError::Parse { line, msg } => ScriptError::Parse {
+                    line: line + base_line - 1,
+                    msg,
+                },
+                other => other,
+            })?;
+            let done = t == Tok::Eof;
+            tokens.push((t, line + base_line - 1));
+            if done {
+                break;
+            }
+        }
+        let mut p = Parser { tokens, i: 0 };
+        let expr = p.parse_expr()?;
+        if !matches!(p.peek(), Tok::Eof) {
+            return Err(ScriptError::Parse {
+                line: base_line,
+                msg: "trailing tokens in template hole".into(),
+            });
+        }
+        Ok(expr)
+    }
+
     fn parse_primary(&mut self) -> Result<Expr, ScriptError> {
         match self.bump() {
             Tok::Number(n) => Ok(Expr::Number(n)),
             Tok::String(s) => Ok(Expr::String(s)),
+            Tok::Template(parts) => {
+                // Desugar to `"lit" + (expr) + "lit"` — `+` already
+                // concatenates when either side is a string.
+                let mut expr: Option<Expr> = None;
+                for part in parts {
+                    let e = match part {
+                        TemplatePart::Lit(s) => Expr::String(s),
+                        TemplatePart::Expr(src) => Self::parse_expr_str(&src, self.line())?,
+                    };
+                    expr = Some(match expr {
+                        None => e,
+                        Some(acc) => Expr::Binary {
+                            left: Box::new(acc),
+                            op: BinOp::Add,
+                            right: Box::new(e),
+                        },
+                    });
+                }
+                Ok(expr.unwrap_or(Expr::String(String::new())))
+            }
             Tok::Ident(id) => match id.as_str() {
                 "true" => Ok(Expr::Bool(true)),
                 "false" => Ok(Expr::Bool(false)),
@@ -1160,12 +1562,15 @@ pub struct ScriptRun {
     pub timelines: Vec<TimelinePlan>,
     /// Return value if any.
     pub value: JsValue,
+    /// Lines captured by `print(...)` (hosts decide where they go).
+    pub logs: Vec<String>,
 }
 
 struct Vm<'a> {
     module: &'a ScriptModule,
     env: IndexMap<String, JsValue>,
     actions: Vec<StyleAction>,
+    logs: Vec<String>,
     runtime: Option<&'a mut StyleRuntime>,
 }
 
@@ -1255,6 +1660,34 @@ impl<'a> Vm<'a> {
                 }
                 Ok(None)
             }
+            Stmt::While { cond, body } => {
+                let mut guard = 0u32;
+                while self.eval(cond)?.truthy() {
+                    guard += 1;
+                    if guard > 100_000 {
+                        return Err(ScriptError::Runtime(
+                            "while-loop exceeded 100000 iterations".into(),
+                        ));
+                    }
+                    if let Some(ret) = self.exec_block(body)? {
+                        return Ok(Some(ret));
+                    }
+                }
+                Ok(None)
+            }
+            Stmt::Switch {
+                disc,
+                cases,
+                default,
+            } => {
+                let d = self.eval(disc)?;
+                for (value, body) in cases {
+                    if values_eq(&d, &self.eval(value)?) {
+                        return self.exec_block(body);
+                    }
+                }
+                self.exec_block(default)
+            }
         }
     }
 
@@ -1302,9 +1735,23 @@ impl<'a> Vm<'a> {
                     }
                     return self.eval(right);
                 }
+                if *op == BinOp::Nullish {
+                    let l = self.eval(left)?;
+                    if !matches!(l, JsValue::Null) {
+                        return Ok(l);
+                    }
+                    return self.eval(right);
+                }
                 let l = self.eval(left)?;
                 let r = self.eval(right)?;
                 Ok(eval_bin(op, &l, &r))
+            }
+            Expr::Ternary { cond, then, els } => {
+                if self.eval(cond)?.truthy() {
+                    self.eval(then)
+                } else {
+                    self.eval(els)
+                }
             }
             Expr::Index { base, index, .. } => {
                 let b = self.eval(base)?;
@@ -1461,6 +1908,60 @@ impl<'a> Vm<'a> {
                 let t = args.get(2).and_then(|v| v.as_f32()).unwrap_or(0.0);
                 Ok(JsValue::Number(a + (b - a) * t))
             }
+            "upper" => Ok(JsValue::String(
+                args.first()
+                    .map(|v| v.as_string())
+                    .unwrap_or_default()
+                    .to_uppercase(),
+            )),
+            "lower" => Ok(JsValue::String(
+                args.first()
+                    .map(|v| v.as_string())
+                    .unwrap_or_default()
+                    .to_lowercase(),
+            )),
+            "trim" => Ok(JsValue::String(
+                args.first()
+                    .map(|v| v.as_string())
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string(),
+            )),
+            "split" => {
+                let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                let sep = args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                let parts: Vec<JsValue> = if sep.is_empty() {
+                    s.chars().map(|c| JsValue::String(c.to_string())).collect()
+                } else {
+                    s.split(sep.as_str())
+                        .map(|p| JsValue::String(p.to_string()))
+                        .collect()
+                };
+                Ok(JsValue::Array(parts))
+            }
+            "join" => {
+                let sep = args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                let out = match args.first() {
+                    Some(JsValue::Array(items)) => items
+                        .iter()
+                        .map(|v| v.as_string())
+                        .collect::<Vec<_>>()
+                        .join(sep.as_str()),
+                    other => other.map(|v| v.as_string()).unwrap_or_default(),
+                };
+                Ok(JsValue::String(out))
+            }
+            "range" => {
+                let n = args
+                    .first()
+                    .and_then(|v| v.as_f32())
+                    .unwrap_or(0.0)
+                    .max(0.0) as usize;
+                let n = n.min(10_000);
+                Ok(JsValue::Array(
+                    (0..n).map(|i| JsValue::Number(i as f32)).collect(),
+                ))
+            }
             "rand" => {
                 // simple LCG from env seed or time-ish counter
                 let seed = self
@@ -1521,6 +2022,237 @@ impl<'a> Vm<'a> {
                 }
                 Ok(JsValue::Null)
             }
+            "replace" => {
+                let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                let from = args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                let to = args.get(2).map(|v| v.as_string()).unwrap_or_default();
+                Ok(JsValue::String(if from.is_empty() {
+                    s
+                } else {
+                    s.replace(from.as_str(), to.as_str())
+                }))
+            }
+            "includes" => {
+                let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                let sub = args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                Ok(JsValue::Bool(s.contains(sub.as_str())))
+            }
+            "startsWith" => {
+                let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                let sub = args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                Ok(JsValue::Bool(s.starts_with(sub.as_str())))
+            }
+            "endsWith" => {
+                let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                let sub = args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                Ok(JsValue::Bool(s.ends_with(sub.as_str())))
+            }
+            "repeat" => {
+                let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                let n = args.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0).max(0.0) as usize;
+                let n = n.min(10_000);
+                Ok(JsValue::String(s.repeat(n)))
+            }
+            "round" => Ok(JsValue::Number(
+                args.first().and_then(|v| v.as_f32()).unwrap_or(0.0).round(),
+            )),
+            "sqrt" => Ok(JsValue::Number(
+                args.first().and_then(|v| v.as_f32()).unwrap_or(0.0).sqrt(),
+            )),
+            "pow" => {
+                let base = args.first().and_then(|v| v.as_f32()).unwrap_or(0.0);
+                let exp = args.get(1).and_then(|v| v.as_f32()).unwrap_or(1.0);
+                Ok(JsValue::Number(base.powf(exp)))
+            }
+            "push" => {
+                // Functional append: returns a new array (bindings reassign).
+                let mut items = match args.first() {
+                    Some(JsValue::Array(items)) => items.clone(),
+                    _ => Vec::new(),
+                };
+                if let Some(v) = args.get(1) {
+                    items.push(v.clone());
+                }
+                Ok(JsValue::Array(items))
+            }
+            "keys" => match args.first() {
+                Some(JsValue::Object(map)) => Ok(JsValue::Array(
+                    map.keys().map(|k| JsValue::String(k.clone())).collect(),
+                )),
+                _ => Ok(JsValue::Array(Vec::new())),
+            },
+            "typeof" => {
+                let name = match args.first().unwrap_or(&JsValue::Null) {
+                    JsValue::Null => "null",
+                    JsValue::Number(_) => "number",
+                    JsValue::String(_) => "string",
+                    JsValue::Bool(_) => "boolean",
+                    JsValue::Array(_) => "array",
+                    JsValue::Object(_) => "object",
+                };
+                Ok(JsValue::String(name.into()))
+            }
+            "print" | "log" => {
+                let line = args
+                    .iter()
+                    .map(|v| v.as_string())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                self.logs.push(line);
+                Ok(JsValue::Null)
+            }
+            "slice" => {
+                let (items, start, end) = match args.first() {
+                    Some(JsValue::Array(items)) => {
+                        let len = items.len() as f32;
+                        let start = args.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0);
+                        let end = args.get(2).and_then(|v| v.as_f32()).unwrap_or(len);
+                        (items.clone(), start, end)
+                    }
+                    _ => (Vec::new(), 0.0, 0.0),
+                };
+                let len = items.len() as f32;
+                let norm = |v: f32| v.max(-len).min(len);
+                let (mut a, mut b) = (norm(start), norm(end));
+                if a < 0.0 {
+                    a += len;
+                }
+                if b < 0.0 {
+                    b += len;
+                }
+                let (a, b) = (a.clamp(0.0, len) as usize, b.clamp(0.0, len) as usize);
+                Ok(JsValue::Array(if a >= b {
+                    Vec::new()
+                } else {
+                    items[a..b.min(items.len())].to_vec()
+                }))
+            }
+            "charAt" => {
+                let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                let i = args.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0) as usize;
+                Ok(JsValue::String(
+                    s.chars().nth(i).map(|c| c.to_string()).unwrap_or_default(),
+                ))
+            }
+            "padStart" | "padEnd" => {
+                let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                let width = args.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0).max(0.0) as usize;
+                let pad = args
+                    .get(2)
+                    .map(|v| v.as_string())
+                    .filter(|p| !p.is_empty())
+                    .unwrap_or_else(|| " ".into());
+                let need = width.saturating_sub(s.chars().count());
+                if need == 0 {
+                    return Ok(JsValue::String(s));
+                }
+                let mut fill = String::new();
+                while fill.chars().count() < need {
+                    fill.push_str(&pad);
+                }
+                let fill: String = fill.chars().take(need).collect();
+                Ok(JsValue::String(if name == "padStart" {
+                    format!("{fill}{s}")
+                } else {
+                    format!("{s}{fill}")
+                }))
+            }
+            "indexOf" => {
+                let found = match args.first() {
+                    Some(JsValue::Array(items)) => {
+                        let needle = args.get(1).cloned().unwrap_or(JsValue::Null);
+                        items.iter().position(|v| v == &needle).map(|i| i as f32)
+                    }
+                    _ => {
+                        let s = args.first().map(|v| v.as_string()).unwrap_or_default();
+                        let sub = args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                        s.find(sub.as_str()).map(|i| s[..i].chars().count() as f32)
+                    }
+                };
+                Ok(JsValue::Number(found.unwrap_or(-1.0)))
+            }
+            "sort" => {
+                let mut items = match args.first() {
+                    Some(JsValue::Array(items)) => items.clone(),
+                    _ => Vec::new(),
+                };
+                if items.iter().all(|v| matches!(v, JsValue::Number(_))) {
+                    items.sort_by(|a, b| {
+                        let (x, y) = (a.as_f32().unwrap_or(0.0), b.as_f32().unwrap_or(0.0));
+                        x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                } else {
+                    items.sort_by_key(|a| a.as_string());
+                }
+                Ok(JsValue::Array(items))
+            }
+            "reverse" => {
+                let mut items = match args.first() {
+                    Some(JsValue::Array(items)) => items.clone(),
+                    _ => Vec::new(),
+                };
+                items.reverse();
+                Ok(JsValue::Array(items))
+            }
+            "entries" => match args.first() {
+                Some(JsValue::Object(map)) => Ok(JsValue::Array(
+                    map.iter()
+                        .map(|(k, v)| JsValue::Array(vec![JsValue::String(k.clone()), v.clone()]))
+                        .collect(),
+                )),
+                _ => Ok(JsValue::Array(Vec::new())),
+            },
+            "values" => match args.first() {
+                Some(JsValue::Object(map)) => Ok(JsValue::Array(map.values().cloned().collect())),
+                _ => Ok(JsValue::Array(Vec::new())),
+            },
+            "has" => {
+                let found = match (args.first(), args.get(1)) {
+                    (Some(JsValue::Object(map)), Some(key)) => {
+                        map.contains_key(key.as_string().as_str())
+                    }
+                    (Some(JsValue::Array(items)), Some(idx)) => idx
+                        .as_f32()
+                        .map(|i| i >= 0.0 && (i as usize) < items.len())
+                        .unwrap_or(false),
+                    _ => false,
+                };
+                Ok(JsValue::Bool(found))
+            }
+            "merge" => {
+                let mut out = indexmap::IndexMap::new();
+                for arg in args {
+                    if let JsValue::Object(map) = arg {
+                        for (k, v) in map {
+                            out.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+                Ok(JsValue::Object(out))
+            }
+            "atan2" => {
+                let y = args.first().and_then(|v| v.as_f32()).unwrap_or(0.0);
+                let x = args.get(1).and_then(|v| v.as_f32()).unwrap_or(1.0);
+                Ok(JsValue::Number(y.atan2(x)))
+            }
+            "hypot" => {
+                let x = args.first().and_then(|v| v.as_f32()).unwrap_or(0.0);
+                let y = args.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0);
+                Ok(JsValue::Number(x.hypot(y)))
+            }
+            "sign" => {
+                let v = args.first().and_then(|v| v.as_f32()).unwrap_or(0.0);
+                Ok(JsValue::Number(if v > 0.0 {
+                    1.0
+                } else if v < 0.0 {
+                    -1.0
+                } else {
+                    0.0
+                }))
+            }
+            "time" => Ok(JsValue::Number(
+                self.runtime.as_ref().map(|rt| rt.clock()).unwrap_or(0.0),
+            )),
             "query" | "get" => {
                 // query(target, prop) → number from runtime
                 let target = args
@@ -1614,7 +2346,7 @@ fn eval_bin(op: &BinOp, l: &JsValue, r: &JsValue) -> JsValue {
         BinOp::Ge => JsValue::Bool(l.as_f32().unwrap_or(0.0) >= r.as_f32().unwrap_or(0.0)),
         BinOp::Eq => JsValue::Bool(values_eq(l, r)),
         BinOp::Ne => JsValue::Bool(!values_eq(l, r)),
-        BinOp::And | BinOp::Or => unreachable!("short-circuit"),
+        BinOp::And | BinOp::Or | BinOp::Nullish => unreachable!("short-circuit"),
     }
 }
 
@@ -1653,6 +2385,7 @@ pub fn run_function_with_runtime(
             module,
             env: IndexMap::new(),
             actions: Vec::new(),
+            logs: Vec::new(),
             runtime: None,
         };
         for (k, expr) in &module.globals {
@@ -1664,15 +2397,18 @@ pub fn run_function_with_runtime(
         module,
         env,
         actions: Vec::new(),
+        logs: Vec::new(),
         runtime,
     };
     let value = vm.run_fn(name, args)?;
     let actions = vm.actions;
+    let logs = vm.logs;
     let timelines = actions_to_timelines(sheet, &actions);
     Ok(ScriptRun {
         actions,
         timelines,
         value,
+        logs,
     })
 }
 
@@ -1689,10 +2425,25 @@ pub fn run_event(
             let r = run_function(module, sheet, &h.fn_name, args)?;
             combined.actions.extend(r.actions);
             combined.timelines.extend(r.timelines);
+            combined.logs.extend(r.logs);
             combined.value = r.value;
         }
     }
     Ok(combined)
+}
+
+/// Fire handlers like [`run_event`], then drop the fired one-shot
+/// (`once`) handlers. Takes `&mut` because consumed handlers leave
+/// the module; plain `run_event` is side-effect free and refires them.
+pub fn run_event_drain(
+    module: &mut ScriptModule,
+    sheet: Option<&Stylesheet>,
+    event: &str,
+    args: &[JsValue],
+) -> Result<ScriptRun, ScriptError> {
+    let run = run_event(module, sheet, event, args)?;
+    module.handlers.retain(|h| !(h.event == event && h.once));
+    Ok(run)
 }
 
 /// Convert Play/Animate actions into [`TimelinePlan`]s when a sheet is available.
@@ -1830,6 +2581,253 @@ mod tests {
         let run = eval_script_fn(src, Some(&sheet), "go", &[]).unwrap();
         assert_eq!(run.timelines.len(), 1);
         assert!((run.timelines[0].duration - 0.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn ternary_and_nullish_coalescing() {
+        let src = r#"
+            fn go(a, b) {
+                let label = a > 0 ? "pos" : "neg";
+                let nested = a > 10 ? "big" : a > 0 ? "small" : "neg";
+                let name = b ?? "anon";
+                let chained = b ?? missing ?? "fallback";
+                let zero = 0 ?? "dflt";
+                let empty = "" ?? "dflt";
+                return label + "|" + nested + "|" + name + "|" + chained
+                    + "|" + zero + "|" + empty;
+            }
+        "#;
+        let run = eval_script_fn(src, None, "go", &[JsValue::num(1.0), JsValue::Null]).unwrap();
+        assert_eq!(run.value.as_string(), "pos|small|anon|fallback|0|");
+        let run =
+            eval_script_fn(src, None, "go", &[JsValue::num(20.0), JsValue::str("zoe")]).unwrap();
+        assert_eq!(run.value.as_string(), "pos|big|zoe|zoe|0|");
+        // ?? short-circuits: the right side never runs.
+        let src = r#"fn go() { return 1 ?? nope_missing_fn(); }"#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(run.value.as_string(), "1");
+        // Only null/undefined trigger; 0 and "" pass through.
+        let src = r#"fn go() { return (null ?? "n") + (missing ?? "u"); }"#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(run.value.as_string(), "nu");
+    }
+
+    #[test]
+    fn while_loop_counts_and_guards() {
+        let src = r#"
+            fn go(n) {
+                let i = 0;
+                let acc = 0;
+                while (i < n) { acc = acc + i; i = i + 1; }
+                return acc;
+            }
+        "#;
+        let run = eval_script_fn(src, None, "go", &[JsValue::num(5.0)]).unwrap();
+        assert_eq!(run.value.as_string(), "10");
+        // Infinite loops error instead of hanging.
+        let bad = r#"fn go() { while (true) { } }"#;
+        let err = eval_script_fn(bad, None, "go", &[]).unwrap_err();
+        assert!(err.to_string().contains("while-loop"), "{err:?}");
+    }
+
+    #[test]
+    fn switch_dispatches_first_match_without_fallthrough() {
+        let src = r#"
+            fn go(state) {
+                let out = "";
+                switch (state) {
+                    case "idle": out = "waiting"; out = out + "!";
+                    case "run": out = "moving";
+                    default: out = "lost";
+                }
+                return out;
+            }
+            fn num(n) {
+                switch (n) {
+                    case 1: return "one";
+                    case 2: return "two";
+                }
+                return "other";
+            }
+        "#;
+        let run = eval_script_fn(src, None, "go", &[JsValue::str("idle")]).unwrap();
+        assert_eq!(run.value.as_string(), "waiting!");
+        let run = eval_script_fn(src, None, "go", &[JsValue::str("run")]).unwrap();
+        assert_eq!(run.value.as_string(), "moving");
+        let run = eval_script_fn(src, None, "go", &[JsValue::str("zzz")]).unwrap();
+        assert_eq!(run.value.as_string(), "lost");
+        let run = eval_script_fn(src, None, "num", &[JsValue::num(2.0)]).unwrap();
+        assert_eq!(run.value.as_string(), "two");
+        let run = eval_script_fn(src, None, "num", &[JsValue::num(9.0)]).unwrap();
+        assert_eq!(run.value.as_string(), "other");
+        // Empty switch without default returns null.
+        let src = r#"fn go() { switch (1) { case 2: return "x"; } return "end"; }"#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(run.value.as_string(), "end");
+    }
+
+    #[test]
+    fn template_literals_interpolate() {
+        let src = r#"
+            fn go(name, count) {
+                return `hi ${name}, ${count + 1} card${count > 1 ? "s" : ""}!`;
+            }
+        "#;
+        let run =
+            eval_script_fn(src, None, "go", &[JsValue::str("zoe"), JsValue::num(2.0)]).unwrap();
+        assert_eq!(run.value.as_string(), "hi zoe, 3 cards!");
+        let run =
+            eval_script_fn(src, None, "go", &[JsValue::str("al"), JsValue::num(1.0)]).unwrap();
+        assert_eq!(run.value.as_string(), "hi al, 2 card!");
+        // Escapes: \` \${ stay literal; $${…} still interpolates.
+        let src = r#"fn go() { return `a\`b\${c}$${40 + 2}`; }"#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(run.value.as_string(), "a`b${c}$42");
+        // Unterminated templates and holes are parse errors, never hangs.
+        assert!(parse_script("fn go() { return `abc; }").is_err());
+        assert!(parse_script("fn go() { return `a${b; }").is_err());
+        assert!(parse_script("fn go() { return 1 ? 2; }").is_err());
+    }
+
+    #[test]
+    fn template_holes_nest_objects_and_templates() {
+        let src = r##"
+            fn go(user) {
+                return `¡${user.name} lleva ${len(user.tags)} (${`x${1 + 1}`})!`;
+            }
+        "##;
+        let run = eval_script_fn(
+            src,
+            None,
+            "go",
+            &[JsValue::Object(
+                [
+                    ("name".to_string(), JsValue::str("Ñandú")),
+                    (
+                        "tags".to_string(),
+                        JsValue::Array(vec![JsValue::str("a"), JsValue::str("b")]),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            )],
+        )
+        .unwrap();
+        assert_eq!(run.value.as_string(), "¡Ñandú lleva 2 (x2)!");
+    }
+
+    #[test]
+    fn string_and_range_helpers() {
+        let src = r#"
+            fn go() {
+                let slug = lower(trim("  Hello World  "));
+                let parts = split("a,b,c", ",");
+                let back = join(parts, "-");
+                let ids = range(3);
+                return slug + "|" + back + "|" + len(ids);
+            }
+        "#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(run.value.as_string(), "hello world|a-b-c|3");
+        let src = r#"
+            fn go() {
+                return upper("ab") + len(range(0));
+            }
+        "#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(run.value.as_string(), "AB0");
+    }
+
+    #[test]
+    fn string_math_collection_helpers() {
+        let src = r#"
+            fn go() {
+                let a = replace("hello world", "world", "vcss");
+                let b = includes("hello", "ell");
+                let c = startsWith("hello", "he") ;
+                let d = endsWith("hello", "lo");
+                let e = repeat("ab", 3);
+                let f = round(2.5);
+                let g = sqrt(16);
+                let h = pow(2, 10);
+                let arr = push(push([], 1), 2);
+                let ks = keys({ x: 1, y: 2 });
+                print("debug", 42);
+                return a + "|" + b + "|" + c + "|" + d + "|" + e
+                    + "|" + f + "|" + g + "|" + h
+                    + "|" + len(arr) + "|" + len(ks) + "|" + typeof(arr);
+            }
+        "#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(
+            run.value.as_string(),
+            "hello vcss|true|true|true|ababab|3|4|1024|2|2|array"
+        );
+        assert_eq!(run.logs, vec!["debug 42".to_string()]);
+    }
+
+    #[test]
+    fn helper_edge_cases() {
+        let src = r#"
+            fn go() {
+                let a = replace("x", "", "y");
+                let b = repeat("ab", 0);
+                let c = push(7, 1);
+                let d = keys(7);
+                let e = typeof(null);
+                return a + "|" + b + "|" + len(c) + "|" + len(d) + "|" + e;
+            }
+        "#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(run.value.as_string(), "x||1|0|null");
+    }
+
+    #[test]
+    fn collection_math_time_helpers() {
+        let src = r#"
+            fn go() {
+                let a = slice([10, 20, 30, 40], 1, 3);
+                let b = charAt("hola", 1);
+                let c = padStart("7", 3, "0");
+                let d = padEnd("7", 3);
+                let e = indexOf([5, 6, 7], 6);
+                let f = indexOf("hola", "la");
+                let g = sort([3, 10, 2]);
+                let h = reverse([1, 2]);
+                let o = entries({ x: 1 });
+                let v = values({ x: 1, y: 2 });
+                let m = merge({ a: 1 }, { b: 2 });
+                return join(a, ",") + "|" + b + "|" + c + "|" + d + "|" + e
+                    + "|" + f + "|" + join(g, ",") + "|" + join(h, ",")
+                    + "|" + len(o) + "|" + len(v) + "|" + len(keys(m))
+                    + "|" + has(m, "b") + "|" + atan2(0, 1) + "|" + hypot(3, 4)
+                    + "|" + sign(-2.5) + "|" + time();
+            }
+        "#;
+        let run = eval_script_fn(src, None, "go", &[]).unwrap();
+        assert_eq!(
+            run.value.as_string(),
+            "20,30|o|007|7  |1|2|2,3,10|2,1|1|2|2|true|0|5|-1|0"
+        );
+    }
+
+    #[test]
+    fn once_handlers_drain() {
+        let src = r#"
+            fn boom() { return 1; }
+            fn tick() { return 2; }
+            on("ev", tick);
+            once("ev", boom);
+        "#;
+        let mut module = parse_script(src).unwrap();
+        assert_eq!(module.handlers.len(), 2);
+        let first = run_event_drain(&mut module, None, "ev", &[]).unwrap();
+        assert_eq!(first.value.as_string(), "1");
+        // The once handler fired and left; the plain one stays.
+        assert_eq!(module.handlers.len(), 1);
+        let second = run_event_drain(&mut module, None, "ev", &[]).unwrap();
+        assert_eq!(second.value.as_string(), "2");
+        assert_eq!(module.handlers.len(), 1);
     }
 
     #[test]

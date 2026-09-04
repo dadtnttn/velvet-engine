@@ -67,6 +67,10 @@ pub fn cmd_launch(
             None,
             false,
             vec![],
+            None,
+            None,
+            None,
+            None,
         )?;
         let zip = std::fs::read_dir(&export_out).ok().and_then(|rd| {
             rd.flatten()

@@ -1,9 +1,14 @@
 //! Bridge between retained UI nodes and VCSS stylesheets.
 
-use velvet_math::Color;
-use velvet_style::{resolve, ComputedStyle, StyleQuery, StyleScope, Stylesheet};
+use velvet_math::{Color, Vec2};
+use velvet_style::{
+    parse_box_shadow, resolve_inherited, ComputedStyle, MediaContext, MediaOrientation, StyleQuery,
+    StyleScope, StyleValue, Stylesheet,
+};
 
-use crate::{NodeId, UiNode, UiStyle, UiTree, WidgetKind};
+use crate::{
+    NinePatchMargins, NodeId, UiImageSource, UiNineSlice, UiNode, UiStyle, UiTree, WidgetKind,
+};
 
 /// Build the VCSS query for one node, including its ancestor context and live
 /// pseudo states.
@@ -36,6 +41,7 @@ pub fn style_query_for_node(tree: &UiTree, id: NodeId) -> Option<StyleQuery> {
         classes: node.classes.clone(),
         states: states_for_node(tree, node),
         ancestors,
+        ..Default::default()
     })
 }
 
@@ -49,6 +55,75 @@ pub fn apply_computed_style(base: &UiStyle, computed: &ComputedStyle) -> UiStyle
 
     if let Some(color) = color(computed, "background") {
         style.background = color;
+    }
+    style.background_gradient = computed.props.get("background").and_then(|v| match v {
+        StyleValue::Gradient(g) => {
+            // All-or-nothing: a stop that still holds var() (undefined
+            // variable) drops the whole gradient, as before.
+            let n = g.stops.len();
+            let mut stops = Vec::with_capacity(n);
+            for (i, s) in g.stops.iter().enumerate() {
+                let pos = s.position.unwrap_or(i as f32 / (n - 1).max(1) as f32);
+                stops.push((to_math_color(s.color.as_color()?), pos));
+            }
+            if stops.is_empty() {
+                return None;
+            }
+            Some(crate::UiGradient {
+                radial: g.radial,
+                angle_deg: g.angle_deg,
+                center: g.center,
+                stops,
+            })
+        }
+        _ => None,
+    });
+    style.box_shadows = computed
+        .props
+        .get("box-shadow")
+        .and_then(|v| match v {
+            StyleValue::Shadow(layers) => Some(layers.clone()),
+            StyleValue::Keyword(s) | StyleValue::String(s) => parse_box_shadow(s),
+            _ => None,
+        })
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|sh| {
+            // Layers whose color still holds var() are dropped; the rest
+            // are kept.
+            sh.color.as_color().map(|c| crate::UiBoxShadow {
+                offset: (sh.offset_x, sh.offset_y),
+                blur: sh.blur,
+                spread: sh.spread,
+                color: to_math_color(c),
+                inset: sh.inset,
+            })
+        })
+        .collect();
+    if let Some(source) = image_source(computed, "background-image") {
+        style.background_image = source;
+    }
+    let source_touched = has_margin_property(computed, "nine-slice");
+    let destination_touched = has_margin_property(computed, "nine-slice-width");
+    if source_touched || destination_touched {
+        let previous = style.nine_slice;
+        let source = margin_values(
+            computed,
+            "nine-slice",
+            previous
+                .map(|slice| slice.source)
+                .unwrap_or_else(|| NinePatchMargins::uniform(0.0)),
+        );
+        let destination_fallback = if source_touched {
+            source
+        } else {
+            previous.map(|slice| slice.destination).unwrap_or(source)
+        };
+        let destination = margin_values(computed, "nine-slice-width", destination_fallback);
+        style.nine_slice = Some(UiNineSlice {
+            source,
+            destination,
+        });
     }
     if let Some(color) = color(computed, "color") {
         style.text_color = color;
@@ -111,9 +186,28 @@ pub fn apply_computed_style(base: &UiStyle, computed: &ComputedStyle) -> UiStyle
 /// this returned value for painting. If layout must consume VCSS dimensions,
 /// preserve or restore that base before resolving the next interaction state.
 pub fn resolve_node_style(tree: &UiTree, id: NodeId, sheet: &Stylesheet) -> Option<UiStyle> {
+    resolve_node_style_with_media(tree, id, sheet, &MediaContext::default())
+}
+
+/// Resolve with explicit `@media` facts (reduced motion, contrast, …).
+pub fn resolve_node_style_with_media(
+    tree: &UiTree,
+    id: NodeId,
+    sheet: &Stylesheet,
+    media: &MediaContext,
+) -> Option<UiStyle> {
     let node = tree.get(id)?;
-    let query = style_query_for_node(tree, id)?;
-    Some(apply_computed_style(&node.style, &resolve(sheet, &query)))
+    let mut query = style_query_for_node(tree, id)?;
+    query.reduced_motion = media.reduced_motion;
+    query.high_contrast = media.high_contrast;
+    query.orientation = media.orientation;
+    query.viewport_width = media.viewport_width;
+    // Inherited resolution: text properties (`color`, `font-*`, custom
+    // properties, …) flow from ancestor nodes, like CSS.
+    Some(apply_computed_style(
+        &node.style,
+        &resolve_inherited(sheet, &query),
+    ))
 }
 
 impl UiTree {
@@ -130,6 +224,44 @@ impl UiTree {
     pub fn vcss_style(&self, id: NodeId, sheet: &Stylesheet) -> Option<UiStyle> {
         resolve_node_style(self, id, sheet)
     }
+
+    /// Resolve with explicit `@media` facts.
+    pub fn vcss_style_with_media(
+        &self,
+        id: NodeId,
+        sheet: &Stylesheet,
+        media: &MediaContext,
+    ) -> Option<UiStyle> {
+        resolve_node_style_with_media(self, id, sheet, media)
+    }
+
+    /// Resolve with `@media` facts: accessibility flags plus the layout
+    /// viewport (orientation/width derive from it).
+    pub fn vcss_style_auto(
+        &self,
+        id: NodeId,
+        sheet: &Stylesheet,
+        reduced_motion: bool,
+        high_contrast: bool,
+        viewport: Vec2,
+    ) -> Option<UiStyle> {
+        let (w, h) = (viewport.x, viewport.y);
+        resolve_node_style_with_media(
+            self,
+            id,
+            sheet,
+            &MediaContext {
+                reduced_motion,
+                high_contrast,
+                orientation: Some(if w >= h {
+                    MediaOrientation::Landscape
+                } else {
+                    MediaOrientation::Portrait
+                }),
+                viewport_width: Some(w),
+            },
+        )
+    }
 }
 
 fn element_name(widget: &WidgetKind) -> &'static str {
@@ -142,6 +274,9 @@ fn element_name(widget: &WidgetKind) -> &'static str {
         WidgetKind::Slider { .. } => "slider",
         WidgetKind::Toggle { .. } => "toggle",
         WidgetKind::TextField { .. } => "text-field",
+        WidgetKind::Dropdown { .. } => "dropdown",
+        WidgetKind::Tabs { .. } => "tabs",
+        WidgetKind::Tooltip { .. } => "tooltip",
     }
 }
 
@@ -155,14 +290,19 @@ fn scope_for_node(tree: &UiTree, node: &UiNode) -> StyleScope {
 }
 
 fn states_for_node(tree: &UiTree, node: &UiNode) -> Vec<String> {
+    use crate::tree::InputModality;
     let mut states = Vec::new();
     if !node.enabled {
         states.push("disabled".into());
     }
-    if tree.focus.focused == Some(node.id)
-        || matches!(node.widget, WidgetKind::TextField { focused: true, .. })
-    {
+    let focused = tree.focus.focused == Some(node.id)
+        || matches!(node.widget, WidgetKind::TextField { focused: true, .. });
+    if focused {
         states.push("focus".into());
+        // Ring only for keyboard arrivals (mouse users get hover instead).
+        if tree.input_modality == InputModality::Keyboard {
+            states.push("focus-visible".into());
+        }
     }
     if matches!(node.widget, WidgetKind::Button { hovered: true, .. }) {
         states.push("hover".into());
@@ -173,7 +313,19 @@ fn states_for_node(tree: &UiTree, node: &UiNode) -> Vec<String> {
     ) {
         states.push("active".into());
     }
+    if matches!(node.widget, WidgetKind::Dropdown { open: true, .. }) {
+        states.push("open".into());
+    }
     states
+}
+
+fn to_math_color(color: velvet_style::Color) -> Color {
+    Color::rgba(
+        color.r as f32 / 255.0,
+        color.g as f32 / 255.0,
+        color.b as f32 / 255.0,
+        color.a,
+    )
 }
 
 fn color(computed: &ComputedStyle, property: &str) -> Option<Color> {
@@ -181,14 +333,7 @@ fn color(computed: &ComputedStyle, property: &str) -> Option<Color> {
         .props
         .get(property)
         .and_then(|value| value.as_color())
-        .map(|color| {
-            Color::rgba(
-                color.r as f32 / 255.0,
-                color.g as f32 / 255.0,
-                color.b as f32 / 255.0,
-                color.a,
-            )
-        })
+        .map(to_math_color)
 }
 
 fn number(computed: &ComputedStyle, property: &str) -> Option<f32> {
@@ -196,6 +341,70 @@ fn number(computed: &ComputedStyle, property: &str) -> Option<f32> {
         .props
         .get(property)
         .and_then(|value| value.as_f32())
+}
+
+fn image_source(computed: &ComputedStyle, property: &str) -> Option<Option<UiImageSource>> {
+    computed.props.get(property).and_then(|value| match value {
+        StyleValue::Url(path) => Some(Some(UiImageSource::Url(path.clone()))),
+        StyleValue::SvgRef(name) => Some(Some(UiImageSource::Svg(name.clone()))),
+        StyleValue::Keyword(value) if value.eq_ignore_ascii_case("none") => Some(None),
+        _ => None,
+    })
+}
+
+fn has_margin_property(computed: &ComputedStyle, property: &str) -> bool {
+    computed.props.contains_key(property)
+        || ["top", "right", "bottom", "left"]
+            .iter()
+            .any(|side| computed.props.contains_key(&format!("{property}-{side}")))
+}
+
+fn margin_values(
+    computed: &ComputedStyle,
+    property: &str,
+    fallback: NinePatchMargins,
+) -> NinePatchMargins {
+    let mut values = computed
+        .props
+        .get(property)
+        .and_then(style_number_list)
+        .map(css_margins)
+        .unwrap_or(fallback);
+    for (side, slot) in [
+        ("top", &mut values.top),
+        ("right", &mut values.right),
+        ("bottom", &mut values.bottom),
+        ("left", &mut values.left),
+    ] {
+        if let Some(value) = number(computed, &format!("{property}-{side}")) {
+            *slot = value.max(0.0);
+        }
+    }
+    values
+}
+
+fn style_number_list(value: &StyleValue) -> Option<Vec<f32>> {
+    if let Some(value) = value.as_f32() {
+        return Some(vec![value.max(0.0)]);
+    }
+    let values: Vec<f32> = value
+        .as_str()?
+        .split_whitespace()
+        .map(|token| token.trim_end_matches("px").parse::<f32>())
+        .collect::<Result<_, _>>()
+        .ok()?;
+    (!values.is_empty() && values.len() <= 4).then_some(values)
+}
+
+fn css_margins(values: Vec<f32>) -> NinePatchMargins {
+    let value = |index: usize| values[index].max(0.0);
+    match values.len() {
+        1 => NinePatchMargins::uniform(value(0)),
+        2 => NinePatchMargins::new(value(1), value(0), value(1), value(0)),
+        3 => NinePatchMargins::new(value(1), value(0), value(1), value(2)),
+        4 => NinePatchMargins::new(value(3), value(0), value(1), value(2)),
+        _ => NinePatchMargins::uniform(0.0),
+    }
 }
 
 fn box_values(
@@ -236,10 +445,166 @@ mod tests {
     use super::*;
     use crate::LayoutType;
     use velvet_math::Vec2;
-    use velvet_style::parse_stylesheet;
+    use velvet_style::{parse_stylesheet, MediaContext};
 
     fn close(actual: f32, expected: f32) {
         assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
+    }
+
+    #[test]
+    fn child_and_not_selectors_work_through_nested_tree() {
+        let mut ui = UiTree::with_root("main");
+        let root = ui.root().unwrap();
+        ui.get_mut(root).unwrap().add_class("menu");
+        let panel = ui.add_node("panel", WidgetKind::Panel, Some(root));
+        let button = ui.add_node(
+            "go",
+            WidgetKind::Button {
+                label: "Go".into(),
+                pressed: false,
+                hovered: false,
+                busy: false,
+            },
+            Some(panel),
+        );
+        ui.get_mut(button).unwrap().add_class("action");
+        let sheet = parse_stylesheet(
+            r#"
+            .menu > .action { opacity: 0.2; }
+            .menu .action:not(.ghost) { opacity: 0.9; }
+            "#,
+        )
+        .unwrap();
+        // Grandchild: child rule misses (panel sits between), :not hits.
+        let style = ui.vcss_style(button, &sheet).unwrap();
+        close(style.opacity, 0.9);
+        // Ghost veto drops back to the retained default.
+        ui.get_mut(button).unwrap().add_class("ghost");
+        let style = ui.vcss_style(button, &sheet).unwrap();
+        close(style.opacity, 1.0);
+    }
+
+    #[test]
+    fn media_and_chrome_map_through_bridge() {
+        let mut ui = UiTree::with_root("main");
+        let root = ui.root().unwrap();
+        let sheet = parse_stylesheet(
+            r#"
+            .banner {
+              background: linear-gradient(to bottom, red, blue);
+              box-shadow: 0 2px 8px #000000;
+              opacity: 1;
+            }
+            @media (prefers-reduced-motion) {
+              .banner { opacity: 0.5; }
+            }
+            "#,
+        )
+        .unwrap();
+        ui.get_mut(root).unwrap().add_class("banner");
+        let style = ui.vcss_style(root, &sheet).unwrap();
+        close(style.opacity, 1.0);
+        let gradient = style.background_gradient.as_ref().expect("gradient");
+        assert_eq!(gradient.stops.len(), 2);
+        assert_eq!(gradient.stops[0].1, 0.0);
+        assert_eq!(gradient.stops[1].1, 1.0);
+        assert_eq!(style.box_shadows.len(), 1);
+        close(style.box_shadows[0].blur, 8.0);
+        // Reduced motion swaps opacity through the same bridge call.
+        let calm = ui
+            .vcss_style_with_media(
+                root,
+                &sheet,
+                &MediaContext {
+                    reduced_motion: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        close(calm.opacity, 0.5);
+        // Viewport-derived flags work too (800px landscape here).
+        let wide = ui
+            .vcss_style_auto(root, &sheet, false, false, Vec2::new(800.0, 600.0))
+            .unwrap();
+        close(wide.opacity, 1.0);
+    }
+
+    #[test]
+    fn vars_inside_color_functions_apply_through_bridge() {
+        let mut ui = UiTree::with_root("main");
+        let root = ui.root().unwrap();
+        let sheet = parse_stylesheet(
+            r#"
+            :root { --gold: #ebc878; }
+            .banner {
+              background: color-mix(in srgb, var(--gold) 70%, #501e78);
+              box-shadow: 0 2px 8px var(--gold);
+              width: calc(8px + 4px);
+            }
+            "#,
+        )
+        .unwrap();
+        ui.get_mut(root).unwrap().add_class("banner");
+        let style = ui.vcss_style(root, &sheet).unwrap();
+        // Same mix authored concrete: 70% gold + 30% plum.
+        let mixed = velvet_style::parse_color("color-mix(in srgb, #ebc878 70%, #501e78)").unwrap();
+        let bg = style.background;
+        assert!((bg.r - mixed.r as f32 / 255.0).abs() < 0.01, "r {bg:?}");
+        assert!((bg.g - mixed.g as f32 / 255.0).abs() < 0.01, "g {bg:?}");
+        assert!((bg.b - mixed.b as f32 / 255.0).abs() < 0.01, "b {bg:?}");
+        assert_eq!(style.box_shadows.len(), 1);
+        let sh = &style.box_shadows[0];
+        assert!((sh.color.r - 0xeb as f32 / 255.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn text_props_inherit_from_parent_nodes() {
+        let mut ui = UiTree::with_root("main");
+        let root = ui.root().unwrap();
+        ui.get_mut(root).unwrap().add_class("menu");
+        let button = ui.add_node(
+            "ok",
+            WidgetKind::Button {
+                label: "Ok".into(),
+                pressed: false,
+                hovered: false,
+                busy: false,
+            },
+            Some(root),
+        );
+        ui.get_mut(button).unwrap().add_class("button");
+        let sheet = parse_stylesheet(
+            r#"
+            .menu { color: #ebc878; font-size: 20; opacity: 0.5; }
+            .button { font-size: 14; }
+            "#,
+        )
+        .unwrap();
+        let style = ui.vcss_style(button, &sheet).unwrap();
+        // color flows down, own font-size wins, opacity never inherits.
+        assert!((style.text_color.r - 0xeb as f32 / 255.0).abs() < 0.01);
+        assert!((style.font_size - 14.0).abs() < 1e-4);
+        assert!((style.opacity - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn border_and_background_shorthands_apply_through_bridge() {
+        let mut ui = UiTree::with_root("main");
+        let root = ui.root().unwrap();
+        ui.get_mut(root).unwrap().add_class("card");
+        let sheet = parse_stylesheet(
+            r#"
+            .card { border: 2px solid red; background: url(a.png); }
+            "#,
+        )
+        .unwrap();
+        let style = ui.vcss_style(root, &sheet).unwrap();
+        assert!((style.border_width - 2.0).abs() < 1e-4);
+        assert!((style.border.r - 1.0).abs() < 1e-4);
+        assert_eq!(
+            style.background_image,
+            Some(UiImageSource::Url("a.png".into()))
+        );
     }
 
     #[test]
@@ -255,6 +620,7 @@ mod tests {
                 label: "Start".into(),
                 pressed: false,
                 hovered: true,
+                busy: false,
             },
             Some(group),
         );
@@ -343,13 +709,93 @@ mod tests {
     }
 
     #[test]
+    fn image_and_nine_slice_properties_map_onto_ui_style() {
+        let mut ui = UiTree::with_root("root");
+        let root = ui.root().unwrap();
+        ui.get_mut(root).unwrap().add_class("ornate");
+        let sheet = parse_stylesheet(
+            r#"
+            .ornate {
+                background-image: url("ui/button.png");
+                nine-slice: 120 180 100 180;
+                nine-slice-width: 14 28;
+            }
+            "#,
+        )
+        .unwrap();
+
+        let style = resolve_node_style(&ui, root, &sheet).unwrap();
+        assert_eq!(
+            style.background_image,
+            Some(UiImageSource::Url("ui/button.png".into()))
+        );
+        let slice = style.nine_slice.unwrap();
+        assert_eq!(
+            slice.source,
+            NinePatchMargins::new(180.0, 120.0, 180.0, 100.0)
+        );
+        assert_eq!(
+            slice.destination,
+            NinePatchMargins::new(28.0, 14.0, 28.0, 14.0)
+        );
+    }
+
+    #[test]
+    fn pseudo_state_can_swap_background_image() {
+        let mut ui = UiTree::with_root("root");
+        let root = ui.root().unwrap();
+        let button = ui.add_node(
+            "start",
+            WidgetKind::Button {
+                label: "Start".into(),
+                pressed: false,
+                hovered: true,
+                busy: false,
+            },
+            Some(root),
+        );
+        let sheet = parse_stylesheet(
+            r#"
+            button { background-image: url("idle.png"); }
+            button:hover { background-image: url("hover.png"); }
+            "#,
+        )
+        .unwrap();
+        let style = resolve_node_style(&ui, button, &sheet).unwrap();
+        assert_eq!(
+            style.background_image,
+            Some(UiImageSource::Url("hover.png".into()))
+        );
+    }
+
+    #[test]
+    fn nine_slice_width_can_override_a_base_style() {
+        let base = UiStyle {
+            nine_slice: Some(UiNineSlice {
+                source: NinePatchMargins::uniform(100.0),
+                destination: NinePatchMargins::uniform(20.0),
+            }),
+            ..UiStyle::default()
+        };
+        let sheet = parse_stylesheet(".compact { nine-slice-width: 8 16; }").unwrap();
+        let computed = resolve_inherited(&sheet, &StyleQuery::class("compact"));
+        let style = apply_computed_style(&base, &computed);
+        let slice = style.nine_slice.unwrap();
+        assert_eq!(slice.source, NinePatchMargins::uniform(100.0));
+        assert_eq!(
+            slice.destination,
+            NinePatchMargins::new(16.0, 8.0, 16.0, 8.0)
+        );
+    }
+
+    #[test]
     fn vcss_gap_changes_column_layout() {
         let mut ui = UiTree::with_root("root");
         let root = ui.root().unwrap();
         {
             let root_node = ui.get_mut(root).unwrap();
             root_node.add_class("menu");
-            root_node.layout = LayoutType::Column;
+            root_node.layout = LayoutType::Column { wrap: false };
         }
         let first = ui.add_node(
             "first",
@@ -357,6 +803,7 @@ mod tests {
                 label: "A".into(),
                 pressed: false,
                 hovered: false,
+                busy: false,
             },
             Some(root),
         );
@@ -366,6 +813,7 @@ mod tests {
                 label: "B".into(),
                 pressed: false,
                 hovered: false,
+                busy: false,
             },
             Some(root),
         );

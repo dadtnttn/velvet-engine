@@ -308,6 +308,40 @@ pub enum NativeId {
     QuatEuler = 143,
     /// `ray_plane_intersection(origin, direction, plane_point, plane_normal)`.
     RayPlaneIntersection = 144,
+    /// `str_upper(s)`.
+    StrUpper = 145,
+    /// `str_lower(s)`.
+    StrLower = 146,
+    /// `str_trim(s)`.
+    StrTrim = 147,
+    /// `str_split(s, sep)`.
+    StrSplit = 148,
+    /// `str_join(list, sep)`.
+    StrJoin = 149,
+    /// `str_contains(s, sub)`.
+    StrContains = 150,
+    /// `str_replace(s, from, to)`.
+    StrReplace = 151,
+    /// `str_starts_with(s, prefix)`.
+    StrStartsWith = 152,
+    /// `str_ends_with(s, suffix)`.
+    StrEndsWith = 153,
+    /// `list_contains(list, value)`.
+    ListContains = 154,
+    /// `list_index_of(list, value)` (-1 when absent).
+    ListIndexOf = 155,
+    /// `list_reverse(list)` (in place, returns the list).
+    ListReverse = 156,
+    /// `list_sort(list)` (in place, deterministic order, returns the list).
+    ListSort = 157,
+    /// `list_slice(list, start [, end])` (new list, negative counts from end).
+    ListSlice = 158,
+    /// `map_values(map)`.
+    MapValues = 159,
+    /// `map_remove(map, key)` (mutates, returns whether it existed).
+    MapRemove = 160,
+    /// `map_merge(a, b)` (new map, `b` wins).
+    MapMerge = 161,
 }
 
 impl NativeId {
@@ -459,6 +493,23 @@ impl NativeId {
             142 => Self::ClampLength,
             143 => Self::QuatEuler,
             144 => Self::RayPlaneIntersection,
+            145 => Self::StrUpper,
+            146 => Self::StrLower,
+            147 => Self::StrTrim,
+            148 => Self::StrSplit,
+            149 => Self::StrJoin,
+            150 => Self::StrContains,
+            151 => Self::StrReplace,
+            152 => Self::StrStartsWith,
+            153 => Self::StrEndsWith,
+            154 => Self::ListContains,
+            155 => Self::ListIndexOf,
+            156 => Self::ListReverse,
+            157 => Self::ListSort,
+            158 => Self::ListSlice,
+            159 => Self::MapValues,
+            160 => Self::MapRemove,
+            161 => Self::MapMerge,
             _ => return None,
         })
     }
@@ -617,6 +668,23 @@ impl NativeId {
             Self::ClampLength => "clamp_length",
             Self::QuatEuler => "quat_euler",
             Self::RayPlaneIntersection => "ray_plane_intersection",
+            Self::StrUpper => "str_upper",
+            Self::StrLower => "str_lower",
+            Self::StrTrim => "str_trim",
+            Self::StrSplit => "str_split",
+            Self::StrJoin => "str_join",
+            Self::StrContains => "str_contains",
+            Self::StrReplace => "str_replace",
+            Self::StrStartsWith => "str_starts_with",
+            Self::StrEndsWith => "str_ends_with",
+            Self::ListContains => "list_contains",
+            Self::ListIndexOf => "list_index_of",
+            Self::ListReverse => "list_reverse",
+            Self::ListSort => "list_sort",
+            Self::ListSlice => "list_slice",
+            Self::MapValues => "map_values",
+            Self::MapRemove => "map_remove",
+            Self::MapMerge => "map_merge",
         }
     }
 
@@ -768,6 +836,23 @@ impl NativeId {
             Self::ClampLength,
             Self::QuatEuler,
             Self::RayPlaneIntersection,
+            Self::StrUpper,
+            Self::StrLower,
+            Self::StrTrim,
+            Self::StrSplit,
+            Self::StrJoin,
+            Self::StrContains,
+            Self::StrReplace,
+            Self::StrStartsWith,
+            Self::StrEndsWith,
+            Self::ListContains,
+            Self::ListIndexOf,
+            Self::ListReverse,
+            Self::ListSort,
+            Self::ListSlice,
+            Self::MapValues,
+            Self::MapRemove,
+            Self::MapMerge,
         ]
     }
 }
@@ -920,6 +1005,23 @@ pub fn lookup_native(name: &str) -> Option<NativeId> {
         "clamp_length" => Some(NativeId::ClampLength),
         "quat_euler" => Some(NativeId::QuatEuler),
         "ray_plane_intersection" => Some(NativeId::RayPlaneIntersection),
+        "str_upper" => Some(NativeId::StrUpper),
+        "str_lower" => Some(NativeId::StrLower),
+        "str_trim" => Some(NativeId::StrTrim),
+        "str_split" => Some(NativeId::StrSplit),
+        "str_join" => Some(NativeId::StrJoin),
+        "str_contains" => Some(NativeId::StrContains),
+        "str_replace" => Some(NativeId::StrReplace),
+        "str_starts_with" => Some(NativeId::StrStartsWith),
+        "str_ends_with" => Some(NativeId::StrEndsWith),
+        "list_contains" => Some(NativeId::ListContains),
+        "list_index_of" => Some(NativeId::ListIndexOf),
+        "list_reverse" => Some(NativeId::ListReverse),
+        "list_sort" => Some(NativeId::ListSort),
+        "list_slice" => Some(NativeId::ListSlice),
+        "map_values" => Some(NativeId::MapValues),
+        "map_remove" => Some(NativeId::MapRemove),
+        "map_merge" => Some(NativeId::MapMerge),
         _ => None,
     }
 }
@@ -1089,7 +1191,18 @@ impl NativeId {
             | N::PowInt
             | N::VecMin
             | N::VecMax
-            | N::ClampLength => (2, 2),
+            | N::ClampLength
+            | N::StrSplit
+            | N::StrJoin
+            | N::StrContains
+            | N::StrStartsWith
+            | N::StrEndsWith
+            | N::ListContains
+            | N::ListIndexOf
+            | N::MapRemove
+            | N::MapMerge => (2, 2),
+            N::StrReplace => (3, 3),
+            N::ListSlice => (2, 3),
             _ => (1, 1),
         };
 
@@ -1148,6 +1261,18 @@ impl NativeId {
             N::Turbulence2 => &[T::Number, T::Number, T::Int, T::Int, T::Number, T::Number],
             N::DomainWarp2 => &[T::Number, T::Number, T::Int, T::Int, T::Number],
             N::Sum | N::Product | N::Mean | N::Median => &[T::List],
+            N::StrUpper | N::StrLower | N::StrTrim => &[T::String],
+            N::StrSplit | N::StrContains | N::StrStartsWith | N::StrEndsWith => {
+                &[T::String, T::String]
+            }
+            N::StrJoin => &[T::List, T::String],
+            N::StrReplace => &[T::String, T::String, T::String],
+            N::ListContains | N::ListIndexOf => &[T::List, T::Any],
+            N::ListReverse | N::ListSort => &[T::List],
+            N::ListSlice => &[T::List, T::Int, T::Int],
+            N::MapValues => &[T::Map],
+            N::MapRemove => &[T::Map, T::String],
+            N::MapMerge => &[T::Map, T::Map],
             N::Variance | N::Stddev => &[T::List, T::Bool],
             N::Quantile => &[T::List, T::Number],
             N::Covariance => &[T::List, T::List, T::Bool],
@@ -1182,18 +1307,38 @@ impl NativeId {
             | N::PresentHide
             | N::Assert
             | N::Fail => T::Null,
-            N::Str | N::Concat | N::HashSha256 | N::HexEncode | N::Base64Encode | N::TypeOf => {
-                T::String
-            }
+            N::Str
+            | N::Concat
+            | N::HashSha256
+            | N::HexEncode
+            | N::Base64Encode
+            | N::TypeOf
+            | N::StrUpper
+            | N::StrLower
+            | N::StrTrim
+            | N::StrJoin
+            | N::StrReplace => T::String,
+            N::StrSplit | N::MapValues => T::List,
             N::IsFinite
             | N::IsNan
             | N::IsInfinite
             | N::ApproxEq
             | N::RngBool
             | N::MapHas
+            | N::StrContains
+            | N::StrStartsWith
+            | N::StrEndsWith
+            | N::ListContains
+            | N::MapRemove
             | N::IsEven
             | N::IsOdd => T::Bool,
-            N::Len | N::Gcd | N::Lcm | N::RngRangeInt | N::WeightedChoose | N::PowInt => T::Int,
+            N::Len
+            | N::Gcd
+            | N::Lcm
+            | N::RngRangeInt
+            | N::WeightedChoose
+            | N::PowInt
+            | N::ListIndexOf => T::Int,
             N::Abs | N::Min | N::Max | N::Clamp => T::Number,
             N::Vec2 => T::Vec2,
             N::Vec3 | N::QuatRotate => T::Vec3,
@@ -1235,9 +1380,16 @@ impl NativeId {
             | N::QuatSlerp => T::Quat,
             N::QuatEuler => T::Quat,
             N::RngNew => T::Rng,
-            N::ListPush | N::MapKeys | N::Shuffle | N::MovingAverage | N::Histogram | N::Ema => {
-                T::List
-            }
+            N::ListPush
+            | N::MapKeys
+            | N::Shuffle
+            | N::MovingAverage
+            | N::Histogram
+            | N::Ema
+            | N::ListReverse
+            | N::ListSort
+            | N::ListSlice => T::List,
+            N::MapMerge => T::Map,
             N::ListPop
             | N::Choose
             | N::Normalize
@@ -1257,6 +1409,9 @@ impl NativeId {
                 | N::PresentHide
                 | N::ListPush
                 | N::ListPop
+                | N::ListReverse
+                | N::ListSort
+                | N::MapRemove
                 | N::Assert
                 | N::Fail
                 | N::RngNextFloat

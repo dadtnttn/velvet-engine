@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "name": "Fire",
+    "author": "",
+    "tags": [
+      "fire"
+    ],
+    "version": "1.0.0"
+  },
+  "dimensions": {
+    "width": 64,
+    "height": 64
+  },
+  "frames": 16,
+  "fps": 12,
+  "loop_mode": "seamless",
+  "palette": "fire",
+  "palette_override": [],
+  "path": {
+    "kind": "line_h",
+    "scale_x": 0.35,
+    "scale_y": 1.0,
+    "phase": 0.0,
+    "frequency": 1.0,
+    "twist": 1.0,
+    "segments": 24
+  },
+  "emitter": {
+    "shape": "cone",
+    "rate": 110.0,
+    "burst_count": 24,
+    "continuous": true,
+    "spread": 0.65,
+    "angle": -1.5707964,
+    "align_to_path": true
+  },
+  "particles": {
+    "max_particles": 600,
+    "lifetime_min": 0.5,
+    "lifetime_max": 1.0,
+    "speed_min": 10.0,
+    "speed_max": 30.0,
+    "gravity": -18.0,
+    "drag": 0.7,
+    "jitter": 0.5,
+    "size": 1,
+    "flicker": 0.18,
+    "fade_pow": 1.2,
+    "shrink": 0.0,
+    "spin": 0.0
+  },
+  "background": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "seed": 61858,
+  "additive": false
+}

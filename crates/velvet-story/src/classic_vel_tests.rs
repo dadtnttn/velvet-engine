@@ -26,6 +26,9 @@ fn pump_to_end(player: &mut StoryPlayer, max: usize) {
             StoryWait::Pause { .. } => {
                 player.tick(1.0); // advance pause clock
             }
+            StoryWait::ScreenCall { .. } => {
+                let _ = player.return_from_screen(StoryValue::Null);
+            }
             StoryWait::Host { token } => {
                 let _ = player.resume_host(&token);
             }

@@ -33,9 +33,11 @@ mod director;
 mod effect;
 mod fx3d;
 mod host;
+mod path;
 mod pose;
 pub mod recipes;
 mod script;
+mod spring;
 mod track;
 mod tween;
 
@@ -46,10 +48,15 @@ pub use fx3d::{
     Pose3DChannel, ProjectedQuad,
 };
 pub use host::AnimStoryHost;
+pub use path::{sample_path, PathTween};
 pub use pose::{AnimField, AnimPose};
 pub use script::{
     apply_program_immediate, parse_anim_script, AnimOp, AnimProgram, AnimScriptError,
     AnimScriptRunner,
 };
-pub use track::{parse_track_line, timeline_from_plan, ChannelTrack, Keyframe, Timeline};
+pub use spring::{critical_damping, Spring};
+pub use track::{
+    parse_track_line, timeline_from_plan, ChannelTrack, Keyframe, Timeline, TimelineCrossfade,
+    TimelineEvent,
+};
 pub use tween::{apply_field, parse_ease, read_field, FloatTween};

@@ -1,0 +1,14 @@
+{
+  "name": "fire",
+  "frame_width": 64,
+  "frame_height": 64,
+  "frames": 16,
+  "fps": 12,
+  "columns": 4,
+  "rows": 4,
+  "sheet_width": 256,
+  "sheet_height": 256,
+  "palette": "Fire",
+  "seed": 61858,
+  "duration": 1.3333334
+}

@@ -14,6 +14,7 @@ mod narrative_cmd;
 mod new_cmd;
 mod pack_cmd;
 mod play_cmd;
+mod scene3d_cmd;
 mod script_cmd;
 mod story_cmd;
 mod style_cmd;
@@ -37,18 +38,26 @@ use export_cmd::cmd_export;
 use image_cmd::{cmd_image_convert, cmd_image_info};
 use loc_cmd::{
     cmd_loc_convert, cmd_loc_extract, cmd_loc_extract_story, cmd_loc_langs, cmd_loc_validate,
+    cmd_loc_validate_story,
 };
-use narrative_cmd::{cmd_level_mutate, cmd_narrative_edit, cmd_narrative_graph};
+use narrative_cmd::{
+    cmd_level_mutate, cmd_narrative_branches, cmd_narrative_check_assets, cmd_narrative_edit,
+    cmd_narrative_graph, cmd_narrative_preview,
+};
 use new_cmd::{cmd_init, cmd_new, cmd_project_info, cmd_template_install, cmd_template_list};
 use pack_cmd::cmd_pack;
 use play_cmd::{cmd_play_project_opts, cmd_play_story_product, cmd_recheck_replay};
+use scene3d_cmd::{cmd_scene3d_check, cmd_scene3d_flatten};
 use script_cmd::{cmd_script_check, cmd_script_fmt, cmd_script_lsp, cmd_script_run};
 use story_cmd::{
     cmd_story_build, cmd_story_check, cmd_story_dump_ast, cmd_story_dump_lowered,
     cmd_story_extract_loc, cmd_story_format, cmd_story_run, cmd_story_studio_model,
 };
-use style_cmd::{cmd_style_check, cmd_style_dump};
-use vs3_cmd::{cmd_vs3_check, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_run};
+use style_cmd::{
+    cmd_style_check, cmd_style_dump, cmd_style_eval, cmd_style_explain, cmd_style_fmt,
+    cmd_style_run, cmd_style_snapshot,
+};
+use vs3_cmd::{cmd_vs3_check, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_natives, cmd_vs3_run};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]
@@ -117,6 +126,11 @@ enum Commands {
         #[command(subcommand)]
         command: StoryCommands,
     },
+    /// Declarative 3D scene tools (`.scene3d.json`).
+    Scene3d {
+        #[command(subcommand)]
+        command: Scene3dCommands,
+    },
     /// Create a new project from a template.
     New {
         /// Project name.
@@ -127,6 +141,10 @@ enum Commands {
         /// Parent directory.
         #[arg(long, default_value = ".")]
         out: PathBuf,
+        /// Extra story languages to scaffold (`tl/<lang>/`), repeatable.
+        /// Visual-novel always ships `en` + `es`; e.g. `--lang fr --lang ja`.
+        #[arg(long)]
+        lang: Vec<String>,
     },
     /// Localization tools.
     Localization {
@@ -174,6 +192,18 @@ enum Commands {
         /// Exclude glob for assets (repeatable).
         #[arg(long)]
         exclude: Vec<String>,
+        /// Android APK signing: none|debug|release (needs SDK + JDK).
+        #[arg(long)]
+        sign: Option<String>,
+        /// Release keystore path (release signing only).
+        #[arg(long)]
+        keystore: Option<PathBuf>,
+        /// Release key alias (release signing only).
+        #[arg(long)]
+        alias: Option<String>,
+        /// Steam App ID: writes steam_appid.txt next to the export.
+        #[arg(long)]
+        steam_app_id: Option<u32>,
     },
     /// Type-check the workspace (`cargo check --workspace`).
     Check {
@@ -426,6 +456,63 @@ enum StyleCommands {
         #[arg(long)]
         state: Option<String>,
     },
+    /// Run a named `@script` function and print actions + value.
+    Run {
+        /// Path to stylesheet.
+        path: PathBuf,
+        /// Function name.
+        name: String,
+        /// Arguments (numbers, bools, null, or strings).
+        #[arg(long = "arg")]
+        args: Vec<String>,
+    },
+    /// Evaluate one `@script` expression and print the value.
+    Eval {
+        /// Path to stylesheet (globals/fns available).
+        path: PathBuf,
+        /// Expression, e.g. `clamp(10, 0, 5)`.
+        expr: String,
+    },
+    /// Snapshot a resolved class to JSON (theme CI).
+    Snapshot {
+        /// Path to stylesheet.
+        path: PathBuf,
+        /// Class name without `.`.
+        #[arg(long, default_value = "button")]
+        class: String,
+        /// Pseudo state (`selected`, `hover`, …).
+        #[arg(long)]
+        state: Option<String>,
+        /// Expected snapshot file (fails on mismatch).
+        #[arg(long)]
+        expect: Option<PathBuf>,
+        /// Write the snapshot file instead of comparing.
+        #[arg(long)]
+        write: bool,
+    },
+    /// Format a `.vcss` file in place.
+    Fmt {
+        /// Path to stylesheet.
+        path: PathBuf,
+        /// Squeeze to minified single-line output instead of pretty-printing.
+        #[arg(long)]
+        minify: bool,
+    },
+    /// Trace the cascade for one property on a selector.
+    Explain {
+        /// Path to stylesheet.
+        path: PathBuf,
+        /// Selector compound, e.g. `.button.primary:hover`.
+        selector: String,
+        /// Property to trace, e.g. `color`.
+        prop: String,
+        /// Ancestor context, e.g. `--ancestor .menu` (repeatable, root-to-parent).
+        #[arg(long = "ancestor")]
+        ancestors: Vec<String>,
+        /// Match `@media (prefers-reduced-motion)` blocks.
+        #[arg(long)]
+        reduced_motion: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -461,6 +548,30 @@ enum NarrativeCommands {
         /// Path to story `.vel`.
         path: PathBuf,
     },
+    /// Branch map: reachable endings + broken jumps (fails on broken).
+    Branches {
+        /// Path to story `.vel`.
+        path: PathBuf,
+        /// Also print Graphviz DOT.
+        #[arg(long, default_value_t = false)]
+        dot: bool,
+    },
+    /// Check referenced assets exist under the project dir.
+    CheckAssets {
+        /// Path to story `.vel` or project dir.
+        path: PathBuf,
+    },
+    /// Dry-run preview: print dialogue walk (no window).
+    Preview {
+        /// Path to story `.vel` or project dir.
+        path: PathBuf,
+        /// Max dialogue lines to print.
+        #[arg(long, default_value_t = 20)]
+        lines: usize,
+        /// Start scene (default: entry).
+        #[arg(long)]
+        scene: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -495,6 +606,9 @@ enum TemplateCommands {
         /// Parent directory.
         #[arg(long, default_value = ".")]
         out: PathBuf,
+        /// Extra story languages to scaffold (`tl/<lang>/`), repeatable.
+        #[arg(long)]
+        lang: Vec<String>,
     },
 }
 
@@ -624,6 +738,29 @@ enum Vs3Commands {
         /// Edition-3 `.vel` file or directory.
         path: PathBuf,
     },
+    /// List script-visible natives (optional name prefix filter).
+    Natives {
+        /// Only show natives starting with this prefix.
+        #[arg(long)]
+        prefix: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum Scene3dCommands {
+    /// Validate a `.scene3d.json` file and check its models exist.
+    Check {
+        /// Path to scene file.
+        path: PathBuf,
+        /// Project root for model paths (default: scene directory).
+        #[arg(long)]
+        project: Option<PathBuf>,
+    },
+    /// Dump flattened world-space nodes.
+    Flatten {
+        /// Path to scene file.
+        path: PathBuf,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -737,6 +874,15 @@ enum LocCommands {
     },
     /// Validate target locale against source catalog.
     Validate { source: PathBuf, target: PathBuf },
+    /// Validate story `tl/<lang>/` maps against `scripts/main.vel`.
+    ValidateStory {
+        /// Project dir (or `.vel` file).
+        #[arg(default_value = ".")]
+        project: PathBuf,
+        /// Single language to check (default: all non-English).
+        #[arg(long)]
+        lang: Option<String>,
+    },
     /// Convert catalog between json/po/properties by extension.
     Convert {
         input: PathBuf,
@@ -802,6 +948,9 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Vs3 {
             command: Vs3Commands::Fmt { path },
         } => cmd_vs3_fmt(path),
+        Commands::Vs3 {
+            command: Vs3Commands::Natives { prefix },
+        } => cmd_vs3_natives(prefix),
         Commands::App {
             command: AppCommands::Check { path },
         } => cmd_app_check(path),
@@ -849,11 +998,16 @@ fn dispatch(cli: Cli) -> Result<()> {
                 None => run(),
             }
         }
+        Commands::Scene3d { command } => match command {
+            Scene3dCommands::Check { path, project } => cmd_scene3d_check(path, project),
+            Scene3dCommands::Flatten { path } => cmd_scene3d_flatten(path),
+        },
         Commands::New {
             name,
             template,
             out,
-        } => cmd_new(name, template, out),
+            lang,
+        } => cmd_new(name, template, out, &lang),
         Commands::Localization {
             command: LocCommands::Extract { path, out, format },
         } => cmd_loc_extract(path, out, &format),
@@ -872,6 +1026,9 @@ fn dispatch(cli: Cli) -> Result<()> {
             command: LocCommands::Validate { source, target },
         } => cmd_loc_validate(source, target),
         Commands::Localization {
+            command: LocCommands::ValidateStory { project, lang },
+        } => cmd_loc_validate_story(project, lang),
+        Commands::Localization {
             command: LocCommands::Convert { input, out, locale },
         } => cmd_loc_convert(input, out, &locale),
         Commands::Pack {
@@ -889,8 +1046,23 @@ fn dispatch(cli: Cli) -> Result<()> {
             platform,
             multi,
             exclude,
+            sign,
+            keystore,
+            alias,
+            steam_app_id,
         } => cmd_export(
-            out, binary, assets, release, build, platform, multi, exclude,
+            out,
+            binary,
+            assets,
+            release,
+            build,
+            platform,
+            multi,
+            exclude,
+            sign,
+            keystore,
+            alias,
+            steam_app_id,
         ),
         Commands::Check { path, release } => cmd_check(path, release),
         Commands::Test {
@@ -928,8 +1100,9 @@ fn dispatch(cli: Cli) -> Result<()> {
                     name,
                     template,
                     out,
+                    lang,
                 },
-        } => cmd_template_install(name, template, out),
+        } => cmd_template_install(name, template, out, &lang),
         Commands::Play {
             path,
             max_steps,
@@ -985,6 +1158,15 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Narrative {
             command: NarrativeCommands::Graph { path },
         } => cmd_narrative_graph(path),
+        Commands::Narrative {
+            command: NarrativeCommands::Branches { path, dot },
+        } => cmd_narrative_branches(path, dot),
+        Commands::Narrative {
+            command: NarrativeCommands::CheckAssets { path },
+        } => cmd_narrative_check_assets(path),
+        Commands::Narrative {
+            command: NarrativeCommands::Preview { path, lines, scene },
+        } => cmd_narrative_preview(path, lines, scene),
         Commands::Level {
             command: LevelCommands::Mutate { path, entity, x, y },
         } => cmd_level_mutate(path, entity, x, y),
@@ -1014,6 +1196,35 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Style {
             command: StyleCommands::Dump { path, class, state },
         } => cmd_style_dump(path, class, state),
+        Commands::Style {
+            command: StyleCommands::Run { path, name, args },
+        } => cmd_style_run(path, name, args),
+        Commands::Style {
+            command: StyleCommands::Eval { path, expr },
+        } => cmd_style_eval(path, expr),
+        Commands::Style {
+            command:
+                StyleCommands::Snapshot {
+                    path,
+                    class,
+                    state,
+                    expect,
+                    write,
+                },
+        } => cmd_style_snapshot(path, class, state, expect, write),
+        Commands::Style {
+            command: StyleCommands::Fmt { path, minify },
+        } => cmd_style_fmt(path, minify),
+        Commands::Style {
+            command:
+                StyleCommands::Explain {
+                    path,
+                    selector,
+                    prop,
+                    ancestors,
+                    reduced_motion,
+                },
+        } => cmd_style_explain(path, selector, prop, ancestors, reduced_motion),
         Commands::Image {
             command: ImageCommands::Info { path },
         } => cmd_image_info(path),

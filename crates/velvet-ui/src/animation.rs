@@ -164,10 +164,26 @@ pub struct TweenSample {
     pub scale: Option<f32>,
 }
 
+/// One crossfade from a frozen sample into a live tween.
+#[derive(Debug, Clone)]
+struct FadingTween {
+    /// Tween name.
+    name: String,
+    /// Frozen source sample.
+    from: TweenSample,
+    /// Incoming tween.
+    tween: UiTween,
+    /// Fade duration seconds.
+    fade: f32,
+    /// Elapsed fade time.
+    elapsed: f32,
+}
+
 /// Tracks multiple concurrent UI tweens.
 #[derive(Debug, Default, Clone)]
 pub struct UiAnimator {
     tweens: Vec<(String, UiTween)>,
+    fading: Vec<FadingTween>,
 }
 
 impl UiAnimator {
@@ -179,11 +195,32 @@ impl UiAnimator {
     /// Start or replace a named tween.
     pub fn play(&mut self, name: impl Into<String>, tween: UiTween) {
         let name = name.into();
+        self.fading.retain(|f| f.name != name);
         if let Some((_, t)) = self.tweens.iter_mut().find(|(n, _)| *n == name) {
             *t = tween;
         } else {
             self.tweens.push((name, tween));
         }
+    }
+
+    /// Crossfade into a named tween from its current sample over
+    /// `fade_secs` (missing source fields cut in directly).
+    pub fn play_fade(&mut self, name: impl Into<String>, tween: UiTween, fade_secs: f32) {
+        let name = name.into();
+        let from = self.sample(&name).unwrap_or_default();
+        self.tweens.retain(|(n, _)| *n != name);
+        self.fading.retain(|f| f.name != name);
+        if fade_secs <= 0.0 {
+            self.tweens.push((name, tween));
+            return;
+        }
+        self.fading.push(FadingTween {
+            name,
+            from,
+            tween,
+            fade: fade_secs.max(1e-4),
+            elapsed: 0.0,
+        });
     }
 
     /// Tick all; remove finished. Returns samples keyed by name.
@@ -193,25 +230,68 @@ impl UiAnimator {
             out.push((name.clone(), tween.tick(dt)));
         }
         self.tweens.retain(|(_, t)| !t.is_finished());
+        let mut done = Vec::new();
+        for (i, fade) in self.fading.iter_mut().enumerate() {
+            fade.elapsed += dt.max(0.0);
+            let sample = fade.tween.tick(dt);
+            let k = (fade.elapsed / fade.fade).clamp(0.0, 1.0);
+            out.push((
+                fade.name.clone(),
+                TweenSample::blend(&fade.from, &sample, k),
+            ));
+            if fade.elapsed >= fade.fade {
+                done.push(i);
+            }
+        }
+        for i in done.into_iter().rev() {
+            let fade = self.fading.remove(i);
+            self.tweens.push((fade.name, fade.tween));
+        }
         out
     }
 
-    /// Sample named tween.
+    /// Sample named tween (fading entries report the blend).
     pub fn sample(&self, name: &str) -> Option<TweenSample> {
+        if let Some(fade) = self.fading.iter().find(|f| f.name == name) {
+            let k = (fade.elapsed / fade.fade).clamp(0.0, 1.0);
+            return Some(TweenSample::blend(&fade.from, &fade.tween.sample(), k));
+        }
         self.tweens
             .iter()
             .find(|(n, _)| n == name)
             .map(|(_, t)| t.sample())
     }
 
-    /// Active count.
+    /// Active count (tweens + fades).
     pub fn len(&self) -> usize {
-        self.tweens.len()
+        self.tweens.len() + self.fading.len()
     }
 
     /// Empty.
     pub fn is_empty(&self) -> bool {
-        self.tweens.is_empty()
+        self.tweens.is_empty() && self.fading.is_empty()
+    }
+}
+
+impl TweenSample {
+    /// Blend two samples (`k` = 0 → `a`). Fields missing on either side
+    /// cut in directly instead of interpolating from nothing.
+    pub fn blend(a: &TweenSample, b: &TweenSample, k: f32) -> TweenSample {
+        let k = k.clamp(0.0, 1.0);
+        let num = |x: Option<f32>, y: Option<f32>| match (x, y) {
+            (Some(x), Some(y)) => Some(x + (y - x) * k),
+            (None, y) => y,
+            (x, None) => x,
+        };
+        TweenSample {
+            opacity: num(a.opacity, b.opacity),
+            offset: match (a.offset, b.offset) {
+                (Some(x), Some(y)) => Some(x.lerp(y, k)),
+                (None, y) => y,
+                (x, None) => x,
+            },
+            scale: num(a.scale, b.scale),
+        }
     }
 }
 
@@ -235,5 +315,31 @@ mod tests {
         a.play("fade", UiTween::opacity(1.0, 0.0, 0.2));
         a.tick(0.25);
         assert!(a.is_empty());
+    }
+
+    #[test]
+    fn play_fade_blends_from_current() {
+        let mut a = UiAnimator::new();
+        a.play("x", UiTween::opacity(0.0, 0.0, 10.0));
+        a.tick(0.1);
+        // Incoming finishes fast (0.1s) while the fade lasts 1s:
+        // midpoint blends frozen 0.0 with finished 1.0 at k=0.5.
+        a.play_fade("x", UiTween::opacity(0.0, 1.0, 0.1), 1.0);
+        a.tick(0.5);
+        let s = a.sample("x").unwrap();
+        assert!((s.opacity.unwrap() - 0.5).abs() < 1e-4, "{s:?}");
+        // After the fade the live tween owns the name and finishes alone.
+        a.tick(1.0);
+        let s = a.sample("x").unwrap();
+        assert!((s.opacity.unwrap() - 1.0).abs() < 1e-4, "{s:?}");
+    }
+
+    #[test]
+    fn play_fade_without_source_cuts_in() {
+        let mut a = UiAnimator::new();
+        a.play_fade("x", UiTween::opacity(0.0, 1.0, 1.0), 1.0);
+        // No source fields: blend is the incoming sample immediately.
+        let s = a.sample("x").unwrap();
+        assert!((s.opacity.unwrap() - 0.0).abs() < 1e-4);
     }
 }

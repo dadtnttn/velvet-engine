@@ -1,9 +1,67 @@
 //! Recursive descent parser.
 
+/// Fold a trailing bare `repeat [n]` (empty steps) into a loop over the
+/// preceding steps of its block. Bare repeats elsewhere are an error.
+fn fold_trailing_repeat(steps: Vec<AtlStep>) -> Result<Vec<AtlStep>, String> {
+    let mut out = steps;
+    for (i, step) in out.iter().enumerate() {
+        if matches!(step, AtlStep::Repeat { steps, .. } if steps.is_empty()) {
+            if i + 1 != out.len() {
+                return Err("repeat must end its block".into());
+            }
+            let body: Vec<AtlStep> = out.drain(..i).collect();
+            if body.is_empty() {
+                return Err("repeat needs steps to loop".into());
+            }
+            let (count, loc) = match out.pop() {
+                Some(AtlStep::Repeat { count, loc, .. }) => (count, loc),
+                _ => unreachable!(),
+            };
+            out.push(AtlStep::Repeat {
+                count,
+                steps: body,
+                loc,
+            });
+            break;
+        }
+    }
+    Ok(out)
+}
+
+/// Warper names accepted after an ATL duration.
+fn is_atl_warper(name: &str) -> bool {
+    matches!(
+        name,
+        "linear"
+            | "ease"
+            | "ease_in"
+            | "ease_out"
+            | "ease_in_out"
+            | "quad_in"
+            | "quad_out"
+            | "quad_in_out"
+            | "cubic_in"
+            | "cubic_out"
+            | "cubic_in_out"
+            | "sine_in"
+            | "sine_out"
+            | "sine_in_out"
+            | "back_in"
+            | "back_out"
+            | "back_in_out"
+            | "elastic_in"
+            | "elastic_out"
+            | "elastic_in_out"
+            | "bounce_in"
+            | "bounce_out"
+            | "bounce_in_out"
+    )
+}
+
 use thiserror::Error;
 use velvet_script_ast::{
-    BinOp, ChoiceArm, Diagnostic, Expr, Item, Module, Param, ScreenButton, ScreenProperty,
-    SourceLoc, StateBinding, Stmt, UnaryOp,
+    AtlStep, AtlValue, BinOp, ChoiceArm, Diagnostic, Expr, Item, Module, Param, ScreenActionKind,
+    ScreenButton, ScreenNode, ScreenParam, ScreenProperty, SourceLoc, StateBinding, Stmt, UnaryOp,
 };
 use velvet_script_lexer::{lex, LexedToken, LexerError, Span, Token};
 
@@ -197,6 +255,8 @@ impl Parser {
                 | "transition"
                 | "sound"
                 | "pause"
+                | "unlock"
+                | "movie"
                 | "break"
                 | "continue"
         )
@@ -217,6 +277,7 @@ impl Parser {
                         | "state"
                         | "scene"
                         | "screen"
+                        | "transform"
                 ) {
                     return;
                 }
@@ -282,6 +343,9 @@ impl Parser {
         }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "screen")) {
             return self.parse_screen();
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "transform")) {
+            return self.parse_transform();
         }
         Ok(Item::Stmt(self.parse_stmt()?))
     }
@@ -415,6 +479,32 @@ impl Parser {
         let start = self.peek_loc();
         self.advance(); // screen
         let (name, _) = self.expect_ident()?;
+        // Optional params: `screen inventory(items, gold = 0)`.
+        let mut params = Vec::new();
+        if self.check(|t| matches!(t, Token::LParen)) {
+            self.advance();
+            loop {
+                if self.check(|t| matches!(t, Token::RParen)) {
+                    self.advance();
+                    break;
+                }
+                let (pname, ploc) = self.expect_ident()?;
+                let mut default = None;
+                if self.match_token(|t| matches!(t, Token::Assign)) {
+                    default = Some(self.parse_expression()?);
+                }
+                params.push(ScreenParam {
+                    name: pname,
+                    default,
+                    loc: ploc,
+                });
+                if self.check(|t| matches!(t, Token::RParen)) {
+                    self.advance();
+                    break;
+                }
+                self.expect(|t| matches!(t, Token::Comma), "expected ',' between params")?;
+            }
+        }
         self.expect(
             |t| matches!(t, Token::LBrace),
             "expected '{' after screen name",
@@ -422,9 +512,12 @@ impl Parser {
 
         let mut properties = Vec::new();
         let mut buttons = Vec::new();
+        let mut children = Vec::new();
         while !self.is_at_end() && !self.check(|t| matches!(t, Token::RBrace)) {
             if self.check(|t| matches!(t, Token::Ident(s) if s == "button")) {
                 buttons.push(self.parse_screen_button()?);
+            } else if let Some(node) = self.try_parse_screen_child()? {
+                children.push(node);
             } else {
                 properties.push(self.parse_screen_property()?);
             }
@@ -435,8 +528,320 @@ impl Parser {
             name,
             properties,
             buttons,
+            params,
+            children,
             loc: start,
         })
+    }
+
+    /// Try `text|textbutton|use|<widget>`, or `button`. Returns None when the
+    /// next line is a `name: value` property (or anything else).
+    fn try_parse_screen_child(&mut self) -> Result<Option<ScreenNode>, String> {
+        let Some(Token::Ident(kind)) = self.peek_token().cloned() else {
+            return Ok(None);
+        };
+        // `name: value` is a property, not a widget.
+        let is_prop = matches!(
+            self.tokens.get(self.pos + 1).map(|t| &t.token),
+            Some(Token::Colon)
+        );
+        if is_prop {
+            return Ok(None);
+        }
+        const WIDGETS: &[&str] = &[
+            "text",
+            "textbutton",
+            "image",
+            "bar",
+            "vbox",
+            "hbox",
+            "fixed",
+            "use",
+            "timer",
+            "key",
+            "input",
+        ];
+        if kind == "button" || !WIDGETS.contains(&kind.as_str()) {
+            return Ok(None);
+        }
+        let start = self.peek_loc();
+        self.advance();
+        match kind.as_str() {
+            "text" => {
+                let text = self.parse_expression()?;
+                Ok(Some(ScreenNode::Text { text, loc: start }))
+            }
+            "textbutton" => {
+                let label = self.parse_expression()?;
+                self.expect(
+                    |t| matches!(t, Token::Ident(s) if s == "action"),
+                    "expected 'action' after textbutton label",
+                )?;
+                let action = self.parse_expression()?;
+                Ok(Some(ScreenNode::TextButton {
+                    label,
+                    action,
+                    loc: start,
+                }))
+            }
+            "use" => {
+                let (screen, _) = self.expect_ident()?;
+                let args = self.parse_paren_args()?;
+                Ok(Some(ScreenNode::Use {
+                    screen,
+                    args,
+                    loc: start,
+                }))
+            }
+            _ => {
+                // Generic widget block: `{ prop: value, … + nested children }`.
+                let (mut properties, mut children) = (Vec::new(), Vec::new());
+                if self.check(|t| matches!(t, Token::LBrace)) {
+                    self.advance();
+                    while !self.is_at_end() && !self.check(|t| matches!(t, Token::RBrace)) {
+                        if let Some(node) = self.try_parse_screen_child()? {
+                            children.push(node);
+                        } else {
+                            properties.push(self.parse_screen_property()?);
+                        }
+                        let _ = self.match_token(|t| matches!(t, Token::Comma | Token::Semi));
+                    }
+                    self.expect(|t| matches!(t, Token::RBrace), "expected '}' after widget")?;
+                }
+                Ok(Some(ScreenNode::Widget {
+                    kind,
+                    properties,
+                    children,
+                    loc: start,
+                }))
+            }
+        }
+    }
+
+    /// Optional `(expr, …)` argument list (empty vec when absent).
+    fn parse_paren_args(&mut self) -> Result<Vec<Expr>, String> {
+        if !self.check(|t| matches!(t, Token::LParen)) {
+            return Ok(Vec::new());
+        }
+        self.advance();
+        let mut args = Vec::new();
+        loop {
+            if self.check(|t| matches!(t, Token::RParen)) {
+                self.advance();
+                break;
+            }
+            args.push(self.parse_expression()?);
+            if self.check(|t| matches!(t, Token::RParen)) {
+                self.advance();
+                break;
+            }
+            self.expect(|t| matches!(t, Token::Comma), "expected ',' between args")?;
+        }
+        Ok(args)
+    }
+
+    fn parse_transform(&mut self) -> Result<Item, String> {
+        let start = self.peek_loc();
+        self.advance(); // transform
+        let (name, _) = self.expect_ident()?;
+        self.expect(
+            |t| matches!(t, Token::LBrace),
+            "expected '{' after transform name",
+        )?;
+        let steps = self.parse_atl_steps()?;
+        self.expect(
+            |t| matches!(t, Token::RBrace),
+            "expected '}' after transform",
+        )?;
+        let steps = fold_trailing_repeat(steps)?;
+        Ok(Item::Transform {
+            name,
+            steps,
+            loc: start,
+        })
+    }
+
+    fn parse_atl_steps(&mut self) -> Result<Vec<AtlStep>, String> {
+        let mut steps = Vec::new();
+        while !self.is_at_end() && !self.check(|t| matches!(t, Token::RBrace)) {
+            steps.push(self.parse_atl_step()?);
+            let _ = self.match_token(|t| matches!(t, Token::Comma | Token::Semi));
+        }
+        Ok(steps)
+    }
+
+    fn parse_atl_step(&mut self) -> Result<AtlStep, String> {
+        let start = self.peek_loc();
+        // Block forms first.
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "parallel")) {
+            self.advance();
+            self.expect(
+                |t| matches!(t, Token::LBrace),
+                "expected '{' after parallel",
+            )?;
+            let steps = self.parse_atl_steps()?;
+            self.expect(
+                |t| matches!(t, Token::RBrace),
+                "expected '}' after parallel",
+            )?;
+            return Ok(AtlStep::Parallel {
+                steps: fold_trailing_repeat(steps)?,
+                loc: start,
+            });
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "choice")) {
+            self.advance();
+            self.expect(|t| matches!(t, Token::LBrace), "expected '{' after choice")?;
+            let steps = self.parse_atl_steps()?;
+            self.expect(|t| matches!(t, Token::RBrace), "expected '}' after choice")?;
+            return Ok(AtlStep::Choice {
+                steps: fold_trailing_repeat(steps)?,
+                loc: start,
+            });
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "on")) {
+            self.advance();
+            let mut events = Vec::new();
+            loop {
+                let (ev, _) = self.expect_ident()?;
+                if ev != "show" && ev != "hide" && ev != "replace" {
+                    return Err(format!(
+                        "expected show, hide or replace after `on`, got `{ev}`"
+                    ));
+                }
+                events.push(ev);
+                if self.check(|t| matches!(t, Token::Comma)) {
+                    self.advance();
+                    continue;
+                }
+                break;
+            }
+            self.expect(|t| matches!(t, Token::LBrace), "expected '{' after on …")?;
+            let steps = self.parse_atl_steps()?;
+            self.expect(|t| matches!(t, Token::RBrace), "expected '}' after on …")?;
+            return Ok(AtlStep::On {
+                events,
+                steps: fold_trailing_repeat(steps)?,
+                loc: start,
+            });
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "repeat")) {
+            self.advance();
+            let mut count = None;
+            if let Some(Token::Int(n)) = self.peek_token().cloned() {
+                self.advance();
+                count = Some(n.max(0) as u32);
+            }
+            // Bare `repeat [n]` loops the enclosing block (folded by the
+            // caller); `repeat [n] { … }` loops explicit steps.
+            if self.check(|t| matches!(t, Token::LBrace)) {
+                self.advance();
+                let steps = self.parse_atl_steps()?;
+                self.expect(|t| matches!(t, Token::RBrace), "expected '}' after repeat")?;
+                return Ok(AtlStep::Repeat {
+                    count,
+                    steps,
+                    loc: start,
+                });
+            }
+            return Ok(AtlStep::Repeat {
+                count,
+                steps: Vec::new(),
+                loc: start,
+            });
+        }
+        // Channel step: `prop value [prop value …] [duration] [warper]`.
+        // A new `prop` starts only when an ident (not a warper) is followed
+        // by a value token; otherwise the step ends here.
+        let mut props = Vec::new();
+        loop {
+            let (prop, _) = self.expect_ident()?;
+            props.push((prop, self.parse_atl_value()?));
+            if !self.atl_channel_follows() {
+                break;
+            }
+        }
+        let (duration, warper) = self.parse_atl_timing()?;
+        Ok(AtlStep::Set {
+            props,
+            duration,
+            warper,
+            loc: start,
+        })
+    }
+
+    /// One ATL channel value: number (signed), string, or keyword ident.
+    fn parse_atl_value(&mut self) -> Result<AtlValue, String> {
+        match self.peek_token().cloned() {
+            Some(Token::String(s)) => {
+                self.advance();
+                Ok(AtlValue::Keyword(s))
+            }
+            Some(Token::Ident(s)) => {
+                self.advance();
+                Ok(AtlValue::Keyword(s))
+            }
+            Some(Token::Int(n)) => {
+                self.advance();
+                Ok(AtlValue::Number(n as f64))
+            }
+            Some(Token::Float(f)) => {
+                self.advance();
+                Ok(AtlValue::Number(f))
+            }
+            Some(Token::Minus) => {
+                self.advance();
+                match self.peek_token().cloned() {
+                    Some(Token::Int(n)) => {
+                        self.advance();
+                        Ok(AtlValue::Number(-(n as f64)))
+                    }
+                    Some(Token::Float(f)) => {
+                        self.advance();
+                        Ok(AtlValue::Number(-f))
+                    }
+                    _ => Err("expected number after '-'".into()),
+                }
+            }
+            other => Err(format!("expected channel value, got {other:?}")),
+        }
+    }
+
+    /// True when another `prop value` pair follows on this step.
+    fn atl_channel_follows(&self) -> bool {
+        if !matches!(self.peek_token(), Some(Token::Ident(w)) if !is_atl_warper(w)) {
+            return false;
+        }
+        matches!(
+            self.tokens.get(self.pos + 1).map(|t| &t.token),
+            Some(
+                Token::String(_) | Token::Ident(_) | Token::Int(_) | Token::Float(_) | Token::Minus
+            )
+        )
+    }
+
+    /// Optional `[duration] [warper]` tail of a channel step.
+    fn parse_atl_timing(&mut self) -> Result<(f64, String), String> {
+        let mut duration = 0.0;
+        match self.peek_token().cloned() {
+            Some(Token::Int(n)) => {
+                self.advance();
+                duration = n as f64;
+            }
+            Some(Token::Float(f)) => {
+                self.advance();
+                duration = f;
+            }
+            _ => {}
+        }
+        let mut warper = "linear".to_string();
+        if let Some(Token::Ident(w)) = self.peek_token().cloned() {
+            if is_atl_warper(&w) {
+                self.advance();
+                warper = w;
+            }
+        }
+        Ok((duration, warper))
     }
 
     fn parse_screen_button(&mut self) -> Result<ScreenButton, String> {
@@ -577,6 +982,87 @@ impl Parser {
         }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "show")) {
             return self.parse_show();
+        }
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "screen"))
+            && matches!(
+                self.tokens.get(self.pos + 1).map(|t| &t.token),
+                Some(Token::Ident(_))
+            )
+        {
+            let loc = self.peek_loc();
+            self.advance();
+            let (word, _) = self.expect_ident()?;
+            // `screen show|hide|call <id> [(args)] [with …] [into var]`.
+            if let Some(action) = ScreenActionKind::parse(&word) {
+                let (id, _) = self.expect_ident()?;
+                let args = self.parse_paren_args()?;
+                let with = self.parse_with_words()?;
+                let result = self.parse_into_var()?;
+                return Ok(Stmt::ScreenAction {
+                    action,
+                    id,
+                    args,
+                    with,
+                    result,
+                    loc,
+                });
+            }
+            return Ok(Stmt::Screen { id: word, loc });
+        }
+        // `unlock <catalog> <id>` — guarded so that `unlock = 5` or
+        // `unlock(x)` still parse as expressions; unknown catalogs get a
+        // clear diagnostic at lowering (`file:line` + valid options).
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "unlock"))
+            && matches!(
+                self.tokens.get(self.pos + 1).map(|t| &t.token),
+                Some(Token::Ident(_))
+            )
+            && matches!(
+                self.tokens.get(self.pos + 2).map(|t| &t.token),
+                Some(Token::Ident(_)) | Some(Token::String(_))
+            )
+        {
+            let loc = self.peek_loc();
+            self.advance();
+            let (kind, _) = self.expect_ident()?;
+            let id = if self.check(|t| matches!(t, Token::String(_))) {
+                let t = self.advance().unwrap().clone();
+                match t.token {
+                    Token::String(s) => s,
+                    _ => unreachable!(),
+                }
+            } else {
+                let (name, _) = self.expect_ident()?;
+                name
+            };
+            return Ok(Stmt::Unlock { kind, id, loc });
+        }
+        // `movie "dir" [loop]` — guarded so `movie = 5` / `movie(x)`
+        // still parse as expressions.
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "movie"))
+            && matches!(
+                self.tokens.get(self.pos + 1).map(|t| &t.token),
+                Some(Token::String(_))
+            )
+        {
+            let loc = self.peek_loc();
+            self.advance();
+            let t = self.advance().unwrap().clone();
+            let path = match t.token {
+                Token::String(s) => s,
+                _ => unreachable!(),
+            };
+            let loop_clip = if self.check(|t| matches!(t, Token::Ident(s) if s == "loop")) {
+                self.advance();
+                true
+            } else {
+                false
+            };
+            return Ok(Stmt::Movie {
+                path,
+                loop_clip,
+                loc,
+            });
         }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "hide")) {
             return self.parse_hide();
@@ -758,6 +1244,41 @@ impl Parser {
         Ok(Stmt::Return { value, loc })
     }
 
+    /// Optional `with <name> [num] [num]` suffix (mini-ATL or transform).
+    fn parse_with_words(&mut self) -> Result<Option<String>, String> {
+        if !self.check(|t| matches!(t, Token::Ident(s) if s == "with")) {
+            return Ok(None);
+        }
+        self.advance();
+        let (kind, _) = self.expect_ident()?;
+        let mut parts = vec![kind];
+        for _ in 0..2 {
+            let num = match self.peek_token() {
+                Some(Token::Int(n)) => Some(n.to_string()),
+                Some(Token::Float(f)) => Some(f.to_string()),
+                _ => None,
+            };
+            match num {
+                Some(n) => {
+                    self.advance();
+                    parts.push(n);
+                }
+                None => break,
+            }
+        }
+        Ok(Some(parts.join(" ")))
+    }
+
+    /// Optional `into <var>` suffix for `screen call` result binding.
+    fn parse_into_var(&mut self) -> Result<Option<String>, String> {
+        if !self.check(|t| matches!(t, Token::Ident(s) if s == "into")) {
+            return Ok(None);
+        }
+        self.advance();
+        let (name, _) = self.expect_ident()?;
+        Ok(Some(name))
+    }
+
     fn parse_hide(&mut self) -> Result<Stmt, String> {
         let loc = self.peek_loc();
         self.advance();
@@ -776,7 +1297,29 @@ impl Parser {
             }
             name
         };
-        Ok(Stmt::Hide { target, loc })
+        // `hide screen <id>` sugar (a lone `hide screen` stays a sprite show).
+        if target == "screen"
+            && matches!(
+                self.tokens.get(self.pos).map(|t| &t.token),
+                Some(Token::Ident(_))
+            )
+        {
+            let (id, _) = self.expect_ident()?;
+            let args = self.parse_paren_args()?;
+            let with = self.parse_with_words()?;
+            let result = self.parse_into_var()?;
+            return Ok(Stmt::ScreenAction {
+                action: ScreenActionKind::Hide,
+                id,
+                args,
+                with,
+                result,
+                loc,
+            });
+        }
+        // Optional motion suffix: `hide luna with fade`.
+        let with = self.parse_with_words()?;
+        Ok(Stmt::Hide { target, with, loc })
     }
 
     fn parse_choice(&mut self) -> Result<Stmt, String> {
@@ -827,13 +1370,41 @@ impl Parser {
             }
             name
         };
+        // `show screen <id> [(args)]` sugar (a lone `show screen at …`
+        // keeps meaning a sprite literally named `screen`).
+        if target == "screen"
+            && matches!(
+                self.tokens.get(self.pos).map(|t| &t.token),
+                Some(Token::Ident(s)) if s != "at" && s != "with"
+            )
+        {
+            let (id, _) = self.expect_ident()?;
+            let args = self.parse_paren_args()?;
+            let with = self.parse_with_words()?;
+            let result = self.parse_into_var()?;
+            return Ok(Stmt::ScreenAction {
+                action: ScreenActionKind::Show,
+                id,
+                args,
+                with,
+                result,
+                loc,
+            });
+        }
         let mut at = None;
         if self.check(|t| matches!(t, Token::Ident(s) if s == "at")) {
             self.advance();
             let (place, _) = self.expect_ident()?;
             at = Some(place);
         }
-        Ok(Stmt::Show { target, at, loc })
+        // Optional mini-ATL suffix: `with <move|zoom|shake|fade> [secs] [amount]`.
+        let with = self.parse_with_words()?;
+        Ok(Stmt::Show {
+            target,
+            at,
+            with,
+            loc,
+        })
     }
 
     fn parse_background(&mut self) -> Result<Stmt, String> {
@@ -1503,6 +2074,109 @@ scene side_scene {
     }
 
     #[test]
+    fn parse_transform_on_handlers() {
+        let r = parse_ok(
+            "transform pop {\n  on show {\n    scale 1.2 0.2\n  }\n  on hide, replace {\n    opacity 0.0 0.3\n  }\n  y -4 1.0\n}",
+        );
+        match &r.module.items[0] {
+            Item::Transform { name, steps, .. } => {
+                assert_eq!(name, "pop");
+                assert_eq!(steps.len(), 3);
+                match &steps[0] {
+                    AtlStep::On { events, steps, .. } => {
+                        assert_eq!(events, &vec!["show".to_string()]);
+                        assert_eq!(steps.len(), 1);
+                    }
+                    other => panic!("{other:?}"),
+                }
+                match &steps[1] {
+                    AtlStep::On { events, .. } => {
+                        assert_eq!(events, &vec!["hide".to_string(), "replace".to_string()])
+                    }
+                    other => panic!("{other:?}"),
+                }
+                assert!(matches!(steps[2], AtlStep::Set { .. }));
+            }
+            other => panic!("{other:?}"),
+        }
+        // bad event rejected
+        let bad = parse_file("transform t {\n on explode {\n x 1\n }\n}\n", None).unwrap();
+        assert!(bad.module.has_errors());
+    }
+
+    #[test]
+    fn parse_screen_action_with_and_into() {
+        let r = parse_ok("scene s { screen show help (\"x\") with fade }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::ScreenAction {
+                    action,
+                    id,
+                    args,
+                    with,
+                    result,
+                    ..
+                } => {
+                    assert_eq!(*action, ScreenActionKind::Show);
+                    assert_eq!(id, "help");
+                    assert_eq!(args.len(), 1);
+                    assert_eq!(with.as_deref(), Some("fade"));
+                    assert!(result.is_none());
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        let r = parse_ok("scene s { screen call help into pick }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::ScreenAction { result, .. } => {
+                    assert_eq!(result.as_deref(), Some("pick"))
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        // sugar forms take `with` too
+        let r = parse_ok("scene s { show screen help with shake }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::ScreenAction { with, .. } => {
+                    assert_eq!(with.as_deref(), Some("shake"))
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+    }
+
+    #[test]
+    fn parse_hide_with_motion() {
+        let r = parse_ok("scene s { hide luna with fade hide kai with shake 0.4 10 hide ren }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => {
+                assert_eq!(body.len(), 3);
+                match &body[0] {
+                    Stmt::Hide { target, with, .. } => {
+                        assert_eq!(target, "luna");
+                        assert_eq!(with.as_deref(), Some("fade"));
+                    }
+                    other => panic!("{other:?}"),
+                }
+                match &body[1] {
+                    Stmt::Hide { with, .. } => assert_eq!(with.as_deref(), Some("shake 0.4 10")),
+                    other => panic!("{other:?}"),
+                }
+                match &body[2] {
+                    Stmt::Hide { with: None, .. } => {}
+                    other => panic!("{other:?}"),
+                }
+            }
+            _ => panic!("expected scene"),
+        }
+    }
+
+    #[test]
     fn parse_else_if_chain() {
         let src = r#"
 function grade(n) {
@@ -1862,6 +2536,204 @@ state {
                     assert_eq!(target, "aria.neutral");
                     assert_eq!(at.as_deref(), Some("center"));
                 }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+    }
+
+    #[test]
+    fn parse_show_with_mini_atl() {
+        let r = parse_ok("scene s { show luna.happy at left with shake 0.4 10 }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::Show {
+                    target, at, with, ..
+                } => {
+                    assert_eq!(target, "luna.happy");
+                    assert_eq!(at.as_deref(), Some("left"));
+                    assert_eq!(with.as_deref(), Some("shake 0.4 10"));
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        // bare `with move` without numbers
+        let r = parse_ok("scene s { show luna with move }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::Show { with, at, .. } => {
+                    assert_eq!(with.as_deref(), Some("move"));
+                    assert!(at.is_none());
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+    }
+
+    #[test]
+    fn parse_screen_actions_and_sugar() {
+        let r = parse_ok("scene s { screen show help (1, \"x\") }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::ScreenAction {
+                    action, id, args, ..
+                } => {
+                    assert_eq!(*action, ScreenActionKind::Show);
+                    assert_eq!(id, "help");
+                    assert_eq!(args.len(), 2);
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        // `show screen` / `hide screen` sugar
+        let r = parse_ok("scene s { show screen help }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::ScreenAction { action, id, .. } => {
+                    assert_eq!(*action, ScreenActionKind::Show);
+                    assert_eq!(id, "help");
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        let r = parse_ok("scene s { hide screen help }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::ScreenAction { action, .. } => assert_eq!(*action, ScreenActionKind::Hide),
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        // a sprite literally named `screen` still works with `at`
+        let r = parse_ok("scene s { show screen at left }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::Show { target, at, .. } => {
+                    assert_eq!(target, "screen");
+                    assert_eq!(at.as_deref(), Some("left"));
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+    }
+
+    #[test]
+    fn parse_game_screen_and_transform() {
+        let r = parse_ok(
+            "screen inv(items, gold = 0) {\n  title: \"Bag\"\n  text \"Loot:\"\n  textbutton done action Return(\"ok\")\n  vbox {\n    text items\n    use row (items)\n  }\n  timer { delay: 3.0 action: Return(\"timeout\") }\n}\ntransform bob {\n  y -8 1.2 ease_in_out, y 0 1.2 ease_in_out, repeat\n}",
+        );
+        match &r.module.items[0] {
+            Item::Screen {
+                name,
+                params,
+                children,
+                properties,
+                ..
+            } => {
+                assert_eq!(name, "inv");
+                assert_eq!(params.len(), 2);
+                assert!(params[1].default.is_some());
+                assert_eq!(properties.len(), 1);
+                assert_eq!(children.len(), 4);
+                assert!(matches!(children[0], ScreenNode::Text { .. }));
+                assert!(matches!(children[1], ScreenNode::TextButton { .. }));
+                match &children[2] {
+                    ScreenNode::Widget { kind, children, .. } => {
+                        assert_eq!(kind, "vbox");
+                        assert_eq!(children.len(), 2);
+                    }
+                    other => panic!("{other:?}"),
+                }
+            }
+            other => panic!("{other:?}"),
+        }
+        match &r.module.items[1] {
+            Item::Transform { name, steps, .. } => {
+                assert_eq!(name, "bob");
+                // trailing bare `repeat` folds the two sets into one loop
+                assert_eq!(steps.len(), 1);
+                match &steps[0] {
+                    AtlStep::Repeat { count, steps, .. } => {
+                        assert_eq!(*count, None);
+                        assert_eq!(steps.len(), 2);
+                        assert!(matches!(steps[0], AtlStep::Set { .. }));
+                    }
+                    other => panic!("{other:?}"),
+                }
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_movie_statement() {
+        let r = parse_ok("scene s { movie \"assets/video/opening\" loop }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::Movie {
+                    path, loop_clip, ..
+                } => {
+                    assert_eq!(path, "assets/video/opening");
+                    assert!(*loop_clip);
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        let r = parse_ok("scene s { movie \"clip\" }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::Movie { loop_clip, .. } => assert!(!loop_clip),
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        // `movie = 5` still parses as an assignment expression
+        let r = parse_ok("function f() { movie = 5 return movie }");
+        assert!(matches!(&r.module.items[0], Item::Function { .. }));
+    }
+
+    #[test]
+    fn parse_unlock_catalog_statement() {
+        let r = parse_ok("scene s { unlock gallery cg_rooftop }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::Unlock { kind, id, .. } => {
+                    assert_eq!(kind, "gallery");
+                    assert_eq!(id, "cg_rooftop");
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        // string ids also work
+        let r = parse_ok("scene s { unlock music \"night theme\" }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::Unlock { kind, id, .. } => {
+                    assert_eq!(kind, "music");
+                    assert_eq!(id, "night theme");
+                }
+                other => panic!("{other:?}"),
+            },
+            _ => panic!("expected scene"),
+        }
+        // `unlock = 5` still parses as an assignment expression, not a statement
+        let r = parse_ok("function f() { unlock = 5 return unlock }");
+        assert!(matches!(&r.module.items[0], Item::Function { .. }));
+    }
+
+    #[test]
+    fn parse_screen_preset_statement() {
+        let r = parse_ok("scene s { screen nvl_page }");
+        match &r.module.items[0] {
+            Item::Scene { body, .. } => match &body[0] {
+                Stmt::Screen { id, .. } => assert_eq!(id, "nvl_page"),
                 other => panic!("{other:?}"),
             },
             _ => panic!("expected scene"),

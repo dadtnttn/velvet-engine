@@ -49,6 +49,9 @@ fn drain_story(player: &mut StoryPlayer) {
             StoryWait::Choice => break,
             StoryWait::Ended => break,
             StoryWait::Pause { .. } | StoryWait::Host { .. } => break,
+            StoryWait::ScreenCall { .. } => {
+                let _ = player.return_from_screen(StoryValue::Null);
+            }
         }
         steps += 1;
     }

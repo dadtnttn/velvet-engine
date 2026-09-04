@@ -98,3 +98,54 @@ Los diagnósticos apuntan a `archivo:línea:columna` del `.vstory` original
 - Usa **nombres de escena** estables, no índices de instrucción.
 - Renombrar escenas requiere migración de saves (documentar en el proyecto).
 - Variables con `set` pueden persistirse por nombre vía host / player state.
+
+## Camino de producto `.vel` (runtime `velvet-story`)
+
+El mismo `StoryProgram` alimenta el runtime de novelas visuales
+(`StoryPlayer` + `VnSession`): presets say/menu/nvl, mini-ATL,
+cinemáticas, galería, sala de música, voces, guardados con foto,
+desbloqueos y pantallas de juego. Detalle de sintaxis en
+[VN_LANGUAGE_SUBSET.md](../reports/VN_LANGUAGE_SUBSET.md); plantilla en
+`templates/visual-novel`.
+
+```bash
+velvet narrative preview scripts/main.vel --lines 10
+velvet narrative branches scripts/main.vel
+velvet narrative check-assets .
+velvet play . --lang es
+```
+
+## Pantallas de juego y transforms
+
+```vel
+screen ticket {
+  title: "Ticket"          # prop viva: titulo
+  tag: "panel"             # mostrar reemplaza el mismo tag
+  text "One evening."      # literal (traducible, typewriter, voz)
+  text score               # dinámico: lee la variable `score`
+  textbutton keep action Return("keep")
+}
+
+transform nod {
+  y -6 0.8 ease_in_out, y 0 0.8 ease_in_out, repeat
+  on show { scale 1.1 0.2 }
+}
+
+scene main {
+  show luna with nod
+  screen show ticket with fade
+  screen call ticket into pick   # modal: resultado en `pick` y `_return`
+  screen hide ticket with fade
+}
+```
+
+- `with` acepta mini-ATL (`move|zoom|shake|fade [segs]`) o un `transform`;
+  en pantallas produce fade de entrada/salida (0.30/0.35 s).
+- Acciones conocidas validadas: `Return(x)`, `Jump("escena")`,
+  `Show("pantalla")` / `Hide("pantalla")`, `Set("var", valor)`;
+  otros nombres son acciones custom del host.
+- Typewriter (`reveal_game_screen`), voces (`voice_clips_for_screen`,
+  la pantalla es la clave de `voice_cast.json`), historial y paint con
+  `font_scale` incluidos; rollback cruza llamadas modales.
+- i18n: `extract-story` genera `screen:<id>:<n>:screen`; `validate-story`
+  las comprueba igual que el diálogo.
