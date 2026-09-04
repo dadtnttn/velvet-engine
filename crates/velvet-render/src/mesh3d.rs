@@ -50,6 +50,12 @@ pub struct Mesh3D {
     pub material: Material3D,
     /// Optional index into [`GltfModel::textures`] for imported meshes.
     pub texture_index: Option<usize>,
+    /// Optional tangent-space normal map paired with the albedo texture.
+    ///
+    /// The index uses the same compact texture table as [`Self::texture_index`]
+    /// so uploaders can preserve the authored glTF normal detail without
+    /// changing the lightweight draw API.
+    pub normal_texture_index: Option<usize>,
     /// Optional skin weights for CPU skeletal sampling.
     pub skinning: Option<SkinWeights3D>,
 }
@@ -68,6 +74,7 @@ impl Mesh3D {
             indices: vec![0, 2, 1, 0, 3, 2],
             material,
             texture_index: None,
+            normal_texture_index: None,
             skinning: None,
         }
     }
@@ -112,6 +119,7 @@ impl Mesh3D {
             indices,
             material,
             texture_index: None,
+            normal_texture_index: None,
             skinning: None,
         }
     }
@@ -163,6 +171,7 @@ impl Mesh3D {
             indices,
             material,
             texture_index: None,
+            normal_texture_index: None,
             skinning: None,
         }
     }
@@ -209,6 +218,7 @@ impl Mesh3D {
             indices,
             material,
             texture_index: None,
+            normal_texture_index: None,
             skinning: None,
         }
     }
@@ -221,9 +231,10 @@ pub struct Material3D {
     pub base_color: [f32; 4],
     /// GPU texture override. `None` uses a white texture.
     pub texture: Option<TextureHandle>,
-    /// Optional local screen-space occlusion window.  The first two values
-    /// are reserved for future per-material offsets; `z` is the soft radius
-    /// in NDC and `w` is the transparency strength at its centre.
+    /// Optional local screen-space occlusion window. `x` remains the floor
+    /// receiver sentinel, `y` carries authored ambient-occlusion strength,
+    /// `z` is the soft reveal radius in NDC, and `w` is the transparency
+    /// strength at its centre.
     pub occlusion_window: [f32; 4],
 }
 
@@ -235,6 +246,17 @@ impl Material3D {
             texture: None,
             occlusion_window: [0.0; 4],
         }
+    }
+
+    /// Set the material's contact/cavity occlusion strength.
+    ///
+    /// The value is deliberately stored in the existing window payload so
+    /// adding AO does not change the public draw/uniform layout. `0` keeps a
+    /// material at the renderer's neutral analytic AO; `1` gives props the
+    /// strongest grounded contact.
+    pub fn with_ambient_occlusion(mut self, strength: f32) -> Self {
+        self.occlusion_window[1] = strength.clamp(0.0, 1.0);
+        self
     }
 }
 
@@ -492,18 +514,13 @@ impl Default for Atmosphere3D {
 /// Presets only describe lighting, fog, the clear colour, and celestial
 /// timing. They do not select meshes or materials, so a game can swap the
 /// atmosphere without rebuilding its world assets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EnvironmentPreset3D {
     /// Lush, misty daylight used by the living nature scene.
+    #[default]
     Lived,
     /// Purple/red nightfall suited to demonic rooms and battlefields.
     Demonic,
-}
-
-impl Default for EnvironmentPreset3D {
-    fn default() -> Self {
-        Self::Lived
-    }
 }
 
 impl EnvironmentPreset3D {
@@ -845,10 +862,7 @@ fn apply_twilight(frame: &mut EnvironmentFrame3D) {
         0.006 + tint[1] * 0.038,
         0.012 + tint[2] * 0.040,
     ];
-    for (channel, target) in frame.clear_color[..3]
-        .iter_mut()
-        .zip(horizon_clear.into_iter())
-    {
+    for (channel, target) in frame.clear_color[..3].iter_mut().zip(horizon_clear) {
         *channel = mix_f32(target, *channel, strength * 0.28);
     }
 }
@@ -988,7 +1002,7 @@ pub struct SkinWeights3D {
     pub joints: Vec<[u16; 4]>,
     /// Four weights per vertex.
     pub weights: Vec<[f32; 4]>,
-    /// Index into [`GltfModel::skins`].
+    /// Index into the source glTF model's skin list.
     pub skin_index: usize,
     /// Node that owns the skinned mesh, if the source document provided one.
     pub mesh_node: Option<usize>,
@@ -1472,6 +1486,10 @@ fn parse_gltf(
             let texture_index = pbr
                 .base_color_texture()
                 .map(|texture| texture.texture().source().index());
+            let normal_texture_index = primitive
+                .material()
+                .normal_texture()
+                .map(|texture| texture.texture().source().index());
             let vertices = positions
                 .into_iter()
                 .enumerate()
@@ -1497,6 +1515,7 @@ fn parse_gltf(
                     occlusion_window: [0.0; 4],
                 },
                 texture_index,
+                normal_texture_index,
                 skinning,
             });
             mesh_transforms.push(
@@ -1562,25 +1581,28 @@ fn parse_gltf(
         .iter()
         .map(|clip| clip.name.clone())
         .collect();
-    // Keep only images that are actually used as base colour textures. glTF
-    // files commonly include normal/ORM maps as separate images, while this
-    // deliberately small renderer currently consumes albedo only. Compacting
-    // here keeps mesh texture indices valid and avoids retaining/uploading
-    // several unused full-resolution maps per prop.
+    // Keep only images that are actually used by a mesh.  Albedo and normal
+    // maps share one compact table so the preview can upload each authored
+    // material as a texture pair without retaining unrelated ORM/detail maps.
     let mut image_remap = vec![None; images.len()];
     let mut used_images = Vec::new();
     for mesh in &meshes {
-        let Some(source_index) = mesh.texture_index else {
-            continue;
-        };
-        if source_index < image_remap.len() && image_remap[source_index].is_none() {
-            image_remap[source_index] = Some(used_images.len());
-            used_images.push(source_index);
+        for source_index in [mesh.texture_index, mesh.normal_texture_index]
+            .into_iter()
+            .flatten()
+        {
+            if source_index < image_remap.len() && image_remap[source_index].is_none() {
+                image_remap[source_index] = Some(used_images.len());
+                used_images.push(source_index);
+            }
         }
     }
     for mesh in &mut meshes {
         mesh.texture_index = mesh
             .texture_index
+            .and_then(|source_index| image_remap.get(source_index).copied().flatten());
+        mesh.normal_texture_index = mesh
+            .normal_texture_index
             .and_then(|source_index| image_remap.get(source_index).copied().flatten());
     }
     let mut images = images.into_iter().map(Some).collect::<Vec<_>>();
@@ -1648,6 +1670,10 @@ pub struct Wgpu3DRenderer {
     meshes: Vec<GpuMesh3D>,
     textures: Vec<GpuTexture3D>,
     white_texture: TextureHandle,
+    target_format: wgpu::TextureFormat,
+    sample_count: u32,
+    msaa_texture: wgpu::Texture,
+    msaa_view: wgpu::TextureView,
     depth_texture: wgpu::Texture,
     depth_view: wgpu::TextureView,
     depth_size: (u32, u32),
@@ -1665,6 +1691,26 @@ impl Wgpu3DRenderer {
         format: wgpu::TextureFormat,
         size: (u32, u32),
     ) -> Self {
+        Self::new_with_msaa(device, queue, format, size, 1)
+    }
+
+    /// Create a renderer with an explicit color/depth MSAA sample count.
+    ///
+    /// The public default remains single-sampled for headless callers. The
+    /// desktop preview opts into 4x when the adapter advertises it, giving
+    /// bevels, foliage cutouts, and wall silhouettes the same clean edge
+    /// treatment users expect from Three.js antialiasing.
+    pub fn new_with_msaa(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        size: (u32, u32),
+        sample_count: u32,
+    ) -> Self {
+        let sample_count = match sample_count {
+            2 | 4 | 8 | 16 => sample_count,
+            _ => 1,
+        };
         let camera_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("velvet-3d-camera-layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -1761,6 +1807,11 @@ impl Wgpu3DRenderer {
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::FilterMode::Linear,
+            // The authored castle is viewed at a steep isometric angle. A
+            // real mip chain plus anisotropic filtering keeps floor stones
+            // and wall details crisp instead of shimmering into a flat blur
+            // as the camera moves away.
+            anisotropy_clamp: 8,
             ..Default::default()
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -1776,7 +1827,9 @@ impl Wgpu3DRenderer {
         let shadow_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("velvet-3d-shadow-pipeline-layout"),
-                bind_group_layouts: &[&camera_layout, &object_layout],
+                // Reuse the material bind group so alpha-masked foliage casts
+                // the same cutout silhouette that the color pass displays.
+                bind_group_layouts: &[&camera_layout, &object_layout, &texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -1827,7 +1880,11 @@ impl Wgpu3DRenderer {
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState {
+                count: sample_count,
+                mask: !0,
+                alpha_to_coverage_enabled: sample_count > 1,
+            },
             multiview: None,
             cache: None,
         });
@@ -1929,7 +1986,8 @@ impl Wgpu3DRenderer {
             &white_texture,
             Some(&flat_normal_texture),
         );
-        let (depth_texture, depth_view) = create_depth_texture(device, size);
+        let (msaa_texture, msaa_view) = create_msaa_texture(device, format, size, sample_count);
+        let (depth_texture, depth_view) = create_depth_texture(device, size, sample_count);
         let shadow_texture = create_shadow_texture(device);
         let shadow_view = shadow_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -1972,6 +2030,10 @@ impl Wgpu3DRenderer {
             meshes: Vec::new(),
             textures: vec![white_gpu],
             white_texture: TextureHandle(0),
+            target_format: format,
+            sample_count,
+            msaa_texture,
+            msaa_view,
             depth_texture,
             depth_view,
             depth_size: (size.0.max(1), size.1.max(1)),
@@ -1981,13 +2043,17 @@ impl Wgpu3DRenderer {
         }
     }
 
-    /// Resize depth storage to match the target surface.
+    /// Resize color/depth storage to match the target surface.
     pub fn resize(&mut self, device: &wgpu::Device, size: (u32, u32)) {
         let size = (size.0.max(1), size.1.max(1));
         if self.depth_size == size {
             return;
         }
-        let (texture, view) = create_depth_texture(device, size);
+        let (msaa_texture, msaa_view) =
+            create_msaa_texture(device, self.target_format, size, self.sample_count);
+        let (texture, view) = create_depth_texture(device, size, self.sample_count);
+        self.msaa_texture = msaa_texture;
+        self.msaa_view = msaa_view;
         self.depth_texture = texture;
         self.depth_view = view;
         self.depth_size = size;
@@ -2241,6 +2307,10 @@ impl Wgpu3DRenderer {
         );
     }
 
+    // Full frame context in one call (device/queue/target/size/camera/
+    // lighting/atmosphere/celestial/lights/draws/clear); grouping would
+    // churn every call site for no runtime gain.
+    #[allow(clippy::too_many_arguments)]
     fn render_with_atmosphere_and_celestial(
         &mut self,
         device: &wgpu::Device,
@@ -2419,6 +2489,13 @@ impl Wgpu3DRenderer {
                 };
                 let offset = self.object_stride * draw_index as u64;
                 shadow_pass.set_bind_group(1, &self.object_bind_group, &[offset as u32]);
+                let texture = draw
+                    .texture
+                    .or(draw.material.texture)
+                    .unwrap_or(self.white_texture);
+                if let Some(texture) = self.textures.get(texture.0 as usize) {
+                    shadow_pass.set_bind_group(2, &texture.bind_group, &[]);
+                }
                 shadow_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 shadow_pass
                     .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -2426,11 +2503,17 @@ impl Wgpu3DRenderer {
             }
         }
         {
+            let color_view = if self.sample_count > 1 {
+                &self.msaa_view
+            } else {
+                target
+            };
+            let resolve_target = (self.sample_count > 1).then_some(target);
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("velvet-3d-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    resolve_target: None,
+                    view: color_view,
+                    resolve_target,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(clear),
                         store: wgpu::StoreOp::Store,
@@ -2472,9 +2555,34 @@ impl Wgpu3DRenderer {
     }
 }
 
+fn create_msaa_texture(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    size: (u32, u32),
+    sample_count: u32,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("velvet-3d-msaa-color"),
+        size: wgpu::Extent3d {
+            width: size.0.max(1),
+            height: size.1.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
 fn create_depth_texture(
     device: &wgpu::Device,
     size: (u32, u32),
+    sample_count: u32,
 ) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("velvet-3d-depth"),
@@ -2484,7 +2592,7 @@ fn create_depth_texture(
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
-        sample_count: 1,
+        sample_count,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Depth32Float,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -2527,6 +2635,133 @@ fn validate_texture_data(texture: &TextureData3D) -> Result<(), Render3DError> {
     Ok(())
 }
 
+fn mip_level_count(width: u32, height: u32) -> u32 {
+    let largest = width.max(height).max(1);
+    32 - largest.leading_zeros()
+}
+
+fn srgb_to_linear(value: f32) -> f32 {
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(value: f32) -> f32 {
+    let value = value.clamp(0.0, 1.0);
+    if value <= 0.0031308 {
+        value * 12.92
+    } else {
+        1.055 * value.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+/// Build a complete CPU mip chain.  wgpu can generate mipmaps on a render
+/// pass, but doing it here keeps uploads deterministic on every backend and
+/// lets normal maps be averaged as vectors instead of blurring their encoded
+/// RGB values into a visibly lumpy surface.
+fn build_mip_chain(data: &TextureData3D, normal_map: bool) -> Vec<(u32, u32, Vec<u8>)> {
+    let mut width = data.width.max(1);
+    let mut height = data.height.max(1);
+    let source_len = (width * height * 4) as usize;
+    let mut levels = vec![(width, height, data.rgba[..source_len].to_vec())];
+    while width > 1 || height > 1 {
+        let next_width = (width / 2).max(1);
+        let next_height = (height / 2).max(1);
+        let source = levels
+            .last()
+            .map(|(_, _, rgba)| rgba.as_slice())
+            .unwrap_or(&[]);
+        let mut next = vec![0_u8; (next_width * next_height * 4) as usize];
+        for y in 0..next_height {
+            for x in 0..next_width {
+                let mut alpha = 0.0;
+                let mut color = [0.0_f32; 3];
+                let mut normal = [0.0_f32; 3];
+                let mut samples: f32 = 0.0;
+                for sy in 0..2 {
+                    let sample_y = (y * 2 + sy).min(height - 1);
+                    for sx in 0..2 {
+                        let sample_x = (x * 2 + sx).min(width - 1);
+                        let index = ((sample_y * width + sample_x) * 4) as usize;
+                        if index + 3 >= source.len() {
+                            continue;
+                        }
+                        let rgba = &source[index..index + 4];
+                        let rgb = [
+                            rgba[0] as f32 / 255.0,
+                            rgba[1] as f32 / 255.0,
+                            rgba[2] as f32 / 255.0,
+                        ];
+                        if normal_map {
+                            normal[0] += rgb[0] * 2.0 - 1.0;
+                            normal[1] += rgb[1] * 2.0 - 1.0;
+                            normal[2] += rgb[2] * 2.0 - 1.0;
+                        } else {
+                            color[0] += srgb_to_linear(rgb[0]);
+                            color[1] += srgb_to_linear(rgb[1]);
+                            color[2] += srgb_to_linear(rgb[2]);
+                        }
+                        alpha += rgba[3] as f32 / 255.0;
+                        samples += 1.0;
+                    }
+                }
+                let samples = samples.max(1.0);
+                let out_index = ((y * next_width + x) * 4) as usize;
+                if normal_map {
+                    let length =
+                        (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2])
+                            .sqrt();
+                    let unit = if length > 0.0001 {
+                        [normal[0] / length, normal[1] / length, normal[2] / length]
+                    } else {
+                        [0.0, 0.0, 1.0]
+                    };
+                    next[out_index] = ((unit[0] * 0.5 + 0.5) * 255.0).round() as u8;
+                    next[out_index + 1] = ((unit[1] * 0.5 + 0.5) * 255.0).round() as u8;
+                    next[out_index + 2] = ((unit[2] * 0.5 + 0.5) * 255.0).round() as u8;
+                } else {
+                    next[out_index] = (linear_to_srgb(color[0] / samples) * 255.0).round() as u8;
+                    next[out_index + 1] =
+                        (linear_to_srgb(color[1] / samples) * 255.0).round() as u8;
+                    next[out_index + 2] =
+                        (linear_to_srgb(color[2] / samples) * 255.0).round() as u8;
+                }
+                next[out_index + 3] = ((alpha / samples) * 255.0).round() as u8;
+            }
+        }
+        levels.push((next_width, next_height, next));
+        width = next_width;
+        height = next_height;
+    }
+    levels
+}
+
+fn upload_mip_chain(queue: &wgpu::Queue, texture: &wgpu::Texture, levels: &[(u32, u32, Vec<u8>)]) {
+    for (mip_level, (width, height, rgba)) in levels.iter().enumerate() {
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: mip_level as u32,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(*height),
+            },
+            wgpu::Extent3d {
+                width: *width,
+                height: *height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+}
+
 fn create_gpu_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -2537,6 +2772,7 @@ fn create_gpu_texture(
 ) -> GpuTexture3D {
     let width = data.width.max(1);
     let height = data.height.max(1);
+    let albedo_levels = build_mip_chain(data, false);
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("velvet-3d-albedo"),
         size: wgpu::Extent3d {
@@ -2544,32 +2780,14 @@ fn create_gpu_texture(
             height,
             depth_or_array_layers: 1,
         },
-        mip_level_count: 1,
+        mip_level_count: mip_level_count(width, height),
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8UnormSrgb,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        &data.rgba,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(width * 4),
-            rows_per_image: Some(height),
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
+    upload_mip_chain(queue, &texture, &albedo_levels);
     // A flat tangent-space normal is the identity perturbation.  Create it
     // lazily for ordinary albedo uploads; terrain can pass a real map through
     // `upload_texture_with_normal`.
@@ -2586,6 +2804,7 @@ fn create_gpu_texture(
     };
     let normal_width = normal_data.width.max(1);
     let normal_height = normal_data.height.max(1);
+    let normal_levels = build_mip_chain(normal_data, true);
     let normal_texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("velvet-3d-normal"),
         size: wgpu::Extent3d {
@@ -2593,32 +2812,14 @@ fn create_gpu_texture(
             height: normal_height,
             depth_or_array_layers: 1,
         },
-        mip_level_count: 1,
+        mip_level_count: mip_level_count(normal_width, normal_height),
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &normal_texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        &normal_data.rgba,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(normal_width * 4),
-            rows_per_image: Some(normal_height),
-        },
-        wgpu::Extent3d {
-            width: normal_width,
-            height: normal_height,
-            depth_or_array_layers: 1,
-        },
-    );
+    upload_mip_chain(queue, &normal_texture, &normal_levels);
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     let normal_view = normal_texture.create_view(&wgpu::TextureViewDescriptor::default());
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -2884,11 +3085,39 @@ fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
         * (1.0 - hemisphere)
         * 0.35;
     let albedo = textureSample(albedo_texture, albedo_sampler, input.uv);
+    // KayKit foliage and decals use glTF MASK materials. Treat their alpha as
+    // a cutout when the draw itself is opaque; blending the transparent texel
+    // fringe was the source of the soft rectangular halos that made assets
+    // look lower quality than the Three.js preview. Explicitly translucent
+    // gameplay markers keep their old blended path.
+    if (object.base_color.a > 0.95 && albedo.a < 0.38) {
+        discard;
+    }
     let base = object.base_color.rgb * input.color.rgb * albedo.rgb;
     let luminance = dot(base, vec3<f32>(0.2126, 0.7152, 0.0722));
-    let roughness = clamp(0.74 - luminance * 0.18, 0.48, 0.78);
-    let contact = exp(-max(input.world_position.y, 0.0) * 2.1);
-    let contact_ao = 1.0 - contact * (0.10 + 0.08 * (1.0 - abs(normal.y)));
+    // The source materials are authored around a 0.45 roughness. The old
+    // luminance-only range (0.48..0.78) made every prop chalky and removed
+    // the small highlights that communicate bevels at the isometric scale.
+    let roughness = clamp(0.56 - luminance * 0.14, 0.36, 0.68);
+    // Analytic contact/cavity AO keeps this forward path inexpensive while
+    // still reacting to the asset's grounded placement. `window.y` is an
+    // optional per-material strength; derivatives add a restrained crease
+    // term on bevels without requiring a deferred depth pyramid.
+    let ground_contact = exp(-max(input.world_position.y, 0.0) * 2.75)
+        * clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
+    let normal_variation = clamp(
+        (length(dpdx(normal)) + length(dpdy(normal))) * 0.55,
+        0.0,
+        1.0,
+    );
+    let authored_ao = clamp(object.occlusion_window.y, 0.0, 1.0);
+    let ambient_ao = clamp(
+        1.0
+            - authored_ao * (0.12 + ground_contact * 0.50)
+            - normal_variation * (0.045 + authored_ao * 0.13),
+        0.58,
+        1.0,
+    );
     let direct = evaluate_brdf(
         base,
         normal,
@@ -2907,7 +3136,7 @@ fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
     );
     let local = local_lighting(base, normal, view_dir, input.world_position, roughness);
     let rim = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.065;
-    let indirect = base * (sky + bounce + lunar_reflection + twilight) * contact_ao;
+    let indirect = base * (sky + bounce + lunar_reflection + twilight) * ambient_ao;
     let lit_color = indirect + direct + moon + local + camera.ambient_color.rgb * rim;
     let distance_to_camera = length(camera.camera_position.xyz - input.world_position);
     let fog_span = max(camera.fog_params.y - camera.fog_params.x, 0.001);
@@ -2983,14 +3212,18 @@ struct Object {
 };
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(1) @binding(0) var<uniform> object: Object;
+@group(2) @binding(0) var albedo_texture: texture_2d<f32>;
+@group(2) @binding(1) var albedo_sampler: sampler;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
+    @location(2) uv: vec2<f32>,
 };
 
 struct ShadowOut {
     @builtin(position) light_clip: vec4<f32>,
     @location(0) camera_clip: vec4<f32>,
+    @location(1) uv: vec2<f32>,
 };
 
 @vertex
@@ -2999,12 +3232,17 @@ fn vs_shadow(input: VertexIn) -> ShadowOut {
     var out: ShadowOut;
     out.light_clip = camera.light_view_projection * world;
     out.camera_clip = camera.view_projection * world;
+    out.uv = input.uv;
     return out;
 }
 
 @fragment
 fn fs_shadow(input: ShadowOut) {
     let window = object.occlusion_window;
+    let albedo = textureSample(albedo_texture, albedo_sampler, input.uv);
+    if (object.base_color.a > 0.95 && albedo.a < 0.38) {
+        discard;
+    }
     if (window.z <= 0.0 || window.w <= 0.0 || input.camera_clip.w <= 0.0001) {
         return;
     }
@@ -3131,6 +3369,54 @@ mod tests {
             .indices
             .iter()
             .all(|index| (*index as usize) < mesh.vertices.len()));
+    }
+
+    #[test]
+    fn texture_mips_are_complete_and_normalized() {
+        let texture = TextureData3D {
+            width: 3,
+            height: 2,
+            rgba: vec![
+                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255, 32, 64, 96,
+                255, 200, 160, 120, 255,
+            ],
+        };
+        let levels = build_mip_chain(&texture, false);
+        assert_eq!(levels.len(), mip_level_count(3, 2) as usize);
+        assert_eq!(
+            levels.last().map(|(width, height, _)| (*width, *height)),
+            Some((1, 1))
+        );
+
+        let normal = TextureData3D {
+            width: 2,
+            height: 2,
+            rgba: [128_u8, 128, 255, 255].repeat(4),
+        };
+        let normal_levels = build_mip_chain(&normal, true);
+        assert_eq!(normal_levels.last().unwrap().2, vec![128, 128, 255, 255]);
+    }
+
+    #[test]
+    fn material_ao_strength_is_clamped_in_window_payload() {
+        let material = Material3D::default().with_ambient_occlusion(1.5);
+        assert_eq!(material.occlusion_window[1], 1.0);
+        let material = material.with_ambient_occlusion(-0.5);
+        assert_eq!(material.occlusion_window[1], 0.0);
+    }
+
+    #[test]
+    fn nature_assets_keep_authored_normal_maps() {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../demos/demon-queen/data/assets/3d/stylized_nature_test/CommonTree_1.gltf");
+        if !path.exists() {
+            return;
+        }
+        let model = GltfModel::load(path).expect("nature tree should load");
+        assert!(model
+            .meshes
+            .iter()
+            .any(|mesh| mesh.normal_texture_index.is_some()));
     }
 
     #[test]

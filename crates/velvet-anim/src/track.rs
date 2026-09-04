@@ -104,11 +104,24 @@ impl ChannelTrack {
     }
 }
 
+/// One named marker on a timeline (fires once per pass).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TimelineEvent {
+    /// Time in seconds.
+    pub time: f32,
+    /// Marker name.
+    pub name: String,
+    /// Fired in the current pass (resets on loop wrap / restart).
+    pub fired: bool,
+}
+
 /// Multi-channel timeline tool applied onto a [`Pose3D`].
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Timeline {
     /// Channels you composed.
     pub channels: Vec<ChannelTrack>,
+    /// Named markers.
+    pub events: Vec<TimelineEvent>,
     /// Elapsed playback time.
     pub elapsed: f32,
     /// Optional hard duration (0 = derive from max key time).
@@ -132,6 +145,28 @@ impl Timeline {
     pub fn with_channel(mut self, track: ChannelTrack) -> Self {
         self.channels.push(track);
         self
+    }
+
+    /// Add a named marker (fires once per pass via [`Timeline::poll_events`]).
+    pub fn with_event(mut self, time: f32, name: impl Into<String>) -> Self {
+        let mut events = std::mem::take(&mut self.events);
+        events.push(TimelineEvent {
+            time: time.max(0.0),
+            name: name.into(),
+            fired: false,
+        });
+        events.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        self.events = events;
+        self
+    }
+
+    /// Restart from zero (also resets fired markers).
+    pub fn restart(&mut self) {
+        self.elapsed = 0.0;
+        self.playing = true;
+        for event in &mut self.events {
+            event.fired = false;
+        }
     }
 
     /// Duration = max key time or explicit.
@@ -162,11 +197,27 @@ impl Timeline {
         if d > 0.0 && self.elapsed > d {
             if self.looping {
                 self.elapsed %= d;
+                for event in &mut self.events {
+                    event.fired = false;
+                }
             } else {
                 self.elapsed = d;
                 self.playing = false;
             }
         }
+    }
+
+    /// Take marker names whose time passed since the last poll (each once
+    /// per pass, in time order).
+    pub fn poll_events(&mut self) -> Vec<String> {
+        let mut out = Vec::new();
+        for event in &mut self.events {
+            if !event.fired && event.time <= self.elapsed {
+                event.fired = true;
+                out.push(event.name.clone());
+            }
+        }
+        out
     }
 
     /// Apply sampled channels onto pose (base pose fields not in tracks stay).
@@ -182,6 +233,57 @@ impl Timeline {
     pub fn sample_pose(&self, mut base: Pose3D) -> Pose3D {
         self.apply(&mut base);
         base
+    }
+
+    /// Blend this timeline with `other` at weight `k` (0 = self).
+    pub fn blended_with(&self, other: &Timeline, k: f32, base: Pose3D) -> Pose3D {
+        let a = self.sample_pose(base);
+        let b = other.sample_pose(base);
+        a.lerp(b, k.clamp(0.0, 1.0))
+    }
+}
+
+/// Crossfade between two timelines over a fixed duration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TimelineCrossfade {
+    /// Outgoing timeline (keeps ticking during the fade).
+    pub from: Timeline,
+    /// Incoming timeline.
+    pub to: Timeline,
+    /// Fade duration seconds.
+    pub duration: f32,
+    /// Elapsed fade time.
+    pub elapsed: f32,
+}
+
+impl TimelineCrossfade {
+    /// Start a fade (clocks keep their current positions).
+    pub fn new(from: Timeline, to: Timeline, duration: f32) -> Self {
+        Self {
+            from,
+            to,
+            duration: duration.max(1e-4),
+            elapsed: 0.0,
+        }
+    }
+
+    /// Finished.
+    pub fn is_finished(&self) -> bool {
+        self.elapsed >= self.duration
+    }
+
+    /// Advance both clocks and the fade.
+    pub fn tick(&mut self, dt: f32) {
+        let dt = dt.max(0.0);
+        self.from.tick(dt);
+        self.to.tick(dt);
+        self.elapsed += dt;
+    }
+
+    /// Blended pose (`from` → `to`).
+    pub fn sample_pose(&self, base: Pose3D) -> Pose3D {
+        let k = (self.elapsed / self.duration).clamp(0.0, 1.0);
+        self.from.blended_with(&self.to, k, base)
     }
 }
 
@@ -219,6 +321,53 @@ pub fn parse_track_line(parts: &[&str]) -> Result<ChannelTrack, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn events_fire_once_in_order() {
+        let tl = Timeline::new()
+            .with_channel(
+                ChannelTrack::new(Pose3DChannel::Opacity)
+                    .key(0.0, 0.0, Ease::Linear)
+                    .key(1.0, 1.0, Ease::Linear),
+            )
+            .with_event(0.75, "three-quarter")
+            .with_event(0.25, "quarter");
+        let mut tl = tl;
+        tl.elapsed = 0.3;
+        assert_eq!(tl.poll_events(), vec!["quarter".to_string()]);
+        assert!(tl.poll_events().is_empty());
+        tl.elapsed = 0.8;
+        assert_eq!(tl.poll_events(), vec!["three-quarter".to_string()]);
+        assert!(tl.poll_events().is_empty());
+        // Loop wrap resets markers so the next pass refires.
+        tl.looping = true;
+        tl.elapsed = 0.9;
+        tl.tick(0.5);
+        assert_eq!(tl.poll_events(), vec!["quarter".to_string()]);
+    }
+
+    #[test]
+    fn crossfade_blends_poses() {
+        let a = Timeline::new().with_channel(
+            ChannelTrack::new(Pose3DChannel::X)
+                .key(0.0, 0.0, Ease::Linear)
+                .key(1.0, 0.0, Ease::Linear),
+        );
+        let b = Timeline::new().with_channel(
+            ChannelTrack::new(Pose3DChannel::X)
+                .key(0.0, 10.0, Ease::Linear)
+                .key(1.0, 10.0, Ease::Linear),
+        );
+        let mut fade = TimelineCrossfade::new(a, b, 1.0);
+        let base = Pose3D::flat(velvet_math::Vec2::ZERO);
+        fade.tick(0.5);
+        let pose = fade.sample_pose(base);
+        assert!((pose.pos.x - 5.0).abs() < 1e-4, "{}", pose.pos.x);
+        fade.tick(1.0);
+        assert!(fade.is_finished());
+        let pose = fade.sample_pose(base);
+        assert!((pose.pos.x - 10.0).abs() < 1e-4);
+    }
 
     #[test]
     fn timeline_yaws_card() {

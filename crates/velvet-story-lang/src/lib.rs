@@ -332,8 +332,12 @@ end
 
     #[test]
     fn no_second_vm_types() {
-        // Vs2MiniVm and OpVs2 come from velvet-script-* (existing stack).
-        let _ = std::any::type_name::<velvet_script_vm::Vs2MiniVm>();
-        let _ = std::any::type_name::<velvet_script_bytecode::opcodes_vs2::OpVs2>();
+        // Vs2MiniVm and OpVs2 come from velvet-script-* (existing stack):
+        // fail if anyone redefines them locally under a different path.
+        assert!(std::any::type_name::<velvet_script_vm::Vs2MiniVm>().contains("velvet_script_vm"));
+        assert!(
+            std::any::type_name::<velvet_script_bytecode::opcodes_vs2::OpVs2>()
+                .contains("opcodes_vs2")
+        );
     }
 }

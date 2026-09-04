@@ -68,6 +68,8 @@ pub struct AutoModeController {
     line_fully_shown: bool,
     /// Whether waiting on voice (blocks auto-advance when prefs say so).
     waiting_for_voice: bool,
+    /// Whether a cinema clip is playing (blocks auto-advance).
+    waiting_for_video: bool,
 }
 
 impl AutoModeController {
@@ -93,7 +95,11 @@ impl AutoModeController {
     pub fn on_line_started(&mut self, text: &str, prefs: &StoryPreferences) {
         self.line_fully_shown = matches!(prefs.text_speed, TextSpeed::Instant);
         self.waiting_for_voice = prefs.wait_for_voice;
-        if self.enabled && self.line_fully_shown && !self.waiting_for_voice {
+        if self.enabled
+            && self.line_fully_shown
+            && !self.waiting_for_voice
+            && !self.waiting_for_video
+        {
             self.timer = Some(compute_auto_delay(text, prefs, &self.config));
         } else {
             self.timer = None;
@@ -103,7 +109,7 @@ impl AutoModeController {
     /// Notify that typewriter finished revealing the current line.
     pub fn on_line_fully_shown(&mut self, text: &str, prefs: &StoryPreferences) {
         self.line_fully_shown = true;
-        if self.enabled && !self.waiting_for_voice {
+        if self.enabled && !self.waiting_for_voice && !self.waiting_for_video {
             self.timer = Some(compute_auto_delay(text, prefs, &self.config));
         }
     }
@@ -111,7 +117,7 @@ impl AutoModeController {
     /// Voice clip finished (or was skipped).
     pub fn on_voice_finished(&mut self, text: &str, prefs: &StoryPreferences) {
         self.waiting_for_voice = false;
-        if self.enabled && self.line_fully_shown {
+        if self.enabled && self.line_fully_shown && !self.waiting_for_video {
             // Restart / start post-voice delay.
             self.timer = Some(compute_auto_delay(text, prefs, &self.config));
         }
@@ -125,11 +131,33 @@ impl AutoModeController {
         }
     }
 
+    /// Cinema clip finished (or was skipped).
+    pub fn on_video_finished(&mut self, text: &str, prefs: &StoryPreferences) {
+        self.waiting_for_video = false;
+        if self.enabled && self.line_fully_shown && !self.waiting_for_voice {
+            self.timer = Some(compute_auto_delay(text, prefs, &self.config));
+        }
+    }
+
+    /// Mark that a cinema clip is still playing (blocks auto-advance).
+    pub fn set_waiting_for_video(&mut self, waiting: bool) {
+        self.waiting_for_video = waiting;
+        if waiting {
+            self.timer = None;
+        }
+    }
+
+    /// Whether blocked on cinema.
+    pub fn is_waiting_for_video(&self) -> bool {
+        self.waiting_for_video
+    }
+
     /// Cancel auto-advance (manual input / choice).
     pub fn cancel(&mut self) {
         self.timer = None;
         self.line_fully_shown = false;
         self.waiting_for_voice = false;
+        self.waiting_for_video = false;
     }
 
     /// Toggle enabled; cancels current timer when disabled.

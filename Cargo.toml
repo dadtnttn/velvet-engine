@@ -72,6 +72,13 @@ members = [
     "demos/sam-tomboy",
     "demos/summoner-emporium",
     "demos/demon-queen",
+    "crates/velvet-fx",
+    "crates/velvet-render-rtx",
+    "crates/velvet-video",
+    "crates/velvet-scene3d",
+    "demos/fx-forge",
+    "demos/third-person",
+    "demos/ui-gallery",
 ]
 default-members = [
     "crates/velvet-cli",
@@ -135,6 +142,10 @@ velvet-cellular = { path = "crates/velvet-cellular" }
 velvet-project = { path = "crates/velvet-project" }
 velvet-build = { path = "crates/velvet-build" }
 velvet-test-utils = { path = "crates/velvet-test-utils" }
+velvet-fx = { path = "crates/velvet-fx" }
+velvet-video = { path = "crates/velvet-video" }
+velvet-render-rtx = { path = "crates/velvet-render-rtx" }
+velvet-scene3d = { path = "crates/velvet-scene3d" }
 
 # External — foundation
 serde = { version = "1", features = ["derive"] }

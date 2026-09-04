@@ -205,6 +205,8 @@ fn lower_stmt(
                 vec![StoryOp::Show {
                     target: target.clone(),
                     at: at.clone(),
+                    motion: None,
+                    transform: None,
                 }],
                 vec![leaf(origin, *span, "show", target)],
             )
@@ -212,6 +214,8 @@ fn lower_stmt(
         Stmt::Hide { character, span } => (
             vec![StoryOp::Hide {
                 target: character.clone(),
+                motion: None,
+                transform: None,
             }],
             vec![leaf(origin, *span, "hide", character.clone())],
         ),

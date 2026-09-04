@@ -62,6 +62,21 @@ velvet-studio patch-visual file.vel button.start text "Play"
 velvet-studio launch ./my_game --choice 0 --lang es
 ```
 
+## VN author palette (classic `.vel`)
+
+Palette commands for novel comfort (same engine as
+`velvet narrative …`, runnable headless in CI):
+
+| Palette | CLI twin | Role |
+|---------|----------|------|
+| `branches <file>` | `narrative branches` | Endings reachability + broken jumps (fails on broken) |
+| `check-assets [file\|dir]` | `narrative check-assets` | Referenced bg/music/sfx/portraits/gallery/music exist? |
+| `vn-preview <file> [lines]` | `narrative preview` | Dialogue dry-run walk, first-choice path |
+
+The `visual-novel` scaffold ships `scripts/main.vel` with `screen` presets
+and `show … with …` mini-ATL plus `gallery.json` / `music.json` /
+`voice_cast.json` catalogs.
+
 Templates: `visual-novel` | `narrative-adventure` | `top-down-rpg` | `top-down-action`
 
 ## Architecture

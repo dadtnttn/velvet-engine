@@ -17,7 +17,7 @@ pub mod prelude;
 
 pub use android::{
     detect_android_sdk, export_android, try_cross_compile_linux, AndroidExportError,
-    AndroidExportOptions, AndroidExportReport, CrossCompileReport,
+    AndroidExportOptions, AndroidExportReport, AndroidSignMode, AndroidSigning, CrossCompileReport,
 };
 pub use export::{
     export_desktop, export_multi_platform_dry_run, list_zip_entries, write_directory_zip,
@@ -31,5 +31,8 @@ pub use pack::{
     copy_dir, copy_dir_with, ensure_dir, pack_directory, pack_directory_with, path_matches,
     AssetPack, PackError, PackFile, PackOptions,
 };
-pub use steam::{write_steam_appid_file, SteamConfig, SteamHook, SteamStatus};
+pub use steam::{
+    write_steam_appid_file, write_workshop_upload_script, SteamConfig, SteamHook, SteamStatus,
+    WorkshopItem,
+};
 pub use web::{export_web_player, run_web_player_node, WebExportError, WebExportReport};

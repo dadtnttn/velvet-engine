@@ -98,6 +98,16 @@ impl ProductPaintList {
             _ => false,
         })
     }
+
+    /// True when at least one game-screen panel was painted.
+    pub fn has_game_screen_geometry(&self) -> bool {
+        self.commands.iter().any(|c| match c {
+            ProductPaintCmd::Quad { id, w, h, .. } => {
+                id.starts_with("gscreen_") && *w > 0.0 && *h > 0.0
+            }
+            _ => false,
+        })
+    }
 }
 
 /// Layout constants (1280×720 product design space).
@@ -143,8 +153,12 @@ pub fn sprite_stand_color(id: &str) -> [f32; 4] {
 }
 
 /// Build paint commands for a virtual resolution.
+///
+/// Glyph sizes scale with the frame's accessibility `font_scale`;
+/// layout geometry stays fixed so panels never overflow.
 pub fn paint_product_frame_at(frame: &ProductUiFrame, vw: f32, vh: f32) -> ProductPaintList {
     let mut commands = Vec::new();
+    let fs = frame.font_scale.clamp(0.5, 3.0);
 
     // Full-screen background (always — product stage)
     let bg = background_mood_color(frame.background.as_deref());
@@ -216,7 +230,7 @@ pub fn paint_product_frame_at(frame: &ProductUiFrame, vw: f32, vh: f32) -> Produ
             x,
             y: y + body_h + 8.0,
             text: sid.clone(),
-            size: 16.0,
+            size: 16.0 * fs,
             color: [0.85, 0.85, 0.92, 1.0],
             z: 6.0 + i as f32,
             width: body_w.max(40.0),
@@ -255,7 +269,7 @@ pub fn paint_product_frame_at(frame: &ProductUiFrame, vw: f32, vh: f32) -> Produ
                 x: panel_x + 24.0,
                 y: panel_y - 22.0,
                 text: frame.namebox.clone(),
-                size: 20.0,
+                size: 20.0 * fs,
                 color: [0.9, 1.0, 0.9, 1.0],
                 z: 12.0,
                 width: nb_w.max(40.0),
@@ -270,7 +284,7 @@ pub fn paint_product_frame_at(frame: &ProductUiFrame, vw: f32, vh: f32) -> Produ
                 x: panel_x + 24.0,
                 y: panel_y + 20.0,
                 text: frame.body.clone(),
-                size: 28.0,
+                size: 28.0 * fs,
                 color: [0.95, 0.95, 0.97, 1.0],
                 z: 12.0,
                 width: body_w,
@@ -312,11 +326,95 @@ pub fn paint_product_frame_at(frame: &ProductUiFrame, vw: f32, vh: f32) -> Produ
                 x: vw * 0.22,
                 y: y + 12.0,
                 text: label.clone(),
-                size: 22.0,
+                size: 22.0 * fs,
                 color: [1.0, 1.0, 1.0, 1.0],
                 z: 21.0,
                 width: vw * 0.55,
             });
+        }
+    }
+
+    for (si, screen) in frame.game_screens.iter().enumerate() {
+        let z = 25.0 + screen.zorder.unwrap_or(0.0) + si as f32 * 5.0;
+        let alpha = screen.alpha.clamp(0.0, 1.0);
+        if alpha <= 0.0 {
+            continue;
+        }
+        if screen.modal {
+            commands.push(ProductPaintCmd::Quad {
+                id: format!("gscreen_dim_{}", screen.id),
+                x: 0.0,
+                y: 0.0,
+                w: vw,
+                h: vh,
+                color: [0.0, 0.0, 0.0, 0.55 * alpha],
+                z,
+            });
+        }
+        let panel_w = vw * 0.5;
+        let rows = screen.revealed_texts.len()
+            + screen.revealed_labels.len()
+            + usize::from(!screen.title.is_empty());
+        let panel_h = (120.0 + rows as f32 * 34.0).min(vh * 0.8);
+        let panel_x = (vw - panel_w) * 0.5;
+        let panel_y = (vh - panel_h) * 0.5;
+        commands.push(ProductPaintCmd::Quad {
+            id: format!("gscreen_{}", screen.id),
+            x: panel_x,
+            y: panel_y,
+            w: panel_w,
+            h: panel_h,
+            color: [0.09, 0.10, 0.16, 0.96 * alpha],
+            z: z + 1.0,
+        });
+        let mut ty = panel_y + 18.0;
+        if !screen.title.is_empty() {
+            commands.push(ProductPaintCmd::Text {
+                id: format!("gscreen_title_{}", screen.id),
+                x: panel_x + 24.0,
+                y: ty,
+                text: screen.title.clone(),
+                size: 24.0 * fs,
+                color: [1.0, 0.9, 0.6, alpha],
+                z: z + 2.0,
+                width: panel_w - 48.0,
+            });
+            ty += 38.0;
+        }
+        for (i, text) in screen.revealed_texts.iter().enumerate() {
+            commands.push(ProductPaintCmd::Text {
+                id: format!("gscreen_text_{}_{i}", screen.id),
+                x: panel_x + 24.0,
+                y: ty,
+                text: text.clone(),
+                size: 20.0 * fs,
+                color: [0.92, 0.92, 0.96, alpha],
+                z: z + 2.0,
+                width: panel_w - 48.0,
+            });
+            ty += 30.0;
+        }
+        for (i, label) in screen.revealed_labels.iter().enumerate() {
+            commands.push(ProductPaintCmd::Quad {
+                id: format!("gscreen_btn_{}_{i}", screen.id),
+                x: panel_x + 24.0,
+                y: ty,
+                w: panel_w - 48.0,
+                h: 34.0,
+                color: [0.18, 0.30, 0.48, 0.95 * alpha],
+                z: z + 2.0,
+            });
+            commands.push(ProductPaintCmd::Text {
+                id: format!("gscreen_btn_text_{}_{i}", screen.id),
+                x: panel_x + 36.0,
+                y: ty + 6.0,
+                text: label.clone(),
+                size: 20.0 * fs,
+                color: [1.0, 1.0, 1.0, alpha],
+                z: z + 3.0,
+                width: panel_w - 72.0,
+            });
+            ty += 42.0;
         }
     }
 
@@ -478,6 +576,32 @@ scene end { "Ending: Paint" }
         }
         let list2 = paint_product_session(&session);
         assert!(list2.has_choice_geometry(), "{:?}", list2.commands);
+
+        // Modal game screen paints a dim + panel + button rows.
+        let src = "screen pick {\n title: \"Pick\"\n textbutton a action Return(\"a\")\n}\nscene main {\n screen call pick\n \"after\"\n}\n";
+        let program = load_program_from_source(src, Some("gs.vel"), "GS").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        assert!(matches!(
+            session.player().wait(),
+            StoryWait::ScreenCall { .. }
+        ));
+        // Complete the typewriter so revealed rows carry full text.
+        session.tick(10.0);
+        let list3 = paint_product_session(&session);
+        assert!(list3.has_game_screen_geometry(), "{:?}", list3.commands);
+        // The modal title and its button reach the paint list verbatim.
+        let texts: Vec<&str> = list3
+            .commands
+            .iter()
+            .filter_map(|c| match c {
+                ProductPaintCmd::Text { id, text, .. } if id.starts_with("gscreen_") => {
+                    Some(text.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(texts.contains(&"Pick"), "{texts:?}");
+        assert!(texts.contains(&"a"), "{texts:?}");
         let descs2 = paint_to_render_descriptors(&list2);
         assert!(
             descs2

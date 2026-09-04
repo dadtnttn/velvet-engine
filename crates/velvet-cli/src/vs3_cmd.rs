@@ -173,6 +173,38 @@ pub fn cmd_vs3_run(
     Ok(())
 }
 
+/// List all script-visible VS3 natives with arity and result type.
+pub fn cmd_vs3_natives(prefix: Option<String>) -> Result<()> {
+    use velvet_script_vs3::NativeId;
+    let mut count = 0usize;
+    for native in NativeId::all() {
+        let spec = native.spec();
+        if let Some(p) = prefix.as_deref() {
+            if !spec.name.starts_with(p) {
+                continue;
+            }
+        }
+        let arity = if spec.min_args == spec.max_args {
+            spec.min_args.to_string()
+        } else {
+            format!("{}..={}", spec.min_args, spec.max_args)
+        };
+        let purity = match spec.purity {
+            velvet_script_vs3::NativePurity::Pure => "pure",
+            velvet_script_vs3::NativePurity::Impure => "impure",
+        };
+        println!(
+            "{:<22} args={:<6} -> {:<7} {purity}",
+            spec.name,
+            arity,
+            format!("{:?}", spec.result).to_ascii_lowercase()
+        );
+        count += 1;
+    }
+    println!("natives={count}");
+    Ok(())
+}
+
 /// Format a VS3 file in place while preserving its edition directive/comments.
 pub fn cmd_vs3_fmt(path: PathBuf) -> Result<()> {
     if path.is_dir() {

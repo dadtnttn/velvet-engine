@@ -51,6 +51,102 @@ pub struct ProductUiFrame {
     pub choice_visible: bool,
     /// Whether language menu should be offered.
     pub language_menu_visible: bool,
+    /// Effective font scale from accessibility prefs.
+    #[serde(default = "default_font_scale")]
+    pub font_scale: f32,
+    /// High-contrast mode from accessibility prefs.
+    #[serde(default)]
+    pub high_contrast: bool,
+    /// Reduced-motion mode from accessibility prefs.
+    #[serde(default)]
+    pub reduced_motion: bool,
+    /// Backlog: last history lines `Speaker: text` (max 30) for History screen.
+    #[serde(default)]
+    pub backlog: Vec<String>,
+    /// A cinema clip is currently playing (hosts hide say UI).
+    #[serde(default)]
+    pub video_playing: bool,
+    /// Active clip progress 0..=1 (0 when none).
+    #[serde(default)]
+    pub video_progress: f32,
+    /// Game screens currently shown (Ren'Py-style `screen show/call`).
+    #[serde(default)]
+    pub game_screens: Vec<GameScreenFrame>,
+}
+
+/// One shown game screen, resolved for display.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GameScreenFrame {
+    /// Screen id.
+    pub id: String,
+    /// Modal `screen call` (blocks until return).
+    pub modal: bool,
+    /// Call args in display form.
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Screen-level `title` property when present.
+    #[serde(default)]
+    pub title: String,
+    /// `text` widget contents in tree order (variables resolved).
+    #[serde(default)]
+    pub texts: Vec<String>,
+    /// `textbutton` labels in tree order (variables resolved).
+    #[serde(default)]
+    pub labels: Vec<String>,
+    /// Typewriter-visible prefixes of `texts` (same length as `texts`).
+    #[serde(default)]
+    pub revealed_texts: Vec<String>,
+    /// Typewriter-visible prefixes of `labels` (same length as `labels`).
+    #[serde(default)]
+    pub revealed_labels: Vec<String>,
+    /// True when the whole screen text is revealed.
+    #[serde(default)]
+    pub text_complete: bool,
+    /// `zorder:` prop (paint stacking hint).
+    #[serde(default)]
+    pub zorder: Option<f32>,
+    /// `tag:` prop (same-tag screens replace each other).
+    #[serde(default)]
+    pub tag: Option<String>,
+    /// Enter transition name (`with` motion or transform).
+    #[serde(default)]
+    pub enter: Option<String>,
+    /// Paint alpha 0..=1 (enter/exit fades; 1 = fully shown).
+    #[serde(default = "default_screen_alpha")]
+    pub alpha: f32,
+}
+
+/// Full alpha for frames serialized before fades existed.
+fn default_screen_alpha() -> f32 {
+    1.0
+}
+
+/// Default font scale for [`ProductUiFrame`] (old JSON without the field).
+fn default_font_scale() -> f32 {
+    1.0
+}
+
+/// Format one backlog line.
+pub fn format_backlog_entry(speaker: &str, text: &str) -> String {
+    if speaker.trim().is_empty() {
+        text.to_string()
+    } else {
+        format!("{}: {}", speaker.trim(), text)
+    }
+}
+
+/// Search backlog lines (case-insensitive substring). Returns matching indexes.
+pub fn search_backlog(backlog: &[String], query: &str) -> Vec<usize> {
+    let q = query.to_ascii_lowercase();
+    if q.trim().is_empty() {
+        return Vec::new();
+    }
+    backlog
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.to_ascii_lowercase().contains(&q))
+        .map(|(i, _)| i)
+        .collect()
 }
 
 /// Detect primary script class for font attachment.
@@ -113,6 +209,7 @@ pub fn build_product_ui_frame(session: &VnSession) -> ProductUiFrame {
     let wait = match session.player().wait() {
         StoryWait::Line => "line",
         StoryWait::Choice => "choice",
+        StoryWait::ScreenCall { .. } => "screen_call",
         StoryWait::Ended => "ended",
         StoryWait::Ready => "ready",
         StoryWait::Pause { .. } => "pause",
@@ -139,6 +236,16 @@ pub fn build_product_ui_frame(session: &VnSession) -> ProductUiFrame {
         .map(|s| s.id.clone())
         .collect();
 
+    let a11y = &session.accessibility;
+    let backlog: Vec<String> = session
+        .history_entries()
+        .iter()
+        .rev()
+        .take(30)
+        .rev()
+        .map(|e| format_backlog_entry(&e.speaker, &e.text))
+        .collect();
+
     ProductUiFrame {
         scene: session.player().scene_name().to_string(),
         wait: wait.into(),
@@ -156,6 +263,142 @@ pub fn build_product_ui_frame(session: &VnSession) -> ProductUiFrame {
         say_visible: session.say.visible,
         choice_visible: session.choice.open,
         language_menu_visible: session.available_languages().len() > 1,
+        font_scale: a11y.font_scale,
+        high_contrast: a11y.high_contrast,
+        reduced_motion: a11y.reduced_motion,
+        backlog,
+        video_playing: session.video.is_playing(),
+        video_progress: session.video.progress().unwrap_or(0.0),
+        game_screens: game_screen_frames(session),
+    }
+}
+
+/// Typewriter prefix of one string given a shared char budget.
+/// `None` (no entry yet) and `usize::MAX` (revealed) show everything.
+fn reveal_prefix(text: &str, remaining: &mut Option<usize>) -> String {
+    match remaining {
+        None | Some(usize::MAX) => text.to_string(),
+        Some(left) => {
+            let take = (*left).min(text.chars().count());
+            *left -= take;
+            text.chars().take(take).collect()
+        }
+    }
+}
+
+/// Resolve shown game screens into display frames.
+pub fn game_screen_frames(session: &VnSession) -> Vec<GameScreenFrame> {
+    let mut frames: Vec<GameScreenFrame> = session
+        .game_screens
+        .iter()
+        .map(|shown| game_screen_frame(session, shown))
+        .collect();
+    // Exiting screens paint under new ones, fading out.
+    for exit in session.screen_exiting.values() {
+        let mut frame = exit.frame.clone();
+        frame.alpha = (1.0 - exit.clock / crate::product::SCREEN_EXIT_SECS).clamp(0.0, 1.0);
+        frames.push(frame);
+    }
+    frames
+}
+
+/// Resolve one shown screen into a display frame.
+pub fn game_screen_frame(
+    session: &VnSession,
+    shown: &crate::runtime::ActiveGameScreen,
+) -> GameScreenFrame {
+    let mut frame = GameScreenFrame {
+        id: shown.id.clone(),
+        modal: shown.modal,
+        args: shown.args.iter().map(|v| v.display_str()).collect(),
+        title: String::new(),
+        texts: Vec::new(),
+        labels: Vec::new(),
+        revealed_texts: Vec::new(),
+        revealed_labels: Vec::new(),
+        text_complete: true,
+        zorder: None,
+        tag: None,
+        enter: session.screen_enters.get(&shown.id).cloned(),
+        alpha: enter_alpha(session, &shown.id),
+    };
+    if let Some(def) = session.game_screen_def(&shown.id) {
+        frame.zorder = def.zorder;
+        frame.tag = def.tag.clone();
+        for prop in &def.properties {
+            if prop.name == "title" {
+                frame.title = session.resolve_screen_value(&prop.value);
+            }
+        }
+        let mut visiting = vec![def.name.clone()];
+        collect_screen_texts(session, &def.children, &mut visiting, 0, &mut frame);
+    }
+    let mut remaining = session.screen_reveal.get(&shown.id).copied();
+    frame.revealed_texts = frame
+        .texts
+        .iter()
+        .map(|t| reveal_prefix(t, &mut remaining))
+        .collect();
+    frame.revealed_labels = frame
+        .labels
+        .iter()
+        .map(|t| reveal_prefix(t, &mut remaining))
+        .collect();
+    frame.text_complete =
+        frame.revealed_texts == frame.texts && frame.revealed_labels == frame.labels;
+    frame
+}
+
+/// Enter-fade alpha for a shown screen (1 without a `with` transition,
+// frozen at reduced motion).
+fn enter_alpha(session: &VnSession, id: &str) -> f32 {
+    if !session.screen_enters.contains_key(id) || session.accessibility.reduced_motion {
+        return 1.0;
+    }
+    let clock = session.screen_enter.get(id).copied().unwrap_or(0.0);
+    (clock / crate::product::SCREEN_ENTER_SECS).clamp(0.0, 1.0)
+}
+
+fn collect_screen_texts(
+    session: &VnSession,
+    children: &[crate::screens::ScreenChildRt],
+    visiting: &mut Vec<String>,
+    depth: usize,
+    frame: &mut GameScreenFrame,
+) {
+    if depth > 8 {
+        return;
+    }
+    for child in children {
+        match child.kind.as_str() {
+            "text" => {
+                if let Some(prop) = child.props.iter().find(|p| p.name == "text") {
+                    frame.texts.push(session.resolve_screen_value(&prop.value));
+                }
+            }
+            "textbutton" => {
+                if let Some(prop) = child.props.iter().find(|p| p.name == "label") {
+                    frame.labels.push(session.resolve_screen_value(&prop.value));
+                }
+            }
+            "use" => {
+                let target = child
+                    .props
+                    .first()
+                    .map(|p| session.resolve_screen_value(&p.value))
+                    .unwrap_or_default();
+                // Cycle guard: a screen reusing an ancestor stops here.
+                if !target.is_empty() && !visiting.contains(&target) {
+                    if let Some(def) = session.game_screen_def(&target) {
+                        visiting.push(target);
+                        collect_screen_texts(session, &def.children, visiting, depth + 1, frame);
+                        visiting.pop();
+                    }
+                }
+            }
+            _ => {}
+        }
+        collect_screen_texts(session, &child.children, visiting, depth + 1, frame);
     }
 }
 
@@ -177,6 +420,31 @@ mod tests {
     use crate::load::load_program_from_source;
     use crate::product::VnSession;
     use crate::runtime::{StoryPlayer, StoryWait};
+
+    #[test]
+    fn ui_frame_exposes_shown_game_screens() {
+        let src = r#"
+screen help {
+  title: "Help"
+  text "Read me."
+  textbutton ok action Return("ok")
+}
+scene main {
+  screen show help
+  "x"
+}
+"#;
+        let program = load_program_from_source(src, Some("gs.vel"), "GS").unwrap();
+        let session = VnSession::new(StoryPlayer::start(program));
+        let frame = build_product_ui_frame(&session);
+        assert_eq!(frame.game_screens.len(), 1);
+        let gs = &frame.game_screens[0];
+        assert_eq!(gs.id, "help");
+        assert!(!gs.modal);
+        assert_eq!(gs.title, "Help");
+        assert_eq!(gs.texts, vec!["Read me.".to_string()]);
+        assert_eq!(gs.labels, vec!["ok".to_string()]);
+    }
 
     #[test]
     fn ui_frame_from_real_story_has_namebox_body_choices() {
@@ -245,6 +513,42 @@ scene end { "Ending: Done" }
         assert!(f.path.contains("NotoSansSC"));
         let f2 = detect_script_family(hi);
         assert_eq!(f2.family, "hi");
+    }
+
+    #[test]
+    fn frame_carries_backlog_and_accessibility() {
+        let src = r#"
+scene main {
+    luna "Hello there."
+    luna "Second line here."
+    "Ending: X"
+}
+"#;
+        let program = load_program_from_source(src, Some("b.vel"), "b").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        session.accessibility.font_scale = 1.5;
+        session.accessibility.high_contrast = true;
+        // advance through two lines
+        for _ in 0..8 {
+            match session.player().wait().clone() {
+                StoryWait::Line => session.advance(),
+                StoryWait::Ended => break,
+                _ => break,
+            }
+        }
+        let frame = build_product_ui_frame(&session);
+        assert!((frame.font_scale - 1.5).abs() < 1e-5);
+        assert!(frame.high_contrast);
+        assert!(!frame.backlog.is_empty());
+        assert!(frame.backlog.iter().any(|l| l.contains("Hello")));
+        assert!(!search_backlog(&frame.backlog, "hello").is_empty());
+        assert!(search_backlog(&frame.backlog, "").is_empty());
+        assert_eq!(format_backlog_entry("", "Hi"), "Hi");
+        // old JSON without new fields still loads
+        let old = r#"{"scene":"s","wait":"line","namebox":"N","body":"B","body_width":1.0,"body_height":1.0,"font":{"family":"latin","path":"x"},"choices":[],"selected_choice":0,"language_options":["en"],"language":"en","background":null,"sprite_ids":[],"say_visible":true,"choice_visible":false,"language_menu_visible":false}"#;
+        let back: ProductUiFrame = serde_json::from_str(old).unwrap();
+        assert!((back.font_scale - 1.0).abs() < 1e-5);
+        assert!(back.backlog.is_empty());
     }
 
     #[test]

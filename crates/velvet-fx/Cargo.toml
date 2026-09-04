@@ -1,0 +1,18 @@
+[package]
+name = "velvet-fx"
+description = "Procedural pixel-art VFX forge — BitFX-like generator for Velvet Engine (standalone, loopable, palette-driven)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-math = { workspace = true }
+velvet-image = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+image = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

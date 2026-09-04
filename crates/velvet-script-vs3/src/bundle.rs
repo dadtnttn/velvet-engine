@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use velvet_script_ast::{Diagnostic, Expr, Item, Module, SourceLoc, Stmt};
+use velvet_script_ast::{Diagnostic, Expr, Item, Module, ScreenNode, SourceLoc, Stmt};
 use velvet_script_bytecode::fnv1a64;
 use velvet_script_parser::parse_file;
 
@@ -534,6 +534,8 @@ impl<'a> Rewriter<'a> {
             Item::Screen {
                 properties,
                 buttons,
+                params,
+                children,
                 ..
             } => {
                 for property in properties {
@@ -543,6 +545,42 @@ impl<'a> Rewriter<'a> {
                     for property in &mut button.properties {
                         self.rewrite_expr(&mut property.value);
                     }
+                }
+                for param in params {
+                    if let Some(default) = param.default.as_mut() {
+                        self.rewrite_expr(default);
+                    }
+                }
+                Self::rewrite_screen_nodes_static(children, self);
+            }
+            Item::Transform { .. } => {
+                // ATL transforms evaluate in the story product shell.
+            }
+        }
+    }
+
+    fn rewrite_screen_nodes_static(nodes: &mut [ScreenNode], rw: &mut Self) {
+        for node in nodes {
+            match node {
+                ScreenNode::Text { text, .. } => rw.rewrite_expr(text),
+                ScreenNode::TextButton { label, action, .. } => {
+                    rw.rewrite_expr(label);
+                    rw.rewrite_expr(action);
+                }
+                ScreenNode::Use { args, .. } => {
+                    for arg in args {
+                        rw.rewrite_expr(arg);
+                    }
+                }
+                ScreenNode::Widget {
+                    properties,
+                    children,
+                    ..
+                } => {
+                    for property in properties {
+                        rw.rewrite_expr(&mut property.value);
+                    }
+                    Self::rewrite_screen_nodes_static(children, rw);
                 }
             }
         }
@@ -623,6 +661,10 @@ impl<'a> Rewriter<'a> {
             | Stmt::Jump { .. }
             | Stmt::Label { .. }
             | Stmt::Show { .. }
+            | Stmt::Screen { .. }
+            | Stmt::Unlock { .. }
+            | Stmt::Movie { .. }
+            | Stmt::ScreenAction { .. }
             | Stmt::Background { .. }
             | Stmt::Music { .. }
             | Stmt::Hide { .. }

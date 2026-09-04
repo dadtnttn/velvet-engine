@@ -223,6 +223,10 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
                 // Declarative screens compile through `velvet-script-layers`.
                 // They intentionally add no executable v1 bytecode.
             }
+            Item::Transform { .. } => {
+                // ATL transforms evaluate in the story product shell.
+                // They intentionally add no executable v1 bytecode.
+            }
         }
     }
     main.emit_op(Op::Null);
@@ -528,12 +532,66 @@ impl FnCompiler<'_> {
                     }
                 }
             }
-            Stmt::Show { target, at, loc } => {
+            Stmt::Show {
+                target,
+                at,
+                with,
+                loc,
+            } => {
                 self.chunk.map_source(loc.line, loc.column);
-                let msg = match at {
+                let mut msg = match at {
                     Some(a) => format!("show {target} at {a}"),
                     None => format!("show {target}"),
                 };
+                if let Some(w) = with {
+                    msg.push_str(" with ");
+                    msg.push_str(w);
+                }
+                self.chunk.emit_constant(Constant::String(msg));
+                self.chunk.emit_op(Op::Print);
+            }
+            Stmt::Screen { id, loc } => {
+                self.chunk.map_source(loc.line, loc.column);
+                self.chunk
+                    .emit_constant(Constant::String(format!("screen {id}")));
+                self.chunk.emit_op(Op::Print);
+            }
+            Stmt::Unlock { kind, id, loc } => {
+                self.chunk.map_source(loc.line, loc.column);
+                self.chunk
+                    .emit_constant(Constant::String(format!("unlock {kind} {id}")));
+                self.chunk.emit_op(Op::Print);
+            }
+            Stmt::Movie {
+                path,
+                loop_clip,
+                loc,
+            } => {
+                self.chunk.map_source(loc.line, loc.column);
+                let msg = if *loop_clip {
+                    format!("movie \"{path}\" loop")
+                } else {
+                    format!("movie \"{path}\"")
+                };
+                self.chunk.emit_constant(Constant::String(msg));
+                self.chunk.emit_op(Op::Print);
+            }
+            Stmt::ScreenAction {
+                action,
+                id,
+                with,
+                result,
+                loc,
+                ..
+            } => {
+                self.chunk.map_source(loc.line, loc.column);
+                let mut msg = format!("screen {} {id}", action.as_str());
+                if let Some(w) = with {
+                    msg.push_str(&format!(" with {w}"));
+                }
+                if let Some(r) = result {
+                    msg.push_str(&format!(" into {r}"));
+                }
                 self.chunk.emit_constant(Constant::String(msg));
                 self.chunk.emit_op(Op::Print);
             }
@@ -552,10 +610,13 @@ impl FnCompiler<'_> {
                 self.chunk.emit_constant(Constant::String(msg));
                 self.chunk.emit_op(Op::Print);
             }
-            Stmt::Hide { target, loc } => {
+            Stmt::Hide { target, with, loc } => {
                 self.chunk.map_source(loc.line, loc.column);
-                self.chunk
-                    .emit_constant(Constant::String(format!("hide {target}")));
+                let msg = match with {
+                    Some(w) => format!("hide {target} with {w}"),
+                    None => format!("hide {target}"),
+                };
+                self.chunk.emit_constant(Constant::String(msg));
                 self.chunk.emit_op(Op::Print);
             }
             Stmt::End { ending, loc } => {

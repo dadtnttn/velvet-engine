@@ -96,6 +96,15 @@ pub struct SaveGame {
     /// Unlocked glossary term ids (optional; empty if unused).
     #[serde(default)]
     pub glossary_unlocked: BTreeSet<String>,
+    /// Unlocked music-room track ids (optional; empty if unused).
+    #[serde(default)]
+    pub music_unlocked: BTreeSet<String>,
+    /// Save thumbnail hash (empty = no photo). Pixels live in sidecar `.thumb.json`.
+    #[serde(default)]
+    pub thumbnail_hash: String,
+    /// Earned achievement ids (union-merged on load).
+    #[serde(default)]
+    pub achievements_earned: BTreeSet<String>,
     /// Narrative program content hash ([`crate::ir::StoryProgram::content_hash`]).
     /// Empty = legacy save (skip identity check on load).
     #[serde(default)]
@@ -148,6 +157,9 @@ impl SaveGame {
             seen_lines,
             gallery_unlocked: BTreeSet::new(),
             glossary_unlocked: BTreeSet::new(),
+            music_unlocked: BTreeSet::new(),
+            achievements_earned: BTreeSet::new(),
+            thumbnail_hash: String::new(),
             program_hash: String::new(),
             checksum: String::new(),
         };
@@ -172,6 +184,13 @@ impl SaveGame {
     /// Attach glossary unlock set and recompute checksum.
     pub fn with_glossary_unlocks(mut self, unlocks: BTreeSet<String>) -> Self {
         self.glossary_unlocked = unlocks;
+        self.checksum = self.compute_checksum();
+        self
+    }
+
+    /// Attach music-room unlock set and recompute checksum.
+    pub fn with_music_unlocks(mut self, unlocks: BTreeSet<String>) -> Self {
+        self.music_unlocked = unlocks;
         self.checksum = self.compute_checksum();
         self
     }
@@ -340,7 +359,43 @@ impl SaveStore {
         if path.exists() {
             std::fs::remove_file(path)?;
         }
+        let thumb = self.thumb_path_for(slot);
+        if thumb.exists() {
+            let _ = std::fs::remove_file(thumb);
+        }
         Ok(())
+    }
+
+    fn thumb_path_for(&self, slot: &str) -> PathBuf {
+        self.root.join(format!("{slot}.thumb.json"))
+    }
+
+    /// Write a save thumbnail sidecar (`<slot>.thumb.json`).
+    /// Returns the thumbnail hash for `SaveMeta.thumbnail`.
+    pub fn write_thumbnail(
+        &self,
+        slot: &str,
+        thumb: &crate::save_photo::SaveThumbnail,
+    ) -> Result<String, SaveError> {
+        self.ensure_dir()?;
+        let json = serde_json::to_vec(thumb).map_err(|e| SaveError::Serde(e.to_string()))?;
+        std::fs::write(self.thumb_path_for(slot), json)?;
+        Ok(thumb.hash.clone())
+    }
+
+    /// Read a save thumbnail sidecar. None when never written.
+    pub fn read_thumbnail(
+        &self,
+        slot: &str,
+    ) -> Result<Option<crate::save_photo::SaveThumbnail>, SaveError> {
+        let path = self.thumb_path_for(slot);
+        if !path.exists() {
+            return Ok(None);
+        }
+        let bytes = std::fs::read(path)?;
+        let thumb: crate::save_photo::SaveThumbnail =
+            serde_json::from_slice(&bytes).map_err(|e| SaveError::Serde(e.to_string()))?;
+        Ok(Some(thumb))
     }
 
     /// Whether a slot file exists.

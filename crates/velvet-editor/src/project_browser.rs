@@ -23,6 +23,29 @@ pub fn list_files(root: &Path, ext: &str) -> Result<Vec<PathBuf>> {
     Ok(out)
 }
 
+/// Copy a directory tree (files only, creates parents).
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+    for entry in WalkDir::new(src).into_iter().filter_map(|e| e.ok()) {
+        let rel = entry
+            .path()
+            .strip_prefix(src)
+            .with_context(|| format!("prefix {}", src.display()))?;
+        if rel.as_os_str().is_empty() {
+            continue;
+        }
+        let out = dst.join(rel);
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&out)?;
+        } else {
+            if let Some(parent) = out.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(entry.path(), &out)?;
+        }
+    }
+    Ok(())
+}
+
 /// Create a project directory from a built-in template.
 pub fn scaffold_project(name: &str, template: &str, parent: &Path) -> Result<PathBuf> {
     let dir = parent.join(name);
@@ -58,6 +81,22 @@ pub fn scaffold_project(name: &str, template: &str, parent: &Path) -> Result<Pat
             fs::copy(&story_src, dir.join("scripts/main.vel"))?;
         } else {
             fs::write(dir.join("scripts/main.vel"), fallback_script(template))?;
+        }
+        for catalog in ["gallery.json", "music.json", "voice_cast.json"] {
+            let src = tpl_root.join(catalog);
+            if src.exists() {
+                fs::copy(&src, dir.join(catalog))?;
+            }
+        }
+        // Placeholder art + audio so the scaffold plays with zero downloads.
+        let assets_src = tpl_root.join("assets");
+        if assets_src.is_dir() {
+            copy_dir_recursive(&assets_src, &dir.join("assets"))?;
+        }
+        // Example stylesheet when the template ships one.
+        let styles_src = tpl_root.join("styles");
+        if styles_src.is_dir() {
+            copy_dir_recursive(&styles_src, &dir.join("styles"))?;
         }
         let readme_src = tpl_root.join("README.md");
         if readme_src.exists() {

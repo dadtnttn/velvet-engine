@@ -6,6 +6,28 @@ use serde::{Deserialize, Serialize};
 use crate::value::StoryValue;
 use crate::variables::AssignOp;
 
+/// Mini-ATL motion attached to a `show` (parsed from `with ...`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShowMotion {
+    /// Canonical kind: `move` | `zoom` | `shake` | `fade`.
+    pub kind: String,
+    /// Duration seconds.
+    pub duration_secs: f32,
+    /// Amount (zoom scale add, shake px, else 0).
+    pub amount: f32,
+}
+
+impl ShowMotion {
+    /// New motion.
+    pub fn new(kind: impl Into<String>, duration_secs: f32, amount: f32) -> Self {
+        Self {
+            kind: kind.into(),
+            duration_secs: duration_secs.clamp(0.05, 3.0),
+            amount: amount.clamp(0.0, 64.0),
+        }
+    }
+}
+
 /// One executable story operation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -28,11 +50,85 @@ pub enum StoryOp {
         target: String,
         /// Placement e.g. `left` / `right` / `center`.
         at: Option<String>,
+        /// Optional mini-ATL motion from `with ...`.
+        #[serde(default)]
+        motion: Option<ShowMotion>,
+        /// Named ATL transform ref (`show … with bob`).
+        #[serde(default)]
+        transform: Option<String>,
+    },
+    /// Apply a VN screen preset (`screen say_classic` — 3-line authoring).
+    Screen {
+        /// Preset id (`say_classic` / `say_minimal` / `nvl_page` / `menu`).
+        id: String,
+    },
+    /// Show a declarative game screen (`screen show inv (…)`).
+    ShowGameScreen {
+        /// Screen id.
+        id: String,
+        /// Positional argument values.
+        #[serde(default)]
+        args: Vec<StoryValue>,
+        /// Enter mini-ATL motion (`with …`).
+        #[serde(default)]
+        motion: Option<ShowMotion>,
+        /// Enter named ATL transform (`with <name>`).
+        #[serde(default)]
+        transform: Option<String>,
+    },
+    /// Hide a declarative game screen (`screen hide inv`).
+    HideGameScreen {
+        /// Screen id.
+        id: String,
+        /// Exit mini-ATL motion (`with …`).
+        #[serde(default)]
+        motion: Option<ShowMotion>,
+        /// Exit named ATL transform (`with <name>`).
+        #[serde(default)]
+        transform: Option<String>,
+    },
+    /// Call a game screen modally (`screen call inv (…)` — blocks for
+    /// [`crate::runtime::StoryPlayer::return_from_screen`]).
+    CallGameScreen {
+        /// Screen id.
+        id: String,
+        /// Positional argument values.
+        #[serde(default)]
+        args: Vec<StoryValue>,
+        /// Enter mini-ATL motion (`with …`).
+        #[serde(default)]
+        motion: Option<ShowMotion>,
+        /// Enter named ATL transform (`with <name>`).
+        #[serde(default)]
+        transform: Option<String>,
+        /// Result variable (`into <var>`, in addition to `_return`).
+        #[serde(default)]
+        result: Option<String>,
+    },
+    /// Unlock a gallery CG or music-room track (`unlock gallery <id>`).
+    Unlock {
+        /// Catalog: `gallery` or `music`.
+        catalog: String,
+        /// Entry id.
+        id: String,
+    },
+    /// Play a cinema clip (`movie "assets/video/opening" [loop]`).
+    Movie {
+        /// Clip directory path (project-relative).
+        path: String,
+        /// Loop instead of finishing.
+        loop_clip: bool,
     },
     /// Hide character.
     Hide {
         /// Target id.
         target: String,
+        /// Optional mini-ATL motion from `with ...`.
+        #[serde(default)]
+        motion: Option<ShowMotion>,
+        /// Named ATL transform ref (`hide … with bob`).
+        #[serde(default)]
+        transform: Option<String>,
     },
     /// Dialogue or monologue.
     Dialogue {
@@ -314,6 +410,12 @@ pub struct StoryProgram {
     pub initial_vars: IndexMap<String, StoryValue>,
     /// Scenes by name.
     pub scenes: IndexMap<String, StoryScene>,
+    /// Declarative game screens by name (`screen inv(…)`).
+    #[serde(default)]
+    pub screens: IndexMap<String, crate::screens::ScreenDef>,
+    /// Named ATL transforms (`transform bob { … }`).
+    #[serde(default)]
+    pub transforms: IndexMap<String, crate::atl::TransformDef>,
     /// Entry scene name.
     pub entry: String,
 }
@@ -330,6 +432,8 @@ impl StoryProgram {
             "entry": &self.entry,
             "title": &self.title,
             "scenes": &self.scenes,
+            "screens": &self.screens,
+            "transforms": &self.transforms,
             "initial_vars": &self.initial_vars,
         });
         let bytes = serde_json::to_vec(&payload).unwrap_or_default();
@@ -344,6 +448,8 @@ impl StoryProgram {
             characters: IndexMap::new(),
             initial_vars: IndexMap::new(),
             scenes: IndexMap::new(),
+            screens: IndexMap::new(),
+            transforms: IndexMap::new(),
             entry: "main".into(),
         }
     }

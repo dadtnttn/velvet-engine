@@ -37,7 +37,8 @@
 | Crate | Responsibility |
 |-------|----------------|
 | `velvet-assets` | Handles, loaders, cache, hot-reload, virtual paths |
-| `velvet-render` | wgpu 2D renderer, cameras, batching, post-FX profiles |
+| `velvet-render` | wgpu 2D renderer + 3D forward pass, cameras, batching, post-FX profiles |
+| `velvet-scene3d` | Declarative 3D scenes, physics, animation blending, particles, saves |
 | `velvet-text` | Rich text, typewriter, fonts, layout, glyph cache |
 | `velvet-audio` | Buses, music/SFX/voice, spatial 2D, streaming |
 | `velvet-input` | Actions, contexts, remapping, devices |

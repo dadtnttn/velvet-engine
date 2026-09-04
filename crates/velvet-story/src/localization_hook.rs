@@ -28,6 +28,8 @@ pub enum LocKind {
     Dialogue,
     /// Choice option text.
     Choice,
+    /// Game-screen text (`text`, `textbutton` label, screen `title`).
+    Screen,
 }
 
 /// Catalog of localization keys extracted from a program.
@@ -82,6 +84,16 @@ impl LocCatalog {
             rewrite_scene_ops(scene_name, &mut scene.ops, &mut lookup);
             scene.reindex_labels();
         }
+        for (screen_id, def) in out.screens.iter_mut() {
+            for (slot_i, slot) in screen_text_slots(def).iter().enumerate() {
+                let key = screen_key(screen_id, slot_i);
+                if let Some(t) = lookup(&key) {
+                    if let Some(text) = screen_slot_value_mut(def, slot) {
+                        *text = t;
+                    }
+                }
+            }
+        }
         out
     }
 }
@@ -119,11 +131,152 @@ fn rewrite_scene_ops(
     }
 }
 
+/// Stable game-screen text key for screen id + slot index.
+pub fn screen_key(screen: &str, slot: usize) -> String {
+    format!("screen:{screen}:{slot}:screen")
+}
+
+/// One localizable text slot inside a [`crate::screens::ScreenDef`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ScreenSlot {
+    /// Child path from the screen root (empty = screen-level prop).
+    path: Vec<usize>,
+    /// Property index within the node (or screen properties when path empty).
+    prop: usize,
+}
+
+/// Localizable props: display text only (never actions, images, numbers).
+fn is_screen_text_prop(kind: &str, name: &str) -> bool {
+    match kind {
+        "screen" => name == "title",
+        "text" => name == "text",
+        "textbutton" | "button" => name == "label",
+        _ => false,
+    }
+}
+
+/// Walk a screen in stable order: `title` prop first, then children
+/// depth-first (`use` targets keep their own keys — never inlined).
+fn screen_text_slots(def: &crate::screens::ScreenDef) -> Vec<ScreenSlot> {
+    let mut slots = Vec::new();
+    for (i, prop) in def.properties.iter().enumerate() {
+        if is_screen_text_prop("screen", &prop.name)
+            && matches!(
+                prop.value,
+                crate::screens::ScreenValueRt::Lit {
+                    value: crate::value::StoryValue::String(_),
+                }
+            )
+        {
+            slots.push(ScreenSlot {
+                path: Vec::new(),
+                prop: i,
+            });
+        }
+    }
+    fn walk(
+        children: &[crate::screens::ScreenChildRt],
+        path: &mut Vec<usize>,
+        slots: &mut Vec<ScreenSlot>,
+    ) {
+        for (ci, child) in children.iter().enumerate() {
+            path.push(ci);
+            if child.kind != "use" {
+                for (pi, prop) in child.props.iter().enumerate() {
+                    if is_screen_text_prop(&child.kind, &prop.name)
+                        && matches!(
+                            prop.value,
+                            crate::screens::ScreenValueRt::Lit {
+                                value: crate::value::StoryValue::String(_),
+                            }
+                        )
+                    {
+                        slots.push(ScreenSlot {
+                            path: path.clone(),
+                            prop: pi,
+                        });
+                    }
+                }
+                walk(&child.children, path, slots);
+            }
+            path.pop();
+        }
+    }
+    walk(&def.children, &mut Vec::new(), &mut slots);
+    slots
+}
+
+fn screen_slot_value<'a>(def: &'a crate::screens::ScreenDef, slot: &ScreenSlot) -> Option<&'a str> {
+    if slot.path.is_empty() {
+        return match &def.properties.get(slot.prop)?.value {
+            crate::screens::ScreenValueRt::Lit {
+                value: crate::value::StoryValue::String(s),
+            } => Some(s),
+            _ => None,
+        };
+    }
+    let mut children = &def.children;
+    for (depth, ci) in slot.path.iter().enumerate() {
+        let node = children.get(*ci)?;
+        if depth + 1 == slot.path.len() {
+            return match &node.props.get(slot.prop)?.value {
+                crate::screens::ScreenValueRt::Lit {
+                    value: crate::value::StoryValue::String(s),
+                } => Some(s),
+                _ => None,
+            };
+        }
+        children = &node.children;
+    }
+    None
+}
+
+fn screen_slot_value_mut<'a>(
+    def: &'a mut crate::screens::ScreenDef,
+    slot: &ScreenSlot,
+) -> Option<&'a mut String> {
+    if slot.path.is_empty() {
+        return match &mut def.properties.get_mut(slot.prop)?.value {
+            crate::screens::ScreenValueRt::Lit {
+                value: crate::value::StoryValue::String(s),
+            } => Some(s),
+            _ => None,
+        };
+    }
+    let mut children = &mut def.children;
+    for (depth, ci) in slot.path.iter().enumerate() {
+        let node = children.get_mut(*ci)?;
+        if depth + 1 == slot.path.len() {
+            return match &mut node.props.get_mut(slot.prop)?.value {
+                crate::screens::ScreenValueRt::Lit {
+                    value: crate::value::StoryValue::String(s),
+                } => Some(s),
+                _ => None,
+            };
+        }
+        children = &mut node.children;
+    }
+    None
+}
+
 /// Build catalog from a full story program.
 pub fn extract_loc_keys(program: &StoryProgram) -> LocCatalog {
     let mut catalog = LocCatalog::default();
     for (scene_name, scene) in &program.scenes {
         extract_from_ops(scene_name, &scene.ops, &mut catalog);
+    }
+    for (screen_id, def) in &program.screens {
+        for (slot_i, slot) in screen_text_slots(def).iter().enumerate() {
+            if let Some(text) = screen_slot_value(def, slot) {
+                catalog.entries.push(LocEntry {
+                    key: screen_key(screen_id, slot_i),
+                    scene: screen_id.clone(),
+                    source: text.to_string(),
+                    speaker: None,
+                    kind: LocKind::Screen,
+                });
+            }
+        }
     }
     catalog
 }
@@ -415,6 +568,56 @@ scene end {
             StoryOp::Dialogue { text, .. } => assert!(text.starts_with('[')),
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn extracts_and_applies_screen_texts() {
+        let src = r##"
+screen help {
+  title: "Help"
+  text "Read me."
+  textbutton "OK" action Return("ok")
+  vbox {
+    text score
+  }
+}
+scene main {
+  screen show help
+  "x"
+}
+"##;
+        let program = load_program_from_source(src, None, "Loc").unwrap();
+        let cat = extract_loc_keys(&program);
+        let screen_keys: Vec<&LocEntry> = cat
+            .entries
+            .iter()
+            .filter(|e| e.kind == LocKind::Screen)
+            .collect();
+        // title + text + label; dynamic `text score` and actions excluded.
+        assert_eq!(
+            screen_keys.len(),
+            3,
+            "{:?}",
+            screen_keys.iter().map(|e| &e.key).collect::<Vec<_>>()
+        );
+        assert_eq!(screen_keys[0].key, "screen:help:0:screen");
+        assert_eq!(screen_keys[0].source, "Help");
+        let mut table = IndexMap::new();
+        for e in &screen_keys {
+            table.insert(e.key.clone(), format!("ES:{}", e.source));
+        }
+        let translated = cat.apply_to_program(&program, &table);
+        let def = &translated.screens["help"];
+        assert_eq!(
+            screen_slot_value(def, &screen_text_slots(def)[0]),
+            Some("ES:Help")
+        );
+        // Re-extracting the translated program keeps keys, new sources.
+        let cat2 = extract_loc_keys(&translated);
+        assert_eq!(
+            cat2.get("screen:help:1:screen").map(|e| e.source.as_str()),
+            Some("ES:Read me.")
+        );
     }
 
     #[test]

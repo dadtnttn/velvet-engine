@@ -1,31 +1,67 @@
+// ============================================================
+//  MI NOVELA — plantilla lista estilo Ren'Py.
+//  SOLO CAMBIA ESTO:
+//    1. Nombres y colores abajo en `character`.
+//    2. Imagenes en assets/ (mismo nombre de archivo o cambia la ruta).
+//    3. Dialogos entre comillas y opciones de cada `choice`.
+//  LO DEMAS YA FUNCIONA: menu, guardados, rollback, galeria, musica,
+//  voces, historial, idiomas (tl/es), accesibilidad.
+//  Comandos: velvet narrative preview|branches|check-assets
+// ============================================================
+
 character narrator {
     name: " "
     color: "#cccccc"
 }
 
+// CAMBIA: nombre, color y retrato de cada personaje.
 character hero {
     name: "Hero"
     color: "#ff4f8b"
+    portrait: "assets/characters/hero.png"
 }
 
 character friend {
     name: "Mira"
     color: "#4fc3ff"
+    portrait: "assets/characters/friend.png"
 }
 
+// CAMBIA: tus variables de ruta (confianza, objetos, capitulos).
 state {
     trust: int = 0
     met_mira: bool = false
 }
 
 scene main {
+    // Pantalla: say_classic | say_minimal | nvl_page | menu
+    screen say_classic
     background "assets/bg/room.png"
-    music "assets/music/soft.ogg" fade_in 1
+    music "assets/music/soft.wav" fade_in 1
     "Rain softens the city noise outside the window."
     hero "I said I'd be here. I meant it."
-    show friend at right
+    // Efecto en 1 linea: with move | zoom | shake | fade [segs] [fuerza]
+    show friend at right with fade
+    // O nombra tu propio movimiento: define `transform` arriba y usalo con `with`.
+    // transform nod {
+    //   y -6 0.8 ease_in_out, y 0 0.8 ease_in_out, repeat
+    // }
+    // show friend at right with nod
     friend "You always say that."
+    // Pantalla de juego (elige y vuelve): declara `screen` arriba y muestrala.
+    // screen ticket {
+    //   title: "Ticket"
+    //   text "One evening, two choices."
+    //   textbutton keep action Return("keep")
+    // }
+    // screen show ticket with fade
+    // screen call ticket into pick   // el valor queda en `pick` y `_return`
+    // screen hide ticket with fade
     met_mira = true
+    // Texto con estilo: {b}negrita{/b} {i}cursiva{/i} {color=#ff0}color{/color}
+    hero "This {b}city{/b} never sleeps, {i}does it?{/i}"
+    // Efecto de sonido de una sola vez.
+    sound "assets/sfx/chime.wav"
     choice {
         "I keep my promises." {
             trust += 1
@@ -42,13 +78,20 @@ scene main {
 
 scene ending_warm {
     background "assets/bg/rooftop.png"
+    show friend.happy at center with zoom 0.3 0.2
     friend "Look — the clouds are breaking."
     hero "Stay a little longer."
     "Ending: Warm Lights"
+    // Desbloquea galeria + musica al llegar a este final.
+    unlock gallery cg_rooftop
+    unlock music soft
+    end "warm"
 }
 
 scene ending_cool {
     background "assets/bg/street.png"
     "You walk home alone. The rain has stopped."
     "Ending: Cool Air"
+    unlock music soft
+    end "cool"
 }

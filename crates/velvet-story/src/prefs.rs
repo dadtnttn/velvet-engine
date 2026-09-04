@@ -56,6 +56,9 @@ pub struct StoryPreferences {
     /// Prefer fullscreen window when host supports it.
     #[serde(default)]
     pub fullscreen: bool,
+    /// Accessibility (font size, contrast, reduced motion). Persisted with prefs.
+    #[serde(default)]
+    pub accessibility: crate::accessibility::AccessibilityPrefs,
 }
 
 fn default_one() -> f32 {
@@ -75,6 +78,7 @@ impl Default for StoryPreferences {
             voice_volume: 1.0,
             wait_for_voice: false,
             fullscreen: false,
+            accessibility: crate::accessibility::AccessibilityPrefs::default(),
         }
     }
 }
@@ -93,5 +97,31 @@ impl StoryPreferences {
     /// Effective voice volume after master.
     pub fn effective_voice_volume(&self) -> f32 {
         (self.master_volume * self.voice_volume).clamp(0.0, 1.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accessibility_persists_with_prefs() {
+        let mut prefs = StoryPreferences::default();
+        prefs.accessibility.font_scale = 1.5;
+        prefs.accessibility.high_contrast = true;
+        let json = serde_json::to_string(&prefs).unwrap();
+        let back: StoryPreferences = serde_json::from_str(&json).unwrap();
+        assert!((back.accessibility.font_scale - 1.5).abs() < 1e-5);
+        assert!(back.accessibility.high_contrast);
+    }
+
+    #[test]
+    fn old_prefs_json_without_accessibility_loads() {
+        let old = r#"{"text_speed":{"Cps":40.0},"auto_mode":false,"auto_delay_secs":1.5,"skip_mode":"Off","master_volume":1.0,"music_volume":1.0,"sfx_volume":1.0,"voice_volume":1.0,"wait_for_voice":false}"#;
+        let prefs: StoryPreferences = serde_json::from_str(old).unwrap();
+        assert_eq!(
+            prefs.accessibility,
+            crate::accessibility::AccessibilityPrefs::default()
+        );
     }
 }

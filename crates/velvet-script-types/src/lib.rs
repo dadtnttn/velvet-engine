@@ -304,13 +304,9 @@ mod tests {
         let m = HirModule::new(2);
         assert!(typeck_module(&m).is_empty());
     }
-    #[test]
-    fn typeck_fn_scene() {
-        let src = "scene intro {}\npub fn main() {}\n";
-        let (m, _) = lower_source_heuristic(src, 2);
-        let _ = typeck_module(&m);
-    }
-
+    // NOTE: `typeck_scene_and_fn_exact` below is the strict version of this
+    // case (same source, asserts empty errors + item count); a bare
+    // parse-only twin would add no protection, so it is intentionally absent.
     #[test]
     fn typeck_scene_and_fn_exact() {
         let src = "scene intro {}\npub fn main() {}\n";

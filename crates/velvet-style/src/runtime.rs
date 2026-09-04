@@ -21,6 +21,8 @@ pub struct NodeStyle {
 pub struct StyleRuntime {
     /// Targets by id (no `#`).
     pub nodes: IndexMap<String, NodeStyle>,
+    /// Monotonic clock seconds (advanced by [`StyleRuntime::tick`]).
+    pub elapsed: f32,
 }
 
 impl StyleRuntime {
@@ -47,6 +49,16 @@ impl StyleRuntime {
             .get(id)
             .and_then(|n| n.channels.get(prop).copied())
             .unwrap_or(0.0)
+    }
+
+    /// Advance the monotonic clock (drives `time()` in `@script`).
+    pub fn tick(&mut self, dt: f32) {
+        self.elapsed += dt.max(0.0);
+    }
+
+    /// Current clock seconds (0 until ticked — deterministic by default).
+    pub fn clock(&self) -> f32 {
+        self.elapsed
     }
 
     /// Apply script side-effects (`Set` actions).

@@ -161,6 +161,10 @@ fn main() -> Result<()> {
             }
             StoryWait::Ended => break,
             StoryWait::Ready | StoryWait::Pause { .. } => player.advance(),
+            StoryWait::ScreenCall { id } => {
+                println!("[screen call: {id}] returning null");
+                let _ = player.return_from_screen(velvet_story::StoryValue::Null);
+            }
             StoryWait::Host { token } => {
                 let _ = player.resume_host(&token);
             }

@@ -61,6 +61,10 @@ pub fn cmd_menu(path: PathBuf, non_interactive: bool) -> Result<()> {
             None,
             false,
             vec![],
+            None,
+            None,
+            None,
+            None,
         ),
         7 => cmd_export(
             root.join("web_dist"),
@@ -74,6 +78,10 @@ pub fn cmd_menu(path: PathBuf, non_interactive: bool) -> Result<()> {
             Some("web".into()),
             false,
             vec![],
+            None,
+            None,
+            None,
+            None,
         ),
         _ => {
             println!("bye");

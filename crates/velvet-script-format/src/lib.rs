@@ -4,7 +4,7 @@
 
 #![deny(missing_docs)]
 
-use velvet_script_ast::{BinOp, Expr, Item, Module, Stmt, UnaryOp};
+use velvet_script_ast::{AtlStep, AtlValue, BinOp, Expr, Item, Module, ScreenNode, Stmt, UnaryOp};
 use velvet_script_parser::{parse_file, ParseError};
 
 /// Format source; returns pretty string or parse error.
@@ -222,12 +222,34 @@ fn format_item(item: &Item, out: &mut String, level: usize, comments: &mut Comme
             name,
             properties,
             buttons,
+            params,
+            children,
             ..
         } => {
             indent(out, level);
             out.push_str("screen ");
             out.push_str(name);
+            if !params.is_empty() {
+                out.push('(');
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push_str(&p.name);
+                    if let Some(d) = &p.default {
+                        out.push_str(" = ");
+                        format_expr(d, out, 0);
+                    }
+                }
+                out.push(')');
+            }
             out.push_str(" {\n");
+            for child in children {
+                format_screen_node(child, out, level + 1, comments);
+            }
+            if !children.is_empty() && (!properties.is_empty() || !buttons.is_empty()) {
+                out.push('\n');
+            }
             for property in properties {
                 comments.emit_before(property.loc.line, out);
                 indent(out, level + 1);
@@ -264,7 +286,163 @@ fn format_item(item: &Item, out: &mut String, level: usize, comments: &mut Comme
             indent(out, level);
             out.push('}');
         }
+        Item::Transform { name, steps, .. } => {
+            indent(out, level);
+            out.push_str("transform ");
+            out.push_str(name);
+            out.push_str(" {\n");
+            for step in steps {
+                format_atl_step(step, out, level + 1);
+            }
+            indent(out, level);
+            out.push('}');
+        }
         Item::Stmt(s) => format_stmt(s, out, level, comments),
+    }
+}
+
+fn format_screen_node(
+    node: &ScreenNode,
+    out: &mut String,
+    level: usize,
+    comments: &mut CommentCursor,
+) {
+    match node {
+        ScreenNode::Text { text, loc } => {
+            comments.emit_before(loc.line, out);
+            indent(out, level);
+            out.push_str("text ");
+            format_expr(text, out, 0);
+            out.push('\n');
+        }
+        ScreenNode::TextButton { label, action, loc } => {
+            comments.emit_before(loc.line, out);
+            indent(out, level);
+            out.push_str("textbutton ");
+            format_expr(label, out, 0);
+            out.push_str(" action ");
+            format_expr(action, out, 0);
+            out.push('\n');
+        }
+        ScreenNode::Use { screen, args, loc } => {
+            comments.emit_before(loc.line, out);
+            indent(out, level);
+            out.push_str("use ");
+            out.push_str(screen);
+            if !args.is_empty() {
+                out.push('(');
+                for (i, a) in args.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    format_expr(a, out, 0);
+                }
+                out.push(')');
+            }
+            out.push('\n');
+        }
+        ScreenNode::Widget {
+            kind,
+            properties,
+            children,
+            loc,
+        } => {
+            comments.emit_before(loc.line, out);
+            indent(out, level);
+            out.push_str(kind);
+            if properties.is_empty() && children.is_empty() {
+                out.push('\n');
+                return;
+            }
+            out.push_str(" {\n");
+            for property in properties {
+                comments.emit_before(property.loc.line, out);
+                indent(out, level + 1);
+                out.push_str(&property.name);
+                out.push_str(": ");
+                format_expr(&property.value, out, 0);
+                out.push('\n');
+            }
+            for child in children {
+                format_screen_node(child, out, level + 1, comments);
+            }
+            indent(out, level);
+            out.push_str("}\n");
+        }
+    }
+}
+
+fn format_atl_step(step: &AtlStep, out: &mut String, level: usize) {
+    match step {
+        AtlStep::Set {
+            props,
+            duration,
+            warper,
+            ..
+        } => {
+            indent(out, level);
+            for (i, (prop, value)) in props.iter().enumerate() {
+                if i > 0 {
+                    out.push(' ');
+                }
+                out.push_str(prop);
+                out.push(' ');
+                match value {
+                    AtlValue::Number(n) => out.push_str(&format!("{n}")),
+                    AtlValue::Keyword(k) => out.push_str(k),
+                }
+            }
+            if *duration > 0.0 {
+                out.push_str(&format!(" {duration}"));
+            }
+            if warper != "linear" {
+                out.push(' ');
+                out.push_str(warper);
+            }
+            out.push('\n');
+        }
+        AtlStep::Parallel { steps, .. } => {
+            indent(out, level);
+            out.push_str("parallel {\n");
+            for s in steps {
+                format_atl_step(s, out, level + 1);
+            }
+            indent(out, level);
+            out.push_str("}\n");
+        }
+        AtlStep::Choice { steps, .. } => {
+            indent(out, level);
+            out.push_str("choice {\n");
+            for s in steps {
+                format_atl_step(s, out, level + 1);
+            }
+            indent(out, level);
+            out.push_str("}\n");
+        }
+        AtlStep::Repeat { count, steps, .. } => {
+            indent(out, level);
+            out.push_str("repeat");
+            if let Some(n) = count {
+                out.push_str(&format!(" {n}"));
+            }
+            out.push_str(" {\n");
+            for s in steps {
+                format_atl_step(s, out, level + 1);
+            }
+            indent(out, level);
+            out.push_str("}\n");
+        }
+        AtlStep::On { events, steps, .. } => {
+            indent(out, level);
+            out.push_str("on ");
+            out.push_str(&events.join(", "));
+            out.push_str(" {\n");
+            for s in steps {
+                format_atl_step(s, out, level + 1);
+            }
+            indent(out, level);
+            out.push_str("}\n");
+        }
     }
 }
 
@@ -275,7 +453,8 @@ fn item_line(item: &Item) -> u32 {
         | Item::Character { loc, .. }
         | Item::State { loc, .. }
         | Item::Scene { loc, .. }
-        | Item::Screen { loc, .. } => loc.line,
+        | Item::Screen { loc, .. }
+        | Item::Transform { loc, .. } => loc.line,
         Item::Stmt(stmt) => stmt.loc().line,
     }
 }
@@ -394,13 +573,78 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize, comments: &mut Comme
             indent(out, level);
             out.push_str("}\n");
         }
-        Stmt::Show { target, at, .. } => {
+        Stmt::Show {
+            target, at, with, ..
+        } => {
             indent(out, level);
             out.push_str("show ");
             out.push_str(target);
             if let Some(a) = at {
                 out.push_str(" at ");
                 out.push_str(a);
+            }
+            if let Some(w) = with {
+                out.push_str(" with ");
+                out.push_str(w);
+            }
+            out.push('\n');
+        }
+        Stmt::Screen { id, .. } => {
+            indent(out, level);
+            out.push_str("screen ");
+            out.push_str(id);
+            out.push('\n');
+        }
+        Stmt::Unlock { kind, id, .. } => {
+            indent(out, level);
+            out.push_str("unlock ");
+            out.push_str(kind);
+            out.push(' ');
+            out.push_str(id);
+            out.push('\n');
+        }
+        Stmt::Movie {
+            path, loop_clip, ..
+        } => {
+            indent(out, level);
+            out.push_str("movie \"");
+            out.push_str(&escape(path));
+            out.push('"');
+            if *loop_clip {
+                out.push_str(" loop");
+            }
+            out.push('\n');
+        }
+        Stmt::ScreenAction {
+            action,
+            id,
+            args,
+            with,
+            result,
+            ..
+        } => {
+            indent(out, level);
+            out.push_str("screen ");
+            out.push_str(action.as_str());
+            out.push(' ');
+            out.push_str(id);
+            if !args.is_empty() {
+                out.push('(');
+                for (i, a) in args.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    format_expr(a, out, 0);
+                }
+                out.push(')');
+            }
+            if let Some(w) = with {
+                out.push_str(" with ");
+                out.push_str(w);
+            }
+            if let Some(r) = result {
+                out.push_str(" into ");
+                out.push_str(r);
             }
             out.push('\n');
         }
@@ -421,10 +665,14 @@ fn format_stmt(stmt: &Stmt, out: &mut String, level: usize, comments: &mut Comme
             }
             out.push('\n');
         }
-        Stmt::Hide { target, .. } => {
+        Stmt::Hide { target, with, .. } => {
             indent(out, level);
             out.push_str("hide ");
             out.push_str(target);
+            if let Some(w) = with {
+                out.push_str(" with ");
+                out.push_str(w);
+            }
             out.push('\n');
         }
         Stmt::End { ending, .. } => {
@@ -702,6 +950,93 @@ mod tests {
         let pretty = format_source(src).unwrap();
         assert!(pretty.contains("scene main"));
         assert!(pretty.contains("jump other"));
+    }
+
+    #[test]
+    fn formats_movie() {
+        let src = "scene s { movie \"assets/video/opening\" loop }";
+        let pretty = format_source(src).unwrap();
+        assert!(
+            pretty.contains("movie \"assets/video/opening\" loop"),
+            "pretty={pretty:?}"
+        );
+        let again = format_source(&pretty).unwrap();
+        assert_eq!(pretty, again);
+    }
+
+    #[test]
+    fn formats_unlock() {
+        let src = "scene s { unlock gallery cg_rooftop }";
+        let pretty = format_source(src).unwrap();
+        assert!(
+            pretty.contains("unlock gallery cg_rooftop"),
+            "pretty={pretty:?}"
+        );
+        let again = format_source(&pretty).unwrap();
+        assert_eq!(pretty, again);
+    }
+
+    #[test]
+    fn formats_show_with_and_screen() {
+        let src = "scene s { screen nvl_page show luna.happy at left with shake 0.4 10 }";
+        let pretty = format_source(src).unwrap();
+        assert!(pretty.contains("screen nvl_page"), "pretty={pretty:?}");
+        assert!(
+            pretty.contains("show luna.happy at left with shake 0.4 10"),
+            "pretty={pretty:?}"
+        );
+        // idempotent
+        let again = format_source(&pretty).unwrap();
+        assert_eq!(pretty, again);
+    }
+
+    #[test]
+    fn formats_transform_on_handlers() {
+        let src = "transform pop {\non show {\nscale 1.2 0.2\n}\non hide, replace {\nopacity 0.0 0.3\n}\n}";
+        let pretty = format_source(src).unwrap();
+        assert!(pretty.contains("on show {"), "pretty={pretty:?}");
+        assert!(pretty.contains("on hide, replace {"), "pretty={pretty:?}");
+        assert_eq!(format_source(&pretty).unwrap(), pretty);
+    }
+
+    #[test]
+    fn formats_screen_action_with_into() {
+        let src = "scene s { screen call help (\"x\") with fade into pick }";
+        let pretty = format_source(src).unwrap();
+        assert!(
+            pretty.contains("screen call help(\"x\") with fade into pick")
+                || pretty.contains("screen call help (\"x\") with fade into pick"),
+            "pretty={pretty:?}"
+        );
+        assert_eq!(format_source(&pretty).unwrap(), pretty);
+    }
+
+    #[test]
+    fn formats_hide_with() {
+        let src = "scene s { hide luna with fade }";
+        let pretty = format_source(src).unwrap();
+        assert!(pretty.contains("hide luna with fade"), "pretty={pretty:?}");
+        assert_eq!(format_source(&pretty).unwrap(), pretty);
+    }
+
+    #[test]
+    fn formats_game_screen_and_transform() {
+        let src = "screen inv(items, gold = 0) {\ntitle: \"Bag\"\ntext \"Loot:\"\ntextbutton done action Return(\"ok\")\n}\ntransform bob {\ny -8 1.2 ease_in_out, y 0 1.2 ease_in_out, repeat\n}\nscene s {\nscreen show inv (\"sword\")\nshow luna with bob\nscreen hide inv\n}";
+        let pretty = format_source(src).unwrap();
+        assert!(
+            pretty.contains("screen inv(items, gold = 0)"),
+            "pretty={pretty:?}"
+        );
+        assert!(
+            pretty.contains("textbutton done action"),
+            "pretty={pretty:?}"
+        );
+        assert!(pretty.contains("transform bob"), "pretty={pretty:?}");
+        assert!(pretty.contains("repeat"), "pretty={pretty:?}");
+        assert!(pretty.contains("screen show inv"), "pretty={pretty:?}");
+        assert!(pretty.contains("show luna with bob"), "pretty={pretty:?}");
+        let again = format_source(&pretty).unwrap();
+        assert_eq!(pretty, again);
     }
 
     #[test]

@@ -66,12 +66,10 @@ pub fn open_session_from_story_path(
     if is_vstory_path(path) {
         let program = load_story_program_from_path(path)?;
         let player = StoryPlayer::start(program);
-        let mut session = VnSession::new(player);
+        let root = path.parent().map(|p| p.to_path_buf());
+        let mut session = VnSession::new_with_root(player, root);
         if let Some(dir) = save_dir {
             session = session.with_save_dir(dir);
-        }
-        if let Some(parent) = path.parent() {
-            session = session.with_project_root(parent.to_path_buf());
         }
         Ok(session)
     } else {

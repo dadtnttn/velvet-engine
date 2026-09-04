@@ -327,6 +327,49 @@ pub enum Stmt {
         target: String,
         /// Optional placement.
         at: Option<String>,
+        /// Optional mini-ATL suffix: `with <move|zoom|shake|fade> [secs] [amount]`.
+        with: Option<String>,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `screen <preset>` — apply a 3-line VN screen preset
+    /// (`say_classic` / `say_minimal` / `nvl_page` / `menu`).
+    Screen {
+        /// Preset id.
+        id: String,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `unlock gallery <id>` / `unlock music <id>` — unlock a CG or track.
+    Unlock {
+        /// Catalog: `gallery` or `music`.
+        kind: String,
+        /// Entry id.
+        id: String,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `movie "assets/video/opening" [loop]` — play a cinema clip.
+    Movie {
+        /// Clip directory path.
+        path: String,
+        /// Loop instead of finishing.
+        loop_clip: bool,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `screen show|hide|call <id> [(args…)] [with …] [into var]` — actions.
+    ScreenAction {
+        /// Action kind.
+        action: ScreenActionKind,
+        /// Screen id.
+        id: String,
+        /// Positional argument expressions.
+        args: Vec<Expr>,
+        /// Optional `with` transition (mini-ATL words or transform name).
+        with: Option<String>,
+        /// Optional `into` result variable (`screen call` only).
+        result: Option<String>,
         /// Location.
         loc: SourceLoc,
     },
@@ -346,10 +389,12 @@ pub enum Stmt {
         /// Location.
         loc: SourceLoc,
     },
-    /// `hide target`.
+    /// `hide target [with motion|transform]`.
     Hide {
         /// Target id / expression path.
         target: String,
+        /// Optional `with` suffix (mini-ATL words or transform name).
+        with: Option<String>,
         /// Location.
         loc: SourceLoc,
     },
@@ -436,6 +481,10 @@ impl Stmt {
             | Self::Label { loc, .. }
             | Self::Choice { loc, .. }
             | Self::Show { loc, .. }
+            | Self::Screen { loc, .. }
+            | Self::Unlock { loc, .. }
+            | Self::Movie { loc, .. }
+            | Self::ScreenAction { loc, .. }
             | Self::Background { loc, .. }
             | Self::Music { loc, .. }
             | Self::Hide { loc, .. }
@@ -479,10 +528,177 @@ pub struct ScreenProperty {
 pub struct ScreenButton {
     /// Stable widget id used by actions and VCSS `#id` selectors.
     pub id: String,
-    /// Button properties such as `label`, `action`, `icon`, and `class`.
+    /// Button properties such as `label`, `action`, and `icon`.
     pub properties: Vec<ScreenProperty>,
     /// Source location of the `button` declaration.
     pub loc: SourceLoc,
+}
+
+/// Parameter of a game screen (`screen inv(items)`), with optional default.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScreenParam {
+    /// Parameter name.
+    pub name: String,
+    /// Default expression when the caller omits it.
+    pub default: Option<Expr>,
+    /// Source location of the parameter name.
+    pub loc: SourceLoc,
+}
+
+/// One widget child inside a game screen.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScreenNode {
+    /// `text <expr>`.
+    Text {
+        /// Text expression.
+        text: Expr,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `textbutton <label> action <action>`.
+    TextButton {
+        /// Label expression.
+        label: Expr,
+        /// Action expression (`Return(…)`, `Jump(…)`, …).
+        action: Expr,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `use <screen> [(args…)]`.
+    Use {
+        /// Referenced screen name.
+        screen: String,
+        /// Positional argument expressions.
+        args: Vec<Expr>,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// Generic widget (`image`, `bar`, `vbox`, `hbox`, `fixed`, `timer`,
+    /// `key`, `input`) with properties and nested children.
+    Widget {
+        /// Widget kind.
+        kind: String,
+        /// Property list (`label: …`, `action: …`, …).
+        properties: Vec<ScreenProperty>,
+        /// Nested children (containers).
+        children: Vec<ScreenNode>,
+        /// Location.
+        loc: SourceLoc,
+    },
+}
+
+impl ScreenNode {
+    /// Source location of this node.
+    pub fn loc(&self) -> &SourceLoc {
+        match self {
+            Self::Text { loc, .. }
+            | Self::TextButton { loc, .. }
+            | Self::Use { loc, .. }
+            | Self::Widget { loc, .. } => loc,
+        }
+    }
+}
+
+/// Screen show/hide/call action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScreenActionKind {
+    /// `screen show <id>` / `show screen <id>`.
+    Show,
+    /// `screen hide <id>` / `hide screen <id>`.
+    Hide,
+    /// `screen call <id>` (blocks for a return value).
+    Call,
+}
+
+impl ScreenActionKind {
+    /// Parse action word.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "show" => Some(Self::Show),
+            "hide" => Some(Self::Hide),
+            "call" => Some(Self::Call),
+            _ => None,
+        }
+    }
+
+    /// Canonical name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Show => "show",
+            Self::Hide => "hide",
+            Self::Call => "call",
+        }
+    }
+}
+
+/// ATL scalar: number or keyword channel value.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AtlValue {
+    /// Number.
+    Number(f64),
+    /// Keyword (warper names, `repeat` counts are separate).
+    Keyword(String),
+}
+
+/// One ATL step inside `transform`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AtlStep {
+    /// `prop value [duration] [warper], …` — one or more channels.
+    Set {
+        /// Channel assignments.
+        props: Vec<(String, AtlValue)>,
+        /// Duration seconds (0 = instant).
+        duration: f64,
+        /// Warper name (`linear` default).
+        warper: String,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `parallel { … }` — steps run together.
+    Parallel {
+        /// Concurrent steps.
+        steps: Vec<AtlStep>,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `choice { … }` — host picks one variant.
+    Choice {
+        /// Variants.
+        steps: Vec<AtlStep>,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `repeat [n]` — loop enclosing block (None = forever).
+    Repeat {
+        /// Iterations (None = infinite).
+        count: Option<u32>,
+        /// Repeated steps.
+        steps: Vec<AtlStep>,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// `on show, hide { … }` — event handler block.
+    On {
+        /// Events (`show` / `hide` / `replace`).
+        events: Vec<String>,
+        /// Handler steps.
+        steps: Vec<AtlStep>,
+        /// Location.
+        loc: SourceLoc,
+    },
+}
+
+impl AtlStep {
+    /// Source location of this step.
+    pub fn loc(&self) -> &SourceLoc {
+        match self {
+            Self::Set { loc, .. }
+            | Self::Parallel { loc, .. }
+            | Self::Choice { loc, .. }
+            | Self::Repeat { loc, .. }
+            | Self::On { loc, .. } => loc,
+        }
+    }
 }
 
 /// Top-level item.
@@ -543,6 +759,19 @@ pub enum Item {
         properties: Vec<ScreenProperty>,
         /// Interactive buttons in author order.
         buttons: Vec<ScreenButton>,
+        /// Screen parameters (`screen inv(items)`), possibly empty.
+        params: Vec<ScreenParam>,
+        /// Widget children (Ren'Py-style screens), possibly empty.
+        children: Vec<ScreenNode>,
+        /// Location.
+        loc: SourceLoc,
+    },
+    /// ATL transform block (`transform bounce { … }`).
+    Transform {
+        /// Transform name (used by `show … with <name>`).
+        name: String,
+        /// Steps in author order.
+        steps: Vec<AtlStep>,
         /// Location.
         loc: SourceLoc,
     },

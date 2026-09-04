@@ -191,6 +191,7 @@ pub fn parse_screen_source(
             properties,
             buttons,
             loc,
+            ..
         } = item
         else {
             continue;

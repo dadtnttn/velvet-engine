@@ -1,0 +1,82 @@
+/* Mi Novela — hoja de estilo de ejemplo.
+   Comandos:
+     velvet style check styles/ui.vcss
+     velvet style dump styles/ui.vcss --class button --state hover
+     velvet style run styles/ui.vcss dealHand --arg 5
+     velvet style eval styles/ui.vcss "clamp(10, 0, 5)"
+*/
+
+:root {
+  --ink: #e8e2f2;
+  --gold: #d2af64;
+  --panel: #0a0c16;
+  --accent: color-mix(in srgb, #d2af64 70%, #501e78);
+}
+
+.say {
+  background: var(--panel);
+  color: var(--ink);
+  /* calc() evalúa aquí mismo (px y números). */
+  padding: calc(12px + 4px);
+  font-size: 28;
+}
+
+.say > .namebox {
+  /* Hijo directo: solo el namebox inmediato del say. */
+  background: var(--gold);
+  color: #0a0c16;
+  padding: 6px 18px;
+}
+
+.button {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--gold);
+  /* min()/max()/clamp() también valen. */
+  width: clamp(120px, 40%, 320px);
+}
+
+.button:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.button:selected {
+  background: #501e78;
+  glow: #dc50dc;
+}
+
+.hero {
+  background: linear-gradient(to bottom, #501e78, #0a0c16 70%);
+  box-shadow: 0 2px 8px #000000;
+}
+
+@media (prefers-reduced-motion) {
+  .hero {
+    opacity: 0.85;
+  }
+}
+
+@keyframes deal {
+  from { opacity: 0; y: -80; scale: 0.65; }
+  to { opacity: 1; y: 0; scale: 1; }
+}
+
+@script {
+  let stagger = 0.08;
+  fn dealHand(count) {
+    print("dealing", count);
+    for (let i = 0; i < count; i = i + 1) {
+      play("deal", {
+        target: "card" + i,
+        delay: i * stagger,
+        duration: 0.32,
+        ease: "cubic_out"
+      });
+    }
+    return "dealt-" + count;
+  }
+  on("menu.open", fn() {
+    animate("#logo", { opacity: [0, 1], y: [-24, 0] }, 0.45);
+  });
+}

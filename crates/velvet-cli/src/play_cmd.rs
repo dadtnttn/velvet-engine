@@ -246,6 +246,13 @@ pub fn cmd_play_story_product(
                 session.ingest_events();
                 host_audio.apply_session_bgm(&mut session);
             }
+            StoryWait::ScreenCall { id } => {
+                println!("  [screen call: {id}] returning null");
+                session
+                    .return_from_screen(velvet_story::StoryValue::Null)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+                host_audio.apply_session_bgm(&mut session);
+            }
         }
     }
 

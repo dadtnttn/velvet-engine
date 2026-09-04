@@ -21,6 +21,9 @@ pub enum WidgetKind {
         pressed: bool,
         /// Hovered.
         hovered: bool,
+        /// Busy (spinner): blocks clicks silently, unlike disabled.
+        #[serde(default)]
+        busy: bool,
     },
     /// Image box.
     Image {
@@ -57,6 +60,31 @@ pub enum WidgetKind {
         /// Focused.
         focused: bool,
     },
+    /// Dropdown / select box.
+    Dropdown {
+        /// Options in order.
+        options: Vec<String>,
+        /// Selected option index.
+        selected: Option<usize>,
+        /// Keyboard highlight index.
+        highlight: usize,
+        /// Popup open.
+        open: bool,
+    },
+    /// Tab strip (children map to tabs by position).
+    Tabs {
+        /// Tab labels in order (matches direct children by position).
+        tabs: Vec<String>,
+        /// Selected tab index.
+        selected: usize,
+    },
+    /// Hover tooltip for another node (see `target`).
+    Tooltip {
+        /// Text.
+        text: String,
+        /// Node name this tooltip describes.
+        target: String,
+    },
 }
 
 /// Button builder helpers.
@@ -73,6 +101,12 @@ pub struct ProgressBar;
 pub struct Slider;
 /// Toggle helper.
 pub struct Toggle;
+/// Dropdown helper.
+pub struct Dropdown;
+/// Tabs helper.
+pub struct Tabs;
+/// Tooltip helper.
+pub struct Tooltip;
 
 impl Button {
     /// Create widget.
@@ -81,6 +115,7 @@ impl Button {
             label: label.into(),
             pressed: false,
             hovered: false,
+            busy: false,
         }
     }
 }
@@ -138,6 +173,35 @@ impl Toggle {
     }
 }
 
+impl Dropdown {
+    /// Create dropdown (nothing selected, closed).
+    pub fn widget(options: Vec<String>) -> WidgetKind {
+        WidgetKind::Dropdown {
+            options,
+            selected: None,
+            highlight: 0,
+            open: false,
+        }
+    }
+}
+
+impl Tabs {
+    /// Create tab strip (first tab selected).
+    pub fn widget(tabs: Vec<String>) -> WidgetKind {
+        WidgetKind::Tabs { tabs, selected: 0 }
+    }
+}
+
+impl Tooltip {
+    /// Create tooltip for the node named `target`.
+    pub fn widget(text: impl Into<String>, target: impl Into<String>) -> WidgetKind {
+        WidgetKind::Tooltip {
+            text: text.into(),
+            target: target.into(),
+        }
+    }
+}
+
 impl WidgetKind {
     /// Progress / slider value if applicable.
     pub fn value01(&self) -> Option<f32> {
@@ -176,6 +240,56 @@ impl WidgetKind {
         }
     }
 
+    /// Dropdown selected index.
+    pub fn dropdown_selected(&self) -> Option<Option<usize>> {
+        match self {
+            Self::Dropdown { selected, .. } => Some(*selected),
+            _ => None,
+        }
+    }
+
+    /// Set dropdown selection (clamped; `None` clears).
+    pub fn dropdown_select(&mut self, index: Option<usize>) {
+        if let Self::Dropdown {
+            options,
+            selected,
+            highlight,
+            ..
+        } = self
+        {
+            let valid = index.filter(|i| *i < options.len());
+            *selected = valid;
+            if let Some(i) = valid {
+                *highlight = i;
+            }
+        }
+    }
+
+    /// Tabs selected index.
+    pub fn tabs_selected(&self) -> Option<usize> {
+        match self {
+            Self::Tabs { selected, .. } => Some(*selected),
+            _ => None,
+        }
+    }
+
+    /// Set tabs selection (wraps around, ignored when empty).
+    pub fn tabs_select(&mut self, index: usize) {
+        if let Self::Tabs { tabs, selected } = self {
+            if !tabs.is_empty() {
+                *selected = index % tabs.len();
+            }
+        }
+    }
+
+    /// Tooltip text and target.
+    pub fn tooltip(&self) -> Option<(&str, &str)> {
+        match self {
+            Self::Tooltip { text, target } => Some((text, target)),
+            _ => None,
+        }
+    }
+
     /// Flip toggle if this is a toggle.
     pub fn flip_toggle(&mut self) {
         if let Self::Toggle { value, .. } = self {
@@ -187,6 +301,23 @@ impl WidgetKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_widgets_build_and_select() {
+        let mut dd = Dropdown::widget(vec!["a".into(), "b".into()]);
+        assert_eq!(dd.dropdown_selected(), Some(None));
+        dd.dropdown_select(Some(5));
+        assert_eq!(dd.dropdown_selected(), Some(None));
+        dd.dropdown_select(Some(1));
+        assert_eq!(dd.dropdown_selected(), Some(Some(1)));
+        let mut tabs = Tabs::widget(vec!["x".into(), "y".into(), "z".into()]);
+        assert_eq!(tabs.tabs_selected(), Some(0));
+        tabs.tabs_select(5);
+        assert_eq!(tabs.tabs_selected(), Some(2));
+        let tip = Tooltip::widget("Help", "save");
+        assert_eq!(tip.tooltip(), Some(("Help", "save")));
+        assert_eq!(Button::widget("OK").dropdown_selected(), None);
+    }
 
     #[test]
     fn builders_and_value() {

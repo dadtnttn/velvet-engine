@@ -6,6 +6,8 @@ use anyhow::{bail, Context, Result};
 use velvet_story::prelude::*;
 
 /// Export desktop package (dry-run by default), or web player when platform=web.
+// CLI entry: one arg per flag (out/binary/assets/platform/signing/steam).
+#[allow(clippy::too_many_arguments)]
 pub fn cmd_export(
     out: PathBuf,
     binary: String,
@@ -15,6 +17,10 @@ pub fn cmd_export(
     platform: Option<String>,
     multi: bool,
     exclude: Vec<String>,
+    sign: Option<String>,
+    keystore: Option<PathBuf>,
+    alias: Option<String>,
+    steam_app_id: Option<u32>,
 ) -> Result<()> {
     // Web product player (Node-runnable + interactive browser).
     if platform.as_deref() == Some("web") {
@@ -23,6 +29,16 @@ pub fn cmd_export(
 
     // Android APK packaging path (dry-run by default unless --build).
     if platform.as_deref() == Some("android") {
+        let signing = match sign.as_deref().map(str::to_ascii_lowercase).as_deref() {
+            None | Some("none") => velvet_build::AndroidSigning::none(),
+            Some("debug") => velvet_build::AndroidSigning::debug(),
+            Some("release") => velvet_build::AndroidSigning {
+                mode: velvet_build::AndroidSignMode::Release,
+                keystore,
+                alias,
+            },
+            Some(other) => bail!("unknown --sign `{other}` (expected none|debug|release)"),
+        };
         let report = velvet_build::export_android(&velvet_build::AndroidExportOptions {
             out_dir: out.clone(),
             application_id: format!("com.velvet.{}", binary.replace('-', "_")),
@@ -31,12 +47,15 @@ pub fn cmd_export(
             version_code: 1,
             dry_run: !build,
             abis: vec!["arm64-v8a".into(), "x86_64".into()],
+            signing,
         })
         .map_err(|e| anyhow::anyhow!("{e}"))?;
         for line in &report.log {
             println!("{line}");
         }
         println!("ANDROID_APK_BUILT={}", report.apk_built);
+        println!("ANDROID_APK_SIGNED={}", report.apk_signed);
+        println!("ANDROID_SIGN={}", report.sign_note);
         println!("ANDROID_NOTE={}", report.toolchain_note);
         println!("export android ready at {}", report.out_dir.display());
         return Ok(());
@@ -153,6 +172,10 @@ pub fn cmd_export(
             }
         }
     }
+    if let Some(app_id) = steam_app_id {
+        velvet_build::write_steam_appid_file(&report.out_dir, app_id)?;
+        println!("steam_appid.txt: {app_id}");
+    }
     println!("export ready at {}", report.out_dir.display());
     Ok(())
 }
@@ -229,6 +252,10 @@ mod tests {
             Some("host,linux".into()),
             true,
             vec![],
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap();
         assert!(out.join("multi-platform-export.json").exists());

@@ -30,7 +30,10 @@ Games may freely combine modules: an RPG can embed branching dialogue; a visual 
 
 ## Non-Goals (v0.x)
 
-- Full 3D rendering pipeline.
+- Full 3D rendering pipeline (shipped instead: declarative `Scene3D`
+  documents, AABB physics, animation blending, 3D particles/saves in
+  `velvet-scene3d`, forward 3D pass in `velvet-render`, and the
+  `third-person` playable slice — no deferred/GI, no skeletal retarget).
 - Networking / multiplayer as a first-class subsystem.
 - Console certification support.
 - Live2D or skeletal animation as core features (plugin extension points only).
