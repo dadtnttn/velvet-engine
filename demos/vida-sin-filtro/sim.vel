@@ -1,0 +1,698 @@
+// @edition 3
+// Simulación de una vida: estado, envejecimiento, efectos y muerte.
+
+const LOG_CHARS = 82
+
+state {
+    L: map = {},
+    G: map = {
+        "mode": "title",
+        "modal": null,
+        "scroll": 0,
+        "dirty": true,
+        "frames": 0,
+        "lives": 0,
+        "rng": null,
+        "pick_gender": "r",
+        "pick_likes": "auto",
+        "cache": [],
+        "quit": false
+    }
+}
+
+// ---------------------------------------------------------------- azar
+
+function rint(a: int, b: int) {
+    if b <= a { return a }
+    return rng_range_int(G.rng, a, b + 1)
+}
+
+function chance(p: int) {
+    return rng_range_int(G.rng, 0, 100) < p
+}
+
+function pick(items: list) {
+    return choose(G.rng, items)
+}
+
+function clamp100(v: int) {
+    return clamp(v, 0, 100)
+}
+
+// ---------------------------------------------------------------- texto
+
+function oa(g: string) {
+    if g == "f" { return "a" }
+    return "o"
+}
+
+function by_gender(g: string, m: string, f: string) {
+    if g == "f" { return f }
+    return m
+}
+
+function full_name(p: map) {
+    return p.first + " " + p.last
+}
+
+function money_str(v: int) {
+    let neg = v < 0
+    let n = v
+    if neg { n = -v }
+    let out = ""
+    while n >= 1000 {
+        let part = n % 1000
+        let pad = str(part)
+        if part < 10 { pad = "00" + pad } else if part < 100 { pad = "0" + pad }
+        out = "," + pad + out
+        n = n / 1000
+    }
+    out = "$" + str(n) + out
+    if neg { return "-" + out }
+    return out
+}
+
+function wrap(text: string, max_chars: int) {
+    let lines = []
+    for paragraph in str_split(text, "\n") {
+        let line = ""
+        for word in str_split(paragraph, " ") {
+            if line == "" {
+                line = word
+            } else if len(line) + 1 + len(word) > max_chars {
+                list_push(lines, line)
+                line = word
+            } else {
+                line = line + " " + word
+            }
+        }
+        list_push(lines, line)
+    }
+    return lines
+}
+
+// Sustituye {marcadores} de género y nombres en los textos de eventos.
+function fmt(text: string, ctx: map) {
+    let out = str_replace(text, "{a}", oa(L.gender))
+    out = str_replace(out, "{nombre}", L.first)
+    let p = partner()
+    if p != null {
+        out = str_replace(out, "{p}", p.first)
+        out = str_replace(out, "{pa}", oa(p.gender))
+        out = str_replace(out, "{pel}", by_gender(p.gender, "él", "ella"))
+        out = str_replace(out, "{plo}", by_gender(p.gender, "lo", "la"))
+    }
+    let x = ctx["person"]
+    if x != null {
+        out = str_replace(out, "{x}", x.first)
+        out = str_replace(out, "{xa}", oa(x.gender))
+        out = str_replace(out, "{xel}", by_gender(x.gender, "él", "ella"))
+        out = str_replace(out, "{xlo}", by_gender(x.gender, "lo", "la"))
+        out = str_replace(out, "{xun}", by_gender(x.gender, "Un", "Una"))
+        out = str_replace(out, "{edad}", str(x.age))
+    }
+    if L.job != null {
+        out = str_replace(out, "{trabajo}", L.job.title)
+    }
+    for key in map_keys(ctx) {
+        let v = ctx[key]
+        if type_of(v) == "string" || type_of(v) == "int" {
+            out = str_replace(out, "{" + key + "}", str(v))
+        }
+    }
+    return out
+}
+
+// ---------------------------------------------------------------- bitácora
+
+function log_add(text: string, kind: string) {
+    for line in wrap(text, LOG_CHARS) {
+        list_push(L.log, {"t": line, "k": kind})
+    }
+    G.scroll = 0
+}
+
+// ---------------------------------------------------------------- personas
+
+function make_person(gender: string, rel: string, age: int) {
+    let names = NAMES_M
+    if gender == "f" { names = NAMES_F }
+    let p = {
+        "id": L.next_id,
+        "first": pick(names),
+        "last": pick(SURNAMES),
+        "gender": gender,
+        "age": age,
+        "rel": rel,
+        "bond": rint(55, 90),
+        "looks": rint(15, 100),
+        "alive": true,
+        "known": false,
+        "slept": false
+    }
+    L.next_id += 1
+    return p
+}
+
+function add_person(p: map) {
+    p.known = true
+    list_push(L.people, p)
+    return p
+}
+
+function find_person(id: int) {
+    for p in L.people {
+        if p.id == id { return p }
+    }
+    return null
+}
+
+function partner() {
+    if L.partner_id == 0 { return null }
+    return find_person(L.partner_id)
+}
+
+function attracted_gender() {
+    if L.likes == "ambos" { return pick(["m", "f"]) }
+    return L.likes
+}
+
+// Un desconocido adulto del género que le atrae al personaje, de edad parecida.
+function stranger() {
+    let lo = max(18, L.age - 8)
+    let hi = max(lo, L.age + 8)
+    return make_person(attracted_gender(), "ligue", rint(lo, hi))
+}
+
+function stranger_aged(lo: int, hi: int) {
+    return make_person(attracted_gender(), "ligue", rint(max(18, lo), max(18, hi)))
+}
+
+function rel_label(p: map) {
+    let r = p.rel
+    if r == "padre" { return "Padre" }
+    if r == "madre" { return "Madre" }
+    if r == "hermano" { return by_gender(p.gender, "Hermano", "Hermana") }
+    if r == "pareja" { return by_gender(p.gender, "Novio", "Novia") }
+    if r == "esposo" { return by_gender(p.gender, "Esposo", "Esposa") }
+    if r == "ex" { return "Ex" }
+    if r == "hijo" { return by_gender(p.gender, "Hijo", "Hija") }
+    if r == "amigo" { return by_gender(p.gender, "Amigo", "Amiga") }
+    if r == "amante" { return by_gender(p.gender, "Amante", "Amante") }
+    return "Ligue"
+}
+
+function has_rel(rel: string) {
+    for p in L.people {
+        if p.alive && p.rel == rel { return true }
+    }
+    return false
+}
+
+function first_rel(rel: string) {
+    for p in L.people {
+        if p.alive && p.rel == rel { return p }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- nueva vida
+
+function new_life() {
+    if G.rng == null {
+        G.rng = rng_new(G.frames * 7919 + 104729)
+    }
+    G.lives += 1
+    let gender = G.pick_gender
+    if gender == "r" { gender = pick(["m", "f"]) }
+    let likes = G.pick_likes
+    if likes == "auto" {
+        likes = by_gender(gender, "f", "m")
+    }
+    let names = NAMES_M
+    if gender == "f" { names = NAMES_F }
+    let dad_last = pick(SURNAMES)
+    let mom_last = pick(SURNAMES)
+    L = {
+        "first": pick(names),
+        "last": dad_last + " " + mom_last,
+        "last1": dad_last,
+        "gender": gender,
+        "likes": likes,
+        "age": 0,
+        "city": pick(CITIES),
+        "alive": true,
+        "happy": rint(65, 95),
+        "health": rint(70, 100),
+        "smarts": rint(10, 95),
+        "looks": rint(10, 95),
+        "karma": 50,
+        "money": 0,
+        "edu": 0,
+        "school": "",
+        "uni": 0,
+        "debt": 0,
+        "job": null,
+        "jail": 0,
+        "jail_total": 0,
+        "record": 0,
+        "people": [],
+        "next_id": 1,
+        "partner_id": 0,
+        "married": false,
+        "partners": 0,
+        "marriages": 0,
+        "divorces": 0,
+        "kids": 0,
+        "alcohol": 0,
+        "drugs": 0,
+        "std": [],
+        "hiv_treated": false,
+        "pregnant": false,
+        "preg_with": "",
+        "partner_preg": false,
+        "claim": "",
+        "used": {},
+        "seen": {},
+        "cause": "",
+        "dying": "",
+        "in_red": false,
+        "last_job": "",
+        "log": []
+    }
+    let dad = make_person("m", "padre", rint(20, 45))
+    dad.last = dad_last
+    add_person(dad)
+    let mom = make_person("f", "madre", rint(18, 42))
+    mom.last = mom_last
+    add_person(mom)
+    if chance(45) && mom.age >= 20 {
+        let sib = make_person(pick(["m", "f"]), "hermano", rint(1, min(9, mom.age - 19)))
+        sib.last = L.last
+        add_person(sib)
+    }
+    log_add("Naciste en " + L.city + ".", "h")
+    log_add(by_gender(gender, "Eres hijo", "Eres hija") + " de " + full_name(dad) + " y " + full_name(mom) + ".", "n")
+    log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
+    G.mode = "game"
+    G.modal = null
+    G.scroll = 0
+}
+
+// ---------------------------------------------------------------- año a año
+
+function age_up() {
+    if !L.alive || G.modal != null { return null }
+    L.age += 1
+    L.used = {}
+    log_add("Edad " + str(L.age), "h")
+    yearly()
+    clamp_stats()
+    if !L.alive { return null }
+    death_check()
+    if !L.alive { return null }
+    if L.claim != "" {
+        let person = make_person(by_gender(L.gender, "f", "m"), "ligue", max(18, L.age + rint(-5, 5)))
+        person.first = L.claim
+        L.claim = ""
+        open_event(find_event("baby_claim"), {"person": person})
+        return null
+    }
+    maybe_event()
+    return null
+}
+
+function clamp_stats() {
+    L.happy = clamp100(L.happy)
+    L.health = clamp100(L.health)
+    L.smarts = clamp100(L.smarts)
+    L.looks = clamp100(L.looks)
+    L.karma = clamp100(L.karma)
+    L.alcohol = clamp100(L.alcohol)
+    L.drugs = clamp100(L.drugs)
+}
+
+function yearly() {
+    // Familia y conocidos
+    for p in L.people {
+        if !p.alive { continue }
+        p.age += 1
+        p.bond = clamp100(p.bond - rint(0, 3))
+        let risk = 0
+        if p.age > 60 { risk = (p.age - 60) / 3 }
+        if p.age > 85 { risk = risk + 10 }
+        if risk > 0 && chance(risk) {
+            p.alive = false
+            log_add("Tu " + str_lower(rel_label(p)) + " " + p.first + " murió a los " + str(p.age) + " años.", "b")
+            if p.bond > 50 { L.happy -= 15 }
+            if p.rel == "padre" || p.rel == "madre" {
+                if chance(60) {
+                    let heritage = rint(2, 40) * 1000
+                    L.money += heritage
+                    log_add("Heredaste " + money_str(heritage) + ".", "g")
+                }
+            }
+            if p.id == L.partner_id {
+                L.partner_id = 0
+                L.married = false
+                L.happy -= 20
+            }
+        }
+    }
+
+    // Infancia
+    if L.age <= 5 {
+        if chance(70) { log_add(pick(CHILDHOOD), "n") }
+    }
+
+    // Escuela
+    if L.age == 6 {
+        L.school = "primaria"
+        log_add("Empezaste la primaria.", "n")
+    }
+    if L.age == 12 {
+        L.school = "secundaria"
+        L.edu = 1
+        log_add("Terminaste la primaria y entraste a la secundaria.", "n")
+    }
+    if L.school != "" && L.age < 18 {
+        L.smarts += rint(0, 3)
+    }
+    if L.age == 18 && L.school == "secundaria" {
+        L.school = ""
+        L.edu = 2
+        log_add("Te graduaste de la secundaria. Ya eres mayor de edad: la noche es tuya.", "g")
+    }
+    if L.uni > 0 {
+        L.uni -= 1
+        L.smarts += rint(1, 4)
+        if L.uni == 0 {
+            L.edu = 3
+            L.school = ""
+            log_add("¡Te graduaste de la universidad!", "g")
+            L.happy += 10
+        }
+    }
+
+    // Prisión
+    if L.jail > 0 {
+        L.jail -= 1
+        L.happy -= 6
+        if L.jail == 0 {
+            log_add("Saliste de prisión. El mundo sigue igual; tú no.", "g")
+        }
+    }
+
+    // Trabajo y dinero
+    if L.job != null && L.jail == 0 {
+        let pay = job_pay(L.job)
+        // Impuestos y estilo de vida se llevan la mitad del sueldo.
+        let net = pay * 50 / 100
+        L.money += net
+        L.job.years += 1
+        L.job.perf = clamp100(L.job.perf + rint(-6, 4))
+        if L.debt > 0 {
+            let payment = min(L.debt, net * 20 / 100)
+            L.debt -= payment
+            L.money -= payment
+            if L.debt == 0 { log_add("Terminaste de pagar tu préstamo estudiantil.", "g") }
+        }
+        if L.job.perf < 15 && chance(50) {
+            log_add("Te despidieron de tu trabajo como " + L.job.title + ".", "b")
+            L.happy -= 10
+            L.last_job = L.job.title
+            L.job = null
+        }
+    }
+    let kids_cost = 3000 * kids_living()
+    if kids_cost > 0 && L.jail == 0 { L.money -= kids_cost }
+    if L.money < 0 && L.age >= 18 {
+        L.happy -= 2
+        if !L.in_red { log_add("Estás en números rojos. Los cobradores ya saben tu nombre.", "b") }
+    }
+    L.in_red = L.money < 0
+
+    // Vicios
+    if L.alcohol > 0 {
+        L.health -= L.alcohol / 12
+        L.alcohol -= 3
+        if L.alcohol > 50 && chance(30) { log_add("Tu hígado te manda saludos. Bebes demasiado.", "b") }
+    }
+    if L.drugs > 0 {
+        L.health -= L.drugs / 8
+        L.happy -= L.drugs / 15
+        L.drugs -= 4
+        if L.drugs >= 70 && chance(L.drugs / 8) {
+            die("una sobredosis")
+            return null
+        }
+    }
+
+    // Infecciones sin tratar
+    for s in L.std {
+        if s == "VIH" {
+            if L.hiv_treated { L.health -= 1 } else { L.health -= 8 }
+        } else if s == "herpes" {
+            L.health -= 1
+        } else {
+            L.health -= 4
+        }
+    }
+
+    // Embarazos
+    if L.pregnant {
+        L.pregnant = false
+        add_child(L.preg_with)
+    }
+    if L.partner_preg {
+        L.partner_preg = false
+        let p = partner()
+        let other = "tu pareja"
+        if p != null { other = p.first }
+        add_child(other)
+    }
+
+    // Pareja
+    let p = partner()
+    if p != null && p.alive {
+        if p.bond < 20 && chance(45) {
+            log_add(p.first + " te dejó. Dice que ya no siente nada.", "b")
+            breakup()
+            L.happy -= 15
+        } else if L.karma < 30 && chance(10) {
+            log_add("Descubriste que " + p.first + " te engaña con alguien del trabajo.", "b")
+            p.bond -= 30
+            L.happy -= 15
+        }
+    }
+
+    // Edad
+    L.happy += rint(-4, 3)
+    if L.age >= 30 { L.looks -= rint(0, 1) }
+    if L.age >= 45 { L.looks -= rint(0, 2) }
+    if L.age >= 50 { L.health -= rint(0, 3) }
+    if L.age >= 70 { L.health -= rint(1, 4) }
+    if L.age >= 8 && L.age < 30 { L.health += rint(0, 2) }
+    return null
+}
+
+function kids_living() {
+    let n = 0
+    for p in L.people {
+        if p.alive && p.rel == "hijo" && p.age < 18 { n += 1 }
+    }
+    return n
+}
+
+function job_pay(job: map) {
+    if job.var != null && job.var > 0 {
+        return L.looks * L.looks * job.var
+    }
+    return job.salary
+}
+
+function add_child(other: string) {
+    let g = pick(["m", "f"])
+    let child = make_person(g, "hijo", 0)
+    child.last = L.last1
+    child.bond = 90
+    add_person(child)
+    L.kids += 1
+    L.happy += 10
+    log_add("¡Nació tu " + by_gender(g, "hijo", "hija") + " " + child.first + "! (con " + other + ")", "g")
+}
+
+function death_check() {
+    if L.health <= 0 {
+        die("problemas de salud")
+        return null
+    }
+    if L.age >= 60 {
+        let over = L.age - 60
+        let risk = over * over / 40 + (100 - L.health) / 10
+        if L.age >= 105 { risk = 100 }
+        if chance(risk) { die(pick(OLD_AGE_CAUSES)) }
+    }
+    return null
+}
+
+function die(cause: string) {
+    L.alive = false
+    L.cause = cause
+    log_add("Moriste a los " + str(L.age) + " años por " + cause + ".", "b")
+    G.modal = null
+    G.mode = "dead"
+}
+
+// ---------------------------------------------------------------- relaciones
+
+function breakup() {
+    let p = partner()
+    if p == null { return null }
+    if L.married {
+        L.married = false
+        L.divorces += 1
+        if L.money > 0 {
+            let half = L.money / 2
+            L.money -= half
+            log_add("El divorcio te costó la mitad de todo: " + money_str(half) + ".", "b")
+        }
+    }
+    p.rel = "ex"
+    L.partner_id = 0
+    return null
+}
+
+function make_partner(p: map) {
+    if !p.known { add_person(p) }
+    let current = partner()
+    if current != null && current.id != p.id {
+        p.rel = "amante"
+        return false
+    }
+    p.rel = "pareja"
+    p.bond = max(p.bond, 60)
+    L.partner_id = p.id
+    return true
+}
+
+function marry() {
+    let p = partner()
+    if p == null { return null }
+    p.rel = "esposo"
+    L.married = true
+    L.marriages += 1
+    let cost = min(max(L.money, 0), 8000)
+    L.money -= cost
+    p.bond = clamp100(p.bond + 15)
+    return null
+}
+
+// ---------------------------------------------------------------- efectos
+
+// Aplica un resultado {w, log, happy, health, ..., special} y devuelve el texto.
+function apply(o: map, ctx: map) {
+    let msg = ""
+    if map_has(o, "log") { msg = fmt(o.log, ctx) }
+    for key in ["happy", "health", "smarts", "looks", "karma", "alcohol", "drugs"] {
+        if map_has(o, key) { L[key] = L[key] + o[key] }
+    }
+    if map_has(o, "money") {
+        let m = o.money
+        if type_of(m) == "list" { m = rint(m[0] / 100, m[1] / 100) * 100 }
+        L.money += m
+        ctx["monto"] = money_str(m)
+        msg = str_replace(msg, "{monto}", money_str(m))
+    }
+    if map_has(o, "bond") {
+        let target = ctx["person"]
+        if target == null || !target.known { target = partner() }
+        if target != null { target.bond = clamp100(target.bond + o.bond) }
+    }
+    if map_has(o, "count") { L.partners += o.count }
+    if map_has(o, "sex") { msg = msg + sex_with(ctx["person"]) }
+    if map_has(o, "std") {
+        if chance(o.std) { msg = msg + catch_std() }
+    }
+    if map_has(o, "preg") { msg = msg + maybe_pregnancy(ctx["person"], o.preg) }
+    if map_has(o, "special") { msg = msg + special(o.special, ctx) }
+    if map_has(o, "jail") { msg = msg + go_to_jail(o.jail) }
+    clamp_stats()
+    if map_has(o, "die") {
+        L.dying = o.die
+    } else if L.health <= 0 {
+        L.dying = "complicaciones de salud"
+        if map_has(o, "drugs") || map_has(o, "alcohol") { L.dying = "sus excesos" }
+    }
+    return msg
+}
+
+function sex_with(person: any) {
+    let out = ""
+    if person != null && !person.slept {
+        person.slept = true
+        L.partners += 1
+    }
+    let p = partner()
+    if p != null && (person == null || person.id != p.id) {
+        L.karma -= 5
+        if chance(30) {
+            p.bond -= 45
+            L.happy -= 10
+            out = " " + p.first + " se enteró de tu infidelidad."
+            if p.bond < 25 {
+                breakup()
+                out = out + " Te dejó y tiró tu ropa por la ventana."
+            }
+        }
+    }
+    return out
+}
+
+function catch_std() {
+    let idx = weighted_choose(G.rng, STD_WEIGHTS)
+    let name = STDS[idx]
+    if list_contains(L.std, name) { return "" }
+    list_push(L.std, name)
+    return " Días después notas algo raro ahí abajo: tienes " + name + "."
+}
+
+function maybe_pregnancy(person: any, p: int) {
+    if person == null || person.gender == L.gender { return "" }
+    if !chance(p) { return "" }
+    if L.gender == "f" {
+        if L.pregnant || L.age > 45 { return "" }
+        L.pregnant = true
+        L.preg_with = person.first
+        return " Semanas después, la prueba sale positiva: estás embarazada."
+    }
+    if person.known && person.id == L.partner_id {
+        L.partner_preg = true
+        return " " + person.first + " está embarazada."
+    }
+    L.claim = person.first
+    return ""
+}
+
+function go_to_jail(years: int) {
+    L.jail = years
+    L.jail_total += years
+    L.record += 1
+    if L.job != null {
+        L.last_job = L.job.title
+        L.job = null
+    }
+    if L.uni > 0 { L.uni = 0 }
+    let out = " Te condenaron a " + str(years) + " " + plural(years, "año", "años") + " de prisión."
+    let p = partner()
+    if p != null && chance(50) {
+        breakup()
+        out = out + " Tu pareja no piensa esperarte."
+    }
+    return out
+}
+
+function plural(n: int, one: string, many: string) {
+    if n == 1 { return one }
+    return many
+}

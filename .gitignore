@@ -65,7 +65,8 @@ demos/demon-queen/.headless-ok
 /demos/demon-queen/.local-tests/
 
 # Untracked local content (purged from history)
-/demos/
+/demos/*
+!/demos/vida-sin-filtro/
 /*.png
 /*.log
 fx_export/*.png

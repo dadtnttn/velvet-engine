@@ -1,0 +1,2 @@
+# El velvet.lock hashea los fuentes byte a byte: mantener LF también en Windows.
+* text=auto eol=lf

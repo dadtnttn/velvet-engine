@@ -1,0 +1,602 @@
+// @edition 3
+// Interfaz: primitivas de dibujo, pantallas y ventanas emergentes.
+// Lienzo de 1280x720; los colores son ARGB en decimal (ver rgb/rgba).
+
+function rgb(r: int, g: int, b: int) {
+    return 4278190080 + r * 65536 + g * 256 + b
+}
+
+function rgba(r: int, g: int, b: int, a: int) {
+    return a * 16777216 + r * 65536 + g * 256 + b
+}
+
+const W = 1280
+const H = 720
+
+const C_BG = rgb(13, 9, 19)
+const C_PANEL = rgb(24, 17, 33)
+const C_PANEL2 = rgb(35, 25, 48)
+const C_HOVER = rgb(52, 37, 70)
+const C_LINE = rgb(62, 46, 82)
+const C_TEXT = rgb(238, 230, 244)
+const C_MUTED = rgb(148, 134, 166)
+const C_ACCENT = rgb(236, 72, 153)
+const C_ACCENT_HI = rgb(250, 110, 180)
+const C_ACCENT_SOFT = rgb(244, 154, 200)
+const C_GOOD = rgb(80, 200, 140)
+const C_WARN = rgb(240, 180, 70)
+const C_BAD = rgb(236, 84, 84)
+const C_BLUE = rgb(110, 160, 245)
+const C_DIM = rgba(6, 3, 10, 200)
+const C_GLOW = rgba(236, 72, 153, 18)
+
+const EDU_NAMES = ["Ninguna", "Primaria", "Secundaria", "Universidad"]
+
+state {
+    C: list = [],
+    block: bool = false
+}
+
+// ---------------------------------------------------------------- primitivas
+
+function push(cmd: map) {
+    list_push(C, cmd)
+}
+
+function rect(x: int, y: int, w: int, h: int, color: int) {
+    push({"op": "rect", "x": x, "y": y, "w": w, "h": h, "color": color})
+}
+
+function arect(x: int, y: int, w: int, h: int, color: int) {
+    push({"op": "alpha_rect", "x": x, "y": y, "w": w, "h": h, "color": color})
+}
+
+function rrect(x: int, y: int, w: int, h: int, r: int, color: int) {
+    push({"op": "rounded_rect", "x": x, "y": y, "w": w, "h": h, "radius": r, "color": color})
+}
+
+function frame_box(x: int, y: int, w: int, h: int, r: int, fill: int, stroke: int) {
+    rrect(x, y, w, h, r, stroke)
+    rrect(x + 1, y + 1, w - 2, h - 2, r, fill)
+}
+
+function text(x: int, y: int, s: string, size: int, color: int, font: string) {
+    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font})
+}
+
+function ctext(x: int, y: int, s: string, size: int, color: int, font: string) {
+    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font, "align": "center"})
+}
+
+function bar(x: int, y: int, w: int, h: int, value: int, fill: int) {
+    push({"op": "bar", "x": x, "y": y, "w": w, "h": h, "ratio": value * 1.0 / 100, "fill": fill, "background": C_BG, "stroke": C_LINE, "thickness": 1})
+}
+
+// Botón con hover del host. Si hay una ventana abierta, se dibuja inactivo.
+function button(x: int, y: int, w: int, h: int, label: string, action: string, style: string, size: int) {
+    let bg = C_PANEL2
+    let hover = C_HOVER
+    let stroke = C_LINE
+    let color = C_TEXT
+    if style == "primary" {
+        bg = C_ACCENT
+        hover = C_ACCENT_HI
+        stroke = C_ACCENT
+        color = rgb(255, 255, 255)
+    } else if style == "selected" {
+        bg = rgb(70, 30, 60)
+        hover = rgb(90, 38, 76)
+        stroke = C_ACCENT
+        color = C_ACCENT_SOFT
+    } else if style == "ghost" {
+        bg = C_PANEL
+        hover = C_PANEL2
+    }
+    if block {
+        push({"op": "panel", "x": x, "y": y, "w": w, "h": h, "color": bg, "stroke": stroke, "thickness": 1})
+        ctext(x + w / 2, y + h / 2 + size * 4 / 10, label, size, color, "bold")
+        return null
+    }
+    push({
+        "op": "button", "x": x, "y": y, "w": w, "h": h, "text": label, "action": action,
+        "font": "bold", "size": size, "color": color, "background": bg, "fill": hover,
+        "stroke": stroke, "thickness": 1
+    })
+    return null
+}
+
+// Botón de dos líneas (título y subtítulo) para menús.
+function item_button(x: int, y: int, w: int, h: int, title: string, sub: string, action: string) {
+    button(x, y, w, h, "", action, "normal", 16)
+    text(x + 16, y + 27, clip_text(title, w - 32, 17), 17, C_TEXT, "bold")
+    text(x + 16, y + 49, clip_text(sub, w - 32, 14), 14, C_MUTED, "ui")
+}
+
+function chars_for(width: int, size: int) {
+    return width * 100 / (size * 54)
+}
+
+function clip_text(s: string, width: int, size: int) {
+    let n = chars_for(width, size)
+    if len(s) <= n { return s }
+    let words = str_split(s, " ")
+    let out = ""
+    for w in words {
+        let next = w
+        if out != "" { next = out + " " + w }
+        if len(next) + 1 > n { return out + "…" }
+        out = next
+    }
+    return out
+}
+
+function stat_color(v: int) {
+    if v >= 60 { return C_GOOD }
+    if v >= 30 { return C_WARN }
+    return C_BAD
+}
+
+function kind_color(k: string) {
+    if k == "g" { return C_GOOD }
+    if k == "b" { return C_BAD }
+    if k == "x" { return C_ACCENT_SOFT }
+    if k == "h" { return C_ACCENT }
+    return C_TEXT
+}
+
+// ---------------------------------------------------------------- frame
+
+function build() {
+    C = []
+    block = false
+    rect(0, 0, W, H, C_BG)
+    if G.mode == "title" {
+        draw_title()
+    } else if G.mode == "dead" {
+        draw_dead()
+    } else {
+        block = G.modal != null
+        draw_game()
+        block = false
+        if G.modal != null { draw_modal(G.modal) }
+    }
+    return C
+}
+
+// ---------------------------------------------------------------- portada
+
+function draw_title() {
+    push({"op": "alpha_ellipse", "x": 1040, "y": 160, "rx": 420, "ry": 300, "color": C_GLOW})
+    push({"op": "alpha_ellipse", "x": 1040, "y": 160, "rx": 260, "ry": 190, "color": C_GLOW})
+    push({"op": "alpha_ellipse", "x": 180, "y": 640, "rx": 360, "ry": 220, "color": C_GLOW})
+
+    ctext(W / 2, 150, "VIDA SIN FILTRO", 68, C_ACCENT, "bold")
+    ctext(W / 2, 192, "Un simulador de vida para adultos. Cada año, una decisión. Cada decisión, una consecuencia.", 18, C_MUTED, "ui")
+
+    frame_box(290, 222, 700, 74, 12, C_PANEL, C_LINE)
+    rrect(312, 240, 64, 38, 8, C_ACCENT)
+    ctext(344, 266, "+18", 20, rgb(255, 255, 255), "bold")
+    text(396, 254, "Contiene sexo (sin escenas explícitas), drogas, alcohol, crimen", 16, C_TEXT, "ui")
+    text(396, 278, "y muy malas decisiones. Solo para mayores de edad.", 16, C_TEXT, "ui")
+
+    ctext(W / 2, 344, "Sexo del personaje", 16, C_MUTED, "bold")
+    toggle(415, 358, 140, "Hombre", "g:m", G.pick_gender == "m")
+    toggle(570, 358, 140, "Mujer", "g:f", G.pick_gender == "f")
+    toggle(725, 358, 140, "Al azar", "g:r", G.pick_gender == "r")
+
+    ctext(W / 2, 440, "Le atraen", 16, C_MUTED, "bold")
+    toggle(340, 454, 140, "Sexo opuesto", "l:auto", G.pick_likes == "auto")
+    toggle(495, 454, 140, "Mujeres", "l:f", G.pick_likes == "f")
+    toggle(650, 454, 140, "Hombres", "l:m", G.pick_likes == "m")
+    toggle(805, 454, 140, "Ambos", "l:ambos", G.pick_likes == "ambos")
+
+    button(460, 540, 360, 64, "EMPEZAR UNA VIDA", "start", "primary", 22)
+    button(580, 620, 120, 40, "Salir", "quit", "ghost", 15)
+
+    if G.lives > 0 {
+        ctext(W / 2, 690, "Vidas vividas: " + str(G.lives), 14, C_MUTED, "ui")
+    }
+    text(20, 704, "Velvet Engine · Velvet Script 3", 13, C_LINE, "ui")
+    text(1080, 704, "Enter: empezar", 13, C_LINE, "ui")
+}
+
+function toggle(x: int, y: int, w: int, label: string, action: string, on: bool) {
+    let style = "normal"
+    if on { style = "selected" }
+    button(x, y, w, 50, label, action, style, 16)
+}
+
+// ---------------------------------------------------------------- juego
+
+function draw_game() {
+    draw_header()
+    draw_log(20, 88, 800, 520)
+    draw_stats(840, 88, 420, 272)
+    draw_status(840, 372, 420, 236)
+    draw_bottom()
+}
+
+function draw_header() {
+    rect(0, 0, W, 72, C_PANEL)
+    rect(0, 72, W, 1, C_LINE)
+    let avatar = C_BLUE
+    if L.gender == "f" { avatar = C_ACCENT }
+    push({"op": "circle", "x": 44, "y": 36, "radius": 24, "color": avatar})
+    ctext(44, 44, initials(), 18, rgb(255, 255, 255), "bold")
+    text(82, 32, L.first + " " + L.last, 24, C_TEXT, "bold")
+    let sub = by_gender(L.gender, "Hombre", "Mujer") + " · " + str(L.age) + " " + plural(L.age, "año", "años") + " · " + L.city
+    text(82, 56, sub, 15, C_MUTED, "ui")
+
+    ctext(900, 28, "OCUPACIÓN", 12, C_MUTED, "bold")
+    ctext(900, 54, occupation_text(), 17, C_TEXT, "bold")
+    ctext(1150, 28, "DINERO", 12, C_MUTED, "bold")
+    let mc = C_GOOD
+    if L.money < 0 { mc = C_BAD }
+    ctext(1150, 56, money_str(L.money), 24, mc, "bold")
+}
+
+function initials() {
+    let parts = str_split(L.last, " ")
+    return str_upper(first_char(L.first) + first_char(parts[0]))
+}
+
+// Primer carácter usando la tabla de letras más comunes (VS3 no indexa strings).
+function first_char(s: string) {
+    for c in ["Á", "É", "Í", "Ó", "Ú", "Ñ", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"] {
+        if str_starts_with(s, c) { return c }
+    }
+    return "?"
+}
+
+function occupation_text() {
+    if L.jail > 0 { return "En prisión" }
+    if L.job != null { return L.job.title }
+    if L.uni > 0 { return "Universitari" + oa(L.gender) }
+    if L.school == "primaria" { return "Primaria" }
+    if L.school == "secundaria" { return "Secundaria" }
+    if L.age < 6 { return by_gender(L.gender, "Bebé consentido", "Bebé consentida") }
+    return "Desemplead" + oa(L.gender)
+}
+
+function draw_log(x: int, y: int, w: int, h: int) {
+    frame_box(x, y, w, h, 14, C_PANEL, C_LINE)
+    let line_h = 24
+    let visible = (h - 28) / line_h
+    let total = len(L.log)
+    let max_scroll = max(0, total - visible)
+    G.scroll = clamp(G.scroll, 0, max_scroll)
+    let start = max(0, total - visible - G.scroll)
+    let end = min(total, start + visible)
+    push({"op": "clip_push", "x": x + 2, "y": y + 2, "w": w - 4, "h": h - 4})
+    let cy = y + 14
+    let i = start
+    while i < end {
+        let entry = L.log[i]
+        if entry.k == "h" {
+            rect(x + 20, cy + 4, w - 52, 1, C_LINE)
+            text(x + 20, cy + 19, entry.t, 15, C_ACCENT, "bold")
+        } else {
+            text(x + 26, cy + 18, entry.t, 16, kind_color(entry.k), "ui")
+        }
+        cy += line_h
+        i += 1
+    }
+    push({"op": "clip_pop"})
+    if max_scroll > 0 {
+        let track_h = h - 28
+        let thumb_h = max(30, track_h * visible / total)
+        let thumb_y = y + 14 + (track_h - thumb_h) * (max_scroll - G.scroll) / max_scroll
+        rrect(x + w - 14, y + 14, 6, track_h, 3, C_PANEL2)
+        rrect(x + w - 14, thumb_y, 6, thumb_h, 3, C_LINE)
+    }
+    if G.scroll > 0 && !block {
+        button(x + w / 2 - 90, y + h - 44, 180, 32, "Ir a lo más reciente", "scroll:end", "normal", 13)
+    }
+}
+
+function draw_stats(x: int, y: int, w: int, h: int) {
+    frame_box(x, y, w, h, 14, C_PANEL, C_LINE)
+    text(x + 20, y + 30, "ESTADÍSTICAS", 13, C_MUTED, "bold")
+    let names = ["Felicidad", "Salud", "Inteligencia", "Atractivo"]
+    let values = [L.happy, L.health, L.smarts, L.looks]
+    let i = 0
+    while i < 4 {
+        let sy = y + 62 + i * 52
+        let v = values[i]
+        text(x + 20, sy, names[i], 16, C_TEXT, "bold")
+        ctext(x + w - 40, sy, str(v) + "%", 15, stat_color(v), "bold")
+        bar(x + 20, sy + 10, w - 40, 16, v, stat_color(v))
+        i += 1
+    }
+}
+
+function draw_status(x: int, y: int, w: int, h: int) {
+    frame_box(x, y, w, h, 14, C_PANEL, C_LINE)
+    text(x + 20, y + 30, "SITUACIÓN", 13, C_MUTED, "bold")
+    let rows = [
+        ["Relación", relationship_text()],
+        ["Educación", education_text()],
+        ["Parejas sexuales", str(L.partners)],
+        ["Hijos", str(L.kids)],
+        ["Salud sexual", std_text()],
+        ["Vicios", vice_text()],
+        ["Antecedentes", record_text()]
+    ]
+    let ry = y + 58
+    for row in rows {
+        text(x + 20, ry, row[0], 14, C_MUTED, "ui")
+        text(x + 160, ry, clip_text(row[1], w - 180, 14), 14, C_TEXT, "bold")
+        ry += 24
+    }
+}
+
+function relationship_text() {
+    let p = partner()
+    if p == null {
+        if L.age < 16 { return "—" }
+        return by_gender(L.gender, "Soltero", "Soltera")
+    }
+    if L.married { return by_gender(L.gender, "Casado", "Casada") + " con " + p.first }
+    return rel_label(p) + ": " + p.first
+}
+
+function education_text() {
+    let out = EDU_NAMES[L.edu]
+    if L.uni > 0 { return "Universidad (" + str(L.uni) + " " + plural(L.uni, "año", "años") + ")" }
+    if L.school != "" { return "Cursando " + L.school }
+    if L.debt > 0 { out = out + " · deuda " + money_str(L.debt) }
+    return out
+}
+
+function std_text() {
+    if L.age < 16 { return "—" }
+    if len(L.std) == 0 { return "Sin infecciones" }
+    return str_join(L.std, ", ")
+}
+
+function vice_text() {
+    let parts = []
+    if L.alcohol > 0 { list_push(parts, "Alcohol " + str(L.alcohol) + "%") }
+    if L.drugs > 0 { list_push(parts, "Drogas " + str(L.drugs) + "%") }
+    if len(parts) == 0 { return "Ninguno" }
+    return str_join(parts, " · ")
+}
+
+function record_text() {
+    if L.jail > 0 { return "En prisión (" + str(L.jail) + " " + plural(L.jail, "año", "años") + ")" }
+    if L.record == 0 { return "Limpios" }
+    return str(L.record) + " " + plural(L.record, "delito", "delitos")
+}
+
+function draw_bottom() {
+    rect(0, 620, W, 100, C_PANEL)
+    rect(0, 620, W, 1, C_LINE)
+    button(20, 636, 230, 68, "Ocupación", "tab:job", "normal", 18)
+    button(262, 636, 230, 68, "Relaciones", "tab:rel", "normal", 18)
+    button(788, 636, 230, 68, "Actividades", "tab:act", "normal", 18)
+    button(1030, 636, 230, 68, "Noche +18", "tab:night", "normal", 18)
+    button(505, 630, 270, 80, "", "age", "primary", 18)
+    ctext(640, 670, "+1 AÑO", 28, rgb(255, 255, 255), "bold")
+    ctext(640, 696, "Espacio", 12, rgb(255, 225, 240), "ui")
+}
+
+// ---------------------------------------------------------------- ventanas
+
+function draw_modal(m: map) {
+    arect(0, 0, W, H, C_DIM)
+    push({"op": "alpha_rect", "x": 0, "y": 0, "w": W, "h": H, "color": 0, "action": "noop"})
+    if m.kind == "info" { return draw_info(m) }
+    if m.kind == "choice" { return draw_choice(m) }
+    if m.kind == "menu" { return draw_menu(m) }
+    if m.kind == "person" { return draw_person(m) }
+    if m.kind == "jobs" { return draw_jobs(m) }
+    return null
+}
+
+function draw_info(m: map) {
+    let w = 620
+    let lines = wrap(m.text, chars_for(w - 64, 17))
+    let h = 84 + len(lines) * 26 + 92
+    let x = (W - w) / 2
+    let y = (H - h) / 2
+    frame_box(x, y, w, h, 16, C_PANEL, C_ACCENT)
+    text(x + 32, y + 48, m.title, 24, C_ACCENT, "bold")
+    let ty = y + 88
+    for line in lines {
+        text(x + 32, ty, line, 17, C_TEXT, "ui")
+        ty += 26
+    }
+    button(x + w / 2 - 90, y + h - 72, 180, 48, "Continuar", "ok", "primary", 17)
+    return null
+}
+
+function draw_choice(m: map) {
+    let w = 660
+    let lines = wrap(m.text, chars_for(w - 64, 17))
+    let n = len(m.choices)
+    let h = 84 + len(lines) * 26 + 20 + n * 60 + 16
+    let x = (W - w) / 2
+    let y = (H - h) / 2
+    frame_box(x, y, w, h, 16, C_PANEL, C_ACCENT)
+    text(x + 32, y + 48, m.title, 24, C_ACCENT, "bold")
+    let ty = y + 88
+    for line in lines {
+        text(x + 32, ty, line, 17, C_TEXT, "ui")
+        ty += 26
+    }
+    let by = ty + 6
+    let i = 0
+    while i < n {
+        button(x + 32, by, w - 64, 50, "", "choice:" + str(i), "normal", 16)
+        rrect(x + 44, by + 11, 28, 28, 6, C_ACCENT)
+        ctext(x + 58, by + 31, str(i + 1), 15, rgb(255, 255, 255), "bold")
+        text(x + 86, by + 31, m.choices[i], 17, C_TEXT, "bold")
+        by += 60
+        i += 1
+    }
+    return null
+}
+
+function draw_panel_header(x: int, y: int, w: int, title: string, back: string) {
+    text(x + 28, y + 46, title, 26, C_ACCENT, "bold")
+    button(x + w - 140, y + 18, 116, 40, "Cerrar", "close", "ghost", 15)
+    if back != "" {
+        button(x + w - 266, y + 18, 116, 40, "Volver", back, "ghost", 15)
+    }
+}
+
+function draw_menu(m: map) {
+    let x = 180
+    let y = 70
+    let w = 920
+    let h = 580
+    frame_box(x, y, w, h, 18, C_PANEL, C_LINE)
+    draw_panel_header(x, y, w, menu_title(m.tab), "")
+    let blocked = menu_block(m.tab)
+    if blocked != "" {
+        ctext(x + w / 2, y + h / 2, blocked, 20, C_MUTED, "ui")
+        return null
+    }
+    let items = menu_items(m.tab)
+    if len(items) == 0 {
+        ctext(x + w / 2, y + h / 2, "No hay nada que hacer aquí por ahora.", 20, C_MUTED, "ui")
+        return null
+    }
+    let i = 0
+    while i < len(items) && i < 21 {
+        let col = i % 3
+        let row = i / 3
+        let ix = x + 24 + col * 296
+        let iy = y + 84 + row * 70
+        let it = items[i]
+        item_button(ix, iy, 280, 62, it.t, it.s, it.action)
+        if it.bond != null {
+            rect(ix + 16, iy + 56, 248, 3, C_BG)
+            rect(ix + 16, iy + 56, 248 * it.bond / 100, 3, stat_color(it.bond))
+        }
+        i += 1
+    }
+    return null
+}
+
+function draw_person(m: map) {
+    let p = find_person(m.pid)
+    let x = 240
+    let y = 80
+    let w = 800
+    let h = 560
+    frame_box(x, y, w, h, 18, C_PANEL, C_LINE)
+    draw_panel_header(x, y, w, full_name(p), "tab:rel")
+    text(x + 28, y + 80, rel_label(p) + " · " + str(p.age) + " años · Atractivo " + str(p.looks) + "%", 16, C_MUTED, "ui")
+    text(x + 28, y + 114, "Cercanía", 15, C_TEXT, "bold")
+    bar(x + 120, y + 100, w - 260, 18, p.bond, stat_color(p.bond))
+    ctext(x + w - 100, y + 115, str(p.bond) + "%", 15, stat_color(p.bond), "bold")
+    let actions = person_actions(p)
+    let i = 0
+    while i < len(actions) {
+        let col = i % 2
+        let row = i / 2
+        let it = actions[i]
+        item_button(x + 28 + col * 378, y + 140 + row * 70, 366, 62, it.t, it.s, it.action)
+        i += 1
+    }
+    return null
+}
+
+function draw_jobs(m: map) {
+    let x = 180
+    let y = 70
+    let w = 920
+    let h = 580
+    frame_box(x, y, w, h, 18, C_PANEL, C_LINE)
+    draw_panel_header(x, y, w, m.title, "tab:job")
+    let i = 0
+    while i < len(m.offers) {
+        let j = m.offers[i]
+        let col = i % 2
+        let row = i / 2
+        let ix = x + 24 + col * 440
+        let iy = y + 84 + row * 160
+        button(ix, iy, 428, 148, "", "hire:" + str(i), "normal", 16)
+        text(ix + 18, iy + 34, by_gender(L.gender, j.m, j.f), 19, C_TEXT, "bold")
+        text(ix + 18, iy + 62, job_salary_text(j), 16, C_GOOD, "bold")
+        text(ix + 18, iy + 88, job_requirements(j), 14, C_MUTED, "ui")
+        let ok = L.edu >= j.edu && L.smarts >= j.smarts && L.looks >= j.looks
+        if ok {
+            text(ix + 18, iy + 124, "Cumples los requisitos · Solicitar", 14, C_GOOD, "ui")
+        } else {
+            text(ix + 18, iy + 124, "No cumples los requisitos · Probar suerte", 14, C_WARN, "ui")
+        }
+        i += 1
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- muerte
+
+function draw_dead() {
+    push({"op": "alpha_ellipse", "x": 290, "y": 300, "rx": 420, "ry": 320, "color": rgba(120, 30, 70, 30)})
+    frame_box(40, 40, 500, 640, 18, C_PANEL, C_LINE)
+    text(72, 92, "DESCANSE EN PAZ", 15, C_MUTED, "bold")
+    text(72, 136, clip_text(L.first + " " + L.last, 436, 30), 30, C_TEXT, "bold")
+    let ty = 160
+    for line in wrap("Murió a los " + str(L.age) + " años por " + L.cause + ".", chars_for(436, 17)) {
+        text(72, ty + 16, line, 17, C_ACCENT_SOFT, "ui")
+        ty += 24
+    }
+    text(72, ty + 22, "«" + epitaph() + "»", 15, C_MUTED, "ui")
+    let job = L.last_job
+    if L.job != null { job = L.job.title }
+    if job == "" { job = "Ninguno" }
+    let rows = [
+        ["Dinero al morir", money_str(L.money)],
+        ["Último trabajo", job],
+        ["Educación", EDU_NAMES[L.edu]],
+        ["Parejas sexuales", str(L.partners)],
+        ["Matrimonios", str(L.marriages)],
+        ["Divorcios", str(L.divorces)],
+        ["Hijos", str(L.kids)],
+        ["Años en prisión", str(L.jail_total)],
+        ["Karma", karma_text()]
+    ]
+    let ry = 270
+    for row in rows {
+        text(72, ry, row[0], 16, C_MUTED, "ui")
+        text(250, ry, clip_text(row[1], 270, 16), 16, C_TEXT, "bold")
+        ry += 30
+    }
+    button(72, 590, 260, 60, "Vivir otra vida", "restart", "primary", 19)
+    button(348, 590, 160, 60, "Salir", "quit", "ghost", 16)
+
+    frame_box(560, 40, 680, 640, 18, C_PANEL, C_LINE)
+    text(592, 92, "ÚLTIMOS RECUERDOS", 15, C_MUTED, "bold")
+    let total = len(L.log)
+    let visible = 22
+    let start = max(0, total - visible)
+    let ly = 128
+    let i = start
+    push({"op": "clip_push", "x": 570, "y": 104, "w": 660, "h": 566})
+    while i < total {
+        let entry = L.log[i]
+        let font = "ui"
+        if entry.k == "h" { font = "bold" }
+        text(592, ly, entry.t, 14, kind_color(entry.k), font)
+        ly += 24
+        i += 1
+    }
+    push({"op": "clip_pop"})
+}
+
+function epitaph() {
+    if L.karma >= 75 { return "Un alma buena en un mundo complicado." }
+    if L.karma >= 50 { return "Vivió, amó y se equivocó como cualquiera." }
+    if L.karma >= 25 { return "Nunca dijo que fuera un santo." }
+    return "El infierno ya tiene su lugar reservado."
+}
+
+function karma_text() {
+    if L.karma >= 75 { return "Santo" }
+    if L.karma >= 50 { return "Decente" }
+    if L.karma >= 25 { return "Cuestionable" }
+    return "Villano"
+}
