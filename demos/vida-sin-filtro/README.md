@@ -54,15 +54,30 @@ binarias en el juego.
   y desbloquean opciones exclusivas en los eventos (por ejemplo, `[VALOR 3]`).
 - **Confidentes**: cada vínculo tiene un arcano (Los Amantes, La Emperatriz, La
   Torre...) y un rango del 1 al 10 que sube con la cercanía.
-- **Vida completa**: escuela, universidad con préstamo, 20 trabajos (incluye
-  bailarín/a exótico/a, modelo y creador/a de contenido +18), aumentos,
-  despidos, prisión con opción de fuga, matrimonio, divorcio, hijos y muerte.
+- **Vida completa**: escuela, universidad con préstamo, aumentos, despidos,
+  prisión con opción de fuga, matrimonio, divorcio, hijos y muerte.
+- **150 carreras** (`jobs.vel`): 126 contratables en 15 campos (Servicio,
+  Oficio, Oficina, Tecnología, Arte, Espectáculo, Salud, Ley, Ciencia, Negocios,
+  Deporte, Educación, Moda, +18 y Calle) y 24 que solo se consiguen fusionando.
+  Todas tienen 5 rangos, acciones propias de su campo y requisitos.
+  - **Especializaciones** (354, de ellas 75 con versión +18) al llegar al rango 3:
+    +25% de sueldo. Un ilustrador puede hacer arte erótico, un artista 3D modelos
+    eróticos, un fotógrafo boudoir, un escritor novela erótica...
+  - **Dos carreras a la vez**: la segunda es de media jornada (mitad de sueldo y
+    experiencia) y tiene su propio turno.
+  - **Fusiones** (42 combinaciones): con ambas carreras en rango 3 las combinas
+    en una nueva que empieza en rango 3. Programador + Artista 3D = Desarrollador
+    de juegos para adultos; Ilustrador + Escritor = Mangaka erótico; Médico +
+    Psicólogo = Sexólogo; Actor porno + Actor = Director de cine para adultos;
+    Corredor de bolsa + Emprendedor = Magnate, y muchas más.
 - **Actividades por categorías**: Cuerpo, Mente y Lujos (viajes, lotería y
   bienes como motos, autos, departamento, mansión o yate).
-- **Noche +18 por categorías**: Fiesta, Ligue, Vicios y Crimen. Encuentros con o
+- **Noche +18 por categorías**: Fiesta, Ligue, Placer (sex shop, love hotel,
+  club swinger, fiesta de disfraces, spa nudista, crucero para adultos),
+  Carreras, Vicios y Crimen. Encuentros con o
   sin protección (ITS y embarazos), drogas con adicción y sobredosis, casino y
   delitos, algunos bloqueados hasta tener rango social suficiente.
-- **69 eventos aleatorios** con decisiones, opciones bloqueadas por rango y
+- **75 eventos aleatorios** con decisiones, opciones bloqueadas por rango y
   personalidades con mejor suerte en ciertas decisiones.
 - **Carreras +18 con 5 rangos**: cine para adultos (Amateur → Leyenda +18),
   striptease (Debut → Leyenda del club), escort (Independiente → Agencia propia)
@@ -74,7 +89,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 22 objetivos con recompensa (graduarte, casarte, primer millón,
+- **Misiones**: 26 objetivos con recompensa (graduarte, casarte, primer millón,
   ganar un premio, llevar un confidente a rango 10, vivir 100 años...).
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
   "!", corazón, gota de sudor, enojo o dinero). 3 tipos de cara, 3 de cuerpo,
@@ -91,7 +106,8 @@ binarias en el juego.
 | `sim.vel` | Estado de la vida, personalidad, rasgos sociales, paso de los años, muerte |
 | `events.vel` | Eventos anuales (datos) y su motor |
 | `acts.vel` | Menús: ocupación, vínculos, actividades, noche, citas, casino, compras |
-| `career.vel` | Carreras +18 con rangos, gustos en la cama y misiones |
+| `jobs.vel` | Catálogo de 150 carreras, especializaciones, segunda carrera y fusiones |
+| `career.vel` | Acciones de las carreras +18, gustos en la cama y misiones |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
 | `ui.vel` | Pantallas, menús, diálogos, notificaciones y efectos |

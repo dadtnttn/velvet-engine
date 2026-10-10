@@ -380,6 +380,7 @@ function new_life() {
         "uni": 0,
         "debt": 0,
         "job": null,
+        "job2": null,
         "jail": 0,
         "jail_total": 0,
         "record": 0,
@@ -579,10 +580,11 @@ function yearly() {
     L.in_red = L.money < 0
 
     // Carrera +18 y fama
-    if L.job != null && L.job.career != null && L.jail == 0 {
+    if L.job != null && L.jail == 0 {
         career_xp(10 + rank("skill") * 3)
-        if chance(30) { log_add("Otro año en el negocio: ahora eres " + career_rank_name() + ".", "x") }
+        if job_is_adult(L.job) && chance(30) { log_add("Otro año en el negocio: ahora eres " + career_rank_name() + ".", "x") }
     }
+    second_job_year()
     if L.fame > 0 { L.fame -= 2 }
 
     // Vicios
@@ -658,7 +660,7 @@ function kids_living() {
 }
 
 function job_pay(job: map) {
-    if job.career != null { return career_pay() }
+    if job.career != null { return pay_of(job) }
     if job.var != null && job.var > 0 {
         return L.looks * L.looks * job.var
     }
@@ -844,6 +846,7 @@ function go_to_jail(years: int) {
         L.last_job = L.job.title
         L.job = null
     }
+    L.job2 = null
     if L.uni > 0 { L.uni = 0 }
     let out = " Te condenaron a " + str(years) + " " + plural(years, "año", "años") + " de prisión."
     let p = partner()

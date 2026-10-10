@@ -407,7 +407,9 @@ function draw_card() {
     panel(16, 398, 372, 212, 18)
     tag(40, 410, 190, str_upper(trait_name(L.trait, L.gender)), HEX_RED, C_WHITE)
     text(238, 429, mood_word(), 14, C_YELLOW, "bold")
-    text(44, 458, "OCUPACIÓN", 11, C_GRAY, "bold")
+    let occ_label = "OCUPACIÓN"
+    if L.job2 != null { occ_label = "OCUPACIÓN · 2.ª: " + str_upper(L.job2.title) }
+    text(44, 458, clip_text(occ_label, 330, 11), 11, C_GRAY, "bold")
     text(44, 479, clip_text(occupation_text(), 320, 16), 16, C_WHITE, "bold")
     text(44, 504, "DINERO", 11, C_GRAY, "bold")
     let mc = C_YELLOW
@@ -492,8 +494,7 @@ function mood_word() {
 
 function occupation_text() {
     if L.jail > 0 { return "En prisión" }
-    if L.job != null && L.job.career != null { return career_rank_name() + " · " + L.job.title }
-    if L.job != null { return L.job.title }
+    if L.job != null { return job_display(L.job) }
     if L.uni > 0 { return "Universitari" + oa(L.gender) }
     if L.school == "primaria" { return "Primaria" }
     if L.school == "secundaria" { return "Secundaria" }
@@ -702,7 +703,6 @@ function draw_modal(m: map) {
     }
     if m.kind == "menu" { return draw_menu(m) }
     if m.kind == "person" { return draw_person(m) }
-    if m.kind == "jobs" { return draw_jobs(m) }
     return null
 }
 
@@ -795,6 +795,15 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
 
     let list_y = 150
     if len(cats) > 0 {
+        // Hasta 6 pestañas por fila; con muchas categorías se usan varias filas compactas.
+        let per_row = 6
+        let tw = 100
+        let th = 30
+        if len(cats) <= 4 {
+            per_row = 4
+            tw = 128
+            th = 38
+        }
         let i = 0
         while i < len(cats) {
             let action = "cat:" + str(i)
@@ -806,19 +815,26 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
             } else if hovered(action) {
                 fill = HEX_RED
             }
-            let tx = 46 + i * 136
-            svg(tx, 140, 134, 42, slant_doc(128, 38, 10, fill, HEX_WHITE, 2, HEX_INK, 4))
-            ctext(tx + 64, 166, str_upper(cats[i]), 16, color, "impact")
-            hot(tx, 140, 128, 38, action)
+            let tx = 46 + (i % per_row) * (tw + 6) - (i / per_row) * 8
+            let ty = 138 + (i / per_row) * (th + 6)
+            svg(tx, ty, tw + 4, th + 4, slant_doc(tw, th, 8, fill, HEX_WHITE, 2, HEX_INK, 4))
+            let size = 16
+            if th < 38 { size = 13 }
+            ctext(tx + tw / 2, ty + th / 2 + size * 4 / 10, clip_text(str_upper(cats[i]), tw - 10, size), size, color, "impact")
+            hot(tx, ty, tw, th, action)
             i += 1
         }
-        list_y = 200
+        let rows = (len(cats) + per_row - 1) / per_row
+        list_y = 140 + rows * (th + 6) + 12
     }
 
-    let pages = max(1, (len(items) + PAGE_SIZE - 1) / PAGE_SIZE)
+    let page_size = (650 - list_y) / 52
+    if page_size > PAGE_SIZE { page_size = PAGE_SIZE }
+    if page_size < 4 { page_size = 4 }
+    let pages = max(1, (len(items) + page_size - 1) / page_size)
     G.menu_page = clamp(G.menu_page, 0, pages - 1)
-    let first = G.menu_page * PAGE_SIZE
-    let last = min(len(items), first + PAGE_SIZE)
+    let first = G.menu_page * page_size
+    let last = min(len(items), first + page_size)
     let focus = null
     let i = first
     while i < last {
@@ -860,7 +876,7 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
         i += 1
     }
     if pages > 1 {
-        let py = list_y + PAGE_SIZE * 52 + 4
+        let py = list_y + page_size * 52 + 4
         if G.menu_page > 0 { small_button(60, py, 140, 36, "ANTERIOR", "page:-") }
         if G.menu_page < pages - 1 { small_button(360, py, 140, 36, "SIGUIENTE", "page:+") }
         ctext(280, py + 24, str(G.menu_page + 1) + " / " + str(pages), 16, C_WHITE, "impact")
@@ -957,7 +973,9 @@ function draw_menu(m: map) {
     let cat = ""
     if len(cats) > 0 { cat = cats[clamp(G.menu_cat, 0, len(cats) - 1)] }
     let items = menu_items(m.tab, cat)
-    draw_list(menu_title(m.tab), cats, G.menu_cat, items, "close", "menu")
+    let back = "close"
+    if m.tab == "jobs" { back = "tab:job" }
+    draw_list(menu_title(m.tab), cats, G.menu_cat, items, back, "menu")
     if len(items) == 0 {
         text(70, 260, "Nada que hacer aquí por ahora.", 20, C_WHITE, "impact")
     }
@@ -972,25 +990,6 @@ function draw_person(m: map) {
         list_push(items, {"action": a.action, "t": a.t, "s": a.s, "desc": a.s, "lock": "", "pid": p.id})
     }
     draw_list(str_upper(p.first), [], 0, items, "tab:rel", "person")
-    return null
-}
-
-function draw_jobs(m: map) {
-    let items = []
-    let i = 0
-    while i < len(m.offers) {
-        let j = m.offers[i]
-        list_push(items, {
-            "action": "hire:" + str(i),
-            "t": by_gender(L.gender, j.m, j.f),
-            "s": job_salary_text(j),
-            "desc": "Requisitos: " + job_requirements(j) + ". Sueldo: " + job_salary_text(j) + ".",
-            "lock": "",
-            "ok": job_ok(j)
-        })
-        i += 1
-    }
-    draw_list("EMPLEOS", [], 0, items, "tab:job", "jobs")
     return null
 }
 
