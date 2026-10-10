@@ -17,6 +17,7 @@ pub mod load;
 pub mod particles;
 pub mod physics;
 pub mod save;
+pub mod terrain;
 
 pub use anim::{
     normalize_quat, quat_nlerp, sample_clip, sample_track_value, AnimClip3D, AnimLayer3D,
@@ -31,7 +32,8 @@ pub use flatten::{flatten_scene, local_matrix, FlatNode3D};
 pub use load::{load_scene_from_path, load_scene_from_str, validate_scene, SceneError};
 pub use particles::{Emitter3D, Particle3D, ParticleSystem3D};
 pub use physics::{
-    bake_colliders, raycast, transform_aabb, transform_point, Aabb3D, CharacterController3D,
-    Collider3D, PhysicsWorld3D, RayHit3D,
+    bake_colliders, heightfield_bounds, raycast, sample_heightfield, transform_aabb,
+    transform_point, Aabb3D, CharacterController3D, Collider3D, PhysicsWorld3D, RayHit3D,
 };
 pub use save::{BodySave3D, SceneSave3D};
+pub use terrain::terrain_scene;

@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://velvetengine.local/schemas/velvet-story-v1.json",
+  "title": "Velvet Story v1",
+  "description": "Historia importable con cuartos, personajes, decisiones, estado persistente y ficha visual por diálogo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schema", "revision", "id", "title", "start", "rooms", "characters", "nodes"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "velvet-story" },
+    "schema": { "const": 1 },
+    "revision": { "type": "integer", "minimum": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "title": { "$ref": "#/$defs/nonEmpty" },
+    "start": { "$ref": "#/$defs/id" },
+    "continue_label": { "$ref": "#/$defs/nonEmpty", "default": "Continuar" },
+    "release": {
+      "$ref": "#/$defs/release",
+      "default": {}
+    },
+    "variables": {
+      "type": "object",
+      "additionalProperties": { "type": "integer" },
+      "default": {}
+    },
+    "rooms": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/room" }
+    },
+    "characters": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/character" }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "playable_until": { "$ref": "#/$defs/id" },
+        "locked_tags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmpty" },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "room": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "background", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "background": { "$ref": "#/$defs/nonEmpty" },
+        "description": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "role", "visual_description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "role": { "$ref": "#/$defs/nonEmpty" },
+        "visual_description": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "sceneLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset", "x", "y", "width", "height"],
+      "properties": {
+        "asset": { "$ref": "#/$defs/nonEmpty" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 }
+      }
+    },
+    "visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "shot"],
+      "properties": {
+        "asset": { "type": "string" },
+        "layers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sceneLayer" },
+          "default": []
+        },
+        "description": { "$ref": "#/$defs/nonEmpty" },
+        "shot": { "$ref": "#/$defs/nonEmpty" },
+        "characters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "default": []
+        },
+        "status": {
+          "enum": ["needed", "reference", "optional", "ready"],
+          "default": "needed"
+        }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["var", "op", "value"],
+      "properties": {
+        "var": { "$ref": "#/$defs/id" },
+        "op": { "enum": ["eq", "ne", "gt", "gte", "lt", "lte"] },
+        "value": { "type": "integer" }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "var", "value"],
+      "properties": {
+        "op": { "enum": ["set", "add", "subtract", "min", "max"] },
+        "var": { "$ref": "#/$defs/id" },
+        "value": { "type": "integer" }
+      }
+    },
+    "worldEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["world", "spawn"],
+      "properties": {
+        "world": { "$ref": "#/$defs/id" },
+        "spawn": { "$ref": "#/$defs/id" }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "to"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/nonEmpty" },
+        "to": { "$ref": "#/$defs/id" },
+        "visible_if": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" },
+          "default": []
+        },
+        "enabled_if": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" },
+          "default": []
+        },
+        "disabled_reason": { "type": "string" },
+        "effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" },
+          "default": []
+        }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["to"],
+      "properties": {
+        "when": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" },
+          "default": []
+        },
+        "to": { "$ref": "#/$defs/id" }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "room", "speaker", "text", "visual"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "room": { "$ref": "#/$defs/id" },
+        "speaker": { "$ref": "#/$defs/id" },
+        "text": { "$ref": "#/$defs/nonEmpty" },
+        "visual": { "$ref": "#/$defs/visual" },
+        "world_entry": { "$ref": "#/$defs/worldEntry" },
+        "pass": {
+          "type": "boolean",
+          "default": false,
+          "description": "Cruce invisible: al entrar sigue a la primera rama que se cumpla, o a next."
+        },
+        "branches": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/branch" },
+          "default": []
+        },
+        "next": { "$ref": "#/$defs/id" },
+        "next_label": { "$ref": "#/$defs/nonEmpty" },
+        "choices": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/choice" },
+          "default": []
+        },
+        "on_enter": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" },
+          "default": []
+        },
+        "on_first_enter": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" },
+          "default": []
+        },
+        "ending": { "type": "boolean", "default": false },
+        "show_hud": { "type": "boolean", "default": true },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    }
+  }
+}

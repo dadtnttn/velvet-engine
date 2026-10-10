@@ -18,6 +18,7 @@ velvet-script-parser = { workspace = true }
 velvet-script-compiler = { workspace = true }
 velvet-script-vm = { workspace = true }
 velvet-script-vs3 = { workspace = true }
+velvet-script-vs3-engine = { workspace = true }
 velvet-vs3-app = { workspace = true }
 velvet-script-format = { workspace = true }
 velvet-script-lsp = { workspace = true }
@@ -25,6 +26,7 @@ velvet-story-lang = { workspace = true }
 velvet-document = { workspace = true }
 velvet-story = { workspace = true }
 velvet-scene3d = { workspace = true }
+velvet-terrain = { workspace = true }
 velvet-cards = { workspace = true }
 velvet-style = { workspace = true }
 velvet-image = { workspace = true }
@@ -39,6 +41,8 @@ camino = { workspace = true }
 serde_json = { workspace = true }
 indexmap = { workspace = true }
 walkdir = { workspace = true }
+softbuffer = { workspace = true }
+winit = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

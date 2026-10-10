@@ -1,0 +1,49 @@
+function use_potion() {
+    if phase != PHASE_PLAYING || dialogue_open || inventory_open { return }
+    if inventory.potions <= 0 {
+        push_log("No tienes pociones.")
+        return
+    }
+    if player.hp >= player.max_hp {
+        push_log("Ya tienes la vida completa.")
+        return
+    }
+
+    inventory.potions -= 1
+    let before = player.hp
+    player.hp = min(player.max_hp, player.hp + 48.0)
+    let healed = player.hp - before
+    push_log(concat("Poción usada: +", str(healed), " HP."))
+    emit_sound("potion")
+    emit_fx("heal", player.pos, healed)
+}
+
+export function inventory_action(action: string, item_id: string) {
+    if action == "close" {
+        inventory_open = false
+        return snapshot()
+    }
+    if action == "use" && item_id == "health_potion" {
+        let was_open = inventory_open
+        inventory_open = false
+        use_potion()
+        inventory_open = was_open
+        return snapshot()
+    }
+    if action == "equip" && item_id == "wood_sword" {
+        equipment.weapon = "wood_sword"
+        emit_sound("equip")
+        return snapshot()
+    }
+    return snapshot()
+}
+
+function inventory_snapshot() {
+    return {
+        "open": inventory_open,
+        "potions": inventory.potions,
+        "capacity": inventory.bag_capacity,
+        "items": inventory.items,
+        "equipment": equipment
+    }
+}

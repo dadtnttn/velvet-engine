@@ -1,0 +1,15 @@
+[package]
+name = "velvet-qa"
+description = "Automatic QA for Velvet Engine games: a walker that plays a zone over its navmesh and notes where it gets stuck, frame times, and the report"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-nav = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_ProcessStatus", "Win32_System_Threading"] }

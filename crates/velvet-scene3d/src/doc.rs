@@ -51,6 +51,18 @@ pub enum MeshKind3D {
     },
     /// 1x1 plane on XZ facing +Y.
     Plane,
+    /// Terrain heightfield on XZ facing +Y (see `velvet-terrain`).
+    ///
+    /// `heights` holds `resolution²` row-major samples spanning
+    /// `-size/2..=size/2` in local X/Z; the node transform applies on top.
+    Heightfield {
+        /// Vertices per side (≥ 2).
+        resolution: u32,
+        /// World XZ extent before node scale.
+        size: f32,
+        /// Heights in world units.
+        heights: Vec<f32>,
+    },
     /// External model (`.glb` / `.gltf`, project-relative path).
     Gltf {
         /// Asset path.

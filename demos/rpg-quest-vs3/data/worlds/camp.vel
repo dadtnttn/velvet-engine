@@ -1,0 +1,42 @@
+function build_camp_world() {
+    let world = world_shell(
+        "camp",
+        "CAMPAMENTO ENEMIGO",
+        "La invasión se organiza tras la empalizada.",
+        "Destruye el campamento",
+        vec2(90, 350)
+    )
+
+    world.terrain = "trampled_grass"
+    world.ambient = {"tint": "late_day", "fog": 0.04, "particles": "embers"}
+
+    add_prop(world, make_prop("palisade", 80, 60, 800, 500, "open_west_gate"))
+    add_prop(world, make_prop("camp_road", 50, 300, 870, 220, "crossroads"))
+    add_prop(world, make_prop("tent", 332, 138, 132, 92, "red_large"))
+    add_prop(world, make_prop("tent", 350, 410, 138, 88, "red_small"))
+    add_prop(world, make_prop("barracks", 566, 76, 198, 194, "enemy"))
+    add_prop(world, make_prop("watchtower", 770, 102, 116, 170, "enemy"))
+    add_prop(world, make_prop("bonfire", 560, 325, 90, 90, "central"))
+    add_prop(world, make_prop("supply_depot", 675, 415, 205, 105, "crates_barrels"))
+    add_prop(world, make_prop("war_banners", 95, 170, 120, 300, "red"))
+
+    add_collider(world, rect(80, 60, 800, 16, "palisade_top"))
+    add_collider(world, rect(80, 60, 16, 200, "palisade_left_top"))
+    add_collider(world, rect(80, 425, 16, 135, "palisade_left_bottom"))
+    add_collider(world, rect(864, 60, 16, 500, "palisade_right"))
+    add_collider(world, rect(80, 544, 800, 16, "palisade_bottom"))
+    add_collider(world, rect(332, 138, 132, 82, "tent_north"))
+    add_collider(world, rect(350, 410, 138, 78, "tent_south"))
+    add_collider(world, rect(566, 76, 198, 180, "barracks"))
+    add_collider(world, rect(770, 102, 116, 150, "tower"))
+    add_collider(world, rect(690, 430, 175, 80, "supplies"))
+
+    add_spawn(world, make_enemy_spawn("scout", 314, 350, 58))
+    add_spawn(world, make_enemy_spawn("scout", 500, 342, 58))
+    add_spawn(world, make_enemy_spawn("scout", 646, 342, 58))
+    add_spawn(world, make_enemy_spawn("scout", 812, 350, 58))
+    add_spawn(world, make_enemy_spawn("scout", 620, 468, 58))
+
+    add_zone(world, {"id": "camp_gate", "kind": "entry", "area": rect(65, 260, 80, 165, "open")})
+    return world
+}

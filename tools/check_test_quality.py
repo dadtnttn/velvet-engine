@@ -9,6 +9,7 @@ left in the default test suite.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,11 +34,12 @@ def compact(value: str) -> str:
 
 
 def iter_rust_files() -> list[Path]:
-    files: list[Path] = []
-    for root in ROOTS:
-        if root.exists():
-            files.extend(root.rglob("*.rs"))
-    return sorted(files)
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--", "*.rs"],
+        check=True, capture_output=True,
+    )
+    files = [Path(p) for p in result.stdout.decode("utf-8").split("\0") if p]
+    return sorted(p for p in files if p.is_file() and p.parts[0] in {str(root) for root in ROOTS})
 
 
 def test_function_ranges(text: str) -> list[tuple[int, int, str, int]]:

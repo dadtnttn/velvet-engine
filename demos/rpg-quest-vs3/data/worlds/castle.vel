@@ -1,0 +1,56 @@
+function build_castle_world() {
+    let world = world_shell(
+        "castle",
+        "EL CASTILLO",
+        "La corte de Solaria espera el desenlace de la invasión.",
+        "Habla con el rey Aldren",
+        vec2(480, 560)
+    )
+
+    world.terrain = "royal_stone"
+    world.ambient = {"tint": "royal_night", "fog": 0.05, "particles": "embers"}
+
+    add_prop(world, make_prop("courtyard", 65, 150, 830, 430, "royal_tiles"))
+    add_prop(world, make_prop("walls", 25, 120, 910, 460, "battlements"))
+    add_prop(world, make_prop("entrance_gate", 410, 515, 140, 105, "open"))
+    add_prop(world, make_prop("castle", 300, 0, 360, 252, "royal"))
+    add_prop(world, make_prop("banners", 120, 145, 720, 105, "blue_red"))
+
+    add_prop(world, make_prop("garden", 80, 270, 240, 290, "royal_garden"))
+    add_prop(world, make_prop("fountain", 125, 350, 160, 140, "royal"))
+
+    add_prop(world, make_prop("royal_carpet", 425, 280, 110, 315, "red_gold"))
+    add_prop(world, make_prop("king_platform", 350, 245, 260, 90, "ceremonial"))
+    add_prop(world, make_prop("throne", 445, 205, 70, 72, "gold_red"))
+    add_prop(world, make_prop("guard_posts", 340, 305, 280, 72, "royal"))
+
+    add_prop(world, make_prop("boss_arena", 645, 255, 275, 280, "sealed"))
+    add_prop(world, make_prop("arena_gate", 610, 330, 45, 115, "boss_gate"))
+    add_prop(world, make_prop("braziers", 75, 175, 810, 355, "four"))
+
+    add_collider(world, rect(300, 0, 360, 215, "castle"))
+    add_collider(world, rect(25, 120, 60, 460, "wall_left"))
+    add_collider(world, rect(875, 120, 60, 460, "wall_right"))
+
+    add_collider(world, rect(410, 540, 40, 80, "entrance_left"))
+    add_collider(world, rect(510, 540, 40, 80, "entrance_right"))
+
+    add_collider(world, rect(80, 270, 240, 25, "garden_north"))
+    add_collider(world, rect(80, 535, 240, 25, "garden_south"))
+    add_collider(world, rect(80, 270, 25, 290, "garden_west"))
+    add_collider(world, rect(295, 270, 25, 290, "garden_east"))
+    add_collider(world, rect(125, 360, 160, 115, "fountain"))
+
+    add_collider(world, rect(610, 330, 45, 115, "boss_gate"))
+    add_collider(world, rect(645, 260, 28, 38, "arena_pillar_nw"))
+    add_collider(world, rect(890, 260, 28, 38, "arena_pillar_ne"))
+    add_collider(world, rect(645, 500, 28, 38, "arena_pillar_sw"))
+    add_collider(world, rect(890, 500, 28, 38, "arena_pillar_se"))
+
+    add_npc(world, make_npc("king_aldren", "REY ALDREN", 480, 285, "quest_giver"))
+    add_npc(world, make_npc("royal_guard_left", "GUARDIA", 385, 338, "guard"))
+    add_npc(world, make_npc("royal_guard_right", "GUARDIA", 575, 338, "guard"))
+
+    add_zone(world, {"id": "boss_arena", "kind": "boss", "area": rect(655, 270, 255, 250, "open")})
+    return world
+}

@@ -1,0 +1,8 @@
+version = 1
+
+[[package]]
+name = "rpg_quest_vs3"
+version = "0.1.0"
+source = "path+."
+checksum = "sha256:e15f6f2aad11992c1dda8c70fc44c52c947768ddf758dfcdfc4c91d29c7506dc"
+dependencies = []

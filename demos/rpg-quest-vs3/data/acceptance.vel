@@ -1,0 +1,92 @@
+// Hooks deterministas para CI y para comparar la migración con la demo Rust original.
+
+export function verify_world(index: int) {
+    if len(player) == 0 { new_game(17) }
+    phase = PHASE_PLAYING
+    load_world(index)
+    intro_timer = 0.0
+    clear_timer = 0.0
+    return snapshot()
+}
+
+export function verify_clear_current_world() {
+    for enemy in enemies {
+        enemy.alive = false
+        enemy.hp = 0.0
+    }
+    update_campaign(0.016)
+    return snapshot()
+}
+
+export function verify_unlock_boss() {
+    if len(player) == 0 { new_game(17) }
+    phase = PHASE_PLAYING
+    load_world(WORLD_CASTLE)
+    intro_timer = 0.0
+    spawn_final_boss()
+    return snapshot()
+}
+
+export function verify_castle_gate() {
+    if len(player) == 0 { new_game(17) }
+    phase = PHASE_PLAYING
+    load_world(WORLD_CASTLE)
+    intro_timer = 0.0
+    let gate_center = vec2(632, 388)
+    let blocked_before = world_blocked(gate_center, PLAYER_RADIUS)
+    spawn_final_boss()
+    let blocked_after = world_blocked(gate_center, PLAYER_RADIUS)
+    return {"blocked_before": blocked_before, "blocked_after": blocked_after}
+}
+
+export function verify_defeat_boss() {
+    verify_unlock_boss()
+    for enemy in enemies {
+        enemy.alive = false
+        enemy.hp = 0.0
+    }
+    update_campaign(0.016)
+    return snapshot()
+}
+
+export function verify_game_over() {
+    if len(player) == 0 { new_game(17) }
+    phase = PHASE_GAME_OVER
+    intro_timer = 0.0
+    clear_timer = 0.0
+    return snapshot()
+}
+
+export function verify_all_worlds() {
+    let result = []
+    let index = WORLD_HOME
+    while index <= WORLD_CASTLE {
+        let world = build_world(index)
+        list_push(result, {
+            "index": index,
+            "id": world.id,
+            "props": len(world.props),
+            "colliders": len(world.colliders),
+            "enemies": len(world.enemy_spawns),
+            "npcs": len(world.npcs)
+        })
+        index += 1
+    }
+    return result
+}
+
+
+export function verify_input_bindings() {
+    let mapped = semantic_input({
+        "held": ["KeyD", "ArrowUp"],
+        "pressed": ["Space", "KeyE", "Escape", "KeyR"]
+    })
+    return {
+        "move_x": mapped.move.x,
+        "move_y": mapped.move.y,
+        "attack": mapped.attack,
+        "interact": mapped.interact,
+        "cancel": mapped.cancel,
+        "restart": mapped.restart
+    }
+}

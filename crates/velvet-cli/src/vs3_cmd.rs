@@ -193,8 +193,13 @@ pub fn cmd_vs3_natives(prefix: Option<String>) -> Result<()> {
             velvet_script_vs3::NativePurity::Pure => "pure",
             velvet_script_vs3::NativePurity::Impure => "impure",
         };
+        let deprecated = if native.is_legacy_present() {
+            "  [deprecated: use velvet.compat via yield]"
+        } else {
+            ""
+        };
         println!(
-            "{:<22} args={:<6} -> {:<7} {purity}",
+            "{:<22} args={:<6} -> {:<7} {purity}{deprecated}",
             spec.name,
             arity,
             format!("{:?}", spec.result).to_ascii_lowercase()
@@ -203,6 +208,40 @@ pub fn cmd_vs3_natives(prefix: Option<String>) -> Result<()> {
     }
     println!("natives={count}");
     Ok(())
+}
+
+/// Run the official VS3 conformance suite against the built-in host modules.
+pub fn cmd_vs3_conform() -> Result<()> {
+    use velvet_script_vs3::{conformance, AbiRegistry};
+    let mut registry = AbiRegistry::new();
+    for module in [
+        velvet_script_vs3_engine::time_module(),
+        velvet_script_vs3_engine::input_module(),
+        velvet_script_vs3_engine::compat_module(),
+        velvet_script_vs3_engine::ecs_module(),
+        velvet_script_vs3_engine::assets_module(),
+        velvet_script_vs3_engine::water_module(),
+    ] {
+        let name = module.name.clone();
+        registry
+            .register(module)
+            .map_err(|e| anyhow::anyhow!("register {name}: {e}"))?;
+    }
+    let report = conformance::run_conformance_suite(&registry);
+    println!(
+        "conform: {} passed, {} failed ({} cases)",
+        report.passed,
+        report.failed,
+        report.passed + report.failed
+    );
+    for failure in &report.failures {
+        println!("  FAIL {failure}");
+    }
+    if report.ok() {
+        Ok(())
+    } else {
+        bail!("vs3 conformance failed")
+    }
 }
 
 /// Format a VS3 file in place while preserving its edition directive/comments.
@@ -412,5 +451,11 @@ mod tests {
         let root = std::path::Path::new("project");
         let file = root.join("game").join("score.vel");
         assert_eq!(module_name(root, &file).unwrap(), "game.score");
+    }
+
+    #[test]
+    fn conform_passes_on_builtin_modules() {
+        // Prints the report; fails the test on any non-conformance.
+        cmd_vs3_conform().unwrap();
     }
 }

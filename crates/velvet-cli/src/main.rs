@@ -18,6 +18,7 @@ mod scene3d_cmd;
 mod script_cmd;
 mod story_cmd;
 mod style_cmd;
+mod terrain_cmd;
 mod vs3_cmd;
 mod workspace_cmd;
 
@@ -57,7 +58,10 @@ use style_cmd::{
     cmd_style_check, cmd_style_dump, cmd_style_eval, cmd_style_explain, cmd_style_fmt,
     cmd_style_run, cmd_style_snapshot,
 };
-use vs3_cmd::{cmd_vs3_check, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_natives, cmd_vs3_run};
+use terrain_cmd::cmd_terrain_generate;
+use vs3_cmd::{
+    cmd_vs3_check, cmd_vs3_conform, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_natives, cmd_vs3_run,
+};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]
@@ -130,6 +134,11 @@ enum Commands {
     Scene3d {
         #[command(subcommand)]
         command: Scene3dCommands,
+    },
+    /// Procedural 3D terrain synthesis.
+    Terrain {
+        #[command(subcommand)]
+        command: TerrainCommands,
     },
     /// Create a new project from a template.
     New {
@@ -744,6 +753,8 @@ enum Vs3Commands {
         #[arg(long)]
         prefix: Option<String>,
     },
+    /// Run the official VS3 conformance suite (registry + drive protocol).
+    Conform,
 }
 
 #[derive(Subcommand, Debug)]
@@ -760,6 +771,33 @@ enum Scene3dCommands {
     Flatten {
         /// Path to scene file.
         path: PathBuf,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum TerrainCommands {
+    /// Bake an island: params JSON + `.scene3d.json` + hillshade preview.
+    Generate {
+        /// Composition preset (`island`, `cordillera`).
+        #[arg(long, default_value = "cordillera")]
+        preset: String,
+        /// Deterministic seed.
+        #[arg(long, default_value_t = 1337)]
+        seed: u64,
+        /// Vertices per side (clamped to 9..=513).
+        #[arg(long, default_value_t = 129)]
+        resolution: u32,
+        /// World XZ extent.
+        #[arg(long, default_value_t = 256.0)]
+        size: f32,
+        /// Skip thermal + hydraulic erosion.
+        #[arg(long)]
+        no_erode: bool,
+        /// Hydraulic droplet count.
+        #[arg(long, default_value_t = 4000)]
+        droplets: u32,
+        /// Output stem (`<out>.terrain.json`, `<out>.scene3d.json`, `<out>.preview.png`).
+        out: PathBuf,
     },
 }
 
@@ -951,6 +989,9 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Vs3 {
             command: Vs3Commands::Natives { prefix },
         } => cmd_vs3_natives(prefix),
+        Commands::Vs3 {
+            command: Vs3Commands::Conform,
+        } => cmd_vs3_conform(),
         Commands::App {
             command: AppCommands::Check { path },
         } => cmd_app_check(path),
@@ -1001,6 +1042,17 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Scene3d { command } => match command {
             Scene3dCommands::Check { path, project } => cmd_scene3d_check(path, project),
             Scene3dCommands::Flatten { path } => cmd_scene3d_flatten(path),
+        },
+        Commands::Terrain { command } => match command {
+            TerrainCommands::Generate {
+                preset,
+                seed,
+                resolution,
+                size,
+                no_erode,
+                droplets,
+                out,
+            } => cmd_terrain_generate(&preset, seed, resolution, size, !no_erode, droplets, out),
         },
         Commands::New {
             name,

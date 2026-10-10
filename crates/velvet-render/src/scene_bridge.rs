@@ -68,6 +68,14 @@ pub fn upload_scene_meshes(
                 device,
                 &Mesh3D::uv_sphere(1.0, *segments as usize, 12, material),
             )?,
+            MeshKind3D::Heightfield {
+                resolution,
+                size,
+                heights,
+            } => renderer.upload_mesh(
+                device,
+                &Mesh3D::heightfield(*resolution as usize, *size, heights, material),
+            )?,
             MeshKind3D::Empty => continue,
             MeshKind3D::Gltf { path } => {
                 let model = GltfModel::load(root.join(path))?;

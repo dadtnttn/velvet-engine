@@ -188,6 +188,11 @@ pub fn bake_colliders(flat: &[FlatNode3D]) -> Vec<Collider3D> {
                 Vec3::new(-0.5, -0.02, -0.5),
                 Vec3::new(0.5, 0.02, 0.5),
             )),
+            MeshKind3D::Heightfield {
+                resolution,
+                size,
+                heights,
+            } => heightfield_bounds(*resolution, *size, heights),
             MeshKind3D::Gltf { .. } | MeshKind3D::Empty => None,
         };
         if let Some(local) = local {
@@ -198,6 +203,63 @@ pub fn bake_colliders(flat: &[FlatNode3D]) -> Vec<Collider3D> {
         }
     }
     out
+}
+
+/// Local-space bounds of a heightfield (XZ extent, Y span), or None when
+/// the grid is malformed (see `validate_scene`).
+pub fn heightfield_bounds(resolution: u32, size: f32, heights: &[f32]) -> Option<Aabb3D> {
+    if resolution < 2 || heights.len() != resolution as usize * resolution as usize {
+        return None;
+    }
+    let mut lo = f32::MAX;
+    let mut hi = f32::MIN;
+    for h in heights {
+        if !h.is_finite() {
+            return None;
+        }
+        lo = lo.min(*h);
+        hi = hi.max(*h);
+    }
+    let half = size * 0.5;
+    Some(Aabb3D::new(
+        Vec3::new(-half, lo, -half),
+        Vec3::new(half, hi, half),
+    ))
+}
+
+/// Bilinear heightfield sample in node-local space.
+///
+/// Returns None outside `±size/2` or for malformed grids. Hosts transform
+/// the query point by the inverse node matrix first (identity in the
+/// common unrotated case); walkers add their foot offset to the result.
+pub fn sample_heightfield(
+    resolution: u32,
+    size: f32,
+    heights: &[f32],
+    x: f32,
+    z: f32,
+) -> Option<f32> {
+    if resolution < 2 || heights.len() != resolution as usize * resolution as usize {
+        return None;
+    }
+    let half = size * 0.5;
+    if x < -half || x > half || z < -half || z > half {
+        return None;
+    }
+    let res = resolution as usize;
+    let fx = ((x + half) / size * (res - 1) as f32).clamp(0.0, (res - 1) as f32);
+    let fz = ((z + half) / size * (res - 1) as f32).clamp(0.0, (res - 1) as f32);
+    let (i0, j0) = (fx.floor() as usize, fz.floor() as usize);
+    let (i1, j1) = ((i0 + 1).min(res - 1), (j0 + 1).min(res - 1));
+    let (tx, tz) = (fx - i0 as f32, fz - j0 as f32);
+    let a = heights[j0 * res + i0];
+    let b = heights[j0 * res + i1];
+    let c = heights[j1 * res + i0];
+    let d = heights[j1 * res + i1];
+    if !(a.is_finite() && b.is_finite() && c.is_finite() && d.is_finite()) {
+        return None;
+    }
+    Some(a * (1.0 - tx) * (1.0 - tz) + b * tx * (1.0 - tz) + c * (1.0 - tx) * tz + d * tx * tz)
 }
 
 /// World-space AABB of a local box through a matrix (8 corners).

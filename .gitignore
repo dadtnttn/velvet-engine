@@ -1,9 +1,18 @@
-# Rust
+# Build outputs and local state
 /target/
+**/target/
+**/dist/
+/dist/
+/export/
+/saves/
+.velvet/
+**/saves/
+**/out/
+**/output/
 **/*.rs.bk
 Cargo.lock.bak
 
-# IDE
+# Editors, dependencies and operating systems
 .idea/
 .vscode/
 node_modules/
@@ -13,62 +22,161 @@ __pycache__/
 *.swo
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Velvet local
-.velvet/
+# Logs, captures and scratch
 *.log
-/dist/
-/export/
-/saves/
-
-# Coverage / profiling
+*.err
+*.out
 *.profraw
 *.profdata
 /coverage/
 lcov.info
-
-# OS
-desktop.ini
-
-# Generated reports (keep intentional ones under docs/reports)
 /tmp/
-
-# Local demo media and generated captures (not distributed with the source)
+/temp/
+/tmp_*
+/.tmp_*
 /artifacts/
 /.local-tests/
-/output_sam_menu_v15_fixed_preview.png
-/demos/echo-xp/data/assets/
-/demos/rpg-quest/assets/
-/demos/sam-tomboy/data/assets/
-/demos/sam-tomboy/data/owned-assets/cg/
-/demos/sam-tomboy/artifacts/
-/demos/sam-tomboy/.local-tests/
-/demos/seventeen/assets/
-/tmp_pc_test.txt
-
-# Local-only asset preparation and model-training helpers
-/demos/echo-xp/tools/generate_win7_svg_assets.py
-/demos/rpg-quest/check_sam_training.ps1
-/demos/rpg-quest/patch_bottom_hud.py
-/demos/sam-tomboy/tools/
-
-# Local autonomous / agent scratch (do not publish)
-docs/engineering/AUTONOMOUS_STATUS.md
+/.local/
+/fx_export/
+/*.png
+/*.jpg
+/archinstall-config.json
+/install-hyprland.sh
+**/.playwright-mcp/
+**/.local-tests/
+**/.headless-ok
 **/AUTONOMOUS_STATUS.md
 
+# Only supported demos belong to the published workspace.
+/demos/*
+!/demos/cellular-arena/
+!/demos/fx-forge/
+!/demos/ui-gallery/
+!/demos/terraflow/
+!/demos/third-person/
+!/demos/rpg-quest-vs3/
+!/demos/demon-queen/
 
-# Demon queen local run artifacts
-demos/demon-queen/.headless-ok
+# Demon Queen source and data are public; media is private by default.
+/demos/demon-queen/**/*.png
+/demos/demon-queen/**/*.jpg
+/demos/demon-queen/**/*.jpeg
+/demos/demon-queen/**/*.webp
+/demos/demon-queen/**/*.gif
+/demos/demon-queen/**/*.ico
+/demos/demon-queen/**/*.mp4
+/demos/demon-queen/**/*.webm
+/demos/demon-queen/**/*.wav
+/demos/demon-queen/**/*.ogg
+/demos/demon-queen/**/*.mp3
+/demos/demon-queen/**/*.flac
+/demos/demon-queen/**/*.glb
+/demos/demon-queen/**/*.gltf
+/demos/demon-queen/**/*.bin
+/demos/demon-queen/**/*.blend
+/demos/demon-queen/**/*.blend1
+/demos/demon-queen/**/*.fbx
+/demos/demon-queen/**/*.obj
+/demos/demon-queen/**/*.mtl
+/demos/demon-queen/**/*.zip
+/demos/demon-queen/**/*.exe
+/demos/demon-queen/**/*.pdf
+/demos/demon-queen/**/*.svg
+/demos/demon-queen/data/assets/*
+!/demos/demon-queen/data/assets/title/
+/demos/demon-queen/data/assets/title/*
+!/demos/demon-queen/data/assets/ui/
+/demos/demon-queen/data/assets/ui/*
+!/demos/demon-queen/data/assets/3d/
+/demos/demon-queen/data/assets/3d/*
+!/demos/demon-queen/data/assets/3d/enemies/
+/demos/demon-queen/data/assets/3d/enemies/*
+!/demos/demon-queen/data/assets/3d/enemies/kaykit_skeletons/
+!/demos/demon-queen/data/assets/3d/enemies/kaykit_skeletons/**
+!/demos/demon-queen/assets/ui/shop/*.svg
 
-# Demon queen local media
-/demos/demon-queen/data/assets/
-/demos/demon-queen/.local-tests/
+# Reviewed non-explicit resources; keep in sync with tools/repository-policy.json.
+!/demos/demon-queen/assets/ui/shop/cart.png
+!/demos/demon-queen/assets/ui/shop/item_amulet_art.png
+!/demos/demon-queen/assets/ui/shop/item_arcane_ash.png
+!/demos/demon-queen/assets/ui/shop/item_bone.png
+!/demos/demon-queen/assets/ui/shop/item_bread.png
+!/demos/demon-queen/assets/ui/shop/item_champion_skull.png
+!/demos/demon-queen/assets/ui/shop/item_closed_box_art.png
+!/demos/demon-queen/assets/ui/shop/item_cloth.png
+!/demos/demon-queen/assets/ui/shop/item_crimson.png
+!/demos/demon-queen/assets/ui/shop/item_heart_shard.png
+!/demos/demon-queen/assets/ui/shop/item_herbs.png
+!/demos/demon-queen/assets/ui/shop/item_ink.png
+!/demos/demon-queen/assets/ui/shop/item_market_map_art.png
+!/demos/demon-queen/assets/ui/shop/item_memory_crystal_art.png
+!/demos/demon-queen/assets/ui/shop/item_mysterious_ring.png
+!/demos/demon-queen/assets/ui/shop/item_mystery_potion.png
+!/demos/demon-queen/assets/ui/shop/item_perfume.png
+!/demos/demon-queen/assets/ui/shop/item_potion.png
+!/demos/demon-queen/assets/ui/shop/item_seal.png
+!/demos/demon-queen/assets/ui/shop/item_slime_blue.png
+!/demos/demon-queen/assets/ui/shop/item_slime_green.png
+!/demos/demon-queen/assets/ui/shop/item_vault_key.png
+!/demos/demon-queen/assets/ui/shop/item_wood_sword.png
+!/demos/demon-queen/assets/ui/shop/sell.png
+!/demos/demon-queen/data/assets/title/app_icon.ico
+!/demos/demon-queen/data/assets/title/app_icon.png
+!/demos/demon-queen/data/assets/ui/button_demon_pill.png
+!/demos/demon-queen/data/assets/ui/button_gothic.png
+!/demos/demon-queen/data/assets/ui/choice_selector_native_1260x108.png
+!/demos/demon-queen/data/assets/ui/choice_selector_native_1320x108.png
+!/demos/demon-queen/data/assets/ui/choice_selector_native_840x72.png
+!/demos/demon-queen/data/assets/ui/choice_selector_premium_native_1320x108.png
+!/demos/demon-queen/data/assets/ui/dialogue_frame_native_1280x720.png
+!/demos/demon-queen/data/assets/ui/dialogue_frame_premium_native_1920x1080.png
+!/demos/demon-queen/data/maps/bosque.png
+!/demos/demon-queen/data/maps/castillo-0.png
+!/demos/demon-queen/data/maps/castillo-1.png
+!/demos/demon-queen/data/maps/termas.png
+!/demos/demon-queen/data/maps/villa.png
 
-# Untracked local content (purged from history)
-/demos/
-/*.png
-/*.log
-fx_export/*.png
-templates/visual-novel/assets/bg/
-templates/visual-novel/assets/cg/
-templates/visual-novel/assets/characters/
+# Game-local outputs and discarded preparation files
+/demos/demon-queen/tmp_*
+/demos/demon-queen/_tmp*
+/demos/demon-queen/.tmp*
+/demos/demon-queen/workflow_*.json
+/demos/demon-queen/gen_*.py
+/demos/demon-queen/patch_*.py
+/demos/demon-queen/fix_*.py
+/demos/demon-queen/logs/
+/demos/demon-queen/temp/
+/demos/demon-queen/demos/
+/demos/demon-queen/tools/comfyui/salidas/
+/demos/demon-queen/AUDIT_ASSETS_DEMON_QUEEN.json
+
+# Local art generation experiments, not engine tooling
+/tools/generate_*_moody*.py
+/tools/generate_all_pony_assets.py
+/tools/generate_emporium_pony_v7_real.py
+/tools/generate_normal_zoo_tiger.py
+/tools/test_clean_tiger.py
+/tools/test_crisp_moody.py
+/tools/test_perfect_portrait.py
+/tools/add_capture_action.py
+/tools/inspect_app_capture_cli.py
+/tools/build_venue_assets.py
+/tools/generate_moody_image.py
+
+# Reviewed pixel-art loading scenes and their visual test references
+!/demos/demon-queen/data/loading/banquet_hall.png
+!/demos/demon-queen/data/loading/banquet_plate.png
+!/demos/demon-queen/data/loading/banquet_table.png
+!/demos/demon-queen/data/loading/infirmary_bench.png
+!/demos/demon-queen/data/loading/infirmary_room.png
+!/demos/demon-queen/data/loading/ref/banquet_frame.png
+!/demos/demon-queen/data/loading/ref/infirmary_frame.png
+!/demos/demon-queen/data/loading/ref/nyx_calm.png
+!/demos/demon-queen/data/loading/ref/nyx_happy.png
+!/demos/demon-queen/data/loading/ref/nyx_squeeze.png
+!/demos/demon-queen/data/loading/ref/queen_bite.png
+!/demos/demon-queen/data/loading/ref/queen_chew.png
+!/demos/demon-queen/data/loading/ref/queen_grab.png
+!/demos/demon-queen/data/loading/ref/queen_rest.png

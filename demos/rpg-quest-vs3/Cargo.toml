@@ -1,0 +1,19 @@
+[package]
+name = "rpg-quest-vs3"
+description = "RPG Quest completamente declarado en Velvet Script 3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "rpg-quest-vs3"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+velvet-vs3-app = { workspace = true }
+
+[dev-dependencies]
+velvet-script-vs3 = { workspace = true }

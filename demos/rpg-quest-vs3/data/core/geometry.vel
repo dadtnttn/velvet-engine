@@ -1,0 +1,35 @@
+function rect(x: float, y: float, w: float, h: float, kind: string) {
+    return {"x": x, "y": y, "w": w, "h": h, "kind": kind}
+}
+
+function point_in_rect(pos: vec2, area: map, margin: float) {
+    return pos.x >= area.x - margin && pos.x <= area.x + area.w + margin && pos.y >= area.y - margin && pos.y <= area.y + area.h + margin
+}
+
+function collider_enabled(area: map) {
+    if area.kind == "boss_gate" && boss_unlocked { return false }
+    return true
+}
+
+function world_blocked(pos: vec2, radius: float) {
+    if pos.x < 18.0 + radius || pos.x > 942.0 - radius || pos.y < 18.0 + radius || pos.y > 622.0 - radius {
+        return true
+    }
+    for area in current_world.colliders {
+        if collider_enabled(area) && point_in_rect(pos, area, radius) { return true }
+    }
+    return false
+}
+
+function move_with_collisions(pos: vec2, delta: vec2, radius: float) {
+    let result = pos
+    let horizontal = vec2(pos.x + delta.x, pos.y)
+    if !world_blocked(horizontal, radius) { result = horizontal }
+    let vertical = vec2(result.x, result.y + delta.y)
+    if !world_blocked(vertical, radius) { result = vertical }
+    return result
+}
+
+function distance_between(a: vec2, b: vec2) {
+    return length(a - b)
+}

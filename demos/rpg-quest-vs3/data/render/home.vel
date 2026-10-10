@@ -1,0 +1,84 @@
+function home_fence_h(items: list, x: int, y: int, width: int) {
+    list_push(items, v_alpha_rect(x, y + 5, width, 5, rgba8(114, 71, 46, 255), 30))
+    list_push(items, v_alpha_rect(x, y + 16, width, 5, rgba8(169, 112, 67, 255), 30))
+    let px = x
+    while px <= x + width {
+        list_push(items, v_alpha_rect(px - 4, y, 9, 27, rgba8(186, 129, 80, 255), 31))
+        list_push(items, v_alpha_rect(px - 2, y + 2, 4, 22, rgba8(210, 154, 99, 255), 32))
+        px += 48
+    }
+}
+
+function home_fence_v(items: list, x: int, y: int, height: int) {
+    list_push(items, v_alpha_rect(x + 5, y, 5, height, rgba8(114, 71, 46, 255), 30))
+    list_push(items, v_alpha_rect(x + 16, y, 5, height, rgba8(169, 112, 67, 255), 30))
+    let py = y
+    while py <= y + height {
+        list_push(items, v_alpha_rect(x, py - 4, 27, 9, rgba8(186, 129, 80, 255), 31))
+        list_push(items, v_alpha_rect(x + 2, py - 2, 22, 4, rgba8(210, 154, 99, 255), 32))
+        py += 48
+    }
+}
+
+function home_visuals(time: float, stage: string) {
+    let items = base_ground("ground_home", rgba8(49, 93, 50, 255))
+    let main_path = [[470, 575], [462, 520], [463, 468], [472, 418], [482, 365], [484, 310]]
+    let east_path = [[472, 418], [535, 406], [600, 388], [665, 360], [730, 334], [800, 314], [872, 300], [952, 292]]
+    push_line_path(items, main_path, 68, rgba8(118, 81, 53, 255), 8)
+    push_line_path(items, east_path, 68, rgba8(118, 81, 53, 255), 8)
+    push_line_path(items, main_path, 52, rgba8(185, 132, 78, 255), 9)
+    push_line_path(items, east_path, 52, rgba8(185, 132, 78, 255), 9)
+
+    for pebble in [[451, 528, 3], [478, 476, 2], [459, 424, 3], [546, 397, 2], [626, 370, 3], [704, 338, 2], [808, 304, 3], [905, 291, 2]] {
+        list_push(items, v_circle(pebble[0], pebble[1], pebble[2], rgba8(141, 96, 59, 255), 10))
+    }
+
+    list_push(items, v_ellipse(805, 448, 112, 72, rgba8(49, 89, 106, 255), 12))
+    list_push(items, v_ellipse(790, 442, 96, 59, rgba8(77, 154, 175, 255), 13))
+    list_push(items, v_ellipse(845, 456, 65, 48, rgba8(77, 154, 175, 255), 13))
+    list_push(items, v_ellipse(754, 462, 52, 38, rgba8(77, 154, 175, 255), 13))
+    for ripple in [[770, 428, 10, 5], [815, 414, 7, 4], [850, 448, 9, 5], [802, 475, 6, 4]] {
+        list_push(items, v_ellipse(ripple[0], ripple[1], ripple[2], ripple[3], rgba8(120, 191, 208, 255), 14))
+    }
+
+    home_fence_h(items, 210, 85, 450)
+    home_fence_v(items, 210, 85, 286)
+    home_fence_v(items, 660, 85, 286)
+    home_fence_h(items, 210, 365, 205)
+    home_fence_h(items, 545, 365, 115)
+
+    list_push(items, v_alpha_rect(230, 136, 100, 150, rgba8(92, 58, 41, 255), 16))
+    list_push(items, v_alpha_rect(237, 143, 86, 136, rgba8(131, 84, 55, 255), 17))
+    let row = 0
+    while row < 4 {
+        let y = 162 + row * 30
+        list_push(items, v_alpha_rect(244, y, 72, 8, rgba8(104, 66, 46, 255), 18))
+        let column = 0
+        while column < 4 {
+            let x = 252 + column * 18
+            list_push(items, v_circle(x, y - 2, 5, rgba8(95, 145, 62, 255), 19))
+            list_push(items, v_circle(x + 3, y - 5, 3, rgba8(134, 186, 81, 255), 20))
+            column += 1
+        }
+        row += 1
+    }
+
+    push_sprite_points(items, "tree", [[18, 48], [95, 148], [18, 382], [112, 474], [818, 24], [875, 456]], 192, 4.0, 96, 128, 40)
+    push_sprite_points(items, "tree_alt", [[28, 245], [700, 42], [878, 420]], 192, 3.0, 98, 130, 41)
+    push_sprite_points(items, "bush", [[180, 118], [202, 410], [626, 116], [655, 342], [888, 380]], 128, 5.0, 64, 64, 42)
+    push_sprite_points(items, "bush_alt", [[146, 330], [272, 76], [612, 328], [905, 214]], 128, 4.0, 58, 58, 42)
+
+    list_push(items, v_sprite("house", 350, 88, 270, 232, "fit", 50))
+    list_push(items, v_sprite("stump", 252, 302, 48, 64, "fit", 45))
+    list_push(items, v_sprite("tool", 302, 326, 38, 38, "fit", 46))
+    list_push(items, v_sprite("wood", 226, 340, 52, 52, "fit", 46))
+    for rock in [[676, 388, 46], [846, 462, 50], [896, 405, 38]] {
+        list_push(items, v_sprite("rock", rock[0], rock[1], rock[2], rock[2], "fit", 43))
+    }
+    for rock in [[724, 495, 42], [822, 370, 46]] {
+        list_push(items, v_sprite("rock_alt", rock[0], rock[1], rock[2], rock[2], "fit", 43))
+    }
+    list_push(items, v_frame("sheep", 128, 3.0, 0, 548, 236, 58, 58, false, 45))
+    list_push(items, v_frame("sheep_grass", 128, 3.0, 0, 602, 274, 58, 58, true, 45))
+    return items
+}

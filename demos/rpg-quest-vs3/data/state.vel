@@ -1,0 +1,33 @@
+// Estado persistente único del juego. Los demás archivos exponen operaciones pequeñas.
+
+state {
+    game_seed: int = 17
+    random: rng = rng_new(17)
+    phase: string = "title"
+    world_index: int = 1
+    stage: string = "idle"
+    elapsed: float = 0.0
+    world_time: float = 0.0
+    intro_timer: float = 0.0
+    clear_timer: float = 0.0
+    attack_cooldown: float = 0.0
+    damage_flash: float = 0.0
+    message_timer: float = 0.0
+    inventory_open: bool = false
+    controls_open: bool = false
+    dialogue_open: bool = false
+    dialogue_id: string = ""
+    dialogue_page: int = 0
+    boss_unlocked: bool = false
+    campaign_complete: bool = false
+    next_entity_id: int = 1
+    player: map = {}
+    inventory: map = {}
+    equipment: map = {}
+    quest: map = {}
+    current_world: map = {}
+    enemies: list = []
+    events: list = []
+    log_entries: list = []
+    ui_state: map = {}
+}

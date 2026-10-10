@@ -8,5 +8,6 @@ rust-version.workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
+velvet-liquid = { workspace = true }
 velvet-script-vs3 = { workspace = true }
 velvet-math = { workspace = true }

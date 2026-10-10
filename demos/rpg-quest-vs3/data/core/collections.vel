@@ -1,0 +1,39 @@
+function clear_list(items: list) {
+    while len(items) > 0 { list_pop(items) }
+}
+
+function copy_list(items: list) {
+    let result = []
+    for item in items { list_push(result, item) }
+    return result
+}
+
+function push_log(text: string) {
+    list_push(log_entries, text)
+    while len(log_entries) > 5 {
+        let next = []
+        let index = 1
+        while index < len(log_entries) {
+            list_push(next, log_entries[index])
+            index += 1
+        }
+        log_entries = next
+    }
+}
+
+function alive_enemy_count() {
+    let count = 0
+    for enemy in enemies {
+        if enemy.alive { count += 1 }
+    }
+    return count
+}
+
+function find_enemy_index(entity_id: int) {
+    let index = 0
+    while index < len(enemies) {
+        if enemies[index].id == entity_id { return index }
+        index += 1
+    }
+    return -1
+}

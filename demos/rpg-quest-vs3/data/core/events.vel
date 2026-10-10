@@ -1,0 +1,21 @@
+function emit(kind: string, payload: map) {
+    list_push(events, {"kind": kind, "payload": payload})
+}
+
+function emit_sound(asset: string) {
+    emit("audio.play", {"asset": asset})
+}
+
+function emit_fx(kind: string, pos: vec2, power: float) {
+    emit("fx.spawn", {"effect": kind, "pos": pos, "power": power})
+}
+
+function emit_world_loaded() {
+    emit("world.loaded", {"world": world_index, "id": current_world.id})
+}
+
+function consume_events() {
+    let result = copy_list(events)
+    clear_list(events)
+    return result
+}

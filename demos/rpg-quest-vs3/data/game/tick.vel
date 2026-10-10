@@ -1,0 +1,62 @@
+function update_leveling() {
+    while player.xp >= player.xp_next {
+        player.xp -= player.xp_next
+        player.level += 1
+        player.xp_next = 100 + (player.level - 1) * 35
+        player.max_hp += 12.0
+        player.hp = player.max_hp
+        push_log(concat("Nivel ", str(player.level), " alcanzado."))
+        emit_sound("level_up")
+    }
+}
+
+function update_timers(dt: float) {
+    elapsed += dt
+    world_time += dt
+    intro_timer = max(0.0, intro_timer - dt)
+    message_timer = max(0.0, message_timer - dt)
+}
+
+export function tick(dt: float, physical_input: map) {
+    if dt < 0.0 { dt = 0.0 }
+    if dt > 0.1 { dt = 0.1 }
+
+    let input = semantic_input(physical_input)
+
+    if phase != PHASE_PLAYING {
+        world_time += dt
+        handle_global_input(input)
+        return snapshot()
+    }
+
+    update_timers(dt)
+    handle_global_input(input)
+    if phase != PHASE_PLAYING { return snapshot() }
+
+    update_player_movement(dt, input)
+    handle_action_input(input)
+    update_combat(dt)
+    update_campaign(dt)
+    update_leveling()
+    return snapshot()
+}
+
+export function restart() {
+    return new_game(game_seed)
+}
+
+export function return_to_title() {
+    phase = PHASE_TITLE
+    intro_timer = 0.0
+    clear_timer = 0.0
+    message_timer = 0.0
+    attack_cooldown = 0.0
+    player.velocity = vec2(0, 0)
+    inventory_open = false
+    controls_open = false
+    dialogue_open = false
+    dialogue_id = ""
+    dialogue_page = 0
+    clear_list(events)
+    return snapshot()
+}

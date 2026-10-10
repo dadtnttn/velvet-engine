@@ -1,0 +1,51 @@
+function forest_visuals(time: float, stage: string) {
+    let items = base_ground("ground_forest", rgba8(34, 69, 39, 255))
+
+    let trail_main = [[72, 360], [175, 350], [270, 330], [370, 315], [480, 320], [585, 300], [690, 300], [805, 355], [925, 390]]
+    let trail_north = [[480, 320], [520, 270], [575, 235], [645, 230]]
+    let trail_south = [[585, 300], [620, 350], [680, 405], [780, 438]]
+    push_line_path(items, trail_main, 62, rgba8(71, 55, 38, 255), 7)
+    push_line_path(items, trail_north, 52, rgba8(71, 55, 38, 255), 7)
+    push_line_path(items, trail_south, 52, rgba8(71, 55, 38, 255), 7)
+    push_line_path(items, trail_main, 46, rgba8(137, 103, 63, 255), 8)
+    push_line_path(items, trail_north, 38, rgba8(137, 103, 63, 255), 8)
+    push_line_path(items, trail_south, 38, rgba8(137, 103, 63, 255), 8)
+
+    for clearing in [[395, 292, 92, 64], [645, 250, 92, 68], [790, 425, 94, 66]] {
+        list_push(items, v_ellipse(clearing[0], clearing[1], clearing[2], clearing[3], rgba8(69, 105, 52, 255), 6))
+        list_push(items, v_alpha_ellipse(clearing[0], clearing[1], clearing[2] - 10, clearing[3] - 8, rgba8(109, 139, 67, 120), 9))
+    }
+
+    let border_trees = [[-18, -10], [55, -8], [130, -18], [215, -8], [300, -20], [390, -10], [480, -15], [570, -6], [660, -18], [750, -8], [840, -15], [915, -5], [-25, 500], [65, 510], [155, 495], [245, 515], [340, 500], [450, 520], [555, 500], [665, 510], [770, 498], [870, 515], [925, 490], [-25, 80], [-20, 185], [-25, 290], [-20, 400], [885, 90], [895, 195], [890, 300], [900, 410]]
+    push_sprite_points(items, "tree", border_trees, 192, 3.2, 110, 145, 30)
+    let inner_trees = [[205, 92], [300, 115], [410, 80], [520, 95], [720, 95], [800, 150], [220, 420], [330, 440], [470, 420], [565, 455], [735, 500], [835, 505], [520, 175], [690, 350], [325, 245]]
+    push_sprite_points(items, "tree_alt", inner_trees, 192, 2.6, 100, 134, 31)
+
+    push_sprite_points(items, "bush", [[170, 265], [260, 365], [350, 185], [455, 385], [565, 170], [675, 175], [715, 320], [850, 305], [875, 450]], 128, 4.0, 54, 54, 33)
+    push_sprite_points(items, "bush_alt", [[130, 400], [285, 220], [440, 200], [590, 390], [745, 235], [825, 375]], 128, 3.5, 50, 50, 33)
+
+    list_push(items, v_alpha_ellipse(575, 427, 74, 13, rgba8(0, 0, 0, 70), 34))
+    list_push(items, v_line(505, 405, 635, 430, 22, rgba8(79, 55, 33, 255), 35))
+    list_push(items, v_line(510, 400, 635, 425, 12, rgba8(125, 88, 48, 255), 36))
+    for branch in [[535, 410, 520, 385], [575, 420, 595, 392], [610, 425, 625, 450]] {
+        list_push(items, v_line(branch[0], branch[1], branch[2], branch[3], 6, rgba8(87, 60, 35, 255), 36))
+    }
+
+    for rock in [[250, 125, 44], [300, 150, 36], [770, 110, 48], [825, 145, 34]] {
+        list_push(items, v_sprite("rock", rock[0], rock[1], rock[2], rock[2], "fit", 34))
+    }
+    list_push(items, v_line(545, 315, 545, 372, 8, rgba8(91, 61, 36, 255), 38))
+    list_push(items, v_line(545, 328, 510, 310, 7, rgba8(157, 111, 61, 255), 39))
+    list_push(items, v_line(545, 342, 580, 325, 7, rgba8(157, 111, 61, 255), 39))
+
+    let particle = 0
+    while particle < 18 {
+        let px = (particle * 83 + 47) % 920 + 20
+        let py = (particle * 53 + 31) % 520 + 50
+        let radius = 2 + particle % 2
+        list_push(items, v_alpha_ellipse(px, py, radius * 2, radius, rgba8(225, 247, 129, 105), 70))
+        particle += 1
+    }
+    list_push(items, v_alpha_rect(0, 0, 960, 640, rgba8(21, 58, 39, 22), 75))
+    return items
+}

@@ -112,8 +112,6 @@ impl VulkanRtxBackend {
             } else if missing.is_empty() {
                 // RT available but not Nvidia — still usable, but we label as Full for now.
                 RtxSupportLevel::Full
-            } else if is_nvidia {
-                RtxSupportLevel::VulkanWithoutRt
             } else {
                 RtxSupportLevel::VulkanWithoutRt
             };

@@ -1,0 +1,25 @@
+[package]
+name = "third-person"
+description = "Third-person vertical slice: declarative 3D scene, physics, blended animation, particles, saves"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "third-person"
+path = "src/main.rs"
+
+[dependencies]
+velvet-math = { workspace = true }
+velvet-scene3d = { workspace = true }
+velvet-render = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+winit = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

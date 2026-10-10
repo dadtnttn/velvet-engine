@@ -136,7 +136,7 @@ Docs: [`docs/language/VELVET_STORY.md`](docs/language/VELVET_STORY.md) ·
 **Requirements:** [Rust](https://www.rust-lang.org/) stable (see `rust-toolchain.toml`).
 
 ```bash
-# Clone (engine only — demos and binary art live outside git history)
+# Clone the engine, supported demos and Demon Queen source
 git clone https://github.com/dadtnttn/velvet-engine.git
 cd velvet-engine
 
@@ -169,8 +169,11 @@ cargo run -p velvet-cli --release -- style check templates/visual-novel/styles/u
 | Cellular lab | `cargo run -p cellular-lab --release` | Headless author lab (**alpha**) |
 | Studio GUI *(alpha)* | `cargo run -p velvet-editor --release -- gui templates/visual-novel --interactive` | Visual / Script / Nodes |
 
-> Windowed game demos live outside this git history (they carry binary
-> art); everything above runs from a fresh clone.
+Supported demos: `cellular-arena`, `fx-forge`, `ui-gallery`, `terraflow`,
+`third-person`, `rpg-quest-vs3` and `demon-queen`. Demon Queen includes source,
+story data and reviewed non-explicit resources; its private media pack is
+distributed separately. See [repository contents](docs/engineering/REPOSITORY_CONTENTS.md)
+and [Demon Queen setup](demos/demon-queen/README.md).
 
 ---
 
@@ -202,6 +205,7 @@ cargo run -p velvet-cli --release -- style check templates/visual-novel/styles/u
 | Velvet Story | [docs/language/VELVET_STORY.md](docs/language/VELVET_STORY.md) · [2.5](docs/language/VELVET_2_5.md) · [VS3 roadmap](docs/language/VS3_ROADMAP.md) |
 | UI animation / interaction | [docs/reports/UI_ANIM.md](docs/reports/UI_ANIM.md) |
 | Scene3D | [docs/reports/SCENE3D.md](docs/reports/SCENE3D.md) |
+| Demon Queen NPCs | [docs/engineering/DEMON_QUEEN_NPCS.md](docs/engineering/DEMON_QUEEN_NPCS.md) |
 | Cellular (alpha) | [docs/architecture/CELLULAR.md](docs/architecture/CELLULAR.md) |
 | Studio (alpha) | [docs/editor/STUDIO.md](docs/editor/STUDIO.md) |
 | Ren’Py parity notes | [docs/reports/RENPY_PARITY.md](docs/reports/RENPY_PARITY.md) |
@@ -219,6 +223,7 @@ Brand assets used on this page: [`docs/assets/`](docs/assets/).
 ```text
 crates/      Engine libraries (core, story, style, ui, scene3d, script, cli, …)
 examples/    Focused runnable examples (run from a fresh clone)
+demos/       Supported engine demos and Demon Queen source
 templates/   Project starters for `velvet new`
 samples/     Ship-shaped sample projects (short-novella, vs3-logic)
 docs/        Architecture, language, reports, tutorials
@@ -230,9 +235,11 @@ tools/       Author and quality tooling
 
 ```bash
 cargo fmt --all -- --check
-cargo check --workspace --all-targets --all-features
-cargo test --workspace --all-targets --all-features
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo check --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon
+cargo check -p demon-queen --all-targets
+cargo test --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon
+cargo clippy --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon -- -D warnings
+python tools/check_repository.py
 ```
 
 Cross-crate scenarios live in `crates/velvet-integration-tests/tests/`. See the [integration matrix](docs/architecture/INTEGRATION_MATRIX.md) for dependency direction and the proof attached to each subsystem.

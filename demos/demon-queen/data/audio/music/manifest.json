@@ -1,0 +1,138 @@
+{
+  "castle": [
+    {
+      "file": "castle_1.ogg",
+      "seconds": 359.56,
+      "source": "The Queen's Private Chamber.wav",
+      "gain_db": -1.07
+    },
+    {
+      "file": "castle_2.ogg",
+      "seconds": 358.76,
+      "source": "The Queen's Private Chamber (1).wav",
+      "gain_db": -0.71
+    },
+    {
+      "file": "castle_3.ogg",
+      "seconds": 359.96,
+      "source": "The Queen's Private Chamber (2).wav",
+      "gain_db": -2.14
+    }
+  ],
+  "forest": [
+    {
+      "file": "forest_1.ogg",
+      "seconds": 359.96,
+      "source": "Path Through the Mist.wav",
+      "gain_db": -2.11
+    },
+    {
+      "file": "forest_2.ogg",
+      "seconds": 303.16,
+      "source": "Path Through the Mist (1).wav",
+      "gain_db": -1.83
+    },
+    {
+      "file": "forest_3.ogg",
+      "seconds": 294.0,
+      "source": "Path Through the Mist (2).wav",
+      "gain_db": -1.87
+    },
+    {
+      "file": "forest_4.ogg",
+      "seconds": 359.56,
+      "source": "Path Through the Mist (3).wav",
+      "gain_db": -1.15
+    }
+  ],
+  "village": [
+    {
+      "file": "village_1.ogg",
+      "seconds": 360.0,
+      "source": "Glowing Windows.wav",
+      "gain_db": -1.54
+    },
+    {
+      "file": "village_2.ogg",
+      "seconds": 252.72,
+      "source": "Glowing Windows (1).wav",
+      "gain_db": -2.7
+    },
+    {
+      "file": "village_3.ogg",
+      "seconds": 359.56,
+      "source": "Glowing Windows (2).wav",
+      "gain_db": -1.81
+    },
+    {
+      "file": "village_4.ogg",
+      "seconds": 359.6,
+      "source": "Glowing Windows (3).wav",
+      "gain_db": -2.26
+    }
+  ],
+  "cave": [
+    {
+      "file": "cave_1.ogg",
+      "seconds": 359.6,
+      "source": "Torchlight in the Deep.wav",
+      "gain_db": -3.3
+    },
+    {
+      "file": "cave_2.ogg",
+      "seconds": 359.88,
+      "source": "Torchlight in the Deep (1).wav",
+      "gain_db": -3.53
+    },
+    {
+      "file": "cave_3.ogg",
+      "seconds": 359.96,
+      "source": "Torchlight in the Deep (2).wav",
+      "gain_db": -1.7
+    },
+    {
+      "file": "cave_4.ogg",
+      "seconds": 359.6,
+      "source": "Torchlight in the Deep (3).wav",
+      "gain_db": -3.3
+    },
+    {
+      "file": "cave_5.ogg",
+      "seconds": 359.96,
+      "source": "Torchlight in the Deep (4).wav",
+      "gain_db": -2.59
+    },
+    {
+      "file": "cave_6.ogg",
+      "seconds": 359.92,
+      "source": "Torchlight in the Deep (5).wav",
+      "gain_db": -2.74
+    }
+  ],
+  "brothel": [
+    {
+      "file": "brothel_1.ogg",
+      "seconds": 359.76,
+      "source": "The Crimson Heart.wav",
+      "gain_db": -1.33
+    },
+    {
+      "file": "brothel_2.ogg",
+      "seconds": 359.88,
+      "source": "The Crimson Heart (1).wav",
+      "gain_db": -1.82
+    },
+    {
+      "file": "brothel_3.ogg",
+      "seconds": 360.12,
+      "source": "The Crimson Heart (2).wav",
+      "gain_db": -1.52
+    },
+    {
+      "file": "brothel_4.ogg",
+      "seconds": 360.2,
+      "source": "The Crimson Heart (3).wav",
+      "gain_db": -2.68
+    }
+  ]
+}

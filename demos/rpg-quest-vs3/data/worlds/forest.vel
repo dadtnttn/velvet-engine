@@ -1,0 +1,37 @@
+function build_forest_world() {
+    let world = world_shell(
+        "forest",
+        "EL BOSQUE",
+        "Las sombras esconden nuevas invasiones.",
+        "Limpia el bosque",
+        vec2(92, 355)
+    )
+
+    world.terrain = "forest_floor"
+    world.ambient = {"tint": "cool_green", "fog": 0.18, "particles": "fireflies"}
+
+    add_prop(world, make_prop("forest_border", 0, 0, 960, 640, "dense_pines"))
+    add_prop(world, make_prop("trail", 55, 300, 850, 170, "branching"))
+    add_prop(world, make_prop("clearing", 320, 210, 190, 170, "west"))
+    add_prop(world, make_prop("clearing", 570, 190, 190, 180, "north"))
+    add_prop(world, make_prop("clearing", 710, 360, 190, 170, "east"))
+    add_prop(world, make_prop("fallen_log", 500, 390, 145, 55, "moss"))
+    add_prop(world, make_prop("signpost", 515, 315, 65, 80, "three_way"))
+    add_prop(world, make_prop("rock_cluster", 250, 125, 120, 90, "granite"))
+    add_prop(world, make_prop("rock_cluster", 770, 110, 110, 90, "granite"))
+
+    add_collider(world, rect(0, 0, 960, 70, "forest_north"))
+    add_collider(world, rect(0, 570, 960, 70, "forest_south"))
+    add_collider(world, rect(0, 0, 55, 640, "forest_west"))
+    add_collider(world, rect(905, 0, 55, 640, "forest_east"))
+    add_collider(world, rect(500, 390, 145, 42, "fallen_log"))
+    add_collider(world, rect(250, 125, 120, 70, "rocks_west"))
+    add_collider(world, rect(770, 110, 110, 70, "rocks_east"))
+
+    add_spawn(world, make_enemy_spawn("scout", 382, 286, 52))
+    add_spawn(world, make_enemy_spawn("scout", 646, 276, 52))
+    add_spawn(world, make_enemy_spawn("scout", 790, 430, 52))
+
+    add_zone(world, {"id": "forest_crossroads", "kind": "landmark", "area": rect(460, 280, 130, 130, "open")})
+    return world
+}

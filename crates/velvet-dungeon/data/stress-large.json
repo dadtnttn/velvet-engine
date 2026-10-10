@@ -1,0 +1,9 @@
+{
+  "critical_path_length": 96,
+  "branch_factor": 1.0,
+  "loop_probability": 1.0,
+  "verticality": 1.0,
+  "room_scale": 1.5,
+  "corridor_length": 28.0,
+  "biome_complexity": 3
+}

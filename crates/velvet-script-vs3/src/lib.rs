@@ -12,6 +12,7 @@
 
 mod abi;
 mod bundle;
+pub mod conformance;
 mod lockfile;
 mod manifest;
 mod package_resolver;

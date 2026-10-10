@@ -1,0 +1,23 @@
+// Identificadores compartidos para evitar cadenas duplicadas por todo el proyecto.
+
+const PHASE_TITLE = "title"
+const PHASE_PLAYING = "playing"
+const PHASE_VICTORY = "victory"
+const PHASE_GAME_OVER = "game_over"
+
+const STAGE_CLEAR_ENEMIES = "clear_enemies"
+const STAGE_TALK_KING = "talk_king"
+const STAGE_DEFEAT_BOSS = "defeat_boss"
+const STAGE_COMPLETE = "complete"
+
+const WORLD_HOME = 1
+const WORLD_FOREST = 2
+const WORLD_CAMP = 3
+const WORLD_CAVE = 4
+const WORLD_CASTLE = 5
+
+const PLAYER_SPEED = 176.0
+const PLAYER_RADIUS = 15.0
+const ENEMY_RADIUS = 14.0
+const ATTACK_RANGE = 62.0
+const INTERACT_RANGE = 86.0

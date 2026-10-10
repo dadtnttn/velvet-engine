@@ -1,12 +1,12 @@
 //! AST to bytecode.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 use velvet_script_ast::{BinOp, Diagnostic, Expr, Item, Module, SourceLoc, Stmt, UnaryOp};
 use velvet_script_bytecode::{
     fnv1a64, lookup_math_constant, lookup_native, BytecodeModule, Chunk, Constant, ModuleMetadata,
-    Op,
+    Op, LEGACY_PRESENT_NOTICE,
 };
 use velvet_script_parser::{parse_file, ParseError};
 
@@ -85,6 +85,7 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
         diagnostics: ast.diagnostics.clone(),
         globals: HashMap::new(),
         errors: Vec::new(),
+        warnings: Vec::new(),
     };
     if let Some(ref f) = ast.file {
         cx.module.metadata.source_path = Some(f.clone());
@@ -137,6 +138,8 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
         globals: &mut cx.globals,
         module_globals: &mut cx.module.globals,
         errors: &mut cx.errors,
+        warnings: &mut cx.warnings,
+        warned: HashSet::new(),
         loops: Vec::new(),
     };
 
@@ -191,6 +194,8 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
                         globals: main_cx.globals,
                         module_globals: main_cx.module_globals,
                         errors: main_cx.errors,
+                        warnings: main_cx.warnings,
+                        warned: HashSet::new(),
                         loops: Vec::new(),
                     };
                     sc.chunk.map_source(loc.line, loc.column);
@@ -236,8 +241,9 @@ pub fn compile(ast: &Module) -> Result<CompileResult, CompileError> {
     cx.module.exports.insert("<script>".into(), main_idx);
     cx.module.functions.push(main);
 
-    // Merge collected errors into diagnostics.
+    // Merge collected errors and soft warnings into diagnostics.
     cx.diagnostics.extend(cx.errors.iter().cloned());
+    cx.diagnostics.extend(cx.warnings.iter().cloned());
 
     if !cx.errors.is_empty() {
         if cx.errors.len() == 1 {
@@ -266,6 +272,7 @@ struct Compiler {
     diagnostics: Vec<Diagnostic>,
     globals: HashMap<String, u16>,
     errors: Vec<Diagnostic>,
+    warnings: Vec<Diagnostic>,
 }
 
 impl Compiler {
@@ -294,6 +301,8 @@ impl Compiler {
             globals: &mut self.globals,
             module_globals: &mut self.module.globals,
             errors: &mut self.errors,
+            warnings: &mut self.warnings,
+            warned: HashSet::new(),
             loops: Vec::new(),
         };
         fc.chunk.map_source(loc.line, loc.column);
@@ -330,6 +339,9 @@ struct FnCompiler<'a> {
     globals: &'a mut HashMap<String, u16>,
     module_globals: &'a mut Vec<String>,
     errors: &'a mut Vec<Diagnostic>,
+    warnings: &'a mut Vec<Diagnostic>,
+    /// Deprecation keys already warned (one notice per name per function).
+    warned: HashSet<String>,
     loops: Vec<LoopContext>,
 }
 
@@ -343,6 +355,14 @@ struct LoopContext {
 impl FnCompiler<'_> {
     fn error(&mut self, message: impl Into<String>, loc: &SourceLoc) {
         self.errors.push(Diagnostic::error(message, loc.clone()));
+    }
+
+    /// Soft warning (compilation continues); deduplicated per key.
+    fn warn(&mut self, key: &str, message: impl Into<String>, loc: &SourceLoc) {
+        if self.warned.insert(key.to_string()) {
+            self.warnings
+                .push(Diagnostic::warning(message, loc.clone()));
+        }
     }
 
     fn begin_scope(&mut self) {
@@ -837,6 +857,9 @@ impl FnCompiler<'_> {
                 } else if let Some(value) = lookup_math_constant(name) {
                     self.chunk.emit_constant(Constant::Float(value));
                 } else if let Some(native) = lookup_native(name) {
+                    if native.is_legacy_present() {
+                        self.warn(name, format!("`{name}`: {LEGACY_PRESENT_NOTICE}"), loc);
+                    }
                     // Push native as a first-class value.
                     self.chunk.emit_constant(Constant::Native(native.as_u16()));
                 } else {
@@ -995,6 +1018,9 @@ impl FnCompiler<'_> {
 
                     // Direct native call when callee is a known stdlib name.
                     if let Some(native) = lookup_native(name) {
+                        if native.is_legacy_present() {
+                            self.warn(name, format!("`{name}`: {LEGACY_PRESENT_NOTICE}"), loc);
+                        }
                         for a in args {
                             self.compile_expr(a)?;
                         }
@@ -1244,6 +1270,44 @@ let x = add(2, 40)
         assert!(!r.module.functions.is_empty());
         assert!(r.module.exports.contains_key("add"));
         assert!(r.module.metadata.source_hash.is_some());
+    }
+
+    #[test]
+    fn legacy_present_calls_warn_but_compile() {
+        let src = r#"
+function setup() {
+    set_bg("bg:x")
+    present_show("nora", "happy", "left")
+    present_show("june")
+    return ui_flag_get("seen")
+}
+"#;
+        let r = compile_source(src, None).unwrap();
+        // One warning per legacy name (deduped), compilation succeeds.
+        let mut warned: Vec<&str> = r
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == velvet_script_ast::Severity::Warning)
+            .map(|d| d.message.as_str())
+            .collect();
+        warned.sort();
+        assert_eq!(warned.len(), 3, "{warned:?}");
+        assert!(
+            warned[0].contains("present_show") && warned[0].contains("velvet.compat"),
+            "{}",
+            warned[0]
+        );
+        assert!(warned[1].contains("set_bg"));
+        assert!(warned[2].contains("ui_flag_get"));
+        // Non-legacy natives stay silent.
+        let r = compile_source("function f() {\n return len([1, 2])\n}\n", None).unwrap();
+        assert!(
+            r.diagnostics
+                .iter()
+                .all(|d| d.severity != velvet_script_ast::Severity::Warning),
+            "{:?}",
+            r.diagnostics
+        );
     }
 
     #[test]

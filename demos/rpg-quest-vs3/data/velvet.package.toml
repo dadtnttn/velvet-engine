@@ -1,0 +1,8 @@
+[package]
+name = "rpg_quest_vs3"
+version = "0.1.0"
+edition = 3
+root = "rpg_quest_vs3.game"
+
+[modules]
+"rpg_quest_vs3.game" = "module.vel"

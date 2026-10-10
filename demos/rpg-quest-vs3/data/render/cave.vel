@@ -1,0 +1,95 @@
+function cave_chamber(items: list, x: int, y: int, w: int, h: int, base: int, rim: int) {
+    list_push(items, v_ellipse(x + w / 2, y + h / 2, w / 2, h / 2, rim, 8))
+    list_push(items, v_ellipse(x + w / 2, y + h / 2, w / 2 - 12, h / 2 - 10, base, 9))
+}
+
+function cave_crystals(items: list, x: int, y: int, w: int, h: int, layer: int) {
+    let index = 0
+    while index < 7 {
+        let px = x + 12 + index * (w - 24) / 7
+        let height = 34 + (index * 19 % (h - 25))
+        let color = rgba8(91, 139, 234, 255)
+        if index % 2 == 1 { color = rgba8(158, 92, 214, 255) }
+        list_push(items, v_alpha_ellipse(px + 5, y + h - 10, 22, 9, rgba8(75, 91, 225, 48), layer))
+        list_push(items, v_rect(px, y + h - height, 10, height, color, layer + 1))
+        list_push(items, v_circle(px + 5, y + h - height, 8, color, layer + 2))
+        index += 1
+    }
+}
+
+function cave_torch(items: list, x: int, y: int, violet: bool) {
+    let outer = rgba8(255, 126, 45, 255)
+    let inner = rgba8(255, 217, 85, 255)
+    if violet {
+        outer = rgba8(153, 87, 235, 255)
+        inner = rgba8(221, 167, 255, 255)
+    }
+    list_push(items, v_alpha_ellipse(x, y, 72, 55, rgba8(outer / 65536 % 256, outer / 256 % 256, outer % 256, 28), 65))
+    list_push(items, v_rect(x - 3, y, 6, 34, rgba8(107, 73, 46, 255), 66))
+    list_push(items, v_circle(x, y - 5, 10, outer, 67))
+    list_push(items, v_circle(x, y - 10, 5, inner, 68))
+}
+
+function cave_visuals(time: float, stage: string) {
+    let items = base_ground("ground_cave", rgba8(22, 25, 38, 255))
+    list_push(items, v_alpha_rect(0, 0, 960, 640, rgba8(10, 15, 31, 90), 2))
+
+    cave_chamber(items, 45, 250, 230, 190, rgba8(61, 68, 88, 255), rgba8(32, 37, 55, 255))
+    cave_chamber(items, 290, 105, 250, 210, rgba8(57, 66, 91, 255), rgba8(31, 37, 56, 255))
+    cave_chamber(items, 325, 285, 290, 190, rgba8(65, 70, 88, 255), rgba8(34, 39, 55, 255))
+    cave_chamber(items, 410, 445, 290, 160, rgba8(54, 66, 83, 255), rgba8(29, 37, 51, 255))
+    cave_chamber(items, 700, 205, 220, 230, rgba8(62, 60, 86, 255), rgba8(34, 32, 58, 255))
+
+    for tunnel in [[220, 305, 155, 85], [405, 245, 85, 105], [535, 395, 105, 105], [570, 300, 180, 90]] {
+        list_push(items, v_alpha_rect(tunnel[0], tunnel[1], tunnel[2], tunnel[3], rgba8(62, 68, 84, 255), 9))
+        list_push(items, v_border(tunnel[0], tunnel[1], tunnel[2], tunnel[3], 8, rgba8(34, 39, 55, 255), 10))
+    }
+
+    for wall in [[45, 55, 230, 165], [545, 55, 370, 135], [45, 455, 370, 130], [555, 190, 145, 95], [625, 405, 75, 50], [700, 455, 215, 130]] {
+        list_push(items, v_alpha_rect(wall[0], wall[1], wall[2], wall[3], rgba8(13, 17, 28, 230), 14))
+        list_push(items, v_border(wall[0], wall[1], wall[2], wall[3], 8, rgba8(38, 45, 63, 255), 15))
+    }
+
+    cave_crystals(items, 335, 130, 160, 140, 32)
+    list_push(items, v_alpha_ellipse(557, 535, 92, 53, rgba8(27, 101, 132, 210), 28))
+    list_push(items, v_ellipse(557, 530, 74, 42, rgba8(62, 180, 205, 255), 29))
+    list_push(items, v_ellipse(530, 518, 22, 8, rgba8(143, 231, 239, 255), 30))
+    list_push(items, v_ellipse(586, 545, 18, 6, rgba8(143, 231, 239, 255), 30))
+
+    for rock in [[78, 88, 58], [130, 112, 44], [180, 92, 52], [735, 475, 46], [785, 500, 56], [840, 480, 42], [285, 470, 40], [330, 490, 34], [365, 475, 38]] {
+        let asset = "rock"
+        if rock[0] % 2 == 1 { asset = "rock_alt" }
+        list_push(items, v_sprite(asset, rock[0], rock[1], rock[2], rock[2], "fit", 34))
+    }
+
+    let spike = 0
+    while spike < 16 {
+        let px = 72 + (spike * 41 % 660)
+        let py = 465 + (spike * 23 % 70)
+        let height = 18 + spike % 22
+        list_push(items, v_line(px, py + height, px + 5, py, 8, rgba8(76, 82, 102, 255), 35))
+        spike += 1
+    }
+
+    list_push(items, v_sprite("shrine", 760, 230, 120, 180, "content", 45))
+    list_push(items, v_alpha_ellipse(820, 395, 65, 14, rgba8(95, 70, 175, 65), 44))
+
+    cave_torch(items, 236, 320, false)
+    cave_torch(items, 396, 280, false)
+    cave_torch(items, 516, 330, false)
+    cave_torch(items, 591, 420, false)
+    cave_torch(items, 691, 320, false)
+    cave_torch(items, 881, 345, true)
+
+    let dust = 0
+    while dust < 30 {
+        let dx = 30 + (dust * 67 % 900)
+        let dy = 45 + (dust * 43 % 530)
+        let color = rgba8(153, 188, 232, 75)
+        if dust % 3 == 0 { color = rgba8(190, 139, 232, 65) }
+        list_push(items, v_alpha_ellipse(dx, dy, 2 + dust % 3, 1 + dust % 2, color, 76))
+        dust += 1
+    }
+    list_push(items, v_alpha_rect(0, 0, 960, 640, rgba8(7, 13, 29, 35), 78))
+    return items
+}
