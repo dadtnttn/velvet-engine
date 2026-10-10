@@ -1188,7 +1188,7 @@ function meets(tag: string) {
     if tag == "uni" { return L.study != null }
     if tag == "gig" { return L.gig != null }
     if tag == "addict" { return L.alcohol + L.drugs >= 40 }
-    return legacy_meets(tag)
+    return legacy_meets(tag) || rel_meets(tag)
 }
 
 function eligible(ev: map) {
@@ -1219,8 +1219,21 @@ function maybe_event() {
             list_push(weights, ev.w)
         }
     }
+    for ev in REL_EVENTS {
+        if eligible(ev) {
+            list_push(pool, ev)
+            list_push(weights, ev.w)
+        }
+    }
     if len(pool) == 0 { return null }
     let ev = pool[weighted_choose(G.rng, weights)]
+    if str_starts_with(ev.id, "rl_") {
+        let ctx = rel_ctx(ev)
+        if ctx["person"] == null { return null }
+        open_event(ev, ctx)
+        G.modal.title = fmt(ev.title, ctx)
+        return null
+    }
     if str_starts_with(ev.id, "lg_") {
         let ctx = legacy_ctx(ev)
         open_event(ev, ctx)

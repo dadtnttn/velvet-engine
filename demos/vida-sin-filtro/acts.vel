@@ -228,6 +228,7 @@ function menu_title(tab: string) {
 function menu_cats(tab: string) {
     if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Hábitos", "Lujos"] }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
+    if tab == "rel" { return ["Familia", "Pareja", "Amigos", "Otros", "Conocer"] }
     if tab == "jobs" { return FIELD_ORDER }
     if tab == "study" { return ["Universidad", "Técnica"] }
     if tab == "gigs" {
@@ -240,7 +241,7 @@ function menu_cats(tab: string) {
 
 function menu_items(tab: string, cat: string) {
     if tab == "job" { return job_items() }
-    if tab == "rel" { return rel_items() }
+    if tab == "rel" { return rel_list(cat) }
     if tab == "missions" { return mission_items() }
     if tab == "effects" { return effect_items() }
     if tab == "jobs" { return job_items_for(cat) }
@@ -329,73 +330,6 @@ function job_items() {
         list_push(items, {"action": "act:jobsearch", "t": "Buscar carrera", "s": "Más de 120 carreras", "desc": "Catálogo completo por campos. Las profesiones piden título; sin él puedes entrar como amateur pasando una audición. Puedes tener dos carreras y fusionarlas.", "lock": ""})
     }
     return items
-}
-
-function rel_items() {
-    let items = []
-    for p in L.people {
-        if !p.alive { continue }
-        list_push(items, {
-            "action": "person:" + str(p.id),
-            "t": full_name(p),
-            "s": rel_label(p) + " · " + str(p.age) + " años",
-            "desc": arcana(p) + " · Rango " + str(conf_rank(p)),
-            "lock": "",
-            "pid": p.id
-        })
-    }
-    if L.age >= 18 && L.jail == 0 {
-        list_push(items, {"action": "act:dating", "t": "Buscar el amor", "s": "Abrir la app de citas", "desc": "Alguien allá afuera está deslizando a la derecha.", "lock": ""})
-    }
-    return items
-}
-
-function person_actions(p: map) {
-    let out = [{"action": "pact:time", "t": "Pasar tiempo juntos", "s": "Más cercanía"}]
-    if tree_for(p) != "" {
-        list_push(out, {"action": "pact:dlg", "t": "Conversación profunda", "s": "Diálogo con decisiones · " + STYLE_NAMES[npc_style(p)]})
-    } else {
-        list_push(out, {"action": "pact:talk", "t": "Conversar", "s": "Un poco más de cercanía"})
-    }
-    for a in [
-        {"action": "pact:argue", "t": "Discutir", "s": "Desahogarte"},
-        {"action": "pact:insult", "t": "Insultar", "s": "Quemar el puente"}
-    ] { list_push(out, a) }
-    let r = p.rel
-    if r == "padre" || r == "madre" {
-        list_push(out, {"action": "pact:money", "t": "Pedir dinero", "s": "Si te quiere lo suficiente"})
-    }
-    if r == "hijo" {
-        for a in kid_items_for(p) { list_push(out, a) }
-    }
-    if L.age >= 18 && L.jail == 0 {
-        if r == "pareja" || r == "esposo" {
-            list_push(out, {"action": "pact:romance", "t": "Noche romántica", "s": "Felicidad y cercanía"})
-            list_push(out, {"action": "pact:baby", "t": "Intentar tener un bebé", "s": "Agrandar la familia"})
-            list_push(out, {"action": "pact:threesome", "t": "Proponer un trío", "s": "Arriesgado"})
-            if r == "pareja" {
-                list_push(out, {"action": "pact:propose", "t": "Proponer matrimonio", "s": "Boda de $8,000"})
-                list_push(out, {"action": "pact:breakup", "t": "Terminar", "s": "Fin de la relación"})
-            } else {
-                list_push(out, {"action": "pact:breakup", "t": "Divorciarte", "s": "Pierdes la mitad"})
-            }
-        }
-        if r == "ex" {
-            list_push(out, {"action": "pact:again", "t": "Intentar volver", "s": "Segundas partes..."})
-            list_push(out, {"action": "pact:hookup", "t": "Recaer en la cama", "s": "Solo una vez más"})
-        }
-        if r == "amante" || r == "ligue" {
-            list_push(out, {"action": "pact:hookup", "t": "Verse a escondidas", "s": "Encuentro"})
-            if L.partner_id == 0 {
-                list_push(out, {"action": "pact:official", "t": "Hacerlo oficial", "s": "Formalizar"})
-            }
-            list_push(out, {"action": "pact:end", "t": "Cortar la aventura", "s": "Se acabó"})
-        }
-        if r == "amigo" || r == "hermano" {
-            list_push(out, {"action": "pact:party", "t": "Salir de fiesta juntos", "s": "Felicidad y alcohol"})
-        }
-    }
-    return out
 }
 
 // ---------------------------------------------------------------- acciones
@@ -900,10 +834,7 @@ function do_person_act(action: string, p: map) {
     }
     if action == "propose" {
         if chance(p.bond - 10 + rank("guts") * 3) {
-            marry()
-            L.happy += 15
-            toast("LOS AMANTES · BODA", "Te casaste con " + name + ".")
-            return finish(name, "¡Dijo que sí! Se casaron en una boda inolvidable.", "g")
+            return open_wedding(p)
         }
         bond_gain(p, -10)
         return finish(name, name + " dijo que no está list" + oa(p.gender) + ". Qué incómodo.", "b")
@@ -1130,5 +1061,9 @@ function dispatch_choice(index: int) {
     if m.handler == "audition" { return resolve_audition(index, m.ctx) }
     if m.handler == "dialog" { return dlg_choose(index) }
     if m.handler == "retire" { return resolve_retire(index) }
+    if m.handler == "gift" { return resolve_gift(index, m.ctx) }
+    if m.handler == "sex" { return resolve_sex(index, m.ctx) }
+    if m.handler == "spicy" { return resolve_spicy(index, m.ctx) }
+    if m.handler == "wedding" { return resolve_wedding(index, m.ctx) }
     return null
 }

@@ -113,6 +113,27 @@ binarias en el juego.
   del sexo oral: más éxito ligando pero más riesgo de ITS; exhibicionista: liga
   más pero cuesta que te contraten). Afectan tu atractivo efectivo, ligues,
   contrataciones, sueldo, calificaciones, placer y felicidad o salud mensual.
+- **Vínculos a fondo** (`relations.vel`): el menú de Vínculos se divide en
+  Familia, Pareja, Amigos, Otros y Conocer gente, y cada persona tiene su propio
+  menú por categorías según el tipo de relación:
+  - Pareja: Citas (cena, cine, picnic, concierto, baile, escapada, regalos),
+    Intimidad (relaciones con condón, anticonceptivo, sin protección o buscando
+    bebé; noche de fantasías según sus gustos; masaje; love hotel; trío),
+    Juntos (ejercicio, cocinar, trivia, videojuegos, series, viajes, mascota),
+    Hablar y Futuro (boda a elegir: íntima, civil, Las Vegas, playa o la boda
+    del año; renovar votos; adopción; tratamiento de fertilidad; divorcio).
+  - Padres, hermanos, hijos, nietos, amigos y ex tienen sus propias opciones
+    (ayudar en casa, cuidarlos en la vejez, leer un cuento, enseñar a manejar,
+    malcriar a los nietos, pijamadas, fiestas, bromas, pedir perdón, bloquear...).
+  - Muchas actividades son minijuegos: tu puntaje decide cuánto crece el vínculo.
+  - **Fertilidad**: cada persona tiene la suya y baja con la edad (antes en
+    mujeres), el cigarro, la obesidad, las drogas y algunas ITS. La probabilidad
+    de embarazo depende de la protección y de la fertilidad de los dos.
+  - **Amigos de la infancia**: haces amigos en el kínder, la primaria y la
+    secundaria que crecen contigo; de adultos pueden confesarte que siempre les
+    gustaste, y llegar juntos hasta la boda y la vejez.
+  - Eventos de pareja y amigos: aniversarios, conocer a los suegros, celos,
+    despidos, discursos de boda y rivalidad entre hermanos.
 - **Hijos y legado** (`family.vel`): tus hijos tienen personalidad (dulce,
   rebelde, genio, flojo), calificaciones y te piden cosas (juguetes, permiso para
   fiestas, el auto, que les pagues la universidad, dinero, la boda). Puedes
@@ -191,6 +212,7 @@ binarias en el juego.
 | `health.vel` | Enfermedades, contagio, mundo de los demás personajes, médico y hábitos |
 | `family.vel` | Hijos, peticiones, herencia, ruleta, nueva generación, vejez y eventos de legado |
 | `effects.vel` | Efectos positivos y negativos y sus modificadores |
+| `relations.vel` | Menús por vínculo, citas, intimidad, fertilidad, bodas, adopción y amigos de la infancia |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
 | `ui.vel` | Pantallas, menús, diálogos, notificaciones y efectos |
