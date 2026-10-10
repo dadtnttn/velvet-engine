@@ -9,6 +9,7 @@ use crate::assets::AppManifest;
 
 pub struct FontSystem {
     fonts: HashMap<String, Font>,
+    data: Vec<Vec<u8>>,
     default: String,
 }
 
@@ -18,6 +19,7 @@ impl FontSystem {
             .canonicalize()
             .with_context(|| format!("font root {} does not exist", asset_root.display()))?;
         let mut fonts = HashMap::new();
+        let mut data = Vec::new();
         let mut ids = HashSet::new();
         for spec in &manifest.fonts {
             anyhow::ensure!(
@@ -26,7 +28,9 @@ impl FontSystem {
                 spec.id
             );
             let paths = font_candidates(&root, &spec.path)?;
-            fonts.insert(spec.id.clone(), load_first(&paths)?);
+            let (font, bytes) = load_first(&paths)?;
+            fonts.insert(spec.id.clone(), font);
+            data.push(bytes);
         }
         let default = manifest
             .fonts
@@ -34,7 +38,15 @@ impl FontSystem {
             .context("at least one font is required")?
             .id
             .clone();
-        Ok(Self { fonts, default })
+        Ok(Self {
+            fonts,
+            data,
+            default,
+        })
+    }
+    /// Raw bytes of every declared font, in manifest order.
+    pub fn font_data(&self) -> impl Iterator<Item = &[u8]> {
+        self.data.iter().map(Vec::as_slice)
     }
     pub fn named(&self, name: &str) -> &Font {
         self.fonts
@@ -65,12 +77,13 @@ fn font_candidates(root: &Path, spec: &str) -> Result<Vec<PathBuf>> {
         Ok(vec![root.join(path)])
     }
 }
-fn load_first(paths: &[PathBuf]) -> Result<Font> {
+fn load_first(paths: &[PathBuf]) -> Result<(Font, Vec<u8>)> {
     let mut errors = Vec::new();
     for path in paths {
         match fs::read(path) {
             Ok(bytes) => {
-                return Font::from_bytes(bytes, FontSettings::default())
+                return Font::from_bytes(bytes.as_slice(), FontSettings::default())
+                    .map(|font| (font, bytes))
                     .map_err(|e| anyhow::anyhow!("invalid font {}: {e}", path.display()))
             }
             Err(e) => errors.push(format!("{}: {e}", path.display())),

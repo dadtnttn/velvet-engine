@@ -1,5 +1,5 @@
 use crate::assets::GameAssets;
-use crate::graphics::{Canvas, FontSystem, Rect};
+use crate::graphics::{Canvas, FontSystem, Rect, SvgCache};
 use crate::model::VisualCommandView;
 
 #[derive(Clone)]
@@ -101,9 +101,11 @@ pub fn action_at(commands: &[VisualCommandView], cursor: [f32; 2]) -> Option<Str
     hit
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     canvas: &mut Canvas,
     fonts: &FontSystem,
+    svg: &mut SvgCache,
     assets: &GameAssets,
     commands: &[VisualCommandView],
     time: f32,
@@ -119,6 +121,13 @@ pub fn render(
         }
         canvas.set_clip(state.clip);
         canvas.set_opacity(state.opacity);
+        if c.op == "svg" {
+            let area = rect(c, &state);
+            if let Some(image) = svg.raster(&c.text, area.w.max(0) as u32, area.h.max(0) as u32) {
+                canvas.image_region(image, 0, 0, image.width, image.height, area, c.flip_x);
+            }
+            continue;
+        }
         render_command(canvas, fonts, assets, c, &state, time, cursor, mouse_down);
     }
     canvas.set_clip(None);

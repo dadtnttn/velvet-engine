@@ -9,7 +9,9 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window};
 
 use crate::assets::{AppManifest, GameAssets};
-use crate::graphics::{scale_letterboxed, Canvas, FontSystem};
+use crate::graphics::{
+    scale_letterboxed, Canvas, FontSystem, SvgCache, MAX_SVG_BYTES, MAX_SVG_SIDE,
+};
 use crate::input::InputState;
 use crate::model::{FrameView, RuntimeEvent};
 use crate::scene::{action_at, render_scene};
@@ -130,6 +132,7 @@ pub struct Vs3App {
     pub(crate) manifest: AppManifest,
     pub(crate) assets: GameAssets,
     pub(crate) fonts: FontSystem,
+    pub(crate) svg: SvgCache,
     pub(crate) canvas: Canvas,
     pub(crate) window: Option<Arc<Window>>,
     pub(crate) context: Option<SoftContext<Arc<Window>>>,
@@ -151,6 +154,7 @@ impl Vs3App {
         let frame = FrameView::parse(&runtime.initialize()?).context("initial VS3 frame")?;
         validate_frame(&frame, &manifest, &assets)?;
         let canvas = Canvas::new(manifest.app.canvas_width, manifest.app.canvas_height);
+        let svg = SvgCache::new(fonts.font_data());
         let mut out = Self {
             runtime,
             frame,
@@ -158,6 +162,7 @@ impl Vs3App {
             manifest,
             assets,
             fonts,
+            svg,
             canvas,
             window: None,
             context: None,
@@ -186,6 +191,7 @@ impl Vs3App {
         render_scene(
             &mut self.canvas,
             &self.fonts,
+            &mut self.svg,
             &self.assets,
             &self.frame,
             self.cursor,
@@ -334,6 +340,7 @@ fn validate_frame(frame: &FrameView, manifest: &AppManifest, assets: &GameAssets
                     | "bar"
                     | "button"
                     | "keycap"
+                    | "svg"
                     | "clip_push"
                     | "clip_pop"
                     | "translate_push"
@@ -387,6 +394,19 @@ fn validate_frame(frame: &FrameView, manifest: &AppManifest, assets: &GameAssets
             anyhow::ensure!(
                 asset.is_empty() || assets.contains(asset),
                 "command {index} references unknown asset `{asset}`"
+            );
+        }
+        if command.op == "svg" {
+            anyhow::ensure!(
+                !command.text.is_empty() && command.text.len() <= MAX_SVG_BYTES,
+                "command {index} svg markup must be 1..={MAX_SVG_BYTES} bytes"
+            );
+            anyhow::ensure!(
+                command.w >= 1.0
+                    && command.h >= 1.0
+                    && command.w <= MAX_SVG_SIDE as f32
+                    && command.h <= MAX_SVG_SIDE as f32,
+                "command {index} svg size must be 1..={MAX_SVG_SIDE} pixels per side"
             );
         }
         if matches!(
