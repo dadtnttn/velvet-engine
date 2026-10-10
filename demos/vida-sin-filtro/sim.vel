@@ -44,7 +44,8 @@ state {
         "legacy": null,
         "roul": null,
         "sex_mode": "",
-        "back_pid": 0
+        "back_pid": 0,
+        "chat": null
     }
 }
 
@@ -328,6 +329,10 @@ function rel_label(p: map) {
     if r == "hijo" { return by_gender(p.gender, "Hijo", "Hija") }
     if r == "amigo" { return by_gender(p.gender, "Amigo", "Amiga") }
     if r == "amante" { return by_gender(p.gender, "Amante", "Amante") }
+    if r == "nieto" { return by_gender(p.gender, "Nieto", "Nieta") }
+    if r == "abuelo" { return by_gender(p.gender, "Abuelo", "Abuela") }
+    if r == "tio" { return by_gender(p.gender, "Tío", "Tía") }
+    if r == "primo" { return by_gender(p.gender, "Primo", "Prima") }
     return "Ligue"
 }
 
@@ -371,6 +376,7 @@ function new_life() {
     log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
     log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
     setup_family()
+    add_extended_family()
     L.grades = clamp(30 + L.smarts / 2 + rint(-10, 10), 0, 100)
 }
 
@@ -538,7 +544,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_gig_event() && !maybe_kid_event() { maybe_event() }
+    if !maybe_gig_event() && !maybe_kid_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -579,6 +585,7 @@ function monthly() {
     health_month()
     kids_month()
     effects_month()
+    moods_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8

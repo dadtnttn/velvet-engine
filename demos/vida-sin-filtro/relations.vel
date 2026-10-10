@@ -16,7 +16,10 @@ const REL_CATS = {
     "child": ["Crianza", "Convivir", "Hablar", "Legado"],
     "grandchild": ["Convivir"],
     "friend": ["Salir", "Juntos", "Hablar"],
-    "ex": ["Hablar", "Reencuentro"]
+    "ex": ["Hablar", "Reencuentro"],
+    "grandparent": ["Convivir", "Hablar"],
+    "uncle": ["Convivir", "Hablar"],
+    "cousin": ["Convivir", "Hablar"]
 }
 
 const REL_ACTS = [
@@ -39,7 +42,7 @@ const REL_ACTS = [
     {"id": "getaway", "t": "Escapada de fin de semana", "s": "$5,000", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 5000,
      "desc": "Una cabaña en el bosque, sin celulares.", "o": [
         {"w": 100, "log": "Dos días de chimenea, vino y nada más que ustedes.", "bond": 14, "happy": 10, "health": 2}]},
-    {"id": "gift", "t": "Darle un regalo", "s": "Desde gratis", "grp": ["partner", "fling", "parent", "child", "friend", "sibling", "grandchild"], "cat": "*", "me": 6, "code": "gift",
+    {"id": "gift", "t": "Darle un regalo", "s": "Desde gratis", "grp": ["partner", "fling", "parent", "child", "friend", "sibling", "grandchild", "grandparent", "uncle", "cousin"], "cat": "*", "me": 6, "code": "gift",
      "desc": "Flores, perfume, una joya o algo hecho con tus manos."},
     // ------------------------------------------------ Intimidad (18+)
     {"id": "sex", "t": "Tener relaciones", "s": "Con o sin protección", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "code": "sex",
@@ -51,8 +54,8 @@ const REL_ACTS = [
     {"id": "lovehotel", "t": "Love hotel temático", "s": "$2,500", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "cost": 2500,
      "desc": "Jacuzzi, espejos en el techo y un columpio que nadie sabe usar.", "o": [
         {"w": 100, "log": "Probaron todo lo que tenía la suite. Salieron a la mañana siguiente con una sonrisa boba.", "bond": 12, "happy": 10, "sexact": true}]},
-    {"id": "threesome", "t": "Proponer un trío", "s": "Arriesgado", "grp": ["partner"], "cat": "Intimidad", "adult": true, "code": "threesome",
-     "desc": "Puede salir legendario... o terminar en el sillón."},
+    {"id": "threesome", "t": "Tríos y algo más", "s": "Necesita su sí", "grp": ["partner"], "cat": "Intimidad", "adult": true, "code": "threesome",
+     "desc": "Invitar a otra mujer o a otro hombre, intercambio de parejas o una fiesta para adultos. Su personalidad y sus gustos deciden si acepta."},
     // ------------------------------------------------ Juntos
     {"id": "gym_together", "t": "Hacer ejercicio juntos", "s": "Salud · Minijuego", "grp": ["partner", "friend", "sibling"], "cat": "Juntos", "me": 12, "them": 12, "mg": "timing", "bond": [3, 10], "health": 3,
      "desc": "Rutina en pareja: sentadillas sincronizadas y competencia sana.", "ok": "Terminaron sudados, orgullosos y con ganas de repetir.", "bad": "Se te cayó la pesa cerca de su pie. Hoy fue cardio de huida."},
@@ -60,7 +63,7 @@ const REL_ACTS = [
      "desc": "Recuerda la receta: ingredientes en el orden correcto.", "ok": "Les quedó delicioso. Ya tienen su platillo especial.", "bad": "Quemaron la cena y pidieron pizza. Igual fue divertido."},
     {"id": "trivia", "t": "Noche de trivia", "s": "Minijuego de preguntas", "grp": ["partner", "friend", "sibling", "parent"], "cat": "*", "me": 8, "them": 8, "mg": "quiz", "bond": [3, 10], "know": 1,
      "desc": "Juego de mesa de preguntas. El que pierde lava los platos.", "ok": "Les ganaste a todos. Te miran con respeto (y algo de envidia).", "bad": "Perdiste vergonzosamente. Tú lavas los platos."},
-    {"id": "videogames", "t": "Jugar videojuegos", "s": "Minijuego de ritmo", "grp": ["friend", "sibling", "child", "partner"], "cat": "*", "me": 5, "them": 5, "mg": "arrows", "bond": [3, 10], "happy": 4,
+    {"id": "videogames", "t": "Jugar videojuegos", "s": "Minijuego de ritmo", "grp": ["friend", "sibling", "child", "partner", "cousin"], "cat": "*", "me": 5, "them": 5, "mg": "arrows", "bond": [3, 10], "happy": 4,
      "desc": "Una partida de baile en la consola.", "ok": "Combo perfecto. Gritaron como en final de mundial.", "bad": "Te dieron una paliza. Pediste la revancha tres veces."},
     {"id": "series", "t": "Maratón de series", "s": "Gratis", "grp": ["partner", "sibling", "friend", "parent"], "cat": "*", "me": 6,
      "desc": "Sillón, cobija y «un capítulo más».", "o": [
@@ -108,10 +111,61 @@ const REL_ACTS = [
         {"w": 60, "log": "Se rio tanto que se le salió el refresco por la nariz.", "bond": 5, "happy": 5},
         {"w": 40, "log": "No le dio nada de risa. Planea su venganza.", "bond": -6, "happy": 2}]},
     // ------------------------------------------------ Hablar / reencuentro
-    {"id": "apologize", "t": "Pedirle perdón", "s": "Reparar la relación", "grp": ["partner", "fling", "parent", "sibling", "child", "friend", "ex"], "cat": "Hablar", "me": 5,
+    {"id": "apologize", "t": "Pedirle perdón", "s": "Reparar la relación", "grp": ["partner", "fling", "parent", "sibling", "child", "friend", "ex", "grandparent", "uncle", "cousin"], "cat": "Hablar", "me": 5,
      "desc": "Reconocer tus errores sin «peros».", "o": [
         {"w": 70, "log": "Te perdonó. Se quitaron un peso de encima.", "bond": 10, "karma": 2},
         {"w": 30, "log": "«Lo voy a pensar.» Por algo se empieza.", "bond": 3}]},
+    // ------------------------------------------------ más con tu pareja
+    {"id": "karaoke", "t": "Karaoke en pareja", "s": "$400 · Minijuego", "grp": ["partner", "fling", "friend"], "cat": "Citas", "adult": true, "cost": 400, "mg": "typing", "bond": [3, 12], "happy": 6,
+     "desc": "Escribe la letra a tiempo para no desafinar el dueto.", "ok": "Su dueto de balada romántica hizo llorar al de la barra.", "bad": "Se te olvidó la letra. Cantaron puros «lalalá»."},
+    {"id": "stargaze", "t": "Ver las estrellas", "s": "Gratis", "grp": ["partner", "fling"], "cat": "Citas", "adult": true,
+     "desc": "Una cobija en el cofre del auto y el cielo despejado.", "o": [
+        {"w": 70, "log": "Viste una estrella fugaz y pediste un deseo. {x} te preguntó cuál. No le dijiste.", "bond": 8, "happy": 5},
+        {"w": 30, "log": "Hablaron de todo: el universo, sus miedos, el futuro. Una de esas noches.", "bond": 12, "happy": 6}]},
+    {"id": "spa", "t": "Spa en pareja", "s": "$2,000", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 2000,
+     "desc": "Masajes, sauna y batas esponjosas.", "o": [
+        {"w": 100, "log": "Salieron tan relajados que casi se quedan dormidos en el auto.", "bond": 9, "happy": 8, "health": 2}]},
+    {"id": "shower", "t": "Bañarse juntos", "s": "Cercanía", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true,
+     "desc": "Ahorrar agua es importante. Eso dicen.", "o": [
+        {"w": 100, "log": "El agua se acabó de calentar mucho antes de que terminaran.", "bond": 7, "happy": 7, "sexact": true}]},
+    {"id": "sexting", "t": "Mensajes picantes", "s": "Riesgo de filtración", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true,
+     "desc": "Fotos y mensajes subidos de tono. Qué podría salir mal.", "o": [
+        {"w": 85, "log": "Tuvieron a {x} sonrojad{xa} en plena junta de trabajo.", "bond": 6, "happy": 5},
+        {"w": 15, "log": "Tus fotos acabaron en un grupo que no era. Humillación pública.", "happy": -15, "fame": 3, "bond": -2}]},
+    {"id": "roleplay", "t": "Juego de rol", "s": "Disfraces", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "cost": 600,
+     "desc": "Hoy eres el profesor; mañana, el pirata. Disfraces incluidos.", "o": [
+        {"w": 75, "log": "Se metieron tanto en el papel que hasta inventaron acentos. Noche épica.", "bond": 9, "happy": 9, "sexact": true},
+        {"w": 25, "log": "Les dio tanta risa el disfraz que no pudieron seguir. Igual fue perfecto.", "bond": 7, "happy": 6}]},
+    {"id": "makeup", "t": "Hacer las paces", "s": "Tras una pelea", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true,
+     "desc": "Después de discutir, la reconciliación.", "o": [
+        {"w": 100, "log": "La pelea quedó olvidada. La reconciliación, no.", "bond": 12, "happy": 6, "sexact": true}]},
+    {"id": "cuddle", "t": "Dormir abrazados", "s": "Gratis", "grp": ["partner"], "cat": "Juntos", "adult": true,
+     "desc": "Cucharita, serie de fondo y ronquidos suaves.", "o": [
+        {"w": 100, "log": "Durmieron como bebés. Bueno, uno roncó.", "bond": 5, "happy": 4, "health": 1}]},
+    {"id": "breakfast", "t": "Desayuno en la cama", "s": "Minijuego de memoria", "grp": ["partner", "parent"], "cat": "*", "me": 10, "mg": "memory", "bond": [4, 12], "happy": 4,
+     "desc": "Recuerda cómo le gusta el café, los huevos y el pan.", "ok": "Todo como le gusta. Te miró como si fueras lo mejor del mundo.", "bad": "Le pusiste azúcar al café. Odia el azúcar. Igual sonrió."},
+    {"id": "dance_class", "t": "Clases de baile", "s": "$800 · Minijuego", "grp": ["partner", "friend"], "cat": "Juntos", "me": 14, "cost": 800, "mg": "arrows", "bond": [4, 12], "health": 2,
+     "desc": "Bachata, tango o salsa en pareja.", "ok": "El maestro los puso de ejemplo frente a todos.", "bad": "Se pisaron tanto que los mandaron a la fila de atrás."},
+    // ------------------------------------------------ familia extendida
+    {"id": "visit", "t": "Visitarl{xlo}", "s": "Cercanía", "grp": ["grandparent", "uncle", "parent", "cousin", "sibling"], "cat": "Convivir", "me": 6,
+     "desc": "Llegar de sorpresa con pan dulce.", "o": [
+        {"w": 80, "log": "Te recibió con los brazos abiertos y no te dejó ir sin comer.", "bond": 7, "happy": 3},
+        {"w": 20, "log": "Te pasaste la tarde escuchando quejas de la familia. Pero valió la pena.", "bond": 5}]},
+    {"id": "family_dinner", "t": "Comida familiar", "s": "Toda la familia", "grp": ["grandparent", "uncle", "parent", "cousin"], "cat": "Convivir", "me": 4,
+     "desc": "La comida del domingo en casa de la abuela.", "o": [
+        {"w": 60, "log": "Mole, chismes y la sobremesa hasta la noche. Así se hace familia.", "bond": 6, "happy": 5},
+        {"w": 25, "log": "Te preguntaron «¿y la novia?», «¿y el trabajo?», «¿y los hijos?». Sobreviviste.", "bond": 4, "happy": -2},
+        {"w": 15, "log": "El tío se pasó de copas y arruinó la sobremesa. Clásico.", "bond": 2, "happy": -3}]},
+    {"id": "ask_story", "t": "Pedirle que te cuente historias", "s": "Conocimiento", "grp": ["grandparent"], "cat": "Convivir", "me": 5,
+     "desc": "Cómo se conocieron, la guerra, el primer televisor del pueblo...", "o": [
+        {"w": 100, "log": "Te contó historias que nadie más sabe. Las vas a recordar toda la vida.", "bond": 9, "know": 2, "happy": 3}]},
+    {"id": "domingo", "t": "Pedirle «domingo»", "s": "Dinerito", "grp": ["grandparent", "uncle"], "cat": "Convivir", "max": 17, "me": 5,
+     "desc": "La mano extendida y la carita de ángel.", "o": [
+        {"w": 70, "log": "Te dio {monto} «para tus dulces». No le digas a tus papás.", "money": [100, 500], "bond": 2},
+        {"w": 30, "log": "«¿Domingo? ¡En mis tiempos trabajábamos desde los cinco años!»", "bond": -1}]},
+    {"id": "cousin_play", "t": "Jugar con tu prim{xa}", "s": "Diversión", "grp": ["cousin"], "cat": "Convivir", "max": 17,
+     "desc": "Escondidas, fútbol en el patio o videojuegos en la sala.", "o": [
+        {"w": 100, "log": "Se rompió una maceta, pero nadie vio quién fue.", "bond": 8, "happy": 6}]},
     {"id": "block", "t": "Bloquearl{xlo} de todo", "s": "Cerrar el ciclo", "grp": ["ex"], "cat": "Reencuentro", "code": "block",
      "desc": "Redes, WhatsApp y el corazón."}
 ]
@@ -173,6 +227,41 @@ const REL_EVENTS = [
         ]
     },
     {
+        "id": "rl_xmas", "title": "Navidad en familia", "min": 4, "max": 90, "w": 5, "req": "hasgrandparent", "person": "grandparent",
+        "text": "Cena de Navidad en casa de tu {rel} {x}. La tía pregunta lo de siempre, el tío ya va por la quinta copa y los primos corren por todos lados.",
+        "choices": [
+            {"t": "Ayudar en la cocina", "o": [{"w": 100, "log": "Terminaste con harina hasta en las cejas y el cariño de toda la familia.", "bond": 10, "kind": 2, "happy": 6}]},
+            {"t": "Contestar las preguntas incómodas con humor", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "«¿Y la pareja?» «Viene en camino, con el aguinaldo.» Carcajada general.", "bond": 6, "happy": 8, "charm": 2}]},
+            {"t": "Encerrarte en el baño con el celular", "o": [{"w": 100, "log": "Sobreviviste. Pero te perdiste el intercambio de regalos.", "bond": -4, "happy": 1}]}
+        ]
+    },
+    {
+        "id": "rl_grandparent_sick", "title": "En el hospital", "min": 6, "max": 70, "w": 4, "req": "oldgrandparent", "person": "oldgrandparent",
+        "text": "Tu {rel} {x} está en el hospital. Pregunta por ti.",
+        "choices": [
+            {"t": "Ir a verl{xlo} y quedarte toda la tarde", "o": [{"w": 100, "log": "Te tomó de la mano y te contó cosas que nunca había dicho. Nunca lo olvidarás.", "bond": 15, "kind": 3, "happy": -2}]},
+            {"t": "Llevarle sus flores favoritas", "o": [{"w": 100, "log": "Sonrió como hace mucho no lo hacía.", "bond": 10}]},
+            {"t": "No tienes tiempo", "o": [{"w": 100, "log": "Te dijeron que preguntó por ti toda la semana.", "bond": -12, "karma": -3}]}
+        ]
+    },
+    {
+        "id": "rl_cousin_party", "title": "La fiesta de tu prim{xa}", "min": 18, "max": 45, "w": 4, "req": "adultcousin", "person": "adultcousin",
+        "text": "Tu prim{xa} {x} te invita a su fiesta de cumpleaños. Va a estar toda la familia... y sus amigos.",
+        "choices": [
+            {"t": "Ir y bailar hasta el amanecer", "o": [{"w": 70, "log": "La fiesta del año. Conociste a medio mundo.", "bond": 10, "happy": 8, "alcohol": 3}, {"w": 30, "log": "Conociste a alguien interesante entre sus amigos.", "bond": 6, "special": "hookup"}]},
+            {"t": "Llevarle un buen regalo y salir temprano", "o": [{"w": 100, "log": "Le encantó tu regalo.", "bond": 6, "money": -500}]},
+            {"t": "No ir", "o": [{"w": 100, "log": "Se dio cuenta.", "bond": -6}]}
+        ]
+    },
+    {
+        "id": "rl_uncle_advice", "title": "El consejo del tío", "min": 12, "max": 30, "w": 4, "req": "hasuncle", "person": "uncle",
+        "text": "Tu {rel} {x} te lleva a un lado en la reunión familiar: «Te voy a dar el consejo que nadie me dio a mí».",
+        "choices": [
+            {"t": "Escuchar con atención", "o": [{"w": 60, "log": "Fue sorprendentemente sabio. Te quedaste pensando días.", "bond": 8, "know": 3}, {"w": 40, "log": "Era sobre criptomonedas. Asentiste por respeto.", "bond": 4}]},
+            {"t": "Fingir que te llaman por teléfono", "o": [{"w": 100, "log": "Se dio cuenta, pero se rio.", "bond": -2}]}
+        ]
+    },
+    {
         "id": "rl_sibling_rivalry", "title": "Rivalidad de hermanos", "min": 6, "max": 17, "w": 5, "req": "hassibling", "person": "sibling",
         "text": "{x} rompió tu juguete favorito y dice que fuiste tú.",
         "choices": [
@@ -193,6 +282,9 @@ function rel_group(p: map) {
     if r == "hermano" { return "sibling" }
     if r == "hijo" { return "child" }
     if r == "nieto" { return "grandchild" }
+    if r == "abuelo" { return "grandparent" }
+    if r == "tio" { return "uncle" }
+    if r == "primo" { return "cousin" }
     if r == "ex" { return "ex" }
     return "friend"
 }
@@ -269,6 +361,9 @@ function legacy_person_items(p: map, cat: string) {
     let r = p.rel
     let adult = L.age >= 18 && p.age >= 18 && L.jail == 0
     if cat == "Hablar" {
+        if can_chat(p) {
+            list_push(out, pitem(p, "ract:chat", "Platicar", "Ánimo: " + mood_name(p), "Una conversación libre. Lo que conviene decir depende de su ánimo (" + str_lower(mood_name(p)) + ") y de su forma de ser (" + str_lower(temper_name(p)) + ")."))
+        }
         if tree_for(p) != "" {
             list_push(out, pitem(p, "pact:dlg", "Conversación profunda", "Diálogo · " + STYLE_NAMES[npc_style(p)], "Una conversación con decisiones. Lo que diga depende de su forma de ser."))
         } else {
@@ -324,7 +419,7 @@ function rel_list(cat: string) {
         if !p.alive { continue }
         let g = rel_group(p)
         let ok = false
-        if cat == "Familia" { ok = g == "parent" || g == "sibling" || g == "child" || g == "grandchild" }
+        if cat == "Familia" { ok = g == "parent" || g == "sibling" || g == "child" || g == "grandchild" || g == "grandparent" || g == "uncle" || g == "cousin" }
         if cat == "Pareja" { ok = g == "partner" || p.rel == "amante" }
         if cat == "Amigos" { ok = g == "friend" }
         if cat == "Otros" { ok = p.rel == "ex" || p.rel == "ligue" }
@@ -400,6 +495,11 @@ function fert_word(f: int) {
 function rel_do(id: string, p: map) {
     G.modal = null
     if id == "makefriend" { return make_friend() }
+    if id == "chat" {
+        if L.used["rchat" + str(p.id)] != null { return info(p.first, "Ya platicaron este mes. Dale un respiro.") }
+        L.used["rchat" + str(p.id)] = 1
+        return start_chat(p, false)
+    }
     if id == "vows" { return renew_vows(p) }
     if id == "adopt" { return adopt(p) }
     if id == "ivf" { return ivf(p) }
@@ -463,7 +563,7 @@ function rel_code(a: map, p: map) {
     if id == "gift" { return open_gift(p) }
     if id == "sex" { return open_sex(p) }
     if id == "spicy" { return open_spicy(p) }
-    if id == "threesome" { return do_person_act("threesome", p) }
+    if id == "threesome" { return open_trio(p) }
     if id == "trip" { return trip(p) }
     if id == "pet" {
         L.money -= a.cost
@@ -586,8 +686,25 @@ function resolve_sex(index: int, ctx: map) {
     L.happy += max(0, happy)
     msg = msg + sex_with(p)
     G.sex_mode = ""
+    if index == 3 && p.gender != L.gender && preg > 0 {
+        return mg_start("race", "La gran carrera", "conceive", {"pid": p.id, "preg": preg, "msg": msg})
+    }
     if p.gender != L.gender { msg = msg + maybe_pregnancy(p, preg) }
-    if index == 3 && !L.pregnant && !L.partner_preg { msg = msg + " Este mes no hubo suerte; sigan intentando." }
+    return finish(p.first, msg, "x")
+}
+
+// Resultado de la carrera: ganarla multiplica la probabilidad de embarazo.
+function conceive_result(score: any, ctx: map) {
+    let p = find_person(ctx.pid)
+    if p == null { return null }
+    let chance_p = ctx.preg * (40 + score * 12 / 10) / 100
+    let msg = ctx.msg
+    let race = "Tu campeón llegó en buen lugar."
+    if score >= 100 { race = "¡Tu campeón llegó primero al óvulo!" }
+    if score < 40 { race = "Tu campeón se quedó en el camino." }
+    let preg = maybe_pregnancy(p, chance_p)
+    msg = msg + " " + race + preg
+    if preg == "" && !L.pregnant && !L.partner_preg { msg = msg + " Este mes no hubo suerte; sigan intentando." }
     return finish(p.first, msg, "x")
 }
 
@@ -723,7 +840,7 @@ function open_wedding(p: map) {
     let costs = [0, 2000, 5000, 20000, 40000]
     let locks = []
     for c in costs {
-        if L.money < c { list_push(locks, money_str(c)) } else { list_push(locks, "") }
+        if c > 0 && L.money < c { list_push(locks, money_str(c)) } else { list_push(locks, "") }
     }
     open_choice("¡DIJO QUE SÍ!", fmt("{x} aceptó casarse contigo. ¿Qué boda quieren?", ctx),
         ["Solo ustedes dos al atardecer (gratis)", "Registro civil y tacos ($2,000)", "Escaparse a Las Vegas ($5,000)", "Boda en la playa ($20,000)", "La boda del año ($40,000)"], locks, "wedding", ctx)
@@ -798,7 +915,18 @@ function childhood_crush() {
     return null
 }
 
+function find_rel_where(rel: string, min_age: int) {
+    for p in L.people {
+        if p.alive && p.rel == rel && p.age >= min_age { return p }
+    }
+    return null
+}
+
 function rel_meets(tag: string) {
+    if tag == "hasgrandparent" { return first_rel("abuelo") != null }
+    if tag == "oldgrandparent" { return find_rel_where("abuelo", 70) != null }
+    if tag == "adultcousin" { return L.age >= 18 && find_rel_where("primo", 18) != null }
+    if tag == "hasuncle" { return first_rel("tio") != null }
     if tag == "childhoodcrush" { return L.partner_id == 0 && L.age >= 18 && childhood_crush() != null }
     if tag == "hasfriend" { return first_rel("amigo") != null }
     if tag == "hassibling" { return first_rel("hermano") != null }
@@ -811,5 +939,97 @@ function rel_ctx(ev: map) {
     if spec == "partner" { return {"person": partner()} }
     if spec == "friend" { return {"person": first_rel("amigo")} }
     if spec == "sibling" { return {"person": first_rel("hermano")} }
-    return {}
+    let p = rel_event_person(spec)
+    if p == null { return {} }
+    return {"person": p, "rel": str_lower(rel_label(p))}
+}
+
+function rel_event_person(spec: any) {
+    if spec == "grandparent" { return first_rel("abuelo") }
+    if spec == "oldgrandparent" { return find_rel_where("abuelo", 70) }
+    if spec == "adultcousin" { return find_rel_where("primo", 18) }
+    if spec == "uncle" { return first_rel("tio") }
+    return null
+}
+
+// ---------------------------------------------------------------- tríos y más
+
+function open_trio(p: map) {
+    let ctx = {"person": p}
+    let odds = trio_odds(p)
+    open_choice("TRÍOS Y ALGO MÁS", fmt("¿Qué le propones a {x}? Que acepte depende de su carácter, de sus gustos y de cuánto confíe en ti. Probabilidad: " + str(odds) + "%.", ctx),
+        ["Invitar a otra mujer", "Invitar a otro hombre", "Intercambio de parejas (swingers)", "Fiesta privada para adultos", "Mejor no"],
+        ["", "", "", "", ""], "trio", ctx)
+    G.modal.tags = [str(odds) + "%", str(odds) + "%", str(odds - 10) + "%", str(odds - 20) + "%", ""]
+    return null
+}
+
+function trio_odds(p: map) {
+    let odds = 20 + rank("charm") * 5
+    if p.tags != null && list_contains(p.tags, "trios") { odds += 35 }
+    if has_kink("trios") { odds += 10 }
+    let st = npc_style(p)
+    if st == "libre" { odds += 20 }
+    if st == "celoso" { odds -= 25 }
+    if st == "dulce" { odds -= 5 }
+    if p.open == true { odds += 20 }
+    if p.bond >= 70 { odds += 10 }
+    return clamp(odds, 5, 95)
+}
+
+function resolve_trio(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    if index == 4 { return finish(p.first, "Lo pensaste mejor. Esta noche, solo ustedes dos.", "n") }
+    let odds = trio_odds(p)
+    if index == 2 { odds -= 10 }
+    if index == 3 { odds -= 20 }
+    if !chance(odds) {
+        let hurt = 12
+        if npc_style(p) == "celoso" { hurt = 25 }
+        bond_gain(p, -hurt)
+        p.mood = "enojado"
+        return finish(p.first, p.first + " se quedó helad" + oa(p.gender) + ". «¿No te basto?» Hoy duermes en el sillón.", "b")
+    }
+    let msg = ""
+    let extra = 1
+    if index == 0 || index == 1 {
+        let g = "f"
+        if index == 1 { g = "m" }
+        let third = make_person(g, "ligue", rint(max(18, L.age - 8), L.age + 8))
+        let who = by_gender(g, "un invitado", "una invitada")
+        msg = p.first + " aceptó. Conocieron a " + third.first + ", " + who + " encantador" + by_gender(g, "", "a") + ", y la noche fue inolvidable para los tres."
+        msg = msg + sex_with(third) + sex_with(p)
+        third.known = false
+    }
+    if index == 2 {
+        let a = make_person(by_gender(L.gender, "f", "m"), "ligue", rint(max(18, L.age - 6), L.age + 10))
+        msg = "Conocieron a otra pareja en un club. Intercambiaron parejas por una noche y volvieron a casa riéndose de todo."
+        msg = msg + sex_with(a) + sex_with(p)
+        flag("trio")
+    }
+    if index == 3 {
+        extra = 3
+        msg = "Una fiesta privada con antifaces, reglas claras y mucha gente dispuesta. Lo que pasa ahí, se queda ahí."
+        msg = msg + sex_with(p)
+        for i in [0, 1, 2] {
+            if chance(20 * (100 + fx_sum("its")) / 100) {
+                let s = catch_its_random()
+                if s != "" { msg = msg + s }
+            }
+        }
+    }
+    L.partners += extra
+    L.happy += 12 + fx_sum("sexhappy")
+    flag("trio")
+    // Celos después de la emoción.
+    let st = npc_style(p)
+    if (st == "celoso" || st == "intenso") && chance(45) {
+        bond_gain(p, -15)
+        msg = msg + " Pero al día siguiente " + p.first + " no paraba de preguntar si te gustó más que con " + by_gender(p.gender, "él", "ella") + "."
+    } else {
+        bond_gain(p, 6)
+        msg = msg + " Despertaron abrazados y con más confianza que nunca."
+    }
+    return finish(p.first, msg, "x")
 }

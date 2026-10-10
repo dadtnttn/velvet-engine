@@ -156,7 +156,7 @@ function npc_ills(p: map) {
     if p.ills != null { return p.ills }
     p.ills = []
     let r = p.rel
-    if p.age < 18 || r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto" { return p.ills }
+    if p.age < 18 || is_family(p) { return p.ills }
     let wild = p.wild
     if wild == null { wild = rint(0, 100) }
     p.wild = wild
@@ -220,7 +220,7 @@ function catch_its_random() {
 
 function is_family(p: map) {
     let r = p.rel
-    return r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto"
+    return r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto" || r == "abuelo" || r == "tio" || r == "primo"
 }
 
 // Cada mes, las demás personas viven: tienen encuentros, se contagian, se curan,

@@ -1065,5 +1065,6 @@ function dispatch_choice(index: int) {
     if m.handler == "sex" { return resolve_sex(index, m.ctx) }
     if m.handler == "spicy" { return resolve_spicy(index, m.ctx) }
     if m.handler == "wedding" { return resolve_wedding(index, m.ctx) }
+    if m.handler == "trio" { return resolve_trio(index, m.ctx) }
     return null
 }

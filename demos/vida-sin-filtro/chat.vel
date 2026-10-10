@@ -1,0 +1,520 @@
+// @edition 3
+// Chat: platicar con cualquier persona como en una app de mensajes. Cada quien tiene
+// un temperamento (callado, parlanchín, bromista, sensible, orgulloso, romántico)
+// y un ánimo que cambia cada mes (feliz, cariñoso, triste, enojado, estresado,
+// aburrido). Lo que conviene decir depende de los dos: a quien está triste no le
+// cuentes chistes; alguien callado y molesto puede ni contestarte.
+// También: la familia extendida (abuelos, tíos y primos) y los mensajes que tu
+// pareja te manda por iniciativa propia.
+
+const TEMPERS = ["callado", "parlanchin", "bromista", "sensible", "orgulloso", "romantico"]
+const TEMPER_M = {"callado": "Callado", "parlanchin": "Parlanchín", "bromista": "Bromista", "sensible": "Sensible", "orgulloso": "Orgulloso", "romantico": "Romántico"}
+const TEMPER_F = {"callado": "Callada", "parlanchin": "Parlanchina", "bromista": "Bromista", "sensible": "Sensible", "orgulloso": "Orgullosa", "romantico": "Romántica"}
+const MOODS = ["feliz", "carinoso", "triste", "enojado", "estresado", "aburrido"]
+const MOOD_NAMES = {"feliz": "Feliz", "carinoso": "Cariñoso", "triste": "Triste", "enojado": "Enojado", "estresado": "Estresado", "aburrido": "Aburrido"}
+
+// Lo que dices tú según el tono elegido.
+const TONE_LABELS = {
+    "day": "Preguntarle por su día", "share": "Contarle de tu día", "compliment": "Hacerle un cumplido",
+    "joke": "Contarle un chiste", "flirt": "Coquetear", "dreams": "Preguntarle por sus sueños",
+    "memory": "Recordar un buen momento", "whatswrong": "Preguntarle qué le pasa", "comfort": "Consolarl{xlo}",
+    "complain": "Desahogarte", "plan": "Proponer un plan", "love": "Decirle que l{xlo} quieres",
+    "school": "Preguntarle por la escuela", "advice": "Pedirle un consejo", "gossip": "Chismear",
+    "past": "Pedirle historias de su juventud"
+}
+const MY_LINES = {
+    "day": ["¿Cómo te fue hoy?", "¿Qué tal tu día?", "Cuéntame, ¿qué hiciste hoy?"],
+    "share": ["Hoy me pasó algo increíble, escucha...", "Te cuento mi día: fue una locura.", "Adivina a quién me encontré hoy."],
+    "compliment": ["Hoy te ves increíble.", "Me encanta cómo eres, ¿sabías?", "Tienes la mejor sonrisa del mundo."],
+    "joke": ["¿Por qué el libro de matemáticas está triste? Porque tiene muchos problemas.", "¿Qué le dice una iguana a su hermana gemela? Somos iguanitas.", "¿Sabes qué hace una abeja en el gimnasio? ¡Zumba!"],
+    "flirt": ["¿Sabes en qué estoy pensando ahora mismo?", "Esta noche no te me escapas.", "¿Ya te dije que me vuelves loc{a}?"],
+    "dreams": ["Si pudieras hacer cualquier cosa en la vida, ¿qué harías?", "¿Cuál es tu sueño más loco?"],
+    "memory": ["¿Te acuerdas de aquella vez que nos perdimos y terminamos riéndonos toda la noche?", "Hoy me acordé de cuando nos conocimos."],
+    "whatswrong": ["Te noto rar{xa}. ¿Qué te pasa?", "Oye... ¿estás bien?", "Sé que algo te pasa. Cuéntame."],
+    "comfort": ["Aquí estoy para lo que necesites.", "Ven, dame un abrazo. Todo va a estar bien.", "No estás sol{xa}, ¿eh?"],
+    "complain": ["Estoy hart{a} de todo, la neta.", "Nada me sale bien últimamente.", "Mi semana fue un desastre."],
+    "plan": ["¿Y si salimos este fin?", "Vamos por un café, yo invito.", "¿Hacemos algo divertido hoy?"],
+    "love": ["Te quiero mucho, ¿sabes?", "Gracias por estar en mi vida.", "No sé qué haría sin ti."],
+    "school": ["¿Cómo vas en la escuela?", "¿Qué aprendiste hoy?", "¿Ya hiciste la tarea?"],
+    "advice": ["Necesito un consejo...", "¿Tú qué harías en mi lugar?"],
+    "gossip": ["¿Ya supiste el chisme?", "No vas a creer lo que me contaron."],
+    "past": ["Cuéntame de cuando eras joven.", "¿Cómo era todo antes?"]
+}
+
+// Qué tan bien cae cada tono según el ánimo (lo que falta vale 0).
+const MOOD_TONE = {
+    "feliz": {"day": 1, "share": 1, "compliment": 1, "joke": 1, "flirt": 1, "dreams": 1, "memory": 1, "plan": 2, "love": 1, "gossip": 1, "past": 1, "school": 1},
+    "carinoso": {"compliment": 2, "flirt": 2, "memory": 2, "love": 2, "plan": 1, "day": 1, "dreams": 1},
+    "triste": {"comfort": 2, "whatswrong": 2, "day": 1, "love": 1, "memory": 1, "joke": -1, "flirt": -2, "complain": -2, "gossip": -1, "plan": -1},
+    "enojado": {"whatswrong": 1, "comfort": 0, "joke": -2, "flirt": -2, "complain": -2, "compliment": -1, "gossip": -1, "share": -1, "school": -1},
+    "estresado": {"comfort": 2, "plan": 1, "day": 1, "joke": 1, "complain": -1, "share": -1, "school": -1, "advice": -1},
+    "aburrido": {"plan": 2, "joke": 1, "gossip": 2, "share": 1, "dreams": 1, "past": 1, "day": -1}
+}
+const TEMPER_TONE = {
+    "callado": {"share": -1, "gossip": -1, "comfort": 1},
+    "parlanchin": {"day": 1, "share": 1, "gossip": 1, "dreams": 1},
+    "bromista": {"joke": 2, "complain": -1},
+    "sensible": {"compliment": 1, "comfort": 1, "love": 1, "complain": -1, "joke": -1},
+    "orgulloso": {"whatswrong": -1, "comfort": -1, "compliment": 1, "advice": 1},
+    "romantico": {"love": 1, "memory": 1, "flirt": 1}
+}
+
+// Respuestas por tono y calidad (good/neutral/bad).
+const REPLIES = {
+    "share": {"good": ["¡No manches! ¿Y luego qué pasó?", "Jaja, me encanta cuando me cuentas tus cosas."], "neutral": ["Ah, mira.", "Qué interesante."], "bad": ["Ajá... ¿ya terminaste?", "Siempre hablas de ti, ¿eh?"]},
+    "compliment": {"good": ["¿En serio? Ay, me hiciste el día.", "Tú siempre sabes qué decir."], "neutral": ["Gracias, supongo.", "Mm, gracias."], "bad": ["¿Y eso a qué viene? ¿Qué quieres?", "No me vas a contentar con halagos."]},
+    "joke": {"good": ["¡JAJAJA! Eres lo peor... cuéntame otro.", "Jaja, no puede ser, qué chiste tan malo. Me encantó."], "neutral": ["Jeje... ok.", "Ese ya me lo sabía."], "bad": ["¿En serio? No es momento para chistes.", "Qué poco tacto tienes."]},
+    "flirt": {"good": ["Mmm... ¿y qué estás esperando?", "Sigue hablando así y no respondo."], "neutral": ["Jaja, ya, tranquil{a}.", "Ahorita no, pero guárdalo para después."], "bad": ["Ahorita no estoy para eso.", "¿Neta solo piensas en eso?"]},
+    "dreams": {"good": ["Siempre he querido viajar por el mundo sin rumbo... ¿te late conmigo?", "Abrir mi propio negocio. Nunca se lo había dicho a nadie."], "neutral": ["No sé... ni lo he pensado.", "Ser feliz, supongo."], "bad": ["¿Sueños? Con trabajo tengo para pagar la renta.", "Qué pregunta tan cursi."]},
+    "memory": {"good": ["¡Jaja, sí! Esa noche fue la mejor.", "Ay, me acuerdo perfecto. Qué bonito fue."], "neutral": ["Algo me acuerdo.", "Sí, más o menos."], "bad": ["Esa vez terminamos peleando, ¿no te acuerdas?", "Prefiero no acordarme."]},
+    "comfort": {"good": ["Gracias... de verdad lo necesitaba.", "*te abraza muy fuerte* No sé qué haría sin ti."], "neutral": ["Gracias.", "Ya se me pasará."], "bad": ["No necesito que me tengan lástima.", "Déjame, ¿sí?"]},
+    "complain": {"good": ["Te entiendo perfecto. Desahógate, para eso estoy.", "Uf, qué semana. Ven, te invito algo."], "neutral": ["Así es la vida.", "Todos tenemos días malos."], "bad": ["¿Y yo qué? También tengo problemas.", "Siempre te estás quejando."]},
+    "plan": {"good": ["¡Sí! Ya me hacía falta salir contigo.", "¡Me encanta la idea! ¿A qué hora?"], "neutral": ["Puede ser, luego vemos.", "Déjame ver si puedo."], "bad": ["No tengo ganas de nada.", "Ahorita no, gracias."]},
+    "love": {"good": ["Yo también te quiero. Muchísimo.", "*se le iluminan los ojos* ¿De verdad? Yo también."], "neutral": ["Ay... gracias.", "Lo sé."], "bad": ["Ahora sí te acuerdas, ¿eh?", "Las palabras no bastan."]},
+    "school": {"good": ["¡Saqué diez en el examen!", "Bien, aprendí sobre los dinosaurios."], "neutral": ["Normal.", "Bien, supongo."], "bad": ["Mal. No quiero hablar de eso.", "Odio la escuela."]},
+    "advice": {"good": ["Mira, haz lo que te haga feliz. Pero piénsalo bien.", "Yo que tú hablaría con la verdad. Siempre funciona."], "neutral": ["Mmm, no sé qué decirte.", "Haz lo que creas."], "bad": ["¿Y yo qué sé? Resuélvelo tú.", "No me metas en tus broncas."]},
+    "gossip": {"good": ["¡No te creo! ¡Cuéntamelo TODO!", "Ay, ya sabía yo que algo pasaba ahí."], "neutral": ["Mm, no me interesa mucho.", "Ah, ¿sí?"], "bad": ["No me gusta hablar de los demás.", "Eso no es asunto nuestro."]},
+    "past": {"good": ["Ay, en mis tiempos... te voy a contar de la vez que me escapé a un concierto.", "Antes no había celulares, ¡y éramos más felices!"], "neutral": ["Eran otros tiempos.", "No me acuerdo de mucho."], "bad": ["Eso ya pasó. No me gusta recordar.", "¿Para qué remover el pasado?"]}
+}
+const DAY_BY_MOOD = {
+    "feliz": ["¡Súper bien! Me fue increíble.", "¡Excelente! Hoy todo me salió bien."],
+    "carinoso": ["Bien... y mejor ahora que me escribes.", "Pensando en ti todo el día, la verdad."],
+    "triste": ["No muy bien, la verdad...", "Ha sido un día pesado."],
+    "enojado": ["Horrible. No quiero ni acordarme.", "Mejor ni preguntes."],
+    "estresado": ["Agotador. Tengo mil pendientes.", "No he parado ni un minuto."],
+    "aburrido": ["Aburridísimo, igual que siempre.", "Nada nuevo. ¿Y tú?"]
+}
+const WRONG_BY_MOOD = {
+    "feliz": ["¿Yo? ¡Nada! Estoy feliz.", "Nada, todo bien, de verdad."],
+    "carinoso": ["Nada... solo que te extrañaba.", "Nada malo, te lo prometo."],
+    "triste": ["Es que... me siento sol{xa} últimamente.", "Tuve un mal día y no paro de pensar en cosas tristes."],
+    "enojado": ["Me molestó algo y no sé cómo decírtelo.", "Estoy hart{xa} de que nadie me escuche."],
+    "estresado": ["Es el trabajo... no puedo más.", "Tengo demasiadas cosas encima."],
+    "aburrido": ["Nada, que no pasa nada en mi vida.", "Me siento estancad{xa}."]
+}
+const GREET = {
+    "feliz": ["¡Hola, {nombre}! ¿Qué onda?", "¡Hey! Justo pensaba en ti."],
+    "carinoso": ["¡Mi {nombre}! Te extrañaba.", "Hola, tú. *sonríe*"],
+    "triste": ["Hola...", "Ah, eres tú. Hola."],
+    "enojado": ["¿Qué quieres?", "Ahorita no estoy de humor."],
+    "estresado": ["Hola, perdón, ando a mil.", "Dime rápido, ¿sí?"],
+    "aburrido": ["¡Por fin alguien! Me muero de aburrimiento.", "Hola. ¿Algo interesante?"]
+}
+const SHORT = {"good": ["Gracias.", "Mm, me gusta.", "*sonríe*"], "neutral": ["Ajá.", "Mm.", "Ok."], "bad": ["...", "No.", "Déjalo."]}
+const TALKY = ["¡Y eso no es todo! Luego pasó otra cosa, y otra...", "Ay, hablando de eso, ¿te conté lo de mi vecina?", "Perdón, hablo mucho, pero tenía que contártelo."]
+const KID_LINES = {"good": ["¡Sííí!", "¡Te quiero muchote!", "*te abraza las piernas*"], "neutral": ["Mmm, ok.", "¿Puedo ver la tele?"], "bad": ["¡No quiero!", "*hace berrinche*"]}
+const REFUSE = ["No quiero hablar ahorita.", "Déjame sol{xa}, por favor.", "*te deja en visto*"]
+const BYE_QUIET = ["Bueno... me voy.", "Ya me cansé de hablar.", "Hablamos luego."]
+const BYE_ANGRY = ["Mejor hablamos otro día.", "Ya no quiero seguir con esto.", "*se va sin despedirse*"]
+const PINGS = {
+    "feliz": ["¡Adivina qué! Me fue increíble hoy.", "Te mando un meme que me hizo pensar en ti."],
+    "carinoso": ["¿Me extrañas? Porque yo sí.", "Solo quería decirte que te quiero."],
+    "triste": ["¿Estás despiert{a}? No me siento bien.", "¿Podemos hablar?"],
+    "enojado": ["Tenemos que hablar.", "¿Me puedes explicar algo?"],
+    "estresado": ["Tuve un día horrible...", "Necesito desahogarme."],
+    "aburrido": ["Me aburroooo. Entretenme.", "¿Qué haces? Yo nada."]
+}
+
+// ---------------------------------------------------------------- personalidad y ánimo
+
+function temper(p: map) {
+    if p.temper == null { p.temper = TEMPERS[p.id * 7 % len(TEMPERS)] }
+    return p.temper
+}
+
+function temper_name(p: map) {
+    if p.gender == "f" { return TEMPER_F[temper(p)] }
+    return TEMPER_M[temper(p)]
+}
+
+function mood(p: map) {
+    if p.mood == null { p.mood = roll_mood(p) }
+    return p.mood
+}
+
+function mood_name(p: map) {
+    let n = MOOD_NAMES[mood(p)]
+    if p.gender == "f" && (n == "Enojado" || n == "Estresado" || n == "Aburrido" || n == "Cariñoso") {
+        return str_replace(n + "#", "o#", "a")
+    }
+    return n
+}
+
+function roll_mood(p: map) {
+    let w = [30, 10, 12, 8, 15, 15]
+    if p.bond >= 60 { w[1] = 18 }
+    if p.bond < 35 {
+        w[3] += 20
+        w[2] += 10
+    }
+    if p.cheated_you == true { w[3] += 15 }
+    if L.jail > 0 { w[2] += 15 }
+    if p.age < 12 { w[4] = 3 }
+    if p.age >= 70 { w[4] = 4 }
+    return MOODS[weighted_choose(G.rng, w)]
+}
+
+// Cada mes cambia el ánimo de todos; tu pareja a veces te escribe.
+function moods_month() {
+    for p in L.people {
+        if p.alive { p.mood = roll_mood(p) }
+    }
+    return null
+}
+
+function maybe_ping() {
+    if G.modal != null || L.jail > 0 || !chance(8) { return false }
+    let p = partner()
+    if p == null || !p.alive { return false }
+    start_chat(p, true)
+    return true
+}
+
+// ---------------------------------------------------------------- familia extendida
+
+function add_extended_family() {
+    let dad = first_rel("padre")
+    let mom = first_rel("madre")
+    for parent in [dad, mom] {
+        if parent == null { continue }
+        // Abuelos
+        for g in ["m", "f"] {
+            let age = parent.age + rint(20, 32)
+            if age < 90 && chance(75) {
+                let gp = make_person(g, "abuelo", age)
+                gp.last = parent.last
+                gp.look.skin = parent.look.skin
+                gp.bond = rint(60, 90)
+                add_person(gp)
+            }
+        }
+        // Tíos y primos
+        let n = rint(0, 2)
+        let i = 0
+        while i < n {
+            let u = make_person(pick(["m", "f"]), "tio", max(18, parent.age + rint(-8, 8)))
+            u.last = parent.last
+            u.look.skin = parent.look.skin
+            u.bond = rint(40, 80)
+            add_person(u)
+            if u.age >= 24 && chance(60) {
+                let cage = rint(0, 10) - 4
+                if cage < 0 { cage = 0 }
+                let c = make_person(pick(["m", "f"]), "primo", cage)
+                c.last = u.last
+                c.look.skin = u.look.skin
+                c.bond = rint(45, 80)
+                add_person(c)
+            }
+            i += 1
+        }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- conversación
+
+function chat_group_tones(p: map) {
+    let g = rel_group(p)
+    let adult = L.age >= 18 && p.age >= 18
+    let out = []
+    if g == "partner" || g == "fling" { out = ["day", "share", "compliment", "joke", "dreams", "memory", "complain", "plan", "love"] }
+    if g == "parent" { out = ["day", "share", "joke", "memory", "complain", "advice", "love", "past"] }
+    if g == "grandparent" { out = ["day", "share", "joke", "memory", "past", "advice", "love"] }
+    if g == "uncle" { out = ["day", "share", "joke", "gossip", "advice", "past", "plan"] }
+    if g == "sibling" || g == "cousin" { out = ["day", "share", "joke", "gossip", "plan", "complain"] }
+    if g == "child" || g == "grandchild" { out = ["day", "joke", "love", "plan", "share"] }
+    if g == "friend" { out = ["day", "share", "joke", "gossip", "dreams", "complain", "plan", "advice", "memory"] }
+    if g == "ex" { out = ["day", "memory", "complain", "compliment"] }
+    if adult && (g == "partner" || g == "fling" || g == "ex") { list_push(out, "flirt") }
+    if (g == "child" || g == "grandchild" || g == "cousin" || g == "sibling") && p.age >= 6 && p.age < 18 { list_push(out, "school") }
+    return out
+}
+
+function can_chat(p: map) {
+    return L.age >= 4 && p.age >= 4 && p.alive
+}
+
+function start_chat(p: map, npc_first: bool) {
+    G.modal = null
+    let ctx = {"person": p}
+    G.chat = {"pid": p.id, "lines": [], "opts": [], "turn": 0, "over": false, "gain": 0, "last": "", "t0": G.t, "refused": false}
+    let m = mood(p)
+    let t = temper(p)
+    let max_turns = 5
+    if t == "callado" { max_turns = 3 }
+    if t == "parlanchin" { max_turns = 7 }
+    G.chat.max = max_turns
+    if npc_first {
+        chat_add("npc", fmt(pick(PINGS[m]), ctx), 0.0)
+    } else if (m == "triste" || m == "enojado") && (t == "callado" || t == "orgulloso" || p.bond < 35) && chance(60) {
+        chat_add("npc", fmt(pick(REFUSE), ctx), 0.4)
+        G.chat.refused = true
+    } else {
+        chat_add("npc", fmt(pick(GREET[m]), ctx), 0.4)
+    }
+    chat_options(p)
+    G.modal = {"kind": "chat", "pid": p.id}
+    G.modal_t0 = G.t
+    return null
+}
+
+function chat_add(who: string, text: string, delay: float) {
+    list_push(G.chat.lines, {"who": who, "t": text, "at": G.t + delay})
+    G.chat.t0 = G.t
+    if len(G.chat.lines) > 14 { G.chat.lines = list_slice(G.chat.lines, len(G.chat.lines) - 14, len(G.chat.lines)) }
+}
+
+function chat_options(p: map) {
+    let c = G.chat
+    let opts = []
+    if c.refused {
+        c.opts = ["insist", "leave"]
+        return null
+    }
+    let m = mood(p)
+    if (m == "triste" || m == "enojado" || m == "estresado") && c.last != "whatswrong" { list_push(opts, "whatswrong") }
+    if (m == "triste" || m == "estresado") && c.last != "comfort" { list_push(opts, "comfort") }
+    let pool = chat_group_tones(p)
+    shuffle(G.rng, pool)
+    for t in pool {
+        if len(opts) >= 4 { break }
+        if t != c.last && !list_contains(opts, t) { list_push(opts, t) }
+    }
+    c.opts = opts
+    return null
+}
+
+function chat_label(tone: string, p: map) {
+    if tone == "insist" { return "Insistir con cariño" }
+    if tone == "leave" { return "Darle su espacio" }
+    return fmt(TONE_LABELS[tone], {"person": p})
+}
+
+function chat_pending() {
+    let c = G.chat
+    if c == null { return false }
+    for l in c.lines {
+        if l.at > G.t { return true }
+    }
+    return false
+}
+
+function chat_choose(i: int) {
+    let c = G.chat
+    if c == null || c.over || chat_pending() || i >= len(c.opts) { return null }
+    let p = find_person(c.pid)
+    if p == null { return null }
+    let tone = c.opts[i]
+    let ctx = {"person": p}
+    if tone == "leave" {
+        chat_add("me", "Está bien. Aquí estoy cuando quieras.", 0.0)
+        chat_add("npc", fmt("Gracias por entenderme.", ctx), 0.7)
+        bond_gain(p, 2)
+        c.gain += 2
+        c.over = true
+        return null
+    }
+    if tone == "insist" {
+        chat_add("me", "Sé que no quieres hablar, pero me preocupas. ¿Qué pasa?", 0.0)
+        if chance(35 + p.bond / 3 + rank("kind") * 5) {
+            c.refused = false
+            chat_add("npc", fmt(pick(WRONG_BY_MOOD[mood(p)]), ctx), 0.9)
+            bond_gain(p, 3)
+            c.gain += 3
+            chat_options(p)
+        } else {
+            chat_add("npc", fmt(pick(BYE_ANGRY), ctx), 0.8)
+            bond_gain(p, -2)
+            c.gain -= 2
+            c.over = true
+        }
+        return null
+    }
+    c.turn += 1
+    c.last = tone
+    chat_add("me", fmt(pick(MY_LINES[tone]), ctx), 0.0)
+    let m = mood(p)
+    let t = temper(p)
+    let r = rint(-1, 1)
+    let mt = MOOD_TONE[m][tone]
+    if mt != null { r += mt }
+    let tt = TEMPER_TONE[t][tone]
+    if tt != null { r += tt }
+    if p.bond >= 75 { r += 1 }
+    if p.bond < 30 { r -= 1 }
+    if tone == "flirt" && rel_group(p) == "ex" && p.bond < 50 { r -= 2 }
+    if tone == "compliment" && looks_eff() >= 70 { r += 0 }
+    let grade = "neutral"
+    if r >= 1 { grade = "good" }
+    if r <= -1 { grade = "bad" }
+    let reply = chat_reply(p, tone, grade)
+    chat_add("npc", fmt(reply, ctx), 0.9)
+    let gains = {"good": 3, "neutral": 1, "bad": -3}
+    let gb = gains[grade]
+    if r >= 3 { gb = 6 }
+    if r <= -3 { gb = -7 }
+    bond_gain(p, gb)
+    c.gain += gb
+    // El ánimo cambia con la conversación.
+    if r >= 3 {
+        if rel_group(p) == "partner" { p.mood = "carinoso" } else { p.mood = "feliz" }
+    }
+    if r <= -3 { p.mood = "enojado" }
+    if grade == "good" && (m == "triste" || m == "estresado") && (tone == "comfort" || tone == "whatswrong") { p.mood = "feliz" }
+    if tone == "plan" && grade == "good" { L.happy += 2 }
+    if tone == "advice" && grade == "good" { gain("know", 1) }
+    if tone == "past" && grade == "good" { gain("know", 1) }
+    if tone == "joke" && grade == "good" { gain("charm", 1) }
+    // ¿Se termina la plática?
+    if r <= -3 && (t == "callado" || t == "orgulloso" || p.bond < 40) {
+        chat_add("npc", fmt(pick(BYE_ANGRY), ctx), 1.6)
+        c.over = true
+        return null
+    }
+    if c.turn >= c.max {
+        let bye = BYE_QUIET
+        if t != "callado" { bye = ["Bueno, te dejo, que tengo cosas que hacer. ¡Me encantó platicar!", "Me tengo que ir, pero hablamos pronto, ¿va?"] }
+        chat_add("npc", fmt(pick(bye), ctx), 1.6)
+        c.over = true
+        return null
+    }
+    chat_options(p)
+    return null
+}
+
+function chat_reply(p: map, tone: string, grade: string) {
+    let t = temper(p)
+    let m = mood(p)
+    if p.age < 10 { return pick(KID_LINES[grade]) }
+    let line = ""
+    if tone == "day" {
+        line = pick(DAY_BY_MOOD[m])
+    } else if tone == "whatswrong" {
+        if grade == "bad" && t == "orgulloso" { line = "Nada. Estoy bien. Deja de preguntar." } else { line = pick(WRONG_BY_MOOD[m]) }
+    } else {
+        line = pick(REPLIES[tone][grade])
+    }
+    if t == "callado" && (tone != "whatswrong" || grade != "good") && chance(70) { line = pick(SHORT[grade]) }
+    if t == "parlanchin" && grade != "bad" && chance(60) { line = line + " " + pick(TALKY) }
+    if t == "bromista" && grade == "good" && chance(50) { line = "Jajaja. " + line }
+    if t == "romantico" && grade == "good" && (rel_group(p) == "partner" || rel_group(p) == "fling") && chance(50) { line = line + " Te amo." }
+    return line
+}
+
+function chat_end() {
+    let c = G.chat
+    if c == null { return null }
+    let p = find_person(c.pid)
+    G.chat = null
+    G.modal = null
+    if p == null { return null }
+    let sign = ""
+    if c.gain > 0 { sign = "+" }
+    let kind = "n"
+    if c.gain >= 4 { kind = "g" }
+    if c.gain <= -3 { kind = "b" }
+    let msg = "Platicaste con " + p.first + ". Cercanía " + sign + str(c.gain) + "."
+    if c.gain >= 8 { msg = "Gran plática con " + p.first + ": se sienten más unid" + oa(p.gender) + "s que nunca. Cercanía +" + str(c.gain) + "." }
+    if c.gain <= -5 { msg = "La plática con " + p.first + " salió mal. Cercanía " + str(c.gain) + "." }
+    G.back_pid = p.id
+    return finish(p.first, msg, kind)
+}
+
+function chat_action(action: string) {
+    if action == "chat:end" { return chat_end() }
+    if str_starts_with(action, "chat:") { return chat_choose(index_of(action, "chat:", 6)) }
+    return null
+}
+
+// ---------------------------------------------------------------- dibujo
+
+function draw_chat() {
+    let c = G.chat
+    if c == null { return null }
+    let p = find_person(c.pid)
+    if p == null { return null }
+    let e = ease(prog(G.modal_t0, 0.25))
+    let px = 20 - (1.0 - e) * 300
+    svg(px - 30, 230, 420, 420, burst_doc(420, 420, 18, HEX_WHITE, HEX_INK, 5, p.id % 9))
+    let pm = "neutral"
+    let m = mood(p)
+    if m == "feliz" || m == "carinoso" { pm = "happy" }
+    if m == "triste" { pm = "sad" }
+    if m == "enojado" { pm = "angry" }
+    portrait(px + 20, 250, 330, 396, p.look, p.gender, p.age, pm, p.id, false)
+    svg(px + 30, 640, 300, 50, slant_doc(294, 44, 14, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
+    text(px + 56, 672, clip_text(str_upper(p.first), 240, 24), 24, C_WHITE, "impact")
+
+    let x = 420
+    let y = 40
+    let w = 820
+    let h = 640
+    svg(x, y, w + 10, h + 10, slant_doc(w, h, 22, HEX_INK, HEX_WHITE, 4, HEX_RED, 10))
+    text(x + 40, y + 46, clip_text(str_upper(p.first + " · " + rel_label(p)), 420, 24), 24, C_WHITE, "impact")
+    let mc = C_YELLOW
+    if m == "triste" || m == "enojado" { mc = C_BAD }
+    text(x + 40, y + 72, "Ánimo: " + mood_name(p) + " · " + temper_name(p) + " · Cercanía " + str(p.bond) + "%", 14, mc, "bold")
+
+    // Mensajes (de abajo hacia arriba)
+    let top = y + 92
+    let bottom = y + 400
+    let lines = []
+    for l in c.lines {
+        if l.at <= G.t { list_push(lines, l) }
+    }
+    let by = bottom
+    let i = len(lines) - 1
+    if chat_pending() {
+        svg(x + 40, by - 34, 110, 30, slant_doc(104, 26, 8, "#262626", "", 0, "", 0))
+        text(x + 58, by - 14, "escribiendo…", 13, C_GRAY, "bold")
+        by -= 40
+    }
+    push({"op": "clip_push", "x": x + 20, "y": top, "w": w - 40, "h": bottom - top})
+    while i >= 0 && by > top {
+        let l = lines[i]
+        let wrapped = wrap(l.t, 52)
+        let bh = len(wrapped) * 22 + 16
+        let bw = 0
+        for s in wrapped { bw = max(bw, len(s) * 9 + 30) }
+        bw = min(560, bw)
+        let bx = x + 40
+        let fill = HEX_WHITE
+        let color = C_INK
+        if l.who == "me" {
+            bx = x + w - 60 - bw
+            fill = HEX_RED
+            color = C_WHITE
+        }
+        let alpha = 1.0
+        if i == len(lines) - 1 { alpha = clamp((G.t - l.at) / 0.2, 0.0, 1.0) }
+        fade_push(alpha)
+        svg(bx, by - bh, bw + 4, bh + 4, slant_doc(bw, bh, 8, fill, HEX_INK, 2, "", 0))
+        let ty = by - bh + 22
+        for s in wrapped {
+            text(bx + 16, ty, s, 16, color, "ui")
+            ty += 22
+        }
+        fade_pop()
+        by -= bh + 10
+        i -= 1
+    }
+    push({"op": "clip_pop"})
+
+    // Opciones
+    let oy = y + 408
+    if c.over {
+        if !chat_pending() { menu_word(x + 230, oy + 80, 360, 64, "TERMINAR", "chat:end", 30) }
+        return null
+    }
+    if chat_pending() { return null }
+    let j = 0
+    while j < len(c.opts) {
+        let action = "chat:" + str(j)
+        dialog_option(x + 40 - j * 4, oy, w - 90, chat_label(c.opts[j], p), j, action, false, [], "")
+        oy += 48
+        j += 1
+    }
+    small_button(x + w - 190, y + h - 50, 160, 36, "DESPEDIRTE", "chat:end")
+    return null
+}
