@@ -1,0 +1,531 @@
+// @edition 3
+// Conversaciones con decisiones: árboles de diálogo con padres, pareja, amigos y ex.
+// Cada persona tiene un estilo (los padres: amoroso, estricto...; los demás: dulce,
+// celoso...) que cambia lo que dice y la probabilidad de convencerla. Las opciones
+// pueden exigir rango social y algunas se resuelven con una tirada (se muestra el %).
+//
+// Nodo: {"say": texto o {estilo: texto}, "opts": [...], "fx": efectos, "end": código, "k": tipo}
+// Opción: {"t", "if", "need", "rank", "go"} o con tirada {"roll", "stat", "money", "grades",
+//          "looks", "ok", "fail"}; "fx" se aplica al elegirla.
+
+const STYLE_MOD = {"amoroso": 15, "estricto": -5, "relajado": 5, "ausente": -15, "toxico": -20,
+                   "dulce": 10, "celoso": -5, "libre": 5, "intenso": 0}
+const WEALTH_MOD = {"pobre": -25, "media": 0, "rica": 25}
+const NPC_STYLES = ["dulce", "celoso", "libre", "intenso"]
+
+const DIALOGS = {
+    "tuition": {
+        "n0": {
+            "say": {
+                "default": "{x} deja lo que está haciendo. «¿Qué pasó? Te noto nervios{a}.»",
+                "amoroso": "{x} te abraza antes de que digas nada. «¡Cuéntame todo!»",
+                "estricto": "{x} se acomoda los lentes. «Habla. Tengo cinco minutos.»",
+                "ausente": "{x} no despega los ojos del celular. «¿Mmm?»",
+                "toxico": "{x} suspira con fastidio. «¿Y ahora qué quieres?»"
+            },
+            "opts": [
+                {"t": "«Me aceptaron en {deg}»", "go": "n1"},
+                {"t": "«Nada, olvídalo»", "go": "self"}
+            ]
+        },
+        "n1": {
+            "say": {
+                "default": "«¿En serio? ¿Y cuánto cuesta eso?» La colegiatura es de {costo} al año.",
+                "amoroso": "«¡Sabía que lo lograrías! Estoy tan orgullos{xa}... ¿Y cuánto cuesta?» Son {costo} al año.",
+                "estricto": "«Bien. Espero que no sea otra de tus ocurrencias. ¿Cuánto?» Son {costo} al año.",
+                "relajado": "«¡Qué buena onda! ¿Y eso cuánto sale?» Son {costo} al año.",
+                "ausente": "«Ajá... qué bien.» Ni siquiera pregunta qué carrera es. Son {costo} al año.",
+                "toxico": "«¿Tú? ¿En {deg}? ¿Y quién crees que va a pagar eso?» Son {costo} al año."
+            },
+            "opts": [
+                {"t": "Pedirle que te la pague completa", "roll": 30, "money": true, "ok": "full", "fail": "no"},
+                {"t": "Pedirle solo la mitad", "roll": 50, "money": true, "ok": "half", "fail": "no"},
+                {"t": "Convencerl{xlo} con tus calificaciones ({grades})", "roll": 30, "grades": true, "money": true, "ok": "full", "fail": "half"},
+                {"t": "Prometer que trabajarás y sacarás dieces", "need": "kind", "rank": 2, "roll": 40, "stat": "kind", "money": true, "ok": "full", "fail": "no"},
+                {"t": "Mejor no pedirle nada", "go": "self"}
+            ]
+        },
+        "no": {
+            "say": {
+                "default": "«Lo siento, de verdad no podemos ahora.»",
+                "estricto": "«No. Si quieres algo en la vida, gánatelo como yo.»",
+                "relajado": "«Uf... ahorita está difícil, la neta.»",
+                "ausente": "«Pregúntale a alguien más, ando ocupad{xa}.»",
+                "toxico": "«¿Para que lo tires a la basura como todo lo demás? Ni lo sueñes.»"
+            },
+            "opts": [
+                {"t": "Insistir con argumentos", "need": "guts", "rank": 2, "roll": 25, "stat": "guts", "money": true, "ok": "half", "fail": "fight"},
+                {"t": "Chantaje emocional", "roll": 30, "fx": {"karma": -2}, "ok": "guilt", "fail": "fight"},
+                {"t": "Aceptarlo y buscar otra forma", "go": "refuse"}
+            ]
+        },
+        "full": {"say": "«Está bien. Es tu futuro: nosotros la pagamos.» Te tiembla la voz al darle las gracias.", "fx": {"bond": 6, "happy": 6}, "end": "pay_full", "k": "g"},
+        "half": {"say": "«Toda no puedo, pero te pago la mitad. El resto lo pones tú.»", "fx": {"bond": 3}, "end": "pay_half", "k": "g"},
+        "guilt": {"say": "Se le quiebra la voz. «Está bien... te ayudo con la mitad.» Ganaste, pero algo se rompió un poco.", "fx": {"bond": -6}, "end": "pay_half", "k": "n"},
+        "fight": {"say": "La conversación termina a gritos y con un portazo.", "fx": {"bond": -15, "happy": -5}, "end": "refuse", "k": "b"},
+        "refuse": {"say": "Asientes en silencio. Tendrás que encontrar otra forma de pagarla.", "end": "refuse", "k": "n"},
+        "self": {"say": "Decides no pedirle nada.", "end": "self", "k": "n"}
+    },
+
+    "parent": {
+        "n0": {
+            "say": {
+                "default": "{x} te mira. «¿Qué pasa, {nombre}?»",
+                "amoroso": "«¡Mi {nombre}!» {x} te sonríe como siempre. «¿De qué quieres hablar?»",
+                "estricto": "«¿Sí? Rápido, que hay cosas que hacer.»",
+                "relajado": "«¿Qué onda? Siéntate, ¿quieres algo de tomar?»",
+                "ausente": "{x} está en otra parte, como siempre. «¿Mmm? ¿Qué pasó?»",
+                "toxico": "«¿Qué quieres ahora?» El ambiente se pone tenso de inmediato."
+            },
+            "opts": [
+                {"t": "Pedirle consejo sobre la vida", "go": "advice"},
+                {"t": "Presumir tus calificaciones ({grades})", "if": "school", "roll": 20, "grades": true, "ok": "proud", "fail": "scold"},
+                {"t": "Pedirle permiso para ir a una fiesta", "if": "teen", "roll": 40, "stat": "charm", "ok": "party_yes", "fail": "grounded"},
+                {"t": "Pedirle dinero", "if": "nojail", "roll": 35, "money": true, "ok": "money", "fail": "money_no"},
+                {"t": "Reclamarle cómo te ha tratado", "need": "guts", "rank": 2, "roll": 35, "stat": "kind", "ok": "reconcile", "fail": "blowup"},
+                {"t": "Decirle que l{xlo} quieres", "go": "love"}
+            ]
+        },
+        "advice": {
+            "say": {
+                "default": "«Mira... nadie sabe lo que hace. Solo no te rindas.»",
+                "amoroso": "«Sé amable, estudia lo que te apasione y nunca dejes que nadie te haga sentir menos.»",
+                "estricto": "«Disciplina. El talento sin disciplina no sirve para nada.»",
+                "relajado": "«Disfruta, que la vida es corta. Pero usa condón.»",
+                "ausente": "«Pues... haz lo que creas.» Y vuelve a su celular.",
+                "toxico": "«Que no seas como yo. Ese es mi consejo.» Por un segundo, parece sincer{xa}."
+            },
+            "fx": {"bond": 4, "know": 2, "kind": 1}, "k": "g"
+        },
+        "proud": {"say": "«¡Esas son calificaciones! Estoy muy orgullos{xa} de ti.» Te premia con un pequeño regalo.", "fx": {"bond": 6, "happy": 6, "money": 300}, "k": "g"},
+        "scold": {"say": "«¿A eso le llamas calificaciones? Más te vale echarle ganas.»", "fx": {"bond": -4, "happy": -4}, "k": "b"},
+        "party_yes": {"say": "«Está bien, pero a las 11 te quiero en casa.»", "fx": {"happy": 8, "charm": 2}, "k": "g"},
+        "grounded": {"say": "«¿Fiesta? Castigad{a} el fin de semana por preguntar.»", "fx": {"happy": -6, "guts": 1}, "k": "b"},
+        "money": {"say": "Saca la cartera con un suspiro.", "end": "parent_money", "k": "g"},
+        "money_no": {"say": "«¿Dinero? ¿Crees que crece en los árboles?»", "fx": {"bond": -2}, "k": "b"},
+        "reconcile": {"say": "Se le humedecen los ojos. «Tienes razón. Lo siento. Lo voy a intentar hacer mejor.» Por fin se abrazan.", "fx": {"bond": 18, "happy": 10}, "end": "parent_better", "k": "g"},
+        "blowup": {"say": "«¿Después de todo lo que hice por ti?» La discusión escala hasta que te encierras en tu cuarto.", "fx": {"bond": -15, "happy": -8}, "k": "b"},
+        "love": {
+            "say": {
+                "default": "«Yo también te quiero, {nombre}.»",
+                "amoroso": "«¡Ay, yo más!» Te llena de besos aunque ya estés grandecit{a}.",
+                "estricto": "Se queda sin palabras un momento. «...Yo también. Ahora ve a hacer tu tarea.»",
+                "ausente": "Levanta la vista, sorprendid{xa}. «...Gracias. Yo también.»",
+                "toxico": "«¿Qué quieres a cambio?» Pero esa noche te prepara tu comida favorita."
+            },
+            "fx": {"bond": 8, "happy": 3}, "k": "g"
+        }
+    },
+
+    "partner": {
+        "n0": {
+            "say": {
+                "default": "{x} se acomoda junto a ti. «¿De qué quieres hablar?»",
+                "dulce": "{x} te sonríe y te toma de la mano. «Te escucho, amor.»",
+                "celoso": "«¿Con quién hablabas hace rato?» pregunta {x} antes de que digas nada.",
+                "libre": "«Dispara. Sin dramas, ¿va?» dice {x}, relajad{xa}.",
+                "intenso": "{x} te mira fijamente. «Por fin. Tenemos que hablar de muchas cosas.»"
+            },
+            "opts": [
+                {"t": "Hablar del futuro", "go": "future"},
+                {"t": "Hablar de lo que les gusta en la cama", "go": "kinks"},
+                {"t": "Confesar una infidelidad", "if": "cheated", "go": "confess"},
+                {"t": "Reclamarle sus celos", "if": "style:celoso", "need": "guts", "rank": 2, "roll": 40, "stat": "guts", "ok": "jealous_ok", "fail": "jealous_fight"},
+                {"t": "Decirle cuánto l{xlo} amas", "go": "love"}
+            ]
+        },
+        "future": {
+            "say": {
+                "default": "«¿El futuro? ¿Qué tienes en mente?»",
+                "dulce": "«Me encanta imaginarlo contigo. ¿Qué piensas?»",
+                "celoso": "«Mientras el futuro sea conmigo y solo conmigo...»",
+                "libre": "«Uy, palabras serias. A ver, ¿qué propones?»",
+                "intenso": "«He pensado en eso todos los días.»"
+            },
+            "opts": [
+                {"t": "Proponer que vivan juntos", "if": "nolive", "roll": 45, "stat": "charm", "ok": "livein", "fail": "notready"},
+                {"t": "Proponer matrimonio", "if": "pareja", "roll": 25, "stat": "guts", "ok": "marry", "fail": "notready"},
+                {"t": "Hablar de tener hijos", "if": "opp", "roll": 40, "stat": "kind", "ok": "baby", "fail": "nokids"},
+                {"t": "Proponer una relación abierta", "if": "closed", "roll": 20, "stat": "charm", "ok": "open", "fail": "hurt"},
+                {"t": "Mejor otro día", "go": "later"}
+            ]
+        },
+        "livein": {"say": "«¡Sí! Ya era hora.» Una semana después, sus cosas ya ocupan medio clóset.", "fx": {"bond": 10, "happy": 8}, "end": "livein", "k": "g"},
+        "marry": {"say": "Se cubre la boca con las manos. «¡SÍ! ¡Mil veces sí!»", "end": "marry", "k": "g"},
+        "notready": {
+            "say": {
+                "default": "«Creo que todavía no estoy list{xa}.» Un silencio incómodo llena la habitación.",
+                "libre": "«Wow, wow, despacio. Me gusta cómo estamos.»",
+                "intenso": "«¿Ahora? ¿Después de cómo has estado? No.»"
+            },
+            "fx": {"bond": -6, "happy": -4}, "k": "b"
+        },
+        "baby": {"say": "«Yo también quiero una familia contigo.» Esa noche lo intentan.", "fx": {"bond": 6}, "end": "baby", "k": "x"},
+        "nokids": {"say": "«¿Hijos? No sé si algún día quiero eso.»", "fx": {"bond": -3}, "k": "n"},
+        "open": {"say": "{x} lo piensa un largo rato. «...Está bien. Con reglas y honestidad.» Ahora tienen una relación abierta.", "end": "open", "k": "x"},
+        "hurt": {"say": "«¿No te basto?» A {x} se le rompe la voz. Duermes en el sillón.", "fx": {"bond": -20, "happy": -6}, "k": "b"},
+        "later": {"say": "«Cuando quieras.» Cambian de tema.", "k": "n"},
+        "kinks": {
+            "say": {
+                "default": "{x} se ríe, nervios{xa}. «A ver... cuéntame.»",
+                "dulce": "{x} se sonroja. «Me da pena... pero quiero saber.»",
+                "celoso": "«¿Y eso dónde lo aprendiste, eh?»",
+                "libre": "«¡Por fin una plática interesante!»",
+                "intenso": "«Quiero saberlo todo de ti. Todo.»"
+            },
+            "opts": [
+                {"t": "Confesarle tu gusto: {gusto}", "if": "kinks", "roll": 45, "stat": "charm", "ok": "kink_yes", "fail": "kink_no"},
+                {"t": "Preguntarle qué le gusta a {xel}", "go": "kink_ask"},
+                {"t": "Proponer probar algo nuevo juntos", "roll": 50, "stat": "guts", "ok": "kink_new", "fail": "kink_no"}
+            ]
+        },
+        "kink_yes": {"say": "«¿En serio? ¿Por qué no me lo dijiste antes?» Esa noche lo prueban... y fue increíble.", "fx": {"bond": 8, "happy": 10}, "end": "kink_yes", "k": "x"},
+        "kink_no": {"say": "{x} hace una mueca. «Mmm... no es lo mío. Pero gracias por contarme.»", "fx": {"bond": -2, "happy": -2}, "k": "n"},
+        "kink_ask": {"say": "{x} se acerca y te lo dice al oído.", "end": "kink_ask", "k": "x"},
+        "kink_new": {"say": "«Me encanta la idea.» Pasan la tarde investigando... y la noche practicando.", "fx": {"bond": 6, "happy": 8}, "end": "kink_new", "k": "x"},
+        "confess": {
+            "say": {
+                "default": "{x} se queda helad{xa}. «¿Qué... qué dijiste?»",
+                "dulce": "A {x} se le llenan los ojos de lágrimas. «¿Por qué?»",
+                "celoso": "«¡LO SABÍA!» {x} avienta lo primero que encuentra.",
+                "libre": "{x} respira hondo. «Ok. Al menos me lo dices tú.»",
+                "intenso": "{x} no grita. Solo te mira. Y eso es peor."
+            },
+            "opts": [
+                {"t": "Pedir perdón de rodillas", "need": "kind", "rank": 2, "roll": 40, "stat": "kind", "ok": "forgiven", "fail": "dumped"},
+                {"t": "«Fue un error, no significó nada»", "roll": 25, "ok": "forgiven", "fail": "dumped"},
+                {"t": "Culparl{xlo} por descuidarte", "roll": 10, "fx": {"karma": -5}, "ok": "forgiven_bad", "fail": "dumped"}
+            ]
+        },
+        "forgiven": {"say": "Tras horas de llanto, {x} decide darte otra oportunidad. «La última.»", "fx": {"bond": -15, "happy": -4, "karma": 4}, "end": "clear_cheat", "k": "n"},
+        "forgiven_bad": {"say": "Increíblemente, {x} termina pidiéndote perdón a ti. Ganaste... pero te sientes fatal.", "fx": {"bond": -10, "karma": -5}, "end": "clear_cheat", "k": "n"},
+        "dumped": {"say": "«Vete. No quiero volver a verte.» Tus cosas terminan en la banqueta.", "fx": {"happy": -15}, "end": "dumped", "k": "b"},
+        "jealous_ok": {"say": "{x} baja la mirada. «Tienes razón. Voy a trabajar en eso.»", "fx": {"bond": 8, "happy": 4}, "end": "calm", "k": "g"},
+        "jealous_fight": {"say": "«¿Celos? ¡Celos los que me provocas tú!» Pelean hasta la madrugada.", "fx": {"bond": -10, "happy": -6}, "k": "b"},
+        "love": {
+            "say": {
+                "default": "«Yo también te amo.» {x} te besa.",
+                "dulce": "«Eres lo mejor que me ha pasado.» {x} te abraza muy fuerte.",
+                "celoso": "«Más te vale.» Pero sonríe como no lo hacía en semanas.",
+                "libre": "«Cursi... pero me gustas mucho.»",
+                "intenso": "«Nunca había sentido algo así por nadie.»"
+            },
+            "fx": {"bond": 7, "happy": 4}, "k": "g"
+        }
+    },
+
+    "friend": {
+        "n0": {
+            "say": {
+                "default": "«¿Qué pasó? Te noto rar{a}.»",
+                "dulce": "«¡Hola! ¿Todo bien?» {x} te recibe con un abrazo.",
+                "celoso": "«Ah, ahora sí te acuerdas de mí.»",
+                "libre": "«¿Qué hay? ¿Plan o plática?»",
+                "intenso": "«Cuéntamelo todo. Con detalles.»"
+            },
+            "opts": [
+                {"t": "Contarle tus problemas", "go": "comfort"},
+                {"t": "Contarle un secreto", "roll": 55, "stat": "kind", "ok": "secret_ok", "fail": "secret_out"},
+                {"t": "Pedirle dinero prestado", "if": "nojail", "roll": 40, "ok": "loan", "fail": "loan_no"},
+                {"t": "Confesarle que te gusta", "if": "crush", "roll": 25, "looks": true, "stat": "charm", "ok": "lovers", "fail": "friendzone"},
+                {"t": "Proponerle un negocio juntos", "if": "adult", "need": "know", "rank": 2, "roll": 40, "stat": "know", "ok": "biz_win", "fail": "biz_lose"}
+            ]
+        },
+        "comfort": {"say": "{x} te escucha sin juzgarte y te invita un café. Te sientes mucho mejor.", "fx": {"bond": 6, "happy": 6}, "k": "g"},
+        "secret_ok": {"say": "«Me llevo tu secreto a la tumba.» Y sabes que es verdad.", "fx": {"bond": 10, "happy": 3}, "k": "g"},
+        "secret_out": {"say": "Para el viernes, todo el mundo sabe tu secreto. Gracias, {x}.", "fx": {"bond": -20, "happy": -8}, "k": "b"},
+        "loan": {"say": "«Claro, para eso estamos.»", "end": "friend_money", "k": "g"},
+        "loan_no": {"say": "«Uf, ando igual o peor que tú.»", "fx": {"bond": -2}, "k": "n"},
+        "lovers": {"say": "{x} sonríe despacio. «Pensé que nunca me lo ibas a decir.» Y te besa.", "fx": {"happy": 12}, "end": "lovers", "k": "x"},
+        "friendzone": {"say": "«Ay... te quiero mucho, pero como amig{a}.» Auch.", "fx": {"bond": -8, "happy": -10}, "k": "b"},
+        "biz_win": {"say": "Su negocio de fin de semana explotó en redes.", "end": "biz_win", "k": "g"},
+        "biz_lose": {"say": "El negocio fracasó y discutieron por quién tenía la culpa.", "fx": {"bond": -10, "money": -3000}, "k": "b"}
+    },
+
+    "ex": {
+        "n0": {
+            "say": {
+                "default": "{x} contesta con frialdad. «¿Qué quieres?»",
+                "dulce": "«Hola...» {x} suena triste, pero contesta.",
+                "celoso": "«¿Ya te dejó tu nuevo juguete?»",
+                "libre": "«¡Hey! Tanto tiempo. ¿Qué cuentas?»",
+                "intenso": "«Sabía que ibas a volver a buscarme.»"
+            },
+            "opts": [
+                {"t": "Pedir perdón por cómo terminó", "need": "kind", "rank": 2, "go": "sorry"},
+                {"t": "Pedirle una explicación", "go": "closure"},
+                {"t": "Proponer volver", "if": "single", "roll": 25, "stat": "charm", "ok": "back", "fail": "no_back"},
+                {"t": "Proponer «amigos con derechos»", "roll": 40, "looks": true, "ok": "fwb", "fail": "no_back"},
+                {"t": "Reclamarle todo lo que te hizo", "go": "rant"}
+            ]
+        },
+        "sorry": {"say": "«Gracias por decirlo. De verdad.» Por primera vez en mucho tiempo, hay paz.", "fx": {"bond": 15, "happy": 6, "karma": 3}, "k": "g"},
+        "closure": {"say": "Hablan durante horas. Duele, pero por fin entiendes qué pasó.", "fx": {"bond": 5, "happy": 4, "know": 1}, "k": "n"},
+        "back": {"say": "«Siempre te extrañé.» Vuelven a estar juntos.", "fx": {"happy": 10}, "end": "back", "k": "x"},
+        "no_back": {"say": "«No. Lo nuestro ya fue.» Y cuelga.", "fx": {"happy": -6}, "k": "b"},
+        "fwb": {"say": "«Sin compromisos, ¿eh? ...Ven.»", "end": "hookup", "k": "x"},
+        "rant": {"say": "Le dices todo lo que te guardaste. Te sientes ligero... y {x} te bloquea en todo.", "fx": {"bond": -25, "happy": 4, "guts": 2}, "k": "n"}
+    }
+}
+
+// ---------------------------------------------------------------- personas
+
+function npc_style(p: map) {
+    if p.style != null { return p.style }
+    p.style = NPC_STYLES[p.id % len(NPC_STYLES)]
+    return p.style
+}
+
+function tree_for(p: map) {
+    let r = p.rel
+    if r == "padre" || r == "madre" {
+        if L.age < 4 { return "" }
+        return "parent"
+    }
+    if L.age < 18 || p.age < 18 {
+        if r == "amigo" || r == "hermano" { return "friend" }
+        return ""
+    }
+    if r == "pareja" || r == "esposo" || r == "amante" { return "partner" }
+    if r == "amigo" || r == "hermano" { return "friend" }
+    if r == "ex" { return "ex" }
+    return ""
+}
+
+function dlg_cond(cond: string, p: map) {
+    if cond == "" { return true }
+    if cond == "school" { return L.school != "" && L.age >= 7 }
+    if cond == "teen" { return L.age >= 13 && L.age < 18 }
+    if cond == "adult" { return L.age >= 18 && p.age >= 18 }
+    if cond == "nojail" { return L.jail == 0 }
+    if cond == "cheated" { return p.cheated == true }
+    if cond == "nolive" { return p.livein != true && p.rel != "esposo" }
+    if cond == "pareja" { return p.rel == "pareja" }
+    if cond == "opp" { return p.gender != L.gender && p.rel != "amante" }
+    if cond == "closed" { return p.open != true }
+    if cond == "kinks" { return len(L.tags) > 0 }
+    if cond == "single" { return L.partner_id == 0 }
+    if cond == "crush" {
+        return p.rel == "amigo" && L.age >= 18 && p.age >= 18 && L.partner_id == 0 && (L.likes == "ambos" || L.likes == p.gender)
+    }
+    if str_starts_with(cond, "style:") { return npc_style(p) == str_replace(cond, "style:", "") }
+    return true
+}
+
+// ---------------------------------------------------------------- flujo
+
+function start_dialog(tree: string, p: map) {
+    G.modal = null
+    let ctx = {"person": p, "grades": str(L.grades), "gusto": ""}
+    if len(L.tags) > 0 { ctx["gusto"] = kink_name(L.tags[0], L.gender) }
+    if tree == "tuition" && G.pending_deg != "" {
+        let d = degree_def(G.pending_deg)
+        ctx["deg"] = d.n
+        ctx["costo"] = money_str(d.cost)
+    }
+    G.dlg = {"tree": tree, "pid": p.id, "ctx": ctx, "opts": []}
+    return dlg_show("n0", "")
+}
+
+function dlg_person() {
+    if G.dlg == null { return null }
+    return find_person(G.dlg.pid)
+}
+
+function dlg_say(node: map, p: map) {
+    let say = node.say
+    if type_of(say) == "string" { return fmt(say, G.dlg.ctx) }
+    let line = say[npc_style(p)]
+    if line == null { line = say["default"] }
+    return fmt(line, G.dlg.ctx)
+}
+
+function dlg_chance(o: map, p: map) {
+    let c = o.roll + (p.bond - 50) / 3
+    let mod = STYLE_MOD[npc_style(p)]
+    if mod != null { c += mod }
+    if o.stat != null { c += rank(o.stat) * 6 }
+    if o.money == true {
+        let w = WEALTH_MOD[L.family]
+        if w != null { c += w }
+    }
+    if o.grades == true { c += L.grades - 60 }
+    if o.looks == true { c += (L.looks - 50) / 2 }
+    return clamp(c, 5, 95)
+}
+
+function dlg_show(id: string, prefix: string) {
+    let p = dlg_person()
+    if p == null { return null }
+    let node = DIALOGS[G.dlg.tree][id]
+    if node.opts == null { return dlg_finish(node, p, prefix) }
+    let labels = []
+    let locks = []
+    let tags = []
+    let opts = []
+    for o in node.opts {
+        let cond = o["if"]
+        if cond != null && !dlg_cond(cond, p) { continue }
+        list_push(opts, o)
+        list_push(labels, fmt(o.t, G.dlg.ctx))
+        let lock = ""
+        if o.need != null && rank(o.need) < o.rank { lock = SOCIAL_NAMES[o.need] + " " + str(o.rank) }
+        list_push(locks, lock)
+        let tg = ""
+        if o.roll != null {
+            tg = str(dlg_chance(o, p)) + "%"
+        } else if o.need != null {
+            tg = SOCIAL_NAMES[o.need] + " " + str(o.rank)
+        }
+        list_push(tags, tg)
+    }
+    G.dlg.opts = opts
+    let title = str_upper(p.first) + " · " + str_upper(STYLE_NAMES[npc_style(p)])
+    open_choice(title, prefix + dlg_say(node, p), labels, locks, "dialog", {"person": p})
+    G.modal.tags = tags
+    return null
+}
+
+function dlg_choose(index: int) {
+    G.modal = null
+    let p = dlg_person()
+    if p == null || index >= len(G.dlg.opts) { return null }
+    let o = G.dlg.opts[index]
+    let ctx = {"person": p}
+    if o.fx != null { apply(o.fx, ctx) }
+    if o.roll != null {
+        if chance(dlg_chance(o, p)) { return dlg_show(o.ok, "[ÉXITO] ") }
+        return dlg_show(o.fail, "[FALLO] ")
+    }
+    return dlg_show(o.go, "")
+}
+
+function dlg_finish(node: map, p: map, prefix: string) {
+    let ctx = {"person": p}
+    let msg = prefix + dlg_say(node, p)
+    if node.fx != null {
+        let extra = apply(node.fx, ctx)
+        if extra != "" { msg = msg + " " + extra }
+    }
+    let kind = node.k
+    if kind == null { kind = "n" }
+    let title = "Conversación con " + p.first
+    let code = node.end
+    G.dlg_tree = G.dlg.tree
+    G.dlg = null
+    if code == null { return finish(title, msg, kind) }
+    return dlg_end(code, p, msg, title, kind)
+}
+
+// Consecuencias de cerrar una conversación.
+function dlg_end(code: string, p: map, msg: string, title: string, kind: string) {
+    if code == "pay_full" { return finish("Inscripción", msg + " " + enroll_do(G.pending_deg, "padres"), "g") }
+    if code == "pay_half" { return finish("Inscripción", msg + " " + enroll_do(G.pending_deg, "mitad"), "g") }
+    if code == "refuse" || code == "self" {
+        if code == "refuse" { G.tuition_no = G.pending_deg }
+        log_add(p.first + ": " + msg, kind)
+        open_enroll(G.pending_deg)
+        if G.modal != null { G.modal.text = msg + "\n\n" + G.modal.text }
+        return null
+    }
+    if code == "parent_money" {
+        let amount = rint(3, 15) * 100
+        if L.family == "media" { amount = rint(10, 40) * 100 }
+        if L.family == "rica" { amount = rint(50, 200) * 100 }
+        L.money += amount
+        return finish(title, msg + " Te da " + money_str(amount) + ".", kind)
+    }
+    if code == "parent_better" {
+        if p.style == "toxico" || p.style == "ausente" { p.style = "relajado" }
+        return finish(title, msg + " Su relación cambió para bien.", kind)
+    }
+    if code == "livein" {
+        p.livein = true
+        flag("livein")
+        return finish(title, msg, kind)
+    }
+    if code == "marry" {
+        marry()
+        L.happy += 15
+        toast("LOS AMANTES · BODA", "Te casaste con " + p.first + ".")
+        return finish(title, msg + " Se casaron en una boda inolvidable.", kind)
+    }
+    if code == "baby" { return finish(title, msg + try_baby(p), kind) }
+    if code == "open" {
+        p.open = true
+        flag("open")
+        return finish(title, msg, kind)
+    }
+    if code == "kink_yes" {
+        sex_with(p)
+        flag("kink")
+        return finish(title, msg, kind)
+    }
+    if code == "kink_ask" {
+        let likes = "nada en especial"
+        if p.tags != null && len(p.tags) > 0 { likes = kinks_text(p.tags, p.gender) }
+        let out = msg + " Le gusta: " + likes + "."
+        if len(shared_kinks(p)) > 0 { out = out + " ¡Comparten gustos!" }
+        return finish(title, out, kind)
+    }
+    if code == "kink_new" {
+        sex_with(p)
+        let options = []
+        for k in KINKS {
+            if !has_kink(k.id) { list_push(options, k.id) }
+        }
+        let out = msg
+        if len(options) > 0 { out = out + special("kink:" + pick(options), {}) }
+        return finish(title, out, kind)
+    }
+    if code == "clear_cheat" {
+        p.cheated = false
+        return finish(title, msg, kind)
+    }
+    if code == "dumped" {
+        p.cheated = false
+        breakup()
+        return finish(title, msg, kind)
+    }
+    if code == "calm" {
+        p.style = "dulce"
+        return finish(title, msg, kind)
+    }
+    if code == "friend_money" {
+        let amount = rint(5, 30) * 100
+        L.money += amount
+        return finish(title, msg + " Te presta " + money_str(amount) + ".", kind)
+    }
+    if code == "lovers" || code == "back" {
+        let out = msg
+        if make_partner(p) { out = out + " Ahora " + p.first + " es tu " + str_lower(rel_label(p)) + "." }
+        return finish(title, out, kind)
+    }
+    if code == "biz_win" {
+        let amount = rint(5, 30) * 1000
+        L.money += amount
+        bond_gain(p, 8)
+        return finish(title, msg + " Ganaron " + money_str(amount) + " cada quien.", kind)
+    }
+    if code == "hookup" {
+        log_add(msg, kind)
+        return open_hookup({"person": p})
+    }
+    return finish(title, msg, kind)
+}
+
+function try_baby(p: map) {
+    if L.pregnant || L.partner_preg { return " Ya viene un bebé en camino." }
+    let age = p.age
+    if L.gender == "f" { age = L.age }
+    if age > 45 { return " A estas alturas ya no es posible." }
+    sex_with(p)
+    if !chance(45) { return " Este mes no hubo suerte (pero sí diversión)." }
+    if L.gender == "f" {
+        L.pregnant = true
+        L.preg_with = p.first
+        return " ¡Estás embarazada!"
+    }
+    L.partner_preg = true
+    return " ¡" + p.first + " está embarazada!"
+}

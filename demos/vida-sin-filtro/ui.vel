@@ -400,6 +400,7 @@ function draw_card() {
     portrait(58, 66, 280, 336, L.look, L.gender, L.age, mood_for(L.happy), 0, true)
     svg(16, 16, 378, 60, slant_doc(372, 54, 18, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
     text(44, 52, clip_text(str_upper(L.first + " " + L.last), 310, 22), 22, C_WHITE, "impact")
+    tag(30, 84, 150, str_upper(month_name()), HEX_YELLOW, C_INK)
     svg(282, 282, 116, 116, burst_doc(116, 116, 14, HEX_RED, HEX_INK, 4, 5))
     otext(340, 342, str(L.age), 40, C_WHITE, "impact", true)
     ctext(340, 362, plural(L.age, "AÑO", "AÑOS"), 12, C_WHITE, "bold")
@@ -443,8 +444,8 @@ function draw_card() {
             tx += w + 4
         }
     } else {
-        text(44, 556, "CIUDAD", 11, C_GRAY, "bold")
-        text(44, 578, clip_text(L.city, 300, 14), 14, C_WHITE, "bold")
+        text(44, 556, "FAMILIA", 11, C_GRAY, "bold")
+        text(44, 578, clip_text(FAMILY_NAMES[L.family], 320, 14), 14, C_WHITE, "bold")
     }
 }
 
@@ -495,7 +496,12 @@ function mood_word() {
 function occupation_text() {
     if L.jail > 0 { return "En prisión" }
     if L.job != null { return job_display(L.job) }
-    if L.uni > 0 { return "Universitari" + oa(L.gender) }
+    if L.study != null {
+        let d = degree_def(L.study.deg)
+        if L.gig != null { return d.n + " + " + L.gig.title }
+        return "Estudiante de " + d.n
+    }
+    if L.gig != null { return L.gig.title + " (medio tiempo)" }
     if L.school == "primaria" { return "Primaria" }
     if L.school == "secundaria" { return "Secundaria" }
     if L.age < 6 { return by_gender(L.gender, "Bebé consentido", "Bebé consentida") }
@@ -626,9 +632,10 @@ function relationship_text() {
 }
 
 function education_text() {
-    if L.uni > 0 { return "Universidad (" + str(L.uni) + " " + plural(L.uni, "año", "años") + ")" }
-    if L.school != "" { return "Cursando " + L.school }
+    if L.study != null { return degree_def(L.study.deg).n + " · prom. " + str(L.study.gpa) }
+    if L.school != "" && L.age < 18 { return "Escuela · calif. " + str(L.grades) }
     let out = EDU_NAMES[L.edu]
+    if len(L.degrees) > 0 { out = degrees_text() }
     if L.debt > 0 { out = out + " · deuda " + money_str(L.debt) }
     return out
 }
@@ -653,20 +660,32 @@ function draw_bottom() {
     let i = 0
     while i < len(tabs) {
         let t = tabs[i]
-        let x = 16 + i * 244
+        let x = 16 + i * 222
         let y = 634
         let on = hovered(t[1])
-        let doc = slant_doc(230, 64, 20, HEX_INK, HEX_WHITE, 3, HEX_RED, 6)
+        let doc = slant_doc(210, 64, 20, HEX_INK, HEX_WHITE, 3, HEX_RED, 6)
         if on {
-            doc = slant_doc(230, 64, 20, HEX_RED, HEX_WHITE, 3, HEX_INK, 8)
+            doc = slant_doc(210, 64, 20, HEX_RED, HEX_WHITE, 3, HEX_INK, 8)
             y -= 6
         }
-        svg(x, y, 238, 72, doc)
-        otext(x + 115, y + 43, t[0], 26, C_WHITE, "impact", true)
-        hot(x, 634, 230, 64, t[1])
+        svg(x, y, 218, 72, doc)
+        otext(x + 105, y + 43, t[0], 24, C_WHITE, "impact", true)
+        hot(x, 634, 210, 64, t[1])
         i += 1
     }
-    star_button(1030, 586, "+1 AÑO", "age", "ESPACIO")
+    // Avance rápido hasta el cumpleaños (se detiene si algo requiere decisión).
+    let fy = 640
+    let fill = HEX_WHITE
+    let color = C_INK
+    if hovered("year") {
+        fill = HEX_YELLOW
+        fy -= 4
+    }
+    svg(912, fy, 128, 58, slant_doc(122, 52, 14, fill, HEX_INK, 3, HEX_RED, 5))
+    ctext(972, fy + 26, "+1 AÑO", 20, color, "impact")
+    ctext(972, fy + 44, "TECLA Y", 11, color, "bold")
+    hot(912, 640, 122, 52, "year")
+    star_button(1034, 586, "+1 MES", "age", "ESPACIO")
 }
 
 // Números que flotan junto a una estadística después de cambiar.
@@ -703,6 +722,7 @@ function draw_modal(m: map) {
     }
     if m.kind == "menu" { return draw_menu(m) }
     if m.kind == "person" { return draw_person(m) }
+    if m.kind == "minigame" { return draw_minigame() }
     return null
 }
 

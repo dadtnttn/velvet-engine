@@ -193,6 +193,7 @@ function arrow_doc(dir: string, fill: string) {
     let pts = [8, 4, 30, 20, 8, 36]
     if dir == "left" { pts = [32, 4, 10, 20, 32, 36] }
     if dir == "up" { pts = [4, 32, 20, 8, 36, 32] }
+    if dir == "down" { pts = [4, 8, 20, 32, 36, 8] }
     let doc = svg_doc(40, 40, poly(pts, fill, HEX_INK, 3))
     svgc[key] = doc
     return doc

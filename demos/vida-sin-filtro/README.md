@@ -20,7 +20,9 @@ Controles:
 | Tecla / ratón | Acción |
 |---|---|
 | Ratón | Todo es clicable; los menús reaccionan al pasar el cursor |
-| Espacio o Enter | Cumplir un año más |
+| Espacio o Enter | Avanzar un mes |
+| Y | Avanzar hasta tu próximo cumpleaños (se detiene si hay una decisión) |
+| 1 – 9, flechas, letras, Espacio | Jugar los minijuegos |
 | 1 – 5 | Elegir una opción en un evento |
 | Enter / Espacio / Esc | Cerrar un mensaje |
 | Esc | Volver o cerrar un menú |
@@ -54,8 +56,40 @@ binarias en el juego.
   y desbloquean opciones exclusivas en los eventos (por ejemplo, `[VALOR 3]`).
 - **Confidentes**: cada vínculo tiene un arcano (Los Amantes, La Emperatriz, La
   Torre...) y un rango del 1 al 10 que sube con la cercanía.
-- **Vida completa**: escuela, universidad con préstamo, aumentos, despidos,
-  prisión con opción de fuga, matrimonio, divorcio, hijos y muerte.
+- **Tiempo mes a mes**: cada mes cobras, trabajas turnos, pagas colegiatura y
+  tomas decisiones; los embarazos duran nueve meses. El botón +1 AÑO avanza
+  hasta tu cumpleaños y se detiene cuando algo requiere una decisión.
+- **Familia desde el nacimiento**: naces en una familia humilde, de clase media o
+  adinerada, y cada padre tiene un estilo (amoroso, estricto, relajado, ausente o
+  tóxico) que afecta tu felicidad, tus calificaciones y si te pagará la carrera.
+- **Escuela y estudios** (`edu.vel`): calificaciones desde la primaria, exámenes
+  semestrales (minijuego, copiar o faltar) y 36 carreras para estudiar (20
+  universitarias y 16 técnicas) con colegiatura mensual. Pagan tus padres (si los
+  convences), una beca según tus calificaciones, un préstamo o tú con tu trabajo.
+  Sin pagar, te dan de baja; con mal promedio, pierdes la beca o repites semestre.
+- **Títulos y amateurs**: muchas carreras piden título. Las reguladas (médico,
+  abogado, policía...) solo con título; en las demás puedes entrar como amateur
+  pasando una audición con minijuego: cobras el 60%, avanzas más lento, practicas
+  con minijuegos y puedes certificarte en rango 3.
+- **100 chambas de medio tiempo** (`gigs.vel`) en 14 lugares (comida, vida
+  nocturna, construcción, tiendas, reparto, hogar, cuidado, oficina, hotel,
+  eventos, gimnasio, fábrica, belleza y en línea +18). Sin experiencia y
+  compatibles con estudiar. Cada turno es un minijuego que decide tus propinas,
+  cada mes hay una minimisión con bono, y hay 24 eventos de trabajo: clientes
+  imposibles, asaltos, huelgas, ascensos... y a partir de los 18, propuestas
+  picantes que siempre puedes aceptar, rechazar o denunciar (nunca en trabajos
+  de cuidado).
+- **7 minijuegos** (`minigames.vel`): bartender (prepara tragos), memoria de
+  pedidos, cambio exacto, precisión, ritmo con flechas, tecleo rápido y examen
+  de preguntas.
+- **Conversaciones con decisiones** (`dialogue.vel`): diálogos ramificados con
+  tus padres, tu pareja, amigos, hermanos y ex. Cada persona tiene un estilo
+  (dulce, celoso, espíritu libre, intenso...) que cambia lo que dice y lo fácil
+  que es convencerla. Las opciones muestran su probabilidad, algunas piden rango
+  social, y pueden terminar en becas, préstamos, bodas, mudarse juntos, una
+  relación abierta, confesiones de infidelidad o reconciliaciones.
+- **Vida completa**: aumentos, despidos, prisión con opción de fuga,
+  matrimonio, divorcio, hijos y muerte.
 - **150 carreras** (`jobs.vel`): 126 contratables en 15 campos (Servicio,
   Oficio, Oficina, Tecnología, Arte, Espectáculo, Salud, Ley, Ciencia, Negocios,
   Deporte, Educación, Moda, +18 y Calle) y 24 que solo se consiguen fusionando.
@@ -89,7 +123,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 26 objetivos con recompensa (graduarte, casarte, primer millón,
+- **Misiones**: 37 objetivos con recompensa (graduarte, casarte, primer millón,
   ganar un premio, llevar un confidente a rango 10, vivir 100 años...).
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
   "!", corazón, gota de sudor, enojo o dinero). 3 tipos de cara, 3 de cuerpo,
@@ -103,11 +137,15 @@ binarias en el juego.
 | Archivo | Contenido |
 |---|---|
 | `main.vel` | Contrato del runtime, puntero/hover, teclado, creador, animaciones |
-| `sim.vel` | Estado de la vida, personalidad, rasgos sociales, paso de los años, muerte |
+| `sim.vel` | Estado de la vida, personalidad, rasgos sociales, paso de los meses, muerte |
 | `events.vel` | Eventos anuales (datos) y su motor |
 | `acts.vel` | Menús: ocupación, vínculos, actividades, noche, citas, casino, compras |
 | `jobs.vel` | Catálogo de 150 carreras, especializaciones, segunda carrera y fusiones |
 | `career.vel` | Acciones de las carreras +18, gustos en la cama y misiones |
+| `edu.vel` | Familia, escuela, exámenes, universidades y técnicas, títulos y audiciones |
+| `gigs.vel` | 100 chambas de medio tiempo, sus eventos y minimisiones |
+| `minigames.vel` | Los 7 minijuegos y su dibujo |
+| `dialogue.vel` | Árboles de diálogo con padres, pareja, amigos y ex |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
 | `ui.vel` | Pantallas, menús, diálogos, notificaciones y efectos |
