@@ -69,7 +69,7 @@ const ACTIVITIES = [
     ]},
     {"id": "japan", "tab": "act", "cat": "Lujos", "t": "Viaje a Tokio", "s": "Felicidad, conocimiento · $15,000", "min": 18, "cost": 15000,
      "desc": "Neón, ramen a las 3 a. m. y un tren que nunca llega tarde.", "o": [
-        {"w": 100, "log": "Recorriste Shibuya de noche y comiste ramen hasta llorar. Inolvidable.", "happy": 18, "know": 6, "charm": 3}
+        {"w": 100, "log": "Recorriste Shibuya de noche y comiste ramen hasta llorar. Inolvidable.", "happy": 18, "know": 6, "charm": 3, "flag": "tokyo"}
     ]},
     {"id": "lottery", "tab": "act", "cat": "Lujos", "t": "Comprar lotería", "s": "Soñar no cuesta... $20", "min": 18, "cost": 20, "code": true,
      "desc": "Una en dos mil. Pero alguien tiene que ganar, ¿no?"},
@@ -189,18 +189,21 @@ function menu_title(tab: string) {
     if tab == "job" { return "OCUPACIÓN" }
     if tab == "rel" { return "VÍNCULOS" }
     if tab == "act" { return "ACTIVIDADES" }
+    if tab == "missions" { return "MISIONES" }
     return "NOCHE +18"
 }
 
 function menu_cats(tab: string) {
     if tab == "act" { return ["Cuerpo", "Mente", "Lujos"] }
-    if tab == "night" { return ["Fiesta", "Ligue", "Vicios", "Crimen"] }
+    if tab == "night" { return ["Fiesta", "Ligue", "Carreras", "Vicios", "Crimen"] }
     return []
 }
 
 function menu_items(tab: string, cat: string) {
     if tab == "job" { return job_items() }
     if tab == "rel" { return rel_items() }
+    if tab == "missions" { return mission_items() }
+    if tab == "night" && cat == "Carreras" { return casting_items() }
     let items = []
     for a in ACTIVITIES {
         if a.tab == tab && a.cat == cat && L.age >= a.min {
@@ -240,6 +243,11 @@ function job_items() {
         list_push(items, {"action": "act:behave", "t": "Portarte bien", "s": "Puede reducir tu condena", "desc": "Agacha la cabeza, cumple las reglas y espera.", "lock": ""})
         list_push(items, {"action": "act:yard", "t": "Pelear en el patio", "s": "Respeto o enfermería", "desc": "En prisión, el respeto se gana a golpes.", "lock": ""})
         list_push(items, {"action": "act:escape", "t": "Intentar escapar", "s": "Muy arriesgado", "desc": "Una cuchara, un túnel y mucha paciencia.", "lock": ""})
+        return items
+    }
+    if L.job != null && L.job.career != null {
+        items = career_items()
+        list_push(items, {"action": "act:jobsearch", "t": "Buscar otro trabajo", "s": "Cambiar de rumbo", "desc": "Quizá sea hora de algo con menos luces.", "lock": ""})
         return items
     }
     if L.age < 18 && L.school != "" {
@@ -581,6 +589,7 @@ function do_job_act(id: string) {
         if chance(8 + rank("skill") * 3) {
             L.jail = 0
             L.record += 1
+            flag("escape")
             finish("Prisión", "¡Escapaste! Ahora eres prófug" + oa(L.gender) + ".", "g")
         } else {
             L.jail += 2
@@ -648,9 +657,13 @@ function hire(index: int) {
 
 function open_hookup(ctx: map) {
     let x = ctx.person
+    let likes = ""
+    if x.tags != null && len(x.tags) > 0 { likes = " Le gusta: " + kinks_text(x.tags, x.gender) + "." }
+    let shared = shared_kinks(x)
+    if len(shared) > 0 { likes = likes + " ¡Comparten gustos!" }
     open_choice(
         "ENCUENTRO CON " + str_upper(x.first),
-        fmt("{x} ({edad} años, atractivo " + str(x.looks) + "%) está más que dispuest{xa}. ¿Cómo quieres que sea?", ctx),
+        fmt("{x} ({edad} años, atractivo " + str(x.looks) + "%) está más que dispuest{xa}." + likes + " ¿Cómo quieres que sea?", ctx),
         ["Con protección", "Sin protección", "Mejor no"],
         ["", "", ""],
         "hookup",
@@ -669,6 +682,14 @@ function resolve_hookup(index: int, ctx: map) {
     if index == 1 {
         o.std = 18
         o.preg = 25
+    }
+    if has_kink("insaciable") { o.happy = o.happy + 3 }
+    let shared = shared_kinks(x)
+    if len(shared) > 0 {
+        o.log = o.log + " Descubrieron que comparten un gusto: " + kink_name(shared[0], L.gender) + ". Noche legendaria."
+        o.happy = o.happy + 6
+        o.flag = "kink"
+        if has_kink("trios") && shared[0] == "trios" { o.count = 1 }
     }
     let msg = apply(o, ctx)
     return finish("Encuentro con " + x.first, msg, "x")
@@ -752,7 +773,7 @@ function bond_gain(p: map, amount: int) {
     p.bond = clamp100(p.bond + gained)
     let after = conf_rank(p)
     if after > before {
-        toast(str_upper(arcana(p)) + " · RANGO " + str(after), "Tu vínculo con " + p.first + " se fortaleció.")
+        list_push(G.toasts, {"head": "¡CONFIDENTE!", "title": str_upper(arcana(p)) + " · RANGO " + str(after), "sub": "Tu vínculo con " + p.first + " se fortaleció.", "t0": G.t})
     }
 }
 
@@ -792,6 +813,7 @@ function do_person_act(action: string, p: map) {
         return finish(name, name + " te dijo que te pongas a trabajar.", "b")
     }
     if action == "romance" {
+        if has_kink("romantico") { bond_gain(p, 5) }
         bond_gain(p, 10)
         L.happy += 8
         sex_with(p)
@@ -819,8 +841,10 @@ function do_person_act(action: string, p: map) {
         return finish(name, "Lo intentaron mucho. Este año no hubo suerte (pero sí diversión).", "x")
     }
     if action == "threesome" {
-        if chance(35 + rank("charm") * 6) {
-            let msg = apply({"log": name + " aceptó. Fue una noche épica.", "happy": 12, "count": 1, "bond": 5, "std": 8}, ctx)
+        let odds = 35 + rank("charm") * 6
+        if has_kink("trios") { odds += 20 }
+        if chance(odds) {
+            let msg = apply({"log": name + " aceptó. Fue una noche épica.", "happy": 12, "count": 1, "bond": 5, "std": 8, "flag": "trio"}, ctx)
             return finish(name, msg, "x")
         }
         bond_gain(p, -20)
@@ -953,8 +977,48 @@ function special(name: string, ctx: map) {
         return " Nuevo sueldo: " + money_str(job_pay(L.job)) + " al año."
     }
     if name == "creator" {
+        let c = career_def("cam")
         if L.job != null { L.last_job = L.job.title }
-        L.job = {"id": "creador", "title": by_gender(L.gender, "Creador de contenido +18", "Creadora de contenido +18"), "salary": 0, "var": 8, "perf": 60, "years": 0}
+        L.job = {"id": "cam", "career": "cam", "title": by_gender(L.gender, c.m, c.f), "salary": 0, "var": 0, "perf": 60, "years": 0, "level": 1, "xp": c.xp[1], "bonus": 100}
+        L.fame = clamp100(L.fame + 15)
+        return " Ahora eres " + str_lower(L.job.title) + "."
+    }
+    if name == "career_raise" {
+        if L.job != null && L.job.career != null { L.job.bonus = L.job.bonus + 15 }
+        return " Tus ingresos suben un 15%."
+    }
+    if name == "kink_scene" {
+        if len(L.tags) == 0 { return "" }
+        let t = pick(L.tags)
+        career_xp(45)
+        L.fame = clamp100(L.fame + 6)
+        L.happy += 8
+        L.money += 5000
+        return "Grabaste una escena de tu especialidad («" + kink_name(t, L.gender) + "»). Se nota que lo disfrutas: los fans enloquecieron. +$5,000."
+    }
+    if name == "clinic" {
+        if L.money < 500 { return "No te alcanzó para las pruebas." }
+        L.money -= 500
+        let out = "Pruebas completas: todo limpio."
+        if len(L.std) > 0 {
+            out = "Te detectaron " + str_join(L.std, ", ") + " a tiempo y empezaste tratamiento."
+            let keep = []
+            for s in L.std {
+                if s == "herpes" || s == "VIH" { list_push(keep, s) }
+                if s == "VIH" { L.hiv_treated = true }
+            }
+            L.std = keep
+        }
+        career_xp(10)
+        return out
+    }
+    if name == "collab" {
+        let p = stranger()
+        p.tags = L.tags
+        ctx["person"] = p
+        career_xp(30)
+        L.fame = clamp100(L.fame + 8)
+        open_hookup(ctx)
         return ""
     }
     return ""

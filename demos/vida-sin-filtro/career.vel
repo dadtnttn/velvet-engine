@@ -1,0 +1,365 @@
+// @edition 3
+// Carreras +18 con rangos, gustos en la cama y misiones.
+// Todo el contenido es para personajes adultos y sin escenas explícitas.
+
+// ---------------------------------------------------------------- carreras +18
+
+// pay: sueldo anual por rango (se ajusta con el atractivo). xp: experiencia para cada rango.
+const CAREERS = [
+    {"id": "porn", "m": "Actor de cine para adultos", "f": "Actriz de cine para adultos", "looks": 50,
+     "ranks": ["Amateur", "Promesa", "Estrella en ascenso", "Estrella", "Leyenda +18"],
+     "pay": [15000, 40000, 90000, 200000, 450000], "xp": [0, 80, 200, 380, 620],
+     "pitch": "Un casting, una cámara y mucha confianza en ti. La fama llega rápido; la reputación familiar, no tanto."},
+    {"id": "stripper", "m": "Bailarín exótico", "f": "Bailarina exótica", "looks": 55,
+     "ranks": ["Debut", "Habitual del tubo", "Estrella del escenario", "Cabeza de cartel", "Leyenda del club"],
+     "pay": [20000, 35000, 60000, 100000, 160000], "xp": [0, 70, 180, 340, 560],
+     "pitch": "Luces, tacones (o botas) y billetes que vuelan. El escenario es tuyo."},
+    {"id": "escort", "m": "Escort", "f": "Escort", "looks": 50,
+     "ranks": ["Independiente", "Agencia", "Escort de lujo", "Acompañante VIP", "Agencia propia"],
+     "pay": [25000, 45000, 90000, 180000, 300000], "xp": [0, 80, 200, 380, 600],
+     "pitch": "Compañía de alto nivel con clientes que pagan bien. Riesgos legales y de salud incluidos."},
+    {"id": "cam", "m": "Creador de contenido +18", "f": "Creadora de contenido +18", "looks": 40,
+     "ranks": ["100 fans", "1K fans", "10K fans", "100K fans", "Un millón de fans"],
+     "pay": [8000, 25000, 70000, 160000, 400000], "xp": [0, 60, 170, 330, 560],
+     "pitch": "Tu cuarto, tu luz de aro y tu público. Tú pones las reglas."}
+]
+
+// Acciones de cada carrera (aparecen en Ocupación). Resultados con xp y fame.
+const CAREER_ACTIONS = {
+    "porn": [
+        {"id": "scene", "t": "Grabar una escena", "s": "Experiencia, dinero", "desc": "Luces, cámara y profesionalismo. Las pruebas médicas están al día... casi siempre.", "o": [
+            {"w": 70, "log": "Grabaste una escena que el director llamó «la mejor del mes».", "xp": 30, "fame": 4, "money": [2000, 6000], "happy": 4, "charm": 2},
+            {"w": 20, "log": "La escena fue un desastre técnico: repitieron todo seis veces.", "xp": 15, "happy": -4},
+            {"w": 10, "log": "Tu co-protagonista no estaba al día con sus pruebas médicas.", "xp": 20, "std": 60}
+        ]},
+        {"id": "kink_scene", "t": "Escena de tu especialidad", "s": "Más experiencia si es tu gusto", "desc": "Haz lo que de verdad te gusta frente a la cámara. Tus fans lo notan.", "o": [
+            {"w": 100, "special": "kink_scene"}
+        ]},
+        {"id": "promo", "t": "Promocionarte en redes", "s": "Fama", "desc": "Fotos con filtro, frases provocativas y respuestas a comentarios a las 3 a. m.", "o": [
+            {"w": 80, "log": "Tu publicación se volvió viral. Nuevos fans por miles.", "fame": 8, "xp": 10, "charm": 3},
+            {"w": 20, "log": "Te suspendieron la cuenta por «contenido sensible». Otra vez.", "fame": 1, "happy": -5}
+        ]},
+        {"id": "contract", "t": "Negociar contrato", "s": "Destreza 3", "need": "skill", "rank": 3, "desc": "Abogados, porcentajes y regalías. La estrella también firma.", "o": [
+            {"w": 100, "log": "Conseguiste regalías por tus escenas. Tu sueldo sube.", "special": "career_raise", "skill": 4}
+        ]}
+    ],
+    "stripper": [
+        {"id": "double", "t": "Turno doble", "s": "Dinero, cansancio", "desc": "Doce horas de música fuerte y propinas en efectivo.", "o": [
+            {"w": 80, "log": "Terminaste con los bolsillos llenos de billetes de $20.", "money": [1500, 4000], "xp": 20, "health": -3},
+            {"w": 20, "log": "Te torciste el tobillo en el tubo.", "health": -10, "xp": 10}
+        ]},
+        {"id": "show", "t": "Show especial en el escenario", "s": "Experiencia, fama", "desc": "Coreografía nueva, luces nuevas y una entrada que nadie olvidará.", "o": [
+            {"w": 75, "log": "El club se vino abajo. El dueño te pidió repetirlo cada viernes.", "xp": 30, "fame": 5, "charm": 4, "happy": 6},
+            {"w": 25, "log": "Falló la música a la mitad. Improvisaste como pudiste.", "xp": 15, "guts": 3}
+        ]},
+        {"id": "vip", "t": "Baile privado VIP", "s": "Mucho dinero", "desc": "Un cuarto privado, un cliente con dinero y reglas estrictas.", "o": [
+            {"w": 70, "log": "El cliente respetó las reglas y dejó una propina enorme.", "money": [3000, 8000], "xp": 20},
+            {"w": 30, "special": "event:handsy"}
+        ]},
+        {"id": "pole", "t": "Entrenar pole dance", "s": "Destreza, salud", "desc": "Fuerza, flexibilidad y moretones en lugares raros.", "o": [
+            {"w": 100, "log": "Ya haces la bandera humana en el tubo.", "skill": 5, "health": 4, "xp": 15}
+        ]}
+    ],
+    "escort": [
+        {"id": "client", "t": "Atender a un cliente", "s": "Dinero, riesgo", "desc": "Cena elegante, conversación y lo que se acuerde. Siempre con protección.", "o": [
+            {"w": 65, "log": "Un cliente educado y generoso. Noche tranquila.", "money": [2000, 6000], "xp": 25, "std": 4},
+            {"w": 15, "log": "El cliente se puso agresivo. Saliste a tiempo, con un golpe en la cara.", "health": -15, "xp": 10, "guts": 3},
+            {"w": 10, "log": "Era un operativo policial.", "jail": 1},
+            {"w": 10, "special": "event:client_love"}
+        ]},
+        {"id": "vip_client", "t": "Cliente VIP", "s": "Rango 3 · mucho dinero", "need": "charm", "rank": 3, "desc": "Fines de semana en yates, cenas con ministros y discreción absoluta.", "o": [
+            {"w": 85, "log": "Un fin de semana en Mónaco con un magnate. Cobraste {monto}.", "money": [15000, 40000], "xp": 40, "fame": 2},
+            {"w": 15, "log": "La esposa del cliente los descubrió. Escándalo en la prensa.", "fame": 10, "happy": -10, "xp": 20}
+        ]},
+        {"id": "tests", "t": "Hacerte pruebas médicas", "s": "Salud · $500", "desc": "Responsabilidad profesional. Tus clientes VIP lo exigen.", "o": [
+            {"w": 100, "special": "clinic"}
+        ]},
+        {"id": "rates", "t": "Subir tus tarifas", "s": "Encanto", "desc": "Si eres de lujo, cobra como tal.", "o": [
+            {"w": 60, "log": "Tus clientes pagaron sin chistar.", "special": "career_raise", "charm": 3},
+            {"w": 40, "log": "Perdiste a varios clientes habituales.", "xp": -20, "happy": -4}
+        ]}
+    ],
+    "cam": [
+        {"id": "stream", "t": "Transmisión en vivo", "s": "Propinas, fans", "desc": "Luz de aro, buena conexión y un chat que no se calla.", "o": [
+            {"w": 75, "log": "Las propinas no paraban de llegar. Ganaste {monto}.", "money": [800, 4000], "xp": 25, "fame": 3},
+            {"w": 25, "log": "Se cayó el internet a la mitad. Tus fans exigen reembolso.", "xp": 5, "happy": -5}
+        ]},
+        {"id": "collab", "t": "Colaborar con otro creador", "s": "Encuentro, muchos fans", "desc": "Dos audiencias, una cámara y química de verdad.", "o": [
+            {"w": 100, "special": "collab"}
+        ]},
+        {"id": "custom", "t": "Contenido personalizado", "s": "Dinero", "desc": "Pedidos especiales de tus fans más fieles. Algunos son muy raros.", "o": [
+            {"w": 70, "log": "Un fan pagó {monto} por un video personalizado bastante inocente, la verdad.", "money": [500, 3000], "xp": 15},
+            {"w": 30, "log": "Te pidieron algo tan raro que tuviste que buscarlo en Google.", "money": [1500, 5000], "xp": 20, "know": 2}
+        ]},
+        {"id": "fans", "t": "Responder a tus fans", "s": "Fama, amabilidad", "desc": "Mensajes, agradecimientos y algún que otro poema horrible.", "o": [
+            {"w": 100, "log": "Tus fans se sienten escuchados. Tu comunidad crece.", "fame": 4, "kind": 3, "xp": 10}
+        ]}
+    ]
+}
+
+function career_def(id: string) {
+    for c in CAREERS {
+        if c.id == id { return c }
+    }
+    return null
+}
+
+function career_job() {
+    if L.job == null || L.job.career == null { return null }
+    return career_def(L.job.career)
+}
+
+function career_rank_name() {
+    let c = career_job()
+    if c == null { return "" }
+    return c.ranks[L.job.level]
+}
+
+function career_pay() {
+    let c = career_def(L.job.career)
+    let base = c.pay[L.job.level] * L.job.bonus / 100
+    return base * (50 + L.looks) / 100
+}
+
+function start_career(id: string) {
+    let c = career_def(id)
+    if c == null { return null }
+    if L.jail > 0 { return info("Casting", "Desde la cárcel no se puede.") }
+    if L.age < 18 { return info("Casting", "Solo para mayores de 18.") }
+    if L.looks < c.looks {
+        L.happy -= 4
+        return finish("Casting", "No pasaste el casting: buscan a alguien con más atractivo (" + str(c.looks) + "%).", "b")
+    }
+    if L.job != null { L.last_job = L.job.title }
+    L.job = {"id": id, "career": id, "title": by_gender(L.gender, c.m, c.f), "salary": 0, "var": 0, "perf": 60, "years": 0, "level": 0, "xp": 0, "bonus": 100}
+    L.fame = clamp100(L.fame + 5)
+    list_push(G.toasts, {"head": "¡NUEVA CARRERA!", "title": str_upper(c.ranks[0]), "sub": by_gender(L.gender, c.m, c.f), "t0": G.t})
+    return finish("Casting", "¡Pasaste el casting! Ahora eres " + str_lower(by_gender(L.gender, c.m, c.f)) + ". " + c.pitch, "x")
+}
+
+// Suma experiencia y sube de rango con notificación.
+function career_xp(amount: int) {
+    let c = career_job()
+    if c == null { return null }
+    L.job.xp = max(0, L.job.xp + amount)
+    while L.job.level < 4 && L.job.xp >= c.xp[L.job.level + 1] {
+        L.job.level += 1
+        L.fame = clamp100(L.fame + 8)
+        L.happy += 6
+        list_push(G.toasts, {"head": "¡ASCENSO!", "title": str_upper(c.ranks[L.job.level]), "sub": by_gender(L.gender, c.m, c.f) + " · rango " + str(L.job.level + 1) + " de 5", "t0": G.t})
+        log_add("Subiste de rango: ahora eres " + c.ranks[L.job.level] + ".", "x")
+    }
+    return null
+}
+
+function career_items() {
+    let items = []
+    let c = career_job()
+    for a in CAREER_ACTIONS[L.job.career] {
+        let lock = ""
+        if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
+        list_push(items, {"action": "cact:" + a.id, "t": a.t, "s": a.s, "desc": a.desc, "lock": lock})
+    }
+    let next = "Rango máximo alcanzado."
+    if L.job.level < 4 { next = "Siguiente rango: " + c.ranks[L.job.level + 1] + " (" + str(L.job.xp) + "/" + str(c.xp[L.job.level + 1]) + " exp)." }
+    list_push(items, {"action": "act:quit", "t": "Retirarte", "s": c.ranks[L.job.level], "desc": "Colgar los tacones para siempre. " + next, "lock": ""})
+    return items
+}
+
+function do_career_act(id: string) {
+    G.modal = null
+    let c = career_job()
+    if c == null { return null }
+    for a in CAREER_ACTIONS[L.job.career] {
+        if a.id != id { continue }
+        if a.need != null && rank(a.need) < a.rank {
+            return info(a.t, "Necesitas " + SOCIAL_NAMES[a.need] + " rango " + str(a.rank) + ".")
+        }
+        let key = "c_" + id
+        let used = L.used[key]
+        if used == null { used = 0 }
+        if used >= 3 { return info(a.t, "Ya trabajaste suficiente este año. Descansa.") }
+        L.used[key] = used + 1
+        let o = pick_outcome(a.o)
+        let msg = apply(o, {})
+        return finish(a.t, msg, outcome_kind(o))
+    }
+    return null
+}
+
+// Opciones de casting en la Noche +18.
+function casting_items() {
+    let items = []
+    let titles = {"porn": "Casting de cine para adultos", "stripper": "Audición de striptease", "escort": "Unirte a una agencia de escorts", "cam": "Abrir cuenta de contenido +18"}
+    for c in CAREERS {
+        let lock = ""
+        if L.looks < c.looks { lock = "Atractivo " + str(c.looks) }
+        if L.job != null && L.job.career == c.id { lock = "Ya es tu carrera" }
+        list_push(items, {"action": "career:" + c.id, "t": titles[c.id], "s": "Rango inicial: " + c.ranks[0], "desc": c.pitch + " Rangos: " + str_join(c.ranks, " › ") + ".", "lock": lock})
+    }
+    return items
+}
+
+// ---------------------------------------------------------------- gustos
+
+const KINKS = [
+    {"id": "oral", "m": "Fan del sexo oral", "f": "Fan del sexo oral", "desc": "Generosidad ante todo."},
+    {"id": "dom", "m": "Dominante", "f": "Dominante", "desc": "Te gusta llevar el control."},
+    {"id": "sub", "m": "Sumiso", "f": "Sumisa", "desc": "Te gusta ceder el control."},
+    {"id": "bdsm", "m": "Amante del BDSM", "f": "Amante del BDSM", "desc": "Cuero, cuerdas y palabras de seguridad."},
+    {"id": "exhib", "m": "Exhibicionista", "f": "Exhibicionista", "desc": "Que te miren te enciende."},
+    {"id": "voyeur", "m": "Voyeur", "f": "Voyeur", "desc": "Mirar es la mitad de la diversión."},
+    {"id": "pies", "m": "Fetiche de pies", "f": "Fetiche de pies", "desc": "Nadie juzga. Bueno, un poco."},
+    {"id": "trios", "m": "Fan de los tríos", "f": "Fan de los tríos", "desc": "Dos es compañía; tres, fiesta."},
+    {"id": "maduros", "m": "Le van los maduros", "f": "Le van los maduros", "desc": "La experiencia es sexy."},
+    {"id": "juguetes", "m": "Fan de los juguetes", "f": "Fan de los juguetes", "desc": "Tu cajón tiene más baterías que un control remoto."},
+    {"id": "cosplay", "m": "Cosplay y disfraces", "f": "Cosplay y disfraces", "desc": "Mejor con orejas de gato."},
+    {"id": "rol", "m": "Juegos de rol", "f": "Juegos de rol", "desc": "Hoy eres el profesor; mañana, el pirata."},
+    {"id": "romantico", "m": "Romántico en la cama", "f": "Romántica en la cama", "desc": "Velas, música y miradas largas."},
+    {"id": "insaciable", "m": "Insaciable", "f": "Insaciable", "desc": "¿Otra vez? Otra vez."},
+    {"id": "tantra", "m": "Tántrico", "f": "Tántrica", "desc": "Sin prisa. Mucha, mucha calma."}
+]
+
+const MAX_KINKS = 3
+
+function kink_name(id: string, gender: string) {
+    for k in KINKS {
+        if k.id == id { return by_gender(gender, k.m, k.f) }
+    }
+    return id
+}
+
+function has_kink(id: string) {
+    return L.tags != null && list_contains(L.tags, id)
+}
+
+function random_kinks(count: int) {
+    let pool = []
+    for k in KINKS { list_push(pool, k.id) }
+    shuffle(G.rng, pool)
+    return list_slice(pool, 0, count)
+}
+
+function shared_kinks(p: map) {
+    let out = []
+    if p.tags == null || L.tags == null { return out }
+    for t in p.tags {
+        if list_contains(L.tags, t) { list_push(out, t) }
+    }
+    return out
+}
+
+function kinks_text(tags: list, gender: string) {
+    let names = []
+    for t in tags { list_push(names, kink_name(t, gender)) }
+    if len(names) == 0 { return "Nada en especial" }
+    return str_join(names, ", ")
+}
+
+// ---------------------------------------------------------------- misiones
+
+const MISSIONS = [
+    {"id": "grad", "t": "Con título", "d": "Gradúate de la universidad.", "r": "+$5,000 · Conocimiento", "reward": {"money": 5000, "know": 6}},
+    {"id": "wed", "t": "Hasta que la muerte...", "d": "Cásate.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "family", "t": "Familia numerosa", "d": "Ten 3 hijos.", "r": "Amabilidad", "reward": {"kind": 10}},
+    {"id": "heart", "t": "Rompecorazones", "d": "Llega a 10 parejas sexuales.", "r": "Encanto", "reward": {"charm": 8}},
+    {"id": "trio", "t": "Tres son multitud", "d": "Participa en un trío o un intercambio.", "r": "Felicidad", "reward": {"happy": 6}},
+    {"id": "kink", "t": "Almas gemelas", "d": "Ten un encuentro con alguien que comparte tus gustos.", "r": "Felicidad · Encanto", "reward": {"happy": 8, "charm": 3}},
+    {"id": "career3", "t": "Estrella de la noche", "d": "Llega al rango 3 en una carrera +18.", "r": "+$15,000", "reward": {"money": 15000}},
+    {"id": "career5", "t": "Leyenda +18", "d": "Llega al rango máximo en una carrera +18.", "r": "Encanto", "reward": {"charm": 15}},
+    {"id": "award", "t": "Terciopelo de oro", "d": "Gana un Premio Terciopelo Rojo.", "r": "Felicidad · Fama", "reward": {"happy": 15}},
+    {"id": "famous", "t": "Celebridad", "d": "Llega a 80% de fama.", "r": "+$50,000", "reward": {"money": 50000}},
+    {"id": "million", "t": "Primer millón", "d": "Junta $1,000,000.", "r": "Felicidad", "reward": {"happy": 15}},
+    {"id": "assets", "t": "Coleccionista", "d": "Ten 3 bienes de lujo.", "r": "Encanto", "reward": {"charm": 6}},
+    {"id": "tokyo", "t": "Turista en Tokio", "d": "Viaja a Tokio.", "r": "Conocimiento", "reward": {"know": 5}},
+    {"id": "social5", "t": "Leyenda social", "d": "Sube un rasgo social a rango 5.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "allsocial", "t": "Persona completa", "d": "Todos tus rasgos sociales en rango 3 o más.", "r": "+$20,000", "reward": {"money": 20000}},
+    {"id": "confidant", "t": "Vínculo máximo", "d": "Lleva a un confidente a rango 10.", "r": "Amabilidad", "reward": {"kind": 8}},
+    {"id": "jail", "t": "Fichado", "d": "Pisa la cárcel.", "r": "Valor", "reward": {"guts": 8}},
+    {"id": "escape", "t": "Prófugo", "d": "Escapa de prisión.", "r": "Valor", "reward": {"guts": 10}},
+    {"id": "clean", "t": "Vida sana", "d": "Llega a los 40 sin adicciones ni antecedentes.", "r": "Salud", "reward": {"health": 10}},
+    {"id": "saint", "t": "Santo", "d": "Llega a 90 de karma.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "villain", "t": "Villano", "d": "Baja tu karma a 10 o menos.", "r": "Valor", "reward": {"guts": 10}},
+    {"id": "hundred", "t": "Centenario", "d": "Vive 100 años.", "r": "Gloria eterna", "reward": {}}
+]
+
+function flag(name: string) {
+    L.flags[name] = true
+}
+
+function has_flag(name: string) {
+    return L.flags[name] == true
+}
+
+function mission_met(id: string) {
+    if id == "grad" { return L.edu >= 3 }
+    if id == "wed" { return L.marriages > 0 }
+    if id == "family" { return L.kids >= 3 }
+    if id == "heart" { return L.partners >= 10 }
+    if id == "trio" { return has_flag("trio") }
+    if id == "kink" { return has_flag("kink") }
+    if id == "career3" { return L.job != null && L.job.career != null && L.job.level >= 2 }
+    if id == "career5" { return L.job != null && L.job.career != null && L.job.level >= 4 }
+    if id == "award" { return has_flag("award") }
+    if id == "famous" { return L.fame >= 80 }
+    if id == "million" { return L.money >= 1000000 }
+    if id == "assets" { return len(L.assets) >= 3 }
+    if id == "tokyo" { return has_flag("tokyo") }
+    if id == "social5" {
+        for k in SOCIAL_KEYS {
+            if rank(k) >= 5 { return true }
+        }
+        return false
+    }
+    if id == "allsocial" {
+        for k in SOCIAL_KEYS {
+            if rank(k) < 3 { return false }
+        }
+        return true
+    }
+    if id == "confidant" {
+        for p in L.people {
+            if p.alive && conf_rank(p) >= 10 { return true }
+        }
+        return false
+    }
+    if id == "jail" { return L.jail_total > 0 }
+    if id == "escape" { return has_flag("escape") }
+    if id == "clean" { return L.age >= 40 && L.alcohol == 0 && L.drugs == 0 && L.record == 0 }
+    if id == "saint" { return L.karma >= 90 }
+    if id == "villain" { return L.karma <= 10 }
+    if id == "hundred" { return L.age >= 100 }
+    return false
+}
+
+// Revisa misiones pendientes y entrega recompensas.
+function check_missions() {
+    if !L.alive && L.age < 100 { return null }
+    for m in MISSIONS {
+        if list_contains(L.done, m.id) { continue }
+        if !mission_met(m.id) { continue }
+        list_push(L.done, m.id)
+        let r = m.reward
+        for key in ["happy", "health", "money"] {
+            if map_has(r, key) { L[key] = L[key] + r[key] }
+        }
+        for key in SOCIAL_KEYS {
+            if map_has(r, key) { gain(key, r[key]) }
+        }
+        clamp_stats()
+        list_push(G.toasts, {"head": "¡MISIÓN CUMPLIDA!", "title": str_upper(m.t), "sub": "Recompensa: " + m.r, "t0": G.t})
+        log_add("Misión cumplida: " + m.t + ".", "x")
+    }
+    return null
+}
+
+function mission_items() {
+    let items = []
+    for m in MISSIONS {
+        let done = list_contains(L.done, m.id)
+        let s = "Recompensa: " + m.r
+        if done { s = "CUMPLIDA" }
+        list_push(items, {"action": "mission:" + m.id, "t": m.t, "s": s, "desc": m.d, "lock": "", "done": done})
+    }
+    return items
+}

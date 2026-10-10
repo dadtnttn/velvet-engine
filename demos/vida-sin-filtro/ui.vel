@@ -174,7 +174,7 @@ function build() {
 function draw_title() {
     let e = ease(prog(G.screen_t0, 0.5))
     svg(-80 + (1.0 - e) * -200, 250, 460, 460, burst_doc(460, 460, 20, HEX_WHITE, HEX_INK, 5, 4))
-    svg(40 + (1.0 - e) * -200, 300, 330, 396, portrait_doc(G.title_look, G.title_gender, 24, "grin"))
+    portrait(40 + (1.0 - e) * -200, 300, 330, 396, G.title_look, G.title_gender, 24, "grin", 3, false)
 
     let logo = ransom_doc(["V", "I", "D", "A", " ", "S", "I", "N", " ", "F", "I", "L", "T", "R", "O"], 84, 3)
     svg(W / 2 - logo.w / 2, 40 - (1.0 - e) * 120, logo.w, logo.h, logo.doc)
@@ -222,66 +222,94 @@ function menu_word(x: any, y: any, w: int, h: int, lbl: string, action: string, 
 function draw_create() {
     let c = G.cre
     svg(-60, 120, 520, 520, burst_doc(520, 520, 22, HEX_WHITE, HEX_INK, 5, 7))
-    svg(40, 150, 360, 432, portrait_doc(c.look, c.gender, 22, "grin"))
+    portrait(40, 150, 360, 432, c.look, c.gender, 22, "grin", 1, true)
     svg(10, -8, 620, 130, tilt_title_doc("CREA TU VIDA", 620, 130, 76, HEX_WHITE, HEX_INK))
 
     panel(462, 96, 790, 590, 24)
+    let pages = ["IDENTIDAD", "ESTILO", "PERSONALIDAD"]
+    let i = 0
+    while i < 3 {
+        let action = "cre:page:" + str(i)
+        let fill = HEX_INK
+        let color = C_WHITE
+        if i == c.page {
+            fill = HEX_WHITE
+            color = C_INK
+        } else if hovered(action) {
+            fill = HEX_RED
+        }
+        svg(500 + i * 196, 112, 196, 44, slant_doc(188, 40, 12, fill, HEX_WHITE, 2, HEX_RED, 4))
+        ctext(500 + i * 196 + 94, 140, str(i + 1) + " · " + pages[i], 17, color, "impact")
+        hot(500 + i * 196, 112, 188, 40, action)
+        i += 1
+    }
     let x0 = 510
-    let y = 140
-    create_label(x0, y, "NOMBRE")
-    let name = str_join(c.chars, "")
-    rect(x0 + 170, y - 26, 330, 38, C_WHITE)
-    let shown = name
-    if shown == "" { shown = "(al azar)" }
-    let cursor = ""
-    if floor(G.t * 2.0) % 2 == 0 { cursor = "|" }
-    text(x0 + 182, y + 2, shown + cursor, 20, C_INK, "bold")
-    small_button(x0 + 516, y - 26, 120, 38, "AZAR", "cre:name")
-    text(x0 + 170, y + 30, "Escribe con el teclado · Retroceso para borrar", 12, C_GRAY, "ui")
-
-    y += 64
-    create_label(x0, y, "SEXO")
-    toggle(x0 + 170, y - 26, 150, "HOMBRE", "cre:gender:m", c.gender == "m")
-    toggle(x0 + 330, y - 26, 150, "MUJER", "cre:gender:f", c.gender == "f")
-
-    y += 50
-    create_label(x0, y, "LE ATRAEN")
-    toggle(x0 + 170, y - 26, 150, "MUJERES", "cre:likes:f", c.likes == "f")
-    toggle(x0 + 330, y - 26, 150, "HOMBRES", "cre:likes:m", c.likes == "m")
-    toggle(x0 + 490, y - 26, 150, "AMBOS", "cre:likes:ambos", c.likes == "ambos")
-
-    y += 50
-    create_label(x0, y, "PIEL")
-    swatches(x0 + 170, y - 8, SKINS, c.look.skin, "cre:skin:")
-
-    y += 46
-    create_label(x0, y, "PEINADO")
-    stepper(x0 + 170, y - 26, HAIR_STYLES[c.look.hair], "cre:hair")
-
-    y += 46
-    create_label(x0, y, "PELO")
-    swatches(x0 + 170, y - 8, HAIR_COLORS, c.look.hcolor, "cre:hcolor:")
-
-    y += 46
-    create_label(x0, y, "OJOS")
-    swatches(x0 + 170, y - 8, EYE_COLORS, c.look.eyes, "cre:eyes:")
-
-    y += 46
-    create_label(x0, y, "ROPA")
-    swatches(x0 + 170, y - 8, OUTFITS, c.look.outfit, "cre:outfit:")
-
-    y += 46
-    create_label(x0, y, "ACCESORIO")
-    stepper(x0 + 170, y - 26, ACCESSORIES[c.look.acc], "cre:acc")
-
-    y += 50
-    create_label(x0, y, "PERSONALIDAD")
-    let t = trait_def(c.trait)
-    stepper(x0 + 170, y - 26, str_upper(by_gender(c.gender, t.m, t.f)), "cre:trait")
-    let dy = y + 30
-    for line in wrap(t.desc, chars_for(380, 13)) {
-        text(x0 + 170, dy, line, 13, C_YELLOW, "bold")
-        dy += 18
+    let y = 200
+    if c.page == 0 {
+        create_label(x0, y, "NOMBRE")
+        rect(x0 + 170, y - 26, 330, 38, C_WHITE)
+        let shown = str_join(c.chars, "")
+        if shown == "" { shown = "(al azar)" }
+        let cursor = ""
+        if floor(G.t * 2.0) % 2 == 0 { cursor = "|" }
+        text(x0 + 182, y + 2, shown + cursor, 20, C_INK, "bold")
+        small_button(x0 + 516, y - 26, 120, 38, "AZAR", "cre:name")
+        text(x0 + 170, y + 30, "Escribe con el teclado · Retroceso para borrar", 12, C_GRAY, "ui")
+        y += 70
+        create_label(x0, y, "SEXO")
+        toggle(x0 + 170, y - 26, 150, "HOMBRE", "cre:gender:m", c.gender == "m")
+        toggle(x0 + 330, y - 26, 150, "MUJER", "cre:gender:f", c.gender == "f")
+        y += 60
+        create_label(x0, y, "LE ATRAEN")
+        toggle(x0 + 170, y - 26, 150, "MUJERES", "cre:likes:f", c.likes == "f")
+        toggle(x0 + 330, y - 26, 150, "HOMBRES", "cre:likes:m", c.likes == "m")
+        toggle(x0 + 490, y - 26, 150, "AMBOS", "cre:likes:ambos", c.likes == "ambos")
+        y += 60
+        create_label(x0, y, "PIEL")
+        swatches(x0 + 170, y - 8, SKINS, c.look.skin, "cre:skin:")
+        y += 60
+        create_label(x0, y, "CARA")
+        stepper(x0 + 170, y - 26, FACES[c.look.face], "cre:face")
+        y += 60
+        create_label(x0, y, "CUERPO")
+        stepper(x0 + 170, y - 26, BODIES[c.look.body], "cre:body")
+    } else if c.page == 1 {
+        create_label(x0, y, "PEINADO")
+        stepper(x0 + 170, y - 26, HAIR_STYLES[c.look.hair], "cre:hair")
+        y += 58
+        create_label(x0, y, "PELO")
+        swatches(x0 + 170, y - 8, HAIR_COLORS, c.look.hcolor, "cre:hcolor:")
+        y += 58
+        create_label(x0, y, "OJOS")
+        swatches(x0 + 170, y - 8, EYE_COLORS, c.look.eyes, "cre:eyes:")
+        y += 58
+        create_label(x0, y, "ROPA")
+        swatches(x0 + 170, y - 8, OUTFITS, c.look.outfit, "cre:outfit:")
+        y += 58
+        create_label(x0, y, "ACCESORIO")
+        stepper(x0 + 170, y - 26, ACCESSORIES[c.look.acc], "cre:acc")
+        y += 58
+        create_label(x0, y, "MARCAS")
+        stepper(x0 + 170, y - 26, MARKS[c.look.mark], "cre:mark")
+        y += 58
+        create_label(x0, y, "LABIOS")
+        stepper(x0 + 170, y - 26, LIPS[c.look.lips], "cre:lips")
+    } else {
+        create_label(x0, y, "PERSONALIDAD")
+        let t = trait_def(c.trait)
+        stepper(x0 + 170, y - 26, str_upper(by_gender(c.gender, t.m, t.f)), "cre:trait")
+        text(x0 + 170, y + 30, clip_text(t.desc, 540, 14), 14, C_YELLOW, "bold")
+        y += 72
+        create_label(x0, y, "GUSTOS +18")
+        text(x0 + 170, y - 4, "Elige hasta " + str(MAX_KINKS) + ". Se revelan al cumplir 18.", 14, C_GRAY, "bold")
+        let k = 0
+        while k < len(KINKS) {
+            let kk = KINKS[k]
+            let col = k % 3
+            let row = k / 3
+            toggle(x0 + col * 230, y + 18 + row * 48, 214, str_upper(by_gender(c.gender, kk.m, kk.f)), "cre:kink:" + kk.id, list_contains(c.tags, kk.id))
+            k += 1
+        }
     }
 
     small_button(1100, 24, 150, 44, "VOLVER", "back")
@@ -368,26 +396,89 @@ function draw_game() {
 }
 
 function draw_card() {
-    svg(18, 64, 360, 360, burst_doc(360, 360, 18, HEX_WHITE, HEX_INK, 4, L.age % 7))
-    svg(58, 82, 280, 336, portrait_doc(L.look, L.gender, L.age, mood_for(L.happy)))
+    svg(18, 52, 360, 360, burst_doc(360, 360, 18, HEX_WHITE, HEX_INK, 4, L.age % 7))
+    portrait(58, 66, 280, 336, L.look, L.gender, L.age, mood_for(L.happy), 0, true)
     svg(16, 16, 378, 60, slant_doc(372, 54, 18, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
     text(44, 52, clip_text(str_upper(L.first + " " + L.last), 310, 22), 22, C_WHITE, "impact")
-    svg(282, 300, 116, 116, burst_doc(116, 116, 14, HEX_RED, HEX_INK, 4, 5))
-    otext(340, 360, str(L.age), 40, C_WHITE, "impact", true)
-    ctext(340, 380, plural(L.age, "AÑO", "AÑOS"), 12, C_WHITE, "bold")
+    svg(282, 282, 116, 116, burst_doc(116, 116, 14, HEX_RED, HEX_INK, 4, 5))
+    otext(340, 342, str(L.age), 40, C_WHITE, "impact", true)
+    ctext(340, 362, plural(L.age, "AÑO", "AÑOS"), 12, C_WHITE, "bold")
 
-    panel(16, 430, 372, 180, 18)
-    tag(40, 444, 190, str_upper(trait_name(L.trait, L.gender)), HEX_RED, C_WHITE)
-    text(238, 463, mood_word(), 14, C_YELLOW, "bold")
-    text(44, 498, "OCUPACIÓN", 11, C_GRAY, "bold")
-    text(44, 520, clip_text(occupation_text(), 320, 17), 17, C_WHITE, "bold")
-    text(44, 552, "DINERO", 11, C_GRAY, "bold")
+    panel(16, 398, 372, 212, 18)
+    tag(40, 410, 190, str_upper(trait_name(L.trait, L.gender)), HEX_RED, C_WHITE)
+    text(238, 429, mood_word(), 14, C_YELLOW, "bold")
+    text(44, 458, "OCUPACIÓN", 11, C_GRAY, "bold")
+    text(44, 479, clip_text(occupation_text(), 320, 16), 16, C_WHITE, "bold")
+    text(44, 504, "DINERO", 11, C_GRAY, "bold")
     let mc = C_YELLOW
     if L.money < 0 { mc = C_BAD }
-    text(44, 580, money_str(L.money), 24, mc, "impact")
-    draw_floats_for("money", 160, 556)
-    text(220, 552, "CIUDAD", 11, C_GRAY, "bold")
-    text(220, 574, clip_text(L.city, 150, 14), 14, C_WHITE, "bold")
+    text(44, 530, money_str(L.money), 22, mc, "impact")
+    draw_floats_for("money", 150, 508)
+    if L.fame > 0 {
+        text(220, 504, "FAMA", 11, C_GRAY, "bold")
+        rect(220, 516, 130, 12, C_GRAY_D)
+        rect(220, 516, 130 * L.fame / 100, 12, C_YELLOW)
+        text(220 + 136, 528, str(L.fame), 13, C_YELLOW, "impact")
+    } else {
+        text(220, 504, "CIUDAD", 11, C_GRAY, "bold")
+        text(220, 526, clip_text(L.city, 150, 14), 14, C_WHITE, "bold")
+    }
+    if L.age >= 18 && len(L.tags) > 0 {
+        text(44, 556, "GUSTOS", 11, C_GRAY, "bold")
+        let tx = 40
+        let ty = 566
+        for t in L.tags {
+            let name = kink_name(t, L.gender)
+            let w = min(170, 24 + len(name) * 8)
+            if tx + w > 380 {
+                tx = 34
+                ty += 24
+            }
+            if ty < 600 {
+                svg(tx, ty, w, 22, slant_doc(w, 22, 7, "#3a0d10", HEX_RED, 2, "", 0))
+                ctext(tx + w / 2, ty + 16, clip_text(name, w - 14, 12), 12, C_PINK, "bold")
+            }
+            tx += w + 4
+        }
+    } else {
+        text(44, 556, "CIUDAD", 11, C_GRAY, "bold")
+        text(44, 578, clip_text(L.city, 300, 14), 14, C_WHITE, "bold")
+    }
+}
+
+// Retrato animado: respira, parpadea y reacciona a lo que pasa (solo el protagonista).
+function portrait(x: any, y: any, w: int, h: int, look: map, gender: string, age: int, mood: string, seed: int, react: bool) {
+    let dx = 0.0
+    let dy = sin(G.t * 2.0 + seed * 1.7) * 2.5
+    let m = mood
+    if mood != "grin" && mood != "dead" && fract((G.t + seed * 0.73) / 3.7) < 0.045 {
+        m = mood + "!b"
+    }
+    let emote = ""
+    let ep = 1.0
+    if react && G.react != null {
+        let p = prog(G.react.t0, 0.9)
+        if p < 1.0 {
+            let k = G.react.kind
+            if k == "b" {
+                dx = sin(G.t * 70.0) * 9.0 * (1.0 - p)
+                emote = "bad"
+            } else {
+                dy = dy - abs(sin(p * 9.42)) * 16.0 * (1.0 - p)
+                emote = "good"
+                if k == "x" { emote = "love" }
+                if k == "m" { emote = "money" }
+                if k == "a" { emote = "angry" }
+            }
+            ep = p
+        }
+    }
+    svg(x + dx, y + dy, w, h, portrait_doc(look, gender, age, m))
+    if emote != "" {
+        fade_push(clamp(1.6 - ep * 1.6, 0.0, 1.0))
+        svg(x + w - 90 + dx, y + 8 - ep * 20.0, 80, 80, emote_doc(emote))
+        fade_pop()
+    }
 }
 
 function mood_word() {
@@ -401,6 +492,7 @@ function mood_word() {
 
 function occupation_text() {
     if L.jail > 0 { return "En prisión" }
+    if L.job != null && L.job.career != null { return career_rank_name() + " · " + L.job.title }
     if L.job != null { return L.job.title }
     if L.uni > 0 { return "Universitari" + oa(L.gender) }
     if L.school == "primaria" { return "Primaria" }
@@ -412,6 +504,15 @@ function occupation_text() {
 function draw_feed(x: int, y: int, w: int, h: int) {
     panel(x, y, w, h, 20)
     tag(x + 30, y + 14, 150, "TU HISTORIA", HEX_RED, C_WHITE)
+    let mission_label = "MISIONES " + str(len(L.done)) + "/" + str(len(MISSIONS))
+    let mfill = HEX_WHITE
+    let mcolor = C_INK
+    if hovered("tab:missions") {
+        mfill = HEX_YELLOW
+    }
+    svg(x + w - 214, y + 10, 190, 34, slant_doc(184, 30, 9, mfill, HEX_INK, 2, HEX_RED, 4))
+    ctext(x + w - 214 + 92, y + 31, mission_label, 15, mcolor, "impact")
+    hot(x + w - 214, y + 10, 184, 30, "tab:missions")
     let line_h = 23
     let top = y + 54
     let visible = (h - 70) / line_h
@@ -619,7 +720,7 @@ function draw_dialog(m: map, choices: list, locks: list, tags: list, prefix: str
     if p != null {
         let px = 20 - (1.0 - e) * 300
         svg(px - 30, 250, 420, 420, burst_doc(420, 420, 18, HEX_WHITE, HEX_INK, 5, p.id % 9))
-        svg(px + 20, 270, 330, 396, portrait_doc(p.look, p.gender, p.age, person_mood(p)))
+        portrait(px + 20, 270, 330, 396, p.look, p.gender, p.age, person_mood(p), p.id, false)
         svg(px + 30, 640, 300, 50, slant_doc(294, 44, 14, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
         text(px + 56, 672, clip_text(str_upper(p.first), 240, 24), 24, C_WHITE, "impact")
     }
@@ -741,6 +842,10 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
             fill = "#1c1c1c"
             color = C_GRAY
         }
+        if it.done == true && !on {
+            fill = "#3a2a00"
+            color = C_YELLOW
+        }
         svg(ix + dx, iy, 526, 52, slant_doc(520, 46, 16, fill, HEX_WHITE, 2, HEX_RED, 6))
         text(ix + dx + 30, iy + 30, clip_text(it.t, 330, 19), 19, color, "impact")
         let sub_color = C_GRAY
@@ -775,7 +880,15 @@ function draw_detail(it: any, kind: string) {
         let p = find_person(it.pid)
         if p != null {
             svg(x + 300, y + 120, 280, 280, burst_doc(280, 280, 16, HEX_RED, HEX_INK, 4, p.id % 7))
-            svg(x + 320, y + 130, 230, 276, portrait_doc(p.look, p.gender, p.age, person_mood(p)))
+            portrait(x + 320, y + 130, 230, 276, p.look, p.gender, p.age, person_mood(p), p.id, false)
+            if p.age >= 18 && L.age >= 18 && p.tags != null {
+                text(x + 46, y + 372, "GUSTOS", 12, C_GRAY, "bold")
+                text(x + 46, y + 394, clip_text(kinks_text(p.tags, p.gender), 260, 15), 15, C_INK, "bold")
+                let shared = shared_kinks(p)
+                if len(shared) > 0 {
+                    text(x + 46, y + 416, "¡Comparten " + str(len(shared)) + " " + plural(len(shared), "gusto", "gustos") + "!", 15, C_RED, "impact")
+                }
+            }
             text(x + 46, y + 60, clip_text(str_upper(p.first), 260, 34), 34, C_INK, "impact")
             text(x + 46, y + 92, rel_label(p) + " · " + str(p.age) + " años", 17, C_RED, "bold")
             text(x + 46, y + 140, "ARCANO", 12, C_GRAY, "bold")
@@ -924,7 +1037,9 @@ function draw_toasts() {
         svg(380, y, 536, 86, slant_doc(526, 76, 24, HEX_INK, HEX_YELLOW, 4, HEX_RED, 8))
         svg(392, y - 4, 90, 90, burst_doc(90, 90, 12, HEX_YELLOW, HEX_INK, 3, 4))
         svg(418, y + 22, 38, 38, arrow_doc("up", HEX_RED))
-        otext(496, y + 32, "¡RANGO ARRIBA!", 18, C_YELLOW, "impact", false)
+        let head = t.head
+        if head == null { head = "¡RANGO ARRIBA!" }
+        otext(496, y + 32, head, 18, C_YELLOW, "impact", false)
         text(496, y + 54, clip_text(t.title, 380, 20), 20, C_WHITE, "impact")
         text(496, y + 71, clip_text(t.sub, 380, 12), 12, C_GRAY, "bold")
         fade_pop()
@@ -941,6 +1056,10 @@ function draw_dead() {
     let e = ease(prog(G.screen_t0, 0.6))
     svg(-40, 140, 460, 460, burst_doc(460, 460, 20, HEX_WHITE, HEX_INK, 5, 1))
     svg(40 - (1.0 - e) * 200, 170, 300, 360, portrait_doc(L.look, L.gender, L.age, "dead"))
+    if L.job != null && L.job.career != null {
+        otext(60, 590, str_upper(career_rank_name()), 26, C_YELLOW, "impact", false)
+        text(60, 614, L.job.title, 15, C_WHITE, "bold")
+    }
     svg(10, -4 - (1.0 - e) * 100, 860, 130, tilt_title_doc("DESCANSE EN PAZ", 860, 130, 72, HEX_WHITE, HEX_INK))
 
     svg(400, 120, 452, 560, slant_doc(440, 548, 22, HEX_WHITE, HEX_INK, 4, HEX_RED, 12))
@@ -963,7 +1082,7 @@ function draw_dead() {
         ["Matrimonios", str(L.marriages) + " · Divorcios " + str(L.divorces)],
         ["Hijos", str(L.kids)],
         ["Años en prisión", str(L.jail_total)],
-        ["Bienes", str(len(L.assets))],
+        ["Misiones", str(len(L.done)) + " / " + str(len(MISSIONS))],
         ["Karma", karma_text()]
     ]
     let ry = ty + 46
