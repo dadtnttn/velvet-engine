@@ -1,0 +1,767 @@
+// @edition 3
+// Catálogo de carreras: más de 120 profesiones en 15 campos, con 5 rangos,
+// especializaciones (muchas con versión +18), dos carreras a la vez y fusiones.
+//
+// Formato de cada carrera:
+//   [id, masculino, femenino, campo, educación, inteligencia, atractivo, sueldo base, banderas, especializaciones]
+// Banderas: a = +18, L = el sueldo depende del atractivo, x = ilegal (riesgo de cárcel),
+//           h = oculta (solo se obtiene por fusión).
+// Especializaciones separadas por "|"; las que terminan en "+18" vuelven la carrera picante.
+
+const CAREER_ROWS = [
+    // ------------------------------------------------ Servicio
+    ["repartidor", "Repartidor de comida", "Repartidora de comida", "Servicio", 0, 0, 0, 12000, "", "Moto exprés|Bicicleta ecológica"],
+    ["cajero", "Cajero de supermercado", "Cajera de supermercado", "Servicio", 0, 0, 0, 14000, "", "Supervisión de cajas|Tienda gourmet"],
+    ["mesero", "Mesero", "Mesera", "Servicio", 0, 0, 0, 16000, "", "Restaurante de lujo|Bar de striptease +18|Banquetes"],
+    ["barista", "Barista", "Barista", "Servicio", 0, 0, 20, 15000, "", "Café de especialidad|Latte art de campeonato"],
+    ["bartender", "Bartender", "Bartender", "Servicio", 0, 0, 30, 19000, "", "Mixología|Bar de ambiente +18|Barra en yates"],
+    ["cocinero", "Cocinero", "Cocinera", "Servicio", 1, 20, 0, 26000, "", "Alta cocina|Repostería erótica +18|Comida callejera"],
+    ["recepcion", "Recepcionista de hotel", "Recepcionista de hotel", "Servicio", 2, 20, 40, 22000, "", "Hotel de lujo|Love hotel +18"],
+    ["sobrecargo", "Sobrecargo", "Sobrecargo", "Servicio", 2, 30, 45, 32000, "", "Jets privados VIP|Vuelos internacionales"],
+    ["chofer", "Chofer de aplicación", "Chofer de aplicación", "Servicio", 0, 0, 0, 17000, "", "Limusinas de lujo|Fiestas en limusina +18"],
+    ["guia", "Guía de turistas", "Guía de turistas", "Servicio", 2, 30, 20, 21000, "", "Tours nocturnos +18|Ecoturismo|Museos"],
+    // ------------------------------------------------ Oficios
+    ["guardia", "Guardia de seguridad", "Guardia de seguridad", "Oficio", 1, 0, 0, 21000, "", "Seguridad de antros|Escolta de eventos"],
+    ["mecanico", "Mecánico", "Mecánica", "Oficio", 1, 20, 0, 24000, "", "Autos de carreras|Tuning"],
+    ["plomero", "Plomero", "Plomera", "Oficio", 1, 15, 0, 26000, "", "Industrial|Visitas a domicilio +18"],
+    ["electricista", "Electricista", "Electricista", "Oficio", 1, 25, 0, 27000, "", "Instalaciones de escenario|Energía solar"],
+    ["carpintero", "Carpintero", "Carpintera", "Oficio", 1, 15, 0, 23000, "", "Muebles de diseño|Mazmorras a medida +18"],
+    ["tatuador", "Tatuador", "Tatuadora", "Oficio", 0, 20, 0, 26000, "", "Realismo|Tatuajes eróticos +18|Tradicional japonés"],
+    ["barbero", "Barbero", "Barbera", "Oficio", 0, 0, 20, 20000, "", "Barbería clásica|Estilismo de famosos"],
+    ["cerrajero", "Cerrajero", "Cerrajera", "Oficio", 1, 20, 0, 22000, "", "Cajas fuertes|Cerraduras inteligentes"],
+    ["jardinero", "Jardinero", "Jardinera", "Oficio", 0, 0, 0, 15000, "", "Paisajismo|Jardinero de mansiones +18"],
+    ["albanil", "Albañil", "Albañil", "Oficio", 0, 0, 0, 18000, "", "Construcción de lujo|Restauración"],
+    // ------------------------------------------------ Oficina
+    ["oficinista", "Oficinista", "Oficinista", "Oficina", 2, 35, 0, 28000, "", "Administración|Logística"],
+    ["contador", "Contador", "Contadora", "Oficina", 3, 55, 0, 42000, "", "Impuestos|Contabilidad de estrellas +18|Auditoría"],
+    ["rrhh", "Reclutador", "Reclutadora", "Oficina", 3, 40, 20, 35000, "", "Cazatalentos|Clima laboral"],
+    ["secretario", "Secretario", "Secretaria", "Oficina", 2, 25, 30, 24000, "", "Asistencia ejecutiva|Secretariado de un magnate"],
+    ["vendedor_autos", "Vendedor de autos", "Vendedora de autos", "Oficina", 2, 30, 35, 30000, "", "Autos de lujo|Motos"],
+    ["inmobiliario", "Agente inmobiliario", "Agente inmobiliaria", "Oficina", 2, 35, 40, 38000, "L", "Mansiones|Propiedades para fiestas +18"],
+    ["community", "Community manager", "Community manager", "Oficina", 2, 30, 0, 27000, "", "Marcas +18|Política|Videojuegos"],
+    ["asistente", "Asistente personal", "Asistente personal", "Oficina", 2, 30, 30, 33000, "", "Asistente de celebridades|Asistente de una estrella +18"],
+    // ------------------------------------------------ Tecnología
+    ["programador", "Programador", "Programadora", "Tecnología", 3, 65, 0, 62000, "", "Videojuegos|Plataformas +18|Ciberseguridad"],
+    ["gamedev", "Desarrollador de videojuegos", "Desarrolladora de videojuegos", "Tecnología", 3, 60, 0, 58000, "", "Juegos para adultos +18|Indie|AAA"],
+    ["hacker_etico", "Hacker ético", "Hacker ética", "Tecnología", 3, 75, 0, 70000, "", "Pentesting|Seguridad de sitios +18"],
+    ["datos", "Científico de datos", "Científica de datos", "Tecnología", 3, 75, 0, 75000, "", "Algoritmos de citas|Finanzas|Algoritmos de sitios +18"],
+    ["ux", "Diseñador UX", "Diseñadora UX", "Tecnología", 3, 50, 0, 50000, "", "Apps de citas|Apps de juguetes +18|Banca"],
+    ["tecnico_it", "Técnico de soporte", "Técnica de soporte", "Tecnología", 2, 35, 0, 30000, "", "Redes|Reparación de juguetes inteligentes +18"],
+    ["sysadmin", "Administrador de sistemas", "Administradora de sistemas", "Tecnología", 3, 55, 0, 45000, "", "Nube|Servidores de streaming +18"],
+    ["ia", "Ingeniero de IA", "Ingeniera de IA", "Tecnología", 3, 85, 0, 90000, "", "Asistentes virtuales|Compañeros virtuales +18|Robótica"],
+    // ------------------------------------------------ Arte
+    ["ilustrador", "Ilustrador", "Ilustradora", "Arte", 0, 30, 0, 30000, "", "Arte erótico +18|Cómic|Concept art"],
+    ["artista3d", "Artista 3D", "Artista 3D", "Arte", 2, 45, 0, 45000, "", "Modelos 3D eróticos +18|Videojuegos|Cine de animación"],
+    ["animador", "Animador", "Animadora", "Arte", 2, 40, 0, 42000, "", "Animación hentai +18|Series infantiles|Anuncios"],
+    ["fotografo", "Fotógrafo", "Fotógrafa", "Arte", 0, 25, 0, 28000, "", "Fotografía boudoir +18|Bodas|Moda"],
+    ["escritor", "Escritor", "Escritora", "Arte", 2, 50, 0, 25000, "", "Novela erótica +18|Thriller|Guiones de cine"],
+    ["pintor", "Pintor", "Pintora", "Arte", 0, 25, 0, 20000, "", "Desnudos artísticos +18|Abstracto|Retratos"],
+    ["escultor", "Escultor", "Escultora", "Arte", 0, 30, 0, 22000, "", "Esculturas sensuales +18|Monumentos"],
+    ["grafico", "Diseñador gráfico", "Diseñadora gráfica", "Arte", 2, 35, 0, 32000, "", "Portadas +18|Branding|Publicidad"],
+    ["historietista", "Historietista", "Historietista", "Arte", 0, 35, 0, 26000, "", "Hentai +18|Superhéroes|Novela gráfica"],
+    ["musico", "Músico", "Música", "Arte", 0, 30, 0, 24000, "", "Música para clubes +18|Rock|Orquesta"],
+    ["cantante", "Cantante", "Cantante", "Arte", 0, 20, 45, 30000, "L", "Cabaret burlesque +18|Pop|Ópera"],
+    ["actor_voz", "Actor de voz", "Actriz de voz", "Arte", 0, 30, 0, 34000, "", "Audio erótico ASMR +18|Doblaje de anime|Videojuegos"],
+    // ------------------------------------------------ Entretenimiento
+    ["actor", "Actor", "Actriz", "Espectáculo", 0, 25, 50, 30000, "L", "Cine erótico de autor +18|Telenovelas|Hollywood"],
+    ["dj", "DJ", "DJ", "Espectáculo", 0, 25, 40, 36000, "", "Fiestas privadas +18|Festivales|Bodas"],
+    ["influencer", "Influencer", "Influencer", "Espectáculo", 0, 10, 50, 20000, "L", "Contenido picante +18|Viajes|Maquillaje"],
+    ["streamer", "Streamer", "Streamer", "Espectáculo", 0, 25, 0, 18000, "", "Streams nocturnos +18|Videojuegos|Charlas"],
+    ["comediante", "Comediante", "Comediante", "Espectáculo", 0, 40, 0, 22000, "", "Humor para adultos +18|Stand-up familiar|Late night"],
+    ["presentador", "Presentador de TV", "Presentadora de TV", "Espectáculo", 2, 50, 55, 60000, "L", "Reality de citas +18|Noticias|Concursos"],
+    ["modelo", "Modelo de pasarela", "Modelo de pasarela", "Espectáculo", 0, 0, 75, 50000, "L", "Desnudo artístico +18|Alta costura|Publicidad"],
+    ["mago", "Mago", "Maga", "Espectáculo", 0, 30, 0, 20000, "", "Magia para despedidas +18|Magia infantil|Las Vegas"],
+    ["bailarin", "Bailarín profesional", "Bailarina profesional", "Espectáculo", 0, 0, 40, 26000, "L", "Burlesque +18|Ballet|Videoclips"],
+    ["youtuber", "Youtuber", "Youtuber", "Espectáculo", 0, 20, 0, 15000, "L", "Bromas para adultos +18|Tutoriales|Vlogs"],
+    // ------------------------------------------------ Salud
+    ["enfermero", "Enfermero", "Enfermera", "Salud", 3, 50, 0, 38000, "", "Urgencias|Clínica de salud sexual +18|Pediatría"],
+    ["medico", "Médico", "Médica", "Salud", 3, 85, 0, 95000, "", "Cirugía|Medicina sexual +18|Urgencias"],
+    ["dentista", "Dentista", "Dentista", "Salud", 3, 70, 0, 80000, "", "Estética dental de famosos|Ortodoncia"],
+    ["psicologo", "Psicólogo", "Psicóloga", "Salud", 3, 60, 0, 55000, "", "Terapia de pareja +18|Clínica|Infancia"],
+    ["fisio", "Fisioterapeuta", "Fisioterapeuta", "Salud", 3, 45, 0, 40000, "", "Deportistas|Rehabilitación"],
+    ["masajista", "Masajista", "Masajista", "Salud", 0, 15, 35, 22000, "L", "Masaje tántrico +18|Deportivo|Spa de lujo"],
+    ["farmaceutico", "Farmacéutico", "Farmacéutica", "Salud", 3, 55, 0, 50000, "", "Farmacia nocturna|Vigorizantes +18"],
+    ["cirujano", "Cirujano plástico", "Cirujana plástica", "Salud", 3, 90, 0, 140000, "", "Cirugía íntima +18|Reconstructiva|Estrellas de cine"],
+    ["veterinario", "Veterinario", "Veterinaria", "Salud", 3, 60, 0, 52000, "", "Exóticos|Mascotas de famosos"],
+    ["paramedico", "Paramédico", "Paramédica", "Salud", 2, 40, 0, 33000, "", "Rescate|Eventos masivos"],
+    ["nutriologo", "Nutriólogo", "Nutrióloga", "Salud", 3, 45, 0, 36000, "", "Fitness|Deportistas"],
+    // ------------------------------------------------ Ley y orden
+    ["policia", "Policía", "Policía", "Ley", 2, 35, 0, 34000, "", "Antivicio +18|Investigación|Tránsito"],
+    ["abogado", "Abogado", "Abogada", "Ley", 3, 75, 0, 75000, "", "Divorcios|Defensa de estrellas +18|Penal"],
+    ["juez", "Juez", "Jueza", "Ley", 3, 85, 0, 120000, "", "Familiar|Penal"],
+    ["detective", "Detective privado", "Detective privada", "Ley", 2, 50, 0, 40000, "", "Infidelidades +18|Fraudes|Desaparecidos"],
+    ["bombero", "Bombero", "Bombera", "Ley", 1, 25, 0, 36000, "", "Rescate|Calendario de bomberos +18"],
+    ["militar", "Militar", "Militar", "Ley", 1, 30, 0, 32000, "", "Fuerzas especiales|Inteligencia"],
+    ["guardaespaldas", "Guardaespaldas", "Guardaespaldas", "Ley", 1, 30, 30, 45000, "", "Celebridades|Estrellas +18 VIP"],
+    // ------------------------------------------------ Ciencia
+    ["biologo", "Biólogo", "Bióloga", "Ciencia", 3, 60, 0, 45000, "", "Genética|Comportamiento sexual animal +18"],
+    ["quimico", "Químico", "Química", "Ciencia", 3, 65, 0, 48000, "", "Fármacos|Lubricantes y juguetes +18|Cosmética"],
+    ["astronomo", "Astrónomo", "Astrónoma", "Ciencia", 3, 75, 0, 60000, "", "Exoplanetas|Divulgación"],
+    ["ingeniero", "Ingeniero", "Ingeniera", "Ciencia", 3, 65, 0, 65000, "", "Robótica|Juguetes inteligentes +18|Aeroespacial"],
+    ["arqueologo", "Arqueólogo", "Arqueóloga", "Ciencia", 3, 55, 0, 40000, "", "Arte erótico antiguo +18|Egipto"],
+    ["investigador", "Investigador médico", "Investigadora médica", "Ciencia", 3, 80, 0, 70000, "", "Sexualidad humana +18|Vacunas"],
+    // ------------------------------------------------ Negocios
+    ["emprendedor", "Emprendedor", "Emprendedora", "Negocios", 0, 40, 0, 20000, "", "Startups|Negocios +18|Franquicias"],
+    ["restaurantero", "Dueño de restaurante", "Dueña de restaurante", "Negocios", 1, 35, 0, 50000, "", "Cocina de autor|Cenas temáticas +18"],
+    ["bar_owner", "Dueño de bar", "Dueña de bar", "Negocios", 0, 30, 0, 45000, "", "Bar de ambiente +18|Cervecería"],
+    ["club_owner", "Dueño de club nocturno", "Dueña de club nocturno", "Negocios", 0, 40, 0, 80000, "", "Club swinger +18|Discoteca de moda"],
+    ["bolsa", "Corredor de bolsa", "Corredora de bolsa", "Negocios", 3, 70, 0, 85000, "", "Criptomonedas|Fondos de inversión"],
+    ["agente_talentos", "Agente de talentos", "Agente de talentos", "Negocios", 2, 45, 0, 50000, "", "Talentos +18|Deportistas|Actores"],
+    ["productor", "Productor musical", "Productora musical", "Negocios", 0, 45, 0, 55000, "", "Reguetón explícito +18|Pop|Bandas sonoras"],
+    ["sexshop", "Dueño de sex shop", "Dueña de sex shop", "Negocios", 0, 30, 0, 40000, "a", "Tienda en línea|Boutique de lujo"],
+    // ------------------------------------------------ Deporte
+    ["futbolista", "Futbolista", "Futbolista", "Deporte", 0, 0, 0, 70000, "", "Selección nacional|Liga europea"],
+    ["boxeador", "Boxeador", "Boxeadora", "Deporte", 0, 0, 0, 40000, "", "Peso pesado|Exhibiciones"],
+    ["mma", "Peleador de MMA", "Peleadora de MMA", "Deporte", 0, 0, 0, 45000, "", "Campeonatos|Peleas clandestinas"],
+    ["entrenador", "Entrenador personal", "Entrenadora personal", "Deporte", 0, 15, 40, 25000, "L", "Modelos fitness +18|Atletas|Rehabilitación"],
+    ["tenista", "Tenista", "Tenista", "Deporte", 0, 20, 0, 60000, "", "Grand Slam|Exhibiciones"],
+    ["yoga", "Instructor de yoga", "Instructora de yoga", "Deporte", 0, 20, 30, 22000, "", "Yoga tántrico +18|Hot yoga|Retiros"],
+    // ------------------------------------------------ Educación
+    ["maestro", "Maestro", "Maestra", "Educación", 3, 45, 0, 30000, "", "Primaria|Secundaria"],
+    ["profesor", "Profesor universitario", "Profesora universitaria", "Educación", 3, 70, 0, 55000, "", "Educación sexual +18|Literatura|Física"],
+    ["tutor", "Tutor privado", "Tutora privada", "Educación", 2, 50, 0, 20000, "", "Idiomas|Exámenes de admisión"],
+    ["bibliotecario", "Bibliotecario", "Bibliotecaria", "Educación", 2, 40, 0, 22000, "", "Archivo histórico|Colección prohibida +18"],
+    ["instructor_manejo", "Instructor de manejo", "Instructora de manejo", "Educación", 1, 20, 0, 21000, "", "Motos|Camiones"],
+    // ------------------------------------------------ Moda y belleza
+    ["estilista", "Estilista", "Estilista", "Moda", 0, 15, 20, 22000, "", "Peinados de pasarela|Estilismo de estrellas +18"],
+    ["maquillador", "Maquillador", "Maquilladora", "Moda", 0, 20, 0, 26000, "", "Maquillaje para cine +18|Novias|Efectos especiales"],
+    ["disenador_moda", "Diseñador de moda", "Diseñadora de moda", "Moda", 2, 40, 0, 40000, "", "Lencería +18|Alta costura|Streetwear"],
+    ["manicurista", "Manicurista", "Manicurista", "Moda", 0, 0, 0, 15000, "", "Uñas de autor|Spa"],
+    ["modelo_ri", "Modelo de ropa interior", "Modelo de lencería", "Moda", 0, 0, 80, 45000, "L", "Campañas +18|Catálogos"],
+    ["cosplayer", "Cosplayer profesional", "Cosplayer profesional", "Moda", 0, 20, 45, 20000, "L", "Cosplay sexy +18|Convenciones|Cosplay histórico"],
+    // ------------------------------------------------ +18
+    ["porn", "Actor de cine para adultos", "Actriz de cine para adultos", "+18", 0, 0, 50, 15000, "aL", "Escenas temáticas|Cine de autor|Parejas reales"],
+    ["stripper", "Bailarín exótico", "Bailarina exótica", "+18", 0, 0, 55, 20000, "aL", "Pole dance acrobático|Shows temáticos"],
+    ["escort", "Escort", "Escort", "+18", 0, 0, 50, 25000, "aL", "Clientes VIP|Viajes de lujo"],
+    ["cam", "Creador de contenido +18", "Creadora de contenido +18", "+18", 0, 0, 40, 8000, "aL", "Contenido en pareja|Cosplay picante|ASMR"],
+    ["gogo", "Gogó de discoteca", "Gogó de discoteca", "+18", 0, 0, 45, 22000, "aL", "Festivales|Fiestas privadas"],
+    ["dominatrix", "Dominador profesional", "Dominatrix profesional", "+18", 0, 35, 40, 50000, "aL", "Mazmorra propia|Clientela VIP"],
+    ["masaje_erotico", "Masajista erótico", "Masajista erótica", "+18", 0, 15, 45, 35000, "aL", "Tantra|Parejas"],
+    ["narrador", "Narrador de audio erótico", "Narradora de audio erótico", "+18", 0, 30, 0, 26000, "a", "ASMR|Audiolibros"],
+    ["modelo_revista", "Modelo de revista para adultos", "Modelo de revista para adultos", "+18", 0, 0, 65, 40000, "aL", "Portadas|Calendarios"],
+    ["teatro_erotico", "Actor de teatro erótico", "Actriz de teatro erótico", "+18", 0, 25, 45, 30000, "aL", "Cabaret|Gira internacional"],
+    ["probador", "Probador de juguetes sexuales", "Probadora de juguetes sexuales", "+18", 0, 20, 0, 28000, "a", "Reseñas en video|Control de calidad"],
+    ["sugar", "Sugar baby profesional", "Sugar baby profesional", "+18", 0, 20, 60, 35000, "aL", "Millonarios|Viajes de lujo"],
+    ["anfitrion", "Anfitrión de club swinger", "Anfitriona de club swinger", "+18", 0, 30, 35, 45000, "a", "Noches temáticas|Cruceros"],
+    // ------------------------------------------------ Calle (ilegal)
+    ["dealer", "Dealer", "Dealer", "Calle", 0, 0, 0, 30000, "x", "Fiestas VIP|Barrio"],
+    ["ladron", "Ladrón de guante blanco", "Ladrona de guante blanco", "Calle", 0, 50, 30, 40000, "x", "Joyas|Arte"],
+    ["hacker_negro", "Hacker criminal", "Hacker criminal", "Calle", 0, 70, 0, 60000, "x", "Bancos|Filtraciones de famosos +18"],
+    ["contrabandista", "Contrabandista", "Contrabandista", "Calle", 0, 30, 0, 45000, "x", "Licores|Arte robado"],
+    ["prestamista", "Prestamista", "Prestamista", "Calle", 0, 35, 0, 35000, "x", "Casinos|Barrio"],
+    ["falsificador", "Falsificador", "Falsificadora", "Calle", 0, 55, 0, 38000, "x", "Billetes|Pasaportes"],
+    // ------------------------------------------------ Fusiones (solo combinando dos carreras)
+    ["f_gamedev18", "Desarrollador de juegos para adultos", "Desarrolladora de juegos para adultos", "Fusión", 0, 0, 0, 90000, "ah", "Novelas visuales|Juegos 3D en realidad virtual"],
+    ["f_visualnovel", "Creador de novelas visuales eróticas", "Creadora de novelas visuales eróticas", "Fusión", 0, 0, 0, 70000, "ah", "Romance|Harem"],
+    ["f_mangaka", "Mangaka erótico", "Mangaka erótica", "Fusión", 0, 0, 0, 65000, "ah", "Hentai de culto|Doujinshi"],
+    ["f_hentai", "Director de animación hentai", "Directora de animación hentai", "Fusión", 0, 0, 0, 85000, "ah", "Series|Películas"],
+    ["f_boudoir", "Dueño de agencia boudoir", "Dueña de agencia boudoir", "Fusión", 0, 0, 0, 75000, "ah", "Revistas|Calendarios"],
+    ["f_director18", "Director de cine para adultos", "Directora de cine para adultos", "Fusión", 0, 0, 0, 120000, "ah", "Cine de autor|Superproducciones"],
+    ["f_stripclub", "Dueño de club de striptease", "Dueña de club de striptease", "Fusión", 0, 0, 0, 110000, "ah", "Cadena de clubes|Club VIP"],
+    ["f_platform", "Fundador de plataforma +18", "Fundadora de plataforma +18", "Fusión", 0, 0, 0, 160000, "ah", "Suscripciones|Transmisiones en vivo"],
+    ["f_sexologo", "Sexólogo clínico", "Sexóloga clínica", "Fusión", 0, 0, 0, 100000, "h", "Terapia de pareja|Televisión"],
+    ["f_lenceria", "Diseñador de lencería de lujo", "Diseñadora de lencería de lujo", "Fusión", 0, 0, 0, 95000, "ah", "Pasarelas|Tiendas propias"],
+    ["f_juguetes", "Fabricante de juguetes eróticos", "Fabricante de juguetes eróticos", "Fusión", 0, 0, 0, 130000, "ah", "Juguetes inteligentes|Línea de lujo"],
+    ["f_audiolibros", "Narrador de audiolibros eróticos", "Narradora de audiolibros eróticos", "Fusión", 0, 0, 0, 60000, "ah", "Podcast|Plataforma propia"],
+    ["f_burlesque", "Estrella de cabaret burlesque", "Estrella de cabaret burlesque", "Fusión", 0, 0, 0, 70000, "ah", "Gira mundial|Las Vegas"],
+    ["f_promotor", "Promotor de fiestas privadas", "Promotora de fiestas privadas", "Fusión", 0, 0, 0, 90000, "ah", "Fiestas en yates|Festivales"],
+    ["f_tatuador_culto", "Tatuador de culto", "Tatuadora de culto", "Fusión", 0, 0, 0, 60000, "h", "Convenciones|Estudio propio"],
+    ["f_bar_tematico", "Dueño de bar temático", "Dueña de bar temático", "Fusión", 0, 0, 0, 70000, "h", "Bar de anime|Bar de terror"],
+    ["f_hacker_elite", "Hacker de élite", "Hacker de élite", "Fusión", 0, 0, 0, 150000, "h", "Gobiernos|Filtraciones"],
+    ["f_abogado_estrellas", "Abogado de las estrellas +18", "Abogada de las estrellas +18", "Fusión", 0, 0, 0, 140000, "ah", "Contratos|Escándalos"],
+    ["f_celebridad", "Celebridad global", "Celebridad global", "Fusión", 0, 0, 0, 200000, "h", "Marcas propias|Cine"],
+    ["f_fitness18", "Influencer fitness +18", "Influencer fitness +18", "Fusión", 0, 0, 0, 80000, "ah", "Rutinas en pareja|Suplementos"],
+    ["f_tantra", "Terapeuta tántrico", "Terapeuta tántrica", "Fusión", 0, 0, 0, 70000, "ah", "Retiros|Parejas"],
+    ["f_bdsm_terapia", "Terapeuta especialista en BDSM", "Terapeuta especialista en BDSM", "Fusión", 0, 0, 0, 90000, "ah", "Talleres|Libros"],
+    ["f_inspector", "Inspector de élite", "Inspectora de élite", "Fusión", 0, 0, 0, 90000, "h", "Crimen organizado|Antivicio"],
+    ["f_magnate", "Magnate", "Magnate", "Fusión", 0, 0, 0, 250000, "h", "Imperio inmobiliario|Imperio del entretenimiento"]
+]
+
+// Dos carreras en rango 3 o más que se combinan en una nueva.
+const FUSIONS = [
+    ["programador", "artista3d", "f_gamedev18"],
+    ["gamedev", "artista3d", "f_gamedev18"],
+    ["gamedev", "ilustrador", "f_visualnovel"],
+    ["programador", "ilustrador", "f_visualnovel"],
+    ["ilustrador", "escritor", "f_mangaka"],
+    ["historietista", "escritor", "f_mangaka"],
+    ["animador", "actor_voz", "f_hentai"],
+    ["animador", "historietista", "f_hentai"],
+    ["fotografo", "modelo_ri", "f_boudoir"],
+    ["fotografo", "modelo_revista", "f_boudoir"],
+    ["porn", "actor", "f_director18"],
+    ["porn", "fotografo", "f_director18"],
+    ["stripper", "bar_owner", "f_stripclub"],
+    ["stripper", "club_owner", "f_stripclub"],
+    ["programador", "cam", "f_platform"],
+    ["emprendedor", "cam", "f_platform"],
+    ["medico", "psicologo", "f_sexologo"],
+    ["enfermero", "psicologo", "f_sexologo"],
+    ["disenador_moda", "modelo_ri", "f_lenceria"],
+    ["disenador_moda", "modelo", "f_lenceria"],
+    ["quimico", "sexshop", "f_juguetes"],
+    ["ingeniero", "probador", "f_juguetes"],
+    ["escritor", "actor_voz", "f_audiolibros"],
+    ["narrador", "escritor", "f_audiolibros"],
+    ["cantante", "stripper", "f_burlesque"],
+    ["bailarin", "cantante", "f_burlesque"],
+    ["dj", "emprendedor", "f_promotor"],
+    ["dj", "club_owner", "f_promotor"],
+    ["tatuador", "ilustrador", "f_tatuador_culto"],
+    ["cocinero", "bartender", "f_bar_tematico"],
+    ["hacker_etico", "hacker_negro", "f_hacker_elite"],
+    ["abogado", "escort", "f_abogado_estrellas"],
+    ["abogado", "porn", "f_abogado_estrellas"],
+    ["influencer", "modelo", "f_celebridad"],
+    ["actor", "cantante", "f_celebridad"],
+    ["entrenador", "cam", "f_fitness18"],
+    ["masajista", "yoga", "f_tantra"],
+    ["masaje_erotico", "yoga", "f_tantra"],
+    ["dominatrix", "psicologo", "f_bdsm_terapia"],
+    ["detective", "policia", "f_inspector"],
+    ["bolsa", "emprendedor", "f_magnate"],
+    ["bolsa", "inmobiliario", "f_magnate"]
+]
+
+const FIELD_ORDER = ["Servicio", "Oficio", "Oficina", "Tecnología", "Arte", "Espectáculo", "Salud", "Ley", "Ciencia", "Negocios", "Deporte", "Educación", "Moda", "+18", "Calle"]
+
+const FIELD_RANKS = {
+    "Servicio": ["Aprendiz", "Turno fijo", "Mano derecha", "Jefatura", "Leyenda del oficio"],
+    "Oficio": ["Aprendiz", "Oficial", "Maestría", "Taller propio", "Leyenda del oficio"],
+    "Oficina": ["Practicante", "Junior", "Senior", "Gerencia", "Dirección general"],
+    "Tecnología": ["Junior", "Semi senior", "Senior", "Arquitectura", "Leyenda tech"],
+    "Arte": ["Principiante", "Promesa", "Talento", "Firma de culto", "Ícono"],
+    "Espectáculo": ["Extra", "Secundario", "Protagónico", "Estrellato", "Leyenda"],
+    "Salud": ["Residente", "Titular", "Especialidad", "Jefatura", "Eminencia"],
+    "Ley": ["Recluta", "Titular", "Veteranía", "Mando", "Leyenda"],
+    "Ciencia": ["Beca", "Investigación", "Doctorado", "Cátedra", "Premio internacional"],
+    "Negocios": ["Emprendimiento", "Pyme", "Empresa", "Corporación", "Imperio"],
+    "Deporte": ["Amateur", "Semiprofesional", "Profesional", "Élite", "Leyenda"],
+    "Educación": ["Suplencia", "Titular", "Coordinación", "Dirección", "Eminencia"],
+    "Moda": ["Asistente", "Profesional", "Firma propia", "Tendencia", "Ícono"],
+    "+18": ["Debut", "Promesa", "Estrella en ascenso", "Estrella", "Leyenda +18"],
+    "Calle": ["Novato de la calle", "Respeto", "Lugarteniente", "Capo", "Leyenda del bajo mundo"],
+    "Fusión": ["Visión", "Estudio propio", "Marca", "Imperio creativo", "Leyenda"]
+}
+
+const RANK_OVERRIDE = {
+    "porn": ["Amateur", "Promesa", "Estrella en ascenso", "Estrella", "Leyenda +18"],
+    "stripper": ["Debut", "Habitual del tubo", "Estrella del escenario", "Cabeza de cartel", "Leyenda del club"],
+    "escort": ["Independiente", "Agencia", "Escort de lujo", "Acompañante VIP", "Agencia propia"],
+    "cam": ["100 fans", "1K fans", "10K fans", "100K fans", "Un millón de fans"]
+}
+
+const XP_TABLE = [0, 100, 300, 650, 1200]
+const PAY_MULT = [100, 160, 250, 400, 650]
+
+// Acciones genéricas por campo. Las carreras con acciones propias usan CAREER_ACTIONS.
+const FIELD_ACTIONS = {
+    "Servicio": [
+        {"id": "shift", "t": "Turno extra", "s": "Dinero, experiencia", "desc": "Más horas, más propinas y más dolor de pies.", "o": [
+            {"w": 80, "log": "Un turno larguísimo, pero las propinas valieron la pena.", "money": [300, 1500], "xp": 20, "health": -1},
+            {"w": 20, "log": "Un cliente te gritó por algo que no era tu culpa.", "xp": 15, "happy": -5, "kind": 2}
+        ]},
+        {"id": "smile", "t": "Atender con encanto", "s": "Encanto, propinas", "desc": "Sonríe, coquetea un poco y deja que fluyan las propinas.", "o": [
+            {"w": 75, "log": "Tus clientes se van felices y tu frasco de propinas también.", "money": [500, 2000], "charm": 4, "xp": 15},
+            {"w": 25, "special": "event:bar_pickup"}
+        ]}
+    ],
+    "Oficio": [
+        {"id": "job", "t": "Aceptar un encargo grande", "s": "Dinero, destreza", "desc": "Un trabajo complicado que paga bien si lo haces impecable.", "o": [
+            {"w": 80, "log": "Quedó impecable. El cliente te recomendará con todos.", "money": [1000, 5000], "skill": 4, "xp": 25},
+            {"w": 20, "log": "Te lastimaste con la herramienta.", "health": -8, "xp": 10}
+        ]},
+        {"id": "home", "t": "Visita a domicilio", "s": "Experiencia, sorpresas", "desc": "Llegas, tocas el timbre y nunca sabes qué te espera.", "o": [
+            {"w": 70, "log": "Trabajo rápido y bien pagado.", "money": [500, 2000], "xp": 15},
+            {"w": 30, "log": "Te abrió la puerta {x} en bata y con muchas ganas de conversar...", "special": "hookup", "xp": 10}
+        ]}
+    ],
+    "Oficina": [
+        {"id": "report", "t": "Entregar el informe a tiempo", "s": "Experiencia, conocimiento", "desc": "Hojas de cálculo, café frío y un jefe que nunca lee nada.", "o": [
+            {"w": 80, "log": "Entregaste antes de la fecha. Tu jefe lo notó por primera vez.", "xp": 25, "know": 3},
+            {"w": 20, "log": "Se borró el archivo a las 11:59 p. m.", "xp": 10, "happy": -6}
+        ]},
+        {"id": "office_affair", "t": "Coquetear en la oficina", "s": "Arriesgado", "desc": "La máquina de café es el lugar más peligroso del edificio.", "o": [
+            {"w": 60, "special": "event:coworker"},
+            {"w": 40, "log": "Recursos Humanos te mandó un correo muy serio.", "happy": -5, "xp": -10}
+        ]}
+    ],
+    "Tecnología": [
+        {"id": "ship", "t": "Lanzar un proyecto", "s": "Experiencia, dinero", "desc": "Código, pruebas y un despliegue un viernes a las 6 p. m.", "o": [
+            {"w": 70, "log": "Lanzamiento perfecto. Hasta te felicitaron en el chat de la empresa.", "xp": 35, "money": [2000, 8000], "know": 3},
+            {"w": 30, "log": "Rompiste producción. Nadie durmió esa noche.", "xp": 20, "happy": -8}
+        ]},
+        {"id": "side", "t": "Proyecto paralelo", "s": "Dinero, conocimiento", "desc": "Una idea loca que haces de noche. Podría ser la próxima gran app.", "o": [
+            {"w": 60, "log": "Tu proyecto paralelo ganó usuarios. Te pagan por él.", "money": [3000, 15000], "know": 5, "xp": 20},
+            {"w": 40, "log": "Nadie lo usó, pero aprendiste muchísimo.", "know": 6, "xp": 15}
+        ]}
+    ],
+    "Arte": [
+        {"id": "create", "t": "Crear una obra nueva", "s": "Experiencia, fama", "desc": "Horas de inspiración, café y dudas existenciales.", "o": [
+            {"w": 70, "log": "Tu nueva obra se volvió viral en redes de arte.", "xp": 30, "fame": 5, "money": [1000, 5000], "skill": 3},
+            {"w": 30, "log": "Bloqueo creativo. Rompiste todo y empezaste de cero.", "xp": 10, "happy": -5}
+        ]},
+        {"id": "commission", "t": "Aceptar comisiones", "s": "Dinero", "desc": "Clientes con pedidos... especiales. Muy especiales.", "o": [
+            {"w": 60, "log": "Comisiones normales y bien pagadas.", "money": [1500, 6000], "xp": 20},
+            {"w": 40, "log": "Un cliente pagó {monto} por un encargo subido de tono que no le contarás a tu mamá.", "money": [4000, 12000], "xp": 25, "fame": 3}
+        ]}
+    ],
+    "Espectáculo": [
+        {"id": "show", "t": "Dar un show", "s": "Fama, experiencia", "desc": "Luces, público y nervios en el estómago.", "o": [
+            {"w": 75, "log": "El público enloqueció. Ya te piden autógrafos.", "fame": 6, "xp": 30, "charm": 4, "money": [1000, 5000]},
+            {"w": 25, "log": "Abucheos. No todos los días son buenos.", "xp": 15, "happy": -6, "guts": 3}
+        ]},
+        {"id": "afterparty", "t": "Ir al after party", "s": "Contactos, peligro", "desc": "Famosos, alcohol y decisiones cuestionables.", "o": [
+            {"w": 50, "log": "Hiciste contactos importantes en la industria.", "xp": 25, "fame": 4, "alcohol": 4},
+            {"w": 50, "special": "hookup", "fame": 2}
+        ]}
+    ],
+    "Salud": [
+        {"id": "guard", "t": "Guardia de 24 horas", "s": "Experiencia, salud", "desc": "Café, urgencias y cero horas de sueño.", "o": [
+            {"w": 80, "log": "Salvaste vidas. Te sientes agotad{a} y orgullos{a}.", "xp": 30, "kind": 4, "health": -3},
+            {"w": 20, "log": "Una noche terrible. Necesitas vacaciones.", "xp": 15, "happy": -8}
+        ]},
+        {"id": "private", "t": "Consulta privada", "s": "Dinero", "desc": "Pacientes con dinero y problemas muy íntimos.", "o": [
+            {"w": 100, "log": "Pacientes VIP con consultas muy privadas. Ganaste {monto}.", "money": [3000, 10000], "xp": 20}
+        ]}
+    ],
+    "Ley": [
+        {"id": "case", "t": "Tomar un caso difícil", "s": "Experiencia, valor", "desc": "Un caso que nadie más quiere tocar.", "o": [
+            {"w": 70, "log": "Resolviste el caso. Saliste en las noticias.", "xp": 35, "guts": 4, "fame": 3},
+            {"w": 30, "log": "El caso se complicó y te ganaste enemigos poderosos.", "xp": 15, "happy": -6}
+        ]},
+        {"id": "bribe", "t": "Aceptar un soborno", "s": "Dinero, karma", "desc": "Nadie se enteraría. Probablemente.", "o": [
+            {"w": 65, "log": "Miraste para otro lado. {monto} más rico.", "money": [5000, 20000], "karma": -10},
+            {"w": 35, "log": "Era una trampa de Asuntos Internos.", "jail": 2, "karma": -10, "special": "fired"}
+        ]}
+    ],
+    "Ciencia": [
+        {"id": "paper", "t": "Publicar una investigación", "s": "Conocimiento, fama", "desc": "Años de trabajo en veinte páginas que leerán seis personas.", "o": [
+            {"w": 70, "log": "Tu artículo fue citado por todo el mundo.", "xp": 35, "know": 6, "fame": 3},
+            {"w": 30, "log": "Rechazado por la revista. Otra vez.", "xp": 15, "happy": -5}
+        ]},
+        {"id": "grant", "t": "Pedir una beca", "s": "Dinero", "desc": "Formularios infinitos para conseguir financiamiento.", "o": [
+            {"w": 60, "log": "Te dieron la beca: {monto} para investigar.", "money": [8000, 25000], "xp": 20},
+            {"w": 40, "log": "Sin beca este año.", "xp": 10}
+        ]}
+    ],
+    "Negocios": [
+        {"id": "deal", "t": "Cerrar un trato grande", "s": "Dinero, destreza", "desc": "Trajes caros, apretones de manos y letras pequeñas.", "o": [
+            {"w": 65, "log": "Cerraste el trato del año: {monto}.", "money": [10000, 50000], "xp": 35, "skill": 4},
+            {"w": 35, "log": "El socio se echó para atrás. Perdiste {monto}.", "money": [-15000, -2000], "xp": 15}
+        ]},
+        {"id": "party", "t": "Fiesta para clientes", "s": "Contactos, excesos", "desc": "Champaña, cerrar negocios y quizás algo más.", "o": [
+            {"w": 50, "log": "Tus clientes se divirtieron muchísimo. Contratos asegurados.", "xp": 30, "money": [5000, 15000], "alcohol": 4},
+            {"w": 50, "special": "hookup", "xp": 15}
+        ]}
+    ],
+    "Deporte": [
+        {"id": "train", "t": "Entrenar al límite", "s": "Salud, experiencia", "desc": "Sudor, dolor y gloria.", "o": [
+            {"w": 80, "log": "Estás en la mejor forma de tu vida.", "health": 6, "looks": 3, "xp": 25, "guts": 3},
+            {"w": 20, "log": "Lesión. Tres meses fuera.", "health": -15, "xp": 10}
+        ]},
+        {"id": "match", "t": "Competir", "s": "Fama, dinero", "desc": "El público ruge. Es tu momento.", "o": [
+            {"w": 55, "log": "¡Victoria! Te llevaste {monto} y una ovación.", "money": [5000, 25000], "fame": 6, "xp": 35},
+            {"w": 45, "log": "Derrota dolorosa frente a todos.", "xp": 20, "happy": -8, "health": -4}
+        ]}
+    ],
+    "Educación": [
+        {"id": "teach", "t": "Dar clases con pasión", "s": "Amabilidad, experiencia", "desc": "Inspirar a quien quiera aprender. Y soportar a quien no.", "o": [
+            {"w": 80, "log": "Tus alumnos te adoran. Uno te dijo que le cambiaste la vida.", "xp": 25, "kind": 5},
+            {"w": 20, "log": "Te pusieron un apodo horrible.", "xp": 10, "happy": -4}
+        ]},
+        {"id": "tutoring", "t": "Clases particulares", "s": "Dinero", "desc": "Hijos de millonarios que necesitan aprobar como sea.", "o": [
+            {"w": 100, "log": "Ganaste {monto} con clases particulares.", "money": [1500, 6000], "xp": 15, "know": 2}
+        ]}
+    ],
+    "Moda": [
+        {"id": "collection", "t": "Trabajar en una colección", "s": "Fama, destreza", "desc": "Telas, tijeras y crisis de nervios antes de la pasarela.", "o": [
+            {"w": 70, "log": "Tu trabajo brilló en la semana de la moda.", "xp": 30, "fame": 5, "skill": 3, "money": [2000, 8000]},
+            {"w": 30, "log": "Una influencer criticó tu trabajo. Duele.", "xp": 15, "happy": -6}
+        ]},
+        {"id": "vip_client", "t": "Atender a una celebridad", "s": "Dinero, contactos", "desc": "Una estrella pide tus servicios para esta noche.", "o": [
+            {"w": 70, "log": "La celebridad te etiquetó en redes. Clientes nuevos por cientos.", "money": [3000, 10000], "fame": 4, "xp": 25},
+            {"w": 30, "special": "hookup"}
+        ]}
+    ],
+    "+18": [
+        {"id": "gig", "t": "Trabajo de la noche", "s": "Dinero, experiencia", "desc": "Lo que mejor sabes hacer, con profesionalismo y protección.", "o": [
+            {"w": 75, "log": "Una noche de trabajo excelente. Ganaste {monto}.", "money": [2000, 7000], "xp": 30, "fame": 3, "std": 4},
+            {"w": 25, "log": "Un cliente difícil te arruinó la noche.", "xp": 15, "happy": -8}
+        ]},
+        {"id": "promo18", "t": "Promocionarte en redes", "s": "Fama", "desc": "Fotos provocativas, textos atrevidos y cuentas suspendidas.", "o": [
+            {"w": 80, "log": "Tu publicación se volvió viral. Nuevos fans por miles.", "fame": 8, "xp": 15, "charm": 3},
+            {"w": 20, "log": "Te suspendieron la cuenta por «contenido sensible».", "happy": -5}
+        ]}
+    ],
+    "Calle": [
+        {"id": "hustle", "t": "Hacer un trabajo sucio", "s": "Dinero, riesgo de cárcel", "desc": "Sin preguntas, sin testigos y sin recibo.", "o": [
+            {"w": 60, "log": "Todo salió limpio. Ganaste {monto}.", "money": [3000, 15000], "xp": 30, "karma": -6, "guts": 3},
+            {"w": 25, "log": "Una banda rival te dio una paliza.", "health": -20, "xp": 15},
+            {"w": 15, "log": "La policía te tenía vigilado.", "jail": 3, "special": "fired"}
+        ]},
+        {"id": "launder", "t": "Lavar dinero", "s": "Conocimiento", "desc": "Un negocio fachada y una contabilidad muy creativa.", "o": [
+            {"w": 75, "log": "El dinero salió limpio y reluciente.", "money": [2000, 8000], "know": 3, "xp": 20},
+            {"w": 25, "log": "Hacienda te mandó una carta. Mal momento.", "money": -10000, "happy": -8}
+        ]}
+    ],
+    "Fusión": [
+        {"id": "launch", "t": "Gran lanzamiento", "s": "Fama, mucho dinero", "desc": "Lo que solo tú puedes hacer, combinando todo lo que sabes.", "o": [
+            {"w": 70, "log": "Tu lanzamiento rompió récords: {monto} en una semana.", "money": [20000, 80000], "fame": 10, "xp": 40},
+            {"w": 30, "log": "Lanzamiento tibio. La crítica no entendió tu visión.", "xp": 20, "happy": -6}
+        ]},
+        {"id": "convention", "t": "Ir a una convención", "s": "Contactos, fans", "desc": "Fans, firmas de autógrafos y fiestas privadas.", "o": [
+            {"w": 60, "log": "Firmaste autógrafos durante seis horas. Tus fans te aman.", "fame": 8, "xp": 25, "charm": 3},
+            {"w": 40, "special": "hookup", "fame": 4}
+        ]}
+    ]
+}
+
+state {
+    JOBC: map = {}
+}
+
+// ---------------------------------------------------------------- definiciones
+
+function job_def(id: string) {
+    let cached = JOBC[id]
+    if cached != null { return cached }
+    for r in CAREER_ROWS {
+        if r[0] == id {
+            let flags = r[8]
+            let d = {
+                "id": r[0], "m": r[1], "f": r[2], "field": r[3], "edu": r[4], "smarts": r[5], "looks": r[6],
+                "base": r[7], "adult": str_contains(flags, "a"), "looksy": str_contains(flags, "L"),
+                "illegal": str_contains(flags, "x"), "hidden": str_contains(flags, "h"), "specs": [],
+                "min_age": 18
+            }
+            if r[9] != "" { d.specs = str_split(r[9], "|") }
+            if (d.field == "Servicio" || d.field == "Oficio") && !d.adult { d.min_age = 16 }
+            JOBC[id] = d
+            return d
+        }
+    }
+    return null
+}
+
+function job_title(id: string) {
+    let d = job_def(id)
+    return by_gender(L.gender, d.m, d.f)
+}
+
+function rank_names(id: string) {
+    let o = RANK_OVERRIDE[id]
+    if o != null { return o }
+    return FIELD_RANKS[job_def(id).field]
+}
+
+// Una carrera es +18 si lo es por naturaleza o por su especialización.
+function job_is_adult(job: any) {
+    if job == null { return false }
+    if job_def(job.id).adult { return true }
+    return str_ends_with(job.spec, "+18")
+}
+
+function new_job(id: string) {
+    return {"id": id, "career": id, "title": job_title(id), "level": 0, "xp": 0, "perf": 60, "years": 0, "bonus": 100, "spec": "", "salary": 0, "var": 0}
+}
+
+// Compatibilidad con el código anterior: la carrera principal.
+function career_def(id: string) {
+    return job_def(id)
+}
+
+function career_job() {
+    if L.job == null { return null }
+    return job_def(L.job.id)
+}
+
+function career_rank_name() {
+    if L.job == null { return "" }
+    return rank_names(L.job.id)[L.job.level]
+}
+
+function job_display(job: any) {
+    if job == null { return "" }
+    let out = rank_names(job.id)[job.level] + " · " + job.title
+    if job.spec != "" { out = out + " (" + job.spec + ")" }
+    return out
+}
+
+function pay_of(job: map) {
+    let d = job_def(job.id)
+    let pay = d.base * PAY_MULT[job.level] / 100
+    if d.looksy { pay = pay * (50 + L.looks) / 100 }
+    return pay * job.bonus / 100
+}
+
+function career_pay() {
+    return pay_of(L.job)
+}
+
+// ---------------------------------------------------------------- búsqueda y contratación
+
+function job_reqs_text(d: map) {
+    let parts = []
+    if d.edu == 1 { list_push(parts, "Primaria") }
+    if d.edu == 2 { list_push(parts, "Secundaria") }
+    if d.edu == 3 { list_push(parts, "Universidad") }
+    if d.smarts > 0 { list_push(parts, "Intel. " + str(d.smarts)) }
+    if d.looks > 0 { list_push(parts, "Atractivo " + str(d.looks)) }
+    if len(parts) == 0 { return "Sin requisitos" }
+    return str_join(parts, " · ")
+}
+
+function job_lock(d: map) {
+    if L.age < d.min_age { return "Edad " + str(d.min_age) }
+    if L.job != null && L.job.id == d.id { return "Ya es tu carrera" }
+    if L.job2 != null && L.job2.id == d.id { return "Ya es tu carrera" }
+    if L.edu < d.edu { return EDU_NAMES[d.edu] }
+    if L.smarts < d.smarts { return "Intel. " + str(d.smarts) }
+    if L.looks < d.looks { return "Atractivo " + str(d.looks) }
+    return ""
+}
+
+function job_items_for(field: string) {
+    let items = []
+    for r in CAREER_ROWS {
+        if r[3] != field { continue }
+        let d = job_def(r[0])
+        if d.hidden { continue }
+        let specs = "Especializaciones: " + str_join(d.specs, ", ") + "."
+        if len(d.specs) == 0 { specs = "" }
+        let tag = ""
+        if d.adult { tag = " Carrera +18." }
+        if d.illegal { tag = " Ilegal: riesgo de cárcel." }
+        list_push(items, {
+            "action": "apply:" + d.id,
+            "t": by_gender(L.gender, d.m, d.f),
+            "s": money_str(d.base) + "/año",
+            "desc": "Requisitos: " + job_reqs_text(d) + "." + tag + " Rangos: " + str_join(rank_names(d.id), " › ") + ". " + specs,
+            "lock": job_lock(d)
+        })
+    }
+    return items
+}
+
+function casting_items() {
+    return job_items_for("+18")
+}
+
+// Solicitud: si ya tienes carrera, preguntamos dónde ponerla.
+function apply_job(id: string) {
+    let d = job_def(id)
+    G.modal = null
+    if d == null { return null }
+    if L.jail > 0 { return info("Solicitud", "Desde la cárcel no se puede.") }
+    let lock = job_lock(d)
+    let ok = lock == ""
+    let odds = 70 + rank("charm") * 3
+    if d.adult || d.illegal { odds = 85 }
+    if !((ok && chance(odds)) || (!ok && L.age >= d.min_age && chance(6))) {
+        L.happy -= 3
+        let why = "Eligieron a alguien más."
+        if !ok { why = "No cumples los requisitos (" + lock + ")." }
+        return finish("Solicitud", "No te aceptaron como " + str_lower(by_gender(L.gender, d.m, d.f)) + ". " + why, "b")
+    }
+    if L.job == null {
+        return take_job(id, "main")
+    }
+    let current = L.job.title
+    let labels = ["Como carrera principal (dejas " + current + ")", "Como segunda carrera (media jornada)", "Mejor no"]
+    if L.job2 != null {
+        labels = ["Reemplazar la principal (" + current + ")", "Reemplazar la segunda (" + L.job2.title + ")", "Mejor no"]
+    }
+    open_choice("¡TE ACEPTARON!", "Te ofrecen el puesto de " + str_lower(by_gender(L.gender, d.m, d.f)) + ". ¿Dónde lo pones?", labels, ["", "", ""], "takejob", {"job": id})
+    return null
+}
+
+function resolve_takejob(index: int, ctx: map) {
+    G.modal = null
+    if index == 2 { return finish("Solicitud", "Rechazaste la oferta.", "n") }
+    if index == 0 { return take_job(ctx.job, "main") }
+    return take_job(ctx.job, "second")
+}
+
+function take_job(id: string, slot: string) {
+    let d = job_def(id)
+    let job = new_job(id)
+    if has_trait("ambicion") { job.bonus = 110 }
+    if slot == "main" {
+        if L.job != null { L.last_job = L.job.title }
+        L.job = job
+    } else {
+        L.job2 = job
+    }
+    if d.adult { L.fame = clamp100(L.fame + 5) }
+    list_push(G.toasts, {"head": "¡NUEVA CARRERA!", "title": str_upper(rank_names(id)[0]), "sub": job.title, "t0": G.t})
+    let where = ""
+    if slot == "second" { where = " como segunda carrera" }
+    return finish("Nueva carrera", "¡Ahora eres " + str_lower(job.title) + where + "! Sueldo: " + money_str(pay_of(job)) + " al año.", "g")
+}
+
+// Atajo para eventos que te dan una carrera directamente.
+function start_career(id: string) {
+    let d = job_def(id)
+    if d == null { return null }
+    if L.looks < d.looks {
+        L.happy -= 4
+        return finish("Casting", "No pasaste el casting: buscan a alguien con más atractivo (" + str(d.looks) + "%).", "b")
+    }
+    return apply_job(id)
+}
+
+// ---------------------------------------------------------------- progreso
+
+function job_xp(job: map, amount: int, label: string) {
+    let names = rank_names(job.id)
+    job.xp = max(0, job.xp + amount)
+    while job.level < 4 && job.xp >= XP_TABLE[job.level + 1] {
+        job.level += 1
+        L.happy += 6
+        if job_is_adult(job) { L.fame = clamp100(L.fame + 8) } else { L.fame = clamp100(L.fame + 2) }
+        list_push(G.toasts, {"head": "¡ASCENSO!", "title": str_upper(names[job.level]), "sub": job.title + label + " · rango " + str(job.level + 1) + " de 5", "t0": G.t})
+        log_add("Subiste de rango" + label + ": ahora eres " + names[job.level] + " (" + job.title + ").", "x")
+    }
+    return null
+}
+
+function career_xp(amount: int) {
+    if L.job == null { return null }
+    return job_xp(L.job, amount, "")
+}
+
+// Pago y experiencia de la segunda carrera (media jornada).
+function second_job_year() {
+    if L.job2 == null || L.jail > 0 { return null }
+    L.money += pay_of(L.job2) * 25 / 100
+    job_xp(L.job2, 10 + rank("skill") * 3, " (2.ª carrera)")
+    return null
+}
+
+function fusion_for(a: string, b: string) {
+    for f in FUSIONS {
+        if (f[0] == a && f[1] == b) || (f[0] == b && f[1] == a) { return f[2] }
+    }
+    return ""
+}
+
+// ---------------------------------------------------------------- menú de ocupación
+
+function career_items() {
+    let items = []
+    let d = job_def(L.job.id)
+    let actions = CAREER_ACTIONS[L.job.id]
+    if actions == null { actions = FIELD_ACTIONS[d.field] }
+    for a in actions {
+        let lock = ""
+        if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
+        list_push(items, {"action": "cact:" + a.id, "t": a.t, "s": a.s, "desc": a.desc, "lock": lock})
+    }
+    if job_is_adult(L.job) && CAREER_ACTIONS[L.job.id] == null {
+        list_push(items, {"action": "cact:spec18", "t": "Encargo +18", "s": "Fama, mucho dinero", "desc": "Tu especialidad picante: los clientes pagan muy bien por lo que haces.", "lock": ""})
+    }
+    list_push(items, {"action": "act:work_hard", "t": "Trabajar más duro", "s": "Desempeño " + str(L.job.perf) + "%", "desc": "Horas extra y reconocimiento (quizá). Suma experiencia.", "lock": ""})
+    list_push(items, {"action": "act:raise", "t": "Pedir un aumento", "s": "Sueldo " + money_str(pay_of(L.job)) + "/año", "desc": "Necesitas buen desempeño y algo de valor.", "lock": ""})
+    if L.job.spec == "" && len(d.specs) > 0 {
+        let lock = ""
+        if L.job.level < 2 { lock = "Rango 3" }
+        list_push(items, {"action": "act:specialize", "t": "Especializarte", "s": "+25% de sueldo", "desc": "Elige tu especialidad: " + str_join(d.specs, ", ") + ".", "lock": lock})
+    }
+    if L.job2 != null {
+        let fused = fusion_for(L.job.id, L.job2.id)
+        if fused != "" {
+            let lock = ""
+            if L.job.level < 2 || L.job2.level < 2 { lock = "Ambas en rango 3" }
+            list_push(items, {"action": "act:fuse", "t": "FUSIONAR → " + job_title(fused), "s": "Carrera nueva", "desc": "Combina " + L.job.title + " y " + L.job2.title + " en una sola carrera: " + job_title(fused) + ".", "lock": lock})
+        }
+        list_push(items, {"action": "act:shift2", "t": "Turno en tu 2.ª carrera", "s": job_display(L.job2), "desc": "Dedica tiempo a tu segunda carrera: experiencia y algo de dinero extra.", "lock": ""})
+        list_push(items, {"action": "act:swap", "t": "Hacer principal: " + L.job2.title, "s": job_display(L.job2), "desc": "Intercambia tu carrera principal y la secundaria.", "lock": ""})
+        list_push(items, {"action": "act:quit2", "t": "Dejar la segunda carrera", "s": L.job2.title, "desc": "Menos trabajo, menos dinero.", "lock": ""})
+    }
+    let names = rank_names(L.job.id)
+    let next = "Rango máximo alcanzado."
+    if L.job.level < 4 { next = "Siguiente rango: " + names[L.job.level + 1] + " (" + str(L.job.xp) + "/" + str(XP_TABLE[L.job.level + 1]) + " exp)." }
+    list_push(items, {"action": "act:jobsearch", "t": "Buscar otra carrera", "s": "Catálogo completo", "desc": "Más de 120 carreras. Puedes tener dos a la vez y fusionarlas.", "lock": ""})
+    list_push(items, {"action": "act:quit", "t": "Renunciar", "s": names[L.job.level], "desc": next, "lock": ""})
+    return items
+}
+
+function do_career_act(id: string) {
+    G.modal = null
+    if L.job == null { return null }
+    let d = job_def(L.job.id)
+    let key = "c_" + id
+    let used = L.used[key]
+    if used == null { used = 0 }
+    if used >= 3 { return info("Trabajo", "Ya trabajaste suficiente este año. Descansa.") }
+    if id == "spec18" {
+        L.used[key] = used + 1
+        let o = {"log": "Hiciste un encargo de «" + L.job.spec + "» para un cliente exigente. Pagó {monto}.", "money": [3000, 12000], "xp": 30, "fame": 6, "happy": 4}
+        if L.job.spec == "" { o.log = "Un encargo picante muy bien pagado: {monto}." }
+        let msg = apply(o, {})
+        return finish(L.job.title, msg, "x")
+    }
+    let actions = CAREER_ACTIONS[L.job.id]
+    if actions == null { actions = FIELD_ACTIONS[d.field] }
+    for a in actions {
+        if a.id != id { continue }
+        if a.need != null && rank(a.need) < a.rank {
+            return info(a.t, "Necesitas " + SOCIAL_NAMES[a.need] + " rango " + str(a.rank) + ".")
+        }
+        L.used[key] = used + 1
+        let o = pick_outcome(a.o)
+        let ctx = {}
+        if map_has(o, "log") && str_contains(o.log, "{x}") { ctx["person"] = stranger() }
+        let msg = apply(o, ctx)
+        if d.illegal && chance(6) { msg = msg + go_to_jail(2) }
+        return finish(a.t, msg, outcome_kind(o))
+    }
+    return null
+}
+
+function open_specialize() {
+    let d = job_def(L.job.id)
+    let locks = []
+    for s in d.specs { list_push(locks, "") }
+    let labels = list_slice(d.specs, 0, len(d.specs))
+    list_push(labels, "Todavía no")
+    list_push(locks, "")
+    open_choice("ESPECIALIZACIÓN", "¿En qué quieres especializarte como " + str_lower(L.job.title) + "? Las que dicen +18 vuelven tu carrera picante: más fama y dinero.", labels, locks, "spec", {})
+    return null
+}
+
+function resolve_spec(index: int) {
+    G.modal = null
+    let d = job_def(L.job.id)
+    if index >= len(d.specs) { return finish("Especialización", "Lo pensarás otro año.", "n") }
+    L.job.spec = d.specs[index]
+    L.job.bonus = L.job.bonus + 25
+    flag("spec")
+    if str_ends_with(L.job.spec, "+18") {
+        flag("spec18")
+        L.fame = clamp100(L.fame + 10)
+    }
+    list_push(G.toasts, {"head": "¡ESPECIALIZACIÓN!", "title": str_upper(L.job.spec), "sub": L.job.title, "t0": G.t})
+    return finish("Especialización", "Ahora te especializas en " + L.job.spec + ". Tu sueldo sube un 25%.", "x")
+}
+
+function fuse_jobs() {
+    G.modal = null
+    if L.job == null || L.job2 == null { return null }
+    let fused = fusion_for(L.job.id, L.job2.id)
+    if fused == "" || L.job.level < 2 || L.job2.level < 2 { return info("Fusión", "Necesitas ambas carreras en rango 3.") }
+    let old = L.job.title + " + " + L.job2.title
+    let job = new_job(fused)
+    job.level = 2
+    job.xp = XP_TABLE[2]
+    job.bonus = 120
+    L.last_job = L.job.title
+    L.job = job
+    L.job2 = null
+    L.fame = clamp100(L.fame + 15)
+    L.happy += 10
+    flag("fusion")
+    list_push(G.toasts, {"head": "¡FUSIÓN!", "title": str_upper(job.title), "sub": old, "t0": G.t})
+    return finish("Fusión de carreras", "Combinaste " + old + " en una carrera nueva: " + job.title + ". Empiezas en rango 3 y ganas " + money_str(pay_of(job)) + " al año.", "x")
+}

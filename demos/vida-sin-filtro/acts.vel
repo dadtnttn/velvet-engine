@@ -116,6 +116,34 @@ const ACTIVITIES = [
         {"w": 70, "log": "Te gastaste el sueldo en billetes de $20. No te arrepientes.", "happy": 8, "karma": -1},
         {"w": 30, "log": "Pagaste un baile privado. Las reglas eran estrictas: solo mirar.", "happy": 10, "money": -1000}
     ]},
+    {"id": "sexshop", "tab": "night", "cat": "Placer", "t": "Ir al sex shop", "s": "Juguetes y curiosidad · $400", "min": 18, "cost": 400,
+     "desc": "Pasillos llenos de cosas que no sabías que existían. El vendedor no juzga.", "o": [
+        {"w": 60, "log": "Saliste con una bolsa discreta y una sonrisa nada discreta.", "happy": 8},
+        {"w": 40, "log": "Probaste algo nuevo esa noche y te encantó.", "special": "kink:juguetes", "happy": 10}
+    ]},
+    {"id": "lovehotel", "tab": "night", "cat": "Placer", "t": "Love hotel", "s": "Habitación temática · $800", "min": 18, "cost": 800,
+     "desc": "Camas redondas, espejos en el techo y jacuzzi en forma de corazón.", "o": [
+        {"w": 100, "special": "lovehotel"}
+    ]},
+    {"id": "swinger", "tab": "night", "cat": "Placer", "t": "Club swinger", "s": "Mente abierta · $1,000", "min": 21, "cost": 1000,
+     "desc": "Reglas claras, consentimiento ante todo y una pulsera de color según lo que buscas.", "o": [
+        {"w": 100, "special": "swinger"}
+    ]},
+    {"id": "costume", "tab": "night", "cat": "Placer", "t": "Fiesta de disfraces picantes", "s": "Cosplay y coqueteo · $300", "min": 18, "cost": 300,
+     "desc": "Enfermeras, bomberos, conejitas y algún que otro dinosaurio confundido.", "o": [
+        {"w": 55, "log": "Tu disfraz fue el más comentado de la noche.", "happy": 10, "charm": 4},
+        {"w": 45, "special": "hookup", "happy": 4}
+    ]},
+    {"id": "nudespa", "tab": "night", "cat": "Placer", "t": "Spa nudista", "s": "Relajación sin ropa · $500", "min": 18, "cost": 500,
+     "desc": "Vapor, aceites y absolutamente nada de ropa. Liberador.", "o": [
+        {"w": 70, "log": "Te relajaste como nunca. Te sientes en paz con tu cuerpo.", "happy": 10, "health": 4},
+        {"w": 30, "log": "Descubriste que te encanta que te miren.", "special": "kink:exhib", "happy": 8}
+    ]},
+    {"id": "cruise", "tab": "night", "cat": "Placer", "t": "Crucero para adultos", "s": "Una semana sin límites · $8,000", "min": 21, "cost": 8000,
+     "desc": "Fiestas temáticas cada noche, playas privadas y cero niños a bordo.", "o": [
+        {"w": 50, "log": "La mejor semana de tu vida. No recuerdas la mitad.", "happy": 20, "alcohol": 5},
+        {"w": 50, "special": "hookup", "happy": 12}
+    ]},
     {"id": "weed", "tab": "night", "cat": "Vicios", "t": "Fumar marihuana", "s": "Relajarte · $50", "min": 18, "cost": 50,
      "desc": "Risas, hambre y teorías sobre el universo.", "o": [
         {"w": 80, "log": "Te reíste de un meme durante 40 minutos.", "happy": 6, "drugs": 5, "smarts": -1},
@@ -190,12 +218,14 @@ function menu_title(tab: string) {
     if tab == "rel" { return "VÍNCULOS" }
     if tab == "act" { return "ACTIVIDADES" }
     if tab == "missions" { return "MISIONES" }
+    if tab == "jobs" { return "CARRERAS" }
     return "NOCHE +18"
 }
 
 function menu_cats(tab: string) {
     if tab == "act" { return ["Cuerpo", "Mente", "Lujos"] }
-    if tab == "night" { return ["Fiesta", "Ligue", "Carreras", "Vicios", "Crimen"] }
+    if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
+    if tab == "jobs" { return FIELD_ORDER }
     return []
 }
 
@@ -203,6 +233,7 @@ function menu_items(tab: string, cat: string) {
     if tab == "job" { return job_items() }
     if tab == "rel" { return rel_items() }
     if tab == "missions" { return mission_items() }
+    if tab == "jobs" { return job_items_for(cat) }
     if tab == "night" && cat == "Carreras" { return casting_items() }
     let items = []
     for a in ACTIVITIES {
@@ -245,9 +276,11 @@ function job_items() {
         list_push(items, {"action": "act:escape", "t": "Intentar escapar", "s": "Muy arriesgado", "desc": "Una cuchara, un túnel y mucha paciencia.", "lock": ""})
         return items
     }
-    if L.job != null && L.job.career != null {
+    if L.job != null {
         items = career_items()
-        list_push(items, {"action": "act:jobsearch", "t": "Buscar otro trabajo", "s": "Cambiar de rumbo", "desc": "Quizá sea hora de algo con menos luces.", "lock": ""})
+        if L.uni > 0 {
+            list_push(items, {"action": "act:uni_study", "t": "Estudiar para los finales", "s": "Inteligencia, conocimiento", "desc": "Trabajas y estudias. Heroico.", "lock": ""})
+        }
         return items
     }
     if L.age < 18 && L.school != "" {
@@ -267,12 +300,7 @@ function job_items() {
         }
     }
     if L.age >= 16 {
-        list_push(items, {"action": "act:jobsearch", "t": "Buscar trabajo", "s": "Ver ofertas de empleo", "desc": "Revisa vacantes y prueba suerte en entrevistas.", "lock": ""})
-    }
-    if L.job != null {
-        list_push(items, {"action": "act:work_hard", "t": "Trabajar más duro", "s": "Desempeño " + str(L.job.perf) + "%", "desc": "Horas extra, correos a medianoche y reconocimiento (quizá).", "lock": ""})
-        list_push(items, {"action": "act:raise", "t": "Pedir un aumento", "s": "Sueldo " + money_str(job_pay(L.job)) + "/año", "desc": "Necesitas buen desempeño y algo de valor.", "lock": ""})
-        list_push(items, {"action": "act:quit", "t": "Renunciar", "s": L.job.title, "desc": "Mandar todo al diablo se siente increíble. Por un rato.", "lock": ""})
+        list_push(items, {"action": "act:jobsearch", "t": "Buscar carrera", "s": "Más de 120 carreras", "desc": "Catálogo completo por campos: de mesero a cirujano, de ilustrador a estrella +18. Puedes tener dos carreras y fusionarlas.", "lock": ""})
     }
     return items
 }
@@ -525,13 +553,51 @@ function do_job_act(id: string) {
         return true
     }
     if id == "jobsearch" {
-        open_jobs()
+        G.modal = {"kind": "menu", "tab": "jobs"}
+        G.menu_cat = 0
+        G.menu_page = 0
+        G.menu_t0 = G.t
+        return true
+    }
+    if id == "specialize" {
+        if L.job.level < 2 { info("Especialización", "Necesitas llegar al rango 3."); return true }
+        open_specialize()
+        return true
+    }
+    if id == "fuse" {
+        fuse_jobs()
+        return true
+    }
+    if id == "swap" {
+        let tmp = L.job
+        L.job = L.job2
+        L.job2 = tmp
+        finish("Carreras", "Ahora tu carrera principal es " + L.job.title + ".", "n")
+        return true
+    }
+    if id == "shift2" {
+        let used = L.used["shift2"]
+        if used == null { used = 0 }
+        if used >= 3 { info("Segunda carrera", "Ya le dedicaste suficiente este año."); return true }
+        L.used["shift2"] = used + 1
+        let pay = pay_of(L.job2) * 5 / 100
+        L.money += pay
+        L.health -= 1
+        job_xp(L.job2, 20, " (2.ª carrera)")
+        finish(L.job2.title, "Le dedicaste tiempo a tu segunda carrera. Ganaste " + money_str(pay) + " extra.", "g")
+        return true
+    }
+    if id == "quit2" {
+        let t = L.job2.title
+        L.job2 = null
+        finish("Carreras", "Dejaste tu segunda carrera como " + t + ".", "n")
         return true
     }
     if id == "work_hard" {
         let boost = rint(6, 14)
         if has_trait("ambicion") { boost += 5 }
         L.job.perf = clamp100(L.job.perf + boost)
+        career_xp(15)
         gain("skill", rint(2, 5))
         L.happy -= 2
         L.health -= 1
@@ -542,8 +608,7 @@ function do_job_act(id: string) {
         let odds = 35 + rank("guts") * 6
         if has_trait("ambicion") { odds += 15 }
         if L.job.perf >= 60 && chance(odds) {
-            L.job.salary = L.job.salary * 110 / 100
-            L.job.var = L.job.var * 11 / 10
+            L.job.bonus = L.job.bonus + 10
             gain("guts", 3)
             finish("Trabajo", "¡Te dieron un aumento! Ahora ganas " + money_str(job_pay(L.job)) + " al año.", "g")
         } else {
@@ -599,58 +664,6 @@ function do_job_act(id: string) {
         return true
     }
     return false
-}
-
-function open_jobs() {
-    let pool = []
-    for j in JOBS {
-        if L.age >= j.min_age { list_push(pool, j) }
-    }
-    shuffle(G.rng, pool)
-    let offers = list_slice(pool, 0, min(6, len(pool)))
-    G.modal = {"kind": "jobs", "title": "OFERTAS DE EMPLEO", "offers": offers}
-    G.modal_t0 = G.t
-}
-
-function job_requirements(j: map) {
-    let parts = []
-    if j.edu == 1 { list_push(parts, "Primaria") }
-    if j.edu == 2 { list_push(parts, "Secundaria") }
-    if j.edu == 3 { list_push(parts, "Universidad") }
-    if j.smarts > 0 { list_push(parts, "Intel. " + str(j.smarts)) }
-    if j.looks > 0 { list_push(parts, "Atractivo " + str(j.looks)) }
-    if len(parts) == 0 { return "Sin requisitos" }
-    return str_join(parts, " · ")
-}
-
-function job_salary_text(j: map) {
-    if j.var != null { return "Según tu atractivo" }
-    return money_str(j.salary) + "/año"
-}
-
-function job_ok(j: map) {
-    return L.edu >= j.edu && L.smarts >= j.smarts && L.looks >= j.looks
-}
-
-function hire(index: int) {
-    let j = G.modal.offers[index]
-    G.modal = null
-    let title = by_gender(L.gender, j.m, j.f)
-    let ok = job_ok(j)
-    let odds = 70 + rank("charm") * 3
-    if (ok && chance(odds)) || (!ok && chance(8)) {
-        if L.job != null { L.last_job = L.job.title }
-        let v = 0
-        if j.var != null { v = j.var }
-        let salary = j.salary
-        if has_trait("ambicion") { salary = salary * 110 / 100 }
-        L.job = {"id": j.id, "title": title, "salary": salary, "var": v, "perf": 60, "years": 0}
-        L.happy += 5
-        return finish("Entrevista", "¡Te contrataron como " + title + "! Ganarás " + money_str(job_pay(L.job)) + " al año.", "g")
-    }
-    let why = "Eligieron a alguien más."
-    if !ok { why = "No cumples los requisitos: " + job_requirements(j) + "." }
-    return finish("Entrevista", "No te contrataron como " + title + ". " + why, "b")
 }
 
 // ---------------------------------------------------------------- encuentros
@@ -972,19 +985,55 @@ function special(name: string, ctx: map) {
     }
     if name == "promo" {
         if L.job == null { return "" }
-        L.job.salary = L.job.salary * 115 / 100
+        L.job.bonus = L.job.bonus + 15
         L.job.perf = clamp100(L.job.perf + 10)
         return " Nuevo sueldo: " + money_str(job_pay(L.job)) + " al año."
     }
     if name == "creator" {
-        let c = career_def("cam")
         if L.job != null { L.last_job = L.job.title }
-        L.job = {"id": "cam", "career": "cam", "title": by_gender(L.gender, c.m, c.f), "salary": 0, "var": 0, "perf": 60, "years": 0, "level": 1, "xp": c.xp[1], "bonus": 100}
+        L.job = new_job("cam")
+        L.job.level = 1
+        L.job.xp = XP_TABLE[1]
         L.fame = clamp100(L.fame + 15)
         return " Ahora eres " + str_lower(L.job.title) + "."
     }
+    if str_starts_with(name, "kink:") {
+        let k = str_replace(name, "kink:", "")
+        if has_kink(k) || len(L.tags) >= 5 { return "" }
+        list_push(L.tags, k)
+        return " Descubriste un nuevo gusto: " + kink_name(k, L.gender) + "."
+    }
+    if name == "lovehotel" {
+        let p = partner()
+        if p != null {
+            bond_gain(p, 12)
+            L.happy += 10
+            sex_with(p)
+            return "Una noche en la suite temática con " + p.first + ". Probaron el jacuzzi, el columpio y todo lo demás."
+        }
+        ctx["person"] = stranger()
+        open_hookup(ctx)
+        return ""
+    }
+    if name == "swinger" {
+        let p = partner()
+        if p != null && chance(55) {
+            L.happy += 12
+            L.partners += 1
+            flag("trio")
+            bond_gain(p, 5)
+            return "Fueron con " + p.first + " y la noche fue... educativa. Volvieron más unidos."
+        }
+        if p != null {
+            bond_gain(p, -15)
+            return p.first + " se sintió incómod" + oa(p.gender) + " y se fueron a la media hora."
+        }
+        ctx["person"] = stranger()
+        open_hookup(ctx)
+        return ""
+    }
     if name == "career_raise" {
-        if L.job != null && L.job.career != null { L.job.bonus = L.job.bonus + 15 }
+        if L.job != null { L.job.bonus = L.job.bonus + 15 }
         return " Tus ingresos suben un 15%."
     }
     if name == "kink_scene" {
@@ -1033,5 +1082,7 @@ function dispatch_choice(index: int) {
     if m.handler == "hookup" { return resolve_hookup(index, m.ctx) }
     if m.handler == "date" { return resolve_date(index, m.ctx) }
     if m.handler == "casino" { return resolve_casino(index, m.ctx) }
+    if m.handler == "takejob" { return resolve_takejob(index, m.ctx) }
+    if m.handler == "spec" { return resolve_spec(index) }
     return null
 }

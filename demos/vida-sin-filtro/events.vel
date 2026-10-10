@@ -1056,6 +1056,96 @@ const EVENTS = [
                 {"w": 100, "log": "Preferiste tu sillón."}
             ]}
         ]
+    },
+    {
+        "id": "secret_commission", "title": "Coleccionista anónimo", "min": 18, "max": 80, "w": 6, "req": "field:Arte",
+        "text": "Un coleccionista anónimo te ofrece $30,000 por una obra +18 muy, muy específica.",
+        "choices": [
+            {"t": "Aceptar y darlo todo", "o": [
+                {"w": 80, "log": "Quedó tan bien que el coleccionista te encargó una serie completa.", "money": 30000, "xp": 40, "fame": 4, "flag": "spec18"},
+                {"w": 20, "log": "La obra se filtró en internet con tu firma. Ahora eres famos{a} en ciertos foros.", "money": 30000, "fame": 12, "happy": -4}
+            ]},
+            {"t": "Negociar los derechos", "need": "skill", "rank": 3, "o": [
+                {"w": 100, "log": "Cobraste $30,000 y conservaste los derechos para vender impresiones.", "money": 45000, "xp": 40}
+            ]},
+            {"t": "Rechazar", "o": [
+                {"w": 100, "log": "Le dijiste que no haces ese tipo de arte. Por ahora."}
+            ]}
+        ]
+    },
+    {
+        "id": "adult_game_launch", "title": "Lanzamiento en Vapor", "min": 18, "max": 80, "w": 7, "req": "career:f_gamedev18",
+        "text": "Tu juego para adultos está listo, pero la tienda Vapor amenaza con censurarlo.",
+        "choices": [
+            {"t": "Lanzarlo en tu propia tienda", "need": "know", "rank": 3, "o": [
+                {"w": 100, "log": "Vendiste 200,000 copias sin intermediarios. Ganaste {monto}.", "money": [80000, 200000], "xp": 60, "fame": 15}
+            ]},
+            {"t": "Censurar lo justo y lanzarlo en Vapor", "o": [
+                {"w": 70, "log": "Lanzamiento exitoso con un parche +18 «no oficial». Ganaste {monto}.", "money": [40000, 120000], "xp": 40, "fame": 8},
+                {"w": 30, "log": "Lo vetaron igual. Los foros enloquecieron.", "fame": 10, "happy": -10}
+            ]},
+            {"t": "Hacer una versión «para toda la familia»", "o": [
+                {"w": 100, "log": "Nadie la compró. Tus fans te acusan de traición.", "happy": -8, "fame": -5}
+            ]}
+        ]
+    },
+    {
+        "id": "visual_novel_waifu", "title": "Personaje de culto", "min": 18, "max": 80, "w": 6, "req": "career:f_visualnovel",
+        "text": "Uno de los personajes de tu novela visual se volvió un fenómeno: hay fans que se casan con almohadas con su cara.",
+        "choices": [
+            {"t": "Vender mercancía oficial", "o": [
+                {"w": 100, "log": "Almohadas, figuras y calendarios. Ganaste {monto}.", "money": [30000, 90000], "xp": 30, "fame": 6}
+            ]},
+            {"t": "Hacer una secuela", "need": "skill", "rank": 3, "o": [
+                {"w": 100, "log": "La secuela superó al original. Ya eres leyenda del género.", "xp": 60, "fame": 12, "money": 40000}
+            ]}
+        ]
+    },
+    {
+        "id": "burnout", "title": "Dos carreras, cero vida", "min": 18, "max": 80, "w": 6, "req": "twojobs",
+        "text": "Llevas meses trabajando en dos carreras y tu cuerpo empieza a reclamar.",
+        "choices": [
+            {"t": "Organizarte como profesional", "need": "skill", "rank": 3, "o": [
+                {"w": 100, "log": "Calendario, asistentes y límites claros. Ahora rindes el doble.", "xp": 30, "happy": 6, "skill": 3}
+            ]},
+            {"t": "Aguantar a base de café", "o": [
+                {"w": 60, "log": "Sobreviviste el año. Apenas.", "health": -10, "xp": 20},
+                {"w": 40, "log": "Colapsaste en la calle y terminaste en el hospital.", "health": -25, "money": -5000}
+            ]},
+            {"t": "Tomar vacaciones", "o": [
+                {"w": 100, "log": "Una semana en la playa sin celular. Volviste como nuev{a}.", "happy": 12, "health": 8, "money": -3000}
+            ]}
+        ]
+    },
+    {
+        "id": "studio_visit", "title": "Visita al estudio", "min": 18, "max": 70, "w": 5, "req": "spec18", "person": "near",
+        "text": "{x}, modelo profesional, viene a tu estudio para posar para tu próximo proyecto +18.",
+        "choices": [
+            {"t": "Mantener todo profesional", "o": [
+                {"w": 100, "log": "Sesión impecable. El proyecto quedó espectacular.", "xp": 35, "fame": 5, "skill": 3}
+            ]},
+            {"t": "Dejar que la química haga lo suyo", "o": [
+                {"w": 100, "special": "hookup"}
+            ]},
+            {"t": "Invitarl{xlo} a colaborar", "need": "charm", "rank": 3, "o": [
+                {"w": 100, "log": "{x} se volvió tu musa oficial. Trabajan juntos desde entonces.", "special": "add_friend", "xp": 40, "fame": 8}
+            ]}
+        ]
+    },
+    {
+        "id": "cosplay_shoot", "title": "Sesión de cosplay picante", "min": 18, "max": 50, "w": 4, "req": "career:cosplayer",
+        "text": "Una marca te ofrece $15,000 por una sesión de cosplay «para mayores de 18».",
+        "choices": [
+            {"t": "Aceptar", "kink": "cosplay", "o": [
+                {"w": 100, "log": "Te divertiste como nunca. La sesión se agotó en horas.", "money": 15000, "fame": 10, "happy": 8, "xp": 40}
+            ]},
+            {"t": "Aceptar por el dinero", "o": [
+                {"w": 100, "log": "Buen dinero, poca emoción.", "money": 15000, "fame": 6, "xp": 25}
+            ]},
+            {"t": "Rechazar", "o": [
+                {"w": 100, "log": "Tu cosplay seguirá siendo para todo público."}
+            ]}
+        ]
     }
 ]
 
@@ -1085,9 +1175,15 @@ function meets(tag: string) {
     if tag == "m" { return L.gender == "m" }
     if tag == "villain" { return L.karma < 30 }
     if tag == "famous" { return L.fame >= 40 }
-    if tag == "career" { return L.job != null && L.job.career != null }
-    if tag == "careerrank3" { return L.job != null && L.job.career != null && L.job.level >= 2 }
-    if str_starts_with(tag, "career:") { return L.job != null && L.job.career == str_replace(tag, "career:", "") }
+    if tag == "career" { return job_is_adult(L.job) || job_is_adult(L.job2) }
+    if tag == "careerrank3" { return job_is_adult(L.job) && L.job.level >= 2 }
+    if tag == "twojobs" { return L.job2 != null }
+    if tag == "spec18" { return L.job != null && str_ends_with(L.job.spec, "+18") }
+    if str_starts_with(tag, "career:") {
+        let id = str_replace(tag, "career:", "")
+        return (L.job != null && L.job.id == id) || (L.job2 != null && L.job2.id == id)
+    }
+    if str_starts_with(tag, "field:") { return L.job != null && job_def(L.job.id).field == str_replace(tag, "field:", "") }
     if str_starts_with(tag, "kink:") { return has_kink(str_replace(tag, "kink:", "")) }
     if tag == "uni" { return L.uni > 0 }
     if tag == "addict" { return L.alcohol + L.drugs >= 40 }

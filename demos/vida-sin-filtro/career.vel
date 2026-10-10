@@ -4,26 +4,6 @@
 
 // ---------------------------------------------------------------- carreras +18
 
-// pay: sueldo anual por rango (se ajusta con el atractivo). xp: experiencia para cada rango.
-const CAREERS = [
-    {"id": "porn", "m": "Actor de cine para adultos", "f": "Actriz de cine para adultos", "looks": 50,
-     "ranks": ["Amateur", "Promesa", "Estrella en ascenso", "Estrella", "Leyenda +18"],
-     "pay": [15000, 40000, 90000, 200000, 450000], "xp": [0, 80, 200, 380, 620],
-     "pitch": "Un casting, una cámara y mucha confianza en ti. La fama llega rápido; la reputación familiar, no tanto."},
-    {"id": "stripper", "m": "Bailarín exótico", "f": "Bailarina exótica", "looks": 55,
-     "ranks": ["Debut", "Habitual del tubo", "Estrella del escenario", "Cabeza de cartel", "Leyenda del club"],
-     "pay": [20000, 35000, 60000, 100000, 160000], "xp": [0, 70, 180, 340, 560],
-     "pitch": "Luces, tacones (o botas) y billetes que vuelan. El escenario es tuyo."},
-    {"id": "escort", "m": "Escort", "f": "Escort", "looks": 50,
-     "ranks": ["Independiente", "Agencia", "Escort de lujo", "Acompañante VIP", "Agencia propia"],
-     "pay": [25000, 45000, 90000, 180000, 300000], "xp": [0, 80, 200, 380, 600],
-     "pitch": "Compañía de alto nivel con clientes que pagan bien. Riesgos legales y de salud incluidos."},
-    {"id": "cam", "m": "Creador de contenido +18", "f": "Creadora de contenido +18", "looks": 40,
-     "ranks": ["100 fans", "1K fans", "10K fans", "100K fans", "Un millón de fans"],
-     "pay": [8000, 25000, 70000, 160000, 400000], "xp": [0, 60, 170, 330, 560],
-     "pitch": "Tu cuarto, tu luz de aro y tu público. Tú pones las reglas."}
-]
-
 // Acciones de cada carrera (aparecen en Ocupación). Resultados con xp y fame.
 const CAREER_ACTIONS = {
     "porn": [
@@ -95,109 +75,6 @@ const CAREER_ACTIONS = {
             {"w": 100, "log": "Tus fans se sienten escuchados. Tu comunidad crece.", "fame": 4, "kind": 3, "xp": 10}
         ]}
     ]
-}
-
-function career_def(id: string) {
-    for c in CAREERS {
-        if c.id == id { return c }
-    }
-    return null
-}
-
-function career_job() {
-    if L.job == null || L.job.career == null { return null }
-    return career_def(L.job.career)
-}
-
-function career_rank_name() {
-    let c = career_job()
-    if c == null { return "" }
-    return c.ranks[L.job.level]
-}
-
-function career_pay() {
-    let c = career_def(L.job.career)
-    let base = c.pay[L.job.level] * L.job.bonus / 100
-    return base * (50 + L.looks) / 100
-}
-
-function start_career(id: string) {
-    let c = career_def(id)
-    if c == null { return null }
-    if L.jail > 0 { return info("Casting", "Desde la cárcel no se puede.") }
-    if L.age < 18 { return info("Casting", "Solo para mayores de 18.") }
-    if L.looks < c.looks {
-        L.happy -= 4
-        return finish("Casting", "No pasaste el casting: buscan a alguien con más atractivo (" + str(c.looks) + "%).", "b")
-    }
-    if L.job != null { L.last_job = L.job.title }
-    L.job = {"id": id, "career": id, "title": by_gender(L.gender, c.m, c.f), "salary": 0, "var": 0, "perf": 60, "years": 0, "level": 0, "xp": 0, "bonus": 100}
-    L.fame = clamp100(L.fame + 5)
-    list_push(G.toasts, {"head": "¡NUEVA CARRERA!", "title": str_upper(c.ranks[0]), "sub": by_gender(L.gender, c.m, c.f), "t0": G.t})
-    return finish("Casting", "¡Pasaste el casting! Ahora eres " + str_lower(by_gender(L.gender, c.m, c.f)) + ". " + c.pitch, "x")
-}
-
-// Suma experiencia y sube de rango con notificación.
-function career_xp(amount: int) {
-    let c = career_job()
-    if c == null { return null }
-    L.job.xp = max(0, L.job.xp + amount)
-    while L.job.level < 4 && L.job.xp >= c.xp[L.job.level + 1] {
-        L.job.level += 1
-        L.fame = clamp100(L.fame + 8)
-        L.happy += 6
-        list_push(G.toasts, {"head": "¡ASCENSO!", "title": str_upper(c.ranks[L.job.level]), "sub": by_gender(L.gender, c.m, c.f) + " · rango " + str(L.job.level + 1) + " de 5", "t0": G.t})
-        log_add("Subiste de rango: ahora eres " + c.ranks[L.job.level] + ".", "x")
-    }
-    return null
-}
-
-function career_items() {
-    let items = []
-    let c = career_job()
-    for a in CAREER_ACTIONS[L.job.career] {
-        let lock = ""
-        if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
-        list_push(items, {"action": "cact:" + a.id, "t": a.t, "s": a.s, "desc": a.desc, "lock": lock})
-    }
-    let next = "Rango máximo alcanzado."
-    if L.job.level < 4 { next = "Siguiente rango: " + c.ranks[L.job.level + 1] + " (" + str(L.job.xp) + "/" + str(c.xp[L.job.level + 1]) + " exp)." }
-    list_push(items, {"action": "act:quit", "t": "Retirarte", "s": c.ranks[L.job.level], "desc": "Colgar los tacones para siempre. " + next, "lock": ""})
-    return items
-}
-
-function do_career_act(id: string) {
-    G.modal = null
-    let c = career_job()
-    if c == null { return null }
-    for a in CAREER_ACTIONS[L.job.career] {
-        if a.id != id { continue }
-        if a.need != null && rank(a.need) < a.rank {
-            return info(a.t, "Necesitas " + SOCIAL_NAMES[a.need] + " rango " + str(a.rank) + ".")
-        }
-        let key = "c_" + id
-        let used = L.used[key]
-        if used == null { used = 0 }
-        if used >= 3 { return info(a.t, "Ya trabajaste suficiente este año. Descansa.") }
-        L.used[key] = used + 1
-        let o = pick_outcome(a.o)
-        let msg = apply(o, {})
-        return finish(a.t, msg, outcome_kind(o))
-    }
-    return null
-}
-
-// Opciones de casting en la Noche +18.
-function casting_items() {
-    let items = []
-    let titles = {"porn": "Casting de cine para adultos", "stripper": "Audición de striptease", "escort": "Unirte a una agencia de escorts", "cam": "Abrir cuenta de contenido +18"}
-    for c in CAREERS {
-        let lock = ""
-        if L.looks < c.looks { lock = "Atractivo " + str(c.looks) }
-        if L.job != null && L.job.career == c.id { lock = "Ya es tu carrera" }
-        list_push(items, {"action": "career:" + c.id, "t": titles[c.id], "s": "Rango inicial: " + c.ranks[0], "desc": c.pitch + " Rangos: " + str_join(c.ranks, " › ") + ".", "lock": lock})
-    }
-    return items
 }
 
 // ---------------------------------------------------------------- gustos
@@ -277,6 +154,10 @@ const MISSIONS = [
     {"id": "confidant", "t": "Vínculo máximo", "d": "Lleva a un confidente a rango 10.", "r": "Amabilidad", "reward": {"kind": 8}},
     {"id": "jail", "t": "Fichado", "d": "Pisa la cárcel.", "r": "Valor", "reward": {"guts": 8}},
     {"id": "escape", "t": "Prófugo", "d": "Escapa de prisión.", "r": "Valor", "reward": {"guts": 10}},
+    {"id": "twojobs", "t": "Pluriempleo", "d": "Ten dos carreras al mismo tiempo.", "r": "+$5,000", "reward": {"money": 5000}},
+    {"id": "spec", "t": "Especialista", "d": "Especialízate en una carrera.", "r": "Destreza", "reward": {"skill": 6}},
+    {"id": "spec18", "t": "Arte sin censura", "d": "Elige una especialización +18 en una carrera normal.", "r": "Fama · Felicidad", "reward": {"happy": 8}},
+    {"id": "fusion", "t": "Fusión", "d": "Combina dos carreras en una nueva.", "r": "+$25,000", "reward": {"money": 25000}},
     {"id": "clean", "t": "Vida sana", "d": "Llega a los 40 sin adicciones ni antecedentes.", "r": "Salud", "reward": {"health": 10}},
     {"id": "saint", "t": "Santo", "d": "Llega a 90 de karma.", "r": "Felicidad", "reward": {"happy": 10}},
     {"id": "villain", "t": "Villano", "d": "Baja tu karma a 10 o menos.", "r": "Valor", "reward": {"guts": 10}},
@@ -298,8 +179,12 @@ function mission_met(id: string) {
     if id == "heart" { return L.partners >= 10 }
     if id == "trio" { return has_flag("trio") }
     if id == "kink" { return has_flag("kink") }
-    if id == "career3" { return L.job != null && L.job.career != null && L.job.level >= 2 }
-    if id == "career5" { return L.job != null && L.job.career != null && L.job.level >= 4 }
+    if id == "career3" { return job_is_adult(L.job) && L.job.level >= 2 }
+    if id == "career5" { return job_is_adult(L.job) && L.job.level >= 4 }
+    if id == "twojobs" { return L.job2 != null }
+    if id == "spec" { return has_flag("spec") }
+    if id == "spec18" { return has_flag("spec18") && !job_def(L.job.id).adult }
+    if id == "fusion" { return has_flag("fusion") }
     if id == "award" { return has_flag("award") }
     if id == "famous" { return L.fame >= 80 }
     if id == "million" { return L.money >= 1000000 }

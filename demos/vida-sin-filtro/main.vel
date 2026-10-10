@@ -7,6 +7,7 @@ import "sim.vel"
 import "events.vel"
 import "acts.vel"
 import "career.vel"
+import "jobs.vel"
 import "art.vel"
 import "ui.vel"
 
@@ -157,7 +158,7 @@ function handle_input(input: map) {
         return null
     }
     if pressed(input, "Escape") {
-        if m.kind == "person" { handle_action("tab:rel") } else if m.kind == "jobs" { handle_action("tab:job") } else { handle_action("close") }
+        if m.kind == "person" { handle_action("tab:rel") } else if m.kind == "menu" && m.tab == "jobs" { handle_action("tab:job") } else { handle_action("close") }
     }
     return null
 }
@@ -249,7 +250,7 @@ function handle_action(action: string) {
         return null
     }
     if str_starts_with(action, "cat:") {
-        G.menu_cat = index_of(action, "cat:", 6)
+        G.menu_cat = index_of(action, "cat:", 20)
         G.menu_page = 0
         G.menu_t0 = G.t
         return null
@@ -281,10 +282,8 @@ function handle_action(action: string) {
     }
     if str_starts_with(action, "choice:") {
         dispatch_choice(index_of(action, "choice:", 5))
-    } else if str_starts_with(action, "hire:") {
-        if G.modal != null && G.modal.kind == "jobs" {
-            hire(index_of(action, "hire:", len(G.modal.offers)))
-        }
+    } else if str_starts_with(action, "apply:") {
+        apply_job(str_replace(action, "apply:", ""))
     } else if str_starts_with(action, "act:") {
         do_act(str_replace(action, "act:", ""))
     } else if str_starts_with(action, "buy:") {
