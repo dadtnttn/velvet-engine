@@ -161,7 +161,18 @@ const MISSIONS = [
     {"id": "clean", "t": "Vida sana", "d": "Llega a los 40 sin adicciones ni antecedentes.", "r": "Salud", "reward": {"health": 10}},
     {"id": "saint", "t": "Santo", "d": "Llega a 90 de karma.", "r": "Felicidad", "reward": {"happy": 10}},
     {"id": "villain", "t": "Villano", "d": "Baja tu karma a 10 o menos.", "r": "Valor", "reward": {"guts": 10}},
-    {"id": "hundred", "t": "Centenario", "d": "Vive 100 años.", "r": "Gloria eterna", "reward": {}}
+    {"id": "hundred", "t": "Centenario", "d": "Vive 100 años.", "r": "Gloria eterna", "reward": {}},
+    {"id": "gig", "t": "Primer sueldo", "d": "Consigue una chamba de medio tiempo.", "r": "+$1,000", "reward": {"money": 1000}},
+    {"id": "gigm", "t": "Empleado del mes", "d": "Cumple 5 minimisiones en tus chambas.", "r": "Destreza", "reward": {"skill": 8}},
+    {"id": "mg100", "t": "Turno perfecto", "d": "Saca 100 puntos en un minijuego.", "r": "Felicidad", "reward": {"happy": 8}},
+    {"id": "tecnico", "t": "Manos de oro", "d": "Gradúate de una carrera técnica.", "r": "Destreza", "reward": {"skill": 6}},
+    {"id": "honors", "t": "Cum laude", "d": "Gradúate con promedio de 90 o más.", "r": "+$10,000", "reward": {"money": 10000}},
+    {"id": "beca", "t": "Beca completa", "d": "Consigue una beca completa.", "r": "Conocimiento", "reward": {"know": 6}},
+    {"id": "parents_pay", "t": "Cuchara de plata", "d": "Convence a tus padres de pagarte la carrera.", "r": "Encanto", "reward": {"charm": 4}},
+    {"id": "amateur", "t": "Talento natural", "d": "Entra a una carrera como amateur pasando una audición.", "r": "Valor", "reward": {"guts": 6}},
+    {"id": "pro", "t": "De amateur a pro", "d": "Deja de ser amateur en una carrera.", "r": "+$8,000", "reward": {"money": 8000}},
+    {"id": "livein", "t": "Bajo el mismo techo", "d": "Vive con tu pareja.", "r": "Felicidad", "reward": {"happy": 6}},
+    {"id": "open", "t": "Amor libre", "d": "Acuerda una relación abierta.", "r": "Encanto", "reward": {"charm": 5}}
 ]
 
 function flag(name: string) {
@@ -214,6 +225,14 @@ function mission_met(id: string) {
     if id == "saint" { return L.karma >= 90 }
     if id == "villain" { return L.karma <= 10 }
     if id == "hundred" { return L.age >= 100 }
+    if id == "gigm" { return L.gig_done >= 5 }
+    if id == "tecnico" {
+        for d in L.degrees {
+            if degree_def(d).type == "tec" { return true }
+        }
+        return false
+    }
+    if has_flag(id) { return true }
     return false
 }
 

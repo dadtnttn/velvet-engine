@@ -1,0 +1,540 @@
+// @edition 3
+// Minijuegos: bartender, memoria, cambio de caja, precisión, flechas, mecanografía y examen.
+// Cada minijuego da un puntaje de 0 a 100 que usan los trabajos, audiciones y exámenes.
+
+const MG_INFO = {
+    "bar": {"title": "BARTENDER", "help": "Prepara cada trago: elige sus 3 ingredientes antes de que se acabe el tiempo. Teclas 1-6 o clic.", "rounds": 5, "limit": 9.0},
+    "memory": {"title": "MEMORIA", "help": "Memoriza el pedido. Cuando desaparezca, elige los 4 platillos correctos. Teclas 1-8 o clic.", "rounds": 3, "limit": 10.0},
+    "math": {"title": "CAMBIO EXACTO", "help": "Calcula el cambio que hay que devolver al cliente. Teclas 1-4 o clic.", "rounds": 6, "limit": 7.0},
+    "timing": {"title": "PRECISIÓN", "help": "Presiona ESPACIO (o el botón) cuando el marcador esté en la zona verde.", "rounds": 5, "limit": 4.0},
+    "arrows": {"title": "RITMO", "help": "Repite la secuencia de flechas con el teclado o con los botones.", "rounds": 4, "limit": 7.0},
+    "typing": {"title": "TECLEO RÁPIDO", "help": "Escribe la palabra que aparece en pantalla, sin errores.", "rounds": 5, "limit": 7.0},
+    "quiz": {"title": "EXAMEN", "help": "Responde las preguntas antes de que se acabe el tiempo. Teclas 1-4 o clic.", "rounds": 5, "limit": 12.0}
+}
+
+const DRINKS = [
+    {"n": "Mojito", "ing": ["Ron", "Menta", "Limón"]},
+    {"n": "Margarita", "ing": ["Tequila", "Limón", "Sal"]},
+    {"n": "Cuba libre", "ing": ["Ron", "Cola", "Limón"]},
+    {"n": "Piña colada", "ing": ["Ron", "Piña", "Coco"]},
+    {"n": "Gin tonic", "ing": ["Ginebra", "Tónica", "Pepino"]},
+    {"n": "Paloma", "ing": ["Tequila", "Toronja", "Sal"]},
+    {"n": "Destornillador", "ing": ["Vodka", "Naranja", "Hielo"]},
+    {"n": "Sex on the beach", "ing": ["Vodka", "Durazno", "Naranja"]},
+    {"n": "Orgasmo", "ing": ["Baileys", "Amaretto", "Café"]},
+    {"n": "Michelada", "ing": ["Cerveza", "Limón", "Chamoy"]},
+    {"n": "Cosmopolitan", "ing": ["Vodka", "Arándano", "Limón"]},
+    {"n": "Tequila sunrise", "ing": ["Tequila", "Naranja", "Granadina"]}
+]
+const ING_POOL = ["Ron", "Menta", "Limón", "Tequila", "Sal", "Cola", "Piña", "Coco", "Ginebra", "Tónica", "Pepino", "Toronja", "Vodka", "Naranja", "Hielo", "Durazno", "Baileys", "Amaretto", "Café", "Cerveza", "Chamoy", "Arándano", "Granadina", "Whisky"]
+
+const DISHES = ["Tacos", "Pizza", "Sopa", "Ensalada", "Hamburguesa", "Pasta", "Sushi", "Enchiladas", "Pollo", "Ceviche", "Burrito", "Flan", "Pastel", "Café", "Limonada", "Cerveza", "Nachos", "Filete", "Quesadilla", "Helado"]
+
+const WORDS = ["CAFE", "NOCHE", "VELVET", "PERSONA", "TRABAJO", "DINERO", "PASION", "DESEO", "FIESTA", "CORAZON", "PIEL", "BESO", "LUNA", "JEFE", "CLIENTE", "TURNO", "PROPINA", "CONTRATO", "ESTRELLA", "RIESGO", "SECRETO", "CITA", "AMOR", "VINO"]
+
+const QUIZ = [
+    {"q": "¿Cuál es la capital de Japón?", "a": ["Tokio", "Kioto", "Osaka", "Seúl"], "c": 0},
+    {"q": "¿Cuánto es 7 × 8?", "a": ["54", "56", "64", "48"], "c": 1},
+    {"q": "¿Qué planeta es el más grande?", "a": ["Saturno", "Tierra", "Júpiter", "Neptuno"], "c": 2},
+    {"q": "¿Quién pintó la Mona Lisa?", "a": ["Picasso", "Da Vinci", "Van Gogh", "Dalí"], "c": 1},
+    {"q": "¿Cuál es el símbolo químico del oro?", "a": ["Ag", "Go", "Au", "Or"], "c": 2},
+    {"q": "¿Cuántos lados tiene un hexágono?", "a": ["5", "6", "7", "8"], "c": 1},
+    {"q": "¿En qué continente está Egipto?", "a": ["Asia", "África", "Europa", "Oceanía"], "c": 1},
+    {"q": "¿Cuál es el órgano más grande del cuerpo?", "a": ["Hígado", "Cerebro", "Piel", "Pulmón"], "c": 2},
+    {"q": "¿Cuánto es la raíz cuadrada de 144?", "a": ["12", "14", "16", "11"], "c": 0},
+    {"q": "¿Quién escribió Cien años de soledad?", "a": ["Borges", "Neruda", "García Márquez", "Cortázar"], "c": 2},
+    {"q": "¿Qué gas respiramos para vivir?", "a": ["Nitrógeno", "Oxígeno", "Helio", "Carbono"], "c": 1},
+    {"q": "¿Cuántos minutos tiene un día?", "a": ["1,440", "1,200", "3,600", "960"], "c": 0},
+    {"q": "¿Qué idioma se habla en Brasil?", "a": ["Español", "Portugués", "Francés", "Italiano"], "c": 1},
+    {"q": "¿Cuál es el océano más grande?", "a": ["Atlántico", "Índico", "Ártico", "Pacífico"], "c": 3},
+    {"q": "Si x + 5 = 12, ¿cuánto vale x?", "a": ["5", "6", "7", "17"], "c": 2},
+    {"q": "¿Qué hormona se asocia con el enamoramiento?", "a": ["Insulina", "Dopamina", "Cortisol", "Adrenalina"], "c": 1},
+    {"q": "¿En qué año llegó Colón a América?", "a": ["1492", "1500", "1521", "1810"], "c": 0},
+    {"q": "¿Cuál es el resultado de 15% de 200?", "a": ["15", "20", "30", "35"], "c": 2},
+    {"q": "¿Qué animal es un mamífero?", "a": ["Tiburón", "Delfín", "Pulpo", "Pingüino"], "c": 1},
+    {"q": "¿Qué método previene ITS y embarazos?", "a": ["La píldora", "El condón", "El coitus interruptus", "Ninguno"], "c": 1},
+    {"q": "¿Cuál es la moneda de Japón?", "a": ["Yuan", "Won", "Yen", "Rupia"], "c": 2},
+    {"q": "¿Cuántos huesos tiene un adulto?", "a": ["106", "206", "306", "180"], "c": 1},
+    {"q": "¿Qué lenguaje se usa para páginas web?", "a": ["HTML", "SQL", "C++", "Excel"], "c": 0},
+    {"q": "¿Quién propuso la teoría de la relatividad?", "a": ["Newton", "Tesla", "Einstein", "Hawking"], "c": 2},
+    {"q": "¿Cuál es la capital de Argentina?", "a": ["Rosario", "Córdoba", "Buenos Aires", "Montevideo"], "c": 2},
+    {"q": "¿Cuánto es 2 elevado a la 10?", "a": ["512", "1,000", "1,024", "2,048"], "c": 2},
+    {"q": "¿Qué significa «consentimiento»?", "a": ["Decir que no", "Un sí claro y libre", "Callarse", "Estar ebrio"], "c": 1},
+    {"q": "¿Qué vitamina da el sol?", "a": ["A", "C", "D", "K"], "c": 2},
+    {"q": "¿Cuál es el país más grande del mundo?", "a": ["China", "Canadá", "EE. UU.", "Rusia"], "c": 3},
+    {"q": "¿Qué instrumento tiene 88 teclas?", "a": ["Guitarra", "Piano", "Violín", "Arpa"], "c": 1}
+]
+
+const ARROW_KEYS = ["up", "down", "left", "right"]
+
+// ---------------------------------------------------------------- ciclo
+
+function mg_start(kind: string, title: string, purpose: string, ctx: map) {
+    let info = MG_INFO[kind]
+    G.mg = {
+        "type": kind, "title": title, "purpose": purpose, "ctx": ctx,
+        "phase": "intro", "round": 0, "rounds": info.rounds, "limit": info.limit,
+        "points": 0, "round_t0": G.t, "fb": "", "fb_ok": false, "fb_t0": -10.0, "q": {}
+    }
+    G.modal = {"kind": "minigame"}
+    G.modal_t0 = G.t
+    return null
+}
+
+function mg_begin() {
+    G.mg.phase = "play"
+    G.mg.round = 0
+    mg_new_round()
+}
+
+function mg_new_round() {
+    let m = G.mg
+    m.round_t0 = G.t
+    let k = m.type
+    if k == "bar" {
+        let d = pick(DRINKS)
+        let opts = list_slice(d.ing, 0, 3)
+        let pool = []
+        for i in ING_POOL {
+            if !list_contains(d.ing, i) { list_push(pool, i) }
+        }
+        shuffle(G.rng, pool)
+        for i in list_slice(pool, 0, 3) { list_push(opts, i) }
+        shuffle(G.rng, opts)
+        m.q = {"drink": d, "opts": opts, "sel": []}
+    } else if k == "memory" {
+        let pool = list_slice(DISHES, 0, len(DISHES))
+        shuffle(G.rng, pool)
+        let order = list_slice(pool, 0, 4)
+        let opts = list_slice(pool, 0, 8)
+        shuffle(G.rng, opts)
+        m.q = {"order": order, "opts": opts, "sel": [], "show_until": G.t + 3.0}
+        m.round_t0 = G.t + 3.0
+    } else if k == "math" {
+        let total = rint(3, 190)
+        let paid = 20
+        for note in [20, 50, 100, 200, 500] {
+            if note > total { paid = note; break }
+        }
+        let change = paid - total
+        let opts = [change]
+        for delta in [1, 5, 10, -1, -5, 2] {
+            let v = change + delta
+            if v > 0 && !list_contains(opts, v) && len(opts) < 4 { list_push(opts, v) }
+        }
+        shuffle(G.rng, opts)
+        m.q = {"total": total, "paid": paid, "change": change, "opts": opts}
+    } else if k == "timing" {
+        m.q = {"zone": rint(18, 82), "width": 12, "speed": 0.9 + m.round * 0.18}
+    } else if k == "arrows" {
+        let seq = []
+        let n = 0
+        while n < 3 + m.round {
+            list_push(seq, pick(ARROW_KEYS))
+            n += 1
+        }
+        m.q = {"seq": seq, "pos": 0}
+    } else if k == "typing" {
+        m.q = {"word": pick(WORDS), "typed": ""}
+    } else {
+        m.q = pick(QUIZ)
+    }
+}
+
+// Termina la ronda: suma puntos (0-1) y avanza.
+function mg_round_end(value: int) {
+    let m = G.mg
+    m.points = m.points + value
+    m.fb_ok = value >= 60
+    m.fb_t0 = G.t
+    m.fb = "¡FALLASTE!"
+    if value >= 99 { m.fb = "¡PERFECTO!" } else if value >= 60 { m.fb = "¡BIEN!" } else if value > 0 { m.fb = "REGULAR" }
+    m.round += 1
+    if m.round >= m.rounds {
+        m.phase = "done"
+        return null
+    }
+    mg_new_round()
+    return null
+}
+
+function mg_score() {
+    return G.mg.points / G.mg.rounds
+}
+
+// Avanza el reloj; se llama cada frame desde app_update.
+function mg_tick() {
+    let m = G.mg
+    if m == null || m.phase != "play" { return null }
+    if G.t < m.round_t0 { return null }
+    if G.t - m.round_t0 > m.limit {
+        if m.type == "memory" {
+            return mg_round_end(mg_memory_value())
+        }
+        return mg_round_end(0)
+    }
+    return null
+}
+
+function mg_memory_value() {
+    let hits = 0
+    for s in G.mg.q.sel {
+        if list_contains(G.mg.q.order, s) { hits += 1 }
+    }
+    return hits * 25
+}
+
+function mg_timing_pos() {
+    let m = G.mg
+    let t = (G.t - m.round_t0) * m.q.speed
+    let phase = fract(t / 2.0)
+    if phase < 0.5 { return phase * 200.0 }
+    return (1.0 - phase) * 200.0
+}
+
+// ---------------------------------------------------------------- entrada
+
+function mg_pick(i: int) {
+    let m = G.mg
+    if m == null || m.phase != "play" || G.t < m.round_t0 { return null }
+    let k = m.type
+    if k == "bar" {
+        if i >= len(m.q.opts) { return null }
+        let ing = m.q.opts[i]
+        if list_contains(m.q.sel, ing) { return null }
+        list_push(m.q.sel, ing)
+        if len(m.q.sel) == 3 {
+            let hits = 0
+            for s in m.q.sel {
+                if list_contains(m.q.drink.ing, s) { hits += 1 }
+            }
+            let value = 0
+            if hits == 3 { value = 100 } else if hits == 2 { value = 40 }
+            return mg_round_end(value)
+        }
+        return null
+    }
+    if k == "memory" {
+        if i >= len(m.q.opts) { return null }
+        let d = m.q.opts[i]
+        if list_contains(m.q.sel, d) { return null }
+        list_push(m.q.sel, d)
+        if len(m.q.sel) == 4 { return mg_round_end(mg_memory_value()) }
+        return null
+    }
+    if k == "math" {
+        if i >= len(m.q.opts) { return null }
+        let v = 0
+        if m.q.opts[i] == m.q.change { v = 100 }
+        return mg_round_end(v)
+    }
+    if k == "quiz" {
+        if i >= 4 { return null }
+        let v = 0
+        if i == m.q.c { v = 100 }
+        return mg_round_end(v)
+    }
+    return null
+}
+
+function mg_hit() {
+    let m = G.mg
+    if m == null || m.phase != "play" || m.type != "timing" { return null }
+    let pos = mg_timing_pos() / 2.0
+    let dist = abs(pos - m.q.zone)
+    let v = 0
+    if dist <= m.q.width / 2 {
+        v = 100
+    } else if dist <= m.q.width {
+        v = 60
+    } else if dist <= m.q.width * 2 {
+        v = 25
+    }
+    return mg_round_end(v)
+}
+
+function mg_arrow(dir: string) {
+    let m = G.mg
+    if m == null || m.phase != "play" || m.type != "arrows" { return null }
+    if m.q.seq[m.q.pos] == dir {
+        m.q.pos = m.q.pos + 1
+        if m.q.pos >= len(m.q.seq) { return mg_round_end(100) }
+        return null
+    }
+    return mg_round_end(m.q.pos * 50 / len(m.q.seq))
+}
+
+function mg_type(letter: string) {
+    let m = G.mg
+    if m == null || m.phase != "play" || m.type != "typing" { return null }
+    let next = m.q.typed + letter
+    if str_starts_with(m.q.word, next) {
+        m.q.typed = next
+        if next == m.q.word { return mg_round_end(100) }
+    } else {
+        m.q.typed = ""
+        m.fb = "¡ERROR!"
+        m.fb_ok = false
+        m.fb_t0 = G.t
+    }
+    return null
+}
+
+function mg_keys(input: map) {
+    let m = G.mg
+    if m.phase == "intro" {
+        if list_contains(input.pressed, "Enter") || list_contains(input.pressed, "Space") { mg_begin() }
+        return null
+    }
+    if m.phase == "done" {
+        if list_contains(input.pressed, "Enter") || list_contains(input.pressed, "Space") { mg_close() }
+        return null
+    }
+    for key in input.pressed {
+        if m.type == "timing" && key == "Space" { mg_hit() }
+        if key == "ArrowUp" { mg_arrow("up") }
+        if key == "ArrowDown" { mg_arrow("down") }
+        if key == "ArrowLeft" { mg_arrow("left") }
+        if key == "ArrowRight" { mg_arrow("right") }
+        if str_starts_with(key, "Digit") {
+            let i = 0
+            while i < 9 {
+                if key == "Digit" + str(i + 1) { mg_pick(i) }
+                i += 1
+            }
+        }
+        if m.type == "typing" && str_starts_with(key, "Key") && len(key) == 4 {
+            mg_type(str_replace(key, "Key", ""))
+        }
+        if G.mg == null || G.mg.phase != "play" { return null }
+    }
+    return null
+}
+
+function mg_action(action: string) {
+    if G.mg == null { return null }
+    if action == "mg:start" { return mg_begin() }
+    if action == "mg:done" { return mg_close() }
+    if action == "mg:hit" { return mg_hit() }
+    if str_starts_with(action, "mg:arrow:") { return mg_arrow(str_replace(action, "mg:arrow:", "")) }
+    if str_starts_with(action, "mg:pick:") { return mg_pick(index_of(action, "mg:pick:", 10)) }
+    if action == "mg:quit" {
+        G.mg.points = 0
+        G.mg.phase = "done"
+    }
+    return null
+}
+
+// Cierra el minijuego y entrega el puntaje a quien lo pidió.
+function mg_close() {
+    let m = G.mg
+    let score = mg_score()
+    G.mg = null
+    G.modal = null
+    if score >= 100 { flag("mg100") }
+    if m.purpose == "practice" { return practice_result(score) }
+    if m.purpose == "certify" { return certify_result(score) }
+    if m.purpose == "gig" { return gig_shift_result(score) }
+    if m.purpose == "audition" { return audition_result(score, m.ctx) }
+    if m.purpose == "exam" { return exam_result(score, m.ctx) }
+    return null
+}
+
+function mg_rating(score: int) {
+    if score >= 95 { return "¡PERFECTO!" }
+    if score >= 75 { return "¡EXCELENTE!" }
+    if score >= 50 { return "BIEN" }
+    if score >= 25 { return "REGULAR" }
+    return "DESASTRE"
+}
+
+// ---------------------------------------------------------------- dibujo
+
+function draw_minigame() {
+    let m = G.mg
+    if m == null { return null }
+    arect(0, 0, W, H, rgba(0, 0, 0, 200))
+    push({"op": "alpha_rect", "x": 0, "y": 0, "w": W, "h": H, "color": 0, "action": "noop"})
+    svg(-120, 0, 700, 720, slant_doc(640, 720, 200, HEX_RED, "", 0, HEX_INK, 60))
+    svg(24, 4, 760, 136, tilt_title_doc(MG_INFO[m.type].title, 760, 136, 72, HEX_WHITE, HEX_INK))
+    let x = 160
+    let y = 150
+    let w = 960
+    let h = 500
+    svg(x, y, w + 12, h + 12, slant_doc(w, h, 24, HEX_INK, HEX_WHITE, 4, HEX_RED, 12))
+    text(x + 50, y + 44, clip_text(str_upper(m.title), 520, 22), 22, C_YELLOW, "impact")
+
+    if m.phase == "intro" {
+        let ty = y + 110
+        for line in wrap(MG_INFO[m.type].help, chars_for(820, 20)) {
+            text(x + 60, ty, line, 20, C_WHITE, "bold")
+            ty += 32
+        }
+        text(x + 60, ty + 20, str(m.rounds) + " rondas · " + str(floor(m.limit)) + " segundos por ronda", 16, C_GRAY, "bold")
+        menu_word(x + 300, y + h - 120, 360, 70, "¡EMPEZAR!", "mg:start", 36)
+        return null
+    }
+    if m.phase == "done" {
+        let score = mg_score()
+        otext(x + w / 2, y + 190, str(score), 120, C_YELLOW, "impact", true)
+        otext(x + w / 2, y + 250, "PUNTOS · " + mg_rating(score), 34, C_WHITE, "impact", true)
+        menu_word(x + 300, y + h - 120, 360, 70, "CONTINUAR", "mg:done", 34)
+        return null
+    }
+
+    // Barra de tiempo y ronda
+    let remaining = clamp(1.0 - (G.t - m.round_t0) / m.limit, 0.0, 1.0)
+    if G.t < m.round_t0 { remaining = 1.0 }
+    text(x + w - 230, y + 44, "RONDA " + str(m.round + 1) + "/" + str(m.rounds), 20, C_WHITE, "impact")
+    rect(x + 50, y + 62, w - 120, 10, C_GRAY_D)
+    let bar_col = C_WHITE
+    if remaining < 0.3 { bar_col = C_RED }
+    rect(x + 50, y + 62, floor((w - 120) * remaining), 10, bar_col)
+
+    let k = m.type
+    if k == "bar" { draw_mg_bar(x, y, w) }
+    if k == "memory" { draw_mg_memory(x, y, w) }
+    if k == "math" { draw_mg_math(x, y, w) }
+    if k == "timing" { draw_mg_timing(x, y, w) }
+    if k == "arrows" { draw_mg_arrows(x, y, w) }
+    if k == "typing" { draw_mg_typing(x, y, w) }
+    if k == "quiz" { draw_mg_quiz(x, y, w) }
+
+    if G.t - m.fb_t0 < 0.7 {
+        let col = C_RED
+        if m.fb_ok { col = C_YELLOW }
+        otext(x + w - 140, y + h - 40, m.fb, 34, col, "impact", true)
+    }
+    small_button(x + w - 180, y + h + 26, 150, 38, "RENDIRSE", "mg:quit")
+    return null
+}
+
+function mg_option(x: int, y: int, w: int, i: int, label: string, selected: bool) {
+    let action = "mg:pick:" + str(i)
+    let fill = "#262626"
+    let color = C_WHITE
+    if selected {
+        fill = HEX_WHITE
+        color = C_INK
+    } else if hovered(action) {
+        fill = HEX_RED
+    }
+    svg(x, y, w + 4, 52, slant_doc(w, 48, 12, fill, HEX_WHITE, 2, HEX_INK, 4))
+    svg(x + 16, y + 10, 28, 28, slant_doc(28, 28, 6, HEX_YELLOW, "", 0, "", 0))
+    ctext(x + 30, y + 31, str(i + 1), 17, C_INK, "impact")
+    text(x + 56, y + 32, clip_text(label, w - 70, 18), 18, color, "bold")
+    hot(x, y, w, 48, action)
+}
+
+function draw_mg_bar(x: int, y: int, w: int) {
+    let q = G.mg.q
+    text(x + 60, y + 130, "PIDEN:", 18, C_GRAY, "impact")
+    otext(x + 60, y + 190, str_upper(q.drink.n), 52, C_WHITE, "impact", false)
+    text(x + 60, y + 224, "Elegidos: " + str(len(q.sel)) + "/3", 16, C_YELLOW, "bold")
+    let i = 0
+    while i < len(q.opts) {
+        mg_option(x + 60 + (i % 3) * 290, y + 270 + (i / 3) * 70, 270, i, q.opts[i], list_contains(q.sel, q.opts[i]))
+        i += 1
+    }
+}
+
+function draw_mg_memory(x: int, y: int, w: int) {
+    let q = G.mg.q
+    if G.t < q.show_until {
+        text(x + 60, y + 130, "MEMORIZA EL PEDIDO", 20, C_YELLOW, "impact")
+        let i = 0
+        while i < 4 {
+            svg(x + 60 + i * 215, y + 180, 204, 90, slant_doc(200, 86, 14, HEX_WHITE, HEX_INK, 3, HEX_RED, 4))
+            ctext(x + 160 + i * 215, y + 236, q.order[i], 24, C_INK, "impact")
+            i += 1
+        }
+        let left = q.show_until - G.t
+        text(x + 60, y + 330, "Desaparece en " + str(floor(left) + 1) + "...", 18, C_WHITE, "bold")
+        return null
+    }
+    text(x + 60, y + 130, "¿QUÉ PIDIERON? (" + str(len(q.sel)) + "/4)", 20, C_YELLOW, "impact")
+    let i = 0
+    while i < len(q.opts) {
+        mg_option(x + 60 + (i % 4) * 215, y + 170 + (i / 4) * 70, 200, i, q.opts[i], list_contains(q.sel, q.opts[i]))
+        i += 1
+    }
+    return null
+}
+
+function draw_mg_math(x: int, y: int, w: int) {
+    let q = G.mg.q
+    text(x + 60, y + 140, "TOTAL A PAGAR", 18, C_GRAY, "impact")
+    otext(x + 60, y + 200, money_str(q.total), 56, C_WHITE, "impact", false)
+    text(x + 460, y + 140, "EL CLIENTE PAGÓ CON", 18, C_GRAY, "impact")
+    otext(x + 460, y + 200, money_str(q.paid), 56, C_YELLOW, "impact", false)
+    text(x + 60, y + 250, "¿Cuánto cambio devuelves?", 18, C_WHITE, "bold")
+    let i = 0
+    while i < len(q.opts) {
+        mg_option(x + 60 + (i % 2) * 430, y + 290 + (i / 2) * 70, 400, i, money_str(q.opts[i]), false)
+        i += 1
+    }
+}
+
+function draw_mg_timing(x: int, y: int, w: int) {
+    let q = G.mg.q
+    let bx = x + 80
+    let bw = w - 160
+    let by = y + 220
+    rect(bx, by, bw, 50, C_GRAY_D)
+    let zx = bx + bw * (q.zone - q.width) / 100
+    rect(zx, by, bw * q.width * 2 / 100, 50, C_YELLOW)
+    rect(bx + bw * (q.zone - q.width / 2) / 100, by, bw * q.width / 100, 50, rgb(80, 220, 120))
+    let pos = mg_timing_pos() / 2.0
+    let cx = bx + bw * pos / 100.0
+    rect(cx - 4, by - 18, 8, 86, C_WHITE)
+    svg(cx - 14, by - 46, 28, 28, arrow_doc("down", HEX_RED))
+    text(x + 80, y + 330, "ESPACIO cuando el marcador esté en verde", 18, C_WHITE, "bold")
+    menu_word(x + 320, y + 370, 320, 64, "¡AHORA!", "mg:hit", 30)
+}
+
+function draw_mg_arrows(x: int, y: int, w: int) {
+    let q = G.mg.q
+    text(x + 60, y + 130, "REPITE LA SECUENCIA", 20, C_YELLOW, "impact")
+    let i = 0
+    while i < len(q.seq) {
+        let fill = HEX_WHITE
+        if i < q.pos { fill = HEX_YELLOW }
+        svg(x + 60 + i * 110, y + 160, 96, 96, slant_doc(92, 92, 10, "#262626", HEX_WHITE, 2, HEX_RED, 4))
+        svg(x + 78 + i * 110, y + 178, 56, 56, arrow_doc(q.seq[i], fill))
+        i += 1
+    }
+    let dirs = ["left", "up", "down", "right"]
+    let j = 0
+    while j < 4 {
+        let action = "mg:arrow:" + dirs[j]
+        let fill = HEX_WHITE
+        if hovered(action) { fill = HEX_RED }
+        svg(x + 260 + j * 110, y + 320, 90, 90, slant_doc(86, 86, 10, HEX_INK, HEX_WHITE, 2, HEX_RED, 4))
+        svg(x + 276 + j * 110, y + 336, 56, 56, arrow_doc(dirs[j], fill))
+        hot(x + 260 + j * 110, y + 320, 86, 86, action)
+        j += 1
+    }
+}
+
+function draw_mg_typing(x: int, y: int, w: int) {
+    let q = G.mg.q
+    text(x + 60, y + 130, "ESCRIBE:", 20, C_YELLOW, "impact")
+    otext(x + w / 2, y + 240, q.word, 80, C_WHITE, "impact", true)
+    let shown = q.typed
+    if shown == "" { shown = "_" }
+    otext(x + w / 2, y + 340, shown, 56, C_YELLOW, "impact", true)
+}
+
+function draw_mg_quiz(x: int, y: int, w: int) {
+    let q = G.mg.q
+    let ty = y + 140
+    for line in wrap(q.q, chars_for(820, 26)) {
+        otext(x + 60, ty, line, 26, C_WHITE, "impact", false)
+        ty += 36
+    }
+    let i = 0
+    while i < 4 {
+        mg_option(x + 60 + (i % 2) * 430, y + 260 + (i / 2) * 70, 400, i, q.a[i], false)
+        i += 1
+    }
+}

@@ -35,7 +35,12 @@ state {
         "modal_t0": 0.0,
         "menu_t0": 0.0,
         "cut_t0": -10.0,
-        "screen_t0": 0.0
+        "screen_t0": 0.0,
+        "mg": null,
+        "dlg": null,
+        "dlg_tree": "",
+        "pending_deg": "",
+        "tuition_no": ""
     }
 }
 
@@ -125,6 +130,7 @@ function fmt(text: string, ctx: map) {
         out = str_replace(out, "{p}", p.first)
         out = str_replace(out, "{pa}", oa(p.gender))
         out = str_replace(out, "{pel}", by_gender(p.gender, "él", "ella"))
+        out = str_replace(out, "l{plo}", by_gender(p.gender, "lo", "la"))
         out = str_replace(out, "{plo}", by_gender(p.gender, "lo", "la"))
     }
     let x = ctx["person"]
@@ -132,6 +138,8 @@ function fmt(text: string, ctx: map) {
         out = str_replace(out, "{x}", x.first)
         out = str_replace(out, "{xa}", oa(x.gender))
         out = str_replace(out, "{xel}", by_gender(x.gender, "él", "ella"))
+        // Los textos escriben "l{xlo}" (Invitarl{xlo}) o "{xlo}" a secas: ambos dan lo/la.
+        out = str_replace(out, "l{xlo}", by_gender(x.gender, "lo", "la"))
         out = str_replace(out, "{xlo}", by_gender(x.gender, "lo", "la"))
         out = str_replace(out, "{xun}", by_gender(x.gender, "Un", "Una"))
         out = str_replace(out, "{edad}", str(x.age))
@@ -377,7 +385,18 @@ function new_life() {
         "money": 0,
         "edu": 0,
         "school": "",
-        "uni": 0,
+        "month": 0,
+        "bmonth": rint(0, 11),
+        "grades": 0,
+        "degrees": [],
+        "study": null,
+        "study_gpa_final": 0,
+        "family": "media",
+        "gig": null,
+        "gig_done": 0,
+        "workxp": 0,
+        "preg_m": 0,
+        "ppreg_m": 0,
         "debt": 0,
         "job": null,
         "job2": null,
@@ -427,6 +446,12 @@ function new_life() {
     log_add(by_gender(gender, "Eres hijo", "Eres hija") + " de " + full_name(dad) + " y " + full_name(mom) + ".", "n")
     log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
     log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
+    setup_family()
+    L.grades = clamp(30 + L.smarts / 2 + rint(-10, 10), 0, 100)
+    G.pending_deg = ""
+    G.tuition_no = ""
+    G.dlg = null
+    G.mg = null
 
     G.mode = "game"
     G.modal = null
@@ -445,24 +470,101 @@ function apply_trait() {
 
 // ---------------------------------------------------------------- año a año
 
-function age_up() {
-    if !L.alive || G.modal != null { return null }
-    L.age += 1
+// Avanza un mes. Devuelve true si fue tu cumpleaños (para la animación de edad).
+function advance_month() {
+    if !L.alive || G.modal != null { return false }
     L.used = {}
-    log_year(L.age)
-    yearly()
+    L.month += 1
+    let birthday = false
+    if L.month >= 12 {
+        L.month = 0
+        L.age += 1
+        birthday = true
+        log_year(L.age)
+        yearly()
+        parenting_year()
+        clamp_stats()
+        if !L.alive { return true }
+        death_check()
+        if !L.alive { return true }
+    }
+    monthly()
     clamp_stats()
-    if !L.alive { return null }
-    death_check()
-    if !L.alive { return null }
+    if !L.alive { return birthday }
+    if L.health <= 0 {
+        die("problemas de salud")
+        return birthday
+    }
+    if G.modal != null { return birthday }
     if L.claim != "" {
         let person = make_person(by_gender(L.gender, "f", "m"), "ligue", max(18, L.age + rint(-5, 5)))
         person.first = L.claim
         L.claim = ""
         open_event(find_event("baby_claim"), {"person": person})
-        return null
+        return birthday
     }
-    maybe_event()
+    if !maybe_gig_event() { maybe_event() }
+    return birthday
+}
+
+// Avanza hasta tu próximo cumpleaños, deteniéndose si algo requiere una decisión.
+function advance_year() {
+    let n = 0
+    while n < 12 {
+        let birthday = advance_month()
+        n += 1
+        if birthday || G.modal != null || !L.alive { return birthday }
+    }
+    return false
+}
+
+const MONTH_NAMES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+function month_name() {
+    return MONTH_NAMES[(L.bmonth + L.month) % 12]
+}
+
+// Lo que pasa cada mes: sueldo, chambas, escuela, colegiatura y embarazos.
+function monthly() {
+    if L.job != null && L.jail == 0 {
+        // Impuestos y estilo de vida se llevan la mitad del sueldo.
+        let net = job_pay(L.job) * 50 / 100 / 12
+        L.money += net
+        if L.debt > 0 {
+            let payment = min(L.debt, net * 20 / 100)
+            L.debt -= payment
+            L.money -= payment
+            if L.debt == 0 { log_add("Terminaste de pagar tu préstamo estudiantil.", "g") }
+        }
+    }
+    gig_month()
+    school_month()
+    study_month()
+    if L.pregnant {
+        if L.preg_m <= 0 {
+            L.preg_m = 8
+        } else {
+            L.preg_m -= 1
+            if L.preg_m == 0 {
+                L.pregnant = false
+                add_child(L.preg_with)
+            }
+        }
+    }
+    if L.partner_preg {
+        if L.ppreg_m <= 0 {
+            L.ppreg_m = 8
+        } else {
+            L.ppreg_m -= 1
+            if L.ppreg_m == 0 {
+                L.partner_preg = false
+                let p = partner()
+                let other = "tu pareja"
+                if p != null { other = p.first }
+                add_child(other)
+            }
+        }
+    }
     return null
 }
 
@@ -530,16 +632,7 @@ function yearly() {
         log_add("Te graduaste de la secundaria. Ya eres mayor de edad: la noche es tuya.", "g")
         if len(L.tags) > 0 { log_add("Descubriste lo que te gusta en la cama: " + kinks_text(L.tags, L.gender) + ".", "x") }
     }
-    if L.uni > 0 {
-        L.uni -= 1
-        L.smarts += rint(1, 4)
-        if L.uni == 0 {
-            L.edu = 3
-            L.school = ""
-            log_add("¡Te graduaste de la universidad!", "g")
-            L.happy += 10
-        }
-    }
+    if L.study != null { L.smarts += rint(1, 3) }
 
     // Prisión
     if L.jail > 0 {
@@ -552,18 +645,8 @@ function yearly() {
 
     // Trabajo y dinero
     if L.job != null && L.jail == 0 {
-        let pay = job_pay(L.job)
-        // Impuestos y estilo de vida se llevan la mitad del sueldo.
-        let net = pay * 50 / 100
-        L.money += net
         L.job.years += 1
         L.job.perf = clamp100(L.job.perf + rint(-6, 4))
-        if L.debt > 0 {
-            let payment = min(L.debt, net * 20 / 100)
-            L.debt -= payment
-            L.money -= payment
-            if L.debt == 0 { log_add("Terminaste de pagar tu préstamo estudiantil.", "g") }
-        }
         if L.job.perf < 15 && chance(50) {
             log_add("Te despidieron de tu trabajo como " + L.job.title + ".", "b")
             L.happy -= 10
@@ -612,19 +695,6 @@ function yearly() {
         } else {
             L.health -= 4
         }
-    }
-
-    // Embarazos
-    if L.pregnant {
-        L.pregnant = false
-        add_child(L.preg_with)
-    }
-    if L.partner_preg {
-        L.partner_preg = false
-        let p = partner()
-        let other = "tu pareja"
-        if p != null { other = p.first }
-        add_child(other)
     }
 
     // Pareja
@@ -768,6 +838,7 @@ function apply(o: map, ctx: map) {
     if map_has(o, "xp") { career_xp(o.xp) }
     if map_has(o, "fame") { L.fame = L.fame + o.fame }
     if map_has(o, "flag") { flag(o.flag) }
+    if map_has(o, "gigperf") && L.gig != null { L.gig.perf = clamp100(L.gig.perf + o.gigperf) }
     if map_has(o, "bond") {
         let target = ctx["person"]
         if target == null || !target.known { target = partner() }
@@ -798,9 +869,11 @@ function sex_with(person: any) {
         L.partners += 1
     }
     let p = partner()
-    if p != null && (person == null || person.id != p.id) {
+    if p != null && p.open != true && (person == null || person.id != p.id) {
+        p.cheated = true
         L.karma -= 5
         if chance(30) {
+            p.cheated = false
             p.bond -= 45
             L.happy -= 10
             out = " " + p.first + " se enteró de tu infidelidad."
@@ -847,7 +920,11 @@ function go_to_jail(years: int) {
         L.job = null
     }
     L.job2 = null
-    if L.uni > 0 { L.uni = 0 }
+    L.gig = null
+    if L.study != null {
+        L.study = null
+        L.school = ""
+    }
     let out = " Te condenaron a " + str(years) + " " + plural(years, "año", "años") + " de prisión."
     let p = partner()
     if p != null && chance(50) {

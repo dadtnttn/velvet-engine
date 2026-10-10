@@ -215,6 +215,8 @@ function find_activity(id: string) {
 
 function menu_title(tab: string) {
     if tab == "job" { return "OCUPACIÓN" }
+    if tab == "study" { return "ESTUDIOS" }
+    if tab == "gigs" { return "CHAMBAS" }
     if tab == "rel" { return "VÍNCULOS" }
     if tab == "act" { return "ACTIVIDADES" }
     if tab == "missions" { return "MISIONES" }
@@ -226,6 +228,12 @@ function menu_cats(tab: string) {
     if tab == "act" { return ["Cuerpo", "Mente", "Lujos"] }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
     if tab == "jobs" { return FIELD_ORDER }
+    if tab == "study" { return ["Universidad", "Técnica"] }
+    if tab == "gigs" {
+        let out = []
+        for k in GIG_PLACE_ORDER { list_push(out, GIG_PLACES[k]) }
+        return out
+    }
     return []
 }
 
@@ -234,6 +242,16 @@ function menu_items(tab: string, cat: string) {
     if tab == "rel" { return rel_items() }
     if tab == "missions" { return mission_items() }
     if tab == "jobs" { return job_items_for(cat) }
+    if tab == "study" {
+        if cat == "Técnica" { return study_items("tec") }
+        return study_items("uni")
+    }
+    if tab == "gigs" {
+        for k in GIG_PLACE_ORDER {
+            if GIG_PLACES[k] == cat { return gig_items(k) }
+        }
+        return []
+    }
     if tab == "night" && cat == "Carreras" { return casting_items() }
     let items = []
     for a in ACTIVITIES {
@@ -264,6 +282,8 @@ function menu_block(tab: string) {
         return "Estás en prisión. Te quedan " + str(L.jail) + " " + plural(L.jail, "año", "años") + "."
     }
     if tab == "job" && L.age < 6 { return "Tu único trabajo ahora es crecer." }
+    if (tab == "gigs" || tab == "study" || tab == "jobs") && L.jail > 0 { return "Desde la cárcel no se puede." }
+    if tab == "gigs" && L.age < 16 { return "Las chambas empiezan a los 16. Por ahora, a estudiar." }
     if tab == "act" && L.age < 6 { return "Eres demasiado pequeñ" + oa(L.gender) + ". Juegas con bloques y babeas." }
     return ""
 }
@@ -276,31 +296,33 @@ function job_items() {
         list_push(items, {"action": "act:escape", "t": "Intentar escapar", "s": "Muy arriesgado", "desc": "Una cuchara, un túnel y mucha paciencia.", "lock": ""})
         return items
     }
-    if L.job != null {
-        items = career_items()
-        if L.uni > 0 {
-            list_push(items, {"action": "act:uni_study", "t": "Estudiar para los finales", "s": "Inteligencia, conocimiento", "desc": "Trabajas y estudias. Heroico.", "lock": ""})
-        }
-        return items
-    }
+    if L.job != null { items = career_items() }
     if L.age < 18 && L.school != "" {
-        list_push(items, {"action": "act:study", "t": "Estudiar más duro", "s": "Inteligencia, conocimiento", "desc": "Cuadernos, desvelos y la satisfacción de un 10.", "lock": ""})
-        list_push(items, {"action": "act:skip", "t": "Saltarte clases", "s": "Felicidad, valor", "desc": "El centro comercial no se va a visitar solo.", "lock": ""})
+        list_push(items, {"action": "act:study", "t": "Estudiar más duro", "s": "Calificaciones " + str(L.grades), "desc": "Cuadernos, desvelos y la satisfacción de un 10. Sube tus calificaciones: abren becas y carreras exigentes.", "lock": ""})
+        list_push(items, {"action": "act:skip", "t": "Saltarte clases", "s": "Felicidad, valor", "desc": "El centro comercial no se va a visitar solo. Tus calificaciones bajan.", "lock": ""})
     }
-    if L.age >= 18 {
-        if L.edu < 2 {
-            list_push(items, {"action": "act:ged", "t": "Secundaria abierta", "s": "$1,500", "desc": "Nunca es tarde para terminar la escuela.", "lock": ""})
-        }
-        if L.edu == 2 && L.uni == 0 {
-            list_push(items, {"action": "act:uni", "t": "Ir a la universidad", "s": "4 años · préstamo de $40,000", "desc": "Fiestas, deudas y, con suerte, un título.", "lock": ""})
-        }
-        if L.uni > 0 {
-            list_push(items, {"action": "act:uni_study", "t": "Estudiar para los finales", "s": "Inteligencia, conocimiento", "desc": "Café, apuntes subrayados y crisis existenciales.", "lock": ""})
-            list_push(items, {"action": "act:dropout", "t": "Dejar la universidad", "s": "Adiós título", "desc": "Muchos millonarios dejaron la escuela. Muchos más no lo son.", "lock": ""})
-        }
+    if L.study != null {
+        let d = degree_def(L.study.deg)
+        let left = L.study.months
+        list_push(items, {"action": "act:study_hard", "t": "Estudiar para " + d.n, "s": "Promedio " + str(L.study.gpa), "desc": "Te faltan " + str(left) + " " + plural(left, "mes", "meses") + ". Café, apuntes subrayados y crisis existenciales. Sube tu promedio (con menos de 65 pierdes la beca).", "lock": ""})
+        list_push(items, {"action": "act:study_party", "t": "Fiesta universitaria", "s": "Felicidad, encanto", "desc": "Los mejores contactos se hacen en las fiestas. Tu promedio no opina lo mismo.", "lock": ""})
+        list_push(items, {"action": "act:dropout", "t": "Dejar " + d.n, "s": "Adiós título", "desc": "Muchos millonarios dejaron la escuela. Muchos más no lo son.", "lock": ""})
+    } else if L.age >= 18 {
+        list_push(items, {"action": "act:studymenu", "t": "Universidad y técnicas", "s": "36 carreras", "desc": "Inscríbete a una universidad o técnica. Los títulos abren profesiones (las reguladas solo con título). Paga tu familia, una beca, un préstamo o tú con tu trabajo.", "lock": ""})
+    }
+    if L.age >= 18 && L.edu < 2 {
+        list_push(items, {"action": "act:ged", "t": "Secundaria abierta", "s": "$1,500", "desc": "Nunca es tarde para terminar la escuela. Necesaria para la universidad.", "lock": ""})
+    }
+    if L.gig != null {
+        for it in gig_action_items() { list_push(items, it) }
     }
     if L.age >= 16 {
-        list_push(items, {"action": "act:jobsearch", "t": "Buscar carrera", "s": "Más de 120 carreras", "desc": "Catálogo completo por campos: de mesero a cirujano, de ilustrador a estrella +18. Puedes tener dos carreras y fusionarlas.", "lock": ""})
+        let sub = "100 trabajos sin experiencia"
+        if L.gig != null { sub = "Cambiar de chamba" }
+        list_push(items, {"action": "act:gigmenu", "t": "Chambas de medio tiempo", "s": sub, "desc": "Mesero, albañil, bartender, repartidor... Sin experiencia, medio tiempo y compatibles con estudiar. Cada turno es un minijuego y cada mes hay una minimisión con bono.", "lock": ""})
+    }
+    if L.age >= 16 && L.job == null {
+        list_push(items, {"action": "act:jobsearch", "t": "Buscar carrera", "s": "Más de 120 carreras", "desc": "Catálogo completo por campos. Las profesiones piden título; sin él puedes entrar como amateur pasando una audición. Puedes tener dos carreras y fusionarlas.", "lock": ""})
     }
     return items
 }
@@ -325,12 +347,16 @@ function rel_items() {
 }
 
 function person_actions(p: map) {
-    let out = [
-        {"action": "pact:time", "t": "Pasar tiempo juntos", "s": "Más cercanía"},
-        {"action": "pact:talk", "t": "Conversar", "s": "Un poco más de cercanía"},
+    let out = [{"action": "pact:time", "t": "Pasar tiempo juntos", "s": "Más cercanía"}]
+    if tree_for(p) != "" {
+        list_push(out, {"action": "pact:dlg", "t": "Conversación profunda", "s": "Diálogo con decisiones · " + STYLE_NAMES[npc_style(p)]})
+    } else {
+        list_push(out, {"action": "pact:talk", "t": "Conversar", "s": "Un poco más de cercanía"})
+    }
+    for a in [
         {"action": "pact:argue", "t": "Discutir", "s": "Desahogarte"},
         {"action": "pact:insult", "t": "Insultar", "s": "Quemar el puente"}
-    ]
+    ] { list_push(out, a) }
     let r = p.rel
     if r == "padre" || r == "madre" {
         list_push(out, {"action": "pact:money", "t": "Pedir dinero", "s": "Si te quiere lo suficiente"})
@@ -392,8 +418,8 @@ function do_act(id: string) {
     }
     let used = L.used[id]
     if used == null { used = 0 }
-    if used >= 3 {
-        return info(a.t, "Ya hiciste eso suficiente este año. Envejece un poco.")
+    if used >= 1 {
+        return info(a.t, "Ya hiciste eso este mes. Avanza el tiempo un poco.")
     }
     L.used[id] = used + 1
     if a.code == true {
@@ -507,14 +533,19 @@ function doctor() {
 
 function do_job_act(id: string) {
     if id == "study" {
-        L.smarts += rint(2, 5)
-        gain("know", rint(3, 6))
+        let used = L.used["study"]
+        if used != null { info("Escuela", "Ya estudiaste extra este mes."); return true }
+        L.used["study"] = 1
+        L.smarts += rint(0, 2)
+        L.grades = clamp(L.grades + rint(2, 5), 0, 100)
+        gain("know", rint(1, 3))
         L.happy -= 1
-        finish("Escuela", "Estudiaste como nunca. Tus profesores están impresionados.", "g")
+        finish("Escuela", "Estudiaste como nunca. Tus calificaciones suben a " + str(L.grades) + ".", "g")
         return true
     }
     if id == "skip" {
-        L.smarts -= rint(1, 3)
+        L.grades = clamp(L.grades - rint(2, 5), 0, 100)
+        L.smarts -= rint(0, 1)
         L.happy += 4
         gain("guts", 3)
         finish("Escuela", "Te saltaste clases para ir al centro comercial.", "n")
@@ -532,26 +563,31 @@ function do_job_act(id: string) {
         }
         return true
     }
-    if id == "uni" {
-        L.uni = 4
-        L.school = "universidad"
-        L.debt += 40000
-        finish("Universidad", "Entraste a la universidad. Préstamo estudiantil: $40,000.", "g")
+    if id == "study_hard" || id == "study_party" || id == "dropout" {
+        let used = L.used[id]
+        if used != null && id != "dropout" { info("Estudios", "Ya hiciste eso este mes."); return true }
+        L.used[id] = 1
+        return study_action(id)
+    }
+    if id == "studymenu" {
+        G.modal = {"kind": "menu", "tab": "study"}
+        G.menu_cat = 0
+        G.menu_page = 0
+        G.menu_t0 = G.t
         return true
     }
-    if id == "uni_study" {
-        L.smarts += rint(2, 5)
-        gain("know", rint(3, 7))
-        L.happy -= 2
-        finish("Universidad", "Noches sin dormir y litros de café. Pasaste los finales.", "g")
+    if id == "gigmenu" {
+        G.modal = {"kind": "menu", "tab": "gigs"}
+        G.menu_cat = 0
+        G.menu_page = 0
+        G.menu_t0 = G.t
         return true
     }
-    if id == "dropout" {
-        L.uni = 0
-        L.school = ""
-        finish("Universidad", "Dejaste la universidad. La deuda, en cambio, no te deja a ti.", "b")
-        return true
-    }
+    if id == "gigwork" { gig_work(false); return true }
+    if id == "gigeasy" { gig_work(true); return true }
+    if id == "gigquit" { gig_quit(); return true }
+    if id == "practice" { start_practice(); return true }
+    if id == "certify" { start_certify(); return true }
     if id == "jobsearch" {
         G.modal = {"kind": "menu", "tab": "jobs"}
         G.menu_cat = 0
@@ -578,7 +614,7 @@ function do_job_act(id: string) {
     if id == "shift2" {
         let used = L.used["shift2"]
         if used == null { used = 0 }
-        if used >= 3 { info("Segunda carrera", "Ya le dedicaste suficiente este año."); return true }
+        if used >= 2 { info("Segunda carrera", "Ya le dedicaste suficiente este mes."); return true }
         L.used["shift2"] = used + 1
         let pay = pay_of(L.job2) * 5 / 100
         L.money += pay
@@ -594,17 +630,21 @@ function do_job_act(id: string) {
         return true
     }
     if id == "work_hard" {
-        let boost = rint(6, 14)
-        if has_trait("ambicion") { boost += 5 }
+        if L.used["work_hard"] != null { info("Trabajo", "Ya hiciste horas extra este mes."); return true }
+        L.used["work_hard"] = 1
+        let boost = rint(3, 7)
+        if has_trait("ambicion") { boost += 3 }
         L.job.perf = clamp100(L.job.perf + boost)
-        career_xp(15)
-        gain("skill", rint(2, 5))
+        career_xp(6)
+        gain("skill", rint(1, 2))
         L.happy -= 2
         L.health -= 1
-        finish("Trabajo", "Te quedaste horas extra todo el año. Tu jefe lo notó.", "g")
+        finish("Trabajo", "Te quedaste horas extra todo el mes. Tu jefe lo notó.", "g")
         return true
     }
     if id == "raise" {
+        if L.job.raise_age == L.age { info("Trabajo", "Ya pediste un aumento este año. Espera a tu próximo cumpleaños."); return true }
+        L.job.raise_age = L.age
         let odds = 35 + rank("guts") * 6
         if has_trait("ambicion") { odds += 15 }
         if L.job.perf >= 60 && chance(odds) {
@@ -794,6 +834,12 @@ function do_person_act(action: string, p: map) {
     G.modal = null
     let ctx = {"person": p}
     let name = p.first
+    if action == "dlg" {
+        let key = "dlg" + str(p.id)
+        if L.used[key] != null { return info(name, name + " ya habló contigo este mes. Dale su espacio.") }
+        L.used[key] = 1
+        return start_dialog(tree_for(p), p)
+    }
     if action == "time" {
         bond_gain(p, rint(5, 12))
         L.happy += 3
@@ -846,12 +892,12 @@ function do_person_act(action: string, p: map) {
             if L.gender == "f" {
                 L.pregnant = true
                 L.preg_with = name
-                return finish(name, "¡Estás embarazada! El bebé nacerá el próximo año.", "g")
+                return finish(name, "¡Estás embarazada! El bebé nacerá en unos meses.", "g")
             }
             L.partner_preg = true
-            return finish(name, "¡" + name + " está embarazada! El bebé nacerá el próximo año.", "g")
+            return finish(name, "¡" + name + " está embarazada! El bebé nacerá en unos meses.", "g")
         }
-        return finish(name, "Lo intentaron mucho. Este año no hubo suerte (pero sí diversión).", "x")
+        return finish(name, "Lo intentaron mucho. Este mes no hubo suerte (pero sí diversión).", "x")
     }
     if action == "threesome" {
         let odds = 35 + rank("charm") * 6
@@ -1032,6 +1078,22 @@ function special(name: string, ctx: map) {
         open_hookup(ctx)
         return ""
     }
+    if name == "gig_raise" {
+        if L.gig == null { return "" }
+        L.gig.pay = L.gig.pay * 115 / 100
+        L.gig.perf = clamp100(L.gig.perf + 10)
+        return " Tu sueldo sube a " + money_str(L.gig.pay) + " al mes."
+    }
+    if name == "gig_fired" {
+        if L.gig == null { return "" }
+        let t = L.gig.title
+        L.gig = null
+        return " Perdiste tu trabajo como " + str_lower(t) + "."
+    }
+    if name == "gig_quit" {
+        L.gig = null
+        return ""
+    }
     if name == "career_raise" {
         if L.job != null { L.job.bonus = L.job.bonus + 15 }
         return " Tus ingresos suben un 15%."
@@ -1084,5 +1146,9 @@ function dispatch_choice(index: int) {
     if m.handler == "casino" { return resolve_casino(index, m.ctx) }
     if m.handler == "takejob" { return resolve_takejob(index, m.ctx) }
     if m.handler == "spec" { return resolve_spec(index) }
+    if m.handler == "exam" { return resolve_exam(index, m.ctx) }
+    if m.handler == "enroll" { return resolve_enroll(index, m.ctx) }
+    if m.handler == "audition" { return resolve_audition(index, m.ctx) }
+    if m.handler == "dialog" { return dlg_choose(index) }
     return null
 }

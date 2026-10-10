@@ -1185,7 +1185,8 @@ function meets(tag: string) {
     }
     if str_starts_with(tag, "field:") { return L.job != null && job_def(L.job.id).field == str_replace(tag, "field:", "") }
     if str_starts_with(tag, "kink:") { return has_kink(str_replace(tag, "kink:", "")) }
-    if tag == "uni" { return L.uni > 0 }
+    if tag == "uni" { return L.study != null }
+    if tag == "gig" { return L.gig != null }
     if tag == "addict" { return L.alcohol + L.drugs >= 40 }
     return false
 }
@@ -1202,7 +1203,8 @@ function eligible(ev: map) {
 }
 
 function maybe_event() {
-    if L.age < 5 || !chance(70) { return null }
+    // Con el tiempo mensual, un evento cada 4-5 meses en promedio.
+    if L.age < 5 || !chance(22) { return null }
     let pool = []
     let weights = []
     for ev in EVENTS {

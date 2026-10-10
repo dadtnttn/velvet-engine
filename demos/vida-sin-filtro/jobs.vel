@@ -463,7 +463,7 @@ function job_is_adult(job: any) {
 }
 
 function new_job(id: string) {
-    return {"id": id, "career": id, "title": job_title(id), "level": 0, "xp": 0, "perf": 60, "years": 0, "bonus": 100, "spec": "", "salary": 0, "var": 0}
+    return {"id": id, "career": id, "title": job_title(id), "level": 0, "xp": 0, "perf": 60, "years": 0, "bonus": 100, "spec": "", "salary": 0, "var": 0, "amateur": false}
 }
 
 // Compatibilidad con el código anterior: la carrera principal.
@@ -485,6 +485,7 @@ function job_display(job: any) {
     if job == null { return "" }
     let out = rank_names(job.id)[job.level] + " · " + job.title
     if job.spec != "" { out = out + " (" + job.spec + ")" }
+    if job.amateur == true { out = out + " · amateur" }
     return out
 }
 
@@ -492,6 +493,8 @@ function pay_of(job: map) {
     let d = job_def(job.id)
     let pay = d.base * PAY_MULT[job.level] / 100
     if d.looksy { pay = pay * (50 + L.looks) / 100 }
+    // Sin título se cobra como amateur.
+    if job.amateur == true { pay = pay * 60 / 100 }
     return pay * job.bonus / 100
 }
 
@@ -516,7 +519,9 @@ function job_lock(d: map) {
     if L.age < d.min_age { return "Edad " + str(d.min_age) }
     if L.job != null && L.job.id == d.id { return "Ya es tu carrera" }
     if L.job2 != null && L.job2.id == d.id { return "Ya es tu carrera" }
-    if L.edu < d.edu { return EDU_NAMES[d.edu] }
+    if !has_credential(d.id) && is_regulated(d.id) { return "Título" }
+    // Las carreras con título propio no piden escolaridad: se entra con título o audición.
+    if REQUIRES[d.id] == null && L.edu < d.edu { return EDU_NAMES[d.edu] }
     if L.smarts < d.smarts { return "Intel. " + str(d.smarts) }
     if L.looks < d.looks { return "Atractivo " + str(d.looks) }
     return ""
@@ -533,11 +538,24 @@ function job_items_for(field: string) {
         let tag = ""
         if d.adult { tag = " Carrera +18." }
         if d.illegal { tag = " Ilegal: riesgo de cárcel." }
+        let cred = ""
+        let sub = money_str(d.base) + "/año"
+        if REQUIRES[d.id] != null {
+            if has_credential(d.id) {
+                cred = " Tienes el título necesario."
+            } else if is_regulated(d.id) {
+                cred = " Profesión regulada: necesitas estudiar " + credential_text(d.id) + "."
+                sub = "Requiere título"
+            } else {
+                cred = " Sin título (" + credential_text(d.id) + ") solo entras como amateur: audición con minijuego, 60% del sueldo y menos experiencia."
+                sub = "Título o audición"
+            }
+        }
         list_push(items, {
             "action": "apply:" + d.id,
             "t": by_gender(L.gender, d.m, d.f),
-            "s": money_str(d.base) + "/año",
-            "desc": "Requisitos: " + job_reqs_text(d) + "." + tag + " Rangos: " + str_join(rank_names(d.id), " › ") + ". " + specs,
+            "s": sub,
+            "desc": "Sueldo: " + money_str(d.base) + "/año. Requisitos: " + job_reqs_text(d) + "." + cred + tag + " Rangos: " + str_join(rank_names(d.id), " › ") + ". " + specs,
             "lock": job_lock(d)
         })
     }
@@ -555,37 +573,66 @@ function apply_job(id: string) {
     if d == null { return null }
     if L.jail > 0 { return info("Solicitud", "Desde la cárcel no se puede.") }
     let lock = job_lock(d)
+    let name = str_lower(by_gender(L.gender, d.m, d.f))
+    if !has_credential(id) {
+        if is_regulated(id) {
+            return info("Solicitud", "Para trabajar como " + name + " necesitas un título: " + credential_text(id) + ". Inscríbete en Ocupación › Estudios.")
+        }
+        if lock != "" { return info("Solicitud", "No cumples los requisitos (" + lock + ").") }
+        let game = AUDITION_GAME[d.field]
+        open_choice("AUDICIÓN", "No tienes título de " + credential_text(id) + ". Puedes entrar como amateur si pasas una audición (" + MG_INFO[game].title + ", necesitas 60 puntos). Como amateur ganas el 60% y avanzas más lento hasta que estudies o te certifiques.",
+            ["Hacer la audición", "Mejor estudiar primero"], ["", ""], "audition", {"job": id})
+        return null
+    }
     let ok = lock == ""
-    let odds = 70 + rank("charm") * 3
+    // La experiencia en chambas ayuda a que te contraten.
+    let odds = 70 + rank("charm") * 3 + min(15, L.workxp / 2)
     if d.adult || d.illegal { odds = 85 }
     if !((ok && chance(odds)) || (!ok && L.age >= d.min_age && chance(6))) {
         L.happy -= 3
         let why = "Eligieron a alguien más."
         if !ok { why = "No cumples los requisitos (" + lock + ")." }
-        return finish("Solicitud", "No te aceptaron como " + str_lower(by_gender(L.gender, d.m, d.f)) + ". " + why, "b")
+        return finish("Solicitud", "No te aceptaron como " + name + ". " + why, "b")
     }
+    return hire_flow(id, false)
+}
+
+function resolve_audition(index: int, ctx: map) {
+    G.modal = null
+    if index == 1 { return finish("Audición", "Decidiste prepararte mejor antes de intentarlo.", "n") }
+    let d = job_def(ctx.job)
+    return mg_start(AUDITION_GAME[d.field], "Audición: " + job_title(ctx.job), "audition", ctx)
+}
+
+// Te contrataron: si ya tienes carrera, preguntamos dónde ponerla.
+function hire_flow(id: string, amateur: bool) {
+    let d = job_def(id)
+    if amateur { flag("amateur") }
     if L.job == null {
-        return take_job(id, "main")
+        return take_job(id, "main", amateur)
     }
     let current = L.job.title
     let labels = ["Como carrera principal (dejas " + current + ")", "Como segunda carrera (media jornada)", "Mejor no"]
     if L.job2 != null {
         labels = ["Reemplazar la principal (" + current + ")", "Reemplazar la segunda (" + L.job2.title + ")", "Mejor no"]
     }
-    open_choice("¡TE ACEPTARON!", "Te ofrecen el puesto de " + str_lower(by_gender(L.gender, d.m, d.f)) + ". ¿Dónde lo pones?", labels, ["", "", ""], "takejob", {"job": id})
+    let how = ""
+    if amateur { how = " como amateur" }
+    open_choice("¡TE ACEPTARON!", "Te ofrecen el puesto de " + str_lower(by_gender(L.gender, d.m, d.f)) + how + ". ¿Dónde lo pones?", labels, ["", "", ""], "takejob", {"job": id, "amateur": amateur})
     return null
 }
 
 function resolve_takejob(index: int, ctx: map) {
     G.modal = null
     if index == 2 { return finish("Solicitud", "Rechazaste la oferta.", "n") }
-    if index == 0 { return take_job(ctx.job, "main") }
-    return take_job(ctx.job, "second")
+    if index == 0 { return take_job(ctx.job, "main", ctx.amateur == true) }
+    return take_job(ctx.job, "second", ctx.amateur == true)
 }
 
-function take_job(id: string, slot: string) {
+function take_job(id: string, slot: string, amateur: bool) {
     let d = job_def(id)
     let job = new_job(id)
+    job.amateur = amateur
     if has_trait("ambicion") { job.bonus = 110 }
     if slot == "main" {
         if L.job != null { L.last_job = L.job.title }
@@ -597,6 +644,7 @@ function take_job(id: string, slot: string) {
     list_push(G.toasts, {"head": "¡NUEVA CARRERA!", "title": str_upper(rank_names(id)[0]), "sub": job.title, "t0": G.t})
     let where = ""
     if slot == "second" { where = " como segunda carrera" }
+    if amateur { where = where + " (amateur)" }
     return finish("Nueva carrera", "¡Ahora eres " + str_lower(job.title) + where + "! Sueldo: " + money_str(pay_of(job)) + " al año.", "g")
 }
 
@@ -615,7 +663,9 @@ function start_career(id: string) {
 
 function job_xp(job: map, amount: int, label: string) {
     let names = rank_names(job.id)
-    job.xp = max(0, job.xp + amount)
+    let gained = amount
+    if job.amateur == true && amount > 0 { gained = amount * 60 / 100 }
+    job.xp = max(0, job.xp + gained)
     while job.level < 4 && job.xp >= XP_TABLE[job.level + 1] {
         job.level += 1
         L.happy += 6
@@ -661,6 +711,13 @@ function career_items() {
     if job_is_adult(L.job) && CAREER_ACTIONS[L.job.id] == null {
         list_push(items, {"action": "cact:spec18", "t": "Encargo +18", "s": "Fama, mucho dinero", "desc": "Tu especialidad picante: los clientes pagan muy bien por lo que haces.", "lock": ""})
     }
+    if L.job.amateur == true {
+        let game = AUDITION_GAME[d.field]
+        list_push(items, {"action": "act:practice", "t": "Practicar (" + MG_INFO[game].title + ")", "s": "Experiencia según tu puntaje", "desc": "Sin título aprendes a la mala: practica con el minijuego de tu oficio. Mejor puntaje, más experiencia.", "lock": ""})
+        let lock = ""
+        if L.job.level < 2 { lock = "Rango 3" }
+        list_push(items, {"action": "act:certify", "t": "Examen de certificación", "s": "Dejar de ser amateur", "desc": "Un examen difícil (necesitas 75 puntos). Si lo pasas, cobras el sueldo completo sin necesidad de título.", "lock": lock})
+    }
     list_push(items, {"action": "act:work_hard", "t": "Trabajar más duro", "s": "Desempeño " + str(L.job.perf) + "%", "desc": "Horas extra y reconocimiento (quizá). Suma experiencia.", "lock": ""})
     list_push(items, {"action": "act:raise", "t": "Pedir un aumento", "s": "Sueldo " + money_str(pay_of(L.job)) + "/año", "desc": "Necesitas buen desempeño y algo de valor.", "lock": ""})
     if L.job.spec == "" && len(d.specs) > 0 {
@@ -694,7 +751,7 @@ function do_career_act(id: string) {
     let key = "c_" + id
     let used = L.used[key]
     if used == null { used = 0 }
-    if used >= 3 { return info("Trabajo", "Ya trabajaste suficiente este año. Descansa.") }
+    if used >= 1 { return info("Trabajo", "Ya hiciste eso este mes. Descansa un poco.") }
     if id == "spec18" {
         L.used[key] = used + 1
         let o = {"log": "Hiciste un encargo de «" + L.job.spec + "» para un cliente exigente. Pagó {monto}.", "money": [3000, 12000], "xp": 30, "fame": 6, "happy": 4}
@@ -764,4 +821,48 @@ function fuse_jobs() {
     flag("fusion")
     list_push(G.toasts, {"head": "¡FUSIÓN!", "title": str_upper(job.title), "sub": old, "t0": G.t})
     return finish("Fusión de carreras", "Combinaste " + old + " en una carrera nueva: " + job.title + ". Empiezas en rango 3 y ganas " + money_str(pay_of(job)) + " al año.", "x")
+}
+
+// ---------------------------------------------------------------- amateurs
+
+function start_practice() {
+    G.modal = null
+    if L.job == null { return null }
+    let used = L.used["practice"]
+    if used == null { used = 0 }
+    if used >= 2 { return info("Práctica", "Ya practicaste suficiente este mes.") }
+    L.used["practice"] = used + 1
+    let d = job_def(L.job.id)
+    return mg_start(AUDITION_GAME[d.field], "Práctica: " + L.job.title, "practice", {})
+}
+
+function practice_result(score: any) {
+    if L.job == null { return null }
+    job_xp(L.job, score / 3, "")
+    gain("skill", 1 + score / 40)
+    L.job.perf = clamp100(L.job.perf + score / 20)
+    return finish("Práctica", "Practicaste con " + str(score) + " puntos. Ganas experiencia como " + str_lower(L.job.title) + ".", "g")
+}
+
+function start_certify() {
+    G.modal = null
+    if L.job == null { return null }
+    if L.job.level < 2 { return info("Certificación", "Necesitas llegar al rango 3 para presentar el examen.") }
+    let used = L.used["certify"]
+    if used != null { return info("Certificación", "Solo puedes presentar el examen una vez al mes.") }
+    L.used["certify"] = 1
+    let d = job_def(L.job.id)
+    return mg_start(AUDITION_GAME[d.field], "Certificación: " + L.job.title, "certify", {})
+}
+
+function certify_result(score: any) {
+    if L.job == null { return null }
+    if score >= 75 {
+        L.job.amateur = false
+        flag("pro")
+        list_push(G.toasts, {"head": "¡CERTIFICACIÓN!", "title": str_upper(L.job.title), "sub": "Ya no eres amateur: sueldo completo.", "t0": G.t})
+        return finish("Certificación", "¡Aprobaste con " + str(score) + "! Ahora eres profesional. Sueldo completo: " + money_str(pay_of(L.job)) + " al año.", "g")
+    }
+    L.happy -= 5
+    return finish("Certificación", "Sacaste " + str(score) + ". Necesitabas 75. Vuelve a intentarlo el próximo mes.", "b")
 }

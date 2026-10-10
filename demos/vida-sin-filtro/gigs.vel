@@ -1,0 +1,705 @@
+// @edition 3
+// Trabajos de medio tiempo ("chambas"): 100 empleos sin experiencia para pagar los
+// estudios. Cada uno tiene minijuego de turno, minimisión mensual y eventos según el
+// lugar de trabajo. Los eventos picantes solo ocurren a partir de los 18 años, entre
+// adultos, y siempre se pueden rechazar. Los trabajos de cuidado no tienen eventos +18.
+//
+// Formato: [id, masculino, femenino, lugar, sueldo mensual, edad mínima, minijuego]
+
+const GIG_ROWS = [
+    // Comida
+    ["lavaplatos", "Lavaplatos", "Lavaplatos", "comida", 2200, 16, "timing"],
+    ["ayudante_cocina", "Ayudante de cocina", "Ayudante de cocina", "comida", 2600, 16, "memory"],
+    ["mesero_g", "Mesero", "Mesera", "comida", 3000, 16, "memory"],
+    ["mesero_banquetes", "Mesero de banquetes", "Mesera de banquetes", "comida", 3200, 16, "memory"],
+    ["fast_food", "Cocinero de comida rápida", "Cocinera de comida rápida", "comida", 2700, 16, "timing"],
+    ["pizzero", "Pizzero", "Pizzera", "comida", 2800, 16, "timing"],
+    ["cajero_cafe", "Cajero de cafetería", "Cajera de cafetería", "comida", 2500, 16, "math"],
+    ["barista_g", "Barista", "Barista", "comida", 2700, 16, "bar"],
+    ["heladero", "Heladero", "Heladera", "comida", 2200, 16, "math"],
+    ["taquero", "Taquero", "Taquera", "comida", 3000, 16, "timing"],
+    ["host", "Host de restaurante", "Hostess de restaurante", "comida", 2900, 16, "memory"],
+    ["hotdogs", "Vendedor de hot dogs", "Vendedora de hot dogs", "comida", 2300, 16, "math"],
+    // Noche
+    ["bartender_g", "Bartender", "Bartender", "noche", 4200, 18, "bar"],
+    ["ayudante_barra", "Ayudante de barra", "Ayudante de barra", "noche", 3200, 18, "bar"],
+    ["mesero_antro", "Mesero de antro", "Mesera de antro", "noche", 3800, 18, "memory"],
+    ["guardarropa", "Encargado de guardarropa", "Encargada de guardarropa", "noche", 2800, 18, "memory"],
+    ["cadenero", "Cadenero", "Cadenera", "noche", 4000, 18, "timing"],
+    ["promotor_antro", "Promotor de antro", "Promotora de antro", "noche", 3500, 18, "arrows"],
+    ["shots", "Vendedor de shots", "Vendedora de shots", "noche", 3600, 18, "math"],
+    ["dj_fiestas", "DJ de fiestas", "DJ de fiestas", "noche", 4500, 18, "arrows"],
+    ["mesero_karaoke", "Mesero de karaoke", "Mesera de karaoke", "noche", 3300, 18, "memory"],
+    ["valet", "Valet parking nocturno", "Valet parking nocturna", "noche", 3400, 18, "timing"],
+    ["limpieza_antro", "Limpieza de antro", "Limpieza de antro", "noche", 2700, 18, "timing"],
+    ["mesero_topless", "Mesero en topless", "Mesera en topless", "noche", 6000, 18, "memory"],
+    // Obra
+    ["ayudante_albanil", "Ayudante de albañil", "Ayudante de albañil", "obra", 3000, 16, "timing"],
+    ["albanil_g", "Albañil", "Albañil", "obra", 3800, 18, "timing"],
+    ["pintor_g", "Pintor de brocha gorda", "Pintora de brocha gorda", "obra", 3200, 16, "timing"],
+    ["cargador", "Cargador", "Cargadora", "obra", 2900, 16, "timing"],
+    ["ayudante_plomero", "Ayudante de plomero", "Ayudante de plomera", "obra", 3100, 16, "timing"],
+    ["ayudante_electricista", "Ayudante de electricista", "Ayudante de electricista", "obra", 3200, 16, "timing"],
+    ["soldador", "Ayudante de soldador", "Ayudante de soldadora", "obra", 3500, 18, "timing"],
+    ["demoledor", "Demoledor", "Demoledora", "obra", 3300, 18, "timing"],
+    ["yesero", "Yesero", "Yesera", "obra", 3000, 16, "timing"],
+    ["pisos", "Instalador de pisos", "Instaladora de pisos", "obra", 3400, 16, "timing"],
+    // Tienda
+    ["cajero_g", "Cajero", "Cajera", "tienda", 2600, 16, "math"],
+    ["reponedor", "Reponedor", "Reponedora", "tienda", 2400, 16, "memory"],
+    ["vendedor_ropa", "Vendedor de ropa", "Vendedora de ropa", "tienda", 2800, 16, "memory"],
+    ["vendedor_celulares", "Vendedor de celulares", "Vendedora de celulares", "tienda", 3200, 16, "math"],
+    ["vendedor_zapatos", "Vendedor de zapatos", "Vendedora de zapatos", "tienda", 2700, 16, "memory"],
+    ["empacador", "Empacador", "Empacadora", "tienda", 1800, 16, "timing"],
+    ["inventarista", "Inventarista", "Inventarista", "tienda", 2900, 16, "math"],
+    ["perfumes", "Vendedor de perfumes", "Vendedora de perfumes", "tienda", 3000, 16, "memory"],
+    ["lenceria_tienda", "Vendedor de lencería", "Vendedora de lencería", "tienda", 3300, 18, "memory"],
+    ["sexshop_dependiente", "Dependiente de sex shop", "Dependienta de sex shop", "tienda", 3500, 18, "memory"],
+    // Calle y reparto
+    ["repartidor_bici", "Repartidor en bici", "Repartidora en bici", "calle", 2600, 16, "timing"],
+    ["repartidor_pizza", "Repartidor de pizza", "Repartidora de pizza", "calle", 2700, 16, "math"],
+    ["mensajero", "Mensajero", "Mensajera", "calle", 2800, 16, "memory"],
+    ["volantero", "Volantero", "Volantera", "calle", 1800, 16, "arrows"],
+    ["ambulante", "Vendedor ambulante", "Vendedora ambulante", "calle", 2400, 16, "math"],
+    ["lavacoches", "Lavacoches", "Lavacoches", "calle", 2200, 16, "timing"],
+    ["botarga", "Botarga de tienda", "Botarga de tienda", "calle", 2000, 16, "arrows"],
+    ["encuestador", "Encuestador", "Encuestadora", "calle", 2500, 16, "memory"],
+    ["repartidor_paqueteria", "Repartidor de paquetería", "Repartidora de paquetería", "calle", 3300, 18, "memory"],
+    ["chofer_app_g", "Chofer de aplicación", "Chofer de aplicación", "calle", 4000, 18, "timing"],
+    // Hogar
+    ["limpieza_casas", "Limpieza de casas", "Limpieza de casas", "hogar", 2800, 16, "timing"],
+    ["jardinero_g", "Jardinero", "Jardinera", "hogar", 2700, 16, "timing"],
+    ["piscinero", "Limpiador de albercas", "Limpiadora de albercas", "hogar", 3000, 16, "timing"],
+    ["mudanzas", "Cargador de mudanzas", "Cargadora de mudanzas", "hogar", 3200, 16, "timing"],
+    ["chef_domicilio", "Cocinero a domicilio", "Cocinera a domicilio", "hogar", 3800, 18, "memory"],
+    ["planchador", "Planchador", "Planchadora", "hogar", 2200, 16, "timing"],
+    ["ama_llaves", "Mayordomo", "Ama de llaves", "hogar", 4200, 18, "memory"],
+    ["manitas", "Manitas a domicilio", "Manitas a domicilio", "hogar", 3300, 16, "timing"],
+    // Cuidado (sin eventos +18)
+    ["ninera", "Niñero", "Niñera", "cuidado", 2600, 16, "memory"],
+    ["cuidador_ancianos", "Cuidador de ancianos", "Cuidadora de ancianos", "cuidado", 3000, 18, "memory"],
+    ["paseador", "Paseador de perros", "Paseadora de perros", "cuidado", 2000, 16, "timing"],
+    ["cuidador_mascotas", "Cuidador de mascotas", "Cuidadora de mascotas", "cuidado", 2200, 16, "memory"],
+    ["tutor_tareas", "Tutor de tareas", "Tutora de tareas", "cuidado", 2500, 16, "quiz"],
+    ["salvavidas", "Salvavidas", "Salvavidas", "cuidado", 2800, 16, "timing"],
+    // Oficina
+    ["recepcionista_g", "Recepcionista", "Recepcionista", "oficina", 3200, 16, "memory"],
+    ["capturista", "Capturista de datos", "Capturista de datos", "oficina", 2900, 16, "typing"],
+    ["telemarketing", "Teleoperador", "Teleoperadora", "oficina", 3000, 16, "typing"],
+    ["asistente_admin", "Asistente administrativo", "Asistente administrativa", "oficina", 3500, 18, "typing"],
+    ["archivista", "Archivista", "Archivista", "oficina", 2600, 16, "memory"],
+    ["mensajero_interno", "Mensajero interno", "Mensajera interna", "oficina", 2400, 16, "memory"],
+    ["soporte_n1", "Soporte técnico", "Soporte técnico", "oficina", 3600, 16, "quiz"],
+    ["cm_junior", "Community manager junior", "Community manager junior", "oficina", 3100, 16, "typing"],
+    ["traductor", "Traductor freelance", "Traductora freelance", "oficina", 3800, 16, "typing"],
+    ["transcriptor", "Transcriptor", "Transcriptora", "oficina", 2800, 16, "typing"],
+    // Hotel
+    ["botones", "Botones", "Botones", "hotel", 2700, 16, "memory"],
+    ["camarista", "Camarista", "Camarista", "hotel", 2900, 16, "timing"],
+    ["recepcion_nocturna", "Recepcionista nocturno", "Recepcionista nocturna", "hotel", 3400, 18, "memory"],
+    ["room_service", "Room service", "Room service", "hotel", 3200, 18, "memory"],
+    ["animador_resort", "Animador de resort", "Animadora de resort", "hotel", 3600, 18, "arrows"],
+    ["spa_ayudante", "Ayudante de spa", "Ayudante de spa", "hotel", 3000, 18, "timing"],
+    // Eventos
+    ["edecan", "Edecán", "Edecán", "eventos", 3800, 18, "memory"],
+    ["mesero_bodas", "Mesero de bodas", "Mesera de bodas", "eventos", 3100, 16, "memory"],
+    ["montador", "Montador de escenarios", "Montadora de escenarios", "eventos", 3300, 16, "timing"],
+    ["staff_conciertos", "Staff de conciertos", "Staff de conciertos", "eventos", 3000, 16, "timing"],
+    ["foto_eventos", "Fotógrafo de eventos", "Fotógrafa de eventos", "eventos", 3500, 16, "timing"],
+    ["payaso", "Payaso de fiestas", "Payasa de fiestas", "eventos", 2600, 16, "arrows"],
+    ["animador_despedidas", "Animador de despedidas", "Animadora de despedidas", "eventos", 4500, 18, "arrows"],
+    ["stripper_despedidas", "Stripper para despedidas", "Stripper para despedidas", "eventos", 7000, 18, "arrows"],
+    // Gimnasio
+    ["recepcion_gym", "Recepcionista de gimnasio", "Recepcionista de gimnasio", "gym", 2600, 16, "memory"],
+    ["spinning", "Instructor de spinning", "Instructora de spinning", "gym", 3500, 18, "arrows"],
+    ["ayudante_entrenador", "Ayudante de entrenador", "Ayudante de entrenadora", "gym", 2900, 16, "timing"],
+    ["caddie", "Caddie de golf", "Caddie de golf", "gym", 3000, 16, "memory"],
+    // Fábrica y campo
+    ["obrero", "Obrero de línea", "Obrera de línea", "fabrica", 3000, 16, "timing"],
+    ["empacador_fabrica", "Empacador de fábrica", "Empacadora de fábrica", "fabrica", 2800, 16, "timing"],
+    ["jornalero", "Jornalero", "Jornalera", "fabrica", 2400, 16, "timing"],
+    ["montacargas", "Operador de montacargas", "Operadora de montacargas", "fabrica", 3600, 18, "timing"],
+    ["calidad", "Control de calidad", "Control de calidad", "fabrica", 3200, 16, "memory"],
+    // Belleza
+    ["asistente_salon", "Asistente de salón", "Asistente de salón", "belleza", 2500, 16, "memory"],
+    ["lavacabezas", "Lavacabezas", "Lavacabezas", "belleza", 2200, 16, "timing"],
+    // En línea +18
+    ["linea_caliente", "Operador de línea caliente", "Operadora de línea caliente", "online18", 5000, 18, "typing"],
+    ["webcam_horas", "Modelo de webcam por horas", "Modelo de webcam por horas", "online18", 6000, 18, "arrows"],
+    ["fotos_atrevidas", "Modelo de fotos atrevidas", "Modelo de fotos atrevidas", "online18", 5500, 18, "memory"]
+]
+
+const GIG_PLACES = {
+    "comida": "Comida", "noche": "Vida nocturna", "obra": "Construcción", "tienda": "Tiendas", "calle": "Calle y reparto",
+    "hogar": "Hogar", "cuidado": "Cuidado", "oficina": "Oficina", "hotel": "Hotel", "eventos": "Eventos",
+    "gym": "Gimnasio", "fabrica": "Fábrica y campo", "belleza": "Belleza", "online18": "En línea +18"
+}
+const GIG_PLACE_ORDER = ["comida", "noche", "obra", "tienda", "calle", "hogar", "cuidado", "oficina", "hotel", "eventos", "gym", "fabrica", "belleza", "online18"]
+
+// Eventos del trabajo. "set": lugares donde ocurren ("any" = todos menos cuidado y en línea).
+// "adult": true exige 18 años y nunca ocurre en trabajos de cuidado.
+const GIG_EVENTS = [
+    {
+        "id": "g_rude", "title": "Cliente imposible", "min": 16, "max": 99, "w": 8, "req": "", "set": ["comida", "noche", "tienda", "hotel", "calle", "oficina"],
+        "text": "Un cliente te grita frente a todos y exige hablar con el gerente por algo que no fue tu culpa.",
+        "choices": [
+            {"t": "Mantener la calma y resolverlo", "need": "kind", "rank": 2, "o": [
+                {"w": 100, "log": "Lo calmaste tan bien que terminó dejándote propina.", "money": 300, "kind": 4, "gigperf": 10}
+            ]},
+            {"t": "Contestarle igual de feo", "o": [
+                {"w": 50, "log": "Se fue humillado. Tus compañeros te aplauden en secreto.", "happy": 6, "guts": 3, "gigperf": -10},
+                {"w": 50, "log": "Te ganaste un reporte del gerente.", "happy": -4, "gigperf": -20}
+            ]},
+            {"t": "Llamar al gerente", "o": [
+                {"w": 100, "log": "El gerente le dio la razón al cliente. Clásico.", "happy": -3}
+            ]}
+        ]
+    },
+    {
+        "id": "g_friend", "title": "Compañero de turno", "min": 16, "max": 99, "w": 7, "req": "", "set": ["any"], "person": "peer",
+        "text": "{x}, que trabaja contigo, te invita a comer algo después del turno.",
+        "choices": [
+            {"t": "Aceptar", "o": [
+                {"w": 100, "log": "Comieron tacos y se rieron de su jefe. Nueva amistad.", "special": "add_friend", "happy": 5}
+            ]},
+            {"t": "Excusarte", "o": [
+                {"w": 100, "log": "Te fuiste directo a casa."}
+            ]}
+        ]
+    },
+    {
+        "id": "g_overtime", "title": "Horas extra", "min": 16, "max": 99, "w": 7, "req": "", "set": ["any"],
+        "text": "Tu jefe te pide quedarte cuatro horas más. «Sin paga, pero por el equipo».",
+        "choices": [
+            {"t": "Negociar que te las pague", "need": "guts", "rank": 2, "o": [
+                {"w": 100, "log": "Le dijiste que el equipo no paga tu renta. Te pagó doble.", "money": 600, "guts": 3}
+            ]},
+            {"t": "Quedarte", "o": [
+                {"w": 100, "log": "Te quedaste. Tu jefe ni las gracias dio.", "happy": -5, "health": -2, "gigperf": 10}
+            ]},
+            {"t": "Irte a tu hora", "o": [
+                {"w": 100, "log": "Te fuiste a tu hora. Al día siguiente te miró feo.", "gigperf": -8}
+            ]}
+        ]
+    },
+    {
+        "id": "g_money_floor", "title": "Dinero en el piso", "min": 16, "max": 99, "w": 4, "req": "", "set": ["comida", "tienda", "calle", "noche", "hotel"],
+        "text": "Encuentras $500 tirados en el piso del local al cerrar.",
+        "choices": [
+            {"t": "Entregarlos al encargado", "o": [
+                {"w": 100, "log": "Tu honestidad impresionó al encargado.", "karma": 6, "gigperf": 8}
+            ]},
+            {"t": "Guardártelos", "o": [
+                {"w": 100, "log": "Cena gratis esta semana.", "money": 500, "karma": -5}
+            ]}
+        ]
+    },
+    {
+        "id": "g_accident", "title": "Casi accidente", "min": 16, "max": 99, "w": 5, "req": "", "set": ["obra", "fabrica", "hogar", "calle"],
+        "text": "Una carga mal amarrada se balancea justo encima de ti.",
+        "choices": [
+            {"t": "Saltar a tiempo", "need": "skill", "rank": 2, "o": [
+                {"w": 100, "log": "Reflejos de gato. Ni un rasguño.", "skill": 2}
+            ]},
+            {"t": "Intentar sostenerla", "o": [
+                {"w": 50, "log": "La sostuviste. Te volviste el héroe del turno.", "guts": 4, "gigperf": 10},
+                {"w": 50, "log": "Te lastimaste el hombro. Dos semanas de incapacidad.", "health": -15}
+            ]}
+        ]
+    },
+    {
+        "id": "g_promo", "title": "Encargado de turno", "min": 16, "max": 99, "w": 4, "req": "", "set": ["any"],
+        "text": "Por tu buen desempeño, te ofrecen ser encargad{a} de turno: más sueldo, más responsabilidad.",
+        "choices": [
+            {"t": "Aceptar", "o": [
+                {"w": 100, "log": "Ahora mandas en el turno. Te subieron el sueldo.", "special": "gig_raise", "happy": 4}
+            ]},
+            {"t": "No quiero más estrés", "o": [
+                {"w": 100, "log": "Preferiste seguir tranquil{a}."}
+            ]}
+        ]
+    },
+    {
+        "id": "g_robbery", "title": "Asalto en el local", "min": 16, "max": 99, "w": 3, "req": "", "set": ["comida", "tienda", "noche", "calle"],
+        "text": "Dos tipos entran armados y exigen el dinero de la caja.",
+        "choices": [
+            {"t": "Entregar todo sin discutir", "o": [
+                {"w": 100, "log": "Se llevaron la caja. Nadie salió herido.", "happy": -6}
+            ]},
+            {"t": "Hacerte el héroe", "need": "guts", "rank": 3, "o": [
+                {"w": 60, "log": "Los sometiste hasta que llegó la policía. Saliste en las noticias.", "fame": 4, "guts": 6, "gigperf": 20},
+                {"w": 40, "log": "Te golpearon con la culata.", "health": -20}
+            ]}
+        ]
+    },
+    {
+        "id": "g_kid", "title": "Berrinche épico", "min": 16, "max": 99, "w": 8, "req": "", "set": ["cuidado"],
+        "text": "El niño que cuidas se tira al piso gritando porque su sándwich está cortado «mal».",
+        "choices": [
+            {"t": "Paciencia infinita", "need": "kind", "rank": 2, "o": [
+                {"w": 100, "log": "Lo calmaste con un cuento inventado. Los padres te subieron el sueldo.", "special": "gig_raise", "kind": 4}
+            ]},
+            {"t": "Hacer otro sándwich", "o": [
+                {"w": 100, "log": "Problema resuelto en dos minutos.", "happy": 1}
+            ]}
+        ]
+    },
+    {
+        "id": "g_viral_tip", "title": "Propina viral", "min": 16, "max": 99, "w": 3, "req": "", "set": ["comida", "noche", "calle"],
+        "text": "Un influencer te deja $2,000 de propina y te graba para su video.",
+        "choices": [
+            {"t": "Sonreír a la cámara", "o": [
+                {"w": 100, "log": "El video se hizo viral. Te reconocen en la calle.", "money": 2000, "fame": 3, "charm": 3}
+            ]},
+            {"t": "Pedir que no te grabe", "o": [
+                {"w": 100, "log": "Respetó tu privacidad y te dejó la propina igual.", "money": 2000}
+            ]}
+        ]
+    },
+    {
+        "id": "g_strike", "title": "Huelga", "min": 16, "max": 99, "w": 3, "req": "", "set": ["fabrica", "obra"],
+        "text": "Tus compañeros organizan una huelga por mejores salarios.",
+        "choices": [
+            {"t": "Unirte y liderarla", "need": "guts", "rank": 3, "o": [
+                {"w": 100, "log": "Ganaron. Todos cobran más gracias a ti.", "special": "gig_raise", "guts": 5, "karma": 5}
+            ]},
+            {"t": "Unirte", "o": [
+                {"w": 60, "log": "Lograron un pequeño aumento.", "special": "gig_raise"},
+                {"w": 40, "log": "Despidieron a los cabecillas. Por suerte no a ti.", "happy": -4}
+            ]},
+            {"t": "Seguir trabajando", "o": [
+                {"w": 100, "log": "Tus compañeros ya no te hablan.", "kind": -3, "gigperf": 10}
+            ]}
+        ]
+    },
+    {
+        "id": "g_number", "title": "Número en la servilleta", "min": 18, "max": 99, "w": 7, "req": "", "adult": true, "set": ["comida", "noche", "tienda", "hotel", "eventos", "gym", "belleza"], "person": "near",
+        "text": "{x} ({edad}) te deja $200 de propina... y su número escrito en la servilleta con un guiño.",
+        "choices": [
+            {"t": "Llamarl{xlo} esa misma noche", "o": [
+                {"w": 100, "special": "hookup", "money": 200}
+            ]},
+            {"t": "Invitarl{xlo} a una cita de verdad", "o": [
+                {"w": 60, "log": "Salieron el fin de semana. Hubo chispa.", "special": "new_partner", "money": 200},
+                {"w": 40, "log": "Resultó que tenía pareja. Qué oso.", "money": 200, "happy": -3}
+            ]},
+            {"t": "Quedarte la propina y tirar el número", "o": [
+                {"w": 100, "log": "Profesional ante todo. Y $200 más.", "money": 200}
+            ]}
+        ]
+    },
+    {
+        "id": "g_bachelorette", "title": "Despedida descontrolada", "min": 18, "max": 99, "w": 6, "req": "", "adult": true, "set": ["noche", "eventos", "comida"],
+        "text": "Una despedida de soltera muy animada te ofrece $500 por quitarte la camisa mientras sirves los tragos.",
+        "choices": [
+            {"t": "Darles un show", "lucky": ["exhib"], "o": [
+                {"w": 70, "log": "Gritaron como en concierto. Te llevaste $500 y varios números de teléfono.", "money": 500, "charm": 4, "happy": 6},
+                {"w": 30, "log": "El gerente te vio. Advertencia por escrito... pero valió la pena.", "money": 500, "gigperf": -15}
+            ]},
+            {"t": "Reírte y seguir sirviendo", "o": [
+                {"w": 100, "log": "Les dijiste que la camisa no está en el menú. Te dieron propina igual.", "money": 150}
+            ]}
+        ]
+    },
+    {
+        "id": "g_storage", "title": "El almacén", "min": 18, "max": 99, "w": 6, "req": "", "adult": true, "set": ["comida", "noche", "tienda", "hotel", "oficina", "fabrica"], "person": "peer",
+        "text": "{x}, tu compañer{xa} de turno, te toma de la mano y te lleva al almacén con una sonrisa traviesa.",
+        "choices": [
+            {"t": "Dejarte llevar", "o": [
+                {"w": 75, "log": "Diez minutos que nadie notó. O eso creen.", "sex": true, "std": 4, "happy": 10},
+                {"w": 25, "log": "El encargado abrió la puerta en el peor momento. Los despidieron a ambos.", "sex": true, "special": "gig_fired", "happy": -5}
+            ]},
+            {"t": "«Aquí no... mejor después del turno»", "o": [
+                {"w": 100, "log": "Salieron esa noche. Ahora es tu pareja.", "special": "new_partner", "happy": 6}
+            ]},
+            {"t": "Rechazarl{xlo} con amabilidad", "o": [
+                {"w": 100, "log": "Le dijiste que no. Lo tomó bien y siguen trabajando juntos."}
+            ]}
+        ]
+    },
+    {
+        "id": "g_towel", "title": "Entrega especial", "min": 18, "max": 99, "w": 7, "req": "", "adult": true, "set": ["calle"], "person": "near",
+        "text": "Al entregar el pedido, {x} abre la puerta envuelt{xa} solo en una toalla y te invita a pasar.",
+        "choices": [
+            {"t": "Pasar", "o": [
+                {"w": 100, "special": "hookup"}
+            ]},
+            {"t": "Entregar y seguir tu ruta", "o": [
+                {"w": 100, "log": "Le diste su pedido y la mejor reseña de tu vida.", "gigperf": 5}
+            ]}
+        ]
+    },
+    {
+        "id": "g_homeowner", "title": "Limonada", "min": 18, "max": 99, "w": 6, "req": "", "adult": true, "set": ["hogar", "obra"], "person": [30, 60],
+        "text": "{xun} dueñ{xa} de la casa donde trabajas te ofrece limonada fría, se sienta muy cerca y te pregunta si tienes prisa.",
+        "choices": [
+            {"t": "No tengo ninguna prisa", "kink": "maduros", "o": [
+                {"w": 100, "special": "hookup"}
+            ]},
+            {"t": "Aceptar solo la limonada", "o": [
+                {"w": 70, "log": "Platicaron un rato. Te recomendó con sus vecinos.", "gigperf": 8},
+                {"w": 30, "special": "hookup"}
+            ]},
+            {"t": "Volver al trabajo", "o": [
+                {"w": 100, "log": "Terminaste el trabajo y te fuiste."}
+            ]}
+        ]
+    },
+    {
+        "id": "g_room_service", "title": "Servicio a la habitación", "min": 18, "max": 99, "w": 7, "req": "", "adult": true, "set": ["hotel"], "person": "near",
+        "text": "En la suite 1204, {x} te recibe en bata, te da $1,000 de propina y te propone quedarte «un rato».",
+        "choices": [
+            {"t": "Quedarte", "o": [
+                {"w": 80, "special": "hookup", "money": 1000},
+                {"w": 20, "log": "Un supervisor te vio salir de la suite. Te despidieron.", "money": 1000, "sex": true, "special": "gig_fired"}
+            ]},
+            {"t": "Aceptar solo la propina", "o": [
+                {"w": 100, "log": "Le diste las gracias y cerraste la puerta. $1,000 más rico.", "money": 1000}
+            ]},
+            {"t": "Reportarlo al gerente", "o": [
+                {"w": 100, "log": "El gerente lo anotó en su expediente. Te dieron el resto del día libre.", "karma": 2}
+            ]}
+        ]
+    },
+    {
+        "id": "g_boss_flirt", "title": "Jefe coqueto", "min": 18, "max": 99, "w": 5, "req": "", "adult": true, "set": ["oficina", "tienda", "comida", "hotel"], "person": [25, 55],
+        "text": "{x}, tu jefe directo, te invita a cenar «para hablar de tu futuro» y te mira de una forma que no deja dudas.",
+        "choices": [
+            {"t": "Aceptar la cena", "o": [
+                {"w": 60, "log": "La cena terminó en su departamento. El lunes, todo fue muy incómodo... y te dieron un aumento.", "sex": true, "special": "gig_raise", "karma": -2},
+                {"w": 40, "log": "Fue una cena agradable y nada más. Te respetó.", "happy": 3}
+            ]},
+            {"t": "Poner un límite claro", "need": "guts", "rank": 2, "o": [
+                {"w": 100, "log": "Le dijiste que lo vuestro es solo trabajo. Lo entendió.", "guts": 3}
+            ]},
+            {"t": "Reportarlo a Recursos Humanos", "o": [
+                {"w": 60, "log": "Investigaron y lo cambiaron de área.", "karma": 3},
+                {"w": 40, "log": "No hicieron nada y el ambiente se puso tenso.", "happy": -6, "gigperf": -10}
+            ]}
+        ]
+    },
+    {
+        "id": "g_gym_private", "title": "Clases privadas", "min": 18, "max": 99, "w": 6, "req": "", "adult": true, "set": ["gym"], "person": "near",
+        "text": "{x}, cliente del gimnasio, te ofrece $1,500 por clases privadas en su casa. Por cómo te mira, no busca solo hacer sentadillas.",
+        "choices": [
+            {"t": "Ir a dar la clase", "o": [
+                {"w": 60, "special": "hookup", "money": 1500},
+                {"w": 40, "log": "Solo quería entrenar. Muy profesional. Te contrató tres meses.", "money": 4500}
+            ]},
+            {"t": "Clases solo en el gimnasio", "o": [
+                {"w": 100, "log": "Aceptó entrenar en el gimnasio. Buen cliente.", "money": 800}
+            ]}
+        ]
+    },
+    {
+        "id": "g_lingerie_shoot", "title": "Oferta de fotos", "min": 18, "max": 99, "w": 4, "req": "hot", "adult": true, "set": ["eventos", "belleza", "tienda", "gym", "hotel"],
+        "text": "Un fotógrafo te ve en el trabajo y te ofrece $3,000 por una sesión en lencería para una marca.",
+        "choices": [
+            {"t": "Aceptar", "o": [
+                {"w": 100, "log": "La sesión quedó espectacular. La marca quiere más.", "money": 3000, "fame": 4, "charm": 3}
+            ]},
+            {"t": "Pedir ver su portafolio primero", "need": "know", "rank": 2, "o": [
+                {"w": 100, "log": "Era una marca real. Negociaste $5,000.", "money": 5000, "fame": 4}
+            ]},
+            {"t": "Rechazar", "o": [
+                {"w": 100, "log": "No es lo tuyo."}
+            ]}
+        ]
+    },
+    {
+        "id": "g_harass", "title": "Manos largas", "min": 18, "max": 99, "w": 4, "req": "", "adult": true, "set": ["noche", "comida", "eventos", "hotel"],
+        "text": "Un cliente borracho te toca sin permiso mientras sirves.",
+        "choices": [
+            {"t": "Ponerlo en su lugar", "need": "guts", "rank": 2, "o": [
+                {"w": 100, "log": "Le dejaste claro que eso no se hace. Se disculpó y se fue.", "guts": 4}
+            ]},
+            {"t": "Llamar a seguridad", "o": [
+                {"w": 100, "log": "Lo sacaron del lugar. Tus compañeros te apoyaron.", "kind": 2}
+            ]},
+            {"t": "Denunciarlo", "o": [
+                {"w": 100, "log": "Levantaste una denuncia. No tienes por qué aguantar eso.", "karma": 3, "guts": 3}
+            ]}
+        ]
+    },
+    {
+        "id": "g_regular", "title": "Cliente frecuente", "min": 18, "max": 99, "w": 8, "req": "", "adult": true, "set": ["online18"], "person": "near",
+        "text": "{x}, tu cliente más fiel, ofrece $3,000 por conocerte en persona.",
+        "choices": [
+            {"t": "Aceptar en un lugar público", "o": [
+                {"w": 60, "log": "Una cena agradable. Pagó lo prometido.", "money": 3000},
+                {"w": 40, "special": "hookup", "money": 3000}
+            ]},
+            {"t": "Mantenerlo en línea", "o": [
+                {"w": 100, "log": "Le dijiste que la magia está en la pantalla. Te mandó una propina igual.", "money": 800}
+            ]}
+        ]
+    },
+    {
+        "id": "g_last_client", "title": "El último cliente", "min": 18, "max": 99, "w": 6, "req": "", "adult": true, "set": ["noche"], "person": "near",
+        "text": "Son las 4 a. m. y {x}, el último cliente, no quiere irse a casa sin ti.",
+        "choices": [
+            {"t": "Irte con {xel}", "o": [
+                {"w": 100, "special": "hookup"}
+            ]},
+            {"t": "Pedirle un taxi", "o": [
+                {"w": 100, "log": "Le pediste un taxi. Te dejó propina de agradecimiento.", "money": 300, "kind": 2}
+            ]}
+        ]
+    },
+    {
+        "id": "g_happy_ending", "title": "Petición especial", "min": 18, "max": 99, "w": 5, "req": "", "adult": true, "set": ["hotel", "belleza"], "person": "near",
+        "text": "Durante el masaje, {x} te pregunta en voz baja si ofreces un «final feliz» por $1,500 extra.",
+        "choices": [
+            {"t": "Aceptar el dinero", "o": [
+                {"w": 70, "log": "Nadie se enteró. $1,500 más y un cliente muy satisfecho.", "money": 1500, "sex": true, "karma": -3},
+                {"w": 30, "log": "El spa tenía cámaras. Te despidieron.", "money": 1500, "sex": true, "special": "gig_fired"}
+            ]},
+            {"t": "Negarte con firmeza", "o": [
+                {"w": 100, "log": "Le dijiste que aquí solo se dan masajes. Terminó la sesión en silencio."}
+            ]},
+            {"t": "Reportarlo", "o": [
+                {"w": 100, "log": "Le prohibieron la entrada al spa.", "karma": 2}
+            ]}
+        ]
+    },
+    {
+        "id": "g_uniform", "title": "Nuevo uniforme", "min": 18, "max": 99, "w": 4, "req": "", "adult": true, "set": ["noche", "eventos", "comida"],
+        "text": "El dueño anuncia un uniforme nuevo mucho más revelador. «Suben las propinas», dice.",
+        "choices": [
+            {"t": "Usarlo con orgullo", "lucky": ["exhib"], "o": [
+                {"w": 100, "log": "Tus propinas se duplicaron este mes.", "money": 1500, "charm": 3}
+            ]},
+            {"t": "Negarte junto a tus compañeros", "need": "guts", "rank": 2, "o": [
+                {"w": 100, "log": "Ante la protesta, el dueño se echó para atrás.", "karma": 3, "guts": 3}
+            ]},
+            {"t": "Renunciar", "o": [
+                {"w": 100, "log": "Renunciaste. Hay más trabajos en el mundo.", "special": "gig_quit"}
+            ]}
+        ]
+    }
+]
+
+const GIG_MISSIONS = [
+    {"id": "shifts", "t": "Turnos completos", "d": "Trabaja 3 turnos este mes."},
+    {"id": "tips", "t": "Rey de las propinas", "d": "Junta {meta} en propinas este mes."},
+    {"id": "perfect", "t": "Turno perfecto", "d": "Saca 90 o más en un turno."},
+    {"id": "good2", "t": "Constancia", "d": "Saca 70 o más en 2 turnos este mes."}
+]
+
+state {
+    GIGC: map = {}
+}
+
+// ---------------------------------------------------------------- definiciones
+
+function gig_def(id: string) {
+    let cached = GIGC[id]
+    if cached != null { return cached }
+    for r in GIG_ROWS {
+        if r[0] == id {
+            // La tabla guarda el sueldo de tiempo completo; la chamba es de medio tiempo.
+            let d = {"id": r[0], "m": r[1], "f": r[2], "set": r[3], "pay": r[4] / 3, "min_age": r[5], "game": r[6]}
+            GIGC[id] = d
+            return d
+        }
+    }
+    return null
+}
+
+function gig_items(place: string) {
+    let items = []
+    for r in GIG_ROWS {
+        if r[3] != place { continue }
+        let d = gig_def(r[0])
+        let lock = ""
+        if L.age < d.min_age { lock = "Edad " + str(d.min_age) }
+        if L.gig != null && L.gig.id == d.id { lock = "Ya trabajas aquí" }
+        list_push(items, {
+            "action": "gig:" + d.id,
+            "t": by_gender(L.gender, d.m, d.f),
+            "s": money_str(d.pay) + "/mes",
+            "desc": "Sin experiencia. Medio tiempo: puedes estudiar a la vez. Minijuego del turno: " + MG_INFO[d.game].title + ". Lugar: " + GIG_PLACES[d.set] + ".",
+            "lock": lock
+        })
+    }
+    return items
+}
+
+function take_gig(id: string) {
+    let d = gig_def(id)
+    G.modal = null
+    if d == null || L.age < d.min_age { return null }
+    if L.jail > 0 { return info("Trabajo", "Desde la cárcel no se puede.") }
+    let old = ""
+    if L.gig != null { old = " Dejaste tu trabajo como " + L.gig.title + "." }
+    L.gig = {"id": id, "title": by_gender(L.gender, d.m, d.f), "pay": d.pay, "months": 0, "shifts": 0, "tips": 0, "good": 0, "perf": 50, "mission": null}
+    new_gig_mission()
+    flag("gig")
+    return finish("Nuevo trabajo", "¡Empiezas como " + str_lower(L.gig.title) + "! Sueldo: " + money_str(d.pay) + " al mes." + old, "g")
+}
+
+function new_gig_mission() {
+    let m = pick(GIG_MISSIONS)
+    let goal = 3
+    if m.id == "tips" { goal = L.gig.pay / 5 }
+    if m.id == "perfect" { goal = 1 }
+    if m.id == "good2" { goal = 2 }
+    L.gig.mission = {"id": m.id, "t": m.t, "d": str_replace(m.d, "{meta}", money_str(goal)), "goal": goal, "done": false}
+    L.gig.shifts = 0
+    L.gig.tips = 0
+    L.gig.good = 0
+}
+
+function gig_mission_progress() {
+    let g = L.gig
+    let m = g.mission
+    if m == null || m.done { return 0 }
+    if m.id == "shifts" { return g.shifts }
+    if m.id == "tips" { return g.tips }
+    return g.good
+}
+
+function check_gig_mission() {
+    let g = L.gig
+    let m = g.mission
+    if m == null || m.done { return null }
+    if gig_mission_progress() >= m.goal {
+        m.done = true
+        L.gig_done += 1
+        let bonus = g.pay / 3
+        L.money += bonus
+        L.happy += 5
+        g.perf = clamp100(g.perf + 10)
+        L.workxp += 3
+        list_push(G.toasts, {"head": "¡MINIMISIÓN!", "title": str_upper(m.t), "sub": "Bono de " + money_str(bonus) + " · " + g.title, "t0": G.t})
+        log_add("Minimisión cumplida en tu trabajo: " + m.t + " (+" + money_str(bonus) + ").", "g")
+    }
+    return null
+}
+
+// Pago, experiencia y minimisión de cada mes.
+function gig_month() {
+    let g = L.gig
+    if g == null { return null }
+    if L.jail > 0 {
+        L.gig = null
+        return null
+    }
+    L.money += g.pay
+    g.months += 1
+    L.workxp += 1
+    if g.mission != null && !g.mission.done {
+        g.perf = clamp100(g.perf - 5)
+    }
+    if g.perf < 10 && chance(50) {
+        log_add("Te corrieron de tu trabajo como " + g.title + " por mal desempeño.", "b")
+        L.gig = null
+        return null
+    }
+    new_gig_mission()
+    return null
+}
+
+function gig_action_items() {
+    let g = L.gig
+    let items = []
+    let d = gig_def(g.id)
+    let m = g.mission
+    let mdesc = "Sin minimisión."
+    let ms = ""
+    if m != null {
+        mdesc = m.d + " Progreso: " + str(gig_mission_progress()) + "/" + str(m.goal) + ". Recompensa: bono de " + money_str(g.pay / 3) + "."
+        ms = "MISIÓN: " + m.t
+        if m.done { ms = "MISIÓN CUMPLIDA" }
+    }
+    list_push(items, {"action": "gigwork", "t": "Trabajar un turno (" + MG_INFO[d.game].title + ")", "s": ms, "desc": "Minijuego: tu puntaje decide las propinas. " + mdesc, "lock": ""})
+    list_push(items, {"action": "gigeasy", "t": "Turno tranquilo", "s": "Sin minijuego", "desc": "Haces lo justo. Poca propina, poco esfuerzo. Cuenta para la minimisión de turnos.", "lock": ""})
+    list_push(items, {"action": "gigquit", "t": "Renunciar a " + g.title, "s": money_str(g.pay) + "/mes", "desc": "Llevas " + str(g.months) + " meses aquí. Desempeño: " + str(g.perf) + "%.", "lock": ""})
+    return items
+}
+
+function gig_work(easy: bool) {
+    G.modal = null
+    let g = L.gig
+    if g == null { return null }
+    let used = L.used["gig"]
+    if used == null { used = 0 }
+    if used >= 4 { return info(g.title, "Ya trabajaste todos tus turnos de este mes.") }
+    L.used["gig"] = used + 1
+    if easy {
+        return gig_shift_result(40)
+    }
+    let d = gig_def(g.id)
+    return mg_start(d.game, "Turno: " + g.title, "gig", {})
+}
+
+function gig_shift_result(score: any) {
+    let g = L.gig
+    if g == null { return null }
+    let tips = g.pay * score / 400
+    L.money += tips
+    g.tips += tips
+    g.shifts += 1
+    if score >= 70 { g.good += 1 }
+    if score >= 90 && g.mission != null && g.mission.id == "perfect" { g.good = max(g.good, 1) }
+    g.perf = clamp100(g.perf + (score - 50) / 10)
+    L.workxp += 1
+    check_gig_mission()
+    let mood = "Turno normal."
+    if score >= 90 { mood = "¡Turno perfecto! Clientes felices." }
+    if score < 30 { mood = "Turno desastroso. Tu jefe te miró feo." }
+    return finish(g.title, mood + " Propinas: " + money_str(tips) + ".", outcome_kind({"happy": score - 50}))
+}
+
+function gig_quit() {
+    G.modal = null
+    if L.gig == null { return null }
+    let t = L.gig.title
+    L.gig = null
+    return finish("Trabajo", "Renunciaste a tu trabajo como " + str_lower(t) + ".", "n")
+}
+
+// ---------------------------------------------------------------- eventos del trabajo
+
+function gig_event_ok(ev: map) {
+    if L.gig == null { return false }
+    let place = gig_def(L.gig.id).set
+    if ev.adult == true && (L.age < 18 || place == "cuidado") { return false }
+    if L.age < ev.min || L.age > ev.max { return false }
+    let last = L.seen[ev.id]
+    if last != null && L.age - last < 2 { return false }
+    for tag in str_split(ev.req, ",") {
+        if !meets(str_trim(tag)) { return false }
+    }
+    if list_contains(ev.set, place) { return true }
+    return list_contains(ev.set, "any") && place != "cuidado" && place != "online18"
+}
+
+function maybe_gig_event() {
+    if L.gig == null || G.modal != null || !chance(30) { return false }
+    let pool = []
+    let weights = []
+    for ev in GIG_EVENTS {
+        if gig_event_ok(ev) {
+            list_push(pool, ev)
+            list_push(weights, ev.w)
+        }
+    }
+    if len(pool) == 0 { return false }
+    let ev = pool[weighted_choose(G.rng, weights)]
+    let ctx = {}
+    let spec = ev["person"]
+    if spec == "near" { ctx = {"person": stranger()} }
+    if spec == "peer" { ctx = {"person": peer()} }
+    if spec != null && type_of(spec) == "list" { ctx = {"person": stranger_aged(spec[0], spec[1])} }
+    open_event(ev, ctx)
+    G.modal.title = L.gig.title + " · " + ev.title
+    return true
+}
+
+// Compañero de trabajo de edad parecida (adulto si tú eres adulto).
+function peer() {
+    if L.age >= 18 { return stranger() }
+    let p = make_person(pick(["m", "f"]), "ligue", L.age)
+    return p
+}
