@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
     pub x: i32,
@@ -25,12 +27,18 @@ impl Rect {
     }
 }
 
+/// Cached glyph coverage keyed by font identity, character and pixel size.
+type GlyphKey = (usize, char, u32);
+/// Upper bound on cached glyphs before the cache is reset.
+const MAX_CACHED_GLYPHS: usize = 16_384;
+
 pub struct Canvas {
     pub width: usize,
     pub height: usize,
     pub pixels: Vec<u32>,
     clip: Option<Rect>,
     opacity: f32,
+    glyphs: HashMap<GlyphKey, (fontdue::Metrics, Vec<u8>)>,
 }
 
 impl Canvas {
@@ -41,7 +49,28 @@ impl Canvas {
             pixels: vec![0xff000000; width * height],
             clip: None,
             opacity: 1.0,
+            glyphs: HashMap::new(),
         }
+    }
+    /// Rasterizes `ch` once per font and size; later calls reuse the coverage.
+    pub(crate) fn glyph(
+        &mut self,
+        font: &fontdue::Font,
+        ch: char,
+        size: f32,
+    ) -> (fontdue::Metrics, &[u8]) {
+        let key = (font as *const fontdue::Font as usize, ch, size.to_bits());
+        if !self.glyphs.contains_key(&key) {
+            if self.glyphs.len() >= MAX_CACHED_GLYPHS {
+                self.glyphs.clear();
+            }
+            self.glyphs.insert(key, font.rasterize(ch, size));
+        }
+        let (metrics, bitmap) = &self.glyphs[&key];
+        (*metrics, bitmap.as_slice())
+    }
+    pub(crate) fn opacity(&self) -> f32 {
+        self.opacity
     }
     pub fn set_clip(&mut self, clip: Option<Rect>) {
         self.clip = clip;

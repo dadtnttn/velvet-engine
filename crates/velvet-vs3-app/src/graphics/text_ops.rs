@@ -12,8 +12,11 @@ impl Canvas {
         color: u32,
     ) -> i32 {
         let mut pen = x as f32;
+        let mut bitmap = Vec::new();
         for ch in text.chars() {
-            let (metrics, bitmap) = font.rasterize(ch, size);
+            let (metrics, coverage) = self.glyph(font, ch, size);
+            bitmap.clear();
+            bitmap.extend_from_slice(coverage);
             let gx = pen as i32 + metrics.xmin;
             let gy = baseline - metrics.height as i32 - metrics.ymin;
             for row in 0..metrics.height {
