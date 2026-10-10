@@ -1166,7 +1166,7 @@ function meets(tag: string) {
     if tag == "married" { return L.married }
     if tag == "single" { return !L.married }
     if tag == "hasex" { return has_rel("ex") }
-    if tag == "hot" { return L.looks >= 60 }
+    if tag == "hot" { return looks_eff() >= 60 }
     if tag == "alcohol" { return L.alcohol >= 15 }
     if tag == "drugs" { return L.drugs >= 15 }
     if tag == "kids" { return L.kids > 0 }
@@ -1188,7 +1188,7 @@ function meets(tag: string) {
     if tag == "uni" { return L.study != null }
     if tag == "gig" { return L.gig != null }
     if tag == "addict" { return L.alcohol + L.drugs >= 40 }
-    return false
+    return legacy_meets(tag)
 }
 
 function eligible(ev: map) {
@@ -1213,8 +1213,20 @@ function maybe_event() {
             list_push(weights, ev.w)
         }
     }
+    for ev in LEGACY_EVENTS {
+        if eligible(ev) {
+            list_push(pool, ev)
+            list_push(weights, ev.w)
+        }
+    }
     if len(pool) == 0 { return null }
     let ev = pool[weighted_choose(G.rng, weights)]
+    if str_starts_with(ev.id, "lg_") {
+        let ctx = legacy_ctx(ev)
+        open_event(ev, ctx)
+        G.modal.title = fmt(ev.title, ctx)
+        return null
+    }
     open_event(ev, event_ctx(ev))
     return null
 }

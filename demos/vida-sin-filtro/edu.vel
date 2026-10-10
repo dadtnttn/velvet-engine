@@ -77,7 +77,8 @@ const AUDITION_GAME = {
 
 const PARENT_STYLES = ["amoroso", "estricto", "relajado", "ausente", "toxico"]
 const STYLE_NAMES = {"amoroso": "Amoroso", "estricto": "Estricto", "relajado": "Relajado", "ausente": "Ausente", "toxico": "Tóxico",
-                     "dulce": "Dulce", "celoso": "Celoso", "libre": "Espíritu libre", "intenso": "Intenso"}
+                     "dulce": "Dulce", "celoso": "Celoso", "libre": "Espíritu libre", "intenso": "Intenso",
+                     "rebelde": "Rebelde", "genio": "Genio", "flojo": "Flojo"}
 const FAMILY_KEYS = ["pobre", "media", "rica"]
 const FAMILY_NAMES = {"pobre": "Humilde", "media": "Clase media", "rica": "Adinerada"}
 
@@ -145,7 +146,7 @@ function school_month() {
     if L.school == "" || L.age >= 18 { return null }
     // Las calificaciones tienden a tu nivel natural (inteligencia y conocimiento);
     // estudiar o faltar las mueve por encima o por debajo durante un tiempo.
-    let target = 35 + L.smarts / 2 + rank("know") * 3
+    let target = 35 + L.smarts / 2 + rank("know") * 3 + fx_sum("grades")
     if L.grades < target { L.grades += rint(0, 1) } else if L.grades > target { L.grades -= rint(0, 1) }
     L.grades = clamp(L.grades + rint(-1, 1), 0, 100)
     if (L.month == 5 || L.month == 11) && G.modal == null && L.age >= 7 {
@@ -347,7 +348,7 @@ function study_month() {
             s.unpaid = 0
         }
     }
-    let target = 30 + L.smarts / 2 + rank("know") * 4
+    let target = 30 + L.smarts / 2 + rank("know") * 4 + fx_sum("grades")
     if s.gpa < target { s.gpa += rint(0, 1) } else if s.gpa > target { s.gpa -= rint(0, 1) }
     s.gpa = clamp(s.gpa + rint(-1, 1), 0, 100)
     L.smarts = clamp100(L.smarts + rint(0, 1))

@@ -172,7 +172,14 @@ const MISSIONS = [
     {"id": "amateur", "t": "Talento natural", "d": "Entra a una carrera como amateur pasando una audición.", "r": "Valor", "reward": {"guts": 6}},
     {"id": "pro", "t": "De amateur a pro", "d": "Deja de ser amateur en una carrera.", "r": "+$8,000", "reward": {"money": 8000}},
     {"id": "livein", "t": "Bajo el mismo techo", "d": "Vive con tu pareja.", "r": "Felicidad", "reward": {"happy": 6}},
-    {"id": "open", "t": "Amor libre", "d": "Acuerda una relación abierta.", "r": "Encanto", "reward": {"charm": 5}}
+    {"id": "open", "t": "Amor libre", "d": "Acuerda una relación abierta.", "r": "Encanto", "reward": {"charm": 5}},
+    {"id": "survivor", "t": "Sobreviviente", "d": "Vence un cáncer.", "r": "Felicidad · Valor", "reward": {"happy": 15, "guts": 6}},
+    {"id": "healthy", "t": "Cuerpo de templo", "d": "Ten 3 hábitos buenos a la vez y ninguno malo.", "r": "Salud", "reward": {"health": 10}},
+    {"id": "grandpa", "t": "La familia crece", "d": "Conoce a tu primer nieto.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "goodparent", "t": "Padres del año", "d": "Llega a 75 de puntaje como padre o madre.", "r": "Amabilidad", "reward": {"kind": 10}},
+    {"id": "retired", "t": "Jubilación dorada", "d": "Jubílate con pensión.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "comeback", "t": "Segunda juventud", "d": "Regresa a la industria +18 como estrella madura.", "r": "Fama · Encanto", "reward": {"charm": 6}},
+    {"id": "dynasty", "t": "Dinastía", "d": "Continúa tu historia como tu heredero.", "r": "+$10,000", "reward": {"money": 10000}}
 ]
 
 function flag(name: string) {
@@ -226,6 +233,17 @@ function mission_met(id: string) {
     if id == "villain" { return L.karma <= 10 }
     if id == "hundred" { return L.age >= 100 }
     if id == "gigm" { return L.gig_done >= 5 }
+    if id == "healthy" {
+        let good = 0
+        for h in L.habits {
+            if habit_def(h).bad { return false }
+            good += 1
+        }
+        return good >= 3
+    }
+    if id == "grandpa" { return has_rel("nieto") }
+    if id == "goodparent" { return L.kids > 0 && L.parent_score >= 75 }
+    if id == "dynasty" { return L.gen >= 2 }
     if id == "tecnico" {
         for d in L.degrees {
             if degree_def(d).type == "tec" { return true }

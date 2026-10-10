@@ -1,0 +1,198 @@
+// @edition 3
+// Efectos: ventajas y desventajas que salen de tu estado (edad, hábitos, gustos,
+// infecciones, enfermedades, fama, vicios, relaciones) y que modifican todo lo demás.
+//
+// Modificadores de un efecto:
+//   looks    atractivo efectivo (ligues, citas, castings, sueldos que dependen del físico)
+//   flirt    probabilidad de ligar y de que una cita salga bien
+//   hire     probabilidad de que te contraten
+//   pay      % de sueldo en tu carrera
+//   grades   calificaciones y promedio a los que tiendes
+//   sexhappy felicidad extra en cada encuentro
+//   its      % extra de contagio de ITS
+//   hap, hp  felicidad y salud de cada mes (se aplican con cierta probabilidad)
+
+// Ventaja de cada gusto en la cama (y alguna desventaja).
+const KINK_FX = {
+    "oral": {"n": "Lengua de oro", "flirt": 6, "sexhappy": 3, "its": 15, "d": "Tu fama de generos{a} te precede. Más éxito ligando, pero el sexo oral también contagia."},
+    "dom": {"n": "Voz de mando", "hire": 5, "flirt": 3, "d": "Tu seguridad se nota en la cama y en las entrevistas de trabajo."},
+    "sub": {"n": "Complaciente", "flirt": 4, "sexhappy": 2, "d": "Te dejas llevar y eso encanta."},
+    "bdsm": {"n": "Disciplina de cuero", "sexhappy": 4, "hire": 2, "d": "Palabras de seguridad, reglas claras y mucha confianza."},
+    "exhib": {"n": "Sin vergüenza", "flirt": 8, "hire": -5, "d": "Te encanta que te miren... a los reclutadores no tanto cuando encuentran tus fotos."},
+    "voyeur": {"n": "Ojo clínico", "hire": 3, "grades": 2, "d": "Observas todo. Notas detalles que otros no."},
+    "pies": {"n": "Fetiche peculiar", "flirt": -3, "sexhappy": 5, "d": "No a todos les late, pero a quien sí, le encanta."},
+    "trios": {"n": "Imán de parejas", "flirt": 5, "its": 25, "d": "Más gente en la cama: más diversión y más riesgo de ITS."},
+    "maduros": {"n": "Gusto por la experiencia", "flirt": 3, "d": "Sabes lo que quieres y la gente madura lo nota."},
+    "juguetes": {"n": "Autosuficiente", "hap": 1, "d": "Tu cajón mágico te mantiene de buen humor."},
+    "cosplay": {"n": "Alma creativa", "pay": 3, "flirt": 2, "d": "La creatividad del cosplay se nota en tu trabajo."},
+    "rol": {"n": "Actor nato", "hire": 5, "flirt": 2, "d": "Interpretas cualquier papel, incluso el del candidato perfecto."},
+    "romantico": {"n": "Corazón tierno", "hap": 1, "d": "Amas a lo grande: tu pareja lo siente y tú también."},
+    "insaciable": {"n": "Insaciable", "sexhappy": 5, "its": 20, "hp": -1, "d": "¿Otra vez? Otra vez. Más placer, más desvelos y más riesgo."},
+    "tantra": {"n": "Calma tántrica", "hap": 1, "flirt": 3, "d": "Sin prisa: más conexión y menos estrés."}
+}
+
+// ---------------------------------------------------------------- cálculo
+
+function fx(id: string, n: string, good: bool, d: string, mods: map) {
+    let e = {"id": id, "n": n, "good": good, "d": d}
+    for k in map_keys(mods) {
+        if k != "n" && k != "d" { e[k] = mods[k] }
+    }
+    return e
+}
+
+// Lista de efectos activos según el estado actual.
+function effects() {
+    let out = []
+    let a = L.age
+    // Edad y físico
+    if a < 4 { list_push(out, fx("tierno", "Tierno", true, "Eres un bebé. Todo el mundo quiere apretarte los cachetes.", {"looks": 20})) }
+    if a >= 4 && a <= 10 { list_push(out, fx("adorable", "Adorable", true, "Carita de ángel: los adultos te perdonan casi todo.", {"looks": 8})) }
+    if a >= 13 && a <= 16 && L.looks < 65 { list_push(out, fx("acne", "Acné adolescente", false, "La pubertad no perdona. Ya pasará.", {"looks": -8, "flirt": -5})) }
+    if a >= 20 && a <= 32 && L.health >= 70 { list_push(out, fx("plenitud", "En plenitud", true, "Juventud, energía y buena piel.", {"looks": 5, "flirt": 3})) }
+    if a >= 45 && a < 65 && L.looks >= 60 { list_push(out, fx("canas", "Canas interesantes", true, "Envejeces como el buen vino.", {"looks": 4, "flirt": 3})) }
+    if a >= 70 { list_push(out, fx("vejez", "Achaques", false, "Las rodillas ya no son lo que eran.", {"hp": -1, "pay": -10})) }
+    let gym = habit_months("gym")
+    if has_habit("gym") && gym >= 12 && a >= 16 { list_push(out, fx("definido", "Cuerpo definido", true, "Un año de gimnasio se nota: marcas, postura y confianza.", {"looks": 10, "flirt": 6, "hp": 1})) }
+    if has_habit("gym") && gym >= 3 && gym < 12 { list_push(out, fx("tonificado", "Tonificándote", true, "Ya se empieza a notar el gimnasio.", {"looks": 4, "flirt": 2})) }
+    if has_habit("correr") && habit_months("correr") >= 12 { list_push(out, fx("atletico", "Atlético", true, "Corazón fuerte y resistencia de maratonista.", {"hp": 1, "hap": 1})) }
+    if has_habit("dieta") && habit_months("dieta") >= 6 { list_push(out, fx("radiante", "Piel radiante", true, "Comer bien se nota en la cara.", {"looks": 3, "hp": 1})) }
+    if has_habit("sol") { list_push(out, fx("bronceado", "Bronceado", true, "Dorad" + oa(L.gender) + " todo el año. (Tu dermatólogo llora.)", {"looks": 4})) }
+    if has_habit("sol") && a >= 40 { list_push(out, fx("arrugas", "Arrugas prematuras", false, "Años de sol sin bloqueador te cobraron factura.", {"looks": -8})) }
+    if has_habit("dormir") { list_push(out, fx("descansado", "Bien descansad" + oa(L.gender), true, "Ocho horas de sueño: mente clara y buen humor.", {"grades": 4, "hap": 1})) }
+    if has_habit("desvelo") { list_push(out, fx("ojeras", "Ojeras", false, "Parece que no duermes. Porque no duermes.", {"looks": -5, "grades": -5})) }
+    if has_habit("leer") && habit_months("leer") >= 12 { list_push(out, fx("culto", "Culto", true, "Siempre tienes algo interesante que decir.", {"grades": 6, "hire": 3, "flirt": 2})) }
+    if has_habit("meditar") && habit_months("meditar") >= 6 { list_push(out, fx("zen", "Mente zen", true, "Nada te altera.", {"hap": 1})) }
+    if has_habit("fumar") || has_habit("vapear") { list_push(out, fx("aliento", "Aliento a cigarro", false, "Nadie quiere besar un cenicero.", {"flirt": -8, "looks": -3})) }
+    if L.alcohol >= 40 { list_push(out, fx("ebrio", "Bebedor crónico", false, "Las manos tiemblan antes de la primera copa.", {"hp": -1, "hire": -10, "looks": -4})) }
+    if L.drugs >= 40 { list_push(out, fx("adicto", "Adicción", false, "Todo gira alrededor de la siguiente dosis.", {"hp": -1, "hire": -15, "looks": -6, "pay": -10})) }
+    if L.pregnant { list_push(out, fx("embarazo", "Brillo del embarazo", true, "Hay un bebé en camino.", {"looks": 3, "hap": 1, "pay": -5})) }
+    // Gustos (desde los 18)
+    if a >= 18 {
+        for t in L.tags {
+            let k = KINK_FX[t]
+            if k != null { list_push(out, fx("k_" + t, k.n, k.flirt == null || k.flirt >= 0, fmt(k.d, {}), k)) }
+        }
+    }
+    // Infecciones y enfermedades
+    for i in L.ill {
+        let id = i.id
+        if id == "ladillas" || id == "candidiasis" || id == "tricomoniasis" { list_push(out, fx("comezon", "Comezón", false, "Te rascas cuando nadie mira. Y a veces cuando sí.", {"hap": -1, "flirt": -10})) }
+        if id == "clamidia" || id == "gonorrea" { list_push(out, fx("ardor", "Ardor", false, "Ir al baño es una tortura y el sexo pierde la gracia.", {"hap": -1, "sexhappy": -5})) }
+        if id == "herpes" && !i.treated { list_push(out, fx("herpes", "Brote de herpes", false, "Ampollas visibles: tus ligues huyen.", {"looks": -4, "flirt": -15})) }
+        if id == "herpes" && i.treated { list_push(out, fx("herpes_ok", "Herpes controlado", false, "Con tratamiento casi no se nota.", {"flirt": -3})) }
+        if id == "vph" { list_push(out, fx("verrugas", "Verrugas", false, "Pequeñas, pero imposibles de ignorar.", {"flirt": -8})) }
+        if id == "sifilis" { list_push(out, fx("sarpullido", "Sarpullido", false, "Manchas en manos y pies que no se quitan.", {"looks": -6})) }
+        if id == "vih" && !i.treated { list_push(out, fx("inmune", "Defensas bajas", false, "Cualquier gripe te tumba.", {"hp": -1})) }
+        if id == "vih" && i.treated { list_push(out, fx("indetectable", "Carga indetectable", true, "Con tratamiento, tu carga viral es indetectable: no transmites el virus.", {})) }
+        if id == "obesidad" { list_push(out, fx("sobrepeso", "Sobrepeso", false, "Te cansas al subir escaleras.", {"looks": -10, "flirt": -5, "hp": -1})) }
+        if id == "diabetes" { list_push(out, fx("fatiga", "Fatiga", false, "El azúcar en la sangre te deja sin energía.", {"grades": -3, "pay": -5})) }
+        if id == "hipertension" { list_push(out, fx("presion", "Presión alta", false, "Dolores de cabeza frecuentes.", {"grades": -2, "hap": -1})) }
+        if id == "epoc" { list_push(out, fx("sin_aliento", "Sin aliento", false, "Te falta el aire.", {"pay": -5, "flirt": -3})) }
+        if id == "depresion" { list_push(out, fx("deprimido", "Deprimid" + oa(L.gender), false, "Nada tiene sentido. Levantarte de la cama ya es un logro.", {"hap": -2, "grades": -6, "hire": -8})) }
+        if ill_def(id).type == "cancer" && i.treated { list_push(out, fx("quimio", "Quimioterapia", false, "Se te cae el pelo y no tienes energía. Pero estás luchando.", {"looks": -12, "hap": -1, "pay": -10})) }
+        if ill_def(id).type == "cancer" && !i.treated && i.stage >= 3 { list_push(out, fx("debil", "Debilidad", false, "Bajaste mucho de peso sin razón.", {"pay": -10, "looks": -6})) }
+        if id == "alzheimer" { list_push(out, fx("olvidos", "Desmemoriad" + oa(L.gender), false, "¿Dónde dejaste las llaves? ¿Y el auto?", {"grades": -10, "pay": -20})) }
+        if id == "artritis" { list_push(out, fx("rigidez", "Articulaciones rígidas", false, "Te duele todo al despertar.", {"pay": -5})) }
+        if id == "gripe" { list_push(out, fx("gripe", "Engripad" + oa(L.gender), false, "Fiebre, mocos y autocompasión.", {"grades": -5, "hap": -1})) }
+    }
+    // Vida social
+    let p = partner()
+    if p != null && p.bond >= 80 { list_push(out, fx("enamorado", "Enamorad" + oa(L.gender), true, "Estás en las nubes con " + p.first + ".", {"hap": 1})) }
+    if L.heartbreak > 0 { list_push(out, fx("corazon_roto", "Corazón roto", false, "Todas las canciones hablan de ti.", {"hap": -2, "flirt": -5})) }
+    if L.fame >= 80 {
+        list_push(out, fx("estrella", "Estrella", true, "Te reconocen en todos lados.", {"flirt": 15, "hire": 8}))
+    } else if L.fame >= 40 {
+        list_push(out, fx("famoso", "Famos" + oa(L.gender), true, "Tienes fans.", {"flirt": 8, "hire": 4}))
+    }
+    if L.record > 0 { list_push(out, fx("fichado", "Antecedentes penales", false, "Tu historial aparece en cada revisión de antecedentes.", {"hire": -15})) }
+    if L.money >= 1000000 { list_push(out, fx("rico", "Billetera generosa", true, "El dinero también es sexy.", {"flirt": 6})) }
+    if L.study != null && L.study.gpa >= 90 { list_push(out, fx("honor", "Cuadro de honor", true, "Tus profesores te adoran.", {"hire": 5})) }
+    return out
+}
+
+function fx_sum(key: string) {
+    let total = 0
+    for e in effects() {
+        let v = e[key]
+        if v != null { total += v }
+    }
+    return total
+}
+
+// Atractivo efectivo: tu atractivo más (o menos) lo que tus efectos aportan.
+function looks_eff() {
+    return clamp(L.looks + fx_sum("looks"), 0, 100)
+}
+
+function flirt_bonus() {
+    return fx_sum("flirt")
+}
+
+// Felicidad y salud de cada mes por tus efectos.
+function effects_month() {
+    let hap = 0
+    let hp = 0
+    for e in effects() {
+        if e.hap != null { hap += e.hap }
+        if e.hp != null { hp += e.hp }
+    }
+    if hap != 0 && chance(50) { L.happy += hap }
+    if hp != 0 && chance(40) { L.health += hp }
+    if L.heartbreak > 0 { L.heartbreak -= 1 }
+    let p = partner()
+    if p != null && has_kink("romantico") && chance(40) { p.bond = clamp100(p.bond + 1) }
+    return null
+}
+
+// ---------------------------------------------------------------- texto e interfaz
+
+const FX_LABELS = [["looks", "atractivo"], ["flirt", "ligue"], ["hire", "contratación"], ["pay", "% sueldo"], ["grades", "calificaciones"], ["sexhappy", "placer"], ["its", "% riesgo ITS"], ["hap", "felicidad/mes"], ["hp", "salud/mes"]]
+
+function fx_summary(e: map) {
+    let parts = []
+    for pair in FX_LABELS {
+        let v = e[pair[0]]
+        if v != null && v != 0 {
+            let s = str(v)
+            if v > 0 { s = "+" + s }
+            list_push(parts, s + " " + pair[1])
+        }
+    }
+    if len(parts) == 0 { return "Sin efecto en números" }
+    return str_join(parts, " · ")
+}
+
+function effect_items() {
+    let items = []
+    for e in effects() {
+        let lock = ""
+        list_push(items, {"action": "fx:" + e.id, "t": e.n, "s": fx_summary(e), "desc": e.d + " Efecto: " + fx_summary(e) + ".", "lock": lock, "done": e.good})
+    }
+    return items
+}
+
+// Chips en la tarjeta del personaje: primero lo bueno, luego lo malo.
+function draw_effect_chips(x: int, y: int) {
+    let list = effects()
+    let shown = 0
+    let cy = y
+    for pass in [true, false] {
+        for e in list {
+            if e.good != pass || shown >= 4 { continue }
+            let w = min(170, 30 + len(e.n) * 8)
+            let fill = "#1f6b2a"
+            let edge = HEX_WHITE
+            if !e.good { fill = "#7a0d12" }
+            svg(x, cy, w + 4, 24, slant_doc(w, 20, 6, fill, edge, 2, HEX_INK, 3))
+            let sign = "+ "
+            if !e.good { sign = "- " }
+            text(x + 10, cy + 15, clip_text(sign + e.n, w - 14, 12), 12, C_WHITE, "bold")
+            cy += 24
+            shown += 1
+        }
+    }
+    let extra = len(list) - shown
+    if extra > 0 { text(x + 6, cy + 14, "+" + str(extra) + " más", 12, C_YELLOW, "bold") }
+    return null
+}

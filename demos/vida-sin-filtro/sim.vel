@@ -40,7 +40,10 @@ state {
         "dlg": null,
         "dlg_tree": "",
         "pending_deg": "",
-        "tuition_no": ""
+        "tuition_no": "",
+        "legacy": null,
+        "roul": null,
+        "sex_mode": ""
     }
 }
 
@@ -200,7 +203,8 @@ function make_person(gender: string, rel: string, age: int) {
         "known": false,
         "slept": false,
         "look": random_look(gender),
-        "tags": random_kinks(2)
+        "tags": random_kinks(2),
+        "wild": rint(0, 100)
     }
     L.next_id += 1
     return p
@@ -343,6 +347,34 @@ function first_rel(rel: string) {
 // ---------------------------------------------------------------- nueva vida
 
 function new_life() {
+    new_life_core(0)
+    let c = G.cre
+    let dad_last = L.last1
+    let mom_last = str_trim(str_replace(L.last, L.last1, ""))
+    let gender = L.gender
+    let dad = make_person("m", "padre", rint(20, 45))
+    dad.last = dad_last
+    dad.look.skin = L.look.skin
+    add_person(dad)
+    let mom = make_person("f", "madre", rint(18, 42))
+    mom.last = mom_last
+    add_person(mom)
+    if chance(45) && mom.age >= 20 {
+        let sib = make_person(pick(["m", "f"]), "hermano", rint(1, min(9, mom.age - 19)))
+        sib.last = L.last
+        sib.look.skin = L.look.skin
+        add_person(sib)
+    }
+    log_add("Naciste en " + L.city + ".", "h")
+    log_add(by_gender(gender, "Eres hijo", "Eres hija") + " de " + full_name(dad) + " y " + full_name(mom) + ".", "n")
+    log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
+    log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
+    setup_family()
+    L.grades = clamp(30 + L.smarts / 2 + rint(-10, 10), 0, 100)
+}
+
+// Crea el estado de una vida (sin familia) a partir de G.cre, con la edad indicada.
+function new_life_core(age: int) {
     ensure_rng()
     G.lives += 1
     let c = G.cre
@@ -374,7 +406,7 @@ function new_life() {
         "fame": 0,
         "done": [],
         "flags": {},
-        "age": 0,
+        "age": age,
         "city": pick(CITIES),
         "alive": true,
         "happy": rint(65, 95),
@@ -413,8 +445,21 @@ function new_life() {
         "kids": 0,
         "alcohol": 0,
         "drugs": 0,
-        "std": [],
-        "hiv_treated": false,
+        "ill": [],
+        "habits": [],
+        "habit_months": {},
+        "gen": 1,
+        "lineage": [],
+        "heir_id": 0,
+        "parent_score": 50,
+        "past_jobs": [],
+        "legacy_kid": 0,
+        "parent_star": "",
+        "parent_star_g": "m",
+        "care": "",
+        "pension": 0,
+        "funeral": null,
+        "heartbreak": 0,
         "pregnant": false,
         "preg_with": "",
         "partner_preg": false,
@@ -429,29 +474,12 @@ function new_life() {
     }
     apply_trait()
     clamp_stats()
-    let dad = make_person("m", "padre", rint(20, 45))
-    dad.last = dad_last
-    dad.look.skin = L.look.skin
-    add_person(dad)
-    let mom = make_person("f", "madre", rint(18, 42))
-    mom.last = mom_last
-    add_person(mom)
-    if chance(45) && mom.age >= 20 {
-        let sib = make_person(pick(["m", "f"]), "hermano", rint(1, min(9, mom.age - 19)))
-        sib.last = L.last
-        sib.look.skin = L.look.skin
-        add_person(sib)
-    }
-    log_add("Naciste en " + L.city + ".", "h")
-    log_add(by_gender(gender, "Eres hijo", "Eres hija") + " de " + full_name(dad) + " y " + full_name(mom) + ".", "n")
-    log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
-    log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
-    setup_family()
-    L.grades = clamp(30 + L.smarts / 2 + rint(-10, 10), 0, 100)
     G.pending_deg = ""
     G.tuition_no = ""
     G.dlg = null
     G.mg = null
+    G.legacy = null
+    G.roul = null
 
     G.mode = "game"
     G.modal = null
@@ -483,6 +511,11 @@ function advance_month() {
         log_year(L.age)
         yearly()
         parenting_year()
+        if L.alive { health_year() }
+        if L.alive {
+            kids_year()
+            old_age_year()
+        }
         clamp_stats()
         if !L.alive { return true }
         death_check()
@@ -492,7 +525,7 @@ function advance_month() {
     clamp_stats()
     if !L.alive { return birthday }
     if L.health <= 0 {
-        die("problemas de salud")
+        die(worst_cause())
         return birthday
     }
     if G.modal != null { return birthday }
@@ -503,7 +536,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_gig_event() { maybe_event() }
+    if !maybe_gig_event() && !maybe_kid_event() { maybe_event() }
     return birthday
 }
 
@@ -537,9 +570,13 @@ function monthly() {
             if L.debt == 0 { log_add("Terminaste de pagar tu préstamo estudiantil.", "g") }
         }
     }
+    if L.pension > 0 { L.money += L.pension / 12 }
     gig_month()
     school_month()
     study_month()
+    health_month()
+    kids_month()
+    effects_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8
@@ -686,17 +723,6 @@ function yearly() {
         }
     }
 
-    // Infecciones sin tratar
-    for s in L.std {
-        if s == "VIH" {
-            if L.hiv_treated { L.health -= 1 } else { L.health -= 8 }
-        } else if s == "herpes" {
-            L.health -= 1
-        } else {
-            L.health -= 4
-        }
-    }
-
     // Pareja
     let p = partner()
     if p != null && p.alive {
@@ -752,7 +778,7 @@ function add_child(other: string) {
 
 function death_check() {
     if L.health <= 0 {
-        die("problemas de salud")
+        die(worst_cause())
         return null
     }
     if L.age >= 60 {
@@ -770,6 +796,7 @@ function die(cause: string) {
     log_add("Moriste a los " + str(L.age) + " años por " + cause + ".", "b")
     G.modal = null
     G.mode = "dead"
+    on_death()
 }
 
 // ---------------------------------------------------------------- relaciones
@@ -788,6 +815,7 @@ function breakup() {
     }
     p.rel = "ex"
     L.partner_id = 0
+    L.heartbreak = 6
     return null
 }
 
@@ -846,8 +874,14 @@ function apply(o: map, ctx: map) {
     }
     if map_has(o, "count") { L.partners += o.count }
     if map_has(o, "sex") { msg = msg + sex_with(ctx["person"]) }
-    if map_has(o, "std") {
-        if chance(o.std) { msg = msg + catch_std() }
+    // Con una persona concreta, el contagio depende de lo que esa persona tenga
+    // (sex_with); "std" es el riesgo de un encuentro anónimo.
+    if map_has(o, "std") && (ctx["person"] == null || !map_has(o, "sex")) {
+        if chance(o.std * (100 + fx_sum("its")) / 100) { msg = msg + catch_its_random() }
+    }
+    if map_has(o, "parent") { L.parent_score = clamp100(L.parent_score + o.parent) }
+    if map_has(o, "kgrades") && ctx["person"] != null && ctx["person"].grades != null {
+        ctx["person"].grades = clamp(ctx["person"].grades + o.kgrades, 0, 100)
     }
     if map_has(o, "preg") { msg = msg + maybe_pregnancy(ctx["person"], o.preg) }
     if map_has(o, "special") { msg = msg + special(o.special, ctx) }
@@ -868,6 +902,7 @@ function sex_with(person: any) {
         person.slept = true
         L.partners += 1
     }
+    if person != null { out = out + sex_contact(person) }
     let p = partner()
     if p != null && p.open != true && (person == null || person.id != p.id) {
         p.cheated = true
@@ -884,14 +919,6 @@ function sex_with(person: any) {
         }
     }
     return out
-}
-
-function catch_std() {
-    let idx = weighted_choose(G.rng, STD_WEIGHTS)
-    let name = STDS[idx]
-    if list_contains(L.std, name) { return "" }
-    list_push(L.std, name)
-    return " Días después notas algo raro ahí abajo: tienes " + name + "."
 }
 
 function maybe_pregnancy(person: any, p: int) {

@@ -1,0 +1,963 @@
+// @edition 3
+// Hijos, legado y vejez: tus hijos crecen con personalidad propia, te piden cosas,
+// estudian (si les pagas) y recuerdan cómo los trataste. Al morir, tu herencia va a
+// quien nombraste o la decide una ruleta según los méritos de cada hijo, y puedes
+// seguir jugando como tu heredero. También: jubilación, cuidados en la vejez,
+// funeral y eventos que te persiguen por tus carreras pasadas.
+
+const KID_STYLES = ["dulce", "rebelde", "genio", "flojo"]
+const KID_TRAIT = {"dulce": "romance", "rebelde": "rebelde", "genio": "cerebro", "flojo": "fiesta"}
+
+// Peticiones de los hijos: como eventos, con "kid": [edad mínima, máxima] del hijo.
+// {x} es el hijo, {hij} "hijo"/"hija". "parent" cambia tu puntaje como padre/madre.
+const KID_EVENTS = [
+    {
+        "id": "k_toy", "title": "El juguete", "kid": [4, 9], "w": 8, "repeat": true,
+        "text": "Tu {hij} {x} vio en la tele un juguete de $1,500 y te lo pide con ojitos de cachorro.",
+        "choices": [
+            {"t": "Comprárselo", "cost": 1500, "o": [{"w": 100, "log": "{x} grita de felicidad. Lo va a romper en una semana, pero vale la pena.", "money": -1500, "bond": 8, "parent": 2}]},
+            {"t": "«Si sacas buenas calificaciones»", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "{x} se puso a estudiar como nunca para ganárselo.", "bond": 3, "kgrades": 6, "parent": 3}]},
+            {"t": "«No. El dinero no crece en los árboles»", "o": [{"w": 100, "log": "{x} hizo el berrinche del siglo en el súper.", "bond": -6, "happy": -2}]}
+        ]
+    },
+    {
+        "id": "k_pet", "title": "¿Podemos tener un perrito?", "kid": [6, 12], "w": 6,
+        "text": "{x} promete que esta vez sí va a cuidar a la mascota. Lo jura por todo.",
+        "choices": [
+            {"t": "Adoptar un perrito", "cost": 3000, "o": [{"w": 100, "log": "Llegó Firulais. Tú terminaste paseándolo, pero {x} es feliz.", "money": -3000, "bond": 10, "happy": 5, "parent": 2}]},
+            {"t": "Negarte", "o": [{"w": 100, "log": "{x} te dejó de hablar tres días.", "bond": -5}]}
+        ]
+    },
+    {
+        "id": "k_homework", "title": "La tarea imposible", "kid": [7, 16], "w": 8, "repeat": true,
+        "text": "{x} lleva dos horas llorando frente a la tarea de matemáticas.",
+        "choices": [
+            {"t": "Sentarte a explicarle", "need": "know", "rank": 2, "o": [{"w": 100, "log": "Lo entendió todo. Te miró como a un genio.", "bond": 8, "kgrades": 8, "parent": 3}]},
+            {"t": "Hacérsela tú", "o": [{"w": 100, "log": "Sacó 10... y no aprendió nada.", "bond": 4, "kgrades": -2}]},
+            {"t": "«Arréglatelas»", "o": [{"w": 100, "log": "Reprobó la tarea y te guarda rencor.", "bond": -5, "kgrades": -4, "parent": -2}]}
+        ]
+    },
+    {
+        "id": "k_bully", "title": "Bullying", "kid": [7, 15], "w": 5,
+        "text": "{x} llega con un ojo morado. Unos niños l{xlo} molestan todos los días.",
+        "choices": [
+            {"t": "Ir a la escuela a exigir solución", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Expulsaron a los abusones. {x} te ve como su héroe.", "bond": 15, "parent": 4}]},
+            {"t": "Enseñarle a defenderse", "o": [{"w": 60, "log": "La siguiente vez se defendió. Ya nadie l{xlo} molesta.", "bond": 8, "parent": 2}, {"w": 40, "log": "Se defendió... y l{xlo} suspendieron a {xel}.", "bond": 2}]},
+            {"t": "«Así es la vida, aguántate»", "o": [{"w": 100, "log": "{x} dejó de contarte sus problemas.", "bond": -15, "parent": -5}]}
+        ]
+    },
+    {
+        "id": "k_phone", "title": "El celular", "kid": [10, 15], "w": 6,
+        "text": "«¡Todos en mi salón tienen celular menos yo!» {x} quiere el modelo de $8,000.",
+        "choices": [
+            {"t": "Comprarle el último modelo", "cost": 8000, "o": [{"w": 100, "log": "{x} es la persona más popular del salón esta semana.", "money": -8000, "bond": 10, "kgrades": -3}]},
+            {"t": "Uno sencillo de $2,000", "cost": 2000, "o": [{"w": 100, "log": "«Bueno... gracias.» Mejor que nada.", "money": -2000, "bond": 4, "parent": 1}]},
+            {"t": "«Cuando cumplas 16»", "o": [{"w": 100, "log": "{x} cuenta los días con rencor.", "bond": -6}]}
+        ]
+    },
+    {
+        "id": "k_party", "title": "La fiesta", "kid": [14, 17], "w": 8, "repeat": true,
+        "text": "{x} te pide permiso para ir a una fiesta y volver a las 3 a. m.",
+        "choices": [
+            {"t": "Dar permiso", "o": [{"w": 70, "log": "Volvió a la hora acordada. Confianza ganada.", "bond": 8, "parent": 1}, {"w": 30, "log": "Volvió a las 6 a. m. con olor a alcohol. Tremenda plática al día siguiente.", "bond": 2, "happy": -4}]},
+            {"t": "Permiso, pero hasta la 1 y tú pasas por {xel}", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Refunfuñó, pero aceptó. Buen equilibrio.", "bond": 4, "parent": 3}]},
+            {"t": "Prohibirlo", "o": [{"w": 60, "log": "Se quedó en casa azotando puertas.", "bond": -8}, {"w": 40, "log": "Se escapó por la ventana. Te enteraste por Instagram.", "bond": -10, "parent": -2}]}
+        ]
+    },
+    {
+        "id": "k_trouble", "title": "Llamada de la policía", "kid": [14, 19], "w": 3,
+        "text": "La policía detuvo a {x} por una pelea afuera de un bar.",
+        "choices": [
+            {"t": "Pagar la fianza ($5,000) y hablar con {xel}", "cost": 5000, "o": [{"w": 100, "log": "Pagaste y tuvieron la plática más seria de su vida.", "money": -5000, "bond": 6, "parent": 2}]},
+            {"t": "Dejarl{xlo} una noche en la celda para que aprenda", "o": [{"w": 60, "log": "Aprendió la lección. A la mala, pero aprendió.", "bond": -4, "parent": 2}, {"w": 40, "log": "No te lo perdona.", "bond": -15}]},
+            {"t": "Gritarle frente a todos los policías", "o": [{"w": 100, "log": "Humillación pública. Se le quedará grabado.", "bond": -12, "parent": -4}]}
+        ]
+    },
+    {
+        "id": "k_comingout", "title": "Una confesión", "kid": [14, 30], "w": 3,
+        "text": "{x} te pide hablar a solas, con las manos temblando: «Me gustan las personas de mi mismo sexo».",
+        "choices": [
+            {"t": "Abrazarl{xlo}: «Te amo igual. Siempre.»", "o": [{"w": 100, "log": "{x} llora de alivio. Nunca habían estado tan cerca.", "bond": 25, "kind": 4, "parent": 6, "karma": 4}]},
+            {"t": "«Dame tiempo para procesarlo»", "o": [{"w": 100, "log": "Fue honesto, aunque a {x} le dolió un poco la pausa.", "bond": -2}]},
+            {"t": "Reaccionar mal", "o": [{"w": 100, "log": "{x} se fue de la casa esa misma noche. Hay heridas que no cierran.", "bond": -45, "parent": -12, "karma": -10}]}
+        ]
+    },
+    {
+        "id": "k_car", "title": "El primer auto", "kid": [16, 20], "w": 5,
+        "text": "{x} sacó su licencia y te pide ayuda para comprar un auto.",
+        "choices": [
+            {"t": "Regalarle uno nuevo ($60,000)", "cost": 60000, "o": [{"w": 100, "log": "{x} no lo puede creer. Te lo agradecerá toda la vida.", "money": -60000, "bond": 18}]},
+            {"t": "Uno usado a medias ($8,000)", "cost": 8000, "o": [{"w": 100, "log": "Un auto viejito, pero suyo. Aprendió a valorar el esfuerzo.", "money": -8000, "bond": 8, "parent": 3}]},
+            {"t": "«Que te lo compre tu trabajo»", "o": [{"w": 100, "log": "Consiguió trabajo de medio tiempo. Te lo recordará siempre.", "bond": -6, "parent": 1}]}
+        ]
+    },
+    {
+        "id": "k_uni", "title": "La universidad de {x}", "kid": [17, 22], "w": 9,
+        "text": "{x} quedó en la universidad (colegiatura de $30,000 al año) y te pregunta si puedes ayudarle a pagarla.",
+        "choices": [
+            {"t": "Pagársela completa ($2,500 al mes)", "o": [{"w": 100, "log": "{x} te abraza llorando. Será la primera persona de la familia con título... gracias a ti.", "special": "kid_tuition_full", "bond": 20, "parent": 6}]},
+            {"t": "Pagar la mitad ($1,250 al mes)", "o": [{"w": 100, "log": "La otra mitad la pagará trabajando. Lo entiende.", "special": "kid_tuition_half", "bond": 8, "parent": 3}]},
+            {"t": "«Pídelo prestado como hice yo»", "o": [{"w": 100, "log": "{x} sacó un préstamo. Empieza la vida adulta con deudas... y algo de rencor.", "special": "kid_tuition_self", "bond": -15, "parent": -4}]}
+        ]
+    },
+    {
+        "id": "k_money", "title": "Préstamo familiar", "kid": [20, 45], "w": 5, "repeat": true,
+        "text": "{x} te pide $10,000 prestados para salir de un apuro.",
+        "choices": [
+            {"t": "Prestárselos", "cost": 10000, "o": [{"w": 60, "log": "Te los devolvió a los seis meses, con un pastel de agradecimiento.", "bond": 10}, {"w": 40, "log": "Nunca te los devolvió. Pero sigue llamando en Navidad.", "money": -10000, "bond": 8}]},
+            {"t": "Regalárselos", "cost": 10000, "o": [{"w": 100, "log": "«No te los tengo que devolver?» Te ganaste un lugar especial en su corazón.", "money": -10000, "bond": 15, "parent": 2}]},
+            {"t": "Negarte", "o": [{"w": 100, "log": "Se las arregló sin ti. Lo recordará.", "bond": -10}]}
+        ]
+    },
+    {
+        "id": "k_moveback", "title": "De vuelta al nido", "kid": [22, 35], "w": 4,
+        "text": "{x} perdió su trabajo y te pregunta si puede volver a vivir contigo «unos meses».",
+        "choices": [
+            {"t": "Recibirl{xlo} con los brazos abiertos", "o": [{"w": 100, "log": "Los meses se volvieron un año, pero la pasaron bien.", "bond": 12, "money": -3000, "parent": 2}]},
+            {"t": "Sí, pero con reglas y renta simbólica", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Funcionó perfecto. Se mudó en seis meses, ya estable.", "bond": 6, "parent": 3}]},
+            {"t": "«Ya eres adult{xa}»", "o": [{"w": 100, "log": "Durmió en el sillón de un amigo. No lo olvida.", "bond": -15}]}
+        ]
+    },
+    {
+        "id": "k_wedding", "title": "¡Boda!", "kid": [22, 45], "w": 4,
+        "text": "{x} se casa y te pide ayuda con la boda.",
+        "choices": [
+            {"t": "Pagar la boda completa ($30,000)", "cost": 30000, "o": [{"w": 100, "log": "La boda fue perfecta. Lloraste en el brindis.", "money": -30000, "bond": 18, "happy": 10, "special": "kid_wed"}]},
+            {"t": "Dar un regalo modesto ($3,000)", "cost": 3000, "o": [{"w": 100, "log": "Un buen regalo y un discurso emotivo.", "money": -3000, "bond": 6, "happy": 6, "special": "kid_wed"}]},
+            {"t": "No ir a la boda", "o": [{"w": 100, "log": "Tu silla vacía salió en todas las fotos.", "bond": -30, "parent": -8, "special": "kid_wed"}]}
+        ]
+    },
+    {
+        "id": "k_grandkids", "title": "Los nietos", "kid": [24, 50], "w": 5, "repeat": true, "req": "grandkids",
+        "text": "{x} te pregunta si puedes cuidar a tus nietos el fin de semana.",
+        "choices": [
+            {"t": "¡Claro! Malcriarlos un poco", "o": [{"w": 100, "log": "Pastel para el desayuno y desvelada de películas. Son tus fans.", "bond": 8, "happy": 8}]},
+            {"t": "Tienes planes", "o": [{"w": 100, "log": "{x} tuvo que cancelar su viaje.", "bond": -5}]}
+        ]
+    }
+]
+
+// Eventos por tus carreras pasadas, por tus hijos ya adultos y por tus padres mayores.
+// Se suman a los eventos normales (ver maybe_event en events.vel).
+const LEGACY_EVENTS = [
+    {
+        "id": "lg_tapes", "title": "Tus viejas películas", "min": 36, "max": 75, "w": 6, "req": "pastporn,kidadult", "person": "kidfriend",
+        "text": "{x} ({edad} años), amig{xa} de tu {hij} {k}, se queda después de la carne asada. Nervios{xa}, te confiesa que encontró tus viejas películas... y que eres su fantasía desde hace años.",
+        "choices": [
+            {"t": "Llevártel{xlo} a la habitación", "o": [{"w": 75, "special": "hookup"}, {"w": 25, "log": "Pasó lo que tenía que pasar... y {k} se enteró. Tremendo drama familiar.", "sex": true, "special": "kid_shame", "happy": 4}]},
+            {"t": "Firmarle un autógrafo y ya", "o": [{"w": 100, "log": "Le firmaste la carátula con un guiño. Se fue en las nubes.", "fame": 2, "happy": 5}]},
+            {"t": "Pedirle discreción por respeto a {k}", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Lo entendió. Tu secreto (y el de tu fantasía) quedan entre ustedes.", "karma": 3}]},
+            {"t": "«Si les gusto tanto... vuelvo al cine»", "o": [{"w": 100, "log": "Le marcaste a tu antiguo productor esa misma noche.", "special": "comeback"}]}
+        ]
+    },
+    {
+        "id": "lg_comeback", "title": "La llamada del productor", "min": 35, "max": 62, "w": 5, "req": "pastadult18,notadultnow",
+        "text": "Tu antiguo productor te llama: «El público ama a las estrellas maduras. Te quiero de regreso como MILF/DILF. Pagamos el doble que antes».",
+        "choices": [
+            {"t": "Regresar a lo grande", "o": [{"w": 100, "log": "Tu regreso fue tendencia mundial.", "special": "comeback"}]},
+            {"t": "Esa etapa ya pasó", "o": [{"w": 100, "log": "Colgaste con una sonrisa nostálgica.", "happy": 2}]}
+        ]
+    },
+    {
+        "id": "lg_school", "title": "Junta de padres", "min": 28, "max": 60, "w": 5, "req": "pastadult,kidschool", "person": [28, 60],
+        "text": "En la junta de la escuela de tu {hij}, {x} (papá/mamá de un compañero) te reconoce de tus días en {pasado}.",
+        "choices": [
+            {"t": "Negarlo con cara de póker", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "«Me confunden mucho.» Se fue dudando.", "guts": 2}]},
+            {"t": "Aceptarlo con orgullo", "o": [{"w": 60, "log": "«¡Era tu fan!» Te pidió una foto discretamente.", "happy": 5, "fame": 1}, {"w": 40, "log": "El chisme recorrió el grupo de WhatsApp de padres.", "happy": -6}]},
+            {"t": "Coquetearle para que guarde el secreto", "o": [{"w": 100, "special": "hookup"}]}
+        ]
+    },
+    {
+        "id": "lg_office", "title": "El grupo de la oficina", "min": 25, "max": 65, "w": 5, "req": "pastadult,normaljob",
+        "text": "Alguien compartió uno de tus videos viejos en el grupo de WhatsApp de tu trabajo.",
+        "choices": [
+            {"t": "Enfrentarlo con la frente en alto", "need": "guts", "rank": 3, "o": [{"w": 100, "log": "«Sí, soy yo. ¿Algún problema?» Nadie volvió a mencionarlo y te ganaste respeto.", "guts": 5, "fame": 2}]},
+            {"t": "Hablar con Recursos Humanos", "o": [{"w": 70, "log": "Despidieron a quien lo compartió.", "karma": 2}, {"w": 30, "log": "RR. HH. te sugirió «buscar otras oportunidades».", "special": "fired", "happy": -10}]},
+            {"t": "Renunciar de la vergüenza", "o": [{"w": 100, "log": "Te fuiste sin despedirte.", "special": "fired", "happy": -8}]}
+        ]
+    },
+    {
+        "id": "lg_fan", "title": "Un fan en el súper", "min": 30, "max": 80, "w": 4, "req": "pastadult", "person": "near",
+        "text": "{x} ({edad}) te detiene en el pasillo de cereales: «¡Eres tú! ¡Vi todas tus películas!»",
+        "choices": [
+            {"t": "Tomarse una selfie", "o": [{"w": 100, "log": "Se fue feliz. Te sentiste famos{a} otra vez.", "happy": 6}]},
+            {"t": "Invitarl{xlo} a un café", "o": [{"w": 100, "special": "hookup"}]},
+            {"t": "«Me confunde con alguien»", "o": [{"w": 100, "log": "Huiste con tu carrito a toda velocidad."}]}
+        ]
+    },
+    {
+        "id": "lg_kidfinds", "title": "Tu {hij} lo descubrió", "min": 35, "max": 70, "w": 4, "req": "pastadult,kidteen",
+        "text": "Tu {hij} {k} llega pálid{ka}: un compañero le mostró tus videos de cuando trabajabas en {pasado}.",
+        "choices": [
+            {"t": "Hablarlo con total honestidad", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Fue incómodo, pero {k} terminó entendiéndote. Hasta se rieron.", "special": "kid_bond_up"}]},
+            {"t": "Negarlo todo", "o": [{"w": 50, "log": "{k} no te creyó y ahora tampoco te cree otras cosas.", "special": "kid_shame"}, {"w": 50, "log": "Por ahora te creyó.", "happy": -2}]},
+            {"t": "«Sí, y lo hacía muy bien»", "o": [{"w": 100, "log": "{k} se tapó los oídos y salió corriendo. Necesitará terapia.", "special": "kid_shame", "happy": 3}]}
+        ]
+    },
+    {
+        "id": "lg_doc", "title": "El documental", "min": 40, "max": 85, "w": 3, "req": "pastadult",
+        "text": "Una plataforma de streaming quiere hacer un documental sobre tu carrera en {pasado}.",
+        "choices": [
+            {"t": "Aceptar y contarlo todo", "o": [{"w": 100, "log": "El documental fue un éxito. Cobraste {monto}.", "money": [40000, 150000], "fame": 15}]},
+            {"t": "Rechazarlo", "o": [{"w": 100, "log": "Prefieres que tu pasado se quede en el pasado."}]}
+        ]
+    },
+    {
+        "id": "lg_memoir", "title": "Tus memorias", "min": 50, "max": 90, "w": 3, "req": "pastadult",
+        "text": "Una editorial te ofrece publicar tus memorias picantes.",
+        "choices": [
+            {"t": "Escribirlas sin censura", "o": [{"w": 100, "log": "«Confesiones desde la cama» fue un best seller. Ganaste {monto}.", "money": [20000, 90000], "fame": 8, "know": 3}]},
+            {"t": "Mejor no", "o": [{"w": 100, "log": "Algunos secretos se van a la tumba."}]}
+        ]
+    },
+    {
+        "id": "lg_parentstar", "title": "El pasado de tu familia", "min": 15, "max": 40, "w": 4, "req": "parentstar",
+        "text": "Descubres que tu {padre}, ya fallecid{pa2}, fue estrella del cine para adultos en su juventud.",
+        "choices": [
+            {"t": "Sentir orgullo: vivió sin pedir permiso", "o": [{"w": 100, "log": "Su historia te inspira a vivir a tu manera.", "guts": 4, "happy": 3}]},
+            {"t": "Avergonzarte", "o": [{"w": 100, "log": "Borraste todas sus fotos del celular.", "happy": -6}]},
+            {"t": "Reírte a carcajadas", "o": [{"w": 100, "log": "La familia tenía más secretos de los que creías.", "happy": 5, "charm": 2}]}
+        ]
+    },
+    {
+        "id": "lg_oldparent", "title": "Tu {padre} necesita ayuda", "min": 25, "max": 70, "w": 6, "req": "oldparent", "person": "oldparent",
+        "text": "Tu {padre} {x} ya tiene {edad} años y no puede valerse por sí mism{xa}. Alguien tiene que cuidarl{xlo}.",
+        "choices": [
+            {"t": "Llevártel{xlo} a vivir contigo", "o": [{"w": 100, "log": "Es agotador, pero sus últimos años son felices a tu lado.", "bond": 25, "happy": -4, "kind": 5, "karma": 8, "money": -5000}]},
+            {"t": "Pagar una buena residencia ($40,000)", "cost": 40000, "o": [{"w": 100, "log": "Está bien atendid{xa}. La visitas los domingos.", "bond": 10, "money": -40000}]},
+            {"t": "Que se las arregle", "o": [{"w": 100, "log": "Le diste la espalda a quien te crió. Tus hijos tomaron nota.", "bond": -40, "karma": -15, "parent": -6}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- hijos
+
+function kids_alive() {
+    let out = []
+    for p in L.people {
+        if p.alive && p.rel == "hijo" { list_push(out, p) }
+    }
+    return out
+}
+
+function kid_init(p: map) {
+    if p.kinit == true { return p }
+    p.kinit = true
+    if p.style == null || !list_contains(KID_STYLES, p.style) { p.style = pick(KID_STYLES) }
+    p.smarts = clamp(L.smarts / 2 + rint(10, 50), 5, 100)
+    if p.style == "genio" { p.smarts = clamp(p.smarts + 25, 0, 100) }
+    p.grades = clamp(30 + p.smarts / 2, 0, 100)
+    p.home = true
+    p.tuition = ""
+    p.degree = ""
+    p.job = ""
+    p.wed = false
+    p.study_m = 0
+    return p
+}
+
+function setup_family_styles() {
+    for p in L.people {
+        if (p.rel == "padre" || p.rel == "madre") && p.style == null {
+            p.style = PARENT_STYLES[weighted_choose(G.rng, [30, 25, 20, 15, 10])]
+        }
+    }
+}
+
+function hij(p: map) {
+    return by_gender(p.gender, "hijo", "hija")
+}
+
+function parent_word() {
+    return by_gender(L.gender, "padre", "madre")
+}
+
+function parenting_label() {
+    let s = L.parent_score
+    if s >= 75 { return by_gender(L.gender, "Padre ejemplar", "Madre ejemplar") }
+    if s >= 55 { return by_gender(L.gender, "Buen padre", "Buena madre") }
+    if s >= 40 { return by_gender(L.gender, "Padre normal", "Madre normal") }
+    if s >= 25 { return by_gender(L.gender, "Padre ausente", "Madre ausente") }
+    return by_gender(L.gender, "Pésimo padre", "Pésima madre")
+}
+
+function kid_ctx(p: map) {
+    return {"person": p, "hij": hij(p)}
+}
+
+// Cada mes: colegiaturas que pagas y alguna petición de tus hijos.
+function kids_month() {
+    for p in kids_alive() {
+        kid_init(p)
+        if p.tuition != "" && p.study_m > 0 {
+            let fee = 2500
+            if p.tuition == "half" { fee = 1250 }
+            if p.tuition == "self" { fee = 0 }
+            L.money -= fee
+            p.study_m -= 1
+            if p.study_m == 0 {
+                p.degree = "título universitario"
+                log_add("¡Tu " + hij(p) + " " + p.first + " se graduó de la universidad!", "g")
+                if p.tuition != "self" { p.bond = clamp100(p.bond + 10) }
+                L.happy += 8
+                p.tuition = ""
+            }
+        }
+    }
+    return null
+}
+
+function maybe_kid_event() {
+    if G.modal != null || L.jail > 0 || !chance(9) { return false }
+    let kids = kids_alive()
+    if len(kids) == 0 { return false }
+    let p = kid_init(pick(kids))
+    let pool = []
+    let weights = []
+    for ev in KID_EVENTS {
+        if p.age < ev.kid[0] || p.age > ev.kid[1] { continue }
+        if ev.repeat != true && list_contains(kid_reqs(p), ev.id) { continue }
+        if ev.req == "grandkids" && !has_grandkids(p) { continue }
+        if ev.id == "k_uni" && (p.tuition != "" || p.degree != "") { continue }
+        list_push(pool, ev)
+        list_push(weights, ev.w)
+    }
+    if len(pool) == 0 { return false }
+    let ev = pool[weighted_choose(G.rng, weights)]
+    list_push(kid_reqs(p), ev.id)
+    open_event(ev, kid_ctx(p))
+    G.modal.title = fmt(ev.title, kid_ctx(p))
+    return true
+}
+
+function kid_event(id: string) {
+    for e in KID_EVENTS {
+        if e.id == id { return e }
+    }
+    return KID_EVENTS[0]
+}
+
+function kid_reqs(p: map) {
+    if p.reqs == null { p.reqs = [] }
+    return p.reqs
+}
+
+function has_grandkids(p: map) {
+    for q in L.people {
+        if q.alive && q.rel == "nieto" && q.parent == p.id { return true }
+    }
+    return false
+}
+
+// Cada año: crecen, estudian, se van de casa, se casan y te dan nietos.
+function kids_year() {
+    let old_score = L.parent_score
+    for p in kids_alive() {
+        kid_init(p)
+        // Cómo los tratas pesa en lo que sienten por ti.
+        p.bond = clamp100(p.bond + (L.parent_score - 50) / 12)
+        if L.jail > 0 { p.bond = clamp100(p.bond - 8) }
+        if L.alcohol + L.drugs >= 50 { p.bond = clamp100(p.bond - 5) }
+        if p.age >= 6 && p.age < 18 {
+            let target = 30 + p.smarts / 2
+            if p.style == "flojo" { target -= 10 }
+            p.grades = clamp(p.grades + (target - p.grades) / 4 + rint(-4, 4), 0, 100)
+        }
+        if p.age == 18 { log_add("Tu " + hij(p) + " " + p.first + " cumplió 18 años.", "n") }
+        if p.home && p.age >= 19 && chance(18) {
+            p.home = false
+            log_add(p.first + " se fue de la casa. El nido se siente vacío.", "n")
+        }
+        if p.age >= 22 && p.job == "" && chance(40) {
+            let r = pick(CAREER_ROWS)
+            if !str_contains(r[8], "h") && !str_contains(r[8], "x") {
+                p.job = by_gender(p.gender, r[1], r[2])
+                log_add("Tu " + hij(p) + " " + p.first + " consiguió trabajo como " + str_lower(p.job) + ".", "n")
+            }
+        }
+        if p.age >= 24 && !p.wed && chance(8) {
+            p.wed = true
+            log_add("¡" + p.first + " se casó!", "g")
+        }
+        if p.age >= 24 && p.age <= 42 && chance(9) {
+            let g = pick(["m", "f"])
+            let baby = make_person(g, "nieto", 0)
+            baby.last = p.last
+            baby.look.skin = p.look.skin
+            baby.parent = p.id
+            baby.bond = 70
+            add_person(baby)
+            L.happy += 8
+            log_add("¡Eres " + by_gender(L.gender, "abuelo", "abuela") + "! " + p.first + " tuvo " + by_gender(g, "un niño", "una niña") + ": " + baby.first + ".", "g")
+        }
+        // En tu vejez, los hijos que te quieren te cuidan.
+        if L.age >= 70 && p.age >= 25 && p.bond >= 60 && chance(40) {
+            L.health += 3
+            L.happy += 3
+            if chance(30) { log_add(p.first + " te visita seguido y te cuida. Valió la pena.", "g") }
+        }
+    }
+    L.parent_score = clamp100(L.parent_score + (50 - L.parent_score) / 10)
+    if old_score >= 0 { return null }
+    return null
+}
+
+function kid_items_for(p: map) {
+    kid_init(p)
+    let out = []
+    let s = p.style
+    if p.age >= 6 && p.age < 18 {
+        list_push(out, {"action": "pact:homework", "t": "Ayudarle con la tarea", "s": "Calificaciones " + str(p.grades)})
+        list_push(out, {"action": "pact:ground", "t": "Castigarl" + oa(p.gender), "s": "Disciplina (le duele)"})
+    }
+    if p.age >= 12 {
+        list_push(out, {"action": "pact:allowance", "t": "Darle dinero ($2,000)", "s": "Cercanía"})
+    }
+    if p.age >= 17 && p.age <= 26 && p.tuition == "" && p.degree == "" {
+        list_push(out, {"action": "pact:kiduni", "t": "Pagarle la universidad", "s": "$2,500 al mes, 4 años"})
+    }
+    if p.age >= 18 && p.home {
+        list_push(out, {"action": "pact:kickout", "t": "Echarl" + oa(p.gender) + " de la casa", "s": "Que se independice"})
+    }
+    if L.heir_id == p.id {
+        list_push(out, {"action": "pact:unheir", "t": "Quitarl" + oa(p.gender) + " del testamento", "s": "Heredero actual"})
+    } else {
+        list_push(out, {"action": "pact:heir", "t": "Nombrarl" + oa(p.gender) + " tu heredero", "s": "Lo hereda todo y podrás seguir como " + by_gender(p.gender, "él", "ella")})
+    }
+    return out
+}
+
+function do_kid_act(action: string, p: map) {
+    kid_init(p)
+    let name = p.first
+    let key = "k" + action + str(p.id)
+    let limited = action == "homework" || action == "ground" || action == "allowance"
+    if limited && L.used[key] != null { return info(name, "Ya hiciste eso este mes con " + name + ".") }
+    if limited { L.used[key] = 1 }
+    if action == "homework" {
+        p.grades = clamp(p.grades + rint(3, 8) + rank("know"), 0, 100)
+        bond_gain(p, 4)
+        L.parent_score = clamp100(L.parent_score + 2)
+        return finish(name, "Pasaron la tarde estudiando juntos. Sus calificaciones suben a " + str(p.grades) + ".", "g")
+    }
+    if action == "ground" {
+        p.grades = clamp(p.grades + rint(1, 4), 0, 100)
+        let hurt = 8
+        if p.style == "rebelde" { hurt = 15 }
+        bond_gain(p, -hurt)
+        return finish(name, "Sin celular ni salidas por un mes. " + name + " te odia un poquito, pero estudia más.", "n")
+    }
+    if action == "allowance" {
+        if L.money < 2000 { return info(name, "No te alcanza.") }
+        L.money -= 2000
+        bond_gain(p, 6)
+        return finish(name, "Le diste $2,000 a " + name + ". Te dio el abrazo más rápido de la historia.", "g")
+    }
+    if action == "kiduni" {
+        G.modal = null
+        list_push(kid_reqs(p), "k_uni")
+        let ev = kid_event("k_uni")
+        open_event(ev, kid_ctx(p))
+        G.modal.title = fmt(ev.title, kid_ctx(p))
+        return null
+    }
+    if action == "kickout" {
+        p.home = false
+        bond_gain(p, -30)
+        L.parent_score = clamp100(L.parent_score - 8)
+        return finish(name, "Le pusiste las maletas en la puerta a " + name + ". «Ya es hora de que vueles.» No lo tomó bien.", "b")
+    }
+    if action == "heir" {
+        L.heir_id = p.id
+        toast("TESTAMENTO", name + " es tu heredero" + by_gender(p.gender, "", "a") + " universal.")
+        return finish("Testamento", "Firmaste tu testamento: " + name + " lo heredará todo. Su parte dependerá de cómo te trate.", "n")
+    }
+    if action == "unheir" {
+        L.heir_id = 0
+        return finish("Testamento", "Quitaste a " + name + " del testamento. Si mueres sin heredero, la ruleta decidirá.", "n")
+    }
+    return null
+}
+
+function kid_special(name: string, ctx: map) {
+    let p = ctx["person"]
+    if name == "kid_tuition_full" || name == "kid_tuition_half" || name == "kid_tuition_self" {
+        if p == null { return "" }
+        kid_init(p)
+        p.tuition = str_replace(name, "kid_tuition_", "")
+        p.study_m = 48
+        return ""
+    }
+    if name == "kid_wed" {
+        if p != null { p.wed = true }
+        return ""
+    }
+    // Para eventos de legado: la persona del evento no es el hijo.
+    if name == "kid_shame" || name == "kid_bond_up" {
+        let k = find_person(L.legacy_kid)
+        if k == null { return "" }
+        if name == "kid_shame" {
+            k.bond = clamp100(k.bond - 20)
+            return " La relación con " + k.first + " se enfrió."
+        }
+        k.bond = clamp100(k.bond + 12)
+        return ""
+    }
+    if name == "comeback" { return comeback() }
+    return ""
+}
+
+// ---------------------------------------------------------------- carreras pasadas
+
+const ADULT_PAST = ["porn", "stripper", "escort", "cam"]
+
+function remember_job(id: string) {
+    if !list_contains(L.past_jobs, id) { list_push(L.past_jobs, id) }
+}
+
+function past_adult() {
+    for id in L.past_jobs {
+        if list_contains(ADULT_PAST, id) || job_def(id).adult { return id }
+    }
+    return ""
+}
+
+function past_adult_label() {
+    let id = past_adult()
+    if id == "" { return "" }
+    if id == "porn" { return "el cine para adultos" }
+    if id == "stripper" { return "los clubes de striptease" }
+    if id == "escort" { return "el mundo de las escorts" }
+    if id == "cam" { return "las transmisiones +18" }
+    return "la industria para adultos"
+}
+
+function comeback() {
+    let id = past_adult()
+    if id == "" || job_def(id) == null { id = "porn" }
+    if L.job != null { L.last_job = L.job.title }
+    L.job = new_job(id)
+    L.job.level = 2
+    L.job.xp = XP_TABLE[2]
+    L.job.spec = by_gender(L.gender, "DILF +18", "MILF +18")
+    L.job.bonus = 150
+    L.fame = clamp100(L.fame + 12)
+    flag("comeback")
+    list_push(G.toasts, {"head": "¡REGRESO!", "title": str_upper(L.job.spec), "sub": L.job.title + " · rango 3", "t0": G.t})
+    return " Vuelves como " + str_lower(L.job.title) + " especialidad " + L.job.spec + ". Los fans de lo maduro te esperaban."
+}
+
+// Etiquetas req de los eventos de legado (las consulta meets en events.vel).
+function legacy_meets(tag: string) {
+    if tag == "pastadult" { return past_adult() != "" }
+    if tag == "pastporn" { return list_contains(L.past_jobs, "porn") || list_contains(L.past_jobs, "cam") }
+    if tag == "pastadult18" { return past_adult() != "" }
+    if tag == "notadultnow" { return !job_is_adult(L.job) }
+    if tag == "normaljob" { return L.job != null && !job_is_adult(L.job) }
+    if tag == "kidadult" { return pick_kid(20, 60) != null }
+    if tag == "kidschool" { return pick_kid(6, 17) != null }
+    if tag == "kidteen" { return pick_kid(15, 25) != null }
+    if tag == "parentstar" { return L.parent_star != "" }
+    if tag == "oldparent" { return L.age >= 25 && old_parent() != null }
+    return false
+}
+
+function pick_kid(lo: int, hi: int) {
+    for p in kids_alive() {
+        if p.age >= lo && p.age <= hi { return p }
+    }
+    return null
+}
+
+function old_parent() {
+    for p in L.people {
+        if p.alive && (p.rel == "padre" || p.rel == "madre") && p.age >= 72 && p.cared != true { return p }
+    }
+    return null
+}
+
+// Contexto (persona y marcadores) de los eventos de legado.
+function legacy_ctx(ev: map) {
+    let ctx = {"pasado": past_adult_label()}
+    let lo = 15
+    let hi = 70
+    if str_contains(ev.req, "kidadult") { lo = 20 }
+    if str_contains(ev.req, "kidschool") {
+        lo = 6
+        hi = 17
+    }
+    if str_contains(ev.req, "kidteen") {
+        lo = 15
+        hi = 25
+    }
+    let k = pick_kid(lo, hi)
+    if k != null {
+        L.legacy_kid = k.id
+        ctx["k"] = k.first
+        ctx["hij"] = hij(k)
+        ctx["ka"] = oa(k.gender)
+    }
+    ctx["padre"] = by_gender(L.parent_star_g, "padre", "madre")
+    ctx["pa2"] = oa(L.parent_star_g)
+    let spec = ev["person"]
+    if spec == "kidfriend" && k != null {
+        ctx["person"] = stranger_aged(max(18, k.age - 2), max(18, k.age + 3))
+    } else if spec == "oldparent" {
+        let p = old_parent()
+        ctx["person"] = p
+        if p != null {
+            p.cared = true
+            ctx["padre"] = str_lower(rel_label(p))
+        }
+    } else if spec == "near" {
+        ctx["person"] = stranger()
+    } else if spec != null && type_of(spec) == "list" {
+        ctx["person"] = stranger_aged(spec[0], spec[1])
+    }
+    return ctx
+}
+
+// ---------------------------------------------------------------- vejez
+
+function old_age_year() {
+    if L.age == 65 && L.job != null && G.modal == null {
+        open_choice("JUBILACIÓN", "Cumpliste 65. Puedes jubilarte y cobrar una pensión del 40% de tu sueldo (" + money_str(pay_of(L.job) * 40 / 100) + " al año), o seguir trabajando.",
+            ["Jubilarme", "Seguir trabajando"], ["", ""], "retire", {})
+    }
+    if L.age >= 75 && L.health < 40 && L.care == "" {
+        let k = null
+        for p in kids_alive() {
+            if p.age >= 25 && p.bond >= 60 && (k == null || p.bond > k.bond) { k = p }
+        }
+        if k != null {
+            L.care = "kid"
+            log_add(k.first + " te llevó a vivir a su casa para cuidarte. No estás sol" + oa(L.gender) + ".", "g")
+            L.happy += 10
+        } else if L.money >= 150000 {
+            L.care = "lujo"
+            L.money -= 100000
+            log_add("Te mudaste a una residencia de lujo con alberca y bingo los jueves.", "n")
+        } else {
+            L.care = "asilo"
+            L.happy -= 15
+            log_add("Nadie pudo cuidarte. Terminaste en un asilo público. Tus hijos casi no te visitan.", "b")
+        }
+    }
+    if L.care == "kid" { L.health += 2 }
+    if L.care == "asilo" { L.happy -= 3 }
+    return null
+}
+
+function resolve_retire(index: int) {
+    G.modal = null
+    if index == 1 { return finish("Jubilación", "Sigues al pie del cañón. El trabajo te mantiene joven.", "n") }
+    L.pension = pay_of(L.job) * 40 / 100
+    L.last_job = L.job.title
+    L.job = null
+    L.job2 = null
+    L.happy += 10
+    flag("retired")
+    return finish("Jubilación", "¡Te jubilaste! Cobrarás " + money_str(L.pension) + " al año. Ahora sí: viajes, nietos y siestas.", "g")
+}
+
+// ---------------------------------------------------------------- muerte, funeral y herencia
+
+function estate_value() {
+    let total = L.money - L.debt
+    for a in ASSETS {
+        if list_contains(L.assets, a.t) { total += a.cost / 2 }
+    }
+    return max(0, total)
+}
+
+function merit(p: map) {
+    return clamp(p.bond, 0, 100)
+}
+
+// Al morir: funeral y quién hereda.
+function on_death() {
+    let mourners = []
+    for p in L.people {
+        if p.alive && p.bond >= 50 && p.age >= 4 { list_push(mourners, p.first) }
+    }
+    let crowd = len(mourners) + L.fame * 3
+    L.funeral = {"n": crowd, "names": list_slice(mourners, 0, min(4, len(mourners)))}
+    let heirs = []
+    for p in kids_alive() { list_push(heirs, p.id) }
+    G.legacy = {"heirs": heirs, "estate": estate_value(), "heir": 0, "share": 0}
+    G.roul = null
+    if len(heirs) == 0 { return null }
+    let named = find_person(L.heir_id)
+    if named != null && named.alive && named.rel == "hijo" {
+        legacy_set_heir(named)
+    } else if len(heirs) == 1 {
+        legacy_set_heir(find_person(heirs[0]))
+    }
+    return null
+}
+
+function legacy_set_heir(p: map) {
+    G.legacy.heir = p.id
+    // Si te trató bien recibe casi todo; si no, la mayor parte se pierde en impuestos y pleitos.
+    G.legacy.share = G.legacy.estate * (30 + merit(p) * 70 / 100) / 100
+}
+
+function funeral_text() {
+    let f = L.funeral
+    if f == null { return "" }
+    if f.n == 0 { return "Nadie fue a tu funeral." }
+    let who = ""
+    if len(f.names) > 0 { who = " Lloraron " + str_join(f.names, ", ") + "." }
+    if f.n >= 100 { return "Una multitud de " + str(f.n) + " personas despidió a una leyenda." + who }
+    return str(f.n) + " " + plural(f.n, "persona fue", "personas fueron") + " a tu funeral." + who
+}
+
+// Ruleta: los hijos con más méritos ocupan más espacio en la rueda.
+function start_roulette() {
+    if G.legacy == null || len(G.legacy.heirs) < 2 || G.roul != null { return null }
+    let weights = []
+    let names = []
+    for id in G.legacy.heirs {
+        let p = find_person(id)
+        list_push(weights, max(5, merit(p)))
+        list_push(names, p.first)
+    }
+    let idx = weighted_choose(G.rng, weights)
+    let total = 0
+    for w in weights { total += w }
+    let start = 0
+    let i = 0
+    while i < idx {
+        start += weights[i]
+        i += 1
+    }
+    let center = (start * 2 + weights[idx]) * 180.0 / total
+    G.roul = {"ids": G.legacy.heirs, "w": weights, "names": names, "total": total, "idx": idx, "t0": G.t, "final": 360.0 * 6.0 - center, "done": false}
+    return null
+}
+
+function roulette_angle() {
+    let r = G.roul
+    let p = clamp((G.t - r.t0) / 4.0, 0.0, 1.0)
+    let u = 1.0 - p
+    return r.final * (1.0 - u * u * u * u)
+}
+
+function roulette_tick() {
+    let r = G.roul
+    if r == null || r.done { return false }
+    if G.t - r.t0 >= 4.1 {
+        r.done = true
+        legacy_set_heir(find_person(r.ids[r.idx]))
+        return true
+    }
+    return true
+}
+
+const ROUL_FILLS = ["#e3141b", "#f7f7f2", "#0d0d0d", "#ffd21f"]
+const ROUL_INKS = ["#f7f7f2", "#0d0d0d", "#f7f7f2", "#0d0d0d"]
+
+function roulette_doc(angle: float) {
+    let r = G.roul
+    let body = "<g transform='rotate(" + str(angle) + " 200 200)'>"
+    let a0 = 0.0
+    let i = 0
+    let n = len(r.w)
+    while i < n {
+        let a1 = a0 + r.w[i] * 360.0 / r.total
+        let x0 = 200.0 + 180.0 * sin(a0 * 0.0174533)
+        let y0 = 200.0 - 180.0 * cos(a0 * 0.0174533)
+        let x1 = 200.0 + 180.0 * sin(a1 * 0.0174533)
+        let y1 = 200.0 - 180.0 * cos(a1 * 0.0174533)
+        let large = 0
+        if a1 - a0 > 180.0 { large = 1 }
+        let fill = ROUL_FILLS[i % 4]
+        if n % 4 == 1 && i == n - 1 && i > 0 { fill = ROUL_FILLS[1] }
+        body = body + "<path d='M200 200 L" + str(x0) + " " + str(y0) + " A180 180 0 " + str(large) + " 1 " + str(x1) + " " + str(y1) + " Z' fill='" + fill + "' stroke='#0d0d0d' stroke-width='4'/>"
+        let mid = (a0 + a1) / 2.0
+        let tx = 200.0 + 112.0 * sin(mid * 0.0174533)
+        let ty = 200.0 - 112.0 * cos(mid * 0.0174533)
+        body = body + "<text x='" + str(tx) + "' y='" + str(ty + 8.0) + "' font-family='Impact' font-size='26' text-anchor='middle' fill='" + ROUL_INKS[i % 4] + "' transform='rotate(" + str(mid) + " " + str(tx) + " " + str(ty) + ")'>" + str_upper(r.names[i]) + "</text>"
+        a0 = a1
+        i += 1
+    }
+    body = body + "</g><circle cx='200' cy='200' r='186' fill='none' stroke='#0d0d0d' stroke-width='10'/><circle cx='200' cy='200' r='22' fill='#0d0d0d' stroke='#f7f7f2' stroke-width='4'/>"
+    body = body + "<polygon points='176,0 224,0 200,44' fill='#ffd21f' stroke='#0d0d0d' stroke-width='5'/>"
+    return svg_doc(400, 400, body)
+}
+
+// Seguir jugando como tu heredero.
+function continue_as_heir() {
+    let lg = G.legacy
+    if lg == null || lg.heir == 0 { return null }
+    let kid = find_person(lg.heir)
+    if kid == null { return null }
+    kid_init(kid)
+    let old = L
+    let money = lg.share
+    let gender = kid.gender
+    let likes = by_gender(gender, "f", "m")
+    if chance(10) { likes = "ambos" } else if chance(8) { likes = gender }
+    let trait = KID_TRAIT[kid.style]
+    if trait == null { trait = TRAITS[rint(0, len(TRAITS) - 1)].id }
+    let family = "pobre"
+    if lg.estate >= 50000 { family = "media" }
+    if lg.estate >= 500000 { family = "rica" }
+    G.cre = {"chars": [], "gender": gender, "likes": likes, "look": kid.look, "trait": trait, "tags": random_kinks(rint(1, 3)), "page": 0, "first": kid.first, "last": old.last1 + " " + pick(SURNAMES)}
+    let gen = old.gen + 1
+    let lineage = list_slice(old.lineage, 0, len(old.lineage))
+    list_push(lineage, old.first)
+    new_life_core(kid.age)
+    L.gen = gen
+    L.lineage = lineage
+    L.looks = clamp100(kid.looks)
+    L.smarts = clamp100(kid.smarts)
+    L.grades = kid.grades
+    L.money = money
+    L.family = family
+    // Lo que heredas de tus padres: algo de lo que aprendieron.
+    for k in SOCIAL_KEYS { gain(k, old.social[k] / 5) }
+    if merit(kid) < 40 {
+        L.happy = 35
+        L.karma = 40
+    }
+    if L.age >= 12 { L.edu = 1 }
+    if L.age >= 18 { L.edu = 2 }
+    if L.age >= 6 && L.age < 12 { L.school = "primaria" }
+    if L.age >= 12 && L.age < 18 { L.school = "secundaria" }
+    if kid.degree != "" { L.edu = 3 }
+    if past_adult_old(old) != "" {
+        L.parent_star = past_adult_old(old)
+        L.parent_star_g = old.gender
+    }
+    // Tu familia: el padre o madre que murió, tu otro padre (su pareja) y tus hermanos.
+    let me = make_person(old.gender, by_gender(old.gender, "padre", "madre"), old.age)
+    me.first = old.first
+    me.last = old.last1
+    me.look = old.look
+    me.alive = false
+    me.bond = kid.bond
+    add_person(me)
+    let mate = null
+    for p in old.people {
+        if p.alive && p.id == old.partner_id && p.gender != old.gender { mate = p }
+    }
+    if mate != null {
+        let other = make_person(mate.gender, by_gender(mate.gender, "padre", "madre"), mate.age)
+        other.first = mate.first
+        other.last = mate.last
+        other.look = mate.look
+        other.bond = rint(50, 85)
+        add_person(other)
+    }
+    for p in old.people {
+        if !p.alive { continue }
+        if p.rel == "hijo" && p.id != kid.id {
+            let sib = make_person(p.gender, "hermano", p.age)
+            sib.first = p.first
+            sib.last = p.last
+            sib.look = p.look
+            sib.bond = clamp100((p.bond + kid.bond) / 2)
+            add_person(sib)
+        }
+        if p.rel == "nieto" && p.parent == kid.id {
+            let child = make_person(p.gender, "hijo", p.age)
+            child.first = p.first
+            child.last = p.last
+            child.look = p.look
+            child.bond = 85
+            add_person(child)
+            L.kids += 1
+        }
+    }
+    setup_family_styles()
+    log_add("Generación " + str(gen) + ": continúas como " + kid.first + ", " + hij(kid) + " de " + old.first + ".", "x")
+    let how = "heredaste " + money_str(money) + "."
+    if money == 0 { how = "no quedó nada que heredar." }
+    log_add("Tu " + str_lower(parent_word_of(old.gender)) + " murió por " + old.cause + " y " + how, "n")
+    if merit(kid) < 40 { log_add("Tu relación con " + old.first + " era mala: empiezas con el corazón roto y poca herencia.", "b") }
+    G.legacy = null
+    G.roul = null
+    G.screen_t0 = G.t
+    G.floats = []
+    let got = "Heredaste " + money_str(money) + "."
+    if money == 0 { got = "No quedó nada que heredar." }
+    return info("NUEVA GENERACIÓN", "Ahora eres " + kid.first + " (" + str(kid.age) + " años). " + got + " Tu historia familiar continúa.")
+}
+
+function parent_word_of(g: string) {
+    return by_gender(g, "Padre", "Madre")
+}
+
+function past_adult_old(old: map) {
+    for id in old.past_jobs {
+        if list_contains(ADULT_PAST, id) { return id }
+    }
+    return ""
+}
+
+function legacy_action(action: string) {
+    if action == "legacy:spin" { return start_roulette() }
+    if action == "legacy:go" { return continue_as_heir() }
+    return null
+}
+
+// Panel de herencia en la pantalla de muerte.
+function draw_legacy() {
+    let lg = G.legacy
+    panel(872, 120, 380, 430, 18)
+    tag(900, 134, 190, "HERENCIA", HEX_RED, C_WHITE)
+    text(900, 186, "Patrimonio: " + money_str(lg.estate), 16, C_YELLOW, "impact")
+    if lg.heir != 0 {
+        let p = find_person(lg.heir)
+        svg(900, 200, 150, 180, portrait_doc(p.look, p.gender, p.age, person_mood(p)))
+        text(1060, 236, clip_text(str_upper(p.first), 180, 24), 24, C_WHITE, "impact")
+        text(1060, 260, str(p.age) + " años · cercanía " + str(p.bond) + "%", 13, C_GRAY, "bold")
+        text(1060, 300, "HEREDA", 12, C_GRAY, "bold")
+        text(1060, 326, money_str(lg.share), 22, C_YELLOW, "impact")
+        let note = "Te quería: recibe casi todo."
+        if merit(p) < 40 { note = "Se llevaban mal: recibe poco." } else if merit(p) < 70 { note = "Recibe una buena parte." }
+        let ty = 404
+        for line in wrap(note, chars_for(320, 15)) {
+            text(900, ty, line, 15, C_WHITE, "bold")
+            ty += 22
+        }
+        menu_word(888, 470, 350, 60, "SEGUIR COMO " + str_upper(p.first), "legacy:go", 22)
+        return null
+    }
+    if G.roul == null {
+        let ty = 220
+        for line in wrap("No dejaste testamento. La ruleta decidirá quién hereda y con quién continúas. Cuanto mejor te trató cada hijo, más espacio tiene en la rueda.", chars_for(330, 15)) {
+            text(900, ty, line, 15, C_WHITE, "bold")
+            ty += 22
+        }
+        ty += 10
+        for id in lg.heirs {
+            let p = find_person(id)
+            if ty < 440 {
+                text(900, ty, clip_text(p.first, 160, 16), 16, C_WHITE, "impact")
+                text(1070, ty, "Méritos " + str(merit(p)), 14, C_YELLOW, "bold")
+            }
+            ty += 24
+        }
+        menu_word(888, 470, 350, 60, "¡GIRAR LA RULETA!", "legacy:spin", 24)
+        return null
+    }
+    return null
+}
+
+// La ruleta ocupa el centro de la pantalla mientras gira.
+function draw_roulette_overlay() {
+    let r = G.roul
+    if r == null { return null }
+    let lg = G.legacy
+    if r.done && G.t - r.t0 > 5.6 { return null }
+    arect(0, 0, W, H, rgba(0, 0, 0, 190))
+    push({"op": "alpha_rect", "x": 0, "y": 0, "w": W, "h": H, "color": 0, "action": "noop"})
+    svg(30, 0, 900, 140, tilt_title_doc("RULETA DE LA HERENCIA", 900, 140, 60, HEX_WHITE, HEX_INK))
+    svg(440, 150, 400, 400, roulette_doc(roulette_angle()))
+    if r.done {
+        otext(640, 620, "¡" + str_upper(r.names[r.idx]) + " HEREDA!", 48, C_YELLOW, "impact", true)
+    }
+    return null
+}
