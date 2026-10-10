@@ -220,12 +220,13 @@ function menu_title(tab: string) {
     if tab == "rel" { return "VÍNCULOS" }
     if tab == "act" { return "ACTIVIDADES" }
     if tab == "missions" { return "MISIONES" }
+    if tab == "effects" { return "EFECTOS" }
     if tab == "jobs" { return "CARRERAS" }
     return "NOCHE +18"
 }
 
 function menu_cats(tab: string) {
-    if tab == "act" { return ["Cuerpo", "Mente", "Lujos"] }
+    if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Hábitos", "Lujos"] }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
     if tab == "jobs" { return FIELD_ORDER }
     if tab == "study" { return ["Universidad", "Técnica"] }
@@ -241,6 +242,7 @@ function menu_items(tab: string, cat: string) {
     if tab == "job" { return job_items() }
     if tab == "rel" { return rel_items() }
     if tab == "missions" { return mission_items() }
+    if tab == "effects" { return effect_items() }
     if tab == "jobs" { return job_items_for(cat) }
     if tab == "study" {
         if cat == "Técnica" { return study_items("tec") }
@@ -253,6 +255,8 @@ function menu_items(tab: string, cat: string) {
         return []
     }
     if tab == "night" && cat == "Carreras" { return casting_items() }
+    if tab == "act" && cat == "Salud" { return health_items() }
+    if tab == "act" && cat == "Hábitos" { return habit_items() }
     let items = []
     for a in ACTIVITIES {
         if a.tab == tab && a.cat == cat && L.age >= a.min {
@@ -361,6 +365,9 @@ function person_actions(p: map) {
     if r == "padre" || r == "madre" {
         list_push(out, {"action": "pact:money", "t": "Pedir dinero", "s": "Si te quiere lo suficiente"})
     }
+    if r == "hijo" {
+        for a in kid_items_for(p) { list_push(out, a) }
+    }
     if L.age >= 18 && L.jail == 0 {
         if r == "pareja" || r == "esposo" {
             list_push(out, {"action": "pact:romance", "t": "Noche romántica", "s": "Felicidad y cercanía"})
@@ -452,7 +459,10 @@ function buy(id: string) {
 }
 
 function code_activity(id: string, a: map) {
-    if id == "doctor" { return doctor() }
+    if id == "doctor" {
+        L.used[id] = L.used[id] - 1
+        return health_checkup()
+    }
     if id == "rehab" {
         if L.alcohol + L.drugs < 10 {
             L.used[id] = L.used[id] - 1
@@ -489,7 +499,7 @@ function code_activity(id: string, a: map) {
     if id == "dating" { return open_dating() }
     if id == "hookup" {
         let person = stranger()
-        let odds = 35 + L.looks / 2 + rank("charm") * 4
+        let odds = 35 + looks_eff() / 2 + rank("charm") * 4 + flirt_bonus()
         if has_trait("carisma") { odds += 15 }
         if chance(odds) {
             return open_hookup({"person": person})
@@ -498,35 +508,6 @@ function code_activity(id: string, a: map) {
     }
     if id == "casino" { return open_casino() }
     return null
-}
-
-function doctor() {
-    let cost = 300
-    if L.age < 18 { cost = 0 }
-    if L.money < cost {
-        return info("Doctor", "No te alcanza para la consulta.")
-    }
-    L.money -= cost
-    L.health += 6
-    if len(L.std) == 0 {
-        return finish("Doctor", "El doctor dice que estás bien. Te cobró por decírtelo.", "g")
-    }
-    let keep = []
-    let lines = []
-    for s in L.std {
-        if s == "herpes" {
-            list_push(keep, s)
-            list_push(lines, "El herpes no tiene cura, pero te dieron una pomada.")
-        } else if s == "VIH" {
-            list_push(keep, s)
-            L.hiv_treated = true
-            list_push(lines, "Empezaste tratamiento antirretroviral para el VIH.")
-        } else {
-            list_push(lines, "Te curaron la " + s + ".")
-        }
-    }
-    L.std = keep
-    return finish("Doctor", str_join(lines, " "), "g")
 }
 
 // ---------------------------------------------------------------- ocupación
@@ -731,12 +712,14 @@ function resolve_hookup(index: int, ctx: map) {
     if index == 2 {
         return finish("Encuentro", "Cambiaste de opinión y te fuiste a casa.", "n")
     }
-    let o = {"log": pick(HOOKUP_LINES), "happy": 4 + x.looks / 12, "sex": true, "std": 3, "preg": 2, "charm": 2}
+    let o = {"log": pick(HOOKUP_LINES), "happy": 4 + x.looks / 12, "sex": true, "preg": 2, "charm": 2}
+    G.sex_mode = "prot"
     if index == 1 {
-        o.std = 18
+        G.sex_mode = "raw"
         o.preg = 25
     }
     if has_kink("insaciable") { o.happy = o.happy + 3 }
+    o.happy = max(0, o.happy + fx_sum("sexhappy"))
     let shared = shared_kinks(x)
     if len(shared) > 0 {
         o.log = o.log + " Descubrieron que comparten un gusto: " + kink_name(shared[0], L.gender) + ". Noche legendaria."
@@ -745,6 +728,7 @@ function resolve_hookup(index: int, ctx: map) {
         if has_kink("trios") && shared[0] == "trios" { o.count = 1 }
     }
     let msg = apply(o, ctx)
+    G.sex_mode = ""
     return finish("Encuentro con " + x.first, msg, "x")
 }
 
@@ -766,7 +750,7 @@ function resolve_date(index: int, ctx: map) {
     G.modal = null
     let x = ctx.person
     if index == 0 {
-        let odds = 55 + (L.looks - x.looks) / 3 + rank("charm") * 4
+        let odds = 55 + (looks_eff() - x.looks) / 3 + rank("charm") * 4 + flirt_bonus()
         if has_trait("carisma") || has_trait("romance") { odds += 10 }
         if chance(odds) {
             L.happy += 8
@@ -779,7 +763,7 @@ function resolve_date(index: int, ctx: map) {
         return finish("Cita", x.first + " habló de su ex toda la noche. Desastre.", "b")
     }
     if index == 1 {
-        if L.looks + rint(0, 50) + rank("charm") * 5 >= x.looks {
+        if looks_eff() + rint(0, 50) + rank("charm") * 5 + flirt_bonus() >= x.looks {
             return open_hookup(ctx)
         }
         L.happy -= 3
@@ -840,6 +824,9 @@ function do_person_act(action: string, p: map) {
         L.used[key] = 1
         return start_dialog(tree_for(p), p)
     }
+    if list_contains(["homework", "ground", "allowance", "kiduni", "kickout", "heir", "unheir"], action) {
+        return do_kid_act(action, p)
+    }
     if action == "time" {
         bond_gain(p, rint(5, 12))
         L.happy += 3
@@ -887,7 +874,9 @@ function do_person_act(action: string, p: map) {
         if her_age > 45 { return finish(name, "A estas alturas ya no es posible.", "n") }
         if L.pregnant || L.partner_preg { return finish(name, "Ya viene un bebé en camino.", "n") }
         L.happy += 3
+        G.sex_mode = "raw"
         sex_with(p)
+        G.sex_mode = ""
         if chance(45) {
             if L.gender == "f" {
                 L.pregnant = true
@@ -955,6 +944,7 @@ function do_person_act(action: string, p: map) {
 // ---------------------------------------------------------------- efectos especiales
 
 function special(name: string, ctx: map) {
+    if str_starts_with(name, "kid_") || name == "comeback" { return kid_special(name, ctx) }
     if str_starts_with(name, "event:") {
         let ev = find_event(str_replace(name, "event:", ""))
         if ev != null { open_event(ev, event_ctx(ev)) }
@@ -1038,6 +1028,7 @@ function special(name: string, ctx: map) {
     if name == "creator" {
         if L.job != null { L.last_job = L.job.title }
         L.job = new_job("cam")
+        remember_job("cam")
         L.job.level = 1
         L.job.xp = XP_TABLE[1]
         L.fame = clamp100(L.fame + 15)
@@ -1108,20 +1099,8 @@ function special(name: string, ctx: map) {
         return "Grabaste una escena de tu especialidad («" + kink_name(t, L.gender) + "»). Se nota que lo disfrutas: los fans enloquecieron. +$5,000."
     }
     if name == "clinic" {
-        if L.money < 500 { return "No te alcanzó para las pruebas." }
-        L.money -= 500
-        let out = "Pruebas completas: todo limpio."
-        if len(L.std) > 0 {
-            out = "Te detectaron " + str_join(L.std, ", ") + " a tiempo y empezaste tratamiento."
-            let keep = []
-            for s in L.std {
-                if s == "herpes" || s == "VIH" { list_push(keep, s) }
-                if s == "VIH" { L.hiv_treated = true }
-            }
-            L.std = keep
-        }
         career_xp(10)
-        return out
+        return its_test()
     }
     if name == "collab" {
         let p = stranger()
@@ -1150,5 +1129,6 @@ function dispatch_choice(index: int) {
     if m.handler == "enroll" { return resolve_enroll(index, m.ctx) }
     if m.handler == "audition" { return resolve_audition(index, m.ctx) }
     if m.handler == "dialog" { return dlg_choose(index) }
+    if m.handler == "retire" { return resolve_retire(index) }
     return null
 }

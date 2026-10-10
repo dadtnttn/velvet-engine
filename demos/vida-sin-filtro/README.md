@@ -88,6 +88,48 @@ binarias en el juego.
   que es convencerla. Las opciones muestran su probabilidad, algunas piden rango
   social, y pueden terminar en becas, préstamos, bodas, mudarse juntos, una
   relación abierta, confesiones de infidelidad o reconciliaciones.
+- **Salud** (`health.vel`): 27 enfermedades. ITS de leves a extremas (ladillas,
+  candidiasis, clamidia, gonorrea, VPH, herpes, sífilis, hepatitis B, VIH), con
+  contagio persona a persona: cada adulto tiene sus propias infecciones, así que
+  con una pareja limpia y fiel no hay riesgo, pero si se acuesta con alguien
+  infectado te lo puede pasar. Más gente distinta, más riesgo; el condón lo baja
+  mucho (no del todo con herpes, VPH y ladillas). También crónicas y cáncer
+  ligados a lo que haces: diabetes, hipertensión, corazón, EPOC, cirrosis,
+  obesidad, depresión, Alzheimer, artritis y 7 tipos de cáncer con etapas. Lo
+  que no te diagnostican da síntomas; el médico lo detecta y lo tratas (cura,
+  control mensual o quimioterapia).
+- **El mundo se mueve**: tu pareja puede engañarte (más si es espíritu libre, si
+  la relación va mal o si es abierta) y traerte algo; tus ex y amigos se casan,
+  la gente se contagia y se cura sin ti.
+- **Hábitos** (Actividades › Hábitos): 6 dañinos (fumar, vapear, beber a diario,
+  comida chatarra, desvelarte, broncearte sin bloqueador) y 8 buenos (gimnasio,
+  correr, comer sano, meditar, leer, dormir 8 horas, condón siempre, chequeo
+  anual). Cambian tu riesgo de cada enfermedad; los adictivos cuestan dejarlos.
+- **Efectos** (`effects.vel`): ventajas y desventajas que salen de todo lo
+  anterior y modifican el resto del juego. Tierno de bebé (+atractivo), acné en
+  la adolescencia, cuerpo definido tras un año de gimnasio, aliento a cigarro,
+  ojeras, sobrepeso, brote de herpes, quimioterapia, enamorado, corazón roto,
+  famoso, antecedentes penales... y una ventaja por cada gusto en la cama (fan
+  del sexo oral: más éxito ligando pero más riesgo de ITS; exhibicionista: liga
+  más pero cuesta que te contraten). Afectan tu atractivo efectivo, ligues,
+  contrataciones, sueldo, calificaciones, placer y felicidad o salud mensual.
+- **Hijos y legado** (`family.vel`): tus hijos tienen personalidad (dulce,
+  rebelde, genio, flojo), calificaciones y te piden cosas (juguetes, permiso para
+  fiestas, el auto, que les pagues la universidad, dinero, la boda). Puedes
+  ayudarles con la tarea, castigarlos, echarlos de la casa, hablar con ellos o
+  pagarles los estudios; todo cuenta para tu puntaje como padre o madre y para
+  lo que sienten por ti. Crecen, trabajan, se casan y te dan nietos; si te
+  quieren, te cuidan en la vejez (si no, asilo).
+- **Herencia y nueva generación**: nombra a un heredero en vida o, si no, una
+  ruleta decide entre tus hijos (quien mejor te trató ocupa más espacio). El
+  heredero recibe más o menos herencia según cómo te trató, y puedes seguir
+  jugando como esa persona, con tu familia, hermanos y nietos.
+- **Vejez y funeral**: jubilación con pensión, cuidados, y un funeral al que va
+  más o menos gente según tus vínculos y tu fama.
+- **Tu pasado te persigue**: si trabajaste en la industria +18, años después
+  pueden reconocerte en la junta de padres, aparecer tus videos en la oficina,
+  ofrecerte un documental o memorias, o un amigo adulto de tu hijo confesarte que
+  eres su fantasía. Y puedes regresar como estrella madura (MILF/DILF).
 - **Vida completa**: aumentos, despidos, prisión con opción de fuga,
   matrimonio, divorcio, hijos y muerte.
 - **150 carreras** (`jobs.vel`): 126 contratables en 15 campos (Servicio,
@@ -123,7 +165,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 37 objetivos con recompensa (graduarte, casarte, primer millón,
+- **Misiones**: 44 objetivos con recompensa (graduarte, casarte, primer millón,
   ganar un premio, llevar un confidente a rango 10, vivir 100 años...).
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
   "!", corazón, gota de sudor, enojo o dinero). 3 tipos de cara, 3 de cuerpo,
@@ -145,7 +187,10 @@ binarias en el juego.
 | `edu.vel` | Familia, escuela, exámenes, universidades y técnicas, títulos y audiciones |
 | `gigs.vel` | 100 chambas de medio tiempo, sus eventos y minimisiones |
 | `minigames.vel` | Los 7 minijuegos y su dibujo |
-| `dialogue.vel` | Árboles de diálogo con padres, pareja, amigos y ex |
+| `dialogue.vel` | Árboles de diálogo con padres, pareja, hijos, amigos y ex |
+| `health.vel` | Enfermedades, contagio, mundo de los demás personajes, médico y hábitos |
+| `family.vel` | Hijos, peticiones, herencia, ruleta, nueva generación, vejez y eventos de legado |
+| `effects.vel` | Efectos positivos y negativos y sus modificadores |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
 | `ui.vel` | Pantallas, menús, diálogos, notificaciones y efectos |

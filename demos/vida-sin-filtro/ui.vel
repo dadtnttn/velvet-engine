@@ -401,6 +401,7 @@ function draw_card() {
     svg(16, 16, 378, 60, slant_doc(372, 54, 18, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
     text(44, 52, clip_text(str_upper(L.first + " " + L.last), 310, 22), 22, C_WHITE, "impact")
     tag(30, 84, 150, str_upper(month_name()), HEX_YELLOW, C_INK)
+    draw_effect_chips(26, 118)
     svg(282, 282, 116, 116, burst_doc(116, 116, 14, HEX_RED, HEX_INK, 4, 5))
     otext(340, 342, str(L.age), 40, C_WHITE, "impact", true)
     ctext(340, 362, plural(L.age, "AÑO", "AÑOS"), 12, C_WHITE, "bold")
@@ -517,9 +518,14 @@ function draw_feed(x: int, y: int, w: int, h: int) {
     if hovered("tab:missions") {
         mfill = HEX_YELLOW
     }
-    svg(x + w - 214, y + 10, 190, 34, slant_doc(184, 30, 9, mfill, HEX_INK, 2, HEX_RED, 4))
-    ctext(x + w - 214 + 92, y + 31, mission_label, 15, mcolor, "impact")
-    hot(x + w - 214, y + 10, 184, 30, "tab:missions")
+    svg(x + w - 176, y + 10, 156, 34, slant_doc(150, 30, 9, mfill, HEX_INK, 2, HEX_RED, 4))
+    ctext(x + w - 176 + 75, y + 31, mission_label, 14, mcolor, "impact")
+    hot(x + w - 176, y + 10, 150, 30, "tab:missions")
+    let efill = HEX_WHITE
+    if hovered("tab:effects") { efill = HEX_YELLOW }
+    svg(x + 182, y + 10, 114, 34, slant_doc(108, 30, 9, efill, HEX_INK, 2, HEX_RED, 4))
+    ctext(x + 182 + 54, y + 31, "EFECTOS " + str(len(effects())), 14, C_INK, "impact")
+    hot(x + 182, y + 10, 108, 30, "tab:effects")
     let line_h = 23
     let top = y + 54
     let visible = (h - 70) / line_h
@@ -564,6 +570,7 @@ function draw_stats(x: int, y: int, w: int, h: int) {
     let i = 0
     while i < 4 {
         let v = L[keys[i]]
+        if keys[i] == "looks" { v = looks_eff() }
         let ry = y + 66 + i * 34
         let rx = x + 30 - i * 4
         text(rx, ry, names[i], 14, C_WHITE, "impact")
@@ -571,6 +578,16 @@ function draw_stats(x: int, y: int, w: int, h: int) {
         rect(rx + 120, ry - 13, 190 * v / 100, 14, stat_color(v))
         rect(rx + 120, ry + 1, 190, 2, C_INK)
         text(rx + 318, ry, str(v), 15, stat_color(v), "impact")
+        if keys[i] == "looks" && v != L.looks {
+            let diff = v - L.looks
+            let lbl = str(diff)
+            let col = C_BAD
+            if diff > 0 {
+                lbl = "+" + lbl
+                col = rgb(90, 220, 120)
+            }
+            text(rx + 120, ry + 14, "base " + str(L.looks) + " · efectos " + lbl, 10, col, "bold")
+        }
         draw_floats_for(keys[i], rx + 262, ry - 15)
         i += 1
     }
@@ -607,7 +624,7 @@ function draw_status(x: int, y: int, w: int, h: int) {
         ["Relación", relationship_text()],
         ["Educación", education_text()],
         ["Parejas sexuales", str(L.partners) + " · Hijos " + str(L.kids)],
-        ["Salud sexual", std_text()],
+        ["Salud", health_text()],
         ["Vicios / ley", vice_text()]
     ]
     let ry = y + 56
@@ -640,11 +657,7 @@ function education_text() {
     return out
 }
 
-function std_text() {
-    if L.age < 16 { return "—" }
-    if len(L.std) == 0 { return "Sin infecciones" }
-    return str_join(L.std, ", ")
-}
+
 
 function vice_text() {
     let parts = []
@@ -1089,6 +1102,11 @@ function draw_dead() {
         ty += 22
     }
     text(436, ty + 8, "«" + epitaph() + "»", 15, C_GRAY, "bold")
+    ty += 14
+    for line in wrap(funeral_text(), chars_for(360, 14)) {
+        ty += 20
+        text(436, ty + 8, line, 14, C_INK, "bold")
+    }
     let job = L.last_job
     if L.job != null { job = L.job.title }
     if job == "" { job = "Ninguno" }
@@ -1099,8 +1117,9 @@ function draw_dead() {
         ["Educación", EDU_NAMES[L.edu]],
         ["Parejas sexuales", str(L.partners)],
         ["Matrimonios", str(L.marriages) + " · Divorcios " + str(L.divorces)],
-        ["Hijos", str(L.kids)],
-        ["Años en prisión", str(L.jail_total)],
+        ["Hijos", str(L.kids) + " · " + parenting_label()],
+        ["Generación", str(L.gen)],
+
         ["Misiones", str(len(L.done)) + " / " + str(len(MISSIONS))],
         ["Karma", karma_text()]
     ]
@@ -1111,6 +1130,12 @@ function draw_dead() {
         ry += 27
     }
 
+    if G.legacy != null && len(G.legacy.heirs) > 0 {
+        draw_legacy()
+        draw_dead_buttons()
+        draw_roulette_overlay()
+        return null
+    }
     panel(872, 120, 380, 430, 18)
     tag(900, 134, 190, "ÚLTIMOS RECUERDOS", HEX_RED, C_WHITE)
     let total = len(L.log)
@@ -1127,7 +1152,10 @@ function draw_dead() {
         i += 1
     }
     push({"op": "clip_pop"})
+    draw_dead_buttons()
+}
 
+function draw_dead_buttons() {
     menu_word(880, 566, 250, 54, "OTRA VIDA", "again", 26)
     small_button(1150, 572, 110, 42, "MENÚ", "restart")
     small_button(1150, 628, 110, 42, "SALIR", "quit")

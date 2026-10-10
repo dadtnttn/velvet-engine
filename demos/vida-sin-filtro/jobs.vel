@@ -492,7 +492,8 @@ function job_display(job: any) {
 function pay_of(job: map) {
     let d = job_def(job.id)
     let pay = d.base * PAY_MULT[job.level] / 100
-    if d.looksy { pay = pay * (50 + L.looks) / 100 }
+    if d.looksy { pay = pay * (50 + looks_eff()) / 100 }
+    pay = pay * max(10, 100 + fx_sum("pay")) / 100
     // Sin título se cobra como amateur.
     if job.amateur == true { pay = pay * 60 / 100 }
     return pay * job.bonus / 100
@@ -523,7 +524,7 @@ function job_lock(d: map) {
     // Las carreras con título propio no piden escolaridad: se entra con título o audición.
     if REQUIRES[d.id] == null && L.edu < d.edu { return EDU_NAMES[d.edu] }
     if L.smarts < d.smarts { return "Intel. " + str(d.smarts) }
-    if L.looks < d.looks { return "Atractivo " + str(d.looks) }
+    if looks_eff() < d.looks { return "Atractivo " + str(d.looks) }
     return ""
 }
 
@@ -586,7 +587,7 @@ function apply_job(id: string) {
     }
     let ok = lock == ""
     // La experiencia en chambas ayuda a que te contraten.
-    let odds = 70 + rank("charm") * 3 + min(15, L.workxp / 2)
+    let odds = 70 + rank("charm") * 3 + min(15, L.workxp / 2) + fx_sum("hire")
     if d.adult || d.illegal { odds = 85 }
     if !((ok && chance(odds)) || (!ok && L.age >= d.min_age && chance(6))) {
         L.happy -= 3
@@ -633,6 +634,7 @@ function take_job(id: string, slot: string, amateur: bool) {
     let d = job_def(id)
     let job = new_job(id)
     job.amateur = amateur
+    remember_job(id)
     if has_trait("ambicion") { job.bonus = 110 }
     if slot == "main" {
         if L.job != null { L.last_job = L.job.title }
@@ -652,7 +654,7 @@ function take_job(id: string, slot: string, amateur: bool) {
 function start_career(id: string) {
     let d = job_def(id)
     if d == null { return null }
-    if L.looks < d.looks {
+    if looks_eff() < d.looks {
         L.happy -= 4
         return finish("Casting", "No pasaste el casting: buscan a alguien con más atractivo (" + str(d.looks) + "%).", "b")
     }
@@ -810,6 +812,7 @@ function fuse_jobs() {
     if fused == "" || L.job.level < 2 || L.job2.level < 2 { return info("Fusión", "Necesitas ambas carreras en rango 3.") }
     let old = L.job.title + " + " + L.job2.title
     let job = new_job(fused)
+    remember_job(fused)
     job.level = 2
     job.xp = XP_TABLE[2]
     job.bonus = 120

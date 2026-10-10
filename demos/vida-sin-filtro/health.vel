@@ -1,0 +1,679 @@
+// @edition 3
+// Salud: infecciones de transmisión sexual (de leves a extremas), enfermedades
+// crónicas y cáncer ligados a tus hábitos, diagnóstico, tratamientos y un mundo que
+// se mueve: las demás personas también tienen encuentros, se contagian y se curan.
+//
+// Contagio: cada persona adulta tiene sus propias infecciones. Si tu pareja está
+// limpia y te es fiel, no hay riesgo por más veces que lo hagan; el riesgo aparece
+// si se acuesta con alguien infectado. Más gente distinta = más dados lanzados.
+
+// Por enfermedad: nombre, tipo (its/cronica/cancer/aguda), gravedad 1-4, daño anual
+// a la salud, si tiene cura, costo del tratamiento, % de éxito, % de contagio por
+// encuentro sin protección, síntoma y causa de muerte.
+const ILLNESSES = {
+    "ladillas": {"n": "Ladillas", "type": "its", "sev": 1, "dmg": 0, "cure": true, "cost": 200, "tx": 95, "trans": 40, "sym": "una comezón insoportable ahí abajo", "die": ""},
+    "candidiasis": {"n": "Candidiasis", "type": "its", "sev": 1, "dmg": 1, "cure": true, "cost": 300, "tx": 95, "trans": 15, "sym": "ardor y comezón", "die": ""},
+    "tricomoniasis": {"n": "Tricomoniasis", "type": "its", "sev": 1, "dmg": 1, "cure": true, "cost": 400, "tx": 90, "trans": 30, "sym": "ardor al orinar", "die": ""},
+    "clamidia": {"n": "Clamidia", "type": "its", "sev": 2, "dmg": 3, "cure": true, "cost": 600, "tx": 90, "trans": 35, "sym": "molestias raras al ir al baño", "die": ""},
+    "gonorrea": {"n": "Gonorrea", "type": "its", "sev": 2, "dmg": 3, "cure": true, "cost": 900, "tx": 85, "trans": 40, "sym": "un ardor intenso y secreción", "die": ""},
+    "vph": {"n": "VPH", "type": "its", "sev": 2, "dmg": 1, "cure": true, "cost": 2500, "tx": 60, "trans": 45, "sym": "unas verrugas que no estaban ahí", "die": ""},
+    "herpes": {"n": "Herpes genital", "type": "its", "sev": 3, "dmg": 2, "cure": false, "cost": 300, "tx": 0, "trans": 30, "sym": "ampollas dolorosas", "die": ""},
+    "sifilis": {"n": "Sífilis", "type": "its", "sev": 3, "dmg": 4, "cure": true, "cost": 1500, "tx": 90, "trans": 30, "sym": "una llaga que no duele y un sarpullido raro", "die": "sífilis avanzada"},
+    "hepatitis_b": {"n": "Hepatitis B", "type": "its", "sev": 3, "dmg": 5, "cure": false, "cost": 900, "tx": 0, "trans": 25, "sym": "cansancio y la piel amarillenta", "die": "complicaciones de la hepatitis"},
+    "vih": {"n": "VIH", "type": "its", "sev": 4, "dmg": 6, "cure": false, "cost": 1500, "tx": 0, "trans": 10, "sym": "fiebre y ganglios inflamados que no se van", "die": "complicaciones del SIDA"},
+    "obesidad": {"n": "Obesidad", "type": "cronica", "sev": 2, "dmg": 2, "cure": true, "cost": 45000, "tx": 80, "trans": 0, "sym": "que la ropa ya no te queda", "die": ""},
+    "diabetes": {"n": "Diabetes tipo 2", "type": "cronica", "sev": 3, "dmg": 5, "cure": false, "cost": 800, "tx": 0, "trans": 0, "sym": "sed constante y cansancio", "die": "complicaciones de la diabetes"},
+    "hipertension": {"n": "Hipertensión", "type": "cronica", "sev": 2, "dmg": 3, "cure": false, "cost": 300, "tx": 0, "trans": 0, "sym": "dolores de cabeza y zumbido en los oídos", "die": ""},
+    "cardiopatia": {"n": "Enfermedad del corazón", "type": "cronica", "sev": 3, "dmg": 6, "cure": false, "cost": 1200, "tx": 0, "trans": 0, "sym": "dolor en el pecho al subir escaleras", "die": "un infarto"},
+    "epoc": {"n": "EPOC", "type": "cronica", "sev": 3, "dmg": 6, "cure": false, "cost": 900, "tx": 0, "trans": 0, "sym": "que te falta el aire", "die": "una insuficiencia respiratoria"},
+    "cirrosis": {"n": "Cirrosis", "type": "cronica", "sev": 4, "dmg": 8, "cure": false, "cost": 1500, "tx": 0, "trans": 0, "sym": "el vientre hinchado y la piel amarilla", "die": "cirrosis"},
+    "depresion": {"n": "Depresión", "type": "cronica", "sev": 2, "dmg": 2, "cure": true, "cost": 800, "tx": 0, "trans": 0, "sym": "que nada te emociona", "die": ""},
+    "alzheimer": {"n": "Alzheimer", "type": "cronica", "sev": 4, "dmg": 4, "cure": false, "cost": 2000, "tx": 0, "trans": 0, "sym": "que olvidas cosas importantes", "die": "complicaciones del Alzheimer"},
+    "artritis": {"n": "Artritis", "type": "cronica", "sev": 2, "dmg": 2, "cure": false, "cost": 300, "tx": 0, "trans": 0, "sym": "dolor en las articulaciones", "die": ""},
+    "c_pulmon": {"n": "Cáncer de pulmón", "type": "cancer", "sev": 4, "dmg": 4, "cure": true, "cost": 3000, "tx": 0, "trans": 0, "sym": "una tos que no se quita", "die": "cáncer de pulmón"},
+    "c_higado": {"n": "Cáncer de hígado", "type": "cancer", "sev": 4, "dmg": 4, "cure": true, "cost": 3000, "tx": 0, "trans": 0, "sym": "dolor bajo las costillas", "die": "cáncer de hígado"},
+    "c_piel": {"n": "Cáncer de piel", "type": "cancer", "sev": 3, "dmg": 2, "cure": true, "cost": 2000, "tx": 0, "trans": 0, "sym": "un lunar que cambió de forma", "die": "cáncer de piel"},
+    "c_cervix": {"n": "Cáncer cervicouterino", "type": "cancer", "sev": 4, "dmg": 3, "cure": true, "cost": 3000, "tx": 0, "trans": 0, "sym": "sangrados fuera de lugar", "die": "cáncer cervicouterino"},
+    "c_prostata": {"n": "Cáncer de próstata", "type": "cancer", "sev": 3, "dmg": 3, "cure": true, "cost": 2500, "tx": 0, "trans": 0, "sym": "molestias al orinar", "die": "cáncer de próstata"},
+    "c_mama": {"n": "Cáncer de mama", "type": "cancer", "sev": 4, "dmg": 3, "cure": true, "cost": 3000, "tx": 0, "trans": 0, "sym": "una bolita en el pecho", "die": "cáncer de mama"},
+    "c_colon": {"n": "Cáncer de colon", "type": "cancer", "sev": 4, "dmg": 3, "cure": true, "cost": 3000, "tx": 0, "trans": 0, "sym": "dolor de estómago constante", "die": "cáncer de colon"},
+    "gripe": {"n": "Gripe fuerte", "type": "aguda", "sev": 1, "dmg": 0, "cure": true, "cost": 150, "tx": 100, "trans": 0, "sym": "fiebre y cuerpo cortado", "die": ""}
+}
+
+const ITS_POOL = ["ladillas", "candidiasis", "tricomoniasis", "clamidia", "gonorrea", "vph", "herpes", "sifilis", "hepatitis_b", "vih"]
+const ITS_WEIGHTS = [12, 10, 10, 20, 15, 18, 8, 4, 2, 1]
+const SEV_NAMES = ["", "Leve", "Moderada", "Grave", "Extrema"]
+
+// Hábitos: se activan en Actividades › Hábitos y cada mes cuentan.
+const HABITS = [
+    {"id": "fumar", "t": "Fumar", "bad": true, "min": 16, "cost": 600, "addict": true, "desc": "Relaja y te ves interesante... hasta que no. Riesgo de cáncer de pulmón, EPOC, infartos e hipertensión. Más años fumando, más riesgo."},
+    {"id": "vapear", "t": "Vapear", "bad": true, "min": 16, "cost": 300, "addict": true, "desc": "«Es más sano que fumar.» Menos que fumar, pero suma riesgo de pulmón y corazón."},
+    {"id": "beber", "t": "Beber a diario", "bad": true, "min": 18, "cost": 900, "addict": true, "desc": "Una copita diario... o seis. Cirrosis, cáncer de hígado, hipertensión y adicción."},
+    {"id": "azucar", "t": "Comida chatarra y azúcar", "bad": true, "min": 6, "cost": 0, "addict": false, "desc": "Refrescos, pan dulce y papitas. Felicidad inmediata. Obesidad, diabetes, presión alta y cáncer de colon."},
+    {"id": "desvelo", "t": "Desvelarte siempre", "bad": true, "min": 12, "cost": 0, "addict": false, "desc": "Series, juegos y redes hasta las 4 a. m. Menos salud, peor humor y más riesgo de depresión."},
+    {"id": "sol", "t": "Broncearte sin bloqueador", "bad": true, "min": 14, "cost": 0, "addict": false, "desc": "Bronceado perfecto. Riesgo de cáncer de piel y arrugas antes de tiempo."},
+    {"id": "gym", "t": "Ir al gimnasio", "bad": false, "min": 14, "cost": 500, "addict": false, "desc": "Salud y atractivo. Baja el riesgo de diabetes, corazón, presión, obesidad y cáncer."},
+    {"id": "correr", "t": "Salir a correr", "bad": false, "min": 8, "cost": 0, "addict": false, "desc": "Gratis y efectivo. Más salud, mejor corazón y menos estrés."},
+    {"id": "dieta", "t": "Comer sano", "bad": false, "min": 6, "cost": 400, "addict": false, "desc": "Verduras, agua y nada de refresco. Baja el riesgo de diabetes, obesidad y cáncer de colon."},
+    {"id": "meditar", "t": "Meditar", "bad": false, "min": 10, "cost": 0, "addict": false, "desc": "Diez minutos al día. Más felicidad, menos presión alta y menos depresión."},
+    {"id": "leer", "t": "Leer todos los días", "bad": false, "min": 7, "cost": 100, "addict": false, "desc": "Conocimiento, mejores calificaciones y menos riesgo de Alzheimer en la vejez."},
+    {"id": "dormir", "t": "Dormir 8 horas", "bad": false, "min": 6, "cost": 0, "addict": false, "desc": "El hábito más subestimado: salud y buen humor."},
+    {"id": "condon", "t": "Usar condón siempre", "bad": false, "min": 16, "cost": 100, "addict": false, "desc": "En cada encuentro, aunque no lo elijas: el contagio de ITS baja muchísimo (el herpes, el VPH y las ladillas se cuelan a veces)."},
+    {"id": "chequeos", "t": "Chequeo médico anual", "bad": false, "min": 18, "cost": 250, "addict": false, "desc": "Cada cumpleaños te revisan: las enfermedades se detectan temprano, cuando todavía se curan."}
+]
+
+// ---------------------------------------------------------------- consultas
+
+function ill_def(id: string) {
+    return ILLNESSES[id]
+}
+
+function find_ill(id: string) {
+    for i in L.ill {
+        if i.id == id { return i }
+    }
+    return null
+}
+
+function has_ill(id: string) {
+    return find_ill(id) != null
+}
+
+function add_ill(id: string, known: bool) {
+    if has_ill(id) { return false }
+    list_push(L.ill, {"id": id, "stage": 1, "known": known, "noticed": false, "treated": false, "months": 0})
+    return true
+}
+
+function remove_ill(id: string) {
+    let keep = []
+    for i in L.ill {
+        if i.id != id { list_push(keep, i) }
+    }
+    L.ill = keep
+}
+
+function ill_name(i: map) {
+    let d = ill_def(i.id)
+    if d.type == "cancer" { return d.n + " (etapa " + str(i.stage) + ")" }
+    if i.id == "vih" && i.stage >= 4 { return "SIDA" }
+    return d.n
+}
+
+function has_habit(id: string) {
+    return list_contains(L.habits, id)
+}
+
+function habit_def(id: string) {
+    for h in HABITS {
+        if h.id == id { return h }
+    }
+    return null
+}
+
+function habit_months(id: string) {
+    let m = L.habit_months[id]
+    if m == null { return 0 }
+    return m
+}
+
+function sedentary() {
+    return !has_habit("gym") && !has_habit("correr")
+}
+
+// Texto corto para el panel de situación.
+function health_text() {
+    let known = []
+    let noticed = false
+    for i in L.ill {
+        if i.known { list_push(known, ill_name(i)) } else if i.noticed { noticed = true }
+    }
+    if len(known) > 0 { return str_join(known, ", ") }
+    if noticed { return "Síntomas raros: ve al médico" }
+    if L.age < 16 { return "Sano" }
+    return "Sin diagnósticos"
+}
+
+// La enfermedad más grave para nombrar la causa de muerte.
+function worst_cause() {
+    let best = ""
+    let sev = 0
+    for i in L.ill {
+        let d = ill_def(i.id)
+        if d.die != "" && d.sev + i.stage > sev {
+            sev = d.sev + i.stage
+            best = d.die
+        }
+    }
+    if best == "" { return "problemas de salud" }
+    return best
+}
+
+// ---------------------------------------------------------------- contagio
+
+// Infecciones de una persona adulta (se generan la primera vez que importan).
+function npc_ills(p: map) {
+    if p.ills != null { return p.ills }
+    p.ills = []
+    let r = p.rel
+    if p.age < 18 || r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto" { return p.ills }
+    let wild = p.wild
+    if wild == null { wild = rint(0, 100) }
+    p.wild = wild
+    if chance(wild / 3) { list_push(p.ills, ITS_POOL[weighted_choose(G.rng, ITS_WEIGHTS)]) }
+    if wild > 80 && chance(25) { list_push(p.ills, ITS_POOL[weighted_choose(G.rng, ITS_WEIGHTS)]) }
+    return p.ills
+}
+
+function protected_now() {
+    if G.sex_mode == "prot" { return true }
+    if G.sex_mode == "raw" { return false }
+    return has_habit("condon")
+}
+
+// Probabilidad de contagio en un encuentro.
+function trans_chance(id: string, prot: bool) {
+    let t = ill_def(id).trans * (100 + fx_sum("its")) / 100
+    if !prot { return t }
+    // El condón no cubre toda la piel.
+    if id == "herpes" || id == "vph" || id == "ladillas" { return t / 3 }
+    return t / 12
+}
+
+// Contacto sexual con una persona: los contagios van en ambos sentidos.
+function sex_contact(person: map) {
+    let prot = protected_now()
+    let out = ""
+    for id in npc_ills(person) {
+        if has_ill(id) { continue }
+        if chance(trans_chance(id, prot)) {
+            add_ill(id, false)
+            let d = ill_def(id)
+            if chance(55) {
+                find_ill(id).noticed = true
+                out = " Semanas después notas " + d.sym + ". Algo te pegaron."
+            }
+        }
+    }
+    for i in L.ill {
+        let d = ill_def(i.id)
+        if d.type == "its" && !list_contains(person.ills, i.id) && chance(trans_chance(i.id, prot)) {
+            list_push(person.ills, i.id)
+        }
+    }
+    return out
+}
+
+// Encuentro con alguien desconocido (clientes, orgías, rodajes...).
+function catch_its_random() {
+    let id = ITS_POOL[weighted_choose(G.rng, ITS_WEIGHTS)]
+    if protected_now() && !chance(25) { return "" }
+    if !add_ill(id, false) { return "" }
+    if chance(55) {
+        find_ill(id).noticed = true
+        return " Días después notas " + ill_def(id).sym + ". Deberías ir al médico."
+    }
+    return ""
+}
+
+// ---------------------------------------------------------------- el mundo se mueve
+
+function is_family(p: map) {
+    let r = p.rel
+    return r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto"
+}
+
+// Cada mes, las demás personas viven: tienen encuentros, se contagian, se curan,
+// engañan a su pareja (tú) o se casan con alguien más.
+function world_month() {
+    for p in L.people {
+        if !p.alive || p.age < 18 || is_family(p) { continue }
+        let ills = npc_ills(p)
+        let mine = p.id == L.partner_id || p.rel == "amante"
+        if mine {
+            let odds = 1
+            let st = npc_style(p)
+            if st == "libre" { odds += 2 }
+            if st == "celoso" { odds += 1 }
+            if p.bond < 40 { odds += 3 }
+            if p.open == true { odds += 8 }
+            if L.jail > 0 { odds += 4 }
+            if chance(odds) {
+                if p.flings == null { p.flings = 0 }
+                p.flings = p.flings + 1
+                if chance(18) { list_push(ills, ITS_POOL[weighted_choose(G.rng, ITS_WEIGHTS)]) }
+                if p.open == true {
+                    if chance(20) { log_add(p.first + " tuvo un encuentro con alguien más. Así es su acuerdo.", "x") }
+                } else {
+                    p.cheated_you = true
+                    if chance(25) {
+                        log_add("Encontraste mensajes en el celular de " + p.first + ": te está engañando.", "b")
+                        p.bond = clamp100(p.bond - 20)
+                        L.happy -= 12
+                    }
+                }
+            }
+        } else {
+            if chance(4) && chance(15) { list_push(ills, ITS_POOL[weighted_choose(G.rng, ITS_WEIGHTS)]) }
+            if (p.rel == "ex" || p.rel == "amigo") && p.wed != true && p.age >= 22 && chance(1) {
+                p.wed = true
+                log_add("Te enteraste de que " + p.first + " (" + str_lower(rel_label(p)) + ") se casó.", "n")
+            }
+        }
+        // La gente también va al médico.
+        if len(ills) > 0 && chance(4) {
+            let keep = []
+            for id in ills {
+                if !ill_def(id).cure || id == "vph" { list_push(keep, id) }
+            }
+            p.ills = keep
+        }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- mes y año
+
+function habits_month() {
+    for id in L.habits {
+        let h = habit_def(id)
+        if h.cost > 0 && L.age >= 18 { L.money -= h.cost }
+        L.habit_months[id] = habit_months(id) + 1
+        if id == "fumar" || id == "vapear" {
+            if chance(20) { L.health -= 1 }
+            if chance(25) { L.happy += 1 }
+        }
+        if id == "beber" {
+            L.alcohol += 2
+            if chance(30) { L.happy += 1 }
+        }
+        if id == "azucar" {
+            if chance(35) { L.happy += 1 }
+            if chance(12) { L.looks -= 1 }
+        }
+        if id == "desvelo" {
+            if chance(25) { L.health -= 1 }
+            if chance(20) { L.happy -= 1 }
+        }
+        if id == "sol" && chance(15) { L.looks += 1 }
+        if id == "gym" {
+            if chance(40) { L.health += 1 }
+            if chance(25) { L.looks += 1 }
+            if chance(15) { gain("guts", 1) }
+        }
+        if id == "correr" && chance(40) { L.health += 1 }
+        if id == "dieta" && chance(25) { L.health += 1 }
+        if id == "meditar" && chance(40) { L.happy += 1 }
+        if id == "leer" && chance(35) { gain("know", 1) }
+        if id == "dormir" {
+            if chance(25) { L.health += 1 }
+            if chance(25) { L.happy += 1 }
+        }
+    }
+    return null
+}
+
+function health_month() {
+    habits_month()
+    world_month()
+    let keep = []
+    for i in L.ill {
+        let d = ill_def(i.id)
+        i.months += 1
+        if d.type == "aguda" {
+            if i.months >= 1 {
+                L.health -= 3
+                continue
+            }
+        }
+        if i.treated {
+            if L.money < d.cost && d.type != "cancer" {
+                i.treated = false
+                log_add("No te alcanzó para el tratamiento de " + d.n + ". Lo dejaste.", "b")
+            } else {
+                L.money -= d.cost
+            }
+        }
+        // Las infecciones sin cura avanzan si no se tratan.
+        if (i.id == "vih" || i.id == "sifilis" || i.id == "hepatitis_b") && !i.treated && i.months % 24 == 0 && i.stage < 4 {
+            i.stage += 1
+        }
+        if d.type == "cancer" {
+            if i.treated {
+                if chance(10 - i.stage * 2) {
+                    log_add("¡Remisión! Venciste el " + str_lower(d.n) + ".", "g")
+                    L.happy += 20
+                    flag("survivor")
+                    continue
+                }
+                if chance(30) { L.looks -= 1 }
+                if chance(30) { L.happy -= 1 }
+            } else if chance(5) && i.stage < 4 {
+                i.stage += 1
+            }
+        }
+        if i.id == "depresion" {
+            if chance(30) { L.happy -= 1 }
+            if i.treated && chance(8) {
+                log_add("La terapia funcionó: la depresión quedó atrás.", "g")
+                continue
+            }
+        }
+        if i.id == "alzheimer" && chance(20) { L.smarts -= 1 }
+        // Síntomas: lo que no te han diagnosticado se empieza a notar.
+        if !i.known && !i.noticed && chance(d.sev * 2 + i.stage * 3) {
+            i.noticed = true
+            log_add("Últimamente notas " + d.sym + ". Algo no anda bien.", "b")
+        }
+        list_push(keep, i)
+    }
+    L.ill = keep
+    if chance(2) && !has_ill("gripe") {
+        add_ill("gripe", true)
+        log_add("Te dio una gripe fuerte. Una semana en cama.", "b")
+    }
+    return null
+}
+
+// Daño anual, nuevas enfermedades según tus hábitos y riesgo de muerte.
+function health_year() {
+    for i in L.ill {
+        let d = ill_def(i.id)
+        let dmg = d.dmg + (i.stage - 1) * 3
+        if i.treated { dmg = dmg / 4 }
+        L.health -= dmg
+        if i.id == "depresion" { L.happy -= 4 }
+    }
+    if has_habit("chequeos") && L.age >= 18 {
+        let found = checkup_reveal()
+        if found != "" { log_add("Chequeo anual: " + found, "b") }
+    }
+    roll_new_illness()
+    // Muertes por enfermedad avanzada.
+    for i in L.ill {
+        let d = ill_def(i.id)
+        let risk = 0
+        if d.type == "cancer" && i.stage >= 4 { risk = 40 }
+        if d.type == "cancer" && i.stage == 3 { risk = 8 }
+        if i.id == "vih" && i.stage >= 4 { risk = 30 }
+        if i.id == "cirrosis" { risk = 12 }
+        if i.id == "alzheimer" && L.age > 75 { risk = 8 }
+        if i.id == "diabetes" && L.age > 60 { risk = 3 }
+        if i.treated { risk = risk / 3 }
+        if risk > 0 && chance(risk) {
+            die(d.die)
+            return null
+        }
+    }
+    // Infartos.
+    let heart = 0
+    if has_ill("cardiopatia") { heart = 6 }
+    if has_ill("hipertension") { heart += 2 }
+    if has_habit("fumar") && L.age >= 40 { heart += 2 }
+    if heart > 0 && chance(heart) {
+        if chance(35) {
+            die("un infarto")
+            return null
+        }
+        L.health -= 20
+        add_ill("cardiopatia", true)
+        log_add("Sufriste un infarto. Sobreviviste de milagro.", "b")
+    }
+    return null
+}
+
+function risk_of(id: string) {
+    let a = L.age
+    let smoke = has_habit("fumar")
+    let smoke_years = habit_months("fumar") / 12
+    let sed = sedentary()
+    let r = 0
+    if id == "obesidad" {
+        if has_habit("azucar") { r = 120 }
+        if sed { r += 40 }
+        if has_habit("dieta") { r -= 100 }
+        if has_habit("gym") { r -= 60 }
+    }
+    if id == "diabetes" && a >= 20 {
+        r = 2 + max(0, a - 45) / 2
+        if has_habit("azucar") { r += 20 }
+        if sed { r += 6 }
+        if has_ill("obesidad") { r += 25 }
+        if has_habit("dieta") { r -= 8 }
+        if has_habit("gym") { r -= 6 }
+    }
+    if id == "hipertension" && a >= 25 {
+        r = 3 + max(0, a - 40) / 2
+        if smoke { r += 10 }
+        if has_habit("beber") { r += 10 }
+        if has_habit("azucar") { r += 5 }
+        if has_ill("obesidad") { r += 15 }
+        if sed { r += 4 }
+        if has_habit("meditar") { r -= 5 }
+        if has_habit("gym") || has_habit("correr") { r -= 5 }
+    }
+    if id == "cardiopatia" && a >= 35 {
+        r = 1 + max(0, a - 50)
+        if has_ill("hipertension") { r += 25 }
+        if has_ill("diabetes") { r += 15 }
+        if smoke { r += 15 }
+        if has_habit("vapear") { r += 5 }
+        if has_ill("obesidad") { r += 10 }
+        if sed { r += 5 }
+        if has_habit("gym") || has_habit("correr") { r -= 8 }
+    }
+    if id == "c_pulmon" {
+        if smoke { r = 3 + smoke_years * 2 }
+        if has_habit("vapear") { r += 4 }
+        if a > 50 { r += 2 }
+    }
+    if id == "epoc" && a >= 35 && smoke { r = 5 + smoke_years }
+    if id == "cirrosis" {
+        if has_habit("beber") { r = 15 }
+        r += L.alcohol / 3
+        if has_ill("hepatitis_b") { r += 30 }
+    }
+    if id == "c_higado" {
+        if has_ill("cirrosis") { r = 40 }
+        if has_ill("hepatitis_b") { r += 10 }
+    }
+    if id == "c_piel" {
+        if has_habit("sol") { r = 12 }
+        if a > 40 { r += 2 }
+    }
+    if id == "c_cervix" && L.gender == "f" && has_ill("vph") { r = 30 }
+    if id == "c_prostata" && L.gender == "m" && a >= 50 { r = (a - 45) / 2 }
+    if id == "c_mama" && L.gender == "f" && a >= 35 {
+        r = (a - 30) / 4
+        if has_habit("gym") { r -= 2 }
+    }
+    if id == "c_colon" && a >= 45 {
+        r = 2
+        if has_habit("azucar") { r += 4 }
+        if sed { r += 3 }
+        if has_habit("dieta") { r -= 3 }
+    }
+    if id == "depresion" && a >= 12 {
+        if L.happy < 30 { r = 80 } else if L.happy < 50 { r = 15 }
+        if has_habit("desvelo") { r += 15 }
+        if has_habit("meditar") { r -= 30 }
+    }
+    if id == "alzheimer" && a >= 65 {
+        r = (a - 60) * 2 - rank("know") * 3
+        if has_habit("leer") { r -= 8 }
+    }
+    if id == "artritis" && a >= 50 { r = a - 45 }
+    return max(0, r)
+}
+
+function roll_new_illness() {
+    for id in ["obesidad", "diabetes", "hipertension", "cardiopatia", "c_pulmon", "epoc", "cirrosis", "c_higado", "c_piel", "c_cervix", "c_prostata", "c_mama", "c_colon", "depresion", "alzheimer", "artritis"] {
+        if has_ill(id) { continue }
+        if rint(1, 1000) <= risk_of(id) {
+            add_ill(id, false)
+            return null
+        }
+    }
+    // La obesidad se va si cambias tus hábitos.
+    if has_ill("obesidad") && !has_habit("azucar") && (has_habit("gym") || has_habit("dieta")) && chance(30) {
+        remove_ill("obesidad")
+        log_add("Con tus nuevos hábitos dejaste atrás la obesidad.", "g")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- médico
+
+// Diagnostica todo lo que tengas; devuelve el texto de lo encontrado.
+function checkup_reveal() {
+    let found = []
+    for i in L.ill {
+        if !i.known {
+            i.known = true
+            list_push(found, ill_name(i) + " (" + SEV_NAMES[ill_def(i.id).sev] + ")")
+        }
+    }
+    if len(found) == 0 { return "" }
+    return "te diagnosticaron " + str_join(found, ", ") + "."
+}
+
+function health_checkup() {
+    G.modal = null
+    let cost = 800
+    if L.age < 18 { cost = 0 }
+    if L.money < cost { return info("Chequeo médico", "No te alcanza. Cuesta " + money_str(cost) + ".") }
+    L.money -= cost
+    L.health += 2
+    let found = checkup_reveal()
+    if found == "" { return finish("Chequeo médico", "Análisis completos: estás sano. Te cobraron por decírtelo.", "g") }
+    return finish("Chequeo médico", "Los análisis no mienten: " + found + " Revisa Actividades › Salud para tratarte.", "b")
+}
+
+function its_test() {
+    let cost = 500
+    if L.money < cost { return "No te alcanzó para las pruebas." }
+    L.money -= cost
+    let found = []
+    for i in L.ill {
+        if ill_def(i.id).type == "its" && !i.known {
+            i.known = true
+            list_push(found, ill_name(i))
+        }
+    }
+    if len(found) == 0 { return "Pruebas de ITS: todo limpio." }
+    return "Pruebas de ITS: positivo a " + str_join(found, ", ") + ". Trátate en Actividades › Salud."
+}
+
+function health_items() {
+    let items = []
+    list_push(items, {"action": "hx:checkup", "t": "Chequeo médico completo", "s": "$800", "desc": "Análisis de sangre, presión, imagen y pruebas de ITS. Diagnostica todo lo que tengas, aunque no tengas síntomas.", "lock": ""})
+    list_push(items, {"action": "hx:its", "t": "Pruebas de ITS", "s": "$500", "desc": "Solo infecciones de transmisión sexual. Rápido y discreto.", "lock": ""})
+    for i in L.ill {
+        if !i.known { continue }
+        let d = ill_def(i.id)
+        let sub = "Gravedad: " + SEV_NAMES[d.sev]
+        let desc = ""
+        let lock = ""
+        let t = "Tratar: " + ill_name(i)
+        if i.treated {
+            t = "En tratamiento: " + ill_name(i)
+            sub = money_str(d.cost) + "/mes"
+            desc = "Ya te estás tratando. Clic para suspender el tratamiento (no lo recomendamos)."
+        } else if d.type == "cancer" {
+            desc = "Quimioterapia y radioterapia: " + money_str(d.cost) + " al mes hasta la remisión. Mientras más temprana la etapa, más probable curarte. Sin tratamiento avanza."
+        } else if i.id == "obesidad" {
+            desc = "Cirugía bariátrica: " + money_str(d.cost) + ", 80% de éxito. O cambia tus hábitos: gimnasio o dieta sin comida chatarra."
+            if L.money < d.cost { lock = money_str(d.cost) }
+        } else if d.cure && d.type != "cronica" {
+            desc = "Tratamiento único: " + money_str(d.cost) + ", " + str(d.tx) + "% de éxito."
+            if L.money < d.cost { lock = money_str(d.cost) }
+        } else {
+            desc = "No tiene cura, pero se controla: " + money_str(d.cost) + " al mes reduce el daño a la cuarta parte y el riesgo de complicaciones."
+        }
+        list_push(items, {"action": "hx:tx:" + i.id, "t": t, "s": sub, "desc": desc, "lock": lock})
+    }
+    return items
+}
+
+function treat(id: string) {
+    G.modal = null
+    let i = find_ill(id)
+    if i == null { return null }
+    let d = ill_def(id)
+    if i.treated {
+        i.treated = false
+        return finish("Salud", "Suspendiste el tratamiento de " + d.n + ".", "b")
+    }
+    if d.type == "cancer" || !d.cure || id == "depresion" {
+        i.treated = true
+        let msg = "Empezaste el tratamiento de " + d.n + " (" + money_str(d.cost) + " al mes)."
+        if d.type == "cancer" { msg = "Empezaste quimioterapia contra el " + str_lower(d.n) + ". Va a ser duro." }
+        if id == "depresion" { msg = "Empezaste terapia y medicamento para la depresión." }
+        return finish("Salud", msg, "n")
+    }
+    if L.money < d.cost { return info("Salud", "No te alcanza. Cuesta " + money_str(d.cost) + ".") }
+    L.money -= d.cost
+    if chance(d.tx) {
+        remove_ill(id)
+        L.happy += 4
+        return finish("Salud", "El tratamiento funcionó: te curaste de " + d.n + ".", "g")
+    }
+    return finish("Salud", "El tratamiento contra " + d.n + " no funcionó esta vez. Inténtalo de nuevo.", "b")
+}
+
+// ---------------------------------------------------------------- hábitos
+
+function habit_items() {
+    let items = []
+    for h in HABITS {
+        let on = has_habit(h.id)
+        let lock = ""
+        if L.age < h.min { lock = "Edad " + str(h.min) }
+        let t = "Empezar: " + h.t
+        let sub = "Hábito bueno"
+        if h.bad { sub = "Hábito dañino" }
+        if on {
+            t = "Dejar: " + h.t
+            sub = "ACTIVO · " + str(habit_months(h.id) / 12) + " años"
+        }
+        let cost = ""
+        if h.cost > 0 { cost = " Cuesta " + money_str(h.cost) + " al mes." }
+        list_push(items, {"action": "habit:" + h.id, "t": t, "s": sub, "desc": h.desc + cost, "lock": lock})
+    }
+    return items
+}
+
+function toggle_habit(id: string) {
+    G.modal = null
+    let h = habit_def(id)
+    if h == null || L.age < h.min { return null }
+    if has_habit(id) {
+        if h.addict {
+            let months = habit_months(id)
+            let odds = 75 - months / 3
+            if odds < 15 { odds = 15 }
+            odds += rank("guts") * 5
+            if !chance(odds) {
+                L.happy -= 4
+                return finish("Hábitos", "Intentaste dejar de " + str_lower(h.t) + " y recaíste a los tres días. La adicción es real.", "b")
+            }
+        }
+        let keep = []
+        for x in L.habits {
+            if x != id { list_push(keep, x) }
+        }
+        L.habits = keep
+        if h.bad {
+            L.happy -= 3
+            gain("guts", 2)
+            return finish("Hábitos", "Dejaste de " + str_lower(h.t) + ". Tu cuerpo te lo agradecerá.", "g")
+        }
+        return finish("Hábitos", "Dejaste el hábito: " + str_lower(h.t) + ".", "n")
+    }
+    list_push(L.habits, id)
+    if h.bad {
+        L.happy += 3
+        return finish("Hábitos", "Empezaste a " + str_lower(h.t) + ". Se siente bien... por ahora.", "b")
+    }
+    return finish("Hábitos", "Nuevo hábito: " + str_lower(h.t) + ". La constancia es la clave.", "g")
+}
