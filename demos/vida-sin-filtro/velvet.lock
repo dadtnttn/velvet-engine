@@ -1,0 +1,8 @@
+version = 1
+
+[[package]]
+name = "vida"
+version = "0.1.0"
+source = "path+."
+checksum = "sha256:572fbec0f5399e3ee30e277636106e37d16ea7b01266d2b155cfc1398c0d8a25"
+dependencies = []

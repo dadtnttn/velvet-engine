@@ -1,0 +1,174 @@
+// @edition 3
+// Vida Sin Filtro — simulador de vida para adultos hecho en Velvet Script 3.
+// Contrato del runtime declarativo: app_manifest / app_init / app_update / app_action.
+
+import "data.vel"
+import "sim.vel"
+import "events.vel"
+import "acts.vel"
+import "ui.vel"
+
+export function app_manifest() {
+    return {
+        "app": {
+            "title": "Vida Sin Filtro",
+            "window_width": 1280,
+            "window_height": 720,
+            "minimum_width": 960,
+            "minimum_height": 540,
+            "canvas_width": 1280,
+            "canvas_height": 720,
+            "resizable": true
+        },
+        "capabilities": ["window", "render2d", "input"],
+        "limits": {
+            "max_commands_per_frame": 4096,
+            "max_instructions": 20000000
+        },
+        "root": "assets",
+        "fonts": [
+            {"id": "ui", "path": "system:segoeui.ttf"},
+            {"id": "bold", "path": "system:segoeuib.ttf"}
+        ],
+        "images": []
+    }
+}
+
+export function app_init() {
+    G.dirty = true
+    return frame()
+}
+
+export function app_update(dt: float, input: map) {
+    G.frames += 1
+    handle_input(input)
+    return frame()
+}
+
+export function app_action(action: string) {
+    handle_action(action)
+    G.dirty = true
+    return frame()
+}
+
+function frame() {
+    if G.dirty {
+        G.cache = build()
+        G.dirty = false
+    }
+    let events = []
+    if G.quit { list_push(events, {"kind": "app.exit", "payload": {}}) }
+    return {"time": 0.0, "commands": G.cache, "events": events}
+}
+
+// ---------------------------------------------------------------- teclado y rueda
+
+function pressed(input: map, key: string) {
+    return list_contains(input.pressed, key)
+}
+
+function handle_input(input: map) {
+    if input.wheel != 0.0 && G.mode == "game" && G.modal == null {
+        if input.wheel > 0.0 { G.scroll += 3 } else { G.scroll = max(0, G.scroll - 3) }
+        G.dirty = true
+    }
+    if len(input.pressed) == 0 { return null }
+    if G.mode == "title" {
+        if pressed(input, "Enter") { handle_action("start"); G.dirty = true }
+        return null
+    }
+    if G.mode == "dead" {
+        if pressed(input, "Enter") { handle_action("restart"); G.dirty = true }
+        return null
+    }
+    let m = G.modal
+    if m == null {
+        if pressed(input, "Space") || pressed(input, "Enter") { handle_action("age"); G.dirty = true }
+        return null
+    }
+    if m.kind == "info" {
+        if pressed(input, "Enter") || pressed(input, "Space") || pressed(input, "Escape") {
+            handle_action("ok")
+            G.dirty = true
+        }
+        return null
+    }
+    if m.kind == "choice" {
+        let keys = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5"]
+        let i = 0
+        while i < len(keys) {
+            if pressed(input, keys[i]) || pressed(input, "Numpad" + str(i + 1)) {
+                handle_action("choice:" + str(i))
+                G.dirty = true
+                return null
+            }
+            i += 1
+        }
+        return null
+    }
+    if pressed(input, "Escape") {
+        handle_action("close")
+        G.dirty = true
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- acciones
+
+function handle_action(action: string) {
+    if action == "noop" { return null }
+    if action == "quit" { G.quit = true; return null }
+    if action == "start" { new_life(); return null }
+    if action == "restart" { G.mode = "title"; G.modal = null; return null }
+    if str_starts_with(action, "g:") { G.pick_gender = str_replace(action, "g:", ""); return null }
+    if str_starts_with(action, "l:") { G.pick_likes = str_replace(action, "l:", ""); return null }
+    if G.mode != "game" { return null }
+
+    if action == "age" { age_up(); return null }
+    if action == "ok" || action == "close" { G.modal = null; return null }
+    if action == "scroll:end" { G.scroll = 0; return null }
+    if str_starts_with(action, "tab:") {
+        G.modal = {"kind": "menu", "tab": str_replace(action, "tab:", "")}
+        return null
+    }
+    if str_starts_with(action, "choice:") {
+        dispatch_choice(index_of(action, "choice:", 5))
+        return null
+    }
+    if str_starts_with(action, "hire:") {
+        if G.modal != null && G.modal.kind == "jobs" {
+            hire(index_of(action, "hire:", len(G.modal.offers)))
+        }
+        return null
+    }
+    if str_starts_with(action, "act:") {
+        do_act(str_replace(action, "act:", ""))
+        return null
+    }
+    if str_starts_with(action, "person:") {
+        for p in L.people {
+            if action == "person:" + str(p.id) {
+                G.modal = {"kind": "person", "pid": p.id}
+            }
+        }
+        return null
+    }
+    if str_starts_with(action, "pact:") {
+        if G.modal != null && G.modal.kind == "person" {
+            let p = find_person(G.modal.pid)
+            if p != null { do_person_act(str_replace(action, "pact:", ""), p) }
+        }
+        return null
+    }
+    return null
+}
+
+// VS3 no convierte texto a número: buscamos el índice que coincide.
+function index_of(action: string, prefix: string, limit: int) {
+    let i = 0
+    while i < limit {
+        if action == prefix + str(i) { return i }
+        i += 1
+    }
+    return -1
+}

@@ -1,0 +1,8 @@
+[package]
+name = "vida"
+version = "0.1.0"
+edition = 3
+root = "vida.main"
+
+[modules]
+"vida.main" = "main.vel"

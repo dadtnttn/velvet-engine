@@ -1,0 +1,49 @@
+// @edition 3
+// Datos base: nombres, ciudades, trabajos e infecciones.
+// Puedes ampliar cualquier lista; el resto del juego la recorre sin cambios.
+
+const NAMES_M = ["Mateo", "Santiago", "Diego", "Sebastián", "Nicolás", "Alejandro", "Daniel", "Gabriel", "Lucas", "Andrés", "Javier", "Emiliano", "Bruno", "Joaquín", "Rodrigo", "Tomás", "Iván", "Leonardo", "Marco", "Adrián", "Hugo", "Óscar", "Rafael", "Gael"]
+
+const NAMES_F = ["Valentina", "Camila", "Sofía", "Isabella", "Mariana", "Lucía", "Daniela", "Gabriela", "Valeria", "Renata", "Paula", "Ximena", "Carla", "Andrea", "Natalia", "Jimena", "Fernanda", "Elena", "Martina", "Alejandra", "Regina", "Abril", "Julieta", "Bianca"]
+
+const SURNAMES = ["García", "Rodríguez", "Martínez", "López", "González", "Hernández", "Pérez", "Sánchez", "Ramírez", "Torres", "Flores", "Rivera", "Gómez", "Díaz", "Reyes", "Morales", "Castillo", "Vargas", "Romero", "Mendoza", "Ruiz", "Navarro", "Guerrero", "Salazar", "Rojas", "Ortega", "Delgado", "Cruz"]
+
+const CITIES = ["Ciudad de México", "Lima", "Bogotá", "Buenos Aires", "Madrid", "Santiago de Chile", "Guadalajara", "Medellín", "Monterrey", "Barcelona", "Quito", "Montevideo", "Cancún", "Valencia"]
+
+// Requisitos: edu (0 nada, 1 primaria, 2 secundaria, 3 universidad), smarts, looks.
+// "var": el sueldo depende del atractivo (salary = atractivo² × var).
+const JOBS = [
+    {"id": "repartidor", "m": "Repartidor de comida", "f": "Repartidora de comida", "salary": 12000, "edu": 0, "smarts": 0, "looks": 0, "min_age": 16, "adult": false},
+    {"id": "cajero", "m": "Cajero de supermercado", "f": "Cajera de supermercado", "salary": 14000, "edu": 0, "smarts": 0, "looks": 0, "min_age": 16, "adult": false},
+    {"id": "mesero", "m": "Mesero", "f": "Mesera", "salary": 16000, "edu": 0, "smarts": 0, "looks": 0, "min_age": 16, "adult": false},
+    {"id": "bartender", "m": "Bartender", "f": "Bartender", "salary": 19000, "edu": 0, "smarts": 0, "looks": 30, "min_age": 18, "adult": false},
+    {"id": "guardia", "m": "Guardia de seguridad", "f": "Guardia de seguridad", "salary": 21000, "edu": 1, "smarts": 0, "looks": 0, "min_age": 18, "adult": false},
+    {"id": "recepcion", "m": "Recepcionista de hotel", "f": "Recepcionista de hotel", "salary": 22000, "edu": 2, "smarts": 20, "looks": 40, "min_age": 18, "adult": false},
+    {"id": "oficina", "m": "Oficinista", "f": "Oficinista", "salary": 28000, "edu": 2, "smarts": 35, "looks": 0, "min_age": 18, "adult": false},
+    {"id": "autos", "m": "Vendedor de autos", "f": "Vendedora de autos", "salary": 30000, "edu": 2, "smarts": 30, "looks": 35, "min_age": 18, "adult": false},
+    {"id": "policia", "m": "Policía", "f": "Policía", "salary": 34000, "edu": 2, "smarts": 35, "looks": 0, "min_age": 18, "adult": false},
+    {"id": "enfermero", "m": "Enfermero", "f": "Enfermera", "salary": 38000, "edu": 3, "smarts": 50, "looks": 0, "min_age": 21, "adult": false},
+    {"id": "programador", "m": "Programador", "f": "Programadora", "salary": 62000, "edu": 3, "smarts": 65, "looks": 0, "min_age": 21, "adult": false},
+    {"id": "abogado", "m": "Abogado", "f": "Abogada", "salary": 75000, "edu": 3, "smarts": 75, "looks": 0, "min_age": 22, "adult": false},
+    {"id": "medico", "m": "Médico", "f": "Médica", "salary": 95000, "edu": 3, "smarts": 85, "looks": 0, "min_age": 24, "adult": false},
+    {"id": "bailarin", "m": "Bailarín exótico", "f": "Bailarina exótica", "salary": 32000, "edu": 0, "smarts": 0, "looks": 65, "min_age": 18, "adult": true},
+    {"id": "modelo", "m": "Modelo de ropa interior", "f": "Modelo de lencería", "salary": 45000, "edu": 0, "smarts": 0, "looks": 80, "min_age": 18, "adult": true},
+    {"id": "creador", "m": "Creador de contenido +18", "f": "Creadora de contenido +18", "salary": 0, "var": 8, "edu": 0, "smarts": 0, "looks": 45, "min_age": 18, "adult": true}
+]
+
+const STDS = ["clamidia", "gonorrea", "herpes", "sífilis", "VIH"]
+const STD_WEIGHTS = [40, 30, 15, 10, 5]
+
+const CHILDHOOD = [
+    "Diste tus primeros pasos y te estampaste contra la mesa.",
+    "Dijiste tu primera palabra: una grosería que aprendiste de tu papá.",
+    "Mordiste a otro niño en la guardería.",
+    "Te comiste un crayón. Sabía a azul.",
+    "Lloraste toda la noche porque sí.",
+    "Te escondiste dentro de una lavadora. Nadie se rió.",
+    "Pintaste la pared de la sala con mermelada.",
+    "Rompiste el control de la tele y culpaste al perro.",
+    "Te expulsaron de la guardería por morder al hámster."
+]
+
+const OLD_AGE_CAUSES = ["causas naturales", "un infarto", "un derrame cerebral", "neumonía", "un paro cardíaco mientras dormías"]
