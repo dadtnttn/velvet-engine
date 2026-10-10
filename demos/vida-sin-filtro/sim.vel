@@ -43,7 +43,8 @@ state {
         "tuition_no": "",
         "legacy": null,
         "roul": null,
-        "sex_mode": ""
+        "sex_mode": "",
+        "back_pid": 0
     }
 }
 
@@ -460,6 +461,7 @@ function new_life_core(age: int) {
         "pension": 0,
         "funeral": null,
         "heartbreak": 0,
+        "fert": rint(50, 95),
         "pregnant": false,
         "preg_with": "",
         "partner_preg": false,
@@ -644,6 +646,7 @@ function yearly() {
         }
     }
 
+    childhood_friends()
     // Infancia
     if L.age <= 5 {
         if chance(70) { log_add(pick(CHILDHOOD), "n") }
@@ -833,12 +836,15 @@ function make_partner(p: map) {
 }
 
 function marry() {
+    return marry_cost(min(max(L.money, 0), 8000))
+}
+
+function marry_cost(cost: int) {
     let p = partner()
     if p == null { return null }
     p.rel = "esposo"
     L.married = true
     L.marriages += 1
-    let cost = min(max(L.money, 0), 8000)
     L.money -= cost
     p.bond = clamp100(p.bond + 15)
     return null

@@ -955,9 +955,21 @@ function draw_detail(it: any, kind: string) {
             rect(x + 46, y + 280, 230, 12, rgb(210, 210, 205))
             rect(x + 46, y + 280, 230 * p.bond / 100, 12, C_RED)
             text(x + 46, y + 330, "Atractivo " + str(p.looks) + "%", 15, C_INK, "bold")
+            let extra = "Carácter: " + STYLE_NAMES[npc_style(p)]
+            if p.age >= 18 && L.age >= 18 && (rel_group(p) == "partner" || rel_group(p) == "fling") && p.gender != L.gender {
+                extra = extra + " · Fertilidad " + fert_word(their_fertility(p))
+            }
+            text(x + 46, y + 352, clip_text(extra, 270, 13), 13, C_GRAY, "bold")
             if kind == "person" {
-                text(x + 46, y + 440, clip_text(str_upper(it.t), 260, 22), 22, C_RED, "impact")
-                text(x + 46, y + 466, it.s, 15, C_INK, "bold")
+                text(x + 46, y + 440, clip_text(str_upper(it.t), 500, 22), 22, C_RED, "impact")
+                text(x + 46, y + 462, clip_text(it.s, 500, 14), 14, C_INK, "bold")
+                if it.desc != null && it.desc != it.s {
+                    let dy = y + 484
+                    for line in wrap(it.desc, chars_for(500, 14)) {
+                        if dy < y + 520 { text(x + 46, dy, line, 14, C_INK, "ui") }
+                        dy += 18
+                    }
+                }
             } else {
                 text(x + 46, y + 470, "Clic para interactuar", 14, C_RED, "bold")
             }
@@ -1018,11 +1030,11 @@ function draw_menu(m: map) {
 function draw_person(m: map) {
     let p = find_person(m.pid)
     if p == null { return null }
-    let items = []
-    for a in person_actions(p) {
-        list_push(items, {"action": a.action, "t": a.t, "s": a.s, "desc": a.s, "lock": "", "pid": p.id})
-    }
-    draw_list(str_upper(p.first), [], 0, items, "tab:rel", "person")
+    let cats = person_cats(p)
+    let cat = cats[clamp(G.menu_cat, 0, len(cats) - 1)]
+    let items = person_items(p, cat)
+    draw_list(str_upper(p.first), cats, G.menu_cat, items, "tab:rel", "person")
+    if len(items) == 0 { text(70, 300, "Nada que hacer aquí por ahora.", 20, C_WHITE, "impact") }
     return null
 }
 
