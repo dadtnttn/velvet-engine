@@ -1,0 +1,63 @@
+function hud_boss_enemy() {
+    for enemy in enemies {
+        if enemy.alive && enemy.kind == "captain" { return enemy }
+    }
+    return {}
+}
+
+function hud_visuals() {
+    let items = []
+    if phase != PHASE_PLAYING || intro_timer > 0.0 || clear_timer > 0.0 { return items }
+
+    ui_panel(items, 12, 10, 330, 108, 200)
+    list_push(items, v_frame("player_idle", 192, 0.0, 0, 25, 27, 64, 64, false, 201))
+    list_push(items, v_text(concat("VALEN  LV ", str(player.level)), "pixel", 102, 35, 16, rgba8(255, 214, 144, 255), "left", 202))
+    list_push(items, v_sprite("icon_heart", 101, 44, 22, 18, "fit", 202))
+    list_push(items, v_bar(132, 45, 188, 19, player.hp / max(player.max_hp, 1.0), rgba8(45, 20, 24, 255), rgba8(74, 140, 83, 255), 203))
+    list_push(items, v_text(concat(str(floor(player.hp)), "/", str(floor(player.max_hp))), "regular", 226, 60, 13, rgba8(255, 239, 220, 255), "center", 204))
+    list_push(items, v_sprite("icon_star", 101, 67, 20, 17, "fit", 202))
+    list_push(items, v_bar(132, 72, 120, 16, player.xp / max(player.xp_next, 1), rgba8(45, 20, 24, 255), rgba8(214, 154, 71, 255), 203))
+    list_push(items, v_text(concat(str(player.xp), "/", str(player.xp_next), " XP"), "regular", 260, 82, 12, rgba8(232, 205, 167, 255), "center", 204))
+    list_push(items, v_text(concat(str(player.gold), " ORO"), "pixel", 105, 106, 12, rgba8(255, 196, 94, 255), "left", 205))
+    list_push(items, v_text(concat("x", str(inventory.potions), " POC."), "pixel", 205, 106, 12, rgba8(255, 124, 117, 255), "left", 205))
+
+    ui_panel(items, 660, 10, 288, 86, 200)
+    list_push(items, v_panel(706, 5, 196, 32, rgba8(79, 42, 33, 255), rgba8(166, 96, 61, 255), 2, 201))
+    list_push(items, v_text(concat("MUNDO ", str(world_index), "/5"), "pixel", 804, 27, 14, rgba8(255, 211, 126, 255), "center", 202))
+    let quest_text = quest.text
+    if quest.target > 0 { quest_text = concat(quest.text, " (", str(quest.remaining), " restantes)") }
+    list_push(items, v_text_wrap(quest_text, "regular", 678, 41, 252, 16, 20, rgba8(255, 233, 200, 255), 203))
+
+    ui_panel(items, 12, 536, 390, 92, 200)
+    list_push(items, v_panel(28, 528, 142, 32, rgba8(79, 42, 33, 255), rgba8(166, 96, 61, 255), 2, 201))
+    list_push(items, v_text("REGISTRO", "pixel", 99, 550, 14, rgba8(255, 211, 126, 255), "center", 202))
+    let log_text = "WASD para moverte"
+    if len(log_entries) > 0 { log_text = log_entries[len(log_entries) - 1] }
+    list_push(items, v_text_wrap(log_text, "regular", 28, 571, 350, 18, 23, rgba8(255, 240, 216, 255), 203))
+
+    ui_panel(items, 414, 536, 534, 92, 200)
+    let hotbar_keys = ["ESP", "E", "H", "I"]
+    let hotbar_labels = ["ATACAR", "HABLAR", "POCIÓN", "MOCHILA"]
+    let hotbar_icons = ["icon_hammer", "icon_star", "icon_potion", "icon_backpack"]
+    let slot = 0
+    while slot < 4 {
+        let x = 470 + slot * 92
+        list_push(items, v_panel(x, 544, 52, 52, rgba8(58, 34, 32, 255), rgba8(166, 106, 67, 255), 2, 201))
+        list_push(items, v_sprite(hotbar_icons[slot], x + 8, 551, 36, 36, "fit", 202))
+        list_push(items, v_keycap(hotbar_keys[slot], x + 34, 539, 30, 30, 203))
+        list_push(items, v_text(hotbar_labels[slot], "pixel", x + 26, 621, 12, rgba8(255, 225, 173, 255), "center", 204))
+        slot += 1
+    }
+
+    let boss = hud_boss_enemy()
+    if map_has(boss, "id") {
+        ui_panel(items, 336, 10, 278, 54, 205)
+        list_push(items, v_text("CAPITÁN INVASOR", "pixel", 475, 31, 14, rgba8(255, 196, 178, 255), "center", 206))
+        list_push(items, v_bar(360, 35, 230, 16, boss.hp / max(boss.max_hp, 1.0), rgba8(45, 20, 24, 255), rgba8(167, 59, 59, 255), 207))
+    }
+
+    if damage_flash > 0.0 {
+        list_push(items, v_alpha_rect(0, 0, 960, 640, rgba8(190, 24, 32, 42), 250))
+    }
+    return items
+}

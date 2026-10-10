@@ -1,0 +1,78 @@
+function build_cave_world() {
+    let world = world_shell(
+        "cave",
+        "LA CUEVA",
+        "Cinco cámaras antiguas laten bajo la montaña.",
+        "Atraviesa la cueva y derrota a los invasores",
+        vec2(92, 350)
+    )
+
+    world.terrain = "cave_stone"
+    world.ambient = {"tint": "deep_blue", "fog": 0.36, "particles": "mineral_dust"}
+
+    // Masas de roca: también definen los espacios no transitables.
+    add_prop(world, make_prop("wall_mass", 45, 55, 230, 165, "deep_west"))
+    add_prop(world, make_prop("wall_mass", 545, 55, 370, 135, "deep_north"))
+    add_prop(world, make_prop("wall_mass", 45, 455, 370, 130, "deep_southwest"))
+    add_prop(world, make_prop("wall_mass", 555, 190, 145, 95, "upper_divide"))
+    add_prop(world, make_prop("wall_mass", 625, 405, 75, 50, "lower_divide"))
+    add_prop(world, make_prop("wall_mass", 700, 455, 215, 130, "deep_southeast"))
+
+    // Cinco cámaras conectadas, cada una con una identidad visual propia.
+    add_prop(world, make_prop("chamber", 45, 250, 230, 190, "entrance"))
+    add_prop(world, make_prop("chamber", 290, 105, 250, 210, "crystal"))
+    add_prop(world, make_prop("chamber", 325, 285, 290, 190, "crossroads"))
+    add_prop(world, make_prop("chamber", 410, 445, 290, 160, "pool"))
+    add_prop(world, make_prop("chamber", 700, 205, 220, 230, "shrine"))
+
+    add_prop(world, make_prop("tunnel", 220, 305, 155, 85, "horizontal"))
+    add_prop(world, make_prop("tunnel", 405, 245, 85, 105, "vertical"))
+    add_prop(world, make_prop("tunnel", 535, 395, 105, 105, "descend"))
+    add_prop(world, make_prop("tunnel", 570, 300, 180, 90, "horizontal"))
+
+    add_prop(world, make_prop("crystal_cluster", 335, 130, 160, 140, "blue_violet"))
+    add_prop(world, make_prop("mineral_pool", 475, 480, 165, 100, "cyan"))
+    add_prop(world, make_prop("rockfall", 78, 88, 155, 105, "sealed_passage"))
+    add_prop(world, make_prop("rockfall", 735, 475, 155, 85, "recent_collapse"))
+    add_prop(world, make_prop("stalagmites", 72, 458, 145, 92, "dense"))
+    add_prop(world, make_prop("stalagmites", 585, 75, 170, 80, "dense"))
+    add_prop(world, make_prop("stalagmites", 650, 408, 105, 55, "sparse"))
+    add_prop(world, make_prop("rubble", 285, 470, 120, 75, "scattered"))
+    add_prop(world, make_prop("shrine", 760, 230, 120, 180, "exit"))
+
+    add_prop(world, make_prop("torch", 220, 320, 32, 55, "orange"))
+    add_prop(world, make_prop("torch", 380, 280, 32, 55, "orange"))
+    add_prop(world, make_prop("torch", 500, 330, 32, 55, "orange"))
+    add_prop(world, make_prop("torch", 575, 420, 32, 55, "orange"))
+    add_prop(world, make_prop("torch", 675, 320, 32, 55, "orange"))
+    add_prop(world, make_prop("torch", 865, 345, 32, 55, "violet"))
+
+    // Límites exteriores.
+    add_collider(world, rect(0, 0, 960, 48, "cave_north"))
+    add_collider(world, rect(0, 592, 960, 48, "cave_south"))
+    add_collider(world, rect(0, 0, 42, 640, "cave_west"))
+    add_collider(world, rect(918, 0, 42, 640, "cave_east"))
+
+    // Las masas oscuras bloquean atajos y obligan a recorrer los túneles.
+    add_collider(world, rect(45, 55, 230, 165, "wall_west"))
+    add_collider(world, rect(545, 55, 370, 135, "wall_north"))
+    add_collider(world, rect(45, 455, 370, 130, "wall_southwest"))
+    add_collider(world, rect(555, 190, 145, 95, "wall_upper_divide"))
+    add_collider(world, rect(625, 405, 75, 50, "wall_lower_divide"))
+    add_collider(world, rect(700, 455, 215, 130, "wall_southeast"))
+
+    add_collider(world, rect(350, 145, 125, 100, "crystals"))
+    add_collider(world, rect(490, 495, 135, 70, "mineral_pool"))
+    add_collider(world, rect(775, 248, 90, 145, "shrine"))
+    add_collider(world, rect(285, 475, 105, 55, "rubble"))
+
+    // Un combate por cámara para evitar amontonamientos.
+    add_spawn(world, make_enemy_spawn("scout", 225, 350, 58))
+    add_spawn(world, make_enemy_spawn("scout", 420, 265, 58))
+    add_spawn(world, make_enemy_spawn("scout", 520, 365, 58))
+    add_spawn(world, make_enemy_spawn("scout", 675, 520, 58))
+    add_spawn(world, make_enemy_spawn("scout", 735, 350, 58))
+
+    add_zone(world, {"id": "cave_exit", "kind": "exit", "area": rect(870, 245, 45, 165, "open")})
+    return world
+}

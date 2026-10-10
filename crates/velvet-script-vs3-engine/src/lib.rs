@@ -14,9 +14,17 @@
 
 #![deny(missing_docs)]
 
+mod assets;
+mod compat;
+mod ecs;
 mod host_modules;
+mod water;
 
+pub use assets::{assets_module, AssetsHost, ASSETS_CAPABILITY};
+pub use compat::{compat_module, CompatHost, COMPAT_CAPABILITY};
+pub use ecs::{ecs_module, EcsHost, ECS_CAPABILITY};
 pub use host_modules::{input_module, time_module, InputModuleHost, TimeModuleHost};
+pub use water::{water_module, WaterHost, WATER_CAPABILITY};
 
 use thiserror::Error;
 use velvet_script_vs3::{mat3_val, mat4_val, vec2_val, vec3_val, Value};

@@ -344,7 +344,28 @@ pub enum NativeId {
     MapMerge = 161,
 }
 
+/// Deprecation notice for the legacy presentation natives.
+///
+/// These synchronous host calls stay working for compatibility, but new code
+/// should drive the registrable `velvet.compat` module through
+/// `yield([service, args])` instead (VS3 roadmap, phase 3).
+pub const LEGACY_PRESENT_NOTICE: &str =
+    "legacy presentation native: use the `velvet.compat` module services via yield([...]) instead";
+
 impl NativeId {
+    /// Legacy presentation natives kept for compatibility
+    /// (`present_show`, `set_bg`, `ui_flag`, `ui_flag_get`, `present_hide`).
+    pub fn is_legacy_present(self) -> bool {
+        matches!(
+            self,
+            Self::PresentShow
+                | Self::PresentSetBg
+                | Self::PresentUiFlag
+                | Self::PresentUiFlagGet
+                | Self::PresentHide
+        )
+    }
+
     /// From raw id.
     pub fn from_u16(id: u16) -> Option<Self> {
         Some(match id {

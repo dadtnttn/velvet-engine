@@ -294,6 +294,37 @@ function frame_clock() {
     }
 
     #[test]
+    fn time_host_conforms_to_host_contract() {
+        use velvet_script_vs3::conformance;
+        let mut host = TimeModuleHost::new();
+        conformance::expect_failed(&mut host, "velvet.time.nope", vec![]);
+        conformance::expect_failed(&mut host, "velvet.time.now_ms", vec![Value::Int(1)]);
+        host.update(42, 0.5);
+        conformance::expect_ready(&mut host, "velvet.time.now_ms", vec![], Value::Int(42));
+        conformance::expect_ready(
+            &mut host,
+            "velvet.time.delta_secs",
+            vec![],
+            Value::Float(0.5),
+        );
+    }
+
+    #[test]
+    fn input_host_conforms_to_host_contract() {
+        use velvet_script_vs3::conformance;
+        let mut host = InputModuleHost::new();
+        conformance::expect_failed(&mut host, "velvet.input.teleport", vec![]);
+        conformance::expect_failed(&mut host, "velvet.input.pressed", vec![Value::Int(7)]);
+        host.set_pressed("jump", true);
+        conformance::expect_ready(
+            &mut host,
+            "velvet.input.pressed",
+            vec![velvet_script_vs3::string_val("jump")],
+            Value::Bool(true),
+        );
+    }
+
+    #[test]
     fn simulated_host_can_stand_in_for_the_real_modules() {
         let mut registry = AbiRegistry::new();
         registry.register(time_module()).unwrap();

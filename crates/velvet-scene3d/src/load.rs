@@ -107,6 +107,37 @@ fn validate_node(
             });
         }
     }
+    if let crate::doc::MeshKind3D::Heightfield {
+        resolution,
+        size,
+        heights,
+    } = &node.mesh
+    {
+        if *resolution < 2 {
+            return Err(SceneError::Node {
+                path: path.clone(),
+                message: "heightfield resolution must be >= 2".into(),
+            });
+        }
+        if !size.is_finite() || *size <= 0.0 {
+            return Err(SceneError::Node {
+                path: path.clone(),
+                message: "heightfield size must be finite and > 0".into(),
+            });
+        }
+        if heights.len() != (*resolution as usize) * (*resolution as usize) {
+            return Err(SceneError::Node {
+                path: path.clone(),
+                message: "heightfield heights must hold resolution² samples".into(),
+            });
+        }
+        if heights.iter().any(|h| !h.is_finite()) {
+            return Err(SceneError::Node {
+                path: path.clone(),
+                message: "heightfield heights must be finite".into(),
+            });
+        }
+    }
     for child in &node.children {
         validate_node(child, trail, ids)?;
     }

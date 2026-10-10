@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/velvet-dungeon",
     "crates/velvet-math",
     "crates/velvet-time",
     "crates/velvet-events",
@@ -62,23 +63,22 @@ members = [
     "examples/hybrid-demo",
     "examples/cellular-lab",
     "demos/cellular-arena",
-    "demos/velvet-novella",
-    "demos/card-duel",
-    "demos/velvet-stakes",
-    "demos/seventeen",
-    "demos/echo-xp",
-    "demos/rpg-quest",
     "demos/rpg-quest-vs3",
-    "demos/sam-tomboy",
-    "demos/summoner-emporium",
     "demos/demon-queen",
+    "demos/demon-queen/dungeon",
     "crates/velvet-fx",
     "crates/velvet-render-rtx",
     "crates/velvet-video",
+    "crates/velvet-terrain",
+    "crates/velvet-liquid",
+    "crates/velvet-nav",
+    "crates/velvet-guion",
+    "crates/velvet-qa",
     "crates/velvet-scene3d",
     "demos/fx-forge",
     "demos/third-person",
     "demos/ui-gallery",
+    "demos/terraflow",
 ]
 default-members = [
     "crates/velvet-cli",
@@ -144,8 +144,13 @@ velvet-build = { path = "crates/velvet-build" }
 velvet-test-utils = { path = "crates/velvet-test-utils" }
 velvet-fx = { path = "crates/velvet-fx" }
 velvet-video = { path = "crates/velvet-video" }
+velvet-terrain = { path = "crates/velvet-terrain" }
+velvet-liquid = { path = "crates/velvet-liquid" }
 velvet-render-rtx = { path = "crates/velvet-render-rtx" }
 velvet-scene3d = { path = "crates/velvet-scene3d" }
+velvet-nav = { path = "crates/velvet-nav" }
+velvet-guion = { path = "crates/velvet-guion" }
+velvet-qa = { path = "crates/velvet-qa" }
 
 # External — foundation
 serde = { version = "1", features = ["derive"] }
@@ -194,6 +199,16 @@ opt-level = 1
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# For iterating (QA runs, captures, trying a change): `cargo build --profile fast-release`.
+# Release optimisation, but no LTO and incremental in many codegen units (release's single unit
+# would recompile the whole game for any change): an edit rebuilds in seconds, not minutes.
+# Builds that ship still use --release.
+[profile.fast-release]
+inherits = "release"
+lto = false
+codegen-units = 256
+incremental = true
 
 [profile.bench]
 inherits = "release"

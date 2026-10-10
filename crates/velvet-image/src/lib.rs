@@ -276,111 +276,178 @@ pub fn rasterize_simple_svg(svg: &str, width: u32, height: u32) -> Result<RgbaIm
     }
     let mut img = RgbaImage::new(width, height);
     let (vb_w, vb_h) = parse_viewbox(svg).unwrap_or((64.0, 64.0));
-    let fill = parse_svg_color_attr(svg, "fill").unwrap_or([235, 200, 120, 255]);
-    let stroke = parse_svg_color_attr(svg, "stroke");
-    let stroke_w = parse_stroke_width(svg).unwrap_or(0.0);
 
-    let paths = extract_all_path_d(svg);
+    // The old rasterizer treated the last fill/stroke attribute in the entire
+    // document as a global color. That made multi-colour game UI icons
+    // impossible. Keep root-level defaults, but let every <path> override them.
+    let svg_tag = extract_opening_tag(svg, "<svg").unwrap_or("");
+    let default_fill = svg_attr(svg_tag, "fill")
+        .and_then(parse_svg_color_value)
+        .unwrap_or([235, 200, 120, 255]);
+    let default_stroke = svg_attr(svg_tag, "stroke")
+        .and_then(parse_svg_color_value)
+        .filter(|color| color[3] > 0);
+    let default_stroke_w = svg_attr(svg_tag, "stroke-width")
+        .or_else(|| svg_attr(svg_tag, "stroke_width"))
+        .and_then(|value| value.parse::<f32>().ok())
+        .unwrap_or(0.0);
+
+    let paths = extract_svg_path_elements(svg, default_fill, default_stroke, default_stroke_w);
     let mut any = false;
-    for d in &paths {
-        // All subpaths in one `d` use even-odd together (letter holes)
+    for path in &paths {
         let mut polys_vb: Vec<Vec<(f32, f32)>> = Vec::new();
-        for sub in split_subpaths(d) {
+        for sub in split_subpaths(&path.d) {
             let poly = parse_path_points(&sub);
             if poly.len() >= 3 {
                 polys_vb.push(poly);
             }
         }
-        if !polys_vb.is_empty() {
-            fill_polygons_vb_evenodd(&mut img, &polys_vb, vb_w, vb_h, fill);
+        if polys_vb.is_empty() {
+            continue;
+        }
+        if path.fill[3] > 0 {
+            fill_polygons_vb_evenodd(&mut img, &polys_vb, vb_w, vb_h, path.fill);
             any = true;
-            if stroke_w > 0.05 {
-                if let Some(sc) = stroke {
-                    if sc[3] > 0 {
-                        for poly in &polys_vb {
-                            stroke_polyline_vb(&mut img, poly, vb_w, vb_h, sc, stroke_w, true);
-                        }
+        }
+        if path.stroke_width > 0.05 {
+            if let Some(stroke) = path.stroke {
+                if stroke[3] > 0 {
+                    for poly in &polys_vb {
+                        stroke_polyline_vb(
+                            &mut img,
+                            poly,
+                            vb_w,
+                            vb_h,
+                            stroke,
+                            path.stroke_width,
+                            true,
+                        );
                     }
+                    any = true;
                 }
             }
         }
     }
     if !any {
-        // fallback: filled rect inset
         fill_rect(
             &mut img,
             width / 8,
             height / 8,
             width * 3 / 4,
             height * 3 / 4,
-            fill,
+            default_fill,
         );
     }
     Ok(img)
 }
 
+#[derive(Clone)]
+struct SvgPathElement {
+    d: String,
+    fill: [u8; 4],
+    stroke: Option<[u8; 4]>,
+    stroke_width: f32,
+}
+
+fn extract_opening_tag<'a>(source: &'a str, prefix: &str) -> Option<&'a str> {
+    let start = source.find(prefix)?;
+    let rest = &source[start..];
+    let end = rest.find('>')?;
+    Some(&rest[..=end])
+}
+
+fn svg_attr<'a>(tag: &'a str, attr: &str) -> Option<&'a str> {
+    for quote in ['"', '\''] {
+        let key = format!("{attr}={quote}");
+        if let Some(index) = tag.find(&key) {
+            let rest = &tag[index + key.len()..];
+            let end = rest.find(quote)?;
+            return Some(rest[..end].trim());
+        }
+    }
+    None
+}
+
+fn parse_svg_color_value(value: &str) -> Option<[u8; 4]> {
+    let value = value.trim();
+    if value.eq_ignore_ascii_case("none") || value.eq_ignore_ascii_case("transparent") {
+        return Some([0, 0, 0, 0]);
+    }
+    let hex = value.strip_prefix('#')?;
+    match hex.len() {
+        3 => {
+            let r = u8::from_str_radix(&hex[0..1].repeat(2), 16).ok()?;
+            let g = u8::from_str_radix(&hex[1..2].repeat(2), 16).ok()?;
+            let b = u8::from_str_radix(&hex[2..3].repeat(2), 16).ok()?;
+            Some([r, g, b, 255])
+        }
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            Some([r, g, b, 255])
+        }
+        8 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
+            Some([r, g, b, a])
+        }
+        _ => None,
+    }
+}
+
+fn extract_svg_path_elements(
+    svg: &str,
+    default_fill: [u8; 4],
+    default_stroke: Option<[u8; 4]>,
+    default_stroke_width: f32,
+) -> Vec<SvgPathElement> {
+    let mut out = Vec::new();
+    let mut search = svg;
+    while let Some(index) = search.find("<path") {
+        let rest = &search[index..];
+        let Some(end) = rest.find('>') else {
+            break;
+        };
+        let tag = &rest[..=end];
+        if let Some(d) = svg_attr(tag, "d") {
+            let fill = svg_attr(tag, "fill")
+                .and_then(parse_svg_color_value)
+                .unwrap_or(default_fill);
+            let stroke = match svg_attr(tag, "stroke") {
+                Some(value) => parse_svg_color_value(value).filter(|color| color[3] > 0),
+                None => default_stroke,
+            };
+            let stroke_width = svg_attr(tag, "stroke-width")
+                .or_else(|| svg_attr(tag, "stroke_width"))
+                .and_then(|value| value.parse::<f32>().ok())
+                .unwrap_or(default_stroke_width);
+            out.push(SvgPathElement {
+                d: d.to_owned(),
+                fill,
+                stroke,
+                stroke_width,
+            });
+        }
+        search = &rest[end + 1..];
+    }
+    out
+}
+
 fn parse_viewbox(svg: &str) -> Option<(f32, f32)> {
-    let key = "viewBox=\"";
-    let i = svg.find(key).or_else(|| svg.find("viewbox=\""))?;
-    let rest = &svg[i + key.len()..];
-    let end = rest.find('"')?;
-    let nums: Vec<f32> = rest[..end]
+    let svg_tag = extract_opening_tag(svg, "<svg")?;
+    let value = svg_attr(svg_tag, "viewBox").or_else(|| svg_attr(svg_tag, "viewbox"))?;
+    let nums: Vec<f32> = value
         .split(|c: char| c.is_whitespace() || c == ',')
-        .filter_map(|t| t.parse().ok())
+        .filter_map(|token| token.parse().ok())
         .collect();
     if nums.len() >= 4 {
         Some((nums[2].max(1.0), nums[3].max(1.0)))
     } else {
         None
     }
-}
-
-fn parse_stroke_width(svg: &str) -> Option<f32> {
-    for key in ["stroke-width=\"", "stroke_width=\""] {
-        if let Some(i) = svg.find(key) {
-            let rest = &svg[i + key.len()..];
-            let end = rest.find('"')?;
-            return rest[..end].parse().ok();
-        }
-    }
-    None
-}
-
-fn parse_svg_color_attr(svg: &str, attr: &str) -> Option<[u8; 4]> {
-    let key = format!("{attr}=\"");
-    // last occurrence wins (path can override root); scan all
-    let mut last = None;
-    let mut search = svg;
-    while let Some(i) = search.find(&key) {
-        let rest = &search[i + key.len()..];
-        let end = rest.find('"')?;
-        let c = rest[..end].trim();
-        if c.eq_ignore_ascii_case("none") || c.eq_ignore_ascii_case("transparent") {
-            last = Some([0, 0, 0, 0]);
-        } else if c.starts_with('#') && c.len() >= 7 {
-            let r = u8::from_str_radix(&c[1..3], 16).ok()?;
-            let g = u8::from_str_radix(&c[3..5], 16).ok()?;
-            let b = u8::from_str_radix(&c[5..7], 16).ok()?;
-            last = Some([r, g, b, 255]);
-        }
-        search = &rest[end + 1..];
-    }
-    last
-}
-
-fn extract_all_path_d(svg: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut search = svg;
-    while let Some(i) = search.find("d=\"") {
-        let rest = &search[i + 3..];
-        if let Some(end) = rest.find('"') {
-            out.push(rest[..end].to_string());
-            search = &rest[end + 1..];
-        } else {
-            break;
-        }
-    }
-    out
 }
 
 /// Split a path `d` into subpaths starting at each absolute/relative moveto.
@@ -872,5 +939,18 @@ mod tests {
         );
         let img = rasterize_simple_svg(&svg, 64, 64).unwrap();
         assert!(img.pixels.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn simple_svg_raster_preserves_per_path_fill() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 32" fill="#ffffff">
+            <path d="M0 0 L32 0 L32 32 L0 32 Z" fill="#ff0000"/>
+            <path d="M32 0 L64 0 L64 32 L32 32 Z" fill="#00ff00"/>
+        </svg>"##;
+        let img = rasterize_simple_svg(svg, 64, 32).unwrap();
+        let left = (16 * 64 + 16) * 4;
+        let right = (16 * 64 + 48) * 4;
+        assert!(img.pixels[left] > 200 && img.pixels[left + 1] < 40);
+        assert!(img.pixels[right + 1] > 200 && img.pixels[right] < 40);
     }
 }

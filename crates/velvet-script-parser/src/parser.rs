@@ -551,6 +551,7 @@ impl Parser {
         const WIDGETS: &[&str] = &[
             "text",
             "textbutton",
+            "button",
             "image",
             "bar",
             "vbox",
@@ -561,7 +562,10 @@ impl Parser {
             "key",
             "input",
         ];
-        if kind == "button" || !WIDGETS.contains(&kind.as_str()) {
+        // Top-level `button id { ... }` is still handled by parse_screen(),
+        // while nested buttons are regular widget nodes so layouts can style
+        // and position them inside hbox/vbox/fixed containers.
+        if !WIDGETS.contains(&kind.as_str()) {
             return Ok(None);
         }
         let start = self.peek_loc();
@@ -2619,6 +2623,33 @@ state {
                 other => panic!("{other:?}"),
             },
             _ => panic!("expected scene"),
+        }
+    }
+
+    #[test]
+    fn parse_nested_button_widget() {
+        let r = parse_ok(
+            "screen phone {\n  hbox {\n    button { label: \"Chats\" class: \"app-tile\" action: Return(\"chats\") }\n  }\n}\nscene main { screen call phone }",
+        );
+        match &r.module.items[0] {
+            Item::Screen { children, .. } => match &children[0] {
+                ScreenNode::Widget { kind, children, .. } => {
+                    assert_eq!(kind, "hbox");
+                    assert_eq!(children.len(), 1);
+                    match &children[0] {
+                        ScreenNode::Widget {
+                            kind, properties, ..
+                        } => {
+                            assert_eq!(kind, "button");
+                            assert!(properties.iter().any(|p| p.name == "class"));
+                            assert!(properties.iter().any(|p| p.name == "action"));
+                        }
+                        other => panic!("expected nested button widget, got {other:?}"),
+                    }
+                }
+                other => panic!("expected hbox widget, got {other:?}"),
+            },
+            other => panic!("expected screen, got {other:?}"),
         }
     }
 

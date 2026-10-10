@@ -29,3 +29,4 @@ window = ["dep:winit", "velvet-app/window"]
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
+naga = { version = "24", features = ["wgsl-in"] }

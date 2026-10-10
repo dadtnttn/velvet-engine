@@ -1,0 +1,16 @@
+function ui_overlay(items: list, alpha: int, layer: int) {
+    list_push(items, v_alpha_rect(0, 0, 960, 640, rgba8(8, 4, 8, alpha), layer))
+}
+
+function ui_title(items: list, text: string, x: int, y: int, w: int, layer: int) {
+    list_push(items, v_panel(x, y, w, 48, rgba8(74, 40, 32, 245), rgba8(178, 111, 67, 255), 3, layer))
+    list_push(items, v_text(text, "pixel", x + w / 2, y + 31, 22, rgba8(255, 213, 126, 255), "center", layer + 1))
+}
+
+function ui_panel(items: list, x: int, y: int, w: int, h: int, layer: int) {
+    list_push(items, v_panel(x, y, w, h, rgba8(31, 17, 22, 238), rgba8(164, 100, 61, 255), 3, layer))
+}
+
+function ui_action_button(items: list, id: string, label: string, icon: string, x: int, y: int, w: int, h: int, layer: int) {
+    list_push(items, v_button(id, label, icon, x, y, w, h, layer))
+}

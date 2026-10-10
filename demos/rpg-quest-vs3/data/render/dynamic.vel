@@ -1,0 +1,8 @@
+function dynamic_visuals() {
+    let items = []
+    for command in entity_visuals() { list_push(items, command) }
+    for command in title_visuals() { list_push(items, command) }
+    for command in hud_visuals() { list_push(items, command) }
+    for command in modal_visuals() { list_push(items, command) }
+    return items
+}

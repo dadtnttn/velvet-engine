@@ -1,0 +1,61 @@
+[package]
+name = "demon-queen"
+default-run = "demon-queen"
+description = "Demon Queen - VN 18+ driven by an importable, versioned JSON story"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+authors = ["Velvet Weaver"]
+# src/bin/map_overlay.rs is part of the shared exploration scene, not a binary.
+autobins = false
+
+[features]
+default = []
+portable = []
+console = []
+
+[[bin]]
+name = "demon-queen"
+path = "src/main.rs"
+
+[[bin]]
+name = "demon-queen-3d"
+path = "src/bin/3d_preview.rs"
+
+[dependencies]
+ab_glyph = "0.2.32"
+anyhow = { workspace = true }
+bytemuck = { workspace = true }
+image = { workspace = true }
+rustybuzz = "0.20"
+serde = { workspace = true }
+serde_json = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+unicode-segmentation = "1.12"
+winit = { workspace = true }
+velvet-style = { workspace = true }
+velvet-ui = { workspace = true }
+velvet-math = { workspace = true }
+velvet-render = { workspace = true }
+velvet-image = { workspace = true }
+velvet-dungeon = { path = "../../crates/velvet-dungeon" }
+velvet-nav = { workspace = true }
+velvet-guion = { workspace = true }
+velvet-qa = { workspace = true }
+demon-queen-dungeon = { path = "dungeon" }
+# Its music is OGG (Vorbis) and its sounds WAV: not the workspace's rodio, which brings every
+# decoder (MP3, FLAC, MP4/AAC) by default.
+rodio = { version = "0.21", default-features = false, features = ["playback", "vorbis", "wav"] }
+
+[[bin]]
+name = "dungeon-lab"
+path = "src/bin/dungeon_lab.rs"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_HiDpi", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_System_Memory"] }
+
+[build-dependencies]
+winresource = { version = "0.1.31", default-features = false }

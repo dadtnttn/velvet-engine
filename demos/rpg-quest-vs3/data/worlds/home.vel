@@ -1,0 +1,42 @@
+function build_home_world() {
+    let world = world_shell(
+        "home",
+        "LA CASA",
+        "El primer ataque ha comenzado.",
+        "Protege la casa: derrota a los invasores",
+        vec2(470, 525)
+    )
+
+    world.terrain = "meadow"
+    world.ambient = {"tint": "day", "fog": 0.0, "particles": "none"}
+
+    add_prop(world, make_prop("road", 425, 285, 535, 355, "forked"))
+    add_prop(world, make_prop("fence", 215, 85, 470, 285, "farm"))
+    add_prop(world, make_prop("farm_plot", 235, 135, 135, 200, "vegetables"))
+    add_prop(world, make_prop("pond", 700, 425, 250, 180, "blue"))
+    add_prop(world, make_prop("tree_cluster", 0, 0, 960, 640, "home_edges"))
+    add_prop(world, make_prop("bush_cluster", 145, 300, 210, 230, "farm"))
+    add_prop(world, make_prop("bush_cluster", 640, 335, 275, 220, "pond"))
+    add_prop(world, make_prop("woodpile", 235, 335, 100, 58, "tools"))
+    add_prop(world, make_prop("sheep_group", 520, 225, 125, 145, "pasture"))
+    add_prop(world, make_prop("house", 345, 35, 270, 320, "blue"))
+
+    add_collider(world, rect(390, 80, 180, 230, "house"))
+    add_collider(world, rect(215, 85, 16, 285, "fence_left"))
+    add_collider(world, rect(215, 85, 470, 16, "fence_top"))
+    add_collider(world, rect(669, 85, 16, 285, "fence_right"))
+    add_collider(world, rect(215, 354, 155, 16, "fence_bottom_left"))
+    add_collider(world, rect(530, 354, 155, 16, "fence_bottom_right"))
+    add_collider(world, rect(235, 145, 135, 190, "farm_plot"))
+    add_collider(world, rect(700, 425, 250, 180, "pond"))
+    add_collider(world, rect(235, 335, 100, 58, "woodpile"))
+
+    add_npc(world, make_npc("mira", "MIRA", 335, 420, "villager"))
+    add_npc(world, make_npc("kael", "KAEL", 640, 225, "villager"))
+
+    add_spawn(world, make_enemy_spawn("scout", 805, 190, 52))
+    add_spawn(world, make_enemy_spawn("scout", 850, 390, 52))
+    add_spawn(world, make_enemy_spawn("scout", 720, 500, 52))
+
+    return world
+}

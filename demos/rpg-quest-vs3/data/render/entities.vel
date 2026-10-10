@@ -1,0 +1,57 @@
+function entity_visuals() {
+    let items = []
+    if phase == PHASE_TITLE { return items }
+
+    for npc in current_world.npcs {
+        let x = npc.pos.x
+        let y = npc.pos.y
+        list_push(items, v_alpha_ellipse(x, y + 20, 20, 6, rgba8(0, 0, 0, 70), 101))
+        list_push(items, v_frame("npc_idle", 192, 4.0, 0, x - 34, y - 34, 68, 68, false, 102))
+        list_push(items, v_text(npc.label, "pixel", x, y - 38, 12, rgba8(255, 220, 98, 255), "center", 103))
+    }
+
+    for enemy in enemies {
+        if enemy.alive {
+            let boss = enemy.kind == "captain"
+            let moving = enemy.state == "chase"
+            let size = 78
+            let asset = "scout_idle"
+            let fps = 5.0
+            if boss {
+                size = 96
+                asset = "captain_idle"
+                if moving { asset = "captain_run"; fps = 9.0 }
+            } else if moving {
+                asset = "scout_run"
+                fps = 9.0
+            }
+            let flip = player.pos.x < enemy.pos.x
+            list_push(items, v_alpha_ellipse(enemy.pos.x, enemy.pos.y + size / 3, size / 3, 6, rgba8(0, 0, 0, 74), 104))
+            list_push(items, v_frame(asset, 192, fps, enemy.id, enemy.pos.x - size / 2, enemy.pos.y - size / 2, size, size, flip, 105))
+            if enemy.hit_flash > 0.0 {
+                list_push(items, v_alpha_ellipse(enemy.pos.x, enemy.pos.y - 5, size / 3, size / 2, rgba8(255, 240, 220, 95), 106))
+            }
+            let distance_to_player = distance(player.pos, enemy.pos)
+            if !boss && (enemy.hp < enemy.max_hp || distance_to_player < 230.0) {
+                list_push(items, v_panel(enemy.pos.x - 48, enemy.pos.y - size / 2 - 20, 96, 18, rgba8(20, 12, 13, 160), rgba8(105, 60, 44, 210), 1, 107))
+                list_push(items, v_text("EXPLORADOR", "pixel", enemy.pos.x, enemy.pos.y - size / 2 - 7, 10, rgba8(255, 216, 174, 255), "center", 108))
+            }
+            if !boss && (enemy.hp < enemy.max_hp || distance_to_player < 165.0) {
+                list_push(items, v_bar(enemy.pos.x - 26, enemy.pos.y - size / 2 + 1, 52, 8, enemy.hp / max(enemy.max_hp, 1.0), rgba8(28, 9, 12, 230), rgba8(217, 75, 75, 255), 109))
+            }
+        }
+    }
+
+    let player_asset = "player_idle"
+    let player_fps = 5.0
+    if player.attack_timer > 0.0 { player_asset = "player_attack"; player_fps = 12.0 }
+    let player_flip = player.facing.x < 0.0
+    list_push(items, v_alpha_ellipse(player.pos.x, player.pos.y + 24, 22, 6, rgba8(0, 0, 0, 78), 110))
+    list_push(items, v_frame(player_asset, 192, player_fps, 0, player.pos.x - 42, player.pos.y - 42, 84, 84, player_flip, 111))
+    if player.invulnerable > 0.0 {
+        for point in [[20, 0], [-20, 0], [0, 10], [0, -10]] {
+            list_push(items, v_circle(player.pos.x + point[0], player.pos.y + point[1], 2, rgba8(255, 213, 154, 255), 112))
+        }
+    }
+    return items
+}

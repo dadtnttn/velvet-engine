@@ -1,0 +1,59 @@
+function title_visuals() {
+    let items = []
+    if phase != PHASE_TITLE { return items }
+    ui_overlay(items, 230, 200)
+    ui_panel(items, 42, 52, 876, 540, 201)
+    ui_title(items, "RPG QUEST", 310, 30, 340, 202)
+
+    ui_panel(items, 72, 128, 310, 410, 205)
+    ui_title(items, "VALEN", 108, 110, 238, 206)
+    list_push(items, v_panel(112, 166, 230, 190, rgba8(20, 10, 14, 210), rgba8(159, 96, 60, 255), 2, 207))
+    list_push(items, v_alpha_ellipse(227, 322, 42, 10, rgba8(0, 0, 0, 72), 208))
+    list_push(items, v_frame("player_idle", 192, 4.0, 0, 167, 196, 120, 120, false, 209))
+    list_push(items, v_text("GUARDIÁN DE SOLARIA", "pixel", 227, 388, 14, rgba8(255, 197, 111, 255), "center", 210))
+    list_push(items, v_text_wrap("Protege Solaria y vence al jefe final.", "regular", 104, 405, 246, 18, 24, rgba8(255, 234, 216, 255), 211))
+    list_push(items, v_panel(100, 482, 116, 36, rgba8(108, 62, 45, 255), rgba8(167, 100, 64, 255), 2, 212))
+    list_push(items, v_panel(226, 482, 116, 36, rgba8(108, 62, 45, 255), rgba8(167, 100, 64, 255), 2, 212))
+    list_push(items, v_text("5 MUNDOS", "pixel", 158, 505, 12, rgba8(255, 217, 165, 255), "center", 213))
+    list_push(items, v_text("1 JEFE", "pixel", 284, 505, 12, rgba8(255, 217, 165, 255), "center", 213))
+
+    list_push(items, v_text("LOS CINCO MUNDOS", "pixel", 430, 174, 24, rgba8(255, 206, 120, 255), "left", 205))
+    list_push(items, v_text_wrap("Una aventura corta y directa. Cada zona fortalece a Valen antes de la batalla final.", "regular", 430, 196, 430, 18, 24, rgba8(255, 234, 216, 255), 206))
+    list_push(items, v_panel(420, 246, 450, 82, rgba8(32, 17, 22, 235), rgba8(167, 100, 64, 255), 2, 207))
+    let route_labels = ["CASA", "BOSQUE", "CAMP.", "CUEVA", "CASTILLO"]
+    let route_x = [458, 548, 638, 728, 818]
+    let index = 0
+    while index < 5 {
+        if index < 4 { list_push(items, v_rect(route_x[index] + 15, 279, 60, 4, rgba8(142, 81, 59, 255), 208)) }
+        list_push(items, v_circle(route_x[index], 282, 12, rgba8(121, 75, 67, 255), 209))
+        if index == 0 { list_push(items, v_circle(route_x[index], 282, 17, rgba8(255, 184, 88, 255), 210)) }
+        list_push(items, v_text(route_labels[index], "pixel", route_x[index], 315, 10, rgba8(255, 217, 165, 255), "center", 211))
+        index += 1
+    }
+
+    ui_action_button(items, "new_game", "NUEVA PARTIDA", "icon_play", 430, 350, 430, 70, 220)
+    ui_action_button(items, "controls", "CONTROLES", "icon_gear", 430, 438, 205, 64, 220)
+    ui_action_button(items, "exit", "SALIR", "icon_home", 655, 438, 205, 64, 220)
+    list_push(items, v_text("Haz clic o pulsa Enter para comenzar", "regular", 645, 548, 16, rgba8(215, 188, 164, 255), "center", 221))
+
+    if controls_open {
+        ui_overlay(items, 205, 230)
+        ui_panel(items, 165, 86, 630, 475, 231)
+        ui_title(items, "CONTROLES", 335, 62, 290, 232)
+        let keys = ["WASD", "E", "ESP", "H", "I", "F11"]
+        let labels = ["MOVERSE", "HABLAR / INTERACTUAR", "ATACAR", "USAR POCIÓN", "ABRIR MOCHILA", "PANTALLA COMPLETA"]
+        let item = 0
+        while item < 6 {
+            let column = item % 2
+            let row = item / 2
+            let x = 210 + column * 285
+            let y = 160 + row * 95
+            list_push(items, v_panel(x, y, 255, 72, rgba8(42, 24, 29, 255), rgba8(136, 84, 58, 255), 2, 233))
+            list_push(items, v_keycap(keys[item], x + 14, y + 13, 64, 46, 234))
+            list_push(items, v_text_wrap(labels[item], "pixel", x + 90, y + 22, 148, 13, 18, rgba8(255, 220, 176, 255), 235))
+            item += 1
+        }
+        ui_action_button(items, "controls", "CERRAR", "icon_cancel", 370, 488, 220, 54, 236)
+    }
+    return items
+}

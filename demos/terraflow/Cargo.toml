@@ -1,0 +1,28 @@
+[package]
+name = "terraflow"
+description = "Terrain + fluids showcase: headless pipeline and windowed 3D viewer (orbit, live water)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "terraflow"
+path = "src/main.rs"
+
+[dependencies]
+velvet-terrain = { workspace = true }
+velvet-liquid = { workspace = true }
+velvet-scene3d = { workspace = true }
+velvet-image = { workspace = true }
+velvet-math = { workspace = true }
+velvet-render = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+winit = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

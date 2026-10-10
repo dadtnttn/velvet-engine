@@ -1,0 +1,120 @@
+function castle_brazier(items: list, x: int, y: int, active: bool) {
+    list_push(items, v_rect(x - 8, y, 16, 34, rgba8(78, 60, 50, 255), 48))
+    list_push(items, v_ellipse(x, y + 2, 17, 8, rgba8(42, 35, 35, 255), 49))
+    let outer = rgba8(255, 117, 42, 255)
+    if active { outer = rgba8(255, 54, 38, 255) }
+    list_push(items, v_alpha_ellipse(x, y - 8, 48, 36, rgba8(255, 93, 35, 36), 47))
+    list_push(items, v_circle(x, y - 8, 12, outer, 50))
+    list_push(items, v_circle(x, y - 15, 6, rgba8(255, 218, 82, 255), 51))
+}
+
+function castle_visuals(time: float, stage: string) {
+    let items = base_ground("ground_castle", rgba8(77, 82, 93, 255))
+    list_push(items, v_alpha_rect(0, 0, 960, 640, rgba8(24, 32, 57, 42), 2))
+
+    list_push(items, v_rect(65, 150, 830, 430, rgba8(112, 116, 128, 255), 5))
+    list_push(items, v_border(65, 150, 830, 430, 10, rgba8(66, 70, 84, 255), 6))
+    let gx = 75
+    while gx < 895 {
+        list_push(items, v_line(gx, 150, gx, 580, 1, rgba8(92, 96, 108, 255), 7))
+        gx += 48
+    }
+    let gy = 165
+    while gy < 580 {
+        list_push(items, v_line(65, gy, 895, gy, 1, rgba8(92, 96, 108, 255), 7))
+        gy += 34
+    }
+
+    list_push(items, v_rect(25, 120, 60, 460, rgba8(62, 66, 79, 255), 18))
+    list_push(items, v_rect(875, 120, 60, 460, rgba8(62, 66, 79, 255), 18))
+    list_push(items, v_rect(25, 120, 910, 38, rgba8(72, 76, 91, 255), 18))
+    let battlement = 0
+    while battlement < 15 {
+        let bx = 25 + battlement * 65
+        list_push(items, v_rect(bx, 100, 35, 35, rgba8(81, 85, 101, 255), 19))
+        battlement += 1
+    }
+
+    list_push(items, v_sprite("castle", 300, 0, 360, 252, "content", 24))
+    for banner in [[135, 160, 0], [215, 160, 1], [735, 160, 0], [815, 160, 1]] {
+        let color = rgba8(48, 79, 143, 255)
+        if banner[2] == 1 { color = rgba8(145, 42, 48, 255) }
+        list_push(items, v_line(banner[0], banner[1], banner[0], banner[1] + 70, 6, rgba8(74, 52, 37, 255), 29))
+        list_push(items, v_rect(banner[0] + 4, banner[1] + 5, 38, 50, color, 30))
+        list_push(items, v_rect(banner[0] + 10, banner[1] + 12, 25, 8, rgba8(229, 185, 69, 255), 31))
+    }
+
+    list_push(items, v_rect(80, 270, 240, 290, rgba8(55, 104, 61, 255), 10))
+    list_push(items, v_border(80, 270, 240, 290, 8, rgba8(48, 69, 49, 255), 11))
+    push_sprite_points(items, "bush", [[95, 290], [155, 290], [230, 290], [95, 490], [165, 500], [245, 490]], 128, 3.0, 58, 58, 14)
+    push_sprite_points(items, "tree_alt", [[90, 345], [220, 365]], 192, 2.5, 92, 120, 15)
+    list_push(items, v_ellipse(205, 420, 80, 63, rgba8(59, 71, 84, 255), 16))
+    list_push(items, v_ellipse(205, 412, 65, 50, rgba8(71, 148, 179, 255), 17))
+    list_push(items, v_circle(205, 384, 18, rgba8(147, 161, 171, 255), 18))
+    list_push(items, v_line(205, 390, 205, 350, 8, rgba8(116, 130, 142, 255), 18))
+    list_push(items, v_circle(205, 348, 7, rgba8(167, 219, 231, 255), 19))
+
+    list_push(items, v_rect(425, 280, 110, 315, rgba8(116, 24, 34, 255), 12))
+    list_push(items, v_border(425, 280, 110, 315, 7, rgba8(222, 174, 58, 255), 13))
+    let crest_y = 305
+    while crest_y < 580 {
+        list_push(items, v_rect(472, crest_y, 16, 10, rgba8(231, 186, 69, 255), 14))
+        crest_y += 42
+    }
+    list_push(items, v_rect(350, 245, 260, 90, rgba8(99, 96, 108, 255), 20))
+    list_push(items, v_border(350, 245, 260, 90, 7, rgba8(221, 174, 63, 255), 21))
+    list_push(items, v_rect(445, 205, 70, 72, rgba8(128, 31, 39, 255), 22))
+    list_push(items, v_border(445, 205, 70, 72, 6, rgba8(235, 190, 69, 255), 23))
+    list_push(items, v_circle(480, 214, 12, rgba8(241, 203, 85, 255), 24))
+
+    let boss_active = stage == STAGE_DEFEAT_BOSS
+    let arena_color = rgba8(79, 69, 92, 255)
+    if boss_active { arena_color = rgba8(101, 49, 58, 255) }
+    list_push(items, v_ellipse(782, 395, 140, 140, rgba8(44, 42, 56, 255), 15))
+    list_push(items, v_ellipse(782, 395, 125, 125, arena_color, 16))
+    list_push(items, v_border(645, 255, 275, 280, 9, rgba8(63, 60, 76, 255), 17))
+    let rune = 0
+    while rune < 8 {
+        let rx = 680 + (rune % 4) * 67
+        let ry = 305 + (rune / 4) * 175
+        let rune_color = rgba8(147, 100, 184, 255)
+        if boss_active { rune_color = rgba8(224, 72, 55, 255) }
+        list_push(items, v_circle(rx, ry, 7, rune_color, 18))
+        rune += 1
+    }
+
+    if !boss_active {
+        list_push(items, v_rect(610, 330, 45, 115, rgba8(61, 55, 62, 255), 40))
+        let bar_y = 338
+        while bar_y < 442 {
+            list_push(items, v_rect(614, bar_y, 37, 8, rgba8(127, 103, 66, 255), 41))
+            bar_y += 20
+        }
+    } else {
+        list_push(items, v_alpha_ellipse(633, 388, 42, 60, rgba8(232, 81, 46, 44), 40))
+    }
+
+    castle_brazier(items, 100, 205, boss_active)
+    castle_brazier(items, 330, 205, boss_active)
+    castle_brazier(items, 630, 205, boss_active)
+    castle_brazier(items, 860, 205, boss_active)
+    castle_brazier(items, 650, 510, boss_active)
+    castle_brazier(items, 905, 510, boss_active)
+
+    list_push(items, v_rect(410, 540, 40, 80, rgba8(68, 65, 76, 255), 34))
+    list_push(items, v_rect(510, 540, 40, 80, rgba8(68, 65, 76, 255), 34))
+    list_push(items, v_line(430, 540, 480, 600, 8, rgba8(219, 173, 66, 255), 35))
+    list_push(items, v_line(530, 540, 480, 600, 8, rgba8(219, 173, 66, 255), 35))
+
+    let ember = 0
+    while ember < 22 {
+        let ex = 50 + (ember * 83 % 870)
+        let ey = 140 + (ember * 47 % 410)
+        let alpha = 45
+        if boss_active { alpha = 90 }
+        list_push(items, v_alpha_ellipse(ex, ey, 3, 5, rgba8(255, 127, 51, alpha), 75))
+        ember += 1
+    }
+    list_push(items, v_alpha_rect(0, 0, 960, 640, rgba8(24, 31, 57, 20), 78))
+    return items
+}

@@ -2,13 +2,26 @@
 //! BGM intents are applied on the real [`AudioEngine`] / [`MusicPlayer`] path.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::num::NonZeroU32;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use softbuffer::{Context as SoftContext, Surface};
+use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalSize;
+use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::window::{Window, WindowId};
 
 use anyhow::{bail, Context, Result};
 use velvet_audio::prelude::*;
 use velvet_story::prelude::*;
 use velvet_story::{
-    build_product_ui_frame, paint_product_frame, paint_to_render_descriptors, ProductUiFrame,
+    build_product_ui_frame, paint_product_frame, paint_product_frame_at,
+    paint_to_render_descriptors, rasterize_product_paint, ProductPaintCmd, ProductPaintList,
+    ProductUiFrame,
 };
 
 /// Host audio state: maps story music paths → clips and drives [`MusicPlayer`].
@@ -143,13 +156,8 @@ pub fn cmd_play_story_product(
 
     println!("playing product session {}", path.display());
     if windowed {
-        match try_windowed_product_tick(&path) {
-            Ok(msg) => println!("windowed: {msg}"),
-            Err(e) => {
-                println!("windowed: REAL WindowRunner failed or display unavailable: {e}");
-                println!("windowed: continuing headless product path (not a window success)");
-            }
-        }
+        println!("windowed: interactive product host owns playback until the window closes");
+        return run_windowed_product_session(session, host_audio, &path);
     }
 
     let mut steps = 0u32;
@@ -361,79 +369,376 @@ pub fn cmd_recheck_replay(
     }
 }
 
-/// Attempt a **real** `WindowRunner` with a short max-frames budget and wall timeout.
+/// Persistent interactive product host for `velvet play --windowed`.
 ///
-/// Returns Ok with a success message only if the window event loop ran and exited 0.
-/// On missing display / hang / event-loop failure returns Err (caller must not claim window success).
-fn try_windowed_product_tick(story: &std::path::Path) -> Result<String> {
-    use std::sync::mpsc;
-    use std::thread;
-    use std::time::Duration;
-    use velvet_app::prelude::*;
-
+/// Unlike the old smoke-test path, this host owns the live [`VnSession`],
+/// renders every frame, and routes real pointer/keyboard input back into
+/// dialogue, choices, and game-screen `Return(...)` buttons.
+fn run_windowed_product_session(
+    session: VnSession,
+    host_audio: HostAudio,
+    story: &Path,
+) -> Result<()> {
     if std::env::var_os("VELVET_FORCE_NO_WINDOW").is_some() {
-        bail!("VELVET_FORCE_NO_WINDOW set — skipping WindowRunner");
+        bail!("VELVET_FORCE_NO_WINDOW set — interactive window disabled");
+    }
+    let (title, width, height) = project_window_profile(story);
+    let event_loop = EventLoop::new().context("create interactive product event loop")?;
+    event_loop.set_control_flow(ControlFlow::Wait);
+    let mut host = InteractiveProductHost::new(session, host_audio, title, width, height);
+    event_loop
+        .run_app(&mut host)
+        .context("interactive product event loop")?;
+    Ok(())
+}
+
+fn project_window_profile(story: &Path) -> (String, u32, u32) {
+    for dir in story.ancestors() {
+        let manifest = dir.join("velvet.project");
+        let Ok(text) = std::fs::read_to_string(&manifest) else {
+            continue;
+        };
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let display = json.get("display");
+        let project = json.get("project");
+        let title = display
+            .and_then(|v| v.get("title"))
+            .and_then(|v| v.as_str())
+            .or_else(|| project.and_then(|v| v.get("name")).and_then(|v| v.as_str()))
+            .unwrap_or("Velvet Engine")
+            .to_string();
+        let width = display
+            .and_then(|v| v.get("width"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1280)
+            .clamp(320, 7680) as u32;
+        let height = display
+            .and_then(|v| v.get("height"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(720)
+            .clamp(240, 4320) as u32;
+        return (title, width, height);
+    }
+    ("Velvet Engine".into(), 1280, 720)
+}
+
+struct InteractiveProductHost {
+    session: VnSession,
+    host_audio: HostAudio,
+    window: Option<Arc<Window>>,
+    context: Option<SoftContext<Arc<Window>>>,
+    surface: Option<Surface<Arc<Window>, Arc<Window>>>,
+    cursor: Option<(f64, f64)>,
+    mouse_down: bool,
+    last_frame: Instant,
+    title: String,
+    virtual_w: f32,
+    virtual_h: f32,
+}
+
+impl InteractiveProductHost {
+    fn new(
+        session: VnSession,
+        host_audio: HostAudio,
+        title: String,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        Self {
+            session,
+            host_audio,
+            window: None,
+            context: None,
+            surface: None,
+            cursor: None,
+            mouse_down: false,
+            last_frame: Instant::now(),
+            title,
+            virtual_w: width as f32,
+            virtual_h: height as f32,
+        }
     }
 
-    let story = story.to_path_buf();
-    println!("windowed: constructing real WindowRunner (max_frames=8, timeout=8s)…");
+    fn paint(&self) -> ProductPaintList {
+        let frame = build_product_ui_frame(&self.session);
+        paint_product_frame_at(&frame, self.virtual_w, self.virtual_h)
+    }
 
-    let (tx, rx) = mpsc::channel();
-    let handle = thread::spawn(move || {
-        let send = |r: std::result::Result<i32, String>| {
-            let _ = tx.send(r);
+    fn render(&mut self) {
+        let paint = self.paint();
+        let Some(window) = self.window.as_ref() else {
+            return;
         };
-        let source = match std::fs::read_to_string(&story) {
-            Ok(s) => s,
-            Err(e) => {
-                send(Err(format!("read story: {e}")));
+        let size = window.inner_size();
+        let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) else {
+            return;
+        };
+        let Some(surface) = self.surface.as_mut() else {
+            return;
+        };
+        if surface.resize(w, h).is_err() {
+            return;
+        }
+        let Ok(mut buffer) = surface.buffer_mut() else {
+            return;
+        };
+        rasterize_product_paint(&paint, &mut buffer, size.width, size.height);
+        let _ = buffer.present();
+    }
+
+    fn cursor_virtual(&self) -> Option<(f32, f32)> {
+        let window = self.window.as_ref()?;
+        let (x, y) = self.cursor?;
+        let size = window.inner_size();
+        if size.width == 0 || size.height == 0 {
+            return None;
+        }
+        Some((
+            (x as f32) * self.virtual_w / size.width as f32,
+            (y as f32) * self.virtual_h / size.height as f32,
+        ))
+    }
+
+    fn pointer_release(&mut self) {
+        let Some((x, y)) = self.cursor_virtual() else {
+            return;
+        };
+        let paint = self.paint();
+        if let Some(id) = interactive_hit(&paint, x, y) {
+            if self.activate_semantic(&id) {
                 return;
             }
-        };
-        let program =
-            match load_program_from_source(&source, Some(&story.to_string_lossy()), "windowed") {
-                Ok(p) => p,
-                Err(e) => {
-                    send(Err(format!("load story: {e}")));
-                    return;
+        }
+        self.advance_or_reveal();
+    }
+
+    fn activate_semantic(&mut self, id: &str) -> bool {
+        if let Some(index) = id
+            .strip_prefix("choice_")
+            .and_then(|v| v.parse::<usize>().ok())
+        {
+            if index < self.session.choice.options.len() {
+                self.session.choice.selected = index;
+                if let Err(error) = self.session.choose_selected() {
+                    eprintln!("[velvet-play] choice activation failed: {error}");
                 }
-            };
-        let player = StoryPlayer::start(program);
-        let session = VnSession::new(player);
+                self.host_audio.apply_session_bgm(&mut self.session);
+                return true;
+            }
+        }
+        if let Some(rest) = id.strip_prefix("gscreen_btn_") {
+            if let Some((screen, index)) = rest.rsplit_once('_') {
+                if let Ok(index) = index.parse::<usize>() {
+                    if let Err(error) = self.session.activate_game_screen_button(screen, index) {
+                        eprintln!("[velvet-play] screen button `{id}` failed: {error}");
+                    }
+                    self.host_audio.apply_session_bgm(&mut self.session);
+                    return true;
+                }
+            }
+        }
+        false
+    }
 
-        let mut app = App::new();
-        app.add_plugin(StoryPlugin);
-        app.insert_resource(session);
-        app.set_runner(WindowRunner {
-            max_frames: Some(8),
-        });
-        let code = app.run();
-        send(Ok(code.0));
-    });
+    fn advance_or_reveal(&mut self) {
+        if let Some(screen) = self.session.pending_screen_call().map(str::to_string) {
+            if let Some(frame) = self.session.resolved_screen_frame(&screen) {
+                if !frame.text_complete {
+                    self.session.reveal_game_screen(&screen);
+                }
+            }
+            return;
+        }
+        match self.session.player().wait().clone() {
+            StoryWait::Line => {
+                if self.session.say.text_complete {
+                    self.session.advance();
+                } else {
+                    self.session.say.reveal_all();
+                }
+            }
+            StoryWait::Ready => self.session.advance(),
+            StoryWait::Pause { .. } => {
+                self.session.player_mut().skip_pause();
+                self.session.ingest_events();
+                self.session.sync_ui_from_wait();
+            }
+            StoryWait::Host { token } => {
+                if let Err(error) = self.session.player_mut().resume_host(&token) {
+                    eprintln!("[velvet-play] host resume failed: {error}");
+                }
+                self.session.ingest_events();
+                self.session.sync_ui_from_wait();
+            }
+            StoryWait::Choice | StoryWait::ScreenCall { .. } | StoryWait::Ended => {}
+        }
+        self.host_audio.apply_session_bgm(&mut self.session);
+    }
 
-    match rx.recv_timeout(Duration::from_secs(8)) {
-        Ok(Ok(0)) => {
-            let _ = handle.join();
-            Ok("WindowRunner completed exit=0 (real OS window path)".into())
-        }
-        Ok(Ok(code)) => {
-            let _ = handle.join();
-            bail!("WindowRunner exited with code {code} (event loop / display failure)")
-        }
-        Ok(Err(e)) => {
-            let _ = handle.join();
-            bail!("WindowRunner setup/run error: {e}")
-        }
-        Err(mpsc::RecvTimeoutError::Timeout) => {
-            // Thread may still be blocked in the event loop; do not claim success.
-            bail!(
-                "WindowRunner did not finish within 8s (display/event-loop hang or no redraw); abandoning wait"
-            )
-        }
-        Err(mpsc::RecvTimeoutError::Disconnected) => {
-            bail!("WindowRunner worker disconnected without result")
+    fn keyboard(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Enter | KeyCode::Space => {
+                if matches!(self.session.player().wait(), StoryWait::Choice) {
+                    if let Err(error) = self.session.choose_selected() {
+                        eprintln!("[velvet-play] choice activation failed: {error}");
+                    }
+                    self.host_audio.apply_session_bgm(&mut self.session);
+                } else {
+                    self.advance_or_reveal();
+                }
+            }
+            KeyCode::ArrowUp if matches!(self.session.player().wait(), StoryWait::Choice) => {
+                self.session.choice.move_sel(-1);
+            }
+            KeyCode::ArrowDown if matches!(self.session.player().wait(), StoryWait::Choice) => {
+                self.session.choice.move_sel(1);
+            }
+            KeyCode::Backspace => {
+                if let Err(error) = self.session.rollback_step() {
+                    eprintln!("[velvet-play] rollback failed: {error}");
+                }
+            }
+            _ => {}
         }
     }
+}
+
+impl ApplicationHandler for InteractiveProductHost {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_some() {
+            return;
+        }
+        let attrs = Window::default_attributes()
+            .with_title(self.title.clone())
+            .with_inner_size(PhysicalSize::new(
+                self.virtual_w as u32,
+                self.virtual_h as u32,
+            ))
+            .with_min_inner_size(PhysicalSize::new(360, 640))
+            .with_resizable(true);
+        match event_loop.create_window(attrs) {
+            Ok(window) => {
+                let window = Arc::new(window);
+                match SoftContext::new(window.clone()).and_then(|context| {
+                    Surface::new(&context, window.clone()).map(|surface| (context, surface))
+                }) {
+                    Ok((context, surface)) => {
+                        self.window = Some(window.clone());
+                        self.context = Some(context);
+                        self.surface = Some(surface);
+                        self.last_frame = Instant::now();
+                        window.request_redraw();
+                    }
+                    Err(error) => {
+                        eprintln!("[velvet-play] could not create softbuffer surface: {error}");
+                        event_loop.exit();
+                    }
+                }
+            }
+            Err(error) => {
+                eprintln!("[velvet-play] could not create window: {error}");
+                event_loop.exit();
+            }
+        }
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        match event {
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor = Some((position.x, position.y));
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => match state {
+                ElementState::Pressed => self.mouse_down = true,
+                ElementState::Released => {
+                    let was_down = self.mouse_down;
+                    self.mouse_down = false;
+                    if was_down {
+                        self.pointer_release();
+                        if let Some(window) = &self.window {
+                            window.request_redraw();
+                        }
+                    }
+                }
+            },
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+                if let PhysicalKey::Code(code) = event.physical_key {
+                    self.keyboard(code);
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+            }
+            WindowEvent::Resized(_) => {
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::RedrawRequested => {
+                let now = Instant::now();
+                let dt = now
+                    .duration_since(self.last_frame)
+                    .as_secs_f32()
+                    .clamp(0.0, 0.1);
+                self.last_frame = now;
+                self.session.tick(dt);
+                self.host_audio.apply_session_bgm(&mut self.session);
+                self.render();
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        event_loop.set_control_flow(ControlFlow::WaitUntil(
+            Instant::now() + Duration::from_millis(16),
+        ));
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+}
+
+fn interactive_hit(paint: &ProductPaintList, x: f32, y: f32) -> Option<String> {
+    let mut best: Option<(f32, usize, String)> = None;
+    for (order, command) in paint.commands.iter().enumerate() {
+        let ProductPaintCmd::Quad {
+            id,
+            x: left,
+            y: top,
+            w,
+            h,
+            z,
+            ..
+        } = command
+        else {
+            continue;
+        };
+        let interactive = id.starts_with("choice_") || id.starts_with("gscreen_btn_");
+        if !interactive || *w <= 0.0 || *h <= 0.0 {
+            continue;
+        }
+        if x < *left || y < *top || x > *left + *w || y > *top + *h {
+            continue;
+        }
+        let replace = best
+            .as_ref()
+            .map(|(best_z, best_order, _)| *z > *best_z || (*z == *best_z && order > *best_order))
+            .unwrap_or(true);
+        if replace {
+            best = Some((*z, order, id.clone()));
+        }
+    }
+    best.map(|(_, _, id)| id)
 }
 
 #[cfg(test)]

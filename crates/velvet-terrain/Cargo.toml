@@ -1,0 +1,11 @@
+[package]
+name = "velvet-terrain"
+description = "Pure-math 3D terrain synthesis for Velvet Engine (noise, erosion, meshing, LOD)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

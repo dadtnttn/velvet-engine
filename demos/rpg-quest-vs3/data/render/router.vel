@@ -1,0 +1,7 @@
+function build_world_visuals(world: map, time: float, stage: string) {
+    if world.id == "home" { return home_visuals(time, stage) }
+    if world.id == "forest" { return forest_visuals(time, stage) }
+    if world.id == "camp" { return camp_visuals(time, stage) }
+    if world.id == "cave" { return cave_visuals(time, stage) }
+    return castle_visuals(time, stage)
+}

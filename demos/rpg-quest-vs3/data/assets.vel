@@ -1,0 +1,91 @@
+function image_asset(id: string, path: string) {
+    return {"id": id, "path": path, "mode": "preload"}
+}
+
+function font_asset(id: string, path: string) {
+    return {"id": id, "path": path}
+}
+
+function asset_manifest() {
+    let tiny = "tiny-swords/Tiny Swords (Free Pack)"
+    let rune = "ui/runewood"
+    return {
+        "app": {
+            "title": "RPG Quest VS3: La liberación de Solaria — Velvet Engine",
+            "window_width": 1100,
+            "window_height": 735,
+            "minimum_width": 900,
+            "minimum_height": 600,
+            "canvas_width": 960,
+            "canvas_height": 640,
+            "resizable": true
+        },
+        "capabilities": ["window", "render2d", "input"],
+        "limits": {
+            "max_commands_per_frame": 2048,
+            "max_assets": 256,
+            "max_image_pixels": 67108864,
+            "max_memory_units": 64000000,
+            "max_instructions": 5000000
+        },
+        "root": "../../rpg-quest/assets",
+        "fonts": [
+            font_asset("regular", "system:segoeui.ttf"),
+            font_asset("pixel", "ui/Toriko.ttf")
+        ],
+        "images": [
+            image_asset("ground_home", concat(tiny, "/Terrain/Tileset/Tilemap_color2.png")),
+            image_asset("ground_forest", concat(tiny, "/Terrain/Tileset/Tilemap_color1.png")),
+            image_asset("ground_camp", concat(tiny, "/Terrain/Tileset/Tilemap_color3.png")),
+            image_asset("ground_cave", concat(tiny, "/Terrain/Tileset/Tilemap_color5.png")),
+            image_asset("ground_castle", concat(tiny, "/Terrain/Tileset/Tilemap_color4.png")),
+            image_asset("player_idle", concat(tiny, "/Units/Blue Units/Warrior/Warrior_Idle.png")),
+            image_asset("player_run", concat(tiny, "/Units/Blue Units/Warrior/Warrior_Run.png")),
+            image_asset("player_attack", concat(tiny, "/Units/Blue Units/Warrior/Warrior_Attack1.png")),
+            image_asset("scout_idle", concat(tiny, "/Units/Red Units/Pawn/Pawn_Idle.png")),
+            image_asset("scout_run", concat(tiny, "/Units/Red Units/Pawn/Pawn_Run.png")),
+            image_asset("captain_idle", concat(tiny, "/Units/Red Units/Warrior/Warrior_Idle.png")),
+            image_asset("captain_run", concat(tiny, "/Units/Red Units/Warrior/Warrior_Run.png")),
+            image_asset("npc_idle", concat(tiny, "/Units/Yellow Units/Pawn/Pawn_Idle Gold.png")),
+            image_asset("house", concat(tiny, "/Buildings/Blue Buildings/House1.png")),
+            image_asset("barracks", concat(tiny, "/Buildings/Red Buildings/Barracks.png")),
+            image_asset("tower", concat(tiny, "/Buildings/Red Buildings/Tower.png")),
+            image_asset("shrine", concat(tiny, "/Buildings/Black Buildings/Monastery.png")),
+            image_asset("castle", concat(tiny, "/Buildings/Blue Buildings/Castle.png")),
+            image_asset("tree", concat(tiny, "/Terrain/Resources/Wood/Trees/Tree1.png")),
+            image_asset("tree_alt", concat(tiny, "/Terrain/Resources/Wood/Trees/Tree2.png")),
+            image_asset("bush", concat(tiny, "/Terrain/Decorations/Bushes/Bushe1.png")),
+            image_asset("bush_alt", concat(tiny, "/Terrain/Decorations/Bushes/Bushe2.png")),
+            image_asset("rock", concat(tiny, "/Terrain/Decorations/Rocks/Rock1.png")),
+            image_asset("rock_alt", concat(tiny, "/Terrain/Decorations/Rocks/Rock2.png")),
+            image_asset("stump", concat(tiny, "/Terrain/Resources/Wood/Trees/Stump 1.png")),
+            image_asset("sheep", concat(tiny, "/Terrain/Resources/Meat/Sheep/Sheep_Idle.png")),
+            image_asset("sheep_grass", concat(tiny, "/Terrain/Resources/Meat/Sheep/Sheep_Grass.png")),
+            image_asset("tool", concat(tiny, "/Terrain/Resources/Tools/Tool_01.png")),
+            image_asset("wood", concat(tiny, "/Terrain/Resources/Wood/Wood Resource/Wood Resource.png")),
+            image_asset("frame_main", concat(rune, "/UI_Runewood_Frame01a.png")),
+            image_asset("frame_alt", concat(rune, "/UI_Runewood_Frame02a.png")),
+            image_asset("frame_text", concat(rune, "/UI_Runewood_Frame05a.png")),
+            image_asset("frame_banner", concat(rune, "/UI_Runewood_FrameMarker02b.png")),
+            image_asset("frame_slot", concat(rune, "/UI_Runewood_FrameSlot03b.png")),
+            image_asset("button", concat(rune, "/UI_Runewood_Button01b.png")),
+            image_asset("button_selected", concat(rune, "/UI_Runewood_Button02b.png")),
+            image_asset("bar_shell", concat(rune, "/UI_Runewood_Bar01a.png")),
+            image_asset("bar_red", concat(rune, "/UI_Runewood_BarFiller02a.png")),
+            image_asset("bar_green", concat(rune, "/UI_Runewood_BarFiller02b.png")),
+            image_asset("bar_gold", concat(rune, "/UI_Runewood_BarFiller02c.png")),
+            image_asset("keycap", concat(rune, "/UI_Runewood_Command_KeyboardKey01a.png")),
+            image_asset("icon_play", concat(rune, "/UI_Runewood_IconPlay01a.png")),
+            image_asset("icon_home", concat(rune, "/UI_Runewood_IconHome01a.png")),
+            image_asset("icon_cancel", concat(rune, "/UI_Runewood_IconCancel01a.png")),
+            image_asset("icon_heart", concat(rune, "/UI_Runewood_IconHeart01a.png")),
+            image_asset("icon_coin", concat(rune, "/UI_Runewood_IconCoin01a.png")),
+            image_asset("icon_star", concat(rune, "/UI_Runewood_IconStar01a.png")),
+            image_asset("icon_backpack", "icons/Icons_Essential/v1.2/Icons/Backpack.png"),
+            image_asset("icon_potion", "icons/Icons_Essential/v1.2/Icons/PotionRed.png"),
+            image_asset("icon_hammer", "icons/Icons_Essential/v1.2/Icons/Hammer.png"),
+            image_asset("icon_gear", "icons/Icons_Essential/v1.2/Icons/Gear.png"),
+            image_asset("icon_trophy", "icons/Icons_Essential/v1.2/Icons/Trophy.png")
+        ]
+    }
+}

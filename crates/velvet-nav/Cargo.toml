@@ -1,0 +1,10 @@
+[package]
+name = "velvet-nav"
+description = "Navigation for Velvet Engine: navmeshes sampled from a game's own walkability, A* with a funnel pass, and crowds kept apart with ORCA"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+velvet-math = { workspace = true }

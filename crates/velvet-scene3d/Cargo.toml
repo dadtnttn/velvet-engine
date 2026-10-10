@@ -11,6 +11,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 velvet-math = { workspace = true }
+velvet-terrain = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

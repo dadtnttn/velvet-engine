@@ -8,25 +8,36 @@
 mod animation;
 mod atlas;
 mod batch;
+mod bc7;
 mod camera;
 mod culling;
 mod debug_overlay;
+mod gi3d;
 mod gpu;
+mod iso;
 mod letterbox;
 mod material;
 mod mesh3d;
 mod particles;
 mod plugin;
+mod post3d;
 mod postprocess;
 mod product_batch;
 mod profile;
+mod readback;
 mod render_plan;
 pub mod scene_bridge;
+mod skin3d;
 mod software;
 mod sort_key;
 mod sprite;
 mod stats;
 mod texture;
+mod toon;
+mod toon_fire;
+mod water3d;
+mod water_life;
+mod work;
 
 pub mod prelude;
 
@@ -39,21 +50,24 @@ pub use culling::{
 };
 pub use debug_overlay::{DebugOverlay, DebugShape, DebugTextLine};
 pub use gpu::{GpuContext, GpuError, RenderSurface, SurfaceFrame};
+pub use iso::{CutawayWalls3D, IsoCamera3D, IsoSettings3D, PlanRoom3D, PlanWall3D};
 pub use letterbox::{compute_letterbox, Letterbox, ScalingMode};
 pub use material::{BlendMode, Material};
 pub use mesh3d::{
-    AnimationClip3D, Atmosphere3D, Camera3D, Celestial3D, DayNightCycle3D, EnvironmentFrame3D,
-    EnvironmentPreset3D, GltfModel, Lighting3D, Material3D, Mesh3D, MeshDraw3D, MeshHandle,
-    MeshVertex3D, PointLight3D, Render3DError, SkinWeights3D, TextureData3D, TextureHandle,
-    Transform3D, Wgpu3DRenderer,
+    AnimatedMesh3D, AnimationClip3D, Atmosphere3D, Camera3D, Celestial3D, DayNightCycle3D,
+    EnvironmentFrame3D, EnvironmentPreset3D, Finish3D, GltfModel, Lighting3D, Material3D, Mesh3D,
+    MeshDraw3D, MeshHandle, MeshVertex3D, PointLight3D, PreparedTexture3D, Render3DError,
+    RotationTracks3D, SkinWeights3D, TextureData3D, TextureHandle, Transform3D, Wgpu3DRenderer,
 };
 pub use particles::{Particle, ParticleBatch, ParticleEmitter, ParticleGpu};
 pub use plugin::RenderPlugin;
 pub use postprocess::{PostEffect, PostProcessStack};
 pub use product_batch::{count_positive_quads, fill_batch_from_product_quads, ProductGpuQuad};
 pub use profile::RenderProfile;
+pub use readback::{frame_is_blank, read_texture_rgba};
 pub use render_plan::{CameraPass, ClearMode, RenderPlan, Viewport};
 pub use scene_bridge::{material_from_doc, scene_draws, upload_scene_meshes, SceneMeshCache};
+pub use skin3d::{Animator3D, Pose3D};
 pub use software::{SoftwarePresenter, SoftwareScalingFilter, SoftwareViewport};
 pub use sort_key::{
     build_sort_key, cmp_sort_keys, pack_z_texture, quantize_y_key, sort_by_key, SortLayers,
@@ -61,6 +75,12 @@ pub use sort_key::{
 pub use sprite::{Sprite, SpriteFlip, SpriteInstance};
 pub use stats::RenderStats;
 pub use texture::{TextureId, TextureRegion, TextureStore};
+pub use toon::{ShadingStyle3D, ToonStyle3D};
+pub use toon_fire::ToonFire3D;
+pub use water3d::{
+    WaterBody3D, WaterBodyHandle, WaterLook3D, WaterStream3D, WaterStreamHandle, WaterStyle3D,
+};
+pub use water_life::WaterLife3D;
 
 /// Clear / background color used when no draw commands cover the framebuffer.
 #[derive(Debug, Clone, Copy, PartialEq)]

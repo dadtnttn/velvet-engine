@@ -913,6 +913,66 @@ impl VnSession {
         self.push_rollback_frame();
     }
 
+    /// Activate a flattened button from a shown game screen.
+    ///
+    /// Product hosts use this for pointer/keyboard activation of `textbutton` /
+    /// `button` widgets. Built-in literal actions execute inside the story runtime.
+    pub fn activate_game_screen_button(
+        &mut self,
+        screen_id: &str,
+        button_index: usize,
+    ) -> Result<(), String> {
+        let frame = crate::product_ui::game_screen_frames(self)
+            .into_iter()
+            .find(|f| f.id == screen_id)
+            .ok_or_else(|| format!("screen `{screen_id}` is not shown"))?;
+        let source = frame
+            .actions
+            .get(button_index)
+            .and_then(|a| a.as_deref())
+            .ok_or_else(|| {
+                format!("screen `{screen_id}` button {button_index} has no executable action")
+            })?;
+        let call = crate::screens::parse_screen_action(source)
+            .ok_or_else(|| format!("unsupported dynamic screen action `{source}`"))?;
+        match call.name.as_str() {
+            "Return" => {
+                let value = call
+                    .args
+                    .first()
+                    .cloned()
+                    .ok_or_else(|| "Return needs one value".to_string())?;
+                self.return_from_screen(value)
+            }
+            "Jump" => {
+                let target = call
+                    .args
+                    .first()
+                    .and_then(|v| match v {
+                        crate::value::StoryValue::String(s) => Some(s.clone()),
+                        _ => None,
+                    })
+                    .ok_or_else(|| "Jump needs one scene name".to_string())?;
+                self.jump_to_scene(&target);
+                Ok(())
+            }
+            "Set" => {
+                let (name, value) = match call.args.as_slice() {
+                    [crate::value::StoryValue::String(name), value] => {
+                        (name.clone(), value.clone())
+                    }
+                    _ => return Err("Set needs a variable name and a value".into()),
+                };
+                self.player.variables_mut().set(name, value);
+                self.sync_ui_from_wait();
+                Ok(())
+            }
+            other => Err(format!(
+                "screen action `{other}` is not interactive-host enabled yet"
+            )),
+        }
+    }
+
     /// Return a value to a modal `screen call` (host: user picked an action).
     ///
     /// The value lands in the `_return` variable; the modal screen is
@@ -2188,6 +2248,36 @@ scene main {
             crate::value::StoryValue::Null
         ));
         assert!(session.pending_screen_call().is_some());
+    }
+
+    #[test]
+    fn interactive_screen_button_executes_return_action() {
+        let src = r#"
+screen phone {
+  hbox {
+    button { label: "Chats" class: "app-tile" action: Return("chats") }
+  }
+}
+scene main {
+  screen call phone into app
+  "after {app}"
+}
+"#;
+        let program =
+            load_program_from_source(src, Some("interactive.vel"), "Interactive").unwrap();
+        let mut session = VnSession::new(StoryPlayer::start(program));
+        assert!(matches!(
+            session.player().wait(),
+            StoryWait::ScreenCall { .. }
+        ));
+        session.activate_game_screen_button("phone", 0).unwrap();
+        assert_eq!(
+            session.player().variables().get("app").display_str(),
+            "chats"
+        );
+        assert!(session.pending_screen_call().is_none());
+        assert!(matches!(session.player().wait(), StoryWait::Line));
+        assert!(session.say.full_text.contains("chats"));
     }
 
     #[test]

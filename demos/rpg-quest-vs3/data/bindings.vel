@@ -1,0 +1,60 @@
+let BIND_MOVE_UP = ["KeyW", "ArrowUp"]
+let BIND_MOVE_DOWN = ["KeyS", "ArrowDown"]
+let BIND_MOVE_LEFT = ["KeyA", "ArrowLeft"]
+let BIND_MOVE_RIGHT = ["KeyD", "ArrowRight"]
+let BIND_ATTACK = ["Space"]
+let BIND_INTERACT = ["KeyE"]
+let BIND_POTION = ["KeyH"]
+let BIND_INVENTORY = ["KeyI"]
+let BIND_CONTROLS = ["KeyC"]
+let BIND_CONFIRM = ["Enter"]
+let BIND_CANCEL = ["Escape"]
+let BIND_RESTART = ["KeyR"]
+
+function physical_has(input: map, group: string, keys: list) {
+    if !map_has(input, group) { return false }
+    let active = input[group]
+    for pressed in active {
+        for expected in keys {
+            if pressed == expected { return true }
+        }
+    }
+    return false
+}
+
+function semantic_input(input: map) {
+    let move_x = 0.0
+    let move_y = 0.0
+    if physical_has(input, "held", BIND_MOVE_RIGHT) { move_x += 1.0 }
+    if physical_has(input, "held", BIND_MOVE_LEFT) { move_x -= 1.0 }
+    if physical_has(input, "held", BIND_MOVE_DOWN) { move_y += 1.0 }
+    if physical_has(input, "held", BIND_MOVE_UP) { move_y -= 1.0 }
+    return {
+        "move": vec2(move_x, move_y),
+        "attack": physical_has(input, "pressed", BIND_ATTACK),
+        "interact": physical_has(input, "pressed", BIND_INTERACT),
+        "use_potion": physical_has(input, "pressed", BIND_POTION),
+        "toggle_inventory": physical_has(input, "pressed", BIND_INVENTORY),
+        "toggle_controls": physical_has(input, "pressed", BIND_CONTROLS),
+        "confirm": physical_has(input, "pressed", BIND_CONFIRM),
+        "cancel": physical_has(input, "pressed", BIND_CANCEL),
+        "restart": physical_has(input, "pressed", BIND_RESTART)
+    }
+}
+
+export function input_manifest() {
+    return {
+        "move_up": BIND_MOVE_UP,
+        "move_down": BIND_MOVE_DOWN,
+        "move_left": BIND_MOVE_LEFT,
+        "move_right": BIND_MOVE_RIGHT,
+        "attack": BIND_ATTACK,
+        "interact": BIND_INTERACT,
+        "potion": BIND_POTION,
+        "inventory": BIND_INVENTORY,
+        "controls": BIND_CONTROLS,
+        "confirm": BIND_CONFIRM,
+        "cancel": BIND_CANCEL,
+        "restart": BIND_RESTART
+    }
+}

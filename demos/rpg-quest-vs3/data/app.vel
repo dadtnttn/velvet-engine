@@ -1,0 +1,49 @@
+function append_commands(target: list, source: list) {
+    for command in source {
+        list_push(target, command)
+    }
+}
+
+function app_packet(snapshot_value: map) {
+    let commands = []
+    if map_has(snapshot_value, "world") && map_has(snapshot_value.world, "visuals") {
+        append_commands(commands, snapshot_value.world.visuals)
+    }
+    if map_has(snapshot_value, "visuals") {
+        append_commands(commands, snapshot_value.visuals)
+    }
+    let packet_events = []
+    if map_has(snapshot_value, "events") {
+        packet_events = snapshot_value.events
+    }
+    let packet_time = 0.0
+    if map_has(snapshot_value, "world_time") {
+        packet_time = snapshot_value.world_time
+    }
+    return {
+        "time": packet_time,
+        "commands": commands,
+        "events": packet_events
+    }
+}
+
+export function app_manifest() {
+    return asset_manifest()
+}
+
+export function app_init() {
+    new_game(17)
+    return app_packet(return_to_title())
+}
+
+export function app_update(dt: float, physical_input: map) {
+    return app_packet(tick(dt, physical_input))
+}
+
+export function app_action(action: string) {
+    return app_packet(ui_action(action))
+}
+
+export function app_shutdown() {
+    return {}
+}

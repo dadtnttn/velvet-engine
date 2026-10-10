@@ -842,6 +842,15 @@ impl Diagnostic {
         }
     }
 
+    /// Warning diagnostic (compilation continues).
+    pub fn warning(message: impl Into<String>, loc: SourceLoc) -> Self {
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            loc,
+        }
+    }
+
     /// Format with location.
     pub fn display(&self) -> String {
         format!("{}: {}", self.loc.display(), self.message)

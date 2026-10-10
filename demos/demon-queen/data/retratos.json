@@ -1,0 +1,611 @@
+{
+  "gorou": {
+    "normal": {
+      "imagen": "reference/pending_review/queen_vn_ring_listen_v1_nobg",
+      "recorte": [
+        212,
+        0,
+        600,
+        600
+      ]
+    },
+    "enfadada": {
+      "imagen": "reference/approved/beat2_enojo_nobg",
+      "recorte": [
+        212,
+        0,
+        600,
+        600
+      ]
+    },
+    "enojada": "enfadada",
+    "seria": "enfadada",
+    "duda": {
+      "imagen": "reference/approved/beat1c_duda_hand_nobg",
+      "recorte": [
+        212,
+        0,
+        600,
+        600
+      ]
+    },
+    "pensativa": "duda",
+    "piensa": "duda",
+    "timida": {
+      "imagen": "reference/approved/fl_shy_nobg",
+      "recorte": [
+        212,
+        0,
+        600,
+        600
+      ]
+    },
+    "sonrojada": "timida",
+    "avergonzada": "timida",
+    "trance": {
+      "imagen": "reference/approved/beat4_trance_nobg",
+      "recorte": [
+        212,
+        0,
+        600,
+        600
+      ]
+    }
+  },
+  "lira": {
+    "normal": {
+      "imagen": "reference/pending_review/lira_vn_halfbody_uniform_v1_nobg",
+      "recorte": [
+        214,
+        10,
+        340,
+        340
+      ]
+    },
+    "seria": {
+      "imagen": "reference/pending_review/lira_vn_halfbody_writing_v1_nobg",
+      "recorte": [
+        174,
+        0,
+        420,
+        420
+      ]
+    },
+    "escribe": "seria",
+    "trance": {
+      "imagen": "reference/pending_review/lira_vn_halfbody_trance_v1_nobg",
+      "recorte": [
+        214,
+        10,
+        340,
+        340
+      ]
+    },
+    "sonrisa": {
+      "imagen": "castillo_vn/lira_sonrisa",
+      "recorte": [
+        256,
+        60,
+        460,
+        460
+      ]
+    },
+    "sonrojada": {
+      "imagen": "castillo_vn/lira_sonrojada",
+      "recorte": [
+        256,
+        60,
+        460,
+        460
+      ]
+    },
+    "sorpresa": {
+      "imagen": "castillo_vn/lira_sorpresa",
+      "recorte": [
+        256,
+        60,
+        460,
+        460
+      ]
+    },
+    "enfadada": {
+      "imagen": "castillo_vn/lira_enfadada",
+      "recorte": [
+        256,
+        60,
+        460,
+        460
+      ]
+    },
+    "reverencia": {
+      "imagen": "castillo_vn/lira_reverencia",
+      "recorte": [
+        256,
+        60,
+        460,
+        460
+      ]
+    },
+    "feliz": "sonrisa",
+    "contenta": "sonrisa",
+    "enojada": "enfadada",
+    "timida": "sonrojada",
+    "sorprendida": "sorpresa"
+  },
+  "nemi": {
+    "normal": {
+      "imagen": "castillo_vn/nemi_normal",
+      "recorte": [
+        240,
+        130,
+        520,
+        520
+      ]
+    },
+    "picara": {
+      "imagen": "castillo_vn/nemi_picara",
+      "recorte": [
+        240,
+        130,
+        520,
+        520
+      ]
+    },
+    "sonrojada": {
+      "imagen": "castillo_vn/nemi_sonrojada",
+      "recorte": [
+        240,
+        130,
+        520,
+        520
+      ]
+    },
+    "enfadada": {
+      "imagen": "castillo_vn/nemi_enfadada",
+      "recorte": [
+        240,
+        130,
+        520,
+        520
+      ]
+    },
+    "sorpresa": {
+      "imagen": "castillo_vn/nemi_sorpresa",
+      "recorte": [
+        240,
+        130,
+        520,
+        520
+      ]
+    },
+    "risa": {
+      "imagen": "castillo_vn/nemi_risa",
+      "recorte": [
+        240,
+        130,
+        520,
+        520
+      ]
+    },
+    "timida": {
+      "imagen": "castillo_vn/nemi_timida",
+      "recorte": [
+        240,
+        130,
+        520,
+        520
+      ]
+    },
+    "feliz": "risa",
+    "contenta": "risa",
+    "enojada": "enfadada",
+    "sorprendida": "sorpresa",
+    "avergonzada": "sonrojada"
+  },
+  "tendero": {
+    "normal": { "imagen": "ui/shop/tendero", "recorte": [200, 30, 620, 620] },
+    "contento": { "imagen": "ui/shop/tendero_contento", "recorte": [200, 30, 620, 620] }
+  },
+  "hypnotist": {
+    "normal": {
+      "imagen": "reference/approved/oldman_mage3_nobg",
+      "recorte": [
+        160,
+        40,
+        640,
+        640
+      ]
+    }
+  },
+  "nina": {
+    "normal": {
+      "imagen": "reference/retratos/nina_normal",
+      "recorte": [
+        80,
+        0,
+        760,
+        760
+      ]
+    },
+    "picara": {
+      "imagen": "reference/retratos/nina_picara",
+      "recorte": [
+        132,
+        0,
+        760,
+        760
+      ]
+    }
+  },
+  "chiquita": {
+    "normal": {
+      "imagen": "reference/retratos/chiquita3d_normal",
+      "recorte": [
+        0,
+        0,
+        1010,
+        1010
+      ]
+    },
+    "celosa": {
+      "imagen": "reference/retratos/chiquita3d_celosa",
+      "recorte": [
+        0,
+        0,
+        1010,
+        1010
+      ]
+    }
+  },
+  "rosalia": {
+    "normal": {
+      "imagen": "reference/retratos/rosalia_normal",
+      "recorte": [
+        132,
+        30,
+        760,
+        760
+      ]
+    }
+  },
+  "alba": {
+    "normal": {
+      "imagen": "reference/retratos/alba_normal",
+      "recorte": [
+        132,
+        60,
+        760,
+        760
+      ]
+    }
+  },
+  "noa": {
+    "normal": {
+      "imagen": "reference/retratos/noa_normal",
+      "recorte": [
+        132,
+        90,
+        760,
+        760
+      ]
+    }
+  },
+  "mugo": {
+    "normal": {
+      "imagen": "termas_vn/mugo_normal",
+      "recorte": [
+        325,
+        19,
+        368,
+        368
+      ]
+    },
+    "orgulloso": {
+      "imagen": "termas_vn/mugo_orgulloso",
+      "recorte": [
+        355,
+        17,
+        368,
+        368
+      ]
+    },
+    "avergonzado": {
+      "imagen": "termas_vn/mugo_avergonzado",
+      "recorte": [
+        326,
+        6,
+        368,
+        368
+      ]
+    },
+    "alto": {
+      "imagen": "termas_vn/mugo_alto",
+      "recorte": [
+        375,
+        19,
+        368,
+        368
+      ]
+    },
+    "enfadado": {
+      "imagen": "termas_vn/mugo_enfadado",
+      "recorte": [
+        249,
+        20,
+        560,
+        560
+      ]
+    },
+    "serio": "normal",
+    "risa": {
+      "imagen": "termas_vn/mugo_risa",
+      "recorte": [
+        336,
+        15,
+        368,
+        368
+      ]
+    },
+    "sorpresa": {
+      "imagen": "termas_vn/mugo_sorpresa",
+      "recorte": [
+        313,
+        15,
+        368,
+        368
+      ]
+    },
+    "senala": {
+      "imagen": "termas_vn/mugo_senala",
+      "recorte": [
+        245,
+        20,
+        368,
+        368
+      ]
+    },
+    "libro": {
+      "imagen": "termas_vn/mugo_libro",
+      "recorte": [
+        321,
+        13,
+        368,
+        368
+      ]
+    },
+    "sorprendido": "sorpresa",
+    "reglamento": "libro",
+    "enojado": "enfadado",
+    "feliz": "risa",
+    "contento": "risa",
+    "guia": "senala"
+  },
+  "dependienta": {
+    "normal": {
+      "imagen": "termas_vn/esq_aburrida",
+      "recorte": [
+        60,
+        0,
+        640,
+        640
+      ]
+    },
+    "senala": {
+      "imagen": "termas_vn/esq_senala",
+      "recorte": [
+        64,
+        0,
+        640,
+        640
+      ]
+    },
+    "aburrida": "normal",
+    "sorpresa": {
+      "imagen": "termas_vn/esq_sorpresa",
+      "recorte": [
+        60,
+        0,
+        640,
+        640
+      ]
+    },
+    "risa": {
+      "imagen": "termas_vn/esq_risa",
+      "recorte": [
+        60,
+        0,
+        640,
+        640
+      ]
+    },
+    "enfadada": {
+      "imagen": "termas_vn/esq_enfadada",
+      "recorte": [
+        60,
+        0,
+        640,
+        640
+      ]
+    },
+    "cobra": {
+      "imagen": "termas_vn/esq_cobra",
+      "recorte": [
+        60,
+        0,
+        640,
+        640
+      ]
+    },
+    "sorprendida": "sorpresa",
+    "enojada": "enfadada",
+    "feliz": "risa",
+    "cobrando": "cobra"
+  },
+  "nyxara": {
+    "normal": {
+      "imagen": "castillo_vn/nyxara_sonrisa",
+      "recorte": [
+        172,
+        100,
+        600,
+        600
+      ]
+    },
+    "seria": {
+      "imagen": "castillo_vn/nyxara_seria",
+      "recorte": [
+        172,
+        100,
+        600,
+        600
+      ]
+    },
+    "sonrojada": {
+      "imagen": "castillo_vn/nyxara_sonrojada",
+      "recorte": [
+        172,
+        100,
+        600,
+        600
+      ]
+    },
+    "pensativa": {
+      "imagen": "castillo_vn/nyxara_pensativa",
+      "recorte": [
+        172,
+        100,
+        600,
+        600
+      ]
+    },
+    "picara": {
+      "imagen": "castillo_vn/nyxara_picara",
+      "recorte": [
+        172,
+        100,
+        600,
+        600
+      ]
+    },
+    "preocupada": {
+      "imagen": "castillo_vn/nyxara_preocupada",
+      "recorte": [
+        172,
+        100,
+        600,
+        600
+      ]
+    },
+    "sonrisa": "normal",
+    "feliz": "normal",
+    "duda": "pensativa",
+    "enfadada": "seria",
+    "enojada": "seria"
+  },
+  "gorou_bikini": {
+    "normal": {
+      "imagen": "termas_vn/reina_bikini_normal",
+      "recorte": [
+        239,
+        60,
+        550,
+        550
+      ]
+    },
+    "segura": {
+      "imagen": "termas_vn/reina_bikini_segura",
+      "recorte": [
+        315,
+        70,
+        550,
+        550
+      ]
+    },
+    "timida": {
+      "imagen": "termas_vn/reina_bikini_timida",
+      "recorte": [
+        239,
+        60,
+        550,
+        550
+      ]
+    },
+    "duda": {
+      "imagen": "termas_vn/reina_bikini_duda",
+      "recorte": [
+        239,
+        60,
+        550,
+        550
+      ]
+    },
+    "sorpresa": {
+      "imagen": "termas_vn/reina_bikini_sorpresa",
+      "recorte": [
+        239,
+        60,
+        550,
+        550
+      ]
+    },
+    "enfadada": {
+      "imagen": "termas_vn/reina_bikini_enfadada",
+      "recorte": [
+        239,
+        60,
+        550,
+        550
+      ]
+    },
+    "risa": {
+      "imagen": "termas_vn/reina_bikini_risa",
+      "recorte": [
+        239,
+        60,
+        550,
+        550
+      ]
+    },
+    "sonrojada": "timida",
+    "avergonzada": "timida",
+    "piensa": "duda",
+    "pensativa": "duda",
+    "enojada": "enfadada",
+    "seria": "enfadada",
+    "sorprendida": "sorpresa",
+    "feliz": "risa",
+    "contenta": "risa"
+  },
+  "gorou_real": {
+    "normal": {
+      "imagen": "termas_vn/reina_normal",
+      "recorte": [
+        212,
+        250,
+        600,
+        600
+      ]
+    },
+    "duda": {
+      "imagen": "termas_vn/reina_duda",
+      "recorte": [
+        212,
+        250,
+        600,
+        600
+      ]
+    },
+    "sorpresa": {
+      "imagen": "termas_vn/reina_sorpresa",
+      "recorte": [
+        212,
+        250,
+        600,
+        600
+      ]
+    },
+    "piensa": "duda",
+    "pensativa": "duda",
+    "sorprendida": "sorpresa"
+  }
+}

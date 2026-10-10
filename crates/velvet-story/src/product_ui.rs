@@ -93,6 +93,9 @@ pub struct GameScreenFrame {
     /// `textbutton` labels in tree order (variables resolved).
     #[serde(default)]
     pub labels: Vec<String>,
+    /// Screen action source for each label (`Return("x")`, `Jump("scene")`, ...).
+    #[serde(default)]
+    pub actions: Vec<Option<String>>,
     /// Typewriter-visible prefixes of `texts` (same length as `texts`).
     #[serde(default)]
     pub revealed_texts: Vec<String>,
@@ -314,6 +317,7 @@ pub fn game_screen_frame(
         title: String::new(),
         texts: Vec::new(),
         labels: Vec::new(),
+        actions: Vec::new(),
         revealed_texts: Vec::new(),
         revealed_labels: Vec::new(),
         text_complete: true,
@@ -325,13 +329,14 @@ pub fn game_screen_frame(
     if let Some(def) = session.game_screen_def(&shown.id) {
         frame.zorder = def.zorder;
         frame.tag = def.tag.clone();
+        let env = screen_param_env(def, &shown.args);
         for prop in &def.properties {
             if prop.name == "title" {
-                frame.title = session.resolve_screen_value(&prop.value);
+                frame.title = resolve_screen_value_in_env(session, &prop.value, &env);
             }
         }
         let mut visiting = vec![def.name.clone()];
-        collect_screen_texts(session, &def.children, &mut visiting, 0, &mut frame);
+        collect_screen_texts(session, &def.children, &env, &mut visiting, 0, &mut frame);
     }
     let mut remaining = session.screen_reveal.get(&shown.id).copied();
     frame.revealed_texts = frame
@@ -349,6 +354,88 @@ pub fn game_screen_frame(
     frame
 }
 
+fn screen_param_env(
+    def: &crate::screens::ScreenDef,
+    args: &[crate::value::StoryValue],
+) -> std::collections::HashMap<String, crate::value::StoryValue> {
+    let mut env = std::collections::HashMap::new();
+    for (i, param) in def.params.iter().enumerate() {
+        let value = args
+            .get(i)
+            .cloned()
+            .or_else(|| param.default.clone())
+            .unwrap_or(crate::value::StoryValue::Null);
+        env.insert(param.name.clone(), value);
+    }
+    env
+}
+
+fn interpolate_screen_string(
+    session: &VnSession,
+    text: &str,
+    env: &std::collections::HashMap<String, crate::value::StoryValue>,
+) -> String {
+    let mut out = text.to_string();
+    for (name, value) in env {
+        out = out.replace(&format!("{{{name}}}"), &value.display_str());
+    }
+    session.player().variables().interpolate(&out)
+}
+
+fn screen_value_as_story(
+    session: &VnSession,
+    value: &crate::screens::ScreenValueRt,
+    env: &std::collections::HashMap<String, crate::value::StoryValue>,
+) -> crate::value::StoryValue {
+    match value {
+        crate::screens::ScreenValueRt::Lit { value } => match value {
+            crate::value::StoryValue::String(s) => {
+                crate::value::StoryValue::String(interpolate_screen_string(session, s, env))
+            }
+            other => other.clone(),
+        },
+        crate::screens::ScreenValueRt::Expr { source } => {
+            if let Some(value) = env.get(source) {
+                return value.clone();
+            }
+            let value = session.player().variables().get(source);
+            if matches!(value, crate::value::StoryValue::Null) {
+                crate::value::StoryValue::String(source.clone())
+            } else {
+                value
+            }
+        }
+    }
+}
+
+fn resolve_screen_value_in_env(
+    session: &VnSession,
+    value: &crate::screens::ScreenValueRt,
+    env: &std::collections::HashMap<String, crate::value::StoryValue>,
+) -> String {
+    crate::product::say_plain_and_cps(&screen_value_as_story(session, value, env).display_str()).0
+}
+
+fn resolve_screen_action_source(
+    session: &VnSession,
+    value: &crate::screens::ScreenValueRt,
+    env: &std::collections::HashMap<String, crate::value::StoryValue>,
+) -> String {
+    match value {
+        crate::screens::ScreenValueRt::Lit {
+            value: crate::value::StoryValue::String(s),
+        } => interpolate_screen_string(session, s, env),
+        crate::screens::ScreenValueRt::Expr { source } => {
+            if let Some(value) = env.get(source) {
+                value.display_str()
+            } else {
+                source.clone()
+            }
+        }
+        other => screen_value_as_story(session, other, env).display_str(),
+    }
+}
+
 /// Enter-fade alpha for a shown screen (1 without a `with` transition,
 // frozen at reduced motion).
 fn enter_alpha(session: &VnSession, id: &str) -> f32 {
@@ -362,6 +449,7 @@ fn enter_alpha(session: &VnSession, id: &str) -> f32 {
 fn collect_screen_texts(
     session: &VnSession,
     children: &[crate::screens::ScreenChildRt],
+    env: &std::collections::HashMap<String, crate::value::StoryValue>,
     visiting: &mut Vec<String>,
     depth: usize,
     frame: &mut GameScreenFrame,
@@ -373,32 +461,56 @@ fn collect_screen_texts(
         match child.kind.as_str() {
             "text" => {
                 if let Some(prop) = child.props.iter().find(|p| p.name == "text") {
-                    frame.texts.push(session.resolve_screen_value(&prop.value));
+                    frame
+                        .texts
+                        .push(resolve_screen_value_in_env(session, &prop.value, env));
                 }
             }
-            "textbutton" => {
+            "textbutton" | "button" => {
                 if let Some(prop) = child.props.iter().find(|p| p.name == "label") {
-                    frame.labels.push(session.resolve_screen_value(&prop.value));
+                    frame
+                        .labels
+                        .push(resolve_screen_value_in_env(session, &prop.value, env));
+                    let action = child
+                        .props
+                        .iter()
+                        .find(|p| p.name == "action")
+                        .map(|p| resolve_screen_action_source(session, &p.value, env));
+                    frame.actions.push(action);
                 }
             }
             "use" => {
                 let target = child
                     .props
                     .first()
-                    .map(|p| session.resolve_screen_value(&p.value))
+                    .map(|p| resolve_screen_value_in_env(session, &p.value, env))
                     .unwrap_or_default();
                 // Cycle guard: a screen reusing an ancestor stops here.
                 if !target.is_empty() && !visiting.contains(&target) {
                     if let Some(def) = session.game_screen_def(&target) {
+                        let args: Vec<crate::value::StoryValue> = child
+                            .args
+                            .iter()
+                            .map(|arg| screen_value_as_story(session, arg, env))
+                            .collect();
+                        let child_env = screen_param_env(def, &args);
                         visiting.push(target);
-                        collect_screen_texts(session, &def.children, visiting, depth + 1, frame);
+                        collect_screen_texts(
+                            session,
+                            &def.children,
+                            &child_env,
+                            visiting,
+                            depth + 1,
+                            frame,
+                        );
                         visiting.pop();
                     }
                 }
+                continue;
             }
             _ => {}
         }
-        collect_screen_texts(session, &child.children, visiting, depth + 1, frame);
+        collect_screen_texts(session, &child.children, env, visiting, depth + 1, frame);
     }
 }
 
@@ -444,6 +556,56 @@ scene main {
         assert_eq!(gs.title, "Help");
         assert_eq!(gs.texts, vec!["Read me.".to_string()]);
         assert_eq!(gs.labels, vec!["ok".to_string()]);
+        assert_eq!(gs.actions, vec![Some("Return(\"ok\")".to_string())]);
+    }
+
+    #[test]
+    fn generic_nested_button_is_exposed_as_a_clickable_label() {
+        let src = r#"
+screen phone {
+  hbox {
+    button { label: "Chats" class: "app-tile" action: Return("chats") }
+  }
+}
+scene main { screen call phone }
+"#;
+        let program = load_program_from_source(src, Some("phone.vel"), "Phone").unwrap();
+        let session = VnSession::new(StoryPlayer::start(program));
+        let frame = build_product_ui_frame(&session);
+        assert_eq!(frame.game_screens[0].labels, vec!["Chats".to_string()]);
+    }
+
+    #[test]
+    fn screen_call_parameters_resolve_inside_text_and_buttons() {
+        let src = r#"
+screen phone(name, preview = "none") {
+  text name
+  text preview
+  hbox { button { label: "Open" action: Return("open") } }
+}
+scene main { screen call phone("Ren", "Nuevo mensaje") }
+"#;
+        let program = load_program_from_source(src, Some("params.vel"), "Params").unwrap();
+        let session = VnSession::new(StoryPlayer::start(program));
+        let gs = &build_product_ui_frame(&session).game_screens[0];
+        assert_eq!(
+            gs.texts,
+            vec!["Ren".to_string(), "Nuevo mensaje".to_string()]
+        );
+        assert_eq!(gs.labels, vec!["Open".to_string()]);
+    }
+
+    #[test]
+    fn use_propagates_screen_arguments() {
+        let src = r#"
+screen row(name) { text name }
+screen phone(name) { use row(name) }
+scene main { screen call phone("Ren") }
+"#;
+        let program = load_program_from_source(src, Some("use_params.vel"), "UseParams").unwrap();
+        let session = VnSession::new(StoryPlayer::start(program));
+        let gs = &build_product_ui_frame(&session).game_screens[0];
+        assert_eq!(gs.texts, vec!["Ren".to_string()]);
     }
 
     #[test]

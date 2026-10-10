@@ -1,0 +1,19 @@
+[package]
+name = "ui-gallery"
+description = "Headless tour of every velvet-ui widget, layout, theme, and animation tool"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "ui-gallery"
+path = "src/main.rs"
+
+[dependencies]
+velvet-ui = { workspace = true }
+velvet-anim = { workspace = true }
+velvet-math = { workspace = true }
+velvet-style = { workspace = true }
+anyhow = { workspace = true }

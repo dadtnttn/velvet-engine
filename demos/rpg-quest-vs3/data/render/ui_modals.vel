@@ -1,0 +1,90 @@
+function transition_visuals() {
+    let items = []
+    if phase != PHASE_PLAYING { return items }
+    if intro_timer <= 0.0 && clear_timer <= 0.0 { return items }
+    ui_overlay(items, 155, 260)
+    ui_panel(items, 220, 175, 520, 270, 261)
+    let title = current_world.title
+    let subtitle = current_world.subtitle
+    let objective = current_world.objective
+    if clear_timer > 0.0 {
+        title = "MUNDO SUPERADO"
+        subtitle = "+15 oro · +1 poción"
+        objective = "Preparando la siguiente zona"
+    }
+    list_push(items, v_text(concat("MUNDO ", str(world_index), " / 5"), "pixel", 480, 215, 15, rgba8(255, 196, 104, 255), "center", 262))
+    list_push(items, v_text(title, "pixel", 480, 270, 30, rgba8(255, 224, 160, 255), "center", 263))
+    list_push(items, v_text(subtitle, "regular", 480, 310, 21, rgba8(241, 214, 190, 255), "center", 264))
+    list_push(items, v_panel(265, 340, 430, 58, rgba8(38, 20, 25, 235), rgba8(143, 83, 55, 255), 2, 265))
+    list_push(items, v_text_wrap(objective, "regular", 290, 360, 380, 19, 24, rgba8(255, 239, 213, 255), 266))
+    list_push(items, v_text("ESPACIO / E / ENTER · CONTINUAR", "pixel", 480, 425, 12, rgba8(221, 184, 144, 255), "center", 267))
+    list_push(items, {"op": "alpha_rect", "action": "confirm", "x": 0, "y": 0, "w": 960, "h": 640, "color": rgba8(0, 0, 0, 0), "layer": 268})
+    return items
+}
+
+function inventory_visuals() {
+    let items = []
+    if !inventory_open { return items }
+    ui_overlay(items, 190, 270)
+    ui_panel(items, 175, 80, 610, 480, 271)
+    ui_title(items, "MOCHILA", 335, 56, 290, 272)
+    list_push(items, v_text("OBJETOS", "pixel", 235, 145, 18, rgba8(255, 205, 120, 255), "left", 273))
+    list_push(items, v_panel(220, 165, 330, 300, rgba8(37, 21, 26, 245), rgba8(126, 76, 53, 255), 2, 273))
+    list_push(items, v_panel(245, 195, 280, 82, rgba8(62, 34, 34, 255), rgba8(154, 89, 61, 255), 2, 274))
+    list_push(items, v_sprite("icon_potion", 260, 210, 50, 50, "fit", 275))
+    list_push(items, v_text("POCIÓN DE VIDA", "pixel", 325, 225, 15, rgba8(255, 221, 173, 255), "left", 276))
+    list_push(items, v_text(concat("Cantidad: ", str(inventory.potions)), "regular", 325, 252, 16, rgba8(231, 202, 178, 255), "left", 276))
+    list_push(items, v_text("EQUIPO", "pixel", 590, 145, 18, rgba8(255, 205, 120, 255), "left", 273))
+    list_push(items, v_panel(575, 165, 165, 205, rgba8(37, 21, 26, 245), rgba8(126, 76, 53, 255), 2, 273))
+    list_push(items, v_sprite("icon_hammer", 620, 200, 72, 72, "fit", 275))
+    list_push(items, v_text("ESPADA DE MADERA", "pixel", 657, 300, 12, rgba8(255, 221, 173, 255), "center", 276))
+    ui_action_button(items, "inventory_close", "CERRAR", "icon_cancel", 370, 490, 220, 54, 280)
+    return items
+}
+
+function dialogue_visuals() {
+    let items = []
+    if !dialogue_open { return items }
+    let lines = dialogue_lines(dialogue_id)
+    let text = ""
+    if dialogue_page < len(lines) { text = lines[dialogue_page] }
+    let speaker = "REY ALDREN"
+    ui_overlay(items, 65, 270)
+    ui_panel(items, 120, 430, 720, 160, 271)
+    list_push(items, v_panel(160, 408, 230, 42, rgba8(84, 45, 35, 255), rgba8(183, 113, 65, 255), 2, 272))
+    list_push(items, v_text(speaker, "pixel", 275, 436, 17, rgba8(255, 212, 121, 255), "center", 273))
+    list_push(items, v_text_wrap(text, "regular", 160, 472, 640, 20, 28, rgba8(255, 239, 218, 255), 274))
+    list_push(items, v_text("ENTER / E · CONTINUAR", "pixel", 720, 566, 12, rgba8(220, 184, 145, 255), "center", 275))
+    list_push(items, {"op": "alpha_rect", "action": "confirm", "x": 120, "y": 430, "w": 720, "h": 160, "color": rgba8(0, 0, 0, 0), "layer": 276})
+    return items
+}
+
+function result_visuals() {
+    let items = []
+    if phase != PHASE_GAME_OVER && phase != PHASE_VICTORY { return items }
+    ui_overlay(items, 205, 280)
+    ui_panel(items, 285, 145, 390, 350, 281)
+    let title = "VALEN HA CAÍDO"
+    let subtitle = "La invasión continúa."
+    let icon = "icon_cancel"
+    if phase == PHASE_VICTORY {
+        title = "SOLARIA LIBERADA"
+        subtitle = "El capitán invasor ha sido derrotado."
+        icon = "icon_trophy"
+    }
+    list_push(items, v_sprite(icon, 420, 170, 120, 120, "fit", 282))
+    list_push(items, v_text(title, "pixel", 480, 326, 29, rgba8(255, 205, 141, 255), "center", 283))
+    list_push(items, v_text(subtitle, "regular", 480, 365, 21, rgba8(236, 211, 190, 255), "center", 284))
+    ui_action_button(items, "restart", "REINTENTAR", "icon_play", 325, 405, 145, 58, 285)
+    ui_action_button(items, "menu", "MENÚ", "icon_home", 490, 405, 145, 58, 285)
+    return items
+}
+
+function modal_visuals() {
+    let items = []
+    for command in transition_visuals() { list_push(items, command) }
+    for command in inventory_visuals() { list_push(items, command) }
+    for command in dialogue_visuals() { list_push(items, command) }
+    for command in result_visuals() { list_push(items, command) }
+    return items
+}

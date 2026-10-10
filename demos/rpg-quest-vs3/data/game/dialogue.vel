@@ -1,0 +1,69 @@
+function dialogue_lines(id: string) {
+    if id == "king_aldren" {
+        return [
+            "Valen, llegaste hasta el corazón de Solaria.",
+            "El capitán enemigo espera en la arena. Derrótalo y termina esta invasión."
+        ]
+    }
+    return ["No hay nada más que decir."]
+}
+
+function open_dialogue(id: string) {
+    dialogue_open = true
+    dialogue_id = id
+    dialogue_page = 0
+    player.velocity = vec2(0, 0)
+    emit_sound("dialogue_open")
+}
+
+function close_dialogue() {
+    let completed_id = dialogue_id
+    dialogue_open = false
+    dialogue_id = ""
+    dialogue_page = 0
+    emit_sound("dialogue_close")
+
+    if completed_id == "king_aldren" && world_index == WORLD_CASTLE && stage == STAGE_TALK_KING {
+        spawn_final_boss()
+    }
+}
+
+function advance_dialogue() {
+    if !dialogue_open { return }
+    let lines = dialogue_lines(dialogue_id)
+    dialogue_page += 1
+    if dialogue_page >= len(lines) { close_dialogue() }
+}
+
+function interact_nearby() {
+    if phase != PHASE_PLAYING || intro_timer > 0.0 || clear_timer > 0.0 || inventory_open { return }
+    if dialogue_open {
+        advance_dialogue()
+        return
+    }
+
+    if world_index == WORLD_CASTLE && stage == STAGE_TALK_KING {
+        let king_pos = vec2(480, 285)
+        if distance_between(player.pos, king_pos) <= INTERACT_RANGE {
+            open_dialogue("king_aldren")
+            return
+        }
+    }
+    push_log("No hay nada con que interactuar cerca.")
+}
+
+function dialogue_snapshot() {
+    let lines = []
+    if dialogue_open { lines = dialogue_lines(dialogue_id) }
+    let text = ""
+    if dialogue_open && dialogue_page < len(lines) { text = lines[dialogue_page] }
+    let speaker = ""
+    if dialogue_id == "king_aldren" { speaker = "REY ALDREN" }
+    return {
+        "open": dialogue_open,
+        "id": dialogue_id,
+        "page": dialogue_page,
+        "speaker": speaker,
+        "text": text
+    }
+}

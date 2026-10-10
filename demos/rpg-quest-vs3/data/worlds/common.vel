@@ -1,0 +1,42 @@
+function make_prop(kind: string, x: float, y: float, w: float, h: float, variant: string) {
+    return {"kind": kind, "x": x, "y": y, "w": w, "h": h, "variant": variant}
+}
+
+function make_enemy_spawn(kind: string, x: float, y: float, hp: float) {
+    return {"kind": kind, "pos": vec2(x, y), "hp": hp}
+}
+
+function make_npc(id: string, label: string, x: float, y: float, role: string) {
+    return {"id": id, "label": label, "pos": vec2(x, y), "role": role}
+}
+
+function world_shell(id: string, title: string, subtitle: string, objective: string, player_start: vec2) {
+    return {
+        "id": id,
+        "title": title,
+        "subtitle": subtitle,
+        "objective": objective,
+        "player_start": player_start,
+        "terrain": "grass",
+        "ambient": {"tint": "day", "fog": 0.0, "particles": "none"},
+        "props": [],
+        "colliders": [],
+        "enemy_spawns": [],
+        "npcs": [],
+        "zones": []
+    }
+}
+
+function add_prop(world: map, prop: map) { list_push(world.props, prop) }
+function add_collider(world: map, area: map) { list_push(world.colliders, area) }
+function add_spawn(world: map, spawn: map) { list_push(world.enemy_spawns, spawn) }
+function add_npc(world: map, npc: map) { list_push(world.npcs, npc) }
+function add_zone(world: map, zone: map) { list_push(world.zones, zone) }
+
+function build_world(index: int) {
+    if index == WORLD_HOME { return build_home_world() }
+    if index == WORLD_FOREST { return build_forest_world() }
+    if index == WORLD_CAMP { return build_camp_world() }
+    if index == WORLD_CAVE { return build_cave_world() }
+    return build_castle_world()
+}

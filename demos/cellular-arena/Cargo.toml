@@ -1,0 +1,20 @@
+[package]
+name = "cellular-arena"
+description = "ALPHA demo — playable cellular / sand arena (Velvet demos/)"
+version = "0.1.0-alpha.1"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "cellular-arena"
+path = "src/main.rs"
+
+[dependencies]
+velvet-cellular = { workspace = true }
+velvet-core = { workspace = true }
+anyhow = { workspace = true }
+winit = { workspace = true }
+softbuffer = "0.4"
+tracing = { workspace = true }

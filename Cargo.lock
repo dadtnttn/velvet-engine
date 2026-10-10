@@ -394,19 +394,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f2d30e4173c4026932d51d31d6b0613b1fd3014bf3f9f8943d4ba139c437ba0"
 
 [[package]]
-name = "card-duel"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde_json",
- "softbuffer",
- "velvet-cards",
- "velvet-core",
- "velvet-story",
- "winit",
-]
-
-[[package]]
 name = "cc"
 version = "1.2.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -744,16 +731,20 @@ dependencies = [
  "ab_glyph",
  "anyhow",
  "bytemuck",
+ "demon-queen-dungeon",
  "image",
  "pollster",
+ "rodio",
  "rustybuzz",
  "serde",
  "serde_json",
- "softbuffer",
  "unicode-segmentation",
+ "velvet-dungeon",
+ "velvet-guion",
  "velvet-image",
  "velvet-math",
- "velvet-play",
+ "velvet-nav",
+ "velvet-qa",
  "velvet-render",
  "velvet-style",
  "velvet-ui",
@@ -761,6 +752,23 @@ dependencies = [
  "windows-sys 0.59.0",
  "winit",
  "winresource",
+]
+
+[[package]]
+name = "demon-queen-dungeon"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "anyhow",
+ "bytemuck",
+ "image",
+ "serde",
+ "serde_json",
+ "velvet-dungeon",
+ "velvet-math",
+ "velvet-render",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]
@@ -893,23 +901,6 @@ name = "dtor"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edf234dd1594d6dd434a8fb8cada51ddbbc593e40e4a01556a0b31c62da2775b"
-
-[[package]]
-name = "echo-xp"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image",
- "rodio",
- "serde",
- "serde_json",
- "softbuffer",
- "velvet-core",
- "velvet-input",
- "velvet-math",
- "velvet-script-vs3",
- "winit",
-]
 
 [[package]]
 name = "encoding_rs"
@@ -1120,40 +1111,6 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi 6.0.0",
-]
-
-[[package]]
-name = "gilrs"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "902fb00d3f6398e635be22e5c837b303c501835cca7ac11a47bba138f7aafdd8"
-dependencies = [
- "fnv",
- "gilrs-core",
- "log",
- "uuid",
- "vec_map",
-]
-
-[[package]]
-name = "gilrs-core"
-version = "0.6.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc7f0ce6237abcc0523f2a5502b1e3fe5802daaae47ac14e166fe49551301ea9"
-dependencies = [
- "inotify",
- "js-sys",
- "libc",
- "libudev-sys",
- "log",
- "nix",
- "objc2-core-foundation",
- "objc2-io-kit",
- "uuid",
- "vec_map",
- "wasm-bindgen",
- "web-sys",
- "windows 0.58.0",
 ]
 
 [[package]]
@@ -1413,26 +1370,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a257582fdcde896fd96463bf2d40eefea0580021c0712a0e2b028b60b47a837a"
 
 [[package]]
-name = "inotify"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "153be1941a183ec9ccd095ddbe17a8b8d435ef6c76e9e02451b933c3999af2c8"
-dependencies = [
- "bitflags 2.13.1",
- "inotify-sys",
- "libc",
-]
-
-[[package]]
-name = "inotify-sys"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c033f80b2c113cdf91ab7a33faa9cbc014726dcad99880c8609af2a370edf37d"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "inout"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1622,16 +1559,6 @@ dependencies = [
  "libc",
  "plain",
  "redox_syscall 0.9.0",
-]
-
-[[package]]
-name = "libudev-sys"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c8469b4a23b962c1396b9b451dda50ef5b283e8dd309d69033475fa9b334324"
-dependencies = [
- "libc",
- "pkg-config",
 ]
 
 [[package]]
@@ -1855,18 +1782,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
-]
-
-[[package]]
-name = "nix"
-version = "0.31.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
-dependencies = [
- "bitflags 2.13.1",
- "cfg-if",
- "cfg_aliases",
- "libc",
 ]
 
 [[package]]
@@ -2148,17 +2063,6 @@ checksum = "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
 dependencies = [
  "bitflags 2.13.1",
  "objc2 0.6.4",
- "objc2-core-foundation",
-]
-
-[[package]]
-name = "objc2-io-kit"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33fafba39597d6dc1fb709123dfa8289d39406734be322956a69f0931c73bb15"
-dependencies = [
- "bitflags 2.13.1",
- "libc",
  "objc2-core-foundation",
 ]
 
@@ -2612,20 +2516,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpg-quest"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "fontdue",
- "image",
- "softbuffer",
- "velvet-math",
- "velvet-play",
- "velvet-rpg",
- "winit",
-]
-
-[[package]]
 name = "rpg-quest-vs3"
 version = "0.1.0"
 dependencies = [
@@ -2697,20 +2587,6 @@ dependencies = [
  "unicode-ccc",
  "unicode-properties",
  "unicode-script",
-]
-
-[[package]]
-name = "sam-tomboy"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "fontdue",
- "image",
- "serde",
- "serde_json",
- "softbuffer",
- "velvet-script-vs3",
- "winit",
 ]
 
 [[package]]
@@ -2807,26 +2683,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "seventeen"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "gilrs",
- "image",
- "rodio",
- "serde",
- "serde_json",
- "softbuffer",
- "velvet-core",
- "velvet-input",
- "velvet-math",
- "velvet-script-vs3",
- "velvet-story",
- "winit",
- "zip",
 ]
 
 [[package]]
@@ -3034,71 +2890,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
-name = "summoner-emporium"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "fontdue",
- "image",
- "serde",
- "serde_json",
- "softbuffer",
- "velvet-script-vs3",
- "winit",
-]
-
-[[package]]
 name = "symphonia"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5773a4c030a19d9bfaa090f49746ff35c75dfddfa700df7a5939d5e076a57039"
 dependencies = [
  "lazy_static",
- "symphonia-bundle-flac",
- "symphonia-bundle-mp3",
- "symphonia-codec-aac",
  "symphonia-codec-pcm",
  "symphonia-codec-vorbis",
  "symphonia-core",
- "symphonia-format-isomp4",
  "symphonia-format-ogg",
  "symphonia-format-riff",
  "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-bundle-flac"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c91565e180aea25d9b80a910c546802526ffd0072d0b8974e3ebe59b686c9976"
-dependencies = [
- "log",
- "symphonia-core",
- "symphonia-metadata",
- "symphonia-utils-xiph",
-]
-
-[[package]]
-name = "symphonia-bundle-mp3"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4872dd6bb56bf5eac799e3e957aa1981086c3e613b27e0ac23b176054f7c57ed"
-dependencies = [
- "lazy_static",
- "log",
- "symphonia-core",
- "symphonia-metadata",
-]
-
-[[package]]
-name = "symphonia-codec-aac"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c263845aa86881416849c1729a54c7f55164f8b96111dba59de46849e73a790"
-dependencies = [
- "lazy_static",
- "log",
- "symphonia-core",
 ]
 
 [[package]]
@@ -3133,19 +2936,6 @@ dependencies = [
  "bytemuck",
  "lazy_static",
  "log",
-]
-
-[[package]]
-name = "symphonia-format-isomp4"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "243739585d11f81daf8dac8d9f3d18cc7898f6c09a259675fc364b382c30e0a5"
-dependencies = [
- "encoding_rs",
- "log",
- "symphonia-core",
- "symphonia-metadata",
- "symphonia-utils-xiph",
 ]
 
 [[package]]
@@ -3225,6 +3015,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "terraflow"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "pollster",
+ "serde_json",
+ "tempfile",
+ "velvet-image",
+ "velvet-liquid",
+ "velvet-math",
+ "velvet-render",
+ "velvet-scene3d",
+ "velvet-terrain",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]
@@ -3601,12 +3409,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
-name = "vec_map"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
-
-[[package]]
 name = "velvet-action"
 version = "0.1.0"
 dependencies = [
@@ -3752,6 +3554,7 @@ dependencies = [
  "clap",
  "indexmap",
  "serde_json",
+ "softbuffer",
  "tempfile",
  "tracing",
  "tracing-subscriber",
@@ -3771,11 +3574,14 @@ dependencies = [
  "velvet-script-parser",
  "velvet-script-vm",
  "velvet-script-vs3",
+ "velvet-script-vs3-engine",
  "velvet-story",
  "velvet-story-lang",
  "velvet-style",
+ "velvet-terrain",
  "velvet-vs3-app",
  "walkdir",
+ "winit",
 ]
 
 [[package]]
@@ -3823,6 +3629,15 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "velvet-dungeon"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "velvet-math",
 ]
 
 [[package]]
@@ -3894,6 +3709,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-guion"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "velvet-image"
 version = "0.1.0"
 dependencies = [
@@ -3947,6 +3770,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-liquid"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "velvet-terrain",
+]
+
+[[package]]
 name = "velvet-math"
 version = "0.1.0"
 dependencies = [
@@ -3955,18 +3787,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "velvet-novella"
+name = "velvet-nav"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "fontdue",
- "image",
- "softbuffer",
- "tracing",
- "velvet-core",
- "velvet-render",
- "velvet-story",
- "winit",
+ "velvet-math",
 ]
 
 [[package]]
@@ -4000,12 +3824,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-qa"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "velvet-nav",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "velvet-render"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "gltf",
  "image",
+ "naga",
  "pollster",
  "pretty_assertions",
  "raw-window-handle",
@@ -4090,6 +3925,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "velvet-math",
+ "velvet-terrain",
 ]
 
 [[package]]
@@ -4267,29 +4103,9 @@ name = "velvet-script-vs3-engine"
 version = "0.1.0"
 dependencies = [
  "thiserror 2.0.18",
+ "velvet-liquid",
  "velvet-math",
  "velvet-script-vs3",
-]
-
-[[package]]
-name = "velvet-stakes"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "fontdue",
- "image",
- "indexmap",
- "softbuffer",
- "velvet-anim",
- "velvet-assets",
- "velvet-cards",
- "velvet-core",
- "velvet-math",
- "velvet-script-layers",
- "velvet-story",
- "velvet-story-lang",
- "velvet-style",
- "winit",
 ]
 
 [[package]]
@@ -4345,6 +4161,14 @@ dependencies = [
  "thiserror 2.0.18",
  "velvet-image",
  "velvet-story",
+]
+
+[[package]]
+name = "velvet-terrain"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

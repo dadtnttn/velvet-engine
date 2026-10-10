@@ -1327,7 +1327,7 @@ mod tests {
 
     #[test]
     fn casino_vcss_css_plus_js() {
-        let src = include_str!("../../../demos/velvet-stakes/data/styles/casino.vcss");
+        let src = include_str!("../tests/fixtures/casino.vcss");
         let sheet = parse_stylesheet(src).expect("casino.vcss");
         assert!(sheet.keyframes.contains_key("deal"));
         assert!(sheet.script.functions.contains_key("dealHand"));

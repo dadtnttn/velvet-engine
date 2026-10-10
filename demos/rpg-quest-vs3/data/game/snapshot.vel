@@ -1,0 +1,34 @@
+function player_snapshot() {
+    return {
+        "pos": player.pos,
+        "facing": player.facing,
+        "hp": player.hp,
+        "max_hp": player.max_hp,
+        "level": player.level,
+        "xp": player.xp,
+        "xp_next": player.xp_next,
+        "gold": player.gold,
+        "alive": player.alive,
+        "invulnerable": player.invulnerable,
+        "attack_timer": player.attack_timer,
+        "hit_flash": player.hit_flash
+    }
+}
+
+export function snapshot() {
+    return {
+        "schema": 3,
+        "phase": phase,
+        "elapsed": elapsed,
+        "world_time": world_time,
+        "world_index": world_index,
+        "stage": stage,
+        "player": player_snapshot(),
+        "world": current_world,
+        "enemies": enemies,
+        "quest": quest,
+        "events": consume_events(),
+        "campaign_complete": campaign_complete,
+        "visuals": dynamic_visuals()
+    }
+}

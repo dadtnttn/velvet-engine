@@ -1,0 +1,24 @@
+[package]
+name = "fx-forge"
+description = "Velvet FX Forge — BitFX-like procedural pixel VFX editor (demo/editor)"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "fx-forge"
+path = "src/main.rs"
+
+[dependencies]
+velvet-fx = { workspace = true }
+velvet-core = { workspace = true }
+velvet-math = { workspace = true }
+velvet-story = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+winit = { workspace = true }
+softbuffer = "0.4"
+tracing = { workspace = true }
+ab_glyph = "0.2"

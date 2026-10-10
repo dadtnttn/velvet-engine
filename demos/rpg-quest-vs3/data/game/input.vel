@@ -1,0 +1,109 @@
+function input_bool(input: map, key: string) {
+    if !map_has(input, key) { return false }
+    return input[key] == true
+}
+
+function input_move(input: map) {
+    if !map_has(input, "move") { return vec2(0, 0) }
+    return input.move
+}
+
+function input_locked() {
+    return intro_timer > 0.0 || clear_timer > 0.0 || dialogue_open || inventory_open || controls_open || phase != PHASE_PLAYING
+}
+
+function update_player_movement(dt: float, input: map) {
+    if input_locked() { return }
+    let movement: vec2 = input_move(input)
+    if length(movement) > 1.0 { movement = normalize(movement) }
+    if length(movement) > 0.001 {
+        player.facing = normalize(movement)
+        let delta: vec2 = movement * (PLAYER_SPEED * dt)
+        player.pos = move_with_collisions(player.pos, delta, PLAYER_RADIUS)
+    }
+}
+
+function handle_global_input(input: map) {
+    if input_bool(input, "restart") && (phase == PHASE_GAME_OVER || phase == PHASE_VICTORY) {
+        new_game(game_seed)
+        return
+    }
+    if input_bool(input, "confirm") && phase == PHASE_TITLE {
+        new_game(game_seed)
+        return
+    }
+    if input_bool(input, "toggle_inventory") && !dialogue_open && phase == PHASE_PLAYING {
+        inventory_open = !inventory_open
+        controls_open = false
+        emit_sound("ui_toggle")
+    }
+    if input_bool(input, "toggle_controls") && phase == PHASE_TITLE {
+        controls_open = !controls_open
+        emit_sound("ui_toggle")
+    }
+    if input_bool(input, "cancel") {
+        if phase == PHASE_TITLE {
+            if controls_open {
+                controls_open = false
+            } else {
+                emit("app.exit", {})
+            }
+            return
+        }
+        if phase == PHASE_GAME_OVER || phase == PHASE_VICTORY {
+            return_to_title()
+            return
+        }
+        if phase == PHASE_PLAYING && !inventory_open && !dialogue_open {
+            return_to_title()
+            return
+        }
+        inventory_open = false
+        controls_open = false
+        if dialogue_open { close_dialogue() }
+    }
+}
+
+function handle_action_input(input: map) {
+    if phase != PHASE_PLAYING { return }
+
+    let skip_transition = input_bool(input, "attack") || input_bool(input, "interact") || input_bool(input, "confirm")
+    if intro_timer > 0.0 {
+        if skip_transition { intro_timer = 0.0 }
+        return
+    }
+    if clear_timer > 0.0 {
+        if skip_transition { clear_timer = 0.001 }
+        return
+    }
+
+    if input_bool(input, "attack") { player_attack() }
+    if input_bool(input, "interact") { interact_nearby() }
+    if input_bool(input, "use_potion") { use_potion() }
+    if input_bool(input, "confirm") && dialogue_open { advance_dialogue() }
+}
+
+export function ui_action(action: string) {
+    if action == "new_game" { return new_game(game_seed) }
+    if action == "controls" {
+        controls_open = !controls_open
+        return snapshot()
+    }
+    if action == "confirm" {
+        if intro_timer > 0.0 { intro_timer = 0.0 }
+        if clear_timer > 0.0 { clear_timer = 0.001 }
+        if dialogue_open { advance_dialogue() }
+        return snapshot()
+    }
+    if action == "inventory_close" {
+        inventory_open = false
+        return snapshot()
+    }
+    if action == "restart" { return restart() }
+    if action == "menu" { return return_to_title() }
+    if action == "exit" {
+        emit("app.exit", {})
+        return snapshot()
+    }
+    return snapshot()
+}

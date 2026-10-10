@@ -1,0 +1,127 @@
+function world_target(index: int) {
+    if index == WORLD_HOME { return 3 }
+    if index == WORLD_FOREST { return 3 }
+    if index == WORLD_CAMP { return 5 }
+    if index == WORLD_CAVE { return 5 }
+    return 0
+}
+
+function world_quest_text(index: int) {
+    if index == WORLD_HOME { return "Protege la casa" }
+    if index == WORLD_FOREST { return "Limpia el bosque" }
+    if index == WORLD_CAMP { return "Destruye el campamento" }
+    if index == WORLD_CAVE { return "Cruza la cueva" }
+    if stage == STAGE_TALK_KING { return "Habla con el rey Aldren" }
+    return "Derrota al jefe final"
+}
+
+function load_world(index: int) {
+    let next_world = index
+    if next_world < WORLD_HOME { next_world = WORLD_HOME }
+    if next_world > WORLD_CASTLE { next_world = WORLD_CASTLE }
+    world_index = next_world
+    current_world = build_world(world_index)
+    player.pos = current_world.player_start
+    player.velocity = vec2(0, 0)
+    world_time = 0.0
+    intro_timer = 0.9
+    clear_timer = 0.0
+    boss_unlocked = false
+
+    if world_index == WORLD_CASTLE {
+        stage = STAGE_TALK_KING
+        clear_list(enemies)
+    } else {
+        stage = STAGE_CLEAR_ENEMIES
+        spawn_world_enemies()
+    }
+    current_world.visuals = build_world_visuals(current_world, 0.0, stage)
+
+    quest.world = world_index
+    quest.target = world_target(world_index)
+    quest.remaining = alive_enemy_count()
+    quest.status = "active"
+    quest.text = world_quest_text(world_index)
+    emit_world_loaded()
+}
+
+function reward_world() {
+    player.gold += 15
+    inventory.potions += 1
+    player.xp += 24 + world_index * 4
+    push_log("Zona superada: +15 oro y +1 poción.")
+    emit_sound("world_clear")
+}
+
+function begin_world_clear() {
+    if clear_timer > 0.0 { return }
+    quest.status = "complete"
+    clear_timer = 0.55
+    reward_world()
+}
+
+function advance_after_clear() {
+    if world_index >= WORLD_CAVE {
+        load_world(WORLD_CASTLE)
+    } else {
+        load_world(world_index + 1)
+    }
+}
+
+function spawn_final_boss() {
+    if boss_unlocked { return }
+    boss_unlocked = true
+    stage = STAGE_DEFEAT_BOSS
+    current_world.visuals = build_world_visuals(current_world, 0.0, stage)
+    quest.target = 1
+    quest.remaining = 1
+    quest.text = "Derrota al jefe final"
+    let boss = {
+        "id": next_entity_id,
+        "kind": "captain",
+        "pos": vec2(792, 390),
+        "home": vec2(792, 390),
+        "hp": 260.0,
+        "max_hp": 260.0,
+        "alive": true,
+        "velocity": vec2(0, 0),
+        "state": "boss",
+        "cooldown": 0.45,
+        "think": 0.0,
+        "hit_flash": 0.0
+    }
+    next_entity_id += 1
+    list_push(enemies, boss)
+    push_log("El rey abrió la arena. El jefe final ha aparecido.")
+    emit_sound("boss_spawn")
+    emit_fx("boss_gate", boss.pos, 1.0)
+}
+
+function finish_campaign() {
+    stage = STAGE_COMPLETE
+    quest.status = "complete"
+    quest.remaining = 0
+    campaign_complete = true
+    phase = PHASE_VICTORY
+    emit_sound("victory")
+    push_log("Solaria ha sido liberada.")
+}
+
+function update_campaign(dt: float) {
+    quest.remaining = alive_enemy_count()
+    quest.text = world_quest_text(world_index)
+
+    if clear_timer > 0.0 {
+        clear_timer -= dt
+        if clear_timer <= 0.0 { advance_after_clear() }
+        return
+    }
+
+    if stage == STAGE_CLEAR_ENEMIES && quest.remaining == 0 {
+        begin_world_clear()
+    }
+
+    if stage == STAGE_DEFEAT_BOSS && quest.remaining == 0 {
+        finish_campaign()
+    }
+}

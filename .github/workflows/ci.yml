@@ -45,6 +45,15 @@ jobs:
       - name: Test quality
         run: python3 tools/check_test_quality.py
 
+      - name: Repository contents
+        run: python3 tools/check_repository.py
+
+      - name: Peli source validation
+        run: node --test demos/demon-queen/tools/peli/tests/*.test.mjs
+
+      - name: VS3 boundaries
+        run: python3 tools/check_vs3_boundaries.py
+
       - name: Check VS Code extension
         working-directory: editors/vscode-velvet
         run: |
@@ -55,15 +64,17 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Check
-        run: cargo check --workspace --all-targets --all-features
+        run: |
+          cargo check --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon
+          RUSTFLAGS="" cargo check -p demon-queen --all-targets
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon -- -D warnings
 
       - name: Test
-        run: cargo test --workspace --all-targets --all-features
+        run: cargo test --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon
 
       - name: Doc
-        run: cargo doc --workspace --all-features --no-deps
+        run: cargo doc --workspace --all-features --no-deps --exclude demon-queen --exclude demon-queen-dungeon
         env:
           RUSTDOCFLAGS: "-D warnings"

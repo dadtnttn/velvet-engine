@@ -1,0 +1,152 @@
+function weapon_damage() {
+    if equipment.weapon == "wood_sword" { return 34.0 }
+    return 24.0
+}
+
+function nearest_attack_target() {
+    let best_id = -1
+    let best_distance = ATTACK_RANGE + 1.0
+    for enemy in enemies {
+        if enemy.alive {
+            let distance = distance_between(player.pos, enemy.pos)
+            if distance <= ATTACK_RANGE && distance < best_distance {
+                best_distance = distance
+                best_id = enemy.id
+            }
+        }
+    }
+    return best_id
+}
+
+function player_attack() {
+    if input_locked() || attack_cooldown > 0.0 { return }
+    attack_cooldown = 0.34
+    player.attack_timer = 0.18
+    emit_sound("sword_swing")
+
+    let target_id = nearest_attack_target()
+    if target_id < 0 { return }
+    let index = find_enemy_index(target_id)
+    if index < 0 { return }
+
+    let enemy = enemies[index]
+    let damage = weapon_damage()
+    enemy.hp = max(0.0, enemy.hp - damage)
+    enemy.hit_flash = 0.16
+    emit_fx("hit", enemy.pos, damage)
+    emit_sound("enemy_hit")
+
+    if enemy.hp <= 0.0 {
+        enemy.alive = false
+        if enemy.kind == "captain" {
+            player.gold += 80
+            player.xp += 120
+            push_log("Jefe derrotado.")
+        } else {
+            player.gold += 9
+            player.xp += 28
+            push_log("Explorador derrotado: +9 oro y +28 XP.")
+        }
+        emit_fx("enemy_down", enemy.pos, 1.0)
+    }
+}
+
+function damage_player(amount: float, source: vec2) {
+    if player.invulnerable > 0.0 || !player.alive { return }
+    player.hp = max(0.0, player.hp - amount)
+    player.invulnerable = 0.55
+    player.hit_flash = 0.2
+    damage_flash = 0.18
+    emit_fx("player_hit", player.pos, amount)
+    emit_sound("player_hit")
+
+    let push = player.pos - source
+    if length(push) > 0.001 {
+        player.pos = move_with_collisions(player.pos, normalize(push) * 18.0, PLAYER_RADIUS)
+    }
+
+    if player.hp <= 0.0 {
+        player.alive = false
+        phase = PHASE_GAME_OVER
+        push_log("Valen ha caído.")
+        emit_sound("game_over")
+    }
+}
+
+function enemy_damage(kind: string) {
+    if kind == "captain" { return 22.0 }
+    return 11.0
+}
+
+function enemy_speed(kind: string) {
+    if kind == "captain" { return 86.0 }
+    return 62.0
+}
+
+function enemy_separation(enemy: map) {
+    let push = vec2(0.0, 0.0)
+    for other in enemies {
+        if other.alive && other.id != enemy.id {
+            let delta = enemy.pos - other.pos
+            let gap = length(delta)
+            if gap > 0.001 && gap < 66.0 {
+                push += normalize(delta) * ((66.0 - gap) / 66.0)
+            }
+        }
+    }
+    return push
+}
+
+function enemy_position_free(enemy_id: int, position: vec2) {
+    for other in enemies {
+        if other.alive && other.id != enemy_id {
+            if distance_between(position, other.pos) < 48.0 { return false }
+        }
+    }
+    return true
+}
+
+function update_enemy(enemy: map, dt: float) {
+    if !enemy.alive { return }
+    enemy.cooldown = max(0.0, enemy.cooldown - dt)
+    enemy.hit_flash = max(0.0, enemy.hit_flash - dt)
+
+    let offset = player.pos - enemy.pos
+    let distance = length(offset)
+    if distance < 260.0 && distance > 58.0 {
+        let chase = normalize(offset)
+        let separation = enemy_separation(enemy)
+        let steering = chase + separation * 1.85
+        if length(steering) > 0.001 {
+            let desired = enemy.pos + normalize(steering) * (enemy_speed(enemy.kind) * dt)
+            if !world_blocked(desired, ENEMY_RADIUS) && enemy_position_free(enemy.id, desired) {
+                enemy.pos = desired
+                enemy.state = "chase"
+            }
+        }
+    } else {
+        enemy.state = "guard"
+    }
+
+    if distance <= 58.0 && enemy.cooldown <= 0.0 {
+        damage_player(enemy_damage(enemy.kind), enemy.pos)
+        if enemy.kind == "captain" {
+            enemy.cooldown = 0.72
+        } else {
+            enemy.cooldown = 1.05
+        }
+    }
+}
+
+function update_combat(dt: float) {
+    attack_cooldown = max(0.0, attack_cooldown - dt)
+    player.attack_timer = max(0.0, player.attack_timer - dt)
+    player.invulnerable = max(0.0, player.invulnerable - dt)
+    player.hit_flash = max(0.0, player.hit_flash - dt)
+    damage_flash = max(0.0, damage_flash - dt)
+
+    if phase != PHASE_PLAYING || intro_timer > 0.0 || clear_timer > 0.0 || dialogue_open || inventory_open {
+        return
+    }
+    for enemy in enemies { update_enemy(enemy, dt) }
+}

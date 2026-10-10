@@ -1,0 +1,104 @@
+function make_player(start: vec2) {
+    return {
+        "pos": start,
+        "facing": vec2(1, 0),
+        "velocity": vec2(0, 0),
+        "hp": 116.0,
+        "max_hp": 116.0,
+        "level": 1,
+        "xp": 0,
+        "xp_next": 100,
+        "gold": 0,
+        "alive": true,
+        "invulnerable": 0.0,
+        "attack_timer": 0.0,
+        "hit_flash": 0.0
+    }
+}
+
+function make_inventory() {
+    return {
+        "potions": 2,
+        "bag_capacity": 12,
+        "items": [
+            {"id": "wood_sword", "name": "Espada de madera", "count": 1, "kind": "weapon"},
+            {"id": "health_potion", "name": "Poción roja", "count": 2, "kind": "consumable"}
+        ]
+    }
+}
+
+function make_equipment() {
+    return {"weapon": "wood_sword", "armor": "cloth", "accessory": "none"}
+}
+
+function make_quest() {
+    return {
+        "id": "liberate_solaria",
+        "world": WORLD_HOME,
+        "target": 3,
+        "remaining": 3,
+        "status": "active",
+        "text": "Protege la casa"
+    }
+}
+
+function spawn_world_enemies() {
+    clear_list(enemies)
+    for spawn in current_world.enemy_spawns {
+        let enemy = {
+            "id": next_entity_id,
+            "kind": spawn.kind,
+            "pos": spawn.pos,
+            "home": spawn.pos,
+            "hp": spawn.hp,
+            "max_hp": spawn.hp,
+            "alive": true,
+            "velocity": vec2(0, 0),
+            "state": "patrol",
+            "cooldown": rng_range_float(random, 0.25, 0.85),
+            "think": rng_range_float(random, 0.0, 1.0),
+            "hit_flash": 0.0
+        }
+        next_entity_id += 1
+        list_push(enemies, enemy)
+    }
+}
+
+function reset_transient_state() {
+    clear_list(events)
+    clear_list(log_entries)
+    inventory_open = false
+    controls_open = false
+    dialogue_open = false
+    dialogue_id = ""
+    dialogue_page = 0
+    campaign_complete = false
+    boss_unlocked = false
+    damage_flash = 0.0
+    message_timer = 0.0
+}
+
+export function new_game(seed: int) {
+    game_seed = seed
+    random = rng_new(seed)
+    phase = PHASE_PLAYING
+    world_index = WORLD_HOME
+    stage = STAGE_CLEAR_ENEMIES
+    elapsed = 0.0
+    world_time = 0.0
+    intro_timer = 1.8
+    clear_timer = 0.0
+    attack_cooldown = 0.0
+    next_entity_id = 1
+    reset_transient_state()
+    current_world = build_world(world_index)
+    current_world.visuals = build_world_visuals(current_world, 0.0, stage)
+    player = make_player(current_world.player_start)
+    inventory = make_inventory()
+    equipment = make_equipment()
+    quest = make_quest()
+    spawn_world_enemies()
+    push_log("La defensa de Solaria ha comenzado.")
+    emit_world_loaded()
+    return snapshot()
+}
