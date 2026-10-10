@@ -37,7 +37,8 @@ const SOCIAL_RANKS = {
 const ARCANA = {
     "padre": "El Emperador", "madre": "La Emperatriz", "hermano": "La Estrella",
     "pareja": "Los Amantes", "esposo": "Los Amantes", "ex": "La Torre",
-    "hijo": "El Sol", "amigo": "La Carroza", "amante": "El Diablo", "ligue": "La Luna"
+    "hijo": "El Sol", "amigo": "La Carroza", "amante": "El Diablo", "ligue": "La Luna",
+    "nieto": "El Mundo", "abuelo": "El Ermitaño", "tio": "El Mago", "primo": "La Fuerza"
 }
 
 // ---------------------------------------------------------------- apariencia

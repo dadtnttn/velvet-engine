@@ -736,6 +736,7 @@ function draw_modal(m: map) {
     if m.kind == "menu" { return draw_menu(m) }
     if m.kind == "person" { return draw_person(m) }
     if m.kind == "minigame" { return draw_minigame() }
+    if m.kind == "chat" { return draw_chat() }
     return null
 }
 
@@ -930,7 +931,7 @@ function draw_detail(it: any, kind: string) {
         if p != null {
             svg(x + 300, y + 120, 280, 280, burst_doc(280, 280, 16, HEX_RED, HEX_INK, 4, p.id % 7))
             portrait(x + 320, y + 130, 230, 276, p.look, p.gender, p.age, person_mood(p), p.id, false)
-            if p.age >= 18 && L.age >= 18 && p.tags != null {
+            if p.age >= 18 && L.age >= 18 && p.tags != null && !is_family(p) {
                 text(x + 46, y + 372, "GUSTOS", 12, C_GRAY, "bold")
                 text(x + 46, y + 394, clip_text(kinks_text(p.tags, p.gender), 260, 15), 15, C_INK, "bold")
                 let shared = shared_kinks(p)
@@ -955,7 +956,7 @@ function draw_detail(it: any, kind: string) {
             rect(x + 46, y + 280, 230, 12, rgb(210, 210, 205))
             rect(x + 46, y + 280, 230 * p.bond / 100, 12, C_RED)
             text(x + 46, y + 330, "Atractivo " + str(p.looks) + "%", 15, C_INK, "bold")
-            let extra = "Carácter: " + STYLE_NAMES[npc_style(p)]
+            let extra = STYLE_NAMES[npc_style(p)] + " · " + temper_name(p) + " · Ánimo: " + str_lower(mood_name(p))
             if p.age >= 18 && L.age >= 18 && (rel_group(p) == "partner" || rel_group(p) == "fling") && p.gender != L.gender {
                 extra = extra + " · Fertilidad " + fert_word(their_fertility(p))
             }

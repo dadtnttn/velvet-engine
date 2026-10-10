@@ -134,6 +134,27 @@ binarias en el juego.
     gustaste, y llegar juntos hasta la boda y la vejez.
   - Eventos de pareja y amigos: aniversarios, conocer a los suegros, celos,
     despidos, discursos de boda y rivalidad entre hermanos.
+- **Platicar** (`chat.vel`): con cualquier persona, como en una app de mensajes.
+  Cada quien tiene un temperamento (callado, parlanchín, bromista, sensible,
+  orgulloso, romántico) y un ánimo que cambia cada mes (feliz, cariñoso, triste,
+  enojado, estresado, aburrido). Eliges qué decir (preguntar por su día,
+  consolar, contar un chiste, coquetear, recordar algo, chismear, pedir consejo,
+  pedir historias a los abuelos...) y responde según los dos: a quien está
+  triste no le cuentes chistes; alguien callado y molesto puede negarse a hablar,
+  y tú decides si insistir o darle su espacio. Tu pareja también te escribe por
+  su cuenta.
+- **Familia extendida**: abuelos, tíos y primos desde que naces, con sus propias
+  actividades (visitas, comida familiar, historias de los abuelos, «domingo»,
+  jugar con los primos) y eventos (Navidad, hospital, fiestas, consejos del tío).
+- **La gran carrera**: al buscar un bebé juegas un minijuego en el que guías a
+  tu campeón hasta el óvulo esquivando glóbulos blancos y tomando turbos; llegar
+  primero aumenta mucho la probabilidad de embarazo.
+- **Tríos y algo más**: invitar a otra mujer o a otro hombre, intercambio de
+  parejas o una fiesta privada para adultos. Que acepte depende de su carácter,
+  sus gustos y su confianza, y puede haber celos después.
+- **Más en pareja**: karaoke, ver las estrellas, spa, bañarse juntos, mensajes
+  picantes (que se pueden filtrar), juego de rol, hacer las paces, dormir
+  abrazados, desayuno en la cama y clases de baile.
 - **Hijos y legado** (`family.vel`): tus hijos tienen personalidad (dulce,
   rebelde, genio, flojo), calificaciones y te piden cosas (juguetes, permiso para
   fiestas, el auto, que les pagues la universidad, dinero, la boda). Puedes
@@ -212,7 +233,8 @@ binarias en el juego.
 | `health.vel` | Enfermedades, contagio, mundo de los demás personajes, médico y hábitos |
 | `family.vel` | Hijos, peticiones, herencia, ruleta, nueva generación, vejez y eventos de legado |
 | `effects.vel` | Efectos positivos y negativos y sus modificadores |
-| `relations.vel` | Menús por vínculo, citas, intimidad, fertilidad, bodas, adopción y amigos de la infancia |
+| `relations.vel` | Menús por vínculo, citas, intimidad, tríos, fertilidad, bodas, adopción, amigos de la infancia y eventos familiares |
+| `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
 | `ui.vel` | Pantallas, menús, diálogos, notificaciones y efectos |

@@ -1293,6 +1293,12 @@ function choice_tag(c: map) {
 
 function open_choice(title: string, text: string, labels: list, locks: list, handler: string, ctx: map) {
     let p = ctx["person"]
+    // Red de seguridad: nunca dejar una ventana con todas las opciones bloqueadas.
+    let open = false
+    for l in locks {
+        if l == "" { open = true }
+    }
+    if !open && len(locks) > 0 { locks[len(locks) - 1] = "" }
     G.modal = {
         "kind": "choice",
         "title": title,
