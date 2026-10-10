@@ -10,6 +10,7 @@ rust-version.workspace = true
 anyhow = { workspace = true }
 fontdue = "0.9"
 image = { workspace = true }
+resvg = { workspace = true }
 softbuffer = { workspace = true }
 velvet-script-vs3 = { workspace = true }
 winit = { workspace = true }

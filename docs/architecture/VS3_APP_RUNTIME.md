@@ -106,12 +106,32 @@ El intérprete software soporta:
 - `circle`, `ellipse`, `alpha_ellipse`, `line`
 - `sprite`, `sprite_frame`, `tile_fill`, `nine_slice`
 - `text`, `text_wrap`
+- `svg`
 - `panel`, `bar`, `button`, `keycap`
 - `clip_push`, `clip_pop`
 - `translate_push`, `transform_pop`
 - `opacity_push`, `opacity_pop`
 
 Todos los estilos, assets, fuentes, colores, tamaños, capas y acciones son campos declarativos del comando. El host no contiene IDs como nombres de personajes, mundos, botones o iconos.
+
+### SVG en línea
+
+`svg` dibuja un documento SVG generado por el script, ideal para personajes
+personalizables, iconos o paneles con formas que las primitivas no cubren:
+
+```vel
+{"op": "svg", "x": 40, "y": 60, "w": 240, "h": 280, "action": "perfil",
+ "text": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 240'>...</svg>"}
+```
+
+- El documento se escala para llenar `w`×`h` (define un `viewBox` con la misma proporción).
+- El host lo rasteriza con `resvg` una sola vez por combinación de texto y tamaño y
+  guarda el resultado en una caché con límite de memoria; repetir el mismo texto
+  cada frame es barato.
+- `<text>` solo usa las fuentes declaradas en el manifiesto; `sans-serif` apunta a la primera.
+- Las referencias externas (`<image href="archivo">`) se ignoran: el SVG no puede leer el disco.
+- Límites: 256 KiB de texto y 4096 px por lado. Un SVG inválido no se dibuja.
+- Acepta `action` como cualquier otra primitiva y `flip_x` para reflejarlo.
 
 ## Eventos del runtime
 

@@ -175,6 +175,7 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 pollster = "0.4"
 raw-window-handle = "0.6"
 softbuffer = "0.4"
+resvg = { version = "0.45", default-features = false, features = ["text"] }
 rodio = "0.21"
 gilrs = "0.11"
 
