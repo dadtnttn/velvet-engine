@@ -1,7 +1,7 @@
 // @edition 3
 // Simulación de una vida: estado, envejecimiento, efectos y muerte.
 
-const LOG_CHARS = 82
+const LOG_CHARS = 50
 
 state {
     L: map = {},
@@ -13,14 +13,36 @@ state {
         "frames": 0,
         "lives": 0,
         "rng": null,
-        "pick_gender": "r",
-        "pick_likes": "auto",
         "cache": [],
-        "quit": false
+        "quit": false,
+        "t": 0.0,
+        "hover": "",
+        "hot": [],
+        "pointer": null,
+        "floats": [],
+        "toasts": [],
+        "cre": {},
+        "menu_cat": 0,
+        "menu_page": 0,
+        "title_look": {},
+        "title_gender": "f",
+        "blink": 0,
+        "px": -1.0,
+        "py": -1.0,
+        "modal_t0": 0.0,
+        "menu_t0": 0.0,
+        "cut_t0": -10.0,
+        "screen_t0": 0.0
     }
 }
 
 // ---------------------------------------------------------------- azar
+
+function ensure_rng() {
+    if G.rng == null {
+        G.rng = rng_new(G.frames * 7919 + 104729)
+    }
+}
 
 function rint(a: int, b: int) {
     if b <= a { return a }
@@ -132,14 +154,31 @@ function log_add(text: string, kind: string) {
     G.scroll = 0
 }
 
+// Encabezado del año; los años sin sucesos se fusionan ("Edad 14–17").
+function log_year(age: int) {
+    let n = len(L.log)
+    if n > 0 {
+        let last = L.log[n - 1]
+        if last.k == "h" && last.a0 != null {
+            last.t = "Edad " + str(last.a0) + "–" + str(age)
+            return null
+        }
+    }
+    list_push(L.log, {"t": "Edad " + str(age), "k": "h", "a0": age})
+    G.scroll = 0
+    return null
+}
+
 // ---------------------------------------------------------------- personas
 
 function make_person(gender: string, rel: string, age: int) {
     let names = NAMES_M
     if gender == "f" { names = NAMES_F }
+    let first = pick(names)
+    if first == L.first { first = pick(names) }
     let p = {
         "id": L.next_id,
-        "first": pick(names),
+        "first": first,
         "last": pick(SURNAMES),
         "gender": gender,
         "age": age,
@@ -148,10 +187,72 @@ function make_person(gender: string, rel: string, age: int) {
         "looks": rint(15, 100),
         "alive": true,
         "known": false,
-        "slept": false
+        "slept": false,
+        "look": random_look(gender)
     }
     L.next_id += 1
     return p
+}
+
+function random_look(gender: string) {
+    let styles = [0, 1, 4, 5, 7, 0, 1]
+    let accs = [0, 0, 0, 1, 3, 4, 4]
+    if gender == "f" {
+        styles = [2, 3, 6, 5, 0, 2, 1]
+        accs = [0, 0, 1, 2, 2, 3]
+    }
+    return {
+        "skin": rint(0, len(SKINS) - 1),
+        "hair": pick(styles),
+        "hcolor": weighted_choose(G.rng, [30, 25, 18, 12, 4, 4, 2, 3, 2]),
+        "eyes": weighted_choose(G.rng, [30, 25, 12, 12, 8, 3]),
+        "outfit": rint(0, len(OUTFITS) - 1),
+        "acc": pick(accs)
+    }
+}
+
+function copy_look(look: map) {
+    return {"skin": look.skin, "hair": look.hair, "hcolor": look.hcolor, "eyes": look.eyes, "outfit": look.outfit, "acc": look.acc}
+}
+
+// ---------------------------------------------------------------- personalidad
+
+function trait_def(id: string) {
+    for t in TRAITS {
+        if t.id == id { return t }
+    }
+    return TRAITS[0]
+}
+
+function trait_name(id: string, gender: string) {
+    let t = trait_def(id)
+    return by_gender(gender, t.m, t.f)
+}
+
+function has_trait(id: string) {
+    return L.trait == id
+}
+
+function rank(key: string) {
+    return min(5, 1 + L.social[key] / 20)
+}
+
+function rank_title(key: string, r: int) {
+    return SOCIAL_RANKS[key][r - 1]
+}
+
+function gain(key: string, amount: int) {
+    L.social[key] = clamp(L.social[key] + amount, 0, 100)
+}
+
+function conf_rank(p: map) {
+    return clamp(1 + p.bond / 11, 1, 10)
+}
+
+function arcana(p: map) {
+    let a = ARCANA[p.rel]
+    if a == null { return "La Luna" }
+    return a
 }
 
 function add_person(p: map) {
@@ -219,26 +320,33 @@ function first_rel(rel: string) {
 // ---------------------------------------------------------------- nueva vida
 
 function new_life() {
-    if G.rng == null {
-        G.rng = rng_new(G.frames * 7919 + 104729)
-    }
+    ensure_rng()
     G.lives += 1
-    let gender = G.pick_gender
-    if gender == "r" { gender = pick(["m", "f"]) }
-    let likes = G.pick_likes
-    if likes == "auto" {
-        likes = by_gender(gender, "f", "m")
-    }
+    let c = G.cre
+    let gender = c.gender
+    let likes = c.likes
+    if likes == "auto" { likes = by_gender(gender, "f", "m") }
     let names = NAMES_M
     if gender == "f" { names = NAMES_F }
     let dad_last = pick(SURNAMES)
     let mom_last = pick(SURNAMES)
+    let first = c.first
+    if first == "" { first = pick(names) }
+    if c.last != "" {
+        let parts = str_split(c.last, " ")
+        dad_last = parts[0]
+        if len(parts) > 1 { mom_last = parts[1] }
+    }
     L = {
-        "first": pick(names),
+        "first": first,
         "last": dad_last + " " + mom_last,
         "last1": dad_last,
         "gender": gender,
         "likes": likes,
+        "look": copy_look(c.look),
+        "trait": c.trait,
+        "social": {"know": rint(0, 10), "guts": rint(0, 10), "skill": rint(0, 10), "kind": rint(0, 10), "charm": rint(0, 10)},
+        "assets": [],
         "age": 0,
         "city": pick(CITIES),
         "alive": true,
@@ -280,8 +388,11 @@ function new_life() {
         "last_job": "",
         "log": []
     }
+    apply_trait()
+    clamp_stats()
     let dad = make_person("m", "padre", rint(20, 45))
     dad.last = dad_last
+    dad.look.skin = L.look.skin
     add_person(dad)
     let mom = make_person("f", "madre", rint(18, 42))
     mom.last = mom_last
@@ -289,14 +400,26 @@ function new_life() {
     if chance(45) && mom.age >= 20 {
         let sib = make_person(pick(["m", "f"]), "hermano", rint(1, min(9, mom.age - 19)))
         sib.last = L.last
+        sib.look.skin = L.look.skin
         add_person(sib)
     }
     log_add("Naciste en " + L.city + ".", "h")
     log_add(by_gender(gender, "Eres hijo", "Eres hija") + " de " + full_name(dad) + " y " + full_name(mom) + ".", "n")
     log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
+    log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
     G.mode = "game"
     G.modal = null
     G.scroll = 0
+}
+
+function apply_trait() {
+    let t = trait_def(L.trait)
+    gain(t.social, 25)
+    if L.trait == "carisma" { L.looks += 10 }
+    if L.trait == "rebelde" { L.karma -= 5 }
+    if L.trait == "cerebro" { L.smarts += 15 }
+    if L.trait == "fiesta" { L.happy += 10 }
+    if L.trait == "ambicion" { L.smarts += 5 }
 }
 
 // ---------------------------------------------------------------- año a año
@@ -305,7 +428,7 @@ function age_up() {
     if !L.alive || G.modal != null { return null }
     L.age += 1
     L.used = {}
-    log_add("Edad " + str(L.age), "h")
+    log_year(L.age)
     yearly()
     clamp_stats()
     if !L.alive { return null }
@@ -377,6 +500,7 @@ function yearly() {
     }
     if L.school != "" && L.age < 18 {
         L.smarts += rint(0, 3)
+        gain("know", rint(1, 3))
     }
     if L.age == 18 && L.school == "secundaria" {
         L.school = ""
@@ -515,6 +639,8 @@ function add_child(other: string) {
     let g = pick(["m", "f"])
     let child = make_person(g, "hijo", 0)
     child.last = L.last1
+    child.look.skin = L.look.skin
+    if chance(50) { child.look.hcolor = L.look.hcolor }
     child.bond = 90
     add_person(child)
     L.kids += 1
@@ -596,6 +722,9 @@ function apply(o: map, ctx: map) {
     if map_has(o, "log") { msg = fmt(o.log, ctx) }
     for key in ["happy", "health", "smarts", "looks", "karma", "alcohol", "drugs"] {
         if map_has(o, key) { L[key] = L[key] + o[key] }
+    }
+    for key in SOCIAL_KEYS {
+        if map_has(o, key) { gain(key, o[key]) }
     }
     if map_has(o, "money") {
         let m = o.money

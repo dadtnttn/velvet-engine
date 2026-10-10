@@ -1,83 +1,154 @@
 // @edition 3
-// Menús del jugador: ocupación, relaciones, actividades y vida nocturna.
+// Menús del jugador: ocupación, vínculos, actividades y vida nocturna.
 
-// Actividades simples definidas como datos (mismo formato de resultados que los eventos).
-// "code": true indica que la lógica vive en code_activity().
+// Actividades definidas como datos (mismo formato de resultados que los eventos).
+// Campos: id, tab (act/night), cat, t (título), s (resumen), desc (descripción),
+//   min (edad), cost, need/rank (requisito social), o (resultados) o "code": true.
 const ACTIVITIES = [
-    {"id": "gym", "tab": "act", "t": "Ir al gimnasio", "s": "Atractivo y salud", "min": 12, "cost": 0, "o": [
-        {"w": 70, "log": "Entrenaste duro todo el año. Se nota en el espejo.", "looks": 3, "health": 4, "happy": 2},
+    {"id": "gym", "tab": "act", "cat": "Cuerpo", "t": "Gimnasio", "s": "Atractivo, salud", "min": 12, "cost": 0,
+     "desc": "Pesas, sudor y espejos. Tu cuerpo te lo agradecerá... mañana.", "o": [
+        {"w": 70, "log": "Entrenaste duro todo el año. Se nota en el espejo.", "looks": 3, "health": 4, "happy": 2, "guts": 2},
         {"w": 20, "log": "Te lastimaste la espalda por cargar de más.", "health": -6},
-        {"w": 10, "log": "Te quedaste mirando a la gente en vez de entrenar.", "happy": 2}
+        {"w": 10, "log": "Te quedaste mirando a la gente en vez de entrenar.", "happy": 2, "charm": 1}
     ]},
-    {"id": "library", "tab": "act", "t": "Leer en la biblioteca", "s": "Inteligencia", "min": 6, "cost": 0, "o": [
-        {"w": 85, "log": "Leíste varios libros. Te sientes más list{a}.", "smarts": 4, "happy": 1},
-        {"w": 15, "log": "Te quedaste dormid{a} sobre un libro de historia.", "smarts": 1}
+    {"id": "boxing", "tab": "act", "cat": "Cuerpo", "t": "Clases de box", "s": "Valor, salud · $200", "min": 14, "cost": 200,
+     "desc": "Golpear un saco hasta olvidar tus problemas. O que te golpeen a ti.", "o": [
+        {"w": 75, "log": "Aprendiste a lanzar un jab decente. Te sientes imparable.", "guts": 6, "health": 3, "happy": 3},
+        {"w": 25, "log": "Te noquearon en tu primer combate de práctica.", "health": -8, "guts": 4}
     ]},
-    {"id": "meditate", "tab": "act", "t": "Meditar", "s": "Felicidad, menos ansiedad", "min": 10, "cost": 0, "o": [
-        {"w": 80, "log": "Respiraste profundo y soltaste el estrés.", "happy": 6, "alcohol": -3, "drugs": -3},
-        {"w": 20, "log": "Intentaste meditar pero pensaste en tu ex todo el tiempo.", "happy": -1}
+    {"id": "dance", "tab": "act", "cat": "Cuerpo", "t": "Clases de baile", "s": "Encanto, destreza · $150", "min": 10, "cost": 150,
+     "desc": "Salsa, bachata y perreo profesional. Tu cadera agradecerá la práctica.", "o": [
+        {"w": 80, "log": "Ya no bailas como tío en boda. Bueno, un poco menos.", "charm": 5, "skill": 3, "happy": 4},
+        {"w": 20, "log": "Pisaste a tu pareja de baile once veces.", "charm": 1, "happy": -2}
     ]},
-    {"id": "walk", "tab": "act", "t": "Salir a caminar", "s": "Salud y felicidad", "min": 6, "cost": 0, "o": [
+    {"id": "walk", "tab": "act", "cat": "Cuerpo", "t": "Salir a caminar", "s": "Salud, felicidad", "min": 6, "cost": 0,
+     "desc": "Aire fresco, árboles y gente paseando perros ajenos.", "o": [
         {"w": 90, "log": "Una buena caminata por el parque.", "health": 2, "happy": 3},
         {"w": 10, "log": "Pisaste caca de perro con zapatos nuevos.", "happy": -3}
     ]},
-    {"id": "games", "tab": "act", "t": "Jugar videojuegos", "s": "Felicidad, a costa de dormir", "min": 6, "cost": 0, "o": [
-        {"w": 80, "log": "Jugaste hasta las 4 a. m. Valió la pena.", "happy": 5, "health": -1},
-        {"w": 20, "log": "Un niño de 12 años te humilló en línea.", "happy": -4}
-    ]},
-    {"id": "doctor", "tab": "act", "t": "Ir al doctor", "s": "Salud, tratar infecciones · $300", "min": 0, "cost": 0, "code": true},
-    {"id": "rehab", "tab": "act", "t": "Centro de rehabilitación", "s": "Quitar adicciones · $8,000", "min": 14, "cost": 8000, "code": true},
-    {"id": "surgery", "tab": "act", "t": "Cirugía estética", "s": "Atractivo (o desastre) · $6,000", "min": 18, "cost": 6000, "code": true},
-    {"id": "tattoo", "tab": "act", "t": "Hacerte un tatuaje", "s": "Arte corporal · $300", "min": 18, "cost": 300, "o": [
-        {"w": 70, "log": "Te tatuaste algo que de verdad te gusta.", "happy": 5, "looks": 2},
+    {"id": "surgery", "tab": "act", "cat": "Cuerpo", "t": "Cirugía estética", "s": "Atractivo (o desastre) · $6,000", "min": 18, "cost": 6000, "code": true,
+     "desc": "Un bisturí, un cirujano con descuento y mucha fe."},
+    {"id": "tattoo", "tab": "act", "cat": "Cuerpo", "t": "Hacerte un tatuaje", "s": "Arte corporal · $300", "min": 18, "cost": 300,
+     "desc": "Tinta para siempre. Elige bien... o no.", "o": [
+        {"w": 70, "log": "Te tatuaste algo que de verdad te gusta.", "happy": 5, "looks": 2, "guts": 2},
         {"w": 30, "log": "El tatuador escribió mal la palabra. Para siempre.", "happy": -6, "looks": -2}
     ]},
-    {"id": "lottery", "tab": "act", "t": "Comprar lotería", "s": "Soñar no cuesta... $20", "min": 18, "cost": 20, "code": true},
+    {"id": "library", "tab": "act", "cat": "Mente", "t": "Biblioteca", "s": "Inteligencia, conocimiento", "min": 6, "cost": 0,
+     "desc": "Silencio, libros viejos y un bibliotecario que te juzga.", "o": [
+        {"w": 85, "log": "Leíste varios libros. Te sientes más list{a}.", "smarts": 4, "happy": 1, "know": 5},
+        {"w": 15, "log": "Te quedaste dormid{a} sobre un libro de historia.", "smarts": 1, "know": 1}
+    ]},
+    {"id": "games", "tab": "act", "cat": "Mente", "t": "Videojuegos", "s": "Felicidad, destreza", "min": 6, "cost": 0,
+     "desc": "Una partida más. Solo una. Son las 4 de la mañana.", "o": [
+        {"w": 80, "log": "Jugaste hasta las 4 a. m. Valió la pena.", "happy": 5, "health": -1, "skill": 3},
+        {"w": 20, "log": "Un niño de 12 años te humilló en línea.", "happy": -4, "guts": 1}
+    ]},
+    {"id": "meditate", "tab": "act", "cat": "Mente", "t": "Meditar", "s": "Felicidad, menos ansiedad", "min": 10, "cost": 0,
+     "desc": "Respira. Inhala. Exhala. No pienses en tu ex.", "o": [
+        {"w": 80, "log": "Respiraste profundo y soltaste el estrés.", "happy": 6, "alcohol": -3, "drugs": -3, "kind": 2},
+        {"w": 20, "log": "Intentaste meditar pero pensaste en tu ex todo el tiempo.", "happy": -1}
+    ]},
+    {"id": "volunteer", "tab": "act", "cat": "Mente", "t": "Voluntariado", "s": "Amabilidad, karma", "min": 12, "cost": 0,
+     "desc": "Comedores comunitarios, refugios de animales y abuelitos que cuentan historias.", "o": [
+        {"w": 85, "log": "Ayudaste en un comedor comunitario. Te sentiste útil.", "kind": 6, "karma": 5, "happy": 3},
+        {"w": 15, "log": "Un abuelito te contó su vida entera. Tres veces.", "kind": 4, "karma": 3}
+    ]},
+    {"id": "therapy", "tab": "act", "cat": "Mente", "t": "Terapia", "s": "Felicidad · $800", "min": 14, "cost": 800,
+     "desc": "Una hora hablando de tu madre por un precio razonable.", "o": [
+        {"w": 80, "log": "Lloraste, entendiste cosas y saliste más liger{a}.", "happy": 10, "know": 2, "kind": 2},
+        {"w": 20, "log": "Tu terapeuta bostezó dos veces. Te dolió.", "happy": 2}
+    ]},
+    {"id": "doctor", "tab": "act", "cat": "Mente", "t": "Ir al doctor", "s": "Salud, infecciones · $300", "min": 0, "cost": 0, "code": true,
+     "desc": "Chequeo general. Trata infecciones curables."},
+    {"id": "rehab", "tab": "act", "cat": "Mente", "t": "Rehabilitación", "s": "Quitar adicciones · $8,000", "min": 14, "cost": 8000, "code": true,
+     "desc": "Noventa días sin nada. Duele, pero funciona."},
+    {"id": "beach", "tab": "act", "cat": "Lujos", "t": "Viaje a la playa", "s": "Felicidad · $3,000", "min": 18, "cost": 3000,
+     "desc": "Arena, sol, cocteles con sombrillita y romances de vacaciones.", "o": [
+        {"w": 65, "log": "Una semana de sol y cocteles. Regresaste con bronceado y sin preocupaciones.", "happy": 12},
+        {"w": 35, "special": "hookup", "happy": 6}
+    ]},
+    {"id": "japan", "tab": "act", "cat": "Lujos", "t": "Viaje a Tokio", "s": "Felicidad, conocimiento · $15,000", "min": 18, "cost": 15000,
+     "desc": "Neón, ramen a las 3 a. m. y un tren que nunca llega tarde.", "o": [
+        {"w": 100, "log": "Recorriste Shibuya de noche y comiste ramen hasta llorar. Inolvidable.", "happy": 18, "know": 6, "charm": 3}
+    ]},
+    {"id": "lottery", "tab": "act", "cat": "Lujos", "t": "Comprar lotería", "s": "Soñar no cuesta... $20", "min": 18, "cost": 20, "code": true,
+     "desc": "Una en dos mil. Pero alguien tiene que ganar, ¿no?"},
 
-    {"id": "club", "tab": "night", "t": "Ir a la discoteca", "s": "Bailar y conocer gente · $200", "min": 18, "cost": 200, "o": [
-        {"w": 45, "log": "Bailaste hasta que cerraron. Te duelen los pies.", "happy": 8, "alcohol": 3},
+    {"id": "club", "tab": "night", "cat": "Fiesta", "t": "Discoteca", "s": "Bailar, conocer gente · $200", "min": 18, "cost": 200,
+     "desc": "Luces, reguetón y gente atractiva con malas intenciones.", "o": [
+        {"w": 45, "log": "Bailaste hasta que cerraron. Te duelen los pies.", "happy": 8, "alcohol": 3, "charm": 2},
         {"w": 30, "special": "event:bar_pickup"},
         {"w": 15, "log": "No recuerdas cómo llegaste a casa.", "alcohol": 8, "health": -3, "happy": 3},
-        {"w": 10, "log": "Te peleaste con un guardia de seguridad. Perdiste.", "health": -10, "happy": -5}
+        {"w": 10, "log": "Te peleaste con un guardia de seguridad. Perdiste.", "health": -10, "happy": -5, "guts": 2}
     ]},
-    {"id": "bar", "tab": "night", "t": "Emborracharte en un bar", "s": "Felicidad rápida · $100", "min": 18, "cost": 100, "o": [
+    {"id": "bar", "tab": "night", "cat": "Fiesta", "t": "Emborracharte en un bar", "s": "Felicidad rápida · $100", "min": 18, "cost": 100,
+     "desc": "Cerveza barata, música triste y confesiones con desconocidos.", "o": [
         {"w": 60, "log": "Unas cervezas con desconocidos. Buena noche.", "happy": 6, "alcohol": 8},
         {"w": 25, "special": "event:bar_pickup"},
-        {"w": 15, "log": "Le lloraste al bartender sobre tu vida. Te dio un trago gratis.", "happy": -2, "alcohol": 10}
+        {"w": 15, "log": "Le lloraste al bartender sobre tu vida. Te dio un trago gratis.", "happy": -2, "alcohol": 10, "kind": 1}
     ]},
-    {"id": "dating", "tab": "night", "t": "App de citas", "s": "Desliza y a ver qué pasa", "min": 18, "cost": 0, "code": true},
-    {"id": "hookup", "tab": "night", "t": "Buscar un encuentro casual", "s": "Sin compromisos", "min": 18, "cost": 0, "code": true},
-    {"id": "strip", "tab": "night", "t": "Club de striptease", "s": "Mirar, no tocar · $500", "min": 18, "cost": 500, "o": [
+    {"id": "karaoke", "tab": "night", "cat": "Fiesta", "t": "Karaoke", "s": "Encanto, valor · $150", "min": 18, "cost": 150,
+     "desc": "Un micrófono, una balada de despecho y cero vergüenza.", "o": [
+        {"w": 70, "log": "Cantaste a todo pulmón. El bar te aplaudió por lástima o por amor.", "happy": 8, "charm": 4, "guts": 3},
+        {"w": 30, "log": "Se te olvidó la letra frente a todos.", "happy": -3, "guts": 2}
+    ]},
+    {"id": "rave", "tab": "night", "cat": "Fiesta", "t": "Rave con éxtasis", "s": "Amor universal · $250", "min": 18, "cost": 250,
+     "desc": "Bajos que hacen temblar el pecho y abrazos con desconocidos sudados.", "o": [
+        {"w": 60, "log": "Abrazaste a 200 desconocidos y les dijiste que los amabas.", "happy": 14, "drugs": 10, "health": -3, "kind": 2},
+        {"w": 25, "special": "hookup"},
+        {"w": 15, "log": "Deshidratación severa. Te desmayaste en la pista.", "health": -15, "drugs": 8}
+    ]},
+    {"id": "vip", "tab": "night", "cat": "Fiesta", "t": "Fiesta VIP en un yate", "s": "Solo con contactos · $2,000", "min": 21, "cost": 2000, "need": "charm", "rank": 4,
+     "desc": "Champaña, famosos y decisiones cuestionables en altamar.", "o": [
+        {"w": 50, "log": "Brindaste con un cantante famoso y saliste en las revistas.", "happy": 15, "charm": 5},
+        {"w": 50, "special": "hookup", "happy": 8}
+    ]},
+    {"id": "dating", "tab": "night", "cat": "Ligue", "t": "App de citas", "s": "Desliza y a ver qué pasa", "min": 18, "cost": 0, "code": true,
+     "desc": "Mil perfiles, cien fotos con filtro y una conversación decente."},
+    {"id": "hookup", "tab": "night", "cat": "Ligue", "t": "Encuentro casual", "s": "Sin compromisos", "min": 18, "cost": 0, "code": true,
+     "desc": "Una noche, sin nombres reales ni desayunos incómodos."},
+    {"id": "seduce", "tab": "night", "cat": "Ligue", "t": "Seducir a alguien en el bar", "s": "Ligue asegurado · $100", "min": 18, "cost": 100, "need": "charm", "rank": 3,
+     "desc": "Una mirada, una sonrisa y una frase que nadie más podría decir sin parecer ridículo.", "o": [
+        {"w": 100, "special": "hookup", "charm": 3}
+    ]},
+    {"id": "strip", "tab": "night", "cat": "Ligue", "t": "Club de striptease", "s": "Mirar, no tocar · $500", "min": 18, "cost": 500,
+     "desc": "Luces rojas, billetes de veinte y reglas muy estrictas.", "o": [
         {"w": 70, "log": "Te gastaste el sueldo en billetes de $20. No te arrepientes.", "happy": 8, "karma": -1},
         {"w": 30, "log": "Pagaste un baile privado. Las reglas eran estrictas: solo mirar.", "happy": 10, "money": -1000}
     ]},
-    {"id": "weed", "tab": "night", "t": "Fumar marihuana", "s": "Relajarte · $50", "min": 18, "cost": 50, "o": [
+    {"id": "weed", "tab": "night", "cat": "Vicios", "t": "Fumar marihuana", "s": "Relajarte · $50", "min": 18, "cost": 50,
+     "desc": "Risas, hambre y teorías sobre el universo.", "o": [
         {"w": 80, "log": "Te reíste de un meme durante 40 minutos.", "happy": 6, "drugs": 5, "smarts": -1},
         {"w": 20, "log": "Te dio una paranoia terrible y no saliste de tu cuarto.", "happy": -5, "drugs": 4}
     ]},
-    {"id": "coke", "tab": "night", "t": "Comprar cocaína", "s": "Euforia peligrosa · $400", "min": 18, "cost": 400, "o": [
+    {"id": "coke", "tab": "night", "cat": "Vicios", "t": "Comprar cocaína", "s": "Euforia peligrosa · $400", "min": 18, "cost": 400,
+     "desc": "Te sentirás invencible. No lo eres.", "o": [
         {"w": 75, "log": "Te sentiste en la cima del mundo. Por unas horas.", "happy": 12, "drugs": 15, "health": -4},
         {"w": 20, "log": "Estaba cortada con algo raro. Pasaste la noche en urgencias.", "health": -25, "drugs": 10},
         {"w": 5, "log": "Tu corazón no aguantó.", "die": "una sobredosis de cocaína"}
     ]},
-    {"id": "rave", "tab": "night", "t": "Rave con éxtasis", "s": "Amor universal · $250", "min": 18, "cost": 250, "o": [
-        {"w": 60, "log": "Abrazaste a 200 desconocidos y les dijiste que los amabas.", "happy": 14, "drugs": 10, "health": -3},
-        {"w": 25, "special": "hookup"},
-        {"w": 15, "log": "Deshidratación severa. Te desmayaste en la pista.", "health": -15, "drugs": 8}
-    ]},
-    {"id": "casino", "tab": "night", "t": "Apostar en el casino", "s": "La casa siempre gana", "min": 18, "cost": 100, "code": true},
-    {"id": "shoplift", "tab": "night", "t": "Robar en una tienda", "s": "Delito menor", "min": 14, "cost": 0, "o": [
-        {"w": 60, "log": "Saliste con {monto} en mercancía bajo la chamarra.", "money": [50, 400], "karma": -3},
+    {"id": "casino", "tab": "night", "cat": "Vicios", "t": "Casino", "s": "La casa siempre gana", "min": 18, "cost": 100, "code": true,
+     "desc": "Ruleta, luces y un señor con traje que te sonríe demasiado."},
+    {"id": "shoplift", "tab": "night", "cat": "Crimen", "t": "Robar en una tienda", "s": "Delito menor", "min": 14, "cost": 0,
+     "desc": "Una chamarra grande y nervios de acero.", "o": [
+        {"w": 60, "log": "Saliste con {monto} en mercancía bajo la chamarra.", "money": [50, 400], "karma": -3, "guts": 2},
         {"w": 40, "log": "El guardia te atrapó con las manos en la masa.", "jail": 1, "karma": -3}
     ]},
-    {"id": "mug", "tab": "night", "t": "Asaltar a alguien", "s": "Delito grave", "min": 16, "cost": 0, "o": [
-        {"w": 55, "log": "Le quitaste la cartera a un turista: {monto}.", "money": [200, 2000], "karma": -10},
+    {"id": "mug", "tab": "night", "cat": "Crimen", "t": "Asaltar a alguien", "s": "Delito grave", "min": 16, "cost": 0,
+     "desc": "Un callejón oscuro y alguien con cara de turista.", "o": [
+        {"w": 55, "log": "Le quitaste la cartera a un turista: {monto}.", "money": [200, 2000], "karma": -10, "guts": 3},
         {"w": 20, "log": "Tu víctima sabía artes marciales.", "health": -20, "karma": -5},
         {"w": 25, "log": "Una patrulla pasaba justo por ahí.", "jail": 3, "karma": -10}
     ]},
-    {"id": "carjack", "tab": "night", "t": "Robar un auto", "s": "Delito grave", "min": 16, "cost": 0, "o": [
-        {"w": 50, "log": "Vendiste el auto en un deshuesadero por {monto}.", "money": [3000, 12000], "karma": -8},
+    {"id": "carjack", "tab": "night", "cat": "Crimen", "t": "Robar un auto", "s": "Delito grave", "min": 16, "cost": 0,
+     "desc": "Un desarmador, sesenta segundos y mucha suerte.", "o": [
+        {"w": 50, "log": "Vendiste el auto en un deshuesadero por {monto}.", "money": [3000, 12000], "karma": -8, "skill": 3},
         {"w": 50, "log": "El auto tenía GPS. Te esperaban al llegar.", "jail": 4, "karma": -8}
+    ]},
+    {"id": "heist", "tab": "night", "cat": "Crimen", "t": "Hackear un banco", "s": "El golpe perfecto", "min": 18, "cost": 0, "need": "know", "rank": 4,
+     "desc": "Un golpe limpio, sin armas, desde tu cuarto. El crimen perfecto... casi.", "o": [
+        {"w": 55, "log": "Transferiste {monto} a una cuenta en el extranjero. Nadie sabe quién fue.", "money": [40000, 150000], "karma": -10, "know": 4},
+        {"w": 45, "log": "La policía cibernética tocó tu puerta a las 6 a. m.", "jail": 8, "karma": -10}
     ]}
 ]
 
@@ -88,7 +159,8 @@ const HOOKUP_LINES = [
     "Terminaron en el piso de la cocina. Mejor no preguntes.",
     "Fue lento, tierno y mucho mejor de lo que esperabas.",
     "Rompieron la cama. Literalmente.",
-    "{x} se quedó dormid{xa} a la mitad. Tu ego no se recupera."
+    "{x} se quedó dormid{xa} a la mitad. Tu ego no se recupera.",
+    "Hubo velas, música y un vecino aplaudiendo al final."
 ]
 
 const BIOS = [
@@ -100,7 +172,8 @@ const BIOS = [
     "Sapiosexual. Háblame de criptomonedas.",
     "Recién salid{xa} de una relación tóxica. ¿Y tú?",
     "No respondo a «hola».",
-    "1.80 m, por si preguntabas."
+    "1.80 m, por si preguntabas.",
+    "Busco Player 2."
 ]
 
 // ---------------------------------------------------------------- menús
@@ -113,19 +186,38 @@ function find_activity(id: string) {
 }
 
 function menu_title(tab: string) {
-    if tab == "job" { return "Ocupación" }
-    if tab == "rel" { return "Relaciones" }
-    if tab == "act" { return "Actividades" }
-    return "Noche +18"
+    if tab == "job" { return "OCUPACIÓN" }
+    if tab == "rel" { return "VÍNCULOS" }
+    if tab == "act" { return "ACTIVIDADES" }
+    return "NOCHE +18"
 }
 
-function menu_items(tab: string) {
+function menu_cats(tab: string) {
+    if tab == "act" { return ["Cuerpo", "Mente", "Lujos"] }
+    if tab == "night" { return ["Fiesta", "Ligue", "Vicios", "Crimen"] }
+    return []
+}
+
+function menu_items(tab: string, cat: string) {
     if tab == "job" { return job_items() }
     if tab == "rel" { return rel_items() }
     let items = []
     for a in ACTIVITIES {
-        if a.tab == tab && L.age >= a.min {
-            list_push(items, {"action": "act:" + a.id, "t": a.t, "s": fmt(a.s, {})})
+        if a.tab == tab && a.cat == cat && L.age >= a.min {
+            let lock = ""
+            if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
+            list_push(items, {"action": "act:" + a.id, "t": a.t, "s": fmt(a.s, {}), "desc": fmt(a.desc, {}), "lock": lock})
+        }
+    }
+    if tab == "act" && cat == "Lujos" && L.age >= 18 {
+        for asset in ASSETS {
+            let lock = ""
+            if list_contains(L.assets, asset.t) {
+                lock = "Ya lo tienes"
+            } else if L.money < asset.cost {
+                lock = money_str(asset.cost)
+            }
+            list_push(items, {"action": "buy:" + asset.id, "t": "Comprar: " + asset.t, "s": money_str(asset.cost), "desc": "Presume tu " + str_lower(asset.t) + ". Felicidad y Encanto.", "lock": lock})
         }
     }
     return items
@@ -145,34 +237,34 @@ function menu_block(tab: string) {
 function job_items() {
     let items = []
     if L.jail > 0 {
-        list_push(items, {"action": "act:behave", "t": "Portarte bien", "s": "Puede reducir tu condena"})
-        list_push(items, {"action": "act:yard", "t": "Pelear en el patio", "s": "Respeto o enfermería"})
-        list_push(items, {"action": "act:escape", "t": "Intentar escapar", "s": "Muy arriesgado"})
+        list_push(items, {"action": "act:behave", "t": "Portarte bien", "s": "Puede reducir tu condena", "desc": "Agacha la cabeza, cumple las reglas y espera.", "lock": ""})
+        list_push(items, {"action": "act:yard", "t": "Pelear en el patio", "s": "Respeto o enfermería", "desc": "En prisión, el respeto se gana a golpes.", "lock": ""})
+        list_push(items, {"action": "act:escape", "t": "Intentar escapar", "s": "Muy arriesgado", "desc": "Una cuchara, un túnel y mucha paciencia.", "lock": ""})
         return items
     }
     if L.age < 18 && L.school != "" {
-        list_push(items, {"action": "act:study", "t": "Estudiar más duro", "s": "Inteligencia"})
-        list_push(items, {"action": "act:skip", "t": "Saltarte clases", "s": "Felicidad, menos inteligencia"})
+        list_push(items, {"action": "act:study", "t": "Estudiar más duro", "s": "Inteligencia, conocimiento", "desc": "Cuadernos, desvelos y la satisfacción de un 10.", "lock": ""})
+        list_push(items, {"action": "act:skip", "t": "Saltarte clases", "s": "Felicidad, valor", "desc": "El centro comercial no se va a visitar solo.", "lock": ""})
     }
     if L.age >= 18 {
         if L.edu < 2 {
-            list_push(items, {"action": "act:ged", "t": "Secundaria abierta", "s": "Terminar la escuela · $1,500"})
+            list_push(items, {"action": "act:ged", "t": "Secundaria abierta", "s": "$1,500", "desc": "Nunca es tarde para terminar la escuela.", "lock": ""})
         }
         if L.edu == 2 && L.uni == 0 {
-            list_push(items, {"action": "act:uni", "t": "Ir a la universidad", "s": "4 años · préstamo de $40,000"})
+            list_push(items, {"action": "act:uni", "t": "Ir a la universidad", "s": "4 años · préstamo de $40,000", "desc": "Fiestas, deudas y, con suerte, un título.", "lock": ""})
         }
         if L.uni > 0 {
-            list_push(items, {"action": "act:uni_study", "t": "Estudiar para los finales", "s": "Inteligencia"})
-            list_push(items, {"action": "act:dropout", "t": "Dejar la universidad", "s": "Adiós título"})
+            list_push(items, {"action": "act:uni_study", "t": "Estudiar para los finales", "s": "Inteligencia, conocimiento", "desc": "Café, apuntes subrayados y crisis existenciales.", "lock": ""})
+            list_push(items, {"action": "act:dropout", "t": "Dejar la universidad", "s": "Adiós título", "desc": "Muchos millonarios dejaron la escuela. Muchos más no lo son.", "lock": ""})
         }
     }
     if L.age >= 16 {
-        list_push(items, {"action": "act:jobsearch", "t": "Buscar trabajo", "s": "Ver ofertas de empleo"})
+        list_push(items, {"action": "act:jobsearch", "t": "Buscar trabajo", "s": "Ver ofertas de empleo", "desc": "Revisa vacantes y prueba suerte en entrevistas.", "lock": ""})
     }
     if L.job != null {
-        list_push(items, {"action": "act:work_hard", "t": "Trabajar más duro", "s": "Desempeño " + str(L.job.perf) + "%"})
-        list_push(items, {"action": "act:raise", "t": "Pedir un aumento", "s": "Sueldo " + money_str(job_pay(L.job)) + "/año"})
-        list_push(items, {"action": "act:quit", "t": "Renunciar", "s": L.job.title})
+        list_push(items, {"action": "act:work_hard", "t": "Trabajar más duro", "s": "Desempeño " + str(L.job.perf) + "%", "desc": "Horas extra, correos a medianoche y reconocimiento (quizá).", "lock": ""})
+        list_push(items, {"action": "act:raise", "t": "Pedir un aumento", "s": "Sueldo " + money_str(job_pay(L.job)) + "/año", "desc": "Necesitas buen desempeño y algo de valor.", "lock": ""})
+        list_push(items, {"action": "act:quit", "t": "Renunciar", "s": L.job.title, "desc": "Mandar todo al diablo se siente increíble. Por un rato.", "lock": ""})
     }
     return items
 }
@@ -185,11 +277,13 @@ function rel_items() {
             "action": "person:" + str(p.id),
             "t": full_name(p),
             "s": rel_label(p) + " · " + str(p.age) + " años",
-            "bond": p.bond
+            "desc": arcana(p) + " · Rango " + str(conf_rank(p)),
+            "lock": "",
+            "pid": p.id
         })
     }
     if L.age >= 18 && L.jail == 0 {
-        list_push(items, {"action": "act:dating", "t": "Buscar el amor", "s": "Abrir la app de citas"})
+        list_push(items, {"action": "act:dating", "t": "Buscar el amor", "s": "Abrir la app de citas", "desc": "Alguien allá afuera está deslizando a la derecha.", "lock": ""})
     }
     return items
 }
@@ -211,10 +305,10 @@ function person_actions(p: map) {
             list_push(out, {"action": "pact:baby", "t": "Intentar tener un bebé", "s": "Agrandar la familia"})
             list_push(out, {"action": "pact:threesome", "t": "Proponer un trío", "s": "Arriesgado"})
             if r == "pareja" {
-                list_push(out, {"action": "pact:propose", "t": "Proponer matrimonio", "s": "Anillo · $8,000 de boda"})
+                list_push(out, {"action": "pact:propose", "t": "Proponer matrimonio", "s": "Boda de $8,000"})
                 list_push(out, {"action": "pact:breakup", "t": "Terminar", "s": "Fin de la relación"})
             } else {
-                list_push(out, {"action": "pact:breakup", "t": "Divorciarte", "s": "Pierdes la mitad de tu dinero"})
+                list_push(out, {"action": "pact:breakup", "t": "Divorciarte", "s": "Pierdes la mitad"})
             }
         }
         if r == "ex" {
@@ -224,7 +318,7 @@ function person_actions(p: map) {
         if r == "amante" || r == "ligue" {
             list_push(out, {"action": "pact:hookup", "t": "Verse a escondidas", "s": "Encuentro"})
             if L.partner_id == 0 {
-                list_push(out, {"action": "pact:official", "t": "Hacerlo oficial", "s": "Formalizar la relación"})
+                list_push(out, {"action": "pact:official", "t": "Hacerlo oficial", "s": "Formalizar"})
             }
             list_push(out, {"action": "pact:end", "t": "Cortar la aventura", "s": "Se acabó"})
         }
@@ -239,6 +333,12 @@ function person_actions(p: map) {
 
 function info(title: string, text: string) {
     G.modal = {"kind": "info", "title": title, "text": text}
+    G.modal_t0 = G.t
+    return null
+}
+
+function toast(title: string, sub: string) {
+    list_push(G.toasts, {"title": title, "sub": sub, "t0": G.t})
 }
 
 function do_act(id: string) {
@@ -248,6 +348,9 @@ function do_act(id: string) {
     if a == null { return null }
     if L.jail > 0 { return info(a.t, "Estás en prisión.") }
     if L.age < a.min { return info(a.t, "Eres demasiado joven para eso.") }
+    if a.need != null && rank(a.need) < a.rank {
+        return info(a.t, "Necesitas " + SOCIAL_NAMES[a.need] + " rango " + str(a.rank) + " para esto.")
+    }
     if a.cost > 0 && L.money < a.cost {
         return info(a.t, "No te alcanza. Necesitas " + money_str(a.cost) + " y tienes " + money_str(L.money) + ".")
     }
@@ -257,14 +360,32 @@ function do_act(id: string) {
         return info(a.t, "Ya hiciste eso suficiente este año. Envejece un poco.")
     }
     L.used[id] = used + 1
-    if a.code {
+    if a.code == true {
         code_activity(id, a)
         return null
     }
     L.money -= a.cost
     let o = pick_outcome(a.o)
     let msg = apply(o, {})
+    if a.tab == "night" && has_trait("fiesta") && L.alive {
+        L.happy = clamp100(L.happy + 4)
+    }
     finish(a.t, msg, outcome_kind(o))
+    return null
+}
+
+function buy(id: string) {
+    G.modal = null
+    for asset in ASSETS {
+        if asset.id != id { continue }
+        if list_contains(L.assets, asset.t) { return info(asset.t, "Ya tienes uno. No seas codicios" + oa(L.gender) + ".") }
+        if L.money < asset.cost { return info(asset.t, "No te alcanza. Cuesta " + money_str(asset.cost) + ".") }
+        L.money -= asset.cost
+        list_push(L.assets, asset.t)
+        L.happy = clamp100(L.happy + asset.happy)
+        gain("charm", asset.charm)
+        return finish("Compra", "Compraste: " + str_lower(asset.t) + ". Todo el barrio te mira con envidia.", "g")
+    }
     return null
 }
 
@@ -276,9 +397,7 @@ function code_activity(id: string, a: map) {
             return info(a.t, "No tienes adicciones... de momento.")
         }
         L.money -= a.cost
-        L.alcohol = 0
-        L.drugs = 0
-        L.health += 10
+        special("rehab", {})
         L.happy -= 5
         return finish(a.t, "Pasaste 90 días en rehabilitación. Estás limpi" + oa(L.gender) + ".", "g")
     }
@@ -308,7 +427,9 @@ function code_activity(id: string, a: map) {
     if id == "dating" { return open_dating() }
     if id == "hookup" {
         let person = stranger()
-        if chance(35 + L.looks / 2) {
+        let odds = 35 + L.looks / 2 + rank("charm") * 4
+        if has_trait("carisma") { odds += 15 }
+        if chance(odds) {
             return open_hookup({"person": person})
         }
         return finish(a.t, "Nadie se interesó esta noche. Te fuiste a casa a ver videos.", "b")
@@ -351,6 +472,7 @@ function doctor() {
 function do_job_act(id: string) {
     if id == "study" {
         L.smarts += rint(2, 5)
+        gain("know", rint(3, 6))
         L.happy -= 1
         finish("Escuela", "Estudiaste como nunca. Tus profesores están impresionados.", "g")
         return true
@@ -358,6 +480,7 @@ function do_job_act(id: string) {
     if id == "skip" {
         L.smarts -= rint(1, 3)
         L.happy += 4
+        gain("guts", 3)
         finish("Escuela", "Te saltaste clases para ir al centro comercial.", "n")
         return true
     }
@@ -366,6 +489,7 @@ function do_job_act(id: string) {
         L.money -= 1500
         if L.smarts >= 25 || chance(60) {
             L.edu = 2
+            gain("know", 5)
             finish("Secundaria abierta", "Terminaste la secundaria abierta. Nunca es tarde.", "g")
         } else {
             finish("Secundaria abierta", "Reprobaste el examen final. Inténtalo de nuevo.", "b")
@@ -381,6 +505,7 @@ function do_job_act(id: string) {
     }
     if id == "uni_study" {
         L.smarts += rint(2, 5)
+        gain("know", rint(3, 7))
         L.happy -= 2
         finish("Universidad", "Noches sin dormir y litros de café. Pasaste los finales.", "g")
         return true
@@ -396,16 +521,22 @@ function do_job_act(id: string) {
         return true
     }
     if id == "work_hard" {
-        L.job.perf = clamp100(L.job.perf + rint(6, 14))
+        let boost = rint(6, 14)
+        if has_trait("ambicion") { boost += 5 }
+        L.job.perf = clamp100(L.job.perf + boost)
+        gain("skill", rint(2, 5))
         L.happy -= 2
         L.health -= 1
         finish("Trabajo", "Te quedaste horas extra todo el año. Tu jefe lo notó.", "g")
         return true
     }
     if id == "raise" {
-        if L.job.perf >= 60 && chance(50) {
+        let odds = 35 + rank("guts") * 6
+        if has_trait("ambicion") { odds += 15 }
+        if L.job.perf >= 60 && chance(odds) {
             L.job.salary = L.job.salary * 110 / 100
             L.job.var = L.job.var * 11 / 10
+            gain("guts", 3)
             finish("Trabajo", "¡Te dieron un aumento! Ahora ganas " + money_str(job_pay(L.job)) + " al año.", "g")
         } else {
             L.job.perf -= 5
@@ -431,10 +562,12 @@ function do_job_act(id: string) {
         } else {
             finish("Prisión", "Te portaste bien. Nadie lo notó.", "n")
         }
+        gain("kind", 2)
         return true
     }
     if id == "yard" {
-        if chance(50) {
+        gain("guts", 4)
+        if chance(40 + rank("guts") * 8) {
             L.happy += 5
             L.health -= 5
             finish("Prisión", "Ganaste la pelea. Ahora te respetan en el patio.", "g")
@@ -445,7 +578,7 @@ function do_job_act(id: string) {
         return true
     }
     if id == "escape" {
-        if chance(12) {
+        if chance(8 + rank("skill") * 3) {
             L.jail = 0
             L.record += 1
             finish("Prisión", "¡Escapaste! Ahora eres prófug" + oa(L.gender) + ".", "g")
@@ -466,7 +599,8 @@ function open_jobs() {
     }
     shuffle(G.rng, pool)
     let offers = list_slice(pool, 0, min(6, len(pool)))
-    G.modal = {"kind": "jobs", "title": "Ofertas de empleo", "offers": offers}
+    G.modal = {"kind": "jobs", "title": "OFERTAS DE EMPLEO", "offers": offers}
+    G.modal_t0 = G.t
 }
 
 function job_requirements(j: map) {
@@ -485,16 +619,23 @@ function job_salary_text(j: map) {
     return money_str(j.salary) + "/año"
 }
 
+function job_ok(j: map) {
+    return L.edu >= j.edu && L.smarts >= j.smarts && L.looks >= j.looks
+}
+
 function hire(index: int) {
     let j = G.modal.offers[index]
     G.modal = null
     let title = by_gender(L.gender, j.m, j.f)
-    let ok = L.edu >= j.edu && L.smarts >= j.smarts && L.looks >= j.looks
-    if (ok && chance(80)) || (!ok && chance(8)) {
+    let ok = job_ok(j)
+    let odds = 70 + rank("charm") * 3
+    if (ok && chance(odds)) || (!ok && chance(8)) {
         if L.job != null { L.last_job = L.job.title }
         let v = 0
         if j.var != null { v = j.var }
-        L.job = {"id": j.id, "title": title, "salary": j.salary, "var": v, "perf": 60, "years": 0}
+        let salary = j.salary
+        if has_trait("ambicion") { salary = salary * 110 / 100 }
+        L.job = {"id": j.id, "title": title, "salary": salary, "var": v, "perf": 60, "years": 0}
         L.happy += 5
         return finish("Entrevista", "¡Te contrataron como " + title + "! Ganarás " + money_str(job_pay(L.job)) + " al año.", "g")
     }
@@ -507,14 +648,14 @@ function hire(index: int) {
 
 function open_hookup(ctx: map) {
     let x = ctx.person
-    G.modal = {
-        "kind": "choice",
-        "title": "Encuentro con " + x.first,
-        "text": fmt("{x} ({edad} años, atractivo " + str(x.looks) + "%) está más que dispuest{xa}. ¿Cómo quieres que sea?", ctx),
-        "choices": ["Con protección", "Sin protección", "Mejor no"],
-        "handler": "hookup",
-        "ctx": ctx
-    }
+    open_choice(
+        "ENCUENTRO CON " + str_upper(x.first),
+        fmt("{x} ({edad} años, atractivo " + str(x.looks) + "%) está más que dispuest{xa}. ¿Cómo quieres que sea?", ctx),
+        ["Con protección", "Sin protección", "Mejor no"],
+        ["", "", ""],
+        "hookup",
+        ctx
+    )
     return null
 }
 
@@ -524,7 +665,7 @@ function resolve_hookup(index: int, ctx: map) {
     if index == 2 {
         return finish("Encuentro", "Cambiaste de opinión y te fuiste a casa.", "n")
     }
-    let o = {"log": pick(HOOKUP_LINES), "happy": 4 + x.looks / 12, "sex": true, "std": 3, "preg": 2}
+    let o = {"log": pick(HOOKUP_LINES), "happy": 4 + x.looks / 12, "sex": true, "std": 3, "preg": 2, "charm": 2}
     if index == 1 {
         o.std = 18
         o.preg = 25
@@ -536,14 +677,14 @@ function resolve_hookup(index: int, ctx: map) {
 function open_dating() {
     let x = stranger()
     let ctx = {"person": x}
-    G.modal = {
-        "kind": "choice",
-        "title": fmt("Match: {x}, {edad}", ctx),
-        "text": fmt("Su bio dice: «" + pick(BIOS) + "» Atractivo: " + str(x.looks) + "%.", ctx),
-        "choices": [fmt("Invitarl{xlo} a una cita", ctx), "Ir directo al grano", "Deslizar a la izquierda"],
-        "handler": "date",
-        "ctx": ctx
-    }
+    open_choice(
+        fmt("MATCH: {x}, {edad}", ctx),
+        fmt("Su bio dice: «" + pick(BIOS) + "» Atractivo: " + str(x.looks) + "%.", ctx),
+        [fmt("Invitarl{xlo} a una cita", ctx), "Ir directo al grano", "Deslizar a la izquierda"],
+        ["", "", ""],
+        "date",
+        ctx
+    )
     return null
 }
 
@@ -551,8 +692,11 @@ function resolve_date(index: int, ctx: map) {
     G.modal = null
     let x = ctx.person
     if index == 0 {
-        if chance(55 + (L.looks - x.looks) / 3) {
+        let odds = 55 + (L.looks - x.looks) / 3 + rank("charm") * 4
+        if has_trait("carisma") || has_trait("romance") { odds += 10 }
+        if chance(odds) {
             L.happy += 8
+            gain("charm", 3)
             let msg = "La cita con " + x.first + " fue increíble. Hubo química."
             msg = msg + special("new_partner", ctx)
             return finish("Cita", msg, "x")
@@ -561,7 +705,7 @@ function resolve_date(index: int, ctx: map) {
         return finish("Cita", x.first + " habló de su ex toda la noche. Desastre.", "b")
     }
     if index == 1 {
-        if L.looks + rint(0, 50) >= x.looks {
+        if L.looks + rint(0, 50) + rank("charm") * 5 >= x.looks {
             return open_hookup(ctx)
         }
         L.happy -= 3
@@ -572,14 +716,14 @@ function resolve_date(index: int, ctx: map) {
 
 function open_casino() {
     let tenth = max(100, L.money / 10)
-    G.modal = {
-        "kind": "choice",
-        "title": "Casino",
-        "text": "Las luces, el ruido, la ruleta. Tienes " + money_str(L.money) + ". ¿Cuánto apuestas?",
-        "choices": ["Apostar $100", "Apostar " + money_str(tenth), "Apostarlo TODO (" + money_str(L.money) + ")", "Mejor no"],
-        "handler": "casino",
-        "ctx": {"amounts": [100, tenth, L.money]}
-    }
+    open_choice(
+        "CASINO",
+        "Las luces, el ruido, la ruleta. Tienes " + money_str(L.money) + ". ¿Cuánto apuestas?",
+        ["Apostar $100", "Apostar " + money_str(tenth), "Apostarlo TODO (" + money_str(L.money) + ")", "Mejor no"],
+        ["", "", "", ""],
+        "casino",
+        {"amounts": [100, tenth, L.money]}
+    )
     return null
 }
 
@@ -588,6 +732,7 @@ function resolve_casino(index: int, ctx: map) {
     if index == 3 { return finish("Casino", "Te fuiste sin apostar. Sabia decisión.", "n") }
     let amount = ctx.amounts[index]
     if amount > L.money || amount <= 0 { return finish("Casino", "No tienes tanto dinero.", "b") }
+    gain("guts", 2)
     if chance(45) {
         L.money += amount
         L.happy += 8
@@ -598,28 +743,42 @@ function resolve_casino(index: int, ctx: map) {
     return finish("Casino", "Perdiste " + money_str(amount) + ". La casa siempre gana.", "b")
 }
 
-// ---------------------------------------------------------------- relaciones
+// ---------------------------------------------------------------- vínculos
+
+function bond_gain(p: map, amount: int) {
+    let before = conf_rank(p)
+    let gained = amount
+    if has_trait("romance") && amount > 0 { gained = amount * 3 / 2 }
+    p.bond = clamp100(p.bond + gained)
+    let after = conf_rank(p)
+    if after > before {
+        toast(str_upper(arcana(p)) + " · RANGO " + str(after), "Tu vínculo con " + p.first + " se fortaleció.")
+    }
+}
 
 function do_person_act(action: string, p: map) {
     G.modal = null
     let ctx = {"person": p}
     let name = p.first
     if action == "time" {
-        p.bond = clamp100(p.bond + rint(5, 12))
+        bond_gain(p, rint(5, 12))
         L.happy += 3
+        gain("kind", 2)
         return finish(name, "Pasaste tiempo con " + name + ". Se divirtieron.", "g")
     }
     if action == "talk" {
-        p.bond = clamp100(p.bond + rint(2, 6))
+        bond_gain(p, rint(2, 6))
+        gain("kind", 1)
         return finish(name, "Platicaste con " + name + " de la vida.", "n")
     }
     if action == "argue" {
-        p.bond = clamp100(p.bond - rint(8, 15))
+        bond_gain(p, -rint(8, 15))
         L.happy -= 3
+        gain("guts", 1)
         return finish(name, "Discutiste con " + name + " por una tontería. Ahora no se hablan.", "b")
     }
     if action == "insult" {
-        p.bond = clamp100(p.bond - 20)
+        bond_gain(p, -20)
         L.karma -= 3
         return finish(name, "Le dijiste a " + name + " cosas que no se olvidan.", "b")
     }
@@ -629,11 +788,11 @@ function do_person_act(action: string, p: map) {
             L.money += amount
             return finish(name, name + " te dio " + money_str(amount) + ".", "g")
         }
-        p.bond = clamp100(p.bond - 3)
+        bond_gain(p, -3)
         return finish(name, name + " te dijo que te pongas a trabajar.", "b")
     }
     if action == "romance" {
-        p.bond = clamp100(p.bond + 10)
+        bond_gain(p, 10)
         L.happy += 8
         sex_with(p)
         return finish(name, "Cena, vino y una noche que terminó como tenía que terminar.", "x")
@@ -660,20 +819,21 @@ function do_person_act(action: string, p: map) {
         return finish(name, "Lo intentaron mucho. Este año no hubo suerte (pero sí diversión).", "x")
     }
     if action == "threesome" {
-        if chance(45) {
+        if chance(35 + rank("charm") * 6) {
             let msg = apply({"log": name + " aceptó. Fue una noche épica.", "happy": 12, "count": 1, "bond": 5, "std": 8}, ctx)
             return finish(name, msg, "x")
         }
-        p.bond = clamp100(p.bond - 20)
+        bond_gain(p, -20)
         return finish(name, name + " se ofendió muchísimo. Hoy duermes en el sillón.", "b")
     }
     if action == "propose" {
-        if chance(p.bond - 10) {
+        if chance(p.bond - 10 + rank("guts") * 3) {
             marry()
             L.happy += 15
+            toast("LOS AMANTES · BODA", "Te casaste con " + name + ".")
             return finish(name, "¡Dijo que sí! Se casaron en una boda inolvidable.", "g")
         }
-        p.bond = clamp100(p.bond - 10)
+        bond_gain(p, -10)
         return finish(name, name + " dijo que no está list" + oa(p.gender) + ". Qué incómodo.", "b")
     }
     if action == "breakup" {
@@ -700,9 +860,10 @@ function do_person_act(action: string, p: map) {
         return finish(name, "Terminaste la aventura con " + name + ".", "n")
     }
     if action == "party" {
-        p.bond = clamp100(p.bond + 5)
+        bond_gain(p, 5)
         L.happy += 6
         L.alcohol += 4
+        gain("charm", 2)
         return finish(name, "Salieron de fiesta y acabaron cantando en un karaoke.", "g")
     }
     return null
@@ -734,6 +895,22 @@ function special(name: string, ctx: map) {
         }
         return " " + p.first + " ahora es tu amante: llevas una doble vida."
     }
+    if name == "vegas_marry" {
+        let p = ctx["person"]
+        if p != null && make_partner(p) {
+            marry()
+            return " Ahora " + p.first + " es tu " + str_lower(rel_label(p)) + "."
+        }
+        return ""
+    }
+    if name == "add_friend" {
+        let p = ctx["person"]
+        if p != null {
+            if !p.known { add_person(p) }
+            p.rel = "amigo"
+        }
+        return ""
+    }
     if name == "breakup" {
         breakup()
         return ""
@@ -746,6 +923,27 @@ function special(name: string, ctx: map) {
     }
     if name == "marry" {
         marry()
+        return ""
+    }
+    if name == "rehab" {
+        L.alcohol = 0
+        L.drugs = 0
+        L.health += 10
+        return ""
+    }
+    if name == "family_hate" {
+        for p in L.people {
+            if p.alive && (p.rel == "padre" || p.rel == "madre" || p.rel == "hermano") {
+                p.bond = clamp100(p.bond - 30)
+            }
+        }
+        return ""
+    }
+    if name == "fired" {
+        if L.job != null {
+            L.last_job = L.job.title
+            L.job = null
+        }
         return ""
     }
     if name == "promo" {
@@ -766,6 +964,7 @@ function dispatch_choice(index: int) {
     let m = G.modal
     if m == null || m.kind != "choice" { return null }
     if index < 0 || index >= len(m.choices) { return null }
+    if m.locks != null && m.locks[index] != "" { return null }
     if m.handler == "event" { return resolve_event(m.ev, index, m.ctx) }
     if m.handler == "hookup" { return resolve_hookup(index, m.ctx) }
     if m.handler == "date" { return resolve_date(index, m.ctx) }

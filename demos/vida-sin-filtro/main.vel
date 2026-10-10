@@ -6,6 +6,7 @@ import "data.vel"
 import "sim.vel"
 import "events.vel"
 import "acts.vel"
+import "art.vel"
 import "ui.vel"
 
 export function app_manifest() {
@@ -22,26 +23,30 @@ export function app_manifest() {
         },
         "capabilities": ["window", "render2d", "input"],
         "limits": {
-            "max_commands_per_frame": 4096,
-            "max_instructions": 20000000
+            "max_commands_per_frame": 8192,
+            "max_instructions": 40000000
         },
         "root": "assets",
         "fonts": [
             {"id": "ui", "path": "system:segoeui.ttf"},
-            {"id": "bold", "path": "system:segoeuib.ttf"}
+            {"id": "bold", "path": "system:segoeuib.ttf"},
+            {"id": "impact", "path": "system:impact.ttf"}
         ],
         "images": []
     }
 }
 
 export function app_init() {
-    G.dirty = true
+    enter_title()
     return frame()
 }
 
 export function app_update(dt: float, input: map) {
     G.frames += 1
+    G.t += dt
+    track_pointer(input.pointer)
     handle_input(input)
+    if animating() { G.dirty = true }
     return frame()
 }
 
@@ -55,10 +60,55 @@ function frame() {
     if G.dirty {
         G.cache = build()
         G.dirty = false
+        // El área bajo el puntero puede haber cambiado con el nuevo frame.
+        if update_hover() { G.cache = build() }
     }
     let events = []
     if G.quit { list_push(events, {"kind": "app.exit", "payload": {}}) }
-    return {"time": 0.0, "commands": G.cache, "events": events}
+    return {"time": G.t, "commands": G.cache, "events": events}
+}
+
+// ---------------------------------------------------------------- puntero y animación
+
+function track_pointer(p: any) {
+    if p == null { return null }
+    if p.x == G.px && p.y == G.py { return null }
+    G.px = p.x
+    G.py = p.y
+    if update_hover() { G.dirty = true }
+    return null
+}
+
+// Recalcula la zona activa bajo el puntero; devuelve true si cambió.
+function update_hover() {
+    let found = ""
+    for h in G.hot {
+        if G.px >= h.x && G.py >= h.y && G.px < h.x + h.w && G.py < h.y + h.h {
+            found = h.a
+        }
+    }
+    if found == G.hover { return false }
+    G.hover = found
+    return true
+}
+
+function animating() {
+    if G.t - G.screen_t0 < 0.8 { return true }
+    if G.modal != null && G.t - G.menu_t0 < 0.6 { return true }
+    if G.modal != null && G.t - G.modal_t0 < 0.35 { return true }
+    if G.t - G.cut_t0 < 1.1 { return true }
+    if len(G.toasts) > 0 { return true }
+    for f in G.floats {
+        if G.t - f.t0 < 1.7 { return true }
+    }
+    if G.mode == "create" {
+        let blink = floor(G.t * 2.0) % 2
+        if blink != G.blink {
+            G.blink = blink
+            return true
+        }
+    }
+    return false
 }
 
 // ---------------------------------------------------------------- teclado y rueda
@@ -73,33 +123,31 @@ function handle_input(input: map) {
         G.dirty = true
     }
     if len(input.pressed) == 0 { return null }
+    G.dirty = true
     if G.mode == "title" {
-        if pressed(input, "Enter") { handle_action("start"); G.dirty = true }
+        if pressed(input, "Enter") { handle_action("new") }
         return null
     }
+    if G.mode == "create" { return creator_keys(input) }
     if G.mode == "dead" {
-        if pressed(input, "Enter") { handle_action("restart"); G.dirty = true }
+        if pressed(input, "Enter") { handle_action("again") }
         return null
     }
     let m = G.modal
     if m == null {
-        if pressed(input, "Space") || pressed(input, "Enter") { handle_action("age"); G.dirty = true }
+        if pressed(input, "Space") || pressed(input, "Enter") { handle_action("age") }
         return null
     }
+    if G.t < G.modal_t0 { return null }
     if m.kind == "info" {
-        if pressed(input, "Enter") || pressed(input, "Space") || pressed(input, "Escape") {
-            handle_action("ok")
-            G.dirty = true
-        }
+        if pressed(input, "Enter") || pressed(input, "Space") || pressed(input, "Escape") { handle_action("ok") }
         return null
     }
     if m.kind == "choice" {
-        let keys = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5"]
         let i = 0
-        while i < len(keys) {
-            if pressed(input, keys[i]) || pressed(input, "Numpad" + str(i + 1)) {
+        while i < 5 {
+            if pressed(input, "Digit" + str(i + 1)) || pressed(input, "Numpad" + str(i + 1)) {
                 handle_action("choice:" + str(i))
-                G.dirty = true
                 return null
             }
             i += 1
@@ -107,10 +155,69 @@ function handle_input(input: map) {
         return null
     }
     if pressed(input, "Escape") {
-        handle_action("close")
-        G.dirty = true
+        if m.kind == "person" { handle_action("tab:rel") } else if m.kind == "jobs" { handle_action("tab:job") } else { handle_action("close") }
     }
     return null
+}
+
+function creator_keys(input: map) {
+    let c = G.cre
+    for key in input.pressed {
+        if key == "Enter" { return handle_action("cre:go") }
+        if key == "Escape" { return handle_action("back") }
+        if key == "Backspace" {
+            if len(c.chars) > 0 { list_pop(c.chars) }
+        } else if key == "Space" {
+            if len(c.chars) > 0 && c.chars[len(c.chars) - 1] != " " { list_push(c.chars, " ") }
+        } else if str_starts_with(key, "Key") && len(key) == 4 && len(str_join(c.chars, "")) < 24 {
+            let letter = str_replace(key, "Key", "")
+            if len(c.chars) > 0 && c.chars[len(c.chars) - 1] != " " { letter = str_lower(letter) }
+            list_push(c.chars, letter)
+        }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- pantallas
+
+function enter_title() {
+    ensure_rng()
+    G.mode = "title"
+    G.modal = null
+    G.title_gender = pick(["m", "f"])
+    G.title_look = random_look(G.title_gender)
+    G.screen_t0 = G.t
+}
+
+function enter_creator() {
+    ensure_rng()
+    let gender = pick(["m", "f"])
+    G.cre = {
+        "chars": [],
+        "gender": gender,
+        "likes": by_gender(gender, "f", "m"),
+        "look": random_look(gender),
+        "trait": TRAITS[rint(0, len(TRAITS) - 1)].id
+    }
+    G.mode = "create"
+    G.modal = null
+    G.screen_t0 = G.t
+}
+
+function start_from_creator() {
+    let c = G.cre
+    let name = str_trim(str_join(c.chars, ""))
+    c.first = ""
+    c.last = ""
+    if name != "" {
+        let parts = str_split(name, " ")
+        c.first = parts[0]
+        if len(parts) > 1 { c.last = str_join(list_slice(parts, 1, len(parts)), " ") }
+    }
+    new_life()
+    G.screen_t0 = G.t
+    G.floats = []
+    G.toasts = []
 }
 
 // ---------------------------------------------------------------- acciones
@@ -118,47 +225,149 @@ function handle_input(input: map) {
 function handle_action(action: string) {
     if action == "noop" { return null }
     if action == "quit" { G.quit = true; return null }
-    if action == "start" { new_life(); return null }
-    if action == "restart" { G.mode = "title"; G.modal = null; return null }
-    if str_starts_with(action, "g:") { G.pick_gender = str_replace(action, "g:", ""); return null }
-    if str_starts_with(action, "l:") { G.pick_likes = str_replace(action, "l:", ""); return null }
+    if action == "restart" { return enter_title() }
+    if action == "new" || action == "again" { return enter_creator() }
+    if action == "quick" {
+        enter_creator()
+        return start_from_creator()
+    }
+    if G.mode == "create" { return creator_action(action) }
     if G.mode != "game" { return null }
 
-    if action == "age" { age_up(); return null }
-    if action == "ok" || action == "close" { G.modal = null; return null }
+    if action == "close" || action == "ok" { G.modal = null; return null }
     if action == "scroll:end" { G.scroll = 0; return null }
     if str_starts_with(action, "tab:") {
         G.modal = {"kind": "menu", "tab": str_replace(action, "tab:", "")}
+        G.menu_cat = 0
+        G.menu_page = 0
+        G.menu_t0 = G.t
         return null
     }
-    if str_starts_with(action, "choice:") {
-        dispatch_choice(index_of(action, "choice:", 5))
+    if str_starts_with(action, "cat:") {
+        G.menu_cat = index_of(action, "cat:", 6)
+        G.menu_page = 0
+        G.menu_t0 = G.t
         return null
     }
-    if str_starts_with(action, "hire:") {
-        if G.modal != null && G.modal.kind == "jobs" {
-            hire(index_of(action, "hire:", len(G.modal.offers)))
-        }
-        return null
-    }
-    if str_starts_with(action, "act:") {
-        do_act(str_replace(action, "act:", ""))
-        return null
-    }
+    if action == "page:+" { G.menu_page += 1; G.menu_t0 = G.t; return null }
+    if action == "page:-" { G.menu_page = max(0, G.menu_page - 1); G.menu_t0 = G.t; return null }
     if str_starts_with(action, "person:") {
         for p in L.people {
             if action == "person:" + str(p.id) {
                 G.modal = {"kind": "person", "pid": p.id}
+                G.menu_page = 0
+                G.menu_t0 = G.t
             }
         }
         return null
     }
-    if str_starts_with(action, "pact:") {
+
+    // Acciones que cambian la vida: comparamos antes y después para los efectos.
+    let before = snapshot()
+    if action == "age" {
+        age_up()
+        G.cut_t0 = G.t
+        if G.modal != null { G.modal_t0 = G.t + 0.85 }
+        report(before, 0.8)
+        if !L.alive { G.screen_t0 = G.t + 0.4 }
+        return null
+    }
+    if str_starts_with(action, "choice:") {
+        dispatch_choice(index_of(action, "choice:", 5))
+    } else if str_starts_with(action, "hire:") {
+        if G.modal != null && G.modal.kind == "jobs" {
+            hire(index_of(action, "hire:", len(G.modal.offers)))
+        }
+    } else if str_starts_with(action, "act:") {
+        do_act(str_replace(action, "act:", ""))
+    } else if str_starts_with(action, "buy:") {
+        buy(str_replace(action, "buy:", ""))
+    } else if str_starts_with(action, "pact:") {
         if G.modal != null && G.modal.kind == "person" {
             let p = find_person(G.modal.pid)
             if p != null { do_person_act(str_replace(action, "pact:", ""), p) }
         }
+    }
+    report(before, 0.0)
+    if !L.alive { G.screen_t0 = G.t }
+    return null
+}
+
+function creator_action(action: string) {
+    let c = G.cre
+    if action == "back" { return enter_title() }
+    if action == "cre:go" { return start_from_creator() }
+    if action == "cre:name" {
+        let names = NAMES_M
+        if c.gender == "f" { names = NAMES_F }
+        c.chars = [pick(names)]
         return null
+    }
+    if action == "cre:random" {
+        let chars = c.chars
+        enter_creator()
+        G.cre.chars = chars
+        G.screen_t0 = G.t - 1.0
+        return null
+    }
+    if action == "cre:gender:m" || action == "cre:gender:f" {
+        c.gender = str_replace(action, "cre:gender:", "")
+        if c.likes != "ambos" { c.likes = by_gender(c.gender, "f", "m") }
+        return null
+    }
+    if str_starts_with(action, "cre:likes:") { c.likes = str_replace(action, "cre:likes:", ""); return null }
+    if str_starts_with(action, "cre:skin:") { c.look.skin = index_of(action, "cre:skin:", len(SKINS)); return null }
+    if str_starts_with(action, "cre:hcolor:") { c.look.hcolor = index_of(action, "cre:hcolor:", len(HAIR_COLORS)); return null }
+    if str_starts_with(action, "cre:eyes:") { c.look.eyes = index_of(action, "cre:eyes:", len(EYE_COLORS)); return null }
+    if str_starts_with(action, "cre:outfit:") { c.look.outfit = index_of(action, "cre:outfit:", len(OUTFITS)); return null }
+    if str_starts_with(action, "cre:hair:") { c.look.hair = cycle(c.look.hair, action, len(HAIR_STYLES)); return null }
+    if str_starts_with(action, "cre:acc:") { c.look.acc = cycle(c.look.acc, action, len(ACCESSORIES)); return null }
+    if str_starts_with(action, "cre:trait:") {
+        let i = 0
+        while i < len(TRAITS) {
+            if TRAITS[i].id == c.trait { break }
+            i += 1
+        }
+        c.trait = TRAITS[cycle(i, action, len(TRAITS))].id
+        return null
+    }
+    return null
+}
+
+function cycle(value: int, action: string, count: int) {
+    if str_ends_with(action, ":+") { return (value + 1) % count }
+    return (value + count - 1) % count
+}
+
+// ---------------------------------------------------------------- efectos de cambio
+
+function snapshot() {
+    if G.mode != "game" || !L.alive { return null }
+    let s = {"happy": L.happy, "health": L.health, "smarts": L.smarts, "looks": L.looks, "money": L.money}
+    for k in SOCIAL_KEYS { s[k] = L.social[k] }
+    return s
+}
+
+// Convierte las diferencias en números flotantes y notificaciones de rango.
+function report(before: any, delay: float) {
+    if before == null || G.mode == "title" || L.social == null { return null }
+    let keep = []
+    for f in G.floats {
+        if G.t - f.t0 < 2.0 { list_push(keep, f) }
+    }
+    G.floats = keep
+    for k in ["happy", "health", "smarts", "looks", "money"] {
+        let d = L[k] - before[k]
+        if d != 0 { list_push(G.floats, {"k": k, "v": d, "t0": G.t + delay}) }
+    }
+    for k in SOCIAL_KEYS {
+        let d = L.social[k] - before[k]
+        if d != 0 { list_push(G.floats, {"k": k, "v": d, "t0": G.t + delay}) }
+        let r0 = min(5, 1 + before[k] / 20)
+        let r1 = rank(k)
+        if r1 > r0 {
+            list_push(G.toasts, {"title": str_upper(SOCIAL_NAMES[k]) + " · RANGO " + str(r1), "sub": "Ahora tu " + str_lower(SOCIAL_NAMES[k]) + " es: " + rank_title(k, r1) + ".", "t0": G.t + delay})
+        }
     }
     return null
 }
@@ -170,5 +379,5 @@ function index_of(action: string, prefix: string, limit: int) {
         if action == prefix + str(i) { return i }
         i += 1
     }
-    return -1
+    return 0
 }

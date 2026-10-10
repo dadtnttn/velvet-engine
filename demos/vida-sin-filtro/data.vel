@@ -1,14 +1,57 @@
 // @edition 3
-// Datos base: nombres, ciudades, trabajos e infecciones.
+// Datos base: nombres, ciudades, trabajos, personalidades, apariencia.
 // Puedes ampliar cualquier lista; el resto del juego la recorre sin cambios.
 
-const NAMES_M = ["Mateo", "Santiago", "Diego", "Sebastián", "Nicolás", "Alejandro", "Daniel", "Gabriel", "Lucas", "Andrés", "Javier", "Emiliano", "Bruno", "Joaquín", "Rodrigo", "Tomás", "Iván", "Leonardo", "Marco", "Adrián", "Hugo", "Óscar", "Rafael", "Gael"]
+const NAMES_M = ["Mateo", "Santiago", "Diego", "Sebastián", "Nicolás", "Alejandro", "Daniel", "Gabriel", "Lucas", "Andrés", "Javier", "Emiliano", "Bruno", "Joaquín", "Rodrigo", "Tomás", "Iván", "Leonardo", "Marco", "Adrián", "Hugo", "Óscar", "Rafael", "Gael", "Ren", "Akira", "Ryuji", "Yusuke"]
 
-const NAMES_F = ["Valentina", "Camila", "Sofía", "Isabella", "Mariana", "Lucía", "Daniela", "Gabriela", "Valeria", "Renata", "Paula", "Ximena", "Carla", "Andrea", "Natalia", "Jimena", "Fernanda", "Elena", "Martina", "Alejandra", "Regina", "Abril", "Julieta", "Bianca"]
+const NAMES_F = ["Valentina", "Camila", "Sofía", "Isabella", "Mariana", "Lucía", "Daniela", "Gabriela", "Valeria", "Renata", "Paula", "Ximena", "Carla", "Andrea", "Natalia", "Jimena", "Fernanda", "Elena", "Martina", "Alejandra", "Regina", "Abril", "Julieta", "Bianca", "Ann", "Makoto", "Haru", "Futaba"]
 
-const SURNAMES = ["García", "Rodríguez", "Martínez", "López", "González", "Hernández", "Pérez", "Sánchez", "Ramírez", "Torres", "Flores", "Rivera", "Gómez", "Díaz", "Reyes", "Morales", "Castillo", "Vargas", "Romero", "Mendoza", "Ruiz", "Navarro", "Guerrero", "Salazar", "Rojas", "Ortega", "Delgado", "Cruz"]
+const SURNAMES = ["García", "Rodríguez", "Martínez", "López", "González", "Hernández", "Pérez", "Sánchez", "Ramírez", "Torres", "Flores", "Rivera", "Gómez", "Díaz", "Reyes", "Morales", "Castillo", "Vargas", "Romero", "Mendoza", "Ruiz", "Navarro", "Guerrero", "Salazar", "Rojas", "Ortega", "Delgado", "Cruz", "Kurusu", "Sakamoto", "Takamaki"]
 
-const CITIES = ["Ciudad de México", "Lima", "Bogotá", "Buenos Aires", "Madrid", "Santiago de Chile", "Guadalajara", "Medellín", "Monterrey", "Barcelona", "Quito", "Montevideo", "Cancún", "Valencia"]
+const CITIES = ["Ciudad de México", "Lima", "Bogotá", "Buenos Aires", "Madrid", "Santiago de Chile", "Guadalajara", "Medellín", "Monterrey", "Barcelona", "Quito", "Montevideo", "Cancún", "Valencia", "Tokio"]
+
+// ---------------------------------------------------------------- personalidad
+
+// Rasgo de personalidad: define estadísticas iniciales y bonificaciones.
+const TRAITS = [
+    {"id": "carisma", "m": "Carismático", "f": "Carismática", "desc": "Todo el mundo te quiere cerca. Más Encanto y éxito en citas y ligues.", "social": "charm"},
+    {"id": "rebelde", "m": "Rebelde", "f": "Rebelde", "desc": "Las reglas son sugerencias. Más Valor y mejor suerte en el crimen.", "social": "guts"},
+    {"id": "cerebro", "m": "Cerebrito", "f": "Cerebrito", "desc": "Lees manuales por diversión. Más Inteligencia y Conocimiento.", "social": "know"},
+    {"id": "fiesta", "m": "Fiestero", "f": "Fiestera", "desc": "La noche es tu hábitat. Más felicidad en la vida nocturna.", "social": "charm"},
+    {"id": "romance", "m": "Romántico", "f": "Romántica", "desc": "Amas a lo grande. Más Amabilidad y tus vínculos crecen más rápido.", "social": "kind"},
+    {"id": "ambicion", "m": "Ambicioso", "f": "Ambiciosa", "desc": "Naciste para mandar. Más Destreza, mejores sueldos y ascensos.", "social": "skill"}
+]
+
+// Estadísticas sociales (como en Persona). Cada una tiene 5 rangos.
+const SOCIAL_KEYS = ["know", "guts", "skill", "kind", "charm"]
+const SOCIAL_NAMES = {"know": "Conocimiento", "guts": "Valor", "skill": "Destreza", "kind": "Amabilidad", "charm": "Encanto"}
+const SOCIAL_RANKS = {
+    "know": ["Cero", "Curiosidad", "Cultura", "Erudición", "Genialidad"],
+    "guts": ["Cobardía", "Firmeza", "Audacia", "Temple", "Leyenda"],
+    "skill": ["Torpeza", "Maña", "Oficio", "Maestría", "Virtuosismo"],
+    "kind": ["Frialdad", "Cortesía", "Empatía", "Bondad", "Santidad"],
+    "charm": ["Invisible", "Simpatía", "Magnetismo", "Seducción", "Irresistible"]
+}
+
+// Arcanos de los confidentes según el tipo de vínculo.
+const ARCANA = {
+    "padre": "El Emperador", "madre": "La Emperatriz", "hermano": "La Estrella",
+    "pareja": "Los Amantes", "esposo": "Los Amantes", "ex": "La Torre",
+    "hijo": "El Sol", "amigo": "La Carroza", "amante": "El Diablo", "ligue": "La Luna"
+}
+
+// ---------------------------------------------------------------- apariencia
+
+const SKINS = ["#ffe3c8", "#f6c9a0", "#e2a877", "#c4864f", "#8e5a33", "#5d3a22"]
+const SKIN_SHADES = ["#f0c7a4", "#e3ab7f", "#c98c5c", "#a86d3d", "#734626", "#462b17"]
+const HAIR_COLORS = ["#1b1b1b", "#4b2c18", "#8a5a2c", "#d8a443", "#ece0bd", "#b8261f", "#2f6fd6", "#e04f9c", "#f4f4f4"]
+const HAIR_NAMES = ["Negro", "Castaño oscuro", "Castaño", "Rubio", "Platino", "Rojo", "Azul", "Rosa", "Blanco"]
+const EYE_COLORS = ["#3b2414", "#6b4423", "#2e7d4f", "#2f63b8", "#7a7a7a", "#d01f2a"]
+const OUTFITS = ["#151515", "#d6141b", "#f2f2ee", "#1d3d7a", "#2e6b3a", "#d8a443"]
+const HAIR_STYLES = ["Corto", "Rebelde", "Largo", "Coleta", "Rapado", "Rizado", "Bob", "Calvo"]
+const ACCESSORIES = ["Nada", "Lentes", "Aretes", "Piercing", "Barba"]
+
+// ---------------------------------------------------------------- trabajo
 
 // Requisitos: edu (0 nada, 1 primaria, 2 secundaria, 3 universidad), smarts, looks.
 // "var": el sueldo depende del atractivo (salary = atractivo² × var).
@@ -16,13 +59,17 @@ const JOBS = [
     {"id": "repartidor", "m": "Repartidor de comida", "f": "Repartidora de comida", "salary": 12000, "edu": 0, "smarts": 0, "looks": 0, "min_age": 16, "adult": false},
     {"id": "cajero", "m": "Cajero de supermercado", "f": "Cajera de supermercado", "salary": 14000, "edu": 0, "smarts": 0, "looks": 0, "min_age": 16, "adult": false},
     {"id": "mesero", "m": "Mesero", "f": "Mesera", "salary": 16000, "edu": 0, "smarts": 0, "looks": 0, "min_age": 16, "adult": false},
+    {"id": "barista", "m": "Barista de cafetería", "f": "Barista de cafetería", "salary": 15000, "edu": 0, "smarts": 0, "looks": 20, "min_age": 16, "adult": false},
     {"id": "bartender", "m": "Bartender", "f": "Bartender", "salary": 19000, "edu": 0, "smarts": 0, "looks": 30, "min_age": 18, "adult": false},
     {"id": "guardia", "m": "Guardia de seguridad", "f": "Guardia de seguridad", "salary": 21000, "edu": 1, "smarts": 0, "looks": 0, "min_age": 18, "adult": false},
+    {"id": "tatuador", "m": "Tatuador", "f": "Tatuadora", "salary": 26000, "edu": 0, "smarts": 20, "looks": 0, "min_age": 18, "adult": false},
     {"id": "recepcion", "m": "Recepcionista de hotel", "f": "Recepcionista de hotel", "salary": 22000, "edu": 2, "smarts": 20, "looks": 40, "min_age": 18, "adult": false},
     {"id": "oficina", "m": "Oficinista", "f": "Oficinista", "salary": 28000, "edu": 2, "smarts": 35, "looks": 0, "min_age": 18, "adult": false},
     {"id": "autos", "m": "Vendedor de autos", "f": "Vendedora de autos", "salary": 30000, "edu": 2, "smarts": 30, "looks": 35, "min_age": 18, "adult": false},
     {"id": "policia", "m": "Policía", "f": "Policía", "salary": 34000, "edu": 2, "smarts": 35, "looks": 0, "min_age": 18, "adult": false},
+    {"id": "dj", "m": "DJ de antro", "f": "DJ de antro", "salary": 36000, "edu": 0, "smarts": 25, "looks": 50, "min_age": 18, "adult": false},
     {"id": "enfermero", "m": "Enfermero", "f": "Enfermera", "salary": 38000, "edu": 3, "smarts": 50, "looks": 0, "min_age": 21, "adult": false},
+    {"id": "periodista", "m": "Periodista", "f": "Periodista", "salary": 41000, "edu": 3, "smarts": 55, "looks": 0, "min_age": 21, "adult": false},
     {"id": "programador", "m": "Programador", "f": "Programadora", "salary": 62000, "edu": 3, "smarts": 65, "looks": 0, "min_age": 21, "adult": false},
     {"id": "abogado", "m": "Abogado", "f": "Abogada", "salary": 75000, "edu": 3, "smarts": 75, "looks": 0, "min_age": 22, "adult": false},
     {"id": "medico", "m": "Médico", "f": "Médica", "salary": 95000, "edu": 3, "smarts": 85, "looks": 0, "min_age": 24, "adult": false},
@@ -43,7 +90,19 @@ const CHILDHOOD = [
     "Te escondiste dentro de una lavadora. Nadie se rió.",
     "Pintaste la pared de la sala con mermelada.",
     "Rompiste el control de la tele y culpaste al perro.",
-    "Te expulsaron de la guardería por morder al hámster."
+    "Te expulsaron de la guardería por morder al hámster.",
+    "Viste una película de terror a escondidas. No dormiste en un mes.",
+    "Te cortaste el fleco tú solo. Fue un error."
 ]
 
 const OLD_AGE_CAUSES = ["causas naturales", "un infarto", "un derrame cerebral", "neumonía", "un paro cardíaco mientras dormías"]
+
+// Bienes que se pueden comprar (categoría Lujos).
+const ASSETS = [
+    {"id": "moto", "t": "Motocicleta", "cost": 9000, "happy": 8, "charm": 3},
+    {"id": "auto", "t": "Auto usado", "cost": 15000, "happy": 6, "charm": 2},
+    {"id": "deportivo", "t": "Auto deportivo", "cost": 90000, "happy": 15, "charm": 8},
+    {"id": "depa", "t": "Departamento", "cost": 120000, "happy": 12, "charm": 3},
+    {"id": "mansion", "t": "Mansión", "cost": 850000, "happy": 25, "charm": 10},
+    {"id": "yate", "t": "Yate", "cost": 1500000, "happy": 30, "charm": 12}
+]
