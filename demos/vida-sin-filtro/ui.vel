@@ -1,6 +1,6 @@
 // @edition 3
-// Interfaz: primitivas de dibujo, pantallas y ventanas emergentes.
-// Lienzo de 1280x720; los colores son ARGB en decimal (ver rgb/rgba).
+// Interfaz estilo Persona: pantallas, menús, ventanas, notificaciones y animaciones.
+// Lienzo de 1280x720; los colores del host son ARGB en decimal (ver rgb/rgba).
 
 function rgb(r: int, g: int, b: int) {
     return 4278190080 + r * 65536 + g * 256 + b
@@ -13,24 +13,18 @@ function rgba(r: int, g: int, b: int, a: int) {
 const W = 1280
 const H = 720
 
-const C_BG = rgb(13, 9, 19)
-const C_PANEL = rgb(24, 17, 33)
-const C_PANEL2 = rgb(35, 25, 48)
-const C_HOVER = rgb(52, 37, 70)
-const C_LINE = rgb(62, 46, 82)
-const C_TEXT = rgb(238, 230, 244)
-const C_MUTED = rgb(148, 134, 166)
-const C_ACCENT = rgb(236, 72, 153)
-const C_ACCENT_HI = rgb(250, 110, 180)
-const C_ACCENT_SOFT = rgb(244, 154, 200)
-const C_GOOD = rgb(80, 200, 140)
-const C_WARN = rgb(240, 180, 70)
-const C_BAD = rgb(236, 84, 84)
-const C_BLUE = rgb(110, 160, 245)
-const C_DIM = rgba(6, 3, 10, 200)
-const C_GLOW = rgba(236, 72, 153, 18)
+const C_RED = rgb(227, 20, 27)
+const C_INK = rgb(13, 13, 13)
+const C_WHITE = rgb(247, 247, 242)
+const C_GRAY = rgb(130, 130, 130)
+const C_GRAY_D = rgb(48, 48, 48)
+const C_YELLOW = rgb(255, 210, 31)
+const C_PINK = rgb(255, 122, 200)
+const C_BAD = rgb(255, 98, 98)
+const C_DIM = rgba(0, 0, 0, 175)
 
 const EDU_NAMES = ["Ninguna", "Primaria", "Secundaria", "Universidad"]
+const PAGE_SIZE = 9
 
 state {
     C: list = [],
@@ -43,73 +37,71 @@ function push(cmd: map) {
     list_push(C, cmd)
 }
 
-function rect(x: int, y: int, w: int, h: int, color: int) {
+function rect(x: any, y: any, w: any, h: any, color: int) {
     push({"op": "rect", "x": x, "y": y, "w": w, "h": h, "color": color})
 }
 
-function arect(x: int, y: int, w: int, h: int, color: int) {
+function arect(x: any, y: any, w: any, h: any, color: int) {
     push({"op": "alpha_rect", "x": x, "y": y, "w": w, "h": h, "color": color})
 }
 
-function rrect(x: int, y: int, w: int, h: int, r: int, color: int) {
-    push({"op": "rounded_rect", "x": x, "y": y, "w": w, "h": h, "radius": r, "color": color})
-}
-
-function frame_box(x: int, y: int, w: int, h: int, r: int, fill: int, stroke: int) {
-    rrect(x, y, w, h, r, stroke)
-    rrect(x + 1, y + 1, w - 2, h - 2, r, fill)
-}
-
-function text(x: int, y: int, s: string, size: int, color: int, font: string) {
+function text(x: any, y: any, s: string, size: int, color: int, font: string) {
     push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font})
 }
 
-function ctext(x: int, y: int, s: string, size: int, color: int, font: string) {
+function ctext(x: any, y: any, s: string, size: int, color: int, font: string) {
     push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font, "align": "center"})
 }
 
-function bar(x: int, y: int, w: int, h: int, value: int, fill: int) {
-    push({"op": "bar", "x": x, "y": y, "w": w, "h": h, "ratio": value * 1.0 / 100, "fill": fill, "background": C_BG, "stroke": C_LINE, "thickness": 1})
+// Texto con contorno negro grueso (estilo cómic).
+function otext(x: any, y: any, s: string, size: int, color: int, font: string, center: bool) {
+    let d = max(2, size / 14)
+    for off in [[-d, 0], [d, 0], [0, -d], [0, d], [-d, -d], [d, d], [-d, d], [d, -d]] {
+        if center { ctext(x + off[0], y + off[1], s, size, C_INK, font) } else { text(x + off[0], y + off[1], s, size, C_INK, font) }
+    }
+    if center { ctext(x, y, s, size, color, font) } else { text(x, y, s, size, color, font) }
 }
 
-// Botón con hover del host. Si hay una ventana abierta, se dibuja inactivo.
-function button(x: int, y: int, w: int, h: int, label: string, action: string, style: string, size: int) {
-    let bg = C_PANEL2
-    let hover = C_HOVER
-    let stroke = C_LINE
-    let color = C_TEXT
-    if style == "primary" {
-        bg = C_ACCENT
-        hover = C_ACCENT_HI
-        stroke = C_ACCENT
-        color = rgb(255, 255, 255)
-    } else if style == "selected" {
-        bg = rgb(70, 30, 60)
-        hover = rgb(90, 38, 76)
-        stroke = C_ACCENT
-        color = C_ACCENT_SOFT
-    } else if style == "ghost" {
-        bg = C_PANEL
-        hover = C_PANEL2
-    }
-    if block {
-        push({"op": "panel", "x": x, "y": y, "w": w, "h": h, "color": bg, "stroke": stroke, "thickness": 1})
-        ctext(x + w / 2, y + h / 2 + size * 4 / 10, label, size, color, "bold")
-        return null
-    }
-    push({
-        "op": "button", "x": x, "y": y, "w": w, "h": h, "text": label, "action": action,
-        "font": "bold", "size": size, "color": color, "background": bg, "fill": hover,
-        "stroke": stroke, "thickness": 1
-    })
+function svg(x: any, y: any, w: int, h: int, doc: string) {
+    push({"op": "svg", "x": x, "y": y, "w": w, "h": h, "text": doc})
+}
+
+function fade_push(ratio: float) {
+    push({"op": "opacity_push", "ratio": ratio})
+}
+
+function fade_pop() {
+    push({"op": "opacity_pop"})
+}
+
+function move_push(dx: any, dy: any) {
+    push({"op": "translate_push", "x": dx, "y": dy})
+}
+
+function move_pop() {
+    push({"op": "transform_pop"})
+}
+
+// Zona clicable. Registra el área para el hover propio del juego.
+function hot(x: any, y: any, w: any, h: any, action: string) {
+    if block { return null }
+    push({"op": "alpha_rect", "x": x, "y": y, "w": w, "h": h, "color": 0, "action": action})
+    list_push(G.hot, {"x": x, "y": y, "w": w, "h": h, "a": action})
     return null
 }
 
-// Botón de dos líneas (título y subtítulo) para menús.
-function item_button(x: int, y: int, w: int, h: int, title: string, sub: string, action: string) {
-    button(x, y, w, h, "", action, "normal", 16)
-    text(x + 16, y + 27, clip_text(title, w - 32, 17), 17, C_TEXT, "bold")
-    text(x + 16, y + 49, clip_text(sub, w - 32, 14), 14, C_MUTED, "ui")
+function hovered(action: string) {
+    return !block && G.hover == action
+}
+
+// Panel inclinado negro con borde blanco y sombra roja.
+function panel(x: int, y: int, w: int, h: int, skew: int) {
+    svg(x, y, w + 6, h + 6, slant_doc(w, h, skew, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
+}
+
+function tag(x: int, y: int, w: int, lbl: string, fill: string, color: int) {
+    svg(x, y, w, 26, slant_doc(w, 26, 8, fill, "", 0, "", 0))
+    ctext(x + w / 2, y + 19, lbl, 13, color, "bold")
 }
 
 function chars_for(width: int, size: int) {
@@ -117,41 +109,53 @@ function chars_for(width: int, size: int) {
 }
 
 function clip_text(s: string, width: int, size: int) {
-    let n = chars_for(width, size)
-    if len(s) <= n { return s }
-    let words = str_split(s, " ")
+    let limit = chars_for(width, size)
+    if len(s) <= limit { return s }
     let out = ""
-    for w in words {
+    for w in str_split(s, " ") {
         let next = w
         if out != "" { next = out + " " + w }
-        if len(next) + 1 > n { return out + "…" }
+        if len(next) + 1 > limit { return out + "…" }
         out = next
     }
     return out
 }
 
+// ---------------------------------------------------------------- animación
+
+function prog(t0: float, dur: float) {
+    return clamp((G.t - t0) / dur, 0.0, 1.0)
+}
+
+function ease(t: float) {
+    let u = 1.0 - t
+    return 1.0 - u * u * u
+}
+
 function stat_color(v: int) {
-    if v >= 60 { return C_GOOD }
-    if v >= 30 { return C_WARN }
-    return C_BAD
+    if v >= 60 { return C_WHITE }
+    if v >= 30 { return C_YELLOW }
+    return C_RED
 }
 
 function kind_color(k: string) {
-    if k == "g" { return C_GOOD }
+    if k == "g" { return C_YELLOW }
     if k == "b" { return C_BAD }
-    if k == "x" { return C_ACCENT_SOFT }
-    if k == "h" { return C_ACCENT }
-    return C_TEXT
+    if k == "x" { return C_PINK }
+    return C_WHITE
 }
 
 // ---------------------------------------------------------------- frame
 
 function build() {
     C = []
+    G.hot = []
     block = false
-    rect(0, 0, W, H, C_BG)
+    svg(0, 0, W, H, bg_doc())
     if G.mode == "title" {
         draw_title()
+    } else if G.mode == "create" {
+        draw_create()
     } else if G.mode == "dead" {
         draw_dead()
     } else {
@@ -159,93 +163,240 @@ function build() {
         draw_game()
         block = false
         if G.modal != null { draw_modal(G.modal) }
+        draw_cutin()
     }
+    draw_toasts()
     return C
 }
 
 // ---------------------------------------------------------------- portada
 
 function draw_title() {
-    push({"op": "alpha_ellipse", "x": 1040, "y": 160, "rx": 420, "ry": 300, "color": C_GLOW})
-    push({"op": "alpha_ellipse", "x": 1040, "y": 160, "rx": 260, "ry": 190, "color": C_GLOW})
-    push({"op": "alpha_ellipse", "x": 180, "y": 640, "rx": 360, "ry": 220, "color": C_GLOW})
+    let e = ease(prog(G.screen_t0, 0.5))
+    svg(-80 + (1.0 - e) * -200, 250, 460, 460, burst_doc(460, 460, 20, HEX_WHITE, HEX_INK, 5, 4))
+    svg(40 + (1.0 - e) * -200, 300, 330, 396, portrait_doc(G.title_look, G.title_gender, 24, "grin"))
 
-    ctext(W / 2, 150, "VIDA SIN FILTRO", 68, C_ACCENT, "bold")
-    ctext(W / 2, 192, "Un simulador de vida para adultos. Cada año, una decisión. Cada decisión, una consecuencia.", 18, C_MUTED, "ui")
+    let logo = ransom_doc(["V", "I", "D", "A", " ", "S", "I", "N", " ", "F", "I", "L", "T", "R", "O"], 84, 3)
+    svg(W / 2 - logo.w / 2, 40 - (1.0 - e) * 120, logo.w, logo.h, logo.doc)
+    otext(W / 2, 186, "UN SIMULADOR DE VIDA PARA ADULTOS", 22, C_WHITE, "impact", true)
 
-    frame_box(290, 222, 700, 74, 12, C_PANEL, C_LINE)
-    rrect(312, 240, 64, 38, 8, C_ACCENT)
-    ctext(344, 266, "+18", 20, rgb(255, 255, 255), "bold")
-    text(396, 254, "Contiene sexo (sin escenas explícitas), drogas, alcohol, crimen", 16, C_TEXT, "ui")
-    text(396, 278, "y muy malas decisiones. Solo para mayores de edad.", 16, C_TEXT, "ui")
+    let items = [["NUEVA VIDA", "new"], ["VIDA AL AZAR", "quick"], ["SALIR", "quit"]]
+    let i = 0
+    while i < len(items) {
+        let it = items[i]
+        let x = 640 + i * 26 + (1.0 - ease(prog(G.screen_t0 + 0.1 * i, 0.4))) * 500
+        let y = 250 + i * 84
+        menu_word(x, y, 440, 68, it[0], it[1], 36)
+        i += 1
+    }
 
-    ctext(W / 2, 344, "Sexo del personaje", 16, C_MUTED, "bold")
-    toggle(415, 358, 140, "Hombre", "g:m", G.pick_gender == "m")
-    toggle(570, 358, 140, "Mujer", "g:f", G.pick_gender == "f")
-    toggle(725, 358, 140, "Al azar", "g:r", G.pick_gender == "r")
-
-    ctext(W / 2, 440, "Le atraen", 16, C_MUTED, "bold")
-    toggle(340, 454, 140, "Sexo opuesto", "l:auto", G.pick_likes == "auto")
-    toggle(495, 454, 140, "Mujeres", "l:f", G.pick_likes == "f")
-    toggle(650, 454, 140, "Hombres", "l:m", G.pick_likes == "m")
-    toggle(805, 454, 140, "Ambos", "l:ambos", G.pick_likes == "ambos")
-
-    button(460, 540, 360, 64, "EMPEZAR UNA VIDA", "start", "primary", 22)
-    button(580, 620, 120, 40, "Salir", "quit", "ghost", 15)
+    svg(640, 520, 566, 116, slant_doc(560, 110, 20, HEX_WHITE, HEX_INK, 3, HEX_RED, 6))
+    svg(670, 540, 70, 70, burst_doc(70, 70, 12, HEX_RED, HEX_INK, 3, 2))
+    ctext(705, 583, "+18", 22, C_WHITE, "impact")
+    text(756, 556, "Contiene sexo (sin escenas explícitas),", 16, C_INK, "bold")
+    text(756, 580, "drogas, alcohol, crimen y muy malas", 16, C_INK, "bold")
+    text(756, 604, "decisiones. Solo para mayores de edad.", 16, C_INK, "bold")
 
     if G.lives > 0 {
-        ctext(W / 2, 690, "Vidas vividas: " + str(G.lives), 14, C_MUTED, "ui")
+        otext(1040, 690, "VIDAS VIVIDAS: " + str(G.lives), 18, C_YELLOW, "impact", false)
     }
-    text(20, 704, "Velvet Engine · Velvet Script 3", 13, C_LINE, "ui")
-    text(1080, 704, "Enter: empezar", 13, C_LINE, "ui")
+    text(20, 708, "Velvet Engine · Velvet Script 3", 13, C_GRAY, "ui")
 }
 
-function toggle(x: int, y: int, w: int, label: string, action: string, on: bool) {
-    let style = "normal"
-    if on { style = "selected" }
-    button(x, y, w, 50, label, action, style, 16)
+// Palabra de menú inclinada: negra con borde blanco; roja al pasar el ratón.
+function menu_word(x: any, y: any, w: int, h: int, lbl: string, action: string, size: int) {
+    let on = hovered(action)
+    let doc = slant_doc(w, h, 22, HEX_INK, HEX_WHITE, 3, HEX_RED, 6)
+    let dx = 0
+    if on {
+        doc = slant_doc(w, h, 22, HEX_RED, HEX_WHITE, 3, HEX_INK, 8)
+        dx = 14
+    }
+    svg(x + dx, y, w + 8, h + 8, doc)
+    otext(x + dx + 40, y + h / 2 + size * 36 / 100, lbl, size, C_WHITE, "impact", false)
+    hot(x, y, w, h, action)
+}
+
+// ---------------------------------------------------------------- creador
+
+function draw_create() {
+    let c = G.cre
+    svg(-60, 120, 520, 520, burst_doc(520, 520, 22, HEX_WHITE, HEX_INK, 5, 7))
+    svg(40, 150, 360, 432, portrait_doc(c.look, c.gender, 22, "grin"))
+    svg(10, -8, 620, 130, tilt_title_doc("CREA TU VIDA", 620, 130, 76, HEX_WHITE, HEX_INK))
+
+    panel(462, 96, 790, 590, 24)
+    let x0 = 510
+    let y = 140
+    create_label(x0, y, "NOMBRE")
+    let name = str_join(c.chars, "")
+    rect(x0 + 170, y - 26, 330, 38, C_WHITE)
+    let shown = name
+    if shown == "" { shown = "(al azar)" }
+    let cursor = ""
+    if floor(G.t * 2.0) % 2 == 0 { cursor = "|" }
+    text(x0 + 182, y + 2, shown + cursor, 20, C_INK, "bold")
+    small_button(x0 + 516, y - 26, 120, 38, "AZAR", "cre:name")
+    text(x0 + 170, y + 30, "Escribe con el teclado · Retroceso para borrar", 12, C_GRAY, "ui")
+
+    y += 64
+    create_label(x0, y, "SEXO")
+    toggle(x0 + 170, y - 26, 150, "HOMBRE", "cre:gender:m", c.gender == "m")
+    toggle(x0 + 330, y - 26, 150, "MUJER", "cre:gender:f", c.gender == "f")
+
+    y += 50
+    create_label(x0, y, "LE ATRAEN")
+    toggle(x0 + 170, y - 26, 150, "MUJERES", "cre:likes:f", c.likes == "f")
+    toggle(x0 + 330, y - 26, 150, "HOMBRES", "cre:likes:m", c.likes == "m")
+    toggle(x0 + 490, y - 26, 150, "AMBOS", "cre:likes:ambos", c.likes == "ambos")
+
+    y += 50
+    create_label(x0, y, "PIEL")
+    swatches(x0 + 170, y - 8, SKINS, c.look.skin, "cre:skin:")
+
+    y += 46
+    create_label(x0, y, "PEINADO")
+    stepper(x0 + 170, y - 26, HAIR_STYLES[c.look.hair], "cre:hair")
+
+    y += 46
+    create_label(x0, y, "PELO")
+    swatches(x0 + 170, y - 8, HAIR_COLORS, c.look.hcolor, "cre:hcolor:")
+
+    y += 46
+    create_label(x0, y, "OJOS")
+    swatches(x0 + 170, y - 8, EYE_COLORS, c.look.eyes, "cre:eyes:")
+
+    y += 46
+    create_label(x0, y, "ROPA")
+    swatches(x0 + 170, y - 8, OUTFITS, c.look.outfit, "cre:outfit:")
+
+    y += 46
+    create_label(x0, y, "ACCESORIO")
+    stepper(x0 + 170, y - 26, ACCESSORIES[c.look.acc], "cre:acc")
+
+    y += 50
+    create_label(x0, y, "PERSONALIDAD")
+    let t = trait_def(c.trait)
+    stepper(x0 + 170, y - 26, str_upper(by_gender(c.gender, t.m, t.f)), "cre:trait")
+    let dy = y + 30
+    for line in wrap(t.desc, chars_for(380, 13)) {
+        text(x0 + 170, dy, line, 13, C_YELLOW, "bold")
+        dy += 18
+    }
+
+    small_button(1100, 24, 150, 44, "VOLVER", "back")
+    small_button(930, 24, 160, 44, "TODO AL AZAR", "cre:random")
+    star_button(1036, 572, "¡A VIVIR!", "cre:go", "ENTER")
+}
+
+function create_label(x: int, y: int, lbl: string) {
+    otext(x, y, lbl, 19, C_WHITE, "impact", false)
+}
+
+function toggle(x: int, y: int, w: int, lbl: string, action: string, on: bool) {
+    let fill = HEX_INK
+    let color = C_WHITE
+    if on {
+        fill = HEX_WHITE
+        color = C_INK
+    }
+    if hovered(action) && !on { fill = HEX_RED }
+    svg(x, y, w + 4, 42, slant_doc(w, 38, 10, fill, HEX_WHITE, 2, HEX_RED, 4))
+    ctext(x + w / 2, y + 26, lbl, 15, color, "bold")
+    hot(x, y, w, 38, action)
+}
+
+function small_button(x: int, y: int, w: int, h: int, lbl: string, action: string) {
+    let fill = HEX_INK
+    if hovered(action) { fill = HEX_RED }
+    svg(x, y, w + 4, h + 4, slant_doc(w, h, 10, fill, HEX_WHITE, 2, HEX_RED, 4))
+    ctext(x + w / 2, y + h / 2 + 6, lbl, 15, C_WHITE, "bold")
+    hot(x, y, w, h, action)
+}
+
+function swatches(x: int, y: int, colors: list, selected: int, prefix: string) {
+    let i = 0
+    while i < len(colors) {
+        let cx = x + 18 + i * 44
+        let action = prefix + str(i)
+        let ring = 0
+        if i == selected { ring = 5 } else if hovered(action) { ring = 3 }
+        let body = "<circle cx='22' cy='22' r='" + str(14 + ring) + "' fill='" + HEX_WHITE + "' stroke='" + HEX_INK + "' stroke-width='2'/>"
+        if i == selected { body = body + "<circle cx='22' cy='22' r='17' fill='" + HEX_RED + "'/>" }
+        body = body + "<circle cx='22' cy='22' r='13' fill='" + colors[i] + "' stroke='" + HEX_INK + "' stroke-width='2'/>"
+        svg(cx - 22, y - 22, 44, 44, svg_doc(44, 44, body))
+        hot(cx - 18, y - 18, 36, 36, action)
+        i += 1
+    }
+}
+
+function stepper(x: int, y: int, lbl: string, action: string) {
+    let left = HEX_WHITE
+    let right = HEX_WHITE
+    if hovered(action + ":-") { left = HEX_RED }
+    if hovered(action + ":+") { right = HEX_RED }
+    svg(x, y, 38, 38, arrow_doc("left", left))
+    hot(x, y, 38, 38, action + ":-")
+    svg(x + 46, y, 268, 42, slant_doc(264, 38, 10, HEX_WHITE, HEX_INK, 2, HEX_RED, 4))
+    ctext(x + 46 + 132, y + 26, lbl, 16, C_INK, "bold")
+    svg(x + 322, y, 38, 38, arrow_doc("right", right))
+    hot(x + 322, y, 38, 38, action + ":+")
+}
+
+// Botón de estallido grande (avanzar año, empezar vida).
+function star_button(x: int, y: int, lbl: string, action: string, hint: string) {
+    let on = hovered(action)
+    let fill = HEX_RED
+    if on { fill = HEX_YELLOW }
+    svg(x, y, 240, 160, burst_doc(240, 160, 16, fill, HEX_INK, 5, 11))
+    let color = C_WHITE
+    if on { color = C_INK }
+    if on { ctext(x + 120, y + 92, lbl, 34, color, "impact") } else { otext(x + 120, y + 92, lbl, 34, color, "impact", true) }
+    ctext(x + 120, y + 116, hint, 12, color, "bold")
+    hot(x + 40, y + 30, 160, 100, action)
 }
 
 // ---------------------------------------------------------------- juego
 
 function draw_game() {
-    draw_header()
-    draw_log(20, 88, 800, 520)
-    draw_stats(840, 88, 420, 272)
-    draw_status(840, 372, 420, 236)
+    draw_card()
+    draw_feed(404, 16, 472, 594)
+    draw_stats(884, 16, 380, 196)
+    draw_social(884, 222, 380, 214)
+    draw_status(884, 446, 380, 146)
     draw_bottom()
 }
 
-function draw_header() {
-    rect(0, 0, W, 72, C_PANEL)
-    rect(0, 72, W, 1, C_LINE)
-    let avatar = C_BLUE
-    if L.gender == "f" { avatar = C_ACCENT }
-    push({"op": "circle", "x": 44, "y": 36, "radius": 24, "color": avatar})
-    ctext(44, 44, initials(), 18, rgb(255, 255, 255), "bold")
-    text(82, 32, L.first + " " + L.last, 24, C_TEXT, "bold")
-    let sub = by_gender(L.gender, "Hombre", "Mujer") + " · " + str(L.age) + " " + plural(L.age, "año", "años") + " · " + L.city
-    text(82, 56, sub, 15, C_MUTED, "ui")
+function draw_card() {
+    svg(18, 64, 360, 360, burst_doc(360, 360, 18, HEX_WHITE, HEX_INK, 4, L.age % 7))
+    svg(58, 82, 280, 336, portrait_doc(L.look, L.gender, L.age, mood_for(L.happy)))
+    svg(16, 16, 378, 60, slant_doc(372, 54, 18, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
+    text(44, 52, clip_text(str_upper(L.first + " " + L.last), 310, 22), 22, C_WHITE, "impact")
+    svg(282, 300, 116, 116, burst_doc(116, 116, 14, HEX_RED, HEX_INK, 4, 5))
+    otext(340, 360, str(L.age), 40, C_WHITE, "impact", true)
+    ctext(340, 380, plural(L.age, "AÑO", "AÑOS"), 12, C_WHITE, "bold")
 
-    ctext(900, 28, "OCUPACIÓN", 12, C_MUTED, "bold")
-    ctext(900, 54, occupation_text(), 17, C_TEXT, "bold")
-    ctext(1150, 28, "DINERO", 12, C_MUTED, "bold")
-    let mc = C_GOOD
+    panel(16, 430, 372, 180, 18)
+    tag(40, 444, 190, str_upper(trait_name(L.trait, L.gender)), HEX_RED, C_WHITE)
+    text(238, 463, mood_word(), 14, C_YELLOW, "bold")
+    text(44, 498, "OCUPACIÓN", 11, C_GRAY, "bold")
+    text(44, 520, clip_text(occupation_text(), 320, 17), 17, C_WHITE, "bold")
+    text(44, 552, "DINERO", 11, C_GRAY, "bold")
+    let mc = C_YELLOW
     if L.money < 0 { mc = C_BAD }
-    ctext(1150, 56, money_str(L.money), 24, mc, "bold")
+    text(44, 580, money_str(L.money), 24, mc, "impact")
+    draw_floats_for("money", 160, 556)
+    text(220, 552, "CIUDAD", 11, C_GRAY, "bold")
+    text(220, 574, clip_text(L.city, 150, 14), 14, C_WHITE, "bold")
 }
 
-function initials() {
-    let parts = str_split(L.last, " ")
-    return str_upper(first_char(L.first) + first_char(parts[0]))
-}
-
-// Primer carácter usando la tabla de letras más comunes (VS3 no indexa strings).
-function first_char(s: string) {
-    for c in ["Á", "É", "Í", "Ó", "Ú", "Ñ", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"] {
-        if str_starts_with(s, c) { return c }
-    }
-    return "?"
+function mood_word() {
+    let m = mood_for(L.happy)
+    if m == "grin" { return "EUFÓRIC" + str_upper(oa(L.gender)) }
+    if m == "happy" { return "CONTENT" + str_upper(oa(L.gender)) }
+    if m == "neutral" { return "TRANQUIL" + str_upper(oa(L.gender)) }
+    if m == "sad" { return "TRISTE" }
+    return "DEPRIMID" + str_upper(oa(L.gender))
 }
 
 function occupation_text() {
@@ -258,75 +409,107 @@ function occupation_text() {
     return "Desemplead" + oa(L.gender)
 }
 
-function draw_log(x: int, y: int, w: int, h: int) {
-    frame_box(x, y, w, h, 14, C_PANEL, C_LINE)
-    let line_h = 24
-    let visible = (h - 28) / line_h
+function draw_feed(x: int, y: int, w: int, h: int) {
+    panel(x, y, w, h, 20)
+    tag(x + 30, y + 14, 150, "TU HISTORIA", HEX_RED, C_WHITE)
+    let line_h = 23
+    let top = y + 54
+    let visible = (h - 70) / line_h
     let total = len(L.log)
     let max_scroll = max(0, total - visible)
     G.scroll = clamp(G.scroll, 0, max_scroll)
     let start = max(0, total - visible - G.scroll)
     let end = min(total, start + visible)
-    push({"op": "clip_push", "x": x + 2, "y": y + 2, "w": w - 4, "h": h - 4})
-    let cy = y + 14
+    push({"op": "clip_push", "x": x + 4, "y": top - 4, "w": w - 8, "h": h - 64})
+    let cy = top
     let i = start
     while i < end {
         let entry = L.log[i]
+        let lx = x + 34 - (cy - y) * 20 / h
         if entry.k == "h" {
-            rect(x + 20, cy + 4, w - 52, 1, C_LINE)
-            text(x + 20, cy + 19, entry.t, 15, C_ACCENT, "bold")
+            svg(lx, cy + 1, 120, 20, slant_doc(120, 20, 7, HEX_RED, "", 0, "", 0))
+            ctext(lx + 60, cy + 16, str_upper(entry.t), 13, C_WHITE, "bold")
         } else {
-            text(x + 26, cy + 18, entry.t, 16, kind_color(entry.k), "ui")
+            text(lx + 6, cy + 17, entry.t, 15, kind_color(entry.k), "ui")
         }
         cy += line_h
         i += 1
     }
     push({"op": "clip_pop"})
     if max_scroll > 0 {
-        let track_h = h - 28
-        let thumb_h = max(30, track_h * visible / total)
-        let thumb_y = y + 14 + (track_h - thumb_h) * (max_scroll - G.scroll) / max_scroll
-        rrect(x + w - 14, y + 14, 6, track_h, 3, C_PANEL2)
-        rrect(x + w - 14, thumb_y, 6, thumb_h, 3, C_LINE)
+        let track = h - 80
+        let thumb = max(30, track * visible / total)
+        let ty = top + (track - thumb) * (max_scroll - G.scroll) / max_scroll
+        rect(x + w - 30, top, 3, track, C_GRAY_D)
+        rect(x + w - 31, ty, 5, thumb, C_WHITE)
     }
-    if G.scroll > 0 && !block {
-        button(x + w / 2 - 90, y + h - 44, 180, 32, "Ir a lo más reciente", "scroll:end", "normal", 13)
+    if G.scroll > 0 {
+        small_button(x + w / 2 - 100, y + h - 52, 200, 34, "LO MÁS RECIENTE", "scroll:end")
     }
 }
 
 function draw_stats(x: int, y: int, w: int, h: int) {
-    frame_box(x, y, w, h, 14, C_PANEL, C_LINE)
-    text(x + 20, y + 30, "ESTADÍSTICAS", 13, C_MUTED, "bold")
-    let names = ["Felicidad", "Salud", "Inteligencia", "Atractivo"]
-    let values = [L.happy, L.health, L.smarts, L.looks]
+    panel(x, y, w, h, 16)
+    tag(x + 26, y + 12, 150, "ESTADÍSTICAS", HEX_RED, C_WHITE)
+    let keys = ["happy", "health", "smarts", "looks"]
+    let names = ["FELICIDAD", "SALUD", "INTELIGENCIA", "ATRACTIVO"]
     let i = 0
     while i < 4 {
-        let sy = y + 62 + i * 52
-        let v = values[i]
-        text(x + 20, sy, names[i], 16, C_TEXT, "bold")
-        ctext(x + w - 40, sy, str(v) + "%", 15, stat_color(v), "bold")
-        bar(x + 20, sy + 10, w - 40, 16, v, stat_color(v))
+        let v = L[keys[i]]
+        let ry = y + 66 + i * 34
+        let rx = x + 30 - i * 4
+        text(rx, ry, names[i], 14, C_WHITE, "impact")
+        rect(rx + 120, ry - 13, 190, 14, C_GRAY_D)
+        rect(rx + 120, ry - 13, 190 * v / 100, 14, stat_color(v))
+        rect(rx + 120, ry + 1, 190, 2, C_INK)
+        text(rx + 318, ry, str(v), 15, stat_color(v), "impact")
+        draw_floats_for(keys[i], rx + 262, ry - 15)
+        i += 1
+    }
+}
+
+function draw_social(x: int, y: int, w: int, h: int) {
+    panel(x, y, w, h, 16)
+    tag(x + 26, y + 12, 170, "RASGOS SOCIALES", HEX_RED, C_WHITE)
+    let i = 0
+    while i < len(SOCIAL_KEYS) {
+        let k = SOCIAL_KEYS[i]
+        let r = rank(k)
+        let ry = y + 64 + i * 32
+        let rx = x + 30 - i * 3
+        text(rx, ry, str_upper(SOCIAL_NAMES[k]), 14, C_WHITE, "impact")
+        text(rx + 128, ry, rank_title(k, r), 13, C_GRAY, "bold")
+        let p = 0
+        while p < 5 {
+            let col = C_GRAY_D
+            if p < r { col = C_RED }
+            rect(rx + 240 + p * 20, ry - 13, 14, 14, col)
+            if p < r { rect(rx + 243 + p * 20, ry - 10, 4, 4, C_WHITE) }
+            p += 1
+        }
+        draw_floats_for(k, rx + 200, ry - 14)
         i += 1
     }
 }
 
 function draw_status(x: int, y: int, w: int, h: int) {
-    frame_box(x, y, w, h, 14, C_PANEL, C_LINE)
-    text(x + 20, y + 30, "SITUACIÓN", 13, C_MUTED, "bold")
+    panel(x, y, w, h, 16)
+    tag(x + 26, y + 12, 130, "SITUACIÓN", HEX_RED, C_WHITE)
     let rows = [
         ["Relación", relationship_text()],
         ["Educación", education_text()],
-        ["Parejas sexuales", str(L.partners)],
-        ["Hijos", str(L.kids)],
+        ["Parejas sexuales", str(L.partners) + " · Hijos " + str(L.kids)],
         ["Salud sexual", std_text()],
-        ["Vicios", vice_text()],
-        ["Antecedentes", record_text()]
+        ["Vicios / ley", vice_text()]
     ]
-    let ry = y + 58
+    let ry = y + 56
+    let i = 0
     for row in rows {
-        text(x + 20, ry, row[0], 14, C_MUTED, "ui")
-        text(x + 160, ry, clip_text(row[1], w - 180, 14), 14, C_TEXT, "bold")
-        ry += 24
+        let rx = x + 30 - i * 3
+        text(rx, ry, row[0], 13, C_GRAY, "bold")
+        text(rx + 136, ry, clip_text(row[1], w - 190, 14), 14, C_WHITE, "bold")
+        ry += 19
+        i += 1
     }
 }
 
@@ -341,9 +524,9 @@ function relationship_text() {
 }
 
 function education_text() {
-    let out = EDU_NAMES[L.edu]
     if L.uni > 0 { return "Universidad (" + str(L.uni) + " " + plural(L.uni, "año", "años") + ")" }
     if L.school != "" { return "Cursando " + L.school }
+    let out = EDU_NAMES[L.edu]
     if L.debt > 0 { out = out + " · deuda " + money_str(L.debt) }
     return out
 }
@@ -358,26 +541,50 @@ function vice_text() {
     let parts = []
     if L.alcohol > 0 { list_push(parts, "Alcohol " + str(L.alcohol) + "%") }
     if L.drugs > 0 { list_push(parts, "Drogas " + str(L.drugs) + "%") }
+    if L.jail > 0 { list_push(parts, "En prisión") } else if L.record > 0 { list_push(parts, str(L.record) + " " + plural(L.record, "delito", "delitos")) }
     if len(parts) == 0 { return "Ninguno" }
     return str_join(parts, " · ")
 }
 
-function record_text() {
-    if L.jail > 0 { return "En prisión (" + str(L.jail) + " " + plural(L.jail, "año", "años") + ")" }
-    if L.record == 0 { return "Limpios" }
-    return str(L.record) + " " + plural(L.record, "delito", "delitos")
+function draw_bottom() {
+    let tabs = [["OCUPACIÓN", "tab:job"], ["VÍNCULOS", "tab:rel"], ["ACTIVIDADES", "tab:act"], ["NOCHE +18", "tab:night"]]
+    let i = 0
+    while i < len(tabs) {
+        let t = tabs[i]
+        let x = 16 + i * 244
+        let y = 634
+        let on = hovered(t[1])
+        let doc = slant_doc(230, 64, 20, HEX_INK, HEX_WHITE, 3, HEX_RED, 6)
+        if on {
+            doc = slant_doc(230, 64, 20, HEX_RED, HEX_WHITE, 3, HEX_INK, 8)
+            y -= 6
+        }
+        svg(x, y, 238, 72, doc)
+        otext(x + 115, y + 43, t[0], 26, C_WHITE, "impact", true)
+        hot(x, 634, 230, 64, t[1])
+        i += 1
+    }
+    star_button(1030, 586, "+1 AÑO", "age", "ESPACIO")
 }
 
-function draw_bottom() {
-    rect(0, 620, W, 100, C_PANEL)
-    rect(0, 620, W, 1, C_LINE)
-    button(20, 636, 230, 68, "Ocupación", "tab:job", "normal", 18)
-    button(262, 636, 230, 68, "Relaciones", "tab:rel", "normal", 18)
-    button(788, 636, 230, 68, "Actividades", "tab:act", "normal", 18)
-    button(1030, 636, 230, 68, "Noche +18", "tab:night", "normal", 18)
-    button(505, 630, 270, 80, "", "age", "primary", 18)
-    ctext(640, 670, "+1 AÑO", 28, rgb(255, 255, 255), "bold")
-    ctext(640, 696, "Espacio", 12, rgb(255, 225, 240), "ui")
+// Números que flotan junto a una estadística después de cambiar.
+function draw_floats_for(key: string, x: int, y: int) {
+    for f in G.floats {
+        if f.k != key || G.t < f.t0 { continue }
+        let p = prog(f.t0, 1.6)
+        if p >= 1.0 { continue }
+        let lbl = str(f.v)
+        let color = C_YELLOW
+        if f.v > 0 { lbl = "+" + lbl }
+        if f.v < 0 { color = C_BAD }
+        if key == "money" {
+            lbl = money_str(f.v)
+            if f.v > 0 { lbl = "+" + lbl }
+        }
+        fade_push(1.0 - p * p)
+        otext(x, y - p * 26, lbl, 18, color, "impact", false)
+        fade_pop()
+    }
 }
 
 // ---------------------------------------------------------------- ventanas
@@ -385,206 +592,407 @@ function draw_bottom() {
 function draw_modal(m: map) {
     arect(0, 0, W, H, C_DIM)
     push({"op": "alpha_rect", "x": 0, "y": 0, "w": W, "h": H, "color": 0, "action": "noop"})
-    if m.kind == "info" { return draw_info(m) }
-    if m.kind == "choice" { return draw_choice(m) }
+    if G.t < G.modal_t0 { return null }
+    if m.kind == "info" { return draw_dialog(m, ["CONTINUAR"], [""], [""], "ok") }
+    if m.kind == "choice" {
+        let tags = m.tags
+        if tags == null { tags = [] }
+        return draw_dialog(m, m.choices, m.locks, tags, "choice:")
+    }
     if m.kind == "menu" { return draw_menu(m) }
     if m.kind == "person" { return draw_person(m) }
     if m.kind == "jobs" { return draw_jobs(m) }
     return null
 }
 
-function draw_info(m: map) {
-    let w = 620
-    let lines = wrap(m.text, chars_for(w - 64, 17))
-    let h = 84 + len(lines) * 26 + 92
+// Diálogo estilo Persona: retrato a un lado, panel inclinado y opciones.
+function draw_dialog(m: map, choices: list, locks: list, tags: list, prefix: string) {
+    let e = ease(prog(G.modal_t0, 0.25))
+    let p = m.person
+    let w = 740
+    let lines = wrap(m.text, chars_for(w - 120, 18))
+    let n = len(choices)
+    let h = 96 + len(lines) * 27 + n * 56 + 20
     let x = (W - w) / 2
-    let y = (H - h) / 2
-    frame_box(x, y, w, h, 16, C_PANEL, C_ACCENT)
-    text(x + 32, y + 48, m.title, 24, C_ACCENT, "bold")
-    let ty = y + 88
-    for line in lines {
-        text(x + 32, ty, line, 17, C_TEXT, "ui")
-        ty += 26
+    if p != null { x = 470 }
+    let y = (H - h) / 2 + 20
+    if p != null {
+        let px = 20 - (1.0 - e) * 300
+        svg(px - 30, 250, 420, 420, burst_doc(420, 420, 18, HEX_WHITE, HEX_INK, 5, p.id % 9))
+        svg(px + 20, 270, 330, 396, portrait_doc(p.look, p.gender, p.age, person_mood(p)))
+        svg(px + 30, 640, 300, 50, slant_doc(294, 44, 14, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
+        text(px + 56, 672, clip_text(str_upper(p.first), 240, 24), 24, C_WHITE, "impact")
     }
-    button(x + w / 2 - 90, y + h - 72, 180, 48, "Continuar", "ok", "primary", 17)
-    return null
-}
-
-function draw_choice(m: map) {
-    let w = 660
-    let lines = wrap(m.text, chars_for(w - 64, 17))
-    let n = len(m.choices)
-    let h = 84 + len(lines) * 26 + 20 + n * 60 + 16
-    let x = (W - w) / 2
-    let y = (H - h) / 2
-    frame_box(x, y, w, h, 16, C_PANEL, C_ACCENT)
-    text(x + 32, y + 48, m.title, 24, C_ACCENT, "bold")
-    let ty = y + 88
+    fade_push(e)
+    move_push((1.0 - e) * 140, 0)
+    svg(x, y, w + 10, h + 10, slant_doc(w, h, 26, HEX_INK, HEX_WHITE, 4, HEX_RED, 10))
+    let title = str_upper(m.title)
+    let tw = min(600, 70 + len(title) * 19)
+    svg(x - 12, y - 26, tw + 6, 58, slant_doc(tw, 52, 16, HEX_RED, HEX_WHITE, 3, HEX_INK, 6))
+    otext(x + 18, y + 12, title, 28, C_WHITE, "impact", false)
+    let ty = y + 64
     for line in lines {
-        text(x + 32, ty, line, 17, C_TEXT, "ui")
-        ty += 26
+        text(x + 48, ty, line, 18, C_WHITE, "ui")
+        ty += 27
     }
-    let by = ty + 6
+    let by = ty + 8
     let i = 0
     while i < n {
-        button(x + 32, by, w - 64, 50, "", "choice:" + str(i), "normal", 16)
-        rrect(x + 44, by + 11, 28, 28, 6, C_ACCENT)
-        ctext(x + 58, by + 31, str(i + 1), 15, rgb(255, 255, 255), "bold")
-        text(x + 86, by + 31, m.choices[i], 17, C_TEXT, "bold")
-        by += 60
+        let action = prefix
+        if prefix == "choice:" { action = prefix + str(i) }
+        let locked = len(locks) > i && locks[i] != ""
+        let tag_text = ""
+        if len(tags) > i { tag_text = tags[i] }
+        dialog_option(x + 40 - i * 6, by, w - 90, choices[i], i, action, locked, locks, tag_text)
+        by += 56
         i += 1
     }
+    move_pop()
+    fade_pop()
     return null
 }
 
-function draw_panel_header(x: int, y: int, w: int, title: string, back: string) {
-    text(x + 28, y + 46, title, 26, C_ACCENT, "bold")
-    button(x + w - 140, y + 18, 116, 40, "Cerrar", "close", "ghost", 15)
-    if back != "" {
-        button(x + w - 266, y + 18, 116, 40, "Volver", back, "ghost", 15)
+function dialog_option(x: int, y: int, w: int, lbl: string, i: int, action: string, locked: bool, locks: list, tag_text: string) {
+    let on = hovered(action) && !locked
+    let fill = "#262626"
+    let color = C_WHITE
+    if on { fill = HEX_RED }
+    if locked {
+        fill = "#1a1a1a"
+        color = C_GRAY
     }
+    let dx = 0
+    if on { dx = 12 }
+    svg(x + dx, y, w + 6, 50, slant_doc(w, 46, 14, fill, HEX_WHITE, 2, HEX_INK, 4))
+    svg(x + dx + 18, y + 9, 30, 30, slant_doc(30, 30, 6, HEX_WHITE, "", 0, "", 0))
+    ctext(x + dx + 33, y + 31, str(i + 1), 18, C_INK, "impact")
+    text(x + dx + 60, y + 30, clip_text(lbl, w - 230, 17), 17, color, "bold")
+    if locked {
+        svg(x + dx + w - 190, y + 8, 30, 30, lock_doc())
+        text(x + dx + w - 156, y + 30, str_upper(locks[i]), 14, C_RED, "impact")
+    } else if tag_text != "" {
+        text(x + dx + w - 150, y + 30, "[" + str_upper(tag_text) + "]", 14, C_YELLOW, "impact")
+    }
+    if !locked { hot(x, y, w, 46, action) }
+}
+
+function person_mood(p: map) {
+    if p.rel == "ex" { return "angry" }
+    if p.bond >= 75 { return "grin" }
+    if p.bond >= 45 { return "happy" }
+    if p.bond >= 25 { return "neutral" }
+    return "sad"
+}
+
+// Pantalla de lista: título ladeado, pestañas, opciones y panel de descripción.
+function draw_list(title: string, cats: list, cat: int, items: list, back: string, kind: string) {
+    let e = ease(prog(G.menu_t0, 0.3))
+    svg(-160 - (1.0 - e) * 400, 0, 820, 720, slant_doc(760, 720, 220, HEX_RED, "", 0, HEX_INK, 60))
+    svg(24, 2 - (1.0 - e) * 80, 640, 136, tilt_title_doc(title, 640, 136, 78, HEX_WHITE, HEX_INK))
+    small_button(1110, 26, 140, 42, "VOLVER", back)
+    text(1118, 86, "ESC", 12, C_WHITE, "bold")
+
+    let list_y = 150
+    if len(cats) > 0 {
+        let i = 0
+        while i < len(cats) {
+            let action = "cat:" + str(i)
+            let fill = HEX_INK
+            let color = C_WHITE
+            if i == cat {
+                fill = HEX_WHITE
+                color = C_INK
+            } else if hovered(action) {
+                fill = HEX_RED
+            }
+            let tx = 46 + i * 136
+            svg(tx, 140, 134, 42, slant_doc(128, 38, 10, fill, HEX_WHITE, 2, HEX_INK, 4))
+            ctext(tx + 64, 166, str_upper(cats[i]), 16, color, "impact")
+            hot(tx, 140, 128, 38, action)
+            i += 1
+        }
+        list_y = 200
+    }
+
+    let pages = max(1, (len(items) + PAGE_SIZE - 1) / PAGE_SIZE)
+    G.menu_page = clamp(G.menu_page, 0, pages - 1)
+    let first = G.menu_page * PAGE_SIZE
+    let last = min(len(items), first + PAGE_SIZE)
+    let focus = null
+    let i = first
+    while i < last {
+        let it = items[i]
+        let k = i - first
+        let ie = ease(prog(G.menu_t0 + k * 0.03, 0.25))
+        let ix = 56 - k * 4 - (1.0 - ie) * 260
+        let iy = list_y + k * 52
+        let locked = it.lock != ""
+        let on = hovered(it.action)
+        if on { focus = it }
+        let fill = HEX_INK
+        let color = C_WHITE
+        let dx = 0
+        if on {
+            fill = HEX_WHITE
+            color = C_INK
+            dx = 16
+        }
+        if locked && !on {
+            fill = "#1c1c1c"
+            color = C_GRAY
+        }
+        svg(ix + dx, iy, 526, 52, slant_doc(520, 46, 16, fill, HEX_WHITE, 2, HEX_RED, 6))
+        text(ix + dx + 30, iy + 30, clip_text(it.t, 330, 19), 19, color, "impact")
+        let sub_color = C_GRAY
+        if on { sub_color = C_RED }
+        if locked {
+            svg(ix + dx + 372, iy + 8, 28, 28, lock_doc())
+            text(ix + dx + 404, iy + 29, clip_text(str_upper(it.lock), 100, 13), 13, C_RED, "impact")
+        } else {
+            text(ix + dx + 344, iy + 29, clip_text(it.s, 160, 12), 12, sub_color, "bold")
+        }
+        hot(ix, iy, 520, 46, it.action)
+        i += 1
+    }
+    if pages > 1 {
+        let py = list_y + PAGE_SIZE * 52 + 4
+        if G.menu_page > 0 { small_button(60, py, 140, 36, "ANTERIOR", "page:-") }
+        if G.menu_page < pages - 1 { small_button(360, py, 140, 36, "SIGUIENTE", "page:+") }
+        ctext(280, py + 24, str(G.menu_page + 1) + " / " + str(pages), 16, C_WHITE, "impact")
+    }
+    if focus == null && len(items) > 0 { focus = items[first] }
+    if focus != null { draw_detail(focus, kind) }
+    return null
+}
+
+function draw_detail(it: any, kind: string) {
+    let x = 660
+    let y = 150
+    let w = 580
+    let h = 520
+    svg(x, y, w + 12, h + 12, slant_doc(w, h, 26, HEX_WHITE, HEX_INK, 4, HEX_INK, 12))
+    if it.pid != null {
+        let p = find_person(it.pid)
+        if p != null {
+            svg(x + 300, y + 120, 280, 280, burst_doc(280, 280, 16, HEX_RED, HEX_INK, 4, p.id % 7))
+            svg(x + 320, y + 130, 230, 276, portrait_doc(p.look, p.gender, p.age, person_mood(p)))
+            text(x + 46, y + 60, clip_text(str_upper(p.first), 260, 34), 34, C_INK, "impact")
+            text(x + 46, y + 92, rel_label(p) + " · " + str(p.age) + " años", 17, C_RED, "bold")
+            text(x + 46, y + 140, "ARCANO", 12, C_GRAY, "bold")
+            text(x + 46, y + 166, str_upper(arcana(p)), 22, C_INK, "impact")
+            text(x + 46, y + 206, "RANGO DE CONFIDENTE", 12, C_GRAY, "bold")
+            let r = conf_rank(p)
+            let i = 0
+            while i < 10 {
+                let col = rgb(210, 210, 205)
+                if i < r { col = C_RED }
+                rect(x + 46 + i * 24, y + 218, 18, 18, col)
+                i += 1
+            }
+            text(x + 46, y + 270, "CERCANÍA " + str(p.bond) + "%", 16, C_INK, "impact")
+            rect(x + 46, y + 280, 230, 12, rgb(210, 210, 205))
+            rect(x + 46, y + 280, 230 * p.bond / 100, 12, C_RED)
+            text(x + 46, y + 330, "Atractivo " + str(p.looks) + "%", 15, C_INK, "bold")
+            if kind == "person" {
+                text(x + 46, y + 440, clip_text(str_upper(it.t), 260, 22), 22, C_RED, "impact")
+                text(x + 46, y + 466, it.s, 15, C_INK, "bold")
+            } else {
+                text(x + 46, y + 470, "Clic para interactuar", 14, C_RED, "bold")
+            }
+            return null
+        }
+    }
+    text(x + 46, y + 66, clip_text(str_upper(it.t), 480, 34), 34, C_INK, "impact")
+    text(x + 46, y + 100, it.s, 17, C_RED, "bold")
+    let ty = y + 150
+    if it.desc != null {
+        for line in wrap(it.desc, chars_for(470, 18)) {
+            text(x + 46, ty, line, 18, C_INK, "ui")
+            ty += 28
+        }
+    }
+    if it.lock != "" {
+        svg(x + 40, y + h - 120, 380, 58, slant_doc(372, 50, 14, HEX_INK, HEX_RED, 3, HEX_RED, 6))
+        svg(x + 58, y + h - 110, 30, 30, lock_doc())
+        text(x + 96, y + h - 87, "REQUIERE: " + str_upper(it.lock), 18, C_WHITE, "impact")
+    }
+    if kind == "jobs" && it.ok != null {
+        let msg = "CUMPLES LOS REQUISITOS"
+        let col = C_RED
+        if !it.ok {
+            msg = "NO CUMPLES · PRUEBA SUERTE"
+            col = C_GRAY
+        }
+        text(x + 46, y + h - 60, msg, 20, col, "impact")
+    }
+    return null
 }
 
 function draw_menu(m: map) {
-    let x = 180
-    let y = 70
-    let w = 920
-    let h = 580
-    frame_box(x, y, w, h, 18, C_PANEL, C_LINE)
-    draw_panel_header(x, y, w, menu_title(m.tab), "")
     let blocked = menu_block(m.tab)
     if blocked != "" {
-        ctext(x + w / 2, y + h / 2, blocked, 20, C_MUTED, "ui")
-        return null
-    }
-    let items = menu_items(m.tab)
-    if len(items) == 0 {
-        ctext(x + w / 2, y + h / 2, "No hay nada que hacer aquí por ahora.", 20, C_MUTED, "ui")
-        return null
-    }
-    let i = 0
-    while i < len(items) && i < 21 {
-        let col = i % 3
-        let row = i / 3
-        let ix = x + 24 + col * 296
-        let iy = y + 84 + row * 70
-        let it = items[i]
-        item_button(ix, iy, 280, 62, it.t, it.s, it.action)
-        if it.bond != null {
-            rect(ix + 16, iy + 56, 248, 3, C_BG)
-            rect(ix + 16, iy + 56, 248 * it.bond / 100, 3, stat_color(it.bond))
+        draw_list(menu_title(m.tab), [], 0, [], "close", "menu")
+        svg(660, 260, 580, 140, slant_doc(570, 130, 20, HEX_WHITE, HEX_INK, 4, HEX_INK, 10))
+        let ty = 320
+        for line in wrap(blocked, chars_for(480, 20)) {
+            text(706, ty, line, 20, C_INK, "impact")
+            ty += 28
         }
-        i += 1
+        return null
+    }
+    let cats = menu_cats(m.tab)
+    let cat = ""
+    if len(cats) > 0 { cat = cats[clamp(G.menu_cat, 0, len(cats) - 1)] }
+    let items = menu_items(m.tab, cat)
+    draw_list(menu_title(m.tab), cats, G.menu_cat, items, "close", "menu")
+    if len(items) == 0 {
+        text(70, 260, "Nada que hacer aquí por ahora.", 20, C_WHITE, "impact")
     }
     return null
 }
 
 function draw_person(m: map) {
     let p = find_person(m.pid)
-    let x = 240
-    let y = 80
-    let w = 800
-    let h = 560
-    frame_box(x, y, w, h, 18, C_PANEL, C_LINE)
-    draw_panel_header(x, y, w, full_name(p), "tab:rel")
-    text(x + 28, y + 80, rel_label(p) + " · " + str(p.age) + " años · Atractivo " + str(p.looks) + "%", 16, C_MUTED, "ui")
-    text(x + 28, y + 114, "Cercanía", 15, C_TEXT, "bold")
-    bar(x + 120, y + 100, w - 260, 18, p.bond, stat_color(p.bond))
-    ctext(x + w - 100, y + 115, str(p.bond) + "%", 15, stat_color(p.bond), "bold")
-    let actions = person_actions(p)
-    let i = 0
-    while i < len(actions) {
-        let col = i % 2
-        let row = i / 2
-        let it = actions[i]
-        item_button(x + 28 + col * 378, y + 140 + row * 70, 366, 62, it.t, it.s, it.action)
-        i += 1
+    if p == null { return null }
+    let items = []
+    for a in person_actions(p) {
+        list_push(items, {"action": a.action, "t": a.t, "s": a.s, "desc": a.s, "lock": "", "pid": p.id})
     }
+    draw_list(str_upper(p.first), [], 0, items, "tab:rel", "person")
     return null
 }
 
 function draw_jobs(m: map) {
-    let x = 180
-    let y = 70
-    let w = 920
-    let h = 580
-    frame_box(x, y, w, h, 18, C_PANEL, C_LINE)
-    draw_panel_header(x, y, w, m.title, "tab:job")
+    let items = []
     let i = 0
     while i < len(m.offers) {
         let j = m.offers[i]
-        let col = i % 2
-        let row = i / 2
-        let ix = x + 24 + col * 440
-        let iy = y + 84 + row * 160
-        button(ix, iy, 428, 148, "", "hire:" + str(i), "normal", 16)
-        text(ix + 18, iy + 34, by_gender(L.gender, j.m, j.f), 19, C_TEXT, "bold")
-        text(ix + 18, iy + 62, job_salary_text(j), 16, C_GOOD, "bold")
-        text(ix + 18, iy + 88, job_requirements(j), 14, C_MUTED, "ui")
-        let ok = L.edu >= j.edu && L.smarts >= j.smarts && L.looks >= j.looks
-        if ok {
-            text(ix + 18, iy + 124, "Cumples los requisitos · Solicitar", 14, C_GOOD, "ui")
-        } else {
-            text(ix + 18, iy + 124, "No cumples los requisitos · Probar suerte", 14, C_WARN, "ui")
-        }
+        list_push(items, {
+            "action": "hire:" + str(i),
+            "t": by_gender(L.gender, j.m, j.f),
+            "s": job_salary_text(j),
+            "desc": "Requisitos: " + job_requirements(j) + ". Sueldo: " + job_salary_text(j) + ".",
+            "lock": "",
+            "ok": job_ok(j)
+        })
         i += 1
     }
+    draw_list("EMPLEOS", [], 0, items, "tab:job", "jobs")
+    return null
+}
+
+// ---------------------------------------------------------------- efectos
+
+// Corte de pantalla al cumplir años.
+function draw_cutin() {
+    let t = G.t - G.cut_t0
+    if t < 0.0 || t > 1.05 { return null }
+    let x = 0.0
+    if t < 0.22 { x = (1.0 - ease(t / 0.22)) * -1400.0 }
+    if t > 0.8 { x = ease((t - 0.8) / 0.25) * 1500.0 }
+    svg(x - 120, 230, 1520, 230, slant_doc(1500, 220, 120, HEX_RED, HEX_WHITE, 6, HEX_INK, 14))
+    svg(x + 160, 250, 1100, 40, slant_doc(1100, 34, 30, HEX_INK, "", 0, "", 0))
+    otext(x + 260, 282, life_stage(), 26, C_WHITE, "impact", false)
+    otext(x + 640, 420, str(L.age), 150, C_WHITE, "impact", true)
+    otext(x + 340, 400, "EDAD", 48, C_YELLOW, "impact", true)
+    otext(x + 940, 400, plural(L.age, "AÑO", "AÑOS"), 48, C_YELLOW, "impact", true)
+    return null
+}
+
+function life_stage() {
+    if L.age < 6 { return "INFANCIA" }
+    if L.age < 13 { return "NIÑEZ" }
+    if L.age < 18 { return "ADOLESCENCIA" }
+    if L.age < 30 { return "JUVENTUD" }
+    if L.age < 60 { return "ADULTEZ" }
+    return "VEJEZ"
+}
+
+// Notificaciones de rango (rasgos sociales y confidentes).
+function draw_toasts() {
+    let alive = []
+    let slot = 0
+    for t in G.toasts {
+        let age = G.t - t.t0
+        if age > 2.8 { continue }
+        list_push(alive, t)
+        let e = ease(clamp(age / 0.25, 0.0, 1.0))
+        let fade = 1.0
+        if age > 2.4 { fade = 1.0 - (age - 2.4) / 0.4 }
+        let y = -90.0 + e * (100.0 + slot * 92.0)
+        fade_push(clamp(fade, 0.0, 1.0))
+        svg(380, y, 536, 86, slant_doc(526, 76, 24, HEX_INK, HEX_YELLOW, 4, HEX_RED, 8))
+        svg(392, y - 4, 90, 90, burst_doc(90, 90, 12, HEX_YELLOW, HEX_INK, 3, 4))
+        svg(418, y + 22, 38, 38, arrow_doc("up", HEX_RED))
+        otext(496, y + 32, "¡RANGO ARRIBA!", 18, C_YELLOW, "impact", false)
+        text(496, y + 54, clip_text(t.title, 380, 20), 20, C_WHITE, "impact")
+        text(496, y + 71, clip_text(t.sub, 380, 12), 12, C_GRAY, "bold")
+        fade_pop()
+        slot += 1
+    }
+    G.toasts = alive
     return null
 }
 
 // ---------------------------------------------------------------- muerte
 
 function draw_dead() {
-    push({"op": "alpha_ellipse", "x": 290, "y": 300, "rx": 420, "ry": 320, "color": rgba(120, 30, 70, 30)})
-    frame_box(40, 40, 500, 640, 18, C_PANEL, C_LINE)
-    text(72, 92, "DESCANSE EN PAZ", 15, C_MUTED, "bold")
-    text(72, 136, clip_text(L.first + " " + L.last, 436, 30), 30, C_TEXT, "bold")
-    let ty = 160
-    for line in wrap("Murió a los " + str(L.age) + " años por " + L.cause + ".", chars_for(436, 17)) {
-        text(72, ty + 16, line, 17, C_ACCENT_SOFT, "ui")
-        ty += 24
+    arect(0, 0, W, H, rgba(0, 0, 0, 170))
+    let e = ease(prog(G.screen_t0, 0.6))
+    svg(-40, 140, 460, 460, burst_doc(460, 460, 20, HEX_WHITE, HEX_INK, 5, 1))
+    svg(40 - (1.0 - e) * 200, 170, 300, 360, portrait_doc(L.look, L.gender, L.age, "dead"))
+    svg(10, -4 - (1.0 - e) * 100, 860, 130, tilt_title_doc("DESCANSE EN PAZ", 860, 130, 72, HEX_WHITE, HEX_INK))
+
+    svg(400, 120, 452, 560, slant_doc(440, 548, 22, HEX_WHITE, HEX_INK, 4, HEX_RED, 12))
+    text(440, 170, clip_text(str_upper(L.first + " " + L.last), 370, 28), 28, C_INK, "impact")
+    let ty = 196
+    for line in wrap("Murió a los " + str(L.age) + " años por " + L.cause + ".", chars_for(360, 16)) {
+        text(436, ty, line, 16, C_RED, "bold")
+        ty += 22
     }
-    text(72, ty + 22, "«" + epitaph() + "»", 15, C_MUTED, "ui")
+    text(436, ty + 8, "«" + epitaph() + "»", 15, C_GRAY, "bold")
     let job = L.last_job
     if L.job != null { job = L.job.title }
     if job == "" { job = "Ninguno" }
     let rows = [
-        ["Dinero al morir", money_str(L.money)],
+        ["Personalidad", trait_name(L.trait, L.gender)],
+        ["Dinero", money_str(L.money)],
         ["Último trabajo", job],
         ["Educación", EDU_NAMES[L.edu]],
         ["Parejas sexuales", str(L.partners)],
-        ["Matrimonios", str(L.marriages)],
-        ["Divorcios", str(L.divorces)],
+        ["Matrimonios", str(L.marriages) + " · Divorcios " + str(L.divorces)],
         ["Hijos", str(L.kids)],
         ["Años en prisión", str(L.jail_total)],
+        ["Bienes", str(len(L.assets))],
         ["Karma", karma_text()]
     ]
-    let ry = 270
+    let ry = ty + 46
     for row in rows {
-        text(72, ry, row[0], 16, C_MUTED, "ui")
-        text(250, ry, clip_text(row[1], 270, 16), 16, C_TEXT, "bold")
-        ry += 30
+        text(436, ry, row[0], 14, C_GRAY, "bold")
+        text(586, ry, clip_text(row[1], 220, 15), 15, C_INK, "impact")
+        ry += 27
     }
-    button(72, 590, 260, 60, "Vivir otra vida", "restart", "primary", 19)
-    button(348, 590, 160, 60, "Salir", "quit", "ghost", 16)
 
-    frame_box(560, 40, 680, 640, 18, C_PANEL, C_LINE)
-    text(592, 92, "ÚLTIMOS RECUERDOS", 15, C_MUTED, "bold")
+    panel(872, 120, 380, 430, 18)
+    tag(900, 134, 190, "ÚLTIMOS RECUERDOS", HEX_RED, C_WHITE)
     let total = len(L.log)
-    let visible = 22
-    let start = max(0, total - visible)
-    let ly = 128
-    let i = start
-    push({"op": "clip_push", "x": 570, "y": 104, "w": 660, "h": 566})
+    let visible = 15
+    let i = max(0, total - visible)
+    let ly = 190
+    push({"op": "clip_push", "x": 880, "y": 160, "w": 364, "h": 386})
     while i < total {
         let entry = L.log[i]
-        let font = "ui"
-        if entry.k == "h" { font = "bold" }
-        text(592, ly, entry.t, 14, kind_color(entry.k), font)
+        let color = kind_color(entry.k)
+        if entry.k == "h" { color = C_RED }
+        text(900, ly, clip_text(entry.t, 330, 13), 13, color, "bold")
         ly += 24
         i += 1
     }
     push({"op": "clip_pop"})
+
+    menu_word(880, 566, 250, 54, "OTRA VIDA", "again", 26)
+    small_button(1150, 572, 110, 42, "MENÚ", "restart")
+    small_button(1150, 628, 110, 42, "SALIR", "quit")
 }
 
 function epitaph() {

@@ -4,24 +4,29 @@
 // Campos de un evento:
 //   id, title, text, min/max (edad), w (peso), req (etiquetas separadas por comas),
 //   person: "near" (desconocido de edad parecida) o [min, max] (rango de edad),
-//   choices: [{t: texto del botón, o: [resultados]}]
+//   choices: [{t: texto del botón, o: [resultados], need/rank: requisito social,
+//              cost: dinero necesario, lucky: [rasgos con mejor suerte]}]
 // Un resultado se elige por peso `w` y puede modificar:
 //   happy, health, smarts, looks, karma, alcohol, drugs, money (número o [min, max]),
+//   know, guts, skill, kind, charm (estadísticas sociales),
 //   bond (pareja o persona del evento), count (+parejas sexuales), sex (encuentro con la persona),
 //   std (% de contagio), preg (% de embarazo), jail (años), die (causa), special.
 // Marcadores de texto: {a} o/a del personaje, {x} nombre de la persona, {xa} o/a,
 //   {xel} él/ella, {xlo} lo/la, {xun} Un/Una, {edad}, {p} pareja, {pa}, {pel}, {plo},
 //   {trabajo}, {monto}.
-// Etiquetas req: school, job, nojob, partner, nopartner, married, single, hasex, hot,
-//   alcohol, drugs, kids, money, f, m.
+// Etiquetas req: school, uni, job, nojob, partner, nopartner, married, single, hasex, hot,
+//   alcohol, drugs, addict, villain, kids, money, f, m.
 
 const EVENTS = [
     {
         "id": "bully", "title": "El abusón", "min": 7, "max": 15, "w": 10, "req": "school",
         "text": "Un abusón de la escuela te quita el almuerzo todos los días.",
         "choices": [
-            {"t": "Pelear", "o": [
-                {"w": 50, "log": "Le rompiste la nariz. Ahora te respetan.", "happy": 10, "health": -5, "karma": -2},
+            {"t": "Humillarlo frente a toda la escuela", "need": "guts", "rank": 2, "o": [
+                {"w": 100, "log": "Lo dejaste callado con una sola frase. Toda la escuela aplaudió.", "happy": 12, "guts": 8, "charm": 4}
+            ]},
+            {"t": "Pelear", "lucky": ["rebelde"], "o": [
+                {"w": 50, "log": "Le rompiste la nariz. Ahora te respetan.", "happy": 10, "health": -5, "karma": -2, "guts": 6},
                 {"w": 50, "log": "Te dio una paliza frente a toda la escuela.", "health": -15, "happy": -15}
             ]},
             {"t": "Decirle a la maestra", "o": [
@@ -42,7 +47,10 @@ const EVENTS = [
                 {"w": 30, "log": "Te descubrieron copiando y te suspendieron una semana.", "happy": -15, "smarts": -3, "karma": -3}
             ]},
             {"t": "Estudiar por tu cuenta", "o": [
-                {"w": 100, "log": "Estudiaste toda la noche y aprobaste con honor.", "smarts": 5, "happy": -3}
+                {"w": 100, "log": "Estudiaste toda la noche y aprobaste con honor.", "smarts": 5, "happy": -3, "know": 5}
+            ]},
+            {"t": "Descubrir que sus respuestas están mal", "need": "know", "rank": 2, "o": [
+                {"w": 100, "log": "Notaste que las respuestas eran falsas. Medio salón reprobó; tú no.", "smarts": 4, "know": 6, "happy": 6}
             ]}
         ]
     },
@@ -105,7 +113,7 @@ const EVENTS = [
         "text": "En un bar, {x} ({edad} años) no deja de mirarte y finalmente se acerca a hablar.",
         "choices": [
             {"t": "Llevártel{xlo} a casa", "o": [
-                {"w": 100, "special": "hookup"}
+                {"w": 100, "special": "hookup", "charm": 2}
             ]},
             {"t": "Pedirle su número", "o": [
                 {"w": 60, "log": "Salieron unas semanas y la cosa fluyó.", "special": "new_partner", "happy": 6},
@@ -139,7 +147,7 @@ const EVENTS = [
                 {"w": 100, "special": "hookup"}
             ]},
             {"t": "Rechazar con elegancia", "o": [
-                {"w": 100, "log": "Le dijiste que no mezclas trabajo y placer. {x} lo tomó bien.", "happy": 1}
+                {"w": 100, "log": "Le dijiste que no mezclas trabajo y placer. {x} lo tomó bien.", "happy": 1, "kind": 3}
             ]},
             {"t": "Reportarl{xlo} a RR. HH.", "o": [
                 {"w": 60, "log": "Despidieron a {x}. La oficina te mira raro.", "karma": -2},
@@ -282,6 +290,9 @@ const EVENTS = [
                 {"w": 60, "log": "La policía cibernética logró que las bajaran.", "happy": -10},
                 {"w": 40, "log": "Nadie hizo nada. Las fotos siguen circulando.", "happy": -25}
             ]},
+            {"t": "Convertirlo en campaña viral a tu favor", "need": "charm", "rank": 4, "o": [
+                {"w": 100, "log": "Te adueñaste de la narrativa. Ahora eres tendencia y tienes patrocinadores.", "money": 25000, "happy": 10, "charm": 8}
+            ]},
             {"t": "Abrir una cuenta +18 y monetizarlo", "o": [
                 {"w": 100, "log": "Si van a verte, que paguen. Ya tienes suscriptores.", "special": "creator", "happy": 5, "karma": -2}
             ]},
@@ -326,8 +337,11 @@ const EVENTS = [
             {"t": "Darle todo", "o": [
                 {"w": 100, "log": "Te quitó $500 y el celular.", "money": -500, "happy": -6}
             ]},
-            {"t": "Defenderte", "o": [
-                {"w": 40, "log": "Lo pusiste a correr. Eres la leyenda del barrio.", "happy": 8, "karma": 2},
+            {"t": "Desarmarlo con un movimiento", "need": "guts", "rank": 4, "o": [
+                {"w": 100, "log": "Le torciste la muñeca y la navaja cayó al suelo. Lo entregaste a la policía.", "happy": 12, "guts": 8, "karma": 5}
+            ]},
+            {"t": "Defenderte", "lucky": ["rebelde"], "o": [
+                {"w": 40, "log": "Lo pusiste a correr. Eres la leyenda del barrio.", "happy": 8, "karma": 2, "guts": 5},
                 {"w": 60, "log": "Te apuñaló en el brazo.", "health": -25}
             ]}
         ]
@@ -436,6 +450,330 @@ const EVENTS = [
                 {"w": 100, "log": "Preferiste la alberca. Con traje de baño, gracias."}
             ]}
         ]
+    },
+    {
+        "id": "black_cat", "title": "Un gato muy raro", "min": 8, "max": 40, "w": 2, "req": "",
+        "text": "Un gato negro con un collar amarillo te sigue a casa. Juras que te acaba de decir «oye, tú».",
+        "choices": [
+            {"t": "Adoptarlo", "o": [
+                {"w": 100, "log": "Ahora tienes un gato que duerme en tu mochila y opina de todo.", "happy": 10, "kind": 5}
+            ]},
+            {"t": "Hablarle de vuelta", "need": "know", "rank": 3, "o": [
+                {"w": 100, "log": "Tuvieron una conversación profunda sobre la corrupción de los adultos. Nadie te creería.", "happy": 6, "know": 6, "guts": 4}
+            ]},
+            {"t": "Ignorarlo", "o": [
+                {"w": 100, "log": "El gato se fue indignado."}
+            ]}
+        ]
+    },
+    {
+        "id": "calling_card", "title": "Tarjeta de aviso", "min": 18, "max": 80, "w": 4, "req": "villain",
+        "text": "Encuentras una tarjeta roja en tu escritorio: «Robaremos tu corazón corrompido». Firmado: un sombrero de copa.",
+        "choices": [
+            {"t": "Reírte y romperla", "o": [
+                {"w": 60, "log": "Una broma de mal gusto. O eso quieres creer.", "karma": -2},
+                {"w": 40, "log": "Esa noche soñaste con un palacio dorado y despertaste llorando.", "happy": -15, "karma": 10}
+            ]},
+            {"t": "Confesar todo lo que has hecho", "o": [
+                {"w": 100, "log": "Pediste perdón a todos los que lastimaste. Te sientes ligero por primera vez.", "karma": 25, "happy": 5, "kind": 8}
+            ]}
+        ]
+    },
+    {
+        "id": "midnight_tv", "title": "Canal de medianoche", "min": 16, "max": 45, "w": 2, "req": "single",
+        "text": "A medianoche, en la tele apagada, aparece la silueta de alguien. Dicen que es tu alma gemela.",
+        "choices": [
+            {"t": "Tocar la pantalla", "o": [
+                {"w": 60, "log": "Tu mano atravesó la pantalla. Al día siguiente conociste a {x} y lo supiste.", "special": "new_partner", "happy": 10},
+                {"w": 40, "log": "Te golpeaste los dedos con la tele. Era solo tu reflejo.", "happy": -2}
+            ]},
+            {"t": "Apagar la tele (ya estaba apagada)", "o": [
+                {"w": 100, "log": "Decidiste que no era asunto tuyo."}
+            ]}
+        ],
+        "person": "near"
+    },
+    {
+        "id": "karaoke", "title": "Duelo de karaoke", "min": 18, "max": 60, "w": 5, "req": "",
+        "text": "En el karaoke, alguien te reta a un duelo de canto frente a todo el bar.",
+        "choices": [
+            {"t": "Cantar con todo el corazón", "need": "charm", "rank": 3, "o": [
+                {"w": 100, "log": "El bar entero cantó contigo. Te invitaron tragos toda la noche.", "happy": 14, "charm": 6}
+            ]},
+            {"t": "Aceptar el reto", "lucky": ["fiesta", "carisma"], "o": [
+                {"w": 50, "log": "Ganaste por aclamación. Tu voz no es buena, pero tu actitud sí.", "happy": 10, "charm": 4, "guts": 3},
+                {"w": 50, "log": "Desafinaste tanto que un perro aulló afuera.", "happy": -6, "guts": 3}
+            ]},
+            {"t": "Huir al baño", "o": [
+                {"w": 100, "log": "Te escondiste en el baño hasta que se olvidaron de ti.", "happy": -3}
+            ]}
+        ]
+    },
+    {
+        "id": "bar_fight", "title": "Busca pleitos", "min": 16, "max": 50, "w": 5, "req": "",
+        "text": "Un borracho empuja a tu amigo y te mira buscando pelea.",
+        "choices": [
+            {"t": "Calmarlo con la mirada", "need": "guts", "rank": 3, "o": [
+                {"w": 100, "log": "Le sostuviste la mirada hasta que se fue. Tu amigo no deja de contarlo.", "happy": 8, "guts": 6, "karma": 3}
+            ]},
+            {"t": "Romperle la cara", "lucky": ["rebelde"], "o": [
+                {"w": 55, "log": "Un solo golpe y al suelo. Te sacaron del bar entre aplausos.", "happy": 6, "guts": 5, "karma": -3},
+                {"w": 45, "log": "Tenía amigos. Despertaste en el hospital.", "health": -25, "guts": 3}
+            ]},
+            {"t": "Llevarte a tu amigo de ahí", "o": [
+                {"w": 100, "log": "Se fueron a otro bar. La noche siguió.", "kind": 3}
+            ]}
+        ]
+    },
+    {
+        "id": "uni_final", "title": "Final de cálculo", "min": 18, "max": 30, "w": 6, "req": "uni",
+        "text": "Mañana es el examen final más difícil de la carrera.",
+        "choices": [
+            {"t": "Presentarlo sin estudiar", "need": "know", "rank": 4, "o": [
+                {"w": 100, "log": "Sacaste el mejor promedio. El profesor sospecha de ti, pero no puede probar nada.", "smarts": 6, "know": 6, "happy": 8}
+            ]},
+            {"t": "Estudiar toda la noche", "lucky": ["cerebro"], "o": [
+                {"w": 70, "log": "Café, apuntes y llanto. Aprobaste.", "smarts": 4, "know": 5, "health": -3},
+                {"w": 30, "log": "Te dormiste sobre el examen. Reprobaste.", "happy": -10, "know": 2}
+            ]},
+            {"t": "Ir de fiesta y rezar", "o": [
+                {"w": 30, "log": "Milagro: aprobaste con lo justo.", "happy": 8},
+                {"w": 70, "log": "Reprobaste y además tienes resaca.", "happy": -10, "alcohol": 5}
+            ]}
+        ]
+    },
+    {
+        "id": "confession", "title": "Confesión", "min": 18, "max": 50, "w": 4, "req": "single", "person": "near",
+        "text": "{x}, tu amig{xa} de hace años, te confiesa que lleva tiempo enamorad{xa} de ti.",
+        "choices": [
+            {"t": "Corresponderle", "o": [
+                {"w": 100, "log": "Se besaron como en una película. Ahora todo tiene sentido.", "special": "new_partner", "happy": 12}
+            ]},
+            {"t": "Rechazarl{xlo} sin romperle el corazón", "need": "kind", "rank": 3, "o": [
+                {"w": 100, "log": "Le explicaste con tanto cariño que siguen siendo amigos.", "special": "add_friend", "kind": 6}
+            ]},
+            {"t": "Reírte", "o": [
+                {"w": 100, "log": "Te reíste en su cara. Perdiste a un amigo de años.", "karma": -8, "happy": -3}
+            ]}
+        ]
+    },
+    {
+        "id": "ex_stalker", "title": "Visita a las 2 a. m.", "min": 18, "max": 60, "w": 4, "req": "hasex", "person": "ex",
+        "text": "Tu ex, {x}, está afuera de tu casa a las 2 a. m. gritando tu nombre.",
+        "choices": [
+            {"t": "Salir y poner límites", "need": "guts", "rank": 3, "o": [
+                {"w": 100, "log": "Le dejaste todo claro. No volvió a aparecer.", "happy": 6, "guts": 5}
+            ]},
+            {"t": "Dejarl{xlo} entrar", "o": [
+                {"w": 100, "special": "hookup"}
+            ]},
+            {"t": "Llamar a la policía", "o": [
+                {"w": 100, "log": "Se llevaron a {x}. Tus vecinos ahora te miran raro.", "happy": -2}
+            ]}
+        ]
+    },
+    {
+        "id": "office_party", "title": "Fiesta de la empresa", "min": 20, "max": 65, "w": 5, "req": "job",
+        "text": "Fiesta de fin de año de la empresa. Tu jefe ya va en su sexta copa.",
+        "choices": [
+            {"t": "Ser el alma de la fiesta", "need": "charm", "rank": 3, "o": [
+                {"w": 100, "log": "Todos hablan de ti el lunes. Tu jefe te recuerda... para bien.", "special": "promo", "happy": 8, "charm": 4}
+            ]},
+            {"t": "Beber al ritmo del jefe", "lucky": ["fiesta"], "o": [
+                {"w": 50, "log": "Se hicieron mejores amigos. Por una noche.", "happy": 8, "alcohol": 6},
+                {"w": 50, "log": "Vomitaste sobre la planta del jefe. Era su favorita.", "happy": -8, "alcohol": 6}
+            ]},
+            {"t": "Irte temprano", "o": [
+                {"w": 100, "log": "Te fuiste antes del desastre. Sabio.", "happy": 1}
+            ]}
+        ]
+    },
+    {
+        "id": "strip_poker", "title": "Póker de prendas", "min": 18, "max": 45, "w": 4, "req": "",
+        "text": "La noche de juegos con amigos termina en póker de prendas.",
+        "choices": [
+            {"t": "Jugar en serio", "need": "skill", "rank": 3, "o": [
+                {"w": 100, "log": "Terminaste con la ropa puesta y todos los demás en calzones.", "happy": 12, "skill": 4, "charm": 4}
+            ]},
+            {"t": "Jugar", "o": [
+                {"w": 50, "log": "Perdiste hasta los calcetines. Te reíste como nunca.", "happy": 10, "charm": 3},
+                {"w": 50, "log": "Alguien tomó fotos. Ya están en el grupo de la familia.", "happy": -8}
+            ]},
+            {"t": "Retirarte con dignidad", "o": [
+                {"w": 100, "log": "Te fuiste vestid{a} y aburrid{a}."}
+            ]}
+        ]
+    },
+    {
+        "id": "photoshoot", "title": "Sesión «artística»", "min": 18, "max": 40, "w": 3, "req": "hot",
+        "text": "Un productor te ofrece $20,000 por una sesión de fotos «artística» sin ropa.",
+        "choices": [
+            {"t": "Negociar el doble", "need": "skill", "rank": 3, "o": [
+                {"w": 100, "log": "Negociaste $40,000 y control total sobre las fotos.", "money": 40000, "happy": 8, "skill": 4}
+            ]},
+            {"t": "Aceptar", "o": [
+                {"w": 100, "log": "Las fotos quedaron espectaculares. Tu abuela no debe verlas.", "money": 20000, "happy": 4, "karma": -2}
+            ]},
+            {"t": "Rechazar", "o": [
+                {"w": 100, "log": "Le dijiste que tu cuerpo no está a la venta."}
+            ]}
+        ]
+    },
+    {
+        "id": "vegas", "title": "¿Qué pasó anoche?", "min": 21, "max": 45, "w": 3, "req": "single,nopartner", "person": "near",
+        "text": "Despiertas en un hotel con un anillo en el dedo y {x} roncando a tu lado.",
+        "choices": [
+            {"t": "Seguir casad{a}", "o": [
+                {"w": 100, "log": "Decidiste darle una oportunidad a lo absurdo.", "sex": true, "special": "vegas_marry", "happy": 6}
+            ]},
+            {"t": "Anular el matrimonio", "o": [
+                {"w": 100, "log": "Un abogado y $2,000 después, eres libre otra vez.", "sex": true, "money": -2000}
+            ]}
+        ]
+    },
+    {
+        "id": "intervention", "title": "Intervención", "min": 18, "max": 70, "w": 6, "req": "addict",
+        "text": "Tu familia organiza una intervención. Todos lloran. Hay pancartas.",
+        "choices": [
+            {"t": "Prometer cambiar de verdad", "need": "kind", "rank": 2, "o": [
+                {"w": 100, "log": "Les pediste perdón y lo dijiste en serio. Empezaste a beber y drogarte mucho menos.", "alcohol": -30, "drugs": -30, "happy": 8, "kind": 5}
+            ]},
+            {"t": "Ir a rehabilitación", "o": [
+                {"w": 100, "log": "Pasaste tres meses en rehabilitación. Saliste limpi{a}.", "special": "rehab", "happy": -5}
+            ]},
+            {"t": "Mandarlos al diablo", "o": [
+                {"w": 100, "log": "Saliste dando un portazo. Tu familia ya no te llama.", "special": "family_hate", "happy": -10}
+            ]}
+        ]
+    },
+    {
+        "id": "noisy_neighbors", "title": "Vecinos ruidosos", "min": 18, "max": 80, "w": 4, "req": "",
+        "text": "Tus vecinos tienen sexo escandaloso todas las noches. Ya sabes sus nombres por los gritos.",
+        "choices": [
+            {"t": "Tocarles la puerta", "need": "guts", "rank": 2, "o": [
+                {"w": 100, "log": "Les dijiste todo. Se disculparon rojos de vergüenza.", "happy": 6, "guts": 3}
+            ]},
+            {"t": "Contraatacar con más ruido", "req_partner": true, "o": [
+                {"w": 100, "log": "Guerra de decibeles. Ganaron ustedes.", "happy": 8, "bond": 8}
+            ]},
+            {"t": "Ponerte audífonos", "o": [
+                {"w": 100, "log": "Dormiste mal, pero en paz.", "happy": -3}
+            ]}
+        ]
+    },
+    {
+        "id": "sex_tape", "title": "Luz, cámara...", "min": 20, "max": 50, "w": 3, "req": "partner",
+        "text": "{p} quiere grabar un video íntimo juntos «solo para ustedes».",
+        "choices": [
+            {"t": "Aceptar", "o": [
+                {"w": 75, "log": "Quedó mejor de lo que esperaban. Está bien guardado... por ahora.", "happy": 8, "bond": 8},
+                {"w": 25, "log": "El celular se perdió. Una semana después, el video estaba en internet.", "happy": -25, "bond": -10}
+            ]},
+            {"t": "Rechazar", "o": [
+                {"w": 100, "log": "Le dijiste que prefieres los recuerdos sin respaldo en la nube.", "bond": -2}
+            ]}
+        ]
+    },
+    {
+        "id": "rival", "title": "Te robaron el crédito", "min": 20, "max": 65, "w": 5, "req": "job",
+        "text": "Un compañero presentó tu proyecto como suyo frente al jefe.",
+        "choices": [
+            {"t": "Demostrar con pruebas que fue tuyo", "need": "skill", "rank": 3, "o": [
+                {"w": 100, "log": "Presentaste el historial de cambios. Lo despidieron y a ti te ascendieron.", "special": "promo", "skill": 5, "happy": 10}
+            ]},
+            {"t": "Sabotear su computadora", "lucky": ["rebelde"], "o": [
+                {"w": 50, "log": "Su presentación falló frente a todos. Justicia poética.", "happy": 8, "karma": -6},
+                {"w": 50, "log": "Te descubrieron. Te despidieron.", "special": "fired", "karma": -6}
+            ]},
+            {"t": "Dejarlo pasar", "o": [
+                {"w": 100, "log": "Te tragaste el coraje. Te sigue doliendo.", "happy": -8}
+            ]}
+        ]
+    },
+    {
+        "id": "crypto", "title": "La moneda del futuro", "min": 20, "max": 65, "w": 4, "req": "money",
+        "text": "Un amigo jura que una criptomoneda nueva con un perro de logo va a explotar.",
+        "choices": [
+            {"t": "Investigar antes de invertir", "need": "know", "rank": 3, "o": [
+                {"w": 60, "log": "Encontraste el momento justo para entrar y salir. Ganaste {monto}.", "money": [8000, 30000], "know": 4},
+                {"w": 40, "log": "Descubriste que era una estafa. Le avisaste a tu amigo; no te hizo caso.", "know": 4, "smarts": 2}
+            ]},
+            {"t": "Invertir $5,000 a ciegas", "cost": 5000, "o": [
+                {"w": 30, "log": "¡Se fue a la luna! Vendiste a tiempo y ganaste $45,000.", "money": 45000, "happy": 12},
+                {"w": 70, "log": "Se desplomó en una semana. Adiós $5,000.", "money": -5000, "happy": -8}
+            ]},
+            {"t": "Pasar", "o": [
+                {"w": 100, "log": "Le dijiste que no. Tu dinero sigue donde estaba."}
+            ]}
+        ]
+    },
+    {
+        "id": "name_tattoo", "title": "Tinta para siempre", "min": 18, "max": 50, "w": 3, "req": "partner",
+        "text": "{p} se tatuó tu nombre en el pecho y te lo enseña emocionad{pa}.",
+        "choices": [
+            {"t": "Tatuarte su nombre también", "o": [
+                {"w": 100, "log": "Ahora llevan sus nombres en la piel. Qué podría salir mal.", "bond": 15, "happy": 6}
+            ]},
+            {"t": "Asustarte", "o": [
+                {"w": 100, "log": "Tu cara lo dijo todo. {p} se puso una camisa en silencio.", "bond": -15}
+            ]}
+        ]
+    },
+    {
+        "id": "silver_fox", "title": "Club de jubilados", "min": 55, "max": 85, "w": 4, "req": "", "person": [55, 85],
+        "text": "En la clase de baile del club de jubilados, {x} ({edad}) te guiña el ojo.",
+        "choices": [
+            {"t": "Invitarl{xlo} a bailar", "o": [
+                {"w": 60, "special": "hookup"},
+                {"w": 40, "log": "Bailaron un danzón y te pisó tres veces. Encantador.", "happy": 8}
+            ]},
+            {"t": "Hacerte el desentendido", "o": [
+                {"w": 100, "log": "A tu edad ya no estás para esos trotes. ¿O sí?"}
+            ]}
+        ]
+    },
+    {
+        "id": "volunteer_call", "title": "Emergencia en el barrio", "min": 16, "max": 75, "w": 3, "req": "",
+        "text": "Un incendio deja a varias familias de tu calle sin casa.",
+        "choices": [
+            {"t": "Organizar a todo el barrio", "need": "kind", "rank": 3, "o": [
+                {"w": 100, "log": "Organizaste colectas, comida y refugio. El barrio te adora.", "karma": 15, "kind": 6, "happy": 8}
+            ]},
+            {"t": "Donar $500", "cost": 500, "o": [
+                {"w": 100, "log": "Donaste lo que pudiste. Te sentiste bien.", "money": -500, "karma": 6, "kind": 3}
+            ]},
+            {"t": "No es tu problema", "o": [
+                {"w": 100, "log": "Cerraste la ventana para no oler el humo.", "karma": -5}
+            ]}
+        ]
+    },
+    {
+        "id": "hack_offer", "title": "Trabajo en la sombra", "min": 18, "max": 50, "w": 3, "req": "",
+        "text": "Un grupo anónimo te ofrece $15,000 por hackear la base de datos de una empresa corrupta.",
+        "choices": [
+            {"t": "Hacerlo sin dejar rastro", "need": "know", "rank": 4, "o": [
+                {"w": 100, "log": "Entraste, filtraste los documentos y saliste. La empresa cayó. Nadie sabe que fuiste tú.", "money": 15000, "karma": 8, "know": 5}
+            ]},
+            {"t": "Intentarlo", "lucky": ["cerebro", "rebelde"], "o": [
+                {"w": 40, "log": "Lo lograste por los pelos. Ganaste $15,000.", "money": 15000, "know": 4},
+                {"w": 60, "log": "Te rastrearon en dos horas.", "jail": 3}
+            ]},
+            {"t": "Rechazar", "o": [
+                {"w": 100, "log": "Borraste el mensaje y cambiaste todas tus contraseñas."}
+            ]}
+        ]
+    },
+    {
+        "id": "influencer", "title": "Video viral", "min": 16, "max": 45, "w": 3, "req": "",
+        "text": "Un video tuyo bailando borrach{a} tiene dos millones de vistas.",
+        "choices": [
+            {"t": "Aprovechar la fama", "need": "charm", "rank": 3, "o": [
+                {"w": 100, "log": "Conseguiste patrocinadores y una gira de antros. Ganaste {monto}.", "money": [5000, 20000], "charm": 6, "happy": 10}
+            ]},
+            {"t": "Esconderte un mes", "o": [
+                {"w": 100, "log": "Esperaste a que internet encontrara otra víctima.", "happy": -6}
+            ]}
+        ]
     }
 ]
 
@@ -463,6 +801,9 @@ function meets(tag: string) {
     if tag == "money" { return L.money >= 1000 }
     if tag == "f" { return L.gender == "f" }
     if tag == "m" { return L.gender == "m" }
+    if tag == "villain" { return L.karma < 30 }
+    if tag == "uni" { return L.uni > 0 }
+    if tag == "addict" { return L.alcohol + L.drugs >= 40 }
     return false
 }
 
@@ -504,16 +845,62 @@ function event_ctx(ev: map) {
 function open_event(ev: map, ctx: map) {
     L.seen[ev.id] = L.age
     let labels = []
-    for c in ev.choices { list_push(labels, fmt(c.t, ctx)) }
+    let locks = []
+    let tags = []
+    for c in ev.choices {
+        list_push(labels, fmt(c.t, ctx))
+        list_push(locks, choice_lock(c))
+        list_push(tags, choice_tag(c))
+    }
+    open_choice(ev.title, fmt(ev.text, ctx), labels, locks, "event", ctx)
+    G.modal.ev = ev
+    G.modal.tags = tags
+}
+
+// Requisito pendiente de una opción ("" si se puede elegir).
+function choice_lock(c: map) {
+    if c.need != null && rank(c.need) < c.rank {
+        return SOCIAL_NAMES[c.need] + " " + str(c.rank)
+    }
+    if c.cost != null && L.money < c.cost {
+        return "Necesitas " + money_str(c.cost)
+    }
+    if c.req_partner == true && L.partner_id == 0 {
+        return "Necesitas pareja"
+    }
+    return ""
+}
+
+// Etiqueta visible del requisito aunque ya se cumpla (estilo Persona).
+function choice_tag(c: map) {
+    if c.need != null { return SOCIAL_NAMES[c.need] + " " + str(c.rank) }
+    return ""
+}
+
+function open_choice(title: string, text: string, labels: list, locks: list, handler: string, ctx: map) {
+    let p = ctx["person"]
     G.modal = {
         "kind": "choice",
-        "title": ev.title,
-        "text": fmt(ev.text, ctx),
+        "title": title,
+        "text": text,
         "choices": labels,
-        "handler": "event",
-        "ev": ev,
-        "ctx": ctx
+        "locks": locks,
+        "handler": handler,
+        "ctx": ctx,
+        "person": p
     }
+    G.modal_t0 = G.t
+}
+
+// Los rasgos en `lucky` duplican la probabilidad del primer resultado.
+function pick_outcome_for(choice: map) {
+    let outcomes = choice.o
+    let weights = []
+    for o in outcomes { list_push(weights, o.w) }
+    if choice.lucky != null && list_contains(choice.lucky, L.trait) {
+        weights[0] = weights[0] * 2
+    }
+    return outcomes[weighted_choose(G.rng, weights)]
 }
 
 function pick_outcome(outcomes: list) {
@@ -525,7 +912,7 @@ function pick_outcome(outcomes: list) {
 function resolve_event(ev: map, index: int, ctx: map) {
     G.modal = null
     let choice = ev.choices[index]
-    let o = pick_outcome(choice.o)
+    let o = pick_outcome_for(choice)
     let msg = apply(o, ctx)
     finish(ev.title, msg, outcome_kind(o))
 }
@@ -539,6 +926,7 @@ function finish(title: string, msg: string, kind: string) {
     }
     if G.modal == null && L.alive && msg != "" {
         G.modal = {"kind": "info", "title": title, "text": msg}
+        G.modal_t0 = G.t
     }
 }
 

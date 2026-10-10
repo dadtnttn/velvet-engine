@@ -1,0 +1,401 @@
+// @edition 3
+// Arte vectorial: genera documentos SVG que el host rasteriza y guarda en caché.
+// Estilo: rojo, negro y blanco, paneles inclinados, semitonos y estallidos de cómic.
+
+const SVG_NS = "xmlns='http://www.w3.org/2000/svg'"
+const HEX_RED = "#e3141b"
+const HEX_RED_D = "#9e0e14"
+const HEX_INK = "#0d0d0d"
+const HEX_WHITE = "#f7f7f2"
+const HEX_GRAY = "#5a5a5a"
+const HEX_YELLOW = "#ffd21f"
+const FONT_TITLE = "Impact, sans-serif"
+
+state {
+    svgc: map = {}
+}
+
+// ---------------------------------------------------------------- utilidades
+
+function n(v: any) {
+    if type_of(v) == "int" { return str(v) }
+    return str(floor(v * 10.0 + 0.5) / 10.0)
+}
+
+function svg_doc(w: int, h: int, body: string) {
+    return "<svg " + SVG_NS + " width='" + str(w) + "' height='" + str(h) + "' viewBox='0 0 " + str(w) + " " + str(h) + "'>" + body + "</svg>"
+}
+
+function points(pts: list) {
+    let parts = []
+    let i = 0
+    while i + 1 < len(pts) {
+        list_push(parts, n(pts[i]) + "," + n(pts[i + 1]))
+        i += 2
+    }
+    return str_join(parts, " ")
+}
+
+function poly(pts: list, fill: string, stroke: string, sw: int) {
+    let s = "<polygon points='" + points(pts) + "' fill='" + fill + "'"
+    if stroke != "" { s = s + " stroke='" + stroke + "' stroke-width='" + str(sw) + "' stroke-linejoin='miter'" }
+    return s + "/>"
+}
+
+function esc(text: string) {
+    let out = str_replace(text, "&", "&amp;")
+    out = str_replace(out, "<", "&lt;")
+    return str_replace(out, ">", "&gt;")
+}
+
+// ---------------------------------------------------------------- formas
+
+// Paralelogramo con sombra desplazada. El documento mide (w + sd) × (h + sd).
+function slant_doc(w: int, h: int, skew: int, fill: string, stroke: string, sw: int, shadow: string, sd: int) {
+    let key = "s|" + str(w) + "|" + str(h) + "|" + str(skew) + "|" + fill + "|" + stroke + "|" + str(sw) + "|" + shadow + "|" + str(sd)
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let o = sw / 2
+    let body = ""
+    if shadow != "" && sd > 0 {
+        body = poly([skew + sd, sd, w + sd, sd, w - skew + sd, h + sd, sd, h + sd], shadow, "", 0)
+    }
+    body = body + poly([skew + o, o, w - o, o, w - skew - o, h - o, o, h - o], fill, stroke, sw)
+    let doc = svg_doc(w + sd, h + sd, body)
+    svgc[key] = doc
+    return doc
+}
+
+// Estallido de cómic con picos irregulares.
+function burst_doc(w: int, h: int, spikes: int, fill: string, stroke: string, sw: int, seed: int) {
+    let key = "b|" + str(w) + "|" + str(h) + "|" + str(spikes) + "|" + fill + "|" + stroke + "|" + str(sw) + "|" + str(seed)
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let cx = w / 2.0
+    let cy = h / 2.0
+    let rx = w / 2.0 - sw
+    let ry = h / 2.0 - sw
+    let pts = []
+    let i = 0
+    let total = spikes * 2
+    while i < total {
+        let a = i * 3.14159265 / spikes - 1.5708
+        let jit = ((i * 7 + seed) * 13 % 10) / 10.0
+        let r = 0.68 + 0.12 * jit
+        if i % 2 == 0 { r = 0.86 + 0.14 * jit }
+        list_push(pts, cx + cos(a) * rx * r)
+        list_push(pts, cy + sin(a) * ry * r)
+        i += 1
+    }
+    let doc = svg_doc(w, h, poly(pts, fill, stroke, sw))
+    svgc[key] = doc
+    return doc
+}
+
+// Estrella de cinco puntas (decoración).
+function star_points(cx: float, cy: float, r: float) {
+    let pts = []
+    let i = 0
+    while i < 10 {
+        let a = i * 3.14159265 / 5 - 1.5708
+        let rr = r
+        if i % 2 == 1 { rr = r * 0.45 }
+        list_push(pts, cx + cos(a) * rr)
+        list_push(pts, cy + sin(a) * rr)
+        i += 1
+    }
+    return pts
+}
+
+// Fondo de pantalla: degradado rojo, semitonos, astillas negras y estrellas.
+function bg_doc() {
+    let cached = svgc["bg"]
+    if cached != null { return cached }
+    let body = "<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#ff2b31'/><stop offset='1' stop-color='#8f0b11'/></linearGradient>"
+    body = body + "<pattern id='h' width='14' height='14' patternUnits='userSpaceOnUse' patternTransform='rotate(30)'><circle cx='7' cy='7' r='3' fill='#000' fill-opacity='0.2'/></pattern></defs>"
+    body = body + "<rect width='1280' height='720' fill='url(#g)'/><rect width='1280' height='720' fill='url(#h)'/>"
+    body = body + poly([0, 0, 470, 0, 300, 720, 0, 720], HEX_INK, "", 0)
+    body = body + poly([480, 0, 500, 0, 330, 720, 310, 720], HEX_WHITE, "", 0)
+    body = body + poly([1090, 0, 1280, 0, 1280, 720, 930, 720], HEX_INK, "", 0)
+    body = body + poly([1070, 0, 1080, 0, 920, 720, 910, 720], HEX_WHITE, "", 0)
+    body = body + poly(star_points(560.0, 70.0, 26.0), HEX_INK, "", 0)
+    body = body + poly(star_points(860.0, 660.0, 34.0), HEX_INK, "", 0)
+    body = body + poly(star_points(1020.0, 120.0, 18.0), HEX_WHITE, "", 0)
+    body = body + poly(star_points(380.0, 640.0, 20.0), HEX_RED, "", 0)
+    let doc = svg_doc(1280, 720, body)
+    svgc["bg"] = doc
+    return doc
+}
+
+// Letras de "nota de rescate": cada letra en una caja distinta y ladeada.
+function ransom_doc(letters: list, size: int, seed: int) {
+    let key = "r|" + str_join(letters, "") + "|" + str(size) + "|" + str(seed)
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let cell = size * 78 / 100
+    let space = size * 36 / 100
+    let width = 20
+    for l in letters {
+        if l == " " { width += space } else { width += cell + 4 }
+    }
+    let h = size + 30
+    let x = 10
+    let body = ""
+    let i = 0
+    let styles = [[HEX_WHITE, HEX_INK], [HEX_INK, HEX_WHITE], [HEX_RED, HEX_WHITE], [HEX_WHITE, HEX_RED]]
+    for l in letters {
+        if l == " " {
+            x += space
+            i += 1
+            continue
+        }
+        let k = (i * 5 + seed) % 4
+        let angle = ((i * 7 + seed) % 9) - 4
+        let grow = ((i * 3 + seed) % 3) * size / 14
+        let st = styles[k]
+        let cx = x + cell / 2
+        let cy = h / 2
+        let bw = cell + grow / 2
+        let bh = size * 92 / 100 + grow
+        body = body + "<g transform='translate(" + str(cx) + " " + str(cy) + ") rotate(" + str(angle) + ")'>"
+        body = body + "<rect x='" + str(-bw / 2 + 4) + "' y='" + str(-bh / 2 + 4) + "' width='" + str(bw) + "' height='" + str(bh) + "' fill='" + HEX_INK + "'/>"
+        body = body + "<rect x='" + str(-bw / 2) + "' y='" + str(-bh / 2) + "' width='" + str(bw) + "' height='" + str(bh) + "' fill='" + st[0] + "' stroke='" + HEX_INK + "' stroke-width='3'/>"
+        body = body + "<text x='0' y='" + str(size * 33 / 100) + "' text-anchor='middle' font-family='" + FONT_TITLE + "' font-weight='bold' font-size='" + str(size + grow) + "' fill='" + st[1] + "'>" + esc(l) + "</text></g>"
+        x += cell + 4
+        i += 1
+    }
+    let doc = svg_doc(width, h, body)
+    let entry = {"doc": doc, "w": width, "h": h}
+    svgc[key] = entry
+    return entry
+}
+
+// Título ladeado con contorno grueso (encabezados de menú).
+function tilt_title_doc(text: string, w: int, h: int, size: int, fill: string, outline: string) {
+    let key = "t|" + text + "|" + str(w) + "|" + str(h) + "|" + str(size) + "|" + fill + "|" + outline
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let t = "<g transform='translate(14 " + str(h - size / 4) + ") rotate(-3)'>"
+    let attrs = " font-family='" + FONT_TITLE + "' font-weight='bold' font-size='" + str(size) + "'"
+    t = t + "<text x='5' y='5'" + attrs + " fill='" + HEX_INK + "'>" + esc(text) + "</text>"
+    t = t + "<text x='0' y='0'" + attrs + " fill='" + outline + "' stroke='" + outline + "' stroke-width='" + str(size / 7) + "' stroke-linejoin='round'>" + esc(text) + "</text>"
+    t = t + "<text x='0' y='0'" + attrs + " fill='" + fill + "'>" + esc(text) + "</text></g>"
+    let doc = svg_doc(w, h, t)
+    svgc[key] = doc
+    return doc
+}
+
+// Flecha triangular para selectores.
+function arrow_doc(dir: string, fill: string) {
+    let key = "a|" + dir + "|" + fill
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let pts = [8, 4, 30, 20, 8, 36]
+    if dir == "left" { pts = [32, 4, 10, 20, 32, 36] }
+    if dir == "up" { pts = [4, 32, 20, 8, 36, 32] }
+    let doc = svg_doc(40, 40, poly(pts, fill, HEX_INK, 3))
+    svgc[key] = doc
+    return doc
+}
+
+// Candado para opciones bloqueadas.
+function lock_doc() {
+    let cached = svgc["lock"]
+    if cached != null { return cached }
+    let body = "<path d='M9 15 V10 a7 7 0 0 1 14 0 V15' fill='none' stroke='" + HEX_WHITE + "' stroke-width='3'/>"
+    body = body + "<rect x='5' y='15' width='22' height='15' fill='" + HEX_WHITE + "'/><circle cx='16' cy='22' r='2.5' fill='" + HEX_INK + "'/>"
+    let doc = svg_doc(32, 32, body)
+    svgc["lock"] = doc
+    return doc
+}
+
+// ---------------------------------------------------------------- retratos
+
+// Clave del aspecto para cachear retratos.
+function look_key(look: map, gender: string, age: int, mood: string) {
+    let bracket = "a"
+    if age < 3 { bracket = "b" } else if age < 13 { bracket = "c" } else if age >= 62 { bracket = "o" } else if age >= 45 { bracket = "m" }
+    return "p|" + str(look.skin) + str(look.hair) + str(look.hcolor) + str(look.eyes) + str(look.outfit) + str(look.acc) + gender + bracket + mood
+}
+
+function mood_for(happy: int) {
+    if happy >= 80 { return "grin" }
+    if happy >= 55 { return "happy" }
+    if happy >= 35 { return "neutral" }
+    if happy >= 15 { return "sad" }
+    return "angry"
+}
+
+function portrait_doc(look: map, gender: string, age: int, mood: string) {
+    let key = look_key(look, gender, age, mood)
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let skin = SKINS[look.skin]
+    let shade = SKIN_SHADES[look.skin]
+    let hc = HAIR_COLORS[look.hcolor]
+    if age >= 62 && look.hcolor < 5 { hc = "#a9a9a9" }
+    let eye = EYE_COLORS[look.eyes]
+    let outfit = OUTFITS[look.outfit]
+    let style = look.hair
+    if age < 3 { style = 8 }
+    let acc = ACCESSORIES[look.acc]
+    let line = " stroke='" + HEX_INK + "' stroke-width='3' stroke-linejoin='round'"
+    let b = ""
+
+    // Pelo de atrás
+    b = b + hair_back(style, hc, line)
+
+    // Cuello y torso
+    b = b + "<path d='M84 156 L84 196 L116 196 L116 156 Z' fill='" + skin + "'" + line + "/>"
+    b = b + "<path d='M84 166 Q100 182 116 166 L116 178 Q100 192 84 178 Z' fill='" + shade + "'/>"
+    b = b + "<path d='M12 240 Q16 200 62 190 L84 186 L100 214 L116 186 L138 190 Q184 200 188 240 Z' fill='" + outfit + "'" + line + "/>"
+    let collar = HEX_WHITE
+    if look.outfit == 2 { collar = HEX_INK }
+    b = b + "<path d='M84 186 L100 214 L116 186 L109 183 L100 200 L91 183 Z' fill='" + collar + "' stroke='" + HEX_INK + "' stroke-width='2'/>"
+    b = b + "<path d='M40 204 Q52 196 66 194' stroke='" + HEX_WHITE + "' stroke-opacity='0.3' stroke-width='4' fill='none' stroke-linecap='round'/>"
+
+    // Orejas y cabeza
+    b = b + "<ellipse cx='51' cy='114' rx='8' ry='12' fill='" + skin + "'" + line + "/>"
+    b = b + "<ellipse cx='149' cy='114' rx='8' ry='12' fill='" + skin + "'" + line + "/>"
+    b = b + "<path d='M50 106 Q50 50 100 48 Q150 50 150 106 Q150 148 128 166 Q112 176 100 176 Q88 176 72 166 Q50 148 50 106 Z' fill='" + skin + "'" + line + "/>"
+    b = b + "<path d='M150 106 Q150 148 128 166 Q112 176 100 176 Q126 160 136 122 Q140 98 150 106 Z' fill='" + shade + "' opacity='0.85'/>"
+    if age >= 55 {
+        b = b + "<path d='M84 78 Q100 74 116 78 M60 124 L67 121 M140 124 L133 121' stroke='" + HEX_INK + "' stroke-opacity='0.4' stroke-width='2' fill='none'/>"
+    }
+
+    // Ojos, cejas, nariz
+    b = b + eyes(mood, eye, gender)
+    let brow = hc
+    if look.hcolor == 4 || look.hcolor == 8 || age >= 62 { brow = "#5a5a5a" }
+    b = b + brows(mood, brow)
+    b = b + "<path d='M101 122 Q106 134 98 138' stroke='" + HEX_INK + "' stroke-opacity='0.55' stroke-width='2.5' fill='none' stroke-linecap='round'/>"
+
+    // Barba
+    if acc == "Barba" && age >= 16 {
+        b = b + "<path d='M52 120 Q54 176 100 184 Q146 176 148 120 Q140 158 116 164 Q100 158 84 164 Q60 158 52 120 Z' fill='" + hc + "' stroke='" + HEX_INK + "' stroke-width='2.5' stroke-linejoin='round'/>"
+        b = b + "<path d='M84 145 Q100 138 116 145 Q100 151 84 145 Z' fill='" + hc + "' stroke='" + HEX_INK + "' stroke-width='2'/>"
+    }
+
+    // Boca y rubor
+    b = b + mouth(mood)
+    if mood == "grin" || mood == "happy" || gender == "f" {
+        b = b + "<ellipse cx='70' cy='134' rx='9' ry='4' fill='#ff5f7e' opacity='0.4'/><ellipse cx='130' cy='134' rx='9' ry='4' fill='#ff5f7e' opacity='0.4'/>"
+    }
+
+    // Pelo de enfrente
+    b = b + hair_front(style, hc, line)
+
+    // Accesorios
+    if acc == "Lentes" {
+        let g = " fill='none' stroke='" + HEX_INK + "' stroke-width='3.5'"
+        b = b + "<circle cx='78' cy='116' r='15'" + g + "/><circle cx='122' cy='116' r='15'" + g + "/>"
+        b = b + "<path d='M93 114 L107 114 M63 112 L52 108 M137 112 L148 108'" + g + "/>"
+        b = b + "<path d='M68 108 L74 104' stroke='#fff' stroke-opacity='0.7' stroke-width='2.5'/><path d='M112 108 L118 104' stroke='#fff' stroke-opacity='0.7' stroke-width='2.5'/>"
+    }
+    if acc == "Aretes" {
+        b = b + "<circle cx='50' cy='132' r='5' fill='" + HEX_YELLOW + "' stroke='" + HEX_INK + "' stroke-width='2'/><circle cx='150' cy='132' r='5' fill='" + HEX_YELLOW + "' stroke='" + HEX_INK + "' stroke-width='2'/>"
+    }
+    if acc == "Piercing" && age >= 13 {
+        b = b + "<circle cx='104' cy='136' r='3.2' fill='none' stroke='#d8d8d8' stroke-width='2'/><circle cx='128' cy='97' r='2.4' fill='#d8d8d8'/><circle cx='134' cy='99' r='2.4' fill='#d8d8d8'/>"
+    }
+    let doc = svg_doc(200, 240, b)
+    svgc[key] = doc
+    return doc
+}
+
+function eyes(mood: string, eye: string, gender: string) {
+    let s = ""
+    for cx in [78, 122] {
+        if mood == "grin" {
+            s = s + "<path d='M" + str(cx - 11) + " 119 Q" + str(cx) + " 106 " + str(cx + 11) + " 119' stroke='" + HEX_INK + "' stroke-width='4' fill='none' stroke-linecap='round'/>"
+            continue
+        }
+        if mood == "dead" {
+            s = s + "<path d='M" + str(cx - 8) + " 110 L" + str(cx + 8) + " 124 M" + str(cx + 8) + " 110 L" + str(cx - 8) + " 124' stroke='" + HEX_INK + "' stroke-width='4' stroke-linecap='round'/>"
+            continue
+        }
+        let ry = 8
+        if mood == "angry" { ry = 6 }
+        s = s + "<ellipse cx='" + str(cx) + "' cy='117' rx='11' ry='" + str(ry) + "' fill='#ffffff' stroke='" + HEX_INK + "' stroke-width='2.5'/>"
+        s = s + "<circle cx='" + str(cx) + "' cy='118' r='5.5' fill='" + eye + "'/>"
+        s = s + "<circle cx='" + str(cx) + "' cy='118' r='2.6' fill='" + HEX_INK + "'/>"
+        s = s + "<circle cx='" + str(cx + 2) + "' cy='116' r='1.6' fill='#ffffff'/>"
+        if gender == "f" {
+            let flick = cx + 13
+            if cx < 100 { flick = cx - 13 }
+            s = s + "<path d='M" + str(cx - 12) + " 113 Q" + str(cx) + " 105 " + str(cx + 12) + " 113 L" + str(flick) + " 108' stroke='" + HEX_INK + "' stroke-width='3.5' fill='none' stroke-linecap='round'/>"
+        }
+    }
+    if mood == "sad" {
+        s = s + "<path d='M68 128 Q66 136 70 138' stroke='#5ab0ff' stroke-width='3' fill='none' stroke-linecap='round'/>"
+    }
+    return s
+}
+
+function brows(mood: string, color: string) {
+    let left = "M66 101 Q78 97 90 100"
+    let right = "M110 100 Q122 97 134 101"
+    if mood == "grin" || mood == "happy" {
+        left = "M66 100 Q78 91 90 97"
+        right = "M110 97 Q122 91 134 100"
+    }
+    if mood == "sad" {
+        left = "M66 103 Q78 101 90 94"
+        right = "M110 94 Q122 101 134 103"
+    }
+    if mood == "angry" {
+        left = "M66 95 Q78 97 91 105"
+        right = "M109 105 Q122 97 134 95"
+    }
+    return "<path d='" + left + " M" + str_replace(right, "M", "") + "' stroke='" + color + "' stroke-width='4.5' fill='none' stroke-linecap='round'/>"
+}
+
+function mouth(mood: string) {
+    let stroke = " stroke='" + HEX_INK + "' stroke-width='3' fill='none' stroke-linecap='round'"
+    if mood == "grin" {
+        return "<path d='M84 148 Q100 170 116 148 Z' fill='#7a1010' stroke='" + HEX_INK + "' stroke-width='2.5' stroke-linejoin='round'/><path d='M86 149 L114 149 Q112 155 100 156 Q88 155 86 149 Z' fill='#ffffff'/>"
+    }
+    if mood == "happy" { return "<path d='M86 150 Q100 161 114 150'" + stroke + "/>" }
+    if mood == "sad" { return "<path d='M87 157 Q100 148 113 157'" + stroke + "/>" }
+    if mood == "angry" { return "<path d='M86 156 Q93 150 100 154 Q107 150 114 156'" + stroke + "/>" }
+    if mood == "dead" { return "<path d='M88 154 Q94 149 100 154 Q106 159 112 154'" + stroke + "/>" }
+    return "<path d='M89 153 L111 152'" + stroke + "/>"
+}
+
+function hair_back(style: int, hc: string, line: string) {
+    if style == 2 { return "<path d='M42 110 Q36 38 100 36 Q164 38 158 110 L166 232 L34 232 Z' fill='" + hc + "'" + line + "/>" }
+    if style == 3 { return "<path d='M136 64 Q196 80 182 176 Q172 128 142 104 Z' fill='" + hc + "'" + line + "/>" }
+    if style == 5 {
+        let s = ""
+        for c in [[60, 70, 30], [100, 50, 34], [140, 70, 30], [44, 106, 24], [156, 106, 24], [48, 140, 18], [152, 140, 18]] {
+            s = s + "<circle cx='" + str(c[0]) + "' cy='" + str(c[1]) + "' r='" + str(c[2]) + "' fill='" + hc + "'" + line + "/>"
+        }
+        return s
+    }
+    if style == 6 { return "<path d='M42 112 Q38 40 100 38 Q162 40 158 112 L160 166 Q140 176 124 160 L76 160 Q60 176 40 166 Z' fill='" + hc + "'" + line + "/>" }
+    return ""
+}
+
+function hair_front(style: int, hc: string, line: string) {
+    let d = ""
+    if style == 0 { d = "M46 112 Q42 46 100 42 Q158 46 154 112 Q150 84 128 72 Q104 88 70 76 Q52 88 46 112 Z" }
+    if style == 1 { d = "M44 116 L38 70 L58 78 L54 40 L80 60 L92 26 L106 56 L130 30 L130 62 L160 46 L148 80 L164 92 L154 118 Q146 90 126 80 L112 98 L100 80 L84 100 L74 80 Q54 92 44 116 Z" }
+    if style == 2 { d = "M44 122 Q40 46 100 40 Q160 46 156 122 Q150 80 120 68 Q96 96 60 82 Q48 96 44 122 Z" }
+    if style == 3 { d = "M46 110 Q46 44 100 40 Q154 44 154 110 Q148 70 100 62 Q60 66 46 110 Z" }
+    if style == 4 { d = "M50 100 Q52 50 100 48 Q148 50 150 100 Q140 70 100 64 Q60 70 50 100 Z" }
+    if style == 5 {
+        let s = ""
+        for c in [[72, 62, 18], [100, 54, 20], [128, 62, 18], [56, 82, 14], [144, 82, 14]] {
+            s = s + "<circle cx='" + str(c[0]) + "' cy='" + str(c[1]) + "' r='" + str(c[2]) + "' fill='" + hc + "'" + line + "/>"
+        }
+        return s
+    }
+    if style == 6 { d = "M46 106 Q46 44 100 42 Q154 44 154 106 L146 98 L54 98 Z" }
+    if style == 8 { d = "M90 52 Q96 36 104 44 Q110 34 112 52 Q100 48 90 52 Z" }
+    if d == "" { return "" }
+    let s = "<path d='" + d + "' fill='" + hc + "'" + line + "/>"
+    if style != 8 {
+        s = s + "<path d='M70 60 Q92 50 114 54' stroke='#ffffff' stroke-opacity='0.35' stroke-width='5' fill='none' stroke-linecap='round'/>"
+    }
+    return s
+}
