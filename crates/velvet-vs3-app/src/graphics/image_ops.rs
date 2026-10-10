@@ -1,4 +1,4 @@
-use super::canvas::{Canvas, Rect};
+use super::canvas::{apply_opacity, blend, Canvas, Rect};
 use crate::assets::ImageAsset;
 
 impl Canvas {
@@ -30,6 +30,10 @@ impl Canvas {
         if sw == 0 || sh == 0 || rect.w <= 0 || rect.h <= 0 {
             return;
         }
+        if !flip_x && !flip_y && rect.w as usize == sw && rect.h as usize == sh {
+            self.blit_unscaled(image, sx0, sy0, rect);
+            return;
+        }
         for dy in 0..rect.h {
             let py = rect.y + dy;
             let sample_y = if flip_y { rect.h - 1 - dy } else { dy };
@@ -45,6 +49,37 @@ impl Canvas {
                     continue;
                 }
                 self.put(px, py, image.pixels[sy * image.width + sx], true);
+            }
+        }
+    }
+    /// Copies a 1:1 region, clipping once instead of per pixel.
+    fn blit_unscaled(&mut self, image: &ImageAsset, sx0: usize, sy0: usize, rect: Rect) {
+        let Some(area) = self.visible().and_then(|visible| visible.intersect(rect)) else {
+            return;
+        };
+        let opacity = self.opacity();
+        for py in area.y..area.y + area.h {
+            let sy = sy0 + (py - rect.y) as usize;
+            if sy >= image.height {
+                break;
+            }
+            let row = py as usize * self.width;
+            for px in area.x..area.x + area.w {
+                let sx = sx0 + (px - rect.x) as usize;
+                if sx >= image.width {
+                    break;
+                }
+                let source = image.pixels[sy * image.width + sx];
+                let alpha = source >> 24;
+                if alpha == 0 {
+                    continue;
+                }
+                let index = row + px as usize;
+                self.pixels[index] = if alpha == 255 && opacity >= 1.0 {
+                    source
+                } else {
+                    blend(self.pixels[index], apply_opacity(source, opacity))
+                };
             }
         }
     }
