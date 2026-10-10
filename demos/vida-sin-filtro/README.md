@@ -62,8 +62,23 @@ binarias en el juego.
 - **Noche +18 por categorías**: Fiesta, Ligue, Vicios y Crimen. Encuentros con o
   sin protección (ITS y embarazos), drogas con adicción y sobredosis, casino y
   delitos, algunos bloqueados hasta tener rango social suficiente.
-- **51 eventos aleatorios** con decisiones, opciones bloqueadas por rango y
+- **69 eventos aleatorios** con decisiones, opciones bloqueadas por rango y
   personalidades con mejor suerte en ciertas decisiones.
+- **Carreras +18 con 5 rangos**: cine para adultos (Amateur → Leyenda +18),
+  striptease (Debut → Leyenda del club), escort (Independiente → Agencia propia)
+  y creador/a de contenido (100 fans → Un millón de fans). Se entra por casting
+  en Noche +18 › Carreras, cada una tiene sus acciones, experiencia, ascensos,
+  fama y eventos propios (rodajes, Premios Terciopelo Rojo, clientes VIP,
+  operativos policiales, campeonatos de pole dance, transmisiones virales).
+- **Gustos en la cama**: elige hasta 3 en el creador (se revelan a los 18).
+  Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
+  fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
+  mejor. Cada persona adulta tiene los suyos.
+- **Misiones**: 22 objetivos con recompensa (graduarte, casarte, primer millón,
+  ganar un premio, llevar un confidente a rango 10, vivir 100 años...).
+- **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
+  "!", corazón, gota de sudor, enojo o dinero). 3 tipos de cara, 3 de cuerpo,
+  12 peinados, marcas (pecas, lunar, cicatriz) y labial.
 - **Efectos**: corte de pantalla al cumplir años, entradas animadas de menús y
   diálogos, números que flotan al cambiar una estadística, notificaciones de
   "¡RANGO ARRIBA!" y obituario con tu retrato.
@@ -76,6 +91,7 @@ binarias en el juego.
 | `sim.vel` | Estado de la vida, personalidad, rasgos sociales, paso de los años, muerte |
 | `events.vel` | Eventos anuales (datos) y su motor |
 | `acts.vel` | Menús: ocupación, vínculos, actividades, noche, citas, casino, compras |
+| `career.vel` | Carreras +18 con rangos, gustos en la cama y misiones |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
 | `ui.vel` | Pantallas, menús, diálogos, notificaciones y efectos |

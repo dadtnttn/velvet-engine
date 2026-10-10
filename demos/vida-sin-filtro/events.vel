@@ -15,7 +15,9 @@
 //   {xel} él/ella, {xlo} lo/la, {xun} Un/Una, {edad}, {p} pareja, {pa}, {pel}, {plo},
 //   {trabajo}, {monto}.
 // Etiquetas req: school, uni, job, nojob, partner, nopartner, married, single, hasex, hot,
-//   alcohol, drugs, addict, villain, kids, money, f, m.
+//   alcohol, drugs, addict, villain, kids, money, f, m, famous, career, careerrank3,
+//   career:<id> (porn, stripper, escort, cam), kink:<id> (gusto del personaje).
+// En una opción, "kink": id la bloquea si el personaje no tiene ese gusto.
 
 const EVENTS = [
     {
@@ -160,8 +162,8 @@ const EVENTS = [
         "text": "{p} te propone invitar a alguien más a la cama este fin de semana.",
         "choices": [
             {"t": "Aceptar", "o": [
-                {"w": 60, "log": "Fue una noche que ninguno de los tres va a olvidar.", "happy": 15, "bond": 8, "count": 1, "std": 8},
-                {"w": 40, "log": "Los celos lo arruinaron todo. Pelearon una semana.", "bond": -25, "happy": -10, "count": 1}
+                {"w": 60, "log": "Fue una noche que ninguno de los tres va a olvidar.", "happy": 15, "bond": 8, "count": 1, "std": 8, "flag": "trio"},
+                {"w": 40, "log": "Los celos lo arruinaron todo. Pelearon una semana.", "bond": -25, "happy": -10, "count": 1, "flag": "trio"}
             ]},
             {"t": "Rechazar", "o": [
                 {"w": 70, "log": "{p} lo entendió sin problema.", "bond": 2},
@@ -403,9 +405,9 @@ const EVENTS = [
         "id": "swingers", "title": "Los vecinos", "min": 25, "max": 60, "w": 2, "req": "married",
         "text": "Unos vecinos muy simpáticos les proponen a ti y a {p} un «intercambio de parejas».",
         "choices": [
-            {"t": "Aceptar", "o": [
-                {"w": 50, "log": "Fue raro... pero divertido. Nadie habla de eso en las reuniones.", "happy": 12, "count": 1, "std": 10, "bond": 5},
-                {"w": 50, "log": "{p} no te volvió a mirar igual.", "bond": -30, "happy": -10, "count": 1}
+            {"t": "Aceptar", "lucky": ["trios", "exhib"], "o": [
+                {"w": 50, "log": "Fue raro... pero divertido. Nadie habla de eso en las reuniones.", "happy": 12, "count": 1, "std": 10, "bond": 5, "flag": "trio"},
+                {"w": 50, "log": "{p} no te volvió a mirar igual.", "bond": -30, "happy": -10, "count": 1, "flag": "trio"}
             ]},
             {"t": "Rechazar", "o": [
                 {"w": 100, "log": "Les cerraron la puerta. Ahora evitan el elevador.", "bond": 3}
@@ -774,6 +776,286 @@ const EVENTS = [
                 {"w": 100, "log": "Esperaste a que internet encontrara otra víctima.", "happy": -6}
             ]}
         ]
+    },
+    {
+        "id": "set_day", "title": "Día de rodaje", "min": 18, "max": 70, "w": 8, "req": "career:porn", "person": "near",
+        "text": "En el set, {x}, tu co-protagonista de hoy, llega nerviosísim{xa}. Es su primera escena.",
+        "choices": [
+            {"t": "Tranquilizarl{xlo} con paciencia", "need": "kind", "rank": 3, "o": [
+                {"w": 100, "log": "Le diste confianza y la escena salió perfecta. {x} te escribe para agradecerte.", "xp": 40, "kind": 5, "fame": 4, "special": "add_friend"}
+            ]},
+            {"t": "Ser profesional y punto", "o": [
+                {"w": 70, "log": "Hicieron su trabajo. El director quedó satisfecho.", "xp": 25, "money": 3000},
+                {"w": 30, "log": "Hubo que repetir todo. Larguísimo día.", "xp": 15, "happy": -4}
+            ]},
+            {"t": "Pedir que cambien a tu pareja de escena", "o": [
+                {"w": 100, "log": "El director aceptó, pero te ganaste fama de diva.", "xp": 10, "fame": 2, "kind": -3}
+            ]}
+        ]
+    },
+    {
+        "id": "award_night", "title": "Premios Terciopelo Rojo", "min": 18, "max": 70, "w": 6, "req": "careerrank3",
+        "text": "Te nominaron en los Premios Terciopelo Rojo, los «Óscar» del entretenimiento para adultos.",
+        "choices": [
+            {"t": "Ir con todo y robarte la alfombra", "need": "charm", "rank": 4, "o": [
+                {"w": 100, "log": "¡GANASTE! Tu discurso fue tan bueno que se volvió meme.", "flag": "award", "fame": 20, "xp": 60, "happy": 15, "money": 20000}
+            ]},
+            {"t": "Ir y cruzar los dedos", "lucky": ["carisma"], "o": [
+                {"w": 35, "log": "¡Ganaste el premio! No te lo esperabas ni tú.", "flag": "award", "fame": 15, "xp": 50, "happy": 12},
+                {"w": 65, "log": "Perdiste ante una leyenda del género. La fiesta posterior valió la pena.", "fame": 5, "happy": 4, "alcohol": 4}
+            ]},
+            {"t": "Quedarte en casa", "o": [
+                {"w": 100, "log": "Viste la ceremonia en pijama. Perdiste. O ganaste; nunca lo sabrás.", "happy": -2}
+            ]}
+        ]
+    },
+    {
+        "id": "family_finds", "title": "La familia se enteró", "min": 18, "max": 70, "w": 6, "req": "career",
+        "text": "Tu familia descubrió a qué te dedicas. Tu tía lo compartió en el grupo de WhatsApp.",
+        "choices": [
+            {"t": "Explicarles con orgullo", "need": "guts", "rank": 3, "o": [
+                {"w": 100, "log": "Les hablaste sin vergüenza. Tu mamá dijo que «al menos eres buen{a} en lo que haces».", "guts": 5, "happy": 8}
+            ]},
+            {"t": "Decir que fue un hackeo", "o": [
+                {"w": 50, "log": "Te creyeron. Por ahora.", "karma": -3},
+                {"w": 50, "log": "Nadie te creyó. La cena de Navidad será incómoda.", "special": "family_hate", "happy": -6}
+            ]},
+            {"t": "Dejar de hablarles", "o": [
+                {"w": 100, "log": "Cortaste contacto con tu familia. Duele más de lo que admites.", "special": "family_hate", "happy": -10}
+            ]}
+        ]
+    },
+    {
+        "id": "exclusive", "title": "Contrato exclusivo", "min": 18, "max": 60, "w": 5, "req": "career:porn",
+        "text": "Un estudio enorme te ofrece $100,000 por un contrato exclusivo de dos años.",
+        "choices": [
+            {"t": "Negociar el doble", "need": "skill", "rank": 4, "o": [
+                {"w": 100, "log": "Firmaste por $200,000 y control creativo. Tu agente llora de felicidad.", "money": 200000, "xp": 60, "fame": 10}
+            ]},
+            {"t": "Firmar", "o": [
+                {"w": 100, "log": "Contrato firmado. Ahora eres cara oficial del estudio.", "money": 100000, "xp": 40, "fame": 8}
+            ]},
+            {"t": "Seguir independiente", "o": [
+                {"w": 100, "log": "Preferiste tu libertad. El estudio no lo olvidará.", "skill": 3}
+            ]}
+        ]
+    },
+    {
+        "id": "client_love", "title": "Cliente enamorado", "min": 18, "max": 70, "w": 4, "req": "career", "person": "near",
+        "text": "{x}, tu cliente más fiel, te confiesa que se enamoró y quiere que lo dejes todo por {xel}.",
+        "choices": [
+            {"t": "Aceptar y empezar de cero", "o": [
+                {"w": 100, "log": "Dejaste el negocio por amor. Ahora {x} es tu pareja.", "special": "new_partner", "happy": 12}
+            ]},
+            {"t": "Rechazarl{xlo} con cariño", "need": "kind", "rank": 2, "o": [
+                {"w": 100, "log": "Le explicaste que tu trabajo es tu trabajo. Siguió siendo cliente... y amigo.", "kind": 4, "money": 3000}
+            ]},
+            {"t": "Subirle la tarifa", "o": [
+                {"w": 100, "log": "Si quiere exclusividad, que pague. Pagó.", "money": 10000, "karma": -3}
+            ]}
+        ]
+    },
+    {
+        "id": "handsy", "title": "Cliente sin modales", "min": 18, "max": 60, "w": 5, "req": "career:stripper",
+        "text": "En el VIP, un cliente borracho no respeta las reglas del club.",
+        "choices": [
+            {"t": "Ponerlo en su lugar", "need": "guts", "rank": 3, "o": [
+                {"w": 100, "log": "Le dejaste claras las reglas con una sola mirada. Pagó doble para disculparse.", "money": 4000, "guts": 5, "xp": 20}
+            ]},
+            {"t": "Llamar a seguridad", "o": [
+                {"w": 100, "log": "Los guardias lo sacaron a la calle. Las demás bailarinas te aplaudieron.", "xp": 10, "kind": 2}
+            ]},
+            {"t": "Aguantar por la propina", "o": [
+                {"w": 100, "log": "Te pagó bien, pero te sentiste fatal toda la noche.", "money": 3000, "happy": -10}
+            ]}
+        ]
+    },
+    {
+        "id": "pole_cup", "title": "Campeonato de pole dance", "min": 18, "max": 50, "w": 5, "req": "career:stripper",
+        "text": "Se abre el campeonato nacional de pole dance. Premio: $30,000.",
+        "choices": [
+            {"t": "Rutina de campeonato", "need": "skill", "rank": 3, "o": [
+                {"w": 100, "log": "Primer lugar. Tu rutina ya tiene un millón de vistas.", "money": 30000, "xp": 50, "fame": 12, "flag": "award"}
+            ]},
+            {"t": "Participar", "o": [
+                {"w": 35, "log": "Ganaste el tercer lugar y $5,000.", "money": 5000, "xp": 30, "fame": 5},
+                {"w": 65, "log": "Te resbalaste en la final. Aun así, el público te ovacionó.", "xp": 20, "happy": -3}
+            ]},
+            {"t": "No participar", "o": [
+                {"w": 100, "log": "Lo viste desde el público con envidia."}
+            ]}
+        ]
+    },
+    {
+        "id": "sting", "title": "Algo huele raro", "min": 18, "max": 70, "w": 5, "req": "career:escort",
+        "text": "Tu nuevo cliente hace preguntas extrañas y lleva zapatos de policía.",
+        "choices": [
+            {"t": "Cancelar con una excusa perfecta", "need": "know", "rank": 3, "o": [
+                {"w": 100, "log": "Era un operativo. Te salvaste por tu instinto.", "know": 4, "guts": 3}
+            ]},
+            {"t": "Arriesgarte", "o": [
+                {"w": 55, "log": "Solo era un cliente raro. Pagó bien.", "money": 4000, "xp": 20},
+                {"w": 45, "log": "Era policía encubierto.", "jail": 1}
+            ]},
+            {"t": "No ir", "o": [
+                {"w": 100, "log": "Mejor perder un cliente que la libertad."}
+            ]}
+        ]
+    },
+    {
+        "id": "stream_boom", "title": "Transmisión viral", "min": 18, "max": 70, "w": 6, "req": "career:cam",
+        "text": "Tu transmisión en vivo explotó: 50,000 personas te están viendo ahora mismo.",
+        "choices": [
+            {"t": "Dar el show de tu vida", "need": "charm", "rank": 3, "o": [
+                {"w": 100, "log": "Rompiste tu récord de propinas: {monto}.", "money": [15000, 40000], "xp": 60, "fame": 15}
+            ]},
+            {"t": "Seguir como siempre", "o": [
+                {"w": 100, "log": "Ganaste miles de seguidores nuevos.", "xp": 30, "fame": 8, "money": 5000}
+            ]},
+            {"t": "Entrar en pánico y cortar", "o": [
+                {"w": 100, "log": "Cortaste la transmisión. Internet nunca olvida.", "happy": -6, "fame": 2}
+            ]}
+        ]
+    },
+    {
+        "id": "obsessed_fan", "title": "Fan obsesionado", "min": 18, "max": 80, "w": 4, "req": "famous",
+        "text": "Un fan obsesionado descubrió tu dirección y te dejó flores... y fotos tuyas durmiendo.",
+        "choices": [
+            {"t": "Enfrentarlo", "need": "guts", "rank": 4, "o": [
+                {"w": 100, "log": "Lo encontraste y le dejaste muy claro que no vuelva. No volvió.", "guts": 6, "happy": 4}
+            ]},
+            {"t": "Mudarte", "o": [
+                {"w": 100, "log": "Te mudaste a un edificio con seguridad. Caro, pero tranquilo.", "money": -8000, "happy": -3}
+            ]},
+            {"t": "Denunciarlo", "o": [
+                {"w": 70, "log": "La policía le puso una orden de restricción.", "happy": 2},
+                {"w": 30, "log": "La policía no hizo nada. Duermes con la luz encendida.", "happy": -12}
+            ]}
+        ]
+    },
+    {
+        "id": "bdsm_club", "title": "Club privado", "min": 21, "max": 65, "w": 5, "req": "",
+        "text": "Una amiga te consigue entrada a un club de BDSM muy exclusivo. Hay cuero, máscaras y reglas estrictas de consentimiento.",
+        "choices": [
+            {"t": "Tomar el control", "kink": "dom", "o": [
+                {"w": 100, "log": "Descubriste que mandar se te da natural. Te invitaron a volver.", "happy": 12, "guts": 5, "sex": true, "flag": "kink"}
+            ]},
+            {"t": "Entregarte", "kink": "sub", "o": [
+                {"w": 100, "log": "Soltar el control fue liberador. Usaron la palabra de seguridad una vez y todo fue perfecto.", "happy": 12, "kind": 3, "sex": true, "flag": "kink"}
+            ]},
+            {"t": "Probar de todo", "kink": "bdsm", "o": [
+                {"w": 100, "log": "Fue como un parque de diversiones para adultos. Saliste con marcas y una sonrisa.", "happy": 14, "health": -2, "sex": true, "flag": "kink"}
+            ]},
+            {"t": "Solo mirar", "o": [
+                {"w": 70, "log": "Miraste desde un rincón con un trago. Aprendiste muchas cosas.", "happy": 5, "know": 2},
+                {"w": 30, "log": "Te dio pena y te fuiste a los diez minutos.", "happy": -2}
+            ]}
+        ]
+    },
+    {
+        "id": "feet_pics", "title": "Una oferta peculiar", "min": 18, "max": 70, "w": 3, "req": "",
+        "text": "Alguien en internet ofrece $500 por fotos de tus pies. Solo pies.",
+        "choices": [
+            {"t": "Venderlas y disfrutarlo", "kink": "pies", "o": [
+                {"w": 100, "log": "Te divertiste muchísimo. Ahora tienes clientes fijos de pies.", "money": 3000, "happy": 8}
+            ]},
+            {"t": "Venderlas", "o": [
+                {"w": 100, "log": "Dinero fácil. No hagas preguntas.", "money": 500, "happy": 2}
+            ]},
+            {"t": "Bloquear", "o": [
+                {"w": 100, "log": "Bloqueaste a ese señor. Y a sus 14 cuentas alternativas."}
+            ]}
+        ]
+    },
+    {
+        "id": "rooftop", "title": "Fiesta en la azotea", "min": 18, "max": 50, "w": 4, "req": "",
+        "text": "En una fiesta en una azotea, el ambiente se pone muy atrevido y alguien propone nadar sin ropa.",
+        "choices": [
+            {"t": "Ser el centro de atención", "kink": "exhib", "o": [
+                {"w": 100, "log": "Te lanzaste primero. Todo el mundo te recuerda; algunos con fotos.", "happy": 12, "charm": 5, "fame": 3}
+            ]},
+            {"t": "Mirar desde el bar", "kink": "voyeur", "o": [
+                {"w": 100, "log": "La mejor vista de la noche era la tuya.", "happy": 8}
+            ]},
+            {"t": "Unirte", "need": "guts", "rank": 2, "o": [
+                {"w": 100, "log": "Agua fría y risas. Una gran noche.", "happy": 8, "guts": 3}
+            ]},
+            {"t": "Irte a casa", "o": [
+                {"w": 100, "log": "Te fuiste antes de que llegara la policía. Sabio."}
+            ]}
+        ]
+    },
+    {
+        "id": "anime_con", "title": "Convención de anime", "min": 18, "max": 45, "w": 3, "req": "", "person": "near",
+        "text": "En la convención de anime, {x} no deja de elogiar tu cosplay y te invita a una fiesta privada.",
+        "choices": [
+            {"t": "Ir sin quitarte el disfraz", "kink": "cosplay", "o": [
+                {"w": 100, "special": "hookup", "happy": 6}
+            ]},
+            {"t": "Ganar el concurso de cosplay", "need": "skill", "rank": 3, "o": [
+                {"w": 100, "log": "Primer lugar en cosplay. Firmaste autógrafos toda la tarde.", "happy": 10, "fame": 4, "money": 2000}
+            ]},
+            {"t": "Comprar figuras e irte", "o": [
+                {"w": 100, "log": "Gastaste $800 en figuras. Valió cada peso.", "money": -800, "happy": 6}
+            ]}
+        ]
+    },
+    {
+        "id": "silver_dinner", "title": "Cena elegante", "min": 18, "max": 45, "w": 4, "req": "kink:maduros", "person": [45, 65],
+        "text": "{x} ({edad}), elegante y con mucha experiencia, te invita a cenar a un restaurante carísimo.",
+        "choices": [
+            {"t": "Aceptar y dejarte llevar", "o": [
+                {"w": 60, "special": "hookup", "happy": 6},
+                {"w": 40, "log": "Cena perfecta y conversación brillante. Ahora es tu pareja.", "special": "new_partner", "happy": 10}
+            ]},
+            {"t": "Rechazar", "o": [
+                {"w": 100, "log": "Le diste las gracias y te fuiste a comer tacos."}
+            ]}
+        ]
+    },
+    {
+        "id": "toy_party", "title": "Fiesta de juguetes", "min": 21, "max": 70, "w": 3, "req": "",
+        "text": "Una amiga organiza una «reunión de ventas» de juguetes para adultos con vino y risas.",
+        "choices": [
+            {"t": "Comprar medio catálogo", "kink": "juguetes", "o": [
+                {"w": 100, "log": "Tu cajón ahora necesita su propio cajón. Felicidad garantizada.", "money": -1500, "happy": 14}
+            ]},
+            {"t": "Ir por el vino", "o": [
+                {"w": 100, "log": "Tomaste vino, te reíste muchísimo y compraste algo «para regalar».", "money": -300, "happy": 8, "alcohol": 3}
+            ]}
+        ]
+    },
+    {
+        "id": "insatiable", "title": "No te alcanza el ritmo", "min": 20, "max": 70, "w": 4, "req": "partner,kink:insaciable",
+        "text": "{p} confiesa, agotad{pa}, que ya no puede seguirte el ritmo.",
+        "choices": [
+            {"t": "Proponer una relación abierta", "o": [
+                {"w": 50, "log": "{p} aceptó con condiciones. Nueva etapa.", "happy": 10, "bond": -5},
+                {"w": 50, "log": "{p} se sintió insuficiente. Pelearon mucho.", "bond": -25, "happy": -8}
+            ]},
+            {"t": "Encontrar el punto medio", "need": "kind", "rank": 3, "o": [
+                {"w": 100, "log": "Hablaron con honestidad y encontraron su ritmo. Están más unid{a}s que nunca.", "bond": 15, "happy": 6}
+            ]},
+            {"t": "Regalarle vitaminas", "o": [
+                {"w": 100, "log": "{p} no supo si reír o llorar.", "bond": -5, "happy": 3}
+            ]}
+        ]
+    },
+    {
+        "id": "tantra_retreat", "title": "Retiro tántrico", "min": 25, "max": 75, "w": 3, "req": "",
+        "text": "Te invitan a un retiro de fin de semana sobre sexualidad consciente en la playa.",
+        "choices": [
+            {"t": "Ir y abrirte por completo", "kink": "tantra", "o": [
+                {"w": 100, "log": "Volviste con otra energía. Tu pareja (si la tienes) te lo agradece.", "happy": 15, "kind": 5, "bond": 10}
+            ]},
+            {"t": "Ir por curiosidad", "money": 0, "o": [
+                {"w": 60, "log": "Aprendiste a respirar. Literalmente. Ya era hora.", "happy": 6, "know": 2},
+                {"w": 40, "log": "Te dio risa todo el fin de semana. Te pidieron que te fueras.", "happy": 3}
+            ]},
+            {"t": "No ir", "o": [
+                {"w": 100, "log": "Preferiste tu sillón."}
+            ]}
+        ]
     }
 ]
 
@@ -802,6 +1084,11 @@ function meets(tag: string) {
     if tag == "f" { return L.gender == "f" }
     if tag == "m" { return L.gender == "m" }
     if tag == "villain" { return L.karma < 30 }
+    if tag == "famous" { return L.fame >= 40 }
+    if tag == "career" { return L.job != null && L.job.career != null }
+    if tag == "careerrank3" { return L.job != null && L.job.career != null && L.job.level >= 2 }
+    if str_starts_with(tag, "career:") { return L.job != null && L.job.career == str_replace(tag, "career:", "") }
+    if str_starts_with(tag, "kink:") { return has_kink(str_replace(tag, "kink:", "")) }
     if tag == "uni" { return L.uni > 0 }
     if tag == "addict" { return L.alcohol + L.drugs >= 40 }
     return false
@@ -868,12 +1155,16 @@ function choice_lock(c: map) {
     if c.req_partner == true && L.partner_id == 0 {
         return "Necesitas pareja"
     }
+    if c.kink != null && !has_kink(c.kink) {
+        return "Gusto: " + kink_name(c.kink, L.gender)
+    }
     return ""
 }
 
 // Etiqueta visible del requisito aunque ya se cumpla (estilo Persona).
 function choice_tag(c: map) {
     if c.need != null { return SOCIAL_NAMES[c.need] + " " + str(c.rank) }
+    if c.kink != null { return kink_name(c.kink, L.gender) }
     return ""
 }
 
@@ -897,8 +1188,12 @@ function pick_outcome_for(choice: map) {
     let outcomes = choice.o
     let weights = []
     for o in outcomes { list_push(weights, o.w) }
-    if choice.lucky != null && list_contains(choice.lucky, L.trait) {
-        weights[0] = weights[0] * 2
+    if choice.lucky != null {
+        let lucky = list_contains(choice.lucky, L.trait)
+        for t in L.tags {
+            if list_contains(choice.lucky, t) { lucky = true }
+        }
+        if lucky { weights[0] = weights[0] * 2 }
     }
     return outcomes[weighted_choose(G.rng, weights)]
 }
@@ -919,6 +1214,7 @@ function resolve_event(ev: map, index: int, ctx: map) {
 
 // Registra el resultado y lo muestra, salvo que un efecto ya abrió otra ventana.
 function finish(title: string, msg: string, kind: string) {
+    G.last_kind = kind
     if msg != "" { log_add(msg, kind) }
     if L.dying != "" {
         die(L.dying)

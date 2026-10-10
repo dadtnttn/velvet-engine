@@ -24,6 +24,9 @@ state {
         "cre": {},
         "menu_cat": 0,
         "menu_page": 0,
+        "react": null,
+        "last_kind": "",
+        "anim_tick": 0,
         "title_look": {},
         "title_gender": "f",
         "blink": 0,
@@ -188,18 +191,21 @@ function make_person(gender: string, rel: string, age: int) {
         "alive": true,
         "known": false,
         "slept": false,
-        "look": random_look(gender)
+        "look": random_look(gender),
+        "tags": random_kinks(2)
     }
     L.next_id += 1
     return p
 }
 
 function random_look(gender: string) {
-    let styles = [0, 1, 4, 5, 7, 0, 1]
+    let styles = [0, 1, 4, 5, 7, 8, 0, 1, 11]
     let accs = [0, 0, 0, 1, 3, 4, 4]
+    let lips = [0, 0, 0, 0, 3]
     if gender == "f" {
-        styles = [2, 3, 6, 5, 0, 2, 1]
+        styles = [2, 3, 6, 5, 0, 9, 10, 11, 2, 1]
         accs = [0, 0, 1, 2, 2, 3]
+        lips = [0, 1, 2, 2, 3, 1]
     }
     return {
         "skin": rint(0, len(SKINS) - 1),
@@ -207,12 +213,17 @@ function random_look(gender: string) {
         "hcolor": weighted_choose(G.rng, [30, 25, 18, 12, 4, 4, 2, 3, 2]),
         "eyes": weighted_choose(G.rng, [30, 25, 12, 12, 8, 3]),
         "outfit": rint(0, len(OUTFITS) - 1),
-        "acc": pick(accs)
+        "acc": pick(accs),
+        "face": rint(0, len(FACES) - 1),
+        "body": rint(0, len(BODIES) - 1),
+        "mark": weighted_choose(G.rng, [60, 15, 15, 10]),
+        "lips": pick(lips)
     }
 }
 
 function copy_look(look: map) {
-    return {"skin": look.skin, "hair": look.hair, "hcolor": look.hcolor, "eyes": look.eyes, "outfit": look.outfit, "acc": look.acc}
+    return {"skin": look.skin, "hair": look.hair, "hcolor": look.hcolor, "eyes": look.eyes, "outfit": look.outfit, "acc": look.acc,
+            "face": look.face, "body": look.body, "mark": look.mark, "lips": look.lips}
 }
 
 // ---------------------------------------------------------------- personalidad
@@ -282,6 +293,10 @@ function attracted_gender() {
 function stranger() {
     let lo = max(18, L.age - 8)
     let hi = max(lo, L.age + 8)
+    if has_kink("maduros") {
+        lo = max(18, L.age + 5)
+        hi = lo + 20
+    }
     return make_person(attracted_gender(), "ligue", rint(lo, hi))
 }
 
@@ -347,6 +362,10 @@ function new_life() {
         "trait": c.trait,
         "social": {"know": rint(0, 10), "guts": rint(0, 10), "skill": rint(0, 10), "kind": rint(0, 10), "charm": rint(0, 10)},
         "assets": [],
+        "tags": c.tags,
+        "fame": 0,
+        "done": [],
+        "flags": {},
         "age": 0,
         "city": pick(CITIES),
         "alive": true,
@@ -407,6 +426,7 @@ function new_life() {
     log_add(by_gender(gender, "Eres hijo", "Eres hija") + " de " + full_name(dad) + " y " + full_name(mom) + ".", "n")
     log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
     log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
+
     G.mode = "game"
     G.modal = null
     G.scroll = 0
@@ -453,6 +473,7 @@ function clamp_stats() {
     L.karma = clamp100(L.karma)
     L.alcohol = clamp100(L.alcohol)
     L.drugs = clamp100(L.drugs)
+    L.fame = clamp100(L.fame)
 }
 
 function yearly() {
@@ -506,6 +527,7 @@ function yearly() {
         L.school = ""
         L.edu = 2
         log_add("Te graduaste de la secundaria. Ya eres mayor de edad: la noche es tuya.", "g")
+        if len(L.tags) > 0 { log_add("Descubriste lo que te gusta en la cama: " + kinks_text(L.tags, L.gender) + ".", "x") }
     }
     if L.uni > 0 {
         L.uni -= 1
@@ -555,6 +577,13 @@ function yearly() {
         if !L.in_red { log_add("Estás en números rojos. Los cobradores ya saben tu nombre.", "b") }
     }
     L.in_red = L.money < 0
+
+    // Carrera +18 y fama
+    if L.job != null && L.job.career != null && L.jail == 0 {
+        career_xp(10 + rank("skill") * 3)
+        if chance(30) { log_add("Otro año en el negocio: ahora eres " + career_rank_name() + ".", "x") }
+    }
+    if L.fame > 0 { L.fame -= 2 }
 
     // Vicios
     if L.alcohol > 0 {
@@ -629,6 +658,7 @@ function kids_living() {
 }
 
 function job_pay(job: map) {
+    if job.career != null { return career_pay() }
     if job.var != null && job.var > 0 {
         return L.looks * L.looks * job.var
     }
@@ -733,6 +763,9 @@ function apply(o: map, ctx: map) {
         ctx["monto"] = money_str(m)
         msg = str_replace(msg, "{monto}", money_str(m))
     }
+    if map_has(o, "xp") { career_xp(o.xp) }
+    if map_has(o, "fame") { L.fame = L.fame + o.fame }
+    if map_has(o, "flag") { flag(o.flag) }
     if map_has(o, "bond") {
         let target = ctx["person"]
         if target == null || !target.known { target = partner() }

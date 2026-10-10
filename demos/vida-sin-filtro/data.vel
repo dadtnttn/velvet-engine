@@ -48,7 +48,12 @@ const HAIR_COLORS = ["#1b1b1b", "#4b2c18", "#8a5a2c", "#d8a443", "#ece0bd", "#b8
 const HAIR_NAMES = ["Negro", "Castaño oscuro", "Castaño", "Rubio", "Platino", "Rojo", "Azul", "Rosa", "Blanco"]
 const EYE_COLORS = ["#3b2414", "#6b4423", "#2e7d4f", "#2f63b8", "#7a7a7a", "#d01f2a"]
 const OUTFITS = ["#151515", "#d6141b", "#f2f2ee", "#1d3d7a", "#2e6b3a", "#d8a443"]
-const HAIR_STYLES = ["Corto", "Rebelde", "Largo", "Coleta", "Rapado", "Rizado", "Bob", "Calvo"]
+const HAIR_STYLES = ["Corto", "Rebelde", "Largo", "Coleta", "Rapado", "Rizado", "Bob", "Calvo", "Mohicano", "Moño", "Dos coletas", "Ondulado"]
+const FACES = ["Ovalada", "Redonda", "Angulosa"]
+const BODIES = ["Normal", "Atlético", "Delgado"]
+const MARKS = ["Ninguna", "Pecas", "Lunar", "Cicatriz"]
+const LIPS = ["Natural", "Labial rojo", "Labial rosa", "Labial negro"]
+const LIP_COLORS = ["", "#c8102e", "#e35d8f", "#1b1b1b"]
 const ACCESSORIES = ["Nada", "Lentes", "Aretes", "Piercing", "Barba"]
 
 // ---------------------------------------------------------------- trabajo
@@ -73,9 +78,7 @@ const JOBS = [
     {"id": "programador", "m": "Programador", "f": "Programadora", "salary": 62000, "edu": 3, "smarts": 65, "looks": 0, "min_age": 21, "adult": false},
     {"id": "abogado", "m": "Abogado", "f": "Abogada", "salary": 75000, "edu": 3, "smarts": 75, "looks": 0, "min_age": 22, "adult": false},
     {"id": "medico", "m": "Médico", "f": "Médica", "salary": 95000, "edu": 3, "smarts": 85, "looks": 0, "min_age": 24, "adult": false},
-    {"id": "bailarin", "m": "Bailarín exótico", "f": "Bailarina exótica", "salary": 32000, "edu": 0, "smarts": 0, "looks": 65, "min_age": 18, "adult": true},
-    {"id": "modelo", "m": "Modelo de ropa interior", "f": "Modelo de lencería", "salary": 45000, "edu": 0, "smarts": 0, "looks": 80, "min_age": 18, "adult": true},
-    {"id": "creador", "m": "Creador de contenido +18", "f": "Creadora de contenido +18", "salary": 0, "var": 8, "edu": 0, "smarts": 0, "looks": 45, "min_age": 18, "adult": true}
+    {"id": "modelo", "m": "Modelo de ropa interior", "f": "Modelo de lencería", "salary": 45000, "edu": 0, "smarts": 0, "looks": 80, "min_age": 18, "adult": true}
 ]
 
 const STDS = ["clamidia", "gonorrea", "herpes", "sífilis", "VIH"]
