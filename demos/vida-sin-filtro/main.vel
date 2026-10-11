@@ -154,6 +154,12 @@ export function app_update(dt: float, input: map) {
     handle_input(input)
     // «+1 año» sigue solo en cuanto respondes lo que lo detuvo.
     if G.yr != null && year_can_resume() { year_continue() }
+    // Igual «+5 años»: retoma los años que faltaban.
+    if G.skip_left != null && G.skip == null && year_can_resume() {
+        let n = G.skip_left
+        G.skip_left = null
+        if n > 0 { emit("app.task", {"name": "years", "arg": n}) }
+    }
     if animating() { G.dirty = true }
     return frame()
 }
@@ -233,8 +239,19 @@ function skip_years(n: int) {
         let ev = yield(frame())
         G.t += ev.dt
         if ev.input != null { track_pointer(ev.input.pointer) }
-        if ev.action == "skip:cancel" { break }
-        if ev.input != null && list_contains(ev.input.pressed, "Escape") { break }
+        if ev.action == "skip:cancel" {
+            G.skip.cancel = true
+            break
+        }
+        if ev.input != null && list_contains(ev.input.pressed, "Escape") {
+            G.skip.cancel = true
+            break
+        }
+    }
+    // Si paró por una decisión (no por cancelar), al responderla sigue con
+    // los años que faltan (ver app_update).
+    if L.alive && G.mode == "game" && y < n && (G.modal != null || G.mg != null) && G.skip.cancel != true {
+        G.skip_left = n - y
     }
     G.skip = null
     report(before, 0.0)

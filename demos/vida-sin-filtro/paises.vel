@@ -1063,6 +1063,8 @@ function pais_choice(handler: string, index: int, ctx: map) {
         return open_wedding(p)
     }
     if handler == "pa_fest" {
+        if pa().fest_go == null { pa().fest_go = {} }
+        pa().fest_go[ctx.n] = if_str(index == 0, "si", "no")
         if index == 1 { return finish(ctx.n, "Lo viste desde la ventana.", "n") }
         L.happy += 7
         gain("charm", 1)
@@ -1169,15 +1171,29 @@ function open_honeymoon() {
     return null
 }
 
+// Las fiestas del país: la primera vez (y de vez en cuando) te preguntan; los
+// demás años, si sueles ir, vas y queda en la bitácora.
 function fest_month() {
     let d = pa()
     let c = here()
     let m = cal_month()
+    if d.fest_go == null { d.fest_go = {} }
     for f in c.fest {
-        if f.m == m && map_get(d.fest, f.n, -1) != L.age && L.age >= 4 && chance(60) {
-            d.fest[f.n] = L.age
+        if f.m != m || map_get(d.fest, f.n, -1) == L.age || L.age < 4 { continue }
+        d.fest[f.n] = L.age
+        let seen = map_get(d.fest_go, f.n, "")
+        let ask = seen == "" || chance(15)
+        // Al adelantar el año, las fiestas ya no cuentan como sorpresa.
+        if G.yr != null && G.yr.pops >= 2 { ask = false }
+        if G.skip != null && !chance(30) { ask = false }
+        if ask && chance(60) {
             open_choice(str_upper(f.n), f.d, ["Ir y disfrutar", "Quedarte en casa"], ["", ""], "pa_fest", {"n": f.n, "d": f.d})
+            if G.yr != null { G.yr.pops += 1 }
             return null
+        }
+        if seen == "si" {
+            L.happy += 3
+            log_add("Como cada año, fuiste a " + f.n + ".", "g")
         }
     }
     return null

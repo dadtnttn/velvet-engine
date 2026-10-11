@@ -690,6 +690,21 @@ function maybe_holiday() {
     let d = vd()
     let m = month_name()
     if G.modal != null || L.jail > 0 || d.hol[m] == L.age || !chance(45) { return null }
+    // La misma fiesta no pregunta cada año: como mucho cada tres, y al
+    // adelantar el año cuenta dentro de sus sorpresas.
+    if d.hol_last == null { d.hol_last = {} }
+    if L.age - map_get(d.hol_last, m, -10) < 3 { return null }
+    if G.yr != null && G.yr.pops >= 2 { return null }
+    if G.skip != null && !chance(30) { return null }
+    maybe_holiday_open(d, m)
+    if G.modal != null {
+        d.hol_last[m] = L.age
+        if G.yr != null { G.yr.pops += 1 }
+    }
+    return null
+}
+
+function maybe_holiday_open(d: map, m: string) {
     let p = partner()
     if m == "Febrero" && L.age >= 15 && p != null {
         d.hol[m] = L.age

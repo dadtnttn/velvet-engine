@@ -4,5 +4,5 @@ version = 1
 name = "vida"
 version = "0.1.0"
 source = "path+."
-checksum = "sha256:152d90d23f6633057efd86a4f76a4c6bd061e8350b7af58c64374320b15cf561"
+checksum = "sha256:79e51e7a39267d0e85d215b3a8c813bed9a45fce723fe4007d6ff38f5e8d1e75"
 dependencies = []
