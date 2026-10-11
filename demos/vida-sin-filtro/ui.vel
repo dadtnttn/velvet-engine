@@ -382,27 +382,37 @@ function draw_create() {
             k += 1
         }
     } else if c.page == 4 {
+        cre_ctry_defaults(c)
+        create_label(x0, y, "REGIÓN")
+        stepper(x0 + 170, y - 26, cre_region_label(c), "cre:region")
+        y += 46
+        create_label(x0, y, "PAÍS")
+        stepper(x0 + 170, y - 26, cre_ctry_label(c), "cre:ctry")
+        y += 46
         create_label(x0, y, "CIUDAD")
         stepper(x0 + 170, y - 26, cre_city_name(c), "cre:city")
-        y += 58
+        y += 46
         create_label(x0, y, "FAMILIA")
         pair_toggles(x0 + 170, y - 26, FAMILY_OPTS, c.fam, "cre:fam:", c.gender)
-        y += 58
+        y += 46
         create_label(x0, y, "HERMANOS")
         pair_toggles(x0 + 170, y - 26, SIB_OPTS, c.sibs, "cre:sibs:", c.gender)
-        y += 58
+        y += 46
         create_label(x0, y, "NACIMIENTO")
         stepper(x0 + 170, y - 26, cre_month_name(c), "cre:bm")
-        let sd = "Tu signo te da un empujón en un rasgo social."
-        if c.bm >= 0 { sd = gfmt(SIGNS[c.bm].d, c.gender) + " +4 " + SOCIAL_NAMES[SIGNS[c.bm].soc] + "." }
-        text(x0 + 170, y + 30, sd, 14, C_YELLOW, "bold")
-        y += 76
+        y += 46
         create_label(x0, y, "ESTATURA")
         pair_toggles(x0 + 170, y - 26, HEIGHTS, c.height, "cre:height:", c.gender)
-        y += 58
+        y += 46
         create_label(x0, y, "DESTINO")
         pair_toggles(x0 + 170, y - 26, DESTINY_OPTS, c.destiny, "cre:destiny:", c.gender)
-        text(x0 + 170, y + 30, "Cuántos eventos aleatorios te pasan cada año.", 13, C_GRAY, "bold")
+        let sd = "Tu signo suma 4 a un rasgo social."
+        if c.bm >= 0 { sd = SIGNS[c.bm].n + ": " + gfmt(SIGNS[c.bm].d, c.gender) + " +4 " + SOCIAL_NAMES[SIGNS[c.bm].soc] + "." }
+        let sy = y + 34
+        for line in wrap_px(cre_ctry_summary(c) + " " + sd + " Destino: cuántos eventos te pasan.", 500, 13) {
+            if sy < y + 110 { text(x0, sy, line, 13, C_YELLOW, "bold") }
+            sy += 18
+        }
     } else if c.page == 5 {
         create_label(x0, y, "RUTA")
         let r = route_def(c.route)
@@ -417,9 +427,16 @@ function draw_create() {
         y = ty + 50
         create_label(x0, y, "RELIGIÓN")
         let rel = religion_def(c.religion)
-        stepper(x0 + 170, y - 26, str_upper(rel.n), "cre:rel")
+        let rlabel = str_upper(rel.n)
+        let rdesc = "Tu familia: " + RELIGION_DESC[rel.id]
+        if c.religion == "" {
+            rlabel = "SEGÚN TU PAÍS"
+            rdesc = "Tu familia tendrá la religión de tu país (al azar, según cuánta gente la practica)."
+            if cre_ctry_defaults(c).ctry != "" { rdesc = rdesc + " En " + cname(c.ctry) + ": " + rel_summary(c.ctry) + "." }
+        }
+        stepper(x0 + 170, y - 26, rlabel, "cre:rel")
         ty = y + 34
-        for line in wrap_px("Tu familia: " + RELIGION_DESC[rel.id], 560, 15) {
+        for line in wrap_px(rdesc, 560, 15) {
             text(x0 + 170, ty, line, 15, C_WHITE, "bold")
             ty += 21
         }
@@ -574,8 +591,11 @@ function draw_card() {
         rect(220, 516, 130 * L.fame / 100, 12, C_YELLOW)
         text(220 + 136, 528, str(L.fame), 13, C_YELLOW, "impact")
     } else {
-        text(220, 504, "CIUDAD", 11, C_GRAY, "bold")
-        textw(220, 526, L.city, 14, C_WHITE, "bold", 150)
+        let pcol = C_GRAY
+        if hovered("pa:map") { pcol = C_YELLOW }
+        text(220, 504, "PAÍS · MAPA ›", 11, pcol, "bold")
+        textw(220, 526, L.city + ", " + here().n, 14, C_WHITE, "bold", 150)
+        hot(216, 490, 160, 44, "pa:map")
     }
     if L.age >= 18 && len(L.tags) > 0 {
         text(44, 556, "GUSTOS", 11, C_GRAY, "bold")
@@ -926,6 +946,7 @@ function draw_modal(m: map) {
     if m.kind == "minigame" { return draw_minigame() }
     if m.kind == "chat" { return draw_chat() }
     if m.kind == "phone" { return draw_phone() }
+    if m.kind == "world" { return draw_world(m) }
     return null
 }
 
@@ -1133,7 +1154,7 @@ function draw_detail(it: any, kind: string) {
                 textw(x + 46, y + 410, gl, 13, C_RED, "bold", 270)
             }
             textw(x + 46, y + 60, str_upper(p.first), 34, C_INK, "impact", 260)
-            text(x + 46, y + 92, rel_label(p) + " · " + str(p.age) + " años", 17, C_RED, "bold")
+            textw(x + 46, y + 92, rel_label(p) + " · " + str(p.age) + " años" + person_flag_text(p), 17, C_RED, "bold", 270)
             text(x + 46, y + 140, "ARCANO", 12, C_GRAY, "bold")
             text(x + 46, y + 166, str_upper(arcana(p)), 22, C_INK, "impact")
             text(x + 46, y + 206, "RANGO DE CONFIDENTE", 12, C_GRAY, "bold")

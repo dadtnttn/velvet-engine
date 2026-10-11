@@ -213,7 +213,7 @@ function living_costs() {
     }
     let food = FOOD[life]
     if home == "padres" { food = food / 2 }
-    let total = rent + food
+    let total = (rent + food) * pais_cost_mult() / 100
     if shares_home() { total = total / 2 }
     return total
 }

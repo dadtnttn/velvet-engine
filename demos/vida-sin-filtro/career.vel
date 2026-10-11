@@ -293,7 +293,16 @@ const MISSIONS = [
     {"id": "bucket5", "t": "Antes de partir", "d": "Cumple 5 deseos de tu lista de deseos.", "r": "Felicidad", "reward": {"happy": 10}},
     {"id": "hitos100", "t": "Una vida de película", "d": "Junta 100 hitos.", "r": "Encanto", "reward": {"charm": 6}},
     {"id": "centenarian", "t": "Un siglo de vida", "d": "Vive 100 años.", "r": "Amabilidad", "reward": {"kind": 8}},
-    {"id": "hero", "t": "Héroe anónimo", "d": "Salva una vida.", "r": "Valor", "reward": {"guts": 8}}
+    {"id": "hero", "t": "Héroe anónimo", "d": "Salva una vida.", "r": "Valor", "reward": {"guts": 8}},
+    {"id": "traveler10", "t": "Pasaporte con sellos", "d": "Visita 10 países.", "r": "Conocimiento", "reward": {"know": 5}},
+    {"id": "traveler50", "t": "Trotamundos", "d": "Visita 50 países.", "r": "Encanto", "reward": {"charm": 8}},
+    {"id": "nomad", "t": "Nómada", "d": "Vive en 3 países distintos.", "r": "Valor", "reward": {"guts": 5}},
+    {"id": "world_citizen", "t": "Ciudadanía global", "d": "Ten 3 nacionalidades.", "r": "+$20,000", "reward": {"money": 20000}},
+    {"id": "poliglota", "t": "Políglota", "d": "Habla 4 idiomas.", "r": "Conocimiento", "reward": {"know": 8}},
+    {"id": "veteran", "t": "Veterano de guerra", "d": "Sobrevive a una guerra en el frente.", "r": "Valor", "reward": {"guts": 8}},
+    {"id": "world_champ", "t": "Campeones del mundo", "d": "Que tu país gane el Mundial mientras vives ahí.", "r": "Felicidad", "reward": {"happy": 15}},
+    {"id": "empire", "t": "El imperio renace", "d": "Reconstruye un imperio histórico conquistando sus territorios.", "r": "Encanto", "reward": {"charm": 10}},
+    {"id": "refugee", "t": "Volver a empezar", "d": "Huye de tu país o pide asilo y empieza de cero.", "r": "Valor", "reward": {"guts": 6}}
 ]
 
 const MISSION_CAT_ORDER = ["Estudios", "Trabajo", "Amor y familia", "Dinero", "Vida"]
@@ -322,7 +331,9 @@ const MISSION_CATS = {
     "terraform": "Trabajo", "pledge": "Dinero", "crossover": "Trabajo", "director18": "Trabajo",
     "viral_reel": "Vida", "teen_safe": "Vida", "scam_proof": "Vida", "reunion": "Amor y familia", "bday_keeper": "Amor y familia",
     "freelancer": "Trabajo", "link_star": "Trabajo", "detox": "Vida",
-    "goals3": "Vida", "flaw_beaten": "Vida", "resolutions3": "Vida", "bucket5": "Vida", "hitos100": "Vida", "centenarian": "Vida", "hero": "Vida"
+    "goals3": "Vida", "flaw_beaten": "Vida", "resolutions3": "Vida", "bucket5": "Vida", "hitos100": "Vida", "centenarian": "Vida", "hero": "Vida",
+    "traveler10": "Vida", "traveler50": "Vida", "nomad": "Vida", "world_citizen": "Vida", "poliglota": "Estudios", "veteran": "Vida",
+    "world_champ": "Vida", "empire": "Trabajo", "refugee": "Vida"
 }
 
 function flag(name: string) {

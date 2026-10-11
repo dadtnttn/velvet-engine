@@ -20,12 +20,6 @@ const COURT_ROLES = [
     {"id": "espias", "n": "Maestro de espías", "key": "orden", "d": "Descubre conspiraciones antes de que estallen."}
 ]
 
-const NATIONS = [
-    {"id": "valdoria", "n": "Valdoria", "str": 55, "d": "Un reino de viñedos y castillos al norte."},
-    {"id": "ostmark", "n": "Ostmark", "str": 70, "d": "Una potencia militar de inviernos largos."},
-    {"id": "sarn", "n": "la Isla de Sarn", "str": 40, "d": "Mercaderes y piratas retirados."},
-    {"id": "kesh", "n": "el Imperio de Kesh", "str": 85, "d": "Un imperio enorme y antiguo al otro lado del mar."}
-]
 
 const TUTORS = [
     {"id": "militar", "n": "Un general retirado", "stat": "guts", "d": "Disciplina, esgrima y estrategia."},
@@ -40,7 +34,7 @@ function kr() {
     if d.court == null { d.court = {} }
     if d.dip == null {
         d.dip = {}
-        for n in NATIONS { d.dip[n.id] = rint(35, 60) }
+        for n in realm_nations() { d.dip[n.id] = rint(35, 60) }
     }
     if d.wars_won == null { d.wars_won = 0 }
     if d.succ == null { d.succ = "primo" }
@@ -68,10 +62,9 @@ function advisor(id: string) {
 }
 
 function nation_def(id: string) {
-    for n in NATIONS {
-        if n.id == id { return n }
-    }
-    return NATIONS[0]
+    let x = ctry(id)
+    if kr().dip[id] == null { kr().dip[id] = rint(35, 60) }
+    return {"id": id, "n": x.n, "str": army_of(id), "d": x.n + ": " + pop_text(x.pop) + ", " + gov_name(x.gov) + "."}
 }
 
 function royal_kids() {
@@ -118,7 +111,8 @@ function corona_items(cat: string) {
         return items
     }
     if cat == "Diplomacia" {
-        for n in NATIONS {
+        for n in realm_nations() {
+            if d.dip[n.id] == null { d.dip[n.id] = rint(35, 60) }
             let rel = d.dip[n.id]
             let st = "Relación " + str(rel)
             if rel >= 75 { st = st + " · aliado" }
@@ -350,7 +344,7 @@ function corona_nation(index: int, id: string) {
     }
     if index == 4 {
         let allies = 0
-        for x in NATIONS {
+        for x in realm_nations() {
             if list_contains(d.realm.laws, "ally_" + x.id) && x.id != id { allies += x.str / 5 }
         }
         let odds = clamp(50 + (d.realm.fuerza + allies - n.str) + rank("guts") * 3 + (advisor("mariscal").skill - 50) / 5, 5, 90)
@@ -358,10 +352,12 @@ function corona_nation(index: int, id: string) {
         flag("war")
         if chance(odds) {
             d.wars_won += 1
+            world().own[id] = here_id()
+            check_empires()
             realm_apply({"tesoro": 20, "aprob": 10, "fuerza": -10, "elite": 5})
             if d.wars_won >= 3 { flag("conqueror") }
             hito_me("Vida", "Ganaste la guerra contra " + n.n)
-            return finish("¡Victoria!", "Tu ejército venció a " + n.n + ". Tributos, tierras y desfiles en la capital.", "g")
+            return finish("¡Victoria!", "Tu ejército venció a " + n.n + ". Ahora " + n.n + " es parte de tu reino.", "g")
         }
         realm_apply({"tesoro": -15, "aprob": -15, "fuerza": -20})
         hito_me("Vida", "Perdiste la guerra contra " + n.n)
@@ -380,7 +376,7 @@ function corona_month() {
         d.regency = false
         d.king = true
         if d.realm == null { d.realm = realm_new() }
-        let title = by_gender(L.gender, "rey", "reina")
+        let title = crown_title()
         hito_me("Vida", "Te coronaron " + title + " al cumplir 18")
         list_push(G.toasts, {"head": "¡CORONACIÓN!", "title": str_upper(title) + " " + str_upper(L.first), "sub": "Termina la regencia", "t0": G.t})
         log_add("Terminó la regencia: hoy te colocaron la corona de tu familia.", "g")

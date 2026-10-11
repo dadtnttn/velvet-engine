@@ -1,0 +1,630 @@
+// @edition 3
+// El mundo en guerra (datos en paises_data.vel: guerras actuales, conflictos
+// internos, rivalidades con su probabilidad anual de guerra, alianzas e imperios).
+// - Cada enero puede estallar una guerra entre rivales; las alianzas de defensa
+//   mutua arrastran a sus miembros. Las guerras duran meses o años y terminan
+//   con un ganador. Si no es tu país, solo son noticias.
+// - Si tu país entra en guerra: sueldos más bajos, miedo, bombardeos y la
+//   posibilidad de que te recluten a la fuerza (presentarte, huir, esconderte,
+//   objetar o sobornar).
+// - Servicio militar obligatorio donde existe, alistarte como voluntario,
+//   rangos, eventos de cuartel, combate, medallas, heridas, deserción y
+//   veteranos con trauma.
+// - Si gobiernas (rey o presidencia): declarar guerras, anexar países y
+//   reconstruir imperios históricos. Lo conquistado se pinta en el mapa.
+// - El Mundial de fútbol cada cuatro años.
+
+const MIL_RANKS = ["Recluta", "Soldado", "Cabo", "Sargento", "Teniente", "Capitán", "Mayor", "Coronel", "General"]
+
+function world_init() {
+    L.world = {"wars": [], "civil": [], "own": {}, "news": []}
+    for w in WARS_NOW {
+        list_push(L.world.wars, {"a": w.a, "b": w.b, "n": w.n, "m": (2026 - w.since) * 12 + 6, "int": w.int, "ja": [], "jb": [], "mine": false})
+    }
+    for c in CIVIL_NOW { list_push(L.world.civil, {"id": c.id, "n": c.n, "int": c.int}) }
+    return null
+}
+
+function world() {
+    if L.world == null { world_init() }
+    return L.world
+}
+
+function war_sides(w: map, id: string) {
+    if w.a == id || list_contains(w.ja, id) { return 1 }
+    if w.b == id || list_contains(w.jb, id) { return 2 }
+    return 0
+}
+
+function war_of(id: string) {
+    for w in world().wars {
+        if war_sides(w, id) > 0 { return w }
+    }
+    return null
+}
+
+function at_war(id: string) {
+    return war_of(id) != null
+}
+
+function civil_war(id: string) {
+    for c in world().civil {
+        if c.id == id { return c.n }
+    }
+    return ""
+}
+
+function at_war_between(a: string, b: string) {
+    for w in world().wars {
+        let sa = war_sides(w, a)
+        let sb = war_sides(w, b)
+        if sa > 0 && sb > 0 && sa != sb { return true }
+    }
+    return false
+}
+
+function enemy_of(w: map, id: string) {
+    if war_sides(w, id) == 1 { return w.b }
+    return w.a
+}
+
+function army_of(id: string) {
+    let a = ctry(id).army
+    for x in map_keys(world().own) {
+        if world().own[x] == id { a += ctry(x).army / 3 }
+    }
+    return a
+}
+
+function owner_of(id: string) {
+    let o = world().own[id]
+    if o == null { return id }
+    return o
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function world_tick() {
+    let wd = world()
+    let m = cal_month()
+    if m == 0 && wd.last_y != world_year() {
+        wd.last_y = world_year()
+        for r in RIVALS {
+            if !at_war_between(r.a, r.b) && chance_tenths(int(r.pct * 3.5)) { start_war(r.a, r.b, "Guerra " + war_adj(r.a, r.b), false) }
+        }
+        for c in COUNTRIES {
+            if c.safe <= 22 && civil_war(c.id) == "" && chance_tenths(8) {
+                list_push(wd.civil, {"id": c.id, "n": "Conflicto armado en " + c.n, "int": 3})
+                world_headline("Estalla un conflicto armado en " + c.n + ".", c.id)
+            }
+        }
+    }
+    // Las guerras avanzan.
+    let keep = []
+    for w in wd.wars {
+        w.m += 1
+        let end_odds = clamp(10 + w.m / 4, 10, 60)
+        if w.mine { end_odds = 0 }
+        if chance_tenths(end_odds) {
+            end_war(w)
+        } else {
+            list_push(keep, w)
+        }
+    }
+    wd.wars = keep
+    let ck = []
+    for c in wd.civil {
+        if chance_tenths(6) {
+            world_headline("Terminó el conflicto: " + c.n + ".", c.id)
+        } else {
+            list_push(ck, c)
+        }
+    }
+    wd.civil = ck
+    // Tu país en guerra
+    let w = war_of(here_id())
+    if w != null && L.age >= 6 {
+        if w.int >= 3 && chance(w.int) && L.jail == 0 {
+            let r = rint(1, 100)
+            if r <= 3 && L.age >= 2 {
+                L.health -= 25
+                tfx_add("susto", 6)
+                log_add("Un bombardeo alcanzó tu barrio. Sobreviviste de milagro, con heridas.", "b")
+            } else {
+                tfx_add("susto", 2)
+                log_add(pick(["Sonaron las sirenas antiaéreas toda la noche.", "Cortes de luz por los ataques. Velas y miedo.", "En las noticias solo hablan de la guerra."]), "n")
+            }
+        }
+        if G.modal == null && L.mil == null && draft_eligible(w) && map_get(pa(), "exempt_m", -1) < L.tm && chance(2 + w.int * 2) { open_draft(w) }
+    }
+    if G.modal == null && cal_month() == 6 && world_year() % 4 == 2 && map_get(pa().wc, str(world_year()), false) != true { world_cup() }
+    if leader_now() { leader_month() }
+    return null
+}
+
+function chance_tenths(t: int) {
+    return rint(1, 1000) <= t
+}
+
+function war_adj(a: string, b: string) {
+    return "entre " + cname(a) + " y " + cname(b)
+}
+
+function world_headline(text: string, id: string) {
+    let wd = world()
+    list_push(wd.news, {"t": text, "y": world_year()})
+    if len(wd.news) > 30 { wd.news = list_slice(wd.news, len(wd.news) - 30, len(wd.news)) }
+    let mine = id == here_id()
+    if mine || chance(35) { log_add("Noticias: " + text, if_str(mine, "b", "n")) }
+    return null
+}
+
+function start_war(a: string, b: string, n: string, mine: bool) {
+    let w = {"a": a, "b": b, "n": n, "m": 0, "int": rint(2, 5), "ja": [], "jb": [], "mine": mine, "front": 0}
+    // Alianzas de defensa mutua: los aliados del atacado se suman.
+    for al in ALLIANCES {
+        if al.mutual && list_contains(al.members, b) && !list_contains(al.members, a) {
+            for x in al.members {
+                if x != b && !list_contains(w.jb, x) && x != a && chance(35) { list_push(w.jb, x) }
+            }
+        }
+    }
+    list_push(world().wars, w)
+    world_headline("¡Estalla la guerra " + str_replace(n, "Guerra ", "") + "!", a)
+    let me = here_id()
+    let side = war_sides(w, me)
+    if side > 0 {
+        list_push(G.toasts, {"head": "¡GUERRA!", "title": str_upper(cname(me)) + " EN GUERRA", "sub": "Contra " + cname(enemy_of(w, me)), "t0": G.t})
+        hito_me("Vida", cname(me) + " entró en guerra contra " + cname(enemy_of(w, me)))
+    }
+    return w
+}
+
+function end_war(w: map) {
+    let pa_ = army_of(w.a)
+    for x in w.ja { pa_ += army_of(x) / 2 }
+    let pb = army_of(w.b)
+    for x in w.jb { pb += army_of(x) / 2 }
+    let a_wins = rint(0, pa_ + pb) < pa_
+    if rint(1, 100) <= 35 { a_wins = false }
+    let winner = w.b
+    let loser = w.a
+    if a_wins {
+        winner = w.a
+        loser = w.b
+    }
+    let me = here_id()
+    let side = war_sides(w, me)
+    if rint(1, 100) <= 40 {
+        world_headline("Alto el fuego: termina la guerra " + str_replace(w.n, "Guerra ", "") + " sin un claro vencedor.", w.a)
+    } else {
+        world_headline("Termina la guerra " + str_replace(w.n, "Guerra ", "") + ": " + cname(winner) + " se impone.", w.a)
+        if side > 0 {
+            if (side == 1) == a_wins {
+                L.happy += 8
+                log_add("¡Tu país ganó la guerra! Desfiles y banderas en cada balcón.", "g")
+            } else {
+                L.happy -= 8
+                L.money -= L.money / 10
+                log_add("Tu país perdió la guerra. Crisis, vergüenza y luto.", "b")
+            }
+        }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- reclutamiento
+
+function draft_eligible(w: map) {
+    if L.age < 18 || L.age > 45 || L.jail > 0 { return false }
+    let c = here()
+    if pa().legal == "ilegal" || pa().legal == "refugiado" { return false }
+    if L.gender == "m" { return true }
+    return c.draft == 2 || w.int >= 5
+}
+
+function open_draft(w: map) {
+    let e = cname(enemy_of(w, here_id()))
+    let c = here()
+    let bribe_lock = ""
+    if c.safe >= 70 { bribe_lock = "Aquí nadie acepta sobornos" }
+    if bribe_lock == "" && L.money < 5000 { bribe_lock = "$5,000" }
+    open_choice("¡TE LLAMAN A FILAS!", "Llega una carta con el sello del ejército: " + c.n + " está en guerra contra " + e + " y te reclutan.", ["Presentarte en el cuartel", "Huir del país", "Esconderte", "Declararte objetor de conciencia", "Sobornar al reclutador ($5,000)"], ["", if_str(L.money < 500, "$500", ""), "", "", bribe_lock], "pa_draft", {"enemy": w.a + "|" + w.b})
+    return null
+}
+
+function draft_result(index: int, ctx: map) {
+    let d = pa()
+    if index == 0 { return mil_start("guerra", rint(8, 24)) }
+    if index == 1 { return open_flee() }
+    if index == 2 {
+        if chance(60) {
+            d.exempt_m = L.tm + 12
+            L.happy -= 6
+            return finish("Escondid" + oa(L.gender), "Pasaste meses escondid" + oa(L.gender) + " en el sótano de un familiar. No te encontraron.", "n")
+        }
+        if chance(50) { return finish("Te encontraron", "La policía militar te sacó de tu escondite." + go_to_jail(2), "b") }
+        mil_start("guerra", rint(10, 24))
+        return finish("Te encontraron", "Te encontraron y te mandaron directo al frente.", "b")
+    }
+    if index == 3 {
+        if chance(50) {
+            mil_start("civil", 12)
+            return finish("Objetor", "Aceptaron tu objeción: harás servicio civil en hospitales y refugios.", "n")
+        }
+        return finish("Objetor", "No aceptaron tu objeción." + go_to_jail(1), "b")
+    }
+    L.money -= 5000
+    if chance(70) {
+        d.exempt_m = L.tm + 24
+        L.karma -= 3
+        return finish("Soborno", "El reclutador guardó el sobre y tu nombre desapareció de la lista.", "n")
+    }
+    return finish("Soborno", "El reclutador era honesto. Te denunció." + go_to_jail(2), "b")
+}
+
+// Servicio militar obligatorio a los 18.
+function service_check() {
+    let c = here()
+    if L.age != 18 || c.draft == 0 || pa().service_done == true || L.mil != null { return null }
+    if L.gender != "m" && c.draft != 2 { return null }
+    if G.modal != null { return null }
+    pa().service_done = true
+    let study_lock = ""
+    if L.study == null && L.school == "" { study_lock = "Solo si estudias" }
+    open_choice("SERVICIO MILITAR", "En " + c.n + " el servicio militar es obligatorio: " + str(c.draft_m) + " meses.", ["Cumplir el servicio", "Pedir prórroga por estudios", "Objeción de conciencia (servicio civil)", "Evadirlo"], ["", study_lock, "", ""], "pa_service", {})
+    return null
+}
+
+function service_result(index: int, ctx: map) {
+    let c = here()
+    if index == 0 { return mil_start("servicio", max(6, c.draft_m)) }
+    if index == 1 { return finish("Prórroga", "Te dieron prórroga mientras estudias. El ejército puede esperar.", "n") }
+    if index == 2 {
+        mil_start("civil", max(6, c.draft_m))
+        return finish("Servicio civil", "Harás tu servicio en un hospital. Menos botas, más turnos de noche.", "n")
+    }
+    if chance(55) {
+        L.karma -= 2
+        return finish("Evasión", "Nadie vino a buscarte. Pero no podrás trabajar para el gobierno.", "n")
+    }
+    L.money -= min(max(0, L.money), 3000)
+    return finish("Evasión", "Te multaron y te quedó una mancha en tus papeles.", "b")
+}
+
+// ---------------------------------------------------------------- vida militar
+
+function mil_start(kind: string, months: int) {
+    L.mil = {"kind": kind, "m": 0, "total": months, "rank": 0, "medals": 0}
+    if kind == "guerra" { L.mil.rank = 1 }
+    if kind == "civil" { return null }
+    hito_me("Vida", if_str(kind == "guerra", "Fuiste al frente", "Empezaste el servicio militar"))
+    return finish("Al cuartel", if_str(kind == "guerra", "Te raparon, te dieron un uniforme y un fusil. En dos semanas estabas en el frente.", "Te raparon, te dieron botas y un sargento que grita. Bienvenid" + oa(L.gender) + " al ejército."), "n")
+}
+
+function mil_enlist() {
+    if L.mil != null { return null }
+    return mil_start("carrera", 24)
+}
+
+function mil_rank_name() {
+    if L.mil == null { return "" }
+    if L.mil.kind == "civil" { return "Servicio civil" }
+    return MIL_RANKS[clamp(L.mil.rank, 0, len(MIL_RANKS) - 1)]
+}
+
+function mil_month() {
+    let m = L.mil
+    if m == null || !L.alive { return null }
+    if L.jail > 0 {
+        L.mil = null
+        return null
+    }
+    m.m += 1
+    let c = here()
+    L.money += 300 * pais_pay_mult() / 100 + m.rank * 80
+    if m.kind == "civil" {
+        if chance(40) { gain("kind", 1) }
+    } else {
+        if chance(50) { gain("guts", 1) }
+        if chance(30) { gain("skill", 1) }
+        if chance(20) { L.health += 1 }
+        if m.m % 6 == 0 && chance(40 + rank("guts") * 8) && m.rank < len(MIL_RANKS) - 1 {
+            m.rank += 1
+            log_add("¡Ascenso! Ahora eres " + str_lower(mil_rank_name()) + ".", "g")
+        }
+    }
+    let w = war_of(here_id())
+    let front = w != null && m.kind != "civil"
+    if front {
+        let r = rint(1, 1000)
+        if r <= w.int * 3 {
+            die("en combate durante la guerra contra " + cname(enemy_of(w, here_id())))
+            return null
+        }
+        if r <= w.int * 3 + 35 {
+            L.health -= rint(10, 25)
+            tfx_add("lesion", 4)
+            log_add("Te hirieron en combate. Te evacuaron al hospital de campaña.", "b")
+        } else if r <= w.int * 3 + 55 {
+            m.medals += 1
+            L.fame = clamp100(L.fame + 2)
+            hito_me("Vida", "Te dieron una medalla al valor")
+        }
+    }
+    if G.modal == null && chance(12) { mil_event(front) }
+    if m.m >= m.total && m.kind != "carrera" {
+        L.mil = null
+        if m.kind == "civil" {
+            gain("kind", 4)
+            log_add("Terminaste tu servicio civil. Ayudaste a mucha gente.", "g")
+            return null
+        }
+        if front || m.kind == "guerra" {
+            pa().veteran = true
+            flag("veteran")
+            hito_me("Vida", "Volviste de la guerra")
+            if chance(40) { tfx_add("trauma", 12) }
+            log_add("Volviste a casa. Tu familia te abrazó como si fuera la primera vez.", "g")
+        } else {
+            hito_me("Vida", "Terminaste el servicio militar")
+            log_add("Terminaste el servicio militar. Ahora tiendes la cama sin que nadie te lo pida.", "g")
+        }
+    }
+    return null
+}
+
+function mil_event(front: bool) {
+    if front {
+        open_choice("EN EL FRENTE", pick(["Tu unidad quedó rodeada en una trinchera. El enemigo avanza.", "Un compañero quedó herido en tierra de nadie.", "Te ordenan avanzar hacia una posición imposible."]), ["Arriesgarte por tus compañeros", "Seguir las órdenes al pie de la letra", "Esconderte hasta que pase"], ["", "", ""], "pa_milev", {"front": true})
+    } else {
+        open_choice("EN EL CUARTEL", pick(["Te tocó guardia de 3 a 6 de la mañana y el sueño te gana.", "El sargento la trae contra ti desde el primer día.", "Unos compañeros quieren escaparse una noche a la ciudad."]), ["Aguantar y cumplir", "Responder", "Seguirles la corriente"], ["", "", ""], "pa_milev", {"front": false})
+    }
+    return null
+}
+
+function mil_event_result(index: int, ctx: map) {
+    if ctx.front == true {
+        if index == 0 {
+            if chance(70) {
+                gain("guts", 5)
+                L.mil.medals += 1
+                hito_me("Vida", "Salvaste a tus compañeros en el frente")
+                return finish("Héroe", "Cruzaste bajo el fuego y los sacaste a todos. Nadie lo olvidará.", "g")
+            }
+            L.health -= 20
+            tfx_add("lesion", 6)
+            return finish("Herid" + oa(L.gender), "Te alcanzó la metralla. Sobreviviste.", "b")
+        }
+        if index == 1 { return finish("Órdenes", "Hiciste lo que te ordenaron. Sobreviviste un día más.", "n") }
+        L.karma -= 2
+        tfx_add("trauma", 3)
+        return finish("Escondid" + oa(L.gender), "Te escondiste. Nadie lo notó, pero tú sí.", "n")
+    }
+    if index == 0 {
+        gain("guts", 2)
+        return finish("Disciplina", "Aguantaste. El sargento casi sonrió.", "g")
+    }
+    if index == 1 {
+        if chance(50) {
+            gain("guts", 3)
+            return finish("Respondiste", "Te ganaste el respeto de todo el pelotón (y una semana de lavar baños).", "n")
+        }
+        L.mil.rank = max(0, L.mil.rank - 1)
+        return finish("Respondiste", "Te degradaron. Bien hecho.", "b")
+    }
+    L.happy += 4
+    if chance(40) { return finish("Escapada", "Los atraparon al volver. Tres días de calabozo.", "b") }
+    return finish("Escapada", "Una noche de libertad en la ciudad. Volvieron antes del toque de diana.", "g")
+}
+
+function mil_discharge() {
+    if L.mil == null { return null }
+    let r = mil_rank_name()
+    L.mil = null
+    if at_war(here_id()) { pa().veteran = true }
+    hito_me("Trabajo", "Te retiraste del ejército como " + str_lower(r))
+    return finish("Baja honrosa", "Entregaste el uniforme con honores. " + r + " en retiro.", "g")
+}
+
+function mil_desert() {
+    if L.mil == null { return null }
+    L.mil = null
+    if chance(45) { return finish("Desertor", "Te atraparon en la estación de autobuses." + go_to_jail(3), "b") }
+    L.karma -= 3
+    return finish("Desertor", "Escapaste. Ahora vives con miedo a cada uniforme.", "n")
+}
+
+// ---------------------------------------------------------------- noticias y Mundial
+
+function world_news() {
+    let wd = world()
+    let lines = []
+    for w in wd.wars {
+        let t = w.n + " (" + str(w.m / 12) + " " + plural(w.m / 12, "año", "años") + ")"
+        list_push(lines, t)
+    }
+    let civ = []
+    for c in wd.civil { list_push(civ, cname(c.id)) }
+    let txt = "Guerras: " + if_str(len(lines) == 0, "ninguna, por ahora.", str_join(lines, " · ") + ".")
+    if len(civ) > 0 { txt = txt + " Conflictos internos en: " + str_join(civ, ", ") + "." }
+    let last = []
+    let i = max(0, len(wd.news) - 4)
+    while i < len(wd.news) {
+        list_push(last, wd.news[i].t)
+        i += 1
+    }
+    if len(last) > 0 { txt = txt + " Últimas noticias: " + str_join(last, " ") }
+    return info("Noticias del mundo · " + str(world_year()), txt)
+}
+
+function world_cup() {
+    let c = here()
+    let y = world_year()
+    pa().wc[str(y)] = true
+    if L.age < 4 { return null }
+    let f = c.fifa
+    let stage = 0
+    if !chance(clamp(f, 3, 97)) {
+        log_add("Mundial " + str(y) + ": " + c.n + " no clasificó. Le vas a otro país, como cada cuatro años.", "n")
+        return null
+    }
+    stage = 1
+    let names = ["la fase de grupos", "los octavos de final", "los cuartos de final", "las semifinales", "la final"]
+    while stage <= 5 && chance(clamp(f - 5 + stage * 2, 10, 85)) { stage += 1 }
+    if stage > 5 {
+        L.happy += 15
+        flag("world_champ")
+        hito_me("Vida", "¡" + c.n + " ganó el Mundial " + str(y) + "!")
+        list_push(G.toasts, {"head": "¡CAMPEONES DEL MUNDO!", "title": str_upper(c.n), "sub": "Mundial " + str(y), "t0": G.t})
+        log_add("¡" + str_upper(c.n) + " CAMPEÓN DEL MUNDO! Lloraste, gritaste y abrazaste a desconocidos en la calle.", "g")
+        return null
+    }
+    L.happy += stage * 2 - 2
+    log_add("Mundial " + str(y) + ": " + c.n + " quedó eliminado en " + names[stage - 1] + ". " + pick(["El árbitro estaba comprado, obvio.", "Faltó el penal.", "La próxima es la buena."]), "n")
+    return null
+}
+
+// ---------------------------------------------------------------- si gobiernas
+
+function leader_now() {
+    if L.rd == null { return false }
+    return (L.route == "rey" && L.rd.king == true) || (L.route == "presidente" && L.rd.pres == true)
+}
+
+function leader_title() {
+    let c = here()
+    if L.route == "rey" { return by_gender(L.gender, c.crown_m, c.crown_f) }
+    return by_gender(L.gender, c.lead_m, c.lead_f)
+}
+
+// Países con los que tu gobierno tiene trato: vecinos, rivales y aliados.
+function realm_nations() {
+    let me = here_id()
+    let out = []
+    for id in here().nb {
+        if has_ctry(id) && !list_contains(out, id) && owner_of(id) != me { list_push(out, id) }
+    }
+    for r in RIVALS {
+        if r.a == me && !list_contains(out, r.b) { list_push(out, r.b) }
+        if r.b == me && !list_contains(out, r.a) { list_push(out, r.a) }
+    }
+    let list = []
+    for id in list_slice(out, 0, min(10, len(out))) {
+        let x = ctry(id)
+        list_push(list, {"id": id, "n": x.n, "str": army_of(id), "d": x.n + ": " + pop_text(x.pop) + ", " + gov_name(x.gov) + "."})
+    }
+    if len(list) == 0 { list_push(list, {"id": "us", "n": "Estados Unidos", "str": 100, "d": "La superpotencia de siempre."}) }
+    return list
+}
+
+function leader_war_odds(id: string) {
+    let mine = army_of(here_id())
+    if L.rd != null && L.rd.realm != null { mine += L.rd.realm.fuerza / 3 }
+    return clamp(50 + (mine - army_of(id)) / 2 + rank("guts") * 3, 5, 92)
+}
+
+function open_leader_war(id: string) {
+    G.modal = null
+    let x = ctry(id)
+    return open_choice("DECLARAR LA GUERRA A " + str_upper(x.n), "Tu ejército (" + str(army_of(here_id())) + ") contra el de " + x.n + " (" + str(army_of(id)) + "). Probabilidad de victoria: " + str(leader_war_odds(id)) + "%. Si ganas, " + x.n + " pasa a ser parte de tu país.", ["¡A la guerra!", "Mejor una anexión pacífica (referéndum)", "No"], ["", if_str(!list_contains(here().nb, id), "Solo vecinos", ""), ""], "pa_war", {"id": id})
+}
+
+function leader_war_result(index: int, ctx: map) {
+    let id = ctx.id
+    let x = ctry(id)
+    if index == 2 { return null }
+    if index == 1 {
+        let odds = clamp(10 + rank("charm") * 6 + (here().gdp - x.gdp) / 2, 3, 60)
+        if chance(odds) { return annex(id, "Por referéndum, " + x.n + " votó unirse a tu país. Fiesta en las dos capitales.") }
+        realm_apply({"aprob": -5})
+        return finish("Referéndum", x.n + " votó «no». Fue humillante.", "b")
+    }
+    flag("war")
+    let w = start_war(here_id(), id, "Guerra de conquista contra " + x.n, true)
+    w.front = 0
+    return finish("¡Guerra!", "Declaraste la guerra a " + x.n + ". Tus tropas cruzan la frontera.", "b")
+}
+
+function annex(id: string, msg: string) {
+    let x = ctry(id)
+    world().own[id] = here_id()
+    if L.rd != null && L.rd.wars_won != null { L.rd.wars_won += 1 }
+    realm_apply({"tesoro": 15, "aprob": 8})
+    hito_me("Vida", x.n + " ahora es parte de tu país")
+    if L.rd != null && L.rd.wars_won >= 3 { flag("conqueror") }
+    check_empires()
+    return finish("Anexión", msg, "g")
+}
+
+function check_empires() {
+    let me = here_id()
+    for e in EMPIRES {
+        let ok = e.core == me || owner_of(e.core) == me
+        for m in e.members {
+            if m != me && owner_of(m) != me { ok = false }
+        }
+        if ok { if hito_once("empire_" + e.core, "Vida", "Restauraste el " + e.n) { flag("empire") } }
+    }
+    return null
+}
+
+// Tus guerras de conquista avanzan cada mes.
+function leader_month() {
+    let me = here_id()
+    let wd = world()
+    let keep = []
+    for w in wd.wars {
+        if !w.mine {
+            list_push(keep, w)
+            continue
+        }
+        let enemy = enemy_of(w, me)
+        let odds = leader_war_odds(enemy)
+        if chance(odds) { w.front += rint(10, 30) } else { w.front -= rint(10, 30) }
+        realm_apply({"tesoro": -2, "aprob": -1})
+        if w.front >= 100 {
+            annex(enemy, "¡Victoria total! " + cname(enemy) + " se rindió y ahora es parte de tu país.")
+            world_headline(cname(me) + " conquista " + cname(enemy) + ".", me)
+            continue
+        }
+        if w.front <= -100 {
+            realm_apply({"aprob": -20, "fuerza": -20})
+            world_headline(cname(enemy) + " derrota a " + cname(me) + ".", me)
+            hito_me("Vida", "Perdiste la guerra contra " + cname(enemy))
+            log_add("Tu guerra contra " + cname(enemy) + " terminó en derrota. El pueblo pide tu cabeza.", "b")
+            continue
+        }
+        list_push(keep, w)
+    }
+    wd.wars = keep
+    let owned = 0
+    for x in map_keys(wd.own) {
+        if wd.own[x] == me { owned += 1 }
+    }
+    if owned > 0 { L.money += owned * 2000 }
+    return null
+}
+
+function owned_list() {
+    let out = []
+    let me = here_id()
+    for x in map_keys(world().own) {
+        if world().own[x] == me { list_push(out, x) }
+    }
+    return out
+}
+
+function crown_title() {
+    let c = here()
+    return by_gender(L.gender, c.crown_m, c.crown_f)
+}
+
+// Texto de la coronación: en las monarquías heredas; en las repúblicas la restauras.
+function crown_text() {
+    let c = here()
+    if c.crown_reform {
+        return "Reformaste la constitución y restauraste la corona: ahora eres " + crown_title() + " de " + c.n + "."
+    }
+    return "Ocupaste el trono de " + c.n + ". Eres " + crown_title() + "."
+}

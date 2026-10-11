@@ -199,6 +199,7 @@ function fans_extra_items(cat: string) {
     list_push(items, {"action": "x8:chat", "t": if_str(d.chat == true, "Equipo de chat (contratado)", "Contratar equipo de chat"), "s": "$3,000/mes", "desc": "Responden mensajes por ti: más dinero en mensajes, menos cansancio... y menos autenticidad.", "lock": ""})
     list_push(items, {"action": "x8:dmca", "t": if_str(d.dmca == true, "Protección contra filtraciones (activa)", "Servicio contra filtraciones"), "s": "$1,000/mes", "desc": "Un equipo que borra tu contenido filtrado en internet.", "lock": ""})
     list_push(items, xitem("calendar", "Lanzar tu calendario", "Dinero", "Doce fotos artísticas para doce meses.", if_str(d.subs < 2000, "2,000 suscriptores", "")))
+    if d.whales == null { d.whales = [] }
     for w in d.whales { list_push(items, xitem("whale:" + str(w.id), "Fan generoso: " + w.name, "Propinas " + money_str(w.tips), w.note, "")) }
     list_push(items, {"action": "x8:fretire", "t": "Cerrar tu cuenta", "s": "Retirarte", "desc": "Te despides de tus fans y cierras esta etapa.", "lock": ""})
     return items

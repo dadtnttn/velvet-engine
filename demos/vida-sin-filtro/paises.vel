@@ -1,0 +1,1221 @@
+// @edition 3
+// Los países del mundo (datos en paises_data.vel):
+// - Naces en un país: tu nombre, el de tu familia y el de casi toda la gente que
+//   conoces salen de los nombres de ahí (con sus nombres «creativos» típicos).
+// - La religión de tu familia sigue los porcentajes del país; tu piel, tu pelo y
+//   tus ojos, su mezcla de etnias. Lo poco común llama la atención: tu atractivo
+//   sube donde tu aspecto es raro y no destaca donde es lo normal.
+// - Economía (sueldos y costo de vida), desempleo, sectores con más trabajo,
+//   felicidad, esperanza de vida, seguridad y leyes (alcohol, parejas del mismo
+//   sexo, trabajo sexual, marihuana).
+// - Costumbres y fiestas de cada país, clichés, idioma.
+// - Viajar a cualquier país, lunas de miel, romances de viaje, sellos del
+//   pasaporte; mudarte con visa (trabajo, matrimonio, inversión, asilo o sin
+//   papeles), huir, cambiarte el nombre, naturalizarte y aprender idiomas.
+// Acciones "pa:" y elecciones "pa_".
+
+const REGIONS = [
+    ["norteamerica", "Norteamérica"], ["centroamerica", "Centroamérica"], ["caribe", "Caribe"], ["sudamerica", "Sudamérica"],
+    ["europa_oeste", "Europa occidental"], ["europa_norte", "Europa del norte"], ["europa_sur", "Europa del sur"], ["europa_este", "Europa del este"],
+    ["asia_central", "Asia central"], ["medio_oriente", "Medio Oriente"], ["africa_norte", "Norte de África"], ["africa_oeste", "África occidental"],
+    ["africa_este", "África oriental"], ["africa_central", "África central"], ["africa_sur", "África austral"], ["asia_sur", "Asia del sur"],
+    ["asia_este", "Asia oriental"], ["sudeste_asiatico", "Sudeste asiático"], ["oceania", "Oceanía"]
+]
+
+// ---------------------------------------------------------------- acceso
+
+function ctry(id: string) {
+    let i = COUNTRY_IX[id]
+    if i == null { return COUNTRIES[COUNTRY_IX[default_ctry()]] }
+    return COUNTRIES[i]
+}
+
+function default_ctry() {
+    if COUNTRY_IX["mx"] != null { return "mx" }
+    return COUNTRIES[0].id
+}
+
+function has_ctry(id: string) {
+    return id != null && COUNTRY_IX[id] != null
+}
+
+function here_id() {
+    if L.ctry == null || !has_ctry(L.ctry) { L.ctry = default_ctry() }
+    return L.ctry
+}
+
+function here() {
+    return ctry(here_id())
+}
+
+function born_id() {
+    if L.born == null { L.born = here_id() }
+    return L.born
+}
+
+function pa() {
+    if L.pa == null {
+        L.pa = {"visited": [], "langs": [], "langp": {}, "legal": "ciudadano", "res_m": 0, "nats": [], "alias": [], "honey": false,
+                "lived": [], "veteran": false, "exempt_m": -1, "fled": false, "wc": {}, "fest": {}, "deport": 0}
+    }
+    return L.pa
+}
+
+function region_name(id: string) {
+    for r in REGIONS {
+        if r[0] == id { return r[1] }
+    }
+    return id
+}
+
+function cname(id: string) {
+    return ctry(id).n
+}
+
+// Gentilicio según el género.
+function demonym(id: string, gender: string) {
+    let c = ctry(id)
+    return by_gender(gender, c.dm, c.df)
+}
+
+function csplit(s: string) {
+    if s == null || s == "" { return [] }
+    return str_split(s, ",")
+}
+
+function main_lang(id: string) {
+    let l = ctry(id).lang
+    let parts = str_split(l, " y ")
+    let first = str_split(parts[0], ",")[0]
+    return str_trim(str_lower(first))
+}
+
+// ---------------------------------------------------------------- nombres
+
+function pais_first(gender: string, cid: string) {
+    let c = ctry(cid)
+    let odd = csplit(by_gender(gender, c.odd_m, c.odd_f))
+    if len(odd) > 0 && chance(c.odd_pct) { return pick(odd) }
+    let names = csplit(by_gender(gender, c.nm, c.nf))
+    if len(names) == 0 { return pick(by_gender(gender, NAMES_M, NAMES_F)) }
+    return pick(names)
+}
+
+function pais_surname(cid: string) {
+    let sn = csplit(ctry(cid).sn)
+    if len(sn) == 0 { return pick(SURNAMES) }
+    return pick(sn)
+}
+
+// De qué país es cada persona nueva: la familia, del país donde naciste; el
+// resto, de donde vives (con algunos extranjeros, más en países ricos).
+function person_ctry(rel: string) {
+    if L == null || L.ctry == null { return default_ctry() }
+    if rel == "padre" || rel == "madre" || rel == "hermano" || rel == "abuelo" || rel == "tio" || rel == "primo" { return born_id() }
+    if rel == "hijo" || rel == "nieto" || rel == "sobrino" { return here_id() }
+    let c = here()
+    let imm = clamp(c.gdp / 4, 2, 18)
+    if chance(imm) { return foreign_ctry(here_id()) }
+    return here_id()
+}
+
+// Un país extranjero: la mitad de las veces, un vecino.
+function foreign_ctry(from: string) {
+    let c = ctry(from)
+    if len(c.nb) > 0 && chance(50) {
+        let nb = pick(c.nb)
+        if has_ctry(nb) { return nb }
+    }
+    let x = COUNTRIES[rint(0, len(COUNTRIES) - 1)]
+    return x.id
+}
+
+function look_for(gender: string, cid: string) {
+    let lk = random_look(gender)
+    let c = ctry(cid)
+    lk.skin = weighted_choose(G.rng, c.skin)
+    let dyed = lk.hcolor >= 5
+    if !dyed {
+        if chance(c.blond) && lk.skin <= 2 {
+            lk.hcolor = pick([3, 3, 2, 4])
+        } else {
+            lk.hcolor = pick([0, 0, 1, 1, 2])
+            if lk.skin >= 3 { lk.hcolor = pick([0, 0, 1]) }
+        }
+    }
+    if chance(c.light_eyes) { lk.eyes = pick([2, 3, 4]) } else { lk.eyes = pick([0, 1, 1]) }
+    return lk
+}
+
+// Aplica nombre, apellido, aspecto y país a una persona.
+function pais_person(p: map, cid: string) {
+    p.ctry = cid
+    p.first = pais_first(p.gender, cid)
+    p.last = pais_surname(cid)
+    if p.gender == "f" { p.last = fem_surname(cid, p.last) }
+    let keep_skin = p.look != null && p.rel == "hijo"
+    let lk = look_for(p.gender, cid)
+    if keep_skin { lk.skin = p.look.skin }
+    p.look = lk
+    return p
+}
+
+function person_flag_text(p: map) {
+    if p.ctry == null || !has_ctry(p.ctry) || L.ctry == null { return "" }
+    return " · " + demonym(p.ctry, p.gender)
+}
+
+// ---------------------------------------------------------------- religión
+
+function rel_pick(cid: string) {
+    let c = ctry(cid)
+    let ids = []
+    let w = []
+    for k in map_keys(c.rel) {
+        if religion_exists(k) {
+            list_push(ids, k)
+            list_push(w, c.rel[k])
+        }
+    }
+    if len(ids) == 0 { return "ninguna" }
+    return ids[weighted_choose(G.rng, w)]
+}
+
+function religion_exists(id: string) {
+    for r in RELIGIONS {
+        if r.id == id { return true }
+    }
+    return false
+}
+
+function rel_summary(cid: string) {
+    let c = ctry(cid)
+    let pairs = []
+    for k in map_keys(c.rel) { list_push(pairs, k) }
+    // Las tres más grandes.
+    let out = []
+    let used = []
+    let n = 0
+    while n < 3 && n < len(pairs) {
+        let best = ""
+        for k in pairs {
+            if !list_contains(used, k) && (best == "" || c.rel[k] > c.rel[best]) { best = k }
+        }
+        if best == "" { break }
+        list_push(used, best)
+        if religion_exists(best) { list_push(out, religion_def(best).n + " " + str(c.rel[best]) + "%") }
+        n += 1
+    }
+    return str_join(out, ", ")
+}
+
+// ---------------------------------------------------------------- creador
+
+function cre_ctry_defaults(c: map) {
+    if c.region == null { c.region = "" }
+    if c.ctry == null { c.ctry = "" }
+    if c.skin_set == null { c.skin_set = false }
+    return c
+}
+
+function region_countries(reg: string) {
+    let out = REGION_COUNTRIES[reg]
+    if out == null { return [] }
+    return out
+}
+
+function cre_region_label(c: map) {
+    if c.region == "" { return "AL AZAR" }
+    return str_upper(region_name(c.region))
+}
+
+function cre_ctry_label(c: map) {
+    if c.ctry == "" { return "AL AZAR" }
+    return str_upper(cname(c.ctry))
+}
+
+function pais_creator_action(cmd: string, action: string) {
+    let c = cre_ctry_defaults(G.cre)
+    if cmd == "region" {
+        let i = 0
+        if c.region != "" {
+            let k = 0
+            while k < len(REGIONS) {
+                if REGIONS[k][0] == c.region { i = k + 1 }
+                k += 1
+            }
+        }
+        i = cycle(i, action, len(REGIONS) + 1)
+        let guard = 0
+        while i > 0 && len(region_countries(REGIONS[i - 1][0])) == 0 && guard < 30 {
+            i = cycle(i, action, len(REGIONS) + 1)
+            guard += 1
+        }
+        if i == 0 { c.region = "" } else { c.region = REGIONS[i - 1][0] }
+        c.ctry = ""
+        if c.region != "" {
+            c.ctry = region_countries(c.region)[0]
+            cre_ctry_look(c)
+        }
+        c.city = ""
+    }
+    if cmd == "ctry" {
+        let list = []
+        if len(COUNTRIES_BY_NAME) == 0 { return null }
+        if c.region == "" {
+            for x in COUNTRIES_BY_NAME { list_push(list, x) }
+        } else {
+            list = region_countries(c.region)
+        }
+        let i = 0
+        if c.ctry != "" { i = list_index(list, c.ctry) + 1 }
+        i = cycle(i, action, len(list) + 1)
+        if i == 0 { c.ctry = "" } else { c.ctry = list[i - 1] }
+        c.city = ""
+        if c.ctry != "" { cre_ctry_look(c) }
+    }
+    if cmd == "skin" { c.skin_set = true }
+    return null
+}
+
+// Al elegir país, el retrato toma un aspecto típico de ahí (si no tocaste la piel).
+function cre_ctry_look(c: map) {
+    if c.skin_set == true || c.ctry == "" { return null }
+    let lk = look_for(c.gender, c.ctry)
+    c.look.skin = lk.skin
+    c.look.hcolor = lk.hcolor
+    c.look.eyes = lk.eyes
+    return null
+}
+
+// País al nacer: el elegido o uno al azar (más probable cuanta más gente tiene).
+function cre_country() {
+    let c = cre_ctry_defaults(G.cre)
+    if c.ctry != "" { return c.ctry }
+    let list = COUNTRIES_BY_NAME
+    if c.region != "" { list = region_countries(c.region) }
+    let w = []
+    for id in list { list_push(w, isqrt(max(1, ctry(id).pop))) }
+    return list[weighted_choose(G.rng, w)]
+}
+
+function isqrt(n: int) {
+    let r = 0
+    while (r + 1) * (r + 1) <= n { r += 1 }
+    return r
+}
+
+function cre_city_options(c: map) {
+    if c.ctry == "" { return [] }
+    return ctry(c.ctry).cities
+}
+
+function cre_ctry_summary(c: map) {
+    if c.ctry == "" {
+        if c.region == "" { return "Naces en cualquier país del mundo (más probable en los más poblados)." }
+        return "Naces en algún país de " + region_name(c.region) + "."
+    }
+    let x = ctry(c.ctry)
+    return x.n + ": " + pop_text(x.pop) + " · " + x.lang + " · " + rel_summary(x.id) + " · ingreso " + wealth_word(x.gdp) + "."
+}
+
+function pop_text(k: int) {
+    if k >= 1000000 { return str(k / 1000000) + " mil millones" }
+    if k >= 1000 { return str(k / 1000) + " millones" }
+    return str(k) + " mil habitantes"
+}
+
+function wealth_word(gdp: int) {
+    if gdp >= 60 { return "muy alto" }
+    if gdp >= 35 { return "alto" }
+    if gdp >= 15 { return "medio" }
+    if gdp >= 6 { return "bajo" }
+    return "muy bajo"
+}
+
+// Se llama al nacer (después de crear a tus padres).
+function pais_birth() {
+    let d = pa()
+    born_id()
+    list_push(d.nats, here_id())
+    list_push(d.lived, here_id())
+    list_push(d.langs, main_lang(here_id()))
+    L.y0 = 2026
+    world_init()
+    let c = here()
+    log_add("Eres " + demonym(here_id(), L.gender) + ". " + pick(csplit_cl(c.cl)), "x")
+    return null
+}
+
+function csplit_cl(s: string) {
+    if s == null || s == "" { return ["Un país como cualquier otro."] }
+    return str_split(s, "|")
+}
+
+// Herederos: siguen en el país y el mundo de su padre o madre.
+function pais_heir(old: map) {
+    L.ctry = old.ctry
+    L.born = old.ctry
+    L.y0 = map_get(old, "y0", 2026) + old.age
+    L.world = old.world
+    let d = pa()
+    list_push(d.nats, here_id())
+    list_push(d.lived, here_id())
+    list_push(d.langs, main_lang(here_id()))
+    if L.world == null { world_init() }
+    return null
+}
+
+function world_year() {
+    return map_get(L, "y0", 2026) + L.tm / 12
+}
+
+function cal_month() {
+    return (L.bmonth + L.month) % 12
+}
+
+// ---------------------------------------------------------------- economía y efectos
+
+function pais_pay_mult() {
+    let g = here().gdp
+    // Curva suave: 22 mil USD de ingreso = sueldos base del juego.
+    let m = 100
+    if g < 22 { m = 100 - (22 - g) * 3 } else { m = 100 + (g - 22) * 25 / 10 }
+    return clamp(m, 18, 280)
+}
+
+function pais_cost_mult() {
+    let g = here().gdp
+    let m = 100
+    if g < 22 { m = 100 - (22 - g) * 25 / 10 } else { m = 100 + (g - 22) * 2 }
+    return clamp(m, 30, 230)
+}
+
+function pais_field_hire(field: string) {
+    if L.ctry == null { return 0 }
+    if list_contains(here().jobs, field) { return 10 }
+    return 0
+}
+
+// Años que la esperanza de vida del país suma o resta al riesgo de morir.
+function pais_life_shift() {
+    if L.ctry == null { return 0 }
+    return (78 - here().life) / 2
+}
+
+function speaks_here() {
+    return list_contains(pa().langs, main_lang(here_id()))
+}
+
+function skin_share() {
+    let c = here()
+    return c.skin[clamp(L.look.skin, 0, 5)]
+}
+
+function pais_fx(out: list) {
+    if L.ctry == null || L.age < 3 { return null }
+    let c = here()
+    let d = pa()
+    let g = L.gender
+    if L.age >= 16 {
+        let m = pais_pay_mult()
+        if m != 100 { list_push(out, fx("p_eco", "Economía de " + c.n, m > 100, "Sueldos y precios de " + c.n + " (ingreso " + wealth_word(c.gdp) + ").", {"pay": m - 100})) }
+        if c.unemp >= 10 { list_push(out, fx("p_unemp", "Desempleo alto", false, "En " + c.n + " el " + str(c.unemp) + "% de la gente busca trabajo.", {"hire": 0 - c.unemp / 2})) }
+    }
+    if c.hap >= 70 { list_push(out, fx("p_hap", "País feliz", true, c.n + " está entre los países más felices del mundo.", {"hap": 1})) }
+    if c.hap > 0 && c.hap <= 42 { list_push(out, fx("p_sad", "País golpeado", false, "La vida en " + c.n + " es dura y se nota en el ánimo.", {"hap": -1})) }
+    // Llamar la atención por ser distinto.
+    if L.age >= 14 {
+        let share = skin_share()
+        let blond = (L.look.hcolor == 3 || L.look.hcolor == 4) && c.blond <= 5
+        let light = (L.look.eyes >= 2 && L.look.eyes <= 4) && c.light_eyes <= 5
+        let pts = 0
+        if share < 5 { pts += 8 } else if share < 15 { pts += 4 }
+        if blond { pts += 3 }
+        if light { pts += 2 }
+        if pts > 0 { list_push(out, fx("p_exotic", "Llamas la atención", true, "En " + c.n + " tu aspecto no es común: la gente voltea a verte.", {"looks": pts, "flirt": pts / 2 + 1})) }
+    }
+    if L.age >= 16 && !speaks_here() { list_push(out, fx("p_lang", "No hablas " + main_lang(here_id()), false, "Te cuesta trabajo pedir hasta un café.", {"hire": -20, "flirt": -8})) }
+    if d.legal == "ilegal" { list_push(out, fx("p_illegal", "Sin papeles", false, "Trabajas en lo que sale y vives con miedo a la deportación.", {"hire": -25, "hap": -1})) }
+    if d.legal == "refugiado" { list_push(out, fx("p_refugee", "Refugiad" + oa(g), false, "Empezar de cero en otro país.", {"hire": -10})) }
+    if d.veteran { list_push(out, fx("p_vet", "Veteran" + oa(g) + " de guerra", true, "Volviste del frente. Te respetan.", {"hire": 5})) }
+    if at_war(here_id()) { list_push(out, fx("p_war", "País en guerra", false, c.n + " está en guerra.", {"hap": -2, "pay": -15})) }
+    let p = partner()
+    if p != null && p.gender == L.gender && c.lgbt == 0 && L.age >= 16 { list_push(out, fx("p_hidden", "Amor a escondidas", false, "En " + c.n + " tu relación es ilegal. Viven escondiéndose.", {"hap": -1})) }
+    if L.mil != null && L.mil.kind != "civil" { list_push(out, fx("p_mil", mil_rank_name(), true, "Estás en el ejército.", {"looks": 2, "flirt": 3})) }
+    return null
+}
+
+// ---------------------------------------------------------------- menú «País» (actividades)
+
+function pitem2(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["pa_" + id] != null { l = "Este mes ya" }
+    return {"action": "pa:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function pa_use(id: string) {
+    if L.used["pa_" + id] != null { return false }
+    L.used["pa_" + id] = 1
+    return true
+}
+
+function pais_items() {
+    let c = here()
+    let d = pa()
+    let items = []
+    let lead = by_gender(L.gender, c.lead_m, c.lead_f)
+    list_push(items, {"action": "pa:map", "t": "Mapa mundi", "s": c.n + " · " + region_name(c.reg), "desc": "Mira el mundo: tu país, las guerras, a dónde viajar o mudarte.", "lock": ""})
+    list_push(items, dninfo(c.n, pop_text(c.pop) + " · " + c.lang, "Capital: " + c.cap + ". Gobierno: " + gov_name(c.gov) + " (" + str_lower(lead) + "). Religiones: " + rel_summary(c.id) + ". Comida: " + str_join(c.food, ", ") + "."))
+    let cl = csplit_cl(c.cl)
+    list_push(items, dninfo("Dicen de " + c.n, "Clichés", cl[L.tm % len(cl)]))
+    let i = 0
+    for cu in c.cus {
+        let lock = ""
+        if L.age < cu.min { lock = "Edad " + str(cu.min) }
+        if lock == "" && cu.cost > 0 && L.money < cu.cost { lock = money_str(cu.cost) }
+        if lock == "" && L.jail > 0 { lock = "En prisión" }
+        let cs = custom_kind_name(cu.k)
+        if cu.cost > 0 { cs = cs + " · " + money_str(cu.cost) }
+        list_push(items, pitem2("cus:" + str(i), cu.t, cs, cu.d, lock))
+        i += 1
+    }
+    for f in c.fest { list_push(items, dninfo(f.n, MONTH_NAMES[clamp(f.m, 0, 11)], f.d)) }
+    if L.age >= 16 && !speaks_here() {
+        let lg = main_lang(here_id())
+        list_push(items, pitem2("learn:" + lg, "Estudiar " + lg, "Progreso " + str(map_get(d.langp, lg, 0)) + "%", "Sin el idioma te cuesta conseguir trabajo y ligar.", ""))
+    }
+    if L.age >= 12 {
+        let extra = pick_study_lang()
+        if extra != "" { list_push(items, pitem2("learn:" + extra, "Aprender " + extra, "Progreso " + str(map_get(d.langp, extra, 0)) + "%", "Un idioma más abre puertas en todo el mundo. Hablas: " + str_join(d.langs, ", ") + ".", "")) }
+    }
+    if L.age >= 18 {
+        list_push(items, pitem2("rename", "Cambiarte el nombre", "$300 · trámite", "Un nombre nuevo en tus papeles.", if_str(L.money < 300, "$300", "")))
+        if L.record > 0 { list_push(items, pitem2("newid", "Comprar una identidad nueva", "$20,000 · ilegal", "Papeles falsos, otro nombre y un historial limpio... si no te atrapan.", if_str(L.money < 20000, "$20,000", ""))) }
+        if d.legal == "residente" && d.res_m >= 60 && !list_contains(d.nats, here_id()) { list_push(items, pitem2("naturalize", "Solicitar la nacionalidad " + demonym(here_id(), L.gender), "$1,000 · examen", "Llevas " + str(d.res_m / 12) + " años viviendo aquí legalmente.", if_str(L.money < 1000, "$1,000", ""))) }
+        if danger_here() != "" { list_push(items, pitem2("flee", "Huir del país", "Ahora", danger_here() + " Puedes escapar a un país vecino como refugiad" + oa(L.gender) + ".", if_str(L.money < 500, "$500", ""))) }
+        if L.mil != null && L.mil.kind == "carrera" && L.mil.m >= 24 {
+            list_push(items, pitem2("discharge", "Pedir la baja del ejército", mil_rank_name(), "Cumpliste tu contrato. Puedes retirarte con honores.", ""))
+        } else if L.mil != null {
+            list_push(items, pitem2("desert", "Desertar del ejército", "Muy arriesgado", "Escapar de tu unidad. Si te atrapan, prisión militar.", ""))
+        }
+        if L.mil != null { list_push(items, dninfo("Ejército: " + mil_rank_name(), str(L.mil.m) + " meses de servicio", "Medallas: " + str(L.mil.medals) + ". " + if_str(L.mil.kind == "carrera", "Militar de carrera.", "Te quedan " + str(max(0, L.mil.total - L.mil.m)) + " meses."))) }
+        if L.mil == null && L.age <= 35 && c.army > 0 { list_push(items, pitem2("enlist", "Alistarte en el ejército", "Voluntari" + oa(L.gender) + " · 24 meses", "Sueldo, disciplina, Valor... y si hay guerra, vas al frente.", "")) }
+    }
+    list_push(items, pitem2("news", "Noticias del mundo", str(len(world().wars)) + " guerras activas", "Guerras, conflictos y el Mundial.", ""))
+    list_push(items, dninfo("Tu pasaporte", str(len(d.visited)) + " " + plural(len(d.visited), "país visitado", "países visitados"), "Nacionalidades: " + nats_text() + ". Has vivido en: " + lived_text() + "."))
+    return items
+}
+
+function nats_text() {
+    let out = []
+    for id in pa().nats { list_push(out, demonym(id, L.gender)) }
+    return str_join(out, ", ")
+}
+
+function lived_text() {
+    let out = []
+    for id in pa().lived { list_push(out, cname(id)) }
+    return str_join(out, ", ")
+}
+
+function gov_name(g: string) {
+    if g == "monarquia_const" { return "monarquía parlamentaria" }
+    if g == "monarquia_abs" { return "monarquía absoluta" }
+    if g == "partido_unico" { return "partido único" }
+    if g == "teocracia" { return "teocracia" }
+    if g == "junta" { return "junta militar" }
+    return "república"
+}
+
+function custom_kind_name(k: string) {
+    if k == "apuesta" { return "Apuesta" }
+    if k == "fiesta" { return "Fiesta" }
+    if k == "comida" { return "Comida" }
+    if k == "ritual" { return "Tradición" }
+    if k == "deporte" { return "Deporte" }
+    if k == "cultura" { return "Cultura" }
+    if k == "naturaleza" { return "Naturaleza" }
+    if k == "picante" { return "Noche +18" }
+    return "Costumbre"
+}
+
+function pick_study_lang() {
+    let d = pa()
+    for lg in ["inglés", "español", "francés", "chino mandarín", "árabe", "portugués", "alemán", "japonés", "ruso", "italiano", "coreano"] {
+        if !list_contains(d.langs, lg) { return lg }
+    }
+    return ""
+}
+
+function danger_here() {
+    let c = here()
+    if at_war(here_id()) { return c.n + " está en guerra." }
+    if civil_war(here_id()) != "" { return "Hay un conflicto armado en " + c.n + "." }
+    let p = partner()
+    if p != null && p.gender == L.gender && c.lgbt == 0 { return "Tu relación es ilegal en " + c.n + "." }
+    if pa().legal == "ilegal" { return "Vives sin papeles." }
+    return ""
+}
+
+// ---------------------------------------------------------------- acciones
+
+function pais_action(action: string) {
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    let d = pa()
+    let c = here()
+    if cmd == "map" { return open_world_map(here_id()) }
+    G.modal = null
+    if cmd == "cus" {
+        let i = parse_int(arg, -1)
+        if i < 0 || i >= len(c.cus) || !pa_use("cus:" + arg) { return null }
+        return do_custom(c, c.cus[i])
+    }
+    if cmd == "learn" {
+        if !pa_use("learn:" + arg) { return null }
+        let p = map_get(d.langp, arg, 0) + 8 + rank("know") * 3
+        if L.age < 18 { p += 4 }
+        d.langp[arg] = min(100, p)
+        gain("know", 1)
+        if p >= 100 {
+            list_push(d.langs, arg)
+            if len(d.langs) >= 4 { flag("poliglota") }
+            hito_me("Estudios", "Aprendiste " + arg)
+            return finish("Idiomas", "¡Ya hablas " + arg + "! Hasta sueñas en " + arg + ".", "g")
+        }
+        return finish("Idiomas", pick(["Conjugaste verbos hasta que te dolió la cabeza.", "Viste una serie con subtítulos y entendiste un chiste.", "Practicaste con una app que no te deja en paz."]) + " Progreso: " + str(p) + "%.", "n")
+    }
+    if cmd == "rename" { return open_rename(false) }
+    if cmd == "newid" { return open_rename(true) }
+    if cmd == "naturalize" {
+        if !pa_use("naturalize") || L.money < 1000 { return null }
+        L.money -= 1000
+        if chance(55 + rank("know") * 8 + if_n(speaks_here(), 15, -20)) {
+            list_push(d.nats, here_id())
+            d.legal = "ciudadano"
+            if len(d.nats) >= 3 { flag("world_citizen") }
+            hito_me("Vida", "Obtuviste la nacionalidad " + demonym(here_id(), L.gender))
+            return finish("Nacionalidad", "Juraste ante la bandera de " + c.n + ". Ya eres " + demonym(here_id(), L.gender) + ".", "g")
+        }
+        return finish("Nacionalidad", "Reprobaste el examen de cultura general. ¿Quién sabía el nombre del tercer presidente? Lo intentarás de nuevo.", "b")
+    }
+    if cmd == "flee" { return open_flee() }
+    if cmd == "enlist" { return mil_enlist() }
+    if cmd == "desert" { return mil_desert() }
+    if cmd == "discharge" { return mil_discharge() }
+    if cmd == "news" { return world_news() }
+    return null
+}
+
+function do_custom(c: map, cu: map) {
+    let k = cu.k
+    L.money -= cu.cost
+    let msg = cu.d
+    if k == "apuesta" {
+        let bet = max(50, cu.cost)
+        return open_choice(str_upper(cu.t), cu.d + " ¿A qué le apuestas? (" + money_str(bet) + ")", ["Al favorito (paga poco)", "Al que va en medio", "Al que nadie quiere (paga mucho)", "Mejor solo mirar"], ["", "", "", ""], "pa_bet", {"bet": bet, "t": cu.t})
+    }
+    if k == "fiesta" {
+        L.happy += 7
+        gain("charm", 2)
+        if L.age >= 18 { L.alcohol += 2 }
+    }
+    if k == "comida" {
+        L.happy += 5
+        if chance(15) {
+            L.health -= 2
+            msg = msg + " Te cayó pesado, pero valió la pena."
+        }
+    }
+    if k == "ritual" {
+        L.happy += 4
+        L.faith = clamp100(L.faith + 2)
+        tfx_add("paz", 2)
+    }
+    if k == "deporte" {
+        L.health += 3
+        gain("guts", 2)
+        if chance(6) {
+            tfx_add("lesion", 2)
+            msg = msg + " Terminaste con un esguince."
+        }
+    }
+    if k == "cultura" {
+        gain("know", 3)
+        L.happy += 3
+    }
+    if k == "naturaleza" {
+        L.happy += 5
+        L.health += 2
+    }
+    if k == "picante" {
+        gain("charm", 2)
+        L.happy += 5
+        if chance(30 + flirt_bonus() / 2) {
+            let x = stranger()
+            return open_choice(str_upper(cu.t), cu.d + " Alguien no te quita los ojos de encima: " + x.first + ", " + str(x.age) + " años.", ["Acercarte", "Seguir la noche sin complicaciones"], ["", ""], "pa_flirt", {"person": x})
+        }
+    }
+    hito_once("custom_" + c.id, "Vida", "Viviste una tradición de " + c.n + ": " + str_lower(cu.t))
+    return finish(cu.t, msg, "g")
+}
+
+// ---------------------------------------------------------------- cambiar de nombre
+
+function open_rename(fake: bool) {
+    let cid = here_id()
+    let opts = []
+    let i = 0
+    while i < 4 {
+        let n = pais_first(L.gender, cid)
+        if i == 3 { n = pais_first(L.gender, foreign_ctry(cid)) }
+        if !list_contains(opts, n) && n != L.first { list_push(opts, n) }
+        i += 1
+    }
+    let labels = []
+    for n in opts { list_push(labels, n) }
+    list_push(labels, "Mejor no")
+    let locks = []
+    for x in labels { list_push(locks, "") }
+    let t = "¿Cómo te quieres llamar ahora?"
+    if fake { t = "El falsificador te ofrece varias identidades. Todas con historial limpio." }
+    return open_choice(if_str(fake, "IDENTIDAD NUEVA", "CAMBIO DE NOMBRE"), t, labels, locks, "pa_rename", {"opts": opts, "fake": fake})
+}
+
+// ---------------------------------------------------------------- viajes
+
+function dist_km(a: string, b: string) {
+    let x = ctry(a)
+    let y = ctry(b)
+    let dlat = x.lat - y.lat
+    if dlat < 0.0 { dlat = 0.0 - dlat }
+    let dlon = x.lon - y.lon
+    if dlon < 0.0 { dlon = 0.0 - dlon }
+    if dlon > 180.0 { dlon = 360.0 - dlon }
+    let midlat = (x.lat + y.lat) / 2.0
+    let k = cos(midlat * 0.0174533)
+    let dist = (dlat + dlon * k) * 111.0 * 0.85
+    return int(dist)
+}
+
+function trip_cost(dest: string) {
+    let km = dist_km(here_id(), dest)
+    return 150 + km * 12 / 100 + ctry(dest).gdp * 35
+}
+
+function pais_trip(dest: string, honey: bool) {
+    let d = pa()
+    let x = ctry(dest)
+    let cost = trip_cost(dest)
+    if honey { cost = cost * 2 }
+    if L.money < cost || L.used["pa_trip"] != null { return null }
+    L.used["pa_trip"] = 1
+    L.money -= cost
+    G.modal = null
+    let first = !list_contains(d.visited, dest)
+    if first && dest != born_id() { list_push(d.visited, dest) }
+    L.happy += 6 + x.tour / 12
+    gain("know", 2)
+    if dist_km(here_id(), dest) > 6000 { tfx_add("jet_lag", 1) }
+    tfx_add("vacaciones", 2)
+    let parts = []
+    list_push(parts, "Viajaste a " + x.n + " (" + money_str(cost) + ").")
+    if x.honey != "" { list_push(parts, "Conociste " + x.honey + ".") }
+    if len(x.cus) > 0 {
+        let cu = pick(x.cus)
+        if L.age >= cu.min { list_push(parts, "Probaste algo muy local: " + str_lower(cu.t) + ".") }
+    }
+    list_push(parts, "Comprobaste que es cierto: " + str_lower_first(pick(csplit_cl(x.cl))))
+    let n = len(d.visited)
+    if first {
+        if n == 1 { hito_me("Vida", "Tu primer viaje al extranjero: " + x.n) }
+        if n == 10 { hito_me("Vida", "Visitaste 10 países") }
+        if n == 25 { hito_me("Vida", "Visitaste 25 países") }
+        if n == 50 { hito_me("Vida", "Visitaste 50 países") }
+        if n == 100 { hito_me("Vida", "Visitaste 100 países") }
+        if n >= 10 { flag("traveler10") }
+        if n >= 50 { flag("traveler50") }
+    }
+    let p = partner()
+    if honey && p != null {
+        d.honey = false
+        bond_gain(p, 12)
+        tfx_add("luna_miel", 8)
+        add_hito(p, "Luna de miel en " + x.n)
+        hito_me("Amor", "Luna de miel en " + x.n)
+        return finish("Luna de miel", str_join(parts, " ") + " " + p.first + " y tú volvieron más enamorad" + oa(L.gender) + "s que nunca.", "x")
+    }
+    if p != null && p.ctry == dest && p.far == true {
+        bond_gain(p, 15)
+        list_push(parts, "Por fin viste a " + p.first + " en persona. Valió cada kilómetro.")
+    }
+    if L.age >= 18 && p == null && chance(25) {
+        let y = stranger()
+        pais_person(y, dest)
+        return open_choice("ROMANCE DE VIAJE", str_join(parts, " ") + " La última noche conoces a " + y.first + ", " + demonym(dest, y.gender) + ", " + str(y.age) + " años.", ["Dejarte llevar", "Intercambiar redes y seguir en contacto", "Solo un recuerdo bonito"], ["", "", ""], "pa_trip_love", {"person": y})
+    }
+    return finish("Viaje a " + x.n, str_join(parts, " "), "g")
+}
+
+function str_lower_first(s: string) {
+    if s == "" { return s }
+    return str_lower(str_sub(s, 0, 1)) + str_sub(s, 1)
+}
+
+// ---------------------------------------------------------------- mudarse
+
+function move_odds(dest: string, kind: string) {
+    let x = ctry(dest)
+    let me = here()
+    if kind == "work" {
+        let o = 60 - max(0, x.gdp - me.gdp) / 2 + L.edu * 7 + rank("know") * 4
+        if L.job != null { o += 10 }
+        if list_contains(pa().langs, main_lang(dest)) { o += 15 }
+        return clamp(o, 5, 95)
+    }
+    if kind == "asylum" { return 60 }
+    if kind == "illegal" { return 75 }
+    return 95
+}
+
+function partner_from(dest: string) {
+    let p = partner()
+    return p != null && p.ctry == dest
+}
+
+function open_move(dest: string) {
+    let x = ctry(dest)
+    G.modal = null
+    let fly = trip_cost(dest)
+    let labels = ["Visa de trabajo o estudios (" + str(move_odds(dest, "work")) + "%)", "Visa por matrimonio", "Visa de inversionista ($500,000)", "Pedir asilo", "Entrar sin papeles ($800)", "Mejor no"]
+    let locks = [if_str(L.money < 1500 + fly, money_str(1500 + fly), ""), if_str(!(L.married && partner_from(dest)), "Pareja de " + x.n, ""), if_str(L.money < 500000, "$500,000", ""), if_str(danger_here() == "", "Sin peligro", ""), if_str(L.money < 800, "$800", ""), ""]
+    return open_choice("MUDARTE A " + str_upper(x.n), "Empezar de nuevo en " + x.n + " (" + x.lang + "). Tu trabajo actual se queda aquí. Vuelo: " + money_str(fly) + ".", labels, locks, "pa_move", {"dest": dest})
+}
+
+function pais_move(dest: string, legal: string) {
+    let d = pa()
+    let x = ctry(dest)
+    let from = here_id()
+    L.ctry = dest
+    L.city = pick(x.cities)
+    d.legal = legal
+    d.res_m = 0
+    if !list_contains(d.lived, dest) { list_push(d.lived, dest) }
+    if !list_contains(d.visited, dest) && dest != born_id() { list_push(d.visited, dest) }
+    if len(d.lived) >= 3 { flag("nomad") }
+    if list_contains(d.nats, dest) { d.legal = "ciudadano" }
+    if L.job != null {
+        log_add("Dejaste tu trabajo como " + L.job.title + " en " + cname(from) + ".", "n")
+        L.job = null
+    }
+    tfx_add("choque_cultural", 6)
+    if len(parents_alive()) > 0 && dest != born_id() { tfx_add("morrina", 8) }
+    hito_me("Vida", "Te mudaste a " + x.n)
+    return null
+}
+
+function open_flee() {
+    let c = here()
+    let opts = []
+    for id in c.nb {
+        if has_ctry(id) && !at_war(id) && civil_war(id) == "" && len(opts) < 4 { list_push(opts, id) }
+    }
+    if len(opts) == 0 {
+        for id in ["es", "de", "us", "ca", "se"] {
+            if len(opts) < 3 && id != here_id() { list_push(opts, id) }
+        }
+    }
+    let labels = []
+    for id in opts { list_push(labels, cname(id)) }
+    list_push(labels, "Quedarte")
+    let locks = []
+    for x in labels { list_push(locks, "") }
+    return open_choice("HUIR DE " + str_upper(c.n), "Una mochila, los papeles que alcanzaste a agarrar y la ruta más segura. ¿A dónde?", labels, locks, "pa_flee", {"opts": opts})
+}
+
+// ---------------------------------------------------------------- elecciones
+
+function pais_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = pa()
+    if handler == "pa_bet" {
+        if index == 3 {
+            L.happy += 2
+            return finish(ctx.t, "Solo miraste. Gritaste igual que los que apostaron.", "n")
+        }
+        let bet = ctx.bet
+        if L.money < bet { return finish(ctx.t, "No te alcanzó para apostar. Miraste desde la barda.", "n") }
+        L.money -= bet
+        L.gamble += 1
+        let odds = [55, 30, 10][index]
+        let mult = [17, 30, 80][index]
+        if chance(odds) {
+            let win = bet * mult / 10
+            L.money += win
+            L.happy += 6
+            return finish(ctx.t, "¡Ganaste! Cobraste " + money_str(win) + ". Gritaste como si fuera la final del Mundial.", "g")
+        }
+        L.happy -= 2
+        return finish(ctx.t, "Perdiste " + money_str(bet) + ". El tuyo se distrajo a la mitad de la carrera.", "b")
+    }
+    if handler == "pa_flirt" {
+        if index == 0 { return special_hookup(ctx) }
+        return finish("La noche", "Bailaste, reíste y volviste a casa con una sonrisa.", "g")
+    }
+    if handler == "pa_trip_love" {
+        let y = ctx.person
+        if index == 0 { return special_hookup(ctx) }
+        if index == 1 {
+            add_person(y)
+            y.rel = "amigo"
+            y.far = true
+            y.bond = 45
+            return finish("Viaje", "Se siguen en redes. Cada like desde " + cname(y.ctry) + " te sacará una sonrisa.", "g")
+        }
+        return finish("Viaje", "Un beso de despedida en el aeropuerto. Algunas historias son perfectas así de cortas.", "g")
+    }
+    if handler == "pa_rename" {
+        let opts = ctx.opts
+        if index >= len(opts) { return null }
+        let old = L.first
+        if ctx.fake == true {
+            if L.money < 20000 { return null }
+            L.money -= 20000
+            if chance(20) {
+                return finish("Identidad nueva", "El falsificador era un policía encubierto." + go_to_jail(2), "b")
+            }
+            L.record = 0
+        } else {
+            if L.money < 300 { return null }
+            L.money -= 300
+        }
+        list_push(d.alias, old)
+        L.first = opts[index]
+        hito_me("Vida", "Te cambiaste el nombre: de " + old + " a " + L.first)
+        return finish("Nuevo nombre", "Desde hoy te llamas " + L.first + " " + L.last + ". Tu mamá todavía te dice " + old + ".", "n")
+    }
+    if handler == "pa_move" {
+        let dest = ctx.dest
+        let fly = trip_cost(dest)
+        if index == 5 { return null }
+        if index == 0 {
+            L.money -= 1500 + fly
+            if chance(move_odds(dest, "work")) {
+                pais_move(dest, "residente")
+                return finish("Visa aprobada", "Te aprobaron la visa. Hiciste las maletas y te mudaste a " + cname(dest) + ".", "g")
+            }
+            return finish("Visa negada", "La embajada rechazó tu solicitud. «Vuelva a intentarlo en un año.»", "b")
+        }
+        if index == 1 {
+            L.money -= fly
+            pais_move(dest, "residente")
+            return finish("Visa por matrimonio", "Tu pareja te llevó a su país. Ahora " + cname(dest) + " también es tu casa.", "g")
+        }
+        if index == 2 {
+            L.money -= 500000
+            pais_move(dest, "residente")
+            return finish("Visa dorada", "Compraste una propiedad y te dieron la residencia en una semana. El dinero abre todas las puertas.", "g")
+        }
+        if index == 3 {
+            L.money -= min(L.money, fly / 2)
+            if chance(move_odds(dest, "asylum")) {
+                pais_move(dest, "refugiado")
+                d.fled = true
+                flag("refugee")
+                return finish("Asilo", "Te dieron asilo en " + cname(dest) + ". Llegaste con una mochila y muchas ganas de empezar de nuevo.", "g")
+            }
+            return finish("Asilo negado", "Rechazaron tu solicitud de asilo. Sigues en " + cname(here_id()) + ".", "b")
+        }
+        L.money -= 800
+        if chance(move_odds(dest, "illegal")) {
+            pais_move(dest, "ilegal")
+            return finish("Sin papeles", "Cruzaste de noche, con el corazón en la garganta. Estás en " + cname(dest) + ", pero sin papeles.", "n")
+        }
+        L.health -= 10
+        L.happy -= 10
+        return finish("Te atraparon", "Te detuvieron en la frontera y te regresaron. Perdiste el dinero y casi la vida en el intento.", "b")
+    }
+    if handler == "pa_flee" {
+        let opts = ctx.opts
+        if index >= len(opts) { return finish("Quedarte", "Decidiste quedarte. Que sea lo que tenga que ser.", "n") }
+        let dest = opts[index]
+        L.money -= min(L.money, 500)
+        if chance(12) {
+            L.health -= 12
+            tfx_add("susto", 4)
+        }
+        pais_move(dest, "refugiado")
+        d.fled = true
+        L.mil = null
+        flag("refugee")
+        hito_me("Vida", "Huiste de " + cname(born_id()) + " como refugiad" + oa(L.gender))
+        return finish("Refugio", "Llegaste a " + cname(dest) + " con lo puesto. Estás a salvo. Ahora toca empezar de cero.", "n")
+    }
+    if handler == "pa_symbolic" {
+        let p = ctx.person
+        if index == 2 { return finish(p.first, "Decidieron esperar a que cambien las leyes.", "n") }
+        if index == 1 {
+            if L.money < 3000 { return null }
+            L.money -= 3000
+        }
+        return open_wedding(p)
+    }
+    if handler == "pa_fest" {
+        if index == 1 { return finish(ctx.n, "Lo viste desde la ventana.", "n") }
+        L.happy += 7
+        gain("charm", 1)
+        hito_once("fest_" + ctx.n, "Vida", "Viviste " + ctx.n)
+        return finish(ctx.n, ctx.d + " Fue inolvidable.", "g")
+    }
+    if handler == "pa_draft" { return draft_result(index, ctx) }
+    if handler == "pa_service" { return service_result(index, ctx) }
+    if handler == "pa_milev" { return mil_event_result(index, ctx) }
+    if handler == "pa_war" { return leader_war_result(index, ctx) }
+    if handler == "pa_wc" { return null }
+    if handler == "pa_honey" {
+        let opts = ctx.opts
+        if index >= len(opts) {
+            pa().honey = false
+            return finish("Luna de miel", "La luna de miel puede esperar. La casa nueva no.", "n")
+        }
+        return pais_trip(opts[index], true)
+    }
+    if handler == "pa_law" { return law_result(index, ctx) }
+    return null
+}
+
+function special_hookup(ctx: map) {
+    if ctx["person"] == null { ctx["person"] = stranger() }
+    open_hookup(ctx)
+    return null
+}
+
+// Matrimonio entre personas del mismo sexo donde no es legal.
+function pais_marriage_block(p: map) {
+    if p.gender != L.gender || L.ctry == null { return false }
+    return here().lgbt < 2
+}
+
+function open_symbolic_wedding(p: map) {
+    let c = here()
+    return open_choice("SIN BODA LEGAL", "En " + c.n + " el matrimonio entre personas del mismo sexo no es legal. Pueden hacer una boda simbólica o casarse en un país donde sí se puede.", ["Boda simbólica", "Casarse en el extranjero ($3,000)", "Esperar"], ["", if_str(L.money < 3000, "$3,000", ""), ""], "pa_symbolic", {"person": p})
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function pais_month() {
+    if L.ctry == null { return null }
+    let d = pa()
+    let c = here()
+    if d.legal != "ciudadano" { d.res_m += 1 }
+    if d.legal == "ilegal" {
+        if chance(1) && L.age >= 16 {
+            pais_move(born_id(), "ciudadano")
+            L.money = L.money / 2
+            hito_me("Vida", "Te deportaron a " + cname(born_id()))
+            log_add("Migración te detuvo en una redada. Te deportaron a " + cname(born_id()) + " con lo puesto.", "b")
+        } else if d.res_m >= 24 && month_name() == "Enero" && chance(25) {
+            d.legal = "residente"
+            d.res_m = 0
+            log_add("¡Una amnistía migratoria! Por fin tienes papeles en " + c.n + ".", "g")
+        }
+    }
+    if d.legal == "refugiado" && d.res_m >= 36 {
+        d.legal = "residente"
+        log_add("Tu estatus de refugiad" + oa(L.gender) + " se convirtió en residencia permanente.", "g")
+    }
+    // La familia que dejaste atrás.
+    if here_id() != born_id() {
+        for p in parents_alive() {
+            if chance(15) { bond_gain(p, -1) }
+        }
+    }
+    world_tick()
+    mil_month()
+    laws_month()
+    if G.modal == null { fest_month() }
+    if G.modal == null && d.honey && L.used["pa_trip"] == null && L.married && chance(60) { open_honeymoon() }
+    return null
+}
+
+function open_honeymoon() {
+    let p = partner()
+    if p == null {
+        pa().honey = false
+        return null
+    }
+    let opts = []
+    if p.ctry != null && p.ctry != here_id() { list_push(opts, p.ctry) }
+    for id in ["fr", "it", "mx", "gr", "th", "mv", "pe", "jp", "id", "es"] {
+        if len(opts) < 4 && id != here_id() && has_ctry(id) && !list_contains(opts, id) { list_push(opts, id) }
+    }
+    let labels = []
+    let locks = []
+    for id in opts {
+        let x = ctry(id)
+        list_push(labels, x.n + " (" + money_str(trip_cost(id) * 2) + ")")
+        list_push(locks, if_str(L.money < trip_cost(id) * 2, money_str(trip_cost(id) * 2), ""))
+    }
+    list_push(labels, "Sin luna de miel por ahora")
+    list_push(locks, "")
+    open_choice("LUNA DE MIEL", "¡Recién casad" + oa(L.gender) + "s! ¿A dónde se van?", labels, locks, "pa_honey", {"opts": opts})
+    return null
+}
+
+function fest_month() {
+    let d = pa()
+    let c = here()
+    let m = cal_month()
+    for f in c.fest {
+        if f.m == m && map_get(d.fest, f.n, -1) != L.age && L.age >= 4 && chance(60) {
+            d.fest[f.n] = L.age
+            open_choice(str_upper(f.n), f.d, ["Ir y disfrutar", "Quedarte en casa"], ["", ""], "pa_fest", {"n": f.n, "d": f.d})
+            return null
+        }
+    }
+    return null
+}
+
+function laws_month() {
+    let c = here()
+    if L.jail > 0 || L.age < 18 || G.modal != null { return null }
+    if c.alcohol == 0 && L.alcohol >= 15 && chance(3) {
+        open_choice("LA POLICÍA", "Te encontraron alcohol en " + c.n + ", donde está prohibido.", ["Pagar la multa ($2,000)", "Negarlo todo"], [if_str(L.money < 2000, "$2,000", ""), ""], "pa_law", {"kind": "alcohol"})
+        return null
+    }
+    if L.route == "escort" && c.sexwork == 0 && chance(2) {
+        open_choice("REDADA", "La policía de " + c.n + " hace una redada: aquí el trabajo sexual es ilegal.", ["Pagar una «multa» ($3,000)", "Correr"], [if_str(L.money < 3000, "$3,000", ""), ""], "pa_law", {"kind": "sexwork"})
+        return null
+    }
+    let p = partner()
+    if p != null && p.gender == L.gender && c.lgbt == 0 && chance(1) {
+        open_choice("DENUNCIA", "Un vecino los denunció. En " + c.n + " su relación es ilegal.", ["Esconderse una temporada", "Huir del país juntos", "Pagar para que se olvide ($2,000)"], ["", "", if_str(L.money < 2000, "$2,000", "")], "pa_law", {"kind": "lgbt"})
+        return null
+    }
+    return null
+}
+
+function law_result(index: int, ctx: map) {
+    let k = ctx.kind
+    if k == "lgbt" {
+        if index == 1 { return open_flee() }
+        if index == 2 {
+            L.money -= 2000
+            return finish("Denuncia", "El dinero hizo que el expediente se perdiera.", "n")
+        }
+        L.happy -= 8
+        let p = partner()
+        if p != null { bond_gain(p, -3) }
+        return finish("Denuncia", "Vivieron meses escondiéndose, sin tomarse de la mano en la calle.", "b")
+    }
+    if index == 0 {
+        L.money -= if_n(k == "alcohol", 2000, 3000)
+        return finish("Multa", "Pagaste y te dejaron ir. Esta vez.", "n")
+    }
+    if chance(50) { return finish("Escape", "Corriste como nunca. Te salvaste por un pelo.", "n") }
+    return finish("Detenid" + oa(L.gender), "No te salió." + go_to_jail(1), "b")
+}
+
+// Los visitantes extranjeros también cuentan en las apps de citas.
+function pais_world_stranger() {
+    let x = stranger()
+    let cid = foreign_ctry(here_id())
+    pais_person(x, cid)
+    x.far = true
+    return x
+}
+
+// ---------------------------------------------------------------- apellidos con género
+
+const SLAVIC_OV = ["ru", "by", "bg", "mk", "kz", "kg", "tj", "uz", "tm", "az", "ua"]
+
+function ends(s: string, t: string) {
+    return str_ends_with(s, t)
+}
+
+function cut(s: string, n: int) {
+    return str_sub(s, 0, len(s) - n)
+}
+
+// Forma femenina de un apellido (si el país la usa).
+function fem_surname(cid: string, s: string) {
+    if s == "" { return s }
+    if cid == "pl" {
+        if ends(s, "ski") || ends(s, "cki") || ends(s, "dzki") { return cut(s, 1) + "a" }
+        return s
+    }
+    if cid == "cz" || cid == "sk" {
+        if ends(s, "ová") || ends(s, "á") { return s }
+        if ends(s, "ý") { return cut(s, 1) + "á" }
+        if ends(s, "ek") { return cut(s, 2) + "ková" }
+        if ends(s, "ec") { return cut(s, 2) + "cová" }
+        if ends(s, "a") || ends(s, "o") || ends(s, "e") { return cut(s, 1) + "ová" }
+        return s + "ová"
+    }
+    if list_contains(SLAVIC_OV, cid) {
+        if ends(s, "skiy") || ends(s, "skii") { return cut(s, 4) + "skaya" }
+        if ends(s, "sky") && cid == "ru" { return cut(s, 3) + "skaya" }
+        if ends(s, "ski") || ends(s, "sky") { return cut(s, 1) + "a" }
+        if ends(s, "ov") || ends(s, "ev") || ends(s, "in") || ends(s, "yn") || ends(s, "ёв") { return s + "a" }
+        return s
+    }
+    if cid == "lt" {
+        if ends(s, "as") || ends(s, "is") || ends(s, "us") || ends(s, "ys") { return cut(s, 2) + "ienė" }
+        return s
+    }
+    if cid == "lv" {
+        if ends(s, "š") || ends(s, "s") { return cut(s, 1) + "a" }
+        return s
+    }
+    if cid == "gr" || cid == "cy" {
+        if ends(s, "os") { return cut(s, 2) + "ou" }
+        if ends(s, "is") || ends(s, "as") || ends(s, "es") { return cut(s, 1) }
+        return s
+    }
+    if cid == "is" {
+        if ends(s, "sson") { return cut(s, 4) + "sdóttir" }
+        if ends(s, "son") { return cut(s, 3) + "dóttir" }
+        return s
+    }
+    return s
+}
+
+// Ajusta los apellidos de las mujeres de tu familia al nacer.
+function fix_family_surnames() {
+    for p in L.people {
+        if p.gender == "f" && p.ctry != null { p.last = fem_surname(p.ctry, p.last) }
+    }
+    if L.gender == "f" {
+        let parts = str_split(L.last, " ")
+        parts[0] = fem_surname(here_id(), parts[0])
+        L.last = str_join(parts, " ")
+    }
+    return null
+}
+
+// Tu aspecto toma lo típico de tu país (si no elegiste la piel en el creador).
+function pais_player_look() {
+    let c = G.cre
+    if c.skin_set == true { return null }
+    let lk = look_for(L.gender, here_id())
+    L.look.skin = lk.skin
+    if L.look.hcolor < 5 { L.look.hcolor = lk.hcolor }
+    L.look.eyes = lk.eyes
+    return null
+}
+
+// ---------------------------------------------------------------- fiestas compartidas
+
+function christmas_here() {
+    let c = here()
+    let x = map_get(c.rel, "catolica", 0) + map_get(c.rel, "evangelica", 0) + map_get(c.rel, "ortodoxa", 0)
+    return x >= 30 || list_contains(["catolica", "evangelica", "ortodoxa"], L.religion) || list_contains(["jp", "kr", "cn", "tw", "sg"], c.id)
+}
+
+function halloween_here() {
+    let r = here().reg
+    return r == "norteamerica" || r == "centroamerica" || r == "caribe" || r == "sudamerica" || r == "oceania" || str_starts_with(r, "europa") || here().id == "jp" || here().id == "kr"
+}

@@ -14,6 +14,8 @@ const RELIGIONS = [
     {"id": "budismo", "n": "Budismo", "strict": 1, "alcohol": true, "poly": "", "temple": "el templo", "w": 5},
     {"id": "hinduismo", "n": "Hinduismo", "strict": 2, "alcohol": true, "poly": "", "temple": "el templo", "w": 4},
     {"id": "sij", "n": "Sijismo", "strict": 2, "alcohol": false, "poly": "", "temple": "el gurdwara", "w": 2},
+    {"id": "sintoismo", "n": "Sintoísmo", "strict": 0, "alcohol": true, "poly": "", "temple": "el santuario sintoísta", "w": 1},
+    {"id": "tradicional", "n": "Religión tradicional", "strict": 1, "alcohol": true, "poly": "", "temple": "el altar de los ancestros", "w": 2},
     {"id": "espiritual", "n": "Espiritualidad libre", "strict": 0, "alcohol": true, "poly": "", "temple": "el círculo de meditación", "w": 5},
     {"id": "terciopelo", "n": "Iglesia del Terciopelo", "strict": 0, "alcohol": true, "poly": "any", "temple": "el santuario", "w": 3},
     {"id": "solar", "n": "Culto del Sol Rojo", "strict": 4, "alcohol": false, "poly": "m", "temple": "el altar del sol", "w": 2},
@@ -24,6 +26,8 @@ const RELIGION_DESC = {
     "catolica": "Tradición, misa los domingos y una abuela que reza por ti.",
     "ortodoxa": "Íconos dorados, cantos antiguos y una Pascua que se celebra en grande.",
     "sij": "Igualdad, servicio a los demás y una cocina comunitaria abierta a todos.",
+    "sintoismo": "Los kami viven en la naturaleza: santuarios, ofrendas y amuletos de la suerte.",
+    "tradicional": "La fe de tus ancestros: espíritus, ofrendas y rituales que pasan de abuelos a nietos.",
     "espiritual": "Sin dogmas: meditación, cristales, energía y lo que te haga sentir bien.",
     "luna": "(Inventada) Una comunidad que honra a la luna. Las mujeres pueden tener varios esposos.",
     "evangelica": "Comunidad muy unida, alabanzas y valores firmes.",
@@ -54,6 +58,7 @@ function random_religion() {
 function religion_of(p: map) {
     if p.religion == null {
         p.religion = random_religion()
+        if p.ctry != null && has_ctry(p.ctry) { p.religion = rel_pick(p.ctry) }
         if is_family(p) && L.religion != null && chance(85) { p.religion = L.religion }
         p.faith = 0
         if p.religion != "ninguna" { p.faith = rint(20, 90) }
@@ -116,7 +121,7 @@ function disapproval(p: map, what: string) {
 function setup_religion() {
     let dad = first_rel("padre")
     let mom = first_rel("madre")
-    let fam = random_religion()
+    let fam = rel_pick(born_id())
     if G.cre.religion != null && G.cre.religion != "" { fam = G.cre.religion }
     let total = 0
     let n = 0

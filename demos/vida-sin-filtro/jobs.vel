@@ -613,7 +613,7 @@ function apply_job(id: string) {
     // Las carreras normales piden entrevista (o solo currículum).
     if ok && !d.adult && !d.illegal { return open_interview(id) }
     // La experiencia en chambas ayuda a que te contraten.
-    let odds = 70 + rank("charm") * 3 + min(15, L.workxp / 2) + fx_sum("hire")
+    let odds = 70 + rank("charm") * 3 + min(15, L.workxp / 2) + fx_sum("hire") + pais_field_hire(d.field)
     if d.adult || d.illegal { odds = 85 }
     if !((ok && chance(odds)) || (!ok && L.age >= d.min_age && chance(6))) {
         L.happy -= 3
