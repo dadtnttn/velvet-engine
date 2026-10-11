@@ -499,7 +499,8 @@ function credential_text(job_id: string) {
     if req == null { return "" }
     let names = []
     for d in req { list_push(names, degree_def(d).n) }
-    return str_join(names, " o ")
+    // «Medicina / Enfermería»: la barra se entiende en todos los idiomas.
+    return str_join(names, " / ")
 }
 
 function is_regulated(job_id: string) {
