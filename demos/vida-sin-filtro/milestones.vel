@@ -1,0 +1,91 @@
+// @edition 3
+// Hitos personales: la línea del tiempo de tu vida. Cada momento importante queda
+// guardado con tu edad y su categoría (vida, amor, amistad, familia, trabajo,
+// estudios, salud). Los hitos con una persona se guardan también en su historia.
+
+const HITO_CATS = ["Todos", "Vida", "Amor", "Amistad", "Familia", "Trabajo", "Estudios", "Salud"]
+
+// Hito personal con notificación.
+function hito_me(cat: string, text: string) {
+    hito_push(cat, text)
+    list_push(G.toasts, {"head": "¡HITO!", "title": str_upper(text), "sub": cat + " · a los " + str(L.age) + " años", "t0": G.t})
+    return null
+}
+
+// Hito personal sin notificación (los pequeños de la infancia, los cumpleaños).
+function hito_quiet(cat: string, text: string) {
+    hito_push(cat, text)
+    return null
+}
+
+function hito_push(cat: string, text: string) {
+    if L.hitos == null { L.hitos = [] }
+    list_push(L.hitos, {"a": L.age, "t": text, "c": cat})
+    log_add("Hito: " + text + ".", "x")
+    return null
+}
+
+// Solo la primera vez que pasa algo.
+function hito_once(key: string, cat: string, text: string) {
+    if L.hito_keys == null { L.hito_keys = {} }
+    if L.hito_keys[key] == true { return false }
+    L.hito_keys[key] = true
+    hito_me(cat, text)
+    return true
+}
+
+function hito_cat_for(p: map) {
+    let g = rel_group(p)
+    if g == "partner" || g == "fling" || g == "ex" { return "Amor" }
+    if g == "friend" { return "Amistad" }
+    return "Familia"
+}
+
+// Hitos que dependen de la edad (se revisan cada cumpleaños).
+function age_hitos() {
+    let a = L.age
+    if a == 1 { hito_quiet("Vida", "Diste tus primeros pasos") }
+    if a == 2 { hito_quiet("Vida", "Dijiste tu primera palabra: «" + pick(["mamá", "papá", "agua", "no", "perro", "pipí"]) + "»") }
+    if a == 6 { hito_me("Estudios", "Tu primer día de escuela") }
+    if a == 12 { hito_me("Estudios", "Terminaste la primaria") }
+    if a == 15 { hito_quiet("Vida", "Cumpliste 15 años") }
+    if a == 18 { hito_me("Vida", "Cumpliste 18: mayoría de edad") }
+    if a == 30 || a == 40 || a == 50 || a == 60 || a == 70 || a == 80 || a == 90 || a == 100 {
+        hito_me("Vida", "Llegaste a los " + str(a))
+    }
+    return null
+}
+
+// Hitos que dependen del estado (se revisan cada mes).
+function state_hitos() {
+    if L.money >= 100000 { hito_once("money100k", "Vida", "Juntaste tus primeros $100,000") }
+    if L.money >= 1000000 { hito_once("million", "Vida", "Tu primer millón") }
+    if L.fame >= 40 { hito_once("famous", "Vida", "Te volviste famos" + oa(L.gender)) }
+    if L.fame >= 80 { hito_once("star", "Vida", "Eres una estrella") }
+    for k in SOCIAL_KEYS {
+        if rank(k) >= 5 { hito_once("social5" + k, "Vida", SOCIAL_NAMES[k] + " al máximo: " + rank_title(k, 5)) }
+    }
+    return null
+}
+
+function my_hito_items(cat: string) {
+    let items = []
+    if L.hitos == null { return items }
+    let i = len(L.hitos) - 1
+    while i >= 0 {
+        let h = L.hitos[i]
+        if cat == "Todos" || h.c == cat {
+            list_push(items, {"action": "hito:" + str(i), "t": h.t, "s": h.c + " · " + str(h.a) + " años", "desc": "A los " + str(h.a) + " años. " + h.t + ".", "lock": "", "done": h.c == "Amor" || h.c == "Familia"})
+        }
+        i -= 1
+    }
+    if len(items) == 0 {
+        list_push(items, {"action": "hito:none", "t": "Todavía nada aquí", "s": "", "desc": "Vive un poco: los momentos importantes aparecerán aquí.", "lock": ""})
+    }
+    return items
+}
+
+function hito_count() {
+    if L.hitos == null { return 0 }
+    return len(L.hitos)
+}

@@ -511,7 +511,13 @@ function occupation_text() {
 
 function draw_feed(x: int, y: int, w: int, h: int) {
     panel(x, y, w, h, 20)
-    tag(x + 30, y + 14, 150, "TU HISTORIA", HEX_RED, C_WHITE)
+    let hfill = HEX_RED
+    if hovered("tab:hitos") { hfill = HEX_YELLOW }
+    svg(x + 24, y + 10, 152, 34, slant_doc(146, 30, 9, hfill, HEX_WHITE, 2, HEX_INK, 4))
+    let hcol = C_WHITE
+    if hovered("tab:hitos") { hcol = C_INK }
+    ctext(x + 24 + 73, y + 31, "HITOS " + str(hito_count()), 14, hcol, "impact")
+    hot(x + 24, y + 10, 146, 30, "tab:hitos")
     let mission_label = "MISIONES " + str(len(L.done)) + "/" + str(len(MISSIONS))
     let mfill = HEX_WHITE
     let mcolor = C_INK
@@ -1131,7 +1137,7 @@ function draw_dead() {
         ["Parejas sexuales", str(L.partners)],
         ["Matrimonios", str(L.marriages) + " · Divorcios " + str(L.divorces)],
         ["Hijos", str(L.kids) + " · " + parenting_label()],
-        ["Generación", str(L.gen)],
+        ["Generación", str(L.gen) + " · " + str(hito_count()) + " hitos"],
 
         ["Misiones", str(len(L.done)) + " / " + str(len(MISSIONS))],
         ["Karma", karma_text()]

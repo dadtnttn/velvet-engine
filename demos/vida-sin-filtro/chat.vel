@@ -363,6 +363,8 @@ function chat_choose(i: int) {
     if r <= -3 { p.mood = "enojado" }
     if grade == "good" && (m == "triste" || m == "estresado") && (tone == "comfort" || tone == "whatswrong") { p.mood = "feliz" }
     if tone == "plan" && grade == "good" { L.happy += 2 }
+    if tone == "love" && grade == "good" && (rel_group(p) == "partner" || rel_group(p) == "fling") { add_hito(p, "Se dijeron «te quiero» por primera vez") }
+    if r >= 3 { add_hito(p, "Su mejor plática") }
     if tone == "advice" && grade == "good" { gain("know", 1) }
     if tone == "past" && grade == "good" { gain("know", 1) }
     if tone == "joke" && grade == "good" { gain("charm", 1) }
@@ -415,6 +417,7 @@ function chat_end() {
     if c.gain >= 4 { kind = "g" }
     if c.gain <= -3 { kind = "b" }
     let msg = "Platicaste con " + p.first + ". Cercanía " + sign + str(c.gain) + "."
+    if c.gain >= 1 { add_hito(p, "Su primera plática") }
     if c.gain >= 8 { msg = "Gran plática con " + p.first + ": se sienten más unid" + oa(p.gender) + "s que nunca. Cercanía +" + str(c.gain) + "." }
     if c.gain <= -5 { msg = "La plática con " + p.first + " salió mal. Cercanía " + str(c.gain) + "." }
     G.back_pid = p.id

@@ -11,36 +11,40 @@
 // Acciones de amor joven. grp: "kidfriend" (6-11 años), "teencrush" (amigo de tu
 // edad que te gusta, 12-17), "teenpair" (noviazgo con alguno menor de edad).
 const SWEET_ACTS = [
-    {"id": "t_lunch", "t": "Compartir tu lonche", "s": "Amistad", "grp": "kidfriend", "cat": "Juntos",
+    {"id": "t_lunch", "hito": "Compartieron el lonche", "t": "Compartir tu lonche", "s": "Amistad", "grp": "kidfriend", "cat": "Juntos",
      "desc": "La mitad de tu sándwich y tus galletas favoritas.", "o": [
         {"w": 100, "log": "{x} te regaló su jugo a cambio. Mejores amigos para siempre.", "bond": 6, "happy": 4, "crush": 5}]},
-    {"id": "t_drawing", "t": "Hacerle un dibujo", "s": "Ternura", "grp": "kidfriend", "cat": "Juntos",
+    {"id": "t_drawing", "hito": "Le hiciste su primer dibujo", "t": "Hacerle un dibujo", "s": "Ternura", "grp": "kidfriend", "cat": "Juntos",
      "desc": "Crayolas, mucha diamantina y los dos tomados de la mano bajo un sol con lentes.", "o": [
         {"w": 100, "log": "{x} lo pegó en su refrigerador. Lo va a guardar por años.", "bond": 8, "happy": 4, "crush": 6}]},
-    {"id": "t_note", "t": "Dejarle una notita", "s": "Le gustas", "grp": "teencrush", "cat": "Romance",
+    {"id": "t_note", "hito": "Tu primera notita de amor", "t": "Dejarle una notita", "s": "Le gustas", "grp": "teencrush", "cat": "Romance",
      "desc": "«¿Te puedo acompañar a la salida?» Sin firma... pero con tu letra.", "o": [
         {"w": 70, "log": "{x} sonrió toda la clase. Creo que adivinó quién fue.", "bond": 5, "crush": 12, "happy": 5},
         {"w": 30, "log": "Su mejor amig{xa} la leyó primero y ya lo sabe toda la escuela. Qué oso.", "bond": 2, "crush": 6, "happy": -4}]},
-    {"id": "t_walkhome", "t": "Acompañarl{xlo} a su casa", "s": "Platicar", "grp": "teencrush", "cat": "Romance",
+    {"id": "t_walkhome", "hito": "La primera vez que l{xlo} acompañaste a casa", "t": "Acompañarl{xlo} a su casa", "s": "Platicar", "grp": "teencrush", "cat": "Romance",
      "desc": "El camino largo, a propósito, para platicar más.", "o": [
         {"w": 100, "log": "Platicaron de todo y de nada. Se tardaron una hora en caminar diez cuadras.", "bond": 7, "crush": 10, "happy": 5}]},
     {"id": "t_ask", "t": "Pedirle que sea tu novi{xa}", "s": "¿Sí o no?", "grp": "teencrush", "cat": "Romance", "code": "ask",
      "desc": "Con el corazón a mil. Si le gustas tanto como l{xlo} quieres tú, dirá que sí."},
-    {"id": "t_walk", "t": "Caminar de la mano", "s": "Gratis", "grp": "teenpair", "cat": "Noviazgo",
+    {"id": "t_walk", "hito": "Se tomaron de la mano por primera vez", "t": "Caminar de la mano", "s": "Gratis", "grp": "teenpair", "cat": "Noviazgo",
      "desc": "Columpios, atardecer y las manos sudando de nervios.", "o": [
         {"w": 100, "log": "Caminaron de la mano hasta que se hizo de noche. Ninguno quería soltarse.", "bond": 7, "happy": 6}]},
-    {"id": "t_icecream", "t": "Ir por un helado", "s": "$60", "grp": "teenpair", "cat": "Noviazgo", "cost": 60,
+    {"id": "t_icecream", "hito": "Su primer helado juntos", "t": "Ir por un helado", "s": "$60", "grp": "teenpair", "cat": "Noviazgo", "cost": 60,
      "desc": "Un helado, dos cucharas.", "o": [
         {"w": 100, "log": "Compartieron un helado de fresa y se rieron de todo.", "bond": 6, "happy": 5}]},
-    {"id": "t_movie", "t": "Ir al cine de la tarde", "s": "$120", "grp": "teenpair", "cat": "Noviazgo", "cost": 120,
+    {"id": "t_movie", "hito": "Su primera ida al cine", "t": "Ir al cine de la tarde", "s": "$120", "grp": "teenpair", "cat": "Noviazgo", "cost": 120,
      "desc": "Palomitas grandes y una película de aventuras.", "o": [
         {"w": 100, "log": "Vieron la película tomados de la mano. Luego la platicaron por horas.", "bond": 7, "happy": 5}]},
-    {"id": "t_study", "t": "Estudiar juntos", "s": "Minijuego · calificaciones", "grp": "teenpair", "cat": "Noviazgo", "mg": "quiz", "bond": [3, 10],
+    {"id": "t_study", "hito": "Estudiaron juntos por primera vez", "t": "Estudiar juntos", "s": "Minijuego · calificaciones", "grp": "teenpair", "cat": "Noviazgo", "mg": "quiz", "bond": [3, 10],
      "desc": "En la biblioteca, susurrando respuestas y pasándose notas.", "ok": "Los dos sacaron buena calificación en el examen.", "bad": "Se la pasaron platicando y no estudiaron nada. Valió la pena."},
-    {"id": "t_letter", "t": "Escribirle una carta", "s": "Minijuego de tecleo", "grp": "teenpair", "cat": "Noviazgo", "mg": "typing", "bond": [3, 12],
+    {"id": "t_letter", "hito": "Tu primera carta de amor", "t": "Escribirle una carta", "s": "Minijuego de tecleo", "grp": "teenpair", "cat": "Noviazgo", "mg": "typing", "bond": [3, 12],
      "desc": "Tres hojas por los dos lados. Sin faltas de ortografía, de preferencia.", "ok": "La guardó en una caja de recuerdos. La va a leer mil veces.", "bad": "Tenía tantos tachones que parecía mapa del tesoro. Igual le encantó."},
-    {"id": "t_dance", "t": "Ensayar el baile escolar", "s": "Minijuego de ritmo", "grp": "teenpair", "cat": "Noviazgo", "mg": "arrows", "bond": [3, 10], "me": 14,
+    {"id": "t_dance", "hito": "Ensayaron su primer baile", "t": "Ensayar el baile escolar", "s": "Minijuego de ritmo", "grp": "teenpair", "cat": "Noviazgo", "mg": "arrows", "bond": [3, 10], "me": 14,
      "desc": "El vals de la graduación no se va a bailar solo.", "ok": "Ya se mueven como en las películas.", "bad": "Se pisaron hasta cansarse. Mucha risa, poco vals."},
+    {"id": "t_kiss", "t": "Darle un beso", "s": "Romántico", "grp": "teenpair", "cat": "Noviazgo", "me": 14, "them": 14, "hito": "Su primer beso",
+     "desc": "Un beso tímido al atardecer. Nada más: así el momento es perfecto.", "o": [
+        {"w": 60, "log": "Un beso rápido y tímido. Se rieron de nervios y no se soltaron la mano en todo el camino.", "bond": 8, "happy": 8},
+        {"w": 40, "log": "Un beso bajo el árbol del parque. Te temblaban las piernas. A {x} también.", "bond": 9, "happy": 9}]},
     {"id": "t_breakup", "t": "Terminar", "s": "Fin del noviazgo", "grp": "teenpair", "cat": "Noviazgo", "code": "breakup",
      "desc": "A veces el primer amor no es el último."}
 ]
@@ -151,6 +155,7 @@ function sweet_items(p: map, cat: string) {
     for a in SWEET_ACTS {
         if a.cat != cat || !list_contains(groups, a.grp) { continue }
         if a.me != null && L.age < a.me { continue }
+        if a.them != null && p.age < a.them { continue }
         let lock = ""
         if L.used["s" + a.id + str(p.id)] != null { lock = "Este mes ya" }
         if a.cost != null && L.money < a.cost { lock = money_str(a.cost) }
@@ -181,6 +186,7 @@ function sweet_do(id: string, p: map) {
     let o = pick_outcome(a.o)
     if o.crush != null { p.crush = clamp100(crush_of(p) + o.crush) }
     let msg = apply(o, ctx)
+    if a.hito != null { add_hito(p, fmt(a.hito, ctx)) }
     return finish(p.first, msg, outcome_kind(o))
 }
 
@@ -198,6 +204,7 @@ function sweet_mg_result(score: any, ctx: map) {
     }
     let text = fmt(a.ok, fctx)
     if score < 50 { text = fmt(a.bad, fctx) }
+    if a.hito != null { add_hito(p, fmt(a.hito, fctx)) }
     return finish(p.first, text + " (" + str(score) + " puntos)", "g")
 }
 
@@ -238,7 +245,7 @@ function add_hito(p: map, text: string) {
     }
     list_push(p.hitos, {"a": L.age, "t": text})
     list_push(G.toasts, {"head": "¡HITO!", "title": str_upper(text), "sub": "Con " + p.first + " · a los " + str(L.age) + " años", "t0": G.t})
-    log_add("Hito con " + p.first + ": " + text + ".", "x")
+    hito_push(hito_cat_for(p), text + " (" + p.first + ")")
     return null
 }
 

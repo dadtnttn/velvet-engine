@@ -298,6 +298,7 @@ function kids_month() {
             if p.study_m == 0 {
                 p.degree = "título universitario"
                 log_add("¡Tu " + hij(p) + " " + p.first + " se graduó de la universidad!", "g")
+                add_hito(p, "Se graduó de la universidad")
                 if p.tuition != "self" { p.bond = clamp100(p.bond + 10) }
                 L.happy += 8
                 p.tuition = ""
@@ -363,7 +364,10 @@ function kids_year() {
             if p.style == "flojo" { target -= 10 }
             p.grades = clamp(p.grades + (target - p.grades) / 4 + rint(-4, 4), 0, 100)
         }
-        if p.age == 18 { log_add("Tu " + hij(p) + " " + p.first + " cumplió 18 años.", "n") }
+        if p.age == 18 {
+            log_add("Tu " + hij(p) + " " + p.first + " cumplió 18 años.", "n")
+            add_hito(p, "Cumplió 18 años")
+        }
         if p.home && p.age >= 19 && chance(18) {
             p.home = false
             log_add(p.first + " se fue de la casa. El nido se siente vacío.", "n")
@@ -378,6 +382,7 @@ function kids_year() {
         if p.age >= 24 && !p.wed && chance(8) {
             p.wed = true
             log_add("¡" + p.first + " se casó!", "g")
+            add_hito(p, "Se casó")
         }
         if p.age >= 24 && p.age <= 42 && chance(9) {
             let g = pick(["m", "f"])
@@ -389,6 +394,7 @@ function kids_year() {
             add_person(baby)
             L.happy += 8
             log_add("¡Eres " + by_gender(L.gender, "abuelo", "abuela") + "! " + p.first + " tuvo " + by_gender(g, "un niño", "una niña") + ": " + baby.first + ".", "g")
+            if !hito_once("first_grandchild", "Familia", "Te convertiste en " + by_gender(L.gender, "abuelo", "abuela")) { hito_me("Familia", "Nació tu nieto " + baby.first) }
         }
         // En tu vejez, los hijos que te quieren te cuidan.
         if L.age >= 70 && p.age >= 25 && p.bond >= 60 && chance(40) {
@@ -469,6 +475,7 @@ function do_kid_act(action: string, p: map) {
     }
     if action == "heir" {
         L.heir_id = p.id
+        add_hito(p, "L" + oa(p.gender) + " nombraste tu " + by_gender(p.gender, "heredero", "heredera"))
         toast("TESTAMENTO", name + " es tu heredero" + by_gender(p.gender, "", "a") + " universal.")
         return finish("Testamento", "Firmaste tu testamento: " + name + " lo heredará todo. Su parte dependerá de cómo te trate.", "n")
     }
@@ -657,6 +664,7 @@ function resolve_retire(index: int) {
     L.job2 = null
     L.happy += 10
     flag("retired")
+    hito_me("Trabajo", "Te jubilaste")
     return finish("Jubilación", "¡Te jubilaste! Cobrarás " + money_str(L.pension) + " al año. Ahora sí: viajes, nietos y siestas.", "g")
 }
 
@@ -872,6 +880,7 @@ function continue_as_heir() {
     }
     setup_family_styles()
     log_add("Generación " + str(gen) + ": continúas como " + kid.first + ", " + hij(kid) + " de " + old.first + ".", "x")
+    hito_me("Familia", "Heredaste el legado de " + old.first)
     let how = "heredaste " + money_str(money) + "."
     if money == 0 { how = "no quedó nada que heredar." }
     log_add("Tu " + str_lower(parent_word_of(old.gender)) + " murió por " + old.cause + " y " + how, "n")

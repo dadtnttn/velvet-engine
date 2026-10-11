@@ -221,6 +221,7 @@ function menu_title(tab: string) {
     if tab == "act" { return "ACTIVIDADES" }
     if tab == "missions" { return "MISIONES" }
     if tab == "effects" { return "EFECTOS" }
+    if tab == "hitos" { return "MIS HITOS" }
     if tab == "jobs" { return "CARRERAS" }
     return "NOCHE +18"
 }
@@ -229,6 +230,7 @@ function menu_cats(tab: string) {
     if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Hábitos", "Lujos"] }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
     if tab == "rel" { return ["Familia", "Pareja", "Amigos", "Otros", "Conocer"] }
+    if tab == "hitos" { return HITO_CATS }
     if tab == "jobs" { return FIELD_ORDER }
     if tab == "study" { return ["Universidad", "Técnica"] }
     if tab == "gigs" {
@@ -244,6 +246,7 @@ function menu_items(tab: string, cat: string) {
     if tab == "rel" { return rel_list(cat) }
     if tab == "missions" { return mission_items() }
     if tab == "effects" { return effect_items() }
+    if tab == "hitos" { return my_hito_items(cat) }
     if tab == "jobs" { return job_items_for(cat) }
     if tab == "study" {
         if cat == "Técnica" { return study_items("tec") }
@@ -370,6 +373,7 @@ function do_act(id: string) {
     L.money -= a.cost
     let o = pick_outcome(a.o)
     let msg = apply(o, {})
+    if a.tab == "night" { hito_once("first_night", "Vida", "Tu primera noche de fiesta") }
     if a.tab == "night" && has_trait("fiesta") && L.alive {
         L.happy = clamp100(L.happy + 4)
     }
@@ -385,6 +389,7 @@ function buy(id: string) {
         if L.money < asset.cost { return info(asset.t, "No te alcanza. Cuesta " + money_str(asset.cost) + ".") }
         L.money -= asset.cost
         list_push(L.assets, asset.t)
+        hito_me("Vida", "Compraste: " + str_lower(asset.t))
         L.happy = clamp100(L.happy + asset.happy)
         gain("charm", asset.charm)
         return finish("Compra", "Compraste: " + str_lower(asset.t) + ". Todo el barrio te mira con envidia.", "g")
@@ -573,6 +578,7 @@ function do_job_act(id: string) {
         return true
     }
     if id == "quit" {
+        hito_me("Trabajo", "Renunciaste a tu trabajo como " + str_lower(L.job.title))
         L.last_job = L.job.title
         L.job = null
         finish("Trabajo", "Renunciaste. Libertad... y cero ingresos.", "n")
@@ -610,6 +616,7 @@ function do_job_act(id: string) {
             L.jail = 0
             L.record += 1
             flag("escape")
+            hito_me("Vida", "Escapaste de prisión")
             finish("Prisión", "¡Escapaste! Ahora eres prófug" + oa(L.gender) + ".", "g")
         } else {
             L.jail += 2
@@ -743,6 +750,7 @@ function bond_gain(p: map, amount: int) {
     if has_trait("romance") && amount > 0 { gained = amount * 3 / 2 }
     p.bond = clamp100(p.bond + gained)
     let after = conf_rank(p)
+    if after >= 10 && before < 10 { add_hito(p, "Vínculo al máximo: confidentes para siempre") }
     if after > before {
         list_push(G.toasts, {"head": "¡CONFIDENTE!", "title": str_upper(arcana(p)) + " · RANGO " + str(after), "sub": "Tu vínculo con " + p.first + " se fortaleció.", "t0": G.t})
     }
@@ -773,6 +781,7 @@ function do_person_act(action: string, p: map) {
         return finish(name, "Platicaste con " + name + " de la vida.", "n")
     }
     if action == "argue" {
+        add_hito(p, "Su primera pelea")
         bond_gain(p, -rint(8, 15))
         L.happy -= 3
         gain("guts", 1)
@@ -834,6 +843,8 @@ function do_person_act(action: string, p: map) {
     }
     if action == "propose" {
         if chance(p.bond - 10 + rank("guts") * 3) {
+            add_hito(p, "Se comprometieron")
+            hito_once("engaged", "Amor", "Te comprometiste")
             return open_wedding(p)
         }
         bond_gain(p, -10)
@@ -931,6 +942,7 @@ function special(name: string, ctx: map) {
         return ""
     }
     if name == "rehab" {
+        hito_me("Salud", "Saliste de rehabilitación")
         L.alcohol = 0
         L.drugs = 0
         L.health += 10

@@ -372,6 +372,7 @@ function new_life() {
         add_person(sib)
     }
     log_add("Naciste en " + L.city + ".", "h")
+    hito_quiet("Vida", "Naciste en " + L.city)
     log_add(by_gender(gender, "Eres hijo", "Eres hija") + " de " + full_name(dad) + " y " + full_name(mom) + ".", "n")
     log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
     log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
@@ -467,6 +468,8 @@ function new_life_core(age: int) {
         "pension": 0,
         "funeral": null,
         "heartbreak": 0,
+        "hitos": [],
+        "hito_keys": {},
         "fert": rint(50, 95),
         "pregnant": false,
         "preg_with": "",
@@ -586,6 +589,7 @@ function monthly() {
     kids_month()
     effects_month()
     moods_month()
+    state_hitos()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8
@@ -637,6 +641,8 @@ function yearly() {
         if risk > 0 && chance(risk) {
             p.alive = false
             log_add("Tu " + str_lower(rel_label(p)) + " " + p.first + " murió a los " + str(p.age) + " años.", "b")
+            if p.bond >= 40 || p.rel == "padre" || p.rel == "madre" || p.id == L.partner_id { hito_me("Familia", "Perdiste a tu " + str_lower(rel_label(p)) + " " + p.first) }
+            if p.id == L.partner_id { add_hito(p, "Partió antes que tú") }
             if p.bond > 50 { L.happy -= 15 }
             if p.rel == "padre" || p.rel == "madre" {
                 if chance(60) {
@@ -655,6 +661,7 @@ function yearly() {
 
     childhood_friends()
     sweet_year()
+    age_hitos()
     // Infancia
     if L.age <= 5 {
         if chance(70) { log_add(pick(CHILDHOOD), "n") }
@@ -678,6 +685,7 @@ function yearly() {
         L.school = ""
         L.edu = 2
         log_add("Te graduaste de la secundaria. Ya eres mayor de edad: la noche es tuya.", "g")
+        hito_me("Estudios", "Terminaste la secundaria")
         if len(L.tags) > 0 { log_add("Descubriste lo que te gusta en la cama: " + kinks_text(L.tags, L.gender) + ".", "x") }
     }
     if L.study != null { L.smarts += rint(1, 3) }
@@ -697,6 +705,7 @@ function yearly() {
         L.job.perf = clamp100(L.job.perf + rint(-6, 4))
         if L.job.perf < 15 && chance(50) {
             log_add("Te despidieron de tu trabajo como " + L.job.title + ".", "b")
+            hito_me("Trabajo", "Te despidieron de tu trabajo como " + str_lower(L.job.title))
             L.happy -= 10
             L.last_job = L.job.title
             L.job = null
@@ -785,6 +794,8 @@ function add_child(other: string) {
     L.kids += 1
     L.happy += 10
     log_add("¡Nació tu " + by_gender(g, "hijo", "hija") + " " + child.first + "! (con " + other + ")", "g")
+    if !hito_once("first_child", "Familia", "Nació tu primer hijo: " + child.first) { hito_me("Familia", "Nació " + child.first) }
+    child.hitos = [{"a": L.age, "t": "Nació"}]
     let mate = partner()
     if mate != null && mate.first == other { add_hito(mate, "Nació " + child.first) }
 }
@@ -820,6 +831,7 @@ function breakup() {
     if L.married {
         L.married = false
         L.divorces += 1
+        hito_me("Amor", "Te divorciaste de " + p.first)
         if L.money > 0 {
             let half = L.money / 2
             L.money -= half
@@ -829,6 +841,8 @@ function breakup() {
     p.rel = "ex"
     L.partner_id = 0
     L.heartbreak = 6
+    add_hito(p, "Terminaron")
+    hito_once("first_heartbreak", "Amor", "Tu primer corazón roto")
     return null
 }
 
@@ -843,6 +857,9 @@ function make_partner(p: map) {
     p.bond = max(p.bond, 60)
     L.partner_id = p.id
     if p.since == null { p.since = L.age }
+    if both_adults(p) {
+        add_hito(p, "Empezaron a salir")
+    }
     return true
 }
 
@@ -925,6 +942,7 @@ function sex_with(person: any) {
         L.partners += 1
     }
     if person != null { out = out + sex_contact(person) }
+    if L.partners >= 1 { hito_once("first_time", "Amor", "Tu primera vez") }
     let p = partner()
     if p != null && p.open != true && (person == null || person.id != p.id) {
         p.cheated = true
@@ -965,6 +983,7 @@ function go_to_jail(years: int) {
     L.jail = years
     L.jail_total += years
     L.record += 1
+    hito_once("first_jail", "Vida", "Tu primera vez en prisión")
     if L.job != null {
         L.last_job = L.job.title
         L.job = null
