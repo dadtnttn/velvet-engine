@@ -212,6 +212,9 @@ function living_costs() {
         if h != null { rent = h.keep }
     }
     let food = FOOD[life]
+    // Con tus padres: hasta los 25 (o mientras estudias) ellos cubren la casa y
+    // la comida; después aportas la mitad de la comida.
+    if home == "padres" && (L.age < 25 || L.study != null) { return 0 }
     if home == "padres" { food = food / 2 }
     let total = (rent + food) * pais_cost_mult() / 100
     if shares_home() { total = total / 2 }
@@ -232,6 +235,25 @@ function finance_month() {
     if shares_home() && L.home != "propia" { L.home = "pareja" }
     dn_charge(living_costs())
     L.money += partner_share()
+    // Sin dinero nadie sostiene el mismo ritmo: tras tres meses en rojo te
+    // aprietas el cinturón y bajas un nivel de estilo de vida.
+    if L.money < 0 {
+        L.red_m = int(map_get(L, "red_m", 0)) + 1
+        if L.red_m >= 3 && L.lifestyle != "austero" {
+            let k = 1
+            while k < len(LIFESTYLES) {
+                if LIFESTYLES[k] == L.lifestyle {
+                    L.lifestyle = LIFESTYLES[k - 1]
+                    break
+                }
+                k += 1
+            }
+            L.red_m = 0
+            log_add("Con las cuentas en rojo te apretaste el cinturón: ahora llevas un estilo de vida " + str_lower(LIFE_NAMES[L.lifestyle]) + ".", "n")
+        }
+    } else {
+        L.red_m = 0
+    }
     // Estilo de vida
     if L.lifestyle == "comodo" && chance(35) { L.happy += 1 }
     if L.lifestyle == "lujoso" {
@@ -262,8 +284,9 @@ function finance_month() {
     }
     // Historial crediticio
     if L.money < 0 {
-        // Sobregiro: el banco cobra 2.5% al mes por los números rojos.
-        let fee = (0 - L.money) * 25 / 1000
+        // Sobregiro: el banco cobra 2.5% al mes por los números rojos. Pasado el
+        // límite de la cuenta, la deuda se vende a cobranza y deja de crecer.
+        let fee = min(0 - L.money, local_cost(30000)) * 25 / 1000
         if fee > 0 {
             L.money -= fee
             if L.od_noted != L.age {
@@ -309,6 +332,12 @@ function pay_loan(kind: string) {
 
 // Cobradores: si las deudas te ahogan, te embargan.
 function collectors() {
+    // Sin nada que embargar y con la deuda ahogándote, alguien te recuerda que
+    // existe la bancarrota (una vez al año, si no la usaste hace poco).
+    if cheapest_asset() == null && !dn_bk_lock() && G.modal == null && map_get(L, "bk_offer", -99) + 12 <= L.tm {
+        L.bk_offer = L.tm
+        return open_choice("LOS COBRADORES NO PARAN", "Debes " + money_str(0 - L.money) + " y no hay mes en que no llamen. Una abogada te explica la salida: declararte en bancarrota. Se borran las deudas, pero pierdes tus bienes y tu historial queda en el piso siete años.", ["Declararte en bancarrota", "Aguantar y pagar poco a poco"], ["", ""], "dn_bankrupt", {})
+    }
     if !chance(25) { return null }
     let worst = cheapest_asset()
     if worst != null {

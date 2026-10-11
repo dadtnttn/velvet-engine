@@ -225,6 +225,8 @@ function draft_eligible(w: map) {
     if L.age < 18 || L.age > 45 || L.jail > 0 { return false }
     let c = here()
     if pa().legal == "ilegal" || pa().legal == "refugiado" { return false }
+    // Sin servicio obligatorio, solo una guerra grande trae movilización general.
+    if c.draft == 0 && w.int < 4 { return false }
     if L.gender == "m" { return true }
     return c.draft == 2 || w.int >= 5
 }

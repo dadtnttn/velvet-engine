@@ -172,6 +172,20 @@ function happy_base() {
     return b
 }
 
+// Hasta dónde se repone tu cuerpo solo: baja con los años (y antes en países con
+// menos esperanza de vida) y con cada enfermedad crónica que arrastras.
+function health_base() {
+    let a = L.age + pais_life_shift()
+    let b = 92
+    if a > 30 { b -= (a - 30) / 3 }
+    if a > 60 { b -= (a - 60) / 2 }
+    for i in L.ill {
+        let d = ill_def(i.id)
+        if (d.type == "cronica" || d.type == "cancer") && d.dmg > 0 { b -= 2 + d.dmg * 2 + i.stage }
+    }
+    return clamp(b, 15, 95)
+}
+
 function effects_month() {
     let hap = 0
     let hp = 0
@@ -179,13 +193,19 @@ function effects_month() {
         if e.hap != null { hap += e.hap }
         if e.hp != null { hp += e.hp }
     }
-    // Los efectos negativos juntos restan como mucho 3 al mes.
-    if hap < -3 { hap = -3 }
+    // Los efectos negativos juntos restan como mucho 2 al mes.
+    if hap < -2 { hap = -2 }
     if hap != 0 && chance(50) { L.happy += hap }
     if hp != 0 && chance(40) { L.health += hp }
+    // El cuerpo se repone de los golpes pasajeros (una gripe, un susto, una
+    // pelea); lo que no se repone es la edad ni lo crónico.
+    let hb = health_base()
+    if L.health < hb && chance(30) { L.health += 1 }
+    if L.health > hb + 5 && chance(20) { L.health -= 1 }
     // La felicidad tiende a volver a tu nivel de siempre (nadie vive en 0 ni en 100).
     let base = happy_base()
-    if L.happy < base - 10 && chance(40) { L.happy += 1 }
+    // Cuanto más hondo el bache, más fuerte el impulso de salir (adaptación).
+    if L.happy < base - 10 && chance(min(70, 25 + (base - 10 - L.happy))) { L.happy += 1 }
     if L.happy > base + 15 && chance(25) { L.happy -= 1 }
     if L.happy < 25 { L.low_months = int(map_get(L, "low_months", 0)) + 1 } else { L.low_months = 0 }
     if L.heartbreak > 0 { L.heartbreak -= 1 }

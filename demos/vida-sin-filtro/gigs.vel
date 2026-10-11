@@ -758,9 +758,9 @@ function gig_action_items() {
         ms = "MISIÓN: " + m.t
         if m.done { ms = "MISIÓN CUMPLIDA" }
     }
-    list_push(items, {"action": "gigwork", "t": "Trabajar un turno (" + MG_INFO[d.game].title + ")", "s": ms, "desc": "Minijuego: tu puntaje decide las propinas. " + mdesc, "lock": ""})
-    list_push(items, {"action": "gigeasy", "t": "Turno tranquilo", "s": "Sin minijuego", "desc": "Haces lo justo. Poca propina, poco esfuerzo. Cuenta para la minimisión de turnos.", "lock": ""})
-    list_push(items, {"action": "gigquit", "t": "Renunciar a " + g.title, "s": money_str(g.pay) + "/mes", "desc": "Llevas " + str(g.months) + " meses aquí. Desempeño: " + str(g.perf) + "%.", "lock": ""})
+    list_push(items, {"action": "act:gigwork", "t": "Trabajar un turno (" + MG_INFO[d.game].title + ")", "s": ms, "desc": "Minijuego: tu puntaje decide las propinas. " + mdesc, "lock": ""})
+    list_push(items, {"action": "act:gigeasy", "t": "Turno tranquilo", "s": "Sin minijuego", "desc": "Haces lo justo. Poca propina, poco esfuerzo. Cuenta para la minimisión de turnos.", "lock": ""})
+    list_push(items, {"action": "act:gigquit", "t": "Renunciar a " + g.title, "s": money_str(g.pay) + "/mes", "desc": "Llevas " + str(g.months) + " meses aquí. Desempeño: " + str(g.perf) + "%.", "lock": ""})
     return items
 }
 

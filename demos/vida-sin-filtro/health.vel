@@ -148,6 +148,8 @@ function habit_months(id: string) {
 }
 
 function sedentary() {
+    // Los niños juegan y corren todo el día: no cuentan como sedentarios.
+    if L.age < 14 { return false }
     return !has_habit("gym") && !has_habit("correr") && !has_habit("caminar")
 }
 
@@ -375,6 +377,7 @@ function health_month() {
     habits_month()
     world_month()
     let keep = []
+    let cared = kid_cared()
     for i in L.ill {
         let d = ill_def(i.id)
         i.months += 1
@@ -384,7 +387,20 @@ function health_month() {
                 continue
             }
         }
-        if i.treated {
+        // De menor, cuando algo se nota, tu familia te lleva al médico y paga.
+        if cared && !i.treated && (i.noticed || i.known) {
+            i.known = true
+            if !d.cure || list_contains(THERAPY_ILLS, i.id) || d.type == "cancer" {
+                i.treated = true
+                log_add("Tu familia te llevó al médico: " + str_lower(d.n) + ". Ya estás en tratamiento.", "n")
+            } else if i.id != "obesidad" && chance(max(40, d.tx)) {
+                log_add("Tu familia te llevó al médico por " + str_lower(d.n) + " y te curaron.", "g")
+                continue
+            }
+        }
+        if i.treated && cared {
+            // El tratamiento lo paga tu familia.
+        } else if i.treated {
             let tc = cost_of(d)
             if L.money < tc && d.type != "cancer" {
                 i.treated = false
@@ -541,7 +557,7 @@ function risk_of(id: string) {
         if has_ill("cirrosis") { r = 40 }
         if has_ill("hepatitis_b") { r += 10 }
     }
-    if id == "c_piel" {
+    if id == "c_piel" && a >= 20 {
         if has_habit("sol") { r = 12 }
         if a > 40 { r += 2 }
         if has_habit("bloqueador") { r = r / 4 }
@@ -568,7 +584,9 @@ function risk_of(id: string) {
         if has_habit("leer") { r -= 8 }
     }
     if id == "artritis" && a >= 50 { r = a - 45 }
-    r += fam_risk(id)
+    // Los antecedentes familiares solo suman dentro de la edad en que la
+    // enfermedad ya puede aparecer (nada de Alzheimer a los 30).
+    if r > 0 { r += fam_risk(id) }
     return max(0, r)
 }
 

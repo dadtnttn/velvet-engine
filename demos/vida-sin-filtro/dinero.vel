@@ -1669,7 +1669,13 @@ function money_fx(out: list) {
     let income = max(1, map_get(d, "inc", 1))
     let mort = 0
     if L.mort != null { mort = L.mort.bal }
-    if debts_total() - mort > income * 12 { list_push(out, fx("deudas", "Ahogad" + oa(L.gender) + " en deudas", false, "Las deudas te quitan el sueño.", {"hap": -1, "hp": -1})) }
+    let debt = debts_total() - mort
+    if debt > income * 12 {
+        // El cuerpo lo resiente cuando la deuda ya es enorme.
+        let mods = {"hap": -1}
+        if debt > max(income * 36, local_cost(40000)) { mods = {"hap": -1, "hp": -1} }
+        list_push(out, fx("deudas", "Ahogad" + oa(L.gender) + " en deudas", false, "Las deudas te quitan el sueño.", mods))
+    }
     if d.card != null && d.card.blocked { list_push(out, fx("tarjeta_bloqueada", "Tarjeta bloqueada", false, "Pasar la tarjeta y que salga «rechazada» delante de todos.", {"hap": -1})) }
     if d.card != null && d.card.tier == 3 { list_push(out, fx("tarjeta_negra", "Tarjeta negra", true, "Una tarjeta de metal que abre puertas.", {"flirt": 3, "hire": 2})) }
     if dn_bk_lock() { list_push(out, fx("bancarrota", "Bancarrota", false, "Tu historial crediticio está en el piso.", {"hire": -5})) }
