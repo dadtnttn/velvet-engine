@@ -84,9 +84,10 @@ function csplit(s: string) {
 }
 
 function main_lang(id: string) {
-    let l = ctry(id).lang
-    let parts = str_split(l, " y ")
-    let first = str_split(parts[0], ",")[0]
+    // "maltés e inglés", "zulú, xhosa y afrikáans": la primera lengua de la lista.
+    let first = str_split(ctry(id).lang, ",")[0]
+    first = str_split(first, " y ")[0]
+    first = str_split(first, " e ")[0]
     return str_trim(str_lower(first))
 }
 
@@ -701,6 +702,11 @@ function dist_km(a: string, b: string) {
     return int(dist)
 }
 
+// Mientras la pandemia no tenga vacuna, no se viaja al extranjero.
+function borders_closed() {
+    return L.pandemic != null && L.pandemic > 10
+}
+
 function trip_cost(dest: string) {
     let km = dist_km(here_id(), dest)
     return 150 + km * 12 / 100 + ctry(dest).gdp * 35
@@ -727,11 +733,12 @@ function pais_trip(dest: string, honey: bool) {
     let x = ctry(dest)
     let cost = trip_cost(dest)
     if honey { cost = cost * 2 }
-    if L.money < cost || L.used["pa_trip"] != null { return null }
+    if L.money < cost || L.used["pa_trip"] != null || borders_closed() { return null }
     L.used["pa_trip"] = 1
     L.money -= cost
     G.modal = null
     let first = mark_visited(dest)
+    if dest == "jp" { flag("tokyo") }
     L.happy += 6 + x.tour / 12
     gain("know", 2)
     if dist_km(here_id(), dest) > 6000 { tfx_add("jet_lag", 1) }

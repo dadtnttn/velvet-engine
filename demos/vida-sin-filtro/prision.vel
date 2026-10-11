@@ -119,6 +119,35 @@ function pitem_pr(id: string, t: string, s: string, desc: string, lock: string) 
     return {"action": "pr:" + id, "t": t, "s": s, "desc": desc, "lock": l}
 }
 
+// La enfermería del penal: diagnostica y cura lo sencillo; lo crónico, el
+// VIH y el cáncer quedan en tratamiento a cargo de la prisión (health_month).
+function prison_clinic() {
+    L.health += 1
+    let found = checkup_reveal()
+    let cure = []
+    for i in L.ill {
+        let d = ill_def(i.id)
+        if i.known && d.cure && d.type != "cronica" && d.type != "cancer" && i.id != "obesidad" && !list_contains(THERAPY_ILLS, i.id) && chance(d.tx) { list_push(cure, i.id) }
+    }
+    let names = []
+    for id in cure {
+        list_push(names, str_lower(ill_def(id).n))
+        remove_ill(id)
+    }
+    let msg = "Te tomaron la presión y te dieron dos aspirinas."
+    if found != "" {
+        msg = "La enfermera insistió en hacerte análisis: " + found
+        hito_me("Salud", "Diagnóstico en prisión: " + str_replace(str_replace(found, "te diagnosticaron ", ""), ".", ""))
+    }
+    if len(names) > 0 { msg = msg + " Te curaron " + str_join(names, ", ") + "." }
+    let ongoing = false
+    for i in L.ill {
+        if i.known && (!ill_def(i.id).cure || ill_def(i.id).type == "cancer" || list_contains(THERAPY_ILLS, i.id)) { ongoing = true }
+    }
+    if ongoing { msg = msg + " Lo que no se cura aquí, la prisión lo trata cada mes." }
+    return finish("Enfermería", msg, if_str(found != "", "b", "n"))
+}
+
 function beh_word() {
     let b = pr().beh
     if b >= 80 { return "ejemplar" }
@@ -145,6 +174,7 @@ function prison_items(cat: string) {
             list_push(items, pitem_pr("course", "Curso técnico", "Destreza · conducta", "Electricidad, plomería o cocina. Un oficio para cuando salgas.", ""))
         }
         list_push(items, pitem_pr("art", "Taller de arte o música", "Felicidad", "Pintar o tocar la guitarra ayuda a no volverse loco.", ""))
+        list_push(items, pitem_pr("clinic", "Ir a la enfermería", "Revisión gratis", "Un médico cansado, una lámpara y pocas medicinas. Te revisa, te diagnostica y te trata lo que se pueda tratar aquí adentro.", ""))
         list_push(items, pitem_pr("behave", "Portarte bien", "Conducta +", "Agacha la cabeza, cumple las reglas, no te metas en nada.", ""))
         return items
     }
@@ -294,6 +324,7 @@ function prison_action(action: string) {
         }
         return finish("Clases", "Fuiste a clases. Llevas " + str(d.study) + " de 6 meses.", "g")
     }
+    if id == "clinic" { return prison_clinic() }
     if id == "course" {
         gain("skill", 3)
         d.beh = clamp100(d.beh + 3)

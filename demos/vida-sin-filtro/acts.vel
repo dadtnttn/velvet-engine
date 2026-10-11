@@ -67,10 +67,6 @@ const ACTIVITIES = [
         {"w": 65, "log": "Una semana de sol y cocteles. Regresaste con bronceado y sin preocupaciones.", "happy": 12},
         {"w": 35, "special": "hookup", "happy": 6}
     ]},
-    {"id": "japan", "tab": "act", "cat": "Lujos", "t": "Viaje a Tokio", "s": "Felicidad, conocimiento · $15,000", "min": 18, "cost": 15000,
-     "desc": "Neón, ramen a las 3 a. m. y un tren que nunca llega tarde.", "o": [
-        {"w": 100, "log": "Recorriste Shibuya de noche y comiste ramen hasta llorar. Inolvidable.", "happy": 18, "know": 6, "charm": 3, "flag": "tokyo"}
-    ]},
     {"id": "lottery", "tab": "act", "cat": "Lujos", "t": "Comprar lotería", "s": "Soñar no cuesta... $20", "min": 18, "cost": 20, "code": true,
      "desc": "Una en dos mil. Pero alguien tiene que ganar, ¿no?"},
 

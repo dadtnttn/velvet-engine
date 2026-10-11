@@ -176,19 +176,22 @@ const PET_KINDS = [
 ]
 const PET_NAMES = ["Firulais", "Michi", "Canela", "Rocky", "Luna", "Chispa", "Toby", "Nala", "Pelusa", "Bombón", "Max", "Kira", "Coco", "Simba", "Pancho", "Mochi", "Lola", "Thor", "Nube", "Frijol"]
 
+// Paquetes de viaje: el vuelo sale de trip_cost (distancia y precios del destino)
+// y "fee" es lo que cuesta la experiencia allá. Si vives ahí, es viaje nacional.
 const TRIPS = [
-    {"id": "paris", "n": "París", "cost": 12000, "d": "La Torre Eiffel de noche, croissants y museos infinitos.", "log": "Subiste a la Torre Eiffel al atardecer y comiste croissants hasta el cansancio."},
-    {"id": "nyc", "n": "Nueva York", "cost": 10000, "d": "Rascacielos, Broadway y pizza a las 3 a. m.", "log": "Viste un musical en Broadway y te perdiste en Central Park."},
-    {"id": "rio", "n": "Río de Janeiro", "cost": 8000, "d": "Carnaval, samba y playas eternas.", "log": "Bailaste samba en el carnaval hasta que salió el sol."},
-    {"id": "roma", "n": "Roma", "cost": 11000, "d": "El Coliseo, la Fontana di Trevi y pasta de verdad.", "log": "Tiraste una moneda a la Fontana di Trevi. Volverás."},
-    {"id": "bali", "n": "Bali", "cost": 9000, "d": "Templos, arrozales y atardeceres de postal.", "log": "Meditaste en un templo frente al mar. Paz absoluta."},
-    {"id": "machu", "n": "Machu Picchu", "cost": 7000, "d": "Cuatro días de caminata hasta la ciudad perdida.", "log": "Llegaste a Machu Picchu al amanecer, entre las nubes."},
-    {"id": "safari", "n": "Safari en Kenia", "cost": 18000, "d": "Leones, elefantes y jirafas a metros de ti.", "log": "Viste una manada de elefantes cruzar al atardecer. Lloraste."},
-    {"id": "islandia", "n": "Islandia", "cost": 14000, "d": "Volcanes, glaciares y auroras boreales.", "log": "Viste la aurora boreal desde un jacuzzi natural."},
-    {"id": "vegas", "n": "Las Vegas", "cost": 5000, "d": "Casinos, shows y decisiones cuestionables.", "log": "Lo que pasa en Las Vegas se queda en Las Vegas. Y pasó de todo."},
-    {"id": "dubai", "n": "Dubái", "cost": 20000, "d": "El edificio más alto del mundo y lujo exagerado.", "log": "Subiste al edificio más alto del mundo y compraste oro en el zoco."},
-    {"id": "antartida", "n": "Antártida", "cost": 40000, "d": "El fin del mundo: hielo, pingüinos y silencio.", "log": "Caminaste entre miles de pingüinos en el lugar más silencioso de la Tierra."},
-    {"id": "mochila", "n": "Mochilear por Europa", "cost": 6000, "d": "Hostales, trenes nocturnos y amigos de veinte países.", "log": "Diez países en un mes, durmiendo en trenes y hostales. Libertad pura."}
+    {"id": "paris", "n": "París", "c": "fr", "fee": 2500, "d": "La Torre Eiffel de noche, croissants y museos infinitos.", "log": "Subiste a la Torre Eiffel al atardecer y comiste croissants hasta el cansancio."},
+    {"id": "nyc", "n": "Nueva York", "c": "us", "fee": 2500, "d": "Rascacielos, Broadway y pizza a las 3 a. m.", "log": "Viste un musical en Broadway y te perdiste en Central Park."},
+    {"id": "rio", "n": "Río de Janeiro", "c": "br", "fee": 1500, "d": "Carnaval, samba y playas eternas.", "log": "Bailaste samba en el carnaval hasta que salió el sol."},
+    {"id": "roma", "n": "Roma", "c": "it", "fee": 2500, "d": "El Coliseo, la Fontana di Trevi y pasta de verdad.", "log": "Tiraste una moneda a la Fontana di Trevi. Volverás."},
+    {"id": "bali", "n": "Bali", "c": "id", "fee": 1500, "d": "Templos, arrozales y atardeceres de postal.", "log": "Meditaste en un templo frente al mar. Paz absoluta."},
+    {"id": "machu", "n": "Machu Picchu", "c": "pe", "fee": 1200, "d": "Cuatro días de caminata hasta la ciudad perdida.", "log": "Llegaste a Machu Picchu al amanecer, entre las nubes."},
+    {"id": "safari", "n": "Safari en Kenia", "t": "Hacer un safari en Kenia", "c": "ke", "fee": 7000, "d": "Leones, elefantes y jirafas a metros de ti.", "log": "Viste una manada de elefantes cruzar al atardecer. Lloraste."},
+    {"id": "islandia", "n": "Islandia", "c": "is", "fee": 4000, "d": "Volcanes, glaciares y auroras boreales.", "log": "Viste la aurora boreal desde un jacuzzi natural."},
+    {"id": "vegas", "n": "Las Vegas", "c": "us", "fee": 1500, "d": "Casinos, shows y decisiones cuestionables.", "log": "Lo que pasa en Las Vegas se queda en Las Vegas. Y pasó de todo."},
+    {"id": "tokio", "n": "Tokio", "c": "jp", "fee": 3000, "d": "Neón, ramen a las 3 a. m. y un tren que nunca llega tarde.", "log": "Recorriste Shibuya de noche y comiste ramen hasta llorar. Inolvidable."},
+    {"id": "dubai", "n": "Dubái", "c": "ae", "fee": 6000, "d": "El edificio más alto del mundo y lujo exagerado.", "log": "Subiste al edificio más alto del mundo y compraste oro en el zoco."},
+    {"id": "antartida", "n": "Antártida", "t": "Viajar a la Antártida", "c": "ar", "fee": 30000, "d": "El fin del mundo: hielo, pingüinos y silencio.", "log": "Caminaste entre miles de pingüinos en el lugar más silencioso de la Tierra."},
+    {"id": "mochila", "n": "Mochilear por Europa", "t": "Mochilear por Europa", "c": "de", "fee": 2000, "multi": ["fr", "de", "it", "es", "nl", "cz", "at"], "d": "Hostales, trenes nocturnos y amigos de veinte países.", "log": "Diez países en un mes, durmiendo en trenes y hostales. Libertad pura."}
 ]
 
 // Para conquistar en el bar: cómo se ve cada tipo de persona y qué le gusta oír.
@@ -342,13 +345,19 @@ function ocio_items(cat: string) {
             return items
         }
         for t in TRIPS {
+            let price = trip_price(t)
             let lock = ""
-            if L.money < t.cost { lock = money_str(t.cost) }
+            if L.money < price { lock = money_str(price) }
             if t.id == "mochila" && L.age > 30 { lock = "Hasta los 30" }
-            if L.used["trip"] != null { lock = "Este mes ya" }
-            let s = money_str(t.cost)
+            if L.used["pa_trip"] != null { lock = "Este mes ya" }
+            if in_barracks() { lock = "En el ejército" }
+            if t.c != here_id() && borders_closed() { lock = "Fronteras cerradas" }
+            let s = money_str(price)
+            if t.c == here_id() { s = "Nacional · " + s }
             if L.visited != null && list_contains(L.visited, t.id) { s = s + " · ya fuiste" }
-            list_push(items, {"action": "oc:trip:" + t.id, "t": "Viajar a " + t.n, "s": s, "desc": t.d, "lock": lock})
+            let title = "Viajar a " + t.n
+            if t.t != null { title = t.t }
+            list_push(items, {"action": "oc:trip:" + t.id, "t": title, "s": s, "desc": t.d, "lock": lock})
         }
         return items
     }
@@ -843,15 +852,23 @@ function trip_def(id: string) {
     return TRIPS[0]
 }
 
+// Precio del paquete desde donde vives.
+function trip_price(t: map) {
+    if t.c == here_id() { return local_price(t.fee) }
+    return trip_cost(t.c) + t.fee
+}
+
 function open_trip(id: string) {
     let t = trip_def(id)
-    if L.used["trip"] != null { return info("Viajes", "Ya viajaste este mes.") }
-    if L.money < t.cost { return info("Viajes", "Cuesta " + money_str(t.cost) + ".") }
+    let price = trip_price(t)
+    if L.used["pa_trip"] != null { return info("Viajes", "Ya viajaste este mes.") }
+    if in_barracks() || (t.c != here_id() && borders_closed()) { return null }
+    if L.money < price { return info("Viajes", "Cuesta " + money_str(price) + ".") }
     let p = partner()
     if p != null && p.alive && both_adults(p) {
-        let extra = t.cost / 2
+        let extra = price / 2
         let lock = ""
-        if L.money < t.cost + extra { lock = money_str(t.cost + extra) }
+        if L.money < price + extra { lock = money_str(price + extra) }
         open_choice(str_upper(t.n), t.d + " ¿Con quién vas?", ["Viajar sol" + oa(L.gender), "Ir con " + p.first + " (+" + money_str(extra) + ")", "Mejor no"], ["", lock, ""], "oc_trip", {"trip": id})
         return null
     }
@@ -860,11 +877,19 @@ function open_trip(id: string) {
 
 function do_trip(id: string, together: bool) {
     let t = trip_def(id)
-    L.used["trip"] = 1
-    L.money -= t.cost
+    let price = trip_price(t)
+    // Un viaje al mes, sea por Actividades o por el mapa, y sella tu pasaporte.
+    L.used["pa_trip"] = 1
+    L.money -= price
     if L.visited == null { L.visited = [] }
     let first = !list_contains(L.visited, id)
     if first { list_push(L.visited, id) }
+    if t.multi != null {
+        for c in t.multi { mark_visited(c) }
+    } else if t.c != here_id() {
+        mark_visited(t.c)
+    }
+    if t.c == "jp" { flag("tokyo") }
     L.happy += 14
     gain("know", 3)
     let msg = t.log
@@ -882,7 +907,7 @@ function do_trip(id: string, together: bool) {
     if together {
         let p = partner()
         if p != null {
-            L.money -= t.cost / 2
+            L.money -= price / 2
             bond_gain(p, 12)
             lazos_spark(p, 8)
             add_hito(p, "Viajaron juntos a " + t.n)
@@ -890,7 +915,10 @@ function do_trip(id: string, together: bool) {
         }
     } else if L.age >= 18 && (id == "rio" || id == "vegas" || id == "mochila" || id == "bali") && chance(35) {
         log_add(msg, "g")
-        open_hookup({"person": stranger()})
+        // Quien conoces allá es de allá.
+        let x = stranger()
+        if t.multi != null { pais_person(x, pick(t.multi)) } else { pais_person(x, t.c) }
+        open_hookup({"person": x})
         return null
     }
     return finish("Viaje", msg, "g")
