@@ -197,7 +197,7 @@ function faith_parent_event() {
             ["Defender tu relación", "Pedirle a " + p.first + " que se convierta", "Terminar por tu familia"], ["", "", ""], "faith_partner", ctx)
         return true
     }
-    if (job_is_adult(L.job) || route_is_adult()) && L.flags["faith_job"] != true && disapproval(parent, "adult") >= 20 {
+    if (job_is_adult(L.job) || route_is_adult()) && L.flags["faith_job"] != true && L.seen["family_finds"] == null && disapproval(parent, "adult") >= 20 {
         L.flags["faith_job"] = true
         open_choice("TUS PADRES SE ENTERARON", fmt("Tu " + str_lower(rel_label(parent)) + " {x} descubrió a qué te dedicas. Tiene los ojos rojos de llorar: «¿Cómo pudiste? ¿Qué va a decir la gente de " + temple_word(religion_of(parent)) + "?»", ctx),
             ["Defender tu trabajo y tu libertad", "Mentirle: «es un malentendido»", "Prometer dejarlo"], ["", "", ""], "faith_job", ctx)

@@ -780,7 +780,7 @@ function escort_action(id: string) {
             hito_once("escort_scare", "Vida", "Un cliente peligroso")
             return finish("Escort", msg, "b")
         }
-        msg = msg + escort_after_client()
+        msg = msg + escort_after_client() + partner_work_check("escort")
         return finish("Escort", msg, "x")
     }
     if id == "evip" {
@@ -789,7 +789,7 @@ function escort_action(id: string) {
         d.clients += 1
         L.happy += 6
         career_xp(25)
-        return finish("Cliente VIP", "Un fin de semana en yate con un cliente generoso: " + money_str(pay) + ".", "x")
+        return finish("Cliente VIP", "Un fin de semana en yate con un cliente generoso: " + money_str(pay) + "." + partner_work_check("escort"), "x")
     }
     if id == "eup" {
         if chance(35 + rank("charm") * 8 + looks_eff() / 5) {
@@ -905,6 +905,7 @@ function porno_scene_result(score: any) {
         msg = msg + " ¡Tu escena ganó el Premio Terciopelo Rojo!"
         hito_me("Trabajo", "Ganaste el Premio Terciopelo Rojo")
     }
+    msg = msg + partner_work_check("porn")
     return finish("Rodaje", msg, "x")
 }
 

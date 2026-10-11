@@ -466,8 +466,15 @@ function portrait_doc(look: map, gender: string, age: int, mood: string) {
     let line = " stroke='" + HEX_INK + "' stroke-width='3' stroke-linejoin='round'"
     let b = ""
 
+    // Cabeza de niños y bebés: se escala la cabeza (pelo, cara, lentes), no el cuerpo (r30).
+    let hsc = ""
+    if age < 13 {
+        let hs = 1.12
+        if age < 3 { hs = 1.15 }
+        hsc = " transform='translate(100 154) scale(" + str(hs) + ") translate(-100 -150)'"
+    }
     // Pelo de atrás
-    b = b + hair_back(style, hc, line)
+    b = b + "<g" + hsc + ">" + hair_back(style, hc, line) + "</g>"
 
     // Cuello, torso y ropa
     b = b + "<path d='M84 156 L84 196 L116 196 L116 156 Z' fill='" + skin + "'" + line + "/>"
@@ -477,6 +484,7 @@ function portrait_doc(look: map, gender: string, age: int, mood: string) {
     b = b + "<path d='M40 204 Q52 196 66 194' stroke='" + HEX_WHITE + "' stroke-opacity='0.3' stroke-width='4' fill='none' stroke-linecap='round'/>"
 
     // Orejas y cabeza
+    b = b + "<g" + hsc + ">"
     b = b + "<ellipse cx='51' cy='114' rx='8' ry='12' fill='" + skin + "'" + line + "/>"
     b = b + "<ellipse cx='149' cy='114' rx='8' ry='12' fill='" + skin + "'" + line + "/>"
     b = b + "<path d='" + HEADS[face] + "' fill='" + skin + "'" + line + "/>"
@@ -539,6 +547,7 @@ function portrait_doc(look: map, gender: string, age: int, mood: string) {
     if acc == "Piercing" && age >= 13 {
         b = b + "<circle cx='104' cy='136' r='3.2' fill='none' stroke='#d8d8d8' stroke-width='2'/><circle cx='128' cy='97' r='2.4' fill='#d8d8d8'/><circle cx='134' cy='99' r='2.4' fill='#d8d8d8'/>"
     }
+    b = b + "</g>"
     // La corona va encima de todo.
     if wear == "royal" {
         b = b + "<path d='M64 64 L72 28 L88 50 L100 18 L112 50 L128 28 L136 64 Z' fill='#e2b13c' stroke='" + HEX_INK + "' stroke-width='3' stroke-linejoin='round'/>"

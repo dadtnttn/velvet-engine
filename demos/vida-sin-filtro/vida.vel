@@ -1431,10 +1431,10 @@ function vida_event_rate() {
 
 const VIDA_EVENTS = [
     // Infancia
-    {"id": "vd_lost_store", "title": "Solo en el súper", "min": 5, "max": 8, "w": 6, "req": "mom",
+    {"id": "vd_lost_store", "title": "Sol{a} en el súper", "min": 5, "max": 8, "w": 6, "req": "mom",
      "text": "Volteas y tu mamá ya no está. Solo ves pasillos gigantes llenos de cereales.",
      "choices": [
-        {"t": "Ir a la caja y pedir que la llamen", "o": [{"w": 100, "log": "«Se busca a la mamá de un niño muy listo.» Llegó corriendo y te abrazó fuerte.", "happy": 3, "know": 2}]},
+        {"t": "Ir a la caja y pedir que la llamen", "o": [{"w": 100, "log": "«Se busca a la mamá de {el} niñ{a} más list{a} del súper.» Llegó corriendo y te abrazó fuerte.", "happy": 3, "know": 2}]},
         {"t": "Llorar a todo pulmón", "o": [{"w": 100, "log": "Media tienda vino a ayudarte. Tu mamá apareció muerta de vergüenza.", "happy": -2}]},
         {"t": "Aprovechar y comer dulces del estante", "o": [{"w": 60, "log": "Te encontraron con la cara llena de chocolate. Castigo, pero valió la pena.", "happy": 4, "karma": -1}, {"w": 40, "log": "Te dolió la panza toda la tarde.", "health": -2}]}
      ]},

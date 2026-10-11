@@ -1516,7 +1516,7 @@ function lazos_year() {
                 n.bond = 60
                 add_person(n)
                 n.hitos = [{"a": L.age, "t": "Nació"}]
-                log_add("¡Tu " + str_lower(rel_label(p)) + " " + p.first + " tuvo " + by_gender(g, "un niño", "una niña") + ": " + n.first + "! Eres ti" + oa(L.gender) + ".", "g")
+                log_add("¡Tu " + str_lower(rel_label(p)) + " " + p.first + " tuvo " + by_gender(g, "un niño", "una niña") + ": " + n.first + "! Eres tí" + oa(L.gender) + ".", "g")
                 if !hito_once("first_nephew", "Familia", "Te volviste " + by_gender(L.gender, "tío", "tía") + ": nació " + n.first) { hito_quiet("Familia", "Nació tu sobrin" + oa(g) + " " + n.first) }
             }
         }

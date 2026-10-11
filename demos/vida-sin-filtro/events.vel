@@ -814,7 +814,7 @@ const EVENTS = [
         ]
     },
     {
-        "id": "family_finds", "title": "La familia se enteró", "min": 18, "max": 70, "w": 6, "req": "career",
+        "id": "family_finds", "title": "La familia se enteró", "min": 18, "max": 70, "w": 6, "req": "career,famsecret",
         "text": "Tu familia descubrió a qué te dedicas. Tu tía lo compartió en el grupo de WhatsApp.",
         "choices": [
             {"t": "Explicarles con orgullo", "need": "guts", "rank": 3, "o": [
@@ -1168,6 +1168,8 @@ function meets(tag: string) {
     if tag == "partner" { return L.partner_id != 0 }
     if tag == "nopartner" { return L.partner_id == 0 }
     if tag == "married" { return L.married }
+    // Tu familia se entera de tu trabajo una sola vez (aquí o en la de tus padres creyentes).
+    if tag == "famsecret" { return L.flags["faith_job"] != true }
     if tag == "single" { return !L.married }
     if tag == "hasex" { return has_rel("ex") }
     if tag == "hot" { return looks_eff() >= 60 }
@@ -1392,7 +1394,7 @@ function open_event(ev: map, ctx: map) {
         list_push(locks, choice_lock(c))
         list_push(tags, choice_tag(c))
     }
-    open_choice(ev.title, fmt(ev.text, ctx), labels, locks, "event", ctx)
+    open_choice(fmt(ev.title, ctx), fmt(ev.text, ctx), labels, locks, "event", ctx)
     G.modal.ev = ev
     G.modal.tags = tags
 }

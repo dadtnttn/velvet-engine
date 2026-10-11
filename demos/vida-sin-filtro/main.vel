@@ -59,6 +59,7 @@ import "phone.vel"
 import "phone_ui.vel"
 import "save.vel"
 import "art.vel"
+import "consejos.vel"
 import "ui.vel"
 
 export function app_manifest() {
@@ -160,6 +161,7 @@ export function app_update(dt: float, input: map) {
         G.skip_left = null
         if n > 0 { emit("app.task", {"name": "years", "arg": n}) }
     }
+    tip_check()
     if animating() { G.dirty = true }
     return frame()
 }
@@ -349,6 +351,7 @@ function handle_input(input: map) {
         if pressed(input, "Escape") { handle_action("cfg:close") }
         return null
     }
+    if G.tip != null { return tip_keys(input) }
     if G.mode == "title" {
         // Enter sigue tu vida guardada si la hay; si no, empieza una nueva.
         if pressed(input, "Enter") {
@@ -577,6 +580,7 @@ function confirm_text(action: string) {
 }
 
 function handle_action_raw(action: string) {
+    if G.tip != null { return tip_action(action) }
     if action == "noop" {
         // Clic en algo bloqueado o fuera de la ventana.
         if G.mg == null && G.modal != null { sfx_at("error", 0.5) }

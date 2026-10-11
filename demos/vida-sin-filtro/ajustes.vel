@@ -35,6 +35,8 @@ state {
         "lgt": 3,
         "tab": 0,
         "intro": false,
+        "tips": true,
+        "tips_seen": [],
         "loaded": false
     }
 }
@@ -48,7 +50,7 @@ function cfg_boot() {
 function cfg_loaded(r: map) {
     CFG.loaded = true
     if r.ok && r.data != null {
-        for key in ["lang", "theme", "master", "sfx", "music", "acc", "lgt", "intro"] {
+        for key in ["lang", "theme", "master", "sfx", "music", "acc", "lgt", "intro", "tips", "tips_seen"] {
             if r.data[key] != null { CFG[key] = r.data[key] }
         }
     }
@@ -56,7 +58,7 @@ function cfg_loaded(r: map) {
 }
 
 function cfg_save() {
-    let data = {"lang": CFG.lang, "theme": CFG.theme, "master": CFG.master, "sfx": CFG.sfx, "music": CFG.music, "acc": CFG.acc, "lgt": CFG.lgt, "intro": CFG.intro}
+    let data = {"lang": CFG.lang, "theme": CFG.theme, "master": CFG.master, "sfx": CFG.sfx, "music": CFG.music, "acc": CFG.acc, "lgt": CFG.lgt, "intro": CFG.intro, "tips": CFG.tips, "tips_seen": CFG.tips_seen}
     storage_request("save", {"slot": CFG_SLOT, "data": data, "tag": "cfg"})
 }
 
@@ -131,6 +133,13 @@ function cfg_action(action: string) {
     } else if str_starts_with(rest, "lgt:") {
         CFG.lgt = parse_int(str_replace(rest, "lgt:", ""), 0)
         sfx("tick")
+    } else if rest == "tips" {
+        CFG.tips = CFG.tips == false
+        sfx("tick")
+    } else if rest == "tips:again" {
+        CFG.tips = true
+        CFG.tips_seen = []
+        sfx("ok")
     } else if str_starts_with(rest, "vol:") {
         // vol:<canal>:<delta>
         let parts = str_split(rest, ":")
@@ -148,9 +157,9 @@ function draw_settings() {
     arect(0, 0, W, H, rgba(0, 0, 0, 200))
     let x0 = int(70.0 - (1.0 - e) * 300.0)
     svg(x0 - 20, 18, 560, 120, tilt_title_doc("AJUSTES", 560, 120, 80, HEX_WHITE, HEX_INK))
-    let tabs = ["IDIOMA", "COLORES", "SONIDO"]
+    let tabs = ["IDIOMA", "COLORES", "SONIDO", "JUEGO"]
     let i = 0
-    while i < 3 {
+    while i < len(tabs) {
         let action = "cfg:tab:" + str(i)
         let fill = HEX_INK
         let color = C_WHITE
@@ -172,6 +181,7 @@ function draw_settings() {
     if CFG.tab == 0 { draw_cfg_langs(px + 40, 190) }
     if CFG.tab == 1 { draw_cfg_themes(px + 40, 190) }
     if CFG.tab == 2 { draw_cfg_sound(px + 40, 190) }
+    if CFG.tab == 3 { draw_cfg_game(px + 40, 190) }
     if G.mode == "game" && L.alive == true {
         small_button(810, 662, 240, 44, "GUARDAR Y SALIR", "cfg:savequit")
     }
@@ -230,4 +240,25 @@ function draw_cfg_sound(x: int, y: int) {
         small_button(x + 680, by - 8, 50, 40, "+", "cfg:vol:" + r[0] + ":10")
         i += 1
     }
+}
+
+function draw_cfg_game(x: int, y: int) {
+    tag(x, y - 26, 200, "JUEGO", HEX_RED, C_WHITE)
+    otext(x, y + 60, "CONSEJOS PARA EMPEZAR", 28, C_WHITE, "impact", false)
+    textw(x, y + 92, "Avisos cortos que señalan cada parte del juego la primera vez.", 16, C_GRAY, "ui", 700)
+    let on = CFG.tips != false
+    let lbl = "NO"
+    if on { lbl = "SÍ" }
+    let fill = HEX_INK
+    let color = C_WHITE
+    if on {
+        fill = HEX_YELLOW
+        color = C_INK
+    } else if hovered("cfg:tips") {
+        fill = HEX_RED
+    }
+    svg(x, y + 112, 150, 56, slant_doc(144, 50, 12, fill, HEX_WHITE, 2, HEX_RED, 5))
+    ctext(x + 72, y + 146, lbl, 24, color, "impact")
+    hot(x, y + 112, 144, 50, "cfg:tips")
+    small_button(x + 180, y + 116, 300, 44, "VER LOS CONSEJOS OTRA VEZ", "cfg:tips:again")
 }

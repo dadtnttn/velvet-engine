@@ -711,7 +711,8 @@ function love_action(id: string) {
     }
     if id == "snoop" {
         L.karma -= 1
-        if p.cheated_you == true || (npc_style(p) == "libre" && p.bond < 40 && chance(40) && !velo_loyal(p)) {
+        // Solo encuentras lo que de verdad pasa: un engaño, o lo que su ánimo de los últimos meses (cheat_odds) ya anunciaba.
+        if p.cheated_you == true || (p.open != true && !velo_loyal(p) && rint(1, 10000) <= cheat_odds(p) * 6) {
             p.cheated_you = true
             L.happy -= 12
             bond_gain(p, -10)

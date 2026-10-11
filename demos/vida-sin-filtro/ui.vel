@@ -206,6 +206,7 @@ function build() {
         if G.modal != null { draw_modal(G.modal) }
         draw_cutin()
         draw_skip()
+        draw_tip()
     }
     block = false
     if cfg { draw_settings() }
@@ -888,13 +889,25 @@ function draw_social(x: int, y: int, w: int, h: int) {
     }
 }
 
+// De niño, la fila de parejas e hijos se cambia por tus amistades.
+function status_love_row() {
+    if L.age < 16 && L.partners == 0 && L.kids == 0 {
+        let n = 0
+        for p in L.people {
+            if p.alive && p.rel == "amigo" { n += 1 }
+        }
+        return ["Amistades", str(n)]
+    }
+    return ["Parejas sexuales", str(L.partners) + " · Hijos " + str(L.kids)]
+}
+
 function draw_status(x: int, y: int, w: int, h: int) {
     panel(x, y, w, h, 16)
     tag(x + 26, y + 12, 130, "SITUACIÓN", HEX_RED, C_WHITE)
     let rows = [
         ["Relación", relationship_text()],
         ["Educación", education_text()],
-        ["Parejas sexuales", str(L.partners) + " · Hijos " + str(L.kids)],
+        status_love_row(),
         ["Salud", health_text()],
         ["Vicios / ley", vice_text()]
     ]

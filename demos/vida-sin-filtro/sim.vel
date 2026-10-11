@@ -643,6 +643,7 @@ function advance_month() {
         return birthday
     }
     if maybe_caught_event() { return birthday }
+    if maybe_work_found_event() { return birthday }
     if maybe_bw_event() { return birthday }
     if maybe_anniversary() { return birthday }
     // Respiro entre decisiones: el destino (tranquilo, normal o caótico) marca cada
@@ -1103,7 +1104,7 @@ function apply(o: map, ctx: map) {
         L.dying = o.die
     } else if L.health <= 0 {
         L.dying = "complicaciones de salud"
-        if map_has(o, "drugs") || map_has(o, "alcohol") { L.dying = "sus excesos" }
+        if map_has(o, "drugs") || map_has(o, "alcohol") { L.dying = "los excesos" }
     }
     return msg
 }

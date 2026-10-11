@@ -73,7 +73,7 @@ const CHILDHOOD = [
     [5, 5, "Viste una película de terror a escondidas. No dormiste en un mes."]
 ]
 
-const OLD_AGE_CAUSES = ["causas naturales", "un infarto", "un derrame cerebral", "neumonía", "un paro cardíaco mientras dormías"]
+const OLD_AGE_CAUSES = ["causas naturales", "un infarto", "un derrame cerebral", "neumonía", "un paro cardíaco durante el sueño"]
 
 // Bienes que se pueden comprar (Lujos). kind: car, moto, bike, boat, air, house
 // (se compra en Finanzas › Bienes), prop, jewel, fashion, art, wine, collect, tech.
