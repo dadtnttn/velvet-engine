@@ -132,6 +132,12 @@ function tag(x: int, y: int, w: int, lbl: string, fill: string, color: int) {
 
 // Ancho real en píxeles de un texto con la fuente indicada (si el host no
 // entregó métricas, se estima por número de letras).
+// "Encanto 4": el nombre del rasgo se traduce aparte (la frase entera no existe
+// en los catálogos), y el número se queda igual.
+function need_text(stat: string, rank: int) {
+    return tr(SOCIAL_NAMES[stat]) + " " + str(rank)
+}
+
 function measure(s: string, size: int, font: string) {
     let m = FONTS[font]
     let t = tr(s)
@@ -966,8 +972,8 @@ function draw_bottom() {
         small_key = "UN MES"
     }
     svg(912, fy, 128, 58, slant_doc(122, 52, 14, fill, HEX_INK, 3, HEX_RED, 5))
-    ctext(972, fy + 26, small_lbl, 20, color, "impact")
-    ctext(972, fy + 44, small_key, 11, color, "bold")
+    ctextw(972, fy + 26, small_lbl, 20, color, "impact", 104)
+    ctextw(972, fy + 44, small_key, 11, color, "bold", 104)
     hot(912, 640, 122, 52, small_act)
     let sy = 600
     let sfill = HEX_INK
@@ -976,7 +982,7 @@ function draw_bottom() {
         sy -= 3
     }
     svg(918, sy, 116, 34, slant_doc(110, 30, 10, sfill, HEX_WHITE, 2, HEX_RED, 4))
-    ctext(972, sy + 21, "+5 AÑOS · U", 14, C_WHITE, "impact")
+    ctextw(972, sy + 21, "+5 AÑOS · U", 14, C_WHITE, "impact", 94)
     hot(918, 600, 110, 30, "skip:5")
     if L.age < 6 {
         star_button(1034, 586, "+1 AÑO", "year", "ESPACIO")

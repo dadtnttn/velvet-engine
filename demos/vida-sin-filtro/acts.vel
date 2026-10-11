@@ -280,7 +280,7 @@ function menu_items(tab: string, cat: string) {
     for a in ACTIVITIES {
         if a.tab == tab && a.cat == cat && L.age >= a.min {
             let lock = ""
-            if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
+            if a.need != null && rank(a.need) < a.rank { lock = need_text(a.need, a.rank) }
             let lock2 = lock
             if lock2 == "" { lock2 = body_lock(a.id) }
             if lock2 == "" && a.cost > 0 && L.money < local_price(a.cost) { lock2 = money_str(local_price(a.cost)) }
