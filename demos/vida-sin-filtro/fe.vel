@@ -517,7 +517,7 @@ function fe_choice(handler: string, index: int, ctx: map) {
 function fe_open_convert(page: int) {
     let opts = []
     for x in RELIGIONS {
-        if x.id != L.religion && x.id != "ninguna" { list_push(opts, x.id) }
+        if x.id != L.religion && x.id != "ninguna" && x.id != "velo" { list_push(opts, x.id) }
     }
     let start = page * 4
     let ids = list_slice(opts, start, min(len(opts), start + 4))

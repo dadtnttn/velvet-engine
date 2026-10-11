@@ -133,10 +133,8 @@ function pl() {
 
 function pl_new_rival() {
     let g = pick(["m", "f"])
-    let names = NAMES_M
-    if g == "f" { names = NAMES_F }
     let party = pick(PARTIES)
-    return {"first": pick(names), "last": pick(SURNAMES), "g": g, "party": party.n, "str": rint(35, 55)}
+    return {"first": pais_first(g, here_id()), "last": pais_surname(here_id()), "g": g, "party": party.n, "str": rint(35, 55)}
 }
 
 function seg_avg() {
@@ -473,10 +471,8 @@ function politica_choice(handler: string, index: int, ctx: map) {
             if index >= len(MINISTER_TYPES) { return null }
             let t = MINISTER_TYPES[index]
             let g = pick(["m", "f"])
-            let names = NAMES_M
-            if g == "f" { names = NAMES_F }
             let had = d.cabinet[ctx.id] != null
-            d.cabinet[ctx.id] = {"first": pick(names), "g": g, "kind": t.n, "skill": t.skill + rint(-10, 10), "loyal": t.loyal, "corrupt": t.corrupt}
+            d.cabinet[ctx.id] = {"first": pais_first(g, here_id()), "g": g, "kind": t.n, "skill": t.skill + rint(-10, 10), "loyal": t.loyal, "corrupt": t.corrupt}
             if had { realm_apply({"elite": -3}) }
             if t.id == "partido" { realm_apply({"elite": 5}) }
             if t.id == "famoso" { realm_apply({"aprob": 4}) }

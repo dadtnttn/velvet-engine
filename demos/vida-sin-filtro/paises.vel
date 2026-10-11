@@ -189,6 +189,20 @@ function religion_exists(id: string) {
     return false
 }
 
+// La religión con más fieles en un país.
+function top_religion(cid: string) {
+    let c = ctry(cid)
+    let best = "ninguna"
+    let v = -1
+    for k in map_keys(c.rel) {
+        if c.rel[k] > v && religion_exists(k) {
+            best = k
+            v = c.rel[k]
+        }
+    }
+    return best
+}
+
 function rel_summary(cid: string) {
     let c = ctry(cid)
     let pairs = []

@@ -326,9 +326,7 @@ function boss() {
     if job == null { return null }
     if job.boss == null {
         let g = pick(["m", "f"])
-        let names = NAMES_M
-        if g == "f" { names = NAMES_F }
-        job.boss = {"first": pick(names), "gender": g, "type": BOSS_TYPES[weighted_choose(G.rng, [15, 30, 18, 15, 12, 10])].id, "mood": rint(45, 65)}
+        job.boss = {"first": pais_first(g, here_id()), "gender": g, "type": BOSS_TYPES[weighted_choose(G.rng, [15, 30, 18, 15, 12, 10])].id, "mood": rint(45, 65)}
     }
     return job.boss
 }
