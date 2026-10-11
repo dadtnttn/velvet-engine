@@ -120,9 +120,12 @@ function local_price(n: int) {
 }
 
 // Cambia en un texto el precio base por el precio local («$800» → «$1,100»).
+// Un texto con precio, en el idioma activo y con el precio de tu país: se
+// traduce el original (los catálogos conservan el monto tal cual) y luego se
+// cambia el monto.
 function local_text(s: string, n: int) {
     if n == 0 { return s }
-    return str_replace(s, money_str(n), money_str(local_price(n)))
+    return str_replace(tr(s), money_str(n), money_str(local_price(n)))
 }
 
 function money_str(v: int) {
