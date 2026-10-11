@@ -227,7 +227,7 @@ function chat_group_tones(p: map) {
     if g == "friend" { out = ["day", "share", "joke", "gossip", "dreams", "complain", "plan", "advice", "memory"] }
     if g == "ex" { out = ["day", "memory", "complain", "compliment"] }
     if adult && (g == "partner" || g == "fling" || g == "ex") { list_push(out, "flirt") }
-    if (g == "child" || g == "grandchild" || g == "cousin" || g == "sibling") && p.age >= 6 && p.age < 18 { list_push(out, "school") }
+    if (g == "child" || g == "grandchild" || g == "cousin" || g == "sibling" || g == "partner" || g == "friend") && p.age >= 6 && p.age < 18 { list_push(out, "school") }
     return out
 }
 

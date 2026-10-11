@@ -654,6 +654,7 @@ function yearly() {
     }
 
     childhood_friends()
+    sweet_year()
     // Infancia
     if L.age <= 5 {
         if chance(70) { log_add(pick(CHILDHOOD), "n") }
@@ -740,7 +741,7 @@ function yearly() {
             log_add(p.first + " te dejó. Dice que ya no siente nada.", "b")
             breakup()
             L.happy -= 15
-        } else if L.karma < 30 && chance(10) {
+        } else if L.karma < 30 && both_adults(p) && chance(10) {
             log_add("Descubriste que " + p.first + " te engaña con alguien del trabajo.", "b")
             p.bond -= 30
             L.happy -= 15
@@ -784,6 +785,8 @@ function add_child(other: string) {
     L.kids += 1
     L.happy += 10
     log_add("¡Nació tu " + by_gender(g, "hijo", "hija") + " " + child.first + "! (con " + other + ")", "g")
+    let mate = partner()
+    if mate != null && mate.first == other { add_hito(mate, "Nació " + child.first) }
 }
 
 function death_check() {
@@ -839,6 +842,7 @@ function make_partner(p: map) {
     p.rel = "pareja"
     p.bond = max(p.bond, 60)
     L.partner_id = p.id
+    if p.since == null { p.since = L.age }
     return true
 }
 
@@ -854,6 +858,8 @@ function marry_cost(cost: int) {
     L.marriages += 1
     L.money -= cost
     p.bond = clamp100(p.bond + 15)
+    add_hito(p, "Se casaron")
+    if p.childhood == true || p.teen_start != null { flag("childhood_love") }
     return null
 }
 
@@ -911,6 +917,9 @@ function apply(o: map, ctx: map) {
 
 function sex_with(person: any) {
     let out = ""
+    // Candado: nada sexual si alguno de los dos es menor de edad.
+    if L.age < 18 { return "" }
+    if person != null && person.age < 18 { return "" }
     if person != null && !person.slept {
         person.slept = true
         L.partners += 1
@@ -936,6 +945,7 @@ function sex_with(person: any) {
 
 function maybe_pregnancy(person: any, p: int) {
     if person == null || person.gender == L.gender { return "" }
+    if !both_adults(person) { return "" }
     if !chance(p) { return "" }
     if L.gender == "f" {
         if L.pregnant || L.age > 45 { return "" }

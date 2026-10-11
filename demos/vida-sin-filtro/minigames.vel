@@ -477,6 +477,7 @@ function mg_close() {
     if score >= 100 { flag("mg100") }
     if m.purpose == "practice" { return practice_result(score) }
     if m.purpose == "rel" { return rel_mg_result(score, m.ctx) }
+    if m.purpose == "sweet" { return sweet_mg_result(score, m.ctx) }
     if m.purpose == "conceive" { return conceive_result(score, m.ctx) }
     if m.purpose == "certify" { return certify_result(score) }
     if m.purpose == "gig" { return gig_shift_result(score) }

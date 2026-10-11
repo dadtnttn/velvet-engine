@@ -1,0 +1,303 @@
+// @edition 3
+// Amor de la infancia e hitos: tu amigo o amiga de la escuela puede convertirse en
+// tu primer amor, y con suerte en el de toda la vida. Mientras alguno de los dos sea
+// menor de edad todo es inocente y romántico: platicar, caminar de la mano, cartas,
+// helado, cine y el baile escolar. Nada más. Lo adulto solo existe cuando ambos
+// tienen 18 años o más.
+//
+// Hitos: cada relación guarda su historia (cómo se conocieron, cuándo se hicieron
+// novios, el baile, la graduación, la boda, los hijos, los aniversarios...).
+
+// Acciones de amor joven. grp: "kidfriend" (6-11 años), "teencrush" (amigo de tu
+// edad que te gusta, 12-17), "teenpair" (noviazgo con alguno menor de edad).
+const SWEET_ACTS = [
+    {"id": "t_lunch", "t": "Compartir tu lonche", "s": "Amistad", "grp": "kidfriend", "cat": "Juntos",
+     "desc": "La mitad de tu sándwich y tus galletas favoritas.", "o": [
+        {"w": 100, "log": "{x} te regaló su jugo a cambio. Mejores amigos para siempre.", "bond": 6, "happy": 4, "crush": 5}]},
+    {"id": "t_drawing", "t": "Hacerle un dibujo", "s": "Ternura", "grp": "kidfriend", "cat": "Juntos",
+     "desc": "Crayolas, mucha diamantina y los dos tomados de la mano bajo un sol con lentes.", "o": [
+        {"w": 100, "log": "{x} lo pegó en su refrigerador. Lo va a guardar por años.", "bond": 8, "happy": 4, "crush": 6}]},
+    {"id": "t_note", "t": "Dejarle una notita", "s": "Le gustas", "grp": "teencrush", "cat": "Romance",
+     "desc": "«¿Te puedo acompañar a la salida?» Sin firma... pero con tu letra.", "o": [
+        {"w": 70, "log": "{x} sonrió toda la clase. Creo que adivinó quién fue.", "bond": 5, "crush": 12, "happy": 5},
+        {"w": 30, "log": "Su mejor amig{xa} la leyó primero y ya lo sabe toda la escuela. Qué oso.", "bond": 2, "crush": 6, "happy": -4}]},
+    {"id": "t_walkhome", "t": "Acompañarl{xlo} a su casa", "s": "Platicar", "grp": "teencrush", "cat": "Romance",
+     "desc": "El camino largo, a propósito, para platicar más.", "o": [
+        {"w": 100, "log": "Platicaron de todo y de nada. Se tardaron una hora en caminar diez cuadras.", "bond": 7, "crush": 10, "happy": 5}]},
+    {"id": "t_ask", "t": "Pedirle que sea tu novi{xa}", "s": "¿Sí o no?", "grp": "teencrush", "cat": "Romance", "code": "ask",
+     "desc": "Con el corazón a mil. Si le gustas tanto como l{xlo} quieres tú, dirá que sí."},
+    {"id": "t_walk", "t": "Caminar de la mano", "s": "Gratis", "grp": "teenpair", "cat": "Noviazgo",
+     "desc": "Columpios, atardecer y las manos sudando de nervios.", "o": [
+        {"w": 100, "log": "Caminaron de la mano hasta que se hizo de noche. Ninguno quería soltarse.", "bond": 7, "happy": 6}]},
+    {"id": "t_icecream", "t": "Ir por un helado", "s": "$60", "grp": "teenpair", "cat": "Noviazgo", "cost": 60,
+     "desc": "Un helado, dos cucharas.", "o": [
+        {"w": 100, "log": "Compartieron un helado de fresa y se rieron de todo.", "bond": 6, "happy": 5}]},
+    {"id": "t_movie", "t": "Ir al cine de la tarde", "s": "$120", "grp": "teenpair", "cat": "Noviazgo", "cost": 120,
+     "desc": "Palomitas grandes y una película de aventuras.", "o": [
+        {"w": 100, "log": "Vieron la película tomados de la mano. Luego la platicaron por horas.", "bond": 7, "happy": 5}]},
+    {"id": "t_study", "t": "Estudiar juntos", "s": "Minijuego · calificaciones", "grp": "teenpair", "cat": "Noviazgo", "mg": "quiz", "bond": [3, 10],
+     "desc": "En la biblioteca, susurrando respuestas y pasándose notas.", "ok": "Los dos sacaron buena calificación en el examen.", "bad": "Se la pasaron platicando y no estudiaron nada. Valió la pena."},
+    {"id": "t_letter", "t": "Escribirle una carta", "s": "Minijuego de tecleo", "grp": "teenpair", "cat": "Noviazgo", "mg": "typing", "bond": [3, 12],
+     "desc": "Tres hojas por los dos lados. Sin faltas de ortografía, de preferencia.", "ok": "La guardó en una caja de recuerdos. La va a leer mil veces.", "bad": "Tenía tantos tachones que parecía mapa del tesoro. Igual le encantó."},
+    {"id": "t_dance", "t": "Ensayar el baile escolar", "s": "Minijuego de ritmo", "grp": "teenpair", "cat": "Noviazgo", "mg": "arrows", "bond": [3, 10], "me": 14,
+     "desc": "El vals de la graduación no se va a bailar solo.", "ok": "Ya se mueven como en las películas.", "bad": "Se pisaron hasta cansarse. Mucha risa, poco vals."},
+    {"id": "t_breakup", "t": "Terminar", "s": "Fin del noviazgo", "grp": "teenpair", "cat": "Noviazgo", "code": "breakup",
+     "desc": "A veces el primer amor no es el último."}
+]
+
+// Eventos del noviazgo joven (se suman al sorteo de eventos).
+const SWEET_EVENTS = [
+    {
+        "id": "sw_dance", "title": "El baile de la escuela", "min": 14, "max": 17, "w": 8, "req": "teencouple", "person": "partner",
+        "text": "Llega el baile de fin de año y {x} te pregunta, nervios{xa}, si van juntos.",
+        "choices": [
+            {"t": "Ir juntos y bailar toda la noche", "o": [{"w": 100, "log": "Bailaron todas las canciones. Fue la mejor noche del año.", "bond": 12, "happy": 10, "special": "hito:Su primer baile escolar"}]},
+            {"t": "Ir con los amigos y bailar solo la lenta", "o": [{"w": 100, "log": "Una sola canción, pero la recordarán siempre.", "bond": 6, "happy": 6, "special": "hito:Bailaron su primera canción lenta"}]},
+            {"t": "No ir: te da pena bailar", "o": [{"w": 100, "log": "{x} fue con sus amigos. Te arrepentiste toda la noche.", "bond": -8, "happy": -4}]}
+        ]
+    },
+    {
+        "id": "sw_parents", "title": "Comida con sus papás", "min": 13, "max": 17, "w": 6, "req": "teencouple", "person": "partner",
+        "text": "Los papás de {x} te invitan a comer el domingo. Su papá tiene cara de pocos amigos.",
+        "choices": [
+            {"t": "Llegar puntual, con flores para su mamá", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Su mamá te adora. Su papá... casi sonrió.", "bond": 10, "special": "hito:Conociste a su familia"}]},
+            {"t": "Ser tú mism{a}", "o": [{"w": 60, "log": "Les caíste bien. ¡Uf!", "bond": 6, "special": "hito:Conociste a su familia"}, {"w": 40, "log": "Tiraste el agua sobre el mantel. Todos se rieron (tú no).", "bond": 3}]},
+            {"t": "Inventar que estás enferm{a}", "o": [{"w": 100, "log": "{x} se dio cuenta. Le dolió.", "bond": -8}]}
+        ]
+    },
+    {
+        "id": "sw_rumor", "title": "Chismes en la escuela", "min": 12, "max": 17, "w": 5, "req": "teencouple", "person": "partner",
+        "text": "Alguien anda diciendo que {x} le gusta otra persona del salón.",
+        "choices": [
+            {"t": "Preguntarle directamente, con calma", "o": [{"w": 100, "log": "Era puro chisme. Se rieron juntos de quien lo inventó.", "bond": 6}]},
+            {"t": "Dejarle de hablar", "o": [{"w": 100, "log": "Pasaron tres días sin hablarse por nada. Al final hicieron las paces.", "bond": -6, "happy": -4}]},
+            {"t": "Confiar y no hacer caso", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Tu confianza le encantó a {x}.", "bond": 10}]}
+        ]
+    },
+    {
+        "id": "sw_moving", "title": "Se muda de ciudad", "min": 13, "max": 17, "w": 2, "req": "teencouple", "person": "partner",
+        "text": "{x} te da la noticia llorando: su familia se muda a otra ciudad al terminar el año.",
+        "choices": [
+            {"t": "Prometer seguir juntos a la distancia", "o": [{"w": 55, "log": "Videollamadas diarias, cartas y la promesa de volver. Lo lograron.", "bond": 12, "special": "hito:Sobrevivieron a la distancia"}, {"w": 45, "log": "La distancia pudo más. Terminaron con cariño.", "special": "sweet_end", "happy": -12}]},
+            {"t": "Terminar en buenos términos", "o": [{"w": 100, "log": "Lloraron juntos y prometieron no olvidarse.", "special": "sweet_end", "happy": -10}]}
+        ]
+    },
+    {
+        "id": "sw_grad", "title": "Graduación", "min": 17, "max": 18, "w": 9, "req": "teencoupleold", "person": "partner",
+        "text": "Llega la graduación. {x} y tú se toman la foto con toga y birrete, como lo soñaron desde niños.",
+        "choices": [
+            {"t": "Prometerse un futuro juntos", "o": [{"w": 100, "log": "Lanzaron los birretes al aire tomados de la mano.", "bond": 12, "happy": 10, "special": "hito:Se graduaron juntos"}]},
+            {"t": "Disfrutar el momento sin promesas", "o": [{"w": 100, "log": "Una foto perfecta. El futuro ya se verá.", "bond": 4, "happy": 8, "special": "hito:Se graduaron juntos"}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- reglas
+
+function both_adults(p: any) {
+    if p == null { return L.age >= 18 }
+    return L.age >= 18 && p.age >= 18
+}
+
+function minor_pair(p: map) {
+    return rel_group(p) == "partner" && (L.age < 18 || p.age < 18)
+}
+
+function attracted_to(p: map) {
+    return L.likes == "ambos" || L.likes == p.gender
+}
+
+// Un amigo de tu edad que te gusta (los dos entre 12 y 17).
+function teen_crush_ok(p: map) {
+    let diff = L.age - p.age
+    if diff < 0 { diff = 0 - diff }
+    return p.rel == "amigo" && L.age >= 12 && L.age < 18 && p.age >= 12 && p.age < 18 && diff <= 2 && L.partner_id == 0 && attracted_to(p)
+}
+
+function kid_friend_ok(p: map) {
+    return p.rel == "amigo" && L.age >= 6 && L.age <= 11 && p.age <= 13
+}
+
+function sweet_groups(p: map) {
+    let out = []
+    if minor_pair(p) { list_push(out, "teenpair") }
+    if teen_crush_ok(p) { list_push(out, "teencrush") }
+    if kid_friend_ok(p) { list_push(out, "kidfriend") }
+    return out
+}
+
+// Categorías extra en la pantalla de la persona.
+function sweet_cats(p: map, cats: list) {
+    let out = []
+    if minor_pair(p) { list_push(out, "Noviazgo") }
+    if teen_crush_ok(p) { list_push(out, "Romance") }
+    for c in cats { list_push(out, c) }
+    if rel_group(p) == "partner" || (p.hitos != null && len(p.hitos) > 0) { list_push(out, "Historia") }
+    return out
+}
+
+function sweet_act(id: string) {
+    for a in SWEET_ACTS {
+        if a.id == id { return a }
+    }
+    return null
+}
+
+function sweet_items(p: map, cat: string) {
+    let items = []
+    if cat == "Historia" { return hito_items(p) }
+    let groups = sweet_groups(p)
+    let ctx = {"person": p}
+    for a in SWEET_ACTS {
+        if a.cat != cat || !list_contains(groups, a.grp) { continue }
+        if a.me != null && L.age < a.me { continue }
+        let lock = ""
+        if L.used["s" + a.id + str(p.id)] != null { lock = "Este mes ya" }
+        if a.cost != null && L.money < a.cost { lock = money_str(a.cost) }
+        list_push(items, {"action": "ract:" + a.id, "t": fmt(a.t, ctx), "s": a.s, "desc": fmt(a.desc, ctx), "lock": lock, "pid": p.id})
+    }
+    return items
+}
+
+function sweet_do(id: string, p: map) {
+    let a = sweet_act(id)
+    if a == null || !list_contains(sweet_groups(p), a.grp) { return null }
+    let ctx = {"person": p}
+    let key = "s" + a.id + str(p.id)
+    if L.used[key] != null { return info(p.first, "Ya lo hicieron este mes.") }
+    if a.cost != null && L.money < a.cost { return info(p.first, "No te alcanza.") }
+    L.used[key] = 1
+    if a.code == "ask" { return ask_out(p) }
+    if a.code == "breakup" {
+        let name = p.first
+        breakup()
+        L.happy -= 8
+        return finish(name, "Terminaste con " + name + ". El primer corazón roto duele como ningún otro.", "b")
+    }
+    if a.cost != null { L.money -= a.cost }
+    if a.mg != null {
+        return mg_start(a.mg, fmt(a.t, ctx) + " con " + p.first, "sweet", {"pid": p.id, "act": a.id})
+    }
+    let o = pick_outcome(a.o)
+    if o.crush != null { p.crush = clamp100(crush_of(p) + o.crush) }
+    let msg = apply(o, ctx)
+    return finish(p.first, msg, outcome_kind(o))
+}
+
+function sweet_mg_result(score: any, ctx: map) {
+    let p = find_person(ctx.pid)
+    let a = sweet_act(ctx.act)
+    if p == null || a == null { return null }
+    let fctx = {"person": p}
+    let gb = a.bond[0] + (a.bond[1] - a.bond[0]) * score / 100
+    bond_gain(p, gb)
+    L.happy += 2 + score / 25
+    if a.id == "t_study" {
+        L.grades = clamp(L.grades + score / 25, 0, 100)
+        if p.grades != null { p.grades = clamp(p.grades + score / 25, 0, 100) }
+    }
+    let text = fmt(a.ok, fctx)
+    if score < 50 { text = fmt(a.bad, fctx) }
+    return finish(p.first, text + " (" + str(score) + " puntos)", "g")
+}
+
+function crush_of(p: map) {
+    if p.crush == null {
+        p.crush = 10
+        if p.childhood == true { p.crush = 25 }
+    }
+    return p.crush
+}
+
+// Pedirle que sea tu novio o novia: depende de cuánto le gustas.
+function ask_out(p: map) {
+    let odds = crush_of(p) + p.bond / 3 + rank("charm") * 5 + (looks_eff() - 50) / 4 - 15
+    if p.childhood == true { odds += 10 }
+    odds = clamp(odds, 5, 95)
+    if chance(odds) {
+        make_partner(p)
+        p.teen_start = L.age
+        add_hito(p, "Se hicieron novios")
+        L.happy += 15
+        flag("first_love")
+        return finish(p.first, "Con la voz temblando se lo pediste... y " + p.first + " dijo que sí, roj" + oa(p.gender) + " como tomate. Tu primer amor.", "g")
+    }
+    p.crush = clamp100(crush_of(p) - 10)
+    bond_gain(p, -4)
+    L.happy -= 8
+    return finish(p.first, p.first + " se quedó callad" + oa(p.gender) + " y luego dijo: «Te quiero, pero como amig" + oa(L.gender) + "». Auch. Quizá con el tiempo...", "b")
+}
+
+// ---------------------------------------------------------------- hitos
+
+function add_hito(p: map, text: string) {
+    if p == null { return null }
+    if p.hitos == null { p.hitos = [] }
+    for h in p.hitos {
+        if h.t == text { return null }
+    }
+    list_push(p.hitos, {"a": L.age, "t": text})
+    list_push(G.toasts, {"head": "¡HITO!", "title": str_upper(text), "sub": "Con " + p.first + " · a los " + str(L.age) + " años", "t0": G.t})
+    log_add("Hito con " + p.first + ": " + text + ".", "x")
+    return null
+}
+
+function hito_items(p: map) {
+    let items = []
+    if p.hitos == null || len(p.hitos) == 0 {
+        list_push(items, {"action": "hito:0", "t": "Su historia apenas empieza", "s": "", "desc": "Cada momento importante que vivan juntos quedará aquí.", "lock": "", "pid": p.id})
+        return items
+    }
+    let i = 0
+    while i < len(p.hitos) {
+        let h = p.hitos[i]
+        list_push(items, {"action": "hito:" + str(i), "t": h.t, "s": "A los " + str(h.a) + " años", "desc": "Tenías " + str(h.a) + " años. " + h.t + ".", "lock": "", "pid": p.id, "done": true})
+        i += 1
+    }
+    return items
+}
+
+// Hitos que llegan solos con el tiempo (una vez al año).
+function sweet_year() {
+    let p = partner()
+    if p == null || !p.alive { return null }
+    if p.since == null { p.since = L.age }
+    let years = L.age - p.since
+    if L.age == 18 && p.teen_start != null { add_hito(p, "Cumpliste 18 a su lado") }
+    if years == 1 { add_hito(p, "Su primer aniversario") }
+    if years == 5 { add_hito(p, "Cinco años juntos") }
+    if years == 10 { add_hito(p, "Diez años juntos") }
+    if years == 25 {
+        add_hito(p, "Bodas de plata: 25 años juntos")
+        L.happy += 10
+    }
+    if years == 50 {
+        add_hito(p, "Bodas de oro: 50 años juntos")
+        L.happy += 15
+        flag("golden")
+    }
+    return null
+}
+
+function sweet_special(name: string, ctx: map) {
+    let p = ctx["person"]
+    if str_starts_with(name, "hito:") {
+        if p != null { add_hito(p, str_replace(name, "hito:", "")) }
+        return ""
+    }
+    if name == "sweet_end" {
+        if p != null {
+            breakup()
+            p.rel = "amigo"
+        }
+        return ""
+    }
+    return ""
+}
+
+function sweet_meets(tag: string) {
+    let p = partner()
+    if tag == "teencouple" { return p != null && L.age < 18 && p.age < 18 }
+    if tag == "teencoupleold" { return p != null && p.teen_start != null && p.age <= 19 }
+    return false
+}

@@ -291,16 +291,16 @@ function rel_group(p: map) {
 
 function person_cats(p: map) {
     let cats = REL_CATS[rel_group(p)]
-    if cats == null { return ["Hablar"] }
+    if cats == null { cats = ["Hablar"] }
     // Sin intimidad, citas ni futuro si alguno es menor de edad.
     if L.age < 18 || p.age < 18 {
         let out = []
         for c in cats {
             if c != "Intimidad" && c != "Citas" && c != "Futuro" && c != "Reencuentro" { list_push(out, c) }
         }
-        return out
+        return sweet_cats(p, out)
     }
-    return cats
+    return sweet_cats(p, cats)
 }
 
 function rel_act(id: string) {
@@ -320,6 +320,7 @@ function rel_hidden(a: map, p: map) {
     if a.maxthem != null && p.age > a.maxthem { return true }
     if a.id == "threesome" && L.age < 18 { return true }
     if a.id == "pet" && p.pet == true { return true }
+    if a.id == "breakfast" && minor_pair(p) { return true }
     return false
 }
 
@@ -341,6 +342,7 @@ function person_items(p: map, cat: string) {
         list_push(items, {"action": "ract:" + a.id, "t": fmt(a.t, ctx), "s": a.s, "desc": fmt(a.desc, ctx), "lock": rel_lock(a, p), "pid": p.id})
     }
     for it in legacy_person_items(p, cat) { list_push(items, it) }
+    for it in sweet_items(p, cat) { list_push(items, it) }
     return items
 }
 
@@ -495,6 +497,7 @@ function fert_word(f: int) {
 function rel_do(id: string, p: map) {
     G.modal = null
     if id == "makefriend" { return make_friend() }
+    if sweet_act(id) != null { return sweet_do(id, p) }
     if id == "chat" {
         if L.used["rchat" + str(p.id)] != null { return info(p.first, "Ya platicaron este mes. Dale un respiro.") }
         L.used["rchat" + str(p.id)] = 1
@@ -902,6 +905,7 @@ function childhood_friends() {
         if a == 6 { where = "en la primaria" }
         if a == 12 { where = "en la secundaria" }
         log_add("Conociste a " + p.first + " " + where + ". Desde ese día son inseparables.", "g")
+        p.hitos = [{"a": a, "t": "Se conocieron " + where}]
     }
     return null
 }
@@ -927,6 +931,7 @@ function rel_meets(tag: string) {
     if tag == "oldgrandparent" { return find_rel_where("abuelo", 70) != null }
     if tag == "adultcousin" { return L.age >= 18 && find_rel_where("primo", 18) != null }
     if tag == "hasuncle" { return first_rel("tio") != null }
+    if sweet_meets(tag) { return true }
     if tag == "childhoodcrush" { return L.partner_id == 0 && L.age >= 18 && childhood_crush() != null }
     if tag == "hasfriend" { return first_rel("amigo") != null }
     if tag == "hassibling" { return first_rel("hermano") != null }
