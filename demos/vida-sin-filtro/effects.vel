@@ -197,14 +197,14 @@ function draw_effect_chips(x: int, y: int) {
     for pass in [true, false] {
         for e in list {
             if e.good != pass || shown >= 4 { continue }
-            let w = min(170, 30 + len(e.n) * 8)
+            let w = min(170, 30 + measure("+ " + e.n, 12, "bold"))
             let fill = "#1f6b2a"
             let edge = HEX_WHITE
             if !e.good { fill = "#7a0d12" }
             svg(x, cy, w + 4, 24, slant_doc(w, 20, 6, fill, edge, 2, HEX_INK, 3))
             let sign = "+ "
             if !e.good { sign = "- " }
-            text(x + 10, cy + 15, clip_text(sign + e.n, w - 14, 12), 12, C_WHITE, "bold")
+            textw(x + 10, cy + 15, sign + e.n, 12, C_WHITE, "bold", w - 14)
             cy += 24
             shown += 1
         }

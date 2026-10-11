@@ -233,11 +233,7 @@ const LEGACY_EVENTS = [
 // ---------------------------------------------------------------- hijos
 
 function kids_alive() {
-    let out = []
-    for p in L.people {
-        if p.alive && p.rel == "hijo" { list_push(out, p) }
-    }
-    return out
+    return list_filter(L.people, fn(p) => p.alive && p.rel == "hijo")
 }
 
 function kid_init(p: map) {
@@ -922,14 +918,14 @@ function draw_legacy() {
     if lg.heir != 0 {
         let p = find_person(lg.heir)
         svg(900, 200, 150, 180, portrait_doc(p.look, p.gender, p.age, person_mood(p)))
-        text(1060, 236, clip_text(str_upper(p.first), 180, 24), 24, C_WHITE, "impact")
+        textw(1060, 236, str_upper(p.first), 24, C_WHITE, "impact", 180)
         text(1060, 260, str(p.age) + " años · cercanía " + str(p.bond) + "%", 13, C_GRAY, "bold")
         text(1060, 300, "HEREDA", 12, C_GRAY, "bold")
         text(1060, 326, money_str(lg.share), 22, C_YELLOW, "impact")
         let note = "Te quería: recibe casi todo."
         if merit(p) < 40 { note = "Se llevaban mal: recibe poco." } else if merit(p) < 70 { note = "Recibe una buena parte." }
         let ty = 404
-        for line in wrap(note, chars_for(320, 15)) {
+        for line in wrap_px(note, 320, 15) {
             text(900, ty, line, 15, C_WHITE, "bold")
             ty += 22
         }
@@ -938,7 +934,7 @@ function draw_legacy() {
     }
     if G.roul == null {
         let ty = 220
-        for line in wrap("No dejaste testamento. La ruleta decidirá quién hereda y con quién continúas. Cuanto mejor te trató cada hijo, más espacio tiene en la rueda.", chars_for(330, 15)) {
+        for line in wrap_px("No dejaste testamento. La ruleta decidirá quién hereda y con quién continúas. Cuanto mejor te trató cada hijo, más espacio tiene en la rueda.", 330, 15) {
             text(900, ty, line, 15, C_WHITE, "bold")
             ty += 22
         }
@@ -946,7 +942,7 @@ function draw_legacy() {
         for id in lg.heirs {
             let p = find_person(id)
             if ty < 440 {
-                text(900, ty, clip_text(p.first, 160, 16), 16, C_WHITE, "impact")
+                textw(900, ty, p.first, 16, C_WHITE, "impact", 160)
                 text(1070, ty, "Méritos " + str(merit(p)), 14, C_YELLOW, "bold")
             }
             ty += 24

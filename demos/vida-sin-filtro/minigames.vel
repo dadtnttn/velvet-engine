@@ -323,7 +323,7 @@ function draw_mg_news(x: int, y: int, w: int) {
     let sel = 0
     while i < len(q.tokens) {
         let t = q.tokens[i]
-        let tw = len(t.w) * 11 + 16
+        let tw = measure(t.w, 18, "bold") + 12
         if tx + tw > maxx {
             tx = x + 60
             ty += 36
@@ -511,7 +511,7 @@ function mg_action(action: string) {
     if action == "mg:lane:l" { return mg_lane(-1) }
     if str_starts_with(action, "mg:word:") {
         if G.mg.type == "news" && G.mg.phase == "play" {
-            let i = index_of(action, "mg:word:", 120)
+            let i = action_num(action, "mg:word:", 120)
             let t = G.mg.q.tokens[i]
             t.sel = !t.sel
         }
@@ -522,7 +522,7 @@ function mg_action(action: string) {
         return null
     }
     if action == "mg:lane:r" { return mg_lane(1) }
-    if str_starts_with(action, "mg:pick:") { return mg_pick(index_of(action, "mg:pick:", 10)) }
+    if str_starts_with(action, "mg:pick:") { return mg_pick(action_num(action, "mg:pick:", 10)) }
     if action == "mg:quit" {
         G.mg.points = 0
         G.mg.phase = "done"
@@ -577,11 +577,11 @@ function draw_minigame() {
     let w = 960
     let h = 500
     svg(x, y, w + 12, h + 12, slant_doc(w, h, 24, HEX_INK, HEX_WHITE, 4, HEX_RED, 12))
-    text(x + 50, y + 44, clip_text(str_upper(m.title), 520, 22), 22, C_YELLOW, "impact")
+    textw(x + 50, y + 44, str_upper(m.title), 22, C_YELLOW, "impact", 520)
 
     if m.phase == "intro" {
         let ty = y + 110
-        for line in wrap(MG_INFO[m.type].help, chars_for(820, 20)) {
+        for line in wrap_px(MG_INFO[m.type].help, 820, 20) {
             text(x + 60, ty, line, 20, C_WHITE, "bold")
             ty += 32
         }
@@ -639,7 +639,7 @@ function mg_option(x: int, y: int, w: int, i: int, label: string, selected: bool
     svg(x, y, w + 4, 52, slant_doc(w, 48, 12, fill, HEX_WHITE, 2, HEX_INK, 4))
     svg(x + 16, y + 10, 28, 28, slant_doc(28, 28, 6, HEX_YELLOW, "", 0, "", 0))
     ctext(x + 30, y + 31, str(i + 1), 17, C_INK, "impact")
-    text(x + 56, y + 32, clip_text(label, w - 70, 18), 18, color, "bold")
+    textw(x + 56, y + 32, label, 18, color, "bold", w - 70)
     hot(x, y, w, 48, action)
 }
 
@@ -745,7 +745,7 @@ function draw_mg_typing(x: int, y: int, w: int) {
 function draw_mg_quiz(x: int, y: int, w: int) {
     let q = G.mg.q
     let ty = y + 140
-    for line in wrap(q.q, chars_for(820, 26)) {
+    for line in wrap_px(q.q, 820, 26) {
         otext(x + 60, ty, line, 26, C_WHITE, "impact", false)
         ty += 36
     }

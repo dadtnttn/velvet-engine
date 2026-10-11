@@ -235,7 +235,7 @@ function draw_phone_home() {
         fade_push(ie)
         if on { svg(gx - 8, gy - 8 + dy, 86, 86, burst_doc(86, 86, 12, HEX_WHITE, "", 0, i)) }
         svg(gx, gy + dy, 72, 72, app_icon_doc(a.id, a.fill))
-        otext(gx + 33, gy + 82 + dy, clip_text(a.n, 80, 11), 11, C_WHITE, "bold", true)
+        otextw(gx + 33, gy + 82 + dy, a.n, 11, C_WHITE, "bold", true, 80)
         let nn = app_new(a.id)
         if nn > 0 {
             svg(gx + 52, gy - 8 + dy, 26, 26, badge_doc())
@@ -258,17 +258,17 @@ function draw_phone_app(id: string) {
     if hovered("ph:home") { back = HEX_YELLOW }
     svg(SCX + 6, SCY + 32, 36, 36, arrow_doc("left", back))
     hot(SCX, SCY + 24, 56, 52, "ph:home")
-    text(SCX + 50, SCY + 62, clip_text(str_upper(a.n), SCW - 70, 26), 26, fg, "impact")
+    textw(SCX + 50, SCY + 62, str_upper(a.n), 26, fg, "impact", SCW - 70)
     let y = SCY + 88
     let sub = app_sub(id)
     if sub != "" {
-        text(SCX + 14, y + 14, clip_text(sub, SCW - 28, 12), 12, C_YELLOW, "bold")
+        textw(SCX + 14, y + 14, sub, 12, C_YELLOW, "bold", SCW - 28)
         y += 22
     }
     let block = app_block(id)
     if block != "" {
         let ty = y + 50
-        for line in wrap(block, chars_for(SCW - 40, 17)) {
+        for line in wrap_px(block, SCW - 40, 17) {
             text(SCX + 20, ty, line, 17, C_WHITE, "impact")
             ty += 24
         }
@@ -308,7 +308,7 @@ function phone_tabs(cats: list, y: int) {
         let tx = SCX + 8 + (i % per) * (tw + 4)
         let ty = y + (i / per) * (th + 4)
         svg(tx, ty, tw + 3, th + 3, slant_doc(tw, th, 6, fill, HEX_WHITE, 2, HEX_INK, 3))
-        ctext(tx + tw / 2, ty + 18, clip_text(str_upper(cats[i]), tw - 8, 12), 12, color, "impact")
+        ctextw(tx + tw / 2, ty + 18, str_upper(cats[i]), 12, color, "impact", tw - 8)
         hot(tx, ty, tw, th, action)
         i += 1
     }
@@ -367,11 +367,11 @@ function phone_list(items: list, y0: int) {
                 avail = rw - 72
             }
         }
-        text(tx, iy + 20, clip_text(it.t, avail, 15), 15, color, "impact")
+        textw(tx, iy + 20, it.t, 15, color, "impact", avail)
         if locked {
-            text(tx, iy + 37, clip_text("REQUIERE: " + str_upper(it.lock), avail, 11), 11, C_RED, "impact")
+            textw(tx, iy + 37, "REQUIERE: " + str_upper(it.lock), 11, C_RED, "impact", avail)
         } else {
-            text(tx, iy + 37, clip_text(it.s, avail, 11), 11, sub_color, "bold")
+            textw(tx, iy + 37, it.s, 11, sub_color, "bold", avail)
         }
         hot(SCX + 10, iy, rw, 44, it.action)
         i += 1
@@ -400,8 +400,8 @@ function draw_flama(y0: int) {
     svg(cx + 40, y0 + 10 + oy, cw - 80, cw - 80, burst_doc(cw - 80, cw - 80, 14, "#ffd9cc", "", 0, x.id % 7))
     portrait(cx + 46, y0 + 8 + oy, cw - 92, ch - 84, x.look, x.gender, x.age, "happy", x.id, false)
     svg(cx - 6, y0 + ch - 84 + oy, cw + 12, 80, slant_doc(cw + 6, 74, 10, HEX_INK, "", 0, "", 0))
-    text(cx + 16, y0 + ch - 48 + oy, clip_text(str_upper(x.first) + ", " + str(x.age), cw - 30, 26), 26, C_WHITE, "impact")
-    text(cx + 16, y0 + ch - 26 + oy, clip_text("A " + str(x.km) + " km · " + x.bio, cw - 34, 12), 12, C_YELLOW, "bold")
+    textw(cx + 16, y0 + ch - 48 + oy, str_upper(x.first) + ", " + str(x.age), 26, C_WHITE, "impact", cw - 30)
+    textw(cx + 16, y0 + ch - 26 + oy, "A " + str(x.km) + " km · " + x.bio, 12, C_YELLOW, "bold", cw - 34)
     fade_pop()
     let by = y0 + ch + 16
     flama_btn(SCX + 40, by, 64, "no", "#262626", "PASAR")
@@ -461,13 +461,13 @@ function draw_phone_notifs() {
     if p != null {
         svg(x + 380, y + 12, 176, 176, burst_doc(176, 176, 14, HEX_RED, HEX_INK, 3, p.id % 7))
         portrait(x + 396, y + 18, 144, 172, p.look, p.gender, p.age, person_mood(p), p.id, false)
-        text(x + 46, y + 58, clip_text(str_upper(p.first), 320, 30), 30, C_INK, "impact")
-        text(x + 46, y + 82, clip_text(rel_label(p) + " · " + bond_state(p), 320, 15), 15, C_RED, "bold")
+        textw(x + 46, y + 58, str_upper(p.first), 30, C_INK, "impact", 320)
+        textw(x + 46, y + 82, rel_label(p) + " · " + bond_state(p), 15, C_RED, "bold", 320)
         rect(x + 46, y + 94, 260, 12, rgb(210, 210, 205))
         rect(x + 46, y + 94, 260 * p.bond / 100, 12, C_RED)
         let since = "Cercanía " + str(p.bond) + "%"
         if p.since != null { since = since + " · juntos desde tus " + str(p.since) + " años" }
-        text(x + 46, y + 126, clip_text(since, 320, 13), 13, C_GRAY, "bold")
+        textw(x + 46, y + 126, since, 13, C_GRAY, "bold", 320)
         small_button(x + 46, y + 138, 160, 34, "ESCRIBIRLE", "ph:chat:" + str(p.id))
         ny = y + 196
     }
@@ -481,8 +481,8 @@ function draw_phone_notifs() {
         if hovered(action) { fill = HEX_RED }
         let rx = x + 36 - k * 3
         svg(rx, ry, 504, 40, slant_doc(498, 36, 10, fill, "", 0, "", 0))
-        text(rx + 20, ry + 24, clip_text(str_upper(app_def(nt.app).n), 110, 13), 13, C_YELLOW, "impact")
-        text(rx + 136, ry + 24, clip_text(nt.t, 340, 13), 13, C_WHITE, "bold")
+        textw(rx + 20, ry + 24, str_upper(app_def(nt.app).n), 13, C_YELLOW, "impact", 110)
+        textw(rx + 136, ry + 24, nt.t, 13, C_WHITE, "bold", 340)
         if nt.new { rect(rx + 484, ry + 14, 8, 8, C_RED) }
         hot(rx, ry, 498, 36, action)
         k += 1
@@ -501,19 +501,19 @@ function draw_profile_panel(p: map, hint: string) {
     svg(x, y, w + 12, h + 12, slant_doc(w, h, 26, HEX_WHITE, HEX_INK, 4, HEX_INK, 12))
     svg(x + 300, y + 110, 280, 280, burst_doc(280, 280, 16, "#ff5a36", HEX_INK, 4, p.id % 7))
     portrait(x + 320, y + 120, 230, 276, p.look, p.gender, p.age, "happy", p.id, false)
-    text(x + 46, y + 60, clip_text(str_upper(p.first), 260, 34), 34, C_INK, "impact")
+    textw(x + 46, y + 60, str_upper(p.first), 34, C_INK, "impact", 260)
     let km = ""
     if p.km != null { km = " · a " + str(p.km) + " km" }
     text(x + 46, y + 92, str(p.age) + " años" + km, 17, C_RED, "bold")
     let ty = y + 130
     if p.bio != null {
-        for line in wrap("«" + p.bio + "»", chars_for(250, 15)) {
+        for line in wrap_px("«" + p.bio + "»", 250, 15) {
             if ty < y + 210 { text(x + 46, ty, line, 15, C_INK, "ui") }
             ty += 20
         }
     }
     text(x + 46, y + 236, "LE GUSTA", 12, C_GRAY, "bold")
-    text(x + 46, y + 258, clip_text(INTEREST_NAMES[p.interests[0]] + ", " + INTEREST_NAMES[p.interests[1]], 260, 16), 16, C_INK, "impact")
+    textw(x + 46, y + 258, INTEREST_NAMES[p.interests[0]] + ", " + INTEREST_NAMES[p.interests[1]], 16, C_INK, "impact", 260)
     let c = compat(p)
     text(x + 46, y + 296, "COMPATIBILIDAD " + str(c) + "%", 16, C_INK, "impact")
     rect(x + 46, y + 304, 230, 10, rgb(210, 210, 205))
@@ -524,7 +524,7 @@ function draw_profile_panel(p: map, hint: string) {
         rect(x + 46, y + 348, 230 * p.heat / 100, 10, rgb(255, 90, 54))
     }
     text(x + 46, y + 384, "Atractivo " + str(p.looks) + "%", 14, C_GRAY, "bold")
-    if p.tags != null && p.age >= 18 && L.age >= 18 { text(x + 46, y + 406, clip_text("Gustos: " + kinks_text(p.tags, p.gender), 270, 13), 13, C_RED, "bold") }
-    text(x + 46, y + 470, clip_text(hint, 500, 15), 15, C_RED, "impact")
+    if p.tags != null && p.age >= 18 && L.age >= 18 { textw(x + 46, y + 406, "Gustos: " + kinks_text(p.tags, p.gender), 13, C_RED, "bold", 270) }
+    textw(x + 46, y + 470, hint, 15, C_RED, "impact", 500)
     return null
 }

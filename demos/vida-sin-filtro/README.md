@@ -30,8 +30,22 @@ Controles:
 | Rueda del ratón | Desplazar la historia de tu vida |
 | Teclado (creador) | Escribir el nombre; Retroceso borra |
 
-Las fuentes se cargan del sistema (`segoeui.ttf`, `segoeuib.ttf` e `impact.ttf`,
-con Arial como respaldo), así que en Windows funciona sin instalar nada.
+Las fuentes se cargan del sistema (`segoeui.ttf`, `segoeuib.ttf` e `impact.ttf`;
+si no están, Arial, Liberation Sans o DejaVu Sans), así que funciona sin
+instalar nada en Windows, macOS y Linux.
+
+### Guardado
+
+La partida se guarda sola en cada cumpleaños y al salir con «Salir». Al volver
+a abrir el juego aparece **Continuar** en la portada con el nombre y la edad de
+tu personaje. Al morir se borra el guardado (no hay vuelta atrás; la herencia
+sigue en la misma partida). Los archivos viven en la carpeta de datos del
+usuario (`%APPDATA%\Velvet\Vida_Sin_Filtro\saves` en Windows) o donde indique
+`--save-dir`:
+
+```powershell
+cargo run -p velvet-cli --release -- app run demos/vida-sin-filtro --save-dir partidas
+```
 
 ## Estilo
 
@@ -480,6 +494,7 @@ binarias en el juego.
 | `phone_ui.vel` | Dibujo del móvil: aparato, pantalla de inicio, apps, tarjeta de Flama y panel lateral |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
+| `save.vel` | Autoguardado, «Continuar» y respuestas del almacenamiento del runtime |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
 | `ui.vel` | Pantallas, menús, diálogos, notificaciones y efectos |
 
@@ -499,8 +514,18 @@ cargo run -p velvet-cli --release -- vs3 lock demos/vida-sin-filtro
 cargo run -p velvet-cli --release -- app check demos/vida-sin-filtro
 ```
 
+Para ver qué funciones cuestan más instrucciones (por ejemplo, 10 años de vida):
+
+```powershell
+cargo run -p velvet-cli --release -- app profile demos/vida-sin-filtro --action quick --action year --action close --action year --frames 1
+```
+
+Los textos con ancho limitado usan `textw`/`ctextw`/`otextw` (el runtime los
+recorta con «…» usando la fuente real) y los párrafos `wrap_px`/`wrap_f`, que
+miden con las métricas de fuente que entrega el host en `app_fonts`.
+
 ## Limitaciones actuales
 
-- No hay guardado: el runtime VS3 no expone almacenamiento todavía.
+- Un solo espacio de guardado automático (sin partidas múltiples).
 - Sin sonido: el runtime VS3 aún no tiene audio.
 - El teclado no escribe acentos en el nombre (los nombres al azar sí los llevan).

@@ -256,13 +256,6 @@ function add_heat(n: int) {
     return null
 }
 
-// Probabilidad acotada entre lo y hi (siempre entera).
-function odds_in(v: int, lo: int, hi: int) {
-    if v < lo { return lo }
-    if v > hi { return hi }
-    return v
-}
-
 function street() {
     if L.street == null { L.street = 0 }
     return L.street
@@ -445,7 +438,7 @@ function ocio_code(id: string, a: map) {
     if id == "dealing" {
         let ok = 65 + street() / 4 - heat() / 3
         if L.crew == true { ok += 10 }
-        if chance(odds_in(ok, 10, 92)) {
+        if chance(clamp(ok, 10, 92)) {
             let m = rint(20, 100) * 100
             L.money += m
             add_heat(10)
@@ -1012,7 +1005,7 @@ function resolve_arrest(index: int, ctx: map) {
     }
     if index == 1 {
         L.money -= ctx.bribe
-        if chance(odds_in(60 - heat() / 3, 15, 80)) {
+        if chance(clamp(60 - heat() / 3, 15, 80)) {
             add_heat(10)
             return finish("Arresto", "El policía guardó el sobre y miró para otro lado. «No te vi.»", "n")
         }
@@ -1066,7 +1059,7 @@ function ocio_choice(handler: string, index: int, ctx: map) {
         if index >= 3 { return finish("Speed dating", "Ninguna te convenció. Te llevaste galletas gratis.", "n") }
         let x = ctx.people[index]
         let odds = 25 + compat(x) / 2 + rank("charm") * 4 + flirt_bonus()
-        if chance(odds_in(odds, 10, 90)) {
+        if chance(clamp(odds, 10, 90)) {
             let msg = x.first + " también te eligió a ti. Su primera cita de verdad fue increíble."
             msg = msg + special("new_partner", {"person": x})
             return finish("Speed dating", msg, "x")

@@ -462,7 +462,7 @@ function chat_end() {
 
 function chat_action(action: string) {
     if action == "chat:end" { return chat_end() }
-    if str_starts_with(action, "chat:") { return chat_choose(index_of(action, "chat:", 6)) }
+    if str_starts_with(action, "chat:") { return chat_choose(action_num(action, "chat:", 6)) }
     return null
 }
 
@@ -483,14 +483,14 @@ function draw_chat() {
     if m == "enojado" { pm = "angry" }
     portrait(px + 20, 250, 330, 396, p.look, p.gender, p.age, pm, p.id, false)
     svg(px + 30, 640, 300, 50, slant_doc(294, 44, 14, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
-    text(px + 56, 672, clip_text(str_upper(p.first), 240, 24), 24, C_WHITE, "impact")
+    textw(px + 56, 672, str_upper(p.first), 24, C_WHITE, "impact", 240)
 
     let x = 420
     let y = 40
     let w = 820
     let h = 640
     svg(x, y, w + 10, h + 10, slant_doc(w, h, 22, HEX_INK, HEX_WHITE, 4, HEX_RED, 10))
-    text(x + 40, y + 46, clip_text(str_upper(p.first + " · " + rel_label(p)), 420, 24), 24, C_WHITE, "impact")
+    textw(x + 40, y + 46, str_upper(p.first + " · " + rel_label(p)), 24, C_WHITE, "impact", 420)
     let mc = C_YELLOW
     if m == "triste" || m == "enojado" { mc = C_BAD }
     text(x + 40, y + 72, "Ánimo: " + mood_name(p) + " · " + temper_name(p) + " · Cercanía " + str(p.bond) + "%", 14, mc, "bold")
@@ -512,10 +512,10 @@ function draw_chat() {
     push({"op": "clip_push", "x": x + 20, "y": top, "w": w - 40, "h": bottom - top})
     while i >= 0 && by > top {
         let l = lines[i]
-        let wrapped = wrap(l.t, 52)
+        let wrapped = wrap_f(l.t, 500, 16, "ui")
         let bh = len(wrapped) * 22 + 16
         let bw = 0
-        for s in wrapped { bw = max(bw, len(s) * 9 + 30) }
+        for s in wrapped { bw = max(bw, measure(s, 16, "ui") + 34) }
         bw = min(560, bw)
         let bx = x + 40
         let fill = HEX_WHITE

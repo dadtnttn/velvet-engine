@@ -307,10 +307,15 @@ impl Vs3App {
     /// Answer a storage request through `app_storage`; its frame replaces
     /// the current one (and may itself request storage, up to 8 deep).
     fn deliver_storage(&mut self, result: velvet_script_vs3::Value) {
-        if matches!(
+        // A missing slot on load is normal (first run); other failures are
+        // worth a line on stderr even when the app handles them.
+        let failed = matches!(
             result.map_get("ok"),
             Ok(Some(velvet_script_vs3::Value::Bool(false)))
-        ) {
+        );
+        let op = result.map_get("op").ok().flatten();
+        let is_load = op.as_ref().and_then(|op| op.as_str()) == Some("load");
+        if failed && !is_load {
             if let Ok(Some(error)) = result.map_get("error") {
                 eprintln!(
                     "[velvet-vs3-app] storage: {}",

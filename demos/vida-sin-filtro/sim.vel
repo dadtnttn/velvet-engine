@@ -815,11 +815,7 @@ function yearly() {
 }
 
 function kids_living() {
-    let n = 0
-    for p in L.people {
-        if p.alive && p.rel == "hijo" && p.age < 18 { n += 1 }
-    }
-    return n
+    return list_count(L.people, fn(p) => p.alive && p.rel == "hijo" && p.age < 18)
 }
 
 function job_pay(job: map) {
@@ -870,6 +866,7 @@ function die(cause: string) {
     log_add("Moriste a los " + str(L.age) + " años por " + cause + ".", "b")
     G.modal = null
     G.mode = "dead"
+    forget_save()
     on_death()
 }
 
