@@ -98,6 +98,7 @@ function bond_state(p: map) {
         return "Inseparables"
     }
     if p.bond < 25 { return "En crisis" }
+    if (g == "partner" || g == "fling") && both_adults(p) && spark_of(p) < 25 { return "Sin chispa" }
     if neglect >= 3 { return "Distanciados" }
     if p.bond >= 60 { return "Muy bien" }
     if g == "partner" && p.since != null && L.age - p.since >= 5 && p.bond < 60 { return "En la rutina" }
@@ -118,10 +119,11 @@ function touch(p: map) {
 // Bono por hacer lo que le gusta (y castigo por lo que odia). Devuelve texto extra.
 function bond_bonus(p: map, act_id: string) {
     touch(p)
+    let out = want_bonus(p, act_id)
     let tags = ACT_TAGS[act_id]
-    if tags == null { return "" }
+    if tags == null { tags = LAZOS_TAGS[act_id] }
+    if tags == null { return out }
     profile(p)
-    let out = ""
     let interest = tags[0]
     if interest != "" {
         if list_contains(p.interests, interest) {

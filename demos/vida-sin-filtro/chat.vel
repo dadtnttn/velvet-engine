@@ -20,7 +20,7 @@ const TONE_LABELS = {
     "memory": "Recordar un buen momento", "whatswrong": "Preguntarle qué le pasa", "comfort": "Consolarl{xlo}",
     "complain": "Desahogarte", "plan": "Proponer un plan", "love": "Decirle que l{xlo} quieres",
     "school": "Preguntarle por la escuela", "advice": "Pedirle un consejo", "gossip": "Chismear",
-    "past": "Pedirle historias de su juventud"
+    "past": "Pedirle historias de su juventud", "secret": "Contarse secretos"
 }
 const MY_LINES = {
     "day": ["¿Cómo te fue hoy?", "¿Qué tal tu día?", "Cuéntame, ¿qué hiciste hoy?"],
@@ -38,23 +38,24 @@ const MY_LINES = {
     "school": ["¿Cómo vas en la escuela?", "¿Qué aprendiste hoy?", "¿Ya hiciste la tarea?"],
     "advice": ["Necesito un consejo...", "¿Tú qué harías en mi lugar?"],
     "gossip": ["¿Ya supiste el chisme?", "No vas a creer lo que me contaron."],
-    "past": ["Cuéntame de cuando eras joven.", "¿Cómo era todo antes?"]
+    "past": ["Cuéntame de cuando eras joven.", "¿Cómo era todo antes?"],
+    "secret": ["¿Me cuentas algo que nunca le hayas dicho a nadie?", "Confía en mí: ¿qué es lo que te guardas?"]
 }
 
 // Qué tan bien cae cada tono según el ánimo (lo que falta vale 0).
 const MOOD_TONE = {
     "feliz": {"day": 1, "share": 1, "compliment": 1, "joke": 1, "flirt": 1, "dreams": 1, "memory": 1, "plan": 2, "love": 1, "gossip": 1, "past": 1, "school": 1},
-    "carinoso": {"compliment": 2, "flirt": 2, "memory": 2, "love": 2, "plan": 1, "day": 1, "dreams": 1},
-    "triste": {"comfort": 2, "whatswrong": 2, "day": 1, "love": 1, "memory": 1, "joke": -1, "flirt": -2, "complain": -2, "gossip": -1, "plan": -1},
-    "enojado": {"whatswrong": 1, "comfort": 0, "joke": -2, "flirt": -2, "complain": -2, "compliment": -1, "gossip": -1, "share": -1, "school": -1},
+    "carinoso": {"compliment": 2, "flirt": 2, "memory": 2, "love": 2, "plan": 1, "day": 1, "dreams": 1, "secret": 1},
+    "triste": {"comfort": 2, "whatswrong": 2, "day": 1, "love": 1, "memory": 1, "joke": -1, "flirt": -2, "complain": -2, "gossip": -1, "plan": -1, "secret": 1},
+    "enojado": {"whatswrong": 1, "comfort": 0, "joke": -2, "flirt": -2, "complain": -2, "compliment": -1, "gossip": -1, "share": -1, "school": -1, "secret": -2},
     "estresado": {"comfort": 2, "plan": 1, "day": 1, "joke": 1, "complain": -1, "share": -1, "school": -1, "advice": -1},
     "aburrido": {"plan": 2, "joke": 1, "gossip": 2, "share": 1, "dreams": 1, "past": 1, "day": -1}
 }
 const TEMPER_TONE = {
-    "callado": {"share": -1, "gossip": -1, "comfort": 1},
+    "callado": {"share": -1, "gossip": -1, "comfort": 1, "secret": -1},
     "parlanchin": {"day": 1, "share": 1, "gossip": 1, "dreams": 1},
     "bromista": {"joke": 2, "complain": -1},
-    "sensible": {"compliment": 1, "comfort": 1, "love": 1, "complain": -1, "joke": -1},
+    "sensible": {"compliment": 1, "comfort": 1, "love": 1, "complain": -1, "joke": -1, "secret": 1},
     "orgulloso": {"whatswrong": -1, "comfort": -1, "compliment": 1, "advice": 1},
     "romantico": {"love": 1, "memory": 1, "flirt": 1}
 }
@@ -74,6 +75,7 @@ const REPLIES = {
     "school": {"good": ["¡Saqué diez en el examen!", "Bien, aprendí sobre los dinosaurios."], "neutral": ["Normal.", "Bien, supongo."], "bad": ["Mal. No quiero hablar de eso.", "Odio la escuela."]},
     "advice": {"good": ["Mira, haz lo que te haga feliz. Pero piénsalo bien.", "Yo que tú hablaría con la verdad. Siempre funciona."], "neutral": ["Mmm, no sé qué decirte.", "Haz lo que creas."], "bad": ["¿Y yo qué sé? Resuélvelo tú.", "No me metas en tus broncas."]},
     "gossip": {"good": ["¡No te creo! ¡Cuéntamelo TODO!", "Ay, ya sabía yo que algo pasaba ahí."], "neutral": ["Mm, no me interesa mucho.", "Ah, ¿sí?"], "bad": ["No me gusta hablar de los demás.", "Eso no es asunto nuestro."]},
+    "secret": {"good": ["*te lo cuenta en voz baja*"], "neutral": ["Hay cosas que prefiero guardarme.", "Quizá otro día te cuento."], "bad": ["¿Por qué tanta curiosidad?", "Eso no te importa."]},
     "past": {"good": ["Ay, en mis tiempos... te voy a contar de la vez que me escapé a un concierto.", "Antes no había celulares, ¡y éramos más felices!"], "neutral": ["Eran otros tiempos.", "No me acuerdo de mucho."], "bad": ["Eso ya pasó. No me gusta recordar.", "¿Para qué remover el pasado?"]}
 }
 const DAY_BY_MOOD = {
@@ -166,9 +168,26 @@ function maybe_ping() {
     if G.modal != null || L.jail > 0 || !chance(8) { return false }
     if L.ph != null && L.ph.dnd { return false }
     let p = partner()
-    if p == null || !p.alive { return false }
-    start_chat(p, true)
-    return true
+    if p != null && p.alive && chance(60) {
+        start_chat(p, true)
+        return true
+    }
+    // También te escriben tu familia y tus amigos cuando hace mucho que no hablan.
+    if L.age < 10 { return false }
+    for q in L.people {
+        if q.alive && q.age >= 10 && can_chat(q) && neglect_months(q) >= 3 && q.bond >= 40 && close_rel(q) && chance(30) {
+            start_chat(q, true)
+            return true
+        }
+    }
+    return false
+}
+
+// Un hito compartido para recordar en el chat ("" si no hay).
+function memory_hito(p: map) {
+    if p.hitos == null || len(p.hitos) == 0 { return "" }
+    let h = p.hitos[rint(0, len(p.hitos) - 1)]
+    return h.t
 }
 
 // ---------------------------------------------------------------- familia extendida
@@ -227,8 +246,14 @@ function chat_group_tones(p: map) {
     if g == "child" || g == "grandchild" { out = ["day", "joke", "love", "plan", "share"] }
     if g == "friend" { out = ["day", "share", "joke", "gossip", "dreams", "complain", "plan", "advice", "memory"] }
     if g == "ex" { out = ["day", "memory", "complain", "compliment"] }
+    if g == "inlaw" { out = ["day", "share", "joke", "advice", "past", "memory"] }
+    if g == "nephew" { out = ["day", "joke", "love", "plan", "share"] }
+    if g == "coworker" { out = ["day", "share", "joke", "gossip", "complain", "plan", "advice"] }
+    if g == "rival" { out = ["day", "complain", "joke", "compliment"] }
+    if g == "acq" { out = ["day", "share", "memory"] }
+    if can_secret(p) { list_push(out, "secret") }
     if adult && (g == "partner" || g == "fling" || g == "ex") { list_push(out, "flirt") }
-    if (g == "child" || g == "grandchild" || g == "cousin" || g == "sibling" || g == "partner" || g == "friend") && p.age >= 6 && p.age < 18 { list_push(out, "school") }
+    if (g == "child" || g == "grandchild" || g == "cousin" || g == "sibling" || g == "partner" || g == "friend" || g == "nephew") && p.age >= 6 && p.age < 18 { list_push(out, "school") }
     return out
 }
 
@@ -335,7 +360,10 @@ function chat_choose(i: int) {
     }
     c.turn += 1
     c.last = tone
-    chat_add("me", fmt(pick(MY_LINES[tone]), ctx), 0.0)
+    let mine = fmt(pick(MY_LINES[tone]), ctx)
+    let shared = memory_hito(p)
+    if tone == "memory" && shared != "" { mine = "¿Te acuerdas? «" + shared + "». Qué tiempos." }
+    chat_add("me", mine, 0.0)
     let m = mood(p)
     let t = temper(p)
     let r = rint(-1, 1)
@@ -345,6 +373,7 @@ function chat_choose(i: int) {
     if tt != null { r += tt }
     if p.bond >= 75 { r += 1 }
     if p.bond < 30 { r -= 1 }
+    if tone == "memory" && shared != "" { r += 1 }
     if tone == "flirt" && rel_group(p) == "ex" && p.bond < 50 { r -= 2 }
     if tone == "compliment" && looks_eff() >= 70 { r += 0 }
     let grade = "neutral"
@@ -352,6 +381,10 @@ function chat_choose(i: int) {
     if r <= -1 { grade = "bad" }
     let reply = chat_reply(p, tone, grade)
     if (tone == "dreams" || tone == "day") && grade == "good" { reply = reply + chat_reveal(p) }
+    if tone == "secret" && grade == "good" {
+        reply = secret_reveal(p)
+        add_hito(p, "Te contó un secreto")
+    }
     chat_add("npc", fmt(reply, ctx), 0.9)
     let gains = {"good": 3, "neutral": 1, "bad": -3}
     let gb = gains[grade]

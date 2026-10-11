@@ -19,7 +19,12 @@ const REL_CATS = {
     "ex": ["Hablar", "Reencuentro"],
     "grandparent": ["Convivir", "Hablar"],
     "uncle": ["Convivir", "Hablar"],
-    "cousin": ["Convivir", "Hablar"]
+    "cousin": ["Convivir", "Hablar"],
+    "inlaw": ["Convivir", "Hablar"],
+    "nephew": ["Convivir", "Hablar"],
+    "coworker": ["Trabajo", "Hablar"],
+    "rival": ["Rivalidad", "Hablar"],
+    "acq": ["Hablar"]
 }
 
 const REL_ACTS = [
@@ -286,6 +291,11 @@ function rel_group(p: map) {
     if r == "tio" { return "uncle" }
     if r == "primo" { return "cousin" }
     if r == "ex" { return "ex" }
+    if r == "suegro" { return "inlaw" }
+    if r == "sobrino" { return "nephew" }
+    if r == "colega" { return "coworker" }
+    if r == "rival" { return "rival" }
+    if r == "exsuegro" { return "acq" }
     return "friend"
 }
 
@@ -307,7 +317,7 @@ function rel_act(id: string) {
     for a in REL_ACTS {
         if a.id == id { return a }
     }
-    return null
+    return lazos_act(id)
 }
 
 // Motivo por el que una acción no se ve ("" si se puede mostrar).
@@ -321,6 +331,7 @@ function rel_hidden(a: map, p: map) {
     if a.id == "threesome" && L.age < 18 { return true }
     if a.id == "pet" && p.pet == true { return true }
     if a.id == "breakfast" && minor_pair(p) { return true }
+    if a.cond != null && !lazos_cond(a.cond, p) { return true }
     return false
 }
 
@@ -333,17 +344,36 @@ function rel_lock(a: map, p: map) {
 
 // Opciones de la pantalla de una persona para la categoría elegida.
 function person_items(p: map, cat: string) {
+    ensure_want(p)
     let items = []
     let ctx = {"person": p}
     let g = rel_group(p)
     for a in REL_ACTS {
         if rel_hidden(a, p) { continue }
         if a.cat != cat && !(a.cat == "*" && rel_star_cat(g) == cat) { continue }
-        list_push(items, {"action": "ract:" + a.id, "t": fmt(a.t, ctx), "s": a.s, "desc": fmt(a.desc, ctx), "lock": rel_lock(a, p), "pid": p.id})
+        list_push(items, act_item(a, p, ctx))
+    }
+    for a in LAZOS_ACTS {
+        if rel_hidden(a, p) { continue }
+        if a.cat != cat && !(a.cat == "*" && rel_star_cat(g) == cat) { continue }
+        list_push(items, act_item(a, p, ctx))
     }
     for it in legacy_person_items(p, cat) { list_push(items, it) }
     for it in sweet_items(p, cat) { list_push(items, it) }
     return items
+}
+
+function act_item(a: map, p: map, ctx: map) {
+    let t = lazos_title(a, p)
+    if t == "" { t = fmt(a.t, ctx) }
+    let s = lazos_sub(a, p)
+    if s == "" { s = a.s }
+    let desc = fmt(a.desc, ctx)
+    if p.want == a.id && p.want_tm == L.tm {
+        s = "★ LO QUE QUIERE · " + s
+        desc = desc + " (Es justo lo que " + p.first + " quiere este mes: cuenta doble.)"
+    }
+    return {"action": "ract:" + a.id, "t": t, "s": s, "desc": desc, "lock": rel_lock(a, p), "pid": p.id}
 }
 
 // Las acciones compartidas ("*") caen en la categoría de convivencia de cada grupo.
@@ -353,6 +383,8 @@ function rel_star_cat(g: string) {
     if g == "friend" { return "Juntos" }
     if g == "child" { return "Convivir" }
     if g == "ex" { return "Reencuentro" }
+    if g == "coworker" { return "Trabajo" }
+    if g == "rival" { return "Rivalidad" }
     return "Convivir"
 }
 
@@ -427,13 +459,17 @@ function rel_list(cat: string) {
         if !p.alive { continue }
         let g = rel_group(p)
         let ok = false
-        if cat == "Familia" { ok = g == "parent" || g == "sibling" || g == "child" || g == "grandchild" || g == "grandparent" || g == "uncle" || g == "cousin" }
+        if cat == "Familia" { ok = g == "parent" || g == "sibling" || g == "child" || g == "grandchild" || g == "grandparent" || g == "uncle" || g == "cousin" || g == "inlaw" || g == "nephew" }
         if cat == "Pareja" { ok = g == "partner" || p.rel == "amante" }
         if cat == "Amigos" { ok = g == "friend" }
-        if cat == "Otros" { ok = p.rel == "ex" || p.rel == "ligue" }
+        if cat == "Trabajo" { ok = g == "coworker" || g == "rival" }
+        if cat == "Otros" { ok = p.rel == "ex" || p.rel == "ligue" || g == "rival" || g == "acq" }
         if !ok { continue }
         let tagline = ""
         if p.childhood == true { tagline = " · desde la infancia" }
+        if p.bday_due == L.tm && p.bday_done != L.tm { tagline = tagline + " · ¡cumpleaños!" }
+        ensure_want(p)
+        if p.want != null && p.want != "" { tagline = tagline + " · ★" }
         list_push(items, {
             "action": "person:" + str(p.id),
             "t": full_name(p),
@@ -478,6 +514,7 @@ function fert_by_age(gender: string, age: int, base: int) {
 }
 
 function my_fertility() {
+    if L.sterile == true { return 0 }
     let f = fert_by_age(L.gender, L.age, L.fert)
     if has_habit("fumar") { f = f * 85 / 100 }
     if has_ill("obesidad") { f = f * 85 / 100 }
@@ -534,6 +571,7 @@ function rel_do(id: string, p: map) {
     let msg = apply(o, ctx)
     if o.sexact == true { msg = msg + sex_with(p) }
     if a.hito != null { add_hito(p, fmt(a.hito, ctx)) }
+    if a.spark != null { lazos_spark(p, a.spark) } else if a.cat == "Intimidad" { lazos_spark(p, 6) }
     msg = msg + bond_bonus(p, a.id)
     return finish(p.first, msg, outcome_kind(o))
 }
@@ -568,6 +606,11 @@ function rel_mg_result(score: any, ctx: map) {
         kind = "n"
     }
     if a.cat == "Intimidad" && score >= 50 { sex_with(p) }
+    if score >= 50 {
+        if a.kgr != null && p.grades != null { p.grades = clamp(p.grades + a.kgr, 0, 100) }
+        if a.flagz != null { flag(a.flagz) }
+        if a.spark != null { lazos_spark(p, a.spark) } else if a.cat == "Intimidad" { lazos_spark(p, 6) }
+    }
     if a.hito != null { add_hito(p, fmt(a.hito, fctx)) }
     text = text + bond_bonus(p, a.id)
     return finish(p.first, text + " (" + str(score) + " puntos)", kind)
@@ -596,7 +639,7 @@ function rel_code(a: map, p: map) {
         gain("guts", 2)
         return finish("Cerrar el ciclo", "Bloqueaste a " + p.first + " de todas partes. Se siente como respirar.", "n")
     }
-    return null
+    return lazos_code(a, p)
 }
 
 // ---------------------------------------------------------------- regalos
@@ -700,6 +743,7 @@ function resolve_sex(index: int, ctx: map) {
     }
     if has_kink("romantico") && rel_group(p) == "partner" { happy += 2 }
     bond_gain(p, rint(3, 8))
+    lazos_spark(p, 6)
     L.happy += max(0, happy)
     msg = msg + sex_with(p)
     add_hito(p, "Su primera noche juntos")
@@ -797,6 +841,7 @@ function trip(p: map) {
     let msg = "Una semana en " + place + " con " + p.first + "."
     let g = rel_group(p)
     if g == "partner" && L.age >= 18 {
+        lazos_spark(p, 10)
         msg = msg + " Paseos de día, hotel de noche. Volvieron más enamorados que nunca." + sex_with(p)
     } else {
         msg = msg + " Fotos, comida rara y anécdotas para toda la vida."
@@ -961,6 +1006,7 @@ function rel_meets(tag: string) {
     if tag == "adultcousin" { return L.age >= 18 && find_rel_where("primo", 18) != null }
     if tag == "hasuncle" { return first_rel("tio") != null }
     if sweet_meets(tag) { return true }
+    if lazos_meets(tag) { return true }
     if tag == "childhoodcrush" { return L.partner_id == 0 && L.age >= 18 && childhood_crush() != null }
     if tag == "hasfriend" { return first_rel("amigo") != null }
     if tag == "hassibling" { return first_rel("hermano") != null }
@@ -983,7 +1029,7 @@ function rel_event_person(spec: any) {
     if spec == "oldgrandparent" { return find_rel_where("abuelo", 70) }
     if spec == "adultcousin" { return find_rel_where("primo", 18) }
     if spec == "uncle" { return first_rel("tio") }
-    return null
+    return lazos_person(spec)
 }
 
 // ---------------------------------------------------------------- tríos y más
