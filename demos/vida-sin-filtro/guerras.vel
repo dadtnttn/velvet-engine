@@ -311,7 +311,19 @@ function mil_start(kind: string, months: int) {
     if kind == "guerra" { L.mil.rank = 1 }
     if kind == "civil" { return null }
     hito_me("Vida", if_str(kind == "guerra", "Fuiste al frente", "Empezaste el servicio militar"))
+    // La vida civil se queda en pausa: el puesto te espera, el sueldo no.
+    if L.job != null { log_add("Tu trabajo te guarda el puesto, pero sin sueldo, hasta que vuelvas del ejército.", "n") }
+    if L.study != null { log_add("Tu carrera queda en pausa hasta que termines el servicio.", "n") }
+    if L.gig != null {
+        log_add("Dejaste tu chamba: en el cuartel no hay tiempo.", "n")
+        L.gig = null
+    }
     return finish("Al cuartel", if_str(kind == "guerra", "Te raparon, te dieron un uniforme y un fusil. En dos semanas estabas en el frente.", "Te raparon, te dieron botas y un sargento que grita. Bienvenid" + oa(L.gender) + " al ejército."), "n")
+}
+
+// En el cuartel o en el frente (el servicio civil no te encierra).
+function in_barracks() {
+    return L.mil != null && L.mil.kind != "civil"
 }
 
 function mil_enlist() {

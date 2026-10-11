@@ -341,6 +341,7 @@ function rel_hidden(a: map, p: map) {
 
 function rel_lock(a: map, p: map) {
     if L.jail > 0 { return "En prisión" }
+    if a.id == "trip" && L.mil != null && L.mil.kind != "civil" { return "En el ejército" }
     if a.cost != null && L.money < local_price(a.cost) { return money_str(local_price(a.cost)) }
     if L.used["r" + a.id + str(p.id)] != null { return "Este mes ya" }
     return ""

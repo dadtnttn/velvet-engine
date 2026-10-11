@@ -317,6 +317,9 @@ function menu_block(tab: string) {
     }
     if tab == "job" && L.age < 6 { return "Tu único trabajo ahora es crecer." }
     if (tab == "gigs" || tab == "study" || tab == "jobs") && L.jail > 0 { return "Desde la cárcel no se puede." }
+    if (tab == "night" || tab == "gigs" || tab == "study" || tab == "jobs") && in_barracks() {
+        return "Estás en el ejército. Eso tendrá que esperar a que termine tu servicio."
+    }
     if tab == "fin" && fin_block() != "" { return fin_block() }
     if tab == "route" && route_block() != "" { return route_block() }
     if tab == "gigs" && L.age < 16 { return "Las chambas empiezan a los 16. Por ahora, a estudiar." }

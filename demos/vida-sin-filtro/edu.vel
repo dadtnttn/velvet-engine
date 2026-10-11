@@ -376,7 +376,8 @@ function enroll_do(id: string, payer: string) {
 // Colegiatura y avance de cada mes.
 function study_month() {
     let s = L.study
-    if s == null { return null }
+    // En el ejército la carrera se congela: ni avanza ni se cobra.
+    if s == null || in_barracks() { return null }
     let d = degree_def(s.deg)
     let fee = study_cost(s) / 12
     let charge = 0

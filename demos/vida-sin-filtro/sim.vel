@@ -674,7 +674,7 @@ function month_name() {
 
 // Lo que pasa cada mes: sueldo, chambas, escuela, colegiatura y embarazos.
 function monthly() {
-    if L.job != null && L.jail == 0 {
+    if L.job != null && L.jail == 0 && !in_barracks() {
         // Impuestos y estilo de vida se llevan la mitad del sueldo.
         // Impuestos (30%); los gastos de vida se cobran aparte en finanzas.
         let net = job_pay(L.job) * 70 / 100 / 12
