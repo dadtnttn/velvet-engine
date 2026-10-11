@@ -676,7 +676,7 @@ function maybe_health_event() {
         return true
     }
     // Pandemia: aviso al empezar.
-    if L.pandemic != null && L.pandemic == 18 && L.pan_asked != true {
+    if L.pandemic != null && L.pandemic > 0 && L.pan_asked != true && L.age >= 10 {
         L.pan_asked = true
         open_choice("¡PANDEMIA!", "Un virus nuevo se extiende por el mundo. Cierran escuelas, oficinas y fronteras. ¿Cómo vas a vivirla?",
             ["Encerrarte y esperar la vacuna", "Seguir con tu vida con precauciones", "Organizar fiestas clandestinas"], ["", "", ""], "hx_pandemic", {})

@@ -382,13 +382,19 @@ function list_remove_value(lst: list, v: any) {
 
 function market_month() {
     let mk = L.mk
-    let drift = 0
-    if mk.econ == "auge" { drift = 2 }
-    if mk.econ == "recesion" { drift = -3 }
+    // A la larga la bolsa sube (un poco más que los bonos), con baches.
+    let drift = 1
+    if mk.econ == "auge" { drift = 3 }
+    if mk.econ == "recesion" { drift = -2 }
     for s in STOCKS {
         let ch = rint(0 - s.v, s.v) + drift
+        // Los rumores del periódico son eso, rumores: a veces se cumplen solo
+        // en parte, a veces el mercado ya lo descontó y a veces sale al revés.
         let n = mk.next[s.id]
-        if n != null { ch += n }
+        if n != null {
+            let roll = rint(1, 100)
+            if roll <= 60 { ch += n * rint(30, 80) / 100 } else if roll <= 80 { ch -= n / 2 }
+        }
         let np = max(100, mk.p[s.id] * (100 + ch) / 100)
         mk.p[s.id] = np
         let h = mk.h[s.id]
@@ -488,7 +494,7 @@ function news_result(score: any) {
     if mk.next[best] < 0 { dir = "bajará" }
     let tip = ""
     if s >= 70 {
-        tip = st.n + " (" + st.s + ") " + dir + " cerca de un " + str(mag) + "% el próximo mes."
+        tip = "Todo apunta a que " + st.n + " (" + st.s + ") " + dir + " hasta un " + str(mag) + "% el próximo mes. Pero es un rumor: el mercado a veces lo descuenta, o sale al revés."
     } else if s >= 40 {
         tip = "Algo grande pasará en " + st.s + ": probablemente " + dir + "."
     } else {
@@ -818,16 +824,36 @@ function open_loan() {
     }
     if L.credit < 520 { locks[0] = "Crédito " + str(L.credit) }
     if L.credit < 600 { locks[1] = "Crédito 600" }
-    if L.credit < 700 || job_income() < 3000 { locks[2] = "Crédito 700 e ingresos" }
-    open_choice("PRÉSTAMO PERSONAL", "Tasa mensual: " + str(loan_rate() / 100) + "." + str(loan_rate() % 100) + "%, a 24 meses. Tu historial: " + str(L.credit) + " (" + credit_word() + ").",
-        ["$10,000", "$50,000", "$200,000", "Mejor no"], locks, "loan", {})
+    if L.credit < 700 { locks[2] = "Crédito 700" }
+    // El banco revisa tus ingresos: el pago no puede pasar del 40% de lo que ganas.
+    let amounts = loan_amounts()
+    let max_pay = max(0, dn().inc) * 40 / 100
+    let labels = []
+    let i = 0
+    while i < 3 {
+        let pay = loan_payment(amounts[i])
+        if locks[i] == "" && pay > max_pay { locks[i] = "Ingresos" }
+        list_push(labels, money_str(amounts[i]) + " (" + money_str(pay) + "/mes)")
+        i += 1
+    }
+    list_push(labels, "Mejor no")
+    open_choice("PRÉSTAMO PERSONAL", "Tasa mensual: " + str(loan_rate() / 100) + "." + str(loan_rate() % 100) + "%, a 24 meses. Tu historial: " + str(L.credit) + " (" + credit_word() + "). Te prestan si el pago no pasa del 40% de tus ingresos (" + money_str(max_pay) + "/mes).",
+        labels, locks, "loan", {})
     return null
+}
+
+function loan_amounts() {
+    return [local_price(10000), local_price(50000), local_price(200000)]
+}
+
+function loan_payment(a: int) {
+    return a / 24 + a * loan_rate() / 10000
 }
 
 function resolve_loan(index: int) {
     G.modal = null
     if index == 3 { return null }
-    let amounts = [10000, 50000, 200000]
+    let amounts = loan_amounts()
     let a = amounts[index]
     L.loan = {"bal": a, "rate": loan_rate(), "base": a / 24}
     L.money += a

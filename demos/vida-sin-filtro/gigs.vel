@@ -647,7 +647,7 @@ function gig_items(place: string) {
         list_push(items, {
             "action": "gig:" + d.id,
             "t": by_gender(L.gender, d.m, d.f),
-            "s": money_str(d.pay) + "/mes",
+            "s": money_str(d.pay * pais_pay_mult() / 100) + "/mes",
             "desc": "Sin experiencia. Medio tiempo: puedes estudiar a la vez. Minijuego del turno: " + MG_INFO[d.game].title + ". Lugar: " + GIG_PLACES[d.set] + ".",
             "lock": lock
         })
@@ -666,13 +666,13 @@ function take_gig(id: string) {
     new_gig_mission()
     flag("gig")
     hito_once("first_gig", "Trabajo", "Tu primera chamba: " + str_lower(L.gig.title))
-    return finish("Nuevo trabajo", "¡Empiezas como " + str_lower(L.gig.title) + "! Sueldo: " + money_str(d.pay) + " al mes." + old, "g")
+    return finish("Nuevo trabajo", "¡Empiezas como " + str_lower(L.gig.title) + "! Sueldo: " + money_str(d.pay * pais_pay_mult() / 100) + " al mes." + old, "g")
 }
 
 function new_gig_mission() {
     let m = pick(GIG_MISSIONS)
     let goal = 3
-    if m.id == "tips" { goal = L.gig.pay / 5 }
+    if m.id == "tips" { goal = gig_pay(L.gig) / 5 }
     if m.id == "perfect" { goal = 1 }
     if m.id == "good2" { goal = 2 }
     if m.id == "games3" || m.id == "streak" { goal = 3 }
@@ -705,7 +705,7 @@ function check_gig_mission() {
         L.gig_done += 1
         hito_once("gig_mission", "Trabajo", "Tu primera minimisión cumplida")
         if L.gig_done == 10 { hito_me("Trabajo", "Diez minimisiones cumplidas: empleado del año") }
-        let bonus = g.pay / 3
+        let bonus = gig_pay(g) / 3
         L.money += bonus
         g.streak = map_get(g, "streak", 0) + 1
         if g.streak == 3 {
@@ -730,13 +730,28 @@ function gig_month() {
         L.gig = null
         return null
     }
-    L.money += g.pay
+    L.money += gig_pay(g)
     g.months += 1
     L.workxp += 1
-    if g.mission != null && !g.mission.done {
-        g.perf = clamp100(g.perf - 5)
+    let shifts = int(map_get(g, "month_shifts", 0))
+    g.month_shifts = 0
+    if G.skip != null {
+        // Mientras adelantas años, cumples con lo básico: dos turnos tranquilos.
+        let tips = gig_pay(g) * 40 / 400 * 2
+        L.money += tips
+        g.tips += tips
+    } else if shifts == 0 {
+        g.perf = clamp100(g.perf - 3)
+        g.streak = 0
+    } else if g.mission != null && !g.mission.done {
+        g.perf = clamp100(g.perf - 1)
         g.streak = 0
     }
+    if g.perf < 30 && g.perf >= 10 && map_get(g, "warned", false) != true {
+        g.warned = true
+        log_add("Tu encargado en tu chamba de " + str_lower(g.title) + " está molesto: si no das turnos, te corren.", "b")
+    }
+    if g.perf >= 40 { g.warned = false }
     if g.perf < 10 && chance(50) {
         log_add("Te corrieron de tu trabajo como " + g.title + " por mal desempeño.", "b")
         L.gig = null
@@ -744,6 +759,11 @@ function gig_month() {
     }
     new_gig_mission()
     return null
+}
+
+// Lo que paga la chamba en este país (como los sueldos de carrera).
+function gig_pay(g: map) {
+    return g.pay * pais_pay_mult() / 100
 }
 
 function gig_action_items() {
@@ -754,13 +774,13 @@ function gig_action_items() {
     let mdesc = "Sin minimisión."
     let ms = ""
     if m != null {
-        mdesc = m.d + " Progreso: " + str(gig_mission_progress()) + "/" + str(m.goal) + ". Recompensa: bono de " + money_str(g.pay / 3) + "."
+        mdesc = m.d + " Progreso: " + str(gig_mission_progress()) + "/" + str(m.goal) + ". Recompensa: bono de " + money_str(gig_pay(g) / 3) + "."
         ms = "MISIÓN: " + m.t
         if m.done { ms = "MISIÓN CUMPLIDA" }
     }
     list_push(items, {"action": "act:gigwork", "t": "Trabajar un turno (" + MG_INFO[d.game].title + ")", "s": ms, "desc": "Minijuego: tu puntaje decide las propinas. " + mdesc, "lock": ""})
     list_push(items, {"action": "act:gigeasy", "t": "Turno tranquilo", "s": "Sin minijuego", "desc": "Haces lo justo. Poca propina, poco esfuerzo. Cuenta para la minimisión de turnos.", "lock": ""})
-    list_push(items, {"action": "act:gigquit", "t": "Renunciar a " + g.title, "s": money_str(g.pay) + "/mes", "desc": "Llevas " + str(g.months) + " meses aquí. Desempeño: " + str(g.perf) + "%.", "lock": ""})
+    list_push(items, {"action": "act:gigquit", "t": "Renunciar a " + g.title, "s": money_str(gig_pay(g)) + "/mes", "desc": "Llevas " + str(g.months) + " meses aquí. Desempeño: " + str(g.perf) + "%.", "lock": ""})
     return items
 }
 
@@ -783,7 +803,7 @@ function gig_work(easy: bool) {
 function gig_shift_result(score: any) {
     let g = L.gig
     if g == null { return null }
-    let tips = g.pay * score / 400
+    let tips = gig_pay(g) * score / 400
     L.money += tips
     g.tips += tips
     g.shifts += 1
@@ -798,7 +818,9 @@ function gig_shift_result(score: any) {
         }
     }
     if score >= 90 && g.mission != null && g.mission.id == "perfect" { g.good = max(g.good, 1) }
-    g.perf = clamp100(g.perf + (score - 50) / 10)
+    // Un turno tranquilo no suma ni resta desempeño.
+    if g.easy_shift != true { g.perf = clamp100(g.perf + (score - 50) / 10) }
+    g.month_shifts = int(map_get(g, "month_shifts", 0)) + 1
     L.workxp += 1
     check_gig_mission()
     let mood = "Turno normal."
