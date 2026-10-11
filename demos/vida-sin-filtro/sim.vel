@@ -40,6 +40,7 @@ state {
         "dlg": null,
         "dlg_tree": "",
         "pending_deg": "",
+        "pending_tier": "",
         "tuition_no": "",
         "legacy": null,
         "roul": null,
@@ -557,6 +558,10 @@ function advance_month() {
         if L.alive { health_year() }
         if L.alive { medicina_year() }
         if L.alive {
+            escuela_year()
+            oficio_year()
+        }
+        if L.alive {
             kids_year()
             old_age_year()
             finance_year()
@@ -581,7 +586,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_ping() { maybe_event() }
+    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -634,6 +639,8 @@ function monthly() {
     ocio_month()
     prison_month()
     medicina_month()
+    escuela_month()
+    oficio_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8
@@ -734,6 +741,7 @@ function yearly() {
         L.edu = 2
         log_add("Te graduaste de la secundaria. Ya eres mayor de edad: la noche es tuya.", "g")
         hito_me("Estudios", "Terminaste la secundaria")
+        escuela_graduation()
         if len(L.tags) > 0 { log_add("Descubriste lo que te gusta en la cama: " + kinks_text(L.tags, L.gender) + ".", "x") }
     }
     if L.study != null { L.smarts += rint(1, 3) }
@@ -956,6 +964,12 @@ function apply(o: map, ctx: map) {
     if map_has(o, "fame") { L.fame = L.fame + o.fame }
     if map_has(o, "flag") { flag(o.flag) }
     if map_has(o, "gigperf") && L.gig != null { L.gig.perf = clamp100(L.gig.perf + o.gigperf) }
+    // Escuela, universidad y trabajo.
+    if map_has(o, "pop") { sc().pop = clamp100(sc().pop + o.pop) }
+    if map_has(o, "grades") { L.grades = clamp(L.grades + o.grades, 0, 100) }
+    if map_has(o, "gpa") && L.study != null { L.study.gpa = clamp(L.study.gpa + o.gpa, 0, 100) }
+    if map_has(o, "perf") && L.job != null { L.job.perf = clamp100(L.job.perf + o.perf) }
+    if map_has(o, "boss") && L.job != null { boss_mood(o.boss) }
     if map_has(o, "bond") {
         let target = ctx["person"]
         if target == null || !target.known { target = partner() }
@@ -974,6 +988,10 @@ function apply(o: map, ctx: map) {
     }
     if map_has(o, "preg") { msg = msg + maybe_pregnancy(ctx["person"], o.preg) }
     if map_has(o, "special") { msg = msg + special(o.special, ctx) }
+    if map_has(o, "detention") { msg = msg + detention() }
+    if map_has(o, "fire") { msg = msg + fire_job(o.fire) }
+    if map_has(o, "layoff") { msg = msg + layoff_roll(o.layoff) }
+    if map_has(o, "severance") { msg = msg + severance(o.severance) }
     if map_has(o, "jail") { msg = msg + go_to_jail(o.jail) }
     clamp_stats()
     if map_has(o, "die") {

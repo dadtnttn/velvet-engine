@@ -79,25 +79,44 @@ binarias en el juego.
   adinerada, y cada padre tiene un estilo (amoroso, estricto, relajado, ausente o
   tóxico) que afecta tu felicidad, tus calificaciones y si te pagará la carrera.
 - **Escuela y estudios** (`edu.vel`): calificaciones desde la primaria, exámenes
-  semestrales (minijuego, copiar o faltar) y 36 carreras para estudiar (20
-  universitarias y 16 técnicas) con colegiatura mensual. Pagan tus padres (si los
+  semestrales (minijuego, copiar o faltar) y 46 carreras para estudiar (28
+  universitarias y 18 técnicas) con colegiatura mensual. La universidad puede ser
+  pública (barata, examen de admisión), privada o de élite (cara, pide buen
+  promedio y da prestigio al buscar trabajo). Pagan tus padres (si los
   convences), una beca según tus calificaciones, un préstamo o tú con tu trabajo.
   Sin pagar, te dan de baja; con mal promedio, pierdes la beca o repites semestre.
 - **Títulos y amateurs**: muchas carreras piden título. Las reguladas (médico,
   abogado, policía...) solo con título; en las demás puedes entrar como amateur
   pasando una audición con minijuego: cobras el 60%, avanzas más lento, practicas
   con minijuegos y puedes certificarte en rango 3.
+- **Vida escolar** (`escuela.vel`): escuela pública, privada, internado o en
+  casa; materias con minijuego propio (matemáticas, historia, ciencias, lengua,
+  geografía), tarea, tutor, olimpiadas, feria de ciencias, elecciones de
+  delegado, mesada, castigos y boleta de fin de año (tus padres reaccionan según
+  su estilo). Popularidad y 6 grupos sociales, 14 clubes con práctica, torneos y
+  medallas, graduación prom y anuario (te nombran «el más probable de...»).
+  En la uni: residencia, fraternidad, intercambio, prácticas, tesis, cambio de
+  carrera y posgrados (maestría, doctorado con beca, MBA). 25 eventos escolares
+  y universitarios.
+- **Vida en el trabajo** (`oficio.vel`): jefe con personalidad (6 tipos) y su
+  humor, entrevista de trabajo (minijuego) al entrar a una carrera, negociar
+  sueldo, evaluación anual con amonestaciones, despidos y recortes (el sindicato
+  protege), liquidación y seguro de desempleo, trabajo remoto, vacaciones,
+  cazatalentos y contraofertas, y 27 eventos de oficina según tu campo.
 - **100 chambas de medio tiempo** (`gigs.vel`) en 14 lugares (comida, vida
   nocturna, construcción, tiendas, reparto, hogar, cuidado, oficina, hotel,
   eventos, gimnasio, fábrica, belleza y en línea +18). Sin experiencia y
   compatibles con estudiar. Cada turno es un minijuego que decide tus propinas,
-  cada mes hay una minimisión con bono, y hay 24 eventos de trabajo: clientes
+  cada mes hay una minimisión con bono, rachas («empleado del mes»), turnos
+  completos o nocturnos, ascenso a encargado y gerente, y hay 38 eventos de trabajo: clientes
   imposibles, asaltos, huelgas, ascensos... y a partir de los 18, propuestas
   picantes que siempre puedes aceptar, rechazar o denunciar (nunca en trabajos
   de cuidado).
-- **7 minijuegos** (`minigames.vel`): bartender (prepara tragos), memoria de
-  pedidos, cambio exacto, precisión, ritmo con flechas, tecleo rápido y examen
-  de preguntas.
+- **15 minijuegos** (`minigames.vel`): bartender (prepara tragos), memoria de
+  pedidos, cambio exacto, precisión, ritmo con flechas, tecleo rápido, examen
+  de preguntas (por materia), el periódico, la gran carrera, ortografía, cálculo
+  mental, secuencia de colores, entrevista, clasificar y reflejos. Se guarda tu
+  mejor puntaje de cada uno.
 - **Conversaciones con decisiones** (`dialogue.vel`): diálogos ramificados con
   tus padres, tu pareja, amigos, hermanos y ex. Cada persona tiene un estilo
   (dulce, celoso, espíritu libre, intenso...) que cambia lo que dice y lo fácil
@@ -378,7 +397,7 @@ binarias en el juego.
   eres su fantasía. Y puedes regresar como estrella madura (MILF/DILF).
 - **Vida completa**: aumentos, despidos, prisión con opción de fuga,
   matrimonio, divorcio, hijos y muerte.
-- **159 carreras** (`jobs.vel`): 135 contratables en 15 campos (Servicio,
+- **166 carreras** (`jobs.vel`): 142 contratables en 15 campos (Servicio,
   Oficio, Oficina, Tecnología, Arte, Espectáculo, Salud, Ley, Ciencia, Negocios,
   Deporte, Educación, Moda, +18 y Calle) y 24 que solo se consiguen fusionando.
   Todas tienen 5 rangos, acciones propias de su campo y requisitos.
@@ -452,8 +471,9 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 55 objetivos con recompensa (graduarte, casarte, primer millón,
-  ganar un premio, llevar un confidente a rango 10, vivir 100 años...).
+- **Misiones**: 88 objetivos con recompensa en 5 categorías (estudios, trabajo,
+  amor, dinero y vida): graduarte, medallas, ser popular, dominar los
+  minijuegos, sobrevivir a un despido, casarte, primer millón, vivir 100 años...
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
   "!", corazón, gota de sudor, enojo o dinero). 3 tipos de cara, 3 de cuerpo,
   12 peinados, marcas (pecas, lunar, cicatriz) y labial.
@@ -469,11 +489,13 @@ binarias en el juego.
 | `sim.vel` | Estado de la vida, personalidad, rasgos sociales, paso de los meses, muerte |
 | `events.vel` | Eventos anuales (datos) y su motor |
 | `acts.vel` | Menús: ocupación, vínculos, actividades, noche, citas, casino, compras |
-| `jobs.vel` | Catálogo de 159 carreras, especializaciones, segunda carrera y fusiones |
+| `jobs.vel` | Catálogo de 166 carreras, especializaciones, segunda carrera y fusiones |
 | `career.vel` | Acciones de las carreras +18, gustos en la cama y misiones |
 | `edu.vel` | Familia, escuela, exámenes, universidades y técnicas, títulos y audiciones |
 | `gigs.vel` | 100 chambas de medio tiempo, sus eventos y minimisiones |
-| `minigames.vel` | Los 7 minijuegos y su dibujo |
+| `escuela.vel` | Vida escolar, clubes, boleta, tipos de universidad, posgrados y eventos escolares |
+| `oficio.vel` | Jefes, entrevistas, evaluaciones, despidos, desempleo y eventos de oficina |
+| `minigames.vel` | Los 15 minijuegos y su dibujo |
 | `dialogue.vel` | Árboles de diálogo con padres, pareja, hijos, amigos y ex |
 | `health.vel` | Enfermedades, contagio, mundo de los demás personajes, médico y hábitos |
 | `family.vel` | Hijos, peticiones, herencia, ruleta, nueva generación, vejez y eventos de legado |

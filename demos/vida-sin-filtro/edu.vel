@@ -26,6 +26,14 @@ const DEGREES = [
     {"id": "moda", "n": "Diseño de Moda", "type": "uni", "years": 4, "cost": 35000, "min": 45},
     {"id": "criminologia", "n": "Criminología", "type": "uni", "years": 4, "cost": 22000, "min": 50},
     {"id": "economia", "n": "Economía y Finanzas", "type": "uni", "years": 4, "cost": 38000, "min": 65},
+    {"id": "arquitectura", "n": "Arquitectura", "type": "uni", "years": 5, "cost": 45000, "min": 70},
+    {"id": "periodismo", "n": "Periodismo", "type": "uni", "years": 4, "cost": 24000, "min": 55},
+    {"id": "rel_internacionales", "n": "Relaciones Internacionales", "type": "uni", "years": 4, "cost": 36000, "min": 70},
+    {"id": "cine", "n": "Cine y Dirección", "type": "uni", "years": 4, "cost": 42000, "min": 50},
+    {"id": "gastronomia", "n": "Gastronomía", "type": "uni", "years": 4, "cost": 40000, "min": 45},
+    {"id": "idiomas", "n": "Lenguas Extranjeras", "type": "uni", "years": 4, "cost": 22000, "min": 55},
+    {"id": "trabajo_social", "n": "Trabajo Social", "type": "uni", "years": 4, "cost": 16000, "min": 45},
+    {"id": "matematicas", "n": "Matemáticas Aplicadas", "type": "uni", "years": 4, "cost": 26000, "min": 80},
     {"id": "t_cocina", "n": "Técnico en Cocina", "type": "tec", "years": 2, "cost": 15000, "min": 0},
     {"id": "t_mecanica", "n": "Técnico en Mecánica", "type": "tec", "years": 2, "cost": 12000, "min": 0},
     {"id": "t_electricidad", "n": "Técnico Electricista", "type": "tec", "years": 2, "cost": 12000, "min": 0},
@@ -41,18 +49,22 @@ const DEGREES = [
     {"id": "t_seguridad", "n": "Academia de Seguridad", "type": "tec", "years": 1, "cost": 6000, "min": 0},
     {"id": "t_escena", "n": "Academia de Baile y Escena", "type": "tec", "years": 2, "cost": 16000, "min": 0},
     {"id": "t_musica", "n": "Producción Musical y DJ", "type": "tec", "years": 1, "cost": 15000, "min": 0},
-    {"id": "t_tatuaje", "n": "Escuela de Tatuaje", "type": "tec", "years": 1, "cost": 12000, "min": 0}
+    {"id": "t_tatuaje", "n": "Escuela de Tatuaje", "type": "tec", "years": 1, "cost": 12000, "min": 0},
+    {"id": "t_aviacion", "n": "Escuela de Aviación", "type": "tec", "years": 2, "cost": 60000, "min": 60},
+    {"id": "t_videojuegos", "n": "Desarrollo de Videojuegos", "type": "tec", "years": 2, "cost": 28000, "min": 35}
 ]
 
 // Títulos que habilitan cada carrera (basta uno). Las que no aparecen no piden título.
 const REQUIRES = {
-    "cocinero": ["t_cocina"], "recepcion": ["t_turismo", "administracion"], "sobrecargo": ["t_turismo"], "guia": ["t_turismo"],
+    "cocinero": ["t_cocina", "gastronomia"], "arquitecto": ["arquitectura"], "periodista": ["periodismo", "comunicacion"],
+    "diplomatico": ["rel_internacionales", "derecho"], "cineasta": ["cine", "comunicacion"], "piloto": ["t_aviacion"],
+    "traductor": ["idiomas"], "trabajador_social": ["trabajo_social", "psicologia"], "recepcion": ["t_turismo", "administracion"], "sobrecargo": ["t_turismo"], "guia": ["t_turismo"],
     "mecanico": ["t_mecanica", "ingenieria"], "plomero": ["t_oficios"], "electricista": ["t_electricidad", "ingenieria"], "carpintero": ["t_oficios"],
     "tatuador": ["t_tatuaje", "artes"], "barbero": ["t_estetica"], "guardia": ["t_seguridad"],
     "oficinista": ["administracion", "contaduria"], "contador": ["contaduria"], "rrhh": ["psicologia", "administracion"], "community": ["comunicacion", "t_grafico"],
-    "programador": ["informatica", "t_bootcamp"], "gamedev": ["informatica", "t_bootcamp"], "hacker_etico": ["informatica"], "datos": ["informatica", "ciencias"],
+    "programador": ["informatica", "t_bootcamp"], "gamedev": ["informatica", "t_bootcamp", "t_videojuegos"], "hacker_etico": ["informatica"], "datos": ["informatica", "ciencias", "matematicas"],
     "ux": ["diseno", "informatica", "t_bootcamp"], "tecnico_it": ["informatica", "t_bootcamp"], "sysadmin": ["informatica"], "ia": ["informatica", "ingenieria"],
-    "ilustrador": ["artes", "diseno", "t_grafico"], "artista3d": ["artes", "diseno", "t_grafico"], "animador": ["artes", "diseno"], "fotografo": ["t_fotografia", "artes", "comunicacion"],
+    "ilustrador": ["artes", "diseno", "t_grafico"], "artista3d": ["artes", "diseno", "t_grafico", "t_videojuegos"], "animador": ["artes", "diseno"], "fotografo": ["t_fotografia", "artes", "comunicacion"],
     "escritor": ["comunicacion", "artes"], "grafico": ["diseno", "t_grafico"], "historietista": ["artes", "t_grafico"], "musico": ["musica", "t_musica"], "cantante": ["musica"], "actor_voz": ["actuacion", "comunicacion"],
     "actor": ["actuacion"], "dj": ["t_musica", "musica"], "presentador": ["comunicacion", "actuacion"], "bailarin": ["t_escena", "actuacion"],
     "enfermero": ["enfermeria"], "medico": ["medicina"], "dentista": ["odontologia"], "psicologo": ["psicologia"], "fisio": ["enfermeria", "t_fitness"],
@@ -61,21 +73,21 @@ const REQUIRES = {
     "biologo": ["ciencias"], "quimico": ["ciencias"], "astronomo": ["ciencias"], "ingeniero": ["ingenieria"], "arqueologo": ["ciencias", "artes"], "investigador": ["medicina", "ciencias"],
     "bolsa": ["administracion", "contaduria"], "agente_talentos": ["administracion", "comunicacion"], "productor": ["t_musica", "musica"],
     "entrenador": ["t_fitness"], "yoga": ["t_fitness"],
-    "maestro": ["educacion"], "profesor": ["educacion", "ciencias", "derecho", "medicina", "artes"], "tutor": ["educacion"],
+    "maestro": ["educacion"], "profesor": ["educacion", "ciencias", "derecho", "medicina", "artes", "matematicas"], "tutor": ["educacion"],
     "estilista": ["t_estetica"], "maquillador": ["t_estetica"], "disenador_moda": ["moda", "diseno"], "manicurista": ["t_estetica"],
     "analista_fin": ["economia", "administracion", "contaduria"], "trader": ["economia", "informatica"], "banquero": ["economia", "administracion"],
-    "asesor_fin": ["economia", "administracion", "contaduria"], "actuario": ["economia", "ciencias"], "auditor": ["contaduria", "economia"], "gestor_fondos": ["economia"],
+    "asesor_fin": ["economia", "administracion", "contaduria"], "actuario": ["economia", "ciencias", "matematicas"], "auditor": ["contaduria", "economia"], "gestor_fondos": ["economia"],
     "masaje_erotico": ["t_masaje"], "dominatrix": ["psicologia"], "stripper": ["t_escena"], "gogo": ["t_escena"]
 }
 
 // Carreras reguladas: sin título no hay forma de entrar.
-const REGULATED = ["actuario", "auditor", "medico", "enfermero", "dentista", "cirujano", "veterinario", "farmaceutico", "psicologo", "abogado", "juez", "policia", "maestro", "profesor", "paramedico", "contador", "investigador", "biologo", "quimico", "astronomo", "ingeniero", "nutriologo", "fisio", "ia", "hacker_etico", "sysadmin"]
+const REGULATED = ["arquitecto", "piloto", "diplomatico", "actuario", "auditor", "medico", "enfermero", "dentista", "cirujano", "veterinario", "farmaceutico", "psicologo", "abogado", "juez", "policia", "maestro", "profesor", "paramedico", "contador", "investigador", "biologo", "quimico", "astronomo", "ingeniero", "nutriologo", "fisio", "ia", "hacker_etico", "sysadmin"]
 
 // Minijuego de audición según el campo de la carrera.
 const AUDITION_GAME = {
     "Servicio": "memory", "Oficio": "timing", "Oficina": "typing", "Tecnología": "typing", "Arte": "memory",
-    "Espectáculo": "arrows", "Salud": "quiz", "Ley": "quiz", "Ciencia": "quiz", "Negocios": "math",
-    "Deporte": "timing", "Educación": "quiz", "Moda": "memory", "+18": "arrows", "Calle": "timing", "Fusión": "quiz"
+    "Espectáculo": "arrows", "Salud": "quiz", "Ley": "quiz", "Ciencia": "quiz", "Negocios": "mental",
+    "Deporte": "reflex", "Educación": "spell", "Moda": "memory", "+18": "arrows", "Calle": "timing", "Fusión": "quiz"
 }
 
 const PARENT_STYLES = ["amoroso", "estricto", "relajado", "ausente", "toxico"]
@@ -149,7 +161,7 @@ function school_month() {
     if L.school == "" || L.age >= 18 { return null }
     // Las calificaciones tienden a tu nivel natural (inteligencia y conocimiento);
     // estudiar o faltar las mueve por encima o por debajo durante un tiempo.
-    let target = 35 + L.smarts / 2 + rank("know") * 3 + fx_sum("grades")
+    let target = 35 + L.smarts / 2 + rank("know") * 3 + fx_sum("grades") + school_bonus()
     if L.grades < target { L.grades += rint(0, 1) } else if L.grades > target { L.grades -= rint(0, 1) }
     L.grades = clamp(L.grades + rint(-1, 1), 0, 100)
     if (L.month == 5 || L.month == 11) && G.modal == null && L.age >= 7 {
@@ -257,8 +269,19 @@ function study_items(kind: string) {
     return items
 }
 
-// Inscripción: elegir quién paga.
+// Inscripción: en la universidad primero eliges dónde (pública, privada, élite);
+// después quién paga.
 function open_enroll(id: string) {
+    let d = degree_def(id)
+    G.modal = null
+    if d == null { return null }
+    G.pending_deg = id
+    if d.type == "uni" { return open_tier_choice(id) }
+    G.pending_tier = ""
+    return open_enroll_pay(id)
+}
+
+function open_enroll_pay(id: string) {
     let d = degree_def(id)
     G.modal = null
     if d == null { return null }
@@ -266,9 +289,16 @@ function open_enroll(id: string) {
     let parents = parents_alive()
     let locks = ["", "", "", ""]
     if len(parents) == 0 { locks[0] = "Sin padres" } else if G.tuition_no == id { locks[0] = "Ya dijeron que no" }
-    if L.grades < 70 { locks[1] = "Calificación 70" }
-    let beca = "Beca (calificación 85: gratis; 70: mitad)"
-    open_choice("INSCRIPCIÓN", "Te aceptaron en " + d.n + " (" + str(d.years) + " años, " + money_str(d.cost) + " al año). ¿Cómo vas a pagarla?",
+    if L.grades < 70 && !has_flag("sport_star") { locks[1] = "Calificación 70" }
+    let beca = "Beca (calificación 85 o deportiva: gratis; 70: mitad)"
+    let tier = G.pending_tier
+    let cost = d.cost
+    let where = ""
+    if tier != null && tier != "" {
+        cost = d.cost * uni_tier(tier).mult / 100
+        where = " (" + str_lower(uni_tier(tier).n) + ")"
+    }
+    open_choice("INSCRIPCIÓN", "Te aceptaron en " + d.n + where + " (" + str(d.years) + " años, " + money_str(cost) + " al año). ¿Cómo vas a pagarla?",
         ["Pedirle a tu familia que pague", beca, "Préstamo estudiantil (deuda)", "Pagarla tú con tu trabajo", "Mejor no"],
         [locks[0], locks[1], "", "", ""], "enroll", {"deg": id})
     return null
@@ -283,7 +313,7 @@ function resolve_enroll(index: int, ctx: map) {
         return start_dialog("tuition", parent)
     }
     if index == 1 {
-        if L.grades >= 85 { return enroll(id, "beca") }
+        if L.grades >= 85 || (has_flag("sport_star") && L.sc != null && L.sc.sport_medals >= 2) { return enroll(id, "beca") }
         return enroll(id, "media_beca")
     }
     if index == 2 { return enroll(id, "prestamo") }
@@ -306,7 +336,13 @@ function enroll(id: string, payer: string) {
 // Inscribe y devuelve el texto del resultado.
 function enroll_do(id: string, payer: string) {
     let d = degree_def(id)
-    L.study = {"deg": id, "months": d.years * 12, "payer": payer, "gpa": clamp(L.grades, 40, 90), "unpaid": 0}
+    let tier = G.pending_tier
+    if tier == null || d.type != "uni" { tier = "" }
+    let mult = 100
+    if tier != "" { mult = uni_tier(tier).mult }
+    L.study = {"deg": id, "months": d.years * 12, "payer": payer, "gpa": clamp(L.grades, 40, 90), "unpaid": 0, "tier": tier, "mult": mult}
+    G.pending_tier = ""
+    if tier == "elite" { flag("elite_uni") }
     L.school = str_lower(d.n)
     let who = {"padres": "Tus padres la pagan completa.", "mitad": "Tus padres pagan la mitad.", "beca": "¡Con beca completa!", "media_beca": "Con media beca.", "prestamo": "Con préstamo estudiantil.", "propio": "La pagas tú: necesitarás trabajar."}
     list_push(G.toasts, {"head": "¡INSCRIPCIÓN!", "title": str_upper(d.n), "sub": who[payer], "t0": G.t})
@@ -323,7 +359,7 @@ function study_month() {
     let s = L.study
     if s == null { return null }
     let d = degree_def(s.deg)
-    let fee = d.cost / 12
+    let fee = study_cost(s) / 12
     let charge = 0
     if s.payer == "propio" { charge = fee }
     if s.payer == "mitad" || s.payer == "media_beca" { charge = fee / 2 }
@@ -373,6 +409,11 @@ function graduate() {
     L.study_gpa_final = L.study.gpa
     list_push(L.degrees, d.id)
     if d.type == "uni" { L.edu = 3 }
+    let tier = L.study.tier
+    if tier != null && tier != "" {
+        L.prestige = max(prestige(), uni_tier(tier).prestige)
+        if tier == "elite" { hito_me("Estudios", "Egresaste de una universidad de élite") }
+    }
     L.study = null
     L.school = ""
     L.happy += 12

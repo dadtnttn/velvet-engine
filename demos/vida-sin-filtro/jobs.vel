@@ -20,6 +20,7 @@ const CAREER_ROWS = [
     ["sobrecargo", "Sobrecargo", "Sobrecargo", "Servicio", 2, 30, 45, 32000, "", "Jets privados VIP|Vuelos internacionales"],
     ["chofer", "Chofer de aplicación", "Chofer de aplicación", "Servicio", 0, 0, 0, 17000, "", "Limusinas de lujo|Fiestas en limusina +18"],
     ["guia", "Guía de turistas", "Guía de turistas", "Servicio", 2, 30, 20, 21000, "", "Tours nocturnos +18|Ecoturismo|Museos"],
+    ["piloto", "Piloto aviador", "Piloto aviadora", "Servicio", 2, 50, 0, 90000, "", "Aerolínea comercial|Jets privados"],
     // ------------------------------------------------ Oficios
     ["guardia", "Guardia de seguridad", "Guardia de seguridad", "Oficio", 1, 0, 0, 21000, "", "Seguridad de antros|Escolta de eventos"],
     ["mecanico", "Mecánico", "Mecánica", "Oficio", 1, 20, 0, 24000, "", "Autos de carreras|Tuning"],
@@ -40,6 +41,7 @@ const CAREER_ROWS = [
     ["inmobiliario", "Agente inmobiliario", "Agente inmobiliaria", "Oficina", 2, 35, 40, 38000, "L", "Mansiones|Propiedades para fiestas +18"],
     ["community", "Community manager", "Community manager", "Oficina", 2, 30, 0, 27000, "", "Marcas +18|Política|Videojuegos"],
     ["asistente", "Asistente personal", "Asistente personal", "Oficina", 2, 30, 30, 33000, "", "Asistente de celebridades|Asistente de una estrella +18"],
+    ["traductor", "Traductor", "Traductora", "Oficina", 2, 45, 0, 32000, "", "Literaria|Simultánea en conferencias"],
     // ------------------------------------------------ Tecnología
     ["programador", "Programador", "Programadora", "Tecnología", 3, 65, 0, 62000, "", "Videojuegos|Plataformas +18|Ciberseguridad"],
     ["gamedev", "Desarrollador de videojuegos", "Desarrolladora de videojuegos", "Tecnología", 3, 60, 0, 58000, "", "Juegos para adultos +18|Indie|AAA"],
@@ -59,6 +61,8 @@ const CAREER_ROWS = [
     ["escultor", "Escultor", "Escultora", "Arte", 0, 30, 0, 22000, "", "Esculturas sensuales +18|Monumentos"],
     ["grafico", "Diseñador gráfico", "Diseñadora gráfica", "Arte", 2, 35, 0, 32000, "", "Portadas +18|Branding|Publicidad"],
     ["historietista", "Historietista", "Historietista", "Arte", 0, 35, 0, 26000, "", "Hentai +18|Superhéroes|Novela gráfica"],
+    ["arquitecto", "Arquitecto", "Arquitecta", "Arte", 3, 55, 0, 56000, "", "Rascacielos|Casas de lujo|Interiorismo"],
+    ["periodista", "Periodista", "Periodista", "Arte", 2, 40, 0, 30000, "", "Investigación|Deportes|Espectáculos"],
     ["musico", "Músico", "Música", "Arte", 0, 30, 0, 24000, "", "Música para clubes +18|Rock|Orquesta"],
     ["cantante", "Cantante", "Cantante", "Arte", 0, 20, 45, 30000, "L", "Cabaret burlesque +18|Pop|Ópera"],
     ["actor_voz", "Actor de voz", "Actriz de voz", "Arte", 0, 30, 0, 34000, "", "Audio erótico ASMR +18|Doblaje de anime|Videojuegos"],
@@ -69,6 +73,7 @@ const CAREER_ROWS = [
     ["streamer", "Streamer", "Streamer", "Espectáculo", 0, 25, 0, 18000, "", "Streams nocturnos +18|Videojuegos|Charlas"],
     ["comediante", "Comediante", "Comediante", "Espectáculo", 0, 40, 0, 22000, "", "Humor para adultos +18|Stand-up familiar|Late night"],
     ["presentador", "Presentador de TV", "Presentadora de TV", "Espectáculo", 2, 50, 55, 60000, "L", "Reality de citas +18|Noticias|Concursos"],
+    ["cineasta", "Director de cine", "Directora de cine", "Espectáculo", 2, 40, 0, 40000, "", "Cine de autor|Blockbusters|Documental"],
     ["modelo", "Modelo de pasarela", "Modelo de pasarela", "Espectáculo", 0, 0, 75, 50000, "L", "Desnudo artístico +18|Alta costura|Publicidad"],
     ["mago", "Mago", "Maga", "Espectáculo", 0, 30, 0, 20000, "", "Magia para despedidas +18|Magia infantil|Las Vegas"],
     ["bailarin", "Bailarín profesional", "Bailarina profesional", "Espectáculo", 0, 0, 40, 26000, "L", "Burlesque +18|Ballet|Videoclips"],
@@ -93,6 +98,7 @@ const CAREER_ROWS = [
     ["bombero", "Bombero", "Bombera", "Ley", 1, 25, 0, 36000, "", "Rescate|Calendario de bomberos +18"],
     ["militar", "Militar", "Militar", "Ley", 1, 30, 0, 32000, "", "Fuerzas especiales|Inteligencia"],
     ["guardaespaldas", "Guardaespaldas", "Guardaespaldas", "Ley", 1, 30, 30, 45000, "", "Celebridades|Estrellas +18 VIP"],
+    ["diplomatico", "Diplomático", "Diplomática", "Ley", 3, 60, 30, 72000, "", "Embajada|Naciones Unidas"],
     // ------------------------------------------------ Ciencia
     ["biologo", "Biólogo", "Bióloga", "Ciencia", 3, 60, 0, 45000, "", "Genética|Comportamiento sexual animal +18"],
     ["quimico", "Químico", "Química", "Ciencia", 3, 65, 0, 48000, "", "Fármacos|Lubricantes y juguetes +18|Cosmética"],
@@ -131,6 +137,7 @@ const CAREER_ROWS = [
     ["tutor", "Tutor privado", "Tutora privada", "Educación", 2, 50, 0, 20000, "", "Idiomas|Exámenes de admisión"],
     ["bibliotecario", "Bibliotecario", "Bibliotecaria", "Educación", 2, 40, 0, 22000, "", "Archivo histórico|Colección prohibida +18"],
     ["instructor_manejo", "Instructor de manejo", "Instructora de manejo", "Educación", 1, 20, 0, 21000, "", "Motos|Camiones"],
+    ["trabajador_social", "Trabajador social", "Trabajadora social", "Educación", 3, 35, 0, 26000, "", "Comunitario|Hospitalario"],
     // ------------------------------------------------ Moda y belleza
     ["estilista", "Estilista", "Estilista", "Moda", 0, 15, 20, 22000, "", "Peinados de pasarela|Estilismo de estrellas +18"],
     ["maquillador", "Maquillador", "Maquilladora", "Moda", 0, 20, 0, 26000, "", "Maquillaje para cine +18|Novias|Efectos especiales"],
@@ -509,6 +516,8 @@ function pay_of(job: map) {
     let pay = d.base * PAY_MULT[job.level] / 100
     if d.looksy { pay = pay * (50 + looks_eff()) / 100 }
     pay = pay * max(10, 100 + fx_sum("pay")) / 100
+    // Prestigio universitario y posgrados.
+    pay = pay * (100 + post_bonus(job)) / 100
     // Sin título se cobra como amateur.
     if job.amateur == true { pay = pay * 60 / 100 }
     return pay * job.bonus / 100
@@ -601,6 +610,8 @@ function apply_job(id: string) {
         return null
     }
     let ok = lock == ""
+    // Las carreras normales piden entrevista (o solo currículum).
+    if ok && !d.adult && !d.illegal { return open_interview(id) }
     // La experiencia en chambas ayuda a que te contraten.
     let odds = 70 + rank("charm") * 3 + min(15, L.workxp / 2) + fx_sum("hire")
     if d.adult || d.illegal { odds = 85 }
@@ -654,6 +665,7 @@ function take_job(id: string, slot: string, amateur: bool) {
     hito_push("Trabajo", "Primer día como " + str_lower(job.title))
     if d.adult { hito_once("debut18", "Trabajo", "Debut en la industria +18") }
     if has_trait("ambicion") { job.bonus = 110 }
+    on_hired(job)
     if slot == "main" {
         if L.job != null { L.last_job = L.job.title }
         L.job = job

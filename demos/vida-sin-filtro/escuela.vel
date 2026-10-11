@@ -1,0 +1,1495 @@
+// @edition 3
+// Escuela y universidad, la segunda capa de los estudios:
+// - Escuela (6-17): tipo de escuela (pública, privada, internado, en casa),
+//   materias con examen por materia, tarea, tutor, olimpiada y feria de
+//   ciencias, popularidad, grupos de amigos, presidencia de la clase, castigos,
+//   baile de graduación, anuario con superlativos y mejor promedio.
+// - Clubes: deportes, ajedrez, robótica, debate, teatro, banda... con práctica
+//   mensual (minijuego), torneo anual, medallas y capitanía.
+// - Familia de origen: domingo (mesada) según la familia, boleta de
+//   calificaciones con la reacción de cada estilo de crianza, castigos.
+// - Universidad: examen de admisión, universidades pública, privada o de élite,
+//   vida en el campus (residencia, fraternidad), prácticas profesionales,
+//   ayudantía, intercambio, tesis y posgrados (maestría, doctorado, MBA).
+// Todo lo de menores es inocente: nada sexual, sin alcohol ni drogas.
+// Acciones con el prefijo "es:" y elecciones "es_".
+
+const SCHOOL_KINDS = {
+    "publica": {"n": "Escuela pública", "bonus": 0, "pop": 0, "d": "Grupos grandes, maestros que hacen lo que pueden y amigos de todos lados."},
+    "privada": {"n": "Colegio privado", "bonus": 5, "pop": 2, "d": "Uniformes caros, salones con aire acondicionado y papás que se conocen entre sí."},
+    "internado": {"n": "Internado estricto", "bonus": 9, "pop": -2, "d": "Horarios militares y estudio obligatorio. Calificaciones altas, nostalgia de casa."},
+    "casa": {"n": "Educación en casa", "bonus": 3, "pop": -6, "d": "Tus papás son tus maestros. Aprendes a tu ritmo, pero casi no conoces a nadie."}
+}
+const SCHOOL_KIND_ORDER = ["publica", "privada", "internado", "casa"]
+
+// Grupos de amigos: requisito (estadística y mínimo), efectos por mes.
+const GROUPS = [
+    {"id": "populares", "n": "Los populares", "need": "looks", "min": 55, "pop": 3, "grades": -1, "social": "charm", "d": "Mandan en el recreo. Todos los quieren o les temen."},
+    {"id": "cerebritos", "n": "Los cerebritos", "need": "grades", "min": 70, "pop": -1, "grades": 2, "social": "know", "d": "Debates sobre dinosaurios y planetas. Sus calificaciones son leyenda."},
+    {"id": "deportistas", "n": "Los deportistas", "need": "health", "min": 60, "pop": 2, "grades": 0, "social": "guts", "d": "Siempre en la cancha. Fuertes, ruidosos y leales."},
+    {"id": "artistas", "n": "Los artistas", "need": "", "min": 0, "pop": 1, "grades": 0, "social": "kind", "d": "Cuadernos llenos de dibujos y música que nadie más conoce."},
+    {"id": "rebeldes", "n": "Los rebeldes", "need": "", "min": 0, "pop": 2, "grades": -2, "social": "guts", "d": "Reglas para romperlas. Más castigos, más anécdotas."},
+    {"id": "gamers", "n": "Los gamers", "need": "", "min": 0, "pop": 0, "grades": 1, "social": "skill", "d": "Estrategias, torneos en línea y memes internos."}
+]
+
+// Clubes: minijuego de práctica y torneo, rasgo social que entrenan, deporte.
+const CLUBS = [
+    {"id": "futbol", "n": "Fútbol", "game": "timing", "social": "guts", "sport": true, "comp": "Torneo intercolegial de fútbol"},
+    {"id": "basquet", "n": "Básquetbol", "game": "reflex", "social": "skill", "sport": true, "comp": "Liga estatal de básquetbol"},
+    {"id": "natacion", "n": "Natación", "game": "timing", "social": "guts", "sport": true, "comp": "Campeonato de natación"},
+    {"id": "atletismo", "n": "Atletismo", "game": "reflex", "social": "guts", "sport": true, "comp": "Carrera de 100 metros"},
+    {"id": "porristas", "n": "Porristas", "game": "arrows", "social": "charm", "sport": true, "comp": "Nacional de porristas"},
+    {"id": "ajedrez", "n": "Ajedrez", "game": "simon", "social": "know", "sport": false, "comp": "Torneo de ajedrez"},
+    {"id": "robotica", "n": "Robótica", "game": "typing", "social": "skill", "sport": false, "comp": "Competencia de robótica"},
+    {"id": "debate", "n": "Debate", "game": "interview", "social": "guts", "sport": false, "comp": "Torneo de debate"},
+    {"id": "teatro", "n": "Teatro", "game": "memory", "social": "charm", "sport": false, "comp": "Festival de teatro escolar"},
+    {"id": "banda", "n": "Banda de música", "game": "arrows", "social": "skill", "sport": false, "comp": "Concurso de bandas"},
+    {"id": "periodico", "n": "Periódico escolar", "game": "spell", "social": "know", "sport": false, "comp": "Premio de periodismo estudiantil"},
+    {"id": "arte", "n": "Taller de arte", "game": "memory", "social": "kind", "sport": false, "comp": "Concurso de pintura"},
+    {"id": "matematicas", "n": "Club de matemáticas", "game": "mental", "social": "know", "sport": false, "comp": "Olimpiada de matemáticas"},
+    {"id": "ciencias_club", "n": "Club de ciencias", "game": "quiz", "subject": "ciencias", "social": "know", "sport": false, "comp": "Feria nacional de ciencias"}
+]
+
+// Universidades por prestigio: % del costo, examen mínimo, prestigio.
+const UNI_TIERS = [
+    {"id": "publica", "n": "Universidad pública", "mult": 40, "exam": 55, "prestige": 0, "d": "Barata y masiva. Hay que pasar el examen de admisión."},
+    {"id": "privada", "n": "Universidad privada", "mult": 100, "exam": 30, "prestige": 1, "d": "Más cara, más fácil de entrar y con mejores contactos."},
+    {"id": "elite", "n": "Universidad de élite", "mult": 220, "exam": 80, "prestige": 2, "d": "Carísima y muy exigente. Su nombre en tu currículum abre todas las puertas."}
+]
+
+// Posgrados: años, costo anual, requisito, % extra de sueldo.
+const POSTS = [
+    {"id": "maestria", "n": "Maestría", "years": 2, "cost": 45000, "need": "uni", "bonus": 15, "d": "Dos años para especializarte. Sueldos más altos en profesiones con título."},
+    {"id": "doctorado", "n": "Doctorado", "years": 4, "cost": 0, "need": "maestria", "bonus": 30, "d": "Cuatro años de investigación con beca mensual. Te llamarán doctor."},
+    {"id": "mba", "n": "MBA", "years": 2, "cost": 90000, "need": "uni", "bonus": 20, "d": "Negocios, liderazgo y contactos de oro. Para Oficina y Negocios."}
+]
+
+const EXCHANGES = [["tokio", "Tokio"], ["paris", "París"], ["madrid", "Madrid"], ["nyc", "Nueva York"], ["seul", "Seúl"]]
+
+const SCHOOL_EVENTS = [
+    {
+        "id": "es_foodfight", "title": "Guerra de comida", "min": 8, "max": 17, "w": 8, "req": "school",
+        "text": "Alguien lanzó un pudín en la cafetería y en segundos vuela comida por todos lados.",
+        "choices": [
+            {"t": "Unirte con todo", "o": [
+                {"w": 60, "log": "Fue la mejor batalla de la historia de la escuela.", "pop": 6, "happy": 8},
+                {"w": 40, "log": "El director te vio con la bandeja en alto.", "pop": 4, "detention": true}
+            ]},
+            {"t": "Esconderte bajo la mesa", "o": [{"w": 100, "log": "Saliste limpi{a}. Nadie se acuerda de que estabas ahí.", "pop": -1}]},
+            {"t": "Grabarlo todo", "o": [{"w": 100, "log": "Tu video tiene más vistas que la página de la escuela.", "pop": 5, "charm": 2}]}
+        ]
+    },
+    {
+        "id": "es_sub", "title": "Maestro sustituto", "min": 7, "max": 17, "w": 8, "req": "school",
+        "text": "Hoy viene un maestro sustituto que no sabe los nombres de nadie.",
+        "choices": [
+            {"t": "Cambiarte de nombre todo el día", "o": [
+                {"w": 70, "log": "Fuiste «Pancho» toda la clase. Tus compañeros lloraban de risa.", "pop": 5, "grades": -1},
+                {"w": 30, "log": "El sustituto resultó ser primo del director.", "detention": true}
+            ]},
+            {"t": "Ayudarle con la lista", "o": [{"w": 100, "log": "Te lo agradeció con una estrellita y un punto extra.", "grades": 2, "kind": 2, "pop": -1}]}
+        ]
+    },
+    {
+        "id": "es_trip", "title": "Excursión escolar", "min": 7, "max": 17, "w": 7, "req": "school",
+        "text": "Excursión al museo de ciencias. El camión huele a sándwich de jamón.",
+        "choices": [
+            {"t": "Poner atención a la guía", "o": [{"w": 100, "log": "Aprendiste cómo funcionan los volcanes. Fascinante.", "grades": 3, "know": 3}]},
+            {"t": "Escaparte a la tienda de recuerdos", "o": [
+                {"w": 60, "log": "Volviste con un llavero de dinosaurio y nadie lo notó.", "happy": 4, "guts": 2},
+                {"w": 40, "log": "Te buscaron por todo el museo. Gran regaño.", "detention": true, "guts": 2}
+            ]},
+            {"t": "Hacer amigos en el camión", "o": [{"w": 100, "log": "Cantaron todo el camino. Hiciste dos amigos nuevos.", "pop": 3, "kind": 2}]}
+        ]
+    },
+    {
+        "id": "es_talent", "title": "Concurso de talentos", "min": 7, "max": 17, "w": 6, "req": "school",
+        "text": "Se abre la inscripción al concurso de talentos de la escuela.",
+        "choices": [
+            {"t": "Cantar frente a toda la escuela", "lucky": ["carisma"], "o": [
+                {"w": 50, "log": "¡Ovación de pie! Hasta los maestros grabaron.", "pop": 10, "charm": 4, "happy": 8},
+                {"w": 50, "log": "Se te quebró la voz en la nota alta. Lo superarás... algún día.", "pop": -4, "guts": 3, "happy": -5}
+            ]},
+            {"t": "Hacer un acto de comedia", "o": [
+                {"w": 60, "log": "Tus chistes sobre la cafetería fueron un éxito.", "pop": 7, "charm": 3},
+                {"w": 40, "log": "Silencio total. Un grillo se rio por compasión.", "pop": -3, "guts": 2}
+            ]},
+            {"t": "Solo ver", "o": [{"w": 100, "log": "Aplaudiste a todos. Bonita tarde.", "kind": 1}]}
+        ]
+    },
+    {
+        "id": "es_popquiz", "title": "Examen sorpresa", "min": 9, "max": 17, "w": 8, "req": "school",
+        "text": "«Saquen una hoja.» Examen sorpresa de un tema que no repasaste.",
+        "choices": [
+            {"t": "Hacer lo que puedas", "o": [
+                {"w": 50, "log": "Sacaste más de lo que esperabas.", "grades": 2},
+                {"w": 50, "log": "Reprobado, pero con dignidad.", "grades": -3}
+            ]},
+            {"t": "Copiarle a quien está al lado", "o": [
+                {"w": 55, "log": "Copiaste perfecto. Hasta sus errores.", "grades": 2, "karma": -2},
+                {"w": 45, "log": "La maestra te quitó el examen frente a todos.", "grades": -5, "detention": true}
+            ]},
+            {"t": "Entregar con un dibujo chistoso", "o": [{"w": 100, "log": "Cero, pero tu dibujo terminó en el pizarrón de la sala de maestros.", "grades": -4, "pop": 3}]}
+        ]
+    },
+    {
+        "id": "es_phone", "title": "Celular confiscado", "min": 11, "max": 17, "w": 6, "req": "school",
+        "text": "El maestro te descubre mensajeando en clase y extiende la mano.",
+        "choices": [
+            {"t": "Entregarlo sin decir nada", "o": [{"w": 100, "log": "Lo recuperaste al final del día. Lección aprendida (a medias).", "happy": -2}]},
+            {"t": "Discutir", "o": [
+                {"w": 40, "log": "Lo convenciste de que era una emergencia familiar.", "guts": 3},
+                {"w": 60, "log": "Ahora tus papás tienen que ir por él a la dirección.", "detention": true, "guts": 2}
+            ]},
+            {"t": "Darle el celular viejo de repuesto", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Le diste un celular de 2009. Leyenda absoluta.", "pop": 6, "guts": 3}]}
+        ]
+    },
+    {
+        "id": "es_viral", "title": "Video viral", "min": 12, "max": 17, "w": 5, "req": "school",
+        "text": "Alguien subió un video tuyo bailando en el recreo y se hizo viral en la escuela.",
+        "choices": [
+            {"t": "Abrazar la fama", "o": [{"w": 100, "log": "Ahora todos te piden el baile. Eres tendencia del pasillo.", "pop": 8, "charm": 3}]},
+            {"t": "Pedir que lo borren", "o": [
+                {"w": 60, "log": "Lo borraron, pero ya todos lo habían visto.", "pop": 1},
+                {"w": 40, "log": "Pedir que lo borren lo hizo más viral.", "pop": 4, "happy": -3}
+            ]}
+        ]
+    },
+    {
+        "id": "es_rumor", "title": "El rumor", "min": 11, "max": 17, "w": 6, "req": "school",
+        "text": "Alguien está esparciendo un rumor falso sobre ti por toda la escuela.",
+        "choices": [
+            {"t": "Enfrentar a quien lo empezó", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Lo confrontaste frente a todos y admitió que era mentira.", "pop": 5, "guts": 4}]},
+            {"t": "Ignorarlo con elegancia", "o": [{"w": 100, "log": "Al mes nadie se acordaba. Bien jugado.", "pop": 1, "kind": 2}]},
+            {"t": "Inventar un rumor peor de esa persona", "o": [{"w": 100, "log": "Ganaste la guerra de rumores. Perdiste un poco de alma.", "pop": 4, "karma": -5}]}
+        ]
+    },
+    {
+        "id": "es_team", "title": "Proyecto en equipo", "min": 9, "max": 17, "w": 7, "req": "school",
+        "text": "En tu equipo para el proyecto final hay alguien que no ha hecho absolutamente nada.",
+        "choices": [
+            {"t": "Hacer todo tú", "o": [{"w": 100, "log": "Proyecto impecable, dos noches sin dormir.", "grades": 4, "happy": -4, "skill": 2}]},
+            {"t": "Decírselo a la maestra", "o": [{"w": 100, "log": "La maestra le bajó la calificación solo a esa persona. Justicia.", "grades": 2, "pop": -2}]},
+            {"t": "Hablar con esa persona", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Resulta que tenía problemas en casa. Terminaron el proyecto juntos.", "grades": 3, "kind": 4, "pop": 2}]}
+        ]
+    },
+    {
+        "id": "es_gym", "title": "Educación física", "min": 7, "max": 17, "w": 6, "req": "school",
+        "text": "Hoy toca la temida prueba de resistencia en educación física.",
+        "choices": [
+            {"t": "Darlo todo", "o": [
+                {"w": 70, "log": "Terminaste entre los primeros. El profe de deportes te anotó en su libreta.", "health": 3, "pop": 3},
+                {"w": 30, "log": "Te torciste el tobillo en la última vuelta.", "health": -6}
+            ]},
+            {"t": "Fingir un dolor de estómago", "o": [{"w": 100, "log": "Pasaste la clase en la enfermería comiendo galletas.", "health": -1, "happy": 3}]}
+        ]
+    },
+    {
+        "id": "es_answers", "title": "Las respuestas", "min": 12, "max": 17, "w": 5, "req": "school",
+        "text": "Un compañero vende las respuestas del examen final por $300.",
+        "choices": [
+            {"t": "Comprarlas", "cost": 300, "o": [
+                {"w": 70, "log": "Las respuestas eran reales. Calificación perfecta, conciencia sucia.", "money": -300, "grades": 6, "karma": -4},
+                {"w": 30, "log": "Los descubrieron a todos los que compraron.", "money": -300, "grades": -8, "detention": true}
+            ]},
+            {"t": "Reportarlo", "o": [{"w": 100, "log": "Cancelaron el examen y lo repitieron. Medio salón te odia.", "pop": -5, "karma": 4, "kind": 2}]},
+            {"t": "Estudiar de verdad", "o": [{"w": 100, "log": "Estudiaste toda la semana. Sacaste buena nota y sin miedo.", "grades": 3, "know": 2}]}
+        ]
+    },
+    {
+        "id": "es_bully_other", "title": "Le hacen bullying", "min": 8, "max": 17, "w": 6, "req": "school",
+        "text": "Unos compañeros molestan todos los días al niño nuevo del salón.",
+        "choices": [
+            {"t": "Defenderlo", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Te pusiste enfrente. Desde ese día es tu mejor amigo.", "kind": 5, "guts": 3, "pop": 2, "karma": 4}]},
+            {"t": "Avisar a un maestro", "o": [{"w": 100, "log": "El maestro habló con todos. Las cosas mejoraron.", "kind": 3, "karma": 2}]},
+            {"t": "Unirte a las burlas", "o": [{"w": 100, "log": "Te reíste con los demás. No te sentiste bien después.", "pop": 3, "karma": -6, "happy": -2}]}
+        ]
+    },
+    {
+        "id": "es_drill", "title": "Simulacro", "min": 6, "max": 17, "w": 5, "req": "school",
+        "text": "Suena la alarma del simulacro de sismo en plena clase de matemáticas.",
+        "choices": [
+            {"t": "Seguir el protocolo", "o": [{"w": 100, "log": "Saliste en orden. El director te puso de ejemplo.", "kind": 1, "grades": 1}]},
+            {"t": "Aprovechar para escaparte al patio", "o": [
+                {"w": 60, "log": "Te perdiste media clase de matemáticas. Victoria.", "happy": 3},
+                {"w": 40, "log": "Te pasaron lista afuera. Castigo.", "detention": true}
+            ]}
+        ]
+    },
+    {
+        "id": "es_bestfriend", "title": "Tu mejor amigo se muda", "min": 8, "max": 16, "w": 4, "req": "school",
+        "text": "Tu mejor amigo de la escuela se cambia de ciudad al final del año.",
+        "choices": [
+            {"t": "Hacerle una fiesta de despedida", "o": [{"w": 100, "log": "Lloraron, rieron y prometieron escribirse.", "kind": 3, "happy": -2, "pop": 2}]},
+            {"t": "Hacerle un álbum de recuerdos", "o": [{"w": 100, "log": "Le diste un álbum con todas sus fotos juntos. Lo va a guardar siempre.", "kind": 4, "happy": -1}]}
+        ]
+    },
+    {
+        "id": "es_drawing", "title": "Concurso de dibujo", "min": 6, "max": 12, "w": 5, "req": "school",
+        "text": "La escuela organiza un concurso de dibujo sobre «Mi familia».",
+        "choices": [
+            {"t": "Dibujar con mucho detalle", "o": [
+                {"w": 40, "log": "¡Primer lugar! Tu dibujo está en la entrada de la escuela.", "pop": 5, "happy": 8, "skill": 2},
+                {"w": 60, "log": "Mención honorífica. Tu mamá lo puso en el refri.", "happy": 4}
+            ]},
+            {"t": "Dibujar algo divertido", "o": [{"w": 100, "log": "Dibujaste a tu familia como superhéroes. Todos se rieron.", "pop": 3, "charm": 1}]}
+        ]
+    },
+    {
+        "id": "es_career_day", "title": "Orientación vocacional", "min": 15, "max": 17, "w": 6, "req": "school",
+        "text": "Feria de orientación vocacional: universidades, test de aptitudes y gente con trajes.",
+        "choices": [
+            {"t": "Hacer el test en serio", "o": [{"w": 100, "log": "El test dice que serías bueno en lo que más disfrutas. Profundo.", "know": 4, "grades": 1}]},
+            {"t": "Juntar todos los dulces gratis", "o": [{"w": 100, "log": "Volviste con 40 plumas, 12 dulces y cero idea de qué estudiar.", "happy": 4}]}
+        ]
+    },
+    {
+        "id": "es_sleepover", "title": "Pijamada", "min": 8, "max": 14, "w": 6, "req": "school",
+        "text": "Te invitan a una pijamada con tus amigos del salón.",
+        "choices": [
+            {"t": "Ir y contar historias de terror", "o": [{"w": 100, "log": "Nadie durmió. Fue la mejor noche del año.", "pop": 4, "happy": 8}]},
+            {"t": "Quedarte en casa", "o": [{"w": 100, "log": "Viste tu serie favorita. También estuvo bien.", "happy": 2, "pop": -1}]}
+        ]
+    }
+]
+
+const CAMPUS_EVENTS = [
+    {
+        "id": "uc_prof", "title": "El profesor imposible", "min": 18, "max": 60, "w": 8, "req": "uni",
+        "text": "Te tocó el profesor que reprueba a la mitad del grupo por deporte.",
+        "choices": [
+            {"t": "Ir a todas sus asesorías", "o": [{"w": 100, "log": "Le caíste bien por necio. Pasaste con buena nota.", "gpa": 4, "happy": -3}]},
+            {"t": "Cambiarte de grupo", "o": [
+                {"w": 60, "log": "Te cambiaste a tiempo. El otro profesor regala puntos.", "gpa": 2},
+                {"w": 40, "log": "No había cupo. Te quedaste con él y lo resentiste.", "gpa": -4}
+            ]}
+        ]
+    },
+    {
+        "id": "uc_strike", "title": "Huelga estudiantil", "min": 18, "max": 60, "w": 5, "req": "uni",
+        "text": "Los estudiantes cerraron la universidad en protesta por el aumento de cuotas.",
+        "choices": [
+            {"t": "Unirte a la protesta", "o": [{"w": 100, "log": "Pintaste pancartas y hablaste en el micrófono. Bajaron las cuotas.", "guts": 5, "charm": 2, "happy": 4}]},
+            {"t": "Estudiar por tu cuenta", "o": [{"w": 100, "log": "Aprovechaste para adelantar materias.", "gpa": 3, "know": 2}]}
+        ]
+    },
+    {
+        "id": "uc_welcome", "title": "Fiesta de bienvenida", "min": 18, "max": 30, "w": 7, "req": "uni",
+        "text": "La fiesta de bienvenida de tu facultad es esta noche.",
+        "choices": [
+            {"t": "Ir a todo", "o": [
+                {"w": 70, "log": "Conociste a medio campus. Tus contactos se multiplicaron.", "charm": 4, "happy": 8, "alcohol": 2},
+                {"w": 30, "log": "Te despertaste en el pasto de la facultad de Derecho.", "happy": 2, "health": -3, "alcohol": 3}
+            ]},
+            {"t": "Quedarte a estudiar", "o": [{"w": 100, "log": "Tu promedio te lo agradece. Tu vida social, no.", "gpa": 2}]}
+        ]
+    },
+    {
+        "id": "uc_plagio", "title": "Ensayo comprado", "min": 18, "max": 60, "w": 5, "req": "uni",
+        "text": "Un compañero ofrece escribirte el ensayo final por $1,500.",
+        "choices": [
+            {"t": "Comprarlo", "cost": 1500, "o": [
+                {"w": 60, "log": "Sacaste 10. El ensayo era mejor que tú.", "money": -1500, "gpa": 4, "karma": -3},
+                {"w": 40, "log": "El detector de plagio lo encontró. Te anularon la materia.", "money": -1500, "gpa": -10, "karma": -3}
+            ]},
+            {"t": "Escribirlo tú", "o": [{"w": 100, "log": "Te costó tres noches. Aprendiste más de lo que creías.", "gpa": 2, "know": 3}]}
+        ]
+    },
+    {
+        "id": "uc_library", "title": "En la biblioteca", "min": 18, "max": 40, "w": 6, "req": "uni", "person": "near",
+        "text": "{x} te pide prestado el cargador en la biblioteca y se queda platicando contigo.",
+        "choices": [
+            {"t": "Invitarl{xa} a un café", "o": [
+                {"w": 70, "log": "Dos horas de café que se sintieron como diez minutos.", "happy": 6, "charm": 2, "bond": 10},
+                {"w": 30, "log": "Tenía novi{xa}. Al menos ganaste un amigo de estudio.", "kind": 2}
+            ]},
+            {"t": "Seguir estudiando", "o": [{"w": 100, "log": "Volviste a tus apuntes. El promedio es primero.", "gpa": 1}]}
+        ]
+    },
+    {
+        "id": "uc_congress", "title": "Congreso estudiantil", "min": 18, "max": 60, "w": 5, "req": "uni",
+        "text": "Te invitan a presentar un trabajo en un congreso en otra ciudad.",
+        "choices": [
+            {"t": "Presentarlo", "o": [
+                {"w": 65, "log": "Tu presentación impresionó a un investigador. Te dio su tarjeta.", "gpa": 4, "know": 4, "guts": 2},
+                {"w": 35, "log": "Te temblaba la voz, pero sobreviviste.", "gpa": 1, "guts": 3}
+            ]},
+            {"t": "No ir", "o": [{"w": 100, "log": "Preferiste no gastar en el viaje.", "happy": -1}]}
+        ]
+    },
+    {
+        "id": "uc_crisis", "title": "Crisis vocacional", "min": 18, "max": 40, "w": 4, "req": "uni",
+        "text": "Una noche a las tres de la mañana te preguntas si de verdad quieres dedicarte a esto.",
+        "choices": [
+            {"t": "Seguir: ya llegaste lejos", "o": [{"w": 100, "log": "Te acordaste de por qué empezaste. Seguiste.", "happy": 2, "gpa": 1}]},
+            {"t": "Hablarlo con un orientador", "o": [{"w": 100, "log": "El orientador te ayudó a ordenar tus ideas.", "happy": 5, "know": 2}]}
+        ]
+    },
+    {
+        "id": "uc_books", "title": "Libros carísimos", "min": 18, "max": 60, "w": 6, "req": "uni",
+        "text": "La lista de libros del semestre cuesta más que tu renta.",
+        "choices": [
+            {"t": "Comprarlos originales", "cost": 2000, "o": [{"w": 100, "log": "Libros nuevos, olor a conocimiento.", "money": -2000, "gpa": 3}]},
+            {"t": "Fotocopias de la biblioteca", "o": [{"w": 100, "log": "Tus fotocopias están subrayadas por tres generaciones.", "gpa": 1}]},
+            {"t": "Organizar un club de estudio", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "Compraron un juego entre todos y estudiaron juntos.", "gpa": 3, "kind": 2, "charm": 2}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- estado
+
+// Vida escolar del personaje (se crea cuando hace falta).
+function sc() {
+    if L.sc == null {
+        let kind = "publica"
+        if L.family == "rica" { kind = "privada" }
+        L.sc = {
+            "kind": kind, "pop": 35, "group": "", "clubs": [], "cxp": {}, "medals": 0, "sport_medals": 0,
+            "det": 0, "prez": false, "honor": 0, "grounded": 0, "allow": 0, "exam": 0, "exam_age": 0,
+            "prom": "", "olymp_age": 0, "fair_age": 0, "elect_age": 0, "comp": {}, "allow_age": 0
+        }
+    }
+    return L.sc
+}
+
+function sc_kind() {
+    return SCHOOL_KINDS[sc().kind]
+}
+
+function in_school() {
+    return L.age >= 6 && L.age < 18 && L.school != "" && L.jail == 0
+}
+
+// Calificación a la que tiendes por tu escuela, tu grupo y tus clubes.
+function school_bonus() {
+    if L.sc == null { return 0 }
+    let b = sc_kind().bonus
+    let g = group_def(L.sc.group)
+    if g != null { b += g.grades }
+    for id in L.sc.clubs {
+        if id == "matematicas" || id == "ciencias_club" || id == "ajedrez" || id == "periodico" || id == "debate" { b += 1 }
+    }
+    return b
+}
+
+function group_def(id: string) {
+    for g in GROUPS {
+        if g.id == id { return g }
+    }
+    return null
+}
+
+function club_def(id: string) {
+    for c in CLUBS {
+        if c.id == id { return c }
+    }
+    return null
+}
+
+function club_level(id: string) {
+    return min(5, map_get(sc().cxp, id, 0) / 40)
+}
+
+function used_once(key: string) {
+    if L.used[key] != null { return true }
+    L.used[key] = 1
+    return false
+}
+
+function grounded() {
+    return L.sc != null && L.sc.grounded > 0
+}
+
+// Reporte y castigo después de clases.
+function detention() {
+    let s = sc()
+    s.det += 1
+    L.happy -= 3
+    let out = " Te ganaste un reporte y un castigo después de clases."
+    if s.det == 5 {
+        s.pop = clamp100(s.pop + 4)
+        L.grades = clamp(L.grades - 6, 0, 100)
+        out = out + " Ya van cinco: te suspendieron tres días."
+        hito_me("Estudios", "Te suspendieron de la escuela")
+    }
+    let p = best_parent()
+    if p != null && (parent_style(p) == "estricto" || parent_style(p) == "toxico") {
+        s.grounded = max(s.grounded, 2)
+        out = out + " En casa te castigaron dos meses sin domingo."
+    }
+    return out
+}
+
+function pop_word() {
+    let p = sc().pop
+    if p >= 85 { return "Leyenda escolar" }
+    if p >= 70 { return "Popular" }
+    if p >= 50 { return "Conocid" + oa(L.gender) }
+    if p >= 30 { return "Del montón" }
+    return "Invisible"
+}
+
+function allowance_base() {
+    if L.family == "rica" { return 600 }
+    if L.family == "pobre" { return 40 }
+    return 150
+}
+
+// ---------------------------------------------------------------- menú de la escuela
+
+function sitem(action: string, t: string, s: string, desc: string, lock: string) {
+    return {"action": "es:" + action, "t": t, "s": s, "desc": desc, "lock": lock}
+}
+
+function school_class_items() {
+    let items = []
+    let s = sc()
+    list_push(items, sitem("report", "Mi boleta", "Calificaciones " + str(L.grades), sc_kind().n + " · Popularidad: " + pop_word() + " (" + str(s.pop) + ") · Castigos: " + str(s.det) + " · Medallas: " + str(s.medals) + ".", ""))
+    list_push(items, {"action": "act:study", "t": "Estudiar más duro", "s": "Calificaciones", "desc": "Cuadernos, desvelos y la satisfacción de un 10.", "lock": ""})
+    let lock = ""
+    if L.used["es_subject"] != null { lock = "Este mes ya" }
+    if L.age < 8 { lock = "Edad 8" }
+    list_push(items, sitem("subject", "Repasar una materia", "Examen de práctica", "Elige materia y presenta un examen de práctica (minijuego). Tu puntaje mueve tus calificaciones.", lock))
+    lock = ""
+    if L.used["es_hw"] != null { lock = "Este mes ya" }
+    list_push(items, sitem("homework", "Hacer la tarea", "Calificaciones", "Sin gloria, pero suma. Un poquito de felicidad menos.", lock))
+    list_push(items, sitem("copyhw", "Copiar la tarea", "Arriesgado", "Más rápido que hacerla. Si te atrapan, castigo.", lock))
+    lock = ""
+    if L.used["es_tutor"] != null { lock = "Este mes ya" } else if (L.family == "pobre" || len(parents_alive()) == 0) && L.money < 600 { lock = "$600" }
+    list_push(items, sitem("tutor", "Tutor particular", "Calificaciones", "Clases particulares. Las paga tu familia si puede; si no, $600 de tus ahorros.", lock))
+    lock = ""
+    if L.used["es_teacher"] != null { lock = "Este mes ya" }
+    list_push(items, sitem("teacher", "Quedarte con el maestro", "Calificaciones, amabilidad", "Preguntas lo que no entendiste. Algunos te dirán «barbero».", lock))
+    lock = ""
+    if L.age < 9 { lock = "Edad 9" } else if s.olymp_age == L.age { lock = "Este año ya" }
+    list_push(items, sitem("olympiad", "Olimpiada del conocimiento", "Medallas", "Cálculo mental contra los mejores alumnos del estado. Una vez al año.", lock))
+    lock = ""
+    if L.age < 8 { lock = "Edad 8" } else if s.fair_age == L.age { lock = "Este año ya" }
+    list_push(items, sitem("fair", "Feria de ciencias", "Medallas, popularidad", "Presenta un experimento ante los jueces (examen de ciencias). Una vez al año.", lock))
+    lock = ""
+    if L.age > 16 { lock = "Ya casi terminas" } else if len(parents_alive()) == 0 { lock = "Sin padres" }
+    list_push(items, sitem("switch", "Cambiar de escuela", sc_kind().n, "Pública, privada, internado o en casa. Necesitas convencer a tus papás.", lock))
+    list_push(items, {"action": "act:skip", "t": "Saltarte clases", "s": "Felicidad, valor", "desc": "El centro comercial no se va a visitar solo. Tus calificaciones bajan.", "lock": ""})
+    return items
+}
+
+function school_life_items() {
+    let items = []
+    let s = sc()
+    let g = group_def(s.group)
+    let gname = "Sin grupo"
+    if g != null { gname = g.n }
+    let lock = ""
+    if L.age < 10 { lock = "Edad 10" }
+    list_push(items, sitem("group", "Grupo de amigos", gname, "Con quién te juntas en el recreo cambia tu popularidad, tus calificaciones y lo que aprendes.", lock))
+    lock = ""
+    if L.used["es_social"] != null { lock = "Este mes ya" } else if grounded() { lock = "Castigad" + oa(L.gender) }
+    list_push(items, sitem("social", "Hacer amigos en el recreo", "Popularidad", "Compartir el lunch, jugar futbolito, platicar de series.", lock))
+    lock = ""
+    if L.used["es_prank"] != null { lock = "Este mes ya" }
+    list_push(items, sitem("prank", "Hacer una broma en clase", "Popularidad, riesgo", "Un chicle en la silla del maestro siempre funciona. A veces termina en la dirección.", lock))
+    lock = ""
+    if L.age < 9 { lock = "Edad 9" } else if L.used["es_candy"] != null { lock = "Este mes ya" }
+    list_push(items, sitem("candy", "Vender dulces en el recreo", "Dinero", "Compras al mayoreo, vendes caro. Prohibido por el reglamento.", lock))
+    lock = ""
+    if L.age < 10 { lock = "Edad 10" } else if s.elect_age == L.age { lock = "Este año ya" } else if s.prez { lock = "Ya eres presidente" }
+    list_push(items, sitem("election", "Postularte a " + by_gender(L.gender, "presidente", "presidenta") + " de la clase", "Popularidad, valor", "Debate con preguntas difíciles (entrevista) y votación. Tu popularidad cuenta.", lock))
+    lock = ""
+    if len(parents_alive()) == 0 { lock = "Sin padres" } else if s.allow_age == L.age { lock = "Este año ya" } else if L.age < 8 { lock = "Edad 8" }
+    list_push(items, sitem("allow", "Pedir más domingo", "Ahora: " + money_str(allowance_now()) + "/mes", "Negocia con tus papás. Depende de cómo se lleven y de tus calificaciones.", lock))
+    lock = ""
+    if L.age != 17 { lock = "A los 17" } else if s.prom != "" { lock = "Ya fuiste" }
+    list_push(items, sitem("prom", "Baile de graduación", "Popularidad", "La noche más esperada de la secundaria: vestido o traje, fotos y la elección del rey y la reina.", lock))
+    return items
+}
+
+function club_items() {
+    let items = []
+    let s = sc()
+    if L.age < 8 {
+        list_push(items, sitem("none", "Clubes", "Desde los 8 años", "Cuando crezcas podrás unirte a dos clubes.", "Edad 8"))
+        return items
+    }
+    for id in s.clubs {
+        let c = club_def(id)
+        let lvl = club_level(id)
+        let lock = ""
+        if L.used["es_cp_" + id] != null { lock = "Este mes ya" }
+        list_push(items, sitem("cpractice:" + id, "Practicar " + c.n, "Nivel " + str(lvl) + "/5", "Entrenamiento con minijuego (" + MG_INFO[c.game].title + "). Sube de nivel para ganar torneos y ser capitán.", lock))
+        lock = ""
+        if map_get(s.comp, id, 0) == L.age { lock = "Este año ya" }
+        list_push(items, sitem("ccomp:" + id, c.comp, "Medallas", "Una vez al año. Tu puntaje más tu nivel deciden la medalla.", lock))
+        list_push(items, sitem("cleave:" + id, "Dejar " + c.n, "", "Más tiempo libre.", ""))
+    }
+    for c in CLUBS {
+        if list_contains(s.clubs, c.id) { continue }
+        let lock = ""
+        if len(s.clubs) >= 2 { lock = "Máximo 2 clubes" }
+        let kind = "Club"
+        if c.sport { kind = "Deporte" }
+        list_push(items, sitem("cjoin:" + c.id, "Unirte a " + c.n, kind, "Entrena " + SOCIAL_NAMES[c.social] + ". Minijuego: " + MG_INFO[c.game].title + ". Torneo: " + c.comp + ".", lock))
+    }
+    return items
+}
+
+function allowance_now() {
+    if L.sc == null { return allowance_base() }
+    return allowance_base() * (100 + L.sc.allow) / 100
+}
+
+// ---------------------------------------------------------------- acciones
+
+function escuela_action(action: string) {
+    G.modal = null
+    let s = sc()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    match cmd {
+        "report" => return info("Mi boleta", report_text())
+        "subject" => {
+            if L.used["es_subject"] != null { return null }
+            let labels = []
+            for k in ["mate", "historia", "ciencias", "lengua", "geo"] { list_push(labels, SUBJECT_NAMES[k]) }
+            list_push(labels, "Mejor no")
+            return open_choice("REPASAR", "¿Qué materia quieres repasar?", labels, ["", "", "", "", "", ""], "es_subject", {})
+        }
+        "homework" => {
+            if used_once("es_hw") { return null }
+            L.grades = clamp(L.grades + rint(1, 3), 0, 100)
+            L.happy -= 1
+            return finish("Tarea", "Hiciste la tarea a tiempo. Nada épico, pero suma.", "g")
+        }
+        "copyhw" => {
+            if used_once("es_hw") { return null }
+            if chance(70) {
+                L.grades = clamp(L.grades + 2, 0, 100)
+                return finish("Tarea", "Copiaste la tarea en el recreo. Nadie lo notó.", "n")
+            }
+            return finish("Tarea", "La maestra notó que tu tarea tenía las mismas faltas de ortografía que la de tu amigo." + detention(), "b")
+        }
+        "tutor" => {
+            if used_once("es_tutor") { return null }
+            let who = "Tus papás pagaron el tutor."
+            if L.family == "pobre" || len(parents_alive()) == 0 {
+                L.money -= 600
+                who = "Pagaste el tutor con tus ahorros."
+            }
+            L.grades = clamp(L.grades + rint(4, 8), 0, 100)
+            gain("know", 2)
+            return finish("Tutor", who + " Tus calificaciones suben a " + str(L.grades) + ".", "g")
+        }
+        "teacher" => {
+            if used_once("es_teacher") { return null }
+            L.grades = clamp(L.grades + 1 + rank("kind"), 0, 100)
+            gain("kind", 2)
+            s.pop = clamp100(s.pop - 1)
+            return finish("Maestro", "Te quedaste después de clase. El maestro te explicó todo con paciencia.", "g")
+        }
+        "olympiad" => {
+            if s.olymp_age == L.age || L.age < 9 { return null }
+            s.olymp_age = L.age
+            return mg_start("mental", "Olimpiada del conocimiento", "escuela", {"kind": "olympiad"})
+        }
+        "fair" => {
+            if s.fair_age == L.age || L.age < 8 { return null }
+            s.fair_age = L.age
+            return mg_start("quiz", "Feria de ciencias", "escuela", {"kind": "fair", "subject": "ciencias"})
+        }
+        "switch" => return open_school_switch()
+        "group" => return open_group_choice()
+        "social" => {
+            if grounded() || used_once("es_social") { return null }
+            s.pop = clamp100(s.pop + rint(2, 5))
+            gain("charm", 1)
+            gain("kind", 1)
+            return finish("Recreo", pick(["Te invitaron a jugar futbolito y metiste el gol del empate.", "Compartiste tus galletas y ahora tienes fans.", "Te sentaste con gente nueva. Te cayeron muy bien."]), "g")
+        }
+        "prank" => {
+            if used_once("es_prank") { return null }
+            gain("guts", 2)
+            if chance(65) {
+                s.pop = clamp100(s.pop + rint(3, 6))
+                return finish("Broma", pick(["Pusiste un globo de agua en el borrador. La clase entera estalló en risas.", "Cambiaste todas las sillas de lugar. El maestro tardó diez minutos en entender.", "Imitaste al director por el altavoz. Leyenda."]), "g")
+            }
+            s.pop = clamp100(s.pop + 2)
+            return finish("Broma", "La broma salió bien... hasta que el maestro preguntó quién fue y todos voltearon a verte." + detention(), "b")
+        }
+        "candy" => {
+            if used_once("es_candy") { return null }
+            let earned = rint(1, 4) * 100
+            L.money += earned
+            gain("skill", 1)
+            if chance(20) {
+                L.money -= earned
+                return finish("Negocio de dulces", "La prefecta te confiscó la mercancía." + detention(), "b")
+            }
+            return finish("Negocio de dulces", "Vendiste todo en el recreo. Ganaste " + money_str(earned) + ".", "g")
+        }
+        "election" => {
+            if s.elect_age == L.age || s.prez || L.age < 10 { return null }
+            s.elect_age = L.age
+            return mg_start("interview", "Debate por la presidencia de la clase", "escuela", {"kind": "election"})
+        }
+        "allow" => return ask_allowance()
+        "prom" => return open_prom()
+        "cjoin" => {
+            if len(s.clubs) >= 2 || list_contains(s.clubs, arg) { return null }
+            let c = club_def(arg)
+            if c == null { return null }
+            list_push(s.clubs, arg)
+            hito_once("club_" + arg, "Estudios", "Te uniste a " + c.n)
+            return finish(c.n, "Te uniste a " + c.n + ". Primer entrenamiento el lunes.", "g")
+        }
+        "cleave" => {
+            let keep = []
+            for id in s.clubs {
+                if id != arg { list_push(keep, id) }
+            }
+            s.clubs = keep
+            return finish("Clubes", "Dejaste el club. Más tiempo libre.", "n")
+        }
+        "cpractice" => {
+            let c = club_def(arg)
+            if c == null || used_once("es_cp_" + arg) { return null }
+            let ctx = {"kind": "club_practice", "club": arg}
+            if c.subject != null { ctx.subject = c.subject }
+            return mg_start(c.game, "Entrenamiento: " + c.n, "escuela", ctx)
+        }
+        "ccomp" => {
+            let c = club_def(arg)
+            if c == null || map_get(s.comp, arg, 0) == L.age { return null }
+            s.comp[arg] = L.age
+            let ctx = {"kind": "club_comp", "club": arg}
+            if c.subject != null { ctx.subject = c.subject }
+            return mg_start(c.game, c.comp, "escuela", ctx)
+        }
+        "admission" => return open_admission(false)
+        "dorm" => return toggle_dorm()
+        "frat" => return join_frat()
+        "intern" => {
+            if L.study == null || L.study.intern == true || used_once("es_intern") { return null }
+            return mg_start("interview", "Entrevista para prácticas", "escuela", {"kind": "intern"})
+        }
+        "ra" => {
+            if L.study == null || used_once("es_ra") { return null }
+            L.study.gpa = clamp(L.study.gpa + 2, 0, 100)
+            L.money += 800
+            gain("know", 2)
+            return finish("Ayudantía", "Ayudaste a tu profesora con su investigación: $800 y una carta de recomendación en camino.", "g")
+        }
+        "exchange" => return open_exchange()
+        "thesis" => {
+            if L.study == null || L.study.thesis == true { return null }
+            L.study.thesis = true
+            return mg_start("typing", "Defensa de tesis", "escuela", {"kind": "thesis"})
+        }
+        "switchmajor" => {
+            if L.study == null { return null }
+            let d = degree_def(L.study.deg)
+            L.study = null
+            L.school = ""
+            hito_me("Estudios", "Dejaste " + d.n + " para cambiarte de carrera")
+            G.modal = {"kind": "menu", "tab": "study"}
+            G.menu_cat = 0
+            G.menu_page = 0
+            G.menu_t0 = G.t
+            return null
+        }
+        "post" => return enroll_post(arg)
+        "poststudy" => {
+            if L.post == null || used_once("es_poststudy") { return null }
+            L.post.gpa = clamp(L.post.gpa + rint(3, 6), 0, 100)
+            gain("know", 3)
+            L.happy -= 2
+            return finish(post_def(L.post.id).n, "Leíste artículos hasta que te sangraron los ojos. Avanzas.", "g")
+        }
+        "postdrop" => {
+            if L.post == null { return null }
+            let n = post_def(L.post.id).n
+            L.post = null
+            return finish("Posgrado", "Dejaste " + str_lower(n) + ". La vida sigue.", "n")
+        }
+        _ => return null
+    }
+}
+
+function report_text() {
+    let s = sc()
+    let g = group_def(s.group)
+    let gname = "ninguno"
+    if g != null { gname = str_lower(g.n) }
+    let clubs = []
+    for id in s.clubs { list_push(clubs, club_def(id).n + " (nivel " + str(club_level(id)) + ")") }
+    let ctext = "ninguno"
+    if len(clubs) > 0 { ctext = str_join(clubs, ", ") }
+    let out = sc_kind().n + ". Calificaciones: " + str(L.grades) + ". Popularidad: " + pop_word() + " (" + str(s.pop) + "). Grupo: " + gname + ". Clubes: " + ctext + ". Medallas: " + str(s.medals) + ". Castigos: " + str(s.det) + "."
+    if s.prez { out = out + " Eres " + by_gender(L.gender, "presidente", "presidenta") + " de la clase." }
+    if s.exam > 0 { out = out + " Examen de admisión: " + str(s.exam) + "." }
+    if s.grounded > 0 { out = out + " Castigad" + oa(L.gender) + " " + str(s.grounded) + " " + plural(s.grounded, "mes", "meses") + " más." }
+    return out
+}
+
+function open_school_switch() {
+    let labels = []
+    let locks = []
+    for k in SCHOOL_KIND_ORDER {
+        let d = SCHOOL_KINDS[k]
+        list_push(labels, d.n)
+        let lock = ""
+        if sc().kind == k { lock = "Ya estás ahí" }
+        if k == "privada" && L.family == "pobre" && L.grades < 85 { lock = "Beca: calificación 85" }
+        if k == "internado" && L.family != "rica" && L.grades < 80 { lock = "Familia adinerada o 80" }
+        list_push(locks, lock)
+    }
+    list_push(labels, "Mejor no")
+    list_push(locks, "")
+    return open_choice("CAMBIO DE ESCUELA", "¿A dónde quieres cambiarte? Tus papás tienen que aceptar. " + sc_kind().d, labels, locks, "es_switch", {})
+}
+
+function open_group_choice() {
+    let labels = []
+    let locks = []
+    for g in GROUPS {
+        list_push(labels, g.n)
+        let lock = ""
+        if sc().group == g.id { lock = "Ya es tu grupo" }
+        if g.need == "looks" && looks_eff() < g.min { lock = "Atractivo " + str(g.min) }
+        if g.need == "grades" && L.grades < g.min { lock = "Calificación " + str(g.min) }
+        if g.need == "health" && L.health < g.min { lock = "Salud " + str(g.min) }
+        list_push(locks, lock)
+    }
+    list_push(labels, "Ir a tu aire")
+    list_push(locks, "")
+    return open_choice("GRUPO DE AMIGOS", "¿Con quién te juntas? Cada grupo tiene su reputación.", labels, locks, "es_group", {})
+}
+
+function parent_style(p: map) {
+    let style = p.style
+    if style == null { return "relajado" }
+    return style
+}
+
+function ask_allowance() {
+    let s = sc()
+    s.allow_age = L.age
+    let p = best_parent()
+    if p == null { return null }
+    let odds = p.bond / 2 + (L.grades - 50) / 2
+    let style = parent_style(p)
+    if style == "amoroso" { odds += 20 }
+    if style == "estricto" && L.grades < 80 { odds -= 30 }
+    if style == "toxico" { odds -= 20 }
+    if L.family == "pobre" { odds -= 25 }
+    if chance(clamp(odds, 5, 90)) {
+        s.allow = min(200, s.allow + 50)
+        return finish("Domingo", p.first + " aceptó: ahora recibes " + money_str(allowance_now()) + " al mes.", "g")
+    }
+    if L.family == "pobre" { return finish("Domingo", "«No alcanza, mij" + oa(L.gender) + ".» Lo entiendes, aunque duela.", "n") }
+    return finish("Domingo", p.first + " dijo que no. «El dinero no crece en los árboles.»", "b")
+}
+
+function open_prom() {
+    let s = sc()
+    if s.prom != "" || L.age != 17 { return null }
+    let labels = ["Ir con tus amigos", "Invitar a alguien que te gusta", "Ir sol" + oa(L.gender) + " y bailar con todos", "No ir"]
+    return open_choice("BAILE DE GRADUACIÓN", "Esta noche es el baile de graduación. Tu popularidad: " + pop_word() + ".", labels, ["", "", "", ""], "es_prom", {})
+}
+
+function open_admission(scheduled: bool) {
+    let s = sc()
+    if s.exam_age == L.age { return info("Examen de admisión", "Ya presentaste el examen este año. Tu puntaje: " + str(s.exam) + ".") }
+    let locks = ["", "", ""]
+    if L.money < 2000 { locks[1] = "$2,000" }
+    return open_choice("EXAMEN DE ADMISIÓN", "El examen para entrar a la universidad. Tu puntaje decide a qué universidades puedes entrar (pública 55, privada 30, élite 80). Último puntaje: " + str(s.exam) + ".",
+        ["Presentarlo", "Curso de preparación (−$2,000, +10 puntos)", "Ahora no"], locks, "es_admission", {})
+}
+
+function toggle_dorm() {
+    let st = L.study
+    if st == null { return null }
+    if st.dorm == true {
+        st.dorm = false
+        return finish("Residencia", "Dejaste la residencia estudiantil.", "n")
+    }
+    st.dorm = true
+    hito_once("dorm", "Estudios", "Te mudaste a la residencia estudiantil")
+    return finish("Residencia", "Te mudaste a la residencia del campus ($700 al mes): más fiestas, más amigos, menos privacidad.", "g")
+}
+
+function join_frat() {
+    let st = L.study
+    if st == null || st.frat == true { return null }
+    let name = by_gender(L.gender, "fraternidad", "sororidad")
+    if rank("charm") < 2 && looks_eff() < 50 {
+        L.happy -= 4
+        return finish("Iniciación", "No pasaste la iniciación de la " + name + ". «Quizá el próximo semestre.»", "b")
+    }
+    st.frat = true
+    flag("frat")
+    L.alcohol += 2
+    gain("charm", 4)
+    hito_me("Estudios", "Entraste a una " + name)
+    return finish("Iniciación", "Sobreviviste a la semana de iniciación. Ahora tienes hermanos para toda la vida (y una camiseta con letras griegas).", "x")
+}
+
+function open_exchange() {
+    let st = L.study
+    if st == null || st.exchange == true { return null }
+    let labels = []
+    let locks = []
+    for e in EXCHANGES {
+        list_push(labels, "Un semestre en " + e[1] + " ($8,000)")
+        let lock = ""
+        if L.money < 8000 && st.payer != "beca" { lock = "$8,000" }
+        list_push(locks, lock)
+    }
+    list_push(labels, "Mejor no")
+    list_push(locks, "")
+    return open_choice("INTERCAMBIO", "Tu universidad tiene convenios en el extranjero. Con beca completa, el viaje lo paga la universidad.", labels, locks, "es_exchange", {})
+}
+
+// ---------------------------------------------------------------- elecciones
+
+function escuela_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let s = sc()
+    match handler {
+        "es_subject" => {
+            let keys = ["mate", "historia", "ciencias", "lengua", "geo"]
+            if index >= len(keys) { return null }
+            if used_once("es_subject") { return null }
+            return mg_start("quiz", "Repaso de " + SUBJECT_NAMES[keys[index]], "escuela", {"kind": "subject", "subject": keys[index]})
+        }
+        "es_switch" => {
+            if index >= len(SCHOOL_KIND_ORDER) { return null }
+            let k = SCHOOL_KIND_ORDER[index]
+            let p = best_parent()
+            if p == null { return null }
+            let odds = p.bond - 10
+            if k == "internado" && parent_style(p) == "estricto" { odds += 40 }
+            if k == "casa" && parent_style(p) == "ausente" { odds -= 40 }
+            if k == "privada" && L.family == "rica" { odds += 30 }
+            if !chance(clamp(odds, 5, 95)) {
+                return finish("Cambio de escuela", p.first + " no estuvo de acuerdo. «Ni lo sueñes.»", "b")
+            }
+            s.kind = k
+            s.pop = clamp(30 + SCHOOL_KINDS[k].pop * 3, 0, 100)
+            s.group = ""
+            hito_me("Estudios", "Te cambiaste a: " + str_lower(SCHOOL_KINDS[k].n))
+            return finish("Cambio de escuela", "Ahora vas a: " + SCHOOL_KINDS[k].n + ". " + SCHOOL_KINDS[k].d + " Empiezas de cero socialmente.", "n")
+        }
+        "es_group" => {
+            if index >= len(GROUPS) {
+                s.group = ""
+                return finish("Grupo de amigos", "Prefieres ir a tu aire. Te llevas con todos y con nadie.", "n")
+            }
+            let g = GROUPS[index]
+            s.group = g.id
+            hito_once("group_" + g.id, "Estudios", "Te juntaste con " + str_lower(g.n))
+            return finish("Grupo de amigos", "Ahora te juntas con " + str_lower(g.n) + ". " + g.d, "g")
+        }
+        "es_prom" => return resolve_prom(index)
+        "es_admission" => {
+            if index == 2 { return null }
+            let bonus = 0
+            if index == 1 {
+                L.money -= 2000
+                bonus = 10
+            }
+            s.exam_age = L.age
+            return mg_start("quiz", "Examen de admisión", "escuela", {"kind": "admission", "bonus": bonus})
+        }
+        "es_exchange" => {
+            if index >= len(EXCHANGES) || L.study == null { return null }
+            let e = EXCHANGES[index]
+            if L.study.payer != "beca" { L.money -= 8000 }
+            L.study.exchange = true
+            L.happy += 12
+            gain("know", 4)
+            gain("charm", 3)
+            L.study.gpa = clamp(L.study.gpa + 2, 0, 100)
+            flag("exchange")
+            if e[0] == "tokio" { flag("tokyo") }
+            hito_me("Estudios", "Semestre de intercambio en " + e[1])
+            return finish("Intercambio", "Un semestre en " + e[1] + ": clases en otro idioma, amigos de todo el mundo y fotos para toda la vida.", "g")
+        }
+        "es_tier" => return resolve_tier(index, ctx)
+        "es_report" => return resolve_report(index, ctx)
+        _ => return null
+    }
+}
+
+function resolve_prom(index: int) {
+    let s = sc()
+    if index == 3 {
+        s.prom = "no"
+        return finish("Baile de graduación", "Preferiste quedarte en casa. Viste las fotos al día siguiente.", "n")
+    }
+    s.prom = "fui"
+    let text = ""
+    if index == 0 {
+        text = "Llegaron en grupo, bailaron todas las canciones y se tomaron mil fotos."
+        L.happy += 10
+        gain("kind", 2)
+    }
+    if index == 1 {
+        if chance(45 + looks_eff() / 3 + rank("charm") * 4) {
+            text = "Dijo que sí. Bailaron la canción lenta y te acompañó a casa. Un recuerdo perfecto."
+            L.happy += 14
+            gain("charm", 3)
+        } else {
+            text = "Te dijo que ya iba con alguien. Fuiste con tus amigos y aun así la pasaste increíble."
+            L.happy += 4
+            gain("guts", 3)
+        }
+    }
+    if index == 2 {
+        text = "Bailaste con medio salón. Nadie se olvidará de tus pasos."
+        L.happy += 8
+        s.pop = clamp100(s.pop + 4)
+    }
+    hito_me("Estudios", "Fuiste al baile de graduación")
+    if s.pop >= 70 && chance(s.pop - 40) {
+        flag("prom_royal")
+        s.pop = clamp100(s.pop + 6)
+        hito_me("Estudios", by_gender(L.gender, "Rey", "Reina") + " del baile de graduación")
+        list_push(G.toasts, {"head": "¡CORONACIÓN!", "title": by_gender(L.gender, "REY", "REINA") + " DEL BAILE", "sub": "Tu generación te eligió.", "t0": G.t})
+        text = text + " Y al final... ¡te coronaron " + by_gender(L.gender, "rey", "reina") + " del baile!"
+    }
+    return finish("Baile de graduación", text, "g")
+}
+
+// ---------------------------------------------------------------- minijuegos
+
+function medal_for(score: int) {
+    if score >= 95 { return "oro" }
+    if score >= 80 { return "plata" }
+    if score >= 65 { return "bronce" }
+    return ""
+}
+
+function school_mg_result(score: any, ctx: map) {
+    let s = sc()
+    match ctx.kind {
+        "subject" => {
+            L.grades = clamp(L.grades + (score - 50) / 6, 0, 100)
+            gain("know", 1 + score / 40)
+            return finish("Repaso de " + SUBJECT_NAMES[ctx.subject], "Sacaste " + str(score) + " en el examen de práctica. Calificaciones: " + str(L.grades) + ".", outcome_kind({"happy": score - 50}))
+        }
+        "olympiad" => {
+            let medal = medal_for(score + rank("know") * 2)
+            if medal == "" { return finish("Olimpiada", "Sacaste " + str(score) + ". No hubo medalla, pero ganaste experiencia.", "n") }
+            s.medals += 1
+            s.pop = clamp100(s.pop + 3)
+            gain("know", 4)
+            if medal == "oro" { flag("olympiad_gold") }
+            hito_me("Estudios", "Medalla de " + medal + " en la olimpiada del conocimiento")
+            list_push(G.toasts, {"head": "¡MEDALLA!", "title": "OLIMPIADA · " + str_upper(medal), "sub": "Puntaje: " + str(score), "t0": G.t})
+            return finish("Olimpiada", "¡Medalla de " + medal + " en la olimpiada del conocimiento! Tu foto sale en el periódico local.", "g")
+        }
+        "fair" => {
+            let medal = medal_for(score + rank("skill") * 2)
+            if medal == "" { return finish("Feria de ciencias", "Tu volcán de bicarbonato no convenció a los jueces (" + str(score) + " puntos).", "n") }
+            s.medals += 1
+            s.pop = clamp100(s.pop + 4)
+            if medal == "oro" { flag("science_fair") }
+            hito_me("Estudios", "Medalla de " + medal + " en la feria de ciencias")
+            return finish("Feria de ciencias", "¡Medalla de " + medal + " en la feria de ciencias! Los jueces quieren ver tu experimento otra vez.", "g")
+        }
+        "election" => {
+            let total = score * 60 / 100 + s.pop * 40 / 100
+            if total >= 60 {
+                s.prez = true
+                s.pop = clamp100(s.pop + 6)
+                gain("guts", 4)
+                flag("class_prez")
+                hito_me("Estudios", "Ganaste la presidencia de la clase")
+                return finish("Elección", "¡Ganaste! Ahora eres " + by_gender(L.gender, "presidente", "presidenta") + " de la clase. Tu primera promesa: más recreo.", "g")
+            }
+            gain("guts", 2)
+            return finish("Elección", "Perdiste la elección (" + str(total) + " de 60 necesarios). El año que entra será.", "b")
+        }
+        "club_practice" => {
+            let c = club_def(ctx.club)
+            let before = club_level(ctx.club)
+            s.cxp[ctx.club] = map_get(s.cxp, ctx.club, 0) + 5 + score / 5
+            gain(c.social, 1 + score / 40)
+            if c.sport { L.health = clamp100(L.health + 1) }
+            let lvl = club_level(ctx.club)
+            let extra = ""
+            if lvl > before {
+                extra = " ¡Subiste a nivel " + str(lvl) + "!"
+                if lvl >= 4 && c.sport && !has_flag("captain") {
+                    flag("captain")
+                    s.pop = clamp100(s.pop + 6)
+                    hito_me("Estudios", "Capitán del equipo de " + str_lower(c.n))
+                    extra = extra + " El entrenador te nombró capitán."
+                }
+            }
+            return finish(c.n, "Entrenaste con " + str(score) + " puntos." + extra, outcome_kind({"happy": score - 40}))
+        }
+        "club_comp" => {
+            let c = club_def(ctx.club)
+            let medal = medal_for(score + club_level(ctx.club) * 5)
+            if medal == "" {
+                L.happy -= 3
+                return finish(c.comp, "Sacaste " + str(score) + ". Esta vez no hubo podio. A entrenar más.", "b")
+            }
+            s.medals += 1
+            if c.sport { s.sport_medals += 1 }
+            s.pop = clamp100(s.pop + 4)
+            L.happy += 8
+            if medal == "oro" && c.sport { flag("sport_star") }
+            hito_me("Estudios", "Medalla de " + medal + ": " + c.comp)
+            list_push(G.toasts, {"head": "¡MEDALLA!", "title": str_upper(c.n) + " · " + str_upper(medal), "sub": c.comp, "t0": G.t})
+            return finish(c.comp, "¡Medalla de " + medal + "! " + str(score) + " puntos y nivel " + str(club_level(ctx.club)) + ".", "g")
+        }
+        "admission" => {
+            let final = clamp(score * 70 / 100 + L.grades * 30 / 100 + ctx.bonus, 0, 100)
+            s.exam = final
+            let can = []
+            for t in UNI_TIERS {
+                if final >= t.exam { list_push(can, str_lower(t.n)) }
+            }
+            let where = "ninguna universidad todavía (puedes repetirlo el próximo año)"
+            if len(can) > 0 { where = str_join(can, ", ") }
+            if final >= 80 { hito_me("Estudios", "Examen de admisión: " + str(final) + " puntos") }
+            return finish("Examen de admisión", "Puntaje final: " + str(final) + ". Puedes entrar a: " + where + ".", outcome_kind({"happy": final - 55}))
+        }
+        "intern" => {
+            if L.study == null { return null }
+            if score >= 55 {
+                L.study.intern = true
+                L.intern = L.study.deg
+                flag("intern")
+                gain("skill", 3)
+                hito_me("Trabajo", "Prácticas profesionales de " + degree_def(L.study.deg).n)
+                return finish("Prácticas", "¡Te quedaste con las prácticas! Cuando trabajes en tu área empezarás con experiencia.", "g")
+            }
+            return finish("Prácticas", "No te eligieron (" + str(score) + " puntos). Puedes intentarlo el próximo mes.", "b")
+        }
+        "thesis" => {
+            if L.study == null { return null }
+            if score >= 80 {
+                L.study.gpa = clamp(L.study.gpa + 6, 0, 100)
+                flag("thesis")
+                hito_me("Estudios", "Tesis laureada")
+                return finish("Tesis", "¡Tesis laureada! El jurado se puso de pie.", "g")
+            }
+            if score < 40 {
+                L.study.gpa = clamp(L.study.gpa - 5, 0, 100)
+                return finish("Tesis", "La defensa fue un desastre. Aprobaste de milagro.", "b")
+            }
+            L.study.gpa = clamp(L.study.gpa + 2, 0, 100)
+            return finish("Tesis", "Defendiste tu tesis con " + str(score) + " puntos. Aprobada.", "g")
+        }
+        _ => return null
+    }
+}
+
+// ---------------------------------------------------------------- universidad
+
+function uni_tier(id: string) {
+    for t in UNI_TIERS {
+        if t.id == id { return t }
+    }
+    return UNI_TIERS[1]
+}
+
+// Antes de pagar una universidad, eliges dónde estudiar.
+function open_tier_choice(id: string) {
+    let d = degree_def(id)
+    let exam = sc().exam
+    let labels = []
+    let locks = []
+    for t in UNI_TIERS {
+        list_push(labels, t.n + " · " + money_str(d.cost * t.mult / 100) + "/año")
+        let lock = ""
+        if exam < t.exam { lock = "Examen " + str(t.exam) }
+        if t.id == "elite" && L.grades < 80 { lock = "Calificación 80" }
+        list_push(locks, lock)
+    }
+    list_push(labels, "Presentar el examen de admisión")
+    list_push(locks, "")
+    list_push(labels, "Mejor no")
+    list_push(locks, "")
+    return open_choice("¿DÓNDE ESTUDIAR " + str_upper(d.n) + "?", "Tu examen de admisión: " + str(exam) + " puntos. " + UNI_TIERS[0].d + " " + UNI_TIERS[2].d, labels, locks, "es_tier", {"deg": id})
+}
+
+function resolve_tier(index: int, ctx: map) {
+    if index == 3 { return open_admission(false) }
+    if index > 3 { return finish("Inscripción", "Lo pensarás mejor.", "n") }
+    G.pending_tier = UNI_TIERS[index].id
+    return open_enroll_pay(ctx.deg)
+}
+
+// Costo anual según la universidad elegida.
+function study_cost(st: map) {
+    let d = degree_def(st.deg)
+    let mult = st.mult
+    if mult == null { mult = 100 }
+    return d.cost * mult / 100
+}
+
+function prestige() {
+    let p = L.prestige
+    if p == null { return 0 }
+    return p
+}
+
+function post_def(id: string) {
+    for p in POSTS {
+        if p.id == id { return p }
+    }
+    return null
+}
+
+function has_post(id: string) {
+    if L.posts == null { return false }
+    for p in L.posts {
+        if str_starts_with(p, id) { return true }
+    }
+    return false
+}
+
+function post_items() {
+    let items = []
+    if L.post != null {
+        let p = post_def(L.post.id)
+        let lock = ""
+        if L.used["es_poststudy"] != null { lock = "Este mes ya" }
+        list_push(items, sitem("poststudy", "Estudiar para tu " + str_lower(p.n), "Promedio " + str(L.post.gpa), "Te faltan " + str(L.post.months) + " meses.", lock))
+        list_push(items, sitem("postdrop", "Dejar el posgrado", p.n, "Puedes volver después.", ""))
+        return items
+    }
+    for p in POSTS {
+        let lock = ""
+        if has_post(p.id) { lock = "Ya lo tienes" }
+        if L.edu < 3 { lock = "Título universitario" }
+        if p.need == "maestria" && !has_post("maestria") { lock = "Maestría" }
+        if L.study != null { lock = "Termina tu carrera" }
+        let cost = "Beca mensual"
+        if p.cost > 0 { cost = money_str(p.cost) + "/año" }
+        if lock == "" && p.cost > 0 && L.money < p.cost / 4 { lock = money_str(p.cost / 4) }
+        list_push(items, sitem("post:" + p.id, p.n, cost, p.d + " " + str(p.years) + " años. +" + str(p.bonus) + "% de sueldo donde aplica.", lock))
+    }
+    return items
+}
+
+function enroll_post(id: string) {
+    let p = post_def(id)
+    if p == null || L.post != null || L.edu < 3 || L.study != null { return null }
+    let base = ""
+    if len(L.degrees) > 0 { base = L.degrees[len(L.degrees) - 1] }
+    L.post = {"id": id, "months": p.years * 12, "gpa": clamp(L.study_gpa_final, 50, 95), "base": base}
+    hito_me("Estudios", "Empezaste " + str_lower(p.n))
+    list_push(G.toasts, {"head": "¡POSGRADO!", "title": str_upper(p.n), "sub": str(p.years) + " años", "t0": G.t})
+    return finish("Posgrado", "Empiezas tu " + str_lower(p.n) + ". " + p.d, "g")
+}
+
+function post_month() {
+    let pst = L.post
+    if pst == null { return null }
+    let p = post_def(pst.id)
+    if p.cost > 0 {
+        L.money -= p.cost / 12
+        if L.money < -5000 {
+            L.post = null
+            log_add("Dejaste tu " + str_lower(p.n) + ": ya no podías pagarla.", "b")
+            return null
+        }
+    } else {
+        L.money += 1200
+    }
+    pst.months -= 1
+    if pst.months <= 0 {
+        if L.posts == null { L.posts = [] }
+        list_push(L.posts, pst.id + ":" + pst.base)
+        L.post = null
+        L.happy += 12
+        gain("know", 8)
+        if pst.id == "doctorado" { flag("phd") }
+        if pst.id == "maestria" { flag("master") }
+        if pst.id == "mba" { flag("mba") }
+        hito_me("Estudios", "Terminaste tu " + str_lower(p.n))
+        list_push(G.toasts, {"head": "¡TÍTULO!", "title": str_upper(p.n), "sub": "+" + str(p.bonus) + "% de sueldo donde aplica", "t0": G.t})
+        log_add("¡Terminaste tu " + str_lower(p.n) + "!", "g")
+    }
+    return null
+}
+
+// % extra de sueldo por prestigio universitario y posgrados.
+function post_bonus(job: map) {
+    let d = job_def(job.id)
+    let b = 0
+    let skilled = REQUIRES[job.id] != null || d.field == "Ciencia" || d.field == "Salud" || d.field == "Ley" || d.field == "Educación" || d.field == "Tecnología"
+    if skilled {
+        if has_post("doctorado") {
+            b += 30
+        } else if has_post("maestria") {
+            b += 15
+        }
+        b += prestige() * 5
+    }
+    if has_post("mba") && (d.field == "Negocios" || d.field == "Oficina") { b += 20 }
+    return b
+}
+
+function study_items_extra() {
+    let items = []
+    let st = L.study
+    if st == null { return items }
+    let d = degree_def(st.deg)
+    if d.type == "uni" {
+        let dorm = "Mudarte a la residencia"
+        if st.dorm == true { dorm = "Dejar la residencia" }
+        list_push(items, sitem("dorm", dorm, "$700/mes", "Vivir en el campus: fiestas, amigos y cero privacidad.", ""))
+        let lock = ""
+        if st.frat == true { lock = "Ya eres miembro" }
+        list_push(items, sitem("frat", "Entrar a una " + by_gender(L.gender, "fraternidad", "sororidad"), "Contactos, fiestas", "Iniciación dura, contactos de por vida. Ayuda a que te contraten.", lock))
+        lock = ""
+        if st.gpa < 75 { lock = "Promedio 75" } else if L.used["es_ra"] != null { lock = "Este mes ya" }
+        list_push(items, sitem("ra", "Ayudantía de investigación", "$800, promedio", "Ayudas a un profesor con su investigación.", lock))
+        lock = ""
+        if st.exchange == true { lock = "Ya fuiste" }
+        list_push(items, sitem("exchange", "Semestre de intercambio", "Mundo", "Tokio, París, Madrid, Nueva York o Seúl.", lock))
+    }
+    let lock = ""
+    if st.intern == true { lock = "Ya las hiciste" } else if st.months > 24 { lock = "Últimos 2 años" } else if L.used["es_intern"] != null { lock = "Este mes ya" }
+    list_push(items, sitem("intern", "Prácticas profesionales", "Experiencia", "Entrevista de trabajo (minijuego). Si te quedas, empiezas tu carrera con experiencia.", lock))
+    lock = ""
+    if st.thesis == true { lock = "Ya la defendiste" } else if st.months > 12 { lock = "Último año" }
+    list_push(items, sitem("thesis", "Defender la tesis", "Promedio", "Escribe sin errores frente al jurado. Con 80 o más, tesis laureada.", lock))
+    list_push(items, sitem("switchmajor", "Cambiar de carrera", "Pierdes lo avanzado", "Eliges otra carrera y empiezas de cero.", ""))
+    return items
+}
+
+// ---------------------------------------------------------------- cada mes y cada año
+
+function escuela_month() {
+    if !L.alive { return null }
+    if L.post != null { post_month() }
+    if L.study != null && L.study.dorm == true {
+        L.money -= 700
+        if chance(30) { gain("charm", 1) }
+    }
+    if L.study != null && L.study.frat == true && chance(25) {
+        L.happy += 2
+        L.alcohol += 1
+    }
+    if L.sc == null || L.age >= 18 { return null }
+    let s = L.sc
+    if s.grounded > 0 { s.grounded -= 1 }
+    // Domingo
+    if L.age >= 8 && len(parents_alive()) > 0 && s.grounded == 0 { L.money += allowance_now() }
+    if !in_school() { return null }
+    // Popularidad: tiende a tu nivel natural.
+    let target = 15 + looks_eff() / 4 + rank("charm") * 6 + sc_kind().pop * 3 + s.medals * 2
+    let g = group_def(s.group)
+    if g != null {
+        target += g.pop * 4
+        if chance(40) { gain(g.social, 1) }
+        if g.id == "rebeldes" && chance(20) { L.karma -= 1 }
+    }
+    if s.prez { target += 10 }
+    if s.pop < target { s.pop = clamp100(s.pop + rint(0, 2)) } else if s.pop > target { s.pop = clamp100(s.pop - rint(0, 1)) }
+    for id in s.clubs {
+        let c = club_def(id)
+        if chance(35) { gain(c.social, 1) }
+        if c.sport && chance(30) { L.health = clamp100(L.health + 1) }
+    }
+    if s.kind == "internado" && chance(25) { L.happy -= 1 }
+    return null
+}
+
+function escuela_year() {
+    if L.sc == null { return null }
+    if L.age == 18 { return null }
+    if in_school() && L.sc.kind != "publica" && L.sc.kind != "casa" && L.family == "pobre" && L.grades < 85 {
+        L.sc.kind = "publica"
+        log_add("Tu familia ya no pudo pagar la colegiatura. Regresaste a la escuela pública.", "b")
+    }
+    return null
+}
+
+// Graduación de la secundaria: anuario y mejor promedio.
+function escuela_graduation() {
+    let s = sc()
+    let lines = []
+    if L.grades >= 95 {
+        flag("valedictorian")
+        hito_me("Estudios", "Mejor promedio de tu generación")
+        list_push(lines, "Diste el discurso de mejor promedio de tu generación.")
+    } else if L.grades >= 90 {
+        s.honor += 1
+    }
+    if s.det == 0 {
+        flag("model_student")
+        list_push(lines, "Terminaste sin un solo castigo.")
+    }
+    let sup = "El más tranquilo de la generación"
+    if s.pop >= 80 {
+        sup = "Más popular"
+    } else if L.grades >= 90 {
+        sup = "Más probable de triunfar"
+    } else if s.sport_medals >= 2 {
+        sup = "Mejor deportista"
+    } else if s.group == "rebeldes" || s.det >= 4 {
+        sup = "Más probable de terminar en la dirección"
+    } else if rank("kind") >= 3 {
+        sup = "El corazón más grande"
+    } else if looks_eff() >= 75 {
+        sup = "Mejor sonrisa"
+    } else if s.medals >= 2 {
+        sup = "Coleccionista de medallas"
+    }
+    hito_me("Estudios", "Anuario: «" + sup + "»")
+    list_push(lines, "En el anuario te eligieron: «" + sup + "».")
+    log_add(str_join(lines, " "), "x")
+    if s.exam == 0 && L.alive {
+        log_add("No presentaste el examen de admisión. Puedes hacerlo en Ocupación › Estudios.", "n")
+    }
+}
+
+// Boleta de fin de año escolar (meses 11 de los 7 a los 17).
+function open_report_card() {
+    let s = sc()
+    let p = best_parent()
+    let text = "Tu boleta: " + str(L.grades) + " de promedio, " + str(s.det) + " " + plural(s.det, "castigo", "castigos") + "."
+    if L.grades >= 95 {
+        s.honor += 1
+        flag("honor_roll")
+        hito_once("honor_" + str(L.age), "Estudios", "Cuadro de honor a los " + str(L.age))
+        text = text + " ¡Cuadro de honor!"
+    }
+    if p == null {
+        return open_choice("BOLETA", text + " No hay a quién enseñársela.", ["Guardarla en un cajón"], [""], "es_report", {})
+    }
+    let locks = ["", "", ""]
+    return open_choice("BOLETA", text + " " + p.first + " (" + str_lower(STYLE_NAMES[parent_style(p)]) + ") espera verla.",
+        ["Enseñársela", "Esconderla", "Falsificar la firma"], locks, "es_report", {"person": p})
+}
+
+function resolve_report(index: int, ctx: map) {
+    G.modal = null
+    let s = sc()
+    let p = ctx["person"]
+    if p == null { return finish("Boleta", "La guardaste junto con las demás.", "n") }
+    let g = L.grades
+    if index == 1 {
+        if g < 70 && chance(60) {
+            s.grounded = max(s.grounded, 3)
+            p.bond = clamp100(p.bond - 6)
+            return finish("Boleta", p.first + " la encontró debajo de tu colchón. Castigo doble: tres meses sin domingo.", "b")
+        }
+        return finish("Boleta", "Nadie preguntó por la boleta. Esta vez.", "n")
+    }
+    if index == 2 {
+        if chance(45 + rank("guts") * 8) {
+            gain("guts", 2)
+            L.karma -= 2
+            return finish("Boleta", "Tu firma falsificada es perfecta. Nadie sospecha nada.", "n")
+        }
+        s.grounded = max(s.grounded, 3)
+        p.bond = clamp100(p.bond - 8)
+        return finish("Boleta", "La escuela llamó a tu casa. La firma no se parecía en nada." + detention(), "b")
+    }
+    match parent_style(p) {
+        "amoroso" => {
+            p.bond = clamp100(p.bond + 3)
+            L.happy += 4
+            if g < 60 {
+                L.grades = clamp(L.grades + 3, 0, 100)
+                return finish("Boleta", p.first + " no se enojó: se sentó contigo a estudiar todas las tardes.", "g")
+            }
+            return finish("Boleta", p.first + " te abrazó y pegó la boleta en el refri.", "g")
+        }
+        "estricto" => {
+            if g >= 85 {
+                L.money += 1000
+                return finish("Boleta", p.first + " asintió con aprobación y te dio $1,000. «Así se hace.»", "g")
+            }
+            if g < 75 {
+                s.grounded = max(s.grounded, 3)
+                L.happy -= 6
+                return finish("Boleta", p.first + " leyó la boleta en silencio. «Tres meses sin domingo, sin tele y sin salir.»", "b")
+            }
+            return finish("Boleta", "«Puedes dar más», dijo " + p.first + ". Y siguió leyendo el periódico.", "n")
+        }
+        "relajado" => {
+            L.happy += 1
+            return finish("Boleta", p.first + " la firmó sin verla. «¿Pasaste? Bien.»", "n")
+        }
+        "ausente" => {
+            L.happy -= 3
+            return finish("Boleta", "Tu boleta se quedó en la mesa una semana. Nadie la firmó.", "b")
+        }
+        _ => {
+            if g < 85 {
+                L.happy -= 8
+                p.bond = clamp100(p.bond - 5)
+                return finish("Boleta", p.first + " te comparó con todos tus primos. Gritó hasta la cena.", "b")
+            }
+            L.happy -= 2
+            return finish("Boleta", "«Pudiste hacerlo mejor», dijo " + p.first + ". Con un " + str(g) + ".", "b")
+        }
+    }
+}
+
+// Eventos de la escuela y la universidad; también la boleta y el examen de admisión.
+function maybe_school_event() {
+    if G.modal != null || L.jail > 0 { return false }
+    if in_school() {
+        let s = sc()
+        if L.month == 11 && L.age >= 7 && map_get(s, "card_age", 0) != L.age {
+            s.card_age = L.age
+            open_report_card()
+            return true
+        }
+        if L.age == 17 && L.month == 6 && s.exam_age != 17 {
+            log_add("Llegó la convocatoria del examen de admisión a la universidad.", "n")
+            open_admission(true)
+            return true
+        }
+        if chance(12) { return school_event_from(SCHOOL_EVENTS) }
+        return false
+    }
+    if L.study != null && chance(9) { return school_event_from(CAMPUS_EVENTS) }
+    return false
+}
+
+function school_event_from(pool: list) {
+    let ok = []
+    let weights = []
+    for ev in pool {
+        if L.age < ev.min || L.age > ev.max { continue }
+        let last = L.seen[ev.id]
+        if last != null && L.age - last < 2 { continue }
+        if ev.req == "uni" && (L.study == null || degree_def(L.study.deg).type != "uni") { continue }
+        list_push(ok, ev)
+        list_push(weights, ev.w)
+    }
+    if len(ok) == 0 { return false }
+    let ev = ok[weighted_choose(G.rng, weights)]
+    let ctx = {}
+    if ev["person"] == "near" { ctx = {"person": stranger()} }
+    open_event(ev, ctx)
+    return true
+}
+
+// Efectos de la escuela.
+function escuela_fx(out: list) {
+    if L.sc != null && L.age < 18 {
+        if L.sc.grounded > 0 { list_push(out, fx("castigo", "Castigad" + oa(L.gender), false, "Sin domingo y sin salir.", {"hap": -1})) }
+        if L.sc.pop >= 80 && in_school() { list_push(out, fx("popular", "Popular", true, "En los pasillos todos te saludan.", {"hap": 1})) }
+    }
+    if has_post("doctorado") {
+        list_push(out, fx("doctor", "Doctorado", true, "Te dicen doctor" + by_gender(L.gender, "", "a") + " y tu currículum impone.", {"hire": 10}))
+    } else if has_post("maestria") {
+        list_push(out, fx("maestria", "Maestría", true, "Un título más en la pared.", {"hire": 5}))
+    }
+    if prestige() >= 2 { list_push(out, fx("elite", "Egresad" + oa(L.gender) + " de élite", true, "Tu universidad abre puertas sola.", {"hire": 10})) }
+    if has_flag("frat") && L.age < 45 { list_push(out, fx("frat", "Hermandad", true, "Tus contactos de la " + by_gender(L.gender, "fraternidad", "sororidad") + " te recomiendan.", {"hire": 5})) }
+}
