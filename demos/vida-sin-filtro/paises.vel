@@ -778,6 +778,14 @@ function pais_trip(dest: string, honey: bool) {
         bond_gain(p, 15)
         list_push(parts, "Por fin viste a " + p.first + " en persona. Valió cada kilómetro.")
     }
+    for m in ph().matches {
+        if m.far == true && m.ctry == dest {
+            m.far = false
+            m.km = rint(1, 25)
+            m.heat = clamp100(m.heat + 20)
+            list_push(parts, "Quedaste con " + m.first + ", tu match de Flama: ahora están a unas calles.")
+        }
+    }
     if L.age >= 18 && p == null && chance(25) {
         let y = stranger()
         pais_person(y, dest)
@@ -1283,6 +1291,28 @@ function christmas_here() {
     let c = here()
     let x = map_get(c.rel, "catolica", 0) + map_get(c.rel, "evangelica", 0) + map_get(c.rel, "ortodoxa", 0)
     return x >= 30 || list_contains(["catolica", "evangelica", "ortodoxa"], L.religion) || list_contains(["jp", "kr", "cn", "tw", "sg"], c.id)
+}
+
+// Tradiciones mexicanas y centroamericanas (posadas, tamales, mariachi).
+function mx_style_here() {
+    return list_contains(["mx", "gt", "sv", "hn"], here_id())
+}
+
+// En el hemisferio sur, las vacaciones largas son en enero.
+function summer_month() {
+    if here().lat < 0 { return "Enero" }
+    return "Julio"
+}
+
+// El Día de las madres no cae igual en todos lados.
+function mothers_day_month() {
+    let id = here_id()
+    if list_contains(["gb", "ie", "ng", "sa", "ae", "qa", "kw", "om", "bh", "jo", "lb", "eg", "iq", "sy", "ps", "ye", "sd", "ly"], id) { return "Marzo" }
+    if list_contains(["ar"], id) { return "Octubre" }
+    if list_contains(["th", "cr"], id) { return "Agosto" }
+    if list_contains(["ru", "by", "kz"], id) { return "Noviembre" }
+    if list_contains(["id", "pa"], id) { return "Diciembre" }
+    return "Mayo"
 }
 
 function halloween_here() {

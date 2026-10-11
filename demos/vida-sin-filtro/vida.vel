@@ -715,7 +715,7 @@ function maybe_holiday() {
             return null
         }
         if L.age < 14 {
-            open_choice("NAVIDAD", "Es Nochebuena. Hay ponche, tamales y un árbol con regalos.", ["Esperar despiert" + oa(L.gender) + " a Santa", "Abrir los regalos a escondidas", "Ayudar a cocinar con la familia"], ["", "", ""], "vd_hol", {"kind": "navidad_kid"})
+            open_choice("NAVIDAD", if_str(mx_style_here(), "Es Nochebuena. Hay ponche, tamales y un árbol con regalos.", "Es Nochebuena. La casa huele a cena especial y hay un árbol con regalos."), ["Esperar despiert" + oa(L.gender) + " a Santa", "Abrir los regalos a escondidas", "Ayudar a cocinar con la familia"], ["", "", ""], "vd_hol", {"kind": "navidad_kid"})
             return null
         }
         open_choice("NAVIDAD", "Las fiestas llegaron. ¿Cómo las pasas este año?", ["Cena con toda la familia", "Viaje de fin de año ($2,000)", "Trabajar el turno doble (pagan triple)", "Organizar el intercambio de regalos ($300)"], ["", if_str(L.money < 2000, "$2,000", ""), if_str(L.job == null, "Sin trabajo", ""), if_str(L.money < 300, "$300", "")], "vd_hol", {"kind": "navidad"})
@@ -726,19 +726,19 @@ function maybe_holiday() {
         open_choice("HALLOWEEN", "Noche de disfraces. ¿De qué te vistes?", ["De algo aterrador", "De algo gracioso", "De algo sexy", "Te quedas en casa repartiendo dulces"], ["", "", if_str(L.age < 18, "Edad 18", ""), ""], "vd_hol", {"kind": "halloween"})
         return null
     }
-    if m == "Julio" && L.age >= 6 && L.age <= 22 && (L.school != "" || L.study != null) {
+    if m == summer_month() && L.age >= 6 && L.age <= 22 && (L.school != "" || L.study != null) {
         d.hol[m] = L.age
         open_choice("VACACIONES DE VERANO", "Dos meses sin clases. ¿Qué haces?", ["Campamento de verano ($500)", "Trabajo de verano", "Dormir hasta mediodía y ver series", "Curso de verano"], [if_str(L.money < 500 && L.age >= 14, "$500", ""), if_str(L.age < 14, "Edad 14", ""), "", ""], "vd_hol", {"kind": "verano"})
         return null
     }
-    if m == "Mayo" && len(kids_alive()) == 0 && L.age >= 6 && L.age <= 50 {
+    if m == mothers_day_month() && len(kids_alive()) == 0 && L.age >= 6 && L.age <= 50 {
         let mom = null
         for q in parents_alive() {
             if q.rel == "madre" { mom = q }
         }
         if mom != null {
             d.hol[m] = L.age
-            open_choice("DÍA DE LAS MADRES", "Es el Día de las madres. " + mom.first + " finge que no espera nada.", ["Llevarle serenata con mariachi ($800)", "Comida en familia", "Una tarjeta hecha a mano", "Un mensaje rápido"], [if_str(L.money < 800, "$800", ""), "", "", ""], "vd_hol", {"kind": "madres", "person": mom})
+            open_choice("DÍA DE LAS MADRES", "Es el Día de las madres. " + mom.first + " finge que no espera nada.", [if_str(mx_style_here(), "Llevarle serenata con mariachi ($800)", "Flores y un regalo especial ($800)"), "Comida en familia", "Una tarjeta hecha a mano", "Un mensaje rápido"], [if_str(L.money < 800, "$800", ""), "", "", ""], "vd_hol", {"kind": "madres", "person": mom})
             return null
         }
     }
@@ -1015,7 +1015,8 @@ function holiday_result(index: int, ctx: map) {
         }
         for q in parents_alive() { bond_gain(q, 3) }
         gain("kind", 1)
-        return finish("Navidad", "Batiste el ponche y ayudaste con los tamales. La familia entera te aplaudió.", "g")
+        if mx_style_here() { return finish("Navidad", "Batiste el ponche y ayudaste con los tamales. La familia entera te aplaudió.", "g") }
+        return finish("Navidad", "Ayudaste en la cocina y te tocó probar todo antes que nadie. La familia entera te aplaudió.", "g")
     }
     if k == "navidad" {
         if index == 0 {
@@ -1083,7 +1084,8 @@ function holiday_result(index: int, ctx: map) {
         if index == 0 {
             L.money -= 800
             bond_gain(p, 12)
-            return finish("Día de las madres", "El mariachi cantó «Las mañanitas» a las 7 a. m. " + p.first + " lloró de emoción (los vecinos, de sueño).", "g")
+            if mx_style_here() { return finish("Día de las madres", "El mariachi cantó «Las mañanitas» a las 7 a. m. " + p.first + " lloró de emoción (los vecinos, de sueño).", "g") }
+            return finish("Día de las madres", "Flores, su regalo favorito y un abrazo largo. " + p.first + " lloró de emoción.", "g")
         }
         if index == 1 {
             bond_gain(p, 6)

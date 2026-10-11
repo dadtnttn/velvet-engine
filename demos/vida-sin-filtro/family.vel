@@ -918,6 +918,7 @@ function continue_as_heir() {
     }
     setup_family_styles()
     corona_inherit(old)
+    route_inherit(old)
     log_add("Generación " + str(gen) + ": continúas como " + kid.first + ", " + hij(kid) + " de " + old.first + ".", "x")
     hito_me("Familia", "Heredaste el legado de " + old.first)
     let how = "heredaste " + money_str(money) + "."

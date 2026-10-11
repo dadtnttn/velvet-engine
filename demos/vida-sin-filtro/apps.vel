@@ -413,7 +413,7 @@ function apps_action(action: string) {
                 L.karma += 2
                 return finish("Grupo de vecinos", "Encontraste al gato perdido de la señora del 3. Eres el héroe del edificio.", "g")
             }
-            return finish("Grupo de vecinos", pick(["Alguien se quejó de un ruido a las 3 a. m. Era tu licuadora.", "Organizaron una posada. Te tocó llevar los vasos.", "Una discusión de 80 mensajes sobre dónde estacionarse."]), "n")
+            return finish("Grupo de vecinos", pick(["Alguien se quejó de un ruido a las 3 a. m. Era tu licuadora.", if_str(mx_style_here(), "Organizaron una posada. Te tocó llevar los vasos.", "Organizaron una fiesta de vecinos. Te tocó llevar los vasos."), "Una discusión de 80 mensajes sobre dónde estacionarse."]), "n")
         }
         "grp_padres" => {
             if !ap_use("grp_padres") { return null }
