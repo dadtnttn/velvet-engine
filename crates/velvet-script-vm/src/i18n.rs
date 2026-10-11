@@ -296,27 +296,27 @@ struct Translator {
 
 const CACHE_LIMIT: usize = 60_000;
 
-/// Letters in a template's literal parts (how much real text it has).
-fn literal_letters(parts: &[Part]) -> usize {
-    parts
-        .iter()
-        .map(|p| match p {
-            Part::Lit(l) => l.chars().filter(|c| c.is_alphabetic()).count(),
-            Part::Hole(_) => 0,
-        })
-        .sum()
-}
-
 /// One to three words, each starting with a capital letter: a proper name
 /// ("Hanna", "Hanna Krawczyk") that no catalog is expected to translate.
 fn looks_like_name(v: &str) -> bool {
     let words: Vec<&str> = v.split_whitespace().collect();
     !words.is_empty()
         && words.len() <= 3
-        && words
-            .iter()
-            .all(|w| w.chars().next().is_some_and(char::is_uppercase))
+        && words.iter().all(|w| {
+            w.chars().next().is_some_and(char::is_uppercase)
+                && !COMMON_WORDS.contains(&w.trim_matches(|c: char| !c.is_alphabetic()))
+        })
 }
+
+/// Capitalized words of the source language that are never names (a line
+/// starting "Hace 3 años" or "Tu madre" is text, not a person).
+const COMMON_WORDS: &[&str] = &[
+    "Hace", "Tu", "Tus", "Te", "Mi", "Mis", "Su", "Sus", "El", "La", "Los", "Las", "Lo", "Un",
+    "Una", "Unos", "Unas", "De", "Del", "Al", "Y", "O", "Con", "Sin", "Por", "Para", "Que", "Se",
+    "No", "Sí", "Si", "Ya", "Muy", "Más", "Menos", "Hoy", "Ayer", "Ahora", "Nunca", "Siempre",
+    "Cada", "Todo", "Toda", "Todos", "Todas", "Este", "Esta", "Ese", "Esa", "Es", "Eres", "Está",
+    "Estás", "Son", "Hay", "Fue", "Fuiste",
+];
 
 fn has_letters(s: &str) -> bool {
     s.chars().any(char::is_alphabetic)
@@ -492,28 +492,102 @@ impl Translator {
             return None;
         }
         self.match_template(s, depth)
+            .or_else(|| self.split_list(s, depth))
+            .or_else(|| self.paren_tail(s, depth))
+            .or_else(|| self.lowercase_start(s, depth))
+    }
+
+    /// "Cinco años juntos (Hanna)": a line with an aside in parentheses at
+    /// the end. The head translates on its own and the aside too, or stays as
+    /// it is when it is a name.
+    fn paren_tail(&self, s: &str, depth: usize) -> Option<String> {
+        let body = s.strip_suffix(')')?;
+        let open = body.rfind(" (")?;
+        let (head, inner) = (&body[..open], &body[open + 2..]);
+        if !has_letters(head) {
+            return None;
+        }
+        let head = self.lookup(head, depth + 1)?;
+        let inner = if !has_letters(inner) {
+            inner.to_owned()
+        } else if let Some(t) = self.lookup(inner, depth + 1) {
+            t
+        } else if looks_like_name(inner) {
+            inner.to_owned()
+        } else {
+            return None;
+        };
+        let out = format!("{head} ({inner})");
+        (out != s).then_some(out)
+    }
+
+    /// "hace 3 años" inside a longer line: templates are stored as
+    /// "Hace {0} años", so try them capitalized and lower the result again.
+    fn lowercase_start(&self, s: &str, depth: usize) -> Option<String> {
+        let mut cs = s.chars();
+        let first = cs.next().filter(|c| c.is_lowercase())?;
+        let cap: String = first.to_uppercase().collect::<String>() + cs.as_str();
+        let t = self.match_template(&cap, depth + 1)?;
+        let mut ts = t.chars();
+        let f = ts.next()?;
+        let out = f.to_lowercase().collect::<String>() + ts.as_str();
+        (out != s).then_some(out)
+    }
+
+    /// Lines the game builds by joining pieces ("Madre · enojada · Hace 3
+    /// años", "Gustos: A, B", "Ana: ¿Salimos?") that are not in the catalog
+    /// as a whole: every piece is translated on its own. If a piece with
+    /// letters neither translates nor looks like a name, the line is left as
+    /// it is (no mixed languages).
+    fn split_list(&self, s: &str, depth: usize) -> Option<String> {
+        'seps: for sep in [" · ", ": ", ", ", " / "] {
+            if !s.contains(sep) {
+                continue;
+            }
+            let mut out = Vec::new();
+            let mut any = false;
+            for piece in s.split(sep) {
+                let core = piece.trim();
+                if core.is_empty() || !has_letters(core) {
+                    out.push(piece.to_owned());
+                    continue;
+                }
+                match self.lookup(piece, depth + 1) {
+                    Some(t) => {
+                        any |= t != piece;
+                        out.push(t);
+                    }
+                    None if looks_like_name(core) => out.push(piece.to_owned()),
+                    None => continue 'seps,
+                }
+            }
+            if any {
+                return Some(out.join(sep));
+            }
+        }
+        None
     }
 
     fn match_template(&self, s: &str, depth: usize) -> Option<String> {
         let upper = is_upper_text(s);
-        let mut best: Option<(usize, Vec<(usize, String)>)> = None;
-        let consider = |idx: usize, best: &mut Option<(usize, Vec<(usize, String)>)>| {
-            let t = &self.cat.templates[idx];
-            if best
-                .as_ref()
-                .is_some_and(|(b, _)| self.cat.templates[*b].weight >= t.weight)
-            {
+        // Every template that matches, heaviest first: if the best one would
+        // leave untranslated words, the next one may not.
+        let mut found: Vec<(usize, Vec<(usize, String)>)> = Vec::new();
+        let mut tried = std::collections::HashSet::new();
+        let mut consider = |idx: usize| {
+            if !tried.insert(idx) {
                 return;
             }
+            let t = &self.cat.templates[idx];
             let parts = if upper { &t.upper } else { &t.parts };
             if let Some(h) = match_parts(parts, s) {
-                *best = Some((idx, h));
+                found.push((idx, h));
             }
         };
         let key = prefix_key(s);
         if let Some(list) = self.cat.by_prefix.get(&key) {
             for &idx in list {
-                consider(idx, &mut best);
+                consider(idx);
             }
         }
         // Shorter leading literals (1-2 chars) are indexed by their own length.
@@ -522,7 +596,7 @@ impl Translator {
             if k.chars().count() == n {
                 if let Some(list) = self.cat.by_prefix.get(&k) {
                     for &idx in list {
-                        consider(idx, &mut best);
+                        consider(idx);
                     }
                 }
             }
@@ -534,29 +608,62 @@ impl Translator {
                 s.contains(lit.as_str())
             };
             if hit {
-                consider(*idx, &mut best);
+                consider(*idx);
             }
         }
-        let (idx, holes) = best?;
+        found.sort_by(|a, b| {
+            self.cat.templates[b.0]
+                .weight
+                .cmp(&self.cat.templates[a.0].weight)
+        });
+        // A result identical to the line (an identity template with names in
+        // its holes) is not a translation: the next candidate may be.
+        found
+            .into_iter()
+            .filter(|(idx, holes)| self.holes_ok(*idx, holes, depth))
+            .map(|(idx, holes)| {
+                restore_case(
+                    s,
+                    self.render(&self.cat.templates[idx].target, &holes, depth),
+                )
+            })
+            .find(|out| out != s)
+    }
+
+    // A template whose holes hold untranslated text would only translate the
+    // glue ("{1} y {2}" -> "…和…", "{0} años" -> "Hace 29 ans") and mix two
+    // languages: better to leave the line as it is (the pieces may still
+    // translate one by one, see `split_list`). A hole shown as text must
+    // translate, or be a short name; holes the target keeps raw ({0!}) or only
+    // uses to pick a form ({0|o=..}) are fine as they are.
+    fn holes_ok(&self, idx: usize, holes: &[(usize, String)], depth: usize) -> bool {
         let t = &self.cat.templates[idx];
-        // A template whose holes hold untranslated text would only translate
-        // the glue ("{1} y {2}" -> "…和…") and mix two languages: better to
-        // leave the line as it is. Long phrases never pass; with a pure glue
-        // template (almost no literal letters) every hole must translate or
-        // look like a name.
-        let glue = literal_letters(&t.parts) < 3;
-        for (_, v) in &holes {
+        for (i, v) in holes {
             if !has_letters(v) {
                 continue;
             }
+            let plain = t.target.contains(&format!("{{{i}}}"));
+            let raw = t.target.contains(&format!("{{{i}!"));
+            if !plain && !raw {
+                continue;
+            }
+            // A hole kept as it is must really be a name ("Hanna", not
+            // "¿Salimos este finde?").
+            if raw && !plain {
+                if looks_like_name(v) {
+                    continue;
+                }
+                return false;
+            }
+            if self.lookup(v.trim(), depth + 1).is_some() {
+                continue;
+            }
             let long = v.split_whitespace().count() > 3;
-            if (long || (glue && !looks_like_name(v))) && self.lookup(v.trim(), depth + 1).is_none()
-            {
-                return None;
+            if long || !looks_like_name(v) {
+                return false;
             }
         }
-        let out = self.render(&t.target, &holes, depth);
-        Some(restore_case(s, out))
+        true
     }
 
     fn render(&self, target: &str, holes: &[(usize, String)], depth: usize) -> String {
@@ -740,6 +847,107 @@ mod tests {
         assert_eq!(t.tr(s), s);
         // A pure glue template with a common word that has no translation.
         assert_eq!(t.tr("Hola y elefante"), "Hola y elefante");
+    }
+
+    #[test]
+    fn joined_pieces_translate_one_by_one() {
+        let c = cat(&[
+            ("Madre", "Mother"),
+            ("enojada", "angry"),
+            ("Hace {0} años", "{0} years ago"),
+            ("Gustos", "Into"),
+            ("Fan de los tríos", "Threesome fan"),
+            ("Amante del BDSM", "BDSM lover"),
+            ("¿Salimos este finde?", "Going out this weekend?"),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(
+            t.tr("Madre · enojada · Hace 3 años"),
+            "Mother · angry · 3 years ago"
+        );
+        assert_eq!(
+            t.tr("Gustos: Fan de los tríos, Amante del BDSM"),
+            "Into: Threesome fan, BDSM lover"
+        );
+        // A name before the colon stays as it is.
+        assert_eq!(
+            t.tr("Filip: ¿Salimos este finde?"),
+            "Filip: Going out this weekend?"
+        );
+        // One piece without translation: the whole line is left alone.
+        let s = "Madre · algo que no existe";
+        assert_eq!(t.tr(s), s);
+    }
+
+    #[test]
+    fn asides_in_parentheses_keep_the_name() {
+        let c = cat(&[
+            ("Cinco años juntos", "Five years together"),
+            ("Hito: {0}.", "Milestone: {0}."),
+            ("Amigo", "Friend"),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(
+            t.tr("Hito: Cinco años juntos (Hanna)."),
+            "Milestone: Five years together (Hanna)."
+        );
+        assert_eq!(
+            t.tr("Cinco años juntos (Amigo)"),
+            "Five years together (Friend)"
+        );
+        // An aside that is neither a name nor in the catalog: left alone.
+        let s = "Cinco años juntos (algo raro)";
+        assert_eq!(t.tr(s), s);
+    }
+
+    #[test]
+    fn templates_never_leave_unknown_words_in_a_hole() {
+        let c = cat(&[
+            ("{0} · {1} años", "{0} · {1} years"),
+            ("Tío", "Uncle"),
+            ("cariñoso", "loving"),
+            ("Hace {0} años", "{0} years ago"),
+            ("Tu {0} te llama.", "Your {0} is calling."),
+        ]);
+        let mut t = Translator::new(c);
+        // "{0} · {1} años" would give "Uncle · cariñoso · Hace 29 years":
+        // the pieces translate one by one instead.
+        assert_eq!(
+            t.tr("Tío · cariñoso · Hace 29 años"),
+            "Uncle · loving · 29 years ago"
+        );
+        // An unknown lowercase word in a hole: the line stays as it is.
+        assert_eq!(t.tr("Tu perrito te llama."), "Tu perrito te llama.");
+        // A name is fine.
+        assert_eq!(t.tr("Tu Firulais te llama."), "Your Firulais is calling.");
+        // Lowercase use of a capitalized template.
+        assert_eq!(t.tr("Tío · hace 29 años"), "Uncle · 29 years ago");
+    }
+
+    #[test]
+    fn common_words_are_not_names() {
+        let c = cat(&[
+            ("{0} · {1} años", "{0} · {1} years"),
+            ("{0} años", "{0} years"),
+            ("{0} · {1}", "{0} · {1}"),
+            ("Tío", "Uncle"),
+            ("cariñoso", "loving"),
+            ("Hace {0} años", "{0} years ago"),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(
+            t.tr("Tío · cariñoso · Hace 29 años"),
+            "Uncle · loving · 29 years ago"
+        );
+    }
+
+    #[test]
+    fn name_holes_only_take_names() {
+        let c = cat(&[("{0}: {1}", "{0!}: {1!}"), ("¿Salimos?", "Going out?")]);
+        let mut t = Translator::new(c);
+        // The identity template would keep the Spanish line: the pieces
+        // translate one by one instead.
+        assert_eq!(t.tr("Filip: ¿Salimos?"), "Filip: Going out?");
     }
 
     #[test]
