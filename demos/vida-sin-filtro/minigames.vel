@@ -1,6 +1,9 @@
 // @edition 3
-// Minijuegos: bartender, memoria, cambio de caja, precisión, flechas, mecanografía y examen.
-// Cada minijuego da un puntaje de 0 a 100 que usan los trabajos, audiciones y exámenes.
+// Minijuegos: bartender, memoria, cambio de caja, precisión, flechas, mecanografía,
+// examen (general o por materia), periódico, la gran carrera, ortografía, cálculo
+// mental, secuencia de colores, entrevista, clasificar y reflejos.
+// Cada minijuego da un puntaje de 0 a 100 que usan los trabajos, audiciones y
+// exámenes; el mejor puntaje de cada uno queda en L.mgbest.
 
 const MG_INFO = {
     "bar": {"title": "BARTENDER", "help": "Prepara cada trago: elige sus 3 ingredientes antes de que se acabe el tiempo. Teclas 1-6 o clic.", "rounds": 5, "limit": 9.0},
@@ -11,7 +14,136 @@ const MG_INFO = {
     "typing": {"title": "TECLEO RÁPIDO", "help": "Escribe la palabra que aparece en pantalla, sin errores.", "rounds": 5, "limit": 7.0},
     "quiz": {"title": "EXAMEN", "help": "Responde las preguntas antes de que se acabe el tiempo. Teclas 1-4 o clic.", "rounds": 5, "limit": 12.0},
     "news": {"title": "EL PERIÓDICO", "help": "Marca las palabras clave de las noticias de negocios: empresas, sectores y señales (auge, crisis, quiebra, récord...). No marques las noticias que no importan. Luego entrega.", "rounds": 1, "limit": 35.0},
-    "race": {"title": "LA GRAN CARRERA", "help": "Guía a tu campeón hasta el óvulo antes que los demás. Cambia de carril con ← → (o A/D, o los botones). Esquiva los glóbulos blancos (te frenan) y toma los turbos amarillos.", "rounds": 1, "limit": 24.0}
+    "race": {"title": "LA GRAN CARRERA", "help": "Guía a tu campeón hasta el óvulo antes que los demás. Cambia de carril con ← → (o A/D, o los botones). Esquiva los glóbulos blancos (te frenan) y toma los turbos amarillos.", "rounds": 1, "limit": 24.0},
+    "spell": {"title": "ORTOGRAFÍA", "help": "Elige la palabra que está bien escrita. Cuidado con los acentos. Teclas 1-4 o clic.", "rounds": 6, "limit": 6.0},
+    "mental": {"title": "CÁLCULO MENTAL", "help": "Resuelve la operación antes de que se acabe el tiempo. Teclas 1-4 o clic.", "rounds": 6, "limit": 6.0},
+    "simon": {"title": "SECUENCIA", "help": "Mira el orden en que se iluminan los colores y repítelo. Cada ronda es más larga. Teclas 1-4 o clic.", "rounds": 4, "limit": 9.0},
+    "interview": {"title": "ENTREVISTA", "help": "Te hacen preguntas difíciles. Elige la respuesta más convincente: no hay respuestas perfectas, pero sí algunas muy malas. Teclas 1-4 o clic.", "rounds": 4, "limit": 14.0},
+    "sort": {"title": "CLASIFICAR", "help": "¿A qué grupo va cada cosa? Decide rápido. Teclas 1-3 o clic.", "rounds": 8, "limit": 3.5},
+    "reflex": {"title": "REFLEJOS", "help": "Espera la luz verde y presiona ESPACIO (o el botón) lo más rápido que puedas. Si te adelantas, pierdes la ronda.", "rounds": 5, "limit": 4.6}
+}
+
+// Ortografía: la primera opción es la correcta (se barajan al jugar).
+const SPELLING = [
+    ["Excelente", "Exelente", "Eccelente", "Excelentte"],
+    ["Bicicleta", "Bisicleta", "Vicicleta", "Bicicletta"],
+    ["Vehículo", "Veíhculo", "Behículo", "Vehícolo"],
+    ["Exhausto", "Exausto", "Exaustho", "Exhaosto"],
+    ["Hipopótamo", "Ipopótamo", "Hipopotámo", "Hipopótano"],
+    ["Aprobación", "Aprovación", "Aprobasión", "Aprobacion"],
+    ["Desarrollo", "Desarollo", "Desarroyo", "Dezarrollo"],
+    ["Ciudadano", "Siudadano", "Ciudadáno", "Ciudádano"],
+    ["Vergüenza", "Verguenza", "Bergüenza", "Vergüensa"],
+    ["Necesario", "Nesesario", "Necesarío", "Necessario"],
+    ["Adolescente", "Adolecente", "Adolesente", "Adolescentte"],
+    ["Proyecto", "Proyeto", "Prollecto", "Proiecto"],
+    ["Atención", "Atensión", "Atencion", "Hatención"],
+    ["Escribir", "Escrivir", "Escribír", "Ezcribir"],
+    ["Jirafa", "Girafa", "Jiraffa", "Jirafá"],
+    ["Huevo", "Uevo", "Güevo", "Huebo"],
+    ["Ahorro", "Aorro", "Ahorrro", "Ajorro"],
+    ["Llave", "Yave", "Llabe", "Llavé"],
+    ["Zapato", "Sapato", "Zapáto", "Zappato"],
+    ["Investigación", "Invetigación", "Imbestigación", "Investigasión"],
+    ["Oxígeno", "Oxigeno", "Oxíjeno", "Ocsígeno"],
+    ["Murciélago", "Murcielago", "Murciélajo", "Murziélago"],
+    ["Exigente", "Exijente", "Exsigente", "Egzigente"],
+    ["Ambulancia", "Anbulancia", "Ambulansia", "Hambulancia"],
+    ["Biblioteca", "Bibloteca", "Viblioteca", "Bibliotéca"],
+    ["Ahora", "Aora", "Ajora", "Ahorá"]
+]
+
+// Colores de la secuencia (nombre, color de relleno).
+const SIMON_PADS = [["ROJO", "#e8202a"], ["AMARILLO", "#ffd21f"], ["VERDE", "#2fbf5a"], ["AZUL", "#2f7be8"]]
+
+// Entrevista: pregunta y respuestas con su puntaje (se barajan al jugar).
+const INTERVIEW = [
+    {"q": "¿Por qué quieres trabajar aquí?", "a": [["Admiro lo que hacen y sé que puedo aportar desde el primer día.", 100], ["Necesito el dinero, la verdad.", 35], ["Me queda cerca de casa.", 15], ["Mi mamá me obligó a venir.", 0]]},
+    {"q": "¿Cuál es tu mayor defecto?", "a": [["A veces me cuesta delegar, pero estoy aprendiendo a confiar en el equipo.", 100], ["Soy demasiado perfeccionista.", 50], ["No tengo defectos.", 10], ["Llego tarde casi siempre.", 0]]},
+    {"q": "¿Dónde te ves en cinco años?", "a": [["Liderando proyectos aquí y creciendo con la empresa.", 100], ["Con mi propio negocio, probablemente.", 40], ["No sé, en la playa.", 10], ["En tu silla.", 25]]},
+    {"q": "Cuéntame de un conflicto con un compañero.", "a": [["Hablamos en privado, escuché su punto y llegamos a un acuerdo.", 100], ["Le pedí al jefe que lo resolviera.", 45], ["Nunca tengo conflictos.", 20], ["Le dejé de hablar para siempre.", 0]]},
+    {"q": "¿Cuánto esperas ganar?", "a": [["Investigué el rango del puesto; busco algo justo según mi experiencia.", 100], ["Lo que ustedes digan está bien.", 40], ["El doble de lo que ofrecen.", 15], ["¿Aquí pagan?", 0]]},
+    {"q": "¿Por qué dejaste tu último trabajo?", "a": [["Buscaba un reto mayor y aprender cosas nuevas.", 100], ["Me aburría.", 30], ["Mi jefe era un idiota.", 0], ["Me corrieron, pero no fue mi culpa.", 15]]},
+    {"q": "¿Qué sabes de nosotros?", "a": [["Leí sobre su último proyecto y me encantó cómo lo resolvieron.", 100], ["Lo que dice su página.", 45], ["Que pagan bien, espero.", 15], ["Nada, vine por curiosidad.", 0]]},
+    {"q": "¿Trabajas mejor solo o en equipo?", "a": [["Disfruto ambas cosas: depende de lo que necesite el proyecto.", 100], ["En equipo, siempre.", 60], ["Solo. La gente me estorba.", 10], ["Como me dejen dormir.", 0]]},
+    {"q": "Si tu jefe se equivoca, ¿qué haces?", "a": [["Se lo comento en privado, con datos y respeto.", 100], ["Me quedo callado: él sabrá.", 35], ["Se lo digo frente a todos.", 10], ["Lo publico en redes.", 0]]},
+    {"q": "¿Cómo manejas la presión?", "a": [["Priorizo, hago una lista y voy resolviendo lo urgente primero.", 100], ["Trabajo mejor bajo presión.", 55], ["Lloro un poco y sigo.", 25], ["Renuncio.", 0]]},
+    {"q": "¿Qué te hace diferente a los demás candidatos?", "a": [["Combino experiencia práctica con muchas ganas de aprender.", 100], ["Soy muy buena onda.", 35], ["Que yo sí vine bañado.", 15], ["Nada, la verdad.", 0]]},
+    {"q": "¿Tienes alguna pregunta para nosotros?", "a": [["¿Cómo se ve el éxito en este puesto durante el primer año?", 100], ["¿Cuántas vacaciones tengo?", 40], ["¿Puedo traer a mi perro?", 20], ["No, ya me quiero ir.", 0]]}
+]
+
+// Clasificar: temas con tres grupos y cosas [nombre, grupo].
+const SORT_SETS = [
+    {"t": "Supermercado", "bins": ["Frutas", "Lácteos", "Limpieza"], "items": [["Manzana", 0], ["Plátano", 0], ["Uvas", 0], ["Mango", 0], ["Leche", 1], ["Queso", 1], ["Yogur", 1], ["Crema", 1], ["Cloro", 2], ["Jabón", 2], ["Escoba", 2], ["Detergente", 2]]},
+    {"t": "Reciclaje", "bins": ["Papel", "Plástico", "Vidrio"], "items": [["Periódico", 0], ["Caja de cartón", 0], ["Cuaderno", 0], ["Botella de refresco", 1], ["Bolsa", 1], ["Tapa", 1], ["Frasco", 2], ["Botella de vino", 2], ["Vaso roto", 2], ["Revista", 0], ["Garrafón", 1], ["Florero", 2]]},
+    {"t": "Animales", "bins": ["Mamífero", "Ave", "Reptil"], "items": [["Ballena", 0], ["Murciélago", 0], ["Delfín", 0], ["Perro", 0], ["Pingüino", 1], ["Águila", 1], ["Avestruz", 1], ["Loro", 1], ["Iguana", 2], ["Cocodrilo", 2], ["Tortuga", 2], ["Serpiente", 2]]},
+    {"t": "Paquetería", "bins": ["Norte", "Centro", "Sur"], "items": [["Monterrey", 0], ["Chihuahua", 0], ["Tijuana", 0], ["Querétaro", 1], ["Puebla", 1], ["Toluca", 1], ["Oaxaca", 2], ["Mérida", 2], ["Chiapas", 2], ["Hermosillo", 0], ["Pachuca", 1], ["Cancún", 2]]},
+    {"t": "Bodega de ropa", "bins": ["Arriba", "Abajo", "Pies"], "items": [["Camisa", 0], ["Suéter", 0], ["Blusa", 0], ["Chamarra", 0], ["Pantalón", 1], ["Falda", 1], ["Short", 1], ["Leggins", 1], ["Tenis", 2], ["Botas", 2], ["Sandalias", 2], ["Calcetines", 2]]}
+]
+
+// Exámenes por materia (la escuela elige la materia; sin materia se usa QUIZ).
+const SUBJECT_NAMES = {"mate": "Matemáticas", "historia": "Historia", "ciencias": "Ciencias", "lengua": "Lengua", "geo": "Geografía"}
+const QUIZ_SUBJECTS = {
+    "mate": [
+        {"q": "¿Cuánto es 9 × 7?", "a": ["56", "63", "72", "61"], "c": 1},
+        {"q": "¿Cuánto es la mitad de 3/4?", "a": ["3/8", "1/2", "3/2", "1/4"], "c": 0},
+        {"q": "Si un triángulo tiene ángulos de 50° y 60°, ¿cuánto mide el tercero?", "a": ["60°", "70°", "80°", "90°"], "c": 1},
+        {"q": "¿Cuál es el 25% de 80?", "a": ["15", "20", "25", "40"], "c": 1},
+        {"q": "¿Cuánto es (-3) × (-4)?", "a": ["-12", "-7", "7", "12"], "c": 3},
+        {"q": "Si 2x = 18, ¿cuánto vale x?", "a": ["6", "8", "9", "16"], "c": 2},
+        {"q": "¿Cuál es el área de un cuadrado de lado 6?", "a": ["12", "24", "36", "18"], "c": 2},
+        {"q": "¿Qué número es primo?", "a": ["21", "27", "29", "33"], "c": 2},
+        {"q": "¿Cuánto es 1,000 − 375?", "a": ["625", "735", "675", "725"], "c": 0},
+        {"q": "¿Cuántos centímetros tiene un metro y medio?", "a": ["15", "105", "150", "1,500"], "c": 2}
+    ],
+    "historia": [
+        {"q": "¿En qué año empezó la Independencia de México?", "a": ["1810", "1821", "1910", "1776"], "c": 0},
+        {"q": "¿Qué civilización construyó Machu Picchu?", "a": ["Mayas", "Incas", "Aztecas", "Olmecas"], "c": 1},
+        {"q": "¿Quién fue el primer hombre en pisar la Luna?", "a": ["Gagarin", "Aldrin", "Armstrong", "Collins"], "c": 2},
+        {"q": "¿En qué año cayó el Muro de Berlín?", "a": ["1979", "1989", "1999", "1969"], "c": 1},
+        {"q": "¿Qué imperio construyó el Coliseo?", "a": ["Griego", "Romano", "Egipcio", "Persa"], "c": 1},
+        {"q": "¿Cuál era la capital de los aztecas?", "a": ["Tula", "Teotihuacán", "Tenochtitlan", "Chichén Itzá"], "c": 2},
+        {"q": "¿En qué año empezó la Segunda Guerra Mundial?", "a": ["1914", "1939", "1945", "1929"], "c": 1},
+        {"q": "¿Quién escribió Don Quijote?", "a": ["Cervantes", "Lope de Vega", "Quevedo", "Góngora"], "c": 0},
+        {"q": "¿Qué país regaló la Estatua de la Libertad a EE. UU.?", "a": ["Inglaterra", "España", "Francia", "Italia"], "c": 2},
+        {"q": "¿Cómo se llamaba el barco más famoso que se hundió en 1912?", "a": ["Lusitania", "Titanic", "Britannic", "Olympic"], "c": 1}
+    ],
+    "ciencias": [
+        {"q": "¿Qué parte de la célula guarda el ADN?", "a": ["Membrana", "Núcleo", "Citoplasma", "Ribosoma"], "c": 1},
+        {"q": "¿A qué temperatura hierve el agua al nivel del mar?", "a": ["90 °C", "100 °C", "110 °C", "120 °C"], "c": 1},
+        {"q": "¿Qué planeta está más cerca del Sol?", "a": ["Venus", "Marte", "Mercurio", "Tierra"], "c": 2},
+        {"q": "¿Qué órgano bombea la sangre?", "a": ["Pulmón", "Hígado", "Riñón", "Corazón"], "c": 3},
+        {"q": "¿Cuál es la fórmula del agua?", "a": ["CO2", "H2O", "O2", "NaCl"], "c": 1},
+        {"q": "¿Qué hacen las plantas con la luz del sol?", "a": ["Fotosíntesis", "Digestión", "Respiración celular", "Ósmosis"], "c": 0},
+        {"q": "¿Qué fuerza nos mantiene en el suelo?", "a": ["Magnetismo", "Fricción", "Gravedad", "Inercia"], "c": 2},
+        {"q": "¿Cuántos cromosomas tiene una persona?", "a": ["23", "46", "48", "64"], "c": 1},
+        {"q": "¿Qué estado de la materia tiene forma propia?", "a": ["Líquido", "Gas", "Sólido", "Plasma"], "c": 2},
+        {"q": "¿Qué animal es un anfibio?", "a": ["Rana", "Lagartija", "Tiburón", "Pingüino"], "c": 0}
+    ],
+    "lengua": [
+        {"q": "¿Cuál es el sinónimo de «feliz»?", "a": ["Triste", "Contento", "Cansado", "Enojado"], "c": 1},
+        {"q": "¿Qué palabra es un verbo?", "a": ["Rápido", "Casa", "Correr", "Azul"], "c": 2},
+        {"q": "¿Cuál es el antónimo de «generoso»?", "a": ["Tacaño", "Amable", "Alegre", "Valiente"], "c": 0},
+        {"q": "En «El perro ladra», ¿cuál es el sujeto?", "a": ["Ladra", "El perro", "El", "Perro ladra"], "c": 1},
+        {"q": "¿Qué palabra es aguda?", "a": ["Árbol", "Canción", "Lápiz", "Música"], "c": 1},
+        {"q": "¿Cuál es el plural de «lápiz»?", "a": ["Lápizes", "Lápices", "Lapices", "Lápiz"], "c": 1},
+        {"q": "¿Qué es una metáfora?", "a": ["Una pregunta", "Una comparación sin «como»", "Un verbo", "Una rima"], "c": 1},
+        {"q": "¿Qué signo abre una pregunta en español?", "a": ["!", "¿", "?", "¡"], "c": 1},
+        {"q": "¿Quién escribió «Cien años de soledad»?", "a": ["Octavio Paz", "García Márquez", "Juan Rulfo", "Neruda"], "c": 1},
+        {"q": "¿Cuántas sílabas tiene «mariposa»?", "a": ["3", "4", "5", "2"], "c": 1}
+    ],
+    "geo": [
+        {"q": "¿Cuál es el río más largo de América?", "a": ["Misisipi", "Amazonas", "Bravo", "Paraná"], "c": 1},
+        {"q": "¿Cuál es la capital de Canadá?", "a": ["Toronto", "Vancouver", "Ottawa", "Montreal"], "c": 2},
+        {"q": "¿En qué continente está la India?", "a": ["África", "Asia", "Oceanía", "Europa"], "c": 1},
+        {"q": "¿Qué país tiene forma de bota?", "a": ["Grecia", "Italia", "Portugal", "Chile"], "c": 1},
+        {"q": "¿Cuál es el desierto más grande del mundo (cálido)?", "a": ["Gobi", "Atacama", "Sahara", "Sonora"], "c": 2},
+        {"q": "¿Cuál es la montaña más alta del mundo?", "a": ["K2", "Everest", "Aconcagua", "Kilimanjaro"], "c": 1},
+        {"q": "¿Cuántos estados tiene México?", "a": ["30", "31", "32", "33"], "c": 2},
+        {"q": "¿Cuál es la capital de Perú?", "a": ["Lima", "Quito", "Bogotá", "La Paz"], "c": 0},
+        {"q": "¿Qué océano está entre América y Europa?", "a": ["Pacífico", "Índico", "Atlántico", "Ártico"], "c": 2},
+        {"q": "¿Qué país tiene más habitantes?", "a": ["EE. UU.", "India", "Brasil", "Rusia"], "c": 1}
+    ]
 }
 
 const DRINKS = [
@@ -140,6 +272,37 @@ function mg_new_round() {
         m.q = {"word": pick(WORDS), "typed": ""}
     } else if k == "news" {
         m.q = {"tokens": news_tokens()}
+    } else if k == "spell" {
+        let set = pick(SPELLING)
+        let opts = list_slice(set, 0, 4)
+        shuffle(G.rng, opts)
+        m.q = {"opts": opts, "c": list_index_of(opts, set[0])}
+    } else if k == "mental" {
+        m.q = mental_question(m.round)
+    } else if k == "simon" {
+        let seq = []
+        while len(seq) < 3 + m.round { list_push(seq, rint(0, 3)) }
+        let show = 0.65 * len(seq) + 0.4
+        m.q = {"seq": seq, "pos": 0, "start": G.t, "show_until": G.t + show}
+        m.round_t0 = G.t + show
+    } else if k == "interview" {
+        let used = map_get(m, "used", [])
+        let q = pick(INTERVIEW)
+        let tries = 0
+        while list_contains(used, q.q) && tries < 20 {
+            q = pick(INTERVIEW)
+            tries += 1
+        }
+        list_push(used, q.q)
+        m.used = used
+        let answers = list_slice(q.a, 0, len(q.a))
+        shuffle(G.rng, answers)
+        m.q = {"q": q.q, "a": answers}
+    } else if k == "sort" {
+        if map_get(m, "theme", null) == null { m.theme = pick(SORT_SETS) }
+        m.q = {"item": pick(m.theme.items)}
+    } else if k == "reflex" {
+        m.q = {"go": G.t + 1.0 + rint(0, 15) / 10.0, "done": false}
     } else if k == "race" {
         let obs = []
         let at = 10
@@ -156,8 +319,37 @@ function mg_new_round() {
         }
         m.q = {"lane": 1, "d": 0.0, "last": G.t, "slow": -1.0, "fast": -1.0, "hits": 0, "obs": obs, "rivals": rivals}
     } else {
-        m.q = pick(QUIZ)
+        let subject = map_get(m.ctx, "subject", "")
+        let pool = QUIZ
+        if subject != "" && QUIZ_SUBJECTS[subject] != null { pool = QUIZ_SUBJECTS[subject] }
+        m.q = pick(pool)
     }
+}
+
+// Operación de cálculo mental, más difícil en cada ronda.
+function mental_question(round: int) {
+    let op = pick(["+", "-", "×"])
+    let a = rint(4, 20 + round * 12)
+    let b = rint(3, 15 + round * 8)
+    if op == "×" {
+        a = rint(3, 6 + round * 2)
+        b = rint(3, 12)
+    }
+    if op == "-" && b > a {
+        let t = a
+        a = b
+        b = t
+    }
+    let answer = a + b
+    if op == "-" { answer = a - b }
+    if op == "×" { answer = a * b }
+    let opts = [answer]
+    for delta in [1, -1, 10, -10, 2, 5, -2] {
+        let v = answer + delta
+        if v >= 0 && !list_contains(opts, v) && len(opts) < 4 { list_push(opts, v) }
+    }
+    shuffle(G.rng, opts)
+    return {"text": str(a) + " " + op + " " + str(b), "opts": opts, "c": list_index_of(opts, answer)}
 }
 
 // Termina la ronda: suma puntos (0-1) y avanza.
@@ -187,6 +379,7 @@ function mg_tick() {
     if m == null || m.phase != "play" { return null }
     if G.t < m.round_t0 { return null }
     if m.type == "race" { return race_tick() }
+    if m.type == "reflex" && G.t - m.q.go > 1.2 { return mg_round_end(0) }
     if m.type == "news" && G.t - m.round_t0 > m.limit { return mg_round_end(news_score()) }
     if G.t - m.round_t0 > m.limit {
         if m.type == "memory" {
@@ -249,11 +442,31 @@ function mg_pick(i: int) {
         if m.q.opts[i] == m.q.change { v = 100 }
         return mg_round_end(v)
     }
-    if k == "quiz" {
+    if k == "quiz" || k == "spell" || k == "mental" {
         if i >= 4 { return null }
         let v = 0
         if i == m.q.c { v = 100 }
         return mg_round_end(v)
+    }
+    if k == "interview" {
+        if i >= len(m.q.a) { return null }
+        // Con encanto convences un poco más.
+        return mg_round_end(min(100, m.q.a[i][1] + rank("charm") * 2))
+    }
+    if k == "sort" {
+        if i >= 3 { return null }
+        let v = 0
+        if i == m.q.item[1] { v = 100 }
+        return mg_round_end(v)
+    }
+    if k == "simon" {
+        if i >= 4 { return null }
+        if m.q.seq[m.q.pos] == i {
+            m.q.pos = m.q.pos + 1
+            if m.q.pos >= len(m.q.seq) { return mg_round_end(100) }
+            return null
+        }
+        return mg_round_end(m.q.pos * 60 / len(m.q.seq))
     }
     return null
 }
@@ -428,7 +641,9 @@ function draw_mg_race(x: int, y: int, w: int) {
 
 function mg_hit() {
     let m = G.mg
-    if m == null || m.phase != "play" || m.type != "timing" { return null }
+    if m == null || m.phase != "play" { return null }
+    if m.type == "reflex" { return reflex_hit() }
+    if m.type != "timing" { return null }
     let pos = mg_timing_pos() / 2.0
     let dist = abs(pos - m.q.zone)
     let v = 0
@@ -440,6 +655,18 @@ function mg_hit() {
         v = 25
     }
     return mg_round_end(v)
+}
+
+// Reflejos: 0.25 s o menos vale 100; 0.85 s o más, nada. Adelantarse, nada.
+function reflex_hit() {
+    let m = G.mg
+    if G.t < m.q.go {
+        m.fb = "¡MUY PRONTO!"
+        return mg_round_end(0)
+    }
+    let reaction = G.t - m.q.go
+    m.last_ms = int(reaction * 1000.0)
+    return mg_round_end(clamp(int(100.0 - (reaction - 0.25) * 166.0), 0, 100))
 }
 
 function mg_arrow(dir: string) {
@@ -480,7 +707,7 @@ function mg_keys(input: map) {
         return null
     }
     for key in input.pressed {
-        if m.type == "timing" && key == "Space" { mg_hit() }
+        if (m.type == "timing" || m.type == "reflex") && key == "Space" { mg_hit() }
         if key == "ArrowUp" { mg_arrow("up") }
         if key == "ArrowDown" { mg_arrow("down") }
         if key == "ArrowLeft" { mg_arrow("left") }
@@ -537,6 +764,14 @@ function mg_close() {
     G.mg = null
     G.modal = null
     if score >= 100 { flag("mg100") }
+    let best = map_get(L, "mgbest", null)
+    if best == null {
+        best = {}
+        L.mgbest = best
+    }
+    if m.points > 0 || score > 0 { best[m.type] = max(map_get(best, m.type, 0), score) }
+    if m.purpose == "escuela" { return school_mg_result(score, m.ctx) }
+    if m.purpose == "oficio" { return work_mg_result(score, m.ctx) }
     if m.purpose == "practice" { return practice_result(score) }
     if m.purpose == "rel" { return rel_mg_result(score, m.ctx) }
     if m.purpose == "news" { return news_result(score) }
@@ -616,6 +851,12 @@ function draw_minigame() {
     if k == "quiz" { draw_mg_quiz(x, y, w) }
     if k == "race" { draw_mg_race(x, y, w) }
     if k == "news" { draw_mg_news(x, y, w) }
+    if k == "spell" { draw_mg_spell(x, y, w) }
+    if k == "mental" { draw_mg_mental(x, y, w) }
+    if k == "simon" { draw_mg_simon(x, y, w) }
+    if k == "interview" { draw_mg_interview(x, y, w) }
+    if k == "sort" { draw_mg_sort(x, y, w) }
+    if k == "reflex" { draw_mg_reflex(x, y, w) }
 
     if G.t - m.fb_t0 < 0.7 {
         let col = C_RED
@@ -754,4 +995,91 @@ function draw_mg_quiz(x: int, y: int, w: int) {
         mg_option(x + 60 + (i % 2) * 430, y + 260 + (i / 2) * 70, 400, i, q.a[i], false)
         i += 1
     }
+}
+
+function draw_mg_spell(x: int, y: int, w: int) {
+    let q = G.mg.q
+    otext(x + 60, y + 150, "¿CUÁL ESTÁ BIEN ESCRITA?", 30, C_WHITE, "impact", false)
+    let i = 0
+    while i < 4 {
+        mg_option(x + 60 + (i % 2) * 430, y + 220 + (i / 2) * 70, 400, i, q.opts[i], false)
+        i += 1
+    }
+}
+
+function draw_mg_mental(x: int, y: int, w: int) {
+    let q = G.mg.q
+    text(x + 60, y + 130, "RESUELVE", 18, C_GRAY, "impact")
+    otext(x + w / 2, y + 220, q.text + " = ?", 72, C_YELLOW, "impact", true)
+    let i = 0
+    while i < 4 {
+        mg_option(x + 60 + (i % 2) * 430, y + 280 + (i / 2) * 70, 400, i, str(q.opts[i]), false)
+        i += 1
+    }
+}
+
+function draw_mg_simon(x: int, y: int, w: int) {
+    let q = G.mg.q
+    let showing = G.t < q.show_until
+    let lit = -1
+    if showing {
+        let slot = int((G.t - q.start) / 0.65)
+        let within = (G.t - q.start) - slot * 0.65
+        if slot < len(q.seq) && within < 0.45 { lit = q.seq[slot] }
+        text(x + 60, y + 130, "MIRA LA SECUENCIA...", 20, C_YELLOW, "impact")
+    } else {
+        text(x + 60, y + 130, "REPÍTELA (" + str(q.pos) + "/" + str(len(q.seq)) + ")", 20, C_YELLOW, "impact")
+    }
+    let i = 0
+    while i < 4 {
+        let px = x + 70 + i * 215
+        let pad = SIMON_PADS[i]
+        let action = "mg:pick:" + str(i)
+        let fill = "#262626"
+        if lit == i { fill = pad[1] }
+        if !showing && hovered(action) { fill = pad[1] }
+        svg(px, y + 170, 200, 200, slant_doc(196, 196, 18, fill, pad[1], 6, HEX_INK, 6))
+        ctext(px + 98, y + 290, pad[0], 22, C_WHITE, "impact")
+        ctext(px + 98, y + 320, str(i + 1), 18, C_GRAY, "bold")
+        if !showing { hot(px, y + 170, 196, 196, action) }
+        i += 1
+    }
+}
+
+function draw_mg_interview(x: int, y: int, w: int) {
+    let q = G.mg.q
+    text(x + 60, y + 128, "TE PREGUNTAN:", 18, C_GRAY, "impact")
+    otextw(x + 60, y + 172, "«" + q.q + "»", 28, C_WHITE, "impact", false, w - 120)
+    let i = 0
+    while i < len(q.a) {
+        mg_option(x + 60, y + 200 + i * 62, w - 120, i, q.a[i][0], false)
+        i += 1
+    }
+}
+
+function draw_mg_sort(x: int, y: int, w: int) {
+    let m = G.mg
+    text(x + 60, y + 130, str_upper(m.theme.t) + " · ¿A DÓNDE VA?", 20, C_YELLOW, "impact")
+    otext(x + w / 2, y + 230, str_upper(m.q.item[0]), 64, C_WHITE, "impact", true)
+    let i = 0
+    while i < 3 {
+        mg_option(x + 60 + i * 290, y + 300, 270, i, m.theme.bins[i], false)
+        i += 1
+    }
+}
+
+function draw_mg_reflex(x: int, y: int, w: int) {
+    let q = G.mg.q
+    let go = G.t >= q.go
+    let fill = "#7a0d12"
+    let caption = "ESPERA..."
+    if go {
+        fill = "#1f9a45"
+        caption = "¡YA!"
+    }
+    svg(x + w / 2 - 160, y + 120, 320, 220, burst_doc(320, 220, 14, fill, HEX_WHITE, 5, 3))
+    otext(x + w / 2, y + 250, caption, 56, C_WHITE, "impact", true)
+    let last = map_get(G.mg, "last_ms", 0)
+    if last > 0 { ctext(x + w / 2, y + 380, "Último: " + str(last) + " ms", 18, C_GRAY, "bold") }
+    menu_word(x + 320, y + 400, 320, 64, "¡AHORA!", "mg:hit", 30)
 }

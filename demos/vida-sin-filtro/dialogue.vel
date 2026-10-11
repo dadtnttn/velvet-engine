@@ -507,7 +507,7 @@ function dlg_end(code: string, p: map, msg: string, title: string, kind: string)
     if code == "refuse" || code == "self" {
         if code == "refuse" { G.tuition_no = G.pending_deg }
         log_add(p.first + ": " + msg, kind)
-        open_enroll(G.pending_deg)
+        open_enroll_pay(G.pending_deg)
         if G.modal != null { G.modal.text = msg + "\n\n" + G.modal.text }
         return null
     }

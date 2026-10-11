@@ -1,0 +1,879 @@
+// @edition 3
+// Oficio: la segunda capa del trabajo.
+// - Tu jefe (mentor, justo, explotador, ausente, microgestor o tóxico) con su
+//   humor; hablar con él, hacerle la barba o pedir responsabilidades.
+// - Lugar de trabajo: capacitación, convivir con colegas, home office,
+//   sindicato, vacaciones y ascenso interno con entrevista.
+// - Entrevista de trabajo (minijuego) al postularte y negociar sueldo.
+// - Evaluación anual con advertencias; tres advertencias y te corren.
+// - Eventos por campo (salud, ley, tecnología, arte, espectáculo, educación,
+//   negocios, deporte, oficios, servicio, ciencia, moda, calle) y de cualquier
+//   trabajo: fiestas, correos a todos, recortes, cazatalentos, sobornos...
+// - Despidos con seguro de desempleo de seis meses.
+// - Chambas: ascenso a encargado y gerente, tiempo completo, turno nocturno,
+//   aumento y empleado del mes.
+// Acciones con el prefijo "of:" y elecciones "of_".
+
+const BOSS_TYPES = [
+    {"id": "mentor", "n": "Mentor", "eval": 10, "hap": 0, "d": "Te enseña todo y te defiende ante los de arriba."},
+    {"id": "justo", "n": "Justo", "eval": 5, "hap": 0, "d": "Exigente, pero parejo con todos."},
+    {"id": "explotador", "n": "Explotador", "eval": -4, "hap": -1, "d": "Horas extra sin pago y vacaciones «cuando haya tiempo»."},
+    {"id": "ausente", "n": "Ausente", "eval": 0, "hap": 0, "d": "Nunca está. Nadie sabe qué hace."},
+    {"id": "micro", "n": "Microgestor", "eval": -2, "hap": -1, "d": "Revisa hasta cómo nombras tus archivos."},
+    {"id": "toxico", "n": "Tóxico", "eval": -8, "hap": -2, "d": "Gritos en las juntas y favoritismos descarados."}
+]
+
+const REMOTE_FIELDS = ["Oficina", "Tecnología", "Negocios", "Arte"]
+const UNION_FIELDS = ["Servicio", "Oficio", "Salud", "Educación", "Ley", "Ciencia", "Oficina"]
+
+// Eventos del trabajo. "fields": campos donde ocurren ("any" = cualquiera legal).
+const WORK_EVENTS = [
+    {
+        "id": "w_party", "title": "Fiesta de fin de año", "fields": ["any"], "w": 8,
+        "text": "Fiesta de fin de año de la empresa: barra libre, karaoke y tu jefe con corbata en la cabeza.",
+        "choices": [
+            {"t": "Cantar a dúo con tu jefe", "o": [
+                {"w": 70, "log": "Cantaron «Bohemian Rhapsody» completa. Tu jefe te abrazó.", "boss": 8, "charm": 3, "happy": 6},
+                {"w": 30, "log": "Desafinaste tan feo que tu jefe dejó de sonreír.", "boss": -3, "happy": 2}
+            ]},
+            {"t": "Aprovechar la barra libre", "o": [
+                {"w": 50, "log": "La pasaste increíble y nadie se acuerda de nada.", "happy": 8, "alcohol": 3},
+                {"w": 50, "log": "Le dijiste a tu jefe lo que piensas de él. En voz alta.", "boss": -15, "alcohol": 3, "guts": 3}
+            ]},
+            {"t": "Irte temprano", "o": [{"w": 100, "log": "Te fuiste antes del karaoke. Sabia decisión.", "boss": -2, "health": 1}]}
+        ]
+    },
+    {
+        "id": "w_replyall", "title": "Responder a todos", "fields": ["Oficina", "Tecnología", "Negocios", "Educación", "Ciencia", "Salud", "Ley", "Arte"], "w": 6,
+        "text": "Le mandaste a un amigo un correo quejándote de tu jefe... con copia a toda la empresa.",
+        "choices": [
+            {"t": "Disculparte en persona", "o": [
+                {"w": 60, "log": "Tu jefe aceptó la disculpa. Las cosas quedaron frías, pero bien.", "boss": -6, "kind": 2},
+                {"w": 40, "log": "No aceptó la disculpa. Te ganaste una advertencia.", "boss": -15, "perf": -10}
+            ]},
+            {"t": "Hacerte el loco", "o": [
+                {"w": 50, "log": "Nadie dijo nada. ¿Nadie lo leyó? Nunca lo sabrás.", "happy": 2},
+                {"w": 50, "log": "Al día siguiente había un sticker de tu cara en el refri de la oficina.", "boss": -10, "happy": -4}
+            ]}
+        ]
+    },
+    {
+        "id": "w_layoff", "title": "Recorte de personal", "fields": ["any"], "w": 5,
+        "text": "Rumores en el pasillo: la empresa va a despedir al 20% del personal.",
+        "choices": [
+            {"t": "Esperar a ver qué pasa", "o": [{"w": 100, "log": "Pasó la semana del recorte.", "layoff": 35}]},
+            {"t": "Trabajar el doble para que no te elijan", "o": [{"w": 100, "log": "Trabajaste como nunca.", "perf": 10, "health": -4, "layoff": 15}]},
+            {"t": "Ofrecerte para el retiro voluntario", "o": [{"w": 100, "log": "Te dieron una buena liquidación por irte.", "severance": 30}]}
+        ]
+    },
+    {
+        "id": "w_headhunter", "title": "Cazatalentos", "fields": ["any"], "w": 5,
+        "text": "Una cazatalentos te ofrece el mismo puesto en la competencia con 20% más de sueldo.",
+        "choices": [
+            {"t": "Aceptar la oferta", "o": [{"w": 100, "log": "Te cambiaste a la competencia.", "special": "of_headhunt"}]},
+            {"t": "Usarla para negociar con tu jefe", "need": "guts", "rank": 2, "o": [
+                {"w": 55, "log": "Tu jefe igualó la oferta para que no te fueras.", "special": "of_counter"},
+                {"w": 45, "log": "«Pues vete.» Tu jefe no se dejó presionar.", "boss": -12}
+            ]},
+            {"t": "Rechazarla", "o": [{"w": 100, "log": "Te quedaste por lealtad. Tu jefe se enteró y lo valoró.", "boss": 6}]}
+        ]
+    },
+    {
+        "id": "w_idea", "title": "Te robaron la idea", "fields": ["Oficina", "Tecnología", "Negocios", "Arte", "Espectáculo", "Ciencia", "Moda"], "w": 6,
+        "text": "En la junta, un compañero presentó tu idea como suya y todos le aplaudieron.",
+        "choices": [
+            {"t": "Desmentirlo ahí mismo", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Mostraste tus correos con la idea. Silencio incómodo y crédito para ti.", "xp": 30, "boss": 5, "guts": 3}]},
+            {"t": "Hablar después con tu jefe", "o": [
+                {"w": 60, "log": "Tu jefe te creyó y lo arregló en privado.", "xp": 15, "boss": 3},
+                {"w": 40, "log": "«Son cosas de equipo», dijo tu jefe. Nada cambió.", "happy": -5}
+            ]},
+            {"t": "Dejarlo pasar", "o": [{"w": 100, "log": "Él se llevó el crédito. Tú, la lección.", "happy": -6, "kind": 1}]}
+        ]
+    },
+    {
+        "id": "w_weekend", "title": "Trabajo en fin de semana", "fields": ["any"], "w": 7,
+        "text": "Viernes 6 p. m.: tu jefe te pide que vengas el sábado «solo un ratito».",
+        "choices": [
+            {"t": "Ir", "o": [{"w": 100, "log": "El «ratito» fueron nueve horas. Tu jefe lo anotó.", "perf": 8, "boss": 5, "happy": -5}]},
+            {"t": "Decir que no", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "«Tengo planes.» Tu jefe tragó saliva y lo aceptó.", "boss": -4, "happy": 3, "guts": 2}]},
+            {"t": "Inventar una boda", "o": [
+                {"w": 70, "log": "La boda de tu «prima» te salvó el fin de semana.", "happy": 3},
+                {"w": 30, "log": "Tu jefe vio tus fotos en la playa ese sábado.", "boss": -10}
+            ]}
+        ]
+    },
+    {
+        "id": "w_intern", "title": "Tu practicante", "fields": ["Oficina", "Tecnología", "Negocios", "Salud", "Ley", "Ciencia", "Arte", "Educación"], "w": 5,
+        "text": "Te asignaron un practicante que no sabe ni prender la impresora.",
+        "choices": [
+            {"t": "Enseñarle con paciencia", "o": [{"w": 100, "log": "Al mes ya te ayudaba de verdad. Te dio las gracias con un pastel.", "kind": 4, "xp": 15}]},
+            {"t": "Mandarlo por cafés todo el día", "o": [{"w": 100, "log": "Tu café siempre estuvo caliente. Tu karma, no tanto.", "karma": -3, "happy": 2}]}
+        ]
+    },
+    {
+        "id": "w_trip", "title": "Viaje de negocios", "fields": ["Oficina", "Tecnología", "Negocios", "Ciencia", "Arte", "Moda", "Espectáculo"], "w": 5,
+        "text": "La empresa necesita que alguien vaya una semana a cerrar un trato en otra ciudad.",
+        "choices": [
+            {"t": "Ir", "o": [
+                {"w": 70, "log": "Cerraste el trato. Viáticos, hotel con alberca y gloria.", "xp": 35, "money": [2000, 6000], "happy": 5},
+                {"w": 30, "log": "Perdieron tu maleta y el cliente canceló. Semana perdida.", "happy": -5, "perf": -3}
+            ]},
+            {"t": "Que vaya alguien más", "o": [{"w": 100, "log": "Se fue tu compañero. Regresó con un ascenso.", "happy": -2}]}
+        ]
+    },
+    {
+        "id": "w_hostile", "title": "Ambiente hostil", "fields": ["any"], "w": 4,
+        "text": "Un compañero te humilla en cada junta y tu jefe solo se ríe.",
+        "choices": [
+            {"t": "Denunciarlo a Recursos Humanos", "need": "guts", "rank": 2, "o": [
+                {"w": 65, "log": "RH le levantó un acta. Las juntas cambiaron por completo.", "happy": 6, "guts": 3},
+                {"w": 35, "log": "RH no hizo nada y ahora tu jefe te ve como problema.", "boss": -10, "happy": -4}
+            ]},
+            {"t": "Aguantar", "o": [{"w": 100, "log": "Aguantaste. Te dolió más de lo que admites.", "happy": -8}]},
+            {"t": "Renunciar", "o": [{"w": 100, "log": "Tu salud mental vale más que este sueldo.", "fire": "Renunciaste por el ambiente de trabajo."}]}
+        ]
+    },
+    {
+        "id": "w_freeze", "title": "Sueldos congelados", "fields": ["any"], "w": 4,
+        "text": "La empresa anunció que este año no habrá aumentos para nadie.",
+        "choices": [
+            {"t": "Organizarte con tus compañeros", "o": [
+                {"w": 50, "log": "Presionaron juntos y consiguieron un bono de compensación.", "money": [2000, 5000], "guts": 3},
+                {"w": 50, "log": "La empresa no cedió y te anotaron en la lista negra.", "boss": -8}
+            ]},
+            {"t": "Aceptarlo", "o": [{"w": 100, "log": "Otro año sin aumento. La inflación no perdona.", "happy": -3}]}
+        ]
+    },
+    {
+        "id": "w_er", "title": "Guardia de 36 horas", "fields": ["Salud"], "w": 8,
+        "text": "Faltaron dos compañeros y te toca cubrir una guardia de 36 horas seguidas.",
+        "choices": [
+            {"t": "Cubrirla", "o": [{"w": 100, "log": "Salvaste tres vidas y casi pierdes la tuya del cansancio.", "health": -8, "xp": 40, "perf": 6, "kind": 3}]},
+            {"t": "Negarte", "o": [{"w": 100, "log": "Te negaste. El hospital lo anotó en tu expediente.", "boss": -8}]}
+        ]
+    },
+    {
+        "id": "w_vip", "title": "Paciente famoso", "fields": ["Salud"], "w": 5,
+        "text": "Atiendes en secreto a una celebridad. Una revista ofrece $30,000 por los detalles.",
+        "choices": [
+            {"t": "Respetar la confidencialidad", "o": [{"w": 100, "log": "La celebridad te mandó una carta de agradecimiento firmada.", "karma": 5, "boss": 4}]},
+            {"t": "Vender la historia", "o": [
+                {"w": 60, "log": "Cobraste $30,000. La portada fue un escándalo.", "money": 30000, "karma": -12},
+                {"w": 40, "log": "Descubrieron la filtración. Te corrieron.", "money": 30000, "karma": -12, "fire": "Te despidieron por violar la confidencialidad."}
+            ]}
+        ]
+    },
+    {
+        "id": "w_bribe", "title": "El soborno", "fields": ["Ley"], "w": 7,
+        "text": "Un empresario te ofrece $20,000 por «perder» unos papeles de su caso.",
+        "choices": [
+            {"t": "Aceptar", "o": [
+                {"w": 75, "log": "Los papeles se perdieron. Tu cuenta engordó.", "money": 20000, "karma": -12},
+                {"w": 25, "log": "Era una trampa de asuntos internos.", "money": 20000, "karma": -12, "jail": 2}
+            ]},
+            {"t": "Rechazarlo", "o": [{"w": 100, "log": "Lo rechazaste. Tu conciencia duerme tranquila.", "karma": 5}]},
+            {"t": "Denunciarlo", "need": "guts", "rank": 3, "o": [{"w": 100, "log": "Lo arrestaron en flagrancia. Te dieron un reconocimiento.", "karma": 8, "xp": 40, "fame": 5}]}
+        ]
+    },
+    {
+        "id": "w_case", "title": "El caso de tu vida", "fields": ["Ley"], "w": 5,
+        "text": "Te asignan el caso más mediático del año.",
+        "choices": [
+            {"t": "Prepararte noche y día", "o": [
+                {"w": 70, "log": "Ganaste el caso. Tu nombre salió en todos los noticieros.", "xp": 60, "fame": 8, "health": -4},
+                {"w": 30, "log": "Perdiste en la última audiencia. La prensa fue cruel.", "xp": 20, "happy": -8}
+            ]},
+            {"t": "Pasárselo a alguien más", "o": [{"w": 100, "log": "Lo ganó tu colega. Te quedaste con la duda.", "happy": -3}]}
+        ]
+    },
+    {
+        "id": "w_outage", "title": "Se cayó todo un viernes", "fields": ["Tecnología"], "w": 8,
+        "text": "Viernes 11 p. m.: se cayeron todos los servidores y tu celular no deja de sonar.",
+        "choices": [
+            {"t": "Quedarte toda la noche", "o": [{"w": 100, "log": "A las 5 a. m. todo volvió a funcionar gracias a ti.", "perf": 10, "boss": 8, "health": -4, "xp": 30}]},
+            {"t": "Apagar el celular", "o": [{"w": 100, "log": "El lunes te esperaba una junta muy incómoda.", "perf": -15, "boss": -15, "happy": 4}]}
+        ]
+    },
+    {
+        "id": "w_startup", "title": "Startup con acciones", "fields": ["Tecnología", "Negocios"], "w": 4,
+        "text": "Una startup te ofrece trabajar con ellos: menos sueldo, pero acciones de la empresa.",
+        "choices": [
+            {"t": "Arriesgarte", "o": [
+                {"w": 25, "log": "La startup se vendió a un gigante. Tus acciones valen una fortuna.", "money": [150000, 400000], "happy": 15},
+                {"w": 75, "log": "La startup quebró en ocho meses. Al menos aprendiste mucho.", "xp": 40, "happy": -6}
+            ]},
+            {"t": "Quedarte en tu trabajo", "o": [{"w": 100, "log": "Preferiste lo seguro.", "happy": 1}]}
+        ]
+    },
+    {
+        "id": "w_gallery", "title": "Exposición", "fields": ["Arte", "Moda"], "w": 6,
+        "text": "Una galería te ofrece montar una exposición con tu obra.",
+        "choices": [
+            {"t": "Aceptar y dar todo", "o": [
+                {"w": 60, "log": "Vendiste casi todo la noche de la inauguración.", "money": [5000, 25000], "fame": 6, "xp": 30},
+                {"w": 40, "log": "Solo fueron tus amigos y tu mamá. Pero tu mamá lloró de orgullo.", "happy": 3, "xp": 10}
+            ]},
+            {"t": "Rechazarla", "o": [{"w": 100, "log": "Todavía no te sientes list{a}.", "happy": -2}]}
+        ]
+    },
+    {
+        "id": "w_role", "title": "Escándalo en redes", "fields": ["Espectáculo"], "w": 6,
+        "text": "Un video tuyo de hace años, diciendo algo muy tonto, se hizo viral.",
+        "choices": [
+            {"t": "Pedir disculpas públicamente", "o": [{"w": 100, "log": "Tu disculpa sincera calmó las aguas.", "fame": 2, "karma": 3}]},
+            {"t": "Responder con humor", "need": "charm", "rank": 3, "o": [{"w": 100, "log": "Tu respuesta fue más viral que el video. Ganaste fans.", "fame": 8, "charm": 3}]},
+            {"t": "Pelearte con todos", "o": [{"w": 100, "log": "Te cancelaron una semana. Perdiste un contrato.", "fame": 4, "money": -10000, "happy": -6}]}
+        ]
+    },
+    {
+        "id": "w_student", "title": "Alumno problemático", "fields": ["Educación"], "w": 8,
+        "text": "Un alumno no deja de interrumpir tus clases. Sospechas que pasa algo en su casa.",
+        "choices": [
+            {"t": "Hablar con él después de clase", "o": [{"w": 100, "log": "Te contó lo que pasaba. Lo canalizaste con la psicóloga. Ahora es tu mejor alumno.", "kind": 5, "xp": 25, "karma": 4}]},
+            {"t": "Mandarlo a la dirección", "o": [{"w": 100, "log": "Volvió peor. El problema sigue ahí.", "happy": -3}]}
+        ]
+    },
+    {
+        "id": "w_investor", "title": "Inversionista ángel", "fields": ["Negocios"], "w": 6,
+        "text": "Un inversionista quiere poner $50,000 en tu proyecto a cambio de una parte.",
+        "choices": [
+            {"t": "Aceptar", "o": [
+                {"w": 65, "log": "Con su dinero creciste el doble en un año.", "money": 50000, "xp": 40},
+                {"w": 35, "log": "Ahora el inversionista quiere decidir todo. Tensión.", "money": 50000, "happy": -6}
+            ]},
+            {"t": "Rechazar: lo haces a tu manera", "o": [{"w": 100, "log": "Creces más lento, pero el negocio es 100% tuyo.", "guts": 3}]}
+        ]
+    },
+    {
+        "id": "w_injury", "title": "Lesión", "fields": ["Deporte"], "w": 8,
+        "text": "Sientes un tirón en la rodilla a una semana de la final.",
+        "choices": [
+            {"t": "Hacer rehabilitación", "o": [{"w": 100, "log": "Te perdiste la final, pero tu rodilla te lo agradecerá a los 50.", "health": 3, "happy": -6}]},
+            {"t": "Jugar lesionad{a}", "o": [
+                {"w": 50, "log": "¡Jugaste la final y ganaron! La rodilla dolió como nunca.", "xp": 60, "fame": 8, "health": -12},
+                {"w": 50, "log": "La lesión empeoró. Seis meses fuera.", "health": -20, "perf": -15}
+            ]}
+        ]
+    },
+    {
+        "id": "w_accident", "title": "Accidente de trabajo", "fields": ["Oficio"], "w": 7,
+        "text": "Una herramienta en mal estado te lastima la mano en pleno trabajo.",
+        "choices": [
+            {"t": "Exigir que te paguen el doctor", "o": [{"w": 100, "log": "La empresa pagó el doctor y cambió las herramientas.", "health": -4, "guts": 2}]},
+            {"t": "Seguir trabajando", "o": [{"w": 100, "log": "Terminaste el trabajo con la mano vendada.", "health": -10, "perf": 5}]}
+        ]
+    },
+    {
+        "id": "w_nopay", "title": "Cliente que no paga", "fields": ["Oficio", "Arte", "Moda"], "w": 6,
+        "text": "Un cliente se niega a pagarte un trabajo de $8,000 que ya entregaste.",
+        "choices": [
+            {"t": "Demandarlo", "o": [
+                {"w": 60, "log": "El juez te dio la razón. Cobraste con intereses.", "money": 9000},
+                {"w": 40, "log": "El juicio costó más que el trabajo.", "money": -2000}
+            ]},
+            {"t": "Exhibirlo en redes", "o": [{"w": 100, "log": "Le dio tanta vergüenza que pagó al día siguiente.", "money": 8000, "guts": 2}]},
+            {"t": "Dejarlo así", "o": [{"w": 100, "log": "Perdiste el dinero, pero no la paz.", "happy": -4}]}
+        ]
+    },
+    {
+        "id": "w_critic", "title": "Visita de un crítico", "fields": ["Servicio"], "w": 7,
+        "text": "Un crítico famoso llegó sin avisar y te tocó atenderlo.",
+        "choices": [
+            {"t": "Dar el mejor servicio de tu vida", "o": [
+                {"w": 65, "log": "Te mencionó con nombre y apellido en su reseña de cinco estrellas.", "fame": 5, "perf": 10, "xp": 25},
+                {"w": 35, "log": "Se te cayó la sopa en su saco. La reseña fue brutal.", "perf": -10, "happy": -6}
+            ]},
+            {"t": "Tratarlo como a cualquiera", "o": [{"w": 100, "log": "Tres estrellas. Ni bien ni mal.", "xp": 5}]}
+        ]
+    },
+    {
+        "id": "w_discovery", "title": "Descubrimiento", "fields": ["Ciencia"], "w": 6,
+        "text": "Tus datos muestran algo que nadie había visto antes.",
+        "choices": [
+            {"t": "Publicarlo en una revista", "o": [
+                {"w": 70, "log": "Tu artículo se volvió referencia mundial.", "fame": 8, "xp": 60, "know": 5},
+                {"w": 30, "log": "Otro laboratorio publicó lo mismo una semana antes.", "happy": -8, "xp": 20}
+            ]},
+            {"t": "Patentarlo", "o": [{"w": 100, "log": "Vendiste la patente a una farmacéutica.", "money": [30000, 120000]}]}
+        ]
+    },
+    {
+        "id": "w_fashionweek", "title": "Semana de la moda", "fields": ["Moda"], "w": 7,
+        "text": "Te invitan a trabajar en la semana de la moda más importante del país.",
+        "choices": [
+            {"t": "Ir y brillar", "o": [{"w": 100, "log": "Tu trabajo salió en todas las revistas.", "fame": 7, "xp": 40, "charm": 2}]},
+            {"t": "No ir", "o": [{"w": 100, "log": "Te lo perdiste. Habrá otras.", "happy": -2}]}
+        ]
+    },
+    {
+        "id": "w_raid", "title": "Redada", "fields": ["Calle"], "w": 9,
+        "text": "La policía cayó en el lugar donde operas.",
+        "choices": [
+            {"t": "Huir por la azotea", "need": "guts", "rank": 2, "o": [
+                {"w": 70, "log": "Saltaste dos azoteas y te perdiste en el mercado.", "guts": 4},
+                {"w": 30, "log": "Te atraparon en la segunda azotea.", "jail": 2}
+            ]},
+            {"t": "Sobornar al oficial", "cost": 10000, "o": [{"w": 100, "log": "El oficial miró para otro lado.", "money": -10000}]},
+            {"t": "Entregarte", "o": [{"w": 100, "log": "Colaboraste. El juez fue benévolo.", "jail": 1}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- jefe
+
+function boss() {
+    let job = L.job
+    if job == null { return null }
+    if job.boss == null {
+        let g = pick(["m", "f"])
+        let names = NAMES_M
+        if g == "f" { names = NAMES_F }
+        job.boss = {"first": pick(names), "gender": g, "type": BOSS_TYPES[weighted_choose(G.rng, [15, 30, 18, 15, 12, 10])].id, "mood": rint(45, 65)}
+    }
+    return job.boss
+}
+
+function boss_type(id: string) {
+    for b in BOSS_TYPES {
+        if b.id == id { return b }
+    }
+    return BOSS_TYPES[1]
+}
+
+function boss_mood(delta: int) {
+    let b = boss()
+    if b != null { b.mood = clamp100(b.mood + delta) }
+}
+
+function boss_label() {
+    let b = boss()
+    return b.first + " · " + boss_type(b.type).n
+}
+
+function job_field() {
+    if L.job == null { return "" }
+    return job_def(L.job.id).field
+}
+
+function legit_job() {
+    if L.job == null { return false }
+    let d = job_def(L.job.id)
+    return !d.illegal && !d.adult
+}
+
+// ---------------------------------------------------------------- despidos
+
+// Te quedas sin trabajo; los trabajos legales dan seguro de desempleo.
+function fire_job(reason: string) {
+    if L.job == null { return "" }
+    let job = L.job
+    let legal = legit_job()
+    L.last_job = job.title
+    L.job = null
+    L.happy -= 10
+    hito_me("Trabajo", "Perdiste tu trabajo como " + str_lower(job.title))
+    if legal {
+        L.unemp = {"months": 6, "amount": pay_of(job) / 12 * 40 / 100}
+        return " " + reason + " Recibirás seguro de desempleo seis meses."
+    }
+    return " " + reason
+}
+
+// Recorte: el sindicato te protege; si no, una probabilidad.
+function layoff_roll(pct: int) {
+    if L.job == null { return "" }
+    if L.job.union == true {
+        flag("survivor_layoff")
+        return " El sindicato protegió tu puesto."
+    }
+    if chance(pct) { return fire_job("Estabas en la lista del recorte.") }
+    flag("survivor_layoff")
+    return " Sobreviviste al recorte."
+}
+
+function severance(pct: int) {
+    if L.job == null { return "" }
+    let amount = pay_of(L.job) * pct / 100
+    L.money += amount
+    return fire_job("Te fuiste con " + money_str(amount) + " de liquidación.")
+}
+
+function oficio_special(name: string, ctx: map) {
+    if L.job == null { return "" }
+    if name == "of_headhunt" {
+        L.job.bonus = L.job.bonus + 20
+        L.job.boss = null
+        L.job.warns = 0
+        flag("headhunted")
+        hito_me("Trabajo", "Te contrató la competencia")
+        return " Ahora ganas " + money_str(pay_of(L.job)) + " al año con jefe nuevo."
+    }
+    if name == "of_counter" {
+        L.job.bonus = L.job.bonus + 15
+        flag("headhunted")
+        return " Tu sueldo sube a " + money_str(pay_of(L.job)) + " al año."
+    }
+    return ""
+}
+
+// ---------------------------------------------------------------- menú del trabajo
+
+function oitem(action: string, t: string, s: string, desc: string, lock: string) {
+    return {"action": "of:" + action, "t": t, "s": s, "desc": desc, "lock": lock}
+}
+
+function workplace_items() {
+    let items = []
+    if L.job == null {
+        if L.unemp != null && L.unemp.months > 0 {
+            list_push(items, oitem("none", "Seguro de desempleo", money_str(L.unemp.amount) + "/mes", "Te quedan " + str(L.unemp.months) + " " + plural(L.unemp.months, "mes", "meses") + " de apoyo. Busca trabajo antes de que se acabe.", ""))
+        }
+        list_push(items, {"action": "act:jobsearch", "t": "Buscar carrera", "s": "Más de 120 carreras", "desc": "Entrevista de trabajo (minijuego) o solo currículum. Las profesiones piden título.", "lock": ""})
+        return items
+    }
+    let job = L.job
+    let b = boss()
+    let bt = boss_type(b.type)
+    list_push(items, oitem("boss", "Tu jefe: " + b.first, bt.n + " · humor " + str(b.mood), bt.d + " Su humor pesa en tu evaluación anual.", ""))
+    let lock = ""
+    if L.used["of_training"] != null { lock = "Este mes ya" } else if L.money < 1500 && b.type != "mentor" { lock = "$1,500" }
+    let who = "$1,500"
+    if b.type == "mentor" { who = "La paga la empresa" }
+    list_push(items, oitem("training", "Capacitación", who, "Un curso con minijuego de tu campo. Experiencia según tu puntaje.", lock))
+    lock = ""
+    if L.used["of_network"] != null { lock = "Este mes ya" }
+    list_push(items, oitem("network", "Convivir con tus colegas", "Encanto, contactos", "Comidas, chismes y alianzas. Cuenta en tu evaluación.", lock))
+    let field = job_field()
+    if list_contains(REMOTE_FIELDS, field) {
+        let t = "Pedir home office"
+        if job.remote == true { t = "Volver a la oficina" }
+        list_push(items, oitem("remote", t, "Felicidad", "Trabajar desde casa en pijama. Tu jefe tiene que aprobarlo.", ""))
+    }
+    if list_contains(UNION_FIELDS, field) && legit_job() {
+        let t = "Afiliarte al sindicato"
+        if job.union == true { t = "Salir del sindicato" }
+        list_push(items, oitem("union", t, "$200/mes", "Te protege de los recortes de personal y negocia aumentos.", ""))
+    }
+    lock = ""
+    if job.vac_age == L.age { lock = "Este año ya" }
+    list_push(items, oitem("vacation", "Pedir vacaciones", "Salud, felicidad", "Una semana lejos del trabajo. A algunos jefes no les encanta.", lock))
+    lock = ""
+    if job.level >= 4 { lock = "Rango máximo" } else if job.promo_age == L.age { lock = "Este año ya" } else if job.xp * 100 < XP_TABLE[job.level + 1] * 70 { lock = "70% de exp. del rango" }
+    list_push(items, oitem("promo", "Pedir un ascenso", "Entrevista", "Entrevista con dirección (minijuego). Con 70 o más subes de rango.", lock))
+    let warns = job.warns
+    if warns == null { warns = 0 }
+    list_push(items, oitem("none", "Expediente", "Advertencias: " + str(warns) + "/3", "Desempeño " + str(job.perf) + "%. Evaluaciones excelentes: " + str(map_get(L, "evals_star", 0)) + ". Tres advertencias y te despiden.", ""))
+    return items
+}
+
+function gig_extra_items() {
+    let items = []
+    let g = L.gig
+    if g == null { return items }
+    let place = gig_def(g.id).set
+    let t = "Pedir tiempo completo"
+    if g.full == true { t = "Volver a medio tiempo" }
+    list_push(items, oitem("gigfull", t, "Doble sueldo", "Ganas el doble, pero si estudias tus calificaciones lo sufren y te cansas más.", ""))
+    if list_contains(["noche", "hotel", "fabrica", "calle", "obra", "comida"], place) {
+        let n = "Pedir turno nocturno"
+        if g.night == true { n = "Volver al turno de día" }
+        list_push(items, oitem("gignight", n, "+25% de sueldo", "Pagan más de noche. El cuerpo lo resiente.", ""))
+    }
+    let lock = ""
+    if g.perf < 70 { lock = "Desempeño 70" } else if g.raise_age == L.age { lock = "Este año ya" }
+    list_push(items, oitem("gigraise", "Pedir aumento", money_str(g.pay) + "/mes", "Con buen desempeño y algo de valor.", lock))
+    let rank_name = "Empleado"
+    let r = g.rank
+    if r == 1 { rank_name = by_gender(L.gender, "Encargado de turno", "Encargada de turno") }
+    if r == 2 { rank_name = by_gender(L.gender, "Gerente de sucursal", "Gerente de sucursal") }
+    let next = "Con 6 meses y desempeño 70 te pueden ascender a encargad" + oa(L.gender) + "."
+    if r == 1 { next = "Con 18 meses y desempeño 80 te pueden hacer gerente." }
+    if r == 2 { next = "Ya llegaste lo más alto en esta chamba." }
+    list_push(items, oitem("none", "Puesto: " + rank_name, str(g.months) + " meses", next + " Racha de minimisiones: " + str(map_get(g, "streak", 0)) + ".", ""))
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function oficio_action(action: string) {
+    G.modal = null
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    match cmd {
+        "none" => return null
+        "boss" => {
+            if L.job == null { return null }
+            let b = boss()
+            return open_choice("TU JEFE: " + str_upper(b.first), boss_type(b.type).d + " Humor: " + str(b.mood) + "/100.",
+                ["Pedir retroalimentación", "Hacerle la barba", "Pedir más responsabilidades", "Quejarte de la carga de trabajo", "Volver"], ["", "", "", "", ""], "of_boss", {})
+        }
+        "training" => {
+            if L.job == null || used_once("of_training") { return null }
+            if boss().type != "mentor" { L.money -= 1500 }
+            let game = AUDITION_GAME[job_field()]
+            if game == null { game = "quiz" }
+            return mg_start(game, "Capacitación: " + L.job.title, "oficio", {"kind": "training"})
+        }
+        "network" => {
+            if L.job == null || used_once("of_network") { return null }
+            L.job.net = map_get(L.job, "net", 0) + 1
+            gain("charm", 2)
+            boss_mood(1)
+            return finish("Colegas", pick(["Comida con tus colegas: chismes, risas y una alianza nueva.", "Fueron por tacos después del trabajo. Ahora sabes quién es quién.", "Organizaste la vaquita para el cumpleaños de alguien. Puntos extra."]), "g")
+        }
+        "remote" => {
+            if L.job == null { return null }
+            if L.job.remote == true {
+                L.job.remote = false
+                return finish("Oficina", "Volviste a la oficina. Extrañabas el café gratis.", "n")
+            }
+            if boss().mood < 50 && boss().type != "ausente" {
+                boss_mood(-2)
+                return finish("Home office", "Tu jefe dijo que no: «Aquí se viene a trabajar».", "b")
+            }
+            L.job.remote = true
+            flag("remote")
+            hito_once("remote", "Trabajo", "Empezaste a trabajar desde casa")
+            return finish("Home office", "¡Aprobado! Ahora trabajas desde casa.", "g")
+        }
+        "union" => {
+            if L.job == null { return null }
+            if L.job.union == true {
+                L.job.union = false
+                return finish("Sindicato", "Saliste del sindicato.", "n")
+            }
+            L.job.union = true
+            flag("union")
+            boss_mood(-3)
+            return finish("Sindicato", "Te afiliaste al sindicato. Tu jefe frunció el ceño.", "g")
+        }
+        "vacation" => {
+            if L.job == null || L.job.vac_age == L.age { return null }
+            let locks = ["", ""]
+            if L.money < 6000 { locks[0] = "$6,000" }
+            return open_choice("VACACIONES", "¿A dónde vas?", ["Una semana en la playa ($6,000)", "Descansar en casa", "Mejor no"], [locks[0], "", ""], "of_vacation", {})
+        }
+        "promo" => {
+            if L.job == null || L.job.promo_age == L.age || L.job.level >= 4 { return null }
+            L.job.promo_age = L.age
+            return mg_start("interview", "Entrevista de ascenso", "oficio", {"kind": "promo"})
+        }
+        "gigfull" => {
+            let g = L.gig
+            if g == null { return null }
+            if g.full == true {
+                g.full = false
+                return finish(g.title, "Volviste a medio tiempo.", "n")
+            }
+            g.full = true
+            return finish(g.title, "Ahora trabajas tiempo completo: el doble de sueldo y el doble de cansancio.", "n")
+        }
+        "gignight" => {
+            let g = L.gig
+            if g == null { return null }
+            if g.night == true {
+                g.night = false
+                return finish(g.title, "Volviste al turno de día.", "n")
+            }
+            g.night = true
+            return finish(g.title, "Ahora trabajas de noche: 25% más de sueldo.", "n")
+        }
+        "gigraise" => {
+            let g = L.gig
+            if g == null || g.perf < 70 || g.raise_age == L.age { return null }
+            g.raise_age = L.age
+            if chance(40 + rank("guts") * 8) {
+                g.pay = g.pay * 115 / 100
+                return finish(g.title, "¡Aumento! Ahora ganas " + money_str(g.pay) + " al mes.", "g")
+            }
+            g.perf = clamp100(g.perf - 5)
+            return finish(g.title, "«No hay presupuesto.» Clásico.", "b")
+        }
+        _ => return null
+    }
+}
+
+function oficio_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    match handler {
+        "of_boss" => return resolve_boss(index)
+        "of_vacation" => {
+            if L.job == null || index == 2 { return null }
+            L.job.vac_age = L.age
+            L.job.perf = clamp100(L.job.perf - 3)
+            if boss().type == "explotador" { boss_mood(-5) }
+            if index == 0 {
+                L.money -= 6000
+                L.happy += 12
+                L.health = clamp100(L.health + 5)
+                return finish("Vacaciones", "Una semana de playa, mar y celular apagado.", "g")
+            }
+            L.happy += 6
+            L.health = clamp100(L.health + 3)
+            return finish("Vacaciones", "Dormiste doce horas diarias. Fue perfecto.", "g")
+        }
+        "of_apply" => {
+            if index == 0 { return mg_start("interview", "Entrevista: " + job_title(ctx.job), "oficio", {"kind": "interview", "job": ctx.job}) }
+            if index == 1 { return cv_apply(ctx.job) }
+            return finish("Solicitud", "Decidiste no postularte por ahora.", "n")
+        }
+        _ => return null
+    }
+}
+
+function resolve_boss(index: int) {
+    if L.job == null || index == 4 { return null }
+    let b = boss()
+    let t = b.type
+    if index == 0 {
+        boss_mood(3)
+        L.job.perf = clamp100(L.job.perf + 3)
+        if t == "mentor" { career_xp(15) }
+        if t == "ausente" { return finish("Tu jefe", "Le pediste retroalimentación. Te contestó tres semanas después con un «ok».", "n") }
+        return finish("Tu jefe", b.first + " te dio consejos útiles. Sabes exactamente en qué mejorar.", "g")
+    }
+    if index == 1 {
+        boss_mood(6)
+        L.karma -= 1
+        if t == "justo" || t == "mentor" {
+            boss_mood(-4)
+            return finish("Tu jefe", b.first + " notó la barba. «No hace falta, de verdad.»", "n")
+        }
+        return finish("Tu jefe", "Le llevaste café y te reíste de todos sus chistes. Le encantó.", "g")
+    }
+    if index == 2 {
+        if L.job.perf >= 60 {
+            career_xp(25)
+            boss_mood(4)
+            L.happy -= 2
+            return finish("Tu jefe", "Te dio un proyecto importante. Más trabajo, más experiencia.", "g")
+        }
+        boss_mood(-3)
+        return finish("Tu jefe", "«Primero haz bien lo que ya tienes.» Auch.", "b")
+    }
+    if t == "explotador" || t == "toxico" {
+        boss_mood(-8)
+        if b.mood < 20 && chance(30) { return finish("Tu jefe", "Le reclamaste tu carga de trabajo." + fire_job("Al día siguiente te despidieron."), "b") }
+        return finish("Tu jefe", "Te escuchó con los brazos cruzados. Ahora te tiene en la mira.", "b")
+    }
+    L.happy += 4
+    L.job.perf = clamp100(L.job.perf - 2)
+    return finish("Tu jefe", b.first + " te escuchó y repartió mejor el trabajo.", "g")
+}
+
+// Postularte sin entrevista: solo currículum (la probabilidad de antes).
+function cv_apply(id: string) {
+    let d = job_def(id)
+    let lock = job_lock(d)
+    let ok = lock == ""
+    let odds = 60 + rank("charm") * 3 + min(15, L.workxp / 2) + fx_sum("hire") + prestige() * 6
+    if !((ok && chance(odds)) || (!ok && L.age >= d.min_age && chance(5))) {
+        L.happy -= 3
+        let why = "Eligieron a alguien más."
+        if !ok { why = "No cumples los requisitos (" + lock + ")." }
+        return finish("Solicitud", "No te llamaron como " + str_lower(job_title(id)) + ". " + why, "b")
+    }
+    return hire_flow(id, false)
+}
+
+function open_interview(id: string) {
+    open_choice("ENTREVISTA DE TRABAJO", "Te llamaron para una entrevista como " + str_lower(job_title(id)) + ". Una buena entrevista también sube tu sueldo inicial.",
+        ["Ir a la entrevista (minijuego)", "Solo mandar el currículum", "Mejor no"], ["", "", ""], "of_apply", {"job": id})
+    return null
+}
+
+function work_mg_result(score: any, ctx: map) {
+    match ctx.kind {
+        "interview" => {
+            let id = ctx.job
+            let d = job_def(id)
+            let lock = job_lock(d)
+            let total = score + fx_sum("hire") / 2 + prestige() * 5 + min(10, L.workxp / 3)
+            if score >= 100 { flag("interview_ace") }
+            if lock != "" && !chance(5) {
+                return finish("Entrevista", "Te fue bien (" + str(score) + "), pero no cumples los requisitos (" + lock + ").", "b")
+            }
+            if total < 55 {
+                L.happy -= 4
+                return finish("Entrevista", "Sacaste " + str(score) + " en la entrevista. «Nosotros te llamamos.» Nunca llamaron.", "b")
+            }
+            if total >= 85 {
+                L.next_bonus = 10
+                log_add("Negociaste un sueldo inicial 10% más alto.", "g")
+            }
+            return hire_flow(id, false)
+        }
+        "promo" => {
+            if L.job == null { return null }
+            if score >= 70 && L.job.level < 4 {
+                L.job.xp = max(L.job.xp, XP_TABLE[L.job.level + 1])
+                career_xp(0)
+                boss_mood(5)
+                return finish("Ascenso", "¡Convenciste a dirección! Subiste de rango.", "g")
+            }
+            boss_mood(-2)
+            return finish("Ascenso", "Sacaste " + str(score) + ". «Todavía no estás list" + oa(L.gender) + ".»", "b")
+        }
+        "training" => {
+            if L.job == null { return null }
+            career_xp(10 + score / 2)
+            gain("skill", 1 + score / 40)
+            L.job.perf = clamp100(L.job.perf + score / 25)
+            return finish("Capacitación", "Terminaste el curso con " + str(score) + " puntos. Tu experiencia sube.", outcome_kind({"happy": score - 40}))
+        }
+        _ => return null
+    }
+}
+
+// Al contratarte: sueldo negociado y experiencia de tus prácticas.
+function on_hired(job: map) {
+    if L.next_bonus != null {
+        job.bonus = job.bonus + L.next_bonus
+        L.next_bonus = null
+    }
+    if L.intern != null {
+        let req = REQUIRES[job.id]
+        if req != null && list_contains(req, L.intern) {
+            job.xp = max(job.xp, XP_TABLE[1])
+            job.level = max(job.level, 1)
+            L.intern = null
+            log_add("Tus prácticas profesionales cuentan: empiezas con experiencia.", "g")
+        }
+    }
+    L.unemp = null
+    if L.past_jobs != null && len(L.past_jobs) >= 5 { flag("five_careers") }
+}
+
+// ---------------------------------------------------------------- cada mes y cada año
+
+function oficio_month() {
+    if !L.alive { return null }
+    if L.unemp != null {
+        if L.job != null {
+            L.unemp = null
+        } else if L.unemp.months > 0 {
+            L.money += L.unemp.amount
+            L.unemp.months -= 1
+            if L.unemp.months == 0 { log_add("Se terminó tu seguro de desempleo.", "n") }
+        }
+    }
+    let job = L.job
+    if job != null && L.jail == 0 {
+        let b = boss()
+        let bt = boss_type(b.type)
+        if bt.hap != 0 && chance(35) { L.happy += bt.hap }
+        if job.remote == true {
+            if chance(40) { L.happy += 1 }
+            if chance(25) { job.perf = clamp100(job.perf + rint(-3, 2)) }
+        }
+        if job.union == true { L.money -= 200 }
+        // El humor del jefe vuelve poco a poco a lo normal.
+        if b.mood > 60 && chance(20) { b.mood -= 1 }
+        if b.mood < 45 && chance(20) { b.mood += 1 }
+    }
+    let g = L.gig
+    if g != null && L.jail == 0 {
+        if g.rank == null { g.rank = 0 }
+        if g.full == true {
+            L.money += g.pay
+            if L.study != null { L.study.gpa = clamp(L.study.gpa - 2, 0, 100) }
+            if L.age < 18 { L.grades = clamp(L.grades - 2, 0, 100) }
+            if chance(40) { L.happy -= 1 }
+        }
+        if g.night == true {
+            L.money += g.pay / 4
+            if chance(30) { L.health -= 1 }
+        }
+        if g.rank == 0 && g.months >= 6 && g.perf >= 70 { gig_promote(g, 1) }
+        if g.rank == 1 && g.months >= 18 && g.perf >= 80 { gig_promote(g, 2) }
+    }
+    return null
+}
+
+function gig_promote(g: map, r: int) {
+    g.rank = r
+    let title = by_gender(L.gender, "Encargado de turno", "Encargada de turno")
+    if r == 2 {
+        title = "Gerente de sucursal"
+        g.pay = g.pay * 130 / 100
+        flag("gig_manager")
+    } else {
+        g.pay = g.pay * 140 / 100
+        flag("gig_boss")
+    }
+    hito_me("Trabajo", title + " en tu chamba de " + str_lower(g.title))
+    list_push(G.toasts, {"head": "¡ASCENSO!", "title": str_upper(title), "sub": g.title + " · " + money_str(g.pay) + "/mes", "t0": G.t})
+    log_add("Te ascendieron a " + str_lower(title) + " en tu trabajo como " + str_lower(g.title) + ".", "g")
+}
+
+// Evaluación anual de desempeño.
+function oficio_year() {
+    let job = L.job
+    if job == null || L.jail > 0 || job.years < 1 { return null }
+    let b = boss()
+    let score = job.perf + boss_type(b.type).eval + (b.mood - 50) / 3 + min(10, map_get(job, "net", 0) * 2) + rint(-8, 8)
+    job.net = 0
+    if job.warns == null { job.warns = 0 }
+    if score >= 85 {
+        let bonus = pay_of(job) * 8 / 100
+        L.money += bonus
+        career_xp(40)
+        L.evals_star = map_get(L, "evals_star", 0) + 1
+        if L.evals_star >= 3 { flag("eval_star") }
+        list_push(G.toasts, {"head": "EVALUACIÓN", "title": "EXCELENTE", "sub": "Bono de " + money_str(bonus), "t0": G.t})
+        log_add("Evaluación anual: excelente. Bono de " + money_str(bonus) + ".", "g")
+    } else if score >= 60 {
+        career_xp(15)
+        log_add("Evaluación anual: cumple con lo esperado.", "n")
+    } else if score >= 40 {
+        job.warns += 1
+        log_add("Evaluación anual: necesita mejorar. Advertencia " + str(job.warns) + " de 3.", "b")
+    } else {
+        job.warns += 2
+        log_add("Evaluación anual: deficiente. Advertencias: " + str(job.warns) + " de 3.", "b")
+    }
+    let limit = 3
+    if job.union == true { limit = 4 }
+    if job.warns >= limit {
+        log_add("Te despidieron por acumular advertencias." + fire_job(""), "b")
+    }
+    if b.mood >= 90 { flag("boss_fav") }
+    return null
+}
+
+function work_event_ok(ev: map) {
+    let last = L.seen[ev.id]
+    if last != null && L.age - last < 3 { return false }
+    let field = job_field()
+    if list_contains(ev.fields, field) { return true }
+    return list_contains(ev.fields, "any") && legit_job()
+}
+
+function maybe_work_event() {
+    if L.job == null || G.modal != null || L.jail > 0 || !chance(7) { return false }
+    let pool = []
+    let weights = []
+    for ev in WORK_EVENTS {
+        if work_event_ok(ev) {
+            list_push(pool, ev)
+            list_push(weights, ev.w)
+        }
+    }
+    if len(pool) == 0 { return false }
+    let ev = pool[weighted_choose(G.rng, weights)]
+    open_event(ev, {})
+    G.modal.title = L.job.title + " · " + ev.title
+    return true
+}
+
+function oficio_fx(out: list) {
+    if L.job != null && L.job.boss != null {
+        let t = L.job.boss.type
+        if t == "toxico" { list_push(out, fx("jefe_toxico", "Jefe tóxico", false, "Los domingos en la noche te duele el estómago.", {"hap": -1})) }
+        if t == "mentor" { list_push(out, fx("mentor", "Buen mentor", true, "Alguien en el trabajo cree en ti.", {"hire": 5})) }
+        if L.job.remote == true { list_push(out, fx("home_office", "Home office", true, "Trabajas en pijama.", {"hap": 1})) }
+    }
+    if L.job == null && L.unemp != null && L.unemp.months > 0 && L.age >= 18 {
+        list_push(out, fx("desempleo", "Desemplead" + oa(L.gender), false, "Buscar trabajo también cansa.", {"hap": -1}))
+    }
+}

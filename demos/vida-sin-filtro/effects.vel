@@ -125,6 +125,8 @@ function effects() {
     phone_fx(out)
     ocio_fx(out)
     medicina_fx(out)
+    escuela_fx(out)
+    oficio_fx(out)
     return out
 }
 

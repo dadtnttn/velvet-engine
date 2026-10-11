@@ -232,9 +232,11 @@ function menu_title(tab: string) {
 function menu_cats(tab: string) {
     if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Médico", "Hábitos", "Hobbies", "Mascotas", "Viajes", "Fe", "Lujos"] }
     if tab == "job" && L.jail > 0 { return PRISON_CATS }
+    if tab == "job" { return job_cats() }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
     if tab == "rel" { return ["Familia", "Pareja", "Amigos", "Trabajo", "Otros", "Conocer"] }
     if tab == "hitos" { return HITO_CATS }
+    if tab == "missions" { return MISSION_CAT_ORDER }
     if tab == "fin" { return fin_cats() }
     if tab == "route" { return route_cats() }
     if tab == "jobs" { return FIELD_ORDER }
@@ -249,10 +251,10 @@ function menu_cats(tab: string) {
 
 function menu_items(tab: string, cat: string) {
     if tab == "job" && L.jail > 0 { return prison_items(cat) }
-    if tab == "job" { return job_items() }
+    if tab == "job" { return job_tab_items(cat) }
     if tab == "act" && (cat == "Hobbies" || cat == "Mascotas" || cat == "Viajes") { return ocio_items(cat) }
     if tab == "rel" { return rel_list(cat) }
-    if tab == "missions" { return mission_items() }
+    if tab == "missions" { return mission_items(cat) }
     if tab == "effects" { return effect_items() }
     if tab == "hitos" { return my_hito_items(cat) }
     if tab == "fin" { return fin_items(cat) }
@@ -318,6 +320,81 @@ function menu_block(tab: string) {
     if tab == "gigs" && L.age < 16 { return "Las chambas empiezan a los 16. Por ahora, a estudiar." }
     if tab == "act" && L.age < 6 { return "Eres demasiado pequeñ" + oa(L.gender) + ". Juegas con bloques y babeas." }
     return ""
+}
+
+// Pestañas de Ocupación: la escuela mientras estudias la secundaria; carrera,
+// trabajo, estudios y chambas después.
+function job_cats() {
+    if L.age < 6 { return [] }
+    if in_school() {
+        let cats = ["Clases", "Vida escolar", "Clubes"]
+        if L.age >= 16 { list_push(cats, "Chambas") }
+        return cats
+    }
+    if L.age < 16 { return [] }
+    return ["Carrera", "Trabajo", "Estudios", "Chambas"]
+}
+
+function job_tab_items(cat: string) {
+    match cat {
+        "Clases" => return school_class_items()
+        "Vida escolar" => return school_life_items()
+        "Clubes" => return club_items()
+        "Carrera" => return career_tab_items()
+        "Trabajo" => return workplace_items()
+        "Estudios" => return study_tab_items()
+        "Chambas" => return gig_tab_items()
+        _ => return job_items()
+    }
+}
+
+function career_tab_items() {
+    if L.job != null { return career_items() }
+    let items = []
+    let last = "Todavía no has tenido una carrera."
+    if L.last_job != "" { last = "Tu último trabajo: " + L.last_job + "." }
+    list_push(items, {"action": "act:jobsearch", "t": "Buscar carrera", "s": "Más de 120 carreras", "desc": last + " Las profesiones piden título; sin él puedes entrar como amateur pasando una audición. Con entrevista (minijuego) también negocias tu sueldo.", "lock": ""})
+    return items
+}
+
+function study_tab_items() {
+    let items = []
+    if L.study != null {
+        let d = degree_def(L.study.deg)
+        let left = L.study.months
+        let where = ""
+        if L.study.tier != null && L.study.tier != "" { where = " · " + uni_tier(L.study.tier).n }
+        list_push(items, {"action": "act:study_hard", "t": "Estudiar para " + d.n, "s": "Promedio " + str(L.study.gpa), "desc": "Te faltan " + str(left) + " " + plural(left, "mes", "meses") + where + ". Sube tu promedio (con menos de 65 pierdes la beca).", "lock": ""})
+        list_push(items, {"action": "act:study_party", "t": "Fiesta universitaria", "s": "Felicidad, encanto", "desc": "Los mejores contactos se hacen en las fiestas. Tu promedio no opina lo mismo.", "lock": ""})
+        for it in study_items_extra() { list_push(items, it) }
+        list_push(items, {"action": "act:dropout", "t": "Dejar " + d.n, "s": "Adiós título", "desc": "Muchos millonarios dejaron la escuela. Muchos más no lo son.", "lock": ""})
+    } else {
+        let lock = ""
+        if L.age < 18 { lock = "Edad 18" }
+        list_push(items, {"action": "act:studymenu", "t": "Universidad y técnicas", "s": str(len(DEGREES)) + " carreras", "desc": "Universidades pública, privada o de élite según tu examen de admisión, y técnicas sin examen. Paga tu familia, una beca, un préstamo o tú.", "lock": lock})
+        lock = ""
+        if L.edu < 2 { lock = "Secundaria" } else if sc().exam_age == L.age { lock = "Este año ya" }
+        list_push(items, {"action": "es:admission", "t": "Examen de admisión", "s": "Puntaje: " + str(sc().exam), "desc": "Decide a qué universidades puedes entrar: pública 55, privada 30, élite 80. Una vez al año.", "lock": lock})
+    }
+    for it in post_items() { list_push(items, it) }
+    if L.age >= 18 && L.edu < 2 {
+        list_push(items, {"action": "act:ged", "t": "Secundaria abierta", "s": "$1,500", "desc": "Nunca es tarde para terminar la escuela. Necesaria para la universidad.", "lock": ""})
+    }
+    return items
+}
+
+function gig_tab_items() {
+    let items = []
+    if L.gig != null {
+        for it in gig_action_items() { list_push(items, it) }
+        for it in gig_extra_items() { list_push(items, it) }
+    }
+    let sub = "100 trabajos sin experiencia"
+    if L.gig != null { sub = "Cambiar de chamba" }
+    let lock = ""
+    if L.age < 16 { lock = "Edad 16" }
+    list_push(items, {"action": "act:gigmenu", "t": "Chambas de medio tiempo", "s": sub, "desc": "Mesero, albañil, bartender, repartidor... Sin experiencia y compatibles con estudiar. Cada turno es un minijuego y cada mes hay una minimisión con bono.", "lock": lock})
+    return items
 }
 
 function job_items() {
@@ -932,6 +1009,7 @@ function do_person_act(action: string, p: map) {
 function special(name: string, ctx: map) {
     if str_starts_with(name, "z_") { return lazos_special(name, ctx) }
     if str_starts_with(name, "oc_") { return ocio_special(name, ctx) }
+    if str_starts_with(name, "of_") { return oficio_special(name, ctx) }
     if str_starts_with(name, "pr_") { return prison_special(name, ctx) }
     if str_starts_with(name, "kid_") || name == "comeback" { return kid_special(name, ctx) }
     if str_starts_with(name, "hito:") || name == "sweet_end" || name == "sweet_moved" { return sweet_special(name, ctx) }
@@ -1149,6 +1227,8 @@ function dispatch_choice(index: int) {
     if str_starts_with(m.handler, "z_") { return lazos_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "oc_") { return ocio_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "hx_") { return health_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "es_") { return escuela_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "of_") { return oficio_choice(m.handler, index, m.ctx) }
     if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
     if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
     if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }

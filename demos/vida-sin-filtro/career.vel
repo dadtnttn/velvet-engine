@@ -190,8 +190,61 @@ const MISSIONS = [
     {"id": "prenup", "t": "Letra pequeña", "d": "Firma un contrato prematrimonial.", "r": "Conocimiento", "reward": {"know": 3}},
     {"id": "route_done", "t": "Leyenda de tu ruta", "d": "Completa todas las etapas de una ruta.", "r": "Fama · +$100,000", "reward": {"money": 100000}},
     {"id": "crowned", "t": "Larga vida", "d": "Hazte coronar en la ruta del trono.", "r": "Encanto", "reward": {"charm": 10}},
-    {"id": "president", "t": "Al poder", "d": "Gana la presidencia.", "r": "Encanto", "reward": {"charm": 10}}
+    {"id": "president", "t": "Al poder", "d": "Gana la presidencia.", "r": "Encanto", "reward": {"charm": 10}},
+    // Escuela y universidad
+    {"id": "honor_roll", "t": "Cuadro de honor", "d": "Termina un año escolar con 95 o más.", "r": "Conocimiento", "reward": {"know": 5}},
+    {"id": "olympiad_gold", "t": "Oro olímpico", "d": "Gana oro en la olimpiada del conocimiento.", "r": "+$3,000", "reward": {"money": 3000}},
+    {"id": "science_fair", "t": "Científico en ciernes", "d": "Gana oro en la feria de ciencias.", "r": "Destreza", "reward": {"skill": 5}},
+    {"id": "class_prez", "t": "Voto popular", "d": "Gana la presidencia de tu clase.", "r": "Valor", "reward": {"guts": 5}},
+    {"id": "prom_royal", "t": "Corona de papel", "d": "Sé rey o reina del baile de graduación.", "r": "Encanto", "reward": {"charm": 6}},
+    {"id": "captain", "t": "Capitanía", "d": "Llega a capitán de un equipo deportivo escolar.", "r": "Salud", "reward": {"health": 6}},
+    {"id": "medals5", "t": "Vitrina llena", "d": "Gana 5 medallas en competencias escolares.", "r": "Felicidad", "reward": {"happy": 8}},
+    {"id": "popular", "t": "Leyenda escolar", "d": "Llega a 90 de popularidad en la escuela.", "r": "Encanto", "reward": {"charm": 5}},
+    {"id": "valedictorian", "t": "Mejor promedio", "d": "Termina la secundaria con 95 o más.", "r": "+$5,000", "reward": {"money": 5000}},
+    {"id": "model_student", "t": "Alumno modelo", "d": "Termina la secundaria sin un solo castigo.", "r": "Amabilidad", "reward": {"kind": 5}},
+    {"id": "elite_uni", "t": "Ivy", "d": "Entra a una universidad de élite.", "r": "Conocimiento", "reward": {"know": 6}},
+    {"id": "exchange", "t": "Ciudadano del mundo", "d": "Haz un semestre de intercambio.", "r": "Encanto", "reward": {"charm": 5}},
+    {"id": "thesis", "t": "Tesis laureada", "d": "Defiende tu tesis con 80 o más.", "r": "Conocimiento", "reward": {"know": 5}},
+    {"id": "frat", "t": "Hermandad", "d": "Entra a una fraternidad o sororidad.", "r": "Encanto", "reward": {"charm": 4}},
+    {"id": "master", "t": "Maestría", "d": "Termina una maestría.", "r": "+$10,000", "reward": {"money": 10000}},
+    {"id": "phd", "t": "Doctor", "d": "Termina un doctorado.", "r": "Conocimiento", "reward": {"know": 10}},
+    {"id": "mba", "t": "Lobo de negocios", "d": "Termina un MBA.", "r": "+$20,000", "reward": {"money": 20000}},
+    // Trabajo
+    {"id": "interview_ace", "t": "Entrevista perfecta", "d": "Saca 100 en una entrevista de trabajo.", "r": "Encanto", "reward": {"charm": 5}},
+    {"id": "intern", "t": "Practicante", "d": "Consigue prácticas profesionales.", "r": "Destreza", "reward": {"skill": 4}},
+    {"id": "eval_star", "t": "Empleado estrella", "d": "Recibe 3 evaluaciones anuales excelentes.", "r": "+$15,000", "reward": {"money": 15000}},
+    {"id": "boss_fav", "t": "Consentido del jefe", "d": "Lleva el humor de tu jefe a 90.", "r": "Felicidad", "reward": {"happy": 6}},
+    {"id": "union", "t": "Sindicalista", "d": "Afíliate a un sindicato.", "r": "Valor", "reward": {"guts": 4}},
+    {"id": "survivor_layoff", "t": "Sobreviviente corporativo", "d": "Sobrevive a un recorte de personal.", "r": "Valor", "reward": {"guts": 5}},
+    {"id": "headhunted", "t": "Codiciado", "d": "Consigue una oferta de la competencia que te suba el sueldo.", "r": "+$8,000", "reward": {"money": 8000}},
+    {"id": "remote", "t": "Oficina en pijama", "d": "Consigue trabajar desde casa.", "r": "Felicidad", "reward": {"happy": 6}},
+    {"id": "five_careers", "t": "Trotamundos laboral", "d": "Ten 5 carreras distintas en tu vida.", "r": "Destreza", "reward": {"skill": 8}},
+    {"id": "gig_boss", "t": "A cargo del turno", "d": "Llega a encargado de turno en una chamba.", "r": "+$2,000", "reward": {"money": 2000}},
+    {"id": "gig_manager", "t": "Gerente", "d": "Llega a gerente de sucursal en una chamba.", "r": "+$6,000", "reward": {"money": 6000}},
+    {"id": "employee_month", "t": "Empleado del mes", "d": "Cumple 3 minimisiones seguidas en tu chamba.", "r": "Felicidad", "reward": {"happy": 6}},
+    // Minijuegos
+    {"id": "mg_master", "t": "Maestro de los minijuegos", "d": "Saca 70 o más en 12 minijuegos distintos.", "r": "+$10,000", "reward": {"money": 10000}},
+    {"id": "reflex_fast", "t": "Reflejos felinos", "d": "Saca 95 o más en Reflejos.", "r": "Destreza", "reward": {"skill": 4}},
+    {"id": "simon_master", "t": "Memoria fotográfica", "d": "Saca 100 en Secuencia.", "r": "Conocimiento", "reward": {"know": 4}},
+    {"id": "spell_master", "t": "Ortografía perfecta", "d": "Saca 100 en Ortografía.", "r": "Conocimiento", "reward": {"know": 4}}
 ]
+
+const MISSION_CAT_ORDER = ["Estudios", "Trabajo", "Amor y familia", "Dinero", "Vida"]
+const MISSION_CATS = {
+    "grad": "Estudios", "tecnico": "Estudios", "honors": "Estudios", "beca": "Estudios", "parents_pay": "Estudios",
+    "honor_roll": "Estudios", "olympiad_gold": "Estudios", "science_fair": "Estudios", "class_prez": "Estudios", "prom_royal": "Estudios",
+    "captain": "Estudios", "medals5": "Estudios", "popular": "Estudios", "valedictorian": "Estudios", "model_student": "Estudios",
+    "elite_uni": "Estudios", "exchange": "Estudios", "thesis": "Estudios", "frat": "Estudios", "master": "Estudios", "phd": "Estudios", "mba": "Estudios",
+    "career3": "Trabajo", "career5": "Trabajo", "award": "Trabajo", "twojobs": "Trabajo", "spec": "Trabajo", "spec18": "Trabajo", "fusion": "Trabajo",
+    "gig": "Trabajo", "gigm": "Trabajo", "amateur": "Trabajo", "pro": "Trabajo", "retired": "Trabajo", "comeback": "Trabajo", "famous": "Trabajo",
+    "route_done": "Trabajo", "crowned": "Trabajo", "president": "Trabajo",
+    "interview_ace": "Trabajo", "intern": "Trabajo", "eval_star": "Trabajo", "boss_fav": "Trabajo", "union": "Trabajo", "survivor_layoff": "Trabajo",
+    "headhunted": "Trabajo", "remote": "Trabajo", "five_careers": "Trabajo", "gig_boss": "Trabajo", "gig_manager": "Trabajo", "employee_month": "Trabajo",
+    "wed": "Amor y familia", "family": "Amor y familia", "heart": "Amor y familia", "trio": "Amor y familia", "kink": "Amor y familia",
+    "confidant": "Amor y familia", "livein": "Amor y familia", "open": "Amor y familia", "grandpa": "Amor y familia", "goodparent": "Amor y familia",
+    "dynasty": "Amor y familia", "first_love": "Amor y familia", "childhood_love": "Amor y familia", "golden": "Amor y familia", "prenup": "Amor y familia",
+    "million": "Dinero", "assets": "Dinero", "investor": "Dinero", "homeowner": "Dinero", "debtfree": "Dinero", "jackpot": "Dinero"
+}
 
 function flag(name: string) {
     L.flags[name] = true
@@ -262,8 +315,24 @@ function mission_met(id: string) {
         }
         return false
     }
+    if id == "medals5" { return L.sc != null && L.sc.medals >= 5 }
+    if id == "popular" { return L.sc != null && L.sc.pop >= 90 }
+    if id == "mg_master" || id == "reflex_fast" || id == "simon_master" || id == "spell_master" {
+        let best = L.mgbest
+        if best == null { return false }
+        if id == "reflex_fast" { return map_get(best, "reflex", 0) >= 95 }
+        if id == "simon_master" { return map_get(best, "simon", 0) >= 100 }
+        if id == "spell_master" { return map_get(best, "spell", 0) >= 100 }
+        return list_count(map_values(best), fn(v) => v >= 70) >= 12
+    }
     if has_flag(id) { return true }
     return false
+}
+
+function mission_cat(id: string) {
+    let c = MISSION_CATS[id]
+    if c == null { return "Vida" }
+    return c
 }
 
 // Revisa misiones pendientes y entrega recompensas.
@@ -287,9 +356,10 @@ function check_missions() {
     return null
 }
 
-function mission_items() {
+function mission_items(cat: string) {
     let items = []
     for m in MISSIONS {
+        if cat != "" && mission_cat(m.id) != cat { continue }
         let done = list_contains(L.done, m.id)
         let s = "Recompensa: " + m.r
         if done { s = "CUMPLIDA" }

@@ -29,6 +29,8 @@ import "space.vel"
 import "lazos.vel"
 import "ocio.vel"
 import "medicina.vel"
+import "escuela.vel"
+import "oficio.vel"
 import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
@@ -484,6 +486,8 @@ function handle_action(action: string) {
         "mg" => mg_action(action)
         "enroll" => open_enroll(rest)
         "hx" => health_dispatch(action, rest)
+        "es" => escuela_action(action)
+        "of" => oficio_action(action)
         "habit" => toggle_habit(rest)
         "gig" => take_gig(rest)
         "cact" => do_career_act(rest)

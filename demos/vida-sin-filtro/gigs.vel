@@ -46,12 +46,12 @@ const GIG_ROWS = [
     ["pisos", "Instalador de pisos", "Instaladora de pisos", "obra", 3400, 16, "timing"],
     // Tienda
     ["cajero_g", "Cajero", "Cajera", "tienda", 2600, 16, "math"],
-    ["reponedor", "Reponedor", "Reponedora", "tienda", 2400, 16, "memory"],
+    ["reponedor", "Reponedor", "Reponedora", "tienda", 2400, 16, "sort"],
     ["vendedor_ropa", "Vendedor de ropa", "Vendedora de ropa", "tienda", 2800, 16, "memory"],
     ["vendedor_celulares", "Vendedor de celulares", "Vendedora de celulares", "tienda", 3200, 16, "math"],
     ["vendedor_zapatos", "Vendedor de zapatos", "Vendedora de zapatos", "tienda", 2700, 16, "memory"],
-    ["empacador", "Empacador", "Empacadora", "tienda", 1800, 16, "timing"],
-    ["inventarista", "Inventarista", "Inventarista", "tienda", 2900, 16, "math"],
+    ["empacador", "Empacador", "Empacadora", "tienda", 1800, 16, "sort"],
+    ["inventarista", "Inventarista", "Inventarista", "tienda", 2900, 16, "sort"],
     ["perfumes", "Vendedor de perfumes", "Vendedora de perfumes", "tienda", 3000, 16, "memory"],
     ["lenceria_tienda", "Vendedor de lencería", "Vendedora de lencería", "tienda", 3300, 18, "memory"],
     ["sexshop_dependiente", "Dependiente de sex shop", "Dependienta de sex shop", "tienda", 3500, 18, "memory"],
@@ -476,6 +476,134 @@ const GIG_EVENTS = [
                 {"w": 100, "log": "Renunciaste. Hay más trabajos en el mundo.", "special": "gig_quit"}
             ]}
         ]
+    },
+    {
+        "id": "g_secret_shopper", "title": "Cliente misterioso", "min": 16, "max": 99, "w": 6, "req": "", "set": ["comida", "tienda", "hotel", "belleza", "gym"],
+        "text": "Corre el rumor de que hoy viene un «cliente misterioso» que evalúa el servicio en secreto.",
+        "choices": [
+            {"t": "Atender a todos como reyes", "o": [
+                {"w": 70, "log": "El cliente misterioso te puso calificación perfecta.", "gigperf": 15, "money": 500},
+                {"w": 30, "log": "Atendiste perfecto a todos... menos al cliente misterioso, que llegó en tu descanso.", "gigperf": 3}
+            ]},
+            {"t": "Seguir normal", "o": [{"w": 100, "log": "Calificación promedio. Ni regaño ni premio.", "gigperf": 1}]}
+        ]
+    },
+    {
+        "id": "g_spill", "title": "Accidente en turno", "min": 16, "max": 99, "w": 6, "req": "", "set": ["comida", "noche", "hotel", "eventos"],
+        "text": "Se te cae una charola completa frente a todos los clientes.",
+        "choices": [
+            {"t": "Hacer una reverencia", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "Los clientes aplaudieron. Hasta te dejaron propina.", "money": 300, "charm": 2}]},
+            {"t": "Limpiar rápido y disculparte", "o": [{"w": 100, "log": "Lo resolviste rápido. El gerente ni se enteró.", "gigperf": 2}]},
+            {"t": "Culpar a tu compañero", "o": [{"w": 100, "log": "Funcionó. Tu compañero ya no te habla.", "karma": -4, "gigperf": 3}]}
+        ]
+    },
+    {
+        "id": "g_overtime", "title": "Doble turno", "min": 16, "max": 99, "w": 7, "req": "", "set": ["any"],
+        "text": "Faltó alguien y el gerente te pide quedarte un turno extra.",
+        "choices": [
+            {"t": "Quedarte", "o": [{"w": 100, "log": "Doble turno, doble paga, pies destrozados.", "money": [600, 1200], "health": -2, "gigperf": 8}]},
+            {"t": "Irte a casa", "o": [{"w": 100, "log": "Te fuiste. El gerente anotó tu nombre en su libreta.", "gigperf": -5, "happy": 2}]}
+        ]
+    },
+    {
+        "id": "g_theft", "title": "Faltante en caja", "min": 16, "max": 99, "w": 5, "req": "", "set": ["tienda", "comida", "noche"],
+        "text": "Al cerrar, faltan $500 en la caja que manejaste.",
+        "choices": [
+            {"t": "Contar todo otra vez", "o": [
+                {"w": 60, "log": "Estaban debajo de la charola. Alma al cuerpo.", "happy": 3},
+                {"w": 40, "log": "No aparecieron. Te los descontaron del sueldo.", "money": -500, "happy": -4}
+            ]},
+            {"t": "Ponerlos de tu bolsa", "o": [{"w": 100, "log": "Pagaste para evitar problemas.", "money": -500, "gigperf": 3}]}
+        ]
+    },
+    {
+        "id": "g_kid_care", "title": "Niño difícil", "min": 16, "max": 99, "w": 7, "req": "", "set": ["cuidado"],
+        "text": "El niño que cuidas hace un berrinche épico en pleno supermercado.",
+        "choices": [
+            {"t": "Mantener la calma y distraerlo", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Lo convenciste de buscar «el cereal secreto». Berrinche resuelto.", "kind": 3, "gigperf": 10}]},
+            {"t": "Comprarle un dulce", "o": [{"w": 100, "log": "Funcionó al instante. Los papás no se tienen que enterar.", "money": -30, "gigperf": 2}]}
+        ]
+    },
+    {
+        "id": "g_elder", "title": "Historias del abuelo", "min": 16, "max": 99, "w": 5, "req": "", "set": ["cuidado", "hogar"],
+        "text": "El señor que cuidas te cuenta historias increíbles de su juventud.",
+        "choices": [
+            {"t": "Escucharlo toda la tarde", "o": [{"w": 100, "log": "Te contó cómo conoció al amor de su vida. Saliste con el corazón calientito.", "kind": 4, "happy": 5}]},
+            {"t": "Grabarlas para su familia", "o": [{"w": 100, "log": "Su familia lloró al escucharlas. Te dieron un bono.", "kind": 5, "money": 800}]}
+        ]
+    },
+    {
+        "id": "g_wedding", "title": "Boda caótica", "min": 16, "max": 99, "w": 6, "req": "", "set": ["eventos"],
+        "text": "En la boda que atiendes, la novia descubre al novio coqueteando con la dama de honor.",
+        "choices": [
+            {"t": "Mantener a todos con pastel y música", "o": [{"w": 100, "log": "Pusiste «La Macarena» y salvaste la fiesta. El coordinador te adora.", "gigperf": 12, "charm": 2}]},
+            {"t": "Grabar el drama", "o": [{"w": 100, "log": "Tu video tiene un millón de vistas. Te prohibieron volver a ese salón.", "gigperf": -15, "happy": 6}]}
+        ]
+    },
+    {
+        "id": "g_gym_member", "title": "El socio del gimnasio", "min": 16, "max": 99, "w": 6, "req": "", "set": ["gym"],
+        "text": "Un socio levanta peso con muy mala técnica y está a punto de lastimarse.",
+        "choices": [
+            {"t": "Corregirlo con tacto", "o": [{"w": 100, "log": "Te agradeció y ahora te pide rutina personalizada.", "money": 400, "gigperf": 6}]},
+            {"t": "No meterte", "o": [{"w": 100, "log": "Se lastimó la espalda. El gerente preguntó por qué nadie lo ayudó.", "gigperf": -8}]}
+        ]
+    },
+    {
+        "id": "g_factory_line", "title": "La línea se detiene", "min": 16, "max": 99, "w": 6, "req": "", "set": ["fabrica"],
+        "text": "La máquina de tu línea se atasca y toda la producción se detiene.",
+        "choices": [
+            {"t": "Intentar arreglarla", "need": "skill", "rank": 2, "o": [{"w": 100, "log": "Encontraste la pieza floja. El supervisor te felicitó en público.", "skill": 3, "gigperf": 12}]},
+            {"t": "Llamar a mantenimiento", "o": [{"w": 100, "log": "Mantenimiento tardó dos horas. Nadie te culpó.", "gigperf": 1}]}
+        ]
+    },
+    {
+        "id": "g_salon_vip", "title": "Clienta famosa", "min": 16, "max": 99, "w": 5, "req": "", "set": ["belleza"],
+        "text": "Una influencer con un millón de seguidores llega sin cita.",
+        "choices": [
+            {"t": "Atenderla de inmediato", "o": [
+                {"w": 70, "log": "Le encantó y te etiquetó. Llegaron nuevos clientes toda la semana.", "gigperf": 12, "money": 600},
+                {"w": 30, "log": "No le gustó el resultado y lo publicó. Semana dura.", "gigperf": -10, "happy": -4}
+            ]},
+            {"t": "Respetar la fila", "o": [{"w": 100, "log": "Se fue molesta, pero tus clientes de siempre te aplaudieron.", "kind": 2}]}
+        ]
+    },
+    {
+        "id": "g_construction_boss", "title": "El maestro de obra", "min": 16, "max": 99, "w": 6, "req": "", "set": ["obra"],
+        "text": "El maestro de obra te ofrece enseñarte el oficio si te quedas después de la jornada.",
+        "choices": [
+            {"t": "Aceptar", "o": [{"w": 100, "log": "Aprendiste a nivelar, cortar y presupuestar. Valió cada hora.", "skill": 5, "gigperf": 8, "health": -1}]},
+            {"t": "Mejor descansar", "o": [{"w": 100, "log": "Te fuiste a casa. Habrá otras oportunidades.", "health": 1}]}
+        ]
+    },
+    {
+        "id": "g_delivery_rain", "title": "Tormenta", "min": 16, "max": 99, "w": 6, "req": "", "set": ["calle"],
+        "text": "Cae una tormenta y la aplicación paga triple por cada entrega.",
+        "choices": [
+            {"t": "Salir a repartir", "o": [
+                {"w": 75, "log": "Terminaste empapad{a} y con la mejor noche de propinas del año.", "money": [800, 2000], "health": -2},
+                {"w": 25, "log": "Te caíste en un charco gigante con la moto.", "health": -8, "money": 300}
+            ]},
+            {"t": "Esperar a que pase", "o": [{"w": 100, "log": "Viste llover desde un techo. Prudente.", "happy": 1}]}
+        ]
+    },
+    {
+        "id": "g_office_coffee", "title": "La cafetera", "min": 16, "max": 99, "w": 5, "req": "", "set": ["oficina"],
+        "text": "Descompusiste la cafetera de la oficina y ya hay fila de gente furiosa.",
+        "choices": [
+            {"t": "Confesar y comprar una nueva", "o": [{"w": 100, "log": "Compraste una cafetera nueva. Eres el héroe de la oficina.", "money": -900, "gigperf": 8, "kind": 2}]},
+            {"t": "Poner un letrero de «en mantenimiento»", "o": [{"w": 100, "log": "Nadie supo quién fue. La oficina pasó una semana sin café.", "karma": -2}]}
+        ]
+    },
+    {
+        "id": "g_hotel_lost", "title": "Objeto olvidado", "min": 16, "max": 99, "w": 5, "req": "", "set": ["hotel", "hogar"],
+        "text": "Encuentras un reloj carísimo olvidado en la habitación que limpias.",
+        "choices": [
+            {"t": "Entregarlo a recepción", "o": [{"w": 100, "log": "El dueño volvió por él y te dejó $1,000 de recompensa.", "money": 1000, "karma": 5, "gigperf": 5}]},
+            {"t": "Quedártelo", "o": [
+                {"w": 60, "log": "Lo vendiste en $8,000. Nadie preguntó.", "money": 8000, "karma": -10},
+                {"w": 40, "log": "Las cámaras te grabaron. Te lo quitaron y quedaste en la cuerda floja.", "karma": -10, "gigperf": -60}
+            ]}
+        ]
     }
 ]
 
@@ -483,7 +611,9 @@ const GIG_MISSIONS = [
     {"id": "shifts", "t": "Turnos completos", "d": "Trabaja 3 turnos este mes."},
     {"id": "tips", "t": "Rey de las propinas", "d": "Junta {meta} en propinas este mes."},
     {"id": "perfect", "t": "Turno perfecto", "d": "Saca 90 o más en un turno."},
-    {"id": "good2", "t": "Constancia", "d": "Saca 70 o más en 2 turnos este mes."}
+    {"id": "good2", "t": "Constancia", "d": "Saca 70 o más en 2 turnos este mes."},
+    {"id": "games3", "t": "Sin atajos", "d": "Trabaja 3 turnos con minijuego (sin turnos tranquilos) este mes."},
+    {"id": "streak", "t": "En racha", "d": "Encadena 3 turnos seguidos con 60 o más."}
 ]
 
 state {
@@ -545,10 +675,14 @@ function new_gig_mission() {
     if m.id == "tips" { goal = L.gig.pay / 5 }
     if m.id == "perfect" { goal = 1 }
     if m.id == "good2" { goal = 2 }
+    if m.id == "games3" || m.id == "streak" { goal = 3 }
     L.gig.mission = {"id": m.id, "t": m.t, "d": str_replace(m.d, "{meta}", money_str(goal)), "goal": goal, "done": false}
     L.gig.shifts = 0
     L.gig.tips = 0
     L.gig.good = 0
+    L.gig.games = 0
+    L.gig.run = 0
+    L.gig.best_run = 0
 }
 
 function gig_mission_progress() {
@@ -557,6 +691,8 @@ function gig_mission_progress() {
     if m == null || m.done { return 0 }
     if m.id == "shifts" { return g.shifts }
     if m.id == "tips" { return g.tips }
+    if m.id == "games3" { return map_get(g, "games", 0) }
+    if m.id == "streak" { return map_get(g, "best_run", 0) }
     return g.good
 }
 
@@ -571,6 +707,12 @@ function check_gig_mission() {
         if L.gig_done == 10 { hito_me("Trabajo", "Diez minimisiones cumplidas: empleado del año") }
         let bonus = g.pay / 3
         L.money += bonus
+        g.streak = map_get(g, "streak", 0) + 1
+        if g.streak == 3 {
+            flag("employee_month")
+            hito_me("Trabajo", "Empleado del mes en tu chamba de " + str_lower(g.title))
+            list_push(G.toasts, {"head": "¡EMPLEADO DEL MES!", "title": str_upper(g.title), "sub": "Tres minimisiones seguidas", "t0": G.t})
+        }
         L.happy += 5
         g.perf = clamp100(g.perf + 10)
         L.workxp += 3
@@ -593,6 +735,7 @@ function gig_month() {
     L.workxp += 1
     if g.mission != null && !g.mission.done {
         g.perf = clamp100(g.perf - 5)
+        g.streak = 0
     }
     if g.perf < 10 && chance(50) {
         log_add("Te corrieron de tu trabajo como " + g.title + " por mal desempeño.", "b")
@@ -629,6 +772,7 @@ function gig_work(easy: bool) {
     if used == null { used = 0 }
     if used >= 4 { return info(g.title, "Ya trabajaste todos tus turnos de este mes.") }
     L.used["gig"] = used + 1
+    g.easy_shift = easy
     if easy {
         return gig_shift_result(40)
     }
@@ -644,6 +788,15 @@ function gig_shift_result(score: any) {
     g.tips += tips
     g.shifts += 1
     if score >= 70 { g.good += 1 }
+    if g.easy_shift != true {
+        g.games = map_get(g, "games", 0) + 1
+        if score >= 60 {
+            g.run = map_get(g, "run", 0) + 1
+            g.best_run = max(map_get(g, "best_run", 0), g.run)
+        } else {
+            g.run = 0
+        }
+    }
     if score >= 90 && g.mission != null && g.mission.id == "perfect" { g.good = max(g.good, 1) }
     g.perf = clamp100(g.perf + (score - 50) / 10)
     L.workxp += 1
