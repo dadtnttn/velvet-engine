@@ -310,9 +310,19 @@ struct Translator {
     cache: HashMap<String, String>,
     outputs: HashSet<String>,
     misses: Option<(std::path::PathBuf, HashSet<String>)>,
+    /// Pieces already looked up while translating one line: templates,
+    /// pieces and sentences try the same substrings over and over.
+    memo: RefCell<HashMap<(String, usize), Option<String>>>,
+    /// Lookups left for the current line, so a long line nothing matches
+    /// cannot take forever.
+    budget: std::cell::Cell<usize>,
 }
 
 const CACHE_LIMIT: usize = 60_000;
+/// Nested lookups allowed per line (a normal line needs a handful).
+const LOOKUP_BUDGET: usize = 400;
+/// Matching templates tried per piece, heaviest first.
+const MAX_CANDIDATES: usize = 12;
 
 /// One to three words, each starting with a capital letter: a proper name
 /// ("Hanna", "Hanna Krawczyk") that no catalog is expected to translate.
@@ -501,6 +511,8 @@ impl Translator {
             cache: HashMap::new(),
             outputs: HashSet::new(),
             misses,
+            memo: RefCell::new(HashMap::new()),
+            budget: std::cell::Cell::new(0),
         }
     }
 
@@ -531,6 +543,8 @@ impl Translator {
         if self.outputs.contains(s) {
             return s.to_owned();
         }
+        self.memo.borrow_mut().clear();
+        self.budget.set(LOOKUP_BUDGET);
         let result = match self.lookup(s, 0) {
             Some(t) => resolve_vars(&t),
             None => {
@@ -550,6 +564,21 @@ impl Translator {
     }
 
     fn lookup(&self, s: &str, depth: usize) -> Option<String> {
+        let key = (s.to_owned(), depth);
+        if let Some(hit) = self.memo.borrow().get(&key) {
+            return hit.clone();
+        }
+        let left = self.budget.get();
+        if left == 0 {
+            return None;
+        }
+        self.budget.set(left - 1);
+        let out = self.lookup_fresh(s, depth);
+        self.memo.borrow_mut().insert(key, out.clone());
+        out
+    }
+
+    fn lookup_fresh(&self, s: &str, depth: usize) -> Option<String> {
         if let Some(t) = self.cat.exact.get(s) {
             // "piojos" is kept as it is (an illness id), but shown as a word
             // it has a translation under "Piojos": that one wins.
@@ -766,6 +795,7 @@ impl Translator {
         // its holes) is not a translation: the next candidate may be.
         found
             .into_iter()
+            .take(MAX_CANDIDATES)
             .filter(|(idx, holes)| self.holes_ok(*idx, holes, depth, strict))
             .map(|(idx, holes)| {
                 restore_case(
@@ -1106,6 +1136,27 @@ mod tests {
         // A sentence without translation keeps the whole line as it is.
         let s = "Algo que no existe. ¡Era justo lo que Ana quería!";
         assert_eq!(t.tr(s), s);
+    }
+
+    #[test]
+    fn long_lines_nothing_matches_stay_fast() {
+        let c = cat(&[
+            ("{0} {1}", "{0} {1}"),
+            ("{0}, {1}", "{0}, {1}"),
+            ("{0}: {1}", "{0}: {1}"),
+            ("{0}. {1}", "{0}. {1}"),
+            ("{0} y {1}", "{0} and {1}"),
+            ("{0} de {1}", "{1}'s {0}"),
+            ("Hola", "Hello"),
+        ]);
+        let mut t = Translator::new(c);
+        let line = (0..40)
+            .map(|i| format!("Palabra{i} de cosa y otra, más: Fin{i}."))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let start = std::time::Instant::now();
+        let _ = t.tr(&line);
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
     }
 
     #[test]
