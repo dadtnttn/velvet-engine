@@ -1,0 +1,1065 @@
+// @edition 3
+// Fe: la segunda capa de la religión.
+// - Ritos de paso según tu religión (primera comunión, bar o bat mitzvá, primer
+//   ayuno, ordenación de novicio...) y festividades del año (Navidad, Ramadán,
+//   Janucá, Diwali, Vesak...) que celebras en familia, a tu manera o ignoras;
+//   algunas tienen ayuno.
+// - Comunidad: servir, subir de fiel a líder de tu comunidad (sacerdote, pastora,
+//   imán, rabina, monje...), votos de celibato cuando la religión los pide (y el
+//   escándalo si los rompes), diezmo e invitar a otros a tu fe.
+// - Conversión con estudio de tres meses (o inmediata en las religiones abiertas);
+//   tu comunidad puede darte la espalda si te vas.
+// - Padres devotos: la misa obligada de niño, el retiro juvenil, la presión por
+//   casarte, presentarte a alguien de la comunidad, el bautizo de tus hijos, tu
+//   pareja del mismo sexo y hacer las paces.
+// - Poligamia: armonía entre tus cónyuges, celos, reuniones familiares, el gasto de
+//   una casa grande y quien quiere irse.
+// - Una secta que recluta a la gente vulnerable, crisis de fe y eventos.
+// Acciones con el prefijo "fe:" y elecciones "fe_".
+
+// Ritos de paso: edad, nombre y descripción (por religión).
+const FE_RITES = {
+    "catolica": [
+        {"age": 9, "n": "Primera comunión", "d": "Vestido blanco o traje, la familia completa en misa y una fiesta con pastel."},
+        {"age": 15, "n": "Confirmación", "d": "Confirmas tu fe frente a la comunidad. Tu padrino te regala algo especial."}
+    ],
+    "ortodoxa": [{"age": 7, "n": "Primera confesión", "d": "Te confiesas por primera vez frente al ícono, con las velas encendidas."}],
+    "evangelica": [{"age": 16, "n": "Bautismo por inmersión", "d": "Decides bautizarte frente a toda la congregación, sumergid{a} en el agua."}],
+    "islam": [
+        {"age": 8, "n": "Tu primera sura de memoria", "d": "Recitas de memoria tu primera sura frente a tu familia."},
+        {"age": 12, "n": "Tu primer Ramadán completo", "d": "Por primera vez ayunas todo el mes, del amanecer al atardecer."}
+    ],
+    "judaismo": [{"age": 13, "n": "Bar o bat mitzvá", "d": "Lees la Torá frente a la comunidad: ahora eres responsable de tus actos. Luego, una gran fiesta."}],
+    "budismo": [{"age": 12, "n": "Novicio por un verano", "d": "Te rapas la cabeza y pasas un verano en el monasterio, como manda la tradición de tu familia."}],
+    "hinduismo": [{"age": 10, "n": "Ceremonia de iniciación", "d": "Un sacerdote te inicia en los estudios sagrados frente al fuego ritual."}],
+    "sij": [{"age": 16, "n": "Iniciación Amrit", "d": "Te inicias en la comunidad y prometes vivir según sus principios."}],
+    "terciopelo": [{"age": 18, "n": "Ceremonia de la mayoría de edad", "d": "Una noche de música, velas rojas y una bendición para tu vida adulta."}],
+    "solar": [{"age": 14, "n": "La prueba del sol", "d": "Tres días de ayuno en la montaña esperando el amanecer."}],
+    "luna": [{"age": 15, "n": "La noche de la luna", "d": "Te presentan ante la comunidad bajo la primera luna llena del año."}]
+}
+
+// Festividades: mes, nombre y si se ayuna.
+const FE_HOLIDAYS = {
+    "catolica": [{"m": "Abril", "n": "Semana Santa", "fast": false}, {"m": "Diciembre", "n": "Navidad", "fast": false}],
+    "ortodoxa": [{"m": "Enero", "n": "Navidad ortodoxa", "fast": false}, {"m": "Abril", "n": "Pascua", "fast": true}],
+    "evangelica": [{"m": "Abril", "n": "Semana Santa", "fast": false}, {"m": "Diciembre", "n": "Navidad", "fast": false}],
+    "islam": [{"m": "Marzo", "n": "Ramadán", "fast": true}, {"m": "Junio", "n": "Fiesta del Sacrificio", "fast": false}],
+    "judaismo": [{"m": "Abril", "n": "Pésaj", "fast": false}, {"m": "Septiembre", "n": "Yom Kipur", "fast": true}, {"m": "Diciembre", "n": "Janucá", "fast": false}],
+    "budismo": [{"m": "Mayo", "n": "Vesak", "fast": false}],
+    "hinduismo": [{"m": "Marzo", "n": "Holi", "fast": false}, {"m": "Noviembre", "n": "Diwali", "fast": false}],
+    "sij": [{"m": "Abril", "n": "Vaisakhi", "fast": false}],
+    "terciopelo": [{"m": "Febrero", "n": "Festival del Terciopelo", "fast": false}],
+    "solar": [{"m": "Junio", "n": "Solsticio", "fast": true}],
+    "luna": [{"m": "Octubre", "n": "Luna de la cosecha", "fast": false}],
+    "espiritual": [{"m": "Marzo", "n": "Retiro de equinoccio", "fast": false}]
+}
+
+// El líder de cada comunidad: [hombre, mujer] y si pide votos de celibato.
+const FE_LEADERS = {
+    "catolica": {"m": "Sacerdote", "f": "Monja", "vows": true},
+    "ortodoxa": {"m": "Monje", "f": "Monja", "vows": true},
+    "evangelica": {"m": "Pastor", "f": "Pastora", "vows": false},
+    "islam": {"m": "Imán", "f": "Maestra del Corán", "vows": false},
+    "judaismo": {"m": "Rabino", "f": "Rabina", "vows": false},
+    "budismo": {"m": "Monje", "f": "Monja", "vows": true},
+    "hinduismo": {"m": "Sacerdote del templo", "f": "Sacerdotisa del templo", "vows": false},
+    "sij": {"m": "Guardián del templo", "f": "Guardiana del templo", "vows": false},
+    "terciopelo": {"m": "Gran Sacerdote", "f": "Gran Sacerdotisa", "vows": false},
+    "solar": {"m": "Profeta del Sol", "f": "Profetisa del Sol", "vows": false},
+    "luna": {"m": "Sumo Sacerdote", "f": "Suma Sacerdotisa", "vows": false},
+    "espiritual": {"m": "Guía espiritual", "f": "Guía espiritual", "vows": false}
+}
+
+// Rangos en tu comunidad: servicio necesario, fe y edad.
+const FE_ROLES = [
+    {"n": "Fiel", "xp": 0, "faith": 0, "age": 0},
+    {"n": "Voluntari{o}", "xp": 40, "faith": 45, "age": 14},
+    {"n": "Maestr{o} de la comunidad", "xp": 120, "faith": 65, "age": 18},
+    {"n": "Líder", "xp": 300, "faith": 80, "age": 25}
+]
+
+const FE_EVENTS = [
+    {
+        "id": "fe_preacher", "title": "Predicador en la plaza", "w": 6, "any": true,
+        "text": "Un predicador con megáfono anuncia en la plaza que el fin del mundo será el próximo martes.",
+        "choices": [
+            {"t": "Escucharlo con respeto", "o": [{"w": 100, "log": "Le diste una moneda. Te deseó que tu alma encuentre paz.", "karma": 1, "happy": 1}]},
+            {"t": "Debatir con él", "need": "know", "rank": 2, "o": [{"w": 100, "log": "Debatieron una hora. Terminaron tomando un café juntos.", "know": 2, "charm": 1}]},
+            {"t": "Seguir de largo", "o": [{"w": 100, "log": "El martes llegó y pasó. El mundo sigue aquí.", "happy": 0}]}
+        ]
+    },
+    {
+        "id": "fe_retreat", "title": "Retiro espiritual", "w": 7,
+        "text": "Tu comunidad organiza un fin de semana de retiro en las montañas: silencio, oración y comida casera ($800).",
+        "choices": [
+            {"t": "Ir al retiro", "cost": 800, "o": [{"w": 100, "log": "Tres días sin celular. Volviste con la cabeza en su lugar.", "money": -800, "happy": 6, "health": 2, "special": "fe_faith:10"}]},
+            {"t": "Quedarte en casa", "o": [{"w": 100, "log": "Lo pensarás para el próximo.", "happy": 0}]}
+        ]
+    },
+    {
+        "id": "fe_scandal", "title": "Escándalo en la comunidad", "w": 5,
+        "text": "Sale en las noticias: el tesorero de tu comunidad desvió los donativos durante años.",
+        "choices": [
+            {"t": "Tu fe no depende de una persona", "o": [{"w": 100, "log": "Separaste a la persona de tu fe. Seguiste adelante.", "special": "fe_faith:-3", "guts": 1}]},
+            {"t": "Alejarte de la comunidad", "o": [{"w": 100, "log": "La decepción fue demasiada.", "special": "fe_faith:-15", "happy": -4}]},
+            {"t": "Organizar una auditoría", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Con otros miembros revisaron las cuentas y recuperaron parte del dinero. Te ganaste el respeto de todos.", "special": "fe_service:30", "karma": 4}]}
+        ]
+    },
+    {
+        "id": "fe_volunteer", "title": "Misión de voluntariado", "w": 6, "age": 16,
+        "text": "Tu comunidad busca voluntarios para construir casas en un pueblo afectado por las lluvias. Son dos semanas ($1,500 de viaje).",
+        "choices": [
+            {"t": "Apuntarte", "cost": 1500, "o": [{"w": 100, "log": "Pusiste ladrillos, cargaste cemento y lloraste cuando una familia recibió las llaves.", "money": -1500, "kind": 4, "karma": 5, "special": "fe_service:25"}]},
+            {"t": "Donar en lugar de ir", "cost": 500, "o": [{"w": 100, "log": "Tu donativo compró cemento para una casa.", "money": -500, "karma": 2}]},
+            {"t": "Esta vez no", "o": [{"w": 100, "log": "Viste las fotos del viaje con algo de envidia.", "happy": -1}]}
+        ]
+    },
+    {
+        "id": "fe_love", "title": "Alguien especial en la comunidad", "w": 5, "age": 18, "single": true,
+        "text": "En las actividades de tu comunidad siempre coincides con la misma persona. Hoy te pidió tu número.",
+        "choices": [
+            {"t": "Invitarl{xlo} a salir", "o": [{"w": 100, "log": "Comparten fe, valores y un humor terrible. Empezaron a salir.", "happy": 8, "special": "fe_meet"}]},
+            {"t": "Mantener la amistad", "o": [{"w": 100, "log": "Se hicieron buenos amigos.", "happy": 2, "kind": 1}]}
+        ]
+    },
+    {
+        "id": "fe_debate", "title": "Debate en la sobremesa", "w": 6,
+        "text": "En una cena, un amigo dice que la religión es «un cuento para niños». Todos te miran.",
+        "choices": [
+            {"t": "Responder con calma y respeto", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "Explicaste lo que tu fe significa para ti. Tu amigo se disculpó por el tono.", "charm": 2, "special": "fe_faith:3"}]},
+            {"t": "Enojarte", "o": [{"w": 100, "log": "La cena terminó en silencio incómodo.", "happy": -4}]},
+            {"t": "Cambiar de tema con un chiste", "o": [{"w": 100, "log": "Todos se rieron y siguieron con el postre.", "happy": 2}]}
+        ]
+    },
+    {
+        "id": "fe_sign", "title": "Una señal", "w": 4,
+        "text": "En el peor momento del año, algo pasó que no sabes explicar: justo cuando ibas a rendirte, todo se acomodó.",
+        "choices": [
+            {"t": "Ver en ello una señal", "o": [{"w": 100, "log": "Lo sentiste como una respuesta. Tu fe se fortaleció.", "happy": 6, "special": "fe_faith:15"}]},
+            {"t": "Fue casualidad", "o": [{"w": 100, "log": "Casualidad o no, lo agradeces.", "happy": 4}]}
+        ]
+    },
+    {
+        "id": "fe_charity", "title": "Colecta para una familia", "w": 6,
+        "text": "Una familia de tu comunidad perdió todo en un incendio. Están juntando dinero.",
+        "choices": [
+            {"t": "Donar $2,000", "cost": 2000, "o": [{"w": 100, "log": "Con lo que juntaron, la familia pudo rentar un lugar y comprar camas.", "money": -2000, "karma": 5, "special": "fe_service:10"}]},
+            {"t": "Organizar una kermés", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Tu kermés juntó el triple. Todo el barrio cooperó.", "karma": 6, "charm": 2, "special": "fe_service:20"}]},
+            {"t": "No puedes ahora", "o": [{"w": 100, "log": "Les mandaste un mensaje de apoyo.", "happy": -1}]}
+        ]
+    },
+    {
+        "id": "fe_curious", "title": "Una invitación", "w": 5, "atheist": true, "age": 14,
+        "text": "Un amigo te invita a una celebración de su religión. Hay música, comida y mucha gente amable.",
+        "choices": [
+            {"t": "Ir con curiosidad", "o": [{"w": 100, "log": "Te gustó más de lo que esperabas. Te regalaron un libro.", "happy": 4, "know": 1}]},
+            {"t": "Agradecer y no ir", "o": [{"w": 100, "log": "Le deseaste una bonita fiesta.", "happy": 0}]}
+        ]
+    }
+]
+
+const POLY_EVENTS = [
+    {
+        "id": "po_jealous", "title": "Celos en casa", "w": 8,
+        "text": "{x} siente que pasas más tiempo con tu otro cónyuge y te lo reclama en plena cena.",
+        "choices": [
+            {"t": "Prometerle más tiempo a solas", "o": [{"w": 100, "log": "Organizaste un fin de semana solo con {x}.", "bond": 8, "money": -1500, "special": "fe_poly:-3"}]},
+            {"t": "Convocar una reunión familiar", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Hablaron todos con honestidad. Hicieron un calendario para repartir el tiempo.", "special": "fe_poly:5"}]},
+            {"t": "Decir que exagera", "o": [{"w": 100, "log": "{x} se encerró en su cuarto.", "bond": -10}]}
+        ]
+    },
+    {
+        "id": "po_house", "title": "La casa queda chica", "w": 6,
+        "text": "Con tantas personas, la casa ya no alcanza: hay fila para el baño todas las mañanas.",
+        "choices": [
+            {"t": "Ampliar la casa ($40,000)", "cost": 40000, "o": [{"w": 100, "log": "Construyeron dos cuartos más. Paz en las mañanas.", "money": -40000, "happy": 6, "special": "fe_poly:6"}]},
+            {"t": "Hacer horarios", "o": [{"w": 100, "log": "Un pizarrón con horarios en la cocina. Funciona... casi siempre.", "special": "fe_poly:1"}]},
+            {"t": "Aguantarse", "o": [{"w": 100, "log": "Las peleas por el baño se volvieron legendarias.", "happy": -4, "special": "fe_poly:-4"}]}
+        ]
+    },
+    {
+        "id": "po_alliance", "title": "Tus cónyuges se hicieron amigos", "w": 5,
+        "text": "Tus cónyuges empezaron a salir juntos los jueves sin ti. Regresan riéndose de cosas que no entiendes.",
+        "choices": [
+            {"t": "Alegrarte", "o": [{"w": 100, "log": "Una casa en paz vale oro.", "happy": 6, "special": "fe_poly:6"}]},
+            {"t": "Sentirte excluid{a}", "o": [{"w": 100, "log": "Te invitaron el jueves siguiente. Era karaoke.", "happy": 2, "special": "fe_poly:2"}]}
+        ]
+    },
+    {
+        "id": "po_money", "title": "¿Quién paga qué?", "w": 6,
+        "text": "Las cuentas de la casa son un caos: nadie sabe quién pagó la luz y todos creen que pagan de más.",
+        "choices": [
+            {"t": "Pagarlo todo tú este mes", "o": [{"w": 100, "log": "Pagaste todo. Todos te lo agradecieron... por un día.", "money": -3000, "special": "fe_poly:3"}]},
+            {"t": "Hacer una hoja de cálculo", "need": "know", "rank": 2, "o": [{"w": 100, "log": "Una hoja de cálculo con colores. Se acabaron las peleas.", "special": "fe_poly:5"}]},
+            {"t": "Dejar que lo resuelvan ellos", "o": [{"w": 100, "log": "Lo resolvieron gritando.", "special": "fe_poly:-3"}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- estado
+
+function fe() {
+    if L.fe == null {
+        L.fe = {
+            "rites": [], "conv": [], "service": 0, "role": 0, "vows": false, "vow_partners": 0, "tithe": false,
+            "fast_m": -1, "holidays": 0, "hol": {}, "sect": null, "study": null, "crisis": 0, "council_m": -1,
+            "invited": 0, "reconcile_age": -1, "mass_age": -1, "pressure_age": -1, "bless_pending": 0, "rite_seen": {}
+        }
+    }
+    return L.fe
+}
+
+function fe_leader_name() {
+    let d = FE_LEADERS[L.religion]
+    if d == null { return "Líder" }
+    return by_gender(L.gender, d.m, d.f)
+}
+
+function fe_role_name(i: int) {
+    if i >= 3 { return fe_leader_name() }
+    let n = FE_ROLES[i].n
+    return str_replace(n, "{o}", by_gender(L.gender, "o", "a"))
+}
+
+function fe_needs_vows() {
+    let d = FE_LEADERS[L.religion]
+    return d != null && d.vows
+}
+
+function fe_add_faith(n: int) {
+    if L.religion == "ninguna" { return null }
+    L.faith = clamp100(L.faith + n)
+    if L.faith >= 100 && L.age >= 18 { flag("faith100") }
+    return null
+}
+
+function fe_poly_harmony() {
+    let sp = spouses()
+    if len(sp) < 2 { return 100 }
+    let total = 0
+    for p in sp { total += p.bond }
+    return total / len(sp)
+}
+
+// ---------------------------------------------------------------- menú
+
+function fitem(action: string, t: string, s: string, desc: string, lock: string) {
+    return {"action": "fe:" + action, "t": t, "s": s, "desc": desc, "lock": lock}
+}
+
+// Comunidad: servicio, rango, votos, diezmo e invitar a otros.
+function fe_community_items() {
+    let d = fe()
+    let items = []
+    if L.religion == "ninguna" {
+        list_push(items, dninfo("Sin comunidad religiosa", "", "Puedes convertirte a una religión en cualquier momento."))
+        return items
+    }
+    let next = ""
+    if d.role < 3 {
+        let r = FE_ROLES[d.role + 1]
+        next = " Para ser " + str_lower(fe_role_name(d.role + 1)) + ": servicio " + str(r.xp) + ", fe " + str(r.faith) + "% y " + str(r.age) + " años."
+    }
+    list_push(items, dninfo("Tu rango: " + fe_role_name(d.role), "Servicio " + str(d.service), "Tu lugar en la comunidad." + next))
+    let sl = ""
+    if L.used["fe_serve"] != null { sl = "Este mes ya" } else if L.age < 8 { sl = "Edad 8" }
+    list_push(items, fitem("serve", "Servir a tu comunidad", "Servicio, fe, karma", "Limpiar el templo, dar clases a los niños, repartir comida. Cada mes suma.", sl))
+    if d.role >= 3 {
+        let gl = ""
+        if L.used["fe_lead"] != null { gl = "Este mes ya" }
+        list_push(items, fitem("lead", "Guiar a tu comunidad", "Donativos, fama", "Enseñanzas, bodas, consejería y funerales. Tu comunidad te sostiene.", gl))
+    }
+    if fe_needs_vows() && !d.vows && d.role >= 2 {
+        let vl = ""
+        if partner() != null || L.married { vl = "Sin pareja" }
+        list_push(items, fitem("vows", "Hacer votos de celibato", "Requisito para ser " + str_lower(fe_leader_name()), "Renuncias a las relaciones de pareja para dedicarte a tu fe. Romperlos es un escándalo.", vl))
+    }
+    if d.vows { list_push(items, fitem("unvow", "Renunciar a tus votos", "Dejas el liderazgo", "Vuelves a la vida laica. Tu comunidad lo entenderá... más o menos.", "")) }
+    let tl = ""
+    if L.age < 18 { tl = "Edad 18" }
+    let tt = "Dar el diezmo (10% de tus ingresos)"
+    if d.tithe { tt = "Dejar de dar el diezmo" }
+    list_push(items, fitem("tithe", tt, if_str(d.tithe, "ACTIVO", "Fe, karma"), "Cada mes, una décima parte de tu sueldo para tu comunidad.", tl))
+    let il = ""
+    if L.used["fe_invite"] != null { il = "Este mes ya" } else if L.age < 14 { il = "Edad 14" }
+    list_push(items, fitem("invite", "Invitar a alguien a tu fe", "Conversiones: " + str(d.invited), "Tu pareja o tus amigos de otra religión. A nadie le gusta que lo presionen.", il))
+    return items
+}
+
+// Familia: padres devotos, reconciliación y cónyuges.
+function fe_family_items() {
+    let d = fe()
+    let items = []
+    let par = devout_parent()
+    if par != null {
+        list_push(items, dninfo("Tu " + str_lower(rel_label(par)) + " " + par.first, religion_def(religion_of(par)).n + " · fe " + str(par.faith) + "%", "Vínculo " + str(par.bond) + ". Le importa mucho lo que haces con tu vida."))
+    }
+    let low = null
+    for p in parents_alive() {
+        if faith_of(p) >= 50 && p.bond < 45 { low = p }
+    }
+    if low != null {
+        let rl = ""
+        if d.reconcile_age == L.age { rl = "Este año ya" }
+        list_push(items, fitem("reconcile", "Hacer las paces con " + low.first, "Una vez al año", "Ir a verl" + oa(low.gender) + ", acompañarl" + oa(low.gender) + " " + a_temple(religion_def(religion_of(low)).temple) + " y hablar sin pelear.", rl))
+    }
+    let sp = spouses()
+    if len(sp) >= 2 {
+        list_push(items, dninfo("Tus cónyuges: " + str(len(sp)), "Armonía " + str(fe_poly_harmony()) + "%", "Cada cónyuge necesita tiempo y atención. Con menos de 50 de armonía, la casa se divide."))
+        let cl = ""
+        if d.council_m == L.tm { cl = "Este mes ya" }
+        list_push(items, fitem("council", "Reunión familiar", "Todos tus cónyuges", "Una cena para hablar de todo con todos. Bien llevada, une a la familia.", cl))
+    } else if can_polygamy() && L.married {
+        list_push(items, dninfo("Matrimonio múltiple", "Tu religión o tus leyes lo permiten", "Puedes casarte también con alguien con quien tengas una relación (Vínculos › Intimidad)."))
+    }
+    if len(items) == 0 { list_push(items, dninfo("Sin pendientes con la familia", "", "Nadie te reclama nada... por ahora.")) }
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function fe_action(action: string) {
+    G.modal = null
+    let d = fe()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    match cmd {
+        "serve" => {
+            if used_once("fe_serve") || L.religion == "ninguna" { return null }
+            let xp = rint(8, 15)
+            if L.faith >= 70 { xp += 5 }
+            d.service += xp
+            fe_add_faith(2)
+            L.karma += 1
+            gain("kind", 1)
+            let msg = pick(["Limpiaste " + religion_def(L.religion).temple + " con otros voluntarios.", "Diste clases a los niños de la comunidad.", "Repartiste despensas a familias que lo necesitan.", "Ayudaste a organizar la fiesta del mes."])
+            let up = fe_check_role()
+            return finish("Comunidad", msg + up, "g")
+        }
+        "lead" => {
+            if d.role < 3 || used_once("fe_lead") { return null }
+            let money = rint(10, 30) * 100
+            L.money += money
+            L.fame += 1
+            L.karma += 2
+            fe_add_faith(2)
+            let msg = pick(["Tu enseñanza del fin de semana conmovió a toda la comunidad.", "Casaste a una pareja joven que te mira como a un ejemplo.", "Acompañaste a una familia en un funeral. Tus palabras les dieron paz.", "Pasaste la tarde escuchando a quien lo necesitaba."])
+            return finish(fe_leader_name(), msg + " La comunidad te apoya con " + money_str(money) + ".", "g")
+        }
+        "vows" => {
+            if partner() != null || L.married || d.vows { return null }
+            d.vows = true
+            d.vow_partners = L.partners
+            hito_me("Vida", "Hiciste votos de celibato")
+            let up = fe_check_role()
+            return finish("Votos", "Frente a tu comunidad, prometiste dedicar tu vida a tu fe." + up, "n")
+        }
+        "unvow" => {
+            if !d.vows { return null }
+            d.vows = false
+            if d.role >= 3 { d.role = 2 }
+            return finish("Votos", "Renunciaste a tus votos y dejaste el liderazgo. Empieza otra etapa.", "n")
+        }
+        "tithe" => {
+            if L.age < 18 { return null }
+            d.tithe = !d.tithe
+            if d.tithe { return finish("Diezmo", "Desde ahora das el 10% de tus ingresos a tu comunidad.", "g") }
+            return finish("Diezmo", "Dejaste de dar el diezmo.", "n")
+        }
+        "invite" => {
+            if L.used["fe_invite"] != null || L.religion == "ninguna" { return null }
+            let cands = []
+            for p in L.people {
+                if !p.alive || p.age < 14 { continue }
+                if p.rel != "amigo" && p.rel != "pareja" && p.rel != "esposo" { continue }
+                if religion_of(p) != L.religion && len(cands) < 5 { list_push(cands, p) }
+            }
+            if len(cands) == 0 { return info("Fe", "Todas las personas cercanas ya comparten tu fe (o no tienes a quién invitar).") }
+            let labels = []
+            let ids = []
+            for p in cands {
+                list_push(labels, p.first + " (" + religion_def(religion_of(p)).n + ", fe " + str(faith_of(p)) + "%)")
+                list_push(ids, p.id)
+            }
+            list_push(labels, "Mejor no")
+            let locks = []
+            for x in labels { list_push(locks, "") }
+            return open_choice("INVITAR A TU FE", "¿A quién le hablas de tu fe?", labels, locks, "fe_invite", {"ids": ids})
+        }
+        "reconcile" => {
+            if d.reconcile_age == L.age { return null }
+            let low = null
+            for p in parents_alive() {
+                if faith_of(p) >= 50 && p.bond < 45 { low = p }
+            }
+            if low == null { return null }
+            d.reconcile_age = L.age
+            if chance(40 + rank("kind") * 8 + rank("charm") * 4) {
+                bond_gain(low, 15)
+                return finish(low.first, "Fueron juntos " + a_temple(religion_def(religion_of(low)).temple) + " y luego a comer. Al despedirse, te abrazó largo rato.", "g")
+            }
+            bond_gain(low, 3)
+            return finish(low.first, "Lo intentaste. Todavía hay heridas, pero algo se movió.", "n")
+        }
+        "council" => {
+            if d.council_m == L.tm || len(spouses()) < 2 { return null }
+            d.council_m = L.tm
+            if chance(45 + rank("kind") * 7 + rank("charm") * 4) {
+                fe_poly_bond(5)
+                return finish("Reunión familiar", "Cenaron todos juntos, hablaron de lo que les molestaba y terminaron jugando cartas. Familia unida.", "g")
+            }
+            fe_poly_bond(-2)
+            return finish("Reunión familiar", "La cena terminó en reclamos cruzados. Lo intentarán otra vez.", "b")
+        }
+        _ => return null
+    }
+}
+
+function fe_poly_bond(n: int) {
+    for p in spouses() { bond_gain(p, n) }
+    return null
+}
+
+function fe_check_role() {
+    let d = fe()
+    if d.role >= 3 { return "" }
+    let r = FE_ROLES[d.role + 1]
+    if d.service < r.xp || L.faith < r.faith || L.age < r.age { return "" }
+    if d.role + 1 == 3 && fe_needs_vows() && !d.vows { return " Para ser " + str_lower(fe_leader_name()) + " necesitas hacer votos de celibato." }
+    d.role += 1
+    let n = fe_role_name(d.role)
+    hito_me("Vida", "Ahora eres " + str_lower(n) + " de tu comunidad")
+    if d.role == 3 {
+        flag("faith_leader")
+        list_push(G.toasts, {"head": "¡TU COMUNIDAD TE ELIGIÓ!", "title": str_upper(n), "sub": religion_def(L.religion).n, "t0": G.t})
+    }
+    return " ¡Ahora eres " + str_lower(n) + "!"
+}
+
+function fe_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = fe()
+    match handler {
+        "fe_invite" => {
+            if index >= len(ctx.ids) { return null }
+            L.used["fe_invite"] = 1
+            let p = find_person(ctx.ids[index])
+            if p == null { return null }
+            let odds = 20 + p.bond / 3 - faith_of(p) / 2 + rank("charm") * 5 + d.role * 5
+            if religion_of(p) == "ninguna" { odds += 10 }
+            if chance(clamp(odds, 3, 85)) {
+                p.religion = L.religion
+                p.faith = 35
+                d.invited += 1
+                if d.invited >= 3 { flag("evangelist") }
+                add_hito(p, "Se unió a tu fe")
+                d.service += 10
+                return finish(p.first, p.first + " te acompañó varias veces " + a_temple(religion_def(L.religion).temple) + " y decidió unirse a tu fe.", "g")
+            }
+            let hit = -5
+            if faith_of(p) >= 70 { hit = -12 }
+            bond_gain(p, hit)
+            return finish(p.first, p.first + " te escuchó con paciencia y luego cambió de tema. «Respeto lo tuyo, pero yo estoy bien así.»", "n")
+        }
+        "fe_rite" => return fe_resolve_rite(index, ctx)
+        "fe_hol" => return fe_resolve_holiday(index, ctx)
+        "fe_conv" => return fe_resolve_convert(index, ctx)
+        "fe_how" => {
+            let id = ctx.id
+            if index == 0 {
+                d.study = {"id": id, "m": 3}
+                return finish("Conversión", "Empezaste a estudiar " + religion_def(id).n + " con un guía. En tres meses podrás convertirte.", "n")
+            }
+            if index == 1 {
+                if religion_def(id).strict > 1 { return null }
+                return change_religion(id)
+            }
+            return null
+        }
+        "fe_ready" => {
+            if index == 0 {
+                hito_once("conversion_ceremony", "Vida", "Tu ceremonia de conversión")
+                return change_religion(ctx.id)
+            }
+            d.study = {"id": ctx.id, "m": 2}
+            return finish("Conversión", "Le pediste a tu guía un par de meses más para pensarlo.", "n")
+        }
+        "fe_parent" => return fe_resolve_parent(index, ctx)
+        "fe_sect" => return fe_resolve_sect(index, ctx)
+        "fe_crisis" => {
+            d.crisis = 0
+            if index == 0 {
+                fe_add_faith(10)
+                L.happy += 3
+                return finish("Crisis de fe", "Volviste " + a_temple(religion_def(L.religion).temple) + " con tus preguntas. No todas tuvieron respuesta, pero te sentiste acompañad" + oa(L.gender) + ".", "g")
+            }
+            if index == 1 {
+                L.faith = max(0, L.faith - 20)
+                return finish("Crisis de fe", "Te alejaste de todo. Tu fe quedó en pausa.", "n")
+            }
+            L.happy += 5
+            gain("know", 1)
+            fe_add_faith(3)
+            return finish("Crisis de fe", "Hablaste con alguien sabio de tu comunidad. Te dijo que dudar también es parte de creer.", "g")
+        }
+        _ => return null
+    }
+}
+
+// ---------------------------------------------------------------- conversión
+
+function fe_open_convert(page: int) {
+    let opts = []
+    for x in RELIGIONS {
+        if x.id != L.religion && x.id != "ninguna" { list_push(opts, x.id) }
+    }
+    let start = page * 4
+    let ids = list_slice(opts, start, min(len(opts), start + 4))
+    let labels = []
+    for id in ids { list_push(labels, religion_def(id).n) }
+    let more = start + 4 < len(opts)
+    if more { list_push(labels, "Ver más religiones") } else { list_push(labels, "Volver al principio") }
+    list_push(labels, "Mejor no")
+    let locks = []
+    for x in labels { list_push(locks, "") }
+    open_choice("CONVERSIÓN", "¿A qué religión te quieres convertir?", labels, locks, "fe_conv", {"ids": ids, "page": page, "more": more})
+    return null
+}
+
+function fe_resolve_convert(index: int, ctx: map) {
+    let ids = ctx.ids
+    if index < len(ids) {
+        let id = ids[index]
+        let r = religion_def(id)
+        let locks = ["", "", ""]
+        if r.strict > 1 { locks[1] = "Pide estudio" }
+        open_choice(str_upper(r.n), RELIGION_DESC[id] + " Puedes estudiarla tres meses con un guía antes de convertirte.", ["Estudiar tres meses y convertirte", "Convertirte de inmediato", "Mejor no"], locks, "fe_how", {"id": id})
+        return null
+    }
+    if index == len(ids) {
+        if ctx.more { return fe_open_convert(ctx.page + 1) }
+        return fe_open_convert(0)
+    }
+    return null
+}
+
+// Después de cambiar de religión (lo llama change_religion).
+function fe_after_convert(old: string, id: string) {
+    let d = fe()
+    d.study = null
+    if d.role > 0 { d.role = 0 }
+    d.service = 0
+    d.vows = false
+    d.tithe = false
+    if id != "ninguna" && !list_contains(d.conv, id) {
+        list_push(d.conv, id)
+        if len(d.conv) >= 3 { flag("seeker") }
+    }
+    let msg = ""
+    // Tu antigua comunidad
+    if old != "ninguna" && religion_def(old).strict >= 3 {
+        let n = 0
+        for p in L.people {
+            if p.alive && p.rel == "amigo" && religion_of(p) == old && faith_of(p) >= 60 {
+                bond_gain(p, -15)
+                n += 1
+            }
+        }
+        if n > 0 { msg = msg + " Algunos amigos de tu antigua comunidad te dieron la espalda." }
+    }
+    if len(spouses()) >= 2 && !can_polygamy() {
+        for p in spouses() { bond_gain(p, -8) }
+        msg = msg + " Tu nueva fe no reconoce tus otros matrimonios; en casa hay tensión."
+    }
+    return msg
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function fe_month() {
+    let d = fe()
+    if !L.alive { return null }
+    // Estudio para convertirte
+    if d.study != null {
+        d.study.m -= 1
+        if chance(40) { gain("know", 1) }
+    }
+    if d.crisis > 0 { d.crisis -= 1 }
+    if L.religion != "ninguna" && L.jail == 0 {
+        if d.tithe && L.age >= 18 {
+            let t = max(0, job_income()) / 10
+            if L.gig != null { t += L.gig.pay / 10 }
+            if t > 0 {
+                L.money -= t
+                L.karma += 1
+                if chance(40) { fe_add_faith(1) }
+                d.service += 1
+            }
+        }
+        if d.role >= 3 && chance(30) { fe_add_faith(1) }
+        // Votos rotos
+        if d.vows && (partner() != null || L.partners > d.vow_partners) {
+            d.vows = false
+            d.role = min(d.role, 1)
+            L.faith = max(0, L.faith - 20)
+            L.fame += 3
+            L.happy -= 10
+            hito_me("Vida", "Rompiste tus votos")
+            log_add("Escándalo: toda tu comunidad se enteró de que rompiste tus votos de celibato. Perdiste tu lugar.", "b")
+        }
+        // Mes de ayuno
+        if d.fast_m == L.tm - 1 && chance(50) { L.health -= 1 }
+    }
+    // La secta
+    let s = d.sect
+    if s != null && L.age >= 18 {
+        s.m += 1
+        let toll = 1000 + max(0, job_income()) / 5
+        let paid = min(toll, max(0, L.money))
+        L.money -= paid
+        s.paid += paid
+        for p in L.people {
+            if p.alive && (p.rel == "padre" || p.rel == "madre" || p.rel == "hermano" || p.rel == "amigo") && chance(30) { p.bond = clamp100(p.bond - 2) }
+        }
+        if s.m <= 4 { L.happy += 1 } else { L.happy -= 1 }
+    }
+    // Poligamia: cada cónyuge extra cuesta y los celos crecen si alguien se siente de lado.
+    let sp = spouses()
+    if len(sp) >= 2 && L.jail == 0 {
+        dn_charge(300 * (len(sp) - 1))
+        for p in sp {
+            if p.bond < 45 && chance(10) { p.bond = clamp100(p.bond - 2) }
+        }
+        if len(sp) >= 3 { flag("casa_llena") }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- eventos
+
+function maybe_fe_event() {
+    if G.modal != null || !L.alive || L.jail > 0 { return false }
+    let d = fe()
+    if d.study != null && d.study.m <= 0 {
+        let id = d.study.id
+        d.study = null
+        open_choice("TU CONVERSIÓN", "Terminaste tus tres meses de estudio de " + religion_def(id).n + ". La ceremonia está lista y tu guía te espera.", ["Convertirte", "Todavía no estás list" + oa(L.gender)], ["", ""], "fe_ready", {"id": id})
+        return true
+    }
+    if fe_rite_event() { return true }
+    if fe_holiday_event() { return true }
+    if fe_parent_event() { return true }
+    if fe_sect_event() { return true }
+    if fe_crisis_event() { return true }
+    let sp = spouses()
+    if len(sp) >= 2 && chance(4) {
+        let pool = []
+        let weights = []
+        for ev in POLY_EVENTS {
+            let last = L.seen[ev.id]
+            if last == null || L.age - last >= 2 {
+                list_push(pool, ev)
+                list_push(weights, ev.w)
+            }
+        }
+        if len(pool) > 0 {
+            let target = sp[rint(0, len(sp) - 1)]
+            if target.bond > 60 { target = sp[0] }
+            open_event(pool[weighted_choose(G.rng, weights)], {"person": target})
+            return true
+        }
+    }
+    if chance(3) {
+        let pool = []
+        let weights = []
+        for ev in FE_EVENTS {
+            if fe_event_ok(ev) {
+                list_push(pool, ev)
+                list_push(weights, ev.w)
+            }
+        }
+        if len(pool) > 0 {
+            open_event(pool[weighted_choose(G.rng, weights)], {"person": stranger_aged(max(18, L.age - 4), max(18, L.age + 4))})
+            return true
+        }
+    }
+    return false
+}
+
+function fe_event_ok(ev: map) {
+    let last = L.seen[ev.id]
+    if last != null && L.age - last < 4 { return false }
+    if ev.age != null && L.age < ev.age { return false }
+    if L.age < 12 { return false }
+    let none = L.religion == "ninguna"
+    if ev.atheist == true { return none }
+    if ev.any != true && none { return false }
+    if ev.single == true && (partner() != null || L.married) { return false }
+    if ev.id == "fe_love" && fe().vows { return false }
+    return true
+}
+
+function fe_rite_event() {
+    let rites = FE_RITES[L.religion]
+    if rites == null { return false }
+    let d = fe()
+    for r in rites {
+        if L.age >= r.age && L.age <= r.age + 1 && !list_contains(d.rites, r.n) && d.rite_seen[r.n] == null {
+            d.rite_seen[r.n] = L.age
+            let n = r.n
+            if L.religion == "judaismo" { n = by_gender(L.gender, "Bar mitzvá", "Bat mitzvá") }
+            let labels = ["Celebrarlo con toda la familia", "Hacerlo, pero sin muchas ganas"]
+            if L.age >= 12 { list_push(labels, "Negarte") } else { list_push(labels, "Hacer berrinche") }
+            open_choice(str_upper(n), fmt(r.d, {}), labels, ["", "", ""], "fe_rite", {"n": r.n, "show": n})
+            return true
+        }
+    }
+    return false
+}
+
+function fe_resolve_rite(index: int, ctx: map) {
+    let d = fe()
+    if index == 2 {
+        for p in parents_alive() {
+            if faith_of(p) >= 40 { bond_gain(p, -12) }
+        }
+        if L.age >= 12 {
+            gain("guts", 2)
+            L.faith = max(0, L.faith - 10)
+            return finish(ctx.show, "Dijiste que no. Tus padres no lo podían creer.", "b")
+        }
+        return finish(ctx.show, "Hiciste el berrinche del siglo. Al final te llevaron de todos modos... y saliste en las fotos con cara de enojo.", "n")
+    }
+    list_push(d.rites, ctx.n)
+    flag("rite")
+    if index == 0 {
+        fe_add_faith(6)
+        let gift = rint(5, 20) * 100
+        if L.family == "rica" { gift = gift * 5 }
+        L.money += gift
+        L.happy += 8
+        for p in parents_alive() { bond_gain(p, 8) }
+        hito_me("Familia", ctx.show)
+        return finish(ctx.show, "Toda la familia vino. Hubo lágrimas, abrazos, fotos y regalos: " + money_str(gift) + " en sobres.", "g")
+    }
+    fe_add_faith(3)
+    hito_quiet("Familia", ctx.show)
+    for p in parents_alive() { bond_gain(p, 2) }
+    return finish(ctx.show, "Cumpliste con la tradición. Tu familia estaba feliz, aunque notó tu cara.", "n")
+}
+
+function fe_holiday_event() {
+    if L.religion == "ninguna" || L.age < 4 { return false }
+    let hols = FE_HOLIDAYS[L.religion]
+    if hols == null { return false }
+    let d = fe()
+    let m = month_name()
+    for h in hols {
+        if h.m == m && d.hol[h.n] != L.age {
+            d.hol[h.n] = L.age
+            let labels = ["Celebrar en familia", "Celebrarlo a tu manera", "Dejarlo pasar"]
+            let locks = ["", "", ""]
+            if h.fast && L.age >= 12 {
+                labels = ["Celebrar en familia y ayunar", "Celebrar en familia sin ayunar", "Celebrarlo a tu manera", "Dejarlo pasar"]
+                locks = ["", "", "", ""]
+                if L.health < 30 { locks[0] = "Salud 30" }
+            }
+            open_choice(str_upper(h.n), "Llegó " + h.n + ". La familia se reúne, hay comida especial y mucha gente en " + religion_def(L.religion).temple + ".", labels, locks, "fe_hol", {"n": h.n, "fast": h.fast && L.age >= 12})
+            return true
+        }
+    }
+    return false
+}
+
+function fe_resolve_holiday(index: int, ctx: map) {
+    let d = fe()
+    let i = index
+    if !ctx.fast { i += 1 }
+    if i == 0 || i == 1 {
+        d.holidays += 1
+        if d.holidays >= 10 { flag("tradition") }
+        fe_add_faith(2)
+        L.happy += 6
+        for p in parents_alive() { bond_gain(p, 4) }
+        if L.age >= 18 { dn_charge(300 * map_get(LIFE_MULT, L.lifestyle, 100) / 100) }
+        if i == 0 {
+            d.fast_m = L.tm
+            L.health -= 2
+            fe_add_faith(4)
+            gain("guts", 1)
+            flag("fasted")
+            return finish(ctx.n, "Ayunaste y celebraste con tu familia. Romper el ayuno juntos supo a gloria.", "g")
+        }
+        return finish(ctx.n, pick(["Comieron hasta no poder más y la abuela contó las mismas historias de siempre.", "La casa olía a comida de fiesta y hubo regalos para todos.", "Fueron juntos " + a_temple(religion_def(L.religion).temple) + " y luego a casa a celebrar."]), "g")
+    }
+    if i == 2 {
+        d.holidays += 1
+        fe_add_faith(1)
+        L.happy += 3
+        return finish(ctx.n, "Lo celebraste a tu manera, con tus amigos.", "n")
+    }
+    L.faith = max(0, L.faith - 3)
+    for p in parents_alive() {
+        if faith_of(p) >= 60 { bond_gain(p, -4) }
+    }
+    return finish(ctx.n, "Lo dejaste pasar como un día más. Tu familia lo notó.", "n")
+}
+
+// Padres devotos: la misa de niño, el retiro, la presión por casarte, la
+// presentación, el bautizo de tus hijos, tu pareja del mismo sexo.
+function fe_parent_event() {
+    if !chance(8) { return false }
+    let par = devout_parent()
+    if par == null { return false }
+    let d = fe()
+    let ctx = {"person": par}
+    let temple = religion_def(religion_of(par)).temple
+    let p = partner()
+    // Con el tiempo, el cariño pesa más.
+    if d.bless_pending > 0 && p != null && chance(20) {
+        d.bless_pending = 0
+        bond_gain(par, 15)
+        flag("parents_bless")
+        add_hito(p, "Tu familia l" + oa(p.gender) + " aceptó")
+        log_add("Tu " + str_lower(rel_label(par)) + " " + par.first + " invitó a " + p.first + " a la comida del domingo y le sirvió primero. Con el tiempo, el amor pudo más.", "g")
+        return false
+    }
+    // Pareja del mismo sexo
+    if p != null && both_adults(p) && p.gender == L.gender && religion_def(religion_of(par)).strict >= 2 && faith_of(par) >= 60 && L.flags["fe_same_" + str(p.id)] != true {
+        L.flags["fe_same_" + str(p.id)] = true
+        ctx["partner"] = p
+        open_choice("TU FAMILIA Y TU AMOR", fmt("Le contaste a tu " + str_lower(rel_label(par)) + " {x} que estás con " + p.first + ". Se quedó en silencio mucho rato. Su fe y su amor por ti están chocando.", ctx),
+            ["Hablarle con el corazón", "Invitarl" + oa(par.gender) + " a comer con " + p.first, "Darle tiempo y espacio"], ["", "", ""], "fe_parent", {"person": par, "partner": p, "kind": "same"})
+        return true
+    }
+    // Bautizo de tu bebé
+    let baby = null
+    for k in kids_alive() {
+        if k.age <= 1 && religion_of(k) != religion_of(par) { baby = k }
+        if k.age <= 1 && L.religion == "ninguna" && k.flags_bapt != true { baby = k }
+    }
+    if baby != null && baby.flags_bapt != true {
+        baby.flags_bapt = true
+        open_choice("EL BAUTIZO", fmt("Tu " + str_lower(rel_label(par)) + " {x} quiere que " + baby.first + " sea presentad" + oa(baby.gender) + " en " + temple + ", como manda su fe.", ctx),
+            ["Aceptar con gusto", "Que decida cuando crezca", "Negarte"], ["", "", ""], "fe_parent", {"person": par, "baby": baby, "kind": "bapt"})
+        return true
+    }
+    // La misa obligada
+    if L.age >= 6 && L.age <= 15 && d.mass_age != L.age && chance(50) {
+        d.mass_age = L.age
+        open_choice("¡" + str_upper(a_temple(temple)) + "!", fmt("Es domingo temprano y {x} te despierta: «Arriba, que vamos " + a_temple(temple) + "». Tú querías dormir.", ctx),
+            ["Ir sin quejarte", "Fingir que te duele la panza", "Hacer berrinche"], ["", "", ""], "fe_parent", {"person": par, "kind": "mass"})
+        return true
+    }
+    // Presión por casarte y la presentación
+    if L.age >= 27 && !L.married && p == null && d.pressure_age != L.age && !d.vows {
+        d.pressure_age = L.age
+        let cand = stranger()
+        cand.religion = religion_of(par)
+        cand.faith = rint(50, 90)
+        ctx["cand"] = cand
+        open_choice("¿Y PARA CUÁNDO?", fmt("En la comida familiar, {x} suspira: «Ya tienes " + str(L.age) + " años... La hija de mi amiga " + de_temple(temple) + " está soltera. O el hijo. Alguien de nuestra fe.» Te enseña una foto de " + cand.first + ".", ctx),
+            ["Aceptar conocer a " + cand.first, "Reírte y cambiar de tema", "Pedirle que deje de presionarte"], ["", "", ""], "fe_parent", {"person": par, "cand": cand, "kind": "match"})
+        return true
+    }
+    return false
+}
+
+function fe_resolve_parent(index: int, ctx: map) {
+    let par = ctx.person
+    match ctx.kind {
+        "same" => {
+            let p = ctx.partner
+            if index == 0 {
+                if chance(35 + rank("charm") * 8 + par.bond / 4) {
+                    bond_gain(par, 10)
+                    flag("parents_bless")
+                    add_hito(p, "Tu familia l" + oa(p.gender) + " aceptó")
+                    return finish(par.first, "Lloraron los dos. Al final te dijo: «Eres mi " + by_gender(L.gender, "hijo", "hija") + ". Eso no cambia nada.»", "g")
+                }
+                bond_gain(par, -10)
+                fe().bless_pending = 1
+                return finish(par.first, "Te escuchó, pero necesita tiempo. Te dolió verl" + oa(par.gender) + " tan confundid" + oa(par.gender) + ".", "n")
+            }
+            if index == 1 {
+                if chance(30 + p.bond / 3 + rank("charm") * 5) {
+                    bond_gain(par, 8)
+                    flag("parents_bless")
+                    return finish(par.first, p.first + " se ganó a tu " + str_lower(rel_label(par)) + " con su risa. Al final de la comida ya se pasaban recetas.", "g")
+                }
+                bond_gain(par, -8)
+                fe().bless_pending = 1
+                return finish(par.first, "La comida fue tensa. " + p.first + " se portó increíble; a tu familia le falta camino.", "n")
+            }
+            fe().bless_pending = 1
+            bond_gain(par, -4)
+            return finish(par.first, "Le diste tiempo. Algunas cosas solo las cura el cariño.", "n")
+        }
+        "bapt" => {
+            let baby = ctx.baby
+            if index == 0 {
+                baby.religion = religion_of(par)
+                baby.faith = 30
+                bond_gain(par, 12)
+                add_hito(baby, "Su presentación en la fe de sus abuelos")
+                return finish("El bautizo", "Fue una ceremonia preciosa. Tu " + str_lower(rel_label(par)) + " no paró de sonreír.", "g")
+            }
+            if index == 1 {
+                baby.religion = "ninguna"
+                baby.faith = 0
+                bond_gain(par, -4)
+                return finish("El bautizo", "Decidiste que " + baby.first + " elija cuando crezca. A tu familia no le encantó, pero lo respetó.", "n")
+            }
+            bond_gain(par, -12)
+            return finish("El bautizo", "Te negaste. La comida del domingo fue muy silenciosa.", "b")
+        }
+        "mass" => {
+            if index == 0 {
+                fe_add_faith(2)
+                bond_gain(par, 3)
+                return finish(religion_def(religion_of(par)).temple, "Fuiste sin quejarte. Después te compraron un helado.", "g")
+            }
+            if index == 1 {
+                L.karma -= 1
+                if chance(50) { return finish("Domingo", "Te creyeron. Dormiste hasta las once. (Tu conciencia, no tanto.)", "n") }
+                bond_gain(par, -3)
+                return finish("Domingo", "Te descubrieron jugando videojuegos «enferm" + oa(L.gender) + "». Castigo de una semana.", "b")
+            }
+            bond_gain(par, -5)
+            gain("guts", 1)
+            return finish("Domingo", "Hiciste berrinche, pero fuiste igual. Toda la misa con cara de enojo.", "n")
+        }
+        "match" => {
+            let cand = ctx.cand
+            if index == 0 {
+                bond_gain(par, 8)
+                if chance(55 + rank("charm") * 5) {
+                    make_partner(cand)
+                    add_hito(cand, "Se conocieron gracias a la familia")
+                    flag("arranged")
+                    return finish("La presentación", "Tomaron un café «por compromiso» y se quedaron platicando cuatro horas. Están saliendo.", "g")
+                }
+                return finish("La presentación", "Fue una cita educada y aburrida. Tu " + str_lower(rel_label(par)) + " ya tiene otra candidata en mente.", "n")
+            }
+            if index == 1 { return finish("Comida familiar", "Te reíste y elogiaste el guisado. Tema cerrado... hasta la próxima comida.", "n") }
+            bond_gain(par, -5)
+            gain("guts", 1)
+            return finish("Comida familiar", "Le pediste que dejara de presionarte. Se ofendió un poco, pero lo entendió.", "n")
+        }
+        _ => return null
+    }
+}
+
+// ---------------------------------------------------------------- la secta
+
+function fe_sect_event() {
+    let d = fe()
+    if L.age < 18 { return false }
+    if d.sect == null {
+        let vulnerable = L.happy < 35 || L.heartbreak > 0
+        if !vulnerable || !chance(4) || L.flags["sect_offer"] == true { return false }
+        L.flags["sect_offer"] = true
+        open_choice("LOS HIJOS DE LA AURORA", "Una mujer muy amable te ve triste en un café. Te habla de un grupo, «los Hijos de la Aurora», que te dará paz y una familia nueva. Te invita a una reunión.",
+            ["Ir a la reunión", "Agradecer y no ir"], ["", ""], "fe_sect", {"kind": "offer"})
+        return true
+    }
+    if d.sect.m >= 6 && d.sect.warned != true {
+        d.sect.warned = true
+        let par = first_rel("madre")
+        if par == null || !par.alive { par = first_rel("padre") }
+        let who = "Tu familia"
+        if par != null && par.alive { who = "Tu " + str_lower(rel_label(par)) + " " + par.first }
+        open_choice("LA VERDAD SOBRE LA AURORA", who + " te encuentra a la salida de una reunión. Llora: ya diste " + money_str(d.sect.paid) + ", casi no ves a nadie y el líder vive en una mansión.",
+            ["Salirte del grupo", "Quedarte: ellos te entienden", "Denunciar al líder"], ["", "", if_str(rank("guts") < 3, "Valor 3", "")], "fe_sect", {"kind": "out"})
+        return true
+    }
+    return false
+}
+
+function fe_resolve_sect(index: int, ctx: map) {
+    let d = fe()
+    if ctx.kind == "offer" {
+        if index != 0 { return finish("Los Hijos de la Aurora", "Le diste las gracias y te fuiste. Algo no te cuadraba.", "n") }
+        d.sect = {"m": 0, "paid": 0}
+        L.happy += 6
+        hito_me("Vida", "Entraste a los Hijos de la Aurora")
+        return finish("Los Hijos de la Aurora", "Te recibieron con abrazos y canciones. Por primera vez en meses te sentiste escuchad" + oa(L.gender) + ". Te pidieron una «aportación voluntaria» mensual.", "x")
+    }
+    if index == 1 {
+        d.sect.m = 0
+        d.sect.warned = false
+        L.happy -= 4
+        return finish("Los Hijos de la Aurora", "Te quedaste. El líder dijo que tu familia «no entiende tu despertar».", "b")
+    }
+    let paid = d.sect.paid
+    d.sect = null
+    flag("sect_escape")
+    hito_me("Vida", "Saliste de una secta")
+    for p in parents_alive() { bond_gain(p, 12) }
+    if index == 2 {
+        L.fame += 5
+        L.money += paid / 2
+        gain("guts", 3)
+        return finish("Libre", "Tu denuncia hizo caer al líder: lo arrestaron con maletas llenas de efectivo. Recuperaste " + money_str(paid / 2) + ".", "g")
+    }
+    L.happy += 6
+    return finish("Libre", "Saliste del grupo. Fue duro, pero tu familia te recibió con los brazos abiertos. Perdiste " + money_str(paid) + " en «aportaciones».", "g")
+}
+
+// ---------------------------------------------------------------- crisis de fe
+
+function fe_crisis_event() {
+    let d = fe()
+    if L.religion == "ninguna" || L.faith < 35 || L.age < 14 || d.crisis > 0 { return false }
+    if !(L.happy < 25 || L.heartbreak > 0) || !chance(5) { return false }
+    d.crisis = 24
+    open_choice("CRISIS DE FE", "Después de todo lo que ha pasado, te preguntas si de verdad alguien escucha tus oraciones.",
+        ["Buscar respuestas en tu fe", "Alejarte de todo", "Hablar con alguien de tu comunidad"], ["", "", ""], "fe_crisis", {})
+    return true
+}
+
+function fe_special(name: string, ctx: map) {
+    if str_starts_with(name, "fe_faith:") {
+        fe_add_faith(parse_int(str_replace(name, "fe_faith:", ""), 0))
+        if L.faith < 0 { L.faith = 0 }
+        return ""
+    }
+    if str_starts_with(name, "fe_service:") {
+        fe().service += parse_int(str_replace(name, "fe_service:", ""), 0)
+        return fe_check_role()
+    }
+    if str_starts_with(name, "fe_poly:") {
+        fe_poly_bond(parse_int(str_replace(name, "fe_poly:", ""), 0))
+        return ""
+    }
+    if name == "fe_meet" {
+        let p = ctx["person"]
+        if p == null { p = stranger() }
+        p.religion = L.religion
+        p.faith = rint(50, 90)
+        make_partner(p)
+        add_hito(p, "Se conocieron en la comunidad")
+        return ""
+    }
+    return ""
+}
+
+// ---------------------------------------------------------------- efectos
+
+function fe_fx(out: list) {
+    if L.fe == null { return null }
+    let d = L.fe
+    if d.tithe { list_push(out, fx("diezmo", "Diezmo", true, "Das una parte de lo tuyo a tu comunidad.", {"hap": 1})) }
+    if d.role >= 3 { list_push(out, fx("lider_fe", fe_leader_name(), true, "Tu comunidad te respeta y te busca.", {"hire": 3})) }
+    if d.vows { list_push(out, fx("votos", "Votos de celibato", false, "Renunciaste al amor de pareja.", {"flirt": -15})) }
+    if d.sect != null { list_push(out, fx("secta", "Los Hijos de la Aurora", false, "Tu vida gira alrededor del grupo.", {"hap": -1, "hire": -5})) }
+    if d.crisis > 12 { list_push(out, fx("crisis_fe", "Crisis de fe", false, "Ya no sabes en qué crees.", {"hap": -1})) }
+    if d.fast_m == L.tm { list_push(out, fx("ayuno", "En ayuno", false, "Del amanecer al atardecer, sin comer.", {"hp": -1})) }
+    let sp = spouses()
+    if len(sp) >= 2 {
+        let h = fe_poly_harmony()
+        if h >= 70 { list_push(out, fx("familia_unida", "Familia unida", true, "Tus cónyuges se llevan bien entre sí.", {"hap": 1})) }
+        if h < 45 { list_push(out, fx("casa_dividida", "Casa dividida", false, "Celos y bandos en tu propia casa.", {"hap": -1})) }
+    }
+    return null
+}

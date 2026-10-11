@@ -304,13 +304,34 @@ binarias en el juego.
     pruebas médicas, premios, tu estudio y producciones) y VelvetFans (fotos,
     videos, en vivo, mensajes, precio de la suscripción, filtraciones,
     seguridad digital y tu agencia).
-- **Religión** (`religion.vel`): religiones reales tratadas de forma general y
-  otras inventadas, con su nivel de exigencia, reglas sobre alcohol y matrimonio
-  y un porcentaje de fe por persona. Tu familia te transmite su fe; puedes ir al
-  templo, rezar, peregrinar, donar, convertirte o dejarla. Los padres devotos
-  reaccionan si tu pareja es de otra religión, si vives en pareja sin casarte o
-  si trabajas en la industria +18. Si tu religión (o la ley de tu reino) lo
-  permite, puedes casarte con más de una persona.
+- **Religión** (`religion.vel`, `fe.vel`): 13 religiones, reales (tratadas de
+  forma general y con respeto) e inventadas, con su nivel de exigencia, reglas
+  sobre alcohol y matrimonio y un porcentaje de fe por persona. Tu familia te
+  transmite su fe; puedes ir al templo, rezar, peregrinar, donar, convertirte o
+  dejarla.
+  - **Ritos y festividades**: ritos de paso según tu religión (primera comunión,
+    bar o bat mitzvá, primer Ramadán, novicio por un verano...) y festividades
+    cada año (Navidad, Semana Santa, Ramadán, Yom Kipur, Janucá, Diwali,
+    Vesak...) que celebras en familia, a tu manera o dejas pasar; algunas con
+    ayuno.
+  - **Comunidad**: sirves y subes de fiel a voluntario, maestro y líder
+    (sacerdote, pastora, imán, rabina, monje...). Algunas religiones piden
+    votos de celibato para guiar, y romperlos es un escándalo. Diezmo e invitar
+    a tu pareja o tus amigos a tu fe.
+  - **Conversión**: estudias tres meses con un guía antes de la ceremonia (en las
+    religiones abiertas puede ser inmediata); tu antigua comunidad puede darte
+    la espalda.
+  - **Padres devotos**: reaccionan a tu pareja de otra religión, a tu trabajo +18
+    y a que vivas en pareja sin casarte; además te llevan al templo de niño, te
+    presionan para casarte y te presentan a alguien de su comunidad, quieren
+    bautizar a tus hijos y, si tu pareja es de tu mismo sexo, su fe choca con
+    su cariño (con el tiempo, el cariño suele ganar). Puedes hacer las paces.
+  - **Poligamia**: si tu religión (o la ley de tu reino) lo permite, te casas con
+    más de una persona; en la Hermandad de la Luna, las mujeres pueden tener
+    varios esposos. Armonía entre cónyuges, celos, reuniones familiares, una
+    casa que queda chica y el gasto extra.
+  - Una secta que recluta a quien está triste, crisis de fe y eventos
+    (retiros, escándalos, voluntariado, el amor en la comunidad...).
 - **El móvil** (`phone.vel`, `phone_ui.vel`): un celular en pantalla que tienes
   desde los 12 años (botón junto a tu retrato o tecla M; en prisión te lo
   quitan). Pantalla de inicio con reloj, fondo, apps con avisos y un panel con tu
@@ -509,7 +530,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 112 objetivos con recompensa en 5 categorías (estudios, trabajo,
+- **Misiones**: 123 objetivos con recompensa en 5 categorías (estudios, trabajo,
   amor, dinero y vida): graduarte, medallas, ser popular, dominar los
   minijuegos, sobrevivir a un despido, casarte, primer millón, vivir 100 años...
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
@@ -547,6 +568,7 @@ binarias en el juego.
 | `mercado.vel` | Índice, oro, bonos, venta en corto, órdenes, cracs, quiebras y salidas a bolsa |
 | `casino.vel` | Ruleta, blackjack, tragamonedas, video póker, bacará, dados, hipódromo, VIP y ludopatía |
 | `lujos.vel` | Tienda de lujo, valor de los bienes, rentas, personal, seguros y estatus |
+| `fe.vel` | Ritos, festividades, comunidad y votos, conversión, padres devotos, poligamia, secta y eventos de fe |
 | `routes.vel` | Rutas, etapas y menús; creador de contenido, escort, estrella +18 y VelvetFans |
 | `realm.vel` | Gobierno del reino y de la presidencia: indicadores, decretos, leyes, crisis y elecciones |
 | `space.vel` | Ruta del filántropo: mina, empresas, filantropía y programa espacial |

@@ -307,6 +307,7 @@ function app_cats(id: string) {
     if id == "agenda" { return ["Pendientes", "Efectos", "Misiones"] }
     if id == "route" { return route_cats() }
     if id == "settings" { return ["Teléfono", "Privacidad"] }
+    if id == "faith" { return ["Práctica", "Comunidad", "Familia"] }
     return []
 }
 
@@ -347,7 +348,7 @@ function app_items(id: string, cat: string) {
         return agenda_items()
     }
     if id == "route" { return route_items(cat) }
-    if id == "faith" { return faith_items() }
+    if id == "faith" { return faith_app_items(cat) }
     if id == "settings" { return settings_items(cat) }
     return []
 }

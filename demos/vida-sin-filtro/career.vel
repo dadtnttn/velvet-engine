@@ -251,7 +251,19 @@ const MISSIONS = [
     {"id": "landlord", "t": "Casero", "d": "Renta 3 propiedades a la vez.", "r": "+$10,000", "reward": {"money": 10000}},
     {"id": "art_collector", "t": "Coleccionista de arte", "d": "Ten una colección de arte, joyas, vinos y piezas que valga $1,000,000.", "r": "Conocimiento", "reward": {"know": 5}},
     {"id": "staff5", "t": "Casa con personal", "d": "Ten 5 empleados domésticos.", "r": "Felicidad", "reward": {"happy": 6}},
-    {"id": "island", "t": "Tu propio paraíso", "d": "Compra una isla privada.", "r": "Felicidad", "reward": {"happy": 15}}
+    {"id": "island", "t": "Tu propio paraíso", "d": "Compra una isla privada.", "r": "Felicidad", "reward": {"happy": 15}},
+    // Fe
+    {"id": "rite", "t": "Rito de paso", "d": "Celebra un rito de paso de tu religión.", "r": "Felicidad", "reward": {"happy": 5}},
+    {"id": "tradition", "t": "Tradición", "d": "Celebra 10 festividades de tu fe.", "r": "Amabilidad", "reward": {"kind": 4}},
+    {"id": "fasted", "t": "Ayuno", "d": "Ayuna en una festividad de tu religión.", "r": "Valor", "reward": {"guts": 4}},
+    {"id": "faith100", "t": "Fe inquebrantable", "d": "Llega a 100% de fe.", "r": "Felicidad", "reward": {"happy": 8}},
+    {"id": "faith_leader", "t": "Líder espiritual", "d": "Llega a ser líder de tu comunidad religiosa.", "r": "Encanto", "reward": {"charm": 6}},
+    {"id": "seeker", "t": "Buscador espiritual", "d": "Conviértete a 3 religiones distintas en tu vida.", "r": "Conocimiento", "reward": {"know": 6}},
+    {"id": "evangelist", "t": "Mensajero", "d": "Invita a 3 personas a unirse a tu fe.", "r": "Encanto", "reward": {"charm": 4}},
+    {"id": "parents_bless", "t": "Con su bendición", "d": "Logra que tus padres devotos acepten a tu pareja.", "r": "Felicidad", "reward": {"happy": 8}},
+    {"id": "arranged", "t": "Cosas de familia", "d": "Empieza una relación con alguien que te presentaron tus padres.", "r": "Amabilidad", "reward": {"kind": 3}},
+    {"id": "casa_llena", "t": "Casa llena", "d": "Ten 3 cónyuges al mismo tiempo.", "r": "Felicidad", "reward": {"happy": 8}},
+    {"id": "sect_escape", "t": "Libre", "d": "Sal de una secta.", "r": "Valor", "reward": {"guts": 6}}
 ]
 
 const MISSION_CAT_ORDER = ["Estudios", "Trabajo", "Amor y familia", "Dinero", "Vida"]
@@ -273,7 +285,8 @@ const MISSION_CATS = {
     "philanthropist": "Dinero", "couple_goals": "Amor y familia", "wolf": "Dinero", "short_win": "Dinero", "diversified": "Dinero",
     "crash_survivor": "Dinero", "ipo_win": "Dinero", "paper_ace": "Dinero", "vip_gold": "Dinero", "royal_flush": "Dinero",
     "card_counter": "Dinero", "longshot": "Dinero", "garage": "Dinero", "jet_set": "Dinero", "landlord": "Dinero",
-    "art_collector": "Dinero", "staff5": "Dinero", "island": "Dinero"
+    "art_collector": "Dinero", "staff5": "Dinero", "island": "Dinero",
+    "parents_bless": "Amor y familia", "arranged": "Amor y familia", "casa_llena": "Amor y familia"
 }
 
 function flag(name: string) {
