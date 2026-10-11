@@ -274,6 +274,7 @@ function draw_world_panel(m: map) {
         let lock = ""
         if L.age < 16 { lock = "A LOS 16" }
         if lock == "" { lock = stuck }
+        if lock == "" && borders_closed() { lock = "FRONTERAS CERRADAS" }
         let tc = trip_cost(c.id)
         if lock == "" && L.money < tc { lock = money_str(tc) }
         if lock == "" && L.used["pa_trip"] != null { lock = "ESTE MES YA" }
@@ -286,7 +287,10 @@ function draw_world_panel(m: map) {
         world_button(x + 186, by, "MUDARTE", "wm:move", ml)
         by += 48
         if pa().honey && L.married {
-            world_button(x + 22, by, "LUNA DE MIEL", "wm:honey", if_str(stuck != "", stuck, if_str(L.money < tc * 2, money_str(tc * 2), "")))
+            let hl = stuck
+            if hl == "" && borders_closed() { hl = "FRONTERAS CERRADAS" }
+            if hl == "" && L.money < tc * 2 { hl = money_str(tc * 2) }
+            world_button(x + 22, by, "LUNA DE MIEL", "wm:honey", hl)
         }
         let dl = ""
         if L.age < 18 { dl = "A LOS 18" } else if L.jail > 0 { dl = "EN PRISIÓN" } else if L.used["pa_date"] != null { dl = "ESTE MES YA" }

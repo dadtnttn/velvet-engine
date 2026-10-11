@@ -380,6 +380,8 @@ function health_month() {
     world_month()
     let keep = []
     let cared = kid_cared()
+    // En prisión, el penal trata lo ya diagnosticado (y lo paga).
+    let inmate = L.jail > 0
     for i in L.ill {
         let d = ill_def(i.id)
         i.months += 1
@@ -400,8 +402,12 @@ function health_month() {
                 continue
             }
         }
-        if i.treated && cared {
-            // El tratamiento lo paga tu familia.
+        if inmate && !cared && !i.treated && i.known && i.id != "obesidad" && (!d.cure || list_contains(THERAPY_ILLS, i.id) || d.type == "cancer") {
+            i.treated = true
+            log_add("La enfermería del penal te puso en tratamiento: " + str_lower(d.n) + ".", "n")
+        }
+        if i.treated && (cared || inmate) {
+            // El tratamiento lo paga tu familia (o la prisión).
         } else if i.treated {
             let tc = cost_of(d)
             if L.money < tc && d.type != "cancer" {
