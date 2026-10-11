@@ -257,12 +257,17 @@ impl Catalog {
                     });
                 }
                 None => {
-                    cat.upper
-                        .entry(src.to_uppercase())
-                        .or_insert_with(|| dst.to_uppercase());
-                    cat.lower
-                        .entry(src.to_lowercase())
-                        .or_insert_with(|| dst.to_lowercase());
+                    // The first entry wins, except that a real translation
+                    // replaces an identity one (a code id that is also a word).
+                    for (map, k, v) in [
+                        (&mut cat.upper, src.to_uppercase(), dst.to_uppercase()),
+                        (&mut cat.lower, src.to_lowercase(), dst.to_lowercase()),
+                    ] {
+                        let keep = map.get(&k).is_some_and(|old| *old != k || v == k);
+                        if !keep {
+                            map.insert(k, v);
+                        }
+                    }
                     cat.exact.insert(src, dst);
                 }
             }
@@ -311,11 +316,87 @@ fn looks_like_name(v: &str) -> bool {
 /// Capitalized words of the source language that are never names (a line
 /// starting "Hace 3 años" or "Tu madre" is text, not a person).
 const COMMON_WORDS: &[&str] = &[
-    "Hace", "Tu", "Tus", "Te", "Mi", "Mis", "Su", "Sus", "El", "La", "Los", "Las", "Lo", "Un",
-    "Una", "Unos", "Unas", "De", "Del", "Al", "Y", "O", "Con", "Sin", "Por", "Para", "Que", "Se",
-    "No", "Sí", "Si", "Ya", "Muy", "Más", "Menos", "Hoy", "Ayer", "Ahora", "Nunca", "Siempre",
-    "Cada", "Todo", "Toda", "Todos", "Todas", "Este", "Esta", "Ese", "Esa", "Es", "Eres", "Está",
-    "Estás", "Son", "Hay", "Fue", "Fuiste",
+    "Hace",
+    "Tu",
+    "Tus",
+    "Te",
+    "Mi",
+    "Mis",
+    "Su",
+    "Sus",
+    "El",
+    "La",
+    "Los",
+    "Las",
+    "Lo",
+    "Un",
+    "Una",
+    "Unos",
+    "Unas",
+    "De",
+    "Del",
+    "Al",
+    "Y",
+    "O",
+    "Con",
+    "Sin",
+    "Por",
+    "Para",
+    "Que",
+    "Se",
+    "No",
+    "Sí",
+    "Si",
+    "Ya",
+    "Muy",
+    "Más",
+    "Menos",
+    "Hoy",
+    "Ayer",
+    "Ahora",
+    "Nunca",
+    "Siempre",
+    "Cada",
+    "Todo",
+    "Toda",
+    "Todos",
+    "Todas",
+    "Este",
+    "Esta",
+    "Ese",
+    "Esa",
+    "Es",
+    "Eres",
+    "Está",
+    "Estás",
+    "Son",
+    "Hay",
+    "Fue",
+    "Fuiste",
+    "Uno",
+    "Dos",
+    "Tres",
+    "Cuatro",
+    "Cinco",
+    "Seis",
+    "Siete",
+    "Ocho",
+    "Nueve",
+    "Diez",
+    "Once",
+    "Doce",
+    "Quince",
+    "Veinte",
+    "Treinta",
+    "Cuarenta",
+    "Cincuenta",
+    "Cien",
+    "Mil",
+    "Primer",
+    "Primera",
+    "Primero",
+    "Segunda",
+    "Segundo",
 ];
 
 fn has_letters(s: &str) -> bool {
@@ -457,6 +538,15 @@ impl Translator {
 
     fn lookup(&self, s: &str, depth: usize) -> Option<String> {
         if let Some(t) = self.cat.exact.get(s) {
+            // "piojos" is kept as it is (an illness id), but shown as a word
+            // it has a translation under "Piojos": that one wins.
+            if t == s {
+                if let Some(l) = self.cat.lower.get(&s.to_lowercase()) {
+                    if *l != s.to_lowercase() && s.chars().next().is_some_and(char::is_lowercase) {
+                        return Some(l.clone());
+                    }
+                }
+            }
             return Some(t.clone());
         }
         // Keep surrounding spaces and a trailing colon/period shown by the UI.
@@ -491,9 +581,13 @@ impl Translator {
         if depth > 6 {
             return None;
         }
-        self.match_template(s, depth)
+        // Templates whose holes all translate come first; then lines built
+        // from pieces; a template that keeps a hole as a name is the last
+        // resort ("{0} años{1}" must not keep "Cinco" as if it were a name).
+        self.match_template(s, depth, true)
             .or_else(|| self.split_list(s, depth))
             .or_else(|| self.paren_tail(s, depth))
+            .or_else(|| self.match_template(s, depth, false))
             .or_else(|| self.lowercase_start(s, depth))
     }
 
@@ -527,7 +621,9 @@ impl Translator {
         let mut cs = s.chars();
         let first = cs.next().filter(|c| c.is_lowercase())?;
         let cap: String = first.to_uppercase().collect::<String>() + cs.as_str();
-        let t = self.match_template(&cap, depth + 1)?;
+        let t = self
+            .match_template(&cap, depth + 1, true)
+            .or_else(|| self.match_template(&cap, depth + 1, false))?;
         let mut ts = t.chars();
         let f = ts.next()?;
         let out = f.to_lowercase().collect::<String>() + ts.as_str();
@@ -568,7 +664,7 @@ impl Translator {
         None
     }
 
-    fn match_template(&self, s: &str, depth: usize) -> Option<String> {
+    fn match_template(&self, s: &str, depth: usize, strict: bool) -> Option<String> {
         let upper = is_upper_text(s);
         // Every template that matches, heaviest first: if the best one would
         // leave untranslated words, the next one may not.
@@ -620,7 +716,7 @@ impl Translator {
         // its holes) is not a translation: the next candidate may be.
         found
             .into_iter()
-            .filter(|(idx, holes)| self.holes_ok(*idx, holes, depth))
+            .filter(|(idx, holes)| self.holes_ok(*idx, holes, depth, strict))
             .map(|(idx, holes)| {
                 restore_case(
                     s,
@@ -634,9 +730,10 @@ impl Translator {
     // glue ("{1} y {2}" -> "…和…", "{0} años" -> "Hace 29 ans") and mix two
     // languages: better to leave the line as it is (the pieces may still
     // translate one by one, see `split_list`). A hole shown as text must
-    // translate, or be a short name; holes the target keeps raw ({0!}) or only
-    // uses to pick a form ({0|o=..}) are fine as they are.
-    fn holes_ok(&self, idx: usize, holes: &[(usize, String)], depth: usize) -> bool {
+    // translate, or (when not `strict`) be a short name; holes the target
+    // keeps raw ({0!}) or only uses to pick a form ({0|o=..}) are fine as
+    // they are.
+    fn holes_ok(&self, idx: usize, holes: &[(usize, String)], depth: usize, strict: bool) -> bool {
         let t = &self.cat.templates[idx];
         for (i, v) in holes {
             if !has_letters(v) {
@@ -659,7 +756,7 @@ impl Translator {
                 continue;
             }
             let long = v.split_whitespace().count() > 3;
-            if long || !looks_like_name(v) {
+            if strict || long || !looks_like_name(v) {
                 return false;
             }
         }
@@ -898,6 +995,41 @@ mod tests {
         // An aside that is neither a name nor in the catalog: left alone.
         let s = "Cinco años juntos (algo raro)";
         assert_eq!(t.tr(s), s);
+    }
+
+    #[test]
+    fn an_id_that_is_also_a_word_still_translates() {
+        let c = cat(&[
+            ("piojos", "piojos"),
+            ("Piojos", "Lice"),
+            (
+                "Tu familia te llevó al médico por {0} y te curaron.",
+                "Your family took you to the doctor for {0}.",
+            ),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(t.tr("piojos"), "lice");
+        assert_eq!(
+            t.tr("Tu familia te llevó al médico por piojos y te curaron."),
+            "Your family took you to the doctor for lice."
+        );
+    }
+
+    #[test]
+    fn a_number_word_is_not_kept_as_a_name() {
+        let c = cat(&[
+            ("{0} años{1}", "Age {0}{1}"),
+            ("Cinco años juntos", "Five years together"),
+            ("juntos", "together"),
+            ("Tu {0} murió.", "Your {0} died."),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(
+            t.tr("Cinco años juntos (Hanna)"),
+            "Five years together (Hanna)"
+        );
+        // A real name in a plain hole still works when nothing else fits.
+        assert_eq!(t.tr("Tu Hanna murió."), "Your Hanna died.");
     }
 
     #[test]
