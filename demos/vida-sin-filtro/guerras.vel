@@ -276,7 +276,11 @@ function service_check() {
     let c = here()
     if L.age != 18 || c.draft == 0 || pa().service_done == true || L.mil != null { return null }
     if L.gender != "m" && c.draft != 2 { return null }
-    if G.modal != null { return null }
+    // Si el cumpleaños ya abrió otra ventana, la carta llega el mes siguiente.
+    if G.modal != null {
+        pa().service_pend = true
+        return null
+    }
     pa().service_done = true
     let study_lock = ""
     if L.study == null && L.school == "" { study_lock = "Solo si estudias" }

@@ -1193,6 +1193,13 @@ function meets(tag: string) {
     if tag == "gig" { return L.gig != null }
     if tag == "addict" { return L.alcohol + L.drugs >= 40 }
     if tag == "sibling" { return vida_meets(tag) }
+    // Parientes que el texto da por hecho.
+    if tag == "mom" { return has_rel("madre") }
+    if tag == "dad" { return has_rel("padre") }
+    if tag == "parents" { return has_rel("madre") || has_rel("padre") }
+    if tag == "grandkids" { return has_rel("nieto") }
+    if tag == "kidsalive" { return len(kids_alive()) > 0 }
+    if tag == "adult" { return L.age >= 18 }
     return legacy_meets(tag) || rel_meets(tag)
 }
 

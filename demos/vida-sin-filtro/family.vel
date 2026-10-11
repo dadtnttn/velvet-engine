@@ -24,7 +24,7 @@ const KID_EVENTS = [
         "id": "k_pet", "title": "¿Podemos tener un perrito?", "kid": [6, 12], "w": 6,
         "text": "{x} promete que esta vez sí va a cuidar a la mascota. Lo jura por todo.",
         "choices": [
-            {"t": "Adoptar un perrito", "cost": 3000, "o": [{"w": 100, "log": "Llegó Firulais. Tú terminaste paseándolo, pero {x} es feliz.", "money": -3000, "bond": 10, "happy": 5, "parent": 2}]},
+            {"t": "Adoptar un perrito", "cost": 3000, "o": [{"w": 100, "log": "Llegó Firulais. Tú terminaste paseándolo, pero {x} es feliz.", "money": -3000, "bond": 10, "happy": 5, "parent": 2, "special": "vd_kidpet"}]},
             {"t": "Negarte", "o": [{"w": 100, "log": "{x} te dejó de hablar tres días.", "bond": -5}]}
         ]
     },
