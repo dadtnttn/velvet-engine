@@ -462,6 +462,13 @@ impl Vs3App {
                 let lang = payload_string(event, "lang").unwrap_or_default();
                 self.set_language(&lang);
             }
+            "i18n.var" => {
+                if let (Some(name), Some(value)) =
+                    (payload_string(event, "name"), payload_string(event, "value"))
+                {
+                    velvet_script_vs3::i18n::set_var(&name, &value);
+                }
+            }
             "audio.play" => {
                 if let Some(id) = payload_string(event, "sound") {
                     let vol = payload_f32(event, "volume").unwrap_or(1.0);

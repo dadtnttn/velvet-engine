@@ -1,0 +1,222 @@
+// @edition 3
+// Ajustes del jugador: idioma, colores y sonido. Se guardan aparte de la
+// partida (espacio "settings") y se aplican al arrancar. El inglés es el idioma
+// predeterminado; el juego está escrito en español y se traduce al dibujar.
+
+const CFG_SLOT = "settings"
+
+// Código del host y nombre en su propio idioma (nunca se traduce).
+const LANGS = [
+    ["en", "English"],
+    ["es", "Español"],
+    ["pt-BR", "Português (BR)"],
+    ["zh-Hans", "简体中文"],
+    ["zh-Hant", "繁體中文"],
+    ["hi", "हिन्दी"],
+    ["ru", "Русский"],
+    ["de", "Deutsch"],
+    ["th", "ไทย"],
+    ["it", "Italiano"],
+    ["ja", "日本語"],
+    ["he", "עברית"],
+    ["fr", "Français"],
+    ["ko", "한국어"],
+    ["pl", "Polski"]
+]
+
+state {
+    CFG: map = {
+        "lang": "en",
+        "theme": "persona",
+        "master": 90,
+        "sfx": 80,
+        "music": 55,
+        "acc": 8,
+        "lgt": 3,
+        "tab": 0,
+        "loaded": false
+    }
+}
+
+// Al arrancar: idioma predeterminado ya mismo y luego lo guardado.
+function cfg_boot() {
+    cfg_apply()
+    storage_request("load", {"slot": CFG_SLOT, "tag": "cfg"})
+}
+
+function cfg_loaded(r: map) {
+    CFG.loaded = true
+    if r.ok && r.data != null {
+        for key in ["lang", "theme", "master", "sfx", "music", "acc", "lgt"] {
+            if r.data[key] != null { CFG[key] = r.data[key] }
+        }
+    }
+    cfg_apply()
+}
+
+function cfg_save() {
+    let data = {"lang": CFG.lang, "theme": CFG.theme, "master": CFG.master, "sfx": CFG.sfx, "music": CFG.music, "acc": CFG.acc, "lgt": CFG.lgt}
+    storage_request("save", {"slot": CFG_SLOT, "data": data, "tag": "cfg"})
+}
+
+function cfg_apply() {
+    emit("i18n.set", {"lang": CFG.lang})
+    emit("audio.volume", {"master": CFG.master / 100.0, "sfx": CFG.sfx / 100.0, "music": CFG.music / 100.0})
+    theme_apply(CFG.theme)
+    G.logc = null
+    G.i18n_g = ""
+    // El catálogo se instala al procesar el evento: se redibuja en el siguiente frame.
+    G.redraw = true
+}
+
+// Género del jugador para las traducciones que lo necesitan ({@g|m=..|f=..}).
+function i18n_sync() {
+    let g = "m"
+    if G.mode == "create" && G.cre != null && G.cre.gender != null {
+        g = G.cre.gender
+    } else if L.gender != null {
+        g = L.gender
+    }
+    if g != G.i18n_g {
+        G.i18n_g = g
+        emit("i18n.var", {"name": "g", "value": g})
+        G.redraw = true
+    }
+}
+
+function lang_name(code: string) {
+    for l in LANGS {
+        if l[0] == code { return l[1] }
+    }
+    return code
+}
+
+// ---------------------------------------------------------------- pantalla
+
+function cfg_open() {
+    G.cfg_on = true
+    G.cfg_t0 = G.t
+    sfx("open")
+}
+
+function cfg_action(action: string) {
+    let rest = str_replace(action, "cfg:", "")
+    if rest == "close" {
+        G.cfg_on = false
+        sfx("back")
+        return null
+    }
+    if str_starts_with(rest, "tab:") {
+        CFG.tab = parse_int(str_replace(rest, "tab:", ""), 0)
+        sfx("tick")
+        return null
+    }
+    if str_starts_with(rest, "lang:") {
+        CFG.lang = str_replace(rest, "lang:", "")
+        sfx("ok")
+    } else if str_starts_with(rest, "theme:") {
+        CFG.theme = str_replace(rest, "theme:", "")
+        sfx("ok")
+    } else if str_starts_with(rest, "acc:") {
+        CFG.acc = parse_int(str_replace(rest, "acc:", ""), 0)
+        sfx("tick")
+    } else if str_starts_with(rest, "lgt:") {
+        CFG.lgt = parse_int(str_replace(rest, "lgt:", ""), 0)
+        sfx("tick")
+    } else if str_starts_with(rest, "vol:") {
+        // vol:<canal>:<delta>
+        let parts = str_split(rest, ":")
+        let ch = parts[1]
+        CFG[ch] = clamp(CFG[ch] + parse_int(parts[2], 0), 0, 100)
+        sfx("tick")
+    }
+    cfg_apply()
+    cfg_save()
+    return null
+}
+
+function draw_settings() {
+    let e = ease(prog(G.cfg_t0, 0.35))
+    arect(0, 0, W, H, rgba(0, 0, 0, 200))
+    let x0 = int(70.0 - (1.0 - e) * 300.0)
+    svg(x0 - 20, 18, 560, 120, tilt_title_doc("AJUSTES", 560, 120, 80, HEX_WHITE, HEX_INK))
+    let tabs = ["IDIOMA", "COLORES", "SONIDO"]
+    let i = 0
+    while i < 3 {
+        let action = "cfg:tab:" + str(i)
+        let fill = HEX_INK
+        let color = C_WHITE
+        if CFG.tab == i {
+            fill = HEX_RED
+        } else if hovered(action) {
+            fill = HEX_WHITE
+            color = C_INK
+        }
+        let ty = 170 + i * 76
+        let tx = x0 + i * 14
+        svg(tx, ty, 300, 66, slant_doc(292, 58, 18, fill, HEX_WHITE, 3, HEX_RED, 6))
+        otext(tx + 34, ty + 42, tabs[i], 30, color, "impact", false)
+        hot(tx, ty, 292, 58, action)
+        i += 1
+    }
+    let px = int(430.0 + (1.0 - e) * 600.0)
+    panel(px, 150, 800, 500, 22)
+    if CFG.tab == 0 { draw_cfg_langs(px + 40, 190) }
+    if CFG.tab == 1 { draw_cfg_themes(px + 40, 190) }
+    if CFG.tab == 2 { draw_cfg_sound(px + 40, 190) }
+    small_button(1070, 662, 170, 44, "VOLVER", "cfg:close")
+}
+
+function draw_cfg_langs(x: int, y: int) {
+    tag(x, y - 26, 260, "IDIOMA · LANGUAGE", HEX_RED, C_WHITE)
+    let i = 0
+    while i < len(LANGS) {
+        let l = LANGS[i]
+        let action = "cfg:lang:" + l[0]
+        let cx = x + (i % 3) * 244 - (i / 3) * 6
+        let cy = y + 20 + (i / 3) * 78
+        let on = CFG.lang == l[0]
+        let fill = HEX_INK
+        let color = C_WHITE
+        if on {
+            fill = HEX_WHITE
+            color = C_INK
+        } else if hovered(action) {
+            fill = HEX_RED
+        }
+        svg(cx, cy, 236, 64, slant_doc(228, 56, 12, fill, HEX_WHITE, 2, HEX_RED, 5))
+        // El nombre del idioma va en su propio idioma: sin traducir.
+        push({"op": "text", "x": cx + 114, "y": cy + 36, "text": l[1], "size": 21, "color": color, "font": "bold", "align": "center", "max_width": 200})
+        if on { svg(cx + 196, cy - 10, 34, 34, burst_doc(34, 34, 10, HEX_RED, HEX_INK, 2, 3)) }
+        hot(cx, cy, 228, 56, action)
+        i += 1
+    }
+}
+
+function draw_cfg_sound(x: int, y: int) {
+    tag(x, y - 26, 200, "SONIDO", HEX_RED, C_WHITE)
+    let rows = [["master", "VOLUMEN GENERAL"], ["sfx", "EFECTOS"], ["music", "MÚSICA"]]
+    let i = 0
+    while i < 3 {
+        let r = rows[i]
+        let ry = y + 60 + i * 120
+        let v = CFG[r[0]]
+        otext(x, ry, r[1], 28, C_WHITE, "impact", false)
+        let bx = x + 10
+        let by = ry + 22
+        let bw = 520
+        rect(bx, by, bw, 26, C_GRAY_D)
+        rect(bx, by, bw * v / 100, 26, C_RED)
+        rect(bx, by + 26, bw, 3, C_INK)
+        // Muescas cada 10 %.
+        let k = 1
+        while k < 10 {
+            rect(bx + bw * k / 10, by, 2, 26, C_INK)
+            k += 1
+        }
+        otext(bx + bw + 30, by + 24, str(v) + "%", 28, C_YELLOW, "impact", false)
+        small_button(x + 620, by - 8, 50, 40, "−", "cfg:vol:" + r[0] + ":-10")
+        small_button(x + 680, by - 8, 50, 40, "+", "cfg:vol:" + r[0] + ":10")
+        i += 1
+    }
+}

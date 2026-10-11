@@ -16,12 +16,14 @@ mod lockfile;
 mod manifest;
 mod package_resolver;
 mod semantic;
+mod strings;
 
 pub use abi::{
     matches_abi_type, validate_request, AbiRegistry, CostClass, FunctionDescriptor,
     ModuleDescriptor, ParamDescriptor, Purity, SimulatedHost, SyncKind, Vs3AbiType,
 };
 
+pub use strings::{extract_strings, StringEntry};
 pub use lockfile::{Vs3LockedPackage, Vs3PackageLock, VS3_PACKAGE_LOCK};
 pub use manifest::{
     Vs3Dependency, Vs3PackageFormatError, Vs3PackageManifest, VS3_PACKAGE_MANIFEST,

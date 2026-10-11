@@ -247,6 +247,69 @@ fn format_file(path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
+/// Extract translatable strings from every edition-3 file under `path`.
+pub fn cmd_vs3_strings(path: PathBuf, out: Option<PathBuf>) -> Result<()> {
+    let mut merged: Vec<velvet_script_vs3::StringEntry> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for file in vs3_files(&path)? {
+        let source =
+            std::fs::read_to_string(&file).with_context(|| format!("read {}", file.display()))?;
+        let name = file
+            .strip_prefix(&path)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let entries = velvet_script_vs3::extract_strings(&source, &name)
+            .map_err(|e| anyhow::anyhow!("{name}: {e}"))?;
+        for entry in entries {
+            match index.get(&entry.key) {
+                Some(&i) => {
+                    let known = &mut merged[i];
+                    known.count += entry.count;
+                    for place in entry.places {
+                        if known.places.len() < 3 {
+                            known.places.push(place);
+                        }
+                    }
+                }
+                None => {
+                    index.insert(entry.key.clone(), merged.len());
+                    merged.push(entry);
+                }
+            }
+        }
+    }
+    let json = serde_json::Value::Array(
+        merged
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "key": e.key,
+                    "holes": e.holes,
+                    "places": e.places,
+                    "context": e.context,
+                    "count": e.count,
+                })
+            })
+            .collect(),
+    );
+    let text = serde_json::to_string_pretty(&json)?;
+    match out {
+        Some(file) => {
+            std::fs::write(&file, text).with_context(|| format!("write {}", file.display()))?;
+            let templates = merged.iter().filter(|e| !e.holes.is_empty()).count();
+            println!(
+                "{} strings ({} templates) -> {}",
+                merged.len(),
+                templates,
+                file.display()
+            );
+        }
+        None => println!("{text}"),
+    }
+    Ok(())
+}
+
 fn vs3_files(root: &std::path::Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for entry in walkdir::WalkDir::new(root).follow_links(false) {

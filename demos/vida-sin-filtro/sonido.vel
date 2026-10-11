@@ -1,0 +1,38 @@
+// @edition 3
+// Sonido: efectos cortos y música de fondo (archivos WAV declarados en el
+// manifiesto, "sounds"). El host mezcla; aquí solo se piden por nombre.
+
+// Efecto con un poco de variación de tono para que no canse.
+function sfx(id: string) {
+    let rate = 1.0
+    // Sin tocar el azar del juego: el tono varía con el número de frame.
+    rate = 0.96 + (G.frames % 9) / 100.0
+    emit("audio.play", {"sound": "sfx_" + id, "volume": 1.0, "rate": rate})
+}
+
+// Música de fondo con fundido; no se reinicia si ya suena.
+function bgm(id: string) {
+    if G.bgm == id { return null }
+    G.bgm = id
+    let snd = ""
+    if id != "" { snd = "bgm_" + id }
+    emit("audio.music", {"sound": snd, "volume": 0.8, "fade": 1.5})
+    return null
+}
+
+// Tema según la pantalla: portada, vida (según la edad) o despedida.
+function bgm_sync() {
+    if G.mode == "title" || G.mode == "create" {
+        bgm("title")
+    } else if G.mode == "dead" {
+        bgm("death")
+    } else if G.mode == "game" {
+        if L.jail != null && L.jail > 0 {
+            bgm("night")
+        } else if L.age != null && L.age < 13 {
+            bgm("child")
+        } else {
+            bgm("life")
+        }
+    }
+}

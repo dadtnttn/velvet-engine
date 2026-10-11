@@ -1,13 +1,17 @@
 // @edition 3
 // Simulación de una vida: estado, envejecimiento, efectos y muerte.
 
-const LOG_CHARS = 50
-
 state {
     L: map = {},
     G: map = {
         "mode": "title",
         "modal": null,
+        "cfg_on": false,
+        "cfg_t0": 0.0,
+        "i18n_g": "",
+        "redraw": false,
+        "bgm": "",
+        "logc": null,
         "scroll": 0,
         "dirty": true,
         "frames": 0,
@@ -175,10 +179,9 @@ function fmt(text: string, ctx: map) {
 
 // ---------------------------------------------------------------- bitácora
 
+// Se guarda la frase entera: se traduce y se parte en líneas al dibujarla.
 function log_add(text: string, kind: string) {
-    for line in wrap(text, LOG_CHARS) {
-        list_push(L.log, {"t": line, "k": kind})
-    }
+    list_push(L.log, {"t": text, "k": kind})
     G.scroll = 0
 }
 

@@ -49,6 +49,9 @@ import "mapa_data.vel"
 import "paises.vel"
 import "guerras.vel"
 import "mapa.vel"
+import "ajustes.vel"
+import "tema.vel"
+import "sonido.vel"
 import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
@@ -94,6 +97,7 @@ export function app_manifest() {
 
 export function app_init() {
     enter_title()
+    cfg_boot()
     request_boot_load()
     return frame()
 }
@@ -174,11 +178,19 @@ function skip_years(n: int) {
 
 function frame() {
     if phone_resume() { G.dirty = true }
+    i18n_sync()
+    bgm_sync()
     if G.dirty {
         G.cache = build()
         G.dirty = false
         // El área bajo el puntero puede haber cambiado con el nuevo frame.
         if update_hover() { G.cache = build() }
+    }
+    // Idioma o variables de traducción nuevas: el host las aplica tras este
+    // frame, así que se vuelve a dibujar en el siguiente.
+    if G.redraw == true {
+        G.redraw = false
+        G.dirty = true
     }
     let events = G.out
     G.out = []
@@ -246,6 +258,10 @@ function handle_input(input: map) {
     }
     if len(input.pressed) == 0 { return null }
     G.dirty = true
+    if G.cfg_on == true {
+        if pressed(input, "Escape") { handle_action("cfg:close") }
+        return null
+    }
     if G.mode == "title" {
         if pressed(input, "Enter") { handle_action("new") }
         return null
@@ -257,6 +273,7 @@ function handle_input(input: map) {
     }
     let m = G.modal
     if m == null {
+        if pressed(input, "Escape") { return handle_action("settings") }
         if pressed(input, "Space") || pressed(input, "Enter") { handle_action("age") }
         if pressed(input, "KeyY") { handle_action("year") }
         if pressed(input, "KeyU") { handle_action("skip:5") }
@@ -392,6 +409,8 @@ function start_from_creator() {
 
 function handle_action(action: string) {
     if action == "noop" { return null }
+    if action == "settings" { return cfg_open() }
+    if str_starts_with(action, "cfg:") { return cfg_action(action) }
     if action == "quit" {
         autosave()
         G.quit = true

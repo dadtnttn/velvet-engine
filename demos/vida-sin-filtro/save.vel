@@ -66,6 +66,7 @@ function has_continue() {
 function save_result(r: map) {
     match r.op {
         "load" => {
+            if r.tag == "cfg" { cfg_loaded(r) }
             if r.ok && r.tag == "boot" { accept_saved(r.data) }
         }
         "save" => {

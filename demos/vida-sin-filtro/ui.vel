@@ -13,20 +13,21 @@ function rgba(r: int, g: int, b: int, a: int) {
 const W = 1280
 const H = 720
 
-const C_RED = rgb(227, 20, 27)
-const C_INK = rgb(13, 13, 13)
-const C_WHITE = rgb(247, 247, 242)
-const C_GRAY = rgb(130, 130, 130)
-const C_GRAY_D = rgb(48, 48, 48)
-const C_YELLOW = rgb(255, 210, 31)
-const C_PINK = rgb(255, 122, 200)
-const C_BAD = rgb(255, 98, 98)
 const C_DIM = rgba(0, 0, 0, 175)
 
 const EDU_NAMES = ["Ninguna", "Primaria", "Secundaria", "Universidad"]
 const PAGE_SIZE = 9
 
 state {
+    // Colores activos (rgba empaquetado); los fija el tema (tema.vel).
+    C_RED: int = 4293071899,
+    C_INK: int = 4279045389,
+    C_WHITE: int = 4294440946,
+    C_GRAY: int = 4286743170,
+    C_GRAY_D: int = 4281348144,
+    C_YELLOW: int = 4294955551,
+    C_PINK: int = 4294933192,
+    C_BAD: int = 4294926946,
     C: list = [],
     block: bool = false,
     // Tablas de avance por fuente que entrega el host (app_fonts).
@@ -53,6 +54,11 @@ function text(x: any, y: any, s: string, size: int, color: int, font: string) {
 
 function ctext(x: any, y: any, s: string, size: int, color: int, font: string) {
     push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "align": "center"})
+}
+
+// Texto ya traducido (líneas partidas de una frase traducida): no pasa por tr.
+function text_raw(x: any, y: any, s: string, size: int, color: int, font: string) {
+    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font})
 }
 
 // Variantes con ancho máximo: el host recorta con «…» usando la fuente real.
@@ -173,7 +179,9 @@ function kind_color(k: string) {
 function build() {
     C = []
     G.hot = []
-    block = false
+    // Con los ajustes abiertos, lo de abajo se dibuja pero no responde.
+    let cfg = G.cfg_on == true
+    block = cfg
     svg(0, 0, W, H, bg_doc())
     if G.mode == "title" {
         draw_title()
@@ -182,13 +190,15 @@ function build() {
     } else if G.mode == "dead" {
         draw_dead()
     } else {
-        block = G.modal != null
+        block = cfg || G.modal != null
         draw_game()
-        block = false
+        block = cfg
         if G.modal != null { draw_modal(G.modal) }
         draw_cutin()
         draw_skip()
     }
+    block = false
+    if cfg { draw_settings() }
     draw_toasts()
     return C
 }
@@ -204,17 +214,17 @@ function draw_title() {
     svg(W / 2 - logo.w / 2, 40 - (1.0 - e) * 120, logo.w, logo.h, logo.doc)
     otext(W / 2, 186, "UN SIMULADOR DE VIDA PARA ADULTOS", 22, C_WHITE, "impact", true)
 
-    let items = [["NUEVA VIDA", "new"], ["VIDA AL AZAR", "quick"], ["SALIR", "quit"]]
-    let top = 250
-    let step = 84
-    let bh = 68
-    let size = 36
+    let items = [["NUEVA VIDA", "new"], ["VIDA AL AZAR", "quick"], ["AJUSTES", "settings"], ["SALIR", "quit"]]
+    let top = 226
+    let step = 72
+    let bh = 60
+    let size = 32
     if has_continue() {
-        items = [["CONTINUAR", "continue"], ["NUEVA VIDA", "new"], ["VIDA AL AZAR", "quick"], ["SALIR", "quit"]]
-        top = 226
-        step = 72
-        bh = 60
-        size = 32
+        items = [["CONTINUAR", "continue"], ["NUEVA VIDA", "new"], ["VIDA AL AZAR", "quick"], ["AJUSTES", "settings"], ["SALIR", "quit"]]
+        top = 214
+        step = 60
+        bh = 52
+        size = 28
     }
     let i = 0
     while i < len(items) {
@@ -225,7 +235,7 @@ function draw_title() {
         if it[1] == "continue" {
             // Quién te espera, alineado a la derecha del botón.
             let room = 440 - 70 - measure("CONTINUAR", size, "impact")
-            push({"op": "text", "x": x + 424, "y": y + bh / 2 + 6, "text": str_upper(SV.info), "size": 14, "color": C_YELLOW, "font": "bold", "align": "right", "max_width": room})
+            push({"op": "text", "x": x + 424, "y": y + bh / 2 + 6, "text": tr(str_upper(SV.info)), "size": 14, "color": C_YELLOW, "font": "bold", "align": "right", "max_width": room})
         }
         i += 1
     }
@@ -233,9 +243,11 @@ function draw_title() {
     svg(640, 520, 566, 116, slant_doc(560, 110, 20, HEX_WHITE, HEX_INK, 3, HEX_RED, 6))
     svg(670, 540, 70, 70, burst_doc(70, 70, 12, HEX_RED, HEX_INK, 3, 2))
     ctext(705, 583, "+18", 22, C_WHITE, "impact")
-    text(756, 556, "Contiene sexo (sin escenas explícitas),", 16, C_INK, "bold")
-    text(756, 580, "drogas, alcohol, crimen y muy malas", 16, C_INK, "bold")
-    text(756, 604, "decisiones. Solo para mayores de edad.", 16, C_INK, "bold")
+    let wy = 556
+    for line in wrap_f("Contiene sexo (sin escenas explícitas), drogas, alcohol, crimen y muy malas decisiones. Solo para mayores de edad.", 420, 16, "bold") {
+        if wy <= 604 { text_raw(756, wy, line, 16, C_INK, "bold") }
+        wy += 24
+    }
 
     if G.lives > 0 {
         otext(1040, 690, "VIDAS VIVIDAS: " + str(G.lives), 18, C_YELLOW, "impact", false)
@@ -681,6 +693,43 @@ function occupation_text() {
     return "Desemplead" + oa(L.gender)
 }
 
+// Bitácora partida en líneas para un ancho y fuente: las frases se traducen y
+// se parten al dibujar; la caché (por idioma, ancho y vida) solo procesa lo nuevo.
+function log_lines(width: int, size: int, font: string) {
+    if G.logc == null { G.logc = {} }
+    let key = str(width) + ":" + str(size) + ":" + font
+    let c = G.logc[key]
+    let lang = i18n_lang()
+    let n = len(L.log)
+    let first = ""
+    if n > 0 { first = L.log[0].t }
+    if c == null || c.lang != lang || c.n > n || c.first != first {
+        c = {"lang": lang, "n": 0, "lines": [], "start": [], "last": "", "first": first}
+        G.logc[key] = c
+    }
+    // El último encabezado de año puede cambiar («Edad 14–17»): se rehace.
+    if c.n > 0 && L.log[c.n - 1].t != c.last {
+        let s = c.start[c.n - 1]
+        c.lines = list_slice(c.lines, 0, s)
+        c.start = list_slice(c.start, 0, c.n - 1)
+        c.n -= 1
+    }
+    while c.n < n {
+        let e = L.log[c.n]
+        list_push(c.start, len(c.lines))
+        if e.k == "h" {
+            list_push(c.lines, {"t": e.t, "k": "h"})
+        } else {
+            for line in wrap_f(e.t, width, size, font) {
+                list_push(c.lines, {"t": line, "k": e.k})
+            }
+        }
+        c.last = e.t
+        c.n += 1
+    }
+    return c.lines
+}
+
 function draw_feed(x: int, y: int, w: int, h: int) {
     panel(x, y, w, h, 20)
     let hfill = HEX_RED
@@ -707,7 +756,8 @@ function draw_feed(x: int, y: int, w: int, h: int) {
     let line_h = 23
     let top = y + 54
     let visible = (h - 70) / line_h
-    let total = len(L.log)
+    let lines = log_lines(w - 80, 15, "ui")
+    let total = len(lines)
     let max_scroll = max(0, total - visible)
     G.scroll = clamp(G.scroll, 0, max_scroll)
     let start = max(0, total - visible - G.scroll)
@@ -716,7 +766,7 @@ function draw_feed(x: int, y: int, w: int, h: int) {
     let cy = top
     let i = start
     while i < end {
-        let entry = L.log[i]
+        let entry = lines[i]
         let lx = x + 34 - (cy - y) * 20 / h
         if entry.k == "h" {
             let head = str_upper(entry.t)
@@ -724,7 +774,7 @@ function draw_feed(x: int, y: int, w: int, h: int) {
             svg(lx, cy + 1, tw, 20, slant_doc(tw, 20, 7, HEX_RED, "", 0, "", 0))
             ctextw(lx + tw / 2, cy + 16, head, 13, C_WHITE, "bold", tw - 20)
         } else {
-            text(lx + 6, cy + 17, entry.t, 15, kind_color(entry.k), "ui")
+            text_raw(lx + 6, cy + 17, entry.t, 15, kind_color(entry.k), "ui")
         }
         cy += line_h
         i += 1
@@ -1399,14 +1449,18 @@ function draw_dead() {
         return null
     }
     tag(900, 134, 190, "ÚLTIMOS RECUERDOS", HEX_RED, C_WHITE)
-    let total = len(L.log)
+    let lines = log_lines(330, 13, "bold")
+    let total = len(lines)
     let visible = 15
     let i = max(0, total - visible)
     while i < total {
-        let entry = L.log[i]
+        let entry = lines[i]
         let color = kind_color(entry.k)
-        if entry.k == "h" { color = C_RED }
-        textw(900, ly, entry.t, 13, color, "bold", 330)
+        if entry.k == "h" {
+            textw(900, ly, entry.t, 13, C_RED, "bold", 330)
+        } else {
+            text_raw(900, ly, entry.t, 13, color, "bold")
+        }
         ly += 24
         i += 1
     }
