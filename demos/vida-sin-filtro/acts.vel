@@ -103,8 +103,8 @@ const ACTIVITIES = [
         {"w": 50, "log": "Brindaste con un cantante famoso y saliste en las revistas.", "happy": 15, "charm": 5},
         {"w": 50, "special": "hookup", "happy": 8}
     ]},
-    {"id": "dating", "tab": "night", "cat": "Ligue", "t": "App de citas", "s": "Desliza y a ver qué pasa", "min": 18, "cost": 0, "code": true,
-     "desc": "Mil perfiles, cien fotos con filtro y una conversación decente."},
+    {"id": "dating", "tab": "night", "cat": "Ligue", "t": "App de citas (en tu móvil)", "s": "Abre Flama", "min": 18, "cost": 0, "code": true,
+     "desc": "Las citas ahora viven en tu celular: Flama para ligar y Alma Gemela para algo serio."},
     {"id": "hookup", "tab": "night", "cat": "Ligue", "t": "Encuentro casual", "s": "Sin compromisos", "min": 18, "cost": 0, "code": true,
      "desc": "Una noche, sin nombres reales ni desayunos incómodos."},
     {"id": "seduce", "tab": "night", "cat": "Ligue", "t": "Seducir a alguien en el bar", "s": "Ligue asegurado · $100", "min": 18, "cost": 100, "need": "charm", "rank": 3,
@@ -444,7 +444,7 @@ function code_activity(id: string, a: map) {
         }
         return finish(a.t, "No ganaste nada. Como siempre.", "n")
     }
-    if id == "dating" { return open_dating() }
+    if id == "dating" { return phone_go("flama") }
     if id == "hookup" {
         let person = stranger()
         let odds = 35 + looks_eff() / 2 + rank("charm") * 4 + flirt_bonus()
@@ -1122,6 +1122,12 @@ function dispatch_choice(index: int) {
     if m.handler == "convert" { return resolve_convert(index, m.ctx) }
     if m.handler == "niche" { return resolve_niche(index) }
     if m.handler == "fprice" { return resolve_fprice(index) }
+    if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
+    if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
+    if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }
+    if m.handler == "ph_plan" { return resolve_plan(index, m.ctx) }
+    if m.handler == "ph_solo" { return resolve_solo(index, m.ctx) }
+    if m.handler == "ph_couple" { return resolve_couple(index, m.ctx) }
     if m.handler == "crisis" { return resolve_crisis(index, m.ctx) }
     if m.handler == "claim" { return resolve_claim(index) }
     if m.handler == "party" { return resolve_party(index) }

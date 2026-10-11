@@ -1,0 +1,530 @@
+// @edition 3
+// Dibujo del móvil: el aparato, la pantalla de inicio con sus apps, cada app con sus
+// pestañas y su lista, la tarjeta de Flama y el panel lateral (notificaciones, detalle
+// o perfil). Mismo estilo que el resto: rojo, negro, blanco y paneles inclinados.
+
+const PHX = 150
+const PHY = 10
+const PHW = 392
+const PHH = 700
+const SCX = 166
+const SCY = 62
+const SCW = 360
+const SCH = 602
+
+// ---------------------------------------------------------------- arte
+
+function is_light(fill: string) {
+    return fill == "#f7f7f2" || fill == "#ffd21f"
+}
+
+function phone_body_doc() {
+    let cached = svgc["phone_body"]
+    if cached != null { return cached }
+    let w = PHW
+    let h = PHH
+    let b = "<rect x='14' y='14' width='" + str(w - 4) + "' height='" + str(h - 4) + "' rx='46' fill='" + HEX_RED + "'/>"
+    b = b + "<rect x='0' y='150' width='8' height='70' rx='3' fill='" + HEX_WHITE + "'/><rect x='0' y='240' width='8' height='44' rx='3' fill='" + HEX_WHITE + "'/>"
+    b = b + "<rect x='" + str(w - 6) + "' y='190' width='8' height='90' rx='3' fill='" + HEX_WHITE + "'/>"
+    b = b + "<rect x='4' y='2' width='" + str(w - 8) + "' height='" + str(h - 4) + "' rx='46' fill='" + HEX_INK + "' stroke='" + HEX_WHITE + "' stroke-width='4'/>"
+    b = b + "<rect x='16' y='52' width='" + str(SCW) + "' height='" + str(SCH) + "' rx='16' fill='#151515'/>"
+    b = b + "<rect x='" + str(w / 2 - 56) + "' y='18' width='112' height='24' rx='12' fill='#000' stroke='#333' stroke-width='2'/>"
+    b = b + "<circle cx='" + str(w / 2 + 36) + "' cy='30' r='6' fill='#1d2a44'/>"
+    b = b + "<rect x='" + str(w / 2 - 60) + "' y='" + str(h - 28) + "' width='120' height='8' rx='4' fill='" + HEX_WHITE + "'/>"
+    let doc = svg_doc(w + 14, h + 14, b)
+    svgc["phone_body"] = doc
+    return doc
+}
+
+function wall_doc(i: int) {
+    let key = "wall|" + str(i)
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let c = WALLS[i]
+    let b = "<defs><linearGradient id='wg' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='" + c[0] + "'/><stop offset='1' stop-color='" + c[1] + "'/></linearGradient>"
+    b = b + "<pattern id='wh' width='12' height='12' patternUnits='userSpaceOnUse' patternTransform='rotate(30)'><circle cx='6' cy='6' r='2.5' fill='#000' fill-opacity='0.22'/></pattern></defs>"
+    b = b + "<rect width='" + str(SCW) + "' height='" + str(SCH) + "' fill='url(#wg)'/><rect width='" + str(SCW) + "' height='" + str(SCH) + "' fill='url(#wh)'/>"
+    b = b + "<polygon points='" + points([0, 300, SCW, 170, SCW, 250, 0, 380]) + "' fill='#000' fill-opacity='0.45'/>"
+    b = b + "<polygon points='" + points([0, 392, SCW, 262, SCW, 270, 0, 400]) + "' fill='#fff' fill-opacity='0.8'/>"
+    b = b + "<polygon points='" + points(star_points(300.0, 70.0, 26.0)) + "' fill='#fff' fill-opacity='0.35'/>"
+    b = b + "<polygon points='" + points(star_points(40.0, 520.0, 18.0)) + "' fill='#fff' fill-opacity='0.3'/>"
+    let doc = svg_doc(SCW, SCH, b)
+    svgc[key] = doc
+    return doc
+}
+
+// Dibujo de cada app (en una caja de 64×64).
+function app_glyph(id: string, c: string, bg: string) {
+    let imp = " font-family='" + FONT_TITLE + "' text-anchor='middle' fill='" + c + "'"
+    if id == "msgs" {
+        return "<path d='M10 12 h44 a6 6 0 0 1 6 6 v22 a6 6 0 0 1 -6 6 h-24 l-12 10 v-10 h-8 a6 6 0 0 1 -6 -6 v-22 a6 6 0 0 1 6 -6 z' fill='" + c + "'/><circle cx='21' cy='29' r='4' fill='" + bg + "'/><circle cx='32' cy='29' r='4' fill='" + bg + "'/><circle cx='43' cy='29' r='4' fill='" + bg + "'/>"
+    }
+    if id == "flama" {
+        return "<path d='M32 5 C38 17 51 24 50 40 C49 52 41 59 32 59 C22 59 14 51 14 40 C14 30 21 26 24 15 C28 23 29 28 34 31 C37 23 35 14 32 5 Z' fill='" + c + "'/><path d='M32 34 C36 40 40 43 39 49 C38 54 35 56 32 56 C28 56 25 53 25 48 C25 43 29 41 32 34 Z' fill='" + bg + "'/>"
+    }
+    if id == "alma" { return "<path d='M32 56 L11 34 C2 24 8 9 20 9 C26 9 30 13 32 18 C34 13 38 9 44 9 C56 9 62 24 53 34 Z' fill='" + c + "'/>" }
+    if id == "gram" {
+        return "<rect x='8' y='14' width='48' height='38' rx='9' fill='none' stroke='" + c + "' stroke-width='5'/><circle cx='32' cy='33' r='10' fill='none' stroke='" + c + "' stroke-width='5'/><circle cx='47' cy='23' r='3.5' fill='" + c + "'/>"
+    }
+    if id == "vfans" { return "<text x='32' y='45'" + imp + " font-size='34'>VF</text><rect x='12' y='50' width='40' height='4' fill='" + c + "'/>" }
+    if id == "vhub" {
+        return "<rect x='6' y='10' width='52' height='36' rx='8' fill='" + c + "'/><polygon points='26,18 42,28 26,38' fill='" + bg + "'/><text x='32' y='61'" + imp + " font-size='14'>18+</text>"
+    }
+    if id == "bank" { return "<text x='32' y='50'" + imp + " font-size='48'>$</text>" }
+    if id == "stocks" {
+        return "<polyline points='8,46 24,28 34,38 52,16' fill='none' stroke='" + c + "' stroke-width='6' stroke-linejoin='round'/><polygon points='40,12 57,9 55,26' fill='" + c + "'/><rect x='8' y='52' width='48' height='4' fill='" + c + "'/>"
+    }
+    if id == "casino" {
+        let dots = ""
+        for d in [[22, 22], [42, 22], [32, 32], [22, 42], [42, 42]] {
+            dots = dots + "<circle cx='" + str(d[0]) + "' cy='" + str(d[1]) + "' r='4.5' fill='" + bg + "'/>"
+        }
+        return "<rect x='11' y='11' width='42' height='42' rx='9' fill='" + c + "'/>" + dots
+    }
+    if id == "jobs" {
+        return "<rect x='8' y='22' width='48' height='32' rx='4' fill='" + c + "'/><rect x='23' y='12' width='18' height='13' rx='3' fill='none' stroke='" + c + "' stroke-width='4'/><rect x='8' y='34' width='48' height='3' fill='" + bg + "'/>"
+    }
+    if id == "shop" {
+        return "<rect x='11' y='28' width='42' height='26' fill='" + c + "'/><rect x='8' y='19' width='48' height='10' fill='" + c + "'/><rect x='29' y='19' width='6' height='35' fill='" + bg + "'/><path d='M32 19 C24 5 13 11 22 19 Z M32 19 C40 5 51 11 42 19 Z' fill='" + c + "'/>"
+    }
+    if id == "health" { return "<rect x='25' y='9' width='14' height='46' rx='2' fill='" + HEX_RED + "'/><rect x='9' y='25' width='46' height='14' rx='2' fill='" + HEX_RED + "'/>" }
+    if id == "memories" { return poly(star_points(32.0, 34.0, 26.0), c, "", 0) }
+    if id == "agenda" {
+        return "<rect x='10' y='14' width='44' height='42' rx='4' fill='none' stroke='" + c + "' stroke-width='5'/><rect x='10' y='14' width='44' height='12' fill='" + c + "'/><rect x='18' y='7' width='5' height='11' fill='" + c + "'/><rect x='41' y='7' width='5' height='11' fill='" + c + "'/><text x='32' y='51'" + imp + " font-size='21'>" + str(L.age % 28 + 1) + "</text>"
+    }
+    if id == "route" { return "<rect x='14' y='7' width='5' height='50' fill='" + c + "'/><polygon points='19,9 54,18 19,31' fill='" + c + "'/>" }
+    if id == "faith" { return "<rect x='25' y='28' width='14' height='28' rx='2' fill='" + c + "'/><path d='M32 6 C39 15 39 22 32 25 C25 22 25 15 32 6 Z' fill='#f2a20c'/>" }
+    return "<circle cx='32' cy='32' r='18' fill='none' stroke='" + c + "' stroke-width='10' stroke-dasharray='7 4.3'/><circle cx='32' cy='32' r='12' fill='" + c + "'/><circle cx='32' cy='32' r='5' fill='" + bg + "'/>"
+}
+
+function app_icon_doc(id: string, fill: string) {
+    let key = "ic|" + id + "|" + fill
+    if id == "agenda" { key = key + "|" + str(L.age % 28) }
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let fg = HEX_WHITE
+    if is_light(fill) { fg = HEX_INK }
+    let b = poly([12, 8, 70, 8, 64, 70, 6, 70], HEX_INK, "", 0)
+    b = b + poly([8, 2, 66, 2, 60, 64, 2, 64], fill, HEX_WHITE, 3)
+    b = b + "<g transform='translate(6 3) scale(0.86)'>" + app_glyph(id, fg, fill) + "</g>"
+    let doc = svg_doc(72, 72, b)
+    svgc[key] = doc
+    return doc
+}
+
+function badge_doc() {
+    let cached = svgc["badge"]
+    if cached != null { return cached }
+    let doc = svg_doc(26, 26, "<circle cx='13' cy='13' r='11' fill='" + HEX_RED + "' stroke='" + HEX_WHITE + "' stroke-width='2.5'/>")
+    svgc["badge"] = doc
+    return doc
+}
+
+// Ícono del celular junto al retrato.
+function phone_icon_doc(on: bool, blocked: bool) {
+    let key = "phi|" + str(on) + "|" + str(blocked)
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let scr = HEX_RED
+    if on { scr = HEX_YELLOW }
+    if blocked { scr = "#3a3a3a" }
+    let b = "<g transform='rotate(9 33 50)'>"
+    b = b + "<rect x='10' y='8' width='46' height='84' rx='10' fill='" + HEX_RED + "'/>"
+    b = b + "<rect x='5' y='3' width='46' height='84' rx='10' fill='" + HEX_INK + "' stroke='" + HEX_WHITE + "' stroke-width='3'/>"
+    b = b + "<rect x='10' y='14' width='36' height='62' rx='4' fill='" + scr + "'/>"
+    b = b + "<rect x='21' y='7' width='14' height='3' rx='1.5' fill='#555'/>"
+    if !blocked {
+        b = b + "<path d='M28 52 L18 42 C14 38 16 31 22 31 C25 31 27 33 28 35 C29 33 31 31 34 31 C40 31 42 38 38 42 Z' fill='" + HEX_WHITE + "'/>"
+    }
+    b = b + "<rect x='22' y='80' width='12' height='3' rx='1.5' fill='" + HEX_WHITE + "'/></g>"
+    let doc = svg_doc(66, 100, b)
+    svgc[key] = doc
+    return doc
+}
+
+function round_btn_doc(kind: string, fill: string, s: int) {
+    let key = "rb|" + kind + "|" + fill + "|" + str(s)
+    let cached = svgc[key]
+    if cached != null { return cached }
+    let r = s / 2
+    let b = "<circle cx='" + str(r + 4) + "' cy='" + str(r + 4) + "' r='" + str(r - 2) + "' fill='" + HEX_INK + "'/>"
+    b = b + "<circle cx='" + str(r) + "' cy='" + str(r) + "' r='" + str(r - 2) + "' fill='" + fill + "' stroke='" + HEX_WHITE + "' stroke-width='3'/>"
+    let g = ""
+    if kind == "no" { g = "<path d='M20 20 L44 44 M44 20 L20 44' stroke='" + HEX_WHITE + "' stroke-width='7' stroke-linecap='round'/>" }
+    if kind == "yes" { g = "<path d='M32 50 L16 34 C9 27 13 15 23 15 C27 15 30 18 32 22 C34 18 37 15 41 15 C51 15 55 27 48 34 Z' fill='" + HEX_WHITE + "'/>" }
+    if kind == "super" { g = poly(star_points(32.0, 33.0, 19.0), HEX_INK, "", 0) }
+    b = b + "<g transform='scale(" + n(s / 64.0) + ")'>" + g + "</g>"
+    let doc = svg_doc(s + 6, s + 6, b)
+    svgc[key] = doc
+    return doc
+}
+
+// ---------------------------------------------------------------- botón en la ficha
+
+function draw_phone_button() {
+    let x = 318
+    let y = 150
+    let blocked = phone_block() != ""
+    let on = hovered("ph:open") && !blocked
+    let dy = 0
+    if on { dy = -5 }
+    svg(x, y + dy, 66, 100, phone_icon_doc(on, blocked))
+    let lbl = "MÓVIL"
+    if L.age < 12 { lbl = "A LOS 12" } else if L.jail > 0 { lbl = "CONFISCADO" }
+    otext(x + 32, y + 112 + dy, lbl, 13, C_WHITE, "impact", true)
+    if !blocked && L.ph != null && L.ph.unread > 0 {
+        svg(x + 44, y - 6 + dy, 26, 26, badge_doc())
+        ctext(x + 57, y + 12 + dy, str(min(L.ph.unread, 9)), 13, C_WHITE, "impact")
+    }
+    if !blocked { hot(x + 2, y, 60, 100, "ph:open") }
+    return null
+}
+
+// ---------------------------------------------------------------- el móvil abierto
+
+function draw_phone() {
+    let e = ease(prog(G.modal_t0, 0.3))
+    svg(-160 - (1.0 - e) * 400, 0, 820, 720, slant_doc(760, 720, 220, HEX_RED, "", 0, HEX_INK, 60))
+    fade_push(e)
+    svg(PHX, PHY, PHW + 14, PHH + 14, phone_body_doc())
+    push({"op": "clip_push", "x": SCX, "y": SCY, "w": SCW, "h": SCH})
+    let focus = null
+    if G.ph_app == "" {
+        draw_phone_home()
+    } else {
+        focus = draw_phone_app(G.ph_app)
+    }
+    phone_status_bar()
+    push({"op": "clip_pop"})
+    if hovered("ph:home") { rect(PHX + PHW / 2 - 60, PHY + PHH - 28, 120, 8, C_RED) }
+    hot(PHX + PHW / 2 - 90, PHY + PHH - 44, 180, 40, "ph:home")
+    fade_pop()
+    draw_phone_side(focus, e)
+    return null
+}
+
+function phone_status_bar() {
+    arect(SCX, SCY, SCW, 24, rgba(0, 0, 0, 150))
+    text(SCX + 18, SCY + 17, "VELVET 5G", 11, C_WHITE, "bold")
+    if G.ph_app != "" { ctext(SCX + SCW / 2, SCY + 17, str_upper(month_name()), 11, C_WHITE, "bold") }
+    let batt = 6 + (L.tm * 7) % 16
+    rect(SCX + SCW - 48, SCY + 7, 26, 12, C_WHITE)
+    rect(SCX + SCW - 46, SCY + 9, 22, 8, C_INK)
+    rect(SCX + SCW - 46, SCY + 9, batt, 8, C_WHITE)
+    rect(SCX + SCW - 22, SCY + 10, 3, 6, C_WHITE)
+    return null
+}
+
+function draw_phone_home() {
+    let d = ph()
+    svg(SCX, SCY, SCW, SCH, wall_doc(d.wall))
+    let cx = SCX + SCW / 2
+    otext(cx, SCY + 86, str_upper(month_name()), 46, C_WHITE, "impact", true)
+    otext(cx, SCY + 112, str(L.age) + " " + plural(L.age, "AÑO", "AÑOS") + " · " + str_upper(L.city), 13, C_WHITE, "bold", true)
+    let apps = phone_apps()
+    let i = 0
+    while i < len(apps) {
+        let a = apps[i]
+        let gx = SCX + 14 + (i % 4) * 86
+        let gy = SCY + 138 + (i / 4) * 88
+        let action = "ph:app:" + a.id
+        let on = hovered(action)
+        let ie = ease(prog(G.menu_t0 + i * 0.02, 0.22))
+        let dy = (1.0 - ie) * 30.0
+        if on { dy = -5.0 }
+        fade_push(ie)
+        if on { svg(gx - 8, gy - 8 + dy, 86, 86, burst_doc(86, 86, 12, HEX_WHITE, "", 0, i)) }
+        svg(gx, gy + dy, 72, 72, app_icon_doc(a.id, a.fill))
+        otext(gx + 33, gy + 82 + dy, clip_text(a.n, 80, 11), 11, C_WHITE, "bold", true)
+        let nn = app_new(a.id)
+        if nn > 0 {
+            svg(gx + 52, gy - 8 + dy, 26, 26, badge_doc())
+            ctext(gx + 65, gy + 10 + dy, str(min(nn, 9)), 13, C_WHITE, "impact")
+        }
+        fade_pop()
+        hot(gx, gy, 66, 66, action)
+        i += 1
+    }
+    return null
+}
+
+function draw_phone_app(id: string) {
+    let a = app_def(id)
+    let fg = C_WHITE
+    if is_light(a.fill) { fg = C_INK }
+    rect(SCX, SCY, SCW, SCH, rgb(21, 21, 21))
+    svg(SCX - 12, SCY + 24, SCW + 24, 58, slant_doc(SCW + 18, 52, 12, a.fill, HEX_WHITE, 2, HEX_INK, 5))
+    let back = HEX_WHITE
+    if hovered("ph:home") { back = HEX_YELLOW }
+    svg(SCX + 6, SCY + 32, 36, 36, arrow_doc("left", back))
+    hot(SCX, SCY + 24, 56, 52, "ph:home")
+    text(SCX + 50, SCY + 62, clip_text(str_upper(a.n), SCW - 70, 26), 26, fg, "impact")
+    let y = SCY + 88
+    let sub = app_sub(id)
+    if sub != "" {
+        text(SCX + 14, y + 14, clip_text(sub, SCW - 28, 12), 12, C_YELLOW, "bold")
+        y += 22
+    }
+    let block = app_block(id)
+    if block != "" {
+        let ty = y + 50
+        for line in wrap(block, chars_for(SCW - 40, 17)) {
+            text(SCX + 20, ty, line, 17, C_WHITE, "impact")
+            ty += 24
+        }
+        return null
+    }
+    let cats = app_cats(id)
+    let cat = ""
+    if len(cats) > 0 {
+        G.menu_cat = clamp(G.menu_cat, 0, len(cats) - 1)
+        cat = cats[G.menu_cat]
+        y = phone_tabs(cats, y + 4)
+    }
+    if id == "flama" && cat == "Descubrir" {
+        draw_flama(y + 4)
+        return null
+    }
+    return phone_list(app_items(id, cat), y + 4)
+}
+
+function phone_tabs(cats: list, y: int) {
+    let count = len(cats)
+    let per = min(count, 4)
+    if count == 5 { per = 3 }
+    let tw = (SCW - 16 - (per - 1) * 4) / per
+    let th = 26
+    let i = 0
+    while i < count {
+        let action = "cat:" + str(i)
+        let fill = HEX_INK
+        let color = C_WHITE
+        if i == G.menu_cat {
+            fill = HEX_WHITE
+            color = C_INK
+        } else if hovered(action) {
+            fill = HEX_RED
+        }
+        let tx = SCX + 8 + (i % per) * (tw + 4)
+        let ty = y + (i / per) * (th + 4)
+        svg(tx, ty, tw + 3, th + 3, slant_doc(tw, th, 6, fill, HEX_WHITE, 2, HEX_INK, 3))
+        ctext(tx + tw / 2, ty + 18, clip_text(str_upper(cats[i]), tw - 8, 12), 12, color, "impact")
+        hot(tx, ty, tw, th, action)
+        i += 1
+    }
+    let rows = (count + per - 1) / per
+    return y + rows * (th + 4) + 2
+}
+
+// Lista de una app; devuelve el elemento enfocado para el panel lateral.
+function phone_list(items: list, y0: int) {
+    let row_h = 52
+    let bottom = SCY + SCH - 40
+    let page_size = (bottom - y0) / row_h
+    if page_size < 3 { page_size = 3 }
+    let pages = max(1, (len(items) + page_size - 1) / page_size)
+    G.menu_page = clamp(G.menu_page, 0, pages - 1)
+    let first = G.menu_page * page_size
+    let last = min(len(items), first + page_size)
+    let rw = SCW - 26
+    let focus = null
+    let i = first
+    while i < last {
+        let it = items[i]
+        let k = i - first
+        let ie = ease(prog(G.menu_t0 + k * 0.03, 0.22))
+        let ix = SCX + 10 - (1.0 - ie) * 220.0
+        let iy = y0 + k * row_h
+        let locked = it.lock != ""
+        let on = hovered(it.action)
+        if on { focus = it }
+        let fill = HEX_INK
+        let color = C_WHITE
+        let sub_color = C_GRAY
+        let dx = 0
+        if on {
+            fill = HEX_WHITE
+            color = C_INK
+            sub_color = C_RED
+            dx = 6
+        }
+        if locked && !on {
+            fill = "#1c1c1c"
+            color = C_GRAY
+        }
+        if it.done == true && !on {
+            fill = "#3a2a00"
+            color = C_YELLOW
+        }
+        svg(ix + dx, iy, rw + 5, 49, slant_doc(rw, 44, 8, fill, HEX_WHITE, 2, HEX_RED, 4))
+        let tx = ix + dx + 16
+        let avail = rw - 34
+        if it.pid != null {
+            let p = find_person(it.pid)
+            if p != null {
+                portrait(ix + dx + 12, iy + 2, 34, 40, p.look, p.gender, p.age, person_mood(p), p.id, false)
+                tx = ix + dx + 54
+                avail = rw - 72
+            }
+        }
+        text(tx, iy + 20, clip_text(it.t, avail, 15), 15, color, "impact")
+        if locked {
+            text(tx, iy + 37, clip_text("REQUIERE: " + str_upper(it.lock), avail, 11), 11, C_RED, "impact")
+        } else {
+            text(tx, iy + 37, clip_text(it.s, avail, 11), 11, sub_color, "bold")
+        }
+        hot(SCX + 10, iy, rw, 44, it.action)
+        i += 1
+    }
+    if pages > 1 {
+        let py = SCY + SCH - 38
+        if G.menu_page > 0 { small_button(SCX + 12, py, 96, 28, "‹ ANTES", "page:-") }
+        if G.menu_page < pages - 1 { small_button(SCX + SCW - 112, py, 96, 28, "MÁS ›", "page:+") }
+        ctext(SCX + SCW / 2, py + 20, str(G.menu_page + 1) + " / " + str(pages), 14, C_WHITE, "impact")
+    }
+    if focus == null && len(items) > first { focus = items[first] }
+    return focus
+}
+
+// Flama: la tarjeta para deslizar.
+function draw_flama(y0: int) {
+    let d = ph()
+    let x = flama_card()
+    let cx = SCX + 18
+    let cw = SCW - 36
+    let ch = 330
+    let e = ease(prog(G.ph_card_t0, 0.3))
+    let oy = (1.0 - e) * 50.0
+    fade_push(e)
+    svg(cx, y0 + oy, cw + 8, ch + 8, slant_doc(cw, ch, 10, HEX_WHITE, HEX_INK, 3, "#ff5a36", 8))
+    svg(cx + 40, y0 + 10 + oy, cw - 80, cw - 80, burst_doc(cw - 80, cw - 80, 14, "#ffd9cc", "", 0, x.id % 7))
+    portrait(cx + 46, y0 + 8 + oy, cw - 92, ch - 84, x.look, x.gender, x.age, "happy", x.id, false)
+    svg(cx - 6, y0 + ch - 84 + oy, cw + 12, 80, slant_doc(cw + 6, 74, 10, HEX_INK, "", 0, "", 0))
+    text(cx + 16, y0 + ch - 48 + oy, clip_text(str_upper(x.first) + ", " + str(x.age), cw - 30, 26), 26, C_WHITE, "impact")
+    text(cx + 16, y0 + ch - 26 + oy, clip_text("A " + str(x.km) + " km · " + x.bio, cw - 34, 12), 12, C_YELLOW, "bold")
+    fade_pop()
+    let by = y0 + ch + 16
+    flama_btn(SCX + 40, by, 64, "no", "#262626", "PASAR")
+    flama_btn(SCX + SCW / 2 - 28, by + 6, 56, "super", HEX_YELLOW, "SÚPER $50")
+    flama_btn(SCX + SCW - 104, by, 64, "yes", "#ff5a36", "ME GUSTA")
+    let likes = "Te quedan " + str(d.swipes) + " «me gusta» este mes"
+    if d.gold { likes = "Flama Gold: «me gusta» ilimitados" }
+    ctext(SCX + SCW / 2, by + 100, likes, 12, C_GRAY, "bold")
+    if G.ph_msg != "" && G.t - G.ph_msg_t0 < 2.0 {
+        let p = prog(G.ph_msg_t0, 2.0)
+        fade_push(1.0 - p * p)
+        svg(SCX + 10, y0 + 120, SCW - 14, 82, slant_doc(SCW - 20, 76, 14, "#ff5a36", HEX_WHITE, 3, HEX_INK, 6))
+        otext(SCX + SCW / 2, y0 + 172, G.ph_msg, 30, C_WHITE, "impact", true)
+        fade_pop()
+    }
+    return null
+}
+
+function flama_btn(x: int, y: int, s: int, kind: string, fill: string, lbl: string) {
+    let action = "ph:fl:" + kind
+    let dy = 0
+    if hovered(action) { dy = -5 }
+    svg(x, y + dy, s + 6, s + 6, round_btn_doc(kind, fill, s))
+    ctext(x + s / 2, y + s + 20, lbl, 11, C_WHITE, "bold")
+    hot(x, y, s, s, action)
+    return null
+}
+
+// ---------------------------------------------------------------- lado derecho
+
+function draw_phone_side(focus: any, e: float) {
+    let title = "MÓVIL"
+    if G.ph_app != "" { title = str_upper(app_def(G.ph_app).n) }
+    svg(600 + (1.0 - e) * 300, 4, 640, 136, tilt_title_doc(title, 640, 136, 70, HEX_WHITE, HEX_INK))
+    small_button(1110, 26, 140, 42, "GUARDAR", "ph:close")
+    text(1118, 86, "ESC · M", 12, C_WHITE, "bold")
+    if G.ph_app == "" { return draw_phone_notifs() }
+    if app_block(G.ph_app) != "" { return null }
+    if G.ph_app == "flama" && G.menu_cat == 0 { return draw_profile_panel(flama_card(), "Desliza: ¿te gusta o no?") }
+    if focus == null { return null }
+    if focus.mid != null {
+        let x = ph_find(focus.mid)
+        if x != null { return draw_profile_panel(x, "Clic para escribirle o invitarl" + by_gender(x.gender, "o", "a") + " a salir.") }
+    }
+    draw_detail(focus, "menu")
+    return null
+}
+
+function draw_phone_notifs() {
+    let x = 660
+    let y = 150
+    let w = 580
+    let h = 520
+    svg(x, y, w + 12, h + 12, slant_doc(w, h, 26, HEX_WHITE, HEX_INK, 4, HEX_INK, 12))
+    let ny = y + 30
+    let p = ph_love()
+    if p != null {
+        svg(x + 380, y + 12, 176, 176, burst_doc(176, 176, 14, HEX_RED, HEX_INK, 3, p.id % 7))
+        portrait(x + 396, y + 18, 144, 172, p.look, p.gender, p.age, person_mood(p), p.id, false)
+        text(x + 46, y + 58, clip_text(str_upper(p.first), 320, 30), 30, C_INK, "impact")
+        text(x + 46, y + 82, clip_text(rel_label(p) + " · " + bond_state(p), 320, 15), 15, C_RED, "bold")
+        rect(x + 46, y + 94, 260, 12, rgb(210, 210, 205))
+        rect(x + 46, y + 94, 260 * p.bond / 100, 12, C_RED)
+        let since = "Cercanía " + str(p.bond) + "%"
+        if p.since != null { since = since + " · juntos desde tus " + str(p.since) + " años" }
+        text(x + 46, y + 126, clip_text(since, 320, 13), 13, C_GRAY, "bold")
+        small_button(x + 46, y + 138, 160, 34, "ESCRIBIRLE", "ph:chat:" + str(p.id))
+        ny = y + 196
+    }
+    text(x + 46, ny + 8, "NOTIFICACIONES", 22, C_RED, "impact")
+    let k = 0
+    for nt in ph().notifs {
+        let ry = ny + 22 + k * 42
+        if ry > y + h - 46 { break }
+        let action = "ph:app:" + nt.app
+        let fill = HEX_INK
+        if hovered(action) { fill = HEX_RED }
+        let rx = x + 36 - k * 3
+        svg(rx, ry, 504, 40, slant_doc(498, 36, 10, fill, "", 0, "", 0))
+        text(rx + 20, ry + 24, clip_text(str_upper(app_def(nt.app).n), 110, 13), 13, C_YELLOW, "impact")
+        text(rx + 136, ry + 24, clip_text(nt.t, 340, 13), 13, C_WHITE, "bold")
+        if nt.new { rect(rx + 484, ry + 14, 8, 8, C_RED) }
+        hot(rx, ry, 498, 36, action)
+        k += 1
+    }
+    if k == 0 { text(x + 46, ny + 52, "Nada nuevo. Disfruta el silencio.", 16, C_GRAY, "bold") }
+    return null
+}
+
+// Perfil de alguien de las apps de citas.
+function draw_profile_panel(p: map, hint: string) {
+    let x = 660
+    let y = 150
+    let w = 580
+    let h = 520
+    profile(p)
+    svg(x, y, w + 12, h + 12, slant_doc(w, h, 26, HEX_WHITE, HEX_INK, 4, HEX_INK, 12))
+    svg(x + 300, y + 110, 280, 280, burst_doc(280, 280, 16, "#ff5a36", HEX_INK, 4, p.id % 7))
+    portrait(x + 320, y + 120, 230, 276, p.look, p.gender, p.age, "happy", p.id, false)
+    text(x + 46, y + 60, clip_text(str_upper(p.first), 260, 34), 34, C_INK, "impact")
+    let km = ""
+    if p.km != null { km = " · a " + str(p.km) + " km" }
+    text(x + 46, y + 92, str(p.age) + " años" + km, 17, C_RED, "bold")
+    let ty = y + 130
+    if p.bio != null {
+        for line in wrap("«" + p.bio + "»", chars_for(250, 15)) {
+            if ty < y + 210 { text(x + 46, ty, line, 15, C_INK, "ui") }
+            ty += 20
+        }
+    }
+    text(x + 46, y + 236, "LE GUSTA", 12, C_GRAY, "bold")
+    text(x + 46, y + 258, clip_text(INTEREST_NAMES[p.interests[0]] + ", " + INTEREST_NAMES[p.interests[1]], 260, 16), 16, C_INK, "impact")
+    let c = compat(p)
+    text(x + 46, y + 296, "COMPATIBILIDAD " + str(c) + "%", 16, C_INK, "impact")
+    rect(x + 46, y + 304, 230, 10, rgb(210, 210, 205))
+    rect(x + 46, y + 304, 230 * c / 100, 10, C_RED)
+    if p.heat != null {
+        text(x + 46, y + 340, "QUÍMICA " + str(p.heat) + "%", 16, C_INK, "impact")
+        rect(x + 46, y + 348, 230, 10, rgb(210, 210, 205))
+        rect(x + 46, y + 348, 230 * p.heat / 100, 10, rgb(255, 90, 54))
+    }
+    text(x + 46, y + 384, "Atractivo " + str(p.looks) + "%", 14, C_GRAY, "bold")
+    if p.tags != null && p.age >= 18 && L.age >= 18 { text(x + 46, y + 406, clip_text("Gustos: " + kinks_text(p.tags, p.gender), 270, 13), 13, C_RED, "bold") }
+    text(x + 46, y + 470, clip_text(hint, 500, 15), 15, C_RED, "impact")
+    return null
+}

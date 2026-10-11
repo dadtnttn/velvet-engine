@@ -449,7 +449,7 @@ function rel_list(cat: string) {
 function meet_items() {
     let items = []
     if L.age >= 18 && L.jail == 0 {
-        list_push(items, {"action": "act:dating", "t": "Buscar el amor", "s": "App de citas", "desc": "Alguien allá afuera está deslizando a la derecha.", "lock": ""})
+        list_push(items, {"action": "ph:app:flama", "t": "Buscar el amor", "s": "Flama, en tu móvil", "desc": "Alguien allá afuera está deslizando a la derecha. Abre Flama (casual) o Alma Gemela (serio) en tu celular.", "lock": ""})
     }
     let lock = ""
     if L.age < 4 { lock = "Edad 4" }
