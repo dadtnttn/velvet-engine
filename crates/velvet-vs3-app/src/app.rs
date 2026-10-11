@@ -195,7 +195,8 @@ impl Vs3App {
         let frame = FrameView::parse(&runtime.initialize()?).context("initial VS3 frame")?;
         validate_frame(&frame, &manifest, &assets)?;
         let canvas = Canvas::new(manifest.app.canvas_width, manifest.app.canvas_height);
-        let svg = SvgCache::new(fonts.font_data());
+        let mut svg = SvgCache::new(fonts.font_data());
+        svg.set_fallbacks(&fonts.chain());
         let mut out = Self {
             runtime,
             frame,
@@ -237,7 +238,9 @@ impl Vs3App {
                         .flatten()
                         .and_then(|m| m.map_entries().ok())
                         .unwrap_or_default();
-                    let entries = msgs.into_iter().filter_map(|(k, v)| v.as_str().map(|t| (k, t.to_owned())));
+                    let entries = msgs
+                        .into_iter()
+                        .filter_map(|(k, v)| v.as_str().map(|t| (k, t.to_owned())));
                     Some(velvet_script_vs3::i18n::Catalog::new(lang, entries))
                 }
                 Err(e) => {
@@ -247,12 +250,11 @@ impl Vs3App {
             },
             Err(_) => None,
         };
-        let catalog = catalog.unwrap_or_else(|| velvet_script_vs3::i18n::Catalog::new(lang, Vec::new()));
+        let catalog =
+            catalog.unwrap_or_else(|| velvet_script_vs3::i18n::Catalog::new(lang, Vec::new()));
         velvet_script_vs3::i18n::set_catalog(Some(catalog));
-        for bytes in self.fonts.set_language(lang) {
-            self.svg.add_font(bytes.as_slice());
-        }
-        self.svg.clear();
+        self.fonts.set_language(lang);
+        self.svg.set_fallbacks(&self.fonts.chain());
         velvet_script_vs3::i18n::set_measurer(Some(self.fonts.measurer()));
     }
     pub(crate) fn update(&mut self, dt: f32) {
@@ -463,9 +465,10 @@ impl Vs3App {
                 self.set_language(&lang);
             }
             "i18n.var" => {
-                if let (Some(name), Some(value)) =
-                    (payload_string(event, "name"), payload_string(event, "value"))
-                {
+                if let (Some(name), Some(value)) = (
+                    payload_string(event, "name"),
+                    payload_string(event, "value"),
+                ) {
                     velvet_script_vs3::i18n::set_var(&name, &value);
                 }
             }

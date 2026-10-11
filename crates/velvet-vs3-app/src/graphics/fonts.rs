@@ -119,18 +119,23 @@ impl FontSystem {
         self.data.iter().map(|d| d.as_slice())
     }
 
+    /// The active fallback fonts, most preferred first.
+    pub fn chain(&self) -> Arc<Vec<Arc<LoadedFont>>> {
+        self.chain.clone()
+    }
+
     /// Activate the fallback fonts for `lang` (loading them on first use).
-    /// Returns the bytes of fonts loaded now, so SVG text can use them too.
-    pub fn set_language(&mut self, lang: &str) -> Vec<Arc<Vec<u8>>> {
+    pub fn set_language(&mut self, lang: &str) {
         self.lang = lang.to_owned();
-        let mut fresh = Vec::new();
         let mut chain = Vec::new();
         // Fonts for this language first (Han characters look different in
         // Chinese, Japanese and Korean fonts), then the always-on ones, then
         // the rest so text in any script still renders (a language picker
         // shows every language in its own script).
         let matches = |s: &FallbackFontSpec| {
-            s.langs.iter().any(|l| l != "*" && (l == lang || lang_prefix(l, lang)))
+            s.langs
+                .iter()
+                .any(|l| l != "*" && (l == lang || lang_prefix(l, lang)))
         };
         let mut ordered: Vec<FallbackFontSpec> = Vec::new();
         ordered.extend(self.fallback_specs.iter().filter(|s| matches(s)).cloned());
@@ -143,7 +148,9 @@ impl FontSystem {
         ordered.extend(
             self.fallback_specs
                 .iter()
-                .filter(|s| !matches(s) && !(s.langs.is_empty() || s.langs.iter().any(|l| l == "*")))
+                .filter(|s| {
+                    !matches(s) && !(s.langs.is_empty() || s.langs.iter().any(|l| l == "*"))
+                })
                 .cloned(),
         );
         for spec in ordered {
@@ -151,12 +158,11 @@ impl FontSystem {
                 chain.push(f.clone());
                 continue;
             }
-            let loaded = font_candidates(&self.root, &spec.path)
-                .and_then(|paths| load_first(&paths));
+            let loaded =
+                font_candidates(&self.root, &spec.path).and_then(|paths| load_first(&paths));
             match loaded {
                 Ok((font, bytes)) => {
                     let f = Arc::new(LoadedFont::new(font, bytes));
-                    fresh.push(f.bytes.clone());
                     self.loaded_fallbacks.insert(spec.id.clone(), f.clone());
                     chain.push(f);
                 }
@@ -164,7 +170,6 @@ impl FontSystem {
             }
         }
         self.chain = Arc::new(chain);
-        fresh
     }
 
     /// Advance widths at size 100 for every declared font, as

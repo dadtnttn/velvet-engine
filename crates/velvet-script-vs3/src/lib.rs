@@ -23,11 +23,11 @@ pub use abi::{
     ModuleDescriptor, ParamDescriptor, Purity, SimulatedHost, SyncKind, Vs3AbiType,
 };
 
-pub use strings::{extract_strings, StringEntry};
 pub use lockfile::{Vs3LockedPackage, Vs3PackageLock, VS3_PACKAGE_LOCK};
 pub use manifest::{
     Vs3Dependency, Vs3PackageFormatError, Vs3PackageManifest, VS3_PACKAGE_MANIFEST,
 };
+pub use strings::{extract_strings, StringEntry};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -1111,10 +1111,10 @@ impl Vs3Module {
     }
 }
 
-/// Re-export legacy presentation state for compatibility adapters.
-pub use velvet_script_vm::{PresentHostState, PresentSprite};
 /// Translation catalogs and host text measuring for `tr`/`str_measure`.
 pub use velvet_script_vm::i18n;
+/// Re-export legacy presentation state for compatibility adapters.
+pub use velvet_script_vm::{PresentHostState, PresentSprite};
 
 fn resolve_entrypoint<'a>(
     entrypoints: &'a BTreeMap<String, String>,

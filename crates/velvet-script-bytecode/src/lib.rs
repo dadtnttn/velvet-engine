@@ -1586,7 +1586,13 @@ impl NativeId {
             N::Float | N::ParseFloat | N::StrMeasure => T::Float,
             N::ListMap | N::ListFilter | N::ListSortBy | N::StrChars | N::StrWrap => T::List,
             N::ListAny | N::ListAll => T::Bool,
-            N::StrRepeat | N::StrPadLeft | N::StrPadRight | N::StrSub | N::JsonEncode | N::Tr | N::I18nLang => T::String,
+            N::StrRepeat
+            | N::StrPadLeft
+            | N::StrPadRight
+            | N::StrSub
+            | N::JsonEncode
+            | N::Tr
+            | N::I18nLang => T::String,
             N::Call | N::ListFind | N::ListReduce | N::MapGet | N::JsonDecode => T::Any,
             N::ListPop
             | N::Choose
