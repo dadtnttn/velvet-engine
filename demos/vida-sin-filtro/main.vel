@@ -337,6 +337,8 @@ function animating() {
 // ---------------------------------------------------------------- teclado y rueda
 
 function pressed(input: map, key: string) {
+    // El Enter del teclado numérico vale igual.
+    if key == "Enter" && list_contains(input.pressed, "NumpadEnter") { return true }
     return list_contains(input.pressed, key)
 }
 

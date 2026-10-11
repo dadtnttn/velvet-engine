@@ -1384,8 +1384,9 @@ function draw_menu(m: map) {
     let cat = ""
     if len(cats) > 0 { cat = cats[clamp(G.menu_cat, 0, len(cats) - 1)] }
     let items = menu_items(m.tab, cat)
+    // Como Esc: de las sublistas de Ocupación se vuelve a Ocupación.
     let back = "close"
-    if m.tab == "jobs" { back = "tab:job" }
+    if m.tab == "jobs" || m.tab == "study" || m.tab == "gigs" { back = "tab:job" }
     draw_list(menu_title(m.tab), cats, G.menu_cat, items, back, "menu")
     if len(items) == 0 {
         text(70, 260, "Nada que hacer aquí por ahora.", 20, C_WHITE, "impact")

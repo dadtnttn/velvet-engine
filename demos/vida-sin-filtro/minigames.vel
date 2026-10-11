@@ -731,11 +731,11 @@ function mg_type(letter: string) {
 function mg_keys(input: map) {
     let m = G.mg
     if m.phase == "intro" {
-        if list_contains(input.pressed, "Enter") || list_contains(input.pressed, "Space") { mg_begin() }
+        if pressed(input, "Enter") || list_contains(input.pressed, "Space") { mg_begin() }
         return null
     }
     if m.phase == "done" {
-        if list_contains(input.pressed, "Enter") || list_contains(input.pressed, "Space") { mg_close() }
+        if pressed(input, "Enter") || list_contains(input.pressed, "Space") { mg_close() }
         return null
     }
     for key in input.pressed {
@@ -746,10 +746,11 @@ function mg_keys(input: map) {
         if key == "ArrowRight" { mg_arrow("right") }
         if m.type == "race" && (key == "ArrowLeft" || key == "KeyA") { mg_lane(-1) }
         if m.type == "race" && (key == "ArrowRight" || key == "KeyD") { mg_lane(1) }
-        if str_starts_with(key, "Digit") {
+        // Números de arriba o del teclado numérico.
+        if str_starts_with(key, "Digit") || str_starts_with(key, "Numpad") {
             let i = 0
             while i < 9 {
-                if key == "Digit" + str(i + 1) { mg_pick(i) }
+                if key == "Digit" + str(i + 1) || key == "Numpad" + str(i + 1) { mg_pick(i) }
                 i += 1
             }
         }
