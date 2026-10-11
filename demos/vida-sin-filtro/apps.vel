@@ -257,9 +257,17 @@ function ap_jobs_items() {
     let fl = AP_FREELANCE
     for f in fl {
         let on = d.freelance == f.id
-        list_push(items, {"action": "ap:free:" + f.id, "t": "Independiente: " + f.n, "s": if_str(on, "ACTIVO · ingreso extra", "Ingreso extra · uno a la vez"), "desc": "Proyectos por tu cuenta cada mes. Pagan según tu " + str_lower(SOCIAL_NAMES[f.stat]) + ".", "lock": if_str(L.age < 16, "Edad 16", "")})
+        let lk = if_str(L.age < 16, "Edad 16", free_lock(f))
+        if on { lk = "" }
+        list_push(items, {"action": "ap:free:" + f.id, "t": "Independiente: " + f.n, "s": if_str(on, "ACTIVO · ingreso extra", "Ingreso extra · uno a la vez"), "desc": "Proyectos por tu cuenta cada mes. Pagan según tu " + str_lower(SOCIAL_NAMES[f.stat]) + " y la economía de tu país; con trabajo de tiempo completo o estudiando, solo te quedan las noches (pagan la mitad).", "lock": lk})
     }
     return items
+}
+
+// Requisitos de cada trabajo independiente.
+function free_lock(f: map) {
+    if f.id == "traduccion" && len(pa().langs) < 2 { return "Necesitas otro idioma" }
+    return ""
 }
 
 function ap_shop_items() {
@@ -633,6 +641,7 @@ function apps_action(action: string) {
         }
         "free" => {
             if L.age < 16 { return null }
+            if d.freelance != arg && free_lock(ap_freelance_def(arg)) != "" { return null }
             if d.freelance == arg {
                 d.freelance = ""
                 return finish("Independiente", "Dejaste los trabajos independientes.", "n")
@@ -852,9 +861,12 @@ function apps_month() {
         }
     }
     // Trabajos independientes
-    if d.freelance != "" && L.age >= 16 && L.jail == 0 {
+    if d.freelance != "" && L.age >= 16 && L.jail == 0 && !in_barracks() {
         let f = ap_freelance_def(d.freelance)
-        let pay = f.pay * (50 + rank(f.stat) * 20) / 100
+        // Paga según tu nivel y la economía de tu país, menos impuestos; con
+        // trabajo de tiempo completo o estudiando, solo te quedan las noches.
+        let pay = f.pay * (50 + rank(f.stat) * 20) / 100 * pais_pay_mult() / 100 * 80 / 100
+        if L.job != null || in_school() || L.study != null { pay = pay / 2 }
         L.money += pay
         d.free_total = map_get(d, "free_total", 0) + pay
         if d.free_total >= 50000 { flag("freelancer") }

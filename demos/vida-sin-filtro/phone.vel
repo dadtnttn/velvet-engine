@@ -50,11 +50,21 @@ const FLAMA_LINES_BAD = [
 ]
 
 const GROUP_LINES_FAM = [
-    "Tu tía mandó un video de un gato tocando el piano. Todos respondieron con stickers.",
-    "Tu mamá preguntó en el grupo quién se comió el último tamal. Nadie confesó.",
-    "El grupo familiar organizó una comida para el domingo. Hasta el tío que nunca viene dijo que sí.",
-    "Tu abuela mandó «buenos días» con una rosa brillante y cuatro bendiciones."
+    "Alguien mandó un video de un gato tocando el piano. Todos respondieron con stickers.",
+    "El grupo familiar organizó una comida para el domingo. Hasta el que nunca viene dijo que sí."
 ]
+
+// Lo que pasa en el chat familiar, con quien de verdad está en tu familia.
+function fam_group_line() {
+    let opts = list_slice(GROUP_LINES_FAM, 0, len(GROUP_LINES_FAM))
+    for p in L.people {
+        if !p.alive { continue }
+        if p.rel == "madre" { list_push(opts, "Tu mamá preguntó en el grupo quién se comió lo último del refri. Nadie confesó.") }
+        if p.rel == "abuelo" && p.gender == "f" { list_push(opts, "Tu abuela mandó «buenos días» con una rosa brillante y cuatro bendiciones.") }
+        if p.rel == "tio" && p.gender == "f" { list_push(opts, "Tu tía mandó una cadena que hay que reenviar a diez personas. Nadie la reenvió.") }
+    }
+    return pick(opts)
+}
 const GROUP_LINES_FRIENDS = [
     "Mandaron memes hasta las 3 a. m. Te dolió el estómago de risa.",
     "Organizaron una salida para el viernes. Ya hay plan.",
@@ -500,14 +510,29 @@ function ph_call(p: map) {
     let gain_b = rint(3, 6)
     let msg = "Hablaron un buen rato. Te alegró escuchar su voz."
     if g == "parent" {
-        msg = pick(["«¿Ya comiste? ¿Te estás abrigando?» Hablaron media hora.", "Te contó todos los chismes del barrio. Todos.", "Te dijo que está orgullos" + oa(p.gender) + " de ti. Te quedaste callad" + oa(L.gender) + " un momento."])
+        if L.home == "padres" {
+            msg = pick(["«¿Para qué me llamas si estoy en la cocina?» Igual hablaron un rato.", "Le llamaste desde tu cuarto. Contestó desde la sala. Se rieron los dos."])
+        } else if L.age < 13 {
+            msg = "Le contaste todo lo que hiciste hoy. Te escuchó como si fuera la noticia del año."
+        } else {
+            msg = pick(["«¿Ya comiste? ¿Te estás abrigando?» Hablaron media hora.", "Te contó todos los chismes del barrio. Todos.", "Te dijo que está orgullos" + oa(p.gender) + " de ti. Te quedaste callad" + oa(L.gender) + " un momento."])
+        }
     } else if g == "grandparent" {
-        msg = "Lloró de emoción al escucharte. Te contó la misma historia de siempre y la escuchaste completa."
+        msg = pick(["Te contó la misma historia de siempre y la escuchaste completa.", "Te preguntó si ya comiste. Dos veces.", "Se emocionó al escucharte. «Ya casi no me llaman», dijo, y te prometiste llamarle más."])
         gain_b += 3
     } else if g == "partner" || p.rel == "amante" {
         msg = pick(["Hablaron una hora sin darse cuenta.", "Ninguno quería colgar primero. «Cuelga tú.» «No, tú.»", "Se quedaron en silencio en la línea, solo escuchándose. Fue bonito."])
     } else if g == "child" || g == "grandchild" {
-        msg = "Te contó su semana con lujo de detalle. Te encanta escucharl" + by_gender(p.gender, "o", "a") + "."
+        // Lo que te cuenta depende de su edad.
+        if p.age < 6 {
+            msg = "Te contó una historia larguísima sobre un perro. No entendiste nada y fue lo mejor de tu semana."
+        } else if p.age < 13 {
+            msg = "Te contó su semana con lujo de detalle. Te encanta escucharl" + by_gender(p.gender, "o", "a") + "."
+        } else if p.age < 18 {
+            msg = "Contestó con monosílabos, pero no colgó. Con un adolescente, eso ya es mucho."
+        } else {
+            msg = "Te contó cómo va su vida. Ya casi no te pide consejos... casi."
+        }
     } else if g == "ex" {
         msg = "Llamaste a tu ex. Silencio incómodo, risas nerviosas y un «cuídate» al final."
         gain_b = rint(1, 4)
@@ -517,7 +542,13 @@ function ph_call(p: map) {
             msg = msg + " " + q.first + " vio la llamada en tu registro y no le gustó nada."
         }
     } else if g == "friend" {
-        msg = pick(["Se rieron como cuando eran más jóvenes.", "Te pidió consejo y se lo diste. Te lo agradeció mucho.", "Quedaron de verse pronto. Esta vez va en serio."])
+        if L.age < 13 {
+            msg = "Planearon a qué jugar mañana en el recreo. Ya hay plan."
+        } else if L.age < 18 {
+            msg = "Hablaron de quién le gusta a quién hasta que les dijeron que colgaran."
+        } else {
+            msg = pick(["Se rieron como cuando eran más jóvenes.", "Te pidió consejo y se lo diste. Te lo agradeció mucho.", "Quedaron de verse pronto. Esta vez va en serio."])
+        }
     }
     if m == "triste" {
         msg = msg + " Notaste su voz apagada y le levantaste el ánimo."
@@ -559,22 +590,17 @@ function group_items() {
 
 function group_action(id: string) {
     if !ph_use("grp:" + id) { return info("Grupos", "Ya revisaste ese grupo este mes.") }
+    // Un chat de grupo acerca un poco, pero no reemplaza verse en persona.
     if id == "fam" {
         for p in L.people {
-            if p.alive && can_chat(p) && is_family(p) {
-                bond_gain(p, 2)
-                touch(p)
-            }
+            if p.alive && can_chat(p) && is_family(p) { bond_gain(p, 1) }
         }
         L.happy += 2
-        return finish("Chat familiar", pick(GROUP_LINES_FAM), "g")
+        return finish("Chat familiar", fam_group_line(), "g")
     }
     if id == "friends" {
         for p in L.people {
-            if p.alive && can_chat(p) && rel_group(p) == "friend" {
-                bond_gain(p, 2)
-                touch(p)
-            }
+            if p.alive && can_chat(p) && rel_group(p) == "friend" { bond_gain(p, 1) }
         }
         L.happy += 4
         return finish("Chat de amigos", pick(GROUP_LINES_FRIENDS), "g")
@@ -1855,7 +1881,10 @@ function phone_pings() {
             notify("msgs", p.first + ": " + pick(["Te extraño. ¿Cuándo nos vemos?", "¿Sigues vivo? Jaja. En serio, ¿todo bien?", "Hoy me acordé de ti."]))
             n += 1
         } else if g == "parent" && chance(10) {
-            notify("msgs", rel_label(p) + ": " + pick(["¿Ya comiste?", "Llámame cuando puedas.", "Te mandé un video, míralo.", "¿Vienes el domingo?"]))
+            // Si vives con tus papás, te escriben desde el otro cuarto.
+            let lines = ["¿Ya comiste?", "Llámame cuando puedas.", "Te mandé un video, míralo.", "¿Vienes el domingo?"]
+            if L.home == "padres" { lines = ["Baja a cenar.", "¿Ya hiciste lo que te pedí?", "Te mandé un video, míralo.", "Tráeme el cargador cuando bajes."] }
+            notify("msgs", rel_label(p) + ": " + pick(lines))
             n += 1
         } else if g == "friend" && chance(6) {
             notify("msgs", p.first + ": " + pick(["¿Salimos este finde?", "Tienes que ver esto jajaja", "¿Me prestas tu cargador mañana?"]))
