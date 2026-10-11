@@ -6,18 +6,26 @@
 // Hay religiones reales (tratadas con respeto y de forma general) y otras inventadas.
 
 const RELIGIONS = [
-    {"id": "catolica", "n": "Catolicismo", "strict": 2, "alcohol": true, "poly": "", "temple": "misa", "w": 30},
+    {"id": "catolica", "n": "Catolicismo", "strict": 2, "alcohol": true, "poly": "", "temple": "la iglesia", "w": 30},
+    {"id": "ortodoxa", "n": "Cristianismo ortodoxo", "strict": 2, "alcohol": true, "poly": "", "temple": "la catedral", "w": 3},
     {"id": "evangelica", "n": "Cristianismo evangélico", "strict": 3, "alcohol": true, "poly": "", "temple": "el culto", "w": 14},
     {"id": "islam", "n": "Islam", "strict": 3, "alcohol": false, "poly": "m", "temple": "la mezquita", "w": 8},
     {"id": "judaismo", "n": "Judaísmo", "strict": 2, "alcohol": true, "poly": "", "temple": "la sinagoga", "w": 4},
     {"id": "budismo", "n": "Budismo", "strict": 1, "alcohol": true, "poly": "", "temple": "el templo", "w": 5},
     {"id": "hinduismo", "n": "Hinduismo", "strict": 2, "alcohol": true, "poly": "", "temple": "el templo", "w": 4},
+    {"id": "sij", "n": "Sijismo", "strict": 2, "alcohol": false, "poly": "", "temple": "el gurdwara", "w": 2},
+    {"id": "espiritual", "n": "Espiritualidad libre", "strict": 0, "alcohol": true, "poly": "", "temple": "el círculo de meditación", "w": 5},
     {"id": "terciopelo", "n": "Iglesia del Terciopelo", "strict": 0, "alcohol": true, "poly": "any", "temple": "el santuario", "w": 3},
     {"id": "solar", "n": "Culto del Sol Rojo", "strict": 4, "alcohol": false, "poly": "m", "temple": "el altar del sol", "w": 2},
+    {"id": "luna", "n": "Hermandad de la Luna", "strict": 1, "alcohol": true, "poly": "f", "temple": "el claro de la luna", "w": 2},
     {"id": "ninguna", "n": "Sin religión", "strict": 0, "alcohol": true, "poly": "", "temple": "", "w": 30}
 ]
 const RELIGION_DESC = {
     "catolica": "Tradición, misa los domingos y una abuela que reza por ti.",
+    "ortodoxa": "Íconos dorados, cantos antiguos y una Pascua que se celebra en grande.",
+    "sij": "Igualdad, servicio a los demás y una cocina comunitaria abierta a todos.",
+    "espiritual": "Sin dogmas: meditación, cristales, energía y lo que te haga sentir bien.",
+    "luna": "(Inventada) Una comunidad que honra a la luna. Las mujeres pueden tener varios esposos.",
     "evangelica": "Comunidad muy unida, alabanzas y valores firmes.",
     "islam": "Oración, comunidad y reglas claras. Los hombres pueden tener hasta cuatro esposas.",
     "judaismo": "Tradiciones milenarias, festividades y mucha familia.",
@@ -56,6 +64,17 @@ function religion_of(p: map) {
 function faith_of(p: map) {
     religion_of(p)
     return p.faith
+}
+
+// «al templo», «a la mezquita»; «del templo», «de la mezquita».
+function a_temple(t: string) {
+    if str_starts_with(t, "el ") { return "al " + str_sub(t, 3) }
+    return "a " + t
+}
+
+function de_temple(t: string) {
+    if str_starts_with(t, "el ") { return "del " + str_sub(t, 3) }
+    return "de " + t
 }
 
 function faith_word(f: int) {
@@ -118,8 +137,9 @@ function setup_religion() {
 // ---------------------------------------------------------------- cada mes
 
 function religion_month() {
+    fe_month()
     if L.religion == "ninguna" { return null }
-    if L.faith > 0 && chance(20) { L.faith -= 1 }
+    if L.faith > 0 && chance(30) { L.faith -= 1 }
     let r = religion_def(L.religion)
     // Culpa si haces lo que tu fe prohíbe.
     if L.faith >= 60 && r.strict >= 2 && (job_is_adult(L.job) || job_is_adult(L.job2)) && chance(50) { L.happy -= 2 }
@@ -127,9 +147,15 @@ function religion_month() {
     return null
 }
 
-// Los padres reaccionan a tu pareja y a tu trabajo (una vez por tema).
+// Eventos de fe: los padres devotos (abajo) y todo lo de fe.vel.
 function maybe_faith_event() {
-    if G.modal != null || L.age < 16 || !chance(10) { return false }
+    if G.modal != null { return false }
+    if L.age >= 16 && chance(10) && faith_parent_event() { return true }
+    return maybe_fe_event()
+}
+
+// Los padres reaccionan a tu pareja y a tu trabajo (una vez por tema).
+function faith_parent_event() {
     let parent = devout_parent()
     if parent == null { return false }
     let ctx = {"person": parent}
@@ -234,11 +260,27 @@ function resolve_faith(handler: string, index: int, ctx: map) {
 
 // ---------------------------------------------------------------- acciones de fe
 
+// Todo junto (Actividades › Fe); el móvil lo separa por pestañas.
 function faith_items() {
+    let items = faith_practice_items()
+    for it in fe_community_items() { list_push(items, it) }
+    for it in fe_family_items() { list_push(items, it) }
+    return items
+}
+
+function faith_app_items(cat: string) {
+    if cat == "Comunidad" { return fe_community_items() }
+    if cat == "Familia" { return fe_family_items() }
+    return faith_practice_items()
+}
+
+function faith_practice_items() {
     let items = []
+    let d = fe()
+    if d.study != null { list_push(items, dninfo("Estudiando " + religion_def(d.study.id).n, "Faltan " + str(max(0, d.study.m)) + " meses", "Al terminar, tu guía te espera para la ceremonia.")) }
     let r = religion_def(L.religion)
     if L.religion != "ninguna" {
-        list_push(items, {"action": "faith:temple", "t": "Ir a " + r.temple, "s": "Fe, felicidad", "desc": "Tu comunidad te recibe. Quizá conozcas a alguien.", "lock": faith_lock("temple")})
+        list_push(items, {"action": "faith:temple", "t": "Ir " + a_temple(r.temple), "s": "Fe, felicidad", "desc": "Tu comunidad te recibe. Quizá conozcas a alguien.", "lock": faith_lock("temple")})
         list_push(items, {"action": "faith:pray", "t": "Rezar o meditar en casa", "s": "Fe", "desc": "Un momento de paz.", "lock": faith_lock("pray")})
         let pl = faith_lock("pilgrim")
         if L.money < 5000 { pl = "$5,000" }
@@ -282,7 +324,7 @@ function faith_action(action: string) {
             add_person(f)
             return finish("Fe", "En " + r.temple + " conociste a " + f.first + ". Se hicieron amigos.", "g")
         }
-        return finish("Fe", "Fuiste a " + r.temple + ". Saliste con el alma más ligera.", "g")
+        return finish("Fe", "Fuiste " + a_temple(r.temple) + ". Saliste con el alma más ligera.", "g")
     }
     if key == "pray" {
         L.faith = clamp100(L.faith + 2)
@@ -302,22 +344,7 @@ function faith_action(action: string) {
         L.karma += 3
         return finish("Fe", "Tu donativo ayudará a tu comunidad.", "g")
     }
-    if key == "convert" {
-        let labels = []
-        let locks = []
-        let ids = []
-        for x in RELIGIONS {
-            if x.id != L.religion && x.id != "ninguna" && len(labels) < 4 {
-                list_push(labels, x.n)
-                list_push(locks, "")
-                list_push(ids, x.id)
-            }
-        }
-        list_push(labels, "Mejor no")
-        list_push(locks, "")
-        open_choice("CONVERSIÓN", "¿A qué religión te quieres convertir?", labels, locks, "convert", {"ids": ids})
-        return null
-    }
+    if key == "convert" { return fe_open_convert(0) }
     if key == "leave" { return change_religion("ninguna") }
     return null
 }
@@ -342,6 +369,7 @@ function change_religion(id: string) {
     }
     let msg = "Ahora: " + r.n + ". " + RELIGION_DESC[id]
     if hurt > 0 { msg = msg + " Tus padres se lo tomaron muy mal." }
+    msg = msg + fe_after_convert(old, id)
     return finish("Fe", msg, "n")
 }
 
@@ -356,6 +384,11 @@ function take_cospouse(p: map) {
     if !L.married || !can_polygamy() || !both_adults(p) { return info("Matrimonio", "No es posible.") }
     let odds = 35 + p.bond / 2
     if religion_of(p) == L.religion || religion_def(religion_of(p)).poly != "" { odds += 20 }
+    // Lo que opinan tus cónyuges actuales pesa.
+    for q in spouses() {
+        if q.bond >= 70 { odds += 5 }
+        if q.bond < 40 { odds -= 10 }
+    }
     if !chance(odds) {
         bond_gain(p, -10)
         return finish(p.first, p.first + " no quiere ser «una más». Se ofendió.", "b")
@@ -372,6 +405,7 @@ function take_cospouse(p: map) {
     L.happy += 8
     add_hito(p, "Se casaron (matrimonio múltiple)")
     hito_once("poly", "Amor", "Tuviste más de un matrimonio a la vez")
+    if len(spouses()) >= 3 { flag("casa_llena") }
     return finish("Boda", "Te casaste también con " + p.first + ". Tu familia ahora es más grande... y las cenas, más complicadas.", "x")
 }
 

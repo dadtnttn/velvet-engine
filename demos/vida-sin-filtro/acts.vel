@@ -996,6 +996,7 @@ function special(name: string, ctx: map) {
     if str_starts_with(name, "of_") { return oficio_special(name, ctx) }
     if str_starts_with(name, "dn_") { return dinero_special(name, ctx) }
     if str_starts_with(name, "lx_") { return lujos_special(name, ctx) }
+    if str_starts_with(name, "fe_") { return fe_special(name, ctx) }
     if str_starts_with(name, "pr_") { return prison_special(name, ctx) }
     if str_starts_with(name, "kid_") || name == "comeback" { return kid_special(name, ctx) }
     if str_starts_with(name, "hito:") || name == "sweet_end" || name == "sweet_moved" { return sweet_special(name, ctx) }
@@ -1218,6 +1219,7 @@ function dispatch_choice(index: int) {
     if str_starts_with(m.handler, "mk_") { return mercado_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "cs_") { return casino_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "lx_") { return lujos_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "fe_") { return fe_choice(m.handler, index, m.ctx) }
     if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
     if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
     if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }

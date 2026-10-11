@@ -35,6 +35,7 @@ import "dinero.vel"
 import "mercado.vel"
 import "casino.vel"
 import "lujos.vel"
+import "fe.vel"
 import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
@@ -496,6 +497,7 @@ function handle_action(action: string) {
         "mk" => mercado_action(action)
         "cs" => casino_action(action)
         "lx" => lujos_action(action)
+        "fe" => fe_action(action)
         "habit" => toggle_habit(rest)
         "gig" => take_gig(rest)
         "cact" => do_career_act(rest)
