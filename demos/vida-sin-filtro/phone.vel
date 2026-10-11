@@ -745,7 +745,7 @@ function flama_card() {
     if d.card == null {
         let x = ap_flama_stranger()
         x.bio = fmt(pick(BIOS), {"person": x})
-        x.km = rint(1, 25)
+        x.km = match_km(x, 25)
         x.heat = 10
         profile(x)
         d.card = x
@@ -851,6 +851,7 @@ function flama_action(id: string) {
     }
     if id == "active" {
         d.active = !d.active
+        if d.active && partner() != null { return finish("Tu perfil", "Tu perfil de citas está activo otra vez... y tienes pareja. Que no te descubran.", "b") }
         if d.active { return finish("Tu perfil", "Tu perfil de citas está activo otra vez.", "n") }
         return finish("Tu perfil", "Pausaste tu perfil. Nadie te verá deslizando.", "n")
     }
@@ -897,15 +898,33 @@ function ph_drop(x: map) {
     return null
 }
 
+// Kilómetros hasta un match: de otro país, la distancia real; si no, el barrio.
+function match_km(x: map, near: int) {
+    if far_away(x) { return dist_km(here_id(), x.ctry) }
+    return rint(1, near)
+}
+
+// Alguien que vive en otro país (lo conociste en línea o de viaje).
+function far_away(x: map) {
+    return x.far == true && x.ctry != null && x.ctry != here_id()
+}
+
 function open_match(x: map) {
     let ctx = {"person": x}
     let fl = ""
     if x.flirted == L.tm { fl = "Este mes ya" }
+    let text = "«" + x.bio + "» Química: " + str(x.heat) + "%. Cuanta más química, más fácil que acepte salir contigo."
+    let dl = ""
+    // Al otro lado del mundo no hay cita esta noche: hay que viajar.
+    if far_away(x) {
+        dl = "Vive en " + cname(x.ctry)
+        text = text + " Vive en " + cname(x.ctry) + " (" + str(x.km) + " km): para verse en persona, viaja allá desde el mapa."
+    }
     open_choice(
         "MATCH: " + str_upper(x.first) + ", " + str(x.age),
-        "«" + x.bio + "» Química: " + str(x.heat) + "%. Cuanta más química, más fácil que acepte salir contigo.",
+        text,
         ["Escribirle un mensaje", "Invitarl" + by_gender(x.gender, "o", "a") + " a una cita", "Proponer verse esta noche", "Deshacer el match", "Volver"],
-        [fl, "", "", "", ""],
+        [fl, dl, dl, "", ""],
         "ph_match",
         ctx
     )
@@ -917,6 +936,7 @@ function resolve_match(index: int, ctx: map) {
     let x = ctx.person
     let d = ph()
     if index == 0 { return open_flirt(x) }
+    if (index == 1 || index == 2) && far_away(x) { return null }
     if index == 1 {
         let odds = 25 + x.heat / 2 + rank("charm") * 4 + compat(x) / 5 + flirt_bonus()
         if chance(odds) {
@@ -1014,7 +1034,7 @@ function alma_list() {
                 make_rich(x)
                 x.bio = fmt(pick(RICH_BIOS), {"person": x})
             }
-            x.km = rint(1, 40)
+            x.km = match_km(x, 40)
             x.heat = 0
             profile(x)
             if d.quiz {
@@ -1798,8 +1818,14 @@ function phone_month() {
         fans_month()
         if L.money - before > 0 { notify("vfans", "Tus suscriptores te pagaron " + money_str(L.money - before)) }
     }
-    // Perfil de citas activo con pareja: te pueden descubrir.
+    // Al empezar una relación, Flama pausa tu perfil (una vez por pareja); si
+    // lo reactivas teniendo pareja, te pueden descubrir.
     let p = partner()
+    if p != null && p.alive && d.active && d.paused_for != p.id {
+        d.paused_for = p.id
+        d.active = false
+        notify("flama", "Pausamos tu perfil: ahora tienes pareja")
+    }
     if p != null && p.alive && d.active && p.open != true && chance(5) {
         p.bond -= 20
         L.happy -= 6

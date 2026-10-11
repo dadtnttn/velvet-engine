@@ -114,6 +114,59 @@ function route_is_adult() {
     return L.route == "escort" || L.route == "porno" || L.route == "fans" || (L.route == "profeta" && L.religion == "velo")
 }
 
+// Lo que pasa a quien continúa la familia: la mina y las empresas siguen
+// siendo tuyas (la ruta continúa); los negocios personales (estudio, agencia,
+// canal, la Orden) se venden o pasan a un sucesor y te queda el dinero.
+function route_inherit(old: map) {
+    let r = old.route
+    let rd = old.rd
+    if r == null || rd == null || r == "normal" || r == "rey" || r == "presidente" { return null }
+    if r == "filantropo" {
+        if rd.mine == 0 { return null }
+        L.route = "filantropo"
+        L.rd = rd
+        L.rstage = old.rstage
+        L.rdone = old.rdone
+        L.family = "rica"
+        rd.auction_age = null
+        let parts = ["la mina «La Verde»"]
+        if rd.tech { list_push(parts, "TerraTech") }
+        if rd.space { list_push(parts, "Ares Aerospace") }
+        if rd.mars > 0 { list_push(parts, "la colonia en Marte") }
+        let what = parts[0]
+        let i = 1
+        while i < len(parts) {
+            if i == len(parts) - 1 { what = what + " y " + parts[i] } else { what = what + ", " + parts[i] }
+            i += 1
+        }
+        hito_me("Trabajo", "Heredaste el imperio de " + old.first)
+        if L.age < 18 { log_add("Heredaste " + what + ". Un fideicomiso lo administra hasta que cumplas 18.", "x") } else { log_add("Heredaste " + what + ". Ahora todo depende de ti.", "x") }
+        return null
+    }
+    let value = 0
+    let what = ""
+    if r == "porno" && rd.studio == true {
+        value = 500000 + rd.studio_films * 20000
+        what = "el estudio de cine"
+    }
+    if (r == "escort" || r == "fans") && rd.agency == true {
+        value = 500000
+        what = "la agencia"
+    }
+    if r == "creador" && rd.brand == true {
+        value = 200000 + min(rd.subs / 10, 2000000)
+        what = "la marca y el catálogo de videos"
+    }
+    if r == "profeta" && rd.order == true && rd.treasury > 0 {
+        value = rd.treasury / 2
+        what = "la Orden del Velo Rojo (eligió a un sucesor; a ti te tocó la mitad del tesoro)"
+    }
+    if value <= 0 { return null }
+    L.money += value
+    log_add("Heredaste " + what + " de " + old.first + ": " + money_str(value) + ".", "g")
+    return null
+}
+
 function route_setup() {
     L.rstage = 0
     L.rdone = false
