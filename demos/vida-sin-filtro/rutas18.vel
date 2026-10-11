@@ -468,6 +468,7 @@ function rutas18_choice(handler: string, index: int, ctx: map) {
             return finish(w.name, "Seguiste atendiéndolo. Cada mensaje te da más miedo.", "b")
         }
         "x8_ev" => return rutas18_event_choice(index, ctx)
+        "x8_found" => return resolve_work_found(index, ctx)
         _ => return null
     }
 }
@@ -478,6 +479,98 @@ function list_filter_out(lst: list, id: int) {
         if x.id != id { list_push(keep, x) }
     }
     return keep
+}
+
+// ---------------------------------------------------------------- tu pareja y tu trabajo
+
+// Lo que tu pareja sabe de tu trabajo +18 (p.work): nada (null), lo acepta
+// ("ok"), le prometiste dejarlo ("promise") o lo sabe y no lo soporta
+// ("against"). Mientras no lo sepa, cada cliente o escena puede delatarte.
+function partner_work_check(kind: string) {
+    let p = partner()
+    if p == null || !p.alive || p.open == true || velo_loyal(p) { return "" }
+    let w = p["work"]
+    if w == "ok" { return "" }
+    let name = p.first
+    if w == "promise" {
+        if !chance(15) { return "" }
+        breakup()
+        L.happy -= 12
+        return " " + name + " descubrió que no lo dejaste. Esta vez no hubo discusión: se fue."
+    }
+    if w == "against" {
+        p.bond = clamp100(p.bond - 4)
+        if p.bond >= 20 { return "" }
+        breakup()
+        L.happy -= 8
+        return " " + name + " ya no pudo más con tu trabajo y se fue."
+    }
+    let odds = 5
+    if kind == "porn" { odds = 8 + L.fame / 5 }
+    if p.livein == true || L.married { odds += 4 }
+    if chance(odds) && L.work_found_id == null {
+        L.work_found_id = p.id
+        L.work_found_kind = kind
+    }
+    return ""
+}
+
+function maybe_work_found_event() {
+    if map_get(L, "work_found_id", null) == null { return false }
+    let p = find_person(L.work_found_id)
+    let kind = L.work_found_kind
+    L.work_found_id = null
+    if p == null || !p.alive || p.id != L.partner_id || p["work"] != null { return false }
+    let ctx = {"person": p}
+    let text = "{x} encontró mensajes de un cliente en tu celular. Ya sabe a qué te dedicas y te espera en la cocina, sin decir nada."
+    if kind == "porn" { text = "A {x} le mandaron un video tuyo. Ya sabe a qué te dedicas y te espera en la cocina, sin decir nada." }
+    let leave = "Terminar con {x}"
+    if L.married { leave = "Pedir el divorcio" }
+    open_choice("SE ENTERÓ", fmt(text, ctx), ["Contarle todo y pedirle que lo acepte", "Prometer dejarlo", fmt(leave, ctx)], ["", "", ""], "x8_found", ctx)
+    return true
+}
+
+// Qué tan fácil acepta tu trabajo: el cariño ayuda; su fe y los celos pesan.
+function work_accept_odds(p: map) {
+    let odds = 20 + p.bond / 3 - disapproval(p, "adult") / 2
+    let st = npc_style(p)
+    if st == "libre" { odds += 25 }
+    if st == "celoso" { odds -= 25 }
+    if p.tags != null && list_contains(p.tags, "trios") { odds += 10 }
+    return clamp(odds, 5, 90)
+}
+
+function resolve_work_found(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    let name = p.first
+    if index == 0 {
+        if chance(work_accept_odds(p)) {
+            p.work = "ok"
+            bond_gain(p, -5)
+            add_hito(p, "Aceptó tu trabajo")
+            return finish(name, "Le contaste todo: el dinero, las reglas, por qué lo haces. Tardó días en procesarlo, pero volvió: «Es tu trabajo. Solo cuídate y no me mientas más».", "g")
+        }
+        p.work = "against"
+        bond_gain(p, -25)
+        L.happy -= 12
+        if p.bond < 25 {
+            breakup()
+            return finish(name, "Le contaste todo. Te escuchó hasta el final y luego hizo una maleta: «No puedo con esto».", "b")
+        }
+        return finish(name, "Le contaste todo. No lo acepta, pero tampoco se fue. Ahora duermen dándose la espalda.", "b")
+    }
+    if index == 1 {
+        p.work = "promise"
+        bond_gain(p, -10)
+        L.happy -= 5
+        return finish(name, "Le prometiste dejarlo. Te abrazó sin decir nada. Si vuelve a enterarse, no habrá otra oportunidad.", "n")
+    }
+    let was_married = L.married
+    breakup()
+    L.happy -= 10
+    if was_married { return finish(name, "Le pediste el divorcio antes de que te lo pidiera a ti. Nadie gritó.", "b") }
+    return finish(name, "Terminaste antes de que te terminaran. Tu trabajo no se negocia.", "b")
 }
 
 // ---------------------------------------------------------------- mes a mes

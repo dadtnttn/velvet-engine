@@ -477,7 +477,7 @@ function do_kid_act(action: string, p: map) {
     if action == "heir" {
         L.heir_id = p.id
         add_hito(p, "L" + oa(p.gender) + " nombraste tu " + by_gender(p.gender, "heredero", "heredera"))
-        toast("TESTAMENTO", name + by_gender(p.gender, " es tu heredero", " es tu heredera") + " universal.")
+        if p.gender == "f" { toast("TESTAMENTO", name + " es tu heredera universal.") } else { toast("TESTAMENTO", name + " es tu heredero universal.") }
         return finish("Testamento", "Firmaste tu testamento: " + name + " lo heredará todo. Su parte dependerá de cómo te trate.", "n")
     }
     if action == "unheir" {
@@ -657,7 +657,11 @@ function old_age_year() {
         } else {
             L.care = "asilo"
             L.happy -= 15
-            log_add("Nadie pudo cuidarte. Terminaste en un asilo público. Tus hijos casi no te visitan.", "b")
+            if len(kids_alive()) > 0 {
+                log_add("Nadie pudo cuidarte. Terminaste en un asilo público. Tus hijos casi no te visitan.", "b")
+            } else {
+                log_add("Nadie pudo cuidarte. Terminaste en un asilo público. Los domingos de visita, nadie pregunta por ti.", "b")
+            }
         }
     }
     if L.care == "kid" { L.health += 2 }

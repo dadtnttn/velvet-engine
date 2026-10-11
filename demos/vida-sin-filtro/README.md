@@ -20,16 +20,16 @@ Controles:
 | Tecla / ratón | Acción |
 |---|---|
 | Ratón | Todo es clicable; los menús reaccionan al pasar el cursor |
-| Espacio o Enter | Avanzar un mes |
+| Espacio o Enter | Avanzar un mes (de bebé, hasta los 6 años, un año entero) |
 | Y | Avanzar hasta tu próximo cumpleaños (se detiene si hay una decisión) |
 | U o «+5 AÑOS» | Avanzar 5 años, uno por frame con barra de progreso (se detiene si hay una decisión; Esc o «Parar» lo corta) |
 | M | Abrir o guardar el móvil (desde los 12 años) |
 | 1 – 9, flechas, letras, Espacio | Jugar los minijuegos |
 | 1 – 5 | Elegir una opción en un evento |
 | Enter / Espacio / Esc | Cerrar un mensaje |
-| Esc | Volver o cerrar un menú |
+| Esc | Volver o cerrar un menú; sin menús abiertos, abre los Ajustes |
 | Rueda del ratón | Desplazar la historia de tu vida |
-| Teclado (creador) | Escribir el nombre; Retroceso borra |
+| Teclado (creador) | Escribir el nombre (con acentos y en cualquier alfabeto); Retroceso borra |
 
 Las fuentes se cargan del sistema (`segoeui.ttf`, `segoeuib.ttf` e `impact.ttf`;
 si no están, Arial, Liberation Sans o DejaVu Sans), así que funciona sin
@@ -418,7 +418,10 @@ binarias en el juego.
     categoría, saltar al cine convencional, reality, huelga, retirarte) y
     **VelvetFans** (pago por ver, nivel VIP, fans generosos y obsesivos, equipo de
     chat, mostrar o no tu cara, servicio contra filtraciones, calendario, cambios
-    de reglas y cerrar la cuenta).
+    de reglas y cerrar la cuenta). Si tienes pareja y no sabe a qué te dedicas,
+    cada cliente o escena puede delatarte: le cuentas todo (lo acepta o no según
+    su cariño, su fe y sus celos), le prometes dejarlo (si te vuelve a descubrir,
+    se va) o terminas tú.
   - **Profeta: la Orden del Velo Rojo** (`velo.vel`, +18): a los 18 fundas un
     culto. Predicas, haces retiros, sermones (minijuego) y sesiones de
     adoctrinamiento; reclutas celebridades y millonarios, eliges hasta cinco
@@ -707,6 +710,30 @@ binarias en el juego.
 - **Efectos**: corte de pantalla al cumplir años, entradas animadas de menús y
   diálogos, números que flotan al cambiar una estadística, notificaciones de
   "¡RANGO ARRIBA!" y obituario con tu retrato.
+- **Viuda negra** (`viuda.vel`): cada persona tiene su patrimonio; al enviudar
+  heredas a tu esposo o esposa y cobras su seguro de vida, con despedida y
+  funeral. Y la ruta oscura: casarte con alguien rico y envenenarl@ poco a poco,
+  con sospechas de la familia, autopsia, detective y cárcel si te descubren.
+- **Consejos para empezar** (`consejos.vel`): después de «Cómo jugar», avisos
+  cortos que iluminan cada parte del juego la primera vez que sirve (tus barras,
+  Vínculos a los 4 años, Ocupación y el paso mes a mes a los 6, el móvil a los 12,
+  la Noche a los 18). Tocar lo iluminado lo abre. Se apagan o se vuelven a ver en
+  Ajustes → Juego.
+- **Ajustes** (`ajustes.vel`, Esc): idioma, colores (`tema.vel`: temas listos y
+  uno propio con tus colores favoritos para el acento, el resaltado y el fondo),
+  sonido (volumen general, efectos y música) y juego. Se guardan aparte de la
+  partida.
+- **Sonido** (`sonido.vel`, `assets/sounds/`): efectos para cada cosa (abrir,
+  elegir, dinero, amor, hitos, cumpleaños, muerte...) con un poco de variación de
+  tono para que no cansen, y música de fondo según la etapa (portada, infancia,
+  vida, noche y muerte).
+- **15 idiomas**: inglés (predeterminado), español, portugués de Brasil, chino
+  simplificado y tradicional, hindi, ruso, alemán, tailandés, italiano, japonés,
+  hebreo, francés, coreano y polaco. El juego está escrito en español y el motor
+  lo traduce al dibujar con los catálogos de `assets/i18n/`: las frases que el
+  juego arma por piezas se traducen pieza por pieza, el género del jugador y de
+  cada persona elige la forma correcta, el hebreo va de derecha a izquierda y el
+  título y los minijuegos de palabras cambian con el idioma (`i18n_data.vel`).
 
 ## Archivos
 
@@ -763,6 +790,12 @@ binarias en el juego.
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `save.vel` | Autoguardado, «Continuar» y respuestas del almacenamiento del runtime |
+| `viuda.vel` | Patrimonio, viudez, seguro de vida, despedidas, funerales y la ruta de la viuda negra |
+| `ajustes.vel` | Ajustes: idioma, colores, sonido y juego (se guardan aparte de la partida) |
+| `tema.vel` | Temas de color y el tema propio |
+| `sonido.vel` | Efectos de sonido y música |
+| `consejos.vel` | Consejos para empezar: cuándo sale cada uno, el foco sobre el botón y su tarjeta |
+| `i18n_data.vel` | Título y palabras de los minijuegos en cada idioma (generado) |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
 | `ui.vel` | Pantallas, menús, diálogos, notificaciones y efectos |
 
@@ -795,5 +828,3 @@ miden con las métricas de fuente que entrega el host en `app_fonts`.
 ## Limitaciones actuales
 
 - Un solo espacio de guardado automático (sin partidas múltiples).
-- Sin sonido: el runtime VS3 aún no tiene audio.
-- El teclado no escribe acentos en el nombre (los nombres al azar sí los llevan).

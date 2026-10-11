@@ -177,7 +177,11 @@ function worst_cause() {
             best = d.die
         }
     }
-    if best == "" { return "problemas de salud" }
+    if best == "" {
+        // Sin una enfermedad que nombrar, a cierta edad es la vejez.
+        if L.age >= 70 { return pick(OLD_AGE_CAUSES) }
+        return "problemas de salud"
+    }
     return best
 }
 

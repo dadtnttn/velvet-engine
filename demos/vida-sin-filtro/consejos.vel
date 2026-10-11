@@ -1,0 +1,148 @@
+// @edition 3
+// Consejos para quien empieza (después de «Cómo jugar»): cada uno sale una
+// sola vez, en el momento en que sirve, y señala el botón del que habla. Lo
+// visto se guarda con los ajustes (vale para todas las vidas) y en Ajustes se
+// apagan o se vuelven a ver.
+
+// x, y, w, h: lo que se ilumina. act: lo que pasa al tocarlo (vacío: nada).
+const TIPS = [
+    {"id": "stats", "min": 2, "x": 884, "y": 16, "w": 380, "h": 196, "act": "",
+     "t": "TUS BARRAS", "b": "Felicidad, salud, inteligencia y apariencia. Toca una barra para ver qué la sube y qué la baja."},
+    {"id": "bonds", "min": 4, "x": 16, "y": 634, "w": 210, "h": 64, "act": "tab:rel", "slot": 1,
+     "t": "TU GENTE", "b": "En VÍNCULOS hablas con tu familia y tus amigos. A quien no cuidas, se aleja."},
+    {"id": "month", "min": 6, "x": 912, "y": 600, "w": 340, "h": 112, "act": "",
+     "t": "MES A MES", "b": "Desde ahora la estrella avanza un mes. +1 AÑO (Y) vive el año completo y +5 AÑOS (U) salta varios."},
+    {"id": "job", "min": 6, "x": 16, "y": 634, "w": 210, "h": 64, "act": "tab:job", "slot": 0,
+     "t": "OCUPACIÓN", "b": "Aquí estudias y, más adelante, trabajas. Lo que aprendas hoy te abre carreras mañana."},
+    {"id": "acts", "min": 8, "x": 16, "y": 634, "w": 210, "h": 64, "act": "tab:act", "slot": 2,
+     "t": "ACTIVIDADES", "b": "Deporte, arte, salud, viajes y más. Cada mes puedes hacer algo por ti."},
+    {"id": "phone", "min": 12, "x": 314, "y": 142, "w": 74, "h": 132, "act": "ph:open",
+     "t": "TU CELULAR", "b": "Mensajes, redes, citas, banco y noticias. La gente te escribe: contesta (tecla M)."},
+    {"id": "night", "min": 18, "x": 16, "y": 634, "w": 210, "h": 64, "act": "tab:night", "slot": 3,
+     "t": "NOCHE +18", "b": "Fiestas, citas y encuentros de adultos. Diviértete: todo tiene consecuencias."}
+]
+
+// Las pestañas de abajo van en fila (ver draw_bottom): la casilla da la x.
+function tip_box(t: map) {
+    let x = t.x
+    if t["slot"] != null { x = 16 + t.slot * 222 }
+    return {"x": x, "y": t.y, "w": t.w, "h": t.h}
+}
+
+function tip_seen(id: string) {
+    let seen = CFG["tips_seen"]
+    return seen != null && list_contains(seen, id)
+}
+
+// ¿Toca mostrar un consejo? Solo con la pantalla en calma: sin ventanas, sin
+// año corriendo y sin la animación del cumpleaños.
+function tip_check() {
+    if G.tip != null || CFG["tips"] == false || CFG.loaded != true { return null }
+    if G.mode != "game" || !L.alive || G.modal != null || G.mg != null || G.dlg != null || G.roul != null { return null }
+    if G.yr != null || G.skip != null || G.skip_left != null || G.ph_on == true || G.cfg_on == true { return null }
+    if G.t - G.screen_t0 < 1.0 || G.t - G.cut_t0 < 1.4 { return null }
+    for t in TIPS {
+        if L.age >= t.min && !tip_seen(t.id) && tip_ready(t.id) {
+            G.tip = t
+            G.tip_t0 = G.t
+            G.dirty = true
+            sfx("open")
+            return null
+        }
+    }
+    return null
+}
+
+function tip_ready(id: string) {
+    if id == "phone" { return phone_block() == "" }
+    return true
+}
+
+function tip_close() {
+    let t = G.tip
+    G.tip = null
+    if t == null { return null }
+    if CFG["tips_seen"] == null { CFG["tips_seen"] = [] }
+    if !list_contains(CFG.tips_seen, t.id) { list_push(CFG.tips_seen, t.id) }
+    cfg_save()
+    G.dirty = true
+    return t
+}
+
+// Con un consejo en pantalla, todo clic o tecla es para él.
+function tip_action(action: string) {
+    if action == "tip:off" {
+        tip_close()
+        CFG["tips"] = false
+        cfg_save()
+        sfx("back")
+        return null
+    }
+    let t = tip_close()
+    sfx("tick")
+    // Tocar lo señalado lo abre de una vez.
+    if action == "tip:go" && t != null && t.act != "" { return handle_action(t.act) }
+    return null
+}
+
+function tip_keys(input: map) {
+    if pressed(input, "Enter") || pressed(input, "Space") || pressed(input, "Escape") { tip_action("tip:ok") }
+    return null
+}
+
+function draw_tip() {
+    let t = G.tip
+    if t == null { return null }
+    let b = tip_box(t)
+    let e = ease(prog(G.tip_t0, 0.3))
+    // Todo se oscurece menos lo que el consejo señala.
+    let dim = rgba(0, 0, 0, int(165.0 * e))
+    arect(0, 0, W, b.y, dim)
+    arect(0, b.y + b.h, W, H - b.y - b.h, dim)
+    arect(0, b.y, b.x, b.h, dim)
+    arect(b.x + b.w, b.y, W - b.x - b.w, b.h, dim)
+    push({"op": "alpha_rect", "x": 0, "y": 0, "w": W, "h": H, "color": 0, "action": "tip:ok"})
+    // Un marco que late alrededor.
+    let pad = 6 + int(4.0 * (0.5 + 0.5 * sin(G.t * 5.0)))
+    let fw = b.w + pad * 2
+    let fh = b.h + pad * 2
+    svg(b.x - pad, b.y - pad, fw, fh, "<svg xmlns='http://www.w3.org/2000/svg' width='" + str(fw) + "' height='" + str(fh) + "'><rect x='3' y='3' width='" + str(fw - 6) + "' height='" + str(fh - 6) + "' rx='10' fill='none' stroke='" + HEX_YELLOW + "' stroke-width='5' stroke-dasharray='18 10'/></svg>")
+    if t.act != "" { hot(b.x, b.y, b.w, b.h, "tip:go") }
+
+    // La tarjeta: arriba de lo señalado si está en la mitad de abajo.
+    let w = 460
+    let fs = 17
+    let lh = 25
+    let lines = wrap_f(t.b, w - 64, fs, "ui")
+    let h = 92 + len(lines) * lh + 64
+    let x = clamp(b.x + b.w / 2 - w / 2, 16, W - 16 - w)
+    let y = b.y + b.h + 26
+    let above = b.y + b.h / 2 > H / 2
+    if above { y = b.y - h - 26 }
+    y = clamp(y, 12, H - 12 - h)
+    // Flecha de la tarjeta hacia lo señalado.
+    let ax = clamp(b.x + b.w / 2, x + 40, x + w - 40)
+    let tri = ""
+    if above {
+        tri = "<polygon points='4,0 40,0 22,24' fill='" + HEX_WHITE + "' stroke='" + HEX_INK + "' stroke-width='3'/>"
+        svg(ax - 22, y + h - 2, 44, 28, "<svg xmlns='http://www.w3.org/2000/svg' width='44' height='28'>" + tri + "</svg>")
+    } else {
+        tri = "<polygon points='22,2 40,26 4,26' fill='" + HEX_WHITE + "' stroke='" + HEX_INK + "' stroke-width='3'/>"
+        svg(ax - 22, y - 26, 44, 28, "<svg xmlns='http://www.w3.org/2000/svg' width='44' height='28'>" + tri + "</svg>")
+    }
+    fade_push(e)
+    move_push(0, (1.0 - e) * 24.0)
+    svg(x, y, w + 10, h + 10, slant_doc(w, h, 18, HEX_INK, HEX_WHITE, 4, HEX_RED, 8))
+    tag(x + 26, y + 18, 170, "GUÍA RÁPIDA", HEX_YELLOW, C_INK)
+    otextw(x + 30, y + 74, t.t, 28, C_WHITE, "impact", false, w - 70)
+    let ty = y + 106
+    for line in lines {
+        text_raw(x + 32, ty, line, fs, C_WHITE, "ui")
+        ty += lh
+    }
+    small_button(x + 30, y + h - 56, 190, 40, "ENTENDIDO", "tip:ok")
+    small_button(x + w - 226, y + h - 56, 196, 40, "NO MÁS CONSEJOS", "tip:off")
+    move_pop()
+    fade_pop()
+    return null
+}

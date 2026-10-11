@@ -113,7 +113,8 @@ function draw_world(m: map) {
     let lx = MAP_X + 6
     let ly = MAP_Y + MAP_DH - 18
     let legend = [["#e3141b", "Tu país"], ["#ffd21f", "Visitado"], ["#ff9a00", "En guerra"], ["#b5651d", "Conflicto"], ["#9b3cf0", "Conquistado"]]
-    if leader_now() { list_push(legend, ["#ff5a00", "Contra ti"]) }
+    // Los enemigos de tu país se pintan aparte (map_fill_for), gobiernes o no.
+    if at_war(here_id()) { list_push(legend, ["#ff5a00", "Contra ti"]) }
     // El ancho sale de cada palabra (en otros idiomas miden distinto).
     let lw = 12
     for pair in legend { lw += 34 + measure(pair[1], 11, "bold") }
