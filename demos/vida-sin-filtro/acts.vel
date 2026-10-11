@@ -141,7 +141,7 @@ const ACTIVITIES = [
         {"w": 50, "special": "hookup", "happy": 12}
     ]},
     {"id": "weed", "tab": "night", "cat": "Vicios", "t": "Fumar marihuana", "s": "Relajarte · $50", "min": 18, "cost": 50,
-     "desc": "Risas, hambre y teorías sobre el universo.", "o": [
+     "desc": "Risas, hambre y teorías sobre el universo. Ojo con la ley de tu país: legal, tolerada o prohibida.", "o": [
         {"w": 80, "log": "Te reíste de un meme durante 40 minutos.", "happy": 6, "drugs": 5, "smarts": -1},
         {"w": 20, "log": "Te dio una paranoia terrible y no saliste de tu cuarto.", "happy": -5, "drugs": 4}
     ]},
@@ -476,6 +476,7 @@ function do_act(id: string) {
         return null
     }
     L.money -= price
+    if id == "weed" && weed_risk(12) { return null }
     let o = pick_outcome(a.o)
     if a.cat == "Crimen" {
         // Con la policía tras de ti, es más fácil que te atrapen.
