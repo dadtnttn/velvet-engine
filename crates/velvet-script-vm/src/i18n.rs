@@ -206,14 +206,15 @@ impl Catalog {
             ..Default::default()
         };
         let mut entries: Vec<(String, String)> = entries.into_iter().collect();
-        // " {0} se fue." is glued after another sentence: the line it shows
-        // up in is looked up trimmed, so the trimmed template must exist too.
+        // " {0} se fue." or " Tienes el título." are glued after another
+        // sentence: pieces of a line are looked up trimmed, so the trimmed
+        // entry must exist too (unless the catalog already has its own).
+        let known: HashSet<&str> = entries.iter().map(|(src, _)| src.as_str()).collect();
         let trimmed: Vec<(String, String)> = entries
             .iter()
             .filter(|(src, dst)| {
-                src.trim().len() != src.len()
-                    && parse_template(src.trim()).is_some()
-                    && !dst.is_empty()
+                let t = src.trim();
+                t.len() != src.len() && !t.is_empty() && !dst.is_empty() && !known.contains(t)
             })
             .map(|(src, dst)| (src.trim().to_owned(), dst.trim().to_owned()))
             .collect();
@@ -320,9 +321,9 @@ struct Translator {
 
 const CACHE_LIMIT: usize = 60_000;
 /// Nested lookups allowed per line (a normal line needs a handful).
-const LOOKUP_BUDGET: usize = 400;
-/// Matching templates tried per piece, heaviest first.
-const MAX_CANDIDATES: usize = 12;
+const LOOKUP_BUDGET: usize = 1500;
+/// Template readings tried per piece, heaviest template first.
+const MAX_CANDIDATES: usize = 24;
 
 /// One to three words, each starting with a capital letter: a proper name
 /// ("Hanna", "Hanna Krawczyk") that no catalog is expected to translate.
@@ -431,66 +432,73 @@ fn is_upper_text(s: &str) -> bool {
 }
 
 /// Match `s` against `parts`; returns the hole values on success.
-fn match_parts(parts: &[Part], s: &str) -> Option<Vec<(usize, String)>> {
-    let mut holes = Vec::new();
-    if match_from(parts, s, &mut holes, 0) {
-        Some(holes)
-    } else {
-        None
-    }
+/// Ways to read `s` with a template, shortest holes first: "Requisitos:
+/// {1}.{2}" over "Intel. 25 · Atractivo 50." can cut at either full stop, and
+/// only the caller knows which split leaves holes that translate.
+fn match_parts(parts: &[Part], s: &str) -> Vec<Vec<(usize, String)>> {
+    let mut out = Vec::new();
+    match_from(parts, s, &mut Vec::new(), 0, &mut out);
+    out
 }
 
-fn match_from(parts: &[Part], s: &str, holes: &mut Vec<(usize, String)>, depth: usize) -> bool {
-    if depth > 64 {
-        return false;
+/// Splits kept per template.
+const MAX_SPLITS: usize = 6;
+
+type Holes = Vec<(usize, String)>;
+
+fn match_from(parts: &[Part], s: &str, holes: &mut Holes, depth: usize, out: &mut Vec<Holes>) {
+    if depth > 64 || out.len() >= MAX_SPLITS {
+        return;
     }
     match parts.first() {
-        None => s.is_empty(),
-        Some(Part::Lit(l)) => match s.strip_prefix(l.as_str()) {
-            Some(rest) => match_from(&parts[1..], rest, holes, depth + 1),
-            None => false,
-        },
-        Some(Part::Hole(i)) => {
-            match parts.get(1) {
-                // Last hole takes the rest.
-                None => {
-                    holes.push((*i, s.to_owned()));
-                    true
-                }
-                Some(Part::Lit(next)) => {
-                    // Try each occurrence of the next literal (shortest hole first).
-                    let mut start = 0;
-                    while let Some(pos) = s[start..].find(next.as_str()) {
-                        let at = start + pos;
-                        let mark = holes.len();
-                        holes.push((*i, s[..at].to_owned()));
-                        if match_from(&parts[1..], &s[at..], holes, depth + 1) {
-                            return true;
-                        }
-                        holes.truncate(mark);
-                        // Advance by one character.
-                        let step = s[at..].chars().next().map_or(1, char::len_utf8);
-                        start = at + step;
-                        if start > s.len() {
-                            break;
-                        }
-                    }
-                    false
-                }
-                // Two holes in a row: split at every char boundary.
-                Some(Part::Hole(_)) => {
-                    for (at, _) in s.char_indices().chain(std::iter::once((s.len(), ' '))) {
-                        let mark = holes.len();
-                        holes.push((*i, s[..at].to_owned()));
-                        if match_from(&parts[1..], &s[at..], holes, depth + 1) {
-                            return true;
-                        }
-                        holes.truncate(mark);
-                    }
-                    false
-                }
+        None => {
+            if s.is_empty() {
+                out.push(holes.clone());
             }
         }
+        Some(Part::Lit(l)) => {
+            if let Some(rest) = s.strip_prefix(l.as_str()) {
+                match_from(&parts[1..], rest, holes, depth + 1, out);
+            }
+        }
+        Some(Part::Hole(i)) => match parts.get(1) {
+            // Last hole takes the rest.
+            None => {
+                holes.push((*i, s.to_owned()));
+                out.push(holes.clone());
+                holes.pop();
+            }
+            Some(Part::Lit(next)) => {
+                // Try each occurrence of the next literal (shortest hole first).
+                let mut start = 0;
+                while let Some(pos) = s[start..].find(next.as_str()) {
+                    let at = start + pos;
+                    holes.push((*i, s[..at].to_owned()));
+                    match_from(&parts[1..], &s[at..], holes, depth + 1, out);
+                    holes.pop();
+                    if out.len() >= MAX_SPLITS {
+                        return;
+                    }
+                    // Advance by one character.
+                    let step = s[at..].chars().next().map_or(1, char::len_utf8);
+                    start = at + step;
+                    if start > s.len() {
+                        break;
+                    }
+                }
+            }
+            // Two holes in a row: split at every char boundary.
+            Some(Part::Hole(_)) => {
+                for (at, _) in s.char_indices().chain(std::iter::once((s.len(), ' '))) {
+                    holes.push((*i, s[..at].to_owned()));
+                    match_from(&parts[1..], &s[at..], holes, depth + 1, out);
+                    holes.pop();
+                    if out.len() >= MAX_SPLITS {
+                        return;
+                    }
+                }
+            }
+        },
     }
 }
 
@@ -715,7 +723,7 @@ impl Translator {
     /// letters neither translates nor looks like a name, the line is left as
     /// it is (no mixed languages).
     fn split_list(&self, s: &str, depth: usize) -> Option<String> {
-        'seps: for sep in [" · ", ": ", ", ", " / "] {
+        'seps: for sep in [" · ", " › ", ": ", ", ", " / "] {
             if !s.contains(sep) {
                 continue;
             }
@@ -755,7 +763,7 @@ impl Translator {
             }
             let t = &self.cat.templates[idx];
             let parts = if upper { &t.upper } else { &t.parts };
-            if let Some(h) = match_parts(parts, s) {
+            for h in match_parts(parts, s) {
                 found.push((idx, h));
             }
         };
@@ -832,7 +840,8 @@ impl Translator {
                 }
                 return false;
             }
-            if self.lookup(v.trim(), depth + 1).is_some() {
+            // As it comes: " Tienes el título." may only exist with its space.
+            if self.lookup(v, depth + 1).is_some() {
                 continue;
             }
             let long = v.split_whitespace().count() > 3;
@@ -1046,6 +1055,7 @@ mod tests {
             t.tr("Gustos: Fan de los tríos, Amante del BDSM"),
             "Into: Threesome fan, BDSM lover"
         );
+        assert_eq!(t.tr("Madre › Gustos"), "Mother › Into");
         // A name before the colon stays as it is.
         assert_eq!(
             t.tr("Filip: ¿Salimos este finde?"),
@@ -1157,6 +1167,28 @@ mod tests {
         let start = std::time::Instant::now();
         let _ = t.tr(&line);
         assert!(start.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[test]
+    fn a_full_stop_inside_a_hole_is_not_the_split() {
+        let c = cat(&[
+            (
+                "Requisitos: {0}.{1} Rangos: {2}.",
+                "Requirements: {0}.{1} Ranks: {2}.",
+            ),
+            ("Intel. {0}", "Int. {0}"),
+            ("Atractivo {0}", "Looks {0}"),
+            (" Tienes el título.", " You have the degree."),
+            ("Extra", "Extra"),
+            ("Leyenda", "Legend"),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(
+            t.tr(
+                "Requisitos: Intel. 25 · Atractivo 50. Tienes el título. Rangos: Extra › Leyenda."
+            ),
+            "Requirements: Int. 25 · Looks 50. You have the degree. Ranks: Extra › Legend."
+        );
     }
 
     #[test]
