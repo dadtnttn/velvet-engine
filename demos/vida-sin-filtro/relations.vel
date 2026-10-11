@@ -411,7 +411,7 @@ function legacy_person_items(p: map, cat: string) {
                 list_push(out, pitem(p, "ract:chat", "Platicar", "Ánimo: " + mood_name(p), "Una conversación libre. Lo que conviene decir depende de su ánimo (" + str_lower(mood_name(p)) + ") y de su forma de ser (" + str_lower(temper_name(p)) + ")."))
             }
             if tree_for(p) != "" {
-                list_push(out, pitem(p, "pact:dlg", "Conversación profunda", "Diálogo · " + STYLE_NAMES[npc_style(p)], "Una conversación con decisiones. Lo que diga depende de su forma de ser."))
+                list_push(out, pitem(p, "pact:dlg", "Conversación profunda", "Diálogo · " + style_name(npc_style(p), p), "Una conversación con decisiones. Lo que diga depende de su forma de ser."))
             } else {
                 list_push(out, pitem(p, "pact:talk", "Conversar", "Un poco más de cercanía", "Platicar de lo que sea."))
             }

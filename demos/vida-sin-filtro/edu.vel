@@ -94,6 +94,14 @@ const PARENT_STYLES = ["amoroso", "estricto", "relajado", "ausente", "toxico"]
 const STYLE_NAMES = {"amoroso": "Amoroso", "estricto": "Estricto", "relajado": "Relajado", "ausente": "Ausente", "toxico": "Tóxico",
                      "dulce": "Dulce", "celoso": "Celoso", "libre": "Espíritu libre", "intenso": "Intenso",
                      "rebelde": "Rebelde", "genio": "Genio", "flojo": "Flojo"}
+const STYLE_NAMES_F = {"amoroso": "Amorosa", "estricto": "Estricta", "relajado": "Relajada", "toxico": "Tóxica",
+                       "celoso": "Celosa", "intenso": "Intensa", "flojo": "Floja"}
+
+// Nombre de un estilo con la concordancia de quien lo tiene.
+function style_name(style: string, p: map) {
+    if p != null && p.gender == "f" && STYLE_NAMES_F[style] != null { return STYLE_NAMES_F[style] }
+    return STYLE_NAMES[style]
+}
 const FAMILY_KEYS = ["pobre", "media", "rica"]
 const FAMILY_NAMES = {"pobre": "Humilde", "media": "Clase media", "rica": "Adinerada"}
 

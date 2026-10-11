@@ -614,6 +614,113 @@ const DIALOGS = {
         "secret_money": {"say": "Le pasas un billete doblado con un guiño. «No le digas a tus papás.» Es su nuevo secreto favorito.", "fx": {"bond": 8, "money": -200}, "k": "g"},
         "teach": {"say": "Le enseñas a hacer algo que solo tú sabes. Se equivoca, se ríen y lo intentan otra vez.", "fx": {"bond": 7, "kind": 1}, "k": "g"},
         "tech": {"say": "Con una paciencia infinita, te enseña a mandar stickers. Ahora mandas stickers. A todos.", "fx": {"bond": 6, "happy": 4}, "k": "g"}
+    },
+
+    // Tíos y tías: la familia que te consiente (y que sabe los chismes).
+    "uncle": {
+        "n0": {
+            "say": {
+                "kid": "{x} te levanta en brazos como si siguieras pesando lo mismo. «¡Mira nada más cuánto creciste!»",
+                "teen": "«¿Y qué, ya tienes quién te pretenda?» {x} se ríe de su propio chiste. Cada reunión, el mismo chiste.",
+                "adult": "«¡Sobrin{a}!» {x} te sirve algo de tomar sin preguntar. «Siéntate y cuéntame todo.»",
+                "elder": "{x} ya camina con bastón, pero sigue contando los mismos chistes. «¿Te acuerdas cuando eras así de chiquit{a}?»"
+            },
+            "opts": [
+                {"t": "Pedirle que te cuente cómo eran tus papás de jóvenes", "go": "parents_young"},
+                {"t": "Pedirle tu domingo", "if": "kidme", "roll": 55, "ok": "allowance_ok", "fail": "allowance_no"},
+                {"t": "Pedirle consejo sobre tu futuro", "if": "notkid", "go": "advice"},
+                {"t": "Preguntarle por el pariente del que nadie habla", "if": "notkid", "roll": 40, "stat": "charm", "ok": "secret_ok", "fail": "secret_bad"},
+                {"t": "Invitarl{xlo} a comer", "if": "adultnojail", "go": "treat"},
+                {"t": "Preguntarle cómo está de salud", "if": "veryold", "go": "uncle_health"}
+            ]
+        },
+        "parents_young": {"say": "Te cuenta que tus papás se escapaban a los bailes por la ventana y que una vez los trajo de vuelta una patrulla. Nunca los volverás a ver igual.", "fx": {"bond": 6, "happy": 4}, "k": "g"},
+        "allowance_ok": {"say": "«Toma, pero no le digas a nadie.» Te deja un billete en la mano y te guiña un ojo.", "fx": {"bond": 3, "money": 100}, "k": "g"},
+        "allowance_no": {"say": "«¿Domingo? ¡Yo a tu edad ya trabajaba!» Te da una palmadita y un chicle.", "fx": {"bond": 1}, "k": "n"},
+        "advice": {"say": "«Haz lo que te guste, pero que deje dinero. Y nunca le prestes a la familia.» Lo dice mirando fijamente a otro tío.", "fx": {"bond": 5, "know": 1}, "k": "g"},
+        "secret_ok": {"say": "Baja la voz y te cuenta la historia del tío abuelo que salió por cigarros y apareció años después con otra familia en otra ciudad. Ahora entiendes muchas cosas.", "fx": {"bond": 6, "know": 1, "happy": 2}, "k": "g"},
+        "secret_bad": {"say": "«De eso no se habla en esta familia.» Se le borra la sonrisa y cambia el tema al clima.", "fx": {"bond": -4}, "k": "b"},
+        "treat": {"say": "Van a su restaurante favorito. A la segunda copa, {x} se pone sentimental: «Yo te cargué el día que naciste.»", "fx": {"bond": 8, "money": -400, "happy": 3}, "k": "g"},
+        "uncle_health": {"say": "«Los doctores dicen que me cuide. Yo digo que ya me cuidé bastante.» Se ríe, pero te aprieta la mano un rato largo.", "fx": {"bond": 6, "kind": 1}, "k": "n"}
+    },
+
+    // Primos: cómplices de las reuniones familiares.
+    "cousin": {
+        "n0": {
+            "say": {
+                "kid": "{x} ya tiene la pelota en la mano. «¿Jugamos? El que pierda cuenta en las escondidas.»",
+                "teen": "{x} te jala a un rincón de la fiesta familiar. «Sálvame de las preguntas de las tías.»",
+                "adult": "{x} te saluda desde la mesa de los primos, que ya no es la de los niños. «¿Qué ha sido de tu vida?»",
+                "elder": "{x} y tú son los últimos de la mesa de los primos. «¿Te acuerdas cuando éramos como veinte?»"
+            },
+            "opts": [
+                {"t": "Jugar como siempre", "if": "kidme", "go": "play"},
+                {"t": "Escaparse juntos de la reunión familiar", "if": "notkid", "go": "escape"},
+                {"t": "Recordar las vacaciones en casa de los abuelos", "if": "notkid", "go": "memories"},
+                {"t": "Contarle un secreto", "roll": 50, "stat": "kind", "ok": "secret_kept", "fail": "secret_out"},
+                {"t": "Proponerle un negocio juntos", "if": "adult", "roll": 35, "stat": "know", "ok": "biz_ok", "fail": "biz_bad"}
+            ]
+        },
+        "play": {"say": "Juegan a las escondidas hasta que oscurece. {x} hace trampa, pero igual te mueres de risa.", "fx": {"bond": 7, "happy": 5}, "k": "g"},
+        "escape": {"say": "Se escapan a la tienda «por hielo» y regresan dos horas después. Nadie lo notó... excepto la abuela.", "fx": {"bond": 7, "happy": 4}, "k": "g"},
+        "memories": {"say": "Se acuerdan de las noches en casa de los abuelos: todos los primos durmiendo en el piso y contando historias de miedo.", "fx": {"bond": 6, "happy": 4}, "k": "g"},
+        "secret_kept": {"say": "Te escucha sin juzgarte y jura no decir nada. Cumple: en la siguiente reunión ni lo menciona.", "fx": {"bond": 8, "happy": 3}, "k": "g"},
+        "secret_out": {"say": "Para el domingo toda la familia ya sabe tu secreto. {x} jura que «solo se lo contó a su mamá».", "fx": {"bond": -8, "happy": -4}, "k": "b"},
+        "biz_ok": {"say": "Arman un negocito de fin de semana. No los hace ricos, pero les deja para unas cervezas y muchas risas.", "fx": {"bond": 6, "money": 1500, "skill": 1}, "k": "g"},
+        "biz_bad": {"say": "El negocio quiebra en tres semanas y cada quien culpa al otro. Las comidas familiares se ponen tensas.", "fx": {"bond": -8, "money": -800}, "k": "b"}
+    },
+
+    // Sobrinos: ahora te toca ser quien consiente. El tono va con su edad.
+    "nephew": {
+        "n0": {
+            "say": {
+                "kid": "{x} corre a abrazarte. «¡Mi {tia} favorit{a}! ¿Me trajiste algo?»",
+                "teen": "{x} levanta la vista del celular. «Ah, hola.» Pero se quita un audífono para escucharte.",
+                "adult": "{x} te invita un café. «Ahora pago yo. Te lo debía desde hace años.»",
+                "elder": "{x} te invita un café. «Ahora pago yo. Te lo debía desde hace años.»"
+            },
+            "opts": [
+                {"t": "Llevarl{xlo} por un helado", "if": "smallkid", "go": "icecream"},
+                {"t": "Ayudarl{xlo} con la tarea", "if": "kidschool", "go": "homework"},
+                {"t": "Darle un consejo que sus papás no le darían", "if": "kidteen", "roll": 50, "stat": "charm", "ok": "cool_ok", "fail": "cool_bad"},
+                {"t": "Contarle las travesuras de sus papás", "go": "parent_stories"},
+                {"t": "Ayudarl{xlo} a conseguir su primer trabajo", "if": "youngadult", "go": "first_job"}
+            ]
+        },
+        "icecream": {"say": "Se mancha hasta las cejas de helado de chocolate. Te toca explicar en su casa por qué ya no quiere cenar.", "fx": {"bond": 8, "happy": 4, "money": -50}, "k": "g"},
+        "homework": {"say": "Le explicas las fracciones con pedazos de pizza. Ahora le encantan las fracciones. Y la pizza.", "fx": {"bond": 6, "know": 1}, "k": "g"},
+        "cool_ok": {"say": "Le dices que no tiene que tenerlo todo resuelto a su edad. Te mira como si por fin alguien l{xlo} entendiera.", "fx": {"bond": 9, "kind": 1}, "k": "g"},
+        "cool_bad": {"say": "Tu consejo suena exactamente a algo que dirían sus papás. {x} pone los ojos en blanco.", "fx": {"bond": -3}, "k": "n"},
+        "parent_stories": {"say": "Le cuentas lo que hacían sus papás a su edad. Ahora tiene material para burlarse de ellos en la cena.", "fx": {"bond": 7, "happy": 3}, "k": "g"},
+        "first_job": {"say": "Haces un par de llamadas y le consigues una entrevista. Llega puntual y bien peinad{xa}. Te sientes orgullos{a}.", "fx": {"bond": 8, "karma": 2}, "k": "g"}
+    },
+
+    // Colegas: aliados, competencia o las dos cosas.
+    "coworker": {
+        "n0": {
+            "say": {
+                "default": "{x} se acerca en la pausa. «¿Tienes cinco minutos?»",
+                "dulce": "{x} te trajo un café sin que se lo pidieras. «Lo tomas sin azúcar, ¿verdad?»",
+                "celoso": "«Vi que el jefe te felicitó.» {x} sonríe, pero no con los ojos.",
+                "libre": "«¿Nos escapamos a comer? Nadie va a notar que no estamos.»",
+                "intenso": "«Necesito hablar contigo. Es sobre el trabajo. Y sobre la vida.»"
+            },
+            "opts": [
+                {"t": "Quejarse juntos del jefe", "roll": 60, "ok": "rant_ok", "fail": "rant_bad"},
+                {"t": "Pedirle ayuda con un pendiente", "go": "help"},
+                {"t": "Proponerle un proyecto juntos", "need": "know", "rank": 2, "roll": 45, "stat": "skill", "ok": "proj_ok", "fail": "proj_bad"},
+                {"t": "Preguntarle cuánto gana", "roll": 35, "stat": "charm", "ok": "salary_ok", "fail": "salary_bad"},
+                {"t": "Invitarl{xlo} a unas cervezas después del trabajo", "if": "adultnojail", "go": "beers"}
+            ]
+        },
+        "rant_ok": {"say": "Imitan al jefe hasta llorar de risa. Nada une más que un enemigo en común.", "fx": {"bond": 6, "happy": 3}, "k": "g"},
+        "rant_bad": {"say": "Al día siguiente el jefe te mira raro. Alguien le fue con el chisme.", "fx": {"bond": -6, "boss": -10}, "k": "b"},
+        "help": {"say": "Te enseña un truco que te ahorra horas. «No le digas a nadie, es mi secreto.»", "fx": {"bond": 3, "perf": 4}, "k": "g"},
+        "proj_ok": {"say": "Presentan el proyecto juntos y sale redondo. En la junta, todos voltean a verlos.", "fx": {"bond": 6, "perf": 8, "boss": 5}, "k": "g"},
+        "proj_bad": {"say": "El proyecto se cae a medio camino y cada quien le echa la culpa al otro frente al jefe.", "fx": {"bond": -4, "perf": -3}, "k": "b"},
+        "salary_ok": {"say": "Te lo dice en voz baja. Gana más que tú haciendo lo mismo. Ahora sabes cuánto pedir en tu próxima evaluación.", "fx": {"bond": 4, "know": 1}, "k": "n"},
+        "salary_bad": {"say": "«Eso no se pregunta.» Se pone incómod{xa} y vuelve a su lugar.", "fx": {"bond": -4}, "k": "b"},
+        "beers": {"say": "Una cerveza se vuelve tres y terminan contándose la vida. El lunes se saludan distinto.", "fx": {"bond": 7, "happy": 4, "money": -200}, "k": "g"}
     }
 }
 
@@ -635,7 +742,7 @@ function age_band(a: int) {
 
 // Quién marca el tono: con tus hijos y nietos, su edad; con los demás, la tuya.
 function dlg_band(p: map) {
-    if G.dlg != null && (G.dlg.tree == "child" || G.dlg.tree == "grandkid") { return age_band(p.age) }
+    if G.dlg != null && (G.dlg.tree == "child" || G.dlg.tree == "grandkid" || G.dlg.tree == "nephew") { return age_band(p.age) }
     return age_band(L.age)
 }
 
@@ -657,6 +764,19 @@ function tree_for(p: map) {
         if L.age >= 4 { return "elder" }
         return ""
     }
+    if r == "tio" {
+        if L.age >= 4 { return "uncle" }
+        return ""
+    }
+    if r == "primo" {
+        // Un primo chiquito no platica como adulto: solo entre niños o desde los 13.
+        if L.age >= 4 && p.age >= 4 && (p.age >= 13 || L.age < 13) { return "cousin" }
+        return ""
+    }
+    if r == "sobrino" {
+        if L.age >= 13 && p.age >= 4 { return "nephew" }
+        return ""
+    }
     if L.age < 18 || p.age < 18 {
         if r == "pareja" && L.age >= 13 && p.age >= 13 { return "teen_partner" }
         if r == "amigo" || r == "hermano" { return "friend" }
@@ -666,6 +786,7 @@ function tree_for(p: map) {
     if r == "amigo" { return "friend" }
     if r == "hermano" { return "sibling" }
     if r == "suegro" { return "inlaw" }
+    if r == "colega" { return "coworker" }
     if r == "ex" { return "ex" }
     return ""
 }
@@ -684,6 +805,7 @@ function dlg_cond(cond: string, p: map) {
     if cond == "notrecorded" { return p.recorded != true && L.age >= 13 }
     if cond == "smallkid" { return p.age < 10 }
     if cond == "adultkid" { return p.age >= 18 }
+    if cond == "youngadult" { return p.age >= 18 && p.age < 30 && L.age >= 18 }
     if cond == "parentsold" {
         for q in parents_alive() {
             if q.age >= 60 { return true }
@@ -790,7 +912,7 @@ function dlg_show(id: string, prefix: string) {
         list_push(tags, tg)
     }
     G.dlg.opts = opts
-    let title = str_upper(p.first) + " · " + str_upper(STYLE_NAMES[npc_style(p)])
+    let title = str_upper(p.first) + " · " + str_upper(style_name(npc_style(p), p))
     open_choice(title, prefix + dlg_say(node, p), labels, locks, "dialog", {"person": p})
     G.modal.tags = tags
     return null
