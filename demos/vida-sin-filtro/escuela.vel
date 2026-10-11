@@ -301,7 +301,7 @@ const CAMPUS_EVENTS = [
         "choices": [
             {"t": "Invitarl{xa} a un café", "o": [
                 {"w": 70, "log": "Dos horas de café que se sintieron como diez minutos.", "happy": 6, "charm": 2, "bond": 10},
-                {"w": 30, "log": "Tenía novi{xa}. Al menos ganaste un amigo de estudio.", "kind": 2}
+                {"w": 30, "log": "Ya tenía pareja. Al menos ganaste un amigo de estudio.", "kind": 2}
             ]},
             {"t": "Seguir estudiando", "o": [{"w": 100, "log": "Volviste a tus apuntes. El promedio es primero.", "gpa": 1}]}
         ]

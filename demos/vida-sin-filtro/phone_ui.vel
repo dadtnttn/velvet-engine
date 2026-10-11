@@ -436,7 +436,7 @@ function draw_phone_side(focus: any, e: float) {
     let title = "MÓVIL"
     if G.ph_app != "" { title = str_upper(app_def(G.ph_app).n) }
     svg(600 + (1.0 - e) * 300, 4, 640, 136, tilt_title_doc(title, 640, 136, 70, HEX_WHITE, HEX_INK))
-    small_button(1110, 26, 140, 42, "GUARDAR", "ph:close")
+    small_button(1110, 26, 140, 42, "CERRAR", "ph:close")
     text(1118, 86, "ESC · M", 12, C_WHITE, "bold")
     if G.ph_app == "" { return draw_phone_notifs() }
     if app_block(G.ph_app) != "" { return null }

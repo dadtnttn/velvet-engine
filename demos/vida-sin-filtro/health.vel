@@ -253,9 +253,36 @@ function catch_its_random() {
 
 // ---------------------------------------------------------------- el mundo se mueve
 
+// Parientes de sangre (y crianza): nunca pueden ser pareja ni encuentro.
+function blood_rel(p: any) {
+    if p == null { return false }
+    let r = p.rel
+    return r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto" || r == "abuelo" || r == "tio" || r == "primo" || r == "sobrino"
+}
+
 function is_family(p: map) {
     let r = p.rel
     return r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto" || r == "abuelo" || r == "tio" || r == "primo" || r == "sobrino" || r == "suegro" || r == "exsuegro"
+}
+
+// Probabilidad mensual (en diezmilésimas) de que tu pareja te engañe: casi nula
+// en una relación sana; crece con poco cariño, poca chispa, su forma de ser,
+// tu ausencia (prisión) o una relación abierta.
+function cheat_odds(p: map) {
+    if p.open == true { return 800 }
+    let v = 5
+    if p.bond < 70 { v += 30 }
+    if p.bond < 50 { v += 80 }
+    if p.bond < 30 { v += 150 }
+    let sp = spark_of(p)
+    if sp < 40 { v += 30 }
+    if sp < 25 { v += 80 }
+    let st = npc_style(p)
+    if st == "libre" { v += 40 }
+    if st == "celoso" { v += 10 }
+    if L.jail > 0 { v += 250 }
+    if p.rel == "amante" { v += 80 }
+    return v
 }
 
 // Cada mes, las demás personas viven: tienen encuentros, se contagian, se curan,
@@ -266,14 +293,7 @@ function world_month() {
         let ills = npc_ills(p)
         let mine = p.id == L.partner_id || p.rel == "amante"
         if mine {
-            let odds = 1
-            let st = npc_style(p)
-            if st == "libre" { odds += 2 }
-            if st == "celoso" { odds += 1 }
-            if p.bond < 40 { odds += 3 }
-            if p.open == true { odds += 8 }
-            if L.jail > 0 { odds += 4 }
-            if chance(odds) && !velo_loyal(p) {
+            if rint(1, 10000) <= cheat_odds(p) && !velo_loyal(p) {
                 if p.flings == null { p.flings = 0 }
                 p.flings = p.flings + 1
                 if chance(18) { list_push(ills, ITS_POOL[weighted_choose(G.rng, ITS_WEIGHTS)]) }
@@ -281,11 +301,8 @@ function world_month() {
                     if chance(20) { log_add(p.first + " tuvo un encuentro con alguien más. Así es su acuerdo.", "x") }
                 } else {
                     p.cheated_you = true
-                    if chance(25) {
-                        log_add("Encontraste mensajes en el celular de " + p.first + ": te está engañando.", "b")
-                        p.bond = clamp100(p.bond - 20)
-                        L.happy -= 12
-                    }
+                    // Lo descubres el 25% de las veces: entonces decides tú (ver maybe_caught_event).
+                    if chance(25) && p.id == L.partner_id && L.caught_id == null { L.caught_id = p.id }
                 }
             }
         } else {

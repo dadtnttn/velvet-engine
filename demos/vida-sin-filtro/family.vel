@@ -105,7 +105,7 @@ const KID_EVENTS = [
         "text": "{x} te pide $10,000 prestados para salir de un apuro.",
         "choices": [
             {"t": "Prestárselos", "cost": 10000, "o": [{"w": 60, "log": "Te los devolvió a los seis meses, con un pastel de agradecimiento.", "bond": 10}, {"w": 40, "log": "Nunca te los devolvió. Pero sigue llamando en Navidad.", "money": -10000, "bond": 8}]},
-            {"t": "Regalárselos", "cost": 10000, "o": [{"w": 100, "log": "«No te los tengo que devolver?» Te ganaste un lugar especial en su corazón.", "money": -10000, "bond": 15, "parent": 2}]},
+            {"t": "Regalárselos", "cost": 10000, "o": [{"w": 100, "log": "«¿No te los tengo que devolver?» Te ganaste un lugar especial en su corazón.", "money": -10000, "bond": 15, "parent": 2}]},
             {"t": "Negarte", "o": [{"w": 100, "log": "Se las arregló sin ti. Lo recordará.", "bond": -10}]}
         ]
     },
@@ -186,7 +186,7 @@ const LEGACY_EVENTS = [
         ]
     },
     {
-        "id": "lg_kidfinds", "title": "Tu {hij} lo descubrió", "min": 35, "max": 70, "w": 4, "req": "pastadult,kidteen",
+        "id": "lg_kidfinds", "title": "Tu {hij} lo descubrió", "min": 35, "max": 70, "w": 4, "req": "pastadult,kid15to25",
         "text": "Tu {hij} {k} llega pálid{ka}: un compañero le mostró tus videos de cuando trabajabas en {pasado}.",
         "choices": [
             {"t": "Hablarlo con total honestidad", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Fue incómodo, pero {k} terminó entendiéndote. Hasta se rieron.", "special": "kid_bond_up"}]},
@@ -377,8 +377,13 @@ function kids_year() {
         }
         if p.age >= 24 && !p.wed && chance(8) {
             p.wed = true
-            log_add("¡" + p.first + " se casó!", "g")
-            add_hito(p, "Se casó")
+            // Su pareja existe aunque no la veas: si un día heredas su vida, sigue ahí.
+            let sg = by_gender(p.gender, "f", "m")
+            if chance(10) { sg = p.gender }
+            let sp = make_person(sg, "esposo", max(18, p.age + rint(-3, 3)))
+            p.spouse = {"first": sp.first, "last": sp.last, "gender": sg, "off": sp.age - p.age, "look": sp.look}
+            log_add("¡" + p.first + " se casó con " + sp.first + "!", "g")
+            add_hito(p, "Se casó con " + sp.first)
         }
         if p.age >= 24 && p.age <= 42 && chance(9) {
             let g = pick(["m", "f"])
@@ -559,7 +564,7 @@ function legacy_meets(tag: string) {
     if tag == "normaljob" { return L.job != null && !job_is_adult(L.job) }
     if tag == "kidadult" { return pick_kid(20, 60) != null }
     if tag == "kidschool" { return pick_kid(6, 17) != null }
-    if tag == "kidteen" { return pick_kid(15, 25) != null }
+    if tag == "kid15to25" { return pick_kid(15, 25) != null }
     if tag == "parentstar" { return L.parent_star != "" }
     if tag == "oldparent" { return L.age >= 25 && old_parent() != null }
     return false
@@ -589,7 +594,7 @@ function legacy_ctx(ev: map) {
         lo = 6
         hi = 17
     }
-    if str_contains(ev.req, "kidteen") {
+    if str_contains(ev.req, "kid15to25") {
         lo = 15
         hi = 25
     }
@@ -846,17 +851,33 @@ function continue_as_heir() {
     me.alive = false
     me.bond = kid.bond
     add_person(me)
-    let mate = null
+    // Tu otro padre o madre (de cualquier sexo), aunque se hayan divorciado, y
+    // la pareja actual de quien murió.
     for p in old.people {
-        if p.alive && p.id == old.partner_id && p.gender != old.gender { mate = p }
-    }
-    if mate != null {
-        let other = make_person(mate.gender, by_gender(mate.gender, "padre", "madre"), mate.age)
-        other.first = mate.first
-        other.last = mate.last
-        other.look = mate.look
+        if !p.alive { continue }
+        let is_mate = p.id == old.partner_id
+        let is_other = kid.other_parent != null && p.id == kid.other_parent
+        if !is_mate && !is_other { continue }
+        let other = make_person(p.gender, by_gender(p.gender, "padre", "madre"), p.age)
+        other.first = p.first
+        other.last = p.last
+        other.look = p.look
         other.bond = rint(50, 85)
+        if !is_other && kid.other_parent != null { other.bond = rint(30, 70) }
+        if !is_mate { other.bond = rint(30, 70) }
         add_person(other)
+    }
+    // Si ya estabas casad@, tu pareja sigue contigo.
+    if kid.spouse != null {
+        let s = kid.spouse
+        let sp = make_person(s.gender, "esposo", max(18, kid.age + s.off))
+        sp.first = s.first
+        sp.last = s.last
+        if s.look != null { sp.look = s.look }
+        sp.bond = rint(60, 85)
+        add_person(sp)
+        L.partner_id = sp.id
+        L.married = true
     }
     for p in old.people {
         if !p.alive { continue }

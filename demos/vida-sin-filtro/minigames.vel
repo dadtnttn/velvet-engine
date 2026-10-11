@@ -751,6 +751,8 @@ function mg_action(action: string) {
     if action == "mg:lane:r" { return mg_lane(1) }
     if str_starts_with(action, "mg:pick:") { return mg_pick(action_num(action, "mg:pick:", 10)) }
     if action == "mg:quit" {
+        // Con el resultado ya en pantalla, Esc cobra el puntaje igual que CONTINUAR.
+        if G.mg.phase == "done" { return mg_close() }
         G.mg.points = 0
         G.mg.phase = "done"
     }

@@ -534,7 +534,7 @@ function stepper(x: int, y: int, lbl: string, action: string) {
     svg(x, y, 38, 38, arrow_doc("left", left))
     hot(x, y, 38, 38, action + ":-")
     svg(x + 46, y, 268, 42, slant_doc(264, 38, 10, HEX_WHITE, HEX_INK, 2, HEX_RED, 4))
-    ctext(x + 46 + 132, y + 26, lbl, 16, C_INK, "bold")
+    ctextw(x + 46 + 132, y + 26, lbl, 16, C_INK, "bold", 236)
     svg(x + 322, y, 38, 38, arrow_doc("right", right))
     hot(x + 322, y, 38, 38, action + ":+")
 }
@@ -940,7 +940,11 @@ function draw_bottom() {
     svg(918, sy, 116, 34, slant_doc(110, 30, 10, sfill, HEX_WHITE, 2, HEX_RED, 4))
     ctext(972, sy + 21, "+5 AÑOS · U", 14, C_WHITE, "impact")
     hot(918, 600, 110, 30, "skip:5")
-    star_button(1034, 586, "+1 MES", "age", "ESPACIO")
+    if L.age < 6 {
+        star_button(1034, 586, "+1 AÑO", "year", "ESPACIO")
+    } else {
+        star_button(1034, 586, "+1 MES", "age", "ESPACIO")
+    }
 }
 
 // Avance de varios años en curso: barra de progreso y botón para parar.
@@ -1348,6 +1352,8 @@ function draw_toasts() {
         let age = G.t - t.t0
         if age > 2.8 { continue }
         list_push(alive, t)
+        // Como mucho tres avisos a la vez; los demás no se apilan encima.
+        if slot >= 3 { continue }
         let e = ease(clamp(age / 0.25, 0.0, 1.0))
         let fade = 1.0
         if age > 2.4 { fade = 1.0 - (age - 2.4) / 0.4 }
@@ -1357,7 +1363,11 @@ function draw_toasts() {
         svg(392, y - 4, 90, 90, burst_doc(90, 90, 12, HEX_YELLOW, HEX_INK, 3, 4))
         svg(418, y + 22, 38, 38, arrow_doc("up", HEX_RED))
         let head = t.head
-        if head == null { head = "¡RANGO ARRIBA!" }
+        if head == null {
+            head = "AVISO"
+            if str_contains(t.title, "RANGO") { head = "¡RANGO ARRIBA!" }
+            if str_contains(t.title, "NO SE PUDO") { head = "ERROR" }
+        }
         otext(496, y + 32, head, 18, C_YELLOW, "impact", false)
         textw(496, y + 54, t.title, 20, C_WHITE, "impact", 380)
         textw(496, y + 71, t.sub, 12, C_GRAY, "bold", 380)

@@ -1,0 +1,419 @@
+// @edition 3
+// Patrimonio de las personas, viudez y herencia entre esposos, despedidas y
+// funerales, seguro de vida y la ruta de la «viuda negra»: casarte con alguien
+// rico y envenenarl@ poco a poco (con sospechas, autopsia, detective y cárcel).
+
+// ---------------------------------------------------------------- patrimonio
+
+// Lo que tiene una persona: lo que ahorró de su trabajo y, a veces, una fortuna.
+function npc_wealth(p: map) {
+    if p.wealth != null { return p.wealth }
+    if p.age < 18 {
+        p.wealth = 0
+        return 0
+    }
+    let years = max(0, p.age - 22)
+    let w = partner_income(p) * 12 * years * rint(5, 25) / 100
+    if chance(3) {
+        w += rint(5, 200) * 100000 * pais_cost_mult() / 100
+        p.rich = true
+    }
+    p.wealth = max(0, w)
+    return p.wealth
+}
+
+function make_rich(p: map) {
+    p.rich = true
+    p.wealth = rint(10, 300) * 100000 * pais_cost_mult() / 100
+    return p.wealth
+}
+
+// Precio local: lo que cuesta en el país donde vives.
+function local_cost(n: int) {
+    return n * pais_cost_mult() / 100
+}
+
+function fortune_line(p: map) {
+    let w = npc_wealth(p) / 1000 * 1000
+    let out = "Patrimonio aproximado de " + p.first + ": " + money_str(w) + "."
+    if partner_income(p) > 0 { out = out + " Gana unos " + money_str(partner_income(p)) + " al mes." }
+    if p.rich == true { out = out + " Es millonari" + oa(p.gender) + " de verdad." }
+    if p.id == L.partner_id && L.married && !L.prenup { out = out + " Sin contrato prematrimonial: si muere, lo heredas tú." }
+    return out
+}
+
+function fortune_hint(p: map) {
+    if p.wealth_known == true || p.id == L.partner_id { return "Patrimonio: " + money_str(npc_wealth(p) / 1000 * 1000) }
+    if p.rich == true { return "Dicen que tiene mucho dinero" }
+    return "Preguntar sin parecer interesad" + oa(L.gender)
+}
+
+// ---------------------------------------------------------------- viudez
+
+// Muere tu esposa o esposo: herencia, seguro de vida y luto.
+function spouse_died(p: map, poisoned: bool) {
+    let msg = ""
+    if L.married {
+        let w = npc_wealth(p)
+        let share = w
+        if p.bond < 40 { share = w * 80 / 100 }
+        if share > 0 {
+            L.money += share
+            msg = " Como su viud" + oa(L.gender) + ", heredaste " + money_str(share) + "."
+            if share < w { msg = msg + " Su familia impugnó una parte del testamento." }
+        }
+        p.wealth = 0
+        if p.ins != null && p.ins > 0 {
+            L.money += p.ins
+            msg = msg + " El seguro de vida te pagó " + money_str(p.ins) + "."
+            p.ins = 0
+        }
+        L.widow = true
+        L.widow_tm = L.tm
+        hito_me("Amor", "Enviudaste: " + p.first + " partió antes que tú")
+    }
+    L.partner_id = 0
+    L.married = false
+    if poisoned {
+        L.happy -= 4
+        tfx_add("culpa", 12)
+    } else {
+        L.happy -= 20
+        L.heartbreak = max(L.heartbreak, 8)
+        tfx_add("duelo", 10)
+    }
+    L.funeral_id = p.id
+    L.funeral_poison = poisoned
+    return msg
+}
+
+// Quien está muy mal y te quiere pide verte antes de irse.
+function maybe_goodbye(p: map, risk: int) {
+    if p.frail == true || risk < 8 || p.bond < 50 || L.jail > 0 { return false }
+    if p.age < 60 || L.goodbye_id != null { return false }
+    p.frail = true
+    L.goodbye_id = p.id
+    return true
+}
+
+// Ventanas pendientes de esta ruta: despedida, funeral, sospecha y detective.
+function maybe_bw_event() {
+    if !L.alive || L.jail > 0 { return false }
+    if L.goodbye_id != null {
+        let p = find_person(L.goodbye_id)
+        L.goodbye_id = null
+        if p != null && p.alive {
+            let ctx = {"person": p, "rel": str_lower(rel_label(p))}
+            let rec = ""
+            if p.recorded == true { rec = "Ya lo hiciste" }
+            open_choice(str_upper(p.first) + " PIDE VERTE",
+                fmt("Tu {rel} {x} está muy débil y pregunta por ti. Los doctores dicen que le queda poco.", ctx),
+                [fmt("Ir a verl{xlo} y despedirte", ctx), "Grabar sus historias en video", "No ir"], ["", rec, ""], "bw_goodbye", ctx)
+            return true
+        }
+    }
+    if L.funeral_id != null {
+        let p = find_person(L.funeral_id)
+        L.funeral_id = null
+        if p != null {
+            let ctx = {"person": p, "rel": str_lower(rel_label(p))}
+            let big = local_cost(15000)
+            let small = local_cost(3000)
+            let labels = ["Una despedida a la altura (" + money_str(big) + ")", "Algo sencillo e íntimo (" + money_str(small) + ")", "No ir al funeral"]
+            if L.funeral_poison == true { labels[2] = "Llorar desconsoladamente frente a todos" }
+            open_choice("EL FUNERAL DE " + str_upper(p.first),
+                fmt("Flores, música y toda la gente que quiso a {x}. ¿Cómo l{xlo} despides?", ctx),
+                labels, [if_str(L.money < big, money_str(big), ""), if_str(L.money < small, money_str(small), ""), ""], "bw_funeral", ctx)
+            return true
+        }
+    }
+    if L.bw_suspect_id != null {
+        let p = find_person(L.bw_suspect_id)
+        L.bw_suspect_id = null
+        if p != null && p.alive && p.poison != null {
+            let ctx = {"person": p}
+            open_choice(str_upper(p.first) + " SOSPECHA",
+                fmt("{x} encontró el frasco escondido detrás del cereal. «¿Qué es esto?», pregunta sin quitarte los ojos de encima.", ctx),
+                ["Inventar una excusa (Encanto)", "Acelerar la dosis", "Detenerte y tirarlo todo"], ["", "", ""], "bw_suspect", ctx)
+            return true
+        }
+    }
+    if L.detective_tm != null && L.tm >= L.detective_tm {
+        L.detective_tm = null
+        let fee = local_cost(50000)
+        open_choice("UN DETECTIVE TOCA TU PUERTA",
+            "La familia de " + L.detective_vic + " contrató a un detective privado. Tiene preguntas sobre su muerte... y una orden para exhumar el cuerpo.",
+            ["Sobornarlo (" + money_str(fee) + ")", "Hacerte " + by_gender(L.gender, "el", "la") + " inocente (Encanto)", "Huir del país esta misma noche", "Confesar"],
+            [if_str(L.money < fee, money_str(fee), ""), "", "", ""], "bw_detective", {})
+        return true
+    }
+    return false
+}
+
+// ---------------------------------------------------------------- veneno
+
+const POISONS = [
+    {"id": "arsenico", "t": "Arsénico en su café", "s": "Lento · 5 meses", "months": 5, "rate": 4, "risk": 8, "cost": 2000},
+    {"id": "pastillas", "t": "Duplicarle sus pastillas", "s": "Medio · 3 meses", "months": 3, "rate": 7, "risk": 15, "cost": 500},
+    {"id": "golpe", "t": "Algo fuerte, de una vez", "s": "Rápido · 1 mes", "months": 1, "rate": 30, "risk": 40, "cost": 5000}
+]
+
+const POISON_SIGNS = [
+    "{x} anda pálid{xa} y sin apetito.",
+    "{x} se queja de dolores de estómago que ningún doctor entiende.",
+    "A {x} se le cae el pelo. El doctor habla de estrés.",
+    "{x} se desmayó en la cocina. «Es la presión», dice.",
+    "{x} duerme todo el día y despierta confundid{xa}.",
+    "{x} te dio las gracias por cuidarl{xlo} tanto. Te sirvió el café que le preparaste."
+]
+
+function open_poison(p: map) {
+    let ctx = {"person": p}
+    let labels = []
+    let locks = []
+    for z in POISONS {
+        let c = local_cost(z.cost)
+        list_push(labels, z.t + " · " + z.s + " · " + money_str(c))
+        list_push(locks, if_str(L.money < c, money_str(c), ""))
+    }
+    list_push(labels, "Mejor no")
+    list_push(locks, "")
+    open_choice("EL PLAN",
+        fmt("Una enfermedad lenta no levanta sospechas... casi nunca. Con lo que tiene {x}, nunca te faltaría nada. ¿Cómo lo harás?", ctx),
+        labels, locks, "bw_poison", ctx)
+    return null
+}
+
+function poison_watchers(p: map) {
+    let n = 0
+    for q in L.people {
+        if q.alive && q.rel == "suegro" && q.of == p.id && q.bond >= 40 { n += 3 }
+    }
+    return n
+}
+
+// Cada mes: el veneno avanza, aparecen síntomas y crece la sospecha.
+function bw_month() {
+    if !L.alive { return null }
+    for p in L.people {
+        if !p.alive { continue }
+        if p.ins != null && p.ins > 0 && p.ins_cost != null {
+            L.money -= p.ins_cost
+            if L.money < 0 {
+                p.ins = 0
+                log_add("Dejaste de pagar el seguro de vida de " + p.first + " y lo cancelaron.", "b")
+            }
+        }
+        let z = p.poison
+        if z == null { continue }
+        z.left -= 1
+        let inc = z.rate + poison_watchers(p) - rank("know") - rank("charm") / 2
+        if npc_style(p) == "celoso" { inc += 3 }
+        z.sus = clamp100(z.sus + max(1, inc))
+        if chance(65) { log_add(fmt(pick(POISON_SIGNS), {"person": p}), "n") }
+        if z.sus >= 95 && z.left > 0 {
+            poison_exposed(p)
+            continue
+        }
+        if z.sus >= 55 && L.bw_suspect_id == null && chance(30) { L.bw_suspect_id = p.id }
+        if z.left <= 0 { poison_death(p) }
+    }
+    return null
+}
+
+// Te descubrieron antes de tiempo: se va, te denuncia y empieza la investigación.
+function poison_exposed(p: map) {
+    p.poison = null
+    p.bond = 0
+    log_add(p.first + " se fue a casa de su familia con unos análisis en la mano y llamó a la policía.", "b")
+    breakup()
+    L.karma -= 30
+    if chance(70) {
+        hito_me("Vida", "Te acusaron de intentar envenenar a " + p.first)
+        log_add("Te arrestaron por intento de homicidio." + go_to_jail(rint(8, 15)), "b")
+    } else {
+        log_add("No hubo pruebas suficientes para arrestarte. Pero todo el mundo lo sabe.", "b")
+        L.fame = clamp100(L.fame + 5)
+    }
+    return null
+}
+
+function poison_death(p: map) {
+    let z = p.poison
+    p.poison = null
+    p.alive = false
+    log_add("Tu " + str_lower(rel_label(p)) + " " + p.first + " murió de un paro cardiaco a los " + str(p.age) + " años. Nadie lo vio venir.", "b")
+    add_hito(p, "Partió antes que tú")
+    lazos_on_death(p)
+    let odds = 10 + min(25, here().gdp / 2) + z.sus / 3 + z.risk - rank("know") * 4
+    if p.ins != null && p.ins > 0 && p.ins_tm != null && L.tm - p.ins_tm < 24 { odds += 15 }
+    if chance(clamp(odds, 3, 90)) {
+        L.partner_id = 0
+        L.married = false
+        L.karma -= 40
+        L.bw_caught = true
+        hito_me("Vida", "La autopsia te delató: envenenaste a " + p.first)
+        log_add("La autopsia encontró veneno en el cuerpo de " + p.first + ". Te arrestaron en el velorio." + go_to_jail(rint(20, 30)), "b")
+        return null
+    }
+    let msg = spouse_died(p, true)
+    L.karma -= 20
+    if L.bw_count == null { L.bw_count = 0 }
+    L.bw_count += 1
+    flag("black_widow")
+    hito_once("black_widow", "Vida", "Nadie sospechó nada")
+    log_add("El médico firmó el acta: causas naturales." + msg, "x")
+    if chance(40) && L.detective_tm == null {
+        L.detective_tm = L.tm + rint(8, 36)
+        L.detective_vic = p.first
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- respuestas
+
+function bw_resolve(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let p = ctx["person"]
+    if handler == "bw_poison" {
+        if index >= len(POISONS) { return finish(p.first, "Lo pensaste mejor. Por ahora.", "n") }
+        let z = POISONS[index]
+        L.money -= local_cost(z.cost)
+        p.poison = {"id": z.id, "left": z.months, "rate": z.rate, "risk": z.risk, "sus": 0, "t0": L.tm}
+        L.karma -= 15
+        tfx_add("culpa", 6)
+        return finish(p.first, "Conseguiste lo necesario con un nombre falso. Esta noche empieza el plan.", "x")
+    }
+    if handler == "bw_suspect" {
+        let z = p.poison
+        if z == null { return null }
+        if index == 0 {
+            if chance(35 + rank("charm") * 10) {
+                z.sus = max(0, z.sus - 35)
+                return finish(p.first, "Le dijiste que era para las cucarachas. Te creyó... por ahora.", "n")
+            }
+            z.sus = clamp100(z.sus + 15)
+            return finish(p.first, fmt("Tu excusa no convenció a {x}. Ahora prueba todo lo que le sirves.", ctx), "b")
+        }
+        if index == 1 {
+            z.left = 1
+            z.risk += 15
+            z.sus = clamp100(z.sus + 10)
+            return finish(p.first, "Ya no hay vuelta atrás.", "x")
+        }
+        p.poison = null
+        bond_gain(p, -10)
+        L.karma += 5
+        return finish(p.first, fmt("Tiraste el frasco al drenaje. {x} se recupera poco a poco... y te mira raro.", ctx), "n")
+    }
+    if handler == "bw_goodbye" {
+        if index == 0 {
+            bond_gain(p, 10)
+            p.goodbye = true
+            L.happy += 4
+            add_hito(p, "Se despidieron")
+            return finish(p.first, fmt("Le tomaste la mano a {x} toda la tarde. Se dijeron todo lo que faltaba.", ctx), "g")
+        }
+        if index == 1 {
+            p.recorded = true
+            p.goodbye = true
+            bond_gain(p, 8)
+            return finish(p.first, fmt("Grabaste horas de sus historias. Su risa quedó guardada para siempre.", ctx), "g")
+        }
+        L.karma -= 5
+        p.no_goodbye = true
+        return finish(p.first, "No fuiste. Te dijiste que habría otra oportunidad.", "b")
+    }
+    if handler == "bw_funeral" {
+        if index == 0 {
+            L.money -= local_cost(15000)
+            fam_bond(4)
+            L.happy += 4
+            return finish("Funeral", fmt("Una despedida preciosa para {x}. Hasta los que no lloran, lloraron.", ctx), "n")
+        }
+        if index == 1 {
+            L.money -= local_cost(3000)
+            fam_bond(2)
+            return finish("Funeral", fmt("Pocas personas, muchas flores y las canciones favoritas de {x}.", ctx), "n")
+        }
+        if L.funeral_poison == true {
+            if chance(40 + rank("charm") * 10) {
+                if L.detective_tm != null { L.detective_tm = L.detective_tm + 24 }
+                return finish("Funeral", "Lloraste tan bonito que hasta la suegra te abrazó.", "x")
+            }
+            if L.detective_tm == null { L.detective_tm = L.tm + rint(6, 18) }
+            return finish("Funeral", "Exageraste. Alguien de su familia te miró con los ojos entrecerrados.", "b")
+        }
+        fam_bond(-8)
+        L.karma -= 3
+        if p.no_goodbye == true { L.happy -= 8 }
+        return finish("Funeral", "No fuiste al funeral. Todos lo notaron.", "b")
+    }
+    if handler == "bw_detective" {
+        if index == 0 {
+            L.money -= local_cost(50000)
+            if chance(70) { return finish("Detective", "Se guardó el sobre y escribió «muerte natural» en su informe. Caso cerrado.", "x") }
+            return bw_busted("El detective grabó el soborno. Con eso le bastó al fiscal.")
+        }
+        if index == 1 {
+            if chance(30 + rank("charm") * 10) { return finish("Detective", "Contestaste todo con lágrimas en los ojos. Se fue convencid" + oa(L.gender) + " de tu inocencia.", "x") }
+            return bw_busted("Exhumaron el cuerpo. El veneno seguía ahí.")
+        }
+        if index == 2 {
+            let opts = []
+            for id in here().nb {
+                if has_ctry(id) && !at_war(id) { list_push(opts, id) }
+            }
+            if len(opts) == 0 { opts = ["es", "ar", "br"] }
+            let dest = opts[rint(0, len(opts) - 1)]
+            pais_move(dest, "ilegal")
+            L.karma -= 5
+            hito_me("Vida", "Huiste del país para que no te atraparan")
+            return finish("Huida", "Tomaste el primer vuelo con lo puesto. Ahora vives en " + cname(dest) + " y miras hacia atrás cada vez que alguien dice tu nombre.", "x")
+        }
+        L.karma += 10
+        hito_me("Vida", "Confesaste que envenenaste a tu pareja")
+        let out = go_to_jail(15)
+        return finish("Confesión", "Lo confesaste todo. El juez valoró tu sinceridad." + out, "b")
+    }
+    if handler == "bw_lifeins" {
+        let amounts = [500000, 2000000, 10000000]
+        let costs = [150, 600, 3000]
+        if index >= 3 { return finish(p.first, "Mejor no.", "n") }
+        p.ins = local_cost(amounts[index])
+        p.ins_cost = local_cost(costs[index])
+        p.ins_tm = L.tm
+        return finish(p.first, "Contrataste un seguro de vida de " + money_str(p.ins) + " para " + p.first + ". Tú eres " + by_gender(L.gender, "el", "la") + " beneficiari" + oa(L.gender) + ".", "n")
+    }
+    return null
+}
+
+function bw_busted(why: string) {
+    L.karma -= 30
+    L.bw_caught = true
+    hito_me("Vida", "Te atraparon: la viudez no fue natural")
+    return finish("Detective", why + go_to_jail(rint(20, 30)), "b")
+}
+
+// Toda la familia de la persona que murió (y la tuya) reacciona igual.
+function fam_bond(n: int) {
+    for q in L.people {
+        if q.alive && is_family(q) { bond_gain(q, n) }
+    }
+    return null
+}
+
+function open_lifeins(p: map) {
+    let ctx = {"person": p}
+    let labels = []
+    let amounts = [500000, 2000000, 10000000]
+    let costs = [150, 600, 3000]
+    let i = 0
+    while i < 3 {
+        list_push(labels, money_str(local_cost(amounts[i])) + " (" + money_str(local_cost(costs[i])) + "/mes)")
+        i += 1
+    }
+    list_push(labels, "Mejor no")
+    open_choice("SEGURO DE VIDA PARA " + str_upper(p.first), fmt("Si a {x} le pasa algo, el dinero es para ti. Se paga cada mes.", ctx), labels, ["", "", "", ""], "bw_lifeins", ctx)
+    return null
+}
