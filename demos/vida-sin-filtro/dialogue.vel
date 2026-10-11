@@ -512,9 +512,9 @@ function dlg_end(code: string, p: map, msg: string, title: string, kind: string)
         return null
     }
     if code == "parent_money" {
-        let amount = rint(3, 15) * 100
-        if L.family == "media" { amount = rint(10, 40) * 100 }
-        if L.family == "rica" { amount = rint(50, 200) * 100 }
+        let r = parent_money_range()
+        let amount = rint(r[0], r[1])
+        if amount >= 100 { amount = amount / 10 * 10 }
         L.money += amount
         return finish(title, msg + " Te da " + money_str(amount) + ".", kind)
     }
@@ -529,10 +529,10 @@ function dlg_end(code: string, p: map, msg: string, title: string, kind: string)
         return finish(title, msg, kind)
     }
     if code == "marry" {
-        marry()
-        L.happy += 15
-        toast("LOS AMANTES · BODA", "Te casaste con " + p.first + ".")
-        return finish(title, msg + " Se casaron en una boda inolvidable.", kind)
+        add_hito(p, "Se comprometieron")
+        hito_once("engaged", "Amor", "Te comprometiste")
+        if msg != "" { log_add(msg, kind) }
+        return begin_wedding(p)
     }
     if code == "baby" { return finish(title, msg + try_baby(p), kind) }
     if code == "open" {
@@ -637,10 +637,13 @@ function try_baby(p: map) {
     let age = p.age
     if L.gender == "f" { age = L.age }
     if age > 45 { return " A estas alturas ya no es posible." }
+    if p.gender == L.gender { return " Entre ustedes dos, así no va a pasar. Pueden adoptar o buscar un tratamiento." }
+    let f = my_fertility() * their_fertility(p) / 100
+    if f <= 0 { return " Los médicos lo dijeron claro: así no va a pasar. ¿Adopción o tratamiento?" }
     G.sex_mode = "raw"
     sex_with(p)
     G.sex_mode = ""
-    if !chance(45) { return " Este mes no hubo suerte (pero sí diversión)." }
+    if !chance(15 + f * 45 / 100) { return " Este mes no hubo suerte (pero sí diversión)." }
     if L.gender == "f" {
         L.pregnant = true
         L.preg_with = p.first

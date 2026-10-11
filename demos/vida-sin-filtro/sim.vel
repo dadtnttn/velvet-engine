@@ -145,6 +145,8 @@ function wrap(text: string, max_chars: int) {
 // Sustituye {marcadores} de género y nombres en los textos de eventos.
 function fmt(text: string, ctx: map) {
     let out = str_replace(text, "{a}", oa(L.gender))
+    out = str_replace(out, "{tia}", by_gender(L.gender, "tío", "tía"))
+    out = str_replace(out, "{el}", by_gender(L.gender, "el", "la"))
     out = str_replace(out, "{nombre}", L.first)
     let p = partner()
     if p != null {
@@ -323,6 +325,10 @@ function attracted_gender() {
 
 // Un desconocido adulto del género que le atrae al personaje, de edad parecida.
 function stranger() {
+    // Entre menores solo aparece gente de su edad (y nunca nada sexual: sex_with lo impide).
+    if L.age < 18 {
+        return make_person(attracted_gender(), "ligue", rint(max(13, L.age - 1), min(17, L.age + 1)))
+    }
     let lo = max(18, L.age - 8)
     let hi = max(lo, L.age + 8)
     if has_kink("maduros") {
@@ -613,6 +619,8 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
+    if maybe_caught_event() { return birthday }
+    if maybe_bw_event() { return birthday }
     if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_route_event() && !maybe_apps_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
@@ -717,9 +725,11 @@ function yearly() {
         p.age += 1
         p.bond = clamp100(p.bond - rint(0, 3))
         let risk = 0
-        if p.age > 60 { risk = (p.age - 60) / 3 }
+        if p.age > 60 { risk = (p.age - 60) / 3 + max(0, pais_life_shift()) / 3 }
         if p.age > 85 { risk = risk + 10 }
         if p.cared == true && risk > 0 { risk = risk * 2 / 3 }
+        // Antes de irse, quien te quiere pide verte (y ese año no muere).
+        if maybe_goodbye(p, risk) { continue }
         if risk > 0 && chance(risk) {
             p.alive = false
             log_add("Tu " + str_lower(rel_label(p)) + " " + p.first + " murió a los " + str(p.age) + " años.", "b")
@@ -735,9 +745,11 @@ function yearly() {
                 }
             }
             if p.id == L.partner_id {
-                L.partner_id = 0
-                L.married = false
-                L.happy -= 20
+                let w = spouse_died(p, false)
+                if w != "" { log_add(w, "n") }
+            } else if (p.rel == "padre" || p.rel == "madre" || p.rel == "hijo" || p.rel == "hermano" || p.rel == "abuelo") && p.bond >= 50 && L.funeral_id == null {
+                L.funeral_id = p.id
+                L.funeral_poison = false
             }
         }
     }
@@ -839,10 +851,6 @@ function yearly() {
             log_add(p.first + " te dejó. Dice que ya no siente nada.", "b")
             breakup()
             L.happy -= 15
-        } else if L.karma < 30 && both_adults(p) && chance(10) && !velo_loyal(p) {
-            log_add("Descubriste que " + p.first + " te engaña con alguien del trabajo.", "b")
-            p.bond -= 30
-            L.happy -= 15
         }
     }
 
@@ -886,7 +894,10 @@ function add_child(other: string) {
     if !hito_once("first_child", "Familia", "Nació tu primer hijo: " + child.first) { hito_me("Familia", "Nació " + child.first) }
     child.hitos = [{"a": L.age, "t": "Nació"}]
     let mate = partner()
-    if mate != null && mate.first == other { add_hito(mate, "Nació " + child.first) }
+    if mate != null && mate.first == other {
+        add_hito(mate, "Nació " + child.first)
+        child.other_parent = mate.id
+    }
     lazos_after_birth(child, other)
 }
 
@@ -1044,6 +1055,7 @@ function sex_with(person: any) {
     // Candado: nada sexual si alguno de los dos es menor de edad.
     if L.age < 18 { return "" }
     if person != null && person.age < 18 { return "" }
+    if blood_rel(person) { return "" }
     if person != null && !person.slept {
         person.slept = true
         L.partners += 1

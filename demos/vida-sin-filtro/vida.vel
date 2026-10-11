@@ -693,7 +693,7 @@ function maybe_holiday() {
     if m == "Noviembre" && L.age >= 6 && list_contains(["mx", "gt", "sv", "hn", "ni", "bo", "pe", "ec"], here_id()) {
         let lost = null
         for q in L.people {
-            if !q.alive && q.bond >= 40 { lost = q }
+            if !q.alive && q.blocked != true && q.bond >= 40 { lost = q }
         }
         if lost != null {
             d.hol[m] = L.age
@@ -1226,6 +1226,7 @@ const TFX = {
     "luna_miel": {"n": "Luna de miel", "good": true, "d": "Recién casad{a}s: todo es miel.", "mods": {"hap": 2}},
     "desvelos": {"n": "Desvelos de bebé", "good": false, "d": "Un recién nacido no te deja dormir.", "mods": {"looks": -3, "grades": -3, "pay": -3}},
     "duelo": {"n": "Duelo", "good": false, "d": "Extrañas a quien se fue.", "mods": {"hap": -2, "pay": -5}},
+    "culpa": {"n": "Culpa", "good": false, "d": "No duermes bien. Ya sabes por qué.", "mods": {"hap": -2}},
     "despedido": {"n": "Golpe al orgullo", "good": false, "d": "Te despidieron y todavía duele.", "mods": {"hap": -1, "hire": -3}},
     "orgullo": {"n": "Recién graduad{a}", "good": true, "d": "Tu título brilla en la pared.", "mods": {"hire": 5, "hap": 1}},
     "jubilado": {"n": "Recién jubilad{a}", "good": true, "d": "Sin despertador, por fin.", "mods": {"hap": 2}},

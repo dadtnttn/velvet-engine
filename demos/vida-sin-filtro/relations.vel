@@ -62,7 +62,7 @@ const REL_ACTS = [
     {"id": "threesome", "t": "Tríos y algo más", "s": "Necesita su sí", "grp": ["partner"], "cat": "Intimidad", "adult": true, "code": "threesome",
      "desc": "Invitar a otra mujer o a otro hombre, intercambio de parejas o una fiesta para adultos. Su personalidad y sus gustos deciden si acepta."},
     // ------------------------------------------------ Juntos
-    {"id": "gym_together", "hito": "Entrenaron juntos por primera vez", "t": "Hacer ejercicio juntos", "s": "Salud · Minijuego", "grp": ["partner", "friend", "sibling"], "cat": "Juntos", "me": 12, "them": 12, "mg": "timing", "bond": [3, 10], "health": 3,
+    {"id": "gym_together", "hito": "Entrenaron juntos por primera vez", "t": "Hacer ejercicio juntos", "s": "Salud · Minijuego", "grp": ["partner", "friend", "sibling"], "cat": "*", "me": 12, "them": 12, "mg": "timing", "bond": [3, 10], "health": 3,
      "desc": "Rutina en pareja: sentadillas sincronizadas y competencia sana.", "ok": "Terminaron sudados, orgullosos y con ganas de repetir.", "bad": "Se te cayó la pesa cerca de su pie. Hoy fue cardio de huida."},
     {"id": "cook", "hito": "Cocinaron juntos por primera vez", "t": "Cocinar juntos", "s": "Minijuego de memoria", "grp": ["partner", "parent", "child", "sibling", "friend"], "cat": "*", "me": 8, "them": 6, "mg": "memory", "bond": [3, 10], "happy": 3,
      "desc": "Recuerda la receta: ingredientes en el orden correcto.", "ok": "Les quedó delicioso. Ya tienen su platillo especial.", "bad": "Quemaron la cena y pidieron pizza. Igual fue divertido."},
@@ -78,13 +78,17 @@ const REL_ACTS = [
     {"id": "pet", "hito": "Adoptaron una mascota juntos", "t": "Adoptar una mascota juntos", "s": "$3,000", "grp": ["partner"], "cat": "Juntos", "adult": true, "cost": 3000, "code": "pet",
      "desc": "Un perro o un gato que será como su primer hijo."},
     // ------------------------------------------------ Salir (amigos)
-    {"id": "party", "hito": "Su primera fiesta juntos", "t": "Salir de fiesta", "s": "Felicidad y alcohol", "grp": ["friend", "sibling"], "cat": "Salir", "adult": true, "cost": 600,
+    {"id": "party", "hito": "Su primera fiesta juntos", "t": "Salir de fiesta", "s": "Felicidad y alcohol", "grp": ["friend"], "cat": "Salir", "adult": true, "cost": 600,
      "desc": "Antro, karaoke y tacos al final.", "o": [
         {"w": 70, "log": "Terminaron cantando en un karaoke a las 4 a. m.", "bond": 7, "happy": 8, "alcohol": 4, "charm": 2},
-        {"w": 30, "log": "Conociste a alguien en la fiesta gracias a {x}.", "bond": 5, "happy": 5, "special": "hookup"}]},
-    {"id": "park", "hito": "Fueron al parque juntos", "t": "Ir al parque", "s": "Gratis", "grp": ["friend", "child", "grandchild", "sibling", "parent"], "cat": "*", "max": 17,
+        {"w": 30, "log": "Conociste a alguien en la fiesta gracias a {x}.", "bond": 5, "happy": 5, "special": "z_affair"}]},
+    {"id": "park", "hito": "Fueron al parque juntos", "t": "Ir al parque", "s": "Gratis", "grp": ["friend", "sibling", "parent"], "cat": "*", "max": 17,
      "desc": "Columpios, pelota y helado.", "o": [
         {"w": 100, "log": "Pasaron la tarde corriendo y jugando hasta que oscureció.", "bond": 6, "happy": 5, "health": 1}]},
+    {"id": "park_kids", "hito": "Lo llevaste al parque", "t": "Llevarl{xlo} al parque", "s": "Gratis", "grp": ["child", "grandchild", "nephew"], "cat": "*", "me": 16, "maxthem": 12,
+     "desc": "Columpios, pelota y un helado de premio.", "o": [
+        {"w": 70, "log": "Le empujaste el columpio cien veces. «¡Más alto!» Cien veces más.", "bond": 7, "happy": 5, "health": 1},
+        {"w": 30, "log": "Se raspó la rodilla, lloró dos minutos y siguió jugando como si nada.", "bond": 5, "happy": 3}]},
     {"id": "sleepover", "hito": "Su primera pijamada", "t": "Pijamada", "s": "Diversión", "grp": ["friend"], "cat": "Salir", "me": 6, "max": 17,
      "desc": "Palomitas, películas de terror y secretos hasta la madrugada.", "o": [
         {"w": 100, "log": "Se quedaron despiertos hasta las 3 contándose secretos. Amistad sellada.", "bond": 10, "happy": 6}]},
@@ -121,7 +125,7 @@ const REL_ACTS = [
         {"w": 70, "log": "Te perdonó. Se quitaron un peso de encima.", "bond": 10, "karma": 2},
         {"w": 30, "log": "«Lo voy a pensar.» Por algo se empieza.", "bond": 3}]},
     // ------------------------------------------------ más con tu pareja
-    {"id": "karaoke", "hito": "Su primer dueto", "t": "Karaoke en pareja", "s": "$400 · Minijuego", "grp": ["partner", "fling", "friend"], "cat": "Citas", "adult": true, "cost": 400, "mg": "typing", "bond": [3, 12], "happy": 6,
+    {"id": "karaoke", "hito": "Su primer dueto", "t": "Karaoke en pareja", "s": "$400 · Minijuego", "grp": ["partner", "fling", "friend"], "cat": "*", "adult": true, "cost": 400, "mg": "typing", "bond": [3, 12], "happy": 6,
      "desc": "Escribe la letra a tiempo para no desafinar el dueto.", "ok": "Su dueto de balada romántica hizo llorar al de la barra.", "bad": "Se te olvidó la letra. Cantaron puros «lalalá»."},
     {"id": "stargaze", "hito": "Vieron las estrellas juntos", "t": "Ver las estrellas", "s": "Gratis", "grp": ["partner", "fling"], "cat": "Citas", "adult": true,
      "desc": "Una cobija en el cofre del auto y el cielo despejado.", "o": [
@@ -205,30 +209,30 @@ const REL_EVENTS = [
         ]
     },
     {
-        "id": "rl_jealous", "title": "Celos", "min": 18, "max": 70, "w": 5, "req": "partner", "person": "partner",
+        "id": "rl_jealous", "title": "Celos", "min": 18, "max": 70, "w": 5, "req": "partner,job", "person": "partner",
         "text": "{x} vio tu celular y no le gustó un mensaje de alguien del trabajo.",
         "choices": [
             {"t": "Mostrarle toda la conversación", "o": [{"w": 100, "log": "No había nada raro. Se disculpó por desconfiar.", "bond": 4}]},
             {"t": "«Confía en mí»", "need": "charm", "rank": 3, "o": [{"w": 100, "log": "Tu seguridad lo calmó todo.", "bond": 3}]},
-            {"t": "Enojarte por que revisó tu celular", "o": [{"w": 50, "log": "Tienes razón en enojarte. Pidió perdón.", "bond": -2}, {"w": 50, "log": "Pelea épica. Durmieron separados.", "bond": -12, "happy": -5}]}
+            {"t": "Enojarte porque revisó tu celular", "o": [{"w": 50, "log": "Tienes razón en enojarte. Pidió perdón.", "bond": -2}, {"w": 50, "log": "Pelea épica. Durmieron separados.", "bond": -12, "happy": -5}]}
         ]
     },
     {
-        "id": "rl_partner_job", "title": "Malas noticias", "min": 18, "max": 70, "w": 4, "req": "partner", "person": "partner",
+        "id": "rl_partner_job", "title": "Malas noticias", "min": 18, "max": 70, "w": 4, "req": "partner,partnerjob", "person": "partner",
         "text": "{x} llega llorando: l{xlo} despidieron del trabajo.",
         "choices": [
-            {"t": "Apoyarl{xlo} y cubrir los gastos un tiempo", "o": [{"w": 100, "log": "Le diste estabilidad mientras buscaba. Nunca lo olvidará.", "bond": 14, "money": -4000, "kind": 3}]},
-            {"t": "Ayudarle con su currículum", "need": "know", "rank": 2, "o": [{"w": 100, "log": "A las dos semanas ya tenía un trabajo mejor.", "bond": 10}]},
-            {"t": "«Pues busca otro»", "o": [{"w": 100, "log": "Se sintió completamente sol{xa}.", "bond": -12}]}
+            {"t": "Apoyarl{xlo} y cubrir los gastos un tiempo", "o": [{"w": 100, "log": "Le diste estabilidad mientras buscaba. Nunca lo olvidará.", "bond": 14, "money": -4000, "kind": 3, "special": "z_pj_fired"}]},
+            {"t": "Ayudarle con su currículum", "need": "know", "rank": 2, "o": [{"w": 100, "log": "A las dos semanas ya tenía un trabajo mejor.", "bond": 10, "special": "z_pj_rehired"}]},
+            {"t": "«Pues busca otro»", "o": [{"w": 100, "log": "Se sintió completamente sol{xa}.", "bond": -12, "special": "z_pj_fired"}]}
         ]
     },
     {
-        "id": "rl_best_man", "title": "La boda de tu amig{xa}", "min": 20, "max": 60, "w": 4, "req": "hasfriend", "person": "friend",
+        "id": "rl_best_man", "title": "La boda de tu amig{xa}", "min": 20, "max": 60, "w": 4, "req": "unwedfriend", "person": "unwedfriend",
         "text": "{x} se casa y te pide que des el discurso en la boda.",
         "choices": [
-            {"t": "Un discurso emotivo", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "No quedó un ojo seco en el salón.", "bond": 15, "happy": 6, "charm": 2}]},
-            {"t": "Improvisar", "o": [{"w": 50, "log": "Salió bien de milagro.", "bond": 6}, {"w": 50, "log": "Contaste la anécdota equivocada frente a los suegros.", "bond": -8, "happy": -4}]},
-            {"t": "Excusarte", "o": [{"w": 100, "log": "Le dolió que no aceptaras.", "bond": -10}]}
+            {"t": "Un discurso emotivo", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "No quedó un ojo seco en el salón.", "bond": 15, "happy": 6, "charm": 2, "special": "z_friend_wed"}]},
+            {"t": "Improvisar", "o": [{"w": 50, "log": "Salió bien de milagro.", "bond": 6, "special": "z_friend_wed"}, {"w": 50, "log": "Contaste la anécdota equivocada frente a los suegros.", "bond": -8, "happy": -4, "special": "z_friend_wed"}]},
+            {"t": "Excusarte", "o": [{"w": 100, "log": "Le dolió que no aceptaras.", "bond": -10, "special": "z_friend_wed"}]}
         ]
     },
     {
@@ -253,7 +257,7 @@ const REL_EVENTS = [
         "id": "rl_cousin_party", "title": "La fiesta de tu prim{xa}", "min": 18, "max": 45, "w": 4, "req": "adultcousin", "person": "adultcousin",
         "text": "Tu prim{xa} {x} te invita a su fiesta de cumpleaños. Va a estar toda la familia... y sus amigos.",
         "choices": [
-            {"t": "Ir y bailar hasta el amanecer", "o": [{"w": 70, "log": "La fiesta del año. Conociste a medio mundo.", "bond": 10, "happy": 8, "alcohol": 3}, {"w": 30, "log": "Conociste a alguien interesante entre sus amigos.", "bond": 6, "special": "hookup"}]},
+            {"t": "Ir y bailar hasta el amanecer", "o": [{"w": 70, "log": "La fiesta del año. Conociste a medio mundo.", "bond": 10, "happy": 8, "alcohol": 3}, {"w": 30, "log": "Conociste a alguien interesante entre sus amigos.", "bond": 6, "special": "z_affair"}]},
             {"t": "Llevarle un buen regalo y salir temprano", "o": [{"w": 100, "log": "Le encantó tu regalo.", "bond": 6, "money": -500}]},
             {"t": "No ir", "o": [{"w": 100, "log": "Se dio cuenta.", "bond": -6}]}
         ]
@@ -395,17 +399,32 @@ function legacy_person_items(p: map, cat: string) {
     let r = p.rel
     let adult = L.age >= 18 && p.age >= 18 && L.jail == 0
     if cat == "Hablar" {
-        if can_chat(p) {
-            list_push(out, pitem(p, "ract:chat", "Platicar", "Ánimo: " + mood_name(p), "Una conversación libre. Lo que conviene decir depende de su ánimo (" + str_lower(mood_name(p)) + ") y de su forma de ser (" + str_lower(temper_name(p)) + ")."))
-        }
-        if tree_for(p) != "" {
-            list_push(out, pitem(p, "pact:dlg", "Conversación profunda", "Diálogo · " + STYLE_NAMES[npc_style(p)], "Una conversación con decisiones. Lo que diga depende de su forma de ser."))
+        if L.age < 3 {
+            // Un bebé no conversa: balbucea.
+            list_push(out, pitem(p, "pact:babble", "Balbucear", "Cercanía", "«Gugu, tata.» Funciona mejor de lo que crees."))
+        } else if p.age < 3 {
+            list_push(out, pitem(p, "pact:faces", "Hacerle caritas", "Cercanía", "Muecas, ruiditos y la cara más ridícula que tengas."))
+            list_push(out, pitem(p, "pact:sing", "Cantarle", "Cercanía", "Una canción de cuna, aunque desafines."))
         } else {
-            list_push(out, pitem(p, "pact:talk", "Conversar", "Un poco más de cercanía", "Platicar de lo que sea."))
+            if can_chat(p) {
+                list_push(out, pitem(p, "ract:chat", "Platicar", "Ánimo: " + mood_name(p), "Una conversación libre. Lo que conviene decir depende de su ánimo (" + str_lower(mood_name(p)) + ") y de su forma de ser (" + str_lower(temper_name(p)) + ")."))
+            }
+            if tree_for(p) != "" {
+                list_push(out, pitem(p, "pact:dlg", "Conversación profunda", "Diálogo · " + STYLE_NAMES[npc_style(p)], "Una conversación con decisiones. Lo que diga depende de su forma de ser."))
+            } else {
+                list_push(out, pitem(p, "pact:talk", "Conversar", "Un poco más de cercanía", "Platicar de lo que sea."))
+            }
+            if adult && (g == "partner" || g == "fling" || g == "friend") {
+                list_push(out, pitem(p, "pact:wealth", "Hablar de dinero", fortune_hint(p), "¿Cuánto gana? ¿Cuánto tiene? Preguntarlo sin parecer interesad" + oa(L.gender) + " es un arte."))
+            }
+            if (r == "padre" || r == "madre") && L.age >= 6 { list_push(out, pitem(p, "pact:money", "Pedir dinero", money_ask_hint(p), "Depende de su cariño, de tu edad y de cómo esté la economía familiar.")) }
+            if L.age < 6 {
+                list_push(out, pitem(p, "pact:tantrum", "Hacer berrinche", "Gritar hasta que te hagan caso", "Tirarte al piso es una forma de comunicación."))
+            } else if p.age >= 6 {
+                list_push(out, pitem(p, "pact:argue", "Discutir", "Desahogarte", "A veces hay que sacarlo todo."))
+                list_push(out, pitem(p, "pact:insult", "Insultar", "Quemar el puente", "Hay palabras que no se olvidan."))
+            }
         }
-        if r == "padre" || r == "madre" { list_push(out, pitem(p, "pact:money", "Pedir dinero", "Si te quiere lo suficiente", "Depende de su cariño y de cómo esté la economía familiar.")) }
-        list_push(out, pitem(p, "pact:argue", "Discutir", "Desahogarte", "A veces hay que sacarlo todo."))
-        list_push(out, pitem(p, "pact:insult", "Insultar", "Quemar el puente", "Hay palabras que no se olvidan."))
     }
     if (cat == "Convivir" || cat == "Juntos" || cat == "Salir") && g != "fling" {
         list_push(out, pitem(p, "pact:time", "Pasar tiempo juntos", "Más cercanía", "Sin plan, solo estar."))
@@ -448,7 +467,23 @@ function legacy_person_items(p: map, cat: string) {
 }
 
 function pitem(p: map, action: string, t: string, s: string, desc: string) {
-    return {"action": action, "t": t, "s": s, "desc": desc, "lock": "", "pid": p.id}
+    let lock = ""
+    if str_starts_with(action, "pact:") && pact_used(str_replace(action, "pact:", ""), p) { lock = "Este mes ya" }
+    return {"action": action, "t": t, "s": s, "desc": desc, "lock": lock, "pid": p.id}
+}
+
+// Lo básico con cada persona se puede una vez al mes (si no, el cariño, la
+// Amabilidad y el dinero de tus papás serían infinitos).
+const PACT_MONTHLY = ["time", "talk", "money", "argue", "insult", "tantrum", "faces", "sing", "babble", "wealth"]
+
+function pact_key(action: string, p: map) {
+    if action == "dlg" { return "dlg" + str(p.id) }
+    return "p" + action + str(p.id)
+}
+
+function pact_used(action: string, p: map) {
+    if action != "dlg" && !list_contains(PACT_MONTHLY, action) { return false }
+    return L.used[pact_key(action, p)] != null
 }
 
 // Lista de vínculos por categoría.
@@ -634,7 +669,9 @@ function rel_code(a: map, p: map) {
         return finish(p.first, "Adoptaron a " + name + " juntos. " + p.first + " no deja de tomarle fotos.", "g")
     }
     if id == "block" {
+        // Fuera de tu vida, pero no muert{xa}: blocked lo distingue de un difunto.
         p.rel = "bloqueado"
+        p.blocked = true
         p.alive = false
         L.happy += 3
         gain("guts", 2)
@@ -904,6 +941,13 @@ function ivf(p: map) {
 }
 
 // Boda: después del «sí», eliges cómo celebrarla.
+// Única puerta a una boda: respeta la ley del país (matrimonio igualitario),
+// luego el acuerdo prenupcial y el estilo de boda.
+function begin_wedding(p: map) {
+    if pais_marriage_block(p) { return open_symbolic_wedding(p) }
+    return open_wedding(p)
+}
+
 function open_wedding(p: map) {
     return open_prenup(p)
 }
@@ -1001,6 +1045,16 @@ function find_rel_where(rel: string, min_age: int) {
     return null
 }
 
+// Un amigo adulto que todavía no se ha casado (cada boda pasa una sola vez).
+function unwed_friend() {
+    let opts = []
+    for p in L.people {
+        if p.alive && p.rel == "amigo" && p.age >= 20 && p.wed != true { list_push(opts, p) }
+    }
+    if len(opts) == 0 { return null }
+    return opts[rint(0, len(opts) - 1)]
+}
+
 function rel_meets(tag: string) {
     if tag == "hasgrandparent" { return first_rel("abuelo") != null }
     if tag == "oldgrandparent" { return find_rel_where("abuelo", 70) != null }
@@ -1010,6 +1064,11 @@ function rel_meets(tag: string) {
     if lazos_meets(tag) { return true }
     if tag == "childhoodcrush" { return L.partner_id == 0 && L.age >= 18 && childhood_crush() != null }
     if tag == "hasfriend" { return first_rel("amigo") != null }
+    if tag == "unwedfriend" { return unwed_friend() != null }
+    if tag == "partnerjob" {
+        let q = partner()
+        return q != null && q.age < 65 && partner_income(q) > 0
+    }
     if tag == "hassibling" { return first_rel("hermano") != null }
     return false
 }
@@ -1019,10 +1078,19 @@ function rel_ctx(ev: map) {
     if spec == "childhood" { return {"person": childhood_crush()} }
     if spec == "partner" { return {"person": partner()} }
     if spec == "friend" { return {"person": first_rel("amigo")} }
+    if spec == "unwedfriend" { return {"person": unwed_friend()} }
     if spec == "sibling" { return {"person": first_rel("hermano")} }
     let p = rel_event_person(spec)
     if p == null { return {} }
-    return {"person": p, "rel": str_lower(rel_label(p))}
+    let res = {"person": p, "rel": str_lower(rel_label(p))}
+    if spec == "kid14to17" {
+        // Su pareja: casi siempre del otro sexo, a veces del mismo.
+        let g = by_gender(p.gender, "f", "m")
+        if chance(10) { g = p.gender }
+        res["nov"] = by_gender(g, "novio", "novia")
+        res["alnov"] = by_gender(g, "al pobre muchacho", "a la pobre muchacha")
+    }
+    return res
 }
 
 function rel_event_person(spec: any) {

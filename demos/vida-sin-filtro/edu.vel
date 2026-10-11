@@ -164,7 +164,8 @@ function school_month() {
     let target = 35 + L.smarts / 2 + rank("know") * 3 + fx_sum("grades") + school_bonus()
     if L.grades < target { L.grades += rint(0, 1) } else if L.grades > target { L.grades -= rint(0, 1) }
     L.grades = clamp(L.grades + rint(-1, 1), 0, 100)
-    if (L.month == 5 || L.month == 11) && G.modal == null && L.age >= 7 {
+    // Abril y octubre: la boleta de fin de año (mes 11) no debe chocar con un examen abierto.
+    if (L.month == 4 || L.month == 10) && G.modal == null && L.age >= 7 {
         open_exam("school")
     }
     return null

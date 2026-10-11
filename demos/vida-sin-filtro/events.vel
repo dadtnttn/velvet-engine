@@ -195,6 +195,10 @@ const EVENTS = [
             {"t": "Aceptar el trato", "o": [
                 {"w": 100, "log": "Viajes, regalos y una tarjeta sin límite. A cambio, tu dignidad y algunas noches.", "money": 30000, "happy": 5, "karma": -8, "sex": true, "std": 5}
             ]},
+            {"t": "Proponerle matrimonio (y a su fortuna)", "need": "charm", "rank": 2, "o": [
+                {"w": 70, "log": "Aceptó con una sonrisa de quien sabe exactamente lo que está pasando.", "special": "z_sugar_marry"},
+                {"w": 30, "log": "Se rió. «Compañía sí; mi testamento, no.»", "happy": -3}
+            ]},
             {"t": "Rechazarlo", "o": [
                 {"w": 100, "log": "Le dijiste que no estás en venta.", "karma": 3}
             ]}

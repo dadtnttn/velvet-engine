@@ -832,6 +832,15 @@ function flama_action(id: string) {
         flama_card()
         return null
     }
+    if id == "elite" {
+        d.elite = d.elite != true
+        d.alma = []
+        if d.elite {
+            L.money -= 500
+            return finish("Alma Gemela Élite", "Bienvenid" + oa(L.gender) + " a Élite: desde ahora solo ves perfiles con fortuna. Se cobra $500 cada mes.", "x")
+        }
+        return finish("Alma Gemela Élite", "Cancelaste Élite. Volviste al mundo de los mortales.", "n")
+    }
     if id == "gold" {
         d.gold = !d.gold
         if d.gold {
@@ -984,6 +993,15 @@ function resolve_flirt(index: int, ctx: map) {
 
 // ---------------------------------------------------------------- Alma Gemela (citas serias)
 
+const RICH_BIOS = [
+    "Tengo un yate que casi no uso. ¿Me ayudas a usarlo?",
+    "Heredé una cadena de hoteles y una soledad enorme.",
+    "Busco a alguien que no me quiera por mi dinero. Suerte con eso.",
+    "Tres casas, dos divorcios y un perro que se llama Dividendo.",
+    "Mis abogados dicen que firme un contrato prematrimonial. Mi corazón dice que no.",
+    "Viajo por el mundo en mi avión. Me falta alguien en el asiento de al lado."
+]
+
 function alma_list() {
     let d = ph()
     if len(d.alma) == 0 && d.alma_m != L.tm {
@@ -992,6 +1010,10 @@ function alma_list() {
         while i < 3 {
             let x = ap_flama_stranger()
             x.bio = fmt(pick(BIOS), {"person": x})
+            if d.elite == true {
+                make_rich(x)
+                x.bio = fmt(pick(RICH_BIOS), {"person": x})
+            }
             x.km = rint(1, 40)
             x.heat = 0
             profile(x)
@@ -1021,11 +1043,16 @@ function alma_items(cat: string) {
         let as = "Pausado"
         if d.active { as = "ACTIVO" }
         list_push(items, {"action": "ph:fl:active", "t": "Tu perfil de citas", "s": as, "desc": "El mismo perfil que en Flama. Si tienes pareja, mejor páusalo.", "lock": ""})
+        let es = "$500/mes · solo millonarios"
+        if d.elite == true { es = "ACTIVO · cancelar" }
+        list_push(items, {"action": "ph:fl:elite", "t": "Alma Gemela Élite", "s": es, "desc": "Solo perfiles con fortuna verificada. Nadie pregunta por qué te interesan tanto.", "lock": if_str(d.elite != true && L.money < 500, "$500", "")})
         list_push(items, {"action": "ph:none", "t": "Estadísticas", "s": str(d.dates) + " citas en total", "desc": "Alma Gemela es para relaciones serias: menos ligues, más futuro.", "lock": ""})
         return items
     }
     for x in alma_list() {
-        list_push(items, {"action": "ph:al:" + str(x.id), "t": x.first + ", " + str(x.age), "s": "Compatibilidad " + str(compat(x)) + "%", "desc": x.bio, "lock": "", "mid": x.id})
+        let rs = ""
+        if x.rich == true { rs = " · millonari" + oa(x.gender) }
+        list_push(items, {"action": "ph:al:" + str(x.id), "t": x.first + ", " + str(x.age), "s": "Compatibilidad " + str(compat(x)) + "%" + rs, "desc": x.bio, "lock": "", "mid": x.id})
     }
     if len(items) == 0 {
         list_push(items, {"action": "ph:none", "t": "Sin sugerencias", "s": "Vuelve el próximo mes", "desc": "Cada mes llegan perfiles nuevos.", "lock": ""})
@@ -1731,6 +1758,10 @@ function phone_month() {
     if d.gold {
         L.money -= 30
         if L.money < 0 { d.gold = false }
+    }
+    if d.elite == true {
+        L.money -= 500
+        if L.money < 0 { d.elite = false }
     }
     if d.card != null && chance(50) { d.card = null }
     d.alma = []

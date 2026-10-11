@@ -216,11 +216,22 @@ function lock_doc() {
 
 // ---------------------------------------------------------------- retratos
 
+// Edades en que el dibujo cambia (labial, piercing, barba, arrugas, canas): la clave
+// las distingue para que nadie reciba el retrato de otra edad.
+function age_flags(age: int) {
+    let f = ""
+    if age >= 13 { f = f + "t" }
+    if age >= 16 { f = f + "b" }
+    if age >= 55 { f = f + "w" }
+    if age >= 62 { f = f + "g" }
+    return f
+}
+
 // Clave del aspecto para cachear retratos.
 function look_key(look: map, gender: string, age: int, mood: string) {
     let bracket = "a"
     if age < 3 { bracket = "b" } else if age < 13 { bracket = "c" } else if age >= 62 { bracket = "o" } else if age >= 45 { bracket = "m" }
-    return "p|" + str(look.skin) + "." + str(look.hair) + "." + str(look.hcolor) + str(look.eyes) + str(look.outfit) + str(look.acc) + str(lv(look, "face")) + str(lv(look, "body")) + str(lv(look, "mark")) + str(lv(look, "lips")) + gender + bracket + mood
+    return "p|" + str(look.skin) + "." + str(look.hair) + "." + str(look.hcolor) + str(look.eyes) + str(look.outfit) + str(look.acc) + str(lv(look, "face")) + str(lv(look, "body")) + str(lv(look, "mark")) + str(lv(look, "lips")) + gender + bracket + age_flags(age) + mood
 }
 
 // Campo de apariencia con valor por defecto (retratos antiguos no lo tienen).
@@ -346,7 +357,7 @@ function portrait_doc(look: map, gender: string, age: int, mood: string) {
 
     // Boca y rubor
     let lip = LIP_COLORS[lv(look, "lips")]
-    if lip != "" && face_mood != "grin" {
+    if lip != "" && face_mood != "grin" && age >= 13 {
         b = b + "<ellipse cx='100' cy='153' rx='13' ry='5' fill='" + lip + "'/>"
     }
     b = b + mouth(face_mood)

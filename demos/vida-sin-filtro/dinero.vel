@@ -191,7 +191,7 @@ const CPL_EVENTS = [
         "text": "{x} vio el estado de cuenta de tu tarjeta: «¿Otra vez compraste en línea a las 3 de la mañana?»",
         "choices": [
             {"t": "Prometer guardar la tarjeta", "o": [{"w": 100, "log": "Guardaste la tarjeta en el cajón. La paz volvió a casa.", "bond": 4, "special": "dn_card_nada"}]},
-            {"t": "Defenderte", "o": [{"w": 100, "log": "«Es mi dinero.» Ella/él no dijo nada más, pero el ambiente se enfrió.", "bond": -6}]}
+            {"t": "Defenderte", "o": [{"w": 100, "log": "«Es mi dinero.» Ya no dijo nada más, pero el ambiente se enfrió.", "bond": -6}]}
         ]
     },
     {

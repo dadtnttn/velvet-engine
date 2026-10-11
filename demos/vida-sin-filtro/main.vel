@@ -53,6 +53,7 @@ import "ajustes.vel"
 import "tema.vel"
 import "sonido.vel"
 import "prision.vel"
+import "viuda.vel"
 import "phone.vel"
 import "phone_ui.vel"
 import "save.vel"
@@ -268,13 +269,23 @@ function handle_input(input: map) {
     }
     if G.mode == "create" { return creator_keys(input) }
     if G.mode == "dead" {
-        if pressed(input, "Enter") { handle_action("again") }
+        // Enter sigue el mismo camino que los botones de herencia y nunca tira una
+        // herencia pendiente ni interrumpe la ruleta.
+        if G.roul != null && G.roul.done != true { return null }
+        if pressed(input, "Enter") {
+            if G.legacy != null && G.legacy.heir != 0 { return handle_action("legacy:go") }
+            if G.legacy != null && len(G.legacy.heirs) >= 2 { return handle_action("legacy:spin") }
+            return handle_action("again")
+        }
         return null
     }
     let m = G.modal
     if m == null {
         if pressed(input, "Escape") { return handle_action("settings") }
-        if pressed(input, "Space") || pressed(input, "Enter") { handle_action("age") }
+        if pressed(input, "Space") || pressed(input, "Enter") {
+            // De bebé, Espacio avanza un año: un mes por clic son demasiados clics.
+            if L.age < 6 { handle_action("year") } else { handle_action("age") }
+        }
         if pressed(input, "KeyY") { handle_action("year") }
         if pressed(input, "KeyU") { handle_action("skip:5") }
         if pressed(input, "KeyM") { handle_action("ph:open") }

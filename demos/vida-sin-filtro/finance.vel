@@ -974,6 +974,12 @@ function divorce_settlement(p: map) {
     let msg = ""
     if L.prenup {
         msg = " Gracias al contrato prematrimonial, conservas todo lo tuyo."
+    } else if npc_wealth(p) > max(0, L.money) + L.savings {
+        // Sin contrato, quien tiene menos se lleva la mitad de la diferencia.
+        let get = (npc_wealth(p) - max(0, L.money) - L.savings) / 2
+        L.money += get
+        p.wealth = npc_wealth(p) - get
+        msg = " Sin contrato prematrimonial, te quedaste con la mitad de la diferencia: " + money_str(get) + "."
     } else {
         let half = max(0, L.money) / 2 + L.savings / 2
         L.money -= max(0, L.money) / 2

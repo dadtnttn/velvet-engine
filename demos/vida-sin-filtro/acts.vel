@@ -732,6 +732,9 @@ function do_job_act(id: string) {
 
 function open_hookup(ctx: map) {
     let x = ctx.person
+    if blood_rel(x) || x.age < 18 || L.age < 18 {
+        return info("Encuentro", "No. Eso no va a pasar.")
+    }
     let likes = ""
     if x.tags != null && len(x.tags) > 0 { likes = " Le gusta: " + kinks_text(x.tags, x.gender) + "." }
     let shared = shared_kinks(x)
@@ -856,6 +859,57 @@ function bond_gain(p: map, amount: int) {
     }
 }
 
+// Cuánto dinero pueden darte tus papás: depende de la clase de la familia,
+// de tu edad (un niño recibe para dulces) y de cuántas veces ya les pediste.
+function parent_money_range() {
+    let lo = 100
+    let hi = 1500
+    if L.family == "pobre" {
+        lo = 20
+        hi = 200
+    }
+    if L.family == "rica" {
+        lo = 1000
+        hi = 15000
+    }
+    if L.age < 12 {
+        lo = max(5, lo / 20)
+        hi = max(20, hi / 15)
+    } else if L.age < 18 {
+        lo = max(10, lo / 4)
+        hi = max(50, hi / 3)
+    }
+    return [lo, hi]
+}
+
+function money_ask_hint(p: map) {
+    if L.age >= 25 { return "A tu edad, da pena" }
+    if L.age < 12 { return "Para dulces" }
+    return "Si te quiere lo suficiente"
+}
+
+function ask_parent_money(p: map) {
+    let name = p.first
+    let odds = 60
+    if L.age >= 18 { odds = 40 }
+    if L.age >= 25 { odds = 25 }
+    if p.bond < 50 { odds = odds / 3 }
+    if L.age >= 25 { bond_gain(p, -2) }
+    if chance(odds) {
+        let r = parent_money_range()
+        let amount = rint(r[0], r[1])
+        if amount >= 100 { amount = amount / 10 * 10 }
+        L.money += amount
+        if L.age < 12 { return finish(name, name + " te dio " + money_str(amount) + " para tus cosas. «No le digas a tus hermanos.»", "g") }
+        if L.age >= 25 { return finish(name, name + " suspiró y te prestó " + money_str(amount) + ". «¿Otra vez?»", "n") }
+        return finish(name, name + " te dio " + money_str(amount) + ".", "g")
+    }
+    bond_gain(p, -3)
+    if L.age < 12 { return finish(name, name + " te dijo que el dinero no crece en los árboles.", "b") }
+    if L.age >= 25 { return finish(name, name + " te dijo que ya estás grandecit" + oa(L.gender) + " para eso.", "b") }
+    return finish(name, name + " te dijo que te pongas a trabajar.", "b")
+}
+
 function do_person_act(action: string, p: map) {
     G.modal = null
     touch(p)
@@ -869,6 +923,34 @@ function do_person_act(action: string, p: map) {
     }
     if list_contains(["homework", "ground", "allowance", "kiduni", "kickout", "heir", "unheir"], action) {
         return do_kid_act(action, p)
+    }
+    if list_contains(PACT_MONTHLY, action) {
+        if pact_used(action, p) { return info(name, "Ya lo hicieron este mes. Dale su espacio.") }
+        L.used[pact_key(action, p)] = 1
+    }
+    if action == "wealth" {
+        if p.bond < 40 && p.id != L.partner_id {
+            bond_gain(p, -3)
+            return finish(name, name + " cambió de tema. Preguntar eso tan pronto no fue elegante.", "b")
+        }
+        p.wealth_known = true
+        return info(name, fortune_line(p))
+    }
+    if action == "babble" {
+        bond_gain(p, rint(3, 6))
+        L.happy += 2
+        return finish(name, "Le dijiste «gugu» a " + name + " y le derretiste el corazón.", "g")
+    }
+    if action == "faces" || action == "sing" {
+        bond_gain(p, rint(3, 7))
+        L.happy += 2
+        if action == "sing" { return finish(name, "Le cantaste a " + name + " hasta que se quedó dormid" + oa(p.gender) + ".", "g") }
+        return finish(name, name + " se rió con tus caritas. Ese sonido lo cura todo.", "g")
+    }
+    if action == "tantrum" {
+        bond_gain(p, -3)
+        L.happy += 1
+        return finish(name, "Hiciste un berrinche épico en el súper. " + name + " fingió que no te conocía.", "b")
     }
     if action == "time" {
         bond_gain(p, rint(5, 12))
@@ -894,13 +976,7 @@ function do_person_act(action: string, p: map) {
         return finish(name, "Le dijiste a " + name + " cosas que no se olvidan.", "b")
     }
     if action == "money" {
-        if p.bond >= 50 && chance(60) {
-            let amount = rint(1, 20) * 100
-            L.money += amount
-            return finish(name, name + " te dio " + money_str(amount) + ".", "g")
-        }
-        bond_gain(p, -3)
-        return finish(name, name + " te dijo que te pongas a trabajar.", "b")
+        return ask_parent_money(p)
     }
     if action == "romance" {
         if has_kink("romantico") { bond_gain(p, 5) }
@@ -946,8 +1022,7 @@ function do_person_act(action: string, p: map) {
         if chance(p.bond - 10 + rank("guts") * 3) {
             add_hito(p, "Se comprometieron")
             hito_once("engaged", "Amor", "Te comprometiste")
-            if pais_marriage_block(p) { return open_symbolic_wedding(p) }
-            return open_wedding(p)
+            return begin_wedding(p)
         }
         bond_gain(p, -10)
         return finish(name, name + " dijo que no está list" + oa(p.gender) + ". Qué incómodo.", "b")
@@ -1175,6 +1250,47 @@ function special(name: string, ctx: map) {
     return ""
 }
 
+// Descubriste que tu pareja te engaña: tú decides qué hacer.
+function maybe_caught_event() {
+    if L.caught_id == null { return false }
+    let p = find_person(L.caught_id)
+    L.caught_id = null
+    if p == null || !p.alive || p.id != L.partner_id { return false }
+    let ctx = {"person": p}
+    let leave = "Terminar con {x}"
+    if L.married { leave = "Pedir el divorcio" }
+    open_choice("LO DESCUBRISTE", fmt("Encontraste mensajes en el celular de {x}. Coquetos. Recientes. Te está engañando y te tiemblan las manos.", ctx),
+        [fmt("Confrontarl{xlo}", ctx), "Fingir que no viste nada", fmt(leave, ctx)], ["", "", ""], "caught", ctx)
+    return true
+}
+
+function resolve_caught(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    if index == 0 {
+        bond_gain(p, -10)
+        L.happy -= 8
+        if tree_for(p) != "" && L.used["dlg" + str(p.id)] == null {
+            L.used["dlg" + str(p.id)] = 1
+            log_add("Le pusiste el celular enfrente a " + p.first + ".", "b")
+            return start_dialog(tree_for(p), p)
+        }
+        p.bond = clamp100(p.bond - 10)
+        return finish(p.first, "Le pusiste el celular enfrente a " + p.first + ". Lloró, lo negó y luego lo admitió. Nada volverá a ser igual.", "b")
+    }
+    if index == 1 {
+        bond_gain(p, -5)
+        L.happy -= 12
+        return finish(p.first, "Fingiste que no viste nada. Por dentro, algo se rompió.", "b")
+    }
+    let was_married = L.married
+    breakup()
+    L.happy -= 10
+    gain("guts", 2)
+    if was_married { return finish(p.first, "Le pediste el divorcio a " + p.first + ". Sin gritos: ya no había nada que decir.", "b") }
+    return finish(p.first, "Terminaste con " + p.first + ". Te dolió, pero te elegiste a ti.", "b")
+}
+
 function dispatch_choice(index: int) {
     let m = G.modal
     if m == null || m.kind != "choice" { return null }
@@ -1182,6 +1298,8 @@ function dispatch_choice(index: int) {
     if m.locks != null && m.locks[index] != "" { return null }
     if m.handler == "event" { return resolve_event(m.ev, index, m.ctx) }
     if m.handler == "hookup" { return resolve_hookup(index, m.ctx) }
+    if m.handler == "caught" { return resolve_caught(index, m.ctx) }
+    if str_starts_with(m.handler, "bw_") { return bw_resolve(m.handler, index, m.ctx) }
     if m.handler == "date" { return resolve_date(index, m.ctx) }
     if m.handler == "casino" { return resolve_casino(index, m.ctx) }
     if m.handler == "takejob" { return resolve_takejob(index, m.ctx) }

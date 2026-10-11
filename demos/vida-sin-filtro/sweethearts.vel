@@ -127,7 +127,7 @@ const SWEET_EVENTS = [
         "choices": [
             {"t": "Darle tu carta y una rosa", "o": [{"w": 100, "log": "Intercambiaron cartas. La tuya le sacó lágrimas; la suya, a ti también.", "bond": 10, "happy": 8, "special": "hito:Su primer San Valentín"}]},
             {"t": "Invitarl{xlo} a comer un helado después de clases", "o": [{"w": 100, "log": "Un helado de fresa, dos cucharas y una tarde perfecta.", "bond": 8, "happy": 6, "special": "hito:Su primer San Valentín"}]},
-            {"t": "Hacerte el que no sabe qué día es", "o": [{"w": 100, "log": "{x} te dio su regalo y tú no tenías nada. Silencio incómodo.", "bond": -8, "happy": -4}]}
+            {"t": "Hacerte {el} que no sabe qué día es", "o": [{"w": 100, "log": "{x} te dio su regalo y tú no tenías nada. Silencio incómodo.", "bond": -8, "happy": -4}]}
         ]
     },
     {

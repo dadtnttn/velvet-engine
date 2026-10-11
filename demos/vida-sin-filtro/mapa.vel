@@ -87,7 +87,7 @@ function draw_world(m: map) {
         let pt = map_pt(c.id)
         let x = MAP_X + pt[0] * MAP_DW / MAP_W
         let y = MAP_Y + pt[1] * MAP_DH / MAP_H
-        hot(x - 6, y - 6, 12, 12, "wm:sel:" + c.id)
+        hot(x - 11, y - 11, 22, 22, "wm:sel:" + c.id)
     }
     // Leyenda
     let lx = MAP_X + 6
@@ -211,17 +211,21 @@ function pick_stable(xs: list, key: string) {
 function world_button(x: int, y: int, lbl: string, action: string, lock: string) {
     let fill = HEX_INK
     let color = C_WHITE
-    let txt = lbl
     if lock != "" {
         fill = "#3a3a3a"
         color = C_GRAY
-        txt = lock
     } else if hovered(action) {
         fill = HEX_RED
     }
     svg(x, y, 158, 42, slant_doc(152, 38, 10, fill, HEX_WHITE, 2, HEX_RED, 4))
-    ctextw(x + 76, y + 25, txt, 13, color, "bold", 140)
-    if lock == "" { hot(x, y, 152, 38, action) }
+    // Con candado, la acción sigue visible y el requisito va debajo.
+    if lock != "" {
+        ctextw(x + 76, y + 17, lbl, 12, color, "bold", 140)
+        ctextw(x + 76, y + 33, lock, 9, C_GRAY, "bold", 140)
+    } else {
+        ctextw(x + 76, y + 25, lbl, 13, color, "bold", 140)
+        hot(x, y, 152, 38, action)
+    }
     return null
 }
 
