@@ -6,8 +6,6 @@ use std::path::{Component, Path, PathBuf};
 
 use semver::VersionReq;
 use sha2::{Digest, Sha256};
-use velvet_script_ast::Item;
-use velvet_script_parser::parse_file;
 
 use crate::{
     Vs3Error, Vs3LockedPackage, Vs3PackageLock, Vs3PackageManifest, VS3_PACKAGE_LOCK,
@@ -226,20 +224,42 @@ fn load_package_sources(
         }
         let source =
             fs::read_to_string(&canonical).map_err(|error| package_error(&canonical, error))?;
-        let parsed = parse_file(&source, Some(&relative)).map_err(|error| Vs3Error::Bundle {
+        // Only the imports are needed here (the bundler parses everything
+        // later), so scan tokens instead of building a full AST.
+        let imports = top_level_imports(&source).map_err(|error| Vs3Error::Bundle {
             path: relative.clone(),
             message: format!("cannot parse package source: {error}"),
         })?;
-        for item in parsed.module.items {
-            if let Item::Import { path, .. } = item {
-                if is_relative_source_import(&path) {
-                    pending.push(normalize_relative_source(&relative, &path)?);
-                }
+        for path in imports {
+            if is_relative_source_import(&path) {
+                pending.push(normalize_relative_source(&relative, &path)?);
             }
         }
         sources.insert(relative, source);
     }
     Ok(sources)
+}
+
+/// `import "path"` declarations at the top level of a source (brace depth 0),
+/// found from the token stream.
+fn top_level_imports(source: &str) -> Result<Vec<String>, String> {
+    use velvet_script_lexer::Token;
+    let tokens = velvet_script_lexer::lex(source).map_err(|error| error.to_string())?;
+    let mut depth = 0usize;
+    let mut imports = Vec::new();
+    for (index, token) in tokens.iter().enumerate() {
+        match &token.token {
+            Token::LBrace => depth += 1,
+            Token::RBrace => depth = depth.saturating_sub(1),
+            Token::Ident(word) if depth == 0 && word == "import" => {
+                if let Some(Token::String(path)) = tokens.get(index + 1).map(|t| &t.token) {
+                    imports.push(path.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(imports)
 }
 
 fn build_graph(

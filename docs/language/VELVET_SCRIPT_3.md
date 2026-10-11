@@ -250,6 +250,17 @@ it called) and its call count; natives appear as `native:<name>` and lambdas as
 example one simulated month per action, or a few people per frame) rather than
 raising the limit indefinitely.
 
+### Performance notes
+
+Bytecode v3 adds superinstructions for the most common patterns: field reads
+by constant key (`p.alive`, also straight from a local), `if`/`while`
+conditions that pop and jump in one step, and a single `FOR_ITER` step per
+`for` iteration. These patterns therefore cost fewer instructions of the
+budget than in v2. Values are 40 bytes (matrices are shared), integer
+arithmetic and comparisons run in place on the stack, constants are
+materialized once per module, and the globals' memory baseline is re-walked
+every 16 top-level calls instead of on every call.
+
 ### Session tasks
 
 `Vs3Session::start_task(name, args, max_total)` runs a function as a

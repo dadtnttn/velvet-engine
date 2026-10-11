@@ -362,8 +362,8 @@ fn json_write(v: &Value, outs: &mut String, pretty: bool, depth: usize) -> Resul
         Value::Vec2(c) => json_floats(outs, c)?,
         Value::Vec3(c) => json_floats(outs, c)?,
         Value::Vec4(c) | Value::Quat(c) => json_floats(outs, c)?,
-        Value::Mat3(c) => json_floats(outs, c)?,
-        Value::Mat4(c) => json_floats(outs, c)?,
+        Value::Mat3(c) => json_floats(outs, &c[..])?,
+        Value::Mat4(c) => json_floats(outs, &c[..])?,
         other => return Err(format!("json_encode cannot encode `{}`", other.type_name())),
     }
     Ok(())

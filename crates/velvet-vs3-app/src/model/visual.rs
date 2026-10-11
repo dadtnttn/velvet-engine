@@ -1,5 +1,4 @@
-use super::value::{optional_boolean, optional_integer, optional_number, optional_string, string};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use velvet_script_vs3::Value;
 #[derive(Debug, Clone, Default)]
 pub struct VisualCommandView {
@@ -52,51 +51,79 @@ pub struct VisualCommandView {
     pub max_lines: i64,
 }
 impl VisualCommandView {
+    /// Parse one command map in a single pass over its entries (a frame can
+    /// carry thousands of commands, so per-key lookups add up).
     pub fn parse(v: &Value) -> Result<Self> {
-        Ok(Self {
-            op: string(v, "op")?,
-            layer: optional_integer(v, "layer"),
-            color: optional_integer(v, "color"),
-            x: optional_number(v, "x"),
-            y: optional_number(v, "y"),
-            w: optional_number(v, "w"),
-            h: optional_number(v, "h"),
-            x2: optional_number(v, "x2"),
-            y2: optional_number(v, "y2"),
-            rx: optional_number(v, "rx"),
-            ry: optional_number(v, "ry"),
-            radius: optional_number(v, "radius"),
-            thickness: optional_number(v, "thickness"),
-            asset: optional_string(v, "asset"),
-            hover_asset: optional_string(v, "hover_asset"),
-            pressed_asset: optional_string(v, "pressed_asset"),
-            fit: optional_string(v, "fit"),
-            text: optional_string(v, "text"),
-            font: optional_string(v, "font"),
-            align: optional_string(v, "align"),
-            action: optional_string(v, "action"),
-            icon: optional_string(v, "icon"),
-            frame_width: optional_integer(v, "frame_width"),
-            frame: optional_integer(v, "frame"),
-            fps: optional_number(v, "fps"),
-            flip_x: optional_boolean(v, "flip_x"),
-            size: optional_number(v, "size"),
-            line_height: optional_number(v, "line_height"),
-            ratio: optional_number(v, "ratio"),
-            stroke: optional_integer(v, "stroke"),
-            background: optional_integer(v, "background"),
-            fill: optional_integer(v, "fill"),
-            source_x: optional_integer(v, "source_x"),
-            source_y: optional_integer(v, "source_y"),
-            source_w: optional_integer(v, "source_w"),
-            source_h: optional_integer(v, "source_h"),
-            tile_w: optional_integer(v, "tile_w"),
-            tile_h: optional_integer(v, "tile_h"),
-            source_border: optional_integer(v, "source_border"),
-            destination_border: optional_integer(v, "destination_border"),
-            max_width: optional_number(v, "max_width"),
-            overflow: optional_string(v, "overflow"),
-            max_lines: optional_integer(v, "max_lines"),
-        })
+        let Value::Map(map) = v else {
+            return Err(anyhow!(
+                "visual command must be a map, got {}",
+                v.type_name()
+            ));
+        };
+        let map = map.borrow();
+        let mut out = Self::default();
+        let mut has_op = false;
+        for (key, value) in map.iter() {
+            match key.as_str() {
+                "op" => {
+                    out.op = value
+                        .as_str()
+                        .ok_or_else(|| anyhow!("`op` is not a string"))?
+                        .to_owned();
+                    has_op = true;
+                }
+                "layer" => out.layer = value.as_i64().unwrap_or_default(),
+                "color" => out.color = value.as_i64().unwrap_or_default(),
+                "x" => out.x = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "y" => out.y = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "w" => out.w = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "h" => out.h = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "x2" => out.x2 = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "y2" => out.y2 = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "rx" => out.rx = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "ry" => out.ry = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "radius" => out.radius = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "thickness" => out.thickness = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "asset" => out.asset = value.as_str().map(str::to_owned).unwrap_or_default(),
+                "hover_asset" => {
+                    out.hover_asset = value.as_str().map(str::to_owned).unwrap_or_default()
+                }
+                "pressed_asset" => {
+                    out.pressed_asset = value.as_str().map(str::to_owned).unwrap_or_default()
+                }
+                "fit" => out.fit = value.as_str().map(str::to_owned).unwrap_or_default(),
+                "text" => out.text = value.as_str().map(str::to_owned).unwrap_or_default(),
+                "font" => out.font = value.as_str().map(str::to_owned).unwrap_or_default(),
+                "align" => out.align = value.as_str().map(str::to_owned).unwrap_or_default(),
+                "action" => out.action = value.as_str().map(str::to_owned).unwrap_or_default(),
+                "icon" => out.icon = value.as_str().map(str::to_owned).unwrap_or_default(),
+                "frame_width" => out.frame_width = value.as_i64().unwrap_or_default(),
+                "frame" => out.frame = value.as_i64().unwrap_or_default(),
+                "fps" => out.fps = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "flip_x" => out.flip_x = matches!(value, Value::Bool(true)),
+                "size" => out.size = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "line_height" => {
+                    out.line_height = value.as_f64().map(|n| n as f32).unwrap_or_default()
+                }
+                "ratio" => out.ratio = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "stroke" => out.stroke = value.as_i64().unwrap_or_default(),
+                "background" => out.background = value.as_i64().unwrap_or_default(),
+                "fill" => out.fill = value.as_i64().unwrap_or_default(),
+                "source_x" => out.source_x = value.as_i64().unwrap_or_default(),
+                "source_y" => out.source_y = value.as_i64().unwrap_or_default(),
+                "source_w" => out.source_w = value.as_i64().unwrap_or_default(),
+                "source_h" => out.source_h = value.as_i64().unwrap_or_default(),
+                "tile_w" => out.tile_w = value.as_i64().unwrap_or_default(),
+                "tile_h" => out.tile_h = value.as_i64().unwrap_or_default(),
+                "source_border" => out.source_border = value.as_i64().unwrap_or_default(),
+                "destination_border" => out.destination_border = value.as_i64().unwrap_or_default(),
+                "max_width" => out.max_width = value.as_f64().map(|n| n as f32).unwrap_or_default(),
+                "overflow" => out.overflow = value.as_str().map(str::to_owned).unwrap_or_default(),
+                "max_lines" => out.max_lines = value.as_i64().unwrap_or_default(),
+                _ => {}
+            }
+        }
+        anyhow::ensure!(has_op, "missing VS3 field `op`");
+        Ok(out)
     }
 }

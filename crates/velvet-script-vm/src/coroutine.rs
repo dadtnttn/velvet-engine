@@ -4,7 +4,7 @@ use velvet_script_bytecode::BytecodeModule;
 use velvet_script_compiler::compile_source;
 
 use crate::value::Value;
-use crate::vm::{Vm, VmError, VmLimits};
+use crate::vm::{Stop, Vm, VmError, VmLimits};
 
 /// Handle to a cooperative coroutine.
 #[derive(Debug)]
@@ -134,26 +134,22 @@ impl Coroutine {
         if self.done {
             return Ok(CoroutineStatus::Complete(self.last_yield.clone()));
         }
-        let mut executed = 0u64;
-        while !self.vm.frames_is_empty() {
+        if !self.vm.frames_is_empty() {
             if self.vm.is_cancelled() {
                 return Err(VmError::Cancelled);
             }
-            match self.vm.step_instruction() {
-                Ok(true) => {
+            match self.vm.run_loop(0, self.slice_budget.max(1))? {
+                Stop::Yield => {
                     // Op::Yield: top of stack is the request payload.
                     self.last_yield = self.vm.peek_value(0).cloned().unwrap_or(Value::Null);
                     self.waiting_for_resume = true;
                     return Ok(CoroutineStatus::Yielded(self.last_yield.clone()));
                 }
-                Ok(false) => {
-                    executed += 1;
-                    if executed >= self.slice_budget {
-                        self.last_yield = Value::Null;
-                        return Ok(CoroutineStatus::Yielded(Value::Null));
-                    }
+                Stop::Budget => {
+                    self.last_yield = Value::Null;
+                    return Ok(CoroutineStatus::Yielded(Value::Null));
                 }
-                Err(e) => return Err(e),
+                Stop::Depth => {}
             }
         }
         self.done = true;

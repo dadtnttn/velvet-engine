@@ -64,18 +64,11 @@ pub fn lex(source: &str) -> Result<Vec<LexedToken>, LexerError> {
 }
 
 fn line_col(line_starts: &[usize], offset: usize) -> (u32, u32) {
-    let mut line = 1u32;
-    let mut start = 0usize;
-    for (i, &s) in line_starts.iter().enumerate() {
-        if s <= offset {
-            line = (i as u32) + 1;
-            start = s;
-        } else {
-            break;
-        }
-    }
+    // `line_starts` is sorted and starts with 0: binary search the line.
+    let line = line_starts.partition_point(|&start| start <= offset).max(1);
+    let start = line_starts[line - 1];
     let column = (offset - start) as u32 + 1;
-    (line, column)
+    (line as u32, column)
 }
 
 #[cfg(test)]

@@ -165,6 +165,20 @@ pub enum TaskStep {
     Complete(Value),
 }
 
+/// Top-level calls between full walks of the globals' memory.
+const GLOBALS_WALK_EVERY: u32 = 16;
+
+/// Why [`Vm::run_loop`] returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stop {
+    /// A `yield` suspended execution (payload on the stack).
+    Yield,
+    /// The call stack unwound to the requested depth.
+    Depth,
+    /// The instruction budget for this run was used.
+    Budget,
+}
+
 /// A cooperative task running on this VM's own state (see [`Vm::start_task`]).
 #[derive(Debug, Clone, Copy)]
 struct TaskState {
@@ -180,6 +194,19 @@ struct TaskState {
 #[derive(Debug)]
 pub struct Vm {
     module: BytecodeModule,
+    /// Constants of every chunk, converted to values once (string constants
+    /// share one `Rc<str>` instead of allocating on every use).
+    constants: Vec<Vec<Value>>,
+    /// What `GetGlobal` yields for a global that is still null: the export or
+    /// native of the same name, resolved once.
+    global_fallback: Vec<Value>,
+    /// Reused buffer for native call arguments.
+    native_args: Vec<Value>,
+    /// Memory units held by globals as of the last full walk, kept current
+    /// for whole-global assignments (see `reset_execution_budget`).
+    globals_units: usize,
+    /// Top-level calls since the globals were last walked.
+    calls_since_walk: u32,
     task: Option<TaskState>,
     profile: Option<Profile>,
     globals: Vec<Value>,
@@ -220,8 +247,31 @@ impl Vm {
                 }
             }
         }
+        let constants = module
+            .functions
+            .iter()
+            .map(|chunk| chunk.constants.iter().map(Value::from_constant).collect())
+            .collect();
+        let global_fallback = module
+            .globals
+            .iter()
+            .map(|name| {
+                if let Some(&f) = module.exports.get(name) {
+                    Value::Function(f)
+                } else if let Some(n) = lookup_native(name) {
+                    Value::Native(n.as_u16())
+                } else {
+                    Value::Null
+                }
+            })
+            .collect();
         Self {
             module,
+            constants,
+            global_fallback,
+            native_args: Vec::new(),
+            globals_units: 0,
+            calls_since_walk: 0,
             task: None,
             profile: None,
             globals,
@@ -506,31 +556,24 @@ impl Vm {
             task.waiting = false;
         }
         self.instructions = 0;
-        let slice = slice.max(1);
-        let outcome = loop {
-            if self.frames.is_empty() {
-                let value = self.pop().unwrap_or(Value::Null);
-                break Ok(TaskStep::Complete(value));
+        let remaining = task.max_total.saturating_sub(task.used);
+        let budget = slice.max(1).min(remaining.saturating_add(1));
+        let outcome = match self.run_loop(0, budget) {
+            Ok(Stop::Depth) => Ok(TaskStep::Complete(self.pop().unwrap_or(Value::Null))),
+            Ok(Stop::Yield) => {
+                task.waiting = true;
+                Ok(TaskStep::Yielded(
+                    self.peek_value(0).cloned().unwrap_or(Value::Null),
+                ))
             }
-            if self.instructions >= slice {
-                break Ok(TaskStep::Paused);
-            }
-            if task.used.saturating_add(self.instructions) > task.max_total {
-                break Err(VmError::InstructionLimit {
+            Ok(Stop::Budget) if task.used.saturating_add(self.instructions) > task.max_total => {
+                Err(VmError::InstructionLimit {
                     limit: task.max_total,
                     stack_trace: self.stack_trace(),
-                });
+                })
             }
-            match self.step_instruction() {
-                Ok(true) => {
-                    task.waiting = true;
-                    break Ok(TaskStep::Yielded(
-                        self.peek_value(0).cloned().unwrap_or(Value::Null),
-                    ));
-                }
-                Ok(false) => {}
-                Err(error) => break Err(error),
-            }
+            Ok(Stop::Budget) => Ok(TaskStep::Paused),
+            Err(error) => Err(error),
         };
         let used = self.instructions;
         task.used = task.used.saturating_add(used);
@@ -567,6 +610,29 @@ impl Vm {
     /// Returns `Ok(true)` if the instruction was `Yield` (suspended).
     /// Returns `Ok(false)` for normal progress (including Return that empties frames).
     pub fn step_instruction(&mut self) -> Result<bool, VmError> {
+        self.exec_one()
+    }
+
+    /// Run instructions until the call stack is back to `stop_depth` frames,
+    /// a `yield` suspends, or `budget` instructions have run. One call runs
+    /// many instructions so the dispatch loop stays tight.
+    pub(crate) fn run_loop(&mut self, stop_depth: usize, budget: u64) -> Result<Stop, VmError> {
+        let start = self.instructions;
+        loop {
+            if self.frames.len() <= stop_depth {
+                return Ok(Stop::Depth);
+            }
+            if self.instructions.wrapping_sub(start) >= budget {
+                return Ok(Stop::Budget);
+            }
+            if self.exec_one()? {
+                return Ok(Stop::Yield);
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn exec_one(&mut self) -> Result<bool, VmError> {
         if self.frames.is_empty() {
             return Ok(false);
         }
@@ -595,14 +661,13 @@ impl Vm {
 
         match op {
             Op::Constant => {
-                let idx = self.read_u16()?;
-                let frame = self.frame()?;
-                let c = self.module.functions[frame.function as usize]
-                    .constants
-                    .get(idx as usize)
-                    .ok_or_else(|| self.runtime_err("bad constant index"))?
-                    .clone();
-                self.push(Value::from_constant(&c))?;
+                let idx = self.read_u16()? as usize;
+                let function = self.frame()?.function as usize;
+                let v = self.constants[function]
+                    .get(idx)
+                    .cloned()
+                    .ok_or_else(|| self.runtime_err("bad constant index"))?;
+                self.push(v)?;
             }
             Op::Null => self.push(Value::Null)?,
             Op::True => self.push(Value::Bool(true))?,
@@ -621,22 +686,16 @@ impl Vm {
             }
             Op::GetGlobal => {
                 let idx = self.read_u16()? as usize;
-                let v = self.globals.get(idx).cloned().unwrap_or(Value::Null);
-                // If null, try resolve export by global name or stdlib.
-                let v = if matches!(v, Value::Null) {
-                    if let Some(name) = self.module.globals.get(idx) {
-                        if let Some(&f) = self.module.exports.get(name) {
-                            Value::Function(f)
-                        } else if let Some(n) = lookup_native(name) {
-                            Value::Native(n.as_u16())
-                        } else {
-                            v
-                        }
-                    } else {
-                        v
+                let v = match self.globals.get(idx) {
+                    Some(Value::Null) | None => {
+                        // A null global named like an export or native
+                        // resolves to it.
+                        self.global_fallback
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or(Value::Null)
                     }
-                } else {
-                    v
+                    Some(v) => v.clone(),
                 };
                 self.push(v)?;
             }
@@ -670,9 +729,29 @@ impl Vm {
                 self.stack[base + slot] = v;
             }
             Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(binary_num(op, &a, &b).map_err(|m| self.runtime_err(m))?)?;
+                let len = self.stack.len();
+                if len < 2 {
+                    return Err(self.runtime_err("stack underflow"));
+                }
+                if let (Value::Int(x), Value::Int(y)) = (&self.stack[len - 2], &self.stack[len - 1])
+                {
+                    let fast = match op {
+                        Op::Add => x.checked_add(*y),
+                        Op::Sub => x.checked_sub(*y),
+                        Op::Mul => x.checked_mul(*y),
+                        _ => None,
+                    };
+                    if let Some(v) = fast {
+                        // Two one-unit ints become one: release one unit.
+                        self.stack.truncate(len - 1);
+                        self.stack[len - 2] = Value::Int(v);
+                        self.memory_units = self.memory_units.saturating_sub(1);
+                        return Ok(false);
+                    }
+                }
+                let result = binary_num(op, &self.stack[len - 2], &self.stack[len - 1])
+                    .map_err(|m| self.runtime_err(m))?;
+                self.replace_top_two(result)?;
             }
             Op::Neg => {
                 let a = self.pop()?;
@@ -691,20 +770,35 @@ impl Vm {
                 let a = self.pop()?;
                 self.push(Value::Bool(!a.is_truthy()))?;
             }
-            Op::Eq => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(Value::Bool(a == b))?;
-            }
-            Op::Ne => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(Value::Bool(a != b))?;
+            Op::Eq | Op::Ne => {
+                let len = self.stack.len();
+                if len < 2 {
+                    return Err(self.runtime_err("stack underflow"));
+                }
+                let equal = self.stack[len - 2] == self.stack[len - 1];
+                self.replace_top_two(Value::Bool(equal == (op == Op::Eq)))?;
             }
             Op::Lt | Op::Le | Op::Gt | Op::Ge => {
-                let b = self.pop()?;
-                let a = self.pop()?;
-                self.push(cmp_op(op, &a, &b).map_err(|m| self.runtime_err(m))?)?;
+                let len = self.stack.len();
+                if len < 2 {
+                    return Err(self.runtime_err("stack underflow"));
+                }
+                if let (Value::Int(x), Value::Int(y)) = (&self.stack[len - 2], &self.stack[len - 1])
+                {
+                    let v = match op {
+                        Op::Lt => x < y,
+                        Op::Le => x <= y,
+                        Op::Gt => x > y,
+                        _ => x >= y,
+                    };
+                    self.stack.truncate(len - 1);
+                    self.stack[len - 2] = Value::Bool(v);
+                    self.memory_units = self.memory_units.saturating_sub(1);
+                    return Ok(false);
+                }
+                let result = cmp_op(op, &self.stack[len - 2], &self.stack[len - 1])
+                    .map_err(|m| self.runtime_err(m))?;
+                self.replace_top_two(result)?;
             }
             Op::Jump => {
                 let offset = self.read_u16()? as usize;
@@ -753,7 +847,7 @@ impl Vm {
             }
             Op::MakeMap => {
                 let count = self.read_u16()? as usize;
-                let mut map = std::collections::HashMap::with_capacity(count);
+                let mut map = std::collections::BTreeMap::new();
                 // Stack has k0,v0,k1,v1,... top is last value.
                 let mut pairs = Vec::with_capacity(count);
                 for _ in 0..count {
@@ -769,7 +863,7 @@ impl Vm {
                     };
                     map.insert(key, v);
                 }
-                self.push(Value::map(map))?;
+                self.push(Value::Map(std::rc::Rc::new(std::cell::RefCell::new(map))))?;
             }
             Op::GetIndex => {
                 let index = self.pop()?;
@@ -806,6 +900,68 @@ impl Vm {
                     .map_err(|message| self.runtime_err(message))?;
                 self.push(stored)?;
             }
+            Op::GetField => {
+                let idx = self.read_u16()? as usize;
+                let function = self.frame()?.function as usize;
+                let len = self.stack.len();
+                if len == 0 {
+                    return Err(self.runtime_err("stack underflow"));
+                }
+                let value = field_of(&self.stack[len - 1], &self.constants[function], idx)
+                    .map_err(|m| self.runtime_err(m))?;
+                let old = std::mem::replace(&mut self.stack[len - 1], value);
+                self.memory_units = self
+                    .memory_units
+                    .saturating_sub(old.stack_units())
+                    .saturating_add(self.stack[len - 1].stack_units());
+                self.ensure_memory_limit()?;
+            }
+            Op::GetLocalField => {
+                let slot = self.read_u8()? as usize;
+                let idx = self.read_u16()? as usize;
+                let frame = self.frame()?;
+                let (base, function) = (frame.stack_base, frame.function as usize);
+                let object = self
+                    .stack
+                    .get(base + slot)
+                    .ok_or_else(|| self.runtime_err("bad local"))?;
+                let value = field_of(object, &self.constants[function], idx)
+                    .map_err(|m| self.runtime_err(m))?;
+                self.push(value)?;
+            }
+            Op::PopJumpIfFalse => {
+                let offset = self.read_u16()? as usize;
+                if !self.pop()?.is_truthy() {
+                    self.frame_mut()?.ip += offset;
+                }
+            }
+            Op::ForIter => {
+                let it_slot = self.read_u8()? as usize;
+                let i_slot = self.read_u8()? as usize;
+                let offset = self.read_u16()? as usize;
+                let base = self.frame()?.stack_base;
+                let (Some(iterable), Some(index)) = (
+                    self.stack.get(base + it_slot),
+                    self.stack.get(base + i_slot),
+                ) else {
+                    return Err(self.runtime_err("bad for-loop locals"));
+                };
+                let i = index
+                    .as_i64()
+                    .ok_or_else(|| self.runtime_err("for-loop index is not a number"))?;
+                let len = iterable
+                    .len()
+                    .ok_or_else(|| self.runtime_err("len on non-sized value"))?;
+                if i < 0 || i as usize >= len {
+                    self.frame_mut()?.ip += offset;
+                } else {
+                    let item = iterable
+                        .get_index(&Value::Int(i))
+                        .map_err(|m| self.runtime_err(m))?;
+                    self.stack[base + i_slot] = Value::Int(i + 1);
+                    self.push(item)?;
+                }
+            }
             Op::Len => {
                 let v = self.pop()?;
                 let n = v
@@ -829,15 +985,12 @@ impl Vm {
     }
 
     fn execute(&mut self) -> Result<(), VmError> {
-        while !self.frames.is_empty() {
-            let yielded = self.step_instruction()?;
-            if yielded {
-                return Err(self.runtime_err(
-                    "yield requires cooperative execution; use Coroutine or Vs3Module::start",
-                ));
-            }
+        match self.run_loop(0, u64::MAX)? {
+            Stop::Yield => Err(self.runtime_err(
+                "yield requires cooperative execution; use Coroutine or Vs3Module::start",
+            )),
+            Stop::Depth | Stop::Budget => Ok(()),
         }
-        Ok(())
     }
 
     fn dispatch_call(&mut self, argc: u8) -> Result<(), VmError> {
@@ -874,8 +1027,20 @@ impl Vm {
             return Err(self.runtime_err("native call underflow"));
         }
         let start = self.stack.len() - argc;
-        let args: Vec<Value> = self.stack[start..].to_vec();
-        self.truncate_stack(start);
+        let mut args = std::mem::take(&mut self.native_args);
+        args.clear();
+        let released: usize = self.stack[start..].iter().map(Value::stack_units).sum();
+        self.memory_units = self.memory_units.saturating_sub(released);
+        args.extend(self.stack.drain(start..));
+        let result = self.invoke_native_with(id, &args);
+        args.clear();
+        if self.native_args.capacity() < args.capacity() {
+            self.native_args = args;
+        }
+        result
+    }
+
+    fn invoke_native_with(&mut self, id: u16, args: &[Value]) -> Result<(), VmError> {
         let native = NativeId::from_u16(id)
             .ok_or_else(|| self.runtime_err(format!("unknown native id {id}")))?;
         if self.limits.sandbox
@@ -895,7 +1060,7 @@ impl Vm {
         }
         let spec = native.spec();
         let cost = u64::from(spec.base_cost)
-            .saturating_add(crate::math::dynamic_cost(native, &args))
+            .saturating_add(crate::math::dynamic_cost(native, args))
             .saturating_sub(1);
         self.charge_instructions(cost)?;
         if let Some(profile) = &mut self.profile {
@@ -904,11 +1069,11 @@ impl Vm {
             entry.instructions += cost + 1;
         }
         if is_callback_native(native) {
-            let value = self.call_higher(native, &args)?;
+            let value = self.call_higher(native, args)?;
             self.push(value)?;
             return Ok(());
         }
-        let out = stdlib::call_native(id, &args).map_err(|m| self.runtime_err(m))?;
+        let out = stdlib::call_native(id, args).map_err(|m| self.runtime_err(m))?;
         if let Some(line) = out.printed {
             self.printed.push(line);
         }
@@ -936,10 +1101,8 @@ impl Vm {
                     self.push(a.clone())?;
                 }
                 self.call_function(*fidx, args.len() as u8)?;
-                while self.frames.len() > depth {
-                    if self.step_instruction()? {
-                        return Err(self.runtime_err("yield is not allowed inside a callback"));
-                    }
+                if self.run_loop(depth, u64::MAX)? == Stop::Yield {
+                    return Err(self.runtime_err("yield is not allowed inside a callback"));
                 }
                 self.pop()
             }
@@ -1069,11 +1232,19 @@ impl Vm {
 
     fn reset_execution_budget(&mut self) {
         self.instructions = 0;
-        self.memory_units = self
-            .globals
-            .iter()
-            .map(|value| value.memory_units().saturating_sub(1))
-            .sum();
+        // Walking every global (large data tables included) on each call is
+        // costly, so the full walk runs every 16 calls; in between, whole
+        // assignments keep `globals_units` current. Growth inside a call is
+        // still caught as values move through the stack.
+        if self.calls_since_walk == 0 {
+            self.globals_units = self
+                .globals
+                .iter()
+                .map(|value| value.memory_units().saturating_sub(1))
+                .sum();
+        }
+        self.calls_since_walk = (self.calls_since_walk + 1) % GLOBALS_WALK_EVERY;
+        self.memory_units = self.globals_units;
     }
 
     fn chunk(&self, idx: u16) -> &Chunk {
@@ -1099,6 +1270,20 @@ impl Vm {
         Ok(value)
     }
 
+    /// Replace the two topmost stack values with `value` (binary operators).
+    #[inline(always)]
+    fn replace_top_two(&mut self, value: Value) -> Result<(), VmError> {
+        let len = self.stack.len();
+        let released = self.stack[len - 1].stack_units() + self.stack[len - 2].stack_units();
+        self.memory_units = self
+            .memory_units
+            .saturating_sub(released)
+            .saturating_add(value.stack_units());
+        self.stack.truncate(len - 1);
+        self.stack[len - 2] = value;
+        self.ensure_memory_limit()
+    }
+
     fn truncate_stack(&mut self, new_len: usize) {
         if new_len >= self.stack.len() {
             return;
@@ -1116,6 +1301,10 @@ impl Vm {
         let new_units = value.memory_units().saturating_sub(1);
         self.memory_units = self.memory_units.saturating_sub(old_units);
         self.memory_units = self.memory_units.saturating_add(new_units);
+        self.globals_units = self
+            .globals_units
+            .saturating_sub(old_units)
+            .saturating_add(new_units);
         self.globals[index] = value;
     }
 
@@ -1177,23 +1366,39 @@ impl Vm {
         Ok(())
     }
 
+    #[inline(always)]
     fn read_u8(&mut self) -> Result<u8, VmError> {
-        let (fidx, ip) = {
-            let frame = self.frame()?;
-            (frame.function, frame.ip)
-        };
-        let b = *self.module.functions[fidx as usize]
-            .code
-            .get(ip)
-            .ok_or_else(|| self.runtime_err("unexpected end of bytecode"))?;
-        self.frame_mut()?.ip = ip + 1;
-        Ok(b)
+        if let Some(frame) = self.frames.last_mut() {
+            if let Some(&b) = self.module.functions[frame.function as usize]
+                .code
+                .get(frame.ip)
+            {
+                frame.ip += 1;
+                return Ok(b);
+            }
+        }
+        Err(self.bytecode_end())
     }
 
+    #[inline(always)]
     fn read_u16(&mut self) -> Result<u16, VmError> {
-        let lo = self.read_u8()? as u16;
-        let hi = self.read_u8()? as u16;
-        Ok(lo | (hi << 8))
+        if let Some(frame) = self.frames.last_mut() {
+            let code = &self.module.functions[frame.function as usize].code;
+            if let (Some(&lo), Some(&hi)) = (code.get(frame.ip), code.get(frame.ip + 1)) {
+                frame.ip += 2;
+                return Ok(u16::from(lo) | (u16::from(hi) << 8));
+            }
+        }
+        Err(self.bytecode_end())
+    }
+
+    #[cold]
+    fn bytecode_end(&self) -> VmError {
+        if self.frames.is_empty() {
+            self.runtime_err("no active frame")
+        } else {
+            self.runtime_err("unexpected end of bytecode")
+        }
     }
 
     fn runtime_err(&self, message: impl Into<String>) -> VmError {
@@ -1236,7 +1441,56 @@ impl Vm {
     }
 }
 
+/// `object.<key>` where the key is a string constant of the running chunk.
+#[inline(always)]
+fn field_of(object: &Value, constants: &[Value], idx: usize) -> Result<Value, String> {
+    let key = constants.get(idx).ok_or("bad constant index")?;
+    if let (Value::Map(map), Value::String(name)) = (object, key) {
+        return Ok(map
+            .borrow()
+            .get(name.as_ref())
+            .cloned()
+            .unwrap_or(Value::Null));
+    }
+    object.get_index(key)
+}
+
 fn binary_num(op: Op, a: &Value, b: &Value) -> Result<Value, String> {
+    // Fast paths for the overwhelmingly common scalar cases.
+    match (a, b) {
+        (Value::Int(x), Value::Int(y)) => {
+            let (x, y) = (*x, *y);
+            let v = match op {
+                Op::Add => x.checked_add(y),
+                Op::Sub => x.checked_sub(y),
+                Op::Mul => x.checked_mul(y),
+                Op::Div => x.checked_div(y),
+                Op::Rem => x.checked_rem(y),
+                _ => return Err("bad numeric op".into()),
+            };
+            return v.map(Value::Int).ok_or_else(|| {
+                if y == 0 && matches!(op, Op::Div | Op::Rem) {
+                    "division by zero".to_string()
+                } else {
+                    "integer overflow".to_string()
+                }
+            });
+        }
+        (Value::Float(_) | Value::Int(_), Value::Float(_) | Value::Int(_)) => {
+            let (x, y) = (a.as_f64().unwrap_or(0.0), b.as_f64().unwrap_or(0.0));
+            return match op {
+                Op::Add => Ok(Value::Float(x + y)),
+                Op::Sub => Ok(Value::Float(x - y)),
+                Op::Mul => Ok(Value::Float(x * y)),
+                Op::Div if y == 0.0 => Err("division by zero".into()),
+                Op::Div => Ok(Value::Float(x / y)),
+                Op::Rem if y == 0.0 => Err("division by zero".into()),
+                Op::Rem => Ok(Value::Float(x % y)),
+                _ => Err("bad numeric op".into()),
+            };
+        }
+        _ => {}
+    }
     // String concat for Add
     if op == Op::Add {
         if let (Value::String(s), _) = (a, b) {
@@ -1293,6 +1547,16 @@ fn binary_num(op: Op, a: &Value, b: &Value) -> Result<Value, String> {
 }
 
 fn cmp_op(op: Op, a: &Value, b: &Value) -> Result<Value, String> {
+    if let (Value::Int(x), Value::Int(y)) = (a, b) {
+        // Exact for every i64 (no detour through f64).
+        return Ok(Value::Bool(match op {
+            Op::Lt => x < y,
+            Op::Le => x <= y,
+            Op::Gt => x > y,
+            Op::Ge => x >= y,
+            _ => return Err("bad cmp".into()),
+        }));
+    }
     let af = a.as_f64().ok_or_else(|| "expected number".to_string())?;
     let bf = b.as_f64().ok_or_else(|| "expected number".to_string())?;
     let v = match op {
