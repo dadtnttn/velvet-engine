@@ -703,6 +703,11 @@ function maybe_holiday() {
     }
     if m == "Diciembre" && christmas_here() {
         d.hol[m] = L.age
+        // Un bebé no espera a Santa: solo se lo cuentan después.
+        if L.age < 3 {
+            log_add(pick(["Tu Navidad: el papel de regalo te emocionó más que el regalo.", "Tu Navidad: te durmiste antes de la cena, abrazad" + oa(L.gender) + " a un peluche nuevo.", "Tu Navidad: todos se pelearon por cargarte."]), "g")
+            return null
+        }
         if L.age < 14 {
             open_choice("NAVIDAD", "Es Nochebuena. Hay ponche, tamales y un árbol con regalos.", ["Esperar despiert" + oa(L.gender) + " a Santa", "Abrir los regalos a escondidas", "Ayudar a cocinar con la familia"], ["", "", ""], "vd_hol", {"kind": "navidad_kid"})
             return null

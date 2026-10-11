@@ -1207,9 +1207,107 @@ function eligible(ev: map) {
     return true
 }
 
+// ---------------------------------------------------------------- de 1 a 5 años
+
+// Los primeros años también se deciden: pocas cosas, pero tuyas.
+const TODDLER_EVENTS = [
+    {
+        "id": "t_word", "title": "TU PRIMERA PALABRA", "min": 1, "max": 1, "w": 10, "req": "",
+        "text": "Toda la familia está alrededor de tu silla alta, con el celular grabando. {x} contiene la respiración.",
+        "choices": [
+            {"t": "«¡Mamá!»", "o": [{"w": 100, "log": "Tu primera palabra fue «mamá». Hubo lágrimas y el video se compartió en todos los grupos de la familia.", "happy": 4, "kind": 2, "bond": 6}]},
+            {"t": "«¡Papá!»", "o": [{"w": 100, "log": "Tu primera palabra fue «papá». Alguien perdió una apuesta.", "happy": 4, "charm": 2, "bond": 6}]},
+            {"t": "«¡No!»", "o": [{"w": 100, "log": "Tu primera palabra fue «¡no!». Ya desde entonces sabías lo que querías.", "guts": 3, "happy": 2}]},
+            {"t": "«¡Galleta!»", "o": [{"w": 100, "log": "Tu primera palabra fue «galleta». Te dieron tres. Aprendiste que hablar funciona.", "happy": 6, "know": 1}]}
+        ]
+    },
+    {
+        "id": "t_steps", "title": "PRIMEROS PASOS", "min": 1, "max": 1, "w": 10, "req": "",
+        "text": "Estás de pie, agarrad{a} del sillón. Al otro lado de la sala, {x} te abre los brazos.",
+        "choices": [
+            {"t": "Soltarte y caminar hacia {x}", "o": [
+                {"w": 70, "log": "Tres pasitos tambaleantes y un abrazo enorme. Ya caminas.", "happy": 5, "skill": 2, "bond": 5},
+                {"w": 30, "log": "Dos pasos, un tropiezo y a llorar. Al día siguiente lo volviste a intentar.", "guts": 2, "skill": 1}
+            ]},
+            {"t": "Gatear: es más rápido", "o": [{"w": 100, "log": "¿Para qué caminar si gateando llegas antes? Caminaste un mes después, a tu ritmo.", "happy": 3, "know": 1}]},
+            {"t": "Sentarte y aplaudir", "o": [{"w": 100, "log": "Te sentaste y aplaudiste. Todos aplaudieron contigo. Fue suficiente por hoy.", "happy": 4, "charm": 2}]}
+        ]
+    },
+    {
+        "id": "t_tantrum", "title": "BERRINCHE EN EL SÚPER", "min": 2, "max": 4, "w": 8, "req": "",
+        "text": "En la caja del súper hay un dulce brillante a la altura exacta de tus ojos. {x} dice que no.",
+        "choices": [
+            {"t": "Tirarte al piso a llorar", "o": [
+                {"w": 50, "log": "Gritaste hasta que te dieron el dulce. Toda la fila te miró. Aprendiste algo que no deberías.", "happy": 4, "karma": -2, "bond": -2},
+                {"w": 50, "log": "Lloraste diez minutos y te llevaron cargando sin dulce. Derrota total.", "happy": -4, "guts": 1}
+            ]},
+            {"t": "Pedirlo «por favor» con ojitos", "o": [{"w": 100, "log": "Dijiste «por favoooor» con la mejor cara. Funcionó, y te felicitaron por educad{a}.", "happy": 4, "charm": 3, "kind": 1}]},
+            {"t": "Esconderlo en el carrito", "o": [
+                {"w": 60, "log": "Lo escondiste debajo de las tortillas. Nadie lo notó. Tu primer crimen perfecto.", "happy": 5, "skill": 2, "karma": -2},
+                {"w": 40, "log": "La cajera lo encontró y lo levantó en el aire. Todos se rieron. Tú no.", "happy": -3}
+            ]}
+        ]
+    },
+    {
+        "id": "t_monster", "title": "EL MONSTRUO DEBAJO DE LA CAMA", "min": 2, "max": 5, "w": 8, "req": "",
+        "text": "Es de noche y algo hizo «crac» debajo de tu cama. Estás segur{a} de que es un monstruo.",
+        "choices": [
+            {"t": "Gritarle a {x} que venga", "o": [{"w": 100, "log": "{x} revisó con la linterna: no había nada. Te quedaste dormid{a} abrazándole la mano.", "happy": 3, "bond": 5}]},
+            {"t": "Asomarte con tu linterna", "o": [{"w": 100, "log": "Te asomaste temblando... y era el gato. Desde esa noche no le tienes miedo a la oscuridad.", "guts": 4, "happy": 2}]},
+            {"t": "Taparte hasta la cabeza", "o": [{"w": 100, "log": "Dormiste bajo la cobija como en una cueva. El monstruo no te encontró.", "happy": 1}]}
+        ]
+    },
+    {
+        "id": "t_kinder", "title": "PRIMER DÍA DE KÍNDER", "min": 3, "max": 4, "w": 10, "req": "",
+        "text": "Mochila nueva, lonchera nueva y un salón lleno de niños que no conoces. {x} te da un beso en la puerta.",
+        "choices": [
+            {"t": "Llorar y no soltarle la pierna", "o": [{"w": 100, "log": "Lloraste media hora. A la salida no querías irte: ya tenías un mejor amigo.", "happy": 2, "kind": 1}]},
+            {"t": "Hacer un amigo en el arenero", "o": [{"w": 100, "log": "Compartiste tu pala en el arenero y te hiciste de un amigo para todo el kínder.", "happy": 5, "kind": 2, "charm": 2}]},
+            {"t": "Morder al que te quitó el crayón", "o": [{"w": 100, "log": "Mordiste a un niño por un crayón rojo. Mandaron llamar a {x} el primer día.", "guts": 2, "karma": -3, "bond": -3}]}
+        ]
+    },
+    {
+        "id": "t_imaginary", "title": "TU AMIGO IMAGINARIO", "min": 3, "max": 5, "w": 7, "req": "",
+        "text": "Tienes un amigo que nadie más puede ver. Le pones plato en la mesa y todo. ¿Quién es?",
+        "choices": [
+            {"t": "Un dragón que escupe arcoíris", "o": [{"w": 100, "log": "Tu amigo imaginario era un dragón que escupía arcoíris. Inventaste mil historias con él.", "happy": 4, "know": 2}]},
+            {"t": "Un perrito que habla", "o": [{"w": 100, "log": "Tu amigo imaginario era un perrito que hablaba. Te enseñó a compartir... según tú.", "happy": 4, "kind": 2}]},
+            {"t": "Un superhéroe que te protege", "o": [{"w": 100, "log": "Tenías un superhéroe invisible de guardaespaldas. Con él no le temías a nada.", "happy": 3, "guts": 2}]},
+            {"t": "No necesitas amigos imaginarios", "o": [{"w": 100, "log": "Preferías a los amigos de verdad, aunque te quitaran los juguetes.", "charm": 2}]}
+        ]
+    },
+    {
+        "id": "t_wall", "title": "OBRA DE ARTE EN LA PARED", "min": 3, "max": 5, "w": 7, "req": "",
+        "text": "Con crayones de todos los colores convertiste la pared de la sala en un mural. {x} acaba de verlo.",
+        "choices": [
+            {"t": "Decir la verdad", "o": [{"w": 100, "log": "Dijiste «fui yo». Te tocó ayudar a limpiar, pero {x} te abrazó por ser honest{a}.", "karma": 3, "kind": 1, "bond": 3}]},
+            {"t": "Culpar al perro", "o": [
+                {"w": 40, "log": "Culpaste al perro. Nadie te creyó: el perro no sabe agarrar crayones.", "karma": -2, "happy": -2},
+                {"w": 60, "log": "Culpaste al perro y, de alguna forma, te creyeron. El perro sigue sin perdonarte.", "karma": -3, "skill": 1}
+            ]},
+            {"t": "Explicar que es arte", "o": [{"w": 100, "log": "Explicaste con toda seriedad que era un dragón en el espacio. Le tomaron foto antes de borrarlo.", "charm": 3, "happy": 3}]}
+        ]
+    }
+]
+
+function maybe_toddler_event() {
+    if L.age < 1 || L.age > 5 || !chance(14) { return false }
+    let p = first_rel("madre")
+    if p == null { p = first_rel("padre") }
+    if p == null { return false }
+    let pool = []
+    for ev in TODDLER_EVENTS {
+        if L.age >= ev.min && L.age <= ev.max && L.seen[ev.id] == null { list_push(pool, ev) }
+    }
+    if len(pool) == 0 { return false }
+    open_event(pick(pool), {"person": p})
+    return true
+}
+
 function maybe_event() {
+    if L.age < 5 { return maybe_toddler_event() }
     // Con el tiempo mensual, un evento cada 4-5 meses en promedio.
-    if L.age < 5 || !chance(vida_event_rate()) { return null }
+    if !chance(vida_event_rate()) { return null }
     let pool = []
     let weights = []
     for ev in EVENTS {

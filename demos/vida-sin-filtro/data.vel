@@ -60,18 +60,17 @@ const ACCESSORIES = ["Nada", "Lentes", "Aretes", "Piercing", "Barba"]
 const STDS = ["clamidia", "gonorrea", "herpes", "sífilis", "VIH"]
 const STD_WEIGHTS = [40, 30, 15, 10, 5]
 
+// Recuerdos de la primera infancia: [edad mínima, edad máxima, texto].
 const CHILDHOOD = [
-    "Diste tus primeros pasos y te estampaste contra la mesa.",
-    "Dijiste tu primera palabra: una grosería que aprendiste de tu papá.",
-    "Mordiste a otro niño en la guardería.",
-    "Te comiste un crayón. Sabía a azul.",
-    "Lloraste toda la noche porque sí.",
-    "Te escondiste dentro de una lavadora. Nadie se rió.",
-    "Pintaste la pared de la sala con mermelada.",
-    "Rompiste el control de la tele y culpaste al perro.",
-    "Te expulsaron de la guardería por morder al hámster.",
-    "Viste una película de terror a escondidas. No dormiste en un mes.",
-    "Te cortaste el fleco tú solo. Fue un error."
+    [0, 1, "Lloraste toda la noche porque sí."],
+    [1, 2, "Te comiste un crayón. Sabía a azul."],
+    [1, 3, "Mordiste a otro niño en la guardería."],
+    [2, 4, "Pintaste la pared de la sala con mermelada."],
+    [2, 4, "Te expulsaron de la guardería por morder al hámster."],
+    [3, 5, "Te escondiste dentro de una lavadora. Nadie se rió."],
+    [3, 5, "Rompiste el control de la tele y culpaste al perro."],
+    [4, 5, "Te cortaste el fleco tú sol{a}. Fue un error."],
+    [5, 5, "Viste una película de terror a escondidas. No dormiste en un mes."]
 ]
 
 const OLD_AGE_CAUSES = ["causas naturales", "un infarto", "un derrame cerebral", "neumonía", "un paro cardíaco mientras dormías"]

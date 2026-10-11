@@ -789,8 +789,18 @@ function yearly() {
     ocio_year()
     age_hitos()
     // Infancia
-    if L.age <= 5 {
-        if chance(70) { log_add(pick(CHILDHOOD), "n") }
+    if L.age <= 5 && chance(70) {
+        // Un recuerdo propio de esa edad, sin repetir.
+        if L.kid_mem == null { L.kid_mem = [] }
+        let opts = []
+        for c in CHILDHOOD {
+            if L.age >= c[0] && L.age <= c[1] && !list_contains(L.kid_mem, c[2]) { list_push(opts, c[2]) }
+        }
+        if len(opts) > 0 {
+            let line = pick(opts)
+            list_push(L.kid_mem, line)
+            log_add(fmt(line, {}), "n")
+        }
     }
 
     // Escuela

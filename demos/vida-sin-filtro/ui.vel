@@ -935,14 +935,23 @@ function draw_bottom() {
     let fy = 640
     let fill = HEX_WHITE
     let color = C_INK
-    if hovered("year") {
+    if hovered(if_str(L.age < 6, "age", "year")) {
         fill = HEX_YELLOW
         fy -= 4
     }
+    // De bebé, la estrella ya avanza un año; este botón da el paso corto (un mes).
+    let small_lbl = "+1 AÑO"
+    let small_act = "year"
+    let small_key = "TECLA Y"
+    if L.age < 6 {
+        small_lbl = "+1 MES"
+        small_act = "age"
+        small_key = "UN MES"
+    }
     svg(912, fy, 128, 58, slant_doc(122, 52, 14, fill, HEX_INK, 3, HEX_RED, 5))
-    ctext(972, fy + 26, "+1 AÑO", 20, color, "impact")
-    ctext(972, fy + 44, "TECLA Y", 11, color, "bold")
-    hot(912, 640, 122, 52, "year")
+    ctext(972, fy + 26, small_lbl, 20, color, "impact")
+    ctext(972, fy + 44, small_key, 11, color, "bold")
+    hot(912, 640, 122, 52, small_act)
     let sy = 600
     let sfill = HEX_INK
     if hovered("skip:5") {
