@@ -506,7 +506,10 @@ function small_button(x: int, y: int, w: int, h: int, lbl: string, action: strin
     let fill = HEX_INK
     if hovered(action) { fill = HEX_RED }
     svg(x, y, w + 4, h + 4, slant_doc(w, h, 10, fill, HEX_WHITE, 2, HEX_RED, 4))
-    ctext(x + w / 2, y + h / 2 + 6, lbl, 15, C_WHITE, "bold")
+    // Si la etiqueta no cabe (otro idioma, texto largo), se achica en vez de salirse.
+    let sz = 15
+    while sz > 10 && measure(lbl, sz, "bold") > w - 28 { sz -= 1 }
+    ctext(x + w / 2, y + h / 2 + sz / 2 - 1, lbl, sz, C_WHITE, "bold")
     hot(x, y, w, h, action)
 }
 
@@ -565,7 +568,7 @@ function draw_game() {
 
 function draw_card() {
     svg(18, 52, 360, 360, burst_doc(360, 360, 18, HEX_WHITE, HEX_INK, 4, L.age % 7))
-    portrait(58, 66, 280, 336, L.look, L.gender, L.age, mood_for(L.happy), 0, true)
+    portrait(58, 66, 280, 336, player_look(), L.gender, L.age, mood_for(L.happy), 0, true)
     svg(16, 16, 378, 60, slant_doc(372, 54, 18, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
     textw(44, 52, str_upper(L.first + " " + L.last), 22, C_WHITE, "impact", 310)
     tag(30, 84, 150, str_upper(month_name()), HEX_YELLOW, C_INK)
@@ -651,12 +654,21 @@ function portrait(x: any, y: any, w: int, h: int, look: map, gender: string, age
             if k == "b" {
                 dx = sin(G.t * 70.0) * 9.0 * (1.0 - p)
                 emote = "bad"
+                m = "surprised"
+                if p > 0.45 { m = "cry" }
             } else {
                 dy = dy - abs(sin(p * 9.42)) * 16.0 * (1.0 - p)
                 emote = "good"
-                if k == "x" { emote = "love" }
+                m = "grin"
+                if k == "x" {
+                    emote = "love"
+                    m = "love"
+                }
                 if k == "m" { emote = "money" }
-                if k == "a" { emote = "angry" }
+                if k == "a" {
+                    emote = "angry"
+                    m = "angry"
+                }
             }
             ep = p
         }
@@ -1022,7 +1034,10 @@ function draw_dialog(m: map, choices: list, locks: list, tags: list, prefix: str
     if p != null {
         let px = 20 - (1.0 - e) * 300
         svg(px - 30, 250, 420, 420, burst_doc(420, 420, 18, HEX_WHITE, HEX_INK, 5, p.id % 9))
-        portrait(px + 20, 270, 330, 396, p.look, p.gender, p.age, person_mood(p), p.id, false)
+        // Mientras «habla» (el primer segundo y medio), la boca se mueve.
+        let pm = person_mood(p)
+        if G.t - G.modal_t0 < 1.5 && fract(G.t * 5.0) < 0.5 { pm = "talk" }
+        portrait(px + 20, 270, 330, 396, p.look, p.gender, p.age, pm, p.id, false)
         svg(px + 30, 640, 300, 50, slant_doc(294, 44, 14, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
         textw(px + 56, 672, str_upper(p.first), 24, C_WHITE, "impact", 240)
     }
@@ -1344,33 +1359,45 @@ function life_stage() {
     return "VEJEZ"
 }
 
-// Notificaciones de rango (rasgos sociales y confidentes).
+// Notificaciones al estilo Persona: una cola, como mucho dos a la vez. Cada una vive
+// 2.6 s desde que aparece (las que esperan no envejecen) y entra con un destello.
 function draw_toasts() {
     let alive = []
     let slot = 0
+    let n = 0
+    let total = len(G.toasts)
     for t in G.toasts {
-        let age = G.t - t.t0
-        if age > 2.8 { continue }
+        n += 1
+        // Si se amontonan muchas, se descartan las más viejas.
+        if total - n >= 8 { continue }
+        if slot >= 2 {
+            list_push(alive, t)
+            continue
+        }
+        if t.shown == null { t.shown = G.t }
+        let age = G.t - t.shown
+        if age > 2.6 { continue }
         list_push(alive, t)
-        // Como mucho tres avisos a la vez; los demás no se apilan encima.
-        if slot >= 3 { continue }
-        let e = ease(clamp(age / 0.25, 0.0, 1.0))
+        let e = ease(clamp(age / 0.22, 0.0, 1.0))
         let fade = 1.0
-        if age > 2.4 { fade = 1.0 - (age - 2.4) / 0.4 }
-        let y = -90.0 + e * (100.0 + slot * 92.0)
-        fade_push(clamp(fade, 0.0, 1.0))
-        svg(380, y, 536, 86, slant_doc(526, 76, 24, HEX_INK, HEX_YELLOW, 4, HEX_RED, 8))
-        svg(392, y - 4, 90, 90, burst_doc(90, 90, 12, HEX_YELLOW, HEX_INK, 3, 4))
-        svg(418, y + 22, 38, 38, arrow_doc("up", HEX_RED))
+        if age > 2.25 { fade = 1.0 - (age - 2.25) / 0.35 }
+        let w = 470
+        let x = 405.0 + (1.0 - e) * 140.0
+        let y = 8.0 + slot * 64.0
+        fade_push(clamp(fade, 0.0, 1.0) * e)
+        svg(x, y, w + 8, 60, slant_doc(w, 54, 18, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
+        svg(x + 6, y - 2, 58, 58, burst_doc(58, 58, 10, HEX_YELLOW, HEX_INK, 3, 4))
+        svg(x + 20, y + 12, 30, 30, arrow_doc("up", HEX_RED))
         let head = t.head
         if head == null {
             head = "AVISO"
             if str_contains(t.title, "RANGO") { head = "¡RANGO ARRIBA!" }
             if str_contains(t.title, "NO SE PUDO") { head = "ERROR" }
         }
-        otext(496, y + 32, head, 18, C_YELLOW, "impact", false)
-        textw(496, y + 54, t.title, 20, C_WHITE, "impact", 380)
-        textw(496, y + 71, t.sub, 12, C_GRAY, "bold", 380)
+        otext(x + 74, y + 19, head, 13, C_YELLOW, "impact", false)
+        textw(x + 74, y + 38, t.title, 17, C_WHITE, "impact", w - 100)
+        textw(x + 74, y + 51, t.sub, 11, C_GRAY, "bold", w - 100)
+        if age < 0.14 { arect(x + 10, y, w - 20, 54, rgba(255, 255, 255, int((0.14 - age) / 0.14 * 110.0))) }
         fade_pop()
         slot += 1
     }
@@ -1384,7 +1411,7 @@ function draw_dead() {
     arect(0, 0, W, H, rgba(0, 0, 0, 170))
     let e = ease(prog(G.screen_t0, 0.6))
     svg(-40, 140, 460, 460, burst_doc(460, 460, 20, HEX_WHITE, HEX_INK, 5, 1))
-    svg(40 - (1.0 - e) * 200, 170, 300, 360, portrait_doc(L.look, L.gender, L.age, "dead"))
+    svg(40 - (1.0 - e) * 200, 170, 300, 360, portrait_doc(player_look(), L.gender, L.age, "dead"))
     if L.job != null && L.job.career != null {
         otext(60, 590, str_upper(career_rank_name()), 26, C_YELLOW, "impact", false)
         text(60, 614, L.job.title, 15, C_WHITE, "bold")
@@ -1421,16 +1448,17 @@ function draw_dead() {
         ["Personalidad", trait_name(L.trait, L.gender)],
         ["Dinero", money_str(L.money)],
         ["Último trabajo", job],
-        ["Educación", EDU_NAMES[L.edu]],
-        ["Parejas sexuales", str(L.partners)],
-        ["Matrimonios", str(L.marriages) + " · Divorcios " + str(L.divorces)],
-        ["Hijos", str(L.kids) + " · " + parenting_label()],
-        ["Generación", str(L.gen) + " · " + str(hito_count()) + " hitos"],
-        ["Propósitos", goals_text()],
-
-        ["Misiones", str(len(L.done)) + " / " + str(len(MISSIONS))],
-        ["Karma", karma_text()]
+        ["Educación", EDU_NAMES[L.edu]]
     ]
+    if L.age >= 18 { list_push(rows, ["Parejas sexuales", str(L.partners)]) }
+    for r in [["Matrimonios", str(L.marriages) + " · Divorcios " + str(L.divorces)],
+              ["Hijos", str(L.kids) + " · " + parenting_label()],
+              ["Generación", str(L.gen) + " · " + str(hito_count()) + " hitos"],
+              ["Propósitos", goals_text()],
+              ["Misiones", str(len(L.done)) + " / " + str(len(MISSIONS))],
+              ["Karma", karma_text()]] {
+        list_push(rows, r)
+    }
     let ry = ty + 46
     for row in rows {
         text(436, ry, row[0], 14, C_GRAY, "bold")
@@ -1444,38 +1472,102 @@ function draw_dead() {
         draw_roulette_overlay()
         return null
     }
+    draw_grade_stamp()
+    // Tu vida en momentos: tus favoritos o, si no marcaste ninguno, los hitos clave.
+    let e2 = ease(prog(G.screen_t0 + 0.2, 0.45))
+    move_push((1.0 - e2) * 200, 0)
     panel(872, 120, 380, 430, 18)
     let favs = fav_hitos()
-    let ly = 190
-    if len(favs) > 0 { tag(900, 134, 250, "TUS MOMENTOS FAVORITOS", HEX_RED, C_WHITE) }
+    let title = "TU VIDA EN MOMENTOS"
+    if len(favs) > 0 { title = "TUS MOMENTOS FAVORITOS" }
+    tag(900, 134, 260, title, HEX_RED, C_WHITE)
     push({"op": "clip_push", "x": 880, "y": 160, "w": 364, "h": 386})
-    if len(favs) > 0 {
-        for h in list_slice(favs, max(0, len(favs) - 14), len(favs)) {
-            textw(900, ly, "★ " + str(h.a) + " años · " + h.t, 13, C_YELLOW, "bold", 330)
-            ly += 24
-        }
-        push({"op": "clip_pop"})
-        draw_dead_buttons()
-        return null
-    }
-    tag(900, 134, 190, "ÚLTIMOS RECUERDOS", HEX_RED, C_WHITE)
-    let lines = log_lines(330, 13, "bold")
-    let total = len(lines)
-    let visible = 15
-    let i = max(0, total - visible)
-    while i < total {
-        let entry = lines[i]
-        let color = kind_color(entry.k)
-        if entry.k == "h" {
-            textw(900, ly, entry.t, 13, C_RED, "bold", 330)
-        } else {
-            text_raw(900, ly, entry.t, 13, color, "bold")
-        }
-        ly += 24
-        i += 1
+    let ly = 178
+    let list = life_highlights()
+    if len(favs) > 0 { list = list_slice(favs, max(0, len(favs) - 11), len(favs)) }
+    if len(list) == 0 { textw(900, ly + 10, "Una vida sin momentos memorables... todavía.", 14, C_GRAY, "bold", 330) }
+    for h in list {
+        svg(896, ly - 15, 62, 22, slant_doc(58, 20, 6, HEX_RED, "", 0, "", 0))
+        ctext(926, ly, str(h.a), 13, C_WHITE, "impact")
+        textw(966, ly, h.t, 13, C_WHITE, "bold", 270)
+        ly += 30
     }
     push({"op": "clip_pop"})
+    text(900, 520, "SE TE RECORDARÁ POR", 11, C_GRAY, "bold")
+    textw(900, 540, remembered_for(), 15, C_YELLOW, "impact", 330)
+    move_pop()
     draw_dead_buttons()
+}
+
+// Calificación de la vida (S a D), al estilo de los resultados de un combate.
+function life_grade() {
+    let s = min(30, L.age * 30 / 85)
+    s += min(20, hito_count() / 2)
+    s += (L.karma - 50) / 5
+    s += L.happy / 10
+    s += min(10, L.kids * 3 + if_num(L.marriages > 0, 3, 0))
+    if L.money >= 1000000 { s += 10 } else if L.money >= 100000 { s += 6 } else if L.money > 0 { s += 3 } else { s -= 5 }
+    s += L.fame / 10
+    if s >= 80 { return ["S", "UNA VIDA LEGENDARIA"] }
+    if s >= 65 { return ["A", "UNA VIDA PLENA"] }
+    if s >= 50 { return ["B", "UNA BUENA VIDA"] }
+    if s >= 35 { return ["C", "UNA VIDA COMPLICADA"] }
+    return ["D", "UN DESASTRE ENTRAÑABLE"]
+}
+
+function if_num(c: bool, a: int, b: int) {
+    if c { return a }
+    return b
+}
+
+function draw_grade_stamp() {
+    let t = G.t - G.screen_t0 - 0.55
+    if t < 0.0 { return null }
+    let g = life_grade()
+    let e = ease(clamp(t / 0.22, 0.0, 1.0))
+    let size = 150.0 + (1.0 - e) * 170.0
+    let cx = 300.0
+    let cy = 520.0
+    fade_push(e)
+    svg(cx - size / 2.0, cy - size / 2.0, int(size), int(size), burst_doc(int(size), int(size), 16, HEX_RED, HEX_INK, 5, 2))
+    otext(cx - size * 0.16, cy + size * 0.2, g[0], int(size * 0.55), C_WHITE, "impact", true)
+    fade_pop()
+    if t > 0.25 {
+        let w = 320
+        svg(56, cy + 74, w + 8, 40, slant_doc(w, 34, 12, HEX_INK, HEX_WHITE, 3, HEX_RED, 5))
+        ctextw(56 + w / 2, cy + 98, g[1], 16, C_YELLOW, "impact", w - 30)
+    }
+    return null
+}
+
+// Los hitos que cuentan tu historia: sin los de salud menores, repartidos a lo largo de la vida.
+function life_highlights() {
+    let out = []
+    if L.hitos == null { return out }
+    let pool = []
+    for h in L.hitos {
+        if h.c == "Salud" && !str_contains(h.t, "Venciste") { continue }
+        list_push(pool, h)
+    }
+    let n = len(pool)
+    if n <= 11 { return pool }
+    let i = 0
+    while i < 11 {
+        list_push(out, pool[i * (n - 1) / 10])
+        i += 1
+    }
+    return out
+}
+
+function remembered_for() {
+    if L.bw_count != null && L.bw_count > 0 { return "Algo que nadie sabe... y que te llevaste a la tumba." }
+    if L.fame >= 60 { return "Tu fama: medio mundo sabía tu nombre." }
+    if L.money >= 1000000 { return "Tu fortuna y lo que hiciste con ella." }
+    if L.kids >= 3 { return "La gran familia que dejaste." }
+    if L.karma >= 80 { return "Tu bondad. Hiciste el mundo un poco mejor." }
+    if L.karma < 20 { return "Tus crímenes. Nadie te extrañará." }
+    if L.marriages >= 3 { return "Tus bodas. Todas." }
+    return "Tu forma de vivir: sin filtro."
 }
 
 function draw_dead_buttons() {

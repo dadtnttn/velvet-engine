@@ -220,10 +220,14 @@ function lock_doc() {
 // las distingue para que nadie reciba el retrato de otra edad.
 function age_flags(age: int) {
     let f = ""
+    if age >= 3 && age < 13 { f = f + "k" }
     if age >= 13 { f = f + "t" }
     if age >= 16 { f = f + "b" }
+    if age >= 45 { f = f + "s" }
     if age >= 55 { f = f + "w" }
     if age >= 62 { f = f + "g" }
+    if age >= 65 { f = f + "y" }
+    if age >= 72 { f = f + "v" }
     return f
 }
 
@@ -231,7 +235,9 @@ function age_flags(age: int) {
 function look_key(look: map, gender: string, age: int, mood: string) {
     let bracket = "a"
     if age < 3 { bracket = "b" } else if age < 13 { bracket = "c" } else if age >= 62 { bracket = "o" } else if age >= 45 { bracket = "m" }
-    return "p|" + str(look.skin) + "." + str(look.hair) + "." + str(look.hcolor) + str(look.eyes) + str(look.outfit) + str(look.acc) + str(lv(look, "face")) + str(lv(look, "body")) + str(lv(look, "mark")) + str(lv(look, "lips")) + gender + bracket + age_flags(age) + mood
+    let wear = look["wear"]
+    if wear == null { wear = "" }
+    return "p|" + str(look.skin) + "." + str(look.hair) + "." + str(look.hcolor) + str(look.eyes) + str(look.outfit) + str(look.acc) + str(lv(look, "face")) + str(lv(look, "body")) + str(lv(look, "mark")) + str(lv(look, "lips")) + gender + bracket + age_flags(age) + mood + "|" + wear
 }
 
 // Campo de apariencia con valor por defecto (retratos antiguos no lo tienen).
@@ -256,6 +262,139 @@ const TORSOS = [
     "M2 240 Q6 194 58 186 L84 184 L100 214 L116 184 L142 186 Q194 194 198 240 Z",
     "M30 240 Q32 206 70 193 L84 188 L100 214 L116 188 L130 193 Q168 206 170 240 Z"
 ]
+
+// Ropa según la etapa de la vida.
+function default_wear(look: map, gender: string, age: int) {
+    if age < 3 { return "baby" }
+    if age < 13 { return "tee" }
+    if age < 18 {
+        if look.outfit % 2 == 0 { return "hoodie" }
+        return "tee"
+    }
+    if age >= 65 { return "cardigan" }
+    if gender == "f" && (look.outfit == 1 || look.outfit == 3 || look.outfit == 5) { return "dress" }
+    return "shirt"
+}
+
+// Lo que viste el protagonista según lo que está viviendo.
+function player_wear() {
+    if L.jail > 0 { return "prison" }
+    if L.route == "rey" && L.rd != null && L.rd.king == true { return "royal" }
+    if L.route == "presidente" && L.rd != null && L.rd.pres == true { return "president" }
+    if L.mil != null { return "military" }
+    if L.age >= 3 && L.age < 13 && L.school != "" { return "uniform" }
+    if L.job != null && L.age >= 18 {
+        let f = job_field()
+        if f == "Salud" { return "scrubs" }
+        if f == "Negocios" || f == "Oficina" || f == "Ley" || f == "Tecnología" { return "suit" }
+        if f == "Deporte" { return "sport" }
+        if f == "Ciencia" { return "lab" }
+    }
+    return default_wear(L.look, L.gender, L.age)
+}
+
+function player_look() {
+    let lk = copy_look(L.look)
+    lk["wear"] = player_wear()
+    return lk
+}
+
+function wear_color(wear: string, look: map) {
+    if wear == "scrubs" { return "#2aa39a" }
+    if wear == "prison" { return "#f28c28" }
+    if wear == "military" { return "#56653a" }
+    if wear == "royal" { return "#8b0d1a" }
+    if wear == "lab" || wear == "uniform" { return "#f2f2ee" }
+    if wear == "suit" || wear == "president" { return "#1f2433" }
+    if wear == "baby" { return "#9fd3f5" }
+    return OUTFITS[look.outfit]
+}
+
+function wear_details(wear: string, look: map, skin: string, color: string, adult: bool) {
+    let ink = HEX_INK
+    let w2 = " stroke='" + ink + "' stroke-width='2'"
+    if wear == "tee" || wear == "baby" {
+        let s = "<path d='M84 187 Q100 202 116 187' stroke='" + ink + "' stroke-width='3' fill='none' stroke-linecap='round'/>"
+        if wear == "tee" { s = s + poly(star_points(100.0, 224.0, 10.0), "#ffffff", ink, 2) }
+        return s
+    }
+    if wear == "hoodie" {
+        let s = "<path d='M62 196 Q100 224 138 196 Q128 180 100 178 Q72 180 62 196 Z' fill='" + color + "'" + w2 + "/>"
+        s = s + "<path d='M62 196 Q100 224 138 196 Q128 180 100 178 Q72 180 62 196 Z' fill='#000000' fill-opacity='0.22'/>"
+        s = s + "<path d='M93 206 L91 230 M107 206 L109 230' stroke='#ffffff' stroke-width='2.5' stroke-linecap='round'/><circle cx='91' cy='231' r='2.6' fill='#ffffff'/><circle cx='109' cy='231' r='2.6' fill='#ffffff'/>"
+        return s
+    }
+    if wear == "suit" || wear == "president" {
+        let s = "<path d='M86 188 L100 216 L114 188 Z' fill='#ffffff'/>"
+        s = s + "<path d='M97 198 L103 198 L106 228 L100 238 L94 228 Z' fill='#c8102e'" + w2 + "/>"
+        s = s + "<path d='M84 186 L72 198 L94 238 L100 216 Z' fill='" + color + "'" + w2 + "/><path d='M116 186 L128 198 L106 238 L100 216 Z' fill='" + color + "'" + w2 + "/>"
+        if wear == "president" {
+            s = s + "<path d='M130 192 L150 200 L74 240 L50 240 Z' fill='#2e8b57'/><path d='M138 195 L144 198 L66 240 L60 240 Z' fill='#ffffff'/><path d='M144 197 L150 200 L74 240 L66 240 Z' fill='#c8102e'/>"
+            s = s + "<circle cx='70' cy='210' r='5' fill='#e2b13c' stroke='" + ink + "' stroke-width='1.5'/>"
+        } else {
+            s = s + "<path d='M126 210 L138 208' stroke='#ffffff' stroke-width='3' stroke-linecap='round'/>"
+        }
+        return s
+    }
+    if wear == "scrubs" {
+        return "<path d='M86 187 L100 210 L114 187' fill='none' stroke='#16655f' stroke-width='4'/><rect x='116' y='214' width='16' height='13' rx='2' fill='none' stroke='#16655f' stroke-width='2.5'/><path d='M124 212 L124 222' stroke='#3b6fd6' stroke-width='2.5'/>"
+    }
+    if wear == "lab" {
+        let s = "<path d='M88 188 L100 210 L112 188 Z' fill='#7fb2e5'/>"
+        s = s + "<path d='M84 186 L76 200 L96 240 L100 212 Z' fill='#ffffff'" + w2 + "/><path d='M116 186 L124 200 L104 240 L100 212 Z' fill='#ffffff'" + w2 + "/>"
+        s = s + "<rect x='120' y='216' width='15' height='12' fill='none' stroke='#9a9a9a' stroke-width='2'/><path d='M124 212 L124 222' stroke='#c8102e' stroke-width='2.5'/>"
+        return s
+    }
+    if wear == "uniform" {
+        return "<path d='M84 186 L100 204 L116 186 L109 183 L100 196 L91 183 Z' fill='#ffffff'" + w2 + "/><path d='M98 198 L102 198 L104 222 L100 228 L96 222 Z' fill='#1d3d7a'/><rect x='118' y='214' width='14' height='11' fill='none' stroke='#9a9a9a' stroke-width='1.5'/>"
+    }
+    if wear == "prison" {
+        return "<path d='M86 187 L100 206 L114 187' fill='none' stroke='#8a4a10' stroke-width='3'/><rect x='112' y='212' width='30' height='13' fill='#ffffff' stroke='#8a4a10' stroke-width='1.5'/><path d='M116 216 L138 216 M116 221 L131 221' stroke='" + ink + "' stroke-width='2'/>"
+    }
+    if wear == "military" {
+        let s = "<ellipse cx='60' cy='220' rx='14' ry='8' fill='#3e4a28'/><ellipse cx='142' cy='214' rx='12' ry='7' fill='#3e4a28'/><ellipse cx='118' cy='234' rx='10' ry='6' fill='#748449'/><ellipse cx='76' cy='236' rx='9' ry='5' fill='#748449'/>"
+        s = s + "<path d='M84 186 L100 204 L116 186' fill='none' stroke='#2c3418' stroke-width='3'/>"
+        s = s + poly(star_points(128.0, 214.0, 7.0), "#e2b13c", ink, 1)
+        return s
+    }
+    if wear == "royal" {
+        let s = "<path d='M58 196 Q100 232 142 196 L148 208 Q100 246 52 208 Z' fill='#ffffff'" + w2 + "/>"
+        for dot in [[66, 210], [84, 220], [100, 224], [116, 220], [134, 210]] { s = s + "<path d='M" + str(dot[0]) + " " + str(dot[1] - 3) + " L" + str(dot[0]) + " " + str(dot[1] + 3) + "' stroke='" + ink + "' stroke-width='2.5'/>" }
+        s = s + "<path d='M86 190 L100 214 L114 190' fill='none' stroke='#e2b13c' stroke-width='4'/><circle cx='100' cy='232' r='6' fill='#e2b13c' stroke='" + ink + "' stroke-width='2'/>"
+        return s
+    }
+    if wear == "dress" {
+        let s = "<path d='M80 187 Q100 212 120 187 Z' fill='" + skin + "'/><path d='M80 187 Q100 212 120 187' fill='none' stroke='" + ink + "' stroke-width='2.5'/>"
+        if adult {
+            for i in [0, 1, 2, 3, 4, 5, 6] {
+                let t = i * 1.0 / 6.0
+                let px = 84.0 + t * 32.0
+                let py = 192.0 + sin(t * 3.1416) * 13.0
+                s = s + "<circle cx='" + str(int(px)) + "' cy='" + str(int(py)) + "' r='2.6' fill='#ffffff' stroke='#9a9a9a' stroke-width='1'/>"
+            }
+        }
+        return s
+    }
+    if wear == "cardigan" {
+        let s = "<path d='M86 188 L100 214 L114 188 Z' fill='#f2f2ee'/>"
+        s = s + "<path d='M86 188 L96 240 M114 188 L104 240' stroke='" + ink + "' stroke-width='2.5'/>"
+        s = s + "<circle cx='94' cy='222' r='2.6' fill='#e2b13c'/><circle cx='96' cy='234' r='2.6' fill='#e2b13c'/>"
+        return s
+    }
+    if wear == "sport" {
+        return "<path d='M70 200 L70 240 M130 200 L130 240' stroke='#ffffff' stroke-width='5'/><path d='M86 188 Q100 200 114 188' fill='none' stroke='#ffffff' stroke-width='3'/>"
+    }
+    let collar = HEX_WHITE
+    if look.outfit == 2 { collar = ink }
+    return "<path d='M84 186 L100 214 L116 186 L109 183 L100 200 L91 183 Z' fill='" + collar + "'" + w2 + "/>"
+}
+
+// ¿Pierde pelo con los años? Solo algunos hombres, siempre los mismos (según su cara).
+function goes_bald(look: map, gender: string, age: int) {
+    if gender != "m" || age < 52 { return false }
+    if !list_contains([0, 1, 4, 8, 14, 18], look.hair) { return false }
+    return (look.skin + look.eyes + lv(look, "face")) % 3 == 0
+}
 
 // Iconos de reacción que aparecen sobre la cabeza.
 function emote_doc(kind: string) {
@@ -297,32 +436,36 @@ function portrait_doc(look: map, gender: string, age: int, mood: string) {
     let key = look_key(look, gender, age, mood)
     let cached = svgc[key]
     if cached != null { return cached }
+    let kid = age >= 3 && age < 13
     let skin = SKINS[look.skin]
     let shade = SKIN_SHADES[look.skin]
     let hc = HAIR_COLORS[look.hcolor]
     if age >= 62 && look.hcolor < 5 { hc = "#a9a9a9" }
+    if age >= 72 && look.hcolor < 5 { hc = "#e2e2e2" }
     let eye = EYE_COLORS[look.eyes]
-    let outfit = OUTFITS[look.outfit]
+    let wear = look["wear"]
+    if wear == null { wear = default_wear(look, gender, age) }
+    let outfit = wear_color(wear, look)
     let style = look.hair
     if age < 3 { style = 99 }
+    if goes_bald(look, gender, age) { style = 98 }
     let acc = ACCESSORIES[look.acc]
     let blink = str_ends_with(mood, "!b")
     let face_mood = str_replace(mood, "!b", "")
     let face = lv(look, "face")
     let body = lv(look, "body")
+    if kid { body = 2 }
     let line = " stroke='" + HEX_INK + "' stroke-width='3' stroke-linejoin='round'"
     let b = ""
 
     // Pelo de atrás
     b = b + hair_back(style, hc, line)
 
-    // Cuello y torso
+    // Cuello, torso y ropa
     b = b + "<path d='M84 156 L84 196 L116 196 L116 156 Z' fill='" + skin + "'" + line + "/>"
     b = b + "<path d='M84 166 Q100 182 116 166 L116 178 Q100 192 84 178 Z' fill='" + shade + "'/>"
     b = b + "<path d='" + TORSOS[body] + "' fill='" + outfit + "'" + line + "/>"
-    let collar = HEX_WHITE
-    if look.outfit == 2 { collar = HEX_INK }
-    b = b + "<path d='M84 186 L100 214 L116 186 L109 183 L100 200 L91 183 Z' fill='" + collar + "' stroke='" + HEX_INK + "' stroke-width='2'/>"
+    b = b + wear_details(wear, look, skin, outfit, age >= 18)
     b = b + "<path d='M40 204 Q52 196 66 194' stroke='" + HEX_WHITE + "' stroke-opacity='0.3' stroke-width='4' fill='none' stroke-linecap='round'/>"
 
     // Orejas y cabeza
@@ -338,12 +481,17 @@ function portrait_doc(look: map, gender: string, age: int, mood: string) {
     }
     if mark == 2 { b = b + "<circle cx='118' cy='150' r='2.6' fill='#3a2316'/>" }
     if mark == 3 { b = b + "<path d='M128 98 L138 128' stroke='#b4505a' stroke-width='3' stroke-linecap='round'/><path d='M129 106 L136 104 M131 114 L138 112 M133 122 L139 120' stroke='#b4505a' stroke-width='2'/>" }
-    if age >= 55 {
-        b = b + "<path d='M84 78 Q100 74 116 78 M60 124 L67 121 M140 124 L133 121' stroke='" + HEX_INK + "' stroke-opacity='0.4' stroke-width='2' fill='none'/>"
+    // Envejecimiento: líneas de expresión, frente, patas de gallo, ojeras y manchas.
+    let wr = " stroke='" + HEX_INK + "' stroke-opacity='0.32' stroke-width='2' fill='none' stroke-linecap='round'"
+    if age >= 45 { b = b + "<path d='M86 140 Q81 150 86 159 M114 140 Q119 150 114 159'" + wr + "/>" }
+    if age >= 55 { b = b + "<path d='M82 80 Q100 75 118 80 M86 87 Q100 83 114 87 M61 115 L54 112 M61 120 L54 121 M139 115 L146 112 M139 120 L146 121'" + wr + "/>" }
+    if age >= 65 {
+        b = b + "<path d='M68 129 Q78 134 88 129 M112 129 Q122 134 132 129'" + wr + "/>"
+        b = b + "<circle cx='132' cy='86' r='3' fill='#8a5a3a' opacity='0.35'/><circle cx='66' cy='96' r='2.2' fill='#8a5a3a' opacity='0.3'/>"
     }
 
     // Ojos, cejas, nariz
-    if blink { b = b + closed_eyes() } else { b = b + eyes(face_mood, eye, gender) }
+    if blink { b = b + closed_eyes() } else { b = b + eyes(face_mood, eye, gender, kid) }
     let brow = hc
     if look.hcolor == 4 || look.hcolor == 8 || age >= 62 { brow = "#5a5a5a" }
     b = b + brows(face_mood, brow)
@@ -357,12 +505,14 @@ function portrait_doc(look: map, gender: string, age: int, mood: string) {
 
     // Boca y rubor
     let lip = LIP_COLORS[lv(look, "lips")]
-    if lip != "" && face_mood != "grin" && age >= 13 {
+    if lip != "" && face_mood != "grin" && face_mood != "talk" && face_mood != "surprised" && age >= 13 {
         b = b + "<ellipse cx='100' cy='153' rx='13' ry='5' fill='" + lip + "'/>"
     }
     b = b + mouth(face_mood)
-    if face_mood == "grin" || face_mood == "happy" || gender == "f" {
-        b = b + "<ellipse cx='70' cy='134' rx='9' ry='4' fill='#ff5f7e' opacity='0.4'/><ellipse cx='130' cy='134' rx='9' ry='4' fill='#ff5f7e' opacity='0.4'/>"
+    let blush = 0.4
+    if face_mood == "love" { blush = 0.7 }
+    if face_mood == "grin" || face_mood == "happy" || face_mood == "love" || gender == "f" || kid {
+        b = b + "<ellipse cx='70' cy='134' rx='9' ry='4' fill='#ff5f7e' opacity='" + str(blush) + "'/><ellipse cx='130' cy='134' rx='9' ry='4' fill='#ff5f7e' opacity='" + str(blush) + "'/>"
     }
 
     // Pelo de enfrente
@@ -381,6 +531,11 @@ function portrait_doc(look: map, gender: string, age: int, mood: string) {
     if acc == "Piercing" && age >= 13 {
         b = b + "<circle cx='104' cy='136' r='3.2' fill='none' stroke='#d8d8d8' stroke-width='2'/><circle cx='128' cy='97' r='2.4' fill='#d8d8d8'/><circle cx='134' cy='99' r='2.4' fill='#d8d8d8'/>"
     }
+    // La corona va encima de todo.
+    if wear == "royal" {
+        b = b + "<path d='M64 64 L72 28 L88 50 L100 18 L112 50 L128 28 L136 64 Z' fill='#e2b13c' stroke='" + HEX_INK + "' stroke-width='3' stroke-linejoin='round'/>"
+        b = b + "<path d='M64 64 L136 64' stroke='" + HEX_INK + "' stroke-width='3'/><circle cx='100' cy='42' r='5' fill='#c8102e' stroke='" + HEX_INK + "' stroke-width='1.5'/><circle cx='80' cy='54' r='3.5' fill='#2f6fd6'/><circle cx='120' cy='54' r='3.5' fill='#2f6fd6'/>"
+    }
     let doc = svg_doc(200, 240, b)
     svgc[key] = doc
     return doc
@@ -390,31 +545,63 @@ function closed_eyes() {
     return "<path d='M67 118 Q78 124 89 118 M111 118 Q122 124 133 118' stroke='" + HEX_INK + "' stroke-width='4' fill='none' stroke-linecap='round'/>"
 }
 
-function eyes(mood: string, eye: string, gender: string) {
+function eyes(mood: string, eye: string, gender: string, kid: bool) {
     let s = ""
+    let ink = HEX_INK
     for cx in [78, 122] {
         if mood == "grin" {
-            s = s + "<path d='M" + str(cx - 11) + " 119 Q" + str(cx) + " 106 " + str(cx + 11) + " 119' stroke='" + HEX_INK + "' stroke-width='4' fill='none' stroke-linecap='round'/>"
+            s = s + "<path d='M" + str(cx - 11) + " 119 Q" + str(cx) + " 106 " + str(cx + 11) + " 119' stroke='" + ink + "' stroke-width='4' fill='none' stroke-linecap='round'/>"
             continue
         }
         if mood == "dead" {
-            s = s + "<path d='M" + str(cx - 8) + " 110 L" + str(cx + 8) + " 124 M" + str(cx + 8) + " 110 L" + str(cx - 8) + " 124' stroke='" + HEX_INK + "' stroke-width='4' stroke-linecap='round'/>"
+            s = s + "<path d='M" + str(cx - 8) + " 110 L" + str(cx + 8) + " 124 M" + str(cx + 8) + " 110 L" + str(cx - 8) + " 124' stroke='" + ink + "' stroke-width='4' stroke-linecap='round'/>"
             continue
         }
+        if mood == "love" {
+            s = s + "<path d='M" + str(cx) + " 126 C" + str(cx - 15) + " 115 " + str(cx - 11) + " 104 " + str(cx - 4) + " 106 C" + str(cx - 1) + " 107 " + str(cx) + " 110 " + str(cx) + " 111 C" + str(cx) + " 110 " + str(cx + 1) + " 107 " + str(cx + 4) + " 106 C" + str(cx + 11) + " 104 " + str(cx + 15) + " 115 " + str(cx) + " 126 Z' fill='#ff4f8b' stroke='" + ink + "' stroke-width='2.5' stroke-linejoin='round'/>"
+            s = s + "<circle cx='" + str(cx - 5) + "' cy='111' r='2' fill='#ffffff'/>"
+            continue
+        }
+        if mood == "cry" {
+            s = s + "<path d='M" + str(cx - 11) + " 116 Q" + str(cx) + " 124 " + str(cx + 11) + " 116' stroke='" + ink + "' stroke-width='4' fill='none' stroke-linecap='round'/>"
+            continue
+        }
+        if mood == "surprised" {
+            s = s + "<ellipse cx='" + str(cx) + "' cy='116' rx='10' ry='11' fill='#ffffff' stroke='" + ink + "' stroke-width='2.5'/>"
+            s = s + "<circle cx='" + str(cx) + "' cy='117' r='3.4' fill='" + ink + "'/>"
+            continue
+        }
+        if mood == "smug" {
+            s = s + "<ellipse cx='" + str(cx) + "' cy='120' rx='11' ry='5' fill='#ffffff' stroke='" + ink + "' stroke-width='2.5'/>"
+            s = s + "<circle cx='" + str(cx + 2) + "' cy='120' r='3.6' fill='" + eye + "'/><circle cx='" + str(cx + 2) + "' cy='120' r='1.8' fill='" + ink + "'/>"
+            s = s + "<path d='M" + str(cx - 13) + " 117 L" + str(cx + 13) + " 117' stroke='" + ink + "' stroke-width='4' stroke-linecap='round'/>"
+            continue
+        }
+        let rx = 11
         let ry = 8
-        if mood == "angry" { ry = 6 }
-        s = s + "<ellipse cx='" + str(cx) + "' cy='117' rx='11' ry='" + str(ry) + "' fill='#ffffff' stroke='" + HEX_INK + "' stroke-width='2.5'/>"
-        s = s + "<circle cx='" + str(cx) + "' cy='118' r='5.5' fill='" + eye + "'/>"
-        s = s + "<circle cx='" + str(cx) + "' cy='118' r='2.6' fill='" + HEX_INK + "'/>"
-        s = s + "<circle cx='" + str(cx + 2) + "' cy='116' r='1.6' fill='#ffffff'/>"
+        let ir = 5.5
+        if kid {
+            rx = 13
+            ry = 10
+            ir = 7.0
+        }
+        if mood == "angry" { ry = ry - 2 }
+        s = s + "<ellipse cx='" + str(cx) + "' cy='117' rx='" + str(rx) + "' ry='" + str(ry) + "' fill='#ffffff' stroke='" + ink + "' stroke-width='2.5'/>"
+        s = s + "<circle cx='" + str(cx) + "' cy='118' r='" + str(ir) + "' fill='" + eye + "'/>"
+        s = s + "<circle cx='" + str(cx) + "' cy='118' r='" + str(ir * 0.47) + "' fill='" + ink + "'/>"
+        s = s + "<circle cx='" + str(cx + 2) + "' cy='116' r='1.8' fill='#ffffff'/>"
+        if kid { s = s + "<circle cx='" + str(cx - 3) + "' cy='121' r='1.2' fill='#ffffff'/>" }
         if gender == "f" {
             let flick = cx + 13
             if cx < 100 { flick = cx - 13 }
-            s = s + "<path d='M" + str(cx - 12) + " 113 Q" + str(cx) + " 105 " + str(cx + 12) + " 113 L" + str(flick) + " 108' stroke='" + HEX_INK + "' stroke-width='3.5' fill='none' stroke-linecap='round'/>"
+            s = s + "<path d='M" + str(cx - 12) + " 113 Q" + str(cx) + " 105 " + str(cx + 12) + " 113 L" + str(flick) + " 108' stroke='" + ink + "' stroke-width='3.5' fill='none' stroke-linecap='round'/>"
         }
     }
     if mood == "sad" {
         s = s + "<path d='M68 128 Q66 136 70 138' stroke='#5ab0ff' stroke-width='3' fill='none' stroke-linecap='round'/>"
+    }
+    if mood == "cry" {
+        s = s + "<path d='M70 122 Q64 140 68 160 M130 122 Q136 140 132 160' stroke='#5ab0ff' stroke-width='5' fill='none' stroke-linecap='round' opacity='0.85'/>"
     }
     return s
 }
@@ -422,17 +609,25 @@ function eyes(mood: string, eye: string, gender: string) {
 function brows(mood: string, color: string) {
     let left = "M66 101 Q78 97 90 100"
     let right = "M110 100 Q122 97 134 101"
-    if mood == "grin" || mood == "happy" {
+    if mood == "grin" || mood == "happy" || mood == "love" {
         left = "M66 100 Q78 91 90 97"
         right = "M110 97 Q122 91 134 100"
     }
-    if mood == "sad" {
+    if mood == "sad" || mood == "cry" {
         left = "M66 103 Q78 101 90 94"
         right = "M110 94 Q122 101 134 103"
     }
     if mood == "angry" {
         left = "M66 95 Q78 97 91 105"
         right = "M109 105 Q122 97 134 95"
+    }
+    if mood == "surprised" {
+        left = "M66 94 Q78 85 90 91"
+        right = "M110 91 Q122 85 134 94"
+    }
+    if mood == "smug" {
+        left = "M66 103 Q78 100 90 102"
+        right = "M110 96 Q122 88 134 95"
     }
     return "<path d='" + left + " M" + str_replace(right, "M", "") + "' stroke='" + color + "' stroke-width='4.5' fill='none' stroke-linecap='round'/>"
 }
@@ -442,6 +637,17 @@ function mouth(mood: string) {
     if mood == "grin" {
         return "<path d='M84 148 Q100 170 116 148 Z' fill='#7a1010' stroke='" + HEX_INK + "' stroke-width='2.5' stroke-linejoin='round'/><path d='M86 149 L114 149 Q112 155 100 156 Q88 155 86 149 Z' fill='#ffffff'/>"
     }
+    if mood == "love" {
+        return "<path d='M84 149 Q100 168 116 149 Z' fill='#7a1010' stroke='" + HEX_INK + "' stroke-width='2.5' stroke-linejoin='round'/><ellipse cx='100' cy='159' rx='7' ry='3.5' fill='#ff7a8a'/>"
+    }
+    if mood == "surprised" {
+        return "<ellipse cx='100' cy='156' rx='7' ry='9' fill='#7a1010' stroke='" + HEX_INK + "' stroke-width='2.5'/>"
+    }
+    if mood == "talk" {
+        return "<ellipse cx='100' cy='154' rx='8' ry='5.5' fill='#7a1010' stroke='" + HEX_INK + "' stroke-width='2.5'/><ellipse cx='100' cy='157' rx='4.5' ry='2.2' fill='#ff7a8a'/>"
+    }
+    if mood == "cry" { return "<path d='M86 158 Q92 151 98 157 Q104 151 110 157 Q114 154 116 158'" + stroke + "/>" }
+    if mood == "smug" { return "<path d='M88 154 Q104 158 114 146'" + stroke + "/>" }
     if mood == "happy" { return "<path d='M86 150 Q100 161 114 150'" + stroke + "/>" }
     if mood == "sad" { return "<path d='M87 157 Q100 148 113 157'" + stroke + "/>" }
     if mood == "angry" { return "<path d='M86 156 Q93 150 100 154 Q107 150 114 156'" + stroke + "/>" }
@@ -450,6 +656,7 @@ function mouth(mood: string) {
 }
 
 function hair_back(style: int, hc: string, line: string) {
+    if style >= 12 && style <= 19 { return hair_back_x(style, hc, line) }
     if style == 2 { return "<path d='M42 110 Q36 38 100 36 Q164 38 158 110 L166 232 L34 232 Z' fill='" + hc + "'" + line + "/>" }
     if style == 3 { return "<path d='M136 64 Q196 80 182 176 Q172 128 142 104 Z' fill='" + hc + "'" + line + "/>" }
     if style == 5 {
@@ -469,6 +676,7 @@ function hair_back(style: int, hc: string, line: string) {
 }
 
 function hair_front(style: int, hc: string, line: string) {
+    if (style >= 12 && style <= 19) || style == 98 { return hair_front_x(style, hc, line) }
     let d = ""
     if style == 0 { d = "M46 112 Q42 46 100 42 Q158 46 154 112 Q150 84 128 72 Q104 88 70 76 Q52 88 46 112 Z" }
     if style == 1 { d = "M44 116 L38 70 L58 78 L54 40 L80 60 L92 26 L106 56 L130 30 L130 62 L160 46 L148 80 L164 92 L154 118 Q146 90 126 80 L112 98 L100 80 L84 100 L74 80 Q54 92 44 116 Z" }
@@ -496,4 +704,63 @@ function hair_front(style: int, hc: string, line: string) {
         s = s + "<path d='M70 60 Q92 50 114 54' stroke='#ffffff' stroke-opacity='0.35' stroke-width='5' fill='none' stroke-linecap='round'/>"
     }
     return s
+}
+
+// Peinados nuevos: afro, trenza, raya al lado, media melena con fleco, chongos,
+// rastas, copete y fleco recto (y la calvicie con los años, 98).
+function hair_back_x(style: int, hc: string, line: string) {
+    let f = "' fill='" + hc + "'" + line + "/>"
+    if style == 12 { return "<circle cx='100' cy='88' r='68" + f }
+    if style == 13 {
+        let s = "<path d='M44 110 Q40 42 100 40 Q160 42 156 110 Z" + f
+        let y = 118
+        while y < 230 {
+            s = s + "<ellipse cx='" + str(146 + (y - 118) / 14) + "' cy='" + str(y) + "' rx='11' ry='9" + f
+            y += 15
+        }
+        return s
+    }
+    if style == 15 { return "<path d='M44 110 Q38 44 100 40 Q162 44 156 110 L160 188 Q148 198 132 186 L68 186 Q52 198 40 188 Z" + f }
+    if style == 16 { return "<circle cx='64' cy='50' r='21" + f + "<circle cx='136' cy='50' r='21" + f }
+    if style == 17 {
+        let s = ""
+        for x in [50, 64, 78, 122, 136, 150] {
+            s = s + "<path d='M" + str(x - 6) + " 80 L" + str(x - 8) + " 214 Q" + str(x) + " 222 " + str(x + 8) + " 214 L" + str(x + 6) + " 80 Z" + f
+        }
+        return s
+    }
+    if style == 19 { return "<path d='M42 108 Q38 42 100 40 Q162 42 158 108 L162 232 L38 232 Z" + f }
+    return ""
+}
+
+function hair_front_x(style: int, hc: string, line: string) {
+    let f = "' fill='" + hc + "'" + line + "/>"
+    let shine = "<path d='M70 60 Q92 50 114 54' stroke='#ffffff' stroke-opacity='0.35' stroke-width='5' fill='none' stroke-linecap='round'/>"
+    if style == 98 {
+        let s = "<path d='M46 118 Q42 96 52 82 L58 86 Q54 102 56 120 Z" + f + "<path d='M154 118 Q158 96 148 82 L142 86 Q146 102 144 120 Z" + f
+        return s + "<path d='M78 62 Q96 54 114 58' stroke='#ffffff' stroke-opacity='0.45' stroke-width='5' fill='none' stroke-linecap='round'/>"
+    }
+    if style == 12 {
+        let s = "<path d='M50 102 Q50 52 100 50 Q150 52 150 102 Q140 76 100 72 Q60 76 50 102 Z" + f
+        for d in [[60, 40], [86, 28], [114, 28], [140, 40], [40, 76], [160, 76]] {
+            s = s + "<circle cx='" + str(d[0]) + "' cy='" + str(d[1]) + "' r='3' fill='#000000' fill-opacity='0.18'/>"
+        }
+        return s
+    }
+    if style == 13 { return "<path d='M46 110 Q46 46 100 42 Q154 46 154 104 Q130 66 86 70 Q58 78 46 110 Z" + f + shine }
+    if style == 14 {
+        return "<path d='M46 112 Q44 48 98 44 Q156 48 154 108 Q148 78 120 70 L84 64 Q60 74 46 112 Z" + f + "<path d='M82 50 L85 64' stroke='" + HEX_INK + "' stroke-opacity='0.5' stroke-width='2.5'/>" + shine
+    }
+    if style == 15 { return "<path d='M50 100 Q50 46 100 44 Q150 46 150 100 L142 92 L132 100 L122 92 L112 100 L100 92 L88 100 L78 92 L68 100 L58 92 Z" + f + shine }
+    if style == 16 { return "<path d='M48 104 Q48 50 100 46 Q152 50 152 104 Q146 76 100 66 Q54 76 48 104 Z" + f + shine }
+    if style == 17 {
+        let s = "<path d='M46 108 Q44 44 100 42 Q156 44 154 108 Q146 80 128 74 L72 74 Q54 80 46 108 Z" + f
+        return s + "<path d='M70 50 L66 74 M90 44 L88 70 M110 44 L112 70 M130 50 L134 74' stroke='" + HEX_INK + "' stroke-opacity='0.35' stroke-width='2.5'/>"
+    }
+    if style == 18 { return "<path d='M50 100 Q46 56 70 46 Q86 20 124 24 Q158 32 150 70 Q152 86 150 100 Q140 74 100 70 Q66 74 50 100 Z" + f + shine }
+    if style == 19 {
+        let s = "<path d='M48 98 Q48 44 100 42 Q152 44 152 98 Z" + f
+        return s + "<path d='M50 96 L50 152 L63 152 L63 96 Z" + f + "<path d='M137 96 L137 152 L150 152 L150 96 Z" + f + shine
+    }
+    return ""
 }

@@ -345,7 +345,7 @@ function mil_month() {
     if front {
         let r = rint(1, 1000)
         if r <= w.int * 3 {
-            die("en combate durante la guerra contra " + cname(enemy_of(w, here_id())))
+            die("heridas de combate en la guerra contra " + cname(enemy_of(w, here_id())))
             return null
         }
         if r <= w.int * 3 + 35 {

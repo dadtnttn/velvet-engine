@@ -486,7 +486,7 @@ const EVENTS = [
         ]
     },
     {
-        "id": "midnight_tv", "title": "Canal de medianoche", "min": 16, "max": 45, "w": 2, "req": "single",
+        "id": "midnight_tv", "title": "Canal de medianoche", "min": 18, "max": 45, "w": 2, "req": "single",
         "text": "A medianoche, en la tele apagada, aparece la silueta de alguien. Dicen que es tu alma gemela.",
         "choices": [
             {"t": "Tocar la pantalla", "o": [
