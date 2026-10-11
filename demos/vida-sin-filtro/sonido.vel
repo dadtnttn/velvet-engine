@@ -2,12 +2,138 @@
 // Sonido: efectos cortos y música de fondo (archivos WAV declarados en el
 // manifiesto, "sounds"). El host mezcla; aquí solo se piden por nombre.
 
+// Efectos con nota musical: no se desafinan (suenan encima de la música).
+const SFX_TONAL = ["ok", "good", "bad", "love", "money", "age", "death", "rank", "phone", "break"]
+
 // Efecto con un poco de variación de tono para que no canse.
 function sfx(id: string) {
+    sfx_at(id, 1.0)
+}
+
+function sfx_at(id: string, vol: float) {
     let rate = 1.0
     // Sin tocar el azar del juego: el tono varía con el número de frame.
-    rate = 0.96 + (G.frames % 9) / 100.0
-    emit("audio.play", {"sound": "sfx_" + id, "volume": 1.0, "rate": rate})
+    if !list_contains(SFX_TONAL, id) { rate = 0.96 + (G.frames % 9) / 100.0 }
+    emit("audio.play", {"sound": "sfx_" + id, "volume": vol, "rate": rate})
+}
+
+// Director de sonido: compara el estado con el del frame anterior y suena lo que
+// toca (ventanas que se abren o cierran, resultados, avisos, cumpleaños, muerte).
+// Así no hay que sembrar llamadas a sfx() por todo el juego.
+function snd_sync() {
+    let s = G.snd
+    if s == null {
+        G.snd = {"mode": G.mode, "kind": "", "mt0": G.modal_t0, "menu": G.menu_t0, "cut": G.cut_t0, "stamp": true,
+                 "hover": G.hover, "tick_t": 0.0, "money": 0, "unread": 0, "month": -1}
+        return null
+    }
+    // Saltando años: solo suena lo que detiene el salto.
+    let quiet = G.skip != null
+    if G.mode != s.mode {
+        if G.mode == "dead" {
+            sfx("death")
+            s.stamp = false
+        } else if G.mode == "game" && (s.mode == "create" || s.mode == "title") {
+            sfx("age")
+        } else if G.mode == "create" || G.mode == "title" {
+            sfx("open")
+        }
+        s.mode = G.mode
+        s.kind = ""
+        s.mt0 = G.modal_t0
+        s.menu = G.menu_t0
+        s.cut = G.cut_t0
+    }
+    // El sello de la calificación cae sobre la pantalla de legado.
+    if G.mode == "dead" && !s.stamp && G.t - G.screen_t0 >= 0.85 {
+        s.stamp = true
+        sfx("stamp")
+    }
+    if G.mode == "game" {
+        snd_modal(s, quiet)
+        // Cumpleaños (la cortinilla del año nuevo) o, si no, la hoja del mes.
+        if G.cut_t0 != s.cut {
+            s.cut = G.cut_t0
+            s.month = L.month
+            if !quiet && G.modal == null { sfx("age") }
+        } else if L.month != s.month {
+            if s.month >= 0 && !quiet && G.modal == null { sfx("month") }
+            s.month = L.month
+        }
+        // Avisos: cada uno suena una vez, cuando aparece.
+        if !quiet {
+            for t in G.toasts {
+                if t.snd != true && G.t >= t.t0 {
+                    t.snd = true
+                    if str_contains(t.title, "RANGO") { sfx("rank") } else { sfx("toast") }
+                    break
+                }
+            }
+        } else {
+            for t in G.toasts { t.snd = true }
+        }
+        // Notificaciones nuevas del móvil.
+        let d = L.ph
+        if d != null && d.unread != null {
+            if d.unread > s.unread && !quiet && G.modal == null && d.dnd != true { sfx_at("phone", 0.7) }
+            s.unread = d.unread
+        }
+    }
+    // Pasar el cursor por las opciones: un tic suave (sin ametrallar).
+    if G.hover != s.hover {
+        s.hover = G.hover
+        if G.hover != "" && G.t - s.tick_t > 0.07 {
+            s.tick_t = G.t
+            sfx_at("tick", 0.35)
+        }
+    }
+    s.money = L.money
+    G.snd_next = null
+    return null
+}
+
+function snd_modal(s: map, quiet: bool) {
+    let kind = ""
+    if G.modal != null { kind = G.modal.kind }
+    // Una ventana de resultado o de decisión acaba de abrirse.
+    if G.modal != null && G.modal_t0 != s.mt0 {
+        s.mt0 = G.modal_t0
+        if kind == "info" {
+            let lk = G.last_kind
+            if G.snd_next != null {
+                // Un sonido pedido por lo que acaba de pasar (p. ej. una ruptura).
+                sfx(G.snd_next)
+                G.snd_next = null
+            } else if lk == "x" {
+                sfx("love")
+            } else if lk == "g" && L.money > s.money {
+                sfx("money")
+            } else if lk == "g" {
+                sfx("good")
+            } else if lk == "b" {
+                sfx("bad")
+            } else {
+                sfx("ok")
+            }
+        } else {
+            sfx("open")
+        }
+        s.kind = kind
+        s.menu = G.menu_t0
+        return null
+    }
+    // Menús: abrir uno nuevo suena distinto a cambiar de página o categoría.
+    if G.menu_t0 != s.menu {
+        s.menu = G.menu_t0
+        if kind != s.kind && kind != "" { sfx("open") } else if kind != "" { sfx_at("tick", 0.6) }
+        s.kind = kind
+        return null
+    }
+    if kind != s.kind {
+        if kind == "" { sfx("back") } else if !quiet { sfx("open") }
+        s.kind = kind
+    }
+    return null
 }
 
 // Música de fondo con fundido; no se reinicia si ya suena.

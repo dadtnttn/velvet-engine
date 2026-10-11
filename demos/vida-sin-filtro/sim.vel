@@ -951,6 +951,7 @@ function breakup() {
     p.rel = "ex"
     L.partner_id = 0
     L.heartbreak = 6
+    G.snd_next = "break"
     add_hito(p, "Terminaron")
     hito_once("first_heartbreak", "Amor", "Tu primer corazón roto")
     return null

@@ -764,8 +764,16 @@ function roulette_angle() {
 function roulette_tick() {
     let r = G.roul
     if r == null || r.done { return false }
+    // Un clic cada vez que pasa una muesca: rápido al principio, lento al final.
+    let notch = int(roulette_angle() / 30.0)
+    if r.notch == null { r.notch = notch }
+    if notch != r.notch {
+        r.notch = notch
+        sfx_at("tick", 0.8)
+    }
     if G.t - r.t0 >= 4.1 {
         r.done = true
+        sfx("rank")
         legacy_set_heir(find_person(r.ids[r.idx]))
         return true
     }
