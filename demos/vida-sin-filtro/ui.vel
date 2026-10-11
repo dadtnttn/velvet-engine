@@ -28,7 +28,9 @@ const PAGE_SIZE = 9
 
 state {
     C: list = [],
-    block: bool = false
+    block: bool = false,
+    // Tablas de avance por fuente que entrega el host (app_fonts).
+    FONTS: map = {}
 }
 
 // ---------------------------------------------------------------- primitivas
@@ -51,6 +53,23 @@ function text(x: any, y: any, s: string, size: int, color: int, font: string) {
 
 function ctext(x: any, y: any, s: string, size: int, color: int, font: string) {
     push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font, "align": "center"})
+}
+
+// Variantes con ancho máximo: el host recorta con «…» usando la fuente real.
+function textw(x: any, y: any, s: string, size: int, color: int, font: string, w: any) {
+    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font, "max_width": w})
+}
+
+function ctextw(x: any, y: any, s: string, size: int, color: int, font: string, w: any) {
+    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font, "align": "center", "max_width": w})
+}
+
+function otextw(x: any, y: any, s: string, size: int, color: int, font: string, center: bool, w: any) {
+    let d = max(2, size / 14)
+    for off in [[-d, 0], [d, 0], [0, -d], [0, d], [-d, -d], [d, d], [-d, d], [d, -d]] {
+        if center { ctextw(x + off[0], y + off[1], s, size, C_INK, font, w) } else { textw(x + off[0], y + off[1], s, size, C_INK, font, w) }
+    }
+    if center { ctextw(x, y, s, size, color, font, w) } else { textw(x, y, s, size, color, font, w) }
 }
 
 // Texto con contorno negro grueso (estilo cómic).
@@ -104,21 +123,23 @@ function tag(x: int, y: int, w: int, lbl: string, fill: string, color: int) {
     ctext(x + w / 2, y + 19, lbl, 13, color, "bold")
 }
 
-function chars_for(width: int, size: int) {
-    return width * 100 / (size * 54)
+// Ancho real en píxeles de un texto con la fuente indicada (si el host no
+// entregó métricas, se estima por número de letras).
+function measure(s: string, size: int, font: string) {
+    let m = FONTS[font]
+    if m != null { return int(str_measure(s, m, size) + 0.99) }
+    return len(s) * size * 54 / 100
 }
 
-function clip_text(s: string, width: int, size: int) {
-    let limit = chars_for(width, size)
-    if len(s) <= limit { return s }
-    let out = ""
-    for w in str_split(s, " ") {
-        let next = w
-        if out != "" { next = out + " " + w }
-        if len(next) + 1 > limit { return out + "…" }
-        out = next
-    }
-    return out
+// Parte un texto en líneas que caben en `width` píxeles con esa fuente.
+function wrap_f(s: string, width: int, size: int, font: string) {
+    let m = FONTS[font]
+    if m != null { return str_wrap(s, m, size, width) }
+    return wrap(s, width * 100 / (size * 54))
+}
+
+function wrap_px(s: string, width: int, size: int) {
+    return wrap_f(s, width, size, "bold")
 }
 
 // ---------------------------------------------------------------- animación
@@ -181,12 +202,28 @@ function draw_title() {
     otext(W / 2, 186, "UN SIMULADOR DE VIDA PARA ADULTOS", 22, C_WHITE, "impact", true)
 
     let items = [["NUEVA VIDA", "new"], ["VIDA AL AZAR", "quick"], ["SALIR", "quit"]]
+    let top = 250
+    let step = 84
+    let bh = 68
+    let size = 36
+    if has_continue() {
+        items = [["CONTINUAR", "continue"], ["NUEVA VIDA", "new"], ["VIDA AL AZAR", "quick"], ["SALIR", "quit"]]
+        top = 226
+        step = 72
+        bh = 60
+        size = 32
+    }
     let i = 0
     while i < len(items) {
         let it = items[i]
         let x = 640 + i * 26 + (1.0 - ease(prog(G.screen_t0 + 0.1 * i, 0.4))) * 500
-        let y = 250 + i * 84
-        menu_word(x, y, 440, 68, it[0], it[1], 36)
+        let y = top + i * step
+        menu_word(x, y, 440, bh, it[0], it[1], size)
+        if it[1] == "continue" {
+            // Quién te espera, alineado a la derecha del botón.
+            let room = 440 - 70 - measure("CONTINUAR", size, "impact")
+            push({"op": "text", "x": x + 424, "y": y + bh / 2 + 6, "text": str_upper(SV.info), "size": 14, "color": C_YELLOW, "font": "bold", "align": "right", "max_width": room})
+        }
         i += 1
     }
 
@@ -301,7 +338,7 @@ function draw_create() {
         let ty = y + 34
         text(x0 + 170, ty, str_upper(r.n), 16, C_YELLOW, "impact")
         ty += 24
-        for line in wrap(r.d, chars_for(560, 15)) {
+        for line in wrap_px(r.d, 560, 15) {
             text(x0 + 170, ty, line, 15, C_WHITE, "bold")
             ty += 21
         }
@@ -310,7 +347,7 @@ function draw_create() {
         let rel = religion_def(c.religion)
         stepper(x0 + 170, y - 26, str_upper(rel.n), "cre:rel")
         ty = y + 34
-        for line in wrap("Tu familia: " + RELIGION_DESC[rel.id], chars_for(560, 15)) {
+        for line in wrap_px("Tu familia: " + RELIGION_DESC[rel.id], 560, 15) {
             text(x0 + 170, ty, line, 15, C_WHITE, "bold")
             ty += 21
         }
@@ -318,7 +355,7 @@ function draw_create() {
         create_label(x0, y, "PERSONALIDAD")
         let t = trait_def(c.trait)
         stepper(x0 + 170, y - 26, str_upper(by_gender(c.gender, t.m, t.f)), "cre:trait")
-        text(x0 + 170, y + 30, clip_text(t.desc, 540, 14), 14, C_YELLOW, "bold")
+        textw(x0 + 170, y + 30, t.desc, 14, C_YELLOW, "bold", 540)
         y += 72
         create_label(x0, y, "GUSTOS +18")
         text(x0 + 170, y - 4, "Elige hasta " + str(MAX_KINKS) + ". Se revelan al cumplir 18.", 14, C_GRAY, "bold")
@@ -419,7 +456,7 @@ function draw_card() {
     svg(18, 52, 360, 360, burst_doc(360, 360, 18, HEX_WHITE, HEX_INK, 4, L.age % 7))
     portrait(58, 66, 280, 336, L.look, L.gender, L.age, mood_for(L.happy), 0, true)
     svg(16, 16, 378, 60, slant_doc(372, 54, 18, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
-    text(44, 52, clip_text(str_upper(L.first + " " + L.last), 310, 22), 22, C_WHITE, "impact")
+    textw(44, 52, str_upper(L.first + " " + L.last), 22, C_WHITE, "impact", 310)
     tag(30, 84, 150, str_upper(month_name()), HEX_YELLOW, C_INK)
     if L.route != null && L.route != "normal" {
         let rf = HEX_RED
@@ -427,7 +464,7 @@ function draw_card() {
         let rc = C_WHITE
         if hovered("tab:route") { rc = C_INK }
         svg(186, 84, 186, 26, slant_doc(180, 26, 8, rf, HEX_WHITE, 2, "", 0))
-        ctext(186 + 90, 102, clip_text("RUTA: " + route_def(L.route).short + " ›", 170, 13), 13, rc, "bold")
+        ctextw(186 + 90, 102, "RUTA: " + route_def(L.route).short + " ›", 13, rc, "bold", 170)
         hot(186, 84, 180, 26, "tab:route")
     }
     draw_effect_chips(26, 118)
@@ -441,8 +478,8 @@ function draw_card() {
     text(238, 429, mood_word(), 14, C_YELLOW, "bold")
     let occ_label = "OCUPACIÓN"
     if L.job2 != null { occ_label = "OCUPACIÓN · 2.ª: " + str_upper(L.job2.title) }
-    text(44, 458, clip_text(occ_label, 330, 11), 11, C_GRAY, "bold")
-    text(44, 479, clip_text(occupation_text(), 320, 16), 16, C_WHITE, "bold")
+    textw(44, 458, occ_label, 11, C_GRAY, "bold", 330)
+    textw(44, 479, occupation_text(), 16, C_WHITE, "bold", 320)
     let fcol = C_YELLOW
     if hovered("ph:app:bank") { fcol = C_WHITE }
     text(44, 504, "DINERO · BANCO ›", 11, fcol, "bold")
@@ -458,7 +495,7 @@ function draw_card() {
         text(220 + 136, 528, str(L.fame), 13, C_YELLOW, "impact")
     } else {
         text(220, 504, "CIUDAD", 11, C_GRAY, "bold")
-        text(220, 526, clip_text(L.city, 150, 14), 14, C_WHITE, "bold")
+        textw(220, 526, L.city, 14, C_WHITE, "bold", 150)
     }
     if L.age >= 18 && len(L.tags) > 0 {
         text(44, 556, "GUSTOS", 11, C_GRAY, "bold")
@@ -466,20 +503,20 @@ function draw_card() {
         let ty = 566
         for t in L.tags {
             let name = kink_name(t, L.gender)
-            let w = min(170, 24 + len(name) * 8)
+            let w = min(170, 28 + measure(name, 12, "bold"))
             if tx + w > 380 {
                 tx = 34
                 ty += 24
             }
             if ty < 600 {
                 svg(tx, ty, w, 22, slant_doc(w, 22, 7, "#3a0d10", HEX_RED, 2, "", 0))
-                ctext(tx + w / 2, ty + 16, clip_text(name, w - 14, 12), 12, C_PINK, "bold")
+                ctextw(tx + w / 2, ty + 16, name, 12, C_PINK, "bold", w - 14)
             }
             tx += w + 4
         }
     } else {
         text(44, 556, "FAMILIA", 11, C_GRAY, "bold")
-        text(44, 578, clip_text(FAMILY_NAMES[L.family] + " · " + religion_text(), 320, 14), 14, C_WHITE, "bold")
+        textw(44, 578, FAMILY_NAMES[L.family] + " · " + religion_text(), 14, C_WHITE, "bold", 320)
     }
 }
 
@@ -580,8 +617,10 @@ function draw_feed(x: int, y: int, w: int, h: int) {
         let entry = L.log[i]
         let lx = x + 34 - (cy - y) * 20 / h
         if entry.k == "h" {
-            svg(lx, cy + 1, 120, 20, slant_doc(120, 20, 7, HEX_RED, "", 0, "", 0))
-            ctext(lx + 60, cy + 16, str_upper(entry.t), 13, C_WHITE, "bold")
+            let head = str_upper(entry.t)
+            let tw = clamp(measure(head, 13, "bold") + 28, 120, w - 70)
+            svg(lx, cy + 1, tw, 20, slant_doc(tw, 20, 7, HEX_RED, "", 0, "", 0))
+            ctextw(lx + tw / 2, cy + 16, head, 13, C_WHITE, "bold", tw - 20)
         } else {
             text(lx + 6, cy + 17, entry.t, 15, kind_color(entry.k), "ui")
         }
@@ -671,7 +710,7 @@ function draw_status(x: int, y: int, w: int, h: int) {
     for row in rows {
         let rx = x + 30 - i * 3
         text(rx, ry, row[0], 13, C_GRAY, "bold")
-        text(rx + 136, ry, clip_text(row[1], w - 190, 14), 14, C_WHITE, "bold")
+        textw(rx + 136, ry, row[1], 14, C_WHITE, "bold", w - 190)
         ry += 19
         i += 1
     }
@@ -785,7 +824,7 @@ function draw_dialog(m: map, choices: list, locks: list, tags: list, prefix: str
     let e = ease(prog(G.modal_t0, 0.25))
     let p = m.person
     let w = 740
-    let lines = wrap(m.text, chars_for(w - 120, 18))
+    let lines = wrap_f(m.text, w - 96, 18, "ui")
     let n = len(choices)
     let h = 96 + len(lines) * 27 + n * 56 + 20
     let x = (W - w) / 2
@@ -796,15 +835,15 @@ function draw_dialog(m: map, choices: list, locks: list, tags: list, prefix: str
         svg(px - 30, 250, 420, 420, burst_doc(420, 420, 18, HEX_WHITE, HEX_INK, 5, p.id % 9))
         portrait(px + 20, 270, 330, 396, p.look, p.gender, p.age, person_mood(p), p.id, false)
         svg(px + 30, 640, 300, 50, slant_doc(294, 44, 14, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
-        text(px + 56, 672, clip_text(str_upper(p.first), 240, 24), 24, C_WHITE, "impact")
+        textw(px + 56, 672, str_upper(p.first), 24, C_WHITE, "impact", 240)
     }
     fade_push(e)
     move_push((1.0 - e) * 140, 0)
     svg(x, y, w + 10, h + 10, slant_doc(w, h, 26, HEX_INK, HEX_WHITE, 4, HEX_RED, 10))
     let title = str_upper(m.title)
-    let tw = min(600, 70 + len(title) * 19)
+    let tw = min(600, 56 + measure(title, 28, "impact"))
     svg(x - 12, y - 26, tw + 6, 58, slant_doc(tw, 52, 16, HEX_RED, HEX_WHITE, 3, HEX_INK, 6))
-    otext(x + 18, y + 12, title, 28, C_WHITE, "impact", false)
+    otextw(x + 18, y + 12, title, 28, C_WHITE, "impact", false, tw - 44)
     let ty = y + 64
     for line in lines {
         text(x + 48, ty, line, 18, C_WHITE, "ui")
@@ -841,7 +880,7 @@ function dialog_option(x: int, y: int, w: int, lbl: string, i: int, action: stri
     svg(x + dx, y, w + 6, 50, slant_doc(w, 46, 14, fill, HEX_WHITE, 2, HEX_INK, 4))
     svg(x + dx + 18, y + 9, 30, 30, slant_doc(30, 30, 6, HEX_WHITE, "", 0, "", 0))
     ctext(x + dx + 33, y + 31, str(i + 1), 18, C_INK, "impact")
-    text(x + dx + 60, y + 30, clip_text(lbl, w - 230, 17), 17, color, "bold")
+    textw(x + dx + 60, y + 30, lbl, 17, color, "bold", w - 230)
     if locked {
         svg(x + dx + w - 190, y + 8, 30, 30, lock_doc())
         text(x + dx + w - 156, y + 30, str_upper(locks[i]), 14, C_RED, "impact")
@@ -894,7 +933,7 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
             svg(tx, ty, tw + 4, th + 4, slant_doc(tw, th, 8, fill, HEX_WHITE, 2, HEX_INK, 4))
             let size = 16
             if th < 38 { size = 13 }
-            ctext(tx + tw / 2, ty + th / 2 + size * 4 / 10, clip_text(str_upper(cats[i]), tw - 10, size), size, color, "impact")
+            ctextw(tx + tw / 2, ty + th / 2 + size * 4 / 10, str_upper(cats[i]), size, color, "impact", tw - 10)
             hot(tx, ty, tw, th, action)
             i += 1
         }
@@ -937,14 +976,14 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
             color = C_YELLOW
         }
         svg(ix + dx, iy, 526, 52, slant_doc(520, 46, 16, fill, HEX_WHITE, 2, HEX_RED, 6))
-        text(ix + dx + 30, iy + 30, clip_text(it.t, 310, 19), 19, color, "impact")
+        textw(ix + dx + 30, iy + 30, it.t, 19, color, "impact", 298)
         let sub_color = C_GRAY
         if on { sub_color = C_RED }
         if locked {
             svg(ix + dx + 372, iy + 8, 28, 28, lock_doc())
-            text(ix + dx + 404, iy + 29, clip_text(str_upper(it.lock), 100, 13), 13, C_RED, "impact")
+            textw(ix + dx + 404, iy + 29, str_upper(it.lock), 13, C_RED, "impact", 100)
         } else {
-            text(ix + dx + 344, iy + 29, clip_text(it.s, 160, 12), 12, sub_color, "bold")
+            textw(ix + dx + 344, iy + 29, it.s, 12, sub_color, "bold", 160)
         }
         hot(ix, iy, 520, 46, it.action)
         i += 1
@@ -975,9 +1014,9 @@ function draw_detail(it: any, kind: string) {
                 let gl = "Gustos: " + kinks_text(p.tags, p.gender)
                 let shared = shared_kinks(p)
                 if len(shared) > 0 { gl = gl + " · ¡comparten " + str(len(shared)) + "!" }
-                text(x + 46, y + 410, clip_text(gl, 270, 13), 13, C_RED, "bold")
+                textw(x + 46, y + 410, gl, 13, C_RED, "bold", 270)
             }
-            text(x + 46, y + 60, clip_text(str_upper(p.first), 260, 34), 34, C_INK, "impact")
+            textw(x + 46, y + 60, str_upper(p.first), 34, C_INK, "impact", 260)
             text(x + 46, y + 92, rel_label(p) + " · " + str(p.age) + " años", 17, C_RED, "bold")
             text(x + 46, y + 140, "ARCANO", 12, C_GRAY, "bold")
             text(x + 46, y + 166, str_upper(arcana(p)), 22, C_INK, "impact")
@@ -993,26 +1032,26 @@ function draw_detail(it: any, kind: string) {
             text(x + 46, y + 270, "CERCANÍA " + str(p.bond) + "%", 16, C_INK, "impact")
             rect(x + 46, y + 280, 230, 12, rgb(210, 210, 205))
             rect(x + 46, y + 280, 230 * p.bond / 100, 12, C_RED)
-            text(x + 46, y + 318, clip_text(bond_state(p) + " · Compatibilidad " + str(compat(p)) + "%", 270, 15), 15, C_INK, "bold")
+            textw(x + 46, y + 318, bond_state(p) + " · Compatibilidad " + str(compat(p)) + "%", 15, C_INK, "bold", 270)
             let extra = STYLE_NAMES[npc_style(p)] + " · " + temper_name(p) + " · " + str_lower(mood_name(p))
             if p.age >= 18 { extra = "Atractivo " + str(p.looks) + "% · " + extra }
-            text(x + 46, y + 338, clip_text(extra, 270, 13), 13, C_GRAY, "bold")
+            textw(x + 46, y + 338, extra, 13, C_GRAY, "bold", 270)
             let fl = interests_text(p)
             if p.bff == true { fl = "Mejor amig" + oa(p.gender) + " · " + fl }
-            text(x + 46, y + 356, clip_text(fl, 270, 13), 13, C_GRAY, "bold")
+            textw(x + 46, y + 356, fl, 13, C_GRAY, "bold", 270)
             let ll = lovelang_text(p)
             if p.age >= 18 && L.age >= 18 && (rel_group(p) == "partner" || rel_group(p) == "fling") && p.gender != L.gender {
                 ll = ll + " · Fertilidad " + fert_word(their_fertility(p))
             }
-            text(x + 46, y + 374, clip_text(ll, 270, 13), 13, C_GRAY, "bold")
+            textw(x + 46, y + 374, ll, 13, C_GRAY, "bold", 270)
             let lz = lazos_detail(p)
-            if lz != "" { text(x + 46, y + 392, clip_text(lz, 270, 13), 13, C_RED, "bold") }
+            if lz != "" { textw(x + 46, y + 392, lz, 13, C_RED, "bold", 270) }
             if kind == "person" {
-                text(x + 46, y + 440, clip_text(str_upper(it.t), 500, 22), 22, C_RED, "impact")
-                text(x + 46, y + 462, clip_text(it.s, 500, 14), 14, C_INK, "bold")
+                textw(x + 46, y + 440, str_upper(it.t), 22, C_RED, "impact", 500)
+                textw(x + 46, y + 462, it.s, 14, C_INK, "bold", 500)
                 if it.desc != null && it.desc != it.s {
                     let dy = y + 484
-                    for line in wrap(it.desc, chars_for(500, 14)) {
+                    for line in wrap_px(it.desc, 500, 14) {
                         if dy < y + 520 { text(x + 46, dy, line, 14, C_INK, "ui") }
                         dy += 18
                     }
@@ -1023,11 +1062,11 @@ function draw_detail(it: any, kind: string) {
             return null
         }
     }
-    text(x + 46, y + 66, clip_text(str_upper(it.t), 420, 34), 34, C_INK, "impact")
+    textw(x + 46, y + 66, str_upper(it.t), 34, C_INK, "impact", 420)
     text(x + 46, y + 100, it.s, 17, C_RED, "bold")
     let ty = y + 150
     if it.desc != null {
-        for line in wrap(it.desc, chars_for(470, 18)) {
+        for line in wrap_px(it.desc, 470, 18) {
             text(x + 46, ty, line, 18, C_INK, "ui")
             ty += 28
         }
@@ -1055,7 +1094,7 @@ function draw_menu(m: map) {
         draw_list(menu_title(m.tab), [], 0, [], "close", "menu")
         svg(660, 260, 580, 140, slant_doc(570, 130, 20, HEX_WHITE, HEX_INK, 4, HEX_INK, 10))
         let ty = 320
-        for line in wrap(blocked, chars_for(480, 20)) {
+        for line in wrap_px(blocked, 480, 20) {
             text(706, ty, line, 20, C_INK, "impact")
             ty += 28
         }
@@ -1131,8 +1170,8 @@ function draw_toasts() {
         let head = t.head
         if head == null { head = "¡RANGO ARRIBA!" }
         otext(496, y + 32, head, 18, C_YELLOW, "impact", false)
-        text(496, y + 54, clip_text(t.title, 380, 20), 20, C_WHITE, "impact")
-        text(496, y + 71, clip_text(t.sub, 380, 12), 12, C_GRAY, "bold")
+        textw(496, y + 54, t.title, 20, C_WHITE, "impact", 380)
+        textw(496, y + 71, t.sub, 12, C_GRAY, "bold", 380)
         fade_pop()
         slot += 1
     }
@@ -1154,15 +1193,15 @@ function draw_dead() {
     svg(10, -4 - (1.0 - e) * 100, 860, 130, tilt_title_doc("DESCANSE EN PAZ", 860, 130, 72, HEX_WHITE, HEX_INK))
 
     svg(400, 120, 452, 560, slant_doc(440, 548, 22, HEX_WHITE, HEX_INK, 4, HEX_RED, 12))
-    text(440, 170, clip_text(str_upper(L.first + " " + L.last), 370, 28), 28, C_INK, "impact")
+    textw(440, 170, str_upper(L.first + " " + L.last), 28, C_INK, "impact", 370)
     let ty = 196
-    for line in wrap("Murió a los " + str(L.age) + " años por " + L.cause + ".", chars_for(360, 16)) {
+    for line in wrap_px("Murió a los " + str(L.age) + " años por " + L.cause + ".", 360, 16) {
         text(436, ty, line, 16, C_RED, "bold")
         ty += 22
     }
     text(436, ty + 8, "«" + epitaph() + "»", 15, C_GRAY, "bold")
     ty += 14
-    for line in wrap(funeral_text(), chars_for(360, 14)) {
+    for line in wrap_px(funeral_text(), 360, 14) {
         ty += 20
         text(436, ty + 8, line, 14, C_INK, "bold")
     }
@@ -1185,7 +1224,7 @@ function draw_dead() {
     let ry = ty + 46
     for row in rows {
         text(436, ry, row[0], 14, C_GRAY, "bold")
-        text(586, ry, clip_text(row[1], 220, 15), 15, C_INK, "impact")
+        textw(586, ry, row[1], 15, C_INK, "impact", 220)
         ry += 27
     }
 
@@ -1206,7 +1245,7 @@ function draw_dead() {
         let entry = L.log[i]
         let color = kind_color(entry.k)
         if entry.k == "h" { color = C_RED }
-        text(900, ly, clip_text(entry.t, 330, 13), 13, color, "bold")
+        textw(900, ly, entry.t, 13, color, "bold", 330)
         ly += 24
         i += 1
     }

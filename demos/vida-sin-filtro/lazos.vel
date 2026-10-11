@@ -335,11 +335,7 @@ function lazos_spark(p: any, n: int) {
 }
 
 function kids_minor() {
-    let n = 0
-    for k in kids_alive() {
-        if k.age < 18 { n += 1 }
-    }
-    return n
+    return list_count(kids_alive(), fn(k) => k.age < 18)
 }
 
 function extra_def(id: string) {

@@ -1,0 +1,127 @@
+// @edition 3
+// Guardado de partida con la capacidad `storage` del runtime: autoguardado en
+// cada cumpleaños y al salir, y «Continuar» en la portada.
+//
+// El juego nunca ve rutas: pide `storage.*` en los eventos del frame y el host
+// responde llamando a `app_storage` (main.vel), que delega en `save_result`.
+
+const SAVE_SLOT = "auto"
+const SAVE_VERSION = 1
+
+state {
+    SV: map = {
+        // Peticiones a enviar en el próximo frame.
+        "pending": [],
+        // Partida encontrada al arrancar (para «Continuar»).
+        "data": null,
+        "info": "",
+        "last_error": ""
+    }
+}
+
+function storage_request(op: string, payload: map) {
+    list_push(SV.pending, {"kind": "storage." + op, "payload": payload})
+}
+
+// Eventos de guardado para este frame.
+function take_storage_events() {
+    let out = SV.pending
+    SV.pending = []
+    return out
+}
+
+function request_boot_load() {
+    storage_request("load", {"slot": SAVE_SLOT, "tag": "boot"})
+}
+
+// Solo se guarda una vida en curso, sin modales ni minijuegos a medias.
+function can_autosave() {
+    return G.mode == "game" && L.alive == true && G.mg == null && G.roul == null && G.legacy == null
+}
+
+function autosave() {
+    if !can_autosave() { return null }
+    let data = {
+        "v": SAVE_VERSION,
+        "L": L,
+        "cre": G.cre,
+        "lives": G.lives,
+        "info": save_summary()
+    }
+    storage_request("save", {"slot": SAVE_SLOT, "data": data, "tag": "auto"})
+    SV.data = data
+    SV.info = data.info
+    return null
+}
+
+// Al morir se borra el autoguardado: no se puede volver atrás.
+function forget_save() {
+    storage_request("delete", {"slot": SAVE_SLOT, "tag": "death"})
+    SV.data = null
+    SV.info = ""
+}
+
+function save_summary() {
+    let s = L.first + " · " + str(L.age) + " " + plural(L.age, "año", "años")
+    if L.gen > 1 { s = s + " · gen. " + str(L.gen) }
+    return s
+}
+
+function has_continue() {
+    return SV.data != null
+}
+
+// Respuesta del host a una petición de guardado.
+function save_result(r: map) {
+    match r.op {
+        "load" => {
+            if r.ok && r.tag == "boot" { accept_saved(r.data) }
+        }
+        "save" => {
+            if !r.ok {
+                SV.last_error = r.error
+                toast("NO SE PUDO GUARDAR", r.error)
+            }
+        }
+        _ => {}
+    }
+    G.dirty = true
+}
+
+function accept_saved(data: any) {
+    if type_of(data) != "map" { return null }
+    if map_get(data, "v", 0) != SAVE_VERSION { return null }
+    let life = map_get(data, "L", null)
+    if type_of(life) != "map" || life.alive != true { return null }
+    SV.data = data
+    SV.info = map_get(data, "info", "")
+    G.lives = max(G.lives, map_get(data, "lives", 0))
+}
+
+// Retoma la vida guardada.
+function continue_saved() {
+    let data = SV.data
+    if data == null { return null }
+    ensure_rng()
+    L = data.L
+    if data.cre != null { G.cre = data.cre }
+    G.lives = max(G.lives, data.lives)
+    G.ph_on = false
+    G.ph_app = ""
+    G.pending_deg = ""
+    G.tuition_no = ""
+    G.dlg = null
+    G.mg = null
+    G.legacy = null
+    G.roul = null
+    G.bj = null
+    G.chat = null
+    G.back_pid = 0
+    G.mode = "game"
+    G.modal = null
+    G.scroll = 0
+    G.floats = []
+    G.toasts = []
+    G.screen_t0 = G.t
+    log_add("Retomas tu vida donde la dejaste.", "x")
+}
