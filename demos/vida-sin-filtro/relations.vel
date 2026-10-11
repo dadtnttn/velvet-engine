@@ -341,7 +341,7 @@ function rel_hidden(a: map, p: map) {
 
 function rel_lock(a: map, p: map) {
     if L.jail > 0 { return "En prisión" }
-    if a.cost != null && L.money < a.cost { return money_str(a.cost) }
+    if a.cost != null && L.money < local_price(a.cost) { return money_str(local_price(a.cost)) }
     if L.used["r" + a.id + str(p.id)] != null { return "Este mes ya" }
     return ""
 }
@@ -372,6 +372,7 @@ function act_item(a: map, p: map, ctx: map) {
     if t == "" { t = fmt(a.t, ctx) }
     let s = lazos_sub(a, p)
     if s == "" { s = a.s }
+    if a.cost != null { s = local_text(s, a.cost) }
     let desc = fmt(a.desc, ctx)
     if p.want == a.id && p.want_tm == L.tm {
         s = "★ LO QUE QUIERE · " + s
@@ -596,10 +597,10 @@ function rel_do(id: string, p: map) {
     if a.code != null { return rel_code(a, p) }
     if a.cost != null && a.mg == null && a.o != null {
         // El costo va en los resultados solo si lo dicen; si no, se cobra aquí.
-        if !rel_outcomes_charge(a) { L.money -= a.cost }
+        if !rel_outcomes_charge(a) { L.money -= local_price(a.cost) }
     }
     if a.mg != null {
-        if a.cost != null { L.money -= a.cost }
+        if a.cost != null { L.money -= local_price(a.cost) }
         return mg_start(a.mg, fmt(a.t, ctx) + " con " + p.first, "rel", {"pid": p.id, "act": a.id})
     }
     let o = pick_outcome(a.o)
@@ -659,7 +660,7 @@ function rel_code(a: map, p: map) {
     if id == "threesome" { return open_trio(p) }
     if id == "trip" { return trip(p) }
     if id == "pet" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         p.pet = true
         bond_gain(p, 10)
         L.happy += 8
@@ -684,11 +685,11 @@ function rel_code(a: map, p: map) {
 
 function open_gift(p: map) {
     let ctx = {"person": p}
-    let labels = ["Flores o dulces ($300)", "Perfume o un buen libro ($1,500)", "Una joya o algo de lujo ($8,000)", "Algo hecho con tus manos (gratis)", "Mejor no"]
+    let labels = [local_text("Flores o dulces ($300)", 300), local_text("Perfume o un buen libro ($1,500)", 1500), local_text("Una joya o algo de lujo ($8,000)", 8000), "Algo hecho con tus manos (gratis)", "Mejor no"]
     let locks = ["", "", "", "", ""]
-    if L.money < 300 { locks[0] = "$300" }
-    if L.money < 1500 { locks[1] = "$1,500" }
-    if L.money < 8000 { locks[2] = "$8,000" }
+    if L.money < local_price(300) { locks[0] = money_str(local_price(300)) }
+    if L.money < local_price(1500) { locks[1] = money_str(local_price(1500)) }
+    if L.money < local_price(8000) { locks[2] = money_str(local_price(8000)) }
     open_choice("REGALO PARA " + str_upper(p.first), fmt("¿Qué le regalas a {x}? A cada quien le gusta algo distinto.", ctx), labels, locks, "gift", ctx)
     G.modal.tags = ["", "", "", "Destreza", ""]
     return null
@@ -702,18 +703,18 @@ function resolve_gift(index: int, ctx: map) {
     let gain_b = 0
     let msg = ""
     if index == 0 {
-        L.money -= 300
+        L.money -= local_price(300)
         gain_b = 5
         msg = "Le encantaron las flores."
         if st == "dulce" || st == "amoroso" { gain_b = 9 }
     }
     if index == 1 {
-        L.money -= 1500
+        L.money -= local_price(1500)
         gain_b = 9
         msg = "Un regalo muy atinado. Lo usa todos los días."
     }
     if index == 2 {
-        L.money -= 8000
+        L.money -= local_price(8000)
         gain_b = 14
         msg = "Se quedó sin palabras. Brilla tanto como su sonrisa."
         if st == "libre" {
@@ -847,7 +848,8 @@ function resolve_spicy(index: int, ctx: map) {
     let t = ctx.opts[index]
     let theirs = p.tags != null && list_contains(p.tags, t)
     G.sex_mode = ""
-    if theirs || chance(35 + rank("charm") * 6) {
+    let faith_no = disapproval(p, "adult")
+    if theirs || chance(35 + rank("charm") * 6 - faith_no / 2) {
         bond_gain(p, 10)
         L.happy += 10 + fx_sum("sexhappy")
         flag("kink")
@@ -860,23 +862,38 @@ function resolve_spicy(index: int, ctx: map) {
         return finish(p.first, msg, "x")
     }
     bond_gain(p, -6)
+    if faith_no >= 30 { return finish(p.first, p.first + " se puso seri" + oa(p.gender) + ". «Mi fe no me lo permite.» Cambiaron de plan y vieron una película.", "n") }
     return finish(p.first, p.first + " se puso incómod" + oa(p.gender) + ". «No es lo mío.» Cambiaron de plan y vieron una película.", "n")
 }
 
 // ---------------------------------------------------------------- viajes y futuro
 
-const TRIP_PLACES = ["Tokio", "París", "Cancún", "Roma", "Nueva York", "Bali", "Buenos Aires", "Barcelona", "Machu Picchu", "Ibiza"]
-
+// Un viaje de una semana para dos: un país de verdad (de los que reciben
+// turistas), al alcance del paquete y que cuenta en tu pasaporte.
 function trip(p: map) {
-    L.money -= 12000
-    let place = pick(TRIP_PLACES)
+    let price = local_price(12000)
+    L.money -= price
+    let here_c = here_id()
+    let opts = []
+    for c in COUNTRIES {
+        if c.id != here_c && c.tour >= 40 && trip_cost(c.id) * 2 <= price { list_push(opts, c.id) }
+    }
+    if len(opts) == 0 {
+        for c in COUNTRIES {
+            if c.id != here_c && c.tour >= 40 { list_push(opts, c.id) }
+        }
+    }
+    let dest = pick(opts)
+    let x = ctry(dest)
+    mark_visited(dest)
     bond_gain(p, 15)
     L.happy += 12
     gain("know", 2)
-    if place == "Tokio" { flag("tokyo") }
-    add_hito(p, "Su primer viaje juntos: " + place)
-    hito_once("trip_" + place, "Vida", "Conociste " + place)
-    let msg = "Una semana en " + place + " con " + p.first + "."
+    tfx_add("vacaciones", 2)
+    if dest == "jp" { flag("tokyo") }
+    add_hito(p, "Viajaron juntos a " + x.n)
+    let msg = "Una semana en " + x.n + " con " + p.first + "."
+    if x.honey != "" { msg = msg + " Conocieron " + x.honey + "." }
     let g = rel_group(p)
     if g == "partner" && L.age >= 18 {
         lazos_spark(p, 10)
@@ -888,10 +905,10 @@ function trip(p: map) {
 }
 
 function renew_vows(p: map) {
-    if L.money < 6000 { return info("Votos", "No te alcanza. Cuesta $6,000.") }
+    if L.money < local_price(6000) { return info("Votos", "No te alcanza. Cuesta " + money_str(local_price(6000)) + ".") }
     if L.used["rvows"] != null { return info("Votos", "Ya lo hicieron este mes.") }
     L.used["rvows"] = 1
-    L.money -= 6000
+    L.money -= local_price(6000)
     bond_gain(p, 18)
     add_hito(p, "Renovaron sus votos")
     L.happy += 10
@@ -899,9 +916,9 @@ function renew_vows(p: map) {
 }
 
 function adopt(p: map) {
-    if L.money < 50000 { return info("Adopción", "El proceso cuesta $50,000.") }
+    if L.money < local_price(50000) { return info("Adopción", "El proceso cuesta " + money_str(local_price(50000)) + ".") }
     if L.age < 25 { return info("Adopción", "Necesitas tener al menos 25 años.") }
-    L.money -= 50000
+    L.money -= local_price(50000)
     let child = make_person(pick(["m", "f"]), "hijo", rint(0, 7))
     child.last = L.last1
     child.bond = 75
@@ -915,9 +932,9 @@ function adopt(p: map) {
 }
 
 function ivf(p: map) {
-    let cost = 80000
+    let cost = local_price(80000)
     let same = p.gender == L.gender
-    if same && L.gender == "m" { cost = 150000 }
+    if same && L.gender == "m" { cost = local_price(150000) }
     if L.money < cost { return info("Fertilidad", "El tratamiento cuesta " + money_str(cost) + ".") }
     if L.pregnant || L.partner_preg { return info("Fertilidad", "Ya viene un bebé en camino.") }
     L.money -= cost
@@ -957,10 +974,10 @@ function open_wedding_style(p: map) {
     let costs = [0, 2000, 5000, 20000, 40000]
     let locks = []
     for c in costs {
-        if c > 0 && L.money < c { list_push(locks, money_str(c)) } else { list_push(locks, "") }
+        if c > 0 && L.money < local_price(c) { list_push(locks, money_str(local_price(c))) } else { list_push(locks, "") }
     }
     open_choice("¡DIJO QUE SÍ!", fmt("{x} aceptó casarse contigo. ¿Qué boda quieren?", ctx),
-        ["Solo ustedes dos al atardecer (gratis)", "Registro civil y tacos ($2,000)", "Escaparse a Las Vegas ($5,000)", "Boda en la playa ($20,000)", "La boda del año ($40,000)"], locks, "wedding", ctx)
+        ["Solo ustedes dos al atardecer (gratis)", local_text("Registro civil y tacos ($2,000)", 2000), local_text("Escaparse a Las Vegas ($5,000)", 5000), local_text("Boda en la playa ($20,000)", 20000), local_text("La boda del año ($40,000)", 40000)], locks, "wedding", ctx)
     G.modal.tags = ["Íntima", "Sencilla", "Espontánea", "Romántica", "Fama"]
     return null
 }
@@ -976,7 +993,7 @@ function resolve_wedding(index: int, ctx: map) {
         "Descalzos en la arena, con el atardecer de fondo. Todos lloraron.",
         "Trescientos invitados, mariachi, fuegos artificiales. Salió en las revistas."
     ]
-    L.money -= costs[index]
+    L.money -= local_price(costs[index])
     marry_cost(0)
     let bonus = [8, 6, 8, 14, 16]
     bond_gain(p, bonus[index])
@@ -1123,6 +1140,8 @@ function trio_odds(p: map) {
     if st == "dulce" { odds -= 5 }
     if p.open == true { odds += 20 }
     if p.bond >= 70 { odds += 10 }
+    // Su fe también opina.
+    odds -= disapproval(p, "adult") / 2
     return clamp(odds, 5, 95)
 }
 

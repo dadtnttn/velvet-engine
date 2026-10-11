@@ -106,6 +106,25 @@ function full_name(p: map) {
     return p.first + " " + p.last
 }
 
+// Precio base del juego ajustado al costo de vida del país, redondeado a una
+// cifra «de etiqueta» ($1,100 y no $1,096).
+function local_price(n: int) {
+    let v = n * pais_cost_mult() / 100
+    let a = abs(v)
+    let step = 1
+    if a >= 10000 { step = 500 } else if a >= 1000 { step = 50 } else if a >= 100 { step = 10 }
+    let r = (a + step / 2) / step * step
+    if r == 0 && a > 0 { r = a }
+    if v < 0 { return 0 - r }
+    return r
+}
+
+// Cambia en un texto el precio base por el precio local («$800» → «$1,100»).
+function local_text(s: string, n: int) {
+    if n == 0 { return s }
+    return str_replace(s, money_str(n), money_str(local_price(n)))
+}
+
 function money_str(v: int) {
     let neg = v < 0
     let n = v
@@ -1021,6 +1040,11 @@ function apply(o: map, ctx: map) {
     if map_has(o, "money") {
         let m = o.money
         if type_of(m) == "list" { m = rint(m[0] / 100, m[1] / 100) * 100 }
+        // Los montos del contenido están en precios base: se ajustan al costo de
+        // vida del país, y el texto dice lo que de verdad pagaste o ganaste.
+        let base = m
+        m = local_price(m)
+        if base != m && msg != "" { msg = str_replace(msg, money_str(abs(base)), money_str(abs(m))) }
         L.money += m
         ctx["monto"] = money_str(m)
         msg = str_replace(msg, "{monto}", money_str(m))

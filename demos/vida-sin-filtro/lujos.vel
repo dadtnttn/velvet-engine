@@ -148,8 +148,8 @@ function owns(a: map) {
 }
 
 function asset_value(a: map) {
-    if L.lx == null { return a.cost * 70 / 100 }
-    return map_get(L.lx.val, a.id, a.cost * 70 / 100)
+    if L.lx == null { return lx_base(a) * 70 / 100 }
+    return map_get(L.lx.val, a.id, lx_base(a) * 70 / 100)
 }
 
 function is_house_asset(a: map) {
@@ -248,8 +248,13 @@ function buen_fin() {
 }
 
 function lx_price(a: map) {
-    if buen_fin() && asset_kind(a) != "house" && asset_kind(a) != "prop" { return a.cost * 75 / 100 }
-    return a.cost
+    if buen_fin() && asset_kind(a) != "house" && asset_kind(a) != "prop" { return lx_base(a) * 75 / 100 }
+    return lx_base(a)
+}
+
+// Precio de lista en este país (el catálogo está en precios base).
+function lx_base(a: map) {
+    return local_price(a.cost)
 }
 
 function rentable(a: map) {
@@ -326,14 +331,14 @@ function lx_items(cat: string) {
         if is_house_asset(a) {
             let l = ""
             if owns(a) { l = "Ya la tienes" }
-            list_push(items, {"action": "fin:house:" + a.id, "t": a.t, "s": money_str(a.cost), "desc": "Tu casa: de contado o con hipoteca. Con casa propia no pagas renta.", "lock": l})
+            list_push(items, {"action": "fin:house:" + a.id, "t": a.t, "s": money_str(lx_base(a)), "desc": "Tu casa: de contado o con hipoteca. Con casa propia no pagas renta.", "lock": l})
             continue
         }
         let l = ""
         let p = lx_price(a)
         if owns(a) { l = "Ya lo tienes" }
         let keep = ""
-        if a.keep > 0 { keep = " Mantenimiento: " + money_str(a.keep) + " al mes." }
+        if a.keep > 0 { keep = " Mantenimiento: " + money_str(local_price(a.keep)) + " al mes." }
         let trend = "Pierde valor con los años."
         if a.appr[0] >= 0 { trend = "Suele ganar valor con los años." } else if a.appr[1] > 0 { trend = "Su valor sube o baja con la moda." }
         let extra = ""
@@ -379,7 +384,7 @@ function lx_premium(kind: string) {
 function lx_keep_costs() {
     let total = 0
     for a in ASSETS {
-        if owns(a) && !is_house_asset(a) { total += a.keep }
+        if owns(a) && !is_house_asset(a) { total += local_price(a.keep) }
     }
     return total
 }
@@ -410,8 +415,8 @@ function lujos_action(action: string) {
             else if L.credit < 620 || dn_bk_lock() { locks[2] = "Crédito 620" }
             else if L.money < p / 5 { locks[2] = "Enganche " + money_str(p / 5) }
             let txt = a.t + ": " + money_str(p) + "."
-            if buen_fin() && p < a.cost { txt = txt + " ¡Precio de Buen Fin!" }
-            if a.keep > 0 { txt = txt + " Mantenimiento: " + money_str(a.keep) + " al mes." }
+            if buen_fin() && p < lx_base(a) { txt = txt + " ¡Precio de Buen Fin!" }
+            if a.keep > 0 { txt = txt + " Mantenimiento: " + money_str(local_price(a.keep)) + " al mes." }
             return open_choice("COMPRAR", txt, ["Pagar de contado", "Tarjeta a 12 meses sin intereses (" + money_str(p / 12) + "/mes)", "Financiarlo: 20% de enganche y 48 meses", "Mejor no"], locks, "lx_buy", {"id": a.id, "price": p})
         }
         "own" => {
@@ -440,7 +445,7 @@ function lujos_action(action: string) {
             list_push(ops, "back")
             let locks = []
             for x in labels { list_push(locks, "") }
-            return open_choice(str_upper(a.t), "Vale " + money_str(asset_value(a)) + " (lo pagaste en " + money_str(a.cost) + ").", labels, locks, "lx_own", {"id": a.id, "ops": ops})
+            return open_choice(str_upper(a.t), "Vale " + money_str(asset_value(a)) + " (lo pagaste en " + money_str(lx_base(a)) + ").", labels, locks, "lx_own", {"id": a.id, "ops": ops})
         }
         "staff" => {
             let s = staff_def(arg)
@@ -519,10 +524,10 @@ function lujos_choice(handler: string, index: int, ctx: map) {
                     let v = asset_value(a) * rint(70, 150) / 100
                     lx_remove(a)
                     L.money += v
-                    dn().capgain += max(0, v - a.cost)
+                    dn().capgain += max(0, v - lx_base(a))
                     if v >= 1000000 { hito_once("auction_million", "Vida", "Vendiste algo en una subasta por más de un millón") }
                     let txt = "El martillo cayó: " + lx_lower(a.t) + " se vendió en " + money_str(v) + "."
-                    if v > a.cost { return finish("Subasta", txt + " ¡Más de lo que pagaste!", "g") }
+                    if v > lx_base(a) { return finish("Subasta", txt + " ¡Más de lo que pagaste!", "g") }
                     return finish("Subasta", txt, "n")
                 }
                 "larga" => {
@@ -558,8 +563,8 @@ function lx_acquire(a: map, paid: int, how: string) {
     let d = lx()
     list_push(L.assets, a.t)
     let k = asset_kind(a)
-    let v = a.cost
-    if k == "car" || k == "moto" || k == "bike" || k == "tech" || k == "fashion" { v = a.cost * 80 / 100 }
+    let v = lx_base(a)
+    if k == "car" || k == "moto" || k == "bike" || k == "tech" || k == "fashion" { v = lx_base(a) * 80 / 100 }
     d.val[a.id] = v
     d.buys_y += 1
     if d.buys_y >= 6 && !d.shopaholic {
@@ -703,9 +708,9 @@ function lujos_year() {
     let d = L.lx
     for a in ASSETS {
         if !owns(a) || is_house_asset(a) { continue }
-        let v = map_get(d.val, a.id, a.cost)
+        let v = map_get(d.val, a.id, lx_base(a))
         let ch = rint(a.appr[0], a.appr[1])
-        v = max(a.cost * 15 / 100, v * (100 + ch) / 100)
+        v = max(lx_base(a) * 15 / 100, v * (100 + ch) / 100)
         d.val[a.id] = v
     }
     if d.buys_y < 2 { d.shopaholic = false }

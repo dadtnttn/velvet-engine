@@ -441,7 +441,7 @@ function lazos_title(a: map, p: map) {
 function lazos_sub(a: map, p: map) {
     if a.id == "z_secret" {
         let s = secret_def(p)
-        if s.cost > 0 { return money_str(s.cost) }
+        if s.cost > 0 { return money_str(local_price(s.cost)) }
         return "Te lo confió"
     }
     return ""
@@ -475,7 +475,7 @@ function lazos_code(a: map, p: map) {
         return finish(p.first, fmt("Tiraste el veneno. {x} empieza a recuperar el color... y tú, el sueño.", ctx), "n")
     }
     if id == "z_therapy" {
-        L.money -= 1500
+        L.money -= local_price(1500)
         bond_gain(p, 12)
         lazos_spark(p, 6)
         profile(p)
@@ -489,6 +489,11 @@ function lazos_code(a: map, p: map) {
         return finish("Terapia de pareja", msg, "g")
     }
     if id == "z_livein" {
+        // Para una pareja devota, primero va la boda.
+        if !L.married && disapproval(p, "unmarried") >= 40 {
+            bond_gain(p, -2)
+            return finish(p.first, "«Te quiero, pero en mi fe primero va el matrimonio.» Te tomó de la mano: la puerta a la boda quedó abierta.", "n")
+        }
         if p.bond >= 55 || chance(p.bond) {
             p.livein = true
             flag("livein")
@@ -506,6 +511,13 @@ function lazos_code(a: map, p: map) {
         if st == "libre" { odds += 30 }
         if st == "celoso" { odds -= 25 }
         if p.tags != null && list_contains(p.tags, "trios") { odds += 15 }
+        let faith_no = disapproval(p, "adult")
+        odds -= faith_no / 2
+        if faith_no >= 40 && !chance(clamp(odds, 3, 90)) {
+            bond_gain(p, -12)
+            p.mood = "triste"
+            return finish(p.first, "«Para mí el amor es de dos. Mi fe no me lo permite, y me duele que me lo pidas.»", "b")
+        }
         if chance(clamp(odds, 3, 90)) {
             p.open = true
             flag("open")
@@ -664,11 +676,11 @@ function lazos_code(a: map, p: map) {
 // Cumpleaños: cómo celebrarlo.
 function open_bday(p: map) {
     let ctx = {"person": p}
-    let labels = ["Fiesta sorpresa ($1,500)", "Cena especial ($500)", "Un regalo y un pastel ($200)", "Llamarle y cantarle «Las mañanitas»"]
+    let labels = [local_text("Fiesta sorpresa ($1,500)", 1500), local_text("Cena especial ($500)", 500), local_text("Un regalo y un pastel ($200)", 200), "Llamarle y cantarle «Las mañanitas»"]
     let locks = ["", "", "", ""]
-    if L.money < 1500 { locks[0] = "$1,500" }
-    if L.money < 500 { locks[1] = "$500" }
-    if L.money < 200 { locks[2] = "$200" }
+    if L.money < local_price(1500) { locks[0] = money_str(local_price(1500)) }
+    if L.money < local_price(500) { locks[1] = money_str(local_price(500)) }
+    if L.money < local_price(200) { locks[2] = money_str(local_price(200)) }
     open_choice("CUMPLEAÑOS DE " + str_upper(p.first), fmt("{x} cumple años este mes. ¿Cómo lo celebras?", ctx), labels, locks, "z_bday", ctx)
     return null
 }
@@ -680,7 +692,7 @@ function resolve_bday(index: int, ctx: map) {
     profile(p)
     let costs = [1500, 500, 200, 0]
     let gains = [14, 10, 8, 5]
-    L.money -= costs[index]
+    L.money -= local_price(costs[index])
     let b = gains[index]
     let g = rel_group(p)
     let msg = ""
@@ -719,8 +731,8 @@ function help_secret(p: map) {
         return finish(p.first, "Hablaron hasta la madrugada. Lloró, te pidió perdón y te prometió que no volverá a pasar. Tú decides si le crees.", "b")
     }
     let s = secret_def(p)
-    if s.cost > 0 && L.money < s.cost { return info(p.first, "Para esto necesitas " + money_str(s.cost) + ".") }
-    L.money -= s.cost
+    if s.cost > 0 && L.money < local_price(s.cost) { return info(p.first, "Para esto necesitas " + money_str(local_price(s.cost)) + ".") }
+    L.money -= local_price(s.cost)
     p.secret_done = true
     bond_gain(p, s.bond)
     L.happy += 3
@@ -969,9 +981,9 @@ function maybe_lazos_event() {
     if L.custody_q == true && kids_minor() > 0 {
         L.custody_q = false
         open_choice("LA CUSTODIA", "El divorcio también es de tus hijos. ¿Cómo quedará la custodia?",
-            ["Custodia compartida", "Pelear la custodia completa ($15,000 de abogados)", "Dejarle la custodia a tu ex"],
+            ["Custodia compartida", local_text("Pelear la custodia completa ($15,000 de abogados)", 15000), "Dejarle la custodia a tu ex"],
             ["", "", ""], "z_custody", {})
-        if L.money < 15000 { G.modal.locks[1] = "$15,000" }
+        if L.money < local_price(15000) { G.modal.locks[1] = money_str(local_price(15000)) }
         return true
     }
     L.custody_q = false
@@ -1043,7 +1055,7 @@ function lazos_choice(handler: string, index: int, ctx: map) {
             return finish("Custodia", "Custodia compartida: una semana contigo, una con tu ex. Los niños se adaptan mejor de lo que esperabas.", "n")
         }
         if index == 1 {
-            L.money -= 15000
+            L.money -= local_price(15000)
             if chance(45 + rank("know") * 5) {
                 L.alimony = 0
                 L.alimony_m = 0

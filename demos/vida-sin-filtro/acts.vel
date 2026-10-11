@@ -285,17 +285,19 @@ function menu_items(tab: string, cat: string) {
         if a.tab == tab && a.cat == cat && L.age >= a.min {
             let lock = ""
             if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
-            list_push(items, {"action": "act:" + a.id, "t": a.t, "s": fmt(a.s, {}), "desc": fmt(a.desc, {}), "lock": lock})
+            let lock2 = lock
+            if lock2 == "" && a.cost > 0 && L.money < local_price(a.cost) { lock2 = money_str(local_price(a.cost)) }
+            list_push(items, {"action": "act:" + a.id, "t": a.t, "s": local_text(fmt(a.s, {}), a.cost), "desc": fmt(a.desc, {}), "lock": lock2})
         }
     }
     for a in OCIO_ACTS {
         if a.tab == tab && a.cat == cat && L.age >= a.min {
             let lock = ocio_lock(a)
             if lock == "" && L.used[a.id] != null { lock = "Este mes ya" }
-            if lock == "" && a.cost > 0 && L.money < a.cost { lock = money_str(a.cost) }
+            if lock == "" && a.cost > 0 && L.money < local_price(a.cost) { lock = money_str(local_price(a.cost)) }
             let t = a.t
             if a.id == "bigheist" { t = heist_title() }
-            list_push(items, {"action": "act:" + a.id, "t": t, "s": fmt(a.s, {}), "desc": fmt(a.desc, {}), "lock": lock})
+            list_push(items, {"action": "act:" + a.id, "t": t, "s": local_text(fmt(a.s, {}), a.cost), "desc": local_text(fmt(a.desc, {}), a.cost), "lock": lock})
         }
     }
     if tab == "act" && cat == "Lujos" && L.age >= 18 {
@@ -455,8 +457,9 @@ function do_act(id: string) {
     if a.need != null && rank(a.need) < a.rank {
         return info(a.t, "Necesitas " + SOCIAL_NAMES[a.need] + " rango " + str(a.rank) + " para esto.")
     }
-    if a.cost > 0 && L.money < a.cost {
-        return info(a.t, "No te alcanza. Necesitas " + money_str(a.cost) + " y tienes " + money_str(L.money) + ".")
+    let price = local_price(a.cost)
+    if a.cost > 0 && L.money < price {
+        return info(a.t, "No te alcanza. Necesitas " + money_str(price) + " y tienes " + money_str(L.money) + ".")
     }
     let used = L.used[id]
     if used == null { used = 0 }
@@ -468,7 +471,7 @@ function do_act(id: string) {
         code_activity(id, a)
         return null
     }
-    L.money -= a.cost
+    L.money -= price
     let o = pick_outcome(a.o)
     let msg = apply(o, {})
     if a.cat == "Crimen" { add_heat(8) }
@@ -495,13 +498,13 @@ function code_activity(id: string, a: map) {
             L.used[id] = L.used[id] - 1
             return info(a.t, "No tienes adicciones... de momento.")
         }
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         special("rehab", {})
         L.happy -= 5
         return finish(a.t, "Pasaste 90 días en rehabilitación. Estás limpi" + oa(L.gender) + ".", "g")
     }
     if id == "surgery" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         if chance(75) {
             L.looks += rint(8, 18)
             return finish(a.t, "La cirugía fue un éxito. Te ves espectacular.", "g")
@@ -511,7 +514,7 @@ function code_activity(id: string, a: map) {
         return finish(a.t, "La cirugía salió mal. Pareces un gato asustado.", "b")
     }
     if id == "lottery" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         if rint(1, 2000) == 1 {
             L.money += 1000000
             L.happy = 100
