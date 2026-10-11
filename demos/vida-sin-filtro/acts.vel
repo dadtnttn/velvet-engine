@@ -477,6 +477,16 @@ function do_act(id: string) {
     }
     L.money -= price
     let o = pick_outcome(a.o)
+    if a.cat == "Crimen" {
+        // Con la policía tras de ti, es más fácil que te atrapen.
+        for x in a.o {
+            if map_has(x, "jail") && !map_has(o, "jail") && chance(heat() / 4) { o = x }
+        }
+        if map_has(o, "jail") {
+            if map_has(o, "karma") { L.karma += o.karma }
+            return caught_for(o.jail, str_lower(a.t), fmt(o.log, {}))
+        }
+    }
     let msg = apply(o, {})
     if a.cat == "Crimen" { add_heat(8) }
     if a.tab == "night" { hito_once("first_night", "Vida", "Tu primera noche de fiesta") }

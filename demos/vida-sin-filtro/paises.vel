@@ -371,7 +371,9 @@ function csplit_cl(s: string) {
 function pais_heir(old: map) {
     L.ctry = old.ctry
     L.born = old.ctry
-    L.y0 = map_get(old, "y0", 2026) + old.age
+    // El año sigue donde lo dejó tu padre o madre: su vida pudo empezar ya de
+    // adulto (si también era heredero), así que cuentan los meses vividos, no su edad.
+    L.y0 = map_get(old, "y0", 2026) + map_get(old, "tm", old.age * 12) / 12
     L.world = old.world
     let d = pa()
     list_push(d.nats, here_id())
