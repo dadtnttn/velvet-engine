@@ -501,9 +501,10 @@ function vida_year() {
     }
     flaw_check()
     if L.age >= 100 { flag("centenarian") }
-    if L.age >= 40 && L.age <= 46 && !d.crisis && chance(30) && G.modal == null {
+    if L.age >= 40 && L.age <= 46 && !d.crisis && chance(30) {
         d.crisis = true
-        open_midlife()
+        // Si otra ventana del cumpleaños llegó primero, la crisis espera su turno.
+        if G.modal == null { open_midlife() } else { d.crisis_pend = true }
     }
     return null
 }
@@ -596,6 +597,11 @@ function vida_month() {
     if G.modal != null { return null }
     if d.gpend {
         open_goal_choice()
+        return null
+    }
+    if d.crisis_pend == true {
+        d.crisis_pend = false
+        open_midlife()
         return null
     }
     resolution_tick()
@@ -1408,7 +1414,7 @@ function vida_event_rate() {
 
 const VIDA_EVENTS = [
     // Infancia
-    {"id": "vd_lost_store", "title": "Solo en el súper", "min": 5, "max": 8, "w": 6, "req": "",
+    {"id": "vd_lost_store", "title": "Solo en el súper", "min": 5, "max": 8, "w": 6, "req": "mom",
      "text": "Volteas y tu mamá ya no está. Solo ves pasillos gigantes llenos de cereales.",
      "choices": [
         {"t": "Ir a la caja y pedir que la llamen", "o": [{"w": 100, "log": "«Se busca a la mamá de un niño muy listo.» Llegó corriendo y te abrazó fuerte.", "happy": 3, "know": 2}]},
@@ -1421,7 +1427,7 @@ const VIDA_EVENTS = [
         {"t": "Amarrarlo a una puerta y ¡PUM!", "o": [{"w": 100, "log": "Salió volando. Lo pusiste bajo la almohada y el Ratón Pérez te dejó $20.", "money": 20, "guts": 3, "happy": 4}]},
         {"t": "Esperar a que se caiga solo", "o": [{"w": 100, "log": "Se cayó en tu sándwich. Te lo tragaste. El Ratón Pérez no vino.", "happy": -2}]}
      ]},
-    {"id": "vd_class_pet", "title": "La mascota del salón", "min": 6, "max": 10, "w": 5, "req": "school",
+    {"id": "vd_class_pet", "title": "La mascota del salón", "min": 6, "max": 10, "w": 5, "req": "school,dad",
      "text": "Te toca llevarte el hámster del salón a casa el fin de semana.",
      "choices": [
         {"t": "Cuidarlo como a un rey", "o": [{"w": 100, "log": "Lo devolviste gordito y feliz. La maestra te puso estrellita.", "kind": 4, "happy": 3}]},
@@ -1446,7 +1452,7 @@ const VIDA_EVENTS = [
         {"t": "No rascarte por nada del mundo", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Dos semanas de tortura sin rascarte. Ni una cicatriz.", "guts": 3, "health": -3}]},
         {"t": "Rascarte (es imposible no hacerlo)", "o": [{"w": 100, "log": "Te quedó una marquita en la frente para siempre.", "health": -3, "looks": -1}]}
      ]},
-    {"id": "vd_shooting_star", "title": "Lluvia de estrellas", "min": 5, "max": 99, "w": 3, "req": "",
+    {"id": "vd_shooting_star", "title": "Lluvia de estrellas", "min": 13, "max": 99, "w": 3, "req": "",
      "text": "Esta noche hay lluvia de estrellas. Todos salen a la azotea.",
      "choices": [
         {"t": "Pedir un deseo de amor", "o": [{"w": 100, "log": "Viste tres estrellas fugaces. Tu deseo es secreto.", "happy": 5, "tfx": "flechazo:2"}]},
@@ -1454,7 +1460,7 @@ const VIDA_EVENTS = [
         {"t": "Solo mirar", "o": [{"w": 100, "log": "Te sentiste diminut{a} y en paz.", "happy": 4, "tfx": "paz:2"}]}
      ]},
     // Adolescencia
-    {"id": "vd_house_party", "title": "Fiesta sin papás", "min": 14, "max": 17, "w": 6, "req": "",
+    {"id": "vd_house_party", "title": "Fiesta sin papás", "min": 14, "max": 17, "w": 6, "req": "parents",
      "text": "Tus papás se van el fin de semana. Tus amigos ya están organizando «una reunioncita».",
      "choices": [
         {"t": "Hacer la fiesta del año", "lucky": ["fiesta"], "o": [{"w": 55, "log": "Leyenda. Toda la escuela habla de tu fiesta.", "happy": 10, "charm": 4}, {"w": 45, "log": "Alguien rompió el florero de la abuela. Te descubrieron. Castigo épico.", "happy": -6, "charm": 2}]},
@@ -1474,11 +1480,11 @@ const VIDA_EVENTS = [
         {"t": "Ir ($1,500)", "cost": 1500, "o": [{"w": 100, "log": "Fogata en la playa, una guitarra y recuerdos para toda la vida.", "money": -1500, "happy": 10, "charm": 3, "tfx": "quemadura:1"}]},
         {"t": "Quedarte", "o": [{"w": 100, "log": "Viste todas las fotos en redes. Te arrepentiste un poco.", "happy": -4}]}
      ]},
-    {"id": "vd_best_friend_moves", "title": "Tu mejor amigo se muda", "min": 9, "max": 17, "w": 4, "req": "",
+    {"id": "vd_best_friend_moves", "title": "Tu mejor amigo se muda", "min": 9, "max": 17, "w": 4, "req": "hasfriend",
      "text": "Tu mejor amigo te cuenta que su familia se muda a otro país.",
      "choices": [
-        {"t": "Prometer escribirse todos los días", "o": [{"w": 50, "log": "Lo cumplieron. Videollamadas cada domingo durante años.", "kind": 3, "happy": -2}, {"w": 50, "log": "Al principio sí. Luego, cada vez menos.", "happy": -5}]},
-        {"t": "Organizarle una despedida sorpresa", "o": [{"w": 100, "log": "Lloraron, rieron y se prometieron volver a verse.", "kind": 4, "happy": 2}]}
+        {"t": "Prometer escribirse todos los días", "o": [{"w": 50, "log": "Lo cumplieron. Videollamadas cada domingo durante años.", "kind": 3, "happy": -2, "special": "vd_friend_away"}, {"w": 50, "log": "Al principio sí. Luego, cada vez menos.", "happy": -5, "special": "vd_friend_away"}]},
+        {"t": "Organizarle una despedida sorpresa", "o": [{"w": 100, "log": "Lloraron, rieron y se prometieron volver a verse.", "kind": 4, "happy": 2, "special": "vd_friend_away"}]}
      ]},
     {"id": "vd_rumor", "title": "El rumor", "min": 12, "max": 17, "w": 4, "req": "school",
      "text": "Circula un rumor falso sobre ti en el chat del salón.",
@@ -1506,7 +1512,7 @@ const VIDA_EVENTS = [
         {"t": "Bajarte a gritarle", "o": [{"w": 50, "log": "Terminaron a gritos. El seguro pagó todo, pero te quedó un dolor de cuello.", "health": -5, "tfx": "lesion:2"}, {"w": 50, "log": "Se disculpó y pagó en efectivo.", "money": 3000}]},
         {"t": "Llamar al seguro y respirar", "o": [{"w": 100, "log": "Un golpe en la puerta y un buen susto. Nadie salió herido.", "tfx": "susto:2", "money": -1000}]}
      ]},
-    {"id": "vd_blackout", "title": "Apagón", "min": 8, "max": 99, "w": 4, "req": "",
+    {"id": "vd_blackout", "title": "Apagón", "min": 14, "max": 99, "w": 4, "req": "",
      "text": "Se fue la luz en toda la ciudad. Sin internet, sin tele, sin celular.",
      "choices": [
         {"t": "Juegos de mesa con velas", "o": [{"w": 100, "log": "La mejor noche en meses. Deberían irse más seguido las luces.", "happy": 5}]},
@@ -1578,7 +1584,7 @@ const VIDA_EVENTS = [
         {"t": "Mudarte ($2,000)", "cost": 2000, "o": [{"w": 100, "log": "Cajas, pizza en el piso y un nuevo comienzo.", "money": -2000, "happy": 6, "tfx": "mudanza:4"}]},
         {"t": "Quedarte donde estás", "o": [{"w": 100, "log": "Mudarse es demasiado cansado.", "happy": 0}]}
      ]},
-    {"id": "vd_lucky_streak", "title": "Día perfecto", "min": 8, "max": 99, "w": 3, "req": "",
+    {"id": "vd_lucky_streak", "title": "Día perfecto", "min": 18, "max": 99, "w": 3, "req": "",
      "text": "El camión llegó a tiempo, encontraste lugar, te regalaron un café y sonó tu canción. Hoy es tu día.",
      "choices": [
         {"t": "Aprovecharlo para pedir algo importante", "o": [{"w": 100, "log": "Te dijeron que sí. Claro que sí: hoy es tu día.", "happy": 6, "tfx": "suerte:3"}]},
@@ -1614,7 +1620,7 @@ const VIDA_EVENTS = [
         {"t": "Aceptar la aventura", "o": [{"w": 100, "log": "Nuevo idioma, nueva ciudad, nuevo tú. Tu sueldo sube 20%.", "happy": 6, "know": 5, "special": "vd_abroad"}]},
         {"t": "Quedarte cerca de los tuyos", "o": [{"w": 100, "log": "Lo pensaste mucho. Elegiste quedarte. Tu familia lo agradeció.", "kind": 3}]}
      ]},
-    {"id": "vd_scam_call", "title": "Llamada sospechosa", "min": 55, "max": 99, "w": 4, "req": "",
+    {"id": "vd_scam_call", "title": "Llamada sospechosa", "min": 55, "max": 99, "w": 4, "req": "grandkids",
      "text": "«¡Abuelit{a}, soy yo! Tuve un accidente, no le digas a nadie y deposítame $10,000.»",
      "choices": [
         {"t": "Depositar de inmediato", "o": [{"w": 100, "log": "Era una estafa. Tus nietos estaban en la escuela.", "money": -10000, "happy": -8}]},
@@ -1640,7 +1646,7 @@ const VIDA_EVENTS = [
         {"t": "Bailar toda la tarde", "o": [{"w": 100, "log": "Bailaste como en tus mejores años. Hiciste amigos nuevos.", "happy": 8, "health": 2, "charm": 2}]},
         {"t": "Mirar desde la banca", "o": [{"w": 100, "log": "Disfrutaste la música con un helado en la mano.", "happy": 3}]}
      ]},
-    {"id": "vd_gas", "title": "El olor a gas", "min": 70, "max": 110, "w": 3, "req": "",
+    {"id": "vd_gas", "title": "El olor a gas", "min": 70, "max": 110, "w": 3, "req": "kidsalive",
      "text": "Huele raro en la cocina. ¿Dejaste la estufa abierta?",
      "choices": [
         {"t": "Abrir ventanas y salir", "o": [{"w": 100, "log": "Lo dejaste abierto. Por suerte lo notaste a tiempo.", "tfx": "susto:2"}]},
@@ -1681,7 +1687,26 @@ function vida_special(name: string, ctx: map) {
         return ""
     }
     if name == "vd_dog" {
+        add_pet("perro", "Suerte")
         hito_once("stray_dog", "Vida", "Adoptaste un perrito callejero")
+        return ""
+    }
+    if name == "vd_kidpet" {
+        add_pet("perro", "Firulais")
+        return ""
+    }
+    if name == "vd_friend_away" {
+        // Tu amigo más cercano de verdad se va: menos contacto y un hito.
+        let best = null
+        for q in L.people {
+            if q.alive && q.rel == "amigo" && (best == null || q.bond > best.bond) { best = q }
+        }
+        if best != null {
+            best.bond = clamp100(best.bond - 10)
+            best.far = true
+            add_hito(best, "Se mudó a otro país")
+            return " (" + best.first + " ya vive lejos.)"
+        }
         return ""
     }
     if name == "vd_hero" {
@@ -1696,9 +1721,27 @@ function vida_special(name: string, ctx: map) {
         return ""
     }
     if name == "vd_abroad" {
+        // Una mudanza de verdad: país lejano, con economía igual o mejor, y tu
+        // empresa te conserva el puesto con un 20% más.
+        let job = L.job
+        let here_c = here_id()
+        let gdp = here().gdp
+        let opts = []
+        for c in COUNTRIES {
+            if c.id != here_c && c.gdp >= gdp && dist_km(here_c, c.id) > 2500 && !at_war(c.id) { list_push(opts, c.id) }
+        }
+        if len(opts) == 0 {
+            if L.job != null { L.job.bonus = L.job.bonus + 20 }
+            hito_me("Trabajo", "Te fuiste a trabajar al extranjero")
+            return ""
+        }
+        let dest = pick(opts)
+        L.job = null
+        pais_move(dest, "residente")
+        L.job = job
         if L.job != null { L.job.bonus = L.job.bonus + 20 }
-        hito_me("Trabajo", "Te fuiste a trabajar al extranjero")
-        return ""
+        hito_me("Trabajo", "Tu empresa te mandó a trabajar a " + cname(dest))
+        return " Destino: " + cname(dest) + "."
     }
     if name == "vd_tribute" {
         hito_me("Vida", "Tu comunidad te hizo un homenaje")

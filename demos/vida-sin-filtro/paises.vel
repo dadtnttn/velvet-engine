@@ -1015,6 +1015,11 @@ function pais_month() {
     if L.ctry == null { return null }
     let d = pa()
     let c = here()
+    // La carta del servicio militar que no cupo en el cumpleaños.
+    if d.service_pend == true && G.modal == null {
+        d.service_pend = false
+        service_check()
+    }
     if d.legal != "ciudadano" { d.res_m += 1 }
     if d.legal == "ilegal" {
         if chance(1) && L.age >= 16 {
