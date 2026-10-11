@@ -359,6 +359,7 @@ function health_action(action: string) {
                 return finish("Psicólogo", "Después de muchas sesiones, lo lograste: superaste la " + str_lower(n) + ".", "g")
             }
         }
+        if L.age < 18 { return finish("Psicólogo", "Dibujaste, jugaste y hablaste de lo que te preocupa en la escuela y en casa. Saliste más liger" + oa(L.gender) + ".", "g") }
         return finish("Psicólogo", "Hablaste de tu infancia, de tu trabajo y de tus miedos. Saliste más liger" + oa(L.gender) + ".", "g")
     }
     if id == "alt" {

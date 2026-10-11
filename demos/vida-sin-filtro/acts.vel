@@ -39,14 +39,14 @@ const ACTIVITIES = [
         {"w": 15, "log": "Te quedaste dormid{a} sobre un libro de historia.", "smarts": 1, "know": 1}
     ]},
     {"id": "games", "tab": "act", "cat": "Mente", "t": "Videojuegos", "s": "Felicidad, destreza", "min": 6, "cost": 0,
-     "desc": "Una partida más. Solo una. Son las 4 de la mañana.", "o": [
-        {"w": 80, "log": "Jugaste hasta las 4 a. m. Valió la pena.", "happy": 5, "health": -1, "skill": 3},
-        {"w": 20, "log": "Un niño de 12 años te humilló en línea.", "happy": -4, "guts": 1}
+     "desc": "Una partida más. Solo una. Son las 4 de la mañana.", "desc_kid": "Una partida más. Solo una. Ya te llamaron a cenar tres veces.", "o": [
+        {"w": 80, "log": "Jugaste hasta las 4 a. m. Valió la pena.", "log_kid": "Jugaste hasta que te mandaron a dormir. Valió la pena.", "happy": 5, "health": -1, "skill": 3},
+        {"w": 20, "log": "Un niño de 12 años te humilló en línea.", "log_kid": "Tu primo más chico te ganó todas las partidas. Todas.", "happy": -4, "guts": 1}
     ]},
     {"id": "meditate", "tab": "act", "cat": "Mente", "t": "Meditar", "s": "Felicidad, menos ansiedad", "min": 10, "cost": 0,
-     "desc": "Respira. Inhala. Exhala. No pienses en tu ex.", "o": [
+     "desc": "Respira. Inhala. Exhala. No pienses en tu ex.", "desc_kid": "Respira. Inhala. Exhala. No pienses en la tarea.", "o": [
         {"w": 80, "log": "Respiraste profundo y soltaste el estrés.", "happy": 6, "alcohol": -3, "drugs": -3, "kind": 2},
-        {"w": 20, "log": "Intentaste meditar pero pensaste en tu ex todo el tiempo.", "happy": -1}
+        {"w": 20, "log": "Intentaste meditar pero pensaste en tu ex todo el tiempo.", "log_kid": "Intentaste meditar pero pensaste en el recreo todo el tiempo.", "happy": -1}
     ]},
     {"id": "volunteer", "tab": "act", "cat": "Mente", "t": "Voluntariado", "s": "Amabilidad, karma", "min": 12, "cost": 0,
      "desc": "Comedores comunitarios, refugios de animales y abuelitos que cuentan historias.", "o": [
@@ -286,8 +286,11 @@ function menu_items(tab: string, cat: string) {
             let lock = ""
             if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
             let lock2 = lock
+            if lock2 == "" { lock2 = body_lock(a.id) }
             if lock2 == "" && a.cost > 0 && L.money < local_price(a.cost) { lock2 = money_str(local_price(a.cost)) }
-            list_push(items, {"action": "act:" + a.id, "t": a.t, "s": local_text(fmt(a.s, {}), a.cost), "desc": fmt(a.desc, {}), "lock": lock2})
+            let desc = a.desc
+            if L.age < 13 && a.desc_kid != null { desc = a.desc_kid }
+            list_push(items, {"action": "act:" + a.id, "t": a.t, "s": local_text(fmt(a.s, {}), a.cost), "desc": fmt(desc, {}), "lock": lock2})
         }
     }
     for a in OCIO_ACTS {
@@ -454,6 +457,8 @@ function do_act(id: string) {
     if a == null { return null }
     if L.jail > 0 { return info(a.t, "Estás en prisión.") }
     if L.age < a.min { return info(a.t, "Eres demasiado joven para eso.") }
+    let bl = body_lock(a.id)
+    if bl != "" { return info(a.t, "Ahora no puede ser: " + str_lower(bl) + ".") }
     if a.need != null && rank(a.need) < a.rank {
         return info(a.t, "Necesitas " + SOCIAL_NAMES[a.need] + " rango " + str(a.rank) + " para esto.")
     }
@@ -1412,4 +1417,24 @@ function dispatch_choice(index: int) {
     if m.handler == "claim" { return resolve_claim(index) }
     if m.handler == "party" { return resolve_party(index) }
     return null
+}
+
+// Lo físico depende del cuerpo: con yeso, quimioterapia, el corazón o los
+// pulmones dañados, la salud por los suelos o muchos años, no todo se puede.
+const BODY_ACTS = ["gym", "boxing", "dance", "climb", "marathon", "skydive", "rave", "gymflirt"]
+const EXTREME_ACTS = ["boxing", "climb", "marathon", "skydive", "rave"]
+
+function body_lock(id: string) {
+    if !list_contains(BODY_ACTS, id) { return "" }
+    if has_ill("fractura") { return "Lesión" }
+    for i in L.ill {
+        if i.treated && ill_def(i.id).type == "cancer" { return "Quimioterapia" }
+    }
+    if L.health < 25 { return "Salud baja" }
+    if list_contains(EXTREME_ACTS, id) {
+        if has_ill("cardiopatia") { return "Corazón" }
+        if has_ill("epoc") { return "Pulmones" }
+        if L.age >= 80 { return "Edad" }
+    }
+    return ""
 }
