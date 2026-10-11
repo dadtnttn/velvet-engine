@@ -53,8 +53,28 @@ function cfg_loaded(r: map) {
         for key in ["lang", "theme", "master", "sfx", "music", "acc", "lgt", "intro", "tips", "tips_seen"] {
             if r.data[key] != null { CFG[key] = r.data[key] }
         }
+    } else {
+        // Primera vez: el idioma del sistema si el juego lo tiene; si no, inglés.
+        CFG.lang = system_lang_code()
     }
     cfg_apply()
+}
+
+// «es-MX» → «es», «zh-TW» → «zh-Hant», «pt-PT» → «pt-BR»...
+function system_lang_code() {
+    let s = str_lower(sys_lang())
+    if s == "" { return "en" }
+    if str_starts_with(s, "zh") {
+        if str_contains(s, "tw") || str_contains(s, "hk") || str_contains(s, "mo") || str_contains(s, "hant") { return "zh-Hant" }
+        return "zh-Hans"
+    }
+    if str_starts_with(s, "pt") { return "pt-BR" }
+    if str_starts_with(s, "iw") { return "he" }
+    let base = str_split(s, "-")[0]
+    for l in LANGS {
+        if l[0] == base { return base }
+    }
+    return "en"
 }
 
 function cfg_save() {
