@@ -1,0 +1,1704 @@
+// @edition 3
+// La base de toda vida, ampliada:
+// 1. Creador: talento, defecto (que puedes superar), aficiones, ciudad, familia,
+//    hermanos, mes de nacimiento (signo), estatura y destino (cuántos eventos).
+// 2. Tiempo: etapas de la vida con un propósito para cada una, propósitos de año
+//    nuevo, fiestas del año, crisis de los 40, lista de deseos en la vejez,
+//    epitafio, últimas palabras y resumen de cada año y de cada década.
+// 3. Estadísticas: historial año a año, detalle de cada barra (qué la sube, qué
+//    la baja, gráfica) y ventajas reales por rango social y por estadísticas altas.
+// 4. Efectos temporales: duelo, luna de miel, desvelos, resaca, estrés, lesiones,
+//    rachas... con meses restantes; soledad y sobriedad.
+// 5. Hitos: favoritos, línea del tiempo por etapas, más hitos automáticos.
+// 6. Eventos aleatorios nuevos para cada etapa de la vida.
+// Acciones "vd:" y "st:"; elecciones "vd_".
+
+// ---------------------------------------------------------------- 1. creador
+
+const TALENTS = [
+    {"id": "musica", "n": "Oído musical", "d": "Cantas afinad{a} desde la cuna.", "soc": "skill", "pts": 12, "stat": "happy", "sv": 5, "int": "musica", "fx": {"flirt": 2, "hap": 1}},
+    {"id": "deporte", "n": "Atleta nat{a}", "d": "Corres, saltas y no te cansas.", "soc": "guts", "pts": 10, "stat": "health", "sv": 10, "int": "deporte", "fx": {"hp": 1, "looks": 2}},
+    {"id": "arte", "n": "Mano de artista", "d": "Dibujas lo que imaginas.", "soc": "skill", "pts": 10, "stat": "smarts", "sv": 4, "int": "arte", "fx": {"pay": 3}},
+    {"id": "numeros", "n": "Cabeza para los números", "d": "Las cuentas te salen solas.", "soc": "know", "pts": 10, "stat": "smarts", "sv": 12, "int": "juegos", "fx": {"grades": 4}},
+    {"id": "labia", "n": "Pico de oro", "d": "Convences a quien sea de lo que sea.", "soc": "charm", "pts": 14, "stat": "happy", "sv": 3, "int": "fiesta", "fx": {"flirt": 4, "hire": 3}},
+    {"id": "belleza", "n": "Belleza natural", "d": "Sales bien hasta en las fotos de la credencial.", "soc": "charm", "pts": 4, "stat": "looks", "sv": 12, "int": "baile", "fx": {"looks": 3}},
+    {"id": "memoria", "n": "Memoria de elefante", "d": "No olvidas nada (ni las ofensas).", "soc": "know", "pts": 12, "stat": "smarts", "sv": 5, "int": "lectura", "fx": {"grades": 3, "hire": 2}},
+    {"id": "corazon", "n": "Corazón de oro", "d": "Sabes lo que sienten los demás.", "soc": "kind", "pts": 14, "stat": "happy", "sv": 3, "int": "cocina", "fx": {"hap": 1}}
+]
+
+const FLAWS = [
+    {"id": "ninguno", "n": "Ninguno", "d": "Nadie es perfecto, pero tú no lo sabes todavía.", "soc": "", "pts": 0, "fx": {}, "goal": ""},
+    {"id": "timido", "n": "Tímid{a}", "d": "Hablar en público te da náuseas.", "soc": "charm", "pts": -8, "fx": {"flirt": -6}, "goal": "Llega a Encanto 3."},
+    {"id": "torpe", "n": "Torpe", "d": "Tropiezas con tus propios pies.", "soc": "skill", "pts": -8, "fx": {"pay": -3}, "goal": "Llega a Destreza 3."},
+    {"id": "enfermizo", "n": "Enfermiz{a}", "d": "Te enfermas de todo.", "soc": "", "pts": 0, "fx": {"hp": -1}, "goal": "Llega a los 18 con salud de 85 o más."},
+    {"id": "flojo", "n": "Floj{a}", "d": "Mañana. Siempre mañana.", "soc": "", "pts": 0, "fx": {"grades": -5, "pay": -3}, "goal": "Rinde al 85% en un trabajo o saca 90 de calificación."},
+    {"id": "impulsivo", "n": "Impulsiv{a}", "d": "Compras primero y piensas después.", "soc": "", "pts": 0, "fx": {}, "goal": "Junta $50,000 en tu ahorro."},
+    {"id": "celoso", "n": "Celos{a}", "d": "Revisas con quién habla tu pareja.", "soc": "kind", "pts": -4, "fx": {}, "goal": "Llega a Amabilidad 4."},
+    {"id": "vanidoso", "n": "Vanidos{a}", "d": "El espejo es tu mejor amigo.", "soc": "kind", "pts": -8, "fx": {"hire": -2}, "goal": "Llega a Amabilidad 3."},
+    {"id": "despistado", "n": "Despistad{a}", "d": "Pierdes las llaves dos veces al día.", "soc": "know", "pts": -5, "fx": {"grades": -3}, "goal": "Llega a Conocimiento 4."}
+]
+
+const SIGNS = [
+    {"n": "Capricornio", "soc": "skill", "d": "Disciplinad{a} y terc{a}."},
+    {"n": "Acuario", "soc": "know", "d": "Original y un poco rar{a}."},
+    {"n": "Piscis", "soc": "kind", "d": "Soñador{ra} y sensible."},
+    {"n": "Aries", "soc": "guts", "d": "Primero actúas, luego preguntas."},
+    {"n": "Tauro", "soc": "skill", "d": "Paciente, leal y glotón{na}."},
+    {"n": "Géminis", "soc": "charm", "d": "Dos personas en una."},
+    {"n": "Cáncer", "soc": "kind", "d": "Tu familia es lo primero."},
+    {"n": "Leo", "soc": "charm", "d": "Naciste para el escenario."},
+    {"n": "Virgo", "soc": "know", "d": "Todo en su lugar."},
+    {"n": "Libra", "soc": "charm", "d": "Buscas el equilibrio (y la belleza)."},
+    {"n": "Escorpio", "soc": "guts", "d": "Intens{a} y misterios{a}."},
+    {"n": "Sagitario", "soc": "guts", "d": "Libre, aventurer{a} y sin filtro."}
+]
+
+const INT_SHORT = {"cine": "CINE", "musica": "MÚSICA", "baile": "BAILE", "cocina": "COCINA", "deporte": "DEPORTE", "naturaleza": "NATURALEZA",
+                   "videojuegos": "VIDEOJUEGOS", "lectura": "LECTURA", "viajes": "VIAJES", "fiesta": "FIESTA", "arte": "ARTE", "juegos": "JUEGOS DE MESA"}
+
+const HEIGHTS = [["baja", "Baja"], ["media", "Media"], ["alta", "Alta"]]
+const FAMILY_OPTS = [["azar", "Al azar"], ["pobre", "Humilde"], ["media", "Media"], ["rica", "Adinerada"]]
+const SIB_OPTS = [["azar", "Al azar"], ["no", "Ninguno"], ["si", "Uno"], ["muchos", "Dos o tres"]]
+const DESTINY_OPTS = [["tranquilo", "Tranquilo"], ["normal", "Normal"], ["caotico", "Caótico"]]
+
+function gfmt(s: string, gender: string) {
+    let r = str_replace(s, "{a}", by_gender(gender, "o", "a"))
+    r = str_replace(r, "{ra}", by_gender(gender, "", "a"))
+    r = str_replace(r, "{na}", by_gender(gender, "", "a"))
+    return r
+}
+
+function talent_def(id: string) {
+    for t in TALENTS {
+        if t.id == id { return t }
+    }
+    return TALENTS[0]
+}
+
+function flaw_def(id: string) {
+    for f in FLAWS {
+        if f.id == id { return f }
+    }
+    return FLAWS[0]
+}
+
+function pair_index(opts: list, id: string) {
+    let i = 0
+    while i < len(opts) {
+        if opts[i][0] == id { return i }
+        i += 1
+    }
+    return 0
+}
+
+function pair_name(opts: list, id: string, gender: string) {
+    return gfmt(opts[pair_index(opts, id)][1], gender)
+}
+
+// Campos nuevos del creador (también para los herederos, que no pasan por él).
+function cre_defaults(c: map) {
+    if c.talent == null { c.talent = TALENTS[rint(0, len(TALENTS) - 1)].id }
+    if c.flaw == null { c.flaw = "ninguno" }
+    if c.ints == null { c.ints = [] }
+    if c.city == null { c.city = "" }
+    if c.fam == null { c.fam = "azar" }
+    if c.sibs == null { c.sibs = "azar" }
+    if c.bm == null { c.bm = -1 }
+    if c.height == null { c.height = "media" }
+    if c.destiny == null { c.destiny = "normal" }
+    return c
+}
+
+function vida_creator_action(cmd: string, action: string, value: string) {
+    let c = cre_defaults(G.cre)
+    if cmd == "talent" { c.talent = TALENTS[cycle(id_index(TALENTS, c.talent), action, len(TALENTS))].id }
+    if cmd == "flaw" { c.flaw = FLAWS[cycle(id_index(FLAWS, c.flaw), action, len(FLAWS))].id }
+    if cmd == "int" {
+        if list_contains(c.ints, value) {
+            let keep = []
+            for x in c.ints {
+                if x != value { list_push(keep, x) }
+            }
+            c.ints = keep
+        } else if len(c.ints) < 3 {
+            list_push(c.ints, value)
+        }
+    }
+    if cmd == "city" {
+        let i = 0
+        if c.city != "" { i = list_index(CITIES, c.city) + 1 }
+        i = cycle(i, action, len(CITIES) + 1)
+        if i == 0 { c.city = "" } else { c.city = CITIES[i - 1] }
+    }
+    if cmd == "fam" { c.fam = value }
+    if cmd == "sibs" { c.sibs = value }
+    if cmd == "bm" { c.bm = cycle(c.bm + 1, action, 13) - 1 }
+    if cmd == "height" { c.height = value }
+    if cmd == "destiny" { c.destiny = value }
+    return null
+}
+
+function list_index(xs: list, v: string) {
+    let i = 0
+    while i < len(xs) {
+        if xs[i] == v { return i }
+        i += 1
+    }
+    return 0
+}
+
+function cre_city_name(c: map) {
+    if c.city == "" { return "AL AZAR" }
+    return str_upper(c.city)
+}
+
+function cre_month_name(c: map) {
+    if c.bm < 0 { return "AL AZAR" }
+    return str_upper(MONTH_NAMES[c.bm]) + " · " + str_upper(SIGNS[c.bm].n)
+}
+
+// Resumen de lo que te dan tus elecciones (en el creador).
+function cre_preview(c: map) {
+    let g = c.gender
+    let t = talent_def(c.talent)
+    let f = flaw_def(c.flaw)
+    let s = "Talento: " + gfmt(t.n, g) + " (" + SOCIAL_NAMES[t.soc] + " +" + str(t.pts) + ", " + stat_name(t.stat) + " +" + str(t.sv) + ")."
+    if f.id != "ninguno" { s = s + " Defecto: " + gfmt(f.n, g) + ". Para superarlo: " + f.goal }
+    return s
+}
+
+function stat_name(k: string) {
+    if k == "happy" { return "Felicidad" }
+    if k == "health" { return "Salud" }
+    if k == "smarts" { return "Inteligencia" }
+    if k == "looks" { return "Atractivo" }
+    return SOCIAL_NAMES[k]
+}
+
+// Ajustes de origen antes de crear la familia.
+function cre_city() {
+    let c = cre_defaults(G.cre)
+    if c.city != "" { return c.city }
+    return pick(CITIES)
+}
+
+function cre_bmonth() {
+    let c = cre_defaults(G.cre)
+    if c.bm >= 0 { return c.bm }
+    return rint(0, 11)
+}
+
+function cre_family(rolled: string) {
+    let c = cre_defaults(G.cre)
+    if c.fam != "azar" { return c.fam }
+    return rolled
+}
+
+// Cuántos hermanos (-1: al azar como siempre).
+function cre_sibs() {
+    let c = cre_defaults(G.cre)
+    if c.sibs == "no" { return 0 }
+    if c.sibs == "si" { return 1 }
+    if c.sibs == "muchos" { return rint(2, 3) }
+    return -1
+}
+
+// Herederos: un talento al azar y el historial desde hoy.
+function vida_heir() {
+    L.talent = TALENTS[rint(0, len(TALENTS) - 1)].id
+    L.flaw = "ninguno"
+    vd_snapshot()
+    vd_hist_push()
+    return null
+}
+
+// Se aplica al nacer, después de la familia.
+function vida_birth() {
+    let c = cre_defaults(G.cre)
+    let g = L.gender
+    let d = vd()
+    let t = talent_def(c.talent)
+    L.talent = t.id
+    gain(t.soc, t.pts)
+    L[t.stat] = clamp100(L[t.stat] + t.sv)
+    let f = flaw_def(c.flaw)
+    L.flaw = f.id
+    if f.soc != "" { gain(f.soc, f.pts) }
+    if f.id == "enfermizo" { L.health = clamp100(L.health - 15) }
+    if f.id == "vanidoso" { L.looks = clamp100(L.looks + 5) }
+    let sg = SIGNS[L.bmonth]
+    gain(sg.soc, 4)
+    L.sign = sg.n
+    L.height = c.height
+    if c.height == "alta" { L.looks = clamp100(L.looks + 2) }
+    if c.height == "baja" { gain("skill", 2) }
+    L.chaos = c.destiny
+    let ints = []
+    for x in c.ints { list_push(ints, x) }
+    if !list_contains(ints, t.int) && len(ints) < 3 { list_push(ints, t.int) }
+    let pool = list_slice(INTERESTS, 0, len(INTERESTS))
+    shuffle(G.rng, pool)
+    for x in pool {
+        if len(ints) < 3 && !list_contains(ints, x) { list_push(ints, x) }
+    }
+    L.interests = ints
+    log_add("Naciste bajo el signo de " + sg.n + ": " + gfmt(sg.d, g), "x")
+    log_add("Tu talento: " + gfmt(t.n, g) + ". " + gfmt(t.d, g), "g")
+    if f.id != "ninguno" { log_add("Tu defecto: " + gfmt(f.n, g) + ". " + gfmt(f.d, g), "n") }
+    vd_snapshot()
+    vd_hist_push()
+    return null
+}
+
+// ---------------------------------------------------------------- estado
+
+function vd() {
+    if L.vd == null {
+        L.vd = {"goals": [], "goal": "", "gstage": "", "gpend": false, "hist": [], "tfx": {}, "res": null, "hol": {}, "bucket": [],
+                "decades": [], "snap": null, "stage_hitos": 0, "stage_love": false, "crisis": false, "addict": false, "last_alc": 0,
+                "last_drg": 0, "nest": false, "flaw_done": false}
+    }
+    return L.vd
+}
+
+// ---------------------------------------------------------------- 2. etapas
+
+const STAGES = [
+    {"id": "bebe", "n": "Primera infancia", "s": "BEBÉ", "min": 0, "max": 2, "d": "Todo es nuevo: dormir, comer y descubrir el mundo."},
+    {"id": "nino", "n": "Infancia", "s": "NIÑEZ", "min": 3, "max": 11, "d": "Escuela, juegos, amigos del barrio y rodillas raspadas."},
+    {"id": "teen", "n": "Adolescencia", "s": "ADOLESCENCIA", "min": 12, "max": 17, "d": "Hormonas, primeros amores, drama y descubrir quién eres."},
+    {"id": "joven", "n": "Juventud", "s": "JUVENTUD", "min": 18, "max": 29, "d": "La noche es tuya. Estudios, trabajos, viajes y errores que valen la pena."},
+    {"id": "adulto", "n": "Adultez", "s": "ADULTEZ", "min": 30, "max": 49, "d": "Carrera, familia, hipoteca... y la pregunta de si es esto lo que querías."},
+    {"id": "maduro", "n": "Madurez", "s": "MADUREZ", "min": 50, "max": 64, "d": "Sabes lo que quieres y lo que no. El cuerpo empieza a opinar."},
+    {"id": "mayor", "n": "Vejez", "s": "VEJEZ", "min": 65, "max": 79, "d": "Jubilación, nietos, achaques y tiempo para lo que siempre pospusiste."},
+    {"id": "anciano", "n": "Ancianidad", "s": "ANCIANIDAD", "min": 80, "max": 200, "d": "Cada año es un regalo. Cada recuerdo, un tesoro."}
+]
+
+const GOALS = {
+    "teen": [
+        {"id": "popular", "n": "Ser popular", "d": "Llegar a Encanto 3."},
+        {"id": "notas", "n": "Sacar buenas notas", "d": "Terminar con 80 de calificación o más."},
+        {"id": "amor", "n": "Vivir un primer amor", "d": "Tener pareja en algún momento de la adolescencia."},
+        {"id": "yo", "n": "Ser yo mism{a}", "d": "Llegar a los 18 con 70 de felicidad o más."}
+    ],
+    "joven": [
+        {"id": "carrera", "n": "Hacer carrera", "d": "Rango 3 en tu trabajo o un título universitario."},
+        {"id": "amor", "n": "Encontrar el amor", "d": "Llegar a los 30 con pareja (vínculo 70+) o casad{a}."},
+        {"id": "ahorro", "n": "Ahorrar", "d": "Patrimonio de $50,000 o más a los 30."},
+        {"id": "vivir", "n": "Vivir a tope", "d": "Juntar 8 hitos en tu juventud."}
+    ],
+    "adulto": [
+        {"id": "familia", "n": "Formar una familia", "d": "Tener al menos un hijo."},
+        {"id": "cima", "n": "Llegar a la cima", "d": "Rango 4 en tu trabajo."},
+        {"id": "patrimonio", "n": "Hacer patrimonio", "d": "Patrimonio de $300,000 o más a los 50."},
+        {"id": "equilibrio", "n": "Equilibrio", "d": "Llegar a los 50 con felicidad y salud de 70 o más."}
+    ],
+    "maduro": [
+        {"id": "huella", "n": "Dejar huella", "d": "Fama de 40 o karma de 75."},
+        {"id": "nietos", "n": "Conocer a tus nietos", "d": "Tener al menos un nieto."},
+        {"id": "retiro", "n": "Retiro dorado", "d": "Patrimonio de un millón a los 65."},
+        {"id": "salud", "n": "Salud de hierro", "d": "Llegar a los 65 con 75 de salud."}
+    ],
+    "mayor": [
+        {"id": "abuelo", "n": "Ser abuel{a} presente", "d": "Un nieto con vínculo de 60 o más."},
+        {"id": "deseos", "n": "Cumplir tu lista de deseos", "d": "Cumplir 5 deseos de tu lista."},
+        {"id": "paz", "n": "Paz interior", "d": "Llegar a los 80 con 75 de felicidad."},
+        {"id": "activo", "n": "Seguir activ{a}", "d": "Llegar a los 80 con 55 de salud."}
+    ],
+    "anciano": [
+        {"id": "cien", "n": "Llegar a los 100", "d": "Cumplir un siglo."},
+        {"id": "rodeado", "n": "Morir rodead{a} de amor", "d": "Que al menos 5 personas te quieran al final."},
+        {"id": "sabio", "n": "Ser la voz sabia", "d": "Conocimiento o Amabilidad en rango 5."},
+        {"id": "alegre", "n": "Viejit{a} feliz", "d": "Mantener 70 de felicidad hasta el final."}
+    ]
+}
+
+function stage_of(age: int) {
+    for s in STAGES {
+        if age >= s.min && age <= s.max { return s }
+    }
+    return STAGES[len(STAGES) - 1]
+}
+
+function stage_def(id: string) {
+    for s in STAGES {
+        if s.id == id { return s }
+    }
+    return STAGES[0]
+}
+
+function stage_goal_def(stage: string, id: string) {
+    let gs = GOALS[stage]
+    if gs == null { return null }
+    for g in gs {
+        if g.id == id { return g }
+    }
+    return null
+}
+
+function has_grandkid(min_bond: int) {
+    for p in L.people {
+        if p.alive && p.rel == "nieto" && p.bond >= min_bond { return true }
+    }
+    return false
+}
+
+function loved_by() {
+    let n = 0
+    for p in L.people {
+        if p.alive && p.bond >= 60 && p.age >= 4 { n += 1 }
+    }
+    return n
+}
+
+function goal_met(stage: string, id: string) {
+    let d = vd()
+    let p = partner()
+    if stage == "teen" {
+        if id == "popular" { return rank("charm") >= 3 }
+        if id == "notas" { return L.grades >= 80 }
+        if id == "amor" { return d.stage_love }
+        return L.happy >= 70
+    }
+    if stage == "joven" {
+        if id == "carrera" { return (L.job != null && L.job.level >= 2) || L.edu >= 3 }
+        if id == "amor" { return L.married || (p != null && p.bond >= 70) }
+        if id == "ahorro" { return net_worth() >= 50000 }
+        return d.stage_hitos >= 8
+    }
+    if stage == "adulto" {
+        if id == "familia" { return L.kids >= 1 }
+        if id == "cima" { return L.job != null && L.job.level >= 3 }
+        if id == "patrimonio" { return net_worth() >= 300000 }
+        return L.happy >= 70 && L.health >= 70
+    }
+    if stage == "maduro" {
+        if id == "huella" { return L.fame >= 40 || L.karma >= 75 }
+        if id == "nietos" { return has_grandkid(0) }
+        if id == "retiro" { return net_worth() >= 1000000 }
+        return L.health >= 75
+    }
+    if stage == "mayor" {
+        if id == "abuelo" { return has_grandkid(60) }
+        if id == "deseos" { return len(d.bucket) >= 5 }
+        if id == "paz" { return L.happy >= 75 }
+        return L.health >= 55
+    }
+    if id == "cien" { return L.age >= 100 }
+    if id == "rodeado" { return loved_by() >= 5 }
+    if id == "sabio" { return rank("know") >= 5 || rank("kind") >= 5 }
+    return L.happy >= 70
+}
+
+function open_goal_choice() {
+    let d = vd()
+    let s = stage_of(L.age)
+    let gs = GOALS[s.id]
+    if gs == null || G.modal != null { return false }
+    let labels = []
+    let locks = []
+    let txt = []
+    for g in gs {
+        list_push(labels, gfmt(g.n, L.gender))
+        list_push(locks, "")
+        list_push(txt, gfmt(g.n, L.gender) + ": " + gfmt(g.d, L.gender))
+    }
+    d.gpend = false
+    open_choice("NUEVA ETAPA: " + str_upper(s.n), s.d + " ¿Qué quieres de esta etapa? " + str_join(txt, " · "), labels, locks, "vd_goal", {})
+    return true
+}
+
+// Cierra el propósito de la etapa que termina (o con tu último aliento).
+function close_goal(dying: bool) {
+    let d = vd()
+    if d.goal == "" || d.gstage == "" { return null }
+    let g = stage_goal_def(d.gstage, d.goal)
+    let st = stage_def(d.gstage)
+    if g == null { return null }
+    let ok = goal_met(d.gstage, d.goal)
+    list_push(d.goals, {"stage": st.n, "goal": gfmt(g.n, L.gender), "ok": ok})
+    let n = gfmt(g.n, L.gender)
+    if ok {
+        if !dying { L.happy += 10 }
+        hito_me("Vida", "Cumpliste tu propósito de la " + str_lower(st.n) + ": " + str_lower(n))
+        let met = 0
+        for x in d.goals {
+            if x.ok { met += 1 }
+        }
+        if met >= 3 { flag("goals3") }
+    } else if !dying {
+        L.happy -= 3
+        log_add("Se acabó tu " + str_lower(st.n) + " y no cumpliste tu propósito («" + n + "»). La vida no siempre sale como la planeas.", "n")
+    }
+    d.goal = ""
+    d.gstage = ""
+    return null
+}
+
+// Cada cumpleaños: etapas, resumen del año, década, nido vacío y defectos.
+function vida_year() {
+    let d = vd()
+    let s = stage_of(L.age)
+    let prev = stage_of(L.age - 1)
+    if s.id != prev.id {
+        close_goal(false)
+        d.stage_hitos = 0
+        d.stage_love = false
+        list_push(G.toasts, {"head": "NUEVA ETAPA", "title": str_upper(s.n), "sub": "A los " + str(L.age) + " años", "t0": G.t})
+        log_add("Empieza tu " + str_lower(s.n) + ". " + s.d, "x")
+        if GOALS[s.id] != null { d.gpend = true }
+    }
+    // Resumen del año
+    let sn = d.snap
+    if sn != null && L.age > 1 {
+        let parts = []
+        let dh = L.happy - sn.happy
+        if dh != 0 { list_push(parts, "felicidad " + sign_str(dh)) }
+        let dl = L.health - sn.health
+        if dl != 0 { list_push(parts, "salud " + sign_str(dl)) }
+        let dm = L.money - sn.money
+        if L.age >= 14 && dm != 0 {
+            let ms = money_str(dm)
+            if dm > 0 { ms = "+" + ms }
+            list_push(parts, "dinero " + ms)
+        }
+        let dhit = hito_count() - sn.hitos
+        if dhit > 0 { list_push(parts, str(dhit) + " " + plural(dhit, "hito", "hitos")) }
+        if len(parts) > 0 { log_add("Tu año en resumen: " + str_join(parts, " · ") + ".", "n") }
+    }
+    vd_hist_push()
+    vd_snapshot()
+    // Década
+    if L.age % 10 == 0 && L.age >= 10 {
+        let a0 = L.age - 10
+        let tot = 0
+        let n = 0
+        for h in d.hist {
+            if h.a >= a0 && h.a < L.age {
+                tot += h.happy
+                n += 1
+            }
+        }
+        let hn = 0
+        if L.hitos != null {
+            for h in L.hitos {
+                if h.a >= a0 && h.a < L.age { hn += 1 }
+            }
+        }
+        let avg = 0
+        if n > 0 { avg = tot / n }
+        let txt = "De los " + str(a0) + " a los " + str(L.age - 1) + ": " + str(hn) + " " + plural(hn, "hito", "hitos") + ", felicidad promedio de " + str(avg) + " (" + str_lower(happy_word(avg)) + ")"
+        list_push(d.decades, {"a": a0, "t": txt})
+        log_add("Tu década en resumen. " + txt + ".", "x")
+    }
+    if L.kids > 0 && kids_living() == 0 && !d.nest && len(kids_alive()) > 0 {
+        d.nest = true
+        tfx_add("nido_vacio", 8)
+        log_add("Tu último hijo se fue de casa. El silencio retumba en los pasillos.", "n")
+    }
+    flaw_check()
+    if L.age >= 100 { flag("centenarian") }
+    if L.age >= 40 && L.age <= 46 && !d.crisis && chance(30) && G.modal == null {
+        d.crisis = true
+        open_midlife()
+    }
+    return null
+}
+
+function sign_str(n: int) {
+    if n > 0 { return "+" + str(n) }
+    return str(n)
+}
+
+function vd_snapshot() {
+    vd().snap = {"happy": L.happy, "health": L.health, "money": L.money, "hitos": hito_count()}
+    return null
+}
+
+function vd_hist_push() {
+    let d = vd()
+    list_push(d.hist, {"a": L.age, "happy": L.happy, "health": L.health, "smarts": L.smarts, "looks": L.looks, "know": L.social.know, "guts": L.social.guts, "skill": L.social.skill, "kind": L.social.kind, "charm": L.social.charm})
+    if len(d.hist) > 110 { d.hist = list_slice(d.hist, len(d.hist) - 110, len(d.hist)) }
+    return null
+}
+
+function flaw_check() {
+    let d = vd()
+    if L.flaw == null || L.flaw == "ninguno" || d.flaw_done { return null }
+    let f = L.flaw
+    let ok = false
+    if f == "timido" { ok = rank("charm") >= 3 }
+    if f == "torpe" { ok = rank("skill") >= 3 }
+    if f == "enfermizo" { ok = L.age >= 18 && L.health >= 85 }
+    if f == "flojo" { ok = (L.job != null && L.job.perf >= 85) || L.grades >= 90 }
+    if f == "impulsivo" { ok = L.savings >= 50000 }
+    if f == "celoso" { ok = rank("kind") >= 4 }
+    if f == "vanidoso" { ok = rank("kind") >= 3 }
+    if f == "despistado" { ok = rank("know") >= 4 }
+    if !ok { return null }
+    d.flaw_done = true
+    let n = gfmt(flaw_def(f).n, L.gender)
+    L.happy += 10
+    gain("guts", 5)
+    flag("flaw_beaten")
+    hito_me("Vida", "Superaste tu defecto: dejaste de ser " + str_lower(n))
+    return null
+}
+
+function open_midlife() {
+    let p = partner()
+    open_choice("LA CRISIS DE LOS 40", "Te miras al espejo y te preguntas qué hiciste con tu vida. Algo tiene que cambiar.",
+        ["Comprarte un auto deportivo ($30,000)", "Correr un maratón", "Hacerte un tatuaje", "Aprender algo totalmente nuevo", "Aceptarte como eres"],
+        [if_str(L.money < 30000, "$30,000", ""), if_str(L.health < 40, "Salud 40", ""), "", "", ""], "vd_crisis", {})
+    return null
+}
+
+// Cada mes: efectos temporales, propósitos, fiestas, adicciones y hitos de estado.
+function vida_month() {
+    if !L.alive { return null }
+    let d = vd()
+    tfx_tick()
+    if partner() != null { d.stage_love = true }
+    // Resaca y abstinencia según cómo cambian tus vicios.
+    if L.alcohol >= d.last_alc + 3 && L.age >= 16 { tfx_add("resaca", 1) }
+    if L.alcohol >= 40 || L.drugs >= 40 { d.addict = true }
+    if d.addict && (L.alcohol < d.last_alc - 4 || L.drugs < d.last_drg - 4) && L.alcohol + L.drugs >= 15 { tfx_add("abstinencia", 2) }
+    d.last_alc = L.alcohol
+    d.last_drg = L.drugs
+    if L.age >= 18 && L.job != null && (L.job.perf < 40 || L.money < 0) && chance(12) && !tfx_has("estres") {
+        tfx_add("estres", 3)
+        log_add("El estrés te está comiendo vivo: duermes mal y todo te irrita.", "b")
+    }
+    if L.job != null && L.job2 != null && chance(8) && !tfx_has("burnout") {
+        tfx_add("burnout", 3)
+        log_add("Dos trabajos te dejaron sin energía. Estás quemad" + oa(L.gender) + ".", "b")
+    }
+    if L.flaw == "impulsivo" && !d.flaw_done && L.age >= 14 && L.money > 500 && chance(15) {
+        let m = min(L.money / 10, rint(2, 20) * 50)
+        L.money -= m
+        log_add("Compra impulsiva: " + money_str(m) + " en algo que no necesitabas.", "n")
+    }
+    if L.flaw == "celoso" && !d.flaw_done && chance(10) {
+        let p = partner()
+        if p != null && both_adults(p) {
+            bond_gain(p, -2)
+            log_add("Le hiciste una escena de celos a " + p.first + ". Otra vez.", "b")
+        }
+    }
+    if L.flaw == "despistado" && !d.flaw_done && L.age >= 10 && chance(6) {
+        L.money -= min(max(0, L.money), 100)
+        log_add(pick(["Perdiste las llaves. Cerrajero: $100.", "Dejaste la cartera en el taxi.", "Olvidaste dónde estacionaste. Dos horas buscando."]), "n")
+    }
+    vida_state_hitos()
+    if G.modal != null { return null }
+    if d.gpend {
+        open_goal_choice()
+        return null
+    }
+    resolution_tick()
+    return null
+}
+
+function vida_state_hitos() {
+    if L.health <= 15 && L.age >= 5 { hito_once("near_death", "Salud", "Estuviste al borde de la muerte") }
+    if L.smarts >= 95 { hito_once("genius", "Estudios", "Tu inteligencia es de genio") }
+    if L.looks >= 95 && L.age >= 16 { hito_once("stunning", "Vida", "Tu belleza para el tráfico") }
+    if L.happy >= 98 && L.age >= 5 { hito_once("bliss", "Vida", "Viviste un momento de felicidad plena") }
+    if L.karma >= 90 { hito_once("saint", "Vida", "Todos dicen que eres un alma buena") }
+    if L.karma <= 8 && L.age >= 14 { hito_once("devil", "Vida", "Te ganaste fama de mala persona") }
+    if L.money <= -50000 { hito_once("rock_bottom", "Vida", "Tocaste fondo con las deudas") }
+    let n = hito_count()
+    if n >= 50 { hito_once("hitos50", "Vida", "Cincuenta momentos que recordar") }
+    if n >= 100 {
+        if hito_once("hitos100", "Vida", "Cien momentos que recordar") { flag("hitos100") }
+    }
+    return null
+}
+
+// Hitos que se suman a la etapa y a algunos efectos temporales.
+function vida_on_hito(cat: string, text: string) {
+    if L.vd == null { return null }
+    L.vd.stage_hitos += 1
+    if str_starts_with(text, "Te despidieron") { tfx_add("despedido", 4) }
+    if str_starts_with(text, "Te jubilaste") { tfx_add("jubilado", 12) }
+    if str_starts_with(text, "Terminaste la secundaria") || str_starts_with(text, "Te graduaste") || str_starts_with(text, "Te titulaste") { tfx_add("orgullo", 4) }
+    if str_starts_with(text, "Perdiste a tu") { tfx_add("duelo", 6) }
+    return null
+}
+
+// ---------------------------------------------------------------- propósitos de año nuevo y fiestas
+
+const RESOLUTIONS = [
+    {"id": "forma", "n": "Ponerme en forma", "d": "Subir 5 de salud o mantener un hábito de ejercicio."},
+    {"id": "ahorrar", "n": "Ahorrar", "d": "Terminar el año con $10,000 más."},
+    {"id": "leer", "n": "Leer más", "d": "Subir 5 de Conocimiento."},
+    {"id": "vicio", "n": "Dejar un vicio", "d": "Bajar alcohol y drogas a menos de 10."},
+    {"id": "amable", "n": "Ser mejor persona", "d": "Subir 5 de karma o de Amabilidad."},
+    {"id": "amor", "n": "Encontrar el amor", "d": "Terminar el año con pareja."}
+]
+
+function resolution_tick() {
+    let d = vd()
+    let m = month_name()
+    if m == "Enero" && L.age >= 10 && (d.res == null || d.res.age != L.age) && chance(70) {
+        let labels = []
+        let locks = []
+        for r in RESOLUTIONS {
+            list_push(labels, r.n)
+            list_push(locks, "")
+        }
+        d.res = {"age": L.age, "id": "", "base": {}}
+        open_choice("PROPÓSITO DE AÑO NUEVO", "Doce uvas, doce deseos. Pero este año eliges uno de verdad. Lo revisas en diciembre.", labels, locks, "vd_res", {})
+        return null
+    }
+    if m == "Diciembre" && d.res != null && d.res.id != "" && d.res.done != true {
+        d.res.done = true
+        let r = d.res
+        let b = r.base
+        let ok = false
+        if r.id == "forma" { ok = L.health >= b.health + 5 || has_habit("gym") || has_habit("correr") }
+        if r.id == "ahorrar" { ok = L.money + L.savings >= b.money + 10000 }
+        if r.id == "leer" { ok = L.social.know >= b.know + 5 }
+        if r.id == "vicio" { ok = L.alcohol < 10 && L.drugs < 10 && !has_habit("fumar") && !has_habit("vapear") }
+        if r.id == "amable" { ok = L.karma >= b.karma + 5 || L.social.kind >= b.kind + 5 }
+        if r.id == "amor" { ok = partner() != null }
+        if ok {
+            L.happy += 6
+            d.res_ok = map_get(d, "res_ok", 0) + 1
+            if d.res_ok >= 3 { flag("resolutions3") }
+            hito_once("res_ok", "Vida", "Cumpliste un propósito de año nuevo")
+            log_add("¡Cumpliste tu propósito de año nuevo! Orgullo puro.", "g")
+        } else {
+            log_add("Tu propósito de año nuevo se quedó en eso: un propósito. Como cada año.", "n")
+        }
+        return null
+    }
+    maybe_holiday()
+    return null
+}
+
+function maybe_holiday() {
+    let d = vd()
+    let m = month_name()
+    if G.modal != null || L.jail > 0 || d.hol[m] == L.age || !chance(45) { return null }
+    let p = partner()
+    if m == "Febrero" && L.age >= 15 && p != null {
+        d.hol[m] = L.age
+        open_choice("SAN VALENTÍN", "Es 14 de febrero y " + p.first + " te mira con ojitos de «¿y mi regalo?».", ["Cena romántica ($300)", "Una carta escrita a mano", "Se te olvidó por completo"], [if_str(L.money < 300, "$300", ""), "", ""], "vd_hol", {"kind": "vale", "person": p})
+        return null
+    }
+    if m == "Noviembre" && L.age >= 6 {
+        let lost = null
+        for q in L.people {
+            if !q.alive && q.bond >= 40 { lost = q }
+        }
+        if lost != null {
+            d.hol[m] = L.age
+            open_choice("DÍA DE MUERTOS", "Cempasúchil, pan de muerto y la foto de " + lost.first + ". ¿Cómo l" + oa(lost.gender) + " recuerdas este año?", ["Ponerle una ofrenda con su comida favorita ($200)", "Visitar su tumba con flores", "Prefieres no pensar en eso"], [if_str(L.money < 200, "$200", ""), "", ""], "vd_hol", {"kind": "muertos", "person": lost})
+            return null
+        }
+    }
+    if m == "Diciembre" {
+        d.hol[m] = L.age
+        if L.age < 14 {
+            open_choice("NAVIDAD", "Es Nochebuena. Hay ponche, tamales y un árbol con regalos.", ["Esperar despiert" + oa(L.gender) + " a Santa", "Abrir los regalos a escondidas", "Ayudar a cocinar con la familia"], ["", "", ""], "vd_hol", {"kind": "navidad_kid"})
+            return null
+        }
+        open_choice("NAVIDAD", "Las fiestas llegaron. ¿Cómo las pasas este año?", ["Cena con toda la familia", "Viaje de fin de año ($2,000)", "Trabajar el turno doble (pagan triple)", "Organizar el intercambio de regalos ($300)"], ["", if_str(L.money < 2000, "$2,000", ""), if_str(L.job == null, "Sin trabajo", ""), if_str(L.money < 300, "$300", "")], "vd_hol", {"kind": "navidad"})
+        return null
+    }
+    if m == "Octubre" && L.age >= 5 && L.age <= 35 {
+        d.hol[m] = L.age
+        open_choice("HALLOWEEN", "Noche de disfraces. ¿De qué te vistes?", ["De algo aterrador", "De algo gracioso", "De algo sexy", "Te quedas en casa repartiendo dulces"], ["", "", if_str(L.age < 18, "Edad 18", ""), ""], "vd_hol", {"kind": "halloween"})
+        return null
+    }
+    if m == "Julio" && L.age >= 6 && L.age <= 22 && (L.school != "" || L.study != null) {
+        d.hol[m] = L.age
+        open_choice("VACACIONES DE VERANO", "Dos meses sin clases. ¿Qué haces?", ["Campamento de verano ($500)", "Trabajo de verano", "Dormir hasta mediodía y ver series", "Curso de verano"], [if_str(L.money < 500 && L.age >= 14, "$500", ""), if_str(L.age < 14, "Edad 14", ""), "", ""], "vd_hol", {"kind": "verano"})
+        return null
+    }
+    if m == "Mayo" && len(kids_alive()) == 0 && L.age >= 6 && L.age <= 50 {
+        let mom = null
+        for q in parents_alive() {
+            if q.rel == "madre" { mom = q }
+        }
+        if mom != null {
+            d.hol[m] = L.age
+            open_choice("DÍA DE LAS MADRES", "Es 10 de mayo. " + mom.first + " finge que no espera nada.", ["Llevarle serenata con mariachi ($800)", "Comida en familia", "Una tarjeta hecha a mano", "Un mensaje rápido"], [if_str(L.money < 800, "$800", ""), "", "", ""], "vd_hol", {"kind": "madres", "person": mom})
+            return null
+        }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- lista de deseos y epitafio
+
+const BUCKET = [
+    {"id": "paracaidas", "n": "Saltar en paracaídas", "cost": 3000, "hp": 50, "hap": 15, "soc": "guts", "d": "Diez mil metros de caída libre y un grito que se oyó hasta el suelo."},
+    {"id": "aurora", "n": "Ver una aurora boreal", "cost": 8000, "hp": 30, "hap": 12, "soc": "know", "d": "El cielo bailó en verde y morado. Lloraste sin pena."},
+    {"id": "memorias", "n": "Escribir tus memorias", "cost": 0, "hp": 0, "hap": 8, "soc": "know", "d": "Trescientas páginas de tu vida. Algunas, muy picantes."},
+    {"id": "crucero", "n": "Un crucero por el Caribe", "cost": 6000, "hp": 25, "hap": 12, "soc": "charm", "d": "Bufé infinito, bingo y atardeceres naranjas."},
+    {"id": "mar", "n": "Nadar en el mar al amanecer", "cost": 500, "hp": 35, "hap": 8, "soc": "guts", "d": "El agua fría, el sol saliendo y la sensación de estar viv{a}."},
+    {"id": "natal", "n": "Volver a tu ciudad natal", "cost": 1500, "hp": 20, "hap": 10, "soc": "kind", "d": "Caminaste por las calles de tu infancia. Todo era más pequeño."},
+    {"id": "tatuaje", "n": "Tu primer tatuaje a esta edad", "cost": 300, "hp": 0, "hap": 6, "soc": "guts", "d": "Una golondrina en el brazo. Tus nietos no lo pueden creer."},
+    {"id": "piano", "n": "Aprender a tocar el piano", "cost": 1000, "hp": 0, "hap": 6, "soc": "skill", "d": "Ya tocas una canción completa. Sin errores (casi)."},
+    {"id": "perdon", "n": "Pedir perdón a quien heriste", "cost": 0, "hp": 0, "hap": 8, "soc": "kind", "d": "Dijiste «lo siento» después de muchos años. Pesaba más de lo que creías."},
+    {"id": "cartas", "n": "Escribirle una carta a cada hijo", "cost": 0, "hp": 0, "hap": 8, "soc": "kind", "d": "Cartas para leer cuando ya no estés. Las guardaron como tesoros."},
+    {"id": "bailar", "n": "Bailar hasta el amanecer", "cost": 200, "hp": 40, "hap": 8, "soc": "charm", "d": "Te dolió todo al día siguiente. Valió cada paso."},
+    {"id": "globo", "n": "Volar en globo aerostático", "cost": 2500, "hp": 30, "hap": 10, "soc": "guts", "d": "El mundo desde arriba, en silencio."}
+]
+
+function bucket_def(id: string) {
+    for b in BUCKET {
+        if b.id == id { return b }
+    }
+    return BUCKET[0]
+}
+
+function epitaph_options() {
+    let out = ["Vivió, amó y se equivocó como cualquiera."]
+    let best = "know"
+    for k in SOCIAL_KEYS {
+        if L.social[k] > L.social[best] { best = k }
+    }
+    let by = {"know": "Nunca dejó de aprender.", "guts": "No le tuvo miedo a nada.", "skill": "Lo que tocaba, lo hacía bien.", "kind": "Dio más de lo que recibió.", "charm": "Nadie olvidó su sonrisa."}
+    list_push(out, by[best])
+    if L.kids > 0 { list_push(out, "Amó a su familia por encima de todo.") }
+    if L.money >= 1000000 { list_push(out, "Se lo quiso llevar todo. No pudo.") }
+    if L.partners >= 20 { list_push(out, "Amó mucho. A mucha gente.") }
+    list_push(out, "Aquí yace alguien que nunca leyó los términos y condiciones.")
+    return list_slice(out, 0, min(5, len(out)))
+}
+
+// ---------------------------------------------------------------- menú «Vida» (actividades)
+
+function vditem(id: string, t: string, s: string, desc: string, lock: string) {
+    return {"action": "vd:" + id, "t": t, "s": s, "desc": desc, "lock": lock}
+}
+
+function vida_items() {
+    let d = vd()
+    let items = []
+    let s = stage_of(L.age)
+    list_push(items, {"action": "fin:info:vida", "t": "Etapa: " + s.n, "s": str(L.age) + " años · " + str(s.min) + " a " + if_str(s.max > 150, "...", str(s.max)), "desc": s.d, "lock": ""})
+    if d.goal != "" {
+        let g = stage_goal_def(d.gstage, d.goal)
+        if g != null {
+            let st = if_str(goal_met(d.gstage, d.goal), "Vas bien", "Todavía no")
+            list_push(items, {"action": "fin:info:vida", "t": "Propósito: " + gfmt(g.n, L.gender), "s": st, "desc": gfmt(g.d, L.gender) + " Se revisa al terminar la etapa.", "lock": ""})
+        }
+    } else if GOALS[s.id] != null {
+        list_push(items, vditem("goal", "Elegir el propósito de tu " + str_lower(s.n), "Meta de etapa", "Un objetivo para esta etapa. Si lo cumples al terminarla, ganas felicidad y un hito.", ""))
+    }
+    let met = 0
+    for x in d.goals {
+        if x.ok { met += 1 }
+    }
+    if len(d.goals) > 0 { list_push(items, vditem("goals", "Propósitos de tus etapas", str(met) + " de " + str(len(d.goals)) + " cumplidos", "Lo que quisiste en cada etapa y si lo lograste.", "")) }
+    if d.res != null && d.res.id != "" && d.res.done != true {
+        let r = res_def(d.res.id)
+        list_push(items, {"action": "fin:info:vida", "t": "Propósito de año nuevo: " + r.n, "s": "Se revisa en diciembre", "desc": r.d, "lock": ""})
+    }
+    if L.flaw != null && L.flaw != "ninguno" {
+        let f = flaw_def(L.flaw)
+        let fs = "Pendiente"
+        if d.flaw_done { fs = "¡Superado!" }
+        list_push(items, {"action": "fin:info:vida", "t": "Defecto: " + gfmt(f.n, L.gender), "s": fs, "desc": gfmt(f.d, L.gender) + " Para superarlo: " + f.goal, "lock": ""})
+    }
+    if L.talent != null {
+        let t = talent_def(L.talent)
+        list_push(items, {"action": "fin:info:vida", "t": "Talento: " + gfmt(t.n, L.gender), "s": "Signo: " + map_get(L, "sign", "?"), "desc": gfmt(t.d, L.gender) + " Efecto: " + fx_summary(t.fx) + ".", "lock": ""})
+    }
+    list_push(items, vditem("history", "Mirar atrás", "Tus estadísticas año a año", "Cómo cambiaron tu felicidad, salud, inteligencia y atractivo con los años.", ""))
+    if len(d.decades) > 0 { list_push(items, vditem("decades", "Tus décadas", str(len(d.decades)) + " resumidas", "Un resumen de cada década que viviste.", "")) }
+    if L.age >= 60 {
+        list_push(items, dninfo("Lista de deseos", str(len(d.bucket)) + " de " + str(len(BUCKET)) + " cumplidos", "Lo que siempre quisiste hacer antes de irte."))
+        for b in BUCKET {
+            if list_contains(d.bucket, b.id) { continue }
+            let lock = ""
+            if b.cost > 0 && L.money < b.cost { lock = money_str(b.cost) }
+            if L.health < b.hp { lock = "Salud " + str(b.hp) }
+            if b.id == "cartas" && L.kids == 0 { lock = "Sin hijos" }
+            if L.used["vd_wish"] != null { lock = "Este mes ya" }
+            let cs = "Gratis"
+            if b.cost > 0 { cs = money_str(b.cost) }
+            list_push(items, vditem("wish:" + b.id, b.n, cs + " · felicidad", "Tachar algo de tu lista de deseos.", lock))
+        }
+    }
+    if L.age >= 65 {
+        let ep = "Elegir tu epitafio"
+        if L.epitaph != null && L.epitaph != "" { ep = "Cambiar tu epitafio" }
+        list_push(items, vditem("epitaph", ep, if_str(L.epitaph != null && L.epitaph != "", "«" + map_get(L, "epitaph", "") + "»", "Lo que dirá tu lápida"), "Las últimas palabras que el mundo leerá de ti.", ""))
+    }
+    return items
+}
+
+function res_def(id: string) {
+    for r in RESOLUTIONS {
+        if r.id == id { return r }
+    }
+    return RESOLUTIONS[0]
+}
+
+function vida_action(action: string) {
+    let d = vd()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    if cmd == "goal" {
+        G.modal = null
+        open_goal_choice()
+        return null
+    }
+    if cmd == "goals" {
+        let lines = []
+        for x in d.goals { list_push(lines, x.stage + ": " + x.goal + if_str(x.ok, " ✓", " ✗")) }
+        return info("Propósitos de tus etapas", str_join(lines, " · "))
+    }
+    if cmd == "decades" {
+        let lines = []
+        for x in d.decades { list_push(lines, x.t + ".") }
+        return info("Tus décadas", str_join(lines, " "))
+    }
+    if cmd == "history" { return open_stat("happy") }
+    if cmd == "wish" {
+        let b = bucket_def(arg)
+        if list_contains(d.bucket, b.id) || L.money < b.cost || L.health < b.hp || L.used["vd_wish"] != null { return null }
+        L.used["vd_wish"] = 1
+        G.modal = null
+        L.money -= b.cost
+        L.happy += b.hap
+        gain(b.soc, 3)
+        list_push(d.bucket, b.id)
+        let msg = gfmt(b.d, L.gender)
+        if b.id == "natal" { msg = "Volviste a " + L.city + ". " + msg }
+        if b.id == "perdon" {
+            let q = null
+            for x in L.people {
+                if x.alive && (x.rel == "ex" || x.rel == "rival" || x.bond < 30) { q = x }
+            }
+            if q != null {
+                bond_gain(q, 20)
+                msg = "Buscaste a " + q.first + " y le pediste perdón. Se abrazaron como si nada."
+            }
+            L.karma += 5
+        }
+        if b.id == "cartas" {
+            for k in kids_alive() { bond_gain(k, 8) }
+        }
+        if b.id == "memorias" { L.memoirs = true }
+        if b.id == "bailar" { L.health -= 3 }
+        hito_me("Vida", "Lista de deseos: " + str_lower(b.n))
+        if len(d.bucket) >= 5 { flag("bucket5") }
+        if len(d.bucket) >= len(BUCKET) { hito_once("bucket_all", "Vida", "Cumpliste toda tu lista de deseos") }
+        return finish(b.n, msg, "g")
+    }
+    if cmd == "epitaph" {
+        G.modal = null
+        let opts = epitaph_options()
+        let locks = []
+        for x in opts { list_push(locks, "") }
+        return open_choice("TU EPITAFIO", "¿Qué dirá tu lápida?", opts, locks, "vd_epitaph", {"opts": opts})
+    }
+    return null
+}
+
+function vida_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = vd()
+    if handler == "vd_goal" {
+        let s = stage_of(L.age)
+        let gs = GOALS[s.id]
+        if gs == null || index >= len(gs) { return null }
+        d.goal = gs[index].id
+        d.gstage = s.id
+        return finish("Propósito", "Tu propósito para la " + str_lower(s.n) + ": " + str_lower(gfmt(gs[index].n, L.gender)) + ". " + gfmt(gs[index].d, L.gender), "n")
+    }
+    if handler == "vd_epitaph" {
+        let opts = ctx.opts
+        if index >= len(opts) { return null }
+        L.epitaph = opts[index]
+        return finish("Epitafio", "«" + L.epitaph + "» Así te recordarán.", "n")
+    }
+    if handler == "vd_res" {
+        if index >= len(RESOLUTIONS) { return null }
+        let r = RESOLUTIONS[index]
+        d.res = {"age": L.age, "id": r.id, "base": {"health": L.health, "money": L.money + L.savings, "know": L.social.know, "karma": L.karma, "kind": L.social.kind}}
+        return finish("Año nuevo", "Tu propósito: " + str_lower(r.n) + ". " + r.d, "n")
+    }
+    if handler == "vd_crisis" {
+        if index == 0 {
+            L.money -= 30000
+            L.happy += 12
+            gain("charm", 3)
+            return finish("Crisis de los 40", "Un convertible rojo. Te sientes de veinte otra vez... hasta que llega el recibo del seguro.", "g")
+        }
+        if index == 1 {
+            L.health += 8
+            gain("guts", 5)
+            tfx_add("motivado", 6)
+            hito_me("Salud", "Corriste un maratón a los " + str(L.age))
+            return finish("Crisis de los 40", "Cuarenta y dos kilómetros. Cruzaste la meta llorando. Te sientes invencible.", "g")
+        }
+        if index == 2 {
+            L.happy += 6
+            L.looks += 1
+            return finish("Crisis de los 40", pick(["Un dragón en la espalda. Tu mamá casi se desmaya.", "La fecha de nacimiento de tus hijos en el brazo. Tu mamá lloró.", "Una frase en latín que no sabes pronunciar."]), "g")
+        }
+        if index == 3 {
+            gain("know", 5)
+            gain("skill", 3)
+            tfx_add("motivado", 6)
+            return finish("Crisis de los 40", pick(["Clases de cerámica. Tu primer jarrón parece un cenicero, pero es tuyo.", "Aprendiste italiano. Ahora pides la pizza con acento.", "Aprendiste a surfear. Te caíste doscientas veces."]), "g")
+        }
+        L.happy += 6
+        gain("kind", 3)
+        tfx_add("paz", 12)
+        return finish("Crisis de los 40", "Te miraste otra vez al espejo y te gustó lo que viste. Las canas, las arrugas y todo lo vivido.", "g")
+    }
+    if handler == "vd_hol" { return holiday_result(index, ctx) }
+    if handler == "vd_ev" { return null }
+    return null
+}
+
+function holiday_result(index: int, ctx: map) {
+    let k = ctx.kind
+    let p = ctx.person
+    if k == "vale" {
+        if index == 0 {
+            L.money -= 300
+            bond_gain(p, 8)
+            return finish("San Valentín", "Velas, vino y postre compartido. " + p.first + " no dejó de sonreír.", "x")
+        }
+        if index == 1 {
+            bond_gain(p, 6)
+            gain("kind", 1)
+            return finish("San Valentín", p.first + " leyó tu carta tres veces y la guardó en su cartera.", "g")
+        }
+        bond_gain(p, -8)
+        return finish("San Valentín", p.first + " te esperó con un regalo. Tú llegaste con las manos vacías. Silencio incómodo.", "b")
+    }
+    if k == "muertos" {
+        if index == 0 {
+            L.money -= 200
+            L.happy += 5
+            fe_add_faith(1)
+            return finish("Día de muertos", "La ofrenda quedó preciosa: su comida favorita, su foto y velas. Sentiste que vino de visita.", "g")
+        }
+        if index == 1 {
+            L.happy += 3
+            return finish("Día de muertos", "Limpiaste la tumba de " + p.first + ", le dejaste flores y le contaste tus novedades.", "g")
+        }
+        L.happy -= 2
+        return finish("Día de muertos", "Evitaste el tema. Pero esa noche soñaste con " + p.first + ".", "n")
+    }
+    if k == "navidad_kid" {
+        if index == 0 { return finish("Navidad", "Te quedaste dormid" + oa(L.gender) + " en el sillón. Al despertar, los regalos ya estaban ahí. ¡Magia!", "g") }
+        if index == 1 {
+            L.karma -= 1
+            return finish("Navidad", "Los abriste a escondidas... y tuviste que fingir sorpresa al día siguiente. Gran actuación.", "n")
+        }
+        for q in parents_alive() { bond_gain(q, 3) }
+        gain("kind", 1)
+        return finish("Navidad", "Batiste el ponche y ayudaste con los tamales. La familia entera te aplaudió.", "g")
+    }
+    if k == "navidad" {
+        if index == 0 {
+            for q in L.people {
+                if q.alive && (rel_group(q) == "parent" || rel_group(q) == "sibling" || rel_group(q) == "child" || rel_group(q) == "partner") { bond_gain(q, 3) }
+            }
+            L.happy += 5
+            return finish("Navidad", pick(["Cena larga, chistes del tío y abrazos a medianoche.", "Alguien quemó el pavo. Igual fue la mejor cena del año.", "Discutieron de política, pero terminaron cantando villancicos."]), "g")
+        }
+        if index == 1 {
+            L.money -= 2000
+            L.happy += 8
+            tfx_add("vacaciones", 2)
+            return finish("Navidad", "Año nuevo en la playa. Uvas bajo la luna y los pies en la arena.", "g")
+        }
+        if index == 2 {
+            let m = max(1000, job_pay(L.job) / 40)
+            L.money += m
+            L.happy -= 3
+            return finish("Navidad", "Trabajaste en Nochebuena. Ganaste " + money_str(m) + ", pero cenaste un sándwich en la oficina.", "n")
+        }
+        L.money -= 300
+        for q in L.people {
+            if q.alive && rel_group(q) == "friend" && chance(60) { bond_gain(q, 3) }
+        }
+        L.happy += 4
+        return finish("Navidad", "El intercambio fue un caos: a alguien le tocó un calcetín usado. Todos rieron.", "g")
+    }
+    if k == "halloween" {
+        L.happy += 4
+        if index == 0 { return finish("Halloween", "Tu disfraz de zombi asustó hasta al perro del vecino.", "g") }
+        if index == 1 {
+            gain("charm", 1)
+            return finish("Halloween", "Te disfrazaste de aguacate. Ganaste el concurso de disfraces.", "g")
+        }
+        if index == 2 {
+            gain("charm", 2)
+            return finish("Halloween", "Todas las miradas de la fiesta fueron tuyas.", "x")
+        }
+        gain("kind", 1)
+        return finish("Halloween", "Repartiste dulces a cuarenta niños. Uno disfrazado de ti. Te halagó.", "g")
+    }
+    if k == "verano" {
+        if index == 0 {
+            if L.age >= 14 { L.money -= 500 }
+            gain("guts", 3)
+            L.happy += 8
+            return finish("Verano", "Fogatas, canoas y una amistad para toda la vida.", "g")
+        }
+        if index == 1 {
+            let m = rint(15, 40) * 100
+            L.money += m
+            gain("skill", 2)
+            return finish("Verano", "Trabajaste todo el verano y juntaste " + money_str(m) + ". Tu primer dinero de verdad.", "g")
+        }
+        if index == 2 {
+            L.happy += 6
+            return finish("Verano", "Viste tres temporadas completas y dormiste hasta las 2 p. m. Perfección.", "g")
+        }
+        gain("know", 3)
+        L.smarts += 2
+        return finish("Verano", "Un curso de verano de programación. Saliste con un videojuego hecho por ti.", "g")
+    }
+    if k == "madres" {
+        if index == 0 {
+            L.money -= 800
+            bond_gain(p, 12)
+            return finish("Día de las madres", "El mariachi cantó «Las mañanitas» a las 7 a. m. " + p.first + " lloró de emoción (los vecinos, de sueño).", "g")
+        }
+        if index == 1 {
+            bond_gain(p, 6)
+            return finish("Día de las madres", "Comida en familia. " + p.first + " no paró de presumirte.", "g")
+        }
+        if index == 2 {
+            bond_gain(p, 5)
+            return finish("Día de las madres", p.first + " guardó tu tarjeta en la caja de los tesoros.", "g")
+        }
+        bond_gain(p, -2)
+        return finish("Día de las madres", "«Feliz día, ma.» Te contestó con un «gracias» seco.", "n")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- muerte
+
+function vida_on_death() {
+    if L.vd == null { return null }
+    close_goal(true)
+    if L.age >= 100 { flag("centenarian") }
+    let p = partner()
+    let words = ["¿Ya se acabó? Qué rápido.", "Apaguen la luz al salir.", "No se peleen por la herencia.", "Fue un buen viaje.", "Díganles que los quise."]
+    if L.kids > 0 { list_push(words, "Díganle a mis hijos que estoy orgullos" + oa(L.gender) + ".") }
+    if p != null { list_push(words, p.first + ", gracias por todo.") }
+    if L.money >= 1000000 { list_push(words, "El dinero... no sirvió de mucho al final.") }
+    if L.karma < 30 { list_push(words, "No me arrepiento de nada. Bueno, de casi nada.") }
+    if L.happy >= 80 { list_push(words, "Lo volvería a vivir todo.") }
+    L.lastwords = pick(words)
+    return null
+}
+
+function vida_epitaph() {
+    if L.epitaph != null && L.epitaph != "" { return L.epitaph }
+    return ""
+}
+
+// ---------------------------------------------------------------- 3. estadísticas
+
+const STAT_INFO = {
+    "happy": {"n": "Felicidad", "up": "Pareja y amigos cercanos, fiestas, hobbies, viajes, logros, mascotas, dormir bien y meditar.", "down": "Rupturas, duelos, deudas, enfermedades, trabajos que odias, vicios y la soledad."},
+    "health": {"n": "Salud", "up": "Ejercicio, buena dieta, dormir, el médico a tiempo, vacunas y dejar los vicios.", "down": "Alcohol, drogas, tabaco, desvelos, accidentes, enfermedades y la edad (desde los 50)."},
+    "smarts": {"n": "Inteligencia", "up": "Escuela, estudiar, leer, la universidad, juegos de mente y talentos como la memoria.", "down": "Drogas, faltar a clases, desvelos y algunas enfermedades en la vejez."},
+    "looks": {"n": "Atractivo", "up": "Gimnasio, dieta, ropa, cuidados, cirugías y la juventud. Los efectos lo suben o lo bajan.", "down": "La edad (desde los 30), vicios, ojeras, enfermedades y el sol sin bloqueador."},
+    "know": {"n": "Conocimiento", "up": "Estudiar, leer, la universidad, cursos y trabajos de oficina.", "down": "Casi nada lo baja: lo que aprendes se queda."},
+    "guts": {"n": "Valor", "up": "Riesgos, peleas, deportes extremos, defender a alguien y enfrentar tus miedos.", "down": "Huir de los problemas."},
+    "skill": {"n": "Destreza", "up": "Trabajar, practicar oficios y hobbies, minijuegos bien hechos.", "down": "Nada: la práctica se acumula."},
+    "kind": {"n": "Amabilidad", "up": "Ayudar, voluntariados, cuidar a tu familia y escuchar.", "down": "Ser cruel, mentir y abandonar a los tuyos."},
+    "charm": {"n": "Encanto", "up": "Fiestas, citas, redes sociales, hablar en público y la seguridad en ti mism{a}.", "down": "Encerrarte y evitar a la gente."}
+}
+
+const SOCIAL_PERKS = {
+    "know": ["", "", "Rango 3: estudias mejor (+3 calificaciones).", "", "Rango 5: genio contratable (+5 contratación, +5% sueldo)."],
+    "guts": ["", "", "Rango 3: sin miedo (+3 ligue).", "", "Rango 5: temple de acero (+1 felicidad al mes)."],
+    "skill": ["", "", "Rango 3: buen oficio (+3% sueldo).", "", "Rango 5: virtuosismo (+8% sueldo)."],
+    "kind": ["", "", "Rango 3: corazón grande (tus vínculos te quieren más).", "", "Rango 5: santidad (+1 felicidad, +3 contratación)."],
+    "charm": ["", "", "Rango 3: magnetismo (+4 ligue).", "", "Rango 5: irresistible (+10 ligue, +3 contratación)."]
+}
+
+function happy_word(v: int) {
+    if v >= 90 { return "Radiante" }
+    if v >= 70 { return "Feliz" }
+    if v >= 50 { return "Tranquil" + oa(L.gender) }
+    if v >= 30 { return "Triste" }
+    return "Hundid" + oa(L.gender)
+}
+
+function stat_word(key: string, v: int) {
+    if key == "happy" { return happy_word(v) }
+    if key == "health" {
+        if v >= 90 { return "Salud de hierro" }
+        if v >= 70 { return "Buena salud" }
+        if v >= 40 { return "Con achaques" }
+        return "Salud delicada"
+    }
+    if key == "smarts" {
+        if v >= 90 { return "Genio" }
+        if v >= 70 { return "Brillante" }
+        if v >= 40 { return "Promedio" }
+        return "Le cuesta"
+    }
+    if v >= 90 { return "Deslumbrante" }
+    if v >= 70 { return "Guapísim" + oa(L.gender) }
+    if v >= 40 { return "Normal" }
+    return "Poco agraciad" + oa(L.gender)
+}
+
+function open_stat(key: string) {
+    let d = vd()
+    let info_def = STAT_INFO[key]
+    if info_def == null { return null }
+    G.modal = null
+    let vals = []
+    let labs = []
+    let hs = d.hist
+    let start = max(0, len(hs) - 12)
+    let i = start
+    while i < len(hs) {
+        list_push(vals, hs[i][key])
+        list_push(labs, str(hs[i].a))
+        i += 1
+    }
+    let social = list_contains(SOCIAL_KEYS, key)
+    let v = 0
+    let text = ""
+    if social {
+        v = L.social[key]
+        let r = rank(key)
+        text = "Rango " + str(r) + ": " + rank_title(key, r) + " (" + str(v) + " puntos)."
+        if r < 5 { text = text + " Te faltan " + str(r * 20 - v) + " para " + rank_title(key, r + 1) + "." }
+        let perks = []
+        for p in SOCIAL_PERKS[key] {
+            if p != "" { list_push(perks, p) }
+        }
+        text = text + " " + str_join(perks, " ")
+    } else {
+        v = L[key]
+        text = str(v) + " · " + stat_word(key, v) + "."
+        if key == "looks" && looks_eff() != L.looks { text = text + " Con tus efectos: " + str(looks_eff()) + "." }
+    }
+    text = text + " Sube con: " + gfmt(info_def.up, L.gender) + " Baja con: " + info_def.down
+    if len(vals) < 2 { text = text + " (La gráfica se llena con los años.)" }
+    open_choice(str_upper(info_def.n), text, ["Cerrar"], [""], "vd_ev", {})
+    G.modal.chart = {"vals": vals, "labs": labs}
+    return null
+}
+
+// Gráfica de barras (detalle de estadísticas).
+function draw_chart(x: int, y: int, w: int, h: int, chart: map) {
+    let vals = chart.vals
+    let n = len(vals)
+    rect(x, y + h, w, 2, C_GRAY)
+    if n == 0 { return null }
+    let bw = w / max(n, 1)
+    let i = 0
+    while i < n {
+        let v = clamp(vals[i], 0, 100)
+        let bh = v * (h - 18) / 100
+        let bx = x + i * bw + 4
+        rect(bx, y + h - bh, bw - 8, bh, stat_color(v))
+        ctext(bx + (bw - 8) / 2, y + h - bh - 4, str(v), 11, C_WHITE, "bold")
+        ctext(bx + (bw - 8) / 2, y + h + 16, chart.labs[i], 10, C_GRAY, "bold")
+        i += 1
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- 4. efectos temporales
+
+const TFX = {
+    "luna_miel": {"n": "Luna de miel", "good": true, "d": "Recién casad{a}s: todo es miel.", "mods": {"hap": 2}},
+    "desvelos": {"n": "Desvelos de bebé", "good": false, "d": "Un recién nacido no te deja dormir.", "mods": {"looks": -3, "grades": -3, "pay": -3}},
+    "duelo": {"n": "Duelo", "good": false, "d": "Extrañas a quien se fue.", "mods": {"hap": -2, "pay": -5}},
+    "despedido": {"n": "Golpe al orgullo", "good": false, "d": "Te despidieron y todavía duele.", "mods": {"hap": -1, "hire": -3}},
+    "orgullo": {"n": "Recién graduad{a}", "good": true, "d": "Tu título brilla en la pared.", "mods": {"hire": 5, "hap": 1}},
+    "jubilado": {"n": "Recién jubilad{a}", "good": true, "d": "Sin despertador, por fin.", "mods": {"hap": 2}},
+    "resaca": {"n": "Resaca", "good": false, "d": "La cabeza te late y el sol te odia.", "mods": {"grades": -5, "pay": -3, "looks": -2}},
+    "motivado": {"n": "Motivad{a}", "good": true, "d": "Tienes energía para comerte el mundo.", "mods": {"grades": 3, "pay": 3}},
+    "estres": {"n": "Estrés", "good": false, "d": "Duermes mal y todo te irrita.", "mods": {"hap": -1, "hp": -1}},
+    "burnout": {"n": "Agotamiento", "good": false, "d": "Estás quemad{a}: no te queda energía.", "mods": {"pay": -8, "hap": -2}},
+    "lesion": {"n": "Lesión", "good": false, "d": "Un yeso y muletas por un tiempo.", "mods": {"hp": -1, "pay": -5, "flirt": -3}},
+    "nuevo_look": {"n": "Nuevo look", "good": true, "d": "Un cambio de imagen que todos notan.", "mods": {"looks": 4, "flirt": 3}},
+    "viral": {"n": "Viral", "good": true, "d": "Todo internet habla de ti (por ahora).", "mods": {"flirt": 5, "hire": 2}},
+    "escandalo": {"n": "Escándalo", "good": false, "d": "Tu nombre está en boca de todos, y no para bien.", "mods": {"hire": -10, "flirt": -3}},
+    "vacaciones": {"n": "Recién vacacionad{a}", "good": true, "d": "Bronceado y con la batería cargada.", "mods": {"hap": 1, "pay": 2}},
+    "abstinencia": {"n": "Abstinencia", "good": false, "d": "Tu cuerpo pide lo que dejaste. Aguanta.", "mods": {"hap": -2, "hp": -1}},
+    "paz": {"n": "Paz interior", "good": true, "d": "Te aceptas tal como eres.", "mods": {"hap": 1}},
+    "susto": {"n": "Susto", "good": false, "d": "Todavía te tiemblan las manos.", "mods": {"hap": -1}},
+    "suerte": {"n": "Racha de suerte", "good": true, "d": "Todo te sale bien últimamente.", "mods": {"flirt": 3, "hire": 3}},
+    "mala_racha": {"n": "Mala racha", "good": false, "d": "Nada te sale. Ya pasará.", "mods": {"hire": -3, "flirt": -3}},
+    "quemadura": {"n": "Quemadura de sol", "good": false, "d": "Rojo como camarón.", "mods": {"looks": -4}},
+    "mudanza": {"n": "Casa nueva", "good": true, "d": "Cajas, pintura fresca y un nuevo comienzo.", "mods": {"hap": 1}},
+    "nido_vacio": {"n": "Nido vacío", "good": false, "d": "Los hijos se fueron de casa.", "mods": {"hap": -1}},
+    "flechazo": {"n": "Flechazo", "good": true, "d": "Alguien no se te sale de la cabeza.", "mods": {"hap": 1, "flirt": 2}}
+}
+
+function tfx_add(id: string, months: int) {
+    if L.vd == null || TFX[id] == null { return null }
+    let cur = map_get(L.vd.tfx, id, 0)
+    L.vd.tfx[id] = max(cur, L.tm + months)
+    return null
+}
+
+function tfx_has(id: string) {
+    return L.vd != null && map_get(L.vd.tfx, id, 0) > L.tm
+}
+
+function tfx_tick() {
+    let d = vd()
+    for id in map_keys(d.tfx) {
+        if d.tfx[id] <= L.tm {
+            map_remove(d.tfx, id)
+            let t = TFX[id]
+            if t != null && !t.good { log_add("Se te pasó: " + str_lower(gfmt(t.n, L.gender)) + ".", "g") }
+        }
+    }
+    return null
+}
+
+function vida_fx(out: list) {
+    if L.vd == null { return null }
+    let d = L.vd
+    let g = L.gender
+    for id in map_keys(d.tfx) {
+        let left = d.tfx[id] - L.tm
+        let t = TFX[id]
+        if left > 0 && t != null {
+            list_push(out, fx("t_" + id, gfmt(t.n, g), t.good, gfmt(t.d, g) + " (" + str(left) + " " + plural(left, "mes", "meses") + ")", t.mods))
+        }
+    }
+    if L.talent != null {
+        let tl = talent_def(L.talent)
+        list_push(out, fx("talento", gfmt(tl.n, g), true, gfmt(tl.d, g), tl.fx))
+    }
+    if L.flaw != null && L.flaw != "ninguno" && !d.flaw_done {
+        let f = flaw_def(L.flaw)
+        list_push(out, fx("defecto", gfmt(f.n, g), false, gfmt(f.d, g) + " Para superarlo: " + f.goal, f.fx))
+    }
+    if L.height == "alta" && L.age >= 16 { list_push(out, fx("alto", "Alt" + oa(g), true, "Sacas una cabeza a todos (y te pegas en los marcos).", {"flirt": 2})) }
+    // Rangos sociales
+    if rank("know") >= 5 { list_push(out, fx("r_know", "Genialidad", true, "Tu cabeza vale oro.", {"hire": 5, "pay": 5})) } else if rank("know") >= 3 { list_push(out, fx("r_know", "Estudios" + oa(g), true, "Aprendes rápido.", {"grades": 3})) }
+    if rank("guts") >= 5 { list_push(out, fx("r_guts", "Temple de acero", true, "Nada te quiebra.", {"hap": 1})) } else if rank("guts") >= 3 { list_push(out, fx("r_guts", "Sin miedo", true, "Te lanzas.", {"flirt": 3})) }
+    if rank("skill") >= 5 { list_push(out, fx("r_skill", "Virtuosismo", true, "Lo que tocas sale perfecto.", {"pay": 8})) } else if rank("skill") >= 3 { list_push(out, fx("r_skill", "Buen oficio", true, "Sabes hacer las cosas.", {"pay": 3})) }
+    if rank("kind") >= 5 { list_push(out, fx("r_kind", "Santidad", true, "Tu bondad se nota a kilómetros.", {"hap": 1, "hire": 3})) }
+    if rank("charm") >= 5 { list_push(out, fx("r_charm", "Irresistible", true, "Entras a un lugar y todos voltean.", {"flirt": 10, "hire": 3})) } else if rank("charm") >= 3 { list_push(out, fx("r_charm", "Magnetismo", true, "La gente quiere estar cerca de ti.", {"flirt": 4})) }
+    // Estadísticas altas o bajas
+    if L.smarts >= 90 { list_push(out, fx("s_smart", "Mente brillante", true, "Resuelves todo antes que los demás.", {"grades": 5, "hire": 3})) }
+    if L.happy >= 90 && L.age >= 5 { list_push(out, fx("s_happy", "Radiante", true, "Tu felicidad es contagiosa.", {"flirt": 4})) }
+    if L.happy < 20 && L.age >= 10 { list_push(out, fx("s_sad", "Al límite", false, "Te cuesta levantarte de la cama.", {"flirt": -5, "hire": -5})) }
+    if L.looks >= 90 && L.age >= 16 { list_push(out, fx("s_looks", "Belleza deslumbrante", true, "Detienes el tráfico.", {"flirt": 5})) }
+    // Soledad y sobriedad
+    if L.age >= 25 && partner() == null && !has_close_friend() { list_push(out, fx("soledad", "Soledad", false, "Nadie te pregunta cómo estás.", {"hap": -1})) }
+    if d.addict && L.alcohol < 10 && L.drugs < 10 { list_push(out, fx("sobrio", "Sobriedad", true, "Dejaste atrás tu adicción. Cada día cuenta.", {"hap": 1, "hire": 3})) }
+    return null
+}
+
+function has_close_friend() {
+    for p in L.people {
+        if p.alive && rel_group(p) == "friend" && p.bond >= 50 { return true }
+    }
+    return false
+}
+
+// Lo que pasa en eventos: "tfx": "id:meses".
+function apply_tfx(spec: string) {
+    let parts = str_split(spec, ":")
+    let m = 3
+    if len(parts) > 1 { m = parse_int(parts[1], 3) }
+    tfx_add(parts[0], m)
+    return null
+}
+
+// ---------------------------------------------------------------- 5. hitos
+
+function vida_hito_action(action: string) {
+    let i = parse_int(str_replace(action, "hito:", ""), -1)
+    if L.hitos == null || i < 0 || i >= len(L.hitos) { return null }
+    let h = L.hitos[i]
+    h.fav = h.fav != true
+    return null
+}
+
+function hito_item(i: int, h: map) {
+    let fav = h.fav == true
+    let t = h.t
+    if fav { t = "★ " + t }
+    let s = h.c + " · " + str(h.a) + " años"
+    let tip = "Toca para marcarlo como favorito."
+    if fav { tip = "Es uno de tus favoritos. Toca para quitarlo." }
+    return {"action": "hito:" + str(i), "t": t, "s": s, "desc": "A los " + str(h.a) + " años. " + h.t + ". " + tip, "lock": "", "done": fav || h.c == "Amor" || h.c == "Familia"}
+}
+
+function hito_list_items(cat: string) {
+    let items = []
+    if L.hitos == null { return items }
+    if cat == "Línea" {
+        let si = 0
+        while si < len(STAGES) {
+            let s = STAGES[si]
+            let n = 0
+            for h in L.hitos {
+                if h.a >= s.min && h.a <= s.max { n += 1 }
+            }
+            if n > 0 {
+                list_push(items, {"action": "hito:none", "t": "— " + str_upper(s.n) + " —", "s": str(s.min) + "-" + if_str(s.max > 150, "...", str(s.max)) + " años · " + str(n) + " " + plural(n, "hito", "hitos"), "desc": s.d, "lock": ""})
+                let i = 0
+                while i < len(L.hitos) {
+                    let h = L.hitos[i]
+                    if h.a >= s.min && h.a <= s.max { list_push(items, hito_item(i, h)) }
+                    i += 1
+                }
+            }
+            si += 1
+        }
+        return items
+    }
+    let i = len(L.hitos) - 1
+    while i >= 0 {
+        let h = L.hitos[i]
+        if cat == "Todos" || h.c == cat || (cat == "Favoritos" && h.fav == true) { list_push(items, hito_item(i, h)) }
+        i -= 1
+    }
+    return items
+}
+
+function fav_hitos() {
+    let out = []
+    if L.hitos == null { return out }
+    for h in L.hitos {
+        if h.fav == true { list_push(out, h) }
+    }
+    return out
+}
+
+// ---------------------------------------------------------------- 6. eventos
+
+function vida_event_rate() {
+    let c = map_get(L, "chaos", "normal")
+    if c == "tranquilo" { return 13 }
+    if c == "caotico" { return 34 }
+    return 22
+}
+
+const VIDA_EVENTS = [
+    // Infancia
+    {"id": "vd_lost_store", "title": "Solo en el súper", "min": 5, "max": 8, "w": 6, "req": "",
+     "text": "Volteas y tu mamá ya no está. Solo ves pasillos gigantes llenos de cereales.",
+     "choices": [
+        {"t": "Ir a la caja y pedir que la llamen", "o": [{"w": 100, "log": "«Se busca a la mamá de un niño muy listo.» Llegó corriendo y te abrazó fuerte.", "happy": 3, "know": 2}]},
+        {"t": "Llorar a todo pulmón", "o": [{"w": 100, "log": "Media tienda vino a ayudarte. Tu mamá apareció muerta de vergüenza.", "happy": -2}]},
+        {"t": "Aprovechar y comer dulces del estante", "o": [{"w": 60, "log": "Te encontraron con la cara llena de chocolate. Castigo, pero valió la pena.", "happy": 4, "karma": -1}, {"w": 40, "log": "Te dolió la panza toda la tarde.", "health": -2}]}
+     ]},
+    {"id": "vd_tooth", "title": "El diente flojo", "min": 5, "max": 8, "w": 6, "req": "",
+     "text": "Tu diente de enfrente se mueve como columpio.",
+     "choices": [
+        {"t": "Amarrarlo a una puerta y ¡PUM!", "o": [{"w": 100, "log": "Salió volando. Lo pusiste bajo la almohada y el Ratón Pérez te dejó $20.", "money": 20, "guts": 3, "happy": 4}]},
+        {"t": "Esperar a que se caiga solo", "o": [{"w": 100, "log": "Se cayó en tu sándwich. Te lo tragaste. El Ratón Pérez no vino.", "happy": -2}]}
+     ]},
+    {"id": "vd_class_pet", "title": "La mascota del salón", "min": 6, "max": 10, "w": 5, "req": "school",
+     "text": "Te toca llevarte el hámster del salón a casa el fin de semana.",
+     "choices": [
+        {"t": "Cuidarlo como a un rey", "o": [{"w": 100, "log": "Lo devolviste gordito y feliz. La maestra te puso estrellita.", "kind": 4, "happy": 3}]},
+        {"t": "Dejarlo correr por la casa", "o": [{"w": 60, "log": "Apareció dos días después dentro de un zapato de tu papá.", "happy": 2}, {"w": 40, "log": "Se escapó para siempre. Compraste uno igual y nadie se dio cuenta.", "karma": -2}]}
+     ]},
+    {"id": "vd_sibling_fight", "title": "Guerra de hermanos", "min": 5, "max": 14, "w": 5, "req": "sibling",
+     "text": "Tu hermano o hermana se acabó tu cereal favorito... y te dejó la caja vacía en la alacena.",
+     "choices": [
+        {"t": "Venganza: esconderle su juguete favorito", "o": [{"w": 100, "log": "Guerra fría en casa por una semana. Ganaste.", "guts": 2, "happy": 2}]},
+        {"t": "Acusarle con tus papás", "o": [{"w": 100, "log": "Hubo castigo. Te dijo chismos{a} hasta los 30.", "happy": 1}]},
+        {"t": "Perdonar", "o": [{"w": 100, "log": "Te dio la mitad de su postre como disculpa.", "kind": 3, "happy": 2}]}
+     ]},
+    {"id": "vd_found_money", "title": "Un billete en la calle", "min": 6, "max": 90, "w": 4, "req": "",
+     "text": "Hay un billete de $500 tirado en la banqueta. No hay nadie cerca.",
+     "choices": [
+        {"t": "Quedártelo", "o": [{"w": 100, "log": "Hoy invitas tú.", "money": 500, "happy": 3}]},
+        {"t": "Preguntar en las tiendas si alguien lo perdió", "o": [{"w": 50, "log": "Era de una señora mayor que lloró de agradecimiento.", "karma": 5, "kind": 3}, {"w": 50, "log": "Nadie lo reclamó. Lo donaste a la iglesia de la esquina.", "karma": 4}]}
+     ]},
+    {"id": "vd_chickenpox", "title": "Varicela", "min": 4, "max": 11, "w": 4, "req": "",
+     "text": "Amaneciste con puntitos rojos por todo el cuerpo. Varicela.",
+     "choices": [
+        {"t": "No rascarte por nada del mundo", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Dos semanas de tortura sin rascarte. Ni una cicatriz.", "guts": 3, "health": -3}]},
+        {"t": "Rascarte (es imposible no hacerlo)", "o": [{"w": 100, "log": "Te quedó una marquita en la frente para siempre.", "health": -3, "looks": -1}]}
+     ]},
+    {"id": "vd_shooting_star", "title": "Lluvia de estrellas", "min": 5, "max": 99, "w": 3, "req": "",
+     "text": "Esta noche hay lluvia de estrellas. Todos salen a la azotea.",
+     "choices": [
+        {"t": "Pedir un deseo de amor", "o": [{"w": 100, "log": "Viste tres estrellas fugaces. Tu deseo es secreto.", "happy": 5, "tfx": "flechazo:2"}]},
+        {"t": "Pedir un deseo de dinero", "o": [{"w": 70, "log": "Viste una estrella fugaz. Al día siguiente te encontraste $100.", "money": 100, "happy": 3}, {"w": 30, "log": "Era un avión.", "happy": 1}]},
+        {"t": "Solo mirar", "o": [{"w": 100, "log": "Te sentiste diminut{a} y en paz.", "happy": 4, "tfx": "paz:2"}]}
+     ]},
+    // Adolescencia
+    {"id": "vd_house_party", "title": "Fiesta sin papás", "min": 14, "max": 17, "w": 6, "req": "",
+     "text": "Tus papás se van el fin de semana. Tus amigos ya están organizando «una reunioncita».",
+     "choices": [
+        {"t": "Hacer la fiesta del año", "lucky": ["fiesta"], "o": [{"w": 55, "log": "Leyenda. Toda la escuela habla de tu fiesta.", "happy": 10, "charm": 4}, {"w": 45, "log": "Alguien rompió el florero de la abuela. Te descubrieron. Castigo épico.", "happy": -6, "charm": 2}]},
+        {"t": "Solo invitar a tus amigos cercanos", "o": [{"w": 100, "log": "Pizza, películas y secretos hasta las 4 a. m.", "happy": 6, "kind": 2}]},
+        {"t": "Negarte", "o": [{"w": 100, "log": "Tus papás nunca se enteraron de lo responsable que fuiste.", "karma": 2}]}
+     ]},
+    {"id": "vd_nickname", "title": "El apodo", "min": 11, "max": 16, "w": 5, "req": "school",
+     "text": "Alguien te puso un apodo y ya todo el salón lo usa.",
+     "choices": [
+        {"t": "Adoptarlo con orgullo", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "Lo volviste tu marca personal. Ahora es genial.", "charm": 4, "happy": 5}]},
+        {"t": "Ponerle uno peor a quien empezó", "o": [{"w": 60, "log": "El tuyo pegó más. Victoria.", "guts": 3, "karma": -2}, {"w": 40, "log": "Ahora tienes dos apodos.", "happy": -5}]},
+        {"t": "Ignorarlo", "o": [{"w": 100, "log": "En un mes se les olvidó.", "happy": -1}]}
+     ]},
+    {"id": "vd_school_trip", "title": "Viaje escolar", "min": 12, "max": 17, "w": 5, "req": "school",
+     "text": "Viaje de generación a la playa. Tres días sin papás.",
+     "choices": [
+        {"t": "Ir ($1,500)", "cost": 1500, "o": [{"w": 100, "log": "Fogata en la playa, una guitarra y recuerdos para toda la vida.", "money": -1500, "happy": 10, "charm": 3, "tfx": "quemadura:1"}]},
+        {"t": "Quedarte", "o": [{"w": 100, "log": "Viste todas las fotos en redes. Te arrepentiste un poco.", "happy": -4}]}
+     ]},
+    {"id": "vd_best_friend_moves", "title": "Tu mejor amigo se muda", "min": 9, "max": 17, "w": 4, "req": "",
+     "text": "Tu mejor amigo te cuenta que su familia se muda a otro país.",
+     "choices": [
+        {"t": "Prometer escribirse todos los días", "o": [{"w": 50, "log": "Lo cumplieron. Videollamadas cada domingo durante años.", "kind": 3, "happy": -2}, {"w": 50, "log": "Al principio sí. Luego, cada vez menos.", "happy": -5}]},
+        {"t": "Organizarle una despedida sorpresa", "o": [{"w": 100, "log": "Lloraron, rieron y se prometieron volver a verse.", "kind": 4, "happy": 2}]}
+     ]},
+    {"id": "vd_rumor", "title": "El rumor", "min": 12, "max": 17, "w": 4, "req": "school",
+     "text": "Circula un rumor falso sobre ti en el chat del salón.",
+     "choices": [
+        {"t": "Enfrentar a quien lo inventó", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Lo pusiste en su lugar frente a todos. El rumor murió.", "guts": 4, "happy": 4}]},
+        {"t": "Contárselo a un adulto de confianza", "o": [{"w": 100, "log": "La escuela intervino. Te pidieron disculpas.", "happy": 2}]},
+        {"t": "Esconderte hasta que pase", "o": [{"w": 100, "log": "Fueron las peores dos semanas de tu vida.", "happy": -8, "tfx": "susto:2"}]}
+     ]},
+    {"id": "vd_driving_test", "title": "El examen de manejo", "min": 16, "max": 30, "w": 4, "req": "",
+     "text": "Hoy es tu examen de manejo. El instructor tiene cara de pocos amigos.",
+     "choices": [
+        {"t": "Manejar con calma", "o": [{"w": 70, "log": "¡Aprobaste! Licencia en mano.", "happy": 6, "skill": 3, "special": "vd_license"}, {"w": 30, "log": "Te pasaste un alto. Reprobado. La próxima.", "happy": -4}]},
+        {"t": "Estacionarte en paralelo a la primera", "need": "skill", "rank": 2, "o": [{"w": 100, "log": "El instructor aplaudió. Literalmente.", "happy": 8, "skill": 3, "special": "vd_license"}]}
+     ]},
+    // Adultez
+    {"id": "vd_lottery", "title": "El billete de lotería", "min": 18, "max": 99, "w": 4, "req": "",
+     "text": "Un vendedor te ofrece el último billete de la lotería del domingo. «Este es el bueno.»",
+     "choices": [
+        {"t": "Comprarlo ($50)", "cost": 50, "o": [{"w": 85, "log": "Ni un reintegro.", "money": -50}, {"w": 13, "log": "¡Ganaste $2,000!", "money": 1950, "happy": 6}, {"w": 2, "log": "¡GANASTE EL PREMIO MAYOR! $500,000.", "money": 499950, "happy": 25, "special": "vd_jackpot"}]},
+        {"t": "No creer en la suerte", "o": [{"w": 100, "log": "El domingo cantaron el número. No era el tuyo. Uf.", "happy": 1}]}
+     ]},
+    {"id": "vd_car_crash", "title": "Choque", "min": 18, "max": 85, "w": 4, "req": "",
+     "text": "Un auto se pasa el alto y te pega de lado.",
+     "choices": [
+        {"t": "Bajarte a gritarle", "o": [{"w": 50, "log": "Terminaron a gritos. El seguro pagó todo, pero te quedó un dolor de cuello.", "health": -5, "tfx": "lesion:2"}, {"w": 50, "log": "Se disculpó y pagó en efectivo.", "money": 3000}]},
+        {"t": "Llamar al seguro y respirar", "o": [{"w": 100, "log": "Un golpe en la puerta y un buen susto. Nadie salió herido.", "tfx": "susto:2", "money": -1000}]}
+     ]},
+    {"id": "vd_blackout", "title": "Apagón", "min": 8, "max": 99, "w": 4, "req": "",
+     "text": "Se fue la luz en toda la ciudad. Sin internet, sin tele, sin celular.",
+     "choices": [
+        {"t": "Juegos de mesa con velas", "o": [{"w": 100, "log": "La mejor noche en meses. Deberían irse más seguido las luces.", "happy": 5}]},
+        {"t": "Salir a ver las estrellas", "o": [{"w": 100, "log": "Sin luz, el cielo estaba lleno de estrellas. Te acordaste de cuando eras niñ{a}.", "happy": 4, "tfx": "paz:1"}]},
+        {"t": "Entrar en pánico", "o": [{"w": 100, "log": "Contaste los minutos hasta que volvió el wifi.", "happy": -3}]}
+     ]},
+    {"id": "vd_quake", "title": "¡Temblor!", "min": 6, "max": 99, "w": 3, "req": "",
+     "text": "Suena la alerta sísmica. El piso empieza a moverse.",
+     "choices": [
+        {"t": "Salir con calma por la ruta de evacuación", "o": [{"w": 100, "log": "Saliste a tiempo. Solo se cayeron unos cuadros.", "tfx": "susto:1"}]},
+        {"t": "Ayudar a los vecinos mayores a salir", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Bajaste a la señora del 5 en brazos. Eres héroe del edificio.", "karma": 6, "kind": 4, "guts": 3}]},
+        {"t": "Quedarte paralizad{a}", "o": [{"w": 70, "log": "Fue corto. Todo bien, salvo tus nervios.", "tfx": "susto:3"}, {"w": 30, "log": "Te cayó una repisa en el hombro.", "health": -8, "tfx": "lesion:2"}]}
+     ]},
+    {"id": "vd_stray_dog", "title": "El perrito callejero", "min": 8, "max": 90, "w": 4, "req": "",
+     "text": "Un perrito flaco te sigue hasta la puerta de tu casa y se sienta a mirarte.",
+     "choices": [
+        {"t": "Adoptarlo", "o": [{"w": 100, "log": "Lo bañaste, lo llamaste «Suerte» y ahora duerme en tu cama.", "happy": 10, "kind": 4, "special": "vd_dog"}]},
+        {"t": "Darle comida y llevarlo a un refugio", "o": [{"w": 100, "log": "En el refugio le encontraron familia en una semana.", "karma": 4, "kind": 3}]},
+        {"t": "Cerrar la puerta", "o": [{"w": 100, "log": "Esa noche llovió. No dormiste bien.", "happy": -3}]}
+     ]},
+    {"id": "vd_radio_contest", "title": "Concurso de radio", "min": 14, "max": 90, "w": 3, "req": "",
+     "text": "«¡La llamada número diez se lleva dos boletos para el concierto del año!»",
+     "choices": [
+        {"t": "Marcar como loc{a}", "o": [{"w": 25, "log": "¡Eras la llamada diez! Gritaste en vivo en la radio.", "happy": 10, "charm": 2}, {"w": 75, "log": "Ocupado, ocupado, ocupado.", "happy": -1}]},
+        {"t": "Ni intentarlo", "o": [{"w": 100, "log": "Siguió sonando tu canción favorita.", "happy": 1}]}
+     ]},
+    {"id": "vd_viral_photo", "title": "Foto viral", "min": 14, "max": 80, "w": 3, "req": "",
+     "text": "Alguien te tomó una foto haciendo algo ridículo en la calle y ya tiene un millón de vistas.",
+     "choices": [
+        {"t": "Aprovechar la fama", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "Hiciste memes de ti mism{a}. Te escribieron marcas.", "money": 3000, "charm": 4, "tfx": "viral:3"}]},
+        {"t": "Reírte de ti mism{a}", "o": [{"w": 100, "log": "Lo tomaste con humor y la gente te quiso más.", "happy": 3, "tfx": "viral:2"}]},
+        {"t": "Pedir que la borren", "o": [{"w": 100, "log": "La borraron, pero el meme ya era eterno.", "happy": -4}]}
+     ]},
+    {"id": "vd_burglary", "title": "Te robaron", "min": 18, "max": 95, "w": 3, "req": "",
+     "text": "Llegas a casa y la puerta está forzada. Se llevaron la tele y la laptop.",
+     "choices": [
+        {"t": "Denunciar y poner alarma ($1,500)", "o": [{"w": 100, "log": "La policía no encontró nada, pero ahora duermes tranquil{a}.", "money": -1500, "tfx": "susto:2"}]},
+        {"t": "Investigar por tu cuenta", "need": "guts", "rank": 3, "o": [{"w": 60, "log": "Encontraste tus cosas en un tianguis y las recuperaste.", "guts": 4, "happy": 5}, {"w": 40, "log": "No encontraste nada. Perdiste $8,000 en cosas.", "money": -8000, "happy": -6}]},
+        {"t": "Resignarte", "o": [{"w": 100, "log": "Perdiste $8,000 en cosas y la sensación de seguridad.", "money": -8000, "happy": -6, "tfx": "mala_racha:3"}]}
+     ]},
+    {"id": "vd_food_poison", "title": "Los tacos de la esquina", "min": 10, "max": 90, "w": 4, "req": "",
+     "text": "Los tacos de anoche te están cobrando la factura.",
+     "choices": [
+        {"t": "Suero y reposo", "o": [{"w": 100, "log": "Dos días entre la cama y el baño. Nunca más (hasta el viernes).", "health": -4}]},
+        {"t": "Ir a trabajar o a clases igual", "o": [{"w": 100, "log": "Mala idea. Muy mala idea.", "health": -6, "happy": -4}]}
+     ]},
+    {"id": "vd_rescue", "title": "Alguien se ahoga", "min": 12, "max": 75, "w": 2, "req": "",
+     "text": "En la alberca pública, un niño manotea en lo hondo. Nadie lo ha visto.",
+     "choices": [
+        {"t": "Lanzarte al agua", "need": "guts", "rank": 2, "o": [{"w": 100, "log": "Lo sacaste a tiempo. Su mamá no dejó de abrazarte. Saliste en el periódico local.", "karma": 10, "guts": 6, "happy": 8, "special": "vd_hero"}]},
+        {"t": "Gritarle al salvavidas", "o": [{"w": 100, "log": "El salvavidas llegó a tiempo. Tu grito lo salvó.", "karma": 5, "happy": 4}]}
+     ]},
+    {"id": "vd_wrong_wedding", "title": "La boda de tu ex", "min": 22, "max": 60, "w": 3, "req": "hasex",
+     "text": "Te llega una invitación: tu ex se casa y quiere que estés ahí.",
+     "choices": [
+        {"t": "Ir y brillar", "need": "charm", "rank": 3, "o": [{"w": 100, "log": "Llegaste espectacular, bailaste con todos y le deseaste lo mejor. Elegancia pura.", "happy": 8, "charm": 3}]},
+        {"t": "Ir y llorar en el baño", "o": [{"w": 100, "log": "Lloraste en el baño. Luego bailaste «La bamba». Montaña rusa.", "happy": -3}]},
+        {"t": "Mandar un regalo y no ir", "o": [{"w": 100, "log": "Le mandaste una licuadora. Elegante y distante.", "happy": 1}]}
+     ]},
+    {"id": "vd_makeover", "title": "Cambio de look", "min": 14, "max": 80, "w": 4, "req": "",
+     "text": "Tu estilista te propone un cambio radical: «Confía en mí.»",
+     "choices": [
+        {"t": "Confiar ($400)", "cost": 400, "o": [{"w": 70, "log": "Te ves increíble. Te reconocen menos, te miran más.", "money": -400, "happy": 6, "tfx": "nuevo_look:6"}, {"w": 30, "log": "Te ves... diferente. Ya crecerá.", "money": -400, "happy": -4}]},
+        {"t": "Solo las puntas", "o": [{"w": 100, "log": "Lo de siempre. Sin sorpresas.", "happy": 1}]}
+     ]},
+    {"id": "vd_move", "title": "Mudanza", "min": 20, "max": 75, "w": 3, "req": "",
+     "text": "Encuentras un departamento con más luz y mejor ubicación por casi lo mismo.",
+     "choices": [
+        {"t": "Mudarte ($2,000)", "cost": 2000, "o": [{"w": 100, "log": "Cajas, pizza en el piso y un nuevo comienzo.", "money": -2000, "happy": 6, "tfx": "mudanza:4"}]},
+        {"t": "Quedarte donde estás", "o": [{"w": 100, "log": "Mudarse es demasiado cansado.", "happy": 0}]}
+     ]},
+    {"id": "vd_lucky_streak", "title": "Día perfecto", "min": 8, "max": 99, "w": 3, "req": "",
+     "text": "El camión llegó a tiempo, encontraste lugar, te regalaron un café y sonó tu canción. Hoy es tu día.",
+     "choices": [
+        {"t": "Aprovecharlo para pedir algo importante", "o": [{"w": 100, "log": "Te dijeron que sí. Claro que sí: hoy es tu día.", "happy": 6, "tfx": "suerte:3"}]},
+        {"t": "Disfrutarlo sin más", "o": [{"w": 100, "log": "Un día perfecto, sin más. Lo recordarás.", "happy": 8}]}
+     ]},
+    {"id": "vd_bad_day", "title": "Día de perros", "min": 8, "max": 99, "w": 3, "req": "",
+     "text": "Se rompió la llave del agua, pisaste un chicle y te mojó un camión. Todavía son las 9 a. m.",
+     "choices": [
+        {"t": "Reírte de todo", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Lo tomaste con humor. Al final, el día mejoró.", "happy": 2}]},
+        {"t": "Encerrarte a esperar que acabe", "o": [{"w": 100, "log": "Mañana será otro día.", "happy": -4, "tfx": "mala_racha:2"}]}
+     ]},
+    {"id": "vd_ufo", "title": "Luces en el cielo", "min": 8, "max": 99, "w": 2, "req": "",
+     "text": "Tres luces se mueven en zigzag sobre el cerro. Nadie más las ve.",
+     "choices": [
+        {"t": "Grabarlo y subirlo", "o": [{"w": 60, "log": "Tu video llegó a un programa de misterios. Ahora eres «l{a} del ovni».", "tfx": "viral:2", "happy": 4}, {"w": 40, "log": "Era un dron. Te comentaron puras risas.", "happy": -2}]},
+        {"t": "Saludar con la mano", "o": [{"w": 100, "log": "Una de las luces parpadeó. Nunca se lo contaste a nadie.", "happy": 4, "know": 2}]}
+     ]},
+    {"id": "vd_reality", "title": "Casting de reality", "min": 18, "max": 45, "w": 2, "req": "hot",
+     "text": "Te detienen en la calle: «¿Quieres salir en un reality de citas en una isla?»",
+     "choices": [
+        {"t": "Aceptar", "o": [{"w": 50, "log": "Saliste en tele nacional, ligaste con medio elenco y regresaste con miles de seguidores.", "happy": 10, "charm": 4, "special": "vd_fame10", "tfx": "viral:4"}, {"w": 50, "log": "Te editaron como villan{a}. Todo el país te odia un rato.", "happy": -8, "special": "vd_fame10", "tfx": "escandalo:4"}]},
+        {"t": "No, gracias", "o": [{"w": 100, "log": "Tu vida privada sigue privada.", "happy": 1}]}
+     ]},
+    {"id": "vd_marathon_charity", "title": "Carrera con causa", "min": 14, "max": 70, "w": 3, "req": "",
+     "text": "Hay una carrera de 10 km para juntar fondos para un hospital infantil.",
+     "choices": [
+        {"t": "Correrla", "o": [{"w": 100, "log": "La terminaste arrastrando los pies, pero la terminaste.", "health": 4, "karma": 4, "guts": 2}]},
+        {"t": "Donar sin correr ($300)", "cost": 300, "o": [{"w": 100, "log": "Tu donativo compró juguetes para la sala de pediatría.", "money": -300, "karma": 5}]}
+     ]},
+    {"id": "vd_job_abroad", "title": "Oferta en el extranjero", "min": 22, "max": 50, "w": 2, "req": "job",
+     "text": "Una empresa extranjera te ofrece el doble de sueldo... al otro lado del mundo.",
+     "choices": [
+        {"t": "Aceptar la aventura", "o": [{"w": 100, "log": "Nuevo idioma, nueva ciudad, nuevo tú. Tu sueldo sube 20%.", "happy": 6, "know": 5, "special": "vd_abroad"}]},
+        {"t": "Quedarte cerca de los tuyos", "o": [{"w": 100, "log": "Lo pensaste mucho. Elegiste quedarte. Tu familia lo agradeció.", "kind": 3}]}
+     ]},
+    {"id": "vd_scam_call", "title": "Llamada sospechosa", "min": 55, "max": 99, "w": 4, "req": "",
+     "text": "«¡Abuelit{a}, soy yo! Tuve un accidente, no le digas a nadie y deposítame $10,000.»",
+     "choices": [
+        {"t": "Depositar de inmediato", "o": [{"w": 100, "log": "Era una estafa. Tus nietos estaban en la escuela.", "money": -10000, "happy": -8}]},
+        {"t": "Hacer una pregunta que solo tu nieto sabría", "o": [{"w": 100, "log": "Colgaron. Bien jugado.", "know": 3, "happy": 3}]},
+        {"t": "Colgar y llamar a tu familia", "o": [{"w": 100, "log": "Todos estaban bien. Avisaste al banco.", "karma": 1}]}
+     ]},
+    {"id": "vd_reunion", "title": "Reunión de exalumnos", "min": 30, "max": 80, "w": 3, "req": "",
+     "text": "Te invitan a la reunión de tu generación de la secundaria.",
+     "choices": [
+        {"t": "Ir y presumir", "o": [{"w": 60, "log": "Todos querían saber de tu vida. Te sentiste exitos{a}.", "happy": 6}, {"w": 40, "log": "El que te molestaba ahora es millonario. Auch.", "happy": -3}]},
+        {"t": "Ir y reconectar", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Reíste con gente que no veías hace décadas. Hiciste planes para verse.", "happy": 8, "kind": 2}]},
+        {"t": "No ir", "o": [{"w": 100, "log": "Viste las fotos en redes. Todos se ven más viejos que tú (eso crees).", "happy": 1}]}
+     ]},
+    {"id": "vd_fall", "title": "La caída", "min": 68, "max": 110, "w": 4, "req": "",
+     "text": "Te resbalaste en la regadera.",
+     "choices": [
+        {"t": "Pedir ayuda de inmediato", "o": [{"w": 70, "log": "Un moretón y un susto. Pusiste agarraderas en el baño.", "health": -4, "tfx": "susto:2"}, {"w": 30, "log": "Fractura de cadera. Meses de rehabilitación.", "health": -15, "tfx": "lesion:6"}]},
+        {"t": "Levantarte solit{a} (no pasa nada)", "o": [{"w": 50, "log": "No pasó nada. Esta vez.", "health": -2}, {"w": 50, "log": "Sí pasó algo. Te torciste la muñeca.", "health": -8, "tfx": "lesion:3"}]}
+     ]},
+    {"id": "vd_park_dance", "title": "Danzón en el parque", "min": 60, "max": 100, "w": 4, "req": "",
+     "text": "Los sábados hay danzón en el kiosco del parque. Un grupo te invita a bailar.",
+     "choices": [
+        {"t": "Bailar toda la tarde", "o": [{"w": 100, "log": "Bailaste como en tus mejores años. Hiciste amigos nuevos.", "happy": 8, "health": 2, "charm": 2}]},
+        {"t": "Mirar desde la banca", "o": [{"w": 100, "log": "Disfrutaste la música con un helado en la mano.", "happy": 3}]}
+     ]},
+    {"id": "vd_gas", "title": "El olor a gas", "min": 70, "max": 110, "w": 3, "req": "",
+     "text": "Huele raro en la cocina. ¿Dejaste la estufa abierta?",
+     "choices": [
+        {"t": "Abrir ventanas y salir", "o": [{"w": 100, "log": "Lo dejaste abierto. Por suerte lo notaste a tiempo.", "tfx": "susto:2"}]},
+        {"t": "Prender la luz para ver mejor", "o": [{"w": 70, "log": "No pasó nada... Uf. Tus hijos te pusieron una estufa eléctrica.", "tfx": "susto:2"}, {"w": 30, "log": "Un pequeño flamazo te quemó las cejas.", "health": -8, "looks": -2}]}
+     ]},
+    {"id": "vd_tribute", "title": "Homenaje", "min": 65, "max": 110, "w": 3, "req": "",
+     "text": "Tu colonia quiere hacerte un homenaje por todo lo que has hecho por la comunidad.",
+     "choices": [
+        {"t": "Aceptarlo con emoción", "o": [{"w": 100, "log": "Discursos, una placa con tu nombre y lágrimas. Te sentiste querid{a}.", "happy": 12, "special": "vd_tribute"}]},
+        {"t": "Rechazarlo con humildad", "o": [{"w": 100, "log": "«No hice nada que no hiciera cualquiera.» Te quisieron todavía más.", "karma": 4, "kind": 3}]}
+     ]},
+    {"id": "vd_dream", "title": "Un sueño extraño", "min": 6, "max": 99, "w": 3, "req": "",
+     "text": "Soñaste que volabas sobre tu ciudad y alguien te decía: «No tengas miedo».",
+     "choices": [
+        {"t": "Tomarlo como una señal", "o": [{"w": 100, "log": "Ese día te atreviste a algo que llevabas meses posponiendo.", "guts": 3, "tfx": "motivado:2"}]},
+        {"t": "Fue solo un sueño", "o": [{"w": 100, "log": "Desayunaste y lo olvidaste a mediodía.", "happy": 1}]}
+     ]}
+]
+
+function vida_meets(tag: string) {
+    if tag == "sibling" {
+        for p in L.people {
+            if p.alive && p.rel == "hermano" { return true }
+        }
+        return false
+    }
+    return false
+}
+
+function vida_special(name: string, ctx: map) {
+    if name == "vd_license" {
+        hito_once("license", "Vida", "Sacaste tu licencia de manejo")
+        return ""
+    }
+    if name == "vd_jackpot" {
+        hito_me("Vida", "Ganaste el premio mayor de la lotería")
+        flag("jackpot")
+        return ""
+    }
+    if name == "vd_dog" {
+        hito_once("stray_dog", "Vida", "Adoptaste un perrito callejero")
+        return ""
+    }
+    if name == "vd_hero" {
+        hito_me("Vida", "Salvaste a un niño de ahogarse")
+        flag("hero")
+        L.fame = clamp100(L.fame + 5)
+        return ""
+    }
+    if name == "vd_fame10" {
+        L.fame = clamp100(L.fame + 10)
+        hito_once("reality", "Vida", "Saliste en un reality show")
+        return ""
+    }
+    if name == "vd_abroad" {
+        if L.job != null { L.job.bonus = L.job.bonus + 20 }
+        hito_me("Trabajo", "Te fuiste a trabajar al extranjero")
+        return ""
+    }
+    if name == "vd_tribute" {
+        hito_me("Vida", "Tu comunidad te hizo un homenaje")
+        return ""
+    }
+    return ""
+}
+
+function goals_text() {
+    if L.vd == null || len(L.vd.goals) == 0 { return "Ninguno" }
+    let met = 0
+    for x in L.vd.goals {
+        if x.ok { met += 1 }
+    }
+    return str(met) + " de " + str(len(L.vd.goals)) + " cumplidos"
+}

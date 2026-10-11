@@ -286,7 +286,14 @@ const MISSIONS = [
     {"id": "bday_keeper", "t": "Nunca se me olvida", "d": "Felicita 15 cumpleaños desde el celular.", "r": "Amabilidad", "reward": {"kind": 5}},
     {"id": "freelancer", "t": "Por mi cuenta", "d": "Gana $50,000 con trabajos independientes.", "r": "+$5,000", "reward": {"money": 5000}},
     {"id": "link_star", "t": "Perfil destacado", "d": "Completa al máximo tu perfil de VelvetLink.", "r": "Encanto", "reward": {"charm": 3}},
-    {"id": "detox", "t": "Vida sin pantalla", "d": "Mantén un año entero el límite de tiempo de pantalla.", "r": "Felicidad", "reward": {"happy": 10}}
+    {"id": "detox", "t": "Vida sin pantalla", "d": "Mantén un año entero el límite de tiempo de pantalla.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "goals3", "t": "Lo que me propuse", "d": "Cumple el propósito de 3 etapas de tu vida.", "r": "Felicidad", "reward": {"happy": 12}},
+    {"id": "flaw_beaten", "t": "Mejor versión", "d": "Supera el defecto con el que naciste.", "r": "Valor", "reward": {"guts": 6}},
+    {"id": "resolutions3", "t": "Ahora sí es el año", "d": "Cumple 3 propósitos de año nuevo.", "r": "Destreza", "reward": {"skill": 5}},
+    {"id": "bucket5", "t": "Antes de partir", "d": "Cumple 5 deseos de tu lista de deseos.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "hitos100", "t": "Una vida de película", "d": "Junta 100 hitos.", "r": "Encanto", "reward": {"charm": 6}},
+    {"id": "centenarian", "t": "Un siglo de vida", "d": "Vive 100 años.", "r": "Amabilidad", "reward": {"kind": 8}},
+    {"id": "hero", "t": "Héroe anónimo", "d": "Salva una vida.", "r": "Valor", "reward": {"guts": 8}}
 ]
 
 const MISSION_CAT_ORDER = ["Estudios", "Trabajo", "Amor y familia", "Dinero", "Vida"]
@@ -314,7 +321,8 @@ const MISSION_CATS = {
     "dynasty_crown": "Trabajo", "abdicated": "Trabajo", "debate_win": "Trabajo", "creator_award": "Trabajo", "mars_city": "Trabajo",
     "terraform": "Trabajo", "pledge": "Dinero", "crossover": "Trabajo", "director18": "Trabajo",
     "viral_reel": "Vida", "teen_safe": "Vida", "scam_proof": "Vida", "reunion": "Amor y familia", "bday_keeper": "Amor y familia",
-    "freelancer": "Trabajo", "link_star": "Trabajo", "detox": "Vida"
+    "freelancer": "Trabajo", "link_star": "Trabajo", "detox": "Vida",
+    "goals3": "Vida", "flaw_beaten": "Vida", "resolutions3": "Vida", "bucket5": "Vida", "hitos100": "Vida", "centenarian": "Vida", "hero": "Vida"
 }
 
 function flag(name: string) {

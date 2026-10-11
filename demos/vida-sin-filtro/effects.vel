@@ -132,6 +132,7 @@ function effects() {
     velo_fx(out)
     contenido_fx(out)
     apps_fx(out)
+    vida_fx(out)
     return out
 }
 

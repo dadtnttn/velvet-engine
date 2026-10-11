@@ -679,6 +679,7 @@ function merit(p: map) {
 
 // Al morir: funeral y quién hereda.
 function on_death() {
+    vida_on_death()
     let mourners = []
     for p in L.people {
         if p.alive && p.bond >= 50 && p.age >= 4 { list_push(mourners, p.first) }
@@ -820,6 +821,7 @@ function continue_as_heir() {
     L.grades = kid.grades
     L.money = money
     L.family = family
+    vida_heir()
     // Lo que heredas de tus padres: algo de lo que aprendieron.
     for k in SOCIAL_KEYS { gain(k, old.social[k] / 5) }
     if merit(kid) < 40 {
