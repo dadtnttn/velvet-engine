@@ -1,0 +1,668 @@
+// @edition 3
+// Mercado: la segunda capa de la bolsa.
+// - Índice VLV (todas las empresas menos las cripto), inversión automática cada
+//   mes, oro (sube en las crisis) y bonos del gobierno a la tasa del banco central.
+// - Venta en corto (apostar a la baja) con llamada de margen y órdenes automáticas
+//   (vender si baja 20% o sube 50%).
+// - Cracs bursátiles con recuperación, quiebras de empresas y salidas a bolsa
+//   (inviertes a ciegas o con la opinión de los analistas).
+// - Noticias: tasa del banco central, oro, índice, la columna del experto de El
+//   Financiero (suscripción), rumores de foros y tips de conocidos.
+// - Estadísticas: ganancias realizadas, mejor venta y número de operaciones; las
+//   ganancias se declaran en los impuestos.
+// Acciones con el prefijo "mk:" y elecciones "mk_".
+
+const IPO_NAMES = [
+    {"n": "NubeYa", "s": "Tecnología"},
+    {"n": "TacoExpress", "s": "Comida rápida"},
+    {"n": "VeloCar", "s": "Autos eléctricos"},
+    {"n": "Glamourama", "s": "Moda"},
+    {"n": "CerebroIA", "s": "Inteligencia artificial"},
+    {"n": "SolarVerde", "s": "Energía solar"},
+    {"n": "MatchPerfecto", "s": "Apps de citas"},
+    {"n": "RoboChef", "s": "Robótica"},
+    {"n": "MetaLlama", "s": "Realidad virtual"},
+    {"n": "GenomaYa", "s": "Biotecnología"},
+    {"n": "PatitasPet", "s": "Mascotas"},
+    {"n": "AguaPura", "s": "Agua embotellada"}
+]
+
+const TIP_PEOPLE = ["Tu cuñado", "Un taxista", "Tu peluquero", "Un compañero del gimnasio", "Un señor en el elevador", "Tu tío el de las ideas"]
+
+// ---------------------------------------------------------------- estado
+
+function mx() {
+    if L.mx == null {
+        L.mx = {
+            "shorts": {}, "orders": {}, "auto": 0, "idx": 0, "idx_inv": 0, "bonds": [], "gold": 0, "gold_inv": 0, "gold_p": 2000,
+            "real": 0, "best": 0, "trades": 0, "ipo": null, "ipo_offer": null, "crash": 0, "crash_new": false, "crash_hold": -1,
+            "forum_m": -1, "rumor": "", "expert": "", "papers": 0
+        }
+    }
+    return L.mx
+}
+
+// Empresas nuevas para partidas guardadas y la tasa del banco central.
+function mk_migrate() {
+    let mk = L.mk
+    for s in STOCKS {
+        if mk.p[s.id] == null {
+            mk.p[s.id] = s.p
+            mk.h[s.id] = [s.p]
+        }
+    }
+    if mk.rate == null { mk.rate = 800 }
+    return null
+}
+
+function idx_level() {
+    let total = 0
+    let n = 0
+    for s in STOCKS {
+        if s.s == "Cripto" { continue }
+        total += price(s.id) * 1000 / s.p
+        n += 1
+    }
+    return max(1, total / max(1, n))
+}
+
+function idx_value() {
+    return mx().idx * idx_level() / 1000
+}
+
+function gold_value() {
+    let m = mx()
+    return m.gold * m.gold_p / 100
+}
+
+function short_pnl(id: string) {
+    let sh = mx().shorts[id]
+    if sh == null { return 0 }
+    return (sh.entry - price(id)) * sh.n / 100
+}
+
+// Todo lo que tienes en el mercado fuera de las acciones.
+function mk_worth() {
+    if L.mx == null || L.mk == null { return 0 }
+    let m = L.mx
+    let total = idx_value() + gold_value()
+    for b in m.bonds { total += b.amt }
+    for id in map_keys(m.shorts) { total += m.shorts[id].coll + short_pnl(id) }
+    if m.ipo != null { total += m.ipo.amt }
+    return total
+}
+
+function mk_positions() {
+    let n = 0
+    for s in STOCKS {
+        if shares(s.id) > 0 { n += 1 }
+    }
+    let m = mx()
+    if m.idx > 0 { n += 1 }
+    if m.gold > 0 { n += 1 }
+    if len(m.bonds) > 0 { n += 1 }
+    return n
+}
+
+function mk_wipe() {
+    if L.mx == null { return null }
+    let m = L.mx
+    m.idx = 0
+    m.idx_inv = 0
+    m.gold = 0
+    m.gold_inv = 0
+    m.bonds = []
+    m.shorts = {}
+    m.orders = {}
+    m.auto = 0
+    m.ipo = null
+    return null
+}
+
+function mk_realized(pl: int) {
+    let m = mx()
+    m.real += pl
+    m.trades += 1
+    if pl > m.best { m.best = pl }
+    dn().capgain += pl
+    if m.real >= 1000000 { flag("wolf") }
+    return null
+}
+
+// Vende n acciones (las órdenes automáticas y el menú de la bolsa).
+function mk_sell(id: string, n: int) {
+    let own = shares(id)
+    let k = min(n, own)
+    if k <= 0 { return {"txt": "", "pl": 0} }
+    let value = k * price(id) / 100
+    let fee = value / 100
+    if fin_pro() { fee = 0 }
+    let inv = map_get(L.invested, id, 0)
+    let cost_part = inv * k / max(1, own)
+    L.invested[id] = inv - cost_part
+    L.port[id] = own - k
+    L.money += value - fee
+    let pl = value - fee - cost_part
+    mk_realized(pl)
+    let txt = "Vendiste " + str(k) + " acciones de " + stock_def(id).n + " por " + money_str(value - fee) + "."
+    if pl >= 0 { txt = txt + " Ganaste " + money_str(pl) + "." } else { txt = txt + " Perdiste " + money_str(0 - pl) + "." }
+    if pl >= 100000 { hito_once("big_trade", "Vida", "Ganaste más de $100,000 en una sola venta") }
+    if L.port[id] <= 0 { map_remove(mx().orders, id) }
+    return {"txt": txt, "pl": pl}
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function mk_month() {
+    let m = mx()
+    let mk = L.mk
+    // Tasa del banco central
+    let target = 800
+    if mk.econ == "auge" { target = 1050 }
+    if mk.econ == "recesion" { target = 450 }
+    if mk.rate < target && chance(35) { mk.rate += 25 }
+    if mk.rate > target && chance(35) { mk.rate -= 25 }
+    // Recuperación después de un crac
+    if m.crash > 0 {
+        m.crash -= 1
+        for s in STOCKS { mk_set_price(s.id, price(s.id) * 103 / 100) }
+    }
+    // Crac bursátil
+    let cp = 3
+    if mk.econ == "recesion" { cp = 8 }
+    if m.crash == 0 && rint(1, 1000) <= cp {
+        for s in STOCKS { mk_set_price(s.id, max(100, price(s.id) * (100 - rint(20, 40)) / 100)) }
+        m.crash = 8
+        m.crash_new = true
+        m.gold_p = m.gold_p * 110 / 100
+        if dn().afore > 0 { dn().afore = dn().afore * 85 / 100 }
+        if L.age >= 14 { log_add("¡CRAC BURSÁTIL! La bolsa se desplomó en un solo día. Los noticieros no hablan de otra cosa.", "b") }
+    }
+    // Oro
+    let g = rint(-3, 3)
+    if mk.econ == "recesion" { g += 2 }
+    if mk.econ == "auge" { g -= 1 }
+    m.gold_p = max(500, m.gold_p * (100 + g) / 100)
+    // Quiebras
+    for s in STOCKS {
+        if s.s != "Cripto" && price(s.id) < s.p * 12 / 100 { stock_bankrupt(s) }
+    }
+    if L.age < 18 { return null }
+    // Órdenes automáticas
+    for id in map_keys(m.orders) {
+        let o = m.orders[id]
+        let p = price(id)
+        if shares(id) <= 0 {
+            map_remove(m.orders, id)
+        } else if p <= o.stop || p >= o.take {
+            let r = mk_sell(id, shares(id))
+            map_remove(m.orders, id)
+            log_add("Orden automática: " + r.txt, "n")
+        }
+    }
+    // Ventas en corto: comisión y llamada de margen
+    for id in map_keys(m.shorts) {
+        let sh = m.shorts[id]
+        L.money -= max(1, sh.coll / 200)
+        let pnl = short_pnl(id)
+        if sh.coll + pnl <= sh.coll / 4 {
+            L.money += sh.coll + pnl
+            mk_realized(pnl)
+            map_remove(m.shorts, id)
+            log_add("Llamada de margen: " + stock_def(id).n + " subió demasiado y el corredor cerró tu apuesta a la baja. Perdiste " + money_str(0 - pnl) + ".", "b")
+        }
+    }
+    // Bonos
+    let keep = []
+    for b in m.bonds {
+        b.left -= 1
+        if b.left <= 0 {
+            let interest = b.amt * b.rate / 10000
+            L.money += b.amt + interest
+            dn().capgain += interest
+            log_add("Vencieron tus bonos: recibiste " + money_str(b.amt + interest) + ".", "g")
+        } else {
+            list_push(keep, b)
+        }
+    }
+    m.bonds = keep
+    // Inversión automática al índice
+    if m.auto > 0 && L.money >= m.auto && L.jail == 0 {
+        L.money -= m.auto
+        m.idx += m.auto * 1000 / idx_level()
+        m.idx_inv += m.auto
+    }
+    // Salida a bolsa en curso
+    if m.ipo != null {
+        m.ipo.left -= 1
+        if m.ipo.left <= 0 {
+            let ipo = m.ipo
+            m.ipo = null
+            let v = ipo.amt * ipo.mult / 100
+            L.money += v
+            mk_realized(v - ipo.amt)
+            let kind = "g"
+            let txt = "Vendiste tus acciones de " + ipo.n + " por " + money_str(v) + "."
+            if v < ipo.amt {
+                kind = "b"
+                txt = txt + " La salida a bolsa fue un fiasco."
+            } else if ipo.mult >= 300 {
+                flag("ipo_win")
+                hito_once("ipo_win", "Vida", "Multiplicaste tu dinero en una salida a bolsa")
+                txt = txt + " ¡La empresa de moda! Multiplicaste tu inversión."
+            }
+            log_add(txt, kind)
+        }
+    }
+    if m.ipo == null && m.ipo_offer == null && chance(3) { m.ipo_offer = make_ipo() }
+    // Columna del experto
+    if has_sub("periodico") { m.expert = expert_column() } else { m.expert = "" }
+    if m.crash_hold >= 0 && L.tm - m.crash_hold >= 12 {
+        if portfolio_value() + idx_value() > 0 { flag("crash_survivor") }
+        m.crash_hold = -1
+    }
+    if mk_positions() >= 8 { flag("diversified") }
+    return null
+}
+
+function mk_set_price(id: string, p: int) {
+    L.mk.p[id] = p
+    let h = L.mk.h[id]
+    if len(h) > 0 { h[len(h) - 1] = p }
+    return null
+}
+
+function stock_bankrupt(s: map) {
+    let m = mx()
+    let had = shares(s.id)
+    let inv = map_get(L.invested, s.id, 0)
+    let msg = "Noticias: " + s.n + " se declaró en quiebra. Renace reestructurada con acciones nuevas."
+    if had > 0 {
+        L.port[s.id] = 0
+        L.invested[s.id] = 0
+        mk_realized(0 - inv)
+        msg = msg + " Tus acciones ya no valen nada: perdiste " + money_str(inv) + "."
+    }
+    let sh = m.shorts[s.id]
+    if sh != null {
+        let pnl = sh.entry * sh.n / 100
+        L.money += sh.coll + pnl
+        mk_realized(pnl)
+        map_remove(m.shorts, s.id)
+        if pnl >= 50000 { flag("short_win") }
+        msg = msg + " ¡Tu apuesta a la baja pagó completa: " + money_str(pnl) + "!"
+    }
+    map_remove(m.orders, s.id)
+    L.mk.p[s.id] = s.p * 40 / 100
+    L.mk.h[s.id] = [s.p * 40 / 100]
+    if L.age >= 14 { log_add(msg, "n") }
+    return null
+}
+
+function make_ipo() {
+    let base = pick(IPO_NAMES)
+    let q = rint(1, 100)
+    let mult = rint(80, 160)
+    if q <= 30 { mult = rint(15, 70) }
+    if q > 70 { mult = rint(170, 300) }
+    if q > 92 { mult = rint(300, 650) }
+    return {"n": base.n, "s": base.s, "mult": mult, "q": q}
+}
+
+function expert_column() {
+    let mk = L.mk
+    let parts = []
+    if mk.econ_m <= 6 {
+        if chance(70) {
+            list_push(parts, "«La economía va a dar un giro en los próximos meses»")
+        }
+    } else if chance(50) {
+        list_push(parts, "«No espero cambios grandes en la economía este semestre»")
+    }
+    let best = ""
+    let mag = 0
+    for id in map_keys(mk.next) {
+        let v = mk.next[id]
+        let a = v
+        if a < 0 { a = 0 - a }
+        if a > mag {
+            mag = a
+            best = id
+        }
+    }
+    if best != "" {
+        let s = stock_def(best)
+        let up = mk.next[best] > 0
+        if !chance(75) { up = !up }
+        if up { list_push(parts, "perspectiva positiva para " + s.s) } else { list_push(parts, "cuidado con " + s.s) }
+    }
+    if len(parts) == 0 { return "" }
+    return "El experto de El Financiero: " + str_join(parts, "; ") + "."
+}
+
+// ---------------------------------------------------------------- eventos
+
+function mk_pending_event() {
+    let m = mx()
+    if m.crash_new {
+        m.crash_new = false
+        if portfolio_value() + idx_value() >= 1000 {
+            open_choice("CRAC BURSÁTIL", "La bolsa se desplomó entre 20% y 40% en un día. Tu portafolio vale " + money_str(portfolio_value() + idx_value()) + " y tu celular no para de vibrar con alertas rojas.",
+                ["Vender todo antes de que baje más", "Aguantar: ya se recuperará", "Comprar barato (20% de tu efectivo al índice)"], ["", "", if_str(L.money < 1000, "Sin efectivo", "")], "mk_crash", {})
+            return true
+        }
+    }
+    if m.ipo_offer != null {
+        let o = m.ipo_offer
+        m.ipo_offer = null
+        if L.money < 5000 { return false }
+        let txt = o.n + " (" + o.s + ") sale a la bolsa la próxima semana. Todos hablan de ella y el precio de salida es un misterio."
+        if fin_pro() || L.mk.tip_m == L.tm {
+            if o.q > 70 { txt = txt + " Los analistas la ven muy sólida." } else if o.q <= 30 { txt = txt + " Los analistas dudan de sus números." } else { txt = txt + " Las opiniones están divididas." }
+        } else {
+            txt = txt + " (Leer el periódico este mes te daría la opinión de los analistas.)"
+        }
+        let locks = ["", "", "", ""]
+        if L.money < 25000 { locks[1] = "Sin fondos" }
+        if L.money < 100000 { locks[2] = "Sin fondos" }
+        open_choice("SALIDA A BOLSA: " + str_upper(o.n), txt, ["Invertir $5,000", "Invertir $25,000", "Invertir $100,000", "Pasar"], locks, "mk_ipo", {"ipo": o})
+        return true
+    }
+    if chance(1) && L.money >= 5000 {
+        let s = pick(STOCKS)
+        let who = pick(TIP_PEOPLE)
+        open_choice("UN TIP «SEGURO»", who + " te jura que " + s.n + " (" + s.s + ") va a subir muchísimo el mes que entra. «Me lo dijo un primo que trabaja ahí.»",
+            ["Comprar $5,000 de " + s.n, "Ignorarlo"], ["", ""], "mk_tip", {"id": s.id})
+        return true
+    }
+    return false
+}
+
+// ---------------------------------------------------------------- menús
+
+function mitem_k(action: string, t: string, s: string, desc: string, lock: string) {
+    return {"action": "mk:" + action, "t": t, "s": s, "desc": desc, "lock": lock}
+}
+
+function mk_invest_items() {
+    let m = mx()
+    let items = []
+    let lock = ""
+    if L.age < 18 { lock = "Edad 18" }
+    list_push(items, dninfo("Ganancias realizadas: " + money_str(m.real), str(m.trades) + " operaciones", "Tu mejor venta: " + money_str(m.best) + ". Lo que ganas al vender se declara en tus impuestos (10%)."))
+    let lvl = idx_level()
+    list_push(items, mitem_k("idx", "Índice VLV: " + str(lvl) + " puntos", "Tienes " + money_str(idx_value()), "Un fondo que compra un poquito de todas las empresas (menos las cripto). Sin comisión y sin sustos grandes. Invertiste " + money_str(m.idx_inv) + ".", lock))
+    let auto = "Apagada"
+    if m.auto > 0 { auto = money_str(m.auto) + " al mes" }
+    list_push(items, mitem_k("auto", "Inversión automática: " + auto, "Al índice", "Cada mes, antes de que te lo gastes, una parte de tu efectivo va al índice.", lock))
+    list_push(items, mitem_k("gold", "Oro: " + money_str(m.gold_p) + " la onza", "Tienes " + money_str(gold_value()), "Refugio en las crisis: sube cuando hay recesión o crac. No paga dividendos.", lock))
+    let bonds = 0
+    for b in m.bonds { bonds += b.amt }
+    list_push(items, mitem_k("bond", "Bonos del gobierno al " + rate_str(bank_rate()), "Tienes " + money_str(bonds), "Le prestas al gobierno un año a la tasa del banco central. Riesgo cero.", lock))
+    for id in map_keys(m.shorts) {
+        let sh = m.shorts[id]
+        let pnl = short_pnl(id)
+        let sign = ""
+        if pnl > 0 { sign = "+" }
+        list_push(items, mitem_k("shortclose:" + id, "A la baja: " + stock_def(id).n, sign + money_str(pnl) + " · cerrar", "Garantía " + money_str(sh.coll) + ". Ganas si el precio baja de " + money_str(sh.entry / 100) + ". Si sube mucho, el corredor la cierra.", ""))
+    }
+    for id in map_keys(m.orders) {
+        let o = m.orders[id]
+        list_push(items, dninfo("Orden: " + stock_def(id).n, "Vende en " + money_str(o.stop / 100) + " o " + money_str(o.take / 100), "Se ejecuta sola al llegar a cualquiera de los dos precios."))
+    }
+    if m.ipo != null { list_push(items, dninfo("Salida a bolsa: " + m.ipo.n, money_str(m.ipo.amt) + " invertidos", "Sabrás cuánto valen en " + str(m.ipo.left) + " " + plural(m.ipo.left, "mes", "meses") + ".")) }
+    return items
+}
+
+function mk_news_items() {
+    let m = mx()
+    let mk = L.mk
+    let items = []
+    let econ = "Normal"
+    if mk.econ == "auge" { econ = "Auge" }
+    if mk.econ == "recesion" { econ = "Recesión" }
+    list_push(items, dninfo("Economía: " + econ, "Banco central: " + rate_str(bank_rate()), "Índice VLV " + str(idx_level()) + " puntos · oro " + money_str(m.gold_p) + " la onza."))
+    if m.crash > 0 { list_push(items, dninfo("Recuperación tras el crac", "La bolsa rebota", "Después de un crac, las acciones suben unos meses.")) }
+    if m.expert != "" {
+        list_push(items, dninfo("Columna del experto", "El Financiero", m.expert))
+    } else {
+        list_push(items, dninfo("El Financiero", "Suscripción en Gastos", "Con la suscripción, cada mes la columna del experto te da una pista del mercado y de la economía."))
+    }
+    let fl = ""
+    if m.forum_m == L.tm { fl = "Este mes ya" }
+    if L.age < 16 { fl = "Edad 16" }
+    list_push(items, mitem_k("forum", "Leer foros de inversión", "Gratis · poco confiable", "Rumores de desconocidos en internet. A veces aciertan.", fl))
+    if m.rumor != "" { list_push(items, dninfo("Rumor del foro", "¿Será cierto?", m.rumor)) }
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function mercado_action(action: string) {
+    G.modal = null
+    fin_init()
+    let m = mx()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    if L.age < 18 && cmd != "forum" { return null }
+    match cmd {
+        "idx" => {
+            let labels = ["Invertir $1,000", "Invertir $10,000", "Invertir $100,000", "Vender todo (" + money_str(idx_value()) + ")", "Volver"]
+            let locks = ["", "", "", "", ""]
+            if L.money < 1000 { locks[0] = "Sin fondos" }
+            if L.money < 10000 { locks[1] = "Sin fondos" }
+            if L.money < 100000 { locks[2] = "Sin fondos" }
+            if m.idx <= 0 { locks[3] = "No tienes" }
+            return open_choice("ÍNDICE VLV", "El índice está en " + str(idx_level()) + " puntos. Tienes " + money_str(idx_value()) + ".", labels, locks, "mk_idx", {})
+        }
+        "auto" => return open_choice("INVERSIÓN AUTOMÁTICA", "¿Cuánto mandas al índice cada mes?", ["Nada", "$500", "$2,000", "$10,000", "Volver"], ["", "", "", "", ""], "mk_auto", {})
+        "gold" => {
+            let labels = ["Comprar $1,000", "Comprar $10,000", "Comprar $100,000", "Vender todo (" + money_str(gold_value()) + ")", "Volver"]
+            let locks = ["", "", "", "", ""]
+            if L.money < 1000 { locks[0] = "Sin fondos" }
+            if L.money < 10000 { locks[1] = "Sin fondos" }
+            if L.money < 100000 { locks[2] = "Sin fondos" }
+            if m.gold <= 0 { locks[3] = "No tienes" }
+            return open_choice("ORO", "La onza está en " + money_str(m.gold_p) + ".", labels, locks, "mk_gold", {})
+        }
+        "bond" => {
+            let locks = ["", "", "", ""]
+            if L.money < 10000 { locks[0] = "Sin fondos" }
+            if L.money < 50000 { locks[1] = "Sin fondos" }
+            if L.money < 200000 { locks[2] = "Sin fondos" }
+            return open_choice("BONOS DEL GOBIERNO", "A un año al " + rate_str(bank_rate()) + ". El gobierno siempre paga (casi siempre).", ["$10,000", "$50,000", "$200,000", "Mejor no"], locks, "mk_bond", {})
+        }
+        "shortclose" => {
+            let sh = m.shorts[arg]
+            if sh == null { return null }
+            let pnl = short_pnl(arg)
+            L.money += sh.coll + pnl
+            mk_realized(pnl)
+            map_remove(m.shorts, arg)
+            if pnl >= 50000 { flag("short_win") }
+            if pnl >= 0 { return finish("Venta en corto", "Cerraste tu apuesta a la baja contra " + stock_def(arg).n + ". Ganaste " + money_str(pnl) + ".", "g") }
+            return finish("Venta en corto", "Cerraste tu apuesta a la baja contra " + stock_def(arg).n + ". Perdiste " + money_str(0 - pnl) + ".", "b")
+        }
+        "forum" => {
+            if m.forum_m == L.tm || L.age < 16 { return null }
+            m.forum_m = L.tm
+            let s = pick(STOCKS)
+            let up = chance(50)
+            let n = L.mk.next[s.id]
+            if n != null && chance(55) { up = n > 0 }
+            let dir = "va a explotar"
+            if !up { dir = "se va a desplomar" }
+            m.rumor = "Un usuario llamado «" + pick(["ToroLoco88", "ManosDeDiamante", "ElOráculo", "LoboSolitario", "TraderDeSofá"]) + "» jura que " + s.n + " " + dir + "."
+            return finish("Foros de inversión", m.rumor + " Otros cien usuarios dicen exactamente lo contrario.", "n")
+        }
+        _ => return null
+    }
+}
+
+// Segundo menú de una acción: venta en corto y órdenes automáticas.
+function mk_open_more(id: string) {
+    let m = mx()
+    let s = stock_def(id)
+    let locks = ["", "", "", "", "", ""]
+    if L.money < 1000 { locks[0] = "Sin fondos" }
+    if L.money < 10000 { locks[1] = "Sin fondos" }
+    if m.shorts[id] == null { locks[2] = "Sin apuesta" }
+    if shares(id) <= 0 { locks[3] = "No tienes acciones" }
+    if m.orders[id] == null { locks[4] = "Sin orden" }
+    if s.s == "Cripto" {
+        locks[0] = "No en cripto"
+        locks[1] = "No en cripto"
+    }
+    open_choice("BOLSA · " + str_upper(s.n), "Vender en corto es apostar a que baja: dejas una garantía y ganas lo que caiga el precio (o pierdes lo que suba). Las órdenes venden solas tus acciones si bajan 20% o suben 50%.",
+        ["Apostar a la baja con $1,000", "Apostar a la baja con $10,000", "Cerrar tu apuesta a la baja", "Poner orden automática", "Quitar la orden", "Volver"], locks, "mk_more", {"id": id})
+    return null
+}
+
+function mercado_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let m = mx()
+    match handler {
+        "mk_idx" => {
+            if index == 3 {
+                let v = idx_value()
+                L.money += v
+                mk_realized(v - m.idx_inv)
+                m.idx = 0
+                m.idx_inv = 0
+                return finish("Índice VLV", "Vendiste tu posición en el índice por " + money_str(v) + ".", "n")
+            }
+            if index > 2 { return null }
+            let amt = [1000, 10000, 100000][index]
+            if L.money < amt { return null }
+            L.money -= amt
+            m.idx += amt * 1000 / idx_level()
+            m.idx_inv += amt
+            hito_once("first_index", "Vida", "Invertiste en un fondo indexado")
+            return finish("Índice VLV", "Invertiste " + money_str(amt) + " en el índice. Aburrido y efectivo.", "g")
+        }
+        "mk_auto" => {
+            if index > 3 { return null }
+            m.auto = [0, 500, 2000, 10000][index]
+            if m.auto == 0 { return finish("Inversión automática", "Apagaste la inversión automática.", "n") }
+            return finish("Inversión automática", "Cada mes mandarás " + money_str(m.auto) + " al índice.", "g")
+        }
+        "mk_gold" => {
+            if index == 3 {
+                let v = gold_value()
+                L.money += v
+                mk_realized(v - m.gold_inv)
+                m.gold = 0
+                m.gold_inv = 0
+                return finish("Oro", "Vendiste tu oro por " + money_str(v) + ".", "n")
+            }
+            if index > 2 { return null }
+            let amt = [1000, 10000, 100000][index]
+            if L.money < amt { return null }
+            L.money -= amt
+            m.gold += amt * 100 / m.gold_p
+            m.gold_inv += amt
+            return finish("Oro", "Compraste " + money_str(amt) + " en oro. Brilla bonito en tu estado de cuenta.", "g")
+        }
+        "mk_bond" => {
+            if index > 2 { return null }
+            let amt = [10000, 50000, 200000][index]
+            if L.money < amt { return null }
+            L.money -= amt
+            list_push(m.bonds, {"amt": amt, "left": 12, "rate": bank_rate()})
+            return finish("Bonos", "Compraste " + money_str(amt) + " en bonos del gobierno al " + rate_str(bank_rate()) + ".", "g")
+        }
+        "mk_more" => {
+            let id = ctx.id
+            if index == 0 || index == 1 {
+                let amt = [1000, 10000][index]
+                if L.money < amt { return null }
+                L.money -= amt
+                let n = amt * 100 / price(id)
+                let sh = m.shorts[id]
+                if sh == null {
+                    m.shorts[id] = {"n": n, "entry": price(id), "coll": amt}
+                } else {
+                    sh.entry = (sh.entry * sh.n + price(id) * n) / max(1, sh.n + n)
+                    sh.n += n
+                    sh.coll += amt
+                }
+                hito_once("first_short", "Vida", "Apostaste a la baja en la bolsa")
+                return finish("Venta en corto", "Apostaste " + money_str(amt) + " a que " + stock_def(id).n + " baja. Si sube mucho, perderás tu garantía.", "n")
+            }
+            if index == 2 { return mercado_action("mk:shortclose:" + id) }
+            if index == 3 {
+                if shares(id) <= 0 { return null }
+                m.orders[id] = {"stop": price(id) * 80 / 100, "take": price(id) * 150 / 100}
+                return finish("Orden automática", "Tus acciones de " + stock_def(id).n + " se venderán solas si bajan a " + money_str(price(id) * 80 / 10000) + " o suben a " + money_str(price(id) * 150 / 10000) + ".", "g")
+            }
+            if index == 4 {
+                map_remove(m.orders, id)
+                return finish("Orden automática", "Quitaste la orden de " + stock_def(id).n + ".", "n")
+            }
+            return open_stock(id)
+        }
+        "mk_crash" => {
+            if index == 0 {
+                let total = 0
+                for s in STOCKS {
+                    if shares(s.id) > 0 { total += mk_sell(s.id, shares(s.id)).pl }
+                }
+                if m.idx > 0 {
+                    let v = idx_value()
+                    L.money += v
+                    mk_realized(v - m.idx_inv)
+                    total += v - m.idx_inv
+                    m.idx = 0
+                    m.idx_inv = 0
+                }
+                L.happy -= 5
+                return finish("Crac bursátil", "Vendiste todo en pánico. Resultado: " + money_str(total) + ". Al menos ya no ves la pantalla roja.", "b")
+            }
+            m.crash_hold = L.tm
+            if index == 2 {
+                let amt = max(1000, L.money / 5)
+                if L.money >= amt {
+                    L.money -= amt
+                    m.idx += amt * 1000 / idx_level()
+                    m.idx_inv += amt
+                }
+                gain("guts", 3)
+                return finish("Crac bursátil", "«Cuando hay sangre en las calles, compra.» Metiste " + money_str(amt) + " al índice en el peor día del año.", "g")
+            }
+            gain("guts", 1)
+            return finish("Crac bursátil", "Apagaste el celular y te fuiste a caminar. Mañana será otro día.", "n")
+        }
+        "mk_ipo" => {
+            if index > 2 { return finish("Salida a bolsa", "La dejaste pasar.", "n") }
+            let amt = [5000, 25000, 100000][index]
+            if L.money < amt { return null }
+            L.money -= amt
+            let o = ctx.ipo
+            m.ipo = {"n": o.n, "amt": amt, "left": rint(3, 6), "mult": o.mult}
+            hito_once("first_ipo", "Vida", "Invertiste en una salida a bolsa")
+            return finish("Salida a bolsa", "Compraste " + money_str(amt) + " de " + o.n + " el día de su salida. En unos meses sabrás si fue genial o un desastre.", "n")
+        }
+        "mk_tip" => {
+            if index != 0 || L.money < 5000 { return finish("Tip seguro", "Le diste el avión. Sabia decisión... o no.", "n") }
+            let id = ctx.id
+            L.money -= 5000
+            let n = 5000 * 100 / price(id)
+            L.port[id] = shares(id) + n
+            L.invested[id] = map_get(L.invested, id, 0) + 5000
+            return finish("Tip seguro", "Compraste $5,000 de " + stock_def(id).n + ". El mes que entra sabrás si tu fuente era confiable.", "n")
+        }
+        _ => return null
+    }
+}
+
+// ---------------------------------------------------------------- efectos
+
+function mk_fx(out: list) {
+    if L.mx == null { return null }
+    let m = L.mx
+    if m.real >= 1000000 { list_push(out, fx("lobo", "Lobo de la bolsa", true, "Ganaste un millón en el mercado y se nota en cómo hablas.", {"hire": 3, "flirt": 2})) }
+    if m.crash > 0 && portfolio_value() + idx_value() > 10000 { list_push(out, fx("crac", "Pánico bursátil", false, "Revisas la bolsa cada diez minutos.", {"hap": -1})) }
+    return null
+}

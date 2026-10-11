@@ -226,7 +226,32 @@ const MISSIONS = [
     {"id": "mg_master", "t": "Maestro de los minijuegos", "d": "Saca 70 o más en 12 minijuegos distintos.", "r": "+$10,000", "reward": {"money": 10000}},
     {"id": "reflex_fast", "t": "Reflejos felinos", "d": "Saca 95 o más en Reflejos.", "r": "Destreza", "reward": {"skill": 4}},
     {"id": "simon_master", "t": "Memoria fotográfica", "d": "Saca 100 en Secuencia.", "r": "Conocimiento", "reward": {"know": 4}},
-    {"id": "spell_master", "t": "Ortografía perfecta", "d": "Saca 100 en Ortografía.", "r": "Conocimiento", "reward": {"know": 4}}
+    {"id": "spell_master", "t": "Ortografía perfecta", "d": "Saca 100 en Ortografía.", "r": "Conocimiento", "reward": {"know": 4}},
+    // Dinero
+    {"id": "emerg_fund", "t": "Colchón", "d": "Junta en tu ahorro seis meses de gastos.", "r": "Felicidad", "reward": {"happy": 6}},
+    {"id": "credit_850", "t": "Crédito perfecto", "d": "Llega a 850 de historial crediticio.", "r": "+$5,000", "reward": {"money": 5000}},
+    {"id": "card_black", "t": "Tarjeta negra", "d": "Consigue la tarjeta de crédito negra.", "r": "Encanto", "reward": {"charm": 5}},
+    {"id": "afore_million", "t": "Retiro de lujo", "d": "Junta $1,000,000 en tu fondo de retiro.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "refund", "t": "Saldo a favor", "d": "Consigue que Hacienda te devuelva dinero.", "r": "+$2,000", "reward": {"money": 2000}},
+    {"id": "philanthropist", "t": "Filántropo", "d": "Dona $1,000,000 a lo largo de tu vida.", "r": "Amabilidad", "reward": {"kind": 10}},
+    {"id": "couple_goals", "t": "Equipo financiero", "d": "Cumple 2 metas de ahorro con tu pareja.", "r": "Felicidad", "reward": {"happy": 8}},
+    {"id": "wolf", "t": "Lobo de la bolsa", "d": "Gana $1,000,000 en la bolsa (ganancias al vender).", "r": "Encanto", "reward": {"charm": 6}},
+    {"id": "short_win", "t": "Contra la corriente", "d": "Gana $50,000 en una venta en corto.", "r": "Conocimiento", "reward": {"know": 5}},
+    {"id": "diversified", "t": "Portafolio diversificado", "d": "Ten 8 inversiones distintas a la vez.", "r": "Conocimiento", "reward": {"know": 4}},
+    {"id": "crash_survivor", "t": "Manos de diamante", "d": "Aguanta un crac bursátil un año sin vender.", "r": "Valor", "reward": {"guts": 6}},
+    {"id": "ipo_win", "t": "Ojo para las joyas", "d": "Triplica tu dinero en una salida a bolsa.", "r": "+$10,000", "reward": {"money": 10000}},
+    {"id": "paper_ace", "t": "Lector del Financiero", "d": "Saca 90 o más en el periódico 5 veces.", "r": "Conocimiento", "reward": {"know": 4}},
+    {"id": "vip_gold", "t": "Cliente distinguido", "d": "Consigue la tarjeta Oro del casino.", "r": "Felicidad", "reward": {"happy": 4}},
+    {"id": "royal_flush", "t": "Escalera real", "d": "Saca una escalera real en el video póker.", "r": "+$20,000", "reward": {"money": 20000}},
+    {"id": "card_counter", "t": "Contador de cartas", "d": "Gana $50,000 contando cartas en el blackjack.", "r": "Conocimiento", "reward": {"know": 5}},
+    {"id": "longshot", "t": "Contra todo pronóstico", "d": "Gana una carrera con el caballo de momio 11 a 1.", "r": "Felicidad", "reward": {"happy": 6}},
+    {"id": "sober", "t": "Un día a la vez", "d": "Pasa un año en Jugadores Anónimos después de caer en la ludopatía.", "r": "Salud", "reward": {"health": 8}},
+    {"id": "garage", "t": "Cochera llena", "d": "Ten 5 vehículos al mismo tiempo.", "r": "Encanto", "reward": {"charm": 4}},
+    {"id": "jet_set", "t": "Jet set", "d": "Llega al estatus Jet set.", "r": "Encanto", "reward": {"charm": 6}},
+    {"id": "landlord", "t": "Casero", "d": "Renta 3 propiedades a la vez.", "r": "+$10,000", "reward": {"money": 10000}},
+    {"id": "art_collector", "t": "Coleccionista de arte", "d": "Ten una colección de arte, joyas, vinos y piezas que valga $1,000,000.", "r": "Conocimiento", "reward": {"know": 5}},
+    {"id": "staff5", "t": "Casa con personal", "d": "Ten 5 empleados domésticos.", "r": "Felicidad", "reward": {"happy": 6}},
+    {"id": "island", "t": "Tu propio paraíso", "d": "Compra una isla privada.", "r": "Felicidad", "reward": {"happy": 15}}
 ]
 
 const MISSION_CAT_ORDER = ["Estudios", "Trabajo", "Amor y familia", "Dinero", "Vida"]
@@ -243,7 +268,12 @@ const MISSION_CATS = {
     "wed": "Amor y familia", "family": "Amor y familia", "heart": "Amor y familia", "trio": "Amor y familia", "kink": "Amor y familia",
     "confidant": "Amor y familia", "livein": "Amor y familia", "open": "Amor y familia", "grandpa": "Amor y familia", "goodparent": "Amor y familia",
     "dynasty": "Amor y familia", "first_love": "Amor y familia", "childhood_love": "Amor y familia", "golden": "Amor y familia", "prenup": "Amor y familia",
-    "million": "Dinero", "assets": "Dinero", "investor": "Dinero", "homeowner": "Dinero", "debtfree": "Dinero", "jackpot": "Dinero"
+    "million": "Dinero", "assets": "Dinero", "investor": "Dinero", "homeowner": "Dinero", "debtfree": "Dinero", "jackpot": "Dinero",
+    "emerg_fund": "Dinero", "credit_850": "Dinero", "card_black": "Dinero", "afore_million": "Dinero", "refund": "Dinero",
+    "philanthropist": "Dinero", "couple_goals": "Amor y familia", "wolf": "Dinero", "short_win": "Dinero", "diversified": "Dinero",
+    "crash_survivor": "Dinero", "ipo_win": "Dinero", "paper_ace": "Dinero", "vip_gold": "Dinero", "royal_flush": "Dinero",
+    "card_counter": "Dinero", "longshot": "Dinero", "garage": "Dinero", "jet_set": "Dinero", "landlord": "Dinero",
+    "art_collector": "Dinero", "staff5": "Dinero", "island": "Dinero"
 }
 
 function flag(name: string) {

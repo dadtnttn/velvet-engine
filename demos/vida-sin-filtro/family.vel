@@ -667,10 +667,9 @@ function resolve_retire(index: int) {
 // ---------------------------------------------------------------- muerte, funeral y herencia
 
 function estate_value() {
-    let total = L.money - L.debt
-    for a in ASSETS {
-        if list_contains(L.assets, a.t) { total += a.cost / 2 }
-    }
+    let total = net_worth()
+    // El seguro de vida va directo a los herederos.
+    if L.lx != null { total += L.lx.life_cov }
     return max(0, total)
 }
 

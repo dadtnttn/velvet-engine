@@ -223,27 +223,56 @@ binarias en el juego.
   Si descuidas a alguien la relación se enfría, y tu pareja toma la iniciativa:
   te reclama si la ignoras, te propone vivir juntos, casarse, tener un bebé o
   irse de viaje. Con un amigo puedes nombrarlo tu mejor amigo.
-- **Finanzas** (`finance.vel`, clic en tu dinero): resumen de ingresos y gastos,
-  patrimonio neto e historial crediticio; estilo de vida (austero, normal o
-  lujoso) y vivienda (con tus padres, rentando o casa propia), que cambian tus
-  gastos de cada mes. El sueldo descuenta 30% de impuestos y la vida cuesta.
-  - **Banco**: ahorro con interés, préstamos personales a 24 meses con tasa
-    según tu crédito, abonos, cobradores y embargos si te hundes en deudas.
-  - **Bienes**: casas con hipoteca a 20 años o de contado (valen lo que diga el
-    mercado inmobiliario) y venta de lo que tengas.
-  - **Bolsa de valores**: 9 empresas de distintos sectores (tecnología, energía,
-    banca, salud, entretenimiento, alimentos, autos, bienes raíces y una cripto
-    muy volátil), con dividendos, ciclos de auge y recesión, y titulares cada mes.
-  - **El periódico** (minijuego): marca las palabras clave de las noticias de
-    negocios; si aciertas, sabrás qué empresa subirá o bajará el próximo mes.
-  - **Casino**: ruleta (color o número), tragamonedas con premio mayor y
-    blackjack. Jugar mucho trae ludopatía.
-  - **Impuestos**: declaración anual con contador, haciéndola tú (minijuego) o
-    evadiendo (auditorías, multas y hasta cárcel).
-  - **En pareja**: tu pareja tiene su propio trabajo y sueldo; viviendo juntos
-    aporta 25% y casados 40%, y comparten los gastos. Antes de la boda puedes
-    proponer un contrato prematrimonial (puede ofenderse); sin él, el divorcio
-    te cuesta la mitad, a veces la casa, y con hijos pagas pensión alimenticia.
+- **Finanzas** (`finance.vel`, `dinero.vel`, clic en tu dinero): 11 pestañas
+  (resumen, gastos, banco, crédito, bolsa, inversiones, noticias, casino, bienes,
+  impuestos y pareja) con patrimonio neto e historial crediticio.
+  - **Gastos**: estilo de vida en cinco niveles (austero, normal, cómodo, lujoso
+    y magnate), vivienda (con tus padres, rentando o casa propia), servicios,
+    9 suscripciones (streaming, comida saludable, herramientas de trabajo, El
+    Financiero, club de vinos...) y transporte (a pie, bici, transporte público,
+    apps, tu vehículo o chofer). 15 imprevistos (muela del juicio, refri,
+    choque, multa, operación de un padre...) que pagas en efectivo, con tu
+    ahorro, con la tarjeta o dejas pasar; tener seis meses de gastos ahorrados
+    es tu fondo de emergencia.
+  - **Banco**: ahorro y plazo fijo a la tasa del banco central (sube en el auge
+    y baja en la recesión), fondo de retiro con aportación de la empresa (a los
+    65 se cobra o se vuelve pensión) y préstamos personales.
+  - **Crédito**: buró con lo que te afecta, tarjeta de crédito en cuatro niveles
+    (clásica, oro, platino y negra) con reembolso, anualidad, pago total o
+    mínimo, intereses, meses sin intereses y bloqueo; prestamista exprés sin
+    buró (cobra a su manera), consolidar deudas, refinanciar la hipoteca,
+    embargo de la casa y bancarrota.
+  - **Bienes**: casas con hipoteca a 10, 20 o 30 años o de contado (valen lo que
+    diga el mercado inmobiliario).
+  - **Bolsa de valores** (`mercado.vel`): 16 empresas de 15 sectores (dos cripto
+    muy volátiles) con dividendos, ciclos de auge y recesión, cracs con
+    recuperación, quiebras y salidas a bolsa. Además: índice VLV, inversión
+    automática cada mes, oro, bonos del gobierno, venta en corto con llamada de
+    margen y órdenes automáticas. Las ganancias se declaran.
+  - **Noticias y el periódico** (minijuego): marca las palabras clave de las
+    noticias de negocios para saber qué empresa se moverá; la columna del
+    experto de El Financiero (suscripción), rumores de foros y tips «seguros»
+    de conocidos.
+  - **Casino** (`casino.vel`): ruleta (color, docena, tu número o el cero),
+    blackjack con zapato de seis barajas (pedir, plantarse, doblar, dividir,
+    rendirse y seguro; si eres listo puedes contar cartas y te pueden vetar),
+    tragamonedas con pozo acumulado, video póker, bacará, dados, hipódromo y
+    rasca y gana. Tarjeta de jugador de bronce a ballena (límite de mesa,
+    reembolso, cortesías y crédito del casino). Jugar mucho trae ludopatía:
+    ganas de apostar, autoexclusión y Jugadores Anónimos.
+  - **Impuestos**: tasas por nivel de ingreso (0% a 15%), ganancias de bolsa,
+    rentas y premios; deducciones (retiro, donativos, intereses de la hipoteca)
+    y saldo a favor. Contador, app, hacerla tú (minijuego), evadir (auditorías
+    con abogado o soborno) o un paraíso fiscal (que se puede filtrar). Predial y
+    tenencia cada año, y donativos.
+  - **En pareja**: tu pareja tiene su propio trabajo y su sueldo cambia (aumentos,
+    ascensos, despidos). Cuatro acuerdos: cuentas separadas, cuenta mancomunada,
+    tú mantienes la casa o te mantiene; metas de ahorro juntos (viaje, renovar
+    votos, fondo de emergencia, enganche, fondo universitario), la plática de
+    dinero y 8 eventos (deudas ocultas, compras impulsivas, herencias, quiere
+    emprender...). Antes de la boda puedes proponer un contrato prematrimonial;
+    sin él, el divorcio te cuesta la mitad del dinero, el retiro y las
+    acciones, a veces la casa, y con hijos pagas pensión alimenticia.
   - **Carrera de Economía y Finanzas** y 9 profesiones nuevas (analista,
     trader, banquero de inversión, asesor, actuario, auditor, gestor de fondos,
     crupier y prestamista). Los financieros no pagan comisión, consiguen
@@ -431,7 +460,16 @@ binarias en el juego.
     Kenia, Islandia, Las Vegas, Dubái, Antártida o mochilear por Europa; solo o
     con tu pareja.
   - Lujos: spa, restaurante gourmet, paracaidismo, concierto VIP, rentar un
-    yate, lotería y bienes como motos, autos, departamento, mansión o yate.
+    yate, lotería y la **tienda de lujo** (`lujos.vel`): 45 bienes en cinco
+    categorías (vehículos del scooter al jet privado, propiedades de la cabaña a
+    la isla privada, joyas y moda, colección y arte, tecnología) de contado, a
+    meses sin intereses o financiados, con 25% de descuento en el Buen Fin.
+    Su valor cambia cada año (los autos se deprecian; el arte, los relojes y
+    los vinos pueden subir); se venden o se subastan, pagan mantenimiento y las
+    casas se pueden rentar. Personal (chef, chofer, niñera, mayordomo,
+    guardaespaldas...), seguros de auto, hogar y vida, estatus social de común
+    a élite, compras compulsivas y eventos (robos, galas, falsificaciones,
+    extorsiones, paparazzi).
 - **Noche +18 por categorías**: Fiesta, Ligue, Placer (sex shop, love hotel,
   club swinger, fiesta de disfraces, spa nudista, crucero para adultos, pole
   dance, burlesque, playa nudista), Carreras, Vicios y Crimen. Encuentros con o
@@ -471,7 +509,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 88 objetivos con recompensa en 5 categorías (estudios, trabajo,
+- **Misiones**: 112 objetivos con recompensa en 5 categorías (estudios, trabajo,
   amor, dinero y vida): graduarte, medallas, ser popular, dominar los
   minijuegos, sobrevivir a un despido, casarte, primer millón, vivir 100 años...
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
@@ -504,7 +542,11 @@ binarias en el juego.
 | `sweethearts.vel` | Amistades de la infancia, noviazgo adolescente romántico e historia de cada pareja |
 | `milestones.vel` | Hitos personales y su pantalla por categorías |
 | `bonds.vel` | Aficiones, lenguaje del amor, compatibilidad, estado, descuido, iniciativas de la pareja y mejor amigo |
-| `finance.vel` | Gastos, banco, crédito, préstamos, casas, bolsa, periódico, casino, impuestos y dinero en pareja |
+| `finance.vel` | Resumen, banco, préstamos, casas, bolsa, periódico y dinero en pareja |
+| `dinero.vel` | Gastos, imprevistos, tarjeta, plazo fijo, retiro, prestamista, bancarrota, impuestos y acuerdos en pareja |
+| `mercado.vel` | Índice, oro, bonos, venta en corto, órdenes, cracs, quiebras y salidas a bolsa |
+| `casino.vel` | Ruleta, blackjack, tragamonedas, video póker, bacará, dados, hipódromo, VIP y ludopatía |
+| `lujos.vel` | Tienda de lujo, valor de los bienes, rentas, personal, seguros y estatus |
 | `routes.vel` | Rutas, etapas y menús; creador de contenido, escort, estrella +18 y VelvetFans |
 | `realm.vel` | Gobierno del reino y de la presidencia: indicadores, decretos, leyes, crisis y elecciones |
 | `space.vel` | Ruta del filántropo: mina, empresas, filantropía y programa espacial |

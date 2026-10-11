@@ -1,0 +1,1050 @@
+// @edition 3
+// Casino: los juegos, la tarjeta VIP y la ludopatía.
+// - Ruleta (color, docena, tu número de la suerte o el cero), blackjack con zapato
+//   de seis barajas (pedir, plantarse, doblar, dividir, rendirse y seguro; puedes
+//   contar cartas si eres listo, y te pueden vetar), tragamonedas con pozo
+//   acumulado, video póker, bacará, dados, carreras de caballos y rasca y gana.
+// - Tarjeta de jugador según lo apostado (bronce a ballena): límite de mesa,
+//   reembolso de pérdidas, cortesías y crédito del casino (marcadores).
+// - Ludopatía: ganas de apostar, autoexclusión y Jugadores Anónimos.
+// - Las ganancias grandes se declaran en tus impuestos.
+// Acciones con el prefijo "cs:" y elecciones "cs_".
+
+const CS_VIP = [
+    {"n": "Sin tarjeta", "w": 0, "cb": 0, "lim": 10000},
+    {"n": "Bronce", "w": 5000, "cb": 0, "lim": 10000},
+    {"n": "Plata", "w": 50000, "cb": 1, "lim": 25000},
+    {"n": "Oro", "w": 250000, "cb": 2, "lim": 100000},
+    {"n": "Diamante", "w": 1000000, "cb": 3, "lim": 500000},
+    {"n": "Ballena", "w": 5000000, "cb": 5, "lim": 0}
+]
+
+const CS_GAMES = [
+    {"id": "roulette", "n": "Ruleta", "s": "Color, docena o número", "d": "La bolita gira: rojo o negro pagan 1 a 1, una docena 2 a 1 y un número 35 a 1."},
+    {"id": "bj", "n": "Blackjack", "s": "Llega a 21", "d": "Seis barajas en el zapato. Pide, plántate, dobla, divide o ríndete. Un blackjack paga 3 a 2."},
+    {"id": "slots", "n": "Tragamonedas", "s": "Pozo acumulado", "d": "Luces, ruido y una palanca. Cada apuesta hace crecer el pozo mayor."},
+    {"id": "vp", "n": "Video póker", "s": "Jacks or Better", "d": "Cinco cartas, cambias las que quieras una vez. Par de J o más recupera tu apuesta; una escalera real paga 800 a 1."},
+    {"id": "bac", "n": "Bacará", "s": "Jugador, banca o empate", "d": "El juego de los millonarios: gana la mano más cercana a 9."},
+    {"id": "dice", "n": "Dados", "s": "Línea de pase", "d": "Tiras dos dados: 7 u 11 ganas, 2, 3 o 12 pierdes; cualquier otro número es tu punto."},
+    {"id": "horse", "n": "Hipódromo", "s": "Carreras de caballos", "d": "Cinco caballos, cinco momios. El favorito casi siempre llega... casi."},
+    {"id": "scratch", "n": "Rasca y gana", "s": "$20 o $100", "d": "Rascas con una moneda y rezas. Premio mayor: 2,000 veces el boleto."}
+]
+
+const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
+const SUIT_NAMES = ["picas", "corazones", "diamantes", "tréboles"]
+const HORSE_NAMES = ["Relámpago", "Tequila Sunrise", "Pegaso Feliz", "Mi Ex", "Viento Norte", "La Jefa", "Sin Prisa", "Último Pago", "Canelo", "Doña Suerte", "Trueno Azul", "Plan B"]
+const HORSE_ODDS = [1, 2, 4, 7, 11]
+const HORSE_W = [42, 28, 17, 10, 7]
+
+const VP_HANDS = {
+    "royal": {"n": "Escalera real", "pay": 800}, "sf": {"n": "Escalera de color", "pay": 50}, "quads": {"n": "Póker", "pay": 25},
+    "full": {"n": "Full", "pay": 9}, "flush": {"n": "Color", "pay": 6}, "straight": {"n": "Escalera", "pay": 4},
+    "trips": {"n": "Tercia", "pay": 3}, "two": {"n": "Dos pares", "pay": 2}, "jacks": {"n": "Par de J o más", "pay": 1}, "none": {"n": "Nada", "pay": 0}
+}
+
+const CS_EVENTS = [
+    {
+        "id": "ce_whale", "title": "La mesa del millonario", "w": 6,
+        "text": "Un señor con anillos en todos los dedos te invita a su mesa VIP. «Juega con mis fichas, me traes suerte.»",
+        "choices": [
+            {"t": "Aceptar", "o": [
+                {"w": 50, "log": "Ganaste tres manos seguidas y te dio tu parte: {monto}.", "money": [5000, 20000], "happy": 8},
+                {"w": 50, "log": "Perdió todo, pero te invitó champaña toda la noche.", "happy": 5, "alcohol": 2}
+            ]},
+            {"t": "Rechazar con educación", "o": [{"w": 100, "log": "Le deseaste suerte y seguiste en lo tuyo.", "happy": 1}]}
+        ]
+    },
+    {
+        "id": "ce_borrow", "title": "El que perdió todo", "w": 6,
+        "text": "Un hombre con la corbata desanudada te pide $500 para el taxi: perdió hasta el reloj.",
+        "choices": [
+            {"t": "Darle el dinero", "cost": 500, "o": [{"w": 100, "log": "Te dio las gracias con los ojos llorosos. Ojalá llegue a su casa.", "money": -500, "karma": 3, "kind": 2}]},
+            {"t": "Llevarlo a la salida y pedirle un taxi", "o": [{"w": 100, "log": "Le pagaste el taxi tú mismo y te aseguraste de que se fuera.", "money": -150, "karma": 4}]},
+            {"t": "Ignorarlo", "o": [{"w": 100, "log": "Lo viste vender su celular en la mesa de junto.", "karma": -1}]}
+        ]
+    },
+    {
+        "id": "ce_comp", "title": "La casa invita", "w": 7,
+        "text": "Un empleado del casino te entrega una tarjeta dorada: cena y show gratis «por ser cliente distinguido».",
+        "choices": [
+            {"t": "Ir a la cena y al show", "o": [{"w": 100, "log": "Langosta, un mago y un asiento en primera fila. La casa sabe consentir.", "happy": 8}]},
+            {"t": "Cambiarla por fichas", "o": [{"w": 100, "log": "Te dieron fichas por {monto}. La casa siempre recupera lo que regala.", "money": [500, 2000]}]}
+        ]
+    },
+    {
+        "id": "ce_streak", "title": "La racha", "w": 6,
+        "text": "Llevas una racha increíble. La gente se junta alrededor de tu mesa y alguien grita «¡todo al rojo!».",
+        "choices": [
+            {"t": "Apostar todo lo ganado al rojo", "o": [
+                {"w": 47, "log": "¡ROJO! La mesa explotó en gritos. Ganaste {monto}.", "money": [5000, 15000], "happy": 12, "guts": 3},
+                {"w": 53, "log": "Negro. Silencio. Te fuiste a casa caminando.", "money": [-15000, -5000], "happy": -10}
+            ]},
+            {"t": "Retirarte con lo ganado", "o": [{"w": 100, "log": "Cambiaste tus fichas y te fuiste con una sonrisa. Pocos lo logran.", "money": 3000, "guts": 2, "happy": 4}]}
+        ]
+    },
+    {
+        "id": "ce_celeb", "title": "Una celebridad en tu mesa", "w": 4,
+        "text": "Un actor famoso se sienta en tu mesa de blackjack, de incógnito con gorra y lentes oscuros.",
+        "choices": [
+            {"t": "Platicar como si nada", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "Platicaron toda la noche. Te dio su número «por si vas a Los Ángeles».", "charm": 3, "happy": 8, "fame": 1}]},
+            {"t": "Pedirle una selfie", "o": [{"w": 100, "log": "Seguridad te sacó de la mesa. La selfie salió borrosa.", "happy": -2}]},
+            {"t": "Respetar su privacidad", "o": [{"w": 100, "log": "Antes de irse, te dejó una ficha de $1,000 «por no hacer escándalo».", "money": 1000, "karma": 2}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- estado
+
+function cs() {
+    if L.cs == null {
+        L.cs = {
+            "wag": 0, "won": 0, "lost": 0, "best": 0, "pot": 50000, "shoe": [], "rc": 0, "counting": false, "banned": 0,
+            "excl": 0, "ja": false, "ja_m": 0, "addict": false, "marker": null, "m_wag": 0, "m_net": 0, "count_win": 0,
+            "hot": 0, "ev": "", "jackpots": 0
+        }
+    }
+    return L.cs
+}
+
+function vip_level() {
+    let c = cs()
+    let lvl = 0
+    let i = 0
+    while i < len(CS_VIP) {
+        if c.wag >= CS_VIP[i].w { lvl = i }
+        i += 1
+    }
+    return lvl
+}
+
+function cs_limit() {
+    return CS_VIP[vip_level()].lim
+}
+
+function cs_lucky() {
+    return (L.bmonth * 7 + len(L.first) * 3) % 36 + 1
+}
+
+function can_count() {
+    return L.smarts >= 60 || rank("know") >= 3
+}
+
+function cs_lock() {
+    if L.age < 18 { return "Edad 18" }
+    let c = cs()
+    if c.excl > 0 { return "Autoexclusión" }
+    if c.banned > 0 { return "Te vetaron" }
+    if L.jail > 0 { return "En prisión" }
+    return ""
+}
+
+// ---------------------------------------------------------------- menú
+
+function citem(action: string, t: string, s: string, desc: string, lock: string) {
+    return {"action": "cs:" + action, "t": t, "s": s, "desc": desc, "lock": lock}
+}
+
+function cs_items() {
+    let items = []
+    if L.age < 18 {
+        list_push(items, dninfo("Solo mayores de edad", "", "En la entrada piden identificación."))
+        return items
+    }
+    let c = cs()
+    let v = CS_VIP[vip_level()]
+    let lim = "sin límite"
+    if v.lim > 0 { lim = "hasta " + money_str(v.lim) + " por apuesta" }
+    let net = c.won - c.lost
+    let sign = ""
+    if net > 0 { sign = "+" }
+    list_push(items, dninfo("Tarjeta de jugador: " + v.n, "Apostado " + money_str(c.wag), "Balance de tu vida en el casino: " + sign + money_str(net) + ". Mesa " + lim + ". Reembolso de pérdidas: " + str(v.cb) + "% al mes. Mejor premio: " + money_str(c.best) + "."))
+    let lock = cs_lock()
+    if c.excl > 0 { list_push(items, dninfo("Autoexclusión", str(c.excl) + " " + plural(c.excl, "mes", "meses"), "Pediste que no te dejen entrar. La puerta está cerrada para ti, por tu bien.")) }
+    if c.banned > 0 { list_push(items, dninfo("Vetad" + oa(L.gender) + " del casino", str(c.banned) + " " + plural(c.banned, "mes", "meses"), "Te descubrieron contando cartas. Tu foto está en la caseta de seguridad.")) }
+    for g in CS_GAMES {
+        let l = lock
+        if l == "" && L.money < 100 && g.id != "scratch" { l = "$100" }
+        if l == "" && L.money < 20 { l = "$20" }
+        let s = g.s
+        if g.id == "slots" { s = "Pozo: " + money_str(c.pot) }
+        list_push(items, citem("game:" + g.id, g.n, s, g.d, l))
+    }
+    if can_count() || c.counting {
+        let t = "Contar cartas en el blackjack"
+        if c.counting { t = "Dejar de contar cartas" }
+        list_push(items, citem("count", t, "Ventaja · riesgo de veto", "Llevas la cuenta de las cartas altas que quedan en el zapato. Cuando la cuenta está alta, tienes ventaja sobre la casa. Si ganas demasiado, el casino lo nota.", lock))
+    }
+    if c.marker == null {
+        let l = lock
+        if l == "" && vip_level() < 2 { l = "Tarjeta Plata" }
+        if l == "" && dn_bk_lock() { l = "Bancarrota" }
+        list_push(items, citem("marker", "Pedir crédito al casino", "Marcador a 3 meses", "Los clientes VIP firman un marcador y reciben fichas al instante. Se cobra en tres meses, quieras o no.", l))
+    } else {
+        list_push(items, citem("markerpay", "Pagar tu marcador", money_str(c.marker.bal), "Vence en " + str(c.marker.left) + " " + plural(c.marker.left, "mes", "meses") + ". Si no pagas, te demandan y te vetan.", if_str(L.money <= 0, "Sin fondos", "")))
+    }
+    if L.gamble >= 15 { list_push(items, dninfo("Cuidado: ludopatía", "Juegas demasiado", "El casino te está consumiendo. Autoexcluirte o ir a Jugadores Anónimos ayuda.")) }
+    if c.excl == 0 { list_push(items, citem("excl", "Autoexcluirte un año", "No podrás entrar", "Pides al casino que no te deje jugar durante 12 meses. Las ganas bajan más rápido.", "")) }
+    let ja = "Ir a Jugadores Anónimos"
+    if c.ja { ja = "Dejar Jugadores Anónimos" }
+    list_push(items, citem("ja", ja, "Gratis · cada semana", "Un grupo de apoyo con café malo y gente que te entiende. Cada mes reduce la ludopatía. Llevas " + str(c.ja_m) + " " + plural(c.ja_m, "mes", "meses") + ".", ""))
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function casino_action(action: string) {
+    G.modal = null
+    fin_init()
+    let c = cs()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    match cmd {
+        "game" => {
+            if cs_lock() != "" { return info("Casino", cs_lock() + ".") }
+            return cs_open_game(arg)
+        }
+        "count" => {
+            if !can_count() && !c.counting { return null }
+            c.counting = !c.counting
+            if c.counting { return finish("Casino", "Desde ahora llevas la cuenta en el blackjack: +1 por cada carta baja, −1 por cada alta. Que no se te note.", "n") }
+            return finish("Casino", "Dejaste de contar cartas. Ahora juegas como todos.", "n")
+        }
+        "marker" => {
+            if cs_lock() != "" || c.marker != null || vip_level() < 2 { return null }
+            let cap = [10000, 10000, 50000, 200000, 1000000, 5000000][vip_level()]
+            let amounts = [cap / 10, cap / 2, cap]
+            return open_choice("MARCADOR", "El anfitrión VIP te ofrece crédito. Se cobra en tres meses.", [money_str(amounts[0]), money_str(amounts[1]), money_str(amounts[2]), "Mejor no"], ["", "", "", ""], "cs_marker", {"amounts": amounts})
+        }
+        "markerpay" => {
+            let mk = c.marker
+            if mk == null { return null }
+            let paid = min(mk.bal, max(0, L.money))
+            L.money -= paid
+            mk.bal -= paid
+            if mk.bal <= 0 {
+                c.marker = null
+                return finish("Casino", "Pagaste tu marcador. El anfitrión VIP te sonríe de nuevo.", "g")
+            }
+            return finish("Casino", "Abonaste " + money_str(paid) + " a tu marcador.", "n")
+        }
+        "excl" => {
+            if c.excl > 0 { return null }
+            c.excl = 12
+            c.counting = false
+            hito_once("self_excl", "Salud", "Te autoexcluiste del casino")
+            return finish("Autoexclusión", "Firmaste la autoexclusión: durante un año no te dejarán entrar. Tu cartera respira.", "g")
+        }
+        "ja" => {
+            c.ja = !c.ja
+            if c.ja { return finish("Jugadores Anónimos", "«Hola, me llamo " + L.first + " y soy jugador" + by_gender(L.gender, "", "a") + ".» Todos te aplaudieron.", "g") }
+            return finish("Jugadores Anónimos", "Dejaste de ir a las juntas.", "n")
+        }
+        _ => return null
+    }
+}
+
+function cs_open_game(id: string) {
+    match id {
+        "roulette" => {
+            let n = cs_lucky()
+            return open_choice("RULETA", "¿A qué le apuestas?", ["Rojo · paga 1 a 1", "Negro · paga 1 a 1", "Primera docena (1-12) · paga 2 a 1", "Tu número de la suerte (" + str(n) + ") · paga 35 a 1", "El cero verde · paga 35 a 1", "Volver"], ["", "", "", "", "", ""], "cs_roul", {})
+        }
+        "bac" => return open_choice("BACARÁ", "¿A quién le apuestas?", ["Al jugador · paga 1 a 1", "A la banca · paga 0.95 a 1", "Al empate · paga 8 a 1", "Volver"], ["", "", "", ""], "cs_bac", {})
+        "horse" => {
+            let names = list_slice(HORSE_NAMES, 0, len(HORSE_NAMES))
+            shuffle(G.rng, names)
+            let labels = []
+            let i = 0
+            while i < 5 {
+                list_push(labels, names[i] + " · " + str(HORSE_ODDS[i]) + " a 1")
+                i += 1
+            }
+            list_push(labels, "Volver")
+            return open_choice("HIPÓDROMO", "Cinco caballos en la pista. El primero es el favorito; el último, un milagro con patas.", labels, ["", "", "", "", "", ""], "cs_horse", {"names": list_slice(names, 0, 5)})
+        }
+        "scratch" => {
+            let locks = ["", "", ""]
+            if L.money < 20 { locks[0] = "$20" }
+            if L.money < 100 { locks[1] = "$100" }
+            return open_choice("RASCA Y GANA", "Boletos con premios de 1, 5, 40 y 2,000 veces su precio.", ["Boleto de $20", "Boleto de $100", "Mejor no"], locks, "cs_scratch", {})
+        }
+        _ => return cs_open_amount(id, {})
+    }
+}
+
+function cs_game_name(id: string) {
+    for g in CS_GAMES {
+        if g.id == id { return g.n }
+    }
+    return "Casino"
+}
+
+function cs_open_amount(game: string, ctx: map) {
+    if L.money < 100 { return info("Casino", "No tienes ni para la primera ficha.") }
+    let lim = cs_limit()
+    let tenth = max(100, L.money / 10)
+    let amounts = [100, 1000, tenth, L.money]
+    let i = 0
+    while i < 4 {
+        if lim > 0 && amounts[i] > lim { amounts[i] = lim }
+        i += 1
+    }
+    let all = "TODO (" + money_str(amounts[3]) + ")"
+    if lim > 0 && L.money > lim { all = "El máximo de la mesa (" + money_str(lim) + ")" }
+    let labels = ["$100", money_str(amounts[1]), money_str(amounts[2]) + " (10%)", all, "Mejor no"]
+    let locks = ["", "", "", "", ""]
+    if L.money < 1000 { locks[1] = "Sin fondos" }
+    ctx["game"] = game
+    ctx["amounts"] = amounts
+    open_choice(str_upper(cs_game_name(game)), "Tienes " + money_str(L.money) + ". ¿Cuánto apuestas?", labels, locks, "cs_amount", ctx)
+    return null
+}
+
+// Cobra la apuesta al empezar (las ganancias se pagan con cs_pay).
+function cs_bet(amount: int) {
+    let c = cs()
+    L.money -= amount
+    L.gamble += 1
+    c.wag += amount
+    c.m_wag += amount
+    c.m_net -= amount
+    if L.gamble >= 20 { c.addict = true }
+    hito_once("first_casino", "Vida", "Tu primera apuesta en el casino")
+    if vip_level() >= 3 { flag("vip_gold") }
+    return null
+}
+
+// ret = lo que te devuelve la casa (0 si pierdes). Registra y muestra el resultado.
+function cs_pay(title: string, bet: int, ret: int, msg: string) {
+    let c = cs()
+    L.money += ret
+    c.m_net += ret
+    let profit = ret - bet
+    let kind = "n"
+    let txt = msg
+    if profit > 0 {
+        c.won += profit
+        if profit > c.best { c.best = profit }
+        if profit >= 10000 { dn().winnings += profit }
+        L.happy += 6
+        gain("guts", 1)
+        kind = "g"
+        txt = txt + " Ganaste " + money_str(profit) + "."
+    } else if profit < 0 {
+        c.lost += 0 - profit
+        L.happy -= 5
+        kind = "b"
+        txt = txt + " Perdiste " + money_str(0 - profit) + "."
+    } else {
+        txt = txt + " Recuperas tu apuesta."
+    }
+    if c.ev == "" && chance(5) { c.ev = pick(["ce_whale", "ce_borrow", "ce_comp", "ce_streak", "ce_celeb"]) }
+    return finish(title, txt, kind)
+}
+
+function casino_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let c = cs()
+    match handler {
+        "cs_roul" => {
+            if index >= 5 { return null }
+            return cs_open_amount("roulette", {"bet": index})
+        }
+        "cs_bac" => {
+            if index >= 3 { return null }
+            return cs_open_amount("bac", {"side": index})
+        }
+        "cs_horse" => {
+            if index >= 5 { return null }
+            return cs_open_amount("horse", {"h": index, "names": ctx.names})
+        }
+        "cs_scratch" => {
+            if index >= 2 { return null }
+            let price_t = [20, 100][index]
+            if L.money < price_t { return null }
+            cs_bet(price_t)
+            let r = rint(1, 10000)
+            let mult = 0
+            if r <= 1 { mult = 2000 } else if r <= 41 { mult = 40 } else if r <= 441 { mult = 5 } else if r <= 2441 { mult = 1 }
+            if mult >= 2000 { hito_me("Vida", "Ganaste el premio mayor de un rasca y gana") }
+            let msg = "Rascaste con una moneda: nada."
+            if mult == 1 { msg = "Rascaste: «reintegro»." }
+            if mult > 1 { msg = "Rascaste: ¡tres iguales! x" + str(mult) + "." }
+            return cs_pay("Rasca y gana", price_t, price_t * mult, msg)
+        }
+        "cs_amount" => {
+            if index >= 4 { return finish("Casino", "Guardaste tus fichas. Sabia decisión.", "n") }
+            let amount = ctx.amounts[index]
+            if amount <= 0 || amount > L.money { return null }
+            return cs_play(ctx.game, amount, ctx)
+        }
+        "cs_bj" => return bj_choose(index)
+        "cs_ins" => return bj_insurance(index)
+        "cs_vp" => return vp_draw(index)
+        "cs_urge" => return resolve_urge(index)
+        "cs_marker" => {
+            if index >= 3 || c.marker != null { return null }
+            let amt = ctx.amounts[index]
+            L.money += amt
+            c.marker = {"bal": amt, "left": 3}
+            return finish("Marcador", "Firmaste un marcador por " + money_str(amt) + ". Las fichas llegaron en una charola de plata.", "n")
+        }
+        _ => return null
+    }
+}
+
+function cs_play(game: string, amount: int, ctx: map) {
+    let c = cs()
+    match game {
+        "roulette" => {
+            cs_bet(amount)
+            let n = rint(0, 36)
+            let color = "negro"
+            if n == 0 { color = "verde" } else if list_contains(RED_NUMBERS, n) { color = "rojo" }
+            let ret = 0
+            let b = ctx.bet
+            if b == 0 && color == "rojo" { ret = amount * 2 }
+            if b == 1 && color == "negro" { ret = amount * 2 }
+            if b == 2 && n >= 1 && n <= 12 { ret = amount * 3 }
+            if b == 3 && n == cs_lucky() { ret = amount * 36 }
+            if b == 4 && n == 0 { ret = amount * 36 }
+            let msg = "La bolita cayó en el " + str(n) + " " + color + "."
+            if ret >= amount * 36 { msg = msg + " ¡La mesa entera grita!" }
+            return cs_pay("Ruleta", amount, ret, msg)
+        }
+        "slots" => {
+            cs_bet(amount)
+            c.pot += max(1, amount * 2 / 100)
+            let r = rint(1, 1500)
+            if r == 1 {
+                let prize = c.pot
+                if amount < 1000 { prize = c.pot * amount / 1000 }
+                c.pot = max(50000, c.pot - prize)
+                c.jackpots += 1
+                flag("jackpot")
+                hito_me("Vida", "¡Ganaste el pozo mayor del casino!")
+                return cs_pay("Tragamonedas", amount, amount + prize, "¡¡POZO MAYOR!! Las luces no paran de girar y llegan tres empleados con una botella.")
+            }
+            let k = rint(1, 1000)
+            if k <= 15 { return cs_pay("Tragamonedas", amount, amount * 20, "¡Triple siete! x20.") }
+            if k <= 75 { return cs_pay("Tragamonedas", amount, amount * 5, "Tres cerezas: x5.") }
+            if k <= 240 { return cs_pay("Tragamonedas", amount, amount * 2, "Dos iguales: x2.") }
+            return cs_pay("Tragamonedas", amount, 0, "Nada. La máquina se ríe de ti.")
+        }
+        "bj" => {
+            cs_bet(amount)
+            return bj_start(amount)
+        }
+        "vp" => {
+            cs_bet(amount)
+            return vp_start(amount)
+        }
+        "bac" => {
+            cs_bet(amount)
+            let p = [bac_card(), bac_card()]
+            let b = [bac_card(), bac_card()]
+            let pt = bac_total(p)
+            let bt = bac_total(b)
+            if pt < 8 && bt < 8 {
+                if pt <= 5 {
+                    list_push(p, bac_card())
+                    pt = bac_total(p)
+                }
+                if bt <= 5 {
+                    list_push(b, bac_card())
+                    bt = bac_total(b)
+                }
+            }
+            let side = ctx.side
+            let ret = 0
+            let res = "Empate a " + str(pt) + "."
+            if pt > bt { res = "Gana el jugador, " + str(pt) + " contra " + str(bt) + "." }
+            if bt > pt { res = "Gana la banca, " + str(bt) + " contra " + str(pt) + "." }
+            if pt == bt {
+                if side == 2 { ret = amount * 9 } else { ret = amount }
+            } else if side == 0 && pt > bt {
+                ret = amount * 2
+            } else if side == 1 && bt > pt {
+                ret = amount + amount * 95 / 100
+            }
+            return cs_pay("Bacará", amount, ret, res)
+        }
+        "dice" => {
+            cs_bet(amount)
+            let first = rint(1, 6) + rint(1, 6)
+            if first == 7 || first == 11 { return cs_pay("Dados", amount, amount * 2, "Sacaste " + str(first) + " en la primera tirada. ¡Natural!") }
+            if first == 2 || first == 3 || first == 12 { return cs_pay("Dados", amount, 0, "Sacaste " + str(first) + ": craps.") }
+            let rolls = []
+            let n = 0
+            while n < 40 {
+                let r = rint(1, 6) + rint(1, 6)
+                list_push(rolls, str(r))
+                if r == first {
+                    return cs_pay("Dados", amount, amount * 2, "Tu punto fue " + str(first) + ". Tiraste " + str_join(rolls, ", ") + ": ¡lo repetiste antes del 7!")
+                }
+                if r == 7 { return cs_pay("Dados", amount, 0, "Tu punto fue " + str(first) + ". Tiraste " + str_join(rolls, ", ") + ": salió el 7.") }
+                n += 1
+            }
+            return cs_pay("Dados", amount, amount, "Los dados se cayeron de la mesa. Tirada nula.")
+        }
+        "horse" => {
+            cs_bet(amount)
+            let winner = weighted_choose(G.rng, HORSE_W)
+            let names = ctx.names
+            let mine = ctx.h
+            if winner == mine {
+                let odds = HORSE_ODDS[mine]
+                if odds >= 11 {
+                    flag("longshot")
+                    hito_once("longshot", "Vida", "Ganaste con el caballo menos favorito")
+                }
+                return cs_pay("Hipódromo", amount, amount * (odds + 1), "¡" + names[mine] + " cruzó la meta primero! Gritaste tanto que te quedaste sin voz.")
+            }
+            return cs_pay("Hipódromo", amount, 0, "Ganó " + names[winner] + ". Tu caballo, " + names[mine] + ", se detuvo a mirar a la tribuna.")
+        }
+        _ => return null
+    }
+}
+
+function bac_card() {
+    let r = rint(1, 13)
+    if r >= 10 { return 0 }
+    return r
+}
+
+function bac_total(cards: list) {
+    let t = 0
+    for c in cards { t += c }
+    return t % 10
+}
+
+// ---------------------------------------------------------------- blackjack
+
+function bj_val(rank_n: int) {
+    if rank_n == 1 { return 11 }
+    if rank_n >= 10 { return 10 }
+    return rank_n
+}
+
+function bj_name(rank_n: int) {
+    if rank_n == 1 { return "A" }
+    if rank_n == 11 { return "J" }
+    if rank_n == 12 { return "Q" }
+    if rank_n == 13 { return "K" }
+    return str(rank_n)
+}
+
+function bj_draw() {
+    let c = cs()
+    if len(c.shoe) < 60 {
+        let shoe = []
+        let d = 0
+        while d < 24 {
+            let r = 1
+            while r <= 13 {
+                list_push(shoe, r)
+                r += 1
+            }
+            d += 1
+        }
+        shuffle(G.rng, shoe)
+        c.shoe = shoe
+        c.rc = 0
+    }
+    let card_n = list_pop(c.shoe)
+    let v = bj_val(card_n)
+    if v >= 2 && v <= 6 { c.rc += 1 }
+    if v >= 10 { c.rc -= 1 }
+    return card_n
+}
+
+function bj_total(cards: list) {
+    let t = 0
+    let aces = 0
+    for k in cards {
+        let v = bj_val(k)
+        t += v
+        if v == 11 { aces += 1 }
+    }
+    while t > 21 && aces > 0 {
+        t -= 10
+        aces -= 1
+    }
+    return t
+}
+
+function bj_names(cards: list) {
+    let out = []
+    for k in cards { list_push(out, bj_name(k)) }
+    return str_join(out, ", ")
+}
+
+function true_count() {
+    let c = cs()
+    let decks = max(1, len(c.shoe) / 52)
+    return c.rc / decks
+}
+
+function bj_start(bet: int) {
+    let p = [bj_draw()]
+    let up = bj_draw()
+    list_push(p, bj_draw())
+    let hole = bj_draw()
+    G.bj = {"bet": bet, "hands": [p], "bets": [bet], "cur": 0, "d": [up, hole], "split": false, "first": true, "tc": true_count()}
+    if bj_val(up) == 11 && L.money >= bet / 2 {
+        open_choice("BLACKJACK · SEGURO", "Tus cartas: " + bj_names(p) + " (" + str(bj_total(p)) + "). El crupier muestra un As. ¿Compras seguro? Cuesta " + money_str(bet / 2) + " y paga 2 a 1 si el crupier tiene blackjack.",
+            ["Comprar seguro", "No, gracias"], ["", ""], "cs_ins", {})
+        return null
+    }
+    return bj_after_peek(0)
+}
+
+function bj_insurance(index: int) {
+    let b = G.bj
+    if b == null { return null }
+    let ins = 0
+    if index == 0 {
+        ins = b.bet / 2
+        L.money -= ins
+        cs().m_net -= ins
+    }
+    return bj_after_peek(ins)
+}
+
+// El crupier revisa si tiene blackjack; luego se juega tu mano.
+function bj_after_peek(ins: int) {
+    let b = G.bj
+    let p = b.hands[0]
+    let dealer_bj = bj_total(b.d) == 21
+    let player_bj = bj_total(p) == 21
+    let ins_ret = 0
+    if dealer_bj && ins > 0 { ins_ret = ins * 3 }
+    if dealer_bj || player_bj {
+        G.bj = null
+        let ret = ins_ret
+        let msg = "El crupier voltea su carta: " + bj_names(b.d) + "."
+        if dealer_bj && player_bj {
+            ret += b.bet
+            msg = msg + " Los dos tienen blackjack: empate."
+        } else if player_bj {
+            ret += b.bet * 5 / 2
+            cs().nat = map_get(cs(), "nat", 0) + 1
+            msg = "¡BLACKJACK! " + bj_names(p) + ". Paga 3 a 2."
+        } else {
+            msg = msg + " Blackjack del crupier."
+            if ins > 0 { msg = msg + " Tu seguro pagó." }
+        }
+        return bj_finish(b.bet + ins, ret, msg)
+    }
+    if ins > 0 { L.happy -= 1 }
+    return bj_show()
+}
+
+function bj_show() {
+    let b = G.bj
+    let p = b.hands[b.cur]
+    let bet = b.bets[b.cur]
+    let txt = "Tus cartas: " + bj_names(p) + " (" + str(bj_total(p)) + "). El crupier muestra: " + bj_name(b.d[0]) + ". Apuesta: " + money_str(bet) + "."
+    if b.split { txt = "Mano " + str(b.cur + 1) + " de " + str(len(b.hands)) + ". " + txt }
+    let c = cs()
+    if c.counting {
+        let tc = true_count()
+        let hint = "neutral"
+        if tc >= 2 { hint = "a tu favor: quedan muchas cartas altas" }
+        if tc <= -2 { hint = "en contra: quedan muchas cartas bajas" }
+        txt = txt + " Cuenta verdadera: " + str(tc) + " (" + hint + ")."
+    }
+    if job_is("crupier") { txt = txt + " (Tu experiencia de crupier: con 12 a 16 contra un 7 o más, conviene pedir.)" }
+    let two = len(p) == 2
+    let locks = ["", "", "", "", ""]
+    if !two || L.money < bet { locks[2] = "No se puede" }
+    if !two || b.split || bj_val(p[0]) != bj_val(p[1]) || L.money < bet { locks[3] = "Solo con un par" }
+    if !two || b.split || !b.first { locks[4] = "Solo al inicio" }
+    open_choice("BLACKJACK", txt, ["Pedir carta", "Plantarte", "Doblar la apuesta", "Dividir el par", "Rendirte (recuperas la mitad)"], locks, "cs_bj", {})
+    return null
+}
+
+function bj_choose(index: int) {
+    let b = G.bj
+    if b == null { return null }
+    let p = b.hands[b.cur]
+    let first = b.first
+    b.first = false
+    if index == 0 {
+        list_push(p, bj_draw())
+        if bj_total(p) >= 21 { return bj_next() }
+        return bj_show()
+    }
+    if index == 1 { return bj_next() }
+    if index == 2 {
+        let bet = b.bets[b.cur]
+        if L.money < bet || len(p) != 2 { return bj_show() }
+        L.money -= bet
+        cs().wag += bet
+        cs().m_wag += bet
+        cs().m_net -= bet
+        b.bets[b.cur] = bet * 2
+        list_push(p, bj_draw())
+        return bj_next()
+    }
+    if index == 3 {
+        if b.split || len(p) != 2 || L.money < b.bet { return bj_show() }
+        L.money -= b.bet
+        cs().wag += b.bet
+        cs().m_wag += b.bet
+        cs().m_net -= b.bet
+        b.split = true
+        b.hands = [[p[0], bj_draw()], [p[1], bj_draw()]]
+        b.bets = [b.bet, b.bet]
+        return bj_show()
+    }
+    if index == 4 && first && !b.split {
+        G.bj = null
+        return bj_finish(b.bet, b.bet / 2, "Te rendiste con " + bj_names(p) + ".")
+    }
+    return bj_show()
+}
+
+function bj_next() {
+    let b = G.bj
+    b.cur += 1
+    b.first = true
+    if b.cur < len(b.hands) { return bj_show() }
+    return bj_settle()
+}
+
+function bj_settle() {
+    let b = G.bj
+    G.bj = null
+    let alive = false
+    for h in b.hands {
+        if bj_total(h) <= 21 { alive = true }
+    }
+    if alive {
+        while bj_total(b.d) < 17 { list_push(b.d, bj_draw()) }
+    }
+    let dt = bj_total(b.d)
+    let ret = 0
+    let total_bet = 0
+    let parts = []
+    let i = 0
+    while i < len(b.hands) {
+        let h = b.hands[i]
+        let bet = b.bets[i]
+        total_bet += bet
+        let pt = bj_total(h)
+        if pt > 21 {
+            list_push(parts, "te pasaste con " + str(pt))
+        } else if dt > 21 || pt > dt {
+            ret += bet * 2
+            list_push(parts, "ganaste con " + str(pt))
+        } else if pt == dt {
+            ret += bet
+            list_push(parts, "empate a " + str(pt))
+        } else {
+            list_push(parts, "perdiste con " + str(pt))
+        }
+        i += 1
+    }
+    let msg = "El crupier: " + bj_names(b.d) + " (" + str(dt) + "). Tú: " + str_join(parts, "; ") + "."
+    return bj_finish(total_bet, ret, msg)
+}
+
+// Cierra la mano: registra, vigila a los contadores y muestra el resultado.
+function bj_finish(bet: int, ret: int, msg: string) {
+    let c = cs()
+    let txt = msg
+    if c.counting && ret > bet {
+        c.count_win += ret - bet
+        if c.count_win >= 50000 { flag("card_counter") }
+        c.hot += 1
+        if true_count() >= 2 && chance(4 + c.hot * 3) {
+            c.banned = 24
+            c.counting = false
+            c.hot = 0
+            hito_once("banned_casino", "Vida", "Te vetaron del casino por contar cartas")
+            txt = txt + " Al cobrar, dos señores de traje te toman del brazo: «El casino ya no desea su presencia». Te vetaron dos años."
+        }
+    } else if ret < bet {
+        c.hot = 0
+    }
+    return cs_pay("Blackjack", bet, ret, txt)
+}
+
+// ---------------------------------------------------------------- video póker
+
+function vp_card_name(card_n: int) {
+    let r = card_n / 4
+    let s = card_n % 4
+    let n = str(r)
+    if r == 11 { n = "J" }
+    if r == 12 { n = "Q" }
+    if r == 13 { n = "K" }
+    if r == 14 { n = "A" }
+    return n + " de " + SUIT_NAMES[s]
+}
+
+function vp_hand_names(cards: list) {
+    let out = []
+    for k in cards { list_push(out, vp_card_name(k)) }
+    return str_join(out, " · ")
+}
+
+function vp_start(bet: int) {
+    let deck = []
+    let r = 2
+    while r <= 14 {
+        let s = 0
+        while s < 4 {
+            list_push(deck, r * 4 + s)
+            s += 1
+        }
+        r += 1
+    }
+    shuffle(G.rng, deck)
+    let hand = []
+    let i = 0
+    while i < 5 {
+        list_push(hand, list_pop(deck))
+        i += 1
+    }
+    G.vp = {"bet": bet, "hand": hand, "deck": deck}
+    let now = VP_HANDS[vp_eval(hand)].n
+    open_choice("VIDEO PÓKER", "Tu mano: " + vp_hand_names(hand) + ". Ahora tienes: " + now + ". ¿Qué cartas cambias?",
+        ["Quedarte con todas", "Quedarte con la jugada y cambiar el resto", "Quedarte con las altas (J o más)", "Cambiar las cinco", "Retirarte (pierdes la apuesta)"], ["", "", "", "", ""], "cs_vp", {})
+    return null
+}
+
+function vp_ranks(hand: list) {
+    let counts = {}
+    for k in hand {
+        let key = str(k / 4)
+        counts[key] = map_get(counts, key, 0) + 1
+    }
+    return counts
+}
+
+function vp_eval(hand: list) {
+    let counts = vp_ranks(hand)
+    let vals = []
+    for k in hand { list_push(vals, k / 4) }
+    let flush = true
+    for k in hand {
+        if k % 4 != hand[0] % 4 { flush = false }
+    }
+    let lo = 99
+    let hi = 0
+    for v in vals {
+        lo = min(lo, v)
+        hi = max(hi, v)
+    }
+    let distinct = len(map_keys(counts))
+    let straight = distinct == 5 && hi - lo == 4
+    if distinct == 5 && list_contains(vals, 14) && list_contains(vals, 2) && list_contains(vals, 3) && list_contains(vals, 4) && list_contains(vals, 5) { straight = true }
+    if straight && flush && lo == 10 { return "royal" }
+    if straight && flush { return "sf" }
+    let four = false
+    let three = false
+    let pairs = 0
+    let high_pair = false
+    for key in map_keys(counts) {
+        let n = counts[key]
+        if n == 4 { four = true }
+        if n == 3 { three = true }
+        if n == 2 {
+            pairs += 1
+            if parse_int(key, 0) >= 11 { high_pair = true }
+        }
+    }
+    if four { return "quads" }
+    if three && pairs == 1 { return "full" }
+    if flush { return "flush" }
+    if straight { return "straight" }
+    if three { return "trips" }
+    if pairs == 2 { return "two" }
+    if high_pair { return "jacks" }
+    return "none"
+}
+
+// Qué cartas conservas según la estrategia elegida.
+function vp_holds(hand: list, mode: int) {
+    let keep = []
+    if mode == 0 { return [0, 1, 2, 3, 4] }
+    if mode == 3 { return keep }
+    let i = 0
+    if mode == 2 {
+        while i < 5 {
+            if hand[i] / 4 >= 11 { list_push(keep, i) }
+            i += 1
+        }
+        return keep
+    }
+    let e = vp_eval(hand)
+    if e == "royal" || e == "sf" || e == "full" || e == "flush" || e == "straight" { return [0, 1, 2, 3, 4] }
+    let counts = vp_ranks(hand)
+    while i < 5 {
+        if counts[str(hand[i] / 4)] >= 2 { list_push(keep, i) }
+        i += 1
+    }
+    if len(keep) > 0 { return keep }
+    // Cuatro del mismo palo: se busca el color.
+    let s = 0
+    while s < 4 {
+        let same = []
+        let j = 0
+        while j < 5 {
+            if hand[j] % 4 == s { list_push(same, j) }
+            j += 1
+        }
+        if len(same) == 4 { return same }
+        s += 1
+    }
+    i = 0
+    while i < 5 {
+        if hand[i] / 4 >= 11 { list_push(keep, i) }
+        i += 1
+    }
+    return keep
+}
+
+function vp_draw(index: int) {
+    let v = G.vp
+    if v == null { return null }
+    G.vp = null
+    if index == 4 { return cs_pay("Video póker", v.bet, 0, "Te retiraste con " + vp_hand_names(v.hand) + ".") }
+    let keep = vp_holds(v.hand, index)
+    let hand = []
+    let i = 0
+    while i < 5 {
+        if list_contains(keep, i) { list_push(hand, v.hand[i]) } else { list_push(hand, list_pop(v.deck)) }
+        i += 1
+    }
+    let e = vp_eval(hand)
+    let h = VP_HANDS[e]
+    if e == "royal" {
+        flag("royal_flush")
+        hito_once("royal_flush", "Vida", "Sacaste una escalera real en el video póker")
+    }
+    return cs_pay("Video póker", v.bet, v.bet * h.pay, "Mano final: " + vp_hand_names(hand) + ". " + h.n + ".")
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function casino_month() {
+    if L.cs == null { return null }
+    let c = L.cs
+    if c.m_wag > 0 {
+        let v = CS_VIP[vip_level()]
+        if c.m_net < 0 && v.cb > 0 {
+            let back = (0 - c.m_net) * v.cb / 100
+            L.money += back
+            log_add("El casino te reembolsó " + money_str(back) + " de tus pérdidas del mes (tarjeta " + v.n + ").", "n")
+        }
+        if vip_level() >= 3 && chance(40) {
+            L.happy += 3
+            log_add("Cortesía VIP: una noche en la suite del casino con todo pagado.", "g")
+        }
+    }
+    c.m_wag = 0
+    c.m_net = 0
+    if c.excl > 0 {
+        c.excl -= 1
+        L.gamble = max(0, L.gamble - 2)
+        if c.excl == 0 { log_add("Terminó tu autoexclusión del casino.", "n") }
+    }
+    if c.banned > 0 { c.banned -= 1 }
+    if c.ja {
+        c.ja_m += 1
+        L.gamble = max(0, L.gamble - 3)
+        if c.addict && c.ja_m >= 12 {
+            flag("sober")
+            hito_once("sober", "Salud", "Un año en Jugadores Anónimos")
+        }
+    }
+    let mk = c.marker
+    if mk != null {
+        mk.left -= 1
+        if mk.left <= 0 {
+            let paid = min(mk.bal, max(0, L.money))
+            L.money -= paid
+            mk.bal -= paid
+            if mk.bal > 0 {
+                L.money -= mk.bal
+                L.credit = max(300, L.credit - 80)
+                L.happy -= 10
+                c.banned = max(c.banned, 12)
+                log_add("Venció tu marcador y no alcanzó: el casino te demandó y te cobró " + money_str(mk.bal) + " más. Te vetaron un año.", "b")
+            } else {
+                log_add("El casino cobró tu marcador de tu cuenta.", "n")
+            }
+            c.marker = null
+        }
+    }
+    return null
+}
+
+// Las ganas de apostar y los eventos del casino (desde maybe_money_event).
+function cs_urge_event() {
+    if L.cs == null { return false }
+    let c = L.cs
+    if c.ev != "" && cs_lock() == "" {
+        let id = c.ev
+        c.ev = ""
+        for ev in CS_EVENTS {
+            if ev.id == id {
+                open_event(ev, {})
+                return true
+            }
+        }
+    }
+    if L.gamble >= 20 && chance(12) {
+        let locks = ["", "", ""]
+        if !c.ja { locks[2] = "Sin padrino" }
+        if c.excl > 0 { locks[0] = "Autoexclusión" }
+        if L.money < 1000 { locks[0] = "Sin dinero" }
+        open_choice("LAS GANAS DE APOSTAR", "Es viernes en la noche. Las luces del casino te llaman. «Solo un ratito, con $1,000 y ya.»", ["Ir «solo un ratito»", "Resistir", "Llamar a tu padrino de Jugadores Anónimos"], locks, "cs_urge", {})
+        return true
+    }
+    return false
+}
+
+function resolve_urge(index: int) {
+    G.modal = null
+    let c = cs()
+    if index == 2 {
+        L.gamble = max(0, L.gamble - 5)
+        gain("kind", 1)
+        return finish("Las ganas", "Tu padrino te contestó a la primera. Hablaron una hora y las ganas se fueron.", "g")
+    }
+    if index == 1 {
+        if rank("guts") >= 3 || chance(50) {
+            gain("guts", 2)
+            L.gamble = max(0, L.gamble - 2)
+            return finish("Las ganas", "Te quedaste en casa viendo una película. Cada «no» cuenta.", "g")
+        }
+    }
+    let loss = min(max(0, L.money), rint(2, 8) * 1000)
+    L.money -= loss
+    c.lost += loss
+    c.wag += loss
+    L.gamble += 3
+    L.happy -= 8
+    let msg = "«Solo un ratito» fueron seis horas. Perdiste " + money_str(loss) + "."
+    let p = partner()
+    if p != null && couple_together() && chance(40) {
+        bond_gain(p, -8)
+        msg = msg + " " + p.first + " vio el estado de cuenta."
+    }
+    return finish("Las ganas", msg, "b")
+}
+
+function cs_fx(out: list) {
+    if L.gamble >= 20 { list_push(out, fx("ludopatia", "Ludopatía", false, "Solo piensas en la próxima apuesta.", {"hap": -1, "hire": -3})) }
+    if L.cs == null { return null }
+    let c = L.cs
+    if vip_level() >= 4 { list_push(out, fx("vip_casino", "VIP del casino", true, "El anfitrión del casino te saluda por tu nombre.", {"flirt": 2})) }
+    if c.ja && c.ja_m >= 3 { list_push(out, fx("jugadores_anonimos", "Un día a la vez", true, "Tu grupo de apoyo te sostiene.", {"hap": 1})) }
+    return null
+}

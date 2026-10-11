@@ -53,6 +53,7 @@ state {
         "back_pid": 0,
         "chat": null,
         "bj": null,
+        "vp": null,
         // Eventos para el host (guardado, tareas) que salen en el próximo frame.
         "out": [],
         // Avance de varios años en curso (tarea del runtime).
@@ -522,6 +523,7 @@ function new_life_core(age: int) {
     G.legacy = null
     G.roul = null
     G.bj = null
+    G.vp = null
     L.mk = null
     fin_init()
 
@@ -586,7 +588,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_ping() { maybe_event() }
+    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -894,6 +896,7 @@ function breakup() {
         log_add("Divorcio." + divorce_settlement(p), "b")
         lazos_divorce(p)
     }
+    dn_breakup(p)
     p.rel = "ex"
     L.partner_id = 0
     L.heartbreak = 6

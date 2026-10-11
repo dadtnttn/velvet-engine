@@ -106,6 +106,7 @@ function continue_saved() {
     G.legacy = null
     G.roul = null
     G.bj = null
+    G.vp = null
     G.chat = null
     G.back_pid = 0
     G.mode = "game"

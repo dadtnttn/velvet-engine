@@ -127,6 +127,7 @@ function effects() {
     medicina_fx(out)
     escuela_fx(out)
     oficio_fx(out)
+    money_fx(out)
     return out
 }
 

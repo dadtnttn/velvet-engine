@@ -298,8 +298,8 @@ function app_cats(id: string) {
         if L.route == "porno" || job_is("porn") { return ["Ver", "Subir", "Canal", "Rodajes", "Negocio"] }
         return ["Ver", "Subir", "Canal"]
     }
-    if id == "bank" { return ["Resumen", "Banco", "Bienes"] }
-    if id == "stocks" { return ["Bolsa", "Noticias"] }
+    if id == "bank" { return ["Resumen", "Gastos", "Banco", "Crédito", "Bienes", "Impuestos", "Pareja"] }
+    if id == "stocks" { return ["Bolsa", "Inversiones", "Noticias"] }
     if id == "jobs" { return ["Ofertas", "Chambas", "Estudios"] }
     if id == "shop" { return ["Regalos", "Para ti", "Lujos"] }
     if id == "health" { return ["Salud", "Médico", "Hábitos"] }
@@ -332,7 +332,7 @@ function app_items(id: string, cat: string) {
         return hub_items(cat)
     }
     if id == "bank" || id == "stocks" { return fin_items(cat) }
-    if id == "casino" { return fin_items("Casino") }
+    if id == "casino" { return cs_items() }
     if id == "jobs" { return jobs_app_items(cat) }
     if id == "shop" { return shop_items(cat) }
     if id == "health" {
@@ -1509,14 +1509,13 @@ function shop_items(cat: string) {
             list_push(items, {"action": "ph:none", "t": "Los lujos, a los 18", "s": "", "desc": "Sin tarjeta no hay compras grandes.", "lock": ""})
             return items
         }
-        for asset in ASSETS {
-            let lock = ""
-            if list_contains(L.assets, asset.t) {
-                lock = "Ya lo tienes"
-            } else if L.money < asset.cost {
-                lock = money_str(asset.cost)
+        list_push(items, {"action": "tab:lux", "t": "Abrir la tienda de lujo", "s": "Estatus: " + lx_status_name(), "desc": "Vehículos, propiedades, joyas, arte, tecnología, personal y seguros.", "lock": ""})
+        for a in ASSETS {
+            if a.cat == "Joyas y moda" && !owns(a) {
+                let lock = ""
+                if L.money < lx_price(a) { lock = money_str(lx_price(a)) }
+                list_push(items, {"action": "lx:buy:" + a.id, "t": a.t, "s": money_str(lx_price(a)), "desc": "Envío express con moño. Felicidad y encanto.", "lock": lock})
             }
-            list_push(items, {"action": "buy:" + asset.id, "t": asset.t, "s": money_str(asset.cost), "desc": "Presume tu " + str_lower(asset.t) + ". Felicidad y Encanto.", "lock": lock})
         }
         return items
     }

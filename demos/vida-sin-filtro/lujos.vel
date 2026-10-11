@@ -1,0 +1,800 @@
+// @edition 3
+// Lujos: lo que compras y lo que te cuesta tenerlo.
+// - Tienda de lujo con más de 40 bienes en cinco categorías (vehículos,
+//   propiedades, joyas y moda, colección y tecnología): de contado, a meses sin
+//   intereses con la tarjeta o financiado. El Buen Fin (noviembre) da 25%.
+// - Su valor cambia cada año: los autos se deprecian; el arte, los relojes, los
+//   vinos y los autos clásicos pueden revalorizarse. Vender o subastar.
+// - Mantenimiento mensual, segundas casas que dan felicidad o que rentas (a largo
+//   plazo o por temporadas, con inquilinos que a veces no pagan).
+// - Personal: limpieza, chef, chofer, entrenador, asistente, niñera, mayordomo,
+//   jardinero, guardaespaldas y estilista.
+// - Seguros de auto, hogar y vida (la suma asegurada va a tu herencia).
+// - Estatus social (común a élite), compras compulsivas y eventos: robos, galas,
+//   revistas, falsificaciones, extorsiones, fiestas en el yate...
+// Acciones con el prefijo "lx:" y elecciones "lx_".
+
+const LX_CATS = ["Vehículos", "Propiedades", "Joyas y moda", "Colección", "Tecnología", "Personal", "Seguros", "Tus bienes"]
+
+const STAFF = [
+    {"id": "limpieza", "n": "Personal de limpieza", "c": 600, "d": "Tu casa siempre impecable. Más tiempo para ti.", "fx": {"hap": 1}},
+    {"id": "chef", "n": "Chef privado", "c": 3000, "d": "Comida de restaurante todos los días, sana y deliciosa.", "fx": {"hp": 1}},
+    {"id": "chofer", "n": "Chofer", "c": 2500, "d": "Te lleva a todas partes: elígelo como transporte en Finanzas › Gastos.", "fx": {}},
+    {"id": "entrenador", "n": "Entrenador personal", "c": 1500, "d": "Te saca de la cama a las 6 a. m. para entrenar.", "fx": {"looks": 3, "hp": 1}},
+    {"id": "asistente", "n": "Asistente personal", "c": 3500, "d": "Agenda, correos y pendientes: rindes más en el trabajo.", "fx": {"pay": 4}},
+    {"id": "ninera", "n": "Niñera", "c": 1800, "d": "Cuida a tus hijos pequeños mientras trabajas.", "fx": {}},
+    {"id": "mayordomo", "n": "Mayordomo", "c": 4000, "d": "Elegancia en tu puerta: tus invitados quedan impresionados. Necesitas casa propia.", "fx": {"flirt": 3}},
+    {"id": "jardinero", "n": "Jardinero", "c": 500, "d": "Tu jardín parece de revista. Necesitas casa propia.", "fx": {}},
+    {"id": "guardaespaldas", "n": "Guardaespaldas", "c": 5000, "d": "Nadie se acerca sin permiso: te protege de robos y extorsiones.", "fx": {}},
+    {"id": "estilista", "n": "Estilista personal", "c": 2000, "d": "Siempre perfect{a} para cualquier foto.", "fx": {"looks": 5}}
+]
+
+const STATUS_LEVELS = [[0, "Común"], [5, "Acomodad{a}"], [12, "Ric{o}"], [25, "Jet set"], [45, "Élite"]]
+
+const LX_EVENTS = [
+    {
+        "id": "lx_gala", "title": "Gala benéfica", "w": 8, "status": 2,
+        "text": "Te invitan a una gala benéfica de etiqueta: subasta silenciosa, champaña y gente que sale en revistas.",
+        "choices": [
+            {"t": "Ir y donar $50,000 en la subasta", "cost": 50000, "o": [{"w": 100, "log": "Ganaste un fin de semana en un castillo y una foto con el alcalde.", "money": -50000, "karma": 6, "fame": 3, "charm": 3, "happy": 6}]},
+            {"t": "Ir solo a socializar", "o": [{"w": 100, "log": "Hiciste contactos valiosos entre canapés.", "charm": 2, "happy": 4}]},
+            {"t": "Quedarte en casa en pijama", "o": [{"w": 100, "log": "Viste las fotos en redes. No te arrepientes.", "happy": 2}]}
+        ]
+    },
+    {
+        "id": "lx_magazine", "title": "Revista de sociedad", "w": 6, "status": 2, "home": true,
+        "text": "Una revista de sociedad quiere fotografiar tu casa para su sección «Hogares de ensueño».",
+        "choices": [
+            {"t": "Aceptar y posar en la sala", "o": [
+                {"w": 70, "log": "Saliste en portada. Tus amigos compraron diez ejemplares.", "fame": 4, "charm": 3, "happy": 5},
+                {"w": 30, "log": "Saliste en portada... y unos ladrones también la leyeron.", "fame": 3, "special": "lx_rob"}
+            ]},
+            {"t": "Rechazar: tu casa es tu refugio", "o": [{"w": 100, "log": "Preferiste la privacidad.", "happy": 1}]}
+        ]
+    },
+    {
+        "id": "lx_fake", "title": "Una oportunidad única", "w": 5, "status": 2, "money": 60000,
+        "text": "Un marchante muy elegante te ofrece «un cuadro perdido de un gran maestro» por solo $50,000. Dice que vale millones.",
+        "choices": [
+            {"t": "Comprarlo de inmediato", "cost": 50000, "o": [
+                {"w": 75, "log": "Un experto lo revisó: es una copia pintada el mes pasado. El marchante desapareció.", "money": -50000, "happy": -8},
+                {"w": 25, "log": "¡Era auténtico! Lo revendiste a un museo por $400,000.", "money": 350000, "happy": 12, "fame": 3}
+            ]},
+            {"t": "Pedir que lo examine un experto", "need": "know", "rank": 3, "o": [{"w": 100, "log": "Notaste la pintura fresca en una esquina. Le diste las gracias y lo denunciaste.", "know": 2, "karma": 3}]},
+            {"t": "No, gracias", "o": [{"w": 100, "log": "Si suena demasiado bueno para ser verdad...", "happy": 1}]}
+        ]
+    },
+    {
+        "id": "lx_extortion", "title": "Llamada de extorsión", "w": 4, "status": 3, "guard": true,
+        "text": "Una voz grave al teléfono: «Sabemos dónde vives y cuánto tienes. Deposita $20,000 o te arrepentirás.»",
+        "choices": [
+            {"t": "Depositar", "cost": 20000, "o": [{"w": 100, "log": "Depositaste. Una semana después volvieron a llamar pidiendo más.", "money": -20000, "happy": -10}]},
+            {"t": "Colgar y llamar a la policía", "o": [
+                {"w": 80, "log": "La policía rastreó la llamada: venía de una prisión. Era un fraude.", "guts": 2},
+                {"w": 20, "log": "La policía no hizo nada, pero nunca volvieron a llamar.", "happy": -3}
+            ]},
+            {"t": "Contratar un guardaespaldas", "o": [{"w": 100, "log": "Ahora tienes a alguien cuidando tu puerta.", "special": "lx_guard"}]}
+        ]
+    },
+    {
+        "id": "lx_friends", "title": "Amigos interesados", "w": 6, "status": 2,
+        "text": "Un amigo de la prepa reaparece con un «negocio seguro» y te pide $30,000 de inversión.",
+        "choices": [
+            {"t": "Invertir", "cost": 30000, "o": [
+                {"w": 60, "log": "El negocio era una pirámide. Tu amigo dejó de contestarte.", "money": -30000, "happy": -6},
+                {"w": 40, "log": "¡Funcionó! Te devolvió el doble.", "money": 30000, "happy": 6}
+            ]},
+            {"t": "Decir que no", "o": [{"w": 100, "log": "Le dijiste que no. Desde entonces solo te escribe para pedirte likes.", "guts": 1}]}
+        ]
+    },
+    {
+        "id": "lx_yacht", "title": "Fin de semana en el mar", "w": 6, "boat": true,
+        "text": "Hace un clima perfecto y tu embarcación está lista en el muelle.",
+        "choices": [
+            {"t": "Organizar una fiesta a bordo", "o": [{"w": 100, "log": "Música, mariscos y el atardecer más bonito del año. Todos quieren volver a invitarte.", "money": -5000, "happy": 10, "charm": 3}]},
+            {"t": "Rentarla a unos turistas", "o": [{"w": 100, "log": "Unos turistas la rentaron todo el fin de semana.", "money": 8000}]},
+            {"t": "Salir a navegar a solas", "o": [{"w": 100, "log": "Solo tú, el mar y el silencio.", "happy": 8, "health": 2}]}
+        ]
+    },
+    {
+        "id": "lx_classic", "title": "Concurso de autos clásicos", "w": 6, "classic": true,
+        "text": "Te invitan a exhibir tu auto clásico en el concurso de elegancia más importante del país.",
+        "choices": [
+            {"t": "Participar", "o": [
+                {"w": 50, "log": "¡Ganaste el primer lugar! Tu auto ahora vale más.", "fame": 2, "happy": 10, "special": "lx_classic_win"},
+                {"w": 50, "log": "Quedaste cuarto. Al menos te tomaste mil fotos.", "happy": 4}
+            ]},
+            {"t": "No arriesgar el auto", "o": [{"w": 100, "log": "Lo dejaste en la cochera, brillante y a salvo.", "happy": 1}]}
+        ]
+    },
+    {
+        "id": "lx_paparazzi", "title": "Paparazzi", "w": 6, "status": 3, "fame": 40,
+        "text": "Al salir del restaurante te esperan seis fotógrafos gritando tu nombre.",
+        "choices": [
+            {"t": "Sonreír y posar", "o": [{"w": 100, "log": "Mañana sales en todas las páginas de chismes. Con tu mejor ángulo.", "fame": 3, "charm": 2}]},
+            {"t": "Taparte la cara", "o": [{"w": 100, "log": "La foto «misteriosa» se hizo viral igual.", "fame": 1}]},
+            {"t": "Pelearte con uno", "o": [{"w": 100, "log": "El video de tu pelea se volvió meme y tuviste que pagar la cámara.", "fame": 4, "karma": -4, "money": -8000}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- estado
+
+function lx() {
+    if L.lx == null {
+        L.lx = {"val": {}, "staff": [], "ins": {}, "life_cov": 0, "rent": {}, "buys_y": 0, "shopaholic": false, "rent_total": 0, "rob_m": -1}
+    }
+    return L.lx
+}
+
+// «Auto clásico» → «auto clásico», pero «SUV familiar» se queda igual.
+function lx_lower(t: string) {
+    if len(t) >= 2 {
+        let second = str_sub(t, 1, 2)
+        if str_upper(second) == second && str_lower(second) != second { return t }
+    }
+    return str_lower(str_sub(t, 0, 1)) + str_sub(t, 1)
+}
+
+function asset_def(id: string) {
+    for a in ASSETS {
+        if a.id == id { return a }
+    }
+    return null
+}
+
+function owns(a: map) {
+    return list_contains(L.assets, a.t)
+}
+
+function asset_value(a: map) {
+    if L.lx == null { return a.cost * 70 / 100 }
+    return map_get(L.lx.val, a.id, a.cost * 70 / 100)
+}
+
+function is_house_asset(a: map) {
+    return map_get(a, "kind", "") == "house"
+}
+
+function asset_kind(a: map) {
+    return map_get(a, "kind", "")
+}
+
+function has_vehicle() {
+    for a in ASSETS {
+        if owns(a) && (asset_kind(a) == "car" || asset_kind(a) == "moto") { return true }
+    }
+    return false
+}
+
+function has_kind(kinds: list) {
+    for a in ASSETS {
+        if owns(a) && list_contains(kinds, asset_kind(a)) { return true }
+    }
+    return false
+}
+
+function has_staff(id: string) {
+    return L.lx != null && list_contains(L.lx.staff, id)
+}
+
+function staff_def(id: string) {
+    for s in STAFF {
+        if s.id == id { return s }
+    }
+    return STAFF[0]
+}
+
+function lx_insured(kind: string) {
+    return L.lx != null && L.lx.ins[kind] == true
+}
+
+function lx_sale_value(a: map) {
+    let k = asset_kind(a)
+    if k == "art" || k == "collect" || k == "jewel" || k == "wine" { return asset_value(a) * 90 / 100 }
+    return asset_value(a) * 85 / 100
+}
+
+// Lo que valen tus bienes (para el patrimonio y la herencia), sin las casas.
+function lx_worth() {
+    let total = 0
+    for a in ASSETS {
+        if owns(a) && !is_house_asset(a) { total += asset_value(a) }
+    }
+    return total
+}
+
+function lx_collection_value() {
+    let total = 0
+    for a in ASSETS {
+        let k = asset_kind(a)
+        if owns(a) && (k == "art" || k == "collect" || k == "jewel" || k == "wine") { total += asset_value(a) }
+    }
+    return total
+}
+
+function lx_points() {
+    let p = 0
+    for a in ASSETS {
+        if !owns(a) { continue }
+        if a.cost < 10000 { p += 1 } else if a.cost < 100000 { p += 2 } else if a.cost < 1000000 { p += 4 } else { p += 8 }
+    }
+    if L.lx != null { p += len(L.lx.staff) * 2 }
+    if L.lifestyle == "lujoso" { p += 3 }
+    if L.lifestyle == "magnate" { p += 8 }
+    if L.dn != null && L.dn.card != null && L.dn.card.tier == 3 { p += 3 }
+    return p
+}
+
+function lx_status() {
+    let pts = lx_points()
+    let lvl = 0
+    let i = 0
+    while i < len(STATUS_LEVELS) {
+        if pts >= STATUS_LEVELS[i][0] { lvl = i }
+        i += 1
+    }
+    return lvl
+}
+
+function lx_status_name() {
+    let n = STATUS_LEVELS[lx_status()][1]
+    n = str_replace(n, "{a}", oa(L.gender))
+    return str_replace(n, "{o}", by_gender(L.gender, "o", "a"))
+}
+
+function buen_fin() {
+    return month_name() == "Noviembre"
+}
+
+function lx_price(a: map) {
+    if buen_fin() && asset_kind(a) != "house" && asset_kind(a) != "prop" { return a.cost * 75 / 100 }
+    return a.cost
+}
+
+function rentable(a: map) {
+    return asset_kind(a) == "prop"
+}
+
+function rented_count() {
+    if L.lx == null { return 0 }
+    return len(map_keys(L.lx.rent))
+}
+
+// ---------------------------------------------------------------- menús
+
+function litem(action: string, t: string, s: string, desc: string, lock: string) {
+    return {"action": "lx:" + action, "t": t, "s": s, "desc": desc, "lock": lock}
+}
+
+function lx_items(cat: string) {
+    let items = []
+    if L.age < 18 {
+        list_push(items, dninfo("Los lujos, a los 18", "", "Sin tarjeta ni contrato no hay compras grandes."))
+        return items
+    }
+    let d = lx()
+    if cat == "Personal" {
+        for s in STAFF {
+            let l = ""
+            if s.id == "ninera" && kids_under12() == 0 && !has_staff(s.id) { l = "Hijos pequeños" }
+            if (s.id == "mayordomo" || s.id == "jardinero") && house_owned() == null && !has_staff(s.id) { l = "Casa propia" }
+            let st = "Contratar · " + money_str(s.c) + "/mes"
+            if has_staff(s.id) { st = "TRABAJA PARA TI · despedir" }
+            list_push(items, litem("staff:" + s.id, s.n, st, fmt(s.d, {}), l))
+        }
+        return items
+    }
+    if cat == "Seguros" {
+        let car = lx_vehicles_value()
+        let al = ""
+        if car == 0 { al = "Sin vehículo" }
+        list_push(items, litem("ins:auto", "Seguro de auto", if_str(lx_insured("auto"), "ACTIVO · ", "") + money_str(lx_premium("auto")) + "/mes", "Cubre choques y robo de tus vehículos (pagas solo un deducible).", al))
+        let hl = ""
+        if lx_home_value() == 0 { hl = "Sin casa ni objetos de valor" }
+        list_push(items, litem("ins:hogar", "Seguro de hogar", if_str(lx_insured("hogar"), "ACTIVO · ", "") + money_str(lx_premium("hogar")) + "/mes", "Cubre goteras, fugas, aparatos y robos en casa, incluidas joyas y arte.", hl))
+        let vl = ""
+        if L.age > 75 && d.life_cov == 0 { vl = "Hasta los 75" }
+        let vs = "Elegir suma asegurada"
+        if d.life_cov > 0 { vs = "ACTIVO · " + money_str(d.life_cov) + " · " + money_str(lx_premium("vida")) + "/mes" }
+        list_push(items, litem("ins:vida", "Seguro de vida", vs, "Si mueres, tus herederos reciben la suma asegurada. Más caro entre más edad tengas.", vl))
+        list_push(items, dninfo("Seguro médico", "En Actividades › Médico", "Los gastos del hospital se cubren con el seguro médico."))
+        return items
+    }
+    if cat == "Tus bienes" {
+        list_push(items, dninfo("Estatus: " + lx_status_name(), str(lx_points()) + " puntos", "Sube con tus bienes, tu personal, tu estilo de vida y tu tarjeta. En la cima: jet set y élite."))
+        list_push(items, dninfo("Tus bienes valen " + money_str(lx_worth()), "Mantenimiento " + money_str(lx_keep_costs()) + "/mes", "Los vehículos pierden valor cada año; el arte, los relojes, los vinos y los autos clásicos pueden ganar."))
+        if rented_count() > 0 { list_push(items, dninfo("Propiedades rentadas: " + str(rented_count()), "Te han dejado " + money_str(d.rent_total), "Las rentas se declaran en tus impuestos (10%).")) }
+        if d.shopaholic { list_push(items, dninfo("Compras compulsivas", "Este año: " + str(d.buys_y) + " compras", "Compras por impulso. Se te quita si pasas un año comprando poco.")) }
+        for a in ASSETS {
+            if !owns(a) { continue }
+            if is_house_asset(a) {
+                list_push(items, dninfo(a.t, "Vende en Finanzas › Bienes", "Tu casa se compra y se vende en Finanzas."))
+                continue
+            }
+            let st = "Vale " + money_str(asset_value(a))
+            let r = d.rent[a.id]
+            if r == "larga" { st = st + " · rentada" }
+            if r == "temporada" { st = st + " · por temporadas" }
+            list_push(items, litem("own:" + a.id, a.t, st, "Venderla, subastarla o rentarla.", ""))
+        }
+        return items
+    }
+    if buen_fin() { list_push(items, dninfo("¡BUEN FIN!", "25% de descuento", "Todo noviembre, los lujos (menos las propiedades) cuestan 25% menos.")) }
+    for a in ASSETS {
+        if a.cat != cat { continue }
+        if is_house_asset(a) {
+            let l = ""
+            if owns(a) { l = "Ya la tienes" }
+            list_push(items, {"action": "fin:house:" + a.id, "t": a.t, "s": money_str(a.cost), "desc": "Tu casa: de contado o con hipoteca. Con casa propia no pagas renta.", "lock": l})
+            continue
+        }
+        let l = ""
+        let p = lx_price(a)
+        if owns(a) { l = "Ya lo tienes" }
+        let keep = ""
+        if a.keep > 0 { keep = " Mantenimiento: " + money_str(a.keep) + " al mes." }
+        let trend = "Pierde valor con los años."
+        if a.appr[0] >= 0 { trend = "Suele ganar valor con los años." } else if a.appr[1] > 0 { trend = "Su valor sube o baja con la moda." }
+        let extra = ""
+        if rentable(a) { extra = " La puedes rentar." }
+        list_push(items, litem("buy:" + a.id, a.t, money_str(p), "Felicidad y encanto. " + trend + keep + extra, l))
+    }
+    return items
+}
+
+function kids_under12() {
+    return list_count(L.people, fn(p) => p.alive && p.rel == "hijo" && p.age < 12)
+}
+
+function lx_vehicles_value() {
+    let total = 0
+    for a in ASSETS {
+        let k = asset_kind(a)
+        if owns(a) && (k == "car" || k == "moto" || k == "boat" || k == "air") { total += asset_value(a) }
+    }
+    return total
+}
+
+function lx_home_value() {
+    let total = 0
+    for h in HOUSES {
+        if list_contains(L.assets, h.t) { total += house_value(h) }
+    }
+    for a in ASSETS {
+        let k = asset_kind(a)
+        if owns(a) && (k == "prop" || k == "jewel" || k == "art" || k == "collect" || k == "wine" || k == "tech" || k == "fashion") { total += asset_value(a) }
+    }
+    return total
+}
+
+function lx_premium(kind: string) {
+    if kind == "auto" { return max(20, lx_vehicles_value() * 4 / 100 / 12) }
+    if kind == "hogar" { return max(15, lx_home_value() * 3 / 1000 / 12) }
+    let cov = lx().life_cov
+    if cov <= 0 { cov = 500000 }
+    return cov * (10 + max(0, L.age - 30)) / 100000
+}
+
+function lx_keep_costs() {
+    let total = 0
+    for a in ASSETS {
+        if owns(a) && !is_house_asset(a) { total += a.keep }
+    }
+    return total
+}
+
+// ---------------------------------------------------------------- acciones
+
+function lujos_action(action: string) {
+    G.modal = null
+    fin_init()
+    let d = lx()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    if L.age < 18 { return null }
+    match cmd {
+        "buy" => {
+            let a = asset_def(arg)
+            if a == null || owns(a) { return null }
+            let p = lx_price(a)
+            let locks = ["", "", "", ""]
+            if L.money < p { locks[0] = money_str(p) }
+            let c = dn().card
+            if c == null { locks[1] = "Sin tarjeta" } else if c.blocked || card_free(c) < p { locks[1] = "Sin crédito suficiente" }
+            let k = asset_kind(a)
+            if p < 20000 || !(k == "car" || k == "moto" || k == "boat" || k == "air" || k == "prop") { locks[2] = "Solo vehículos y casas" }
+            else if L.loan != null { locks[2] = "Ya tienes un préstamo" }
+            else if L.credit < 620 || dn_bk_lock() { locks[2] = "Crédito 620" }
+            else if L.money < p / 5 { locks[2] = "Enganche " + money_str(p / 5) }
+            let txt = a.t + ": " + money_str(p) + "."
+            if buen_fin() && p < a.cost { txt = txt + " ¡Precio de Buen Fin!" }
+            if a.keep > 0 { txt = txt + " Mantenimiento: " + money_str(a.keep) + " al mes." }
+            return open_choice("COMPRAR", txt, ["Pagar de contado", "Tarjeta a 12 meses sin intereses (" + money_str(p / 12) + "/mes)", "Financiarlo: 20% de enganche y 48 meses", "Mejor no"], locks, "lx_buy", {"id": a.id, "price": p})
+        }
+        "own" => {
+            let a = asset_def(arg)
+            if a == null || !owns(a) { return null }
+            let labels = ["Vender (" + money_str(lx_sale_value(a)) + ")"]
+            let ops = ["sell"]
+            let k = asset_kind(a)
+            if k == "art" || k == "collect" || k == "jewel" || k == "wine" || a.id == "clasico" {
+                list_push(labels, "Subastarlo (puede salir mejor o peor)")
+                list_push(ops, "auction")
+            }
+            if rentable(a) {
+                let r = d.rent[a.id]
+                if r == null {
+                    list_push(labels, "Rentarla a largo plazo (estable)")
+                    list_push(ops, "larga")
+                    list_push(labels, "Rentarla por temporadas (más dinero, más riesgo)")
+                    list_push(ops, "temporada")
+                } else {
+                    list_push(labels, "Dejar de rentarla")
+                    list_push(ops, "unrent")
+                }
+            }
+            list_push(labels, "Volver")
+            list_push(ops, "back")
+            let locks = []
+            for x in labels { list_push(locks, "") }
+            return open_choice(str_upper(a.t), "Vale " + money_str(asset_value(a)) + " (lo pagaste en " + money_str(a.cost) + ").", labels, locks, "lx_own", {"id": a.id, "ops": ops})
+        }
+        "staff" => {
+            let s = staff_def(arg)
+            if has_staff(arg) {
+                let keep = []
+                for id in d.staff {
+                    if id != arg { list_push(keep, id) }
+                }
+                d.staff = keep
+                if arg == "chofer" && dn().trans == "chofer" { dn().trans = "publico" }
+                return finish("Personal", "Despediste a tu " + str_lower(s.n) + ". Le diste una buena carta de recomendación.", "n")
+            }
+            list_push(d.staff, arg)
+            hito_once("first_staff", "Vida", "Contrataste a tu primer empleado doméstico")
+            if len(d.staff) >= 5 { flag("staff5") }
+            if arg == "chofer" { dn().trans = "chofer" }
+            return finish("Personal", "Contrataste un " + str_lower(s.n) + " por " + money_str(s.c) + " al mes.", "g")
+        }
+        "ins" => {
+            if arg == "vida" {
+                if d.life_cov > 0 {
+                    d.life_cov = 0
+                    return finish("Seguro de vida", "Cancelaste tu seguro de vida.", "n")
+                }
+                return open_choice("SEGURO DE VIDA", "¿Cuánto recibirán tus herederos si te pasa algo?", ["$500,000", "$2,000,000", "$10,000,000", "Mejor no"], ["", "", "", ""], "lx_life", {})
+            }
+            if lx_insured(arg) {
+                d.ins[arg] = false
+                return finish("Seguros", "Cancelaste tu seguro de " + arg + ".", "n")
+            }
+            d.ins[arg] = true
+            hito_once("first_insurance", "Vida", "Contrataste tu primer seguro")
+            return finish("Seguros", "Contrataste el seguro de " + arg + " por " + money_str(lx_premium(arg)) + " al mes.", "g")
+        }
+        _ => return null
+    }
+}
+
+function lujos_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = lx()
+    match handler {
+        "lx_buy" => {
+            let a = asset_def(ctx.id)
+            if a == null || owns(a) || index == 3 { return null }
+            let p = ctx.price
+            let how = ""
+            if index == 0 {
+                if L.money < p { return null }
+                L.money -= p
+                how = "de contado"
+            } else if index == 1 {
+                if !card_msi(a.t, p, 12) { return null }
+                how = "a 12 meses sin intereses"
+            } else {
+                let down = p / 5
+                if L.money < down || L.loan != null { return null }
+                L.money -= down
+                L.loan = {"bal": p - down, "rate": loan_rate() * 70 / 100, "base": (p - down) / 48}
+                how = "con " + money_str(down) + " de enganche y 48 mensualidades"
+            }
+            return lx_acquire(a, p, how)
+        }
+        "lx_own" => {
+            let a = asset_def(ctx.id)
+            if a == null || !owns(a) || index >= len(ctx.ops) { return null }
+            let op = ctx.ops[index]
+            match op {
+                "sell" => {
+                    let v = lx_sale_value(a)
+                    lx_remove(a)
+                    L.money += v
+                    return finish("Venta", "Vendiste " + lx_lower(a.t) + " por " + money_str(v) + ".", "n")
+                }
+                "auction" => {
+                    let v = asset_value(a) * rint(70, 150) / 100
+                    lx_remove(a)
+                    L.money += v
+                    dn().capgain += max(0, v - a.cost)
+                    if v >= 1000000 { hito_once("auction_million", "Vida", "Vendiste algo en una subasta por más de un millón") }
+                    let txt = "El martillo cayó: " + lx_lower(a.t) + " se vendió en " + money_str(v) + "."
+                    if v > a.cost { return finish("Subasta", txt + " ¡Más de lo que pagaste!", "g") }
+                    return finish("Subasta", txt, "n")
+                }
+                "larga" => {
+                    d.rent[a.id] = "larga"
+                    if rented_count() >= 3 { flag("landlord") }
+                    hito_once("landlord", "Vida", "Rentaste tu primera propiedad")
+                    return finish("Rentas", "Rentaste " + lx_lower(a.t) + " a largo plazo: unos " + money_str(asset_value(a) * 45 / 10000) + " al mes.", "g")
+                }
+                "temporada" => {
+                    d.rent[a.id] = "temporada"
+                    if rented_count() >= 3 { flag("landlord") }
+                    hito_once("landlord", "Vida", "Rentaste tu primera propiedad")
+                    return finish("Rentas", "Publicaste " + lx_lower(a.t) + " para rentas por temporada. Más dinero, más huéspedes impredecibles.", "g")
+                }
+                "unrent" => {
+                    map_remove(d.rent, a.id)
+                    return finish("Rentas", "Ya no rentas " + lx_lower(a.t) + ". Vuelve a ser tu refugio.", "n")
+                }
+                _ => return null
+            }
+        }
+        "lx_life" => {
+            if index >= 3 { return null }
+            d.life_cov = [500000, 2000000, 10000000][index]
+            hito_once("first_insurance", "Vida", "Contrataste tu primer seguro")
+            return finish("Seguro de vida", "Contrataste un seguro de vida por " + money_str(d.life_cov) + ". Pagarás " + money_str(lx_premium("vida")) + " al mes.", "g")
+        }
+        _ => return null
+    }
+}
+
+function lx_acquire(a: map, paid: int, how: string) {
+    let d = lx()
+    list_push(L.assets, a.t)
+    let k = asset_kind(a)
+    let v = a.cost
+    if k == "car" || k == "moto" || k == "bike" || k == "tech" || k == "fashion" { v = a.cost * 80 / 100 }
+    d.val[a.id] = v
+    d.buys_y += 1
+    if d.buys_y >= 6 && !d.shopaholic {
+        d.shopaholic = true
+        log_add("Llevas " + str(d.buys_y) + " compras este año. Tu banco ya te reconoce por la voz.", "n")
+    }
+    L.happy = clamp100(L.happy + a.happy)
+    gain("charm", a.charm)
+    hito_me("Vida", "Compraste: " + lx_lower(a.t))
+    lx_flags()
+    return finish("Compra", "Compraste " + lx_lower(a.t) + " " + how + ". Todo el barrio te mira con envidia.", "g")
+}
+
+function lx_remove(a: map) {
+    list_remove_value(L.assets, a.t)
+    if L.lx != null {
+        map_remove(L.lx.rent, a.id)
+        map_remove(L.lx.val, a.id)
+    }
+    return null
+}
+
+function lx_flags() {
+    let vehicles = 0
+    for a in ASSETS {
+        let k = asset_kind(a)
+        if owns(a) && (k == "car" || k == "moto" || k == "boat" || k == "air" || k == "bike") { vehicles += 1 }
+    }
+    if vehicles >= 5 { flag("garage") }
+    let isla = asset_def("isla")
+    if isla != null && owns(isla) { flag("island") }
+    if lx_collection_value() >= 1000000 { flag("art_collector") }
+    if lx_status() >= 3 { flag("jet_set") }
+    return null
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function lujos_month() {
+    if L.lx == null || L.age < 18 { return null }
+    let d = L.lx
+    // Ya no tienes la casa que rentabas (la vendiste, te la embargaron...).
+    for id in map_keys(d.rent) {
+        let a = asset_def(id)
+        if a == null || !owns(a) { map_remove(d.rent, id) }
+    }
+    if L.jail > 0 { return null }
+    let costs = lx_keep_costs()
+    for id in d.staff { costs += staff_def(id).c }
+    if lx_insured("auto") { costs += lx_premium("auto") }
+    if lx_insured("hogar") { costs += lx_premium("hogar") }
+    if d.life_cov > 0 { costs += lx_premium("vida") }
+    dn_charge(costs)
+    if len(d.staff) > 0 && L.money < -5000 {
+        d.staff = []
+        if dn().trans == "chofer" { dn().trans = "publico" }
+        log_add("Tu personal renunció: hace meses que no les pagas.", "b")
+    }
+    // Segundas casas y rentas
+    for a in ASSETS {
+        if !owns(a) || !rentable(a) { continue }
+        let r = d.rent[a.id]
+        let v = asset_value(a)
+        if r == null {
+            if chance(30) { L.happy += 1 }
+            if a.id == "vinedo" {
+                let wine = v * 4 / 1000
+                L.money += wine
+                dn().rentinc += wine
+            }
+            continue
+        }
+        let income = v * 45 / 10000
+        if r == "temporada" { income = v * 90 / 10000 * rint(30, 100) / 100 }
+        if chance(6) {
+            if r == "larga" {
+                if chance(60) {
+                    income = 0
+                    log_add("El inquilino de tu " + lx_lower(a.t) + " no pagó este mes. «La próxima semana, sin falta.»", "b")
+                } else {
+                    log_add("Tu inquilino de " + lx_lower(a.t) + " es un sol: pagó por adelantado y arregló la llave del baño.", "g")
+                    income = income * 2
+                }
+            } else {
+                let dmg = v * rint(5, 20) / 1000
+                income -= dmg
+                log_add("Unos huéspedes hicieron una fiesta en tu " + lx_lower(a.t) + ": reparaciones por " + money_str(dmg) + ".", "b")
+            }
+        }
+        L.money += income
+        dn().rentinc += max(0, income)
+        d.rent_total += max(0, income)
+    }
+    if has_staff("ninera") && kids_under12() > 0 && chance(30) { L.parent_score = clamp100(L.parent_score + 1) }
+    if has_staff("entrenador") && chance(25) { L.looks = clamp100(L.looks + 1) }
+    if d.shopaholic && L.money > 0 && chance(30) {
+        let spent = L.money * rint(1, 4) / 100
+        L.money -= spent
+        L.happy += 1
+        log_add("Compraste cosas que no necesitabas: " + money_str(spent) + " en paquetes que siguen sin abrir.", "n")
+    }
+    // Robos
+    lx_robbery()
+    lx_flags()
+    return null
+}
+
+function lx_robbery() {
+    let d = lx()
+    let pool = []
+    for a in ASSETS {
+        let k = asset_kind(a)
+        if owns(a) && (k == "jewel" || k == "art" || k == "collect" || k == "tech" || k == "fashion" || k == "car" || k == "moto") { list_push(pool, a) }
+    }
+    if len(pool) == 0 { return null }
+    let odds = 5 + lx_status() * 3
+    if rint(1, 1000) > odds { return null }
+    if has_staff("guardaespaldas") {
+        log_add("Tu guardaespaldas espantó a unos tipos que rondaban tu casa.", "g")
+        return null
+    }
+    let a = pick(pool)
+    let v = asset_value(a)
+    lx_remove(a)
+    let kind = "hogar"
+    if asset_kind(a) == "car" || asset_kind(a) == "moto" { kind = "auto" }
+    let msg = "Te robaron: " + lx_lower(a.t) + "."
+    if lx_insured(kind) {
+        L.money += v * 80 / 100
+        msg = msg + " El seguro te pagó " + money_str(v * 80 / 100) + "."
+    } else {
+        L.happy -= 8
+        msg = msg + " No tenías seguro."
+    }
+    log_add(msg, "b")
+    return null
+}
+
+function lujos_year() {
+    if L.lx == null { return null }
+    let d = L.lx
+    for a in ASSETS {
+        if !owns(a) || is_house_asset(a) { continue }
+        let v = map_get(d.val, a.id, a.cost)
+        let ch = rint(a.appr[0], a.appr[1])
+        v = max(a.cost * 15 / 100, v * (100 + ch) / 100)
+        d.val[a.id] = v
+    }
+    if d.buys_y < 2 { d.shopaholic = false }
+    d.buys_y = 0
+    lx_flags()
+    return null
+}
+
+// ---------------------------------------------------------------- eventos
+
+function lx_event_ok(ev: map) {
+    let last = L.seen[ev.id]
+    if last != null && L.age - last < 3 { return false }
+    if ev.status != null && lx_status() < ev.status { return false }
+    if ev.money != null && L.money < ev.money { return false }
+    if ev.fame != null && L.fame < ev.fame { return false }
+    if ev.boat == true && !has_kind(["boat"]) { return false }
+    if ev.classic == true {
+        let c = asset_def("clasico")
+        if c == null || !owns(c) { return false }
+    }
+    if ev.home == true && house_owned() == null && !has_kind(["prop"]) { return false }
+    if ev.guard == true && has_staff("guardaespaldas") { return false }
+    return true
+}
+
+function lx_event() {
+    if L.lx == null || !chance(3) { return false }
+    let pool = []
+    let weights = []
+    for ev in LX_EVENTS {
+        if lx_event_ok(ev) {
+            list_push(pool, ev)
+            list_push(weights, ev.w)
+        }
+    }
+    if len(pool) == 0 { return false }
+    open_event(pool[weighted_choose(G.rng, weights)], {})
+    return true
+}
+
+function lujos_special(name: string, ctx: map) {
+    match name {
+        "lx_rob" => {
+            lx().rob_m = L.tm
+            lx_robbery_forced()
+            return ""
+        }
+        "lx_guard" => {
+            let d = lx()
+            if !has_staff("guardaespaldas") { list_push(d.staff, "guardaespaldas") }
+            return " Tu guardaespaldas cobra " + money_str(staff_def("guardaespaldas").c) + " al mes."
+        }
+        "lx_classic_win" => {
+            let a = asset_def("clasico")
+            if a != null && owns(a) { lx().val[a.id] = asset_value(a) * 115 / 100 }
+            return ""
+        }
+        _ => return ""
+    }
+}
+
+function lx_robbery_forced() {
+    for a in ASSETS {
+        let k = asset_kind(a)
+        if owns(a) && (k == "jewel" || k == "art" || k == "tech" || k == "fashion") {
+            let v = asset_value(a)
+            lx_remove(a)
+            if lx_insured("hogar") {
+                L.money += v * 80 / 100
+                log_add("Te robaron: " + lx_lower(a.t) + ". El seguro pagó " + money_str(v * 80 / 100) + ".", "b")
+            } else {
+                log_add("Te robaron: " + lx_lower(a.t) + ".", "b")
+            }
+            return null
+        }
+    }
+    return null
+}
+
+function lx_fx(out: list) {
+    let st = lx_status()
+    if st == 3 { list_push(out, fx("jet_set", "Jet set", true, "Te invitan a todas las fiestas que importan.", {"flirt": 5, "hire": 3})) }
+    if st >= 4 { list_push(out, fx("elite", "Élite", true, "Tu apellido abre cualquier puerta.", {"flirt": 8, "hire": 5, "hap": 1})) }
+    if L.lx == null { return null }
+    for id in L.lx.staff {
+        let s = staff_def(id)
+        if len(map_keys(s.fx)) > 0 { list_push(out, fx("staff_" + id, s.n, true, fmt(s.d, {}), s.fx)) }
+    }
+    if L.lx.shopaholic { list_push(out, fx("shopaholic", "Compras compulsivas", false, "Cada paquete que llega te alegra cinco minutos.", {"hap": 1})) }
+    return null
+}
