@@ -179,10 +179,18 @@ function tilt_title_doc(src: string, w: int, h: int, size: int, fill: string, ou
     let key = "t|" + text + "|" + str(w) + "|" + str(h) + "|" + str(size) + "|" + fill + "|" + outline
     let cached = svgc[key]
     if cached != null { return cached }
+    // En otros idiomas el título puede ser más largo: se achica para caber.
+    let fs = size
+    let m = FONTS["impact"]
+    if m != null {
+        let tw = int(str_measure(text, m, size) + 0.99)
+        let avail = w - 44
+        if tw > avail { fs = max(size / 2, size * avail / tw) }
+    }
     let t = "<g transform='translate(14 " + str(h - size / 4) + ") rotate(-3)'>"
-    let attrs = " font-family='" + FONT_TITLE + "' font-weight='bold' font-size='" + str(size) + "'"
+    let attrs = " font-family='" + FONT_TITLE + "' font-weight='bold' font-size='" + str(fs) + "'"
     t = t + "<text x='5' y='5'" + attrs + " fill='" + HEX_INK + "'>" + esc(text) + "</text>"
-    t = t + "<text x='0' y='0'" + attrs + " fill='" + outline + "' stroke='" + outline + "' stroke-width='" + str(size / 7) + "' stroke-linejoin='round'>" + esc(text) + "</text>"
+    t = t + "<text x='0' y='0'" + attrs + " fill='" + outline + "' stroke='" + outline + "' stroke-width='" + str(max(3, fs / 7)) + "' stroke-linejoin='round'>" + esc(text) + "</text>"
     t = t + "<text x='0' y='0'" + attrs + " fill='" + fill + "'>" + esc(text) + "</text></g>"
     let doc = svg_doc(w, h, t)
     svgc[key] = doc

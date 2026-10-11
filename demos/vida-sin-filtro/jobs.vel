@@ -738,7 +738,7 @@ function career_items() {
     if actions == null { actions = FIELD_ACTIONS[d.field] }
     for a in actions {
         let lock = ""
-        if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
+        if a.need != null && rank(a.need) < a.rank { lock = need_text(a.need, a.rank) }
         list_push(items, {"action": "cact:" + a.id, "t": a.t, "s": a.s, "desc": a.desc, "lock": lock})
     }
     if job_is_adult(L.job) && CAREER_ACTIONS[L.job.id] == null {

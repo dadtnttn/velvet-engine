@@ -1400,7 +1400,7 @@ function open_event(ev: map, ctx: map) {
 // Requisito pendiente de una opción ("" si se puede elegir).
 function choice_lock(c: map) {
     if c.need != null && rank(c.need) < c.rank {
-        return SOCIAL_NAMES[c.need] + " " + str(c.rank)
+        return need_text(c.need, c.rank)
     }
     if c.cost != null && L.money < local_price(c.cost) {
         return "Necesitas " + money_str(local_price(c.cost))
@@ -1416,7 +1416,7 @@ function choice_lock(c: map) {
 
 // Etiqueta visible del requisito aunque ya se cumpla (estilo Persona).
 function choice_tag(c: map) {
-    if c.need != null { return SOCIAL_NAMES[c.need] + " " + str(c.rank) }
+    if c.need != null { return need_text(c.need, c.rank) }
     if c.kink != null { return kink_name(c.kink, L.gender) }
     return ""
 }

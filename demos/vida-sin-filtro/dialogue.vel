@@ -901,13 +901,13 @@ function dlg_show(id: string, prefix: string) {
         list_push(opts, o)
         list_push(labels, fmt(o.t, G.dlg.ctx))
         let lock = ""
-        if o.need != null && rank(o.need) < o.rank { lock = SOCIAL_NAMES[o.need] + " " + str(o.rank) }
+        if o.need != null && rank(o.need) < o.rank { lock = need_text(o.need, o.rank) }
         list_push(locks, lock)
         let tg = ""
         if o.roll != null {
             tg = str(dlg_chance(o, p)) + "%"
         } else if o.need != null {
-            tg = SOCIAL_NAMES[o.need] + " " + str(o.rank)
+            tg = need_text(o.need, o.rank)
         }
         list_push(tags, tg)
     }
