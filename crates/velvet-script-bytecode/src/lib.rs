@@ -390,6 +390,11 @@ pub enum NativeId {
     JsonDecode = 184,
     /// `str_wrap(text, advances, size, max_width)` → list of lines.
     StrWrap = 185,
+    /// `tr(text)`: text translated by the host's active language catalog
+    /// (unchanged when no catalog is installed or no entry matches).
+    Tr = 186,
+    /// `i18n_lang()`: code of the active language (`""` when none).
+    I18nLang = 187,
 }
 
 impl NativeId {
@@ -582,6 +587,8 @@ impl NativeId {
             183 => Self::JsonEncode,
             184 => Self::JsonDecode,
             185 => Self::StrWrap,
+            186 => Self::Tr,
+            187 => Self::I18nLang,
             _ => return None,
         })
     }
@@ -781,6 +788,8 @@ impl NativeId {
             Self::JsonEncode => "json_encode",
             Self::JsonDecode => "json_decode",
             Self::StrWrap => "str_wrap",
+            Self::Tr => "tr",
+            Self::I18nLang => "i18n_lang",
         }
     }
 
@@ -973,6 +982,8 @@ impl NativeId {
             Self::JsonEncode,
             Self::JsonDecode,
             Self::StrWrap,
+            Self::Tr,
+            Self::I18nLang,
         ]
     }
 }
@@ -1166,6 +1177,8 @@ pub fn lookup_native(name: &str) -> Option<NativeId> {
         "json_encode" => Some(NativeId::JsonEncode),
         "json_decode" => Some(NativeId::JsonDecode),
         "str_wrap" => Some(NativeId::StrWrap),
+        "tr" => Some(NativeId::Tr),
+        "i18n_lang" => Some(NativeId::I18nLang),
         _ => None,
     }
 }
@@ -1363,6 +1376,7 @@ impl NativeId {
             N::ListReduce | N::StrMeasure => (3, 3),
             N::JsonEncode => (1, 2),
             N::StrWrap => (4, 4),
+            N::I18nLang => (0, 0),
             _ => (1, 1),
         };
 
@@ -1472,6 +1486,7 @@ impl NativeId {
             N::StrSub => &[T::String, T::Int, T::Int],
             N::StrMeasure => &[T::String, T::Map, T::Number],
             N::StrWrap => &[T::String, T::Map, T::Number, T::Number],
+            N::Tr => &[T::String],
             N::JsonEncode => &[T::Any, T::Bool],
             _ => &[T::Any],
         };
@@ -1571,7 +1586,7 @@ impl NativeId {
             N::Float | N::ParseFloat | N::StrMeasure => T::Float,
             N::ListMap | N::ListFilter | N::ListSortBy | N::StrChars | N::StrWrap => T::List,
             N::ListAny | N::ListAll => T::Bool,
-            N::StrRepeat | N::StrPadLeft | N::StrPadRight | N::StrSub | N::JsonEncode => T::String,
+            N::StrRepeat | N::StrPadLeft | N::StrPadRight | N::StrSub | N::JsonEncode | N::Tr | N::I18nLang => T::String,
             N::Call | N::ListFind | N::ListReduce | N::MapGet | N::JsonDecode => T::Any,
             N::ListPop
             | N::Choose
@@ -1615,6 +1630,8 @@ impl NativeId {
                 | N::ListCount
                 | N::ListReduce
                 | N::ListSortBy
+                | N::Tr
+                | N::I18nLang
         ) {
             Impure
         } else {

@@ -135,6 +135,8 @@ pub(crate) fn call_ext(native: NativeId, args: &[Value]) -> Option<Result<Native
             | N::StrWrap
             | N::JsonEncode
             | N::JsonDecode
+            | N::Tr
+            | N::I18nLang
     ) {
         return None;
     }
@@ -238,6 +240,11 @@ pub(crate) fn call_ext(native: NativeId, args: &[Value]) -> Option<Result<Native
         N::JsonDecode => as_str(&args[0], "json_decode")
             .and_then(json_decode)
             .map(out),
+        N::Tr => match &args[0] {
+            Value::String(s) => Ok(out(text(crate::i18n::translate(s)))),
+            other => Ok(out(other.clone())),
+        },
+        N::I18nLang => Ok(out(text(crate::i18n::active_lang()))),
         _ => return None,
     };
     Some(r)
@@ -248,7 +255,7 @@ pub(crate) fn ext_cost(native: NativeId, args: &[Value]) -> u64 {
     use NativeId as N;
     let slen = |i: usize| args.get(i).and_then(Value::as_str).map_or(0, str::len) as u64;
     match native {
-        N::StrIndexOf | N::StrChars | N::StrSub | N::StrMeasure | N::JsonDecode => slen(0) / 4,
+        N::StrIndexOf | N::StrChars | N::StrSub | N::StrMeasure | N::JsonDecode | N::Tr => slen(0) / 4,
         N::StrWrap => slen(0),
         N::StrRepeat => {
             slen(0).saturating_mul(args.get(1).and_then(Value::as_i64).unwrap_or(0).max(0) as u64)
@@ -375,6 +382,9 @@ struct Advances {
     table: BTreeMap<String, Value>,
     default: f64,
     scale: f64,
+    /// Host font id (`"__font"` entry): measured with real metrics when the
+    /// host installed a measurer.
+    font: Option<String>,
 }
 
 impl Advances {
@@ -387,14 +397,24 @@ impl Advances {
             .map_entries()
             .map_err(|_| format!("{name} expects an advance map"))?;
         let default = table.get("default").and_then(Value::as_f64).unwrap_or(55.0);
+        let font = table
+            .get("__font")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
         Ok(Self {
             table,
             default,
             scale,
+            font,
         })
     }
 
     fn width(&self, s: &str) -> f64 {
+        if let Some(font) = &self.font {
+            if let Some(w) = crate::i18n::host_measure(font, s, self.scale * 100.0) {
+                return w;
+            }
+        }
         let mut key = String::new();
         let mut width = 0.0;
         for c in s.chars() {

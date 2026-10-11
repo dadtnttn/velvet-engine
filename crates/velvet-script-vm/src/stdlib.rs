@@ -736,7 +736,7 @@ mod tests {
     fn lookup_names() {
         assert_eq!(lookup_native("abs"), Some(NativeId::Abs));
         assert!(lookup_native("nope").is_none());
-        assert_eq!(NativeId::all().len(), 186);
+        assert_eq!(NativeId::all().len(), 188);
         // New collection natives resolve by name and keep stable ids.
         assert_eq!(lookup_native("str_split"), Some(NativeId::StrSplit));
         assert_eq!(lookup_native("list_sort"), Some(NativeId::ListSort));

@@ -35,6 +35,16 @@ pub struct SvgCache {
 }
 
 impl SvgCache {
+    /// Make an extra font (e.g. a fallback for the active language) visible
+    /// to SVG text.
+    pub fn add_font(&mut self, data: &[u8]) {
+        std::sync::Arc::make_mut(&mut self.fontdb).load_font_data(data.to_vec());
+    }
+    /// Forget every cached raster (fonts changed).
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.pixels = 0;
+    }
     /// Builds a cache whose text rendering only sees the given font files.
     pub fn new<'a>(fonts: impl IntoIterator<Item = &'a [u8]>) -> Self {
         let mut db = usvg::fontdb::Database::new();

@@ -171,7 +171,8 @@ function ransom_doc(letters: list, size: int, seed: int) {
 }
 
 // Título ladeado con contorno grueso (encabezados de menú).
-function tilt_title_doc(text: string, w: int, h: int, size: int, fill: string, outline: string) {
+function tilt_title_doc(src: string, w: int, h: int, size: int, fill: string, outline: string) {
+    let text = tr(src)
     let key = "t|" + text + "|" + str(w) + "|" + str(h) + "|" + str(size) + "|" + fill + "|" + outline
     let cached = svgc[key]
     if cached != null { return cached }

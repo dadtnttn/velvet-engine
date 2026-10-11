@@ -1,6 +1,7 @@
 mod canvas;
 mod fonts;
 mod image_ops;
+mod layout;
 mod svg;
 mod text_ops;
 mod viewport;

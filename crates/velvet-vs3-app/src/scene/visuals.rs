@@ -271,21 +271,21 @@ fn text(canvas: &mut Canvas, fonts: &FontSystem, c: &VisualCommandView, s: &Stat
     let f = fonts.named(&c.font);
     let x = (c.x + s.offset[0]).round() as i32;
     let y = (c.y + s.offset[1]).round() as i32;
-    let (line, size) = fit_line(f, &c.text, c.size.max(8.0), c.max_width, &c.overflow);
+    let (line, size) = fit_line(&f, &c.text, c.size.max(8.0), c.max_width, &c.overflow);
     match c.align.as_str() {
-        "center" => canvas.centered_text(f, &line, x, y, size, color(c.color)),
+        "center" => canvas.centered_text(&f, &line, x, y, size, color(c.color)),
         "right" => {
-            let width = Canvas::measure_text(f, &line, size).round() as i32;
-            canvas.text_line(f, &line, x - width, y, size, color(c.color));
+            let width = Canvas::measure_text(&f, &line, size).round() as i32;
+            canvas.text_line(&f, &line, x - width, y, size, color(c.color));
         }
         _ => {
-            canvas.text_line(f, &line, x, y, size, color(c.color));
+            canvas.text_line(&f, &line, x, y, size, color(c.color));
         }
     }
 }
 fn text_wrap(canvas: &mut Canvas, fonts: &FontSystem, c: &VisualCommandView, s: &State) {
     canvas.text_wrapped(
-        fonts.named(&c.font),
+        &fonts.named(&c.font),
         &c.text,
         (c.x + s.offset[0]).round() as i32,
         (c.y + s.offset[1]).round() as i32,
@@ -363,9 +363,9 @@ fn button(
     } else {
         c.overflow.as_str()
     };
-    let (label, size) = fit_line(font, &c.text, c.size.max(8.0), room, overflow);
+    let (label, size) = fit_line(&font, &c.text, c.size.max(8.0), room, overflow);
     canvas.centered_text(
-        font,
+        &font,
         &label,
         area.x + area.w / 2 + i32::from(pressed),
         area.y + area.h / 2 + (size * 0.4) as i32 + i32::from(pressed),
@@ -399,7 +399,7 @@ fn keycap(
         fallback_button(canvas, c, area, false)
     }
     canvas.centered_text(
-        fonts.named(&c.font),
+        &fonts.named(&c.font),
         &c.text,
         area.x + area.w / 2,
         area.y + area.h / 2 + (c.size.max(8.0) * 0.4) as i32,

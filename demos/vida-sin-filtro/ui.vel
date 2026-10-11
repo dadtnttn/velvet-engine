@@ -48,20 +48,20 @@ function arect(x: any, y: any, w: any, h: any, color: int) {
 }
 
 function text(x: any, y: any, s: string, size: int, color: int, font: string) {
-    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font})
+    push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font})
 }
 
 function ctext(x: any, y: any, s: string, size: int, color: int, font: string) {
-    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font, "align": "center"})
+    push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "align": "center"})
 }
 
 // Variantes con ancho máximo: el host recorta con «…» usando la fuente real.
 function textw(x: any, y: any, s: string, size: int, color: int, font: string, w: any) {
-    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font, "max_width": w})
+    push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "max_width": w})
 }
 
 function ctextw(x: any, y: any, s: string, size: int, color: int, font: string, w: any) {
-    push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font, "align": "center", "max_width": w})
+    push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "align": "center", "max_width": w})
 }
 
 function otextw(x: any, y: any, s: string, size: int, color: int, font: string, center: bool, w: any) {
@@ -127,15 +127,17 @@ function tag(x: int, y: int, w: int, lbl: string, fill: string, color: int) {
 // entregó métricas, se estima por número de letras).
 function measure(s: string, size: int, font: string) {
     let m = FONTS[font]
-    if m != null { return int(str_measure(s, m, size) + 0.99) }
-    return len(s) * size * 54 / 100
+    let t = tr(s)
+    if m != null { return int(str_measure(t, m, size) + 0.99) }
+    return len(t) * size * 54 / 100
 }
 
 // Parte un texto en líneas que caben en `width` píxeles con esa fuente.
 function wrap_f(s: string, width: int, size: int, font: string) {
     let m = FONTS[font]
-    if m != null { return str_wrap(s, m, size, width) }
-    return wrap(s, width * 100 / (size * 54))
+    let t = tr(s)
+    if m != null { return str_wrap(t, m, size, width) }
+    return wrap(t, width * 100 / (size * 54))
 }
 
 function wrap_px(s: string, width: int, size: int) {

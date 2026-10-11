@@ -27,8 +27,8 @@ impl Rect {
     }
 }
 
-/// Cached glyph coverage keyed by font identity, character and pixel size.
-type GlyphKey = (usize, char, u32);
+/// Cached glyph coverage keyed by font identity, glyph code and pixel size.
+type GlyphKey = (usize, u32, u32);
 /// Upper bound on cached glyphs before the cache is reset.
 const MAX_CACHED_GLYPHS: usize = 16_384;
 
@@ -55,16 +55,20 @@ impl Canvas {
     /// Rasterizes `ch` once per font and size; later calls reuse the coverage.
     pub(crate) fn glyph(
         &mut self,
-        font: &fontdue::Font,
-        ch: char,
+        font: &super::fonts::LoadedFont,
+        glyph: super::layout::GlyphRef,
         size: f32,
     ) -> (fontdue::Metrics, &[u8]) {
-        let key = (font as *const fontdue::Font as usize, ch, size.to_bits());
+        let key = (font.key, glyph.code(), size.to_bits());
         if !self.glyphs.contains_key(&key) {
             if self.glyphs.len() >= MAX_CACHED_GLYPHS {
                 self.glyphs.clear();
             }
-            self.glyphs.insert(key, font.rasterize(ch, size));
+            let raster = match glyph {
+                super::layout::GlyphRef::Char(ch) => font.font.rasterize(ch, size),
+                super::layout::GlyphRef::Index(i) => font.font.rasterize_indexed(i, size),
+            };
+            self.glyphs.insert(key, raster);
         }
         let (metrics, bitmap) = &self.glyphs[&key];
         (*metrics, bitmap.as_slice())

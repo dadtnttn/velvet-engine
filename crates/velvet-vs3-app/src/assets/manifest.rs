@@ -17,6 +17,23 @@ pub struct FontSpec {
     pub path: String,
 }
 
+/// A font used for characters the main fonts lack (CJK, Devanagari, Thai,
+/// Hebrew...). Loaded on demand for the languages listed in `langs`
+/// (`["*"]` = always).
+#[derive(Debug, Clone)]
+pub struct FallbackFontSpec {
+    pub id: String,
+    pub path: String,
+    pub langs: Vec<String>,
+}
+
+/// A sound effect or music track (16-bit PCM WAV).
+#[derive(Debug, Clone)]
+pub struct SoundSpec {
+    pub id: String,
+    pub path: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct AppSpec {
     pub title: String,
@@ -73,7 +90,9 @@ pub struct AppManifest {
     pub limits: AppLimits,
     pub root: String,
     pub fonts: Vec<FontSpec>,
+    pub fallback_fonts: Vec<FallbackFontSpec>,
     pub images: Vec<ImageSpec>,
+    pub sounds: Vec<SoundSpec>,
 }
 
 impl AppManifest {
@@ -126,6 +145,35 @@ impl AppManifest {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let fallback_fonts = match optional_field(value, "fallback_fonts")? {
+            Some(items) => items
+                .list_items()
+                .map_err(|error| anyhow!(error))?
+                .iter()
+                .map(|entry| {
+                    Ok(FallbackFontSpec {
+                        id: string(entry, "id")?,
+                        path: string(entry, "path")?,
+                        langs: optional_strings(entry, "langs")?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            None => Vec::new(),
+        };
+        let sounds = match optional_field(value, "sounds")? {
+            Some(items) => items
+                .list_items()
+                .map_err(|error| anyhow!(error))?
+                .iter()
+                .map(|entry| {
+                    Ok(SoundSpec {
+                        id: string(entry, "id")?,
+                        path: string(entry, "path")?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            None => Vec::new(),
+        };
         anyhow::ensure!(!fonts.is_empty(), "manifest requires at least one font");
         anyhow::ensure!(
             images.len() <= limits.max_assets,
@@ -137,7 +185,9 @@ impl AppManifest {
             limits,
             root,
             fonts,
+            fallback_fonts,
             images,
+            sounds,
         })
     }
 
