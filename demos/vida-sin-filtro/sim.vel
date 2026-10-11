@@ -51,7 +51,11 @@ state {
         "ph_card_t0": -10.0,
         "back_pid": 0,
         "chat": null,
-        "bj": null
+        "bj": null,
+        // Eventos para el host (guardado, tareas) que salen en el próximo frame.
+        "out": [],
+        // Avance de varios años en curso (tarea del runtime).
+        "skip": null
     }
 }
 

@@ -32,6 +32,7 @@ Exportaciones opcionales:
 export function app_shutdown() { ... }
 export function app_fonts(metrics: map) { ... }     // antes de app_init
 export function app_storage(result: map) { ... }    // devuelve un frame
+export function app_task(name: string, arg: any) { ... }  // trabajo largo
 ```
 
 ## Manifiesto
@@ -55,7 +56,9 @@ export function app_manifest() {
             "max_assets": 512,
             "max_image_pixels": 67108864,
             "max_memory_units": 64000000,
-            "max_instructions": 5000000
+            "max_instructions": 5000000,
+            "task_slice_instructions": 2000000,
+            "max_task_instructions": 4000000000
         },
         "root": "assets",
         "fonts": [
@@ -195,9 +198,55 @@ El frame puede emitir:
 {"kind": "window.set_size", "payload": {"width": 1280, "height": 720}}
 {"kind": "window.set_fullscreen", "payload": {"enabled": true}}
 {"kind": "app.profile", "payload": {"enabled": true}}   // false imprime el informe
+{"kind": "app.task", "payload": {"name": "years", "arg": 10}}  // ver Tareas largas
 ```
 
 Cerrar la ventana desde el sistema sigue siendo una operación del host.
+
+## Tareas largas (`app_task`)
+
+`max_instructions` limita cada llamada (`app_update`, `app_action`…). Para un
+trabajo que no cabe en una llamada (simular años, generar un mapa grande,
+cargar datos, una IA que piensa) el frame emite:
+
+```vel
+{"kind": "app.task", "payload": {"name": "years", "arg": 10}}
+```
+
+y el host empieza `app_task(name, arg)` como **tarea cooperativa** sobre la misma
+sesión (ve y cambia el mismo `state`). Desde el frame siguiente:
+
+- Cada frame la tarea corre hasta `task_slice_instructions` instrucciones
+  (2 millones por defecto). Si se acaban a mitad de trabajo, se pausa sola y
+  sigue en el próximo frame, sin perder nada. La ventana nunca se congela.
+- `yield(frame)` muestra ese frame y espera al siguiente. El valor de `yield`
+  es `{"dt": segundos, "input": paquete físico, "action": acción clicada o null}`.
+- Mientras la tarea corre, el host no llama a `app_update` ni a `app_action`:
+  los clics llegan como `action` en la respuesta de `yield`.
+- Al terminar, la tarea devuelve un frame (o `null`) y la app sigue normal.
+- `max_task_instructions` (4.000 millones por defecto) corta una tarea
+  descontrolada; el error muestra la pila del script.
+- Las respuestas de `storage` pedidas durante la tarea se entregan a
+  `app_storage` cuando termina.
+
+```vel
+export function app_task(name: string, arg: any) {
+    match name {
+        "years" => {
+            let i = 0
+            while i < arg {
+                simulate_year()
+                i += 1
+                let ev = yield(progress_frame(i, arg))   // un año por frame
+                if ev.action == "cancel" { break }
+            }
+        }
+    }
+    return frame()
+}
+```
+
+`velvet app profile` deja terminar las tareas que inicie cada `--action`.
 
 ## Guardado de partida (`storage`)
 
@@ -252,7 +301,7 @@ supera `max_instructions`, el error muestra la pila del script en ese momento.
 
 ## Seguridad y límites
 
-- La VM conserva sus límites de instrucciones (por llamada), memoria, stack y recursión.
+- La VM conserva sus límites de instrucciones (por llamada, por porción de tarea y por tarea completa), memoria, stack y recursión.
 - El guardado solo escribe en la carpeta de slots de la app.
 - Los recursos quedan confinados al `root` declarado.
 - Se limita el número de recursos, píxeles por imagen y comandos por frame.

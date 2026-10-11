@@ -15,8 +15,10 @@ use crate::graphics::{
 use crate::input::InputState;
 use crate::model::{FrameView, RuntimeEvent};
 use crate::scene::{action_at, render_scene};
+use crate::script::InputFrame;
 use crate::script::ScriptRuntime;
 use crate::storage::SaveStore;
+use velvet_script_vs3::TaskStep;
 
 #[derive(Debug, Clone)]
 pub struct AppOptions {
@@ -113,18 +115,10 @@ pub fn capture_package_with_action(
 ) -> Result<()> {
     let mut app = Vs3App::with_saves(path, SaveLocation::Memory)?;
     if let Some(action) = action {
-        let frame = app
-            .runtime
-            .action(action)
-            .and_then(|value| FrameView::parse(&value))?;
-        app.accept_checked(frame)?;
+        app.perform_action(action)?;
     }
     for _ in 0..frames {
-        let frame = app
-            .runtime
-            .update(1.0 / 60.0, Default::default())
-            .and_then(|value| FrameView::parse(&value))?;
-        app.accept_checked(frame)?;
+        app.tick(1.0 / 60.0, Default::default())?;
     }
     app.render();
     save_canvas(&app.canvas, output.as_ref())?;
@@ -132,22 +126,17 @@ pub fn capture_package_with_action(
     Ok(())
 }
 fn run_headless(path: impl AsRef<Path>, frames: u64) -> Result<()> {
-    let mut runtime = ScriptRuntime::load(path)?;
-    let manifest = runtime.manifest().clone();
-    let fonts = FontSystem::load(&manifest.asset_root(runtime.package_root()), &manifest)?;
-    runtime.provide_fonts(fonts.metrics_value())?;
-    let mut frame = FrameView::parse(&runtime.initialize()?)?;
+    let mut app = Vs3App::with_saves(path, SaveLocation::Memory)?;
     for _ in 0..frames {
-        anyhow::ensure!(
-            frame.commands.len() <= manifest.limits.max_commands_per_frame,
-            "frame exceeds command limit"
-        );
-        frame = FrameView::parse(&runtime.update(1.0 / 60.0, Default::default())?)?;
+        app.tick(1.0 / 60.0, Default::default())?;
+        if app.exit_requested {
+            break;
+        }
     }
-    runtime.shutdown()?;
+    app.runtime.shutdown()?;
     println!(
         "VS3 APP HEADLESS OK frames={frames} commands={}",
-        frame.commands.len()
+        app.frame.commands.len()
     );
     Ok(())
 }
@@ -171,15 +160,24 @@ pub struct Vs3App {
     pub(crate) frame_count: u64,
     pub(crate) saves: SaveStore,
     storage_depth: u8,
+    /// The running `app_task` is stopped at a `yield` and expects a reply.
+    task_waiting: bool,
+    /// A click made while a task runs, delivered with its next reply.
+    task_action: Option<String>,
+    /// Storage results produced while a task held the session.
+    deferred_storage: Vec<velvet_script_vs3::Value>,
 }
 impl Vs3App {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
-        Self::with_saves(path, SaveLocation::Default)
+        let app = Self::with_saves(path, SaveLocation::Default)?;
+        app.manifest.require_capability("window")?;
+        Ok(app)
     }
+    /// Load an app without opening a window (`window` is checked by the
+    /// windowed entry points only).
     pub fn with_saves(path: impl AsRef<Path>, location: SaveLocation) -> Result<Self> {
         let mut runtime = ScriptRuntime::load(path)?;
         let manifest = runtime.manifest().clone();
-        manifest.require_capability("window")?;
         let saves = match location {
             SaveLocation::Default => SaveStore::for_app(&manifest, None),
             SaveLocation::Dir(dir) => SaveStore::for_app(&manifest, Some(dir)),
@@ -212,20 +210,76 @@ impl Vs3App {
             frame_count: 0,
             saves,
             storage_depth: 0,
+            task_waiting: false,
+            task_action: None,
+            deferred_storage: Vec::new(),
         };
         out.process_events();
         Ok(out)
     }
     pub(crate) fn update(&mut self, dt: f32) {
         let input = self.input.take_frame();
-        match self
-            .runtime
-            .update(dt.clamp(0.0, 0.1) as f64, input)
-            .and_then(|v| FrameView::parse(&v))
-        {
-            Ok(frame) => self.accept(frame),
-            Err(e) => eprintln!("[velvet-vs3-app] update failed: {e:#}"),
+        if let Err(e) = self.tick(dt.clamp(0.0, 0.1) as f64, input) {
+            eprintln!("[velvet-vs3-app] update failed: {e:#}");
         }
+    }
+    /// One frame: `app_update`, or one slice of the running `app_task`.
+    pub fn tick(&mut self, dt: f64, input: InputFrame) -> Result<()> {
+        if self.runtime.task_active() {
+            return self.run_task_slice(dt, input);
+        }
+        let frame = FrameView::parse(&self.runtime.update(dt, input)?)?;
+        self.accept_checked(frame)
+    }
+    /// A declarative action (click). While a task runs, it is handed to the
+    /// task with its next `yield` reply instead of calling `app_action`.
+    pub fn perform_action(&mut self, action: &str) -> Result<()> {
+        if self.runtime.task_active() {
+            self.task_action = Some(action.to_owned());
+            return Ok(());
+        }
+        let frame = FrameView::parse(&self.runtime.action(action)?)?;
+        self.accept_checked(frame)
+    }
+    fn run_task_slice(&mut self, dt: f64, input: InputFrame) -> Result<()> {
+        use velvet_script_vs3::{float_val, map_val, string_val, Value};
+        let reply = if self.task_waiting {
+            let action = self.task_action.take().map_or(Value::Null, string_val);
+            Some(map_val([
+                ("dt".to_string(), float_val(dt)),
+                ("input".to_string(), input.into_value()),
+                ("action".to_string(), action),
+            ]))
+        } else {
+            None
+        };
+        let step = match self.runtime.resume_task(reply) {
+            Ok(step) => step,
+            Err(error) => {
+                self.task_waiting = false;
+                self.task_action = None;
+                self.flush_deferred_storage();
+                return Err(error);
+            }
+        };
+        match step {
+            TaskStep::Yielded(value) => {
+                self.task_waiting = true;
+                if is_frame_packet(&value) {
+                    self.accept_checked(FrameView::parse(&value)?)?;
+                }
+            }
+            TaskStep::Paused => self.task_waiting = false,
+            TaskStep::Complete(value) => {
+                self.task_waiting = false;
+                self.task_action = None;
+                if is_frame_packet(&value) {
+                    self.accept_checked(FrameView::parse(&value)?)?;
+                }
+                self.flush_deferred_storage();
+            }
+        }
+        Ok(())
     }
     pub(crate) fn render(&mut self) {
         render_scene(
@@ -269,13 +323,8 @@ impl Vs3App {
         let Some(action) = action_at(&self.frame.commands, cursor) else {
             return;
         };
-        match self
-            .runtime
-            .action(&action)
-            .and_then(|v| FrameView::parse(&v))
-        {
-            Ok(frame) => self.accept(frame),
-            Err(e) => eprintln!("[velvet-vs3-app] action `{action}` failed: {e:#}"),
+        if let Err(e) = self.perform_action(&action) {
+            eprintln!("[velvet-vs3-app] action `{action}` failed: {e:#}");
         }
     }
     fn accept(&mut self, frame: FrameView) {
@@ -304,6 +353,11 @@ impl Vs3App {
             self.deliver_storage(result);
         }
     }
+    fn flush_deferred_storage(&mut self) {
+        for result in std::mem::take(&mut self.deferred_storage) {
+            self.deliver_storage(result);
+        }
+    }
     /// Answer a storage request through `app_storage`; its frame replaces
     /// the current one (and may itself request storage, up to 8 deep).
     fn deliver_storage(&mut self, result: velvet_script_vs3::Value) {
@@ -322,6 +376,11 @@ impl Vs3App {
                     error.as_str().unwrap_or_default()
                 );
             }
+        }
+        if self.runtime.task_active() {
+            // `app_storage` runs once the task finishes.
+            self.deferred_storage.push(result);
+            return;
         }
         if self.storage_depth >= 8 {
             eprintln!("[velvet-vs3-app] storage results nested too deeply; dropping one");
@@ -342,6 +401,25 @@ impl Vs3App {
     fn process_event(&mut self, event: &RuntimeEvent) {
         match event.kind.as_str() {
             "app.exit" => self.exit_requested = true,
+            "app.task" => {
+                // `{payload: {name, arg}}` starts `app_task(name, arg)`; it
+                // runs in slices from the next frame on.
+                let name = payload_string(event, "name").unwrap_or_default();
+                if self.runtime.task_active() {
+                    eprintln!(
+                        "[velvet-vs3-app] app.task `{name}` ignored: a task is already running"
+                    );
+                } else {
+                    let arg = payload(event, "arg").unwrap_or(velvet_script_vs3::Value::Null);
+                    match self.runtime.start_task(&name, arg) {
+                        Ok(()) => {
+                            self.task_waiting = false;
+                            self.task_action = None;
+                        }
+                        Err(e) => eprintln!("[velvet-vs3-app] {e:#}"),
+                    }
+                }
+            }
             "app.profile" => {
                 // `{payload: {enabled: true}}` starts counting; `false` prints
                 // the report to stderr and stops.
@@ -383,6 +461,9 @@ impl Vs3App {
             _ => {}
         }
     }
+}
+fn is_frame_packet(value: &velvet_script_vs3::Value) -> bool {
+    matches!(value.map_get("commands"), Ok(Some(_)))
 }
 fn payload(event: &RuntimeEvent, key: &str) -> Option<velvet_script_vs3::Value> {
     event.payload.as_ref()?.map_get(key).ok().flatten()
@@ -562,19 +643,15 @@ pub fn profile_package(
     let mut app = Vs3App::with_saves(path, SaveLocation::Memory)?;
     app.runtime.set_profiling(true);
     for action in actions {
-        let frame = app
-            .runtime
-            .action(action)
-            .and_then(|value| FrameView::parse(&value))
+        app.perform_action(action)
             .with_context(|| format!("action `{action}`"))?;
-        app.accept_checked(frame)?;
+        // Let a task started by the action finish before the next one.
+        while app.runtime.task_active() {
+            app.tick(1.0 / 60.0, Default::default())?;
+        }
     }
     for _ in 0..frames {
-        let frame = app
-            .runtime
-            .update(1.0 / 60.0, Default::default())
-            .and_then(|value| FrameView::parse(&value))?;
-        app.accept_checked(frame)?;
+        app.tick(1.0 / 60.0, Default::default())?;
     }
     let report = app.runtime.profile_report();
     app.runtime.shutdown()?;

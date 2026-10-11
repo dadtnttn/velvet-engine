@@ -22,6 +22,7 @@ Controles:
 | Ratón | Todo es clicable; los menús reaccionan al pasar el cursor |
 | Espacio o Enter | Avanzar un mes |
 | Y | Avanzar hasta tu próximo cumpleaños (se detiene si hay una decisión) |
+| U o «+5 AÑOS» | Avanzar 5 años, uno por frame con barra de progreso (se detiene si hay una decisión; Esc o «Parar» lo corta) |
 | M | Abrir o guardar el móvil (desde los 12 años) |
 | 1 – 9, flechas, letras, Espacio | Jugar los minijuegos |
 | 1 – 5 | Elegir una opción en un evento |

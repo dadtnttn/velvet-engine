@@ -154,10 +154,33 @@ pub(crate) fn is_callback_native(native: NativeId) -> bool {
     )
 }
 
+/// Result of running one slice of a cooperative task.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskStep {
+    /// The script called `yield(value)`; resume with a reply.
+    Yielded(Value),
+    /// The slice budget ran out mid-work; resume (without a reply) later.
+    Paused,
+    /// The task returned this value and is finished.
+    Complete(Value),
+}
+
+/// A cooperative task running on this VM's own state (see [`Vm::start_task`]).
+#[derive(Debug, Clone, Copy)]
+struct TaskState {
+    /// Stopped at an explicit `yield` (its payload is on the stack).
+    waiting: bool,
+    /// Instructions used by the task so far.
+    used: u64,
+    /// Total instructions the task may use.
+    max_total: u64,
+}
+
 /// Velvet Script virtual machine.
 #[derive(Debug)]
 pub struct Vm {
     module: BytecodeModule,
+    task: Option<TaskState>,
     profile: Option<Profile>,
     globals: Vec<Value>,
     stack: Vec<Value>,
@@ -199,6 +222,7 @@ impl Vm {
         }
         Self {
             module,
+            task: None,
             profile: None,
             globals,
             stack: Vec::new(),
@@ -393,6 +417,11 @@ impl Vm {
 
     /// Call a named export with args (pushed left-to-right).
     pub fn call_name(&mut self, name: &str, args: &[Value]) -> Result<Value, VmError> {
+        if self.task.is_some() {
+            return Err(self.runtime_err(format!(
+                "cannot call '{name}' while a task is running; resume or cancel it first"
+            )));
+        }
         if self.frames.is_empty() {
             self.reset_execution_budget();
         }
@@ -411,6 +440,126 @@ impl Vm {
         self.call_function(fidx, args.len() as u8)?;
         self.execute()?;
         Ok(self.pop().unwrap_or(Value::Null))
+    }
+
+    /// Start a cooperative task: call export `name` on this VM (sharing its
+    /// globals and `state`) without running it yet. Drive it with
+    /// [`Self::resume_task`]; while it is active, `call_name` is rejected.
+    /// `max_total` caps the instructions the whole task may use.
+    pub fn start_task(
+        &mut self,
+        name: &str,
+        args: &[Value],
+        max_total: u64,
+    ) -> Result<(), VmError> {
+        if self.task.is_some() || !self.frames.is_empty() {
+            return Err(self.runtime_err("another call or task is already running"));
+        }
+        let fidx = *self
+            .module
+            .exports
+            .get(name)
+            .ok_or_else(|| VmError::Runtime {
+                message: format!("unknown function '{name}'"),
+                location: None,
+                stack_trace: vec![],
+            })?;
+        self.reset_execution_budget();
+        for a in args {
+            self.push(a.clone())?;
+        }
+        if let Err(error) = self.call_function(fidx, args.len() as u8) {
+            self.abort_task();
+            return Err(error);
+        }
+        self.task = Some(TaskState {
+            waiting: false,
+            used: 0,
+            max_total,
+        });
+        Ok(())
+    }
+
+    /// Whether a task started with [`Self::start_task`] is still running.
+    pub fn task_active(&self) -> bool {
+        self.task.is_some()
+    }
+
+    /// Run the task for at most `slice` instructions. After a `yield`, `reply`
+    /// becomes the value of the `yield(...)` expression (null if `None`).
+    /// Returns the step outcome and the instructions this slice used. Any
+    /// error cancels the task.
+    pub fn resume_task(
+        &mut self,
+        reply: Option<Value>,
+        slice: u64,
+    ) -> Result<(TaskStep, u64), VmError> {
+        let Some(mut task) = self.task else {
+            return Err(self.runtime_err("no task is running"));
+        };
+        if task.waiting {
+            let _ = self.pop();
+            if let Err(error) = self.push(reply.unwrap_or(Value::Null)) {
+                self.abort_task();
+                return Err(error);
+            }
+            task.waiting = false;
+        }
+        self.instructions = 0;
+        let slice = slice.max(1);
+        let outcome = loop {
+            if self.frames.is_empty() {
+                let value = self.pop().unwrap_or(Value::Null);
+                break Ok(TaskStep::Complete(value));
+            }
+            if self.instructions >= slice {
+                break Ok(TaskStep::Paused);
+            }
+            if task.used.saturating_add(self.instructions) > task.max_total {
+                break Err(VmError::InstructionLimit {
+                    limit: task.max_total,
+                    stack_trace: self.stack_trace(),
+                });
+            }
+            match self.step_instruction() {
+                Ok(true) => {
+                    task.waiting = true;
+                    break Ok(TaskStep::Yielded(
+                        self.peek_value(0).cloned().unwrap_or(Value::Null),
+                    ));
+                }
+                Ok(false) => {}
+                Err(error) => break Err(error),
+            }
+        };
+        let used = self.instructions;
+        task.used = task.used.saturating_add(used);
+        match outcome {
+            Ok(TaskStep::Complete(value)) => {
+                self.task = None;
+                Ok((TaskStep::Complete(value), used))
+            }
+            Ok(step) => {
+                self.task = Some(task);
+                Ok((step, used))
+            }
+            Err(error) => {
+                self.abort_task();
+                Err(error)
+            }
+        }
+    }
+
+    /// Drop a running task (its frames and stack values); state changes it
+    /// already made stay.
+    pub fn cancel_task(&mut self) {
+        self.abort_task();
+    }
+
+    fn abort_task(&mut self) {
+        self.task = None;
+        self.frames.clear();
+        self.truncate_stack(0);
     }
 
     /// Execute a single instruction.
@@ -844,7 +993,10 @@ impl Vm {
             N::ListFilter => {
                 let mut out = Vec::new();
                 for item in items {
-                    if self.call_value_sync(&f, std::slice::from_ref(&item))?.is_truthy() {
+                    if self
+                        .call_value_sync(&f, std::slice::from_ref(&item))?
+                        .is_truthy()
+                    {
                         out.push(item);
                     }
                 }
@@ -852,7 +1004,10 @@ impl Vm {
             }
             N::ListFind => {
                 for item in items {
-                    if self.call_value_sync(&f, std::slice::from_ref(&item))?.is_truthy() {
+                    if self
+                        .call_value_sync(&f, std::slice::from_ref(&item))?
+                        .is_truthy()
+                    {
                         return Ok(item);
                     }
                 }

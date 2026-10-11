@@ -250,6 +250,18 @@ it called) and its call count; natives appear as `native:<name>` and lambdas as
 example one simulated month per action, or a few people per frame) rather than
 raising the limit indefinitely.
 
+### Session tasks
+
+`Vs3Session::start_task(name, args, max_total)` runs a function as a
+cooperative task **on the session itself** (same `state`), unlike
+`Vs3Module::start`, which uses a separate VM. `resume_task(reply, slice)` runs
+at most `slice` instructions and returns `TaskStep::Yielded(value)` (the script
+called `yield(value)`; `reply` becomes its result on the next resume),
+`TaskStep::Paused` (the slice ran out mid-work; nothing is lost) or
+`TaskStep::Complete(value)`. While a task is active, `call` fails;
+`cancel_task` drops it. Apps reach this through `app_task` (see the app
+runtime document).
+
 ## Rust API
 
 ```rust

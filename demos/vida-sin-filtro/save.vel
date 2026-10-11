@@ -10,8 +10,6 @@ const SAVE_VERSION = 1
 
 state {
     SV: map = {
-        // Peticiones a enviar en el próximo frame.
-        "pending": [],
         // Partida encontrada al arrancar (para «Continuar»).
         "data": null,
         "info": "",
@@ -20,14 +18,7 @@ state {
 }
 
 function storage_request(op: string, payload: map) {
-    list_push(SV.pending, {"kind": "storage." + op, "payload": payload})
-}
-
-// Eventos de guardado para este frame.
-function take_storage_events() {
-    let out = SV.pending
-    SV.pending = []
-    return out
+    emit("storage." + op, payload)
 }
 
 function request_boot_load() {

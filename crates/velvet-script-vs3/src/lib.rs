@@ -41,7 +41,7 @@ use velvet_script_vm::{Coroutine, CoroutineStatus, Vm, VmError};
 /// Runtime values, limits, and native metadata re-exported for hosts and tooling.
 pub use velvet_script_vm::{
     json_decode, json_encode, wrap_lines, NativeId, NativePurity, NativeSpec, NativeType,
-    ProfileEntry, Value, VmLimits,
+    ProfileEntry, TaskStep, Value, VmLimits,
 };
 
 /// Runtime-checkable VS3 type annotation.
@@ -199,6 +199,7 @@ pub const SUPPORTED_SURFACE: &[&str] = &[
     "natives: callbacks call list_map list_filter list_find list_any list_all list_count list_reduce list_sort_by",
     "natives: text layout str_measure str_wrap with host font advance tables",
     "per-function instruction profiler through Vs3Session",
+    "session tasks: start_task/resume_task slices sharing state, yield replies, pause, cancel",
     "while cond { }",
     "for value in collection with break and continue",
     "null/int/bool/float/string/list/map literals",
@@ -926,6 +927,44 @@ impl Vs3Session {
     /// Drain lines captured by the `print` native.
     pub fn take_printed(&mut self) -> Vec<String> {
         self.vm.take_printed()
+    }
+
+    /// Start a cooperative task on this session: `name` runs with the same
+    /// `state` as ordinary calls, in slices driven by [`Self::resume_task`].
+    /// `max_total` caps the instructions of the whole task. While the task is
+    /// active, [`Self::call`] fails.
+    pub fn start_task(
+        &mut self,
+        name: &str,
+        args: &[Value],
+        max_total: u64,
+    ) -> Result<(), Vs3Error> {
+        validate_runtime_args(&self.signatures, name, args)?;
+        let actual = resolve_entrypoint(&self.entrypoints, name)?;
+        self.vm
+            .start_task(actual, args, max_total)
+            .map_err(map_vm_err)
+    }
+
+    /// Run the active task for at most `slice` instructions. `reply` becomes
+    /// the value of the pending `yield(...)` expression. Returns the step and
+    /// the instructions used. An error cancels the task.
+    pub fn resume_task(
+        &mut self,
+        reply: Option<Value>,
+        slice: u64,
+    ) -> Result<(TaskStep, u64), Vs3Error> {
+        self.vm.resume_task(reply, slice).map_err(map_vm_err)
+    }
+
+    /// Whether a task is running.
+    pub fn task_active(&self) -> bool {
+        self.vm.task_active()
+    }
+
+    /// Stop the running task; changes it already made to `state` remain.
+    pub fn cancel_task(&mut self) {
+        self.vm.cancel_task();
     }
 
     /// Total instructions executed by this session.
@@ -2589,6 +2628,73 @@ function main() {
     }
 
     #[test]
+    fn session_tasks_share_state_yield_pause_and_cancel() {
+        let source = r#"// @edition 3
+state { n: int = 0 }
+function work(k: int) {
+    let i = 0
+    while i < k {
+        n += 1
+        i += 1
+        if i % 10 == 0 {
+            let reply = yield(i)
+            if reply == "stop" { return -1 }
+        }
+    }
+    return n
+}
+function count() { return n }
+"#;
+        let module = compile(source, Some("task.vel")).unwrap();
+        let mut session = module.session().unwrap();
+        session.start_task("work", &[int(100)], 1_000_000).unwrap();
+        assert!(session.task_active());
+        let (step, used) = session.resume_task(None, 1_000_000).unwrap();
+        assert_eq!(step, TaskStep::Yielded(int(10)));
+        assert!(used > 0);
+        // Ordinary calls wait for the task.
+        assert!(session.call("count", &[]).is_err());
+        // A tiny slice pauses mid-work without losing progress.
+        let mut paused = false;
+        let mut step = TaskStep::Paused;
+        let mut reply = Some(string_val("go"));
+        while step == TaskStep::Paused {
+            step = session.resume_task(reply.take(), 5).unwrap().0;
+            paused |= step == TaskStep::Paused;
+        }
+        assert!(paused);
+        assert_eq!(step, TaskStep::Yielded(int(20)));
+        let (step, _) = session
+            .resume_task(Some(string_val("stop")), 1_000_000)
+            .unwrap();
+        assert_eq!(step, TaskStep::Complete(int(-1)));
+        assert!(!session.task_active());
+        assert_eq!(session.call("count", &[]).unwrap(), int(20));
+
+        // The whole-task cap stops runaway work and frees the session.
+        session.start_task("work", &[int(1_000_000)], 500).unwrap();
+        let mut error = None;
+        for _ in 0..1000 {
+            match session.resume_task(Some(Value::Null), 100) {
+                Ok(_) => {}
+                Err(e) => {
+                    error = Some(e);
+                    break;
+                }
+            }
+        }
+        assert!(error.unwrap().to_string().contains("instruction limit"));
+        assert!(!session.task_active());
+        assert!(session.call("count", &[]).is_ok());
+
+        session.start_task("work", &[int(100)], 1_000_000).unwrap();
+        session.resume_task(None, 1_000_000).unwrap();
+        session.cancel_task();
+        assert!(!session.task_active());
+        assert!(session.call("count", &[]).is_ok());
+    }
+
+    #[test]
     fn instruction_limit_error_names_the_hot_frame() {
         let source =
             "// @edition 3\nfunction spin() { while true { } }\nfunction main() { spin() }\n";
@@ -2619,7 +2725,7 @@ function main() {
         );
         assert_eq!(
             SUPPORTED_SURFACE.len(),
-            35,
+            36,
             "update this contract with every capability change"
         );
         for required in [

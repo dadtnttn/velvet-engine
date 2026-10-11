@@ -36,6 +36,10 @@ pub struct AppLimits {
     pub max_image_pixels: usize,
     pub max_memory_units: usize,
     pub max_instructions: u64,
+    /// Instructions a running `app_task` may use per frame.
+    pub task_slice_instructions: u64,
+    /// Instructions a whole `app_task` may use before it is stopped.
+    pub max_task_instructions: u64,
 }
 
 impl Default for AppLimits {
@@ -46,6 +50,8 @@ impl Default for AppLimits {
             max_image_pixels: 67_108_864,
             max_memory_units: 64_000_000,
             max_instructions: 5_000_000,
+            task_slice_instructions: 2_000_000,
+            max_task_instructions: 4_000_000_000,
         }
     }
 }
@@ -175,6 +181,18 @@ fn parse_limits(value: &Value) -> Result<AppLimits> {
             "max_instructions",
             defaults.max_instructions as i64,
         )? as u64,
+        task_slice_instructions: integer_or(
+            &limits,
+            "task_slice_instructions",
+            defaults.task_slice_instructions as i64,
+        )?
+        .max(1_000) as u64,
+        max_task_instructions: integer_or(
+            &limits,
+            "max_task_instructions",
+            defaults.max_task_instructions as i64,
+        )?
+        .max(1) as u64,
     })
 }
 

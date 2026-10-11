@@ -3,8 +3,8 @@ use crate::assets::AppManifest;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use velvet_script_vs3::{
-    compile_package_path, float_val, string_val, ProfileEntry, Value, VmLimits, Vs3Module,
-    Vs3Session,
+    compile_package_path, float_val, string_val, ProfileEntry, TaskStep, Value, VmLimits,
+    Vs3Module, Vs3Session,
 };
 
 pub struct ScriptRuntime {
@@ -60,6 +60,7 @@ impl ScriptRuntime {
         self.call("app_action", &[string_val(action)])
     }
     pub fn shutdown(&mut self) -> Result<()> {
+        self.session.cancel_task();
         if self.has("app_shutdown") {
             let _ = self.call("app_shutdown", &[])?;
         }
@@ -86,6 +87,34 @@ impl ScriptRuntime {
         } else {
             Ok(None)
         }
+    }
+    /// Start `app_task(name, arg)` as a cooperative task on the app session.
+    pub fn start_task(&mut self, name: &str, arg: Value) -> Result<()> {
+        anyhow::ensure!(
+            self.has("app_task"),
+            "the package emitted `app.task` but does not export `app_task(name, arg)`"
+        );
+        self.session
+            .start_task(
+                &format!("{}.app_task", self.namespace),
+                &[string_val(name), arg],
+                self.manifest.limits.max_task_instructions,
+            )
+            .with_context(|| format!("VS3 app task `{name}`"))
+    }
+    /// Run one frame's slice of the active task.
+    pub fn resume_task(&mut self, reply: Option<Value>) -> Result<TaskStep> {
+        let slice = self.manifest.limits.task_slice_instructions;
+        self.session
+            .resume_task(reply, slice)
+            .map(|(step, _)| step)
+            .context("VS3 app task")
+    }
+    pub fn task_active(&self) -> bool {
+        self.session.task_active()
+    }
+    pub fn cancel_task(&mut self) {
+        self.session.cancel_task();
     }
     /// Count calls and instructions per function from now on.
     pub fn set_profiling(&mut self, enabled: bool) {
