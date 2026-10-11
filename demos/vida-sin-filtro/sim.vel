@@ -817,16 +817,10 @@ function yearly() {
     }
     if L.study != null { L.smarts += rint(1, 3) }
 
-    // Prisión
+    // Prisión (la condena corre por meses: ver prison_month).
     if L.jail > 0 {
-        L.jail -= 1
         L.happy -= 6
-        if L.jail == 0 {
-            L.pr = null
-            log_add("Saliste de prisión. El mundo sigue igual; tú no.", "g")
-        } else {
-            prison_year()
-        }
+        prison_year()
     }
 
     // Trabajo y dinero
@@ -1148,6 +1142,7 @@ function maybe_pregnancy(person: any, p: int) {
 
 function go_to_jail(years: int) {
     L.jail = years
+    L.jail_mo = 0
     prison_enter()
     L.jail_total += years
     L.record += 1

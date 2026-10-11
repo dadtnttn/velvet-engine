@@ -153,7 +153,7 @@ const ACTIVITIES = [
      "desc": "Te sentirás invencible. No lo eres.", "o": [
         {"w": 75, "log": "Te sentiste en la cima del mundo. Por unas horas.", "happy": 12, "drugs": 15, "health": -4},
         {"w": 20, "log": "Estaba cortada con algo raro. Pasaste la noche en urgencias.", "health": -25, "drugs": 10},
-        {"w": 5, "log": "Tu corazón no aguantó.", "die": "una sobredosis de cocaína"}
+        {"w": 5, "log": "", "special": "coke_od"}
     ]},
     {"id": "casino", "tab": "night", "cat": "Vicios", "t": "Casino", "s": "La casa siempre gana", "min": 18, "cost": 100, "code": true,
      "desc": "Ruleta, luces y un señor con traje que te sonríe demasiado."},
@@ -310,7 +310,7 @@ function menu_items(tab: string, cat: string) {
 function menu_block(tab: string) {
     if tab == "night" && L.age < 18 { return "La vida nocturna empieza a los 18. Paciencia." }
     if (tab == "night" || tab == "act") && L.jail > 0 {
-        return "Estás en prisión. Te quedan " + str(L.jail) + " " + plural(L.jail, "año", "años") + "."
+        return "Estás en prisión. Te quedan " + sentence_left() + "."
     }
     if tab == "job" && L.age < 6 { return "Tu único trabajo ahora es crecer." }
     if (tab == "gigs" || tab == "study" || tab == "jobs") && L.jail > 0 { return "Desde la cárcel no se puede." }
@@ -639,10 +639,19 @@ function do_job_act(id: string) {
         if used == null { used = 0 }
         if used >= 2 { info("Segunda carrera", "Ya le dedicaste suficiente este mes."); return true }
         L.used["shift2"] = used + 1
-        let pay = pay_of(L.job2) * 5 / 100
+        // Medio tiempo de verdad: cada turno es como dos semanas de un sueldo
+        // a una cuarta parte (y lo ilegal sigue siendo ilegal).
+        let pay = pay_of(L.job2) * 15 / 1000
         L.money += pay
         L.health -= 1
         job_xp(L.job2, 20, " (2.ª carrera)")
+        let d2 = job_def(L.job2.id)
+        if d2 != null && d2.illegal && chance(6) {
+            let t2 = L.job2.title
+            let jail = go_to_jail(2)
+            finish(t2, "Te agarraron en plena chamba." + jail, "b")
+            return true
+        }
         finish(L.job2.title, "Le dedicaste tiempo a tu segunda carrera. Ganaste " + money_str(pay) + " extra.", "g")
         return true
     }
@@ -1074,7 +1083,25 @@ function do_person_act(action: string, p: map) {
 // Lo que nunca debe abrirse para menores, venga del evento que venga.
 const ADULT_SPECIALS = ["hookup", "hookup_young", "lovehotel", "swinger", "collab", "z_affair", "z_sugar_marry"]
 
+// Una sobredosis no es una moneda al aire: casi siempre se sobrevive, salvo con
+// el corazón ya dañado, la salud por los suelos o una adicción fuerte.
+function coke_overdose() {
+    let risk = 10
+    if L.drugs >= 60 { risk += 40 }
+    if has_ill("cardiopatia") { risk += 60 }
+    if L.health < 30 { risk += 40 }
+    if chance(min(90, risk)) {
+        L.dying = "una sobredosis de cocaína"
+        return "Tu corazón no aguantó."
+    }
+    L.health -= 30
+    L.money -= emergency_cost(3000)
+    hito_once("coke_od", "Salud", "Sobreviviste a una sobredosis")
+    return "Sobredosis: el corazón se te desbocó y despertaste en urgencias con electrodos en el pecho. Los médicos dicen que tuviste suerte. La próxima vez, quizá no."
+}
+
 function special(name: string, ctx: map) {
+    if name == "coke_od" { return coke_overdose() }
     if L.age < 18 && list_contains(ADULT_SPECIALS, name) { return "" }
     if str_starts_with(name, "z_") { return lazos_special(name, ctx) }
     if str_starts_with(name, "vd_") { return vida_special(name, ctx) }

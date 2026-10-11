@@ -132,7 +132,7 @@ function beh_word() {
 function prison_items(cat: string) {
     let d = pr()
     let items = []
-    let head = "Te quedan " + str(L.jail) + " " + plural(L.jail, "año", "años") + " · conducta " + beh_word() + " (" + str(d.beh) + ") · respeto " + str(d.resp)
+    let head = "Te quedan " + sentence_left() + " · conducta " + beh_word() + " (" + str(d.beh) + ") · respeto " + str(d.resp)
     if d.gang { head = head + " · pandilla" }
     if cat == "Rutina" {
         list_push(items, {"action": "pr:none", "t": "Tu situación", "s": head, "desc": "Con buena conducta (80 o más) puedes salir antes. Con respeto bajo y sin pandilla, eres presa fácil.", "lock": ""})
@@ -552,10 +552,33 @@ function maybe_prison_event() {
     return true
 }
 
+// «2 años y 3 meses», «8 meses».
+function sentence_left() {
+    let m = max(1, L.jail * 12 - int(map_get(L, "jail_mo", 0)))
+    let y = m / 12
+    let r = m % 12
+    if y == 0 { return str(r) + " " + plural(r, "mes", "meses") }
+    if r == 0 { return str(y) + " " + plural(y, "año", "años") }
+    return str(y) + " " + plural(y, "año", "años") + " y " + str(r) + " " + plural(r, "mes", "meses")
+}
+
 function prison_month() {
     if L.jail <= 0 || !L.alive { return null }
     let d = pr()
     d.served += 1
+    // Cada doce meses cumplidos, un año menos de condena.
+    L.jail_mo = int(map_get(L, "jail_mo", 0)) + 1
+    if L.jail_mo >= 12 {
+        L.jail_mo = 0
+        L.jail -= 1
+        if L.jail <= 0 {
+            L.jail = 0
+            L.pr = null
+            log_add("Saliste de prisión. El mundo sigue igual; tú no.", "g")
+            hito_once("released", "Vida", "Saliste de prisión")
+            return null
+        }
+    }
     if d.beh > 60 && chance(30) { d.beh -= 1 }
     if !d.gang && d.resp < 30 && chance(15) {
         L.health -= 8

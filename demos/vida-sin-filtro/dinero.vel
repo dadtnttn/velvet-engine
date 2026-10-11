@@ -428,6 +428,8 @@ function card_cycle() {
 function dinero_month() {
     let d = dn()
     d.inc = dn_income()
+    // La declaración que quedó pendiente en el cumpleaños.
+    if d.tax_pending == true && G.modal == null && L.jail == 0 && L.age >= 18 { tax_open() }
     // Las deudas crecen aunque estés en prisión.
     card_cycle()
     payday_month(d)
@@ -714,11 +716,12 @@ function tax_report() {
     if L.job != null { income = job_pay(L.job) }
     if L.job2 != null { income += job_pay(L.job2) / 2 }
     let rate = tax_rate_for(income)
-    let base = income * rate / 100
+    // El sueldo ya pagó su impuesto cada mes (la retención del 30%): aquí solo
+    // se declara lo demás (bolsa, rentas, premios) y se aplican deducciones.
     let cap = max(0, d.capgain) * 10 / 100
     let rent = d.rentinc * 10 / 100
     let win = d.winnings * 15 / 100
-    return {"income": income, "rate": rate, "base": base, "cap": cap, "rent": rent, "win": win, "full": base + cap + rent + win, "credit": d.ded * 25 / 100}
+    return {"income": income, "rate": rate, "base": 0, "cap": cap, "rent": rent, "win": win, "full": cap + rent + win, "credit": d.ded * 25 / 100}
 }
 
 function dn_tax_reset() {
@@ -739,21 +742,33 @@ function tax_pro() {
 function finance_year() {
     fin_init()
     dinero_year()
-    if L.age < 18 || L.jail > 0 || G.modal != null {
+    if L.age < 18 || L.jail > 0 {
         dn_tax_reset()
         return null
     }
+    // Si otra ventana del cumpleaños llegó primero, la declaración espera.
+    if G.modal != null {
+        dn().tax_pending = true
+        return null
+    }
+    return tax_open()
+}
+
+function tax_open() {
+    dn().tax_pending = false
     let r = tax_report()
     if r.full <= 0 && r.credit <= 0 {
         dn_tax_reset()
         return null
     }
     let pro = tax_pro()
-    let parts = ["sueldo " + money_str(r.income) + " (tasa " + str(r.rate) + "%)"]
+    let parts = []
+    if r.income > 0 { list_push(parts, "sueldo " + money_str(r.income) + " (impuesto ya retenido)") }
     if r.cap > 0 { list_push(parts, "ganancias de bolsa") }
     if r.rent > 0 { list_push(parts, "rentas") }
     if r.win > 0 { list_push(parts, "premios") }
-    let txt = "Llegó la declaración anual. Declaras: " + str_join(parts, ", ") + ". Impuesto: " + money_str(r.full) + "."
+    if len(parts) == 0 { list_push(parts, "tus deducciones") }
+    let txt = "Llegó la declaración anual. Declaras: " + str_join(parts, ", ") + ". Impuesto por pagar: " + money_str(r.full) + "."
     if r.credit > 0 { txt = txt + " Tus deducciones (retiro, donativos, intereses de la hipoteca) pueden bajarlo hasta " + money_str(r.credit) + "." }
     let first = "Contratar a un contador ($2,000)"
     if pro { first = "Hacerla tú con tu experiencia profesional" }

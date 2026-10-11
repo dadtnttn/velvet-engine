@@ -717,7 +717,7 @@ function career_xp(amount: int) {
 // Pago y experiencia de la segunda carrera (media jornada).
 function second_job_year() {
     if L.job2 == null || L.jail > 0 { return null }
-    L.money += pay_of(L.job2) * 25 / 100
+    L.money += pay_of(L.job2) * 15 / 100
     job_xp(L.job2, 10 + rank("skill") * 3, " (2.ª carrera)")
     return null
 }
