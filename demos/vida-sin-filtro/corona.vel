@@ -1,0 +1,571 @@
+// @edition 3
+// Corona: la segunda capa de la ruta del trono.
+// - El consejo real: canciller, mariscal, arzobispo, tesorero y maestro de espías,
+//   cada quien con su lealtad y su talento; pedirles consejo, premiarlos o
+//   destituirlos. Si su lealtad cae, conspiran.
+// - Diplomacia y guerra con cuatro reinos vecinos: embajadas, tratados, alianzas,
+//   bodas reales para tus herederos y guerras.
+// - Herederos: príncipes y princesas, su educación con tutores, presentarlos en la
+//   corte, la ley de sucesión y abdicar.
+// - Dinastía: si mueres en el trono, tu heredero sigue la partida como monarca
+//   (con regencia si es menor de edad).
+// - Eventos de palacio: atentados, pretendientes, escándalos, rebeliones y presagios.
+// Acciones con el prefijo "kr:" y elecciones "kr_".
+
+const COURT_ROLES = [
+    {"id": "canciller", "n": "Canciller", "key": "elite", "d": "Lleva la política y el trato con la nobleza."},
+    {"id": "mariscal", "n": "Mariscal", "key": "fuerza", "d": "Manda el ejército y la guardia real."},
+    {"id": "arzobispo", "n": "Arzobispo", "key": "fe", "d": "Guía al clero y bendice tu reinado."},
+    {"id": "tesorero", "n": "Tesorero", "key": "tesoro", "d": "Cuida las arcas del reino."},
+    {"id": "espias", "n": "Maestro de espías", "key": "orden", "d": "Descubre conspiraciones antes de que estallen."}
+]
+
+const NATIONS = [
+    {"id": "valdoria", "n": "Valdoria", "str": 55, "d": "Un reino de viñedos y castillos al norte."},
+    {"id": "ostmark", "n": "Ostmark", "str": 70, "d": "Una potencia militar de inviernos largos."},
+    {"id": "sarn", "n": "la Isla de Sarn", "str": 40, "d": "Mercaderes y piratas retirados."},
+    {"id": "kesh", "n": "el Imperio de Kesh", "str": 85, "d": "Un imperio enorme y antiguo al otro lado del mar."}
+]
+
+const TUTORS = [
+    {"id": "militar", "n": "Un general retirado", "stat": "guts", "d": "Disciplina, esgrima y estrategia."},
+    {"id": "diplomatico", "n": "Una embajadora", "stat": "charm", "d": "Idiomas, protocolo y el arte de convencer."},
+    {"id": "erudito", "n": "Un sabio de la academia", "stat": "know", "d": "Historia, ciencias y filosofía."}
+]
+
+// ---------------------------------------------------------------- estado
+
+function kr() {
+    let d = L.rd
+    if d.court == null { d.court = {} }
+    if d.dip == null {
+        d.dip = {}
+        for n in NATIONS { d.dip[n.id] = rint(35, 60) }
+    }
+    if d.wars_won == null { d.wars_won = 0 }
+    if d.succ == null { d.succ = "primo" }
+    return d
+}
+
+function make_advisor(role: string) {
+    let g = pick(["m", "f"])
+    let names = NAMES_M
+    if g == "f" { names = NAMES_F }
+    return {"first": pick(names), "last": pick(SURNAMES), "g": g, "loyal": rint(45, 85), "skill": rint(35, 90), "age": rint(35, 70)}
+}
+
+function court_role(id: string) {
+    for r in COURT_ROLES {
+        if r.id == id { return r }
+    }
+    return COURT_ROLES[0]
+}
+
+function advisor(id: string) {
+    let d = kr()
+    if d.court[id] == null { d.court[id] = make_advisor(id) }
+    return d.court[id]
+}
+
+function nation_def(id: string) {
+    for n in NATIONS {
+        if n.id == id { return n }
+    }
+    return NATIONS[0]
+}
+
+function royal_kids() {
+    return kids_alive()
+}
+
+function crown_heir() {
+    let named = find_person(L.heir_id)
+    if named != null && named.alive && named.rel == "hijo" { return named }
+    let best = null
+    for k in royal_kids() {
+        if best == null || k.age > best.age { best = k }
+    }
+    return best
+}
+
+function prince_title(p: map) {
+    return by_gender(p.gender, "Príncipe", "Princesa")
+}
+
+function kitem(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["kr_" + id] != null { l = "Este mes ya" }
+    return {"action": "kr:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function kr_use(id: string) {
+    if L.used["kr_" + id] != null { return false }
+    L.used["kr_" + id] = 1
+    return true
+}
+
+// ---------------------------------------------------------------- menús
+
+function corona_items(cat: string) {
+    let d = kr()
+    let items = []
+    if cat == "Consejo" {
+        list_push(items, kitem("council", "Reunir al consejo real", "Todo el reino", "Una sesión con tus cinco consejeros. Cada uno aporta según su talento.", ""))
+        for r in COURT_ROLES {
+            let a = advisor(r.id)
+            list_push(items, {"action": "kr:adv:" + r.id, "t": r.n + ": " + a.first + " " + a.last, "s": "Lealtad " + str(a.loyal) + " · talento " + str(a.skill), "desc": r.d + " Con talento alto, mejora " + str_lower(realm_names()[r.key]) + " cada mes. Con lealtad baja, conspira.", "lock": ""})
+        }
+        return items
+    }
+    if cat == "Diplomacia" {
+        for n in NATIONS {
+            let rel = d.dip[n.id]
+            let st = "Relación " + str(rel)
+            if rel >= 75 { st = st + " · aliado" }
+            if rel < 25 { st = st + " · hostil" }
+            list_push(items, {"action": "kr:nation:" + n.id, "t": cap_first(n.n), "s": st, "desc": n.d + " Fuerza militar " + str(n.str) + ".", "lock": ""})
+        }
+        list_push(items, dninfo("Guerras ganadas: " + str(d.wars_won), "Ejército " + str(d.realm.fuerza), "La guerra se gana con el ejército, el valor de tu mariscal y tus aliados. Perderla puede costarte la corona."))
+        return items
+    }
+    // Herederos
+    let kids = royal_kids()
+    let heir = crown_heir()
+    let law = "Primogenitura: hereda tu primogénito."
+    if d.succ == "libre" { law = "Libre elección: tú eliges a tu heredero." }
+    list_push(items, dninfo("Ley de sucesión", if_str(d.succ == "libre", "Libre elección", "Primogenitura"), law + " Si mueres en el trono, tu heredero sigue la partida como monarca."))
+    if len(kids) == 0 {
+        list_push(items, dninfo("Sin herederos", "La corona necesita un heredero", "Sin hijos, la dinastía termina contigo."))
+    }
+    for k in kids {
+        let t = prince_title(k) + " " + k.first
+        if heir != null && heir.id == k.id { t = t + " (heredero)" }
+        let tutor = "Sin tutor"
+        if k.kr_tutor != null { tutor = "Tutor: " + str_lower(k.kr_tutor) }
+        list_push(items, {"action": "kr:kid:" + str(k.id), "t": t, "s": str(k.age) + " años · " + tutor, "desc": "Educarl" + oa(k.gender) + ", presentarl" + oa(k.gender) + " ante la corte o nombrarl" + oa(k.gender) + " heredero.", "lock": ""})
+    }
+    let al = ""
+    if heir == null || heir.age < 18 { al = "Heredero adulto" }
+    list_push(items, {"action": "kr:abdicate", "t": "Abdicar en tu heredero", "s": "Dejar el trono", "desc": "Le pasas la corona en vida y te retiras como " + by_gender(L.gender, "rey padre", "reina madre") + ".", "lock": al})
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function corona_action(action: string) {
+    G.modal = null
+    if L.route != "rey" || !L.rd.king { return null }
+    let d = kr()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    match cmd {
+        "council" => {
+            if !kr_use("council") { return null }
+            let parts2 = []
+            for r in COURT_ROLES {
+                let a = advisor(r.id)
+                let v = (a.skill - 40) / 15
+                if v != 0 {
+                    let delta = {}
+                    delta[r.key] = v
+                    realm_apply(delta)
+                    list_push(parts2, realm_names()[r.key] + " " + if_str(v > 0, "+", "") + str(v))
+                }
+            }
+            if len(parts2) == 0 { list_push(parts2, "sin grandes cambios") }
+            return finish("El consejo real", "Discutieron hasta la medianoche. Resultado: " + str_join(parts2, ", ") + ".", "n")
+        }
+        "adv" => {
+            let a = advisor(arg)
+            let r = court_role(arg)
+            let locks = ["", "", "", ""]
+            if L.used["kr_adv" + arg] != null { locks[0] = "Este mes ya" }
+            if d.realm.tesoro < 5 { locks[1] = "Tesoro 5" }
+            open_choice(str_upper(r.n), a.first + " " + a.last + ", " + str(a.age) + " años. Lealtad " + str(a.loyal) + ", talento " + str(a.skill) + ". " + r.d,
+                ["Pedirle consejo", "Darle un título y tierras (Tesoro −5)", "Destituirl" + oa(a.g) + " y nombrar a alguien más", "Volver"], locks, "kr_adv", {"role": arg})
+            return null
+        }
+        "nation" => {
+            let n = nation_def(arg)
+            let rel = d.dip[arg]
+            let heir = crown_heir()
+            let locks = ["", "", "", "", "", ""]
+            if L.used["kr_n" + arg] != null {
+                locks[0] = "Este mes ya"
+                locks[1] = "Este mes ya"
+            }
+            if rel < 60 { locks[1] = "Relación 60" }
+            if rel < 75 { locks[2] = "Relación 75" }
+            if heir == null || heir.age < 18 || heir.rel != "hijo" || L.flags["royal_wed_" + str(heir.id)] == true { locks[3] = "Heredero adulto y soltero" } else if rel < 50 { locks[3] = "Relación 50" }
+            open_choice(str_upper(n.n), cap_first(n.n) + ": " + n.d + " Relación " + str(rel) + ". Fuerza militar " + str(n.str) + " contra tu ejército de " + str(d.realm.fuerza) + ".",
+                ["Enviar una embajada (Tesoro −3)", "Firmar un tratado comercial", "Alianza militar", "Casar a tu heredero con su casa real", "Declarar la guerra", "Volver"], locks, "kr_nation", {"id": arg})
+            return null
+        }
+        "kid" => {
+            let k = find_person(parse_int(arg, 0))
+            if k == null { return null }
+            let locks = ["", "", "", ""]
+            if k.kr_tutor != null { locks[0] = "Ya tiene tutor" }
+            if L.used["kr_present"] != null { locks[1] = "Este mes ya" }
+            if k.age < 6 { locks[1] = "Edad 6" }
+            if d.succ != "libre" && crown_heir() != null && crown_heir().id != k.id && !is_eldest(k) { locks[2] = "Ley de primogenitura" }
+            if L.heir_id == k.id { locks[2] = "Ya es heredero" }
+            open_choice(str_upper(prince_title(k) + " " + k.first), k.first + ", " + str(k.age) + " años. Inteligencia " + str(k.smarts) + ", vínculo " + str(k.bond) + ".",
+                ["Elegirle un tutor", "Presentarl" + oa(k.gender) + " ante la corte", "Nombrarl" + oa(k.gender) + " heredero", "Volver"], locks, "kr_kid", {"person": k})
+            return null
+        }
+        "abdicate" => {
+            let heir = crown_heir()
+            if heir == null || heir.age < 18 { return null }
+            open_choice("ABDICAR", "¿Le pasas la corona a " + heir.first + "? Dejarás de gobernar para siempre.", ["Abdicar", "Seguir reinando"], ["", ""], "kr_abdicate", {"person": heir})
+            return null
+        }
+        _ => return null
+    }
+}
+
+function is_eldest(k: map) {
+    for other in royal_kids() {
+        if other.age > k.age { return false }
+    }
+    return true
+}
+
+function corona_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    if L.route != "rey" { return null }
+    let d = kr()
+    match handler {
+        "kr_adv" => {
+            let a = advisor(ctx.role)
+            let r = court_role(ctx.role)
+            if index == 0 {
+                if !kr_use("adv" + ctx.role) { return null }
+                let v = 2 + a.skill / 20
+                let delta = {}
+                delta[r.key] = v
+                realm_apply(delta)
+                a.loyal = clamp100(a.loyal + 2)
+                return finish(r.n, a.first + " te dio un buen consejo. " + realm_names()[r.key] + " +" + str(v) + ".", "g")
+            }
+            if index == 1 {
+                realm_apply({"tesoro": -5})
+                a.loyal = clamp100(a.loyal + 20)
+                return finish(r.n, "Nombraste a " + a.first + " " + by_gender(a.g, "conde", "condesa") + " de un valle con río. Su lealtad subió.", "g")
+            }
+            if index == 2 {
+                d.court[ctx.role] = make_advisor(ctx.role)
+                realm_apply({"elite": -3})
+                let b = d.court[ctx.role]
+                return finish(r.n, "Destituiste a " + a.first + ". Tu nuevo " + str_lower(r.n) + " es " + b.first + " " + b.last + " (talento " + str(b.skill) + ").", "n")
+            }
+            return null
+        }
+        "kr_nation" => return corona_nation(index, ctx.id)
+        "kr_kid" => {
+            let k = ctx.person
+            if index == 0 {
+                let labels = []
+                for t in TUTORS { list_push(labels, t.n + ": " + t.d) }
+                list_push(labels, "Volver")
+                open_choice("UN TUTOR PARA " + str_upper(k.first), "¿Quién educará a " + k.first + "?", labels, ["", "", "", ""], "kr_tutor", {"person": k})
+                return null
+            }
+            if index == 1 {
+                if !kr_use("present") { return null }
+                realm_apply({"elite": 4, "aprob": 3})
+                bond_gain(k, 5)
+                add_hito(k, "Su presentación ante la corte")
+                return finish("La corte", k.first + " saludó a la corte con una reverencia perfecta. Los nobles aplaudieron.", "g")
+            }
+            if index == 2 {
+                L.heir_id = k.id
+                add_hito(k, "Nombrad" + oa(k.gender) + " heredero de la corona")
+                bond_gain(k, 8)
+                return finish("Heredero", "Proclamaste a " + k.first + " " + str_lower(prince_title(k)) + " heredero de la corona.", "g")
+            }
+            return null
+        }
+        "kr_tutor" => {
+            if index >= len(TUTORS) { return null }
+            let t = TUTORS[index]
+            let k = ctx.person
+            k.kr_tutor = t.n
+            k.kr_stat = t.stat
+            k.smarts = clamp100(k.smarts + 8)
+            realm_apply({"tesoro": -3})
+            add_hito(k, "Su tutor: " + str_lower(t.n))
+            return finish("Educación real", t.n + " educará a " + k.first + ": " + str_lower(t.d), "g")
+        }
+        "kr_abdicate" => {
+            if index != 0 { return null }
+            let heir = ctx.person
+            d.king = false
+            d.abdicated = true
+            L.happy += 10
+            flag("abdicated")
+            hito_me("Vida", "Abdicaste en " + heir.first)
+            add_hito(heir, "Fue coronad" + oa(heir.gender))
+            bond_gain(heir, 10)
+            return finish("Abdicación", "En una ceremonia solemne, colocaste la corona sobre la cabeza de " + heir.first + ". Ahora eres " + by_gender(L.gender, "rey padre", "reina madre") + ".", "g")
+        }
+        "kr_ev" => return corona_event_choice(index, ctx)
+        _ => return null
+    }
+}
+
+function corona_nation(index: int, id: string) {
+    let d = kr()
+    let n = nation_def(id)
+    if index == 0 || index == 1 {
+        if !kr_use("n" + id) { return null }
+    }
+    if index == 0 {
+        realm_apply({"tesoro": -3})
+        d.dip[id] = clamp100(d.dip[id] + rint(6, 12) + rank("charm"))
+        return finish("Embajada", "Tus embajadores llevaron regalos a " + n.n + ". Relación: " + str(d.dip[id]) + ".", "g")
+    }
+    if index == 1 {
+        if d.dip[id] < 60 { return null }
+        realm_apply({"tesoro": 10, "aprob": 2})
+        return finish("Tratado", "Firmaste un tratado comercial con " + n.n + ". Barcos cargados entran a tus puertos.", "g")
+    }
+    if index == 2 {
+        if d.dip[id] < 75 || list_contains(d.realm.laws, "ally_" + id) { return finish("Alianza", "Ya son aliados.", "n") }
+        list_push(d.realm.laws, "ally_" + id)
+        realm_apply({"fuerza": 10})
+        return finish("Alianza", "Ahora " + n.n + " es tu aliado militar. Tu ejército suma " + str(n.str / 5) + " de fuerza en caso de guerra.", "g")
+    }
+    if index == 3 {
+        let heir = crown_heir()
+        if heir == null || heir.age < 18 || d.dip[id] < 50 { return null }
+        L.flags["royal_wed_" + str(heir.id)] = true
+        d.dip[id] = clamp100(d.dip[id] + 25)
+        realm_apply({"elite": 5, "aprob": 6})
+        add_hito(heir, "Boda real con la casa de " + n.n)
+        bond_gain(heir, 4)
+        return finish("Boda real", heir.first + " se casó con alguien de la casa real de " + n.n + ". Las campanas sonaron tres días.", "g")
+    }
+    if index == 4 {
+        let allies = 0
+        for x in NATIONS {
+            if list_contains(d.realm.laws, "ally_" + x.id) && x.id != id { allies += x.str / 5 }
+        }
+        let odds = clamp(50 + (d.realm.fuerza + allies - n.str) + rank("guts") * 3 + (advisor("mariscal").skill - 50) / 5, 5, 90)
+        d.dip[id] = 0
+        flag("war")
+        if chance(odds) {
+            d.wars_won += 1
+            realm_apply({"tesoro": 20, "aprob": 10, "fuerza": -10, "elite": 5})
+            if d.wars_won >= 3 { flag("conqueror") }
+            hito_me("Vida", "Ganaste la guerra contra " + n.n)
+            return finish("¡Victoria!", "Tu ejército venció a " + n.n + ". Tributos, tierras y desfiles en la capital.", "g")
+        }
+        realm_apply({"tesoro": -15, "aprob": -15, "fuerza": -20})
+        hito_me("Vida", "Perdiste la guerra contra " + n.n)
+        return finish("Derrota", "La guerra contra " + n.n + " fue un desastre. Viudas en las plazas y el pueblo furioso.", "b")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function corona_month() {
+    if L.route != "rey" { return null }
+    let d = kr()
+    // Regencia: al cumplir 18, la coronación.
+    if d.regency == true && L.age >= 18 {
+        d.regency = false
+        d.king = true
+        if d.realm == null { d.realm = realm_new() }
+        let title = by_gender(L.gender, "rey", "reina")
+        hito_me("Vida", "Te coronaron " + title + " al cumplir 18")
+        list_push(G.toasts, {"head": "¡CORONACIÓN!", "title": str_upper(title) + " " + str_upper(L.first), "sub": "Termina la regencia", "t0": G.t})
+        log_add("Terminó la regencia: hoy te colocaron la corona de tu familia.", "g")
+    }
+    if !d.king || d.realm == null { return null }
+    for r in COURT_ROLES {
+        let a = advisor(r.id)
+        if a.skill >= 60 && chance(25) {
+            let delta = {}
+            delta[r.key] = 1
+            realm_apply(delta)
+        }
+        if chance(20) { a.loyal = clamp100(a.loyal + if_n(d.realm.tesoro >= 40, 1, -1)) }
+    }
+    // Herederos educados
+    for k in royal_kids() {
+        if k.kr_stat != null && k.age < 18 && chance(15) { k.smarts = clamp100(k.smarts + 1) }
+    }
+    return null
+}
+
+function corona_event() {
+    if L.route != "rey" || !L.rd.king || G.modal != null || L.rd.realm == null || !chance(5) { return false }
+    let d = kr()
+    // Conspiración de un consejero desleal
+    for r in COURT_ROLES {
+        let a = advisor(r.id)
+        if a.loyal < 25 && chance(40) {
+            open_choice("TRAICIÓN EN LA CORTE", "Tus espías interceptaron cartas: tu " + str_lower(r.n) + ", " + a.first + " " + a.last + ", conspira contra ti.",
+                ["Arrestarl" + oa(a.g) + " y juzgarl" + oa(a.g), "Comprar su lealtad (Tesoro −10)", "Desterrarl" + oa(a.g) + " en silencio"], ["", "", ""], "kr_ev", {"kind": "traitor", "role": r.id})
+            return true
+        }
+    }
+    let r = rint(1, 6)
+    if r == 1 {
+        let guard = (advisor("espias").skill + advisor("mariscal").skill) / 2
+        open_choice("ATENTADO", "Durante el desfile, un hombre saca una ballesta entre la multitud. Tu guardia reacciona.", ["Agacharte y confiar en tu guardia", "Enfrentarlo tú", "Saludar como si nada"], ["", "", ""], "kr_ev", {"kind": "attack", "guard": guard})
+        return true
+    }
+    if r == 2 {
+        open_choice("UN PRETENDIENTE", "Un noble asegura ser descendiente directo del último rey y reclama tu trono. Algunos nobles lo escuchan.", ["Ofrecerle un ducado a cambio de lealtad", "Encarcelarlo", "Desafiarlo a un debate público"], ["", "", ""], "kr_ev", {"kind": "pretender"})
+        return true
+    }
+    if r == 3 {
+        open_choice("REVUELTA CAMPESINA", "Los campesinos del sur marchan hacia la capital con antorchas: los impuestos los ahogan.", ["Bajar sus impuestos", "Recibir a sus líderes", "Mandar al ejército"], ["", "", ""], "kr_ev", {"kind": "revolt"})
+        return true
+    }
+    if r == 4 {
+        open_choice("UN COMETA", "Un cometa rojo cruza el cielo tres noches seguidas. El pueblo lo toma como un presagio.", ["Declararlo señal de prosperidad", "Ordenar misas y rogativas", "Explicarlo con astrónomos"], ["", "", ""], "kr_ev", {"kind": "comet"})
+        return true
+    }
+    if r == 5 {
+        open_choice("ESCÁNDALO REAL", "Un periódico publica cartas de amor que supuestamente escribiste a alguien de la servidumbre.", ["Negarlo todo", "Reconocerlo con dignidad", "Comprar el periódico"], ["", "", ""], "kr_ev", {"kind": "scandal"})
+        return true
+    }
+    open_choice("EL DUQUE REBELDE", "El duque del este se niega a pagar tributos y cierra sus fronteras.", ["Negociar", "Sitiar su castillo", "Ignorarlo"], ["", "", ""], "kr_ev", {"kind": "duke"})
+    return true
+}
+
+function corona_event_choice(index: int, ctx: map) {
+    let d = kr()
+    match ctx.kind {
+        "traitor" => {
+            let r = court_role(ctx.role)
+            if index == 0 {
+                realm_apply({"orden": 8, "elite": -6})
+                d.court[ctx.role] = make_advisor(ctx.role)
+                return finish("Traición", "El juicio fue rápido. Tu nuevo " + str_lower(r.n) + " es " + d.court[ctx.role].first + ".", "n")
+            }
+            if index == 1 {
+                realm_apply({"tesoro": -10})
+                advisor(ctx.role).loyal = 70
+                return finish("Traición", "Un cofre de oro y un título más. Por ahora, te es fiel.", "n")
+            }
+            realm_apply({"elite": -3})
+            d.court[ctx.role] = make_advisor(ctx.role)
+            return finish("Traición", "Desapareció de la corte una madrugada. Nadie pregunta.", "n")
+        }
+        "attack" => {
+            let ok = chance(clamp(40 + ctx.guard / 2, 30, 95))
+            if index == 1 { ok = chance(30 + rank("guts") * 12) }
+            if ok {
+                realm_apply({"aprob": 8, "orden": 4})
+                if index == 1 { gain("guts", 4) }
+                hito_once("royal_attack", "Vida", "Sobreviviste a un atentado")
+                return finish("Atentado", "Detuvieron al atacante a tiempo. El pueblo celebró que sigues con vida.", "g")
+            }
+            L.health -= 25
+            realm_apply({"orden": -6})
+            return finish("Atentado", "La flecha te alcanzó en el hombro. Sobreviviste, pero pasaste semanas en cama.", "b")
+        }
+        "pretender" => {
+            if index == 0 {
+                realm_apply({"tesoro": -6, "elite": 6})
+                return finish("El pretendiente", "Aceptó el ducado y juró lealtad. Un rival menos.", "n")
+            }
+            if index == 1 {
+                realm_apply({"orden": 6, "aprob": -4, "elite": -4})
+                return finish("El pretendiente", "Lo encerraste en la torre. Sus partidarios callan... por ahora.", "n")
+            }
+            if chance(40 + rank("charm") * 8) {
+                realm_apply({"aprob": 10, "elite": 4})
+                return finish("El pretendiente", "Lo destrozaste en el debate frente al pueblo. Nadie vuelve a mencionarlo.", "g")
+            }
+            realm_apply({"aprob": -8, "elite": -6})
+            return finish("El pretendiente", "Su discurso fue mejor que el tuyo. Ahora tiene seguidores.", "b")
+        }
+        "revolt" => {
+            if index == 0 {
+                realm_apply({"tesoro": -10, "aprob": 8})
+                return finish("Revuelta", "Bajaste los impuestos del sur. Volvieron a sus campos cantando tu nombre.", "g")
+            }
+            if index == 1 {
+                if chance(45 + rank("kind") * 8) {
+                    realm_apply({"aprob": 8, "orden": 4})
+                    return finish("Revuelta", "Escuchaste a sus líderes una tarde entera. Se fueron convencidos.", "g")
+                }
+                realm_apply({"aprob": -4})
+                return finish("Revuelta", "No llegaron a un acuerdo. Siguen en las plazas.", "n")
+            }
+            realm_apply({"orden": 10, "aprob": -12, "fuerza": -4})
+            L.karma -= 6
+            return finish("Revuelta", "El ejército dispersó la marcha. El sur no lo olvidará.", "b")
+        }
+        "comet" => {
+            if index == 0 { realm_apply({"aprob": 5}) }
+            if index == 1 { realm_apply({"fe": 8, "tesoro": -3}) }
+            if index == 2 { realm_apply({"elite": 3, "fe": -3}) }
+            return finish("El cometa", "El cometa se fue como llegó. El pueblo recordará lo que dijiste.", "n")
+        }
+        "scandal" => {
+            if index == 0 {
+                if chance(50) { return finish("Escándalo", "Nadie pudo probar nada.", "n") }
+                realm_apply({"aprob": -10})
+                return finish("Escándalo", "Aparecieron más cartas. Tu negativa empeoró todo.", "b")
+            }
+            if index == 1 {
+                realm_apply({"aprob": 2, "elite": -5, "fe": -4})
+                return finish("Escándalo", "Lo reconociste en público. Al pueblo le pareció muy humano.", "n")
+            }
+            realm_apply({"tesoro": -8, "orden": 2})
+            return finish("Escándalo", "Compraste el periódico. Ahora solo publica recetas y el clima.", "x")
+        }
+        _ => {
+            if index == 0 {
+                realm_apply({"tesoro": -4, "elite": 4})
+                return finish("El duque", "Le perdonaste un año de tributos a cambio de su lealtad.", "n")
+            }
+            if index == 1 {
+                if chance(30 + d.realm.fuerza / 2) {
+                    realm_apply({"tesoro": 8, "orden": 6, "fuerza": -5})
+                    return finish("El duque", "Tras un mes de sitio, el duque se rindió y pagó todo con intereses.", "g")
+                }
+                realm_apply({"fuerza": -10, "aprob": -6})
+                return finish("El duque", "El sitio fracasó. El duque se burla desde sus murallas.", "b")
+            }
+            realm_apply({"tesoro": -5, "elite": -5})
+            return finish("El duque", "Otros nobles notaron que el duque no paga... y tampoco quieren pagar.", "b")
+        }
+    }
+}
+
+// ---------------------------------------------------------------- dinastía
+
+// Al continuar como heredero: si moriste en el trono, la corona pasa a tu hijo.
+function corona_inherit(old: map) {
+    if old.route != "rey" || old.rd == null || old.rd.king != true { return null }
+    let rd = old.rd
+    L.route = "rey"
+    L.rd = rd
+    L.rstage = 4
+    L.rdone = false
+    L.family = "rica"
+    rd.reign_m = 0
+    rd.stable_m = 0
+    rd.abdicated = false
+    if L.age < 18 {
+        rd.king = false
+        rd.regency = true
+        log_add("Eres " + by_gender(L.gender, "el nuevo rey", "la nueva reina") + ", pero aún no cumples 18: un consejo de regencia gobierna hasta tu coronación.", "x")
+    } else {
+        rd.king = true
+        hito_me("Vida", "Heredaste la corona")
+        log_add("La corona de tu familia ahora es tuya. ¡Larga vida a " + L.first + "!", "x")
+    }
+    flag("dynasty_crown")
+    return null
+}

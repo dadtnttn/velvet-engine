@@ -1,0 +1,611 @@
+// @edition 3
+// Política: la segunda capa de la ruta presidencial.
+// - Campaña: equipo (jefe de campaña, encuestadora, estratega digital, operador
+//   territorial), cinco sectores de votantes, promesas de campaña, un rival con
+//   nombre en cada elección, guerra sucia, encuestas y el debate cara a cara con
+//   preguntas (cada respuesta conquista a unos y aleja a otros).
+// - Noche electoral con resultados por sector.
+// - Gobierno: gabinete (técnicos, leales, del partido o celebridades; algunos
+//   roban), conferencias de prensa, mensaje a la nación, el Congreso que te manda
+//   leyes para firmar o vetar, crisis presidenciales y juicio político.
+// - Promesas: las que no cumples te cobran aprobación.
+// - Después del poder: memorias, conferencias y tu biblioteca presidencial.
+// Acciones con el prefijo "pl:" y elecciones "pl_".
+
+const SEGMENTS = [
+    {"id": "jovenes", "n": "Jóvenes", "w": 20},
+    {"id": "trabajadores", "n": "Trabajadores", "w": 25},
+    {"id": "empresarios", "n": "Empresarios", "w": 10},
+    {"id": "rural", "n": "Campo", "w": 20},
+    {"id": "media", "n": "Clase media", "w": 25}
+]
+
+const STAFF_POL = [
+    {"id": "jefe", "n": "Jefe de campaña", "c": 20000, "d": "Organiza todo: tu popularidad sube un poco cada mes."},
+    {"id": "encuestas", "n": "Encuestadora", "c": 5000, "d": "Sabes exactamente cómo vas en cada sector."},
+    {"id": "digital", "n": "Estratega digital", "c": 10000, "d": "Redes sociales y memes: los jóvenes te siguen."},
+    {"id": "territorio", "n": "Operador territorial", "c": 8000, "d": "Camionetas, pueblos y apretones de mano: el campo te conoce."}
+]
+
+const SEG_ACTS = [
+    {"id": "uni", "seg": "jovenes", "n": "Mitin en universidades", "d": "Selfies, preguntas difíciles y mucha energía."},
+    {"id": "fabrica", "seg": "trabajadores", "n": "Visitar fábricas", "d": "Casco, overol y escuchar a la gente del turno de noche."},
+    {"id": "cena", "seg": "empresarios", "n": "Cena con empresarios", "d": "Vino caro, promesas de estabilidad y donativos."},
+    {"id": "campo", "seg": "rural", "n": "Gira por el campo", "d": "Tierra, tractores y comida en casas de adobe."},
+    {"id": "vecinos", "seg": "media", "n": "Reuniones vecinales", "d": "Baches, seguridad y el precio de la gasolina."}
+]
+
+const PROMISES = [
+    {"id": "impuestos", "n": "Bajar los impuestos", "seg": {"empresarios": 10, "media": 8, "trabajadores": -2}, "law": "tax_down"},
+    {"id": "salud", "n": "Salud universal gratuita", "seg": {"trabajadores": 10, "jovenes": 6, "empresarios": -6}, "law": "l_health"},
+    {"id": "seguridad", "n": "Mano dura contra el crimen", "seg": {"media": 10, "rural": 6, "jovenes": -6}, "law": "l_iron"},
+    {"id": "becas", "n": "Becas para todos los estudiantes", "seg": {"jovenes": 12, "media": 4}, "law": "schools"},
+    {"id": "campo", "n": "Apoyo al campo", "seg": {"rural": 12, "trabajadores": 3}, "law": "l_rural"},
+    {"id": "verde", "n": "Plan verde", "seg": {"jovenes": 8, "empresarios": -4}, "law": "l_green"}
+]
+
+// El debate cara a cara: tres preguntas.
+const DEBATE_QS = [
+    {"q": "«¿Qué hará con el desempleo?»", "a": [
+        {"t": "Obra pública masiva", "seg": {"trabajadores": 6, "empresarios": -2}},
+        {"t": "Bajar impuestos a las empresas que contraten", "seg": {"empresarios": 6, "media": 2}},
+        {"t": "Capacitación digital para jóvenes", "seg": {"jovenes": 6}}
+    ]},
+    {"q": "«¿Cómo bajará la inseguridad?»", "a": [
+        {"t": "Más policías en las calles", "seg": {"media": 6, "rural": 3, "jovenes": -2}},
+        {"t": "Atacar las causas: educación y empleo", "seg": {"jovenes": 5, "trabajadores": 3}},
+        {"t": "«Mi rival protege a los criminales»", "seg": {"media": 3}, "dirty": true}
+    ]},
+    {"q": "«¿Subirá los impuestos?»", "a": [
+        {"t": "Solo a los más ricos", "seg": {"trabajadores": 6, "jovenes": 3, "empresarios": -6}},
+        {"t": "Nunca", "seg": {"empresarios": 5, "media": 4}},
+        {"t": "Lo que haga falta para la salud y la educación", "seg": {"jovenes": 4, "trabajadores": 3, "media": -2}}
+    ]},
+    {"q": "«¿Qué hará por el campo?»", "a": [
+        {"t": "Créditos baratos y agua para riego", "seg": {"rural": 7}},
+        {"t": "Tratados para exportar más", "seg": {"empresarios": 4, "rural": 3}},
+        {"t": "El campo tiene que modernizarse solo", "seg": {"empresarios": 3, "rural": -6}}
+    ]},
+    {"q": "«Hablemos de corrupción»", "a": [
+        {"t": "Fiscalía independiente y cárcel para todos", "seg": {"media": 6, "jovenes": 4}},
+        {"t": "Mostrar tus declaraciones de impuestos en vivo", "seg": {"media": 5, "jovenes": 3}, "risk": true},
+        {"t": "Recordar los escándalos de tu rival", "seg": {"media": 2}, "dirty": true}
+    ]}
+]
+
+const MINISTRIES = [
+    {"id": "hacienda", "n": "Hacienda", "key": "tesoro"},
+    {"id": "interior", "n": "Gobernación", "key": "orden"},
+    {"id": "salud", "n": "Salud", "key": "aprob"},
+    {"id": "economia", "n": "Economía", "key": "fe"},
+    {"id": "seguridad", "n": "Seguridad", "key": "fuerza"}
+]
+
+const MINISTER_TYPES = [
+    {"id": "tecnico", "n": "Una técnica brillante", "skill": 85, "loyal": 45, "corrupt": 5},
+    {"id": "leal", "n": "Tu amigo de toda la vida", "skill": 50, "loyal": 90, "corrupt": 20},
+    {"id": "partido", "n": "Un cacique del partido", "skill": 55, "loyal": 60, "corrupt": 30},
+    {"id": "famoso", "n": "Una celebridad", "skill": 35, "loyal": 55, "corrupt": 15}
+]
+
+const PRESS_QS = [
+    {"q": "Una periodista pregunta por el aumento de la gasolina.", "a": ["Explicar las causas con datos", "Culpar al gobierno anterior", "«Siguiente pregunta»"]},
+    {"q": "Un reportero pregunta si es cierto que tu cuñado recibió contratos del gobierno.", "a": ["Ordenar una investigación", "Negarlo y cambiar de tema", "Atacar al medio por mentiroso"]},
+    {"q": "Te preguntan por la marcha de estudiantes de ayer.", "a": ["Invitar a los estudiantes a dialogar", "Decir que la manipula la oposición", "Prometer más becas"]},
+    {"q": "Te preguntan si vas a buscar la reelección.", "a": ["«Hoy me toca gobernar»", "«El pueblo decidirá»", "«Por supuesto»"]}
+]
+
+const BILLS = [
+    {"n": "Ley de transparencia", "sign": {"aprob": 5, "elite": -4}, "veto": {"elite": 4, "aprob": -6}},
+    {"n": "Aumento al salario mínimo", "sign": {"aprob": 8, "fe": -4}, "veto": {"fe": 3, "aprob": -8}},
+    {"n": "Reforma a las pensiones", "sign": {"tesoro": 8, "aprob": -6}, "veto": {"aprob": 4, "tesoro": -4}},
+    {"n": "Ley de vigilancia digital", "sign": {"orden": 8, "aprob": -6}, "veto": {"aprob": 4, "fuerza": -3}},
+    {"n": "Presupuesto de egresos", "sign": {"elite": 5, "tesoro": -4}, "veto": {"elite": -10, "tesoro": 3}},
+    {"n": "Ley de energías limpias", "sign": {"aprob": 4, "fe": 3, "tesoro": -4}, "veto": {"fe": 2, "aprob": -3}}
+]
+
+const PRES_CRISES = [
+    {"t": "Pandemia", "text": "Un virus nuevo llena los hospitales.", "a": ["Confinamiento estricto", "Vacunas y hospitales de campaña", "Mantener todo abierto"], "da": [{"aprob": 2, "fe": -10, "orden": 4}, {"tesoro": -15, "aprob": 8}, {"fe": 4, "aprob": -12}]},
+    {"t": "Crisis financiera", "text": "Un banco grande quiebra y arrastra a la bolsa.", "a": ["Rescatar a los bancos", "Dejarlos caer", "Proteger a los ahorradores"], "da": [{"tesoro": -15, "fe": 8, "aprob": -6}, {"fe": -12, "aprob": 4}, {"tesoro": -8, "aprob": 6, "fe": -3}]},
+    {"t": "Huracán", "text": "Un huracán categoría 5 golpea la costa.", "a": ["Ir en persona a la zona", "Mandar al ejército a ayudar", "Dar un mensaje desde la oficina"], "da": [{"aprob": 10, "tesoro": -6}, {"fuerza": -4, "aprob": 6, "tesoro": -6}, {"aprob": -10}]},
+    {"t": "Espionaje", "text": "Una filtración revela que tu gobierno espiaba a periodistas.", "a": ["Despedir al responsable", "Negarlo", "Defenderlo por seguridad nacional"], "da": [{"aprob": -2, "orden": -2}, {"aprob": -8}, {"fuerza": 4, "aprob": -10}]},
+    {"t": "Ataque cibernético", "text": "Hackers paralizan los sistemas del gobierno y los bancos.", "a": ["Pagar el rescate", "Reconstruir todo desde cero", "Culpar a un país vecino"], "da": [{"tesoro": -10, "orden": 2}, {"tesoro": -6, "fe": -4, "aprob": 3}, {"aprob": 2, "fe": -5}]},
+    {"t": "Paro de transportistas", "text": "Los transportistas bloquean todas las carreteras.", "a": ["Negociar", "Desalojar con la policía", "Esperar a que se cansen"], "da": [{"tesoro": -6, "aprob": 3}, {"orden": 6, "aprob": -8}, {"fe": -8, "aprob": -4}]},
+    {"t": "Guerra comercial", "text": "Tu principal socio comercial sube aranceles a tus productos.", "a": ["Responder con aranceles", "Negociar en una cumbre", "Buscar nuevos mercados"], "da": [{"fe": -6, "aprob": 4}, {"fe": 3, "aprob": -2}, {"fe": 2, "tesoro": -3}]},
+    {"t": "Caravana migrante", "text": "Miles de personas cruzan tu frontera huyendo de la guerra.", "a": ["Recibirlos con albergues", "Cerrar la frontera", "Pedir ayuda a la ONU"], "da": [{"tesoro": -8, "aprob": -2, "orden": -2}, {"fuerza": -3, "aprob": 2}, {"aprob": 1, "elite": 2}]}
+]
+
+// ---------------------------------------------------------------- estado
+
+function pl() {
+    let d = L.rd
+    if d.segs == null {
+        d.segs = {}
+        for s in SEGMENTS { d.segs[s.id] = d.pop }
+    }
+    if d.staff == null { d.staff = [] }
+    if d.promises == null { d.promises = [] }
+    if d.cabinet == null { d.cabinet = {} }
+    if d.rival == null { d.rival = pl_new_rival() }
+    if d.dirty == null { d.dirty = 0 }
+    return d
+}
+
+function pl_new_rival() {
+    let g = pick(["m", "f"])
+    let names = NAMES_M
+    if g == "f" { names = NAMES_F }
+    let party = pick(PARTIES)
+    return {"first": pick(names), "last": pick(SURNAMES), "g": g, "party": party.n, "str": rint(35, 55)}
+}
+
+function seg_avg() {
+    let d = pl()
+    let total = 0
+    for s in SEGMENTS { total += d.segs[s.id] * s.w }
+    return total / 100
+}
+
+function seg_add(changes: map) {
+    let d = pl()
+    for k in map_keys(changes) {
+        if d.segs[k] != null { d.segs[k] = clamp(d.segs[k] + changes[k], 0, 100) }
+    }
+    return null
+}
+
+function has_staff_pol(id: string) {
+    return list_contains(pl().staff, id)
+}
+
+function plitem(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["pl_" + id] != null { l = "Este mes ya" }
+    return {"action": "pl:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function pl_use(id: string) {
+    if L.used["pl_" + id] != null { return false }
+    L.used["pl_" + id] = 1
+    return true
+}
+
+function rival_name() {
+    let r = pl().rival
+    return r.first + " " + r.last
+}
+
+// Probabilidad de ganar la elección (la usa run_election).
+function pl_election_odds(id: string) {
+    let d = pl()
+    let base = (d.pop + seg_avg()) / 2 + rank("charm") * 5
+    for s in d.staff { base += 2 }
+    let rival = d.rival.str
+    if id == "run_gov" { rival += 5 }
+    if id == "run_pres" { rival += 10 }
+    return clamp(base + 35 - rival, 5, 92)
+}
+
+// Resultados de la noche electoral por sector.
+function pl_results_text(won: bool) {
+    let d = pl()
+    let parts = []
+    for s in SEGMENTS {
+        let v = clamp(d.segs[s.id] + rint(-5, 5) + if_n(won, 8, -8), 5, 85)
+        list_push(parts, s.n + " " + str(v) + "%")
+    }
+    let msg = " Noche electoral contra " + rival_name() + " (" + d.rival.party + "): " + str_join(parts, ", ") + "."
+    d.rival = pl_new_rival()
+    return msg
+}
+
+// ---------------------------------------------------------------- menús
+
+function politica_items(cat: string) {
+    let d = pl()
+    let items = []
+    if cat == "Equipo" {
+        list_push(items, dninfo("Tu rival: " + rival_name(), d.rival.party + " · fuerza " + str(d.rival.str), "En cada elección enfrentas a alguien distinto. Tu fuerza: popularidad " + str(d.pop) + "%, sectores " + str(seg_avg()) + "%."))
+        let poll = "Contrata una encuestadora para verlo."
+        if has_staff_pol("encuestas") {
+            let parts = []
+            for s in SEGMENTS { list_push(parts, s.n + " " + str(d.segs[s.id]) + "%") }
+            poll = str_join(parts, " · ")
+        }
+        list_push(items, dninfo("Encuesta por sectores", "Promedio " + str(seg_avg()) + "%", poll))
+        for st in STAFF_POL {
+            let on = has_staff_pol(st.id)
+            list_push(items, {"action": "pl:staff:" + st.id, "t": st.n, "s": if_str(on, "CONTRATADO · despedir", money_str(st.c) + "/mes"), "desc": st.d, "lock": if_str(!on && d.party == "", "Necesitas partido", "")})
+        }
+        for a in SEG_ACTS {
+            let l = ""
+            if d.party == "" { l = "Necesitas partido" }
+            list_push(items, plitem(a.id, a.n, "Sector: " + seg_name(a.seg), a.d, l))
+        }
+        list_push(items, plitem("promise", "Hacer una promesa de campaña", "Promesas: " + str(len(d.promises)), "Promesas que te dan votos... y que tendrás que cumplir si ganas.", if_str(d.party == "", "Necesitas partido", "")))
+        list_push(items, plitem("faceoff", "Debate cara a cara con tu rival", "Tres preguntas", "Cada respuesta conquista a unos sectores y aleja a otros.", if_str(d.party == "", "Necesitas partido", "")))
+        list_push(items, plitem("dirty", "Guerra sucia contra tu rival", "Arriesgado · karma", "Un expediente filtrado a la prensa. Puede hundirlo... o hundirte.", if_str(d.party == "", "Necesitas partido", "")))
+        return items
+    }
+    if cat == "Gabinete" {
+        for m in MINISTRIES {
+            let mn = d.cabinet[m.id]
+            if mn == null {
+                list_push(items, {"action": "pl:min:" + m.id, "t": "Secretaría de " + m.n, "s": "Sin titular", "desc": "Nombra a alguien para mejorar " + str_lower(realm_names()[m.key]) + ".", "lock": ""})
+            } else {
+                list_push(items, {"action": "pl:min:" + m.id, "t": "Secretaría de " + m.n + ": " + mn.first, "s": "Talento " + str(mn.skill) + " · lealtad " + str(mn.loyal), "desc": mn.kind + ". Mejora " + str_lower(realm_names()[m.key]) + " cada mes según su talento. Cambiarl" + oa(mn.g) + " cuesta un poco de Congreso.", "lock": ""})
+            }
+        }
+        return items
+    }
+    if cat == "Prensa" {
+        list_push(items, plitem("press", "Conferencia de prensa", "Aprobación", "Preguntas de los periodistas, en vivo y sin guion.", ""))
+        list_push(items, plitem("interview", "Entrevista en horario estelar", "Encanto", "Una hora con el conductor más visto del país.", ""))
+        let ml = ""
+        if d.msg_age == L.age { ml = "Este año ya" }
+        list_push(items, {"action": "pl:nation", "t": "Mensaje a la nación", "s": "Una vez al año", "desc": "Un discurso en cadena nacional sobre el estado del país.", "lock": ml})
+        list_push(items, plitem("leak", "Filtrar información de tus enemigos", "Congreso +, karma −", "Un sobre a un periodista amigo.", ""))
+        let pr = []
+        for p in d.promises { list_push(pr, promise_def(p).n) }
+        if len(pr) > 0 { list_push(items, dninfo("Tus promesas", str(len(pr)), str_join(pr, ", ") + ". Si no las cumples en dos años, la aprobación cae.")) }
+        return items
+    }
+    // Expresidente
+    if d.ex == true {
+        list_push(items, plitem("memoir", "Escribir tus memorias", "Dinero", "Un libro con todo lo que no pudiste decir.", if_str(d.memoir == true, "Ya las escribiste", "")))
+        list_push(items, plitem("talks", "Dar conferencias", "Dinero", "Universidades y foros te pagan por escucharte.", ""))
+        list_push(items, {"action": "pl:library", "t": "Fundar tu biblioteca presidencial", "s": "$2,000,000", "desc": "Un museo de tu gobierno para la posteridad.", "lock": if_str(d.library == true, "Ya existe", if_str(L.money < 2000000, "$2,000,000", ""))})
+        list_push(items, plitem("advise", "Asesorar a otros gobiernos", "Fama", "Presidentes de otros países te piden consejo.", ""))
+    }
+    return items
+}
+
+function seg_name(id: string) {
+    for s in SEGMENTS {
+        if s.id == id { return s.n }
+    }
+    return id
+}
+
+function promise_def(id: string) {
+    for p in PROMISES {
+        if p.id == id { return p }
+    }
+    return PROMISES[0]
+}
+
+// ---------------------------------------------------------------- acciones
+
+function politica_action(action: string) {
+    G.modal = null
+    if L.route != "presidente" { return null }
+    let d = pl()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    for a in SEG_ACTS {
+        if a.id == cmd {
+            if !pl_use(cmd) || d.party == "" { return null }
+            let g = rint(3, 7) + rank("charm")
+            let ch = {}
+            ch[a.seg] = g
+            seg_add(ch)
+            d.pop = clamp100(d.pop + 1)
+            if a.id == "cena" { L.money += rint(10, 40) * 1000 }
+            return finish(a.n, pick(["Te escucharon y te creyeron.", "Hubo preguntas difíciles, pero saliste bien parad" + oa(L.gender) + ".", "Te despidieron con aplausos."]) + " " + seg_name(a.seg) + " +" + str(g) + ".", "g")
+        }
+    }
+    match cmd {
+        "staff" => {
+            if has_staff_pol(arg) {
+                let keep = []
+                for id in d.staff {
+                    if id != arg { list_push(keep, id) }
+                }
+                d.staff = keep
+                return finish("Equipo", "Despediste a tu equipo de " + str_lower(staff_pol_def(arg).n) + ".", "n")
+            }
+            if d.party == "" { return null }
+            list_push(d.staff, arg)
+            return finish("Equipo", "Contrataste: " + staff_pol_def(arg).n + ".", "g")
+        }
+        "promise" => {
+            if !pl_use("promise") { return null }
+            let labels = []
+            let locks = []
+            for p in PROMISES {
+                list_push(labels, p.n)
+                list_push(locks, if_str(list_contains(d.promises, p.id), "Ya lo prometiste", ""))
+            }
+            return open_choice("PROMESA DE CAMPAÑA", "¿Qué le prometes al país?", labels, locks, "pl_promise", {})
+        }
+        "faceoff" => {
+            if !pl_use("faceoff") { return null }
+            let qs = list_slice(DEBATE_QS, 0, len(DEBATE_QS))
+            shuffle(G.rng, qs)
+            return pl_debate_step({"qs": list_slice(qs, 0, 3), "i": 0, "score": 0, "dirty": 0})
+        }
+        "dirty" => {
+            if !pl_use("dirty") { return null }
+            L.karma -= 5
+            d.dirty += 1
+            if chance(55) {
+                d.rival.str = max(10, d.rival.str - 12)
+                return finish("Guerra sucia", "El expediente de " + rival_name() + " explotó en los noticieros. Su campaña se tambalea.", "x")
+            }
+            d.pop = max(0, d.pop - 8)
+            seg_add({"jovenes": -4, "media": -4})
+            return finish("Guerra sucia", "Descubrieron que la filtración salió de tu equipo. El escándalo es tuyo.", "b")
+        }
+        "min" => {
+            if !d.pres { return null }
+            let labels = []
+            for t in MINISTER_TYPES { list_push(labels, t.n + " (talento " + str(t.skill) + ")") }
+            list_push(labels, "Volver")
+            return open_choice("SECRETARÍA DE " + str_upper(ministry_def(arg).n), "¿A quién nombras?", labels, ["", "", "", "", ""], "pl_min", {"id": arg})
+        }
+        "press" => {
+            if !d.pres || !pl_use("press") { return null }
+            let q = pick(PRESS_QS)
+            return open_choice("CONFERENCIA DE PRENSA", q.q, q.a, ["", "", ""], "pl_press", {})
+        }
+        "interview" => {
+            if !d.pres || !pl_use("interview") { return null }
+            if chance(40 + rank("charm") * 9) {
+                realm_apply({"aprob": 6})
+                return finish("Entrevista", "Hablaste con soltura, hiciste reír al conductor y explicaste tus planes. Aprobación +6.", "g")
+            }
+            realm_apply({"aprob": -5})
+            return finish("Entrevista", "Te enredaste con una pregunta sobre el precio del huevo. Fue meme toda la semana.", "b")
+        }
+        "nation" => {
+            if !d.pres || d.msg_age == L.age { return null }
+            d.msg_age = L.age
+            let v = 3 + rank("charm") * 2
+            realm_apply({"aprob": v})
+            return finish("Mensaje a la nación", "Hablaste en cadena nacional durante cuarenta minutos. Aprobación +" + str(v) + ".", "g")
+        }
+        "leak" => {
+            if !d.pres || !pl_use("leak") { return null }
+            L.karma -= 4
+            realm_apply({"elite": 6, "aprob": -1})
+            return finish("Filtración", "El senador que te bloqueaba apareció en todos los noticieros. Ahora coopera.", "x")
+        }
+        "memoir" => {
+            if d.ex != true || d.memoir == true || !pl_use("memoir") { return null }
+            d.memoir = true
+            let m = rint(5, 20) * 100000
+            L.money += m
+            return finish("Memorias", "Tus memorias fueron el libro más vendido del año. Adelanto: " + money_str(m) + ".", "g")
+        }
+        "talks" => {
+            if d.ex != true || !pl_use("talks") { return null }
+            let m = rint(5, 25) * 10000
+            L.money += m
+            return finish("Conferencias", "Una universidad extranjera te pagó " + money_str(m) + " por una conferencia.", "g")
+        }
+        "library" => {
+            if d.ex != true || d.library == true || L.money < 2000000 { return null }
+            L.money -= 2000000
+            d.library = true
+            L.fame = clamp100(L.fame + 5)
+            hito_me("Vida", "Inauguraste tu biblioteca presidencial")
+            return finish("Biblioteca", "Tu biblioteca presidencial abrió con una fila de dos cuadras.", "g")
+        }
+        "advise" => {
+            if d.ex != true || !pl_use("advise") { return null }
+            L.fame = clamp100(L.fame + 2)
+            gain("know", 1)
+            return finish("Asesoría", "Un presidente joven te pidió consejo para su primera crisis.", "g")
+        }
+        _ => return null
+    }
+}
+
+function staff_pol_def(id: string) {
+    for s in STAFF_POL {
+        if s.id == id { return s }
+    }
+    return STAFF_POL[0]
+}
+
+function ministry_def(id: string) {
+    for m in MINISTRIES {
+        if m.id == id { return m }
+    }
+    return MINISTRIES[0]
+}
+
+function pl_debate_step(ctx: map) {
+    let q = ctx.qs[ctx.i]
+    let labels = []
+    for a in q.a { list_push(labels, a.t) }
+    open_choice("DEBATE · PREGUNTA " + str(ctx.i + 1) + " DE 3", "Contra " + rival_name() + ". La moderadora pregunta: " + q.q, labels, ["", "", ""], "pl_deb", ctx)
+    return null
+}
+
+function politica_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = pl()
+    match handler {
+        "pl_promise" => {
+            if index >= len(PROMISES) { return null }
+            let p = PROMISES[index]
+            if list_contains(d.promises, p.id) { return null }
+            list_push(d.promises, p.id)
+            seg_add(p.seg)
+            return finish("Promesa", "Prometiste: «" + p.n + "». Los aplausos fueron enormes. Ahora habrá que cumplir.", "g")
+        }
+        "pl_deb" => {
+            let q = ctx.qs[ctx.i]
+            if index >= len(q.a) { return null }
+            let a = q.a[index]
+            seg_add(a.seg)
+            let pts = 0
+            for k in map_keys(a.seg) { pts += a.seg[k] }
+            ctx.score = ctx.score + pts
+            if a.dirty == true {
+                ctx.dirty = ctx.dirty + 1
+                L.karma -= 2
+            }
+            if a.risk == true && chance(30) {
+                d.pop = max(0, d.pop - 6)
+                log_add("En tus declaraciones de impuestos apareció una cuenta que nadie conocía. Mal momento.", "b")
+            }
+            ctx.i = ctx.i + 1
+            if ctx.i < len(ctx.qs) { return pl_debate_step(ctx) }
+            let g = ctx.score / 4 + rank("charm")
+            d.pop = clamp100(d.pop + g)
+            d.rival.str = max(10, d.rival.str - g / 2)
+            if ctx.score >= 18 { flag("debate_win") }
+            let verdict = "Las encuestas dicen que ganaste el debate."
+            if ctx.score < 8 { verdict = "Las encuestas dicen que fue un empate." }
+            if ctx.dirty >= 2 { verdict = verdict + " Tus ataques personales no le gustaron a todos." }
+            return finish("Debate", verdict + " Popularidad +" + str(g) + ".", "g")
+        }
+        "pl_min" => {
+            if index >= len(MINISTER_TYPES) { return null }
+            let t = MINISTER_TYPES[index]
+            let g = pick(["m", "f"])
+            let names = NAMES_M
+            if g == "f" { names = NAMES_F }
+            let had = d.cabinet[ctx.id] != null
+            d.cabinet[ctx.id] = {"first": pick(names), "g": g, "kind": t.n, "skill": t.skill + rint(-10, 10), "loyal": t.loyal, "corrupt": t.corrupt}
+            if had { realm_apply({"elite": -3}) }
+            if t.id == "partido" { realm_apply({"elite": 5}) }
+            if t.id == "famoso" { realm_apply({"aprob": 4}) }
+            return finish("Gabinete", "Nombraste a " + d.cabinet[ctx.id].first + " en la Secretaría de " + ministry_def(ctx.id).n + ".", "g")
+        }
+        "pl_press" => {
+            if index == 0 {
+                realm_apply({"aprob": 4})
+                return finish("Prensa", "Respondiste con calma y datos. Los periodistas lo notaron.", "g")
+            }
+            if index == 1 {
+                if chance(50) { return finish("Prensa", "Lograste esquivar el tema.", "n") }
+                realm_apply({"aprob": -4})
+                return finish("Prensa", "Esquivar la pregunta fue la noticia del día.", "b")
+            }
+            realm_apply({"aprob": -3, "orden": 2})
+            L.karma -= 2
+            return finish("Prensa", "Tu respuesta dividió al país: unos te aplauden y otros te odian.", "n")
+        }
+        "pl_bill" => {
+            let b = BILLS[ctx.i]
+            if index == 0 {
+                realm_apply(b.sign)
+                return finish(b.n, "Firmaste la ley. " + delta_text(b.sign) + ".", "n")
+            }
+            realm_apply(b.veto)
+            return finish(b.n, "Vetaste la ley. " + delta_text(b.veto) + ".", "n")
+        }
+        "pl_crisis" => {
+            let c = PRES_CRISES[ctx.i]
+            if index >= len(c.da) { return null }
+            realm_apply(c.da[index])
+            return finish(c.t, "Decisión tomada: " + delta_text(c.da[index]) + ".", "n")
+        }
+        "pl_impeach" => {
+            if index == 0 {
+                if L.money < 1000000 { return null }
+                L.money -= 1000000
+                realm_apply({"elite": 15})
+                L.karma -= 5
+                return finish("Juicio político", "Repartiste favores y cargos. Los votos para destituirte desaparecieron.", "x")
+            }
+            if index == 1 {
+                if chance(35 + rank("charm") * 8) {
+                    realm_apply({"elite": 12, "aprob": 6})
+                    return finish("Juicio político", "Tu defensa en el pleno fue histórica. El Congreso votó a tu favor.", "g")
+                }
+                return fall_from_power("El Congreso aprobó tu destitución.")
+            }
+            d.pres = false
+            d.realm = null
+            d.ex = true
+            hito_me("Vida", "Renunciaste a la presidencia")
+            return finish("Renuncia", "Renunciaste antes del juicio. Te vas con la cabeza en alto... más o menos.", "n")
+        }
+        _ => return null
+    }
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function politica_month() {
+    if L.route != "presidente" { return null }
+    let d = pl()
+    if !d.pres {
+        if len(d.staff) > 0 && d.party != "" {
+            let cost = 0
+            for id in d.staff { cost += staff_pol_def(id).c }
+            L.money -= cost
+            if has_staff_pol("jefe") && chance(50) { d.pop = clamp100(d.pop + 1) }
+            if has_staff_pol("digital") && chance(50) { seg_add({"jovenes": 1}) }
+            if has_staff_pol("territorio") && chance(50) { seg_add({"rural": 1}) }
+        }
+        if d.realm == null && d.ex != true && (d.done == true || d.terms >= 1) { d.ex = true }
+        return null
+    }
+    let r = d.realm
+    if r == null { return null }
+    for m in MINISTRIES {
+        let mn = d.cabinet[m.id]
+        if mn != null && mn.skill >= 60 && chance(25) {
+            let delta = {}
+            delta[m.key] = 1
+            realm_apply(delta)
+        }
+    }
+    // Promesas incumplidas
+    if d.term_m >= 24 {
+        for id in d.promises {
+            let p = promise_def(id)
+            if !list_contains(r.laws, p.law) && L.used["ra_" + p.law] == null && chance(8) {
+                realm_apply({"aprob": -1})
+                if chance(20) { log_add("La gente te recuerda una promesa de campaña que no has cumplido: «" + p.n + "».", "b") }
+            }
+        }
+    }
+    return null
+}
+
+function politica_event() {
+    if L.route != "presidente" || G.modal != null { return false }
+    let d = pl()
+    if !d.pres || d.realm == null { return false }
+    if d.realm.elite < 25 && d.impeach_age != L.age && chance(25) {
+        d.impeach_age = L.age
+        open_choice("JUICIO POLÍTICO", "La oposición juntó firmas para destituirte. El Congreso votará en dos semanas.", ["Negociar votos ($1,000,000)", "Defenderte en el pleno", "Renunciar"], [if_str(L.money < 1000000, "$1,000,000", ""), "", ""], "pl_impeach", {})
+        return true
+    }
+    // Corrupción en el gabinete
+    for m in MINISTRIES {
+        let mn = d.cabinet[m.id]
+        if mn != null && chance(mn.corrupt / 10) {
+            realm_apply({"aprob": -6})
+            d.cabinet[m.id] = null
+            log_add("Escándalo: " + mn.first + ", tu titular de " + m.n + ", desvió fondos. Tuviste que despedirl" + oa(mn.g) + ".", "b")
+            return false
+        }
+    }
+    if chance(4) {
+        let i = rint(0, len(BILLS) - 1)
+        open_choice("EL CONGRESO TE MANDA UNA LEY", BILLS[i].n + ". ¿La firmas o la vetas? Firmar: " + delta_text(BILLS[i].sign) + ". Vetar: " + delta_text(BILLS[i].veto) + ".", ["Firmarla", "Vetarla"], ["", ""], "pl_bill", {"i": i})
+        return true
+    }
+    if chance(4) {
+        let i = rint(0, len(PRES_CRISES) - 1)
+        let c = PRES_CRISES[i]
+        let labels = []
+        let j = 0
+        while j < len(c.a) {
+            list_push(labels, c.a[j] + " (" + delta_text(c.da[j]) + ")")
+            j += 1
+        }
+        open_choice(str_upper(c.t), c.text + " " + realm_line() + ".", labels, ["", "", ""], "pl_crisis", {"i": i})
+        return true
+    }
+    return false
+}

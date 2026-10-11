@@ -588,7 +588,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_ping() { maybe_event() }
+    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_route_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -807,11 +807,11 @@ function yearly() {
     // Pareja
     let p = partner()
     if p != null && p.alive {
-        if p.bond < 20 && chance(45) {
+        if p.bond < 20 && chance(45) && !velo_loyal(p) {
             log_add(p.first + " te dejó. Dice que ya no siente nada.", "b")
             breakup()
             L.happy -= 15
-        } else if L.karma < 30 && both_adults(p) && chance(10) {
+        } else if L.karma < 30 && both_adults(p) && chance(10) && !velo_loyal(p) {
             log_add("Descubriste que " + p.first + " te engaña con alguien del trabajo.", "b")
             p.bond -= 30
             L.happy -= 15
@@ -1018,6 +1018,11 @@ function sex_with(person: any) {
     if person != null { out = out + sex_contact(person) }
     if L.partners >= 1 { hito_once("first_time", "Amor", "Tu primera vez") }
     let p = partner()
+    // En la Orden del Velo Rojo tus consortes no se ponen celosos; la Orden sí.
+    if L.route == "profeta" && velo_active() && (p == null || p.velo == true) {
+        if person == null || person.velo != true { out = out + velo_infidelity(person) }
+        return out
+    }
     if p != null && p.open != true && (person == null || person.id != p.id) {
         p.cheated = true
         L.karma -= 5

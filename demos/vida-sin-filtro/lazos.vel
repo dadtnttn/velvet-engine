@@ -1216,7 +1216,7 @@ function lazos_month() {
             let decay = 1 + years / 6
             if decay > 4 { decay = 4 }
             if chance(70) { p.spark = clamp100(spark_of(p) - decay) }
-            if spark_of(p) < 20 && p.open != true && (npc_style(p) == "libre" || p.bond < 45) && chance(5) && p.cheated_you != true {
+            if spark_of(p) < 20 && p.open != true && (npc_style(p) == "libre" || p.bond < 45) && chance(5) && p.cheated_you != true && !velo_loyal(p) {
                 p.cheated_you = true
                 log_add(p.first + " llega tarde últimamente y sonríe mucho al celular.", "n")
             }

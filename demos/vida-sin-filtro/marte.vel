@@ -1,0 +1,456 @@
+// @edition 3
+// Marte: la segunda capa de la ruta del filántropo espacial.
+// - La mina: taller de talla (esmeraldas que valen más), escuela y clínica para
+//   las familias mineras, restaurar la selva, la veta legendaria («La Verde
+//   Imperial»), derrumbes y mineros ilegales.
+// - TerraTech: productos (teléfono, inteligencia artificial, chip cuántico) que
+//   dejan ingresos, salida a bolsa y dilemas éticos.
+// - Ares Aerospace: constelación de satélites, turismo espacial, base lunar,
+//   astronautas con nombre y la carrera contra Orbitron.
+// - La colonia de Marte después del primer aterrizaje: colonos, domos, oxígeno,
+//   terraformación, tormentas, el primer bebé marciano y la independencia.
+// - Filantropía: la Promesa de Dar, vacunas y limpiar los océanos.
+// Acciones con el prefijo "sp:" y elecciones "sp_".
+
+const PRODUCTS = [
+    {"id": "phone", "n": "Teléfono Terra", "cost": 3000000, "inc": 400000, "d": "Un teléfono con batería de una semana."},
+    {"id": "gaia", "n": "Gaia, la inteligencia artificial", "cost": 10000000, "inc": 1500000, "d": "Una IA que traduce, diagnostica y programa."},
+    {"id": "chip", "n": "Chip cuántico", "cost": 25000000, "inc": 4000000, "d": "Cálculos que antes tomaban siglos, en segundos."}
+]
+
+const ASTRO_NAMES = ["Valentina Ríos", "Kenji Mori", "Amara Okafor", "Lucas Ferreira", "Ingrid Solberg", "Diego Paredes", "Leila Haddad", "Tomás Quiroga", "Mei Lin", "Rafael Duarte"]
+
+// ---------------------------------------------------------------- estado
+
+function sp() {
+    let d = L.rd
+    if d.products == null { d.products = [] }
+    if d.astros == null { d.astros = [] }
+    if d.orbitron == null { d.orbitron = 0 }
+    if d.colony == null { d.colony = {"pop": 0, "domes": 0, "oxygen": 0, "terra": 0, "morale": 60, "free": false} }
+    if d.sats == null { d.sats = 0 }
+    return d
+}
+
+function spitem(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["sp_" + id] != null { l = "Este mes ya" }
+    return {"action": "sp:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function sp_use(id: string) {
+    if L.used["sp_" + id] != null { return false }
+    L.used["sp_" + id] = 1
+    return true
+}
+
+function money_lock(cost: int) {
+    if L.money < cost { return money_str(cost) }
+    return ""
+}
+
+function product_def(id: string) {
+    for p in PRODUCTS {
+        if p.id == id { return p }
+    }
+    return PRODUCTS[0]
+}
+
+// ---------------------------------------------------------------- menús
+
+function marte_items(cat: string) {
+    let d = sp()
+    let items = []
+    if cat == "Mina" {
+        if d.mine == 0 { return items }
+        list_push(items, {"action": "sp:cut", "t": "Taller de talla de esmeraldas", "s": "$1,000,000", "desc": "Tallar tus propias esmeraldas: las subastas valen 50% más.", "lock": if_str(d.cut == true, "Ya existe", money_lock(1000000))})
+        list_push(items, {"action": "sp:school", "t": "Escuela y clínica para las familias", "s": "$500,000", "desc": "Los hijos de los mineros estudian y sus padres se atienden gratis. El bienestar ya no baja.", "lock": if_str(d.school == true, "Ya existe", money_lock(500000))})
+        list_push(items, {"action": "sp:forest", "t": "Restaurar la selva", "s": "$2,000,000", "desc": "Reforestar lo que la mina destruyó. Karma y fama.", "lock": if_str(d.forest == true, "Hecho", money_lock(2000000))})
+        list_push(items, spitem("vein", "Buscar la veta legendaria", "$300,000 · suerte", "Los viejos mineros hablan de «La Verde Imperial», la esmeralda más grande del mundo.", if_str(d.imperial == true, "Ya la encontraste", money_lock(300000))))
+        return items
+    }
+    if cat == "TerraTech" {
+        if !d.tech {
+            list_push(items, dninfo("Primero funda TerraTech", "Empresas", "Sin empresa de tecnología no hay productos."))
+            return items
+        }
+        for p in PRODUCTS {
+            let done = list_contains(d.products, p.id)
+            list_push(items, {"action": "sp:prod:" + p.id, "t": "Lanzar: " + p.n, "s": money_str(p.cost), "desc": p.d + " Ingresos: " + money_str(p.inc) + " al mes.", "lock": if_str(done, "En el mercado", money_lock(p.cost))})
+        }
+        list_push(items, {"action": "sp:ipo", "t": "Sacar TerraTech a la bolsa", "s": "Lluvia de millones", "desc": "Vendes una parte de la empresa al público. Necesitas dos productos en el mercado.", "lock": if_str(d.tt_ipo == true, "Ya cotiza", if_str(len(d.products) < 2, "Dos productos", ""))})
+        list_push(items, dninfo("Orbitron, tu rival", "Progreso a Marte: " + str(d.orbitron) + "%", "La empresa de un millonario excéntrico. Si llega a Marte antes que tú, la gloria será suya."))
+        return items
+    }
+    if cat == "Marte" {
+        if !d.mars_done {
+            list_push(items, dninfo("Primero, llegar", "Misión a Marte: " + str(d.mars) + "%", "Cuando aterrice la primera misión, podrás fundar la colonia."))
+            if d.space {
+                list_push(items, {"action": "sp:sats", "t": "Constelación de satélites", "s": "$30,000,000", "desc": "Internet desde el espacio para todo el planeta: $2,000,000 al mes.", "lock": if_str(d.sats > 0, "En órbita", money_lock(30000000))})
+                list_push(items, {"action": "sp:tourism", "t": "Turismo espacial", "s": "$10,000,000", "desc": "Boletos de lujo para ver la Tierra desde arriba: $1,000,000 al mes.", "lock": if_str(d.tourism == true, "En operación", if_str(!d.rocket, "Necesitas cohete", money_lock(10000000)))})
+                list_push(items, {"action": "sp:moon", "t": "Base lunar", "s": "$200,000,000", "desc": "Un trampolín en la Luna: la misión a Marte avanza más rápido.", "lock": if_str(d.moon == true, "Ya existe", if_str(!d.station, "Necesitas estación", money_lock(200000000)))})
+                list_push(items, spitem("astro", "Reclutar astronautas", "Tripulación", "Pilotos, médicos e ingenieros que arriesgarán su vida contigo. Tienes " + str(len(d.astros)) + ".", ""))
+            }
+            return items
+        }
+        let c = d.colony
+        list_push(items, dninfo("Colonia Ares: " + big_num(c.pop) + " colonos", "Terraformación " + str(c.terra) + "%", "Domos " + str(c.domes) + " · oxígeno " + str(c.oxygen) + "% · ánimo " + str(c.morale) + "%." + if_str(c.free, " Marte es independiente.", "")))
+        list_push(items, spitem("colonists", "Enviar colonos", "$50,000,000 · +100", "Familias valientes que dejan la Tierra para siempre.", if_str(c.domes * 200 <= c.pop, "Construye más domos", money_lock(50000000))))
+        list_push(items, spitem("dome", "Construir un domo", "$30,000,000", "Casas para 200 colonos bajo cristal.", money_lock(30000000)))
+        list_push(items, spitem("oxygen", "Planta de oxígeno", "$20,000,000", "Aire para respirar. Sin oxígeno, el ánimo se desploma.", money_lock(20000000)))
+        list_push(items, spitem("terra", "Terraformar", "$100,000,000 · +5%", "Calentar el planeta y espesar la atmósfera. Un trabajo de siglos que empieza hoy.", money_lock(100000000)))
+        list_push(items, spitem("visit", "Visitar la colonia", "Felicidad", "Caminar en Marte, entre tus colonos.", ""))
+        return items
+    }
+    // Filantropía (extra)
+    list_push(items, {"action": "sp:pledge", "t": "Firmar la Promesa de Dar", "s": "La mitad de tu fortuna", "desc": "Te comprometes a donar la mitad de lo que tienes en vida.", "lock": if_str(d.pledge == true, "Ya la firmaste", if_str(L.money < 10000000, "$10,000,000", ""))})
+    list_push(items, spitem("vaccines", "Vacunas para un continente", "$5,000,000", "Millones de niños vacunados.", money_lock(5000000)))
+    list_push(items, spitem("ocean", "Limpiar los océanos", "$8,000,000", "Barcos que recogen plástico día y noche.", money_lock(8000000)))
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function marte_action(action: string) {
+    G.modal = null
+    if L.route != "filantropo" { return null }
+    let d = sp()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    match cmd {
+        "cut" => {
+            if d.cut == true || L.money < 1000000 { return null }
+            L.money -= 1000000
+            d.cut = true
+            return finish("Taller de talla", "Maestros talladores convierten tus esmeraldas en joyas. Las subastas valdrán más.", "g")
+        }
+        "school" => {
+            if d.school == true || L.money < 500000 { return null }
+            L.money -= 500000
+            d.school = true
+            d.workers = clamp100(d.workers + 20)
+            L.karma += 6
+            hito_me("Vida", "Abriste una escuela y una clínica para los mineros")
+            return finish("La mina", "Inauguraste la escuela «La Verde» y una clínica. Los hijos de los mineros te dibujaron una tarjeta enorme.", "g")
+        }
+        "forest" => {
+            if d.forest == true || L.money < 2000000 { return null }
+            L.money -= 2000000
+            d.forest = true
+            L.karma += 8
+            L.fame = clamp100(L.fame + 4)
+            return finish("La selva", "Medio millón de árboles nativos plantados. Los monos regresaron.", "g")
+        }
+        "vein" => {
+            if d.imperial == true || L.money < 300000 || !sp_use("vein") { return null }
+            L.money -= 300000
+            if chance(12 + d.mine * 3) {
+                d.imperial = true
+                let v = 50000000
+                if d.cut == true { v = 80000000 }
+                L.money += v
+                L.fame = clamp100(L.fame + 10)
+                hito_me("Vida", "Encontraste La Verde Imperial")
+                return finish("¡La Verde Imperial!", "Un minero gritó desde el fondo del túnel: la esmeralda más grande jamás encontrada. Se subastó en " + money_str(v) + ".", "g")
+            }
+            return finish("La veta", "Tres semanas de excavación y solo piedras. Los viejos dicen que sigue ahí.", "n")
+        }
+        "prod" => {
+            let p = product_def(arg)
+            if !d.tech || list_contains(d.products, arg) || L.money < p.cost { return null }
+            L.money -= p.cost
+            list_push(d.products, arg)
+            L.fame = clamp100(L.fame + 4)
+            hito_me("Trabajo", "TerraTech lanzó " + p.n)
+            if arg == "gaia" {
+                open_choice("EL DILEMA DE GAIA", "Un gobierno quiere comprar a Gaia para vigilar a sus ciudadanos. Pagan $50,000,000.", ["Vender", "Rechazar y publicar tus principios éticos", "Negociar un uso limitado"], ["", "", ""], "sp_gaia", {})
+                return null
+            }
+            return finish("TerraTech", "Lanzaste " + p.n + ". Filas en las tiendas desde la madrugada.", "g")
+        }
+        "ipo" => {
+            if d.tt_ipo == true || len(d.products) < 2 { return null }
+            d.tt_ipo = true
+            let v = 50000000 + len(d.products) * 30000000
+            L.money += v
+            hito_me("Trabajo", "TerraTech salió a la bolsa")
+            return finish("Salida a bolsa", "TerraTech tocó la campana de la bolsa. Vendiste una parte por " + money_str(v) + ".", "g")
+        }
+        "sats" => {
+            if d.sats > 0 || L.money < 30000000 { return null }
+            L.money -= 30000000
+            d.sats = 1000
+            hito_me("Trabajo", "Lanzaste tu constelación de satélites")
+            return finish("Satélites", "Mil satélites en órbita: internet hasta en la selva de tu mina.", "g")
+        }
+        "tourism" => {
+            if d.tourism == true || !d.rocket || L.money < 10000000 { return null }
+            L.money -= 10000000
+            d.tourism = true
+            return finish("Turismo espacial", "El primer vuelo turístico despegó con seis millonarios llorando de emoción.", "g")
+        }
+        "moon" => {
+            if d.moon == true || !d.station || L.money < 200000000 { return null }
+            L.money -= 200000000
+            d.moon = true
+            d.mars = clamp100(d.mars + 20)
+            hito_me("Vida", "Construiste una base en la Luna")
+            return finish("Base lunar", "La base Selene-1 ya opera en el polo sur de la Luna. Marte está más cerca.", "g")
+        }
+        "astro" => {
+            if !sp_use("astro") { return null }
+            let names = []
+            for n in ASTRO_NAMES {
+                if !list_contains(d.astros, n) { list_push(names, n) }
+            }
+            if len(names) == 0 { return finish("Astronautas", "Ya tienes a la mejor tripulación del mundo.", "n") }
+            let n = pick(names)
+            list_push(d.astros, n)
+            return finish("Astronautas", n + " se unió a la tripulación de Ares. Cada astronauta mejora la probabilidad de éxito de los lanzamientos.", "g")
+        }
+        "colonists" => {
+            let c = d.colony
+            if !d.mars_done || c.domes * 200 <= c.pop || L.money < 50000000 || !sp_use("colonists") { return null }
+            L.money -= 50000000
+            c.pop += 100
+            if c.pop >= 1000 { flag("mars_city") }
+            return finish("Colonos", "Cien colonos nuevos despegaron hacia Marte. La colonia tiene " + big_num(c.pop) + " habitantes.", "g")
+        }
+        "dome" => {
+            if !d.mars_done || L.money < 30000000 || !sp_use("dome") { return null }
+            L.money -= 30000000
+            d.colony.domes += 1
+            return finish("Domo", "Un domo nuevo brilla en la llanura de Utopía.", "g")
+        }
+        "oxygen" => {
+            if !d.mars_done || L.money < 20000000 || !sp_use("oxygen") { return null }
+            L.money -= 20000000
+            d.colony.oxygen = clamp100(d.colony.oxygen + 25)
+            d.colony.morale = clamp100(d.colony.morale + 5)
+            return finish("Oxígeno", "La planta de oxígeno respira por todos.", "g")
+        }
+        "terra" => {
+            if !d.mars_done || L.money < 100000000 || !sp_use("terra") { return null }
+            L.money -= 100000000
+            d.colony.terra = clamp100(d.colony.terra + 5)
+            if d.colony.terra >= 20 { flag("terraform") }
+            return finish("Terraformación", "El cielo de Marte es un poquito menos rojo. Terraformación: " + str(d.colony.terra) + "%.", "g")
+        }
+        "visit" => {
+            if !d.mars_done || !sp_use("visit") { return null }
+            L.happy += 15
+            hito_once("walk_mars", "Vida", "Caminaste en Marte")
+            return finish("Marte", "Caminaste entre los domos de tu colonia. Una niña marciana te regaló una piedra roja.", "g")
+        }
+        "pledge" => {
+            if d.pledge == true || L.money < 10000000 { return null }
+            let half = L.money / 2
+            L.money -= half
+            d.donated += half
+            d.pledge = true
+            L.karma += 20
+            L.fame = clamp100(L.fame + 8)
+            flag("pledge")
+            hito_me("Vida", "Firmaste la Promesa de Dar")
+            return finish("La Promesa de Dar", "Donaste " + money_str(half) + ", la mitad de tu fortuna.", "g")
+        }
+        "vaccines" => {
+            if L.money < 5000000 || !sp_use("vaccines") { return null }
+            L.money -= 5000000
+            d.donated += 5000000
+            L.karma += 8
+            return finish("Vacunas", "Millones de niños vacunados contra el sarampión gracias a ti.", "g")
+        }
+        "ocean" => {
+            if L.money < 8000000 || !sp_use("ocean") { return null }
+            L.money -= 8000000
+            d.donated += 8000000
+            L.karma += 8
+            L.fame = clamp100(L.fame + 3)
+            return finish("Océanos", "Tus barcos sacaron diez mil toneladas de plástico del Pacífico.", "g")
+        }
+        _ => return null
+    }
+}
+
+function marte_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = sp()
+    match handler {
+        "sp_gaia" => {
+            if index == 0 {
+                L.money += 50000000
+                L.karma -= 15
+                return finish("Gaia", "Vendiste a Gaia. Cobraste $50,000,000. Algunos de tus ingenieros renunciaron.", "x")
+            }
+            if index == 1 {
+                L.karma += 8
+                L.fame = clamp100(L.fame + 6)
+                return finish("Gaia", "Publicaste tus principios: Gaia nunca vigilará a nadie. El mundo te aplaudió.", "g")
+            }
+            L.money += 20000000
+            return finish("Gaia", "Gaia ayudará solo en emergencias médicas. Cobraste $20,000,000.", "n")
+        }
+        "sp_ev" => return marte_event_choice(index, ctx)
+        _ => return null
+    }
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function marte_month() {
+    if L.route != "filantropo" { return null }
+    let d = sp()
+    for id in d.products { L.money += product_def(id).inc }
+    if d.sats > 0 { L.money += 2000000 }
+    if d.tourism == true { L.money += 1000000 }
+    if d.school == true && d.workers < 60 && chance(30) { d.workers += 1 }
+    if d.space && !d.mars_done && d.orbitron < 100 {
+        if chance(30) { d.orbitron += rint(1, 3) }
+        if d.orbitron >= 100 && d.orbitron_landed != true {
+            d.orbitron_landed = true
+            log_add("Noticias: Orbitron aterrizó en Marte antes que tú. El mundo celebra a su dueño excéntrico.", "b")
+        }
+    }
+    if d.mars_done {
+        let c = d.colony
+        if c.pop == 0 {
+            c.pop = 12
+            c.domes = 1
+            c.oxygen = 40
+            hito_me("Vida", "Fundaste la Colonia Ares en Marte")
+        }
+        if c.oxygen > 0 && chance(30) { c.oxygen -= 1 }
+        if c.oxygen < 30 && chance(40) { c.morale = clamp100(c.morale - 2) }
+        if c.oxygen >= 50 && chance(30) { c.morale = clamp100(c.morale + 1) }
+        if c.pop > 0 && chance(10) { c.pop += rint(1, 4) }
+    }
+    if d.cut == true && L.used["ra_auction"] != null && d.cut_m != L.tm {
+        d.cut_m = L.tm
+        L.money += rint(50, 300) * 1000 * d.mine
+    }
+    return null
+}
+
+function marte_event() {
+    if L.route != "filantropo" || G.modal != null || !chance(5) { return false }
+    let d = sp()
+    if d.mine > 0 && chance(40) {
+        if chance(50) {
+            open_choice("DERRUMBE EN LA MINA", "Un túnel colapsó con doce mineros adentro.", ["Dirigir el rescate en persona", "Contratar rescatistas internacionales ($2,000,000)", "Dejarlo a los capataces"], ["", money_lock(2000000), ""], "sp_ev", {"kind": "collapse"})
+            return true
+        }
+        open_choice("MINEROS ILEGALES", "Un grupo de mineros ilegales excava en tus terrenos. Viven en la miseria.", ["Desalojarlos", "Contratarlos legalmente", "Hacerte de la vista gorda"], ["", "", ""], "sp_ev", {"kind": "illegal"})
+        return true
+    }
+    if d.mars_done && chance(50) {
+        let r = rint(1, 3)
+        if r == 1 {
+            open_choice("TORMENTA DE POLVO", "Una tormenta de polvo cubre Marte durante semanas. Los paneles solares no reciben luz.", ["Racionar la energía", "Mandar reactores de emergencia ($40,000,000)"], ["", money_lock(40000000)], "sp_ev", {"kind": "storm"})
+            return true
+        }
+        if r == 2 && d.colony.baby != true {
+            d.colony.baby = true
+            L.happy += 10
+            hito_me("Vida", "Nació el primer bebé marciano")
+            log_add("Nació la primera persona en Marte. Sus padres le pusieron tu apellido como segundo nombre.", "g")
+            return false
+        }
+        if d.colony.pop >= 300 && d.colony.free != true {
+            open_choice("INDEPENDENCIA", "Los colonos votaron: quieren que Marte sea independiente de la Tierra y de tus empresas.", ["Concederles la independencia", "Negociar autonomía", "Negarte"], ["", "", ""], "sp_ev", {"kind": "indep"})
+            return true
+        }
+    }
+    if d.space && !d.mars_done {
+        open_choice("CARRERA ESPACIAL", "El dueño de Orbitron te reta en redes: «Llegaré a Marte antes que tú».", ["Ignorarlo", "Acelerar la investigación ($10,000,000)", "Proponerle una misión conjunta"], ["", money_lock(10000000), ""], "sp_ev", {"kind": "race"})
+        return true
+    }
+    return false
+}
+
+function marte_event_choice(index: int, ctx: map) {
+    let d = sp()
+    match ctx.kind {
+        "collapse" => {
+            if index == 0 {
+                if chance(55 + rank("guts") * 6) {
+                    L.karma += 8
+                    L.fame = clamp100(L.fame + 5)
+                    d.workers = clamp100(d.workers + 10)
+                    return finish("El rescate", "Tres días sin dormir. Sacaron a los doce con vida. Te cargaron en hombros.", "g")
+                }
+                L.happy -= 15
+                return finish("El rescate", "Sacaron a diez con vida. Dos no lo lograron. Fuiste a cada funeral.", "b")
+            }
+            if index == 1 {
+                L.money -= 2000000
+                d.workers = clamp100(d.workers + 5)
+                return finish("El rescate", "Los rescatistas sacaron a los doce mineros con vida.", "g")
+            }
+            d.workers = clamp100(d.workers - 20)
+            L.karma -= 8
+            return finish("El rescate", "El rescate tardó demasiado. Los periódicos y los mineros no te lo perdonan.", "b")
+        }
+        "illegal" => {
+            if index == 0 {
+                L.karma -= 4
+                return finish("Mineros ilegales", "Los desalojaron. Se fueron a otra mina peor.", "n")
+            }
+            if index == 1 {
+                L.karma += 5
+                d.workers = clamp100(d.workers + 3)
+                return finish("Mineros ilegales", "Ahora tienen contrato, casco y seguro médico.", "g")
+            }
+            return finish("Mineros ilegales", "Siguen excavando. Un día habrá un accidente.", "n")
+        }
+        "storm" => {
+            if index == 0 {
+                d.colony.morale = clamp100(d.colony.morale - 10)
+                return finish("Tormenta", "Semanas de frío y oscuridad. La colonia sobrevivió, cansada.", "n")
+            }
+            L.money -= 40000000
+            d.colony.morale = clamp100(d.colony.morale + 5)
+            return finish("Tormenta", "Los reactores llegaron a tiempo. Nadie pasó frío.", "g")
+        }
+        "indep" => {
+            if index == 0 {
+                d.colony.free = true
+                L.karma += 10
+                L.fame = 100
+                flag("mars_free")
+                hito_me("Vida", "Marte se independizó con tu bendición")
+                return finish("Independencia", "Nace la República de Marte. Su primera ley lleva tu nombre.", "g")
+            }
+            if index == 1 {
+                d.colony.morale = clamp100(d.colony.morale + 5)
+                return finish("Independencia", "Marte tendrá su propio consejo, pero seguirá unido a Ares.", "n")
+            }
+            d.colony.morale = clamp100(d.colony.morale - 20)
+            return finish("Independencia", "Te negaste. Los colonos pintaron «LIBERTAD» en los domos.", "b")
+        }
+        _ => {
+            if index == 1 {
+                L.money -= 10000000
+                if d.station { d.mars = clamp100(d.mars + 10) } else { d.rnd = clamp100(d.rnd + 10) }
+                return finish("Carrera espacial", "Duplicaste los turnos de tus ingenieros. Vas adelante.", "g")
+            }
+            if index == 2 {
+                if chance(40) {
+                    d.orbitron = 0
+                    d.mars = clamp100(d.mars + 5)
+                    return finish("Carrera espacial", "Aceptó: Orbitron y Ares irán juntos a Marte.", "g")
+                }
+                return finish("Carrera espacial", "Se burló de tu propuesta en un video.", "n")
+            }
+            return finish("Carrera espacial", "No le contestaste. El silencio también es respuesta.", "n")
+        }
+    }
+}
+
+// Los astronautas mejoran los lanzamientos.
+function astro_bonus() {
+    if L.route != "filantropo" || L.rd.astros == null { return 0 }
+    return min(15, len(L.rd.astros) * 3)
+}

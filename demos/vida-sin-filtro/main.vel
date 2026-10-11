@@ -36,6 +36,12 @@ import "mercado.vel"
 import "casino.vel"
 import "lujos.vel"
 import "fe.vel"
+import "velo.vel"
+import "corona.vel"
+import "politica.vel"
+import "contenido.vel"
+import "marte.vel"
+import "rutas18.vel"
 import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
@@ -498,6 +504,12 @@ function handle_action(action: string) {
         "cs" => casino_action(action)
         "lx" => lujos_action(action)
         "fe" => fe_action(action)
+        "vl" => velo_action(action)
+        "kr" => corona_action(action)
+        "pl" => politica_action(action)
+        "cc" => contenido_action(action)
+        "sp" => marte_action(action)
+        "x8" => rutas18_action(action)
         "habit" => toggle_habit(rest)
         "gig" => take_gig(rest)
         "cact" => do_career_act(rest)

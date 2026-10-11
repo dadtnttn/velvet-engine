@@ -1,0 +1,648 @@
+// @edition 3
+// Rutas +18: la segunda capa de escort, estrella del cine para adultos y
+// VelvetFans. Todo entre adultos que consienten y sin contenido explícito.
+// - Escort: clientes habituales con nombre (cenas, viajes, galas), verificar a
+//   los clientes, reglas claras, reseñas, viajes de acompañante, chequeos médicos,
+//   tu agencia con su plantilla y su comisión (justa o abusiva), operativos
+//   policiales, clientes famosos y quien se enamora de ti; retirarte.
+// - Estrella +18: contrato con un estudio (o independiente), el género de cada
+//   rodaje, compañeros de escena con química, dirigir, premios por categoría cada
+//   año, salto al cine convencional y al reality, huelga por mejores condiciones;
+//   retirarte y escribir tus memorias.
+// - VelvetFans: paquetes de pago por ver, nivel VIP, tus fans más generosos (y
+//   los obsesivos), equipo de chat, mostrar o no tu cara, servicio contra
+//   filtraciones, cambios de reglas de la plataforma, calendario y retiro.
+// Acciones con el prefijo "x8:" y elecciones "x8_".
+
+const CLIENT_KINDS = [
+    {"id": "cena", "n": "Cenas y conversación", "mult": 100, "d": "Restaurantes caros y alguien que necesita ser escuchado."},
+    {"id": "gala", "n": "Galas y eventos", "mult": 140, "d": "Ser su acompañante en bodas, premios y fiestas de empresa."},
+    {"id": "viaje", "n": "Viajes", "mult": 250, "d": "Fines de semana en otras ciudades y otros países."},
+    {"id": "solo", "n": "Compañía discreta", "mult": 120, "d": "Un hotel elegante y mucha discreción."}
+]
+
+const STUDIOS = [
+    {"id": "terciopelo", "n": "Terciopelo Films", "pay": 130, "fame": 3, "d": "El estudio más prestigioso: producciones cuidadas y premios."},
+    {"id": "neon", "n": "Neón Studios", "pay": 100, "fame": 1, "d": "Mucho volumen: ruedas seguido y te pagan puntual."},
+    {"id": "indie", "n": "Indie Real", "pay": 80, "fame": 2, "d": "Producciones independientes: libertad creativa y fans muy fieles."}
+]
+
+const GENRES = [
+    {"id": "romance", "n": "Romántica", "d": "Historias de amor con mucha química."},
+    {"id": "comedia", "n": "Comedia erótica", "d": "Risas y coqueteo."},
+    {"id": "fantasia", "n": "Fantasía", "d": "Vestuario, escenografía y mundos imaginarios."},
+    {"id": "parodia", "n": "Parodia", "d": "Versiones picantes de películas famosas."},
+    {"id": "epoca", "n": "De época", "d": "Corsés, candelabros y pasiones del siglo XIX."}
+]
+
+// ---------------------------------------------------------------- estado
+
+function x8() {
+    let d = L.rd
+    if d.regulars == null { d.regulars = [] }
+    if d.rep == null { d.rep = 3 }
+    if d.roster == null { d.roster = [] }
+    if d.costars == null { d.costars = [] }
+    if d.awards_n == null { d.awards_n = 0 }
+    if d.whales == null { d.whales = [] }
+    return d
+}
+
+function xitem(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["x8_" + id] != null { l = "Este mes ya" }
+    return {"action": "x8:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function x8_use(id: string) {
+    if L.used["x8_" + id] != null { return false }
+    L.used["x8_" + id] = 1
+    return true
+}
+
+function client_kind(id: string) {
+    for k in CLIENT_KINDS {
+        if k.id == id { return k }
+    }
+    return CLIENT_KINDS[0]
+}
+
+function studio_def(id: string) {
+    for s in STUDIOS {
+        if s.id == id { return s }
+    }
+    return STUDIOS[1]
+}
+
+function genre_def(id: string) {
+    for g in GENRES {
+        if g.id == id { return g }
+    }
+    return GENRES[0]
+}
+
+function new_adult_name(g: string) {
+    let names = NAMES_M
+    if g == "f" { names = NAMES_F }
+    return pick(names)
+}
+
+// ---------------------------------------------------------------- escort
+
+function escort_extra_items(cat: string) {
+    let d = x8()
+    let items = []
+    if cat == "Agenda" {
+        list_push(items, dninfo("Reputación: " + str(d.rep) + " estrellas", str(len(d.regulars)) + " clientes habituales", "Las buenas citas y la discreción suben tus reseñas; las malas experiencias las bajan."))
+        for c in d.regulars {
+            let k = client_kind(c.kind)
+            list_push(items, xitem("reg:" + str(c.id), c.first + ", " + str(c.age) + " años", k.n + " · generosidad " + str(c.gen), k.d + " " + c.note, ""))
+        }
+        list_push(items, {"action": "x8:screen", "t": if_str(d.screen == true, "Verificas a tus clientes", "Verificar a tus clientes"), "s": if_str(d.screen == true, "ACTIVO", "Seguridad"), "desc": "Pides referencias e identificación antes de cada cita. Menos clientes, casi ningún susto.", "lock": ""})
+        list_push(items, {"action": "x8:rules", "t": if_str(d.rules == true, "Reglas claras (activas)", "Establecer reglas claras"), "s": "Salud y límites", "desc": "Protección siempre, límites por escrito y cero excepciones. Baja mucho el riesgo de ITS.", "lock": ""})
+        list_push(items, xitem("checkup", "Chequeo médico", "$800", "Pruebas completas de ITS cada mes.", if_str(L.money < 800, "$800", "")))
+        list_push(items, xitem("travel", "Viaje de acompañante", "Mucho dinero", "Una semana en otro país con un cliente habitual.", if_str(len(d.regulars) == 0, "Un cliente habitual", "")))
+        list_push(items, {"action": "x8:retire", "t": "Retirarte del oficio", "s": "Nueva vida", "desc": "Cierras tu agenda con dignidad. Lo que ganaste, lo invertiste bien.", "lock": if_str(L.job == null || !job_is("escort"), "No ejerces", "")})
+        return items
+    }
+    // Agencia
+    if d.agency != true {
+        list_push(items, dninfo("Primero abre tu agencia", "Negocio", "Con tu agencia podrás representar a otras personas adultas con reglas justas."))
+        return items
+    }
+    let cut = map_get(d, "cut", 30)
+    list_push(items, dninfo("Tu agencia: " + str(len(d.roster)) + " personas", "Comisión " + str(cut) + "%", "Cada persona te deja una parte de sus citas. Con una comisión justa se quedan y te recomiendan."))
+    list_push(items, xitem("hire", "Sumar a alguien a tu agencia", "Más ingresos", "Una persona adulta que quiere trabajar con seguridad y reglas claras.", if_str(len(d.roster) >= 12, "Agencia llena", "")))
+    list_push(items, {"action": "x8:cut", "t": "Cambiar tu comisión", "s": "Ahora " + str(cut) + "%", "desc": "Justa (20%), estándar (30%) o abusiva (50%).", "lock": ""})
+    for e in d.roster { list_push(items, dninfo(e.first + ", " + str(e.age) + " años", "Lealtad " + str(e.loyal), "Trabaja con tu agencia.")) }
+    return items
+}
+
+function make_regular() {
+    let d = x8()
+    let g = pick(["m", "m", "m", "f"])
+    let k = pick(CLIENT_KINDS)
+    let notes = ["Viudo reciente.", "Empresaria con poco tiempo libre.", "Le gusta hablar de libros.", "Siempre llega con flores.", "Muy tímido al principio.", "Viaja por trabajo todo el año.", "Divorciada y sin ganas de citas normales.", "Un político conocido (discreción total)."]
+    let c = {"id": rint(1000, 999999), "first": new_adult_name(g), "g": g, "age": rint(30, 70), "kind": k.id, "gen": rint(80, 200), "note": pick(notes), "dates": 0}
+    list_push(d.regulars, c)
+    return c
+}
+
+function find_regular(id: int) {
+    for c in x8().regulars {
+        if c.id == id { return c }
+    }
+    return null
+}
+
+// Lo llama la cita normal: a veces el cliente se vuelve habitual.
+function escort_after_client() {
+    let d = x8()
+    let msg = ""
+    if len(d.regulars) < 8 && chance(25) {
+        let c = make_regular()
+        msg = " " + c.first + " quiere volver a verte: ahora es tu cliente habitual."
+    }
+    if chance(40) { d.rep = clamp(d.rep + 1, 1, 5) }
+    return msg
+}
+
+function escort_risk_mult() {
+    let d = x8()
+    let m = 100
+    if d.screen == true { m = 20 }
+    return m
+}
+
+function escort_its_mult() {
+    let d = x8()
+    if d.rules == true { return 30 }
+    return 100
+}
+
+// ---------------------------------------------------------------- estrella +18
+
+function porno_extra_items(cat: string) {
+    let d = x8()
+    let items = []
+    let st = "Independiente"
+    if d.contract != null { st = studio_def(d.contract).n }
+    list_push(items, dninfo("Contrato: " + st, "Premios: " + str(d.awards_n), "Próximo rodaje: " + genre_def(map_get(d, "genre", "romance")).n + ". Compañeros de escena: " + str(len(d.costars)) + "."))
+    for s in STUDIOS {
+        let on = d.contract == s.id
+        list_push(items, {"action": "x8:studio:" + s.id, "t": if_str(on, "Contrato con " + s.n, "Firmar con " + s.n), "s": if_str(on, "VIGENTE · romper", "Pago " + str(s.pay) + "%"), "desc": s.d, "lock": ""})
+    }
+    list_push(items, {"action": "x8:genre", "t": "Elegir el género del próximo rodaje", "s": genre_def(map_get(d, "genre", "romance")).n, "desc": "Cada género cuenta para una categoría distinta en los premios.", "lock": ""})
+    list_push(items, xitem("costar", "Conocer a un compañero de escena", "Química", "Un ensayo con alguien nuevo de la industria. Con buena química, las escenas salen mejor.", ""))
+    list_push(items, xitem("direct", "Dirigir una escena", "Dinero · experiencia", "Del otro lado de la cámara: guion, luces y cuidar a tu equipo.", if_str(L.job == null || L.job.level < 2, "Rango 3", "")))
+    list_push(items, xitem("mainstream", "Audición para cine convencional", "Fama", "Un director de cine independiente busca a alguien con tu presencia.", if_str(L.fame < 50, "Fama 50", "")))
+    list_push(items, xitem("reality", "Reality show", "Dinero · fama", "Cámaras en tu casa durante un mes.", if_str(L.fame < 40, "Fama 40", "")))
+    list_push(items, {"action": "x8:pretire", "t": "Retirarte del cine para adultos", "s": "Memorias", "desc": "Un último rodaje, una fiesta de despedida y un libro con tu historia.", "lock": if_str(!job_is("porn"), "No estás en activo", "")})
+    return items
+}
+
+// ---------------------------------------------------------------- VelvetFans
+
+function fans_extra_items(cat: string) {
+    let d = vf()
+    let items = []
+    if d.open != true {
+        list_push(items, dninfo("Primero abre tu cuenta", "", "Tus fans te esperan."))
+        return items
+    }
+    let face = "Sin mostrar tu cara"
+    if d.face == true { face = "Mostrando tu cara" }
+    list_push(items, dninfo("Tu cuenta: " + big_num(d.subs) + " suscriptores", face, "Mostrar tu cara atrae más fans, pero una filtración te afecta más. VIP: " + if_str(d.vip == true, "activo", "no") + "."))
+    list_push(items, xitem("ppv", "Paquete de pago por ver", "Dinero extra", "Un paquete especial que tus suscriptores compran aparte.", ""))
+    list_push(items, {"action": "x8:vip", "t": if_str(d.vip == true, "Nivel VIP (activo)", "Abrir nivel VIP"), "s": "Fans más generosos", "desc": "Un nivel caro con atención especial. Atrae a los fans que más gastan.", "lock": if_str(d.subs < 500, "500 suscriptores", "")})
+    list_push(items, {"action": "x8:face", "t": if_str(d.face == true, "Dejar de mostrar tu cara", "Mostrar tu cara"), "s": "Anonimato", "desc": "Con tu cara: +30% de suscriptores, pero las filtraciones duelen más.", "lock": ""})
+    list_push(items, {"action": "x8:chat", "t": if_str(d.chat == true, "Equipo de chat (contratado)", "Contratar equipo de chat"), "s": "$3,000/mes", "desc": "Responden mensajes por ti: más dinero en mensajes, menos cansancio... y menos autenticidad.", "lock": ""})
+    list_push(items, {"action": "x8:dmca", "t": if_str(d.dmca == true, "Protección contra filtraciones (activa)", "Servicio contra filtraciones"), "s": "$1,000/mes", "desc": "Un equipo que borra tu contenido filtrado en internet.", "lock": ""})
+    list_push(items, xitem("calendar", "Lanzar tu calendario", "Dinero", "Doce fotos artísticas para doce meses.", if_str(d.subs < 2000, "2,000 suscriptores", "")))
+    for w in d.whales { list_push(items, xitem("whale:" + str(w.id), "Fan generoso: " + w.name, "Propinas " + money_str(w.tips), w.note, "")) }
+    list_push(items, {"action": "x8:fretire", "t": "Cerrar tu cuenta", "s": "Retirarte", "desc": "Te despides de tus fans y cierras esta etapa.", "lock": ""})
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function rutas18_action(action: string) {
+    G.modal = null
+    if L.age < 18 { return null }
+    let d = x8()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    match cmd {
+        // Escort
+        "reg" => {
+            let c = find_regular(parse_int(arg, 0))
+            if c == null || !job_is("escort") || !x8_use("reg:" + arg) { return null }
+            let k = client_kind(c.kind)
+            let pay = L.rd.rate * k.mult / 100 * c.gen / 100
+            L.money += pay
+            c.dates += 1
+            career_xp(12)
+            d.rep = clamp(d.rep + if_n(chance(50), 1, 0), 1, 5)
+            let msg = pick(["Cenaron en un restaurante con vista a la ciudad. " + c.first + " habló de su vida toda la noche.", "Fueron juntos a una gala. Todos preguntaron quién eras.", "Una noche tranquila, una buena conversación y mucha discreción."]) + " Cobraste " + money_str(pay) + "."
+            if c.dates >= 6 && c.love != true && chance(20) {
+                c.love = true
+                open_choice("SE ENAMORÓ", c.first + " te confiesa que se enamoró de ti. Quiere que dejes el oficio y empiecen una vida juntos.", ["Aceptar y empezar una relación", "Agradecerle y mantener la relación profesional", "Cerrar la agenda con " + c.first], ["", "", ""], "x8_love", {"id": c.id})
+                return null
+            }
+            if c.famous != true && chance(10) {
+                c.famous = true
+                msg = msg + " Descubriste que " + c.first + " es una figura muy conocida. Tu discreción vale oro."
+                pay = pay / 2
+                L.money += pay
+            }
+            return finish(c.first, msg, "x")
+        }
+        "screen" => {
+            d.screen = d.screen != true
+            return finish("Verificación", if_str(d.screen == true, "Desde ahora pides referencias a cada cliente.", "Dejaste de verificar clientes."), "n")
+        }
+        "rules" => {
+            d.rules = d.rules != true
+            return finish("Reglas", if_str(d.rules == true, "Tus reglas están por escrito y no se negocian.", "Quitaste tus reglas por escrito."), "n")
+        }
+        "checkup" => {
+            if L.money < 800 || !x8_use("checkup") { return null }
+            L.money -= 800
+            return finish("Chequeo médico", its_test(), "n")
+        }
+        "travel" => {
+            if len(d.regulars) == 0 || !x8_use("travel") { return null }
+            let c = pick(d.regulars)
+            let pay = L.rd.rate * 4 * c.gen / 100
+            L.money += pay
+            L.happy += 8
+            career_xp(25)
+            return finish("Viaje", "Una semana con " + c.first + " en " + pick(["Roma", "Tokio", "Mónaco", "Cartagena", "Santorini"]) + ". Hoteles de lujo y cero preguntas. Cobraste " + money_str(pay) + ".", "x")
+        }
+        "retire" => {
+            if !job_is("escort") { return null }
+            L.last_job = L.job.title
+            L.job = null
+            d.retired = true
+            hito_me("Trabajo", "Te retiraste como escort")
+            return finish("Retiro", "Cerraste tu agenda. Algunos clientes te mandaron flores de despedida.", "g")
+        }
+        "hire" => {
+            if d.agency != true || len(d.roster) >= 12 || !x8_use("hire") { return null }
+            let g = pick(["f", "f", "m"])
+            list_push(d.roster, {"first": new_adult_name(g), "age": rint(21, 35), "loyal": rint(50, 80)})
+            return finish("Tu agencia", "Sumaste a una persona más a tu agencia, con contrato, seguridad y chequeos médicos.", "g")
+        }
+        "cut" => return open_choice("TU COMISIÓN", "¿Qué parte de cada cita se queda la agencia?", ["Justa (20%)", "Estándar (30%)", "Abusiva (50%)", "Dejarla igual"], ["", "", "", ""], "x8_cut", {})
+        // Estrella +18
+        "studio" => {
+            if !job_is("porn") { return null }
+            if d.contract == arg {
+                d.contract = null
+                return finish("Contrato", "Rompiste tu contrato. Ahora trabajas por tu cuenta.", "n")
+            }
+            d.contract = arg
+            hito_once("studio_contract", "Trabajo", "Firmaste con un estudio")
+            return finish("Contrato", "Firmaste con " + studio_def(arg).n + ". Sueldo fijo y producciones aseguradas.", "g")
+        }
+        "genre" => {
+            let labels = []
+            for g in GENRES { list_push(labels, g.n + ": " + g.d) }
+            return open_choice("GÉNERO DEL PRÓXIMO RODAJE", "¿Qué tipo de película harás?", labels, ["", "", "", "", ""], "x8_genre", {})
+        }
+        "costar" => {
+            if !job_is("porn") || !x8_use("costar") { return null }
+            let g = attracted_gender()
+            let c = {"first": new_adult_name(g), "g": g, "chem": rint(30, 100)}
+            list_push(d.costars, c)
+            if len(d.costars) > 5 { d.costars = list_slice(d.costars, len(d.costars) - 5, len(d.costars)) }
+            let word = "poca"
+            if c.chem >= 70 { word = "muchísima" } else if c.chem >= 50 { word = "buena" }
+            return finish("Compañeros de escena", "Ensayaste con " + c.first + ": hubo " + word + " química frente a la cámara.", "x")
+        }
+        "direct" => {
+            if !job_is("porn") || L.job.level < 2 || !x8_use("direct") { return null }
+            let pay = 20000 + L.fame * 500
+            L.money += pay
+            career_xp(20)
+            flag("director18")
+            return finish("Dirección", "Dirigiste tu primera escena: guion, luces y un set donde todos se sintieron respetados. Cobraste " + money_str(pay) + ".", "g")
+        }
+        "mainstream" => {
+            if L.fame < 50 || !x8_use("mainstream") { return null }
+            if chance(30 + rank("charm") * 6) {
+                L.fame = clamp100(L.fame + 10)
+                L.money += 150000
+                flag("crossover")
+                hito_me("Trabajo", "Saltaste al cine convencional")
+                return finish("Audición", "¡Te dieron el papel! Un drama independiente que irá a festivales.", "g")
+            }
+            return finish("Audición", "El director dijo que eras perfect" + oa(L.gender) + ", pero el productor tuvo miedo del escándalo.", "n")
+        }
+        "reality" => {
+            if L.fame < 40 || !x8_use("reality") { return null }
+            L.money += 80000
+            L.fame = clamp100(L.fame + 6)
+            L.happy -= 3
+            return finish("Reality", "Un mes con cámaras hasta en la cocina. Te pagaron $80,000 y te convertiste en meme.", "x")
+        }
+        "pretire" => {
+            if !job_is("porn") { return null }
+            L.last_job = L.job.title
+            L.job = null
+            d.retired = true
+            let m = 50000 + L.fame * 2000
+            L.money += m
+            hito_me("Trabajo", "Te retiraste del cine para adultos")
+            return finish("Retiro", "Te despediste con una fiesta llena de colegas. Tus memorias te dieron " + money_str(m) + ".", "g")
+        }
+        // VelvetFans
+        "ppv" => {
+            let f = vf()
+            if f.open != true || !x8_use("ppv") { return null }
+            let buyers = f.subs * rint(8, 20) / 100
+            let pay = buyers * f.price * 15 / 10
+            L.money += pay
+            return finish("Pago por ver", big_num(buyers) + " fans compraron tu paquete especial: " + money_str(pay) + ".", "x")
+        }
+        "vip" => {
+            let f = vf()
+            if f.subs < 500 { return null }
+            f.vip = f.vip != true
+            return finish("VIP", if_str(f.vip == true, "Abriste tu nivel VIP.", "Cerraste tu nivel VIP."), "n")
+        }
+        "face" => {
+            let f = vf()
+            f.face = f.face != true
+            if f.face == true {
+                f.subs += f.subs * 3 / 10
+                return finish("Tu cara", "Mostraste tu cara por primera vez. Llegó una ola de suscriptores.", "x")
+            }
+            return finish("Tu cara", "Volviste al anonimato.", "n")
+        }
+        "chat" => {
+            let f = vf()
+            f.chat = f.chat != true
+            return finish("Equipo de chat", if_str(f.chat == true, "Un equipo responde tus mensajes ahora.", "Volviste a responder tú."), "n")
+        }
+        "dmca" => {
+            let f = vf()
+            f.dmca = f.dmca != true
+            return finish("Filtraciones", if_str(f.dmca == true, "Contrataste un servicio que borra tus filtraciones.", "Cancelaste el servicio contra filtraciones."), "n")
+        }
+        "calendar" => {
+            let f = vf()
+            if f.subs < 2000 || !x8_use("calendar") { return null }
+            let pay = f.subs * 3
+            L.money += pay
+            return finish("Calendario", "Tu calendario artístico se agotó en una semana: " + money_str(pay) + ".", "x")
+        }
+        "whale" => {
+            let f = vf()
+            let w = null
+            for x in f.whales {
+                if x.id == parse_int(arg, 0) { w = x }
+            }
+            if w == null || !x8_use("whale:" + arg) { return null }
+            if w.obsessed == true {
+                open_choice("UN FAN OBSESIONADO", w.name + " te manda cuarenta mensajes al día y dice que sabe en qué ciudad vives.", ["Bloquearlo", "Ponerle límites claros", "Seguir atendiéndolo"], ["", "", ""], "x8_whale", {"id": w.id})
+                return null
+            }
+            let tip = rint(5, 30) * 100
+            L.money += tip
+            w.tips += tip
+            if w.tips > 20000 && chance(25) { w.obsessed = true }
+            return finish(w.name, "Le mandaste un saludo personalizado. Te dejó " + money_str(tip) + " de propina.", "x")
+        }
+        "fretire" => {
+            let f = vf()
+            if f.open != true { return null }
+            f.open = false
+            f.subs = 0
+            hito_me("Trabajo", "Cerraste tu cuenta de VelvetFans")
+            return finish("VelvetFans", "Te despediste de tus fans con un último mensaje. Cerraste la cuenta con la cabeza en alto.", "n")
+        }
+        _ => return null
+    }
+}
+
+function rutas18_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = x8()
+    match handler {
+        "x8_love" => {
+            let c = find_regular(ctx.id)
+            if c == null { return null }
+            if index == 0 {
+                let p = make_person(c.g, "ligue", c.age)
+                p.first = c.first
+                p.bond = 75
+                make_partner(p)
+                d.regulars = list_filter_out(d.regulars, c.id)
+                if job_is("escort") {
+                    L.last_job = L.job.title
+                    L.job = null
+                }
+                hito_me("Amor", "Dejaste el oficio por amor")
+                return finish("Amor", "Dejaste el oficio. " + c.first + " y tú empiezan una vida nueva.", "g")
+            }
+            if index == 1 { return finish(c.first, "Le agradeciste con cariño. La relación sigue siendo profesional.", "n") }
+            d.regulars = list_filter_out(d.regulars, c.id)
+            return finish(c.first, "Cerraste la agenda con " + c.first + ". Fue lo más sano.", "n")
+        }
+        "x8_cut" => {
+            if index >= 3 { return null }
+            d.cut = [20, 30, 50][index]
+            if d.cut == 50 { L.karma -= 6 }
+            if d.cut == 20 { L.karma += 3 }
+            return finish("Comisión", "Ahora tu agencia cobra " + str(d.cut) + "%.", "n")
+        }
+        "x8_genre" => {
+            if index >= len(GENRES) { return null }
+            d.genre = GENRES[index].id
+            return finish("Próximo rodaje", "Tu próximo rodaje será: " + GENRES[index].n + ".", "n")
+        }
+        "x8_whale" => {
+            let f = vf()
+            let keep = []
+            let w = null
+            for x in f.whales {
+                if x.id == ctx.id { w = x } else { list_push(keep, x) }
+            }
+            if w == null { return null }
+            if index == 0 {
+                f.whales = keep
+                return finish("Bloqueado", "Bloqueaste a " + w.name + ". Perdiste a tu mejor cliente y ganaste paz.", "n")
+            }
+            if index == 1 {
+                if chance(60) {
+                    w.obsessed = false
+                    return finish(w.name, "Entendió tus límites y se disculpó.", "g")
+                }
+                f.whales = keep
+                L.happy -= 6
+                return finish(w.name, "No lo tomó bien y te amenazó. Lo bloqueaste y lo reportaste.", "b")
+            }
+            L.happy -= 8
+            return finish(w.name, "Seguiste atendiéndolo. Cada mensaje te da más miedo.", "b")
+        }
+        "x8_ev" => return rutas18_event_choice(index, ctx)
+        _ => return null
+    }
+}
+
+function list_filter_out(lst: list, id: int) {
+    let keep = []
+    for x in lst {
+        if x.id != id { list_push(keep, x) }
+    }
+    return keep
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function rutas18_month() {
+    if L.age < 18 { return null }
+    let r = L.route
+    if r == "escort" {
+        let d = x8()
+        if d.agency == true && len(d.roster) > 0 {
+            let cut = map_get(d, "cut", 30)
+            L.money += len(d.roster) * L.rd.rate * 6 * cut / 100
+            for e in d.roster {
+                if cut >= 50 && chance(20) { e.loyal -= 5 }
+                if cut <= 20 && chance(20) { e.loyal = min(100, e.loyal + 3) }
+            }
+            let keep = []
+            for e in d.roster {
+                if e.loyal > 20 { list_push(keep, e) }
+            }
+            if len(keep) < len(d.roster) { log_add("Alguien dejó tu agencia: no estaba a gusto con las condiciones.", "b") }
+            d.roster = keep
+        }
+    }
+    if r == "porno" && job_is("porn") {
+        let d = x8()
+        if d.contract != null { L.money += 8000 * studio_def(d.contract).pay / 100 }
+        if month_name() == "Enero" && d.award_age != L.age {
+            d.award_age = L.age
+            let films = map_get(L.rd, "films", 0)
+            if films >= 3 && chance(15 + L.fame / 3 + films) {
+                d.awards_n += 1
+                flag("award")
+                let cats = ["Mejor escena", "Mejor actuación en comedia", "Mejor película de época", "Revelación del año", "Química del año"]
+                if L.job.level >= 4 { list_push(cats, "Trayectoria") }
+                let c = pick(cats)
+                L.fame = clamp100(L.fame + 6)
+                hito_me("Trabajo", "Premio Terciopelo Rojo: " + c)
+                list_push(G.toasts, {"head": "PREMIOS TERCIOPELO ROJO", "title": str_upper(c), "sub": "¡Ganaste!", "t0": G.t})
+            }
+        }
+    }
+    if vf().open == true {
+        let f = vf()
+        if f.open == true {
+            if f.chat == true {
+                L.money -= 3000
+                L.money += f.subs * f.price / 20
+            }
+            if f.dmca == true { L.money -= 1000 }
+            if f.vip == true { L.money += f.subs * f.price / 25 }
+            if f.whales == null { f.whales = [] }
+            if f.subs >= 300 && len(f.whales) < 3 && chance(10) {
+                list_push(f.whales, {"id": rint(1000, 999999), "name": pick(["Toro_Dorado", "ElCaballero77", "MrGenerous", "LunaFan", "Sombra_Rica", "PoetaNocturno"]), "tips": 0, "note": "Siempre está en tus transmisiones.", "obsessed": false})
+            }
+        }
+    }
+    return null
+}
+
+// Las filtraciones (fans_month) duelen menos con el servicio y sin cara.
+function fans_leak_mult() {
+    let f = vf()
+    if f.dmca == true { return 30 }
+    if f.face == true { return 150 }
+    return 100
+}
+
+function rutas18_event() {
+    if L.age < 18 || G.modal != null || !chance(4) { return false }
+    let r = L.route
+    if r == "escort" && job_is("escort") {
+        if chance(50) {
+            open_choice("OPERATIVO POLICIAL", "Al llegar a la cita, el «cliente» resulta ser un policía encubierto.", ["Mostrar que trabajas con agencia y reglas claras", "Pedir un abogado", "Intentar irte"], ["", "", ""], "x8_ev", {"kind": "sting"})
+            return true
+        }
+        open_choice("UNA MALA RESEÑA", "Alguien publicó una reseña falsa y cruel sobre ti en un foro.", ["Responder con elegancia", "Pedir a tus clientes habituales que opinen", "Ignorarla"], ["", "", ""], "x8_ev", {"kind": "review"})
+        return true
+    }
+    if r == "porno" && job_is("porn") {
+        if chance(50) {
+            open_choice("HUELGA EN LA INDUSTRIA", "Las actrices y actores de la industria convocan a huelga por mejores condiciones y pruebas médicas pagadas.", ["Unirte a la huelga", "Seguir rodando", "Organizar tú las negociaciones"], ["", "", ""], "x8_ev", {"kind": "strike"})
+            return true
+        }
+        open_choice("TU FAMILIA LO SUPO", "Un primo vio una de tus películas y se lo contó a toda la familia.", ["Hablar con ellos con honestidad", "Cambiar de tema", "Alejarte un tiempo"], ["", "", ""], "x8_ev", {"kind": "family"})
+        return true
+    }
+    if r == "fans" && vf().open == true {
+        open_choice("CAMBIO DE REGLAS", "VelvetFans anuncia nuevas reglas: cobrará más comisión y prohibirá cierto tipo de contenido.", ["Adaptarte", "Abrir una cuenta en otra plataforma", "Protestar con otros creadores"], ["", "", ""], "x8_ev", {"kind": "policy"})
+        return true
+    }
+    return false
+}
+
+function rutas18_event_choice(index: int, ctx: map) {
+    let d = x8()
+    match ctx.kind {
+        "sting" => {
+            if index == 0 {
+                if d.agency == true || d.rules == true {
+                    return finish("Operativo", "Tu agencia legal y tus reglas por escrito te salvaron. Te dejaron ir con una disculpa.", "g")
+                }
+                L.money -= 5000
+                return finish("Operativo", "Te multaron con $5,000. Necesitas trabajar con más protección.", "b")
+            }
+            if index == 1 {
+                L.money -= 15000
+                return finish("Operativo", "Tu abogado resolvió todo en una tarde. Cobró $15,000.", "n")
+            }
+            if chance(50) { return finish("Operativo", "Saliste por la puerta de servicio.", "n") }
+            return finish("Operativo", "No te dejaron ir." + go_to_jail(1), "b")
+        }
+        "review" => {
+            if index == 0 {
+                d.rep = clamp(d.rep + 1, 1, 5)
+                return finish("Reseña", "Tu respuesta elegante te ganó más respeto que la reseña.", "g")
+            }
+            if index == 1 && len(d.regulars) > 0 {
+                d.rep = 5
+                return finish("Reseña", "Tus clientes habituales te defendieron con reseñas de cinco estrellas.", "g")
+            }
+            d.rep = clamp(d.rep - 1, 1, 5)
+            return finish("Reseña", "La reseña se quedó ahí arriba un buen rato.", "n")
+        }
+        "strike" => {
+            if index == 0 {
+                L.karma += 4
+                return finish("Huelga", "La huelga funcionó: ahora los estudios pagan las pruebas médicas.", "g")
+            }
+            if index == 1 {
+                L.money += 20000
+                L.karma -= 4
+                return finish("Huelga", "Rodaste durante la huelga. Te pagaron doble y tus colegas no te hablan.", "n")
+            }
+            L.fame = clamp100(L.fame + 5)
+            L.karma += 6
+            hito_once("strike_leader", "Trabajo", "Lideraste la huelga de tu industria")
+            return finish("Huelga", "Negociaste con los estudios y conseguiste un contrato colectivo histórico.", "g")
+        }
+        "family" => {
+            if index == 0 {
+                for p in parents_alive() { bond_gain(p, if_n(chance(50), 5, -8)) }
+                return finish("Familia", "Hablaste con honestidad. Algunos lo entendieron; otros necesitan tiempo.", "n")
+            }
+            if index == 1 { return finish("Familia", "Cambiaste de tema en cada comida.", "n") }
+            L.happy -= 5
+            return finish("Familia", "Te alejaste un tiempo de las reuniones familiares.", "n")
+        }
+        _ => {
+            let f = vf()
+            if index == 0 {
+                L.money -= f.subs * f.price / 10
+                return finish("Nuevas reglas", "Te adaptaste. Ganas un poco menos este mes.", "n")
+            }
+            if index == 1 {
+                f.subs -= f.subs / 6
+                f.multi = true
+                return finish("Nuevas reglas", "Abriste cuenta en otra plataforma. Algunos fans no te siguieron.", "n")
+            }
+            if chance(40) {
+                L.fame = clamp100(L.fame + 4)
+                return finish("Nuevas reglas", "Las protestas funcionaron: VelvetFans dio marcha atrás.", "g")
+            }
+            return finish("Nuevas reglas", "La plataforma no escuchó.", "n")
+        }
+    }
+}

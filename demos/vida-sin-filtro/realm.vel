@@ -39,7 +39,25 @@ const GOV_ACTS = [
     {"id": "l_health", "who": "p", "cat": "Leyes", "once": true, "t": "Reforma de salud universal", "desc": "Cara, popular y difícil de aprobar.", "d": {"tesoro": -15, "aprob": 12, "elite": -6}},
     {"id": "l_market", "who": "p", "cat": "Leyes", "once": true, "t": "Reforma económica liberal", "desc": "Menos regulación: la economía despega, los sindicatos protestan.", "d": {"fe": 15, "orden": -6, "aprob": -3}},
     {"id": "l_green", "who": "b", "cat": "Leyes", "once": true, "t": "Plan verde nacional", "desc": "Energías limpias y parques.", "d": {"tesoro": -10, "aprob": 6, "fe": 3}},
-    {"id": "l_adult", "who": "b", "cat": "Leyes", "once": true, "t": "Regular la industria +18", "desc": "Derechos laborales y pruebas médicas para quienes trabajan en ella.", "d": {"aprob": 3, "fe": 4, "tesoro": 4}}
+    {"id": "l_adult", "who": "b", "cat": "Leyes", "once": true, "t": "Regular la industria +18", "desc": "Derechos laborales y pruebas médicas para quienes trabajan en ella.", "d": {"aprob": 3, "fe": 4, "tesoro": 4}},
+    // Corte y leyes del reino
+    {"id": "tourney", "who": "r", "cat": "Corte", "t": "Torneo real", "desc": "Justas, arqueros y banderas. El ejército luce y el pueblo grita.", "d": {"tesoro": -6, "fuerza": 6, "aprob": 4}},
+    {"id": "ball", "who": "r", "cat": "Corte", "t": "Baile en palacio", "desc": "Candelabros, valses y alianzas entre copas.", "d": {"tesoro": -5, "elite": 7}},
+    {"id": "tour", "who": "r", "cat": "Corte", "t": "Gira por las provincias", "desc": "Saludar a tu pueblo pueblo por pueblo.", "d": {"tesoro": -4, "aprob": 8}},
+    {"id": "portrait", "who": "r", "cat": "Corte", "t": "Retrato oficial", "desc": "Un pintor famoso inmortaliza tu reinado.", "d": {"tesoro": -3, "elite": 2, "aprob": 2}},
+    {"id": "l_rights", "who": "r", "cat": "Leyes", "once": true, "t": "Carta de derechos", "desc": "Derechos del pueblo por escrito, incluso frente a la corona.", "d": {"aprob": 10, "elite": -6, "orden": -2}},
+    {"id": "l_feudal", "who": "r", "cat": "Leyes", "once": true, "t": "Abolir los privilegios feudales", "desc": "Los nobles pierden sus fueros. El pueblo celebra en las calles.", "d": {"aprob": 12, "elite": -15}},
+    {"id": "l_noble_tax", "who": "r", "cat": "Leyes", "once": true, "t": "Impuesto a la nobleza", "desc": "Los que más tienen, pagan más.", "d": {"tesoro": 15, "elite": -12}},
+    {"id": "l_equal", "who": "r", "cat": "Leyes", "once": true, "t": "Libre elección del heredero", "desc": "Cualquiera de tus hijos puede heredar la corona, sin importar el orden ni el género.", "d": {"aprob": 4, "fe": -3}},
+    {"id": "l_academy", "who": "r", "cat": "Leyes", "once": true, "t": "Academia Real de Ciencias", "desc": "Sabios de todo el mundo al servicio del reino.", "d": {"tesoro": -8, "aprob": 3, "elite": 3}},
+    {"id": "l_bank", "who": "r", "cat": "Leyes", "once": true, "t": "Banco Real", "desc": "La corona presta dinero... con intereses.", "d": {"tesoro": 12, "elite": 4, "aprob": -2}},
+    {"id": "l_censor", "who": "r", "cat": "Leyes", "once": true, "t": "Censura de la prensa", "desc": "Nadie publica nada sin el sello real.", "d": {"orden": 10, "aprob": -8}},
+    {"id": "l_press", "who": "r", "cat": "Leyes", "once": true, "t": "Libertad de prensa", "desc": "Los periódicos pueden criticar a la corona.", "d": {"aprob": 8, "orden": -5, "elite": -3}},
+    {"id": "l_draft", "who": "r", "cat": "Leyes", "once": true, "t": "Servicio militar obligatorio", "desc": "Todos los jóvenes sirven dos años.", "d": {"fuerza": 15, "aprob": -8}},
+    {"id": "l_amnesty", "who": "b", "cat": "Leyes", "once": true, "t": "Amnistía general", "desc": "Perdón para los presos políticos.", "d": {"aprob": 6, "orden": -6}},
+    {"id": "l_nodeath", "who": "b", "cat": "Leyes", "once": true, "t": "Abolir la pena de muerte", "desc": "Nadie más morirá por orden del Estado.", "d": {"aprob": 4, "fe": 3, "orden": -2}},
+    {"id": "l_absolute", "who": "r", "cat": "Leyes", "once": true, "t": "Monarquía absoluta", "desc": "Tu palabra es ley. Sin parlamento y sin límites.", "d": {"orden": 10, "elite": -8, "aprob": -10}},
+    {"id": "l_rural", "who": "p", "cat": "Leyes", "once": true, "t": "Plan nacional para el campo", "desc": "Créditos, riego y caminos para los agricultores.", "d": {"tesoro": -10, "aprob": 6, "fe": 2}}
 ]
 
 const CRISES = [
@@ -210,6 +228,10 @@ function resolve_crisis(index: int, ctx: map) {
 function realm_items(cat: string) {
     let d = L.rd
     let items = []
+    if L.route == "rey" && d.regency == true {
+        list_push(items, dninfo("Regencia", "Coronación a los 18", "Un consejo de regencia gobierna por ti hasta que cumplas 18."))
+        return items
+    }
     if L.route == "rey" && !d.king && cat == "Corte" {
         list_push(items, ritem("court", "Asistir a la corte", "Influencia", "Hacerte ver, escuchar y recordar.", ""))
         let bl = ""
@@ -354,6 +376,7 @@ function do_gov(a: map) {
         hito_me("Vida", "Legalizaste los matrimonios múltiples en tu reino")
     }
     if a.id == "l_official" { L.faith = clamp100(L.faith + 10) }
+    if a.id == "l_equal" { L.rd.succ = "libre" }
     if a.id == "corrupt" {
         let take = rint(50, 300) * 1000
         L.money += take
@@ -423,7 +446,7 @@ function resolve_party(index: int) {
 function run_election(id: string) {
     let d = L.rd
     let cost = 20000
-    let base = d.pop + rank("charm") * 5
+    let base = pl_election_odds(id)
     if id == "run_gov" { cost = 200000 }
     if id == "run_pres" { cost = 1000000 }
     if L.money < cost { return null }
@@ -433,12 +456,12 @@ function run_election(id: string) {
         if id == "run_dip" {
             d.office = "diputado"
             d.pop = clamp100(d.pop + 10)
-            return finish("¡Ganaste!", "Eres diputad" + oa(L.gender) + ". Tu primer cargo de elección popular.", "g")
+            return finish("¡Ganaste!", "Eres diputad" + oa(L.gender) + ". Tu primer cargo de elección popular." + pl_results_text(true), "g")
         }
         if id == "run_gov" {
             d.office = "gobernador"
             d.pop = clamp100(d.pop + 10)
-            return finish("¡Ganaste!", "Eres " + by_gender(L.gender, "gobernador", "gobernadora") + ". El país entero te está viendo.", "g")
+            return finish("¡Ganaste!", "Eres " + by_gender(L.gender, "gobernador", "gobernadora") + ". El país entero te está viendo." + pl_results_text(true), "g")
         }
         d.pres = true
         d.terms = 1
@@ -448,11 +471,11 @@ function run_election(id: string) {
         flag("president")
         L.happy += 25
         list_push(G.toasts, {"head": "¡PRESIDENCIA!", "title": str_upper(by_gender(L.gender, "Presidente", "Presidenta")) + " " + str_upper(L.first), "sub": "Seis años para cambiar el país.", "t0": G.t})
-        return finish("¡Presidencia!", "Ganaste la elección. Ahora eres " + by_gender(L.gender, "presidente", "presidenta") + " de " + L.city + ".", "g")
+        return finish("¡Presidencia!", "Ganaste la elección. Ahora eres " + by_gender(L.gender, "presidente", "presidenta") + " de " + L.city + "." + pl_results_text(true), "g")
     }
     d.pop = max(0, d.pop - 8)
     L.happy -= 10
-    return finish("Derrota", "Perdiste la elección. A levantarse y volver a intentarlo.", "b")
+    return finish("Derrota", "Perdiste la elección. A levantarse y volver a intentarlo." + pl_results_text(false), "b")
 }
 
 function debate_result(score: any) {

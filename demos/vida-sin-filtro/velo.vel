@@ -1,0 +1,977 @@
+// @edition 3
+// Ruta del profeta (+18): la Orden del Velo Rojo.
+// A los 18 tienes una «revelación» y fundas la Orden. Creces de un puñado de
+// fieles a una multitud, eliges la doctrina, construyes el templo y la ciudadela,
+// y llenas el Círculo de los Doce: doce consortes adultos que eliges uno a uno
+// (cada quien con su don y su cargo). El Círculo es obligatorio: sin él, los
+// fieles dudan.
+// El lavado de mente sostiene a la Orden: con fervor alto tus consortes no se
+// ponen celosos ni te son infieles; tú sí puedes estar con alguien fuera del
+// Círculo, pero los fieles se enteran y la Orden lo resiente. Si el fervor de un
+// consorte cae, puede escapar y hablar con la prensa.
+// Al final eliges el destino del mundo: la Reforma (el Alba: hospitales, escuelas,
+// liberar las mentes) o el Ocaso (gobiernos infiltrados, mercados en ruinas y el
+// Gran Eclipse). Prensa y autoridades vigilan: la presión puede acabar en redada.
+// Acciones con el prefijo "vl:" y elecciones "vl_".
+
+const VL_CIRCLE = 12
+
+// Dones de los consortes: cada uno ocupa un cargo en el Círculo.
+const VL_GIFTS = [
+    {"id": "devocion", "n": "Devoción", "role": "Guardián de la fe", "rf": "Guardiana de la fe", "d": "Mantiene encendido el fervor de los fieles."},
+    {"id": "tesoro", "n": "Números", "role": "Guardián del tesoro", "rf": "Guardiana del tesoro", "d": "Los diezmos rinden más."},
+    {"id": "voz", "n": "Elocuencia", "role": "Voz del Profeta", "rf": "Voz del Profeta", "d": "Predica por ti: llegan más fieles."},
+    {"id": "sanacion", "n": "Sanación", "role": "Sanador del Velo", "rf": "Sanadora del Velo", "d": "Cuida tu salud y la de los fieles."},
+    {"id": "estrategia", "n": "Estrategia", "role": "Estratega", "rf": "Estratega", "d": "Calma a la prensa y a las autoridades."},
+    {"id": "arte", "n": "Arte", "role": "Artista del Velo", "rf": "Artista del Velo", "d": "Himnos, murales y fama para la Orden."},
+    {"id": "escudo", "n": "Valor", "role": "Escudo del Profeta", "rf": "Escudo del Profeta", "d": "Te protege en las redadas y los atentados."},
+    {"id": "saber", "n": "Sabiduría", "role": "Escriba", "rf": "Escriba", "d": "Escribe la doctrina: el destino avanza más rápido."},
+    {"id": "fortuna", "n": "Fortuna", "role": "Mecenas", "rf": "Mecenas", "d": "Trae una dote enorme a la Orden."},
+    {"id": "redes", "n": "Redes", "role": "Mensajero digital", "rf": "Mensajera digital", "d": "Convierte a la Orden en tendencia."},
+    {"id": "vision", "n": "Visión", "role": "Vidente", "rf": "Vidente", "d": "Sus profecías arrastran multitudes."},
+    {"id": "diplomacia", "n": "Diplomacia", "role": "Embajador", "rf": "Embajadora", "d": "Abre puertas en gobiernos y empresas."}
+]
+
+const VL_BACKGROUNDS = [
+    ["exmodelo", "exmodelo"], ["médico", "médica"], ["heredero de una naviera", "heredera de una naviera"],
+    ["maestro de yoga", "maestra de yoga"], ["abogado", "abogada"], ["cantante", "cantante"],
+    ["ingeniero", "ingeniera"], ["influencer", "influencer"], ["bailarín", "bailarina"],
+    ["periodista", "periodista"], ["chef", "chef"], ["atleta olímpico", "atleta olímpica"],
+    ["pintor", "pintora"], ["programador", "programadora"], ["enfermero", "enfermera"],
+    ["actor de telenovelas", "actriz de telenovelas"], ["exmilitar", "exmilitar"], ["economista", "economista"],
+    ["sacerdote que colgó los hábitos", "monja que colgó los hábitos"], ["piloto", "piloto"]
+]
+
+const VL_DOCTRINES = [
+    {"id": "velo", "n": "El velo sagrado", "d": "Los fieles visten de rojo y se cubren el rostro en el templo.", "fx": {"fervor": 2}},
+    {"id": "diezmo", "n": "Diezmo total", "d": "Los fieles entregan casi todo lo que ganan.", "fx": {"tithe": 3, "heat": 1}},
+    {"id": "ayuno", "n": "Ayuno y silencio", "d": "Días de ayuno y semanas sin hablar.", "fx": {"fervor": 2, "brain": 1}},
+    {"id": "aislamiento", "n": "Aislamiento del mundo", "d": "Nada de familia de fuera, nada de teléfonos.", "fx": {"fervor": 3, "brain": 2, "recruit": -1, "heat": 1}},
+    {"id": "caridad", "n": "Obras de caridad", "d": "Comedores, albergues y brigadas médicas.", "fx": {"reform": 1, "heat": -1, "recruit": 1}},
+    {"id": "ciencia", "n": "Ciencia y espíritu", "d": "La fe no pelea con la razón.", "fx": {"reform": 1, "recruit": 1}},
+    {"id": "fin", "n": "La profecía del fin", "d": "El mundo viejo caerá y solo el Velo quedará en pie.", "fx": {"doom": 1, "fervor": 2, "heat": 1}},
+    {"id": "sanacion", "n": "Sanación por la fe", "d": "Imposición de manos y milagros en vivo.", "fx": {"recruit": 2, "heat": 1}},
+    {"id": "jerarquia", "n": "Jerarquía de los velos", "d": "Velos de colores según tu rango: todos quieren subir.", "fx": {"tithe": 1, "fervor": 1}},
+    {"id": "puertas", "n": "Puertas abiertas", "d": "Cualquiera entra y cualquiera sale.", "fx": {"recruit": 2, "brain": -2, "heat": -1}}
+]
+
+const VL_SEATS = 4
+
+const VL_TEMPLE = [
+    {"n": "Sin templo", "cost": 0},
+    {"n": "Templo del Velo", "cost": 500000},
+    {"n": "Hacienda del Velo", "cost": 3000000},
+    {"n": "Ciudadela Roja", "cost": 20000000}
+]
+
+// Proyectos del destino: Reforma (el Alba) u Ocaso (el Gran Eclipse).
+const VL_REFORM = [
+    {"id": "hospitales", "n": "Hospitales del Alba", "cost": 2000000, "p": 15, "d": "Hospitales gratuitos en los barrios más pobres."},
+    {"id": "escuelas", "n": "Escuelas del Alba", "cost": 1500000, "p": 12, "d": "Escuelas con comida, libros y maestros bien pagados."},
+    {"id": "bosques", "n": "Reforestar el planeta", "cost": 3000000, "p": 15, "d": "Mil millones de árboles plantados por los fieles."},
+    {"id": "paz", "n": "Mediar la paz", "cost": 1000000, "p": 15, "d": "Tus embajadores sientan a la mesa a dos países en guerra."},
+    {"id": "abrir", "n": "Abrir la Orden", "cost": 0, "p": 15, "d": "Terminar con el lavado de mente: quien se queda, se queda por convicción."},
+    {"id": "liberar", "n": "Liberar a los Doce", "cost": 0, "p": 15, "d": "Le devuelves su voluntad a tus consortes. Algunos se quedarán; otros no."},
+    {"id": "alba", "n": "El Concilio del Alba", "cost": 10000000, "p": 20, "d": "Líderes de todas las religiones firman contigo un pacto por el planeta."}
+]
+
+const VL_DOOM = [
+    {"id": "gobierno", "n": "Infiltrar gobiernos", "cost": 3000000, "p": 15, "d": "Fieles en ministerios, congresos y tribunales."},
+    {"id": "medios", "n": "Comprar los medios", "cost": 5000000, "p": 15, "d": "Noticieros y periódicos repiten tus profecías."},
+    {"id": "mercados", "n": "Hundir los mercados", "cost": 2000000, "p": 15, "d": "Ventas masivas coordinadas: las bolsas del mundo se desploman."},
+    {"id": "elite", "n": "Doblegar a las élites", "cost": 4000000, "p": 15, "d": "Banqueros y generales asisten en secreto a tu templo."},
+    {"id": "torre", "n": "La Torre del Ocaso", "cost": 15000000, "p": 20, "d": "Una torre roja que se ve desde todas las ciudades."},
+    {"id": "eclipse", "n": "Preparar el Gran Eclipse", "cost": 0, "p": 20, "d": "La noche en que el mundo viejo se apaga. Necesitas 80% de ocaso."}
+]
+
+// ---------------------------------------------------------------- estado
+
+function vl() {
+    return L.rd
+}
+
+function velo_active() {
+    return L.route == "profeta" && L.rd != null && L.rd.order == true
+}
+
+// Tus consortes: nunca te engañan mientras dure el lavado.
+function velo_loyal(p: any) {
+    return p != null && L.route == "profeta" && p.velo == true && map_get(p, "fervor", 0) >= 25
+}
+
+function velo_consorts() {
+    let out = []
+    for p in L.people {
+        if p.alive && p.velo == true && (p.rel == "esposo" || p.rel == "pareja") { list_push(out, p) }
+    }
+    return out
+}
+
+function velo_has_gift(id: string) {
+    for p in velo_consorts() {
+        if p.gift == id { return true }
+    }
+    return false
+}
+
+function gift_role(id: string, g: string) {
+    let d = gift_def(id)
+    return by_gender(g, d.role, d.rf)
+}
+
+function gift_def(id: string) {
+    for g in VL_GIFTS {
+        if g.id == id { return g }
+    }
+    return VL_GIFTS[0]
+}
+
+function doctrine_def(id: string) {
+    for d in VL_DOCTRINES {
+        if d.id == id { return d }
+    }
+    return VL_DOCTRINES[0]
+}
+
+function doctrine_fx(key: string) {
+    let t = 0
+    for id in vl().doctrine {
+        let v = doctrine_def(id).fx[key]
+        if v != null { t += v }
+    }
+    return t
+}
+
+function prophet_title() {
+    return by_gender(L.gender, "el Profeta", "la Profetisa")
+}
+
+function consort_word(p: map) {
+    return by_gender(p.gender, "consorte", "consorte")
+}
+
+function velo_spouse_word() {
+    let g = attracted_gender()
+    if L.likes == "ambos" { return "consortes" }
+    return by_gender(g, "esposos", "esposas")
+}
+
+function vl_use(id: string) {
+    if L.used["vl_" + id] != null { return false }
+    L.used["vl_" + id] = 1
+    return true
+}
+
+function vitem(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["vl_" + id] != null { l = "Este mes ya" }
+    return {"action": "vl:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function velo_status() {
+    let d = vl()
+    if !d.order { return "Aún no fundas la Orden." }
+    return "Fieles " + big_num(d.fol) + " · fervor " + str(d.fervor) + " · lavado " + str(d.brain) + " · presión " + str(d.heat) + " · Círculo " + str(len(velo_consorts())) + "/12."
+}
+
+// ---------------------------------------------------------------- menú
+
+function velo_cats() {
+    if !vl().order { return ["Objetivos", "La Orden"] }
+    return ["Objetivos", "La Orden", "El Círculo", "Doctrina", "Destino"]
+}
+
+function velo_items(cat: string) {
+    let d = vl()
+    let items = []
+    if !d.order {
+        let l = ""
+        if L.age < 18 { l = "Edad 18" }
+        list_push(items, {"action": "vl:found", "t": "Fundar la Orden del Velo Rojo", "s": "La revelación", "desc": "Una noche, frente a un velo rojo, entiendes que naciste para guiar. Empiezas con un puñado de fieles en tu sala.", "lock": l})
+        return items
+    }
+    if cat == "La Orden" {
+        list_push(items, dninfo("La Orden: " + big_num(d.fol) + " fieles", VL_TEMPLE[d.temple].n, velo_status() + " Tesoro de la Orden: " + money_str(d.treasury) + "."))
+        list_push(items, vitem("preach", "Predicar en las calles", "Fieles", "Plazas, metros y parques. Tu carisma decide cuántos te siguen.", ""))
+        list_push(items, vitem("retreat", "Retiro de fin de semana", "$20,000 · fieles y fervor", "Tres días en el campo, cantos al amanecer y llanto colectivo.", if_str(L.money < 20000, "$20,000", "")))
+        list_push(items, vitem("sermon", "Gran sermón", "Minijuego · fervor", "Tu voz, el templo lleno y la música subiendo. Tu puntaje decide el fervor.", ""))
+        list_push(items, vitem("wash", "Sesión de adoctrinamiento", "Lavado +", "Horas de repetición, poco sueño y la verdad del Velo. Sube el fervor y el lavado; también la presión.", ""))
+        list_push(items, vitem("celebrity", "Reclutar a una celebridad", "Fama · fieles", "Un actor caído en desgracia busca sentido a su vida.", if_str(d.fol < 500, "500 fieles", "")))
+        list_push(items, vitem("rich", "Cortejar a un millonario", "Tesoro", "Un magnate solitario y una cuenta bancaria enorme.", if_str(d.fol < 200, "200 fieles", "")))
+        list_push(items, vitem("tithe", "Tomar del tesoro de la Orden", "Dinero para ti", "Los diezmos son sagrados... y también útiles. Si los fieles se enteran, el fervor cae.", if_str(d.treasury < 10000, "Tesoro $10,000", "")))
+        let next = d.temple + 1
+        if next < len(VL_TEMPLE) {
+            let t = VL_TEMPLE[next]
+            list_push(items, {"action": "vl:temple", "t": "Construir: " + t.n, "s": money_str(t.cost) + " del tesoro", "desc": "Un lugar a la altura de la Orden. Más fieles, más fervor, más miradas.", "lock": if_str(d.treasury < t.cost, "Tesoro " + money_str(t.cost), "")})
+        }
+        list_push(items, vitem("press", "Calmar a la prensa", "$50,000 · presión −", "Abogados, comunicados y un reportaje amable sobre la caridad de la Orden.", if_str(L.money < 50000, "$50,000", "")))
+        return items
+    }
+    if cat == "El Círculo" {
+        let cs = velo_consorts()
+        let n = len(cs)
+        list_push(items, dninfo("El Círculo de los Doce: " + str(n) + "/12", "Obligatorio", "La Orden exige que " + prophet_title() + " tenga doce " + velo_spouse_word() + ". Cada consorte tiene un don y un cargo. Mientras dure el lavado, no hay celos ni infidelidades de su parte."))
+        if n < VL_CIRCLE {
+            list_push(items, vitem("choose", "Elegir a tu consorte número " + str(n + 1), "Ver candidatos", "La Orden te presenta a sus candidatos adultos. Mira su don, su historia y su atractivo, y elige.", ""))
+        }
+        list_push(items, vitem("ritual", "Ceremonia del Círculo", "Fervor de los Doce", "Una noche de velas con todos tus consortes. Fortalece su devoción y su lazo contigo.", if_str(n == 0, "Sin consortes", "")))
+        for p in cs {
+            let g = gift_def(p.gift)
+            list_push(items, {"action": "vl:consort:" + str(p.id), "t": p.first + " · " + gift_role(p.gift, p.gender), "s": "Fervor " + str(p.fervor) + " · vínculo " + str(p.bond), "desc": cap_first(p.bg) + ", " + str(p.age) + " años. Don: " + g.n + " (" + g.d + ")", "lock": ""})
+        }
+        return items
+    }
+    if cat == "Doctrina" {
+        list_push(items, dninfo("Dogmas: " + str(len(d.doctrine)) + "/" + str(VL_SEATS + if_n(velo_has_gift("saber"), 1, 0)), "Lo que cree la Orden", "Cada dogma cambia el fervor, los diezmos, el reclutamiento, la presión y el destino. Puedes cambiarlos."))
+        for doc in VL_DOCTRINES {
+            let on = list_contains(d.doctrine, doc.id)
+            let l = ""
+            if !on && len(d.doctrine) >= VL_SEATS + if_n(velo_has_gift("saber"), 1, 0) { l = "Sin espacio" }
+            list_push(items, {"action": "vl:doc:" + doc.id, "t": doc.n, "s": if_str(on, "VIGENTE · quitar", "Proclamar"), "desc": doc.d, "lock": l})
+        }
+        return items
+    }
+    // Destino
+    if d.path == "" {
+        let l = ""
+        if d.fol < 10000 || d.temple < 1 { l = "10,000 fieles y templo" }
+        list_push(items, dninfo("El destino del mundo", "Todavía no eliges", "Con diez mil fieles y un templo, la Orden está lista. ¿La usarás para reformar el mundo o para hundirlo?"))
+        list_push(items, {"action": "vl:path:reforma", "t": "La Reforma: el Alba", "s": "Cambiar el mundo", "desc": "Hospitales, escuelas, bosques y paz. Al final tendrás que liberar las mentes, incluso las de tus consortes.", "lock": l})
+        list_push(items, {"action": "vl:path:ocaso", "t": "El Ocaso: el Gran Eclipse", "s": "Destruir el mundo viejo", "desc": "Gobiernos, medios, mercados y élites a tus pies. Al final, el Gran Eclipse.", "lock": l})
+        return items
+    }
+    let reform = d.path == "reforma"
+    let list = VL_DOOM
+    let meter = d.doom
+    let word = "Ocaso"
+    if reform {
+        list = VL_REFORM
+        meter = d.reform
+        word = "Reforma"
+    }
+    list_push(items, dninfo(word + ": " + str(meter) + "%", if_str(reform, "El Alba", "El Gran Eclipse"), if_str(reform, "Cada obra acerca el Alba. Para terminar, el lavado debe bajar de 30.", "Cada paso acerca el Eclipse. La presión de las autoridades crece.")))
+    for pr in list {
+        let done = list_contains(d.done, pr.id)
+        let l = ""
+        if done { l = "Hecho" } else if pr.cost > 0 && d.treasury + L.money < pr.cost { l = money_str(pr.cost) }
+        if pr.id == "eclipse" && d.doom < 80 && !done { l = "Ocaso 80%" }
+        if pr.id == "alba" && d.reform < 70 && !done { l = "Reforma 70%" }
+        let cost = "Sin costo"
+        if pr.cost > 0 { cost = money_str(pr.cost) }
+        list_push(items, {"action": "vl:proj:" + pr.id, "t": pr.n, "s": cost + " · +" + str(pr.p) + "%", "desc": pr.d + " Se paga primero del tesoro de la Orden.", "lock": l})
+    }
+    return items
+}
+
+function if_n(cond: bool, a: int, b: int) {
+    if cond { return a }
+    return b
+}
+
+function cap_first(t: string) {
+    if len(t) == 0 { return t }
+    return str_upper(str_sub(t, 0, 1)) + str_sub(t, 1)
+}
+
+// ---------------------------------------------------------------- acciones
+
+function velo_action(action: string) {
+    G.modal = null
+    let d = vl()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    if L.route != "profeta" || L.age < 18 { return null }
+    match cmd {
+        "found" => {
+            if d.order { return null }
+            d.order = true
+            d.fol = rint(8, 20)
+            d.fervor = 60
+            d.found_age = L.age
+            hito_me("Vida", "Fundaste la Orden del Velo Rojo")
+            list_push(G.toasts, {"head": "LA REVELACIÓN", "title": "LA ORDEN DEL VELO ROJO", "sub": "Tus primeros " + str(d.fol) + " fieles", "t0": G.t})
+            return finish("La revelación", "Frente a un velo rojo, a medianoche, hablaste por primera vez como " + prophet_title() + ". " + str(d.fol) + " personas lloraron en tu sala. La Orden del Velo Rojo ha nacido.", "x")
+        }
+        "preach" => {
+            if !vl_use("preach") { return null }
+            let g = rint(3, 10) + rank("charm") * 4 + doctrine_fx("recruit") * 3 + d.fol * rint(1, 4) / 100
+            if velo_has_gift("voz") { g = g * 3 / 2 }
+            d.fol += g
+            gain("charm", 1)
+            return finish("Predicación", pick(["Hablaste en la plaza hasta quedarte sin voz.", "En el metro, una mujer lloró al escucharte y trajo a su familia.", "Te siguieron hasta el templo cantando."]) + " +" + big_num(g) + " fieles.", "g")
+        }
+        "retreat" => {
+            if L.money < 20000 || !vl_use("retreat") { return null }
+            L.money -= 20000
+            let g = rint(10, 30) + d.fol / 20
+            d.fol += g
+            d.fervor = clamp100(d.fervor + 6)
+            d.brain = clamp100(d.brain + 3)
+            return finish("Retiro", "Tres días de cantos, ayuno y confesiones. Volvieron " + big_num(g) + " fieles nuevos con la mirada encendida.", "g")
+        }
+        "sermon" => {
+            if !vl_use("sermon") { return null }
+            return mg_start("interview", "El gran sermón", "velo", {"kind": "sermon"})
+        }
+        "wash" => {
+            if !vl_use("wash") { return null }
+            d.fervor = clamp100(d.fervor + 10)
+            d.brain = clamp100(d.brain + 8)
+            d.heat = clamp100(d.heat + 4)
+            for p in velo_consorts() { p.fervor = clamp100(p.fervor + 6) }
+            L.karma -= 4
+            return finish("Adoctrinamiento", "Horas de repetición en penumbra: «El Velo es la verdad». Al amanecer, nadie duda de ti.", "x")
+        }
+        "celebrity" => {
+            if d.fol < 500 || !vl_use("celebrity") { return null }
+            if chance(45 + rank("charm") * 6) {
+                let g = d.fol / 5 + 500
+                d.fol += g
+                L.fame = clamp100(L.fame + 5)
+                d.heat = clamp100(d.heat + 3)
+                return finish("Celebridad", "Un actor famoso anunció en televisión que el Velo le salvó la vida. +" + big_num(g) + " fieles.", "g")
+            }
+            d.heat = clamp100(d.heat + 6)
+            return finish("Celebridad", "La celebridad se burló de la Orden en un programa de chismes.", "b")
+        }
+        "rich" => {
+            if d.fol < 200 || !vl_use("rich") { return null }
+            if chance(40 + rank("charm") * 7) {
+                let gift = rint(5, 50) * 100000
+                d.treasury += gift
+                return finish("Mecenas", "Un magnate solitario donó " + money_str(gift) + " a la Orden «para encontrar la paz».", "g")
+            }
+            return finish("Mecenas", "El millonario te escuchó, te invitó un whisky y no soltó un peso.", "n")
+        }
+        "tithe" => {
+            if d.treasury < 10000 || !vl_use("tithe") { return null }
+            let take = d.treasury / 4
+            d.treasury -= take
+            L.money += take
+            L.karma -= 3
+            if chance(25) {
+                d.fervor = clamp100(d.fervor - 12)
+                d.heat = clamp100(d.heat + 8)
+                return finish("El tesoro", "Tomaste " + money_str(take) + ". Un fiel vio los estados de cuenta: murmullos en el templo.", "b")
+            }
+            return finish("El tesoro", "Tomaste " + money_str(take) + " del tesoro de la Orden. Nadie pregunta.", "x")
+        }
+        "temple" => {
+            let next = d.temple + 1
+            if next >= len(VL_TEMPLE) || d.treasury < VL_TEMPLE[next].cost { return null }
+            d.treasury -= VL_TEMPLE[next].cost
+            d.temple = next
+            d.fervor = clamp100(d.fervor + 10)
+            d.heat = clamp100(d.heat + 5)
+            hito_me("Vida", "Construiste " + VL_TEMPLE[next].n)
+            return finish("El templo", "Inauguraste " + VL_TEMPLE[next].n + ". Miles de velos rojos ondearon al mismo tiempo.", "g")
+        }
+        "press" => {
+            if L.money < 50000 || !vl_use("press") { return null }
+            L.money -= 50000
+            let drop = rint(10, 20)
+            if velo_has_gift("estrategia") { drop += 8 }
+            d.heat = max(0, d.heat - drop)
+            return finish("La prensa", "Abogados, comunicados y fotos repartiendo despensas. La presión bajó " + str(drop) + ".", "n")
+        }
+        "choose" => {
+            if len(velo_consorts()) >= VL_CIRCLE || !vl_use("choose") { return null }
+            return velo_open_candidates()
+        }
+        "ritual" => {
+            if !vl_use("ritual") || len(velo_consorts()) == 0 { return null }
+            for p in velo_consorts() {
+                p.fervor = clamp100(p.fervor + 8)
+                p.bond = clamp100(p.bond + 4)
+            }
+            L.happy += 6
+            return finish("Ceremonia del Círculo", "Una noche de velas rojas con tus " + str(len(velo_consorts())) + " consortes. Te juraron devoción otra vez.", "x")
+        }
+        "consort" => {
+            let p = find_person(parse_int(arg, 0))
+            if p == null || p.velo != true { return null }
+            let g = gift_def(p.gift)
+            let locks = ["", "", "", "", ""]
+            if L.used["vl_c" + str(p.id)] != null {
+                locks[0] = "Este mes ya"
+                locks[1] = "Este mes ya"
+            }
+            if d.path != "reforma" { locks[2] = "Solo en la Reforma" }
+            open_choice(str_upper(p.first) + " · " + str_upper(gift_role(p.gift, p.gender)), cap_first(p.bg) + ". Fervor " + str(p.fervor) + ", vínculo " + str(p.bond) + ". " + g.d,
+                ["Pasar tiempo a solas", "Adoctrinarl" + oa(p.gender), "Devolverle su voluntad", "Repudiarl" + oa(p.gender) + " (dejar el Círculo)", "Volver"], locks, "vl_consort", {"person": p})
+            return null
+        }
+        "doc" => {
+            if list_contains(d.doctrine, arg) {
+                let keep = []
+                for id in d.doctrine {
+                    if id != arg { list_push(keep, id) }
+                }
+                d.doctrine = keep
+                d.fervor = clamp100(d.fervor - 3)
+                return finish("Doctrina", "Derogaste «" + doctrine_def(arg).n + "». Los fieles se adaptan.", "n")
+            }
+            if len(d.doctrine) >= VL_SEATS + if_n(velo_has_gift("saber"), 1, 0) { return null }
+            list_push(d.doctrine, arg)
+            return finish("Doctrina", "Proclamaste un nuevo dogma: «" + doctrine_def(arg).n + "». " + doctrine_def(arg).d, "x")
+        }
+        "path" => {
+            if d.path != "" || d.fol < 10000 || d.temple < 1 { return null }
+            d.path = arg
+            if arg == "reforma" {
+                hito_me("Vida", "Elegiste la Reforma: el Alba")
+                return finish("El destino", "Frente a toda la Orden anunciaste el Alba: el Velo cambiará el mundo para bien. Los fieles lloraron de alegría.", "g")
+            }
+            hito_me("Vida", "Elegiste el Ocaso: el Gran Eclipse")
+            L.karma -= 15
+            return finish("El destino", "Bajo una luna roja anunciaste el Ocaso: el mundo viejo caerá. Los fieles gritaron tu nombre.", "x")
+        }
+        "proj" => return velo_project(arg)
+        _ => return null
+    }
+}
+
+function velo_project(id: string) {
+    let d = vl()
+    let list = VL_DOOM
+    if d.path == "reforma" { list = VL_REFORM }
+    let pr = null
+    for x in list {
+        if x.id == id { pr = x }
+    }
+    if pr == null || list_contains(d.done, id) { return null }
+    if id == "eclipse" && d.doom < 80 { return null }
+    if id == "alba" && d.reform < 70 { return null }
+    if pr.cost > 0 {
+        if d.treasury + L.money < pr.cost { return null }
+        let from_t = min(d.treasury, pr.cost)
+        d.treasury -= from_t
+        L.money -= pr.cost - from_t
+    }
+    list_push(d.done, id)
+    let gain_p = pr.p
+    if velo_has_gift("saber") { gain_p += 3 }
+    if velo_has_gift("vision") { gain_p += 2 }
+    let msg = ""
+    if d.path == "reforma" {
+        d.reform = clamp100(d.reform + gain_p)
+        L.karma += 6
+        L.fame = clamp100(L.fame + 4)
+        d.heat = max(0, d.heat - 5)
+        msg = velo_reform_effect(id)
+    } else {
+        d.doom = clamp100(d.doom + gain_p)
+        L.karma -= 8
+        d.heat = clamp100(d.heat + 8)
+        msg = velo_doom_effect(id)
+    }
+    hito_me("Vida", pr.n)
+    return finish(pr.n, msg, if_str(d.path == "reforma", "g", "x"))
+}
+
+function velo_reform_effect(id: string) {
+    let d = vl()
+    match id {
+        "abrir" => {
+            d.brain = max(0, d.brain - 40)
+            let lost = d.fol / 5
+            d.fol -= lost
+            return "Abriste las puertas: nadie está obligado a nada. Se fueron " + big_num(lost) + " fieles; los que quedan, creen de verdad."
+        }
+        "liberar" => {
+            let stay = 0
+            let gone = []
+            for p in velo_consorts() {
+                p.fervor = 0
+                if p.bond >= 55 || chance(30) {
+                    stay += 1
+                    p.free = true
+                } else {
+                    list_push(gone, p.first)
+                    p.rel = "ex"
+                    p.cospouse = false
+                    p.velo = false
+                    if L.partner_id == p.id {
+                        L.partner_id = 0
+                        L.married = false
+                    }
+                }
+            }
+            flag("freed_circle")
+            let msg = "Uno a uno, tus consortes despertaron del lavado. " + str(stay) + " decidieron quedarse contigo, ahora por amor."
+            if len(gone) > 0 { msg = msg + " Se fueron: " + str_join(gone, ", ") + "." }
+            return msg
+        }
+        "alba" => return "Líderes de todas las religiones firmaron contigo el Pacto del Alba en un estadio lleno."
+        _ => return "La obra se inauguró con miles de fieles de rojo. El mundo empieza a cambiar."
+    }
+}
+
+function velo_doom_effect(id: string) {
+    let d = vl()
+    match id {
+        "mercados" => {
+            if L.mx != null || L.mk != null {
+                fin_init()
+                mx().crash_new = true
+                mx().crash = 8
+                for s in STOCKS { mk_set_price(s.id, max(100, price(s.id) * 70 / 100)) }
+            }
+            return "Tus fieles en las casas de bolsa vendieron todo a la misma hora. Las bolsas del mundo se desplomaron."
+        }
+        "gobierno" => return "Ahora hay fieles del Velo en ministerios y tribunales. Las leyes empiezan a cambiar a tu favor."
+        "medios" => {
+            d.fol += d.fol / 4
+            return "Los noticieros abren con tus profecías. La Orden crece sin parar."
+        }
+        "torre" => return "La Torre del Ocaso se levanta roja sobre la ciudad. Se ve desde cualquier lugar."
+        "eclipse" => return "Todo está listo para la noche del Gran Eclipse."
+        _ => return "Las élites del mundo se arrodillan en secreto ante el Velo."
+    }
+}
+
+// Candidatos para el Círculo (todos adultos).
+function velo_open_candidates() {
+    let d = vl()
+    let cands = []
+    let i = 0
+    while i < 4 {
+        let p = stranger_aged(18, max(26, min(L.age + 12, 60)))
+        let g = VL_GIFTS[rint(0, len(VL_GIFTS) - 1)]
+        p.gift = g.id
+        let bg = pick(VL_BACKGROUNDS)
+        p.bg = by_gender(p.gender, bg[0], bg[1])
+        list_push(cands, p)
+        i += 1
+    }
+    d.cands = cands
+    let labels = []
+    let lines = []
+    let i2 = 1
+    for p in cands {
+        list_push(labels, p.first + " · " + gift_role(p.gift, p.gender))
+        list_push(lines, str(i2) + ") " + p.first + ", " + str(p.age) + ", " + p.bg + ". Atractivo " + str(p.looks) + ".")
+        i2 += 1
+    }
+    list_push(labels, "Ver otros candidatos")
+    list_push(labels, "Volver")
+    let n = len(velo_consorts()) + 1
+    open_choice("EL CÍRCULO · CONSORTE " + str(n) + " DE 12", "Candidatos de la Orden, todos adultos: " + str_join(lines, " ") + " Su don ocupará un cargo junto a ti.", labels, ["", "", "", "", "", ""], "vl_pick", {})
+    return null
+}
+
+function velo_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = vl()
+    match handler {
+        "vl_pick" => {
+            if index == 4 { return velo_open_candidates() }
+            if index > 4 || d.cands == null || index >= len(d.cands) { return null }
+            return velo_wed(d.cands[index])
+        }
+        "vl_consort" => return velo_consort_choice(index, ctx.person)
+        "vl_raid" => return velo_raid(index)
+        "vl_event" => return velo_event_choice(index, ctx)
+        "vl_eclipse" => return velo_eclipse(index)
+        _ => return null
+    }
+}
+
+function velo_wed(cand: map) {
+    let d = vl()
+    d.cands = []
+    let p = cand
+    p.velo = true
+    p.fervor = rint(45, 75)
+    p.bond = rint(55, 80)
+    p.known = false
+    if L.partner_id == 0 {
+        make_partner(p)
+        marry_cost(0)
+    } else {
+        add_person(p)
+        p.rel = "esposo"
+        p.cospouse = true
+        L.marriages += 1
+        add_hito(p, "Entró al Círculo de los Doce")
+    }
+    let g = gift_def(p.gift)
+    if p.gift == "fortuna" {
+        let dote = rint(10, 60) * 100000
+        d.treasury += dote
+    }
+    let n = len(velo_consorts())
+    d.fervor = clamp100(d.fervor + 3)
+    hito_me("Amor", "Boda del Velo con " + p.first + " (" + str(n) + " de 12)")
+    if n >= VL_CIRCLE {
+        flag("circle12")
+        list_push(G.toasts, {"head": "EL CÍRCULO ESTÁ COMPLETO", "title": "LOS DOCE", "sub": "La Orden celebra durante siete días", "t0": G.t})
+        d.fervor = clamp100(d.fervor + 15)
+    }
+    return finish("Boda del Velo", "Bajo un velo rojo, frente a toda la Orden, " + p.first + " se convirtió en tu consorte número " + str(n) + ": " + str_lower(gift_role(p.gift, p.gender)) + ".", "x")
+}
+
+function velo_consort_choice(index: int, p: map) {
+    let d = vl()
+    if p == null || index == 4 { return null }
+    if index == 0 || index == 1 {
+        if !vl_use("c" + str(p.id)) { return null }
+    }
+    if index == 0 {
+        p.bond = clamp100(p.bond + 8)
+        L.happy += 4
+        return finish(p.first, pick(["Una tarde lejos del templo, solo ustedes dos. Por un rato parecieron una pareja cualquiera.", p.first + " te contó su vida antes de la Orden. Lo escuchaste todo.", "Cocinaron juntos y se rieron como hace mucho."]), "g")
+    }
+    if index == 1 {
+        p.fervor = clamp100(p.fervor + 15)
+        p.bond = clamp100(p.bond - 2)
+        L.karma -= 2
+        return finish(p.first, "Horas de oración guiada. " + p.first + " repite tus palabras con los ojos cerrados.", "x")
+    }
+    if index == 2 {
+        if d.path != "reforma" { return null }
+        p.fervor = 0
+        p.free = true
+        if p.bond >= 55 || chance(35) {
+            p.bond = clamp100(p.bond + 5)
+            return finish(p.first, p.first + " despertó del lavado. Lloró mucho... y decidió quedarse contigo, ahora por voluntad propia.", "g")
+        }
+        velo_leave(p, false)
+        return finish(p.first, p.first + " despertó del lavado, te miró como a un desconocido y se fue. Lo entiendes.", "n")
+    }
+    velo_leave(p, false)
+    d.fervor = clamp100(d.fervor - 5)
+    return finish(p.first, "Repudiaste a " + p.first + " frente a la Orden. Su lugar en el Círculo quedó vacío.", "b")
+}
+
+// Un consorte deja el Círculo (huye, lo repudias o despierta).
+function velo_leave(p: map, fled: bool) {
+    let d = vl()
+    p.rel = "ex"
+    p.cospouse = false
+    p.velo = false
+    if L.partner_id == p.id {
+        L.partner_id = 0
+        L.married = false
+        // Otro consorte toma el lugar principal.
+        for q in velo_consorts() {
+            if L.partner_id == 0 {
+                L.partner_id = q.id
+                q.rel = "esposo"
+                L.married = true
+            }
+        }
+    }
+    if fled {
+        d.escaped += 1
+        d.heat = clamp100(d.heat + 15)
+        d.fervor = clamp100(d.fervor - 10)
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function velo_month() {
+    let d = vl()
+    if !d.order || L.age < 18 { return null }
+    let consorts = velo_consorts()
+    let n = len(consorts)
+    // Fervor: baja solo, lo sostienen los dogmas y la Guardiana de la fe.
+    let fv = -2 + doctrine_fx("fervor")
+    if velo_has_gift("devocion") { fv += 2 }
+    if d.temple >= 1 { fv += 1 }
+    if n < VL_CIRCLE && d.found_age != null && L.age - d.found_age >= 3 {
+        fv -= 2
+        if chance(15) { log_add("Los fieles murmuran: " + prophet_title() + " aún no completa el Círculo de los Doce.", "b") }
+    }
+    if chance(60) { d.fervor = clamp100(d.fervor + fv) }
+    d.brain = clamp100(d.brain + doctrine_fx("brain") - 1)
+    // Fieles
+    let grow = d.fol * (d.fervor / 25 + doctrine_fx("recruit") + rank("charm")) / 300 + rint(0, 3)
+    if velo_has_gift("redes") { grow += d.fol / 60 + 5 }
+    if velo_has_gift("vision") { grow += d.fol / 120 }
+    if d.fervor < 35 { grow -= d.fol * (35 - d.fervor) / 400 }
+    d.fol = max(1, d.fol + grow)
+    if d.fol >= 1000 { flag("velo_1k") }
+    // Diezmos
+    let tithe = d.fol * (8 + doctrine_fx("tithe") * 6) / 10
+    if velo_has_gift("tesoro") { tithe = tithe * 13 / 10 }
+    d.treasury += tithe
+    L.money += tithe / 10
+    // Presión de la prensa y las autoridades
+    let h = d.brain / 25 + doctrine_fx("heat") + d.fol / 20000
+    if velo_has_gift("estrategia") { h -= 1 }
+    if velo_has_gift("diplomacia") { h -= 1 }
+    if d.path == "ocaso" { h += 1 }
+    if chance(50) { d.heat = clamp(d.heat + h, 0, 100) }
+    if velo_has_gift("sanacion") && chance(30) { L.health += 1 }
+    if velo_has_gift("arte") && chance(20) { L.fame = clamp100(L.fame + 1) }
+    // Los consortes: el lavado se gasta; con poco fervor y poco cariño, alguien huye.
+    for p in consorts {
+        if p.free != true && chance(40) { p.fervor = max(0, p.fervor - 1 - (100 - d.brain) / 60) }
+        if p.free != true && p.fervor < 20 && p.bond < 50 && chance(12) {
+            velo_leave(p, true)
+            log_add(p.first + " escapó de la Orden a medianoche y le contó todo a un periodista. Su lugar en el Círculo quedó vacío.", "b")
+        }
+    }
+    if d.path == "reforma" && chance(20) { d.reform = clamp100(d.reform + 1) }
+    if d.path == "ocaso" && chance(20) { d.doom = clamp100(d.doom + 1) }
+    L.fame = clamp100(max(L.fame, min(80, d.fol / 500)))
+    velo_check_final()
+    return null
+}
+
+// Lo que hace el profeta fuera del Círculo: los fieles se enteran.
+function velo_infidelity(person: any) {
+    if !velo_active() { return "" }
+    if person != null && person.velo == true { return "" }
+    let d = vl()
+    d.infidelities += 1
+    d.fervor = clamp100(d.fervor - 8)
+    d.fol -= d.fol / 20
+    d.heat = clamp100(d.heat + 4)
+    for p in velo_consorts() { p.fervor = max(0, p.fervor - 3) }
+    if d.infidelities == 1 { hito_me("Vida", "Te viste con alguien fuera del Círculo") }
+    return " Tus consortes no dijeron nada (el Velo no lo permite), pero los fieles se enteraron: el fervor de la Orden cayó."
+}
+
+// ---------------------------------------------------------------- eventos
+
+function maybe_velo_event() {
+    if !velo_active() || G.modal != null || L.jail > 0 { return false }
+    let d = vl()
+    if d.heat >= 90 && chance(35) {
+        let locks = ["", "", ""]
+        if L.money < 500000 { locks[0] = "$500,000" }
+        open_choice("¡REDADA!", "Patrullas, helicópteros y cámaras de televisión rodean " + str_lower(VL_TEMPLE[max(1, d.temple)].n) + ". Una fiscal pide hablar con " + prophet_title() + ".",
+            ["Negociar con abogados ($500,000)", "Entregarte para proteger a la Orden", "Huir con el Círculo a las montañas"], locks, "vl_raid", {})
+        return true
+    }
+    if d.path == "ocaso" && d.doom >= 100 && list_contains(d.done, "eclipse") && !d.final {
+        open_choice("EL GRAN ECLIPSE", "Es la noche. Fieles en cada ministerio, cada canal de televisión y cada banco esperan tu señal. Si das la orden, el mundo viejo se apaga.",
+            ["Dar la señal", "Detenerte en el último momento"], ["", ""], "vl_eclipse", {})
+        return true
+    }
+    if !chance(6) { return false }
+    let r = rint(1, 6)
+    if r == 1 {
+        open_choice("UN EXMIEMBRO HABLA", "Un exfiel publicó un video llorando: dice que la Orden le quitó años, dinero y familia. Tiene millones de vistas.",
+            ["Desmentirlo en un video", "Pagarle para que lo borre ($100,000)", "Pedirle perdón en público"], ["", if_str(L.money < 100000, "$100,000", ""), ""], "vl_event", {"kind": "ex"})
+        return true
+    }
+    if r == 2 {
+        let fams = d.fol / 50 + 1
+        open_choice("LAS FAMILIAS", str(fams) + " familias protestan frente al templo con fotos de sus hijos adultos que se unieron a la Orden y ya no les hablan.",
+            ["Abrir las puertas para que los visiten", "Que la seguridad los aleje", "Ignorarlos"], ["", "", ""], "vl_event", {"kind": "families"})
+        return true
+    }
+    if r == 3 && len(velo_consorts()) >= 2 {
+        open_choice("EL CÍRCULO", "Tus consortes organizaron, sin que lo pidieras, una noche en tu honor. Hay música, velas y cada quien te preparó un regalo.",
+            ["Disfrutarla con los Doce", "Aprovechar para pedirles más devoción"], ["", ""], "vl_event", {"kind": "honor"})
+        return true
+    }
+    if r == 4 {
+        open_choice("EL DOCUMENTAL", "Una plataforma de streaming prepara un documental sobre la Orden. Te ofrecen una entrevista.",
+            ["Dar la entrevista", "Negarte y amenazar con demandar", "Infiltrar a un fiel en el equipo"], ["", "", ""], "vl_event", {"kind": "doc"})
+        return true
+    }
+    if r == 5 {
+        open_choice("UN MILAGRO", "Una fiel asegura que se curó al tocar tu velo. Todos la vieron levantarse de su silla de ruedas.",
+            ["Proclamarlo milagro", "Decir que fue la fe de ella, no tu poder", "Pedir que la revise un médico"], ["", "", ""], "vl_event", {"kind": "miracle"})
+        return true
+    }
+    open_choice("CISMA", "Un predicador de la Orden dice que también tuvo una revelación y quiere su propio Círculo. Un tercio de los fieles lo escucha.",
+        ["Expulsarlo", "Nombrarlo tu mano derecha", "Retarlo a un sermón frente a todos"], ["", "", ""], "vl_event", {"kind": "schism"})
+    return true
+}
+
+function velo_event_choice(index: int, ctx: map) {
+    let d = vl()
+    match ctx.kind {
+        "ex" => {
+            if index == 0 {
+                if chance(40 + rank("charm") * 6) { return finish("El exmiembro", "Tu video fue más visto que el suyo. Los fieles cerraron filas.", "n") }
+                d.heat = clamp100(d.heat + 10)
+                d.fol -= d.fol / 15
+                return finish("El exmiembro", "Tu respuesta pareció arrogante. Más gente se salió.", "b")
+            }
+            if index == 1 {
+                L.money -= 100000
+                L.karma -= 4
+                d.heat = max(0, d.heat - 5)
+                return finish("El exmiembro", "Firmó un acuerdo de confidencialidad y borró el video.", "x")
+            }
+            L.karma += 5
+            d.brain = max(0, d.brain - 5)
+            if d.path == "reforma" { d.reform = clamp100(d.reform + 3) }
+            d.fervor = clamp100(d.fervor - 3)
+            return finish("El exmiembro", "Pediste perdón en público. Algunos fieles se desconcertaron; mucha gente de fuera te respetó.", "g")
+        }
+        "families" => {
+            if index == 0 {
+                d.brain = max(0, d.brain - 6)
+                d.heat = max(0, d.heat - 10)
+                d.fol -= d.fol / 25
+                L.karma += 4
+                return finish("Las familias", "Hubo abrazos, gritos y llanto. Algunos fieles se fueron con sus familias; la prensa habló bien de ti.", "n")
+            }
+            if index == 1 {
+                d.heat = clamp100(d.heat + 12)
+                L.karma -= 5
+                return finish("Las familias", "Las imágenes de tu seguridad empujando a una madre dieron la vuelta al mundo.", "b")
+            }
+            d.heat = clamp100(d.heat + 5)
+            return finish("Las familias", "Siguieron ahí toda la semana con sus fotos.", "n")
+        }
+        "honor" => {
+            if index == 0 {
+                for p in velo_consorts() { p.bond = clamp100(p.bond + 5) }
+                L.happy += 10
+                return finish("El Círculo", "Fue una de las mejores noches de tu vida.", "g")
+            }
+            for p in velo_consorts() {
+                p.fervor = clamp100(p.fervor + 6)
+                p.bond = clamp100(p.bond - 3)
+            }
+            return finish("El Círculo", "Convertiste la fiesta en un ritual. Te obedecen más; te quieren un poco menos.", "x")
+        }
+        "doc" => {
+            if index == 0 {
+                if chance(35 + rank("charm") * 8) {
+                    d.fol += d.fol / 6
+                    L.fame = clamp100(L.fame + 6)
+                    return finish("El documental", "Saliste carismático y sereno. Después del estreno, miles quisieron conocer la Orden.", "g")
+                }
+                d.heat = clamp100(d.heat + 15)
+                return finish("El documental", "La edición te hizo ver como un monstruo. El documental es un éxito mundial.", "b")
+            }
+            if index == 1 {
+                d.heat = clamp100(d.heat + 8)
+                return finish("El documental", "Tu amenaza se volvió el tráiler del documental.", "b")
+            }
+            if chance(60) {
+                d.heat = max(0, d.heat - 8)
+                return finish("El documental", "Tu fiel infiltrado «perdió» las mejores entrevistas. El documental salió flojo.", "x")
+            }
+            d.heat = clamp100(d.heat + 20)
+            return finish("El documental", "Descubrieron al infiltrado y lo pusieron en el último episodio.", "b")
+        }
+        "miracle" => {
+            if index == 0 {
+                d.fol += d.fol / 5 + 50
+                d.fervor = clamp100(d.fervor + 10)
+                d.heat = clamp100(d.heat + 6)
+                return finish("El milagro", "«¡Milagro!» El video se volvió viral. La Orden creció como nunca.", "x")
+            }
+            if index == 1 {
+                L.karma += 3
+                d.fervor = clamp100(d.fervor + 3)
+                return finish("El milagro", "Dijiste que fue su fe. Tu humildad conmovió a todos.", "g")
+            }
+            L.karma += 4
+            d.brain = max(0, d.brain - 3)
+            return finish("El milagro", "El médico explicó que su lesión había sanado sola. Ella sigue en la Orden, más tranquila.", "n")
+        }
+        _ => {
+            if index == 0 {
+                d.fol -= d.fol / 6
+                d.fervor = clamp100(d.fervor + 5)
+                return finish("El cisma", "Lo expulsaste. Se llevó a muchos, pero los que quedaron son tuyos.", "n")
+            }
+            if index == 1 {
+                d.fervor = clamp100(d.fervor - 5)
+                d.fol += d.fol / 10
+                return finish("El cisma", "Ahora es tu mano derecha. Por ahora.", "n")
+            }
+            if chance(40 + rank("charm") * 8) {
+                d.fervor = clamp100(d.fervor + 12)
+                return finish("El cisma", "Tu sermón fue tan poderoso que el rival se arrodilló frente a todos.", "g")
+            }
+            d.fol -= d.fol / 3
+            return finish("El cisma", "Su sermón fue mejor. Un tercio de la Orden se fue con él.", "b")
+        }
+    }
+}
+
+function velo_raid(index: int) {
+    let d = vl()
+    if index == 0 {
+        if L.money < 500000 { return null }
+        L.money -= 500000
+        d.heat = 45
+        return finish("La redada", "Tus abogados negociaron toda la noche. La fiscalía retiró los cargos... por ahora.", "n")
+    }
+    if index == 1 {
+        d.heat = 20
+        d.fervor = clamp100(d.fervor + 15)
+        d.fol -= d.fol / 3
+        hito_me("Vida", "Te entregaste en la redada")
+        return finish("La redada", "Saliste con las manos en alto entre velos rojos que lloraban. Para los fieles eres un mártir." + go_to_jail(3), "b")
+    }
+    let guard = velo_has_gift("escudo")
+    d.heat = 50
+    d.fol -= d.fol / 4
+    d.temple = max(0, d.temple - 1)
+    if !guard && chance(30) {
+        let circle = velo_consorts()
+        if len(circle) > 0 {
+            let p = circle[rint(0, len(circle) - 1)]
+            velo_leave(p, true)
+            return finish("La huida", "Huiste a las montañas con el Círculo. En la confusión, " + p.first + " se quedó atrás y se entregó a la policía.", "b")
+        }
+    }
+    return finish("La huida", "Huiste a las montañas con el Círculo. El templo quedó sellado, pero la Orden sigue viva.", "n")
+}
+
+function velo_eclipse(index: int) {
+    let d = vl()
+    if index == 1 {
+        d.doom = 70
+        L.karma += 10
+        return finish("El último momento", "Con el teléfono en la mano, no diste la señal. Los fieles no entienden por qué.", "n")
+    }
+    d.final = true
+    flag("eclipse")
+    L.karma -= 40
+    L.fame = 100
+    hito_me("Vida", "El Gran Eclipse")
+    list_push(G.toasts, {"head": "EL GRAN ECLIPSE", "title": "EL MUNDO VIEJO TERMINÓ", "sub": "El Velo Rojo cubre las ciudades", "t0": G.t})
+    return finish("El Gran Eclipse", "Esa noche se apagaron las pantallas del mundo. Gobiernos que se rinden, bolsas que no abren y, sobre cada ciudad, un velo rojo. El mundo que conocías terminó; empieza el tuyo.", "x")
+}
+
+// La reforma se completa sola cuando llegas al 100% y liberaste las mentes.
+function velo_check_final() {
+    let d = vl()
+    if d.path == "reforma" && !d.final && d.reform >= 100 && d.brain < 30 {
+        d.final = true
+        flag("dawn")
+        L.karma += 30
+        L.fame = 100
+        hito_me("Vida", "El Alba: cambiaste el mundo")
+        list_push(G.toasts, {"head": "EL ALBA", "title": "EL MUNDO CAMBIÓ", "sub": "La Orden del Velo Rojo, de culto a esperanza", "t0": G.t})
+        log_add("El Alba llegó: hospitales llenos de vida, escuelas abiertas, bosques donde había desierto. La Orden ya no lava mentes: las abre.", "g")
+    }
+    return null
+}
+
+function velo_mg_result(score: any, ctx: map) {
+    let d = vl()
+    let g = score / 6
+    d.fervor = clamp100(d.fervor + g)
+    d.fol += score * (1 + d.fol / 2000)
+    if score >= 90 { hito_once("velo_sermon", "Vida", "Un sermón legendario") }
+    if score < 40 { return finish("El gran sermón", "Te trabaste a mitad del sermón (" + str(score) + " puntos). Los fieles aplaudieron por compromiso.", "n") }
+    return finish("El gran sermón", "Tu sermón (" + str(score) + " puntos) hizo temblar el templo. Fervor +" + str(g) + ".", "x")
+}
+
+function velo_fx(out: list) {
+    if !velo_active() { return null }
+    let d = vl()
+    list_push(out, fx("profeta", cap_first(prophet_title()), true, "Miles de personas creen que hablas por algo más grande.", {"flirt": 6, "hap": 1}))
+    if d.heat >= 70 { list_push(out, fx("vigilancia", "En la mira", false, "La prensa y la fiscalía no te quitan los ojos de encima.", {"hap": -1, "hire": -10})) }
+    if len(velo_consorts()) >= VL_CIRCLE { list_push(out, fx("circulo", "El Círculo completo", true, "Doce consortes a tu lado.", {"hap": 1})) }
+    return null
+}

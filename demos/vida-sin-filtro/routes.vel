@@ -1,8 +1,10 @@
 // @edition 3
 // Rutas: una meta de vida que eliges al crear tu personaje. Cada ruta tiene etapas
 // (objetivos) que se cumplen solas al lograrlas y un menú propio con acciones.
-// Rutas: trono, presidencia, creador de contenido, filántropo espacial y tres rutas
-// +18 (escort, estrella del cine para adultos y VelvetFans). Las +18 empiezan a los 18.
+// Rutas: trono, presidencia, creador de contenido, filántropo espacial y cuatro rutas
+// +18 (escort, estrella del cine para adultos, VelvetFans y el profeta de la Orden
+// del Velo Rojo). Las +18 empiezan a los 18. La segunda capa de cada ruta vive en
+// corona.vel, politica.vel, contenido.vel, marte.vel, rutas18.vel y velo.vel.
 
 const ROUTES = [
     {"id": "normal", "n": "Vida normal", "short": "VIDA NORMAL", "adult": false,
@@ -20,7 +22,9 @@ const ROUTES = [
     {"id": "porno", "n": "Ruta de la estrella +18", "short": "ESTRELLA +18", "adult": true,
      "d": "+18. Desde los 18: rodajes, premios, fama y tu propio estudio de cine para adultos."},
     {"id": "fans", "n": "Ruta VelvetFans (+18)", "short": "VELVETFANS +18", "adult": true,
-     "d": "+18. Desde los 18: abre tu cuenta de contenido exclusivo, consigue suscriptores, ajusta tu precio y crea un imperio."}
+     "d": "+18. Desde los 18: abre tu cuenta de contenido exclusivo, consigue suscriptores, ajusta tu precio y crea un imperio."},
+    {"id": "profeta", "n": "Ruta del profeta: la Orden del Velo Rojo", "short": "VELO ROJO +18", "adult": true,
+     "d": "+18. Desde los 18 fundas un culto: fieles, doctrina, templo y el Círculo de los Doce, doce consortes que eliges uno por uno. El lavado de mente los mantiene fieles; tú decides si la Orden reforma el mundo o lo hunde."}
 ]
 
 const ROUTE_STAGES = {
@@ -82,6 +86,15 @@ const ROUTE_STAGES = {
         {"t": "10,000 suscriptores", "d": "Estás en el top de la plataforma.", "req": "fsubs10k"},
         {"t": "Top 1%", "d": "100 mil suscriptores.", "req": "fsubs100k"},
         {"t": "Imperio de fans", "d": "Funda tu agencia de creadores.", "req": "fans_agency"}
+    ],
+    "profeta": [
+        {"t": "La revelación", "d": "Funda la Orden del Velo Rojo (18+).", "req": "v_order"},
+        {"t": "Los primeros fieles", "d": "Reúne 100 fieles.", "req": "v_fol100"},
+        {"t": "El Círculo de los Doce", "d": "Desposa a tus doce consortes, uno por uno.", "req": "v_circle"},
+        {"t": "El templo", "d": "Construye el Templo del Velo.", "req": "v_temple"},
+        {"t": "La multitud", "d": "Llega a 10,000 fieles.", "req": "v_fol10k"},
+        {"t": "La elección", "d": "Elige el destino del mundo: la Reforma o el Ocaso.", "req": "v_path"},
+        {"t": "El final", "d": "Llega al Alba (reforma 100% y lavado bajo 30) o al Gran Eclipse.", "req": "v_final"}
     ]
 }
 
@@ -123,6 +136,10 @@ function route_setup() {
         L.rd = {"films": 0, "studio": false, "studio_films": 0, "tested": -1}
     } else if id == "fans" {
         L.rd = {"open": false, "subs": 0, "price": 10, "agency": false, "security": false}
+    } else if id == "profeta" {
+        L.rd = {"order": false, "fol": 0, "fervor": 50, "brain": 20, "heat": 0, "treasury": 0, "temple": 0, "doctrine": [],
+                "path": "", "reform": 0, "doom": 0, "done": [], "cands": [], "escaped": 0, "infidelities": 0, "final": false}
+        log_add("Desde niñ" + oa(L.gender) + " sientes que naciste para algo más grande. A los 18 lo sabrás.", "x")
     } else {
         L.rd = {}
     }
@@ -183,6 +200,13 @@ function route_check(req: string) {
     if req == "fsubs10k" { return d.subs >= 10000 }
     if req == "fsubs100k" { return d.subs >= 100000 }
     if req == "fans_agency" { return d.agency == true }
+    if req == "v_order" { return d.order == true }
+    if req == "v_fol100" { return d.fol >= 100 }
+    if req == "v_circle" { return has_flag("circle12") }
+    if req == "v_temple" { return d.temple >= 1 }
+    if req == "v_fol10k" { return d.fol >= 10000 }
+    if req == "v_path" { return d.path != "" }
+    if req == "v_final" { return d.final == true }
     return false
 }
 
@@ -194,6 +218,12 @@ function route_month() {
     if L.route == "creador" { creator_month() }
     if L.route == "fans" { fans_month() }
     if L.route == "escort" { escort_month() }
+    corona_month()
+    politica_month()
+    contenido_month()
+    marte_month()
+    velo_month()
+    rutas18_month()
     let st = route_stages()
     if L.rstage < len(st) && route_check(st[L.rstage].req) {
         let s = st[L.rstage]
@@ -212,7 +242,7 @@ function route_month() {
 
 function route_block() {
     if L.route == null || L.route == "normal" { return "Elegiste una vida sin guion. Para seguir una ruta, elígela al crear tu siguiente personaje." }
-    if route_is_adult() && L.age < 18 { return "Tu ruta empieza a los 18 años. Por ahora, vive tu infancia y tu adolescencia." }
+    if route_def(L.route).adult && L.age < 18 { return "Tu ruta empieza a los 18 años. Por ahora, vive tu infancia y tu adolescencia." }
     return ""
 }
 
@@ -220,25 +250,48 @@ function route_cats() {
     let id = L.route
     let d = L.rd
     if id == "rey" {
-        if d.king { return ["Objetivos", "Gobierno", "Leyes", "Corte"] }
+        if d.king { return ["Objetivos", "Gobierno", "Leyes", "Corte", "Consejo", "Diplomacia", "Herederos"] }
+        if d.regency == true { return ["Objetivos"] }
         return ["Objetivos", "Corte"]
     }
     if id == "presidente" {
-        if d.pres { return ["Objetivos", "Gobierno", "Leyes"] }
-        return ["Objetivos", "Campaña"]
+        if d.pres { return ["Objetivos", "Gobierno", "Leyes", "Gabinete", "Prensa"] }
+        if d.ex == true { return ["Objetivos", "Campaña", "Equipo", "Expresidente"] }
+        return ["Objetivos", "Campaña", "Equipo"]
     }
-    if id == "creador" || id == "fans" { return ["Objetivos", "Contenido", "Negocio"] }
-    if id == "filantropo" { return ["Objetivos", "Mina", "Empresas", "Espacio", "Filantropía"] }
-    if id == "escort" { return ["Objetivos", "Clientes", "Negocio"] }
-    if id == "porno" { return ["Objetivos", "Rodajes", "Negocio"] }
+    if id == "creador" { return ["Objetivos", "Contenido", "Formatos", "Negocio", "Equipo", "Canal"] }
+    if id == "fans" { return ["Objetivos", "Contenido", "Negocio", "Fans"] }
+    if id == "filantropo" { return ["Objetivos", "Mina", "Empresas", "TerraTech", "Espacio", "Marte", "Filantropía"] }
+    if id == "escort" { return ["Objetivos", "Clientes", "Negocio", "Agenda", "Agencia"] }
+    if id == "porno" { return ["Objetivos", "Rodajes", "Negocio", "Carrera"] }
+    if id == "profeta" { return velo_cats() }
     return ["Objetivos"]
 }
 
 function route_items(cat: string) {
     if cat == "Objetivos" { return objective_items() }
     let id = L.route
+    if id == "profeta" { return velo_items(cat) }
+    if id == "rey" && (cat == "Consejo" || cat == "Diplomacia" || cat == "Herederos") { return corona_items(cat) }
+    if id == "presidente" && (cat == "Equipo" || cat == "Gabinete" || cat == "Prensa" || cat == "Expresidente") { return politica_items(cat) }
+    if id == "creador" && (cat == "Formatos" || cat == "Equipo" || cat == "Canal") { return contenido_items(cat) }
+    if id == "filantropo" && (cat == "TerraTech" || cat == "Marte") { return marte_items(cat) }
+    if id == "escort" && (cat == "Agenda" || cat == "Agencia") { return escort_extra_items(cat) }
+    if id == "porno" && cat == "Carrera" { return porno_extra_items(cat) }
+    if id == "fans" && cat == "Fans" { return fans_extra_items(cat) }
     if id == "rey" || id == "presidente" { return realm_items(cat) }
-    if id == "filantropo" { return space_items(cat) }
+    if id == "filantropo" {
+        let base = space_items(cat)
+        if cat == "Mina" || cat == "Filantropía" {
+            for it in marte_items(cat) { list_push(base, it) }
+        }
+        return base
+    }
+    if id == "creador" && cat == "Negocio" {
+        let base = creator_items(cat)
+        for it in contenido_items(cat) { list_push(base, it) }
+        return base
+    }
     if id == "creador" { return creator_items(cat) }
     if id == "fans" { return fans_items(cat) }
     if id == "escort" { return escort_items(cat) }
@@ -269,6 +322,7 @@ function route_status() {
     let id = L.route
     if id == "rey" {
         if d.king { return "Reinas desde hace " + str(d.reign_m) + " meses." }
+        if d.regency == true { return "Regencia: te coronan a los 18." }
         return "Influencia " + str(d.inf) + " · aliados " + str(d.allies) + "."
     }
     if id == "presidente" {
@@ -282,6 +336,7 @@ function route_status() {
     if id == "escort" { return "Clientes: " + str(d.clients) + " · tarifa " + money_str(d.rate) + "." }
     if id == "porno" { return "Películas: " + str(d.films) + "." }
     if id == "filantropo" { return "Mina nivel " + str(d.mine) + " · investigación " + str(d.rnd) + "%." }
+    if id == "profeta" { return velo_status() }
     return ""
 }
 
@@ -584,7 +639,7 @@ function fans_month() {
     let churn = 2 + d.price / 10
     d.subs -= d.subs * churn / 100
     if d.price <= 10 { d.subs += rint(0, 10) + d.subs / 50 }
-    if !d.security && d.subs >= 500 && chance(4) {
+    if !d.security && d.subs >= 500 && rint(1, 2500) <= 100 * fans_leak_mult() / 100 {
         L.happy -= 12
         hito_once("leak", "Vida", "Filtraron tu contenido")
         log_add("Alguien filtró tu contenido exclusivo en un foro. Te sientes expuest" + oa(L.gender) + ".", "b")
@@ -653,8 +708,8 @@ function escort_action(id: string) {
         let msg = "Cita con un cliente discreto. Cobraste " + money_str(pay) + "."
         L.money += pay
         L.partners += 1
-        if chance(6 * (100 + fx_sum("its")) / 100) { msg = msg + catch_its_random() }
-        if !d.security && chance(5) {
+        if chance(6 * (100 + fx_sum("its")) / 100 * escort_its_mult() / 100) { msg = msg + catch_its_random() }
+        if !d.security && rint(1, 2000) <= 100 * escort_risk_mult() / 100 {
             L.money -= pay
             L.health -= 10
             L.happy -= 15
@@ -662,6 +717,7 @@ function escort_action(id: string) {
             hito_once("escort_scare", "Vida", "Un cliente peligroso")
             return finish("Escort", msg, "b")
         }
+        msg = msg + escort_after_client()
         return finish("Escort", msg, "x")
     }
     if id == "evip" {
@@ -769,6 +825,12 @@ function porno_scene_result(score: any) {
     let d = L.rd
     d.films += 1
     let pay = 3000 + score * 80 + L.fame * 100
+    let x = x8()
+    if x.contract != null {
+        pay = pay * studio_def(x.contract).pay / 100
+        L.fame = clamp100(L.fame + studio_def(x.contract).fame / 2)
+    }
+    if len(x.costars) > 0 && x.costars[len(x.costars) - 1].chem >= 70 { pay = pay * 12 / 10 }
     L.money += pay
     L.fame = clamp100(L.fame + score / 25)
     career_xp(score / 2)
@@ -781,4 +843,16 @@ function porno_scene_result(score: any) {
         hito_me("Trabajo", "Ganaste el Premio Terciopelo Rojo")
     }
     return finish("Rodaje", msg, "x")
+}
+
+// Eventos de las rutas (desde advance_month).
+function maybe_route_event() {
+    if L.route == null || L.route == "normal" { return false }
+    if maybe_velo_event() { return true }
+    if corona_event() { return true }
+    if politica_event() { return true }
+    if contenido_event() { return true }
+    if marte_event() { return true }
+    if rutas18_event() { return true }
+    return false
 }

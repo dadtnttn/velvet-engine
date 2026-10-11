@@ -206,7 +206,7 @@ function space_action(id: string) {
 
 function launch_result(score: any, ctx: map) {
     let d = L.rd
-    let odds = 35 + score * 6 / 10
+    let odds = 35 + score * 6 / 10 + astro_bonus()
     if chance(odds) {
         if d.station {
             d.mars_done = true
