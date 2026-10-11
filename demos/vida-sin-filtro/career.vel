@@ -263,7 +263,22 @@ const MISSIONS = [
     {"id": "parents_bless", "t": "Con su bendición", "d": "Logra que tus padres devotos acepten a tu pareja.", "r": "Felicidad", "reward": {"happy": 8}},
     {"id": "arranged", "t": "Cosas de familia", "d": "Empieza una relación con alguien que te presentaron tus padres.", "r": "Amabilidad", "reward": {"kind": 3}},
     {"id": "casa_llena", "t": "Casa llena", "d": "Ten 3 cónyuges al mismo tiempo.", "r": "Felicidad", "reward": {"happy": 8}},
-    {"id": "sect_escape", "t": "Libre", "d": "Sal de una secta.", "r": "Valor", "reward": {"guts": 6}}
+    {"id": "sect_escape", "t": "Libre", "d": "Sal de una secta.", "r": "Valor", "reward": {"guts": 6}},
+    // Rutas
+    {"id": "circle12", "t": "El Círculo de los Doce", "d": "Completa el Círculo de la Orden del Velo Rojo.", "r": "Encanto", "reward": {"charm": 8}},
+    {"id": "dawn", "t": "El Alba", "d": "Usa la Orden del Velo Rojo para reformar el mundo.", "r": "Amabilidad", "reward": {"kind": 15}},
+    {"id": "eclipse", "t": "El Gran Eclipse", "d": "Hunde el mundo viejo bajo el Velo Rojo.", "r": "Valor", "reward": {"guts": 15}},
+    {"id": "freed_circle", "t": "Mentes libres", "d": "Libera a tus consortes del lavado de mente.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "conqueror", "t": "Conquistador", "d": "Gana 3 guerras como monarca.", "r": "Valor", "reward": {"guts": 8}},
+    {"id": "dynasty_crown", "t": "La corona sigue", "d": "Hereda el trono de tu padre o tu madre.", "r": "Encanto", "reward": {"charm": 6}},
+    {"id": "abdicated", "t": "Paso al costado", "d": "Abdica en tu heredero.", "r": "Felicidad", "reward": {"happy": 8}},
+    {"id": "debate_win", "t": "Ganaste el debate", "d": "Arrasa en un debate cara a cara contra tu rival.", "r": "Encanto", "reward": {"charm": 5}},
+    {"id": "creator_award", "t": "Creador del año", "d": "Gana un Premio Velvet Creators.", "r": "+$20,000", "reward": {"money": 20000}},
+    {"id": "mars_city", "t": "Ciudad marciana", "d": "Lleva tu colonia de Marte a 1,000 habitantes.", "r": "Conocimiento", "reward": {"know": 8}},
+    {"id": "terraform", "t": "Cielo menos rojo", "d": "Terraforma Marte al 20%.", "r": "Conocimiento", "reward": {"know": 6}},
+    {"id": "pledge", "t": "La Promesa de Dar", "d": "Dona la mitad de tu fortuna en vida.", "r": "Amabilidad", "reward": {"kind": 10}},
+    {"id": "crossover", "t": "Del +18 al cine", "d": "Consigue un papel en el cine convencional.", "r": "Encanto", "reward": {"charm": 5}},
+    {"id": "director18", "t": "Detrás de cámara", "d": "Dirige una escena en el cine para adultos.", "r": "Destreza", "reward": {"skill": 5}}
 ]
 
 const MISSION_CAT_ORDER = ["Estudios", "Trabajo", "Amor y familia", "Dinero", "Vida"]
@@ -286,7 +301,10 @@ const MISSION_CATS = {
     "crash_survivor": "Dinero", "ipo_win": "Dinero", "paper_ace": "Dinero", "vip_gold": "Dinero", "royal_flush": "Dinero",
     "card_counter": "Dinero", "longshot": "Dinero", "garage": "Dinero", "jet_set": "Dinero", "landlord": "Dinero",
     "art_collector": "Dinero", "staff5": "Dinero", "island": "Dinero",
-    "parents_bless": "Amor y familia", "arranged": "Amor y familia", "casa_llena": "Amor y familia"
+    "parents_bless": "Amor y familia", "arranged": "Amor y familia", "casa_llena": "Amor y familia",
+    "circle12": "Trabajo", "dawn": "Trabajo", "eclipse": "Trabajo", "freed_circle": "Amor y familia", "conqueror": "Trabajo",
+    "dynasty_crown": "Trabajo", "abdicated": "Trabajo", "debate_win": "Trabajo", "creator_award": "Trabajo", "mars_city": "Trabajo",
+    "terraform": "Trabajo", "pledge": "Dinero", "crossover": "Trabajo", "director18": "Trabajo"
 }
 
 function flag(name: string) {

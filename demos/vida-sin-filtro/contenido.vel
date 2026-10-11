@@ -1,0 +1,536 @@
+// @edition 3
+// Contenido: la segunda capa de la ruta del creador.
+// - Energía: crear cansa; sin descanso llega el agotamiento (burnout).
+// - Reputación: decide cuánto pagan las marcas; las polémicas la gastan.
+// - Formatos: tutorial, vlog, reacción (cuidado con los derechos de autor),
+//   reto, documental, podcast y maratón en vivo.
+// - Plataformas: VelvetTube, Flash (videos cortos) y Velvetgram.
+// - Equipo: editor, community manager, representante y diseñador de miniaturas.
+// - Marcas: ofertas que eliges (algunas dudosas), mercancía, curso, libro, serie,
+//   casa de creadores y gira de shows.
+// - Tres strikes de derechos de autor y te borran el canal; canal de respaldo.
+// - Premios Velvet Creators cada diciembre y eventos: trolls, doxxing, fans,
+//   tendencias, desmonetización, pleitos con otros creadores.
+// Los menores de 18 solo reciben marcas aptas para su edad.
+// Acciones con el prefijo "cc:" y elecciones "cc_".
+
+const PLATFORMS = [
+    {"id": "tube", "n": "VelvetTube", "d": "Videos largos: crecer cuesta, pero cada seguidor vale más."},
+    {"id": "flash", "n": "Flash", "d": "Videos cortos: creces rapidísimo, pero pagan poco y se olvidan rápido."},
+    {"id": "gram", "n": "Velvetgram", "d": "Fotos e historias: las marcas aman esta plataforma."}
+]
+
+const FORMATS = [
+    {"id": "tutorial", "n": "Tutorial", "e": 15, "g": 90, "rep": 2, "d": "Enseñas algo útil. Crecimiento estable y buena reputación."},
+    {"id": "vlog", "n": "Vlog", "e": 10, "g": 80, "rep": 1, "d": "Tu día a día. A la gente le encanta conocerte."},
+    {"id": "reaccion", "n": "Video de reacción", "e": 5, "g": 100, "rep": -1, "d": "Rápido y barato. Riesgo de reclamo por derechos de autor."},
+    {"id": "reto", "n": "Reto extremo", "e": 20, "g": 130, "rep": 0, "d": "Mucho riesgo, posibilidad de volverse viral... o de lastimarte."},
+    {"id": "docu", "n": "Documental", "e": 35, "g": 160, "rep": 5, "d": "Semanas de trabajo. Prestigio y premios."},
+    {"id": "maraton", "n": "Maratón de 24 horas en vivo", "e": 45, "g": 120, "rep": 2, "d": "Un día entero en vivo. Donaciones enormes, cansancio enorme."}
+]
+
+const TEAM = [
+    {"id": "editor", "n": "Editor de video", "c": 3000, "d": "Tus videos rinden 25% más y te cansas menos."},
+    {"id": "cm", "n": "Community manager", "c": 2000, "d": "Cuida tus comentarios: tu reputación sube poco a poco."},
+    {"id": "manager", "n": "Representante", "c": 5000, "d": "Negocia con las marcas: pagan 30% más."},
+    {"id": "thumbs", "n": "Diseñador de miniaturas", "c": 1000, "d": "Miniaturas irresistibles: más vistas."}
+]
+
+const SPONSORS = [
+    {"id": "vpn", "n": "Una VPN segura", "mult": 100, "rep": 0, "adult": false, "scam": 0},
+    {"id": "snacks", "n": "Una marca de botanas", "mult": 90, "rep": 1, "adult": false, "scam": 0},
+    {"id": "juego", "n": "Un videojuego nuevo", "mult": 110, "rep": 1, "adult": false, "scam": 0},
+    {"id": "app", "n": "Una app de idiomas", "mult": 80, "rep": 2, "adult": false, "scam": 0},
+    {"id": "apuestas", "n": "Una casa de apuestas", "mult": 220, "rep": -8, "adult": true, "scam": 0},
+    {"id": "cripto", "n": "Una cripto «revolucionaria»", "mult": 300, "rep": -4, "adult": true, "scam": 45},
+    {"id": "suplementos", "n": "Suplementos milagro", "mult": 180, "rep": -6, "adult": true, "scam": 20},
+    {"id": "moda", "n": "Una marca de moda", "mult": 140, "rep": 2, "adult": false, "scam": 0}
+]
+
+// ---------------------------------------------------------------- estado
+
+function cc() {
+    let d = L.rd
+    if d.energy == null { d.energy = 100 }
+    if d.rep == null { d.rep = 55 }
+    if d.platform == null { d.platform = "tube" }
+    if d.team == null { d.team = [] }
+    if d.strikes == null { d.strikes = 0 }
+    if d.awards == null { d.awards = 0 }
+    if d.formats == null { d.formats = {} }
+    return d
+}
+
+function platform_def(id: string) {
+    for p in PLATFORMS {
+        if p.id == id { return p }
+    }
+    return PLATFORMS[0]
+}
+
+function has_team(id: string) {
+    return list_contains(cc().team, id)
+}
+
+function team_def(id: string) {
+    for t in TEAM {
+        if t.id == id { return t }
+    }
+    return TEAM[0]
+}
+
+function citem_c(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["cc_" + id] != null { l = "Este mes ya" }
+    return {"action": "cc:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function cc_use(id: string) {
+    if L.used["cc_" + id] != null { return false }
+    L.used["cc_" + id] = 1
+    return true
+}
+
+function cc_energy_word() {
+    let e = cc().energy
+    if e >= 70 { return "con energía" }
+    if e >= 40 { return "cansad" + oa(L.gender) }
+    if e >= 20 { return "agotad" + oa(L.gender) }
+    return "al borde del burnout"
+}
+
+// ---------------------------------------------------------------- menús
+
+function contenido_items(cat: string) {
+    let d = cc()
+    let items = []
+    let young = ""
+    if L.age < 13 { young = "Edad 13" }
+    if cat == "Formatos" {
+        list_push(items, dninfo("Energía: " + str(d.energy) + "%", cc_energy_word(), "Cada formato cansa distinto. Recuperas energía cada mes; si llegas a cero, el burnout te obliga a parar."))
+        for f in FORMATS {
+            let l = young
+            if l == "" && d.energy < f.e { l = "Energía " + str(f.e) }
+            if f.id == "maraton" && d.subs < 10000 && l == "" { l = "10 mil seguidores" }
+            list_push(items, citem_c("fmt:" + f.id, f.n, "Energía −" + str(f.e), f.d, l))
+        }
+        let pl = young
+        if pl == "" && d.podcast != true && L.money < 20000 { pl = "$20,000" }
+        if d.podcast == true { pl = "" }
+        list_push(items, {"action": "cc:podcast", "t": if_str(d.podcast == true, "Tu podcast (al aire)", "Lanzar un podcast"), "s": if_str(d.podcast == true, "Ingresos cada mes", "$20,000 de equipo"), "desc": "Micrófonos, invitados y charlas largas. Cada mes te da seguidores y patrocinios.", "lock": if_str(d.podcast == true, "Al aire", pl)})
+        return items
+    }
+    if cat == "Canal" {
+        let p = platform_def(d.platform)
+        list_push(items, dninfo("Plataforma principal: " + p.n, "Reputación " + str(d.rep), p.d + " Strikes de derechos de autor: " + str(d.strikes) + "/3. Premios: " + str(d.awards) + "."))
+        for x in PLATFORMS {
+            if x.id != d.platform { list_push(items, {"action": "cc:plat:" + x.id, "t": "Cambiar a " + x.n, "s": "Plataforma principal", "desc": x.d + " Al cambiar pierdes 10% de tus seguidores.", "lock": young}) }
+        }
+        list_push(items, citem_c("rest", "Vacaciones sin internet", "Energía +50", "Dos semanas lejos de todo. Tus seguidores bajan un poco.", ""))
+        list_push(items, citem_c("meetup", "Encuentro con fans", "Reputación, seguidores", "Una tarde de fotos, abrazos y regalos hechos a mano.", if_str(d.subs < 5000, "5 mil seguidores", young)))
+        list_push(items, citem_c("apology", "Video de disculpa", "Reputación +", "Fondo blanco, suéter gris y voz baja. A veces funciona.", if_str(d.rep >= 60, "No hace falta", young)))
+        if d.deleted == true { list_push(items, citem_c("backup", "Abrir un canal de respaldo", "Empezar de nuevo", "Te borraron el canal. Tus fans más fieles te siguen al nuevo.", "")) }
+        return items
+    }
+    if cat == "Equipo" {
+        for t in TEAM {
+            let on = has_team(t.id)
+            let l = young
+            if !on && d.subs < 5000 && l == "" { l = "5 mil seguidores" }
+            list_push(items, {"action": "cc:team:" + t.id, "t": t.n, "s": if_str(on, "TRABAJA CONTIGO · despedir", money_str(t.c) + "/mes"), "desc": t.d, "lock": if_str(on, "", l)})
+        }
+        return items
+    }
+    // Negocio (extras)
+    list_push(items, citem_c("deal", "Revisar ofertas de marcas", "Elegir patrocinio", "Tres marcas quieren trabajar contigo. Algunas pagan más... por algo.", if_str(d.subs < 5000, "5 mil seguidores", young)))
+    list_push(items, {"action": "cc:course", "t": "Lanzar un curso en línea", "s": "Ingresos cada mes", "desc": "Enseña lo que sabes. Ventas según tu reputación.", "lock": if_str(d.course == true, "Ya lo tienes", if_str(d.subs < 100000, "100 mil seguidores", young))})
+    list_push(items, {"action": "cc:book", "t": "Escribir un libro", "s": "Adelanto", "desc": "Tu historia en papel. Gira de firmas incluida.", "lock": if_str(d.book == true, "Ya lo escribiste", if_str(d.subs < 500000, "500 mil seguidores", young))})
+    list_push(items, {"action": "cc:show", "t": "Tu propia serie", "s": "Fama", "desc": "Una plataforma de streaming te ofrece una temporada.", "lock": if_str(d.show == true, "Ya la tienes", if_str(d.subs < 2000000, "2 millones", young))})
+    list_push(items, {"action": "cc:house", "t": "Abrir una casa de creadores", "s": "$2,000,000", "desc": "Una mansión llena de creadores: colaboraciones todos los días.", "lock": if_str(d.house == true, "Ya la tienes", if_str(L.money < 2000000, "$2,000,000", if_str(L.age < 18, "Edad 18", "")))})
+    list_push(items, citem_c("tour", "Gira de shows en vivo", "Dinero · energía −30", "Teatros llenos en diez ciudades.", if_str(d.subs < 1000000, "1 millón", if_str(d.energy < 30, "Energía 30", young))))
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function contenido_action(action: string) {
+    G.modal = null
+    if L.route != "creador" || L.age < 13 { return null }
+    let d = cc()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    match cmd {
+        "fmt" => {
+            let f = null
+            for x in FORMATS {
+                if x.id == arg { f = x }
+            }
+            if f == null || d.energy < f.e || !cc_use("fmt:" + arg) { return null }
+            let cost = f.e
+            if has_team("editor") { cost = cost * 3 / 4 }
+            d.energy = max(0, d.energy - cost)
+            d.formats[arg] = map_get(d.formats, arg, 0) + 1
+            let mult = 100
+            if has_team("editor") { mult += 25 }
+            if has_team("thumbs") { mult += 10 }
+            if d.platform == "flash" { mult += 30 }
+            let g = (f.g * (20 + d.subs / 1500) / 10) * mult / 100 + rint(10, 60)
+            d.rep = clamp100(d.rep + f.rep)
+            d.videos += 1
+            let msg = ""
+            if arg == "reaccion" && chance(20) {
+                d.strikes += 1
+                msg = " Un estudio reclamó los derechos del video: strike " + str(d.strikes) + " de 3."
+                if d.strikes >= 3 { return cc_delete_channel() }
+            }
+            if arg == "reto" && chance(15) {
+                L.health -= 12
+                d.rep = clamp100(d.rep - 4)
+                return finish(f.n, "El reto salió mal: terminaste en urgencias. El video sí tuvo muchas vistas.", "b")
+            }
+            if arg == "maraton" {
+                let tips = d.subs / 100 + rint(2, 10) * 1000
+                L.money += tips
+                L.health -= 3
+                msg = " Donaciones: " + money_str(tips) + "."
+            }
+            if arg == "docu" { L.fame = clamp100(L.fame + 3) }
+            if (arg == "reto" || arg == "docu") && chance(10) {
+                g = g * 8
+                L.fame = clamp100(L.fame + 6)
+                hito_once("viral", "Vida", "Tu primer video viral")
+                msg = msg + " ¡Se hizo viral!"
+            }
+            d.subs += g
+            return finish(f.n, "Publicaste un " + str_lower(f.n) + ". +" + big_num(g) + " seguidores." + msg, "g")
+        }
+        "podcast" => {
+            if d.podcast == true || L.money < 20000 { return null }
+            L.money -= 20000
+            d.podcast = true
+            hito_once("podcast", "Trabajo", "Lanzaste tu podcast")
+            return finish("Podcast", "Grabaste el primer episodio con un invitado sorpresa. Ya está al aire.", "g")
+        }
+        "plat" => {
+            d.platform = arg
+            d.subs -= d.subs / 10
+            return finish("Plataforma", "Ahora tu casa principal es " + platform_def(arg).n + ".", "n")
+        }
+        "rest" => {
+            if !cc_use("rest") { return null }
+            d.energy = clamp100(d.energy + 50)
+            d.subs -= d.subs / 40
+            L.happy += 6
+            return finish("Vacaciones", "Dos semanas sin internet. Volviste con ideas y ojeras de menos.", "g")
+        }
+        "meetup" => {
+            if !cc_use("meetup") { return null }
+            d.rep = clamp100(d.rep + 4)
+            d.subs += d.subs / 50 + 200
+            L.happy += 5
+            return finish("Encuentro con fans", "Una fila de tres cuadras. Una niña te regaló un dibujo tuyo que vas a enmarcar.", "g")
+        }
+        "apology" => {
+            if !cc_use("apology") { return null }
+            if chance(45 + rank("charm") * 6) {
+                d.rep = clamp100(d.rep + 12)
+                return finish("Disculpa", "Tu disculpa sonó sincera. La gente te dio otra oportunidad.", "g")
+            }
+            d.rep = clamp100(d.rep - 4)
+            return finish("Disculpa", "Te acusaron de leer un guion. La disculpa también fue meme.", "b")
+        }
+        "backup" => {
+            if d.deleted != true || !cc_use("backup") { return null }
+            d.deleted = false
+            d.strikes = 0
+            d.subs = map_get(d, "subs_before", 0) / 3
+            return finish("Canal de respaldo", "Abriste un canal nuevo. " + big_num(d.subs) + " fans fieles te siguieron.", "g")
+        }
+        "team" => {
+            let t = team_def(arg)
+            if has_team(arg) {
+                let keep = []
+                for id in d.team {
+                    if id != arg { list_push(keep, id) }
+                }
+                d.team = keep
+                return finish("Equipo", "Despediste a tu " + str_lower(t.n) + ".", "n")
+            }
+            if d.subs < 5000 { return null }
+            list_push(d.team, arg)
+            return finish("Equipo", "Contrataste un " + str_lower(t.n) + " por " + money_str(t.c) + " al mes.", "g")
+        }
+        "deal" => {
+            if !cc_use("deal") { return null }
+            let pool = []
+            for s in SPONSORS {
+                if !(s.adult && L.age < 18) { list_push(pool, s) }
+            }
+            shuffle(G.rng, pool)
+            let offers = list_slice(pool, 0, 3)
+            let labels = []
+            for s in offers { list_push(labels, s.n + " (" + money_str(cc_sponsor_pay(s)) + ")") }
+            list_push(labels, "Rechazar todas")
+            return open_choice("OFERTAS DE MARCAS", "Tu bandeja de entrada tiene tres ofertas. Reputación actual: " + str(d.rep) + ".", labels, ["", "", "", ""], "cc_deal", {"offers": offers})
+        }
+        "course" => {
+            if d.course == true || d.subs < 100000 { return null }
+            d.course = true
+            hito_once("course", "Trabajo", "Lanzaste tu curso en línea")
+            return finish("Curso", "Tu curso se lanzó con miles de alumnos inscritos.", "g")
+        }
+        "book" => {
+            if d.book == true || d.subs < 500000 { return null }
+            d.book = true
+            let m = d.subs / 5 + 100000
+            L.money += m
+            L.fame = clamp100(L.fame + 4)
+            hito_me("Trabajo", "Publicaste tu libro")
+            return finish("Libro", "Tu libro fue el más vendido de la feria. Adelanto: " + money_str(m) + ".", "g")
+        }
+        "show" => {
+            if d.show == true || d.subs < 2000000 { return null }
+            d.show = true
+            L.money += 2000000
+            L.fame = clamp100(L.fame + 10)
+            hito_me("Trabajo", "Estrenaste tu propia serie")
+            return finish("Tu serie", "Tu serie se estrenó en una plataforma de streaming. Primera temporada: $2,000,000.", "g")
+        }
+        "house" => {
+            if d.house == true || L.money < 2000000 || L.age < 18 { return null }
+            L.money -= 2000000
+            d.house = true
+            hito_me("Trabajo", "Abriste tu casa de creadores")
+            return finish("Casa de creadores", "Ocho creadores se mudaron a tu mansión. Hay cámaras hasta en la cocina.", "g")
+        }
+        "tour" => {
+            if d.subs < 1000000 || d.energy < 30 || !cc_use("tour") { return null }
+            d.energy -= 30
+            let m = d.subs / 10 + 200000
+            L.money += m
+            L.fame = clamp100(L.fame + 3)
+            return finish("Gira", "Diez ciudades, teatros llenos y tu nombre en las marquesinas. Ganaste " + money_str(m) + ".", "g")
+        }
+        _ => return null
+    }
+}
+
+function cc_sponsor_pay(s: map) {
+    let d = cc()
+    let pay = (d.subs / 40 + 1000) * s.mult / 100 * (50 + d.rep) / 100
+    if has_team("manager") { pay = pay * 13 / 10 }
+    if d.platform == "gram" { pay = pay * 12 / 10 }
+    return pay
+}
+
+function cc_delete_channel() {
+    let d = cc()
+    d.deleted = true
+    d.subs_before = d.subs
+    d.subs = 0
+    L.happy -= 25
+    hito_me("Trabajo", "Te borraron el canal")
+    return finish("Canal eliminado", "Tercer strike: la plataforma borró tu canal con todos tus videos. Años de trabajo, desaparecidos.", "b")
+}
+
+function contenido_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = cc()
+    match handler {
+        "cc_deal" => {
+            if index >= len(ctx.offers) { return finish("Marcas", "Rechazaste todas. Tu integridad no está en venta (este mes).", "n") }
+            let s = ctx.offers[index]
+            let pay = cc_sponsor_pay(s)
+            L.money += pay
+            d.rep = clamp100(d.rep + s.rep)
+            if s.scam > 0 && chance(s.scam) {
+                d.rep = clamp100(d.rep - 20)
+                d.subs -= d.subs / 6
+                hito_once("scam_sponsor", "Trabajo", "Promocionaste una estafa")
+                return finish("Patrocinio", "Cobraste " + money_str(pay) + ", pero " + str_lower(s.n) + " resultó ser una estafa. Tus seguidores perdieron dinero y te culpan a ti.", "b")
+            }
+            return finish("Patrocinio", "Cerraste el trato con " + str_lower(s.n) + ": " + money_str(pay) + ".", "g")
+        }
+        "cc_ev" => return contenido_event_choice(index, ctx)
+        _ => return null
+    }
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function contenido_month() {
+    if L.route != "creador" || L.age < 13 { return null }
+    let d = cc()
+    d.energy = clamp100(d.energy + 20)
+    if d.energy <= 5 && d.burnout_age != L.age {
+        d.burnout_age = L.age
+        L.happy -= 15
+        L.health -= 5
+        d.energy = 40
+        d.subs -= d.subs / 20
+        hito_once("burnout_creator", "Salud", "Burnout de creador")
+        log_add("Burnout: un día no pudiste levantarte de la cama. Tuviste que parar un mes entero.", "b")
+    }
+    let cost = 0
+    for id in d.team { cost += team_def(id).c }
+    if cost > 0 { L.money -= cost }
+    if has_team("cm") && chance(40) { d.rep = clamp100(d.rep + 1) }
+    if d.podcast == true {
+        L.money += 2000 + d.subs / 200
+        d.subs += rint(50, 300) + d.subs / 300
+    }
+    if d.course == true { L.money += d.subs / 100 * d.rep / 50 }
+    if d.house == true && chance(40) { d.subs += d.subs / 80 }
+    if d.platform == "flash" { d.subs -= d.subs / 100 }
+    if d.rep < 50 && chance(30) { d.rep += 1 }
+    // Premios Velvet Creators (diciembre)
+    if month_name() == "Diciembre" && d.subs >= 1000000 && d.award_age != L.age {
+        d.award_age = L.age
+        if chance(20 + d.rep / 3 + map_get(d.formats, "docu", 0) * 5) {
+            d.awards += 1
+            L.fame = clamp100(L.fame + 8)
+            flag("creator_award")
+            hito_me("Trabajo", "Ganaste un Premio Velvet Creators")
+            list_push(G.toasts, {"head": "PREMIOS VELVET CREATORS", "title": "¡GANASTE!", "sub": "Creador" + by_gender(L.gender, "", "a") + " del año", "t0": G.t})
+        } else {
+            log_add("Estuviste nominad" + oa(L.gender) + " en los Premios Velvet Creators, pero ganó otr" + oa(L.gender) + ".", "n")
+        }
+    }
+    return null
+}
+
+function contenido_event() {
+    if L.route != "creador" || L.age < 13 || G.modal != null || cc().subs < 1000 || !chance(5) { return false }
+    let r = rint(1, 6)
+    if r == 1 {
+        open_choice("LOS TROLLS", "Un grupo de trolls inunda tus comentarios con insultos coordinados.", ["Ignorarlos", "Responderles con humor", "Desactivar los comentarios una semana"], ["", "", ""], "cc_ev", {"kind": "trolls"})
+        return true
+    }
+    if r == 2 && L.age >= 16 {
+        open_choice("DOXXING", "Alguien publicó la dirección de tu casa en un foro.", ["Mudarte ($20,000)", "Contratar seguridad ($5,000)", "Hacer un video pidiendo respeto"], [if_str(L.money < 20000, "$20,000", ""), if_str(L.money < 5000, "$5,000", ""), ""], "cc_ev", {"kind": "dox"})
+        return true
+    }
+    if r == 3 {
+        open_choice("TENDENCIA", "Hay una tendencia nueva que todos están haciendo. Si te subes hoy, puedes volar.", ["Subirte a la tendencia", "Crear tu propia versión", "Pasar"], ["", "", ""], "cc_ev", {"kind": "trend"})
+        return true
+    }
+    if r == 4 {
+        open_choice("PLEITO ENTRE CREADORES", "Otro creador te acusa de copiar su idea en un video con millones de vistas.", ["Responder con pruebas", "Proponer una colaboración", "Ignorarlo"], ["", "", ""], "cc_ev", {"kind": "beef"})
+        return true
+    }
+    if r == 5 {
+        open_choice("DESMONETIZACIÓN", "La plataforma cambió sus reglas: la mitad de tus videos ya no generan dinero.", ["Adaptar tu contenido", "Quejarte públicamente", "Moverte a otra plataforma"], ["", "", ""], "cc_ev", {"kind": "demon"})
+        return true
+    }
+    open_choice("UN FAN ESPECIAL", "Un fan con una enfermedad grave te escribe: su sueño es conocerte.", ["Visitarlo en el hospital", "Mandarle un video personalizado", "No contestar"], ["", "", ""], "cc_ev", {"kind": "fan"})
+    return true
+}
+
+function contenido_event_choice(index: int, ctx: map) {
+    let d = cc()
+    match ctx.kind {
+        "trolls" => {
+            if index == 0 {
+                L.happy -= 4
+                return finish("Trolls", "Se aburrieron en una semana. Tú no dormiste bien.", "n")
+            }
+            if index == 1 {
+                if chance(50 + rank("charm") * 5) {
+                    d.subs += d.subs / 30
+                    d.rep = clamp100(d.rep + 3)
+                    return finish("Trolls", "Tu respuesta fue más viral que sus insultos.", "g")
+                }
+                d.rep = clamp100(d.rep - 3)
+                return finish("Trolls", "Te picaron y contestaste de más. Ahora hay capturas.", "b")
+            }
+            L.happy += 2
+            return finish("Trolls", "Una semana sin comentarios. Silencio bendito.", "n")
+        }
+        "dox" => {
+            if index == 0 {
+                L.money -= 20000
+                return finish("Doxxing", "Te mudaste en secreto. Esta vez nadie sabe dónde vives.", "n")
+            }
+            if index == 1 {
+                L.money -= 5000
+                return finish("Doxxing", "Un guardia en la puerta y cámaras nuevas. Duermes un poco mejor.", "n")
+            }
+            d.rep = clamp100(d.rep + 3)
+            L.happy -= 6
+            return finish("Doxxing", "Tu comunidad reportó el foro hasta que lo cerraron. Aun así, da miedo.", "n")
+        }
+        "trend" => {
+            if index == 0 {
+                d.subs += d.subs / 15 + 500
+                return finish("Tendencia", "Llegaste a tiempo. +" + big_num(d.subs / 15 + 500) + " seguidores.", "g")
+            }
+            if index == 1 {
+                if chance(35) {
+                    d.subs += d.subs / 4
+                    hito_once("trend_creator", "Trabajo", "Creaste una tendencia")
+                    return finish("Tendencia", "Tu versión se volvió la tendencia. Todos copian la tuya.", "g")
+                }
+                return finish("Tendencia", "Tu versión era demasiado rara. Pasó sin pena ni gloria.", "n")
+            }
+            return finish("Tendencia", "La dejaste pasar.", "n")
+        }
+        "beef" => {
+            if index == 0 {
+                d.rep = clamp100(d.rep + 4)
+                d.subs += d.subs / 40
+                return finish("Pleito", "Tus pruebas eran claras. Él borró su video.", "g")
+            }
+            if index == 1 {
+                d.subs += d.subs / 12
+                return finish("Pleito", "Hicieron un video juntos riéndose del pleito. Ambos ganaron.", "g")
+            }
+            d.rep = clamp100(d.rep - 4)
+            return finish("Pleito", "El silencio pareció culpa.", "b")
+        }
+        "demon" => {
+            if index == 0 {
+                d.energy = max(0, d.energy - 15)
+                return finish("Desmonetización", "Rehiciste tus formatos. Costó trabajo, pero funcionó.", "n")
+            }
+            if index == 1 {
+                if chance(40) {
+                    d.rep = clamp100(d.rep + 5)
+                    return finish("Desmonetización", "Otros creadores se unieron a tu queja. La plataforma dio marcha atrás.", "g")
+                }
+                L.money -= d.subs / 50
+                return finish("Desmonetización", "La plataforma ni te contestó. Perdiste ingresos ese mes.", "b")
+            }
+            let nxt = "tube"
+            if d.platform == "tube" { nxt = "gram" }
+            d.platform = nxt
+            d.subs -= d.subs / 10
+            return finish("Desmonetización", "Te mudaste a " + platform_def(nxt).n + ".", "n")
+        }
+        _ => {
+            if index == 0 {
+                d.rep = clamp100(d.rep + 8)
+                L.happy += 8
+                L.karma += 5
+                return finish("El fan", "Pasaste la tarde con él. Fue el mejor video que nunca vas a subir.", "g")
+            }
+            if index == 1 {
+                d.rep = clamp100(d.rep + 3)
+                L.karma += 2
+                return finish("El fan", "Le mandaste un video personalizado. Su mamá te escribió llorando.", "g")
+            }
+            L.karma -= 2
+            return finish("El fan", "Viste el mensaje y no contestaste.", "n")
+        }
+    }
+}
+
+function contenido_fx(out: list) {
+    if L.route != "creador" || L.rd == null || L.rd.energy == null { return null }
+    let d = L.rd
+    if d.energy < 20 { list_push(out, fx("agotado_creador", "Agotamiento creativo", false, "Ya no se te ocurre nada y todo te cansa.", {"hap": -1})) }
+    if d.rep >= 80 { list_push(out, fx("buena_fama", "Buena reputación", true, "Las marcas y los fans confían en ti.", {"hire": 3})) }
+    if d.rep < 30 { list_push(out, fx("cancelado", "Mala reputación", false, "Te asocian con polémicas.", {"hire": -5})) }
+    return null
+}

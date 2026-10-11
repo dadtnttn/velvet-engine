@@ -273,7 +273,7 @@ function world_month() {
             if p.bond < 40 { odds += 3 }
             if p.open == true { odds += 8 }
             if L.jail > 0 { odds += 4 }
-            if chance(odds) {
+            if chance(odds) && !velo_loyal(p) {
                 if p.flings == null { p.flings = 0 }
                 p.flings = p.flings + 1
                 if chance(18) { list_push(ills, ITS_POOL[weighted_choose(G.rng, ITS_WEIGHTS)]) }

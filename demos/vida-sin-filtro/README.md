@@ -281,29 +281,72 @@ binarias en el juego.
     su propia declaración.
 - **Rutas** (`routes.vel`, página «Ruta y fe» del creador): una meta de vida con
   etapas que se cumplen solas y su propio menú (botón «RUTA» en tu tarjeta).
-  - **Trono** (`realm.vel`): naces en una familia noble; ganas influencia en la
-    corte, aliados (nobles, generales, realeza extranjera) y reclamas el trono por
-    referéndum o golpe de Estado. Ya en el trono gobiernas el reino con seis
-    indicadores (tesoro, pueblo, nobleza, ejército, clero y orden), decretos,
-    leyes modernas (parlamento, libertad religiosa, religión oficial, poligamia
-    real, plan verde...), crisis mensuales y el riesgo de revoluciones y golpes.
-  - **Presidencia**: militancia en un partido, mítines, debates (minijuego),
-    anuncios y fondos; elecciones a diputado, gobernador y presidente; gobierno
-    con presupuesto, aprobación, congreso, seguridad, economía y paz social;
-    reformas, corrupción, juicio político y reelección.
-  - **Creador de contenido**: videos y transmisiones en vivo (minijuegos), nicho,
-    colaboraciones, polémicas y cancelaciones, patrocinios, mercancía y tu marca,
-    hasta los 10 millones de seguidores.
-  - **Filántropo espacial** (`space.vel`): heredas una mina de esmeraldas (cuida o
-    exprime a los mineros), fundas TerraTech y Ares Aerospace, contratas
-    ingenieros, investigas, lanzas cohetes (minijuego, pueden explotar),
-    construyes una estación orbital y llevas a la humanidad a Marte; además
-    donas millones y creas tu fundación.
-  - **Rutas +18** (desde los 18): escort (clientes, tarifa, seguridad, clientes
-    VIP, tu agencia), estrella del cine para adultos (rodajes con minijuego,
-    pruebas médicas, premios, tu estudio y producciones) y VelvetFans (fotos,
-    videos, en vivo, mensajes, precio de la suscripción, filtraciones,
-    seguridad digital y tu agencia).
+  - **Trono** (`realm.vel`, `corona.vel`): naces en una familia noble; ganas
+    influencia en la corte, aliados (nobles, generales, realeza extranjera) y
+    reclamas el trono por referéndum o golpe de Estado. Ya en el trono gobiernas
+    con seis indicadores (tesoro, pueblo, nobleza, ejército, clero y orden),
+    decretos de corte (torneos, bailes, giras), más de 20 leyes (carta de
+    derechos, abolir los privilegios feudales, banco real, censura o libertad de
+    prensa, servicio militar, monarquía absoluta...) y crisis. Tu **consejo real**
+    (canciller, mariscal, arzobispo, tesorero y maestro de espías) tiene lealtad y
+    talento, y conspira si lo descuidas. **Diplomacia y guerra** con cuatro
+    reinos: embajadas, tratados, alianzas, bodas reales y guerras. **Herederos**:
+    tutores, presentación en la corte, ley de sucesión y abdicar. Si mueres en el
+    trono, tu heredero sigue la partida como monarca (con regencia si es menor).
+    Eventos: atentados, pretendientes, revueltas, cometas, escándalos y duques
+    rebeldes.
+  - **Presidencia** (`politica.vel`): militancia, mítines, debates (minijuego),
+    anuncios y fondos; un **equipo de campaña**, cinco **sectores de votantes**
+    (jóvenes, trabajadores, empresarios, campo y clase media), promesas que luego
+    tendrás que cumplir, un **rival con nombre** en cada elección, guerra sucia,
+    el **debate cara a cara** por preguntas y la noche electoral por sectores.
+    En el gobierno: **gabinete** (técnicos, leales, caciques o celebridades;
+    algunos roban), conferencias de prensa, entrevistas, mensaje a la nación,
+    leyes del Congreso para firmar o vetar, crisis (pandemia, crisis financiera,
+    huracán, ciberataque...), juicio político y reelección. Después: memorias,
+    conferencias y tu biblioteca presidencial.
+  - **Creador de contenido** (`contenido.vel`): videos y transmisiones en vivo
+    (minijuegos), nicho, colaboraciones, polémicas y patrocinios; además
+    **energía** y burnout, **reputación**, formatos (tutorial, vlog, reacción,
+    reto, documental, maratón de 24 horas, podcast), plataforma principal
+    (VelvetTube, Flash o Velvetgram), equipo (editor, community manager,
+    representante, miniaturas), ofertas de marcas (algunas son estafas; los
+    menores solo reciben marcas aptas), tres strikes y te borran el canal,
+    curso, libro, serie, casa de creadores, gira y los Premios Velvet Creators.
+  - **Filántropo espacial** (`space.vel`, `marte.vel`): heredas una mina de
+    esmeraldas (taller de talla, escuela y clínica para los mineros, restaurar la
+    selva, la veta legendaria, derrumbes), fundas TerraTech (teléfono, IA y chip
+    cuántico, salida a bolsa, el dilema ético de la IA) y Ares Aerospace
+    (satélites, turismo espacial, base lunar, astronautas, la carrera contra
+    Orbitron), lanzas cohetes y llevas a la humanidad a Marte. Luego administras
+    la **colonia**: colonos, domos, oxígeno, terraformación, tormentas, el primer
+    bebé marciano y la independencia. Filantropía: fundación, la Promesa de Dar,
+    vacunas y océanos.
+  - **Rutas +18** (desde los 18, sin contenido explícito, siempre entre adultos):
+    **escort** (clientes habituales con nombre, verificar clientes, reglas
+    claras, reseñas, viajes de acompañante, chequeos, tu agencia con comisión
+    justa o abusiva, operativos policiales, quien se enamora de ti, retirarte),
+    **estrella del cine para adultos** (contratos con tres estudios, el género
+    de cada rodaje, compañeros de escena con química, dirigir, premios por
+    categoría, saltar al cine convencional, reality, huelga, retirarte) y
+    **VelvetFans** (pago por ver, nivel VIP, fans generosos y obsesivos, equipo de
+    chat, mostrar o no tu cara, servicio contra filtraciones, calendario, cambios
+    de reglas y cerrar la cuenta).
+  - **Profeta: la Orden del Velo Rojo** (`velo.vel`, +18): a los 18 fundas un
+    culto. Predicas, haces retiros, sermones (minijuego) y sesiones de
+    adoctrinamiento; reclutas celebridades y millonarios, eliges hasta cinco
+    dogmas y construyes el templo, la hacienda y la Ciudadela Roja. El **Círculo
+    de los Doce** es obligatorio: eliges a tus doce consortes adultos uno por
+    uno entre candidatos con historia y un don que ocupa un cargo (tesoro, voz,
+    sanación, estrategia, escudo, visión...). El **lavado de mente** mantiene a
+    la Orden: mientras dure, tus consortes no se ponen celosos ni te son
+    infieles; tú sí puedes estar con alguien fuera del Círculo, pero los fieles
+    se enteran y la Orden lo resiente. Si el fervor de un consorte cae, puede
+    escapar y hablar con la prensa. La presión de la prensa y la fiscalía crece
+    hasta las redadas. Al final eliges el destino: **la Reforma** (hospitales,
+    escuelas, bosques, paz, abrir la Orden y liberar a los Doce) o **el Ocaso**
+    (infiltrar gobiernos, comprar medios, hundir los mercados y el Gran
+    Eclipse).
 - **Religión** (`religion.vel`, `fe.vel`): 13 religiones, reales (tratadas de
   forma general y con respeto) e inventadas, con su nivel de exigencia, reglas
   sobre alcohol y matrimonio y un porcentaje de fe por persona. Tu familia te
@@ -530,7 +573,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 123 objetivos con recompensa en 5 categorías (estudios, trabajo,
+- **Misiones**: 137 objetivos con recompensa en 5 categorías (estudios, trabajo,
   amor, dinero y vida): graduarte, medallas, ser popular, dominar los
   minijuegos, sobrevivir a un despido, casarte, primer millón, vivir 100 años...
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
@@ -569,6 +612,12 @@ binarias en el juego.
 | `casino.vel` | Ruleta, blackjack, tragamonedas, video póker, bacará, dados, hipódromo, VIP y ludopatía |
 | `lujos.vel` | Tienda de lujo, valor de los bienes, rentas, personal, seguros y estatus |
 | `fe.vel` | Ritos, festividades, comunidad y votos, conversión, padres devotos, poligamia, secta y eventos de fe |
+| `corona.vel` | Consejo real, diplomacia y guerra, herederos, dinastía y eventos de palacio |
+| `politica.vel` | Equipo de campaña, sectores, rivales, debate por preguntas, gabinete, prensa y crisis |
+| `contenido.vel` | Energía, reputación, formatos, plataformas, equipo, marcas, strikes y premios |
+| `marte.vel` | Mina, TerraTech, satélites, turismo, base lunar, Orbitron y la colonia de Marte |
+| `rutas18.vel` | Segunda capa de escort, estrella +18 y VelvetFans |
+| `velo.vel` | Ruta del profeta: la Orden del Velo Rojo |
 | `routes.vel` | Rutas, etapas y menús; creador de contenido, escort, estrella +18 y VelvetFans |
 | `realm.vel` | Gobierno del reino y de la presidencia: indicadores, decretos, leyes, crisis y elecciones |
 | `space.vel` | Ruta del filántropo: mina, empresas, filantropía y programa espacial |

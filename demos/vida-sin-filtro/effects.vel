@@ -129,6 +129,8 @@ function effects() {
     oficio_fx(out)
     money_fx(out)
     fe_fx(out)
+    velo_fx(out)
+    contenido_fx(out)
     return out
 }
 

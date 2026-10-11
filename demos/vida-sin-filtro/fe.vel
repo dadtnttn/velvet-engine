@@ -625,7 +625,7 @@ function fe_month() {
     }
     // Poligamia: cada cónyuge extra cuesta y los celos crecen si alguien se siente de lado.
     let sp = spouses()
-    if len(sp) >= 2 && L.jail == 0 {
+    if len(sp) >= 2 && L.jail == 0 && L.route != "profeta" {
         dn_charge(300 * (len(sp) - 1))
         for p in sp {
             if p.bond < 45 && chance(10) { p.bond = clamp100(p.bond - 2) }
@@ -652,7 +652,7 @@ function maybe_fe_event() {
     if fe_sect_event() { return true }
     if fe_crisis_event() { return true }
     let sp = spouses()
-    if len(sp) >= 2 && chance(4) {
+    if len(sp) >= 2 && L.route != "profeta" && chance(4) {
         let pool = []
         let weights = []
         for ev in POLY_EVENTS {
@@ -956,7 +956,7 @@ function fe_sect_event() {
     let d = fe()
     if L.age < 18 { return false }
     if d.sect == null {
-        let vulnerable = L.happy < 35 || L.heartbreak > 0
+        let vulnerable = (L.happy < 35 || L.heartbreak > 0) && L.route != "profeta"
         if !vulnerable || !chance(4) || L.flags["sect_offer"] == true { return false }
         L.flags["sect_offer"] = true
         open_choice("LOS HIJOS DE LA AURORA", "Una mujer muy amable te ve triste en un café. Te habla de un grupo, «los Hijos de la Aurora», que te dará paz y una familia nueva. Te invita a una reunión.",
@@ -1056,7 +1056,7 @@ function fe_fx(out: list) {
     if d.crisis > 12 { list_push(out, fx("crisis_fe", "Crisis de fe", false, "Ya no sabes en qué crees.", {"hap": -1})) }
     if d.fast_m == L.tm { list_push(out, fx("ayuno", "En ayuno", false, "Del amanecer al atardecer, sin comer.", {"hp": -1})) }
     let sp = spouses()
-    if len(sp) >= 2 {
+    if len(sp) >= 2 && L.route != "profeta" {
         let h = fe_poly_harmony()
         if h >= 70 { list_push(out, fx("familia_unida", "Familia unida", true, "Tus cónyuges se llevan bien entre sí.", {"hap": 1})) }
         if h < 45 { list_push(out, fx("casa_dividida", "Casa dividida", false, "Celos y bandos en tu propia casa.", {"hap": -1})) }

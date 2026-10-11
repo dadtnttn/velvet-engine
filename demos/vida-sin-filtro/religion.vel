@@ -93,6 +93,7 @@ function religion_text() {
 
 // ¿Tu religión te permite casarte con otra persona además de tu pareja?
 function can_polygamy() {
+    if L.route == "profeta" { return true }
     if L.rd != null && L.rd.poly == true { return true }
     let r = religion_def(L.religion)
     if r.poly == "any" { return true }
