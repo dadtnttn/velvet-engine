@@ -278,7 +278,15 @@ const MISSIONS = [
     {"id": "terraform", "t": "Cielo menos rojo", "d": "Terraforma Marte al 20%.", "r": "Conocimiento", "reward": {"know": 6}},
     {"id": "pledge", "t": "La Promesa de Dar", "d": "Dona la mitad de tu fortuna en vida.", "r": "Amabilidad", "reward": {"kind": 10}},
     {"id": "crossover", "t": "Del +18 al cine", "d": "Consigue un papel en el cine convencional.", "r": "Encanto", "reward": {"charm": 5}},
-    {"id": "director18", "t": "Detrás de cámara", "d": "Dirige una escena en el cine para adultos.", "r": "Destreza", "reward": {"skill": 5}}
+    {"id": "director18", "t": "Detrás de cámara", "d": "Dirige una escena en el cine para adultos.", "r": "Destreza", "reward": {"skill": 5}},
+    {"id": "viral_reel", "t": "Se hizo viral", "d": "Sube un reel que llegue a millones.", "r": "Encanto", "reward": {"charm": 4}},
+    {"id": "teen_safe", "t": "Sin miedo a contarlo", "d": "De adolescente, bloquea y denuncia a un adulto que te escribe raro.", "r": "Valor", "reward": {"guts": 5}},
+    {"id": "scam_proof", "t": "A mí no me engañan", "d": "Desenmascara una estafa por mensaje o en una app de citas.", "r": "Conocimiento", "reward": {"know": 4}},
+    {"id": "reunion", "t": "Como si no hubiera pasado el tiempo", "d": "Reconecta con un viejo amigo por mensaje.", "r": "Felicidad", "reward": {"happy": 8}},
+    {"id": "bday_keeper", "t": "Nunca se me olvida", "d": "Felicita 15 cumpleaños desde el celular.", "r": "Amabilidad", "reward": {"kind": 5}},
+    {"id": "freelancer", "t": "Por mi cuenta", "d": "Gana $50,000 con trabajos independientes.", "r": "+$5,000", "reward": {"money": 5000}},
+    {"id": "link_star", "t": "Perfil destacado", "d": "Completa al máximo tu perfil de VelvetLink.", "r": "Encanto", "reward": {"charm": 3}},
+    {"id": "detox", "t": "Vida sin pantalla", "d": "Mantén un año entero el límite de tiempo de pantalla.", "r": "Felicidad", "reward": {"happy": 10}}
 ]
 
 const MISSION_CAT_ORDER = ["Estudios", "Trabajo", "Amor y familia", "Dinero", "Vida"]
@@ -304,7 +312,9 @@ const MISSION_CATS = {
     "parents_bless": "Amor y familia", "arranged": "Amor y familia", "casa_llena": "Amor y familia",
     "circle12": "Trabajo", "dawn": "Trabajo", "eclipse": "Trabajo", "freed_circle": "Amor y familia", "conqueror": "Trabajo",
     "dynasty_crown": "Trabajo", "abdicated": "Trabajo", "debate_win": "Trabajo", "creator_award": "Trabajo", "mars_city": "Trabajo",
-    "terraform": "Trabajo", "pledge": "Dinero", "crossover": "Trabajo", "director18": "Trabajo"
+    "terraform": "Trabajo", "pledge": "Dinero", "crossover": "Trabajo", "director18": "Trabajo",
+    "viral_reel": "Vida", "teen_safe": "Vida", "scam_proof": "Vida", "reunion": "Amor y familia", "bday_keeper": "Amor y familia",
+    "freelancer": "Trabajo", "link_star": "Trabajo", "detox": "Vida"
 }
 
 function flag(name: string) {

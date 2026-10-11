@@ -396,6 +396,12 @@ function card_cycle() {
     let paid = min(want, max(0, L.money))
     L.money -= paid
     c.bal -= paid
+    if paid < minp && ap_remind("card") && L.savings >= minp - paid {
+        L.savings -= minp - paid
+        c.bal -= minp - paid
+        paid = minp
+        log_add("Tu celular te recordó el pago de la tarjeta: el mínimo salió de tu ahorro, sin recargo.", "n")
+    }
     if paid < minp {
         c.late += 1
         c.bal += 40

@@ -1,0 +1,1085 @@
+// @edition 3
+// Apps: la segunda capa del celular.
+// - Mensajes y llamadas: bloquear contactos, felicitar cumpleaños, notas de voz,
+//   mensaje de año nuevo a todos, reconectar con viejos amigos, grupos de
+//   vecinos, de padres de familia y de tu comunidad; números equivocados,
+//   estafas por mensaje y mensajes de madrugada que no debiste mandar.
+// - Flama y Alma Gemela: preferencias de edad, impulso del perfil, Flama Platino,
+//   elegir el lugar de la primera cita, avisar a un amigo dónde estás,
+//   casamentera profesional, retiro de solteros; perfiles falsos y estafas
+//   románticas.
+// - Velvetgram: reels, transmisiones en vivo, sorteos, colaboraciones con
+//   influencers, mejores amigos, apagar comentarios, filtros de belleza, cuenta
+//   hackeada y mensajes de desconocidos a menores (bloquear y avisar).
+// - VelvetFans y VelvetHub: pestaña de fans, contenido premium, límite de
+//   tiempo, protección de identidad, denunciar robos de video, premios de la
+//   plataforma y retirarte.
+// - Banco, Bolsa, Casino, Empleos y Tienda: transferir y pedir prestado a tu
+//   familia, alertas de gasto y de precios, VelvetLink (perfil profesional,
+//   trabajos independientes), ofertas relámpago y electrónica.
+// - Agenda, Recuerdos, Salud y Ajustes: cumpleaños, recordatorios automáticos,
+//   álbum, recuerdo del día, imprimir un álbum, pasos, sueño, telemedicina,
+//   diario de ánimo, tiempo de pantalla, modo concentración, control parental y
+//   copia de seguridad.
+// Acciones con el prefijo "ap:" y elecciones "ap_".
+
+const AP_FLAMA_PREFS = [
+    {"id": "cualquiera", "n": "Cualquier edad"},
+    {"id": "mismo", "n": "De mi edad"},
+    {"id": "mayores", "n": "Mayores que yo"},
+    {"id": "menores", "n": "Más jóvenes (adultos)"}
+]
+
+const AP_VENUES = [
+    {"id": "cafe", "n": "Un café tranquilo", "cost": 100, "int": "lectura", "d": "Fácil, barato y sin presión."},
+    {"id": "bar", "n": "Un bar con música", "cost": 400, "int": "musica", "d": "Ruido, tragos y química."},
+    {"id": "museo", "n": "Un museo", "cost": 200, "int": "arte", "d": "Para hablar de algo más que del clima."},
+    {"id": "cena", "n": "Una cena elegante", "cost": 1500, "int": "cocina", "d": "Mantel blanco y velas."},
+    {"id": "parque", "n": "Caminar por el parque", "cost": 0, "int": "naturaleza", "d": "Aire libre y conversación."}
+]
+
+const AP_FREELANCE = [
+    {"id": "diseno", "n": "Diseño gráfico", "stat": "skill", "pay": 1500},
+    {"id": "codigo", "n": "Programación", "stat": "know", "pay": 3000},
+    {"id": "traduccion", "n": "Traducciones", "stat": "know", "pay": 1200},
+    {"id": "redaccion", "n": "Redacción", "stat": "charm", "pay": 1000},
+    {"id": "video", "n": "Edición de video", "stat": "skill", "pay": 1800}
+]
+
+const AP_DEALS = [
+    {"id": "audifonos", "n": "Audífonos con cancelación de ruido", "cost": 300, "hap": 4, "d": "Silencio total en el transporte."},
+    {"id": "laptop", "n": "Laptop nueva", "cost": 1500, "hap": 5, "d": "Rápida y ligera. Rindes más."},
+    {"id": "tablet", "n": "Tableta", "cost": 600, "hap": 4, "d": "Series en la cama."},
+    {"id": "reloj_int", "n": "Reloj inteligente", "cost": 400, "hap": 3, "d": "Cuenta tus pasos y tus latidos."},
+    {"id": "consola", "n": "Consola de videojuegos", "cost": 700, "hap": 6, "d": "Fines de semana enteros."},
+    {"id": "flores", "n": "Ramo de flores a domicilio", "cost": 80, "hap": 2, "d": "Para alguien especial."},
+    {"id": "perfume", "n": "Perfume de diseñador", "cost": 250, "hap": 3, "d": "Dejas huella al pasar."},
+    {"id": "colchon", "n": "Colchón ortopédico", "cost": 900, "hap": 4, "d": "Duermes como bebé."}
+]
+
+// ---------------------------------------------------------------- estado
+
+function ap() {
+    if L.ap == null {
+        L.ap = {
+            "blocked": [], "remind": {}, "screen": false, "focus": false, "backup": false, "steps": false, "sleep": false,
+            "moodlog": 0, "flpref": "cualquiera", "boost_m": -1, "safe": false, "platinum": false, "close": false,
+            "comments_off": false, "beauty": false, "hub_limit": false, "hub_mask": false, "hub_premium": false,
+            "link": 0, "freelance": "", "alerts": false, "spend_alerts": false, "deals": [], "deals_m": -1,
+            "newyear_age": -1, "albums": 0, "parental": false
+        }
+    }
+    return L.ap
+}
+
+function ap_blocked(p: map) {
+    return L.ap != null && list_contains(L.ap.blocked, p.id)
+}
+
+function ap_remind(key: string) {
+    return L.ap != null && L.ap.remind[key] == true
+}
+
+function aitem(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["ap_" + id] != null { l = "Este mes ya" }
+    return {"action": "ap:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function ap_use(id: string) {
+    if L.used["ap_" + id] != null { return false }
+    L.used["ap_" + id] = 1
+    return true
+}
+
+function toggle_label(on: bool, yes: string, no: string) {
+    if on { return yes }
+    return no
+}
+
+// Desconocido de Flama según tus preferencias de edad (siempre adultos).
+function ap_flama_stranger() {
+    let pref = ap().flpref
+    if L.age < 18 { return stranger() }
+    if pref == "mismo" { return stranger_aged(max(18, L.age - 3), L.age + 3) }
+    if pref == "mayores" { return stranger_aged(L.age + 4, L.age + 20) }
+    if pref == "menores" { return stranger_aged(max(18, L.age - 12), max(18, L.age - 1)) }
+    return stranger()
+}
+
+function ap_boost() {
+    let d = ap()
+    let b = 0
+    if d.boost_m == L.tm { b += 15 }
+    if d.platinum { b += 8 }
+    return b
+}
+
+// ---------------------------------------------------------------- 40. Mensajes y llamadas
+
+function ap_msgs_items() {
+    let d = ap()
+    let items = []
+    let bday = []
+    for p in ph_sorted() {
+        if p.bday_due == L.tm && p.bday_done != L.tm { list_push(bday, p) }
+    }
+    for p in bday { list_push(items, aitem("hbd:" + str(p.id), "Felicitar a " + p.first, "¡Cumple años este mes!", "Un mensaje con emojis de pastel. Mejor que nada (aunque una fiesta es mejor).", "")) }
+    let p = ph_love()
+    if p != null { list_push(items, aitem("voice", "Mandarle una nota de voz a " + p.first, "Cercanía", "Tu voz a mitad del día. A veces vale más que un mensaje.", "")) }
+    let nl = ""
+    if month_name() != "Diciembre" { nl = "En diciembre" } else if d.newyear_age == L.age { nl = "Este año ya" }
+    list_push(items, {"action": "ap:newyear", "t": "Mensaje de año nuevo a todos", "s": "Todos tus contactos", "desc": "«¡Feliz año! Que este sí sea el bueno.» A todos un poco más cerca.", "lock": nl})
+    let lost = ap_lost_friend()
+    let ll = ""
+    let ln = ""
+    if lost == null { ll = "Nadie perdido" } else { ln = lost.first }
+    list_push(items, aitem("reconnect", "Reconectar con un viejo amigo", ln, "Alguien con quien perdiste contacto hace mucho. Un «¿te acuerdas de mí?» puede revivirlo todo.", ll))
+    list_push(items, aitem("grp_vecinos", "Grupo de vecinos", "Comunidad", "Alertas de seguridad, el gato perdido de la señora del 3 y quejas por la música.", ""))
+    if len(kids_alive()) > 0 { list_push(items, aitem("grp_padres", "Grupo de padres de la escuela", "Hijos", "Doscientos mensajes por una kermés. Pero te enteras de todo.", "")) }
+    if L.religion != "ninguna" { list_push(items, aitem("grp_fe", "Grupo de tu comunidad religiosa", "Fe", "Oraciones, avisos y bendiciones de buenos días.", "")) }
+    // Bloqueos
+    for q in ph_sorted() {
+        if q.rel == "ex" || q.rel == "rival" { list_push(items, {"action": "ap:block:" + str(q.id), "t": "Bloquear a " + q.first, "s": rel_label(q), "desc": "Ya no podrá escribirte ni llamarte.", "lock": ""}) }
+    }
+    for id in d.blocked {
+        let q = find_person(id)
+        if q != null { list_push(items, {"action": "ap:unblock:" + str(id), "t": "Desbloquear a " + q.first, "s": "Bloqueado", "desc": "Darle otra oportunidad.", "lock": ""}) }
+    }
+    return items
+}
+
+function ap_lost_friend() {
+    for p in L.people {
+        if p.alive && rel_group(p) == "friend" && neglect_months(p) >= 18 && !ap_blocked(p) { return p }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- 41. Flama y Alma Gemela
+
+function ap_flama_items() {
+    let d = ap()
+    let items = []
+    let pn = "Cualquier edad"
+    for x in AP_FLAMA_PREFS {
+        if x.id == d.flpref { pn = x.n }
+    }
+    list_push(items, {"action": "ap:flpref", "t": "Preferencias de edad", "s": pn, "desc": "A quién te muestra la app. Siempre adultos.", "lock": ""})
+    list_push(items, aitem("boost", "Impulsar tu perfil", "$20 · este mes", "Tu perfil aparece primero durante un mes: muchos más matches.", if_str(L.money < 20, "$20", "")))
+    list_push(items, {"action": "ap:platinum", "t": toggle_label(d.platinum, "Flama Platino (activo)", "Flama Platino"), "s": "$60/mes", "desc": "Ves a quién le gustas antes de deslizar y tu perfil sale en las mejores recomendaciones.", "lock": ""})
+    list_push(items, {"action": "ap:safe", "t": toggle_label(d.safe, "Avisas a un amigo de tus citas", "Avisar a un amigo de tus citas"), "s": "Seguridad", "desc": "Alguien sabe dónde estás y con quién. Las citas raras se cortan a tiempo.", "lock": ""})
+    let ml = ""
+    if len(ph().matches) == 0 { ml = "Sin matches" }
+    list_push(items, aitem("venue", "Elegir el lugar de la primera cita", "Con un match", "Si eliges algo que le gusta, la cita sale mucho mejor.", ml))
+    return items
+}
+
+function ap_alma_items() {
+    let items = []
+    list_push(items, aitem("matchmaker", "Casamentera profesional", "$2,000", "Una experta te presenta a tres personas muy compatibles contigo.", if_str(L.money < 2000, "$2,000", "")))
+    list_push(items, aitem("retreat", "Retiro de solteros", "$1,200 · fin de semana", "Treinta solteros, una casa en el bosque y actividades para conocerse.", if_str(L.money < 1200, "$1,200", "")))
+    list_push(items, aitem("videocall", "Videollamada antes de la cita", "Química +", "Con tus sugerencias: verse antes de salir evita sorpresas.", if_str(len(ph().alma) == 0, "Sin sugerencias", "")))
+    return items
+}
+
+// ---------------------------------------------------------------- 42. Velvetgram
+
+function ap_gram_items() {
+    let d = ap()
+    let items = []
+    list_push(items, aitem("reel", "Subir un reel", "Minijuego · viral", "Un video corto con música de moda. Si el ritmo es perfecto, puede volar.", ""))
+    list_push(items, aitem("live", "Transmitir en vivo", "Regalos · seguidores", "Tus seguidores te mandan regalos virtuales mientras platicas.", if_str(ph().fol < 500, "500 seguidores", "")))
+    list_push(items, aitem("giveaway", "Hacer un sorteo", "$500 · muchos seguidores", "«Sigue, comenta y etiqueta a tres amigos.»", if_str(L.money < 500, "$500", "")))
+    list_push(items, aitem("collab", "Colaborar con un influencer", "Seguidores", "Una foto juntos y cada quien comparte la cuenta del otro.", if_str(ph().fol < 2000, "2,000 seguidores", "")))
+    list_push(items, {"action": "ap:close", "t": toggle_label(d.close, "Lista de mejores amigos (activa)", "Lista de mejores amigos"), "s": "Historias privadas", "desc": "Tus historias más personales solo para tus amigos: más cercanía con ellos.", "lock": ""})
+    list_push(items, {"action": "ap:comments", "t": toggle_label(d.comments_off, "Comentarios apagados", "Apagar los comentarios"), "s": "Paz mental", "desc": "Sin comentarios no hay odio... ni tanto crecimiento.", "lock": ""})
+    list_push(items, {"action": "ap:beauty", "t": toggle_label(d.beauty, "Filtro de belleza (activo)", "Usar filtro de belleza"), "s": "Más likes", "desc": "Piel de porcelana y ojos más grandes. Más likes; frente al espejo, menos felicidad.", "lock": ""})
+    return items
+}
+
+// ---------------------------------------------------------------- 43. VelvetHub
+
+function ap_hub_items() {
+    let d = ap()
+    let items = []
+    let h = ph()
+    list_push(items, {"action": "ap:hublimit", "t": toggle_label(d.hub_limit, "Límite de tiempo (activo)", "Poner límite de tiempo"), "s": "Bienestar", "desc": "La app se bloquea después de un rato. La costumbre se apaga más rápido.", "lock": ""})
+    if L.age >= 18 && h.vids > 0 {
+        list_push(items, {"action": "ap:hubmask", "t": toggle_label(d.hub_mask, "Protección de identidad (activa)", "Proteger tu identidad"), "s": "$50/mes", "desc": "Difumina tatuajes, voz y fondo: nadie de tu familia te reconoce.", "lock": ""})
+        list_push(items, {"action": "ap:hubprem", "t": toggle_label(d.hub_premium, "Contenido premium (activo)", "Abrir contenido premium"), "s": "Más dinero por vista", "desc": "Tus mejores videos detrás de un pago: menos vistas, más dinero.", "lock": if_str(h.views < 10000, "10 mil vistas", "")})
+        list_push(items, aitem("dmca", "Denunciar videos robados", "Recuperar ingresos", "Páginas piratas suben tus videos. Un reclamo y los bajan.", ""))
+        list_push(items, aitem("hubcomm", "Leer y responder comentarios", "Comunidad", "Fans amables, críticos y algún comentario que te hace el día.", ""))
+    }
+    return items
+}
+
+// ---------------------------------------------------------------- 44. Banco, Bolsa, Empleos y Tienda
+
+function ap_bank_items() {
+    let d = ap()
+    let items = []
+    if L.age >= 16 {
+        for p in ph_sorted() {
+            let g = rel_group(p)
+            if g == "parent" || g == "child" || g == "sibling" || g == "friend" || g == "grandparent" {
+                list_push(items, {"action": "ap:send:" + str(p.id), "t": "Transferir a " + p.first, "s": rel_label(p), "desc": "Un apoyo, un regalo o una deuda pagada.", "lock": if_str(L.money < 500, "$500", "")})
+            }
+        }
+    }
+    let par = null
+    for p in parents_alive() {
+        if p.bond >= 50 { par = p }
+    }
+    list_push(items, aitem("borrow", "Pedirle dinero a tu familia", "Sin intereses", "Tu familia te presta... y te lo recordará en cada comida.", if_str(par == null, "Padres con buen vínculo", "")))
+    list_push(items, {"action": "ap:spend", "t": toggle_label(d.spend_alerts, "Alertas de gasto (activas)", "Activar alertas de gasto"), "s": "Menos compras impulsivas", "desc": "Cada compra te avisa cuánto llevas gastado. Las compras compulsivas bajan.", "lock": ""})
+    return items
+}
+
+function ap_stock_items() {
+    let d = ap()
+    let items = []
+    list_push(items, {"action": "ap:alerts", "t": toggle_label(d.alerts, "Alertas de precios (activas)", "Activar alertas de precios"), "s": "Notificaciones", "desc": "Te avisa cuando una acción tuya se mueve más de 10% en un mes.", "lock": ""})
+    return items
+}
+
+function ap_jobs_items() {
+    let d = ap()
+    let items = []
+    let lvl = ["Perfil vacío", "Perfil básico", "Perfil completo", "Perfil destacado"]
+    list_push(items, aitem("cv", "VelvetLink: mejorar tu perfil", lvl[min(3, d.link)], "Foto profesional, logros y recomendaciones. Te contratan más fácil.", if_str(d.link >= 3, "Perfil destacado", if_str(L.age < 16, "Edad 16", ""))))
+    list_push(items, aitem("network", "Hacer networking en línea", "Contactos", "Felicitar ascensos ajenos y comentar con palabras como «sinergia».", if_str(L.age < 16, "Edad 16", "")))
+    let fl = AP_FREELANCE
+    for f in fl {
+        let on = d.freelance == f.id
+        list_push(items, {"action": "ap:free:" + f.id, "t": "Independiente: " + f.n, "s": if_str(on, "ACTIVO · ingreso extra", "Ingreso extra · uno a la vez"), "desc": "Proyectos por tu cuenta cada mes. Pagan según tu " + str_lower(SOCIAL_NAMES[f.stat]) + ".", "lock": if_str(L.age < 16, "Edad 16", "")})
+    }
+    return items
+}
+
+function ap_shop_items() {
+    let d = ap()
+    let items = []
+    if d.deals_m != L.tm {
+        let pool = list_slice(AP_DEALS, 0, len(AP_DEALS))
+        shuffle(G.rng, pool)
+        d.deals = []
+        for x in list_slice(pool, 0, 3) { list_push(d.deals, x.id) }
+        d.deals_m = L.tm
+    }
+    list_push(items, dninfo("Ofertas relámpago del mes", "40% de descuento", "Cambian cada mes. Corre."))
+    for id in d.deals {
+        let x = ap_deal_def(id)
+        let cost = x.cost * 60 / 100
+        list_push(items, aitem("deal:" + id, x.n, money_str(cost) + " (antes " + money_str(x.cost) + ")", x.d, if_str(L.money < cost, money_str(cost), if_str(L.age < 14, "Edad 14", ""))))
+    }
+    return items
+}
+
+function ap_deal_def(id: string) {
+    for x in AP_DEALS {
+        if x.id == id { return x }
+    }
+    return AP_DEALS[0]
+}
+
+// ---------------------------------------------------------------- 45. Agenda, Recuerdos, Salud y Ajustes
+
+function ap_agenda_items(cat: string) {
+    let d = ap()
+    let items = []
+    if cat == "Cumpleaños" {
+        let cur = cur_month()
+        let n = 0
+        for p in ph_sorted() {
+            if p.rel == "ex" || p.rel == "ligue" { continue }
+            let m = bday_month(p)
+            let diff = (m - cur + 12) % 12
+            if diff <= 2 {
+                let when = "Este mes"
+                if diff == 1 { when = "El próximo mes" }
+                if diff == 2 { when = "En dos meses" }
+                let act = "ap:none"
+                if diff == 0 && p.bday_done != L.tm { act = "ap:hbd:" + str(p.id) }
+                list_push(items, {"action": act, "t": p.first + " (" + rel_label(p) + ")", "s": when + " · " + MONTH_NAMES[m], "desc": if_str(diff == 0 && p.bday_done != L.tm, "Toca para felicitarl" + oa(p.gender) + ".", "Anótalo para no olvidarlo."), "lock": ""})
+                n += 1
+            }
+        }
+        if n == 0 { list_push(items, dninfo("Sin cumpleaños cerca", "", "Nadie cumple años en los próximos dos meses.")) }
+        return items
+    }
+    // Avisos
+    list_push(items, {"action": "ap:rem:bday", "t": "Recordatorio de cumpleaños", "s": toggle_label(ap_remind("bday"), "ACTIVO", "Apagado"), "desc": "La agenda te avisa y mandas felicitaciones aunque se te pase el mes.", "lock": ""})
+    list_push(items, {"action": "ap:rem:checkup", "t": "Chequeo médico anual", "s": toggle_label(ap_remind("checkup"), "ACTIVO", "Apagado"), "desc": "Cada cumpleaños se agenda solo un chequeo preventivo ($300).", "lock": if_str(L.age < 18, "Edad 18", "")})
+    list_push(items, {"action": "ap:rem:card", "t": "Pago de la tarjeta", "s": toggle_label(ap_remind("card"), "ACTIVO", "Apagado"), "desc": "Si no alcanza el efectivo, el pago mínimo sale de tu ahorro y te ahorras el recargo.", "lock": if_str(L.age < 18, "Edad 18", "")})
+    return items
+}
+
+function ap_memories_items() {
+    let d = ap()
+    let items = []
+    let hs = L.hitos
+    let n = 0
+    if hs != null { n = len(hs) }
+    list_push(items, aitem("throwback", "Recuerdo del día", "Nostalgia", "«Hace unos años...» Un recuerdo al azar de tu vida.", if_str(n < 3, "Pocos recuerdos", "")))
+    list_push(items, aitem("share", "Compartir un recuerdo con alguien", "Cercanía", "Le mandas a alguien una foto vieja de los dos.", if_str(len(ph_sorted()) == 0, "Sin contactos", "")))
+    list_push(items, aitem("album", "Imprimir un álbum de fotos", "$200 · felicidad", "Fotos de papel para tocar. Álbumes impresos: " + str(d.albums) + ".", if_str(L.money < 200, "$200", "")))
+    let ex = find_rel_where("ex", 0)
+    list_push(items, aitem("forget", "Borrar las fotos con tu ex", "Pasar la página", "Seleccionar todo, borrar. Respirar.", if_str(ex == null, "Sin ex", "")))
+    return items
+}
+
+function ap_health_items() {
+    let d = ap()
+    let items = []
+    list_push(items, {"action": "ap:steps", "t": toggle_label(d.steps, "Meta de 10,000 pasos (activa)", "Meta de 10,000 pasos"), "s": "Salud", "desc": "El celular te cuenta los pasos y te felicita. Caminas más sin darte cuenta.", "lock": ""})
+    list_push(items, {"action": "ap:sleep", "t": toggle_label(d.sleep, "Rutina de sueño (activa)", "Rutina de sueño"), "s": "Ánimo", "desc": "Alarma para dormir, nada de pantallas en la cama. Despiertas mejor.", "lock": ""})
+    list_push(items, aitem("tele", "Telemedicina", "$50", "Una consulta por videollamada: barata y sin salir de casa.", if_str(L.money < 50, "$50", "")))
+    list_push(items, aitem("moodlog", "Diario de ánimo", "Felicidad · autoconocimiento", "Anotas cómo te sientes cada noche. Llevas " + str(d.moodlog) + " meses.", ""))
+    return items
+}
+
+function ap_settings_items() {
+    let d = ap()
+    let items = []
+    list_push(items, {"action": "ap:screen", "t": toggle_label(d.screen, "Límite de tiempo de pantalla (activo)", "Límite de tiempo de pantalla"), "s": "Bienestar digital", "desc": "Menos horas pegad" + oa(L.gender) + " al celular: más felicidad, menos crecimiento en redes.", "lock": ""})
+    list_push(items, {"action": "ap:focus", "t": toggle_label(d.focus, "Modo concentración (activo)", "Modo concentración"), "s": "Estudio y trabajo", "desc": "Silencia todo en horas de trabajo o estudio. Rindes más; tus amigos te sienten lejos.", "lock": ""})
+    list_push(items, {"action": "ap:backup", "t": toggle_label(d.backup, "Copia de seguridad (activa)", "Copia de seguridad en la nube"), "s": "$5/mes", "desc": "Si pierdes el celular, no pierdes tus fotos ni tus contactos.", "lock": ""})
+    if len(kids_alive()) > 0 {
+        list_push(items, {"action": "ap:parental", "t": toggle_label(d.parental, "Control parental (activo)", "Control parental"), "s": "Tus hijos", "desc": "Filtros y horarios en el celular de tus hijos menores. Más seguros; a los adolescentes no les encanta.", "lock": ""})
+    }
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function apps_action(action: string) {
+    G.modal = null
+    let d = ap()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    match cmd {
+        "none" => return null
+        "hbd" => {
+            let p = find_person(parse_int(arg, 0))
+            if p == null || p.bday_done == L.tm { return null }
+            p.bday_done = L.tm
+            bond_gain(p, 4)
+            touch(p)
+            d.hbd = map_get(d, "hbd", 0) + 1
+            if d.hbd >= 15 { flag("bday_keeper") }
+            return finish(p.first, "«¡Feliz cumpleaños! 🎂» " + p.first + " te contestó con un montón de corazones.", "g")
+        }
+        "voice" => {
+            let p = ph_love()
+            if p == null || !ap_use("voice") { return null }
+            bond_gain(p, 3)
+            return finish(p.first, pick(["Le mandaste una nota de voz cantando mal su canción favorita. La escuchó diez veces.", "«Solo quería que escucharas mi voz.» Te respondió con otra nota de voz más larga."]) + bond_bonus(p, "talk"), "g")
+        }
+        "newyear" => {
+            if month_name() != "Diciembre" || d.newyear_age == L.age { return null }
+            d.newyear_age = L.age
+            for p in ph_sorted() {
+                bond_gain(p, 1)
+                touch(p)
+            }
+            L.happy += 3
+            return finish("Año nuevo", "Mandaste felicitaciones a todos tus contactos. Te llovieron stickers de uvas y fuegos artificiales.", "g")
+        }
+        "reconnect" => {
+            let p = ap_lost_friend()
+            if p == null || !ap_use("reconnect") { return null }
+            touch(p)
+            if chance(65) {
+                bond_gain(p, 15)
+                add_hito(p, "Se reencontraron")
+                flag("reunion")
+                return finish(p.first, "«¡No lo puedo creer! ¿Cómo estás?» Hablaron tres horas como si no hubiera pasado el tiempo.", "g")
+            }
+            bond_gain(p, 3)
+            return finish(p.first, p.first + " te respondió amable, pero ya no hay mucho de qué hablar. La vida los llevó por caminos distintos.", "n")
+        }
+        "grp_vecinos" => {
+            if !ap_use("grp_vecinos") { return null }
+            L.happy += 1
+            if chance(25) {
+                L.karma += 2
+                return finish("Grupo de vecinos", "Encontraste al gato perdido de la señora del 3. Eres el héroe del edificio.", "g")
+            }
+            return finish("Grupo de vecinos", pick(["Alguien se quejó de un ruido a las 3 a. m. Era tu licuadora.", "Organizaron una posada. Te tocó llevar los vasos.", "Una discusión de 80 mensajes sobre dónde estacionarse."]), "n")
+        }
+        "grp_padres" => {
+            if !ap_use("grp_padres") { return null }
+            L.parent_score = clamp100(L.parent_score + 2)
+            return finish("Grupo de padres", "Te enteraste de la tarea, del festival y del piojo de la semana. Tus hijos van al día.", "g")
+        }
+        "grp_fe" => {
+            if !ap_use("grp_fe") { return null }
+            fe_add_faith(2)
+            fe().service += 3
+            return finish("Grupo de tu comunidad", "Bendiciones de buenos días, la lista de la colecta y una cadena de oración.", "g")
+        }
+        "block" => {
+            let p = find_person(parse_int(arg, 0))
+            if p == null { return null }
+            list_push(d.blocked, p.id)
+            if p.rel == "ex" { L.heartbreak = max(0, L.heartbreak - 3) }
+            L.happy += 2
+            return finish("Bloqueo", "Bloqueaste a " + p.first + ". Ya no aparecerá en tus mensajes.", "n")
+        }
+        "unblock" => {
+            let id = parse_int(arg, 0)
+            let keep = []
+            for x in d.blocked {
+                if x != id { list_push(keep, x) }
+            }
+            d.blocked = keep
+            return finish("Bloqueo", "Desbloqueaste el contacto.", "n")
+        }
+        "flpref" => {
+            let labels = []
+            for x in AP_FLAMA_PREFS { list_push(labels, x.n) }
+            return open_choice("PREFERENCIAS", "¿A quién quieres ver en Flama y Alma Gemela? (Siempre adultos.)", labels, ["", "", "", ""], "ap_flpref", {})
+        }
+        "boost" => {
+            if L.money < 20 || !ap_use("boost") { return null }
+            L.money -= 20
+            d.boost_m = L.tm
+            return finish("Flama", "Tu perfil sale primero este mes. Prepárate para muchos «me gusta».", "g")
+        }
+        "platinum" => {
+            d.platinum = !d.platinum
+            return finish("Flama Platino", toggle_label(d.platinum, "Ahora eres Flama Platino ($60 al mes).", "Cancelaste Flama Platino."), "n")
+        }
+        "safe" => {
+            d.safe = !d.safe
+            return finish("Citas seguras", toggle_label(d.safe, "Desde ahora un amigo sabe siempre dónde es tu cita.", "Ya no avisas a nadie de tus citas."), "n")
+        }
+        "venue" => {
+            let ms = ph().matches
+            if len(ms) == 0 || !ap_use("venue") { return null }
+            let x = ms[0]
+            let labels = []
+            let locks = []
+            for v in AP_VENUES {
+                list_push(labels, v.n + " (" + money_str(v.cost) + ")")
+                list_push(locks, if_str(L.money < v.cost, money_str(v.cost), ""))
+            }
+            profile(x)
+            return open_choice("PRIMERA CITA CON " + str_upper(x.first), "¿A dónde llevas a " + x.first + "? " + interests_text(x) + ".", labels, locks, "ap_venue", {"person": x})
+        }
+        "matchmaker" => {
+            if L.money < 2000 || !ap_use("matchmaker") { return null }
+            L.money -= 2000
+            let pd = ph()
+            pd.alma = []
+            let mine = my_interests()
+            let i = 0
+            while i < 3 {
+                let x = ap_flama_stranger()
+                x.bio = fmt(pick(BIOS), {"person": x})
+                x.km = rint(1, 30)
+                x.heat = 20
+                profile(x)
+                x.interests = [mine[rint(0, len(mine) - 1)], mine[rint(0, len(mine) - 1)]]
+                list_push(pd.alma, x)
+                i += 1
+            }
+            pd.alma_m = L.tm
+            return finish("Casamentera", "La casamentera te entrevistó dos horas y te presentó a tres personas muy compatibles. Míralas en Sugerencias.", "g")
+        }
+        "retreat" => {
+            if L.money < 1200 || !ap_use("retreat") { return null }
+            L.money -= 1200
+            L.happy += 5
+            gain("charm", 2)
+            if chance(45 + rank("charm") * 5) && partner() == null {
+                let x = ap_flama_stranger()
+                profile(x)
+                ph_add_match(x)
+                x.heat = 50
+                return finish("Retiro de solteros", "Fogata, juegos y una caminata con " + x.first + " que no querías que terminara. Ahora es tu match.", "x")
+            }
+            return finish("Retiro de solteros", "Conociste gente agradable y te divertiste. Nadie especial esta vez.", "n")
+        }
+        "videocall" => {
+            let al = ph().alma
+            if len(al) == 0 || !ap_use("videocall") { return null }
+            let x = al[0]
+            if x.heat == null { x.heat = 10 }
+            x.heat = clamp100(x.heat + 15 + rank("charm") * 2)
+            return finish(x.first, "Hablaron por video media hora. Química: " + str(x.heat) + "%. Ya quieren verse en persona.", "x")
+        }
+        "reel" => {
+            if !ap_use("reel") { return null }
+            return mg_start("arrows", "Tu reel", "apps", {"kind": "reel"})
+        }
+        "live" => {
+            let pd = ph()
+            if pd.fol < 500 || !ap_use("live") { return null }
+            let gifts = pd.fol / 50 + rint(50, 300)
+            L.money += gifts
+            pd.fol += pd.fol / 40 + 20
+            pd.posted = true
+            return finish("En vivo", "Platicaste una hora con tus seguidores. Te mandaron regalos virtuales por " + money_str(gifts) + ".", "g")
+        }
+        "giveaway" => {
+            let pd = ph()
+            if L.money < 500 || !ap_use("giveaway") { return null }
+            L.money -= 500
+            let g = pd.fol / 8 + 400
+            pd.fol += g
+            pd.posted = true
+            return finish("Sorteo", "Regalaste unos audífonos. +" + big_num(g) + " seguidores (algunos se irán cuando termine el sorteo).", "g")
+        }
+        "collab" => {
+            let pd = ph()
+            if pd.fol < 2000 || !ap_use("collab") { return null }
+            let g = pd.fol / 6 + 300
+            pd.fol += g
+            pd.posted = true
+            return finish("Colaboración", "Una foto con un influencer y menciones mutuas. +" + big_num(g) + " seguidores.", "g")
+        }
+        "close" => {
+            d.close = !d.close
+            return finish("Mejores amigos", toggle_label(d.close, "Tus historias más personales ahora son solo para tus amigos cercanos.", "Tus historias vuelven a ser para todos."), "n")
+        }
+        "comments" => {
+            d.comments_off = !d.comments_off
+            return finish("Comentarios", toggle_label(d.comments_off, "Apagaste los comentarios. Silencio.", "Encendiste los comentarios."), "n")
+        }
+        "beauty" => {
+            d.beauty = !d.beauty
+            return finish("Filtro de belleza", toggle_label(d.beauty, "Ahora todas tus fotos llevan filtro.", "Volviste a tu cara de siempre. Te queda bien."), "n")
+        }
+        "hublimit" => {
+            d.hub_limit = !d.hub_limit
+            return finish("Límite de tiempo", toggle_label(d.hub_limit, "Pusiste un límite de tiempo en VelvetHub.", "Quitaste el límite de tiempo."), "n")
+        }
+        "hubmask" => {
+            d.hub_mask = !d.hub_mask
+            return finish("Identidad", toggle_label(d.hub_mask, "Tus videos ahora protegen tu identidad.", "Quitaste la protección de identidad."), "n")
+        }
+        "hubprem" => {
+            if ph().views < 10000 { return null }
+            d.hub_premium = !d.hub_premium
+            return finish("Premium", toggle_label(d.hub_premium, "Abriste tu contenido premium.", "Cerraste tu contenido premium."), "n")
+        }
+        "dmca" => {
+            if !ap_use("dmca") { return null }
+            let m = ph().views / 100 + 200
+            L.money += m
+            return finish("Videos robados", "Bajaron tus videos de tres páginas piratas. Recuperaste " + money_str(m) + " en ingresos.", "g")
+        }
+        "hubcomm" => {
+            if !ap_use("hubcomm") { return null }
+            let pd = ph()
+            L.happy += 2
+            pd.views += 200 + pd.views / 50
+            return finish("Comentarios", pick(["«Eres lo mejor de mi semana.» Respondiste con un corazón y te siguieron cien personas más.", "Entre halagos y algún troll, contestaste a tus fans más fieles. Agradecen que estés ahí.", "Un comentario te hizo reír tanto que lo fijaste arriba."]), "g")
+        }
+        "send" => {
+            let p = find_person(parse_int(arg, 0))
+            if p == null || L.money < 500 { return null }
+            return open_choice("TRANSFERIR A " + str_upper(p.first), "¿Cuánto le mandas a " + p.first + "?", ["$500", "$5,000", "$50,000", "Mejor no"], ["", if_str(L.money < 5000, "Sin fondos", ""), if_str(L.money < 50000, "Sin fondos", ""), ""], "ap_send", {"person": p})
+        }
+        "borrow" => {
+            if !ap_use("borrow") { return null }
+            let par = null
+            for p in parents_alive() {
+                if p.bond >= 50 { par = p }
+            }
+            if par == null { return null }
+            let amt = 2000
+            if L.family == "media" { amt = 10000 }
+            if L.family == "rica" { amt = 50000 }
+            L.money += amt
+            bond_gain(par, -3)
+            return finish(par.first, par.first + " te transfirió " + money_str(amt) + ". «No te lo voy a cobrar... pero tampoco lo voy a olvidar.»", "n")
+        }
+        "spend" => {
+            d.spend_alerts = !d.spend_alerts
+            return finish("Alertas de gasto", toggle_label(d.spend_alerts, "Ahora cada compra te avisa cuánto llevas gastado.", "Apagaste las alertas de gasto."), "n")
+        }
+        "alerts" => {
+            d.alerts = !d.alerts
+            return finish("Alertas de precios", toggle_label(d.alerts, "Te avisaremos cuando tus acciones se muevan mucho.", "Apagaste las alertas de precios."), "n")
+        }
+        "cv" => {
+            if d.link >= 3 || L.age < 16 || !ap_use("cv") { return null }
+            d.link += 1
+            if d.link >= 3 { flag("link_star") }
+            return finish("VelvetLink", "Mejoraste tu perfil profesional. Los reclutadores te encuentran más fácil.", "g")
+        }
+        "network" => {
+            if L.age < 16 || !ap_use("network") { return null }
+            gain("charm", 1)
+            if L.job != null { L.job.perf = clamp100(L.job.perf + 2) }
+            if chance(15) && L.job != null {
+                L.job.bonus = L.job.bonus + 5
+                return finish("VelvetLink", "Un contacto de VelvetLink te recomendó para un proyecto: tu sueldo sube 5%.", "g")
+            }
+            return finish("VelvetLink", "Comentaste «¡Felicidades, bien merecido!» en doce publicaciones. Tu red crece.", "n")
+        }
+        "free" => {
+            if L.age < 16 { return null }
+            if d.freelance == arg {
+                d.freelance = ""
+                return finish("Independiente", "Dejaste los trabajos independientes.", "n")
+            }
+            d.freelance = arg
+            return finish("Independiente", "Empezaste a tomar proyectos de " + str_lower(ap_freelance_def(arg).n) + " por tu cuenta.", "g")
+        }
+        "deal" => {
+            let x = ap_deal_def(arg)
+            let cost = x.cost * 60 / 100
+            if L.money < cost || !ap_use("deal:" + arg) { return null }
+            L.money -= cost
+            L.happy += x.hap
+            if arg == "laptop" && L.job != null { L.job.perf = clamp100(L.job.perf + 3) }
+            if arg == "reloj_int" { L.health = clamp100(L.health + 1) }
+            if arg == "flores" {
+                let p = ph_love()
+                if p != null {
+                    bond_gain(p, 5)
+                    return finish("Flores", "Le mandaste flores a " + p.first + " a su trabajo. Le preguntaron toda la tarde de quién eran.", "g")
+                }
+            }
+            if d.spend_alerts { return finish("Oferta", "Compraste " + str_lower(x.n) + " por " + money_str(cost) + ". (Tu alerta te recuerda que este mes ya gastaste bastante.)", "g") }
+            return finish("Oferta", "Compraste " + str_lower(x.n) + " por " + money_str(cost) + ". ¡Qué ganga!", "g")
+        }
+        "rem" => {
+            d.remind[arg] = d.remind[arg] != true
+            return finish("Recordatorios", toggle_label(d.remind[arg] == true, "Recordatorio activado.", "Recordatorio apagado."), "n")
+        }
+        "throwback" => {
+            let hs = L.hitos
+            if hs == null || len(hs) < 3 || !ap_use("throwback") { return null }
+            let h = hs[rint(0, len(hs) - 2)]
+            let yrs = L.age - h.a
+            L.happy += 3
+            let when = "Hace " + str(yrs) + " " + plural(yrs, "año", "años")
+            if yrs == 0 { when = "Este mismo año" }
+            return finish("Recuerdo del día", when + ": «" + h.t + "». Sonreíste sin darte cuenta.", "g")
+        }
+        "share" => {
+            if !ap_use("share") { return null }
+            let ps = ph_sorted()
+            if len(ps) == 0 { return null }
+            let p = pick(list_slice(ps, 0, min(5, len(ps))))
+            bond_gain(p, 4)
+            touch(p)
+            return finish(p.first, "Le mandaste a " + p.first + " una foto vieja de los dos. «¡Qué jóvenes éramos!»", "g")
+        }
+        "album" => {
+            if L.money < 200 || !ap_use("album") { return null }
+            L.money -= 200
+            d.albums += 1
+            L.happy += 5
+            hito_once("first_album", "Vida", "Imprimiste un álbum de fotos")
+            return finish("Álbum", "Llegó tu álbum impreso. Lo hojeaste dos veces seguidas.", "g")
+        }
+        "forget" => {
+            if find_rel_where("ex", 0) == null || !ap_use("forget") { return null }
+            L.heartbreak = max(0, L.heartbreak - 4)
+            L.happy += 2
+            return finish("Recuerdos", "Seleccionaste todas las fotos con tu ex y las borraste. Dolió menos de lo que pensabas.", "g")
+        }
+        "steps" => {
+            d.steps = !d.steps
+            return finish("Pasos", toggle_label(d.steps, "Meta diaria: 10,000 pasos.", "Quitaste tu meta de pasos."), "n")
+        }
+        "sleep" => {
+            d.sleep = !d.sleep
+            return finish("Sueño", toggle_label(d.sleep, "Rutina de sueño activada: a las 11 a dormir.", "Quitaste tu rutina de sueño."), "n")
+        }
+        "tele" => {
+            if L.money < 50 || !ap_use("tele") { return null }
+            L.money -= 50
+            L.health = clamp100(L.health + 2)
+            return finish("Telemedicina", "Una doctora te atendió por video en diez minutos. Receta digital y reposo.", "g")
+        }
+        "moodlog" => {
+            if !ap_use("moodlog") { return null }
+            d.moodlog += 1
+            L.happy += 2
+            if d.moodlog >= 12 { hito_once("moodlog", "Salud", "Un año escribiendo tu diario de ánimo") }
+            return finish("Diario de ánimo", "Escribiste cómo te sentiste este mes. Ponerlo en palabras ayuda.", "g")
+        }
+        "screen" => {
+            d.screen = !d.screen
+            d.screen_n = 0
+            return finish("Tiempo de pantalla", toggle_label(d.screen, "Límite de pantalla activado.", "Límite de pantalla desactivado."), "n")
+        }
+        "focus" => {
+            d.focus = !d.focus
+            return finish("Modo concentración", toggle_label(d.focus, "Modo concentración activado.", "Modo concentración desactivado."), "n")
+        }
+        "backup" => {
+            d.backup = !d.backup
+            return finish("Copia de seguridad", toggle_label(d.backup, "Tus fotos y contactos se respaldan en la nube.", "Desactivaste la copia de seguridad."), "n")
+        }
+        "parental" => {
+            d.parental = !d.parental
+            return finish("Control parental", toggle_label(d.parental, "Activaste el control parental en el celular de tus hijos.", "Quitaste el control parental."), "n")
+        }
+        _ => return null
+    }
+}
+
+function ap_freelance_def(id: string) {
+    for f in AP_FREELANCE {
+        if f.id == id { return f }
+    }
+    return AP_FREELANCE[0]
+}
+
+function apps_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = ap()
+    match handler {
+        "ap_flpref" => {
+            if index >= len(AP_FLAMA_PREFS) { return null }
+            d.flpref = AP_FLAMA_PREFS[index].id
+            let pd = ph()
+            pd.card = null
+            pd.alma = []
+            pd.alma_m = -1
+            return finish("Preferencias", "Ahora ves: " + str_lower(AP_FLAMA_PREFS[index].n) + ".", "n")
+        }
+        "ap_venue" => {
+            let x = ctx.person
+            if index >= len(AP_VENUES) || x == null { return null }
+            let v = AP_VENUES[index]
+            if L.money < v.cost { return null }
+            L.money -= v.cost
+            profile(x)
+            if x.heat == null { x.heat = 10 }
+            if list_contains(x.interests, v.int) {
+                x.heat = clamp100(x.heat + 25)
+                return finish("Primera cita", v.n + ": justo lo que le encanta a " + x.first + ". La cita fue perfecta. Química " + str(x.heat) + "%.", "x")
+            }
+            if x.dislike == v.int {
+                x.heat = max(0, x.heat - 10)
+                return finish("Primera cita", "A " + x.first + " no le gusta nada ese lugar. Fingió estar bien.", "b")
+            }
+            x.heat = clamp100(x.heat + 8)
+            return finish("Primera cita", "Una cita agradable. Química " + str(x.heat) + "%.", "n")
+        }
+        "ap_send" => {
+            let p = ctx.person
+            if index >= 3 || p == null { return null }
+            let amt = [500, 5000, 50000][index]
+            if L.money < amt { return null }
+            L.money -= amt
+            bond_gain(p, [3, 8, 15][index])
+            L.karma += [1, 2, 4][index]
+            return finish(p.first, "Le transferiste " + money_str(amt) + " a " + p.first + ". «¡Gracias, de verdad!»", "g")
+        }
+        "ap_ev" => return apps_event_choice(index, ctx)
+        _ => return null
+    }
+}
+
+function apps_mg_result(score: any, ctx: map) {
+    let pd = ph()
+    let g = 30 + score * (pd.fol / 300 + 5) / 10
+    if ap().beauty { g = g * 12 / 10 }
+    pd.posted = true
+    pd.posts += 1
+    if score >= 85 && chance(15) {
+        g = g * 10 + 5000
+        L.fame = clamp100(L.fame + 4)
+        hito_once("viral_reel", "Vida", "Tu reel se hizo viral")
+        flag("viral_reel")
+        pd.fol += g
+        return finish("¡Reel viral!", "Tu reel llegó a millones de personas: +" + big_num(g) + " seguidores.", "g")
+    }
+    pd.fol += g
+    return finish("Reel", "Tu reel quedó " + mg_rating(score) + ". +" + big_num(g) + " seguidores.", "g")
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function apps_month() {
+    if L.age < 12 || L.ap == null { return null }
+    let d = L.ap
+    let pd = ph()
+    if d.platinum {
+        L.money -= 60
+        if L.money < 0 { d.platinum = false }
+    }
+    if d.backup { L.money -= 5 }
+    if d.hub_mask { L.money -= 50 }
+    if d.screen {
+        d.screen_n = map_get(d, "screen_n", 0) + 1
+        if d.screen_n >= 12 { flag("detox") }
+        pd.streak = max(0, pd.streak - 2)
+        if chance(30) { L.happy += 1 }
+        if pd.fol > 0 { pd.fol -= pd.fol / 200 }
+    }
+    if d.hub_limit { pd.streak = max(0, pd.streak - 3) }
+    if d.hub_premium && pd.views > 0 { L.money += pd.views / 400 }
+    if d.focus {
+        if L.job != null && chance(30) { L.job.perf = clamp100(L.job.perf + 1) }
+        if L.age < 18 && chance(30) { L.grades = clamp(L.grades + 1, 0, 100) }
+        if L.study != null && chance(30) { L.study.gpa = clamp(L.study.gpa + 1, 0, 100) }
+    }
+    if d.steps && chance(25) { L.health = clamp100(L.health + 1) }
+    if d.sleep && chance(30) { L.happy += 1 }
+    if d.close && chance(30) {
+        for p in L.people {
+            if p.alive && rel_group(p) == "friend" && chance(30) { bond_gain(p, 1) }
+        }
+    }
+    if d.beauty && chance(20) { L.happy -= 1 }
+    if d.comments_off && pd.fol > 0 { pd.fol -= pd.fol / 300 }
+    if d.spend_alerts && L.lx != null && L.lx.shopaholic && chance(20) { L.lx.buys_y = max(0, L.lx.buys_y - 1) }
+    if (L.route == null || L.route == "normal") && L.vf != null && L.vf.open == true { rutas18_month() }
+    if d.parental {
+        for k in kids_alive() {
+            if k.age >= 13 && k.age < 18 && chance(10) { bond_gain(k, -1) }
+        }
+    }
+    // Trabajos independientes
+    if d.freelance != "" && L.age >= 16 && L.jail == 0 {
+        let f = ap_freelance_def(d.freelance)
+        let pay = f.pay * (50 + rank(f.stat) * 20) / 100
+        L.money += pay
+        d.free_total = map_get(d, "free_total", 0) + pay
+        if d.free_total >= 50000 { flag("freelancer") }
+        if chance(10) { gain(f.stat, 1) }
+        if chance(25) { notify("jobs", "Te pagaron un proyecto independiente: " + money_str(pay)) }
+    }
+    // Alertas de precios
+    if d.alerts && L.mk != null {
+        for s in STOCKS {
+            if shares(s.id) > 0 {
+                let h = L.mk.h[s.id]
+                if len(h) >= 2 {
+                    let prev = h[len(h) - 2]
+                    let ch = (price(s.id) - prev) * 100 / max(1, prev)
+                    if ch >= 10 || ch <= -10 { notify("stocks", s.n + " se movió " + if_str(ch > 0, "+", "") + str(ch) + "% este mes") }
+                }
+            }
+        }
+    }
+    return null
+}
+
+// Recordatorios: cumpleaños (desde lazos.vel), chequeo y tarjeta.
+function ap_bday_reminder(p: map) {
+    if !ap_remind("bday") { return false }
+    p.bday_done = p.bday_due
+    bond_gain(p, 2)
+    log_add("Tu agenda te recordó el cumpleaños de " + p.first + ": le mandaste felicitaciones.", "n")
+    return true
+}
+
+function apps_year() {
+    if L.ap == null || L.age < 18 { return null }
+    if ap_remind("checkup") && L.jail == 0 {
+        dn_charge(300)
+        L.health = clamp100(L.health + 2)
+        notify("health", "Chequeo médico anual completado")
+        log_add("Tu chequeo médico anual: todo en orden. (Agendado por tu celular.)", "n")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- eventos
+
+function maybe_apps_event() {
+    if G.modal != null || L.age < 12 || L.jail > 0 || L.ph == null || !chance(4) { return false }
+    let d = ap()
+    let pd = ph()
+    let r = rint(1, 8)
+    if r == 1 {
+        open_choice("MENSAJE DE TU «BANCO»", "«Su cuenta fue bloqueada. Ingrese aquí sus datos para desbloquearla: velvet-bnco.com»", ["Dar clic y llenar los datos", "Borrarlo", "Llamar a tu banco para avisar"], ["", "", ""], "ap_ev", {"kind": "phish"})
+        return true
+    }
+    if r == 2 && L.age >= 18 && partner() == null {
+        let x = ap_flama_stranger()
+        open_choice("NÚMERO EQUIVOCADO", "Te llega un mensaje: «¿Ya llegaste a casa? Avísame.» No conoces el número. Le contestas que se equivocó... y responde con un chiste.", ["Seguirle la plática", "Dejarlo ahí"], ["", ""], "ap_ev", {"kind": "wrong", "person": x})
+        return true
+    }
+    if r == 3 && L.age >= 18 && L.alcohol >= 20 {
+        let ex = find_rel_where("ex", 0)
+        if ex != null && !ap_blocked(ex) {
+            open_choice("LAS 3 DE LA MAÑANA", "Llevas unas copas y el nombre de " + ex.first + " brilla en tus contactos.", ["Mandarle «te extraño»", "Mandarle algo a tu mejor amigo", "Dormirte"], ["", "", ""], "ap_ev", {"kind": "drunk", "person": ex})
+            return true
+        }
+    }
+    if r == 4 && chance(30) {
+        open_choice("¡TU CELULAR!", "Al bajar del camión, buscas tu celular... y ya no está.", ["Rastrearlo con la app", "Comprar otro ($800)", "Darlo por perdido"], ["", if_str(L.money < 800, "$800", ""), ""], "ap_ev", {"kind": "lost"})
+        return true
+    }
+    if r == 5 && L.age >= 18 && len(pd.matches) > 0 {
+        let x = pd.matches[0]
+        open_choice("¿AMOR O ESTAFA?", x.first + " lleva semanas escribiéndote cosas preciosas. Hoy te cuenta que tiene una emergencia y necesita $3,000.", ["Mandarle el dinero", "Pedirle una videollamada primero", "Bloquearl" + oa(x.gender)], ["", "", ""], "ap_ev", {"kind": "scam", "person": x})
+        return true
+    }
+    if r == 6 && L.age >= 18 && len(pd.matches) > 0 {
+        let x = pd.matches[0]
+        open_choice("LA CITA A CIEGAS", "Llegas a tu cita con " + x.first + " y... no se parece en nada a sus fotos.", ["Quedarte y darle una oportunidad", "Inventar una emergencia", "Decirle la verdad con amabilidad"], ["", "", ""], "ap_ev", {"kind": "catfish", "person": x})
+        return true
+    }
+    if r == 7 && L.age < 18 && pd.fol > 0 {
+        open_choice("UN MENSAJE RARO", "Un adulto que no conoces te escribe en Velvetgram: te dice que eres muy madur" + oa(L.gender) + " y que no le cuentes a nadie que hablan.", ["Bloquearlo y contarle a un adulto de confianza", "Ignorarlo"], ["", ""], "ap_ev", {"kind": "teen"})
+        return true
+    }
+    if r == 8 && pd.fol >= 1000 && !ph().secure {
+        open_choice("CUENTA HACKEADA", "Alguien entró a tu Velvetgram y está publicando anuncios de cripto con tu cara.", ["Recuperarla con soporte técnico ($200)", "Abrir una cuenta nueva", "Activar la seguridad del celular ($100)"], [if_str(L.money < 200, "$200", ""), "", if_str(L.money < 100, "$100", "")], "ap_ev", {"kind": "hacked"})
+        return true
+    }
+    return false
+}
+
+function apps_event_choice(index: int, ctx: map) {
+    let d = ap()
+    let pd = ph()
+    if ctx.person != null && ctx.person.heat == null { ctx.person.heat = 10 }
+    match ctx.kind {
+        "phish" => {
+            if index == 0 {
+                let loss = min(max(0, L.money), rint(5, 50) * 100)
+                if pd.secure {
+                    return finish("Estafa", "Tu doble factor bloqueó el acceso. Te salvaste por un pelo.", "n")
+                }
+                L.money -= loss
+                L.happy -= 6
+                hito_once("phished", "Vida", "Caíste en una estafa por mensaje")
+                return finish("Estafa", "Era una estafa. Vaciaron " + money_str(loss) + " de tu cuenta.", "b")
+            }
+            if index == 2 {
+                L.karma += 1
+                gain("know", 1)
+                flag("scam_proof")
+                return finish("Estafa", "Tu banco agradeció el aviso y bloqueó la página falsa.", "g")
+            }
+            return finish("Estafa", "Lo borraste. Bien hecho.", "n")
+        }
+        "wrong" => {
+            if index == 0 {
+                let x = ctx.person
+                x.bio = "Se equivocó de número contigo."
+                x.km = rint(1, 30)
+                x.heat = 35
+                profile(x)
+                ph_add_match(x)
+                return finish("Número equivocado", "Platicaron hasta la madrugada. " + x.first + " ahora aparece en tus matches.", "x")
+            }
+            return finish("Número equivocado", "Lo dejaste ahí. Algún día te preguntarás qué hubiera pasado.", "n")
+        }
+        "drunk" => {
+            let ex = ctx.person
+            if index == 0 {
+                if chance(30) {
+                    bond_gain(ex, 10)
+                    return finish(ex.first, "Te contestó: «Yo también.» Mañana va a ser un día complicado.", "x")
+                }
+                L.happy -= 6
+                let p = partner()
+                if p != null {
+                    bond_gain(p, -8)
+                    return finish(ex.first, "Te dejó en visto. Y tu pareja vio la notificación. Mala noche.", "b")
+                }
+                return finish(ex.first, "Te dejó en visto. Al día siguiente quisiste desaparecer.", "b")
+            }
+            if index == 1 { return finish("3 a. m.", "Le mandaste un audio de diez minutos a tu mejor amig" + oa(L.gender) + ". Se rio toda la mañana.", "g") }
+            return finish("3 a. m.", "Te dormiste abrazando el celular. Gran decisión.", "g")
+        }
+        "lost" => {
+            if index == 0 {
+                if chance(50) { return finish("Tu celular", "La app lo ubicó en el asiento del camión. Lo recuperaste al día siguiente.", "g") }
+                index = 2
+            }
+            if index == 1 {
+                L.money -= 800
+                return finish("Tu celular", "Compraste uno nuevo." + if_str(d.backup, " Tu copia de seguridad restauró todo.", " Perdiste tus fotos y medio año de conversaciones."), if_str(d.backup, "n", "b"))
+            }
+            if !d.backup { L.happy -= 6 }
+            pd.model = max(0, pd.model - 1)
+            return finish("Tu celular", "Lo diste por perdido y usas uno viejo." + if_str(d.backup, " Al menos tus fotos están en la nube.", " Tus fotos se fueron con él."), "b")
+        }
+        "scam" => {
+            let x = ctx.person
+            if index == 0 {
+                L.money -= min(max(0, L.money), 3000)
+                ph_drop(x)
+                L.happy -= 10
+                hito_once("romance_scam", "Amor", "Caíste en una estafa romántica")
+                return finish("Estafa romántica", "Mandaste el dinero. " + x.first + " desapareció de la app esa misma noche.", "b")
+            }
+            if index == 1 {
+                if chance(50) {
+                    ph_drop(x)
+                    flag("scam_proof")
+                    return finish("Estafa romántica", x.first + " inventó mil excusas para no prender la cámara y luego te borró. Era un perfil falso.", "g")
+                }
+                x.heat = clamp100(x.heat + 10)
+                return finish("Estafa romántica", "Hicieron videollamada: era real y su emergencia también. Le ayudaste con un consejo y le encantó que fueras cuidados" + oa(L.gender) + ".", "g")
+            }
+            ph_drop(x)
+            return finish("Estafa romántica", "Lo bloqueaste. Más vale prevenir.", "n")
+        }
+        "catfish" => {
+            let x = ctx.person
+            if index == 0 {
+                if chance(50) {
+                    x.heat = clamp100(x.heat + 20)
+                    return finish("Cita a ciegas", "No era como en las fotos, pero te hizo reír toda la noche. Las fotos no son todo.", "g")
+                }
+                ph_drop(x)
+                return finish("Cita a ciegas", "La cita fue tan incómoda como esperabas.", "n")
+            }
+            if index == 1 {
+                ph_drop(x)
+                L.karma -= 1
+                if d.safe { return finish("Cita a ciegas", "Tu amigo te llamó con una «emergencia» a los diez minutos. Plan perfecto.", "n") }
+                return finish("Cita a ciegas", "Inventaste que se inundó tu casa. Nadie te creyó.", "n")
+            }
+            ph_drop(x)
+            L.karma += 1
+            return finish("Cita a ciegas", "Le dijiste con cuidado que te sentiste engañad" + oa(L.gender) + ". Se disculpó. Fue lo más honesto de la noche.", "n")
+        }
+        "teen" => {
+            if index == 0 {
+                gain("guts", 2)
+                L.karma += 2
+                for p in parents_alive() { bond_gain(p, 4) }
+                hito_once("teen_safe", "Vida", "Bloqueaste y denunciaste a un acosador en línea")
+                flag("teen_safe")
+                return finish("Hiciste lo correcto", "Lo bloqueaste y se lo contaste a tu familia. Lo reportaron y la cuenta desapareció. Hiciste exactamente lo correcto.", "g")
+            }
+            L.happy -= 3
+            return finish("Mensaje raro", "Lo ignoraste, pero siguió escribiendo. Bloquéalo y cuéntaselo a un adulto de confianza.", "b")
+        }
+        _ => {
+            if index == 0 {
+                L.money -= 200
+                return finish("Cuenta hackeada", "Soporte técnico te devolvió la cuenta después de tres días de angustia.", "n")
+            }
+            if index == 1 {
+                pd.fol = pd.fol / 4
+                return finish("Cuenta hackeada", "Abriste una cuenta nueva. Solo te siguieron tus fans más fieles.", "b")
+            }
+            L.money -= 100
+            pd.secure = true
+            return finish("Cuenta hackeada", "Activaste el doble factor: recuperaste la cuenta y nadie vuelve a entrar.", "g")
+        }
+    }
+}
+
+function apps_fx(out: list) {
+    if L.ap == null { return null }
+    let d = L.ap
+    if d.screen { list_push(out, fx("pantalla", "Desconectad" + oa(L.gender), true, "Menos pantalla, más vida.", {"hap": 1})) }
+    if d.focus { list_push(out, fx("concentracion", "Modo concentración", true, "Nada te distrae cuando trabajas.", {"grades": 2, "pay": 1})) }
+    if d.steps { list_push(out, fx("pasos", "10,000 pasos", true, "Caminas todos los días.", {"hp": 1})) }
+    if d.beauty { list_push(out, fx("filtro", "Vivir con filtro", false, "En el espejo ya no te reconoces.", {"hap": -1})) }
+    if d.link >= 3 { list_push(out, fx("velvetlink", "Perfil destacado", true, "Los reclutadores te escriben a ti.", {"hire": 5})) }
+    return null
+}

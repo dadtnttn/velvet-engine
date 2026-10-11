@@ -777,6 +777,7 @@ function mg_close() {
     if m.purpose == "news" { return news_result(score) }
     if m.purpose == "route" { return route_mg_result(score, m.ctx) }
     if m.purpose == "velo" { return velo_mg_result(score, m.ctx) }
+    if m.purpose == "apps" { return apps_mg_result(score, m.ctx) }
     if m.purpose == "phone" { return phone_mg_result(score, m.ctx) }
     if m.purpose == "lazos" { return lazos_mg_result(score, m.ctx) }
     if m.purpose == "ocio" { return ocio_mg_result(score, m.ctx) }
