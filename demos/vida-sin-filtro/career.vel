@@ -187,7 +187,10 @@ const MISSIONS = [
     {"id": "homeowner", "t": "Casa propia", "d": "Compra una casa.", "r": "Felicidad", "reward": {"happy": 10}},
     {"id": "debtfree", "t": "Libre de deudas", "d": "Termina de pagar un préstamo o una hipoteca.", "r": "+$5,000", "reward": {"money": 5000}},
     {"id": "jackpot", "t": "Premio mayor", "d": "Gana el premio mayor de las tragamonedas.", "r": "Valor", "reward": {"guts": 5}},
-    {"id": "prenup", "t": "Letra pequeña", "d": "Firma un contrato prematrimonial.", "r": "Conocimiento", "reward": {"know": 3}}
+    {"id": "prenup", "t": "Letra pequeña", "d": "Firma un contrato prematrimonial.", "r": "Conocimiento", "reward": {"know": 3}},
+    {"id": "route_done", "t": "Leyenda de tu ruta", "d": "Completa todas las etapas de una ruta.", "r": "Fama · +$100,000", "reward": {"money": 100000}},
+    {"id": "crowned", "t": "Larga vida", "d": "Hazte coronar en la ruta del trono.", "r": "Encanto", "reward": {"charm": 10}},
+    {"id": "president", "t": "Al poder", "d": "Gana la presidencia.", "r": "Encanto", "reward": {"charm": 10}}
 ]
 
 function flag(name: string) {

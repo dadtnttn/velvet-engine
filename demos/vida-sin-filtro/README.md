@@ -189,6 +189,38 @@ binarias en el juego.
     préstamos más baratos, leen mejor el periódico, pueden analizar el mercado y
     hasta usar información privilegiada (ilegal). Contadores y auditores hacen
     su propia declaración.
+- **Rutas** (`routes.vel`, página «Ruta y fe» del creador): una meta de vida con
+  etapas que se cumplen solas y su propio menú (botón «RUTA» en tu tarjeta).
+  - **Trono** (`realm.vel`): naces en una familia noble; ganas influencia en la
+    corte, aliados (nobles, generales, realeza extranjera) y reclamas el trono por
+    referéndum o golpe de Estado. Ya en el trono gobiernas el reino con seis
+    indicadores (tesoro, pueblo, nobleza, ejército, clero y orden), decretos,
+    leyes modernas (parlamento, libertad religiosa, religión oficial, poligamia
+    real, plan verde...), crisis mensuales y el riesgo de revoluciones y golpes.
+  - **Presidencia**: militancia en un partido, mítines, debates (minijuego),
+    anuncios y fondos; elecciones a diputado, gobernador y presidente; gobierno
+    con presupuesto, aprobación, congreso, seguridad, economía y paz social;
+    reformas, corrupción, juicio político y reelección.
+  - **Creador de contenido**: videos y transmisiones en vivo (minijuegos), nicho,
+    colaboraciones, polémicas y cancelaciones, patrocinios, mercancía y tu marca,
+    hasta los 10 millones de seguidores.
+  - **Filántropo espacial** (`space.vel`): heredas una mina de esmeraldas (cuida o
+    exprime a los mineros), fundas TerraTech y Ares Aerospace, contratas
+    ingenieros, investigas, lanzas cohetes (minijuego, pueden explotar),
+    construyes una estación orbital y llevas a la humanidad a Marte; además
+    donas millones y creas tu fundación.
+  - **Rutas +18** (desde los 18): escort (clientes, tarifa, seguridad, clientes
+    VIP, tu agencia), estrella del cine para adultos (rodajes con minijuego,
+    pruebas médicas, premios, tu estudio y producciones) y VelvetFans (fotos,
+    videos, en vivo, mensajes, precio de la suscripción, filtraciones,
+    seguridad digital y tu agencia).
+- **Religión** (`religion.vel`): religiones reales tratadas de forma general y
+  otras inventadas, con su nivel de exigencia, reglas sobre alcohol y matrimonio
+  y un porcentaje de fe por persona. Tu familia te transmite su fe; puedes ir al
+  templo, rezar, peregrinar, donar, convertirte o dejarla. Los padres devotos
+  reaccionan si tu pareja es de otra religión, si vives en pareja sin casarte o
+  si trabajas en la industria +18. Si tu religión (o la ley de tu reino) lo
+  permite, puedes casarte con más de una persona.
 - **Platicar** (`chat.vel`): con cualquier persona, como en una app de mensajes.
   Cada quien tiene un temperamento (callado, parlanchín, bromista, sensible,
   orgulloso, romántico) y un ánimo que cambia cada mes (feliz, cariñoso, triste,
@@ -262,7 +294,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 52 objetivos con recompensa (graduarte, casarte, primer millón,
+- **Misiones**: 55 objetivos con recompensa (graduarte, casarte, primer millón,
   ganar un premio, llevar un confidente a rango 10, vivir 100 años...).
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
   "!", corazón, gota de sudor, enojo o dinero). 3 tipos de cara, 3 de cuerpo,
@@ -293,6 +325,10 @@ binarias en el juego.
 | `milestones.vel` | Hitos personales y su pantalla por categorías |
 | `bonds.vel` | Aficiones, lenguaje del amor, compatibilidad, estado, descuido, iniciativas de la pareja y mejor amigo |
 | `finance.vel` | Gastos, banco, crédito, préstamos, casas, bolsa, periódico, casino, impuestos y dinero en pareja |
+| `routes.vel` | Rutas, etapas y menús; creador de contenido, escort, estrella +18 y VelvetFans |
+| `realm.vel` | Gobierno del reino y de la presidencia: indicadores, decretos, leyes, crisis y elecciones |
+| `space.vel` | Ruta del filántropo: mina, empresas, filantropía y programa espacial |
+| `religion.vel` | Religiones, fe, reacciones de la familia, conversiones y matrimonios múltiples |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |

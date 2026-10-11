@@ -1,0 +1,780 @@
+// @edition 3
+// Rutas: una meta de vida que eliges al crear tu personaje. Cada ruta tiene etapas
+// (objetivos) que se cumplen solas al lograrlas y un menú propio con acciones.
+// Rutas: trono, presidencia, creador de contenido, filántropo espacial y tres rutas
+// +18 (escort, estrella del cine para adultos y VelvetFans). Las +18 empiezan a los 18.
+
+const ROUTES = [
+    {"id": "normal", "n": "Vida normal", "short": "VIDA NORMAL", "adult": false,
+     "d": "Sin guion. Tú decides qué hacer con tu vida."},
+    {"id": "rey", "n": "Ruta del trono", "short": "TRONO", "adult": false,
+     "d": "Naces en una familia noble. Gana influencia y aliados, reclama el trono, convierte tu país en un reino y gobiérnalo: tesoro, pueblo, nobleza, ejército, clero y orden."},
+    {"id": "presidente", "n": "Ruta presidencial", "short": "PRESIDENCIA", "adult": false,
+     "d": "Afíliate a un partido, gana elecciones de diputado a presidente y gobierna: presupuesto, aprobación, congreso, seguridad y economía. Reelección incluida."},
+    {"id": "creador", "n": "Ruta del creador de contenido", "short": "CREADOR", "adult": false,
+     "d": "Desde los 13 años sube videos y transmite en vivo. Elige tu nicho, colabora, consigue patrocinios y llega a los 10 millones de seguidores."},
+    {"id": "filantropo", "n": "Ruta del filántropo espacial", "short": "MARTE", "adult": false,
+     "d": "Tu familia es dueña de una mina de esmeraldas. Hazla próspera, funda empresas de tecnología y espaciales, dona fortunas y lleva a la humanidad a Marte."},
+    {"id": "escort", "n": "Ruta del placer (escort)", "short": "ESCORT +18", "adult": true,
+     "d": "+18. Desde los 18: construye tu clientela, sube tu tarifa, cuida tu seguridad y abre tu propia agencia."},
+    {"id": "porno", "n": "Ruta de la estrella +18", "short": "ESTRELLA +18", "adult": true,
+     "d": "+18. Desde los 18: rodajes, premios, fama y tu propio estudio de cine para adultos."},
+    {"id": "fans", "n": "Ruta VelvetFans (+18)", "short": "VELVETFANS +18", "adult": true,
+     "d": "+18. Desde los 18: abre tu cuenta de contenido exclusivo, consigue suscriptores, ajusta tu precio y crea un imperio."}
+]
+
+const ROUTE_STAGES = {
+    "rey": [
+        {"t": "Sangre noble", "d": "Crece en la corte. Cumple 16 años.", "req": "age16"},
+        {"t": "Influencia", "d": "Llega a 40 de influencia en la corte.", "req": "inf40"},
+        {"t": "Aliados", "d": "Gánate a 3 aliados poderosos.", "req": "allies3"},
+        {"t": "La corona", "d": "Reclama el trono (21+): referéndum o golpe de Estado.", "req": "king"},
+        {"t": "Reino estable", "d": "24 meses con pueblo y orden de 50 o más.", "req": "stable24"},
+        {"t": "Dinastía", "d": "Ten un heredero mientras reinas.", "req": "heir"},
+        {"t": "Monarca legendario", "d": "Reina 10 años y termina con el pueblo en 60 o más.", "req": "reign120"}
+    ],
+    "presidente": [
+        {"t": "Militancia", "d": "Afíliate a un partido (18+).", "req": "party"},
+        {"t": "Diputado", "d": "Gana una elección a diputado (25+).", "req": "office:diputado"},
+        {"t": "Gobernador", "d": "Gana una gubernatura (30+).", "req": "office:gobernador"},
+        {"t": "Presidente", "d": "Gana la presidencia (35+).", "req": "pres"},
+        {"t": "Buen gobierno", "d": "24 meses con aprobación de 55 o más.", "req": "good24"},
+        {"t": "Reelección", "d": "Gana un segundo mandato.", "req": "terms2"},
+        {"t": "Leyenda de la democracia", "d": "Termina tu segundo mandato con aprobación de 50 o más.", "req": "presdone"}
+    ],
+    "creador": [
+        {"t": "Primer video", "d": "Sube tu primer video (13+).", "req": "videos1"},
+        {"t": "Mil seguidores", "d": "Llega a 1,000 seguidores.", "req": "subs1k"},
+        {"t": "Botón de plata", "d": "Llega a 100 mil seguidores.", "req": "subs100k"},
+        {"t": "Botón de oro", "d": "Llega a un millón de seguidores.", "req": "subs1m"},
+        {"t": "Diamante", "d": "Llega a 10 millones de seguidores.", "req": "subs10m"},
+        {"t": "Imperio digital", "d": "Lanza tu propia marca.", "req": "brand"}
+    ],
+    "filantropo": [
+        {"t": "Heredero de la mina", "d": "Cumple 18 y recibe la mina de esmeraldas.", "req": "mine"},
+        {"t": "Mina próspera", "d": "Lleva la mina a nivel 3.", "req": "mine3"},
+        {"t": "TerraTech", "d": "Funda tu empresa de tecnología ($5 millones).", "req": "tech"},
+        {"t": "Ares Aerospace", "d": "Funda tu empresa espacial ($20 millones).", "req": "space"},
+        {"t": "Cohete reutilizable", "d": "Desarrolla el cohete y lánzalo con éxito.", "req": "rocket"},
+        {"t": "Estación orbital", "d": "Construye una estación en órbita ($100 millones).", "req": "station"},
+        {"t": "Humanos en Marte", "d": "Desarrolla la misión y lleva a la humanidad a Marte.", "req": "mars"}
+    ],
+    "escort": [
+        {"t": "Debut", "d": "Empieza como escort (18+).", "req": "job:escort"},
+        {"t": "Clientela fiel", "d": "Atiende a 10 clientes.", "req": "clients10"},
+        {"t": "Escort de lujo", "d": "Llega al rango 3.", "req": "rank3"},
+        {"t": "Tarifa VIP", "d": "Cobra $5,000 o más por cita.", "req": "rate5k"},
+        {"t": "Agencia propia", "d": "Abre tu agencia.", "req": "agency"},
+        {"t": "Leyenda del placer", "d": "Junta $5 millones.", "req": "money5m"}
+    ],
+    "porno": [
+        {"t": "Casting", "d": "Entra al cine para adultos (18+).", "req": "job:porn"},
+        {"t": "Primer protagónico", "d": "Llega al rango 2.", "req": "rank2"},
+        {"t": "Premio Terciopelo Rojo", "d": "Gana el gran premio de la industria.", "req": "award"},
+        {"t": "Estrella", "d": "Llega a 60 de fama.", "req": "fame60"},
+        {"t": "Tu propio estudio", "d": "Funda tu estudio ($2 millones).", "req": "studio"},
+        {"t": "Leyenda +18", "d": "Rango máximo y 5 películas de tu estudio.", "req": "pornlegend"}
+    ],
+    "fans": [
+        {"t": "Abrir tu cuenta", "d": "Abre tu cuenta en VelvetFans (18+).", "req": "fans_open"},
+        {"t": "100 suscriptores", "d": "Tus primeros fans.", "req": "fsubs100"},
+        {"t": "1,000 suscriptores", "d": "Ya vives de esto.", "req": "fsubs1k"},
+        {"t": "10,000 suscriptores", "d": "Estás en el top de la plataforma.", "req": "fsubs10k"},
+        {"t": "Top 1%", "d": "100 mil suscriptores.", "req": "fsubs100k"},
+        {"t": "Imperio de fans", "d": "Funda tu agencia de creadores.", "req": "fans_agency"}
+    ]
+}
+
+const NICHES = ["Videojuegos", "Comedia", "Belleza", "Fitness", "Música", "Cocina"]
+const NICHE_INT = {"Videojuegos": "videojuegos", "Comedia": "cine", "Belleza": "arte", "Fitness": "deporte", "Música": "musica", "Cocina": "cocina"}
+
+// ---------------------------------------------------------------- base
+
+function route_def(id: string) {
+    for r in ROUTES {
+        if r.id == id { return r }
+    }
+    return ROUTES[0]
+}
+
+function route_is_adult() {
+    return L.route == "escort" || L.route == "porno" || L.route == "fans"
+}
+
+function route_setup() {
+    L.rstage = 0
+    L.rdone = false
+    let id = L.route
+    if id == "rey" {
+        L.family = "rica"
+        L.rd = {"inf": 0, "allies": 0, "king": false, "realm": null, "reign_m": 0, "stable_m": 0, "poly": false}
+        log_add("Naciste en una familia noble, descendiente de la antigua corona. Algunos dicen que el trono te pertenece.", "x")
+    } else if id == "presidente" {
+        L.rd = {"party": "", "pop": 5, "office": "", "pres": false, "term_m": 0, "terms": 0, "good_m": 0, "stable_m": 0, "realm": null, "done": false}
+    } else if id == "creador" {
+        L.rd = {"subs": 0, "niche": "", "videos": 0, "brand": false}
+    } else if id == "filantropo" {
+        L.family = "rica"
+        L.rd = {"mine": 0, "workers": 50, "tech": false, "space": false, "eng": 0, "rnd": 0, "rocket": false, "station": false, "mars": 0, "mars_done": false, "donated": 0}
+        log_add("Tu familia es dueña de «La Verde», una mina de esmeraldas. Un día será tuya.", "x")
+    } else if id == "escort" {
+        L.rd = {"clients": 0, "rate": 1000, "security": false, "agency": false}
+    } else if id == "porno" {
+        L.rd = {"films": 0, "studio": false, "studio_films": 0, "tested": -1}
+    } else if id == "fans" {
+        L.rd = {"open": false, "subs": 0, "price": 10, "agency": false, "security": false}
+    } else {
+        L.rd = {}
+    }
+    return null
+}
+
+function route_stages() {
+    let s = ROUTE_STAGES[L.route]
+    if s == null { return [] }
+    return s
+}
+
+function route_check(req: string) {
+    let d = L.rd
+    if req == "age16" { return L.age >= 16 }
+    if req == "inf40" { return d.inf >= 40 }
+    if req == "allies3" { return d.allies >= 3 }
+    if req == "king" { return d.king == true }
+    if req == "stable24" { return d.stable_m >= 24 }
+    if req == "heir" { return d.king == true && len(kids_alive()) > 0 }
+    if req == "reign120" { return d.king == true && d.reign_m >= 120 && d.realm.aprob >= 60 }
+    if req == "party" { return d.party != "" }
+    if str_starts_with(req, "office:") {
+        let o = str_replace(req, "office:", "")
+        return d.office == o || (o == "diputado" && (d.office == "gobernador" || d.pres)) || (o == "gobernador" && d.pres)
+    }
+    if req == "pres" { return d.pres == true || d.terms >= 1 }
+    if req == "good24" { return d.good_m >= 24 }
+    if req == "terms2" { return d.terms >= 2 }
+    if req == "presdone" { return d.done == true }
+    if req == "videos1" { return d.videos >= 1 }
+    if req == "subs1k" { return d.subs >= 1000 }
+    if req == "subs100k" { return d.subs >= 100000 }
+    if req == "subs1m" { return d.subs >= 1000000 }
+    if req == "subs10m" { return d.subs >= 10000000 }
+    if req == "brand" { return d.brand == true }
+    if req == "mine" { return d.mine >= 1 }
+    if req == "mine3" { return d.mine >= 3 }
+    if req == "tech" { return d.tech == true }
+    if req == "space" { return d.space == true }
+    if req == "rocket" { return d.rocket == true }
+    if req == "station" { return d.station == true }
+    if req == "mars" { return d.mars_done == true }
+    if str_starts_with(req, "job:") { return job_is(str_replace(req, "job:", "")) }
+    if req == "clients10" { return d.clients >= 10 }
+    if req == "rank3" { return L.job != null && L.job.level >= 2 }
+    if req == "rank2" { return L.job != null && L.job.level >= 1 }
+    if req == "rate5k" { return d.rate >= 5000 }
+    if req == "agency" { return d.agency == true }
+    if req == "money5m" { return L.money >= 5000000 }
+    if req == "award" { return has_flag("award") }
+    if req == "fame60" { return L.fame >= 60 }
+    if req == "studio" { return d.studio == true }
+    if req == "pornlegend" { return L.job != null && L.job.level >= 4 && d.studio_films >= 5 }
+    if req == "fans_open" { return d.open == true }
+    if req == "fsubs100" { return d.subs >= 100 }
+    if req == "fsubs1k" { return d.subs >= 1000 }
+    if req == "fsubs10k" { return d.subs >= 10000 }
+    if req == "fsubs100k" { return d.subs >= 100000 }
+    if req == "fans_agency" { return d.agency == true }
+    return false
+}
+
+// Cada mes: lo propio de la ruta y revisar si se cumplió la etapa actual.
+function route_month() {
+    if L.route == null || L.route == "normal" { return null }
+    if L.route == "rey" || L.route == "presidente" { realm_month() }
+    if L.route == "filantropo" { space_month() }
+    if L.route == "creador" { creator_month() }
+    if L.route == "fans" { fans_month() }
+    if L.route == "escort" { escort_month() }
+    let st = route_stages()
+    if L.rstage < len(st) && route_check(st[L.rstage].req) {
+        let s = st[L.rstage]
+        L.rstage += 1
+        L.happy += 6
+        hito_me("Vida", "Ruta: " + s.t)
+        if L.rstage >= len(st) {
+            L.rdone = true
+            flag("route_done")
+            list_push(G.toasts, {"head": "¡RUTA COMPLETADA!", "title": str_upper(route_def(L.route).n), "sub": "Eres una leyenda.", "t0": G.t})
+            L.fame = clamp100(L.fame + 20)
+        }
+    }
+    return null
+}
+
+function route_block() {
+    if L.route == null || L.route == "normal" { return "Elegiste una vida sin guion. Para seguir una ruta, elígela al crear tu siguiente personaje." }
+    if route_is_adult() && L.age < 18 { return "Tu ruta empieza a los 18 años. Por ahora, vive tu infancia y tu adolescencia." }
+    return ""
+}
+
+function route_cats() {
+    let id = L.route
+    let d = L.rd
+    if id == "rey" {
+        if d.king { return ["Objetivos", "Gobierno", "Leyes", "Corte"] }
+        return ["Objetivos", "Corte"]
+    }
+    if id == "presidente" {
+        if d.pres { return ["Objetivos", "Gobierno", "Leyes"] }
+        return ["Objetivos", "Campaña"]
+    }
+    if id == "creador" || id == "fans" { return ["Objetivos", "Contenido", "Negocio"] }
+    if id == "filantropo" { return ["Objetivos", "Mina", "Empresas", "Espacio", "Filantropía"] }
+    if id == "escort" { return ["Objetivos", "Clientes", "Negocio"] }
+    if id == "porno" { return ["Objetivos", "Rodajes", "Negocio"] }
+    return ["Objetivos"]
+}
+
+function route_items(cat: string) {
+    if cat == "Objetivos" { return objective_items() }
+    let id = L.route
+    if id == "rey" || id == "presidente" { return realm_items(cat) }
+    if id == "filantropo" { return space_items(cat) }
+    if id == "creador" { return creator_items(cat) }
+    if id == "fans" { return fans_items(cat) }
+    if id == "escort" { return escort_items(cat) }
+    if id == "porno" { return porno_items(cat) }
+    return []
+}
+
+function objective_items() {
+    let items = []
+    let st = route_stages()
+    let i = 0
+    while i < len(st) {
+        let s = st[i]
+        let sub = "Pendiente"
+        let lock = ""
+        if i < L.rstage { sub = "CUMPLIDO" }
+        if i == L.rstage { sub = "EN CURSO" }
+        if i > L.rstage { lock = "Etapa " + str(i + 1) }
+        list_push(items, {"action": "ra:obj", "t": str(i + 1) + ". " + s.t, "s": sub, "desc": s.d + " " + route_status(), "lock": lock, "done": i < L.rstage})
+        i += 1
+    }
+    return items
+}
+
+// Una línea con el estado de la ruta.
+function route_status() {
+    let d = L.rd
+    let id = L.route
+    if id == "rey" {
+        if d.king { return "Reinas desde hace " + str(d.reign_m) + " meses." }
+        return "Influencia " + str(d.inf) + " · aliados " + str(d.allies) + "."
+    }
+    if id == "presidente" {
+        let o = d.office
+        if d.pres { o = "presidente" }
+        if o == "" { o = "ninguno" }
+        return "Popularidad " + str(d.pop) + "% · cargo: " + o + "."
+    }
+    if id == "creador" { return "Seguidores: " + big_num(d.subs) + "." }
+    if id == "fans" { return "Suscriptores: " + big_num(d.subs) + " · precio $" + str(d.price) + "." }
+    if id == "escort" { return "Clientes: " + str(d.clients) + " · tarifa " + money_str(d.rate) + "." }
+    if id == "porno" { return "Películas: " + str(d.films) + "." }
+    if id == "filantropo" { return "Mina nivel " + str(d.mine) + " · investigación " + str(d.rnd) + "%." }
+    return ""
+}
+
+function big_num(n: int) {
+    if n >= 1000000 { return str(n / 1000000) + "." + str(n % 1000000 / 100000) + " M" }
+    if n >= 1000 { return str(n / 1000) + "." + str(n % 1000 / 100) + " mil" }
+    return str(n)
+}
+
+// Acción genérica de ruta con límite mensual.
+function ritem(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["ra_" + id] != null { l = "Este mes ya" }
+    return {"action": "ra:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function route_use(id: string) {
+    if L.used["ra_" + id] != null { return false }
+    L.used["ra_" + id] = 1
+    return true
+}
+
+function route_action(id: string) {
+    G.modal = null
+    if id == "obj" { return null }
+    let r = L.route
+    if r == "rey" || r == "presidente" { return realm_action(id) }
+    if r == "filantropo" { return space_action(id) }
+    if r == "creador" { return creator_action_r(id) }
+    if r == "fans" { return fans_action(id) }
+    if r == "escort" { return escort_action(id) }
+    if r == "porno" { return porno_action(id) }
+    return null
+}
+
+function route_mg_result(score: any, ctx: map) {
+    let k = ctx.kind
+    if k == "video" || k == "live" { return creator_result(k, score) }
+    if k == "flive" { return fans_live_result(score) }
+    if k == "scene" { return porno_scene_result(score) }
+    if k == "debate" { return debate_result(score) }
+    if k == "launch" { return launch_result(score, ctx) }
+    return null
+}
+
+// ---------------------------------------------------------------- creador de contenido
+
+function creator_items(cat: string) {
+    let d = L.rd
+    let items = []
+    let young = ""
+    if L.age < 13 { young = "Edad 13" }
+    if cat == "Contenido" {
+        list_push(items, ritem("video", "Grabar un video", "Minijuego · seguidores", "Edita rápido y bien: tu puntaje decide cuántas vistas tiene. Si es de tu nicho y te gusta, rinde más.", young))
+        list_push(items, ritem("live", "Transmitir en vivo", "Minijuego · donaciones", "Interactúa con tu chat al ritmo. Más seguidores, más donaciones.", young))
+        let nl = young
+        list_push(items, {"action": "ra:niche", "t": "Elegir tu nicho", "s": "Actual: " + creator_niche(), "desc": "Un nicho que te apasiona hace que tus videos rindan más.", "lock": nl})
+        let cl = young
+        if d.subs < 1000 && cl == "" { cl = "1,000 seguidores" }
+        list_push(items, ritem("collab", "Colaborar con otro creador", "Seguidores", "Juntar comunidades siempre suma.", cl))
+        list_push(items, ritem("drama", "Hacer polémica", "Arriesgado", "Un video de chisme y clickbait. Puede explotar... o cancelarte.", young))
+        list_push(items, ritem("rest", "Descanso digital", "Salud mental", "Un mes sin redes. Tus seguidores bajan un poco, tú respiras.", ""))
+        return items
+    }
+    let sl = ""
+    if d.subs < 10000 { sl = "10 mil seguidores" }
+    list_push(items, ritem("sponsor", "Aceptar un patrocinio", "Dinero", "Una marca te paga por mencionarla. Pagan según tus seguidores.", sl))
+    let ml = ""
+    if d.subs < 50000 { ml = "50 mil seguidores" }
+    list_push(items, ritem("merch", "Vender mercancía", "Dinero", "Gorras, playeras y tazas con tu cara.", ml))
+    let bl = ""
+    if d.subs < 1000000 { bl = "1 millón" }
+    if d.brand { bl = "Ya la tienes" }
+    if bl == "" && L.money < 500000 { bl = "$500,000" }
+    list_push(items, {"action": "ra:brand", "t": "Lanzar tu propia marca", "s": "$500,000", "desc": "Tu propia empresa de productos. Ingresos cada mes.", "lock": bl})
+    return items
+}
+
+function creator_niche() {
+    if L.rd.niche == "" { return "ninguno" }
+    return L.rd.niche
+}
+
+function creator_action_r(id: string) {
+    let d = L.rd
+    if id == "niche" {
+        let labels = list_slice(NICHES, 0, len(NICHES))
+        let locks = []
+        for x in labels { list_push(locks, "") }
+        open_choice("TU NICHO", "¿De qué será tu canal?", labels, locks, "niche", {})
+        return null
+    }
+    if !route_use(id) { return info("Contenido", "Ya lo hiciste este mes.") }
+    if id == "video" { return mg_start("typing", "Editar tu video", "route", {"kind": "video"}) }
+    if id == "live" { return mg_start("arrows", "Transmisión en vivo", "route", {"kind": "live"}) }
+    if id == "collab" {
+        let gainv = d.subs / 10 + rint(200, 2000)
+        d.subs += gainv
+        let f = make_person(pick(["m", "f"]), "amigo", max(13, L.age + rint(-4, 6)))
+        f.bond = rint(45, 70)
+        add_person(f)
+        return finish("Colaboración", "Hiciste un video con " + f.first + ", otr" + oa(f.gender) + " creador" + by_gender(f.gender, "", "a") + ". +" + big_num(gainv) + " seguidores y una nueva amistad.", "g")
+    }
+    if id == "drama" {
+        if chance(55) {
+            let g = d.subs * 3 / 10 + 500
+            d.subs += g
+            L.fame = clamp100(L.fame + 3)
+            return finish("Polémica", "El chisme explotó: +" + big_num(g) + " seguidores. Los comentarios arden.", "g")
+        }
+        let lost = d.subs / 4
+        d.subs -= lost
+        L.happy -= 10
+        hito_once("cancelled", "Vida", "Te cancelaron en redes")
+        return finish("Polémica", "Te cancelaron. Perdiste " + big_num(lost) + " seguidores y ahora todos opinan de ti.", "b")
+    }
+    if id == "rest" {
+        d.subs -= d.subs / 50
+        L.happy += 8
+        L.health += 2
+        return finish("Descanso", "Un mes sin redes. Dormiste, leíste y volviste con ideas nuevas.", "g")
+    }
+    if id == "sponsor" {
+        let pay = d.subs / 40 + 1000
+        L.money += pay
+        return finish("Patrocinio", "Una marca te pagó " + money_str(pay) + " por mencionarla en tu video.", "g")
+    }
+    if id == "merch" {
+        let pay = d.subs / 25
+        L.money += pay
+        return finish("Mercancía", "Vendiste tu mercancía: " + money_str(pay) + ".", "g")
+    }
+    if id == "brand" {
+        if d.brand || L.money < 500000 { return null }
+        L.money -= 500000
+        d.brand = true
+        hito_me("Trabajo", "Lanzaste tu propia marca")
+        return finish("Tu marca", "Lanzaste tu marca. Se agotó en un día.", "g")
+    }
+    return null
+}
+
+function resolve_niche(index: int) {
+    G.modal = null
+    let n = NICHES[index]
+    L.rd.niche = n
+    return finish("Tu canal", "Ahora tu canal es de " + str_lower(n) + ".", "n")
+}
+
+function creator_result(kind: string, score: any) {
+    let d = L.rd
+    let mult = 1
+    let ni = NICHE_INT[d.niche]
+    if ni != null && list_contains(my_interests(), ni) { mult = 2 }
+    if kind == "video" {
+        d.videos += 1
+        let gainv = (score + 20) * (5 + d.subs / 2000) * mult
+        if score >= 80 && chance(8) {
+            gainv = gainv * 10
+            hito_once("viral", "Vida", "Tu primer video viral")
+            d.subs += gainv
+            L.fame = clamp100(L.fame + 8)
+            return finish("¡Viral!", "¡Tu video se hizo viral! +" + big_num(gainv) + " seguidores.", "g")
+        }
+        d.subs += gainv
+        if d.videos == 1 { hito_me("Trabajo", "Subiste tu primer video") }
+        return finish("Video", "Tu video tuvo " + big_num(gainv * 7) + " vistas. +" + big_num(gainv) + " seguidores. (" + str(score) + " puntos)", "g")
+    }
+    let tips = d.subs / 300 * score / 50 + score * 3
+    L.money += tips
+    d.subs += score * (2 + d.subs / 5000)
+    return finish("En vivo", "Tu transmisión estuvo " + mg_rating(score) + ". Donaciones: " + money_str(tips) + ".", "g")
+}
+
+function creator_month() {
+    let d = L.rd
+    if d.subs <= 0 { return null }
+    L.money += d.subs * 2 / 100
+    if d.brand { L.money += 30000 + d.subs / 100 }
+    if L.used["ra_video"] != null { d.subs += d.subs / 100 } else { d.subs -= d.subs / 60 }
+    if d.subs >= 1000000 { L.fame = clamp100(max(L.fame, 50)) }
+    return null
+}
+
+// ---------------------------------------------------------------- VelvetFans (+18)
+
+function fans_items(cat: string) {
+    let d = L.rd
+    let items = []
+    if !d.open {
+        list_push(items, {"action": "ra:fopen", "t": "Abrir tu cuenta en VelvetFans", "s": "Empezar", "desc": "Fotos y videos exclusivos para quienes pagan tu suscripción. Tú pones las reglas.", "lock": ""})
+        return items
+    }
+    if cat == "Contenido" {
+        list_push(items, ritem("fphotos", "Publicar una sesión de fotos", "Suscriptores", "Lencería, luz suave y tu mejor ángulo.", ""))
+        list_push(items, ritem("fvideo", "Video exclusivo", "Más suscriptores", "Contenido que solo tus fans pagados pueden ver.", ""))
+        list_push(items, ritem("flive", "Transmisión en vivo", "Minijuego · propinas", "Lee el chat al ritmo y consiente a tus fans.", ""))
+        list_push(items, ritem("fdm", "Mensajes personalizados", "Dinero", "Contenido a pedido para tus fans más fieles.", ""))
+        list_push(items, ritem("fcollab", "Colaboración con otro creador", "Fama", "Un video juntos para las dos comunidades.", ""))
+        return items
+    }
+    list_push(items, {"action": "ra:fprice", "t": "Cambiar tu precio", "s": "Ahora $" + str(d.price) + "/mes", "desc": "Más caro: menos fans pero más dinero por fan. Más barato: creces rápido.", "lock": ""})
+    let pl = ""
+    if L.money < 500 { pl = "$500" }
+    list_push(items, ritem("fpromo", "Promoción en redes", "$500 · suscriptores", "Anuncios y adelantos en tus redes públicas.", pl))
+    let sl = ""
+    if d.security { sl = "Ya tienes" }
+    list_push(items, {"action": "ra:fsecurity", "t": "Contratar seguridad digital", "s": "$2,000/mes", "desc": "Protege tu identidad y evita filtraciones y acosadores.", "lock": sl})
+    let al = ""
+    if d.subs < 100000 { al = "100 mil suscriptores" }
+    if d.agency { al = "Ya la tienes" }
+    if al == "" && L.money < 1000000 { al = "$1,000,000" }
+    list_push(items, {"action": "ra:fagency", "t": "Fundar tu agencia de creadores", "s": "$1,000,000", "desc": "Manejas a otros creadores y te llevas un porcentaje.", "lock": al})
+    return items
+}
+
+function fans_action(id: string) {
+    let d = L.rd
+    if id == "fopen" {
+        d.open = true
+        if L.job == null { L.job = new_job("cam") }
+        remember_job("cam")
+        hito_me("Trabajo", "Abriste tu cuenta en VelvetFans")
+        return finish("VelvetFans", "Tu cuenta está abierta. Primera foto subida con el corazón a mil.", "x")
+    }
+    if id == "fprice" {
+        open_choice("TU PRECIO", "¿Cuánto cobras al mes? Ahora: $" + str(d.price) + ".", ["$5 (crecer rápido)", "$10", "$20", "$50 (exclusivo)", "Dejarlo igual"], ["", "", "", "", ""], "fprice", {})
+        return null
+    }
+    if id == "fsecurity" {
+        d.security = true
+        return finish("Seguridad", "Contrataste seguridad digital. Duermes más tranquil" + oa(L.gender) + ".", "g")
+    }
+    if id == "fagency" {
+        if d.agency || L.money < 1000000 { return null }
+        L.money -= 1000000
+        d.agency = true
+        hito_me("Trabajo", "Fundaste tu agencia de creadores")
+        return finish("Tu agencia", "Ahora representas a otros creadores. El dinero entra solo.", "g")
+    }
+    if !route_use(id) { return info("VelvetFans", "Ya lo hiciste este mes.") }
+    let looks_bonus = looks_eff() / 20 + fx_sum("flirt") / 5
+    if id == "fphotos" {
+        let g = rint(10, 40) + d.subs * (3 + looks_bonus) / 100
+        d.subs += g
+        career_xp(8)
+        return finish("Sesión de fotos", "Tus fotos encantaron: +" + big_num(g) + " suscriptores.", "x")
+    }
+    if id == "fvideo" {
+        let g = rint(30, 90) + d.subs * (5 + looks_bonus) / 100
+        d.subs += g
+        L.fame = clamp100(L.fame + 1)
+        career_xp(12)
+        return finish("Video exclusivo", "Tu video exclusivo fue el más visto de la semana: +" + big_num(g) + " suscriptores.", "x")
+    }
+    if id == "flive" { return mg_start("arrows", "En vivo en VelvetFans", "route", {"kind": "flive"}) }
+    if id == "fdm" {
+        let pay = d.subs * d.price / 15 + 200
+        L.money += pay
+        return finish("Mensajes", "Tus fans más fieles pagaron por contenido a pedido: " + money_str(pay) + ".", "x")
+    }
+    if id == "fcollab" {
+        d.subs += d.subs / 8 + 100
+        L.fame = clamp100(L.fame + 3)
+        return finish("Colaboración", "Tu video con otro creador fue tendencia en la plataforma.", "x")
+    }
+    if id == "fpromo" {
+        L.money -= 500
+        d.subs += rint(20, 80) + d.subs / 30
+        return finish("Promoción", "Tus adelantos en redes atrajeron nuevos fans.", "g")
+    }
+    return null
+}
+
+function resolve_fprice(index: int) {
+    G.modal = null
+    let prices = [5, 10, 20, 50]
+    if index < 4 { L.rd.price = prices[index] }
+    return finish("Tu precio", "Tu suscripción ahora cuesta $" + str(L.rd.price) + " al mes.", "n")
+}
+
+function fans_live_result(score: any) {
+    let d = L.rd
+    let tips = score * (5 + d.subs / 200)
+    L.money += tips
+    d.subs += score / 2 + d.subs / 100
+    return finish("En vivo", "Tu transmisión estuvo " + mg_rating(score) + ". Propinas: " + money_str(tips) + ".", "x")
+}
+
+function fans_month() {
+    let d = L.rd
+    if !d.open { return null }
+    let income = d.subs * d.price * 80 / 100
+    L.money += income
+    if d.agency { L.money += 50000 + d.subs / 2 }
+    let churn = 2 + d.price / 10
+    d.subs -= d.subs * churn / 100
+    if d.price <= 10 { d.subs += rint(0, 10) + d.subs / 50 }
+    if !d.security && d.subs >= 500 && chance(4) {
+        L.happy -= 12
+        hito_once("leak", "Vida", "Filtraron tu contenido")
+        log_add("Alguien filtró tu contenido exclusivo en un foro. Te sientes expuest" + oa(L.gender) + ".", "b")
+    }
+    if !d.security && d.subs >= 2000 && chance(2) {
+        L.happy -= 8
+        log_add("Un fan obsesionado descubrió dónde vives. Da miedo salir.", "b")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- escort (+18)
+
+function escort_items(cat: string) {
+    let d = L.rd
+    let items = []
+    if !job_is("escort") {
+        list_push(items, {"action": "ra:estart", "t": "Empezar como escort", "s": "Debut", "desc": "Tus reglas, tu seguridad y tu tarifa. Siempre entre adultos que consienten.", "lock": ""})
+        return items
+    }
+    if cat == "Clientes" {
+        list_push(items, ritem("eclient", "Atender a un cliente", money_str(d.rate), "Una cita discreta en un buen hotel. Usa protección: siempre hay riesgo.", ""))
+        let vl = ""
+        if L.job.level < 1 { vl = "Rango 2" }
+        list_push(items, ritem("evip", "Cliente VIP", "Mucho dinero", "Un empresario te invita a su yate un fin de semana.", vl))
+        list_push(items, ritem("eup", "Subir tu tarifa", "Encanto", "Si tu encanto lo sostiene, ganas más por cita. Si no, pierdes clientes.", ""))
+        list_push(items, ritem("edown", "Bajar tu tarifa", "Más clientes", "Más trabajo, menos dinero por cita.", ""))
+        return items
+    }
+    let sl = ""
+    if d.security { sl = "Ya tienes" }
+    list_push(items, {"action": "ra:esecurity", "t": "Contratar seguridad", "s": "$3,000/mes", "desc": "Un chofer y alguien que sabe dónde estás. Evita los peores sustos.", "lock": sl})
+    let al = ""
+    if L.job.level < 1 { al = "Rango 2" }
+    if d.agency { al = "Ya la tienes" }
+    if al == "" && L.money < 500000 { al = "$500,000" }
+    list_push(items, {"action": "ra:eagency", "t": "Abrir tu agencia", "s": "$500,000", "desc": "Representas a otras escorts con reglas justas y seguridad. Ganancias cada mes.", "lock": al})
+    return items
+}
+
+function escort_action(id: string) {
+    let d = L.rd
+    if id == "estart" {
+        if L.job != null { L.last_job = L.job.title }
+        L.job = new_job("escort")
+        remember_job("escort")
+        hito_me("Trabajo", "Debut como escort")
+        return finish("Debut", "Tu primera cita como escort. Nervios, un buen vestido y reglas claras.", "x")
+    }
+    if id == "esecurity" {
+        d.security = true
+        return finish("Seguridad", "Contrataste seguridad. Ahora alguien siempre sabe dónde estás.", "g")
+    }
+    if id == "eagency" {
+        if d.agency || L.money < 500000 { return null }
+        L.money -= 500000
+        d.agency = true
+        hito_me("Trabajo", "Abriste tu propia agencia")
+        return finish("Tu agencia", "Abriste tu agencia: reglas justas, seguridad y discreción.", "g")
+    }
+    if !route_use(id) { return info("Escort", "Ya lo hiciste este mes.") }
+    if id == "eclient" {
+        let pay = d.rate * rint(8, 12) / 10
+        d.clients += 1
+        career_xp(10)
+        let msg = "Cita con un cliente discreto. Cobraste " + money_str(pay) + "."
+        L.money += pay
+        L.partners += 1
+        if chance(6 * (100 + fx_sum("its")) / 100) { msg = msg + catch_its_random() }
+        if !d.security && chance(5) {
+            L.money -= pay
+            L.health -= 10
+            L.happy -= 15
+            msg = "El cliente se puso violento y se llevó tu dinero. Saliste corriendo del hotel."
+            hito_once("escort_scare", "Vida", "Un cliente peligroso")
+            return finish("Escort", msg, "b")
+        }
+        return finish("Escort", msg, "x")
+    }
+    if id == "evip" {
+        let pay = d.rate * 5
+        L.money += pay
+        d.clients += 1
+        L.happy += 6
+        career_xp(25)
+        return finish("Cliente VIP", "Un fin de semana en yate con un cliente generoso: " + money_str(pay) + ".", "x")
+    }
+    if id == "eup" {
+        if chance(35 + rank("charm") * 8 + looks_eff() / 5) {
+            d.rate = d.rate * 13 / 10
+            return finish("Tarifa", "Tus clientes aceptaron la nueva tarifa: " + money_str(d.rate) + ".", "g")
+        }
+        d.clients = max(0, d.clients - 2)
+        return finish("Tarifa", "Algunos clientes se fueron con alguien más barato.", "b")
+    }
+    if id == "edown" {
+        d.rate = max(500, d.rate * 8 / 10)
+        d.clients += 2
+        return finish("Tarifa", "Bajaste tu tarifa a " + money_str(d.rate) + ". Llegaron clientes nuevos.", "n")
+    }
+    return null
+}
+
+function escort_month() {
+    let d = L.rd
+    if d.security { L.money -= 3000 }
+    if d.agency { L.money += rint(20, 60) * 1000 }
+    return null
+}
+
+// ---------------------------------------------------------------- estrella +18
+
+function porno_items(cat: string) {
+    let d = L.rd
+    let items = []
+    if !job_is("porn") {
+        list_push(items, {"action": "ra:pstart", "t": "Ir al casting", "s": "Debut", "desc": "Un estudio serio, pruebas médicas y contrato claro.", "lock": ""})
+        return items
+    }
+    if cat == "Rodajes" {
+        list_push(items, ritem("pscene", "Grabar una escena", "Minijuego · fama", "Ritmo, química y profesionalismo frente a la cámara.", ""))
+        list_push(items, ritem("ptest", "Pruebas médicas de la industria", "Salud", "La industria exige pruebas: detectan ITS antes de que sea tarde.", ""))
+        list_push(items, ritem("pcon", "Convención de fans", "Fama, dinero", "Firmas de autógrafos y fotos con tus fans.", ""))
+        return items
+    }
+    let sl = ""
+    if L.job.level < 1 { sl = "Rango 2" }
+    if d.studio { sl = "Ya lo tienes" }
+    if sl == "" && L.money < 2000000 { sl = "$2,000,000" }
+    list_push(items, {"action": "ra:pstudio", "t": "Fundar tu estudio", "s": "$2,000,000", "desc": "Tus películas, tus reglas y las ganancias para ti.", "lock": sl})
+    let fl = ""
+    if !d.studio { fl = "Necesitas estudio" }
+    if fl == "" && L.money < 200000 { fl = "$200,000" }
+    list_push(items, ritem("pfilm", "Producir una película", "$200,000", "Inviertes en una producción: si la fama acompaña, ganancias enormes.", fl))
+    return items
+}
+
+function porno_action(id: string) {
+    let d = L.rd
+    if id == "pstart" {
+        if L.job != null { L.last_job = L.job.title }
+        L.job = new_job("porn")
+        remember_job("porn")
+        hito_me("Trabajo", "Debut en el cine para adultos")
+        return finish("Casting", "Pasaste el casting. Contrato firmado y pruebas médicas en regla.", "x")
+    }
+    if id == "pstudio" {
+        if d.studio || L.money < 2000000 { return null }
+        L.money -= 2000000
+        d.studio = true
+        hito_me("Trabajo", "Fundaste tu estudio de cine para adultos")
+        return finish("Tu estudio", "Fundaste tu estudio. Ahora tú decides cómo se trabaja.", "g")
+    }
+    if !route_use(id) { return info("Estrella +18", "Ya lo hiciste este mes.") }
+    if id == "pscene" { return mg_start("arrows", "Rodaje", "route", {"kind": "scene"}) }
+    if id == "ptest" {
+        d.tested = L.tm
+        let msg = its_test()
+        L.money += 500
+        return finish("Pruebas", msg, "n")
+    }
+    if id == "pcon" {
+        let pay = 5000 + L.fame * 300
+        L.money += pay
+        L.fame = clamp100(L.fame + 3)
+        return finish("Convención", "Firmaste autógrafos seis horas seguidas. Ganaste " + money_str(pay) + ".", "g")
+    }
+    if id == "pfilm" {
+        if L.money < 200000 { return null }
+        L.money -= 200000
+        d.studio_films += 1
+        let ret = 200000 * (L.fame + rint(0, 60)) / 50
+        L.money += ret
+        let kind = "g"
+        if ret < 200000 { kind = "b" }
+        return finish("Producción", "Tu película recaudó " + money_str(ret) + ".", kind)
+    }
+    return null
+}
+
+function porno_scene_result(score: any) {
+    let d = L.rd
+    d.films += 1
+    let pay = 3000 + score * 80 + L.fame * 100
+    L.money += pay
+    L.fame = clamp100(L.fame + score / 25)
+    career_xp(score / 2)
+    let msg = "Escena terminada (" + str(score) + " puntos). Cobraste " + money_str(pay) + "."
+    if d.tested != L.tm && chance(5 * (100 + fx_sum("its")) / 100) { msg = msg + catch_its_random() }
+    L.partners += 1
+    if score >= 90 && chance(25) && !has_flag("award") {
+        flag("award")
+        msg = msg + " ¡Tu escena ganó el Premio Terciopelo Rojo!"
+        hito_me("Trabajo", "Ganaste el Premio Terciopelo Rojo")
+    }
+    return finish("Rodaje", msg, "x")
+}

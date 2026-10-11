@@ -378,7 +378,10 @@ function new_life() {
     log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
     log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
     setup_family()
+    setup_religion()
     add_extended_family()
+    if G.cre.route != null { L.route = G.cre.route }
+    route_setup()
     L.grades = clamp(30 + L.smarts / 2 + rint(-10, 10), 0, 100)
 }
 
@@ -474,6 +477,12 @@ function new_life_core(age: int) {
         "interests": null,
         "hito_keys": {},
         "fert": rint(50, 95),
+        "route": "normal",
+        "rd": {},
+        "rstage": 0,
+        "rdone": false,
+        "religion": "ninguna",
+        "faith": 0,
         "pregnant": false,
         "preg_with": "",
         "partner_preg": false,
@@ -554,7 +563,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_gig_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_ping() { maybe_event() }
+    if !maybe_gig_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -600,6 +609,8 @@ function monthly() {
     state_hitos()
     bonds_month()
     finance_month()
+    religion_month()
+    route_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8
