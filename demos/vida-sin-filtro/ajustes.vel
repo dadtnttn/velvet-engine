@@ -215,7 +215,7 @@ function draw_cfg_sound(x: int, y: int) {
         otext(x, ry, r[1], 28, C_WHITE, "impact", false)
         let bx = x + 10
         let by = ry + 22
-        let bw = 520
+        let bw = 490
         rect(bx, by, bw, 26, C_GRAY_D)
         rect(bx, by, bw * v / 100, 26, C_RED)
         rect(bx, by + 26, bw, 3, C_INK)
@@ -225,7 +225,7 @@ function draw_cfg_sound(x: int, y: int) {
             rect(bx + bw * k / 10, by, 2, 26, C_INK)
             k += 1
         }
-        otext(bx + bw + 30, by + 24, str(v) + "%", 28, C_YELLOW, "impact", false)
+        otext(bx + bw + 18, by + 24, str(v) + "%", 28, C_YELLOW, "impact", false)
         small_button(x + 620, by - 8, 50, 40, "−", "cfg:vol:" + r[0] + ":-10")
         small_button(x + 680, by - 8, 50, 40, "+", "cfg:vol:" + r[0] + ":10")
         i += 1
