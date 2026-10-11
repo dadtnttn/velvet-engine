@@ -191,6 +191,7 @@ impl Vs3App {
         runtime.provide_fonts(fonts.metrics_value())?;
         velvet_script_vs3::i18n::set_measurer(Some(fonts.measurer()));
         velvet_script_vs3::i18n::set_catalog(None);
+        velvet_script_vs3::i18n::set_system_lang(&crate::locale::system_language());
         let audio = crate::audio::Audio::load(&asset_root, &manifest.sounds);
         let frame = FrameView::parse(&runtime.initialize()?).context("initial VS3 frame")?;
         validate_frame(&frame, &manifest, &assets)?;

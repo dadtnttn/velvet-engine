@@ -100,6 +100,20 @@ pub fn translate(text: &str) -> String {
     })
 }
 
+static SYSTEM_LANG: std::sync::RwLock<String> = std::sync::RwLock::new(String::new());
+
+/// The language of the player's system, as the host reports it ("es-MX").
+pub fn set_system_lang(code: &str) {
+    if let Ok(mut lang) = SYSTEM_LANG.write() {
+        *lang = code.to_owned();
+    }
+}
+
+/// The language of the player's system (`""` when the host did not say).
+pub fn system_lang() -> String {
+    SYSTEM_LANG.read().map(|l| l.clone()).unwrap_or_default()
+}
+
 /// Code of the active language (`""` when no catalog is installed).
 pub fn active_lang() -> String {
     ACTIVE.with(|a| {

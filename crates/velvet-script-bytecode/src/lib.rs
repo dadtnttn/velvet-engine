@@ -395,6 +395,9 @@ pub enum NativeId {
     Tr = 186,
     /// `i18n_lang()`: code of the active language (`""` when none).
     I18nLang = 187,
+    /// `sys_lang()`: the language of the player's system as the host reports
+    /// it ("es-MX"), `""` when unknown.
+    SysLang = 188,
 }
 
 impl NativeId {
@@ -589,6 +592,7 @@ impl NativeId {
             185 => Self::StrWrap,
             186 => Self::Tr,
             187 => Self::I18nLang,
+            188 => Self::SysLang,
             _ => return None,
         })
     }
@@ -790,6 +794,7 @@ impl NativeId {
             Self::StrWrap => "str_wrap",
             Self::Tr => "tr",
             Self::I18nLang => "i18n_lang",
+            Self::SysLang => "sys_lang",
         }
     }
 
@@ -984,6 +989,7 @@ impl NativeId {
             Self::StrWrap,
             Self::Tr,
             Self::I18nLang,
+            Self::SysLang,
         ]
     }
 }
@@ -1179,6 +1185,7 @@ pub fn lookup_native(name: &str) -> Option<NativeId> {
         "str_wrap" => Some(NativeId::StrWrap),
         "tr" => Some(NativeId::Tr),
         "i18n_lang" => Some(NativeId::I18nLang),
+        "sys_lang" => Some(NativeId::SysLang),
         _ => None,
     }
 }
@@ -1376,7 +1383,7 @@ impl NativeId {
             N::ListReduce | N::StrMeasure => (3, 3),
             N::JsonEncode => (1, 2),
             N::StrWrap => (4, 4),
-            N::I18nLang => (0, 0),
+            N::I18nLang | N::SysLang => (0, 0),
             _ => (1, 1),
         };
 
@@ -1592,7 +1599,8 @@ impl NativeId {
             | N::StrSub
             | N::JsonEncode
             | N::Tr
-            | N::I18nLang => T::String,
+            | N::I18nLang
+            | N::SysLang => T::String,
             N::Call | N::ListFind | N::ListReduce | N::MapGet | N::JsonDecode => T::Any,
             N::ListPop
             | N::Choose
@@ -1638,6 +1646,7 @@ impl NativeId {
                 | N::ListSortBy
                 | N::Tr
                 | N::I18nLang
+                | N::SysLang
         ) {
             Impure
         } else {

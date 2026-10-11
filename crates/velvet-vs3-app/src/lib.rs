@@ -9,6 +9,7 @@ mod assets;
 mod audio;
 mod graphics;
 mod input;
+mod locale;
 mod model;
 mod platform;
 mod scene;

@@ -137,6 +137,7 @@ pub(crate) fn call_ext(native: NativeId, args: &[Value]) -> Option<Result<Native
             | N::JsonDecode
             | N::Tr
             | N::I18nLang
+            | N::SysLang
     ) {
         return None;
     }
@@ -245,6 +246,7 @@ pub(crate) fn call_ext(native: NativeId, args: &[Value]) -> Option<Result<Native
             other => Ok(out(other.clone())),
         },
         N::I18nLang => Ok(out(text(crate::i18n::active_lang()))),
+        N::SysLang => Ok(out(text(crate::i18n::system_lang()))),
         _ => return None,
     };
     Some(r)
