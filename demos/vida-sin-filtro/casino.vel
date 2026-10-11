@@ -306,7 +306,14 @@ function cs_open_amount(game: string, ctx: map) {
 function cs_bet(amount: int) {
     let c = cs()
     L.money -= amount
-    L.gamble += 1
+    // La adicción se mide en noches de juego, no en manos: la primera apuesta
+    // del mes pesa; las siguientes casi no.
+    if map_get(c, "bet_tm", -1) != L.tm {
+        c.bet_tm = L.tm
+        L.gamble += 2
+    } else if chance(15) {
+        L.gamble += 1
+    }
     c.wag += amount
     c.m_wag += amount
     c.m_net -= amount
@@ -935,6 +942,16 @@ function vp_draw(index: int) {
 function casino_month() {
     if L.cs == null { return null }
     let c = L.cs
+    // Dos años sin apostar: la ludopatía queda atrás.
+    if c.addict == true {
+        if L.gamble <= 0 { c.clean_m = map_get(c, "clean_m", 0) + 1 } else { c.clean_m = 0 }
+        if c.clean_m >= 24 {
+            c.addict = false
+            c.clean_m = 0
+            log_add("Llevas dos años sin apostar. Ya no sientes el jalón del casino.", "g")
+            hito_once("gamble_free", "Vida", "Dejaste atrás la ludopatía")
+        }
+    }
     if c.m_wag > 0 {
         let v = CS_VIP[vip_level()]
         if c.m_net < 0 && v.cb > 0 {

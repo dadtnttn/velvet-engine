@@ -1108,7 +1108,7 @@ function open_tier_choice(id: string) {
         list_push(labels, t.n + " · " + money_str(local_price(d.cost) * t.mult / 100) + "/año")
         let lock = ""
         if exam < t.exam { lock = "Examen " + str(t.exam) }
-        if t.id == "elite" && L.grades < 80 { lock = "Calificación 80" }
+        if t.id == "elite" && acad_grades() < 80 { lock = "Calificación 80" }
         list_push(locks, lock)
     }
     list_push(labels, "Presentar el examen de admisión")

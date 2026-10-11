@@ -643,6 +643,7 @@ function lazos_code(a: map, p: map) {
         bond_gain(p, -25)
         if p.bond < 20 {
             p.rel = "rival"
+            if L.job != null { p.rival_job = L.job.id }
             hito_quiet("Trabajo", p.first + " se volvió tu rival")
             return finish(p.first, "El jefe le creyó a ti. " + p.first + " sabe que fuiste tú. Ahora es tu rival.", "b")
         }
@@ -883,6 +884,7 @@ function lazos_special(name: string, ctx: map) {
     }
     if name == "z_make_rival" {
         if p == null { return "" }
+        if p.rel == "colega" && L.job != null { p.rival_job = L.job.id }
         p.rel = "rival"
         p.bond = min(p.bond, 15)
         return " Ahora " + p.first + " es tu rival."
@@ -1241,8 +1243,34 @@ function lazos_on_death(p: map) {
 
 // ---------------------------------------------------------------- cada mes y cada año
 
+// Cuando dejas (o pierdes) tu trabajo principal: tus colegas quedan como
+// amigos o excolegas, tus rivales de ahí ya no te sabotean en el nuevo, y si
+// tenías segunda carrera, esa pasa a ser la principal.
+function job_sync() {
+    let cur = ""
+    if L.job != null { cur = L.job.id }
+    let prev = map_get(L, "job_was", "")
+    if prev != "" && cur != prev {
+        for q in L.people {
+            if q.rel == "colega" {
+                if q.bond >= 60 { q.rel = "amigo" } else { q.rel = "excolega" }
+            }
+            if q.rel == "rival" && map_get(q, "rival_job", "") == prev { q.rival_job = "old" }
+        }
+    }
+    if L.job == null && L.job2 != null {
+        L.job = L.job2
+        L.job2 = null
+        cur = L.job.id
+        log_add("Tu segunda carrera, " + str_lower(L.job.title) + ", ahora es tu trabajo principal.", "n")
+    }
+    L.job_was = cur
+    return null
+}
+
 function lazos_month() {
     if !L.alive { return null }
+    job_sync()
     bw_month()
     let cur = cur_month()
     let colegas = 0
@@ -1300,7 +1328,7 @@ function lazos_month() {
             }
         }
         // Rivales
-        if p.rel == "rival" && L.job != null && chance(6) {
+        if p.rel == "rival" && L.job != null && map_get(p, "rival_job", L.job.id) == L.job.id && chance(6) {
             L.job.perf = clamp100(L.job.perf - 5)
             log_add("Tu rival " + p.first + " habló mal de ti con el jefe.", "b")
         }

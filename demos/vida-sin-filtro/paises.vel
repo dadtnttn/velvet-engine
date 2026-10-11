@@ -816,6 +816,24 @@ function pais_move(dest: string, legal: string) {
         log_add("Dejaste tu trabajo como " + L.job.title + " en " + cname(from) + ".", "n")
         L.job = null
     }
+    // Lo que no se muda contigo: la segunda carrera, la chamba y los estudios.
+    if L.job2 != null { L.job2 = null }
+    if L.gig != null {
+        log_add("Dejaste tu chamba de " + str_lower(L.gig.title) + ".", "n")
+        L.gig = null
+    }
+    if L.study != null && L.age >= 18 {
+        log_add("Dejaste tus estudios en " + cname(from) + ". Podrás inscribirte de nuevo aquí.", "n")
+        L.study = null
+    }
+    // Tus papás no se mudaron contigo: ahora rentas.
+    if L.home == "padres" && L.age >= 18 {
+        L.home = "renta"
+        log_add("Ahora rentas un lugar en " + L.city + ".", "n")
+    } else if L.home == "propia" {
+        L.home = "renta"
+        log_add("Tu casa se quedó en " + cname(from) + ". Aquí rentas mientras tanto.", "n")
+    }
     tfx_add("choque_cultural", 6)
     if len(parents_alive()) > 0 && dest != born_id() { tfx_add("morrina", 8) }
     hito_me("Vida", "Te mudaste a " + x.n)

@@ -380,6 +380,7 @@ function rel_label(p: map) {
     if r == "exsuegro" { return by_gender(p.gender, "Ex suegro", "Ex suegra") }
     if r == "sobrino" { return by_gender(p.gender, "Sobrino", "Sobrina") }
     if r == "colega" { return by_gender(p.gender, "Colega", "Colega") }
+    if r == "excolega" { return by_gender(p.gender, "Excolega", "Excolega") }
     if r == "rival" { return by_gender(p.gender, "Rival", "Rival") }
     if r == "recluso" { return by_gender(p.gender, "Compañero de celda", "Compañera de celda") }
     return "Ligue"
@@ -767,8 +768,8 @@ function yearly() {
             lazos_on_death(p)
             if p.bond > 50 { L.happy -= 15 }
             if p.rel == "padre" || p.rel == "madre" {
-                if chance(60) {
-                    let heritage = rint(2, 40) * 1000
+                let heritage = parent_estate(p)
+                if heritage > 0 {
                     L.money += heritage
                     log_add("Heredaste " + money_str(heritage) + ".", "g")
                 }
@@ -836,16 +837,13 @@ function yearly() {
     // Trabajo y dinero
     if L.job != null && L.jail == 0 {
         L.job.years += 1
-        L.job.perf = clamp100(L.job.perf + rint(-6, 4))
+        L.job.perf = clamp100(L.job.perf + rint(-4, 4))
         if L.job.perf < 15 && chance(50) {
-            log_add("Te despidieron de tu trabajo como " + L.job.title + ".", "b")
-            hito_me("Trabajo", "Te despidieron de tu trabajo como " + str_lower(L.job.title))
-            L.happy -= 10
-            L.last_job = L.job.title
-            L.job = null
+            let t = L.job.title
+            log_add("Te despidieron de tu trabajo como " + t + "." + fire_job("Tu desempeño se vino abajo."), "b")
         }
     }
-    let kids_cost = 3000 * kids_living()
+    let kids_cost = local_price(3000) * kids_living()
     if kids_cost > 0 && L.jail == 0 { L.money -= kids_cost }
     if L.money < 0 && L.age >= 18 {
         L.happy -= 2
@@ -1179,4 +1177,21 @@ function go_to_jail(years: int) {
 function plural(n: int, one: string, many: string) {
     if n == 1 { return one }
     return many
+}
+
+// Lo que te deja papá o mamá: depende de cuánto tenía la familia y del país,
+// se reparte entre los hermanos vivos y pesa cuánto se querían.
+function parent_estate(p: map) {
+    let base = 0
+    if L.family == "pobre" { base = rint(0, 15) * 1000 }
+    if L.family == "media" { base = rint(30, 200) * 1000 }
+    if L.family == "rica" { base = rint(500, 5000) * 1000 }
+    // Si queda el otro progenitor, la mayor parte se queda con él o ella.
+    if has_rel("padre") || has_rel("madre") { base = base / 3 }
+    let heirs = 1
+    for q in L.people {
+        if q.alive && q.rel == "hermano" { heirs += 1 }
+    }
+    let share = base * pais_pay_mult() / 100 / heirs
+    return share * (50 + p.bond / 2) / 100
 }
