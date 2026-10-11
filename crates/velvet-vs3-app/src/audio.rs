@@ -60,7 +60,10 @@ pub fn decode_wav(bytes: &[u8]) -> Option<Clip> {
             .chunks_exact(2)
             .map(|b| f32::from(i16::from_le_bytes([b[0], b[1]])) / 32768.0)
             .collect(),
-        (1, 8) => data.iter().map(|b| (f32::from(*b) - 128.0) / 128.0).collect(),
+        (1, 8) => data
+            .iter()
+            .map(|b| (f32::from(*b) - 128.0) / 128.0)
+            .collect(),
         (3, 32) => data
             .chunks_exact(4)
             .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
@@ -118,7 +121,11 @@ impl MixState {
                 }
                 let idx = (v.pos as usize).min(total.saturating_sub(1));
                 let l = v.clip.samples[idx * src_ch];
-                let r = if src_ch > 1 { v.clip.samples[idx * src_ch + 1] } else { l };
+                let r = if src_ch > 1 {
+                    v.clip.samples[idx * src_ch + 1]
+                } else {
+                    l
+                };
                 let g = v.volume * v.gain * bus * self.master;
                 if channels >= 2 {
                     out[f * channels] += l * g;
@@ -171,7 +178,11 @@ impl Audio {
             out_rate: 44_100,
         }));
         #[cfg(feature = "audio")]
-        let stream = if clips.is_empty() { None } else { open_stream(state.clone()) };
+        let stream = if clips.is_empty() {
+            None
+        } else {
+            open_stream(state.clone())
+        };
         Self {
             clips,
             state,
@@ -192,7 +203,11 @@ impl Audio {
             volume: volume.clamp(0.0, 2.0),
             looped: music,
             gain: if music && fade > 0.0 { 0.0 } else { 1.0 },
-            gain_step: if music && fade > 0.0 { 1.0 / frames_fade } else { 0.0 },
+            gain_step: if music && fade > 0.0 {
+                1.0 / frames_fade
+            } else {
+                0.0
+            },
             music,
             done: false,
         })
@@ -250,7 +265,8 @@ impl Audio {
         }
     }
 
-    /// Render `frames` stereo frames offline (tests and tools).
+    /// Render `frames` stereo frames offline.
+    #[cfg(test)]
     pub fn render_offline(&self, frames: usize) -> Vec<f32> {
         let mut out = vec![0.0; frames * 2];
         if let Ok(mut s) = self.state.lock() {

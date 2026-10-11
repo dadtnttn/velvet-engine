@@ -59,7 +59,12 @@ pub fn set_var(name: &str, value: &str) {
 }
 
 fn var(name: &str) -> String {
-    VARS.with(|v| v.borrow().get(&name.to_lowercase()).cloned().unwrap_or_default())
+    VARS.with(|v| {
+        v.borrow()
+            .get(&name.to_lowercase())
+            .cloned()
+            .unwrap_or_default()
+    })
 }
 
 /// Resolve `{@var|k=v|...}` selects in a finished translation.
@@ -97,7 +102,12 @@ pub fn translate(text: &str) -> String {
 
 /// Code of the active language (`""` when no catalog is installed).
 pub fn active_lang() -> String {
-    ACTIVE.with(|a| a.borrow().as_ref().map(|t| t.cat.lang.clone()).unwrap_or_default())
+    ACTIVE.with(|a| {
+        a.borrow()
+            .as_ref()
+            .map(|t| t.cat.lang.clone())
+            .unwrap_or_default()
+    })
 }
 
 /// Install (or remove) the host text measurer.
@@ -187,7 +197,10 @@ fn parse_template(src: &str) -> Option<Vec<Part>> {
 
 impl Catalog {
     /// Build from `(source, translation)` pairs.
-    pub fn new(lang: impl Into<String>, entries: impl IntoIterator<Item = (String, String)>) -> Self {
+    pub fn new(
+        lang: impl Into<String>,
+        entries: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
         let mut cat = Catalog {
             lang: lang.into(),
             ..Default::default()
@@ -215,7 +228,10 @@ impl Catalog {
                     let idx = cat.templates.len();
                     match parts.first() {
                         Some(Part::Lit(first)) => {
-                            cat.by_prefix.entry(prefix_key(first)).or_default().push(idx);
+                            cat.by_prefix
+                                .entry(prefix_key(first))
+                                .or_default()
+                                .push(idx);
                             cat.by_prefix
                                 .entry(prefix_key(&first.to_uppercase()))
                                 .or_default()
@@ -241,8 +257,12 @@ impl Catalog {
                     });
                 }
                 None => {
-                    cat.upper.entry(src.to_uppercase()).or_insert_with(|| dst.to_uppercase());
-                    cat.lower.entry(src.to_lowercase()).or_insert_with(|| dst.to_lowercase());
+                    cat.upper
+                        .entry(src.to_uppercase())
+                        .or_insert_with(|| dst.to_uppercase());
+                    cat.lower
+                        .entry(src.to_lowercase())
+                        .or_insert_with(|| dst.to_lowercase());
                     cat.exact.insert(src, dst);
                 }
             }
@@ -293,7 +313,9 @@ fn looks_like_name(v: &str) -> bool {
     let words: Vec<&str> = v.split_whitespace().collect();
     !words.is_empty()
         && words.len() <= 3
-        && words.iter().all(|w| w.chars().next().is_some_and(char::is_uppercase))
+        && words
+            .iter()
+            .all(|w| w.chars().next().is_some_and(char::is_uppercase))
 }
 
 fn has_letters(s: &str) -> bool {
@@ -396,7 +418,11 @@ impl Translator {
             return;
         }
         use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             let _ = writeln!(f, "{}", s.replace('\n', "\\n"));
         }
     }
@@ -473,7 +499,10 @@ impl Translator {
         let mut best: Option<(usize, Vec<(usize, String)>)> = None;
         let consider = |idx: usize, best: &mut Option<(usize, Vec<(usize, String)>)>| {
             let t = &self.cat.templates[idx];
-            if best.as_ref().is_some_and(|(b, _)| self.cat.templates[*b].weight >= t.weight) {
+            if best
+                .as_ref()
+                .is_some_and(|(b, _)| self.cat.templates[*b].weight >= t.weight)
+            {
                 return;
             }
             let parts = if upper { &t.upper } else { &t.parts };
@@ -499,7 +528,11 @@ impl Translator {
             }
         }
         for (idx, lit) in &self.cat.floating {
-            let hit = if upper { s.contains(&lit.to_uppercase()) } else { s.contains(lit.as_str()) };
+            let hit = if upper {
+                s.contains(&lit.to_uppercase())
+            } else {
+                s.contains(lit.as_str())
+            };
             if hit {
                 consider(*idx, &mut best);
             }
@@ -517,7 +550,8 @@ impl Translator {
                 continue;
             }
             let long = v.split_whitespace().count() > 3;
-            if (long || (glue && !looks_like_name(v))) && self.lookup(v.trim(), depth + 1).is_none() {
+            if (long || (glue && !looks_like_name(v))) && self.lookup(v.trim(), depth + 1).is_none()
+            {
                 return None;
             }
         }
@@ -562,7 +596,8 @@ impl Translator {
                             let shown = if raw.trim().is_empty() || !has_letters(raw) {
                                 raw.to_owned()
                             } else {
-                                self.lookup(raw, depth + 1).unwrap_or_else(|| raw.to_owned())
+                                self.lookup(raw, depth + 1)
+                                    .unwrap_or_else(|| raw.to_owned())
                             };
                             out.push_str(&shown);
                         }
@@ -626,7 +661,10 @@ fn plural_category(lang: &str, n: i64) -> &'static str {
 /// plural category of a numeric value.
 fn pick_plural(options: &str, raw: &str, lang: &str) -> String {
     if options.contains('#') {
-        let digits: String = raw.chars().filter(|c| c.is_ascii_digit() || *c == '-').collect();
+        let digits: String = raw
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '-')
+            .collect();
         if let Ok(n) = digits.parse::<i64>() {
             let cat = plural_category(lang, n);
             let mut fallback = None;
@@ -669,14 +707,20 @@ mod tests {
     use super::*;
 
     fn cat(entries: &[(&str, &str)]) -> Catalog {
-        Catalog::new("en", entries.iter().map(|(a, b)| (a.to_string(), b.to_string())))
+        Catalog::new(
+            "en",
+            entries.iter().map(|(a, b)| (a.to_string(), b.to_string())),
+        )
     }
 
     #[test]
     fn plural_forms() {
         let c = Catalog::new(
             "ru",
-            vec![("{0} años".to_string(), "{0} {0|#one=год|#few=года|#many=лет}".to_string())],
+            vec![(
+                "{0} años".to_string(),
+                "{0} {0|#one=год|#few=года|#many=лет}".to_string(),
+            )],
         );
         let mut t = Translator::new(c);
         assert_eq!(t.tr("1 años"), "1 год");

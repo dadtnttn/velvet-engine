@@ -11,7 +11,9 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use resvg::{tiny_skia, usvg};
+use usvg::fontdb::{Database, Source, ID};
 
+use super::fonts::LoadedFont;
 use crate::assets::ImageAsset;
 
 /// Largest side accepted for one rasterized SVG.
@@ -26,19 +28,43 @@ struct Entry {
     last_used: u64,
 }
 
+/// A fallback font as loaded in the SVG font database.
+type Fallback = (Vec<ID>, Arc<LoadedFont>);
+
 /// Rasterizes and caches inline SVG documents.
 pub struct SvgCache {
-    fontdb: Arc<usvg::fontdb::Database>,
+    fontdb: Arc<Database>,
+    /// Faces already in `fontdb` for each fallback font, by font key.
+    loaded: HashMap<usize, Vec<ID>>,
+    /// Fallbacks of the active language, most preferred first.
+    fallbacks: Arc<Vec<Fallback>>,
     entries: HashMap<u64, Entry>,
     pixels: usize,
     clock: u64,
 }
 
 impl SvgCache {
-    /// Make an extra font (e.g. a fallback for the active language) visible
-    /// to SVG text.
-    pub fn add_font(&mut self, data: &[u8]) {
-        std::sync::Arc::make_mut(&mut self.fontdb).load_font_data(data.to_vec());
+    /// Use `chain` (the active language's fallback fonts, most preferred
+    /// first) for characters the font named by the SVG lacks, so Han text
+    /// gets the Chinese, Japanese or Korean shapes of the language in use.
+    pub fn set_fallbacks(&mut self, chain: &[Arc<LoadedFont>]) {
+        let mut ordered = Vec::with_capacity(chain.len());
+        for font in chain {
+            let ids = match self.loaded.get(&font.key) {
+                Some(ids) => ids.clone(),
+                None => {
+                    let data: Arc<dyn AsRef<[u8]> + Sync + Send> = font.bytes.clone();
+                    let ids = Arc::make_mut(&mut self.fontdb)
+                        .load_font_source(Source::Binary(data))
+                        .to_vec();
+                    self.loaded.insert(font.key, ids.clone());
+                    ids
+                }
+            };
+            ordered.push((ids, font.clone()));
+        }
+        self.fallbacks = Arc::new(ordered);
+        self.clear();
     }
     /// Forget every cached raster (fonts changed).
     pub fn clear(&mut self) {
@@ -47,7 +73,7 @@ impl SvgCache {
     }
     /// Builds a cache whose text rendering only sees the given font files.
     pub fn new<'a>(fonts: impl IntoIterator<Item = &'a [u8]>) -> Self {
-        let mut db = usvg::fontdb::Database::new();
+        let mut db = Database::new();
         for data in fonts {
             db.load_font_data(data.to_vec());
         }
@@ -64,6 +90,8 @@ impl SvgCache {
         }
         Self {
             fontdb: Arc::new(db),
+            loaded: HashMap::new(),
+            fallbacks: Arc::new(Vec::new()),
             entries: HashMap::new(),
             pixels: 0,
             clock: 0,
@@ -78,7 +106,7 @@ impl SvgCache {
         self.clock += 1;
         let key = cache_key(svg, width, height);
         if !self.entries.contains_key(&key) {
-            let image = rasterize(svg, width, height, &self.fontdb);
+            let image = rasterize(svg, width, height, &self.fontdb, &self.fallbacks);
             if let Some(image) = &image {
                 self.pixels += image.pixels.len();
             }
@@ -134,10 +162,25 @@ fn rasterize(
     svg: &str,
     width: u32,
     height: u32,
-    fontdb: &Arc<usvg::fontdb::Database>,
+    fontdb: &Arc<Database>,
+    fallbacks: &Arc<Vec<Fallback>>,
 ) -> Option<ImageAsset> {
+    let preferred = fallbacks.clone();
+    let any_font = usvg::FontResolver::default_fallback_selector();
+    let font_resolver = usvg::FontResolver {
+        select_font: usvg::FontResolver::default_font_selector(),
+        // The active language's fonts first, then any font with the glyph.
+        select_fallback: Box::new(move |ch, used, db| {
+            preferred
+                .iter()
+                .filter(|(_, font)| font.has(ch))
+                .find_map(|(ids, _)| ids.iter().find(|id| !used.contains(id)).copied())
+                .or_else(|| any_font(ch, used, db))
+        }),
+    };
     let options = usvg::Options {
         fontdb: fontdb.clone(),
+        font_resolver,
         image_href_resolver: usvg::ImageHrefResolver {
             resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
             resolve_string: Box::new(|_, _| None),
@@ -218,6 +261,34 @@ mod tests {
             viewBox='0 0 10 10'><image width='10' height='10' xlink:href='/etc/passwd'/></svg>";
         let image = cache.raster(svg, 10, 10).expect("document still parses");
         assert!(image.pixels.iter().all(|pixel| pixel >> 24 == 0));
+    }
+
+    #[test]
+    fn text_falls_back_to_the_active_language_fonts_in_order() {
+        let load = |path: &str| {
+            let bytes = std::fs::read(path).ok()?;
+            super::super::fonts::test_chain(bytes).map(|chain| chain.primary)
+        };
+        let (Some(latin), Some(zh), Some(ja)) = (
+            load("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            load("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
+            load("/usr/share/fonts/truetype/fonts-japanese-gothic.ttf"),
+        ) else {
+            return; // fonts not installed here
+        };
+        // An unknown family resolves to the cache's first font.
+        let doc = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>\
+            <text x='4' y='52' font-size='52' font-family='none'>直</text></svg>";
+        let draw = |main: &Arc<LoadedFont>, chain: &[Arc<LoadedFont>]| {
+            let mut cache = SvgCache::new([main.bytes.as_slice()]);
+            cache.set_fallbacks(chain);
+            cache.raster(doc, 64, 64).map(|image| image.pixels.clone())
+        };
+        let as_zh = draw(&zh, &[]);
+        let as_ja = draw(&ja, &[]);
+        assert_ne!(as_zh, as_ja);
+        assert_eq!(draw(&latin, &[zh.clone(), ja.clone()]), as_zh);
+        assert_eq!(draw(&latin, &[ja.clone(), zh.clone()]), as_ja);
     }
 
     #[test]

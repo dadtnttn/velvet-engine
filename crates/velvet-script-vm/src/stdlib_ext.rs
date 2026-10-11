@@ -255,7 +255,9 @@ pub(crate) fn ext_cost(native: NativeId, args: &[Value]) -> u64 {
     use NativeId as N;
     let slen = |i: usize| args.get(i).and_then(Value::as_str).map_or(0, str::len) as u64;
     match native {
-        N::StrIndexOf | N::StrChars | N::StrSub | N::StrMeasure | N::JsonDecode | N::Tr => slen(0) / 4,
+        N::StrIndexOf | N::StrChars | N::StrSub | N::StrMeasure | N::JsonDecode | N::Tr => {
+            slen(0) / 4
+        }
         N::StrWrap => slen(0),
         N::StrRepeat => {
             slen(0).saturating_mul(args.get(1).and_then(Value::as_i64).unwrap_or(0).max(0) as u64)

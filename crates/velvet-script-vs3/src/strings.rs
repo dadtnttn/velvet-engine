@@ -37,10 +37,35 @@ const ID_KEYS: &[&str] = &[
 
 /// Calls whose string arguments are identifiers.
 const ID_CALLS: &[&str] = &[
-    "emit", "map_get", "map_has", "map_set", "map_remove", "has_flag", "set_flag", "flag",
-    "clear_flag", "list_contains", "str_replace", "str_split", "str_starts_with",
-    "str_ends_with", "str_contains", "str_find", "str_slice", "type_of", "svg", "img",
-    "go", "goto", "screen", "set_screen", "sfx", "play_sound", "music", "rgba", "hex",
+    "emit",
+    "map_get",
+    "map_has",
+    "map_set",
+    "map_remove",
+    "has_flag",
+    "set_flag",
+    "flag",
+    "clear_flag",
+    "list_contains",
+    "str_replace",
+    "str_split",
+    "str_starts_with",
+    "str_ends_with",
+    "str_contains",
+    "str_find",
+    "str_slice",
+    "type_of",
+    "svg",
+    "img",
+    "go",
+    "goto",
+    "screen",
+    "set_screen",
+    "sfx",
+    "play_sound",
+    "music",
+    "rgba",
+    "hex",
 ];
 
 #[derive(Default)]
@@ -155,7 +180,9 @@ fn split_markers(lit: &str) -> Vec<(bool, String)> {
         let Some(close) = after.find('}') else { break };
         let name = &after[..close];
         let valid = !name.is_empty()
-            && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
             && !name.chars().all(|c| c.is_ascii_digit());
         if !valid {
             out.push((false, rest[..open + 1 + close + 1].to_string()));
@@ -213,7 +240,11 @@ impl Collector {
         }
         let parts = split_markers(value);
         if parts.iter().any(|(m, _)| *m) {
-            self.template(parts.into_iter().map(|(m, s)| (m, s, None)).collect(), line, context);
+            self.template(
+                parts.into_iter().map(|(m, s)| (m, s, None)).collect(),
+                line,
+                context,
+            );
         } else {
             self.add(value.to_string(), Vec::new(), line, context);
         }
@@ -255,7 +286,7 @@ impl Collector {
             // "{0}: {1}" style joins are kept (their parts translate on their
             // own) when they carry punctuation; bare spaces would match anything.
             let lits: String = key
-                .split(|c| c == '{' || c == '}')
+                .split(['{', '}'])
                 .filter(|s| !s.chars().all(|c| c.is_ascii_digit()))
                 .collect();
             if !lits.chars().any(|c| !c.is_whitespace()) {
@@ -320,7 +351,9 @@ impl Collector {
                         }
                     }
                 }
-                BinOp::AddAssign if matches!(**right, Expr::String { .. }) || is_string_concat(right) => {
+                BinOp::AddAssign
+                    if matches!(**right, Expr::String { .. }) || is_string_concat(right) =>
+                {
                     let mut pieces = vec![(true, String::new(), Some(describe(left)))];
                     let mut flat = Vec::new();
                     flatten_add(right, &mut flat);

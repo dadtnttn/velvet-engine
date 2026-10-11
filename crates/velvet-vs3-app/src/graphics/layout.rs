@@ -67,14 +67,17 @@ fn needs_layout(text: &str) -> bool {
     text.chars().any(|c| is_complex(c) || (c as u32) >= 0x2E80)
 }
 
+/// Shaped glyphs: (glyph id, advance, x offset, y offset).
+type Shaped = Rc<Vec<(u16, f32, f32, f32)>>;
+
 thread_local! {
-    static SHAPED: RefCell<HashMap<(usize, String, u32, bool), Rc<Vec<(u16, f32, f32, f32)>>>> =
+    static SHAPED: RefCell<HashMap<(usize, String, u32, bool), Shaped>> =
         RefCell::new(HashMap::new());
 }
 use std::rc::Rc;
 
-/// Shape `text` with `font` at `size`: (glyph id, advance, x offset, y offset).
-fn shape(font: &LoadedFont, text: &str, size: f32, rtl: bool) -> Rc<Vec<(u16, f32, f32, f32)>> {
+/// Shape `text` with `font` at `size`.
+fn shape(font: &LoadedFont, text: &str, size: f32, rtl: bool) -> Shaped {
     let key = (font.key, text.to_owned(), size.to_bits(), rtl);
     if let Some(hit) = SHAPED.with(|c| c.borrow().get(&key).cloned()) {
         return hit;
@@ -102,7 +105,11 @@ fn shape(font: &LoadedFont, text: &str, size: f32, rtl: bool) -> Rc<Vec<(u16, f3
         }
     } else {
         // No shaping data: fall back to characters (reversed for RTL).
-        let chars: Vec<char> = if rtl { text.chars().rev().collect() } else { text.chars().collect() };
+        let chars: Vec<char> = if rtl {
+            text.chars().rev().collect()
+        } else {
+            text.chars().collect()
+        };
         for ch in chars {
             let idx = font.font.lookup_glyph_index(ch);
             let adv = font.font.metrics_indexed(idx, size).advance_width;
@@ -123,10 +130,7 @@ fn shape(font: &LoadedFont, text: &str, size: f32, rtl: bool) -> Rc<Vec<(u16, f3
 /// Split into directional runs: (text, rtl). Neutrals join the run before them.
 fn bidi_runs(text: &str) -> (Vec<(String, bool)>, bool) {
     let mut runs: Vec<(String, bool)> = Vec::new();
-    let base_rtl = text
-        .chars()
-        .find(|c| c.is_alphabetic())
-        .is_some_and(is_rtl);
+    let base_rtl = text.chars().find(|c| c.is_alphabetic()).is_some_and(is_rtl);
     let mut cur = String::new();
     let mut cur_rtl: Option<bool> = None;
     for ch in text.chars() {
@@ -181,7 +185,9 @@ pub fn layout(chain: &FontChain, text: &str, size: f32) -> (Vec<Placed>, f32) {
         let mut segs: Vec<(Arc<LoadedFont>, String)> = Vec::new();
         for ch in run.chars() {
             let f = if is_mark(ch) && !segs.is_empty() {
-                segs.last().map(|s| s.0.clone()).unwrap_or_else(|| chain.font_for(ch).clone())
+                segs.last()
+                    .map(|s| s.0.clone())
+                    .unwrap_or_else(|| chain.font_for(ch).clone())
             } else {
                 chain.font_for(ch).clone()
             };
