@@ -371,6 +371,8 @@ function ocio_head_items(tab: string, cat: string) {
 
 // Candados especiales de algunas actividades ("" si se puede).
 function ocio_lock(a: map) {
+    let bl = body_lock(a.id)
+    if bl != "" { return bl }
     if a.id == "gang" && L.crew == true { return "Ya estás dentro" }
     if a.id == "gang" && rank("guts") < 2 { return "Valor 2" }
     if a.id == "launder" && heat() == 0 { return "Sin calor" }

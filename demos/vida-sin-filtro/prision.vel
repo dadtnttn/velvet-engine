@@ -431,7 +431,8 @@ function prison_visit(p: map) {
         let msg = "Una hora a solas en el cuarto de visitas conyugales. Para los dos, fue como respirar." + sex_with(p)
         return finish("Visita conyugal", msg, "x")
     }
-    if g == "child" { return finish("Visitas", p.first + " te dibujó algo y lo pegó en el vidrio. Te lo llevaste a tu celda.", "g") }
+    if g == "child" && p.age < 13 { return finish("Visitas", p.first + " te dibujó algo y lo pegó en el vidrio. Te lo llevaste a tu celda.", "g") }
+    if g == "child" { return finish("Visitas", p.first + " vino a verte. Hablaron de todo un poco y te prometió volver el mes que viene.", "g") }
     return finish("Visitas", p.first + " te trajo comida casera y noticias de afuera. Te hizo mucho bien.", "g")
 }
 

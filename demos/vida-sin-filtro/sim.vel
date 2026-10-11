@@ -1033,6 +1033,8 @@ function marry_cost(cost: int) {
 function apply(o: map, ctx: map) {
     let msg = ""
     if map_has(o, "log") { msg = fmt(o.log, ctx) }
+    // Variante para niños, si el resultado la trae.
+    if L.age < 13 && map_has(o, "log_kid") { msg = fmt(o.log_kid, ctx) }
     for key in ["happy", "health", "smarts", "looks", "karma", "alcohol", "drugs"] {
         if map_has(o, key) { L[key] = L[key] + o[key] }
     }

@@ -139,7 +139,7 @@ const QUIZ_SUBJECTS = {
         {"q": "¿Qué país tiene forma de bota?", "a": ["Grecia", "Italia", "Portugal", "Chile"], "c": 1},
         {"q": "¿Cuál es el desierto más grande del mundo (cálido)?", "a": ["Gobi", "Atacama", "Sahara", "Sonora"], "c": 2},
         {"q": "¿Cuál es la montaña más alta del mundo?", "a": ["K2", "Everest", "Aconcagua", "Kilimanjaro"], "c": 1},
-        {"q": "¿Cuántos estados tiene México?", "a": ["30", "31", "32", "33"], "c": 2},
+        {"q": "¿Cuántas entidades federativas tiene México (estados más la capital)?", "a": ["30", "31", "32", "33"], "c": 2},
         {"q": "¿Cuál es la capital de Perú?", "a": ["Lima", "Quito", "Bogotá", "La Paz"], "c": 0},
         {"q": "¿Qué océano está entre América y Europa?", "a": ["Pacífico", "Índico", "Atlántico", "Ártico"], "c": 2},
         {"q": "¿Qué país tiene más habitantes?", "a": ["EE. UU.", "India", "Brasil", "Rusia"], "c": 1}
@@ -182,21 +182,41 @@ const QUIZ = [
     {"q": "¿Qué idioma se habla en Brasil?", "a": ["Español", "Portugués", "Francés", "Italiano"], "c": 1},
     {"q": "¿Cuál es el océano más grande?", "a": ["Atlántico", "Índico", "Ártico", "Pacífico"], "c": 3},
     {"q": "Si x + 5 = 12, ¿cuánto vale x?", "a": ["5", "6", "7", "17"], "c": 2},
-    {"q": "¿Qué hormona se asocia con el enamoramiento?", "a": ["Insulina", "Dopamina", "Cortisol", "Adrenalina"], "c": 1},
+    {"q": "¿Qué hormona se asocia con el enamoramiento?", "a": ["Insulina", "Dopamina", "Cortisol", "Adrenalina"], "c": 1, "adult": true},
     {"q": "¿En qué año llegó Colón a América?", "a": ["1492", "1500", "1521", "1810"], "c": 0},
     {"q": "¿Cuál es el resultado de 15% de 200?", "a": ["15", "20", "30", "35"], "c": 2},
     {"q": "¿Qué animal es un mamífero?", "a": ["Tiburón", "Delfín", "Pulpo", "Pingüino"], "c": 1},
-    {"q": "¿Qué método previene ITS y embarazos?", "a": ["La píldora", "El condón", "El coitus interruptus", "Ninguno"], "c": 1},
+    {"q": "¿Qué método previene ITS y embarazos?", "a": ["La píldora", "El condón", "El coitus interruptus", "Ninguno"], "c": 1, "adult": true},
     {"q": "¿Cuál es la moneda de Japón?", "a": ["Yuan", "Won", "Yen", "Rupia"], "c": 2},
     {"q": "¿Cuántos huesos tiene un adulto?", "a": ["106", "206", "306", "180"], "c": 1},
     {"q": "¿Qué lenguaje se usa para páginas web?", "a": ["HTML", "SQL", "C++", "Excel"], "c": 0},
     {"q": "¿Quién propuso la teoría de la relatividad?", "a": ["Newton", "Tesla", "Einstein", "Hawking"], "c": 2},
     {"q": "¿Cuál es la capital de Argentina?", "a": ["Rosario", "Córdoba", "Buenos Aires", "Montevideo"], "c": 2},
     {"q": "¿Cuánto es 2 elevado a la 10?", "a": ["512", "1,000", "1,024", "2,048"], "c": 2},
-    {"q": "¿Qué significa «consentimiento»?", "a": ["Decir que no", "Un sí claro y libre", "Callarse", "Estar ebrio"], "c": 1},
+    {"q": "¿Qué significa «consentimiento»?", "a": ["Decir que no", "Un sí claro y libre", "Callarse", "Estar ebrio"], "c": 1, "adult": true},
     {"q": "¿Qué vitamina da el sol?", "a": ["A", "C", "D", "K"], "c": 2},
     {"q": "¿Cuál es el país más grande del mundo?", "a": ["China", "Canadá", "EE. UU.", "Rusia"], "c": 3},
     {"q": "¿Qué instrumento tiene 88 teclas?", "a": ["Guitarra", "Piano", "Violín", "Arpa"], "c": 1}
+]
+
+// Para la primaria: preguntas de su edad.
+const QUIZ_KIDS = [
+    {"q": "¿Cuánto es 3 + 4?", "a": ["6", "7", "8", "9"], "c": 1},
+    {"q": "¿Cuánto es 5 × 2?", "a": ["7", "10", "12", "52"], "c": 1},
+    {"q": "¿Cuántas patas tiene una araña?", "a": ["4", "6", "8", "10"], "c": 2},
+    {"q": "¿De qué color es el cielo en un día despejado?", "a": ["Verde", "Azul", "Rojo", "Morado"], "c": 1},
+    {"q": "¿Qué animal dice «muu»?", "a": ["El perro", "La vaca", "El gato", "El pato"], "c": 1},
+    {"q": "¿Cuántos días tiene una semana?", "a": ["5", "6", "7", "10"], "c": 2},
+    {"q": "¿Qué figura tiene tres lados?", "a": ["Cuadrado", "Círculo", "Triángulo", "Rectángulo"], "c": 2},
+    {"q": "¿En qué planeta vivimos?", "a": ["Marte", "La Tierra", "Júpiter", "La Luna"], "c": 1},
+    {"q": "¿Cuánto es 10 − 3?", "a": ["6", "7", "8", "13"], "c": 1},
+    {"q": "¿Qué necesitan las plantas para crecer?", "a": ["Agua y luz", "Dulces", "Ruido", "Hielo"], "c": 0},
+    {"q": "¿Cuál es el animal más grande del mundo?", "a": ["El elefante", "La ballena azul", "La jirafa", "El león"], "c": 1},
+    {"q": "¿Cuántas horas tiene un día?", "a": ["12", "20", "24", "30"], "c": 2},
+    {"q": "¿Qué estación viene después del invierno?", "a": ["El otoño", "La primavera", "El verano", "Ninguna"], "c": 1},
+    {"q": "¿Cuántos meses tiene un año?", "a": ["10", "11", "12", "13"], "c": 2},
+    {"q": "¿Qué se pone primero: el calcetín o el zapato?", "a": ["El zapato", "El calcetín", "Los dos juntos", "Ninguno"], "c": 1},
+    {"q": "¿Cuánto es la mitad de 20?", "a": ["5", "10", "15", "40"], "c": 1}
 ]
 
 const ARROW_KEYS = ["up", "down", "left", "right"]
@@ -321,7 +341,18 @@ function mg_new_round() {
     } else {
         let subject = map_get(m.ctx, "subject", "")
         let pool = QUIZ
-        if subject != "" && QUIZ_SUBJECTS[subject] != null { pool = QUIZ_SUBJECTS[subject] }
+        if subject != "" && QUIZ_SUBJECTS[subject] != null {
+            pool = QUIZ_SUBJECTS[subject]
+        } else if L.age < 13 {
+            pool = QUIZ_KIDS
+        } else if L.age < 18 {
+            // Nada de temas de adultos en los exámenes de la secundaria.
+            let teen = []
+            for qq in QUIZ {
+                if qq.adult != true { list_push(teen, qq) }
+            }
+            pool = teen
+        }
         m.q = pick(pool)
     }
 }
