@@ -158,13 +158,14 @@ function risk_new(id: string) {
     if id == "parkinson" && a >= 60 { r = (a - 55) / 3 }
     if id == "cataratas" && a >= 60 { r = a - 55 }
     if id == "hepatitis_c" && L.drugs >= 40 { r = 20 }
-    if id == "c_leucemia" { r = 1 }
+    // Rara de verdad: 1 de cada 5,000 al año.
+    if id == "c_leucemia" && chance(20) { r = 1 }
     if id == "c_pancreas" && a >= 55 {
         r = 2
         if has_habit("fumar") { r += 4 }
         if has_habit("beber") { r += 3 }
     }
-    if r < 0 { r = 0 }
+    if r <= 0 { return 0 }
     return r + fam_risk(id)
 }
 
@@ -527,6 +528,7 @@ function health_choice(handler: string, index: int, ctx: map) {
             let c = emergency_cost(ctx.cost)
             L.money -= c
             if kind == "apendicitis" {
+                L.appendix_out = true
                 hito_once("appendix", "Salud", "Te operaron de apendicitis")
                 return finish("Urgencias", "Te operaron de emergencia. Salió bien: te quedó una cicatriz y una cuenta de " + money_str(c) + ".", "n")
             }
@@ -544,6 +546,7 @@ function health_choice(handler: string, index: int, ctx: map) {
                 return null
             }
             L.health -= 25
+            L.appendix_out = true
             return finish("Apendicitis", "Aguantaste el dolor hasta que reventó. Llegaste al hospital de milagro.", "b")
         }
         if kind == "intox" {
@@ -636,21 +639,38 @@ function maybe_health_event() {
             }
         }
     }
-    // Urgencias.
-    if L.age >= 8 && rint(1, 1000) <= 2 {
+    // Urgencias. De menor, quien decide (y paga) es tu familia.
+    if L.age >= 8 && L.appendix_out != true && rint(1, 1000) <= 2 {
+        if kid_cared() {
+            L.appendix_out = true
+            L.health -= 6
+            hito_once("appendix", "Salud", "Te operaron de apendicitis")
+            finish("¡URGENCIA!", "Un dolor agudísimo en el abdomen te despertó de madrugada. Tu familia te llevó corriendo a urgencias: era apendicitis. Te operaron esa misma noche y en una semana ya estabas de vuelta en la escuela.", "n")
+            return true
+        }
         open_choice("¡URGENCIA!", "Un dolor agudísimo en el lado derecho del abdomen. Te doblas de dolor: parece apendicitis.",
             ["Ir a urgencias (" + money_str(emergency_cost(8000)) + ")", "Aguantar en casa"], ["", ""], "hx_emerg", {"kind": "apendicitis", "cost": 8000})
         return true
     }
     if L.age >= 12 && rint(1, 1000) <= 4 {
+        if kid_cared() {
+            L.health -= 2
+            finish("INTOXICACIÓN", "Algo que comiste no estaba bien: fiebre y vómito toda la noche. En casa te cuidaron con suero, caldo y mucha paciencia.", "n")
+            return true
+        }
         open_choice("INTOXICACIÓN", "Los tacos de anoche no estaban bien. Fiebre, vómito y escalofríos.",
             ["Ir a urgencias (" + money_str(emergency_cost(1500)) + ")", "Aguantar con suero casero"], ["", ""], "hx_emerg", {"kind": "intox", "cost": 1500})
         return true
     }
     let acc = 3 + L.alcohol / 10
     if L.age >= 4 && rint(1, 1000) <= acc && !has_ill("fractura") {
-        add_ill("fractura", true)
         let how = pick(["Te caíste de la bicicleta", "Resbalaste en la regadera", "Te torciste mal jugando fútbol", "Bajaste las escaleras demasiado rápido"])
+        if kid_cared() {
+            L.health -= 3
+            finish("¡ACCIDENTE!", how + " y escuchaste un crac. Tu familia te llevó al hospital: un yeso, muchas firmas de tus amigos y en unas semanas quedaste como nuev" + oa(L.gender) + ".", "n")
+            return true
+        }
+        add_ill("fractura", true)
         open_choice("¡ACCIDENTE!", how + " y escuchaste un crac. Te duele horrible.",
             ["Ir al hospital (" + money_str(emergency_cost(2000)) + ")", "Ponerte hielo y esperar"], ["", ""], "hx_emerg", {"kind": "fractura", "cost": 2000})
         return true
@@ -684,8 +704,15 @@ function medicina_month() {
         L.nutri_m -= 1
         delta -= 2
     }
-    if L.age >= 40 && chance(15) { delta += 1 }
     if L.age < 18 && b < 190 && chance(30) { delta += 1 }
+    // Cada cuerpo tiene un peso de equilibrio (genética, y algo más con los años:
+    // +0.1 de IMC por año entre los 20 y los 60). Sin empujones, el IMC vuelve
+    // poco a poco hacia él; con malos hábitos se queda por encima.
+    if L.bmi_set == null { L.bmi_set = clamp(b, 185, 255) }
+    let target = L.bmi_set + clamp(L.age - 20, 0, 40)
+    let gap = b - target
+    if gap > 0 && chance(min(60, gap * 2)) { delta -= 1 }
+    if gap < 0 && chance(min(60, (0 - gap) * 2)) { delta += 1 }
     L.bmi = clamp(b + delta, 150, 450)
     if L.bmi >= 300 && !has_ill("obesidad") {
         add_ill("obesidad", true)
@@ -811,8 +838,9 @@ function medicina_year() {
         if i.id == "c_leucemia" && i.stage >= 3 { r = 25 }
         if i.id == "c_pancreas" && i.stage >= 3 { r = 35 }
         if i.id == "parkinson" && L.age >= 75 { r = 6 }
-        if i.id == "asma" && !i.treated { r = 1 }
         if i.treated { r = r / 3 }
+        // Un ataque de asma mortal es raro (2 de cada 1,000 al año sin inhalador).
+        if i.id == "asma" && !i.treated && rint(1, 1000) <= 2 { r = 100 }
         if r > 0 && chance(r) {
             die(ill_def(i.id).die)
             return null
@@ -876,4 +904,9 @@ function medicina_fx(out: list) {
         if i.id == "fractura" { list_push(out, fx("yeso", "Con yeso", false, "Todos firman tu yeso.", {"pay": -5, "hp": -1})) }
     }
     return null
+}
+
+// Un menor con papá o mamá vivos: las urgencias las resuelve (y paga) su familia.
+function kid_cared() {
+    return L.age < 18 && (has_rel("padre") || has_rel("madre"))
 }
