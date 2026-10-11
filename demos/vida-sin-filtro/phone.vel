@@ -302,7 +302,7 @@ function app_cats(id: string) {
     if id == "stocks" { return ["Bolsa", "Noticias"] }
     if id == "jobs" { return ["Ofertas", "Chambas", "Estudios"] }
     if id == "shop" { return ["Regalos", "Para ti", "Lujos"] }
-    if id == "health" { return ["Salud", "Hábitos"] }
+    if id == "health" { return ["Salud", "Médico", "Hábitos"] }
     if id == "memories" { return HITO_CATS }
     if id == "agenda" { return ["Pendientes", "Efectos", "Misiones"] }
     if id == "route" { return route_cats() }
@@ -337,6 +337,7 @@ function app_items(id: string, cat: string) {
     if id == "shop" { return shop_items(cat) }
     if id == "health" {
         if cat == "Hábitos" { return habit_items() }
+        if cat == "Médico" { return doctor_items() }
         return health_items()
     }
     if id == "memories" { return my_hito_items(cat) }

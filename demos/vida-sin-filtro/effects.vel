@@ -58,7 +58,7 @@ function effects() {
     if has_habit("correr") && habit_months("correr") >= 12 { list_push(out, fx("atletico", "Atlético", true, "Corazón fuerte y resistencia de maratonista.", {"hp": 1, "hap": 1})) }
     if has_habit("dieta") && habit_months("dieta") >= 6 { list_push(out, fx("radiante", "Piel radiante", true, "Comer bien se nota en la cara.", {"looks": 3, "hp": 1})) }
     if has_habit("sol") { list_push(out, fx("bronceado", "Bronceado", true, "Dorad" + oa(L.gender) + " todo el año. (Tu dermatólogo llora.)", {"looks": 4})) }
-    if has_habit("sol") && a >= 40 { list_push(out, fx("arrugas", "Arrugas prematuras", false, "Años de sol sin bloqueador te cobraron factura.", {"looks": -8})) }
+    if has_habit("sol") && !has_habit("bloqueador") && a >= 40 { list_push(out, fx("arrugas", "Arrugas prematuras", false, "Años de sol sin bloqueador te cobraron factura.", {"looks": -8})) }
     if has_habit("dormir") { list_push(out, fx("descansado", "Bien descansad" + oa(L.gender), true, "Ocho horas de sueño: mente clara y buen humor.", {"grades": 4, "hap": 1})) }
     if has_habit("desvelo") { list_push(out, fx("ojeras", "Ojeras", false, "Parece que no duermes. Porque no duermes.", {"looks": -5, "grades": -5})) }
     if has_habit("leer") && habit_months("leer") >= 12 { list_push(out, fx("culto", "Culto", true, "Siempre tienes algo interesante que decir.", {"grades": 6, "hire": 3, "flirt": 2})) }
@@ -124,6 +124,7 @@ function effects() {
     if L.study != null && L.study.gpa >= 90 { list_push(out, fx("honor", "Cuadro de honor", true, "Tus profesores te adoran.", {"hire": 5})) }
     phone_fx(out)
     ocio_fx(out)
+    medicina_fx(out)
     return out
 }
 

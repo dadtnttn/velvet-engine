@@ -230,7 +230,7 @@ function menu_title(tab: string) {
 }
 
 function menu_cats(tab: string) {
-    if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Hábitos", "Hobbies", "Mascotas", "Viajes", "Fe", "Lujos"] }
+    if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Médico", "Hábitos", "Hobbies", "Mascotas", "Viajes", "Fe", "Lujos"] }
     if tab == "job" && L.jail > 0 { return PRISON_CATS }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
     if tab == "rel" { return ["Familia", "Pareja", "Amigos", "Trabajo", "Otros", "Conocer"] }
@@ -271,6 +271,7 @@ function menu_items(tab: string, cat: string) {
     }
     if tab == "night" && cat == "Carreras" { return casting_items() }
     if tab == "act" && cat == "Salud" { return health_items() }
+    if tab == "act" && cat == "Médico" { return doctor_items() }
     if tab == "act" && cat == "Hábitos" { return habit_items() }
     let items = ocio_head_items(tab, cat)
     for a in ACTIVITIES {
@@ -1147,6 +1148,7 @@ function dispatch_choice(index: int) {
     if m.handler == "fprice" { return resolve_fprice(index) }
     if str_starts_with(m.handler, "z_") { return lazos_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "oc_") { return ocio_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "hx_") { return health_choice(m.handler, index, m.ctx) }
     if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
     if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
     if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }
