@@ -61,13 +61,14 @@ function text_raw(x: any, y: any, s: string, size: int, color: int, font: string
     push({"op": "text", "x": x, "y": y, "text": s, "size": size, "color": color, "font": font})
 }
 
-// Variantes con ancho máximo: el host recorta con «…» usando la fuente real.
+// Variantes con ancho máximo: el host primero achica la letra para que quepa
+// (otros idiomas son más largos) y solo si aún no cabe, recorta con «…».
 function textw(x: any, y: any, s: string, size: int, color: int, font: string, w: any) {
-    push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "max_width": w})
+    push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "max_width": w, "overflow": "shrink"})
 }
 
 function ctextw(x: any, y: any, s: string, size: int, color: int, font: string, w: any) {
-    push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "align": "center", "max_width": w})
+    push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "align": "center", "max_width": w, "overflow": "shrink"})
 }
 
 function otextw(x: any, y: any, s: string, size: int, color: int, font: string, center: bool, w: any) {
@@ -498,7 +499,7 @@ function toggle(x: int, y: int, w: int, lbl: string, action: string, on: bool) {
     }
     if hovered(action) && !on { fill = HEX_RED }
     svg(x, y, w + 4, 42, slant_doc(w, 38, 10, fill, HEX_WHITE, 2, HEX_RED, 4))
-    ctext(x + w / 2, y + 26, lbl, 15, color, "bold")
+    ctextw(x + w / 2, y + 26, lbl, 15, color, "bold", w - 22)
     hot(x, y, w, 38, action)
 }
 
@@ -1032,11 +1033,28 @@ function draw_dialog(m: map, choices: list, locks: list, tags: list, prefix: str
     let e = ease(prog(G.modal_t0, 0.25))
     let p = m.person
     let w = 740
-    let lines = wrap_f(m.text, w - 96, 18, "ui")
+    let fs = 18
+    let lh = 27
+    let oh = 56
+    let lines = wrap_f(m.text, w - 96, fs, "ui")
     let n = len(choices)
     let chart_h = 0
     if m.chart != null && len(m.chart.vals) > 0 { chart_h = 150 }
-    let h = 96 + len(lines) * 27 + n * 56 + 20 + chart_h
+    let h = 96 + len(lines) * lh + n * oh + 20 + chart_h
+    // Texto largo (o traducido) y muchas opciones: todo se compacta para que
+    // la ventana nunca se salga de la pantalla.
+    if h > H - 50 {
+        fs = 16
+        lh = 23
+        oh = 50
+        lines = wrap_f(m.text, w - 96, fs, "ui")
+        let room = (H - 50 - 96 - n * oh - 20 - chart_h) / lh
+        if len(lines) > room && room > 0 {
+            lines = list_slice(lines, 0, room)
+            lines[room - 1] = lines[room - 1] + "…"
+        }
+        h = 96 + len(lines) * lh + n * oh + 20 + chart_h
+    }
     let x = (W - w) / 2
     if p != null { x = 470 }
     let y = (H - h) / 2 + 20
@@ -1059,8 +1077,8 @@ function draw_dialog(m: map, choices: list, locks: list, tags: list, prefix: str
     otextw(x + 18, y + 12, title, 28, C_WHITE, "impact", false, tw - 44)
     let ty = y + 64
     for line in lines {
-        text(x + 48, ty, line, 18, C_WHITE, "ui")
-        ty += 27
+        text_raw(x + 48, ty, line, fs, C_WHITE, "ui")
+        ty += lh
     }
     if chart_h > 0 {
         draw_chart(x + 48, ty + 6, w - 110, 110, m.chart)
@@ -1075,7 +1093,7 @@ function draw_dialog(m: map, choices: list, locks: list, tags: list, prefix: str
         let tag_text = ""
         if len(tags) > i { tag_text = tags[i] }
         dialog_option(x + 40 - i * 6, by, w - 90, choices[i], i, action, locked, locks, tag_text)
-        by += 56
+        by += oh
         i += 1
     }
     move_pop()
@@ -1100,9 +1118,9 @@ function dialog_option(x: int, y: int, w: int, lbl: string, i: int, action: stri
     textw(x + dx + 60, y + 30, lbl, 17, color, "bold", w - 230)
     if locked {
         svg(x + dx + w - 190, y + 8, 30, 30, lock_doc())
-        text(x + dx + w - 156, y + 30, str_upper(locks[i]), 14, C_RED, "impact")
+        textw(x + dx + w - 156, y + 30, str_upper(locks[i]), 14, C_RED, "impact", 146)
     } else if tag_text != "" {
-        text(x + dx + w - 150, y + 30, "[" + str_upper(tag_text) + "]", 14, C_YELLOW, "impact")
+        textw(x + dx + w - 150, y + 30, "[" + str_upper(tag_text) + "]", 14, C_YELLOW, "impact", 140)
     }
     if !locked { hot(x, y, w, 46, action) }
 }
@@ -1269,7 +1287,7 @@ function draw_detail(it: any, kind: string) {
                 if it.desc != null && it.desc != it.s {
                     let dy = y + 484
                     for line in wrap_px(it.desc, 500, 14) {
-                        if dy < y + 520 { text(x + 46, dy, line, 14, C_INK, "ui") }
+                        if dy < y + 520 { text_raw(x + 46, dy, line, 14, C_INK, "ui") }
                         dy += 18
                     }
                 }
@@ -1280,18 +1298,21 @@ function draw_detail(it: any, kind: string) {
         }
     }
     textw(x + 46, y + 66, str_upper(it.t), 34, C_INK, "impact", 420)
-    text(x + 46, y + 100, it.s, 17, C_RED, "bold")
+    textw(x + 46, y + 100, it.s, 17, C_RED, "bold", 500)
     let ty = y + 150
+    // La descripción no invade el aviso de requisito ni sale de la tarjeta.
+    let bottom = y + h - 24
+    if it.lock != "" { bottom = y + h - 132 }
     if it.desc != null {
         for line in wrap_px(it.desc, 470, 18) {
-            text(x + 46, ty, line, 18, C_INK, "ui")
+            if ty <= bottom { text_raw(x + 46, ty, line, 18, C_INK, "ui") }
             ty += 28
         }
     }
     if it.lock != "" {
         svg(x + 40, y + h - 120, 380, 58, slant_doc(372, 50, 14, HEX_INK, HEX_RED, 3, HEX_RED, 6))
         svg(x + 58, y + h - 110, 30, 30, lock_doc())
-        text(x + 96, y + h - 87, "REQUIERE: " + str_upper(it.lock), 18, C_WHITE, "impact")
+        textw(x + 96, y + h - 87, "REQUIERE: " + str_upper(it.lock), 18, C_WHITE, "impact", 316)
     }
     if kind == "jobs" && it.ok != null {
         let msg = "CUMPLES LOS REQUISITOS"
@@ -1431,24 +1452,24 @@ function draw_dead() {
     textw(440, 170, str_upper(L.first + " " + L.last), 28, C_INK, "impact", 370)
     let ty = 196
     for line in wrap_px("Murió a los " + str(L.age) + " años por " + L.cause + ".", 360, 16) {
-        text(436, ty, line, 16, C_RED, "bold")
+        text_raw(436, ty, line, 16, C_RED, "bold")
         ty += 22
     }
     for line in wrap_px("«" + epitaph() + "»", 360, 15) {
-        text(436, ty + 8, line, 15, C_GRAY, "bold")
+        text_raw(436, ty + 8, line, 15, C_GRAY, "bold")
         ty += 20
     }
     ty -= 20
     if L.lastwords != null && L.lastwords != "" {
         for line in wrap_px("Últimas palabras: «" + L.lastwords + "»", 360, 13) {
             ty += 18
-            text(436, ty + 8, line, 13, C_RED, "bold")
+            text_raw(436, ty + 8, line, 13, C_RED, "bold")
         }
     }
     ty += 14
     for line in wrap_px(funeral_text(), 360, 14) {
         ty += 20
-        text(436, ty + 8, line, 14, C_INK, "bold")
+        text_raw(436, ty + 8, line, 14, C_INK, "bold")
     }
     let job = L.last_job
     if L.job != null { job = L.job.title }
@@ -1468,11 +1489,17 @@ function draw_dead() {
               ["Karma", karma_text()]] {
         list_push(rows, r)
     }
+    // Las filas se aprietan si el texto de arriba creció (funeral largo,
+    // otros idiomas); si ni así caben, se omiten las menos importantes.
     let ry = ty + 46
+    let rh = 27
+    let room = 662 - ry
+    if room < len(rows) * rh { rh = max(19, room / len(rows)) }
+    while len(rows) > 6 && len(rows) * rh > room { list_pop(rows) }
     for row in rows {
         text(436, ry, row[0], 14, C_GRAY, "bold")
         textw(586, ry, row[1], 15, C_INK, "impact", 220)
-        ry += 27
+        ry += rh
     }
 
     if G.legacy != null && len(G.legacy.heirs) > 0 {
