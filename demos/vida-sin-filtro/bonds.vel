@@ -78,7 +78,7 @@ function interests_text(p: map) {
     let names = []
     for i in p.known_int { list_push(names, INTEREST_NAMES[i]) }
     let out = "Le gusta: "
-    if len(names) == 0 { out = out + "¿?" } else { out = out + str_join(names, ", ") }
+    if len(names) == 0 { out = out + "???" } else { out = out + str_join(names, ", ") }
     if p.known_dis { out = out + " · Odia: " + INTEREST_NAMES[p.dislike] }
     return out
 }

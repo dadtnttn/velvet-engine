@@ -289,11 +289,11 @@ function mg_new_round() {
         }
         m.q = {"seq": seq, "pos": 0}
     } else if k == "typing" {
-        m.q = {"word": pick(WORDS), "typed": ""}
+        m.q = {"word": pick(mg_words()), "typed": ""}
     } else if k == "news" {
         m.q = {"tokens": news_tokens()}
     } else if k == "spell" {
-        let set = pick(SPELLING)
+        let set = pick(mg_spelling())
         let opts = list_slice(set, 0, 4)
         shuffle(G.rng, opts)
         m.q = {"opts": opts, "c": list_index_of(opts, set[0])}
@@ -1117,4 +1117,29 @@ function draw_mg_reflex(x: int, y: int, w: int) {
     let last = map_get(G.mg, "last_ms", 0)
     if last > 0 { ctext(x + w / 2, y + 380, "Último: " + str(last) + " ms", 18, C_GRAY, "bold") }
     menu_word(x + 320, y + 400, 320, 64, "¡AHORA!", "mg:hit", 30)
+}
+
+// Palabras del minijuego de tecleo en el idioma del jugador (solo letras A-Z,
+// que son las que se teclean); si no hay, las de siempre.
+function mg_words() {
+    let g = I18N_GAME[CFG.lang]
+    if g != null && g.typing != null {
+        let out = []
+        for w in g.typing {
+            let ok = len(w) > 0
+            for ch in str_chars(w) {
+                if !str_contains("ABCDEFGHIJKLMNOPQRSTUVWXYZ", ch) { ok = false }
+            }
+            if ok { list_push(out, w) }
+        }
+        if len(out) >= 5 { return out }
+    }
+    return WORDS
+}
+
+// Grupos de ortografía (la buena primero) en el idioma del jugador.
+function mg_spelling() {
+    let g = I18N_GAME[CFG.lang]
+    if g != null && g.spelling != null && len(g.spelling) >= 5 { return g.spelling }
+    return SPELLING
 }
