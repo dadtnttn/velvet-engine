@@ -490,6 +490,9 @@ function pact_used(action: string, p: map) {
 }
 
 // Lista de vínculos por categoría.
+// Una pieza propia (no pegada a otra) para que se traduzca sola en la lista.
+const BDAY_TAG = "¡Cumpleaños!"
+
 function rel_list(cat: string) {
     let items = []
     if cat == "Conocer" { return meet_items() }
@@ -505,7 +508,7 @@ function rel_list(cat: string) {
         if !ok { continue }
         let tagline = ""
         if p.childhood == true { tagline = " · desde la infancia" }
-        if p.bday_due == L.tm && p.bday_done != L.tm { tagline = tagline + " · ¡cumpleaños!" }
+        if p.bday_due == L.tm && p.bday_done != L.tm { tagline = tagline + " · " + BDAY_TAG }
         ensure_want(p)
         if p.want != null && p.want != "" { tagline = tagline + " · ★" }
         list_push(items, {
