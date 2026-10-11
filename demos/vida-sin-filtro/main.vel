@@ -92,7 +92,31 @@ export function app_manifest() {
             {"id": "thai", "path": "fonts/NotoSansThai-Regular.ttf", "langs": ["th"]},
             {"id": "hebr", "path": "fonts/NotoSansHebrew-Regular.ttf", "langs": ["he"]}
         ],
-        "images": []
+        "images": [],
+        "sounds": [
+            {"id": "sfx_open", "path": "sounds/sfx_open.wav"},
+            {"id": "sfx_back", "path": "sounds/sfx_back.wav"},
+            {"id": "sfx_tick", "path": "sounds/sfx_tick.wav"},
+            {"id": "sfx_ok", "path": "sounds/sfx_ok.wav"},
+            {"id": "sfx_good", "path": "sounds/sfx_good.wav"},
+            {"id": "sfx_bad", "path": "sounds/sfx_bad.wav"},
+            {"id": "sfx_love", "path": "sounds/sfx_love.wav"},
+            {"id": "sfx_money", "path": "sounds/sfx_money.wav"},
+            {"id": "sfx_toast", "path": "sounds/sfx_toast.wav"},
+            {"id": "sfx_age", "path": "sounds/sfx_age.wav"},
+            {"id": "sfx_death", "path": "sounds/sfx_death.wav"},
+            {"id": "sfx_stamp", "path": "sounds/sfx_stamp.wav"},
+            {"id": "sfx_error", "path": "sounds/sfx_error.wav"},
+            {"id": "sfx_phone", "path": "sounds/sfx_phone.wav"},
+            {"id": "sfx_rank", "path": "sounds/sfx_rank.wav"},
+            {"id": "sfx_break", "path": "sounds/sfx_break.wav"},
+            {"id": "sfx_month", "path": "sounds/sfx_month.wav"},
+            {"id": "bgm_title", "path": "sounds/bgm_title.wav"},
+            {"id": "bgm_life", "path": "sounds/bgm_life.wav"},
+            {"id": "bgm_child", "path": "sounds/bgm_child.wav"},
+            {"id": "bgm_night", "path": "sounds/bgm_night.wav"},
+            {"id": "bgm_death", "path": "sounds/bgm_death.wav"}
+        ]
     }
 }
 
@@ -181,6 +205,7 @@ function frame() {
     if phone_resume() { G.dirty = true }
     i18n_sync()
     bgm_sync()
+    snd_sync()
     if G.dirty {
         G.cache = build()
         G.dirty = false
@@ -423,7 +448,11 @@ function start_from_creator() {
 // ---------------------------------------------------------------- acciones
 
 function handle_action(action: string) {
-    if action == "noop" { return null }
+    if action == "noop" {
+        // Clic en algo bloqueado o fuera de la ventana.
+        if G.mg == null && G.modal != null { sfx_at("error", 0.5) }
+        return null
+    }
     if action == "settings" { return cfg_open() }
     if str_starts_with(action, "cfg:") { return cfg_action(action) }
     if action == "quit" {
