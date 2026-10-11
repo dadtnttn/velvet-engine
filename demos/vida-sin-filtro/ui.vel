@@ -211,8 +211,24 @@ function draw_title() {
     svg(-80 + (1.0 - e) * -200, 250, 460, 460, burst_doc(460, 460, 20, HEX_WHITE, HEX_INK, 5, 4))
     portrait(40 + (1.0 - e) * -200, 300, 330, 396, G.title_look, G.title_gender, 24, "grin", 3, false)
 
-    let logo = ransom_doc(["V", "I", "D", "A", " ", "S", "I", "N", " ", "F", "I", "L", "T", "R", "O"], 84, 3)
-    svg(W / 2 - logo.w / 2, 40 - (1.0 - e) * 120, logo.w, logo.h, logo.doc)
+    // El logo en el idioma elegido; las letras se achican si el título es largo.
+    let title = "VIDA SIN FILTRO"
+    let g = I18N_GAME[CFG.lang]
+    if g != null && g.title != null && g.title != "" { title = g.title }
+    if list_contains(["he", "hi", "th"], CFG.lang) {
+        // Escrituras con letras que se unen o se leen de derecha a izquierda:
+        // el título va entero, con el motor de texto (forma y dirección).
+        otextw(W / 2, 120 - (1.0 - e) * 120, title, 76, C_WHITE, "impact", true, 1100)
+    } else {
+        let letters = str_chars(title)
+        let units = 0
+        for l in letters {
+            if l == " " { units += 36 } else { units += 82 }
+        }
+        let lsize = min(84, 110000 / max(1, units))
+        let logo = ransom_doc(letters, lsize, 3)
+        svg(W / 2 - logo.w / 2, 40 - (1.0 - e) * 120 + (84 - lsize) / 2, logo.w, logo.h, logo.doc)
+    }
     otext(W / 2, 186, "UN SIMULADOR DE VIDA PARA ADULTOS", 22, C_WHITE, "impact", true)
 
     let items = [["NUEVA VIDA", "new"], ["VIDA AL AZAR", "quick"], ["AJUSTES", "settings"], ["SALIR", "quit"]]
