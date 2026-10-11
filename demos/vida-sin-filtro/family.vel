@@ -477,7 +477,7 @@ function do_kid_act(action: string, p: map) {
     if action == "heir" {
         L.heir_id = p.id
         add_hito(p, "L" + oa(p.gender) + " nombraste tu " + by_gender(p.gender, "heredero", "heredera"))
-        toast("TESTAMENTO", name + " es tu heredero" + by_gender(p.gender, "", "a") + " universal.")
+        toast("TESTAMENTO", name + by_gender(p.gender, " es tu heredero", " es tu heredera") + " universal.")
         return finish("Testamento", "Firmaste tu testamento: " + name + " lo heredará todo. Su parte dependerá de cómo te trate.", "n")
     }
     if action == "unheir" {

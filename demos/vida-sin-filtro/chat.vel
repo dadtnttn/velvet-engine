@@ -200,11 +200,12 @@ function mood(p: map) {
     return p.mood
 }
 
+// Formas femeninas escritas completas (así existen en los catálogos de traducción).
+const MOOD_NAMES_F = {"Enojado": "Enojada", "Estresado": "Estresada", "Aburrido": "Aburrida", "Cariñoso": "Cariñosa"}
+
 function mood_name(p: map) {
     let n = MOOD_NAMES[mood(p)]
-    if p.gender == "f" && (n == "Enojado" || n == "Estresado" || n == "Aburrido" || n == "Cariñoso") {
-        return str_replace(n + "#", "o#", "a")
-    }
+    if p.gender == "f" && MOOD_NAMES_F[n] != null { return MOOD_NAMES_F[n] }
     return n
 }
 
