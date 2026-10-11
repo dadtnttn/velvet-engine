@@ -299,7 +299,7 @@ function rel_group(p: map) {
     if r == "sobrino" { return "nephew" }
     if r == "colega" { return "coworker" }
     if r == "rival" { return "rival" }
-    if r == "exsuegro" || r == "recluso" { return "acq" }
+    if r == "exsuegro" || r == "recluso" || r == "excolega" { return "acq" }
     return "friend"
 }
 

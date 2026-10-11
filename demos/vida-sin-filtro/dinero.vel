@@ -446,7 +446,8 @@ function dinero_month() {
         if d.trans == "apps" && chance(30) { L.happy += 1 }
         if has_sub("comida") && chance(30) { L.health += 1 }
         if has_sub("vinos") {
-            L.alcohol += 1
+            // Tres botellas al mes son un gusto, no un vicio (salvo que ya bebas).
+            if L.alcohol < 15 && chance(25) { L.alcohol += 1 }
             if chance(20) { gain("charm", 1) }
         }
         if has_sub("juegos") && chance(15) { gain("skill", 1) }
@@ -885,6 +886,7 @@ function dn_gastos_items() {
     for s in SUBS {
         let l = ""
         if L.age < s.min { l = "Edad " + str(s.min) }
+        if s.id == "vinos" && here().alcohol == 0 && !has_sub("vinos") { l = "Prohibido aquí" }
         let st = "Suscribirte · " + money_str(s.c) + "/mes"
         if has_sub(s.id) { st = "ACTIVA · " + money_str(s.c) + "/mes · cancelar" }
         list_push(items, ditem("sub:" + s.id, s.n, st, s.d, l))

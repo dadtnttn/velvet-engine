@@ -814,6 +814,13 @@ function oficio_year() {
     let score = job.perf + boss_type(b.type).eval + (b.mood - 50) / 3 + min(10, map_get(job, "net", 0) * 2) + rint(-8, 8)
     job.net = 0
     if job.warns == null { job.warns = 0 }
+    // Las advertencias no son para siempre: un año excelente borra una y tres
+    // años sin problemas limpian tu expediente.
+    if score >= 60 { job.clean = map_get(job, "clean", 0) + 1 } else { job.clean = 0 }
+    if job.warns > 0 && (score >= 85 || job.clean >= 3) {
+        if job.clean >= 3 { job.warns = 0 } else { job.warns -= 1 }
+        log_add("Tu expediente mejoró: te quitaron una advertencia.", "g")
+    }
     if score >= 85 {
         let bonus = pay_of(job) * 8 / 100
         L.money += bonus
@@ -828,6 +835,7 @@ function oficio_year() {
     } else if score >= 40 {
         job.warns += 1
         log_add("Evaluación anual: necesita mejorar. Advertencia " + str(job.warns) + " de 3.", "b")
+        list_push(G.toasts, {"head": "ADVERTENCIA", "title": "EVALUACIÓN BAJA", "sub": "Trabaja duro o habla con tu jefe", "t0": G.t})
     } else {
         job.warns += 2
         log_add("Evaluación anual: deficiente. Advertencias: " + str(job.warns) + " de 3.", "b")

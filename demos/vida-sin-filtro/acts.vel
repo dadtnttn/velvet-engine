@@ -1173,6 +1173,19 @@ function special(name: string, ctx: map) {
         L.alcohol = 0
         L.drugs = 0
         L.health += 10
+        // Sales limpi@: los hábitos adictivos se quedan en la clínica (y empieza
+        // el año difícil de no recaer).
+        let keep = []
+        if L.quit == null { L.quit = {} }
+        for x in L.habits {
+            let h = habit_def(x)
+            if h != null && h.addict {
+                L.quit[x] = L.tm
+            } else {
+                list_push(keep, x)
+            }
+        }
+        L.habits = keep
         return ""
     }
     if name == "family_hate" {

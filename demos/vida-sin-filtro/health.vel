@@ -335,6 +335,8 @@ function world_month() {
 // ---------------------------------------------------------------- mes y año
 
 function habits_month() {
+    // En prisión no hay gimnasio que pagar ni bar al que ir.
+    if L.jail > 0 { return null }
     for id in L.habits {
         let h = habit_def(id)
         if h.cost > 0 && L.age >= 18 { L.money -= h.cost }
@@ -736,6 +738,12 @@ function toggle_habit(id: string) {
     G.modal = null
     let h = habit_def(id)
     if h == null || L.age < h.min { return null }
+    // Un cambio de hábito por mes, y tras una recaída hay que esperar.
+    if L.used["habit_" + id] != null { return info("Hábitos", "Ya hiciste un cambio con este hábito este mes.") }
+    if L.quit_try != null && L.quit_try[id] != null && L.tm - L.quit_try[id] < 3 {
+        return info("Hábitos", "Hace poco que recaíste. Date unos meses antes de volver a intentarlo.")
+    }
+    L.used["habit_" + id] = 1
     if has_habit(id) {
         if h.addict {
             let months = habit_months(id)
@@ -745,6 +753,8 @@ function toggle_habit(id: string) {
             if has_fam("adiccion") { odds -= 15 }
             if !chance(odds) {
                 L.happy -= 4
+                if L.quit_try == null { L.quit_try = {} }
+                L.quit_try[id] = L.tm
                 return finish("Hábitos", "Intentaste dejar de " + str_lower(h.t) + " y recaíste a los tres días. La adicción es real.", "b")
             }
         }
@@ -759,8 +769,9 @@ function toggle_habit(id: string) {
         }
         if h.bad {
             L.happy -= 3
-            gain("guts", 2)
-            hito_me("Salud", "Dejaste de " + str_lower(h.t))
+            // El mérito es dejar algo que ya pesaba, no prender y apagar.
+            if habit_months(id) >= 3 { gain("guts", 2) }
+            hito_once("quit_" + id, "Salud", "Dejaste de " + str_lower(h.t))
             return finish("Hábitos", "Dejaste de " + str_lower(h.t) + ". Tu cuerpo te lo agradecerá.", "g")
         }
         return finish("Hábitos", "Dejaste el hábito: " + str_lower(h.t) + ".", "n")

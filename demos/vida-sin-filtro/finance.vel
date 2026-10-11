@@ -1060,8 +1060,13 @@ function divorce_settlement(p: map) {
     dn_breakup(p)
     let kids = kids_living()
     if kids > 0 {
-        L.alimony = max(500, job_income() * (10 + kids * 5) / 100)
-        L.alimony_m = 120
+        L.alimony = max(local_price(500), job_income() * (10 + kids * 5) / 100)
+        // Hasta que el menor cumpla 18.
+        let youngest = 18
+        for k in kids_alive() {
+            if k.age < youngest { youngest = k.age }
+        }
+        L.alimony_m = max(12, (18 - youngest) * 12)
         msg = msg + " Pagarás " + money_str(L.alimony) + " al mes de pensión alimenticia."
     }
     L.prenup = false
