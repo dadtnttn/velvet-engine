@@ -168,8 +168,9 @@ function religion_month() {
     if L.religion == "ninguna" { return null }
     if L.faith > 0 && chance(30) { L.faith -= 1 }
     let r = religion_def(L.religion)
-    // Culpa si haces lo que tu fe prohíbe.
-    if L.faith >= 60 && r.strict >= 2 && (job_is_adult(L.job) || job_is_adult(L.job2)) && chance(50) { L.happy -= 2 }
+    // Si haces lo que tu fe prohíbe, la culpa (el efecto «Culpa») ya te cobra en
+    // felicidad; con el tiempo, el choque también va desgastando la fe.
+    if L.faith >= 60 && r.strict >= 2 && (job_is_adult(L.job) || job_is_adult(L.job2) || route_is_adult()) && chance(40) { L.faith -= 1 }
     if L.faith >= 70 && !r.alcohol && has_habit("beber") && chance(40) { L.happy -= 1 }
     return null
 }

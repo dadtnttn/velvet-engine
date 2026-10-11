@@ -806,7 +806,13 @@ function do_career_act(id: string) {
         let ctx = {}
         if map_has(o, "log") && str_contains(o.log, "{x}") { ctx["person"] = stranger() }
         let msg = apply(o, ctx)
-        if d.illegal && chance(6) { msg = msg + go_to_jail(2) }
+        if d.illegal {
+            add_heat(3)
+            if chance(caught_odds(2)) {
+                log_add(msg, outcome_kind(o))
+                return caught_for(2, "tu trabajo ilegal", "La policía llegó a mitad del trabajo.")
+            }
+        }
         return finish(a.t, msg, outcome_kind(o))
     }
     return null

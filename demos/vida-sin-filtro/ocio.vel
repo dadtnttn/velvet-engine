@@ -1013,6 +1013,35 @@ function open_sportsbet() {
 // ---------------------------------------------------------------- arresto
 
 // La policía te atrapó: entregarte, sobornar, correr o llamar a tu abogado.
+// Te atraparon: el mismo camino para cualquier delito. Los menores van con el
+// juez de menores, la primera falta leve se paga con multa y lo demás pasa por
+// el arresto (entregarte, sobornar, correr o llamar a tu abogado).
+function caught_for(years: int, crime: string, what: string) {
+    add_heat(10)
+    if L.age < 18 { return juvenile_court(what) }
+    if years <= 1 && L.record == 0 {
+        let fine = local_price(500)
+        L.money -= fine
+        return finish("Primera vez", what + " Como era tu primera falta, saliste con una multa de " + money_str(fine) + " y una advertencia.", "b")
+    }
+    open_arrest(years, crime)
+    if G.modal != null && what != "" { G.modal.text = what + " " + G.modal.text }
+    return null
+}
+
+// Justicia para menores: sin prisión, con trabajo comunitario y un buen susto.
+function juvenile_court(what: string) {
+    let hours = rint(4, 12) * 10
+    L.happy -= 6
+    L.karma -= 2
+    let pars = parents_alive()
+    for q in pars { bond_gain(q, -8) }
+    hito_once("juvenile", "Vida", "Tu primera vez ante un juez de menores")
+    let who = "tus papás tuvieron que ir por ti a la delegación"
+    if len(pars) == 0 { who = "una trabajadora social lleva tu caso" }
+    return finish("Juez de menores", what + " Por ser menor de edad no fuiste a prisión: " + str(hours) + " horas de trabajo comunitario, y " + who + ".", "b")
+}
+
 function open_arrest(years: int, crime: string) {
     let y = years
     if L.parole != null && L.parole > 0 { y += 2 }
