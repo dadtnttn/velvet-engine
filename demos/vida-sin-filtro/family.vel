@@ -781,7 +781,7 @@ function roulette_doc(angle: float) {
         let mid = (a0 + a1) / 2.0
         let tx = 200.0 + 112.0 * sin(mid * 0.0174533)
         let ty = 200.0 - 112.0 * cos(mid * 0.0174533)
-        body = body + "<text x='" + str(tx) + "' y='" + str(ty + 8.0) + "' font-family='Impact' font-size='26' text-anchor='middle' fill='" + ROUL_INKS[i % 4] + "' transform='rotate(" + str(mid) + " " + str(tx) + " " + str(ty) + ")'>" + str_upper(r.names[i]) + "</text>"
+        body = body + "<text x='" + str(tx) + "' y='" + str(ty + 8.0) + "' font-family='Impact' font-size='26' text-anchor='middle' fill='" + ROUL_INKS[i % 4] + "' transform='rotate(" + str(mid) + " " + str(tx) + " " + str(ty) + ")'>" + esc(tr(str_upper(r.names[i]))) + "</text>"
         a0 = a1
         i += 1
     }

@@ -3,16 +3,19 @@
 // Estilo: rojo, negro y blanco, paneles inclinados, semitonos y estallidos de cómic.
 
 const SVG_NS = "xmlns='http://www.w3.org/2000/svg'"
-const HEX_RED = "#e3141b"
-const HEX_RED_D = "#9e0e14"
-const HEX_INK = "#0d0d0d"
-const HEX_WHITE = "#f7f7f2"
-const HEX_GRAY = "#5a5a5a"
-const HEX_YELLOW = "#ffd21f"
 const FONT_TITLE = "Impact, sans-serif"
 
+// Paleta activa: la cambia el tema de color (tema.vel).
 state {
-    svgc: map = {}
+    svgc: map = {},
+    HEX_RED: string = "#e3141b",
+    HEX_RED_D: string = "#9e0e14",
+    HEX_RED_L: string = "#ff2b31",
+    HEX_BG_D: string = "#8f0b11",
+    HEX_INK: string = "#0d0d0d",
+    HEX_WHITE: string = "#f7f7f2",
+    HEX_GRAY: string = "#5a5a5a",
+    HEX_YELLOW: string = "#ffd21f"
 }
 
 // ---------------------------------------------------------------- utilidades
@@ -111,7 +114,7 @@ function star_points(cx: float, cy: float, r: float) {
 function bg_doc() {
     let cached = svgc["bg"]
     if cached != null { return cached }
-    let body = "<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#ff2b31'/><stop offset='1' stop-color='#8f0b11'/></linearGradient>"
+    let body = "<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='" + HEX_RED_L + "'/><stop offset='1' stop-color='" + HEX_BG_D + "'/></linearGradient>"
     body = body + "<pattern id='h' width='14' height='14' patternUnits='userSpaceOnUse' patternTransform='rotate(30)'><circle cx='7' cy='7' r='3' fill='#000' fill-opacity='0.2'/></pattern></defs>"
     body = body + "<rect width='1280' height='720' fill='url(#g)'/><rect width='1280' height='720' fill='url(#h)'/>"
     body = body + poly([0, 0, 470, 0, 300, 720, 0, 720], HEX_INK, "", 0)

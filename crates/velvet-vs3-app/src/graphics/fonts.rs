@@ -125,20 +125,28 @@ impl FontSystem {
         self.lang = lang.to_owned();
         let mut fresh = Vec::new();
         let mut chain = Vec::new();
-        let wanted: Vec<FallbackFontSpec> = self
-            .fallback_specs
-            .iter()
-            .filter(|s| {
-                s.langs.is_empty()
-                    || s.langs.iter().any(|l| l == "*" || l == lang || lang_prefix(l, lang))
-            })
-            .cloned()
-            .collect();
-        // Fonts specific to this language first, then the always-on ones.
-        let (mut own, mut any): (Vec<_>, Vec<_>) =
-            wanted.into_iter().partition(|s| s.langs.iter().any(|l| l != "*"));
-        own.append(&mut any);
-        for spec in own {
+        // Fonts for this language first (Han characters look different in
+        // Chinese, Japanese and Korean fonts), then the always-on ones, then
+        // the rest so text in any script still renders (a language picker
+        // shows every language in its own script).
+        let matches = |s: &FallbackFontSpec| {
+            s.langs.iter().any(|l| l != "*" && (l == lang || lang_prefix(l, lang)))
+        };
+        let mut ordered: Vec<FallbackFontSpec> = Vec::new();
+        ordered.extend(self.fallback_specs.iter().filter(|s| matches(s)).cloned());
+        ordered.extend(
+            self.fallback_specs
+                .iter()
+                .filter(|s| !matches(s) && (s.langs.is_empty() || s.langs.iter().any(|l| l == "*")))
+                .cloned(),
+        );
+        ordered.extend(
+            self.fallback_specs
+                .iter()
+                .filter(|s| !matches(s) && !(s.langs.is_empty() || s.langs.iter().any(|l| l == "*")))
+                .cloned(),
+        );
+        for spec in ordered {
             if let Some(f) = self.loaded_fallbacks.get(&spec.id) {
                 chain.push(f.clone());
                 continue;

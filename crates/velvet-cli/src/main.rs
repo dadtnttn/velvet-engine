@@ -57,7 +57,9 @@ use style_cmd::{
     cmd_style_check, cmd_style_dump, cmd_style_eval, cmd_style_explain, cmd_style_fmt,
     cmd_style_run, cmd_style_snapshot,
 };
-use vs3_cmd::{cmd_vs3_check, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_natives, cmd_vs3_run};
+use vs3_cmd::{
+    cmd_vs3_check, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_natives, cmd_vs3_run, cmd_vs3_strings,
+};
 use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]
@@ -760,6 +762,14 @@ enum Vs3Commands {
         /// Edition-3 `.vel` file or directory.
         path: PathBuf,
     },
+    /// List the translatable strings of a package (exact texts and templates).
+    Strings {
+        /// Package directory.
+        path: PathBuf,
+        /// Write JSON here instead of stdout.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// List script-visible natives (optional name prefix filter).
     Natives {
         /// Only show natives starting with this prefix.
@@ -974,6 +984,9 @@ fn dispatch(cli: Cli) -> Result<()> {
         Commands::Vs3 {
             command: Vs3Commands::Natives { prefix },
         } => cmd_vs3_natives(prefix),
+        Commands::Vs3 {
+            command: Vs3Commands::Strings { path, out },
+        } => cmd_vs3_strings(path, out),
         Commands::App {
             command: AppCommands::Check { path },
         } => cmd_app_check(path),

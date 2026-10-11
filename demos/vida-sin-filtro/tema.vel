@@ -1,0 +1,151 @@
+// @edition 3
+// Temas de color: la paleta de toda la interfaz (acento, sombra, resaltado,
+// tinta y papel). Hay temas listos y uno propio con tus colores favoritos.
+
+// [id, nombre, acento, acento oscuro, acento claro (fondo), fondo oscuro, resaltado, tinta, papel]
+const THEMES = [
+    ["persona", "ROJO REBELDE", "#e3141b", "#9e0e14", "#ff2b31", "#8f0b11", "#ffd21f", "#0d0d0d", "#f7f7f2"],
+    ["azul", "AZUL MEDIANOCHE", "#1f6fe8", "#0f3c8c", "#3a8bff", "#0a2457", "#7fe7ff", "#070b16", "#eef4ff"],
+    ["amarillo", "AMARILLO TV", "#f2b705", "#a87800", "#ffd21f", "#7a5200", "#ff5a1f", "#121008", "#fffbea"],
+    ["verde", "ESMERALDA", "#12a150", "#0a6a33", "#22c766", "#064023", "#e8ff3a", "#06110b", "#f0fff5"],
+    ["neon", "NEÓN", "#ff1f8f", "#9c0f56", "#ff4fb0", "#4a0730", "#29f0ff", "#0b0612", "#fff0fa"],
+    ["morado", "VIOLETA", "#8b2cf0", "#561a99", "#a659ff", "#2d0c55", "#ffcf3a", "#0c0714", "#f6f0ff"],
+    ["oro", "ORO NEGRO", "#d4a017", "#8a6508", "#f0c24a", "#3d2c05", "#ffffff", "#0b0a07", "#fff8e6"],
+    ["sakura", "SAKURA", "#ff5c8a", "#b8335a", "#ff86a8", "#6e1d36", "#ffe14d", "#140a0e", "#fff4f7"],
+    ["custom", "TUS COLORES", "", "", "", "", "", "", ""]
+]
+
+// Colores elegibles para el tema propio.
+const THEME_SWATCHES = [
+    "#e3141b", "#ff5a1f", "#f2b705", "#ffd21f", "#9be22d", "#12a150", "#14c3b5", "#29c5ff",
+    "#1f6fe8", "#3b3bd6", "#8b2cf0", "#c42bd6", "#ff1f8f", "#ff5c8a", "#b5651d", "#f7f7f2"
+]
+
+function hex_val(h: string) {
+    let digits = "0123456789abcdef"
+    let s = str_lower(h)
+    let v = 0
+    let i = 1
+    while i < len(s) {
+        v = v * 16 + max(0, str_index_of(digits, str_sub(s, i, i + 1)))
+        i += 1
+    }
+    return v
+}
+
+function hex_rgba(h: string) {
+    return 4278190080 + hex_val(h)
+}
+
+// Mezcla dos colores hex (t = 0 → a, t = 100 → b).
+function hex_mix(a: string, b: string, t: int) {
+    let va = hex_val(a)
+    let vb = hex_val(b)
+    let out = "#"
+    let shift = 65536
+    while shift >= 1 {
+        let ca = (va / shift) % 256
+        let cb = (vb / shift) % 256
+        let c = ca + (cb - ca) * t / 100
+        out = out + hex2(c)
+        shift = shift / 256
+    }
+    return out
+}
+
+function hex2(v: int) {
+    let digits = "0123456789abcdef"
+    let c = clamp(v, 0, 255)
+    return str_sub(digits, c / 16, c / 16 + 1) + str_sub(digits, c % 16, c % 16 + 1)
+}
+
+function theme_row(id: string) {
+    for t in THEMES {
+        if t[0] == id { return t }
+    }
+    return THEMES[0]
+}
+
+function theme_colors(id: string) {
+    if id == "custom" {
+        let a = THEME_SWATCHES[CFG.acc % len(THEME_SWATCHES)]
+        let l = THEME_SWATCHES[CFG.lgt % len(THEME_SWATCHES)]
+        if l == a { l = "#f7f7f2" }
+        return ["custom", "TUS COLORES", a, hex_mix(a, "#000000", 35), hex_mix(a, "#ffffff", 18), hex_mix(a, "#000000", 62), l, "#0d0d0d", "#f7f7f2"]
+    }
+    return theme_row(id)
+}
+
+function theme_apply(id: string) {
+    let t = theme_colors(id)
+    HEX_RED = t[2]
+    HEX_RED_D = t[3]
+    HEX_RED_L = t[4]
+    HEX_BG_D = t[5]
+    HEX_YELLOW = t[6]
+    HEX_INK = t[7]
+    HEX_WHITE = t[8]
+    C_RED = hex_rgba(t[2])
+    C_YELLOW = hex_rgba(t[6])
+    C_INK = hex_rgba(t[7])
+    C_WHITE = hex_rgba(t[8])
+    C_GRAY_D = hex_rgba(hex_mix(t[7], t[8], 15))
+    // Las piezas SVG guardadas usaban la paleta anterior.
+    svgc = {}
+    G.dirty = true
+}
+
+// Muestra de un tema: tres franjas inclinadas con sus colores.
+function theme_card_doc(t: list, w: int, h: int, on: bool) {
+    let body = poly([10, 0, w, 0, w - 10, h, 0, h], t[7], t[8], 3)
+    body = body + poly([20, 8, w * 55 / 100, 8, w * 55 / 100 - 8, h - 8, 12, h - 8], t[2], "", 0)
+    body = body + poly([w * 55 / 100 + 6, 8, w * 78 / 100, 8, w * 78 / 100 - 8, h - 8, w * 55 / 100 - 2, h - 8], t[6], "", 0)
+    body = body + poly([w * 78 / 100 + 6, 8, w - 14, 8, w - 22, h - 8, w * 78 / 100 - 2, h - 8], t[8], "", 0)
+    if on { body = body + poly([10, 0, w, 0, w - 10, h, 0, h], "none", t[6], 6) }
+    return svg_doc(w, h, body)
+}
+
+function draw_cfg_themes(x: int, y: int) {
+    tag(x, y - 26, 220, "COLORES", HEX_RED, C_WHITE)
+    let i = 0
+    while i < len(THEMES) {
+        let t = theme_colors(THEMES[i][0])
+        let action = "cfg:theme:" + t[0]
+        let cx = x + (i % 3) * 244 - (i / 3) * 8
+        let cy = y + 14 + (i / 3) * 96
+        let on = CFG.theme == t[0]
+        let lift = 0
+        if hovered(action) { lift = -4 }
+        svg(cx, cy + lift, 226, 50, theme_card_doc(t, 226, 50, on))
+        let color = C_WHITE
+        if on { color = C_YELLOW }
+        otextw(cx + 6, cy + 76 + lift, t[1], 17, color, "impact", false, 220)
+        hot(cx, cy, 226, 82, action)
+        i += 1
+    }
+    if CFG.theme == "custom" {
+        let sy = y + 330
+        otextw(x, sy + 6, "ACENTO", 18, C_WHITE, "impact", false, 100)
+        swatch_row(x + 104, sy - 14, CFG.acc, "cfg:acc:")
+        otextw(x, sy + 62, "RESALTE", 18, C_WHITE, "impact", false, 100)
+        swatch_row(x + 104, sy + 42, CFG.lgt, "cfg:lgt:")
+    } else {
+        textw(x, y + 340, "Elige «TUS COLORES» para armar tu propia paleta.", 15, C_GRAY, "bold", 700)
+    }
+}
+
+// Fila compacta con todos los colores elegibles.
+function swatch_row(x: int, y: int, selected: int, prefix: string) {
+    let i = 0
+    while i < len(THEME_SWATCHES) {
+        let action = prefix + str(i)
+        let r = 13
+        if i == selected { r = 17 } else if hovered(action) { r = 15 }
+        let body = "<circle cx='20' cy='20' r='" + str(r + 3) + "' fill='" + HEX_INK + "'/>"
+        if i == selected { body = body + "<circle cx='20' cy='20' r='" + str(r + 2) + "' fill='" + HEX_WHITE + "'/>" }
+        body = body + "<circle cx='20' cy='20' r='" + str(r) + "' fill='" + THEME_SWATCHES[i] + "' stroke='" + HEX_INK + "' stroke-width='2'/>"
+        svg(x + i * 40, y, 40, 40, svg_doc(40, 40, body))
+        hot(x + i * 40 + 2, y + 2, 36, 36, action)
+        i += 1
+    }
+}
