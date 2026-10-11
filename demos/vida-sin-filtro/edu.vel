@@ -197,6 +197,7 @@ function exam_apply(kind: string, delta: any) {
 function exam_result(score: any, ctx: map) {
     exam_apply(ctx.kind, (score - 50) / 4)
     gain("know", 2 + score / 25)
+    if score >= 100 { hito_once("exam100", "Estudios", "Sacaste 100 en un examen") }
     if score >= 80 { return finish("Exámenes", "¡Examen brillante! Sacaste " + str(score) + ". Tus calificaciones suben.", "g") }
     if score >= 50 { return finish("Exámenes", "Aprobaste con " + str(score) + ".", "n") }
     return finish("Exámenes", "Reprobaste con " + str(score) + ". Tus calificaciones bajan.", "b")
@@ -309,6 +310,8 @@ function enroll_do(id: string, payer: string) {
     G.tuition_no = ""
     if payer == "beca" { flag("beca") }
     if payer == "padres" { flag("parents_pay") }
+    hito_me("Estudios", "Entraste a " + d.n)
+    if payer == "beca" { hito_once("beca", "Estudios", "Conseguiste una beca completa") }
     return "Empiezas " + d.n + ". " + who[payer]
 }
 
@@ -381,6 +384,8 @@ function graduate() {
     }
     list_push(G.toasts, {"head": "¡TÍTULO!", "title": str_upper(d.n), "sub": "Te graduaste. Nuevas carreras disponibles.", "t0": G.t})
     log_add("¡Te graduaste de " + d.n + "!", "g")
+    hito_me("Estudios", "Te graduaste de " + d.n)
+    if L.study_gpa_final >= 90 { hito_me("Estudios", "Graduación con honores") }
     flag("degree")
     return null
 }
@@ -407,6 +412,7 @@ function study_action(id: string) {
         let d = degree_def(s.deg)
         L.study = null
         L.school = ""
+        hito_me("Estudios", "Dejaste " + d.n)
         finish("Estudios", "Dejaste " + d.n + ". La deuda, en cambio, no te deja a ti.", "b")
         return true
     }

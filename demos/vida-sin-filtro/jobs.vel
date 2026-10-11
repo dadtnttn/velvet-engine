@@ -635,6 +635,9 @@ function take_job(id: string, slot: string, amateur: bool) {
     let job = new_job(id)
     job.amateur = amateur
     remember_job(id)
+    hito_once("first_job", "Trabajo", "Tu primer trabajo formal: " + str_lower(job.title))
+    hito_push("Trabajo", "Primer día como " + str_lower(job.title))
+    if d.adult { hito_once("debut18", "Trabajo", "Debut en la industria +18") }
     if has_trait("ambicion") { job.bonus = 110 }
     if slot == "main" {
         if L.job != null { L.last_job = L.job.title }
@@ -674,6 +677,7 @@ function job_xp(job: map, amount: int, label: string) {
         if job_is_adult(job) { L.fame = clamp100(L.fame + 8) } else { L.fame = clamp100(L.fame + 2) }
         list_push(G.toasts, {"head": "¡ASCENSO!", "title": str_upper(names[job.level]), "sub": job.title + label + " · rango " + str(job.level + 1) + " de 5", "t0": G.t})
         log_add("Subiste de rango" + label + ": ahora eres " + names[job.level] + " (" + job.title + ").", "x")
+        hito_push("Trabajo", "Ascenso a " + names[job.level] + " (" + job.title + ")")
     }
     return null
 }
@@ -795,6 +799,7 @@ function resolve_spec(index: int) {
     let d = job_def(L.job.id)
     if index >= len(d.specs) { return finish("Especialización", "Lo pensarás otro año.", "n") }
     L.job.spec = d.specs[index]
+    hito_me("Trabajo", "Te especializaste en " + L.job.spec)
     L.job.bonus = L.job.bonus + 25
     flag("spec")
     if str_ends_with(L.job.spec, "+18") {
@@ -822,6 +827,7 @@ function fuse_jobs() {
     L.fame = clamp100(L.fame + 15)
     L.happy += 10
     flag("fusion")
+    hito_me("Trabajo", "Fusionaste carreras: ahora eres " + str_lower(job.title))
     list_push(G.toasts, {"head": "¡FUSIÓN!", "title": str_upper(job.title), "sub": old, "t0": G.t})
     return finish("Fusión de carreras", "Combinaste " + old + " en una carrera nueva: " + job.title + ". Empiezas en rango 3 y ganas " + money_str(pay_of(job)) + " al año.", "x")
 }
@@ -863,6 +869,7 @@ function certify_result(score: any) {
     if score >= 75 {
         L.job.amateur = false
         flag("pro")
+        hito_me("Trabajo", "Te certificaste como " + str_lower(L.job.title))
         list_push(G.toasts, {"head": "¡CERTIFICACIÓN!", "title": str_upper(L.job.title), "sub": "Ya no eres amateur: sueldo completo.", "t0": G.t})
         return finish("Certificación", "¡Aprobaste con " + str(score) + "! Ahora eres profesional. Sueldo completo: " + money_str(pay_of(L.job)) + " al año.", "g")
     }

@@ -535,6 +535,7 @@ function take_gig(id: string) {
     L.gig = {"id": id, "title": by_gender(L.gender, d.m, d.f), "pay": d.pay, "months": 0, "shifts": 0, "tips": 0, "good": 0, "perf": 50, "mission": null}
     new_gig_mission()
     flag("gig")
+    hito_once("first_gig", "Trabajo", "Tu primera chamba: " + str_lower(L.gig.title))
     return finish("Nuevo trabajo", "¡Empiezas como " + str_lower(L.gig.title) + "! Sueldo: " + money_str(d.pay) + " al mes." + old, "g")
 }
 
@@ -566,6 +567,8 @@ function check_gig_mission() {
     if gig_mission_progress() >= m.goal {
         m.done = true
         L.gig_done += 1
+        hito_once("gig_mission", "Trabajo", "Tu primera minimisión cumplida")
+        if L.gig_done == 10 { hito_me("Trabajo", "Diez minimisiones cumplidas: empleado del año") }
         let bonus = g.pay / 3
         L.money += bonus
         L.happy += 5
@@ -647,6 +650,7 @@ function gig_shift_result(score: any) {
     check_gig_mission()
     let mood = "Turno normal."
     if score >= 90 { mood = "¡Turno perfecto! Clientes felices." }
+    if score >= 100 { hito_once("gig_perfect_" + g.id, "Trabajo", "Turno perfecto como " + str_lower(g.title)) }
     if score < 30 { mood = "Turno desastroso. Tu jefe te miró feo." }
     return finish(g.title, mood + " Propinas: " + money_str(tips) + ".", outcome_kind({"happy": score - 50}))
 }

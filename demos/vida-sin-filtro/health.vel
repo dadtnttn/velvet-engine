@@ -344,6 +344,7 @@ function health_month() {
                     log_add("¡Remisión! Venciste el " + str_lower(d.n) + ".", "g")
                     L.happy += 20
                     flag("survivor")
+                    hito_me("Salud", "Venciste el " + str_lower(d.n))
                     continue
                 }
                 if chance(30) { L.looks -= 1 }
@@ -418,6 +419,7 @@ function health_year() {
         L.health -= 20
         add_ill("cardiopatia", true)
         log_add("Sufriste un infarto. Sobreviviste de milagro.", "b")
+        hito_me("Salud", "Sobreviviste a un infarto")
     }
     return null
 }
@@ -546,6 +548,7 @@ function health_checkup() {
     L.health += 2
     let found = checkup_reveal()
     if found == "" { return finish("Chequeo médico", "Análisis completos: estás sano. Te cobraron por decírtelo.", "g") }
+    hito_me("Salud", "Diagnóstico: " + str_replace(str_replace(found, "te diagnosticaron ", ""), ".", ""))
     return finish("Chequeo médico", "Los análisis no mienten: " + found + " Revisa Actividades › Salud para tratarte.", "b")
 }
 
@@ -666,6 +669,7 @@ function toggle_habit(id: string) {
         if h.bad {
             L.happy -= 3
             gain("guts", 2)
+            hito_me("Salud", "Dejaste de " + str_lower(h.t))
             return finish("Hábitos", "Dejaste de " + str_lower(h.t) + ". Tu cuerpo te lo agradecerá.", "g")
         }
         return finish("Hábitos", "Dejaste el hábito: " + str_lower(h.t) + ".", "n")

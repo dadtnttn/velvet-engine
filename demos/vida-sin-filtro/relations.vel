@@ -24,86 +24,86 @@ const REL_CATS = {
 
 const REL_ACTS = [
     // ------------------------------------------------ Citas (pareja y aventuras)
-    {"id": "dinner", "t": "Cena romántica", "s": "$800 · Minijuego", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 800, "mg": "memory", "bond": [4, 14], "happy": 4,
+    {"id": "dinner", "hito": "Su primera cena romántica", "t": "Cena romántica", "s": "$800 · Minijuego", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 800, "mg": "memory", "bond": [4, 14], "happy": 4,
      "desc": "Un restaurante bonito. Recuerda bien lo que pidió para impresionarl{xlo}.", "ok": "Velas, vino y conversación que no querían que terminara.", "bad": "Te equivocaste con su pedido y el mesero también. Cena incómoda."},
-    {"id": "movies", "t": "Ir al cine", "s": "$300", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 300,
+    {"id": "movies", "hito": "Su primera ida al cine", "t": "Ir al cine", "s": "$300", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 300,
      "desc": "Palomitas compartidas y la mano en la rodilla.", "o": [
         {"w": 70, "log": "Vieron una comedia y se rieron de lo mismo. Química.", "bond": 6, "happy": 4},
         {"w": 30, "log": "La película era malísima; se besaron toda la segunda mitad.", "bond": 8, "happy": 5}]},
-    {"id": "picnic", "t": "Picnic en el parque", "s": "Gratis", "grp": ["partner", "fling"], "cat": "Citas", "adult": true,
+    {"id": "picnic", "hito": "Su primer picnic", "t": "Picnic en el parque", "s": "Gratis", "grp": ["partner", "fling"], "cat": "Citas", "adult": true,
      "desc": "Sándwiches, una manta y el atardecer.", "o": [
         {"w": 75, "log": "Una tarde perfecta y sencilla. Te tomó de la mano todo el camino de regreso.", "bond": 6, "happy": 5},
         {"w": 25, "log": "Llovió a mitad del picnic. Corrieron empapados y muertos de risa.", "bond": 9, "happy": 4, "health": -1}]},
-    {"id": "concert", "t": "Ir a un concierto", "s": "$1,500", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 1500,
+    {"id": "concert", "hito": "Su primer concierto juntos", "t": "Ir a un concierto", "s": "$1,500", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 1500,
      "desc": "Su banda favorita en vivo.", "o": [
         {"w": 100, "log": "Cantaron a gritos abrazados. Sin voz, pero felices.", "bond": 10, "happy": 8}]},
-    {"id": "dance", "t": "Salir a bailar", "s": "$500 · Minijuego", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 500, "mg": "arrows", "bond": [3, 14], "happy": 6,
+    {"id": "dance", "hito": "Bailaron juntos por primera vez", "t": "Salir a bailar", "s": "$500 · Minijuego", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 500, "mg": "arrows", "bond": [3, 14], "happy": 6,
      "desc": "Salsa, bachata o reguetón: sigue el ritmo.", "ok": "Se movieron como si llevaran años bailando juntos. Todos los miraban.", "bad": "Le pisaste los pies once veces. Se rieron, pero le duelen."},
-    {"id": "getaway", "t": "Escapada de fin de semana", "s": "$5,000", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 5000,
+    {"id": "getaway", "hito": "Su primera escapada", "t": "Escapada de fin de semana", "s": "$5,000", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 5000,
      "desc": "Una cabaña en el bosque, sin celulares.", "o": [
         {"w": 100, "log": "Dos días de chimenea, vino y nada más que ustedes.", "bond": 14, "happy": 10, "health": 2}]},
-    {"id": "gift", "t": "Darle un regalo", "s": "Desde gratis", "grp": ["partner", "fling", "parent", "child", "friend", "sibling", "grandchild", "grandparent", "uncle", "cousin"], "cat": "*", "me": 6, "code": "gift",
+    {"id": "gift", "hito": "Su primer regalo", "t": "Darle un regalo", "s": "Desde gratis", "grp": ["partner", "fling", "parent", "child", "friend", "sibling", "grandchild", "grandparent", "uncle", "cousin"], "cat": "*", "me": 6, "code": "gift",
      "desc": "Flores, perfume, una joya o algo hecho con tus manos."},
     // ------------------------------------------------ Intimidad (18+)
     {"id": "sex", "t": "Tener relaciones", "s": "Con o sin protección", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "code": "sex",
      "desc": "Tú decides la protección. Sin condón hay riesgo de ITS (si tiene algo) y de embarazo según la fertilidad de los dos."},
     {"id": "spicy", "t": "Noche de fantasías", "s": "Según sus gustos", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "code": "spicy",
      "desc": "Propón uno de tus gustos (o de los suyos). Si lo comparten, noche legendaria; si no, puede incomodarl{xlo}."},
-    {"id": "massage", "t": "Masaje sensual", "s": "Cercanía · Minijuego", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "mg": "timing", "bond": [3, 12], "happy": 6,
+    {"id": "massage", "hito": "Su primer masaje", "t": "Masaje sensual", "s": "Cercanía · Minijuego", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "mg": "timing", "bond": [3, 12], "happy": 6,
      "desc": "Aceites, velas y manos firmes en el momento justo.", "ok": "Se derritió en tus manos. La noche siguió por su cuenta.", "bad": "Le jalaste el pelo con el aceite. Romántico... casi."},
-    {"id": "lovehotel", "t": "Love hotel temático", "s": "$2,500", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "cost": 2500,
+    {"id": "lovehotel", "hito": "Su primera noche en un love hotel", "t": "Love hotel temático", "s": "$2,500", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "cost": 2500,
      "desc": "Jacuzzi, espejos en el techo y un columpio que nadie sabe usar.", "o": [
         {"w": 100, "log": "Probaron todo lo que tenía la suite. Salieron a la mañana siguiente con una sonrisa boba.", "bond": 12, "happy": 10, "sexact": true}]},
     {"id": "threesome", "t": "Tríos y algo más", "s": "Necesita su sí", "grp": ["partner"], "cat": "Intimidad", "adult": true, "code": "threesome",
      "desc": "Invitar a otra mujer o a otro hombre, intercambio de parejas o una fiesta para adultos. Su personalidad y sus gustos deciden si acepta."},
     // ------------------------------------------------ Juntos
-    {"id": "gym_together", "t": "Hacer ejercicio juntos", "s": "Salud · Minijuego", "grp": ["partner", "friend", "sibling"], "cat": "Juntos", "me": 12, "them": 12, "mg": "timing", "bond": [3, 10], "health": 3,
+    {"id": "gym_together", "hito": "Entrenaron juntos por primera vez", "t": "Hacer ejercicio juntos", "s": "Salud · Minijuego", "grp": ["partner", "friend", "sibling"], "cat": "Juntos", "me": 12, "them": 12, "mg": "timing", "bond": [3, 10], "health": 3,
      "desc": "Rutina en pareja: sentadillas sincronizadas y competencia sana.", "ok": "Terminaron sudados, orgullosos y con ganas de repetir.", "bad": "Se te cayó la pesa cerca de su pie. Hoy fue cardio de huida."},
-    {"id": "cook", "t": "Cocinar juntos", "s": "Minijuego de memoria", "grp": ["partner", "parent", "child", "sibling", "friend"], "cat": "*", "me": 8, "them": 6, "mg": "memory", "bond": [3, 10], "happy": 3,
+    {"id": "cook", "hito": "Cocinaron juntos por primera vez", "t": "Cocinar juntos", "s": "Minijuego de memoria", "grp": ["partner", "parent", "child", "sibling", "friend"], "cat": "*", "me": 8, "them": 6, "mg": "memory", "bond": [3, 10], "happy": 3,
      "desc": "Recuerda la receta: ingredientes en el orden correcto.", "ok": "Les quedó delicioso. Ya tienen su platillo especial.", "bad": "Quemaron la cena y pidieron pizza. Igual fue divertido."},
-    {"id": "trivia", "t": "Noche de trivia", "s": "Minijuego de preguntas", "grp": ["partner", "friend", "sibling", "parent"], "cat": "*", "me": 8, "them": 8, "mg": "quiz", "bond": [3, 10], "know": 1,
+    {"id": "trivia", "hito": "Su primera noche de juegos", "t": "Noche de trivia", "s": "Minijuego de preguntas", "grp": ["partner", "friend", "sibling", "parent"], "cat": "*", "me": 8, "them": 8, "mg": "quiz", "bond": [3, 10], "know": 1,
      "desc": "Juego de mesa de preguntas. El que pierde lava los platos.", "ok": "Les ganaste a todos. Te miran con respeto (y algo de envidia).", "bad": "Perdiste vergonzosamente. Tú lavas los platos."},
-    {"id": "videogames", "t": "Jugar videojuegos", "s": "Minijuego de ritmo", "grp": ["friend", "sibling", "child", "partner", "cousin"], "cat": "*", "me": 5, "them": 5, "mg": "arrows", "bond": [3, 10], "happy": 4,
+    {"id": "videogames", "hito": "Su primera partida juntos", "t": "Jugar videojuegos", "s": "Minijuego de ritmo", "grp": ["friend", "sibling", "child", "partner", "cousin"], "cat": "*", "me": 5, "them": 5, "mg": "arrows", "bond": [3, 10], "happy": 4,
      "desc": "Una partida de baile en la consola.", "ok": "Combo perfecto. Gritaron como en final de mundial.", "bad": "Te dieron una paliza. Pediste la revancha tres veces."},
-    {"id": "series", "t": "Maratón de series", "s": "Gratis", "grp": ["partner", "sibling", "friend", "parent"], "cat": "*", "me": 6,
+    {"id": "series", "hito": "Su primer maratón de series", "t": "Maratón de series", "s": "Gratis", "grp": ["partner", "sibling", "friend", "parent"], "cat": "*", "me": 6,
      "desc": "Sillón, cobija y «un capítulo más».", "o": [
         {"w": 100, "log": "Terminaron la temporada completa en una noche. No se arrepienten.", "bond": 5, "happy": 4}]},
     {"id": "trip", "t": "Viaje juntos", "s": "$12,000", "grp": ["partner", "friend", "parent", "child", "sibling"], "cat": "*", "me": 18, "cost": 12000, "code": "trip",
      "desc": "Una semana en otro país. Nada une tanto como perderse juntos en un aeropuerto."},
-    {"id": "pet", "t": "Adoptar una mascota juntos", "s": "$3,000", "grp": ["partner"], "cat": "Juntos", "adult": true, "cost": 3000, "code": "pet",
+    {"id": "pet", "hito": "Adoptaron una mascota juntos", "t": "Adoptar una mascota juntos", "s": "$3,000", "grp": ["partner"], "cat": "Juntos", "adult": true, "cost": 3000, "code": "pet",
      "desc": "Un perro o un gato que será como su primer hijo."},
     // ------------------------------------------------ Salir (amigos)
-    {"id": "party", "t": "Salir de fiesta", "s": "Felicidad y alcohol", "grp": ["friend", "sibling"], "cat": "Salir", "adult": true, "cost": 600,
+    {"id": "party", "hito": "Su primera fiesta juntos", "t": "Salir de fiesta", "s": "Felicidad y alcohol", "grp": ["friend", "sibling"], "cat": "Salir", "adult": true, "cost": 600,
      "desc": "Antro, karaoke y tacos al final.", "o": [
         {"w": 70, "log": "Terminaron cantando en un karaoke a las 4 a. m.", "bond": 7, "happy": 8, "alcohol": 4, "charm": 2},
         {"w": 30, "log": "Conociste a alguien en la fiesta gracias a {x}.", "bond": 5, "happy": 5, "special": "hookup"}]},
-    {"id": "park", "t": "Ir al parque", "s": "Gratis", "grp": ["friend", "child", "grandchild", "sibling", "parent"], "cat": "*", "max": 17,
+    {"id": "park", "hito": "Fueron al parque juntos", "t": "Ir al parque", "s": "Gratis", "grp": ["friend", "child", "grandchild", "sibling", "parent"], "cat": "*", "max": 17,
      "desc": "Columpios, pelota y helado.", "o": [
         {"w": 100, "log": "Pasaron la tarde corriendo y jugando hasta que oscureció.", "bond": 6, "happy": 5, "health": 1}]},
-    {"id": "sleepover", "t": "Pijamada", "s": "Diversión", "grp": ["friend"], "cat": "Salir", "me": 6, "max": 17,
+    {"id": "sleepover", "hito": "Su primera pijamada", "t": "Pijamada", "s": "Diversión", "grp": ["friend"], "cat": "Salir", "me": 6, "max": 17,
      "desc": "Palomitas, películas de terror y secretos hasta la madrugada.", "o": [
         {"w": 100, "log": "Se quedaron despiertos hasta las 3 contándose secretos. Amistad sellada.", "bond": 10, "happy": 6}]},
-    {"id": "coffee", "t": "Tomar un café", "s": "$150", "grp": ["friend", "ex", "parent", "sibling"], "cat": "*", "me": 15, "cost": 150,
+    {"id": "coffee", "hito": "Su primer café juntos", "t": "Tomar un café", "s": "$150", "grp": ["friend", "ex", "parent", "sibling"], "cat": "*", "me": 15, "cost": 150,
      "desc": "Ponerse al día con calma.", "o": [
         {"w": 100, "log": "Platicaron dos horas sin darse cuenta.", "bond": 5, "happy": 3}]},
     // ------------------------------------------------ Familia
-    {"id": "help_home", "t": "Ayudar en casa", "s": "Amabilidad", "grp": ["parent"], "cat": "Ayuda", "me": 5,
+    {"id": "help_home", "hito": "Le ayudaste en casa por primera vez", "t": "Ayudar en casa", "s": "Amabilidad", "grp": ["parent"], "cat": "Ayuda", "me": 5,
      "desc": "Lavar los platos sin que te lo pidan. Un milagro.", "o": [
         {"w": 100, "log": "No lo podían creer. Te ganaste puntos para siempre.", "bond": 7, "kind": 2}]},
-    {"id": "care_parent", "t": "Cuidarl{xlo} y acompañarl{xlo}", "s": "Su vejez", "grp": ["parent"], "cat": "Ayuda", "me": 18, "them": 65,
+    {"id": "care_parent", "hito": "Empezaste a cuidarl{xlo}", "t": "Cuidarl{xlo} y acompañarl{xlo}", "s": "Su vejez", "grp": ["parent"], "cat": "Ayuda", "me": 18, "them": 65,
      "desc": "Llevarl{xlo} al médico, hacerle las compras y quedarte a platicar.", "o": [
         {"w": 100, "log": "Te lo agradeció con lágrimas en los ojos.", "bond": 12, "kind": 3, "karma": 3, "happy": -1}]},
     {"id": "give_money", "t": "Darle dinero ($5,000)", "s": "Ayuda económica", "grp": ["parent", "sibling", "friend"], "cat": "*", "me": 18, "cost": 5000,
      "desc": "Para que se ayude con sus gastos.", "o": [
         {"w": 100, "log": "Lo aceptó con vergüenza y muchísimo agradecimiento.", "bond": 10, "money": -5000, "karma": 2}]},
-    {"id": "story", "t": "Leerle un cuento", "s": "Ternura", "grp": ["child", "grandchild"], "cat": "*", "them": 2, "maxthem": 9, "me": 14,
+    {"id": "story", "hito": "Le leíste su primer cuento", "t": "Leerle un cuento", "s": "Ternura", "grp": ["child", "grandchild"], "cat": "*", "them": 2, "maxthem": 9, "me": 14,
      "desc": "Voces distintas para cada personaje, obligatorio.", "o": [
         {"w": 100, "log": "Se quedó dormid{xa} antes del final, abrazad{xa} a tu brazo.", "bond": 8, "happy": 5}]},
-    {"id": "teach_drive", "t": "Enseñarle a manejar", "s": "Valor", "grp": ["child"], "cat": "Crianza", "them": 16, "maxthem": 20,
+    {"id": "teach_drive", "hito": "Le enseñaste a manejar", "t": "Enseñarle a manejar", "s": "Valor", "grp": ["child"], "cat": "Crianza", "them": 16, "maxthem": 20,
      "desc": "Tus nervios contra su pie en el acelerador.", "o": [
         {"w": 70, "log": "Después de tres sustos, ya maneja bastante bien.", "bond": 9, "guts": 2},
         {"w": 30, "log": "Chocó contra un bote de basura. Ambos gritaron. Igual aprendió.", "bond": 5, "money": -2000}]},
-    {"id": "spoil", "t": "Malcriarl{xlo}", "s": "Dulces y juguetes", "grp": ["grandchild"], "cat": "Convivir", "cost": 500,
+    {"id": "spoil", "hito": "L{xlo} malcriaste por primera vez", "t": "Malcriarl{xlo}", "s": "Dulces y juguetes", "grp": ["grandchild"], "cat": "Convivir", "cost": 500,
      "desc": "Para eso existen los abuelos.", "o": [
         {"w": 100, "log": "Pastel antes de la comida y una bici nueva. Eres su persona favorita.", "bond": 12, "happy": 6}]},
     {"id": "prank", "t": "Hacerle una broma", "s": "Risas (o pelea)", "grp": ["sibling", "friend"], "cat": "*", "me": 5,
@@ -111,59 +111,59 @@ const REL_ACTS = [
         {"w": 60, "log": "Se rio tanto que se le salió el refresco por la nariz.", "bond": 5, "happy": 5},
         {"w": 40, "log": "No le dio nada de risa. Planea su venganza.", "bond": -6, "happy": 2}]},
     // ------------------------------------------------ Hablar / reencuentro
-    {"id": "apologize", "t": "Pedirle perdón", "s": "Reparar la relación", "grp": ["partner", "fling", "parent", "sibling", "child", "friend", "ex", "grandparent", "uncle", "cousin"], "cat": "Hablar", "me": 5,
+    {"id": "apologize", "hito": "Se reconciliaron", "t": "Pedirle perdón", "s": "Reparar la relación", "grp": ["partner", "fling", "parent", "sibling", "child", "friend", "ex", "grandparent", "uncle", "cousin"], "cat": "Hablar", "me": 5,
      "desc": "Reconocer tus errores sin «peros».", "o": [
         {"w": 70, "log": "Te perdonó. Se quitaron un peso de encima.", "bond": 10, "karma": 2},
         {"w": 30, "log": "«Lo voy a pensar.» Por algo se empieza.", "bond": 3}]},
     // ------------------------------------------------ más con tu pareja
-    {"id": "karaoke", "t": "Karaoke en pareja", "s": "$400 · Minijuego", "grp": ["partner", "fling", "friend"], "cat": "Citas", "adult": true, "cost": 400, "mg": "typing", "bond": [3, 12], "happy": 6,
+    {"id": "karaoke", "hito": "Su primer dueto", "t": "Karaoke en pareja", "s": "$400 · Minijuego", "grp": ["partner", "fling", "friend"], "cat": "Citas", "adult": true, "cost": 400, "mg": "typing", "bond": [3, 12], "happy": 6,
      "desc": "Escribe la letra a tiempo para no desafinar el dueto.", "ok": "Su dueto de balada romántica hizo llorar al de la barra.", "bad": "Se te olvidó la letra. Cantaron puros «lalalá»."},
-    {"id": "stargaze", "t": "Ver las estrellas", "s": "Gratis", "grp": ["partner", "fling"], "cat": "Citas", "adult": true,
+    {"id": "stargaze", "hito": "Vieron las estrellas juntos", "t": "Ver las estrellas", "s": "Gratis", "grp": ["partner", "fling"], "cat": "Citas", "adult": true,
      "desc": "Una cobija en el cofre del auto y el cielo despejado.", "o": [
         {"w": 70, "log": "Viste una estrella fugaz y pediste un deseo. {x} te preguntó cuál. No le dijiste.", "bond": 8, "happy": 5},
         {"w": 30, "log": "Hablaron de todo: el universo, sus miedos, el futuro. Una de esas noches.", "bond": 12, "happy": 6}]},
-    {"id": "spa", "t": "Spa en pareja", "s": "$2,000", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 2000,
+    {"id": "spa", "hito": "Su primer día de spa", "t": "Spa en pareja", "s": "$2,000", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 2000,
      "desc": "Masajes, sauna y batas esponjosas.", "o": [
         {"w": 100, "log": "Salieron tan relajados que casi se quedan dormidos en el auto.", "bond": 9, "happy": 8, "health": 2}]},
-    {"id": "shower", "t": "Bañarse juntos", "s": "Cercanía", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true,
+    {"id": "shower", "hito": "Se bañaron juntos por primera vez", "t": "Bañarse juntos", "s": "Cercanía", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true,
      "desc": "Ahorrar agua es importante. Eso dicen.", "o": [
         {"w": 100, "log": "El agua se acabó de calentar mucho antes de que terminaran.", "bond": 7, "happy": 7, "sexact": true}]},
     {"id": "sexting", "t": "Mensajes picantes", "s": "Riesgo de filtración", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true,
      "desc": "Fotos y mensajes subidos de tono. Qué podría salir mal.", "o": [
         {"w": 85, "log": "Tuvieron a {x} sonrojad{xa} en plena junta de trabajo.", "bond": 6, "happy": 5},
         {"w": 15, "log": "Tus fotos acabaron en un grupo que no era. Humillación pública.", "happy": -15, "fame": 3, "bond": -2}]},
-    {"id": "roleplay", "t": "Juego de rol", "s": "Disfraces", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "cost": 600,
+    {"id": "roleplay", "hito": "Su primer juego de rol", "t": "Juego de rol", "s": "Disfraces", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "cost": 600,
      "desc": "Hoy eres el profesor; mañana, el pirata. Disfraces incluidos.", "o": [
         {"w": 75, "log": "Se metieron tanto en el papel que hasta inventaron acentos. Noche épica.", "bond": 9, "happy": 9, "sexact": true},
         {"w": 25, "log": "Les dio tanta risa el disfraz que no pudieron seguir. Igual fue perfecto.", "bond": 7, "happy": 6}]},
     {"id": "makeup", "t": "Hacer las paces", "s": "Tras una pelea", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true,
      "desc": "Después de discutir, la reconciliación.", "o": [
         {"w": 100, "log": "La pelea quedó olvidada. La reconciliación, no.", "bond": 12, "happy": 6, "sexact": true}]},
-    {"id": "cuddle", "t": "Dormir abrazados", "s": "Gratis", "grp": ["partner"], "cat": "Juntos", "adult": true,
+    {"id": "cuddle", "hito": "Durmieron abrazados por primera vez", "t": "Dormir abrazados", "s": "Gratis", "grp": ["partner"], "cat": "Juntos", "adult": true,
      "desc": "Cucharita, serie de fondo y ronquidos suaves.", "o": [
         {"w": 100, "log": "Durmieron como bebés. Bueno, uno roncó.", "bond": 5, "happy": 4, "health": 1}]},
-    {"id": "breakfast", "t": "Desayuno en la cama", "s": "Minijuego de memoria", "grp": ["partner", "parent"], "cat": "*", "me": 10, "mg": "memory", "bond": [4, 12], "happy": 4,
+    {"id": "breakfast", "hito": "Su primer desayuno en la cama", "t": "Desayuno en la cama", "s": "Minijuego de memoria", "grp": ["partner", "parent"], "cat": "*", "me": 10, "mg": "memory", "bond": [4, 12], "happy": 4,
      "desc": "Recuerda cómo le gusta el café, los huevos y el pan.", "ok": "Todo como le gusta. Te miró como si fueras lo mejor del mundo.", "bad": "Le pusiste azúcar al café. Odia el azúcar. Igual sonrió."},
-    {"id": "dance_class", "t": "Clases de baile", "s": "$800 · Minijuego", "grp": ["partner", "friend"], "cat": "Juntos", "me": 14, "cost": 800, "mg": "arrows", "bond": [4, 12], "health": 2,
+    {"id": "dance_class", "hito": "Su primera clase de baile", "t": "Clases de baile", "s": "$800 · Minijuego", "grp": ["partner", "friend"], "cat": "Juntos", "me": 14, "cost": 800, "mg": "arrows", "bond": [4, 12], "health": 2,
      "desc": "Bachata, tango o salsa en pareja.", "ok": "El maestro los puso de ejemplo frente a todos.", "bad": "Se pisaron tanto que los mandaron a la fila de atrás."},
     // ------------------------------------------------ familia extendida
-    {"id": "visit", "t": "Visitarl{xlo}", "s": "Cercanía", "grp": ["grandparent", "uncle", "parent", "cousin", "sibling"], "cat": "Convivir", "me": 6,
+    {"id": "visit", "hito": "Tu primera visita", "t": "Visitarl{xlo}", "s": "Cercanía", "grp": ["grandparent", "uncle", "parent", "cousin", "sibling"], "cat": "Convivir", "me": 6,
      "desc": "Llegar de sorpresa con pan dulce.", "o": [
         {"w": 80, "log": "Te recibió con los brazos abiertos y no te dejó ir sin comer.", "bond": 7, "happy": 3},
         {"w": 20, "log": "Te pasaste la tarde escuchando quejas de la familia. Pero valió la pena.", "bond": 5}]},
-    {"id": "family_dinner", "t": "Comida familiar", "s": "Toda la familia", "grp": ["grandparent", "uncle", "parent", "cousin"], "cat": "Convivir", "me": 4,
+    {"id": "family_dinner", "hito": "Su primera comida familiar", "t": "Comida familiar", "s": "Toda la familia", "grp": ["grandparent", "uncle", "parent", "cousin"], "cat": "Convivir", "me": 4,
      "desc": "La comida del domingo en casa de la abuela.", "o": [
         {"w": 60, "log": "Mole, chismes y la sobremesa hasta la noche. Así se hace familia.", "bond": 6, "happy": 5},
         {"w": 25, "log": "Te preguntaron «¿y la novia?», «¿y el trabajo?», «¿y los hijos?». Sobreviviste.", "bond": 4, "happy": -2},
         {"w": 15, "log": "El tío se pasó de copas y arruinó la sobremesa. Clásico.", "bond": 2, "happy": -3}]},
-    {"id": "ask_story", "t": "Pedirle que te cuente historias", "s": "Conocimiento", "grp": ["grandparent"], "cat": "Convivir", "me": 5,
+    {"id": "ask_story", "hito": "Te contó la historia de su vida", "t": "Pedirle que te cuente historias", "s": "Conocimiento", "grp": ["grandparent"], "cat": "Convivir", "me": 5,
      "desc": "Cómo se conocieron, la guerra, el primer televisor del pueblo...", "o": [
         {"w": 100, "log": "Te contó historias que nadie más sabe. Las vas a recordar toda la vida.", "bond": 9, "know": 2, "happy": 3}]},
     {"id": "domingo", "t": "Pedirle «domingo»", "s": "Dinerito", "grp": ["grandparent", "uncle"], "cat": "Convivir", "max": 17, "me": 5,
      "desc": "La mano extendida y la carita de ángel.", "o": [
         {"w": 70, "log": "Te dio {monto} «para tus dulces». No le digas a tus papás.", "money": [100, 500], "bond": 2},
         {"w": 30, "log": "«¿Domingo? ¡En mis tiempos trabajábamos desde los cinco años!»", "bond": -1}]},
-    {"id": "cousin_play", "t": "Jugar con tu prim{xa}", "s": "Diversión", "grp": ["cousin"], "cat": "Convivir", "max": 17,
+    {"id": "cousin_play", "hito": "Jugaron juntos por primera vez", "t": "Jugar con tu prim{xa}", "s": "Diversión", "grp": ["cousin"], "cat": "Convivir", "max": 17,
      "desc": "Escondidas, fútbol en el patio o videojuegos en la sala.", "o": [
         {"w": 100, "log": "Se rompió una maceta, pero nadie vio quién fue.", "bond": 8, "happy": 6}]},
     {"id": "block", "t": "Bloquearl{xlo} de todo", "s": "Cerrar el ciclo", "grp": ["ex"], "cat": "Reencuentro", "code": "block",
@@ -525,6 +525,7 @@ function rel_do(id: string, p: map) {
     let o = pick_outcome(a.o)
     let msg = apply(o, ctx)
     if o.sexact == true { msg = msg + sex_with(p) }
+    if a.hito != null { add_hito(p, fmt(a.hito, ctx)) }
     return finish(p.first, msg, outcome_kind(o))
 }
 
@@ -558,6 +559,7 @@ function rel_mg_result(score: any, ctx: map) {
         kind = "n"
     }
     if a.cat == "Intimidad" && score >= 50 { sex_with(p) }
+    if a.hito != null { add_hito(p, fmt(a.hito, fctx)) }
     return finish(p.first, text + " (" + str(score) + " puntos)", kind)
 }
 
@@ -637,6 +639,7 @@ function resolve_gift(index: int, ctx: map) {
     }
     bond_gain(p, gain_b)
     L.happy += 2
+    add_hito(p, "Su primer regalo")
     return finish(p.first, msg, "g")
 }
 
@@ -688,6 +691,7 @@ function resolve_sex(index: int, ctx: map) {
     bond_gain(p, rint(3, 8))
     L.happy += max(0, happy)
     msg = msg + sex_with(p)
+    add_hito(p, "Su primera noche juntos")
     G.sex_mode = ""
     if index == 3 && p.gender != L.gender && preg > 0 {
         return mg_start("race", "La gran carrera", "conceive", {"pid": p.id, "preg": preg, "msg": msg})
@@ -777,6 +781,8 @@ function trip(p: map) {
     L.happy += 12
     gain("know", 2)
     if place == "Tokio" { flag("tokyo") }
+    add_hito(p, "Su primer viaje juntos: " + place)
+    hito_once("trip_" + place, "Vida", "Conociste " + place)
     let msg = "Una semana en " + place + " con " + p.first + "."
     let g = rel_group(p)
     if g == "partner" && L.age >= 18 {
@@ -793,6 +799,7 @@ function renew_vows(p: map) {
     L.used["rvows"] = 1
     L.money -= 6000
     bond_gain(p, 18)
+    add_hito(p, "Renovaron sus votos")
     L.happy += 10
     return finish("Renovación de votos", "Frente a familia y amigos, volvieron a prometerse todo. " + p.first + " lloró desde el «hola».", "g")
 }
@@ -809,6 +816,7 @@ function adopt(p: map) {
     L.happy += 15
     bond_gain(p, 10)
     flag("adopt")
+    add_hito(p, "Adoptaron a " + child.first)
     return finish("Adopción", "Después de meses de trámites, " + child.first + " (" + str(child.age) + " años) llegó a su casa. Ya son familia.", "g")
 }
 
@@ -830,6 +838,7 @@ function ivf(p: map) {
     if L.gender == "f" && (!same || my_fertility() >= their_fertility(p)) {
         L.pregnant = true
         L.preg_with = p.first
+        add_hito(p, "El tratamiento de fertilidad funcionó")
         return finish("Fertilidad", "¡Funcionó! Estás embarazada.", "g")
     }
     L.partner_preg = true
@@ -869,6 +878,8 @@ function resolve_wedding(index: int, ctx: map) {
     L.happy += 10 + index * 2
     if index == 4 { L.fame = clamp100(L.fame + 5) }
     toast("LOS AMANTES · BODA", "Te casaste con " + p.first + ".")
+    let styles = ["Boda íntima al atardecer", "Boda civil con tacos", "Boda en Las Vegas", "Boda en la playa", "La boda del año"]
+    add_hito(p, styles[index])
     return finish("Boda", texts[index] + " Ahora " + p.first + " es tu " + str_lower(rel_label(p)) + ".", "g")
 }
 
@@ -888,6 +899,8 @@ function make_friend() {
     add_person(p)
     let where = "en la escuela"
     if L.age >= 18 { where = pick(["en el gimnasio", "en una clase de cocina", "en un bar", "en el trabajo", "en un club de lectura"]) }
+    p.hitos = [{"a": L.age, "t": "Se conocieron " + where}]
+    hito_once("first_friend_made", "Amistad", "Hiciste un amigo por tu cuenta: " + p.first)
     return finish("Amistades", "Conociste a " + p.first + " " + where + ". Hicieron clic de inmediato.", "g")
 }
 
@@ -906,6 +919,7 @@ function childhood_friends() {
         if a == 12 { where = "en la secundaria" }
         log_add("Conociste a " + p.first + " " + where + ". Desde ese día son inseparables.", "g")
         p.hitos = [{"a": a, "t": "Se conocieron " + where}]
+        hito_quiet("Amistad", "Conociste a " + p.first + " " + where)
     }
     return null
 }

@@ -134,6 +134,24 @@ binarias en el juego.
     gustaste, y llegar juntos hasta la boda y la vejez.
   - Eventos de pareja y amigos: aniversarios, conocer a los suegros, celos,
     despidos, discursos de boda y rivalidad entre hermanos.
+- **Amor de la infancia** (`sweethearts.vel`): de niño compartes el lonche y
+  haces dibujos con tus amigos; de adolescente, si alguien de tu edad te gusta,
+  le dejas notitas, l@ acompañas a casa y le pides que sea tu novi@. El noviazgo
+  joven es solo romántico: caminar de la mano, helado, cine, estudiar juntos,
+  cartas, ensayar el baile escolar y un beso tímido (desde los 14, entre chicos
+  de la misma edad). Eventos: el baile, conocer a sus papás, chismes, mudanzas y
+  la graduación juntos. Nada adulto existe hasta que ambos tienen 18; si siguen
+  juntos, pueden vivir, casarse, tener hijos y envejecer juntos.
+- **Hitos** (`milestones.vel`): la línea del tiempo de tu vida en «Hitos», por
+  categorías (vida, amor, amistad, familia, trabajo, estudios, salud): primeros
+  pasos, primer día de escuela, primer beso, primer noviazgo, primer trabajo y
+  cada ascenso, especializaciones, chambas y turnos perfectos, becas y
+  graduaciones, viajes, compras, primer millón, fama, prisión, diagnósticos,
+  vencer un cáncer, bodas, hijos, nietos, pérdidas, jubilación y herencias.
+  Además, cada persona guarda su propia historia contigo (pestaña Historia):
+  cómo se conocieron, primera cita, primer regalo, primer viaje, «te quiero»,
+  peleas, reconciliaciones, compromiso, boda, hijos y aniversarios hasta las
+  bodas de oro.
 - **Platicar** (`chat.vel`): con cualquier persona, como en una app de mensajes.
   Cada quien tiene un temperamento (callado, parlanchín, bromista, sensible,
   orgulloso, romántico) y un ánimo que cambia cada mes (feliz, cariñoso, triste,
@@ -207,7 +225,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 44 objetivos con recompensa (graduarte, casarte, primer millón,
+- **Misiones**: 47 objetivos con recompensa (graduarte, casarte, primer millón,
   ganar un premio, llevar un confidente a rango 10, vivir 100 años...).
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
   "!", corazón, gota de sudor, enojo o dinero). 3 tipos de cara, 3 de cuerpo,
@@ -234,6 +252,8 @@ binarias en el juego.
 | `family.vel` | Hijos, peticiones, herencia, ruleta, nueva generación, vejez y eventos de legado |
 | `effects.vel` | Efectos positivos y negativos y sus modificadores |
 | `relations.vel` | Menús por vínculo, citas, intimidad, tríos, fertilidad, bodas, adopción, amigos de la infancia y eventos familiares |
+| `sweethearts.vel` | Amistades de la infancia, noviazgo adolescente romántico e historia de cada pareja |
+| `milestones.vel` | Hitos personales y su pantalla por categorías |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |

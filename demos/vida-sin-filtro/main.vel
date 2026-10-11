@@ -18,6 +18,7 @@ import "effects.vel"
 import "relations.vel"
 import "chat.vel"
 import "sweethearts.vel"
+import "milestones.vel"
 import "art.vel"
 import "ui.vel"
 
