@@ -458,7 +458,7 @@ function job_def(id: string) {
                 "min_age": 18
             }
             if r[9] != "" { d.specs = str_split(r[9], "|") }
-            if (d.field == "Servicio" || d.field == "Oficio") && !d.adult { d.min_age = 16 }
+            // Las carreras son de adultos; antes de los 18 están las chambas de medio tiempo.
             JOBC[id] = d
             return d
         }

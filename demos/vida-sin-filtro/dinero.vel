@@ -195,7 +195,7 @@ const CPL_EVENTS = [
         ]
     },
     {
-        "id": "cm_anniv", "title": "Aniversario", "w": 6, "married": true,
+        "id": "cm_anniv", "title": "Aniversario", "w": 0, "married": true,
         "text": "Se acerca su aniversario de bodas y {x} sueña con cenar en el restaurante más caro de la ciudad ($2,500).",
         "choices": [
             {"t": "Reservar en el restaurante", "cost": 2500, "o": [{"w": 100, "log": "Siete tiempos, vino y una mirada como la del primer día.", "money": -2500, "bond": 8, "happy": 5}]},
@@ -307,6 +307,8 @@ function debts_total() {
     if d.card != null { total += d.card.bal + card_msi_left(d.card) }
     if d.payday != null { total += d.payday.bal }
     if L.cs != null && L.cs.marker != null { total += L.cs.marker.bal }
+    // Los números rojos también son deuda (un sobregiro).
+    total += max(0, 0 - L.money)
     return total
 }
 
@@ -967,7 +969,7 @@ function dn_credit_items() {
         if L.mort.rate <= better + 10 { l = "Ya tienes buena tasa" } else if L.money < 3000 { l = "$3,000" }
         list_push(items, ditem("refi", "Refinanciar la hipoteca", "Tasa nueva: " + rate_str(better) + " mensual", "Tu tasa actual es " + rate_str(L.mort.rate) + " mensual. Cambiarla cuesta $3,000 de trámites.", l))
     }
-    if debts_total() > 30000 && net_worth() < 0 {
+    if debts_total() > 20000 && net_worth() < 0 {
         let l = ""
         if dn_bk_lock() { l = "Ya te declaraste" }
         list_push(items, ditem("bankrupt", "Declararte en bancarrota", "Último recurso", "Borra tus deudas (menos el préstamo estudiantil), pero pierdes tus bienes e inversiones y tu historial queda en el piso siete años.", l))
@@ -1488,7 +1490,8 @@ function bankruptcy() {
     mk_wipe()
     L.savings = 0
     d.cdt = []
-    if L.money > 0 { L.money = 0 }
+    // La bancarrota limpia todo: también el sobregiro y las pensiones atrasadas.
+    L.money = 0
     L.credit = 350
     d.bk_age = L.age
     L.happy -= 20

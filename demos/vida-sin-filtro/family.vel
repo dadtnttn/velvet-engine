@@ -628,7 +628,16 @@ function legacy_ctx(ev: map) {
 // ---------------------------------------------------------------- vejez
 
 function old_age_year() {
-    if L.age == 65 && L.job != null && G.modal == null {
+    // Pensión básica del Estado para todos desde los 65 (con o sin trabajo).
+    if L.age >= 65 && L.state_pension != true {
+        L.state_pension = true
+        let base = local_cost(3600)
+        L.pension += base
+        log_add("Empezaste a cobrar la pensión básica del Estado: " + money_str(base) + " al año. No es mucho, pero ayuda.", "n")
+    }
+    // Si a los 65 había otra decisión abierta, la jubilación se ofrece al año siguiente.
+    if L.age >= 65 && L.job != null && G.modal == null && (L.retire_asked == null || L.age - L.retire_asked >= 3) {
+        L.retire_asked = L.age
         open_choice("JUBILACIÓN", "Cumpliste 65. Puedes jubilarte y cobrar una pensión del 40% de tu sueldo (" + money_str(pay_of(L.job) * 40 / 100) + " al año), o seguir trabajando.",
             ["Jubilarme", "Seguir trabajando"], ["", ""], "retire", {})
     }
@@ -659,7 +668,7 @@ function old_age_year() {
 function resolve_retire(index: int) {
     G.modal = null
     if index == 1 { return finish("Jubilación", "Sigues al pie del cañón. El trabajo te mantiene joven.", "n") }
-    L.pension = pay_of(L.job) * 40 / 100
+    L.pension += pay_of(L.job) * 40 / 100
     L.last_job = L.job.title
     L.job = null
     L.job2 = null

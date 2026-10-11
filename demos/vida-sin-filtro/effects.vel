@@ -156,6 +156,22 @@ function flirt_bonus() {
 }
 
 // Felicidad y salud de cada mes por tus efectos.
+// Tu punto de equilibrio: carácter, amor, amistad y fe lo suben.
+function happy_base() {
+    let b = 50
+    if L.trait == "fiesta" || L.trait == "carisma" { b += 5 }
+    let p = partner()
+    if p != null && p.bond >= 60 { b += 8 }
+    for q in L.people {
+        if q.alive && (q.rel == "amigo" || q.bff == true) && q.bond >= 60 {
+            b += 5
+            break
+        }
+    }
+    if L.faith != null && L.faith >= 60 { b += 4 }
+    return b
+}
+
 function effects_month() {
     let hap = 0
     let hp = 0
@@ -163,8 +179,15 @@ function effects_month() {
         if e.hap != null { hap += e.hap }
         if e.hp != null { hp += e.hp }
     }
+    // Los efectos negativos juntos restan como mucho 3 al mes.
+    if hap < -3 { hap = -3 }
     if hap != 0 && chance(50) { L.happy += hap }
     if hp != 0 && chance(40) { L.health += hp }
+    // La felicidad tiende a volver a tu nivel de siempre (nadie vive en 0 ni en 100).
+    let base = happy_base()
+    if L.happy < base - 10 && chance(40) { L.happy += 1 }
+    if L.happy > base + 15 && chance(25) { L.happy -= 1 }
+    if L.happy < 25 { L.low_months = int(map_get(L, "low_months", 0)) + 1 } else { L.low_months = 0 }
     if L.heartbreak > 0 { L.heartbreak -= 1 }
     let p = partner()
     if p != null && has_kink("romantico") && chance(40) { p.bond = clamp100(p.bond + 1) }

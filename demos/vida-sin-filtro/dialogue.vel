@@ -78,7 +78,13 @@ const DIALOGS = {
                 "toxico": "«¿Qué quieres ahora?» El ambiente se pone tenso de inmediato."
             },
             "opts": [
+                {"t": "Pedirle que juegue contigo", "if": "kidme", "go": "play"},
                 {"t": "Pedirle consejo sobre la vida", "go": "advice"},
+                {"t": "Pedirle consejo sobre tu matrimonio", "if": "married", "go": "marriage"},
+                {"t": "Pedirle consejo para criar a tus hijos", "if": "haskids", "go": "raising"},
+                {"t": "Contarle que va a ser abuel{xa}", "if": "grandbaby", "go": "grandbaby"},
+                {"t": "Preguntarle por su salud", "if": "oldparent", "go": "health"},
+                {"t": "Decirle lo que nunca le dijiste", "if": "oldparent", "need": "kind", "rank": 2, "go": "unsaid"},
                 {"t": "Presumir tus calificaciones ({grades})", "if": "school", "roll": 20, "grades": true, "ok": "proud", "fail": "scold"},
                 {"t": "Pedirle permiso para ir a una fiesta", "if": "teen", "roll": 40, "stat": "charm", "ok": "party_yes", "fail": "grounded"},
                 {"t": "Pedirle dinero", "if": "nojail", "roll": 35, "money": true, "ok": "money", "fail": "money_no"},
@@ -88,14 +94,102 @@ const DIALOGS = {
         },
         "advice": {
             "say": {
-                "default": "«Mira... nadie sabe lo que hace. Solo no te rindas.»",
-                "amoroso": "«Sé amable, estudia lo que te apasione y nunca dejes que nadie te haga sentir menos.»",
-                "estricto": "«Disciplina. El talento sin disciplina no sirve para nada.»",
-                "relajado": "«Disfruta, que la vida es corta. Pero usa condón.»",
-                "ausente": "«Pues... haz lo que creas.» Y vuelve a su celular.",
-                "toxico": "«Que no seas como yo. Ese es mi consejo.» Por un segundo, parece sincer{xa}."
+                "kid": {
+                    "default": "«Sé buena persona, haz tu tarea y no le pegues a tus primos.»",
+                    "amoroso": "«Sé amable con todos y nunca dejes de preguntar por qué.»",
+                    "estricto": "«Primero la tarea y luego el juego. Así se forma el carácter.»",
+                    "relajado": "«Juega mucho. Ser niñ{a} se acaba rapidísimo.»",
+                    "ausente": "«Pregúntale a tu maestra.» Y vuelve a su celular.",
+                    "toxico": "«No llores por todo. La vida no es justa.»"
+                },
+                "teen": {
+                    "default": "«Mira... nadie sabe lo que hace. Solo no te rindas.»",
+                    "amoroso": "«Sé amable, estudia lo que te apasione y nunca dejes que nadie te haga sentir menos.»",
+                    "estricto": "«Disciplina. El talento sin disciplina no sirve para nada.»",
+                    "relajado": "«Disfruta, que la vida es corta. Pero usa condón.»",
+                    "ausente": "«Pues... haz lo que creas.» Y vuelve a su celular.",
+                    "toxico": "«Que no seas como yo. Ese es mi consejo.» Por un segundo, parece sincer{xa}."
+                },
+                "adult": {
+                    "default": "«Nadie sabe lo que hace, {nombre}. Ni yo. Solo no te rindas.»",
+                    "amoroso": "«Cuida a la gente que te cuida. Lo demás va y viene.»",
+                    "estricto": "«Ahorra. Y nunca firmes nada sin leerlo dos veces.»",
+                    "relajado": "«Trabaja para vivir, no vivas para trabajar.»",
+                    "ausente": "«Tú siempre supiste lo que hacías mejor que yo.» Es lo más sincero que te ha dicho.",
+                    "toxico": "«Que no cometas mis errores. Ese es mi consejo.» Por un segundo, parece sincer{xa}."
+                },
+                "elder": {
+                    "default": "«A estas alturas ya lo sabes: el tiempo es lo único que no se recupera.»",
+                    "amoroso": "«Sigues siendo mi niñ{a}, aunque ya tengas canas.» Te acaricia la mano.",
+                    "estricto": "«Ve al doctor. No seas terc{a} como yo.»",
+                    "relajado": "«Ríete más. Ya no tienes nada que demostrarle a nadie.»",
+                    "ausente": "Se queda mirando por la ventana. «Ojalá hubiera estado más contigo.»",
+                    "toxico": "«Ya ni para qué te aconsejo.» Pero no te suelta la mano."
+                }
             },
             "fx": {"bond": 4, "know": 2, "kind": 1}, "k": "g"
+        },
+        "play": {
+            "say": {
+                "default": "Se tira al piso contigo y juegan hasta que se les olvida la hora.",
+                "amoroso": "Construyen un fuerte de cobijas en la sala. Es el mejor día de tu vida.",
+                "estricto": "«Diez minutos.» Juegan una hora. No dice nada.",
+                "relajado": "Te deja ganar en todo y finge que le duele muchísimo.",
+                "ausente": "Juega contigo... con una mano. Con la otra contesta correos.",
+                "toxico": "«Estoy cansad{xa}.» Pero al final te lanza la pelota un rato."
+            },
+            "fx": {"bond": 5, "happy": 5}, "k": "g"
+        },
+        "marriage": {
+            "say": {
+                "default": "«El amor no basta: hay que escoger a esa persona todos los días, aunque no tengas ganas.»",
+                "amoroso": "«Nunca se vayan a dormir enojados. Y bésense en la cocina sin motivo.»",
+                "estricto": "«Cuentas claras y respeto. Lo demás se arregla.»",
+                "relajado": "«Ríanse juntos. Si dejan de reírse, ahí sí preocúpate.»",
+                "ausente": "«Pregúntale a tu pareja qué necesita. Yo nunca lo hice.»",
+                "toxico": "«Que no te pase lo que a mí.» No dice más, pero lo entiendes todo."
+            },
+            "fx": {"bond": 5, "know": 1, "kind": 1}, "k": "g"
+        },
+        "raising": {
+            "say": {
+                "default": "«Vas a equivocarte. Todos lo hacemos. Lo importante es pedir perdón.»",
+                "amoroso": "«Abrázalos aunque digan que ya están grandes. Sobre todo entonces.»",
+                "estricto": "«Límites. Te van a odiar un rato y te lo van a agradecer toda la vida.»",
+                "relajado": "«No te tomes todo tan en serio: sobrevivieron hasta tus experimentos de cocina.»",
+                "ausente": "«Estate presente. Es lo que más extrañaste de mí, ¿verdad?»",
+                "toxico": "«Hazlo mejor que yo.» Parece sincer{xa}."
+            },
+            "fx": {"bond": 5, "know": 1, "parent": 2}, "k": "g"
+        },
+        "grandbaby": {
+            "say": {
+                "default": "Se le llenan los ojos de lágrimas. «¿Voy a ser abuel{xa}?» Te abraza tan fuerte que casi no respiras.",
+                "estricto": "Se queda inmóvil. Luego se aclara la garganta. «Bien. Muy bien.» Le tiembla la voz.",
+                "ausente": "Deja el celular por primera vez en años. «¿Abuel{xa}? ¿Yo?»",
+                "toxico": "«¿Y ya pensaron cómo lo van a mantener?» Pero esa misma tarde compra una cuna."
+            },
+            "fx": {"bond": 10, "happy": 6}, "k": "g"
+        },
+        "health": {
+            "say": {
+                "default": "«Ay, ya sabes: las rodillas, la presión... nada que una buena sopa no arregle.» Te das cuenta de que está más cansad{xa} que antes.",
+                "amoroso": "«Estoy bien, mi amor, no te preocupes por mí.» Pero se toma tu mano un buen rato.",
+                "estricto": "«Voy al doctor cada mes. A diferencia de otros.» Te mira con intención.",
+                "relajado": "«¡Más sano que nunca!» Se le escapa una tos.",
+                "ausente": "«Bien, bien.» No suelta más detalles.",
+                "toxico": "«¿Ahora sí te importa?» Pero te cuenta todo, con lujo de detalle."
+            },
+            "fx": {"bond": 6, "kind": 1}, "k": "n"
+        },
+        "unsaid": {
+            "say": {
+                "default": "Le dices todo: gracias, perdón y te quiero. Se quedan en silencio, tomados de la mano, mucho rato.",
+                "estricto": "Por primera vez en tu vida le ves llorar. «Yo también estoy orgullos{xa} de ti. Nunca te lo dije.»",
+                "ausente": "Te escucha sin mirar el celular. «Gracias por decírmelo mientras todavía estoy aquí.»",
+                "toxico": "Se le quiebra la voz. «Fui muy dur{xa} contigo. Perdóname.» Nunca pensaste que lo oirías."
+            },
+            "fx": {"bond": 12, "happy": 6, "karma": 2}, "k": "g"
         },
         "proud": {"say": "«¡Esas son calificaciones! Estoy muy orgullos{xa} de ti.» Te premia con un pequeño regalo.", "fx": {"bond": 6, "happy": 6, "money": 300}, "k": "g"},
         "scold": {"say": "«¿A eso le llamas calificaciones? Más te vale echarle ganas.»", "fx": {"bond": -4, "happy": -4}, "k": "b"},
@@ -111,7 +205,19 @@ const DIALOGS = {
                 "amoroso": "«¡Ay, yo más!» Te llena de besos aunque ya estés grandecit{a}.",
                 "estricto": "Se queda sin palabras un momento. «...Yo también. Ahora ve a hacer tu tarea.»",
                 "ausente": "Levanta la vista, sorprendid{xa}. «...Gracias. Yo también.»",
-                "toxico": "«¿Qué quieres a cambio?» Pero esa noche te prepara tu comida favorita."
+                "toxico": "«¿Qué quieres a cambio?» Pero esa noche te prepara tu comida favorita.",
+                "adult": {
+                    "default": "«Yo también te quiero, {nombre}. Siempre.»",
+                    "amoroso": "«¡Ay, mi niñ{a}! Para mí siempre vas a tener cinco años.»",
+                    "estricto": "Se queda callad{xa} un momento. «...Yo también. Nunca te lo dije lo suficiente.»",
+                    "relajado": "«¡Uy, qué sentimental!» Pero te abraza un buen rato.",
+                    "ausente": "Levanta la vista, sorprendid{xa}. «...Gracias. Yo también.»",
+                    "toxico": "«¿Qué quieres a cambio?» Pero se le quiebra la voz."
+                },
+                "elder": {
+                    "default": "«Yo también, mi viej{a}.» Se ríen los dos de lo raro que suena.",
+                    "estricto": "«...Yo también.» Esta vez no te manda a hacer nada."
+                }
             },
             "fx": {"bond": 8, "happy": 3}, "k": "g"
         }
@@ -249,12 +355,30 @@ const DIALOGS = {
             "opts": [
                 {"t": "Contarle tus problemas", "go": "comfort"},
                 {"t": "Contarle un secreto", "roll": 55, "stat": "kind", "ok": "secret_ok", "fail": "secret_out"},
-                {"t": "Pedirle dinero prestado", "if": "nojail", "roll": 40, "ok": "loan", "fail": "loan_no"},
+                {"t": "Pedirle prestado su juguete favorito", "if": "kidme", "roll": 50, "stat": "kind", "ok": "toy_ok", "fail": "toy_no"},
+                {"t": "Pedirle que te pase la tarea", "if": "teen", "roll": 45, "stat": "charm", "ok": "hw_ok", "fail": "hw_no"},
+                {"t": "Hablar de quién te gusta", "if": "teen", "go": "crush_talk"},
+                {"t": "Recordar viejos tiempos", "if": "elderme", "go": "old_times"},
+                {"t": "Pedirle dinero prestado", "if": "adultnojail", "roll": 40, "ok": "loan", "fail": "loan_no"},
                 {"t": "Confesarle que te gusta", "if": "crush", "roll": 25, "looks": true, "stat": "charm", "ok": "lovers", "fail": "friendzone"},
                 {"t": "Proponerle un negocio juntos", "if": "adult", "need": "know", "rank": 2, "roll": 40, "stat": "know", "ok": "biz_win", "fail": "biz_lose"}
             ]
         },
-        "comfort": {"say": "{x} te escucha sin juzgarte y te invita un café. Te sientes mucho mejor.", "fx": {"bond": 6, "happy": 6}, "k": "g"},
+        "comfort": {
+            "say": {
+                "kid": "{x} te escucha muy seri{xa} y te regala la mitad de su lonche. Ya te sientes mejor.",
+                "teen": "{x} te escucha sin juzgarte y se quedan hablando por mensaje hasta las 2 a. m.",
+                "adult": "{x} te escucha sin juzgarte y te invita un café. Te sientes mucho mejor.",
+                "elder": "{x} te escucha con calma y te sirve un café de olla. A estas alturas ya no hay prisa para nada."
+            },
+            "fx": {"bond": 6, "happy": 6}, "k": "g"
+        },
+        "toy_ok": {"say": "«Pero me lo cuidas, ¿eh?» Te lo presta como si te entregara un tesoro.", "fx": {"bond": 5, "happy": 5}, "k": "g"},
+        "toy_no": {"say": "«¡Es MÍO!» Se lo lleva abrazado. Hoy no hay trato.", "fx": {"bond": -2, "happy": -2}, "k": "n"},
+        "hw_ok": {"say": "Te la pasa a escondidas en el recreo. «Cámbiale las palabras, ¿eh?»", "fx": {"bond": 3, "grades": 2, "karma": -1}, "k": "g"},
+        "hw_no": {"say": "«Ni loc{xa}. La última vez nos cacharon a los dos.»", "fx": {"bond": -2}, "k": "n"},
+        "crush_talk": {"say": "Se cuentan quién les gusta, con nombres y todo. Hacen un pacto de silencio con el dedo meñique.", "fx": {"bond": 7, "happy": 4}, "k": "g"},
+        "old_times": {"say": "Recuerdan cuando eran jóvenes y se creían inmortales. Se ríen hasta que les duele la panza.", "fx": {"bond": 8, "happy": 6}, "k": "g"},
         "secret_ok": {"say": "«Me llevo tu secreto a la tumba.» Y sabes que es verdad.", "fx": {"bond": 10, "happy": 3}, "k": "g"},
         "secret_out": {"say": "Para el viernes, todo el mundo sabe tu secreto. Gracias, {x}.", "fx": {"bond": -20, "happy": -8}, "k": "b"},
         "loan": {"say": "«Claro, para eso estamos.»", "end": "friend_money", "k": "g"},
@@ -275,7 +399,10 @@ const DIALOGS = {
                 "flojo": "{x} sigue acostad{xa} en el sillón. «Mmm... ¿qué onda?»"
             },
             "opts": [
+                {"t": "Preguntarle qué quiere ser de grande", "if": "smallkid", "go": "dream"},
                 {"t": "Preguntarle cómo va en la escuela", "if": "kidschool", "go": "school"},
+                {"t": "Preguntarle cómo le va en el trabajo", "if": "adultkid", "go": "kid_job"},
+                {"t": "Preguntarle cuándo te hará abuel{a}", "if": "adultkid", "roll": 40, "stat": "kind", "ok": "kids_soon", "fail": "kids_drop"},
                 {"t": "La plática sobre sexo y protección", "if": "kidteen", "roll": 45, "stat": "kind", "ok": "talk_ok", "fail": "talk_bad"},
                 {"t": "Darle un consejo de vida", "go": "advice"},
                 {"t": "Decirle que te sientes orgullos{a} de {xel}", "go": "proud"},
@@ -292,6 +419,27 @@ const DIALOGS = {
             },
             "fx": {"bond": 3}, "k": "n"
         },
+        "dream": {
+            "say": {
+                "default": "«¡Astronauta! O dinosaurio. Todavía no decido.»",
+                "dulce": "«Quiero ser como tú.» Se te hace un nudo en la garganta.",
+                "rebelde": "«Millonari{xa}. Y no voy a ir a la escuela.»",
+                "genio": "«Científic{xa}. Voy a curar el cáncer y luego a viajar en el tiempo.»",
+                "flojo": "«Probador{xa} de colchones. Existe, lo investigué.»"
+            },
+            "fx": {"bond": 5, "happy": 4}, "k": "g"
+        },
+        "kid_job": {
+            "say": {
+                "default": "Te cuenta de su jefe, de sus compañeros y de lo caro que está todo. Te pide un consejo y lo apunta.",
+                "rebelde": "«Mi jefe es un idiota, pero me paga.» Te ríes: dijiste exactamente lo mismo a su edad.",
+                "genio": "Te explica su trabajo durante media hora. Entiendes la mitad y te sientes orgullos{a} del todo.",
+                "flojo": "«Ahí la llevo.» Pero te enseña fotos de su escritorio con un dibujo tuyo."
+            },
+            "fx": {"bond": 6, "know": 1}, "k": "n"
+        },
+        "kids_soon": {"say": "Sonríe de lado. «Estamos pensándolo...» Se te ilumina la cara.", "fx": {"bond": 4, "happy": 5}, "k": "g"},
+        "kids_drop": {"say": "«{pa_word}, ¿otra vez con eso?» Se le borra la sonrisa. Mejor cambias de tema.", "fx": {"bond": -4}, "k": "b"},
         "talk_ok": {"say": "Fue la conversación más incómoda de sus vidas, pero {x} escuchó todo: consentimiento, protección y respeto. Te lo agradecerá algún día.", "fx": {"bond": 6, "parent": 4}, "k": "g"},
         "talk_bad": {"say": "«¡YA SÉ TODO ESO!» {x} salió corriendo con las orejas rojas. Le dejaste un folleto en la puerta.", "fx": {"bond": -2}, "k": "n"},
         "advice": {"say": "Le das el consejo que te hubiera gustado escuchar a su edad. {x} se queda pensando.", "fx": {"bond": 4, "parent": 1}, "k": "g"},
@@ -333,6 +481,139 @@ const DIALOGS = {
         "no_back": {"say": "«No. Lo nuestro ya fue.» Y cuelga.", "fx": {"happy": -6}, "k": "b"},
         "fwb": {"say": "«Sin compromisos, ¿eh? ...Ven.»", "end": "hookup", "k": "x"},
         "rant": {"say": "Le dices todo lo que te guardaste. Te sientes ligero... y {x} te bloquea en todo.", "fx": {"bond": -25, "happy": 4, "guts": 2}, "k": "n"}
+    },
+
+    // Primer amor: noviazgo adolescente (sin nada sexual).
+    "teen_partner": {
+        "n0": {
+            "say": {
+                "default": "{x} te manda un sticker de corazón y luego te habla en persona, nervios{xa}. «¿Qué onda?»",
+                "dulce": "{x} te espera a la salida con tu dulce favorito. «Te extrañé todo el día.»",
+                "celoso": "«¿Quién era el que te saludó en el recreo?» pregunta {x} antes que nada.",
+                "libre": "«¿Nos escapamos al parque después de clases?» propone {x}.",
+                "intenso": "{x} te toma de las manos. «Tenemos que hablar de lo nuestro.»"
+            },
+            "opts": [
+                {"t": "Hablar de qué pasará después de la prepa", "go": "after"},
+                {"t": "Invitarl{xlo} a comer con tu familia", "roll": 50, "stat": "charm", "ok": "family_ok", "fail": "family_bad"},
+                {"t": "Pedirle que lo hagan oficial en redes", "go": "official"},
+                {"t": "Contarle tus inseguridades", "go": "insecure"},
+                {"t": "Terminar con cariño", "go": "teen_break"}
+            ]
+        },
+        "after": {"say": "«¿Y si nos vamos a escuelas distintas?» Se quedan callados un rato. Luego hacen planes de todos modos.", "fx": {"bond": 6, "happy": 3}, "k": "n"},
+        "family_ok": {"say": "Tu familia l{xlo} adoró. Tu abuela ya pregunta por la boda.", "fx": {"bond": 8, "happy": 5}, "k": "g"},
+        "family_bad": {"say": "Tu familia l{xlo} interrogó como en la tele. {x} no volvió a aceptar una invitación.", "fx": {"bond": -5, "happy": -4}, "k": "b"},
+        "official": {"say": "Una foto juntos con un corazón. Tus amigos comentan «¡POR FIN!».", "fx": {"bond": 6, "happy": 5}, "k": "g"},
+        "insecure": {"say": "Te escucha sin reírse. «A mí me gustas así, tal cual.» Te pone tu canción favorita.", "fx": {"bond": 8, "happy": 6}, "k": "g"},
+        "teen_break": {"say": "Le dices que l{xlo} quieres mucho, pero que ya no se siente igual. Lloran los dos. Fue bonito mientras duró.", "fx": {"happy": -6}, "end": "teen_break", "k": "b"}
+    },
+
+    // Abuelos y gente muy mayor: historias, salud y lo que queda por decir.
+    "elder": {
+        "n0": {
+            "say": {
+                "default": "{x} deja el periódico. «¿Qué cuentas, mij{a}?»",
+                "dulce": "«¡Ven acá!» {x} te llena de besos y ya te está sirviendo de comer.",
+                "celoso": "«Ya ni te acuerdas de mí.» Pero te hace espacio en el sillón.",
+                "libre": "«¿Vamos por un helado? No le digas a tu mamá.»",
+                "intenso": "{x} te toma la cara con las dos manos. «Déjame verte bien.»"
+            },
+            "opts": [
+                {"t": "Pedirle que te cuente cómo era su juventud", "go": "stories"},
+                {"t": "Preguntarle cómo era la familia antes", "go": "family_then"},
+                {"t": "Preguntarle por su salud", "if": "notkid", "go": "eld_health"},
+                {"t": "Grabar sus recuerdos en video", "if": "notrecorded", "go": "record"},
+                {"t": "Preguntarle cuál es su último deseo", "if": "veryold", "go": "wish"}
+            ]
+        },
+        "stories": {"say": "Te cuenta cómo conoció al amor de su vida en un baile, con una canción que todavía tararea. Tiene más aventuras que tú.", "fx": {"bond": 6, "know": 2}, "k": "g"},
+        "family_then": {"say": "Saca un álbum de fotos en blanco y negro. Descubres secretos de la familia que nadie te había contado.", "fx": {"bond": 6, "happy": 3, "know": 1}, "k": "g"},
+        "eld_health": {"say": "«Me duelen las rodillas cuando va a llover. Soy mejor que el pronóstico del clima.» Se ríe, pero notas que le cuesta levantarse.", "fx": {"bond": 5, "kind": 1}, "k": "n"},
+        "record": {"say": "Grabas horas de historias: su infancia, sus travesuras, la receta del mole. Un tesoro.", "fx": {"bond": 8, "happy": 4}, "end": "record", "k": "g"},
+        "wish": {"say": "«Ver a toda la familia junta una vez más, en la misma mesa.» Te lo dice sin dramatismo, como quien pide la sal.", "fx": {"bond": 8, "kind": 2}, "k": "n"}
+    },
+
+    // Hermanos adultos: la infancia, los papás y la herencia.
+    "sibling": {
+        "n0": {
+            "say": {
+                "default": "«¿Qué onda? ¿Ahora qué?» {x} sonríe como cuando eran niños.",
+                "dulce": "«¡Herman{a}!» {x} te abraza como si no se vieran en años.",
+                "celoso": "«Ah, ¿ahora sí me buscas? Seguro necesitas algo.»",
+                "libre": "«¿Cerveza y quejarnos de la vida?»",
+                "intenso": "«Qué bueno que viniste. Hay que hablar de la familia.»"
+            },
+            "opts": [
+                {"t": "Recordar sus travesuras de niños", "go": "mischief"},
+                {"t": "Hablar de quién era el consentido", "roll": 40, "stat": "kind", "ok": "fav_ok", "fail": "fav_fight"},
+                {"t": "Ponerse de acuerdo para cuidar a sus papás", "if": "parentsold", "go": "care_split"},
+                {"t": "Hablar de la herencia de sus papás", "if": "parentsold", "roll": 35, "stat": "kind", "ok": "inherit_ok", "fail": "inherit_fight"},
+                {"t": "Pedirle dinero prestado", "if": "adultnojail", "roll": 40, "ok": "loan", "fail": "loan_no"}
+            ]
+        },
+        "mischief": {"say": "Se acuerdan de la vez que culparon al perro por el florero roto. Lloran de risa.", "fx": {"bond": 7, "happy": 5}, "k": "g"},
+        "fav_ok": {"say": "«Siempre pensé que eras tú.» «¡Y yo que eras tú!» Resulta que los dos se sentían igual.", "fx": {"bond": 10, "happy": 4}, "k": "g"},
+        "fav_fight": {"say": "Salen treinta años de rencores en diez minutos. Alguien azota una puerta.", "fx": {"bond": -12, "happy": -5}, "k": "b"},
+        "care_split": {"say": "Hacen un calendario: tú los domingos, {x} los miércoles. Por primera vez se sienten un equipo.", "fx": {"bond": 7, "kind": 2}, "k": "g"},
+        "inherit_ok": {"say": "Acuerdan repartir todo parejo y no pelear nunca por dinero. Se dan la mano como adultos.", "fx": {"bond": 6, "karma": 2}, "k": "g"},
+        "inherit_fight": {"say": "«¿La casa para ti? ¡Ni lo sueñes!» Ya están peleando por algo que todavía no existe.", "fx": {"bond": -14, "happy": -4}, "k": "b"},
+        "loan": {"say": "«Para eso estamos... pero me lo pagas, ¿eh?»", "end": "friend_money", "k": "g"},
+        "loan_no": {"say": "«Hermanos sí, socios no.»", "fx": {"bond": -2}, "k": "n"}
+    },
+
+    // Suegros: ganártelos sin perderte.
+    "inlaw": {
+        "n0": {
+            "say": {
+                "default": "{x} te mira de arriba abajo. «Siéntate. ¿Ya comiste?»",
+                "dulce": "«¡Pásale, pásale! Ya eres de la familia.»",
+                "celoso": "«Mi hij{pa} pudo haber escogido a cualquiera...» Te sirve café de todos modos.",
+                "libre": "«Relájate, no muerdo. Casi nunca.»",
+                "intenso": "«Quiero saberlo todo de ti. Todo.»"
+            },
+            "opts": [
+                {"t": "Ganártel{xlo} con un postre casero", "go": "dessert"},
+                {"t": "Pedirle consejo sobre su hij{pa}", "go": "advice_inlaw"},
+                {"t": "Preguntarle cómo era tu pareja de niñ{pa}", "go": "partner_young"},
+                {"t": "Poner límites con respeto", "need": "guts", "rank": 2, "roll": 40, "stat": "charm", "ok": "limits_ok", "fail": "limits_bad"}
+            ]
+        },
+        "dessert": {"say": "Prueba el pastel con cara de jurado. «...No está mal.» Se sirve otra rebanada.", "fx": {"bond": 7, "happy": 2}, "k": "g"},
+        "advice_inlaw": {"say": "Te cuenta todas sus mañas, sus miedos y lo que le gusta que le digan. Información valiosísima.", "fx": {"bond": 5, "know": 1}, "k": "g"},
+        "partner_young": {"say": "Saca fotos de cuando tu pareja era niñ{pa}: dientes chuecos, corte de hongo y todo. Las vas a usar en su cumpleaños.", "fx": {"bond": 6, "happy": 4}, "k": "g"},
+        "limits_ok": {"say": "«Tienes razón. Es su casa y su vida.» Te respeta un poquito más desde hoy.", "fx": {"bond": 4, "guts": 1}, "k": "g"},
+        "limits_bad": {"say": "«¿Me estás diciendo que me meto?» Lo que sigue es una guerra fría de tres domingos.", "fx": {"bond": -10, "happy": -3}, "k": "b"}
+    },
+
+    // Nietos: el tono cambia con su edad.
+    "grandkid": {
+        "n0": {
+            "say": {
+                "kid": "{x} corre a abrazarte. «¡Abuel{a}! ¿Me das dulces?»",
+                "teen": "{x} levanta la vista del celular. «Hola, abuel{a}.» Te da un abrazo rápido, pero se queda.",
+                "adult": "{x} llega con flores. «¿Cómo estás, abuel{a}? Te extrañaba.»",
+                "elder": "{x} llega con flores. «¿Cómo estás, abuel{a}? Te extrañaba.»"
+            },
+            "opts": [
+                {"t": "Contarle cómo era la vida antes", "go": "old_days"},
+                {"t": "Darle un dinerito a escondidas", "go": "secret_money"},
+                {"t": "Enseñarle algo que sabes hacer", "go": "teach"},
+                {"t": "Pedirle que te enseñe a usar el celular", "if": "elderme", "go": "tech"}
+            ]
+        },
+        "old_days": {
+            "say": {
+                "kid": "«¿No había internet? ¿Y qué hacían?» No te cree nada, pero no se mueve de tu lado.",
+                "teen": "Le cuentas cómo ligabas sin celular. Se ríe tanto que lo graba para sus amigos.",
+                "adult": "Te escucha con atención y te hace preguntas. Ahora es el guardián de tus historias.",
+                "elder": "Te escucha con atención y te hace preguntas. Ahora es el guardián de tus historias."
+            },
+            "fx": {"bond": 7, "happy": 3}, "k": "g"
+        },
+        "secret_money": {"say": "Le pasas un billete doblado con un guiño. «No le digas a tus papás.» Es su nuevo secreto favorito.", "fx": {"bond": 8, "money": -200}, "k": "g"},
+        "teach": {"say": "Le enseñas a hacer algo que solo tú sabes. Se equivoca, se ríen y lo intentan otra vez.", "fx": {"bond": 7, "kind": 1}, "k": "g"},
+        "tech": {"say": "Con una paciencia infinita, te enseña a mandar stickers. Ahora mandas stickers. A todos.", "fx": {"bond": 6, "happy": 4}, "k": "g"}
     }
 }
 
@@ -342,6 +623,20 @@ function npc_style(p: map) {
     if p.style != null { return p.style }
     p.style = NPC_STYLES[p.id % len(NPC_STYLES)]
     return p.style
+}
+
+// Etapas de la vida: cambian el tono de lo que se dice y las opciones.
+function age_band(a: int) {
+    if a < 13 { return "kid" }
+    if a < 18 { return "teen" }
+    if a < 60 { return "adult" }
+    return "elder"
+}
+
+// Quién marca el tono: con tus hijos y nietos, su edad; con los demás, la tuya.
+function dlg_band(p: map) {
+    if G.dlg != null && (G.dlg.tree == "child" || G.dlg.tree == "grandkid") { return age_band(p.age) }
+    return age_band(L.age)
 }
 
 function tree_for(p: map) {
@@ -354,19 +649,47 @@ function tree_for(p: map) {
         if p.age >= 4 { return "child" }
         return ""
     }
+    if r == "nieto" {
+        if p.age >= 4 && L.age >= 4 { return "grandkid" }
+        return ""
+    }
+    if r == "abuelo" {
+        if L.age >= 4 { return "elder" }
+        return ""
+    }
     if L.age < 18 || p.age < 18 {
+        if r == "pareja" && L.age >= 13 && p.age >= 13 { return "teen_partner" }
         if r == "amigo" || r == "hermano" { return "friend" }
         return ""
     }
     if r == "pareja" || r == "esposo" || r == "amante" { return "partner" }
-    if r == "amigo" || r == "hermano" { return "friend" }
+    if r == "amigo" { return "friend" }
+    if r == "hermano" { return "sibling" }
+    if r == "suegro" { return "inlaw" }
     if r == "ex" { return "ex" }
-    if r == "hijo" && p.age >= 4 { return "child" }
     return ""
 }
 
 function dlg_cond(cond: string, p: map) {
     if cond == "" { return true }
+    if cond == "kidme" { return L.age < 13 }
+    if cond == "notkid" { return L.age >= 13 }
+    if cond == "elderme" { return L.age >= 60 }
+    if cond == "adultnojail" { return L.age >= 18 && L.jail == 0 }
+    if cond == "married" { return L.married && L.age >= 18 }
+    if cond == "haskids" { return L.kids > 0 && L.age >= 18 }
+    if cond == "grandbaby" { return (L.pregnant || L.partner_preg) && L.age >= 18 }
+    if cond == "oldparent" { return p.age >= 65 && L.age >= 18 }
+    if cond == "veryold" { return p.age >= 75 && L.age >= 13 }
+    if cond == "notrecorded" { return p.recorded != true && L.age >= 13 }
+    if cond == "smallkid" { return p.age < 10 }
+    if cond == "adultkid" { return p.age >= 18 }
+    if cond == "parentsold" {
+        for q in parents_alive() {
+            if q.age >= 60 { return true }
+        }
+        return false
+    }
     if cond == "school" { return L.school != "" && L.age >= 7 }
     if cond == "teen" { return L.age >= 13 && L.age < 18 }
     if cond == "adult" { return L.age >= 18 && p.age >= 18 }
@@ -417,6 +740,10 @@ function dlg_person() {
 
 function dlg_say(node: map, p: map) {
     let say = node.say
+    if type_of(say) != "string" {
+        let b = say[dlg_band(p)]
+        if b != null { say = b }
+    }
     if type_of(say) == "string" { return fmt(say, G.dlg.ctx) }
     let line = say[npc_style(p)]
     if line == null { line = say["default"] }
@@ -517,6 +844,15 @@ function dlg_end(code: string, p: map, msg: string, title: string, kind: string)
         if amount >= 100 { amount = amount / 10 * 10 }
         L.money += amount
         return finish(title, msg + " Te da " + money_str(amount) + ".", kind)
+    }
+    if code == "teen_break" {
+        breakup()
+        return finish(title, msg, kind)
+    }
+    if code == "record" {
+        p.recorded = true
+        add_hito(p, "Grabaste sus historias")
+        return finish(title, msg, kind)
     }
     if code == "parent_better" {
         if p.style == "toxico" || p.style == "ausente" { p.style = "relajado" }

@@ -169,6 +169,8 @@ function space_action(id: string) {
     }
     if id == "auction" {
         let m = rint(100, 600) * 1000 * d.mine
+        // Con el taller de talla propio, las piedras valen 50% más.
+        if d.cut == true { m = m * 15 / 10 }
         L.money += m
         return finish("Subasta", "Un coleccionista pagó " + money_str(m) + " por tus mejores esmeraldas.", "g")
     }

@@ -1329,6 +1329,75 @@ function lazos_month() {
 
 // Lo que quiere este mes se decide la primera vez que lo miras (así no cuesta nada
 // avanzar meses).
+function rel_event_by_id(id: string) {
+    for ev in REL_EVENTS {
+        if ev.id == id { return ev }
+    }
+    return null
+}
+
+// El aniversario de bodas llega cada año en su fecha (no al azar).
+function maybe_anniversary() {
+    if !L.married || L.jail > 0 { return false }
+    let p = partner()
+    if p == null || !p.alive { return false }
+    if p.wed_tm == null { p.wed_tm = L.tm }
+    let n = L.tm - p.wed_tm
+    if n <= 0 || n % 12 != 0 || p.anniv_seen == L.tm { return false }
+    p.anniv_seen = L.tm
+    let ev = rel_event_by_id("rl_anniv")
+    if ev == null { return false }
+    let years = n / 12
+    open_event(ev, {"person": p, "anios": str(years) + " " + plural(years, "año", "años")})
+    return true
+}
+
+// La gente también te busca: cada tanto alguien te invita a lo que quiere este mes.
+function maybe_npc_initiative() {
+    if L.jail > 0 || L.age < 5 || G.modal != null { return false }
+    if L.npc_init_tm != null && L.tm - L.npc_init_tm < 2 { return false }
+    if !chance(20) { return false }
+    let best = null
+    let best_a = null
+    let best_w = -1
+    for p in L.people {
+        if !p.alive || p.bond < 45 || p.blocked == true || p.id == L.partner_id || p.age < 4 { continue }
+        ensure_want(p)
+        if p.want == null || p.want == "" || p.want_tm != L.tm { continue }
+        let a = rel_act(p.want)
+        if a == null || rel_hidden(a, p) || rel_lock(a, p) != "" { continue }
+        let w = p.bond + rint(0, 40)
+        if w > best_w {
+            best = p
+            best_a = a
+            best_w = w
+        }
+    }
+    if best == null { return false }
+    L.npc_init_tm = L.tm
+    let ctx = {"person": best}
+    let what = fmt(best_a.t, ctx)
+    let text = fmt("{x} te manda un mensaje: «¿Te late? Tengo ganas de verte.» Quiere: ", ctx)
+    let band = age_band(best.age)
+    if band == "kid" { text = fmt("{x} te jala de la mano, emocionad{xa}. Quiere: ", ctx) }
+    if band == "teen" { text = fmt("{x} te escribe: «Oye... ¿y si hacemos algo juntos?» Quiere: ", ctx) }
+    if band == "elder" { text = fmt("{x} te llama por teléfono: «¿Me acompañas? Ya casi no salgo.» Quiere: ", ctx) }
+    open_choice(str_upper(best.first) + " TE BUSCA", text + what + ".", ["Aceptar", "Otro día", "No puedo"], ["", "", ""], "npc_invite", {"person": best, "act": best_a.id})
+    return true
+}
+
+function resolve_npc_invite(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    if index == 0 { return rel_do(ctx.act, p) }
+    if index == 1 {
+        bond_gain(p, -2)
+        return finish(p.first, "Le dijiste que otro día. «Va, pero no se te olvide.»", "n")
+    }
+    bond_gain(p, -4)
+    return finish(p.first, p.first + " se quedó con las ganas.", "b")
+}
+
 function ensure_want(p: map) {
     if p.want_tm == L.tm { return null }
     p.want_tm = L.tm
