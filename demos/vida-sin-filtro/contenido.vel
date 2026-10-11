@@ -364,7 +364,7 @@ function contenido_choice(handler: string, index: int, ctx: map) {
 function contenido_month() {
     if L.route != "creador" || L.age < 13 { return null }
     let d = cc()
-    d.energy = clamp100(d.energy + 20)
+    // Si terminas el mes sin energía, el cuerpo cobra la factura antes de descansar.
     if d.energy <= 5 && d.burnout_age != L.age {
         d.burnout_age = L.age
         L.happy -= 15
@@ -373,6 +373,8 @@ function contenido_month() {
         d.subs -= d.subs / 20
         hito_once("burnout_creator", "Salud", "Burnout de creador")
         log_add("Burnout: un día no pudiste levantarte de la cama. Tuviste que parar un mes entero.", "b")
+    } else {
+        d.energy = clamp100(d.energy + 20)
     }
     let cost = 0
     for id in d.team { cost += team_def(id).c }

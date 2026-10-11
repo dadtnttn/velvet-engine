@@ -290,6 +290,16 @@ function velo_action(action: string) {
             d.fol = rint(8, 20)
             d.fervor = 60
             d.found_age = L.age
+            // Tu propia revelación reemplaza la fe en la que creciste.
+            let old = L.religion
+            L.religion = "velo"
+            L.faith = max(L.faith, 85)
+            if old != "" && old != "ninguna" && old != "velo" { log_add("Dejaste atrás " + str_lower(religion_def(old).n) + ": ahora tu fe es la que tú predicas.", "x") }
+            let dp = devout_parent()
+            if dp != null && religion_of(dp) != "velo" {
+                dp.bond = clamp100(dp.bond - 15)
+                log_add("Tu " + str_lower(rel_label(dp)) + " " + dp.first + " lloró al saber que fundaste tu propia religión. Reza por ti cada noche.", "b")
+            }
             hito_me("Vida", "Fundaste la Orden del Velo Rojo")
             list_push(G.toasts, {"head": "LA REVELACIÓN", "title": "LA ORDEN DEL VELO ROJO", "sub": "Tus primeros " + str(d.fol) + " fieles", "t0": G.t})
             return finish("La revelación", "Frente a un velo rojo, a medianoche, hablaste por primera vez como " + prophet_title() + ". " + str(d.fol) + " personas lloraron en tu sala. La Orden del Velo Rojo ha nacido.", "x")

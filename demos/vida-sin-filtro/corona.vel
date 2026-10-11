@@ -15,11 +15,17 @@
 const COURT_ROLES = [
     {"id": "canciller", "n": "Canciller", "key": "elite", "d": "Lleva la política y el trato con la nobleza."},
     {"id": "mariscal", "n": "Mariscal", "key": "fuerza", "d": "Manda el ejército y la guardia real."},
-    {"id": "arzobispo", "n": "Arzobispo", "key": "fe", "d": "Guía al clero y bendice tu reinado."},
+    {"id": "arzobispo", "n": "Arzobispo", "key": "fe", "d": "Guía a los religiosos del reino y bendice tu reinado."},
     {"id": "tesorero", "n": "Tesorero", "key": "tesoro", "d": "Cuida las arcas del reino."},
     {"id": "espias", "n": "Maestro de espías", "key": "orden", "d": "Descubre conspiraciones antes de que estallen."}
 ]
 
+
+// El consejero religioso cambia con la fe mayoritaria del reino.
+function role_name(r: map) {
+    if r.id == "arzobispo" { return cleric_title(top_religion(here_id())) }
+    return r.n
+}
 
 const TUTORS = [
     {"id": "militar", "n": "Un general retirado", "stat": "guts", "d": "Disciplina, esgrima y estrategia."},
@@ -43,9 +49,9 @@ function kr() {
 
 function make_advisor(role: string) {
     let g = pick(["m", "f"])
-    let names = NAMES_M
-    if g == "f" { names = NAMES_F }
-    return {"first": pick(names), "last": pick(SURNAMES), "g": g, "loyal": rint(45, 85), "skill": rint(35, 90), "age": rint(35, 70)}
+    // Tus consejeros son gente del reino: nombres de aquí.
+    let c = here_id()
+    return {"first": pais_first(g, c), "last": pais_surname(c), "g": g, "loyal": rint(45, 85), "skill": rint(35, 90), "age": rint(35, 70)}
 }
 
 function court_role(id: string) {
@@ -106,7 +112,7 @@ function corona_items(cat: string) {
         list_push(items, kitem("council", "Reunir al consejo real", "Todo el reino", "Una sesión con tus cinco consejeros. Cada uno aporta según su talento.", ""))
         for r in COURT_ROLES {
             let a = advisor(r.id)
-            list_push(items, {"action": "kr:adv:" + r.id, "t": r.n + ": " + a.first + " " + a.last, "s": "Lealtad " + str(a.loyal) + " · talento " + str(a.skill), "desc": r.d + " Con talento alto, mejora " + str_lower(realm_names()[r.key]) + " cada mes. Con lealtad baja, conspira.", "lock": ""})
+            list_push(items, {"action": "kr:adv:" + r.id, "t": role_name(r) + ": " + a.first + " " + a.last, "s": "Lealtad " + str(a.loyal) + " · talento " + str(a.skill), "desc": r.d + " Con talento alto, mejora " + str_lower(realm_names()[r.key]) + " cada mes. Con lealtad baja, conspira.", "lock": ""})
         }
         return items
     }
@@ -177,7 +183,7 @@ function corona_action(action: string) {
             let locks = ["", "", "", ""]
             if L.used["kr_adv" + arg] != null { locks[0] = "Este mes ya" }
             if d.realm.tesoro < 5 { locks[1] = "Tesoro 5" }
-            open_choice(str_upper(r.n), a.first + " " + a.last + ", " + str(a.age) + " años. Lealtad " + str(a.loyal) + ", talento " + str(a.skill) + ". " + r.d,
+            open_choice(str_upper(role_name(r)), a.first + " " + a.last + ", " + str(a.age) + " años. Lealtad " + str(a.loyal) + ", talento " + str(a.skill) + ". " + r.d,
                 ["Pedirle consejo", "Darle un título y tierras (Tesoro −5)", "Destituirl" + oa(a.g) + " y nombrar a alguien más", "Volver"], locks, "kr_adv", {"role": arg})
             return null
         }
@@ -202,6 +208,8 @@ function corona_action(action: string) {
             if k == null { return null }
             let locks = ["", "", "", ""]
             if k.kr_tutor != null { locks[0] = "Ya tiene tutor" }
+            // Los tutores son para la infancia y la adolescencia.
+            if k.age < 4 || k.age >= 18 { locks[0] = "De 4 a 17 años" }
             if L.used["kr_present"] != null { locks[1] = "Este mes ya" }
             if k.age < 6 { locks[1] = "Edad 6" }
             if d.succ != "libre" && crown_heir() != null && crown_heir().id != k.id && !is_eldest(k) { locks[2] = "Ley de primogenitura" }
@@ -242,18 +250,18 @@ function corona_choice(handler: string, index: int, ctx: map) {
                 delta[r.key] = v
                 realm_apply(delta)
                 a.loyal = clamp100(a.loyal + 2)
-                return finish(r.n, a.first + " te dio un buen consejo. " + realm_names()[r.key] + " +" + str(v) + ".", "g")
+                return finish(role_name(r), a.first + " te dio un buen consejo. " + realm_names()[r.key] + " +" + str(v) + ".", "g")
             }
             if index == 1 {
                 realm_apply({"tesoro": -5})
                 a.loyal = clamp100(a.loyal + 20)
-                return finish(r.n, "Nombraste a " + a.first + " " + by_gender(a.g, "conde", "condesa") + " de un valle con río. Su lealtad subió.", "g")
+                return finish(role_name(r), "Nombraste a " + a.first + " " + by_gender(a.g, "conde", "condesa") + " de un valle con río. Su lealtad subió.", "g")
             }
             if index == 2 {
                 d.court[ctx.role] = make_advisor(ctx.role)
                 realm_apply({"elite": -3})
                 let b = d.court[ctx.role]
-                return finish(r.n, "Destituiste a " + a.first + ". Tu nuevo " + str_lower(r.n) + " es " + b.first + " " + b.last + " (talento " + str(b.skill) + ").", "n")
+                return finish(role_name(r), "Destituiste a " + a.first + ". Tu nuevo " + str_lower(role_name(r)) + " es " + b.first + " " + b.last + " (talento " + str(b.skill) + ").", "n")
             }
             return null
         }
@@ -261,6 +269,7 @@ function corona_choice(handler: string, index: int, ctx: map) {
         "kr_kid" => {
             let k = ctx.person
             if index == 0 {
+                if k.kr_tutor != null || k.age < 4 || k.age >= 18 { return null }
                 let labels = []
                 for t in TUTORS { list_push(labels, t.n + ": " + t.d) }
                 list_push(labels, "Volver")
@@ -405,7 +414,7 @@ function corona_event() {
     for r in COURT_ROLES {
         let a = advisor(r.id)
         if a.loyal < 25 && chance(40) {
-            open_choice("TRAICIÓN EN LA CORTE", "Tus espías interceptaron cartas: tu " + str_lower(r.n) + ", " + a.first + " " + a.last + ", conspira contra ti.",
+            open_choice("TRAICIÓN EN LA CORTE", "Tus espías interceptaron cartas: tu " + str_lower(role_name(r)) + ", " + a.first + " " + a.last + ", conspira contra ti.",
                 ["Arrestarl" + oa(a.g) + " y juzgarl" + oa(a.g), "Comprar su lealtad (Tesoro −10)", "Desterrarl" + oa(a.g) + " en silencio"], ["", "", ""], "kr_ev", {"kind": "traitor", "role": r.id})
             return true
         }
@@ -444,7 +453,7 @@ function corona_event_choice(index: int, ctx: map) {
             if index == 0 {
                 realm_apply({"orden": 8, "elite": -6})
                 d.court[ctx.role] = make_advisor(ctx.role)
-                return finish("Traición", "El juicio fue rápido. Tu nuevo " + str_lower(r.n) + " es " + d.court[ctx.role].first + ".", "n")
+                return finish("Traición", "El juicio fue rápido. Tu nuevo " + str_lower(role_name(r)) + " es " + d.court[ctx.role].first + ".", "n")
             }
             if index == 1 {
                 realm_apply({"tesoro": -10})

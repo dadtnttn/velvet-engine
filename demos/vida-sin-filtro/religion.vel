@@ -20,9 +20,12 @@ const RELIGIONS = [
     {"id": "terciopelo", "n": "Iglesia del Terciopelo", "strict": 0, "alcohol": true, "poly": "any", "temple": "el santuario", "w": 3},
     {"id": "solar", "n": "Culto del Sol Rojo", "strict": 4, "alcohol": false, "poly": "m", "temple": "el altar del sol", "w": 2},
     {"id": "luna", "n": "Hermandad de la Luna", "strict": 1, "alcohol": true, "poly": "f", "temple": "el claro de la luna", "w": 2},
+    // La Orden del Velo Rojo: solo se llega a ella fundándola (ruta del profeta).
+    {"id": "velo", "n": "Orden del Velo Rojo", "strict": 1, "alcohol": true, "poly": "any", "temple": "el santuario del Velo", "w": 0},
     {"id": "ninguna", "n": "Sin religión", "strict": 0, "alcohol": true, "poly": "", "temple": "", "w": 30}
 ]
 const RELIGION_DESC = {
+    "velo": "Una fe nueva nacida de tu propia revelación: velas rojas, votos y fieles que te miran como a un profeta.",
     "catolica": "Tradición, misa los domingos y una abuela que reza por ti.",
     "ortodoxa": "Íconos dorados, cantos antiguos y una Pascua que se celebra en grande.",
     "sij": "Igualdad, servicio a los demás y una cocina comunitaria abierta a todos.",
@@ -41,6 +44,24 @@ const RELIGION_DESC = {
 }
 
 // ---------------------------------------------------------------- consultas
+
+// La máxima autoridad religiosa de una corte, según la fe.
+function cleric_title(rel: string) {
+    if rel == "catolica" { return "Arzobispo" }
+    if rel == "ortodoxa" { return "Patriarca" }
+    if rel == "evangelica" { return "Pastor de la corte" }
+    if rel == "islam" { return "Gran muftí" }
+    if rel == "judaismo" { return "Gran rabino" }
+    if rel == "budismo" { return "Monje mayor" }
+    if rel == "ninguna" { return "Consejero de cultos" }
+    return "Sumo sacerdote"
+}
+
+// Dónde se reúne la gente de una fe ("la iglesia", "la mezquita"...).
+function temple_word(rel: string) {
+    if !religion_exists(rel) || religion_def(rel).temple == "" { return "la comunidad" }
+    return religion_def(rel).temple
+}
 
 function religion_def(id: string) {
     for r in RELIGIONS {
@@ -171,13 +192,13 @@ function faith_parent_event() {
         ctx["pname"] = p.first
         ctx["prel"] = religion_def(religion_of(p)).n
         ctx["partner"] = p
-        open_choice("TU FAMILIA NO LO APRUEBA", fmt("Tu " + str_lower(rel_label(parent)) + " {x} te dice muy serio: «{pname} no es de nuestra fe ({prel}). Así no vas a formar una familia como Dios manda».", ctx),
+        open_choice("TU FAMILIA NO LO APRUEBA", fmt("Tu " + str_lower(rel_label(parent)) + " {x} te dice muy seri" + oa(parent.gender) + ": «{pname} no es de nuestra fe ({prel}). Así no vas a formar una familia como manda nuestra fe».", ctx),
             ["Defender tu relación", "Pedirle a " + p.first + " que se convierta", "Terminar por tu familia"], ["", "", ""], "faith_partner", ctx)
         return true
     }
     if (job_is_adult(L.job) || route_is_adult()) && L.flags["faith_job"] != true && disapproval(parent, "adult") >= 20 {
         L.flags["faith_job"] = true
-        open_choice("TUS PADRES SE ENTERARON", fmt("Tu " + str_lower(rel_label(parent)) + " {x} descubrió a qué te dedicas. Tiene los ojos rojos de llorar: «¿Cómo pudiste? ¿Qué va a decir la gente de la iglesia?»", ctx),
+        open_choice("TUS PADRES SE ENTERARON", fmt("Tu " + str_lower(rel_label(parent)) + " {x} descubrió a qué te dedicas. Tiene los ojos rojos de llorar: «¿Cómo pudiste? ¿Qué va a decir la gente de " + temple_word(religion_of(parent)) + "?»", ctx),
             ["Defender tu trabajo y tu libertad", "Mentirle: «es un malentendido»", "Prometer dejarlo"], ["", "", ""], "faith_job", ctx)
         return true
     }

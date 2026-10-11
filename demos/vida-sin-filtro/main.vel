@@ -715,9 +715,10 @@ function creator_action(action: string) {
     match parts[1] {
         "go" => return start_from_creator()
         "name" => {
-            let names = NAMES_M
-            if c.gender == "f" { names = NAMES_F }
-            c.chars = [pick(names)]
+            // Un nombre típico del país elegido.
+            let cc = c.ctry
+            if cc == null || cc == "" { cc = default_ctry() }
+            c.chars = [pais_first(c.gender, cc)]
         }
         "random" => {
             let chars = c.chars
@@ -746,6 +747,8 @@ function creator_action(action: string) {
             let ri = 0
             if c.religion != "" { ri = id_index(RELIGIONS, c.religion) + 1 }
             ri = cycle(ri, action, len(RELIGIONS) + 1)
+            // La Orden del Velo Rojo no se elige al nacer: se funda.
+            if ri > 0 && RELIGIONS[ri - 1].id == "velo" { ri = cycle(ri, action, len(RELIGIONS) + 1) }
             if ri == 0 { c.religion = "" } else { c.religion = RELIGIONS[ri - 1].id }
         }
         "trait" => c.trait = TRAITS[cycle(id_index(TRAITS, c.trait), action, len(TRAITS))].id

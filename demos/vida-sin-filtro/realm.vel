@@ -27,7 +27,7 @@ const GOV_ACTS = [
     {"id": "feast", "who": "r", "cat": "Corte", "t": "Fiesta nacional", "desc": "Fuegos artificiales, pan y circo.", "d": {"tesoro": -8, "aprob": 6, "elite": 3}},
     {"id": "banquet", "who": "r", "cat": "Corte", "t": "Banquete con la nobleza", "desc": "Vino, alianzas y chismes.", "d": {"tesoro": -6, "elite": 10}},
     {"id": "exile", "who": "r", "cat": "Corte", "t": "Exiliar a un noble rebelde", "desc": "Quitar la manzana podrida. Los demás nobles toman nota.", "d": {"elite": -8, "orden": 8}},
-    {"id": "clergy", "who": "r", "cat": "Corte", "t": "Donar a la Iglesia", "desc": "El clero bendice tu reinado.", "d": {"tesoro": -6, "fe": 12}},
+    {"id": "clergy", "who": "r", "cat": "Corte", "t": "Donar a los templos", "desc": "Los religiosos del reino bendicen tu reinado.", "d": {"tesoro": -6, "fe": 12}},
     {"id": "negotiate", "who": "p", "cat": "Gobierno", "t": "Negociar con el Congreso", "desc": "Cabildeo, cafés y concesiones.", "d": {"elite": 12, "aprob": -2}},
     {"id": "summit", "who": "p", "cat": "Gobierno", "t": "Cumbre internacional", "desc": "Fotos con líderes del mundo y acuerdos comerciales.", "d": {"fe": 6, "aprob": 3, "tesoro": -3}},
     {"id": "corrupt", "who": "p", "cat": "Gobierno", "t": "Desviar fondos públicos", "desc": "Ilegal. Dinero fácil para ti... hasta que salga en las noticias.", "d": {"tesoro": -10}},
@@ -234,12 +234,14 @@ function realm_items(cat: string) {
         return items
     }
     if L.route == "rey" && !d.king && cat == "Corte" {
-        list_push(items, ritem("court", "Asistir a la corte", "Influencia", "Hacerte ver, escuchar y recordar.", ""))
+        // La intriga se aprende con los años: de niñ@ solo te presentan en la corte.
+        list_push(items, ritem("court", "Asistir a la corte", "Influencia", "Hacerte ver, escuchar y recordar.", if_str(L.age < 6, "Edad 6", "")))
         let bl = ""
-        if L.money < 5000 { bl = "$5,000" }
+        if L.age < 18 { bl = "Edad 18" }
+        if bl == "" && L.money < 5000 { bl = "$5,000" }
         list_push(items, ritem("nobles", "Banquete con nobles", "$5,000 · aliados", "Vino caro y promesas. A veces alguien se une a tu causa.", bl))
-        list_push(items, ritem("speech", "Discurso al pueblo", "Encanto", "Si convences, la gente empieza a corear tu nombre.", ""))
-        list_push(items, ritem("general", "Ganarte a un general", "Valor", "Sin el ejército, no hay trono.", ""))
+        list_push(items, ritem("speech", "Discurso al pueblo", "Encanto", "Si convences, la gente empieza a corear tu nombre.", if_str(L.age < 14, "Edad 14", "")))
+        list_push(items, ritem("general", "Ganarte a un general", "Valor", "Sin el ejército, no hay trono.", if_str(L.age < 16, "Edad 16", "")))
         let cl = ""
         if L.age < 18 || L.partner_id != 0 { cl = "Adulto y sin pareja" }
         list_push(items, ritem("royal", "Cortejar a realeza extranjera", "Alianza", "Un matrimonio puede valer un ejército.", cl))
@@ -302,7 +304,9 @@ function realm_items(cat: string) {
         if lock == "" && L.used["ra_" + a.id] != null { lock = "Este mes ya" }
         let sub = delta_text(a.d)
         if sub == "" { sub = "Depende de ti" }
-        list_push(items, {"action": "ra:" + a.id, "t": a.t, "s": sub, "desc": a.desc + " (" + realm_line() + ")", "lock": lock})
+        let t = a.t
+        if a.id == "clergy" && temple_word(top_religion(here_id())) != "la comunidad" { t = str_replace("Donar a " + temple_word(top_religion(here_id())), "Donar a el ", "Donar al ") }
+        list_push(items, {"action": "ra:" + a.id, "t": t, "s": sub, "desc": a.desc + " (" + realm_line() + ")", "lock": lock})
     }
     if L.route == "rey" && cat == "Corte" {
         let ml = ""
@@ -328,6 +332,7 @@ function realm_action(id: string) {
     }
     if !route_use(id) { return info("Ruta", "Ya lo hiciste este mes.") }
     if id == "rally" || id == "debate" || id == "ads" || id == "donors" { return realm_route_action(id) }
+    if (id == "court" && L.age < 6) || (id == "nobles" && L.age < 18) || (id == "speech" && L.age < 14) || (id == "general" && L.age < 16) { return null }
     if id == "court" {
         let g = rint(4, 8) + rank("charm")
         d.inf = clamp100(d.inf + g)

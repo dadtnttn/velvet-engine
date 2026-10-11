@@ -829,7 +829,7 @@ function continue_as_heir() {
     let family = "pobre"
     if lg.estate >= 50000 { family = "media" }
     if lg.estate >= 500000 { family = "rica" }
-    G.cre = {"chars": [], "gender": gender, "likes": likes, "look": kid.look, "trait": trait, "tags": random_kinks(rint(1, 3)), "page": 0, "first": kid.first, "last": old.last1 + " " + pick(SURNAMES), "ctry": map_get(old, "ctry", "mx"), "region": ""}
+    G.cre = {"chars": [], "gender": gender, "likes": likes, "look": kid.look, "trait": trait, "tags": random_kinks(rint(1, 3)), "page": 0, "first": kid.first, "last": old.last1 + " " + pais_surname(map_get(old, "ctry", "mx")), "ctry": map_get(old, "ctry", "mx"), "region": ""}
     let gen = old.gen + 1
     let lineage = list_slice(old.lineage, 0, len(old.lineage))
     list_push(lineage, old.first)

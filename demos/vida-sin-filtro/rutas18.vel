@@ -82,9 +82,7 @@ function genre_def(id: string) {
 }
 
 function new_adult_name(g: string) {
-    let names = NAMES_M
-    if g == "f" { names = NAMES_F }
-    return pick(names)
+    return pais_first(g, here_id())
 }
 
 // ---------------------------------------------------------------- escort

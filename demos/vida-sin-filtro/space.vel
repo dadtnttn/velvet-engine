@@ -51,7 +51,9 @@ function space_items(cat: string) {
         if L.money < 200000 { wl = "$200,000" }
         list_push(items, ritem("workers_good", "Mejorar las condiciones de los mineros", "$200,000", "Seguridad, sueldos dignos y escuelas para sus hijos. Bienestar: " + str(d.workers) + "%.", wl))
         list_push(items, ritem("workers_bad", "Exprimir a los mineros", "Dinero rápido", "Turnos dobles y menos seguridad. Dinero ahora, problemas después.", ""))
-        list_push(items, ritem("auction", "Subastar esmeraldas", "Dinero", "Una subasta privada para coleccionistas.", ""))
+        let al = ""
+        if d.auction_age == L.age { al = "Una al año" }
+        list_push(items, ritem("auction", "Subastar esmeraldas", "Una vez al año", "Una subasta privada para coleccionistas con las mejores piedras del año: vale unos meses de producción.", al))
         return items
     }
     if cat == "Empresas" {
@@ -92,7 +94,8 @@ function space_items(cat: string) {
         list_push(items, {"action": "ra:station", "t": "Construir la estación orbital", "s": "$100,000,000", "desc": "Un puerto en órbita: el trampolín a Marte.", "lock": stl})
         let vl = ""
         if !d.rocket { vl = "Necesitas cohete" }
-        list_push(items, ritem("tourist", "Viajar tú al espacio", "Sueño cumplido", "Mirar la Tierra desde arriba.", vl))
+        if vl == "" && L.money < 500000 { vl = "$500,000" }
+        list_push(items, ritem("tourist", "Viajar tú al espacio", "$500,000 · sueño cumplido", "Mirar la Tierra desde arriba.", vl))
         return items
     }
     let dl = ""
@@ -168,7 +171,9 @@ function space_action(id: string) {
         return finish("La mina", "Turnos dobles. Ganaste $300,000 extra. Los mineros murmuran.", "n")
     }
     if id == "auction" {
-        let m = rint(100, 600) * 1000 * d.mine
+        if d.auction_age == L.age { return null }
+        d.auction_age = L.age
+        let m = d.mine * 30000 * (50 + d.workers) / 100 * rint(2, 4)
         // Con el taller de talla propio, las piedras valen 50% más.
         if d.cut == true { m = m * 15 / 10 }
         L.money += m
@@ -186,6 +191,7 @@ function space_action(id: string) {
     }
     if id == "launch" { return mg_start("timing", "Ventana de lanzamiento", "route", {"kind": "launch"}) }
     if id == "tourist" {
+        if L.money < 500000 { return null }
         L.money -= 500000
         L.happy += 25
         hito_me("Vida", "Viajaste al espacio")

@@ -93,7 +93,7 @@ function prison_enter() {
     if L.age < 18 { age = L.age }
     let c = make_person(L.gender, "recluso", age)
     c.bond = rint(20, 45)
-    c.last = pick(SURNAMES)
+    c.last = pais_surname(here_id())
     add_person(c)
     c.hitos = [{"a": L.age, "t": "Compartieron celda"}]
     L.pr.cell = c.id

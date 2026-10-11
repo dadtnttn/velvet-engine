@@ -111,7 +111,7 @@ function route_def(id: string) {
 }
 
 function route_is_adult() {
-    return L.route == "escort" || L.route == "porno" || L.route == "fans"
+    return L.route == "escort" || L.route == "porno" || L.route == "fans" || (L.route == "profeta" && L.religion == "velo")
 }
 
 function route_setup() {
@@ -546,9 +546,11 @@ function fans_items(cat: string) {
     let pl = ""
     if L.money < 500 { pl = "$500" }
     list_push(items, ritem("fpromo", "Promoción en redes", "$500 · suscriptores", "Anuncios y adelantos en tus redes públicas.", pl))
-    let sl = ""
-    if d.security { sl = "Ya tienes" }
-    list_push(items, {"action": "ra:fsecurity", "t": "Contratar seguridad digital", "s": "$2,000/mes", "desc": "Protege tu identidad y evita filtraciones y acosadores.", "lock": sl})
+    if d.security {
+        list_push(items, {"action": "ra:fsecurity", "t": "Cancelar la seguridad digital", "s": "ACTIVA · $2,000/mes", "desc": "Ahorras el pago, pero vuelves a quedar expuest" + oa(L.gender) + " a filtraciones y acosadores.", "lock": ""})
+    } else {
+        list_push(items, {"action": "ra:fsecurity", "t": "Contratar seguridad digital", "s": "$2,000/mes", "desc": "Protege tu identidad y evita filtraciones y acosadores.", "lock": ""})
+    }
     let al = ""
     if d.subs < 100000 { al = "100 mil suscriptores" }
     if d.agency { al = "Ya la tienes" }
@@ -571,6 +573,10 @@ function fans_action(id: string) {
         return null
     }
     if id == "fsecurity" {
+        if d.security {
+            d.security = false
+            return finish("Seguridad", "Cancelaste la seguridad digital. Ojalá no te arrepientas.", "n")
+        }
         d.security = true
         return finish("Seguridad", "Contrataste seguridad digital. Duermes más tranquil" + oa(L.gender) + ".", "g")
     }
@@ -638,6 +644,7 @@ function fans_month() {
     if !d.open { return null }
     let income = d.subs * d.price * 80 / 100
     L.money += income
+    if d.security { L.money -= 2000 }
     if d.agency { L.money += 50000 + d.subs / 2 }
     let churn = 2 + d.price / 10
     d.subs -= d.subs * churn / 100

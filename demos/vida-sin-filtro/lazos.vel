@@ -1009,10 +1009,11 @@ function maybe_lazos_event() {
         }
         if pm <= 2 && pm > 0 && L.pq["name"] != true {
             L.pq["name"] = true
-            let m = pick(NAMES_M)
-            let f = pick(NAMES_F)
-            let m2 = pick(NAMES_M)
-            let f2 = pick(NAMES_F)
+            // Nombres de tu cultura (la del país donde naciste).
+            let m = pais_first("m", born_id())
+            let f = pais_first("f", born_id())
+            let m2 = pais_first("m", born_id())
+            let f2 = pais_first("f", born_id())
             L.pq_opts = [[m, f], [m2, f2]]
             let l0 = m + " si es niño, " + f + " si es niña"
             let l1 = m2 + " si es niño, " + f2 + " si es niña"
@@ -1113,7 +1114,7 @@ function lazos_choice(handler: string, index: int, ctx: map) {
             return finish("El nombre", "Ya tiene nombre. Lo dicen en voz alta cada vez que le hablan a la panza.", "g")
         }
         if index == 2 {
-            L.baby_names = [pick(NAMES_M), pick(NAMES_F)]
+            L.baby_names = [pais_first("m", born_id()), pais_first("f", born_id())]
             let q = partner()
             if q != null { bond_gain(q, 5) }
             return finish("El nombre", "Le dejaste elegir a tu pareja. Le hizo mucha ilusión.", "g")
