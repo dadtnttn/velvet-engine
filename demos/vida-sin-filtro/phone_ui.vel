@@ -94,6 +94,9 @@ function app_glyph(id: string, c: string, bg: string) {
     }
     if id == "route" { return "<rect x='14' y='7' width='5' height='50' fill='" + c + "'/><polygon points='19,9 54,18 19,31' fill='" + c + "'/>" }
     if id == "faith" { return "<rect x='25' y='28' width='14' height='28' rx='2' fill='" + c + "'/><path d='M32 6 C39 15 39 22 32 25 C25 22 25 15 32 6 Z' fill='#f2a20c'/>" }
+    if id == "news" {
+        return "<rect x='8' y='12' width='48' height='42' rx='3' fill='none' stroke='" + c + "' stroke-width='5'/><rect x='15' y='20' width='16' height='14' fill='" + HEX_RED + "'/><rect x='35' y='20' width='14' height='4' fill='" + c + "'/><rect x='35' y='29' width='14' height='4' fill='" + c + "'/><rect x='15' y='39' width='34' height='4' fill='" + c + "'/><rect x='15' y='46' width='26' height='3' fill='" + c + "'/>"
+    }
     return "<circle cx='32' cy='32' r='18' fill='none' stroke='" + c + "' stroke-width='10' stroke-dasharray='7 4.3'/><circle cx='32' cy='32' r='12' fill='" + c + "'/><circle cx='32' cy='32' r='5' fill='" + bg + "'/>"
 }
 
