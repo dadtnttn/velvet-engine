@@ -205,6 +205,19 @@ impl Catalog {
             lang: lang.into(),
             ..Default::default()
         };
+        let mut entries: Vec<(String, String)> = entries.into_iter().collect();
+        // " {0} se fue." is glued after another sentence: the line it shows
+        // up in is looked up trimmed, so the trimmed template must exist too.
+        let trimmed: Vec<(String, String)> = entries
+            .iter()
+            .filter(|(src, dst)| {
+                src.trim().len() != src.len()
+                    && parse_template(src.trim()).is_some()
+                    && !dst.is_empty()
+            })
+            .map(|(src, dst)| (src.trim().to_owned(), dst.trim().to_owned()))
+            .collect();
+        entries.extend(trimmed);
         for (src, dst) in entries {
             if dst.is_empty() {
                 continue;
@@ -587,8 +600,45 @@ impl Translator {
         self.match_template(s, depth, true)
             .or_else(|| self.split_list(s, depth))
             .or_else(|| self.paren_tail(s, depth))
+            .or_else(|| self.sentences(s, depth))
             .or_else(|| self.match_template(s, depth, false))
             .or_else(|| self.lowercase_start(s, depth))
+    }
+
+    /// "Te perdonó. ¡Era justo lo que Ana quería!": sentences the game glues
+    /// together. The line is cut at the first sentence end where both sides
+    /// translate (the right side may be cut again).
+    fn sentences(&self, s: &str, depth: usize) -> Option<String> {
+        let cs: Vec<(usize, char)> = s.char_indices().collect();
+        for w in cs.windows(3) {
+            let [(_, end), (sp, ' '), (_, next)] = w else {
+                continue;
+            };
+            if !matches!(end, '.' | '!' | '?' | '»' | '"' | '…' | ')') {
+                continue;
+            }
+            if !(next.is_uppercase() || matches!(next, '¡' | '¿' | '«' | '"' | '(')) {
+                continue;
+            }
+            let (left, right) = (&s[..*sp], &s[*sp + 1..]);
+            if !has_letters(left) || !has_letters(right) {
+                continue;
+            }
+            let Some(l) = self.lookup(left, depth + 1) else {
+                continue;
+            };
+            let Some(r) = self.lookup(right, depth + 1) else {
+                continue;
+            };
+            // Chinese and Japanese put no space after a full stop.
+            let glue = if l.ends_with(['。', '！', '？', '」', '』', '）']) {
+                ""
+            } else {
+                " "
+            };
+            return Some(format!("{l}{glue}{r}"));
+        }
+        None
     }
 
     /// "Cinco años juntos (Hanna)": a line with an aside in parentheses at
@@ -1013,6 +1063,49 @@ mod tests {
             t.tr("Tu familia te llevó al médico por piojos y te curaron."),
             "Your family took you to the doctor for lice."
         );
+    }
+
+    #[test]
+    fn glued_sentences_find_their_template() {
+        let c = cat(&[
+            (" {0} se fue.", " {0} left."),
+            ("Cobraste {0}.{1}", "You earned {0}.{1}"),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(
+            t.tr("Cobraste $500. Hanna se fue."),
+            "You earned $500. Hanna left."
+        );
+    }
+
+    #[test]
+    fn glued_sentences_translate_one_by_one() {
+        let c = cat(&[
+            (
+                "Te perdonó. Se quitaron un peso de encima.",
+                "They forgave you. A weight off both your shoulders.",
+            ),
+            (
+                " ¡Era justo lo que {0} quería!",
+                " It was exactly what {0!} wanted!",
+            ),
+            (
+                "Te dio {0} «para tus dulces».",
+                "They gave you {0} \"for candy.\"",
+            ),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(
+            t.tr("Te perdonó. Se quitaron un peso de encima. ¡Era justo lo que Ana quería!"),
+            "They forgave you. A weight off both your shoulders. It was exactly what Ana wanted!"
+        );
+        assert_eq!(
+            t.tr("Te dio $5 «para tus dulces». ¡Era justo lo que Ana quería!"),
+            "They gave you $5 \"for candy.\" It was exactly what Ana wanted!"
+        );
+        // A sentence without translation keeps the whole line as it is.
+        let s = "Algo que no existe. ¡Era justo lo que Ana quería!";
+        assert_eq!(t.tr(s), s);
     }
 
     #[test]
