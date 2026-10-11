@@ -185,6 +185,7 @@ function build() {
         block = false
         if G.modal != null { draw_modal(G.modal) }
         draw_cutin()
+        draw_skip()
     }
     draw_toasts()
     return C
@@ -776,7 +777,34 @@ function draw_bottom() {
     ctext(972, fy + 26, "+1 AÑO", 20, color, "impact")
     ctext(972, fy + 44, "TECLA Y", 11, color, "bold")
     hot(912, 640, 122, 52, "year")
+    let sy = 600
+    let sfill = HEX_INK
+    if hovered("skip:5") {
+        sfill = HEX_RED
+        sy -= 3
+    }
+    svg(918, sy, 116, 34, slant_doc(110, 30, 10, sfill, HEX_WHITE, 2, HEX_RED, 4))
+    ctext(972, sy + 21, "+5 AÑOS · U", 14, C_WHITE, "impact")
+    hot(918, 600, 110, 30, "skip:5")
     star_button(1034, 586, "+1 MES", "age", "ESPACIO")
+}
+
+// Avance de varios años en curso: barra de progreso y botón para parar.
+function draw_skip() {
+    let s = G.skip
+    if s == null { return null }
+    arect(0, 0, W, H, rgba(0, 0, 0, 120))
+    let w = 520
+    let h = 170
+    let x = (W - w) / 2
+    let y = 250
+    svg(x, y, w + 10, h + 10, slant_doc(w, h, 22, HEX_INK, HEX_WHITE, 4, HEX_RED, 10))
+    otextw(x + w / 2, y + 52, "AVANZANDO EL TIEMPO", 30, C_YELLOW, "impact", true, w - 60)
+    let ratio = 0.0
+    if s.total > 0 { ratio = float(s.done) / float(s.total) }
+    push({"op": "bar", "x": x + 50, "y": y + 74, "w": w - 100, "h": 22, "ratio": ratio, "fill": C_RED, "background": C_GRAY_D, "stroke": C_WHITE, "thickness": 2})
+    ctext(x + w / 2, y + 116, str(L.age) + " " + plural(L.age, "año", "años") + " · " + str(s.done) + " de " + str(s.total), 16, C_WHITE, "bold")
+    small_button(x + w / 2 - 80, y + 128, 160, 30, "PARAR (ESC)", "skip:cancel")
 }
 
 // Números que flotan junto a una estadística después de cambiar.

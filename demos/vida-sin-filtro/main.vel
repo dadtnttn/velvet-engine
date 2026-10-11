@@ -103,6 +103,46 @@ export function app_action(action: string) {
     return frame()
 }
 
+// Evento para el host en el próximo frame.
+function emit(kind: string, payload: map) {
+    list_push(G.out, {"kind": kind, "payload": payload})
+}
+
+// Tareas largas del runtime: corren repartidas en varios frames.
+export function app_task(name: string, arg: any) {
+    match name {
+        "years" => skip_years(int(arg))
+        _ => {}
+    }
+    G.dirty = true
+    return frame()
+}
+
+// Avanza varios años, uno por frame, con barra de progreso. Se detiene si algo
+// requiere una decisión, si mueres o si cancelas (botón o Esc).
+function skip_years(n: int) {
+    if G.mode != "game" || !L.alive || G.modal != null { return null }
+    let before = snapshot()
+    G.skip = {"total": n, "done": 0, "from": L.age, "t0": G.t}
+    let y = 0
+    while y < n && L.alive && G.modal == null && G.mode == "game" {
+        if advance_year() {
+            y += 1
+            autosave()
+        }
+        G.skip.done = y
+        G.dirty = true
+        let ev = yield(frame())
+        G.t += ev.dt
+        if ev.input != null { track_pointer(ev.input.pointer) }
+        if ev.action == "skip:cancel" { break }
+        if ev.input != null && list_contains(ev.input.pressed, "Escape") { break }
+    }
+    G.skip = null
+    report(before, 0.0)
+    if !L.alive { G.screen_t0 = G.t }
+}
+
 function frame() {
     if phone_resume() { G.dirty = true }
     if G.dirty {
@@ -111,7 +151,8 @@ function frame() {
         // El área bajo el puntero puede haber cambiado con el nuevo frame.
         if update_hover() { G.cache = build() }
     }
-    let events = take_storage_events()
+    let events = G.out
+    G.out = []
     if G.quit { list_push(events, {"kind": "app.exit", "payload": {}}) }
     return {"time": G.t, "commands": G.cache, "events": events}
 }
@@ -189,6 +230,7 @@ function handle_input(input: map) {
     if m == null {
         if pressed(input, "Space") || pressed(input, "Enter") { handle_action("age") }
         if pressed(input, "KeyY") { handle_action("year") }
+        if pressed(input, "KeyU") { handle_action("skip:5") }
         if pressed(input, "KeyM") { handle_action("ph:open") }
         return null
     }
@@ -397,6 +439,10 @@ function handle_action(action: string) {
     // Acciones que cambian la vida: comparamos antes y después para los efectos.
     let before = snapshot()
     G.last_kind = ""
+    if str_starts_with(action, "skip:") && action != "skip:cancel" {
+        emit("app.task", {"name": "years", "arg": action_num(action, "skip:", 101)})
+        return null
+    }
     if action == "age" || action == "year" {
         let birthday = false
         if action == "year" { birthday = advance_year() } else { birthday = advance_month() }

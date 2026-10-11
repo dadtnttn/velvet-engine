@@ -30,6 +30,6 @@ pub use value::Value;
 pub use velvet_script_bytecode::{
     lookup_math_constant, lookup_native, NativeId, NativePurity, NativeSpec, NativeType,
 };
-pub use vm::{run_source, CallFrameView, ProfileEntry, Vm, VmError, VmLimits, VmOutput};
+pub use vm::{run_source, CallFrameView, ProfileEntry, TaskStep, Vm, VmError, VmLimits, VmOutput};
 
 pub use vs2_host::{DialogueLine, LayerEntry, MenuChoice, StageChar, Vs2Host, Vs2MiniVm};
