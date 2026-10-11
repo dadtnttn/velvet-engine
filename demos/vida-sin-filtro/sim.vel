@@ -469,6 +469,8 @@ function new_life_core(age: int) {
         "funeral": null,
         "heartbreak": 0,
         "hitos": [],
+        "tm": 0,
+        "interests": null,
         "hito_keys": {},
         "fert": rint(50, 95),
         "pregnant": false,
@@ -547,7 +549,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_gig_event() && !maybe_kid_event() && !maybe_ping() { maybe_event() }
+    if !maybe_gig_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -590,6 +592,7 @@ function monthly() {
     effects_month()
     moods_month()
     state_hitos()
+    bonds_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8

@@ -238,6 +238,7 @@ function can_chat(p: map) {
 function start_chat(p: map, npc_first: bool) {
     G.modal = null
     let ctx = {"person": p}
+    touch(p)
     G.chat = {"pid": p.id, "lines": [], "opts": [], "turn": 0, "over": false, "gain": 0, "last": "", "t0": G.t, "refused": false}
     let m = mood(p)
     let t = temper(p)
@@ -349,6 +350,7 @@ function chat_choose(i: int) {
     if r >= 1 { grade = "good" }
     if r <= -1 { grade = "bad" }
     let reply = chat_reply(p, tone, grade)
+    if (tone == "dreams" || tone == "day") && grade == "good" { reply = reply + chat_reveal(p) }
     chat_add("npc", fmt(reply, ctx), 0.9)
     let gains = {"good": 3, "neutral": 1, "bad": -3}
     let gb = gains[grade]

@@ -938,12 +938,10 @@ function draw_detail(it: any, kind: string) {
             svg(x + 300, y + 120, 280, 280, burst_doc(280, 280, 16, HEX_RED, HEX_INK, 4, p.id % 7))
             portrait(x + 320, y + 130, 230, 276, p.look, p.gender, p.age, person_mood(p), p.id, false)
             if p.age >= 18 && L.age >= 18 && p.tags != null && !is_family(p) {
-                text(x + 46, y + 372, "GUSTOS", 12, C_GRAY, "bold")
-                text(x + 46, y + 394, clip_text(kinks_text(p.tags, p.gender), 260, 15), 15, C_INK, "bold")
+                let gl = "Gustos: " + kinks_text(p.tags, p.gender)
                 let shared = shared_kinks(p)
-                if len(shared) > 0 {
-                    text(x + 46, y + 416, "¡Comparten " + str(len(shared)) + " " + plural(len(shared), "gusto", "gustos") + "!", 15, C_RED, "impact")
-                }
+                if len(shared) > 0 { gl = gl + " · ¡comparten " + str(len(shared)) + "!" }
+                text(x + 46, y + 410, clip_text(gl, 270, 13), 13, C_RED, "bold")
             }
             text(x + 46, y + 60, clip_text(str_upper(p.first), 260, 34), 34, C_INK, "impact")
             text(x + 46, y + 92, rel_label(p) + " · " + str(p.age) + " años", 17, C_RED, "bold")
@@ -961,12 +959,18 @@ function draw_detail(it: any, kind: string) {
             text(x + 46, y + 270, "CERCANÍA " + str(p.bond) + "%", 16, C_INK, "impact")
             rect(x + 46, y + 280, 230, 12, rgb(210, 210, 205))
             rect(x + 46, y + 280, 230 * p.bond / 100, 12, C_RED)
-            if p.age >= 18 { text(x + 46, y + 330, "Atractivo " + str(p.looks) + "%", 15, C_INK, "bold") }
-            let extra = STYLE_NAMES[npc_style(p)] + " · " + temper_name(p) + " · Ánimo: " + str_lower(mood_name(p))
+            text(x + 46, y + 318, clip_text(bond_state(p) + " · Compatibilidad " + str(compat(p)) + "%", 270, 15), 15, C_INK, "bold")
+            let extra = STYLE_NAMES[npc_style(p)] + " · " + temper_name(p) + " · " + str_lower(mood_name(p))
+            if p.age >= 18 { extra = "Atractivo " + str(p.looks) + "% · " + extra }
+            text(x + 46, y + 338, clip_text(extra, 270, 13), 13, C_GRAY, "bold")
+            let fl = interests_text(p)
+            if p.bff == true { fl = "Mejor amig" + oa(p.gender) + " · " + fl }
+            text(x + 46, y + 356, clip_text(fl, 270, 13), 13, C_GRAY, "bold")
+            let ll = lovelang_text(p)
             if p.age >= 18 && L.age >= 18 && (rel_group(p) == "partner" || rel_group(p) == "fling") && p.gender != L.gender {
-                extra = extra + " · Fertilidad " + fert_word(their_fertility(p))
+                ll = ll + " · Fertilidad " + fert_word(their_fertility(p))
             }
-            text(x + 46, y + 352, clip_text(extra, 270, 13), 13, C_GRAY, "bold")
+            text(x + 46, y + 374, clip_text(ll, 270, 13), 13, C_GRAY, "bold")
             if kind == "person" {
                 text(x + 46, y + 440, clip_text(str_upper(it.t), 500, 22), 22, C_RED, "impact")
                 text(x + 46, y + 462, clip_text(it.s, 500, 14), 14, C_INK, "bold")

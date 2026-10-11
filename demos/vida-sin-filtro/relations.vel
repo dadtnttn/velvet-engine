@@ -378,6 +378,9 @@ function legacy_person_items(p: map, cat: string) {
     if (cat == "Convivir" || cat == "Juntos" || cat == "Salir") && g != "fling" {
         list_push(out, pitem(p, "pact:time", "Pasar tiempo juntos", "Más cercanía", "Sin plan, solo estar."))
     }
+    if cat == "Salir" && g == "friend" && p.bff != true && p.bond >= 70 && L.age >= 6 {
+        list_push(out, pitem(p, "ract:bff", "Nombrarl" + oa(p.gender) + " tu mejor amig" + oa(p.gender), "Solo puede haber uno", "Un título serio: mejores amigos para siempre. Si ya tienes uno, lo reemplaza."))
+    }
     if g == "child" {
         let kc = "Crianza"
         for it in kid_items_for(p) {
@@ -497,6 +500,7 @@ function fert_word(f: int) {
 function rel_do(id: string, p: map) {
     G.modal = null
     if id == "makefriend" { return make_friend() }
+    if id == "bff" { return make_bff(p) }
     if sweet_act(id) != null { return sweet_do(id, p) }
     if id == "chat" {
         if L.used["rchat" + str(p.id)] != null { return info(p.first, "Ya platicaron este mes. Dale un respiro.") }
@@ -526,6 +530,7 @@ function rel_do(id: string, p: map) {
     let msg = apply(o, ctx)
     if o.sexact == true { msg = msg + sex_with(p) }
     if a.hito != null { add_hito(p, fmt(a.hito, ctx)) }
+    msg = msg + bond_bonus(p, a.id)
     return finish(p.first, msg, outcome_kind(o))
 }
 
@@ -560,6 +565,7 @@ function rel_mg_result(score: any, ctx: map) {
     }
     if a.cat == "Intimidad" && score >= 50 { sex_with(p) }
     if a.hito != null { add_hito(p, fmt(a.hito, fctx)) }
+    text = text + bond_bonus(p, a.id)
     return finish(p.first, text + " (" + str(score) + " puntos)", kind)
 }
 
@@ -640,6 +646,7 @@ function resolve_gift(index: int, ctx: map) {
     bond_gain(p, gain_b)
     L.happy += 2
     add_hito(p, "Su primer regalo")
+    msg = msg + bond_bonus(p, "gift")
     return finish(p.first, msg, "g")
 }
 
