@@ -1188,6 +1188,7 @@ function meets(tag: string) {
     if tag == "uni" { return L.study != null }
     if tag == "gig" { return L.gig != null }
     if tag == "addict" { return L.alcohol + L.drugs >= 40 }
+    if tag == "sibling" { return vida_meets(tag) }
     return legacy_meets(tag) || rel_meets(tag)
 }
 
@@ -1204,7 +1205,7 @@ function eligible(ev: map) {
 
 function maybe_event() {
     // Con el tiempo mensual, un evento cada 4-5 meses en promedio.
-    if L.age < 5 || !chance(22) { return null }
+    if L.age < 5 || !chance(vida_event_rate()) { return null }
     let pool = []
     let weights = []
     for ev in EVENTS {
@@ -1232,6 +1233,12 @@ function maybe_event() {
         }
     }
     for ev in LAZOS_EVENTS {
+        if eligible(ev) {
+            list_push(pool, ev)
+            list_push(weights, ev.w)
+        }
+    }
+    for ev in VIDA_EVENTS {
         if eligible(ev) {
             list_push(pool, ev)
             list_push(weights, ev.w)

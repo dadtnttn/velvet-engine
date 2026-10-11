@@ -58,9 +58,45 @@ binarias en el juego.
 
 ## Qué hay en el juego
 
-- **Creador de personaje**: nombre (escrito o al azar), sexo, a quién le atrae,
-  tono de piel, 8 peinados, 9 colores de pelo, ojos, ropa, accesorios (lentes,
-  aretes, piercing, barba) y personalidad. El retrato se ve en vivo.
+- **Creador de personaje** (6 pestañas): nombre (escrito o al azar), sexo, a
+  quién le atrae, tono de piel, peinados, colores de pelo, ojos, ropa,
+  accesorios y personalidad. El retrato se ve en vivo. Además (`vida.vel`):
+  - **Carácter**: un talento (oído musical, atleta, artista, números, pico de
+    oro, belleza natural, memoria, corazón de oro) que sube un rasgo social y
+    una estadística, y un defecto opcional (tímido, torpe, enfermizo, flojo,
+    impulsivo, celoso, vanidoso, despistado) que puedes superar en tu vida para
+    ganar un hito, felicidad y Valor.
+  - **Gustos**: tres aficiones (las que comparten tus vínculos cuentan) y los
+    gustos +18, que se revelan a los 18.
+  - **Origen**: ciudad, familia (humilde, media o adinerada), hermanos, mes de
+    nacimiento con su signo (+4 a un rasgo social), estatura y destino
+    (tranquilo, normal o caótico: cuántos eventos aleatorios te pasan).
+- **Etapas de la vida** (`vida.vel`): primera infancia, infancia, adolescencia,
+  juventud, adultez, madurez, vejez y ancianidad. Al empezar cada etapa eliges
+  un propósito (ser popular, hacer carrera, formar una familia, dejar huella,
+  cumplir tu lista de deseos...); al terminarla se revisa y, si lo lograste,
+  ganas felicidad y un hito. También: propósito de año nuevo (se revisa en
+  diciembre), fiestas del año (San Valentín, Día de las madres, verano,
+  Halloween, Día de muertos con ofrenda, Navidad), la crisis de los 40, una
+  lista de 12 deseos desde los 60, elegir tu epitafio desde los 65 y tus
+  últimas palabras. Cada cumpleaños hay un resumen del año y cada diez años, uno
+  de la década.
+- **Estadísticas en detalle**: toca cualquier barra para ver qué la sube, qué
+  la baja y una gráfica de los últimos 12 años. Los rangos sociales 3 y 5 dan
+  ventajas reales (calificaciones, sueldo, ligue, felicidad), igual que tener
+  una estadística muy alta o muy baja.
+- **Efectos temporales**: luna de miel, desvelos de bebé, duelo, golpe al
+  orgullo, recién graduado o jubilado, resaca, estrés, agotamiento, lesiones,
+  nuevo look, viral, escándalo, abstinencia, racha de suerte o mala racha, nido
+  vacío... con los meses que les quedan. Además soledad y sobriedad.
+- **Hitos**: marca tus favoritos (aparecen al final de tu vida), mira tu línea
+  del tiempo por etapas y gana hitos nuevos (al borde de la muerte, genio, alma
+  buena, cien momentos...).
+- **40 eventos aleatorios nuevos** para cada etapa: perderte en el súper, el
+  diente flojo, fiesta sin papás, el apodo, examen de manejo, lotería, choques,
+  temblores, apagones, perritos callejeros, foto viral, robos, rescatar a
+  alguien, la boda de tu ex, casting de reality, estafas a abuelitos, caídas,
+  danzón en el parque, homenajes...
 - **Retratos SVG con expresiones**: tu cara cambia con tu felicidad (eufórica,
   contenta, tranquila, triste, deprimida), envejece con canas y arrugas, y cada
   persona de tu vida tiene su propio retrato.
@@ -611,7 +647,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 145 objetivos con recompensa en 5 categorías (estudios, trabajo,
+- **Misiones**: 152 objetivos con recompensa en 5 categorías (estudios, trabajo,
   amor, dinero y vida): graduarte, medallas, ser popular, dominar los
   minijuegos, sobrevivir a un despido, casarte, primer millón, vivir 100 años...
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
@@ -665,6 +701,7 @@ binarias en el juego.
 | `prision.vel` | Vida en prisión: rutina, patio, visitas, legal, fuga y eventos |
 | `medicina.vel` | Peso, antecedentes, enfermedades nuevas, médico, vacunas, seguro, cirugías, urgencias, recaídas y pandemias |
 | `phone.vel` | El móvil: apps, citas por app, redes, VelvetHub, mensajes a la pareja, notificaciones |
+| `vida.vel` | Talento, defecto, origen y destino; etapas y propósitos, fiestas, lista de deseos, epitafio; historial de estadísticas, efectos temporales, hitos favoritos y eventos nuevos |
 | `apps.vel` | Segunda capa de las apps: bloqueos, cumpleaños, ajustes de citas, reels y en vivo, transferencias, VelvetLink, ofertas, recordatorios, álbum y bienestar digital |
 | `phone_ui.vel` | Dibujo del móvil: aparato, pantalla de inicio, apps, tarjeta de Flama y panel lateral |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |

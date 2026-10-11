@@ -100,7 +100,7 @@ const FAMILY_NAMES = {"pobre": "Humilde", "media": "Clase media", "rica": "Adine
 // ---------------------------------------------------------------- familia
 
 function setup_family() {
-    L.family = FAMILY_KEYS[weighted_choose(G.rng, [35, 45, 20])]
+    L.family = cre_family(FAMILY_KEYS[weighted_choose(G.rng, [35, 45, 20])])
     for p in L.people {
         if p.rel == "padre" || p.rel == "madre" {
             p.style = PARENT_STYLES[weighted_choose(G.rng, [30, 25, 20, 15, 10])]

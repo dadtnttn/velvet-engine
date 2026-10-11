@@ -43,6 +43,7 @@ import "contenido.vel"
 import "marte.vel"
 import "rutas18.vel"
 import "apps.vel"
+import "vida.vel"
 import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
@@ -347,6 +348,7 @@ function enter_creator() {
         "route": "normal",
         "religion": random_religion()
     }
+    cre_defaults(G.cre)
     G.mode = "create"
     G.modal = null
     G.screen_t0 = G.t
@@ -432,7 +434,8 @@ function handle_action(action: string) {
     }
     if action == "page:+" { G.menu_page += 1; G.menu_t0 = G.t; return null }
     if action == "page:-" { G.menu_page = max(0, G.menu_page - 1); G.menu_t0 = G.t; return null }
-    if str_starts_with(action, "mission:") || str_starts_with(action, "fx:") || str_starts_with(action, "hito:") || str_starts_with(action, "fin:info:") { return null }
+    if str_starts_with(action, "hito:") { return vida_hito_action(action) }
+    if str_starts_with(action, "mission:") || str_starts_with(action, "fx:") || str_starts_with(action, "fin:info:") { return null }
     if str_starts_with(action, "person:") {
         G.ph_on = false
         for p in L.people {
@@ -512,6 +515,8 @@ function handle_action(action: string) {
         "sp" => marte_action(action)
         "x8" => rutas18_action(action)
         "ap" => apps_action(action)
+        "vd" => vida_action(action)
+        "st" => open_stat(rest)
         "habit" => toggle_habit(rest)
         "gig" => take_gig(rest)
         "cact" => do_career_act(rest)
@@ -580,7 +585,8 @@ function creator_action(action: string) {
             }
         }
         "likes" => c.likes = value
-        "page" => c.page = action_num(action, "cre:page:", 4)
+        "page" => c.page = action_num(action, "cre:page:", 6)
+        "talent", "flaw", "int", "city", "fam", "sibs", "bm", "height", "destiny" => vida_creator_action(parts[1], action, value)
         "route" => c.route = ROUTES[cycle(id_index(ROUTES, c.route), action, len(ROUTES))].id
         "rel" => c.religion = RELIGIONS[cycle(id_index(RELIGIONS, c.religion), action, len(RELIGIONS))].id
         "trait" => c.trait = TRAITS[cycle(id_index(TRAITS, c.trait), action, len(TRAITS))].id

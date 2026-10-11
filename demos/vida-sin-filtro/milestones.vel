@@ -3,7 +3,7 @@
 // guardado con tu edad y su categoría (vida, amor, amistad, familia, trabajo,
 // estudios, salud). Los hitos con una persona se guardan también en su historia.
 
-const HITO_CATS = ["Todos", "Vida", "Amor", "Amistad", "Familia", "Trabajo", "Estudios", "Salud"]
+const HITO_CATS = ["Todos", "Favoritos", "Línea", "Vida", "Amor", "Amistad", "Familia", "Trabajo", "Estudios", "Salud"]
 
 // Hito personal con notificación.
 function hito_me(cat: string, text: string) {
@@ -22,6 +22,7 @@ function hito_push(cat: string, text: string) {
     if L.hitos == null { L.hitos = [] }
     list_push(L.hitos, {"a": L.age, "t": text, "c": cat})
     log_add("Hito: " + text + ".", "x")
+    vida_on_hito(cat, text)
     return null
 }
 
@@ -69,15 +70,10 @@ function state_hitos() {
 }
 
 function my_hito_items(cat: string) {
-    let items = []
-    if L.hitos == null { return items }
-    let i = len(L.hitos) - 1
-    while i >= 0 {
-        let h = L.hitos[i]
-        if cat == "Todos" || h.c == cat {
-            list_push(items, {"action": "hito:" + str(i), "t": h.t, "s": h.c + " · " + str(h.a) + " años", "desc": "A los " + str(h.a) + " años. " + h.t + ".", "lock": "", "done": h.c == "Amor" || h.c == "Familia"})
-        }
-        i -= 1
+    let items = hito_list_items(cat)
+    if len(items) == 0 && cat == "Favoritos" {
+        list_push(items, {"action": "hito:none", "t": "Sin favoritos todavía", "s": "", "desc": "Toca cualquier hito para marcarlo como favorito. Tus favoritos aparecen al final de tu vida.", "lock": ""})
+        return items
     }
     if len(items) == 0 {
         list_push(items, {"action": "hito:none", "t": "Todavía nada aquí", "s": "", "desc": "Vive un poco: los momentos importantes aparecerán aquí.", "lock": ""})

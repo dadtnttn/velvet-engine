@@ -383,11 +383,19 @@ function new_life() {
     let mom = make_person("f", "madre", rint(18, 42))
     mom.last = mom_last
     add_person(mom)
-    if chance(45) && mom.age >= 20 {
+    let nsib = cre_sibs()
+    if nsib < 0 {
+        nsib = 0
+        if chance(45) { nsib = 1 }
+    }
+    if nsib > 0 && mom.age < 20 + nsib * 2 { mom.age = 20 + nsib * 2 + rint(0, 8) }
+    let si = 0
+    while si < nsib {
         let sib = make_person(pick(["m", "f"]), "hermano", rint(1, min(9, mom.age - 19)))
         sib.last = L.last
         sib.look.skin = L.look.skin
         add_person(sib)
+        si += 1
     }
     log_add("Naciste en " + L.city + ".", "h")
     hito_quiet("Vida", "Naciste en " + L.city)
@@ -395,6 +403,7 @@ function new_life() {
     log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
     log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
     setup_family()
+    vida_birth()
     setup_religion()
     add_extended_family()
     if G.cre.route != null { L.route = G.cre.route }
@@ -438,7 +447,7 @@ function new_life_core(age: int) {
         "done": [],
         "flags": {},
         "age": age,
-        "city": pick(CITIES),
+        "city": cre_city(),
         "alive": true,
         "happy": rint(65, 95),
         "health": rint(70, 100),
@@ -449,7 +458,7 @@ function new_life_core(age: int) {
         "edu": 0,
         "school": "",
         "month": 0,
-        "bmonth": rint(0, 11),
+        "bmonth": cre_bmonth(),
         "grades": 0,
         "degrees": [],
         "study": null,
@@ -568,6 +577,7 @@ function advance_month() {
             old_age_year()
             finance_year()
             apps_year()
+            vida_year()
         }
         clamp_stats()
         if !L.alive { return true }
@@ -639,6 +649,7 @@ function monthly() {
     route_month()
     phone_month()
     apps_month()
+    vida_month()
     lazos_month()
     ocio_month()
     prison_month()
@@ -854,6 +865,7 @@ function add_child(other: string) {
     add_person(child)
     L.kids += 1
     L.happy += 10
+    tfx_add("desvelos", 6)
     log_add("¡Nació tu " + by_gender(g, "hijo", "hija") + " " + child.first + "! (con " + other + ")", "g")
     if !hito_once("first_child", "Familia", "Nació tu primer hijo: " + child.first) { hito_me("Familia", "Nació " + child.first) }
     child.hitos = [{"a": L.age, "t": "Nació"}]
@@ -937,6 +949,7 @@ function marry_cost(cost: int) {
     L.money -= cost
     p.bond = clamp100(p.bond + 15)
     add_hito(p, "Se casaron")
+    tfx_add("luna_miel", 3)
     if p.childhood == true || p.teen_start != null { flag("childhood_love") }
     if p.pinky == true {
         add_hito(p, "Cumplieron su promesa de meñique")
@@ -968,6 +981,7 @@ function apply(o: map, ctx: map) {
     if map_has(o, "xp") { career_xp(o.xp) }
     if map_has(o, "fame") { L.fame = L.fame + o.fame }
     if map_has(o, "flag") { flag(o.flag) }
+    if map_has(o, "tfx") { apply_tfx(o.tfx) }
     if map_has(o, "gigperf") && L.gig != null { L.gig.perf = clamp100(L.gig.perf + o.gigperf) }
     // Escuela, universidad y trabajo.
     if map_has(o, "pop") { sc().pop = clamp100(sc().pop + o.pop) }
