@@ -279,7 +279,7 @@ binarias en el juego.
 | `sim.vel` | Estado de la vida, personalidad, rasgos sociales, paso de los meses, muerte |
 | `events.vel` | Eventos anuales (datos) y su motor |
 | `acts.vel` | Menús: ocupación, vínculos, actividades, noche, citas, casino, compras |
-| `jobs.vel` | Catálogo de 150 carreras, especializaciones, segunda carrera y fusiones |
+| `jobs.vel` | Catálogo de 159 carreras, especializaciones, segunda carrera y fusiones |
 | `career.vel` | Acciones de las carreras +18, gustos en la cama y misiones |
 | `edu.vel` | Familia, escuela, exámenes, universidades y técnicas, títulos y audiciones |
 | `gigs.vel` | 100 chambas de medio tiempo, sus eventos y minimisiones |
