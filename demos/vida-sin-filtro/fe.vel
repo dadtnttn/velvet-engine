@@ -491,6 +491,7 @@ function fe_choice(handler: string, index: int, ctx: map) {
             return finish("Conversión", "Le pediste a tu guía un par de meses más para pensarlo.", "n")
         }
         "fe_parent" => return fe_resolve_parent(index, ctx)
+        "fe_fam" => return fe_resolve_family(index, ctx)
         "fe_sect" => return fe_resolve_sect(index, ctx)
         "fe_crisis" => {
             d.crisis = 0
@@ -655,6 +656,7 @@ function maybe_fe_event() {
     if fe_rite_event() { return true }
     if fe_holiday_event() { return true }
     if fe_parent_event() { return true }
+    if fe_family_event() { return true }
     if fe_sect_event() { return true }
     if fe_crisis_event() { return true }
     let sp = spouses()
@@ -869,6 +871,101 @@ function fe_parent_event() {
         return true
     }
     return false
+}
+
+// Cuando la fe es tuya: tus hijos crecen con ella (o contra ella) y, de
+// mayor, tus nietos te preguntan qué crees.
+function fe_family_event() {
+    if L.religion == "ninguna" || L.faith < 50 || !chance(6) { return false }
+    let d = fe()
+    let temple = religion_def(L.religion).temple
+    if temple == "" { return false }
+    let kid = null
+    let teen = null
+    for k in kids_alive() {
+        if k.age >= 6 && k.age <= 12 { kid = k }
+        if k.age >= 14 && k.age <= 17 && religion_of(k) == L.religion { teen = k }
+    }
+    if teen != null && d.teen_doubt != teen.id && chance(50) {
+        d.teen_doubt = teen.id
+        open_choice("YA NO CREE", fmt("{x} te dice sin mirarte: «Ya no creo en nada de eso. No quiero seguir yendo " + a_temple(temple) + ".»", {"person": teen}),
+            ["Respetar su decisión", "Exigirle que siga yendo", "Preguntarle por qué, sin juzgar"], ["", "", ""], "fe_fam", {"person": teen, "kind": "teen"})
+        return true
+    }
+    if kid != null && d.kid_temple_age != L.age {
+        d.kid_temple_age = L.age
+        let kc = {"person": kid}
+        open_choice("DÍA DE IR " + str_upper(a_temple(temple)), fmt("Toca ir " + a_temple(temple) + " y {x} se esconde debajo de la cama: «¡No quiero ir, es aburrido!»", kc),
+            [fmt("Llevarl{xlo} de todos modos", kc), fmt("Dejarl{xlo} en casa esta vez", kc), "Prometerle un helado al salir"], ["", "", ""], "fe_fam", {"person": kid, "kind": "kid"})
+        return true
+    }
+    if L.age >= 65 && (d.elder_talk_age == null || L.age - d.elder_talk_age >= 4) {
+        let gk = null
+        for p in L.people {
+            if p.alive && p.rel == "nieto" && p.age >= 6 && p.age <= 16 { gk = p }
+        }
+        if gk != null {
+            d.elder_talk_age = L.age
+            open_choice("LA GRAN PREGUNTA", fmt("Tu niet{xa} {x} te pregunta muy seri{xa}: «¿Qué crees que hay después de morir?»", {"person": gk}),
+                ["Contarle lo que te enseña tu fe", "Decirle que nadie lo sabe con certeza", "«Lo que importa es cómo vives»"], ["", "", ""], "fe_fam", {"person": gk, "kind": "elder"})
+            return true
+        }
+    }
+    return false
+}
+
+function fe_resolve_family(index: int, ctx: map) {
+    let p = ctx.person
+    if p == null { return null }
+    let c = {"person": p}
+    if ctx.kind == "kid" {
+        if index == 0 {
+            bond_gain(p, -3)
+            p.faith = clamp100(faith_of(p) + 5)
+            fe_add_faith(1)
+            return finish("En familia", fmt("Fue con cara de pocos amigos, pero al final cantó más fuerte que nadie. Lo negará siempre.", c), "n")
+        }
+        if index == 1 {
+            bond_gain(p, 3)
+            return finish("En familia", fmt("{x} se quedó feliz en casa. Tú fuiste sol" + oa(L.gender) + " y l{xlo} extrañaste un poco.", c), "n")
+        }
+        L.money -= local_price(50)
+        bond_gain(p, 5)
+        return finish("En familia", fmt("{x} aguantó toda la ceremonia pensando en el helado. Funcionó, y te tomaste uno también.", c), "g")
+    }
+    if ctx.kind == "teen" {
+        if index == 0 {
+            bond_gain(p, 6)
+            p.religion = "ninguna"
+            p.faith = 10
+            add_hito(p, "Dejó la fe de la familia")
+            return finish("Tu hij" + oa(p.gender), fmt("Le dijiste que lo respetas, aunque te duela. Te abrazó, aliviad{xa}.", c), "n")
+        }
+        if index == 1 {
+            bond_gain(p, -10)
+            return finish("Tu hij" + oa(p.gender), fmt("{x} sigue yendo, pero de mala gana. Ahora casi no te habla.", c), "b")
+        }
+        if chance(40 + rank("charm") * 8 + p.bond / 5) {
+            bond_gain(p, 8)
+            return finish("Tu hij" + oa(p.gender), fmt("Te contó sus dudas de verdad y hablaron dos horas. Sigue con preguntas, pero confía en ti.", c), "g")
+        }
+        bond_gain(p, -2)
+        return finish("Tu hij" + oa(p.gender), fmt("«No lo entenderías.» {x} se encerró en su cuarto.", c), "b")
+    }
+    if index == 0 {
+        bond_gain(p, 6)
+        L.happy += 3
+        fe_add_faith(2)
+        return finish("Tu niet" + oa(p.gender), fmt("Le contaste lo que crees, con calma. {x} te escuchó con los ojos muy abiertos.", c), "g")
+    }
+    if index == 1 {
+        bond_gain(p, 4)
+        gain("kind", 1)
+        return finish("Tu niet" + oa(p.gender), fmt("«Nadie lo sabe, mi amor.» Te abrazó fuerte y se quedaron mirando las nubes.", c), "g")
+    }
+    L.karma += 1
+    bond_gain(p, 5)
+    return finish("Tu niet" + oa(p.gender), fmt("«Lo que importa es cómo vives.» {x} lo anotó en su cuaderno. Quizá algún día lo entienda.", c), "g")
 }
 
 function fe_resolve_parent(index: int, ctx: map) {
