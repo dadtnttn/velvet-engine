@@ -344,6 +344,7 @@ function rel_label(p: map) {
     if r == "sobrino" { return by_gender(p.gender, "Sobrino", "Sobrina") }
     if r == "colega" { return by_gender(p.gender, "Colega", "Colega") }
     if r == "rival" { return by_gender(p.gender, "Rival", "Rival") }
+    if r == "recluso" { return by_gender(p.gender, "Compañero de celda", "Compañera de celda") }
     return "Ligue"
 }
 
@@ -575,7 +576,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_gig_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_ping() { maybe_event() }
+    if !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -625,6 +626,8 @@ function monthly() {
     route_month()
     phone_month()
     lazos_month()
+    ocio_month()
+    prison_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8
@@ -699,6 +702,7 @@ function yearly() {
     childhood_friends()
     sweet_year()
     lazos_year()
+    ocio_year()
     age_hitos()
     // Infancia
     if L.age <= 5 {
@@ -733,7 +737,10 @@ function yearly() {
         L.jail -= 1
         L.happy -= 6
         if L.jail == 0 {
+            L.pr = null
             log_add("Saliste de prisión. El mundo sigue igual; tú no.", "g")
+        } else {
+            prison_year()
         }
     }
 
@@ -1024,6 +1031,7 @@ function maybe_pregnancy(person: any, p: int) {
 
 function go_to_jail(years: int) {
     L.jail = years
+    prison_enter()
     L.jail_total += years
     L.record += 1
     hito_once("first_jail", "Vida", "Tu primera vez en prisión")

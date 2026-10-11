@@ -543,6 +543,8 @@ function mg_close() {
     if m.purpose == "route" { return route_mg_result(score, m.ctx) }
     if m.purpose == "phone" { return phone_mg_result(score, m.ctx) }
     if m.purpose == "lazos" { return lazos_mg_result(score, m.ctx) }
+    if m.purpose == "ocio" { return ocio_mg_result(score, m.ctx) }
+    if m.purpose == "prision" { return prison_mg_result(score, m.ctx) }
     if m.purpose == "taxes" { return taxes_result(score, m.ctx) }
     if m.purpose == "sweet" { return sweet_mg_result(score, m.ctx) }
     if m.purpose == "conceive" { return conceive_result(score, m.ctx) }
