@@ -807,7 +807,7 @@ function continue_as_heir() {
     let family = "pobre"
     if lg.estate >= 50000 { family = "media" }
     if lg.estate >= 500000 { family = "rica" }
-    G.cre = {"chars": [], "gender": gender, "likes": likes, "look": kid.look, "trait": trait, "tags": random_kinks(rint(1, 3)), "page": 0, "first": kid.first, "last": old.last1 + " " + pick(SURNAMES)}
+    G.cre = {"chars": [], "gender": gender, "likes": likes, "look": kid.look, "trait": trait, "tags": random_kinks(rint(1, 3)), "page": 0, "first": kid.first, "last": old.last1 + " " + pick(SURNAMES), "ctry": map_get(old, "ctry", "mx"), "region": ""}
     let gen = old.gen + 1
     let lineage = list_slice(old.lineage, 0, len(old.lineage))
     list_push(lineage, old.first)
@@ -822,6 +822,7 @@ function continue_as_heir() {
     L.money = money
     L.family = family
     vida_heir()
+    pais_heir(old)
     // Lo que heredas de tus padres: algo de lo que aprendieron.
     for k in SOCIAL_KEYS { gain(k, old.social[k] / 5) }
     if merit(kid) < 40 {

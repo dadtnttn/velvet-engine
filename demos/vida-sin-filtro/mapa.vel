@@ -1,0 +1,284 @@
+// @edition 3
+// Mapa mundi (polígonos de Natural Earth en mapa_data.vel). Muestra tu país,
+// los que visitaste, las guerras, los conflictos internos y tus conquistas.
+// Tocas un país (en el mapa o en la lista por regiones) para ver su ficha y
+// viajar, mudarte, irte de luna de miel, buscar pareja de ahí o, si gobiernas,
+// declararle la guerra. Acciones "wm:".
+
+const MAP_X = 16
+const MAP_Y = 84
+const MAP_DW = 880
+const MAP_DH = 342
+
+function open_world_map(sel: string) {
+    let reg = 0
+    let k = 0
+    let c = ctry(sel)
+    while k < len(REGIONS) {
+        if REGIONS[k][0] == c.reg { reg = k }
+        k += 1
+    }
+    G.modal = {"kind": "world", "sel": sel, "reg": reg, "page": 0}
+    G.modal_t0 = G.t
+    return null
+}
+
+function map_pt(id: string) {
+    let c = MAP_CENTS[id]
+    if c != null { return c }
+    let x = ctry(id)
+    return [int((x.lon + 180.0) * MAP_K), int((84.0 - x.lat) * MAP_K)]
+}
+
+function map_fill_for(id: string, sel: string) {
+    let me = here_id()
+    if id == me { return "#e3141b" }
+    if owner_of(id) == me { return "#9b3cf0" }
+    if at_war_between(me, id) { return "#ff5a00" }
+    if at_war(id) { return "#ff9a00" }
+    if civil_war(id) != "" { return "#b5651d" }
+    if list_contains(pa().visited, id) { return "#ffd21f" }
+    return ""
+}
+
+// Capa de colores: se arma solo cuando cambia el estado del mundo.
+function map_overlay(sel: string) {
+    let wd = world()
+    let sig = here_id() + "|" + sel + "|" + str(len(pa().visited)) + "|" + str(len(wd.wars)) + "|" + str(len(wd.civil)) + "|" + str(len(map_keys(wd.own)))
+    if G.map_sig == sig && G.map_doc != null { return G.map_doc }
+    let body = ""
+    for c in COUNTRIES {
+        let f = map_fill_for(c.id, sel)
+        let is_sel = c.id == sel
+        if f == "" && !is_sel { continue }
+        let stroke = "#111"
+        let sw = "0.8"
+        if is_sel {
+            stroke = "#ffffff"
+            sw = "3"
+            if f == "" { f = "#f7f7f2" }
+        }
+        let path = MAP_PATHS[c.id]
+        if path != null {
+            body = body + "<path d='" + path + "' fill='" + f + "' stroke='" + stroke + "' stroke-width='" + sw + "'/>"
+        } else {
+            let pt = map_pt(c.id)
+            body = body + "<circle cx='" + str(pt[0]) + "' cy='" + str(pt[1]) + "' r='5' fill='" + f + "' stroke='" + stroke + "' stroke-width='" + sw + "'/>"
+        }
+        // Territorios que van con su país (Groenlandia con Dinamarca...).
+        for t in map_keys(MAP_EXTRA_OWNER) {
+            if MAP_EXTRA_OWNER[t] == c.id && MAP_PATHS[t] != null { body = body + "<path d='" + MAP_PATHS[t] + "' fill='" + f + "' stroke='#111' stroke-width='0.8'/>" }
+        }
+    }
+    let doc = "<svg xmlns='http://www.w3.org/2000/svg' width='" + str(MAP_W) + "' height='" + str(MAP_H) + "' viewBox='0 0 " + str(MAP_W) + " " + str(MAP_H) + "'>" + body + "</svg>"
+    G.map_sig = sig
+    G.map_doc = doc
+    return doc
+}
+
+function draw_world(m: map) {
+    arect(0, 0, W, H, rgba(6, 12, 24, 245))
+    svg(10, -6, 520, 100, tilt_title_doc("MAPA MUNDI", 520, 100, 58, HEX_WHITE, HEX_INK))
+    small_button(1120, 20, 140, 44, "CERRAR", "wm:close")
+    rect(MAP_X - 4, MAP_Y - 4, MAP_DW + 8, MAP_DH + 8, rgb(18, 40, 70))
+    svg(MAP_X, MAP_Y, MAP_DW, MAP_DH, MAP_BASE)
+    svg(MAP_X, MAP_Y, MAP_DW, MAP_DH, map_overlay(m.sel))
+    for c in COUNTRIES {
+        let pt = map_pt(c.id)
+        let x = MAP_X + pt[0] * MAP_DW / MAP_W
+        let y = MAP_Y + pt[1] * MAP_DH / MAP_H
+        hot(x - 6, y - 6, 12, 12, "wm:sel:" + c.id)
+    }
+    // Leyenda
+    let lx = MAP_X + 6
+    let ly = MAP_Y + MAP_DH - 18
+    for pair in [["#e3141b", "Tu país"], ["#ffd21f", "Visitado"], ["#ff9a00", "En guerra"], ["#b5651d", "Conflicto"], ["#9b3cf0", "Conquistado"]] {
+        rect(lx, ly, 12, 12, hex_color(pair[0]))
+        text(lx + 16, ly + 11, pair[1], 11, C_WHITE, "bold")
+        lx += 100
+    }
+    draw_world_list(m)
+    draw_world_panel(m)
+    return null
+}
+
+function hex_color(h: string) {
+    if h == "#e3141b" { return C_RED }
+    if h == "#ffd21f" { return C_YELLOW }
+    if h == "#ff9a00" { return rgb(255, 154, 0) }
+    if h == "#b5651d" { return rgb(181, 101, 29) }
+    if h == "#9b3cf0" { return rgb(155, 60, 240) }
+    return C_WHITE
+}
+
+function draw_world_list(m: map) {
+    let reg = REGIONS[m.reg]
+    let y0 = MAP_Y + MAP_DH + 16
+    svg(MAP_X, y0, 38, 38, arrow_doc("left", HEX_WHITE))
+    hot(MAP_X, y0, 38, 38, "wm:reg:-")
+    svg(MAP_X + 46, y0, 300, 42, slant_doc(296, 38, 10, HEX_WHITE, HEX_INK, 2, HEX_RED, 4))
+    ctext(MAP_X + 46 + 148, y0 + 26, str_upper(reg[1]), 16, C_INK, "bold")
+    svg(MAP_X + 354, y0, 38, 38, arrow_doc("right", HEX_WHITE))
+    hot(MAP_X + 354, y0, 38, 38, "wm:reg:+")
+    let ids = region_countries(reg[0])
+    let per = 20
+    let pages = max(1, (len(ids) + per - 1) / per)
+    let page = min(m.page, pages - 1)
+    if pages > 1 {
+        small_button(MAP_X + 410, y0 + 2, 110, 34, "PÁGINA " + str(page + 1) + "/" + str(pages), "wm:page:+")
+    }
+    let i = 0
+    let start = page * per
+    while i < per && start + i < len(ids) {
+        let id = ids[start + i]
+        let bx = MAP_X + (i % 4) * 222
+        let by = y0 + 50 + (i / 4) * 40
+        toggle_s(bx, by, 210, cname(id), "wm:sel:" + id, id == m.sel)
+        i += 1
+    }
+    return null
+}
+
+function draw_world_panel(m: map) {
+    let x = 912
+    let y = 84
+    let w = 352
+    let c = ctry(m.sel)
+    panel(x, y, w, 612, 16)
+    textw(x + 22, y + 40, str_upper(c.n), 26, C_WHITE, "impact", w - 40)
+    text(x + 22, y + 62, region_name(c.reg) + " · " + demonym(c.id, L.gender), 13, C_YELLOW, "bold")
+    let lines = []
+    list_push(lines, "Capital: " + c.cap + " · " + pop_text(c.pop))
+    list_push(lines, "Idioma: " + c.lang)
+    list_push(lines, "Gobierno: " + gov_name(c.gov) + " · " + by_gender(L.gender, c.lead_m, c.lead_f))
+    list_push(lines, "Religión: " + rel_summary(c.id))
+    list_push(lines, "Ingreso " + wealth_word(c.gdp) + " · vida " + str(c.life) + " años · seguridad " + str(c.safe) + "%")
+    let st = ""
+    if at_war(c.id) { st = war_of(c.id).n + "." }
+    if civil_war(c.id) != "" { st = st + " " + civil_war(c.id) + "." }
+    if owner_of(c.id) != c.id { st = st + " Bajo el mando de " + cname(owner_of(c.id)) + "." }
+    if st != "" { list_push(lines, st) }
+    list_push(lines, "Lo mejor: " + c.honey + ".")
+    list_push(lines, "«" + pick_stable(csplit_cl(c.cl), c.id) + "»")
+    let ty = y + 92
+    for ln in lines {
+        for part in wrap_px(ln, w - 44, 13) {
+            if ty < y + 430 { text(x + 22, ty, part, 13, C_WHITE, "bold") }
+            ty += 18
+        }
+        ty += 4
+    }
+    // Botones
+    let by = y + 446
+    let me = here_id()
+    if c.id == me {
+        text(x + 22, by + 20, "Es donde vives ahora.", 15, C_YELLOW, "bold")
+    } else {
+        let lock = ""
+        if L.age < 16 { lock = "A LOS 16" }
+        let tc = trip_cost(c.id)
+        if lock == "" && L.money < tc { lock = money_str(tc) }
+        if lock == "" && L.used["pa_trip"] != null { lock = "ESTE MES YA" }
+        world_button(x + 22, by, "VIAJAR " + money_str(tc), "wm:trip", lock)
+        let ml = ""
+        if L.age < 18 { ml = "A LOS 18" }
+        world_button(x + 186, by, "MUDARTE", "wm:move", ml)
+        by += 48
+        if pa().honey && L.married {
+            world_button(x + 22, by, "LUNA DE MIEL", "wm:honey", if_str(L.money < tc * 2, money_str(tc * 2), ""))
+        }
+        world_button(x + 186, by, "BUSCAR PAREJA", "wm:date", if_str(L.age < 18, "A LOS 18", if_str(L.used["pa_date"] != null, "ESTE MES YA", "")))
+        by += 48
+        if leader_now() && owner_of(c.id) != me {
+            world_button(x + 22, by, if_str(at_war_between(me, c.id), "EN GUERRA", "DECLARAR GUERRA"), "wm:war", if_str(at_war_between(me, c.id), "YA", ""))
+        }
+    }
+    world_button(x + 186, y + 560, "MI PAÍS", "wm:sel:" + me, "")
+    return null
+}
+
+function pick_stable(xs: list, key: string) {
+    if len(xs) == 0 { return "" }
+    let h = 0
+    let i = 0
+    while i < len(key) {
+        h += i * 7 + 13
+        i += 1
+    }
+    return xs[(h + L.tm / 12) % len(xs)]
+}
+
+function world_button(x: int, y: int, lbl: string, action: string, lock: string) {
+    let fill = HEX_INK
+    let color = C_WHITE
+    let txt = lbl
+    if lock != "" {
+        fill = "#3a3a3a"
+        color = C_GRAY
+        txt = lock
+    } else if hovered(action) {
+        fill = HEX_RED
+    }
+    svg(x, y, 158, 42, slant_doc(152, 38, 10, fill, HEX_WHITE, 2, HEX_RED, 4))
+    ctextw(x + 76, y + 25, txt, 13, color, "bold", 140)
+    if lock == "" { hot(x, y, 152, 38, action) }
+    return null
+}
+
+function world_action(action: string) {
+    let m = G.modal
+    if m == null || m.kind != "world" {
+        open_world_map(here_id())
+        m = G.modal
+    }
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    if cmd == "close" {
+        G.modal = null
+        return null
+    }
+    if cmd == "sel" {
+        if has_ctry(arg) {
+            m.sel = arg
+            let k = 0
+            while k < len(REGIONS) {
+                if REGIONS[k][0] == ctry(arg).reg { m.reg = k }
+                k += 1
+            }
+        }
+        return null
+    }
+    if cmd == "reg" {
+        m.reg = cycle(m.reg, action, len(REGIONS))
+        m.page = 0
+        return null
+    }
+    if cmd == "page" {
+        m.page += 1
+        let pages = max(1, (len(region_countries(REGIONS[m.reg][0])) + 19) / 20)
+        if m.page >= pages { m.page = 0 }
+        return null
+    }
+    let sel = m.sel
+    if cmd == "trip" { return pais_trip(sel, false) }
+    if cmd == "honey" { return pais_trip(sel, true) }
+    if cmd == "move" { return open_move(sel) }
+    if cmd == "war" { return open_leader_war(sel) }
+    if cmd == "date" {
+        if L.age < 18 || L.used["pa_date"] != null { return null }
+        L.used["pa_date"] = 1
+        G.modal = null
+        let x = stranger()
+        pais_person(x, sel)
+        x.far = sel != here_id()
+        x.bio = "Vive en " + ctry(sel).cap + ". Busca a alguien de lejos."
+        x.km = dist_km(here_id(), sel)
+        x.heat = 15
+        profile(x)
+        ph_add_match(x)
+        return finish("Amor a distancia", "Hiciste match con " + x.first + ", " + demonym(sel, x.gender) + ", " + str(x.age) + " años. Escríbele en Flama.", "x")
+    }
+    return null
+}

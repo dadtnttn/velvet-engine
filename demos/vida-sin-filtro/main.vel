@@ -44,6 +44,11 @@ import "marte.vel"
 import "rutas18.vel"
 import "apps.vel"
 import "vida.vel"
+import "paises_data.vel"
+import "mapa_data.vel"
+import "paises.vel"
+import "guerras.vel"
+import "mapa.vel"
 import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
@@ -285,6 +290,10 @@ function handle_input(input: map) {
         }
         return null
     }
+    if m.kind == "world" {
+        if pressed(input, "Escape") { handle_action("wm:close") }
+        return null
+    }
     if m.kind == "phone" {
         if pressed(input, "KeyM") {
             handle_action("ph:close")
@@ -346,7 +355,7 @@ function enter_creator() {
         "tags": [],
         "page": 0,
         "route": "normal",
-        "religion": random_religion()
+        "religion": ""
     }
     cre_defaults(G.cre)
     G.mode = "create"
@@ -516,6 +525,8 @@ function handle_action(action: string) {
         "x8" => rutas18_action(action)
         "ap" => apps_action(action)
         "vd" => vida_action(action)
+        "pa" => pais_action(action)
+        "wm" => world_action(action)
         "st" => open_stat(rest)
         "habit" => toggle_habit(rest)
         "gig" => take_gig(rest)
@@ -576,6 +587,7 @@ function creator_action(action: string) {
             G.cre.page = page
             G.cre.route = route
             G.cre.tags = random_kinks(rint(1, MAX_KINKS))
+            cre_ctry_defaults(G.cre)
             G.screen_t0 = G.t - 1.0
         }
         "gender" => {
@@ -587,8 +599,14 @@ function creator_action(action: string) {
         "likes" => c.likes = value
         "page" => c.page = action_num(action, "cre:page:", 6)
         "talent", "flaw", "int", "city", "fam", "sibs", "bm", "height", "destiny" => vida_creator_action(parts[1], action, value)
+        "region", "ctry" => pais_creator_action(parts[1], action)
         "route" => c.route = ROUTES[cycle(id_index(ROUTES, c.route), action, len(ROUTES))].id
-        "rel" => c.religion = RELIGIONS[cycle(id_index(RELIGIONS, c.religion), action, len(RELIGIONS))].id
+        "rel" => {
+            let ri = 0
+            if c.religion != "" { ri = id_index(RELIGIONS, c.religion) + 1 }
+            ri = cycle(ri, action, len(RELIGIONS) + 1)
+            if ri == 0 { c.religion = "" } else { c.religion = RELIGIONS[ri - 1].id }
+        }
         "trait" => c.trait = TRAITS[cycle(id_index(TRAITS, c.trait), action, len(TRAITS))].id
         "face" => c.look.face = cycle(c.look.face, action, len(FACES))
         "body" => c.look.body = cycle(c.look.body, action, len(BODIES))
@@ -596,7 +614,10 @@ function creator_action(action: string) {
         "lips" => c.look.lips = cycle(c.look.lips, action, len(LIPS))
         "hair" => c.look.hair = cycle(c.look.hair, action, len(HAIR_STYLES))
         "acc" => c.look.acc = cycle(c.look.acc, action, len(ACCESSORIES))
-        "skin" => c.look.skin = action_num(action, "cre:skin:", len(SKINS))
+        "skin" => {
+            c.look.skin = action_num(action, "cre:skin:", len(SKINS))
+            c.skin_set = true
+        }
         "hcolor" => c.look.hcolor = action_num(action, "cre:hcolor:", len(HAIR_COLORS))
         "eyes" => c.look.eyes = action_num(action, "cre:eyes:", len(EYE_COLORS))
         "outfit" => c.look.outfit = action_num(action, "cre:outfit:", len(OUTFITS))

@@ -414,12 +414,12 @@ function resolve_claim(index: int) {
         d.king = true
         d.realm = realm_new()
         if index == 1 { realm_apply({"aprob": -10, "fuerza": 10, "orden": -5}) }
-        let title = by_gender(L.gender, "rey", "reina")
+        let title = crown_title()
         hito_me("Vida", "Te coronaron " + title)
         flag("crowned")
         L.happy += 25
-        list_push(G.toasts, {"head": "¡CORONACIÓN!", "title": str_upper(title) + " " + str_upper(L.first), "sub": "El país ahora es un reino.", "t0": G.t})
-        return finish("Coronación", "¡Larga vida a " + L.first + "! La corona brilla sobre tu cabeza y el país se convierte en el Reino de " + L.city + ".", "g")
+        list_push(G.toasts, {"head": "¡CORONACIÓN!", "title": str_upper(title) + " " + str_upper(L.first), "sub": here().n, "t0": G.t})
+        return finish("Coronación", "¡Larga vida a " + L.first + "! " + crown_text(), "g")
     }
     if index == 1 {
         if chance(25) {
@@ -470,8 +470,8 @@ function run_election(id: string) {
         d.realm.aprob = clamp(d.pop, 30, 80)
         flag("president")
         L.happy += 25
-        list_push(G.toasts, {"head": "¡PRESIDENCIA!", "title": str_upper(by_gender(L.gender, "Presidente", "Presidenta")) + " " + str_upper(L.first), "sub": "Seis años para cambiar el país.", "t0": G.t})
-        return finish("¡Presidencia!", "Ganaste la elección. Ahora eres " + by_gender(L.gender, "presidente", "presidenta") + " de " + L.city + "." + pl_results_text(true), "g")
+        list_push(G.toasts, {"head": "¡AL PODER!", "title": str_upper(leader_title()) + " " + str_upper(L.first), "sub": here().n, "t0": G.t})
+        return finish("¡Al poder!", "Ganaste. Ahora eres " + str_lower_first(leader_title()) + " de " + here().n + "." + pl_results_text(true), "g")
     }
     d.pop = max(0, d.pop - 8)
     L.happy -= 10

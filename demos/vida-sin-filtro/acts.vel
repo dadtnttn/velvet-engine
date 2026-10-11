@@ -231,7 +231,7 @@ function menu_title(tab: string) {
 }
 
 function menu_cats(tab: string) {
-    if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Médico", "Hábitos", "Hobbies", "Mascotas", "Viajes", "Fe", "Lujos", "Vida"] }
+    if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Médico", "Hábitos", "Hobbies", "Mascotas", "Viajes", "Fe", "Lujos", "Vida", "País"] }
     if tab == "job" && L.jail > 0 { return PRISON_CATS }
     if tab == "job" { return job_cats() }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
@@ -264,6 +264,7 @@ function menu_items(tab: string, cat: string) {
     if tab == "route" { return route_items(cat) }
     if tab == "act" && cat == "Fe" { return faith_items() }
     if tab == "act" && cat == "Vida" { return vida_items() }
+    if tab == "act" && cat == "País" { return pais_items() }
     if tab == "jobs" { return job_items_for(cat) }
     if tab == "study" {
         if cat == "Técnica" { return study_items("tec") }
@@ -945,6 +946,7 @@ function do_person_act(action: string, p: map) {
         if chance(p.bond - 10 + rank("guts") * 3) {
             add_hito(p, "Se comprometieron")
             hito_once("engaged", "Amor", "Te comprometiste")
+            if pais_marriage_block(p) { return open_symbolic_wedding(p) }
             return open_wedding(p)
         }
         bond_gain(p, -10)
@@ -1230,6 +1232,7 @@ function dispatch_choice(index: int) {
     if str_starts_with(m.handler, "x8_") { return rutas18_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "ap_") { return apps_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "vd_") { return vida_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "pa_") { return pais_choice(m.handler, index, m.ctx) }
     if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
     if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
     if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }

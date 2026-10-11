@@ -204,6 +204,7 @@ function make_person(gender: string, rel: string, age: int) {
     if gender == "f" { names = NAMES_F }
     let first = pick(names)
     if first == L.first { first = pick(names) }
+    let pc = person_ctry(rel)
     let p = {
         "id": L.next_id,
         "first": first,
@@ -220,6 +221,8 @@ function make_person(gender: string, rel: string, age: int) {
         "tags": random_kinks(2),
         "wild": rint(0, 100)
     }
+    pais_person(p, pc)
+    if p.first == L.first { p.first = pais_first(gender, pc) }
     L.next_id += 1
     return p
 }
@@ -372,9 +375,11 @@ function first_rel(rel: string) {
 
 function new_life() {
     new_life_core(0)
+    pais_player_look()
     let c = G.cre
     let dad_last = L.last1
     let mom_last = str_trim(str_replace(L.last, L.last1, ""))
+    if mom_last == "" { mom_last = pais_surname(born_id()) }
     let gender = L.gender
     let dad = make_person("m", "padre", rint(20, 45))
     dad.last = dad_last
@@ -403,9 +408,11 @@ function new_life() {
     log_add("Te llamaron " + L.first + " " + L.last + ".", "n")
     log_add("Personalidad: " + trait_name(L.trait, gender) + ".", "x")
     setup_family()
+    pais_birth()
     vida_birth()
     setup_religion()
     add_extended_family()
+    fix_family_surnames()
     if G.cre.route != null { L.route = G.cre.route }
     route_setup()
     L.grades = clamp(30 + L.smarts / 2 + rint(-10, 10), 0, 100)
@@ -423,10 +430,11 @@ function new_life_core(age: int) {
     if likes == "auto" { likes = by_gender(gender, "f", "m") }
     let names = NAMES_M
     if gender == "f" { names = NAMES_F }
-    let dad_last = pick(SURNAMES)
-    let mom_last = pick(SURNAMES)
+    let cid = cre_country()
+    let dad_last = pais_surname(cid)
+    let mom_last = pais_surname(cid)
     let first = c.first
-    if first == "" { first = pick(names) }
+    if first == "" { first = pais_first(gender, cid) }
     if c.last != "" {
         let parts = str_split(c.last, " ")
         dad_last = parts[0]
@@ -434,7 +442,9 @@ function new_life_core(age: int) {
     }
     L = {
         "first": first,
-        "last": dad_last + " " + mom_last,
+        "last": if_str(ctry(cid).ss == 2, dad_last + " " + mom_last, dad_last),
+        "ctry": cid,
+        "born": cid,
         "last1": dad_last,
         "gender": gender,
         "likes": likes,
@@ -447,7 +457,7 @@ function new_life_core(age: int) {
         "done": [],
         "flags": {},
         "age": age,
-        "city": cre_city(),
+        "city": cre_city_in(cid),
         "alive": true,
         "happy": rint(65, 95),
         "health": rint(70, 100),
@@ -578,6 +588,7 @@ function advance_month() {
             finance_year()
             apps_year()
             vida_year()
+            service_check()
         }
         clamp_stats()
         if !L.alive { return true }
@@ -650,6 +661,7 @@ function monthly() {
     phone_month()
     apps_month()
     vida_month()
+    pais_month()
     lazos_month()
     ocio_month()
     prison_month()
@@ -859,6 +871,7 @@ function add_child(other: string) {
     let chosen = lazos_baby_name(g)
     if chosen != "" { child.first = chosen }
     child.last = L.last1
+    if g == "f" { child.last = fem_surname(here_id(), child.last) }
     child.look.skin = L.look.skin
     if chance(50) { child.look.hcolor = L.look.hcolor }
     child.bond = 90
@@ -879,8 +892,8 @@ function death_check() {
         die(worst_cause())
         return null
     }
-    if L.age >= 60 {
-        let over = L.age - 60
+    if L.age + pais_life_shift() >= 60 {
+        let over = L.age - 60 + pais_life_shift()
         let risk = over * over / 40 + (100 - L.health) / 10
         if L.age >= 105 { risk = 100 }
         if chance(risk) { die(pick(OLD_AGE_CAUSES)) }
@@ -950,6 +963,7 @@ function marry_cost(cost: int) {
     p.bond = clamp100(p.bond + 15)
     add_hito(p, "Se casaron")
     tfx_add("luna_miel", 3)
+    if L.age >= 18 { pa().honey = true }
     if p.childhood == true || p.teen_start != null { flag("childhood_love") }
     if p.pinky == true {
         add_hito(p, "Cumplieron su promesa de meñique")

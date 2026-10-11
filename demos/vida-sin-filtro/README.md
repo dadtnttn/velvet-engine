@@ -71,6 +71,57 @@ binarias en el juego.
   - **Origen**: ciudad, familia (humilde, media o adinerada), hermanos, mes de
     nacimiento con su signo (+4 a un rasgo social), estatura y destino
     (tranquilo, normal o caótico: cuántos eventos aleatorios te pasan).
+- **Los países del mundo** (`paises.vel`, `paises_data.vel`): 197 países
+  investigados uno por uno (nombres más comunes, nombres «creativos» típicos
+  como los venezolanos, apellidos, religiones con sus porcentajes, mezcla de
+  tonos de piel, pelo y ojos, economía, esperanza de vida, felicidad,
+  seguridad, desempleo, leyes, servicio militar, ejército, sectores con más
+  trabajo, comida, clichés, costumbres, fiestas y lugares para la luna de miel).
+  - **Naces en un país** (o eliges región, país y ciudad en el creador): tu
+    nombre, el de tus padres y el de casi toda la gente que conoces salen de
+    ahí, con apellidos femeninos donde existen (Kowalska, Ivanova, Nováková,
+    Papadopoulou, Jónsdóttir...) y dos apellidos donde se usan. Siempre hay
+    algunos extranjeros, más en los países ricos.
+  - **Religión y etnia**: tu familia sigue los porcentajes religiosos del país
+    (se agregaron el sintoísmo y las religiones tradicionales) y tu aspecto, su
+    mezcla de etnias. Lo poco común llama la atención: si tu piel, tu pelo
+    rubio o tus ojos claros son raros donde vives, tu atractivo sube; donde son
+    lo normal, no destacas.
+  - **Economía y leyes**: sueldos y costo de vida según el ingreso del país,
+    desempleo, sectores con más vacantes, felicidad y esperanza de vida. El
+    alcohol prohibido, el trabajo sexual ilegal o las parejas del mismo sexo
+    criminalizadas traen multas, redadas o denuncias; donde el matrimonio
+    igualitario no es legal, solo hay boda simbólica o casarse en el extranjero.
+  - **Actividades → País**: costumbres reales de cada país (apostar en una
+    carrera de cuyes en Perú, Śmigus-dyngus en Polonia, Basant en Pakistán...),
+    con apuestas, fiestas, comida, tradiciones, deporte y noches +18; fiestas
+    nacionales que llegan cada año; clichés; idiomas para estudiar; cambio de
+    nombre (o identidad falsa); nacionalidad tras 5 años de residencia.
+  - **Mapa mundi** (`mapa.vel`, polígonos reales de Natural Earth): tu país, los
+    que visitaste, las guerras, los conflictos y tus conquistas. Tocas un país
+    para ver su ficha y viajar, mudarte, irte de luna de miel o buscar pareja
+    de ahí (a distancia).
+  - **Viajes y migración**: viajes a cualquier país (el precio depende de la
+    distancia y de lo caro que es), sellos del pasaporte, romances de viaje,
+    jet lag; luna de miel al casarte; mudarte con visa de trabajo, por
+    matrimonio, de inversionista, pidiendo asilo o sin papeles (con riesgo de
+    deportación y amnistías); choque cultural y nostalgia; huir como
+    refugiado. En Flama puedes buscar gente de todo el mundo.
+- **Guerras y vida militar** (`guerras.vel`): el mundo empieza con las guerras y
+  conflictos reales de 2026, y cada año puede estallar una nueva entre 92
+  pares de rivales según su probabilidad (las alianzas como la OTAN arrastran
+  a sus miembros). Si tu país entra en guerra: bombardeos, sueldos más bajos y
+  reclutamiento forzoso (presentarte, huir, esconderte, objetar o sobornar).
+  Servicio militar obligatorio donde existe, alistarte como voluntario,
+  rangos, eventos de cuartel y del frente, medallas, heridas, muerte en
+  combate, deserción, veteranos y trauma. El Mundial cada cuatro años.
+  - **Rutas de rey y presidencia conectadas al país**: el título sale del país
+    (Rey en el Reino Unido, Sapa Inca en Perú, Tlatoani en México, Zar en
+    Rusia...) y en las repúblicas hay que reformar la constitución para
+    restaurar la corona. La diplomacia es con tus vecinos y rivales reales; si
+    gobiernas puedes declarar guerras de conquista o anexar por referéndum, y
+    reconstruir 25 imperios históricos (inca, mexica, Gran Colombia, otomano,
+    romano...).
 - **Etapas de la vida** (`vida.vel`): primera infancia, infancia, adolescencia,
   juventud, adultez, madurez, vejez y ancianidad. Al empezar cada etapa eliges
   un propósito (ser popular, hacer carrera, formar una familia, dejar huella,
@@ -647,7 +698,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 152 objetivos con recompensa en 5 categorías (estudios, trabajo,
+- **Misiones**: 162 objetivos con recompensa en 5 categorías (estudios, trabajo,
   amor, dinero y vida): graduarte, medallas, ser popular, dominar los
   minijuegos, sobrevivir a un despido, casarte, primer millón, vivir 100 años...
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
@@ -701,6 +752,11 @@ binarias en el juego.
 | `prision.vel` | Vida en prisión: rutina, patio, visitas, legal, fuga y eventos |
 | `medicina.vel` | Peso, antecedentes, enfermedades nuevas, médico, vacunas, seguro, cirugías, urgencias, recaídas y pandemias |
 | `phone.vel` | El móvil: apps, citas por app, redes, VelvetHub, mensajes a la pareja, notificaciones |
+| `paises.vel` | Países: nombres, religión, aspecto, economía, leyes, costumbres, viajes, migración |
+| `paises_data.vel` | Datos de los 197 países, guerras, rivalidades, alianzas e imperios (generado) |
+| `guerras.vel` | Guerras del mundo, reclutamiento, vida militar, conquistas y el Mundial |
+| `mapa.vel` | Mapa mundi interactivo |
+| `mapa_data.vel` | Polígonos del mapa (Natural Earth, generado) |
 | `vida.vel` | Talento, defecto, origen y destino; etapas y propósitos, fiestas, lista de deseos, epitafio; historial de estadísticas, efectos temporales, hitos favoritos y eventos nuevos |
 | `apps.vel` | Segunda capa de las apps: bloqueos, cumpleaños, ajustes de citas, reels y en vivo, transferencias, VelvetLink, ofertas, recordatorios, álbum y bienestar digital |
 | `phone_ui.vel` | Dibujo del móvil: aparato, pantalla de inicio, apps, tarjeta de Flama y panel lateral |

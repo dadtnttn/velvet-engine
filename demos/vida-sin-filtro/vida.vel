@@ -125,10 +125,12 @@ function vida_creator_action(cmd: string, action: string, value: string) {
         }
     }
     if cmd == "city" {
+        let cities = cre_city_options(cre_ctry_defaults(c))
+        if len(cities) == 0 { return null }
         let i = 0
-        if c.city != "" { i = list_index(CITIES, c.city) + 1 }
-        i = cycle(i, action, len(CITIES) + 1)
-        if i == 0 { c.city = "" } else { c.city = CITIES[i - 1] }
+        if c.city != "" { i = list_index(cities, c.city) + 1 }
+        i = cycle(i, action, len(cities) + 1)
+        if i == 0 { c.city = "" } else { c.city = cities[i - 1] }
     }
     if cmd == "fam" { c.fam = value }
     if cmd == "sibs" { c.sibs = value }
@@ -176,10 +178,11 @@ function stat_name(k: string) {
 }
 
 // Ajustes de origen antes de crear la familia.
-function cre_city() {
+function cre_city_in(cid: string) {
     let c = cre_defaults(G.cre)
-    if c.city != "" { return c.city }
-    return pick(CITIES)
+    let cities = ctry(cid).cities
+    if c.city != "" && list_contains(cities, c.city) { return c.city }
+    return pick(cities)
 }
 
 function cre_bmonth() {
@@ -687,7 +690,7 @@ function maybe_holiday() {
         open_choice("SAN VALENTÍN", "Es 14 de febrero y " + p.first + " te mira con ojitos de «¿y mi regalo?».", ["Cena romántica ($300)", "Una carta escrita a mano", "Se te olvidó por completo"], [if_str(L.money < 300, "$300", ""), "", ""], "vd_hol", {"kind": "vale", "person": p})
         return null
     }
-    if m == "Noviembre" && L.age >= 6 {
+    if m == "Noviembre" && L.age >= 6 && list_contains(["mx", "gt", "sv", "hn", "ni", "bo", "pe", "ec"], here_id()) {
         let lost = null
         for q in L.people {
             if !q.alive && q.bond >= 40 { lost = q }
@@ -698,7 +701,7 @@ function maybe_holiday() {
             return null
         }
     }
-    if m == "Diciembre" {
+    if m == "Diciembre" && christmas_here() {
         d.hol[m] = L.age
         if L.age < 14 {
             open_choice("NAVIDAD", "Es Nochebuena. Hay ponche, tamales y un árbol con regalos.", ["Esperar despiert" + oa(L.gender) + " a Santa", "Abrir los regalos a escondidas", "Ayudar a cocinar con la familia"], ["", "", ""], "vd_hol", {"kind": "navidad_kid"})
@@ -707,7 +710,7 @@ function maybe_holiday() {
         open_choice("NAVIDAD", "Las fiestas llegaron. ¿Cómo las pasas este año?", ["Cena con toda la familia", "Viaje de fin de año ($2,000)", "Trabajar el turno doble (pagan triple)", "Organizar el intercambio de regalos ($300)"], ["", if_str(L.money < 2000, "$2,000", ""), if_str(L.job == null, "Sin trabajo", ""), if_str(L.money < 300, "$300", "")], "vd_hol", {"kind": "navidad"})
         return null
     }
-    if m == "Octubre" && L.age >= 5 && L.age <= 35 {
+    if m == "Octubre" && L.age >= 5 && L.age <= 35 && halloween_here() {
         d.hol[m] = L.age
         open_choice("HALLOWEEN", "Noche de disfraces. ¿De qué te vistes?", ["De algo aterrador", "De algo gracioso", "De algo sexy", "Te quedas en casa repartiendo dulces"], ["", "", if_str(L.age < 18, "Edad 18", ""), ""], "vd_hol", {"kind": "halloween"})
         return null
@@ -724,7 +727,7 @@ function maybe_holiday() {
         }
         if mom != null {
             d.hol[m] = L.age
-            open_choice("DÍA DE LAS MADRES", "Es 10 de mayo. " + mom.first + " finge que no espera nada.", ["Llevarle serenata con mariachi ($800)", "Comida en familia", "Una tarjeta hecha a mano", "Un mensaje rápido"], [if_str(L.money < 800, "$800", ""), "", "", ""], "vd_hol", {"kind": "madres", "person": mom})
+            open_choice("DÍA DE LAS MADRES", "Es el Día de las madres. " + mom.first + " finge que no espera nada.", ["Llevarle serenata con mariachi ($800)", "Comida en familia", "Una tarjeta hecha a mano", "Un mensaje rápido"], [if_str(L.money < 800, "$800", ""), "", "", ""], "vd_hol", {"kind": "madres", "person": mom})
             return null
         }
     }
@@ -1243,7 +1246,11 @@ const TFX = {
     "quemadura": {"n": "Quemadura de sol", "good": false, "d": "Rojo como camarón.", "mods": {"looks": -4}},
     "mudanza": {"n": "Casa nueva", "good": true, "d": "Cajas, pintura fresca y un nuevo comienzo.", "mods": {"hap": 1}},
     "nido_vacio": {"n": "Nido vacío", "good": false, "d": "Los hijos se fueron de casa.", "mods": {"hap": -1}},
-    "flechazo": {"n": "Flechazo", "good": true, "d": "Alguien no se te sale de la cabeza.", "mods": {"hap": 1, "flirt": 2}}
+    "flechazo": {"n": "Flechazo", "good": true, "d": "Alguien no se te sale de la cabeza.", "mods": {"hap": 1, "flirt": 2}},
+    "trauma": {"n": "Trauma de guerra", "good": false, "d": "Los ruidos fuertes te devuelven al frente.", "mods": {"hap": -2, "hire": -3}},
+    "choque_cultural": {"n": "Choque cultural", "good": false, "d": "Otra comida, otro idioma, otras reglas. Todo cuesta el doble.", "mods": {"hap": -1, "hire": -5}},
+    "morrina": {"n": "Nostalgia de tu tierra", "good": false, "d": "Extrañas la comida de tu mamá y hasta el tráfico de tu ciudad.", "mods": {"hap": -1}},
+    "jet_lag": {"n": "Jet lag", "good": false, "d": "Tu cuerpo sigue en otro huso horario.", "mods": {"grades": -3, "pay": -2}}
 }
 
 function tfx_add(id: string, months: int) {

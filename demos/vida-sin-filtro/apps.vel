@@ -27,7 +27,8 @@ const AP_FLAMA_PREFS = [
     {"id": "cualquiera", "n": "Cualquier edad"},
     {"id": "mismo", "n": "De mi edad"},
     {"id": "mayores", "n": "Mayores que yo"},
-    {"id": "menores", "n": "Más jóvenes (adultos)"}
+    {"id": "menores", "n": "Más jóvenes (adultos)"},
+    {"id": "mundo", "n": "Gente de todo el mundo"}
 ]
 
 const AP_VENUES = [
@@ -101,6 +102,7 @@ function toggle_label(on: bool, yes: string, no: string) {
 function ap_flama_stranger() {
     let pref = ap().flpref
     if L.age < 18 { return stranger() }
+    if pref == "mundo" { return pais_world_stranger() }
     if pref == "mismo" { return stranger_aged(max(18, L.age - 3), L.age + 3) }
     if pref == "mayores" { return stranger_aged(L.age + 4, L.age + 20) }
     if pref == "menores" { return stranger_aged(max(18, L.age - 12), max(18, L.age - 1)) }
@@ -441,7 +443,7 @@ function apps_action(action: string) {
         "flpref" => {
             let labels = []
             for x in AP_FLAMA_PREFS { list_push(labels, x.n) }
-            return open_choice("PREFERENCIAS", "¿A quién quieres ver en Flama y Alma Gemela? (Siempre adultos.)", labels, ["", "", "", ""], "ap_flpref", {})
+            return open_choice("PREFERENCIAS", "¿A quién quieres ver en Flama y Alma Gemela? (Siempre adultos.)", labels, ["", "", "", "", ""], "ap_flpref", {})
         }
         "boost" => {
             if L.money < 20 || !ap_use("boost") { return null }
