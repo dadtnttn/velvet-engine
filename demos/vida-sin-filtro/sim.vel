@@ -650,8 +650,12 @@ function advance_month() {
     if chaos == "caotico" { gap = 1 }
     if L.last_pop != null && L.tm - L.last_pop < gap { return birthday }
     if G.skip != null && !chance(35) { return birthday }
+    if G.yr != null && G.yr.pops >= 2 { return birthday }
     if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_npc_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_route_event() && !maybe_apps_event() && !maybe_ping() { maybe_event() }
-    if G.modal != null { L.last_pop = L.tm }
+    if G.modal != null {
+        L.last_pop = L.tm
+        if G.yr != null { G.yr.pops += 1 }
+    }
     return birthday
 }
 

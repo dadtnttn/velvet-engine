@@ -152,8 +152,47 @@ export function app_update(dt: float, input: map) {
     }
     if G.roul != null && roulette_tick() { G.dirty = true }
     handle_input(input)
+    // «+1 año» sigue solo en cuanto respondes lo que lo detuvo.
+    if G.yr != null && year_can_resume() { year_continue() }
     if animating() { G.dirty = true }
     return frame()
+}
+
+// «+1 año» avanza mes a mes hasta tu cumpleaños. Si algo pide una decisión, se
+// detiene ahí y, al responderla, el año sigue solo. Los sucesos al azar se
+// limitan a dos por año (los urgentes siempre llegan).
+function year_continue() {
+    let before = snapshot()
+    let birthday = false
+    while G.yr != null && G.yr.left > 0 {
+        birthday = advance_month()
+        G.yr.left -= 1
+        if birthday || !L.alive || G.yr.left <= 0 { G.yr = null }
+        if G.modal != null || G.mg != null { break }
+    }
+    let delay = 0.0
+    if birthday {
+        G.cut_t0 = G.t
+        delay = 0.8
+        if G.modal != null { G.modal_t0 = G.t + 0.85 }
+    }
+    report(before, delay)
+    if !L.alive {
+        G.yr = null
+        G.screen_t0 = G.t + 0.4
+    }
+    // Autoguardado en cada cumpleaños y cada tres meses.
+    if birthday || L.month % 3 == 0 { autosave() }
+    G.dirty = true
+    return null
+}
+
+function year_can_resume() {
+    if G.mode != "game" || !L.alive || G.skip != null {
+        G.yr = null
+        return false
+    }
+    return G.modal == null && G.mg == null && G.dlg == null && G.roul == null && G.ph_on != true && G.cfg_on != true
 }
 
 export function app_action(action: string) {
@@ -609,9 +648,12 @@ function handle_action_raw(action: string) {
         emit("app.task", {"name": "years", "arg": action_num(action, "skip:", 101)})
         return null
     }
-    if action == "age" || action == "year" {
-        let birthday = false
-        if action == "year" { birthday = advance_year() } else { birthday = advance_month() }
+    if action == "year" {
+        G.yr = {"left": 12, "pops": 0}
+        return year_continue()
+    }
+    if action == "age" {
+        let birthday = advance_month()
         let delay = 0.0
         if birthday {
             G.cut_t0 = G.t
