@@ -567,6 +567,7 @@ function advance_month() {
             kids_year()
             old_age_year()
             finance_year()
+            apps_year()
         }
         clamp_stats()
         if !L.alive { return true }
@@ -588,7 +589,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_route_event() && !maybe_ping() { maybe_event() }
+    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_route_event() && !maybe_apps_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -637,6 +638,7 @@ function monthly() {
     religion_month()
     route_month()
     phone_month()
+    apps_month()
     lazos_month()
     ocio_month()
     prison_month()

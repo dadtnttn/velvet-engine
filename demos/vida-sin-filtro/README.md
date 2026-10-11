@@ -405,6 +405,44 @@ binarias en el juego.
     lujos), **Salud**, **Recuerdos** (tus hitos), **Agenda** (a quién no le has
     hablado, efectos y misiones), **Mi Ruta**, **Fe** y **Ajustes** (modelo de
     celular, fondo, no molestar, seguridad contra filtraciones, bloquear a tu ex).
+- **Segunda capa de las apps** (`apps.vel`): una pestaña nueva en casi cada app.
+  - **Mensajes → Más**: felicitar los cumpleaños del mes, notas de voz a tu
+    pareja, mensaje de año nuevo a todos (en diciembre), reconectar con un amigo
+    que perdiste de vista, grupos de vecinos, de padres de la escuela y de tu
+    comunidad religiosa, y bloquear o desbloquear contactos (un bloqueado
+    desaparece de tus mensajes y llamadas). Eventos: un número equivocado que
+    termina en match, el mensaje falso de tu «banco», escribirle a tu ex a las
+    3 a. m. y perder el celular (con copia de seguridad no pierdes tus fotos).
+  - **Flama → Ajustes** y **Alma Gemela → Servicios** (+18): preferencias de
+    edad (siempre adultos), impulso del perfil, Flama Platino, avisar a un amigo
+    de tus citas, elegir el lugar de la primera cita según sus aficiones,
+    casamentera profesional, retiro de solteros y videollamada antes de verse.
+    Eventos: estafas románticas que piden dinero y citas que no se parecen a sus
+    fotos.
+  - **Velvetgram → Crecer**: reels (minijuego de ritmo, pueden hacerse
+    virales), transmisiones en vivo con regalos, sorteos, colaboraciones con
+    influencers, lista de mejores amigos, apagar comentarios y filtro de belleza
+    (más likes, menos felicidad). Eventos: cuenta hackeada; si eres menor y un
+    adulto desconocido te escribe raro, bloquearlo y contarlo es lo correcto.
+  - **VelvetFans → Fans** (ahora fuera de la ruta también) y **VelvetHub →
+    Comunidad** (+18): límite de tiempo contra la costumbre, proteger tu
+    identidad, contenido premium, denunciar videos robados y responder
+    comentarios.
+  - **Banco → Enviar**: transferir dinero a tu familia y amigos, pedirle
+    prestado a tus papás y alertas de gasto. **Bolsa → Alertas** de precios.
+    **Empleos → Red** (VelvetLink): perfil profesional (te contratan más fácil),
+    networking y trabajos independientes con ingreso mensual según tus
+    habilidades. **Tienda → Ofertas**: tres ofertas relámpago al mes con 40% de
+    descuento.
+  - **Agenda → Cumpleaños y Avisos**: los cumpleaños de los próximos dos meses y
+    recordatorios automáticos (felicitar aunque se te pase el mes, chequeo
+    médico anual, pago mínimo de la tarjeta desde tu ahorro). **Recuerdos →
+    Álbum**: recuerdo del día, compartir una foto vieja, imprimir álbumes y
+    borrar las fotos con tu ex. **Salud → Bienestar**: meta de pasos, rutina de
+    sueño, telemedicina y diario de ánimo. **Ajustes → Bienestar**: tiempo de
+    pantalla, modo concentración, copia de seguridad y control parental.
+  - Ocho misiones nuevas (reel viral, felicitar 15 cumpleaños, ganar $50,000
+    como independiente, un año con límite de pantalla...).
 - **Lazos** (`lazos.vel`): la segunda capa de todas las relaciones.
   - **Cumpleaños**: cada persona cumple en su mes; aparece en la agenda, en la
     lista de vínculos y como acción («Celebrar su cumpleaños»: fiesta sorpresa,
@@ -573,7 +611,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 137 objetivos con recompensa en 5 categorías (estudios, trabajo,
+- **Misiones**: 145 objetivos con recompensa en 5 categorías (estudios, trabajo,
   amor, dinero y vida): graduarte, medallas, ser popular, dominar los
   minijuegos, sobrevivir a un despido, casarte, primer millón, vivir 100 años...
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
@@ -627,6 +665,7 @@ binarias en el juego.
 | `prision.vel` | Vida en prisión: rutina, patio, visitas, legal, fuga y eventos |
 | `medicina.vel` | Peso, antecedentes, enfermedades nuevas, médico, vacunas, seguro, cirugías, urgencias, recaídas y pandemias |
 | `phone.vel` | El móvil: apps, citas por app, redes, VelvetHub, mensajes a la pareja, notificaciones |
+| `apps.vel` | Segunda capa de las apps: bloqueos, cumpleaños, ajustes de citas, reels y en vivo, transferencias, VelvetLink, ofertas, recordatorios, álbum y bienestar digital |
 | `phone_ui.vel` | Dibujo del móvil: aparato, pantalla de inicio, apps, tarjeta de Flama y panel lateral |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |

@@ -42,6 +42,7 @@ import "politica.vel"
 import "contenido.vel"
 import "marte.vel"
 import "rutas18.vel"
+import "apps.vel"
 import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
@@ -510,6 +511,7 @@ function handle_action(action: string) {
         "cc" => contenido_action(action)
         "sp" => marte_action(action)
         "x8" => rutas18_action(action)
+        "ap" => apps_action(action)
         "habit" => toggle_habit(rest)
         "gig" => take_gig(rest)
         "cact" => do_career_act(rest)

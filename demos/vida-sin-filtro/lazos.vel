@@ -1202,6 +1202,7 @@ function lazos_month() {
                     log_add("Este mes cumple años tu " + str_lower(rel_label(p)) + " " + p.first + ".", "n")
                     notify("agenda", "Este mes cumple años " + p.first)
                 }
+            } else if p.bday_due == L.tm - 1 && p.bday_done != p.bday_due && key && L.age >= 16 && ap_bday_reminder(p) {
             } else if p.bday_due == L.tm - 1 && p.bday_done != p.bday_due && key && L.age >= 16 {
                 let hurt = 4
                 if g == "partner" { hurt = 10 }

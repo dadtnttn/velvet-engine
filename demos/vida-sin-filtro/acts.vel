@@ -1226,6 +1226,7 @@ function dispatch_choice(index: int) {
     if str_starts_with(m.handler, "cc_") { return contenido_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "sp_") { return marte_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "x8_") { return rutas18_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "ap_") { return apps_choice(m.handler, index, m.ctx) }
     if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
     if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
     if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }
