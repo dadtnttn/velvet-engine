@@ -525,7 +525,12 @@ function world_cup() {
     let f = c.fifa
     let stage = 0
     if !chance(clamp(f, 3, 97)) {
-        log_add("Mundial " + str(y) + ": " + c.n + " no clasificó. Le vas a otro país, como cada cuatro años.", "n")
+        let sp = str_lower(map_get(c, "sport", "fútbol"))
+        if sp != "fútbol" && sp != "futbol" {
+            log_add("Mundial " + str(y) + ": " + c.n + " no clasificó, y casi nadie lo notó: aquí el deporte rey es el " + sp + ".", "n")
+        } else {
+            log_add("Mundial " + str(y) + ": " + c.n + " no clasificó. Le vas a otro país, como cada cuatro años.", "n")
+        }
         return null
     }
     stage = 1

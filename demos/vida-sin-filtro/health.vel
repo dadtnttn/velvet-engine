@@ -345,6 +345,8 @@ function habits_month() {
             if chance(20) { L.health -= 1 }
             if chance(25) { L.happy += 1 }
         }
+        // Fumar a diario donde la ley lo castiga: tarde o temprano te revisan.
+        if id == "mota" && G.modal == null { weed_risk(3) }
         if id == "beber" {
             L.alcohol += 2
             if chance(30) { L.happy += 1 }

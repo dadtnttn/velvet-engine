@@ -718,6 +718,30 @@ function dist_km(a: string, b: string) {
     return int(dist)
 }
 
+// La marihuana según la ley del país: 0 prohibida, 1 tolerada (multa), 2 legal.
+function weed_law() {
+    return map_get(here(), "weed", 1)
+}
+
+// Fumar donde está prohibida o tolerada tiene sus riesgos. Devuelve true si
+// abrió una decisión (arresto) o un aviso que reemplaza al resultado normal.
+function weed_risk(odds: int) {
+    let law = weed_law()
+    if law >= 2 || !chance(odds) { return false }
+    if law == 1 {
+        let fine = local_price(300)
+        L.money -= fine
+        add_heat(3)
+        log_add("Un policía te encontró fumando marihuana en la calle: multa de " + money_str(fine) + ".", "b")
+        return false
+    }
+    // Donde está prohibida, puede costar años (en algunos países, muchos).
+    let years = 1
+    if here().safe >= 80 { years = 3 }
+    caught_for(years, "posesión de marihuana", "La policía te encontró con marihuana. En " + here().n + " está prohibida.")
+    return true
+}
+
 // Mientras la pandemia no tenga vacuna, no se viaja al extranjero.
 function borders_closed() {
     return L.pandemic != null && L.pandemic > 10

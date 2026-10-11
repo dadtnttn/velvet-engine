@@ -821,6 +821,10 @@ function yearly() {
     if L.school != "" && L.age < 18 {
         L.smarts += rint(0, 3)
         gain("know", rint(1, 3))
+        // La calidad de las escuelas de tu país también cuenta.
+        let edu = map_get(here(), "edu", 50)
+        if edu >= 70 && chance(50) { L.smarts += 1 }
+        if edu < 35 && chance(40) { L.smarts -= 1 }
     }
     if L.age == 18 && L.school == "secundaria" {
         L.school = ""
