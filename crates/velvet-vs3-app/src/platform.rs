@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
@@ -23,6 +23,9 @@ impl ApplicationHandler for Vs3App {
             .with_position(PhysicalPosition::new(80, 50));
         match event_loop.create_window(attrs) {
             Ok(window) => {
+                // Text input for names and chat: also lets the platform IME
+                // (Chinese, Japanese, Korean...) commit composed text.
+                window.set_ime_allowed(true);
                 let window = Arc::new(window);
                 match SoftContext::new(window.clone()).and_then(|context| {
                     Surface::new(&context, window.clone()).map(|surface| (context, surface))
@@ -57,7 +60,13 @@ impl ApplicationHandler for Vs3App {
                         ElementState::Released => self.input.release(key),
                     }
                 }
+                if event.state == ElementState::Pressed {
+                    if let Some(text) = &event.text {
+                        self.input.text(text);
+                    }
+                }
             }
+            WindowEvent::Ime(Ime::Commit(text)) => self.input.text(&text),
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(window) = &self.window {
                     self.cursor = window_to_canvas(

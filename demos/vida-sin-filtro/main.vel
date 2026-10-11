@@ -386,17 +386,34 @@ function handle_input(input: map) {
 
 function creator_keys(input: map) {
     let c = G.cre
+    // Con texto del sistema (ñ, acentos, 王, नमस्ते...) se usa tal cual; si el
+    // host no lo manda, se arma el nombre con las teclas A-Z de siempre.
+    let typed = input.text
+    let has_text = typed != null && len(typed) > 0
     for key in input.pressed {
         if key == "Enter" { return handle_action("cre:go") }
         if key == "Escape" { return handle_action("back") }
         if key == "Backspace" {
             if len(c.chars) > 0 { list_pop(c.chars) }
+        } else if has_text {
+            // Las letras llegan por el texto.
         } else if key == "Space" {
             if len(c.chars) > 0 && c.chars[len(c.chars) - 1] != " " { list_push(c.chars, " ") }
-        } else if str_starts_with(key, "Key") && len(key) == 4 && len(str_join(c.chars, "")) < 24 {
+        } else if str_starts_with(key, "Key") && len(key) == 4 && len(c.chars) < 24 {
             let letter = str_replace(key, "Key", "")
             if len(c.chars) > 0 && c.chars[len(c.chars) - 1] != " " { letter = str_lower(letter) }
             list_push(c.chars, letter)
+        }
+    }
+    if has_text {
+        for t in typed {
+            for ch in str_chars(t) {
+                if ch == " " {
+                    if len(c.chars) > 0 && c.chars[len(c.chars) - 1] != " " { list_push(c.chars, " ") }
+                } else if len(c.chars) < 24 {
+                    list_push(c.chars, ch)
+                }
+            }
         }
     }
     return null
