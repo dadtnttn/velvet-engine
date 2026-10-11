@@ -551,6 +551,7 @@ function advance_month() {
         yearly()
         parenting_year()
         if L.alive { health_year() }
+        if L.alive { medicina_year() }
         if L.alive {
             kids_year()
             old_age_year()
@@ -576,7 +577,7 @@ function advance_month() {
         open_event(find_event("baby_claim"), {"person": person})
         return birthday
     }
-    if !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_ping() { maybe_event() }
+    if !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_ping() { maybe_event() }
     return birthday
 }
 
@@ -628,6 +629,7 @@ function monthly() {
     lazos_month()
     ocio_month()
     prison_month()
+    medicina_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8

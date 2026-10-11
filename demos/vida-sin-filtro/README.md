@@ -89,8 +89,8 @@ binarias en el juego.
   que es convencerla. Las opciones muestran su probabilidad, algunas piden rango
   social, y pueden terminar en becas, préstamos, bodas, mudarse juntos, una
   relación abierta, confesiones de infidelidad o reconciliaciones.
-- **Salud** (`health.vel`): 27 enfermedades. ITS de leves a extremas (ladillas,
-  candidiasis, clamidia, gonorrea, VPH, herpes, sífilis, hepatitis B, VIH), con
+- **Salud** (`health.vel`, `medicina.vel`): 45 enfermedades. ITS de leves a extremas (ladillas,
+  candidiasis, clamidia, gonorrea, VPH, herpes, sífilis, hepatitis B y C, VIH), con
   contagio persona a persona: cada adulto tiene sus propias infecciones, así que
   con una pareja limpia y fiel no hay riesgo, pero si se acuesta con alguien
   infectado te lo puede pasar. Más gente distinta, más riesgo; el condón lo baja
@@ -99,13 +99,39 @@ binarias en el juego.
   obesidad, depresión, Alzheimer, artritis y 7 tipos de cáncer con etapas. Lo
   que no te diagnostican da síntomas; el médico lo detecta y lo tratas (cura,
   control mensual o quimioterapia).
+  - **Más enfermedades**: asma, migraña, ansiedad, insomnio, burnout, gastritis,
+    colesterol, osteoporosis, Parkinson, cataratas, leucemia y cáncer de
+    páncreas; de la infancia, varicela, piojos y mononucleosis; fracturas.
+  - **Peso real**: tu IMC sube y baja con tus hábitos (comida chatarra,
+    sedentarismo, alcohol, gimnasio, correr, caminar, comer sano, nutriólogo);
+    la obesidad llega a partir de 30 y se va al bajar de 28.
+  - **Antecedentes familiares** (corazón, diabetes, cáncer, Alzheimer, depresión,
+    adicciones) que suben tus riesgos; una prueba genética los revela.
+  - **Médico** (Actividades › Médico): chequeo, especialista para síntomas,
+    pruebas de ITS, prueba genética, vacunas (gripe, VPH, hepatitis B y la de la
+    pandemia), dentista, nutriólogo, psicólogo, medicina alternativa (no sirve) y
+    seguro médico (pagas cada mes y los tratamientos cuestan mucho menos).
+  - **Tratamientos**: para el cáncer eliges quimioterapia, cirugía (etapas 1 y
+    2), tratamiento experimental o medicina alternativa; cirugías mayores para
+    el corazón (bypass), el hígado (trasplante con lista de espera), las
+    rodillas, las cataratas y la obesidad; terapia para ansiedad, insomnio,
+    burnout y depresión. Si eres menor, tus papás pagan.
+  - **Urgencias y sustos**: apendicitis, intoxicaciones y accidentes (ir a
+    urgencias o aguantar), recaídas de quienes dejan una adicción, pandemias
+    (encerrarte, seguir con precaución o fiestas clandestinas; luego llega la
+    vacuna) y avisarle a tu pareja de una ITS (si se la pasas sin decirle, se
+    acaba la confianza).
 - **El mundo se mueve**: tu pareja puede engañarte (más si es espíritu libre, si
   la relación va mal o si es abierta) y traerte algo; tus ex y amigos se casan,
   la gente se contagia y se cura sin ti.
-- **Hábitos** (Actividades › Hábitos): 6 dañinos (fumar, vapear, beber a diario,
-  comida chatarra, desvelarte, broncearte sin bloqueador) y 8 buenos (gimnasio,
-  correr, comer sano, meditar, leer, dormir 8 horas, condón siempre, chequeo
-  anual). Cambian tu riesgo de cada enfermedad; los adictivos cuestan dejarlos.
+- **Hábitos** (Actividades › Hábitos): 12 dañinos (fumar, vapear, beber a diario,
+  comida chatarra, desvelarte, broncearte sin bloqueador, mucho café, redes sin
+  parar, bebidas energéticas, saltarte comidas, apostar cada semana, marihuana
+  diaria) y 14 buenos (gimnasio, correr, comer sano, meditar, leer, dormir 8
+  horas, condón siempre, chequeo anual, agua, vitaminas, bloqueador, caminar,
+  yoga y PrEP). Cambian tu riesgo de cada enfermedad y tu peso; los adictivos
+  cuestan dejarlos y durante el primer año hay tentaciones. Un año con un buen
+  hábito (o sin uno malo) queda como hito.
 - **Efectos** (`effects.vel`): ventajas y desventajas que salen de todo lo
   anterior y modifican el resto del juego. Tierno de bebé (+atractivo), acné en
   la adolescencia, cuerpo definido tras un año de gimnasio, aliento a cigarro,
@@ -449,6 +475,7 @@ binarias en el juego.
 | `lazos.vel` | Cumpleaños, deseos, secretos, suegros, sobrinos, colegas, rivales, pasión, embarazo por etapas, crianza por edades y herencias |
 | `ocio.vel` | Actividades nuevas, hobbies con progreso, mascotas, viajes, noche y crimen con calor policial y arrestos |
 | `prision.vel` | Vida en prisión: rutina, patio, visitas, legal, fuga y eventos |
+| `medicina.vel` | Peso, antecedentes, enfermedades nuevas, médico, vacunas, seguro, cirugías, urgencias, recaídas y pandemias |
 | `phone.vel` | El móvil: apps, citas por app, redes, VelvetHub, mensajes a la pareja, notificaciones |
 | `phone_ui.vel` | Dibujo del móvil: aparato, pantalla de inicio, apps, tarjeta de Flama y panel lateral |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |

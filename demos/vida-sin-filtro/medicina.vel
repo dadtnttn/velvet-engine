@@ -1,0 +1,843 @@
+// @edition 3
+// Medicina: la segunda capa de la salud.
+// - Peso real (IMC) que sube y baja con tus hábitos; la obesidad llega con el IMC.
+// - Antecedentes familiares (corazón, diabetes, cáncer, Alzheimer, depresión,
+//   adicciones) que suben tus riesgos; una prueba genética los revela.
+// - Enfermedades nuevas (asma, migraña, ansiedad, insomnio, burnout, gastritis,
+//   colesterol, osteoporosis, Parkinson, cataratas, hepatitis C, leucemia,
+//   páncreas) y de la infancia (varicela, piojos, mononucleosis), fracturas.
+// - Médico: especialista, prueba genética, vacunas (gripe, VPH, hepatitis B),
+//   dentista, nutriólogo, psicólogo, medicina alternativa y seguro médico.
+// - Tratamientos del cáncer (quimio, cirugía, experimental, alternativa) y
+//   cirugías mayores (bypass, trasplante de hígado, prótesis, cataratas).
+// - Urgencias (apendicitis, intoxicación, accidentes), recaídas de quienes dejan
+//   una adicción, pandemias y avisarle a tu pareja de una ITS.
+// Acciones con el prefijo "hx:" y elecciones "hx_".
+
+const THERAPY_ILLS = ["depresion", "ansiedad", "insomnio", "burnout"]
+const FAMHIST = ["corazon", "diabetes", "cancer", "alzheimer", "depresion", "adiccion"]
+const FAMHIST_NAMES = {"corazon": "enfermedades del corazón", "diabetes": "diabetes", "cancer": "cáncer", "alzheimer": "Alzheimer", "depresion": "depresión", "adiccion": "adicciones"}
+
+// Cirugías mayores: {ill, n, cost, ok}
+const SURGERIES = [
+    {"ill": "cardiopatia", "n": "Bypass coronario", "cost": 60000, "ok": 70},
+    {"ill": "cirrosis", "n": "Trasplante de hígado", "cost": 90000, "ok": 75},
+    {"ill": "artritis", "n": "Prótesis de rodilla", "cost": 25000, "ok": 85},
+    {"ill": "cataratas", "n": "Cirugía de cataratas", "cost": 8000, "ok": 95},
+    {"ill": "obesidad", "n": "Cirugía bariátrica", "cost": 45000, "ok": 80}
+]
+
+// ---------------------------------------------------------------- utilidades
+
+// Lo que cuesta un tratamiento: gratis si eres menor (pagan tus papás) y con
+// descuento si tienes seguro médico.
+function cost_of(d: map) {
+    if L.age < 18 { return 0 }
+    if L.insured == true { return d.cost * 30 / 100 }
+    return d.cost
+}
+
+function emergency_cost(base: int) {
+    if L.age < 18 { return 0 }
+    if L.insured == true { return base * 20 / 100 }
+    return base
+}
+
+function premium() {
+    return 150 + L.age * 8
+}
+
+function bmi10() {
+    if L.bmi == null { L.bmi = 205 + rint(-25, 35) }
+    return L.bmi
+}
+
+function bmi_text() {
+    let b = bmi10()
+    let word = "normal"
+    if b < 185 { word = "bajo peso" }
+    if b >= 250 { word = "sobrepeso" }
+    if b >= 300 { word = "obesidad" }
+    return "IMC " + str(b / 10) + "." + str(b % 10) + " (" + word + ")"
+}
+
+function famhist() {
+    if L.famhist == null {
+        let out = []
+        let n = weighted_choose(G.rng, [40, 40, 20])
+        let pool = list_slice(FAMHIST, 0, len(FAMHIST))
+        shuffle(G.rng, pool)
+        let i = 0
+        while i < n {
+            list_push(out, pool[i])
+            i += 1
+        }
+        L.famhist = out
+    }
+    return L.famhist
+}
+
+function has_fam(id: string) {
+    return list_contains(famhist(), id)
+}
+
+// Riesgo extra por antecedentes familiares (por mil, cada año).
+function fam_risk(id: string) {
+    let r = 0
+    if has_fam("corazon") {
+        if id == "cardiopatia" { r += 8 }
+        if id == "hipertension" { r += 6 }
+        if id == "colesterol" { r += 6 }
+    }
+    if has_fam("diabetes") && id == "diabetes" { r += 10 }
+    if has_fam("cancer") && str_starts_with(id, "c_") { r += 3 }
+    if has_fam("alzheimer") {
+        if id == "alzheimer" { r += 12 }
+        if id == "parkinson" { r += 4 }
+    }
+    if has_fam("depresion") {
+        if id == "depresion" { r += 15 }
+        if id == "ansiedad" { r += 10 }
+    }
+    return r
+}
+
+function vaxed(id: string) {
+    if L.vax == null { L.vax = [] }
+    if id == "gripe" { return L.vax_flu == L.age }
+    return list_contains(L.vax, id)
+}
+
+// Riesgo (por mil, cada año) de las enfermedades nuevas.
+function risk_new(id: string) {
+    let a = L.age
+    let r = 0
+    if id == "asma" && a <= 12 { r = 8 }
+    if id == "migrana" && a >= 12 && a <= 55 {
+        r = 5
+        if has_habit("desvelo") { r += 6 }
+        if has_habit("cafe") { r += 6 }
+    }
+    if id == "ansiedad" && a >= 12 {
+        r = 8
+        if has_habit("cafe") { r += 12 }
+        if has_habit("redes") { r += 15 }
+        if has_habit("energeticas") { r += 8 }
+        if L.happy < 40 { r += 30 }
+        if has_habit("meditar") || has_habit("yoga_h") { r -= 15 }
+    }
+    if id == "insomnio" && a >= 12 {
+        if has_habit("desvelo") { r += 35 }
+        if has_habit("cafe") { r += 20 }
+        if has_habit("energeticas") { r += 20 }
+        if has_habit("redes") { r += 10 }
+        if has_habit("dormir") { r -= 30 }
+    }
+    if id == "burnout" && a >= 20 && L.job != null && L.happy < 50 {
+        r = 30
+        if L.job2 != null { r += 30 }
+        if has_habit("meditar") { r -= 15 }
+    }
+    if id == "gastritis" && a >= 14 {
+        if has_habit("beber") { r += 15 }
+        if has_habit("ayuno") { r += 25 }
+        if has_habit("cafe") { r += 10 }
+        if has_ill("ansiedad") { r += 10 }
+    }
+    if id == "colesterol" && a >= 30 {
+        r = 3 + (a - 30) / 3
+        if has_habit("azucar") { r += 10 }
+        if has_habit("dieta") { r -= 8 }
+    }
+    if id == "osteoporosis" {
+        if L.gender == "f" && a >= 50 { r = a - 45 }
+        if L.gender == "m" && a >= 65 { r = (a - 60) / 2 }
+        if r > 0 && has_habit("gym") { r -= 5 }
+        if r > 0 && has_habit("fumar") { r += 5 }
+    }
+    if id == "parkinson" && a >= 60 { r = (a - 55) / 3 }
+    if id == "cataratas" && a >= 60 { r = a - 55 }
+    if id == "hepatitis_c" && L.drugs >= 40 { r = 20 }
+    if id == "c_leucemia" { r = 1 }
+    if id == "c_pancreas" && a >= 55 {
+        r = 2
+        if has_habit("fumar") { r += 4 }
+        if has_habit("beber") { r += 3 }
+    }
+    if r < 0 { r = 0 }
+    return r + fam_risk(id)
+}
+
+// ---------------------------------------------------------------- Salud y Médico
+
+// Resumen al principio de Actividades › Salud.
+function health_head() {
+    let s = "Salud " + str(L.health) + "% · " + bmi_text()
+    if L.insured == true { s = s + " · con seguro" }
+    let d = "Tu peso cambia con tus hábitos: comida chatarra y sedentarismo lo suben; gimnasio, correr, caminar y comer sano lo bajan."
+    if L.famhist_known == true {
+        let names = []
+        for f in famhist() { list_push(names, FAMHIST_NAMES[f]) }
+        if len(names) == 0 { d = d + " Antecedentes familiares: ninguno." } else { d = d + " Antecedentes familiares: " + str_join(names, ", ") + "." }
+    } else {
+        d = d + " No conoces tus antecedentes familiares (prueba genética en Médico)."
+    }
+    let vx = []
+    if vaxed("gripe") { list_push(vx, "gripe") }
+    if vaxed("vph") { list_push(vx, "VPH") }
+    if vaxed("hepb") { list_push(vx, "hepatitis B") }
+    if L.pan_vax == true { list_push(vx, "virus") }
+    if len(vx) > 0 { d = d + " Vacunas: " + str_join(vx, ", ") + "." }
+    return {"action": "hx:none", "t": "Tu salud", "s": s, "desc": d, "lock": ""}
+}
+
+// Elementos extra de Salud: cirugías y avisar a tu pareja.
+function health_extra_items() {
+    let items = []
+    for sx in SURGERIES {
+        let i = find_ill(sx.ill)
+        if i == null || !i.known { continue }
+        let c = emergency_cost(sx.cost)
+        let lock = ""
+        if L.money < c { lock = money_str(c) }
+        let desc = sx.n + ": " + str(sx.ok) + "% de éxito. Si sale bien, te curas."
+        if sx.ill == "cirrosis" {
+            if L.tx_list == null || L.tx_list == 0 {
+                desc = "Primero hay que entrar a la lista de espera de trasplantes (gratis). Después de seis meses en la lista, puedes operarte."
+                lock = ""
+            } else if L.tm - L.tx_list < 6 {
+                lock = "Lista de espera"
+                desc = "Llevas " + str(L.tm - L.tx_list) + " meses en la lista de espera. Faltan " + str(6 - L.tm + L.tx_list) + "."
+            }
+        }
+        list_push(items, {"action": "hx:sx:" + sx.ill, "t": "Cirugía: " + sx.n, "s": money_str(c), "desc": desc, "lock": lock})
+    }
+    let p = partner()
+    if p != null && p.alive && both_adults(p) {
+        for i in L.ill {
+            let d = ill_def(i.id)
+            if d.type == "its" && i.known && (L.told == null || L.told[i.id] != true) {
+                list_push(items, {"action": "hx:tell:" + i.id, "t": "Contarle a " + p.first + " de tu " + d.n, "s": "Honestidad", "desc": "Le dices la verdad para que se haga pruebas. Duele, pero callarlo es peor: si se entera de que le contagiaste algo sin decirle, se acabó la confianza.", "lock": "", "pid": p.id})
+            }
+        }
+    }
+    return items
+}
+
+function doctor_items() {
+    let items = []
+    let ck = 800
+    if L.age < 18 { ck = 0 }
+    list_push(items, {"action": "hx:checkup", "t": "Chequeo médico completo", "s": money_str(ck), "desc": "Análisis de sangre, presión, imagen y pruebas de ITS. Diagnostica todo lo que tengas, aunque no tengas síntomas.", "lock": ""})
+    let noticed = false
+    for i in L.ill {
+        if !i.known && i.noticed { noticed = true }
+    }
+    let sl = ""
+    if !noticed { sl = "Sin síntomas" }
+    list_push(items, mitem("specialist", "Consulta con especialista", money_str(emergency_cost(300)), "Para los síntomas raros que ya notaste: más barato que un chequeo completo.", sl))
+    if L.age >= 16 { list_push(items, {"action": "hx:its", "t": "Pruebas de ITS", "s": "$500", "desc": "Solo infecciones de transmisión sexual. Rápido y discreto.", "lock": ""}) }
+    let gl = ""
+    if L.famhist_known == true { gl = "Ya la hiciste" }
+    if gl == "" && L.money < emergency_cost(2000) { gl = money_str(emergency_cost(2000)) }
+    list_push(items, {"action": "hx:genetic", "t": "Prueba genética", "s": money_str(emergency_cost(2000)), "desc": "Descubre qué enfermedades corren en tu familia para prevenirlas a tiempo.", "lock": gl})
+    let fl = ""
+    if vaxed("gripe") { fl = "Ya este año" }
+    list_push(items, {"action": "hx:vax:gripe", "t": "Vacuna de la gripe", "s": money_str(emergency_cost(100)) + " · cada año", "desc": "Te protege de la gripe fuerte durante este año.", "lock": fl})
+    let vl = ""
+    if vaxed("vph") { vl = "Ya la tienes" }
+    if L.age < 9 || L.age > 45 { vl = "De 9 a 45 años" }
+    list_push(items, {"action": "hx:vax:vph", "t": "Vacuna contra el VPH", "s": money_str(emergency_cost(600)), "desc": "Casi elimina el contagio del VPH y el riesgo de cáncer cervicouterino.", "lock": vl})
+    let hl = ""
+    if vaxed("hepb") { hl = "Ya la tienes" }
+    list_push(items, {"action": "hx:vax:hepb", "t": "Vacuna contra la hepatitis B", "s": money_str(emergency_cost(400)), "desc": "Protección de por vida contra la hepatitis B.", "lock": hl})
+    if L.pandemic != null && L.pandemic > 0 && L.pan_vax_ready == true {
+        let pl = ""
+        if L.pan_vax == true { pl = "Ya la tienes" }
+        list_push(items, {"action": "hx:vax:virus", "t": "Vacuna contra el virus", "s": "Gratis", "desc": "La vacuna de la pandemia ya llegó. Gratis en el centro de salud.", "lock": pl})
+    }
+    list_push(items, mitem("dentist", "Dentista", money_str(emergency_cost(300)), "Limpieza, revisión y una sonrisa de comercial.", ""))
+    list_push(items, mitem("nutri", "Nutriólogo", money_str(emergency_cost(500)), "Un plan de alimentación de seis meses: tu peso baja aunque comas rico.", ""))
+    list_push(items, mitem("psych", "Psicólogo", money_str(emergency_cost(800)), "Una hora para hablar de todo. Ayuda contra la depresión, la ansiedad, el insomnio y el burnout.", ""))
+    if L.age >= 14 { list_push(items, mitem("alt", "Medicina alternativa", "$200", "Cristales, tés y un señor muy seguro de sí mismo. Relaja... y nada más.", "")) }
+    if L.age >= 18 {
+        let s = money_str(premium()) + "/mes"
+        let t = "Contratar un seguro médico"
+        if L.insured == true {
+            t = "Cancelar tu seguro médico"
+            s = "ACTIVO · " + s
+        }
+        list_push(items, {"action": "hx:insure", "t": t, "s": s, "desc": "Pagas cada mes y los tratamientos, cirugías y urgencias te cuestan mucho menos (70 a 80% de descuento). Más caro mientras más edad tengas.", "lock": ""})
+    }
+    return items
+}
+
+function mitem(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["hx_" + id] != null { l = "Este mes ya" }
+    return {"action": "hx:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function m_use(id: string) {
+    if L.used["hx_" + id] != null { return false }
+    L.used["hx_" + id] = 1
+    return true
+}
+
+// ---------------------------------------------------------------- acciones
+
+function health_action(action: string) {
+    G.modal = null
+    if action == "hx:none" { return null }
+    if str_starts_with(action, "hx:sx:") { return surgery(str_replace(action, "hx:sx:", "")) }
+    if str_starts_with(action, "hx:tell:") { return tell_partner(str_replace(action, "hx:tell:", "")) }
+    if str_starts_with(action, "hx:vax:") { return vaccinate(str_replace(action, "hx:vax:", "")) }
+    if action == "hx:genetic" {
+        let c = emergency_cost(2000)
+        if L.famhist_known == true || L.money < c { return null }
+        L.money -= c
+        L.famhist_known = true
+        let names = []
+        for f in famhist() { list_push(names, FAMHIST_NAMES[f]) }
+        if len(names) == 0 { return finish("Prueba genética", "Buenas noticias: no hay enfermedades importantes en tu familia. Solo depende de ti.", "g") }
+        hito_once("genetic", "Salud", "Conociste tus antecedentes familiares")
+        return finish("Prueba genética", "En tu familia hay antecedentes de " + str_join(names, " y ") + ". Ahora sabes qué cuidar: hábitos sanos y chequeos.", "n")
+    }
+    if action == "hx:insure" {
+        if L.age < 18 { return null }
+        L.insured = L.insured != true
+        if L.insured { return finish("Seguro médico", "Contrataste un seguro médico: " + money_str(premium()) + " al mes. Ahora los tratamientos te cuestan mucho menos.", "g") }
+        return finish("Seguro médico", "Cancelaste tu seguro. Ojalá no lo necesites.", "n")
+    }
+    let id = str_replace(action, "hx:", "")
+    if id == "specialist" {
+        let c = emergency_cost(300)
+        if L.money < c { return info("Especialista", "Cuesta " + money_str(c) + ".") }
+        if !m_use(id) { return info("Especialista", "Ya fuiste este mes.") }
+        L.money -= c
+        let found = []
+        for i in L.ill {
+            if !i.known && i.noticed {
+                i.known = true
+                list_push(found, ill_name(i))
+            }
+        }
+        if len(found) == 0 { return finish("Especialista", "Te revisó a fondo: no es nada grave. Probablemente estrés.", "g") }
+        hito_me("Salud", "Diagnóstico: " + str_join(found, ", "))
+        return finish("Especialista", "El especialista encontró la causa: " + str_join(found, ", ") + ". Revisa Salud para tratarte.", "b")
+    }
+    if id == "dentist" {
+        let c = emergency_cost(300)
+        if L.money < c { return info("Dentista", "Cuesta " + money_str(c) + ".") }
+        if !m_use(id) { return info("Dentista", "Ya fuiste este mes.") }
+        L.money -= c
+        L.dentist = L.age
+        L.looks = clamp100(L.looks + 1)
+        if chance(25) { return finish("Dentista", "Tenías dos caries. Te las arreglaron con el taladro más ruidoso del mundo. Ya sonríes sin miedo.", "n") }
+        return finish("Dentista", "Dientes limpios y relucientes. «Use hilo dental», como siempre.", "g")
+    }
+    if id == "nutri" {
+        let c = emergency_cost(500)
+        if L.money < c { return info("Nutriólogo", "Cuesta " + money_str(c) + ".") }
+        if !m_use(id) { return info("Nutriólogo", "Ya fuiste este mes.") }
+        L.money -= c
+        L.nutri_m = 6
+        return finish("Nutriólogo", "Te dio un plan de seis meses: porciones, horarios y agua. Tu peso irá bajando poco a poco.", "g")
+    }
+    if id == "psych" {
+        let c = emergency_cost(800)
+        if L.money < c { return info("Psicólogo", "Cuesta " + money_str(c) + ".") }
+        if !m_use(id) { return info("Psicólogo", "Ya fuiste este mes.") }
+        L.money -= c
+        L.happy += 8
+        for i in L.ill {
+            if list_contains(THERAPY_ILLS, i.id) && i.known && chance(20) {
+                let n = ill_def(i.id).n
+                remove_ill(i.id)
+                hito_me("Salud", "Superaste: " + n)
+                return finish("Psicólogo", "Después de muchas sesiones, lo lograste: superaste la " + str_lower(n) + ".", "g")
+            }
+        }
+        return finish("Psicólogo", "Hablaste de tu infancia, de tu trabajo y de tus miedos. Saliste más liger" + oa(L.gender) + ".", "g")
+    }
+    if id == "alt" {
+        if L.money < 200 { return info("Medicina alternativa", "Cuesta $200.") }
+        if !m_use(id) { return info("Medicina alternativa", "Ya fuiste este mes.") }
+        L.money -= 200
+        L.happy += 3
+        return finish("Medicina alternativa", pick(["Te pusieron cristales en la frente y te cobraron $200. Te relajaste, eso sí.", "Un té de hierbas con un sabor horrible. «Mañana te sentirás mejor.» No.", "Te leyeron el aura: «bloqueada». Te la desbloquearon por $200."]), "n")
+    }
+    return null
+}
+
+function vaccinate(id: string) {
+    let costs = {"gripe": 100, "vph": 600, "hepb": 400, "virus": 0}
+    let base = costs[id]
+    if base == null { return null }
+    let c = emergency_cost(base)
+    if L.money < c { return info("Vacuna", "Cuesta " + money_str(c) + ".") }
+    if vaxed(id) { return null }
+    if id == "vph" && (L.age < 9 || L.age > 45) { return null }
+    L.money -= c
+    if id == "gripe" {
+        L.vax_flu = L.age
+        return finish("Vacuna", "Te vacunaste contra la gripe. Te dolió el brazo un día.", "g")
+    }
+    if id == "virus" {
+        L.pan_vax = true
+        hito_once("pan_vax", "Salud", "Te vacunaste durante la pandemia")
+        return finish("Vacuna", "Te pusieron la vacuna contra el virus. Respiraste tranquil" + oa(L.gender) + " por primera vez en meses.", "g")
+    }
+    list_push(L.vax, id)
+    let names = {"vph": "el VPH", "hepb": "la hepatitis B"}
+    return finish("Vacuna", "Te vacunaste contra " + names[id] + ". Prevenir es más barato que curar.", "g")
+}
+
+function surgery(ill: string) {
+    let sx = SURGERIES[0]
+    let found = false
+    for s in SURGERIES {
+        if s.ill == ill {
+            sx = s
+            found = true
+        }
+    }
+    if !found || !has_ill(ill) { return null }
+    if ill == "cirrosis" && (L.tx_list == null || L.tx_list == 0) {
+        L.tx_list = L.tm
+        return finish("Lista de trasplantes", "Entraste a la lista de espera de trasplantes. En unos meses podría llegar un hígado compatible.", "n")
+    }
+    if ill == "cirrosis" && L.tm - L.tx_list < 6 { return info("Lista de trasplantes", "Todavía no hay un donante compatible.") }
+    let c = emergency_cost(sx.cost)
+    if L.money < c { return info(sx.n, "Cuesta " + money_str(c) + ".") }
+    L.money -= c
+    if chance(sx.ok) {
+        remove_ill(ill)
+        L.happy += 10
+        if ill == "cirrosis" { L.tx_list = 0 }
+        hito_me("Salud", sx.n + " exitosa")
+        return finish(sx.n, "La operación fue un éxito. Te recuperaste en unas semanas y te sientes como nuev" + oa(L.gender) + ".", "g")
+    }
+    L.health -= 12
+    return finish(sx.n, "La operación no salió como se esperaba. Hubo complicaciones y la enfermedad sigue ahí.", "b")
+}
+
+// Avisar a tu pareja de una ITS.
+function tell_partner(ill: string) {
+    let p = partner()
+    let i = find_ill(ill)
+    if p == null || i == null { return null }
+    if L.told == null { L.told = {} }
+    L.told[ill] = true
+    let d = ill_def(ill)
+    let hurt = 5
+    if d.sev >= 3 { hurt = 10 }
+    if npc_style(p) == "celoso" { hurt += 6 }
+    // Se hace pruebas y se trata si se puede curar.
+    let ills = npc_ills(p)
+    let had = list_contains(ills, ill)
+    if had && d.cure {
+        let keep = []
+        for x in ills {
+            if x != ill { list_push(keep, x) }
+        }
+        p.ills = keep
+    }
+    p.blame = null
+    bond_gain(p, 0 - hurt)
+    L.karma += 3
+    add_hito(p, "Le contaste la verdad sobre tu salud")
+    let msg = "Se lo dijiste a " + p.first + " con el estómago hecho nudo. Le dolió, pero agradeció tu honestidad y fue a hacerse pruebas."
+    if had && d.cure { msg = msg + " Salió positiv" + oa(p.gender) + " y ya se está tratando." }
+    if had && !d.cure { msg = msg + " Salió positiv" + oa(p.gender) + ". Lo van a llevar juntos." }
+    if !had { msg = msg + " Salió negativ" + oa(p.gender) + ". Respiraron los dos." }
+    return finish(p.first, msg, "n")
+}
+
+// Tratamiento del cáncer: quimio, cirugía, experimental o alternativa.
+function open_cancer(id: string) {
+    let i = find_ill(id)
+    if i == null { return null }
+    let d = ill_def(id)
+    let surg = emergency_cost(40000)
+    let expc = emergency_cost(150000)
+    let locks = ["", "", "", "", ""]
+    if i.stage >= 3 { locks[1] = "Etapa " + str(i.stage) }
+    if locks[1] == "" && L.money < surg { locks[1] = money_str(surg) }
+    if L.money < expc { locks[2] = money_str(expc) }
+    open_choice("TRATAR: " + str_upper(d.n), "Etapa " + str(i.stage) + ". Mientras más temprano, mejores probabilidades. ¿Qué tratamiento eliges?",
+        ["Quimioterapia (" + money_str(cost_of(d)) + " al mes)", "Cirugía para extirparlo (" + money_str(surg) + ")", "Tratamiento experimental (" + money_str(expc) + ")", "Medicina alternativa ($500)", "Mejor no"],
+        locks, "hx_cancer", {"ill": id})
+    G.modal.tags = ["Larga", "Etapa 1-2", "Arriesgado", "No funciona", ""]
+    return null
+}
+
+function resolve_cancer(index: int, ctx: map) {
+    let id = ctx.ill
+    let i = find_ill(id)
+    if i == null { return null }
+    let d = ill_def(id)
+    if index == 0 {
+        i.treated = true
+        return finish("Salud", "Empezaste quimioterapia contra el " + str_lower(d.n) + ". Va a ser duro.", "n")
+    }
+    if index == 1 {
+        L.money -= emergency_cost(40000)
+        let ok = 75
+        if i.stage == 2 { ok = 55 }
+        if chance(ok) {
+            remove_ill(id)
+            L.happy += 20
+            flag("survivor")
+            hito_me("Salud", "Venciste el " + str_lower(d.n))
+            return finish("Cirugía", "Lo extirparon completo. Los márgenes salieron limpios. ¡Venciste el cáncer!", "g")
+        }
+        L.health -= 10
+        return finish("Cirugía", "No pudieron quitarlo todo. Vas a necesitar quimioterapia.", "b")
+    }
+    if index == 2 {
+        L.money -= emergency_cost(150000)
+        if chance(45) {
+            remove_ill(id)
+            L.happy += 20
+            flag("survivor")
+            hito_me("Salud", "Venciste el " + str_lower(d.n) + " con un tratamiento experimental")
+            return finish("Tratamiento experimental", "El tratamiento experimental funcionó. Los médicos no lo pueden creer.", "g")
+        }
+        L.health -= 20
+        return finish("Tratamiento experimental", "El tratamiento experimental no funcionó y te dejó muy débil.", "b")
+    }
+    if index == 3 {
+        L.money -= 500
+        L.happy += 2
+        if i.stage < 4 { i.stage += 1 }
+        return finish("Medicina alternativa", "Tés, cristales y promesas. No funcionó: el cáncer siguió avanzando. Etapa " + str(i.stage) + ".", "b")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- urgencias, recaídas y pandemia
+
+function health_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    if handler == "hx_cancer" { return resolve_cancer(index, ctx) }
+    if handler == "hx_emerg" {
+        let kind = ctx.kind
+        if index == 0 {
+            let c = emergency_cost(ctx.cost)
+            L.money -= c
+            if kind == "apendicitis" {
+                hito_once("appendix", "Salud", "Te operaron de apendicitis")
+                return finish("Urgencias", "Te operaron de emergencia. Salió bien: te quedó una cicatriz y una cuenta de " + money_str(c) + ".", "n")
+            }
+            if kind == "intox" {
+                L.health -= 2
+                return finish("Urgencias", "Suero, pastillas y una noche en el hospital. Nunca más tacos de ese puesto.", "n")
+            }
+            remove_ill("fractura")
+            L.health -= 3
+            return finish("Urgencias", "Te enyesaron. En unas semanas quedas como nuev" + oa(L.gender) + ". Cuenta del hospital: " + money_str(c) + ".", "n")
+        }
+        if kind == "apendicitis" {
+            if chance(25) {
+                die("una peritonitis")
+                return null
+            }
+            L.health -= 25
+            return finish("Apendicitis", "Aguantaste el dolor hasta que reventó. Llegaste al hospital de milagro.", "b")
+        }
+        if kind == "intox" {
+            L.health -= 8
+            return finish("Intoxicación", "Tres días abrazad" + oa(L.gender) + " al baño. Sobreviviste.", "b")
+        }
+        return finish("Fractura", "Decidiste no ir al hospital. Va a sanar... a su manera.", "b")
+    }
+    if handler == "hx_relapse" {
+        let id = ctx.habit
+        let h = habit_def(id)
+        if h == null { return null }
+        if index == 0 && chance(55 + rank("guts") * 6) {
+            gain("guts", 1)
+            return finish("Tentación", "Respiraste hondo y dijiste que no. Un día más sin " + str_lower(h.t) + ".", "g")
+        }
+        if !has_habit(id) { list_push(L.habits, id) }
+        L.quit[id] = 0 - 1
+        L.happy -= 4
+        if index == 0 { return finish("Recaída", "Lo intentaste, pero no pudiste. Volviste a " + str_lower(h.t) + ".", "b") }
+        return finish("Recaída", "«Solo uno no pasa nada.» Volviste a " + str_lower(h.t) + ".", "b")
+    }
+    if handler == "hx_pandemic" {
+        L.pan_mode = index
+        if index == 0 {
+            L.happy -= 6
+            return finish("Pandemia", "Te encerraste en casa: pan casero, videollamadas y paciencia. Estás a salvo.", "n")
+        }
+        if index == 1 { return finish("Pandemia", "Seguiste con tu vida normal, con cubrebocas y gel. Cruzas los dedos.", "n") }
+        L.karma -= 6
+        L.happy += 6
+        return finish("Pandemia", "Organizaste fiestas clandestinas. La pasaste increíble... y el riesgo es enorme.", "b")
+    }
+    return null
+}
+
+function maybe_health_event() {
+    if G.modal != null || L.jail > 0 { return false }
+    // Recaídas de quienes dejaron una adicción hace poco.
+    if L.quit != null && L.age >= 14 {
+        for k in map_keys(L.quit) {
+            let since = L.quit[k]
+            if since >= 0 && L.tm - since <= 12 && !has_habit(k) {
+                let odds = 5
+                if L.happy < 50 { odds = 10 }
+                if chance(odds) {
+                    let h = habit_def(k)
+                    if h != null {
+                        open_choice("TENTACIÓN", "Un mal día y alguien te ofrece: «¿Uno? Para el estrés.» Hace " + str(L.tm - since) + " meses que dejaste de " + str_lower(h.t) + ".",
+                            ["Resistir", "Solo uno no pasa nada"], ["", ""], "hx_relapse", {"habit": k})
+                        return true
+                    }
+                }
+            }
+        }
+    }
+    // Urgencias.
+    if L.age >= 8 && rint(1, 1000) <= 2 {
+        open_choice("¡URGENCIA!", "Un dolor agudísimo en el lado derecho del abdomen. Te doblas de dolor: parece apendicitis.",
+            ["Ir a urgencias (" + money_str(emergency_cost(8000)) + ")", "Aguantar en casa"], ["", ""], "hx_emerg", {"kind": "apendicitis", "cost": 8000})
+        return true
+    }
+    if L.age >= 12 && rint(1, 1000) <= 4 {
+        open_choice("INTOXICACIÓN", "Los tacos de anoche no estaban bien. Fiebre, vómito y escalofríos.",
+            ["Ir a urgencias (" + money_str(emergency_cost(1500)) + ")", "Aguantar con suero casero"], ["", ""], "hx_emerg", {"kind": "intox", "cost": 1500})
+        return true
+    }
+    let acc = 3 + L.alcohol / 10
+    if L.age >= 4 && rint(1, 1000) <= acc && !has_ill("fractura") {
+        add_ill("fractura", true)
+        let how = pick(["Te caíste de la bicicleta", "Resbalaste en la regadera", "Te torciste mal jugando fútbol", "Bajaste las escaleras demasiado rápido"])
+        open_choice("¡ACCIDENTE!", how + " y escuchaste un crac. Te duele horrible.",
+            ["Ir al hospital (" + money_str(emergency_cost(2000)) + ")", "Ponerte hielo y esperar"], ["", ""], "hx_emerg", {"kind": "fractura", "cost": 2000})
+        return true
+    }
+    // Pandemia: aviso al empezar.
+    if L.pandemic != null && L.pandemic == 18 && L.pan_asked != true {
+        L.pan_asked = true
+        open_choice("¡PANDEMIA!", "Un virus nuevo se extiende por el mundo. Cierran escuelas, oficinas y fronteras. ¿Cómo vas a vivirla?",
+            ["Encerrarte y esperar la vacuna", "Seguir con tu vida con precauciones", "Organizar fiestas clandestinas"], ["", "", ""], "hx_pandemic", {})
+        return true
+    }
+    return false
+}
+
+// ---------------------------------------------------------------- cada mes y cada año
+
+function medicina_month() {
+    if !L.alive { return null }
+    // Peso.
+    let b = bmi10()
+    let delta = 0
+    if has_habit("azucar") && chance(60) { delta += 2 }
+    if sedentary() && chance(40) { delta += 1 }
+    if has_habit("beber") && chance(30) { delta += 1 }
+    if has_habit("gym") && chance(60) { delta -= 2 }
+    if has_habit("correr") && chance(50) { delta -= 1 }
+    if has_habit("caminar") && chance(40) { delta -= 1 }
+    if has_habit("dieta") && chance(60) { delta -= 2 }
+    if has_habit("ayuno") && chance(40) { delta -= 1 }
+    if L.nutri_m != null && L.nutri_m > 0 {
+        L.nutri_m -= 1
+        delta -= 2
+    }
+    if L.age >= 40 && chance(15) { delta += 1 }
+    if L.age < 18 && b < 190 && chance(30) { delta += 1 }
+    L.bmi = clamp(b + delta, 150, 450)
+    if L.bmi >= 300 && !has_ill("obesidad") {
+        add_ill("obesidad", true)
+        log_add("Tu IMC pasó de 30: el médico lo llama obesidad.", "b")
+    }
+    if L.bmi < 280 && has_ill("obesidad") {
+        remove_ill("obesidad")
+        log_add("Bajaste de peso: ya no tienes obesidad.", "g")
+        hito_once("lost_weight", "Salud", "Dejaste atrás la obesidad")
+    }
+    // Hábitos nuevos.
+    for id in L.habits {
+        if id == "agua" && chance(25) { L.health += 1 }
+        if id == "vitaminas" && chance(20) { L.health += 1 }
+        if id == "caminar" && chance(30) { L.health += 1 }
+        if id == "yoga_h" && chance(35) { L.happy += 1 }
+        if id == "cafe" && chance(20) { gain("know", 1) }
+        if id == "redes" {
+            if chance(30) { L.happy -= 1 }
+            if chance(20) { L.happy += 1 }
+        }
+        if id == "apuestas" {
+            gamble_up()
+            if chance(30) {
+                let w = rint(5, 30) * 100
+                L.money += w
+                if chance(20) { log_add("Le atinaste a una apuesta: " + money_str(w) + ". La emoción engancha.", "n") }
+            }
+        }
+        if id == "mota" {
+            L.drugs += 1
+            if chance(30) { L.happy += 1 }
+            if chance(15) { L.smarts -= 1 }
+        }
+        if id == "energeticas" && chance(15) { L.health -= 1 }
+        // Un año con un buen hábito.
+        let h = habit_def(id)
+        if h != null && !h.bad && habit_months(id) == 12 { hito_once("habit1y_" + id, "Salud", "Un año con el hábito: " + str_lower(h.t)) }
+    }
+    // Un año sin una adicción.
+    if L.quit != null {
+        for k in map_keys(L.quit) {
+            let since = L.quit[k]
+            if since >= 0 && L.tm - since == 12 && !has_habit(k) {
+                let h = habit_def(k)
+                if h != null {
+                    hito_me("Salud", "Un año sin " + str_lower(h.t))
+                    L.happy += 6
+                }
+            }
+        }
+    }
+    // Seguro médico.
+    if L.insured == true {
+        L.money -= premium()
+        if L.money < -10000 {
+            L.insured = false
+            log_add("Dejaste de pagar tu seguro médico y te lo cancelaron.", "b")
+        }
+    }
+    // Pandemia.
+    if L.pandemic != null && L.pandemic > 0 {
+        L.pandemic -= 1
+        if L.pandemic == 10 {
+            L.pan_vax_ready = true
+            log_add("¡Ya hay vacuna contra el virus! Es gratis en Actividades › Médico.", "g")
+        }
+        if L.pandemic == 0 { log_add("La pandemia terminó oficialmente. El mundo vuelve a abrazarse.", "g") }
+        let odds = 6
+        if L.pan_mode == 0 { odds = 1 }
+        if L.pan_mode == 2 { odds = 18 }
+        if L.pan_vax == true { odds = odds / 4 }
+        if !has_ill("virus") && chance(odds) {
+            add_ill("virus", true)
+            L.health -= 8
+            log_add("Te contagiaste del virus. Fiebre, tos y dos semanas encerrad" + oa(L.gender) + ".", "b")
+            if L.age >= 65 && L.pan_vax != true && chance(10) { die("complicaciones del virus") }
+        }
+    }
+    return null
+}
+
+function medicina_year() {
+    if !L.alive { return null }
+    // Enfermedades nuevas.
+    for id in ["asma", "migrana", "ansiedad", "insomnio", "burnout", "gastritis", "colesterol", "osteoporosis", "parkinson", "cataratas", "hepatitis_c", "c_leucemia", "c_pancreas"] {
+        if has_ill(id) { continue }
+        if rint(1, 1000) <= risk_new(id) {
+            add_ill(id, false)
+            break
+        }
+    }
+    // De la infancia y la juventud.
+    if L.age >= 2 && L.age <= 10 && L.vari != true && chance(30) {
+        add_ill("varicela", true)
+        log_add("Te dio varicela: granitos por todo el cuerpo y prohibido rascarse.", "b")
+    }
+    if L.age >= 5 && L.age <= 12 && chance(15) && !has_ill("piojos") {
+        add_ill("piojos", true)
+        log_add("Te pegaron piojos en la escuela. Champú especial y peine de dientes finos.", "b")
+    }
+    if L.age >= 14 && L.age <= 25 && chance(4) && !has_ill("mono") {
+        add_ill("mono", true)
+        log_add("Te dio mononucleosis, «la enfermedad del beso». Dos meses de cansancio.", "b")
+    }
+    // Sin dentista en años: dolor de muelas.
+    if L.age >= 10 && (L.dentist == null || L.age - L.dentist >= 3) && chance(20) {
+        L.happy -= 4
+        log_add("Te dio un dolor de muelas terrible. Ve al dentista.", "b")
+    }
+    // Una pandemia de vez en cuando.
+    if (L.pandemic == null || L.pandemic == 0) && L.age >= 4 && chance(2) {
+        L.pandemic = 18
+        L.pan_asked = false
+        L.pan_vax = false
+        L.pan_vax_ready = false
+        L.pan_mode = 1
+        log_add("Las noticias hablan de un virus nuevo que se extiende por el mundo.", "b")
+    }
+    // Muertes por enfermedades nuevas.
+    for i in L.ill {
+        let r = 0
+        if i.id == "c_leucemia" && i.stage >= 3 { r = 25 }
+        if i.id == "c_pancreas" && i.stage >= 3 { r = 35 }
+        if i.id == "parkinson" && L.age >= 75 { r = 6 }
+        if i.id == "asma" && !i.treated { r = 1 }
+        if i.treated { r = r / 3 }
+        if r > 0 && chance(r) {
+            die(ill_def(i.id).die)
+            return null
+        }
+    }
+    return null
+}
+
+// Final de una enfermedad aguda.
+function acute_end(i: map) {
+    let id = i.id
+    if id == "gripe" { L.health -= 3 }
+    if id == "varicela" {
+        L.vari = true
+        L.health -= 2
+        log_add("Se te quitó la varicela. Ya no te volverá a dar.", "g")
+    }
+    if id == "piojos" { log_add("Por fin se fueron los piojos.", "g") }
+    if id == "mono" {
+        L.health -= 4
+        log_add("Te recuperaste de la mononucleosis.", "g")
+    }
+    if id == "fractura" {
+        if i.treated {
+            log_add("Te quitaron el yeso. Como nuev" + oa(L.gender) + ".", "g")
+        } else {
+            L.health -= 6
+            L.looks = clamp100(L.looks - 1)
+            log_add("Tu hueso sanó chueco. Nunca volvió a ser igual.", "b")
+        }
+    }
+    if id == "virus" { log_add("Te recuperaste del virus.", "g") }
+    return null
+}
+
+function acute_dur(id: string) {
+    if id == "piojos" || id == "mono" || id == "fractura" { return 2 }
+    return 1
+}
+
+// Efectos de la medicina.
+function medicina_fx(out: list) {
+    let b = bmi10()
+    if b < 175 && L.age >= 14 { list_push(out, fx("bajo_peso", "Bajo peso", false, "Te falta energía y te enfermas más.", {"hp": -1, "looks": -2})) }
+    if b >= 250 && b < 300 && L.age >= 14 { list_push(out, fx("sobrepeso", "Unos kilos de más", false, "La ropa aprieta un poco.", {"looks": -3})) }
+    if has_habit("bloqueador") && has_habit("agua") && L.age >= 16 { list_push(out, fx("piel_cuidada", "Piel cuidada", true, "Bloqueador y agua: tu piel no envejece.", {"looks": 3})) }
+    if has_habit("cafe") { list_push(out, fx("cafeinado", "Cafeinad" + oa(L.gender), true, "Alerta todo el día... y temblorinas.", {"grades": 2, "hap": -1})) }
+    if has_habit("redes") { list_push(out, fx("redes", "Pegad" + oa(L.gender) + " a las redes", false, "Scroll infinito: comparas tu vida con la de todos.", {"hap": -1, "grades": -3})) }
+    if has_habit("mota") { list_push(out, fx("relajado", "Siempre relajad" + oa(L.gender), false, "Nada te preocupa. Tampoco el trabajo.", {"hap": 1, "grades": -4, "hire": -5})) }
+    if L.insured == true { list_push(out, fx("seguro", "Seguro médico", true, "Si te enfermas, no te arruinas.", {})) }
+    if L.dentist != null && L.age - L.dentist <= 1 { list_push(out, fx("sonrisa", "Sonrisa de comercial", true, "Dientes limpios y blancos.", {"looks": 2, "flirt": 1})) }
+    for i in L.ill {
+        if i.id == "asma" { list_push(out, fx("asma", "Asma", false, "Te falta el aire al correr.", {"hp": -1})) }
+        if i.id == "migrana" { list_push(out, fx("migrana", "Migrañas", false, "Hay días en que la luz duele.", {"grades": -3, "pay": -5})) }
+        if i.id == "ansiedad" { list_push(out, fx("ansioso", "Ansiedad", false, "El corazón acelerado sin razón.", {"hap": -1, "flirt": -3})) }
+        if i.id == "insomnio" { list_push(out, fx("insomnio", "Insomnio", false, "Ves el techo hasta las 4 a. m.", {"grades": -4, "looks": -2})) }
+        if i.id == "burnout" { list_push(out, fx("burnout", "Quemad" + oa(L.gender) + " del trabajo", false, "Te arrastras cada mañana a la oficina.", {"pay": -15, "hap": -1})) }
+        if i.id == "gastritis" { list_push(out, fx("gastritis", "Gastritis", false, "Todo te cae pesado.", {"hap": -1})) }
+        if i.id == "parkinson" { list_push(out, fx("temblor", "Temblor", false, "Las manos ya no obedecen igual.", {"pay": -10})) }
+        if i.id == "cataratas" { list_push(out, fx("vista", "Vista nublada", false, "Todo se ve borroso.", {"grades": -5})) }
+        if i.id == "fractura" { list_push(out, fx("yeso", "Con yeso", false, "Todos firman tu yeso.", {"pay": -5, "hp": -1})) }
+    }
+    return null
+}
