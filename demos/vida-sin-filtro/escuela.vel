@@ -1368,7 +1368,7 @@ function open_report_card() {
         return open_choice("BOLETA", text + " No hay a quién enseñársela.", ["Guardarla en un cajón"], [""], "es_report", {})
     }
     let locks = ["", "", ""]
-    return open_choice("BOLETA", text + " " + p.first + " (" + str_lower(STYLE_NAMES[parent_style(p)]) + ") espera verla.",
+    return open_choice("BOLETA", text + " " + p.first + " (" + str_lower(style_name(parent_style(p), p)) + ") espera verla.",
         ["Enseñársela", "Esconderla", "Falsificar la firma"], locks, "es_report", {"person": p})
 }
 
