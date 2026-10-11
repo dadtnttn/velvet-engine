@@ -9,6 +9,9 @@ pub struct InputFrame {
     pub mouse_pressed: bool,
     pub mouse_released: bool,
     pub wheel: f64,
+    /// Characters typed this frame (keyboard text and committed IME input),
+    /// already composed: «ñ», «é», «王», «नमस्ते»...
+    pub text: Vec<String>,
 }
 impl InputFrame {
     pub fn into_value(self) -> Value {
@@ -34,6 +37,10 @@ impl InputFrame {
             ("mouse_pressed".into(), bool_val(self.mouse_pressed)),
             ("mouse_released".into(), bool_val(self.mouse_released)),
             ("wheel".into(), float_val(self.wheel)),
+            (
+                "text".into(),
+                list_val(self.text.into_iter().map(string_val).collect()),
+            ),
         ])
     }
 }
