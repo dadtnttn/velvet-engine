@@ -159,6 +159,8 @@ pub struct Vs3App {
     pub(crate) exit_requested: bool,
     pub(crate) frame_count: u64,
     pub(crate) saves: SaveStore,
+    pub(crate) audio: crate::audio::Audio,
+    asset_root: std::path::PathBuf,
     storage_depth: u8,
     /// The running `app_task` is stopped at a `yield` and expects a reply.
     task_waiting: bool,
@@ -187,6 +189,9 @@ impl Vs3App {
         let assets = GameAssets::load(&asset_root, &manifest)?;
         let fonts = FontSystem::load(&asset_root, &manifest)?;
         runtime.provide_fonts(fonts.metrics_value())?;
+        velvet_script_vs3::i18n::set_measurer(Some(fonts.measurer()));
+        velvet_script_vs3::i18n::set_catalog(None);
+        let audio = crate::audio::Audio::load(&asset_root, &manifest.sounds);
         let frame = FrameView::parse(&runtime.initialize()?).context("initial VS3 frame")?;
         validate_frame(&frame, &manifest, &assets)?;
         let canvas = Canvas::new(manifest.app.canvas_width, manifest.app.canvas_height);
@@ -209,6 +214,8 @@ impl Vs3App {
             exit_requested: false,
             frame_count: 0,
             saves,
+            audio,
+            asset_root,
             storage_depth: 0,
             task_waiting: false,
             task_action: None,
@@ -216,6 +223,37 @@ impl Vs3App {
         };
         out.process_events();
         Ok(out)
+    }
+    /// Switch the UI language: translation catalog `i18n/<lang>.json` (if
+    /// present), fallback fonts for its script and exact text measuring.
+    pub fn set_language(&mut self, lang: &str) {
+        let path = self.asset_root.join("i18n").join(format!("{lang}.json"));
+        let catalog = match std::fs::read_to_string(&path) {
+            Ok(text) => match velvet_script_vs3::json_decode(&text) {
+                Ok(value) => {
+                    let msgs = value
+                        .map_get("msgs")
+                        .ok()
+                        .flatten()
+                        .and_then(|m| m.map_entries().ok())
+                        .unwrap_or_default();
+                    let entries = msgs.into_iter().filter_map(|(k, v)| v.as_str().map(|t| (k, t.to_owned())));
+                    Some(velvet_script_vs3::i18n::Catalog::new(lang, entries))
+                }
+                Err(e) => {
+                    eprintln!("[velvet-vs3-app] {}: {e}", path.display());
+                    None
+                }
+            },
+            Err(_) => None,
+        };
+        let catalog = catalog.unwrap_or_else(|| velvet_script_vs3::i18n::Catalog::new(lang, Vec::new()));
+        velvet_script_vs3::i18n::set_catalog(Some(catalog));
+        for bytes in self.fonts.set_language(lang) {
+            self.svg.add_font(bytes.as_slice());
+        }
+        self.svg.clear();
+        velvet_script_vs3::i18n::set_measurer(Some(self.fonts.measurer()));
     }
     pub(crate) fn update(&mut self, dt: f32) {
         let input = self.input.take_frame();
@@ -420,6 +458,30 @@ impl Vs3App {
                     }
                 }
             }
+            "i18n.set" => {
+                let lang = payload_string(event, "lang").unwrap_or_default();
+                self.set_language(&lang);
+            }
+            "audio.play" => {
+                if let Some(id) = payload_string(event, "sound") {
+                    let vol = payload_f32(event, "volume").unwrap_or(1.0);
+                    let rate = payload_f32(event, "rate").unwrap_or(1.0);
+                    self.audio.play(&id, vol, rate);
+                }
+            }
+            "audio.music" => {
+                let id = payload_string(event, "sound").unwrap_or_default();
+                let vol = payload_f32(event, "volume").unwrap_or(1.0);
+                let fade = payload_f32(event, "fade").unwrap_or(1.0);
+                self.audio.music(&id, vol, fade);
+            }
+            "audio.volume" => {
+                self.audio.volume(
+                    payload_f32(event, "master"),
+                    payload_f32(event, "sfx"),
+                    payload_f32(event, "music"),
+                );
+            }
             "app.profile" => {
                 // `{payload: {enabled: true}}` starts counting; `false` prints
                 // the report to stderr and stops.
@@ -473,6 +535,9 @@ fn payload_string(event: &RuntimeEvent, key: &str) -> Option<String> {
 }
 fn payload_i64(event: &RuntimeEvent, key: &str) -> Option<i64> {
     payload(event, key)?.as_i64()
+}
+fn payload_f32(event: &RuntimeEvent, key: &str) -> Option<f32> {
+    payload(event, key)?.as_f64().map(|v| v as f32)
 }
 fn payload_bool(event: &RuntimeEvent, key: &str) -> Option<bool> {
     match payload(event, key)? {

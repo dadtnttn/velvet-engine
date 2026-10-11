@@ -1111,6 +1111,8 @@ impl Vs3Module {
 
 /// Re-export legacy presentation state for compatibility adapters.
 pub use velvet_script_vm::{PresentHostState, PresentSprite};
+/// Translation catalogs and host text measuring for `tr`/`str_measure`.
+pub use velvet_script_vm::i18n;
 
 fn resolve_entrypoint<'a>(
     entrypoints: &'a BTreeMap<String, String>,

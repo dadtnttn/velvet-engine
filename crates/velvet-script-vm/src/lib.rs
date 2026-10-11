@@ -7,6 +7,7 @@
 
 mod coroutine;
 mod debugger;
+pub mod i18n;
 mod math;
 mod present_host;
 mod stdlib;

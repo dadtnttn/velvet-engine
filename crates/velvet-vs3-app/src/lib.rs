@@ -6,6 +6,7 @@
 
 mod app;
 mod assets;
+mod audio;
 mod graphics;
 mod input;
 mod model;

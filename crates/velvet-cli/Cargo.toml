@@ -46,3 +46,7 @@ tempfile = "3"
 [features]
 default = ["window"]
 window = ["velvet-app/window"]
+
+# Sound on desktop platforms that need no extra system headers to build.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+velvet-vs3-app = { workspace = true, features = ["audio"] }

@@ -79,6 +79,15 @@ export function app_manifest() {
             {"id": "bold", "path": "system:segoeuib.ttf"},
             {"id": "impact", "path": "system:impact.ttf"}
         ],
+        "fallback_fonts": [
+            {"id": "sc", "path": "fonts/NotoSansSC-Regular.otf", "langs": ["zh-Hans"]},
+            {"id": "tc", "path": "fonts/NotoSansTC-Regular.otf", "langs": ["zh-Hant"]},
+            {"id": "jp", "path": "fonts/NotoSansJP-Regular.otf", "langs": ["ja"]},
+            {"id": "kr", "path": "fonts/NotoSansKR-Regular.otf", "langs": ["ko"]},
+            {"id": "deva", "path": "fonts/NotoSansDevanagari-Regular.ttf", "langs": ["hi"]},
+            {"id": "thai", "path": "fonts/NotoSansThai-Regular.ttf", "langs": ["th"]},
+            {"id": "hebr", "path": "fonts/NotoSansHebrew-Regular.ttf", "langs": ["he"]}
+        ],
         "images": []
     }
 }

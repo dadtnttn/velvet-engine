@@ -9,11 +9,17 @@ rust-version.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 fontdue = "0.9"
+rustybuzz = "0.20"
+cpal = { version = "0.15", optional = true }
 image = { workspace = true }
 resvg = { workspace = true }
 softbuffer = { workspace = true }
 velvet-script-vs3 = { workspace = true }
 winit = { workspace = true }
+
+[features]
+# Sound output through cpal (needs ALSA headers on Linux).
+audio = ["dep:cpal"]
 
 [dev-dependencies]
 tempfile = "3"
