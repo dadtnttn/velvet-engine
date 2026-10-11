@@ -270,20 +270,27 @@ function draw_world_panel(m: map) {
     if c.id == me {
         text(x + 22, by + 20, "Es donde vives ahora.", 15, C_YELLOW, "bold")
     } else {
+        let stuck = world_stuck()
         let lock = ""
         if L.age < 16 { lock = "A LOS 16" }
+        if lock == "" { lock = stuck }
         let tc = trip_cost(c.id)
         if lock == "" && L.money < tc { lock = money_str(tc) }
         if lock == "" && L.used["pa_trip"] != null { lock = "ESTE MES YA" }
         world_button(x + 22, by, "VIAJAR " + money_str(tc), "wm:trip", lock)
         let ml = ""
         if L.age < 18 { ml = "A LOS 18" }
+        if ml == "" { ml = stuck }
+        // Quien gobierna no se lleva el país en la maleta.
+        if ml == "" && leader_now() { ml = "GOBIERNAS" }
         world_button(x + 186, by, "MUDARTE", "wm:move", ml)
         by += 48
         if pa().honey && L.married {
-            world_button(x + 22, by, "LUNA DE MIEL", "wm:honey", if_str(L.money < tc * 2, money_str(tc * 2), ""))
+            world_button(x + 22, by, "LUNA DE MIEL", "wm:honey", if_str(stuck != "", stuck, if_str(L.money < tc * 2, money_str(tc * 2), "")))
         }
-        world_button(x + 186, by, "BUSCAR PAREJA", "wm:date", if_str(L.age < 18, "A LOS 18", if_str(L.used["pa_date"] != null, "ESTE MES YA", "")))
+        let dl = ""
+        if L.age < 18 { dl = "A LOS 18" } else if L.jail > 0 { dl = "EN PRISIÓN" } else if L.used["pa_date"] != null { dl = "ESTE MES YA" }
+        world_button(x + 186, by, "BUSCAR PAREJA", "wm:date", dl)
         by += 48
         if leader_now() && owner_of(c.id) != me {
             world_button(x + 22, by, if_str(at_war_between(me, c.id), "EN GUERRA", "DECLARAR GUERRA"), "wm:war", if_str(at_war_between(me, c.id), "YA", ""))
@@ -291,6 +298,13 @@ function draw_world_panel(m: map) {
     }
     world_button(x + 186, y + 560, "MI PAÍS", "wm:sel:" + me, "")
     return null
+}
+
+// Lo que te impide salir del país ahora mismo: la cárcel o el cuartel.
+function world_stuck() {
+    if L.jail > 0 { return "EN PRISIÓN" }
+    if L.mil != null && L.mil.kind != "civil" { return "EN EL EJÉRCITO" }
+    return ""
 }
 
 function pick_stable(xs: list, key: string) {
@@ -367,12 +381,16 @@ function world_action(action: string) {
         return null
     }
     let sel = m.sel
+    if (cmd == "trip" || cmd == "honey" || cmd == "move") && world_stuck() != "" { return null }
     if cmd == "trip" { return pais_trip(sel, false) }
     if cmd == "honey" { return pais_trip(sel, true) }
-    if cmd == "move" { return open_move(sel) }
+    if cmd == "move" {
+        if leader_now() { return null }
+        return open_move(sel)
+    }
     if cmd == "war" { return open_leader_war(sel) }
     if cmd == "date" {
-        if L.age < 18 || L.used["pa_date"] != null { return null }
+        if L.age < 18 || L.jail > 0 || L.used["pa_date"] != null { return null }
         L.used["pa_date"] = 1
         G.modal = null
         let x = stranger()

@@ -726,7 +726,7 @@ function check_gig_mission() {
 function gig_month() {
     let g = L.gig
     if g == null { return null }
-    if L.jail > 0 {
+    if L.jail > 0 || in_barracks() {
         L.gig = null
         return null
     }

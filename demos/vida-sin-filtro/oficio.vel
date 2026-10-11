@@ -758,7 +758,7 @@ function oficio_month() {
         }
     }
     let job = L.job
-    if job != null && L.jail == 0 {
+    if job != null && L.jail == 0 && !in_barracks() {
         let b = boss()
         let bt = boss_type(b.type)
         if bt.hap != 0 && chance(35) { L.happy += bt.hap }

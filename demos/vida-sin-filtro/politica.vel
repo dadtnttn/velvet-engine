@@ -195,6 +195,11 @@ function pl_results_text(won: bool) {
         list_push(parts, s.n + " " + str(v) + "%")
     }
     let msg = " Noche electoral contra " + rival_name() + " (" + d.rival.party + "): " + str_join(parts, ", ") + "."
+    // Donde no se vota, el resultado oficial se conoce de antemano.
+    if !free_elections() {
+        msg = " Resultado oficial: " + str(rint(96, 99)) + "% a favor."
+        if !won { msg = " Eligieron a " + rival_name() + "." }
+    }
     d.rival = pl_new_rival()
     return msg
 }

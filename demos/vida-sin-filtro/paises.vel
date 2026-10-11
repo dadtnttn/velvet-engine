@@ -493,7 +493,7 @@ function pais_items() {
         list_push(items, pitem2("rename", "Cambiarte el nombre", "$300 · trámite", "Un nombre nuevo en tus papeles.", if_str(L.money < 300, "$300", "")))
         if L.record > 0 { list_push(items, pitem2("newid", "Comprar una identidad nueva", "$20,000 · ilegal", "Papeles falsos, otro nombre y un historial limpio... si no te atrapan.", if_str(L.money < 20000, "$20,000", ""))) }
         if d.legal == "residente" && d.res_m >= 60 && !list_contains(d.nats, here_id()) { list_push(items, pitem2("naturalize", "Solicitar la nacionalidad " + demonym(here_id(), L.gender), "$1,000 · examen", "Llevas " + str(d.res_m / 12) + " años viviendo aquí legalmente.", if_str(L.money < 1000, "$1,000", ""))) }
-        if danger_here() != "" { list_push(items, pitem2("flee", "Huir del país", "Ahora", danger_here() + " Puedes escapar a un país vecino como refugiad" + oa(L.gender) + ".", if_str(L.money < 500, "$500", ""))) }
+        if danger_here() != "" { list_push(items, pitem2("flee", "Huir del país", "Ahora", danger_here() + " Puedes escapar a un país vecino como refugiad" + oa(L.gender) + ".", if_str(L.jail > 0, "En prisión", if_str(L.money < 500, "$500", "")))) }
         if L.mil != null && L.mil.kind == "carrera" && L.mil.m >= 24 {
             list_push(items, pitem2("discharge", "Pedir la baja del ejército", mil_rank_name(), "Cumpliste tu contrato. Puedes retirarte con honores.", ""))
         } else if L.mil != null {
@@ -795,6 +795,12 @@ function open_move(dest: string) {
     let x = ctry(dest)
     G.modal = null
     let fly = trip_cost(dest)
+    // Volver a un país del que tienes la nacionalidad no pide visa.
+    if list_contains(pa().nats, dest) {
+        let hl = ["Volver (" + money_str(fly) + ")", "Mejor no"]
+        let hk = [if_str(L.money < fly, money_str(fly), ""), ""]
+        return open_choice("VOLVER A " + str_upper(x.n), "Tienes la nacionalidad " + demonym(dest, L.gender) + ": no necesitas visa. Tu trabajo actual se queda aquí. Vuelo: " + money_str(fly) + ".", hl, hk, "pa_home", {"dest": dest})
+    }
     let labels = ["Visa de trabajo o estudios (" + str(move_odds(dest, "work")) + "%)", "Visa por matrimonio", "Visa de inversionista ($500,000)", "Pedir asilo", "Entrar sin papeles ($800)", "Mejor no"]
     let locks = [if_str(L.money < 1500 + fly, money_str(1500 + fly), ""), if_str(!(L.married && partner_from(dest)), "Pareja de " + x.n, ""), if_str(L.money < 500000, "$500,000", ""), if_str(danger_here() == "", "Sin peligro", ""), if_str(L.money < 800, "$800", ""), ""]
     return open_choice("MUDARTE A " + str_upper(x.n), "Empezar de nuevo en " + x.n + " (" + x.lang + "). Tu trabajo actual se queda aquí. Vuelo: " + money_str(fly) + ".", labels, locks, "pa_move", {"dest": dest})
@@ -841,6 +847,7 @@ function pais_move(dest: string, legal: string) {
 }
 
 function open_flee() {
+    if L.jail > 0 { return null }
     let c = here()
     let opts = []
     for id in c.nb {
@@ -920,6 +927,14 @@ function pais_choice(handler: string, index: int, ctx: map) {
         hito_me("Vida", "Te cambiaste el nombre: de " + old + " a " + L.first)
         return finish("Nuevo nombre", "Desde hoy te llamas " + L.first + " " + L.last + ". Tu mamá todavía te dice " + old + ".", "n")
     }
+    if handler == "pa_home" {
+        let dest = ctx.dest
+        let fly = trip_cost(dest)
+        if index != 0 || L.money < fly { return null }
+        L.money -= fly
+        pais_move(dest, "ciudadano")
+        return finish("De vuelta", "Volviste a " + cname(dest) + ". Todo se ve más chico de lo que recordabas, pero huele a casa.", "g")
+    }
     if handler == "pa_move" {
         let dest = ctx.dest
         let fly = trip_cost(dest)
@@ -969,6 +984,12 @@ function pais_choice(handler: string, index: int, ctx: map) {
         if chance(12) {
             L.health -= 12
             tfx_add("susto", 4)
+        }
+        // Irte con el uniforme puesto es desertar: en tu país quedas fichad{a}.
+        if in_barracks() {
+            L.record += 1
+            L.karma -= 3
+            log_add("Desertaste del ejército al huir. En " + cname(here_id()) + " tienes una orden de arresto.", "b")
         }
         pais_move(dest, "refugiado")
         d.fled = true

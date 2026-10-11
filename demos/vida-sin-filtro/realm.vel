@@ -194,17 +194,18 @@ function election_end_of_term() {
         log_add("Entregaste la banda presidencial. La historia te juzgará con " + str(r.aprob) + "% de aprobación.", "g")
         return null
     }
+    let free = free_elections()
     if chance(r.aprob + rank("charm") * 4) {
         d.terms += 1
         d.term_m = 0
         hito_me("Vida", "Ganaste la reelección")
-        log_add("¡Reelecto! El pueblo te dio seis años más.", "g")
+        if free { log_add("¡Reelecto! El pueblo te dio seis años más.", "g") } else { log_add("Te confirmaron seis años más en el poder. Hubo desfile.", "g") }
         return null
     }
     d.pres = false
     d.realm = null
     hito_me("Vida", "Perdiste la reelección")
-    log_add("Perdiste la reelección. Fin de tu presidencia.", "b")
+    if free { log_add("Perdiste la reelección. Fin de tu presidencia.", "b") } else { log_add("Los de dentro te dieron la espalda. Fin de tu mandato.", "b") }
     return null
 }
 
@@ -260,16 +261,32 @@ function realm_items(cat: string) {
         if adl == "" && L.money < 10000 { adl = "$10,000" }
         list_push(items, ritem("ads", "Anuncios de campaña", "$10,000", "Tu cara en espectaculares y redes.", adl))
         list_push(items, ritem("donors", "Recaudar fondos", "Dinero", "Cenas con empresarios. Algunos esperan favores.", al))
-        let el = ""
-        if d.party == "" || L.age < 25 || d.pop < 20 || L.money < 20000 { el = "25 años, 20% y $20,000" }
+        // Sin la nacionalidad no puedes aspirar a ningún cargo.
+        let nl = ""
+        if !citizen_here() { nl = "Necesitas la nacionalidad" }
+        let free = free_elections()
+        let el = nl
+        if el == "" && (d.party == "" || L.age < 25 || d.pop < 20 || L.money < 20000) { el = "25 años, 20% y $20,000" }
         if d.office != "" { el = "Ya lo lograste" }
-        list_push(items, {"action": "ra:run_dip", "t": "Campaña a diputado", "s": "$20,000", "desc": "Tu primera elección.", "lock": el})
-        let gl = ""
-        if d.office != "diputado" || L.age < 30 || d.pop < 45 || L.money < 200000 { gl = "Diputado, 30 años, 45% y $200,000" }
-        list_push(items, {"action": "ra:run_gov", "t": "Campaña a gobernador", "s": "$200,000", "desc": "Gobernar un estado es el trampolín a la presidencia.", "lock": gl})
-        let prl = ""
-        if d.office != "gobernador" || L.age < 35 || d.pop < 55 || L.money < 1000000 { prl = "Gobernador, 35 años, 55% y $1,000,000" }
-        list_push(items, {"action": "ra:run_pres", "t": "Campaña presidencial", "s": "$1,000,000", "desc": "La elección de tu vida.", "lock": prl})
+        if free {
+            list_push(items, {"action": "ra:run_dip", "t": "Campaña a diputado", "s": "$20,000", "desc": "Tu primera elección.", "lock": el})
+        } else {
+            list_push(items, {"action": "ra:run_dip", "t": "Conseguir un escaño", "s": "$20,000", "desc": "Aquí no se vota: " + regime_who() + " decide quién entra.", "lock": el})
+        }
+        let gl = nl
+        if gl == "" && (d.office != "diputado" || L.age < 30 || d.pop < 45 || L.money < 200000) { gl = "Diputado, 30 años, 45% y $200,000" }
+        if free {
+            list_push(items, {"action": "ra:run_gov", "t": "Campaña a gobernador", "s": "$200,000", "desc": "Gobernar un estado es el trampolín a la presidencia.", "lock": gl})
+        } else {
+            list_push(items, {"action": "ra:run_gov", "t": "Que te nombren " + by_gender(L.gender, "gobernador", "gobernadora"), "s": "$200,000", "desc": "Lealtad, contactos y sobres. Quien reparte los cargos ya te tiene en la mira.", "lock": gl})
+        }
+        let prl = nl
+        if prl == "" && (d.office != "gobernador" || L.age < 35 || d.pop < 55 || L.money < 1000000) { prl = "Gobernador, 35 años, 55% y $1,000,000" }
+        if free {
+            list_push(items, {"action": "ra:run_pres", "t": "Campaña presidencial", "s": "$1,000,000", "desc": "La elección de tu vida.", "lock": prl})
+        } else {
+            list_push(items, {"action": "ra:run_pres", "t": "Llegar a la cima del poder", "s": "$1,000,000", "desc": "En " + here().n + " manda quien elige " + regime_who() + ". Que te elija a ti.", "lock": prl})
+        }
         return items
     }
     if !ruling() { return items }
@@ -443,24 +460,48 @@ function resolve_party(index: int) {
     return finish("Militancia", "Ahora militas en el " + p.n + ".", "g")
 }
 
+// Repúblicas y monarquías parlamentarias votan; en los regímenes el poder
+// lo reparten los de dentro.
+function free_elections() {
+    let g = here().gov
+    return g == "republica" || g == "monarquia_const"
+}
+
+// Quién decide en un régimen sin elecciones libres.
+function regime_who() {
+    let g = here().gov
+    if g == "monarquia_abs" { return "la Corona" }
+    if g == "partido_unico" { return "el Partido" }
+    if g == "junta" { return "la junta militar" }
+    return "el consejo de clérigos"
+}
+
+// Solo se gobierna el país del que tienes la nacionalidad.
+function citizen_here() {
+    return list_contains(pa().nats, here_id())
+}
+
 function run_election(id: string) {
     let d = L.rd
     let cost = 20000
     let base = pl_election_odds(id)
     if id == "run_gov" { cost = 200000 }
     if id == "run_pres" { cost = 1000000 }
-    if L.money < cost { return null }
+    if L.money < cost || !citizen_here() { return null }
     if !route_use(id) { return info("Elecciones", "Una campaña por mes.") }
     L.money -= cost
+    let free = free_elections()
     if chance(clamp(base, 5, 90)) {
         if id == "run_dip" {
             d.office = "diputado"
             d.pop = clamp100(d.pop + 10)
+            if !free { return finish("Un escaño", "Te dieron un escaño. Tienes voz... mientras digas lo correcto." + pl_results_text(true), "g") }
             return finish("¡Ganaste!", "Eres diputad" + oa(L.gender) + ". Tu primer cargo de elección popular." + pl_results_text(true), "g")
         }
         if id == "run_gov" {
             d.office = "gobernador"
             d.pop = clamp100(d.pop + 10)
+            if !free { return finish("Nombramiento", "Te nombraron " + by_gender(L.gender, "gobernador", "gobernadora") + ". Nadie votó, pero todos aplauden." + pl_results_text(true), "g") }
             return finish("¡Ganaste!", "Eres " + by_gender(L.gender, "gobernador", "gobernadora") + ". El país entero te está viendo." + pl_results_text(true), "g")
         }
         d.pres = true
@@ -471,10 +512,12 @@ function run_election(id: string) {
         flag("president")
         L.happy += 25
         list_push(G.toasts, {"head": "¡AL PODER!", "title": str_upper(leader_title()) + " " + str_upper(L.first), "sub": here().n, "t0": G.t})
+        if !free { return finish("¡Al poder!", "Te ganaste el favor " + str_replace("de " + regime_who(), "de el ", "del ") + ". Ahora eres " + str_lower_first(leader_title()) + " de " + here().n + "." + pl_results_text(true), "g") }
         return finish("¡Al poder!", "Ganaste. Ahora eres " + str_lower_first(leader_title()) + " de " + here().n + "." + pl_results_text(true), "g")
     }
     d.pop = max(0, d.pop - 8)
     L.happy -= 10
+    if !free { return finish("Fuera", "Te dejaron fuera. Aquí, quien pierde se queda callad" + oa(L.gender) + "." + pl_results_text(false), "b") }
     return finish("Derrota", "Perdiste la elección. A levantarse y volver a intentarlo." + pl_results_text(false), "b")
 }
 
