@@ -1,0 +1,1720 @@
+// @edition 3
+// Dinero: la letra pequeña de tus finanzas.
+// - Gastos de cada mes: servicios, suscripciones y transporte, además de la
+//   vivienda y la comida de finance.vel. Imprevistos (dentista, refri, choque...)
+//   que pagas en efectivo, con tu ahorro, con la tarjeta o dejas pasar.
+// - Tarjeta de crédito en cuatro niveles (clásica, oro, platino y negra) con
+//   reembolso, pago total o mínimo, intereses, meses sin intereses y bloqueo.
+// - Plazo fijo, fondo de retiro con aportación de la empresa, prestamista sin
+//   buró, consolidar deudas, refinanciar la hipoteca, embargo y bancarrota.
+// - Tasa del banco central: sube en el auge y baja en la recesión; mueve el
+//   interés del ahorro y de los préstamos.
+// - Impuestos: tasas por nivel de ingreso, ganancias de bolsa, rentas y premios,
+//   deducciones (retiro, donativos, intereses de la hipoteca), saldo a favor,
+//   contador, app, hacerla tú, evadir (auditorías) o paraíso fiscal; predial y
+//   tenencia cada año.
+// - Dinero en pareja: cuentas separadas, mancomunada, tú mantienes o te mantiene;
+//   metas de ahorro juntos, plática de dinero, el sueldo de tu pareja cambia y
+//   eventos (deudas ocultas, compras impulsivas, herencias...).
+// Acciones con el prefijo "dn:" y elecciones "dn_".
+
+const SUBS = [
+    {"id": "streaming", "n": "Plataformas de streaming", "c": 45, "min": 14, "d": "Series y películas sin fin. Un poco más de felicidad."},
+    {"id": "musica", "n": "Música sin anuncios", "c": 10, "min": 12, "d": "Tu banda sonora personal, a todas horas."},
+    {"id": "nube", "n": "Nube y respaldo", "c": 5, "min": 12, "d": "Tus fotos a salvo aunque el celular termine en el escusado."},
+    {"id": "comida", "n": "Caja de comida saludable", "c": 250, "min": 18, "d": "Ingredientes medidos y recetas: comes mejor sin pensarlo."},
+    {"id": "juegos", "n": "Pase de videojuegos", "c": 15, "min": 12, "d": "Cientos de juegos por una cuota al mes."},
+    {"id": "meditacion", "n": "App de meditación", "c": 12, "min": 14, "d": "Diez minutos al día de respirar. Menos estrés."},
+    {"id": "software", "n": "Herramientas profesionales", "c": 30, "min": 18, "d": "Programas de diseño, oficina y código: rindes más en el trabajo."},
+    {"id": "periodico", "n": "El Financiero", "c": 40, "min": 16, "d": "El periódico de negocios: cada mes, la columna del experto y una pista del mercado en Noticias."},
+    {"id": "vinos", "n": "Club de vinos", "c": 120, "min": 18, "d": "Tres botellas selectas al mes. Sofisticación garantizada."}
+]
+
+const TRANSPORTS = [
+    {"id": "pie", "n": "A pie", "c": 0, "d": "Gratis y sano, aunque llegas sudando."},
+    {"id": "bici", "n": "En bicicleta", "c": 20, "d": "Barato, rápido y ejercicio diario. Cuidado con los autos."},
+    {"id": "publico", "n": "Transporte público", "c": 60, "d": "Metro y camión: barato, lleno y a veces una aventura."},
+    {"id": "apps", "n": "Taxis y apps", "c": 450, "d": "Cómodo y caro. Llegas fresc{a} a todos lados."},
+    {"id": "auto", "n": "Tu propio vehículo", "c": 250, "d": "Gasolina, estacionamiento y libertad. Necesitas un auto o una moto."},
+    {"id": "chofer", "n": "Con chofer", "c": 0, "d": "Te llevan a todas partes. Necesitas contratar un chofer (Lujos › Personal)."}
+]
+
+// Luz, agua, gas e internet según tu estilo de vida (si no vives con tus padres).
+const SERVICES = {"austero": 70, "normal": 120, "comodo": 200, "lujoso": 400, "magnate": 1200}
+// Qué tan caros son los imprevistos según tu estilo de vida (%).
+const LIFE_MULT = {"austero": 70, "normal": 100, "comodo": 140, "lujoso": 220, "magnate": 450}
+
+const CARD_TIERS = [
+    {"n": "Clásica", "limit": 5000, "credit": 580, "inc": 0, "fee": 0, "cash": 0, "d": "Tu primera tarjeta. Sin anualidad ni recompensas."},
+    {"n": "Oro", "limit": 25000, "credit": 670, "inc": 2000, "fee": 300, "cash": 1, "d": "1% de reembolso en todo lo que pagas con ella."},
+    {"n": "Platino", "limit": 120000, "credit": 730, "inc": 8000, "fee": 1500, "cash": 2, "d": "2% de reembolso y salas VIP en los aeropuertos."},
+    {"n": "Negra", "limit": 800000, "credit": 790, "inc": 30000, "fee": 6000, "cash": 3, "d": "3% de reembolso, concierge 24 horas y un metal que suena al caer sobre la mesa."}
+]
+const CARD_RATE = 35  // 3.5% mensual sobre el saldo que no pagas
+
+const CARD_USES = {"nada": "Guardada en el cajón", "gastos": "Para los gastos del mes", "antojos": "Gastos y antojos"}
+
+// Tasas del impuesto anual por nivel de ingreso: [hasta, %].
+const TAX_BRACKETS = [[30000, 0], [100000, 6], [300000, 9], [1000000, 12], [999999999, 15]]
+
+// Imprevistos. need: "car" (tienes vehículo), "home" (no vives con tus padres),
+// "own" (casa propia), "parent" (vive alguno de tus padres). ins: qué seguro lo cubre.
+const IMPREVISTOS = [
+    {"id": "muela", "t": "Muela del juicio", "c": 1500, "need": "", "ins": "med",
+     "text": "Te despertaste con la cara hinchada: la muela del juicio quiere salir sí o sí.",
+     "skip": "Aguantaste con analgésicos. Fue un mes de dolor.", "o": {"health": -6, "happy": -4}},
+    {"id": "celular", "t": "Celular al agua", "c": 800, "need": "", "ins": "",
+     "text": "Se te cayó el celular al escusado. No sobrevivió.",
+     "skip": "Usas uno viejo con la pantalla estrellada.", "o": {"happy": -3}},
+    {"id": "refri", "t": "Se murió el refri", "c": 1200, "need": "home", "ins": "hogar",
+     "text": "El refrigerador hizo un ruido raro y se apagó para siempre. La comida empieza a oler.",
+     "skip": "Vives de comida que no necesita refrigeración.", "o": {"health": -2, "happy": -3}},
+    {"id": "auto", "t": "Se descompuso tu vehículo", "c": 2500, "need": "car", "ins": "",
+     "text": "Tu vehículo hizo un ruido feo en plena avenida y se detuvo. El mecánico ya está sonriendo.",
+     "skip": "Lo dejaste estacionado y volviste al transporte público.", "o": {"happy": -4}, "trans": true},
+    {"id": "multa", "t": "Multa de tránsito", "c": 600, "need": "car", "ins": "",
+     "text": "Te tomaron una foto pasándote un semáforo en rojo. Llegó la multa a casa.",
+     "skip": "La ignoraste. Ahora aparece en tu historial crediticio.", "o": {"happy": -1}, "credit": -25},
+    {"id": "choque", "t": "Choque", "c": 4000, "need": "car", "ins": "auto",
+     "text": "Alguien se frenó de golpe y le diste por detrás. Nadie se lastimó, pero tu defensa quedó en el piso.",
+     "skip": "Manejas con la defensa amarrada con alambre.", "o": {"happy": -5, "charm": -2}},
+    {"id": "boda", "t": "Boda de un amigo", "c": 2000, "need": "", "ins": "",
+     "text": "Tu amigo se casa en la playa: regalo de la mesa, traje y vuelo. Es en tres semanas.",
+     "skip": "No fuiste. Te mandó una foto de la mesa vacía con tu nombre.", "o": {"happy": -4, "kind": -2}},
+    {"id": "gotera", "t": "Gotera en el techo", "c": 3000, "need": "own", "ins": "hogar",
+     "text": "Cada vez que llueve hay una cubeta nueva en tu sala. La gotera ya tiene nombre.",
+     "skip": "Compraste más cubetas. La humedad ya llegó a las paredes.", "o": {"health": -3, "happy": -4}},
+    {"id": "laptop", "t": "Tu computadora murió", "c": 1800, "need": "", "ins": "",
+     "text": "Pantalla negra y un olor a quemado. Tu computadora se llevó tus archivos al más allá.",
+     "skip": "Usas la computadora de la biblioteca. Todo te toma el doble.", "o": {"happy": -3}, "work": true},
+    {"id": "fuga", "t": "Fuga de agua", "c": 900, "need": "home", "ins": "hogar",
+     "text": "Una tubería reventó y el vecino de abajo toca tu puerta muy enojado.",
+     "skip": "Cerraste la llave de paso y te bañas con cubeta.", "o": {"happy": -4, "health": -1}},
+    {"id": "lentes", "t": "Lentes rotos", "c": 700, "need": "", "ins": "",
+     "text": "Te sentaste sobre tus lentes. Ahora ves el mundo en dos mitades.",
+     "skip": "Los pegaste con cinta. Te duele la cabeza todas las tardes.", "o": {"happy": -2, "health": -1}},
+    {"id": "urgencias", "t": "Noche en urgencias", "c": 3500, "need": "", "ins": "med",
+     "text": "Unos tacos de dudosa procedencia te mandaron a urgencias. Te quieren dejar en observación.",
+     "skip": "Firmaste tu alta voluntaria y te fuiste a sufrir a casa.", "o": {"health": -8}},
+    {"id": "mama", "t": "Operación de tu mamá", "c": 8000, "need": "parent", "ins": "",
+     "text": "Tu familia te llama: hay que operar a uno de tus padres y el seguro no cubre todo.",
+     "skip": "Le dijiste que no tenías. Se las arreglaron como pudieron, pero se notó tu ausencia.", "o": {"happy": -6, "karma": -4}},
+    {"id": "mudanza", "t": "Aumento de renta", "c": 2500, "need": "home", "ins": "",
+     "text": "El casero subió la renta de golpe y pide el depósito de nuevo para renovar el contrato.",
+     "skip": "Te mudaste a un lugar más chico y más lejos.", "o": {"happy": -5}},
+    {"id": "robo_bici", "t": "Te robaron la bici", "c": 600, "need": "bici", "ins": "",
+     "text": "Dejaste tu bicicleta amarrada cinco minutos. Ahora solo queda el candado.",
+     "skip": "Te toca caminar.", "o": {"happy": -3}, "trans": true}
+]
+
+const CPL_MODES = [
+    {"id": "separadas", "n": "Cuentas separadas", "d": "Cada quien su dinero. Si viven juntos aporta 25% de su sueldo; casados, 40%."},
+    {"id": "mancomunada", "n": "Cuenta mancomunada", "d": "Todo va a una sola cuenta: aporta 60% de su sueldo y pelean menos por dinero... salvo cuando alguien gasta de más."},
+    {"id": "mantienes", "n": "Tú mantienes la casa", "d": "Tu pareja deja de trabajar para cuidar el hogar: no aporta dinero, pero la casa y los hijos lo agradecen."},
+    {"id": "te_mantiene", "n": "Te mantiene", "d": "Tu pareja aporta 80% de su sueldo. Puedes dejar de trabajar sin que falte nada."}
+]
+
+const CPL_GOALS = [
+    {"id": "viaje", "n": "Viaje soñado", "target": 30000, "d": "Dos semanas en el lugar que siempre quisieron conocer."},
+    {"id": "votos", "n": "Renovar los votos", "target": 50000, "d": "Una fiesta para decirse que sí otra vez. Solo si están casados."},
+    {"id": "colchon", "n": "Fondo de emergencia", "target": 60000, "d": "Para dormir tranquilos pase lo que pase. Al terminar queda en tu ahorro."},
+    {"id": "enganche", "n": "Enganche de una casa", "target": 150000, "d": "Al terminar, el dinero queda en tu ahorro listo para el enganche."},
+    {"id": "hijos", "n": "Fondo universitario", "target": 200000, "d": "Que sus hijos estudien sin deudas. Necesitan tener hijos."}
+]
+
+// Eventos de dinero en pareja ({x} es tu pareja).
+const CPL_EVENTS = [
+    {
+        "id": "cm_impulse", "title": "Compra impulsiva", "w": 8,
+        "text": "{x} llegó con una pantalla gigante de $6,000. «¡Estaba en oferta!» La pagó con el dinero de la casa.",
+        "choices": [
+            {"t": "Disfrutarla juntos", "o": [{"w": 100, "log": "Maratón de películas el fin de semana. Al final no fue tan mala idea.", "money": -3000, "happy": 4, "bond": 3}]},
+            {"t": "Reclamarle", "o": [
+                {"w": 60, "log": "Se enojó, pero la devolvió a la tienda.", "bond": -6},
+                {"w": 40, "log": "«¡También es mi dinero!» Durmieron enojados.", "bond": -10, "money": -3000}
+            ]},
+            {"t": "Hacer juntos un presupuesto", "need": "charm", "rank": 2, "o": [{"w": 100, "log": "Sin pelear, acordaron consultarse antes de gastar más de $2,000.", "bond": 4, "money": -3000}]}
+        ]
+    },
+    {
+        "id": "cm_debt", "title": "La deuda secreta", "w": 6,
+        "text": "Encontraste estados de cuenta escondidos: {x} debe $15,000 en tarjetas y no te había dicho nada.",
+        "choices": [
+            {"t": "Pagarla tú", "cost": 15000, "o": [{"w": 100, "log": "Liquidaste su deuda. Lloró de alivio y de vergüenza.", "money": -15000, "bond": 12, "kind": 3}]},
+            {"t": "Ayudarle a armar un plan de pagos", "o": [{"w": 100, "log": "Hicieron un plan a un año. Te prometió no esconderte nada más.", "bond": 5, "know": 1}]},
+            {"t": "Enojarte por la mentira", "o": [{"w": 100, "log": "Le dijiste que lo que más te dolía era la mentira. La confianza quedó tocada.", "bond": -14}]}
+        ]
+    },
+    {
+        "id": "cm_family", "title": "Préstamo a la familia", "w": 6,
+        "text": "El hermano de {x} necesita $10,000 «solo por dos meses». {x} te mira con ojos de cachorro.",
+        "choices": [
+            {"t": "Prestárselos", "cost": 10000, "o": [
+                {"w": 55, "log": "Pasaron dos meses. Y dos años. Nunca los devolvió.", "money": -10000, "bond": 6},
+                {"w": 45, "log": "¡Los devolvió puntual y con una botella de regalo!", "bond": 8, "happy": 2}
+            ]},
+            {"t": "Negarte con amabilidad", "o": [{"w": 100, "log": "Entendió tus razones, aunque su familia ahora te ve raro.", "bond": -5}]},
+            {"t": "Ofrecer ayudarle a buscar trabajo", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Le conseguiste una entrevista. Consiguió el trabajo y te adora.", "bond": 8, "kind": 2}]}
+        ]
+    },
+    {
+        "id": "cm_bonus", "title": "Bono inesperado", "w": 6,
+        "text": "A {x} le dieron un bono de $8,000 en su trabajo y quiere gastarlo en un fin de semana contigo.",
+        "choices": [
+            {"t": "¡Vámonos!", "o": [{"w": 100, "log": "Hotel con jacuzzi, desayunos tardíos y cero celulares.", "happy": 10, "bond": 8, "health": 2}]},
+            {"t": "Proponer ahorrarlo", "o": [
+                {"w": 60, "log": "Aceptó. La mitad fue a tu ahorro.", "money": 4000, "bond": -2},
+                {"w": 40, "log": "«Nunca quieres divertirte.» Se lo gastó en su colección de tenis.", "bond": -6}
+            ]}
+        ]
+    },
+    {
+        "id": "cm_business", "title": "Quiere emprender", "w": 4,
+        "text": "{x} quiere dejar su trabajo para abrir una cafetería y te pide $30,000 para arrancar.",
+        "choices": [
+            {"t": "Apoyarle", "cost": 30000, "o": [{"w": 100, "log": "Le diste el dinero y tu bendición.", "money": -30000, "bond": 10, "special": "dn_pbiz"}]},
+            {"t": "Pedirle que lo piense un año más", "o": [{"w": 100, "log": "Se guardó el sueño en un cajón. A veces lo ves mirando locales vacíos.", "bond": -6}]},
+            {"t": "Burlarte de la idea", "o": [{"w": 100, "log": "Nunca olvidará esa risa.", "bond": -15}]}
+        ]
+    },
+    {
+        "id": "cm_inherit", "title": "Herencia de la abuela", "w": 4,
+        "text": "La abuela de {x} le dejó $40,000 de herencia.",
+        "choices": [
+            {"t": "«Es tuyo, úsalo como quieras»", "o": [{"w": 100, "log": "Te agradeció que no metieras las manos. Invitó la cena.", "bond": 6, "happy": 2}]},
+            {"t": "Proponer invertirlo juntos", "o": [{"w": 100, "log": "Pusieron la mitad en tu cuenta de inversión.", "money": 20000, "bond": 2}]},
+            {"t": "Pedirle que lo ponga en la casa", "o": [{"w": 100, "log": "Lo pensó... y aceptó.", "bond": -3, "special": "dn_inherit"}]}
+        ]
+    },
+    {
+        "id": "cm_cardfight", "title": "Pelea por la tarjeta", "w": 5, "card": true,
+        "text": "{x} vio el estado de cuenta de tu tarjeta: «¿Otra vez compraste en línea a las 3 de la mañana?»",
+        "choices": [
+            {"t": "Prometer guardar la tarjeta", "o": [{"w": 100, "log": "Guardaste la tarjeta en el cajón. La paz volvió a casa.", "bond": 4, "special": "dn_card_nada"}]},
+            {"t": "Defenderte", "o": [{"w": 100, "log": "«Es mi dinero.» Ella/él no dijo nada más, pero el ambiente se enfrió.", "bond": -6}]}
+        ]
+    },
+    {
+        "id": "cm_anniv", "title": "Aniversario", "w": 6, "married": true,
+        "text": "Se acerca su aniversario de bodas y {x} sueña con cenar en el restaurante más caro de la ciudad ($2,500).",
+        "choices": [
+            {"t": "Reservar en el restaurante", "cost": 2500, "o": [{"w": 100, "log": "Siete tiempos, vino y una mirada como la del primer día.", "money": -2500, "bond": 8, "happy": 5}]},
+            {"t": "Cocinarle tú en casa", "o": [
+                {"w": 60, "log": "Velas, tu mejor receta y su canción. Fue perfecto.", "bond": 7, "happy": 4},
+                {"w": 40, "log": "Se te quemó la cena. Pidieron pizza y se rieron muchísimo.", "bond": 3, "happy": 3}
+            ]},
+            {"t": "Olvidarlo", "o": [{"w": 100, "log": "Lo olvidaste. No hay cena que arregle eso.", "bond": -15, "happy": -4}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- estado
+
+function dn() {
+    if L.dn == null {
+        L.dn = {
+            "subs": [], "trans": "publico", "card": null, "cdt": [], "afore": 0, "afore_pct": 0, "afore_out": false,
+            "payday": null, "late_m": 0, "bk_age": -1, "ded": 0, "capgain": 0, "rentinc": 0, "winnings": 0,
+            "offshore": false, "off_bal": 0, "audits": 0, "refunds": 0, "donated": 0, "evaded": 0,
+            "cpl": "separadas", "goal": null, "goals": 0, "talk_age": -1, "calm": 0, "imprev": 0
+        }
+    }
+    return L.dn
+}
+
+function bank_rate() {
+    if L.mk == null { return 800 }
+    return map_get(L.mk, "rate", 800)
+}
+
+function rate_str(bps: int) {
+    let frac = bps % 100
+    let pad = str(frac)
+    if frac < 10 { pad = "0" + pad }
+    return str(bps / 100) + "." + pad + "%"
+}
+
+function has_sub(id: string) {
+    return list_contains(dn().subs, id)
+}
+
+function sub_def(id: string) {
+    for s in SUBS {
+        if s.id == id { return s }
+    }
+    return SUBS[0]
+}
+
+function trans_def(id: string) {
+    for t in TRANSPORTS {
+        if t.id == id { return t }
+    }
+    return TRANSPORTS[2]
+}
+
+function couple_together() {
+    let p = partner()
+    return p != null && p.alive && both_adults(p) && (L.married || p.livein == true)
+}
+
+function couple_mode() {
+    if L.dn == null || !couple_together() { return "separadas" }
+    return L.dn.cpl
+}
+
+function cpl_mode_def(id: string) {
+    for m in CPL_MODES {
+        if m.id == id { return m }
+    }
+    return CPL_MODES[0]
+}
+
+function dn_bk_lock() {
+    let d = dn()
+    return d.bk_age >= 0 && L.age - d.bk_age < 7
+}
+
+// Lo que entra al mes (sin propinas ni rentas).
+function dn_income() {
+    let total = job_income() + L.pension / 12 + partner_share()
+    if L.gig != null { total += L.gig.pay }
+    return total
+}
+
+// Gastos de cada mes que se suman a la vivienda y la comida.
+function dn_extra_costs() {
+    if L.age < 18 || L.jail > 0 { return 0 }
+    let d = dn()
+    let total = 0
+    if L.home != "padres" { total += map_get(SERVICES, L.lifestyle, 120) }
+    for id in d.subs { total += sub_def(id).c }
+    total += trans_def(d.trans).c
+    return total
+}
+
+function dn_monthly_costs() {
+    let total = living_costs() + dn_extra_costs()
+    if L.loan != null { total += L.loan.base }
+    if L.mort != null { total += L.mort.base }
+    return max(1, total)
+}
+
+function debts_total() {
+    let d = dn()
+    let total = max(0, L.debt)
+    if L.loan != null { total += L.loan.bal }
+    if L.mort != null { total += L.mort.bal }
+    if d.card != null { total += d.card.bal + card_msi_left(d.card) }
+    if d.payday != null { total += d.payday.bal }
+    if L.cs != null && L.cs.marker != null { total += L.cs.marker.bal }
+    return total
+}
+
+// Cobra un gasto: con la tarjeta si la usas para los gastos del mes, o en efectivo.
+function dn_charge(amount: int) {
+    if amount <= 0 { return null }
+    let c = dn().card
+    if c != null && c.use != "nada" && !c.blocked && card_free(c) >= amount {
+        c.bal += amount
+        c.month += amount
+        return null
+    }
+    L.money -= amount
+    return null
+}
+
+// ---------------------------------------------------------------- tarjeta
+
+function card_msi_left(c: map) {
+    let total = 0
+    for m in c.msi { total += m.m * m.left }
+    return total
+}
+
+function card_free(c: map) {
+    return max(0, c.limit - c.bal - card_msi_left(c))
+}
+
+function card_tier_ok(i: int) {
+    let t = CARD_TIERS[i]
+    if L.age < 18 || dn_bk_lock() { return false }
+    if L.credit < t.credit { return false }
+    if i == 3 && net_worth() >= 3000000 { return true }
+    return dn_income() >= t.inc
+}
+
+function best_card_tier() {
+    let best = -1
+    let i = 0
+    while i < len(CARD_TIERS) {
+        if card_tier_ok(i) { best = i }
+        i += 1
+    }
+    return best
+}
+
+// Compra a meses sin intereses (la usa la tienda de lujos).
+function card_msi(name: string, amount: int, months: int) {
+    let c = dn().card
+    if c == null || c.blocked || card_free(c) < amount { return false }
+    list_push(c.msi, {"n": name, "m": amount / months, "left": months})
+    c.month += amount
+    return true
+}
+
+function card_cycle() {
+    let d = dn()
+    let c = d.card
+    if c == null { return null }
+    let keep = []
+    for m in c.msi {
+        c.bal += m.m
+        m.left -= 1
+        if m.left > 0 { list_push(keep, m) }
+    }
+    c.msi = keep
+    if c.use == "antojos" && !c.blocked && L.jail == 0 {
+        let a = map_get(LIFE_MULT, L.lifestyle, 100) * 3
+        if card_free(c) >= a {
+            c.bal += a
+            c.month += a
+            if chance(60) { L.happy += 2 }
+        }
+    }
+    let tier = CARD_TIERS[c.tier]
+    if c.month > 0 && tier.cash > 0 {
+        let cb = c.month * tier.cash / 100
+        c.bal -= cb
+        c.cb = map_get(c, "cb", 0) + cb
+    }
+    c.month = 0
+    if c.bal <= 0 { return null }
+    let due = c.bal
+    let minp = max(min(due, 100), due * 5 / 100)
+    let want = due
+    if c.pay == "minimo" { want = minp }
+    let paid = min(want, max(0, L.money))
+    L.money -= paid
+    c.bal -= paid
+    if paid < minp {
+        c.late += 1
+        c.bal += 40
+        L.credit = max(300, L.credit - 15)
+        log_add("No alcanzaste a pagar el mínimo de tu tarjeta: recargo y golpe a tu historial.", "b")
+        if c.late >= 3 && !c.blocked {
+            c.blocked = true
+            log_add("El banco bloqueó tu tarjeta por falta de pago.", "b")
+        }
+    } else if paid >= due {
+        c.late = 0
+    }
+    if c.bal > 0 {
+        c.bal += c.bal * CARD_RATE / 1000
+        if c.bal > c.limit * 80 / 100 { L.credit = max(300, L.credit - 3) }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- mes a mes
+
+function dinero_month() {
+    let d = dn()
+    d.inc = dn_income()
+    // Las deudas crecen aunque estés en prisión.
+    card_cycle()
+    payday_month(d)
+    if L.age >= 18 && L.jail == 0 {
+        if d.trans == "auto" && !has_vehicle() {
+            d.trans = "publico"
+            log_add("Ya no tienes vehículo: vuelves al transporte público.", "n")
+        }
+        if d.trans == "chofer" && !has_staff("chofer") { d.trans = "publico" }
+        dn_charge(dn_extra_costs())
+        if d.trans == "pie" || d.trans == "bici" {
+            if chance(25) { L.health += 1 }
+        }
+        if d.trans == "apps" && chance(30) { L.happy += 1 }
+        if has_sub("comida") && chance(30) { L.health += 1 }
+        if has_sub("vinos") {
+            L.alcohol += 1
+            if chance(20) { gain("charm", 1) }
+        }
+        if has_sub("juegos") && chance(15) { gain("skill", 1) }
+    }
+    // Plazo fijo
+    let keep = []
+    for t in d.cdt {
+        t.left -= 1
+        if t.left <= 0 {
+            let interest = t.amt * t.rate / 10000
+            L.savings += t.amt + interest
+            log_add("Venció tu plazo fijo: " + money_str(t.amt + interest) + " pasan a tu ahorro (+" + money_str(interest) + ").", "g")
+        } else {
+            list_push(keep, t)
+        }
+    }
+    d.cdt = keep
+    afore_month(d)
+    // Hipoteca en números rojos: aviso y embargo.
+    if L.mort != null {
+        if L.money < 0 {
+            d.late_m += 1
+            if d.late_m == 2 { log_add("Aviso del banco: llevas dos meses sin poder cubrir la hipoteca. Si sigues así, te embargan la casa.", "b") }
+            if d.late_m >= 4 { foreclose() }
+        } else {
+            d.late_m = 0
+        }
+    }
+    if d.calm > 0 { d.calm -= 1 }
+    goal_month(d)
+    if couple_mode() == "mantienes" && kids_living() > 0 && chance(30) { L.parent_score = clamp100(L.parent_score + 1) }
+    if L.savings >= dn_monthly_costs() * 6 && L.age >= 18 { flag("emerg_fund") }
+    if L.credit >= 850 { flag("credit_850") }
+    if d.offshore && d.off_bal > 0 { d.off_bal += d.off_bal * 3 / 1000 }
+    return null
+}
+
+function payday_month(d: map) {
+    let pd = d.payday
+    if pd == null { return null }
+    pd.bal += pd.bal * 12 / 100
+    pd.m += 1
+    if pd.m >= 3 && chance(35) {
+        let r = rint(1, 3)
+        if r == 1 && L.job != null {
+            boss_mood(-8)
+            log_add("El prestamista llamó a tu trabajo para cobrarte. Todos se enteraron.", "b")
+        } else if r == 2 {
+            L.happy -= 6
+            log_add("El prestamista le marcó a tu familia para cobrarte. Qué vergüenza.", "b")
+        } else {
+            L.happy -= 5
+            log_add("Encontraste una nota del prestamista pegada en tu puerta. Ya saben dónde vives.", "b")
+        }
+    }
+    if pd.bal >= pd.orig * 4 {
+        let a = cheapest_asset()
+        if a != null {
+            list_remove_value(L.assets, a.t)
+            pd.bal = max(0, pd.bal - asset_value(a) / 2)
+            log_add("Los del préstamo se llevaron tu " + lx_lower(a.t) + " como pago.", "b")
+        } else {
+            let take = min(pd.bal, max(0, L.money))
+            L.money -= take
+            pd.bal -= take
+            L.happy -= 8
+            log_add("Los del préstamo te quitaron lo que traías en la cartera.", "b")
+        }
+        if pd.bal <= 0 { d.payday = null }
+    }
+    return null
+}
+
+function afore_month(d: map) {
+    if L.job != null && L.jail == 0 && d.afore_pct > 0 && !d.afore_out {
+        let gross = job_pay(L.job) / 12
+        let mine = gross * d.afore_pct / 100
+        let match_amt = 0
+        if legit_job() { match_amt = gross * min(d.afore_pct, 6) / 200 }
+        L.money -= mine
+        d.afore += mine + match_amt
+        d.ded += mine
+    }
+    if d.afore > 0 {
+        let r = rint(1, 9)
+        if L.mk != null && L.mk.econ == "auge" { r += 2 }
+        if L.mk != null && L.mk.econ == "recesion" { r -= 4 }
+        d.afore += d.afore * r / 1000
+        if d.afore >= 1000000 { flag("afore_million") }
+    }
+    return null
+}
+
+function foreclose() {
+    let d = dn()
+    d.late_m = 0
+    let h = house_owned()
+    L.mort = null
+    L.credit = max(300, L.credit - 120)
+    L.happy -= 20
+    if h != null {
+        list_remove_value(L.assets, h.t)
+        if L.home == "propia" { L.home = "renta" }
+        hito_me("Vida", "El banco te embargó la casa")
+        log_add("El banco te embargó " + lx_lower(h.t) + ". Cajas, lágrimas y un cerrajero cambiando las chapas.", "b")
+    } else {
+        log_add("El banco remató lo que garantizaba tu hipoteca.", "b")
+    }
+    flag("foreclosed")
+    return null
+}
+
+function goal_def(id: string) {
+    for g in CPL_GOALS {
+        if g.id == id { return g }
+    }
+    return CPL_GOALS[0]
+}
+
+function goal_month(d: map) {
+    let goal = d.goal
+    if goal == null { return null }
+    if !couple_together() {
+        L.savings += goal.saved / 2
+        log_add("Sin pareja, la meta «" + goal_def(goal.id).n + "» se canceló. Te quedaste con la mitad de lo ahorrado.", "n")
+        d.goal = null
+        return null
+    }
+    if L.money >= goal.mine {
+        L.money -= goal.mine
+        goal.saved += goal.mine
+    }
+    let p = partner()
+    if couple_mode() != "mantienes" { goal.saved += partner_income(p) * 10 / 100 }
+    let g = goal_def(goal.id)
+    if goal.saved >= g.target { goal_done(d, g, p) }
+    return null
+}
+
+function goal_done(d: map, g: map, p: map) {
+    let saved = d.goal.saved
+    d.goal = null
+    d.goals += 1
+    if d.goals >= 2 { flag("couple_goals") }
+    add_hito(p, "Cumplieron su meta: " + str_lower(g.n))
+    bond_gain(p, 8)
+    let msg = "¡Cumplieron su meta con " + p.first + ": " + str_lower(g.n) + "!"
+    match g.id {
+        "viaje" => {
+            L.happy += 15
+            L.health = clamp100(L.health + 3)
+            msg = msg + " Dos semanas de playas, museos y fotos que nadie más va a ver."
+        }
+        "votos" => {
+            L.happy += 10
+            bond_gain(p, 7)
+            msg = msg + " Se dijeron que sí otra vez frente a todos sus amigos."
+        }
+        "hijos" => {
+            L.parent_score = clamp100(L.parent_score + 10)
+            flag("kids_fund")
+            msg = msg + " La universidad de sus hijos está pagada."
+        }
+        _ => {
+            L.savings += saved
+            msg = msg + " " + money_str(saved) + " pasan a tu ahorro."
+        }
+    }
+    hito_me("Amor", "Cumpliste una meta de ahorro con " + p.first)
+    log_add(msg, "g")
+    return null
+}
+
+// ---------------------------------------------------------------- cada año
+
+function dinero_year() {
+    let d = dn()
+    lujos_year()
+    if L.age < 18 { return null }
+    // Anualidad de la tarjeta
+    let c = d.card
+    if c != null && !c.blocked {
+        let fee = CARD_TIERS[c.tier].fee
+        if fee > 0 {
+            c.bal += fee
+            log_add("Se cobró la anualidad de tu tarjeta " + CARD_TIERS[c.tier].n + ": " + money_str(fee) + ".", "n")
+        }
+    }
+    // Predial y tenencia
+    let predial = 0
+    for h in HOUSES {
+        if list_contains(L.assets, h.t) { predial += house_value(h) * 2 / 1000 }
+    }
+    let tenencia = 0
+    for a in ASSETS {
+        if !list_contains(L.assets, a.t) || is_house_asset(a) { continue }
+        let k = map_get(a, "kind", "")
+        if k == "prop" { predial += asset_value(a) * 2 / 1000 }
+        if (k == "car" || k == "moto" || k == "boat" || k == "air") && asset_value(a) >= 50000 { tenencia += asset_value(a) * 2 / 100 }
+    }
+    if predial + tenencia > 0 && L.jail == 0 {
+        L.money -= predial + tenencia
+        let parts = []
+        if predial > 0 { list_push(parts, "predial " + money_str(predial)) }
+        if tenencia > 0 { list_push(parts, "tenencia " + money_str(tenencia)) }
+        log_add("Impuestos de tus bienes: " + str_join(parts, " y ") + ".", "n")
+    }
+    // El sueldo de tu pareja cambia.
+    let p = partner()
+    if p != null && p.alive && both_adults(p) && p.income != null && couple_mode() != "mantienes" {
+        if p.income == 0 {
+            if chance(45) {
+                p.income = null
+                partner_income(p)
+                if p.income > 0 { log_add(p.first + " consiguió trabajo: " + str_lower(p.job_t) + ".", "g") }
+            }
+        } else {
+            let r = rint(1, 100)
+            if r <= 5 {
+                p.income = 0
+                p.job_t = "Sin trabajo"
+                log_add("Despidieron a " + p.first + ". Está buscando trabajo.", "b")
+            } else if r <= 11 {
+                p.income = p.income * 125 / 100
+                log_add("¡Ascendieron a " + p.first + "! Ahora gana " + money_str(p.income) + " al mes.", "g")
+            } else {
+                p.income = p.income * (100 + rint(2, 7)) / 100
+            }
+        }
+    }
+    // Paraíso fiscal: cada año puede filtrarse.
+    if d.offshore && chance(7) { offshore_leak() }
+    return null
+}
+
+function offshore_leak() {
+    let d = dn()
+    let fine = d.off_bal * 40 / 100
+    d.off_bal -= fine
+    L.karma -= 10
+    L.happy -= 10
+    L.fame = max(0, L.fame - 5)
+    flag("offshore_leak")
+    hito_me("Vida", "Saliste en los Papeles del Paraíso")
+    let msg = "Los Papeles del Paraíso: una filtración mundial expuso tu cuenta secreta. Hacienda te cobró " + money_str(fine) + " de multa."
+    if d.off_bal > 1000000 && chance(25) && G.modal == null {
+        msg = msg + go_to_jail(2)
+        d.offshore = false
+        d.off_bal = 0
+    }
+    log_add(msg, "b")
+    return null
+}
+
+// ---------------------------------------------------------------- impuestos
+
+function tax_rate_for(income: int) {
+    for b in TAX_BRACKETS {
+        if income <= b[0] { return b[1] }
+    }
+    return 15
+}
+
+function tax_report() {
+    let d = dn()
+    let income = 0
+    if L.job != null { income = job_pay(L.job) }
+    if L.job2 != null { income += job_pay(L.job2) / 2 }
+    let rate = tax_rate_for(income)
+    let base = income * rate / 100
+    let cap = max(0, d.capgain) * 10 / 100
+    let rent = d.rentinc * 10 / 100
+    let win = d.winnings * 15 / 100
+    return {"income": income, "rate": rate, "base": base, "cap": cap, "rent": rent, "win": win, "full": base + cap + rent + win, "credit": d.ded * 25 / 100}
+}
+
+function dn_tax_reset() {
+    let d = dn()
+    d.ded = 0
+    d.capgain = 0
+    d.rentinc = 0
+    d.winnings = 0
+}
+
+function tax_pro() {
+    if job_is("contador") || job_is("auditor") { return true }
+    let p = partner()
+    return p != null && L.married && p.job_t != null && (str_contains(p.job_t, "Contador") || str_contains(p.job_t, "Contadora"))
+}
+
+// La declaración anual (la llama sim.vel en cada cumpleaños).
+function finance_year() {
+    fin_init()
+    dinero_year()
+    if L.age < 18 || L.jail > 0 || G.modal != null {
+        dn_tax_reset()
+        return null
+    }
+    let r = tax_report()
+    if r.full <= 0 && r.credit <= 0 {
+        dn_tax_reset()
+        return null
+    }
+    let pro = tax_pro()
+    let parts = ["sueldo " + money_str(r.income) + " (tasa " + str(r.rate) + "%)"]
+    if r.cap > 0 { list_push(parts, "ganancias de bolsa") }
+    if r.rent > 0 { list_push(parts, "rentas") }
+    if r.win > 0 { list_push(parts, "premios") }
+    let txt = "Llegó la declaración anual. Declaras: " + str_join(parts, ", ") + ". Impuesto: " + money_str(r.full) + "."
+    if r.credit > 0 { txt = txt + " Tus deducciones (retiro, donativos, intereses de la hipoteca) pueden bajarlo hasta " + money_str(r.credit) + "." }
+    let first = "Contratar a un contador ($2,000)"
+    if pro { first = "Hacerla tú con tu experiencia profesional" }
+    let locks = ["", "", "", "", ""]
+    if L.money < 2000 && !pro { locks[0] = "$2,000" }
+    if L.money < 300 { locks[1] = "$300" }
+    if !dn().offshore { locks[4] = "Sin cuenta offshore" }
+    open_choice("DECLARACIÓN ANUAL", txt, [first, "Usar una app de impuestos ($300)", "Hacerla tú (minijuego de cuentas)", "Evadir impuestos", "Esconderlo en tu paraíso fiscal"], locks, "taxes", {"full": r.full, "credit": r.credit, "pro": pro})
+    return null
+}
+
+function resolve_taxes(index: int, ctx: map) {
+    G.modal = null
+    let full = ctx.full
+    let credit = ctx.credit
+    if index == 0 {
+        if !ctx.pro { L.money -= 2000 }
+        return tax_settle(full * 75 / 100 - credit, "Tu contador encontró todas las deducciones.")
+    }
+    if index == 1 {
+        L.money -= 300
+        return tax_settle(full * 90 / 100 - credit * 80 / 100, "La app te guió paso a paso.")
+    }
+    if index == 2 { return mg_start("math", "Declaración de impuestos", "taxes", {"full": full, "credit": credit}) }
+    if index == 4 {
+        flag("offshore_used")
+        L.karma -= 3
+        return tax_settle(full * 20 / 100, "Tus ingresos «viven» en una isla con palmeras. Pagaste solo una parte.")
+    }
+    dn_tax_reset()
+    L.karma -= 5
+    let d = dn()
+    d.evaded += 1
+    if chance(20 + d.evaded * 5) {
+        d.audits += 1
+        open_choice("AUDITORÍA DE HACIENDA", "Hacienda cruzó datos con tu banco: no declaraste " + money_str(full) + " de impuestos. Te citan en sus oficinas.",
+            ["Pagar con multa y recargos (" + money_str(full * 2) + ")", "Contratar a un abogado fiscal ($10,000)", "Ofrecerle algo al auditor (" + money_str(max(1000, full / 2)) + ")"], ["", "", ""], "dn_audit", {"full": full})
+        return null
+    }
+    return finish("Impuestos", "No pagaste nada... y nadie se dio cuenta. Por ahora.", "n")
+}
+
+function tax_settle(pay: int, msg: string) {
+    dn_tax_reset()
+    if pay < 0 {
+        let refund = 0 - pay
+        L.money += refund
+        dn().refunds += refund
+        flag("refund")
+        hito_once("tax_refund", "Vida", "Hacienda te devolvió dinero")
+        return finish("Impuestos", msg + " ¡Saldo a favor! Hacienda te devuelve " + money_str(refund) + ".", "g")
+    }
+    L.money -= pay
+    return finish("Impuestos", msg + " Pagaste " + money_str(pay) + ". Todo en regla.", "g")
+}
+
+function taxes_result(score: any, ctx: map) {
+    let pay = ctx.full * (130 - score / 2) / 100 - ctx.credit * score / 100
+    if score >= 80 { return tax_settle(pay, "Cuentas perfectas (" + str(score) + " puntos).") }
+    return tax_settle(pay, "Te equivocaste en algunas cuentas (" + str(score) + " puntos) y hubo recargos.")
+}
+
+function resolve_audit(index: int, ctx: map) {
+    let full = ctx.full
+    if index == 0 {
+        L.money -= full * 2
+        L.credit = max(300, L.credit - 30)
+        return finish("Auditoría", "Pagaste " + money_str(full * 2) + " entre impuestos, multa y recargos. Lección aprendida.", "b")
+    }
+    if index == 1 {
+        L.money -= 10000
+        if chance(65) {
+            L.money -= full
+            return finish("Auditoría", "Tu abogado negoció: pagaste solo el impuesto original (" + money_str(full) + "). Sin multa.", "n")
+        }
+        L.money -= full * 3
+        L.credit = max(300, L.credit - 60)
+        return finish("Auditoría", "Ni el abogado pudo con Hacienda: multa de " + money_str(full * 3) + ".", "b")
+    }
+    let bribe = max(1000, full / 2)
+    L.money -= bribe
+    L.karma -= 8
+    if chance(55) { return finish("Auditoría", "El auditor guardó tu sobre y tu expediente se «extravió».", "x") }
+    L.money -= full * 3
+    return finish("Auditoría", "El auditor era honesto y lo grabó todo. Multa de " + money_str(full * 3) + "." + go_to_jail(1), "b")
+}
+
+// ---------------------------------------------------------------- menús
+
+function dninfo(t: string, s: string, desc: string) {
+    return {"action": "fin:info:90", "t": t, "s": s, "desc": desc, "lock": ""}
+}
+
+function ditem(action: string, t: string, s: string, desc: string, lock: string) {
+    return {"action": "dn:" + action, "t": t, "s": s, "desc": desc, "lock": lock}
+}
+
+function dn_gastos_items() {
+    let d = dn()
+    let items = []
+    let adult = L.age >= 18
+    let lock = ""
+    if !adult { lock = "Edad 18" }
+    let costs = living_costs()
+    let extra = dn_extra_costs()
+    list_push(items, dninfo("Gastos fijos: " + money_str(costs + extra) + "/mes", "Vivienda, comida, servicios...", "Vivienda y comida " + money_str(costs) + "; servicios, suscripciones y transporte " + money_str(extra) + ". Si usas la tarjeta para los gastos del mes, se cargan a ella."))
+    if adult {
+        list_push(items, {"action": "fin:life", "t": "Estilo de vida: " + LIFE_NAMES[L.lifestyle], "s": "Cambiar", "desc": "Austero, normal, cómodo, lujoso o magnate: cambia tu renta, tu comida, tus servicios y lo caros que salen los imprevistos.", "lock": ""})
+        list_push(items, {"action": "fin:home", "t": "Vivienda: " + HOME_NAMES[L.home], "s": "Cambiar", "desc": "Con tus padres no pagas renta (pero después de los 25 te pesa). Rentar te da independencia. Con casa propia solo pagas mantenimiento.", "lock": ""})
+    }
+    let t = trans_def(d.trans)
+    list_push(items, ditem("trans", "Transporte: " + t.n, money_str(t.c) + "/mes", fmt(t.d, {}), lock))
+    if L.home != "padres" && adult { list_push(items, dninfo("Servicios: " + money_str(map_get(SERVICES, L.lifestyle, 120)) + "/mes", "Luz, agua, gas, internet", "Dependen de tu estilo de vida.")) }
+    for s in SUBS {
+        let l = ""
+        if L.age < s.min { l = "Edad " + str(s.min) }
+        let st = "Suscribirte · " + money_str(s.c) + "/mes"
+        if has_sub(s.id) { st = "ACTIVA · " + money_str(s.c) + "/mes · cancelar" }
+        list_push(items, ditem("sub:" + s.id, s.n, st, s.d, l))
+    }
+    let months = L.savings / dn_monthly_costs()
+    list_push(items, dninfo("Fondo de emergencia: " + str(months) + " " + plural(months, "mes", "meses"), "Meta: 6 meses", "Tu ahorro alcanza para " + str(months) + " " + plural(months, "mes", "meses") + " de gastos. Con 3 meses duermes tranquil" + oa(L.gender) + "; los imprevistos se pueden pagar con el ahorro."))
+    return items
+}
+
+function dn_bank_items() {
+    let d = dn()
+    let items = []
+    let lock = ""
+    if L.age < 18 { lock = "Edad 18" }
+    list_push(items, dninfo("Tasa del banco central: " + rate_str(bank_rate()) + " anual", "Mueve ahorro y préstamos", "Sube cuando la economía está en auge y baja en la recesión. Tu ahorro gana " + rate_str(bank_rate() * 60 / 100) + " al año."))
+    let cl = lock
+    if cl == "" && L.money < 10000 { cl = "$10,000" }
+    list_push(items, ditem("cdt", "Abrir un plazo fijo", "12 meses al " + rate_str(bank_rate() + 150), "Inmovilizas tu dinero un año a cambio de más interés que el ahorro. Romperlo antes cuesta.", cl))
+    let i = 0
+    for t in d.cdt {
+        list_push(items, ditem("cdtbreak:" + str(i), "Plazo fijo: " + money_str(t.amt), "Vence en " + str(t.left) + " " + plural(t.left, "mes", "meses") + " · romper", "Al " + rate_str(t.rate) + ". Si lo rompes antes, pierdes el interés y 5% del capital.", ""))
+        i += 1
+    }
+    let al = lock
+    if al == "" && d.afore_out { al = "Ya lo cobraste" }
+    list_push(items, ditem("afore", "Fondo de retiro: " + money_str(d.afore), "Aportas " + str(d.afore_pct) + "% del sueldo", "Lo que apartas de tu sueldo crece con el mercado; en un trabajo formal la empresa pone la mitad (hasta el 3%). Lo aportado es deducible. A los 65 lo cobras.", al))
+    if d.afore > 0 && L.age < 65 && !d.afore_out { list_push(items, ditem("aforeout", "Retirar el fondo antes de tiempo", "Pierdes 40%", "Multa y retención: recibes el 60% de " + money_str(d.afore) + ".", "")) }
+    return items
+}
+
+function dn_credit_items() {
+    let d = dn()
+    let items = []
+    let lock = ""
+    if L.age < 18 { lock = "Edad 18" }
+    let factors = []
+    let c = d.card
+    if c != null && c.late > 0 { list_push(factors, str(c.late) + " pagos tarde en la tarjeta") }
+    if c != null && c.bal > c.limit / 2 { list_push(factors, "tarjeta muy usada") }
+    if L.money < 0 { list_push(factors, "números rojos") }
+    if d.payday != null { list_push(factors, "préstamo con prestamista") }
+    if dn_bk_lock() { list_push(factors, "bancarrota reciente") }
+    if len(factors) == 0 { list_push(factors, "nada en contra") }
+    list_push(items, dninfo("Buró de crédito: " + str(L.credit) + " (" + credit_word() + ")", "Deudas: " + money_str(debts_total()), "Te afecta: " + str_join(factors, ", ") + ". Pagar a tiempo y usar poco la tarjeta lo sube."))
+    if c == null {
+        let l = lock
+        let tier = best_card_tier()
+        if l == "" && dn_bk_lock() { l = "Bancarrota reciente" }
+        if l == "" && tier < 0 { l = "Crédito 580" }
+        let s = "Solicitar"
+        if tier >= 0 { s = "Te aprueban la " + CARD_TIERS[tier].n }
+        list_push(items, ditem("cardnew", "Tarjeta de crédito", s, "Cuatro niveles: clásica, oro, platino y negra. Dependen de tu historial y tus ingresos.", l))
+    } else {
+        let tier = CARD_TIERS[c.tier]
+        let st = "Saldo " + money_str(c.bal) + " · disponible " + money_str(card_free(c))
+        if c.blocked { st = "BLOQUEADA · debes " + money_str(c.bal) }
+        list_push(items, dninfo("Tarjeta " + tier.n, st, tier.d + " Límite " + money_str(c.limit) + ". Reembolsos ganados: " + money_str(map_get(c, "cb", 0)) + "."))
+        let ul = ""
+        if c.blocked { ul = "Bloqueada" }
+        list_push(items, ditem("carduse", "Uso: " + CARD_USES[c.use], "Cambiar", "Guardada, para los gastos del mes (reembolso sin intereses si pagas el total) o también para antojos (más felicidad, más gasto).", ul))
+        let pm = "Pagas el total cada mes"
+        if c.pay == "minimo" { pm = "Pagas solo el mínimo" }
+        list_push(items, ditem("cardpay", pm, "Cambiar", "Con el pago mínimo te sobra efectivo, pero el saldo genera 3.5% de interés mensual.", ""))
+        let pl = ""
+        if c.bal <= 0 { pl = "Sin saldo" } else if L.money <= 0 { pl = "Sin fondos" }
+        list_push(items, ditem("cardnow", "Pagar la tarjeta ahora", money_str(c.bal), "Liquida lo que puedas con tu efectivo.", pl))
+        if len(c.msi) > 0 { list_push(items, dninfo("Meses sin intereses", money_str(card_msi_left(c)) + " pendientes", str(len(c.msi)) + " " + plural(len(c.msi), "compra", "compras") + " a meses: se cargan solas a tu tarjeta cada mes.")) }
+        let best = best_card_tier()
+        if c.blocked {
+            let rl = ""
+            if c.bal > 0 { rl = "Paga el saldo" } else if L.credit < 600 { rl = "Crédito 600" }
+            list_push(items, ditem("cardfix", "Reactivar la tarjeta", "Con saldo en cero", "El banco te da otra oportunidad si liquidas todo y tu historial no está por los suelos.", rl))
+        } else if best > c.tier {
+            list_push(items, ditem("cardup", "Subir a la tarjeta " + CARD_TIERS[best].n, "Te la aprueban", CARD_TIERS[best].d + " Anualidad " + money_str(CARD_TIERS[best].fee) + ".", ""))
+        }
+        list_push(items, ditem("cardcancel", "Cancelar la tarjeta", "", "Si no debes nada, la puedes cancelar.", if_str(c.bal > 0 || len(c.msi) > 0, "Tienes saldo", "")))
+    }
+    let pd = d.payday
+    if pd == null {
+        list_push(items, ditem("payday", "Prestamista exprés", "Sin buró · 12% mensual", "Te prestan en efectivo sin revisar nada. Si te atrasas, cobran a su manera.", lock))
+    } else {
+        let pl = ""
+        if L.money <= 0 { pl = "Sin fondos" }
+        list_push(items, ditem("paydaypay", "Pagarle al prestamista", money_str(pd.bal), "Crece 12% cada mes. Llevas " + str(pd.m) + " " + plural(pd.m, "mes", "meses") + ".", pl))
+    }
+    let consol = 0
+    if c != null { consol += c.bal }
+    if pd != null { consol += pd.bal }
+    if consol > 0 {
+        let l = ""
+        if L.credit < 620 { l = "Crédito 620" } else if dn_bk_lock() { l = "Bancarrota reciente" }
+        list_push(items, ditem("consol", "Consolidar deudas", money_str(consol + loan_bal()), "Juntas tarjeta, prestamista y préstamo personal en un solo préstamo a 36 meses con mejor tasa. Comisión de $500.", l))
+    }
+    if L.mort != null {
+        let better = loan_rate() / 3
+        let l = ""
+        if L.mort.rate <= better + 10 { l = "Ya tienes buena tasa" } else if L.money < 3000 { l = "$3,000" }
+        list_push(items, ditem("refi", "Refinanciar la hipoteca", "Tasa nueva: " + rate_str(better) + " mensual", "Tu tasa actual es " + rate_str(L.mort.rate) + " mensual. Cambiarla cuesta $3,000 de trámites.", l))
+    }
+    if debts_total() > 30000 && net_worth() < 0 {
+        let l = ""
+        if dn_bk_lock() { l = "Ya te declaraste" }
+        list_push(items, ditem("bankrupt", "Declararte en bancarrota", "Último recurso", "Borra tus deudas (menos el préstamo estudiantil), pero pierdes tus bienes e inversiones y tu historial queda en el piso siete años.", l))
+    }
+    return items
+}
+
+function if_str(cond: bool, a: string, b: string) {
+    if cond { return a }
+    return b
+}
+
+function loan_bal() {
+    if L.loan == null { return 0 }
+    return L.loan.bal
+}
+
+function dn_tax_items() {
+    let d = dn()
+    let items = []
+    if L.age < 18 {
+        list_push(items, dninfo("Los impuestos, a los 18", "", "Por ahora Hacienda no sabe que existes."))
+        return items
+    }
+    let r = tax_report()
+    list_push(items, dninfo("Impuesto estimado del año: " + money_str(max(0, r.full - r.credit)), "Tasa " + str(r.rate) + "% sobre tu sueldo", "Sueldo " + money_str(r.income) + " → " + money_str(r.base) + "; bolsa " + money_str(r.cap) + "; rentas " + money_str(r.rent) + "; premios " + money_str(r.win) + ". Menos deducciones: " + money_str(r.credit) + ". Se declara en tu cumpleaños."))
+    list_push(items, dninfo("Tasas por ingreso", "0% · 6% · 9% · 12% · 15%", "Hasta $30,000 al año no pagas; luego 6% hasta $100,000, 9% hasta $300,000, 12% hasta $1,000,000 y 15% arriba. Ganancias de bolsa y rentas: 10%. Premios: 15%."))
+    list_push(items, dninfo("Deducciones acumuladas: " + money_str(d.ded), "Bajan tu impuesto 25%", "Cuentan tus aportaciones al fondo de retiro, tus donativos y los intereses de tu hipoteca."))
+    list_push(items, ditem("donate", "Donar a una causa", "Karma · deducible", "Comedores, becas, refugios de animales. Deducible de impuestos; las grandes donaciones te dan fama.", ""))
+    list_push(items, dninfo("Tu historial con Hacienda", money_str(d.refunds) + " devueltos", "Auditorías: " + str(d.audits) + ". Donado en tu vida: " + money_str(d.donated) + "."))
+    if !d.offshore {
+        let l = ""
+        if L.age < 25 { l = "Edad 25" } else if net_worth() < 1000000 { l = "Patrimonio $1,000,000" } else if L.money < 25000 { l = "$25,000" }
+        list_push(items, ditem("offshore", "Abrir cuenta en un paraíso fiscal", "$25,000 de apertura", "Una sociedad en una isla: pagas mucho menos impuesto y ese dinero no lo tocan ni el divorcio ni los acreedores. Si se filtra, es un escándalo.", l))
+    } else {
+        list_push(items, ditem("offin", "Mandar dinero a la isla", "Saldo offshore: " + money_str(d.off_bal), "Crece 0.3% al mes, no aparece en el divorcio ni en el embargo. Ilegal si no lo declaras.", if_str(L.money < 10000, "$10,000", "")))
+        list_push(items, ditem("offout", "Traer el dinero de vuelta", money_str(d.off_bal), "Lo regresas a tu cuenta.", if_str(d.off_bal <= 0, "Sin saldo", "")))
+    }
+    return items
+}
+
+function dn_couple_items() {
+    let d = dn()
+    let items = []
+    let p = partner()
+    if p == null || !both_adults(p) {
+        list_push(items, dninfo("Sin pareja", "", "Las finanzas en pareja aparecen cuando tienes una relación entre adultos."))
+        return items
+    }
+    let pinc = partner_income(p)
+    let pre = "Sin contrato prematrimonial."
+    if L.prenup { pre = "Con contrato prematrimonial." }
+    list_push(items, dninfo("Finanzas con " + p.first, p.job_t + " · " + money_str(pinc) + "/mes", "Aporta " + money_str(partner_share()) + " al mes a la casa. " + pre))
+    if !couple_together() {
+        list_push(items, dninfo("Todavía no viven juntos", "", "Cuando vivan juntos o se casen podrán organizar su dinero."))
+        return items
+    }
+    let m = cpl_mode_def(couple_mode())
+    list_push(items, ditem("cplmode", "Acuerdo: " + m.n, "Cambiar", m.d, ""))
+    if d.goal == null {
+        list_push(items, ditem("goal", "Meta de ahorro juntos", "Elegir", "Viaje, renovar votos, fondo de emergencia, enganche o fondo universitario. Cada mes aportan los dos.", ""))
+    } else {
+        let g = goal_def(d.goal.id)
+        list_push(items, ditem("goalstop", "Meta: " + g.n, money_str(d.goal.saved) + " de " + money_str(g.target), "Tú pones " + money_str(d.goal.mine) + " al mes y " + p.first + " el 10% de su sueldo. Cancelarla aquí (te quedas con la mitad).", ""))
+    }
+    let tl = ""
+    if d.talk_age == L.age { tl = "Este año ya" }
+    list_push(items, ditem("talk", "Plática de dinero", "Una vez al año", "Sentarse a hablar de dinero sin pelear (o intentarlo). Con un buen acuerdo pelean menos por las cuentas.", tl))
+    return items
+}
+
+// ---------------------------------------------------------------- acciones
+
+function dinero_action(action: string) {
+    G.modal = null
+    fin_init()
+    let d = dn()
+    let parts = str_split(action, ":")
+    let cmd = parts[1]
+    let arg = ""
+    if len(parts) > 2 { arg = parts[2] }
+    match cmd {
+        "trans" => {
+            let labels = []
+            let locks = []
+            for t in TRANSPORTS {
+                list_push(labels, t.n + " (" + money_str(t.c) + "/mes)")
+                let l = ""
+                if t.id == "auto" && !has_vehicle() { l = "Sin vehículo" }
+                if t.id == "chofer" && !has_staff("chofer") { l = "Sin chofer" }
+                list_push(locks, l)
+            }
+            return open_choice("TRANSPORTE", "¿Cómo te mueves por la ciudad?", labels, locks, "dn_trans", {})
+        }
+        "sub" => {
+            let s = sub_def(arg)
+            if has_sub(arg) {
+                let keep = []
+                for id in d.subs {
+                    if id != arg { list_push(keep, id) }
+                }
+                d.subs = keep
+                return finish("Suscripciones", "Cancelaste " + s.n + ". Un cargo menos.", "n")
+            }
+            if L.age < s.min { return null }
+            list_push(d.subs, arg)
+            if len(d.subs) >= 6 { flag("sub_hoarder") }
+            return finish("Suscripciones", "Te suscribiste a " + s.n + " (" + money_str(s.c) + " al mes).", "g")
+        }
+        "cdt" => {
+            let amounts = [10000, 50000, 200000, 1000000]
+            let labels = ["$10,000", "$50,000", "$200,000", "$1,000,000", "Mejor no"]
+            let locks = ["", "", "", "", ""]
+            let i = 0
+            while i < 4 {
+                if L.money < amounts[i] { locks[i] = "Sin fondos" }
+                i += 1
+            }
+            return open_choice("PLAZO FIJO", "A 12 meses al " + rate_str(bank_rate() + 150) + " anual. Tienes " + money_str(L.money) + ".", labels, locks, "dn_cdt", {"amounts": amounts})
+        }
+        "cdtbreak" => {
+            let i = parse_int(arg, 0)
+            if i < 0 || i >= len(d.cdt) { return null }
+            let t = d.cdt[i]
+            let back = t.amt * 95 / 100
+            let keep = []
+            let j = 0
+            while j < len(d.cdt) {
+                if j != i { list_push(keep, d.cdt[j]) }
+                j += 1
+            }
+            d.cdt = keep
+            L.money += back
+            return finish("Plazo fijo", "Rompiste tu plazo fijo: recuperaste " + money_str(back) + ".", "n")
+        }
+        "afore" => {
+            return open_choice("FONDO DE RETIRO", "¿Qué parte de tu sueldo apartas cada mes para tu retiro? Ahora: " + str(d.afore_pct) + "%.", ["Nada", "5%", "10%", "15%", "Volver"], ["", "", "", "", ""], "dn_afore_pct", {})
+        }
+        "aforeout" => {
+            if d.afore <= 0 || d.afore_out { return null }
+            let v = d.afore * 60 / 100
+            L.money += v
+            d.afore = 0
+            return finish("Fondo de retiro", "Retiraste tu fondo antes de tiempo: recibiste " + money_str(v) + ". Tu yo de 65 años no está contento.", "n")
+        }
+        "cardnew" => {
+            let tier = best_card_tier()
+            if d.card != null || tier < 0 { return null }
+            let t = CARD_TIERS[tier]
+            d.card = {"tier": tier, "limit": t.limit, "bal": 0, "use": "gastos", "pay": "total", "late": 0, "blocked": false, "month": 0, "msi": [], "cb": 0}
+            hito_once("first_card", "Vida", "Tu primera tarjeta de crédito")
+            if tier == 3 { flag("card_black") }
+            return finish("Tarjeta de crédito", "¡Aprobada! Tarjeta " + t.n + " con límite de " + money_str(t.limit) + ". La usarás para los gastos del mes; pagas el total cada mes.", "g")
+        }
+        "cardup" => {
+            let c = d.card
+            let tier = best_card_tier()
+            if c == null || tier <= c.tier { return null }
+            c.tier = tier
+            c.limit = CARD_TIERS[tier].limit
+            if tier == 3 {
+                flag("card_black")
+                hito_once("card_black", "Vida", "Te dieron la tarjeta negra")
+            }
+            return finish("Tarjeta de crédito", "Ahora tienes la tarjeta " + CARD_TIERS[tier].n + " con límite de " + money_str(c.limit) + ".", "g")
+        }
+        "carduse" => {
+            if d.card == null { return null }
+            return open_choice("USO DE LA TARJETA", "¿Para qué usas tu tarjeta?", ["Guardarla en el cajón", "Pagar los gastos del mes", "Gastos y antojos", "Volver"], ["", "", "", ""], "dn_card_use", {})
+        }
+        "cardpay" => {
+            let c = d.card
+            if c == null { return null }
+            if c.pay == "total" {
+                c.pay = "minimo"
+                return finish("Tarjeta", "Ahora pagas solo el mínimo. Cuidado: el saldo genera 3.5% al mes.", "n")
+            }
+            c.pay = "total"
+            return finish("Tarjeta", "Ahora pagas el total cada mes. Sin intereses.", "g")
+        }
+        "cardnow" => {
+            let c = d.card
+            if c == null || c.bal <= 0 { return null }
+            let paid = min(c.bal, max(0, L.money))
+            L.money -= paid
+            c.bal -= paid
+            if c.bal <= 0 { L.credit = min(850, L.credit + 5) }
+            return finish("Tarjeta", "Abonaste " + money_str(paid) + " a tu tarjeta. Saldo: " + money_str(c.bal) + ".", "g")
+        }
+        "cardfix" => {
+            let c = d.card
+            if c == null || c.bal > 0 || L.credit < 600 { return null }
+            c.blocked = false
+            c.late = 0
+            return finish("Tarjeta", "El banco reactivó tu tarjeta. Segunda oportunidad.", "g")
+        }
+        "cardcancel" => {
+            let c = d.card
+            if c == null || c.bal > 0 || len(c.msi) > 0 { return null }
+            d.card = null
+            if d.trans == "" { d.trans = "publico" }
+            return finish("Tarjeta", "Cancelaste tu tarjeta. Cortarla con tijeras fue liberador.", "n")
+        }
+        "payday" => {
+            if d.payday != null || L.age < 18 { return null }
+            return open_choice("PRESTAMISTA EXPRÉS", "Un señor muy amable en una oficina sin letrero. Te presta hoy mismo, sin preguntas. Interés: 12% al mes.", ["$2,000", "$5,000", "$20,000", "Mejor no"], ["", "", "", ""], "dn_payday", {})
+        }
+        "paydaypay" => {
+            let pd = d.payday
+            if pd == null { return null }
+            let paid = min(pd.bal, max(0, L.money))
+            L.money -= paid
+            pd.bal -= paid
+            if pd.bal <= 0 {
+                d.payday = null
+                return finish("Prestamista", "Liquidaste al prestamista. Ya no te sobresaltas cuando suena el teléfono.", "g")
+            }
+            return finish("Prestamista", "Le abonaste " + money_str(paid) + ". Todavía le debes " + money_str(pd.bal) + ".", "n")
+        }
+        "consol" => {
+            if L.credit < 620 || dn_bk_lock() { return null }
+            let total = 0
+            if d.card != null {
+                total += d.card.bal
+                d.card.bal = 0
+            }
+            if d.payday != null {
+                total += d.payday.bal
+                d.payday = null
+            }
+            if L.loan != null { total += L.loan.bal }
+            if total <= 0 { return null }
+            total += 500
+            L.loan = {"bal": total, "rate": loan_rate() * 80 / 100, "base": total / 36}
+            flag("consolidated")
+            return finish("Banco", "Consolidaste tus deudas en un solo préstamo de " + money_str(total) + " a 36 meses al " + rate_str(L.loan.rate) + " mensual.", "g")
+        }
+        "refi" => {
+            if L.mort == null || L.money < 3000 { return null }
+            let better = loan_rate() / 3
+            if L.mort.rate <= better + 10 { return null }
+            L.money -= 3000
+            let old = L.mort.rate
+            L.mort.rate = better
+            flag("refinanced")
+            return finish("Hipoteca", "Refinanciaste tu hipoteca: de " + rate_str(old) + " a " + rate_str(better) + " mensual. Ahorrarás muchísimo en intereses.", "g")
+        }
+        "bankrupt" => {
+            return open_choice("BANCARROTA", "Un juez revisará tus cuentas. Se borran tus deudas (menos el préstamo estudiantil), pero se rematan tus bienes, tu casa y tus inversiones. Tu historial queda en 350 y por siete años no te darán crédito.", ["Declararte en bancarrota", "Mejor no"], ["", ""], "dn_bankrupt", {})
+        }
+        "donate" => {
+            let amounts = [1000, 10000, 100000, 1000000]
+            let locks = ["", "", "", "", ""]
+            let i = 0
+            while i < 4 {
+                if L.money < amounts[i] { locks[i] = "Sin fondos" }
+                i += 1
+            }
+            return open_choice("DONAR", "¿Cuánto donas? Es deducible de impuestos.", ["$1,000", "$10,000", "$100,000", "$1,000,000", "Mejor no"], locks, "dn_donate", {"amounts": amounts})
+        }
+        "offshore" => {
+            if d.offshore || L.money < 25000 || net_worth() < 1000000 { return null }
+            L.money -= 25000
+            d.offshore = true
+            L.karma -= 5
+            hito_once("offshore", "Vida", "Abriste una cuenta en un paraíso fiscal")
+            return finish("Paraíso fiscal", "Un abogado de traje blanco te registró una sociedad en una isla. Ahora tienes una cuenta que nadie ve.", "x")
+        }
+        "offin" => {
+            if !d.offshore || L.money < 10000 { return null }
+            let amounts = [10000, 100000, max(10000, L.money / 2), L.money]
+            let locks = ["", "", "", "", ""]
+            if L.money < 100000 { locks[1] = "Sin fondos" }
+            return open_choice("A LA ISLA", "¿Cuánto mandas a tu cuenta offshore?", ["$10,000", "$100,000", "La mitad (" + money_str(amounts[2]) + ")", "Todo (" + money_str(L.money) + ")", "Mejor no"], locks, "dn_offin", {"amounts": amounts})
+        }
+        "offout" => {
+            if d.off_bal <= 0 { return null }
+            L.money += d.off_bal
+            let v = d.off_bal
+            d.off_bal = 0
+            return finish("Paraíso fiscal", "Trajiste " + money_str(v) + " de la isla a tu cuenta.", "n")
+        }
+        "cplmode" => {
+            if !couple_together() { return null }
+            let labels = []
+            for m in CPL_MODES { list_push(labels, m.n) }
+            list_push(labels, "Volver")
+            return open_choice("DINERO EN PAREJA", "¿Cómo organizan su dinero? Ahora: " + cpl_mode_def(couple_mode()).n + ". Tu pareja tiene que estar de acuerdo.", labels, ["", "", "", "", ""], "dn_cplmode", {"person": partner()})
+        }
+        "goal" => {
+            if !couple_together() || d.goal != null { return null }
+            let labels = []
+            let locks = []
+            for g in CPL_GOALS {
+                list_push(labels, g.n + " (" + money_str(g.target) + ")")
+                let l = ""
+                if g.id == "votos" && !L.married { l = "Casados" }
+                if g.id == "hijos" && len(kids_alive()) == 0 { l = "Con hijos" }
+                list_push(locks, l)
+            }
+            return open_choice("META DE AHORRO", "¿Para qué ahorran juntos?", labels, locks, "dn_goal", {})
+        }
+        "goalstop" => {
+            if d.goal == null { return null }
+            L.savings += d.goal.saved / 2
+            let p = partner()
+            if p != null { bond_gain(p, -5) }
+            d.goal = null
+            return finish("Meta de ahorro", "Cancelaron la meta. Te quedaste con la mitad de lo ahorrado en tu ahorro.", "n")
+        }
+        "talk" => {
+            if !couple_together() || d.talk_age == L.age { return null }
+            let p = partner()
+            return open_choice("PLÁTICA DE DINERO", "Se sientan en la mesa de la cocina con una libreta. ¿Cómo lo abordas?", ["Hacer un presupuesto juntos", "Reclamarle sus gastos", "Proponer una app para registrar todo", "Mejor otro día"], ["", "", "", ""], "dn_talk", {"person": p})
+        }
+        _ => return null
+    }
+}
+
+function dinero_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    let d = dn()
+    match handler {
+        "dn_trans" => {
+            if index < 0 || index >= len(TRANSPORTS) { return null }
+            let t = TRANSPORTS[index]
+            d.trans = t.id
+            return finish("Transporte", "Ahora te mueves: " + str_lower(t.n) + ".", "n")
+        }
+        "dn_imprev" => return resolve_imprev(index, ctx)
+        "dn_cdt" => {
+            if index >= 4 { return null }
+            let amt = ctx.amounts[index]
+            if L.money < amt { return null }
+            L.money -= amt
+            list_push(d.cdt, {"amt": amt, "left": 12, "rate": bank_rate() + 150})
+            hito_once("first_cdt", "Vida", "Abriste tu primer plazo fijo")
+            return finish("Plazo fijo", "Inmovilizaste " + money_str(amt) + " a 12 meses al " + rate_str(bank_rate() + 150) + ".", "g")
+        }
+        "dn_afore_pct" => {
+            if index >= 4 { return null }
+            d.afore_pct = [0, 5, 10, 15][index]
+            if d.afore_pct > 0 { hito_once("afore", "Trabajo", "Empezaste a ahorrar para tu retiro") }
+            return finish("Fondo de retiro", "Ahora apartas " + str(d.afore_pct) + "% de tu sueldo para tu retiro.", "g")
+        }
+        "dn_afore" => {
+            if index == 2 { return finish("Fondo de retiro", "Lo dejas crecer un año más.", "n") }
+            let v = d.afore
+            d.afore = 0
+            d.afore_out = true
+            d.afore_pct = 0
+            if index == 0 {
+                let yearly = v * 8 / 100
+                L.pension += yearly
+                return finish("Fondo de retiro", "Tu fondo de " + money_str(v) + " se convirtió en una pensión de " + money_str(yearly) + " al año de por vida.", "g")
+            }
+            L.money += v * 90 / 100
+            return finish("Fondo de retiro", "Cobraste tu fondo de retiro completo: " + money_str(v * 90 / 100) + " después de impuestos.", "g")
+        }
+        "dn_card_use" => {
+            if index >= 3 || d.card == null { return null }
+            d.card.use = ["nada", "gastos", "antojos"][index]
+            return finish("Tarjeta", "Uso de tu tarjeta: " + str_lower(CARD_USES[d.card.use]) + ".", "n")
+        }
+        "dn_payday" => {
+            if index >= 3 || d.payday != null { return null }
+            let amt = [2000, 5000, 20000][index]
+            L.money += amt
+            d.payday = {"bal": amt, "orig": amt, "m": 0}
+            L.credit = max(300, L.credit - 10)
+            return finish("Prestamista", "Te dio " + money_str(amt) + " en efectivo y una sonrisa que no te gustó.", "n")
+        }
+        "dn_bankrupt" => {
+            if index != 0 { return null }
+            return bankruptcy()
+        }
+        "dn_audit" => return resolve_audit(index, ctx)
+        "dn_donate" => {
+            if index >= 4 { return null }
+            let amt = ctx.amounts[index]
+            if L.money < amt { return null }
+            L.money -= amt
+            d.ded += amt
+            d.donated += amt
+            L.karma += [2, 5, 10, 20][index]
+            L.happy += [2, 4, 6, 10][index]
+            gain("kind", [1, 2, 4, 8][index])
+            let msg = "Donaste " + money_str(amt) + "."
+            if amt >= 100000 {
+                L.fame += [0, 0, 3, 8][index]
+                msg = msg + " Salió en las noticias: una placa con tu nombre en la entrada."
+            }
+            if d.donated >= 1000000 {
+                flag("philanthropist")
+                hito_once("philanthropist", "Vida", "Donaste un millón en tu vida")
+            }
+            return finish("Donación", msg + " Es deducible de impuestos.", "g")
+        }
+        "dn_offin" => {
+            if index >= 4 { return null }
+            let amt = ctx.amounts[index]
+            if amt <= 0 || amt > L.money { return null }
+            L.money -= amt
+            d.off_bal += amt
+            L.karma -= 2
+            return finish("Paraíso fiscal", "Mandaste " + money_str(amt) + " a la isla. Saldo offshore: " + money_str(d.off_bal) + ".", "x")
+        }
+        "dn_cplmode" => return resolve_cplmode(index, ctx)
+        "dn_goal" => {
+            if index >= len(CPL_GOALS) { return null }
+            let g = CPL_GOALS[index]
+            return open_choice("TU APORTACIÓN", "Meta: " + g.n + " (" + money_str(g.target) + "). ¿Cuánto pones tú cada mes?", ["$500", "$2,000", "$10,000", "Mejor no"], ["", "", "", ""], "dn_goal_amt", {"id": g.id})
+        }
+        "dn_goal_amt" => {
+            if index >= 3 { return null }
+            d.goal = {"id": ctx.id, "saved": 0, "mine": [500, 2000, 10000][index]}
+            let p = partner()
+            if p != null { bond_gain(p, 3) }
+            return finish("Meta de ahorro", "¡Empezaron a ahorrar juntos para " + str_lower(goal_def(ctx.id).n) + "!", "g")
+        }
+        "dn_talk" => {
+            let p = ctx.person
+            if index == 3 || p == null { return null }
+            d.talk_age = L.age
+            if index == 0 {
+                if rank("charm") >= 2 || npc_style(p) == "dulce" {
+                    bond_gain(p, 6)
+                    d.calm = 12
+                    return finish("Plática de dinero", "Hicieron un presupuesto sin pelear. Por primera vez, los dos saben a dónde se va el dinero.", "g")
+                }
+                bond_gain(p, -2)
+                return finish("Plática de dinero", "Empezó bien y terminó en «¡es que tú siempre!». Lo intentarán otro día.", "n")
+            }
+            if index == 1 {
+                let hit = -8
+                if npc_style(p) == "dulce" { hit = -3 }
+                bond_gain(p, hit)
+                return finish("Plática de dinero", p.first + " se sintió atacad" + oa(p.gender) + ". La plática terminó en portazo.", "b")
+            }
+            bond_gain(p, 2)
+            d.calm = 6
+            return finish("Plática de dinero", "Instalaron una app y registran todo. Discuten menos, aunque ahora pelean por quién olvidó anotar el café.", "g")
+        }
+        _ => return null
+    }
+}
+
+function resolve_cplmode(index: int, ctx: map) {
+    let d = dn()
+    let p = ctx.person
+    if index >= len(CPL_MODES) || p == null { return null }
+    let m = CPL_MODES[index]
+    if m.id == d.cpl { return finish("Dinero en pareja", "Ya organizan así su dinero.", "n") }
+    let style = npc_style(p)
+    let odds = 100
+    if m.id == "mancomunada" {
+        odds = 50 + p.bond / 2
+        if style == "dulce" { odds += 15 }
+        if style == "celoso" { odds += 10 }
+        if style == "libre" { odds -= 20 }
+    }
+    if m.id == "mantienes" {
+        if dn_income() - partner_share() < 3000 { return finish("Dinero en pareja", "Con tus ingresos no alcanza para mantener la casa tú sol" + oa(L.gender) + ".", "b") }
+        odds = 35 + p.bond / 3
+        if style == "dulce" { odds += 15 }
+        if style == "intenso" { odds -= 10 }
+    }
+    if m.id == "te_mantiene" {
+        if partner_income(p) < 2500 { return finish("Dinero en pareja", p.first + " no gana lo suficiente para mantenerte.", "b") }
+        odds = 20 + p.bond / 2 + rank("charm") * 5
+        if style == "libre" { odds -= 15 }
+    }
+    if !chance(clamp(odds, 5, 95)) {
+        bond_gain(p, -3)
+        return finish("Dinero en pareja", p.first + " no estuvo de acuerdo: «" + pick(["No me siento cómod" + oa(p.gender) + " con eso.", "Lo hablamos otro día.", "¿Y si sale mal?"]) + "»", "b")
+    }
+    // Salir de «tú mantienes»: tu pareja vuelve a trabajar.
+    if d.cpl == "mantienes" && p.income_prev != null {
+        p.income = p.income_prev
+        p.job_t = p.job_prev
+        p.income_prev = null
+    }
+    if m.id == "mantienes" {
+        p.income_prev = partner_income(p)
+        p.job_prev = p.job_t
+        p.income = 0
+        p.job_t = "Hogar"
+        bond_gain(p, 5)
+    }
+    if d.cpl == "mancomunada" && m.id == "separadas" { bond_gain(p, -3) }
+    d.cpl = m.id
+    if m.id == "mancomunada" { flag("joint_account") }
+    return finish("Dinero en pareja", "Acordaron un nuevo arreglo: " + str_lower(m.n) + ".", "g")
+}
+
+function bankruptcy() {
+    let d = dn()
+    let lost = []
+    L.loan = null
+    L.mort = null
+    d.payday = null
+    if d.card != null {
+        d.card = null
+    }
+    if L.cs != null { L.cs.marker = null }
+    for a in ASSETS {
+        if list_contains(L.assets, a.t) { list_push(lost, lx_lower(a.t)) }
+    }
+    for h in HOUSES {
+        if list_contains(L.assets, h.t) && !list_contains(lost, lx_lower(h.t)) { list_push(lost, lx_lower(h.t)) }
+    }
+    L.assets = []
+    if L.home == "propia" { L.home = "renta" }
+    if L.mk != null {
+        L.port = {}
+        L.invested = {}
+    }
+    mk_wipe()
+    L.savings = 0
+    d.cdt = []
+    if L.money > 0 { L.money = 0 }
+    L.credit = 350
+    d.bk_age = L.age
+    L.happy -= 20
+    flag("bankrupt")
+    hito_me("Vida", "Te declaraste en bancarrota")
+    let msg = "El juez aprobó tu bancarrota. Tus deudas desaparecieron"
+    if len(lost) > 0 { msg = msg + ", y con ellas " + str_join(list_slice(lost, 0, min(4, len(lost))), ", ") }
+    return finish("Bancarrota", msg + ". Empiezas de cero.", "b")
+}
+
+// ---------------------------------------------------------------- imprevistos
+
+function imprev_ok(ev: map) {
+    match ev.need {
+        "car" => return has_vehicle()
+        "bici" => return dn().trans == "bici"
+        "home" => return L.home != "padres"
+        "own" => return house_owned() != null && L.home == "propia"
+        "parent" => return has_rel("padre") || has_rel("madre")
+        _ => return true
+    }
+}
+
+function imprev_insured(ev: map) {
+    if ev.ins == "med" { return L.insured == true }
+    if ev.ins == "" { return false }
+    return lx_insured(ev.ins)
+}
+
+function dn_imprevisto() {
+    let d = dn()
+    if d.imprev == L.tm { return false }
+    let pool = []
+    for ev in IMPREVISTOS {
+        if imprev_ok(ev) { list_push(pool, ev) }
+    }
+    if len(pool) == 0 { return false }
+    d.imprev = L.tm
+    let ev = pick(pool)
+    let cost = ev.c * map_get(LIFE_MULT, L.lifestyle, 100) / 100
+    if ev.id == "mama" { cost = ev.c }
+    let txt = ev.text
+    if imprev_insured(ev) {
+        cost = cost * 20 / 100
+        txt = txt + " Tu seguro cubre casi todo: solo pagas el deducible."
+    }
+    txt = txt + " Cuesta " + money_str(cost) + "."
+    let locks = ["", "", "", ""]
+    if L.money < cost { locks[0] = "Sin efectivo" }
+    if L.savings < cost { locks[1] = "Sin ahorro" }
+    let c = d.card
+    if c == null { locks[2] = "Sin tarjeta" } else if c.blocked || card_free(c) < cost { locks[2] = "Sin crédito" }
+    open_choice("IMPREVISTO: " + str_upper(ev.t), txt, ["Pagar en efectivo", "Usar tu fondo de ahorro", "Pagarlo con la tarjeta", "Dejarlo así"], locks, "dn_imprev", {"id": ev.id, "cost": cost})
+    return true
+}
+
+function resolve_imprev(index: int, ctx: map) {
+    let ev = IMPREVISTOS[0]
+    for e in IMPREVISTOS {
+        if e.id == ctx.id { ev = e }
+    }
+    let cost = ctx.cost
+    if index == 0 {
+        L.money -= cost
+        return finish(ev.t, "Lo pagaste en efectivo (" + money_str(cost) + ") y asunto arreglado.", "n")
+    }
+    if index == 1 {
+        L.savings -= cost
+        hito_once("emerg_used", "Vida", "Tu fondo de ahorro te salvó de un imprevisto")
+        return finish(ev.t, "Para eso estaba el ahorro: " + money_str(cost) + " y asunto arreglado.", "g")
+    }
+    if index == 2 {
+        let c = dn().card
+        if c != null {
+            c.bal += cost
+            c.month += cost
+        }
+        return finish(ev.t, "Lo cargaste a la tarjeta (" + money_str(cost) + "). Problema de tu yo del próximo mes.", "n")
+    }
+    let msg = apply(ev.o, {})
+    if ev.credit != null { L.credit = max(300, L.credit + ev.credit) }
+    if ev.trans == true { dn().trans = "publico" }
+    if ev.work == true {
+        if L.job != null { L.job.perf = clamp100(L.job.perf - 5) }
+        if L.study != null { L.study.gpa = clamp(L.study.gpa - 3, 0, 100) }
+    }
+    return finish(ev.t, ev.skip + msg, "b")
+}
+
+// ---------------------------------------------------------------- eventos
+
+function dn_afore_event() {
+    let d = dn()
+    if L.age < 65 || d.afore <= 0 || d.afore_out || d.afore_age == L.age { return false }
+    d.afore_age = L.age
+    open_choice("TU FONDO DE RETIRO", "Cumpliste 65: tu fondo de retiro tiene " + money_str(d.afore) + ". ¿Qué haces con él?", ["Convertirlo en pensión (" + money_str(d.afore * 8 / 100) + " al año)", "Cobrarlo todo (" + money_str(d.afore * 90 / 100) + ")", "Dejarlo crecer un año más"], ["", "", ""], "dn_afore", {})
+    return true
+}
+
+function dn_couple_event() {
+    let p = partner()
+    if p == null || !couple_together() { return false }
+    let pool = []
+    let weights = []
+    for ev in CPL_EVENTS {
+        let last = L.seen[ev.id]
+        if last != null && L.age - last < 4 { continue }
+        if ev.married == true && !L.married { continue }
+        if ev.card == true && (dn().card == null || dn().card.bal <= 0) { continue }
+        if dn().calm > 0 && ev.id == "cm_cardfight" { continue }
+        list_push(pool, ev)
+        list_push(weights, ev.w)
+    }
+    if len(pool) == 0 { return false }
+    let ev = pool[weighted_choose(G.rng, weights)]
+    open_event(ev, {"person": p})
+    return true
+}
+
+// Eventos de dinero de cada mes (desde advance_month).
+function maybe_money_event() {
+    if G.modal != null || !L.alive || L.jail > 0 { return false }
+    fin_init()
+    if L.age < 18 { return false }
+    if mk_pending_event() { return true }
+    if cs_urge_event() { return true }
+    if dn_afore_event() { return true }
+    if chance(4) && dn_imprevisto() { return true }
+    if chance(3) && dn_couple_event() { return true }
+    if lx_event() { return true }
+    return false
+}
+
+function dinero_special(name: string, ctx: map) {
+    let p = ctx["person"]
+    match name {
+        "dn_card_nada" => {
+            if dn().card != null { dn().card.use = "nada" }
+            return ""
+        }
+        "dn_pbiz" => {
+            if p == null { return "" }
+            if chance(45) {
+                p.income = max(1500, partner_income(p)) * 180 / 100
+                p.job_t = by_gender(p.gender, "Dueño de cafetería", "Dueña de cafetería")
+                L.money += 30000
+                add_hito(p, "Abrió su propio negocio")
+                return " Un año después, la cafetería está llena y te devolvió el préstamo."
+            }
+            p.income = 0
+            p.job_t = "Sin trabajo"
+            return " La cafetería cerró a los ocho meses. " + p.first + " está buscando trabajo otra vez."
+        }
+        "dn_inherit" => {
+            if L.mort != null {
+                L.mort.bal = max(0, L.mort.bal - 40000)
+                if L.mort.bal == 0 { L.mort = null }
+                return " La hipoteca bajó $40,000."
+            }
+            L.savings += 40000
+            return " Como no tienen hipoteca, lo pusieron en el ahorro."
+        }
+        _ => return ""
+    }
+}
+
+// ---------------------------------------------------------------- efectos
+
+function money_fx(out: list) {
+    if L.age < 18 || L.dn == null { return null }
+    let d = L.dn
+    let costs = dn_monthly_costs()
+    if L.savings >= costs * 3 { list_push(out, fx("colchon", "Colchón financiero", true, "Tienes ahorro para varios meses. Duermes tranquil" + oa(L.gender) + ".", {"hap": 1})) }
+    // Ingreso del mes guardado en dinero_month (calcularlo aquí volvería a pedir los efectos).
+    let income = max(1, map_get(d, "inc", 1))
+    let mort = 0
+    if L.mort != null { mort = L.mort.bal }
+    if debts_total() - mort > income * 12 { list_push(out, fx("deudas", "Ahogad" + oa(L.gender) + " en deudas", false, "Las deudas te quitan el sueño.", {"hap": -1, "hp": -1})) }
+    if d.card != null && d.card.blocked { list_push(out, fx("tarjeta_bloqueada", "Tarjeta bloqueada", false, "Pasar la tarjeta y que salga «rechazada» delante de todos.", {"hap": -1})) }
+    if d.card != null && d.card.tier == 3 { list_push(out, fx("tarjeta_negra", "Tarjeta negra", true, "Una tarjeta de metal que abre puertas.", {"flirt": 3, "hire": 2})) }
+    if dn_bk_lock() { list_push(out, fx("bancarrota", "Bancarrota", false, "Tu historial crediticio está en el piso.", {"hire": -5})) }
+    if has_sub("meditacion") { list_push(out, fx("meditacion", "Mente en calma", true, "Respiras antes de reaccionar.", {"hap": 1})) }
+    if has_sub("software") && L.job != null { list_push(out, fx("herramientas", "Buenas herramientas", true, "Trabajas más rápido con los programas adecuados.", {"pay": 2})) }
+    if has_sub("vinos") { list_push(out, fx("sommelier", "Sommelier aficionado", true, "Sabes elegir el vino en cualquier cita.", {"flirt": 2})) }
+    if d.trans == "pie" || d.trans == "bici" { list_push(out, fx("piernas", "Piernas de acero", true, "Te mueves a pie o en bici por toda la ciudad.", {"hp": 1})) }
+    if d.trans == "chofer" { list_push(out, fx("chofer", "Con chofer", true, "Llegas a todas partes descansad" + oa(L.gender) + ".", {"hap": 1})) }
+    let mode = couple_mode()
+    if mode == "mantienes" { list_push(out, fx("hogar", "Hogar en orden", true, "Tu pareja se encarga de la casa.", {"hap": 1})) }
+    if mode == "te_mantiene" { list_push(out, fx("mantenido", by_gender(L.gender, "Mantenido", "Mantenida"), true, "Tu pareja paga casi todo.", {"hap": 1})) }
+    mk_fx(out)
+    cs_fx(out)
+    lx_fx(out)
+    return null
+}
+
+// ---------------------------------------------------------------- divorcio
+
+// Al separarse: se cancela la meta y se reparte lo que construyeron (sin contrato).
+function dn_breakup(p: map) {
+    if L.dn == null { return "" }
+    let d = L.dn
+    let msg = ""
+    if d.goal != null {
+        L.savings += d.goal.saved / 2
+        d.goal = null
+    }
+    if d.cpl == "mantienes" && p.income_prev != null {
+        p.income = p.income_prev
+        p.job_t = p.job_prev
+        p.income_prev = null
+    }
+    d.cpl = "separadas"
+    return msg
+}
+
+function dn_divorce_split() {
+    if L.dn == null { return "" }
+    let d = L.dn
+    let parts = []
+    if d.afore > 0 {
+        d.afore = d.afore / 2
+        list_push(parts, "la mitad de tu fondo de retiro")
+    }
+    if L.mk != null && portfolio_value() > 0 {
+        for s in STOCKS {
+            if shares(s.id) > 0 {
+                L.port[s.id] = shares(s.id) / 2
+                L.invested[s.id] = map_get(L.invested, s.id, 0) / 2
+            }
+        }
+        list_push(parts, "la mitad de tus acciones")
+    }
+    if len(parts) == 0 { return "" }
+    return " También se llevó " + str_join(parts, " y ") + "."
+}

@@ -1,9 +1,10 @@
 // @edition 3
 // Finanzas: gastos de vida, estilo de vida y vivienda, banco (ahorro, préstamos,
 // hipotecas, historial crediticio), bolsa de valores con noticias y el periódico
-// (minijuego que da pistas para invertir), casino, impuestos, el dinero en pareja
-// (aportes, contrato prematrimonial, divorcio y pensión alimenticia) y las
-// profesiones financieras que te dan ventaja.
+// (minijuego que da pistas para invertir), el dinero en pareja (aportes, contrato
+// prematrimonial, divorcio y pensión alimenticia) y las profesiones financieras
+// que te dan ventaja. Más en dinero.vel (gastos, tarjeta, impuestos, pareja),
+// mercado.vel (índice, oro, bonos, cortos), casino.vel y lujos.vel.
 
 const STOCKS = [
     {"id": "tecnonova", "n": "TecnoNova", "s": "Tecnología", "p": 12000, "v": 8, "div": 0},
@@ -14,13 +15,20 @@ const STOCKS = [
     {"id": "agromax", "n": "AgroMax", "s": "Alimentos", "p": 3000, "v": 4, "div": 25},
     {"id": "autoruta", "n": "AutoRuta", "s": "Autos", "p": 5500, "v": 6, "div": 0},
     {"id": "inmobilia", "n": "Inmobilia", "s": "Bienes raíces", "p": 7000, "v": 5, "div": 30},
-    {"id": "criptoloco", "n": "CriptoLoco", "s": "Cripto", "p": 1000, "v": 25, "div": 0}
+    {"id": "criptoloco", "n": "CriptoLoco", "s": "Cripto", "p": 1000, "v": 25, "div": 0},
+    {"id": "aerovelvet", "n": "AeroVelvet", "s": "Aerolíneas", "p": 3500, "v": 8, "div": 0},
+    {"id": "telemax", "n": "TeleMax", "s": "Telecomunicaciones", "p": 5000, "v": 3, "div": 45},
+    {"id": "orominas", "n": "OroMinas", "s": "Minería", "p": 4500, "v": 7, "div": 20},
+    {"id": "megamart", "n": "MegaMart", "s": "Comercio", "p": 6500, "v": 4, "div": 30},
+    {"id": "pixelforge", "n": "PixelForge", "s": "Videojuegos", "p": 8000, "v": 10, "div": 0},
+    {"id": "biogenix", "n": "BioGenix", "s": "Biotecnología", "p": 2500, "v": 14, "div": 0},
+    {"id": "perrocoin", "n": "PerroCoin", "s": "Cripto", "p": 300, "v": 40, "div": 0}
 ]
 
-const LIFESTYLES = ["austero", "normal", "lujoso"]
-const LIFE_NAMES = {"austero": "Austero", "normal": "Normal", "lujoso": "Lujoso"}
-const RENT = {"austero": 250, "normal": 450, "lujoso": 2000}
-const FOOD = {"austero": 150, "normal": 300, "lujoso": 1000}
+const LIFESTYLES = ["austero", "normal", "comodo", "lujoso", "magnate"]
+const LIFE_NAMES = {"austero": "Austero", "normal": "Normal", "comodo": "Cómodo", "lujoso": "Lujoso", "magnate": "Magnate"}
+const RENT = {"austero": 250, "normal": 450, "comodo": 900, "lujoso": 2000, "magnate": 6000}
+const FOOD = {"austero": 150, "normal": 300, "comodo": 550, "lujoso": 1000, "magnate": 3000}
 const HOME_NAMES = {"padres": "Con tus padres", "renta": "Rentas un lugar", "pareja": "Con tu pareja", "propia": "Casa propia"}
 const FIN_JOBS = ["bolsa", "analista_fin", "trader", "banquero", "asesor_fin", "actuario", "auditor", "gestor_fondos", "contador"]
 const HOUSES = [
@@ -52,14 +60,17 @@ const NEWS_FILLER = [
 // ---------------------------------------------------------------- estado
 
 function fin_init() {
-    if L.mk != null { return null }
+    if L.mk != null {
+        mk_migrate()
+        return null
+    }
     let prices = {}
     let hist = {}
     for s in STOCKS {
         prices[s.id] = s.p
         hist[s.id] = [s.p]
     }
-    L.mk = {"p": prices, "h": hist, "next": {}, "news": [], "article": [], "tip": "", "tip_m": -1, "econ": "normal", "econ_m": 12}
+    L.mk = {"p": prices, "h": hist, "next": {}, "news": [], "article": [], "tip": "", "tip_m": -1, "econ": "normal", "econ_m": 12, "rate": 800}
     L.port = {}
     L.invested = {}
     L.savings = 0
@@ -128,14 +139,13 @@ function house_owned() {
 }
 
 function net_worth() {
-    let total = L.money + L.savings + portfolio_value() - L.debt
-    if L.loan != null { total -= L.loan.bal }
-    if L.mort != null { total -= L.mort.bal }
-    for a in ASSETS {
-        if list_contains(L.assets, a.t) { total += a.cost * 7 / 10 }
-    }
+    let total = L.money + L.savings + portfolio_value() + mk_worth() + lx_worth() - debts_total()
     for h in HOUSES {
-        if list_contains(L.assets, h.t) && h.t != "Departamento" { total += house_value(h) }
+        if list_contains(L.assets, h.t) { total += house_value(h) }
+    }
+    if L.dn != null {
+        total += L.dn.afore + L.dn.off_bal
+        for t in L.dn.cdt { total += t.amt }
     }
     return total
 }
@@ -167,9 +177,14 @@ function partner_income(p: map) {
 function partner_share() {
     let p = partner()
     if p == null || !p.alive || !both_adults(p) { return 0 }
-    if L.married { return partner_income(p) * 40 / 100 }
-    if p.livein == true { return partner_income(p) * 25 / 100 }
-    return 0
+    if !L.married && p.livein != true { return 0 }
+    let pct = 25
+    if L.married { pct = 40 }
+    let mode = couple_mode()
+    if mode == "mancomunada" { pct = 60 }
+    if mode == "te_mantiene" { pct = 80 }
+    if mode == "mantienes" { return 0 }
+    return partner_income(p) * pct / 100
 }
 
 function shares_home() {
@@ -206,24 +221,32 @@ function living_costs() {
 function finance_month() {
     fin_init()
     market_month()
+    mk_month()
     if L.gamble > 0 { L.gamble = max(0, L.gamble - 2) }
+    casino_month()
     if L.age < 18 { return null }
     if L.home == "padres" && !has_rel("padre") && !has_rel("madre") {
         L.home = "renta"
         log_add("Ya no tienes a tus padres: ahora pagas renta.", "n")
     }
     if shares_home() && L.home != "propia" { L.home = "pareja" }
-    L.money -= living_costs()
+    dn_charge(living_costs())
     L.money += partner_share()
     // Estilo de vida
+    if L.lifestyle == "comodo" && chance(35) { L.happy += 1 }
     if L.lifestyle == "lujoso" {
         if chance(60) { L.happy += 2 }
         if chance(20) { gain("charm", 1) }
     }
+    if L.lifestyle == "magnate" {
+        if chance(70) { L.happy += 3 }
+        if chance(30) { gain("charm", 1) }
+        if chance(10) { L.fame += 1 }
+    }
     if L.lifestyle == "austero" && chance(40) { L.happy -= 1 }
     if L.home == "padres" && L.age >= 25 && chance(30) { L.happy -= 1 }
-    // Ahorro
-    if L.savings > 0 { L.savings += L.savings * 4 / 1000 }
+    // Ahorro (según la tasa del banco central)
+    if L.savings > 0 { L.savings += L.savings * bank_rate() / 200000 }
     // Préstamos e hipoteca
     pay_loan("loan")
     pay_loan("mort")
@@ -244,12 +267,16 @@ function finance_month() {
         L.credit += 2
     }
     if L.money < -20000 { collectors() }
-    // Peleas por dinero
+    // Peleas por dinero (menos con cuenta mancomunada o un buen acuerdo)
     let p = partner()
-    if p != null && L.married && L.money < 0 && chance(15) {
+    let fight = 15
+    if couple_mode() == "mancomunada" || dn().calm > 0 { fight = 7 }
+    if p != null && L.married && L.money < 0 && chance(fight) {
         p.bond = clamp100(p.bond - 6)
         log_add("Pelea con " + p.first + " por el dinero. Las cuentas no salen.", "b")
     }
+    dinero_month()
+    lujos_month()
     return null
 }
 
@@ -258,6 +285,7 @@ function pay_loan(kind: string) {
     if l == null { return null }
     let interest = l.bal * l.rate / 10000
     l.bal += interest
+    if kind == "mort" { dn().ded += interest }
     let pay = min(l.bal, l.base + interest)
     L.money -= pay
     l.bal -= pay
@@ -275,8 +303,8 @@ function collectors() {
     if !chance(25) { return null }
     let worst = cheapest_asset()
     if worst != null {
-        list_remove_value(L.assets, worst.t)
-        L.money += worst.cost / 2
+        L.money += asset_value(worst) / 2
+        lx_remove(worst)
         L.credit = max(300, L.credit - 40)
         log_add("Te embargaron: " + str_lower(worst.t) + ". Lo remataron a mitad de precio.", "b")
         hito_once("seized", "Vida", "Te embargaron por deudas")
@@ -294,7 +322,7 @@ function cheapest_asset() {
     let i = 0
     while i < len(ASSETS) {
         let a = ASSETS[i]
-        if list_contains(L.assets, a.t) && (idx < 0 || a.cost < best) {
+        if list_contains(L.assets, a.t) && !is_house_asset(a) && (idx < 0 || a.cost < best) {
             best = a.cost
             idx = i
         }
@@ -356,7 +384,7 @@ function plan_market() {
     while i < 2 {
         let s = stock_def(ids[i])
         let big = rint(10, 35)
-        if s.id == "criptoloco" { big = rint(25, 80) }
+        if s.s == "Cripto" { big = rint(25, 80) }
         let up = chance(55)
         if up { next[s.id] = big } else { next[s.id] = 0 - big }
         let tpl = pick(NEWS_UP)
@@ -431,6 +459,10 @@ function news_result(score: any) {
     }
     mk.tip = tip
     mk.tip_m = L.tm
+    if score >= 90 {
+        mx().papers += 1
+        if mx().papers >= 5 { flag("paper_ace") }
+    }
     gain("know", 1)
     hito_once("first_paper", "Vida", "Leíste el periódico financiero por primera vez")
     return finish("El periódico", "Marcaste las palabras clave (" + str(score) + " puntos). Tu pista: " + tip, "g")
@@ -439,7 +471,17 @@ function news_result(score: any) {
 // ---------------------------------------------------------------- menú
 
 function fin_cats() {
-    return ["Resumen", "Banco", "Bolsa", "Noticias", "Casino", "Bienes"]
+    return ["Resumen", "Gastos", "Banco", "Crédito", "Bolsa", "Inversiones", "Noticias", "Casino", "Bienes", "Impuestos", "Pareja"]
+}
+
+function fin_cat_index(name: string) {
+    let cats = fin_cats()
+    let i = 0
+    while i < len(cats) {
+        if cats[i] == name { return i }
+        i += 1
+    }
+    return 0
 }
 
 function fin_block() {
@@ -462,7 +504,7 @@ function fin_items(cat: string) {
         let pen = L.pension / 12
         let share = partner_share()
         let total_in = inc + gig + pen + share
-        let costs = living_costs()
+        let costs = living_costs() + dn_extra_costs()
         let loans = 0
         if L.loan != null { loans += L.loan.base }
         if L.mort != null { loans += L.mort.base }
@@ -474,23 +516,22 @@ function fin_items(cat: string) {
         if share > 0 { list_push(parts, "aporte de tu pareja " + money_str(share)) }
         if len(parts) == 0 { list_push(parts, "nada") }
         list_push(items, finfo(0, "Ingresos: " + money_str(total_in) + "/mes", "Sin contar propinas", "Entra: " + str_join(parts, ", ") + ". El sueldo ya descuenta 30% de impuestos."))
-        list_push(items, finfo(1, "Gastos: " + money_str(total_out) + "/mes", "Vida, deudas", "Vivienda y comida " + money_str(costs) + ", préstamos " + money_str(loans) + ". Los hijos cuestan $3,000 al año cada uno y los hábitos se cobran aparte."))
+        list_push(items, finfo(1, "Gastos: " + money_str(total_out) + "/mes", "Vida, deudas", "Vivienda, comida, servicios y transporte " + money_str(costs) + ", préstamos " + money_str(loans) + ". Los hijos cuestan $3,000 al año cada uno; los hábitos, los lujos y el personal se cobran aparte."))
         list_push(items, finfo(2, "Patrimonio neto: " + money_str(net_worth()), "Todo lo que tienes", "Efectivo " + money_str(L.money) + ", ahorro " + money_str(L.savings) + ", bolsa " + money_str(portfolio_value()) + ", bienes y casas, menos tus deudas."))
         list_push(items, finfo(3, "Historial crediticio: " + str(L.credit), credit_word(), "Sube si pagas a tiempo y no estás en números rojos. Decide si te prestan y a qué tasa."))
         if adult {
-            list_push(items, {"action": "fin:life", "t": "Estilo de vida: " + LIFE_NAMES[L.lifestyle], "s": "Cambiar", "desc": "Austero: gastas poco y te pesa un poco. Normal. Lujoso: gastas mucho, más felicidad y encanto.", "lock": ""})
+            list_push(items, {"action": "fin:life", "t": "Estilo de vida: " + LIFE_NAMES[L.lifestyle], "s": "Cambiar", "desc": "Austero, normal, cómodo, lujoso o magnate: cambia tus gastos de cada mes, tu felicidad y tu encanto.", "lock": ""})
             list_push(items, {"action": "fin:home", "t": "Vivienda: " + HOME_NAMES[L.home], "s": "Cambiar", "desc": "Con tus padres no pagas renta (pero después de los 25 te pesa). Rentar te da independencia. Con casa propia solo pagas mantenimiento.", "lock": ""})
-            let p = partner()
-            if p != null && both_adults(p) {
-                let pinc = partner_income(p)
-                let pre = "Sin contrato prematrimonial."
-                if L.prenup { pre = "Con contrato prematrimonial." }
-                list_push(items, finfo(4, "Finanzas con " + p.first, p.job_t + " · " + money_str(pinc) + "/mes", "Si viven juntos aporta 25% de su sueldo; casados, 40%, y comparten los gastos de la casa. " + pre))
-            }
             if L.alimony_m > 0 { list_push(items, finfo(5, "Pensión alimenticia", money_str(L.alimony) + "/mes", "Te quedan " + str(L.alimony_m) + " meses.")) }
+            list_push(items, {"action": "tab:lux", "t": "Tienda de lujo", "s": "Estatus: " + lx_status_name(), "desc": "Vehículos, propiedades, joyas, arte, personal y seguros.", "lock": ""})
         }
         return items
     }
+    if cat == "Gastos" { return dn_gastos_items() }
+    if cat == "Crédito" { return dn_credit_items() }
+    if cat == "Inversiones" { return mk_invest_items() }
+    if cat == "Impuestos" { return dn_tax_items() }
+    if cat == "Pareja" { return dn_couple_items() }
     if cat == "Banco" {
         let lock = ""
         if !adult { lock = "Edad 18" }
@@ -506,7 +547,8 @@ function fin_items(cat: string) {
         if debt <= 0 { pl = "Sin deudas" }
         list_push(items, {"action": "fin:pay", "t": "Abonar a tus deudas", "s": money_str(debt), "desc": "Préstamo personal, préstamo estudiantil e hipoteca. Pagar antes ahorra intereses.", "lock": pl})
         if L.loan != null { list_push(items, finfo(6, "Préstamo: " + money_str(L.loan.bal), money_str(L.loan.base) + "/mes + interés", "Tasa mensual: " + str(L.loan.rate / 100) + "." + str(L.loan.rate % 100) + "%.")) }
-        if L.mort != null { list_push(items, finfo(7, "Hipoteca: " + money_str(L.mort.bal), money_str(L.mort.base) + "/mes + interés", "Tu casa, a 20 años.")) }
+        if L.mort != null { list_push(items, finfo(7, "Hipoteca: " + money_str(L.mort.bal), money_str(L.mort.base) + "/mes + interés", "Tasa mensual: " + rate_str(L.mort.rate) + ". Si te quedas en números rojos varios meses, el banco te embarga.")) }
+        for it in dn_bank_items() { list_push(items, it) }
         return items
     }
     if cat == "Bolsa" {
@@ -528,6 +570,7 @@ function fin_items(cat: string) {
         return items
     }
     if cat == "Noticias" {
+        for it in mk_news_items() { list_push(items, it) }
         let i = 10
         for n in L.mk.news {
             list_push(items, finfo(i, n, "Titulares", "Lo que dicen todos. Para los detalles, lee el periódico."))
@@ -543,16 +586,7 @@ function fin_items(cat: string) {
         }
         return items
     }
-    if cat == "Casino" {
-        let lock = ""
-        if !adult { lock = "Edad 18" }
-        list_push(items, {"action": "fin:bet:roulette", "t": "Ruleta: rojo o negro", "s": "Paga 2 a 1", "desc": "Casi la mitad de probabilidad. El verde es de la casa.", "lock": lock})
-        list_push(items, {"action": "fin:bet:number", "t": "Ruleta: a un número", "s": "Paga 36 a 1", "desc": "Una en 37. Para soñadores.", "lock": lock})
-        list_push(items, {"action": "fin:bet:slots", "t": "Tragamonedas", "s": "Premio mayor x200", "desc": "Luces, ruido y una palanca.", "lock": lock})
-        list_push(items, {"action": "fin:bet:bj", "t": "Blackjack", "s": "Llega a 21", "desc": "Pide cartas sin pasarte de 21 y gánale al crupier.", "lock": lock})
-        if L.gamble >= 15 { list_push(items, finfo(21, "Cuidado: ludopatía", "Juegas demasiado", "El casino te está consumiendo. Tómate un descanso.")) }
-        return items
-    }
+    if cat == "Casino" { return cs_items() }
     if cat == "Bienes" {
         for h in HOUSES {
             let lock = ""
@@ -561,13 +595,12 @@ function fin_items(cat: string) {
             let down = h.cost / 5
             list_push(items, {"action": "fin:house:" + h.id, "t": h.t + " " + money_str(house_value(h)), "s": "Enganche " + money_str(down * house_value(h) / h.cost), "desc": "Cómprala con hipoteca a 20 años (necesitas el enganche del 20% y buen crédito) o de contado. Con casa propia no pagas renta.", "lock": lock})
         }
-        for a in ASSETS {
-            if list_contains(L.assets, a.t) {
-                list_push(items, {"action": "fin:sell:" + a.id, "t": "Vender: " + a.t, "s": money_str(a.cost * 7 / 10), "desc": "Lo usado vale menos: recuperas el 70%.", "lock": ""})
-            }
+        if list_contains(L.assets, "Departamento") {
+            list_push(items, {"action": "fin:sell:depa", "t": "Vender: Departamento", "s": money_str(house_value(HOUSES[0])), "desc": "Al precio actual del mercado inmobiliario. Si tiene hipoteca, primero se liquida.", "lock": ""})
         }
+        list_push(items, {"action": "tab:lux", "t": "Tus otros bienes", "s": money_str(lx_worth()), "desc": "Vehículos, segundas casas, joyas y arte: véndelos, subástalos o réntalos en la Tienda de lujo › Tus bienes.", "lock": ""})
         for h in HOUSES {
-            if list_contains(L.assets, h.t) && h.t != "Departamento" {
+            if list_contains(L.assets, h.t) && h.id != "depa" {
                 list_push(items, {"action": "fin:sellh:" + h.id, "t": "Vender: " + h.t, "s": money_str(house_value(h)), "desc": "Al precio actual del mercado inmobiliario. Si tiene hipoteca, primero se liquida.", "lock": ""})
             }
         }
@@ -590,7 +623,9 @@ function fin_action(action: string) {
     fin_init()
     G.modal = null
     if action == "fin:life" {
-        open_choice("ESTILO DE VIDA", "¿Cómo quieres vivir? Afecta tus gastos de cada mes y tu felicidad.", ["Austero (gastas poco)", "Normal", "Lujoso (gastas mucho)"], ["", "", ""], "fin_life", {})
+        let labels = []
+        for l in LIFESTYLES { list_push(labels, LIFE_NAMES[l] + " (renta " + money_str(RENT[l]) + ", comida " + money_str(FOOD[l]) + ")") }
+        open_choice("ESTILO DE VIDA", "¿Cómo quieres vivir? Afecta tus gastos de cada mes, los imprevistos y tu felicidad.", labels, ["", "", "", "", ""], "fin_life", {})
         return null
     }
     if action == "fin:home" { return open_home() }
@@ -609,9 +644,8 @@ function fin_action(action: string) {
         return mg_start("news", "El periódico financiero", "news", {})
     }
     if str_starts_with(action, "fin:stock:") { return open_stock(str_replace(action, "fin:stock:", "")) }
-    if str_starts_with(action, "fin:bet:") { return open_bet(str_replace(action, "fin:bet:", "")) }
     if str_starts_with(action, "fin:house:") { return open_house(str_replace(action, "fin:house:", "")) }
-    if str_starts_with(action, "fin:sell:") { return sell_asset(str_replace(action, "fin:sell:", "")) }
+    if action == "fin:sell:depa" { return sell_house("depa") }
     if str_starts_with(action, "fin:sellh:") { return sell_house(str_replace(action, "fin:sellh:", "")) }
     return null
 }
@@ -694,14 +728,17 @@ function open_stock(id: string) {
         if pl > 0 { sign = "+" }
         txt = txt + " Ganancia: " + sign + money_str(pl) + "."
     }
-    let locks = ["", "", "", "", ""]
+    let big = max(10000, L.money / 4 / 1000 * 1000)
+    let locks = ["", "", "", "", "", ""]
     if L.money < 1000 { locks[0] = "Sin fondos" }
-    if L.money < 10000 { locks[1] = "Sin fondos" }
+    if L.money < big { locks[1] = "Sin fondos" }
     if own == 0 {
         locks[2] = "No tienes"
         locks[3] = "No tienes"
     }
-    open_choice("BOLSA · " + str_upper(s.n), txt, ["Comprar $1,000", "Comprar $10,000", "Vender la mitad", "Vender todo", "Cerrar"], locks, "stock", {"id": id})
+    let sh = mx().shorts[id]
+    if sh != null { txt = txt + " Apuesta a la baja: " + money_str(short_pnl(id)) + "." }
+    open_choice("BOLSA · " + str_upper(s.n), txt, ["Comprar $1,000", "Comprar " + money_str(big), "Vender la mitad", "Vender todo", "Venta en corto y órdenes", "Cerrar"], locks, "stock", {"id": id, "big": big})
     return null
 }
 
@@ -710,7 +747,7 @@ function resolve_stock(index: int, ctx: map) {
     let id = ctx.id
     if index == 0 || index == 1 {
         let amount = 1000
-        if index == 1 { amount = 10000 }
+        if index == 1 { amount = map_get(ctx, "big", 10000) }
         return resolve_amount(0, {"kind": "buy:" + id, "amounts": [amount]})
     }
     if index == 2 || index == 3 {
@@ -718,32 +755,19 @@ function resolve_stock(index: int, ctx: map) {
         let n = own
         if index == 2 { n = own / 2 }
         if n <= 0 { return null }
-        let value = n * price(id) / 100
-        let fee = value / 100
-        if fin_pro() { fee = 0 }
-        let inv = L.invested[id]
-        if inv == null { inv = 0 }
-        let cost_part = inv * n / max(1, own)
-        L.invested[id] = inv - cost_part
-        L.port[id] = own - n
-        L.money += value - fee
-        let pl = value - fee - cost_part
+        let r = mk_sell(id, n)
         let kind = "g"
-        let txt = "Vendiste " + str(n) + " acciones de " + stock_def(id).n + " por " + money_str(value - fee) + "."
-        if pl >= 0 { txt = txt + " Ganaste " + money_str(pl) + "." } else {
-            txt = txt + " Perdiste " + money_str(0 - pl) + "."
-            kind = "b"
-        }
-        if pl >= 100000 { hito_once("big_trade", "Vida", "Ganaste más de $100,000 en una sola venta") }
-        return finish("Bolsa", txt, kind)
+        if r.pl < 0 { kind = "b" }
+        return finish("Bolsa", r.txt, kind)
     }
+    if index == 4 { return mk_open_more(id) }
     return null
 }
 
 // ---------------------------------------------------------------- préstamos y casas
 
 function loan_rate() {
-    let r = 250 - (L.credit - 600) * 3 / 5
+    let r = 250 - (L.credit - 600) * 3 / 5 + (bank_rate() - 800) / 12
     if fin_pro() { r = r * 70 / 100 }
     return clamp(r, 60, 450)
 }
@@ -751,6 +775,9 @@ function loan_rate() {
 function open_loan() {
     if L.age < 18 { return info("Banco", "Necesitas ser mayor de edad.") }
     let locks = ["", "", "", ""]
+    if dn_bk_lock() {
+        locks = ["Bancarrota", "Bancarrota", "Bancarrota", ""]
+    }
     if L.credit < 520 { locks[0] = "Crédito " + str(L.credit) }
     if L.credit < 600 { locks[1] = "Crédito 600" }
     if L.credit < 700 || job_income() < 3000 { locks[2] = "Crédito 700 e ingresos" }
@@ -778,29 +805,41 @@ function open_house(id: string) {
     if L.age < 18 { return info("Bienes", "Necesitas ser mayor de edad.") }
     let value = house_value(h)
     let down = value / 5
-    let locks = ["", "", ""]
+    let locks = ["", "", "", "", ""]
     if L.money < value { locks[0] = money_str(value) }
-    if L.money < down || L.credit < 620 || L.mort != null { locks[1] = "Enganche y crédito 620" }
-    open_choice(str_upper(h.t), "Vale " + money_str(value) + ". Con hipoteca pagas " + money_str(down) + " de enganche y el resto a 20 años.",
-        ["Comprar de contado", "Comprar con hipoteca", "Mejor no"], locks, "house", {"id": h.id})
+    let ml = ""
+    if L.mort != null { ml = "Ya tienes hipoteca" } else if dn_bk_lock() { ml = "Bancarrota" } else if L.money < down || L.credit < 620 { ml = "Enganche y crédito 620" }
+    locks[1] = ml
+    locks[2] = ml
+    locks[3] = ml
+    let rest = value - down
+    open_choice(str_upper(h.t), "Vale " + money_str(value) + ". Con hipoteca pagas " + money_str(down) + " de enganche y el resto a plazos: a menos años, mensualidad más alta pero menos interés.",
+        ["Comprar de contado", "Hipoteca a 10 años (" + money_str(rest / 120) + "/mes + interés)", "Hipoteca a 20 años (" + money_str(rest / 240) + "/mes + interés)", "Hipoteca a 30 años (" + money_str(rest / 360) + "/mes + interés)", "Mejor no"], locks, "house", {"id": h.id})
     return null
 }
 
 function resolve_house(index: int, ctx: map) {
     G.modal = null
-    if index == 2 { return null }
+    if index >= 4 { return null }
     let h = HOUSES[0]
     for x in HOUSES {
         if x.id == ctx.id { h = x }
     }
+    if list_contains(L.assets, h.t) { return null }
     let value = house_value(h)
     if index == 0 {
+        if L.money < value { return null }
         L.money -= value
     } else {
+        if L.mort != null { return null }
         let down = value / 5
         L.money -= down
         let rest = value - down
-        L.mort = {"bal": rest, "rate": loan_rate() / 3, "base": rest / 240}
+        let years = [10, 20, 30][index - 1]
+        let rate = loan_rate() / 3
+        if years == 10 { rate = rate * 85 / 100 }
+        if years == 30 { rate = rate * 115 / 100 }
+        L.mort = {"bal": rest, "rate": rate, "base": rest / (years * 12), "years": years}
     }
     list_push(L.assets, h.t)
     L.home = "propia"
@@ -810,18 +849,6 @@ function resolve_house(index: int, ctx: map) {
     let p = partner()
     if p != null && both_adults(p) { add_hito(p, "Compraron su casa") }
     return finish("Bienes", "¡Ya tienes " + str_lower(h.t) + " propia! Se acabó la renta.", "g")
-}
-
-function sell_asset(id: string) {
-    for a in ASSETS {
-        if a.id == id && list_contains(L.assets, a.t) {
-            list_remove_value(L.assets, a.t)
-            L.money += a.cost * 7 / 10
-            if house_owned() == null && L.home == "propia" { L.home = "renta" }
-            return finish("Bienes", "Vendiste " + str_lower(a.t) + " por " + money_str(a.cost * 7 / 10) + ".", "n")
-        }
-    }
-    return null
 }
 
 function sell_house(id: string) {
@@ -863,205 +890,8 @@ function resolve_home(index: int) {
     return finish("Vivienda", "Ahora vives: " + str_lower(HOME_NAMES[h]) + ".", "n")
 }
 
-// ---------------------------------------------------------------- casino
-
-function open_bet(game: string) {
-    if L.age < 18 { return info("Casino", "Solo mayores de edad.") }
-    if L.money < 100 { return info("Casino", "No tienes ni para la primera ficha.") }
-    let tenth = max(100, L.money / 10)
-    let amounts = [100, 1000, tenth, L.money]
-    let labels = ["$100", "$1,000", money_str(tenth) + " (10%)", "TODO (" + money_str(L.money) + ")", "Mejor no"]
-    let locks = ["", "", "", "", ""]
-    if L.money < 1000 { locks[1] = "Sin fondos" }
-    let names = {"roulette": "RULETA · ROJO O NEGRO", "number": "RULETA · A UN NÚMERO", "slots": "TRAGAMONEDAS", "bj": "BLACKJACK"}
-    open_choice(names[game], "Tienes " + money_str(L.money) + ". ¿Cuánto apuestas?", labels, locks, "bet", {"game": game, "amounts": amounts})
-    return null
-}
-
-function resolve_bet(index: int, ctx: map) {
-    G.modal = null
-    if index == 4 { return finish("Casino", "Guardaste tus fichas. Sabia decisión.", "n") }
-    let amount = ctx.amounts[index]
-    if amount <= 0 || amount > L.money { return null }
-    L.gamble += 1
-    hito_once("first_casino", "Vida", "Tu primera apuesta en el casino")
-    let g = ctx.game
-    if g == "roulette" {
-        if rint(1, 37) <= 18 { return bet_win(amount, amount, "¡Salió tu color!") }
-        return bet_lose(amount, "La bolita cayó en el otro color.")
-    }
-    if g == "number" {
-        if rint(1, 37) == 1 { return bet_win(amount, amount * 35, "¡Tu número! La mesa entera grita.") }
-        return bet_lose(amount, "Ni cerca.")
-    }
-    if g == "slots" {
-        let r = rint(1, 1000)
-        if r <= 2 {
-            hito_me("Vida", "¡Ganaste el premio mayor del casino!")
-            flag("jackpot")
-            return bet_win(amount, amount * 199, "¡¡PREMIO MAYOR!! Las luces no paran de girar.")
-        }
-        if r <= 20 { return bet_win(amount, amount * 19, "¡Triple siete! x20.") }
-        if r <= 100 { return bet_win(amount, amount * 4, "Tres cerezas: x5.") }
-        if r <= 300 { return bet_win(amount, amount, "Dos iguales: recuperas el doble.") }
-        return bet_lose(amount, "Nada. La máquina se ríe de ti.")
-    }
-    if g == "bj" {
-        L.money -= amount
-        G.bj = {"bet": amount, "p": [card(), card()], "d": [card()]}
-        return bj_show("")
-    }
-    return null
-}
-
-function bet_win(bet: int, profit: int, msg: string) {
-    L.money += profit
-    L.happy += 6
-    gain("guts", 1)
-    if profit >= 100000 && chance(40) {
-        let tax = profit / 5
-        L.money -= tax
-        msg = msg + " Hacienda se llevó " + money_str(tax) + " de impuestos."
-    }
-    return finish("Casino", msg + " Ganaste " + money_str(profit) + ".", "g")
-}
-
-function bet_lose(bet: int, msg: string) {
-    L.money -= bet
-    L.happy -= 5
-    return finish("Casino", msg + " Perdiste " + money_str(bet) + ".", "b")
-}
-
-function card() {
-    let c = rint(1, 13)
-    if c > 10 { return 10 }
-    if c == 1 { return 11 }
-    return c
-}
-
-function hand_total(cards: list) {
-    let t = 0
-    let aces = 0
-    for c in cards {
-        t += c
-        if c == 11 { aces += 1 }
-    }
-    while t > 21 && aces > 0 {
-        t -= 10
-        aces -= 1
-    }
-    return t
-}
-
-function bj_show(prefix: string) {
-    let b = G.bj
-    let pt = hand_total(b.p)
-    let txt = prefix + "Tus cartas suman " + str(pt) + ". El crupier muestra " + str(hand_total(b.d)) + ". Apuesta: " + money_str(b.bet) + "."
-    let locks = ["", "", ""]
-    if len(b.p) > 2 || L.money < b.bet { locks[2] = "No se puede" }
-    if job_is("crupier") { txt = txt + " (Tu experiencia de crupier: con 12 a 16 contra un 7 o más, conviene pedir.)" }
-    open_choice("BLACKJACK", txt, ["Pedir carta", "Plantarte", "Doblar la apuesta"], locks, "bj", {})
-    return null
-}
-
 function job_is(id: string) {
     return (L.job != null && L.job.id == id) || (L.job2 != null && L.job2.id == id)
-}
-
-function resolve_bj(index: int) {
-    G.modal = null
-    let b = G.bj
-    if b == null { return null }
-    if index == 2 {
-        L.money -= b.bet
-        b.bet = b.bet * 2
-        list_push(b.p, card())
-        return bj_end()
-    }
-    if index == 0 {
-        list_push(b.p, card())
-        if hand_total(b.p) > 21 {
-            G.bj = null
-            L.happy -= 5
-            return finish("Blackjack", "Te pasaste con " + str(hand_total(b.p)) + ". Perdiste " + money_str(b.bet) + ".", "b")
-        }
-        if hand_total(b.p) == 21 { return bj_end() }
-        return bj_show("")
-    }
-    return bj_end()
-}
-
-function bj_end() {
-    let b = G.bj
-    G.bj = null
-    let pt = hand_total(b.p)
-    if pt > 21 {
-        L.happy -= 5
-        return finish("Blackjack", "Te pasaste con " + str(pt) + ". Perdiste " + money_str(b.bet) + ".", "b")
-    }
-    while hand_total(b.d) < 17 { list_push(b.d, card()) }
-    let dt = hand_total(b.d)
-    if dt > 21 || pt > dt {
-        let win = b.bet * 2
-        if pt == 21 && len(b.p) == 2 { win = b.bet * 5 / 2 }
-        L.money += win
-        L.happy += 6
-        return finish("Blackjack", "Tú " + str(pt) + ", crupier " + str(dt) + ". ¡Ganaste " + money_str(win - b.bet) + "!", "g")
-    }
-    if pt == dt {
-        L.money += b.bet
-        return finish("Blackjack", "Empate a " + str(pt) + ". Recuperas tu apuesta.", "n")
-    }
-    L.happy -= 5
-    return finish("Blackjack", "Tú " + str(pt) + ", crupier " + str(dt) + ". Perdiste " + money_str(b.bet) + ".", "b")
-}
-
-// ---------------------------------------------------------------- impuestos (cada año)
-
-function finance_year() {
-    fin_init()
-    if L.age < 18 || L.jail > 0 || G.modal != null { return null }
-    let income = 0
-    if L.job != null { income = job_pay(L.job) }
-    if income < 30000 { return null }
-    let owed = income * 8 / 100
-    let pro = job_is("contador") || job_is("auditor")
-    let p = partner()
-    if p != null && L.married && p.job_t != null && (str_contains(p.job_t, "Contador") || str_contains(p.job_t, "Contadora")) { pro = true }
-    let locks = ["", "", ""]
-    if L.money < 2000 && !pro { locks[0] = "$2,000" }
-    let first = "Contratar a un contador ($2,000): pagas menos"
-    if pro { first = "Hacerla tú con tu experiencia (gratis): pagas menos" }
-    open_choice("DECLARACIÓN ANUAL", "Llegó la declaración de impuestos. Calculas que debes " + money_str(owed) + ".", [first, "Hacerla tú (minijuego de cuentas)", "Evadir impuestos"], locks, "taxes", {"owed": owed, "pro": pro})
-    return null
-}
-
-function resolve_taxes(index: int, ctx: map) {
-    G.modal = null
-    let owed = ctx.owed
-    if index == 0 {
-        if !ctx.pro { L.money -= 2000 }
-        L.money -= owed * 70 / 100
-        return finish("Impuestos", "Con deducciones bien hechas pagaste " + money_str(owed * 70 / 100) + ". Todo en regla.", "g")
-    }
-    if index == 1 { return mg_start("math", "Declaración de impuestos", "taxes", {"owed": owed}) }
-    L.karma -= 5
-    if chance(25) {
-        let fine = owed * 3
-        L.money -= fine
-        L.credit = max(300, L.credit - 60)
-        if chance(20) { return finish("Impuestos", "Auditoría de Hacienda: multa de " + money_str(fine) + "." + go_to_jail(1), "b") }
-        return finish("Impuestos", "¡Auditoría! Hacienda te descubrió: multa de " + money_str(fine) + ".", "b")
-    }
-    return finish("Impuestos", "No pagaste nada... y nadie se dio cuenta. Por ahora.", "n")
-}
-
-function taxes_result(score: any, ctx: map) {
-    let owed = ctx.owed
-    let pay = owed * (130 - score / 2) / 100
-    L.money -= pay
-    if score >= 80 { return finish("Impuestos", "Cuentas perfectas: pagaste " + money_str(pay) + ".", "g") }
-    return finish("Impuestos", "Te equivocaste en algunas cuentas y pagaste " + money_str(pay) + " con recargos.", "n")
 }
 
 // ---------------------------------------------------------------- carreras financieras
@@ -1156,6 +986,8 @@ function divorce_settlement(p: map) {
             msg = msg + " Y " + p.first + " se quedó con la casa."
         }
     }
+    if !L.prenup { msg = msg + dn_divorce_split() }
+    dn_breakup(p)
     let kids = kids_living()
     if kids > 0 {
         L.alimony = max(500, job_income() * (10 + kids * 5) / 100)

@@ -224,6 +224,7 @@ function menu_title(tab: string) {
     if tab == "effects" { return "EFECTOS" }
     if tab == "hitos" { return "MIS HITOS" }
     if tab == "fin" { return "FINANZAS" }
+    if tab == "lux" { return "LUJOS" }
     if tab == "route" { return "MI RUTA" }
     if tab == "jobs" { return "CARRERAS" }
     return "NOCHE +18"
@@ -238,6 +239,7 @@ function menu_cats(tab: string) {
     if tab == "hitos" { return HITO_CATS }
     if tab == "missions" { return MISSION_CAT_ORDER }
     if tab == "fin" { return fin_cats() }
+    if tab == "lux" { return LX_CATS }
     if tab == "route" { return route_cats() }
     if tab == "jobs" { return FIELD_ORDER }
     if tab == "study" { return ["Universidad", "Técnica"] }
@@ -258,6 +260,7 @@ function menu_items(tab: string, cat: string) {
     if tab == "effects" { return effect_items() }
     if tab == "hitos" { return my_hito_items(cat) }
     if tab == "fin" { return fin_items(cat) }
+    if tab == "lux" { return lx_items(cat) }
     if tab == "route" { return route_items(cat) }
     if tab == "act" && cat == "Fe" { return faith_items() }
     if tab == "jobs" { return job_items_for(cat) }
@@ -294,15 +297,7 @@ function menu_items(tab: string, cat: string) {
         }
     }
     if tab == "act" && cat == "Lujos" && L.age >= 18 {
-        for asset in ASSETS {
-            let lock = ""
-            if list_contains(L.assets, asset.t) {
-                lock = "Ya lo tienes"
-            } else if L.money < asset.cost {
-                lock = money_str(asset.cost)
-            }
-            list_push(items, {"action": "buy:" + asset.id, "t": "Comprar: " + asset.t, "s": money_str(asset.cost), "desc": "Presume tu " + str_lower(asset.t) + ". Felicidad y Encanto.", "lock": lock})
-        }
+        list_push(items, {"action": "tab:lux", "t": "Tienda de lujo", "s": "Estatus: " + lx_status_name(), "desc": "Más de 40 bienes: vehículos, propiedades, joyas, arte y tecnología. También personal doméstico y seguros.", "lock": ""})
     }
     return items
 }
@@ -483,20 +478,9 @@ function do_act(id: string) {
     return null
 }
 
+// Compatibilidad: las compras de lujo pasan por la tienda de lujos.
 function buy(id: string) {
-    G.modal = null
-    for asset in ASSETS {
-        if asset.id != id { continue }
-        if list_contains(L.assets, asset.t) { return info(asset.t, "Ya tienes uno. No seas codicios" + oa(L.gender) + ".") }
-        if L.money < asset.cost { return info(asset.t, "No te alcanza. Cuesta " + money_str(asset.cost) + ".") }
-        L.money -= asset.cost
-        list_push(L.assets, asset.t)
-        hito_me("Vida", "Compraste: " + str_lower(asset.t))
-        L.happy = clamp100(L.happy + asset.happy)
-        gain("charm", asset.charm)
-        return finish("Compra", "Compraste: " + str_lower(asset.t) + ". Todo el barrio te mira con envidia.", "g")
-    }
-    return null
+    return lujos_action("lx:buy:" + id)
 }
 
 function code_activity(id: string, a: map) {
@@ -555,7 +539,7 @@ function code_activity(id: string, a: map) {
     if id == "casino" {
         L.used[id] = L.used[id] - 1
         G.modal = {"kind": "menu", "tab": "fin"}
-        G.menu_cat = 4
+        G.menu_cat = fin_cat_index("Casino")
         G.menu_page = 0
         G.menu_t0 = G.t
         return null
@@ -1010,6 +994,8 @@ function special(name: string, ctx: map) {
     if str_starts_with(name, "z_") { return lazos_special(name, ctx) }
     if str_starts_with(name, "oc_") { return ocio_special(name, ctx) }
     if str_starts_with(name, "of_") { return oficio_special(name, ctx) }
+    if str_starts_with(name, "dn_") { return dinero_special(name, ctx) }
+    if str_starts_with(name, "lx_") { return lujos_special(name, ctx) }
     if str_starts_with(name, "pr_") { return prison_special(name, ctx) }
     if str_starts_with(name, "kid_") || name == "comeback" { return kid_special(name, ctx) }
     if str_starts_with(name, "hito:") || name == "sweet_end" || name == "sweet_moved" { return sweet_special(name, ctx) }
@@ -1208,6 +1194,7 @@ function dispatch_choice(index: int) {
     if m.handler == "initiative" { return resolve_initiative(index, m.ctx) }
     if m.handler == "fin_life" {
         G.modal = null
+        if index >= len(LIFESTYLES) { return null }
         L.lifestyle = LIFESTYLES[index]
         return finish("Estilo de vida", "Ahora llevas un estilo de vida " + str_lower(LIFE_NAMES[L.lifestyle]) + ".", "n")
     }
@@ -1216,8 +1203,6 @@ function dispatch_choice(index: int) {
     if m.handler == "loan" { return resolve_loan(index) }
     if m.handler == "house" { return resolve_house(index, m.ctx) }
     if m.handler == "home" { return resolve_home(index) }
-    if m.handler == "bet" { return resolve_bet(index, m.ctx) }
-    if m.handler == "bj" { return resolve_bj(index) }
     if m.handler == "taxes" { return resolve_taxes(index, m.ctx) }
     if m.handler == "prenup" { return resolve_prenup(index, m.ctx) }
     if m.handler == "faith_partner" || m.handler == "faith_job" || m.handler == "faith_livein" { return resolve_faith(m.handler, index, m.ctx) }
@@ -1229,6 +1214,10 @@ function dispatch_choice(index: int) {
     if str_starts_with(m.handler, "hx_") { return health_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "es_") { return escuela_choice(m.handler, index, m.ctx) }
     if str_starts_with(m.handler, "of_") { return oficio_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "dn_") { return dinero_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "mk_") { return mercado_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "cs_") { return casino_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "lx_") { return lujos_choice(m.handler, index, m.ctx) }
     if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
     if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
     if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }

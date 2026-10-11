@@ -31,6 +31,10 @@ import "ocio.vel"
 import "medicina.vel"
 import "escuela.vel"
 import "oficio.vel"
+import "dinero.vel"
+import "mercado.vel"
+import "casino.vel"
+import "lujos.vel"
 import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
@@ -263,7 +267,7 @@ function handle_input(input: map) {
     }
     if m.kind == "choice" {
         let i = 0
-        while i < 5 {
+        while i < 6 {
             if pressed(input, "Digit" + str(i + 1)) || pressed(input, "Numpad" + str(i + 1)) {
                 handle_action("choice:" + str(i))
                 return null
@@ -468,7 +472,7 @@ function handle_action(action: string) {
         rest = str_sub(action, colon + 1)
     }
     match head {
-        "choice" => dispatch_choice(action_num(action, "choice:", 5))
+        "choice" => dispatch_choice(action_num(action, "choice:", 6))
         "apply" => apply_job(rest)
         "act" => do_act(rest)
         "buy" => buy(rest)
@@ -488,6 +492,10 @@ function handle_action(action: string) {
         "hx" => health_dispatch(action, rest)
         "es" => escuela_action(action)
         "of" => oficio_action(action)
+        "dn" => dinero_action(action)
+        "mk" => mercado_action(action)
+        "cs" => casino_action(action)
+        "lx" => lujos_action(action)
         "habit" => toggle_habit(rest)
         "gig" => take_gig(rest)
         "cact" => do_career_act(rest)

@@ -76,12 +76,57 @@ const CHILDHOOD = [
 
 const OLD_AGE_CAUSES = ["causas naturales", "un infarto", "un derrame cerebral", "neumonía", "un paro cardíaco mientras dormías"]
 
-// Bienes que se pueden comprar (categoría Lujos).
+// Bienes que se pueden comprar (Lujos). kind: car, moto, bike, boat, air, house
+// (se compra en Finanzas › Bienes), prop, jewel, fashion, art, wine, collect, tech.
+// keep: mantenimiento al mes. appr: cuánto cambia su valor cada año (% mínimo y máximo).
 const ASSETS = [
-    {"id": "moto", "t": "Motocicleta", "cost": 9000, "happy": 8, "charm": 3},
-    {"id": "auto", "t": "Auto usado", "cost": 15000, "happy": 6, "charm": 2},
-    {"id": "deportivo", "t": "Auto deportivo", "cost": 90000, "happy": 15, "charm": 8},
-    {"id": "depa", "t": "Departamento", "cost": 120000, "happy": 12, "charm": 3},
-    {"id": "mansion", "t": "Mansión", "cost": 850000, "happy": 25, "charm": 10},
-    {"id": "yate", "t": "Yate", "cost": 1500000, "happy": 30, "charm": 12}
+    // Vehículos
+    {"id": "bici_ruta", "t": "Bicicleta de ruta", "cost": 1500, "happy": 3, "charm": 0, "cat": "Vehículos", "kind": "bike", "keep": 5, "appr": [-15, -8]},
+    {"id": "scooter", "t": "Scooter eléctrico", "cost": 2500, "happy": 3, "charm": 1, "cat": "Vehículos", "kind": "bike", "keep": 10, "appr": [-20, -12]},
+    {"id": "moto", "t": "Motocicleta", "cost": 9000, "happy": 8, "charm": 3, "cat": "Vehículos", "kind": "moto", "keep": 80, "appr": [-12, -6]},
+    {"id": "auto", "t": "Auto usado", "cost": 15000, "happy": 6, "charm": 2, "cat": "Vehículos", "kind": "car", "keep": 120, "appr": [-12, -6]},
+    {"id": "compacto", "t": "Auto compacto nuevo", "cost": 25000, "happy": 8, "charm": 3, "cat": "Vehículos", "kind": "car", "keep": 150, "appr": [-15, -8]},
+    {"id": "pickup", "t": "Camioneta pickup", "cost": 40000, "happy": 8, "charm": 3, "cat": "Vehículos", "kind": "car", "keep": 220, "appr": [-12, -6]},
+    {"id": "suv", "t": "SUV familiar", "cost": 45000, "happy": 9, "charm": 4, "cat": "Vehículos", "kind": "car", "keep": 250, "appr": [-14, -7]},
+    {"id": "electrico", "t": "Auto eléctrico", "cost": 60000, "happy": 10, "charm": 5, "cat": "Vehículos", "kind": "car", "keep": 100, "appr": [-15, -8]},
+    {"id": "deportivo", "t": "Auto deportivo", "cost": 90000, "happy": 15, "charm": 8, "cat": "Vehículos", "kind": "car", "keep": 600, "appr": [-12, -5]},
+    {"id": "clasico", "t": "Auto clásico", "cost": 120000, "happy": 14, "charm": 8, "cat": "Vehículos", "kind": "car", "keep": 500, "appr": [2, 12]},
+    {"id": "limusina", "t": "Limusina", "cost": 200000, "happy": 12, "charm": 8, "cat": "Vehículos", "kind": "car", "keep": 1500, "appr": [-12, -6]},
+    {"id": "superdeportivo", "t": "Superdeportivo", "cost": 350000, "happy": 22, "charm": 12, "cat": "Vehículos", "kind": "car", "keep": 2500, "appr": [-8, 2]},
+    {"id": "lancha", "t": "Lancha", "cost": 35000, "happy": 10, "charm": 3, "cat": "Vehículos", "kind": "boat", "keep": 300, "appr": [-10, -5]},
+    {"id": "velero", "t": "Velero", "cost": 80000, "happy": 12, "charm": 5, "cat": "Vehículos", "kind": "boat", "keep": 500, "appr": [-8, -3]},
+    {"id": "yate", "t": "Yate", "cost": 1500000, "happy": 30, "charm": 12, "cat": "Vehículos", "kind": "boat", "keep": 12000, "appr": [-8, -3]},
+    {"id": "helicoptero", "t": "Helicóptero", "cost": 1200000, "happy": 25, "charm": 10, "cat": "Vehículos", "kind": "air", "keep": 15000, "appr": [-8, -3]},
+    {"id": "jet", "t": "Jet privado", "cost": 8000000, "happy": 35, "charm": 15, "cat": "Vehículos", "kind": "air", "keep": 60000, "appr": [-7, -2]},
+    // Propiedades
+    {"id": "depa", "t": "Departamento", "cost": 120000, "happy": 12, "charm": 3, "cat": "Propiedades", "kind": "house", "keep": 0, "appr": [0, 0]},
+    {"id": "mansion", "t": "Mansión", "cost": 850000, "happy": 25, "charm": 10, "cat": "Propiedades", "kind": "house", "keep": 0, "appr": [0, 0]},
+    {"id": "cabana", "t": "Cabaña en el bosque", "cost": 90000, "happy": 10, "charm": 2, "cat": "Propiedades", "kind": "prop", "keep": 200, "appr": [1, 6]},
+    {"id": "playa", "t": "Casa de playa", "cost": 400000, "happy": 18, "charm": 5, "cat": "Propiedades", "kind": "prop", "keep": 900, "appr": [2, 7]},
+    {"id": "rancho", "t": "Rancho con caballos", "cost": 600000, "happy": 16, "charm": 5, "cat": "Propiedades", "kind": "prop", "keep": 1500, "appr": [1, 6]},
+    {"id": "penthouse", "t": "Penthouse", "cost": 1500000, "happy": 20, "charm": 8, "cat": "Propiedades", "kind": "prop", "keep": 3000, "appr": [2, 8]},
+    {"id": "vinedo", "t": "Viñedo", "cost": 2000000, "happy": 18, "charm": 8, "cat": "Propiedades", "kind": "prop", "keep": 4000, "appr": [2, 7]},
+    {"id": "isla", "t": "Isla privada", "cost": 12000000, "happy": 35, "charm": 15, "cat": "Propiedades", "kind": "prop", "keep": 20000, "appr": [2, 9]},
+    // Joyas y moda
+    {"id": "tenis", "t": "Tenis de colección", "cost": 2000, "happy": 3, "charm": 2, "cat": "Joyas y moda", "kind": "fashion", "keep": 0, "appr": [-5, 15]},
+    {"id": "bolso", "t": "Bolso de diseñador", "cost": 6000, "happy": 5, "charm": 4, "cat": "Joyas y moda", "kind": "fashion", "keep": 0, "appr": [-3, 8]},
+    {"id": "perlas", "t": "Collar de perlas", "cost": 8000, "happy": 4, "charm": 3, "cat": "Joyas y moda", "kind": "jewel", "keep": 0, "appr": [0, 4]},
+    {"id": "reloj", "t": "Reloj de lujo", "cost": 12000, "happy": 6, "charm": 4, "cat": "Joyas y moda", "kind": "jewel", "keep": 0, "appr": [0, 5]},
+    {"id": "anillo", "t": "Anillo de diamantes", "cost": 25000, "happy": 6, "charm": 4, "cat": "Joyas y moda", "kind": "jewel", "keep": 0, "appr": [0, 4]},
+    {"id": "alta_costura", "t": "Guardarropa de alta costura", "cost": 30000, "happy": 8, "charm": 6, "cat": "Joyas y moda", "kind": "fashion", "keep": 0, "appr": [-12, -5]},
+    {"id": "reloj_suizo", "t": "Reloj suizo de colección", "cost": 150000, "happy": 10, "charm": 7, "cat": "Joyas y moda", "kind": "jewel", "keep": 0, "appr": [3, 10]},
+    // Colección
+    {"id": "cartas", "t": "Cartas coleccionables raras", "cost": 1000, "happy": 3, "charm": 0, "cat": "Colección", "kind": "collect", "keep": 0, "appr": [-20, 40]},
+    {"id": "comics", "t": "Cómics de primera edición", "cost": 3000, "happy": 3, "charm": 0, "cat": "Colección", "kind": "collect", "keep": 0, "appr": [-5, 15]},
+    {"id": "emergente", "t": "Cuadro de un artista emergente", "cost": 5000, "happy": 4, "charm": 2, "cat": "Colección", "kind": "art", "keep": 0, "appr": [-25, 60]},
+    {"id": "monedas", "t": "Monedas antiguas", "cost": 10000, "happy": 3, "charm": 1, "cat": "Colección", "kind": "collect", "keep": 0, "appr": [0, 8]},
+    {"id": "vinos_cava", "t": "Cava de vinos", "cost": 15000, "happy": 5, "charm": 3, "cat": "Colección", "kind": "wine", "keep": 30, "appr": [3, 9]},
+    {"id": "escultura", "t": "Escultura contemporánea", "cost": 40000, "happy": 6, "charm": 3, "cat": "Colección", "kind": "art", "keep": 0, "appr": [-10, 20]},
+    {"id": "fosil", "t": "Fósil de dinosaurio", "cost": 250000, "happy": 10, "charm": 5, "cat": "Colección", "kind": "collect", "keep": 0, "appr": [0, 8]},
+    {"id": "maestro", "t": "Obra de un gran maestro", "cost": 2000000, "happy": 15, "charm": 10, "cat": "Colección", "kind": "art", "keep": 0, "appr": [4, 10]},
+    // Tecnología
+    {"id": "gamer", "t": "Computadora gamer", "cost": 3000, "happy": 5, "charm": 0, "cat": "Tecnología", "kind": "tech", "keep": 0, "appr": [-25, -15]},
+    {"id": "telescopio", "t": "Telescopio profesional", "cost": 8000, "happy": 5, "charm": 0, "cat": "Tecnología", "kind": "tech", "keep": 0, "appr": [-10, -5]},
+    {"id": "cine", "t": "Cine en casa", "cost": 15000, "happy": 8, "charm": 2, "cat": "Tecnología", "kind": "tech", "keep": 20, "appr": [-20, -10]},
+    {"id": "domotica", "t": "Casa inteligente", "cost": 20000, "happy": 6, "charm": 1, "cat": "Tecnología", "kind": "tech", "keep": 30, "appr": [-15, -8]}
 ]
