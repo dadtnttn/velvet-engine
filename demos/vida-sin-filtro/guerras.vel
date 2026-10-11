@@ -162,7 +162,37 @@ function world_headline(text: string, id: string) {
     if len(wd.news) > 30 { wd.news = list_slice(wd.news, len(wd.news) - 30, len(wd.news)) }
     let mine = id == here_id()
     if mine || chance(35) { log_add("Noticias: " + text, if_str(mine, "b", "n")) }
+    // Lo que pasa en tu país o en uno vecino te llega al celular.
+    if mine || list_contains(here().nb, id) { notify("news", text) }
     return null
+}
+
+// La app de Noticias: el mundo (lo más nuevo primero) y tu país.
+function news_items(cat: string) {
+    let items = []
+    let wd = world()
+    if cat == "Mundo" {
+        let wars = []
+        for w in wd.wars { list_push(wars, w.n) }
+        list_push(items, {"action": "ph:none", "t": "Guerras activas", "s": str(len(wars)), "desc": if_str(len(wars) == 0, "Ninguna, por ahora.", str_join(wars, " · ") + "."), "lock": ""})
+        let i = len(wd.news) - 1
+        while i >= 0 && len(items) < 14 {
+            let n = wd.news[i]
+            list_push(items, {"action": "ph:none", "t": n.t, "s": str(n.y), "desc": n.t, "lock": ""})
+            i -= 1
+        }
+        if len(wd.news) == 0 { list_push(items, {"action": "ph:none", "t": "Sin titulares", "s": "Día tranquilo", "desc": "El mundo está extrañamente en paz.", "lock": ""}) }
+        return items
+    }
+    let c = here()
+    let lead = by_gender(L.gender, c.lead_m, c.lead_f)
+    list_push(items, {"action": "ph:none", "t": c.n, "s": gov_name(c.gov), "desc": "Gobierno: " + gov_name(c.gov) + " (" + str_lower(lead) + "). Capital: " + c.cap + ".", "lock": ""})
+    let dg = danger_here()
+    list_push(items, {"action": "ph:none", "t": "Seguridad", "s": if_str(dg == "", "En paz", "Peligro"), "desc": if_str(dg == "", "No hay guerras ni conflictos armados en " + c.n + ".", dg), "lock": ""})
+    let next = world_year()
+    while next % 4 != 2 { next += 1 }
+    list_push(items, {"action": "ph:none", "t": "Mundial de fútbol", "s": str(next), "desc": "Cada cuatro años, el país entero se paraliza. El próximo es en " + str(next) + ".", "lock": ""})
+    return items
 }
 
 function start_war(a: string, b: string, n: string, mine: bool) {

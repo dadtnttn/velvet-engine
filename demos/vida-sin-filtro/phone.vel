@@ -23,6 +23,7 @@ const PHONE_APPS = [
     {"id": "agenda", "n": "Agenda", "fill": "#e3141b", "min": 12},
     {"id": "route", "n": "Mi Ruta", "fill": "#0d0d0d", "min": 12},
     {"id": "faith", "n": "Fe", "fill": "#f7f7f2", "min": 12},
+    {"id": "news", "n": "Noticias", "fill": "#f7f7f2", "min": 12},
     {"id": "settings", "n": "Ajustes", "fill": "#3a3a3a", "min": 12}
 ]
 
@@ -322,6 +323,7 @@ function app_cats(id: string) {
     if id == "route" { return route_cats() }
     if id == "settings" { return ["Teléfono", "Privacidad", "Bienestar"] }
     if id == "faith" { return ["Práctica", "Comunidad", "Familia"] }
+    if id == "news" { return ["Mundo", "Mi país"] }
     return []
 }
 
@@ -333,6 +335,7 @@ function app_block(id: string) {
 }
 
 function app_items(id: string, cat: string) {
+    if id == "news" { return news_items(cat) }
     if id == "msgs" {
         if cat == "Más" { return ap_msgs_items() }
         return msgs_items(cat)
