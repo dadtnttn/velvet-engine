@@ -855,6 +855,10 @@ function ivf(p: map) {
 
 // Boda: después del «sí», eliges cómo celebrarla.
 function open_wedding(p: map) {
+    return open_prenup(p)
+}
+
+function open_wedding_style(p: map) {
     let ctx = {"person": p}
     let costs = [0, 2000, 5000, 20000, 40000]
     let locks = []

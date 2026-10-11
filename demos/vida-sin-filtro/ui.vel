@@ -413,7 +413,10 @@ function draw_card() {
     if L.job2 != null { occ_label = "OCUPACIÓN · 2.ª: " + str_upper(L.job2.title) }
     text(44, 458, clip_text(occ_label, 330, 11), 11, C_GRAY, "bold")
     text(44, 479, clip_text(occupation_text(), 320, 16), 16, C_WHITE, "bold")
-    text(44, 504, "DINERO", 11, C_GRAY, "bold")
+    let fcol = C_YELLOW
+    if hovered("tab:fin") { fcol = C_WHITE }
+    text(44, 504, "DINERO · VER FINANZAS ›", 11, fcol, "bold")
+    hot(40, 490, 170, 46, "tab:fin")
     let mc = C_YELLOW
     if L.money < 0 { mc = C_BAD }
     text(44, 530, money_str(L.money), 22, mc, "impact")

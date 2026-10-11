@@ -162,6 +162,33 @@ binarias en el juego.
   Si descuidas a alguien la relación se enfría, y tu pareja toma la iniciativa:
   te reclama si la ignoras, te propone vivir juntos, casarse, tener un bebé o
   irse de viaje. Con un amigo puedes nombrarlo tu mejor amigo.
+- **Finanzas** (`finance.vel`, clic en tu dinero): resumen de ingresos y gastos,
+  patrimonio neto e historial crediticio; estilo de vida (austero, normal o
+  lujoso) y vivienda (con tus padres, rentando o casa propia), que cambian tus
+  gastos de cada mes. El sueldo descuenta 30% de impuestos y la vida cuesta.
+  - **Banco**: ahorro con interés, préstamos personales a 24 meses con tasa
+    según tu crédito, abonos, cobradores y embargos si te hundes en deudas.
+  - **Bienes**: casas con hipoteca a 20 años o de contado (valen lo que diga el
+    mercado inmobiliario) y venta de lo que tengas.
+  - **Bolsa de valores**: 9 empresas de distintos sectores (tecnología, energía,
+    banca, salud, entretenimiento, alimentos, autos, bienes raíces y una cripto
+    muy volátil), con dividendos, ciclos de auge y recesión, y titulares cada mes.
+  - **El periódico** (minijuego): marca las palabras clave de las noticias de
+    negocios; si aciertas, sabrás qué empresa subirá o bajará el próximo mes.
+  - **Casino**: ruleta (color o número), tragamonedas con premio mayor y
+    blackjack. Jugar mucho trae ludopatía.
+  - **Impuestos**: declaración anual con contador, haciéndola tú (minijuego) o
+    evadiendo (auditorías, multas y hasta cárcel).
+  - **En pareja**: tu pareja tiene su propio trabajo y sueldo; viviendo juntos
+    aporta 25% y casados 40%, y comparten los gastos. Antes de la boda puedes
+    proponer un contrato prematrimonial (puede ofenderse); sin él, el divorcio
+    te cuesta la mitad, a veces la casa, y con hijos pagas pensión alimenticia.
+  - **Carrera de Economía y Finanzas** y 9 profesiones nuevas (analista,
+    trader, banquero de inversión, asesor, actuario, auditor, gestor de fondos,
+    crupier y prestamista). Los financieros no pagan comisión, consiguen
+    préstamos más baratos, leen mejor el periódico, pueden analizar el mercado y
+    hasta usar información privilegiada (ilegal). Contadores y auditores hacen
+    su propia declaración.
 - **Platicar** (`chat.vel`): con cualquier persona, como en una app de mensajes.
   Cada quien tiene un temperamento (callado, parlanchín, bromista, sensible,
   orgulloso, romántico) y un ánimo que cambia cada mes (feliz, cariñoso, triste,
@@ -202,7 +229,7 @@ binarias en el juego.
   eres su fantasía. Y puedes regresar como estrella madura (MILF/DILF).
 - **Vida completa**: aumentos, despidos, prisión con opción de fuga,
   matrimonio, divorcio, hijos y muerte.
-- **150 carreras** (`jobs.vel`): 126 contratables en 15 campos (Servicio,
+- **159 carreras** (`jobs.vel`): 135 contratables en 15 campos (Servicio,
   Oficio, Oficina, Tecnología, Arte, Espectáculo, Salud, Ley, Ciencia, Negocios,
   Deporte, Educación, Moda, +18 y Calle) y 24 que solo se consiguen fusionando.
   Todas tienen 5 rangos, acciones propias de su campo y requisitos.
@@ -235,7 +262,7 @@ binarias en el juego.
   Cambian tus ligues, desbloquean opciones `[GUSTO]` en eventos (club de BDSM,
   fiestas atrevidas, cosplay...) y si compartes gustos con alguien la noche es
   mejor. Cada persona adulta tiene los suyos.
-- **Misiones**: 47 objetivos con recompensa (graduarte, casarte, primer millón,
+- **Misiones**: 52 objetivos con recompensa (graduarte, casarte, primer millón,
   ganar un premio, llevar un confidente a rango 10, vivir 100 años...).
 - **Retratos animados y variados**: respiran, parpadean y reaccionan (salto con
   "!", corazón, gota de sudor, enojo o dinero). 3 tipos de cara, 3 de cuerpo,
@@ -265,6 +292,7 @@ binarias en el juego.
 | `sweethearts.vel` | Amistades de la infancia, noviazgo adolescente romántico e historia de cada pareja |
 | `milestones.vel` | Hitos personales y su pantalla por categorías |
 | `bonds.vel` | Aficiones, lenguaje del amor, compatibilidad, estado, descuido, iniciativas de la pareja y mejor amigo |
+| `finance.vel` | Gastos, banco, crédito, préstamos, casas, bolsa, periódico, casino, impuestos y dinero en pareja |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |

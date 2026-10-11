@@ -105,6 +105,16 @@ function effects() {
     } else if L.fame >= 40 {
         list_push(out, fx("famoso", "Famos" + oa(L.gender), true, "Tienes fans.", {"flirt": 8, "hire": 4}))
     }
+    if L.mk != null {
+        let owed = L.debt
+        if L.loan != null { owed += L.loan.bal }
+        if owed >= 50000 { list_push(out, fx("deudas", "Agobiado por deudas", false, "Cada mes los intereses se comen tu sueldo.", {"hap": -1})) }
+        if L.home == "propia" { list_push(out, fx("casa", "Casa propia", true, "Nadie te puede correr de tu hogar.", {"hap": 1})) }
+        if L.gamble >= 15 { list_push(out, fx("ludopatia", "Ludopatía", false, "No puedes dejar de apostar.", {"hap": -1, "hire": -5})) }
+        if portfolio_value() >= 100000 { list_push(out, fx("inversionista", "Inversionista", true, "Tu dinero trabaja por ti.", {"flirt": 3})) }
+        if L.lifestyle == "lujoso" && L.age >= 18 { list_push(out, fx("lujo", "Vida de lujo", true, "Ropa de marca y restaurantes caros.", {"looks": 3, "flirt": 4})) }
+        if L.money < -5000 && L.age >= 18 { list_push(out, fx("numeros_rojos", "Números rojos", false, "El estrés de no llegar a fin de mes.", {"hap": -1})) }
+    }
     if L.record > 0 { list_push(out, fx("fichado", "Antecedentes penales", false, "Tu historial aparece en cada revisión de antecedentes.", {"hire": -15})) }
     if L.money >= 1000000 { list_push(out, fx("rico", "Billetera generosa", true, "El dinero también es sexy.", {"flirt": 6})) }
     if L.study != null && L.study.gpa >= 90 { list_push(out, fx("honor", "Cuadro de honor", true, "Tus profesores te adoran.", {"hire": 5})) }

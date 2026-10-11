@@ -10,6 +10,7 @@ const MG_INFO = {
     "arrows": {"title": "RITMO", "help": "Repite la secuencia de flechas con el teclado o con los botones.", "rounds": 4, "limit": 7.0},
     "typing": {"title": "TECLEO RÁPIDO", "help": "Escribe la palabra que aparece en pantalla, sin errores.", "rounds": 5, "limit": 7.0},
     "quiz": {"title": "EXAMEN", "help": "Responde las preguntas antes de que se acabe el tiempo. Teclas 1-4 o clic.", "rounds": 5, "limit": 12.0},
+    "news": {"title": "EL PERIÓDICO", "help": "Marca las palabras clave de las noticias de negocios: empresas, sectores y señales (auge, crisis, quiebra, récord...). No marques las noticias que no importan. Luego entrega.", "rounds": 1, "limit": 35.0},
     "race": {"title": "LA GRAN CARRERA", "help": "Guía a tu campeón hasta el óvulo antes que los demás. Cambia de carril con ← → (o A/D, o los botones). Esquiva los glóbulos blancos (te frenan) y toma los turbos amarillos.", "rounds": 1, "limit": 24.0}
 }
 
@@ -137,6 +138,8 @@ function mg_new_round() {
         m.q = {"seq": seq, "pos": 0}
     } else if k == "typing" {
         m.q = {"word": pick(WORDS), "typed": ""}
+    } else if k == "news" {
+        m.q = {"tokens": news_tokens()}
     } else if k == "race" {
         let obs = []
         let at = 10
@@ -184,6 +187,7 @@ function mg_tick() {
     if m == null || m.phase != "play" { return null }
     if G.t < m.round_t0 { return null }
     if m.type == "race" { return race_tick() }
+    if m.type == "news" && G.t - m.round_t0 > m.limit { return mg_round_end(news_score()) }
     if G.t - m.round_t0 > m.limit {
         if m.type == "memory" {
             return mg_round_end(mg_memory_value())
@@ -292,6 +296,52 @@ function race_tick() {
         while partial < 25 && (partial + 1) * 4 <= q.d { partial += 1 }
         return mg_round_end(partial)
     }
+    return null
+}
+
+function news_score() {
+    let keys = 0
+    let hits = 0
+    let wrong = 0
+    for t in G.mg.q.tokens {
+        if t.key { keys += 1 }
+        if t.sel && t.key { hits += 1 }
+        if t.sel && !t.key { wrong += 1 }
+    }
+    return clamp(hits * 100 / max(1, keys) - wrong * 12, 0, 100)
+}
+
+function draw_mg_news(x: int, y: int, w: int) {
+    let q = G.mg.q
+    rect(x + 40, y + 88, w - 80, 380, rgb(242, 236, 220))
+    text(x + 60, y + 118, "EL DIARIO FINANCIERO", 22, C_INK, "impact")
+    rect(x + 60, y + 128, w - 120, 3, C_INK)
+    let tx = x + 60
+    let ty = y + 162
+    let maxx = x + w - 60
+    let i = 0
+    let sel = 0
+    while i < len(q.tokens) {
+        let t = q.tokens[i]
+        let tw = len(t.w) * 11 + 16
+        if tx + tw > maxx {
+            tx = x + 60
+            ty += 36
+        }
+        let action = "mg:word:" + str(i)
+        if t.sel {
+            rect(tx - 2, ty - 21, tw, 28, C_YELLOW)
+            sel += 1
+        } else if hovered(action) {
+            rect(tx - 2, ty - 21, tw, 28, rgb(255, 205, 205))
+        }
+        text(tx + 4, ty, t.w, 18, C_INK, "bold")
+        hot(tx - 2, ty - 21, tw, 28, action)
+        tx += tw + 6
+        i += 1
+    }
+    text(x + 60, y + 448, "Marcadas: " + str(sel) + " · Tip: las empresas y sectores casi siempre importan.", 14, C_GRAY_D, "bold")
+    menu_word(x + w / 2 - 150, y + 470, 300, 54, "ENTREGAR", "mg:submit", 26)
     return null
 }
 
@@ -459,6 +509,18 @@ function mg_action(action: string) {
     if action == "mg:hit" { return mg_hit() }
     if str_starts_with(action, "mg:arrow:") { return mg_arrow(str_replace(action, "mg:arrow:", "")) }
     if action == "mg:lane:l" { return mg_lane(-1) }
+    if str_starts_with(action, "mg:word:") {
+        if G.mg.type == "news" && G.mg.phase == "play" {
+            let i = index_of(action, "mg:word:", 120)
+            let t = G.mg.q.tokens[i]
+            t.sel = !t.sel
+        }
+        return null
+    }
+    if action == "mg:submit" {
+        if G.mg.type == "news" && G.mg.phase == "play" { return mg_round_end(news_score()) }
+        return null
+    }
     if action == "mg:lane:r" { return mg_lane(1) }
     if str_starts_with(action, "mg:pick:") { return mg_pick(index_of(action, "mg:pick:", 10)) }
     if action == "mg:quit" {
@@ -477,6 +539,8 @@ function mg_close() {
     if score >= 100 { flag("mg100") }
     if m.purpose == "practice" { return practice_result(score) }
     if m.purpose == "rel" { return rel_mg_result(score, m.ctx) }
+    if m.purpose == "news" { return news_result(score) }
+    if m.purpose == "taxes" { return taxes_result(score, m.ctx) }
     if m.purpose == "sweet" { return sweet_mg_result(score, m.ctx) }
     if m.purpose == "conceive" { return conceive_result(score, m.ctx) }
     if m.purpose == "certify" { return certify_result(score) }
@@ -546,6 +610,7 @@ function draw_minigame() {
     if k == "typing" { draw_mg_typing(x, y, w) }
     if k == "quiz" { draw_mg_quiz(x, y, w) }
     if k == "race" { draw_mg_race(x, y, w) }
+    if k == "news" { draw_mg_news(x, y, w) }
 
     if G.t - m.fb_t0 < 0.7 {
         let col = C_RED

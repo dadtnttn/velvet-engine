@@ -25,6 +25,7 @@ const DEGREES = [
     {"id": "nutricion", "n": "Nutrición", "type": "uni", "years": 4, "cost": 25000, "min": 55},
     {"id": "moda", "n": "Diseño de Moda", "type": "uni", "years": 4, "cost": 35000, "min": 45},
     {"id": "criminologia", "n": "Criminología", "type": "uni", "years": 4, "cost": 22000, "min": 50},
+    {"id": "economia", "n": "Economía y Finanzas", "type": "uni", "years": 4, "cost": 38000, "min": 65},
     {"id": "t_cocina", "n": "Técnico en Cocina", "type": "tec", "years": 2, "cost": 15000, "min": 0},
     {"id": "t_mecanica", "n": "Técnico en Mecánica", "type": "tec", "years": 2, "cost": 12000, "min": 0},
     {"id": "t_electricidad", "n": "Técnico Electricista", "type": "tec", "years": 2, "cost": 12000, "min": 0},
@@ -62,11 +63,13 @@ const REQUIRES = {
     "entrenador": ["t_fitness"], "yoga": ["t_fitness"],
     "maestro": ["educacion"], "profesor": ["educacion", "ciencias", "derecho", "medicina", "artes"], "tutor": ["educacion"],
     "estilista": ["t_estetica"], "maquillador": ["t_estetica"], "disenador_moda": ["moda", "diseno"], "manicurista": ["t_estetica"],
+    "analista_fin": ["economia", "administracion", "contaduria"], "trader": ["economia", "informatica"], "banquero": ["economia", "administracion"],
+    "asesor_fin": ["economia", "administracion", "contaduria"], "actuario": ["economia", "ciencias"], "auditor": ["contaduria", "economia"], "gestor_fondos": ["economia"],
     "masaje_erotico": ["t_masaje"], "dominatrix": ["psicologia"], "stripper": ["t_escena"], "gogo": ["t_escena"]
 }
 
 // Carreras reguladas: sin título no hay forma de entrar.
-const REGULATED = ["medico", "enfermero", "dentista", "cirujano", "veterinario", "farmaceutico", "psicologo", "abogado", "juez", "policia", "maestro", "profesor", "paramedico", "contador", "investigador", "biologo", "quimico", "astronomo", "ingeniero", "nutriologo", "fisio", "ia", "hacker_etico", "sysadmin"]
+const REGULATED = ["actuario", "auditor", "medico", "enfermero", "dentista", "cirujano", "veterinario", "farmaceutico", "psicologo", "abogado", "juez", "policia", "maestro", "profesor", "paramedico", "contador", "investigador", "biologo", "quimico", "astronomo", "ingeniero", "nutriologo", "fisio", "ia", "hacker_etico", "sysadmin"]
 
 // Minijuego de audición según el campo de la carrera.
 const AUDITION_GAME = {
