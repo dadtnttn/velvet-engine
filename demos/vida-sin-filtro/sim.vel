@@ -233,11 +233,11 @@ function make_person(gender: string, rel: string, age: int) {
 }
 
 function random_look(gender: string) {
-    let styles = [0, 1, 4, 5, 7, 8, 0, 1, 11]
+    let styles = [0, 1, 4, 5, 7, 8, 0, 1, 11, 12, 14, 17, 18, 14]
     let accs = [0, 0, 0, 1, 3, 4, 4]
     let lips = [0, 0, 0, 0, 3]
     if gender == "f" {
-        styles = [2, 3, 6, 5, 0, 9, 10, 11, 2, 1]
+        styles = [2, 3, 6, 5, 0, 9, 10, 11, 2, 1, 12, 13, 15, 16, 17, 19]
         accs = [0, 0, 1, 2, 2, 3]
         lips = [0, 1, 2, 2, 3, 1]
     }
@@ -956,7 +956,14 @@ function breakup() {
     return null
 }
 
+// Un menor (menos de 18) y un adulto nunca forman pareja ni amantes.
+function minor_mix(p: map) {
+    if L.age < 18 { return p.age >= 18 }
+    return p.age < 18
+}
+
 function make_partner(p: map) {
+    if minor_mix(p) { return false }
     if !p.known { add_person(p) }
     let current = partner()
     if current != null && current.id != p.id {

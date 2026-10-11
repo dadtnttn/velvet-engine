@@ -876,8 +876,8 @@ function continue_as_heir() {
         if !is_mate { other.bond = rint(30, 70) }
         add_person(other)
     }
-    // Si ya estabas casad@, tu pareja sigue contigo.
-    if kid.spouse != null {
+    // Si ya estabas casad@, tu pareja sigue contigo (solo si el heredero ya es adulto).
+    if kid.spouse != null && kid.age >= 18 {
         let s = kid.spouse
         let sp = make_person(s.gender, "esposo", max(18, kid.age + s.off))
         sp.first = s.first

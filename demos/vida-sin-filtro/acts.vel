@@ -1105,6 +1105,7 @@ function special(name: string, ctx: map) {
         if make_partner(p) {
             return " Ahora " + p.first + " es tu " + str_lower(rel_label(p)) + "."
         }
+        if minor_mix(p) { return "" }
         return " " + p.first + " ahora es tu amante: llevas una doble vida."
     }
     if name == "vegas_marry" {

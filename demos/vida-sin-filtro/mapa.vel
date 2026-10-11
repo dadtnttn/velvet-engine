@@ -81,25 +81,121 @@ function draw_world(m: map) {
     svg(10, -6, 520, 100, tilt_title_doc("MAPA MUNDI", 520, 100, 58, HEX_WHITE, HEX_INK))
     small_button(1120, 20, 140, 44, "CERRAR", "wm:close")
     rect(MAP_X - 4, MAP_Y - 4, MAP_DW + 8, MAP_DH + 8, rgb(18, 40, 70))
-    svg(MAP_X, MAP_Y, MAP_DW, MAP_DH, MAP_BASE)
-    svg(MAP_X, MAP_Y, MAP_DW, MAP_DH, map_overlay(m.sel))
+    // Vista: el mundo entero o un acercamiento a la región elegida.
+    let v = [0.0, 0.0, MAP_W * 1.0, MAP_H * 1.0]
+    if m.zoom != false { v = map_view(m.reg) }
+    let sc = MAP_DW * 1.0 / v[2]
+    svg(MAP_X, MAP_Y, MAP_DW, MAP_DH, map_viewbox(MAP_BASE, v, "b" + str(m.reg) + str(m.zoom != false)))
+    svg(MAP_X, MAP_Y, MAP_DW, MAP_DH, map_viewbox(map_overlay(m.sel), v, "o" + str(m.reg) + str(m.zoom != false) + G.map_sig))
+    let reg_ids = region_countries(REGIONS[m.reg][0])
+    let labels = []
     for c in COUNTRIES {
         let pt = map_pt(c.id)
-        let x = MAP_X + pt[0] * MAP_DW / MAP_W
-        let y = MAP_Y + pt[1] * MAP_DH / MAP_H
-        hot(x - 11, y - 11, 22, 22, "wm:sel:" + c.id)
+        let x = MAP_X + (pt[0] - v[0]) * sc
+        let y = MAP_Y + (pt[1] - v[1]) * sc
+        if x < MAP_X || x > MAP_X + MAP_DW || y < MAP_Y || y > MAP_Y + MAP_DH { continue }
+        let r = 11.0
+        if sc > 1.6 { r = 16.0 }
+        hot(int(x - r), int(y - r), int(r * 2.0), int(r * 2.0), "wm:sel:" + c.id)
+        // De cerca, los países de la región llevan su nombre (el elegido primero).
+        if sc > 1.6 && list_contains(reg_ids, c.id) {
+            list_push(labels, {"id": c.id, "x": int(x), "y": int(y) + 4})
+        }
     }
+    map_labels(labels, m.sel)
+    let zl = "VER EL MUNDO"
+    if m.zoom == false { zl = "ACERCAR REGIÓN" }
+    small_button(MAP_X + MAP_DW - 176, MAP_Y + 8, 168, 34, zl, "wm:zoom")
     // Leyenda
     let lx = MAP_X + 6
     let ly = MAP_Y + MAP_DH - 18
-    for pair in [["#e3141b", "Tu país"], ["#ffd21f", "Visitado"], ["#ff9a00", "En guerra"], ["#b5651d", "Conflicto"], ["#9b3cf0", "Conquistado"]] {
+    let legend = [["#e3141b", "Tu país"], ["#ffd21f", "Visitado"], ["#ff9a00", "En guerra"], ["#b5651d", "Conflicto"], ["#9b3cf0", "Conquistado"]]
+    // El ancho sale de cada palabra (en otros idiomas miden distinto).
+    let lw = 12
+    for pair in legend { lw += 34 + measure(pair[1], 11, "bold") }
+    // Franja oscura: si debajo hay un país del mismo color, el cuadrito no se pierde.
+    arect(MAP_X, ly - 5, min(lw, MAP_DW), 22, rgba(6, 12, 24, 238))
+    for pair in legend {
         rect(lx, ly, 12, 12, hex_color(pair[0]))
         text(lx + 16, ly + 11, pair[1], 11, C_WHITE, "bold")
-        lx += 100
+        lx += 34 + measure(pair[1], 11, "bold")
     }
     draw_world_list(m)
     draw_world_panel(m)
     return null
+}
+
+// Nombres sobre el mapa sin encimarse: si una etiqueta choca con otra ya puesta,
+// se prueba un poco más arriba o más abajo; si tampoco cabe, se omite (el país
+// sigue siendo clicable y está en la lista de abajo).
+function map_labels(labels: list, sel: string) {
+    let placed = []
+    let order = []
+    for lb in labels { if lb.id == sel { list_push(order, lb) } }
+    for lb in labels { if lb.id != sel { list_push(order, lb) } }
+    for lb in order {
+        let name = str_upper(cname(lb.id))
+        let w = measure(name, 11, "bold") + 8
+        let col = C_WHITE
+        if lb.id == sel { col = C_YELLOW }
+        for dy in [0, -14, 14] {
+            let x0 = lb.x - w / 2
+            let y0 = lb.y + dy - 12
+            if x0 < MAP_X + 2 || x0 + w > MAP_X + MAP_DW - 2 || y0 < MAP_Y + 2 || y0 + 15 > MAP_Y + MAP_DH - 22 { continue }
+            let free = true
+            for q in placed {
+                if x0 < q[0] + q[2] && q[0] < x0 + w && y0 < q[1] + q[3] && q[1] < y0 + 15 { free = false }
+            }
+            if free {
+                list_push(placed, [x0, y0, w, 15])
+                otext(lb.x, lb.y + dy, name, 11, col, "bold", true)
+                break
+            }
+        }
+    }
+    return null
+}
+
+// Recorte del mapa para una región: abarca todos sus países, con margen y con la
+// misma proporción que el panel (para que nada se deforme).
+function map_view(reg: int) {
+    if G.map_views == null { G.map_views = {} }
+    let key = str(reg)
+    if G.map_views[key] != null { return G.map_views[key] }
+    let ids = region_countries(REGIONS[reg][0])
+    let x0 = 99999.0
+    let y0 = 99999.0
+    let x1 = -99999.0
+    let y1 = -99999.0
+    for id in ids {
+        let pt = map_pt(id)
+        x0 = min(x0, pt[0] * 1.0)
+        y0 = min(y0, pt[1] * 1.0)
+        x1 = max(x1, pt[0] * 1.0)
+        y1 = max(y1, pt[1] * 1.0)
+    }
+    let ratio = MAP_W * 1.0 / MAP_H
+    let pad = 40.0
+    let vw = max(220.0, max(x1 - x0 + pad * 2.0, (y1 - y0 + pad * 2.0) * ratio))
+    vw = min(vw, MAP_W * 1.0)
+    let vh = vw / ratio
+    let vx = clamp((x0 + x1) / 2.0 - vw / 2.0, 0.0, MAP_W - vw)
+    let vy = clamp((y0 + y1) / 2.0 - vh / 2.0, 0.0, MAP_H - vh)
+    let v = [vx, vy, vw, vh]
+    G.map_views[key] = v
+    return v
+}
+
+// El mismo SVG con otro viewBox: solo se rasteriza la parte visible.
+function map_viewbox(doc: string, v: list, key: string) {
+    if G.map_vb == null { G.map_vb = {} }
+    if G.map_vb[key] != null { return G.map_vb[key] }
+    let vb = "viewBox='" + str(int(v[0])) + " " + str(int(v[1])) + " " + str(int(v[2])) + " " + str(int(v[3])) + "'"
+    let out = str_replace(doc, "viewBox='0 0 " + str(MAP_W) + " " + str(MAP_H) + "'", vb)
+    // Una caché pequeña: el mapa base por región y la capa de colores actual.
+    if len(map_keys(G.map_vb)) > 40 { G.map_vb = {} }
+    G.map_vb[key] = out
+    return out
 }
 
 function hex_color(h: string) {
@@ -257,6 +353,11 @@ function world_action(action: string) {
     if cmd == "reg" {
         m.reg = cycle(m.reg, action, len(REGIONS))
         m.page = 0
+        m.zoom = true
+        return null
+    }
+    if cmd == "zoom" {
+        m.zoom = m.zoom == false
         return null
     }
     if cmd == "page" {
