@@ -1218,7 +1218,11 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
             svg(ix + dx + 372, iy + 8, 28, 28, lock_doc())
             textw(ix + dx + 404, iy + 29, str_upper(it.lock), 13, C_RED, "impact", 100)
         } else {
-            textw(ix + dx + 344, iy + 29, it.s, 12, sub_color, "bold", 160)
+            // El subtítulo usa el espacio que deja el título (hasta 230 px).
+            let title_end = ix + dx + 30 + min(298, measure(it.t, 19, "impact")) + 18
+            let sub_w = min(230, max(160, measure(it.s, 12, "bold")))
+            let sub_x = max(title_end, ix + dx + 504 - sub_w)
+            textw(sub_x, iy + 29, it.s, 12, sub_color, "bold", ix + dx + 504 - sub_x)
         }
         hot(ix, iy, 520, 46, it.action)
         i += 1
