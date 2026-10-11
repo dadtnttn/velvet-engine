@@ -187,6 +187,7 @@ function sweet_do(id: string, p: map) {
     if o.crush != null { p.crush = clamp100(crush_of(p) + o.crush) }
     let msg = apply(o, ctx)
     if a.hito != null { add_hito(p, fmt(a.hito, ctx)) }
+    msg = msg + bond_bonus(p, a.id)
     return finish(p.first, msg, outcome_kind(o))
 }
 
@@ -205,6 +206,7 @@ function sweet_mg_result(score: any, ctx: map) {
     let text = fmt(a.ok, fctx)
     if score < 50 { text = fmt(a.bad, fctx) }
     if a.hito != null { add_hito(p, fmt(a.hito, fctx)) }
+    text = text + bond_bonus(p, a.id)
     return finish(p.first, text + " (" + str(score) + " puntos)", "g")
 }
 

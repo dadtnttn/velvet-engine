@@ -1,0 +1,301 @@
+// @edition 3
+// Profundidad de los vínculos: cada persona tiene aficiones (y algo que odia), un
+// lenguaje del amor y una compatibilidad contigo. Hacer lo que le gusta acerca
+// mucho más (y lo vas descubriendo); descuidar a alguien enfría la relación; y tu
+// pareja también toma la iniciativa: vivir juntos, casarse, un bebé, un viaje.
+
+const INTERESTS = ["cine", "musica", "baile", "cocina", "deporte", "naturaleza", "videojuegos", "lectura", "viajes", "fiesta", "arte", "juegos"]
+const INTEREST_NAMES = {"cine": "el cine", "musica": "la música", "baile": "bailar", "cocina": "cocinar", "deporte": "el deporte", "naturaleza": "la naturaleza",
+                        "videojuegos": "los videojuegos", "lectura": "leer", "viajes": "viajar", "fiesta": "la fiesta", "arte": "el arte", "juegos": "los juegos de mesa"}
+const LOVE_LANGS = ["palabras", "tiempo", "regalos", "servicio", "contacto"]
+const LOVE_LANG_NAMES = {"palabras": "Palabras de afirmación", "tiempo": "Tiempo de calidad", "regalos": "Regalos", "servicio": "Actos de servicio", "contacto": "Contacto físico"}
+
+// Afición y lenguaje del amor de cada actividad.
+const ACT_TAGS = {
+    "dinner": ["cocina", "tiempo"], "movies": ["cine", "tiempo"], "picnic": ["naturaleza", "tiempo"], "concert": ["musica", "tiempo"],
+    "dance": ["baile", "contacto"], "getaway": ["viajes", "tiempo"], "gift": ["", "regalos"], "massage": ["", "contacto"],
+    "lovehotel": ["", "contacto"], "gym_together": ["deporte", "tiempo"], "cook": ["cocina", "servicio"], "trivia": ["juegos", "tiempo"],
+    "videogames": ["videojuegos", "tiempo"], "series": ["cine", "tiempo"], "trip": ["viajes", "tiempo"], "pet": ["naturaleza", "servicio"],
+    "party": ["fiesta", "tiempo"], "park": ["naturaleza", "tiempo"], "sleepover": ["cine", "tiempo"], "coffee": ["", "tiempo"],
+    "help_home": ["", "servicio"], "care_parent": ["", "servicio"], "give_money": ["", "regalos"], "story": ["lectura", "tiempo"],
+    "teach_drive": ["", "servicio"], "spoil": ["", "regalos"], "prank": ["juegos", ""], "apologize": ["", "palabras"],
+    "karaoke": ["musica", "tiempo"], "stargaze": ["naturaleza", "tiempo"], "spa": ["", "contacto"], "shower": ["", "contacto"],
+    "sexting": ["", "palabras"], "roleplay": ["arte", "contacto"], "makeup": ["", "contacto"], "cuddle": ["", "contacto"],
+    "breakfast": ["cocina", "servicio"], "dance_class": ["baile", "contacto"], "visit": ["", "tiempo"], "family_dinner": ["cocina", "tiempo"],
+    "ask_story": ["lectura", "tiempo"], "cousin_play": ["juegos", "tiempo"],
+    "t_lunch": ["cocina", "regalos"], "t_drawing": ["arte", "regalos"], "t_note": ["lectura", "palabras"], "t_walkhome": ["naturaleza", "tiempo"],
+    "t_walk": ["naturaleza", "contacto"], "t_icecream": ["cocina", "tiempo"], "t_movie": ["cine", "tiempo"], "t_study": ["lectura", "servicio"],
+    "t_letter": ["lectura", "palabras"], "t_dance": ["baile", "contacto"], "t_kiss": ["", "contacto"],
+    "time": ["", "tiempo"], "talk": ["", "palabras"], "chat": ["", "palabras"]
+}
+
+// ---------------------------------------------------------------- perfil
+
+function profile(p: map) {
+    if p.interests == null {
+        let pool = list_slice(INTERESTS, 0, len(INTERESTS))
+        shuffle(G.rng, pool)
+        p.interests = [pool[0], pool[1]]
+        p.dislike = pool[2]
+        p.lovelang = LOVE_LANGS[(p.id * 3 + 1) % len(LOVE_LANGS)]
+        p.known_int = []
+        p.known_dis = false
+        p.ll_hits = 0
+        p.ll_known = false
+    }
+    return p
+}
+
+function my_interests() {
+    if L.interests == null {
+        let pool = list_slice(INTERESTS, 0, len(INTERESTS))
+        shuffle(G.rng, pool)
+        L.interests = [pool[0], pool[1], pool[2]]
+    }
+    return L.interests
+}
+
+// Compatibilidad: aficiones en común, gustos en la cama (adultos), carácter.
+function compat(p: map) {
+    profile(p)
+    let c = 40
+    for i in p.interests {
+        if list_contains(my_interests(), i) { c += 15 }
+    }
+    if list_contains(my_interests(), p.dislike) { c -= 10 }
+    if both_adults(p) && (rel_group(p) == "partner" || rel_group(p) == "fling") { c += len(shared_kinks(p)) * 8 }
+    let t = temper(p)
+    if t == "bromista" && has_trait("carisma") { c += 8 }
+    if t == "romantico" && has_trait("romance") { c += 10 }
+    if t == "parlanchin" && rank("charm") >= 3 { c += 5 }
+    if t == "callado" && rank("kind") >= 3 { c += 5 }
+    if npc_style(p) == "celoso" && has_trait("fiesta") { c -= 10 }
+    return clamp(c, 5, 99)
+}
+
+function interests_text(p: map) {
+    profile(p)
+    let names = []
+    for i in p.known_int { list_push(names, INTEREST_NAMES[i]) }
+    let out = "Le gusta: "
+    if len(names) == 0 { out = out + "¿?" } else { out = out + str_join(names, ", ") }
+    if p.known_dis { out = out + " · Odia: " + INTEREST_NAMES[p.dislike] }
+    return out
+}
+
+function lovelang_text(p: map) {
+    profile(p)
+    if p.ll_known { return "Lenguaje del amor: " + LOVE_LANG_NAMES[p.lovelang] }
+    return "Lenguaje del amor: ¿?"
+}
+
+// Cómo va la relación, en palabras.
+function bond_state(p: map) {
+    let neglect = neglect_months(p)
+    let g = rel_group(p)
+    if p.bond >= 85 && neglect < 2 {
+        if g == "partner" { return "Enamoradísimos" }
+        return "Inseparables"
+    }
+    if p.bond < 25 { return "En crisis" }
+    if neglect >= 3 { return "Distanciados" }
+    if p.bond >= 60 { return "Muy bien" }
+    if g == "partner" && p.since != null && L.age - p.since >= 5 && p.bond < 60 { return "En la rutina" }
+    return "Normal"
+}
+
+// ---------------------------------------------------------------- interacción
+
+function neglect_months(p: map) {
+    if p.last_m == null { p.last_m = L.tm }
+    return L.tm - p.last_m
+}
+
+function touch(p: map) {
+    p.last_m = L.tm
+}
+
+// Bono por hacer lo que le gusta (y castigo por lo que odia). Devuelve texto extra.
+function bond_bonus(p: map, act_id: string) {
+    touch(p)
+    let tags = ACT_TAGS[act_id]
+    if tags == null { return "" }
+    profile(p)
+    let out = ""
+    let interest = tags[0]
+    if interest != "" {
+        if list_contains(p.interests, interest) {
+            bond_gain(p, 4)
+            if !list_contains(p.known_int, interest) {
+                list_push(p.known_int, interest)
+                out = out + " Descubriste que a " + p.first + " le encanta " + INTEREST_NAMES[interest] + "."
+            }
+        } else if p.dislike == interest {
+            bond_gain(p, -5)
+            if !p.known_dis {
+                p.known_dis = true
+                out = out + " Se notó que a " + p.first + " no le gusta nada " + INTEREST_NAMES[interest] + "."
+            }
+        }
+    }
+    let ll = tags[1]
+    if ll != "" && ll == p.lovelang {
+        bond_gain(p, 3)
+        p.ll_hits = p.ll_hits + 1
+        if !p.ll_known && p.ll_hits >= 3 {
+            p.ll_known = true
+            out = out + " Ahora lo sabes: el lenguaje del amor de " + p.first + " es «" + str_lower(LOVE_LANG_NAMES[p.lovelang]) + "»."
+            add_hito(p, "Descubriste su lenguaje del amor")
+        }
+    }
+    return out
+}
+
+// En el chat, preguntar por sus sueños puede revelar lo que le gusta.
+function chat_reveal(p: map) {
+    profile(p)
+    for i in p.interests {
+        if !list_contains(p.known_int, i) {
+            list_push(p.known_int, i)
+            return " (Te contó que le encanta " + INTEREST_NAMES[i] + ".)"
+        }
+    }
+    return ""
+}
+
+// ---------------------------------------------------------------- cada mes
+
+// Descuido: si no le dedicas tiempo, la relación se enfría.
+function bonds_month() {
+    L.tm += 1
+    for p in L.people {
+        if !p.alive || p.age < 4 { continue }
+        let n = neglect_months(p)
+        let g = rel_group(p)
+        if g == "partner" && n >= 2 {
+            p.bond = clamp100(p.bond - 2)
+            if n >= 4 { p.mood = "triste" }
+        }
+        if (g == "friend" || g == "parent" || g == "grandparent") && n >= 6 && chance(50) { p.bond = clamp100(p.bond - 1) }
+        if p.bff == true && n >= 3 && chance(40) { p.bond = clamp100(p.bond - 1) }
+    }
+    return null
+}
+
+// Tu pareja toma la iniciativa (máximo una propuesta cada pocos meses).
+function maybe_partner_initiative() {
+    if G.modal != null || L.jail > 0 || !chance(7) { return false }
+    let p = partner()
+    if p == null || !p.alive || !both_adults(p) { return false }
+    let ctx = {"person": p}
+    let neglect = neglect_months(p)
+    if neglect >= 3 && p.bond >= 25 {
+        open_choice(str_upper(p.first) + " SE SIENTE SOL" + str_upper(oa(p.gender)), fmt("«Últimamente casi no pasamos tiempo juntos. ¿Todavía te importo?» {x} te mira esperando una respuesta.", ctx),
+            ["Abrazarl{xlo} y planear algo especial", "Explicarle que has estado muy ocupad{a}", "«Estás exagerando»"], ["", "", ""], "initiative", {"person": p, "kind": "neglect"})
+        return true
+    }
+    if p.rel == "pareja" && p.livein != true && p.bond >= 70 && L.age - p.since >= 1 {
+        open_choice("UNA PROPUESTA", fmt("{x} te da una llave con un listón: «¿Y si vivimos juntos?»", ctx),
+            ["¡Sí!", "Todavía no estoy list{a}"], ["", ""], "initiative", {"person": p, "kind": "livein"})
+        return true
+    }
+    if p.rel == "pareja" && p.bond >= 80 && L.age - p.since >= 2 && chance(50) {
+        open_choice("¡DE RODILLAS!", fmt("En medio de la cena, {x} se arrodilla con un anillo en la mano: «¿Te quieres casar conmigo?»", ctx),
+            ["¡Sí, mil veces sí!", "Necesito pensarlo", "No"], ["", "", ""], "initiative", {"person": p, "kind": "propose"})
+        return true
+    }
+    if p.rel == "esposo" && p.gender != L.gender && p.bond >= 75 && !L.pregnant && !L.partner_preg && L.kids < 4 && my_fertility() > 0 && their_fertility(p) > 0 && chance(40) {
+        open_choice("¿UN BEBÉ?", fmt("{x} te toma de las manos: «He estado pensando... quiero que tengamos un bebé».", ctx),
+            ["Me encantaría", "Todavía no", "No quiero hijos"], ["", "", ""], "initiative", {"person": p, "kind": "baby"})
+        return true
+    }
+    if p.bond >= 65 && L.money >= 12000 && chance(30) {
+        open_choice("¿NOS VAMOS?", fmt("{x} te enseña fotos de una playa: «Necesitamos unas vacaciones. Tú y yo. ¿Qué dices?»", ctx),
+            ["¡Vámonos! ($12,000)", "Ahorita no se puede"], ["", ""], "initiative", {"person": p, "kind": "trip"})
+        return true
+    }
+    return false
+}
+
+function resolve_initiative(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    let k = ctx.kind
+    touch(p)
+    if k == "neglect" {
+        if index == 0 {
+            bond_gain(p, 10)
+            p.mood = "carinoso"
+            return finish(p.first, "Le prometiste tiempo de calidad y lo cumpliste esa misma noche. Volvió la chispa.", "g")
+        }
+        if index == 1 {
+            bond_gain(p, 2)
+            return finish(p.first, p.first + " lo entendió... a medias. Más te vale hacerle un espacio.", "n")
+        }
+        bond_gain(p, -15)
+        p.mood = "enojado"
+        return finish(p.first, p.first + " se fue a dormir sin decir nada. Esa frase le dolió.", "b")
+    }
+    if k == "livein" {
+        if index == 0 {
+            p.livein = true
+            flag("livein")
+            bond_gain(p, 10)
+            L.happy += 8
+            add_hito(p, "Se fueron a vivir juntos")
+            return finish(p.first, "Una semana después, sus cosas ya ocupan medio clóset. Y te encanta.", "g")
+        }
+        bond_gain(p, -6)
+        return finish(p.first, "«Está bien... cuando estés list" + oa(L.gender) + ".» Se le notó la desilusión.", "n")
+    }
+    if k == "propose" {
+        if index == 0 {
+            add_hito(p, "Te propuso matrimonio")
+            return open_wedding(p)
+        }
+        if index == 1 {
+            bond_gain(p, -8)
+            return finish(p.first, p.first + " guardó el anillo sin decir nada. Esperará... un tiempo.", "n")
+        }
+        bond_gain(p, -30)
+        L.happy -= 8
+        return finish(p.first, "El «no» resonó en todo el restaurante. La relación quedó herida.", "b")
+    }
+    if k == "baby" {
+        if index == 0 {
+            bond_gain(p, 10)
+            L.happy += 5
+            return open_sex(p)
+        }
+        if index == 1 {
+            bond_gain(p, -4)
+            return finish(p.first, "«Bueno, lo hablamos más adelante.»", "n")
+        }
+        bond_gain(p, -20)
+        return finish(p.first, p.first + " se quedó en silencio. Quieren cosas distintas de la vida.", "b")
+    }
+    if k == "trip" {
+        if index == 0 { return trip(p) }
+        bond_gain(p, -3)
+        return finish(p.first, "Guardó las fotos con un suspiro.", "n")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- mejor amigo
+
+function bff() {
+    for p in L.people {
+        if p.alive && p.bff == true { return p }
+    }
+    return null
+}
+
+function make_bff(p: map) {
+    let old = bff()
+    if old != null { old.bff = false }
+    p.bff = true
+    bond_gain(p, 10)
+    add_hito(p, "Se nombraron mejores amigos")
+    return finish(p.first, "«¿Mejores amigos?» «Para siempre.» Hicieron un saludo secreto que nadie más conoce.", "g")
+}

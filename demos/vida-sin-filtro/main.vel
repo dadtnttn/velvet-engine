@@ -19,6 +19,7 @@ import "relations.vel"
 import "chat.vel"
 import "sweethearts.vel"
 import "milestones.vel"
+import "bonds.vel"
 import "art.vel"
 import "ui.vel"
 

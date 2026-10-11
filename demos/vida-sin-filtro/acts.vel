@@ -758,6 +758,7 @@ function bond_gain(p: map, amount: int) {
 
 function do_person_act(action: string, p: map) {
     G.modal = null
+    touch(p)
     let ctx = {"person": p}
     let name = p.first
     if action == "dlg" {
@@ -1080,5 +1081,6 @@ function dispatch_choice(index: int) {
     if m.handler == "spicy" { return resolve_spicy(index, m.ctx) }
     if m.handler == "wedding" { return resolve_wedding(index, m.ctx) }
     if m.handler == "trio" { return resolve_trio(index, m.ctx) }
+    if m.handler == "initiative" { return resolve_initiative(index, m.ctx) }
     return null
 }

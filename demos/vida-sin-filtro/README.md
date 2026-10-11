@@ -152,6 +152,16 @@ binarias en el juego.
   cómo se conocieron, primera cita, primer regalo, primer viaje, «te quiero»,
   peleas, reconciliaciones, compromiso, boda, hijos y aniversarios hasta las
   bodas de oro.
+- **Vínculos con profundidad** (`bonds.vel`): cada persona tiene dos aficiones
+  (cine, música, baile, cocina, deporte, naturaleza, videojuegos, lectura,
+  viajes, fiesta, arte, juegos de mesa), algo que odia y un lenguaje del amor
+  (palabras, tiempo, regalos, actos de servicio o contacto físico). Hacer lo que
+  le gusta acerca mucho más y lo vas descubriendo (también platicando); hacer lo
+  que odia aleja. Su ficha muestra el estado de la relación (enamoradísimos,
+  muy bien, en la rutina, distanciados, en crisis) y su compatibilidad contigo.
+  Si descuidas a alguien la relación se enfría, y tu pareja toma la iniciativa:
+  te reclama si la ignoras, te propone vivir juntos, casarse, tener un bebé o
+  irse de viaje. Con un amigo puedes nombrarlo tu mejor amigo.
 - **Platicar** (`chat.vel`): con cualquier persona, como en una app de mensajes.
   Cada quien tiene un temperamento (callado, parlanchín, bromista, sensible,
   orgulloso, romántico) y un ánimo que cambia cada mes (feliz, cariñoso, triste,
@@ -254,6 +264,7 @@ binarias en el juego.
 | `relations.vel` | Menús por vínculo, citas, intimidad, tríos, fertilidad, bodas, adopción, amigos de la infancia y eventos familiares |
 | `sweethearts.vel` | Amistades de la infancia, noviazgo adolescente romántico e historia de cada pareja |
 | `milestones.vel` | Hitos personales y su pantalla por categorías |
+| `bonds.vel` | Aficiones, lenguaje del amor, compatibilidad, estado, descuido, iniciativas de la pareja y mejor amigo |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |
