@@ -1005,6 +1005,8 @@ function draw_detail(it: any, kind: string) {
                 ll = ll + " · Fertilidad " + fert_word(their_fertility(p))
             }
             text(x + 46, y + 374, clip_text(ll, 270, 13), 13, C_GRAY, "bold")
+            let lz = lazos_detail(p)
+            if lz != "" { text(x + 46, y + 392, clip_text(lz, 270, 13), 13, C_RED, "bold") }
             if kind == "person" {
                 text(x + 46, y + 440, clip_text(str_upper(it.t), 500, 22), 22, C_RED, "impact")
                 text(x + 46, y + 462, clip_text(it.s, 500, 14), 14, C_INK, "bold")

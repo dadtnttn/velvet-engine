@@ -1,0 +1,1364 @@
+// @edition 3
+// Lazos: la segunda capa de las relaciones.
+// - Cumpleaños de cada persona (celébralos u olvídalos y paga el precio).
+// - Lo que cada quien quiere este mes: si se lo das, cuenta doble.
+// - Secretos que se cuentan en confianza y la forma de ayudar con cada uno.
+// - Suegros, sobrinos, colegas del trabajo, rivales y ex suegros.
+// - Pasión de la pareja (se apaga con la rutina), relación abierta, terapia,
+//   vivir juntos, vasectomía o ligadura, tentaciones y custodia tras el divorcio.
+// - Embarazo por etapas: ecografía, baby shower, nombre, gemelos y control prenatal.
+// - Crianza por edades, actividades extraescolares, fiesta de 15 y logros de los hijos.
+// - Abuelos, tíos, primos y herencias de la familia.
+// Las acciones nuevas usan el mismo formato que REL_ACTS (ids "z_...") y "cond"
+// para condiciones especiales.
+
+const LAZOS_ACTS = [
+    // ------------------------------------------------ pareja: pasión y futuro
+    {"id": "z_newthing", "hito": "Se atrevieron a algo nuevo", "t": "Probar algo nuevo juntos", "s": "Pasión", "grp": ["partner", "fling"], "cat": "Intimidad", "adult": true, "spark": 15,
+     "desc": "Romper la rutina con algo que nunca han probado. Sin presión: solo si a los dos les late.", "o": [
+        {"w": 70, "log": "Se atrevieron a algo que nunca habían probado. Se rieron, se sonrojaron y quieren repetir.", "bond": 8, "happy": 8, "sexact": true},
+        {"w": 30, "log": "No salió como en su cabeza, pero la risa valió la pena.", "bond": 5, "happy": 4}]},
+    {"id": "z_lazysunday", "t": "Domingo en la cama", "s": "Gratis · pasión", "grp": ["partner"], "cat": "Intimidad", "adult": true, "spark": 8,
+     "desc": "Sin despertador, sin planes y sin salir de entre las sábanas.", "o": [
+        {"w": 100, "log": "Desayuno en la cama, siesta, risas y mucho más. El mejor domingo del año.", "bond": 6, "happy": 6, "sexact": true}]},
+    {"id": "z_boutique", "hito": "Su primera noche en un hotel boutique", "t": "Hotel boutique sorpresa", "s": "$3,500 · pasión", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "cost": 3500, "spark": 12,
+     "desc": "Le vendas los ojos y lo llevas a una suite con vista a la ciudad.", "o": [
+        {"w": 100, "log": "Champaña, vista a la ciudad y una tina enorme. No salieron de la habitación.", "bond": 12, "happy": 9, "sexact": true}]},
+    {"id": "z_cookdate", "hito": "Le cocinaste una cena especial", "t": "Cocinarle una cena a la luz de las velas", "s": "Minijuego · pasión", "grp": ["partner", "fling"], "cat": "Citas", "adult": true, "mg": "memory", "bond": [4, 12], "happy": 5, "spark": 6,
+     "desc": "Su platillo favorito, hecho por ti. Recuerda bien la receta.", "ok": "Le quedó perfecto. Brindaron, bailaron en la cocina y los platos se quedaron para mañana.", "bad": "Se te quemó la salsa. Pidieron pizza y comieron a la luz de las velas igual."},
+    {"id": "z_loveletter", "hito": "Le escribiste una carta de amor", "t": "Escribirle una carta de amor", "s": "Minijuego de tecleo", "grp": ["partner"], "cat": "Juntos", "adult": true, "mg": "typing", "bond": [4, 14], "happy": 3,
+     "desc": "A mano, con todo lo que nunca le has dicho.", "ok": "La leyó tres veces y la guardó en su cartera. Desde entonces la lleva siempre.", "bad": "Te quedó llena de tachones, pero se notaba que venía del corazón."},
+    {"id": "z_therapy", "t": "Terapia de pareja", "s": "$1,500 · arreglar lo roto", "grp": ["partner"], "cat": "Hablar", "adult": true, "cost": 1500, "code": "therapy",
+     "desc": "Una persona experta que les ayuda a escucharse. Repara heridas, celos y rutina."},
+    {"id": "z_livein", "t": "Proponer vivir juntos", "s": "Un gran paso", "grp": ["partner"], "cat": "Futuro", "adult": true, "code": "livein", "cond": "canlivein",
+     "desc": "Una llave con un listón y la pregunta más bonita."},
+    {"id": "z_openrel", "t": "Proponer relación abierta", "s": "Necesita su sí", "grp": ["partner"], "cat": "Futuro", "adult": true, "code": "openrel", "cond": "notopen",
+     "desc": "Ver a otras personas con honestidad y reglas claras. Depende de su forma de ser: si es celoso o celosa, le dolerá."},
+    {"id": "z_closerel", "t": "Volver a ser solo ustedes dos", "s": "Cerrar la relación", "grp": ["partner"], "cat": "Futuro", "adult": true, "code": "closerel", "cond": "isopen",
+     "desc": "Se acabaron los permisos: de nuevo exclusivos."},
+    {"id": "z_prenatal", "t": "Ir juntos a la consulta prenatal", "s": "Bebé sano", "grp": ["partner"], "cat": "Futuro", "adult": true, "code": "prenatal", "cond": "pregnant",
+     "desc": "Escuchar el corazón del bebé, vitaminas y muchas preguntas. Un buen control evita complicaciones."},
+    {"id": "z_sterile", "t": "Operarte para no tener más hijos", "s": "$3,000 · permanente", "grp": ["partner"], "cat": "Futuro", "adult": true, "me": 25, "code": "sterile", "cond": "fertile",
+     "desc": "Vasectomía o ligadura de trompas. Adiós a los sustos (las ITS siguen existiendo)."},
+    {"id": "z_unsterile", "t": "Revertir la operación", "s": "$10,000 · 50%", "grp": ["partner"], "cat": "Futuro", "adult": true, "code": "unsterile", "cond": "sterile",
+     "desc": "Cambiaron de opinión. No siempre funciona."},
+    // ------------------------------------------------ para todos
+    {"id": "z_bday", "t": "Celebrar su cumpleaños", "s": "¡Es este mes!", "grp": ["partner", "fling", "parent", "child", "sibling", "friend", "grandparent", "uncle", "cousin", "grandchild", "inlaw", "nephew", "coworker"], "cat": "*", "code": "bday", "cond": "bday",
+     "desc": "Fiesta sorpresa, una cena, un pastel o al menos «Las mañanitas» por teléfono. Si se te olvida, lo va a notar."},
+    {"id": "z_secret", "t": "Ayudarle con su secreto", "s": "Te lo confió", "grp": ["partner", "fling", "parent", "child", "sibling", "friend", "grandparent", "uncle", "cousin", "inlaw", "nephew", "coworker"], "cat": "Hablar", "code": "secret", "cond": "secret",
+     "desc": "Te contó algo que no le ha dicho a nadie."},
+    // ------------------------------------------------ hijos por edades
+    {"id": "z_lullaby", "hito": "L{xlo} arrullaste hasta dormirse", "t": "Arrullarl{xlo}", "s": "Ternura", "grp": ["child"], "cat": "Crianza", "maxthem": 1, "me": 14,
+     "desc": "Una canción de cuna desafinada y el bebé dormido en tu pecho.", "o": [
+        {"w": 100, "log": "Se durmió agarrando tu dedo. No te moviste en dos horas para no despertarl{xlo}.", "bond": 7, "happy": 5, "parent": 1}]},
+    {"id": "z_diaper", "t": "Cambiarle el pañal", "s": "Crianza", "grp": ["child"], "cat": "Crianza", "maxthem": 2, "me": 14,
+     "desc": "Toallitas, talco y valentía.", "o": [
+        {"w": 70, "log": "Misión cumplida. Huele a talco y a victoria.", "bond": 4, "parent": 2},
+        {"w": 30, "log": "Fuga en pleno cambio. Necesitas otro baño. Y otra camisa.", "bond": 3, "parent": 2, "happy": -2}]},
+    {"id": "z_pediatra", "t": "Llevarl{xlo} al pediatra", "s": "$300 · salud", "grp": ["child", "grandchild"], "cat": "Crianza", "maxthem": 5, "me": 16, "cost": 300,
+     "desc": "Vacunas, talla, peso y una paleta de premio.", "o": [
+        {"w": 100, "log": "Vacunas al día. Lloró con el piquete y se le olvidó con la paleta.", "bond": 4, "parent": 3}]},
+    {"id": "z_blocks", "hito": "Construyeron su primera torre", "t": "Jugar con bloques", "s": "Diversión", "grp": ["child", "grandchild", "nephew"], "cat": "*", "them": 1, "maxthem": 5, "me": 6,
+     "desc": "Una torre altísima... y su destrucción.", "o": [
+        {"w": 100, "log": "Construyeron una torre altísima. {x} la derribó con orgullo y aplaudió.", "bond": 6, "happy": 5}]},
+    {"id": "z_bike", "hito": "Le enseñaste a andar en bici", "t": "Enseñarle a andar en bici", "s": "Minijuego de precisión", "grp": ["child", "nephew", "grandchild"], "cat": "*", "them": 4, "maxthem": 9, "me": 14, "mg": "timing", "bond": [4, 12], "happy": 4,
+     "desc": "Sueltas el asiento justo en el momento correcto.", "ok": "Soltaste el asiento y siguió pedaleando sola. Gritó «¡mira!» y no paraste de aplaudir.", "bad": "Rodillas raspadas y un curita de dinosaurio. Mañana lo intentan otra vez."},
+    {"id": "z_festival", "hito": "Fuiste a su festival escolar", "t": "Ir a su festival escolar", "s": "Orgullo", "grp": ["child", "grandchild", "nephew"], "cat": "*", "them": 4, "maxthem": 12,
+     "desc": "Una obra de teatro con disfraces de cartón.", "o": [
+        {"w": 70, "log": "Salió vestid{xa} de árbol. Lloraste. Lo grabaste todo.", "bond": 9, "happy": 6, "parent": 2},
+        {"w": 30, "log": "Se le olvidó su línea, te buscó en el público y la dijo mirándote a ti.", "bond": 12, "happy": 7, "parent": 2}]},
+    {"id": "z_science", "hito": "Hicieron su primer proyecto de ciencias", "t": "Ayudarle con el proyecto de ciencias", "s": "Minijuego · calificaciones", "grp": ["child"], "cat": "Crianza", "them": 8, "maxthem": 15, "me": 18, "mg": "quiz", "bond": [3, 10], "kgr": 8,
+     "desc": "Un volcán de bicarbonato que tiene que funcionar frente a todo el salón.", "ok": "El volcán hizo erupción frente al jurado. ¡Primer lugar!", "bad": "El volcán no hizo nada. Bueno, un pequeño burbujeo. Sacó seis."},
+    {"id": "z_game", "hito": "Fuiste a verl{xlo} competir", "t": "Ir a su partido o recital", "s": "Desde las gradas", "grp": ["child", "nephew", "grandchild"], "cat": "*", "them": 7, "maxthem": 17,
+     "desc": "Gritar su nombre desde las gradas, con pancarta incluida.", "o": [
+        {"w": 60, "log": "Ganaron. Gritaste tanto que te quedaste sin voz.", "bond": 9, "happy": 6, "parent": 2},
+        {"w": 40, "log": "Perdieron, pero te buscó con la mirada en las gradas y sonrió.", "bond": 8, "parent": 2}]},
+    {"id": "z_talk", "hito": "Tuvieron «la plática»", "t": "Tener «la plática»", "s": "Educación", "grp": ["child"], "cat": "Crianza", "them": 12, "maxthem": 16, "me": 25,
+     "desc": "Respeto, consentimiento y cuidarse. Incómodo, pero necesario.", "o": [
+        {"w": 100, "log": "Le hablaste de respeto, consentimiento y de cuidarse. Se puso roj{xa} como tomate, pero escuchó todo. Muy importante.", "bond": 4, "parent": 4}]},
+    {"id": "z_loveadvice", "t": "Darle consejos de amor", "s": "Experiencia", "grp": ["child", "nephew"], "cat": "Hablar", "them": 13, "maxthem": 35,
+     "desc": "Tus errores del corazón, para que no los repita.", "o": [
+        {"w": 70, "log": "Le contaste tus errores del corazón. Te escuchó en silencio y luego te abrazó.", "bond": 7, "kind": 1},
+        {"w": 30, "log": "«Ay, ya, qué oso.» Pero al día siguiente te pidió otro consejo.", "bond": 5}]},
+    {"id": "z_move", "t": "Ayudarle con la mudanza", "s": "Cajas y cariño", "grp": ["child", "sibling", "friend", "nephew"], "cat": "*", "them": 18, "me": 16, "cond": "awayhome",
+     "desc": "Cargar cajas, armar muebles sin instructivo y pedir pizza en el piso.", "o": [
+        {"w": 100, "log": "Cargaste cajas todo el día. Comieron pizza en el piso de su nuevo hogar.", "bond": 8, "health": -1}]},
+    {"id": "z_babysit", "t": "Cuidar a tus nietos un fin de semana", "s": "Abuelidad", "grp": ["child"], "cat": "Convivir", "code": "babysit", "cond": "hasgk",
+     "desc": "Galletas, desvelo y reglas que no existen en tu casa."},
+    {"id": "z_extra", "t": "Inscribirl{xlo} en una actividad", "s": "$500/mes · talento", "grp": ["child"], "cat": "Crianza", "them": 5, "maxthem": 16, "code": "extra", "cond": "noextra",
+     "desc": "Fútbol, música, arte, danza o programación. Con práctica puede volverse su talento (y hasta una beca)."},
+    {"id": "z_quitextra", "t": "Sacarl{xlo} de su actividad", "s": "Ahorrar", "grp": ["child"], "cat": "Crianza", "code": "quitextra", "cond": "hasextra",
+     "desc": "Ya no se puede pagar, o ya no le gusta."},
+    // ------------------------------------------------ hermanos, primos y sobrinos
+    {"id": "z_mischief", "hito": "Su primera travesura juntos", "t": "Hacer una travesura juntos", "s": "Cómplices", "grp": ["sibling", "cousin"], "cat": "*", "me": 6, "max": 16,
+     "desc": "Esconder el control de la tele, cambiar la sal por azúcar...", "o": [
+        {"w": 60, "log": "Escondieron el control de la tele. Nadie lo encontró en tres días.", "bond": 8, "happy": 5},
+        {"w": 40, "log": "Los cacharon. Castigados los dos, pero cómplices para siempre.", "bond": 9, "happy": 1}]},
+    {"id": "z_defend", "hito": "L{xlo} defendiste", "t": "Defenderl{xlo}", "s": "Valor", "grp": ["sibling", "cousin", "nephew"], "cat": "*", "them": 6, "maxthem": 17, "me": 8,
+     "desc": "Alguien se metió con tu familia en la escuela.", "o": [
+        {"w": 100, "log": "Saliste a defenderl{xlo} sin pensarlo. Ahora eres su héroe.", "bond": 10, "guts": 2}]},
+    {"id": "z_cousinparty", "t": "Salir de fiesta con tu prim{xa}", "s": "$400", "grp": ["cousin"], "cat": "Convivir", "adult": true, "cost": 400,
+     "desc": "La familia que sale de fiesta unida...", "o": [
+        {"w": 70, "log": "Terminaron en la casa de alguien que ninguno conocía. Leyenda familiar.", "bond": 8, "happy": 7, "alcohol": 3},
+        {"w": 30, "log": "Tu prim{xa} te presentó a alguien interesante.", "bond": 5, "happy": 4, "special": "z_affair"}]},
+    {"id": "z_nplay", "hito": "Jugaron juntos por primera vez", "t": "Jugar con tu sobrin{xa}", "s": "Diversión", "grp": ["nephew"], "cat": "Convivir", "maxthem": 12, "me": 6,
+     "desc": "Ser el tío o la tía divertida es un trabajo de tiempo completo.", "o": [
+        {"w": 100, "log": "Jugaron hasta que se quedó dormid{xa} en el sillón. Eres su persona favorita.", "bond": 8, "happy": 5}]},
+    {"id": "z_nicecream", "t": "Llevarl{xlo} por un helado", "s": "$60", "grp": ["nephew", "grandchild"], "cat": "Convivir", "maxthem": 14, "me": 12, "cost": 60,
+     "desc": "Doble bola, con chispas.", "o": [
+        {"w": 100, "log": "Se manchó toda la cara de chocolate. Foto obligatoria.", "bond": 6, "happy": 4}]},
+    {"id": "z_godparent", "t": "Ser su padrino o madrina", "s": "Para toda la vida", "grp": ["nephew"], "cat": "Convivir", "maxthem": 4, "me": 16, "code": "godparent", "cond": "notgod",
+     "desc": "Tu herman{a} te lo pidió. Una responsabilidad (y regalos de cumpleaños) de por vida."},
+    {"id": "z_ndomingo", "t": "Darle su domingo", "s": "$200", "grp": ["nephew"], "cat": "Convivir", "maxthem": 17, "me": 16, "cost": 200,
+     "desc": "Un billete doblado en la mano y un guiño.", "o": [
+        {"w": 100, "log": "«¡Gracias, ti{a}!» Corrió a la tienda antes de que te arrepintieras.", "bond": 5, "money": -200}]},
+    // ------------------------------------------------ abuelos y tíos
+    {"id": "z_recipe", "hito": "Te enseñó su receta secreta", "t": "Aprender su receta secreta", "s": "Minijuego de memoria", "grp": ["grandparent", "parent", "inlaw"], "cat": "*", "me": 8, "them": 50, "mg": "memory", "bond": [5, 12], "happy": 3, "flagz": "recipe",
+     "desc": "La receta que nadie más sabe hacer igual. Memoriza los pasos.", "ok": "Te quedó idéntica. «Ahora la receta es tuya.» Te tembló la voz.", "bad": "Se te pasó la sal, pero se rio y te dejó intentarlo de nuevo."},
+    {"id": "z_techhelp", "t": "Enseñarle a usar el celular", "s": "Paciencia", "grp": ["grandparent", "parent", "uncle", "inlaw"], "cat": "*", "me": 10, "them": 60,
+     "desc": "Stickers, videollamadas y cómo no compartir su ubicación con medio mundo.", "o": [
+        {"w": 60, "log": "Después de una hora ya manda stickers. Muchos stickers. A todos.", "bond": 8, "happy": 4},
+        {"w": 40, "log": "Compró algo por error en internet. Lo cancelaron entre risas.", "bond": 6, "happy": 3}]},
+    {"id": "z_record", "t": "Grabar sus historias en video", "s": "Para siempre", "grp": ["grandparent", "parent"], "cat": "*", "me": 12, "them": 60, "code": "record", "cond": "notrecorded",
+     "desc": "Su voz, su risa y sus historias, guardadas para cuando ya no esté."},
+    {"id": "z_walkgp", "t": "Salir a caminar juntos", "s": "Salud y plática", "grp": ["grandparent"], "cat": "Convivir", "me": 6,
+     "desc": "Despacito, por el parque, saludando a todo el barrio.", "o": [
+        {"w": 100, "log": "Caminaron despacio y te presentó con orgullo a todos sus vecinos.", "bond": 6, "health": 1}]},
+    {"id": "z_fishing", "hito": "Fueron de pesca juntos", "t": "Ir de pesca", "s": "Paciencia", "grp": ["uncle", "grandparent", "parent"], "cat": "*", "me": 6,
+     "desc": "Una caña, un lago y cero prisa.", "o": [
+        {"w": 60, "log": "No pescaron nada, pero platicaron de todo.", "bond": 7, "happy": 4},
+        {"w": 40, "log": "¡Pescaste uno enorme! La foto quedó para la historia familiar.", "bond": 8, "happy": 6}]},
+    {"id": "z_unclebiz", "t": "Trabajar en su negocio", "s": "Dinero y oficio", "grp": ["uncle"], "cat": "Convivir", "me": 14, "max": 25,
+     "desc": "Un sábado atendiendo su negocio.", "o": [
+        {"w": 100, "log": "Atendiste su negocio todo el sábado. Te pagó {monto} y te enseñó un par de trucos.", "money": [800, 3000], "skill": 2, "bond": 4}]},
+    // ------------------------------------------------ suegros
+    {"id": "z_inlawlunch", "hito": "Su primera comida juntos", "t": "Comer con tus suegros", "s": "Familia política", "grp": ["inlaw"], "cat": "Convivir",
+     "desc": "Comida del domingo en su casa. Siéntate derech{a}.", "o": [
+        {"w": 60, "log": "Su comida estuvo deliciosa y la plática fluyó. Puntos para ti.", "bond": 8, "happy": 3, "special": "z_partner_up"},
+        {"w": 40, "log": "«¿Y para cuándo los nietos?» preguntaron tres veces.", "bond": 4, "happy": -2}]},
+    {"id": "z_wininlaw", "hito": "Te ganaste a tu suegr{xa}", "t": "Ganarte a tu suegr{xa}", "s": "Minijuego de preguntas", "grp": ["inlaw"], "cat": "Convivir", "mg": "quiz", "bond": [4, 14],
+     "desc": "Te hará preguntas incómodas sobre tu vida. Responde bien.", "ok": "Respondiste todo con seguridad. «Mi hij{xa} eligió bien.»", "bad": "Titubeaste en todo. Te mira con desconfianza."},
+    {"id": "z_inlawgift", "t": "Llevarles un detalle", "s": "$300", "grp": ["inlaw"], "cat": "Convivir", "cost": 300,
+     "desc": "Un postre, flores o una botella.", "o": [
+        {"w": 100, "log": "Les encantó el detalle. Tu pareja se dio cuenta y te lo agradeció.", "bond": 7, "money": -300, "special": "z_partner_up"}]},
+    {"id": "z_inlawadvice", "t": "Pedirle consejo", "s": "Conocimiento", "grp": ["inlaw"], "cat": "Hablar",
+     "desc": "Nadie conoce a tu pareja mejor que quien {plo} crió.", "o": [
+        {"w": 70, "log": "Te dio un consejo sabio sobre tu pareja. Ahora l{plo} entiendes mejor.", "bond": 6, "know": 1, "special": "z_partner_up"},
+        {"w": 30, "log": "Te dio un sermón de una hora. Asentiste.", "bond": 3}]},
+    {"id": "z_inlawfight", "t": "Ponerle un alto", "s": "Ya basta", "grp": ["inlaw"], "cat": "Hablar", "adult": true, "code": "inlawfight",
+     "desc": "Sus críticas ya fueron demasiado. Le dices lo que piensas."},
+    // ------------------------------------------------ colegas
+    {"id": "z_cwcoffee", "t": "Ir por un café", "s": "$60", "grp": ["coworker"], "cat": "Trabajo", "cost": 60,
+     "desc": "Diez minutos de descanso que se vuelven cuarenta.", "o": [
+        {"w": 100, "log": "Se rieron de la última junta. Ya es tu persona favorita de la oficina.", "bond": 6, "money": -60}]},
+    {"id": "z_cwlunch", "t": "Comer juntos", "s": "$150", "grp": ["coworker"], "cat": "Trabajo", "cost": 150,
+     "desc": "La fonda de la esquina, como siempre.", "o": [
+        {"w": 70, "log": "Hablaron mal del jefe con mucho cariño. Ya son cómplices.", "bond": 7, "money": -150},
+        {"w": 30, "log": "Te contó todos los chismes de la oficina.", "bond": 6, "know": 1, "money": -150}]},
+    {"id": "z_cwhelp", "t": "Pedirle ayuda con un proyecto", "s": "Desempeño", "grp": ["coworker"], "cat": "Trabajo", "code": "cwhelp",
+     "desc": "Dos cabezas piensan mejor que una. Mientras no abuses."},
+    {"id": "z_cwhappy", "t": "Happy hour después del trabajo", "s": "$300", "grp": ["coworker"], "cat": "Trabajo", "adult": true, "cost": 300,
+     "desc": "Dos por uno en cervezas y quejas sobre la semana.", "o": [
+        {"w": 100, "log": "El happy hour se alargó hasta la medianoche. Mañana va a doler.", "bond": 8, "happy": 6, "alcohol": 3, "money": -300}]},
+    {"id": "z_cwflirt", "t": "Coquetear con tu colega", "s": "Romance de oficina", "grp": ["coworker"], "cat": "Trabajo", "adult": true, "code": "cwflirt", "cond": "attracted",
+     "desc": "Miradas en la junta y mensajes en el chat interno. Recursos Humanos vigila."},
+    {"id": "z_cwblame", "t": "Echarle la culpa de un error", "s": "Sucio pero útil", "grp": ["coworker"], "cat": "Trabajo", "code": "cwblame",
+     "desc": "El error fue tuyo. El jefe no tiene por qué saberlo."},
+    // ------------------------------------------------ rivales
+    {"id": "z_rvpeace", "t": "Hacer las paces", "s": "Amabilidad", "grp": ["rival"], "cat": "Rivalidad", "code": "rvpeace",
+     "desc": "Tenderle la mano. Puede aceptarla... o morderla."},
+    {"id": "z_rvduel", "t": "Retarl{xlo} a un duelo", "s": "Minijuego de cálculo", "grp": ["rival"], "cat": "Rivalidad", "code": "rvduel",
+     "desc": "Frente a todos. Quien pierda, se calla para siempre."},
+    {"id": "z_rvsabotage", "t": "Sabotearl{xlo}", "s": "Karma negativo", "grp": ["rival"], "cat": "Rivalidad", "code": "rvsabotage",
+     "desc": "Un correo que no llega, un archivo que se pierde..."},
+    {"id": "z_rvignore", "t": "Ignorarl{xlo} con elegancia", "s": "Paz mental", "grp": ["rival"], "cat": "Rivalidad",
+     "desc": "La mejor respuesta es la indiferencia.", "o": [
+        {"w": 100, "log": "Ni le contestaste. Tu paz vale más.", "happy": 3, "kind": 1}]}
+]
+
+const LAZOS_TAGS = {
+    "z_newthing": ["", "contacto"], "z_lazysunday": ["", "contacto"], "z_boutique": ["viajes", "tiempo"], "z_cookdate": ["cocina", "servicio"],
+    "z_loveletter": ["lectura", "palabras"], "z_bike": ["deporte", "tiempo"], "z_festival": ["arte", "tiempo"], "z_game": ["deporte", "tiempo"],
+    "z_recipe": ["cocina", "tiempo"], "z_fishing": ["naturaleza", "tiempo"], "z_walkgp": ["naturaleza", "tiempo"], "z_techhelp": ["", "servicio"],
+    "z_move": ["", "servicio"], "z_inlawgift": ["", "regalos"], "z_cwcoffee": ["", "tiempo"], "z_cwlunch": ["cocina", "tiempo"],
+    "z_nplay": ["juegos", "tiempo"], "z_blocks": ["juegos", "tiempo"], "z_mischief": ["juegos", ""], "z_cousinparty": ["fiesta", "tiempo"]
+}
+
+// Secretos por tipo de vínculo: {id, t: lo que te cuenta, h: cómo ayudar, cost, bond, hito}
+const SECRETS = {
+    "partner": [
+        {"id": "aurora", "t": "Siempre ha soñado con ver una aurora boreal contigo.", "h": "Llevarl{xlo} a ver la aurora boreal", "cost": 15000, "bond": 18, "hito": "Vieron una aurora boreal juntos"},
+        {"id": "insecure", "t": "A veces siente que no es suficiente para ti.", "h": "Decirle todo lo que admiras de {xel}", "cost": 0, "bond": 12, "hito": ""},
+        {"id": "career", "t": "Quiere dejar su trabajo para dedicarse a lo que ama, pero le da miedo.", "h": "Apoyarl{xlo} para que lo intente", "cost": 8000, "bond": 15, "hito": "L{xlo} apoyaste a perseguir su sueño"},
+        {"id": "family", "t": "Le duele que su familia no te haya aceptado del todo.", "h": "Ir a ganarte a su familia", "cost": 0, "bond": 10, "hito": ""}
+    ],
+    "friend": [
+        {"id": "love", "t": "Está enamorad{xa} de ti desde hace años.", "h": "Hablar de lo que sienten", "cost": 0, "bond": 10, "hito": ""},
+        {"id": "debt", "t": "Tiene deudas que no le dejan dormir.", "h": "Ayudarle a pagarlas", "cost": 10000, "bond": 16, "hito": "Le ayudaste a salir de sus deudas"},
+        {"id": "lonely", "t": "Se siente muy sol{xa} últimamente.", "h": "Pasar más tiempo con {xel}", "cost": 0, "bond": 12, "hito": ""},
+        {"id": "business", "t": "Quiere abrir su propio negocio, pero no tiene con qué.", "h": "Invertir en su negocio", "cost": 20000, "bond": 14, "hito": "Invertiste en su negocio"}
+    ],
+    "parent": [
+        {"id": "singer", "t": "De joven quería ser cantante, pero tuvo que trabajar.", "h": "Regalarle clases de canto", "cost": 2000, "bond": 15, "hito": "Le regalaste las clases que nunca tomó"},
+        {"id": "guilt", "t": "Le preocupa no haberte criado bien.", "h": "Decirle que hizo un gran trabajo", "cost": 0, "bond": 15, "hito": "Le dijiste que hizo un gran trabajo"},
+        {"id": "health", "t": "Tiene un problema de salud que no le ha contado a nadie.", "h": "Acompañarl{xlo} al médico", "cost": 0, "bond": 12, "hito": "L{xlo} acompañaste al médico"}
+    ],
+    "child": [
+        {"id": "bully", "t": "Le están haciendo bullying en la escuela.", "h": "Hablar con la escuela y apoyarl{xlo}", "cost": 0, "bond": 12, "hito": ""},
+        {"id": "art", "t": "Quiere dedicarse al arte, pero teme decepcionarte.", "h": "Decirle que l{xlo} apoyas", "cost": 0, "bond": 15, "hito": "L{xlo} apoyaste en su sueño"},
+        {"id": "crush", "t": "Le gusta alguien y no sabe qué hacer.", "h": "Darle un consejo con cariño", "cost": 0, "bond": 10, "hito": ""}
+    ],
+    "sibling": [
+        {"id": "favorite", "t": "Siempre sintió que tus papás te preferían a ti.", "h": "Hablarlo con calma", "cost": 0, "bond": 14, "hito": "Hablaron de su infancia"},
+        {"id": "vase", "t": "Rompió el jarrón de la abuela hace años y te echó la culpa.", "h": "Reírte y perdonarl{xlo}", "cost": 0, "bond": 10, "hito": ""}
+    ],
+    "coworker": [
+        {"id": "leaving", "t": "Está buscando otro trabajo a escondidas.", "h": "Guardarle el secreto y recomendarl{xlo}", "cost": 0, "bond": 12, "hito": ""},
+        {"id": "promo", "t": "Sabe quién se va a quedar con el próximo ascenso.", "h": "Prepararte con su ayuda", "cost": 0, "bond": 8, "hito": ""}
+    ],
+    "other": [
+        {"id": "letter", "t": "Guarda una carta que nunca se atrevió a enviar.", "h": "Animarl{xlo} a enviarla", "cost": 0, "bond": 10, "hito": ""},
+        {"id": "alone", "t": "Le da miedo envejecer sol{xa}.", "h": "Prometerle que no estará sol{xa}", "cost": 0, "bond": 12, "hito": ""},
+        {"id": "debt2", "t": "Pasa por un mal momento de dinero.", "h": "Echarle la mano", "cost": 3000, "bond": 12, "hito": ""}
+    ]
+}
+
+const EXTRAS = [
+    {"id": "futbol", "n": "Fútbol", "win": "Metió el gol de la final del torneo"},
+    {"id": "musica", "n": "Música", "win": "Dio su primer concierto como solista"},
+    {"id": "arte", "n": "Arte", "win": "Ganó un concurso de pintura"},
+    {"id": "danza", "n": "Danza", "win": "Ganó una competencia de baile"},
+    {"id": "code", "n": "Programación", "win": "Ganó un concurso de robótica"}
+]
+
+// Eventos nuevos (prefijo "rl_" para usar el contexto de vínculos).
+const LAZOS_EVENTS = [
+    {
+        "id": "rl_z_temptation", "title": "Tentación", "min": 20, "max": 70, "w": 6, "req": "lowspark", "person": "partner",
+        "text": "Con {x} la chispa anda apagada últimamente. Alguien del trabajo te coquetea descaradamente y te invita a tomar algo «sin compromiso».",
+        "choices": [
+            {"t": "Ponerle un alto con amabilidad", "o": [{"w": 100, "log": "Le dijiste que tienes pareja. Te sentiste bien contigo mism{a}.", "karma": 3, "happy": -1}]},
+            {"t": "Seguirle el juego", "o": [{"w": 100, "log": "Una copa llevó a otra...", "special": "z_affair"}]},
+            {"t": "Contárselo a {x} y planear una escapada", "o": [{"w": 100, "log": "Se lo contaste con honestidad y planearon un fin de semana solos. La chispa volvió.", "bond": 6, "happy": 6, "special": "z_spark"}]}
+        ]
+    },
+    {
+        "id": "rl_z_inlaws", "title": "Visita sorpresa", "min": 20, "max": 75, "w": 5, "req": "hasinlaw", "person": "inlaw",
+        "text": "Tu {rel} {x} llega de sorpresa a quedarse una semana en tu casa. Con maleta grande.",
+        "choices": [
+            {"t": "Recibirl{xlo} con todo y su comida favorita", "o": [{"w": 100, "log": "Fue la mejor semana. Se fue llorando y tu pareja te miró con amor.", "bond": 10, "special": "z_partner_up"}]},
+            {"t": "Aguantar en silencio", "o": [{"w": 100, "log": "Siete días de opiniones sobre cómo vives. Sobreviviste.", "happy": -4}]},
+            {"t": "Inventar un viaje de trabajo", "o": [{"w": 100, "log": "Se dio cuenta. Y tu pareja también.", "bond": -8, "special": "z_partner_down"}]}
+        ]
+    },
+    {
+        "id": "rl_z_promo", "title": "El ascenso", "min": 20, "max": 64, "w": 5, "req": "hascoworker", "person": "coworker",
+        "text": "Tú y {x} compiten por el mismo ascenso. El jefe decide la próxima semana.",
+        "choices": [
+            {"t": "Competir limpio", "o": [{"w": 50, "log": "¡Te dieron el ascenso! {x} te felicitó de corazón.", "bond": 4, "special": "promo"}, {"w": 50, "log": "Se lo dieron a {x}. Le diste la mano y lo celebraste con {xel}.", "bond": 8, "happy": -3}]},
+            {"t": "Proponerle hacer equipo", "need": "kind", "rank": 2, "o": [{"w": 100, "log": "Presentaron el proyecto juntos. El jefe los ascendió a los dos.", "bond": 12, "xp": 15, "special": "promo"}]},
+            {"t": "Hablar mal de {x} con el jefe", "o": [{"w": 60, "log": "Te dieron el ascenso. {x} sabe lo que hiciste.", "karma": -6, "special": "promo"}, {"w": 40, "log": "El jefe se dio cuenta de tu juego sucio.", "karma": -6, "xp": -10, "special": "z_make_rival"}]}
+        ]
+    },
+    {
+        "id": "rl_z_nephew", "title": "La fiesta de tu sobrin{xa}", "min": 16, "max": 80, "w": 4, "req": "hasnephew", "person": "nephew",
+        "text": "Es la fiesta de cumpleaños de tu sobrin{xa} {x}: piñata, pastel y veinte niños con azúcar en las venas.",
+        "choices": [
+            {"t": "Llegar con el mejor regalo ($500)", "cost": 500, "o": [{"w": 100, "log": "Abrió tu regalo primero. Eres su ti{a} favorit{a}.", "money": -500, "bond": 10}]},
+            {"t": "Ir y romper la piñata con los niños", "o": [{"w": 100, "log": "Terminaste con dulces en el pelo y la mejor sonrisa.", "bond": 8, "happy": 5, "health": -1}]},
+            {"t": "No ir", "o": [{"w": 100, "log": "Te preguntó por ti toda la tarde.", "bond": -5}]}
+        ]
+    },
+    {
+        "id": "rl_z_oldfriend", "title": "Un viejo amigo", "min": 20, "max": 85, "w": 4, "req": "lostfriend", "person": "lostfriend",
+        "text": "En el súper te encuentras a {x}. Hace años que no se veían.",
+        "choices": [
+            {"t": "Abrazarl{xlo} y quedar para ponerse al día", "o": [{"w": 100, "log": "Se tomaron un café que duró cuatro horas. Como si no hubiera pasado el tiempo.", "bond": 14, "happy": 6, "special": "z_touch"}]},
+            {"t": "Saludar rápido", "o": [{"w": 100, "log": "Un «¡qué gusto verte!» y cada quien a lo suyo.", "bond": 2, "special": "z_touch"}]},
+            {"t": "Esconderte detrás de los cereales", "o": [{"w": 100, "log": "Te vio. Los dos fingieron que no.", "bond": -5}]}
+        ]
+    },
+    {
+        "id": "rl_z_kidlove", "title": "¡Tiene novi{xa}!", "min": 28, "max": 75, "w": 4, "req": "kidteen", "person": "kidteen",
+        "text": "Tu {rel} {x} llega con una sonrisa boba y no suelta el celular. Te confiesa que tiene novi{xa}.",
+        "choices": [
+            {"t": "Alegrarte y darle consejos", "o": [{"w": 100, "log": "Te contó todo. Te sentiste orgullos{a} de su confianza.", "bond": 8, "parent": 3}]},
+            {"t": "Conocer a su novi{xa} con cara seria", "o": [{"w": 100, "log": "Le hiciste el interrogatorio completo al pobre muchacho. {x} murió de vergüenza.", "bond": -3, "happy": 3}]},
+            {"t": "Prohibírselo", "o": [{"w": 100, "log": "Portazo. Ahora se ven a escondidas.", "bond": -10, "parent": -3}]}
+        ]
+    },
+    {
+        "id": "rl_z_reunion", "title": "Reunión familiar", "min": 8, "max": 90, "w": 4, "req": "bigfamily", "person": "elder",
+        "text": "Reunión de toda la familia en casa de tu {rel} {x}: tres generaciones, cuarenta personas y un solo baño.",
+        "choices": [
+            {"t": "Organizar los juegos para todos", "o": [{"w": 100, "log": "Lotería, fútbol y concurso de baile. La familia hablará de esta reunión por años.", "bond": 8, "happy": 8, "special": "z_family_up"}]},
+            {"t": "Quedarte en la mesa de los mayores escuchando historias", "o": [{"w": 100, "log": "Te enteraste de secretos familiares que nadie te había contado.", "bond": 10, "know": 2}]},
+            {"t": "Llegar tarde y salir temprano", "o": [{"w": 100, "log": "Todos lo notaron.", "bond": -5, "special": "z_family_down"}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- utilidades
+
+function lazos_act(id: string) {
+    for a in LAZOS_ACTS {
+        if a.id == id { return a }
+    }
+    return null
+}
+
+function close_rel(p: map) {
+    let g = rel_group(p)
+    return g == "partner" || g == "parent" || g == "child" || g == "sibling" || g == "grandparent" || p.bff == true
+}
+
+function cur_month() {
+    return (L.bmonth + L.month) % 12
+}
+
+function bday_month(p: map) {
+    if p.bm == null { p.bm = (p.id * 5 + 3) % 12 }
+    return p.bm
+}
+
+function spark_of(p: map) {
+    if p.spark == null { p.spark = 70 }
+    return p.spark
+}
+
+function lazos_spark(p: any, n: int) {
+    if p == null { return null }
+    let g = rel_group(p)
+    if g != "partner" && g != "fling" { return null }
+    p.spark = clamp100(spark_of(p) + n)
+    return null
+}
+
+function kids_minor() {
+    let n = 0
+    for k in kids_alive() {
+        if k.age < 18 { n += 1 }
+    }
+    return n
+}
+
+function extra_def(id: string) {
+    for e in EXTRAS {
+        if e.id == id { return e }
+    }
+    return EXTRAS[0]
+}
+
+function secret_of(p: map) {
+    if p.secret == null {
+        let g = rel_group(p)
+        let pool = SECRETS["other"]
+        if g == "partner" || g == "fling" { pool = SECRETS["partner"] }
+        if g == "friend" { pool = SECRETS["friend"] }
+        if g == "parent" { pool = SECRETS["parent"] }
+        if g == "child" && p.age >= 8 { pool = SECRETS["child"] }
+        if g == "sibling" { pool = SECRETS["sibling"] }
+        if g == "coworker" { pool = SECRETS["coworker"] }
+        let s = pool[rint(0, len(pool) - 1)]
+        p.secret = s.id
+        p.secret_known = false
+        p.secret_done = false
+    }
+    return p.secret
+}
+
+function secret_def(p: map) {
+    let id = secret_of(p)
+    for k in map_keys(SECRETS) {
+        for s in SECRETS[k] {
+            if s.id == id { return s }
+        }
+    }
+    return SECRETS["other"][0]
+}
+
+// ¿Se puede pedirle un secreto en el chat?
+function can_secret(p: map) {
+    if p.age < 8 || L.age < 8 || p.bond < 55 { return false }
+    let g = rel_group(p)
+    if g == "ex" || g == "rival" || g == "acq" { return false }
+    secret_of(p)
+    return !p.secret_known
+}
+
+// Lo que te cuenta cuando se abre contigo.
+function secret_reveal(p: map) {
+    let s = secret_def(p)
+    if p.cheated_you == true && (rel_group(p) == "partner" || rel_group(p) == "fling") {
+        p.secret = "cheat"
+        p.secret_known = true
+        p.secret_done = false
+        return "*baja la mirada* Tengo que decirte algo... estuve con alguien más. Lo siento muchísimo."
+    }
+    p.secret_known = true
+    let ctx = {"person": p}
+    return fmt("*baja la voz* Nunca se lo he dicho a nadie: " + str_lower(s.t), ctx)
+}
+
+// ---------------------------------------------------------------- condiciones y menús
+
+function lazos_cond(cond: string, p: map) {
+    if cond == "canlivein" { return p.rel == "pareja" && p.livein != true }
+    if cond == "notopen" { return p.open != true }
+    if cond == "isopen" { return p.open == true }
+    if cond == "pregnant" { return L.pregnant || L.partner_preg }
+    if cond == "fertile" { return L.sterile != true }
+    if cond == "sterile" { return L.sterile == true }
+    if cond == "bday" { return p.bday_due == L.tm && p.bday_done != L.tm }
+    if cond == "secret" { return p.secret_known == true && p.secret_done != true }
+    if cond == "awayhome" { return p.home != true && p.moved_help != true }
+    if cond == "hasgk" { return has_grandkids(p) }
+    if cond == "noextra" { return p.extra == null || p.extra == "" }
+    if cond == "hasextra" { return p.extra != null && p.extra != "" }
+    if cond == "notgod" { return p.god != true }
+    if cond == "notrecorded" { return p.recorded != true }
+    if cond == "attracted" { return attracted_to(p) }
+    return true
+}
+
+// Título dinámico de algunas acciones.
+function lazos_title(a: map, p: map) {
+    if a.id == "z_secret" {
+        let s = secret_def(p)
+        if p.secret == "cheat" { return "Hablar de su infidelidad" }
+        return fmt(s.h, {"person": p})
+    }
+    if a.id == "z_sterile" { return by_gender(L.gender, "Hacerte la vasectomía", "Ligarte las trompas") }
+    if a.id == "z_quitextra" && p.extra != null && p.extra != "" { return "Sacarl" + oa(p.gender) + " de " + extra_def(p.extra).n }
+    return ""
+}
+
+function lazos_sub(a: map, p: map) {
+    if a.id == "z_secret" {
+        let s = secret_def(p)
+        if s.cost > 0 { return money_str(s.cost) }
+        return "Te lo confió"
+    }
+    return ""
+}
+
+// Línea extra en el panel de una persona.
+function lazos_detail(p: map) {
+    ensure_want(p)
+    let parts = []
+    if p.bday_due == L.tm && p.bday_done != L.tm { list_push(parts, "¡Cumple años este mes!") }
+    if p.want != null && p.want_tm == L.tm {
+        let a = rel_act(p.want)
+        if a != null { list_push(parts, "Quiere: " + fmt(a.t, {"person": p})) }
+    }
+    if both_adults(p) && (rel_group(p) == "partner" || rel_group(p) == "fling") { list_push(parts, "Pasión " + str(spark_of(p)) + "%") }
+    if p.extra != null && p.extra != "" { list_push(parts, extra_def(p.extra).n + " " + str(p.talent) + "%") }
+    if p.secret_known == true && p.secret_done != true { list_push(parts, "Te contó un secreto") }
+    return str_join(parts, " · ")
+}
+
+// ---------------------------------------------------------------- acciones con código
+
+function lazos_code(a: map, p: map) {
+    let id = a.id
+    let ctx = {"person": p}
+    if id == "z_therapy" {
+        L.money -= 1500
+        bond_gain(p, 12)
+        lazos_spark(p, 6)
+        profile(p)
+        let msg = "Hablaron de todo lo que nunca se habían dicho. Salieron tomados de la mano."
+        if !p.ll_known {
+            p.ll_known = true
+            msg = msg + " La terapeuta lo dijo claro: el lenguaje del amor de " + p.first + " es «" + str_lower(LOVE_LANG_NAMES[p.lovelang]) + "»."
+        }
+        if p.mood == "enojado" { p.mood = "carinoso" }
+        add_hito(p, "Fueron a terapia de pareja")
+        return finish("Terapia de pareja", msg, "g")
+    }
+    if id == "z_livein" {
+        if p.bond >= 55 || chance(p.bond) {
+            p.livein = true
+            flag("livein")
+            bond_gain(p, 10)
+            L.happy += 8
+            add_hito(p, "Se fueron a vivir juntos")
+            return finish(p.first, "Le diste una llave con un listón. Gritó, te abrazó y esa misma semana trajo sus plantas.", "g")
+        }
+        bond_gain(p, -4)
+        return finish(p.first, "«Me encanta la idea... pero todavía no.» Paciencia.", "n")
+    }
+    if id == "z_openrel" {
+        let odds = 15 + p.wild / 3
+        let st = npc_style(p)
+        if st == "libre" { odds += 30 }
+        if st == "celoso" { odds -= 25 }
+        if p.tags != null && list_contains(p.tags, "trios") { odds += 15 }
+        if chance(clamp(odds, 3, 90)) {
+            p.open = true
+            flag("open")
+            bond_gain(p, 3)
+            add_hito(p, "Abrieron la relación")
+            return finish(p.first, p.first + " lo pensó un momento y sonrió: «Con reglas claras y siempre con la verdad.» Ahora tienen una relación abierta.", "x")
+        }
+        let hurt = 10
+        if st == "celoso" { hurt = 20 }
+        bond_gain(p, -hurt)
+        p.mood = "triste"
+        return finish(p.first, "«¿No te basto?» Se le rompió la voz. No era lo que quería escuchar.", "b")
+    }
+    if id == "z_closerel" {
+        p.open = false
+        bond_gain(p, 6)
+        return finish(p.first, "Acordaron volver a ser solo ustedes dos.", "g")
+    }
+    if id == "z_prenatal" {
+        if L.prenatal == null { L.prenatal = 0 }
+        L.prenatal = L.prenatal + 1
+        bond_gain(p, 6)
+        L.happy += 4
+        add_hito(p, "Escucharon juntos el corazón del bebé")
+        return finish("Consulta prenatal", "Escucharon el corazón del bebé. Latía rapidísimo. Se apretaron la mano sin decir nada.", "g")
+    }
+    if id == "z_sterile" {
+        if L.money < 3000 { return info("Operación", "Cuesta $3,000.") }
+        L.money -= 3000
+        L.sterile = true
+        L.health -= 2
+        hito_me("Salud", by_gender(L.gender, "Te hiciste la vasectomía", "Te ligaste las trompas"))
+        return finish("Operación", "Listo: ya no habrá más sustos de embarazo. Recuerda que el condón sigue protegiendo de las ITS.", "n")
+    }
+    if id == "z_unsterile" {
+        if L.money < 10000 { return info("Operación", "Cuesta $10,000.") }
+        L.money -= 10000
+        if chance(50) {
+            L.sterile = false
+            return finish("Operación", "¡La operación funcionó! Pueden volver a buscar un bebé.", "g")
+        }
+        return finish("Operación", "Esta vez no funcionó.", "b")
+    }
+    if id == "z_bday" { return open_bday(p) }
+    if id == "z_secret" { return help_secret(p) }
+    if id == "z_babysit" {
+        bond_gain(p, 8)
+        for q in L.people {
+            if q.alive && q.rel == "nieto" && q.parent == p.id { bond_gain(q, 6) }
+        }
+        L.happy += 6
+        L.health -= 1
+        return finish(p.first, "Te dejaron a los nietos un fin de semana. Galletas antes de la cena, desvelos y muchas risas. " + p.first + " pudo descansar por fin.", "g")
+    }
+    if id == "z_extra" { return open_extra(p) }
+    if id == "z_quitextra" {
+        let n = extra_def(p.extra).n
+        p.extra = ""
+        let msg = "Ya no irá a " + str_lower(n) + "."
+        if p.talent >= 40 {
+            bond_gain(p, -8)
+            msg = msg + " Le dolió: era buen" + oa(p.gender) + "."
+        }
+        return finish(p.first, msg, "n")
+    }
+    if id == "z_godparent" {
+        p.god = true
+        bond_gain(p, 15)
+        let sib = find_person(p.parent)
+        if sib != null { bond_gain(sib, 8) }
+        add_hito(p, by_gender(L.gender, "Fuiste su padrino", "Fuiste su madrina"))
+        L.happy += 5
+        return finish(p.first, "Aceptaste ser " + by_gender(L.gender, "su padrino", "su madrina") + ". Lo cargaste en brazos durante toda la ceremonia.", "g")
+    }
+    if id == "z_record" {
+        p.recorded = true
+        bond_gain(p, 8)
+        gain("know", 2)
+        add_hito(p, "Grabaste sus historias")
+        return finish(p.first, "Grabaste horas de historias: cómo se enamoró, sus travesuras, la receta del mole. Un tesoro.", "g")
+    }
+    if id == "z_inlawfight" {
+        bond_gain(p, -15)
+        gain("guts", 2)
+        L.happy += 3
+        let q = partner()
+        let msg = "Le dijiste a tu " + str_lower(rel_label(p)) + " lo que pensabas. Silencio total en la mesa."
+        if q != null && q.alive {
+            if npc_style(q) == "libre" || q.bond >= 75 {
+                bond_gain(q, 3)
+                msg = msg + " " + q.first + " te dio la razón en privado."
+            } else {
+                bond_gain(q, -5)
+                msg = msg + " " + q.first + " se quedó entre la espada y la pared."
+            }
+        }
+        return finish(p.first, msg, "n")
+    }
+    if id == "z_cwhelp" {
+        if L.job == null { return finish(p.first, "Ya no trabajan juntos, pero te dio buenos consejos.", "n") }
+        L.job.perf = clamp100(L.job.perf + 6)
+        career_xp(4)
+        bond_gain(p, -1)
+        return finish(p.first, p.first + " te ayudó a sacar el proyecto. Desempeño +6. Le debes una.", "g")
+    }
+    if id == "z_cwflirt" {
+        let odds = 25 + rank("charm") * 6 + flirt_bonus() + (looks_eff() - p.looks) / 3 + p.bond / 4
+        if chance(clamp(odds, 5, 90)) {
+            let msg = p.first + " te siguió el juego. Un beso en el elevador lo cambió todo."
+            msg = msg + special("new_partner", ctx)
+            if chance(15) && L.job != null {
+                L.job.perf = clamp100(L.job.perf - 15)
+                msg = msg + " Recursos Humanos se enteró: plática incómoda y desempeño −15."
+            }
+            return finish(p.first, msg, "x")
+        }
+        bond_gain(p, -8)
+        return finish(p.first, p.first + " te dejó claro que no le interesa. Incomodidad en cada junta.", "b")
+    }
+    if id == "z_cwblame" {
+        if L.job != null { L.job.perf = clamp100(L.job.perf + 5) }
+        L.karma -= 5
+        bond_gain(p, -25)
+        if p.bond < 20 {
+            p.rel = "rival"
+            hito_quiet("Trabajo", p.first + " se volvió tu rival")
+            return finish(p.first, "El jefe le creyó a ti. " + p.first + " sabe que fuiste tú. Ahora es tu rival.", "b")
+        }
+        return finish(p.first, "El jefe le llamó la atención a " + p.first + ". Tu desempeño sube, tu conciencia baja.", "n")
+    }
+    if id == "z_rvpeace" {
+        if chance(25 + rank("kind") * 8 + p.bond / 3) {
+            p.rel = "colega"
+            p.bond = max(p.bond, 45)
+            add_hito(p, "Hicieron las paces")
+            return finish(p.first, "Le tendiste la mano y la aceptó. «Éramos un par de tontos.» Ya no son rivales.", "g")
+        }
+        bond_gain(p, -3)
+        return finish(p.first, p.first + " se rio de tu oferta de paz. Todavía no.", "b")
+    }
+    if id == "z_rvduel" { return mg_start("math", "Duelo contra " + p.first, "lazos", {"kind": "duel", "pid": p.id}) }
+    if id == "z_rvsabotage" {
+        L.karma -= 6
+        if chance(30) {
+            if L.job != null { L.job.perf = clamp100(L.job.perf - 12) }
+            L.happy -= 5
+            return finish(p.first, "Te cacharon saboteando a " + p.first + ". Ahora el villano eres tú.", "b")
+        }
+        L.happy += 4
+        if L.job != null { L.job.perf = clamp100(L.job.perf + 4) }
+        return finish(p.first, "Su presentación «se borró» misteriosamente. Nadie sospecha de ti. Todavía.", "n")
+    }
+    return null
+}
+
+// Cumpleaños: cómo celebrarlo.
+function open_bday(p: map) {
+    let ctx = {"person": p}
+    let labels = ["Fiesta sorpresa ($1,500)", "Cena especial ($500)", "Un regalo y un pastel ($200)", "Llamarle y cantarle «Las mañanitas»"]
+    let locks = ["", "", "", ""]
+    if L.money < 1500 { locks[0] = "$1,500" }
+    if L.money < 500 { locks[1] = "$500" }
+    if L.money < 200 { locks[2] = "$200" }
+    open_choice("CUMPLEAÑOS DE " + str_upper(p.first), fmt("{x} cumple años este mes. ¿Cómo lo celebras?", ctx), labels, locks, "z_bday", ctx)
+    return null
+}
+
+function resolve_bday(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    p.bday_done = L.tm
+    profile(p)
+    let costs = [1500, 500, 200, 0]
+    let gains = [14, 10, 8, 5]
+    L.money -= costs[index]
+    let b = gains[index]
+    let g = rel_group(p)
+    let msg = ""
+    if index == 0 {
+        msg = "Apagaron las luces, gritaron «¡SORPRESA!» y " + p.first + " casi se desmaya. Lloró de risa."
+        if p.age < 13 || g == "friend" || g == "partner" { b += 4 }
+        add_hito(p, "Le organizaste una fiesta sorpresa")
+    }
+    if index == 1 {
+        msg = "Una cena tranquila, solo para celebrar a " + p.first + ". Brindaron por otro año."
+        if p.lovelang == "tiempo" { b += 4 }
+    }
+    if index == 2 {
+        msg = "Velas, pastel de chocolate y su regalo envuelto con demasiada cinta."
+        if p.lovelang == "regalos" { b += 4 }
+    }
+    if index == 3 {
+        msg = "Le cantaste «Las mañanitas» por teléfono, desafinando con ganas."
+        if g == "grandparent" || p.lovelang == "palabras" { b += 4 }
+    }
+    bond_gain(p, b)
+    L.happy += 3
+    touch(p)
+    return finish("¡Feliz cumpleaños!", msg, "g")
+}
+
+// Ayudar con el secreto que te contó.
+function help_secret(p: map) {
+    let ctx = {"person": p}
+    if p.secret == "cheat" {
+        p.secret_done = true
+        p.cheated_you = false
+        L.happy -= 8
+        bond_gain(p, -6)
+        add_hito(p, "Te confesó su infidelidad")
+        return finish(p.first, "Hablaron hasta la madrugada. Lloró, te pidió perdón y te prometió que no volverá a pasar. Tú decides si le crees.", "b")
+    }
+    let s = secret_def(p)
+    if s.cost > 0 && L.money < s.cost { return info(p.first, "Para esto necesitas " + money_str(s.cost) + ".") }
+    L.money -= s.cost
+    p.secret_done = true
+    bond_gain(p, s.bond)
+    L.happy += 3
+    L.karma += 2
+    if s.hito != "" { add_hito(p, fmt(s.hito, ctx)) }
+    if s.id == "love" {
+        let ok_age = both_adults(p) || (L.age < 18 && p.age < 18 && L.age >= 12 && p.age >= 12)
+        if ok_age && attracted_to(p) && L.partner_id == 0 {
+            let msg = "Se lo dijiste: tú también sientes algo. Se quedaron mirándose un segundo eterno."
+            if both_adults(p) { msg = msg + " Y luego, por fin, el beso." }
+            make_partner(p)
+            add_hito(p, "De amigos a algo más")
+            return finish(p.first, msg + " Ahora " + p.first + " es tu " + str_lower(rel_label(p)) + ".", "x")
+        }
+        return finish(p.first, "Le dijiste con cariño que l" + by_gender(p.gender, "o", "a") + " quieres muchísimo, pero como amig" + oa(p.gender) + ". Le dolió, pero valoró tu honestidad.", "n")
+    }
+    if s.id == "business" { p.invest = L.tm }
+    if s.id == "health" { p.cared = true }
+    if s.id == "promo" && L.job != null { L.job.perf = clamp100(L.job.perf + 8) }
+    if s.id == "family" {
+        for q in L.people {
+            if q.alive && q.rel == "suegro" { bond_gain(q, 8) }
+        }
+    }
+    let msgs = {
+        "aurora": "Viajaron al norte y vieron el cielo bailar en verde y violeta. " + p.first + " no dejaba de llorar.",
+        "insecure": "Le dijiste, mirándol" + oa(p.gender) + " a los ojos, todo lo que admiras de " + by_gender(p.gender, "él", "ella") + ". No necesitó decir nada.",
+        "career": "Le diste el empujón (y el colchón económico) para intentarlo. Brilla de emoción.",
+        "debt": "Le ayudaste a pagar sus deudas. Te abrazó tan fuerte que te dolieron las costillas.",
+        "lonely": "Empezaste a buscarl" + oa(p.gender) + " más seguido. Volvió a sonreír.",
+        "business": "Invertiste en su negocio. Ojalá funcione: en un año sabrán.",
+        "singer": "Le regalaste clases de canto. Ya canta en las comidas familiares. Mucho.",
+        "guilt": "Le dijiste que hizo un gran trabajo. Se le quebró la voz.",
+        "health": "L" + oa(p.gender) + " acompañaste al médico. Lo detectaron a tiempo.",
+        "bully": "Hablaste con la escuela y con tu " + hij(p) + ". Ya no está sol" + oa(p.gender) + " en esto.",
+        "art": "«Te apoyo en lo que decidas.» Te abrazó como cuando era pequeñ" + oa(p.gender) + ".",
+        "crush": "Le diste un consejo con cariño. Te escuchó con los ojos brillantes.",
+        "favorite": "Hablaron de su infancia por primera vez. Se pidieron perdón por cosas de hace treinta años.",
+        "vase": "Te reíste tanto que se contagió. El jarrón de la abuela, por fin, descansa en paz.",
+        "leaving": "Le guardaste el secreto y le escribiste una recomendación. Nunca lo olvidará.",
+        "promo": "Te contó todo lo que el jefe busca. Te preparaste mejor que nadie.",
+        "family": "Fuiste a ganarte a su familia con postre y paciencia. Funcionó.",
+        "letter": "L" + oa(p.gender) + " animaste a enviar la carta. Le respondieron.",
+        "alone": "Le prometiste que nunca estará sol" + oa(p.gender) + ". Se lo cumplirás.",
+        "debt2": "Le echaste la mano con dinero. No lo olvidará."
+    }
+    let msg = msgs[s.id]
+    if msg == null { msg = "Le ayudaste con lo que te confió." }
+    return finish(p.first, msg, "g")
+}
+
+// Actividades extraescolares de los hijos.
+function open_extra(p: map) {
+    let labels = []
+    for e in EXTRAS { list_push(labels, e.n) }
+    list_push(labels, "Mejor no")
+    let locks = []
+    for l in labels { list_push(locks, "") }
+    open_choice("ACTIVIDAD PARA " + str_upper(p.first), "Cuesta $500 al mes. Con práctica, puede volverse su gran talento.", labels, locks, "z_extra", {"person": p})
+    return null
+}
+
+function resolve_extra(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    if index >= len(EXTRAS) { return finish(p.first, "Lo dejaron para después.", "n") }
+    let e = EXTRAS[index]
+    p.extra = e.id
+    if p.talent == null { p.talent = 0 }
+    bond_gain(p, 5)
+    L.parent_score = clamp100(L.parent_score + 2)
+    return finish(p.first, "Inscribiste a " + p.first + " en " + str_lower(e.n) + ". Llegó feliz de su primera clase.", "g")
+}
+
+// Minijuegos de lazos (duelo con tu rival).
+function lazos_mg_result(score: any, ctx: map) {
+    let p = find_person(ctx.pid)
+    if p == null { return null }
+    if ctx.kind == "duel" {
+        if score >= 60 {
+            gain("guts", 3)
+            L.happy += 6
+            bond_gain(p, 5)
+            if L.job != null { L.job.perf = clamp100(L.job.perf + 4) }
+            return finish("Duelo", "Le ganaste a " + p.first + " frente a todos (" + str(score) + " puntos). A regañadientes, ahora te respeta.", "g")
+        }
+        L.happy -= 5
+        bond_gain(p, -3)
+        return finish("Duelo", p.first + " te ganó (" + str(score) + " puntos). Lo va a presumir por meses.", "b")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- efectos especiales
+
+function lazos_special(name: string, ctx: map) {
+    let p = ctx["person"]
+    if name == "z_partner_up" {
+        let q = partner()
+        if q != null && q.alive { bond_gain(q, 3) }
+        return ""
+    }
+    if name == "z_partner_down" {
+        let q = partner()
+        if q != null && q.alive { bond_gain(q, -5) }
+        return ""
+    }
+    if name == "z_spark" {
+        lazos_spark(partner(), 15)
+        return ""
+    }
+    if name == "z_touch" {
+        if p != null { touch(p) }
+        return ""
+    }
+    if name == "z_affair" {
+        let x = stranger()
+        open_hookup({"person": x})
+        return ""
+    }
+    if name == "z_make_rival" {
+        if p == null { return "" }
+        p.rel = "rival"
+        p.bond = min(p.bond, 15)
+        return " Ahora " + p.first + " es tu rival."
+    }
+    if name == "z_family_up" || name == "z_family_down" {
+        let d = 4
+        if name == "z_family_down" { d = -3 }
+        for q in L.people {
+            if q.alive && is_family(q) && q.rel != "hijo" { bond_gain(q, d) }
+        }
+        return ""
+    }
+    if name == "z_reunite" {
+        if p == null { return "" }
+        p.moved = false
+        touch(p)
+        if L.partner_id == 0 && attracted_to(p) && both_adults(p) {
+            make_partner(p)
+            add_hito(p, "Se reencontraron después de años")
+            return " El primer amor nunca se olvida: ahora " + p.first + " es tu " + str_lower(rel_label(p)) + " otra vez."
+        }
+        p.rel = "amigo"
+        p.bond = max(p.bond, 60)
+        add_hito(p, "Se reencontraron después de años")
+        return ""
+    }
+    if name == "z_unmove" {
+        if p != null {
+            p.moved = false
+            touch(p)
+        }
+        return ""
+    }
+    return ""
+}
+
+// ---------------------------------------------------------------- eventos
+
+function lazos_meets(tag: string) {
+    if tag == "lowspark" {
+        let p = partner()
+        return p != null && p.alive && both_adults(p) && spark_of(p) < 30 && p.open != true
+    }
+    if tag == "hasinlaw" { return first_rel("suegro") != null }
+    if tag == "hascoworker" { return L.job != null && first_rel("colega") != null }
+    if tag == "hasnephew" { return first_rel("sobrino") != null }
+    if tag == "lostfriend" { return lost_friend() != null }
+    if tag == "kidteen" { return kid_teen() != null }
+    if tag == "bigfamily" { return elder() != null && len(L.people) >= 8 }
+    if tag == "movedlove" { return moved_love() != null }
+    return false
+}
+
+function lazos_person(spec: any) {
+    if spec == "inlaw" { return first_rel("suegro") }
+    if spec == "coworker" { return first_rel("colega") }
+    if spec == "nephew" { return first_rel("sobrino") }
+    if spec == "lostfriend" { return lost_friend() }
+    if spec == "kidteen" { return kid_teen() }
+    if spec == "elder" { return elder() }
+    if spec == "movedlove" { return moved_love() }
+    return null
+}
+
+function lost_friend() {
+    for p in L.people {
+        if p.alive && p.rel == "amigo" && p.bond >= 25 && neglect_months(p) >= 18 { return p }
+    }
+    return null
+}
+
+function kid_teen() {
+    for p in kids_alive() {
+        if p.age >= 14 && p.age <= 17 { return p }
+    }
+    return null
+}
+
+function elder() {
+    let p = first_rel("abuelo")
+    if p != null { return p }
+    return first_rel("tio")
+}
+
+function moved_love() {
+    if L.age < 22 || L.age > 45 { return null }
+    for p in L.people {
+        if p.alive && p.moved == true && p.age >= 20 { return p }
+    }
+    return null
+}
+
+// Eventos con prioridad: custodia, embarazo, fiesta de 15.
+function maybe_lazos_event() {
+    if G.modal != null || L.jail > 0 { return false }
+    if L.custody_q == true && kids_minor() > 0 {
+        L.custody_q = false
+        open_choice("LA CUSTODIA", "El divorcio también es de tus hijos. ¿Cómo quedará la custodia?",
+            ["Custodia compartida", "Pelear la custodia completa ($15,000 de abogados)", "Dejarle la custodia a tu ex"],
+            ["", "", ""], "z_custody", {})
+        if L.money < 15000 { G.modal.locks[1] = "$15,000" }
+        return true
+    }
+    L.custody_q = false
+    if L.pregnant || L.partner_preg {
+        if L.pq == null { L.pq = {} }
+        let pm = L.preg_m
+        if !L.pregnant { pm = L.ppreg_m }
+        if pm <= 6 && pm > 0 && L.pq["ultra"] != true {
+            L.pq["ultra"] = true
+            L.twins = chance(4)
+            open_choice("LA ECOGRAFÍA", "En la pantalla aparece una manchita que se mueve. El doctor pregunta: «¿Quieren saber si es niño o niña?»",
+                ["Sí, queremos saber", "Que sea sorpresa"], ["", ""], "z_ultra", {})
+            return true
+        }
+        if pm <= 4 && pm > 0 && L.pq["shower"] != true {
+            L.pq["shower"] = true
+            open_choice("BABY SHOWER", "La familia quiere organizar un baby shower.",
+                ["Fiesta grande con toda la familia ($1,000)", "Algo íntimo con los más cercanos", "Sin fiesta"], ["", "", ""], "z_shower", {})
+            if L.money < 1000 { G.modal.locks[0] = "$1,000" }
+            return true
+        }
+        if pm <= 2 && pm > 0 && L.pq["name"] != true {
+            L.pq["name"] = true
+            let m = pick(NAMES_M)
+            let f = pick(NAMES_F)
+            let m2 = pick(NAMES_M)
+            let f2 = pick(NAMES_F)
+            L.pq_opts = [[m, f], [m2, f2]]
+            let l0 = m + " si es niño, " + f + " si es niña"
+            let l1 = m2 + " si es niño, " + f2 + " si es niña"
+            if L.baby_sex == "m" {
+                l0 = m
+                l1 = m2
+            }
+            if L.baby_sex == "f" {
+                l0 = f
+                l1 = f2
+            }
+            let q = partner()
+            let who = "tu pareja"
+            if q != null { who = q.first }
+            open_choice("EL NOMBRE DEL BEBÉ", "Ya falta poco. ¿Cómo se va a llamar?", [l0, l1, "Que lo elija " + who, "Decidirlo al verle la cara"], ["", "", "", ""], "z_name", {})
+            return true
+        }
+    }
+    if L.quince != null && L.quince != 0 && find_person(L.quince) != null {
+        let q15 = find_person(L.quince)
+        L.quince = 0
+        let ctx = {"person": q15}
+        let labels = ["Fiesta grande con vals ($8,000)", "Un viaje los dos juntos ($5,000)", "Pastel y comida en casa", "No celebrar"]
+        let locks = ["", "", "", ""]
+        if L.money < 8000 { locks[0] = "$8,000" }
+        if L.money < 5000 { locks[1] = "$5,000" }
+        open_choice("¡CUMPLE 15!", fmt("Tu " + hij(q15) + " {x} cumple 15 años. ¿Cómo lo celebran?", ctx), labels, locks, "z_quince", ctx)
+        return true
+    }
+    return false
+}
+
+function lazos_choice(handler: string, index: int, ctx: map) {
+    if handler == "z_bday" { return resolve_bday(index, ctx) }
+    if handler == "z_extra" { return resolve_extra(index, ctx) }
+    G.modal = null
+    if handler == "z_custody" {
+        if index == 0 {
+            for k in kids_alive() {
+                if k.age < 18 { bond_gain(k, 2) }
+            }
+            return finish("Custodia", "Custodia compartida: una semana contigo, una con tu ex. Los niños se adaptan mejor de lo que esperabas.", "n")
+        }
+        if index == 1 {
+            L.money -= 15000
+            if chance(45 + rank("know") * 5) {
+                L.alimony = 0
+                L.alimony_m = 0
+                for k in kids_alive() {
+                    if k.age < 18 { bond_gain(k, 8) }
+                }
+                L.parent_score = clamp100(L.parent_score + 5)
+                return finish("Custodia", "Ganaste la custodia completa. Los niños vivirán contigo y ya no pagas pensión.", "g")
+            }
+            for k in kids_alive() {
+                if k.age < 18 { bond_gain(k, -4) }
+            }
+            return finish("Custodia", "El juez le dio la custodia a tu ex. Los ves cada quince días.", "b")
+        }
+        L.alimony = L.alimony * 3 / 2
+        for k in kids_alive() {
+            if k.age < 18 { bond_gain(k, -15) }
+        }
+        L.parent_score = clamp100(L.parent_score - 10)
+        L.happy -= 4
+        return finish("Custodia", "Le dejaste la custodia a tu ex. Pagarás más pensión y los verás poco. Lo van a recordar.", "b")
+    }
+    if handler == "z_ultra" {
+        if index == 0 {
+            L.baby_sex = pick(["m", "f"])
+            let msg = "«¡Es " + by_gender(L.baby_sex, "un niño", "una niña") + "!»"
+            if L.twins { msg = msg + " Y... un momento. «Aquí hay otro corazón.» ¡Son gemelos!" }
+            return finish("La ecografía", msg + " Saliste con la foto impresa y no dejaste de verla.", "g")
+        }
+        L.baby_sex = ""
+        return finish("La ecografía", "Prefirieron la sorpresa. El doctor guardó el secreto con una sonrisa.", "g")
+    }
+    if handler == "z_shower" {
+        if index == 0 {
+            L.money -= 1000
+            let gifts = rint(20, 60) * 100
+            L.money += gifts
+            for q in L.people {
+                if q.alive && is_family(q) { bond_gain(q, 3) }
+            }
+            L.happy += 8
+            return finish("Baby shower", "Pañales, juegos ridículos y regalos por " + money_str(gifts) + ". Toda la familia emocionada.", "g")
+        }
+        if index == 1 {
+            L.happy += 5
+            return finish("Baby shower", "Una tarde tranquila con los más cercanos. Lloraste con cada mameluco.", "g")
+        }
+        return finish("Baby shower", "Sin fiesta. Más tiempo para dormir mientras se pueda.", "n")
+    }
+    if handler == "z_name" {
+        if index <= 1 {
+            L.baby_names = L.pq_opts[index]
+            return finish("El nombre", "Ya tiene nombre. Lo dicen en voz alta cada vez que le hablan a la panza.", "g")
+        }
+        if index == 2 {
+            L.baby_names = [pick(NAMES_M), pick(NAMES_F)]
+            let q = partner()
+            if q != null { bond_gain(q, 5) }
+            return finish("El nombre", "Le dejaste elegir a tu pareja. Le hizo mucha ilusión.", "g")
+        }
+        L.baby_names = []
+        return finish("El nombre", "Lo decidirán al verle la carita.", "n")
+    }
+    if handler == "z_quince" {
+        let p = ctx.person
+        if index == 0 {
+            L.money -= 8000
+            bond_gain(p, 15)
+            L.happy += 8
+            add_hito(p, "Su fiesta de 15 años")
+            return finish(p.first, "Vals, chambelanes, pastel de cinco pisos y toda la familia bailando. Bailaste con " + p.first + " y lloraste.", "g")
+        }
+        if index == 1 {
+            L.money -= 5000
+            bond_gain(p, 13)
+            L.happy += 6
+            add_hito(p, "Su viaje de 15 años")
+            return finish(p.first, "Se fueron de viaje los dos. Hablaron como nunca. Volvieron más unidos.", "g")
+        }
+        if index == 2 {
+            bond_gain(p, 5)
+            return finish(p.first, "Pastel, comida en casa y los abuelos. Sencillo y bonito.", "g")
+        }
+        bond_gain(p, -8)
+        return finish(p.first, "No celebraron. " + p.first + " no dijo nada, pero se le notó.", "b")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- nacimientos
+
+function lazos_baby_sex() {
+    if L.baby_sex == "m" || L.baby_sex == "f" { return L.baby_sex }
+    return pick(["m", "f"])
+}
+
+function lazos_baby_name(g: string) {
+    if L.baby_names == null || len(L.baby_names) < 2 { return "" }
+    if g == "m" { return L.baby_names[0] }
+    return L.baby_names[1]
+}
+
+// Después de que nace: gemelos, control prenatal y limpiar el estado del embarazo.
+function lazos_after_birth(child: map, other: string) {
+    if L.prenatal != null && L.prenatal >= 2 {
+        child.bond = clamp100(child.bond + 5)
+        L.happy += 4
+        log_add("Gracias al buen control prenatal, el parto fue sin complicaciones.", "g")
+    } else if L.gender == "f" && L.prenatal == 0 && chance(15) {
+        L.health -= 6
+        log_add("Hubo complicaciones en el parto. Ya pasó el susto.", "b")
+    }
+    if L.twins == true {
+        L.twins = false
+        let g = pick(["m", "f"])
+        let twin = make_person(g, "hijo", 0)
+        twin.last = child.last
+        twin.look.skin = child.look.skin
+        twin.look.hcolor = child.look.hcolor
+        twin.bond = 90
+        twin.twin = child.id
+        child.twin = twin.id
+        add_person(twin)
+        L.kids += 1
+        L.happy += 6
+        log_add("¡Y nació " + by_gender(g, "su gemelo", "su gemela") + " " + twin.first + "! Dos de un jalón.", "g")
+        twin.hitos = [{"a": L.age, "t": "Nació (gemel" + oa(g) + " de " + child.first + ")"}]
+        hito_once("twins", "Familia", "Tuviste gemelos")
+    }
+    L.baby_sex = ""
+    L.baby_names = []
+    L.prenatal = 0
+    L.pq = {}
+    return null
+}
+
+// ---------------------------------------------------------------- familia política
+
+// Al casarte llegan tus suegros.
+function lazos_on_marry(p: map) {
+    if p.inlaws == true { return null }
+    p.inlaws = true
+    let n = 0
+    for g in ["m", "f"] {
+        let age = p.age + rint(24, 32)
+        if age < 88 && chance(80) {
+            let s = make_person(g, "suegro", age)
+            s.last = p.last
+            s.bond = rint(40, 65)
+            s.of = p.id
+            add_person(s)
+            n += 1
+        }
+    }
+    if n > 0 { hito_quiet("Familia", "Ahora tienes suegros") }
+    return null
+}
+
+// Al divorciarte, tus suegros pasan a ser ex suegros y queda pendiente la custodia.
+function lazos_divorce(p: map) {
+    for q in L.people {
+        if q.alive && q.rel == "suegro" && q.of == p.id { q.rel = "exsuegro" }
+    }
+    if kids_minor() > 0 { L.custody_q = true }
+    return null
+}
+
+// Cuando muere alguien de la familia.
+function lazos_on_death(p: map) {
+    let r = p.rel
+    if (r == "abuelo" || r == "tio") && p.bond >= 60 && chance(45) {
+        let m = rint(5, 60) * 1000
+        L.money += m
+        log_add("Tu " + str_lower(rel_label(p)) + " " + p.first + " te dejó " + money_str(m) + " en su testamento.", "g")
+        hito_me("Familia", "Heredaste de tu " + str_lower(rel_label(p)) + " " + p.first)
+    }
+    if p.recorded == true {
+        L.happy += 8
+        log_add("Ves los videos con sus historias. Sigue aquí, de algún modo.", "n")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- cada mes y cada año
+
+function lazos_month() {
+    if !L.alive { return null }
+    let cur = cur_month()
+    let colegas = 0
+    for p in L.people {
+        if !p.alive { continue }
+        let g = rel_group(p)
+        if p.rel == "colega" { colegas += 1 }
+        // Cumpleaños
+        if g != "ex" && g != "rival" && g != "acq" && p.rel != "ligue" && p.age >= 1 {
+            if bday_month(p) == cur {
+                p.bday_due = L.tm
+                if close_rel(p) && L.age >= 6 {
+                    log_add("Este mes cumple años tu " + str_lower(rel_label(p)) + " " + p.first + ".", "n")
+                    if L.age >= 12 { notify("agenda", "Este mes cumple años " + p.first) }
+                }
+            } else if p.bday_due == L.tm - 1 && p.bday_done != p.bday_due && close_rel(p) && L.age >= 8 {
+                let hurt = 4
+                if g == "partner" { hurt = 10 }
+                bond_gain(p, 0 - hurt)
+                log_add("Se te olvidó el cumpleaños de " + p.first + ". Lo notó.", "b")
+            }
+        }
+        // Pasión de la pareja
+        if (g == "partner" || g == "fling") && both_adults(p) {
+            let years = 0
+            if p.since != null { years = L.age - p.since }
+            let decay = 1 + years / 6
+            if decay > 4 { decay = 4 }
+            if chance(70) { p.spark = clamp100(spark_of(p) - decay) }
+            if spark_of(p) < 20 && p.open != true && (npc_style(p) == "libre" || p.bond < 45) && chance(5) && p.cheated_you != true {
+                p.cheated_you = true
+                log_add(p.first + " llega tarde últimamente y sonríe mucho al celular.", "n")
+            }
+        }
+        // Suegros
+        if p.rel == "suegro" {
+            let q = partner()
+            if q != null && q.id == p.of {
+                if p.bond < 25 && chance(20) {
+                    bond_gain(q, -2)
+                    if chance(30) { log_add("Tu " + str_lower(rel_label(p)) + " le habla mal de ti a " + q.first + ".", "b") }
+                }
+                if p.bond >= 75 && chance(30) { bond_gain(q, 1) }
+            }
+        }
+        // Rivales
+        if p.rel == "rival" && L.job != null && chance(6) {
+            L.job.perf = clamp100(L.job.perf - 5)
+            log_add("Tu rival " + p.first + " habló mal de ti con el jefe.", "b")
+        }
+        // Inversión en el negocio de un amigo
+        if p.invest != null && L.tm - p.invest == 12 {
+            if chance(60) {
+                L.money += 40000
+                log_add("¡El negocio de " + p.first + " despegó! Te devolvió el doble: $40,000.", "g")
+                add_hito(p, "Su negocio fue un éxito")
+            } else {
+                log_add("El negocio de " + p.first + " cerró. Perdiste tu inversión, pero no su amistad.", "b")
+            }
+        }
+        // Actividades de los hijos
+        if p.rel == "hijo" && p.extra != null && p.extra != "" {
+            if p.age >= 18 {
+                p.extra = ""
+            } else {
+                L.money -= 500
+                let t = rint(1, 4)
+                if p.style == "genio" && p.extra == "code" { t += 2 }
+                if p.style == "flojo" { t -= 1 }
+                p.talent = clamp100(p.talent + t)
+            }
+        }
+    }
+    // Colegas nuevos en el trabajo
+    if L.job != null && L.jail == 0 && L.age >= 16 && colegas < 3 && chance(10) {
+        let age = max(18, L.age + rint(-10, 10))
+        let c = make_person(pick(["m", "f"]), "colega", age)
+        c.bond = rint(35, 60)
+        add_person(c)
+        c.hitos = [{"a": L.age, "t": "Se conocieron en el trabajo"}]
+        log_add("Conociste a " + c.first + " en el trabajo. Parece buena onda.", "n")
+    }
+    return null
+}
+
+// Lo que quiere este mes se decide la primera vez que lo miras (así no cuesta nada
+// avanzar meses).
+function ensure_want(p: map) {
+    if p.want_tm == L.tm { return null }
+    p.want_tm = L.tm
+    p.want = ""
+    let g = rel_group(p)
+    if g == "ex" || g == "rival" || g == "acq" || p.rel == "ligue" || p.age < 3 || !p.alive { return null }
+    if chance(70) { pick_want(p) }
+    return null
+}
+
+// Elige algo que esa persona quiere hacer contigo este mes.
+function pick_want(p: map) {
+    let opts = []
+    for a in REL_ACTS {
+        if a.code == null && !rel_hidden(a, p) && (a.cost == null || a.cost <= 3000) { list_push(opts, a.id) }
+    }
+    for a in LAZOS_ACTS {
+        if a.code == null && !rel_hidden(a, p) && (a.cost == null || a.cost <= 3000) { list_push(opts, a.id) }
+    }
+    if len(opts) == 0 { return null }
+    p.want = opts[rint(0, len(opts) - 1)]
+    p.want_tm = L.tm
+    return null
+}
+
+// ¿Cumpliste lo que quería? (se llama desde bond_bonus)
+function want_bonus(p: map, act_id: string) {
+    if p.want == null || p.want != act_id || p.want_tm != L.tm { return "" }
+    p.want = ""
+    bond_gain(p, 6)
+    list_push(G.toasts, {"head": "¡JUSTO LO QUE QUERÍA!", "title": str_upper(p.first), "sub": "Cercanía extra por leerle la mente.", "t0": G.t})
+    return " ¡Era justo lo que " + p.first + " quería!"
+}
+
+function lazos_year() {
+    for p in L.people {
+        if !p.alive { continue }
+        if p.rel == "hijo" {
+            kid_init(p)
+            if p.age == 1 {
+                add_hito(p, "Dio sus primeros pasos")
+                L.happy += 3
+            }
+            if p.age == 2 { add_hito(p, "Dijo su primera palabra: «" + by_gender(L.gender, "papá", "mamá") + "»") }
+            if p.age == 6 { add_hito(p, "Su primer día de escuela") }
+            if p.age == 15 && (L.quince == null || L.quince == 0) { L.quince = p.id }
+            if p.extra != null && p.extra != "" {
+                let e = extra_def(p.extra)
+                if p.talent >= 45 && p.tmile != true {
+                    p.tmile = true
+                    add_hito(p, e.win)
+                    L.happy += 6
+                    L.parent_score = clamp100(L.parent_score + 3)
+                }
+                if p.talent >= 80 && p.age >= 16 && p.tuition == "" && p.degree == "" && p.schol != true {
+                    p.schol = true
+                    add_hito(p, "Ganó una beca por su talento en " + str_lower(e.n))
+                    log_add("¡A " + p.first + " le ofrecieron una beca completa por su talento! No pagarás su universidad.", "g")
+                }
+            }
+        }
+        // Hermanos: se casan y tienen hijos (tus sobrinos).
+        if p.rel == "hermano" && p.age >= 23 && p.age <= 42 {
+            if p.wed != true && chance(6) {
+                p.wed = true
+                add_hito(p, "Se casó")
+                log_add("Tu " + str_lower(rel_label(p)) + " " + p.first + " se casó. Lloraste en la ceremonia.", "g")
+            }
+            if p.age >= 24 && chance(8) {
+                let g = pick(["m", "f"])
+                let n = make_person(g, "sobrino", 0)
+                n.last = p.last
+                n.parent = p.id
+                n.bond = 60
+                add_person(n)
+                n.hitos = [{"a": L.age, "t": "Nació"}]
+                log_add("¡Tu " + str_lower(rel_label(p)) + " " + p.first + " tuvo " + by_gender(g, "un niño", "una niña") + ": " + n.first + "! Eres ti" + oa(L.gender) + ".", "g")
+                if !hito_once("first_nephew", "Familia", "Te volviste ti" + oa(L.gender) + ": nació " + n.first) { hito_quiet("Familia", "Nació tu sobrin" + oa(g) + " " + n.first) }
+            }
+        }
+        // Becas: si ya va a la universidad, la beca la cubre.
+        if p.rel == "hijo" && p.schol == true && p.tuition != "" && p.tuition != "self" { p.tuition = "self" }
+    }
+    return null
+}

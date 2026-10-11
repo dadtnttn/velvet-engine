@@ -252,6 +252,51 @@ binarias en el juego.
     lujos), **Salud**, **Recuerdos** (tus hitos), **Agenda** (a quién no le has
     hablado, efectos y misiones), **Mi Ruta**, **Fe** y **Ajustes** (modelo de
     celular, fondo, no molestar, seguridad contra filtraciones, bloquear a tu ex).
+- **Lazos** (`lazos.vel`): la segunda capa de todas las relaciones.
+  - **Cumpleaños**: cada persona cumple en su mes; aparece en la agenda, en la
+    lista de vínculos y como acción («Celebrar su cumpleaños»: fiesta sorpresa,
+    cena, pastel o «Las mañanitas» por teléfono, según lo que le guste). Si se te
+    olvida el de alguien cercano, lo nota.
+  - **Lo que quiere este mes**: cada quien desea algo contigo (marcado con ★);
+    si se lo das, cuenta doble.
+  - **Secretos**: con suficiente confianza, en el chat pueden «contarse
+    secretos» (un sueño, una deuda, un amor escondido, un problema de salud, una
+    infidelidad...). Luego puedes ayudarle con eso: un amigo enamorado puede
+    volverse tu pareja, un préstamo puede salvar su negocio, acompañar a tus
+    papás al médico alarga su vida.
+  - **Nueva familia y nuevos vínculos**: suegros al casarte (comidas, ganártelos
+    con un minijuego, pedirles consejo o ponerles un alto; si te quieren o te
+    odian, influyen en tu pareja), ex suegros tras el divorcio, sobrinos cuando
+    tus hermanos tienen hijos (jugar, consentir, ser su padrino o madrina),
+    colegas del trabajo (café, comidas, ayuda, happy hour, romance de oficina o
+    echarles la culpa) y rivales (paces, duelo con minijuego, sabotaje).
+  - **Pareja**: pasión que se apaga con los años y se recupera con intimidad,
+    viajes y cosas nuevas; si se apaga del todo hay tentaciones (y tu pareja
+    también puede caer). Terapia de pareja, vivir juntos, relación abierta,
+    vasectomía o ligadura (y revertirla), cartas de amor, cenas hechas por ti,
+    hotel boutique y custodia de los hijos tras el divorcio.
+  - **Embarazo por etapas**: ecografía (saber si es niño o niña, o sorpresa;
+    a veces son gemelos), baby shower, elegir el nombre, consultas prenatales
+    juntos y un parto mejor cuidado.
+  - **Crianza por edades**: arrullarle, cambiar pañales, pediatra, bloques,
+    enseñarle a andar en bici, su festival escolar, su partido, el proyecto de
+    ciencias, «la plática» y consejos de amor. Actividades extraescolares
+    (fútbol, música, arte, danza, programación) que se vuelven talento, premios
+    y becas. Sus primeros pasos, su primera palabra, su primer día de escuela y
+    su fiesta de 15. Ya de grande: ayudarle con la mudanza y cuidar a tus nietos.
+  - **Familia extendida**: aprender la receta secreta de la abuela, enseñarle a
+    usar el celular, grabar sus historias, ir de pesca con el tío, trabajar en su
+    negocio, salir de fiesta con tus primos, travesuras de hermanos. Abuelos y
+    tíos que te quieren pueden dejarte herencia. Eventos: reunión familiar,
+    visita sorpresa de tus suegros, el ascenso contra tu colega, la fiesta de tu
+    sobrino, un viejo amigo en el súper, tu hijo adolescente enamorado.
+  - **Amor de infancia**: promesa de meñique (si se casan de grandes, se
+    cumple), bici, fuerte de cobijas y estampas; de adolescentes, mensajes hasta
+    tarde, la feria, pulseras, la rueda de la fortuna, sus iniciales en un árbol,
+    San Valentín y el campamento escolar. Si tu primer amor se mudó lejos, puede
+    volver años después. Todo inocente mientras alguno sea menor de edad.
+  - **Chat**: tus recuerdos reales con esa persona salen en la plática, y tu
+    familia y amigos también te escriben cuando hace mucho que no hablan.
 - **Platicar** (`chat.vel`): con cualquier persona, como en una app de mensajes.
   Cada quien tiene un temperamento (callado, parlanchín, bromista, sensible,
   orgulloso, romántico) y un ánimo que cambia cada mes (feliz, cariñoso, triste,
@@ -360,6 +405,7 @@ binarias en el juego.
 | `realm.vel` | Gobierno del reino y de la presidencia: indicadores, decretos, leyes, crisis y elecciones |
 | `space.vel` | Ruta del filántropo: mina, empresas, filantropía y programa espacial |
 | `religion.vel` | Religiones, fe, reacciones de la familia, conversiones y matrimonios múltiples |
+| `lazos.vel` | Cumpleaños, deseos, secretos, suegros, sobrinos, colegas, rivales, pasión, embarazo por etapas, crianza por edades y herencias |
 | `phone.vel` | El móvil: apps, citas por app, redes, VelvetHub, mensajes a la pareja, notificaciones |
 | `phone_ui.vel` | Dibujo del móvil: aparato, pantalla de inicio, apps, tarjeta de Flama y panel lateral |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |

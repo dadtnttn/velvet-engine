@@ -231,7 +231,7 @@ function menu_title(tab: string) {
 function menu_cats(tab: string) {
     if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Hábitos", "Fe", "Lujos"] }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
-    if tab == "rel" { return ["Familia", "Pareja", "Amigos", "Otros", "Conocer"] }
+    if tab == "rel" { return ["Familia", "Pareja", "Amigos", "Trabajo", "Otros", "Conocer"] }
     if tab == "hitos" { return HITO_CATS }
     if tab == "fin" { return fin_cats() }
     if tab == "route" { return route_cats() }
@@ -909,8 +909,9 @@ function do_person_act(action: string, p: map) {
 // ---------------------------------------------------------------- efectos especiales
 
 function special(name: string, ctx: map) {
+    if str_starts_with(name, "z_") { return lazos_special(name, ctx) }
     if str_starts_with(name, "kid_") || name == "comeback" { return kid_special(name, ctx) }
-    if str_starts_with(name, "hito:") || name == "sweet_end" { return sweet_special(name, ctx) }
+    if str_starts_with(name, "hito:") || name == "sweet_end" || name == "sweet_moved" { return sweet_special(name, ctx) }
     if str_starts_with(name, "event:") {
         let ev = find_event(str_replace(name, "event:", ""))
         if ev != null { open_event(ev, event_ctx(ev)) }
@@ -1122,6 +1123,7 @@ function dispatch_choice(index: int) {
     if m.handler == "convert" { return resolve_convert(index, m.ctx) }
     if m.handler == "niche" { return resolve_niche(index) }
     if m.handler == "fprice" { return resolve_fprice(index) }
+    if str_starts_with(m.handler, "z_") { return lazos_choice(m.handler, index, m.ctx) }
     if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
     if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
     if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }

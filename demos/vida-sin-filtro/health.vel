@@ -220,7 +220,7 @@ function catch_its_random() {
 
 function is_family(p: map) {
     let r = p.rel
-    return r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto" || r == "abuelo" || r == "tio" || r == "primo"
+    return r == "padre" || r == "madre" || r == "hermano" || r == "hijo" || r == "nieto" || r == "abuelo" || r == "tio" || r == "primo" || r == "sobrino" || r == "suegro" || r == "exsuegro"
 }
 
 // Cada mes, las demás personas viven: tienen encuentros, se contagian, se curan,
