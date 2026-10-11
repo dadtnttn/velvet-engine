@@ -262,6 +262,15 @@ function finance_month() {
     }
     // Historial crediticio
     if L.money < 0 {
+        // Sobregiro: el banco cobra 2.5% al mes por los números rojos.
+        let fee = (0 - L.money) * 25 / 1000
+        if fee > 0 {
+            L.money -= fee
+            if L.od_noted != L.age {
+                L.od_noted = L.age
+                log_add("El banco te cobra intereses por tus números rojos (" + money_str(fee) + " este mes).", "b")
+            }
+        }
         L.credit = max(300, L.credit - 8)
     } else if L.credit < 850 {
         L.credit += 2

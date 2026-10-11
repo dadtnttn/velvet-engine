@@ -413,6 +413,11 @@ function health_month() {
             }
         }
         if list_contains(THERAPY_ILLS, i.id) {
+            // Con el ánimo de vuelta, a veces se va sola, poco a poco.
+            if L.happy >= 50 && chance(4) {
+                log_add("Poco a poco volviste a sentir ganas: " + str_lower(d.n) + " quedó atrás.", "g")
+                continue
+            }
             if chance(30) { L.happy -= 1 }
             if i.treated && chance(8) {
                 log_add("El tratamiento funcionó: superaste " + str_lower(d.n) + ".", "g")

@@ -14,7 +14,7 @@ const REL_CATS = {
     "parent": ["Convivir", "Hablar", "Ayuda"],
     "sibling": ["Convivir", "Hablar"],
     "child": ["Crianza", "Convivir", "Hablar", "Legado"],
-    "grandchild": ["Convivir"],
+    "grandchild": ["Convivir", "Hablar"],
     "friend": ["Salir", "Juntos", "Hablar"],
     "ex": ["Hablar", "Reencuentro"],
     "grandparent": ["Convivir", "Hablar"],
@@ -191,8 +191,8 @@ const REL_EVENTS = [
         ]
     },
     {
-        "id": "rl_anniv", "title": "Aniversario", "min": 19, "max": 90, "w": 6, "req": "married", "person": "partner",
-        "text": "Hoy es su aniversario de bodas con {x}.",
+        "id": "rl_anniv", "title": "Aniversario", "min": 999, "max": 999, "w": 0, "req": "married", "person": "partner",
+        "text": "Hoy cumplen {anios} de casados, {x} y tú.",
         "choices": [
             {"t": "Cena en el mejor restaurante ($3,000)", "cost": 3000, "o": [{"w": 100, "log": "Brindaron por otro año juntos.", "money": -3000, "bond": 12, "happy": 8}]},
             {"t": "Algo hecho por ti", "need": "skill", "rank": 2, "o": [{"w": 100, "log": "Le hiciste un álbum de fotos a mano. Lloró de emoción.", "bond": 15, "happy": 6}]},

@@ -103,6 +103,12 @@ function world_tick() {
     let keep = []
     for w in wd.wars {
         w.m += 1
+        // Tu guerra de conquista la decides tú mientras gobiernas; si dejas el poder
+        // (caída, fin de mandato, renuncia, abdicación o herencia) sigue su curso normal.
+        if w.mine && !leader_now() {
+            w.mine = false
+            w.m = max(w.m, 24)
+        }
         let end_odds = clamp(10 + w.m / 4, 10, 60)
         if w.mine { end_odds = 0 }
         if chance_tenths(end_odds) {
@@ -352,7 +358,8 @@ function mil_month() {
             hito_me("Vida", "Te dieron una medalla al valor")
         }
     }
-    if G.modal == null && chance(12) { mil_event(front) }
+    // El evento del cuartel solo si el servicio sigue (al terminar, L.mil queda en null).
+    if G.modal == null && chance(12) && (m.m < m.total || m.kind == "carrera") { mil_event(front) }
     if m.m >= m.total && m.kind != "carrera" {
         L.mil = null
         if m.kind == "civil" {
@@ -384,6 +391,10 @@ function mil_event(front: bool) {
 }
 
 function mil_event_result(index: int, ctx: map) {
+    if L.mil == null {
+        G.modal = null
+        return finish("Servicio", "Tu servicio ya había terminado.", "n")
+    }
     if ctx.front == true {
         if index == 0 {
             if chance(70) {

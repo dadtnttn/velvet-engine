@@ -42,6 +42,72 @@ const MY_LINES = {
     "secret": ["¿Me cuentas algo que nunca le hayas dicho a nadie?", "Confía en mí: ¿qué es lo que te guardas?"]
 }
 
+// Lo que dices cambia con tu edad (lo que no está aquí usa MY_LINES).
+const MY_LINES_BAND = {
+    "kid": {
+        "share": ["¡Hoy vi un perro gigante en la calle!", "Te cuento: en el recreo pasó algo increíble.", "¡Aprendí a silbar! Bueno, casi."],
+        "compliment": ["¡Me caes súper bien!", "Eres mi persona favorita.", "Tu dibujo está bien bonito."],
+        "plan": ["¿Jugamos a las escondidas?", "¿Vamos al parque?", "¿Vemos caricaturas juntos?"],
+        "complain": ["¡Nadie me deja hacer nada!", "Hoy la maestra me regañó y no fue mi culpa.", "Estoy aburrid{a}."],
+        "love": ["¡Te quiero muchote!", "Eres lo máximo.", "Te hice un dibujo. Es para ti."],
+        "dreams": ["¿Qué quieres ser de grande?", "Si fueras un superhéroe, ¿cuál serías?"],
+        "gossip": ["¿Sabías que un niño de mi salón se comió un gusano?", "Te tengo un chisme del recreo."],
+        "secret": ["¿Me guardas un secreto? Júralo con el meñique."],
+        "advice": ["¿Qué hago si alguien me molesta en la escuela?", "¿Cómo le hago para no tener miedo en la noche?"],
+        "memory": ["¿Te acuerdas cuando jugamos en el parque y llovió?", "¿Te acuerdas de mi cumpleaños? ¡El pastel estaba gigante!"]
+    },
+    "teen": {
+        "share": ["No vas a creer lo que pasó en la prepa hoy.", "Te cuento: hoy fue el día más vergonzoso de mi vida.", "Adivina quién me habló hoy."],
+        "plan": ["¿Vamos por unas papas después de clases?", "¿Jugamos en línea hoy?", "¿Nos vemos en el centro comercial?"],
+        "complain": ["Mis papás no me entienden.", "Reprobé el examen, seguro.", "Estoy hart{a} de la escuela."],
+        "gossip": ["¿Ya viste lo que publicaron en el grupo?", "Tengo el chisme del año: ¿adivina quién anda con quién?"],
+        "dreams": ["¿Ya sabes qué vas a estudiar?", "Si pudieras irte a vivir a cualquier país, ¿cuál?"],
+        "advice": ["¿Cómo le hablo a alguien que me gusta?", "¿Tú qué harías si tus papás no te dejan salir?"]
+    },
+    "elder": {
+        "share": ["Hoy me acordé de algo de cuando era joven...", "Fui al mercado y me encontré a un viejo amigo.", "Hoy por fin aprendí a hacer videollamadas."],
+        "plan": ["¿Vamos por un café y un pan dulce?", "¿Jugamos dominó esta tarde?", "¿Me acompañas a caminar al parque?"],
+        "complain": ["Me duelen hasta las pestañas.", "Ya nadie llama por teléfono.", "Los precios de ahora son un robo."],
+        "dreams": ["¿Todavía tienes algún sueño pendiente?", "Si pudieras volver a tener veinte años, ¿qué harías distinto?"],
+        "advice": ["A mi edad todavía necesito consejos, ¿sabes?", "¿Tú cómo le haces para no preocuparte tanto?"]
+    }
+}
+
+// Lo que te responden cambia con su edad (lo que no está aquí usa las tablas generales).
+const REPLIES_BAND = {
+    "teen": {
+        "school": {"good": ["¡Saqué nueve en mate! ¿Puedes creerlo?", "Bien, ya casi salimos de vacaciones."], "neutral": ["Ahí va.", "Normal, aburrida."], "bad": ["La odio. No quiero hablar de eso.", "Me van a dejar extraordinario."]},
+        "dreams": {"good": ["Quiero ser artista y vivir en otro país.", "Quiero tener un canal con un millón de seguidores."], "neutral": ["No sé ni qué voy a estudiar.", "Primero sobrevivir a la prepa."], "bad": ["¿Sueños? Qué cursi.", "Déjame vivir."]},
+        "plan": {"good": ["¡Va! Pero tengo que pedir permiso.", "¡Sí! Le digo a los demás."], "neutral": ["Si me dejan, sí.", "Mmm, tal vez."], "bad": ["Estoy castigad{xa}.", "No tengo ganas."]},
+        "complain": {"good": ["Uf, te entiendo. Mis papás también están insoportables.", "Igual yo. Somos dos."], "neutral": ["Así es esto.", "Ya pasará."], "bad": ["Tú siempre te quejas.", "¿Y yo qué?"]}
+    },
+    "elder": {
+        "dreams": {"good": ["Ya cumplí casi todos. Me falta ver el mar una vez más.", "Ver crecer a mis nietos. Con eso me doy por bien servid{xa}."], "neutral": ["A mi edad, despertar ya es ganancia.", "Ya no sueño tanto como antes."], "bad": ["¿Sueños? Ya estoy grande para eso.", "Déjate de cosas."]},
+        "plan": {"good": ["¡Claro! Pero tempranito, que luego me da sueño.", "Me encantaría. Hace mucho que nadie me invita."], "neutral": ["Si no llueve, sí.", "Déjame ver cómo amanezco."], "bad": ["Ya no salgo, me cansa mucho.", "Mejor ven tú."]},
+        "complain": {"good": ["Ay, mij{a}, eso no es nada. Ven, te cuento lo que yo pasé.", "Todo pasa. Hasta lo peor."], "neutral": ["La vida es así.", "Paciencia."], "bad": ["Los jóvenes de ahora se quejan de todo.", "En mis tiempos no había tiempo para quejarse."]}
+    }
+}
+const DAY_BAND = {
+    "teen": {"estresado": ["Tuve tres exámenes. Me muero.", "La escuela me tiene hart{xa}."], "aburrido": ["Igual que siempre: escuela, tarea, celular."], "enojado": ["Mis papás me quitaron el celular. Horrible."]},
+    "elder": {"estresado": ["Fui al doctor, a la farmacia y al banco. Agotador.", "Hoy no encontraba mis lentes y los traía puestos."], "aburrido": ["Vi la novela y regué las plantas. Lo de siempre."], "triste": ["Hoy me acordé mucho de los que ya no están."]}
+}
+const WRONG_BAND = {
+    "teen": {"estresado": ["Los exámenes me tienen loc{xa}.", "Mis papás no me dejan respirar."], "triste": ["Nadie en la escuela me entiende.", "Me dejaron fuera del grupo."]},
+    "elder": {"estresado": ["Las medicinas, los doctores... es mucho.", "Me preocupa ser una carga."], "triste": ["Extraño a los que ya se fueron.", "La casa se siente muy grande ahora."]}
+}
+
+function my_lines(tone: string) {
+    let b = MY_LINES_BAND[age_band(L.age)]
+    if b != null && b[tone] != null { return b[tone] }
+    return MY_LINES[tone]
+}
+
+function band_pick(table: map, band: string, key: string, fallback: list) {
+    let b = table[band]
+    if b != null && b[key] != null { return pick(b[key]) }
+    return pick(fallback)
+}
+
 // Qué tan bien cae cada tono según el ánimo (lo que falta vale 0).
 const MOOD_TONE = {
     "feliz": {"day": 1, "share": 1, "compliment": 1, "joke": 1, "flirt": 1, "dreams": 1, "memory": 1, "plan": 2, "love": 1, "gossip": 1, "past": 1, "school": 1},
@@ -360,7 +426,7 @@ function chat_choose(i: int) {
     }
     c.turn += 1
     c.last = tone
-    let mine = fmt(pick(MY_LINES[tone]), ctx)
+    let mine = fmt(pick(my_lines(tone)), ctx)
     let shared = memory_hito(p)
     if tone == "memory" && shared != "" { mine = "¿Te acuerdas? «" + shared + "». Qué tiempos." }
     chat_add("me", mine, 0.0)
@@ -425,13 +491,15 @@ function chat_reply(p: map, tone: string, grade: string) {
     let t = temper(p)
     let m = mood(p)
     if p.age < 10 { return pick(KID_LINES[grade]) }
+    let band = age_band(p.age)
     let line = ""
     if tone == "day" {
-        line = pick(DAY_BY_MOOD[m])
+        line = band_pick(DAY_BAND, band, m, DAY_BY_MOOD[m])
     } else if tone == "whatswrong" {
-        if grade == "bad" && t == "orgulloso" { line = "Nada. Estoy bien. Deja de preguntar." } else { line = pick(WRONG_BY_MOOD[m]) }
+        if grade == "bad" && t == "orgulloso" { line = "Nada. Estoy bien. Deja de preguntar." } else { line = band_pick(WRONG_BAND, band, m, WRONG_BY_MOOD[m]) }
     } else {
-        line = pick(REPLIES[tone][grade])
+        let rb = REPLIES_BAND[band]
+        if rb != null && rb[tone] != null { line = pick(rb[tone][grade]) } else { line = pick(REPLIES[tone][grade]) }
     }
     if t == "callado" && (tone != "whatswrong" || grade != "good") && chance(70) { line = pick(SHORT[grade]) }
     if t == "parlanchin" && grade != "bad" && chance(60) { line = line + " " + pick(TALKY) }

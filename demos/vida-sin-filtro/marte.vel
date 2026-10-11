@@ -327,10 +327,7 @@ function marte_month() {
         if c.oxygen >= 50 && chance(30) { c.morale = clamp100(c.morale + 1) }
         if c.pop > 0 && chance(10) { c.pop += rint(1, 4) }
     }
-    if d.cut == true && L.used["ra_auction"] != null && d.cut_m != L.tm {
-        d.cut_m = L.tm
-        L.money += rint(50, 300) * 1000 * d.mine
-    }
+
     return null
 }
 

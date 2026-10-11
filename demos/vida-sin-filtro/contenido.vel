@@ -168,6 +168,7 @@ function contenido_action(action: string) {
                 if x.id == arg { f = x }
             }
             if f == null || d.energy < f.e || !cc_use("fmt:" + arg) { return null }
+            d.last_upload_tm = L.tm
             let cost = f.e
             if has_team("editor") { cost = cost * 3 / 4 }
             d.energy = max(0, d.energy - cost)

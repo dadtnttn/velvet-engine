@@ -580,8 +580,44 @@ function health_choice(handler: string, index: int, ctx: map) {
     return null
 }
 
+// Alguien que te quiere nota que no estás bien y te ofrece pagar la terapia.
+function maybe_someone_notices() {
+    if map_get(L, "low_months", 0) < 6 || L.age < 8 { return false }
+    let who = null
+    for q in L.people {
+        if q.alive && q.bond >= 60 && (q.id == L.partner_id || q.rel == "padre" || q.rel == "madre" || q.rel == "amigo" || q.bff == true) { who = q }
+    }
+    if who == null { return false }
+    L.low_months = 0
+    open_choice(str_upper(who.first) + " TE NOTA RAR" + str_upper(oa(L.gender)),
+        fmt("{x} se sienta junto a ti. «Llevas meses apagad{a}. Te conozco. ¿Me dejas ayudarte? Yo pago la terapia.»", {"person": who}),
+        ["Aceptar su ayuda", "«Estoy bien, de verdad»"], ["", ""], "notices", {"person": who})
+    return true
+}
+
+function resolve_notices(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    if index == 0 {
+        bond_gain(p, 8)
+        L.happy += 8
+        for id in THERAPY_ILLS {
+            let i = find_ill(id)
+            if i != null {
+                i.known = true
+                i.treated = true
+            }
+        }
+        hito_me("Salud", "Pediste ayuda cuando más la necesitabas")
+        return finish(p.first, fmt("Lloraste en su hombro y al día siguiente fuiste a tu primera sesión. {x} te acompañó hasta la puerta.", ctx), "g")
+    }
+    bond_gain(p, -2)
+    return finish(p.first, fmt("«Bueno... aquí voy a estar.» {x} no insiste, pero te mira preocupad{xa}.", ctx), "n")
+}
+
 function maybe_health_event() {
     if G.modal != null || L.jail > 0 { return false }
+    if maybe_someone_notices() { return true }
     // Recaídas de quienes dejaron una adicción hace poco.
     if L.quit != null && L.age >= 14 {
         for k in map_keys(L.quit) {

@@ -172,6 +172,16 @@ function school_month() {
 }
 
 function open_exam(kind: string) {
+    // Mientras adelantas años, el examen se resuelve solo según tus calificaciones.
+    if G.skip != null {
+        let base = L.grades
+        if kind == "uni" && L.study != null { base = L.study.gpa }
+        let delta = -4
+        if chance(base) { delta = 4 }
+        exam_apply(kind, delta)
+        if delta > 0 { log_add("Pasaste tus exámenes sin drama.", "n") } else { log_add("Los exámenes no te fueron bien.", "b") }
+        return null
+    }
     let title = "EXÁMENES"
     let text = "Llegan los exámenes de fin de semestre. Tus calificaciones: " + str(L.grades) + "."
     if kind == "uni" {

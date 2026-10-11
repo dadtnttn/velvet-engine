@@ -493,6 +493,7 @@ function creator_result(kind: string, score: any) {
     let ni = NICHE_INT[d.niche]
     if ni != null && list_contains(my_interests(), ni) { mult = 2 }
     if kind == "video" {
+        d.last_upload_tm = L.tm
         d.videos += 1
         let gainv = (score + 20) * (5 + d.subs / 2000) * mult
         if score >= 80 && chance(8) {
@@ -517,7 +518,9 @@ function creator_month() {
     if d.subs <= 0 { return null }
     L.money += d.subs * 2 / 100
     if d.brand { L.money += 30000 + d.subs / 100 }
-    if L.used["ra_video"] != null { d.subs += d.subs / 100 } else { d.subs -= d.subs / 60 }
+    // L.used se reinicia antes de esto cada mes: la fecha del último video vive en d.
+    let last = map_get(d, "last_upload_tm", -99)
+    if last >= L.tm - 1 { d.subs += d.subs / 100 } else if last < L.tm - 2 { d.subs -= d.subs / 60 }
     if d.subs >= 1000000 { L.fame = clamp100(max(L.fame, 50)) }
     return null
 }

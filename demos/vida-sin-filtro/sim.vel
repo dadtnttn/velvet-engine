@@ -621,7 +621,17 @@ function advance_month() {
     }
     if maybe_caught_event() { return birthday }
     if maybe_bw_event() { return birthday }
-    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_route_event() && !maybe_apps_event() && !maybe_ping() { maybe_event() }
+    if maybe_anniversary() { return birthday }
+    // Respiro entre decisiones: el destino (tranquilo, normal o caótico) marca cada
+    // cuántos meses puede interrumpirte algo; al adelantar años, aún menos.
+    let gap = 2
+    let chaos = map_get(L, "chaos", "normal")
+    if chaos == "tranquilo" { gap = 3 }
+    if chaos == "caotico" { gap = 1 }
+    if L.last_pop != null && L.tm - L.last_pop < gap { return birthday }
+    if G.skip != null && !chance(35) { return birthday }
+    if !maybe_school_event() && !maybe_work_event() && !maybe_gig_event() && !maybe_prison_event() && !maybe_ocio_event() && !maybe_health_event() && !maybe_lazos_event() && !maybe_kid_event() && !maybe_partner_initiative() && !maybe_npc_initiative() && !maybe_faith_event() && !maybe_money_event() && !maybe_route_event() && !maybe_apps_event() && !maybe_ping() { maybe_event() }
+    if G.modal != null { L.last_pop = L.tm }
     return birthday
 }
 
@@ -855,7 +865,7 @@ function yearly() {
     }
 
     // Edad
-    L.happy += rint(-4, 3)
+    L.happy += rint(-3, 3)
     if L.age >= 30 { L.looks -= rint(0, 1) }
     if L.age >= 45 { L.looks -= rint(0, 2) }
     if L.age >= 50 { L.health -= rint(0, 3) }
@@ -971,6 +981,7 @@ function marry_cost(cost: int) {
     let p = partner()
     if p == null { return null }
     p.rel = "esposo"
+    p.wed_tm = L.tm
     L.married = true
     L.marriages += 1
     L.money -= cost

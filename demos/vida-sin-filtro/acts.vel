@@ -1068,7 +1068,11 @@ function do_person_act(action: string, p: map) {
 
 // ---------------------------------------------------------------- efectos especiales
 
+// Lo que nunca debe abrirse para menores, venga del evento que venga.
+const ADULT_SPECIALS = ["hookup", "hookup_young", "lovehotel", "swinger", "collab", "z_affair", "z_sugar_marry"]
+
 function special(name: string, ctx: map) {
+    if L.age < 18 && list_contains(ADULT_SPECIALS, name) { return "" }
     if str_starts_with(name, "z_") { return lazos_special(name, ctx) }
     if str_starts_with(name, "vd_") { return vida_special(name, ctx) }
     if str_starts_with(name, "oc_") { return ocio_special(name, ctx) }
@@ -1081,7 +1085,8 @@ function special(name: string, ctx: map) {
     if str_starts_with(name, "hito:") || name == "sweet_end" || name == "sweet_moved" { return sweet_special(name, ctx) }
     if str_starts_with(name, "event:") {
         let ev = find_event(str_replace(name, "event:", ""))
-        if ev != null { open_event(ev, event_ctx(ev)) }
+        // Respeta la edad del evento (p. ej. ligar en un bar solo de adulto).
+        if ev != null && (ev.min == null || L.age >= ev.min) && (ev.max == null || L.age <= ev.max) { open_event(ev, event_ctx(ev)) }
         return ""
     }
     if name == "hookup" {
@@ -1299,6 +1304,8 @@ function dispatch_choice(index: int) {
     if m.handler == "event" { return resolve_event(m.ev, index, m.ctx) }
     if m.handler == "hookup" { return resolve_hookup(index, m.ctx) }
     if m.handler == "caught" { return resolve_caught(index, m.ctx) }
+    if m.handler == "npc_invite" { return resolve_npc_invite(index, m.ctx) }
+    if m.handler == "notices" { return resolve_notices(index, m.ctx) }
     if str_starts_with(m.handler, "bw_") { return bw_resolve(m.handler, index, m.ctx) }
     if m.handler == "date" { return resolve_date(index, m.ctx) }
     if m.handler == "casino" { return resolve_casino(index, m.ctx) }

@@ -29,7 +29,7 @@ const UNION_FIELDS = ["Servicio", "Oficio", "Salud", "Educación", "Ley", "Cienc
 // Eventos del trabajo. "fields": campos donde ocurren ("any" = cualquiera legal).
 const WORK_EVENTS = [
     {
-        "id": "w_party", "title": "Fiesta de fin de año", "fields": ["any"], "w": 8,
+        "id": "w_party", "title": "Fiesta de fin de año", "fields": ["any"], "w": 8, "min": 18,
         "text": "Fiesta de fin de año de la empresa: barra libre, karaoke y tu jefe con corbata en la cabeza.",
         "choices": [
             {"t": "Cantar a dúo con tu jefe", "o": [
@@ -842,6 +842,7 @@ function oficio_year() {
 }
 
 function work_event_ok(ev: map) {
+    if ev.min != null && L.age < ev.min { return false }
     let last = L.seen[ev.id]
     if last != null && L.age - last < 3 { return false }
     let field = job_field()
