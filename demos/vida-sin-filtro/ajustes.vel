@@ -34,6 +34,7 @@ state {
         "acc": 8,
         "lgt": 3,
         "tab": 0,
+        "intro": false,
         "loaded": false
     }
 }
@@ -47,7 +48,7 @@ function cfg_boot() {
 function cfg_loaded(r: map) {
     CFG.loaded = true
     if r.ok && r.data != null {
-        for key in ["lang", "theme", "master", "sfx", "music", "acc", "lgt"] {
+        for key in ["lang", "theme", "master", "sfx", "music", "acc", "lgt", "intro"] {
             if r.data[key] != null { CFG[key] = r.data[key] }
         }
     }
@@ -55,7 +56,7 @@ function cfg_loaded(r: map) {
 }
 
 function cfg_save() {
-    let data = {"lang": CFG.lang, "theme": CFG.theme, "master": CFG.master, "sfx": CFG.sfx, "music": CFG.music, "acc": CFG.acc, "lgt": CFG.lgt}
+    let data = {"lang": CFG.lang, "theme": CFG.theme, "master": CFG.master, "sfx": CFG.sfx, "music": CFG.music, "acc": CFG.acc, "lgt": CFG.lgt, "intro": CFG.intro}
     storage_request("save", {"slot": CFG_SLOT, "data": data, "tag": "cfg"})
 }
 
@@ -105,6 +106,13 @@ function cfg_action(action: string) {
         G.cfg_on = false
         sfx("back")
         return null
+    }
+    // Guardar la vida en curso y volver a la portada (ahí sale «Continuar»).
+    if rest == "savequit" {
+        autosave()
+        G.cfg_on = false
+        sfx("ok")
+        return enter_title()
     }
     if str_starts_with(rest, "tab:") {
         CFG.tab = parse_int(str_replace(rest, "tab:", ""), 0)
@@ -164,6 +172,9 @@ function draw_settings() {
     if CFG.tab == 0 { draw_cfg_langs(px + 40, 190) }
     if CFG.tab == 1 { draw_cfg_themes(px + 40, 190) }
     if CFG.tab == 2 { draw_cfg_sound(px + 40, 190) }
+    if G.mode == "game" && L.alive == true {
+        small_button(810, 662, 240, 44, "GUARDAR Y SALIR", "cfg:savequit")
+    }
     small_button(1070, 662, 170, 44, "VOLVER", "cfg:close")
 }
 

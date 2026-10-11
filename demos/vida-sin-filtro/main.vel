@@ -293,7 +293,10 @@ function handle_input(input: map) {
         return null
     }
     if G.mode == "title" {
-        if pressed(input, "Enter") { handle_action("new") }
+        // Enter sigue tu vida guardada si la hay; si no, empieza una nueva.
+        if pressed(input, "Enter") {
+            if SV.data != null { handle_action("continue") } else { handle_action("new") }
+        }
         return null
     }
     if G.mode == "create" { return creator_keys(input) }
@@ -444,6 +447,12 @@ function start_from_creator() {
     G.screen_t0 = G.t
     G.floats = []
     G.toasts = []
+    // La primera vida: una guía corta de cómo se juega (solo una vez).
+    if CFG.intro != true && G.modal == null {
+        CFG.intro = true
+        cfg_save()
+        info("CÓMO SE JUEGA", "Avanzas el tiempo con la estrella (Espacio): de bebé, un año; después, un mes. Y adelanta un año y U, cinco. Abajo están tus menús: Ocupación (escuela y trabajo), Vínculos (tu gente), Actividades y Noche +18. El celular (M) tiene apps de citas, chat, banco y más. Toca una barra de estadísticas para ver qué la mueve. Esc abre los ajustes: idioma, colores y sonido. Cada decisión cuenta: no hay vidas buenas ni malas, solo tuyas.")
+    }
 }
 
 // ---------------------------------------------------------------- acciones
@@ -593,7 +602,8 @@ function handle_action_raw(action: string) {
         }
         report(before, delay)
         if !L.alive { G.screen_t0 = G.t + 0.4 }
-        if birthday { autosave() }
+        // Autoguardado en cada cumpleaños y cada tres meses.
+        if birthday || L.month % 3 == 0 { autosave() }
         return null
     }
     // "<grupo>:<resto>" → cada grupo tiene su despachador.
