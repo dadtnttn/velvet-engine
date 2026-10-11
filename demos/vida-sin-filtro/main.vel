@@ -17,6 +17,7 @@ import "family.vel"
 import "effects.vel"
 import "relations.vel"
 import "chat.vel"
+import "sweethearts.vel"
 import "art.vel"
 import "ui.vel"
 
@@ -321,7 +322,7 @@ function handle_action(action: string) {
     }
     if action == "page:+" { G.menu_page += 1; G.menu_t0 = G.t; return null }
     if action == "page:-" { G.menu_page = max(0, G.menu_page - 1); G.menu_t0 = G.t; return null }
-    if str_starts_with(action, "mission:") || str_starts_with(action, "fx:") { return null }
+    if str_starts_with(action, "mission:") || str_starts_with(action, "fx:") || str_starts_with(action, "hito:") { return null }
     if str_starts_with(action, "person:") {
         for p in L.people {
             if action == "person:" + str(p.id) {

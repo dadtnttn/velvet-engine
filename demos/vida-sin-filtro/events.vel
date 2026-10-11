@@ -1225,9 +1225,15 @@ function maybe_event() {
             list_push(weights, ev.w)
         }
     }
+    for ev in SWEET_EVENTS {
+        if eligible(ev) {
+            list_push(pool, ev)
+            list_push(weights, ev.w)
+        }
+    }
     if len(pool) == 0 { return null }
     let ev = pool[weighted_choose(G.rng, weights)]
-    if str_starts_with(ev.id, "rl_") {
+    if str_starts_with(ev.id, "rl_") || str_starts_with(ev.id, "sw_") {
         let ctx = rel_ctx(ev)
         if ctx["person"] == null { return null }
         open_event(ev, ctx)

@@ -897,7 +897,7 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
             color = C_YELLOW
         }
         svg(ix + dx, iy, 526, 52, slant_doc(520, 46, 16, fill, HEX_WHITE, 2, HEX_RED, 6))
-        text(ix + dx + 30, iy + 30, clip_text(it.t, 330, 19), 19, color, "impact")
+        text(ix + dx + 30, iy + 30, clip_text(it.t, 310, 19), 19, color, "impact")
         let sub_color = C_GRAY
         if on { sub_color = C_RED }
         if locked {
@@ -955,7 +955,7 @@ function draw_detail(it: any, kind: string) {
             text(x + 46, y + 270, "CERCANÍA " + str(p.bond) + "%", 16, C_INK, "impact")
             rect(x + 46, y + 280, 230, 12, rgb(210, 210, 205))
             rect(x + 46, y + 280, 230 * p.bond / 100, 12, C_RED)
-            text(x + 46, y + 330, "Atractivo " + str(p.looks) + "%", 15, C_INK, "bold")
+            if p.age >= 18 { text(x + 46, y + 330, "Atractivo " + str(p.looks) + "%", 15, C_INK, "bold") }
             let extra = STYLE_NAMES[npc_style(p)] + " · " + temper_name(p) + " · Ánimo: " + str_lower(mood_name(p))
             if p.age >= 18 && L.age >= 18 && (rel_group(p) == "partner" || rel_group(p) == "fling") && p.gender != L.gender {
                 extra = extra + " · Fertilidad " + fert_word(their_fertility(p))

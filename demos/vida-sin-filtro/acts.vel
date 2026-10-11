@@ -876,6 +876,7 @@ function do_person_act(action: string, p: map) {
 
 function special(name: string, ctx: map) {
     if str_starts_with(name, "kid_") || name == "comeback" { return kid_special(name, ctx) }
+    if str_starts_with(name, "hito:") || name == "sweet_end" { return sweet_special(name, ctx) }
     if str_starts_with(name, "event:") {
         let ev = find_event(str_replace(name, "event:", ""))
         if ev != null { open_event(ev, event_ctx(ev)) }
@@ -973,7 +974,7 @@ function special(name: string, ctx: map) {
     }
     if name == "lovehotel" {
         let p = partner()
-        if p != null {
+        if p != null && both_adults(p) {
             bond_gain(p, 12)
             L.happy += 10
             sex_with(p)
@@ -985,6 +986,7 @@ function special(name: string, ctx: map) {
     }
     if name == "swinger" {
         let p = partner()
+        if p != null && !both_adults(p) { p = null }
         if p != null && chance(55) {
             L.happy += 12
             L.partners += 1

@@ -525,6 +525,7 @@ function dlg_end(code: string, p: map, msg: string, title: string, kind: string)
     if code == "livein" {
         p.livein = true
         flag("livein")
+        add_hito(p, "Se fueron a vivir juntos")
         return finish(title, msg, kind)
     }
     if code == "marry" {
