@@ -276,6 +276,26 @@ struct Translator {
 
 const CACHE_LIMIT: usize = 60_000;
 
+/// Letters in a template's literal parts (how much real text it has).
+fn literal_letters(parts: &[Part]) -> usize {
+    parts
+        .iter()
+        .map(|p| match p {
+            Part::Lit(l) => l.chars().filter(|c| c.is_alphabetic()).count(),
+            Part::Hole(_) => 0,
+        })
+        .sum()
+}
+
+/// One to three words, each starting with a capital letter: a proper name
+/// ("Hanna", "Hanna Krawczyk") that no catalog is expected to translate.
+fn looks_like_name(v: &str) -> bool {
+    let words: Vec<&str> = v.split_whitespace().collect();
+    !words.is_empty()
+        && words.len() <= 3
+        && words.iter().all(|w| w.chars().next().is_some_and(char::is_uppercase))
+}
+
 fn has_letters(s: &str) -> bool {
     s.chars().any(char::is_alphabetic)
 }
@@ -486,6 +506,21 @@ impl Translator {
         }
         let (idx, holes) = best?;
         let t = &self.cat.templates[idx];
+        // A template whose holes hold untranslated text would only translate
+        // the glue ("{1} y {2}" -> "…和…") and mix two languages: better to
+        // leave the line as it is. Long phrases never pass; with a pure glue
+        // template (almost no literal letters) every hole must translate or
+        // look like a name.
+        let glue = literal_letters(&t.parts) < 3;
+        for (_, v) in &holes {
+            if !has_letters(v) {
+                continue;
+            }
+            let long = v.split_whitespace().count() > 3;
+            if (long || (glue && !looks_like_name(v))) && self.lookup(v.trim(), depth + 1).is_none() {
+                return None;
+            }
+        }
         let out = self.render(&t.target, &holes, depth);
         Some(restore_case(s, out))
     }
@@ -648,6 +683,19 @@ mod tests {
         assert_eq!(t.tr("3 años"), "3 года");
         assert_eq!(t.tr("21 años"), "21 год");
         assert_eq!(t.tr("12 años"), "12 лет");
+    }
+
+    #[test]
+    fn glue_templates_do_not_mix_languages() {
+        let c = cat(&[("{0} y {1}", "{0} and {1}"), ("Hola", "Hello")]);
+        let mut t = Translator::new(c);
+        // Names in the holes: the glue is translated.
+        assert_eq!(t.tr("Hanna y Adam"), "Hanna and Adam");
+        // Whole untranslated sentences in a hole: the line is left as it is.
+        let s = "Se acabó tu juventud y no cumpliste tu propósito.";
+        assert_eq!(t.tr(s), s);
+        // A pure glue template with a common word that has no translation.
+        assert_eq!(t.tr("Hola y elefante"), "Hola y elefante");
     }
 
     #[test]
