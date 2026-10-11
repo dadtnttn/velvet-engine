@@ -191,7 +191,10 @@ function build() {
     block = cfg
     svg(0, 0, W, H, bg_doc())
     if G.mode == "title" {
+        block = cfg || G.modal != null
         draw_title()
+        block = cfg
+        if G.modal != null { draw_modal(G.modal) }
     } else if G.mode == "create" {
         draw_create()
     } else if G.mode == "dead" {

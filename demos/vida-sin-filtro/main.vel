@@ -527,7 +527,7 @@ function handle_action(action: string) {
         G.confirm_ok = ""
         return null
     }
-    if G.mode == "game" && G.confirm_ok != action {
+    if (G.mode == "game" || G.mode == "title") && G.confirm_ok != action {
         let q = confirm_text(action)
         if q != "" {
             open_choice("¿SEGURO?", q, ["Sí, hacerlo", "Mejor no"], ["", ""], "confirm", {"action": action, "prev": G.modal})
@@ -538,6 +538,11 @@ function handle_action(action: string) {
 }
 
 function confirm_text(action: string) {
+    // Solo hay un lugar para guardar: empezar otra vida reemplaza la guardada.
+    if G.mode == "title" {
+        if (action == "new" || action == "quick") && has_continue() { return "Ya tienes una vida guardada (" + SV.info + "). Si empiezas otra, se reemplaza." }
+        return ""
+    }
     if action == "act:quit" && L.job != null { return "Vas a renunciar a tu trabajo de " + str_lower(L.job.title) + ". Desde hoy, cero sueldo." }
     if action == "act:gigquit" && L.gig != null { return "Vas a dejar tu chamba de " + str_lower(L.gig.title) + "." }
     if action == "act:dropout" { return "Vas a dejar tus estudios. Lo que ya pagaste no se devuelve." }
