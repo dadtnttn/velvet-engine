@@ -408,6 +408,10 @@ pub(crate) fn call_math_native(native: NativeId, args: &[Value]) -> Result<Nativ
 /// Variable instruction charge for collection- and iteration-sized math work.
 pub(crate) fn dynamic_cost(native: NativeId, args: &[Value]) -> u64 {
     use NativeId as N;
+    let extra = crate::stdlib_ext::ext_cost(native, args);
+    if extra > 0 {
+        return extra;
+    }
     let list_len = |index: usize| args.get(index).and_then(Value::len).unwrap_or_default() as u64;
     match native {
         N::Shuffle

@@ -1,5 +1,5 @@
 use crate::assets::GameAssets;
-use crate::graphics::{Canvas, FontSystem, Rect, SvgCache};
+use crate::graphics::{fit_line, Canvas, FontSystem, Rect, SvgCache};
 use crate::model::VisualCommandView;
 
 #[derive(Clone)]
@@ -271,10 +271,16 @@ fn text(canvas: &mut Canvas, fonts: &FontSystem, c: &VisualCommandView, s: &Stat
     let f = fonts.named(&c.font);
     let x = (c.x + s.offset[0]).round() as i32;
     let y = (c.y + s.offset[1]).round() as i32;
-    if c.align == "center" {
-        canvas.centered_text(f, &c.text, x, y, c.size.max(8.0), color(c.color))
-    } else {
-        canvas.text_line(f, &c.text, x, y, c.size.max(8.0), color(c.color));
+    let (line, size) = fit_line(f, &c.text, c.size.max(8.0), c.max_width, &c.overflow);
+    match c.align.as_str() {
+        "center" => canvas.centered_text(f, &line, x, y, size, color(c.color)),
+        "right" => {
+            let width = Canvas::measure_text(f, &line, size).round() as i32;
+            canvas.text_line(f, &line, x - width, y, size, color(c.color));
+        }
+        _ => {
+            canvas.text_line(f, &line, x, y, size, color(c.color));
+        }
     }
 }
 fn text_wrap(canvas: &mut Canvas, fonts: &FontSystem, c: &VisualCommandView, s: &State) {
@@ -287,6 +293,7 @@ fn text_wrap(canvas: &mut Canvas, fonts: &FontSystem, c: &VisualCommandView, s: 
         c.size.max(8.0),
         c.line_height.round().max(10.0) as i32,
         color(c.color),
+        c.max_lines.max(0) as usize,
     );
 }
 fn bar(canvas: &mut Canvas, c: &VisualCommandView, area: Rect) {
@@ -343,12 +350,26 @@ fn button(
             );
         }
     }
+    // Labels never spill out of the button: shrink first, then ellipsis.
+    let font = fonts.named(&c.font);
+    let icon_room = if c.icon.is_empty() { 0 } else { area.h };
+    let room = if c.max_width > 0.0 {
+        c.max_width
+    } else {
+        (area.w - 16 - 2 * icon_room).max(8) as f32
+    };
+    let overflow = if c.overflow.is_empty() {
+        "shrink"
+    } else {
+        c.overflow.as_str()
+    };
+    let (label, size) = fit_line(font, &c.text, c.size.max(8.0), room, overflow);
     canvas.centered_text(
-        fonts.named(&c.font),
-        &c.text,
+        font,
+        &label,
         area.x + area.w / 2 + i32::from(pressed),
-        area.y + area.h / 2 + (c.size.max(8.0) * 0.4) as i32 + i32::from(pressed),
-        c.size.max(8.0),
+        area.y + area.h / 2 + (size * 0.4) as i32 + i32::from(pressed),
+        size,
         color(c.color),
     );
 }

@@ -9,6 +9,8 @@ velvet app check path/to/package
 velvet app run path/to/package
 velvet app run path/to/package --headless --frames 120
 velvet app capture path/to/package output.png --frames 2
+velvet app run path/to/package --save-dir ./partidas
+velvet app profile path/to/package --action nueva --action avanzar --frames 60 --top 30
 ```
 
 El runtime descubre automáticamente el único namespace que exporta `app_manifest`; no conoce el nombre del juego ni exige un módulo concreto.
@@ -24,7 +26,13 @@ export function app_update(dt: float, input: map) { ... }
 export function app_action(action: string) { ... }
 ```
 
-`app_shutdown()` es opcional.
+Exportaciones opcionales:
+
+```vel
+export function app_shutdown() { ... }
+export function app_fonts(metrics: map) { ... }     // antes de app_init
+export function app_storage(result: map) { ... }    // devuelve un frame
+```
 
 ## Manifiesto
 
@@ -41,7 +49,7 @@ export function app_manifest() {
             "canvas_height": 540,
             "resizable": true
         },
-        "capabilities": ["window", "render2d", "input"],
+        "capabilities": ["window", "render2d", "input", "storage"],
         "limits": {
             "max_commands_per_frame": 4096,
             "max_assets": 512,
@@ -62,7 +70,9 @@ export function app_manifest() {
 }
 ```
 
-Las rutas absolutas y cualquier ruta con `..` están prohibidas. Los IDs deben ser únicos. `app check` carga y valida todos los recursos, incluidos los declarados como `lazy`.
+`system:archivo.ttf` busca la fuente en las carpetas del sistema (Windows,
+macOS y Linux) y si no existe usa una sans-serif común (Arial, Liberation Sans,
+DejaVu Sans). Las rutas absolutas y cualquier ruta con `..` están prohibidas. Los IDs deben ser únicos. `app check` carga y valida todos los recursos, incluidos los declarados como `lazy`.
 
 ## Frame packet
 
@@ -112,6 +122,48 @@ El intérprete software soporta:
 - `translate_push`, `transform_pop`
 - `opacity_push`, `opacity_pop`
 
+### Texto que cabe
+
+| Comando | Campos | Efecto |
+|---|---|---|
+| `text` | `max_width`, `overflow`, `align` | Si el texto supera `max_width`: `"ellipsis"` (por defecto) lo corta con `…`, `"shrink"` reduce el tamaño (mínimo 8 px) y luego corta, `"clip"` lo corta sin marca. `align` acepta `"left"`, `"center"` y `"right"` (x es el borde derecho). |
+| `text_wrap` | `w`, `max_lines` | Ajusta por palabras a `w`; las palabras más largas que la línea se parten por letras. Con `max_lines` la última línea termina en `…`. |
+| `button` | `max_width`, `overflow` | La etiqueta nunca se sale del botón: por defecto se encoge y luego se corta. |
+
+```vel
+{"op": "text", "x": 20, "y": 40, "text": nombre, "font": "regular", "size": 18,
+ "max_width": 160, "overflow": "shrink"}
+{"op": "text_wrap", "x": 20, "y": 60, "w": 300, "max_lines": 3, "text": bio,
+ "font": "regular", "size": 14, "line_height": 18}
+```
+
+### Medir texto desde el script
+
+Si el paquete exporta `app_fonts(metrics)`, el host lo llama una vez antes de
+`app_init` con una tabla por fuente:
+
+```vel
+{"regular": {"a": 55.62, "b": 55.62, ..., "default": 55.62, "line_height": 115.0}}
+```
+
+Son los avances de cada carácter (ASCII y letras latinas con acentos, `ñ`,
+`¡`, `¿`, comillas, `…`) a tamaño 100. Con ellos el script puede maquetar:
+
+```vel
+state { FONTS: map = {} }
+export function app_fonts(metrics: map) { FONTS = metrics }
+
+function fits(text: string, size: int, w: int) {
+    return str_measure(text, FONTS.regular, size) <= w
+}
+function card_height(text: string, w: int) {
+    return len(str_wrap(text, FONTS.regular, 14, w)) * 18 + 24
+}
+```
+
+`str_measure` y `str_wrap` dan el mismo resultado que el renderer (sin
+kerning), así que las alturas calculadas coinciden con lo dibujado.
+
 Todos los estilos, assets, fuentes, colores, tamaños, capas y acciones son campos declarativos del comando. El host no contiene IDs como nombres de personajes, mundos, botones o iconos.
 
 ### SVG en línea
@@ -142,13 +194,66 @@ El frame puede emitir:
 {"kind": "window.set_title", "payload": {"title": "Nuevo título"}}
 {"kind": "window.set_size", "payload": {"width": 1280, "height": 720}}
 {"kind": "window.set_fullscreen", "payload": {"enabled": true}}
+{"kind": "app.profile", "payload": {"enabled": true}}   // false imprime el informe
 ```
 
 Cerrar la ventana desde el sistema sigue siendo una operación del host.
 
+## Guardado de partida (`storage`)
+
+Con la capacidad `storage` el script guarda y carga datos por *slots* sin ver
+rutas ni el sistema de archivos:
+
+```vel
+{"kind": "storage.save",   "payload": {"slot": "auto", "data": partida, "tag": "autosave"}}
+{"kind": "storage.load",   "payload": {"slot": "auto"}}
+{"kind": "storage.delete", "payload": {"slot": "auto"}}
+{"kind": "storage.list",   "payload": {}}
+```
+
+Después de procesar el frame, el host responde cada petición llamando a
+`app_storage(result)`, que devuelve un frame como `app_action`:
+
+```vel
+export function app_storage(r: map) {
+    match r.op {
+        "load" => { if r.ok { restore(r.data) } }
+        "list" => { SLOTS = r.slots }   // [{"slot", "bytes", "modified"}]
+        "save" => { if !r.ok { toast("No se pudo guardar: " + r.error) } }
+    }
+    return frame()
+}
+```
+
+`result` contiene `op`, `slot`, `ok`, `error`, `data` (solo en `load`) y el
+`tag` que se haya enviado. Reglas:
+
+- `data` puede ser cualquier valor serializable (null, bool, números, texto,
+  listas, mapas, vectores); se guarda como JSON. Máximo 8 MiB por slot y 64
+  slots.
+- Los nombres de slot son 1-48 caracteres `[A-Za-z0-9_-]`; nunca forman rutas.
+- Cada slot se escribe en un archivo temporal y se renombra, así un cierre
+  inesperado no deja una partida a medias.
+- Carpeta: `--save-dir`, si no `VELVET_SAVE_DIR`, si no
+  `%APPDATA%\Velvet\<título>\saves` (Windows),
+  `~/Library/Application Support/Velvet/<título>/saves` (macOS) o
+  `$XDG_DATA_HOME/velvet/<título>/saves` (Linux).
+- `velvet app capture` y `velvet app profile` usan slots en memoria: nunca
+  tocan el disco.
+- Sin la capacidad `storage` cada petición responde `ok: false`.
+
+## Perfilado
+
+`velvet app profile` ejecuta el paquete sin ventana (`app_init`, las acciones
+`--action` en orden y `--frames` actualizaciones) y lista, por función, las
+instrucciones propias, el porcentaje del total y las llamadas. Los natives
+aparecen como `native:<nombre>` y las lambdas como `fn#<n>`. Si una llamada
+supera `max_instructions`, el error muestra la pila del script en ese momento.
+
 ## Seguridad y límites
 
-- La VM conserva sus límites de instrucciones, memoria, stack y recursión.
+- La VM conserva sus límites de instrucciones (por llamada), memoria, stack y recursión.
+- El guardado solo escribe en la carpeta de slots de la app.
 - Los recursos quedan confinados al `root` declarado.
 - Se limita el número de recursos, píxeles por imagen y comandos por frame.
 - Las capacidades deben declararse explícitamente.

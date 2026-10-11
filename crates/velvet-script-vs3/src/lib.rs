@@ -39,7 +39,10 @@ use velvet_script_parser::parse_file;
 use velvet_script_vm::{Coroutine, CoroutineStatus, Vm, VmError};
 
 /// Runtime values, limits, and native metadata re-exported for hosts and tooling.
-pub use velvet_script_vm::{NativeId, NativePurity, NativeSpec, NativeType, Value, VmLimits};
+pub use velvet_script_vm::{
+    json_decode, json_encode, wrap_lines, NativeId, NativePurity, NativeSpec, NativeType,
+    ProfileEntry, Value, VmLimits,
+};
 
 /// Runtime-checkable VS3 type annotation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +77,9 @@ pub enum Vs3Type {
     Quat,
     /// Mutable deterministic random stream.
     Rng,
+    /// Function reference (`function` / `fn`): a named function, an
+    /// imported `alias.fn`, a native, or a lambda.
+    Function,
 }
 
 impl Vs3Type {
@@ -94,6 +100,7 @@ impl Vs3Type {
             "mat4" => Self::Mat4,
             "quat" | "quaternion" => Self::Quat,
             "rng" | "random" => Self::Rng,
+            "function" | "fn" => Self::Function,
             _ => return None,
         })
     }
@@ -116,6 +123,7 @@ impl Vs3Type {
             Self::Mat4 => "mat4",
             Self::Quat => "quat",
             Self::Rng => "rng",
+            Self::Function => "function",
         }
     }
 
@@ -144,6 +152,7 @@ impl Vs3Type {
                     | (Self::Mat4, Value::Mat4(_))
                     | (Self::Quat, Value::Quat(_))
                     | (Self::Rng, Value::Rng(_))
+                    | (Self::Function, Value::Function(_) | Value::Native(_))
             )
     }
 
@@ -172,7 +181,7 @@ impl Vs3Type {
 pub const SUPPORTED_SURFACE: &[&str] = &[
     "edition: // @edition 3",
     "function name(params) { body }",
-    "checked annotations: any null bool int float string list map vec2 vec3 vec4 mat3 mat4 quat rng",
+    "checked annotations: any null bool int float string list map vec2 vec3 vec4 mat3 mat4 quat rng function",
     "return expr",
     "let name = expr",
     "const name = expr",
@@ -184,6 +193,12 @@ pub const SUPPORTED_SURFACE: &[&str] = &[
     "versioned local packages with stable package.module identities",
     "reproducible velvet.lock graphs with semantic version checks and SHA-256",
     "if cond { } else { }",
+    "match value { \"a\", \"b\" => { } _ => { } }",
+    "function values: named functions, module.function references and fn(x) { } / fn(x) => expr lambdas without captures",
+    "natives: conversions int float parse_int parse_float and json_encode json_decode",
+    "natives: callbacks call list_map list_filter list_find list_any list_all list_count list_reduce list_sort_by",
+    "natives: text layout str_measure str_wrap with host font advance tables",
+    "per-function instruction profiler through Vs3Session",
     "while cond { }",
     "for value in collection with break and continue",
     "null/int/bool/float/string/list/map literals",
@@ -917,6 +932,49 @@ impl Vs3Session {
     pub fn instructions(&self) -> u64 {
         self.vm.total_instructions()
     }
+
+    /// Start (or stop) counting calls and instructions per function.
+    /// Enabling resets previous counts.
+    pub fn set_profiling(&mut self, enabled: bool) {
+        self.vm.set_profiling(enabled);
+    }
+
+    /// Per-function profile since profiling was enabled, most expensive
+    /// first. Module-mangled names are shown with their source name;
+    /// lambdas appear as `fn#<n>`.
+    pub fn profile_report(&self) -> Vec<ProfileEntry> {
+        let public: BTreeMap<&str, &str> = self
+            .entrypoints
+            .iter()
+            .map(|(public, actual)| (actual.as_str(), public.as_str()))
+            .collect();
+        let mut report = self.vm.profile_report();
+        for entry in &mut report {
+            let name = public
+                .get(entry.name.as_str())
+                .copied()
+                .unwrap_or(&entry.name);
+            entry.name = display_function_name(name);
+        }
+        report
+    }
+}
+
+/// Readable name for a compiled function (`__vs3m_<hash>_name` → `name`,
+/// `__lambda_<hash>_<n>` → `fn#<n>`).
+fn display_function_name(actual: &str) -> String {
+    let mut name = actual;
+    if let Some(rest) = name.strip_prefix("__vs3m_") {
+        if let Some((_, local)) = rest.split_once('_') {
+            name = local;
+        }
+    }
+    if let Some(rest) = name.strip_prefix("__lambda_") {
+        if let Some((_, index)) = rest.split_once('_') {
+            return format!("fn#{index}");
+        }
+    }
+    name.to_string()
 }
 
 impl Vs3Module {
@@ -1076,6 +1134,19 @@ fn map_vm_err(e: VmError) -> Vs3Error {
             loc: location
                 .as_ref()
                 .map(|l| l.to_string())
+                .unwrap_or_else(|| "<runtime>".into()),
+            stack_trace,
+        },
+        VmError::InstructionLimit { limit, stack_trace } => Vs3Error::Runtime {
+            message: VmError::InstructionLimit {
+                limit,
+                stack_trace: Vec::new(),
+            }
+            .to_string(),
+            // Innermost frame, e.g. `  in tick at main.vel:12:5`.
+            loc: stack_trace
+                .first()
+                .and_then(|frame| frame.split_once(" at ").map(|(_, loc)| loc.to_string()))
                 .unwrap_or_else(|| "<runtime>".into()),
             stack_trace,
         },
@@ -2358,6 +2429,187 @@ function for_demo() {
     }
 
     #[test]
+    fn conversions_parse_text_and_truncate_floats() {
+        let source = r#"// @edition 3
+function main() {
+    let a: int = int("3") + int(2.9) + int(-2.5) + int(true) + int(" 7 ")
+    let b: float = float("2.5") + float(1)
+    let c = parse_int("x", -1) + parse_int("12", 0)
+    let d = parse_float("1e3", 0.0)
+    return [a, b, c, d, str(int("-4"))]
+}
+"#;
+        let module = compile(source, Some("conv.vel")).unwrap();
+        let value = module.call("main", &[]).unwrap();
+        assert_eq!(value.to_string(), "[11, 3.5, 11, 1000, -4]");
+        let error = compile(
+            "// @edition 3\nfunction main() { return int(\"tres\") }\n",
+            Some("bad.vel"),
+        )
+        .unwrap()
+        .call("main", &[])
+        .unwrap_err();
+        assert!(error.to_string().contains("int"), "{error}");
+    }
+
+    #[test]
+    fn inference_keeps_null_placeholders_and_unknown_clamps_open() {
+        let source = r#"// @edition 3
+function level() { return 3 }
+function main() {
+    let cache = null
+    cache = {hits: 1}
+    let lst = null
+    lst = [1, 2]
+    let n: int = clamp(level(), 0, 10)
+    let m: int = max(level(), 1) / 2
+    return [cache, lst, n, m]
+}
+"#;
+        let module = compile(source, Some("infer.vel")).unwrap();
+        assert_eq!(
+            module.call("main", &[]).unwrap().to_string(),
+            "[{hits: 1}, [1, 2], 3, 1]"
+        );
+        let error = compile(
+            "// @edition 3\nfunction main() { let n: int = 1.5\n return n }\n",
+            Some("hint.vel"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("int(x)"), "{error}");
+    }
+
+    #[test]
+    fn match_dispatches_strings_and_ints_with_default() {
+        let source = r#"// @edition 3
+function kind(v) {
+    let out = "?"
+    match v {
+        "a", "b" => { out = "ab" }
+        "c" => out = "c"
+        3 => { return "three" }
+        _ => { out = "other" }
+    }
+    return out
+}
+function main() {
+    let match = 1
+    match = match + 1
+    return [kind("a"), kind("b"), kind("c"), kind(3), kind("z"), match]
+}
+"#;
+        let module = compile(source, Some("match.vel")).unwrap();
+        assert_eq!(
+            module.call("main", &[]).unwrap().to_string(),
+            "[ab, ab, c, three, other, 2]"
+        );
+    }
+
+    #[test]
+    fn function_values_lambdas_and_callback_natives() {
+        let module = compile_bundle(
+            "game.vel",
+            [
+                (
+                    "game.vel",
+                    r#"// @edition 3
+import "util.vel" as util
+function triple(x) { return x * 3 }
+function main() {
+    let xs = [3, 1, 2]
+    let f: function = triple
+    return [
+        list_map(xs, util.double),
+        list_map(xs, f),
+        list_filter(xs, fn(v) => v > 1),
+        list_sort_by(xs, fn(v) { return -v }),
+        list_reduce(xs, fn(acc, v) => acc + v, 0),
+        list_find(xs, fn(v) => v == 2),
+        list_any(xs, fn(v) => v > 2),
+        list_all(xs, fn(v) => v > 2),
+        list_count(xs, fn(v) => v >= 2),
+        call(util.double, 21),
+        call(abs, -4)
+    ]
+}
+"#,
+                ),
+                ("util.vel", "export function double(x) { return x * 2 }\n"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            module.call("main", &[]).unwrap().to_string(),
+            "[[6, 2, 4], [9, 3, 6], [3, 2], [3, 2, 1], 6, 2, true, false, 2, 42, 4]"
+        );
+    }
+
+    #[test]
+    fn json_roundtrip_and_text_layout_natives() {
+        let source = r#"// @edition 3
+function main() {
+    let data = {name: "Ana \"A\"", age: 31, tags: ["x", 2.5, null, true]}
+    let back = json_decode(json_encode(data))
+    let font = {default: 50, " ": 25}
+    return [back == data, str_measure("ab c", font, 20), str_wrap("uno dos tres", font, 10, 40)]
+}
+"#;
+        let module = compile(source, Some("json.vel")).unwrap();
+        assert_eq!(
+            module.call("main", &[]).unwrap().to_string(),
+            "[true, 35, [uno dos, tres]]"
+        );
+    }
+
+    #[test]
+    fn profiler_reports_per_function_instructions() {
+        let source = r#"// @edition 3
+function leaf(x) { return x + 1 }
+function main() {
+    let total = 0
+    let i = 0
+    while i < 50 { total = total + leaf(i)
+        i += 1 }
+    return list_map([1, 2], fn(v) => v * 2)
+}
+"#;
+        let module = compile(source, Some("prof.vel")).unwrap();
+        let mut session = module.session().unwrap();
+        session.set_profiling(true);
+        session.call("main", &[]).unwrap();
+        let report = session.profile_report();
+        let leaf = report.iter().find(|row| row.name == "leaf").unwrap();
+        assert_eq!(leaf.calls, 50);
+        assert!(leaf.instructions > 0);
+        assert!(report.iter().any(|row| row.name.starts_with("fn#")));
+        assert!(report.iter().any(|row| row.name == "native:list_map"));
+        assert!(report
+            .windows(2)
+            .all(|pair| pair[0].instructions >= pair[1].instructions));
+    }
+
+    #[test]
+    fn instruction_limit_error_names_the_hot_frame() {
+        let source =
+            "// @edition 3\nfunction spin() { while true { } }\nfunction main() { spin() }\n";
+        let module = compile(source, Some("spin.vel")).unwrap();
+        let error = module
+            .call_with_limits(
+                "main",
+                &[],
+                VmLimits {
+                    max_instructions: 1_000,
+                    ..VmLimits::default()
+                },
+            )
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("instruction limit"), "{error}");
+        assert!(error.contains("in spin"), "{error}");
+        assert!(error.contains("profile"), "{error}");
+    }
+
+    #[test]
     fn supported_surface_table_is_unique_and_covers_runtime_contracts() {
         let unique: std::collections::HashSet<_> = SUPPORTED_SURFACE.iter().copied().collect();
         assert_eq!(
@@ -2367,7 +2619,7 @@ function for_demo() {
         );
         assert_eq!(
             SUPPORTED_SURFACE.len(),
-            29,
+            35,
             "update this contract with every capability change"
         );
         for required in [
