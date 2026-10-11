@@ -130,6 +130,7 @@ pub fn cmd_vs3_run(
     args: Vec<String>,
     cooperative: bool,
     responses: Vec<String>,
+    profile: bool,
 ) -> Result<()> {
     let module = compile_path(&path).map_err(|e| {
         for d in e.diagnostics() {
@@ -164,6 +165,16 @@ pub fn cmd_vs3_run(
                 Vs3TaskStatus::Waiting { .. } => unreachable!("CLI does not install a host"),
             }
         }
+    } else if profile {
+        let mut session = module
+            .session()
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        session.set_profiling(true);
+        let value = session
+            .call(&call, &values)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        println!("=> {value}");
+        crate::app_cmd::print_profile(&session.profile_report(), 40);
     } else {
         let value = module
             .call(&call, &values)

@@ -29,7 +29,7 @@ use tracing::info;
 use velvet_app::prelude::*;
 use velvet_core::{engine_version, RunMode};
 
-use app_cmd::{cmd_app_capture, cmd_app_check, cmd_app_run};
+use app_cmd::{cmd_app_capture, cmd_app_check, cmd_app_profile, cmd_app_run};
 use cards_cmd::{cmd_cards_validate, cmd_cards_zones};
 use crypto_cmd::{cmd_hybrid_fingerprint, cmd_hybrid_keygen, cmd_hybrid_open, cmd_hybrid_seal};
 use doctor::cmd_doctor;
@@ -688,6 +688,25 @@ enum AppCommands {
         /// Number of headless frames; zero uses 60.
         #[arg(long, default_value_t = 0)]
         frames: u64,
+        /// Directory for save slots (default: VELVET_SAVE_DIR or the per-user
+        /// data directory).
+        #[arg(long)]
+        save_dir: Option<PathBuf>,
+    },
+    /// Count calls and instructions per script function while the app runs
+    /// headlessly through `app_init`, the given actions and N frames.
+    Profile {
+        /// Package directory or `velvet.package.toml`.
+        path: PathBuf,
+        /// Actions to invoke in order (repeatable).
+        #[arg(long = "action")]
+        actions: Vec<String>,
+        /// Frames to update after the actions.
+        #[arg(long, default_value_t = 60)]
+        frames: u64,
+        /// Rows to print.
+        #[arg(long, default_value_t = 30)]
+        top: usize,
     },
     /// Render a VS3 frame packet to a PNG without creating a window.
     Capture {
@@ -732,6 +751,9 @@ enum Vs3Commands {
         /// Values injected into consecutive yields (same syntax as `--arg`).
         #[arg(long = "resume")]
         responses: Vec<String>,
+        /// Print calls and instructions per function after the call.
+        #[arg(long)]
+        profile: bool,
     },
     /// Format a VS3 file in place without dropping its edition/comments.
     Fmt {
@@ -943,8 +965,9 @@ fn dispatch(cli: Cli) -> Result<()> {
                     args,
                     cooperative,
                     responses,
+                    profile,
                 },
-        } => cmd_vs3_run(path, call, args, cooperative, responses),
+        } => cmd_vs3_run(path, call, args, cooperative, responses, profile),
         Commands::Vs3 {
             command: Vs3Commands::Fmt { path },
         } => cmd_vs3_fmt(path),
@@ -960,8 +983,18 @@ fn dispatch(cli: Cli) -> Result<()> {
                     path,
                     headless,
                     frames,
+                    save_dir,
                 },
-        } => cmd_app_run(path, headless, frames),
+        } => cmd_app_run(path, headless, frames, save_dir),
+        Commands::App {
+            command:
+                AppCommands::Profile {
+                    path,
+                    actions,
+                    frames,
+                    top,
+                },
+        } => cmd_app_profile(path, actions, frames, top),
         Commands::App {
             command:
                 AppCommands::Capture {

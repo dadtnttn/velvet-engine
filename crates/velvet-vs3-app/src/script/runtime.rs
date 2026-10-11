@@ -3,7 +3,8 @@ use crate::assets::AppManifest;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use velvet_script_vs3::{
-    compile_package_path, float_val, string_val, Value, VmLimits, Vs3Module, Vs3Session,
+    compile_package_path, float_val, string_val, ProfileEntry, Value, VmLimits, Vs3Module,
+    Vs3Session,
 };
 
 pub struct ScriptRuntime {
@@ -68,6 +69,31 @@ impl ScriptRuntime {
         self.session
             .call(&format!("{}.{}", self.namespace, function), args)
             .with_context(|| format!("VS3 app call `{function}`"))
+    }
+    /// Hand font advance tables to the optional `app_fonts(metrics)` export
+    /// (called once, before `app_init`).
+    pub fn provide_fonts(&mut self, metrics: Value) -> Result<()> {
+        if self.has("app_fonts") {
+            self.call("app_fonts", &[metrics])?;
+        }
+        Ok(())
+    }
+    /// Deliver a storage result to the optional `app_storage(result)`
+    /// export. Returns the frame it produced, if the export exists.
+    pub fn storage(&mut self, result: Value) -> Result<Option<Value>> {
+        if self.has("app_storage") {
+            self.call("app_storage", &[result]).map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+    /// Count calls and instructions per function from now on.
+    pub fn set_profiling(&mut self, enabled: bool) {
+        self.session.set_profiling(enabled);
+    }
+    /// Per-function costs since profiling was enabled, most expensive first.
+    pub fn profile_report(&self) -> Vec<ProfileEntry> {
+        self.session.profile_report()
     }
     pub fn has(&self, function: &str) -> bool {
         self.module

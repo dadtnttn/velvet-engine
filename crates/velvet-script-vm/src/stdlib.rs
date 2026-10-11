@@ -514,7 +514,18 @@ pub fn call_native(id: u16, args: &[Value]) -> Result<NativeOutput, String> {
                 printed: None,
             })
         }
-        native => crate::math::call_math_native(native, args),
+        native => {
+            if let Some(result) = crate::stdlib_ext::call_ext(native, args) {
+                return result;
+            }
+            if crate::vm::is_callback_native(native) {
+                return Err(format!(
+                    "native `{}` calls script functions and must run inside the VM",
+                    native.name()
+                ));
+            }
+            crate::math::call_math_native(native, args)
+        }
     }
 }
 
@@ -591,7 +602,7 @@ fn normalize_index(i: i64, len: i64) -> i64 {
 
 /// Deterministic total order for `list_sort`: numbers, then strings,
 /// then everything else by type name + display.
-fn compare_values(a: &Value, b: &Value) -> std::cmp::Ordering {
+pub(crate) fn compare_values(a: &Value, b: &Value) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     let rank = |v: &Value| match v {
         Value::Null => 0,
@@ -725,7 +736,7 @@ mod tests {
     fn lookup_names() {
         assert_eq!(lookup_native("abs"), Some(NativeId::Abs));
         assert!(lookup_native("nope").is_none());
-        assert_eq!(NativeId::all().len(), 162);
+        assert_eq!(NativeId::all().len(), 186);
         // New collection natives resolve by name and keep stable ids.
         assert_eq!(lookup_native("str_split"), Some(NativeId::StrSplit));
         assert_eq!(lookup_native("list_sort"), Some(NativeId::ListSort));

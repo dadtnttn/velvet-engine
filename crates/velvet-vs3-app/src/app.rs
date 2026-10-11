@@ -16,19 +16,36 @@ use crate::input::InputState;
 use crate::model::{FrameView, RuntimeEvent};
 use crate::scene::{action_at, render_scene};
 use crate::script::ScriptRuntime;
+use crate::storage::SaveStore;
 
 #[derive(Debug, Clone)]
 pub struct AppOptions {
     pub headless: bool,
     pub frames: u64,
+    /// Save slot directory; `None` uses `VELVET_SAVE_DIR` or the per-user
+    /// data directory.
+    pub save_dir: Option<std::path::PathBuf>,
 }
 impl Default for AppOptions {
     fn default() -> Self {
         Self {
             headless: false,
             frames: 60,
+            save_dir: None,
         }
     }
+}
+
+/// Where an app keeps its save slots.
+#[derive(Debug, Clone, Default)]
+pub enum SaveLocation {
+    /// `VELVET_SAVE_DIR`, else the per-user data directory.
+    #[default]
+    Default,
+    /// An explicit directory.
+    Dir(std::path::PathBuf),
+    /// Nothing touches the disk (captures, profiling, tests).
+    Memory,
 }
 impl AppOptions {
     pub fn from_env_args() -> Result<Self> {
@@ -39,6 +56,9 @@ impl AppOptions {
                 "--headless" => out.headless = true,
                 "--frames" => {
                     out.frames = args.next().context("--frames requires a value")?.parse()?
+                }
+                "--save-dir" => {
+                    out.save_dir = Some(args.next().context("--save-dir requires a value")?.into())
                 }
                 _ => {}
             }
@@ -53,7 +73,11 @@ pub fn run_package(path: impl AsRef<Path>, options: AppOptions) -> Result<()> {
     }
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(ControlFlow::Wait);
-    let mut app = Vs3App::new(path)?;
+    let location = match options.save_dir {
+        Some(dir) => SaveLocation::Dir(dir),
+        None => SaveLocation::Default,
+    };
+    let mut app = Vs3App::with_saves(path, location)?;
     app.manifest.require_capability("window")?;
     event_loop.run_app(&mut app)?;
     app.runtime.shutdown()?;
@@ -65,7 +89,8 @@ pub fn validate_package(path: impl AsRef<Path>) -> Result<AppManifest> {
     let asset_root = manifest.asset_root(runtime.package_root());
     let assets = GameAssets::load(&asset_root, &manifest)?;
     assets.validate_all()?;
-    let _fonts = FontSystem::load(&asset_root, &manifest)?;
+    let fonts = FontSystem::load(&asset_root, &manifest)?;
+    runtime.provide_fonts(fonts.metrics_value())?;
     let frame = FrameView::parse(&runtime.initialize()?)?;
     validate_frame(&frame, &manifest, &assets)?;
     runtime.shutdown()?;
@@ -86,7 +111,7 @@ pub fn capture_package_with_action(
     frames: u64,
     action: Option<&str>,
 ) -> Result<()> {
-    let mut app = Vs3App::new(path)?;
+    let mut app = Vs3App::with_saves(path, SaveLocation::Memory)?;
     if let Some(action) = action {
         let frame = app
             .runtime
@@ -109,6 +134,8 @@ pub fn capture_package_with_action(
 fn run_headless(path: impl AsRef<Path>, frames: u64) -> Result<()> {
     let mut runtime = ScriptRuntime::load(path)?;
     let manifest = runtime.manifest().clone();
+    let fonts = FontSystem::load(&manifest.asset_root(runtime.package_root()), &manifest)?;
+    runtime.provide_fonts(fonts.metrics_value())?;
     let mut frame = FrameView::parse(&runtime.initialize()?)?;
     for _ in 0..frames {
         anyhow::ensure!(
@@ -142,15 +169,26 @@ pub struct Vs3App {
     pub(crate) mouse_down: bool,
     pub(crate) exit_requested: bool,
     pub(crate) frame_count: u64,
+    pub(crate) saves: SaveStore,
+    storage_depth: u8,
 }
 impl Vs3App {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
+        Self::with_saves(path, SaveLocation::Default)
+    }
+    pub fn with_saves(path: impl AsRef<Path>, location: SaveLocation) -> Result<Self> {
         let mut runtime = ScriptRuntime::load(path)?;
         let manifest = runtime.manifest().clone();
         manifest.require_capability("window")?;
+        let saves = match location {
+            SaveLocation::Default => SaveStore::for_app(&manifest, None),
+            SaveLocation::Dir(dir) => SaveStore::for_app(&manifest, Some(dir)),
+            SaveLocation::Memory => SaveStore::memory(),
+        };
         let asset_root = manifest.asset_root(runtime.package_root());
         let assets = GameAssets::load(&asset_root, &manifest)?;
         let fonts = FontSystem::load(&asset_root, &manifest)?;
+        runtime.provide_fonts(fonts.metrics_value())?;
         let frame = FrameView::parse(&runtime.initialize()?).context("initial VS3 frame")?;
         validate_frame(&frame, &manifest, &assets)?;
         let canvas = Canvas::new(manifest.app.canvas_width, manifest.app.canvas_height);
@@ -172,6 +210,8 @@ impl Vs3App {
             mouse_down: false,
             exit_requested: false,
             frame_count: 0,
+            saves,
+            storage_depth: 0,
         };
         out.process_events();
         Ok(out)
@@ -252,13 +292,66 @@ impl Vs3App {
     }
     fn process_events(&mut self) {
         let events = self.frame.events.clone();
+        let allowed = self.manifest.capabilities.contains("storage");
+        let mut results = Vec::new();
         for event in &events {
-            self.process_event(event);
+            match self.saves.handle(event, allowed) {
+                Some(result) => results.push(result),
+                None => self.process_event(event),
+            }
         }
+        for result in results {
+            self.deliver_storage(result);
+        }
+    }
+    /// Answer a storage request through `app_storage`; its frame replaces
+    /// the current one (and may itself request storage, up to 8 deep).
+    fn deliver_storage(&mut self, result: velvet_script_vs3::Value) {
+        if matches!(
+            result.map_get("ok"),
+            Ok(Some(velvet_script_vs3::Value::Bool(false)))
+        ) {
+            if let Ok(Some(error)) = result.map_get("error") {
+                eprintln!(
+                    "[velvet-vs3-app] storage: {}",
+                    error.as_str().unwrap_or_default()
+                );
+            }
+        }
+        if self.storage_depth >= 8 {
+            eprintln!("[velvet-vs3-app] storage results nested too deeply; dropping one");
+            return;
+        }
+        self.storage_depth += 1;
+        match self
+            .runtime
+            .storage(result)
+            .and_then(|value| value.map(|v| FrameView::parse(&v)).transpose())
+        {
+            Ok(Some(frame)) => self.accept(frame),
+            Ok(None) => {}
+            Err(e) => eprintln!("[velvet-vs3-app] app_storage failed: {e:#}"),
+        }
+        self.storage_depth -= 1;
     }
     fn process_event(&mut self, event: &RuntimeEvent) {
         match event.kind.as_str() {
             "app.exit" => self.exit_requested = true,
+            "app.profile" => {
+                // `{payload: {enabled: true}}` starts counting; `false` prints
+                // the report to stderr and stops.
+                if payload_bool(event, "enabled") == Some(true) {
+                    self.runtime.set_profiling(true);
+                } else {
+                    for row in self.runtime.profile_report().iter().take(40) {
+                        eprintln!(
+                            "[profile] {:>12} instr {:>8} calls  {}",
+                            row.instructions, row.calls, row.name
+                        );
+                    }
+                    self.runtime.set_profiling(false);
+                }
+            }
             "window.set_title" => {
                 if let (Some(window), Some(title)) = (&self.window, payload_string(event, "title"))
                 {
@@ -451,4 +544,34 @@ fn save_canvas(canvas: &Canvas, output: &Path) -> Result<()> {
     )
     .with_context(|| format!("could not save capture {}", output.display()))?;
     Ok(())
+}
+
+/// Profile an app headlessly: run `app_init`, then each action, then
+/// `frames` updates, and return per-function instruction counts (most
+/// expensive first). Saves stay in memory.
+pub fn profile_package(
+    path: impl AsRef<Path>,
+    actions: &[String],
+    frames: u64,
+) -> Result<Vec<velvet_script_vs3::ProfileEntry>> {
+    let mut app = Vs3App::with_saves(path, SaveLocation::Memory)?;
+    app.runtime.set_profiling(true);
+    for action in actions {
+        let frame = app
+            .runtime
+            .action(action)
+            .and_then(|value| FrameView::parse(&value))
+            .with_context(|| format!("action `{action}`"))?;
+        app.accept_checked(frame)?;
+    }
+    for _ in 0..frames {
+        let frame = app
+            .runtime
+            .update(1.0 / 60.0, Default::default())
+            .and_then(|value| FrameView::parse(&value))?;
+        app.accept_checked(frame)?;
+    }
+    let report = app.runtime.profile_report();
+    app.runtime.shutdown()?;
+    Ok(report)
 }

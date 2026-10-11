@@ -342,6 +342,54 @@ pub enum NativeId {
     MapRemove = 160,
     /// `map_merge(a, b)` (new map, `b` wins).
     MapMerge = 161,
+    /// `int(value)`: integer from int, float (truncates), bool or numeric string.
+    Int = 162,
+    /// `float(value)`: float from int, float, bool or numeric string.
+    Float = 163,
+    /// `parse_int(text, fallback)`: integer or `fallback` when not numeric.
+    ParseInt = 164,
+    /// `parse_float(text, fallback)`: float or `fallback` when not numeric.
+    ParseFloat = 165,
+    /// `call(function, args...)`: call a function value.
+    Call = 166,
+    /// `list_map(list, f)`: new list with `f(item)`.
+    ListMap = 167,
+    /// `list_filter(list, f)`: new list with items where `f(item)` is truthy.
+    ListFilter = 168,
+    /// `list_find(list, f)`: first item where `f(item)` is truthy, else null.
+    ListFind = 169,
+    /// `list_any(list, f)`: whether any `f(item)` is truthy.
+    ListAny = 170,
+    /// `list_all(list, f)`: whether every `f(item)` is truthy.
+    ListAll = 171,
+    /// `list_count(list, f)`: how many items satisfy `f`.
+    ListCount = 172,
+    /// `list_reduce(list, f, initial)`: fold with `f(accumulator, item)`.
+    ListReduce = 173,
+    /// `list_sort_by(list, f)`: new list sorted by the key `f(item)` (stable).
+    ListSortBy = 174,
+    /// `map_get(map, key [, default])`: value or default (null).
+    MapGet = 175,
+    /// `str_index_of(text, needle)`: character index or -1.
+    StrIndexOf = 176,
+    /// `str_repeat(text, count)`.
+    StrRepeat = 177,
+    /// `str_pad_left(text, width [, fill])`.
+    StrPadLeft = 178,
+    /// `str_pad_right(text, width [, fill])`.
+    StrPadRight = 179,
+    /// `str_chars(text)`: list of characters.
+    StrChars = 180,
+    /// `str_sub(text, start [, end])`: substring by character index.
+    StrSub = 181,
+    /// `str_measure(text, advances, size)`: width from a per-character advance table.
+    StrMeasure = 182,
+    /// `json_encode(value [, pretty])`.
+    JsonEncode = 183,
+    /// `json_decode(text)`.
+    JsonDecode = 184,
+    /// `str_wrap(text, advances, size, max_width)` → list of lines.
+    StrWrap = 185,
 }
 
 impl NativeId {
@@ -510,6 +558,30 @@ impl NativeId {
             159 => Self::MapValues,
             160 => Self::MapRemove,
             161 => Self::MapMerge,
+            162 => Self::Int,
+            163 => Self::Float,
+            164 => Self::ParseInt,
+            165 => Self::ParseFloat,
+            166 => Self::Call,
+            167 => Self::ListMap,
+            168 => Self::ListFilter,
+            169 => Self::ListFind,
+            170 => Self::ListAny,
+            171 => Self::ListAll,
+            172 => Self::ListCount,
+            173 => Self::ListReduce,
+            174 => Self::ListSortBy,
+            175 => Self::MapGet,
+            176 => Self::StrIndexOf,
+            177 => Self::StrRepeat,
+            178 => Self::StrPadLeft,
+            179 => Self::StrPadRight,
+            180 => Self::StrChars,
+            181 => Self::StrSub,
+            182 => Self::StrMeasure,
+            183 => Self::JsonEncode,
+            184 => Self::JsonDecode,
+            185 => Self::StrWrap,
             _ => return None,
         })
     }
@@ -685,6 +757,30 @@ impl NativeId {
             Self::MapValues => "map_values",
             Self::MapRemove => "map_remove",
             Self::MapMerge => "map_merge",
+            Self::Int => "int",
+            Self::Float => "float",
+            Self::ParseInt => "parse_int",
+            Self::ParseFloat => "parse_float",
+            Self::Call => "call",
+            Self::ListMap => "list_map",
+            Self::ListFilter => "list_filter",
+            Self::ListFind => "list_find",
+            Self::ListAny => "list_any",
+            Self::ListAll => "list_all",
+            Self::ListCount => "list_count",
+            Self::ListReduce => "list_reduce",
+            Self::ListSortBy => "list_sort_by",
+            Self::MapGet => "map_get",
+            Self::StrIndexOf => "str_index_of",
+            Self::StrRepeat => "str_repeat",
+            Self::StrPadLeft => "str_pad_left",
+            Self::StrPadRight => "str_pad_right",
+            Self::StrChars => "str_chars",
+            Self::StrSub => "str_sub",
+            Self::StrMeasure => "str_measure",
+            Self::JsonEncode => "json_encode",
+            Self::JsonDecode => "json_decode",
+            Self::StrWrap => "str_wrap",
         }
     }
 
@@ -853,6 +949,30 @@ impl NativeId {
             Self::MapValues,
             Self::MapRemove,
             Self::MapMerge,
+            Self::Int,
+            Self::Float,
+            Self::ParseInt,
+            Self::ParseFloat,
+            Self::Call,
+            Self::ListMap,
+            Self::ListFilter,
+            Self::ListFind,
+            Self::ListAny,
+            Self::ListAll,
+            Self::ListCount,
+            Self::ListReduce,
+            Self::ListSortBy,
+            Self::MapGet,
+            Self::StrIndexOf,
+            Self::StrRepeat,
+            Self::StrPadLeft,
+            Self::StrPadRight,
+            Self::StrChars,
+            Self::StrSub,
+            Self::StrMeasure,
+            Self::JsonEncode,
+            Self::JsonDecode,
+            Self::StrWrap,
         ]
     }
 }
@@ -1022,6 +1142,30 @@ pub fn lookup_native(name: &str) -> Option<NativeId> {
         "map_values" => Some(NativeId::MapValues),
         "map_remove" => Some(NativeId::MapRemove),
         "map_merge" => Some(NativeId::MapMerge),
+        "int" => Some(NativeId::Int),
+        "float" => Some(NativeId::Float),
+        "parse_int" => Some(NativeId::ParseInt),
+        "parse_float" => Some(NativeId::ParseFloat),
+        "call" => Some(NativeId::Call),
+        "list_map" => Some(NativeId::ListMap),
+        "list_filter" => Some(NativeId::ListFilter),
+        "list_find" => Some(NativeId::ListFind),
+        "list_any" => Some(NativeId::ListAny),
+        "list_all" => Some(NativeId::ListAll),
+        "list_count" => Some(NativeId::ListCount),
+        "list_reduce" => Some(NativeId::ListReduce),
+        "list_sort_by" => Some(NativeId::ListSortBy),
+        "map_get" => Some(NativeId::MapGet),
+        "str_index_of" => Some(NativeId::StrIndexOf),
+        "str_repeat" => Some(NativeId::StrRepeat),
+        "str_pad_left" => Some(NativeId::StrPadLeft),
+        "str_pad_right" => Some(NativeId::StrPadRight),
+        "str_chars" => Some(NativeId::StrChars),
+        "str_sub" => Some(NativeId::StrSub),
+        "str_measure" => Some(NativeId::StrMeasure),
+        "json_encode" => Some(NativeId::JsonEncode),
+        "json_decode" => Some(NativeId::JsonDecode),
+        "str_wrap" => Some(NativeId::StrWrap),
         _ => None,
     }
 }
@@ -1203,6 +1347,22 @@ impl NativeId {
             | N::MapMerge => (2, 2),
             N::StrReplace => (3, 3),
             N::ListSlice => (2, 3),
+            N::Call => (1, u8::MAX),
+            N::ParseInt
+            | N::ParseFloat
+            | N::ListMap
+            | N::ListFilter
+            | N::ListFind
+            | N::ListAny
+            | N::ListAll
+            | N::ListCount
+            | N::ListSortBy
+            | N::StrIndexOf
+            | N::StrRepeat => (2, 2),
+            N::MapGet | N::StrPadLeft | N::StrPadRight | N::StrSub => (2, 3),
+            N::ListReduce | N::StrMeasure => (3, 3),
+            N::JsonEncode => (1, 2),
+            N::StrWrap => (4, 4),
             _ => (1, 1),
         };
 
@@ -1296,6 +1456,23 @@ impl NativeId {
             N::ClosestPointSegment => &[T::Vector, T::Vector, T::Vector],
             N::SegmentIntersection2 => &[T::Vec2, T::Vec2, T::Vec2, T::Vec2],
             N::RayPlaneIntersection => &[T::Vector, T::Vector, T::Vector, T::Vector],
+            N::ListMap
+            | N::ListFilter
+            | N::ListFind
+            | N::ListAny
+            | N::ListAll
+            | N::ListCount
+            | N::ListSortBy => &[T::List, T::Any],
+            N::ListReduce => &[T::List, T::Any, T::Any],
+            N::MapGet => &[T::Map, T::String, T::Any],
+            N::StrIndexOf => &[T::String, T::String],
+            N::StrRepeat => &[T::String, T::Int],
+            N::StrPadLeft | N::StrPadRight => &[T::String, T::Int, T::String],
+            N::StrChars | N::JsonDecode => &[T::String],
+            N::StrSub => &[T::String, T::Int, T::Int],
+            N::StrMeasure => &[T::String, T::Map, T::Number],
+            N::StrWrap => &[T::String, T::Map, T::Number, T::Number],
+            N::JsonEncode => &[T::Any, T::Bool],
             _ => &[T::Any],
         };
 
@@ -1390,6 +1567,12 @@ impl NativeId {
             | N::ListSort
             | N::ListSlice => T::List,
             N::MapMerge => T::Map,
+            N::Int | N::ParseInt | N::ListCount | N::StrIndexOf => T::Int,
+            N::Float | N::ParseFloat | N::StrMeasure => T::Float,
+            N::ListMap | N::ListFilter | N::ListSortBy | N::StrChars | N::StrWrap => T::List,
+            N::ListAny | N::ListAll => T::Bool,
+            N::StrRepeat | N::StrPadLeft | N::StrPadRight | N::StrSub | N::JsonEncode => T::String,
+            N::Call | N::ListFind | N::ListReduce | N::MapGet | N::JsonDecode => T::Any,
             N::ListPop
             | N::Choose
             | N::Normalize
@@ -1423,6 +1606,15 @@ impl NativeId {
                 | N::Shuffle
                 | N::Choose
                 | N::WeightedChoose
+                | N::Call
+                | N::ListMap
+                | N::ListFilter
+                | N::ListFind
+                | N::ListAny
+                | N::ListAll
+                | N::ListCount
+                | N::ListReduce
+                | N::ListSortBy
         ) {
             Impure
         } else {

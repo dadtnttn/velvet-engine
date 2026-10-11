@@ -51,10 +51,14 @@ pub enum VmError {
         stack_trace: Vec<String>,
     },
     /// Instruction budget exhausted.
-    #[error("instruction limit exceeded ({limit})")]
+    #[error(
+        "instruction limit exceeded ({limit} per call); raise `max_instructions`, split the work across calls, or find hot spots with `velvet app profile` / `velvet vs3 run --profile`"
+    )]
     InstructionLimit {
         /// Limit.
         limit: u64,
+        /// Script frames active when the budget ran out (innermost first).
+        stack_trace: Vec<String>,
     },
     /// Memory budget.
     #[error("memory limit exceeded ({limit} units)")]
@@ -108,10 +112,53 @@ pub struct CallFrameView {
     pub stack_base: usize,
 }
 
+/// Per-function profile counters.
+#[derive(Debug, Clone, Copy, Default)]
+struct FunctionProfile {
+    calls: u64,
+    instructions: u64,
+}
+
+#[derive(Debug, Clone)]
+struct Profile {
+    functions: Vec<FunctionProfile>,
+    natives: std::collections::BTreeMap<u16, FunctionProfile>,
+}
+
+/// One row of a profiling report.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProfileEntry {
+    /// Function name (`native:<name>` for natives).
+    pub name: String,
+    /// Times called.
+    pub calls: u64,
+    /// Instructions executed inside the function itself (self cost),
+    /// including the cost charged for natives it called.
+    pub instructions: u64,
+}
+
+/// Whether a native calls back into script functions (needs the VM).
+pub(crate) fn is_callback_native(native: NativeId) -> bool {
+    use NativeId as N;
+    matches!(
+        native,
+        N::Call
+            | N::ListMap
+            | N::ListFilter
+            | N::ListFind
+            | N::ListAny
+            | N::ListAll
+            | N::ListCount
+            | N::ListReduce
+            | N::ListSortBy
+    )
+}
+
 /// Velvet Script virtual machine.
 #[derive(Debug)]
 pub struct Vm {
     module: BytecodeModule,
+    profile: Option<Profile>,
     globals: Vec<Value>,
     stack: Vec<Value>,
     frames: Vec<CallFrame>,
@@ -152,6 +199,7 @@ impl Vm {
         }
         Self {
             module,
+            profile: None,
             globals,
             stack: Vec::new(),
             frames: Vec::new(),
@@ -187,6 +235,58 @@ impl Vm {
     /// Borrow printed lines.
     pub fn printed(&self) -> &[String] {
         &self.printed
+    }
+
+    /// Turn per-function instruction profiling on or off. Turning it on
+    /// clears previous measurements.
+    pub fn set_profiling(&mut self, enabled: bool) {
+        self.profile = if enabled {
+            Some(Profile {
+                functions: vec![FunctionProfile::default(); self.module.functions.len()],
+                natives: std::collections::BTreeMap::new(),
+            })
+        } else {
+            None
+        };
+    }
+
+    /// Whether profiling is on.
+    pub fn is_profiling(&self) -> bool {
+        self.profile.is_some()
+    }
+
+    /// Profiling results sorted by self instructions (highest first). Script
+    /// functions use their name; natives appear as `native:<name>` and count
+    /// their charged cost. Empty when profiling is off.
+    pub fn profile_report(&self) -> Vec<ProfileEntry> {
+        let Some(profile) = &self.profile else {
+            return Vec::new();
+        };
+        let mut out: Vec<ProfileEntry> = profile
+            .functions
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.calls > 0 || f.instructions > 0)
+            .map(|(index, f)| ProfileEntry {
+                name: self.module.functions[index].name.clone(),
+                calls: f.calls,
+                instructions: f.instructions,
+            })
+            .collect();
+        for (id, f) in &profile.natives {
+            let name = NativeId::from_u16(*id).map_or("?", NativeId::name);
+            out.push(ProfileEntry {
+                name: format!("native:{name}"),
+                calls: f.calls,
+                instructions: f.instructions,
+            });
+        }
+        out.sort_by(|a, b| {
+            b.instructions
+                .cmp(&a.instructions)
+                .then(a.name.cmp(&b.name))
+        });
+        out
     }
 
     /// Instructions executed so far.
@@ -326,9 +426,17 @@ impl Vm {
         }
         self.instructions += 1;
         self.total_instructions += 1;
+        if let Some(profile) = &mut self.profile {
+            if let Some(frame) = self.frames.last() {
+                if let Some(f) = profile.functions.get_mut(frame.function as usize) {
+                    f.instructions += 1;
+                }
+            }
+        }
         if self.instructions > self.limits.max_instructions {
             return Err(VmError::InstructionLimit {
                 limit: self.limits.max_instructions,
+                stack_trace: self.stack_trace(),
             });
         }
 
@@ -641,6 +749,16 @@ impl Vm {
             .saturating_add(crate::math::dynamic_cost(native, &args))
             .saturating_sub(1);
         self.charge_instructions(cost)?;
+        if let Some(profile) = &mut self.profile {
+            let entry = profile.natives.entry(id).or_default();
+            entry.calls += 1;
+            entry.instructions += cost + 1;
+        }
+        if is_callback_native(native) {
+            let value = self.call_higher(native, &args)?;
+            self.push(value)?;
+            return Ok(());
+        }
         let out = stdlib::call_native(id, &args).map_err(|m| self.runtime_err(m))?;
         if let Some(line) = out.printed {
             self.printed.push(line);
@@ -649,12 +767,146 @@ impl Vm {
         Ok(())
     }
 
+    /// Call a function value (script function or native) to completion from
+    /// inside a native and return its result.
+    fn call_value_sync(&mut self, callee: &Value, args: &[Value]) -> Result<Value, VmError> {
+        if args.len() > u8::MAX as usize {
+            return Err(self.runtime_err("too many arguments in callback"));
+        }
+        match callee {
+            Value::Native(id) => {
+                for a in args {
+                    self.push(a.clone())?;
+                }
+                self.invoke_native(*id, args.len() as u8)?;
+                self.pop()
+            }
+            Value::Function(fidx) => {
+                let depth = self.frames.len();
+                for a in args {
+                    self.push(a.clone())?;
+                }
+                self.call_function(*fidx, args.len() as u8)?;
+                while self.frames.len() > depth {
+                    if self.step_instruction()? {
+                        return Err(self.runtime_err("yield is not allowed inside a callback"));
+                    }
+                }
+                self.pop()
+            }
+            other => Err(self.runtime_err(format!(
+                "expected a function value, got `{}`",
+                other.type_name()
+            ))),
+        }
+    }
+
+    /// Natives that call back into script functions.
+    fn call_higher(&mut self, native: NativeId, args: &[Value]) -> Result<Value, VmError> {
+        use NativeId as N;
+        let spec = native.spec();
+        if args.len() < spec.min_args as usize || args.len() > spec.max_args as usize {
+            return Err(self.runtime_err(format!(
+                "{} expects {}..={} arguments, got {}",
+                spec.name,
+                spec.min_args,
+                spec.max_args,
+                args.len()
+            )));
+        }
+        if native == N::Call {
+            return self.call_value_sync(&args[0], &args[1..]);
+        }
+        let items = args[0].list_items().map_err(|_| {
+            self.runtime_err(format!(
+                "{} expects a list, got `{}`",
+                spec.name,
+                args[0].type_name()
+            ))
+        })?;
+        let f = args[1].clone();
+        if !matches!(f, Value::Function(_) | Value::Native(_)) {
+            return Err(self.runtime_err(format!(
+                "{} expects a function as second argument, got `{}`",
+                spec.name,
+                f.type_name()
+            )));
+        }
+        self.charge_instructions(items.len() as u64)?;
+        match native {
+            N::ListMap => {
+                let mut out = Vec::with_capacity(items.len());
+                for item in items {
+                    out.push(self.call_value_sync(&f, &[item])?);
+                }
+                Ok(Value::list(out))
+            }
+            N::ListFilter => {
+                let mut out = Vec::new();
+                for item in items {
+                    if self.call_value_sync(&f, std::slice::from_ref(&item))?.is_truthy() {
+                        out.push(item);
+                    }
+                }
+                Ok(Value::list(out))
+            }
+            N::ListFind => {
+                for item in items {
+                    if self.call_value_sync(&f, std::slice::from_ref(&item))?.is_truthy() {
+                        return Ok(item);
+                    }
+                }
+                Ok(Value::Null)
+            }
+            N::ListAny | N::ListAll => {
+                let want_all = native == N::ListAll;
+                for item in items {
+                    let hit = self.call_value_sync(&f, &[item])?.is_truthy();
+                    if want_all && !hit {
+                        return Ok(Value::Bool(false));
+                    }
+                    if !want_all && hit {
+                        return Ok(Value::Bool(true));
+                    }
+                }
+                Ok(Value::Bool(want_all))
+            }
+            N::ListCount => {
+                let mut n = 0i64;
+                for item in items {
+                    if self.call_value_sync(&f, &[item])?.is_truthy() {
+                        n += 1;
+                    }
+                }
+                Ok(Value::Int(n))
+            }
+            N::ListReduce => {
+                let mut acc = args[2].clone();
+                for item in items {
+                    acc = self.call_value_sync(&f, &[acc, item])?;
+                }
+                Ok(acc)
+            }
+            N::ListSortBy => {
+                let mut keyed = Vec::with_capacity(items.len());
+                for item in items {
+                    let key = self.call_value_sync(&f, std::slice::from_ref(&item))?;
+                    keyed.push((key, item));
+                }
+                keyed.sort_by(|a, b| stdlib::compare_values(&a.0, &b.0));
+                Ok(Value::list(keyed.into_iter().map(|(_, v)| v).collect()))
+            }
+            _ => Err(self.runtime_err(format!("native `{}` is not a callback native", spec.name))),
+        }
+    }
+
     fn charge_instructions(&mut self, extra: u64) -> Result<(), VmError> {
         self.instructions = self.instructions.saturating_add(extra);
         self.total_instructions = self.total_instructions.saturating_add(extra);
         if self.instructions > self.limits.max_instructions {
             return Err(VmError::InstructionLimit {
                 limit: self.limits.max_instructions,
+                stack_trace: self.stack_trace(),
             });
         }
         Ok(())
@@ -757,6 +1009,11 @@ impl Vm {
         let stack_base = self.stack.len() - argc as usize;
         // Locals beyond params are pushed by `let` as the stack grows (Lox-style).
         let _ = chunk.locals;
+        if let Some(profile) = &mut self.profile {
+            if let Some(f) = profile.functions.get_mut(fidx as usize) {
+                f.calls += 1;
+            }
+        }
         self.frames.push(CallFrame {
             function: fidx,
             ip: 0,

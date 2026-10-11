@@ -43,15 +43,26 @@ function register_run(score: int) {
 - Immutable bindings: `const name = value`.
 - Persistent module state: `state { name: type = value }`.
 - Parameter, local, and state annotations: `any`, `null`, `bool`, `int`/`i64`,
-  `float`/`f64`, `string`/`str`, `list`, and `map`.
+  `float`/`f64`, `string`/`str`, `list`, `map`, and `function`/`fn`.
+- `let x = null` declares a placeholder whose type stays open: it may later
+  hold a map, a list, a number, etc. Annotate it (`let x: map = null` is an
+  error; use `let x: any = null`) only when you want a fixed type.
 - A `Vs3Session` initializes state once and preserves it across calls.
   `Vs3Module::call` is intentionally isolated and creates a fresh session.
 
 Unknown names, duplicate definitions, invalid assignment targets, writes to a
 `const`, wrong arity, unknown types, and statically visible type mismatches are
 compile errors with source locations. Unknown names and types include a
-`(did you mean \`x\`?)` hint when a close identifier is visible. Annotated
-function parameters are also checked at the Rust/CLI call boundary.
+`(did you mean \`x\`?)` hint when a close identifier is visible. Mismatches
+between numbers and text suggest the conversion to use (`int(x)`,
+`float(s)`, `str(x)`). Annotated function parameters are also checked at the
+Rust/CLI call boundary.
+
+Numeric inference: `int op int` stays `int` (`7 / 2 == 3`), any `float`
+operand makes the result `float`. `abs`, `min`, `max` and `clamp` return
+`int` when every argument is a known `int`, `float` when one is a known
+`float`, and an unchecked value when an argument's type is unknown (for
+example the result of a user function) — they never guess `float`.
 
 ### Values and operators
 
@@ -86,7 +97,40 @@ function sum_even(values: list) {
 ```
 
 VS3 supports `if`/`else`, `while`, `for value in collection`, `break`,
-`continue`, block scopes, and `return`.
+`continue`, block scopes, `return`, and `match`:
+
+```velvet
+function on_action(action: string) {
+    match action {
+        "save", "quicksave" => { save_game() }
+        "quit" => return quit()
+        _ => { log("unknown " + action) }
+    }
+}
+```
+
+`match` compares the value with `==` against each pattern (strings, ints or
+any comparable value; several patterns per arm separated by commas). `_` or
+`else` is the default arm. Arms are blocks or single statements, written with
+`=>` (or `->`). `break`/`continue`/`return` inside an arm act on the enclosing
+loop or function. `match` remains a valid variable name.
+
+### Functions as values
+
+Function names, natives and `module.function` (for exported functions of an
+aliased import) are values: store them in variables, lists or maps and call
+them as `f(x)` or `call(f, x)`. Lambdas create anonymous functions:
+
+```velvet
+let doubled = list_map(scores, fn(v) => v * 2)
+let alive = list_filter(people, fn(p) { return p.alive && p.age >= 18 })
+let handlers = {"buy": shop.buy, "sell": shop.sell}
+call(handlers[kind], item)
+```
+
+Lambdas do **not** capture locals: they see their parameters, module state and
+top-level functions. Pass anything else as an argument (for example with
+`list_reduce`'s accumulator or a map in `state`).
 
 Narrative declarations and commands such as `scene`, `character`, dialogue,
 `choice`, and `background` are rejected in edition 3. Use the classic story
@@ -103,8 +147,12 @@ mistaken for general-language semantics.
 | Statistics | Aggregates, quantiles, variance, covariance, correlation, histograms and smoothing |
 | Numerical | Polynomial evaluation/root solving and sample-based trapezoid/Simpson integration |
 | Values | `len`, `concat`, `str`, `type_of` |
-| Strings | `str_upper`, `str_lower`, `str_trim`, `str_split`, `str_join`, `str_contains`, `str_replace`, `str_starts_with`, `str_ends_with` |
-| Collections | `list_push`, `list_pop`, `list_contains`, `list_index_of`, `list_reverse`, `list_sort`, `list_slice`, `map_has`, `map_keys`, `map_values`, `map_remove`, `map_merge` |
+| Conversions | `int(x)` (truncates floats, parses `"42"`/`"3.9"`, `true`→1; errors on bad text), `float(x)`, `parse_int(s, fallback)`, `parse_float(s, fallback)` |
+| Strings | `str_upper`, `str_lower`, `str_trim`, `str_split`, `str_join`, `str_contains`, `str_replace`, `str_starts_with`, `str_ends_with`, `str_index_of`, `str_sub(s, start, end?)`, `str_chars`, `str_repeat`, `str_pad_left`/`str_pad_right(s, width, fill?)` |
+| Text layout | `str_measure(text, advances, size)` → width in pixels, `str_wrap(text, advances, size, max_width)` → list of lines. `advances` is a per-character width table at size 100 (`{"a": 55.6, ..., "default": 55}`); apps receive one per font from the host (see the app runtime) |
+| Collections | `list_push`, `list_pop`, `list_contains`, `list_index_of`, `list_reverse`, `list_sort`, `list_slice`, `map_has`, `map_get(map, key, fallback?)`, `map_keys`, `map_values`, `map_remove`, `map_merge` |
+| Callbacks | `call(f, args...)`, `list_map`, `list_filter`, `list_find` (or `null`), `list_any`, `list_all`, `list_count`, `list_reduce(list, f, initial)`, `list_sort_by(list, key_fn)` (stable) |
+| Data | `json_encode(value, pretty?)`, `json_decode(text)` (vectors/matrices encode as float arrays) |
 | Errors | `assert(condition, message?)`, `fail(message)` |
 | Data tools | `hash_sha256`, `hex_encode`, `base64_encode` |
 | Debug output | `print` (captured by the VM, not written directly by the runtime) |
@@ -169,6 +217,9 @@ velvet vs3 run samples/vs3-logic/game_rules.vel `
 velvet vs3 run logic.vel --call score `
   --arg f:0.75 --arg null --arg 'j:{"difficulty":"hard"}'
 
+# Count calls and instructions per function for one call
+velvet vs3 run logic.vel --call simulate_year --profile
+
 # Observe and optionally answer consecutive yields
 velvet vs3 run samples/vs3-logic/host_services.vel `
   --call load_profile --arg i:7 --cooperative --resume 'j:{"name":"Ada"}'
@@ -176,6 +227,28 @@ velvet vs3 run samples/vs3-logic/host_services.vel `
 
 Argument prefixes are `i:`, `f:`, `b:`, `s:`, and `j:`. Bare integers,
 floats, booleans, `null`, and strings are also accepted.
+
+## Instruction budget and profiling
+
+Every top-level call (`Vs3Session::call`, an app's `app_update`, an action…)
+gets `max_instructions` instructions; natives charge extra in proportion to
+the data they touch, and callbacks charge one instruction per element. When
+the budget runs out the error names the limit and the script stack at that
+moment (`in advance_month at sim.vel:120:9 …`), so the hot loop is visible.
+
+To see where the instructions go:
+
+- `velvet vs3 run file.vel --call f --profile` for a single call;
+- `velvet app profile <package> --action a --action b --frames 60` for an app;
+- `Vs3Session::set_profiling(true)` + `profile_report()` from Rust;
+- an app frame event `{"kind": "app.profile", "payload": {"enabled": true}}`
+  starts counting and `enabled: false` prints the report to stderr.
+
+Each row reports a function's self cost (its own instructions plus the natives
+it called) and its call count; natives appear as `native:<name>` and lambdas as
+`fn#<n>`. Work that does not fit one call should be split across calls (for
+example one simulated month per action, or a few people per frame) rather than
+raising the limit indefinitely.
 
 ## Rust API
 
@@ -228,7 +301,13 @@ function attack() {
 Nominal modules have isolated names and persistent state. Functions are called
 with `module.function(...)`; state and top-level bindings are private and must
 be exposed through functions. Different modules may therefore define the same
-function or state names without collision.
+function or state names without collision. An exported function can also be
+passed as a value: `list_map(items, inventory.price_of)`.
+
+Unaliased imports are the right tool for splitting one big module into files;
+aliased imports are the tool for real namespaces. Moving a group of files from
+one style to the other only requires adding `export` to its public functions
+and prefixing calls with the alias.
 
 Public APIs can be declared explicitly:
 
@@ -321,8 +400,9 @@ The current alpha provides shared source fragments, nominal module namespaces,
 explicit function exports, stable local package identities, semantic-version
 requirements, and reproducible offline lockfiles. It deliberately does not yet
 claim remote registries, network downloads, signed package provenance,
-structs/enums, pattern matching, generics, return-type syntax, or a borrow checker. Records and tagged variants are represented
-with maps and dispatched with ordinary conditionals. Future features should extend
+structs/enums, destructuring pattern matching (beyond value `match`), closures that capture locals, generics,
+return-type syntax, or a borrow checker. Records and tagged variants are represented
+with maps and dispatched with `match` or ordinary conditionals. Future features should extend
 the same semantic frontend and bytecode versioning instead of creating a parallel
 language pipeline.
 

@@ -101,6 +101,8 @@ pub fn parse_file(source: &str, file: Option<&str>) -> Result<ParseResult, Parse
         pos: 0,
         file: file.map(|s| s.to_string()),
         diagnostics: Vec::new(),
+        lifted: Vec::new(),
+        hidden_counter: 0,
     };
     let mut items = Vec::new();
     while !p.is_at_end() {
@@ -117,6 +119,8 @@ pub fn parse_file(source: &str, file: Option<&str>) -> Result<ParseResult, Parse
             }
         }
     }
+    // Lambdas are lifted to hidden top-level functions.
+    items.append(&mut p.lifted);
     let mut module = Module {
         file: file.map(|s| s.to_string()),
         items,
@@ -137,6 +141,10 @@ struct Parser {
     pos: usize,
     file: Option<String>,
     diagnostics: Vec<Diagnostic>,
+    /// Hidden functions produced by lambda expressions.
+    lifted: Vec<Item>,
+    /// Counter for hidden names (`match` temporaries, lambdas).
+    hidden_counter: usize,
 }
 
 impl Parser {
@@ -899,6 +907,11 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, String> {
+        if self.check(|t| matches!(t, Token::Ident(s) if s == "match")) {
+            if let Some(stmt) = self.try_parse_match()? {
+                return Ok(stmt);
+            }
+        }
         if self.check(|t| matches!(t, Token::Ident(s) if s == "let")) {
             return self.parse_let();
         }
@@ -1119,6 +1132,204 @@ impl Parser {
         let expr = self.parse_expression()?;
         let loc = expr.loc().clone();
         Ok(Stmt::Expr { expr, loc })
+    }
+
+    fn next_hidden(&mut self) -> usize {
+        let n = self.hidden_counter;
+        self.hidden_counter += 1;
+        n
+    }
+
+    /// `=>` (lexed as `=` `>`) or `->`.
+    fn match_fat_arrow(&mut self) -> bool {
+        if self.check(|t| matches!(t, Token::Arrow)) {
+            self.advance();
+            return true;
+        }
+        let adjacent = match (self.tokens.get(self.pos), self.tokens.get(self.pos + 1)) {
+            (
+                Some(LexedToken {
+                    token: Token::Assign,
+                    span: first,
+                    ..
+                }),
+                Some(LexedToken {
+                    token: Token::Gt,
+                    span: second,
+                    ..
+                }),
+            ) => first.end == second.start,
+            _ => false,
+        };
+        if adjacent {
+            self.pos += 2;
+        }
+        adjacent
+    }
+
+    /// `match value { "a", "b" => { ... } "c" => stmt  _ => { ... } }`.
+    ///
+    /// Desugars to a block with a hidden temporary and an `if` chain using
+    /// `==`, so it works for strings, ints and any comparable value. `_` or
+    /// `else` marks the default arm. Returns `None` (without consuming
+    /// anything) when `match` is used as an ordinary identifier.
+    fn try_parse_match(&mut self) -> Result<Option<Stmt>, String> {
+        let start = self.pos;
+        let diagnostics = self.diagnostics.len();
+        let lifted = self.lifted.len();
+        let loc = self.peek_loc();
+        self.advance(); // match
+        let subject = match self.parse_or() {
+            Ok(subject) if self.check(|t| matches!(t, Token::LBrace)) => subject,
+            _ => {
+                self.pos = start;
+                self.diagnostics.truncate(diagnostics);
+                self.lifted.truncate(lifted);
+                return Ok(None);
+            }
+        };
+        self.advance(); // {
+        let temp = format!("__match{}", self.next_hidden());
+        let mut arms: Vec<(Vec<Expr>, Stmt)> = Vec::new();
+        let mut default: Option<Stmt> = None;
+        while !self.is_at_end() && !self.check(|t| matches!(t, Token::RBrace)) {
+            let arm_loc = self.peek_loc();
+            let is_default =
+                self.check(|t| matches!(t, Token::Ident(s) if s == "_" || s == "else"));
+            let mut patterns = Vec::new();
+            if is_default {
+                self.advance();
+            } else {
+                loop {
+                    patterns.push(self.parse_or()?);
+                    if !self.match_token(|t| matches!(t, Token::Comma)) {
+                        break;
+                    }
+                }
+            }
+            if !self.match_fat_arrow() {
+                return Err(format!(
+                    "expected '=>' in match arm at {}",
+                    arm_loc.display()
+                ));
+            }
+            let body = if self.check(|t| matches!(t, Token::LBrace)) {
+                Stmt::Block {
+                    loc: self.peek_loc(),
+                    body: self.parse_block_stmts()?,
+                }
+            } else {
+                self.parse_stmt()?
+            };
+            let _ = self.match_token(|t| matches!(t, Token::Comma | Token::Semi));
+            if is_default {
+                if default.is_some() {
+                    return Err(format!(
+                        "duplicate default arm in match at {}",
+                        arm_loc.display()
+                    ));
+                }
+                default = Some(body);
+            } else {
+                arms.push((patterns, body));
+            }
+        }
+        self.expect(
+            |t| matches!(t, Token::RBrace),
+            "expected '}' to close match",
+        )?;
+        let mut chain = default.map(Box::new);
+        for (patterns, body) in arms.into_iter().rev() {
+            let mut cond: Option<Expr> = None;
+            for pattern in patterns {
+                let ploc = pattern.loc().clone();
+                let test = Expr::Binary {
+                    left: Box::new(Expr::Ident {
+                        name: temp.clone(),
+                        loc: ploc.clone(),
+                    }),
+                    op: BinOp::Eq,
+                    right: Box::new(pattern),
+                    loc: ploc.clone(),
+                };
+                cond = Some(match cond {
+                    None => test,
+                    Some(previous) => Expr::Binary {
+                        left: Box::new(previous),
+                        op: BinOp::Or,
+                        right: Box::new(test),
+                        loc: ploc,
+                    },
+                });
+            }
+            let body_loc = match &body {
+                Stmt::Block { loc, .. } => loc.clone(),
+                _ => loc.clone(),
+            };
+            chain = Some(Box::new(Stmt::If {
+                cond: cond.expect("non-default arm has a pattern"),
+                then_body: Box::new(body),
+                else_body: chain,
+                loc: body_loc,
+            }));
+        }
+        let mut body = vec![Stmt::Let {
+            name: temp,
+            ty: None,
+            init: subject,
+            loc: loc.clone(),
+        }];
+        if let Some(chain) = chain {
+            body.push(*chain);
+        }
+        Ok(Some(Stmt::Block { body, loc }))
+    }
+
+    /// `fn(a, b) { ... }` or `fn(a) => expr` in expression position. The
+    /// body is lifted into a hidden top-level function; lambdas do not
+    /// capture locals (pass what they need as arguments or keep it in
+    /// `state`).
+    fn parse_lambda(&mut self) -> Result<Expr, String> {
+        let loc = self.peek_loc();
+        self.advance(); // fn/function
+        self.expect(|t| matches!(t, Token::LParen), "expected '('")?;
+        let mut params = Vec::new();
+        if !self.check(|t| matches!(t, Token::RParen)) {
+            loop {
+                let (pname, _) = self.expect_ident()?;
+                let mut ty = None;
+                if self.match_token(|t| matches!(t, Token::Colon)) {
+                    ty = Some(self.expect_ident()?.0);
+                }
+                params.push(Param { name: pname, ty });
+                if !self.match_token(|t| matches!(t, Token::Comma)) {
+                    break;
+                }
+            }
+        }
+        self.expect(|t| matches!(t, Token::RParen), "expected ')'")?;
+        let body = if self.match_fat_arrow() {
+            let value = self.parse_expression()?;
+            vec![Stmt::Return {
+                loc: value.loc().clone(),
+                value: Some(value),
+            }]
+        } else {
+            self.parse_block_stmts()?
+        };
+        let name = format!(
+            "__lambda_{:08x}_{}",
+            hidden_file_hash(self.file.as_deref().unwrap_or("")),
+            self.next_hidden()
+        );
+        self.lifted.push(Item::Function {
+            exported: false,
+            name: name.clone(),
+            params,
+            body,
+            loc: loc.clone(),
+        });
+        Ok(Expr::Ident { name, loc })
     }
 
     fn parse_let(&mut self) -> Result<Stmt, String> {
@@ -1789,6 +2000,15 @@ impl Parser {
                 self.advance();
                 Ok(Expr::String { value: s, loc })
             }
+            Token::Ident(name)
+                if (name == "fn" || name == "function")
+                    && matches!(
+                        self.tokens.get(self.pos + 1).map(|t| &t.token),
+                        Some(Token::LParen)
+                    ) =>
+            {
+                self.parse_lambda()
+            }
             Token::Ident(name) => {
                 let name = name.clone();
                 self.advance();
@@ -1848,10 +2068,16 @@ impl Parser {
     }
 }
 
+fn hidden_file_hash(file: &str) -> u32 {
+    file.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use velvet_script_ast::{BinOp, Item, UnaryOp};
+    use velvet_script_ast::{BinOp, Expr, Item, Stmt, UnaryOp};
 
     fn parse_ok(src: &str) -> ParseResult {
         let r = parse(src).unwrap();
@@ -2404,6 +2630,66 @@ scene main {
             .items
             .iter()
             .any(|i| matches!(i, Item::Scene { .. })));
+    }
+
+    #[test]
+    fn parse_match_desugars_to_if_chain() {
+        let r = parse_ok(
+            "fn f(x) { match x { \"a\", \"b\" => { return 1 } 2 -> return 2\n _ => { return 3 } } }",
+        );
+        let Item::Function { body, .. } = &r.module.items[0] else {
+            panic!("expected function");
+        };
+        let Stmt::Block { body, .. } = &body[0] else {
+            panic!("match lowers to a block");
+        };
+        assert!(matches!(&body[0], Stmt::Let { name, .. } if name.starts_with("__match")));
+        let Stmt::If {
+            cond, else_body, ..
+        } = &body[1]
+        else {
+            panic!("expected if chain");
+        };
+        assert!(matches!(cond, Expr::Binary { op: BinOp::Or, .. }));
+        let Some(next) = else_body else {
+            panic!("second arm missing");
+        };
+        assert!(matches!(
+            next.as_ref(),
+            Stmt::If {
+                else_body: Some(_),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn match_stays_an_identifier_outside_statement_form() {
+        let r = parse_ok("fn f() { let match = 1\n match = match + 1\n match(2) }");
+        let Item::Function { body, .. } = &r.module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(body.len(), 3);
+        assert!(matches!(&body[1], Stmt::Expr { .. }));
+    }
+
+    #[test]
+    fn parse_lambdas_lift_hidden_functions() {
+        let r = parse_ok(
+            "fn f(xs) { return list_map(xs, fn(v) => v * 2) }\nlet g = fn(a, b) { return a + b }",
+        );
+        let names: Vec<_> = r
+            .module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Function { name, .. } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(names.len(), 3, "{names:?}");
+        assert!(names[1].starts_with("__lambda_") && names[2].starts_with("__lambda_"));
+        assert_ne!(names[1], names[2]);
     }
 
     #[test]

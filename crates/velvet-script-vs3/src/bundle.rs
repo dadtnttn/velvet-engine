@@ -203,7 +203,11 @@ where
 }
 
 pub(crate) fn load_path(path: &Path) -> Result<(String, BTreeMap<String, String>), Vs3Error> {
-    let root_dir = path.parent().unwrap_or_else(|| Path::new("."));
+    // `Path::new("main.vel").parent()` is `Some("")`, not `None`.
+    let root_dir = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     let canonical_root = root_dir.canonicalize().map_err(|error| {
         bundle_error(
             &root_dir.display().to_string(),
@@ -743,12 +747,12 @@ impl<'a> Rewriter<'a> {
                     _ => None,
                 };
                 if let Some(alias) = module_alias {
-                    self.diagnostics.push(Diagnostic::error(
-                        format!(
-                            "module member `{alias}.{field}` cannot be used as a value; call an exported function instead"
-                        ),
-                        loc.clone(),
-                    ));
+                    // `alias.fn` as a value is a reference to the exported
+                    // function (e.g. `list_map(xs, util.double)`).
+                    let (field, loc) = (field.clone(), loc.clone());
+                    if let Some(actual) = self.resolve_module_function(&alias, &field, &loc) {
+                        *expr = Expr::Ident { name: actual, loc };
+                    }
                 } else {
                     self.rewrite_expr(object);
                 }

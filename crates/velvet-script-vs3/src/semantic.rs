@@ -227,7 +227,10 @@ impl Validator {
                     scope.insert(
                         name.clone(),
                         Binding {
-                            ty: expected.or(found),
+                            // `let x = null` leaves the type open: the
+                            // variable is a placeholder that later receives
+                            // a map, list, number…
+                            ty: expected.or(found.filter(|ty| *ty != Vs3Type::Null)),
                             mutable: true,
                         },
                     );
@@ -669,9 +672,20 @@ impl Validator {
     ) {
         if let (Some(expected), Some(found)) = (expected, found) {
             if !expected.accepts(found) {
+                let hint = match (expected, found) {
+                    (Vs3Type::Int, Vs3Type::Float) => " (use `int(x)` to truncate)",
+                    (Vs3Type::Int, Vs3Type::String) => {
+                        " (use `int(s)` or `parse_int(s, fallback)`)"
+                    }
+                    (Vs3Type::Float, Vs3Type::String) => {
+                        " (use `float(s)` or `parse_float(s, fallback)`)"
+                    }
+                    (Vs3Type::String, _) => " (use `str(x)`)",
+                    _ => "",
+                };
                 self.error(
                     format!(
-                        "type mismatch: expected `{}`, found `{}`",
+                        "type mismatch: expected `{}`, found `{}`{hint}",
                         expected.as_str(),
                         found.as_str()
                     ),
@@ -803,6 +817,10 @@ fn native_result_type(native: NativeId, arguments: &[Option<Vs3Type>]) -> Option
                 Some(Vs3Type::Int)
             } else if arguments.contains(&Some(Vs3Type::Any)) {
                 Some(Vs3Type::Any)
+            } else if arguments.contains(&None) {
+                // An argument of unknown type (e.g. a user function result)
+                // may be an int at run time: do not guess `float`.
+                None
             } else {
                 Some(Vs3Type::Float)
             }

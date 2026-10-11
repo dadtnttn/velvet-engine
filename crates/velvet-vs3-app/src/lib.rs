@@ -12,10 +12,14 @@ mod model;
 mod platform;
 mod scene;
 mod script;
+mod storage;
 
 pub use app::{
-    capture_package, capture_package_with_action, run_package, validate_package, AppOptions, Vs3App,
+    capture_package, capture_package_with_action, profile_package, run_package, validate_package,
+    AppOptions, SaveLocation, Vs3App,
 };
 pub use assets::{AppLimits, AppManifest, AppSpec, FontSpec, ImageSpec};
 pub use model::{FrameView, RuntimeEvent, VisualCommandView};
 pub use script::ScriptRuntime;
+pub use storage::{SaveStore, MAX_SAVE_BYTES, MAX_SLOTS};
+pub use velvet_script_vs3::ProfileEntry;

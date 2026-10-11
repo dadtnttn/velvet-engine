@@ -10,6 +10,7 @@ mod debugger;
 mod math;
 mod present_host;
 mod stdlib;
+mod stdlib_ext;
 mod value;
 mod vm;
 mod vs2_host;
@@ -24,10 +25,11 @@ pub use present_host::{
     with_present_host, PresentHostState, PresentSprite,
 };
 pub use stdlib::{call_native, NativeOutput};
+pub use stdlib_ext::{json_decode, json_encode, wrap_lines};
 pub use value::Value;
 pub use velvet_script_bytecode::{
     lookup_math_constant, lookup_native, NativeId, NativePurity, NativeSpec, NativeType,
 };
-pub use vm::{run_source, CallFrameView, Vm, VmError, VmLimits, VmOutput};
+pub use vm::{run_source, CallFrameView, ProfileEntry, Vm, VmError, VmLimits, VmOutput};
 
 pub use vs2_host::{DialogueLine, LayerEntry, MenuChoice, StageChar, Vs2Host, Vs2MiniVm};

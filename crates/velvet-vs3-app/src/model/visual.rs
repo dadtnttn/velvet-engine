@@ -43,6 +43,13 @@ pub struct VisualCommandView {
     pub tile_h: i64,
     pub source_border: i64,
     pub destination_border: i64,
+    /// Text width limit in pixels (`text`, `button`); 0 = unlimited.
+    pub max_width: f32,
+    /// What to do when text exceeds its width: `ellipsis` (default),
+    /// `shrink` (scale down, then ellipsis) or `clip`.
+    pub overflow: String,
+    /// Maximum lines for `text_wrap`; the last one ends in an ellipsis.
+    pub max_lines: i64,
 }
 impl VisualCommandView {
     pub fn parse(v: &Value) -> Result<Self> {
@@ -87,6 +94,9 @@ impl VisualCommandView {
             tile_h: optional_integer(v, "tile_h"),
             source_border: optional_integer(v, "source_border"),
             destination_border: optional_integer(v, "destination_border"),
+            max_width: optional_number(v, "max_width"),
+            overflow: optional_string(v, "overflow"),
+            max_lines: optional_integer(v, "max_lines"),
         })
     }
 }
