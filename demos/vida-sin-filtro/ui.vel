@@ -431,6 +431,7 @@ function draw_card() {
         hot(186, 84, 180, 26, "tab:route")
     }
     draw_effect_chips(26, 118)
+    draw_phone_button()
     svg(282, 282, 116, 116, burst_doc(116, 116, 14, HEX_RED, HEX_INK, 4, 5))
     otext(340, 342, str(L.age), 40, C_WHITE, "impact", true)
     ctext(340, 362, plural(L.age, "AÑO", "AÑOS"), 12, C_WHITE, "bold")
@@ -443,9 +444,9 @@ function draw_card() {
     text(44, 458, clip_text(occ_label, 330, 11), 11, C_GRAY, "bold")
     text(44, 479, clip_text(occupation_text(), 320, 16), 16, C_WHITE, "bold")
     let fcol = C_YELLOW
-    if hovered("tab:fin") { fcol = C_WHITE }
-    text(44, 504, "DINERO · VER FINANZAS ›", 11, fcol, "bold")
-    hot(40, 490, 170, 46, "tab:fin")
+    if hovered("ph:app:bank") { fcol = C_WHITE }
+    text(44, 504, "DINERO · BANCO ›", 11, fcol, "bold")
+    hot(40, 490, 170, 46, "ph:app:bank")
     let mc = C_YELLOW
     if L.money < 0 { mc = C_BAD }
     text(44, 530, money_str(L.money), 22, mc, "impact")
@@ -775,6 +776,7 @@ function draw_modal(m: map) {
     if m.kind == "person" { return draw_person(m) }
     if m.kind == "minigame" { return draw_minigame() }
     if m.kind == "chat" { return draw_chat() }
+    if m.kind == "phone" { return draw_phone() }
     return null
 }
 

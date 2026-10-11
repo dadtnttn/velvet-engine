@@ -1,0 +1,1788 @@
+// @edition 3
+// El móvil: un teléfono dentro del juego con apps conectadas a todo lo demás.
+// Mensajes y llamadas, apps de citas (Flama y Alma Gemela), Velvetgram, VelvetFans,
+// VelvetHub, banco, bolsa, casino, empleos, tienda, salud, recuerdos, agenda, tu ruta,
+// tu fe y ajustes. Se abre con el botón del celular (o la tecla M) desde los 12 años.
+// Las acciones de las apps usan el prefijo "ph:"; las que ya existían (fin:, ra:,
+// act:, apply:...) se reutilizan tal cual y al terminar vuelves al móvil.
+
+const PHONE_APPS = [
+    {"id": "msgs", "n": "Mensajes", "fill": "#2fbf71", "min": 12},
+    {"id": "flama", "n": "Flama", "fill": "#ff5a36", "min": 18},
+    {"id": "alma", "n": "Alma Gemela", "fill": "#ff7ac8", "min": 18},
+    {"id": "gram", "n": "Velvetgram", "fill": "#9b3cf0", "min": 12},
+    {"id": "vfans", "n": "VelvetFans", "fill": "#1e9bff", "min": 18},
+    {"id": "vhub", "n": "VelvetHub", "fill": "#ff9a00", "min": 18},
+    {"id": "bank", "n": "Banco", "fill": "#ffd21f", "min": 12},
+    {"id": "stocks", "n": "Bolsa", "fill": "#f7f7f2", "min": 18},
+    {"id": "casino", "n": "Casino", "fill": "#0d0d0d", "min": 18},
+    {"id": "jobs", "n": "Empleos", "fill": "#3a3a3a", "min": 14},
+    {"id": "shop", "n": "Tienda", "fill": "#e3141b", "min": 12},
+    {"id": "health", "n": "Salud", "fill": "#f7f7f2", "min": 12},
+    {"id": "memories", "n": "Recuerdos", "fill": "#ffd21f", "min": 12},
+    {"id": "agenda", "n": "Agenda", "fill": "#e3141b", "min": 12},
+    {"id": "route", "n": "Mi Ruta", "fill": "#0d0d0d", "min": 12},
+    {"id": "faith", "n": "Fe", "fill": "#f7f7f2", "min": 12},
+    {"id": "settings", "n": "Ajustes", "fill": "#3a3a3a", "min": 12}
+]
+
+const PHONE_MODELS = [
+    {"n": "Ladrillo con tapa", "cost": 0, "d": "Indestructible, con juego de la viborita. Las fotos parecen pinturas impresionistas."},
+    {"n": "VelvetPhone 12", "cost": 800, "d": "Buena cámara y batería decente. Tus selfies mejoran."},
+    {"n": "VelvetPhone Pro", "cost": 2500, "d": "Tres cámaras, modo retrato y una pantalla que brilla. Más seguidores, más matches."},
+    {"n": "VelvetPhone Pro Max dorado", "cost": 12000, "d": "Bañado en oro. No hace nada distinto, pero todos lo notan."}
+]
+
+const WALLS = [["#ff2b31", "#8f0b11"], ["#2a2a2a", "#050505"], ["#ff7ac8", "#6a1546"], ["#ffd21f", "#b86b00"], ["#2f63b8", "#0b1a3d"]]
+const WALL_NAMES = ["Rojo Velvet", "Noche", "Rosa", "Oro", "Azul medianoche"]
+
+const FLAMA_LINES_GOOD = [
+    "Vi que te gusta {int}. ¿Me recomiendas algo? Quiero entender qué te apasiona.",
+    "Tu foto haciendo {int} me sacó una sonrisa. ¿Desde cuándo te gusta?",
+    "Pregunta seria: ¿{int} un domingo en la tarde o un sábado de noche?"
+]
+const FLAMA_LINES_MEH = ["Hola, ¿cómo estás?", "Hey :)", "¿Qué tal tu día?", "Hola, guap{xa}."]
+const FLAMA_LINES_BAD = [
+    "¿Eres un préstamo bancario? Porque tienes todo mi interés.",
+    "Mándame tu número, que no uso mucho la app.",
+    "¿Te dolió cuando caíste del cielo? A mí sí, me torcí el tobillo.",
+    "Holaaaa ¿estás? ¿Hola? ¿Hola??"
+]
+
+const GROUP_LINES_FAM = [
+    "Tu tía mandó un video de un gato tocando el piano. Todos respondieron con stickers.",
+    "Tu mamá preguntó en el grupo quién se comió el último tamal. Nadie confesó.",
+    "El grupo familiar organizó una comida para el domingo. Hasta el tío que nunca viene dijo que sí.",
+    "Tu abuela mandó «buenos días» con una rosa brillante y cuatro bendiciones."
+]
+const GROUP_LINES_FRIENDS = [
+    "Mandaron memes hasta las 3 a. m. Te dolió el estómago de risa.",
+    "Organizaron una salida para el viernes. Ya hay plan.",
+    "Alguien mandó una foto vergonzosa de hace diez años. Leyenda.",
+    "Debatieron dos horas sobre si la pizza con piña es delito. No llegaron a nada."
+]
+
+// ---------------------------------------------------------------- estado
+
+function ph() {
+    if L.ph == null {
+        L.ph = {
+            "model": 0, "wall": 0, "notifs": [], "unread": 0, "opened": false,
+            "card": null, "swipes": 10, "matches": [], "gold": false, "photo": 0, "bio": false, "active": false, "nmatch": 0, "dates": 0,
+            "alma": [], "quiz": false,
+            "fol": 0, "posts": 0, "official": false, "sponsor": false, "fake": false, "verified": false, "posted": false,
+            "views": 0, "vids": 0, "hverified": false, "watched": false, "streak": 0,
+            "dnd": false, "secure": false, "loc": false, "sexy_m": -100
+        }
+    }
+    return L.ph
+}
+
+// Datos de VelvetFans: en la ruta de VelvetFans son los de la ruta; si no, una cuenta propia.
+function vf() {
+    if L.route == "fans" { return L.rd }
+    if L.vf == null { L.vf = {"open": false, "subs": 0, "price": 10, "agency": false, "security": false} }
+    return L.vf
+}
+
+const FANS_IDS = ["fopen", "fprice", "fsecurity", "fagency", "fphotos", "fvideo", "flive", "fdm", "fcollab", "fpromo"]
+
+function app_def(id: string) {
+    for a in PHONE_APPS {
+        if a.id == id { return a }
+    }
+    return PHONE_APPS[0]
+}
+
+function app_visible(a: map) {
+    if L.age < a.min { return false }
+    if a.id == "route" { return L.route != null && L.route != "normal" }
+    if a.id == "faith" { return L.religion != null && L.religion != "ninguna" }
+    return true
+}
+
+function phone_apps() {
+    let out = []
+    for a in PHONE_APPS {
+        if app_visible(a) { list_push(out, a) }
+    }
+    return out
+}
+
+function phone_block() {
+    if L.age < 12 { return "Todavía no tienes celular. Tus papás dicen que a los 12." }
+    if L.jail > 0 { return "En prisión te confiscaron el celular." }
+    return ""
+}
+
+function ph_item(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["ph_" + id] != null { l = "Este mes ya" }
+    return {"action": "ph:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function ph_use(id: string) {
+    if L.used["ph_" + id] != null { return false }
+    L.used["ph_" + id] = 1
+    return true
+}
+
+// Notificación en el móvil (la más nueva primero).
+function notify(app: string, text: string) {
+    let d = ph()
+    let keep = [{"app": app, "t": text, "a": L.age, "new": true}]
+    for n in d.notifs {
+        if len(keep) < 12 { list_push(keep, n) }
+    }
+    d.notifs = keep
+    d.unread += 1
+    return null
+}
+
+function app_new(id: string) {
+    let c = 0
+    for n in ph().notifs {
+        if n.new && n.app == id { c += 1 }
+    }
+    return c
+}
+
+// ---------------------------------------------------------------- navegación
+
+function phone_go(app: string) {
+    if phone_block() != "" { return info("El móvil", phone_block()) }
+    let d = ph()
+    if !d.opened {
+        d.opened = true
+        hito_once("first_phone", "Vida", "Tu primer celular")
+    }
+    d.unread = 0
+    G.ph_on = true
+    G.back_pid = 0
+    G.modal = {"kind": "phone"}
+    G.modal_t0 = G.t
+    phone_nav(app)
+    return null
+}
+
+function phone_nav(app: string) {
+    let id = app
+    if id != "" && !app_visible(app_def(id)) { id = "" }
+    G.ph_app = id
+    G.menu_cat = 0
+    G.menu_page = 0
+    G.menu_t0 = G.t
+    if id != "" {
+        for n in ph().notifs {
+            if n.app == id { n.new = false }
+        }
+    }
+    return null
+}
+
+function phone_close() {
+    G.ph_on = false
+    G.ph_app = ""
+    G.modal = null
+    return null
+}
+
+// Después de cualquier acción hecha desde el móvil, se vuelve a él.
+function phone_resume() {
+    if !G.ph_on || G.modal != null { return false }
+    if G.mode != "game" || !L.alive || phone_block() != "" {
+        G.ph_on = false
+        return false
+    }
+    G.modal = {"kind": "phone"}
+    G.modal_t0 = G.t - 1.0
+    return true
+}
+
+function phone_action(action: string) {
+    if action == "ph:open" { return phone_go("") }
+    if action == "ph:close" { return phone_close() }
+    if action == "ph:home" {
+        if G.ph_app == "" { return phone_close() }
+        return phone_nav("")
+    }
+    if str_starts_with(action, "ph:app:") {
+        let id = str_replace(action, "ph:app:", "")
+        if G.ph_on && G.modal != null && G.modal.kind == "phone" { return phone_nav(id) }
+        return phone_go(id)
+    }
+    if action == "ph:fl:card" { return null }
+    G.modal = null
+    if str_starts_with(action, "ph:chat:") {
+        let p = ph_person(action, "ph:chat:")
+        if p != null { start_chat(p, false) }
+        return null
+    }
+    if str_starts_with(action, "ph:call:") {
+        let p = ph_person(action, "ph:call:")
+        if p != null { return ph_call(p) }
+        return null
+    }
+    if str_starts_with(action, "ph:gift:") {
+        let p = ph_person(action, "ph:gift:")
+        if p != null { return open_gift(p) }
+        return null
+    }
+    if str_starts_with(action, "ph:fm:") {
+        let x = ph_stranger(action, "ph:fm:")
+        if x != null { return open_match(x) }
+        return null
+    }
+    if str_starts_with(action, "ph:al:") {
+        let x = ph_stranger(action, "ph:al:")
+        if x != null { return open_alma(x) }
+        return null
+    }
+    if str_starts_with(action, "ph:fl:") { return flama_action(str_replace(action, "ph:fl:", "")) }
+    if str_starts_with(action, "ph:pm:") { return love_action(str_replace(action, "ph:pm:", "")) }
+    if str_starts_with(action, "ph:grp:") { return group_action(str_replace(action, "ph:grp:", "")) }
+    if str_starts_with(action, "ph:gr:") { return gram_action(str_replace(action, "ph:gr:", "")) }
+    if str_starts_with(action, "ph:hb:") { return hub_action(str_replace(action, "ph:hb:", "")) }
+    if str_starts_with(action, "ph:sh:") { return shop_action(str_replace(action, "ph:sh:", "")) }
+    if str_starts_with(action, "ph:set:") { return settings_action(str_replace(action, "ph:set:", "")) }
+    if str_starts_with(action, "ph:alq") { return alma_quiz() }
+    return null
+}
+
+function ph_person(action: string, prefix: string) {
+    for p in L.people {
+        if p.alive && action == prefix + str(p.id) { return p }
+    }
+    return null
+}
+
+function ph_stranger(action: string, prefix: string) {
+    let d = ph()
+    for x in d.matches {
+        if action == prefix + str(x.id) { return x }
+    }
+    for x in d.alma {
+        if action == prefix + str(x.id) { return x }
+    }
+    if d.card != null && action == prefix + str(d.card.id) { return d.card }
+    return null
+}
+
+function ph_find(id: int) {
+    let d = ph()
+    for x in d.matches {
+        if x.id == id { return x }
+    }
+    for x in d.alma {
+        if x.id == id { return x }
+    }
+    if d.card != null && d.card.id == id { return d.card }
+    return null
+}
+
+// ---------------------------------------------------------------- apps: categorías y listas
+
+function app_cats(id: string) {
+    if id == "msgs" {
+        if ph_love() != null { return ["Chats", "Llamar", "Pareja", "Grupos"] }
+        return ["Chats", "Llamar", "Grupos"]
+    }
+    if id == "flama" { return ["Descubrir", "Matches", "Perfil"] }
+    if id == "alma" { return ["Sugerencias", "Test", "Perfil"] }
+    if id == "gram" {
+        if L.route == "creador" { return ["Publicar", "Explorar", "Perfil", "Canal", "Negocio"] }
+        return ["Publicar", "Explorar", "Perfil"]
+    }
+    if id == "vfans" { return ["Contenido", "Negocio"] }
+    if id == "vhub" {
+        if L.route == "porno" || job_is("porn") { return ["Ver", "Subir", "Canal", "Rodajes", "Negocio"] }
+        return ["Ver", "Subir", "Canal"]
+    }
+    if id == "bank" { return ["Resumen", "Banco", "Bienes"] }
+    if id == "stocks" { return ["Bolsa", "Noticias"] }
+    if id == "jobs" { return ["Ofertas", "Chambas", "Estudios"] }
+    if id == "shop" { return ["Regalos", "Para ti", "Lujos"] }
+    if id == "health" { return ["Salud", "Hábitos"] }
+    if id == "memories" { return HITO_CATS }
+    if id == "agenda" { return ["Pendientes", "Efectos", "Misiones"] }
+    if id == "route" { return route_cats() }
+    if id == "settings" { return ["Teléfono", "Privacidad"] }
+    return []
+}
+
+function app_block(id: string) {
+    if id == "route" { return route_block() }
+    if (id == "bank" || id == "stocks" || id == "casino") && fin_block() != "" { return fin_block() }
+    if id == "vfans" && L.route == "creador" { return "" }
+    return ""
+}
+
+function app_items(id: string, cat: string) {
+    if id == "msgs" { return msgs_items(cat) }
+    if id == "flama" { return flama_items(cat) }
+    if id == "alma" { return alma_items(cat) }
+    if id == "gram" {
+        if cat == "Canal" { return creator_items("Contenido") }
+        if cat == "Negocio" { return creator_items("Negocio") }
+        return gram_items(cat)
+    }
+    if id == "vfans" { return fans_items(cat) }
+    if id == "vhub" {
+        if cat == "Rodajes" || cat == "Negocio" { return porno_items(cat) }
+        return hub_items(cat)
+    }
+    if id == "bank" || id == "stocks" { return fin_items(cat) }
+    if id == "casino" { return fin_items("Casino") }
+    if id == "jobs" { return jobs_app_items(cat) }
+    if id == "shop" { return shop_items(cat) }
+    if id == "health" {
+        if cat == "Hábitos" { return habit_items() }
+        return health_items()
+    }
+    if id == "memories" { return my_hito_items(cat) }
+    if id == "agenda" {
+        if cat == "Efectos" { return effect_items() }
+        if cat == "Misiones" { return mission_items() }
+        return agenda_items()
+    }
+    if id == "route" { return route_items(cat) }
+    if id == "faith" { return faith_items() }
+    if id == "settings" { return settings_items(cat) }
+    return []
+}
+
+// Línea de estado bajo el nombre de cada app.
+function app_sub(id: string) {
+    let d = ph()
+    if id == "msgs" { return str(len(ph_sorted())) + " contactos" }
+    if id == "flama" {
+        let s = "Me gusta: " + str(d.swipes) + " · Matches: " + str(len(d.matches))
+        if d.gold { s = "FLAMA GOLD · Matches: " + str(len(d.matches)) }
+        return s
+    }
+    if id == "alma" { return "Sugerencias del mes: " + str(len(alma_list())) }
+    if id == "gram" {
+        let s = big_num(d.fol) + " seguidores · " + str(d.posts) + " publicaciones"
+        if d.verified { s = s + " · VERIFICAD" + str_upper(oa(L.gender)) }
+        return s
+    }
+    if id == "vfans" {
+        let f = vf()
+        if !f.open { return "Cuenta sin abrir" }
+        return big_num(f.subs) + " suscriptores · $" + str(f.price) + "/mes"
+    }
+    if id == "vhub" { return big_num(d.views) + " vistas · " + str(d.vids) + " videos" }
+    if id == "bank" {
+        fin_init()
+        return "Efectivo " + money_str(L.money) + " · Ahorro " + money_str(L.savings)
+    }
+    if id == "stocks" {
+        fin_init()
+        return "Tu portafolio: " + money_str(portfolio_value())
+    }
+    if id == "casino" { return "Saldo: " + money_str(L.money) + " · Juega con responsabilidad" }
+    if id == "jobs" { return occupation_text() }
+    if id == "shop" { return "Saldo: " + money_str(L.money) }
+    if id == "health" { return "Salud " + str(L.health) + "% · Felicidad " + str(L.happy) + "%" }
+    if id == "memories" {
+        let n = 0
+        if L.hitos != null { n = len(L.hitos) }
+        return str(n) + " recuerdos guardados"
+    }
+    if id == "agenda" { return str(len(pending_people())) + " personas esperan saber de ti" }
+    if id == "route" { return route_def(L.route).n }
+    if id == "faith" { return religion_text() }
+    if id == "settings" { return PHONE_MODELS[d.model].n }
+    return ""
+}
+
+// ---------------------------------------------------------------- Mensajes
+
+function ph_rank(p: map) {
+    let g = rel_group(p)
+    if g == "partner" || p.rel == "amante" { return 0 }
+    if g == "parent" || g == "child" || g == "sibling" { return 1 }
+    if g == "friend" { return 2 }
+    if g == "ex" || p.rel == "ligue" { return 4 }
+    return 3
+}
+
+function ph_sorted() {
+    let out = []
+    let r = 0
+    while r < 5 {
+        for p in L.people {
+            if p.alive && can_chat(p) && ph_rank(p) == r { list_push(out, p) }
+        }
+        r += 1
+    }
+    return out
+}
+
+// Pareja (o amante) a quien van los mensajes románticos.
+function ph_love() {
+    let p = partner()
+    if p != null && p.alive { return p }
+    for q in L.people {
+        if q.alive && q.rel == "amante" { return q }
+    }
+    return null
+}
+
+function seen_text(p: map) {
+    let n = neglect_months(p)
+    if n <= 0 { return "Hablaron este mes" }
+    if n == 1 { return "Hace un mes" }
+    if n >= 24 { return "Hace " + str(n / 12) + " años" }
+    return "Hace " + str(n) + " meses"
+}
+
+function msgs_items(cat: string) {
+    let items = []
+    if cat == "Grupos" { return group_items() }
+    if cat == "Pareja" { return love_items() }
+    for p in ph_sorted() {
+        if cat == "Llamar" {
+            let l = ""
+            if L.used["ph_call" + str(p.id)] != null { l = "Este mes ya" }
+            list_push(items, {"action": "ph:call:" + str(p.id), "t": "Llamar a " + p.first, "s": rel_label(p) + " · " + seen_text(p), "desc": "Una llamada de verdad, con voz. Más cercanía que un mensaje.", "lock": l, "pid": p.id})
+        } else {
+            let s = rel_label(p) + " · " + str_lower(mood_name(p)) + " · " + seen_text(p)
+            list_push(items, {"action": "ph:chat:" + str(p.id), "t": full_name(p), "s": s, "desc": "Abrir el chat.", "lock": "", "pid": p.id})
+        }
+    }
+    if len(items) == 0 {
+        list_push(items, {"action": "ph:none", "t": "Sin contactos", "s": "Conoce gente", "desc": "Tu lista de contactos está vacía. Sal a conocer gente.", "lock": ""})
+    }
+    return items
+}
+
+function ph_call(p: map) {
+    if !ph_use("call" + str(p.id)) { return info("Llamada", "Ya hablaste con " + p.first + " este mes.") }
+    let g = rel_group(p)
+    let m = mood(p)
+    let gain_b = rint(3, 6)
+    let msg = "Hablaron un buen rato. Te alegró escuchar su voz."
+    if g == "parent" {
+        msg = pick(["«¿Ya comiste? ¿Te estás abrigando?» Hablaron media hora.", "Te contó todos los chismes del barrio. Todos.", "Te dijo que está orgullos" + oa(p.gender) + " de ti. Te quedaste callad" + oa(L.gender) + " un momento."])
+    } else if g == "grandparent" {
+        msg = "Lloró de emoción al escucharte. Te contó la misma historia de siempre y la escuchaste completa."
+        gain_b += 3
+    } else if g == "partner" || p.rel == "amante" {
+        msg = pick(["Hablaron una hora sin darse cuenta.", "Ninguno quería colgar primero. «Cuelga tú.» «No, tú.»", "Se quedaron en silencio en la línea, solo escuchándose. Fue bonito."])
+    } else if g == "child" || g == "grandchild" {
+        msg = "Te contó su semana con lujo de detalle. Te encanta escucharl" + by_gender(p.gender, "o", "a") + "."
+    } else if g == "ex" {
+        msg = "Llamaste a tu ex. Silencio incómodo, risas nerviosas y un «cuídate» al final."
+        gain_b = rint(1, 4)
+        let q = partner()
+        if q != null && q.id != p.id && chance(25) {
+            bond_gain(q, -6)
+            msg = msg + " " + q.first + " vio la llamada en tu registro y no le gustó nada."
+        }
+    } else if g == "friend" {
+        msg = pick(["Se rieron como cuando eran más jóvenes.", "Te pidió consejo y se lo diste. Te lo agradeció mucho.", "Quedaron de verse pronto. Esta vez va en serio."])
+    }
+    if m == "triste" {
+        msg = msg + " Notaste su voz apagada y le levantaste el ánimo."
+        p.mood = "feliz"
+        gain_b += 3
+    }
+    if m == "enojado" && chance(40) {
+        msg = p.first + " te colgó a los dos minutos. Sigue de malas."
+        gain_b = 0
+    }
+    if gain_b > 0 { bond_gain(p, gain_b) }
+    msg = msg + bond_bonus(p, "talk")
+    L.happy += 2
+    return finish("Llamada con " + p.first, msg, "g")
+}
+
+function group_items() {
+    let items = []
+    let fam = 0
+    let fr = 0
+    for p in L.people {
+        if !p.alive || !can_chat(p) { continue }
+        if is_family(p) { fam += 1 }
+        if rel_group(p) == "friend" { fr += 1 }
+    }
+    let fl = ""
+    if fam == 0 { fl = "Sin familia" }
+    list_push(items, ph_item("grp:fam", "Chat familiar", "Toda la familia +", "Memes de tu tía, cadenas de buenos días y fotos del perro. Todos se sienten más cerca.", fl))
+    let frl = ""
+    if fr == 0 { frl = "Sin amigos" }
+    list_push(items, ph_item("grp:friends", "Chat de amigos", "Amigos +, felicidad", "Memes a las 3 a. m. y planes que a veces sí se cumplen.", frl))
+    if L.job != null {
+        list_push(items, ph_item("grp:work", "Grupo del trabajo", "Desempeño", "Responder rápido al jefe y mandar el sticker correcto. Política de oficina digital.", ""))
+    } else if L.study != null || L.age < 18 {
+        list_push(items, ph_item("grp:school", "Grupo de la escuela", "Calificaciones", "Tareas compartidas, apuntes y rumores. Mucho rumor.", ""))
+    }
+    return items
+}
+
+function group_action(id: string) {
+    if !ph_use("grp:" + id) { return info("Grupos", "Ya revisaste ese grupo este mes.") }
+    if id == "fam" {
+        for p in L.people {
+            if p.alive && can_chat(p) && is_family(p) {
+                bond_gain(p, 2)
+                touch(p)
+            }
+        }
+        L.happy += 2
+        return finish("Chat familiar", pick(GROUP_LINES_FAM), "g")
+    }
+    if id == "friends" {
+        for p in L.people {
+            if p.alive && can_chat(p) && rel_group(p) == "friend" {
+                bond_gain(p, 2)
+                touch(p)
+            }
+        }
+        L.happy += 4
+        return finish("Chat de amigos", pick(GROUP_LINES_FRIENDS), "g")
+    }
+    if id == "work" {
+        if L.job == null { return null }
+        L.job.perf = clamp100(L.job.perf + 3)
+        career_xp(3)
+        if chance(20) {
+            L.happy -= 3
+            return finish("Grupo del trabajo", "Mandaste un meme al grupo del trabajo por error. Tu jefe respondió con un «?».", "b")
+        }
+        return finish("Grupo del trabajo", "Respondiste rápido y bien. Tu jefe dejó un pulgar arriba. Desempeño +3.", "g")
+    }
+    if id == "school" {
+        gain("know", 2)
+        if L.grades != null { L.grades = clamp100(L.grades + 2) }
+        return finish("Grupo de la escuela", "Alguien compartió los apuntes completos. Te salvaron el examen.", "g")
+    }
+    return null
+}
+
+// Mensajes con tu pareja (o tu amante).
+function love_items() {
+    let items = []
+    let p = ph_love()
+    if p == null { return items }
+    let n = p.first
+    let adult = both_adults(p)
+    list_push(items, ph_item("pm:gm", "Mensaje de buenos días a " + n, "Cercanía", "Un «buenos días, ¿dormiste bien?» cambia todo el día.", ""))
+    list_push(items, ph_item("pm:song", "Dedicarle una canción", "Cercanía · música", "Le mandas esa canción que te recuerda a " + by_gender(p.gender, "él", "ella") + ".", ""))
+    list_push(items, ph_item("pm:video", "Videollamada", "Tiempo de calidad", "Verse las caras aunque estén lejos.", ""))
+    list_push(items, ph_item("pm:plan", "Planear una cita sorpresa", "Adivina qué le gusta", "Elige un plan. Si atinas a lo que le gusta, ganas muchísimo.", ""))
+    if adult {
+        list_push(items, ph_item("pm:sext", "Mensajes atrevidos", "+18 · pasión", "Coqueteo subido de tono por chat. Lo que pasa en el chat se queda en el chat... casi siempre.", ""))
+    }
+    if p.bond < 55 {
+        list_push(items, ph_item("pm:sorry", "Pedir perdón por mensaje", "Arreglar las cosas", "A veces cuesta menos escribirlo que decirlo.", ""))
+    }
+    list_push(items, ph_item("pm:snoop", "Revisar su celular a escondidas", "Desconfianza", "Lo dejó desbloqueado en la mesa... Quizá descubras algo. Quizá te descubra a ti.", ""))
+    if p.id == L.partner_id {
+        let s = "Desactivado"
+        if ph().loc { s = "ACTIVADO" }
+        list_push(items, {"action": "ph:pm:loc", "t": "Compartir ubicación en tiempo real", "s": s, "desc": "Saben siempre dónde está el otro. Da tranquilidad... y hace muy difícil esconder cosas.", "lock": ""})
+    }
+    return items
+}
+
+function love_action(id: string) {
+    let p = ph_love()
+    if p == null { return null }
+    if id == "loc" {
+        let d = ph()
+        d.loc = !d.loc
+        if d.loc {
+            bond_gain(p, 4)
+            return finish("Ubicación", "Ahora " + p.first + " y tú comparten ubicación. Le dio mucha tranquilidad.", "g")
+        }
+        if npc_style(p) == "celoso" {
+            bond_gain(p, -6)
+            return finish("Ubicación", "Dejaste de compartir tu ubicación. " + p.first + " te preguntó tres veces por qué.", "b")
+        }
+        return finish("Ubicación", "Dejaste de compartir tu ubicación.", "n")
+    }
+    if !ph_use("pm:" + id) { return info(p.first, "Ya lo hiciste este mes.") }
+    if id == "gm" {
+        bond_gain(p, 3)
+        let msg = pick(["Te respondió con un corazón y «¿cómo amaneciste tú?».", "«Ya te extrañaba.» Te sacó una sonrisa toda la mañana.", "Te mandó una foto de su desayuno. Romance moderno."])
+        if mood(p) == "triste" {
+            bond_gain(p, 3)
+            msg = msg + " Andaba triste y tu mensaje le cambió el día."
+        }
+        return finish(p.first, msg + bond_bonus(p, "talk"), "g")
+    }
+    if id == "song" {
+        bond_gain(p, 2)
+        return finish(p.first, "Le dedicaste una canción. La escuchó en repetición." + bond_bonus(p, "concert"), "g")
+    }
+    if id == "video" {
+        bond_gain(p, 4)
+        L.happy += 2
+        return finish(p.first, "Videollamada de dos horas. Se quedaron dormidos con la llamada abierta." + bond_bonus(p, "time"), "g")
+    }
+    if id == "plan" { return open_plan(p) }
+    if id == "sext" {
+        if !both_adults(p) { return null }
+        bond_gain(p, 4)
+        L.happy += 4
+        let msg = pick(["Los mensajes subieron de tono hasta que ninguno pudo concentrarse en el trabajo.", "Un mensaje atrevido, una respuesta más atrevida y una cita esa misma noche.", "Te sonrojaste en pleno transporte público. Valió la pena."])
+        if p.wild >= 60 || len(shared_kinks(p)) > 0 {
+            bond_gain(p, 2)
+        }
+        if !ph().secure && chance(4) {
+            L.happy -= 12
+            hito_once("phone_leak", "Vida", "Se filtraron tus fotos íntimas")
+            msg = msg + " Días después, alguien hackeó tu nube y tus fotos aparecieron en un foro. Activa la seguridad del móvil."
+            return finish(p.first, msg, "b")
+        }
+        return finish(p.first, msg + bond_bonus(p, "sexting"), "x")
+    }
+    if id == "sorry" {
+        bond_gain(p, 6)
+        if p.mood == "enojado" { p.mood = "aburrido" }
+        return finish(p.first, "Escribiste un mensaje largo y honesto. Tardó en responder, pero respondió: «Gracias. Yo también lo siento.»" + bond_bonus(p, "apologize"), "g")
+    }
+    if id == "snoop" {
+        L.karma -= 1
+        if p.cheated_you == true || (npc_style(p) == "libre" && p.bond < 40 && chance(40)) {
+            p.cheated_you = true
+            L.happy -= 12
+            bond_gain(p, -10)
+            hito_once("found_cheat", "Amor", "Descubriste mensajes que no querías ver")
+            return finish("Su celular", "Encontraste mensajes con alguien más. Coquetos. Recientes. Te temblaron las manos. Puedes reclamárselo en su pantalla de vínculo.", "b")
+        }
+        if chance(35) {
+            bond_gain(p, -10)
+            return finish("Su celular", p.first + " te encontró con su celular en la mano. «¿En serio? ¿No confías en mí?» La confianza se resintió.", "b")
+        }
+        return finish("Su celular", "No encontraste nada raro: fotos de comida, memes y tu nombre con un corazón. Te sentiste fatal por desconfiar.", "n")
+    }
+    return null
+}
+
+// Cita sorpresa: adivina lo que le gusta.
+function open_plan(p: map) {
+    profile(p)
+    let pool = list_slice(INTERESTS, 0, len(INTERESTS))
+    shuffle(G.rng, pool)
+    let opts = [p.interests[rint(0, 1)]]
+    for i in pool {
+        if len(opts) >= 3 { break }
+        if !list_contains(opts, i) { list_push(opts, i) }
+    }
+    shuffle(G.rng, opts)
+    let labels = []
+    for o in opts { list_push(labels, "Algo con " + INTEREST_NAMES[o]) }
+    list_push(labels, "Mejor otro día")
+    open_choice("CITA SORPRESA", "¿Qué plan le preparas a " + p.first + "? " + interests_text(p) + ".", labels, ["", "", "", ""], "ph_plan", {"person": p, "opts": opts})
+    return null
+}
+
+function resolve_plan(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    if index >= 3 { return finish(p.first, "Lo dejaste para otro día.", "n") }
+    let o = ctx.opts[index]
+    profile(p)
+    if list_contains(p.interests, o) {
+        bond_gain(p, 10)
+        L.happy += 5
+        if !list_contains(p.known_int, o) { list_push(p.known_int, o) }
+        add_hito(p, "La cita sorpresa perfecta")
+        return finish(p.first, "¡Le encantó! Le preparaste algo con " + INTEREST_NAMES[o] + " y le brillaron los ojos. «¿Cómo sabías?»", "g")
+    }
+    if p.dislike == o {
+        bond_gain(p, -4)
+        p.known_dis = true
+        return finish(p.first, "Fallaste: a " + p.first + " no le gusta nada " + INTEREST_NAMES[o] + ". Fingió una sonrisa toda la tarde.", "b")
+    }
+    bond_gain(p, 3)
+    return finish(p.first, "Estuvo bien. No era su plan favorito, pero valoró el detalle.", "n")
+}
+
+// ---------------------------------------------------------------- Flama (citas casuales)
+
+function flama_card() {
+    let d = ph()
+    if d.card == null {
+        let x = stranger()
+        x.bio = fmt(pick(BIOS), {"person": x})
+        x.km = rint(1, 25)
+        x.heat = 10
+        profile(x)
+        d.card = x
+        G.ph_card_t0 = G.t
+    }
+    return d.card
+}
+
+function flama_odds(x: map) {
+    let d = ph()
+    let odds = 35 + (looks_eff() - x.looks) / 2 + rank("charm") * 4 + flirt_bonus() + d.photo * 5 + d.model * 3
+    if d.bio { odds += 5 }
+    if d.gold { odds += 10 }
+    if has_trait("carisma") { odds += 5 }
+    return clamp(odds, 5, 95)
+}
+
+function flama_items(cat: string) {
+    let d = ph()
+    let items = []
+    if cat == "Matches" {
+        for x in d.matches {
+            list_push(items, {"action": "ph:fm:" + str(x.id), "t": x.first + ", " + str(x.age), "s": "Química " + str(x.heat) + "% · a " + str(x.km) + " km", "desc": x.bio, "lock": "", "mid": x.id})
+        }
+        if len(items) == 0 {
+            list_push(items, {"action": "ph:none", "t": "Aún sin matches", "s": "Desliza en Descubrir", "desc": "Dale «me gusta» a quien te guste. Si es mutuo, aparecerá aquí.", "lock": ""})
+        }
+        return items
+    }
+    let pl = ""
+    if d.photo >= 3 { pl = "Ya son perfectas" }
+    if pl == "" && L.money < 300 { pl = "$300" }
+    list_push(items, ph_item("fl:photo", "Fotos profesionales", "$300 · más matches", "Un fotógrafo, buena luz y tu mejor ángulo. Calidad: " + str(d.photo) + "/3.", pl))
+    let bl = ""
+    if d.bio { bl = "Ya la tienes" }
+    list_push(items, ph_item("fl:bio", "Escribir una bio ingeniosa", "Encanto o inteligencia", "Una bio que haga reír a cualquiera. Sin «busco Player 2».", bl))
+    let gs = "$30/mes"
+    if d.gold { gs = "Activo · cancelar" }
+    list_push(items, {"action": "ph:fl:gold", "t": "Flama Gold", "s": gs, "desc": "Me gusta ilimitados, un súper like gratis y más visibilidad.", "lock": ""})
+    let as = "Pausado"
+    if d.active { as = "ACTIVO" }
+    list_push(items, {"action": "ph:fl:active", "t": "Tu perfil de citas", "s": as, "desc": "Si tienes pareja y tu perfil sigue activo, quizá te encuentre deslizando. Peligro.", "lock": ""})
+    list_push(items, {"action": "ph:none", "t": "Estadísticas", "s": str(d.nmatch) + " matches · " + str(d.dates) + " citas", "desc": "Tu historial en las apps de citas.", "lock": ""})
+    return items
+}
+
+function flama_action(id: string) {
+    let d = ph()
+    if id == "no" {
+        d.card = null
+        flama_card()
+        return null
+    }
+    if id == "yes" || id == "super" {
+        let x = flama_card()
+        if id == "yes" && !d.gold && d.swipes <= 0 { return info("Flama", "Te quedaste sin «me gusta» este mes. Espera al próximo o hazte Flama Gold.") }
+        let odds = flama_odds(x)
+        if id == "super" {
+            if d.gold && ph_use("superfree") {
+                odds += 25
+            } else if L.money >= 50 {
+                L.money -= 50
+                odds += 25
+            } else {
+                return info("Flama", "Un súper like cuesta $50.")
+            }
+        } else if !d.gold {
+            d.swipes -= 1
+        }
+        d.active = true
+        d.card = null
+        if chance(odds) {
+            if id == "super" { x.heat = 35 }
+            ph_add_match(x)
+            G.ph_msg = "¡ES UN MATCH!"
+            G.ph_msg_t0 = G.t
+            hito_once("first_match", "Amor", "Tu primer match en Flama")
+            list_push(G.toasts, {"head": "FLAMA", "title": "¡MATCH CON " + str_upper(x.first) + "!", "sub": "Escríbele desde Matches.", "t0": G.t})
+        } else {
+            G.ph_msg = "Sin match... siguiente"
+            G.ph_msg_t0 = G.t
+        }
+        flama_card()
+        return null
+    }
+    if id == "gold" {
+        d.gold = !d.gold
+        if d.gold {
+            L.money -= 30
+            return finish("Flama Gold", "Ahora eres Flama Gold: me gusta ilimitados. Se cobra $30 cada mes.", "g")
+        }
+        return finish("Flama Gold", "Cancelaste Flama Gold.", "n")
+    }
+    if id == "active" {
+        d.active = !d.active
+        if d.active { return finish("Tu perfil", "Tu perfil de citas está activo otra vez.", "n") }
+        return finish("Tu perfil", "Pausaste tu perfil. Nadie te verá deslizando.", "n")
+    }
+    if !ph_use("fl:" + id) { return info("Flama", "Ya lo hiciste este mes.") }
+    if id == "photo" {
+        if L.money < 300 || d.photo >= 3 { return null }
+        L.money -= 300
+        d.photo += 1
+        return finish("Fotos", "El fotógrafo te hizo ver como protagonista de película. Calidad de fotos: " + str(d.photo) + "/3.", "g")
+    }
+    if id == "bio" {
+        if rank("charm") + rank("know") >= 5 || chance(40) {
+            d.bio = true
+            return finish("Tu bio", "Escribiste una bio genial. Hasta tu amig" + oa(L.gender) + " te pidió que le escribieras la suya.", "g")
+        }
+        return finish("Tu bio", "Escribiste algo, lo borraste, lo volviste a escribir... y quedó «Hola :)». Inténtalo el próximo mes.", "n")
+    }
+    return null
+}
+
+function ph_add_match(x: map) {
+    let d = ph()
+    let keep = [x]
+    for m in d.matches {
+        if len(keep) < 8 && m.id != x.id { list_push(keep, m) }
+    }
+    d.matches = keep
+    d.nmatch += 1
+    return null
+}
+
+function ph_drop(x: map) {
+    let d = ph()
+    let keep = []
+    for m in d.matches {
+        if m.id != x.id { list_push(keep, m) }
+    }
+    d.matches = keep
+    let keep2 = []
+    for m in d.alma {
+        if m.id != x.id { list_push(keep2, m) }
+    }
+    d.alma = keep2
+    return null
+}
+
+function open_match(x: map) {
+    let ctx = {"person": x}
+    let fl = ""
+    if x.flirted == L.tm { fl = "Este mes ya" }
+    open_choice(
+        "MATCH: " + str_upper(x.first) + ", " + str(x.age),
+        "«" + x.bio + "» Química: " + str(x.heat) + "%. Cuanta más química, más fácil que acepte salir contigo.",
+        ["Escribirle un mensaje", "Invitarl" + by_gender(x.gender, "o", "a") + " a una cita", "Proponer verse esta noche", "Deshacer el match", "Volver"],
+        [fl, "", "", "", ""],
+        "ph_match",
+        ctx
+    )
+    return null
+}
+
+function resolve_match(index: int, ctx: map) {
+    G.modal = null
+    let x = ctx.person
+    let d = ph()
+    if index == 0 { return open_flirt(x) }
+    if index == 1 {
+        let odds = 25 + x.heat / 2 + rank("charm") * 4 + compat(x) / 5 + flirt_bonus()
+        if chance(odds) {
+            ph_drop(x)
+            d.dates += 1
+            L.happy += 8
+            gain("charm", 2)
+            x.rel = "ligue"
+            let msg = "La cita con " + x.first + " fue increíble: hablaron hasta que cerraron el lugar."
+            msg = msg + special("new_partner", ctx)
+            hito_once("app_love", "Amor", "Encontraste a alguien en una app de citas")
+            add_hito(x, "Se conocieron en Flama")
+            return finish("Cita", msg, "x")
+        }
+        x.heat = max(0, x.heat - 10)
+        L.happy -= 3
+        return finish("Cita", pick([x.first + " te dejó plantad" + oa(L.gender) + ". Esperaste 40 minutos con dos cafés.", x.first + " dijo que «no estaba buscando nada serio ahorita».", "La cita fue un desastre: habló de su ex toda la noche."]), "b")
+    }
+    if index == 2 {
+        let odds = 20 + x.heat / 2 + (looks_eff() - x.looks) / 3 + rank("charm") * 3 + flirt_bonus()
+        if x.wild >= 60 { odds += 15 }
+        if chance(odds) {
+            ph_drop(x)
+            d.dates += 1
+            return open_hookup(ctx)
+        }
+        x.heat = max(0, x.heat - 5)
+        return finish("Flama", x.first + " te respondió: «Uy, vas muy rápido. Mejor conozcámonos primero.»", "n")
+    }
+    if index == 3 {
+        ph_drop(x)
+        return finish("Flama", "Deshiciste el match con " + x.first + ".", "n")
+    }
+    return null
+}
+
+// Escribirle a un match: elige el mensaje (uno toca lo que le gusta, otro es genérico, otro da pena).
+function open_flirt(x: map) {
+    profile(x)
+    let ctx = {"person": x}
+    let good = str_replace(pick(FLAMA_LINES_GOOD), "{int}", INTEREST_NAMES[x.interests[0]])
+    let lines = [good, fmt(pick(FLAMA_LINES_MEH), ctx), pick(FLAMA_LINES_BAD)]
+    let order = [0, 1, 2]
+    shuffle(G.rng, order)
+    let labels = []
+    for i in order { list_push(labels, lines[i]) }
+    list_push(labels, "No escribir nada")
+    ctx["order"] = order
+    open_choice("ESCRIBIRLE A " + str_upper(x.first), "Le gusta " + INTEREST_NAMES[x.interests[0]] + " y " + INTEREST_NAMES[x.interests[1]] + ". ¿Qué le escribes?", labels, ["", "", "", ""], "ph_flirt", ctx)
+    return null
+}
+
+function resolve_flirt(index: int, ctx: map) {
+    G.modal = null
+    let x = ctx.person
+    if index >= 3 { return null }
+    x.flirted = L.tm
+    let kind = ctx.order[index]
+    if kind == 0 {
+        x.heat = clamp100(x.heat + 25 + rank("charm") * 2)
+        return finish(x.first, "Te respondió con tres párrafos y una pregunta de vuelta. ¡Hay química! (" + str(x.heat) + "%)", "x")
+    }
+    if kind == 1 {
+        x.heat = clamp100(x.heat + 6)
+        return finish(x.first, "«Bien, ¿y tú?» La conversación sobrevive, pero sin chispa. Química " + str(x.heat) + "%.", "n")
+    }
+    x.heat = max(0, x.heat - 15)
+    if chance(30) {
+        ph_drop(x)
+        return finish(x.first, x.first + " deshizo el match. Ese mensaje no fue buena idea.", "b")
+    }
+    return finish(x.first, "Te dejó en visto. Química " + str(x.heat) + "%.", "b")
+}
+
+// ---------------------------------------------------------------- Alma Gemela (citas serias)
+
+function alma_list() {
+    let d = ph()
+    if len(d.alma) == 0 && d.alma_m != L.tm {
+        d.alma_m = L.tm
+        let i = 0
+        while i < 3 {
+            let x = stranger()
+            x.bio = fmt(pick(BIOS), {"person": x})
+            x.km = rint(1, 40)
+            x.heat = 0
+            profile(x)
+            if d.quiz {
+                let mine = my_interests()
+                x.interests = [mine[rint(0, len(mine) - 1)], x.interests[1]]
+                if list_contains(mine, x.dislike) { x.dislike = x.interests[1] }
+            }
+            list_push(d.alma, x)
+            i += 1
+        }
+    }
+    return d.alma
+}
+
+function alma_items(cat: string) {
+    let d = ph()
+    let items = []
+    if cat == "Test" {
+        let ql = ""
+        if d.quiz { ql = "Ya lo hiciste" }
+        list_push(items, {"action": "ph:alq", "t": "Test de compatibilidad", "s": "Minijuego · mejores sugerencias", "desc": "Responde rápido y con honestidad. Después, tus sugerencias compartirán tus aficiones.", "lock": ql})
+        list_push(items, {"action": "ph:none", "t": "Tus aficiones", "s": interests_mine_text(), "desc": "Lo que te gusta. Alma Gemela te junta con gente que lo comparte.", "lock": ""})
+        return items
+    }
+    if cat == "Perfil" {
+        let as = "Pausado"
+        if d.active { as = "ACTIVO" }
+        list_push(items, {"action": "ph:fl:active", "t": "Tu perfil de citas", "s": as, "desc": "El mismo perfil que en Flama. Si tienes pareja, mejor páusalo.", "lock": ""})
+        list_push(items, {"action": "ph:none", "t": "Estadísticas", "s": str(d.dates) + " citas en total", "desc": "Alma Gemela es para relaciones serias: menos ligues, más futuro.", "lock": ""})
+        return items
+    }
+    for x in alma_list() {
+        list_push(items, {"action": "ph:al:" + str(x.id), "t": x.first + ", " + str(x.age), "s": "Compatibilidad " + str(compat(x)) + "%", "desc": x.bio, "lock": "", "mid": x.id})
+    }
+    if len(items) == 0 {
+        list_push(items, {"action": "ph:none", "t": "Sin sugerencias", "s": "Vuelve el próximo mes", "desc": "Cada mes llegan perfiles nuevos.", "lock": ""})
+    }
+    return items
+}
+
+function interests_mine_text() {
+    let names = []
+    for i in my_interests() { list_push(names, INTEREST_NAMES[i]) }
+    return str_join(names, ", ")
+}
+
+function open_alma(x: map) {
+    let ctx = {"person": x}
+    let wl = ""
+    if x.flirted == L.tm { wl = "Este mes ya" }
+    let ints = INTEREST_NAMES[x.interests[0]] + " y " + INTEREST_NAMES[x.interests[1]]
+    open_choice(
+        str_upper(x.first) + " · " + str(compat(x)) + "%",
+        "«" + x.bio + "» Le gusta " + ints + ". Química: " + str(x.heat) + "%.",
+        ["Escribirle un mensaje largo y sincero", "Proponerle una cita", "No es para mí", "Volver"],
+        [wl, "", "", ""],
+        "ph_alma",
+        ctx
+    )
+    return null
+}
+
+function resolve_alma(index: int, ctx: map) {
+    G.modal = null
+    let x = ctx.person
+    let d = ph()
+    if index == 0 {
+        x.flirted = L.tm
+        x.heat = clamp100(x.heat + compat(x) / 4 + rank("kind") * 3 + rint(0, 10))
+        d.active = true
+        return finish(x.first, "Le escribiste sobre tus sueños y tus miedos. Te respondió igual de sincer" + oa(x.gender) + ". Química " + str(x.heat) + "%.", "x")
+    }
+    if index == 1 {
+        d.active = true
+        let odds = compat(x) * 2 / 3 + x.heat / 2 + 5
+        if chance(odds) {
+            ph_drop(x)
+            d.dates += 1
+            x.rel = "ligue"
+            x.bond = max(x.bond, 70)
+            x.known_int = [x.interests[0], x.interests[1]]
+            L.happy += 10
+            let msg = "Cena, caminata y una plática que duró hasta el amanecer. Con " + x.first + " todo se sintió fácil."
+            msg = msg + special("new_partner", ctx)
+            hito_once("app_love", "Amor", "Encontraste a alguien en una app de citas")
+            add_hito(x, "Se conocieron en Alma Gemela")
+            return finish("Alma Gemela", msg, "x")
+        }
+        x.heat = max(0, x.heat - 10)
+        return finish("Alma Gemela", x.first + " dijo que prefería conocerte un poco más antes de verse. Escríbele primero.", "n")
+    }
+    if index == 2 {
+        ph_drop(x)
+        return finish("Alma Gemela", "Descartaste a " + x.first + ".", "n")
+    }
+    return null
+}
+
+function alma_quiz() {
+    if ph().quiz { return null }
+    return mg_start("quiz", "Test de compatibilidad", "phone", {"kind": "alma"})
+}
+
+function phone_mg_result(score: any, ctx: map) {
+    let d = ph()
+    if ctx.kind == "alma" {
+        d.quiz = true
+        d.alma = []
+        d.alma_m = -1
+        alma_list()
+        return finish("Alma Gemela", "Test terminado (" + mg_rating(score) + "). Tus nuevas sugerencias comparten tus aficiones.", "g")
+    }
+    if ctx.kind == "selfie" {
+        let g = 10 + score * (looks_eff() + d.model * 10) / 40 + d.fol * score / 2000
+        d.fol += g
+        d.posts += 1
+        d.posted = true
+        L.happy += 3
+        hito_once("first_post", "Vida", "Tu primera publicación en Velvetgram")
+        return finish("Selfie", "Tu selfie quedó " + mg_rating(score) + ". +" + big_num(g) + " seguidores.", "g")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- Velvetgram
+
+function gram_items(cat: string) {
+    let d = ph()
+    let items = []
+    let adult = L.age >= 18
+    if cat == "Publicar" {
+        list_push(items, ph_item("gr:selfie", "Subir una selfie", "Minijuego · seguidores", "Encuentra la luz, el ángulo y el momento exacto.", ""))
+        let p = partner()
+        if p != null && p.alive {
+            let t = "Foto con " + p.first
+            let s = "Cercanía, seguidores"
+            if !d.official {
+                t = "Hacer oficial lo de " + p.first
+                s = "¡Gran paso!"
+            }
+            list_push(items, ph_item("gr:couple", t, s, "Una foto juntos para que todo el mundo lo sepa.", ""))
+        }
+        for q in L.people {
+            if q.alive && q.rel == "amante" {
+                list_push(items, ph_item("gr:lover", "Subir una foto con " + q.first, "Muy arriesgado", "Tu amante te pidió una foto juntos. Si tu pareja la ve...", ""))
+                break
+            }
+        }
+        list_push(items, ph_item("gr:friends", "Foto con tus amigos", "Amistad, seguidores", "Una foto en grupo, alguien con los ojos cerrados.", ""))
+        if len(kids_alive()) > 0 { list_push(items, ph_item("gr:kids", "Foto con tus hijos", "Familia", "Tu orgullo, en una foto.", "")) }
+        let ll = ""
+        if len(L.assets) == 0 && L.money < 100000 { ll = "Sin lujos que presumir" }
+        list_push(items, ph_item("gr:lux", "Presumir tus lujos", "Muchos seguidores · riesgo", "Autos, viajes y champaña. La envidia da likes... y da ideas a los ladrones.", ll))
+        if adult { list_push(items, ph_item("gr:spicy", "Foto atrevida", "+18 · seguidores", "Ropa mínima, filtro máximo. No a todos en tu vida les va a gustar.", "")) }
+        list_push(items, ph_item("gr:story", "Historia de tu día", "Felicidad", "Tu café, tu perro, tu atardecer. Lo normal.", ""))
+        return items
+    }
+    if cat == "Explorar" {
+        let p = partner()
+        if p != null && p.alive { list_push(items, ph_item("gr:likep", "Dar like a las fotos de " + p.first, "Cercanía", "Comentar con corazones. Lo nota más de lo que crees.", "")) }
+        let ex = find_rel_where("ex", 0)
+        if ex != null { list_push(items, ph_item("gr:stalk", "Stalkear a tu ex", "Mala idea", "Solo vas a ver una foto. Solo una. Cuidado con el dedo.", "")) }
+        list_push(items, ph_item("gr:celebs", "Ver la vida de los famosos", "Comparación", "Vidas perfectas, cuerpos perfectos, vacaciones perfectas. Ajá.", ""))
+        list_push(items, ph_item("gr:fight", "Discutir en los comentarios", "Valor · drama", "Alguien está equivocado en internet y no puedes permitirlo.", ""))
+        if adult { list_push(items, ph_item("gr:dm", "Mandar un mensaje a alguien que te gusta", "Ligue", "Respondes a su historia con un fuego. Puede salir algo.", "")) }
+        return items
+    }
+    list_push(items, {"action": "ph:none", "t": big_num(d.fol) + " seguidores", "s": str(d.posts) + " publicaciones", "desc": "Publica cada mes para crecer. Si dejas de publicar, pierdes seguidores.", "lock": ""})
+    let bl = ""
+    if L.money < 500 { bl = "$500" }
+    if d.fake { bl = "Ya compraste" }
+    list_push(items, ph_item("gr:buy", "Comprar seguidores", "$500 · trampa", "Dos mil seguidores que son bots. Si te descubren, ridículo público.", bl))
+    let sl = ""
+    if d.fol < 10000 { sl = "10 mil seguidores" }
+    if d.sponsor { sl = "Ya tienes" }
+    list_push(items, {"action": "ph:gr:sponsor", "t": "Aceptar patrocinios", "s": "Dinero cada mes", "desc": "Marcas que te pagan por mencionarlas. Más seguidores, más dinero.", "lock": sl})
+    let vl = ""
+    if d.fol < 100000 && L.fame < 40 { vl = "100 mil o fama 40" }
+    if d.verified { vl = "Ya verificad" + oa(L.gender) }
+    list_push(items, {"action": "ph:gr:verify", "t": "Verificar tu cuenta", "s": "Insignia azul · fama", "desc": "La insignia que dice «sí, soy yo».", "lock": vl})
+    return items
+}
+
+function gram_action(id: string) {
+    let d = ph()
+    if id == "sponsor" {
+        if d.fol < 10000 || d.sponsor { return null }
+        d.sponsor = true
+        hito_once("sponsor", "Trabajo", "Tu primer patrocinio en redes")
+        return finish("Patrocinios", "Una marca de bebidas te pagará cada mes por mencionarla. Eres influencer oficialmente.", "g")
+    }
+    if id == "verify" {
+        if d.verified { return null }
+        d.verified = true
+        L.fame = clamp100(L.fame + 5)
+        hito_once("verified", "Vida", "Verificaron tu cuenta de Velvetgram")
+        return finish("Verificación", "Tienes la insignia azul. Tus publicaciones llegan a más gente.", "g")
+    }
+    if !ph_use("gr:" + id) { return info("Velvetgram", "Ya lo hiciste este mes.") }
+    let boost = 100 + d.model * 10
+    if d.verified { boost += 30 }
+    if id == "selfie" { return mg_start("timing", "La selfie perfecta", "phone", {"kind": "selfie"}) }
+    if id == "couple" {
+        let p = partner()
+        if p == null { return null }
+        let g = (20 + d.fol / 40) * boost / 100
+        d.fol += g
+        d.posts += 1
+        d.posted = true
+        bond_gain(p, 4)
+        if !d.official {
+            d.official = true
+            bond_gain(p, 8)
+            add_hito(p, "Hicieron oficial su relación en redes")
+            return finish("Velvetgram", "Subiste la foto con " + p.first + ": «oficialmente ocupad" + oa(L.gender) + "». Le dio mucha ilusión. +" + big_num(g) + " seguidores.", "g")
+        }
+        return finish("Velvetgram", "Otra foto con " + p.first + ". Tus seguidores los aman juntos. +" + big_num(g) + " seguidores.", "g")
+    }
+    if id == "lover" {
+        let lover = find_rel_where("amante", 0)
+        if lover == null { return null }
+        bond_gain(lover, 8)
+        d.posts += 1
+        let p = partner()
+        if p != null && chance(60) {
+            p.bond -= 40
+            L.happy -= 15
+            if p.bond < 25 {
+                breakup()
+                return finish("Velvetgram", "Subiste la foto con " + lover.first + ". " + p.first + " la vio en minutos. Se acabó: te dejó.", "b")
+            }
+            return finish("Velvetgram", "Subiste la foto con " + lover.first + ". " + p.first + " la vio. La pelea se escuchó en todo el edificio.", "b")
+        }
+        return finish("Velvetgram", "Subiste la foto con " + lover.first + " y la borraste a la hora. Nadie la vio... crees.", "x")
+    }
+    if id == "friends" {
+        for q in L.people {
+            if q.alive && rel_group(q) == "friend" {
+                bond_gain(q, 2)
+                touch(q)
+            }
+        }
+        let g = (10 + d.fol / 60) * boost / 100
+        d.fol += g
+        d.posts += 1
+        d.posted = true
+        return finish("Velvetgram", "La foto con tus amigos fue un éxito: todos la compartieron. +" + big_num(g) + " seguidores.", "g")
+    }
+    if id == "kids" {
+        for k in kids_alive() { bond_gain(k, 2) }
+        let g = (10 + d.fol / 50) * boost / 100
+        d.fol += g
+        d.posts += 1
+        d.posted = true
+        L.happy += 4
+        return finish("Velvetgram", "Una foto con tus hijos. Los comentarios se llenaron de corazones. +" + big_num(g) + " seguidores.", "g")
+    }
+    if id == "lux" {
+        let g = (60 + d.fol / 20) * boost / 100
+        d.fol += g
+        d.posts += 1
+        d.posted = true
+        L.karma -= 1
+        if chance(15) {
+            let loss = min(max(L.money, 0), rint(2000, 15000))
+            L.money -= loss
+            return finish("Velvetgram", "Presumiste tus lujos... con tu ubicación activada. Te robaron " + money_str(loss) + " esa misma semana.", "b")
+        }
+        return finish("Velvetgram", "Tus fotos de lujo explotaron: +" + big_num(g) + " seguidores y muchos comentarios envidiosos.", "g")
+    }
+    if id == "spicy" {
+        let g = (40 + d.fol / 25 + looks_eff()) * boost / 100
+        d.fol += g
+        d.posts += 1
+        d.posted = true
+        let msg = "La foto atrevida arrasó: +" + big_num(g) + " seguidores."
+        let p = partner()
+        if p != null && npc_style(p) == "celoso" {
+            bond_gain(p, -6)
+            msg = msg + " A " + p.first + " no le hizo ninguna gracia."
+        }
+        if L.faith >= 50 && religion_def(L.religion).strict >= 2 {
+            for q in L.people {
+                if q.alive && (q.rel == "padre" || q.rel == "madre") { bond_gain(q, -5) }
+            }
+            msg = msg + " Tus papás la vieron. Silencio en el grupo familiar."
+        }
+        return finish("Velvetgram", msg, "x")
+    }
+    if id == "story" {
+        d.fol += 2 + d.fol / 200
+        L.happy += 2
+        return finish("Velvetgram", pick(["Subiste tu café con espuma en forma de corazón. 14 likes.", "Un atardecer precioso, sin filtro. Bueno, con uno.", "Una historia de tu día. Tu mamá fue la primera en verla."]), "g")
+    }
+    if id == "likep" {
+        let p = partner()
+        if p == null { return null }
+        bond_gain(p, 2)
+        return finish(p.first, "Le diste like a todas sus fotos y le comentaste un corazón. Le sacaste una sonrisa." + bond_bonus(p, "talk"), "g")
+    }
+    if id == "stalk" {
+        let ex = find_rel_where("ex", 0)
+        if ex == null { return null }
+        L.happy -= 3
+        if chance(25) {
+            ex.bond = clamp100(ex.bond + 6)
+            return finish("Velvetgram", "Le diste like por accidente a una foto de " + ex.first + " de hace tres años. Quisiste desaparecer. Te respondió con un «jaja hola».", "b")
+        }
+        return finish("Velvetgram", ex.first + " se ve feliz. Muy feliz. Demasiado feliz. Cerraste la app.", "b")
+    }
+    if id == "celebs" {
+        if L.fame >= 40 {
+            L.happy += 4
+            return finish("Velvetgram", "Entre las fotos de famosos... apareces tú. Raro, pero bonito.", "g")
+        }
+        L.happy -= 2
+        return finish("Velvetgram", "Una hora viendo vidas perfectas. Tu sillón nunca se vio tan triste.", "b")
+    }
+    if id == "fight" {
+        gain("guts", 2)
+        L.happy -= 2
+        if chance(15) {
+            d.fol += 500 + d.fol / 10
+            L.fame = clamp100(L.fame + 1)
+            return finish("Velvetgram", "Tu respuesta se hizo viral. Medio internet te apoya y el otro medio te odia. +500 seguidores.", "n")
+        }
+        return finish("Velvetgram", "Escribiste un ensayo. Te respondieron con un emoji de payaso. Perdiste.", "b")
+    }
+    if id == "dm" {
+        if chance(35 + rank("charm") * 6 + flirt_bonus()) {
+            let x = stranger()
+            x.bio = fmt(pick(BIOS), {"person": x})
+            x.km = rint(1, 20)
+            x.heat = 30
+            profile(x)
+            ph_add_match(x)
+            return finish("Velvetgram", x.first + " respondió tu fueguito con otro fueguito. Ahora se escriben: aparece en tus matches de Flama.", "x")
+        }
+        return finish("Velvetgram", "Visto. Sin respuesta. El fueguito se apagó.", "b")
+    }
+    if id == "buy" {
+        if L.money < 500 || d.fake { return null }
+        L.money -= 500
+        d.fol += 2000
+        d.fake = true
+        return finish("Velvetgram", "Dos mil seguidores nuevos... que se llaman «user8472619». Nadie comenta, pero el número se ve bien.", "n")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- VelvetHub (+18)
+
+function hub_items(cat: string) {
+    let d = ph()
+    let items = []
+    let p = partner()
+    if cat == "Ver" {
+        list_push(items, ph_item("hb:watch", "Ver videos", "Felicidad · cuidado", "Un rato a solas. Con moderación, no pasa nada; sin ella, se vuelve hábito.", ""))
+        if p != null && p.alive && both_adults(p) { list_push(items, ph_item("hb:together", "Ver algo con " + p.first, "Complicidad", "Puede darles ideas... o ser incómodo. Depende de " + by_gender(p.gender, "él", "ella") + ".", "")) }
+        let el = ""
+        if len(L.tags) >= MAX_KINKS { el = "Ya sabes lo que te gusta" }
+        list_push(items, ph_item("hb:explore", "Explorar categorías nuevas", "Descubrir un gusto", "Curiosidad. Quizá descubras algo de ti.", el))
+        return items
+    }
+    if cat == "Subir" {
+        list_push(items, ph_item("hb:solo", "Grabar un video en solitario", "Vistas · dinero", "Tú, una cámara y buena luz. Puedes ocultar tu cara.", ""))
+        let cl = ""
+        if p == null || !p.alive || !both_adults(p) { cl = "Necesitas pareja" }
+        list_push(items, ph_item("hb:couple", "Proponer un video en pareja", "Solo si acepta", "Se lo propones con calma. Si dice que no, es no.", cl))
+        let ol = ""
+        if d.vids < 3 { ol = "3 videos" }
+        list_push(items, ph_item("hb:collab", "Colaborar con otro creador", "Muchas vistas · riesgo", "Un video con otra persona de la plataforma. Más vistas; también riesgo de ITS.", ol))
+        return items
+    }
+    list_push(items, {"action": "ph:none", "t": big_num(d.views) + " vistas", "s": str(d.vids) + " videos", "desc": "Ganas dinero cada mes según tus vistas. Tus videos viejos siguen sumando.", "lock": ""})
+    list_push(items, {"action": "ph:none", "t": "Ingreso estimado", "s": money_str(hub_income()) + "/mes", "desc": "Con el canal verificado ganas el doble por vista.", "lock": ""})
+    let vl = ""
+    if d.views < 50000 { vl = "50 mil vistas" }
+    if d.hverified { vl = "Ya verificado" }
+    list_push(items, {"action": "ph:hb:verify", "t": "Verificar tu canal", "s": "Ganas el doble", "desc": "Insignia de creador verificado.", "lock": vl})
+    let dl = ""
+    if d.vids == 0 { dl = "Sin videos" }
+    list_push(items, {"action": "ph:hb:delete", "t": "Borrar todos tus videos", "s": "Empezar de cero", "desc": "Internet no olvida del todo, pero ayuda.", "lock": dl})
+    return items
+}
+
+function hub_income() {
+    let d = ph()
+    let v = d.views / 250
+    if d.hverified { v = v * 2 }
+    return v
+}
+
+function hub_action(id: string) {
+    let d = ph()
+    if id == "verify" {
+        if d.views < 50000 || d.hverified { return null }
+        d.hverified = true
+        return finish("VelvetHub", "Canal verificado. Tus videos ahora pagan el doble.", "x")
+    }
+    if id == "delete" {
+        d.views = 0
+        d.vids = 0
+        return finish("VelvetHub", "Borraste todos tus videos. Te sientes más liger" + oa(L.gender) + ".", "n")
+    }
+    if !ph_use("hb:" + id) { return info("VelvetHub", "Ya lo hiciste este mes.") }
+    let p = partner()
+    if id == "watch" {
+        d.watched = true
+        L.happy += 4
+        if d.streak >= 8 { return finish("VelvetHub", "Otra vez. Ya ni lo disfrutas tanto, pero no puedes parar.", "b") }
+        return finish("VelvetHub", "Un rato a solas con la pantalla. Te relajaste.", "x")
+    }
+    if id == "together" {
+        if p == null { return null }
+        if p.wild >= 40 || len(shared_kinks(p)) > 0 {
+            bond_gain(p, 6)
+            L.happy += 5
+            let msg = "Les dio muchas ideas. La noche terminó mucho mejor de lo que empezó."
+            if p.tags != null && len(p.tags) > 0 && chance(50) {
+                msg = msg + " Descubriste que a " + p.first + " le gusta: " + kink_name(p.tags[0], p.gender) + "."
+            }
+            return finish(p.first, msg, "x")
+        }
+        bond_gain(p, -3)
+        return finish(p.first, "Fue incómodo. " + p.first + " prefirió poner una serie. No pasa nada: a cada quien lo suyo.", "n")
+    }
+    if id == "explore" {
+        if len(L.tags) >= MAX_KINKS { return null }
+        if chance(45) {
+            for k in random_kinks(len(KINKS)) {
+                if !list_contains(L.tags, k) {
+                    list_push(L.tags, k)
+                    return finish("VelvetHub", "Descubriste algo que no sabías que te gustaba: " + kink_name(k, L.gender) + ".", "x")
+                }
+            }
+        }
+        return finish("VelvetHub", "Viste de todo un poco. Nada te convenció.", "n")
+    }
+    if id == "solo" {
+        open_choice("VIDEO EN SOLITARIO", "¿Muestras tu cara? Más vistas si la muestras... pero cualquiera podría reconocerte.", ["Con máscara (anónimo)", "Mostrando la cara", "Mejor no"], ["", "", ""], "ph_solo", {})
+        return null
+    }
+    if id == "couple" {
+        if p == null || !both_adults(p) { return null }
+        let ctx = {"person": p}
+        open_choice("PROPONER UN VIDEO", "Le preguntas a " + p.first + " con calma si le gustaría grabar un video juntos para VelvetHub. Puede decir que no.", ["Proponérselo con cariño", "Mejor ni preguntar"], ["", ""], "ph_couple", ctx)
+        return null
+    }
+    if id == "collab" {
+        let x = stranger()
+        let g = rint(3000, 12000) * (100 + looks_eff()) / 100
+        if L.route == "porno" || job_is("porn") { g = g * 2 }
+        d.views += g
+        d.vids += 1
+        L.money += g / 10
+        let msg = "Grabaste con " + x.first + ", otr" + oa(x.gender) + " creador" + by_gender(x.gender, "", "a") + " de la plataforma. +" + big_num(g) + " vistas."
+        msg = msg + sex_with(x)
+        return finish("VelvetHub", msg, "x")
+    }
+    return null
+}
+
+function resolve_solo(index: int, ctx: map) {
+    G.modal = null
+    let d = ph()
+    if index == 2 { return finish("VelvetHub", "Cerraste la cámara.", "n") }
+    let g = rint(200, 1500) * (100 + looks_eff()) / 100
+    if index == 1 { g = g * 2 }
+    if L.route == "porno" || job_is("porn") { g = g * 2 }
+    d.views += g
+    d.vids += 1
+    hito_once("first_upload", "Vida", "Subiste tu primer video a VelvetHub")
+    let msg = "Subiste tu video: +" + big_num(g) + " vistas."
+    if index == 1 && chance(12) && L.route != "porno" && !job_is("porn") {
+        L.fame = clamp100(L.fame + 2)
+        for q in L.people {
+            if q.alive && is_family(q) && q.age >= 18 { bond_gain(q, -8) }
+        }
+        msg = msg + " Alguien de tu familia te reconoció. La próxima comida familiar será larga."
+        return finish("VelvetHub", msg, "b")
+    }
+    return finish("VelvetHub", msg, "x")
+}
+
+function resolve_couple(index: int, ctx: map) {
+    G.modal = null
+    let p = ctx.person
+    let d = ph()
+    if index == 1 { return finish(p.first, "Mejor no preguntaste.", "n") }
+    let odds = p.wild / 2 + p.bond / 3 + len(shared_kinks(p)) * 10
+    if has_kink("exhib") { odds += 10 }
+    if p.wild < 25 { odds = 0 }
+    if chance(odds) {
+        let g = rint(2000, 8000) * (100 + looks_eff()) / 100
+        d.views += g
+        d.vids += 1
+        bond_gain(p, 4)
+        add_hito(p, "Grabaron su primer video juntos")
+        return finish(p.first, p.first + " dijo que sí, con una sonrisa traviesa. Grabaron con máscaras y mucha complicidad. +" + big_num(g) + " vistas.", "x")
+    }
+    bond_gain(p, -2)
+    return finish(p.first, "«No, eso no es para mí.» Respetaste su respuesta y cambiaron de tema. Quedó un poco de incomodidad.", "n")
+}
+
+// ---------------------------------------------------------------- Empleos, tienda, agenda, ajustes
+
+function jobs_app_items(cat: string) {
+    let items = []
+    if cat == "Chambas" {
+        if L.age < 16 {
+            list_push(items, {"action": "ph:none", "t": "Las chambas empiezan a los 16", "s": "Paciencia", "desc": "Por ahora, a estudiar.", "lock": ""})
+            return items
+        }
+        for k in GIG_PLACE_ORDER {
+            for it in gig_items(k) {
+                if it.lock == "" { list_push(items, it) }
+            }
+        }
+        return items
+    }
+    if cat == "Estudios" {
+        for it in study_items("uni") { list_push(items, it) }
+        for it in study_items("tec") { list_push(items, it) }
+        return items
+    }
+    for f in FIELD_ORDER {
+        for it in job_items_for(f) {
+            if it.lock == "" { list_push(items, it) }
+        }
+    }
+    if len(items) == 0 {
+        list_push(items, {"action": "ph:none", "t": "Sin ofertas para ti", "s": "Estudia o gana experiencia", "desc": "Ninguna vacante coincide con tu perfil todavía.", "lock": ""})
+    }
+    return items
+}
+
+function shop_items(cat: string) {
+    let items = []
+    if cat == "Regalos" {
+        for p in ph_sorted() {
+            if p.rel == "ex" || p.rel == "ligue" { continue }
+            list_push(items, {"action": "ph:gift:" + str(p.id), "t": "Regalo para " + p.first, "s": rel_label(p) + " · a domicilio", "desc": "Se lo envías a su casa con una tarjeta.", "lock": "", "pid": p.id})
+        }
+        if len(items) == 0 { list_push(items, {"action": "ph:none", "t": "Nadie a quien regalar", "s": "", "desc": "Conoce gente primero.", "lock": ""}) }
+        return items
+    }
+    if cat == "Lujos" {
+        if L.age < 18 {
+            list_push(items, {"action": "ph:none", "t": "Los lujos, a los 18", "s": "", "desc": "Sin tarjeta no hay compras grandes.", "lock": ""})
+            return items
+        }
+        for asset in ASSETS {
+            let lock = ""
+            if list_contains(L.assets, asset.t) {
+                lock = "Ya lo tienes"
+            } else if L.money < asset.cost {
+                lock = money_str(asset.cost)
+            }
+            list_push(items, {"action": "buy:" + asset.id, "t": asset.t, "s": money_str(asset.cost), "desc": "Presume tu " + str_lower(asset.t) + ". Felicidad y Encanto.", "lock": lock})
+        }
+        return items
+    }
+    list_push(items, shop_item("food", "Pedir comida a domicilio", 30, "Hamburguesa, papas y cero ganas de cocinar.", 12))
+    list_push(items, shop_item("game", "Videojuego nuevo", 70, "El que todos están jugando.", 12))
+    list_push(items, shop_item("book", "Libro de autoayuda", 20, "«Cómo dejar de procrastinar» (lo leerás mañana).", 12))
+    list_push(items, shop_item("clothes", "Ropa de marca", 1500, "Te ves y te sientes mejor.", 14))
+    list_push(items, shop_item("skin", "Cosméticos premium", 400, "Piel de comercial.", 14))
+    list_push(items, shop_item("lingerie", "Ropa interior sexy", 300, "Para sentirte irresistible por unos meses.", 18))
+    list_push(items, shop_item("toys", "Juguetes íntimos (envío discreto)", 400, "Caja sin logo. El repartidor no sabe nada.", 18))
+    return items
+}
+
+function shop_item(id: string, t: string, cost: int, desc: string, min_age: int) {
+    let l = ""
+    if L.age < min_age { l = "Edad " + str(min_age) }
+    if l == "" && L.money < cost { l = money_str(cost) }
+    return ph_item("sh:" + id, t, money_str(cost), desc, l)
+}
+
+function shop_action(id: string) {
+    let costs = {"food": 30, "game": 70, "book": 20, "clothes": 1500, "skin": 400, "lingerie": 300, "toys": 400}
+    let c = costs[id]
+    if c == null || L.money < c { return null }
+    if !ph_use("sh:" + id) { return info("Tienda", "Ya lo compraste este mes.") }
+    L.money -= c
+    if id == "food" {
+        L.happy += 3
+        L.health -= 1
+        return finish("Tienda", "Llegó caliente y en 20 minutos. El repartidor merece propina.", "g")
+    }
+    if id == "game" {
+        L.happy += 5
+        gain("skill", 1)
+        return finish("Tienda", "Lo jugaste todo el fin de semana. Valió cada centavo.", "g")
+    }
+    if id == "book" {
+        L.smarts = clamp100(L.smarts + 2)
+        gain("know", 2)
+        return finish("Tienda", "Lo leíste de un jalón. Algo se te quedó.", "g")
+    }
+    if id == "clothes" {
+        L.looks = clamp100(L.looks + 2)
+        L.happy += 4
+        gain("charm", 1)
+        return finish("Tienda", "Ropa nueva, actitud nueva. Te ves increíble.", "g")
+    }
+    if id == "skin" {
+        L.looks = clamp100(L.looks + 1)
+        L.happy += 2
+        return finish("Tienda", "Tu piel brilla. Literalmente.", "g")
+    }
+    if id == "lingerie" {
+        ph().sexy_m = L.tm
+        L.happy += 3
+        return finish("Tienda", "Te la probaste frente al espejo. Te sientes irresistible: más éxito ligando por unos meses.", "x")
+    }
+    if id == "toys" {
+        L.happy += 6
+        if !has_kink("juguetes") && len(L.tags) < MAX_KINKS && chance(40) {
+            list_push(L.tags, "juguetes")
+            return finish("Tienda", "Llegó en una caja sin logo. Descubriste un nuevo gusto: " + kink_name("juguetes", L.gender) + ".", "x")
+        }
+        return finish("Tienda", "Llegó en una caja sin logo. El repartidor no sospechó nada. Creo.", "x")
+    }
+    return null
+}
+
+// Personas con las que no hablas hace tiempo.
+function pending_people() {
+    let out = []
+    for p in ph_sorted() {
+        if p.rel == "ex" || p.rel == "ligue" { continue }
+        if neglect_months(p) >= 3 { list_push(out, p) }
+    }
+    return out
+}
+
+function agenda_items() {
+    let items = []
+    let p = partner()
+    if p != null && p.alive && p.since != null {
+        let yrs = L.age - p.since
+        list_push(items, {"action": "ph:none", "t": "Con " + p.first + ": " + str(yrs) + " " + plural(yrs, "año", "años"), "s": bond_state(p), "desc": "Desde que tenías " + str(p.since) + " años. Cercanía " + str(p.bond) + "%.", "lock": "", "pid": p.id})
+    }
+    for q in pending_people() {
+        let l = ""
+        if L.used["ph_call" + str(q.id)] != null { l = "Este mes ya" }
+        list_push(items, {"action": "ph:call:" + str(q.id), "t": "Llamar a " + q.first, "s": rel_label(q) + " · " + str_lower(seen_text(q)), "desc": "Hace tiempo que no sabes de " + q.first + ". La distancia enfría cualquier relación.", "lock": l, "pid": q.id})
+    }
+    if L.pregnant { list_push(items, {"action": "ph:none", "t": "Consulta prenatal", "s": "Bebé en camino", "desc": "Cuídate mucho estos meses.", "lock": ""}) }
+    if len(items) == 0 { list_push(items, {"action": "ph:none", "t": "Estás al día", "s": "Nada pendiente", "desc": "Hablaste con todos hace poco. Bien hecho.", "lock": ""}) }
+    return items
+}
+
+function settings_items(cat: string) {
+    let d = ph()
+    let items = []
+    if cat == "Privacidad" {
+        let ds = "Desactivado"
+        if d.dnd { ds = "ACTIVADO" }
+        list_push(items, {"action": "ph:set:dnd", "t": "No molestar", "s": ds, "desc": "Nadie te escribe por sorpresa. A tu pareja quizá no le guste que no contestes.", "lock": ""})
+        let sl = ""
+        if d.secure { sl = "Ya activada" }
+        if sl == "" && L.money < 100 { sl = "$100" }
+        list_push(items, {"action": "ph:set:secure", "t": "Seguridad y doble factor", "s": "$100", "desc": "Evita que hackeen tu nube y filtren tus fotos.", "lock": sl})
+        let ex = find_rel_where("ex", 0)
+        let bl = ""
+        if ex == null { bl = "Sin ex" }
+        list_push(items, ph_item("set:block", "Bloquear a tu ex", "Pasar la página", "Ojos que no ven, corazón que sana más rápido.", bl))
+        return items
+    }
+    let i = 0
+    while i < len(PHONE_MODELS) {
+        let m = PHONE_MODELS[i]
+        let l = ""
+        let sub = money_str(m.cost)
+        if i == d.model {
+            sub = "EL TUYO"
+        } else if i < d.model {
+            l = "Ya tienes uno mejor"
+        } else if L.money < m.cost {
+            l = money_str(m.cost)
+        }
+        list_push(items, {"action": "ph:set:model" + str(i), "t": m.n, "s": sub, "desc": m.d, "lock": l, "done": i == d.model})
+        i += 1
+    }
+    list_push(items, {"action": "ph:set:wall", "t": "Cambiar fondo de pantalla", "s": WALL_NAMES[d.wall], "desc": "Un poco de color.", "lock": ""})
+    return items
+}
+
+function settings_action(id: string) {
+    let d = ph()
+    if id == "wall" {
+        d.wall = (d.wall + 1) % len(WALLS)
+        return null
+    }
+    if id == "dnd" {
+        d.dnd = !d.dnd
+        if d.dnd { return finish("No molestar", "Modo no molestar activado. Paz y silencio.", "n") }
+        return finish("No molestar", "Ya puedes recibir mensajes otra vez.", "n")
+    }
+    if id == "secure" {
+        if d.secure || L.money < 100 { return null }
+        L.money -= 100
+        d.secure = true
+        return finish("Seguridad", "Doble factor activado. Tu nube está a salvo.", "g")
+    }
+    if id == "block" {
+        if !ph_use("set:block") { return null }
+        L.heartbreak = max(0, L.heartbreak - 6)
+        L.happy += 3
+        return finish("Bloqueo", "Bloqueaste a tu ex en todas partes. Respiraste hondo. Duele menos.", "g")
+    }
+    let i = 1
+    while i < len(PHONE_MODELS) {
+        if id == "model" + str(i) {
+            let m = PHONE_MODELS[i]
+            if i <= d.model || L.money < m.cost { return null }
+            L.money -= m.cost
+            d.model = i
+            L.happy += 4 + i * 2
+            hito_once("phone_" + str(i), "Vida", "Estrenaste un " + m.n)
+            return finish("Celular nuevo", "Estrenaste tu " + m.n + ". Lo cuidas más que a tus plantas.", "g")
+        }
+        i += 1
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- cada mes
+
+function phone_month() {
+    if L.age < 12 { return null }
+    let d = ph()
+    d.swipes = 10
+    if d.gold {
+        L.money -= 30
+        if L.money < 0 { d.gold = false }
+    }
+    if d.card != null && chance(50) { d.card = null }
+    d.alma = []
+    // Velvetgram: si no publicas, pierdes seguidores.
+    if d.fol > 0 {
+        if d.posted { d.fol += d.fol / 100 } else { d.fol -= d.fol / 50 }
+        if d.fake && chance(6) {
+            d.fol = d.fol / 2
+            d.fake = false
+            L.happy -= 5
+            log_add("Descubrieron que compraste seguidores. Medio internet se burla de ti.", "b")
+        }
+        if d.sponsor && d.fol >= 1000 {
+            let pay = d.fol / 10
+            L.money += pay
+            if pay >= 1000 { notify("gram", "Patrocinios: te pagaron " + money_str(pay)) }
+        }
+        if d.fol >= 1000000 { L.fame = clamp100(max(L.fame, 50)) } else if d.fol >= 100000 { L.fame = clamp100(max(L.fame, 30)) }
+        if d.posted && d.fol >= 100 && chance(40) { notify("gram", big_num(d.fol / 20 + 3) + " personas le dieron like a tu última foto") }
+    }
+    d.posted = false
+    // VelvetHub
+    if d.views > 0 {
+        let inc = hub_income()
+        L.money += inc
+        d.views += d.views / 50
+        if inc >= 100 { notify("vhub", "Ganaste " + money_str(inc) + " con tus videos") }
+    }
+    if d.watched { d.streak += 1 } else { d.streak = max(0, d.streak - 2) }
+    d.watched = false
+    // VelvetFans fuera de su ruta
+    if L.route != "fans" && L.vf != null && L.vf.open {
+        let before = L.money
+        fans_month()
+        if L.money - before > 0 { notify("vfans", "Tus suscriptores te pagaron " + money_str(L.money - before)) }
+    }
+    // Perfil de citas activo con pareja: te pueden descubrir.
+    let p = partner()
+    if p != null && p.alive && d.active && p.open != true && chance(5) {
+        p.bond -= 20
+        L.happy -= 6
+        if p.bond < 25 {
+            breakup()
+            log_add(p.first + " encontró tu perfil activo en una app de citas. Te dejó.", "b")
+        } else {
+            log_add(p.first + " encontró tu perfil activo en una app de citas. «¿Qué es esto?»", "b")
+        }
+    }
+    // No molestar: tu pareja se siente ignorada.
+    if p != null && p.alive && d.dnd && chance(25) { bond_gain(p, -2) }
+    // Mensajes que llegan solos.
+    if !d.dnd { phone_pings() }
+    if L.job != null && L.jail == 0 && chance(30) { notify("bank", "Depósito de nómina: " + money_str(job_pay(L.job) * 70 / 100 / 12)) }
+    if d.active && L.age >= 18 && chance(35) { notify("flama", str(rint(1, 9)) + " personas te dieron «me gusta»") }
+    return null
+}
+
+function phone_pings() {
+    let n = 0
+    for p in L.people {
+        if n >= 2 { break }
+        if !p.alive || !can_chat(p) { continue }
+        let g = rel_group(p)
+        if (g == "partner" || p.rel == "amante") && neglect_months(p) >= 2 && chance(50) {
+            notify("msgs", p.first + ": " + pick(["Te extraño. ¿Cuándo nos vemos?", "¿Sigues vivo? Jaja. En serio, ¿todo bien?", "Hoy me acordé de ti."]))
+            n += 1
+        } else if g == "parent" && chance(10) {
+            notify("msgs", rel_label(p) + ": " + pick(["¿Ya comiste?", "Llámame cuando puedas.", "Te mandé un video, míralo.", "¿Vienes el domingo?"]))
+            n += 1
+        } else if g == "friend" && chance(6) {
+            notify("msgs", p.first + ": " + pick(["¿Salimos este finde?", "Tienes que ver esto jajaja", "¿Me prestas tu cargador mañana?"]))
+            n += 1
+        }
+    }
+    return null
+}
+
+// Efectos que vienen del móvil.
+function phone_fx(out: list) {
+    if L.ph == null { return null }
+    let d = L.ph
+    if d.model >= 3 { list_push(out, fx("phone_gold", "Celular de lujo", true, "Tu celular dorado llama la atención.", {"flirt": 2})) }
+    if d.fol >= 100000 {
+        list_push(out, fx("influencer", "Celebridad de internet", true, "Te reconocen por tus publicaciones.", {"flirt": 8, "hire": 4}))
+    } else if d.fol >= 10000 {
+        list_push(out, fx("influencer", "Influencer", true, "Tus seguidores te dan seguridad (y descuentos).", {"flirt": 5, "hire": 2}))
+    }
+    if d.streak >= 8 && L.age >= 18 { list_push(out, fx("hub_addict", "Pegad" + oa(L.gender) + " a VelvetHub", false, "Demasiadas horas frente a la pantalla. Lo real ya no emociona igual.", {"hap": -1, "sexhappy": -4, "flirt": -2})) }
+    if L.tm - d.sexy_m < 3 && L.age >= 18 { list_push(out, fx("sexy", "Sintiéndote sexy", true, "Tu ropa interior nueva te da confianza.", {"flirt": 5})) }
+    return null
+}

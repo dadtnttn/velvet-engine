@@ -307,6 +307,7 @@ function route_use(id: string) {
 function route_action(id: string) {
     G.modal = null
     if id == "obj" { return null }
+    if list_contains(FANS_IDS, id) { return fans_action(id) }
     let r = L.route
     if r == "rey" || r == "presidente" { return realm_action(id) }
     if r == "filantropo" { return space_action(id) }
@@ -469,7 +470,7 @@ function creator_month() {
 // ---------------------------------------------------------------- VelvetFans (+18)
 
 function fans_items(cat: string) {
-    let d = L.rd
+    let d = vf()
     let items = []
     if !d.open {
         list_push(items, {"action": "ra:fopen", "t": "Abrir tu cuenta en VelvetFans", "s": "Empezar", "desc": "Fotos y videos exclusivos para quienes pagan tu suscripción. Tú pones las reglas.", "lock": ""})
@@ -499,7 +500,7 @@ function fans_items(cat: string) {
 }
 
 function fans_action(id: string) {
-    let d = L.rd
+    let d = vf()
     if id == "fopen" {
         d.open = true
         if L.job == null { L.job = new_job("cam") }
@@ -559,12 +560,15 @@ function fans_action(id: string) {
 function resolve_fprice(index: int) {
     G.modal = null
     let prices = [5, 10, 20, 50]
-    if index < 4 { L.rd.price = prices[index] }
-    return finish("Tu precio", "Tu suscripción ahora cuesta $" + str(L.rd.price) + " al mes.", "n")
+    if index < 4 {
+        let d = vf()
+        d.price = prices[index]
+    }
+    return finish("Tu precio", "Tu suscripción ahora cuesta $" + str(vf().price) + " al mes.", "n")
 }
 
 function fans_live_result(score: any) {
-    let d = L.rd
+    let d = vf()
     let tips = score * (5 + d.subs / 200)
     L.money += tips
     d.subs += score / 2 + d.subs / 100
@@ -572,7 +576,7 @@ function fans_live_result(score: any) {
 }
 
 function fans_month() {
-    let d = L.rd
+    let d = vf()
     if !d.open { return null }
     let income = d.subs * d.price * 80 / 100
     L.money += income

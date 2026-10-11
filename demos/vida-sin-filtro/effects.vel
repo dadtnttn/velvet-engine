@@ -122,6 +122,7 @@ function effects() {
     if L.record > 0 { list_push(out, fx("fichado", "Antecedentes penales", false, "Tu historial aparece en cada revisión de antecedentes.", {"hire": -15})) }
     if L.money >= 1000000 { list_push(out, fx("rico", "Billetera generosa", true, "El dinero también es sexy.", {"flirt": 6})) }
     if L.study != null && L.study.gpa >= 90 { list_push(out, fx("honor", "Cuadro de honor", true, "Tus profesores te adoran.", {"hire": 5})) }
+    phone_fx(out)
     return out
 }
 

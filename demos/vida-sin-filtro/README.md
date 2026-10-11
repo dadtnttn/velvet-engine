@@ -22,6 +22,7 @@ Controles:
 | Ratón | Todo es clicable; los menús reaccionan al pasar el cursor |
 | Espacio o Enter | Avanzar un mes |
 | Y | Avanzar hasta tu próximo cumpleaños (se detiene si hay una decisión) |
+| M | Abrir o guardar el móvil (desde los 12 años) |
 | 1 – 9, flechas, letras, Espacio | Jugar los minijuegos |
 | 1 – 5 | Elegir una opción en un evento |
 | Enter / Espacio / Esc | Cerrar un mensaje |
@@ -221,6 +222,36 @@ binarias en el juego.
   reaccionan si tu pareja es de otra religión, si vives en pareja sin casarte o
   si trabajas en la industria +18. Si tu religión (o la ley de tu reino) lo
   permite, puedes casarte con más de una persona.
+- **El móvil** (`phone.vel`, `phone_ui.vel`): un celular en pantalla que tienes
+  desde los 12 años (botón junto a tu retrato o tecla M; en prisión te lo
+  quitan). Pantalla de inicio con reloj, fondo, apps con avisos y un panel con tu
+  pareja y tus notificaciones. Las apps usan lo que ya existe y al terminar
+  vuelves al móvil:
+  - **Mensajes**: chatea o llama a cualquiera; mensajes para tu pareja (buenos
+    días, una canción, videollamada, mensajes atrevidos +18, pedir perdón,
+    planear una cita sorpresa adivinando sus aficiones, revisar su celular a
+    escondidas, compartir ubicación) y grupos (familia, amigos, trabajo o escuela).
+  - **Flama** (+18): desliza tarjetas (paso, me gusta, súper like), consigue
+    matches, escríbeles eligiendo el mensaje (lo que toca sus aficiones funciona;
+    las frases cursis no), sube la química, invítalos a una cita o a verse esa
+    noche. Fotos profesionales, bio, Flama Gold y tu perfil activo: si tienes
+    pareja y te encuentra deslizando, problemas.
+  - **Alma Gemela** (+18): citas serias por compatibilidad; un test (minijuego)
+    mejora las sugerencias.
+  - **Velvetgram**: selfies (minijuego), hacer oficial tu relación, fotos con
+    amigos, hijos o lujos (cuidado con los ladrones), stalkear a tu ex, discutir
+    en comentarios, seguidores, patrocinios y verificación. En la ruta de
+    creador también lleva tu canal.
+  - **VelvetFans** (+18): la misma cuenta de la ruta, ahora para cualquiera.
+  - **VelvetHub** (+18): ver videos (con moderación: puede volverse adicción),
+    verlos en pareja, subir videos anónimos o mostrando la cara, proponer uno en
+    pareja (solo si acepta), colaboraciones, vistas e ingresos. En la carrera o
+    ruta +18 también lleva tus rodajes.
+  - **Banco**, **Bolsa** y **Casino** (las finanzas), **Empleos** (vacantes para
+    ti, chambas y estudios), **Tienda** (regalos a domicilio, compras para ti y
+    lujos), **Salud**, **Recuerdos** (tus hitos), **Agenda** (a quién no le has
+    hablado, efectos y misiones), **Mi Ruta**, **Fe** y **Ajustes** (modelo de
+    celular, fondo, no molestar, seguridad contra filtraciones, bloquear a tu ex).
 - **Platicar** (`chat.vel`): con cualquier persona, como en una app de mensajes.
   Cada quien tiene un temperamento (callado, parlanchín, bromista, sensible,
   orgulloso, romántico) y un ánimo que cambia cada mes (feliz, cariñoso, triste,
@@ -329,6 +360,8 @@ binarias en el juego.
 | `realm.vel` | Gobierno del reino y de la presidencia: indicadores, decretos, leyes, crisis y elecciones |
 | `space.vel` | Ruta del filántropo: mina, empresas, filantropía y programa espacial |
 | `religion.vel` | Religiones, fe, reacciones de la familia, conversiones y matrimonios múltiples |
+| `phone.vel` | El móvil: apps, citas por app, redes, VelvetHub, mensajes a la pareja, notificaciones |
+| `phone_ui.vel` | Dibujo del móvil: aparato, pantalla de inicio, apps, tarjeta de Flama y panel lateral |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |
 | `data.vel` | Nombres, ciudades, trabajos, personalidades, arcanos, paletas, bienes |
 | `art.vel` | Generadores SVG: fondo, paneles, estallidos, logo y retratos |

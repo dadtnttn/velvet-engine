@@ -44,6 +44,11 @@ state {
         "legacy": null,
         "roul": null,
         "sex_mode": "",
+        "ph_on": false,
+        "ph_app": "",
+        "ph_msg": "",
+        "ph_msg_t0": -10.0,
+        "ph_card_t0": -10.0,
         "back_pid": 0,
         "chat": null,
         "bj": null
@@ -388,6 +393,8 @@ function new_life() {
 // Crea el estado de una vida (sin familia) a partir de G.cre, con la edad indicada.
 function new_life_core(age: int) {
     ensure_rng()
+    G.ph_on = false
+    G.ph_app = ""
     G.lives += 1
     let c = G.cre
     let gender = c.gender
@@ -611,6 +618,7 @@ function monthly() {
     finance_month()
     religion_month()
     route_month()
+    phone_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8

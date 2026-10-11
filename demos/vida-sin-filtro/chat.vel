@@ -164,6 +164,7 @@ function moods_month() {
 
 function maybe_ping() {
     if G.modal != null || L.jail > 0 || !chance(8) { return false }
+    if L.ph != null && L.ph.dnd { return false }
     let p = partner()
     if p == null || !p.alive { return false }
     start_chat(p, true)
