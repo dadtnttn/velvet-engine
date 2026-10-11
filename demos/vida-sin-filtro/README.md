@@ -351,13 +351,54 @@ binarias en el juego.
     de juegos para adultos; Ilustrador + Escritor = Mangaka erótico; Médico +
     Psicólogo = Sexólogo; Actor porno + Actor = Director de cine para adultos;
     Corredor de bolsa + Emprendedor = Magnate, y muchas más.
-- **Actividades por categorías**: Cuerpo, Mente y Lujos (viajes, lotería y
-  bienes como motos, autos, departamento, mansión o yate).
+- **Actividades por categorías** (`ocio.vel`): Cuerpo, Mente, Salud, Hábitos,
+  Hobbies, Mascotas, Viajes, Fe y Lujos.
+  - Cuerpo y mente: yoga, natación, escalada, maratón (minijuego), artes
+    marciales con cinturones del blanco al negro (exámenes con minijuego),
+    cambio de look (nuevo peinado y color), piercing, museos, documentales,
+    crucigramas (minijuego), diario y club de debate.
+  - **Hobbies con progreso**: guitarra, piano, inglés, japonés, ajedrez,
+    pintura, escribir una novela, cocina, fotografía, programación y jardinería.
+    Se practican con minijuegos y al avanzar desbloquean formas de ganar: tocar
+    en bares, dar clases, torneos de ajedrez, vender cuadros o fotos, publicar tu
+    novela (con regalías), lanzar una app. Dan efectos: bilingüe, políglota,
+    músico, mente de ajedrecista, buen sazón.
+  - **Mascotas**: perro, gato, conejo, hámster, loro, tortuga, serpiente o
+    caballo, con nombre, edad, cariño y salud. Juegas con ellas, las llevas al
+    veterinario, les enseñas trucos (minijuego) y comen cada mes; cada especie
+    vive lo suyo. La mascota que adoptas con tu pareja también es real.
+  - **Viajes**: París, Nueva York, Río, Roma, Bali, Machu Picchu, safari en
+    Kenia, Islandia, Las Vegas, Dubái, Antártida o mochilear por Europa; solo o
+    con tu pareja.
+  - Lujos: spa, restaurante gourmet, paracaidismo, concierto VIP, rentar un
+    yate, lotería y bienes como motos, autos, departamento, mansión o yate.
 - **Noche +18 por categorías**: Fiesta, Ligue, Placer (sex shop, love hotel,
-  club swinger, fiesta de disfraces, spa nudista, crucero para adultos),
-  Carreras, Vicios y Crimen. Encuentros con o
+  club swinger, fiesta de disfraces, spa nudista, crucero para adultos, pole
+  dance, burlesque, playa nudista), Carreras, Vicios y Crimen. Encuentros con o
   sin protección (ITS y embarazos), drogas con adicción y sobredosis, casino y
   delitos, algunos bloqueados hasta tener rango social suficiente.
+  - Fiesta: festivales, fiesta en la playa, beer pong y DJ por una noche
+    (minijuegos) y pleitos de bar.
+  - Ligue: conquistar a alguien en el bar (observa cómo es y elige qué decirle
+    en dos rondas: intelectual, fiestero, romántico o directo), speed dating por
+    compatibilidad y ligar en el gimnasio.
+  - Vicios: hongos, apuestas deportivas, póker clandestino y carreras
+    clandestinas (minijuegos).
+  - **Crimen con calor policial y respeto en la calle**: carterista, robo a
+    casa y estafa telefónica (minijuegos), vender droga, unirte a una pandilla,
+    lavar dinero, esconderte y el gran golpe al casino por etapas (planos,
+    equipo y la noche del golpe). Cada delito sube tu calor; con mucho calor
+    hay allanamientos. Si te atrapan eliges: entregarte (menos años), sobornar,
+    correr o llamar a tu abogado (libertad condicional). Si escapas de prisión
+    eres prófugo hasta conseguir una identidad falsa.
+- **Prisión** (`prision.vel`): la pestaña Ocupación se vuelve tu vida adentro,
+  con conducta y respeto. Rutina (taller con sueldo, gimnasio, biblioteca,
+  terminar la secundaria, cursos, arte, portarte bien), Patio (tu compañero de
+  celda, peleas, pandilla, contrabando, proteger a los nuevos), Visitas (familia,
+  amigos y visita conyugal con tu pareja; cartas), Legal (apelación, libertad
+  condicional, delatar) y Fuga (herramienta, túnel, guardia sobornado, escapar
+  con minijuego o saltar la barda). Eventos: motín, revisión de celdas, pleitos,
+  cartas, epidemias y el recluso nuevo. Con conducta ejemplar sales antes.
 - **75 eventos aleatorios** con decisiones, opciones bloqueadas por rango y
   personalidades con mejor suerte en ciertas decisiones.
 - **Carreras +18 con 5 rangos**: cine para adultos (Amateur → Leyenda +18),
@@ -406,6 +447,8 @@ binarias en el juego.
 | `space.vel` | Ruta del filántropo: mina, empresas, filantropía y programa espacial |
 | `religion.vel` | Religiones, fe, reacciones de la familia, conversiones y matrimonios múltiples |
 | `lazos.vel` | Cumpleaños, deseos, secretos, suegros, sobrinos, colegas, rivales, pasión, embarazo por etapas, crianza por edades y herencias |
+| `ocio.vel` | Actividades nuevas, hobbies con progreso, mascotas, viajes, noche y crimen con calor policial y arrestos |
+| `prision.vel` | Vida en prisión: rutina, patio, visitas, legal, fuga y eventos |
 | `phone.vel` | El móvil: apps, citas por app, redes, VelvetHub, mensajes a la pareja, notificaciones |
 | `phone_ui.vel` | Dibujo del móvil: aparato, pantalla de inicio, apps, tarjeta de Flama y panel lateral |
 | `chat.vel` | Conversaciones libres, temperamentos, ánimos, mensajes de tu pareja y familia extendida |

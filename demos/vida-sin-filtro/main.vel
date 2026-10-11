@@ -26,6 +26,8 @@ import "routes.vel"
 import "realm.vel"
 import "space.vel"
 import "lazos.vel"
+import "ocio.vel"
+import "prision.vel"
 import "phone.vel"
 import "phone_ui.vel"
 import "art.vel"
@@ -398,6 +400,10 @@ function handle_action(action: string) {
         start_career(str_replace(action, "career:", ""))
     } else if str_starts_with(action, "ph:") {
         phone_action(action)
+    } else if str_starts_with(action, "oc:") {
+        ocio_action(action)
+    } else if str_starts_with(action, "pr:") {
+        prison_action(action)
     } else if str_starts_with(action, "ra:") {
         route_action(str_replace(action, "ra:", ""))
     } else if str_starts_with(action, "faith:") {

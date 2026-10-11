@@ -295,7 +295,7 @@ function rel_group(p: map) {
     if r == "sobrino" { return "nephew" }
     if r == "colega" { return "coworker" }
     if r == "rival" { return "rival" }
-    if r == "exsuegro" { return "acq" }
+    if r == "exsuegro" || r == "recluso" { return "acq" }
     return "friend"
 }
 
@@ -629,6 +629,7 @@ function rel_code(a: map, p: map) {
         bond_gain(p, 10)
         L.happy += 8
         let name = pick(["Firulais", "Michi", "Canela", "Rocky", "Luna", "Chispa", "Toby", "Nala"])
+        add_pet(pick(["perro", "gato"]), name)
         log_add("Adoptaron a " + name + ". La casa ya tiene dueño (y no son ustedes).", "g")
         return finish(p.first, "Adoptaron a " + name + " juntos. " + p.first + " no deja de tomarle fotos.", "g")
     }

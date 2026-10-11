@@ -1,0 +1,1251 @@
+// @edition 3
+// Ocio: más actividades, pasatiempos con progreso, mascotas, viajes, vida nocturna y
+// crimen con «calor» policial.
+// - Actividades nuevas (mismo formato que ACTIVITIES) en cuerpo, mente, lujos,
+//   fiesta, ligue, placer, vicios y crimen; las que dicen "code" se resuelven aquí.
+// - Pasatiempos (guitarra, piano, idiomas, ajedrez, pintura, escritura, cocina,
+//   fotografía, programación, jardinería) que suben de nivel con minijuegos y abren
+//   formas de ganar dinero o fama.
+// - Mascotas con nombre, edad y cariño (y su despedida).
+// - Viajes a destinos del mundo, solo o con tu pareja.
+// - Crimen: cada golpe sube tu calor policial; con mucho calor hay allanamientos.
+//   Si te atrapan eliges: entregarte, sobornar, correr o llamar a tu abogado.
+// Acciones propias con el prefijo "oc:".
+
+const OCIO_ACTS = [
+    // ------------------------------------------------ cuerpo
+    {"id": "yoga", "tab": "act", "cat": "Cuerpo", "t": "Yoga", "s": "Salud, calma", "min": 10, "cost": 0,
+     "desc": "Respirar, estirarte y descubrir músculos que no sabías que tenías.", "o": [
+        {"w": 70, "log": "Saludaste al sol hasta que el sol te saludó a ti.", "health": 3, "happy": 4, "kind": 1},
+        {"w": 30, "log": "Te quedaste atorad{a} en la postura del cuervo. Pero qué flexibilidad.", "health": 2, "happy": 2}]},
+    {"id": "swim", "tab": "act", "cat": "Cuerpo", "t": "Natación", "s": "Salud · $100", "min": 6, "cost": 100,
+     "desc": "Cloro, gorrito y cincuenta largos.", "o": [
+        {"w": 100, "log": "Hiciste cincuenta largos. Dormiste como bebé.", "health": 4, "looks": 1}]},
+    {"id": "climb", "tab": "act", "cat": "Cuerpo", "t": "Escalada", "s": "Valor · $300", "min": 12, "cost": 300,
+     "desc": "Un muro de doce metros y un arnés que esperas que aguante.", "o": [
+        {"w": 75, "log": "Llegaste a la cima del muro. Te sentiste invencible.", "health": 3, "guts": 3, "happy": 4},
+        {"w": 25, "log": "Te resbalaste y quedaste colgando del arnés. Todos aplaudieron igual.", "guts": 2, "happy": 1}]},
+    {"id": "marathon", "tab": "act", "cat": "Cuerpo", "t": "Correr un maratón", "s": "Minijuego · $500", "min": 16, "cost": 500, "code": true,
+     "desc": "42 kilómetros, ampollas y la gloria en la meta. Dosifica tu energía."},
+    {"id": "martial", "tab": "act", "cat": "Cuerpo", "t": "Artes marciales", "s": "Cinturones · $400", "min": 6, "cost": 400, "code": true,
+     "desc": "Del cinturón blanco al negro. Cada clase te acerca al examen de grado."},
+    {"id": "haircut", "tab": "act", "cat": "Cuerpo", "t": "Cambio de look", "s": "Peluquería · $200", "min": 8, "cost": 200, "code": true,
+     "desc": "Nuevo corte, nuevo color, nueva persona."},
+    {"id": "piercing", "tab": "act", "cat": "Cuerpo", "t": "Hacerte un piercing", "s": "$150", "min": 16, "cost": 150,
+     "desc": "Ceja, nariz u ombligo. Duele dos segundos.", "o": [
+        {"w": 80, "log": "Un piercing nuevo. Te ves más rud{a}.", "looks": 1, "happy": 4, "guts": 1},
+        {"w": 20, "log": "Se te infectó. Una semana de dolor.", "health": -4, "happy": -2}]},
+    // ------------------------------------------------ mente
+    {"id": "museum", "tab": "act", "cat": "Mente", "t": "Ir a un museo", "s": "Cultura · $100", "min": 6, "cost": 100,
+     "desc": "Arte, dinosaurios o historia. Silencio y bancas incómodas.", "o": [
+        {"w": 100, "log": "Te quedaste media hora frente a un cuadro sin entenderlo. Te sentiste culto.", "know": 3, "happy": 3, "smarts": 1}]},
+    {"id": "docs", "tab": "act", "cat": "Mente", "t": "Ver documentales", "s": "Conocimiento", "min": 8, "cost": 0,
+     "desc": "Pulpos, imperios y asesinos en serie.", "o": [
+        {"w": 100, "log": "Ahora sabes demasiado sobre los pulpos.", "know": 2, "smarts": 1, "happy": 2}]},
+    {"id": "puzzles", "tab": "act", "cat": "Mente", "t": "Crucigramas y sudokus", "s": "Minijuego de cálculo", "min": 8, "cost": 0, "code": true,
+     "desc": "Ejercita el cerebro con números."},
+    {"id": "journal", "tab": "act", "cat": "Mente", "t": "Escribir un diario", "s": "Felicidad", "min": 8, "cost": 0,
+     "desc": "Todo lo que no le cuentas a nadie.", "o": [
+        {"w": 100, "log": "Escribiste todo lo que sentías. Te quitaste un peso de encima.", "happy": 4, "kind": 1}]},
+    {"id": "debate", "tab": "act", "cat": "Mente", "t": "Club de debate", "s": "Encanto, valor", "min": 12, "cost": 0,
+     "desc": "Defender lo indefendible con elegancia.", "o": [
+        {"w": 70, "log": "Ganaste el debate con un argumento brillante.", "know": 2, "charm": 3, "guts": 2},
+        {"w": 30, "log": "Te quedaste en blanco frente a todos.", "guts": 1, "happy": -2}]},
+    // ------------------------------------------------ lujos
+    {"id": "spaday", "tab": "act", "cat": "Lujos", "t": "Día de spa", "s": "Felicidad · $1,200", "min": 16, "cost": 1200,
+     "desc": "Mascarilla, sauna y un masaje que te deja sin huesos.", "o": [
+        {"w": 100, "log": "Saliste tan relajad{a} que olvidaste dónde estacionaste.", "happy": 10, "health": 3, "looks": 1}]},
+    {"id": "gourmet", "tab": "act", "cat": "Lujos", "t": "Restaurante gourmet", "s": "$800", "min": 16, "cost": 800,
+     "desc": "Ocho tiempos y porciones del tamaño de una moneda.", "o": [
+        {"w": 80, "log": "Ocho tiempos, porciones minúsculas y un postre que te hizo llorar.", "happy": 8, "charm": 1},
+        {"w": 20, "log": "Te cobraron $800 por espuma de algo. Mucha espuma.", "happy": 2}]},
+    {"id": "skydive", "tab": "act", "cat": "Lujos", "t": "Paracaidismo", "s": "Valor · $2,500", "min": 18, "cost": 2500,
+     "desc": "Saltar de un avión a 4,000 metros. Por gusto.", "o": [
+        {"w": 95, "log": "Saltaste desde 4,000 metros. Gritaste todo el camino. ¡Otra vez!", "happy": 15, "guts": 6, "flag": "skydive"},
+        {"w": 5, "log": "El paracaídas tardó en abrir. Aterrizaste con un tobillo roto, pero viv{a}.", "health": -20, "guts": 8}]},
+    {"id": "vipconcert", "tab": "act", "cat": "Lujos", "t": "Concierto con pase VIP", "s": "$3,000", "min": 15, "cost": 3000,
+     "desc": "Primera fila y pase para conocer a la banda.", "o": [
+        {"w": 100, "log": "El cantante te señaló desde el escenario. Te tomaste foto con la banda.", "happy": 14, "charm": 2}]},
+    {"id": "yachtday", "tab": "act", "cat": "Lujos", "t": "Rentar un yate por un día", "s": "$15,000", "min": 21, "cost": 15000,
+     "desc": "Mar abierto, champaña y amigos que de pronto te quieren mucho.", "o": [
+        {"w": 60, "log": "Un día entero en altamar. Te sentiste en un video musical.", "happy": 15, "charm": 4},
+        {"w": 40, "special": "hookup", "happy": 10}]},
+    // ------------------------------------------------ fiesta
+    {"id": "festival", "tab": "night", "cat": "Fiesta", "t": "Festival de música", "s": "Tres días · $1,500", "min": 18, "cost": 1500,
+     "desc": "Tres escenarios, lodo, casas de campaña y cero sueño.", "o": [
+        {"w": 50, "log": "Tres días de música, lodo y amigos nuevos. No te bañaste en tres días.", "happy": 15, "alcohol": 4, "charm": 2},
+        {"w": 25, "log": "Probaste algo que te pasaron en la carpa. Viste colores.", "happy": 12, "drugs": 8},
+        {"w": 25, "special": "hookup", "happy": 8}]},
+    {"id": "beachparty", "tab": "night", "cat": "Fiesta", "t": "Fiesta en la playa", "s": "$300", "min": 18, "cost": 300,
+     "desc": "Fogata, música y amanecer en la arena.", "o": [
+        {"w": 60, "log": "Fogata, música y un amanecer en la arena.", "happy": 9, "alcohol": 3},
+        {"w": 40, "special": "hookup", "happy": 5}]},
+    {"id": "beerpong", "tab": "night", "cat": "Fiesta", "t": "Torneo de beer pong", "s": "Minijuego de precisión", "min": 18, "cost": 0, "code": true,
+     "desc": "Encesta la pelota en los vasos. El que pierde, bebe."},
+    {"id": "dj", "tab": "night", "cat": "Fiesta", "t": "Ser DJ por una noche", "s": "Minijuego de ritmo", "min": 18, "cost": 0, "code": true,
+     "desc": "El DJ no llegó y te ofreciste. Mantén la pista llena."},
+    {"id": "barfight", "tab": "night", "cat": "Fiesta", "t": "Buscar pleito en un bar", "s": "Valor (o hospital)", "min": 18, "cost": 0,
+     "desc": "Alguien te vio feo. Tal vez.", "o": [
+        {"w": 50, "log": "Ganaste la pelea. Te invitaron una ronda.", "guts": 4, "happy": 3, "health": -5},
+        {"w": 35, "log": "Te dieron una paliza.", "health": -15, "guts": 2},
+        {"w": 15, "log": "Llegó la policía.", "special": "oc_arrest_fight"}]},
+    // ------------------------------------------------ ligue
+    {"id": "barflirt", "tab": "night", "cat": "Ligue", "t": "Conquistar a alguien en el bar", "s": "Lee a la persona", "min": 18, "cost": 100, "code": true,
+     "desc": "Observa cómo es y elige bien qué decirle. Dos frases deciden la noche."},
+    {"id": "speeddate", "tab": "night", "cat": "Ligue", "t": "Speed dating", "s": "Tres citas · $200", "min": 18, "cost": 200, "code": true,
+     "desc": "Tres personas, tres minutos cada una. Elige a quién volver a ver."},
+    {"id": "gymflirt", "tab": "night", "cat": "Ligue", "t": "Ligar en el gimnasio", "s": "Gratis", "min": 18, "cost": 0,
+     "desc": "«¿Me ayudas con esta pesa?» El truco más viejo del mundo.", "o": [
+        {"w": 40, "special": "hookup"},
+        {"w": 35, "log": "Te dio su número... de entrenador personal. $800 al mes.", "happy": -1},
+        {"w": 25, "log": "Te ignoró con los audífonos puestos.", "happy": -2}]},
+    // ------------------------------------------------ placer
+    {"id": "pole", "tab": "night", "cat": "Placer", "t": "Clase de pole dance", "s": "Fuerza y confianza · $300", "min": 18, "cost": 300,
+     "desc": "Más difícil de lo que parece. Mucho más.", "o": [
+        {"w": 80, "log": "Terminaste con moretones y una confianza nueva. Qué fuerza se necesita.", "health": 3, "looks": 1, "charm": 3, "happy": 6},
+        {"w": 20, "log": "Te resbalaste del tubo con toda la gracia del mundo.", "happy": 2, "health": -2}]},
+    {"id": "burlesque", "tab": "night", "cat": "Placer", "t": "Show de burlesque", "s": "$400", "min": 18, "cost": 400,
+     "desc": "Plumas, lentejuelas y humor picante.", "o": [
+        {"w": 100, "log": "Plumas, lentejuelas y humor picante. Aplaudiste de pie.", "happy": 9, "charm": 1}]},
+    {"id": "nudebeach", "tab": "night", "cat": "Placer", "t": "Playa nudista", "s": "Gratis", "min": 18, "cost": 0,
+     "desc": "Sol en todas partes. En todas.", "o": [
+        {"w": 70, "log": "Te quitaste la ropa y los complejos. Liberador.", "happy": 9},
+        {"w": 30, "log": "Te quemaste partes que nunca habían visto el sol.", "happy": 3, "health": -2, "special": "kink:exhib"}]},
+    // ------------------------------------------------ vicios
+    {"id": "shrooms", "tab": "night", "cat": "Vicios", "t": "Hongos alucinógenos", "s": "Viaje · $150", "min": 18, "cost": 150,
+     "desc": "El universo explicado por un árbol que habla.", "o": [
+        {"w": 60, "log": "Hablaste con un árbol durante horas. Tenía buenos argumentos.", "happy": 10, "know": 2, "drugs": 5},
+        {"w": 30, "log": "El universo tuvo sentido por un momento.", "happy": 12, "smarts": 1, "drugs": 4},
+        {"w": 10, "log": "Mal viaje. Lloraste abrazad{a} a una almohada.", "happy": -10, "drugs": 5}]},
+    {"id": "sportsbet", "tab": "night", "cat": "Vicios", "t": "Apuestas deportivas", "s": "El partido de hoy", "min": 18, "cost": 0, "code": true,
+     "desc": "Favorito, sorpresa o empate. El que sabe, sabe."},
+    {"id": "poker", "tab": "night", "cat": "Vicios", "t": "Póker clandestino", "s": "Minijuego · $500", "min": 18, "cost": 500, "code": true,
+     "desc": "Un sótano, humo y gente que no sonríe. Memoriza las cartas."},
+    {"id": "streetrace", "tab": "night", "cat": "Vicios", "t": "Carreras clandestinas", "s": "Minijuego · $1,000", "min": 18, "cost": 1000, "code": true,
+     "desc": "Un auto prestado, una avenida vacía y $5,000 para el ganador."},
+    // ------------------------------------------------ crimen
+    {"id": "pickpocket", "tab": "night", "cat": "Crimen", "t": "Carterista en el metro", "s": "Minijuego · delito menor", "min": 14, "cost": 0, "code": true,
+     "desc": "Dedos ágiles en la hora pico. Sube tu calor policial."},
+    {"id": "burglary", "tab": "night", "cat": "Crimen", "t": "Robar una casa", "s": "Minijuego · delito grave", "min": 18, "cost": 0, "code": true,
+     "desc": "Recuerda la combinación de la caja fuerte antes de que vuelvan los dueños."},
+    {"id": "scam", "tab": "night", "cat": "Crimen", "t": "Estafa telefónica", "s": "Minijuego de tecleo", "min": 18, "cost": 0, "code": true,
+     "desc": "«Hola, le hablamos de su banco...» Escribe rápido el guion."},
+    {"id": "graffiti", "tab": "night", "cat": "Crimen", "t": "Grafiti", "s": "Arte urbano ilegal", "min": 12, "cost": 0,
+     "desc": "Tu firma en el puente más visto de la ciudad.", "o": [
+        {"w": 70, "log": "Tu firma ya está en el puente más visto de la ciudad.", "guts": 3, "happy": 5, "karma": -1},
+        {"w": 30, "log": "Te cacharon con la lata en la mano: multa de $500.", "money": -500, "happy": -3}]},
+    {"id": "dealing", "tab": "night", "cat": "Crimen", "t": "Vender droga", "s": "Mucho dinero · mucho riesgo", "min": 18, "cost": 0, "code": true,
+     "desc": "Dinero fácil hasta que deja de serlo."},
+    {"id": "gang", "tab": "night", "cat": "Crimen", "t": "Unirte a una pandilla", "s": "Respeto · protección", "min": 16, "cost": 0, "code": true,
+     "desc": "Una familia nueva, con reglas nuevas. Más éxito en la calle y protección en prisión."},
+    {"id": "launder", "tab": "night", "cat": "Crimen", "t": "Lavar dinero", "s": "Baja tu calor · $2,000", "min": 18, "cost": 2000, "code": true,
+     "desc": "Una lavandería que nunca lava nada. Tu calor policial baja mucho."},
+    {"id": "hide", "tab": "night", "cat": "Crimen", "t": "Esconderte un tiempo", "s": "Baja tu calor", "min": 14, "cost": 0, "code": true,
+     "desc": "Encerrad{a} en casa, sin salir ni contestar el teléfono."},
+    {"id": "bigheist", "tab": "night", "cat": "Crimen", "t": "El gran golpe", "s": "Respeto 40 · por etapas", "min": 21, "cost": 0, "code": true,
+     "desc": "Un casino, un equipo y un plan perfecto: planos, equipo y la noche del golpe."},
+    {"id": "fakeid", "tab": "night", "cat": "Crimen", "t": "Conseguir una identidad falsa", "s": "$20,000", "min": 18, "cost": 20000, "code": true,
+     "desc": "Nombre nuevo, pasado limpio. Solo si eres prófug{a}."}
+]
+
+const BELTS = ["blanco", "amarillo", "verde", "azul", "rojo", "negro"]
+
+const HOBBIES = [
+    {"id": "guitarra", "n": "Tocar la guitarra", "min": 8, "mg": "arrows", "lv50": "Ya tocas bien la guitarra", "lv100": "Te volviste virtuoso de la guitarra", "show": "Tocar en un bar", "showmin": 40},
+    {"id": "piano", "n": "Tocar el piano", "min": 6, "mg": "arrows", "lv50": "Ya tocas bien el piano", "lv100": "Te volviste virtuoso del piano", "show": "Dar un recital", "showmin": 40},
+    {"id": "ingles", "n": "Aprender inglés", "min": 6, "mg": "typing", "lv50": "Ya te defiendes en inglés", "lv100": "Hablas inglés con fluidez", "show": "Dar clases particulares", "showmin": 60},
+    {"id": "japones", "n": "Aprender japonés", "min": 10, "mg": "typing", "lv50": "Ya lees hiragana y katakana", "lv100": "Hablas japonés con fluidez", "show": "Traducir anime por encargo", "showmin": 60},
+    {"id": "ajedrez", "n": "Ajedrez", "min": 6, "mg": "math", "lv50": "Ya juegas ajedrez en serio", "lv100": "Te volviste gran maestro de ajedrez", "show": "Jugar un torneo", "showmin": 35},
+    {"id": "pintura", "n": "Pintura", "min": 6, "mg": "memory", "lv50": "Encontraste tu estilo como pintor", "lv100": "Te volviste un artista consagrado", "show": "Vender tus cuadros", "showmin": 45},
+    {"id": "escritura", "n": "Escribir una novela", "min": 12, "mg": "typing", "lv50": "Llevas la mitad de tu novela", "lv100": "Terminaste tu novela", "show": "Publicar tu novela", "showmin": 100},
+    {"id": "cocina", "n": "Cocina gourmet", "min": 10, "mg": "memory", "lv50": "Cocinas como restaurante", "lv100": "Te volviste chef de nivel profesional", "show": "Hacer una cena para tus amigos", "showmin": 30},
+    {"id": "foto", "n": "Fotografía", "min": 12, "mg": "timing", "lv50": "Tus fotos ya parecen de revista", "lv100": "Te volviste un gran fotógrafo", "show": "Vender tus fotos", "showmin": 45},
+    {"id": "codigo", "n": "Programación", "min": 10, "mg": "typing", "lv50": "Ya programas tus propias apps", "lv100": "Programas como un genio", "show": "Lanzar tu propia app", "showmin": 80},
+    {"id": "jardin", "n": "Jardinería", "min": 8, "mg": "", "lv50": "Tu jardín es la envidia del barrio", "lv100": "Tu jardín salió en una revista", "show": "Vender plantas en el mercado", "showmin": 40}
+]
+
+const PET_KINDS = [
+    {"id": "perro", "n": "Perro", "cost": 500, "life": 13, "food": 150},
+    {"id": "gato", "n": "Gato", "cost": 300, "life": 15, "food": 100},
+    {"id": "conejo", "n": "Conejo", "cost": 100, "life": 9, "food": 60},
+    {"id": "hamster", "n": "Hámster", "cost": 50, "life": 3, "food": 20},
+    {"id": "loro", "n": "Loro", "cost": 800, "life": 40, "food": 60},
+    {"id": "tortuga", "n": "Tortuga", "cost": 80, "life": 50, "food": 20},
+    {"id": "serpiente", "n": "Serpiente", "cost": 300, "life": 20, "food": 50},
+    {"id": "caballo", "n": "Caballo", "cost": 8000, "life": 28, "food": 600}
+]
+const PET_NAMES = ["Firulais", "Michi", "Canela", "Rocky", "Luna", "Chispa", "Toby", "Nala", "Pelusa", "Bombón", "Max", "Kira", "Coco", "Simba", "Pancho", "Mochi", "Lola", "Thor", "Nube", "Frijol"]
+
+const TRIPS = [
+    {"id": "paris", "n": "París", "cost": 12000, "d": "La Torre Eiffel de noche, croissants y museos infinitos.", "log": "Subiste a la Torre Eiffel al atardecer y comiste croissants hasta el cansancio."},
+    {"id": "nyc", "n": "Nueva York", "cost": 10000, "d": "Rascacielos, Broadway y pizza a las 3 a. m.", "log": "Viste un musical en Broadway y te perdiste en Central Park."},
+    {"id": "rio", "n": "Río de Janeiro", "cost": 8000, "d": "Carnaval, samba y playas eternas.", "log": "Bailaste samba en el carnaval hasta que salió el sol."},
+    {"id": "roma", "n": "Roma", "cost": 11000, "d": "El Coliseo, la Fontana di Trevi y pasta de verdad.", "log": "Tiraste una moneda a la Fontana di Trevi. Volverás."},
+    {"id": "bali", "n": "Bali", "cost": 9000, "d": "Templos, arrozales y atardeceres de postal.", "log": "Meditaste en un templo frente al mar. Paz absoluta."},
+    {"id": "machu", "n": "Machu Picchu", "cost": 7000, "d": "Cuatro días de caminata hasta la ciudad perdida.", "log": "Llegaste a Machu Picchu al amanecer, entre las nubes."},
+    {"id": "safari", "n": "Safari en Kenia", "cost": 18000, "d": "Leones, elefantes y jirafas a metros de ti.", "log": "Viste una manada de elefantes cruzar al atardecer. Lloraste."},
+    {"id": "islandia", "n": "Islandia", "cost": 14000, "d": "Volcanes, glaciares y auroras boreales.", "log": "Viste la aurora boreal desde un jacuzzi natural."},
+    {"id": "vegas", "n": "Las Vegas", "cost": 5000, "d": "Casinos, shows y decisiones cuestionables.", "log": "Lo que pasa en Las Vegas se queda en Las Vegas. Y pasó de todo."},
+    {"id": "dubai", "n": "Dubái", "cost": 20000, "d": "El edificio más alto del mundo y lujo exagerado.", "log": "Subiste al edificio más alto del mundo y compraste oro en el zoco."},
+    {"id": "antartida", "n": "Antártida", "cost": 40000, "d": "El fin del mundo: hielo, pingüinos y silencio.", "log": "Caminaste entre miles de pingüinos en el lugar más silencioso de la Tierra."},
+    {"id": "mochila", "n": "Mochilear por Europa", "cost": 6000, "d": "Hostales, trenes nocturnos y amigos de veinte países.", "log": "Diez países en un mes, durmiendo en trenes y hostales. Libertad pura."}
+]
+
+// Para conquistar en el bar: cómo se ve cada tipo de persona y qué le gusta oír.
+const FLIRT_TYPES = ["intelectual", "fiestero", "romantico", "directo"]
+const FLIRT_LOOKS = {
+    "intelectual": "lee un libro en la barra y se acomoda los lentes",
+    "fiestero": "baila sol{xa} en medio de la pista con un trago en la mano",
+    "romantico": "mira las velas de la mesa con cara de película",
+    "directo": "te sostiene la mirada sin pestañear desde el otro lado del bar"
+}
+const FLIRT_LINES = {
+    "intelectual": ["¿Qué libro es? Llevo meses buscando algo que me atrape.", "Tengo una teoría sobre por qué este bar tiene tan mala música. ¿Te la cuento?"],
+    "fiestero": ["¡Esta canción es buenísima! ¿Bailamos?", "¿Shots? Yo invito la primera ronda."],
+    "romantico": ["No pude dejar de mirarte desde que llegué.", "Tienes una sonrisa que ilumina todo el lugar."],
+    "directo": ["No te voy a mentir: eres lo mejor de este lugar.", "Me gustas. ¿Te invito algo o seguimos mirándonos?"]
+}
+
+// ---------------------------------------------------------------- utilidades
+
+function find_ocio(id: string) {
+    for a in OCIO_ACTS {
+        if a.id == id { return a }
+    }
+    return null
+}
+
+function hob_level(id: string) {
+    if L.hob == null { L.hob = {} }
+    let v = L.hob[id]
+    if v == null { return 0 }
+    return v
+}
+
+function hob_def(id: string) {
+    for h in HOBBIES {
+        if h.id == id { return h }
+    }
+    return HOBBIES[0]
+}
+
+function pet_kind(id: string) {
+    for k in PET_KINDS {
+        if k.id == id { return k }
+    }
+    return PET_KINDS[0]
+}
+
+function pets_alive() {
+    let out = []
+    if L.pets == null { L.pets = [] }
+    for pt in L.pets {
+        if pt.alive { list_push(out, pt) }
+    }
+    return out
+}
+
+function heat() {
+    if L.heat == null { L.heat = 0 }
+    return L.heat
+}
+
+function add_heat(n: int) {
+    L.heat = clamp100(heat() + n)
+    L.crime_m = L.tm
+    return null
+}
+
+// Probabilidad acotada entre lo y hi (siempre entera).
+function odds_in(v: int, lo: int, hi: int) {
+    if v < lo { return lo }
+    if v > hi { return hi }
+    return v
+}
+
+function street() {
+    if L.street == null { L.street = 0 }
+    return L.street
+}
+
+function add_street(n: int) {
+    L.street = clamp100(street() + n)
+    return null
+}
+
+// Probabilidad de que te atrapen (sube con el calor policial).
+function caught_odds(base: int) {
+    let o = base + heat() / 4
+    if L.crew == true { o -= 8 }
+    if has_trait("rebelde") { o -= 5 }
+    return clamp(o, 5, 90)
+}
+
+function gamble_up() {
+    fin_init()
+    L.gamble = L.gamble + 1
+    return null
+}
+
+// Acciones "oc:" del menú.
+function ocio_action(action: string) {
+    G.modal = null
+    if action == "oc:none" { return null }
+    if action == "oc:adopt" {
+        if L.age < 8 || len(pets_alive()) >= 4 || L.used["adopt"] != null { return null }
+        return open_adopt()
+    }
+    if str_starts_with(action, "oc:pet:") {
+        let pt = find_pet(action)
+        if pt != null { return open_pet(pt) }
+        return null
+    }
+    for h in HOBBIES {
+        if action == "oc:hob:" + h.id { return hob_action(h.id) }
+        if action == "oc:show:" + h.id { return show_action(h.id) }
+    }
+    for t in TRIPS {
+        if action == "oc:trip:" + t.id { return open_trip(t.id) }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- menús
+
+function ocio_items(cat: string) {
+    let items = []
+    if cat == "Hobbies" {
+        for h in HOBBIES {
+            if L.age < h.min { continue }
+            let lv = hob_level(h.id)
+            let lock = ""
+            if L.used["hob_" + h.id] != null { lock = "Este mes ya" }
+            let s = "Nivel " + str(lv) + "%"
+            if h.mg != "" { s = s + " · minijuego" }
+            list_push(items, {"action": "oc:hob:" + h.id, "t": h.n, "s": s, "desc": "Practica cada mes para subir de nivel. A partir de " + str(h.showmin) + "% se desbloquea: «" + h.show + "».", "lock": lock, "done": lv >= 100})
+            if lv >= h.showmin && !(h.id == "escritura" && L.book == true) && !(h.id == "codigo" && L.app_done == true) {
+                let sl = ""
+                if L.used["show_" + h.id] != null { sl = "Este mes ya" }
+                list_push(items, {"action": "oc:show:" + h.id, "t": "★ " + h.show, "s": "Tu talento en " + str_lower(h.n), "desc": "Aprovecha lo que ya sabes hacer.", "lock": sl})
+            }
+        }
+        return items
+    }
+    if cat == "Mascotas" {
+        let al = ""
+        if L.age < 8 { al = "Edad 8" }
+        if len(pets_alive()) >= 4 { al = "Ya tienes 4" }
+        if L.used["adopt"] != null { al = "Este mes ya" }
+        list_push(items, {"action": "oc:adopt", "t": "Adoptar una mascota", "s": "Perro, gato, conejo, loro...", "desc": "Un compañero para toda su vida. Necesita comida cada mes, cariño y veterinario.", "lock": al})
+        for pt in pets_alive() {
+            let k = pet_kind(pt.kind)
+            list_push(items, {"action": "oc:pet:" + str(pt.id), "t": pt.name, "s": k.n + " · " + str(pt.age) + " " + plural(pt.age, "año", "años") + " · cariño " + str(pt.bond) + "%", "desc": "Juega con " + pt.name + ", llévalo al veterinario o enséñale un truco. Come " + money_str(k.food) + " al mes. Vive unos " + str(k.life) + " años.", "lock": ""})
+        }
+        return items
+    }
+    if cat == "Viajes" {
+        if L.age < 16 {
+            list_push(items, {"action": "oc:none", "t": "Viajar sol" + oa(L.gender) + ", a los 16", "s": "Paciencia", "desc": "Por ahora, las vacaciones son con tu familia.", "lock": ""})
+            return items
+        }
+        for t in TRIPS {
+            let lock = ""
+            if L.money < t.cost { lock = money_str(t.cost) }
+            if t.id == "mochila" && L.age > 30 { lock = "Hasta los 30" }
+            if L.used["trip"] != null { lock = "Este mes ya" }
+            let s = money_str(t.cost)
+            if L.visited != null && list_contains(L.visited, t.id) { s = s + " · ya fuiste" }
+            list_push(items, {"action": "oc:trip:" + t.id, "t": "Viajar a " + t.n, "s": s, "desc": t.d, "lock": lock})
+        }
+        return items
+    }
+    return items
+}
+
+// Elementos extra al principio de algunas categorías de la noche.
+function ocio_head_items(tab: string, cat: string) {
+    let items = []
+    if tab == "night" && cat == "Crimen" {
+        let s = "Calor " + str(heat()) + "% · Respeto " + str(street()) + "%"
+        let d = "El calor policial sube con cada golpe y baja con el tiempo. Con mucho calor, la policía allana tu casa. El respeto en la calle hace todo más fácil."
+        if L.crew == true { s = s + " · pandilla" }
+        if L.fugitive == true { s = s + " · PRÓFUG" + str_upper(oa(L.gender)) }
+        if L.parole != null && L.parole > 0 { d = d + " Estás en libertad condicional: si te atrapan, la condena es mayor." }
+        list_push(items, {"action": "oc:none", "t": "Tu situación en la calle", "s": s, "desc": d, "lock": ""})
+    }
+    return items
+}
+
+// Candados especiales de algunas actividades ("" si se puede).
+function ocio_lock(a: map) {
+    if a.id == "gang" && L.crew == true { return "Ya estás dentro" }
+    if a.id == "gang" && rank("guts") < 2 { return "Valor 2" }
+    if a.id == "launder" && heat() == 0 { return "Sin calor" }
+    if a.id == "bigheist" && street() < 40 { return "Respeto 40" }
+    if a.id == "fakeid" && L.fugitive != true { return "No eres prófug" + oa(L.gender) }
+    return ""
+}
+
+function heist_title() {
+    let s = L.heist
+    if s == null || s == 0 { return "El gran golpe: estudiar los planos" }
+    if s == 1 { return "El gran golpe: reclutar al equipo ($10,000)" }
+    return "El gran golpe: ¡ejecutarlo!"
+}
+
+// ---------------------------------------------------------------- acciones con código
+
+function ocio_code(id: string, a: map) {
+    if id == "marathon" {
+        L.money -= a.cost
+        return mg_start("race", "Maratón", "ocio", {"kind": "marathon"})
+    }
+    if id == "martial" {
+        L.money -= a.cost
+        if L.belt == null { L.belt = 0 }
+        if L.belt_xp == null { L.belt_xp = 0 }
+        if L.belt >= 5 {
+            gain("guts", 2)
+            L.health += 2
+            return finish(a.t, "Entrenaste con los alumnos nuevos. Cinturón negro: ahora enseñas tú.", "g")
+        }
+        L.belt_xp += rint(20, 40)
+        L.health += 2
+        gain("guts", 1)
+        if L.belt_xp >= 100 {
+            L.belt_xp = 0
+            return mg_start("timing", "Examen de cinturón " + BELTS[L.belt + 1], "ocio", {"kind": "belt"})
+        }
+        return finish(a.t, "Kata, patadas y sudor. Te falta poco para el examen de cinturón " + BELTS[L.belt + 1] + ".", "g")
+    }
+    if id == "haircut" { return open_haircut() }
+    if id == "puzzles" { return mg_start("math", "Crucigramas y sudokus", "ocio", {"kind": "puzzles"}) }
+    if id == "beerpong" { return mg_start("timing", "Beer pong", "ocio", {"kind": "beerpong"}) }
+    if id == "dj" { return mg_start("arrows", "DJ por una noche", "ocio", {"kind": "dj"}) }
+    if id == "barflirt" {
+        L.money -= a.cost
+        return open_barflirt()
+    }
+    if id == "speeddate" {
+        L.money -= a.cost
+        return open_speeddate()
+    }
+    if id == "sportsbet" { return open_sportsbet() }
+    if id == "poker" {
+        L.money -= a.cost
+        return mg_start("memory", "Póker clandestino", "ocio", {"kind": "poker"})
+    }
+    if id == "streetrace" {
+        L.money -= a.cost
+        return mg_start("race", "Carrera clandestina", "ocio", {"kind": "streetrace"})
+    }
+    if id == "pickpocket" { return mg_start("timing", "Carterista en el metro", "ocio", {"kind": "pickpocket"}) }
+    if id == "burglary" { return mg_start("memory", "La caja fuerte", "ocio", {"kind": "burglary"}) }
+    if id == "scam" { return mg_start("typing", "Estafa telefónica", "ocio", {"kind": "scam"}) }
+    if id == "dealing" {
+        let ok = 65 + street() / 4 - heat() / 3
+        if L.crew == true { ok += 10 }
+        if chance(odds_in(ok, 10, 92)) {
+            let m = rint(20, 100) * 100
+            L.money += m
+            add_heat(10)
+            add_street(5)
+            L.karma -= 6
+            return finish(a.t, "Moviste mercancía toda la semana. Ganaste " + money_str(m) + ". El barrio ya sabe quién eres.", "n")
+        }
+        if chance(50) { return open_arrest(4, "vender droga") }
+        L.health -= 20
+        add_street(-5)
+        return finish(a.t, "Una pandilla rival te emboscó en su territorio. Terminaste en el hospital.", "b")
+    }
+    if id == "gang" {
+        if L.crew == true || rank("guts") < 2 { return null }
+        if chance(60 + rank("guts") * 6) {
+            L.crew = true
+            add_street(20)
+            L.karma -= 5
+            hito_me("Vida", "Te uniste a una pandilla")
+            return finish(a.t, "Pasaste la iniciación. Ahora tienes hermanos de barrio que te cuidan las espaldas... y te piden favores.", "n")
+        }
+        L.health -= 12
+        return finish(a.t, "La iniciación salió mal. Te dieron una paliza y te dijeron que volvieras cuando tuvieras más agallas.", "b")
+    }
+    if id == "launder" {
+        if heat() == 0 || L.money < 2000 { return null }
+        L.money -= 2000
+        L.heat = max(0, heat() - 30)
+        return finish(a.t, "Una lavandería, un restaurante fantasma y facturas que cuadran. Tu calor policial baja a " + str(L.heat) + "%.", "n")
+    }
+    if id == "hide" {
+        L.heat = max(0, heat() - 15)
+        L.happy -= 4
+        return finish(a.t, "Un mes sin salir, sin redes y comiendo sopa instantánea. Tu calor policial baja a " + str(L.heat) + "%.", "n")
+    }
+    if id == "bigheist" {
+        if street() < 40 { return null }
+        let s = L.heist
+        if s == null { s = 0 }
+        if s == 0 { return mg_start("memory", "Los planos del casino", "ocio", {"kind": "plans"}) }
+        if s == 1 {
+            if L.money < 10000 { return info(a.t, "Reclutar al equipo cuesta $10,000.") }
+            L.money -= 10000
+            L.heist = 2
+            add_heat(5)
+            return finish(a.t, "Reclutaste a un hacker, a un experto en cajas fuertes y a un chofer que no hace preguntas. Ya está todo listo.", "n")
+        }
+        return mg_start("timing", "¡El gran golpe!", "ocio", {"kind": "heist"})
+    }
+    if id == "fakeid" {
+        if L.fugitive != true || L.money < 20000 { return null }
+        L.money -= 20000
+        L.fugitive = false
+        L.heat = 0
+        hito_me("Vida", "Empezaste de cero con una identidad falsa")
+        return finish(a.t, "Pasaporte nuevo, nombre nuevo, ciudad nueva. Nadie te busca ya.", "n")
+    }
+    return null
+}
+
+// Resultados de los minijuegos de ocio.
+function ocio_mg_result(score: any, ctx: map) {
+    let k = ctx.kind
+    if k == "hob" { return hob_result(ctx.id, score) }
+    if k == "trick" { return trick_result(score, ctx) }
+    if k == "chess" {
+        if score >= 70 {
+            let m = rint(20, 200) * 100 * hob_level("ajedrez") / 50
+            L.money += m
+            gain("know", 2)
+            hito_once("chess_win", "Vida", "Ganaste un torneo de ajedrez")
+            return finish("Torneo de ajedrez", "¡Jaque mate en la final! Ganaste " + money_str(m) + ".", "g")
+        }
+        return finish("Torneo de ajedrez", "Perdiste en la semifinal contra un niño de 11 años. Así es el ajedrez.", "b")
+    }
+    if k == "marathon" {
+        if score >= 40 {
+            L.health += 5
+            gain("guts", 3)
+            hito_once("marathon", "Salud", "Terminaste un maratón")
+            return finish("Maratón", "Cruzaste la meta (" + str(score) + " puntos). Lloraste, te dieron una medalla y no podías caminar.", "g")
+        }
+        L.health -= 3
+        return finish("Maratón", "Te acalambraste en el kilómetro 30. El año que viene.", "b")
+    }
+    if k == "belt" {
+        if score >= 50 {
+            L.belt += 1
+            gain("guts", 3)
+            if L.belt >= 5 { hito_me("Salud", "Conseguiste el cinturón negro") } else { hito_quiet("Salud", "Cinturón " + BELTS[L.belt] + " en artes marciales") }
+            return finish("Examen de cinturón", "¡Aprobaste! Ahora eres cinturón " + BELTS[L.belt] + ".", "g")
+        }
+        return finish("Examen de cinturón", "Reprobaste el examen. A entrenar más.", "b")
+    }
+    if k == "puzzles" {
+        L.smarts += score / 30
+        gain("know", 1 + score / 40)
+        return finish("Crucigramas", "Resolviste " + str(score / 10) + " acertijos. Tu cerebro lo agradece.", "g")
+    }
+    if k == "beerpong" {
+        if score >= 60 {
+            L.happy += 8
+            gain("charm", 2)
+            return finish("Beer pong", "¡Campeón del torneo! Te cargaron en hombros.", "g")
+        }
+        L.alcohol += 5
+        L.happy += 3
+        return finish("Beer pong", "Perdiste y te tocó beber. Mucho.", "n")
+    }
+    if k == "dj" {
+        if score >= 70 {
+            L.money += 800
+            gain("charm", 3)
+            L.fame = clamp100(L.fame + 1)
+            return finish("DJ", "La pista nunca se vació. El dueño te pagó $800 y te ofreció la próxima fecha.", "g")
+        }
+        L.happy -= 2
+        return finish("DJ", "Pusiste una balada en el peor momento. La pista se vació.", "b")
+    }
+    if k == "poker" {
+        if score >= 70 {
+            let m = rint(15, 50) * 100
+            L.money += m
+            gamble_up()
+            return finish("Póker", "Leíste a todos en la mesa. Te llevaste " + money_str(m) + ".", "g")
+        }
+        if chance(8) { return open_arrest(1, "apuestas ilegales") }
+        gamble_up()
+        return finish("Póker", "Perdiste tu entrada. El señor del sombrero sonrió.", "b")
+    }
+    if k == "streetrace" {
+        if score >= 70 {
+            L.money += 5000
+            add_street(5)
+            gain("guts", 3)
+            return finish("Carrera", "¡Ganaste la carrera por medio auto! $5,000 a tu bolsillo.", "g")
+        }
+        if score < 30 && chance(40) {
+            L.health -= 25
+            L.money -= 2000
+            return finish("Carrera", "Perdiste el control en la curva. Chocaste contra un poste.", "b")
+        }
+        if chance(caught_odds(5)) { return open_arrest(1, "carreras clandestinas") }
+        return finish("Carrera", "Llegaste segundo. Nadie recuerda al segundo.", "n")
+    }
+    if k == "pickpocket" {
+        if score >= 45 {
+            let m = 50 + score * 8
+            L.money += m
+            add_heat(4)
+            add_street(2)
+            L.karma -= 3
+            return finish("Carterista", "Sacaste una cartera con " + money_str(m) + " sin que nadie lo notara.", "n")
+        }
+        if chance(caught_odds(45)) { return open_arrest(1, "robo en el metro") }
+        return finish("Carterista", "Te sintió la mano y gritó. Corriste dos estaciones.", "b")
+    }
+    if k == "burglary" {
+        if score >= 50 {
+            let m = 2000 + score * 120
+            L.money += m
+            add_heat(12)
+            add_street(4)
+            L.karma -= 6
+            return finish("Robo", "Abriste la caja fuerte a la primera. Te llevaste " + money_str(m) + " en joyas y efectivo.", "n")
+        }
+        if chance(caught_odds(55)) { return open_arrest(3, "robo a casa habitación") }
+        return finish("Robo", "Sonó la alarma y saliste por la ventana con las manos vacías.", "b")
+    }
+    if k == "scam" {
+        if score >= 45 {
+            let m = 800 + score * 60
+            L.money += m
+            add_heat(8)
+            L.karma -= 8
+            return finish("Estafa", "Una señora te dio los datos de su tarjeta. Te llevaste " + money_str(m) + ". Tu karma, no tanto.", "n")
+        }
+        if chance(caught_odds(35)) { return open_arrest(2, "fraude") }
+        return finish("Estafa", "Te colgaron a la tercera palabra.", "b")
+    }
+    if k == "plans" {
+        if score >= 60 {
+            L.heist = 1
+            return finish("Los planos", "Memorizaste cada pasillo, cámara y cambio de guardia. Siguiente paso: el equipo.", "n")
+        }
+        return finish("Los planos", "Te confundiste con los planos. Mejor estúdialos otra vez el próximo mes.", "b")
+    }
+    if k == "heist" {
+        L.heist = 0
+        if score >= 70 {
+            let m = rint(5, 15) * 100000
+            L.money += m
+            add_heat(50)
+            add_street(25)
+            L.karma -= 15
+            hito_me("Vida", "Diste el gran golpe al casino")
+            return finish("¡EL GRAN GOLPE!", "Todo salió según el plan. Salieron del casino con " + money_str(m) + ". La policía no tiene ni una pista. Todavía.", "x")
+        }
+        if score >= 40 {
+            L.money += 100000
+            add_heat(40)
+            return finish("El gran golpe", "Sonaron las alarmas a mitad del golpe. Escaparon con solo $100,000.", "n")
+        }
+        return open_arrest(10, "el robo al casino")
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- pasatiempos
+
+function hob_action(id: string) {
+    let h = hob_def(id)
+    if L.age < h.min { return null }
+    if L.used["hob_" + id] != null { return info(h.n, "Ya practicaste este mes.") }
+    L.used["hob_" + id] = 1
+    if h.mg != "" { return mg_start(h.mg, h.n, "ocio", {"kind": "hob", "id": id}) }
+    return hob_result(id, 70)
+}
+
+function hob_result(id: string, score: any) {
+    let h = hob_def(id)
+    let before = hob_level(id)
+    let g = 4 + score / 12
+    if has_trait("cerebro") && (id == "ingles" || id == "japones" || id == "ajedrez" || id == "codigo") { g += 2 }
+    let after = clamp(before + g, 0, 100)
+    L.hob[id] = after
+    L.happy += 2
+    if id == "guitarra" || id == "piano" { gain("charm", 1) }
+    if id == "ingles" || id == "japones" || id == "ajedrez" || id == "codigo" { gain("know", 1) }
+    if id == "pintura" || id == "foto" || id == "cocina" { gain("skill", 1) }
+    let msg = "Practicaste " + str_lower(h.n) + ". Nivel " + str(after) + "%."
+    if before < 50 && after >= 50 { hito_me("Vida", h.lv50) }
+    if before < 100 && after >= 100 { hito_me("Vida", h.lv100) }
+    if before < h.showmin && after >= h.showmin { msg = msg + " Desbloqueaste: «" + h.show + "»." }
+    return finish(h.n, msg, "g")
+}
+
+function show_action(id: string) {
+    let h = hob_def(id)
+    let lv = hob_level(id)
+    if lv < h.showmin { return null }
+    if L.used["show_" + id] != null { return info(h.show, "Ya lo hiciste este mes.") }
+    L.used["show_" + id] = 1
+    if id == "guitarra" || id == "piano" {
+        let m = rint(3, 15) * 100 * lv / 50
+        L.money += m
+        gain("charm", 2)
+        if L.age >= 18 && chance(20) { return special_hookup_after("Tocaste en un bar y te pagaron " + money_str(m) + ". Alguien del público te esperaba a la salida...") }
+        return finish(h.show, "El público pidió otra. Te pagaron " + money_str(m) + ".", "g")
+    }
+    if id == "ingles" || id == "japones" {
+        let m = rint(5, 20) * 100
+        L.money += m
+        return finish(h.show, "Ganaste " + money_str(m) + " con tus clases. Tus alumnos te adoran.", "g")
+    }
+    if id == "ajedrez" { return mg_start("math", "Torneo de ajedrez", "ocio", {"kind": "chess"}) }
+    if id == "pintura" || id == "foto" {
+        let m = rint(5, 50) * lv
+        L.money += m
+        if lv >= 90 && chance(25) {
+            L.fame = clamp100(L.fame + 4)
+            hito_once("art_" + id, "Trabajo", "Una galería expuso tu obra")
+            return finish(h.show, "Una galería expuso tu obra y vendiste todo: " + money_str(m) + ".", "g")
+        }
+        return finish(h.show, "Vendiste tu obra por " + money_str(m) + ".", "g")
+    }
+    if id == "escritura" {
+        L.book = true
+        L.money += 20000
+        L.fame = clamp100(L.fame + 6)
+        hito_me("Trabajo", "Publicaste tu primera novela")
+        return finish(h.show, "Una editorial compró tu novela: $20,000 de adelanto y regalías cada mes. Ya eres autor publicado.", "g")
+    }
+    if id == "cocina" {
+        for q in L.people {
+            if q.alive && rel_group(q) == "friend" { bond_gain(q, 4) }
+        }
+        let p = partner()
+        if p != null && p.alive { bond_gain(p, 4) }
+        L.happy += 6
+        return finish(h.show, "Cocinaste un banquete para tus amigos. Nadie se quería ir.", "g")
+    }
+    if id == "codigo" {
+        L.app_done = true
+        if chance(45 + rank("know") * 5) {
+            let m = rint(5, 50) * 10000
+            L.money += m
+            L.fame = clamp100(L.fame + 4)
+            hito_me("Trabajo", "Lanzaste una app exitosa")
+            return finish(h.show, "Tu app se volvió viral. La vendiste por " + money_str(m) + ".", "g")
+        }
+        L.money -= 2000
+        return finish(h.show, "Lanzaste tu app. La descargaron tu mamá y tres bots.", "b")
+    }
+    if id == "jardin" {
+        L.money += rint(2, 8) * 100
+        L.happy += 4
+        return finish(h.show, "Vendiste tus plantas en el mercado del domingo. Te fuiste con dinero y un helecho de regalo.", "g")
+    }
+    return null
+}
+
+function special_hookup_after(msg: string) {
+    log_add(msg, "x")
+    open_hookup({"person": stranger()})
+    return null
+}
+
+// ---------------------------------------------------------------- cambio de look
+
+function open_haircut() {
+    let styles = []
+    let pool = [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11]
+    shuffle(G.rng, pool)
+    let i = 0
+    while i < 3 {
+        list_push(styles, pool[i])
+        i += 1
+    }
+    let colors = [rint(0, len(HAIR_COLORS) - 1), rint(0, len(HAIR_COLORS) - 1), rint(0, len(HAIR_COLORS) - 1)]
+    let labels = []
+    let j = 0
+    while j < 3 {
+        list_push(labels, HAIR_STYLES[styles[j]] + ", " + str_lower(HAIR_NAMES[colors[j]]))
+        j += 1
+    }
+    list_push(labels, "Solo despuntar")
+    open_choice("CAMBIO DE LOOK", "¿Qué te haces? Cuesta $200.", labels, ["", "", "", ""], "oc_hair", {"styles": styles, "colors": colors})
+    return null
+}
+
+// ---------------------------------------------------------------- mascotas
+
+function add_pet(kind: string, name: string) {
+    if L.pets == null { L.pets = [] }
+    if L.pet_next == null { L.pet_next = 1 }
+    let pt = {"id": L.pet_next, "kind": kind, "name": name, "age": 0, "bond": 70, "alive": true, "health": 90, "seen": L.tm}
+    if kind == "perro" || kind == "gato" { pt.age = rint(0, 3) }
+    L.pet_next += 1
+    list_push(L.pets, pt)
+    hito_once("first_pet", "Vida", "Tu primera mascota: " + name)
+    return pt
+}
+
+function open_adopt() {
+    let pool = list_slice(PET_KINDS, 0, len(PET_KINDS))
+    shuffle(G.rng, pool)
+    let kinds = [pool[0].id, pool[1].id, pool[2].id, pool[3].id]
+    let labels = []
+    let locks = []
+    for id in kinds {
+        let k = pet_kind(id)
+        list_push(labels, k.n + " (" + money_str(k.cost) + ")")
+        if L.money < k.cost { list_push(locks, money_str(k.cost)) } else { list_push(locks, "") }
+    }
+    list_push(labels, "Mejor no")
+    list_push(locks, "")
+    open_choice("ADOPTAR UNA MASCOTA", "En el refugio hay varios que te miran con ojos de «llévame».", labels, locks, "oc_adopt", {"kinds": kinds})
+    return null
+}
+
+function find_pet(action: string) {
+    for pt in pets_alive() {
+        if action == "oc:pet:" + str(pt.id) { return pt }
+    }
+    return null
+}
+
+function open_pet(pt: map) {
+    let k = pet_kind(pt.kind)
+    let labels = ["Jugar con " + pt.name, "Llevarl" + pet_o(pt) + " al veterinario ($200)", "Enseñarle un truco (minijuego)", "Darl" + pet_o(pt) + " en adopción", "Volver"]
+    let locks = ["", "", "", "", ""]
+    if L.used["pet" + str(pt.id)] != null {
+        locks[0] = "Este mes ya"
+        locks[2] = "Este mes ya"
+    }
+    if L.money < 200 { locks[1] = "$200" }
+    open_choice(str_upper(pt.name), k.n + " de " + str(pt.age) + " " + plural(pt.age, "año", "años") + ". Cariño " + str(pt.bond) + "%, salud " + str(pt.health) + "%.", labels, locks, "oc_pet", {"pet": pt.id})
+    return null
+}
+
+function pet_o(pt: map) {
+    if pt.kind == "tortuga" || pt.kind == "serpiente" { return "a" }
+    return "o"
+}
+
+function pet_by_id(id: int) {
+    for pt in pets_alive() {
+        if pt.id == id { return pt }
+    }
+    return null
+}
+
+// ---------------------------------------------------------------- viajes
+
+function trip_def(id: string) {
+    for t in TRIPS {
+        if t.id == id { return t }
+    }
+    return TRIPS[0]
+}
+
+function open_trip(id: string) {
+    let t = trip_def(id)
+    if L.used["trip"] != null { return info("Viajes", "Ya viajaste este mes.") }
+    if L.money < t.cost { return info("Viajes", "Cuesta " + money_str(t.cost) + ".") }
+    let p = partner()
+    if p != null && p.alive && both_adults(p) {
+        let extra = t.cost / 2
+        let lock = ""
+        if L.money < t.cost + extra { lock = money_str(t.cost + extra) }
+        open_choice(str_upper(t.n), t.d + " ¿Con quién vas?", ["Viajar sol" + oa(L.gender), "Ir con " + p.first + " (+" + money_str(extra) + ")", "Mejor no"], ["", lock, ""], "oc_trip", {"trip": id})
+        return null
+    }
+    return do_trip(id, false)
+}
+
+function do_trip(id: string, together: bool) {
+    let t = trip_def(id)
+    L.used["trip"] = 1
+    L.money -= t.cost
+    if L.visited == null { L.visited = [] }
+    let first = !list_contains(L.visited, id)
+    if first { list_push(L.visited, id) }
+    L.happy += 14
+    gain("know", 3)
+    let msg = t.log
+    if first { hito_me("Vida", "Conociste " + t.n) }
+    if len(L.visited) >= 7 { hito_once("traveler", "Vida", "Viajaste por medio mundo") }
+    if id == "vegas" {
+        if chance(40) {
+            L.money += 8000
+            msg = msg + " Además ganaste $8,000 en la ruleta."
+        } else {
+            L.money -= 2000
+            msg = msg + " Perdiste $2,000 en el casino."
+        }
+    }
+    if together {
+        let p = partner()
+        if p != null {
+            L.money -= t.cost / 2
+            bond_gain(p, 12)
+            lazos_spark(p, 8)
+            add_hito(p, "Viajaron juntos a " + t.n)
+            msg = msg + " Con " + p.first + " todo fue mejor."
+        }
+    } else if L.age >= 18 && (id == "rio" || id == "vegas" || id == "mochila" || id == "bali") && chance(35) {
+        log_add(msg, "g")
+        open_hookup({"person": stranger()})
+        return null
+    }
+    return finish("Viaje", msg, "g")
+}
+
+// ---------------------------------------------------------------- conquistar en el bar
+
+function open_barflirt() {
+    let x = stranger()
+    let tp = pick(FLIRT_TYPES)
+    let ctx = {"person": x, "type": tp, "round": 1, "score": 0}
+    return flirt_round(ctx)
+}
+
+function flirt_round(ctx: map) {
+    let x = ctx.person
+    let types = list_slice(FLIRT_TYPES, 0, len(FLIRT_TYPES))
+    shuffle(G.rng, types)
+    let opts = [ctx.type]
+    for t in types {
+        if len(opts) < 3 && t != ctx.type { list_push(opts, t) }
+    }
+    shuffle(G.rng, opts)
+    let labels = []
+    let k = ctx.round - 1
+    for t in opts { list_push(labels, FLIRT_LINES[t][k]) }
+    list_push(labels, "Retirarte con dignidad")
+    ctx["opts"] = opts
+    let text = fmt(str_upper(x.first) + " (" + str(x.age) + ") " + FLIRT_LOOKS[ctx.type] + ". ¿Qué le dices?", ctx)
+    if ctx.round == 2 { text = fmt("{x} te mira con curiosidad. Segunda oportunidad: ¿qué le dices ahora?", ctx) }
+    open_choice("CONQUISTA EN EL BAR · " + str(ctx.round) + "/2", text, labels, ["", "", "", ""], "oc_flirt", ctx)
+    return null
+}
+
+function resolve_barflirt(index: int, ctx: map) {
+    G.modal = null
+    let x = ctx.person
+    if index >= 3 { return finish("En el bar", "Te retiraste con dignidad. Mañana será otro día.", "n") }
+    if ctx.opts[index] == ctx.type { ctx["score"] = ctx.score + 1 }
+    if ctx.round == 1 {
+        ctx["round"] = 2
+        return flirt_round(ctx)
+    }
+    let s = ctx.score
+    if rank("charm") >= 4 && chance(30) { s += 1 }
+    if s >= 2 {
+        open_choice("¡FUNCIONÓ!", fmt("{x} se ríe, se acerca y te toma del brazo. ¿Qué sigue?", ctx), ["Invitarl{xlo} a salir en serio", "Ir a tu casa esta noche", "Darle tu número y despedirte"], ["", "", ""], "oc_flirtwin", {"person": x})
+        return null
+    }
+    if s == 1 {
+        x.bio = "Se conocieron en un bar."
+        x.km = rint(1, 10)
+        x.heat = 25
+        profile(x)
+        ph_add_match(x)
+        return finish("En el bar", x.first + " se rió de tu segunda frase y te dio su número. Aparece en tus matches de Flama: escríbele.", "x")
+    }
+    L.happy -= 3
+    return finish("En el bar", x.first + " te miró de arriba abajo y volvió con sus amigos. Auch.", "b")
+}
+
+// ---------------------------------------------------------------- speed dating
+
+function open_speeddate() {
+    let people = [stranger(), stranger(), stranger()]
+    let labels = []
+    for x in people {
+        profile(x)
+        list_push(labels, x.first + ", " + str(x.age) + " · le gusta " + INTEREST_NAMES[x.interests[0]] + " · " + str(compat(x)) + "%")
+    }
+    list_push(labels, "Ninguna me convenció")
+    open_choice("SPEED DATING", "Tres citas de tres minutos. ¿A quién quieres volver a ver?", labels, ["", "", "", ""], "oc_speed", {"people": people})
+    return null
+}
+
+// ---------------------------------------------------------------- apuestas
+
+function open_sportsbet() {
+    let teams = ["Tigres", "Águilas", "Pumas", "Leones", "Halcones", "Toros", "Diablos", "Rayos"]
+    shuffle(G.rng, teams)
+    let locks = ["", "", "", ""]
+    if L.money < 500 {
+        locks[0] = "$500"
+        locks[1] = "$500"
+    }
+    if L.money < 2000 { locks[2] = "$2,000" }
+    open_choice("APUESTAS DEPORTIVAS", teams[0] + " contra " + teams[1] + ". Los " + teams[0] + " son favoritos.",
+        ["$500 a los " + teams[0] + " (paga x1.5)", "$500 a los " + teams[1] + " (paga x4)", "$2,000 al empate (paga x3)", "Mejor no"], locks, "oc_bet", {"a": teams[0], "b": teams[1]})
+    return null
+}
+
+// ---------------------------------------------------------------- arresto
+
+// La policía te atrapó: entregarte, sobornar, correr o llamar a tu abogado.
+function open_arrest(years: int, crime: string) {
+    let y = years
+    if L.parole != null && L.parole > 0 { y += 2 }
+    let bribe = 3000 * y + heat() * 100
+    let locks = ["", "", "", ""]
+    if L.money < bribe { locks[1] = money_str(bribe) }
+    if L.money < 10000 { locks[3] = "$10,000" }
+    open_choice("¡ALTO, POLICÍA!", "Te atraparon por " + crime + ". Te podrían dar " + str(y) + " " + plural(y, "año", "años") + " de prisión.",
+        ["Entregarte sin resistencia", "Sobornar al policía (" + money_str(bribe) + ")", "Correr", "Llamar a tu abogado ($10,000)"], locks, "oc_arrest", {"years": y, "crime": crime, "bribe": bribe})
+    G.modal.tags = ["Menos años", "Riesgo", "Riesgo", "Libertad condicional"]
+    return null
+}
+
+function resolve_arrest(index: int, ctx: map) {
+    G.modal = null
+    let y = ctx.years
+    if index == 0 {
+        let years = max(1, y - 1)
+        return finish("Arresto", "Cooperaste y el juez lo tomó en cuenta." + go_to_jail(years), "b")
+    }
+    if index == 1 {
+        L.money -= ctx.bribe
+        if chance(odds_in(60 - heat() / 3, 15, 80)) {
+            add_heat(10)
+            return finish("Arresto", "El policía guardó el sobre y miró para otro lado. «No te vi.»", "n")
+        }
+        return finish("Arresto", "El policía era honesto. Intento de soborno: más años." + go_to_jail(y + 1), "b")
+    }
+    if index == 2 {
+        let odds = 25 + L.health / 5 + rank("guts") * 3 - heat() / 4
+        if chance(clamp(odds, 10, 75)) {
+            add_heat(15)
+            gain("guts", 2)
+            return finish("Arresto", "Saltaste una barda, cruzaste tres patios y te perdiste entre la gente. Te salvaste... por ahora.", "n")
+        }
+        L.health -= 5
+        return finish("Arresto", "Te alcanzaron a media cuadra. Resistirte empeoró las cosas." + go_to_jail(y + 1), "b")
+    }
+    L.money -= 10000
+    if chance(40 + rank("know") * 5) {
+        L.record += 1
+        L.parole = 24
+        hito_once("parole", "Vida", "Te salvaste de la cárcel con libertad condicional")
+        return finish("Arresto", "Tu abogado encontró un error en el proceso. Saliste con libertad condicional por dos años. No te metas en problemas.", "n")
+    }
+    return finish("Arresto", "Ni tu abogado pudo hacer nada." + go_to_jail(y), "b")
+}
+
+// ---------------------------------------------------------------- elecciones
+
+function ocio_choice(handler: string, index: int, ctx: map) {
+    G.modal = null
+    if handler == "oc_arrest" { return resolve_arrest(index, ctx) }
+    if handler == "oc_flirt" { return resolve_barflirt(index, ctx) }
+    if handler == "oc_flirtwin" {
+        let x = ctx.person
+        if index == 0 {
+            if chance(55 + rank("charm") * 5) {
+                let msg = "Quedaron para cenar al día siguiente. Y al siguiente. Y al siguiente."
+                msg = msg + special("new_partner", ctx)
+                return finish("En el bar", msg, "x")
+            }
+            return finish("En el bar", x.first + " prefirió no complicarse, pero te dio un beso en la mejilla.", "n")
+        }
+        if index == 1 { return open_hookup(ctx) }
+        x.bio = "Se conocieron en un bar."
+        x.km = rint(1, 10)
+        x.heat = 50
+        profile(x)
+        ph_add_match(x)
+        return finish("En el bar", "Le diste tu número y te fuiste con misterio. Ahora está en tus matches de Flama.", "x")
+    }
+    if handler == "oc_speed" {
+        if index >= 3 { return finish("Speed dating", "Ninguna te convenció. Te llevaste galletas gratis.", "n") }
+        let x = ctx.people[index]
+        let odds = 25 + compat(x) / 2 + rank("charm") * 4 + flirt_bonus()
+        if chance(odds_in(odds, 10, 90)) {
+            let msg = x.first + " también te eligió a ti. Su primera cita de verdad fue increíble."
+            msg = msg + special("new_partner", {"person": x})
+            return finish("Speed dating", msg, "x")
+        }
+        return finish("Speed dating", x.first + " eligió a alguien más. Así es esto.", "b")
+    }
+    if handler == "oc_bet" {
+        if index == 3 { return finish("Apuestas", "Guardaste tu dinero.", "n") }
+        let amounts = [500, 500, 2000]
+        let mult = [150, 400, 300]
+        let odds = [60, 22, 28]
+        L.money -= amounts[index]
+        gamble_up()
+        if chance(odds[index]) {
+            let win = amounts[index] * mult[index] / 100
+            L.money += win
+            L.happy += 6
+            return finish("Apuestas", "¡Le atinaste! Cobraste " + money_str(win) + ".", "g")
+        }
+        L.happy -= 3
+        return finish("Apuestas", "Perdiste la apuesta. El árbitro estaba comprado, seguro.", "b")
+    }
+    if handler == "oc_hair" {
+        if index == 3 {
+            L.money -= 200
+            return finish("Peluquería", "Solo despuntaste. Te ves igual, pero más fresc" + oa(L.gender) + ".", "n")
+        }
+        L.money -= 200
+        L.look.hair = ctx.styles[index]
+        L.look.hcolor = ctx.colors[index]
+        L.happy += 5
+        L.looks = clamp100(L.looks + rint(-2, 4))
+        return finish("Cambio de look", "¡Look nuevo! " + HAIR_STYLES[L.look.hair] + " y " + str_lower(HAIR_NAMES[L.look.hcolor]) + ". Todos te preguntan qué te hiciste.", "g")
+    }
+    if handler == "oc_adopt" {
+        if index >= 4 { return finish("Refugio", "Te fuiste sin adoptar. Uno te siguió con la mirada hasta la puerta.", "n") }
+        let k = pet_kind(ctx.kinds[index])
+        L.money -= k.cost
+        L.used["adopt"] = 1
+        let pt = add_pet(k.id, pick(PET_NAMES))
+        L.happy += 8
+        return finish("Nueva mascota", "Adoptaste a " + pt.name + ", tu " + str_lower(k.n) + ". Ya manda en tu casa.", "g")
+    }
+    if handler == "oc_pet" {
+        let pt = pet_by_id(ctx.pet)
+        if pt == null || index == 4 { return null }
+        if index == 0 {
+            L.used["pet" + str(pt.id)] = 1
+            pt.bond = clamp100(pt.bond + 8)
+            pt.seen = L.tm
+            L.happy += 4
+            if pt.kind == "perro" { L.health += 2 }
+            return finish(pt.name, pick(["Jugaron hasta que los dos quedaron rendidos.", pt.name + " te trajo la pelota cuarenta veces. Cuarenta.", "Siesta juntos en el sillón. Perfecto."]), "g")
+        }
+        if index == 1 {
+            L.money -= 200
+            pt.health = clamp100(pt.health + 25)
+            return finish(pt.name, "El veterinario dijo que " + pt.name + " está sano. Le dieron una galleta por portarse bien.", "g")
+        }
+        if index == 2 {
+            L.used["pet" + str(pt.id)] = 1
+            return mg_start("timing", "Truco para " + pt.name, "ocio", {"kind": "trick", "pet": pt.id})
+        }
+        pt.alive = false
+        L.happy -= 8
+        return finish(pt.name, "Le encontraste un buen hogar a " + pt.name + ". Te dolió despedirte.", "n")
+    }
+    if handler == "oc_trip" {
+        if index == 2 { return null }
+        return do_trip(ctx.trip, index == 1)
+    }
+    return null
+}
+
+// Truco de la mascota (minijuego).
+function trick_result(score: any, ctx: map) {
+    let pt = pet_by_id(ctx.pet)
+    if pt == null { return null }
+    if score >= 50 {
+        pt.bond = clamp100(pt.bond + 10)
+        let tricks = ["dar la pata", "sentarse", "dar una vuelta", "hacerse el muerto", "chocar los cinco"]
+        let tr = pick(tricks)
+        hito_quiet("Vida", pt.name + " aprendió a " + tr)
+        return finish(pt.name, "¡" + pt.name + " aprendió a " + tr + "! Lo presumes con todas las visitas.", "g")
+    }
+    return finish(pt.name, pt.name + " te miró sin entender nada y se fue a dormir.", "n")
+}
+
+// ---------------------------------------------------------------- efectos especiales y eventos
+
+function ocio_special(name: string, ctx: map) {
+    if name == "oc_arrest_fight" {
+        open_arrest(1, "riña en un bar")
+        return ""
+    }
+    return ""
+}
+
+// Allanamientos cuando el calor policial es muy alto; recaptura si eres prófugo.
+function maybe_ocio_event() {
+    if G.modal != null || L.jail > 0 { return false }
+    if heat() >= 70 && chance(8) {
+        log_add("La policía tocó tu puerta a las 6 a. m.", "b")
+        open_arrest(2, "un allanamiento a tu casa")
+        return true
+    }
+    if L.fugitive == true && chance(3) {
+        L.fugitive = false
+        log_add("Te reconocieron en una gasolinera. Se acabó la huida.", "b")
+        finish("Recaptura", "Te encontraron. De vuelta a prisión, con condena extra." + go_to_jail(4), "b")
+        return true
+    }
+    return false
+}
+
+// ---------------------------------------------------------------- cada mes y cada año
+
+function ocio_month() {
+    if !L.alive { return null }
+    // El calor baja si no cometes delitos.
+    if L.heat != null && L.heat > 0 {
+        let d = 3
+        if L.crime_m != L.tm { d = 6 }
+        L.heat = max(0, L.heat - d)
+    }
+    if L.parole != null && L.parole > 0 { L.parole -= 1 }
+    // Regalías de tu novela.
+    if L.book == true { L.money += rint(5, 30) * 100 }
+    // Mascotas: comida y cariño.
+    for pt in pets_alive() {
+        L.money -= pet_kind(pt.kind).food
+        if L.tm - pt.seen >= 3 && chance(50) { pt.bond = max(0, pt.bond - 3) }
+        if chance(5) { pt.health = max(0, pt.health - rint(5, 20)) }
+    }
+    return null
+}
+
+function ocio_year() {
+    for pt in pets_alive() {
+        pt.age += 1
+        let k = pet_kind(pt.kind)
+        let risk = 0
+        if pt.age >= k.life - 2 { risk = (pt.age - k.life + 3) * 20 }
+        if pt.health < 20 { risk += 25 }
+        if risk > 0 && chance(risk) {
+            pt.alive = false
+            L.happy -= 12
+            log_add("Tu " + str_lower(k.n) + " " + pt.name + " murió a los " + str(pt.age) + " años. Gracias por todo, " + pt.name + ".", "b")
+            hito_me("Vida", "Despediste a " + pt.name)
+        }
+    }
+    return null
+}
+
+// Efectos de pasatiempos, mascotas y calle.
+function ocio_fx(out: list) {
+    if L.hob != null {
+        let langs = 0
+        if hob_level("ingles") >= 70 { langs += 1 }
+        if hob_level("japones") >= 70 { langs += 1 }
+        if langs >= 2 {
+            list_push(out, fx("poliglota", "Políglota", true, "Hablas varios idiomas: las empresas te pelean.", {"hire": 8, "flirt": 2}))
+        } else if langs == 1 {
+            list_push(out, fx("bilingue", "Bilingüe", true, "Hablar otro idioma abre puertas.", {"hire": 5}))
+        }
+        if hob_level("guitarra") >= 60 || hob_level("piano") >= 60 { list_push(out, fx("musico", "Músic" + oa(L.gender), true, "Una canción bien tocada derrite a cualquiera.", {"flirt": 4})) }
+        if hob_level("ajedrez") >= 70 { list_push(out, fx("ajedrecista", "Mente de ajedrecista", true, "Siempre piensas tres jugadas adelante.", {"grades": 3, "hire": 2})) }
+        if hob_level("cocina") >= 60 { list_push(out, fx("sazon", "Buen sazón", true, "Comes delicioso todos los días.", {"hap": 1})) }
+    }
+    if L.belt != null && L.belt >= 5 { list_push(out, fx("cinta_negra", "Cinturón negro", true, "Nadie se mete contigo.", {"hp": 1, "flirt": 2})) }
+    for pt in pets_alive() {
+        if pt.bond >= 60 {
+            list_push(out, fx("mascota", "Compañía peluda", true, pt.name + " te recibe feliz cada día.", {"hap": 1}))
+            break
+        }
+    }
+    if L.crew == true { list_push(out, fx("pandilla", "Pandiller" + oa(L.gender), false, "Respeto en la calle, desconfianza en las entrevistas.", {"hire": -10, "flirt": 2})) }
+    if L.fugitive == true { list_push(out, fx("profugo", "Prófug" + oa(L.gender), false, "Siempre mirando por encima del hombro.", {"hap": -1, "hire": -20})) }
+    if L.heat != null && L.heat >= 50 && L.fugitive != true { list_push(out, fx("buscado", "En la mira de la policía", false, "Las patrullas pasan muy seguido por tu calle.", {"hap": -1})) }
+    if L.book == true { list_push(out, fx("autor", "Autor publicad" + oa(L.gender), true, "Firmas libros en las ferias.", {"flirt": 3, "hire": 3})) }
+    return null
+}

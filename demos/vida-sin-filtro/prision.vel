@@ -1,0 +1,601 @@
+// @edition 3
+// Prisión: la vida adentro, mes a mes.
+// - Rutina: trabajar (sueldo de prisión), gimnasio, biblioteca, estudiar la
+//   secundaria, talleres de arte y portarte bien.
+// - Patio: pelear, unirte a una pandilla (protección), contrabando de cigarros,
+//   proteger a los nuevos y tu compañero o compañera de celda.
+// - Visitas y cartas de tu familia y tu pareja (visita conyugal entre adultos).
+// - Legal: apelación con abogado, audiencia de libertad condicional o delatar.
+// - Fuga: conseguir una herramienta, cavar un túnel, sobornar a un guardia y
+//   escapar (o saltar la barda a la desesperada).
+// - Eventos: motín, revisión de celdas, pleitos, cartas, enfermedades, el nuevo.
+// Conducta y respeto deciden cómo te va: con buena conducta sales antes; con
+// respeto (o pandilla) nadie se mete contigo. Acciones con el prefijo "pr:".
+
+const PRISON_CATS = ["Rutina", "Patio", "Visitas", "Legal", "Fuga"]
+
+const PRISON_EVENTS = [
+    {
+        "id": "pr_riot", "title": "Motín",
+        "text": "Estalla un motín en tu pabellón: colchones quemados, gritos y guardias armados en la entrada.",
+        "choices": [
+            {"t": "Unirte al motín", "o": [{"w": 60, "log": "Peleaste junto a los demás. Ahora te respetan, pero los guardias te tienen en la mira.", "guts": 3, "health": -5, "special": "pr_riot_join"}, {"w": 40, "log": "Te identificaron como uno de los cabecillas: dos años más.", "health": -5, "special": "pr_more2"}]},
+            {"t": "Encerrarte en tu celda", "o": [{"w": 100, "log": "Esperaste a que pasara la tormenta. Nadie te notó.", "happy": -2}]},
+            {"t": "Ayudar a los guardias", "o": [{"w": 100, "log": "Los guardias lo anotaron en tu expediente. Los reclusos, también.", "special": "pr_snitchy"}]}
+        ]
+    },
+    {
+        "id": "pr_search", "title": "Revisión sorpresa",
+        "text": "A las 5 a. m. entran los guardias: revisión de celdas. Si tienes algo escondido, es ahora o nunca.",
+        "choices": [
+            {"t": "Esconder todo en el colchón", "need": "skill", "rank": 2, "o": [{"w": 100, "log": "No encontraron nada. Eres un mago.", "happy": 2}]},
+            {"t": "Quedarte quiet{a} y rezar", "o": [{"w": 60, "log": "Revisaron rápido y se fueron.", "happy": 1}, {"w": 40, "log": "Encontraron tu mercancía. Castigo y mala nota en tu expediente.", "special": "pr_busted"}]}
+        ]
+    },
+    {
+        "id": "pr_fight", "title": "Te buscan pleito",
+        "text": "Un recluso enorme te empuja en la fila de la comida. Todos voltean a ver qué haces.",
+        "choices": [
+            {"t": "Responder el golpe", "o": [{"w": 50, "log": "Lo tumbaste. Nadie volverá a empujarte.", "guts": 4, "health": -5, "special": "pr_resp_up"}, {"w": 50, "log": "Te ganó. Enfermería y orgullo herido.", "health": -15, "special": "pr_resp_down"}]},
+            {"t": "Ignorarlo y seguir en la fila", "o": [{"w": 100, "log": "Seguiste en la fila. Algunos lo vieron como debilidad.", "special": "pr_resp_down"}]},
+            {"t": "Llamar a tu pandilla", "o": [{"w": 100, "log": "", "special": "pr_call_gang"}]}
+        ]
+    },
+    {
+        "id": "pr_letter", "title": "Carta de casa",
+        "text": "Te llega una carta de tu familia. Está llena de noticias y de «te extrañamos».",
+        "choices": [
+            {"t": "Responder con todo tu cariño", "o": [{"w": 100, "log": "Escribiste cinco hojas. Lloraste en la tercera.", "happy": 6, "special": "pr_family"}]},
+            {"t": "Guardarla sin responder", "o": [{"w": 100, "log": "Te dio vergüenza responder. La leíste veinte veces.", "happy": -3}]}
+        ]
+    },
+    {
+        "id": "pr_offer", "title": "Una oferta de protección",
+        "text": "El líder de una pandilla del pabellón se sienta a tu lado: «Aquí sol{a} no duras. Con nosotros, nadie te toca. Pero a veces te pediremos favores.»",
+        "choices": [
+            {"t": "Aceptar", "o": [{"w": 100, "log": "Ahora tienes protección... y deudas.", "special": "pr_join"}]},
+            {"t": "Rechazar con respeto", "o": [{"w": 70, "log": "Asintió y se fue. Respetó tu decisión.", "special": "pr_resp_up"}, {"w": 30, "log": "No le gustó tu respuesta. Esa noche te dieron una lección.", "health": -12}]}
+        ]
+    },
+    {
+        "id": "pr_sick", "title": "Gripe en el pabellón",
+        "text": "Una gripe fuerte recorre el pabellón. Media prisión tose.",
+        "choices": [
+            {"t": "Ir a la enfermería a tiempo", "o": [{"w": 100, "log": "Te dieron medicina a tiempo. Saliste en tres días.", "health": -2}]},
+            {"t": "Aguantarte", "o": [{"w": 100, "log": "Pasaste una semana con fiebre en tu litera.", "health": -10, "happy": -3}]}
+        ]
+    },
+    {
+        "id": "pr_newbie", "title": "El nuevo",
+        "text": "Llega un recluso joven, temblando. Ya varios lo miran como presa fácil.",
+        "choices": [
+            {"t": "Protegerlo", "o": [{"w": 100, "log": "Te pusiste a su lado. Desde entonces te sigue a todos lados y te llama «jef{a}».", "kind": 4, "special": "pr_resp_up"}]},
+            {"t": "No meterte", "o": [{"w": 100, "log": "No es tu problema. O eso te dices en las noches.", "karma": -2}]},
+            {"t": "Quitarle sus cosas", "o": [{"w": 100, "log": "Te quedaste con sus cigarros y sus tenis. Tu karma lo resiente.", "karma": -6, "special": "pr_take"}]}
+        ]
+    }
+]
+
+// ---------------------------------------------------------------- estado
+
+function pr() {
+    if L.pr == null { prison_enter() }
+    return L.pr
+}
+
+// Al entrar a prisión: estado nuevo y un compañero de celda.
+function prison_enter() {
+    let resp = 10 + street() / 2
+    if L.crew == true { resp += 20 }
+    L.pr = {"beh": 50, "resp": clamp100(resp), "gang": L.crew == true, "tunnel": 0, "tool": false, "guard": false,
+            "contra": 0, "served": 0, "snitch": false, "study": 0, "appeal": false, "cell": 0}
+    let age = max(18, L.age + rint(-10, 10))
+    if L.age < 18 { age = L.age }
+    let c = make_person(L.gender, "recluso", age)
+    c.bond = rint(20, 45)
+    c.last = pick(SURNAMES)
+    add_person(c)
+    c.hitos = [{"a": L.age, "t": "Compartieron celda"}]
+    L.pr.cell = c.id
+    return null
+}
+
+function cellmate() {
+    if L.pr == null { return null }
+    let c = find_person(L.pr.cell)
+    if c == null || !c.alive { return null }
+    return c
+}
+
+function pr_use(id: string) {
+    if L.used["pr_" + id] != null { return false }
+    L.used["pr_" + id] = 1
+    return true
+}
+
+function pitem_pr(id: string, t: string, s: string, desc: string, lock: string) {
+    let l = lock
+    if l == "" && L.used["pr_" + id] != null { l = "Este mes ya" }
+    return {"action": "pr:" + id, "t": t, "s": s, "desc": desc, "lock": l}
+}
+
+function beh_word() {
+    let b = pr().beh
+    if b >= 80 { return "ejemplar" }
+    if b >= 60 { return "buena" }
+    if b >= 40 { return "regular" }
+    return "mala"
+}
+
+// ---------------------------------------------------------------- menú
+
+function prison_items(cat: string) {
+    let d = pr()
+    let items = []
+    let head = "Te quedan " + str(L.jail) + " " + plural(L.jail, "año", "años") + " · conducta " + beh_word() + " (" + str(d.beh) + ") · respeto " + str(d.resp)
+    if d.gang { head = head + " · pandilla" }
+    if cat == "Rutina" {
+        list_push(items, {"action": "pr:none", "t": "Tu situación", "s": head, "desc": "Con buena conducta (80 o más) puedes salir antes. Con respeto bajo y sin pandilla, eres presa fácil.", "lock": ""})
+        list_push(items, pitem_pr("work", "Trabajar en el taller", "Sueldo de prisión · conducta", "Lavandería, cocina o carpintería. Paga poco, pero cuenta para tu expediente.", ""))
+        list_push(items, pitem_pr("gym", "Hacer ejercicio en el patio", "Salud, atractivo", "Lagartijas, barras y abdominales al sol.", ""))
+        list_push(items, pitem_pr("library", "Ir a la biblioteca", "Inteligencia", "Libros viejos y silencio. Un lujo aquí adentro.", ""))
+        if L.edu < 2 {
+            list_push(items, pitem_pr("school", "Estudiar la secundaria", "Progreso " + str(d.study) + "/6", "Clases para reclusos. Seis meses y sales con certificado.", ""))
+        } else {
+            list_push(items, pitem_pr("course", "Curso técnico", "Destreza · conducta", "Electricidad, plomería o cocina. Un oficio para cuando salgas.", ""))
+        }
+        list_push(items, pitem_pr("art", "Taller de arte o música", "Felicidad", "Pintar o tocar la guitarra ayuda a no volverse loco.", ""))
+        list_push(items, pitem_pr("behave", "Portarte bien", "Conducta +", "Agacha la cabeza, cumple las reglas, no te metas en nada.", ""))
+        return items
+    }
+    if cat == "Patio" {
+        let c = cellmate()
+        if c != null {
+            list_push(items, {"action": "pr:chat", "t": "Platicar con " + c.first, "s": "Tu compañer" + oa(c.gender) + " de celda · cercanía " + str(c.bond) + "%", "desc": "Compartir cuatro metros cuadrados une a cualquiera.", "lock": "", "pid": c.id})
+        }
+        list_push(items, pitem_pr("fight", "Pelear en el patio", "Respeto (o enfermería)", "En prisión, el respeto se gana a golpes.", ""))
+        let gl = ""
+        if d.gang { gl = "Ya estás dentro" }
+        list_push(items, pitem_pr("gang", "Unirte a una pandilla", "Protección", "Nadie se mete con los de la pandilla. Pero la pandilla pide favores.", gl))
+        list_push(items, pitem_pr("smuggle", "Comerciar con cigarros", "Dinero · riesgo", "La moneda de la prisión. Compra barato, vende caro, que no te cachen.", ""))
+        list_push(items, pitem_pr("protect", "Proteger a un recluso nuevo", "Amabilidad, respeto", "Siempre hay alguien más asustado que tú.", ""))
+        return items
+    }
+    if cat == "Visitas" {
+        let vl = ""
+        if L.used["pr_visit"] != null { vl = "Este mes ya" }
+        for p in L.people {
+            if !p.alive || p.bond < 25 { continue }
+            let g = rel_group(p)
+            if g == "partner" || g == "parent" || g == "child" || g == "sibling" || g == "friend" || g == "grandparent" {
+                let s = rel_label(p) + " · cercanía " + str(p.bond) + "%"
+                if g == "partner" && both_adults(p) { s = s + " · visita conyugal" }
+                list_push(items, {"action": "pr:visit:" + str(p.id), "t": "Pedir visita de " + p.first, "s": s, "desc": "Una hora en la sala de visitas (o a solas, si es tu pareja). Lo que más se extraña aquí adentro.", "lock": vl, "pid": p.id})
+            }
+        }
+        list_push(items, pitem_pr("letters", "Escribir cartas a tu familia", "Cercanía", "Papel, lápiz y todo lo que no dijiste afuera.", ""))
+        return items
+    }
+    if cat == "Legal" {
+        let al = ""
+        if d.appeal { al = "Ya apelaste" }
+        if al == "" && L.money < 15000 { al = "$15,000" }
+        list_push(items, {"action": "pr:appeal", "t": "Contratar un abogado para apelar", "s": "$15,000 · una vez", "desc": "Un buen abogado puede reducir tu condena o sacarte. Funciona mejor con conocimiento.", "lock": al})
+        let pl = ""
+        if d.served < 12 { pl = "Cumple un año" }
+        list_push(items, pitem_pr("parole", "Audiencia de libertad condicional", "Según tu conducta", "Un comité revisa tu expediente. Con conducta alta puedes salir hoy mismo.", pl))
+        let sl = ""
+        if d.snitch { sl = "Ya delataste" }
+        list_push(items, {"action": "pr:snitch", "t": "Delatar a otro recluso", "s": "−1 año · muy peligroso", "desc": "La fiscalía te ofrece un trato. Los soplones no la pasan bien aquí.", "lock": sl})
+        return items
+    }
+    list_push(items, {"action": "pr:none", "t": "Tu plan de fuga", "s": "Túnel " + str(d.tunnel) + "%", "desc": "Herramienta: " + yes_no(d.tool) + " · Guardia sobornado: " + yes_no(d.guard) + ". Con el túnel al 100% o un guardia comprado, puedes escapar. Si te descubren, más años.", "lock": ""})
+    let tl = ""
+    if d.tool { tl = "Ya la tienes" }
+    list_push(items, pitem_pr("tool", "Conseguir una herramienta", "Una cuchara afilada", "Robarla de la cocina o comprarla en el mercado negro.", tl))
+    let dl = ""
+    if !d.tool { dl = "Necesitas herramienta" }
+    if d.tunnel >= 100 { dl = "Túnel listo" }
+    list_push(items, pitem_pr("dig", "Cavar el túnel", "Progreso", "Cada noche, detrás del póster. Paciencia y silencio.", dl))
+    let bl = ""
+    if d.guard { bl = "Ya está comprado" }
+    if bl == "" && L.money < 5000 { bl = "$5,000" }
+    list_push(items, {"action": "pr:bribe", "t": "Sobornar a un guardia", "s": "$5,000", "desc": "Que una puerta se quede abierta la noche correcta.", "lock": bl})
+    let el = ""
+    if d.tunnel < 100 && !d.guard { el = "Túnel o guardia" }
+    list_push(items, pitem_pr("escape", "¡Escapar!", "Minijuego de carrera", "Esta es la noche. Corre sin mirar atrás.", el))
+    list_push(items, pitem_pr("jump", "Saltar la barda a la desesperada", "Casi imposible", "Sin plan, sin ayuda, sin esperanza.", ""))
+    return items
+}
+
+function yes_no(b: bool) {
+    if b { return "sí" }
+    return "no"
+}
+
+// ---------------------------------------------------------------- acciones
+
+function prison_action(action: string) {
+    G.modal = null
+    if L.jail <= 0 { return null }
+    let d = pr()
+    if action == "pr:none" { return null }
+    if action == "pr:chat" {
+        let c = cellmate()
+        if c != null { return start_chat(c, false) }
+        return null
+    }
+    if str_starts_with(action, "pr:visit:") {
+        for p in L.people {
+            if p.alive && action == "pr:visit:" + str(p.id) { return prison_visit(p) }
+        }
+        return null
+    }
+    if action == "pr:appeal" {
+        if d.appeal || L.money < 15000 { return null }
+        L.money -= 15000
+        d.appeal = true
+        if chance(30 + rank("know") * 6) {
+            let cut = rint(1, 3)
+            L.jail = max(0, L.jail - cut)
+            if L.jail == 0 { return prison_release("Tu abogado ganó la apelación. ¡Eres libre!") }
+            return finish("Apelación", "Tu abogado consiguió reducir tu condena " + str(cut) + " " + plural(cut, "año", "años") + ".", "g")
+        }
+        return finish("Apelación", "El juez rechazó la apelación. Perdiste $15,000 y la esperanza.", "b")
+    }
+    if action == "pr:snitch" {
+        if d.snitch { return null }
+        d.snitch = true
+        d.resp = max(0, d.resp - 40)
+        L.karma -= 5
+        L.jail = max(0, L.jail - 1)
+        if L.jail == 0 { return prison_release("Tu información valió tu libertad. Afuera, nadie debe saber lo que hiciste.") }
+        return finish("Soplón", "La fiscalía te restó un año. En el pabellón ya se corrió la voz: eres soplón.", "n")
+    }
+    if action == "pr:bribe" {
+        if d.guard || L.money < 5000 { return null }
+        L.money -= 5000
+        if chance(70) {
+            d.guard = true
+            return finish("El guardia", "El guardia guardó el sobre y te dijo una fecha. Una puerta se quedará abierta.", "n")
+        }
+        d.beh = max(0, d.beh - 25)
+        return finish("El guardia", "El guardia te denunció. Perdiste el dinero y tu conducta se desplomó.", "b")
+    }
+    let id = str_replace(action, "pr:", "")
+    if !pr_use(id) { return info("Prisión", "Ya lo hiciste este mes.") }
+    if id == "work" {
+        let pay = rint(4, 15) * 10
+        L.money += pay
+        d.beh = clamp100(d.beh + 4)
+        gain("skill", 1)
+        return finish("Taller", "Doblaste sábanas ocho horas. Te pagaron " + money_str(pay) + ". Tu expediente mejora.", "n")
+    }
+    if id == "gym" {
+        L.health += 3
+        L.looks = clamp100(L.looks + 1)
+        gain("guts", 1)
+        d.resp = clamp100(d.resp + 2)
+        return finish("Patio", "Barras, lagartijas y sol. Saldrás de aquí más fuerte de lo que entraste.", "g")
+    }
+    if id == "library" {
+        L.smarts = clamp100(L.smarts + 2)
+        gain("know", 2)
+        return finish("Biblioteca", pick(["Leíste un libro de leyes. Ahora entiendes tu caso mejor que tu abogado.", "Leíste una novela entera en una noche. Por unas horas, estuviste afuera.", "Terminaste una enciclopedia vieja de la A a la F."]), "g")
+    }
+    if id == "school" {
+        d.study += 1
+        d.beh = clamp100(d.beh + 3)
+        gain("know", 2)
+        if d.study >= 6 {
+            L.edu = 2
+            hito_me("Estudios", "Terminaste la secundaria en prisión")
+            return finish("Clases", "¡Terminaste la secundaria! Tu certificado no dice dónde estudiaste.", "g")
+        }
+        return finish("Clases", "Fuiste a clases. Llevas " + str(d.study) + " de 6 meses.", "g")
+    }
+    if id == "course" {
+        gain("skill", 3)
+        d.beh = clamp100(d.beh + 3)
+        return finish("Curso técnico", "Aprendiste un oficio. Te servirá cuando salgas.", "g")
+    }
+    if id == "art" {
+        L.happy += 6
+        gain("kind", 1)
+        return finish("Taller de arte", "Pintaste un mural en el comedor. Por primera vez en meses, sonreíste de verdad.", "g")
+    }
+    if id == "behave" {
+        d.beh = clamp100(d.beh + 8)
+        gain("kind", 1)
+        return finish("Buena conducta", "Cumpliste todas las reglas, sin quejarte. Tu conducta mejora (" + str(d.beh) + ").", "n")
+    }
+    if id == "fight" {
+        gain("guts", 3)
+        if chance(35 + rank("guts") * 8 + d.resp / 5) {
+            d.resp = clamp100(d.resp + 12)
+            d.beh = max(0, d.beh - 6)
+            L.health -= 5
+            return finish("Pelea", "Ganaste la pelea. Ahora te respetan en el patio.", "g")
+        }
+        d.beh = max(0, d.beh - 6)
+        L.health -= 18
+        return finish("Pelea", "Te mandaron a la enfermería con tres costillas rotas.", "b")
+    }
+    if id == "gang" {
+        if d.gang { return null }
+        return prison_join_gang()
+    }
+    if id == "smuggle" {
+        if chance(20 - rank("skill") * 2) {
+            d.beh = max(0, d.beh - 15)
+            L.jail += 1
+            L.jail_total += 1
+            return finish("Contrabando", "Te cacharon con dos cajas de cigarros. Un año más de condena.", "b")
+        }
+        let m = rint(3, 12) * 100
+        L.money += m
+        d.contra += 1
+        d.resp = clamp100(d.resp + 3)
+        return finish("Contrabando", "Vendiste cigarros a todo el pabellón. Ganaste " + money_str(m) + ".", "n")
+    }
+    if id == "protect" {
+        gain("kind", 3)
+        if chance(70) {
+            d.resp = clamp100(d.resp + 6)
+            L.karma += 3
+            return finish("El nuevo", "Te pusiste entre el nuevo y los abusivos. Nadie se atrevió. Te ganaste un amigo y respeto.", "g")
+        }
+        L.health -= 10
+        return finish("El nuevo", "Lo defendiste y te tocaron los golpes a ti. Valió la pena, dices.", "n")
+    }
+    if id == "letters" {
+        for p in L.people {
+            if p.alive && (is_family(p) || rel_group(p) == "partner") { bond_gain(p, 3) }
+        }
+        L.happy += 3
+        return finish("Cartas", "Escribiste cartas a toda tu familia. Pronto llegarán respuestas.", "g")
+    }
+    if id == "parole" {
+        if d.served < 12 { return null }
+        if d.beh >= 60 && chance(d.beh - 30) {
+            L.parole = 24
+            return prison_release("El comité aprobó tu libertad condicional. Dos años sin meterte en problemas.")
+        }
+        d.beh = max(0, d.beh - 5)
+        return finish("Libertad condicional", "El comité negó tu libertad. «Siga trabajando en su conducta.»", "b")
+    }
+    if id == "tool" {
+        if chance(75) {
+            d.tool = true
+            return finish("La herramienta", "Robaste una cuchara de la cocina y la afilaste contra el piso. Ya tienes con qué cavar.", "n")
+        }
+        d.beh = max(0, d.beh - 15)
+        return finish("La herramienta", "Te cacharon con la cuchara en el calcetín. Conducta por los suelos.", "b")
+    }
+    if id == "dig" {
+        if !d.tool || d.tunnel >= 100 { return null }
+        if chance(10) {
+            d.tunnel = 0
+            d.tool = false
+            d.beh = max(0, d.beh - 25)
+            L.jail += 1
+            L.jail_total += 1
+            return finish("El túnel", "Los guardias encontraron el túnel detrás de tu póster. Un año más y castigo.", "b")
+        }
+        d.tunnel = min(100, d.tunnel + rint(8, 18))
+        if d.tunnel >= 100 { return finish("El túnel", "¡El túnel llega al otro lado de la barda! Ya puedes escapar.", "x") }
+        return finish("El túnel", "Cavaste toda la noche en silencio. Túnel al " + str(d.tunnel) + "%.", "n")
+    }
+    if id == "escape" {
+        if d.tunnel < 100 && !d.guard { return null }
+        return mg_start("race", "¡La fuga!", "prision", {"kind": "escape"})
+    }
+    if id == "jump" {
+        if chance(6 + rank("skill") * 3 + rank("guts") * 2) { return prison_escaped("Saltaste la barda bajo la lluvia y nadie te vio. ¡Increíble!") }
+        L.jail += 2
+        L.jail_total += 2
+        d.beh = max(0, d.beh - 20)
+        return finish("La barda", "Te atraparon trepando la barda. Dos años más.", "b")
+    }
+    return null
+}
+
+function prison_join_gang() {
+    let d = pr()
+    if chance(55 + d.resp / 3) {
+        d.gang = true
+        d.resp = clamp100(d.resp + 20)
+        d.beh = max(0, d.beh - 10)
+        L.crew = true
+        hito_once("prison_gang", "Vida", "Entraste a una pandilla en prisión")
+        return finish("La pandilla", "Te tatuaron el símbolo de la pandilla. Ahora nadie te toca.", "n")
+    }
+    L.health -= 10
+    return finish("La pandilla", "No te aceptaron. «Gánate el respeto primero.»", "b")
+}
+
+function prison_visit(p: map) {
+    if L.used["pr_visit"] != null { return info("Visitas", "Ya tuviste visita este mes.") }
+    L.used["pr_visit"] = 1
+    if p.bond < 35 && chance(50) {
+        p.bond = clamp100(p.bond - 3)
+        L.happy -= 5
+        return finish("Visitas", p.first + " no vino. Esperaste toda la hora mirando la puerta.", "b")
+    }
+    let g = rel_group(p)
+    bond_gain(p, 10)
+    L.happy += 8
+    touch(p)
+    if g == "partner" && both_adults(p) {
+        add_hito(p, "Su primera visita conyugal")
+        let msg = "Una hora a solas en el cuarto de visitas conyugales. Para los dos, fue como respirar." + sex_with(p)
+        return finish("Visita conyugal", msg, "x")
+    }
+    if g == "child" { return finish("Visitas", p.first + " te dibujó algo y lo pegó en el vidrio. Te lo llevaste a tu celda.", "g") }
+    return finish("Visitas", p.first + " te trajo comida casera y noticias de afuera. Te hizo mucho bien.", "g")
+}
+
+// Resultado de la fuga.
+function prison_mg_result(score: any, ctx: map) {
+    let d = pr()
+    if ctx.kind == "escape" {
+        let odds = 40 + score / 2
+        if d.guard { odds += 15 }
+        if chance(clamp(odds, 10, 95)) { return prison_escaped("Corriste por el túnel, saltaste la última reja y te perdiste en la noche. ¡Eres libre!") }
+        d.tunnel = 0
+        d.guard = false
+        d.tool = false
+        d.beh = 0
+        L.jail += 3
+        L.jail_total += 3
+        return finish("La fuga", "Los reflectores te encontraron a diez metros de la libertad. Tres años más y aislamiento.", "b")
+    }
+    return null
+}
+
+function prison_escaped(msg: string) {
+    L.jail = 0
+    L.record += 1
+    L.fugitive = true
+    L.heat = 80
+    flag("escape")
+    hito_me("Vida", "Escapaste de prisión")
+    L.pr = null
+    return finish("¡Fuga!", msg + " Ahora eres prófug" + oa(L.gender) + ": la policía te busca.", "x")
+}
+
+function prison_release(msg: string) {
+    L.jail = 0
+    L.pr = null
+    hito_once("released", "Vida", "Saliste de prisión")
+    return finish("¡Libertad!", msg, "g")
+}
+
+// ---------------------------------------------------------------- efectos especiales de los eventos
+
+function prison_special(name: string, ctx: map) {
+    if L.pr == null { return "" }
+    let d = L.pr
+    if name == "pr_riot_join" {
+        d.resp = clamp100(d.resp + 15)
+        d.beh = max(0, d.beh - 20)
+        return ""
+    }
+    if name == "pr_more2" {
+        L.jail += 2
+        L.jail_total += 2
+        d.beh = max(0, d.beh - 20)
+        return ""
+    }
+    if name == "pr_snitchy" {
+        d.beh = clamp100(d.beh + 20)
+        d.resp = max(0, d.resp - 15)
+        return ""
+    }
+    if name == "pr_busted" {
+        d.contra = 0
+        d.beh = max(0, d.beh - 15)
+        return ""
+    }
+    if name == "pr_resp_up" {
+        d.resp = clamp100(d.resp + 12)
+        return ""
+    }
+    if name == "pr_resp_down" {
+        d.resp = max(0, d.resp - 10)
+        return ""
+    }
+    if name == "pr_call_gang" {
+        if d.gang {
+            d.resp = clamp100(d.resp + 8)
+            return "Tus compañeros de pandilla rodearon al grandote. Se disculpó y se fue."
+        }
+        L.health -= 15
+        d.resp = max(0, d.resp - 10)
+        return "No tienes pandilla. Nadie vino. Te dieron una paliza."
+    }
+    if name == "pr_family" {
+        for p in L.people {
+            if p.alive && is_family(p) { bond_gain(p, 4) }
+        }
+        return ""
+    }
+    if name == "pr_join" {
+        d.gang = true
+        L.crew = true
+        d.resp = clamp100(d.resp + 20)
+        d.beh = max(0, d.beh - 10)
+        return ""
+    }
+    if name == "pr_take" {
+        d.resp = clamp100(d.resp + 8)
+        L.money += 100
+        return ""
+    }
+    return ""
+}
+
+// ---------------------------------------------------------------- cada mes y cada año
+
+function maybe_prison_event() {
+    if G.modal != null || L.jail <= 0 || !chance(16) { return false }
+    let d = pr()
+    let pool = []
+    for ev in PRISON_EVENTS {
+        if ev.id == "pr_search" && d.contra == 0 && !d.tool { continue }
+        if ev.id == "pr_offer" && d.gang { continue }
+        list_push(pool, ev)
+    }
+    if len(pool) == 0 { return false }
+    let ev = pick(pool)
+    open_event(ev, {})
+    return true
+}
+
+function prison_month() {
+    if L.jail <= 0 || !L.alive { return null }
+    let d = pr()
+    d.served += 1
+    if d.beh > 60 && chance(30) { d.beh -= 1 }
+    if !d.gang && d.resp < 30 && chance(15) {
+        L.health -= 8
+        L.happy -= 4
+        log_add("Te golpearon en las regaderas. Sin respeto ni pandilla, eres presa fácil.", "b")
+    }
+    if d.gang && chance(6) {
+        if chance(50) {
+            L.health -= 10
+            log_add("Ajuste de cuentas entre pandillas. Saliste herid" + oa(L.gender) + ".", "b")
+        } else {
+            d.beh = max(0, d.beh - 8)
+            log_add("La pandilla te pidió un favor. No pudiste decir que no.", "n")
+        }
+    }
+    if d.snitch && chance(12) {
+        L.health -= 15
+        log_add("Alguien te dejó claro lo que piensan de los soplones.", "b")
+    }
+    if d.tunnel > 0 && d.tunnel < 100 && chance(4) {
+        d.tunnel = 0
+        d.beh = max(0, d.beh - 20)
+        log_add("Los guardias descubrieron tu túnel en una revisión.", "b")
+    }
+    let c = cellmate()
+    if c != null && chance(30) { c.bond = clamp100(c.bond + 2) }
+    return null
+}
+
+// Una vez al año: con conducta ejemplar te quitan un año extra.
+function prison_year() {
+    if L.jail <= 0 || L.pr == null { return null }
+    if L.pr.beh >= 80 && chance(35) {
+        L.jail -= 1
+        log_add("Por tu conducta ejemplar te redujeron un año de condena.", "g")
+        if L.jail <= 0 {
+            L.jail = 0
+            L.pr = null
+            log_add("Saliste de prisión antes de tiempo. El mundo sigue igual; tú no.", "g")
+        }
+    }
+    return null
+}

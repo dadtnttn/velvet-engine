@@ -210,10 +210,11 @@ function find_activity(id: string) {
     for a in ACTIVITIES {
         if a.id == id { return a }
     }
-    return null
+    return find_ocio(id)
 }
 
 function menu_title(tab: string) {
+    if tab == "job" && L.jail > 0 { return "PRISIÓN" }
     if tab == "job" { return "OCUPACIÓN" }
     if tab == "study" { return "ESTUDIOS" }
     if tab == "gigs" { return "CHAMBAS" }
@@ -229,7 +230,8 @@ function menu_title(tab: string) {
 }
 
 function menu_cats(tab: string) {
-    if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Hábitos", "Fe", "Lujos"] }
+    if tab == "act" { return ["Cuerpo", "Mente", "Salud", "Hábitos", "Hobbies", "Mascotas", "Viajes", "Fe", "Lujos"] }
+    if tab == "job" && L.jail > 0 { return PRISON_CATS }
     if tab == "night" { return ["Fiesta", "Ligue", "Placer", "Carreras", "Vicios", "Crimen"] }
     if tab == "rel" { return ["Familia", "Pareja", "Amigos", "Trabajo", "Otros", "Conocer"] }
     if tab == "hitos" { return HITO_CATS }
@@ -246,7 +248,9 @@ function menu_cats(tab: string) {
 }
 
 function menu_items(tab: string, cat: string) {
+    if tab == "job" && L.jail > 0 { return prison_items(cat) }
     if tab == "job" { return job_items() }
+    if tab == "act" && (cat == "Hobbies" || cat == "Mascotas" || cat == "Viajes") { return ocio_items(cat) }
     if tab == "rel" { return rel_list(cat) }
     if tab == "missions" { return mission_items() }
     if tab == "effects" { return effect_items() }
@@ -268,12 +272,22 @@ function menu_items(tab: string, cat: string) {
     if tab == "night" && cat == "Carreras" { return casting_items() }
     if tab == "act" && cat == "Salud" { return health_items() }
     if tab == "act" && cat == "Hábitos" { return habit_items() }
-    let items = []
+    let items = ocio_head_items(tab, cat)
     for a in ACTIVITIES {
         if a.tab == tab && a.cat == cat && L.age >= a.min {
             let lock = ""
             if a.need != null && rank(a.need) < a.rank { lock = SOCIAL_NAMES[a.need] + " " + str(a.rank) }
             list_push(items, {"action": "act:" + a.id, "t": a.t, "s": fmt(a.s, {}), "desc": fmt(a.desc, {}), "lock": lock})
+        }
+    }
+    for a in OCIO_ACTS {
+        if a.tab == tab && a.cat == cat && L.age >= a.min {
+            let lock = ocio_lock(a)
+            if lock == "" && L.used[a.id] != null { lock = "Este mes ya" }
+            if lock == "" && a.cost > 0 && L.money < a.cost { lock = money_str(a.cost) }
+            let t = a.t
+            if a.id == "bigheist" { t = heist_title() }
+            list_push(items, {"action": "act:" + a.id, "t": t, "s": fmt(a.s, {}), "desc": fmt(a.desc, {}), "lock": lock})
         }
     }
     if tab == "act" && cat == "Lujos" && L.age >= 18 {
@@ -382,6 +396,7 @@ function do_act(id: string) {
     L.money -= a.cost
     let o = pick_outcome(a.o)
     let msg = apply(o, {})
+    if a.cat == "Crimen" { add_heat(8) }
     if a.tab == "night" { hito_once("first_night", "Vida", "Tu primera noche de fiesta") }
     if a.tab == "night" && has_trait("fiesta") && L.alive {
         L.happy = clamp100(L.happy + 4)
@@ -445,6 +460,11 @@ function code_activity(id: string, a: map) {
         return finish(a.t, "No ganaste nada. Como siempre.", "n")
     }
     if id == "dating" { return phone_go("flama") }
+    let lk = ocio_lock(a)
+    if lk != "" && find_ocio(id) != null {
+        L.used[id] = L.used[id] - 1
+        return info(a.t, "No se puede: " + lk + ".")
+    }
     if id == "hookup" {
         let person = stranger()
         let odds = 35 + looks_eff() / 2 + rank("charm") * 4 + flirt_bonus()
@@ -462,7 +482,7 @@ function code_activity(id: string, a: map) {
         G.menu_t0 = G.t
         return null
     }
-    return null
+    return ocio_code(id, a)
 }
 
 // ---------------------------------------------------------------- ocupación
@@ -910,6 +930,8 @@ function do_person_act(action: string, p: map) {
 
 function special(name: string, ctx: map) {
     if str_starts_with(name, "z_") { return lazos_special(name, ctx) }
+    if str_starts_with(name, "oc_") { return ocio_special(name, ctx) }
+    if str_starts_with(name, "pr_") { return prison_special(name, ctx) }
     if str_starts_with(name, "kid_") || name == "comeback" { return kid_special(name, ctx) }
     if str_starts_with(name, "hito:") || name == "sweet_end" || name == "sweet_moved" { return sweet_special(name, ctx) }
     if str_starts_with(name, "event:") {
@@ -1124,6 +1146,7 @@ function dispatch_choice(index: int) {
     if m.handler == "niche" { return resolve_niche(index) }
     if m.handler == "fprice" { return resolve_fprice(index) }
     if str_starts_with(m.handler, "z_") { return lazos_choice(m.handler, index, m.ctx) }
+    if str_starts_with(m.handler, "oc_") { return ocio_choice(m.handler, index, m.ctx) }
     if m.handler == "ph_match" { return resolve_match(index, m.ctx) }
     if m.handler == "ph_flirt" { return resolve_flirt(index, m.ctx) }
     if m.handler == "ph_alma" { return resolve_alma(index, m.ctx) }
