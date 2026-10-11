@@ -182,7 +182,12 @@ const MISSIONS = [
     {"id": "dynasty", "t": "Dinastía", "d": "Continúa tu historia como tu heredero.", "r": "+$10,000", "reward": {"money": 10000}},
     {"id": "first_love", "t": "Primer amor", "d": "Ten tu primer noviazgo en la adolescencia.", "r": "Felicidad", "reward": {"happy": 8}},
     {"id": "childhood_love", "t": "Amor de toda la vida", "d": "Cásate con tu amor de la infancia.", "r": "Felicidad · Amabilidad", "reward": {"happy": 15, "kind": 6}},
-    {"id": "golden", "t": "Bodas de oro", "d": "Cumple 50 años con la misma pareja.", "r": "Felicidad", "reward": {"happy": 20}}
+    {"id": "golden", "t": "Bodas de oro", "d": "Cumple 50 años con la misma pareja.", "r": "Felicidad", "reward": {"happy": 20}},
+    {"id": "investor", "t": "Inversionista", "d": "Ten un portafolio de bolsa de $100,000.", "r": "Conocimiento", "reward": {"know": 6}},
+    {"id": "homeowner", "t": "Casa propia", "d": "Compra una casa.", "r": "Felicidad", "reward": {"happy": 10}},
+    {"id": "debtfree", "t": "Libre de deudas", "d": "Termina de pagar un préstamo o una hipoteca.", "r": "+$5,000", "reward": {"money": 5000}},
+    {"id": "jackpot", "t": "Premio mayor", "d": "Gana el premio mayor de las tragamonedas.", "r": "Valor", "reward": {"guts": 5}},
+    {"id": "prenup", "t": "Letra pequeña", "d": "Firma un contrato prematrimonial.", "r": "Conocimiento", "reward": {"know": 3}}
 ]
 
 function flag(name: string) {
@@ -247,6 +252,7 @@ function mission_met(id: string) {
     if id == "grandpa" { return has_rel("nieto") }
     if id == "goodparent" { return L.kids > 0 && L.parent_score >= 75 }
     if id == "dynasty" { return L.gen >= 2 }
+    if id == "investor" { return L.mk != null && portfolio_value() >= 100000 }
     if id == "tecnico" {
         for d in L.degrees {
             if degree_def(d).type == "tec" { return true }

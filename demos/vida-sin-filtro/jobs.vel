@@ -109,6 +109,15 @@ const CAREER_ROWS = [
     ["agente_talentos", "Agente de talentos", "Agente de talentos", "Negocios", 2, 45, 0, 50000, "", "Talentos +18|Deportistas|Actores"],
     ["productor", "Productor musical", "Productora musical", "Negocios", 0, 45, 0, 55000, "", "Reguetón explícito +18|Pop|Bandas sonoras"],
     ["sexshop", "Dueño de sex shop", "Dueña de sex shop", "Negocios", 0, 30, 0, 40000, "a", "Tienda en línea|Boutique de lujo"],
+    ["analista_fin", "Analista financiero", "Analista financiera", "Negocios", 3, 60, 0, 60000, "", "Mercados emergentes|Riesgo crediticio"],
+    ["trader", "Trader", "Trader", "Negocios", 2, 55, 0, 50000, "", "Day trading|Criptomonedas"],
+    ["banquero", "Banquero de inversión", "Banquera de inversión", "Negocios", 3, 70, 0, 110000, "", "Fusiones y adquisiciones|Capital privado"],
+    ["asesor_fin", "Asesor financiero", "Asesora financiera", "Negocios", 2, 50, 0, 45000, "", "Planes de retiro|Clientes VIP"],
+    ["actuario", "Actuario", "Actuaria", "Negocios", 3, 75, 0, 70000, "", "Seguros de vida|Pensiones"],
+    ["auditor", "Auditor", "Auditora", "Negocios", 3, 55, 0, 55000, "", "Fraudes|Auditoría fiscal"],
+    ["gestor_fondos", "Gestor de fondos", "Gestora de fondos", "Negocios", 3, 75, 0, 130000, "", "Fondos de cobertura|Inversión ética"],
+    ["crupier", "Crupier de casino", "Crupier de casino", "Negocios", 1, 30, 20, 22000, "", "Mesas VIP|Póker profesional"],
+    ["prestamista", "Prestamista", "Prestamista", "Calle", 0, 30, 0, 30000, "x", "Cobranza|Casas de empeño"],
     // ------------------------------------------------ Deporte
     ["futbolista", "Futbolista", "Futbolista", "Deporte", 0, 0, 0, 70000, "", "Selección nacional|Liga europea"],
     ["boxeador", "Boxeador", "Boxeadora", "Deporte", 0, 0, 0, 40000, "", "Peso pesado|Exhibiciones"],
@@ -245,6 +254,12 @@ const FIELD_RANKS = {
 }
 
 const RANK_OVERRIDE = {
+    "analista_fin": ["Analista junior", "Analista", "Analista senior", "Director de análisis", "Gurú del mercado"],
+    "trader": ["Novato", "Trader", "Trader senior", "Jefe de mesa", "Lobo de Wall Street"],
+    "banquero": ["Asociado", "Vicepresidente", "Director", "Socio", "Titán de la banca"],
+    "asesor_fin": ["Asesor junior", "Asesor", "Asesor senior", "Asesor de fortunas", "Leyenda patrimonial"],
+    "gestor_fondos": ["Analista de fondos", "Gestor", "Gestor senior", "Director de inversiones", "Magnate de fondos"],
+    "crupier": ["Aprendiz", "Crupier", "Crupier VIP", "Jefe de mesas", "Leyenda del casino"],
     "porn": ["Amateur", "Promesa", "Estrella en ascenso", "Estrella", "Leyenda +18"],
     "stripper": ["Debut", "Habitual del tubo", "Estrella del escenario", "Cabeza de cartel", "Leyenda del club"],
     "escort": ["Independiente", "Agencia", "Escort de lujo", "Acompañante VIP", "Agencia propia"],
@@ -717,6 +732,7 @@ function career_items() {
     if job_is_adult(L.job) && CAREER_ACTIONS[L.job.id] == null {
         list_push(items, {"action": "cact:spec18", "t": "Encargo +18", "s": "Fama, mucho dinero", "desc": "Tu especialidad picante: los clientes pagan muy bien por lo que haces.", "lock": ""})
     }
+    for it in fin_career_items() { list_push(items, it) }
     if L.job.amateur == true {
         let game = AUDITION_GAME[d.field]
         list_push(items, {"action": "act:practice", "t": "Practicar (" + MG_INFO[game].title + ")", "s": "Experiencia según tu puntaje", "desc": "Sin título aprendes a la mala: practica con el minijuego de tu oficio. Mejor puntaje, más experiencia.", "lock": ""})
@@ -754,6 +770,7 @@ function do_career_act(id: string) {
     G.modal = null
     if L.job == null { return null }
     let d = job_def(L.job.id)
+    if id == "market" || id == "insider" { return fin_career_act(id) }
     let key = "c_" + id
     let used = L.used[key]
     if used == null { used = 0 }

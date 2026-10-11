@@ -45,7 +45,8 @@ state {
         "roul": null,
         "sex_mode": "",
         "back_pid": 0,
-        "chat": null
+        "chat": null,
+        "bj": null
     }
 }
 
@@ -493,6 +494,9 @@ function new_life_core(age: int) {
     G.mg = null
     G.legacy = null
     G.roul = null
+    G.bj = null
+    L.mk = null
+    fin_init()
 
     G.mode = "game"
     G.modal = null
@@ -528,6 +532,7 @@ function advance_month() {
         if L.alive {
             kids_year()
             old_age_year()
+            finance_year()
         }
         clamp_stats()
         if !L.alive { return true }
@@ -574,7 +579,8 @@ function month_name() {
 function monthly() {
     if L.job != null && L.jail == 0 {
         // Impuestos y estilo de vida se llevan la mitad del sueldo.
-        let net = job_pay(L.job) * 50 / 100 / 12
+        // Impuestos (30%); los gastos de vida se cobran aparte en finanzas.
+        let net = job_pay(L.job) * 70 / 100 / 12
         L.money += net
         if L.debt > 0 {
             let payment = min(L.debt, net * 20 / 100)
@@ -593,6 +599,7 @@ function monthly() {
     moods_month()
     state_hitos()
     bonds_month()
+    finance_month()
     if L.pregnant {
         if L.preg_m <= 0 {
             L.preg_m = 8
@@ -835,11 +842,7 @@ function breakup() {
         L.married = false
         L.divorces += 1
         hito_me("Amor", "Te divorciaste de " + p.first)
-        if L.money > 0 {
-            let half = L.money / 2
-            L.money -= half
-            log_add("El divorcio te costó la mitad de todo: " + money_str(half) + ".", "b")
-        }
+        log_add("Divorcio." + divorce_settlement(p), "b")
     }
     p.rel = "ex"
     L.partner_id = 0
