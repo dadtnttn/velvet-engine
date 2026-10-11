@@ -86,7 +86,7 @@ function interests_text(p: map) {
 function lovelang_text(p: map) {
     profile(p)
     if p.ll_known { return "Lenguaje del amor: " + LOVE_LANG_NAMES[p.lovelang] }
-    return "Lenguaje del amor: ¿?"
+    return "Lenguaje del amor: ???"
 }
 
 // Cómo va la relación, en palabras.
