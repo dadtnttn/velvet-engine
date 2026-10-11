@@ -1281,7 +1281,9 @@ function open_event(ev: map, ctx: map) {
     let locks = []
     let tags = []
     for c in ev.choices {
-        list_push(labels, fmt(c.t, ctx))
+        let lbl = fmt(c.t, ctx)
+        if c.cost != null { lbl = local_text(lbl, c.cost) }
+        list_push(labels, lbl)
         list_push(locks, choice_lock(c))
         list_push(tags, choice_tag(c))
     }
@@ -1295,8 +1297,8 @@ function choice_lock(c: map) {
     if c.need != null && rank(c.need) < c.rank {
         return SOCIAL_NAMES[c.need] + " " + str(c.rank)
     }
-    if c.cost != null && L.money < c.cost {
-        return "Necesitas " + money_str(c.cost)
+    if c.cost != null && L.money < local_price(c.cost) {
+        return "Necesitas " + money_str(local_price(c.cost))
     }
     if c.req_partner == true && L.partner_id == 0 {
         return "Necesitas pareja"

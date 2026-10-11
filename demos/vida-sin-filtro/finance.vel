@@ -151,8 +151,8 @@ function net_worth() {
 }
 
 function house_value(h: map) {
-    // Las casas siguen al mercado inmobiliario.
-    return h.cost * price("inmobilia") / 7000
+    // Las casas siguen al mercado inmobiliario y al costo de vida del país.
+    return local_price(h.cost) * price("inmobilia") / 7000
 }
 
 // ---------------------------------------------------------------- pareja

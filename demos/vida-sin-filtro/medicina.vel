@@ -33,18 +33,18 @@ const SURGERIES = [
 // descuento si tienes seguro médico.
 function cost_of(d: map) {
     if L.age < 18 { return 0 }
-    if L.insured == true { return d.cost * 30 / 100 }
-    return d.cost
+    if L.insured == true { return local_price(d.cost) * 30 / 100 }
+    return local_price(d.cost)
 }
 
 function emergency_cost(base: int) {
     if L.age < 18 { return 0 }
-    if L.insured == true { return base * 20 / 100 }
-    return base
+    if L.insured == true { return local_price(base) * 20 / 100 }
+    return local_price(base)
 }
 
 function premium() {
-    return 150 + L.age * 8
+    return local_price(150 + L.age * 8)
 }
 
 function bmi10() {

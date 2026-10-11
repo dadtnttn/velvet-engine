@@ -706,6 +706,22 @@ function trip_cost(dest: string) {
     return 150 + km * 12 / 100 + ctry(dest).gdp * 35
 }
 
+// Apunta un país en tu pasaporte (y celebra los hitos de viajero).
+function mark_visited(dest: string) {
+    let d = pa()
+    if list_contains(d.visited, dest) || dest == born_id() { return false }
+    list_push(d.visited, dest)
+    let n = len(d.visited)
+    if n == 1 { hito_me("Vida", "Tu primer viaje al extranjero: " + ctry(dest).n) }
+    if n == 10 { hito_me("Vida", "Visitaste 10 países") }
+    if n == 25 { hito_me("Vida", "Visitaste 25 países") }
+    if n == 50 { hito_me("Vida", "Visitaste 50 países") }
+    if n == 100 { hito_me("Vida", "Visitaste 100 países") }
+    if n >= 10 { flag("traveler10") }
+    if n >= 50 { flag("traveler50") }
+    return true
+}
+
 function pais_trip(dest: string, honey: bool) {
     let d = pa()
     let x = ctry(dest)
@@ -715,8 +731,7 @@ function pais_trip(dest: string, honey: bool) {
     L.used["pa_trip"] = 1
     L.money -= cost
     G.modal = null
-    let first = !list_contains(d.visited, dest)
-    if first && dest != born_id() { list_push(d.visited, dest) }
+    let first = mark_visited(dest)
     L.happy += 6 + x.tour / 12
     gain("know", 2)
     if dist_km(here_id(), dest) > 6000 { tfx_add("jet_lag", 1) }
@@ -729,16 +744,6 @@ function pais_trip(dest: string, honey: bool) {
         if L.age >= cu.min { list_push(parts, "Probaste algo muy local: " + str_lower(cu.t) + ".") }
     }
     list_push(parts, "Comprobaste que es cierto: " + str_lower_first(pick(csplit_cl(x.cl))))
-    let n = len(d.visited)
-    if first {
-        if n == 1 { hito_me("Vida", "Tu primer viaje al extranjero: " + x.n) }
-        if n == 10 { hito_me("Vida", "Visitaste 10 países") }
-        if n == 25 { hito_me("Vida", "Visitaste 25 países") }
-        if n == 50 { hito_me("Vida", "Visitaste 50 países") }
-        if n == 100 { hito_me("Vida", "Visitaste 100 países") }
-        if n >= 10 { flag("traveler10") }
-        if n >= 50 { flag("traveler50") }
-    }
     let p = partner()
     if honey && p != null {
         d.honey = false

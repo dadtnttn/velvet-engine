@@ -274,8 +274,8 @@ function study_items(kind: string) {
             lock = "Calificación " + str(d.min)
         }
         let unlocks = careers_for_degree(d.id)
-        let desc = str(d.years) + " " + plural(d.years, "año", "años") + " · " + money_str(d.cost) + " al año · calificación mínima " + str(d.min) + ". Abre: " + str_join(unlocks, ", ") + "."
-        list_push(items, {"action": "enroll:" + d.id, "t": d.n, "s": money_str(d.cost / 12) + "/mes", "desc": desc, "lock": lock})
+        let desc = str(d.years) + " " + plural(d.years, "año", "años") + " · " + money_str(local_price(d.cost)) + " al año · calificación mínima " + str(d.min) + ". Abre: " + str_join(unlocks, ", ") + "."
+        list_push(items, {"action": "enroll:" + d.id, "t": d.n, "s": money_str(local_price(d.cost) / 12) + "/mes", "desc": desc, "lock": lock})
     }
     return items
 }
@@ -303,10 +303,10 @@ function open_enroll_pay(id: string) {
     if L.grades < 70 && !has_flag("sport_star") { locks[1] = "Calificación 70" }
     let beca = "Beca (calificación 85 o deportiva: gratis; 70: mitad)"
     let tier = G.pending_tier
-    let cost = d.cost
+    let cost = local_price(d.cost)
     let where = ""
     if tier != null && tier != "" {
-        cost = d.cost * uni_tier(tier).mult / 100
+        cost = local_price(d.cost) * uni_tier(tier).mult / 100
         where = " (" + str_lower(uni_tier(tier).n) + ")"
     }
     open_choice("INSCRIPCIÓN", "Te aceptaron en " + d.n + where + " (" + str(d.years) + " años, " + money_str(cost) + " al año). ¿Cómo vas a pagarla?",

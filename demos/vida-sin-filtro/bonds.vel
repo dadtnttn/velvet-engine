@@ -196,7 +196,14 @@ function maybe_partner_initiative() {
             ["Abrazarl{xlo} y planear algo especial", "Explicarle que has estado muy ocupad{a}", "«Estás exagerando»"], ["", "", ""], "initiative", {"person": p, "kind": "neglect"})
         return true
     }
-    if p.rel == "pareja" && p.livein != true && p.bond >= 70 && L.age - p.since >= 1 {
+    // Una pareja devota no propone vivir juntos: propone casarse, y antes.
+    let devout = disapproval(p, "unmarried") >= 40
+    if devout && p.rel == "pareja" && p.bond >= 70 && L.age - p.since >= 1 && chance(50) {
+        open_choice("¡DE RODILLAS!", fmt("{x} te toma de las manos: «En mi fe el amor se toma en serio. No quiero solo vivir contigo: ¿te casarías conmigo?»", ctx),
+            ["¡Sí, mil veces sí!", "Necesito pensarlo", "No"], ["", "", ""], "initiative", {"person": p, "kind": "propose"})
+        return true
+    }
+    if p.rel == "pareja" && p.livein != true && p.bond >= 70 && L.age - p.since >= 1 && !devout {
         open_choice("UNA PROPUESTA", fmt("{x} te da una llave con un listón: «¿Y si vivimos juntos?»", ctx),
             ["¡Sí!", "Todavía no estoy list{a}"], ["", ""], "initiative", {"person": p, "kind": "livein"})
         return true
@@ -211,9 +218,9 @@ function maybe_partner_initiative() {
             ["Me encantaría", "Todavía no", "No quiero hijos"], ["", "", ""], "initiative", {"person": p, "kind": "baby"})
         return true
     }
-    if p.bond >= 65 && L.money >= 12000 && chance(30) {
+    if p.bond >= 65 && L.money >= local_price(12000) && chance(30) {
         open_choice("¿NOS VAMOS?", fmt("{x} te enseña fotos de una playa: «Necesitamos unas vacaciones. Tú y yo. ¿Qué dices?»", ctx),
-            ["¡Vámonos! ($12,000)", "Ahorita no se puede"], ["", ""], "initiative", {"person": p, "kind": "trip"})
+            [local_text("¡Vámonos! ($12,000)", 12000), "Ahorita no se puede"], ["", ""], "initiative", {"person": p, "kind": "trip"})
         return true
     }
     return false

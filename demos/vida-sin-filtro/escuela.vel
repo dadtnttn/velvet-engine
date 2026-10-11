@@ -1105,7 +1105,7 @@ function open_tier_choice(id: string) {
     let labels = []
     let locks = []
     for t in UNI_TIERS {
-        list_push(labels, t.n + " · " + money_str(d.cost * t.mult / 100) + "/año")
+        list_push(labels, t.n + " · " + money_str(local_price(d.cost) * t.mult / 100) + "/año")
         let lock = ""
         if exam < t.exam { lock = "Examen " + str(t.exam) }
         if t.id == "elite" && L.grades < 80 { lock = "Calificación 80" }
@@ -1130,7 +1130,7 @@ function study_cost(st: map) {
     let d = degree_def(st.deg)
     let mult = st.mult
     if mult == null { mult = 100 }
-    return d.cost * mult / 100
+    return local_price(d.cost) * mult / 100
 }
 
 function prestige() {
@@ -1171,8 +1171,8 @@ function post_items() {
         if p.need == "maestria" && !has_post("maestria") { lock = "Maestría" }
         if L.study != null { lock = "Termina tu carrera" }
         let cost = "Beca mensual"
-        if p.cost > 0 { cost = money_str(p.cost) + "/año" }
-        if lock == "" && p.cost > 0 && L.money < p.cost / 4 { lock = money_str(p.cost / 4) }
+        if p.cost > 0 { cost = money_str(local_price(p.cost)) + "/año" }
+        if lock == "" && p.cost > 0 && L.money < local_price(p.cost) / 4 { lock = money_str(local_price(p.cost) / 4) }
         list_push(items, sitem("post:" + p.id, p.n, cost, p.d + " " + str(p.years) + " años. +" + str(p.bonus) + "% de sueldo donde aplica.", lock))
     }
     return items
@@ -1194,7 +1194,7 @@ function post_month() {
     if pst == null { return null }
     let p = post_def(pst.id)
     if p.cost > 0 {
-        L.money -= p.cost / 12
+        L.money -= local_price(p.cost) / 12
         if L.money < -5000 {
             L.post = null
             log_add("Dejaste tu " + str_lower(p.n) + ": ya no podías pagarla.", "b")

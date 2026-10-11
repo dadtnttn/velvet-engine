@@ -390,11 +390,11 @@ function heist_title() {
 
 function ocio_code(id: string, a: map) {
     if id == "marathon" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         return mg_start("race", "Maratón", "ocio", {"kind": "marathon"})
     }
     if id == "martial" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         if L.belt == null { L.belt = 0 }
         if L.belt_xp == null { L.belt_xp = 0 }
         if L.belt >= 5 {
@@ -416,20 +416,20 @@ function ocio_code(id: string, a: map) {
     if id == "beerpong" { return mg_start("timing", "Beer pong", "ocio", {"kind": "beerpong"}) }
     if id == "dj" { return mg_start("arrows", "DJ por una noche", "ocio", {"kind": "dj"}) }
     if id == "barflirt" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         return open_barflirt()
     }
     if id == "speeddate" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         return open_speeddate()
     }
     if id == "sportsbet" { return open_sportsbet() }
     if id == "poker" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         return mg_start("memory", "Póker clandestino", "ocio", {"kind": "poker"})
     }
     if id == "streetrace" {
-        L.money -= a.cost
+        L.money -= local_price(a.cost)
         return mg_start("race", "Carrera clandestina", "ocio", {"kind": "streetrace"})
     }
     if id == "pickpocket" { return mg_start("timing", "Carterista en el metro", "ocio", {"kind": "pickpocket"}) }
