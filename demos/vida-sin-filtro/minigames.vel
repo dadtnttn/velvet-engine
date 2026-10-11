@@ -567,7 +567,8 @@ function draw_mg_news(x: int, y: int, w: int) {
     let sel = 0
     while i < len(q.tokens) {
         let t = q.tokens[i]
-        let tw = measure(t.w, 18, "bold") + 12
+        // Las palabras ya vienen traducidas: se miden y se dibujan tal cual.
+        let tw = int(str_measure(t.w, FONTS["bold"], 18) + 0.99) + 12
         if tx + tw > maxx {
             tx = x + 60
             ty += 36
@@ -579,7 +580,7 @@ function draw_mg_news(x: int, y: int, w: int) {
         } else if hovered(action) {
             rect(tx - 2, ty - 21, tw, 28, rgb(255, 205, 205))
         }
-        text(tx + 4, ty, t.w, 18, C_INK, "bold")
+        text_raw(tx + 4, ty, t.w, 18, C_INK, "bold")
         hot(tx - 2, ty - 21, tw, 28, action)
         tx += tw + 6
         i += 1

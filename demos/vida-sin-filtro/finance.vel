@@ -37,15 +37,17 @@ const HOUSES = [
     {"id": "mansion", "t": "Mansión", "cost": 850000, "keep": 2500}
 ]
 
+// Cada noticia se traduce entera; entre corchetes van las palabras clave que
+// hay que marcar ([E] es la empresa y [S] el sector), en el idioma que sea.
 const NEWS_UP = [
-    "El sector {S} vive un {auge} histórico: {E} anuncia {ganancias} récord.",
-    "Analistas prevén un {repunte} de {E} tras su nuevo {lanzamiento}.",
-    "{E} firma un {contrato} gigante y el sector {S} celebra."
+    "El sector [S] vive un [auge] histórico: [E] anuncia [ganancias] récord.",
+    "Analistas prevén un [repunte] de [E] tras su nuevo [lanzamiento].",
+    "[E] firma un [contrato] gigante y el sector [S] celebra."
 ]
 const NEWS_DOWN = [
-    "Señales de {crisis} en {S}: {E} enfrenta una {demanda} millonaria.",
-    "Temen la {quiebra} de proveedores de {E}; el sector {S} {cae}.",
-    "Un {escándalo} sacude a {E}: renuncia su director."
+    "Señales de [crisis] en [S]: [E] enfrenta una [demanda] millonaria.",
+    "Temen la [quiebra] de proveedores de [E]; el sector [S] [cae].",
+    "Un [escándalo] sacude a [E]: renuncia su director."
 ]
 const NEWS_FILLER = [
     "El clima será soleado durante el fin de semana.",
@@ -433,14 +435,14 @@ function plan_market() {
         if up { next[s.id] = big } else { next[s.id] = 0 - big }
         let tpl = pick(NEWS_UP)
         if !up { tpl = pick(NEWS_DOWN) }
-        list_push(article, str_replace(str_replace(tpl, "{S}", "{" + s.s + "}"), "{E}", "{" + s.n + "}"))
+        list_push(article, {"t": tpl, "S": s.s, "E": s.n})
         if up { list_push(news, "Rumores optimistas sobre " + s.s + ".") } else { list_push(news, "Nubarrones sobre el sector " + s.s + ".") }
         i += 1
     }
     let fillers = list_slice(NEWS_FILLER, 0, len(NEWS_FILLER))
     shuffle(G.rng, fillers)
-    list_push(article, fillers[0])
-    list_push(article, fillers[1])
+    list_push(article, {"t": fillers[0]})
+    list_push(article, {"t": fillers[1]})
     shuffle(G.rng, article)
     if mk.econ == "auge" { list_push(news, "La economía crece: el empleo está en máximos.") }
     if mk.econ == "recesion" { list_push(news, "Recesión: las empresas recortan personal.") }
@@ -451,9 +453,20 @@ function plan_market() {
 }
 
 // Palabras del periódico: las que van entre llaves son clave.
+// Palabras del periódico en el idioma activo: cada oración se traduce entera
+// y luego se parte en palabras (las de corchetes son las clave).
 function news_tokens() {
     let tokens = []
-    for sentence in L.mk.article {
+    for item in L.mk.article {
+        if type_of(item) == "map" {
+            let text = tr(item.t)
+            if item.S != null { text = str_replace(text, "[S]", "[" + tr(item.S) + "]") }
+            if item.E != null { text = str_replace(text, "[E]", "[" + item.E + "]") }
+            news_split(text, tokens)
+            continue
+        }
+        // Partidas guardadas con el formato viejo: {clave} dentro del texto.
+        let sentence = item
         let key = false
         for raw in str_split(sentence, " ") {
             let w = raw
@@ -471,6 +484,57 @@ function news_tokens() {
         }
     }
     return tokens
+}
+
+function news_split(text: string, tokens: list) {
+    let parts = str_split(text, "[")
+    let i = 0
+    while i < len(parts) {
+        let part = parts[i]
+        if i == 0 {
+            news_words(part, false, tokens)
+        } else {
+            let close = str_index_of(part, "]")
+            if close < 0 {
+                news_words(part, false, tokens)
+            } else {
+                news_words(str_sub(part, 0, close), true, tokens)
+                news_words(str_sub(part, close + 1), false, tokens)
+            }
+        }
+        i += 1
+    }
+    return null
+}
+
+// Agrega palabras; la puntuación pegada a la anterior («Ares:») se queda con ella.
+function news_words(s: string, key: bool, tokens: list) {
+    if s == "" { return null }
+    let ws = str_split(s, " ")
+    let j = 0
+    while j < len(ws) {
+        let w = ws[j]
+        if w != "" {
+            if j == 0 && len(tokens) > 0 && !str_starts_with(s, " ") && !key && glues(w) {
+                let last = tokens[len(tokens) - 1]
+                last.w = last.w + w
+            } else {
+                list_push(tokens, {"w": w, "key": key, "sel": false})
+            }
+        }
+        j += 1
+    }
+    return null
+}
+
+const NEWS_PUNCT = ".,;:!?)»”’…。，、；：！？）」』%"
+
+// Lo que va pegado a la palabra anterior: puntuación («Ares:»), sufijos con
+// guion («Automobil-Branche») o apóstrofo.
+function glues(w: string) {
+    let cs = str_chars(w)
+    if len(cs) == 0 { return false }
+    return str_contains(NEWS_PUNCT, cs[0]) || cs[0] == "-" || cs[0] == "'" || cs[0] == "’"
 }
 
 function news_result(score: any) {
