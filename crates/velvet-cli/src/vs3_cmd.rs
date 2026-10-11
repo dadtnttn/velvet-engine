@@ -320,9 +320,9 @@ fn parse_args(args: &[String]) -> Result<Vec<Value>> {
         } else if let Some(rest) = a.strip_prefix("q:") {
             out.push(Value::Quat(parse_float_components::<4>(rest, a)?));
         } else if let Some(rest) = a.strip_prefix("m3:") {
-            out.push(Value::Mat3(parse_float_components::<9>(rest, a)?));
+            out.push(Value::mat3(parse_float_components::<9>(rest, a)?));
         } else if let Some(rest) = a.strip_prefix("m4:") {
-            out.push(Value::Mat4(parse_float_components::<16>(rest, a)?));
+            out.push(Value::mat4(parse_float_components::<16>(rest, a)?));
         } else if let Some(rest) = a.strip_prefix("j:") {
             let json: serde_json::Value =
                 serde_json::from_str(rest).with_context(|| format!("bad JSON arg {a}"))?;

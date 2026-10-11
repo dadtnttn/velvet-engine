@@ -30,10 +30,10 @@ pub enum Value {
     Vec3([f64; 3]),
     /// Immutable four-component `f64` vector.
     Vec4([f64; 4]),
-    /// Immutable column-major 3x3 `f64` matrix.
-    Mat3([f64; 9]),
-    /// Immutable column-major 4x4 `f64` matrix.
-    Mat4([f64; 16]),
+    /// Immutable column-major 3x3 `f64` matrix (shared: keeps `Value` small).
+    Mat3(Rc<[f64; 9]>),
+    /// Immutable column-major 4x4 `f64` matrix (shared: keeps `Value` small).
+    Mat4(Rc<[f64; 16]>),
     /// Immutable quaternion `(x, y, z, w)`.
     Quat([f64; 4]),
     /// Shared deterministic PCG random stream `[state, increment]`.
@@ -126,8 +126,10 @@ impl Value {
             Self::Mat4(_) => 16,
             Self::String(s) => 1 + s.len() / 8,
             Self::List(l) => {
+                // A container with a single owner is reachable only once, so
+                // only shared ones need cycle/duplicate tracking.
                 let key = (0, Rc::as_ptr(l) as usize);
-                if !seen.insert(key) {
+                if Rc::strong_count(l) > 1 && !seen.insert(key) {
                     return 0;
                 }
                 1 + l
@@ -138,7 +140,7 @@ impl Value {
             }
             Self::Map(m) => {
                 let key = (1, Rc::as_ptr(m) as usize);
-                if !seen.insert(key) {
+                if Rc::strong_count(m) > 1 && !seen.insert(key) {
                     return 0;
                 }
                 1 + m
@@ -222,11 +224,12 @@ impl Value {
                 Ok(items[i as usize].clone())
             }
             Self::Map(map) => {
-                let key = match index {
-                    Self::String(s) => s.as_ref().to_string(),
-                    other => other.to_string(),
+                let map = map.borrow();
+                let found = match index {
+                    Self::String(s) => map.get(s.as_ref()),
+                    other => map.get(other.to_string().as_str()),
                 };
-                Ok(map.borrow().get(&key).cloned().unwrap_or(Self::Null))
+                Ok(found.cloned().unwrap_or(Self::Null))
             }
             Self::String(s) => {
                 let i = index
@@ -268,11 +271,17 @@ impl Value {
                 Ok(value)
             }
             Self::Map(map) => {
+                let mut map = map.borrow_mut();
                 let key = match index {
-                    Self::String(s) => s.as_ref().to_string(),
-                    other => other.to_string(),
+                    Self::String(s) => std::borrow::Cow::Borrowed(s.as_ref()),
+                    other => std::borrow::Cow::Owned(other.to_string()),
                 };
-                map.borrow_mut().insert(key, value.clone());
+                // Overwrite in place when the key exists (no key allocation).
+                if let Some(slot) = map.get_mut(key.as_ref()) {
+                    *slot = value.clone();
+                } else {
+                    map.insert(key.into_owned(), value.clone());
+                }
                 Ok(value)
             }
             Self::Vec2(_)
@@ -288,6 +297,16 @@ impl Value {
     /// Build a list value.
     pub fn list(items: Vec<Value>) -> Self {
         Self::List(Rc::new(RefCell::new(items)))
+    }
+
+    /// 3x3 matrix value.
+    pub fn mat3(values: [f64; 9]) -> Self {
+        Self::Mat3(Rc::new(values))
+    }
+
+    /// 4x4 matrix value.
+    pub fn mat4(values: [f64; 16]) -> Self {
+        Self::Mat4(Rc::new(values))
     }
 
     /// Build a map value.
@@ -496,8 +515,8 @@ fn fmt_value(
             "vec4({}, {}, {}, {})",
             value[0], value[1], value[2], value[3]
         ),
-        Value::Mat3(value) => fmt_numeric_value("mat3", value, f),
-        Value::Mat4(value) => fmt_numeric_value("mat4", value, f),
+        Value::Mat3(value) => fmt_numeric_value("mat3", &value[..], f),
+        Value::Mat4(value) => fmt_numeric_value("mat4", &value[..], f),
         Value::Quat(value) => write!(
             f,
             "quat({}, {}, {}, {})",

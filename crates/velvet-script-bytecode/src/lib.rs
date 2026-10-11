@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 use serde::{Deserialize, Serialize};
 
 /// Bytecode format version carried in module metadata.
-pub const BYTECODE_VERSION: u16 = 2;
+pub const BYTECODE_VERSION: u16 = 3;
 
 /// Native host function identifiers shared by compiler and VM.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1750,11 +1750,21 @@ pub enum Op {
     MakeMap = 39,
     /// Compound index update: container, index, rhs; followed by arithmetic opcode byte.
     UpdateIndex = 40,
+    /// Field read with a constant key (u16 constant index): `[.., obj]` → `obj[key]`.
+    GetField = 41,
+    /// Field of a local (u8 slot, u16 constant key) without pushing the local.
+    GetLocalField = 42,
+    /// Pop the condition and jump forward u16 when it is falsy (`if`/`while`).
+    PopJumpIfFalse = 43,
+    /// `for` step (u8 iterable slot, u8 index slot, u16 exit offset): when the
+    /// index is past the end jump forward, else push `iterable[index]` and
+    /// increment the index.
+    ForIter = 44,
 }
 
 impl Op {
     /// From raw byte.
-    pub fn from_u8(b: u8) -> Option<Self> {
+    pub const fn from_u8(b: u8) -> Option<Self> {
         Some(match b {
             1 => Self::Constant,
             2 => Self::Null,
@@ -1796,6 +1806,10 @@ impl Op {
             38 => Self::Len,
             39 => Self::MakeMap,
             40 => Self::UpdateIndex,
+            41 => Self::GetField,
+            42 => Self::GetLocalField,
+            43 => Self::PopJumpIfFalse,
+            44 => Self::ForIter,
             _ => return None,
         })
     }
@@ -1848,11 +1862,15 @@ impl Op {
             Self::Len => "LEN",
             Self::MakeMap => "MAKE_MAP",
             Self::UpdateIndex => "UPDATE_INDEX",
+            Self::GetField => "GET_FIELD",
+            Self::GetLocalField => "GET_LOCAL_FIELD",
+            Self::PopJumpIfFalse => "POP_JUMP_IF_FALSE",
+            Self::ForIter => "FOR_ITER",
         }
     }
 
     /// Operand size in bytes following the opcode.
-    pub fn operand_len(self) -> usize {
+    pub const fn operand_len(self) -> usize {
         match self {
             Self::Constant
             | Self::DefineGlobal
@@ -1863,9 +1881,12 @@ impl Op {
             | Self::JumpIfTrue
             | Self::Loop
             | Self::MakeList
-            | Self::MakeMap => 2,
+            | Self::MakeMap
+            | Self::GetField
+            | Self::PopJumpIfFalse => 2,
             Self::GetLocal | Self::SetLocal | Self::Call | Self::UpdateIndex => 1,
-            Self::NativeCall => 3, // u16 id + u8 argc
+            Self::NativeCall | Self::GetLocalField => 3, // u16 id + u8 argc / u8 + u16
+            Self::ForIter => 4,
             _ => 0,
         }
     }
@@ -1978,6 +1999,46 @@ pub struct Chunk {
     pub constants: Vec<Constant>,
     /// Source map (sparse).
     pub source_map: Vec<SourceMapEntry>,
+    /// Lookup index used by [`Chunk::add_constant`] to intern constants in
+    /// O(1); rebuilt on demand, never serialized or compared.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    constant_index: ConstantIndex,
+}
+
+/// Hashable identity of a constant (floats by bit pattern).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum ConstantKey {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(u64),
+    String(String),
+    Function(u16),
+    Native(u16),
+}
+
+impl ConstantKey {
+    fn of(constant: &Constant) -> Self {
+        match constant {
+            Constant::Null => Self::Null,
+            Constant::Bool(b) => Self::Bool(*b),
+            Constant::Int(i) => Self::Int(*i),
+            Constant::Float(f) => Self::Float(f.to_bits()),
+            Constant::String(s) => Self::String(s.clone()),
+            Constant::Function(f) => Self::Function(*f),
+            Constant::Native(n) => Self::Native(*n),
+        }
+    }
+}
+
+/// Side index of a chunk's constant pool (ignored by equality).
+#[derive(Debug, Clone, Default)]
+struct ConstantIndex(std::collections::HashMap<ConstantKey, u16>);
+
+impl PartialEq for ConstantIndex {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 impl Chunk {
@@ -1990,6 +2051,7 @@ impl Chunk {
             code: Vec::new(),
             constants: Vec::new(),
             source_map: Vec::new(),
+            constant_index: ConstantIndex::default(),
         }
     }
 
@@ -2020,14 +2082,24 @@ impl Chunk {
 
     /// Add constant; return index.
     pub fn add_constant(&mut self, c: Constant) -> u16 {
-        // Intern simple duplicates for strings/ints.
-        for (i, existing) in self.constants.iter().enumerate() {
-            if existing == &c {
-                return i as u16;
+        // Intern duplicates through a hash index (the pool is public, so the
+        // index is rebuilt whenever it is out of sync with it).
+        if self.constant_index.0.len() != self.constants.len() {
+            self.constant_index.0.clear();
+            for (i, existing) in self.constants.iter().enumerate() {
+                self.constant_index
+                    .0
+                    .entry(ConstantKey::of(existing))
+                    .or_insert(i as u16);
             }
+        }
+        let key = ConstantKey::of(&c);
+        if let Some(&idx) = self.constant_index.0.get(&key) {
+            return idx;
         }
         let idx = self.constants.len() as u16;
         self.constants.push(c);
+        self.constant_index.0.insert(key, idx);
         idx
     }
 
@@ -2252,6 +2324,7 @@ impl Chunk {
             locals,
             code,
             constants,
+            constant_index: ConstantIndex::default(),
             source_map,
         })
     }
@@ -2445,9 +2518,50 @@ pub fn disassemble_chunk(chunk: &Chunk) -> String {
                 let idx = read_u16(&chunk.code, &mut ip);
                 let _ = writeln!(out, "{start:04X}  {} {}{line_note}", op.mnemonic(), idx);
             }
-            Op::Jump | Op::JumpIfFalse | Op::JumpIfTrue | Op::Loop | Op::MakeList | Op::MakeMap => {
+            Op::Jump
+            | Op::JumpIfFalse
+            | Op::JumpIfTrue
+            | Op::Loop
+            | Op::MakeList
+            | Op::MakeMap
+            | Op::PopJumpIfFalse => {
                 let off = read_u16(&chunk.code, &mut ip);
                 let _ = writeln!(out, "{start:04X}  {} {}{line_note}", op.mnemonic(), off);
+            }
+            Op::GetField => {
+                let idx = read_u16(&chunk.code, &mut ip);
+                let key = chunk
+                    .constants
+                    .get(idx as usize)
+                    .map(format_constant)
+                    .unwrap_or_else(|| "<bad>".into());
+                let _ = writeln!(out, "{start:04X}  {} {key}{line_note}", op.mnemonic());
+            }
+            Op::GetLocalField => {
+                let slot = chunk.code.get(ip).copied().unwrap_or(0);
+                ip += 1;
+                let idx = read_u16(&chunk.code, &mut ip);
+                let key = chunk
+                    .constants
+                    .get(idx as usize)
+                    .map(format_constant)
+                    .unwrap_or_else(|| "<bad>".into());
+                let _ = writeln!(
+                    out,
+                    "{start:04X}  {} {slot} {key}{line_note}",
+                    op.mnemonic()
+                );
+            }
+            Op::ForIter => {
+                let it = chunk.code.get(ip).copied().unwrap_or(0);
+                let index = chunk.code.get(ip + 1).copied().unwrap_or(0);
+                ip += 2;
+                let off = read_u16(&chunk.code, &mut ip);
+                let _ = writeln!(
+                    out,
+                    "{start:04X}  {} {it} {index} {off}{line_note}",
+                    op.mnemonic()
+                );
             }
             Op::GetLocal | Op::SetLocal | Op::Call => {
                 let slot = chunk.code.get(ip).copied().unwrap_or(0);
@@ -2554,13 +2668,15 @@ mod tests {
 
     #[test]
     fn op_roundtrip_all() {
-        for b in 1u8..=40 {
+        for b in 1u8..=44 {
             let op = Op::from_u8(b).expect("op defined");
             assert_eq!(op.to_u8(), b);
             assert!(!op.mnemonic().is_empty());
         }
         assert!(Op::from_u8(0).is_none());
-        assert!(Op::from_u8(41).is_none());
+        assert!(Op::from_u8(45).is_none());
+        assert_eq!(Op::GetLocalField.operand_len(), 3);
+        assert_eq!(Op::ForIter.operand_len(), 4);
     }
 
     #[test]

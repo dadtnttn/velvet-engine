@@ -446,10 +446,9 @@ impl FnCompiler<'_> {
             } => {
                 self.chunk.map_source(loc.line, loc.column);
                 self.compile_expr(cond)?;
-                self.chunk.emit_op(Op::JumpIfFalse);
+                self.chunk.emit_op(Op::PopJumpIfFalse);
                 let else_jump = self.chunk.len();
                 self.chunk.emit_u16(0);
-                self.chunk.emit_op(Op::Pop);
                 self.compile_stmt(then_body)?;
                 self.chunk.emit_op(Op::Jump);
                 let end_jump = self.chunk.len();
@@ -457,7 +456,6 @@ impl FnCompiler<'_> {
                 // patch else
                 let else_offset = self.chunk.len() - (else_jump + 2);
                 self.chunk.patch_u16(else_jump, else_offset as u16);
-                self.chunk.emit_op(Op::Pop);
                 if let Some(e) = else_body {
                     self.compile_stmt(e)?;
                 }
@@ -468,10 +466,9 @@ impl FnCompiler<'_> {
                 self.chunk.map_source(loc.line, loc.column);
                 let loop_start = self.chunk.len();
                 self.compile_expr(cond)?;
-                self.chunk.emit_op(Op::JumpIfFalse);
+                self.chunk.emit_op(Op::PopJumpIfFalse);
                 let exit_jump = self.chunk.len();
                 self.chunk.emit_u16(0);
-                self.chunk.emit_op(Op::Pop);
                 self.loops.push(LoopContext {
                     continue_target: Some(loop_start),
                     continue_jumps: Vec::new(),
@@ -484,7 +481,6 @@ impl FnCompiler<'_> {
                 self.chunk.emit_u16(back as u16);
                 let exit_off = self.chunk.len() - (exit_jump + 2);
                 self.chunk.patch_u16(exit_jump, exit_off as u16);
-                self.chunk.emit_op(Op::Pop);
                 let break_target = self.chunk.len();
                 let loop_context = self.loops.pop().expect("while loop context");
                 for jump in loop_context.break_jumps {
@@ -674,7 +670,7 @@ impl FnCompiler<'_> {
                 body,
                 loc,
             } => {
-                // Desugar: let __it = iter; let __i = 0; while __i < len(__it) { let name = __it[__i]; body; __i += 1 }
+                // let __it = iter; let __i = 0; then FOR_ITER per iteration.
                 self.chunk.map_source(loc.line, loc.column);
                 self.begin_scope();
                 // __it
@@ -686,35 +682,21 @@ impl FnCompiler<'_> {
                 self.add_local("__i");
                 let i_slot = (self.locals.len() - 1) as u8;
 
+                // Each iteration: FOR_ITER checks `__i < len(__it)`, pushes
+                // `__it[__i]` as `name` and increments `__i` (continue
+                // therefore jumps straight back to it).
                 let loop_start = self.chunk.len();
-                // cond: __i < len(__it)
-                self.chunk.emit_op(Op::GetLocal);
-                self.chunk.emit_u8(i_slot);
-                self.chunk.emit_op(Op::GetLocal);
+                self.chunk.emit_op(Op::ForIter);
                 self.chunk.emit_u8(it_slot);
-                if let Some(native) = lookup_native("len") {
-                    self.chunk.emit_native_call(native.as_u16(), 1);
-                } else {
-                    self.error("stdlib len missing for for-loop lowering", loc);
-                    self.chunk.emit_constant(Constant::Int(0));
-                }
-                self.chunk.emit_op(Op::Lt);
-                self.chunk.emit_op(Op::JumpIfFalse);
+                self.chunk.emit_u8(i_slot);
                 let exit_jump = self.chunk.len();
                 self.chunk.emit_u16(0);
-                self.chunk.emit_op(Op::Pop);
 
-                // bind name = __it[__i]
                 self.begin_scope();
-                self.chunk.emit_op(Op::GetLocal);
-                self.chunk.emit_u8(it_slot);
-                self.chunk.emit_op(Op::GetLocal);
-                self.chunk.emit_u8(i_slot);
-                self.chunk.emit_op(Op::GetIndex);
                 self.add_local(name);
 
                 self.loops.push(LoopContext {
-                    continue_target: None,
+                    continue_target: Some(loop_start),
                     continue_jumps: Vec::new(),
                     break_jumps: Vec::new(),
                     // `name` lives in the per-iteration scope and must be
@@ -724,29 +706,11 @@ impl FnCompiler<'_> {
                 self.compile_stmt(body)?;
                 self.end_scope();
 
-                // __i += 1
-                let continue_target = self.chunk.len();
-                if let Some(context) = self.loops.last_mut() {
-                    context.continue_target = Some(continue_target);
-                    let jumps = std::mem::take(&mut context.continue_jumps);
-                    for jump in jumps {
-                        self.patch_forward_jump(jump, continue_target);
-                    }
-                }
-                self.chunk.emit_op(Op::GetLocal);
-                self.chunk.emit_u8(i_slot);
-                self.chunk.emit_constant(Constant::Int(1));
-                self.chunk.emit_op(Op::Add);
-                self.chunk.emit_op(Op::SetLocal);
-                self.chunk.emit_u8(i_slot);
-                self.chunk.emit_op(Op::Pop);
-
                 self.chunk.emit_op(Op::Loop);
                 let back = self.chunk.len() + 2 - loop_start;
                 self.chunk.emit_u16(back as u16);
                 let exit_off = self.chunk.len() - (exit_jump + 2);
                 self.chunk.patch_u16(exit_jump, exit_off as u16);
-                self.chunk.emit_op(Op::Pop);
                 let break_target = self.chunk.len();
                 let loop_context = self.loops.pop().expect("for loop context");
                 for jump in loop_context.break_jumps {
@@ -1012,9 +976,21 @@ impl FnCompiler<'_> {
             }
             Expr::Field { object, field, loc } => {
                 self.chunk.map_source(loc.line, loc.column);
-                self.compile_expr(object)?;
-                self.chunk.emit_constant(Constant::String(field.clone()));
-                self.chunk.emit_op(Op::GetIndex);
+                let key = self.chunk.add_constant(Constant::String(field.clone()));
+                let local = match object.as_ref() {
+                    Expr::Ident { name, .. } => self.resolve_local(name),
+                    _ => None,
+                };
+                if let Some(slot) = local {
+                    // `p.alive` with `p` local: one instruction, no push of `p`.
+                    self.chunk.emit_op(Op::GetLocalField);
+                    self.chunk.emit_u8(slot);
+                    self.chunk.emit_u16(key);
+                } else {
+                    self.compile_expr(object)?;
+                    self.chunk.emit_op(Op::GetField);
+                    self.chunk.emit_u16(key);
+                }
             }
             Expr::Index { object, index, loc } => {
                 self.chunk.map_source(loc.line, loc.column);
@@ -1329,14 +1305,8 @@ function f() {
             .iter()
             .find(|chunk| chunk.name == "f")
             .unwrap();
-        assert_eq!(
-            chunk
-                .code
-                .iter()
-                .filter(|&&byte| byte == Op::GetIndex.to_u8())
-                .count(),
-            2
-        );
+        let text = velvet_script_bytecode::disassemble_chunk(chunk);
+        assert_eq!(text.matches("GET_FIELD").count(), 2, "{text}");
     }
 
     #[test]
@@ -1364,7 +1334,7 @@ scene other {
     }
 
     #[test]
-    fn compile_for_loop_uses_len_and_index() {
+    fn compile_for_loop_uses_for_iter() {
         let src = r#"
 function sum(xs) {
     let total = 0
@@ -1376,14 +1346,9 @@ function sum(xs) {
 "#;
         let r = compile_source(src, None).unwrap();
         let chunk = r.module.functions.iter().find(|c| c.name == "sum").unwrap();
-        assert!(
-            chunk.code.contains(&(Op::GetIndex as u8)),
-            "for lowering should index the iterable"
-        );
-        assert!(
-            chunk.code.contains(&(Op::NativeCall as u8)),
-            "for lowering should call len"
-        );
+        let text = velvet_script_bytecode::disassemble_chunk(chunk);
+        assert_eq!(text.matches("FOR_ITER").count(), 1, "{text}");
+        assert!(text.contains("LOOP"), "{text}");
     }
 
     #[test]
@@ -1407,7 +1372,8 @@ function sign(n) {
             .iter()
             .find(|c| c.name == "sign")
             .unwrap();
-        assert!(chunk.code.contains(&(Op::JumpIfFalse as u8)));
+        let text = velvet_script_bytecode::disassemble_chunk(chunk);
+        assert_eq!(text.matches("POP_JUMP_IF_FALSE").count(), 2, "{text}");
     }
 
     #[test]

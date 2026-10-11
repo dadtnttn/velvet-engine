@@ -182,40 +182,40 @@ pub(crate) fn call_math_native(native: NativeId, args: &[Value]) -> Result<Nativ
             let values = vector_zip(&args[0], &args[1], "vec_lerp", |a, b| a + (b - a) * t)?;
             vector_like(&args[0], values)?
         }
-        N::Mat3Identity => Value::Mat3(identity_matrix::<9>(3)),
-        N::Mat4Identity => Value::Mat4(identity_matrix::<16>(4)),
-        N::Mat3 => Value::Mat3(array_from_args::<9>(args, "mat3")?),
-        N::Mat4 => Value::Mat4(array_from_args::<16>(args, "mat4")?),
+        N::Mat3Identity => Value::mat3(identity_matrix::<9>(3)),
+        N::Mat4Identity => Value::mat4(identity_matrix::<16>(4)),
+        N::Mat3 => Value::mat3(array_from_args::<9>(args, "mat3")?),
+        N::Mat4 => Value::mat4(array_from_args::<16>(args, "mat4")?),
         N::Mat3Translation => {
             let value = vec2(&args[0], "mat3_translation")?;
-            Value::Mat3([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, value[0], value[1], 1.0])
+            Value::mat3([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, value[0], value[1], 1.0])
         }
         N::Mat3Scale => {
             let value = vec2(&args[0], "mat3_scale")?;
-            Value::Mat3([value[0], 0.0, 0.0, 0.0, value[1], 0.0, 0.0, 0.0, 1.0])
+            Value::mat3([value[0], 0.0, 0.0, 0.0, value[1], 0.0, 0.0, 0.0, 1.0])
         }
-        N::Mat3Rotation => Value::Mat3(rotation_z3(number(&args[0], "mat3_rotation")?)),
+        N::Mat3Rotation => Value::mat3(rotation_z3(number(&args[0], "mat3_rotation")?)),
         N::Mat4Translation => {
             let value = vec3(&args[0], "mat4_translation")?;
             let mut matrix = identity_matrix::<16>(4);
             matrix[12] = value[0];
             matrix[13] = value[1];
             matrix[14] = value[2];
-            Value::Mat4(matrix)
+            Value::mat4(matrix)
         }
         N::Mat4Scale => {
             let value = vec3(&args[0], "mat4_scale")?;
-            Value::Mat4([
+            Value::mat4([
                 value[0], 0.0, 0.0, 0.0, 0.0, value[1], 0.0, 0.0, 0.0, 0.0, value[2], 0.0, 0.0,
                 0.0, 0.0, 1.0,
             ])
         }
-        N::Mat4RotationX => Value::Mat4(rotation_x4(number(&args[0], "mat4_rotation_x")?)),
-        N::Mat4RotationY => Value::Mat4(rotation_y4(number(&args[0], "mat4_rotation_y")?)),
-        N::Mat4RotationZ => Value::Mat4(rotation_z4(number(&args[0], "mat4_rotation_z")?)),
-        N::Mat4Orthographic => Value::Mat4(orthographic(args)?),
-        N::Mat4Perspective => Value::Mat4(perspective(args)?),
-        N::Mat4LookAt => Value::Mat4(look_at(args)?),
+        N::Mat4RotationX => Value::mat4(rotation_x4(number(&args[0], "mat4_rotation_x")?)),
+        N::Mat4RotationY => Value::mat4(rotation_y4(number(&args[0], "mat4_rotation_y")?)),
+        N::Mat4RotationZ => Value::mat4(rotation_z4(number(&args[0], "mat4_rotation_z")?)),
+        N::Mat4Orthographic => Value::mat4(orthographic(args)?),
+        N::Mat4Perspective => Value::mat4(perspective(args)?),
+        N::Mat4LookAt => Value::mat4(look_at(args)?),
         N::MatMul => matrix_multiply(&args[0], &args[1])?,
         N::MatTranspose => matrix_transpose(&args[0])?,
         N::MatDeterminant => Value::Float(matrix_determinant(&args[0])?),
@@ -787,16 +787,16 @@ fn look_at(args: &[Value]) -> Result<[f64; 16], String> {
 
 fn matrix(value: &Value) -> Result<(&[f64], usize), String> {
     match value {
-        Value::Mat3(values) => Ok((values, 3)),
-        Value::Mat4(values) => Ok((values, 4)),
+        Value::Mat3(values) => Ok((&values[..], 3)),
+        Value::Mat4(values) => Ok((&values[..], 4)),
         _ => Err(format!("expected matrix, got {}", value.type_name())),
     }
 }
 
 fn matrix_value(dimension: usize, values: Vec<f64>) -> Result<Value, String> {
     match (dimension, values.as_slice()) {
-        (3, values) => Ok(Value::Mat3(values.try_into().map_err(|_| "invalid mat3")?)),
-        (4, values) => Ok(Value::Mat4(values.try_into().map_err(|_| "invalid mat4")?)),
+        (3, values) => Ok(Value::mat3(values.try_into().map_err(|_| "invalid mat3")?)),
+        (4, values) => Ok(Value::mat4(values.try_into().map_err(|_| "invalid mat4")?)),
         _ => Err("unsupported matrix dimension".into()),
     }
 }
@@ -1896,12 +1896,14 @@ fn approx_value(a: &Value, b: &Value, epsilon: f64) -> Result<bool, String> {
         (Value::Vec4(a), Value::Vec4(b)) | (Value::Quat(a), Value::Quat(b)) => {
             Ok(a.iter().zip(b).all(|(a, b)| (a - b).abs() <= epsilon))
         }
-        (Value::Mat3(a), Value::Mat3(b)) => {
-            Ok(a.iter().zip(b).all(|(a, b)| (a - b).abs() <= epsilon))
-        }
-        (Value::Mat4(a), Value::Mat4(b)) => {
-            Ok(a.iter().zip(b).all(|(a, b)| (a - b).abs() <= epsilon))
-        }
+        (Value::Mat3(a), Value::Mat3(b)) => Ok(a
+            .iter()
+            .zip(b.iter())
+            .all(|(a, b)| (a - b).abs() <= epsilon)),
+        (Value::Mat4(a), Value::Mat4(b)) => Ok(a
+            .iter()
+            .zip(b.iter())
+            .all(|(a, b)| (a - b).abs() <= epsilon)),
         _ if a.type_name() == b.type_name() => Ok(a == b),
         _ => Err(format!(
             "approx_eq incompatible types: {} and {}",
@@ -1931,7 +1933,7 @@ mod tests {
         );
         assert_eq!(call(NativeId::Dot, &[a, b]), Value::Float(32.0));
 
-        let matrix = Value::Mat3([2.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 1.0]);
+        let matrix = Value::mat3([2.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 1.0]);
         let inverse = call(NativeId::MatInverse, std::slice::from_ref(&matrix));
         let identity = call(NativeId::MatMul, &[matrix, inverse]);
         assert!(matches!(
@@ -1939,7 +1941,7 @@ mod tests {
                 NativeId::ApproxEq,
                 &[
                     identity,
-                    Value::Mat3(identity_matrix::<9>(3)),
+                    Value::mat3(identity_matrix::<9>(3)),
                     Value::Float(1e-10)
                 ]
             ),

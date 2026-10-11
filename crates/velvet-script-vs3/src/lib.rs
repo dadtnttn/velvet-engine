@@ -1516,12 +1516,12 @@ pub fn vec4_val(x: f64, y: f64, z: f64, w: f64) -> Value {
 
 /// Construct an immutable column-major VS3 `mat3` for host calls.
 pub fn mat3_val(columns: [f64; 9]) -> Value {
-    Value::Mat3(columns)
+    Value::mat3(columns)
 }
 
 /// Construct an immutable column-major VS3 `mat4` for host calls.
 pub fn mat4_val(columns: [f64; 16]) -> Value {
-    Value::Mat4(columns)
+    Value::mat4(columns)
 }
 
 /// Construct an immutable VS3 quaternion `(x, y, z, w)` for host calls.
@@ -2625,6 +2625,48 @@ function main() {
         assert!(report
             .windows(2)
             .all(|pair| pair[0].instructions >= pair[1].instructions));
+    }
+
+    #[test]
+    fn fast_paths_keep_loop_field_and_compare_semantics() {
+        let source = r#"// @edition 3
+state { G: map = {"n": 2, "who": {"name": "Ana"}} }
+function main() {
+    let out = []
+    for row in [[1, 2, 3], [4, 5, 6]] {
+        for x in row {
+            if x == 2 { continue }
+            if x == 5 { break }
+            list_push(out, x)
+        }
+    }
+    let letters = ""
+    for c in "abc" { letters = letters + c + "." }
+    let p = {"age": 30, "tags": ["x"]}
+    let v = vec2(3, 4)
+    let total = 0
+    let i = 0
+    while i < 10 {
+        i += 1
+        if i % 2 == 0 { continue }
+        total += i
+    }
+    let big = 9007199254740993
+    return [out, letters, p.age, len(p.tags), G.who.name, G.missing, v.x + v.y,
+            total, big > 9007199254740992, -7 / 2, 7 % 3, 2.5 * 2]
+}
+function null_field() {
+    let p = null
+    return p.age
+}
+"#;
+        let module = compile(source, Some("fast.vel")).unwrap();
+        assert_eq!(
+            module.call("main", &[]).unwrap().to_string(),
+            "[[1, 3, 4], a.b.c., 30, 1, Ana, null, 7, 25, true, -3, 1, 5]"
+        );
+        let error = module.call("null_field", &[]).unwrap_err().to_string();
+        assert!(error.contains("not indexable"), "{error}");
     }
 
     #[test]
