@@ -115,6 +115,10 @@ function effects() {
         if L.lifestyle == "lujoso" && L.age >= 18 { list_push(out, fx("lujo", "Vida de lujo", true, "Ropa de marca y restaurantes caros.", {"looks": 3, "flirt": 4})) }
         if L.money < -5000 && L.age >= 18 { list_push(out, fx("numeros_rojos", "Números rojos", false, "El estrés de no llegar a fin de mes.", {"hap": -1})) }
     }
+    if L.faith >= 60 && L.religion != "ninguna" { list_push(out, fx("fe", "Fe firme", true, "Tu fe te sostiene en los días malos.", {"hap": 1})) }
+    if L.faith >= 60 && religion_def(L.religion).strict >= 2 && (job_is_adult(L.job) || route_is_adult()) && L.age >= 18 { list_push(out, fx("culpa", "Culpa", false, "Lo que haces choca con lo que crees.", {"hap": -2})) }
+    if L.rd != null && L.rd.king == true { list_push(out, fx("corona", "La corona", true, "Todos se inclinan ante ti.", {"flirt": 15, "hire": 20})) }
+    if L.rd != null && L.rd.pres == true { list_push(out, fx("poder", "Poder presidencial", true, "Tu agenda la escribe un equipo.", {"flirt": 8, "hap": -1})) }
     if L.record > 0 { list_push(out, fx("fichado", "Antecedentes penales", false, "Tu historial aparece en cada revisión de antecedentes.", {"hire": -15})) }
     if L.money >= 1000000 { list_push(out, fx("rico", "Billetera generosa", true, "El dinero también es sexy.", {"flirt": 6})) }
     if L.study != null && L.study.gpa >= 90 { list_push(out, fx("honor", "Cuadro de honor", true, "Tus profesores te adoran.", {"hire": 5})) }

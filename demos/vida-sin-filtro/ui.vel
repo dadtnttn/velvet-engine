@@ -226,9 +226,9 @@ function draw_create() {
     svg(10, -8, 620, 130, tilt_title_doc("CREA TU VIDA", 620, 130, 76, HEX_WHITE, HEX_INK))
 
     panel(462, 96, 790, 590, 24)
-    let pages = ["IDENTIDAD", "ESTILO", "PERSONALIDAD"]
+    let pages = ["IDENTIDAD", "ESTILO", "PERSONALIDAD", "RUTA Y FE"]
     let i = 0
-    while i < 3 {
+    while i < 4 {
         let action = "cre:page:" + str(i)
         let fill = HEX_INK
         let color = C_WHITE
@@ -238,9 +238,9 @@ function draw_create() {
         } else if hovered(action) {
             fill = HEX_RED
         }
-        svg(500 + i * 196, 112, 196, 44, slant_doc(188, 40, 12, fill, HEX_WHITE, 2, HEX_RED, 4))
-        ctext(500 + i * 196 + 94, 140, str(i + 1) + " · " + pages[i], 17, color, "impact")
-        hot(500 + i * 196, 112, 188, 40, action)
+        svg(496 + i * 186, 112, 184, 44, slant_doc(178, 40, 12, fill, HEX_WHITE, 2, HEX_RED, 4))
+        ctext(496 + i * 186 + 89, 140, str(i + 1) + " · " + pages[i], 15, color, "impact")
+        hot(496 + i * 186, 112, 178, 40, action)
         i += 1
     }
     let x0 = 510
@@ -294,6 +294,26 @@ function draw_create() {
         y += 58
         create_label(x0, y, "LABIOS")
         stepper(x0 + 170, y - 26, LIPS[c.look.lips], "cre:lips")
+    } else if c.page == 3 {
+        create_label(x0, y, "RUTA")
+        let r = route_def(c.route)
+        stepper(x0 + 170, y - 26, r.short, "cre:route")
+        let ty = y + 34
+        text(x0 + 170, ty, str_upper(r.n), 16, C_YELLOW, "impact")
+        ty += 24
+        for line in wrap(r.d, chars_for(560, 15)) {
+            text(x0 + 170, ty, line, 15, C_WHITE, "bold")
+            ty += 21
+        }
+        y = ty + 50
+        create_label(x0, y, "RELIGIÓN")
+        let rel = religion_def(c.religion)
+        stepper(x0 + 170, y - 26, str_upper(rel.n), "cre:rel")
+        ty = y + 34
+        for line in wrap("Tu familia: " + RELIGION_DESC[rel.id], chars_for(560, 15)) {
+            text(x0 + 170, ty, line, 15, C_WHITE, "bold")
+            ty += 21
+        }
     } else {
         create_label(x0, y, "PERSONALIDAD")
         let t = trait_def(c.trait)
@@ -401,6 +421,15 @@ function draw_card() {
     svg(16, 16, 378, 60, slant_doc(372, 54, 18, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
     text(44, 52, clip_text(str_upper(L.first + " " + L.last), 310, 22), 22, C_WHITE, "impact")
     tag(30, 84, 150, str_upper(month_name()), HEX_YELLOW, C_INK)
+    if L.route != null && L.route != "normal" {
+        let rf = HEX_RED
+        if hovered("tab:route") { rf = HEX_WHITE }
+        let rc = C_WHITE
+        if hovered("tab:route") { rc = C_INK }
+        svg(186, 84, 186, 26, slant_doc(180, 26, 8, rf, HEX_WHITE, 2, "", 0))
+        ctext(186 + 90, 102, clip_text("RUTA: " + route_def(L.route).short + " ›", 170, 13), 13, rc, "bold")
+        hot(186, 84, 180, 26, "tab:route")
+    }
     draw_effect_chips(26, 118)
     svg(282, 282, 116, 116, burst_doc(116, 116, 14, HEX_RED, HEX_INK, 4, 5))
     otext(340, 342, str(L.age), 40, C_WHITE, "impact", true)
@@ -449,7 +478,7 @@ function draw_card() {
         }
     } else {
         text(44, 556, "FAMILIA", 11, C_GRAY, "bold")
-        text(44, 578, clip_text(FAMILY_NAMES[L.family], 320, 14), 14, C_WHITE, "bold")
+        text(44, 578, clip_text(FAMILY_NAMES[L.family] + " · " + religion_text(), 320, 14), 14, C_WHITE, "bold")
     }
 }
 
@@ -990,7 +1019,7 @@ function draw_detail(it: any, kind: string) {
             return null
         }
     }
-    text(x + 46, y + 66, clip_text(str_upper(it.t), 480, 34), 34, C_INK, "impact")
+    text(x + 46, y + 66, clip_text(str_upper(it.t), 420, 34), 34, C_INK, "impact")
     text(x + 46, y + 100, it.s, 17, C_RED, "bold")
     let ty = y + 150
     if it.desc != null {

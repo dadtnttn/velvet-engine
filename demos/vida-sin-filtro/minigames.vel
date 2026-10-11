@@ -540,6 +540,7 @@ function mg_close() {
     if m.purpose == "practice" { return practice_result(score) }
     if m.purpose == "rel" { return rel_mg_result(score, m.ctx) }
     if m.purpose == "news" { return news_result(score) }
+    if m.purpose == "route" { return route_mg_result(score, m.ctx) }
     if m.purpose == "taxes" { return taxes_result(score, m.ctx) }
     if m.purpose == "sweet" { return sweet_mg_result(score, m.ctx) }
     if m.purpose == "conceive" { return conceive_result(score, m.ctx) }

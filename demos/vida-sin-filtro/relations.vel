@@ -401,6 +401,9 @@ function legacy_person_items(p: map, cat: string) {
         list_push(out, pitem(p, "ract:adopt", "Adoptar un hijo", "$50,000", "Darle un hogar a un niño que lo necesita."))
         list_push(out, pitem(p, "ract:ivf", "Tratamiento de fertilidad", "$80,000", "Fertilización in vitro (o gestación subrogada si son del mismo sexo)."))
     }
+    if cat == "Intimidad" && adult && g == "fling" && L.married && can_polygamy() {
+        list_push(out, pitem(p, "ract:cospouse", "Casarte también con " + p.first, "Matrimonio múltiple", "Tu religión o las leyes de tu reino lo permiten. A tu cónyuge actual quizá no le guste."))
+    }
     if cat == "Intimidad" && adult && g == "fling" {
         if L.partner_id == 0 && r != "ex" { list_push(out, pitem(p, "pact:official", "Hacerlo oficial", "Formalizar", "Ponerle nombre a lo que tienen.")) }
         list_push(out, pitem(p, "pact:end", "Cortar la aventura", "Se acabó", "Lo que pasó, pasó."))
@@ -501,6 +504,7 @@ function rel_do(id: string, p: map) {
     G.modal = null
     if id == "makefriend" { return make_friend() }
     if id == "bff" { return make_bff(p) }
+    if id == "cospouse" { return take_cospouse(p) }
     if sweet_act(id) != null { return sweet_do(id, p) }
     if id == "chat" {
         if L.used["rchat" + str(p.id)] != null { return info(p.first, "Ya platicaron este mes. Dale un respiro.") }

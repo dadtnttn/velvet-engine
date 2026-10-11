@@ -1,0 +1,487 @@
+// @edition 3
+// Gobernar: el reino (ruta del trono) y la presidencia comparten un motor de país
+// con seis indicadores. En el reino: tesoro, pueblo, nobleza, ejército, clero y
+// orden. En la presidencia: presupuesto, aprobación, congreso, seguridad, economía
+// y paz social. Cada mes hay decretos, crisis y consecuencias.
+
+const REALM_KEYS = ["tesoro", "aprob", "elite", "fuerza", "fe", "orden"]
+const REALM_NAMES_REY = {"tesoro": "Tesoro", "aprob": "Pueblo", "elite": "Nobleza", "fuerza": "Ejército", "fe": "Clero", "orden": "Orden"}
+const REALM_NAMES_PRES = {"tesoro": "Presupuesto", "aprob": "Aprobación", "elite": "Congreso", "fuerza": "Seguridad", "fe": "Economía", "orden": "Paz social"}
+
+const PARTIES = [
+    {"id": "rojo", "n": "Partido Rojo (progresista)"},
+    {"id": "azul", "n": "Partido Azul (conservador)"},
+    {"id": "verde", "n": "Partido Verde (ecologista)"},
+    {"id": "morado", "n": "Partido Morado (libertario)"}
+]
+
+// Decretos: "r" = rey, "p" = presidente, "b" = ambos. "d": cambios a los indicadores.
+const GOV_ACTS = [
+    {"id": "tax_up", "who": "b", "cat": "Gobierno", "t": "Subir impuestos", "desc": "Más dinero para el Estado, menos sonrisas en la calle.", "d": {"tesoro": 15, "aprob": -8, "fe": -3}},
+    {"id": "tax_down", "who": "b", "cat": "Gobierno", "t": "Bajar impuestos", "desc": "La gente te ama... mientras dure el dinero.", "d": {"tesoro": -12, "aprob": 8, "fe": 3}},
+    {"id": "hospitals", "who": "b", "cat": "Gobierno", "t": "Construir hospitales", "desc": "Salud para todos.", "d": {"tesoro": -15, "aprob": 7, "orden": 2}},
+    {"id": "schools", "who": "b", "cat": "Gobierno", "t": "Construir escuelas", "desc": "Un pueblo educado es un pueblo libre (y exigente).", "d": {"tesoro": -12, "aprob": 5, "fe": 2}},
+    {"id": "army", "who": "b", "cat": "Gobierno", "t": "Reforzar ejército y policía", "desc": "Más uniformes, más equipo, más disciplina.", "d": {"tesoro": -10, "fuerza": 12, "aprob": -2}},
+    {"id": "infra", "who": "b", "cat": "Gobierno", "t": "Carreteras y trenes", "desc": "Obras que mueven la economía.", "d": {"tesoro": -14, "fe": 8, "aprob": 3}},
+    {"id": "audience", "who": "b", "cat": "Gobierno", "t": "Audiencia pública", "desc": "Escuchas a la gente cara a cara. Tu encanto decide.", "d": {}},
+    {"id": "feast", "who": "r", "cat": "Corte", "t": "Fiesta nacional", "desc": "Fuegos artificiales, pan y circo.", "d": {"tesoro": -8, "aprob": 6, "elite": 3}},
+    {"id": "banquet", "who": "r", "cat": "Corte", "t": "Banquete con la nobleza", "desc": "Vino, alianzas y chismes.", "d": {"tesoro": -6, "elite": 10}},
+    {"id": "exile", "who": "r", "cat": "Corte", "t": "Exiliar a un noble rebelde", "desc": "Quitar la manzana podrida. Los demás nobles toman nota.", "d": {"elite": -8, "orden": 8}},
+    {"id": "clergy", "who": "r", "cat": "Corte", "t": "Donar a la Iglesia", "desc": "El clero bendice tu reinado.", "d": {"tesoro": -6, "fe": 12}},
+    {"id": "negotiate", "who": "p", "cat": "Gobierno", "t": "Negociar con el Congreso", "desc": "Cabildeo, cafés y concesiones.", "d": {"elite": 12, "aprob": -2}},
+    {"id": "summit", "who": "p", "cat": "Gobierno", "t": "Cumbre internacional", "desc": "Fotos con líderes del mundo y acuerdos comerciales.", "d": {"fe": 6, "aprob": 3, "tesoro": -3}},
+    {"id": "corrupt", "who": "p", "cat": "Gobierno", "t": "Desviar fondos públicos", "desc": "Ilegal. Dinero fácil para ti... hasta que salga en las noticias.", "d": {"tesoro": -10}},
+    {"id": "l_parliament", "who": "r", "cat": "Leyes", "once": true, "t": "Crear un parlamento electo", "desc": "Monarquía constitucional: el pueblo vota, la nobleza pierde poder.", "d": {"aprob": 12, "elite": -12, "orden": 4}},
+    {"id": "l_freedom", "who": "b", "cat": "Leyes", "once": true, "t": "Libertad religiosa", "desc": "Cada quien cree en lo que quiera.", "d": {"aprob": 6, "fe": -8}},
+    {"id": "l_official", "who": "r", "cat": "Leyes", "once": true, "t": "Religión oficial del reino", "desc": "Tu fe se vuelve la del Estado.", "d": {"fe": 15, "aprob": -5}},
+    {"id": "l_poly", "who": "r", "cat": "Leyes", "once": true, "t": "Ley de matrimonios múltiples", "desc": "La corona puede tener varias esposas (o esposos).", "d": {"aprob": -6, "fe": -6}},
+    {"id": "l_iron", "who": "b", "cat": "Leyes", "once": true, "t": "Mano dura contra el crimen", "desc": "Más orden, menos libertades.", "d": {"orden": 15, "aprob": -4, "fuerza": 5}},
+    {"id": "l_health", "who": "p", "cat": "Leyes", "once": true, "t": "Reforma de salud universal", "desc": "Cara, popular y difícil de aprobar.", "d": {"tesoro": -15, "aprob": 12, "elite": -6}},
+    {"id": "l_market", "who": "p", "cat": "Leyes", "once": true, "t": "Reforma económica liberal", "desc": "Menos regulación: la economía despega, los sindicatos protestan.", "d": {"fe": 15, "orden": -6, "aprob": -3}},
+    {"id": "l_green", "who": "b", "cat": "Leyes", "once": true, "t": "Plan verde nacional", "desc": "Energías limpias y parques.", "d": {"tesoro": -10, "aprob": 6, "fe": 3}},
+    {"id": "l_adult", "who": "b", "cat": "Leyes", "once": true, "t": "Regular la industria +18", "desc": "Derechos laborales y pruebas médicas para quienes trabajan en ella.", "d": {"aprob": 3, "fe": 4, "tesoro": 4}}
+]
+
+const CRISES = [
+    {"t": "Sequía", "text": "Una sequía arruina las cosechas. El pueblo pide ayuda.", "a": ["Abrir los graneros del Estado", "Que se las arreglen"], "da": [{"tesoro": -12, "aprob": 8}, {"aprob": -12, "orden": -6}]},
+    {"t": "Epidemia", "text": "Una epidemia se extiende por las ciudades.", "a": ["Cuarentena y hospitales", "Minimizar el problema"], "da": [{"tesoro": -12, "aprob": 5, "fe": -5}, {"aprob": -15, "orden": -8}]},
+    {"t": "Frontera", "text": "Un país vecino mueve tropas a la frontera.", "a": ["Movilizar al ejército", "Negociar la paz"], "da": [{"fuerza": -8, "tesoro": -8, "aprob": 6}, {"aprob": -3, "elite": -4, "orden": 3}]},
+    {"t": "Huelga general", "text": "Los sindicatos paralizan el país exigiendo aumentos.", "a": ["Dar el aumento", "Mandar a la policía"], "da": [{"tesoro": -10, "aprob": 6}, {"aprob": -12, "orden": 4, "fuerza": -4}]},
+    {"t": "Escándalo", "text": "La prensa publica fotos tuyas en una fiesta escandalosa.", "a": ["Pedir perdón en televisión", "Negarlo todo"], "da": [{"aprob": -4}, {"aprob": -10, "elite": -3}]},
+    {"t": "Terremoto", "text": "Un terremoto sacude la capital.", "a": ["Reconstruir todo con dinero público", "Pedir ayuda internacional"], "da": [{"tesoro": -18, "aprob": 10}, {"aprob": 2, "elite": -3, "fe": -4}]},
+    {"t": "Conspiración", "text": "Tus espías descubren una conspiración en tu contra.", "a": ["Arrestar a los conspiradores", "Ignorarlo"], "da": [{"orden": 8, "elite": -8, "fuerza": -3}, {"orden": -10}]},
+    {"t": "Bonanza", "text": "Descubren un enorme yacimiento de petróleo.", "a": ["Que lo explote el Estado", "Venderlo a empresas privadas"], "da": [{"tesoro": 20, "fe": 5}, {"tesoro": 10, "fe": 10, "aprob": -4}]},
+    {"t": "Boda real extranjera", "text": "Una casa real extranjera propone una alianza matrimonial con tu familia.", "a": ["Aceptar la alianza", "Rechazarla"], "da": [{"elite": 8, "fuerza": 5}, {"aprob": 2}]}
+]
+
+// ---------------------------------------------------------------- estado
+
+function realm_new() {
+    return {"tesoro": 50, "aprob": 55, "elite": 50, "fuerza": 50, "fe": 50, "orden": 50, "laws": []}
+}
+
+function realm_names() {
+    if L.route == "rey" { return REALM_NAMES_REY }
+    return REALM_NAMES_PRES
+}
+
+function ruling() {
+    let d = L.rd
+    return (L.route == "rey" && d.king == true) || (L.route == "presidente" && d.pres == true)
+}
+
+function realm_apply(delta: map) {
+    let r = L.rd.realm
+    for k in map_keys(delta) {
+        r[k] = clamp(r[k] + delta[k], 0, 100)
+    }
+    return null
+}
+
+function realm_line() {
+    let r = L.rd.realm
+    let n = realm_names()
+    let parts = []
+    for k in REALM_KEYS { list_push(parts, n[k] + " " + str(r[k])) }
+    return str_join(parts, " · ")
+}
+
+function delta_text(d: map) {
+    let n = realm_names()
+    let parts = []
+    for k in REALM_KEYS {
+        let v = d[k]
+        if v != null {
+            let s = str(v)
+            if v > 0 { s = "+" + s }
+            list_push(parts, n[k] + " " + s)
+        }
+    }
+    return str_join(parts, ", ")
+}
+
+// ---------------------------------------------------------------- cada mes
+
+function realm_month() {
+    let d = L.rd
+    if L.route == "presidente" {
+        if d.office == "diputado" && !d.pres { L.money += 4000 }
+        if d.office == "gobernador" && !d.pres { L.money += 8000 }
+        if !d.pres && d.pop > 5 && chance(50) { d.pop -= 1 }
+    }
+    if !ruling() { return null }
+    let r = d.realm
+    // Todo tiende a volver al centro, y el tesoro cobra impuestos.
+    for k in REALM_KEYS {
+        if r[k] > 52 && chance(40) { r[k] -= 1 }
+        if r[k] < 48 && chance(40) { r[k] += 1 }
+    }
+    r.tesoro = clamp(r.tesoro + 1 + r.fe / 40, 0, 100)
+    if r.tesoro <= 5 {
+        r.aprob = clamp(r.aprob - 3, 0, 100)
+        r.fuerza = clamp(r.fuerza - 2, 0, 100)
+    }
+    if L.route == "rey" {
+        d.reign_m += 1
+        L.money += 15000 + r.tesoro * 400
+    } else {
+        d.term_m += 1
+        L.money += 12000
+    }
+    if r.aprob >= 50 && r.orden >= 50 { d.stable_m += 1 }
+    if L.route == "presidente" && r.aprob >= 55 { d.good_m += 1 }
+    L.fame = clamp100(max(L.fame, 60))
+    // ¿Caes?
+    if r.aprob < 20 && r.orden < 35 && chance(20) { return fall_from_power("Una revolución popular tomó el palacio.") }
+    if L.route == "rey" && r.elite < 15 && r.fuerza < 30 && chance(15) { return fall_from_power("La nobleza y el ejército dieron un golpe de Estado.") }
+    if L.route == "presidente" && r.elite < 15 && chance(10) { return fall_from_power("El Congreso te destituyó en un juicio político.") }
+    if L.route == "presidente" && d.term_m >= 72 { return election_end_of_term() }
+    if G.modal == null && chance(14) { open_crisis() }
+    return null
+}
+
+function fall_from_power(why: string) {
+    let d = L.rd
+    if L.route == "rey" {
+        d.king = false
+        d.realm = null
+        d.inf = 10
+        d.allies = 0
+        L.money = L.money / 2
+        L.happy -= 25
+        hito_me("Vida", "Perdiste el trono")
+        log_add(why + " Huiste al exilio con la mitad de tu fortuna. Algún día volverás.", "b")
+        if L.rstage > 3 { L.rstage = 3 }
+        return null
+    }
+    d.pres = false
+    d.realm = null
+    d.office = ""
+    d.pop = 10
+    L.happy -= 20
+    hito_me("Vida", "Te destituyeron de la presidencia")
+    log_add(why + " Tu carrera política quedó en ruinas.", "b")
+    if L.rstage > 3 { L.rstage = 3 }
+    return null
+}
+
+function election_end_of_term() {
+    let d = L.rd
+    let r = d.realm
+    if d.terms >= 2 {
+        if r.aprob >= 50 { d.done = true }
+        d.pres = false
+        d.realm = null
+        hito_me("Vida", "Terminaste tu segundo mandato presidencial")
+        log_add("Entregaste la banda presidencial. La historia te juzgará con " + str(r.aprob) + "% de aprobación.", "g")
+        return null
+    }
+    if chance(r.aprob + rank("charm") * 4) {
+        d.terms += 1
+        d.term_m = 0
+        hito_me("Vida", "Ganaste la reelección")
+        log_add("¡Reelecto! El pueblo te dio seis años más.", "g")
+        return null
+    }
+    d.pres = false
+    d.realm = null
+    hito_me("Vida", "Perdiste la reelección")
+    log_add("Perdiste la reelección. Fin de tu presidencia.", "b")
+    return null
+}
+
+function open_crisis() {
+    let c = pick(CRISES)
+    let labels = []
+    for a in c.a { list_push(labels, a + " (" + delta_text(c.da[len(labels)]) + ")") }
+    open_choice(str_upper(c.t), c.text + " " + realm_line() + ".", labels, ["", ""], "crisis", {"da": c.da, "t": c.t})
+    return null
+}
+
+function resolve_crisis(index: int, ctx: map) {
+    G.modal = null
+    if !ruling() { return null }
+    realm_apply(ctx.da[index])
+    return finish(ctx.t, "Decisión tomada: " + delta_text(ctx.da[index]) + ".", "n")
+}
+
+// ---------------------------------------------------------------- menú
+
+function realm_items(cat: string) {
+    let d = L.rd
+    let items = []
+    if L.route == "rey" && !d.king && cat == "Corte" {
+        list_push(items, ritem("court", "Asistir a la corte", "Influencia", "Hacerte ver, escuchar y recordar.", ""))
+        let bl = ""
+        if L.money < 5000 { bl = "$5,000" }
+        list_push(items, ritem("nobles", "Banquete con nobles", "$5,000 · aliados", "Vino caro y promesas. A veces alguien se une a tu causa.", bl))
+        list_push(items, ritem("speech", "Discurso al pueblo", "Encanto", "Si convences, la gente empieza a corear tu nombre.", ""))
+        list_push(items, ritem("general", "Ganarte a un general", "Valor", "Sin el ejército, no hay trono.", ""))
+        let cl = ""
+        if L.age < 18 || L.partner_id != 0 { cl = "Adulto y sin pareja" }
+        list_push(items, ritem("royal", "Cortejar a realeza extranjera", "Alianza", "Un matrimonio puede valer un ejército.", cl))
+        let tl = ""
+        if L.age < 21 || d.inf < 40 || d.allies < 3 { tl = "21 años, influencia 40, 3 aliados" }
+        list_push(items, {"action": "ra:claim", "t": "Reclamar el trono", "s": "Referéndum o golpe", "desc": "Ha llegado la hora. Convierte este país en un reino.", "lock": tl})
+        return items
+    }
+    if L.route == "presidente" && !d.pres && cat == "Campaña" {
+        let pl = ""
+        if L.age < 18 { pl = "Edad 18" }
+        if d.party != "" { pl = "Ya militas" }
+        list_push(items, {"action": "ra:party", "t": "Afiliarte a un partido", "s": "Militancia", "desc": "Cada partido tiene su gente. Elige con cuidado.", "lock": pl})
+        let al = ""
+        if d.party == "" { al = "Necesitas partido" }
+        list_push(items, ritem("rally", "Ir a mítines", "Popularidad", "Gorras, megáfonos y abrazos.", al))
+        list_push(items, ritem("debate", "Debate televisado", "Minijuego · popularidad", "Responde bien y ganas votos.", al))
+        let adl = al
+        if adl == "" && L.money < 10000 { adl = "$10,000" }
+        list_push(items, ritem("ads", "Anuncios de campaña", "$10,000", "Tu cara en espectaculares y redes.", adl))
+        list_push(items, ritem("donors", "Recaudar fondos", "Dinero", "Cenas con empresarios. Algunos esperan favores.", al))
+        let el = ""
+        if d.party == "" || L.age < 25 || d.pop < 20 || L.money < 20000 { el = "25 años, 20% y $20,000" }
+        if d.office != "" { el = "Ya lo lograste" }
+        list_push(items, {"action": "ra:run_dip", "t": "Campaña a diputado", "s": "$20,000", "desc": "Tu primera elección.", "lock": el})
+        let gl = ""
+        if d.office != "diputado" || L.age < 30 || d.pop < 45 || L.money < 200000 { gl = "Diputado, 30 años, 45% y $200,000" }
+        list_push(items, {"action": "ra:run_gov", "t": "Campaña a gobernador", "s": "$200,000", "desc": "Gobernar un estado es el trampolín a la presidencia.", "lock": gl})
+        let prl = ""
+        if d.office != "gobernador" || L.age < 35 || d.pop < 55 || L.money < 1000000 { prl = "Gobernador, 35 años, 55% y $1,000,000" }
+        list_push(items, {"action": "ra:run_pres", "t": "Campaña presidencial", "s": "$1,000,000", "desc": "La elección de tu vida.", "lock": prl})
+        return items
+    }
+    if !ruling() { return items }
+    let who = "p"
+    if L.route == "rey" { who = "r" }
+    if cat == "Gobierno" || cat == "Corte" {
+        list_push(items, {"action": "ra:status", "t": "Estado del país", "s": "Indicadores", "desc": realm_line() + ".", "lock": ""})
+    }
+    for a in GOV_ACTS {
+        if a.cat != cat || (a.who != "b" && a.who != who) { continue }
+        let lock = ""
+        if a.once == true && list_contains(d.realm.laws, a.id) { lock = "Aprobada" }
+        if lock == "" && L.used["ra_" + a.id] != null { lock = "Este mes ya" }
+        let sub = delta_text(a.d)
+        if sub == "" { sub = "Depende de ti" }
+        list_push(items, {"action": "ra:" + a.id, "t": a.t, "s": sub, "desc": a.desc + " (" + realm_line() + ")", "lock": lock})
+    }
+    if L.route == "rey" && cat == "Corte" {
+        let ml = ""
+        if !can_polygamy() || !L.married { ml = "Ley o religión" }
+        list_push(items, ritem("consort", "Tomar otra esposa o esposo", "Matrimonio real", "Una alianza más para la corona.", ml))
+    }
+    return items
+}
+
+function realm_action(id: string) {
+    let d = L.rd
+    if id == "status" { return info("Estado del país", realm_line() + ".") }
+    if id == "claim" { return open_claim() }
+    if id == "party" {
+        let labels = []
+        for p in PARTIES { list_push(labels, p.n) }
+        open_choice("¿QUÉ PARTIDO?", "Tu militancia define a tus aliados y a tus enemigos.", labels, ["", "", "", ""], "party", {})
+        return null
+    }
+    if id == "run_dip" || id == "run_gov" || id == "run_pres" { return run_election(id) }
+    for a in GOV_ACTS {
+        if a.id == id { return do_gov(a) }
+    }
+    if !route_use(id) { return info("Ruta", "Ya lo hiciste este mes.") }
+    if id == "rally" || id == "debate" || id == "ads" || id == "donors" { return realm_route_action(id) }
+    if id == "court" {
+        let g = rint(4, 8) + rank("charm")
+        d.inf = clamp100(d.inf + g)
+        return finish("La corte", "Te dejaste ver en la corte. Influencia +" + str(g) + ".", "g")
+    }
+    if id == "nobles" {
+        L.money -= 5000
+        d.inf = clamp100(d.inf + 6)
+        if chance(35 + rank("charm") * 5) {
+            d.allies += 1
+            return finish("Banquete", "Un duque brindó por ti en público. ¡Nuevo aliado! (" + str(d.allies) + ")", "g")
+        }
+        return finish("Banquete", "Mucho vino, muchas promesas. Influencia +6.", "n")
+    }
+    if id == "speech" {
+        if chance(40 + rank("charm") * 10) {
+            d.inf = clamp100(d.inf + 10)
+            return finish("Discurso", "La plaza entera coreó tu nombre.", "g")
+        }
+        d.inf = max(0, d.inf - 3)
+        return finish("Discurso", "Te abuchearon. Hay que pulir ese discurso.", "b")
+    }
+    if id == "general" {
+        if chance(30 + rank("guts") * 10) {
+            d.allies += 1
+            return finish("El general", "El general aceptó apoyarte cuando llegue el momento. Aliados: " + str(d.allies) + ".", "g")
+        }
+        return finish("El general", "El general te escuchó... y no se comprometió a nada.", "n")
+    }
+    if id == "royal" {
+        let p = stranger_aged(max(18, L.age - 5), L.age + 5)
+        p.last = pick(["de Borbón", "von Habsburg", "de Saboya", "Windsor", "de Orleans"])
+        make_partner(p)
+        d.allies += 2
+        return finish("Alianza real", "Conociste a " + full_name(p) + ", de una casa real extranjera. Ahora son pareja y su familia te apoya (+2 aliados).", "x")
+    }
+    if id == "consort" {
+        let p = stranger_aged(max(18, L.age - 10), L.age + 5)
+        add_person(p)
+        p.bond = 60
+        return take_cospouse(p)
+    }
+    return null
+}
+
+function do_gov(a: map) {
+    let d = L.rd
+    if a.once == true && list_contains(d.realm.laws, a.id) { return null }
+    if !route_use(a.id) { return info(a.t, "Ya lo hiciste este mes.") }
+    if a.once == true { list_push(d.realm.laws, a.id) }
+    if a.id == "audience" {
+        if chance(40 + rank("charm") * 10) {
+            realm_apply({"aprob": 8})
+            return finish(a.t, "La gente salió encantada contigo. (Aprobación +8)", "g")
+        }
+        realm_apply({"aprob": -4})
+        return finish(a.t, "Te gritaron y salió en todos los noticieros. (Aprobación -4)", "b")
+    }
+    realm_apply(a.d)
+    let msg = a.t + ": " + delta_text(a.d) + "."
+    if a.id == "l_poly" {
+        d.poly = true
+        hito_me("Vida", "Legalizaste los matrimonios múltiples en tu reino")
+    }
+    if a.id == "l_official" { L.faith = clamp100(L.faith + 10) }
+    if a.id == "corrupt" {
+        let take = rint(50, 300) * 1000
+        L.money += take
+        L.karma -= 8
+        msg = "Desviaste " + money_str(take) + " a una cuenta en el extranjero."
+        if chance(20) {
+            realm_apply({"aprob": -20, "elite": -15})
+            msg = msg + " ¡Un periodista lo descubrió! Escándalo nacional."
+        }
+    }
+    if a.once == true { hito_me("Vida", "Aprobaste: " + a.t) }
+    return finish("Gobierno", msg, "n")
+}
+
+// ---------------------------------------------------------------- llegar al poder
+
+function open_claim() {
+    let d = L.rd
+    if L.age < 21 || d.inf < 40 || d.allies < 3 { return null }
+    let ref = clamp(d.inf / 2 + rank("charm") * 6 + 10, 5, 90)
+    let coup = clamp(d.allies * 12 + rank("guts") * 6, 5, 90)
+    open_choice("LA CORONA", "Llegó el momento de reclamar el trono y convertir el país en un reino.",
+        ["Referéndum constitucional", "Golpe de Estado con tus aliados", "Esperar"], ["", "", ""], "claim", {})
+    G.modal.tags = [str(ref) + "%", str(coup) + "%", ""]
+    return null
+}
+
+function resolve_claim(index: int) {
+    G.modal = null
+    let d = L.rd
+    if index == 2 { return finish("La corona", "Decidiste esperar el momento justo.", "n") }
+    let odds = clamp(d.inf / 2 + rank("charm") * 6 + 10, 5, 90)
+    if index == 1 { odds = clamp(d.allies * 12 + rank("guts") * 6, 5, 90) }
+    if chance(odds) {
+        d.king = true
+        d.realm = realm_new()
+        if index == 1 { realm_apply({"aprob": -10, "fuerza": 10, "orden": -5}) }
+        let title = by_gender(L.gender, "rey", "reina")
+        hito_me("Vida", "Te coronaron " + title)
+        flag("crowned")
+        L.happy += 25
+        list_push(G.toasts, {"head": "¡CORONACIÓN!", "title": str_upper(title) + " " + str_upper(L.first), "sub": "El país ahora es un reino.", "t0": G.t})
+        return finish("Coronación", "¡Larga vida a " + L.first + "! La corona brilla sobre tu cabeza y el país se convierte en el Reino de " + L.city + ".", "g")
+    }
+    if index == 1 {
+        if chance(25) {
+            die("ejecución tras un golpe fallido")
+            return null
+        }
+        d.allies = 0
+        d.inf = max(0, d.inf - 20)
+        return finish("Golpe fallido", "El golpe fracasó." + go_to_jail(5), "b")
+    }
+    d.inf = max(0, d.inf - 15)
+    return finish("Referéndum", "El pueblo votó «no». Tu influencia cayó, pero sigues libre.", "b")
+}
+
+function resolve_party(index: int) {
+    G.modal = null
+    let p = PARTIES[index]
+    L.rd.party = p.id
+    L.rd.pop = max(L.rd.pop, 8)
+    hito_me("Vida", "Te afiliaste al " + p.n)
+    return finish("Militancia", "Ahora militas en el " + p.n + ".", "g")
+}
+
+function run_election(id: string) {
+    let d = L.rd
+    let cost = 20000
+    let base = d.pop + rank("charm") * 5
+    if id == "run_gov" { cost = 200000 }
+    if id == "run_pres" { cost = 1000000 }
+    if L.money < cost { return null }
+    if !route_use(id) { return info("Elecciones", "Una campaña por mes.") }
+    L.money -= cost
+    if chance(clamp(base, 5, 90)) {
+        if id == "run_dip" {
+            d.office = "diputado"
+            d.pop = clamp100(d.pop + 10)
+            return finish("¡Ganaste!", "Eres diputad" + oa(L.gender) + ". Tu primer cargo de elección popular.", "g")
+        }
+        if id == "run_gov" {
+            d.office = "gobernador"
+            d.pop = clamp100(d.pop + 10)
+            return finish("¡Ganaste!", "Eres " + by_gender(L.gender, "gobernador", "gobernadora") + ". El país entero te está viendo.", "g")
+        }
+        d.pres = true
+        d.terms = 1
+        d.term_m = 0
+        d.realm = realm_new()
+        d.realm.aprob = clamp(d.pop, 30, 80)
+        flag("president")
+        L.happy += 25
+        list_push(G.toasts, {"head": "¡PRESIDENCIA!", "title": str_upper(by_gender(L.gender, "Presidente", "Presidenta")) + " " + str_upper(L.first), "sub": "Seis años para cambiar el país.", "t0": G.t})
+        return finish("¡Presidencia!", "Ganaste la elección. Ahora eres " + by_gender(L.gender, "presidente", "presidenta") + " de " + L.city + ".", "g")
+    }
+    d.pop = max(0, d.pop - 8)
+    L.happy -= 10
+    return finish("Derrota", "Perdiste la elección. A levantarse y volver a intentarlo.", "b")
+}
+
+function debate_result(score: any) {
+    let g = score / 8
+    L.rd.pop = clamp100(L.rd.pop + g)
+    return finish("Debate", "Debate terminado (" + str(score) + " puntos). Popularidad +" + str(g) + ".", "g")
+}
+
+function realm_route_action(id: string) {
+    let d = L.rd
+    if id == "rally" {
+        let g = rint(2, 5) + rank("charm")
+        d.pop = clamp100(d.pop + g)
+        return finish("Mitin", "La plaza llena gritando tu nombre. Popularidad +" + str(g) + ".", "g")
+    }
+    if id == "debate" { return mg_start("quiz", "Debate televisado", "route", {"kind": "debate"}) }
+    if id == "ads" {
+        L.money -= 10000
+        d.pop = clamp100(d.pop + 5)
+        return finish("Anuncios", "Tu cara está en todas partes. Popularidad +5.", "g")
+    }
+    if id == "donors" {
+        let m = rint(10, 60) * 1000
+        L.money += m
+        if chance(15) {
+            d.pop = max(0, d.pop - 10)
+            return finish("Fondos", "Recaudaste " + money_str(m) + ", pero salió a la luz que un donante es narcotraficante. Popularidad -10.", "b")
+        }
+        return finish("Fondos", "Recaudaste " + money_str(m) + " para tu campaña.", "g")
+    }
+    return null
+}

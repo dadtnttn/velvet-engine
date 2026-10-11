@@ -818,6 +818,8 @@ function continue_as_heir() {
     new_life_core(kid.age)
     L.gen = gen
     L.lineage = lineage
+    L.religion = religion_of(kid)
+    L.faith = faith_of(kid)
     L.looks = clamp100(kid.looks)
     L.smarts = clamp100(kid.smarts)
     L.grades = kid.grades

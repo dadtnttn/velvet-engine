@@ -1,0 +1,228 @@
+// @edition 3
+// Ruta del filántropo espacial: heredas una mina de esmeraldas, la haces próspera
+// (cuidando, o no, a tus mineros), fundas TerraTech y Ares Aerospace, donas fortunas
+// y llevas a la humanidad a Marte. Los lanzamientos son un minijuego de precisión.
+
+function space_month() {
+    let d = L.rd
+    if d.mine == 0 && L.age >= 18 {
+        d.mine = 1
+        hito_me("Trabajo", "Heredaste la mina de esmeraldas «La Verde»")
+        log_add("Cumpliste 18: la mina de esmeraldas ahora es tuya. Cientos de familias dependen de ti.", "x")
+    }
+    if d.mine > 0 {
+        let income = d.mine * 30000 * (50 + d.workers) / 100
+        if d.workers < 25 && chance(30) {
+            income = 0
+            log_add("Huelga en la mina: los mineros exigen mejores condiciones. Este mes no hubo producción.", "b")
+            d.workers = clamp100(d.workers + 5)
+        }
+        L.money += income
+        if d.workers > 50 && chance(30) { d.workers -= 1 }
+    }
+    if d.tech { L.money += 300000 }
+    if d.space {
+        L.money -= d.eng * 20000
+        if d.station {
+            d.mars = clamp100(d.mars + d.eng / 5)
+        } else {
+            d.rnd = clamp100(d.rnd + d.eng / 5)
+        }
+    }
+    if d.rocket { L.money += 1000000 }
+    return null
+}
+
+function space_items(cat: string) {
+    let d = L.rd
+    let items = []
+    let adult = ""
+    if L.age < 18 { adult = "Edad 18" }
+    if cat == "Mina" {
+        if d.mine == 0 {
+            list_push(items, {"action": "ra:obj", "t": "La mina será tuya a los 18", "s": "Paciencia", "desc": "Mientras tanto, estudia: la ingeniería y la economía te servirán.", "lock": ""})
+            return items
+        }
+        let cost = d.mine * 500000
+        let ul = ""
+        if L.money < cost { ul = money_str(cost) }
+        list_push(items, {"action": "ra:mine_up", "t": "Ampliar la mina (nivel " + str(d.mine + 1) + ")", "s": money_str(cost), "desc": "Más túneles, más máquinas, más esmeraldas. Producción actual: " + money_str(d.mine * 30000 * (50 + d.workers) / 100) + " al mes.", "lock": ul})
+        let wl = ""
+        if L.money < 200000 { wl = "$200,000" }
+        list_push(items, ritem("workers_good", "Mejorar las condiciones de los mineros", "$200,000", "Seguridad, sueldos dignos y escuelas para sus hijos. Bienestar: " + str(d.workers) + "%.", wl))
+        list_push(items, ritem("workers_bad", "Exprimir a los mineros", "Dinero rápido", "Turnos dobles y menos seguridad. Dinero ahora, problemas después.", ""))
+        list_push(items, ritem("auction", "Subastar esmeraldas", "Dinero", "Una subasta privada para coleccionistas.", ""))
+        return items
+    }
+    if cat == "Empresas" {
+        let tl = adult
+        if d.tech { tl = "Ya existe" }
+        if tl == "" && L.money < 5000000 { tl = "$5,000,000" }
+        list_push(items, {"action": "ra:tech", "t": "Fundar TerraTech", "s": "$5,000,000", "desc": "Tecnología, chips e inteligencia artificial. Ingresos de $300,000 al mes.", "lock": tl})
+        let sl = adult
+        if !d.tech { sl = "Necesitas TerraTech" }
+        if d.space { sl = "Ya existe" }
+        if sl == "" && L.money < 20000000 { sl = "$20,000,000" }
+        list_push(items, {"action": "ra:space", "t": "Fundar Ares Aerospace", "s": "$20,000,000", "desc": "Tu empresa espacial. El primer paso hacia Marte.", "lock": sl})
+        return items
+    }
+    if cat == "Espacio" {
+        if !d.space {
+            list_push(items, {"action": "ra:obj", "t": "Primero funda Ares Aerospace", "s": "", "desc": "Sin empresa espacial no hay cohetes.", "lock": ""})
+            return items
+        }
+        list_push(items, ritem("hire_eng", "Contratar ingenieros", "+5 ingenieros", "Cada ingeniero cuesta $20,000 al mes y avanza la investigación. Tienes " + str(d.eng) + ".", ""))
+        let il = ""
+        if L.money < 2000000 { il = "$2,000,000" }
+        let goal = "Cohete reutilizable: " + str(d.rnd) + "%"
+        if d.station { goal = "Misión a Marte: " + str(d.mars) + "%" }
+        list_push(items, ritem("research", "Invertir en investigación", "$2,000,000", goal + ". Cada inversión suma 10%.", il))
+        let ll = ""
+        if !d.rocket && d.rnd < 100 { ll = "Investigación 100%" }
+        if d.rocket && !d.station { ll = "Construye la estación" }
+        if d.station && d.mars < 100 { ll = "Misión 100%" }
+        if d.mars_done { ll = "Misión cumplida" }
+        let lt = "Lanzar el cohete reutilizable"
+        if d.station { lt = "Lanzar la misión tripulada a Marte" }
+        list_push(items, ritem("launch", lt, "Minijuego", "La ventana de lanzamiento es corta: presiona en el momento exacto. Un fallo cuesta caro.", ll))
+        let stl = ""
+        if !d.rocket { stl = "Necesitas cohete" }
+        if d.station { stl = "Ya existe" }
+        if stl == "" && L.money < 100000000 { stl = "$100,000,000" }
+        list_push(items, {"action": "ra:station", "t": "Construir la estación orbital", "s": "$100,000,000", "desc": "Un puerto en órbita: el trampolín a Marte.", "lock": stl})
+        let vl = ""
+        if !d.rocket { vl = "Necesitas cohete" }
+        list_push(items, ritem("tourist", "Viajar tú al espacio", "Sueño cumplido", "Mirar la Tierra desde arriba.", vl))
+        return items
+    }
+    let dl = ""
+    if L.money < 1000000 { dl = "$1,000,000" }
+    list_push(items, ritem("donate_h", "Donar a hospitales", "$1,000,000", "Equipos, medicinas y alas pediátricas con tu nombre.", dl))
+    list_push(items, ritem("donate_s", "Becas para estudiantes", "$1,000,000", "Cien jóvenes estudiarán gracias a ti.", dl))
+    let fl = ""
+    if L.money < 5000000 { fl = "$5,000,000" }
+    if has_flag("foundation") { fl = "Ya existe" }
+    list_push(items, {"action": "ra:foundation", "t": "Crear tu fundación", "s": "$5,000,000", "desc": "Una fundación permanente que ayudará por generaciones.", "lock": fl})
+    list_push(items, finfo(30, "Has donado " + money_str(d.donated), "", "La generosidad sube tu karma y tu fama."))
+    return items
+}
+
+function space_action(id: string) {
+    let d = L.rd
+    if id == "mine_up" {
+        let cost = d.mine * 500000
+        if L.money < cost { return null }
+        L.money -= cost
+        d.mine += 1
+        hito_me("Trabajo", "La mina llegó al nivel " + str(d.mine))
+        return finish("La mina", "Abriste nuevos túneles. La mina ahora es nivel " + str(d.mine) + ".", "g")
+    }
+    if id == "tech" {
+        if d.tech || L.money < 5000000 { return null }
+        L.money -= 5000000
+        d.tech = true
+        hito_me("Trabajo", "Fundaste TerraTech")
+        return finish("TerraTech", "Fundaste TerraTech. Tu primer producto es un éxito.", "g")
+    }
+    if id == "space" {
+        if d.space || L.money < 20000000 { return null }
+        L.money -= 20000000
+        d.space = true
+        d.eng = 10
+        hito_me("Trabajo", "Fundaste Ares Aerospace")
+        return finish("Ares Aerospace", "Fundaste Ares Aerospace con diez ingenieros brillantes. Marte espera.", "g")
+    }
+    if id == "station" {
+        if d.station || !d.rocket || L.money < 100000000 { return null }
+        L.money -= 100000000
+        d.station = true
+        hito_me("Vida", "Construiste una estación orbital")
+        return finish("Estación orbital", "La estación Ares-1 ya orbita la Tierra. Siguiente parada: Marte.", "g")
+    }
+    if id == "foundation" {
+        if L.money < 5000000 { return null }
+        L.money -= 5000000
+        d.donated += 5000000
+        flag("foundation")
+        L.karma += 15
+        L.fame = clamp100(L.fame + 10)
+        hito_me("Vida", "Creaste tu fundación")
+        return finish("Fundación", "Tu fundación ayudará a miles de personas, incluso cuando ya no estés.", "g")
+    }
+    if !route_use(id) { return info("Ruta", "Ya lo hiciste este mes.") }
+    if id == "workers_good" {
+        L.money -= 200000
+        d.workers = clamp100(d.workers + 15)
+        L.karma += 4
+        return finish("La mina", "Mejores sueldos y túneles seguros. Los mineros te aplauden.", "g")
+    }
+    if id == "workers_bad" {
+        L.money += 300000
+        d.workers = clamp100(d.workers - 15)
+        L.karma -= 6
+        if chance(10) {
+            L.happy -= 15
+            hito_once("mine_accident", "Vida", "Accidente en tu mina")
+            return finish("La mina", "Un derrumbe dejó heridos. Los periódicos te llaman explotador.", "b")
+        }
+        return finish("La mina", "Turnos dobles. Ganaste $300,000 extra. Los mineros murmuran.", "n")
+    }
+    if id == "auction" {
+        let m = rint(100, 600) * 1000 * d.mine
+        L.money += m
+        return finish("Subasta", "Un coleccionista pagó " + money_str(m) + " por tus mejores esmeraldas.", "g")
+    }
+    if id == "hire_eng" {
+        d.eng += 5
+        return finish("Ingenieros", "Cinco ingenieros nuevos se unieron a Ares. Ahora son " + str(d.eng) + ".", "g")
+    }
+    if id == "research" {
+        if L.money < 2000000 { return null }
+        L.money -= 2000000
+        if d.station { d.mars = clamp100(d.mars + 10) } else { d.rnd = clamp100(d.rnd + 10) }
+        return finish("Investigación", "Millones en pruebas y prototipos. El progreso avanza.", "g")
+    }
+    if id == "launch" { return mg_start("timing", "Ventana de lanzamiento", "route", {"kind": "launch"}) }
+    if id == "tourist" {
+        L.money -= 500000
+        L.happy += 25
+        hito_me("Vida", "Viajaste al espacio")
+        return finish("El espacio", "Viste la Tierra desde arriba, azul y frágil. Lloraste un poco.", "g")
+    }
+    if id == "donate_h" || id == "donate_s" {
+        if L.money < 1000000 { return null }
+        L.money -= 1000000
+        d.donated += 1000000
+        L.karma += 8
+        L.fame = clamp100(L.fame + 4)
+        L.happy += 6
+        hito_once("first_big_donation", "Vida", "Donaste tu primer millón")
+        let what = "un ala pediátrica"
+        if id == "donate_s" { what = "cien becas universitarias" }
+        return finish("Filantropía", "Tu donativo financió " + what + ". Tu nombre está en una placa.", "g")
+    }
+    return null
+}
+
+function launch_result(score: any, ctx: map) {
+    let d = L.rd
+    let odds = 35 + score * 6 / 10
+    if chance(odds) {
+        if d.station {
+            d.mars_done = true
+            hito_me("Vida", "Llevaste a la humanidad a Marte")
+            L.fame = 100
+            L.happy += 30
+            list_push(G.toasts, {"head": "¡HISTORIA!", "title": "HUMANOS EN MARTE", "sub": "Ares Aerospace lo logró.", "t0": G.t})
+            return finish("Marte", "«Aquí Ares Uno: hemos aterrizado.» La humanidad pisó Marte gracias a ti.", "g")
+        }
+        d.rocket = true
+        hito_me("Vida", "Lanzaste con éxito tu cohete reutilizable")
+        return finish("Lanzamiento", "¡El cohete despegó, llegó a órbita y aterrizó de pie! Los contratos llueven.", "g")
+    }
+    L.money -= 5000000
+    L.happy -= 10
+    hito_once("rocket_boom", "Vida", "Tu primer cohete explotó")
+    if d.station { d.mars = max(60, d.mars - 20) } else { d.rnd = max(60, d.rnd - 20) }
+    return finish("Lanzamiento", "El cohete explotó segundos después del despegue. Nadie salió herido, pero perdiste $5,000,000.", "b")
+}
