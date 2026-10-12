@@ -140,6 +140,12 @@ function hovered(action: string) {
     return !block && G.hover == action
 }
 
+// Una fila de lista bajo el puntero. Varias filas pueden compartir acción
+// (las que solo informan): se ilumina solo la que está debajo.
+function hovered_at(action: string, x: any, y: any, w: any, h: any) {
+    return hovered(action) && G.px >= x && G.py >= y && G.px < x + w && G.py < y + h
+}
+
 // Panel inclinado negro con borde blanco y sombra roja.
 function panel(x: int, y: int, w: int, h: int, skew: int) {
     svg(x, y, w + 6, h + 6, slant_doc(w, h, skew, HEX_INK, HEX_WHITE, 3, HEX_RED, 6))
@@ -1251,7 +1257,7 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
         let ix = 56 - k * 4 - (1.0 - ie) * 260
         let iy = list_y + k * 52
         let locked = it.lock != ""
-        let on = hovered(it.action)
+        let on = hovered_at(it.action, ix, iy, 520, 46)
         if on { focus = it }
         let fill = HEX_INK
         let color = C_WHITE
