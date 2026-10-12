@@ -733,10 +733,19 @@ function dn_tax_reset() {
     d.winnings = 0
 }
 
-function tax_pro() {
-    if job_is("contador") || job_is("auditor") { return true }
+// Lo «pro» de la declaración: tu propia carrera (contador o auditor) o tu
+// pareja casada que lo es. Son dos casos distintos: quien la hace cambia el texto.
+function tax_pro_self() {
+    return job_is("contador") || job_is("auditor")
+}
+
+function tax_pro_partner() {
     let p = partner()
-    return p != null && L.married && p.job_t != null && (str_contains(p.job_t, "Contador") || str_contains(p.job_t, "Contadora"))
+    return p != null && L.married && p.job_t != null && (str_contains(p.job_t, "Contador") || str_contains(p.job_t, "Auditor"))
+}
+
+function tax_pro() {
+    return tax_pro_self() || tax_pro_partner()
 }
 
 // La declaración anual (la llama sim.vel en cada cumpleaños).
@@ -763,6 +772,7 @@ function tax_open() {
         return null
     }
     let pro = tax_pro()
+    let self_pro = tax_pro_self()
     let parts = []
     if r.income > 0 { list_push(parts, "sueldo " + money_str(r.income) + " (impuesto ya retenido)") }
     if r.cap > 0 { list_push(parts, "ganancias de bolsa") }
@@ -772,12 +782,13 @@ function tax_open() {
     let txt = "Llegó la declaración anual. Declaras: " + str_join(parts, ", ") + ". Impuesto por pagar: " + money_str(r.full) + "."
     if r.credit > 0 { txt = txt + " Tus deducciones (retiro, donativos, intereses de la hipoteca) pueden bajarlo hasta " + money_str(r.credit) + "." }
     let first = "Contratar a un contador ($2,000)"
-    if pro { first = "Hacerla tú con tu experiencia profesional" }
+    if self_pro { first = "Hacerla tú con tu experiencia profesional" }
+    if pro && !self_pro { first = "Que la haga tu pareja" }
     let locks = ["", "", "", "", ""]
     if L.money < 2000 && !pro { locks[0] = "$2,000" }
     if L.money < 300 { locks[1] = "$300" }
     if !dn().offshore { locks[4] = "Sin cuenta offshore" }
-    open_choice("DECLARACIÓN ANUAL", txt, [first, "Usar una app de impuestos ($300)", "Hacerla tú (minijuego de cuentas)", "Evadir impuestos", "Esconderlo en tu paraíso fiscal"], locks, "taxes", {"full": r.full, "credit": r.credit, "pro": pro})
+    open_choice("DECLARACIÓN ANUAL", txt, [first, "Usar una app de impuestos ($300)", "Hacerla tú (minijuego de cuentas)", "Evadir impuestos", "Esconderlo en tu paraíso fiscal"], locks, "taxes", {"full": r.full, "credit": r.credit, "pro": pro, "self_pro": self_pro})
     return null
 }
 
@@ -787,7 +798,13 @@ function resolve_taxes(index: int, ctx: map) {
     let credit = ctx.credit
     if index == 0 {
         if !ctx.pro { L.money -= 2000 }
-        return tax_settle(full * 75 / 100 - credit, "Tu contador encontró todas las deducciones.")
+        let done_msg = "Tu contador encontró todas las deducciones."
+        if ctx.self_pro == true {
+            done_msg = "Con tu experiencia profesional encontraste todas las deducciones."
+        } else if ctx.pro == true {
+            done_msg = "Tu pareja encontró todas las deducciones."
+        }
+        return tax_settle(full * 75 / 100 - credit, done_msg)
     }
     if index == 1 {
         L.money -= 300
