@@ -352,6 +352,13 @@ function handle_input(input: map) {
     // Lo que se escribe con IME (chino, japonés, coreano...) llega sin tecla.
     if len(input.pressed) == 0 && !(G.mode == "create" && len(input.text) > 0) { return null }
     G.dirty = true
+    // F11: pantalla completa, en cualquier momento.
+    if pressed(input, "F11") {
+        CFG["full"] = CFG["full"] != true
+        cfg_apply()
+        cfg_save()
+        return null
+    }
     if G.cfg_on == true {
         if pressed(input, "Escape") { handle_action("cfg:close") }
         return null

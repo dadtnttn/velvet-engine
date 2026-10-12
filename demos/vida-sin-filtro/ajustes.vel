@@ -37,6 +37,7 @@ state {
         "intro": false,
         "tips": true,
         "tips_seen": [],
+        "full": false,
         "loaded": false
     }
 }
@@ -50,7 +51,7 @@ function cfg_boot() {
 function cfg_loaded(r: map) {
     CFG.loaded = true
     if r.ok && r.data != null {
-        for key in ["lang", "theme", "master", "sfx", "music", "acc", "lgt", "intro", "tips", "tips_seen"] {
+        for key in ["lang", "theme", "master", "sfx", "music", "acc", "lgt", "intro", "tips", "tips_seen", "full"] {
             if r.data[key] != null { CFG[key] = r.data[key] }
         }
     } else {
@@ -78,7 +79,7 @@ function system_lang_code() {
 }
 
 function cfg_save() {
-    let data = {"lang": CFG.lang, "theme": CFG.theme, "master": CFG.master, "sfx": CFG.sfx, "music": CFG.music, "acc": CFG.acc, "lgt": CFG.lgt, "intro": CFG.intro, "tips": CFG.tips, "tips_seen": CFG.tips_seen}
+    let data = {"lang": CFG.lang, "theme": CFG.theme, "master": CFG.master, "sfx": CFG.sfx, "music": CFG.music, "acc": CFG.acc, "lgt": CFG.lgt, "intro": CFG.intro, "tips": CFG.tips, "tips_seen": CFG.tips_seen, "full": CFG.full}
     storage_request("save", {"slot": CFG_SLOT, "data": data, "tag": "cfg"})
 }
 
@@ -86,6 +87,12 @@ function cfg_apply() {
     emit("i18n.set", {"lang": CFG.lang})
     emit("audio.volume", {"master": CFG.master / 100.0, "sfx": CFG.sfx / 100.0, "music": CFG.music / 100.0})
     theme_apply(CFG.theme)
+    // Pantalla completa solo cuando cambia (repetirla parpadea).
+    let full = CFG["full"] == true
+    if G["full_on"] != full {
+        G["full_on"] = full
+        emit("window.set_fullscreen", {"enabled": full})
+    }
     G.logc = null
     G.i18n_g = ""
     // El catálogo se instala al procesar el evento: se redibuja en el siguiente frame.
@@ -155,6 +162,9 @@ function cfg_action(action: string) {
         sfx("tick")
     } else if rest == "tips" {
         CFG.tips = CFG.tips == false
+        sfx("tick")
+    } else if rest == "full" {
+        CFG["full"] = CFG["full"] != true
         sfx("tick")
     } else if rest == "tips:again" {
         CFG.tips = true
@@ -266,7 +276,15 @@ function draw_cfg_game(x: int, y: int) {
     tag(x, y - 26, 200, "JUEGO", HEX_RED, C_WHITE)
     otext(x, y + 60, "CONSEJOS PARA EMPEZAR", 28, C_WHITE, "impact", false)
     textw(x, y + 92, "Avisos cortos que señalan cada parte del juego la primera vez.", 16, C_GRAY, "ui", 700)
-    let on = CFG.tips != false
+    cfg_toggle(x, y + 112, CFG.tips != false, "cfg:tips")
+    small_button(x + 180, y + 116, 300, 44, "VER LOS CONSEJOS OTRA VEZ", "cfg:tips:again")
+    otext(x, y + 230, "PANTALLA COMPLETA", 28, C_WHITE, "impact", false)
+    textw(x, y + 262, "El juego ocupa toda la pantalla. También con la tecla F11.", 16, C_GRAY, "ui", 700)
+    cfg_toggle(x, y + 282, CFG["full"] == true, "cfg:full")
+}
+
+// Un interruptor SÍ/NO.
+function cfg_toggle(x: int, y: int, on: bool, action: string) {
     let lbl = "NO"
     if on { lbl = "SÍ" }
     let fill = HEX_INK
@@ -274,11 +292,10 @@ function draw_cfg_game(x: int, y: int) {
     if on {
         fill = HEX_YELLOW
         color = C_INK
-    } else if hovered("cfg:tips") {
+    } else if hovered(action) {
         fill = HEX_RED
     }
-    svg(x, y + 112, 150, 56, slant_doc(144, 50, 12, fill, HEX_WHITE, 2, HEX_RED, 5))
-    ctext(x + 72, y + 146, lbl, 24, color, "impact")
-    hot(x, y + 112, 144, 50, "cfg:tips")
-    small_button(x + 180, y + 116, 300, 44, "VER LOS CONSEJOS OTRA VEZ", "cfg:tips:again")
+    svg(x, y, 150, 56, slant_doc(144, 50, 12, fill, HEX_WHITE, 2, HEX_RED, 5))
+    ctext(x + 72, y + 34, lbl, 24, color, "impact")
+    hot(x, y, 144, 50, action)
 }
