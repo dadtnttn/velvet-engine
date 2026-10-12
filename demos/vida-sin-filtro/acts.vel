@@ -1051,6 +1051,7 @@ function do_person_act(action: string, p: map) {
         if chance(p.bond - 10 + rank("guts") * 3) {
             add_hito(p, "Se comprometieron")
             hito_once("engaged", "Amor", "Te comprometiste")
+            p["wed_by_them"] = false
             return begin_wedding(p)
         }
         bond_gain(p, -10)
@@ -1184,7 +1185,13 @@ function special(name: string, ctx: map) {
         return ""
     }
     if name == "marry" {
-        marry()
+        // Un anillo en un evento también pasa por la ley del país, el contrato y el estilo de boda.
+        let pr = partner()
+        if pr != null {
+            // Te lo pidió a ti: la ventana de la boda lo dice así.
+            pr["wed_by_them"] = true
+            begin_wedding(pr)
+        }
         return ""
     }
     if name == "rehab" {

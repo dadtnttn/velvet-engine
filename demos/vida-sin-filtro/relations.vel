@@ -981,7 +981,13 @@ function open_wedding_style(p: map) {
     for c in costs {
         if c > 0 && L.money < local_price(c) { list_push(locks, money_str(local_price(c))) } else { list_push(locks, "") }
     }
-    open_choice("¡DIJO QUE SÍ!", fmt("{x} aceptó casarse contigo. ¿Qué boda quieren?", ctx),
+    let title = "¡DIJO QUE SÍ!"
+    let ask = "{x} aceptó casarse contigo. ¿Qué boda quieren?"
+    if map_get(p, "wed_by_them", false) == true {
+        title = "¡ACEPTASTE!"
+        ask = "Aceptaste casarte con {x}. ¿Qué boda quieren?"
+    }
+    open_choice(title, fmt(ask, ctx),
         ["Solo ustedes dos al atardecer (gratis)", local_text("Registro civil y tacos ($2,000)", 2000), local_text("Escaparse a Las Vegas ($5,000)", 5000), local_text("Boda en la playa ($20,000)", 20000), local_text("La boda del año ($40,000)", 40000)], locks, "wedding", ctx)
     G.modal.tags = ["Íntima", "Sencilla", "Espontánea", "Romántica", "Fama"]
     return null

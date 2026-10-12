@@ -1074,6 +1074,8 @@ function prenup_odds(p: map) {
     if st == "intenso" { o -= 20 }
     if st == "celoso" { o -= 15 }
     if net_worth() > 500000 { o += 10 }
+    // La fe de tu pareja pesa: un contrato antes de casarse suena a planear el divorcio.
+    o -= disapproval(p, "") / 3
     return clamp(o, 5, 95)
 }
 
