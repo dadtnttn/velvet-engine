@@ -69,7 +69,21 @@ const INTERVIEW = [
     {"q": "Si tu jefe se equivoca, ¿qué haces?", "a": [["Se lo comento en privado, con datos y respeto.", 100], ["Me quedo callado: él sabrá.", 35], ["Se lo digo frente a todos.", 10], ["Lo publico en redes.", 0]]},
     {"q": "¿Cómo manejas la presión?", "a": [["Priorizo, hago una lista y voy resolviendo lo urgente primero.", 100], ["Trabajo mejor bajo presión.", 55], ["Lloro un poco y sigo.", 25], ["Renuncio.", 0]]},
     {"q": "¿Qué te hace diferente a los demás candidatos?", "a": [["Combino experiencia práctica con muchas ganas de aprender.", 100], ["Soy muy buena onda.", 35], ["Que yo sí vine bañado.", 15], ["Nada, la verdad.", 0]]},
-    {"q": "¿Tienes alguna pregunta para nosotros?", "a": [["¿Cómo se ve el éxito en este puesto durante el primer año?", 100], ["¿Cuántas vacaciones tengo?", 40], ["¿Puedo traer a mi perro?", 20], ["No, ya me quiero ir.", 0]]}
+    {"q": "¿Tienes alguna pregunta para nosotros?", "a": [["¿Cómo se ve el éxito en este puesto durante el primer año?", 100], ["¿Cuántas vacaciones tengo?", 40], ["¿Puedo traer a mi perro?", 20], ["No, ya me quiero ir.", 0]]},
+    {"q": "¿Qué harías si un cliente te grita?", "a": [["Lo escucho con calma y busco una solución.", 100], ["Le paso el problema a mi jefe.", 45], ["Le grito más fuerte.", 0], ["Finjo que no hablo su idioma.", 10]]},
+    {"q": "¿Trabajas mejor solo o en equipo?", "a": [["Me adapto: sé cuándo colaborar y cuándo concentrarme.", 100], ["Solo, la gente me estorba.", 20], ["En equipo, así otros hacen la parte difícil.", 10], ["Depende de quién sea el equipo.", 55]]},
+    {"q": "Véndeme esta pluma.", "a": [["Primero dime: ¿qué necesitas firmar hoy?", 100], ["Es una pluma muy bonita... azul.", 30], ["¿Tú cuánto ofreces por ella?", 40], ["No.", 0]]},
+    {"q": "¿Cómo manejas la presión?", "a": [["Priorizo, hago una lista y voy por partes.", 100], ["Con mucho café.", 45], ["Lloro un poquito y sigo.", 25], ["Renuncio.", 0]]},
+    {"q": "¿Qué sabes de nuestra empresa?", "a": [["Investigué sus proyectos recientes y me encanta hacia dónde van.", 100], ["Que están contratando.", 25], ["Vi su página... por encima.", 40], ["¿Cómo se llama esto?", 0]]},
+    {"q": "¿Cuál ha sido tu mayor logro?", "a": [["Sacar adelante un proyecto difícil cuando nadie creía en él.", 100], ["Terminar la escuela.", 45], ["Ganar un torneo de videojuegos.", 25], ["Llegar a esta entrevista.", 15]]},
+    {"q": "Si fueras un animal, ¿cuál serías?", "a": [["Un delfín: listo, sociable y bueno en equipo.", 100], ["Un león, porque mando.", 40], ["Un perezoso.", 5], ["Esta pregunta es ridícula.", 10]]},
+    {"q": "¿Tienes alguna pregunta para nosotros?", "a": [["¿Cómo miden el éxito en este puesto?", 100], ["¿Cuántos días de vacaciones hay?", 30], ["¿Puedo trabajar desde la cama?", 10], ["No, ya me quiero ir.", 0]]},
+    {"q": "¿Qué haces en tu tiempo libre?", "a": [["Aprendo cosas nuevas y hago deporte para despejarme.", 100], ["Veo series hasta las 4 de la mañana.", 30], ["Dormir.", 20], ["Nada que pueda contar aquí.", 5]]},
+    {"q": "¿Por qué deberíamos contratarte a ti y no a otra persona?", "a": [["Porque tengo la experiencia y las ganas de aprender que buscan.", 100], ["Porque caigo bien a todo el mundo.", 30], ["Porque los demás son peores.", 15], ["No sé, contraten a la otra persona.", 0]]},
+    {"q": "Describe tu trabajo ideal.", "a": [["Uno donde pueda crecer, aportar y aprender del equipo.", 100], ["Uno donde no tenga que trabajar.", 5], ["El de mi jefe.", 25], ["Este, supongo.", 45]]},
+    {"q": "¿Qué haces cuando te equivocas?", "a": [["Lo reconozco, lo arreglo y aprendo para la próxima.", 100], ["Busco a quién echarle la culpa.", 0], ["Hago como que no pasó nada.", 15], ["Pido perdón mil veces.", 50]]},
+    {"q": "¿Cómo te describirían tus amistades?", "a": [["Como alguien responsable, alegre y de confianza.", 100], ["Como el alma de la fiesta.", 40], ["No tengo amistades.", 5], ["Pregúntales.", 20]]},
+    {"q": "¿Puedes quedarte horas extra si hace falta?", "a": [["Sí, si el proyecto lo necesita y nos organizamos bien.", 100], ["Solo si me pagan el triple.", 30], ["Jamás.", 5], ["Ya hago horas extra... durmiendo.", 10]]}
 ]
 
 // Clasificar: temas con tres grupos y cosas [nombre, grupo].
@@ -106,7 +120,27 @@ const QUIZ_SUBJECTS = {
         {"q": "¿En qué año empezó la Segunda Guerra Mundial?", "a": ["1914", "1939", "1945", "1929"], "c": 1},
         {"q": "¿Quién escribió Don Quijote?", "a": ["Cervantes", "Lope de Vega", "Quevedo", "Góngora"], "c": 0},
         {"q": "¿Qué país regaló la Estatua de la Libertad a EE. UU.?", "a": ["Inglaterra", "España", "Francia", "Italia"], "c": 2},
-        {"q": "¿Cómo se llamaba el barco más famoso que se hundió en 1912?", "a": ["Lusitania", "Titanic", "Britannic", "Olympic"], "c": 1}
+        {"q": "¿Cómo se llamaba el barco más famoso que se hundió en 1912?", "a": ["Lusitania", "Titanic", "Britannic", "Olympic"], "c": 1},
+        {"q": "¿Qué civilización construyó las pirámides de Giza?", "a": ["Los egipcios", "Los romanos", "Los mayas", "Los persas"], "c": 0},
+        {"q": "¿Quién llegó a América en 1492?", "a": ["Cristóbal Colón", "Fernando de Magallanes", "Vasco da Gama", "Marco Polo"], "c": 0},
+        {"q": "¿Qué invento se atribuye a Gutenberg?", "a": ["La imprenta", "El telescopio", "La brújula", "El reloj"], "c": 0},
+        {"q": "¿En qué año terminó la Segunda Guerra Mundial?", "a": ["1945", "1939", "1950", "1918"], "c": 0},
+        {"q": "¿Qué muralla se construyó para proteger a China?", "a": ["La Gran Muralla", "El Muro de Adriano", "El Muro de Berlín", "La Muralla Roja"], "c": 0},
+        {"q": "¿Quién fue Napoleón Bonaparte?", "a": ["Un emperador francés", "Un pintor italiano", "Un rey inglés", "Un explorador español"], "c": 0},
+        {"q": "¿Qué expedición dio la primera vuelta al mundo?", "a": ["La de Magallanes y Elcano", "La de Colón", "La de James Cook", "La de Darwin"], "c": 0},
+        {"q": "¿Qué pueblo navegaba en barcos llamados drakkar?", "a": ["Los vikingos", "Los fenicios", "Los romanos", "Los aztecas"], "c": 0},
+        {"q": "¿Qué científico propuso la teoría de la relatividad?", "a": ["Albert Einstein", "Isaac Newton", "Galileo Galilei", "Charles Darwin"], "c": 0},
+        {"q": "¿Qué filósofo griego fue maestro de Alejandro Magno?", "a": ["Aristóteles", "Platón", "Sócrates", "Pitágoras"], "c": 0},
+        {"q": "¿Dónde empezó la Revolución Industrial?", "a": ["Inglaterra", "Francia", "Estados Unidos", "Japón"], "c": 0},
+        {"q": "¿Qué imperio tenía su capital en Cusco?", "a": ["El inca", "El azteca", "El romano", "El otomano"], "c": 0},
+        {"q": "¿Quién pintó la Mona Lisa?", "a": ["Leonardo da Vinci", "Miguel Ángel", "Pablo Picasso", "Vincent van Gogh"], "c": 0},
+        {"q": "¿Cómo se llamó el enfrentamiento entre EE. UU. y la URSS sin guerra directa?", "a": ["La Guerra Fría", "La Guerra de los Cien Años", "La Gran Guerra", "La Guerra de Troya"], "c": 0},
+        {"q": "¿Qué líder luchó sin violencia por la independencia de la India?", "a": ["Mahatma Gandhi", "Jawaharlal Nehru", "Nelson Mandela", "Martin Luther King"], "c": 0},
+        {"q": "¿Quién fue el primer presidente negro de Sudáfrica?", "a": ["Nelson Mandela", "Desmond Tutu", "Kofi Annan", "Jacob Zuma"], "c": 0},
+        {"q": "¿Qué ciudad romana quedó sepultada por el volcán Vesubio?", "a": ["Pompeya", "Atenas", "Cartago", "Troya"], "c": 0},
+        {"q": "¿Qué escritura usaban los antiguos egipcios?", "a": ["Los jeroglíficos", "La cuneiforme", "Las runas", "El alfabeto latino"], "c": 0},
+        {"q": "¿En qué siglo llegó el ser humano a la Luna?", "a": ["En el siglo XX", "En el siglo XIX", "En el siglo XXI", "En el siglo XVIII"], "c": 0},
+        {"q": "¿Qué ciudad era el centro del Imperio romano?", "a": ["Roma", "Atenas", "Constantinopla", "Alejandría"], "c": 0}
     ],
     "ciencias": [
         {"q": "¿Qué parte de la célula guarda el ADN?", "a": ["Membrana", "Núcleo", "Citoplasma", "Ribosoma"], "c": 1},
@@ -118,7 +152,27 @@ const QUIZ_SUBJECTS = {
         {"q": "¿Qué fuerza nos mantiene en el suelo?", "a": ["Magnetismo", "Fricción", "Gravedad", "Inercia"], "c": 2},
         {"q": "¿Cuántos cromosomas tiene una persona?", "a": ["23", "46", "48", "64"], "c": 1},
         {"q": "¿Qué estado de la materia tiene forma propia?", "a": ["Líquido", "Gas", "Sólido", "Plasma"], "c": 2},
-        {"q": "¿Qué animal es un anfibio?", "a": ["Rana", "Lagartija", "Tiburón", "Pingüino"], "c": 0}
+        {"q": "¿Qué animal es un anfibio?", "a": ["Rana", "Lagartija", "Tiburón", "Pingüino"], "c": 0},
+        {"q": "¿Cuál es el planeta más grande del sistema solar?", "a": ["Júpiter", "Saturno", "Neptuno", "La Tierra"], "c": 0},
+        {"q": "¿Qué gas necesitamos respirar para vivir?", "a": ["Oxígeno", "Nitrógeno", "Helio", "Dióxido de carbono"], "c": 0},
+        {"q": "¿Cuántos huesos tiene aproximadamente un adulto?", "a": ["206", "106", "306", "56"], "c": 0},
+        {"q": "¿Qué órgano usamos para pensar?", "a": ["El cerebro", "El hígado", "El estómago", "El riñón"], "c": 0},
+        {"q": "¿Qué tipo de animal es la ballena?", "a": ["Un mamífero", "Un pez", "Un reptil", "Un anfibio"], "c": 0},
+        {"q": "¿Qué metal es líquido a temperatura ambiente?", "a": ["El mercurio", "El hierro", "La plata", "El aluminio"], "c": 0},
+        {"q": "¿Qué parte de la planta absorbe el agua del suelo?", "a": ["La raíz", "La hoja", "La flor", "El fruto"], "c": 0},
+        {"q": "¿Cuál es el planeta rojo?", "a": ["Marte", "Venus", "Júpiter", "Mercurio"], "c": 0},
+        {"q": "¿Qué llevan los glóbulos rojos por el cuerpo?", "a": ["Oxígeno", "Azúcar", "Agua", "Grasa"], "c": 0},
+        {"q": "¿A qué temperatura se congela el agua?", "a": ["0 °C", "10 °C", "-10 °C", "32 °C"], "c": 0},
+        {"q": "¿Quién describió la gravedad tras ver caer una manzana, según la leyenda?", "a": ["Isaac Newton", "Albert Einstein", "Galileo Galilei", "Nikola Tesla"], "c": 0},
+        {"q": "¿Cuál es el hueso más largo del cuerpo?", "a": ["El fémur", "La tibia", "El húmero", "El radio"], "c": 0},
+        {"q": "¿Qué mamífero pone huevos?", "a": ["El ornitorrinco", "El delfín", "El murciélago", "El canguro"], "c": 0},
+        {"q": "¿Qué nos protege de buena parte de los rayos ultravioleta del Sol?", "a": ["La capa de ozono", "Las nubes de lluvia", "La Luna", "El viento"], "c": 0},
+        {"q": "¿Qué elemento químico tiene el símbolo O?", "a": ["El oxígeno", "El oro", "El osmio", "El hierro"], "c": 0},
+        {"q": "¿Qué viaja más rápido?", "a": ["La luz", "El sonido", "Un avión", "Un cohete"], "c": 0},
+        {"q": "¿Cuántos planetas tiene el sistema solar?", "a": ["8", "9", "7", "10"], "c": 0},
+        {"q": "¿Cómo se llama la energía que viene del viento?", "a": ["Eólica", "Solar", "Nuclear", "Geotérmica"], "c": 0},
+        {"q": "¿Qué insecto produce la miel?", "a": ["La abeja", "La avispa", "La hormiga", "La mariposa"], "c": 0},
+        {"q": "¿Qué órgano filtra la sangre y produce la orina?", "a": ["El riñón", "El corazón", "El pulmón", "El páncreas"], "c": 0}
     ],
     "lengua": [
         {"q": "¿Cuál es el sinónimo de «feliz»?", "a": ["Triste", "Contento", "Cansado", "Enojado"], "c": 1},
@@ -130,7 +184,19 @@ const QUIZ_SUBJECTS = {
         {"q": "¿Qué es una metáfora?", "a": ["Una pregunta", "Una comparación sin «como»", "Un verbo", "Una rima"], "c": 1},
         {"q": "¿Qué signo abre una pregunta en español?", "a": ["!", "¿", "?", "¡"], "c": 1},
         {"q": "¿Quién escribió «Cien años de soledad»?", "a": ["Octavio Paz", "García Márquez", "Juan Rulfo", "Neruda"], "c": 1},
-        {"q": "¿Cuántas sílabas tiene «mariposa»?", "a": ["3", "4", "5", "2"], "c": 1}
+        {"q": "¿Cuántas sílabas tiene «mariposa»?", "a": ["3", "4", "5", "2"], "c": 1},
+        {"q": "¿Cuál es el antónimo de «alto»?", "a": ["Bajo", "Grande", "Largo", "Ancho"], "c": 0},
+        {"q": "¿Cuál es el sinónimo de «rápido»?", "a": ["Veloz", "Lento", "Tranquilo", "Pesado"], "c": 0},
+        {"q": "¿Qué palabra es un sustantivo?", "a": ["Mesa", "Correr", "Bonito", "Rápidamente"], "c": 0},
+        {"q": "¿Qué palabra es un adjetivo?", "a": ["Hermoso", "Cantar", "Ayer", "Lápiz"], "c": 0},
+        {"q": "¿Quién escribió «Romeo y Julieta»?", "a": ["William Shakespeare", "Miguel de Cervantes", "Dante Alighieri", "Goethe"], "c": 0},
+        {"q": "¿Cómo se llama el texto que cuenta la vida de una persona?", "a": ["Una biografía", "Un poema", "Una receta", "Una noticia"], "c": 0},
+        {"q": "¿Qué es una fábula?", "a": ["Un cuento con moraleja", "Una canción", "Una noticia", "Un diccionario"], "c": 0},
+        {"q": "¿Quién escribió «El principito»?", "a": ["Antoine de Saint-Exupéry", "Julio Verne", "Victor Hugo", "J. R. R. Tolkien"], "c": 0},
+        {"q": "¿Qué texto da instrucciones para cocinar un plato?", "a": ["Una receta", "Una novela", "Un poema", "Una carta"], "c": 0},
+        {"q": "¿Quién escribió la saga de Harry Potter?", "a": ["J. K. Rowling", "J. R. R. Tolkien", "Roald Dahl", "C. S. Lewis"], "c": 0},
+        {"q": "¿Cuál es el antónimo de «valiente»?", "a": ["Cobarde", "Fuerte", "Atrevido", "Audaz"], "c": 0},
+        {"q": "¿Para qué sirve un diccionario?", "a": ["Para saber qué significan las palabras", "Para leer cuentos", "Para ubicar países", "Para resolver sumas"], "c": 0}
     ],
     "geo": [
         {"q": "¿Cuál es el río más largo de América?", "a": ["Misisipi", "Amazonas", "Bravo", "Paraná"], "c": 1},
@@ -196,7 +262,27 @@ const QUIZ = [
     {"q": "¿Qué significa «consentimiento»?", "a": ["Decir que no", "Un sí claro y libre", "Callarse", "Estar ebrio"], "c": 1, "adult": true},
     {"q": "¿Qué vitamina da el sol?", "a": ["A", "C", "D", "K"], "c": 2},
     {"q": "¿Cuál es el país más grande del mundo?", "a": ["China", "Canadá", "EE. UU.", "Rusia"], "c": 3},
-    {"q": "¿Qué instrumento tiene 88 teclas?", "a": ["Guitarra", "Piano", "Violín", "Arpa"], "c": 1}
+    {"q": "¿Qué instrumento tiene 88 teclas?", "a": ["Guitarra", "Piano", "Violín", "Arpa"], "c": 1},
+    {"q": "¿Cuántos jugadores de un equipo de fútbol están en la cancha?", "a": ["11", "9", "10", "12"], "c": 0},
+    {"q": "¿Qué deporte se juega en Wimbledon?", "a": ["Tenis", "Golf", "Críquet", "Rugby"], "c": 0},
+    {"q": "¿Cuántas cuerdas tiene normalmente una guitarra?", "a": ["6", "4", "5", "8"], "c": 0},
+    {"q": "¿Qué idioma tiene más hablantes nativos en el mundo?", "a": ["El chino mandarín", "El inglés", "El español", "El hindi"], "c": 0},
+    {"q": "¿Qué red social nació en 2004 en una universidad?", "a": ["Facebook", "Instagram", "TikTok", "Twitter"], "c": 0},
+    {"q": "¿Cuántos colores tiene el arcoíris?", "a": ["7", "5", "6", "9"], "c": 0},
+    {"q": "¿Qué empresa creó el iPhone?", "a": ["Apple", "Samsung", "Nokia", "Google"], "c": 0},
+    {"q": "¿Qué moneda se usa en la mayor parte de la Unión Europea?", "a": ["El euro", "El dólar", "La libra", "El franco"], "c": 0},
+    {"q": "¿Cuántos años tiene un siglo?", "a": ["100", "10", "1,000", "50"], "c": 0},
+    {"q": "¿Cuál es el océano más grande?", "a": ["El Pacífico", "El Atlántico", "El Índico", "El Ártico"], "c": 0},
+    {"q": "¿En qué deporte se batea y se corre entre bases?", "a": ["Béisbol", "Críquet", "Hockey", "Golf"], "c": 0},
+    {"q": "¿Quién pintó «La noche estrellada»?", "a": ["Vincent van Gogh", "Pablo Picasso", "Salvador Dalí", "Claude Monet"], "c": 0},
+    {"q": "¿Cuántos lados tiene un hexágono?", "a": ["6", "5", "7", "8"], "c": 0},
+    {"q": "¿Qué vitamina produce la piel con la luz del sol?", "a": ["La vitamina D", "La vitamina C", "La vitamina A", "La vitamina B12"], "c": 0},
+    {"q": "¿De qué país es originaria la pizza?", "a": ["Italia", "Francia", "Grecia", "Estados Unidos"], "c": 0},
+    {"q": "¿Cada cuántos años hay Juegos Olímpicos de verano?", "a": ["4", "2", "3", "5"], "c": 0},
+    {"q": "¿Qué planeta tiene los anillos más famosos?", "a": ["Saturno", "Júpiter", "Marte", "Urano"], "c": 0},
+    {"q": "¿Cuál es el animal terrestre más rápido?", "a": ["El guepardo", "El león", "El caballo", "El galgo"], "c": 0},
+    {"q": "¿Qué se celebra el 1 de enero?", "a": ["El Año Nuevo", "La Navidad", "Halloween", "El Día del Trabajo"], "c": 0},
+    {"q": "¿Cuántos minutos tiene una hora?", "a": ["60", "100", "30", "90"], "c": 0}
 ]
 
 // Para la primaria: preguntas de su edad.
@@ -216,7 +302,31 @@ const QUIZ_KIDS = [
     {"q": "¿Qué estación viene después del invierno?", "a": ["El otoño", "La primavera", "El verano", "Ninguna"], "c": 1},
     {"q": "¿Cuántos meses tiene un año?", "a": ["10", "11", "12", "13"], "c": 2},
     {"q": "¿Qué se pone primero: el calcetín o el zapato?", "a": ["El zapato", "El calcetín", "Los dos juntos", "Ninguno"], "c": 1},
-    {"q": "¿Cuánto es la mitad de 20?", "a": ["5", "10", "15", "40"], "c": 1}
+    {"q": "¿Cuánto es la mitad de 20?", "a": ["5", "10", "15", "40"], "c": 1},
+    {"q": "¿Cuántas patas tiene un perro?", "a": ["4", "2", "6", "8"], "c": 0},
+    {"q": "¿Qué animal tiene trompa?", "a": ["El elefante", "El caballo", "El tigre", "El conejo"], "c": 0},
+    {"q": "¿De qué color es una fresa madura?", "a": ["Roja", "Azul", "Verde", "Morada"], "c": 0},
+    {"q": "¿Cuál es el contrario de «frío»?", "a": ["Caliente", "Mojado", "Oscuro", "Pequeño"], "c": 0},
+    {"q": "¿Qué animal vuela?", "a": ["El pájaro", "El pez", "El gato", "La vaca"], "c": 0},
+    {"q": "¿Cuántos dedos tienes en una mano?", "a": ["5", "4", "6", "10"], "c": 0},
+    {"q": "¿Con qué vemos?", "a": ["Con los ojos", "Con las orejas", "Con la nariz", "Con las manos"], "c": 0},
+    {"q": "¿Qué fruta es amarilla y alargada?", "a": ["El plátano", "La manzana", "La uva", "La sandía"], "c": 0},
+    {"q": "¿Dónde viven los peces?", "a": ["En el agua", "En los árboles", "En el desierto", "En las nubes"], "c": 0},
+    {"q": "¿Qué figura es redonda?", "a": ["El círculo", "El cuadrado", "El triángulo", "La estrella"], "c": 0},
+    {"q": "¿Qué vemos en el cielo de noche?", "a": ["La Luna", "El arcoíris", "El Sol", "Una ballena"], "c": 0},
+    {"q": "¿Cuántas ruedas tiene una bicicleta?", "a": ["2", "3", "4", "1"], "c": 0},
+    {"q": "¿Qué animal nos da leche?", "a": ["La vaca", "La gallina", "El pez", "La rana"], "c": 0},
+    {"q": "¿Qué color sale de mezclar azul y amarillo?", "a": ["Verde", "Morado", "Naranja", "Rosa"], "c": 0},
+    {"q": "¿Qué día viene después del lunes?", "a": ["El martes", "El domingo", "El jueves", "El sábado"], "c": 0},
+    {"q": "¿Con qué oímos?", "a": ["Con las orejas", "Con los ojos", "Con los pies", "Con la boca"], "c": 0},
+    {"q": "¿Qué animal es el rey de la selva en los cuentos?", "a": ["El león", "El ratón", "El búho", "La tortuga"], "c": 0},
+    {"q": "¿Qué cae del cielo cuando llueve?", "a": ["Agua", "Arena", "Hojas", "Piedras"], "c": 0},
+    {"q": "¿Cuántas estaciones tiene un año?", "a": ["4", "2", "6", "12"], "c": 0},
+    {"q": "¿Qué número va después del 19?", "a": ["20", "18", "21", "29"], "c": 0},
+    {"q": "¿Qué animal teje telarañas?", "a": ["La araña", "La abeja", "La hormiga", "El caracol"], "c": 0},
+    {"q": "¿Con qué se corta el papel?", "a": ["Con tijeras", "Con una cuchara", "Con un peine", "Con un lápiz"], "c": 0},
+    {"q": "¿Qué es más grande?", "a": ["Una montaña", "Una casa", "Un perro", "Una pelota"], "c": 0},
+    {"q": "¿De qué color es la nieve?", "a": ["Blanca", "Negra", "Azul", "Verde"], "c": 0}
 ]
 
 const ARROW_KEYS = ["up", "down", "left", "right"]
@@ -306,13 +416,9 @@ function mg_new_round() {
         m.q = {"seq": seq, "pos": 0, "start": G.t, "show_until": G.t + show}
         m.round_t0 = G.t + show
     } else if k == "interview" {
+        // Ni repetidas en la entrevista ni de las que ya te hicieron antes.
         let used = map_get(m, "used", [])
-        let q = pick(INTERVIEW)
-        let tries = 0
-        while list_contains(used, q.q) && tries < 20 {
-            q = pick(INTERVIEW)
-            tries += 1
-        }
+        let q = fresh_item(INTERVIEW, used)
         list_push(used, q.q)
         m.used = used
         let answers = list_slice(q.a, 0, len(q.a))
@@ -339,21 +445,11 @@ function mg_new_round() {
         }
         m.q = {"lane": 1, "d": 0.0, "last": G.t, "slow": -1.0, "fast": -1.0, "hits": 0, "obs": obs, "rivals": rivals}
     } else {
-        let subject = map_get(m.ctx, "subject", "")
-        let pool = QUIZ
-        if subject != "" && QUIZ_SUBJECTS[subject] != null {
-            pool = QUIZ_SUBJECTS[subject]
-        } else if L.age < 13 {
-            pool = QUIZ_KIDS
-        } else if L.age < 18 {
-            // Nada de temas de adultos en los exámenes de la secundaria.
-            let teen = []
-            for qq in QUIZ {
-                if qq.adult != true { list_push(teen, qq) }
-            }
-            pool = teen
-        }
-        m.q = pick(pool)
+        // Preguntas a tu medida que no se repiten (ver preguntas.vel).
+        if map_get(m, "asked", null) == null { m["asked"] = [] }
+        let q = quiz_question(map_get(m.ctx, "subject", ""), m.asked)
+        list_push(m.asked, q.id)
+        m.q = q
     }
 }
 

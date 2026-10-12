@@ -1,0 +1,324 @@
+// @edition 3
+// Preguntas de examen y de trivia que no se repiten. Las de matemáticas se
+// generan según tu edad y las de geografía salen de los países del juego
+// (nunca se acaban); las demás vienen de los bancos de minigames.vel y aquí
+// se recuerda cuáles ya viste para no repetirlas.
+
+// Una pregunta con su respuesta y las falsas, en orden al azar.
+function make_q(id: string, text: string, right: string, wrong: list) {
+    let opts = [right]
+    for w in wrong {
+        if len(opts) < 4 && w != "" && !list_contains(opts, w) { list_push(opts, w) }
+    }
+    if len(opts) < 4 { return null }
+    shuffle(G.rng, opts)
+    return {"id": id, "q": text, "a": opts, "c": list_index_of(opts, right)}
+}
+
+// Tres números cerca del correcto (y distintos).
+function near_numbers(right: int, spread: int, allow_negative: bool) {
+    let out = []
+    let tries = 0
+    while len(out) < 3 && tries < 60 {
+        tries += 1
+        let v = right + rint(1, max(2, spread)) * pick([-1, 1])
+        if (v < 0 && !allow_negative) || v == right || list_contains(out, str(v)) { continue }
+        list_push(out, str(v))
+    }
+    return out
+}
+
+// ---------------------------------------------------------------- matemáticas
+
+// Las de cuentas se distinguen por su texto (cada una es distinta).
+function math_q(text: string, right: string, wrong: list) {
+    return make_q("m:" + text, text, right, wrong)
+}
+
+// 12,500 con separador de miles, como el resto del juego.
+function num_str(n: int) {
+    if n < 0 { return "-" + num_str(0 - n) }
+    if n < 1000 { return str(n) }
+    return num_str(n / 1000) + "," + str_pad_left(str(n % 1000), 3, "0")
+}
+
+// Una operación a la medida de tu edad: sumas de niño, álgebra de adolescente.
+function math_question() {
+    let a = L.age
+    if a <= 8 {
+        let x = rint(6, 60)
+        let y = rint(3, 35)
+        if chance(55) { return math_q("¿Cuánto es " + str(x) + " + " + str(y) + "?", str(x + y), near_numbers(x + y, 10, false)) }
+        let big = max(x, y)
+        let small = min(x, y)
+        return math_q("¿Cuánto es " + str(big) + " − " + str(small) + "?", str(big - small), near_numbers(big - small, 8, false))
+    }
+    if a <= 10 {
+        let x = rint(3, 12)
+        let y = rint(3, 12)
+        let roll = rint(0, 99)
+        if roll < 50 { return math_q("¿Cuánto es " + str(x) + " × " + str(y) + "?", str(x * y), near_numbers(x * y, 12, false)) }
+        if roll < 80 { return math_q("¿Cuánto es " + str(x * y) + " ÷ " + str(x) + "?", str(y), near_numbers(y, 4, false)) }
+        let n = rint(2, 9) * 10
+        return math_q("¿Cuánto es la mitad de " + str(n) + "?", str(n / 2), near_numbers(n / 2, 6, false))
+    }
+    if a <= 12 {
+        let roll = rint(0, 99)
+        if roll < 30 {
+            let p = pick([10, 20, 25, 50, 75])
+            let n = rint(1, 12) * 20
+            return math_q("¿Cuánto es el " + str(p) + "% de " + str(n) + "?", str(n * p / 100), near_numbers(n * p / 100, 10, false))
+        }
+        if roll < 55 {
+            let w = rint(3, 15)
+            let h = rint(2, 12)
+            return math_q("Un rectángulo mide " + str(w) + " por " + str(h) + ". ¿Cuál es su área?", str(w * h), [str(2 * (w + h)), str(w + h), str(w * h + w)])
+        }
+        if roll < 80 {
+            let d = pick([3, 4, 5])
+            let n = rint(2, 12) * d
+            let part = pick(["un tercio", "un cuarto", "un quinto"])
+            if d == 3 { part = "un tercio" }
+            if d == 4 { part = "un cuarto" }
+            if d == 5 { part = "un quinto" }
+            return math_q("¿Cuánto es " + part + " de " + str(n) + "?", str(n / d), near_numbers(n / d, 4, false))
+        }
+        let x = rint(12, 99)
+        let y = rint(11, 49)
+        return math_q("¿Cuánto es " + str(x) + " × " + str(y) + "?", num_str(x * y), near_big(x * y, 40))
+    }
+    if a <= 15 {
+        let roll = rint(0, 99)
+        if roll < 30 {
+            let x = rint(2, 9)
+            let b = rint(1, 20)
+            let k = rint(2, 9)
+            return math_q("Si " + str(k) + "x + " + str(b) + " = " + str(k * x + b) + ", ¿cuánto vale x?", str(x), near_numbers(x, 3, true))
+        }
+        if roll < 55 {
+            let x = rint(-12, -2)
+            let y = rint(2, 12) * pick([-1, 1])
+            return math_q("¿Cuánto es (" + str(x) + ") × (" + str(y) + ")?", str(x * y), [str(0 - x * y), str(x + y), str(x * y + y)])
+        }
+        if roll < 80 {
+            let n = rint(4, 20)
+            return math_q("¿Cuánto es " + str(n) + " al cuadrado?", str(n * n), [str(n * 2), str(n * n + n), str(n * n - n)])
+        }
+        let n = rint(3, 15)
+        return math_q("¿Cuál es la raíz cuadrada de " + str(n * n) + "?", str(n), near_numbers(n, 3, false))
+    }
+    // Prepa, universidad y adultos.
+    let roll = rint(0, 99)
+    if roll < 25 {
+        let p = pick([12, 15, 16, 30, 35, 40])
+        let n = rint(2, 30) * 50
+        return math_q("Un producto de " + money_str(n) + " tiene " + str(p) + "% de descuento. ¿Cuánto pagas?", money_str(n - n * p / 100), [money_str(n * p / 100), money_str(n - p), money_str(n - n * p / 100 + 50)])
+    }
+    if roll < 50 {
+        let x = rint(2, 12)
+        let b = rint(2, 30)
+        let k = rint(3, 12)
+        return math_q("Si " + str(k) + "x − " + str(b) + " = " + str(k * x - b) + ", ¿cuánto vale x?", str(x), near_numbers(x, 3, true))
+    }
+    if roll < 75 {
+        let e = rint(5, 12)
+        let v = 1
+        let i = 0
+        while i < e {
+            v = v * 2
+            i += 1
+        }
+        return math_q("¿Cuánto es 2 elevado a la " + str(e) + "?", num_str(v), [num_str(v / 2), num_str(v * 2), str(e * 2)])
+    }
+    let x = rint(15, 95)
+    let y = rint(15, 95)
+    return math_q("¿Cuánto es " + str(x) + " × " + str(y) + "?", num_str(x * y), near_big(x * y, 60))
+}
+
+// Como near_numbers, con separador de miles.
+function near_big(right: int, spread: int) {
+    let out = []
+    for v in near_numbers(right, spread, false) { list_push(out, num_str(int(v))) }
+    return out
+}
+
+// ---------------------------------------------------------------- geografía
+
+// Países para preguntar: de niño, los de tu región y los más poblados.
+function geo_pool() {
+    let out = []
+    let reg = here().reg
+    for c in COUNTRIES {
+        if c.cap == null || c.cap == "" { continue }
+        if L.age >= 13 || c.reg == reg || c.pop >= 40000 { list_push(out, c) }
+    }
+    return out
+}
+
+// Otras `n` capitales, de la misma región si se puede (más difícil).
+function other_capitals(c: map, n: int) {
+    let same = []
+    let rest = []
+    for o in COUNTRIES {
+        if o.id == c.id || o.cap == null || o.cap == "" { continue }
+        if o.reg == c.reg { list_push(same, o.cap) } else { list_push(rest, o.cap) }
+    }
+    shuffle(G.rng, same)
+    shuffle(G.rng, rest)
+    let out = list_slice(same, 0, min(n, len(same)))
+    let k = 0
+    while len(out) < n && k < len(rest) {
+        list_push(out, rest[k])
+        k += 1
+    }
+    return out
+}
+
+function other_countries(c: map, n: int) {
+    let same = []
+    for o in COUNTRIES {
+        if o.id != c.id && o.reg == c.reg { list_push(same, o.n) }
+    }
+    shuffle(G.rng, same)
+    let out = list_slice(same, 0, min(n, len(same)))
+    while len(out) < n {
+        let o = pick(COUNTRIES)
+        if o.id != c.id && !list_contains(out, o.n) { list_push(out, o.n) }
+    }
+    return out
+}
+
+function geo_question() {
+    let pool = geo_pool()
+    let c = pick(pool)
+    let roll = rint(0, 99)
+    if roll < 35 { return make_q("g:cap:" + c.id, "¿Cuál es la capital de " + c.n + "?", c.cap, other_capitals(c, 3)) }
+    if roll < 50 { return make_q("g:of:" + c.id, "¿De qué país es capital " + c.cap + "?", c.n, other_countries(c, 3)) }
+    if roll < 65 {
+        let regs = []
+        for r in REGIONS {
+            if r[0] != c.reg { list_push(regs, r[1]) }
+        }
+        shuffle(G.rng, regs)
+        return make_q("g:reg:" + c.id, "¿En qué región del mundo está " + c.n + "?", region_name(c.reg), list_slice(regs, 0, 3))
+    }
+    if roll < 80 {
+        let langs = []
+        let tries = 0
+        while len(langs) < 3 && tries < 80 {
+            tries += 1
+            let o = pick(COUNTRIES)
+            // Nada que se parezca a la buena («Árabe» si es «árabe y bereber»).
+            if str_contains(o.lang, c.lang) || str_contains(c.lang, o.lang) || str_contains(o.lang, " ") != str_contains(c.lang, " ") { continue }
+            if !list_contains(langs, cap_first(o.lang)) { list_push(langs, cap_first(o.lang)) }
+        }
+        return make_q("g:lang:" + c.id, "¿Qué idioma se habla más en " + c.n + "?", cap_first(c.lang), langs)
+    }
+    // ¿Cuál tiene más habitantes? Cuatro países de poblaciones distintas.
+    let four = [c]
+    let tries = 0
+    while len(four) < 4 && tries < 80 {
+        tries += 1
+        let o = pick(pool)
+        let clash = false
+        for f in four {
+            if f.id == o.id || abs(f.pop - o.pop) < f.pop / 5 { clash = true }
+        }
+        if !clash { list_push(four, o) }
+    }
+    if len(four) < 4 { return make_q("g:cap:" + c.id, "¿Cuál es la capital de " + c.n + "?", c.cap, other_capitals(c, 3)) }
+    let top = four[0]
+    for f in four {
+        if f.pop > top.pop { top = f }
+    }
+    let wrong = []
+    for f in four {
+        if f.id != top.id { list_push(wrong, f.n) }
+    }
+    return make_q("g:pop:" + top.id, "¿Cuál de estos países tiene más habitantes?", top.n, wrong)
+}
+
+// ---------------------------------------------------------------- bancos fijos
+
+// Un elemento del banco que no hayas visto (ni en esta ronda); si ya los
+// viste todos, ese banco vuelve a empezar.
+function fresh_item(pool: list, used: list) {
+    if map_get(L, "qseen", null) == null { L["qseen"] = [] }
+    let fresh = []
+    for q in pool {
+        if !list_contains(L.qseen, q.q) && !list_contains(used, q.q) { list_push(fresh, q) }
+    }
+    if len(fresh) == 0 {
+        let mine = []
+        for q in pool { list_push(mine, q.q) }
+        let keep = []
+        for s in L.qseen {
+            if !list_contains(mine, s) { list_push(keep, s) }
+        }
+        L.qseen = keep
+        for q in pool {
+            if !list_contains(used, q.q) { list_push(fresh, q) }
+        }
+        if len(fresh) == 0 { fresh = pool }
+    }
+    let q = pick(fresh)
+    list_push(L.qseen, q.q)
+    if len(L.qseen) > 600 { L.qseen = list_slice(L.qseen, len(L.qseen) - 600, len(L.qseen)) }
+    return q
+}
+
+// Una pregunta del banco que no hayas visto, con las respuestas en otro orden.
+function fresh_question(pool: list) {
+    let q = fresh_item(pool, [])
+    let wrong = []
+    let i = 0
+    while i < len(q.a) {
+        if i != q.c { list_push(wrong, q.a[i]) }
+        i += 1
+    }
+    return make_q("s:" + q.q, q.q, q.a[q.c], wrong)
+}
+
+// La pregunta de la siguiente ronda: según la materia (o tu edad) y nunca
+// una que ya salió en este mismo examen.
+function quiz_question(subject: string, asked: list) {
+    if map_get(L, "qseen", null) == null { L["qseen"] = [] }
+    let tries = 0
+    while tries < 12 {
+        tries += 1
+        let q = quiz_candidate(subject)
+        if q == null || list_contains(asked, q.id) { continue }
+        // Las de geografía también se recuerdan entre exámenes.
+        if str_starts_with(q.id, "g:") {
+            if list_contains(L.qseen, q.id) { continue }
+            list_push(L.qseen, q.id)
+        }
+        return q
+    }
+    return quiz_candidate(subject)
+}
+
+function quiz_candidate(subject: string) {
+    if subject == "mate" {
+        if L.age < 11 || chance(80) { return math_question() }
+        return fresh_question(QUIZ_SUBJECTS.mate)
+    }
+    if subject == "geo" {
+        if chance(75) { return geo_question() }
+        return fresh_question(QUIZ_SUBJECTS.geo)
+    }
+    if subject != "" && QUIZ_SUBJECTS[subject] != null { return fresh_question(QUIZ_SUBJECTS[subject]) }
+    // Sin materia: cultura general a tu medida, con algo de cuentas y mapa.
+    let roll = rint(0, 99)
+    if roll < 25 { return math_question() }
+    if roll < 50 { return geo_question() }
+    if L.age < 13 { return fresh_question(QUIZ_KIDS) }
+    if L.age < 18 {
+        let teen = []
+        for qq in QUIZ {
+            if qq.adult != true { list_push(teen, qq) }
+        }
+        return fresh_question(teen)
+    }
+    return fresh_question(QUIZ)
+}
