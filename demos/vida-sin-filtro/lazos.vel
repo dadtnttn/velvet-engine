@@ -854,6 +854,7 @@ function lazos_special(name: string, ctx: map) {
         p.wealth_known = true
         make_partner(p)
         p.bond = max(p.bond, 65)
+        p["wed_by_them"] = true
         begin_wedding(p)
         return ""
     }

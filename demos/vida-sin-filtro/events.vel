@@ -369,7 +369,7 @@ const EVENTS = [
         "text": "{p} se arrodilla en medio del restaurante con un anillo en la mano.",
         "choices": [
             {"t": "Aceptar", "o": [
-                {"w": 100, "log": "¡Dijiste que sí! La boda fue preciosa.", "special": "marry", "happy": 15}
+                {"w": 100, "log": "¡Dijiste que sí! Ahora toca planear la boda.", "special": "marry", "happy": 15}
             ]},
             {"t": "Rechazar", "o": [
                 {"w": 100, "log": "Lo rechazaste frente a todo el restaurante. {p} se fue llorando.", "special": "breakup", "happy": -10, "karma": -3}

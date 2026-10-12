@@ -260,6 +260,7 @@ function resolve_initiative(index: int, ctx: map) {
     if k == "propose" {
         if index == 0 {
             add_hito(p, "Te propuso matrimonio")
+            p["wed_by_them"] = true
             return begin_wedding(p)
         }
         if index == 1 {

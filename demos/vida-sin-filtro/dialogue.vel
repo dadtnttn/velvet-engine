@@ -998,6 +998,7 @@ function dlg_end(code: string, p: map, msg: string, title: string, kind: string)
         add_hito(p, "Se comprometieron")
         hito_once("engaged", "Amor", "Te comprometiste")
         if msg != "" { log_add(msg, kind) }
+        p["wed_by_them"] = false
         return begin_wedding(p)
     }
     if code == "baby" { return finish(title, msg + try_baby(p), kind) }
