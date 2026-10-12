@@ -225,6 +225,42 @@ Los `window.*` que llegan antes de que exista la ventana (por ejemplo, al cargar
 los ajustes guardados durante `app_init`) no se pierden: la ventana se abre ya
 con ese título, tamaño o pantalla completa.
 
+## Traducción (`i18n`)
+
+El script escribe siempre en su idioma; el host traduce cada texto al dibujarlo
+(cambiar de idioma cambia todo lo que hay en pantalla, también lo ya escrito).
+
+```vel
+{"kind": "i18n.set", "payload": {"lang": "en"}}             // carga assets/i18n/en.json
+{"kind": "i18n.var", "payload": {"name": "g", "value": "f"}} // para {@g|m=…|f=…}
+```
+
+El catálogo es `{"lang": "en", "msgs": {"Original": "Traducción", …}}`. Además
+de textos exactos admite plantillas con huecos:
+
+| En la traducción | Qué hace |
+|---|---|
+| `{0}` | pone el valor, traducido si el catálogo lo tiene («ingreso bajo» → «low income») |
+| `{0!}` | un nombre: se queda como está (salvo un papel dicho en su lugar, «Tu mamá») |
+| `{0\|o=…\|a=…\|*=…}` | elige por el valor del hueco |
+| `{0\|#one=…\|#few=…\|#many=…\|#other=…}` | plural según las reglas del idioma |
+| `{@g\|m=…\|f=…}` | elige por una variable (`i18n.var`) |
+
+Para una línea se prueba, en orden: el texto exacto; la misma entrada con otra
+mayúscula (en alemán los sustantivos conservan la suya); las plantillas, la más
+larga primero y con todos sus huecos traducibles; las líneas hechas de piezas
+(` · `, ` › `, `: `, `, `, ` / `); un paréntesis al final; frases pegadas
+(cada una por su cuenta); una pieza conocida con algo alrededor (viñeta `- `,
+punto final, `-8 contratación`, `Casa con jardín $350,000`); y por último una
+plantilla que deja un nombre en un hueco. Un nombre son de una a tres palabras
+con mayúscula; una palabra común del original («Tu», «La», «Si») lo vuelve
+texto, salvo que las demás no estén en el catálogo («Si Thu» es un nombre,
+«TU MAMÁ» no).
+
+Los saltos de línea van por palabras. El chino y el japonés, que no usan
+espacios, se parten por carácter con sus reglas: `、。」ー` y las kana pequeñas
+no abren línea, `「（` no la cierran y una cifra como `F11` no se parte.
+
 ## Tareas largas (`app_task`)
 
 `max_instructions` limita cada llamada (`app_update`, `app_action`…). Para un
