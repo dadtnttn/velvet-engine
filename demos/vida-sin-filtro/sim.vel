@@ -239,6 +239,11 @@ function fmt(text: string, ctx: map) {
         // mayúscula si abren la frase.
         let xn = who(x)
         if xn != x.first {
+            // «Tu {rel} {x}» ya dice quién es: ahí va su nombre («Tu madre
+            // Dayana», no «Tu madre tu mamá»).
+            for lead in ["{rel} ", "{padre} ", str_lower(rel_label(x)) + " "] {
+                out = str_replace(out, lead + "{x}", lead + x.first)
+            }
             let cap = cap_first(xn)
             if str_starts_with(out, "{x}") { out = cap + str_sub(out, 3) }
             for lead in ["¡", "¿", ". ", "! ", "? ", "» ", "\n"] { out = str_replace(out, lead + "{x}", lead + cap) }
