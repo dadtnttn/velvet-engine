@@ -208,7 +208,7 @@ function start_war(a: string, b: string, n: string, mine: bool) {
         }
     }
     list_push(world().wars, w)
-    world_headline("¡Estalla la guerra " + str_replace(n, "Guerra ", "") + "!", a)
+    world_headline("¡Estalla «" + n + "»!", a)
     let me = here_id()
     let side = war_sides(w, me)
     if side > 0 {

@@ -92,13 +92,53 @@ function faith_of(p: map) {
     return p.faith
 }
 
-// «al templo», «a la mezquita»; «del templo», «de la mezquita».
+// «al templo», «a la mezquita»; «del templo», «de la mezquita». Escritas
+// enteras para que cada idioma traduzca la frase con su preposición
+// («to the temple», «в храм»).
+const TEMPLE_TO = {
+    "el altar de los ancestros": "al altar de los ancestros",
+    "el altar del sol": "al altar del sol",
+    "el claro de la luna": "al claro de la luna",
+    "el culto": "al culto",
+    "el círculo de meditación": "al círculo de meditación",
+    "el gurdwara": "al gurdwara",
+    "el santuario": "al santuario",
+    "el santuario del Velo": "al santuario del Velo",
+    "el santuario sintoísta": "al santuario sintoísta",
+    "el templo": "al templo",
+    "la catedral": "a la catedral",
+    "la iglesia": "a la iglesia",
+    "la mezquita": "a la mezquita",
+    "la sinagoga": "a la sinagoga"
+}
+
+const TEMPLE_FROM = {
+    "el altar de los ancestros": "del altar de los ancestros",
+    "el altar del sol": "del altar del sol",
+    "el claro de la luna": "del claro de la luna",
+    "el culto": "del culto",
+    "el círculo de meditación": "del círculo de meditación",
+    "el gurdwara": "del gurdwara",
+    "el santuario": "del santuario",
+    "el santuario del Velo": "del santuario del Velo",
+    "el santuario sintoísta": "del santuario sintoísta",
+    "el templo": "del templo",
+    "la catedral": "de la catedral",
+    "la iglesia": "de la iglesia",
+    "la mezquita": "de la mezquita",
+    "la sinagoga": "de la sinagoga"
+}
+
 function a_temple(t: string) {
+    let x = map_get(TEMPLE_TO, t, null)
+    if x != null { return x }
     if str_starts_with(t, "el ") { return "al " + str_sub(t, 3) }
     return "a " + t
 }
 
 function de_temple(t: string) {
+    let x = map_get(TEMPLE_FROM, t, null)
+    if x != null { return x }
     if str_starts_with(t, "el ") { return "del " + str_sub(t, 3) }
     return "de " + t
 }
