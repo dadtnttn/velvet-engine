@@ -110,6 +110,19 @@ Rust no asigna acciones de juego. Entrega un paquete físico:
 
 El paquete VS3 decide si una tecla significa mover, atacar, abrir un menú o cualquier otra acción.
 
+## Resolución y redibujado
+
+El paquete maqueta en su lienzo lógico (`canvas_width`×`canvas_height` del
+manifiesto) y el host lo dibuja a la resolución real de la ventana: en una
+pantalla 4K, un lienzo de 1280×720 se dibuja 3 veces más grande, con texto,
+formas y SVG rasterizados a ese tamaño (nada se estira). Más allá de 3× el
+host estira la imagen el resto del camino. Las coordenadas del puntero
+siguen en unidades lógicas.
+
+Entre un frame y el siguiente el host solo redibuja las zonas cuyos comandos
+cambiaron (o cuyo botón cambió de estado bajo el cursor), así que una
+pantalla quieta con algo animado cuesta poco aunque la ventana sea enorme.
+
 ## Primitivas 2D
 
 El intérprete software soporta:
@@ -130,6 +143,7 @@ El intérprete software soporta:
 | Comando | Campos | Efecto |
 |---|---|---|
 | `text` | `max_width`, `overflow`, `align` | Si el texto supera `max_width`: `"ellipsis"` (por defecto) lo corta con `…`, `"shrink"` reduce el tamaño (mínimo 8 px) y luego corta, `"clip"` lo corta sin marca. `align` acepta `"left"`, `"center"` y `"right"` (x es el borde derecho). |
+| `text` | `stroke`, `thickness` | Contorno: cada letra se rodea de `thickness` px (lógicos) del color `stroke`, dibujado detrás del texto. Queda continuo a cualquier resolución. |
 | `text_wrap` | `w`, `max_lines` | Ajusta por palabras a `w`; las palabras más largas que la línea se parten por letras. Con `max_lines` la última línea termina en `…`. |
 | `button` | `max_width`, `overflow` | La etiqueta nunca se sale del botón: por defecto se encoge y luego se corta. |
 

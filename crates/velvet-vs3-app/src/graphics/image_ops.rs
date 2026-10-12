@@ -1,5 +1,45 @@
-use super::canvas::{apply_opacity, blend, Canvas, Rect};
+use super::canvas::{alpha_table, composite, Canvas, Rect};
 use crate::assets::ImageAsset;
+
+/// The parts of each image row that are not fully transparent, so drawing
+/// skips the empty pixels and copies the solid ones in one go.
+pub struct Spans {
+    /// Per row, its range in `spans`.
+    rows: Vec<(u32, u32)>,
+    /// Start, end and whether every pixel is opaque, in row order.
+    spans: Vec<(u32, u32, bool)>,
+}
+
+impl Spans {
+    /// `None` when the image is too fragmented for spans to pay off.
+    pub fn of(image: &ImageAsset) -> Option<Spans> {
+        let mut rows = Vec::with_capacity(image.height);
+        let mut spans: Vec<(u32, u32, bool)> = Vec::new();
+        let limit = image.width * image.height / 8 + 64;
+        for row in image.pixels.chunks_exact(image.width.max(1)) {
+            let first = spans.len() as u32;
+            let mut x = 0;
+            while x < row.len() {
+                let a = row[x] >> 24;
+                if a == 0 {
+                    x += 1;
+                    continue;
+                }
+                let solid = a == 255;
+                let start = x;
+                while x < row.len() && (row[x] >> 24 == 255) == solid && row[x] >> 24 != 0 {
+                    x += 1;
+                }
+                spans.push((start as u32, x as u32, solid));
+                if spans.len() > limit {
+                    return None;
+                }
+            }
+            rows.push((first, spans.len() as u32));
+        }
+        Some(Spans { rows, spans })
+    }
+}
 
 impl Canvas {
     #[allow(clippy::too_many_arguments)]
@@ -34,52 +74,99 @@ impl Canvas {
             self.blit_unscaled(image, sx0, sy0, rect);
             return;
         }
-        for dy in 0..rect.h {
-            let py = rect.y + dy;
+        let Some(area) = self.drawable(rect) else {
+            return;
+        };
+        let alpha = alpha_table(self.opacity());
+        // Nearest source column of each visible column, worked out once.
+        let columns: Vec<usize> = (area.x..area.x + area.w)
+            .map(|px| {
+                let dx = px - rect.x;
+                let sample_x = if flip_x { rect.w - 1 - dx } else { dx };
+                sx0 + (sample_x as usize * sw / rect.w as usize).min(sw - 1)
+            })
+            .collect();
+        let width = self.width;
+        for py in area.y..area.y + area.h {
+            let dy = py - rect.y;
             let sample_y = if flip_y { rect.h - 1 - dy } else { dy };
             let sy = sy0 + (sample_y as usize * sh / rect.h as usize).min(sh - 1);
-            for dx in 0..rect.w {
-                let px = rect.x + dx;
-                if !self.accepts(px, py) {
-                    continue;
+            if sy >= image.height {
+                continue;
+            }
+            let source = &image.pixels[sy * image.width..(sy + 1) * image.width];
+            let at = py as usize * width + area.x as usize;
+            let row = &mut self.pixels[at..at + area.w as usize];
+            for (pixel, &sx) in row.iter_mut().zip(&columns) {
+                if let Some(&color) = source.get(sx) {
+                    composite(pixel, color, &alpha);
                 }
-                let sample_x = if flip_x { rect.w - 1 - dx } else { dx };
-                let sx = sx0 + (sample_x as usize * sw / rect.w as usize).min(sw - 1);
-                if sx >= image.width || sy >= image.height {
-                    continue;
-                }
-                self.put(px, py, image.pixels[sy * image.width + sx], true);
             }
         }
     }
     /// Copies a 1:1 region, clipping once instead of per pixel.
     fn blit_unscaled(&mut self, image: &ImageAsset, sx0: usize, sy0: usize, rect: Rect) {
-        let Some(area) = self.visible().and_then(|visible| visible.intersect(rect)) else {
+        let Some(area) = self.drawable(rect) else {
             return;
         };
-        let opacity = self.opacity();
+        let sx = sx0 + (area.x - rect.x) as usize;
+        if sx >= image.width {
+            return;
+        }
+        let w = (area.w as usize).min(image.width - sx);
+        let opaque = self.opacity() >= 1.0;
+        let alpha = alpha_table(self.opacity());
+        let width = self.width;
         for py in area.y..area.y + area.h {
             let sy = sy0 + (py - rect.y) as usize;
             if sy >= image.height {
                 break;
             }
-            let row = py as usize * self.width;
-            for px in area.x..area.x + area.w {
-                let sx = sx0 + (px - rect.x) as usize;
-                if sx >= image.width {
-                    break;
+            let from = sy * image.width + sx;
+            let source = &image.pixels[from..from + w];
+            let at = py as usize * width + area.x as usize;
+            let row = &mut self.pixels[at..at + w];
+            for (pixel, &color) in row.iter_mut().zip(source) {
+                match color >> 24 {
+                    0 => {}
+                    255 if opaque => *pixel = color,
+                    _ => composite(pixel, color, &alpha),
                 }
-                let source = image.pixels[sy * image.width + sx];
-                let alpha = source >> 24;
-                if alpha == 0 {
+            }
+        }
+    }
+    /// `blit_unscaled` of a whole image, visiting only its `spans`.
+    pub fn image_spans(&mut self, image: &ImageAsset, spans: &Spans, rect: Rect) {
+        if rect.w as usize != image.width || rect.h as usize != image.height {
+            return self.image_region(image, 0, 0, image.width, image.height, rect, false);
+        }
+        let Some(area) = self.drawable(rect) else {
+            return;
+        };
+        let opaque = self.opacity() >= 1.0;
+        let alpha = alpha_table(self.opacity());
+        let (left, right) = ((area.x - rect.x) as u32, (area.x + area.w - rect.x) as u32);
+        let width = self.width;
+        for py in area.y..area.y + area.h {
+            let sy = (py - rect.y) as usize;
+            let (first, last) = spans.rows[sy];
+            let source = &image.pixels[sy * image.width..(sy + 1) * image.width];
+            let row = py as usize * width;
+            for &(start, end, solid) in &spans.spans[first as usize..last as usize] {
+                let (start, end) = (start.max(left), end.min(right));
+                if start >= end {
                     continue;
                 }
-                let index = row + px as usize;
-                self.pixels[index] = if alpha == 255 && opacity >= 1.0 {
-                    source
+                let from = &source[start as usize..end as usize];
+                let at = row + (rect.x + start as i32) as usize;
+                let to = &mut self.pixels[at..at + from.len()];
+                if solid && opaque {
+                    to.copy_from_slice(from);
                 } else {
-                    blend(self.pixels[index], apply_opacity(source, opacity))
-                };
+                    for (pixel, &color) in to.iter_mut().zip(from) {
+                        composite(pixel, color, &alpha);
+                    }
+                }
             }
         }
     }
@@ -183,6 +270,45 @@ impl Canvas {
                         false,
                     );
                 }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn image() -> ImageAsset {
+        // Transparent, solid and half-transparent pixels in runs and alone.
+        let alphas = [0u32, 0, 255, 255, 255, 128, 0, 7, 255, 0, 0, 200];
+        let pixels = (0..12 * 9)
+            .map(|i| (alphas[(i * 7 + i / 12) % 12] << 24) | (i as u32 * 0x010305))
+            .collect();
+        ImageAsset {
+            width: 12,
+            height: 9,
+            pixels,
+        }
+    }
+
+    #[test]
+    fn spans_draw_exactly_like_the_plain_copy() {
+        let image = image();
+        let spans = Spans::of(&image).expect("small image");
+        for opacity in [1.0, 0.6] {
+            for (x, y) in [(3, 2), (-4, -3), (14, 8)] {
+                let rect = Rect::new(x, y, 12, 9);
+                let mut plain = Canvas::new(20, 14);
+                let mut fast = Canvas::new(20, 14);
+                for canvas in [&mut plain, &mut fast] {
+                    canvas.clear(0xff336699);
+                    canvas.set_clip(Some(Rect::new(1, 1, 17, 11)));
+                    canvas.set_opacity(opacity);
+                }
+                plain.blit_unscaled(&image, 0, 0, rect);
+                fast.image_spans(&image, &spans, rect);
+                assert_eq!(plain.pixels, fast.pixels, "{x},{y} at {opacity}");
             }
         }
     }

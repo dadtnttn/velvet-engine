@@ -69,11 +69,12 @@ impl ApplicationHandler for Vs3App {
             WindowEvent::Ime(Ime::Commit(text)) => self.input.text(&text),
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(window) = &self.window {
+                    // Logical units: the canvas itself may be drawn bigger.
                     self.cursor = window_to_canvas(
                         position,
                         window.inner_size(),
-                        self.canvas.width,
-                        self.canvas.height,
+                        self.manifest.app.canvas_width,
+                        self.manifest.app.canvas_height,
                     );
                     self.input
                         .pointer(self.cursor.map(|p| [p[0] as f64, p[1] as f64]));
