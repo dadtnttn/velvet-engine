@@ -339,7 +339,8 @@ function phone_list(items: list, y0: int) {
         let ix = SCX + 10 - (1.0 - ie) * 220.0
         let iy = y0 + k * row_h
         let locked = it.lock != ""
-        let on = hovered_at(it.action, SCX + 10, iy, rw, 44)
+        let act = row_action(it)
+        let on = hovered_at(act, SCX + 10, iy, rw, 44)
         if on { focus = it }
         let fill = HEX_INK
         let color = C_WHITE
@@ -376,7 +377,7 @@ function phone_list(items: list, y0: int) {
         } else {
             textw(tx, iy + 37, it.s, 11, sub_color, "bold", avail)
         }
-        hot(SCX + 10, iy, rw, 44, it.action)
+        hot(SCX + 10, iy, rw, 44, act)
         i += 1
     }
     if pages > 1 {

@@ -744,11 +744,11 @@ function fe_resolve_rite(index: int, ctx: map) {
         fe_add_faith(6)
         let gift = rint(5, 20) * 100
         if L.family == "rica" { gift = gift * 5 }
-        L.money += gift
+        let note = kid_money(gift)
         L.happy += 8
         for p in parents_alive() { bond_gain(p, 8) }
         hito_me("Familia", ctx.show)
-        return finish(ctx.show, "Toda la familia vino. Hubo lágrimas, abrazos, fotos y regalos: " + money_str(gift) + " en sobres.", "g")
+        return finish(ctx.show, "Toda la familia vino. Hubo lágrimas, abrazos, fotos y regalos: " + money_str(gift) + " en sobres." + note, "g")
     }
     fe_add_faith(3)
     hito_quiet("Familia", ctx.show)

@@ -627,6 +627,8 @@ function fin_items(cat: string) {
         list_push(items, finfo(1, "Gastos: " + money_str(total_out) + "/mes", "Vida, deudas", "Vivienda, comida, servicios y transporte " + money_str(costs) + ", préstamos " + money_str(loans) + ". Los hijos cuestan $3,000 al año cada uno; los hábitos, los lujos y el personal se cobran aparte."))
         list_push(items, finfo(2, "Patrimonio neto: " + money_str(net_worth()), "Todo lo que tienes", "Efectivo " + money_str(L.money) + ", ahorro " + money_str(L.savings) + ", bolsa " + money_str(portfolio_value()) + ", bienes y casas, menos tus deudas."))
         list_push(items, finfo(3, "Historial crediticio: " + str(L.credit), credit_word(), "Sube si pagas a tiempo y no estás en números rojos. Decide si te prestan y a qué tasa."))
+        let fund = int(map_get(L, "fund", 0))
+        if L.age < 18 && fund > 0 { list_push(items, finfo(9, "Fondo para tus 18: " + money_str(fund), "Lo recibes al cumplir 18", "Premios, regalos grandes y herencias que te guardan hasta que seas mayor de edad.")) }
         if adult {
             list_push(items, {"action": "fin:life", "t": "Estilo de vida: " + LIFE_NAMES[L.lifestyle], "s": "Cambiar", "desc": "Austero, normal, cómodo, lujoso o magnate: cambia tus gastos de cada mes, tu felicidad y tu encanto.", "lock": ""})
             list_push(items, {"action": "fin:home", "t": "Vivienda: " + HOME_NAMES[L.home], "s": "Cambiar", "desc": "Con tus padres no pagas renta (pero después de los 25 te pesa). Rentar te da independencia. Con casa propia solo pagas mantenimiento.", "lock": ""})

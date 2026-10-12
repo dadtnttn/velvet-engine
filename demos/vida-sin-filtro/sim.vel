@@ -175,6 +175,51 @@ function who(p: map) {
     return p.first
 }
 
+// ---------------------------------------------------------------- dinero de menores
+
+// Lo que tus papás pagan por ti de una vez (precios base), según la familia.
+function parents_cap() {
+    if len(parents_alive()) == 0 { return 0 }
+    if L.family == "rica" { return 5000 }
+    if L.family == "pobre" { return 60 }
+    return 600
+}
+
+// De menor, tus papás pagan tus gastos si les alcanza.
+function parents_pay(base: int) {
+    return L.age < 18 && base > 0 && base <= parents_cap()
+}
+
+// Lo que un menor tiene a la mano; lo demás se lo guardan en su fondo.
+function kid_cash_cap() {
+    if L.age < 13 { return local_price(300) }
+    return local_price(1000)
+}
+
+// Un menor no carga con miles en el bolsillo: el dinero grande (premios,
+// regalos, herencias) se guarda en un fondo hasta los 18. Devuelve la nota
+// para el mensaje («» si va directo a tu bolsillo).
+function kid_money(m: int) {
+    if L.age >= 18 || m <= local_price(200) {
+        L.money += m
+        return ""
+    }
+    L.fund = int(map_get(L, "fund", 0)) + m
+    return " Lo guardan en un fondo para ti hasta que cumplas 18."
+}
+
+// De menor no se anda con miles en el bolsillo: lo que pase de lo normal
+// para tu edad (regalos, sobres, premios) se guarda en tu fondo.
+function kid_cash_month() {
+    let cap = kid_cash_cap()
+    if L.age >= 18 || L.money <= cap { return null }
+    let extra = L.money - cap
+    L.money = cap
+    L.fund = int(map_get(L, "fund", 0)) + extra
+    log_add("Te guardaron " + money_str(extra) + " en tu fondo para cuando cumplas 18.", "n")
+    return null
+}
+
 function fmt(text: string, ctx: map) {
     let out = str_replace(text, "{a}", oa(L.gender))
     out = str_replace(out, "{tia}", by_gender(L.gender, "tío", "tía"))
@@ -515,6 +560,7 @@ function new_life_core(age: int) {
         "looks": rint(10, 95),
         "karma": 50,
         "money": 0,
+        "fund": 0,
         "edu": 0,
         "school": "",
         "month": 0,
@@ -713,6 +759,7 @@ function monthly() {
         }
     }
     if L.pension > 0 { L.money += L.pension / 12 }
+    kid_cash_month()
     gig_month()
     school_month()
     study_month()
@@ -795,10 +842,7 @@ function yearly() {
             if p.bond > 50 { L.happy -= 15 }
             if p.rel == "padre" || p.rel == "madre" {
                 let heritage = parent_estate(p)
-                if heritage > 0 {
-                    L.money += heritage
-                    log_add("Heredaste " + money_str(heritage) + ".", "g")
-                }
+                if heritage > 0 { log_add("Heredaste " + money_str(heritage) + "." + kid_money(heritage), "g") }
             }
             if p.id == L.partner_id {
                 let w = spouse_died(p, false)
@@ -847,6 +891,12 @@ function yearly() {
         let edu = map_get(here(), "edu", 50)
         if edu >= 70 && chance(50) { L.smarts += 1 }
         if edu < 35 && chance(40) { L.smarts -= 1 }
+    }
+    if L.age == 18 && int(map_get(L, "fund", 0)) > 0 {
+        let f = L.fund
+        L.fund = 0
+        L.money += f
+        log_add("Cumpliste 18: recibiste los " + money_str(f) + " que te guardaron de niñ" + oa(L.gender) + ".", "g")
     }
     if L.age == 18 && L.school == "secundaria" {
         L.school = ""
@@ -1079,9 +1129,19 @@ function apply(o: map, ctx: map) {
         let base = m
         m = local_price(m)
         if base != m && msg != "" { msg = str_replace(msg, money_str(abs(base)), money_str(abs(m))) }
-        L.money += m
+        let note = ""
+        if m > 0 {
+            note = kid_money(m)
+        } else if L.age < 18 {
+            // De menor, tus papás cubren las medicinas y los platos rotos; sin
+            // ellos, nunca quedas a deber.
+            if len(parents_alive()) == 0 { L.money = max(0, L.money + m) }
+        } else {
+            L.money += m
+        }
         ctx["monto"] = money_str(m)
         msg = str_replace(msg, "{monto}", money_str(m))
+        if note != "" && msg != "" { msg = msg + note }
     }
     if map_has(o, "xp") { career_xp(o.xp) }
     if map_has(o, "fame") { L.fame = L.fame + o.fame }

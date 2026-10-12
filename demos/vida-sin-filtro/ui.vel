@@ -141,6 +141,13 @@ function hovered(action: string) {
     return !block && G.hover == action
 }
 
+// Lo que hace el clic en una fila: si está bloqueada, nada (solo se ilumina
+// para leer por qué).
+function row_action(it: map) {
+    if it.lock != "" { return "locked:" + it.action }
+    return it.action
+}
+
 // Una fila de lista bajo el puntero. Varias filas pueden compartir acción
 // (las que solo informan): se ilumina solo la que está debajo.
 function hovered_at(action: string, x: any, y: any, w: any, h: any) {
@@ -1258,7 +1265,8 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
         let ix = 56 - k * 4 - (1.0 - ie) * 260
         let iy = list_y + k * 52
         let locked = it.lock != ""
-        let on = hovered_at(it.action, ix, iy, 520, 46)
+        let act = row_action(it)
+        let on = hovered_at(act, ix, iy, 520, 46)
         if on { focus = it }
         let fill = HEX_INK
         let color = C_WHITE
@@ -1290,7 +1298,7 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
             let sub_x = max(title_end, ix + dx + 504 - sub_w)
             textw(sub_x, iy + 29, it.s, 12, sub_color, "bold", ix + dx + 504 - sub_x)
         }
-        hot(ix, iy, 520, 46, it.action)
+        hot(ix, iy, 520, 46, act)
         i += 1
     }
     if pages > 1 {

@@ -360,6 +360,7 @@ function faith_action(action: string) {
         return finish("Fe", "Unos minutos en silencio. Te sientes en paz.", "n")
     }
     if key == "pilgrim" {
+        if L.age < 16 || L.money < 5000 { return info("Fe", "Una peregrinación cuesta $5,000 y es a partir de los 16.") }
         L.money -= 5000
         L.faith = clamp100(L.faith + 15)
         L.happy += 8
@@ -367,6 +368,7 @@ function faith_action(action: string) {
         return finish("Fe", "Caminaste kilómetros junto a miles de fieles. Volviste distint" + oa(L.gender) + ".", "g")
     }
     if key == "donate" {
+        if L.money < 1000 { return info("Fe", "Necesitas $1,000 para donar.") }
         L.money -= 1000
         L.faith = clamp100(L.faith + 3)
         L.karma += 3

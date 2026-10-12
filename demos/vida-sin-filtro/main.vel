@@ -583,9 +583,9 @@ function confirm_text(action: string) {
 
 function handle_action_raw(action: string) {
     if G.tip != null { return tip_action(action) }
-    if action == "noop" {
+    if action == "noop" || str_starts_with(action, "locked:") {
         // Clic en algo bloqueado o fuera de la ventana.
-        if G.mg == null && G.modal != null { sfx_at("error", 0.5) }
+        if str_starts_with(action, "locked:") || (G.mg == null && G.modal != null) { sfx_at("error", 0.5) }
         return null
     }
     if action == "settings" { return cfg_open() }
