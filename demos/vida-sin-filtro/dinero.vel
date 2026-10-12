@@ -859,8 +859,10 @@ function resolve_audit(index: int, ctx: map) {
 
 // ---------------------------------------------------------------- menús
 
+// Fila que solo informa: cada una con su propia acción (si no, al pasar el
+// ratón se iluminarían todas a la vez).
 function dninfo(t: string, s: string, desc: string) {
-    return {"action": "fin:info:90", "t": t, "s": s, "desc": desc, "lock": ""}
+    return {"action": "fin:info:" + t, "t": t, "s": s, "desc": desc, "lock": ""}
 }
 
 function ditem(action: string, t: string, s: string, desc: string, lock: string) {
