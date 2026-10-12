@@ -700,42 +700,128 @@ impl Translator {
             .or_else(|| self.split_list(s, depth))
             .or_else(|| self.paren_tail(s, depth))
             .or_else(|| self.sentences(s, depth))
+            .or_else(|| self.decorated(s, depth))
             .or_else(|| self.match_template(s, depth, false))
             .or_else(|| self.lowercase_start(s, depth))
     }
 
+    /// A piece the game decorates: a bullet ("- Economía de Myanmar"), a
+    /// full stop after a name ("Guerra de Gaza.") or a price after a label
+    /// ("Casa con jardín $350,000"). The bare piece has its own entry.
+    fn decorated(&self, s: &str, depth: usize) -> Option<String> {
+        let inner = |body: &str| {
+            has_letters(body)
+                .then(|| self.lookup(body, depth + 1))
+                .flatten()
+                .filter(|t| t != body)
+        };
+        for bullet in ["- ", "• "] {
+            if let Some(rest) = s.strip_prefix(bullet) {
+                return inner(rest).map(|t| format!("{bullet}{t}"));
+            }
+        }
+        if let Some(body) = s.strip_suffix('.').filter(|b| !b.ends_with('.')) {
+            return inner(body).map(|t| {
+                if t.ends_with(['.', '!', '?', '。', '！', '？', '।']) {
+                    t
+                } else {
+                    format!("{t}{}", self.full_stop())
+                }
+            });
+        }
+        let (head, price) = s.rsplit_once(' ')?;
+        let digits = price.trim_start_matches(['+', '-']).strip_prefix('$')?;
+        let is_amount = !digits.is_empty()
+            && digits.starts_with(|c: char| c.is_ascii_digit())
+            && digits
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == ',' || c == '.');
+        if !is_amount {
+            return None;
+        }
+        inner(head).map(|t| format!("{t} {price}"))
+    }
+
+    fn full_stop(&self) -> &'static str {
+        match self.cat.lang.as_str() {
+            "ja" | "zh-Hans" | "zh-Hant" => "。",
+            "hi" => "।",
+            _ => ".",
+        }
+    }
+
     /// "Te perdonó. ¡Era justo lo que Ana quería!": sentences the game glues
-    /// together. The line is cut at the first sentence end where both sides
-    /// translate (the right side may be cut again).
+    /// together. The line is cut where sentences may end, into pieces that
+    /// all translate (the longest ones first). Every piece is looked up at
+    /// the same depth, so a summary of eight sentences still translates.
     fn sentences(&self, s: &str, depth: usize) -> Option<String> {
         let cs: Vec<(usize, char)> = s.char_indices().collect();
+        let mut cuts = Vec::new();
         for w in cs.windows(3) {
             let [(_, end), (sp, ' '), (_, next)] = w else {
                 continue;
             };
-            if !matches!(end, '.' | '!' | '?' | '»' | '"' | '…' | ')') {
-                continue;
+            if matches!(end, '.' | '!' | '?' | '»' | '"' | '…' | ')')
+                && (next.is_uppercase() || matches!(next, '¡' | '¿' | '«' | '"' | '('))
+            {
+                cuts.push(*sp);
             }
-            if !(next.is_uppercase() || matches!(next, '¡' | '¿' | '«' | '"' | '(')) {
-                continue;
+        }
+        if cuts.is_empty() {
+            return None;
+        }
+        // Piece i..j runs from the start after cut i-1 to cut j-1 (or the
+        // ends of the line); done[j] is the line up to cut j-1, translated.
+        let start = |i: usize| if i == 0 { 0 } else { cuts[i - 1] + 1 };
+        let end = |j: usize| cuts.get(j - 1).copied().unwrap_or(s.len());
+        let last = cuts.len() + 1;
+        // First sentence by sentence (the usual case, and cheap); runs of
+        // sentences only when that fails: one entry spanning two of them
+        // ("Fueron juntos {0}… Al despedirse…"), tried as exact text or a
+        // template, never cut again (that is this same search).
+        for runs in [false, true] {
+            let mut done: Vec<Option<String>> = vec![None; last + 1];
+            done[0] = Some(String::new());
+            for j in 1..=last {
+                for i in (0..j).rev() {
+                    let single = j - i == 1;
+                    if !single && !runs {
+                        break;
+                    }
+                    let Some(before) = done[i].as_ref() else {
+                        continue;
+                    };
+                    let piece = &s[start(i)..end(j)];
+                    if (i == 0 && j == last) || !has_letters(piece) {
+                        continue;
+                    }
+                    let t = if single {
+                        self.lookup(piece, depth + 1)
+                    } else {
+                        self.cat
+                            .exact
+                            .get(piece)
+                            .cloned()
+                            .or_else(|| self.match_template(piece, depth + 1, true))
+                    };
+                    let Some(t) = t else {
+                        continue;
+                    };
+                    // Chinese and Japanese put no space after a full stop.
+                    let glue = if before.is_empty()
+                        || before.ends_with(['。', '！', '？', '」', '』', '）'])
+                    {
+                        ""
+                    } else {
+                        " "
+                    };
+                    done[j] = Some(format!("{before}{glue}{t}"));
+                    break;
+                }
             }
-            let (left, right) = (&s[..*sp], &s[*sp + 1..]);
-            if !has_letters(left) || !has_letters(right) {
-                continue;
+            if let Some(out) = done[last].take() {
+                return Some(out);
             }
-            let Some(l) = self.lookup(left, depth + 1) else {
-                continue;
-            };
-            let Some(r) = self.lookup(right, depth + 1) else {
-                continue;
-            };
-            // Chinese and Japanese put no space after a full stop.
-            let glue = if l.ends_with(['。', '！', '？', '」', '』', '）']) {
-                ""
-            } else {
-                " "
-            };
-            return Some(format!("{l}{glue}{r}"));
         }
         None
     }
@@ -1378,6 +1464,42 @@ mod tests {
         );
         // A common word next to a known one is still text, not a name.
         assert_eq!(t.tr("TU MAMÁ TE BUSCA"), "YOUR MOM IS LOOKING FOR YOU");
+    }
+
+    #[test]
+    fn a_bullet_a_full_stop_or_a_price_around_a_known_piece() {
+        let c = cat(&[
+            ("Economía de {0}", "{0}'s economy"),
+            ("Guerra de Gaza", "Gaza War"),
+            ("Casa con jardín", "House with a yard"),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(t.tr("- Economía de Myanmar"), "- Myanmar's economy");
+        assert_eq!(t.tr("Guerra de Gaza."), "Gaza War.");
+        assert_eq!(
+            t.tr("Casa con jardín $350,000"),
+            "House with a yard $350,000"
+        );
+        // Nothing known inside: the line stays as it is.
+        assert_eq!(t.tr("Algo raro."), "Algo raro.");
+        let mut t = Translator::new(Catalog::new(
+            "ja",
+            vec![("Guerra de Gaza".to_string(), "ガザ戦争".to_string())],
+        ));
+        assert_eq!(t.tr("Guerra de Gaza."), "ガザ戦争。");
+    }
+
+    #[test]
+    fn a_summary_of_many_glued_sentences_translates() {
+        let c = cat(&[(
+            "De los {0} a los {1}: {2} hitos.",
+            "From {0} to {1}: {2} milestones.",
+        )]);
+        let mut t = Translator::new(c);
+        let join = |f: &dyn Fn(usize) -> String| (0..8).map(f).collect::<Vec<_>>().join(" ");
+        let line = join(&|d| format!("De los {} a los {}: {d} hitos.", d * 10, d * 10 + 9));
+        let want = join(&|d| format!("From {} to {}: {d} milestones.", d * 10, d * 10 + 9));
+        assert_eq!(t.tr(&line), want);
     }
 
     #[test]
