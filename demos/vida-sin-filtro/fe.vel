@@ -1072,7 +1072,10 @@ function fe_sect_event() {
         if par == null || !par.alive { par = first_rel("padre") }
         let who = "Tu familia"
         if par != null && par.alive { who = "Tu " + str_lower(rel_label(par)) + " " + par.first }
-        open_choice("LA VERDAD SOBRE LA AURORA", who + " te encuentra a la salida de una reunión. Llora: ya diste " + money_str(d.sect.paid) + ", casi no ves a nadie y el líder vive en una mansión.",
+        // Sin dinero no les diste nada: entonces no se habla de cuánto.
+        let cry = who + " te encuentra a la salida de una reunión. Llora: casi no ves a nadie y el líder vive en una mansión."
+        if d.sect.paid > 0 { cry = who + " te encuentra a la salida de una reunión. Llora: ya diste " + money_str(d.sect.paid) + ", casi no ves a nadie y el líder vive en una mansión." }
+        open_choice("LA VERDAD SOBRE LA AURORA", cry,
             ["Salirte del grupo", "Quedarte: ellos te entienden", "Denunciar al líder"], ["", "", if_str(rank("guts") < 3, "Valor 3", "")], "fe_sect", {"kind": "out"})
         return true
     }
@@ -1103,9 +1106,11 @@ function fe_resolve_sect(index: int, ctx: map) {
         L.fame += 5
         L.money += paid / 2
         gain("guts", 3)
+        if paid / 2 <= 0 { return finish("Libre", "Tu denuncia hizo caer al líder: lo arrestaron con maletas llenas de efectivo.", "g") }
         return finish("Libre", "Tu denuncia hizo caer al líder: lo arrestaron con maletas llenas de efectivo. Recuperaste " + money_str(paid / 2) + ".", "g")
     }
     L.happy += 6
+    if paid <= 0 { return finish("Libre", "Saliste del grupo. Fue duro, pero tu familia te recibió con los brazos abiertos.", "g") }
     return finish("Libre", "Saliste del grupo. Fue duro, pero tu familia te recibió con los brazos abiertos. Perdiste " + money_str(paid) + " en «aportaciones».", "g")
 }
 
