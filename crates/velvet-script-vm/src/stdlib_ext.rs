@@ -435,7 +435,9 @@ impl Advances {
 }
 
 /// Greedy word wrap shared by `str_wrap` and hosts: paragraphs split on
-/// `\n`, words that alone exceed `max_width` are broken by character.
+/// `\n`, words that alone exceed `max_width` (and Chinese or Japanese text,
+/// which has no spaces) are broken by character, following the line-break
+/// rules of those scripts.
 pub fn wrap_lines(text: &str, max_width: f64, measure: impl Fn(&str) -> f64) -> Vec<String> {
     let mut lines = Vec::new();
     for paragraph in text.split('\n') {
@@ -461,7 +463,9 @@ pub fn wrap_lines(text: &str, max_width: f64, measure: impl Fn(&str) -> f64) -> 
                 let mut next = line.clone();
                 next.push(c);
                 if !line.is_empty() && measure(&next) > max_width {
-                    lines.push(std::mem::take(&mut line));
+                    let keep = break_point(&line, c);
+                    let carried = line.split_off(keep);
+                    lines.push(std::mem::replace(&mut line, carried));
                     line.push(c);
                 } else {
                     line = next;
@@ -471,6 +475,129 @@ pub fn wrap_lines(text: &str, max_width: f64, measure: impl Fn(&str) -> f64) -> 
         lines.push(line);
     }
     lines
+}
+
+/// Where to cut `line` when `next` no longer fits: at its end, unless that
+/// would start the next line with a closing mark (`、。」ー` and small kana),
+/// end this one with an opening mark (`「（`), or split a number or a Latin
+/// word (`F11`). Then up to a few characters move down with `next`; with no
+/// better place the line is cut at its end anyway.
+fn break_point(line: &str, next: char) -> usize {
+    let chars: Vec<(usize, char)> = line.char_indices().collect();
+    for back in 0..chars.len().min(5) {
+        let at = chars.len() - back;
+        if at == 0 {
+            break;
+        }
+        let after = chars.get(at).map_or(next, |&(_, c)| c);
+        let before = chars[at - 1].1;
+        let joined = before.is_ascii_alphanumeric() && after.is_ascii_alphanumeric();
+        if !no_line_start(after) && !no_line_end(before) && !joined {
+            return chars.get(at).map_or(line.len(), |&(i, _)| i);
+        }
+    }
+    line.len()
+}
+
+/// Closing marks, small kana and the long-vowel mark never start a line.
+fn no_line_start(c: char) -> bool {
+    matches!(
+        c,
+        '、' | '。'
+            | '，'
+            | '．'
+            | '・'
+            | '：'
+            | '；'
+            | '？'
+            | '！'
+            | 'ー'
+            | '〜'
+            | '～'
+            | '…'
+            | '‥'
+            | '々'
+            | 'ゝ'
+            | 'ゞ'
+            | 'ヽ'
+            | 'ヾ'
+            | '」'
+            | '』'
+            | '）'
+            | '］'
+            | '｝'
+            | '〕'
+            | '〉'
+            | '》'
+            | '】'
+            | '〙'
+            | '〗'
+            | '〟'
+            | '’'
+            | '”'
+            | 'ぁ'
+            | 'ぃ'
+            | 'ぅ'
+            | 'ぇ'
+            | 'ぉ'
+            | 'っ'
+            | 'ゃ'
+            | 'ゅ'
+            | 'ょ'
+            | 'ゎ'
+            | 'ァ'
+            | 'ィ'
+            | 'ゥ'
+            | 'ェ'
+            | 'ォ'
+            | 'ッ'
+            | 'ャ'
+            | 'ュ'
+            | 'ョ'
+            | 'ヮ'
+            | 'ヵ'
+            | 'ヶ'
+            | ','
+            | '.'
+            | ':'
+            | ';'
+            | '!'
+            | '?'
+            | ')'
+            | ']'
+            | '}'
+            | '%'
+            | '％'
+    )
+}
+
+/// Opening marks (and currency signs) never end a line.
+fn no_line_end(c: char) -> bool {
+    matches!(
+        c,
+        '「' | '『'
+            | '（'
+            | '［'
+            | '｛'
+            | '〔'
+            | '〈'
+            | '《'
+            | '【'
+            | '〘'
+            | '〖'
+            | '〝'
+            | '‘'
+            | '“'
+            | '('
+            | '['
+            | '{'
+            | '$'
+            | '¥'
+            | '￥'
+            | '€'
+            | '£'
+            | '₩'
+    )
 }
 
 /// Encode a value as JSON (vectors, matrices and quaternions become float
@@ -665,5 +792,41 @@ impl JsonParser<'_> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wrap_lines;
+
+    /// Every character is one unit wide.
+    fn wrap(text: &str, width: f64) -> Vec<String> {
+        wrap_lines(text, width, |s| s.chars().count() as f64)
+    }
+
+    #[test]
+    fn cjk_lines_never_start_with_closing_marks_or_end_with_opening_ones() {
+        // Cut at the end, "、" would open the second line: "犯" moves down with it.
+        assert_eq!(wrap("あいうえ犯、かきく", 5.0), ["あいうえ", "犯、かきく"]);
+        assert_eq!(wrap("あいうえお」かき", 5.0), ["あいうえ", "お」かき"]);
+        assert_eq!(wrap("ラーメン屋ーです", 5.0), ["ラーメン", "屋ーです"]);
+        // "「" stays with the quote it opens.
+        assert_eq!(wrap("あいう「えお」", 4.0), ["あいう", "「えお」"]);
+        // A number is not split.
+        assert_eq!(wrap("キーはF11です", 5.0), ["キーは", "F11です"]);
+        for line in wrap(
+            "性的な内容（露骨な場面はなし）、ドラッグ、飲酒、犯罪、そして最悪の判断",
+            9.0,
+        ) {
+            assert!(!line.starts_with(['、', '）', '。']), "{line}");
+            assert!(!line.ends_with('（'), "{line}");
+        }
+    }
+
+    #[test]
+    fn words_still_wrap_on_spaces_and_long_ones_by_character() {
+        assert_eq!(wrap("uno dos tres", 7.0), ["uno dos", "tres"]);
+        assert_eq!(wrap("abcdefghij", 4.0), ["abcd", "efgh", "ij"]);
+        assert_eq!(wrap("a\nb", 10.0), ["a", "b"]);
     }
 }
