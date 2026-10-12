@@ -221,6 +221,10 @@ El frame puede emitir:
 
 Cerrar la ventana desde el sistema sigue siendo una operación del host.
 
+Los `window.*` que llegan antes de que exista la ventana (por ejemplo, al cargar
+los ajustes guardados durante `app_init`) no se pierden: la ventana se abre ya
+con ese título, tamaño o pantalla completa.
+
 ## Tareas largas (`app_task`)
 
 `max_instructions` limita cada llamada (`app_update`, `app_action`…). Para un
