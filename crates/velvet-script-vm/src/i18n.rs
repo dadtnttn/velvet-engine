@@ -673,25 +673,34 @@ impl Translator {
                 return Some(format!("{lead}{t}{tail}"));
             }
         }
-        if is_upper_text(s) {
-            if let Some(t) = self.cat.upper.get(s) {
-                return Some(t.clone());
-            }
-        } else if let Some(t) = self.cat.lower.get(s) {
-            if s.chars().next().is_some_and(char::is_lowercase) {
-                return Some(first_lower(t));
-            }
+        // Another case of an entry. One that stays the same is an id ("deprimido")
+        // and only counts when nothing better fits: "Deprimido" is the
+        // template "Deprimid{0}".
+        let case_hit = if is_upper_text(s) {
+            self.cat.upper.get(s).cloned()
+        } else {
+            self.cat
+                .lower
+                .get(s)
+                .filter(|_| s.chars().next().is_some_and(char::is_lowercase))
+                .map(|t| first_lower(t))
         }
-        // A capitalized form of a lowercase entry (and vice versa).
-        if let Some(t) = self.cat.lower.get(&s.to_lowercase()) {
-            return Some(match s.chars().next() {
-                Some(c) if c.is_uppercase() => first_upper(t),
-                Some(c) if c.is_lowercase() => first_lower(t),
-                _ => t.clone(),
-            });
+        .or_else(|| {
+            // A capitalized form of a lowercase entry (and vice versa).
+            self.cat
+                .lower
+                .get(&s.to_lowercase())
+                .map(|t| match s.chars().next() {
+                    Some(c) if c.is_uppercase() => first_upper(t),
+                    Some(c) if c.is_lowercase() => first_lower(t),
+                    _ => t.clone(),
+                })
+        });
+        if let Some(t) = case_hit.as_ref().filter(|t| *t != s) {
+            return Some(t.clone());
         }
         if depth > 6 {
-            return None;
+            return case_hit;
         }
         // Templates whose holes all translate come first; then lines built
         // from pieces; a template that keeps a hole as a name is the last
@@ -701,6 +710,7 @@ impl Translator {
             .or_else(|| self.paren_tail(s, depth))
             .or_else(|| self.sentences(s, depth))
             .or_else(|| self.decorated(s, depth))
+            .or_else(|| case_hit.clone())
             .or_else(|| self.match_template(s, depth, false))
             .or_else(|| self.lowercase_start(s, depth))
     }
@@ -728,6 +738,28 @@ impl Translator {
                     format!("{t}{}", self.full_stop())
                 }
             });
+        }
+        // A signed amount before a stat: "-8 contratación", "+40 % sueldo".
+        if s.starts_with(['+', '-']) {
+            let rest =
+                s[1..].trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ',');
+            if rest.len() < s.len() - 1 {
+                let (amount, words) = s.split_at(s.len() - rest.len());
+                let (amount, words) = match words.strip_prefix(" %") {
+                    Some(w) => (&s[..amount.len() + 2], w),
+                    None => (amount, words),
+                };
+                if let Some(words) = words.strip_prefix(' ') {
+                    if let Some(t) = inner(words) {
+                        return Some(format!("{amount} {t}"));
+                    }
+                }
+                // "+40 % sueldo": the entry is "% sueldo".
+                if let Some(words) = rest.strip_prefix(' ') {
+                    let amount = &s[..s.len() - rest.len()];
+                    return inner(words).map(|t| format!("{amount} {t}"));
+                }
+            }
         }
         let (head, price) = s.rsplit_once(' ')?;
         let digits = price.trim_start_matches(['+', '-']).strip_prefix('$')?;
@@ -1480,6 +1512,18 @@ mod tests {
             t.tr("Casa con jardín $350,000"),
             "House with a yard $350,000"
         );
+        let mut u = Translator::new(cat(&[("contratación", "hiring"), ("sueldo", "salary")]));
+        assert_eq!(
+            u.tr("-8 contratación · +40 % sueldo"),
+            "-8 hiring · +40 % salary"
+        );
+        let mut v = Translator::new(cat(&[
+            ("deprimido", "deprimido"),
+            ("Deprimid{0}", "Depressed"),
+            ("% sueldo", "% salary"),
+        ]));
+        assert_eq!(v.tr("Deprimido"), "Depressed");
+        assert_eq!(v.tr("+40 % sueldo"), "+40 % salary");
         // Nothing known inside: the line stays as it is.
         assert_eq!(t.tr("Algo raro."), "Algo raro.");
         let mut t = Translator::new(Catalog::new(
