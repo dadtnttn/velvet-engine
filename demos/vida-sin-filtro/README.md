@@ -734,6 +734,11 @@ binarias en el juego.
   juego arma por piezas se traducen pieza por pieza, el género del jugador y de
   cada persona elige la forma correcta, el hebreo va de derecha a izquierda y el
   título y los minijuegos de palabras cambian con el idioma (`i18n_data.vel`).
+  Los 14 catálogos traducen todo el texto actual del juego. Se generan con
+  `herramientas/traduccion/` (su `LEEME.md` explica cómo traducir lo que se
+  agregue). Chino, japonés, coreano, hindi, tailandés y hebreo usan las fuentes
+  Noto de `assets/fonts/`, que no vienen en el repositorio: se recortan con
+  `herramientas/traduccion/subset_fonts.py`.
 
 ## Archivos
 
