@@ -429,6 +429,7 @@ function mg_memory_value() {
     return hits * 25
 }
 
+// Dónde va el marcador, en % de la barra: de punta a punta y de vuelta.
 function mg_timing_pos() {
     let m = G.mg
     let t = (G.t - m.round_t0) * m.q.speed
@@ -676,7 +677,7 @@ function mg_hit() {
     if m == null || m.phase != "play" { return null }
     if m.type == "reflex" { return reflex_hit() }
     if m.type != "timing" { return null }
-    let pos = mg_timing_pos() / 2.0
+    let pos = mg_timing_pos()
     let dist = abs(pos - m.q.zone)
     let v = 0
     if dist <= m.q.width / 2 {
@@ -979,7 +980,7 @@ function draw_mg_timing(x: int, y: int, w: int) {
     let zx = bx + bw * (q.zone - q.width) / 100
     rect(zx, by, bw * q.width * 2 / 100, 50, C_YELLOW)
     rect(bx + bw * (q.zone - q.width / 2) / 100, by, bw * q.width / 100, 50, rgb(80, 220, 120))
-    let pos = mg_timing_pos() / 2.0
+    let pos = mg_timing_pos()
     let cx = bx + bw * pos / 100.0
     rect(cx - 4, by - 18, 8, 86, C_WHITE)
     svg(cx - 14, by - 46, 28, 28, arrow_doc("down", HEX_RED))

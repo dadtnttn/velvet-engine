@@ -71,21 +71,23 @@ function ctextw(x: any, y: any, s: string, size: int, color: int, font: string, 
     push({"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "align": "center", "max_width": w, "overflow": "shrink"})
 }
 
-function otextw(x: any, y: any, s: string, size: int, color: int, font: string, center: bool, w: any) {
-    let d = max(2, size / 14)
-    for off in [[-d, 0], [d, 0], [0, -d], [0, d], [-d, -d], [d, d], [-d, d], [d, -d]] {
-        if center { ctextw(x + off[0], y + off[1], s, size, C_INK, font, w) } else { textw(x + off[0], y + off[1], s, size, C_INK, font, w) }
-    }
-    if center { ctextw(x, y, s, size, color, font, w) } else { textw(x, y, s, size, color, font, w) }
+// Texto con contorno negro grueso (estilo cómic): el host rodea cada letra
+// de tinta, nítido a cualquier resolución.
+function outlined(x: any, y: any, s: string, size: int, color: int, font: string, center: bool) {
+    let m = {"op": "text", "x": x, "y": y, "text": tr(s), "size": size, "color": color, "font": font, "stroke": C_INK, "thickness": float(max(2, size / 14)) * 1.3}
+    if center { m["align"] = "center" }
+    return m
 }
 
-// Texto con contorno negro grueso (estilo cómic).
+function otextw(x: any, y: any, s: string, size: int, color: int, font: string, center: bool, w: any) {
+    let m = outlined(x, y, s, size, color, font, center)
+    m["max_width"] = w
+    m["overflow"] = "shrink"
+    push(m)
+}
+
 function otext(x: any, y: any, s: string, size: int, color: int, font: string, center: bool) {
-    let d = max(2, size / 14)
-    for off in [[-d, 0], [d, 0], [0, -d], [0, d], [-d, -d], [d, d], [-d, d], [d, -d]] {
-        if center { ctext(x + off[0], y + off[1], s, size, C_INK, font) } else { text(x + off[0], y + off[1], s, size, C_INK, font) }
-    }
-    if center { ctext(x, y, s, size, color, font) } else { text(x, y, s, size, color, font) }
+    push(outlined(x, y, s, size, color, font, center))
 }
 
 function svg(x: any, y: any, w: int, h: int, doc: string) {

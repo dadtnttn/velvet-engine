@@ -1431,11 +1431,16 @@ function open_choice(title: string, text: string, labels: list, locks: list, han
         if l == "" { open = true }
     }
     if !open && len(locks) > 0 { locks[len(locks) - 1] = "" }
+    // Las opciones también llevan marcas ({a}, l{xlo}...): se rellenan aquí.
+    let shown = []
+    for l in labels {
+        if str_contains(l, "{") { list_push(shown, fmt(l, ctx)) } else { list_push(shown, l) }
+    }
     G.modal = {
         "kind": "choice",
         "title": title,
         "text": text,
-        "choices": labels,
+        "choices": shown,
         "locks": locks,
         "handler": handler,
         "ctx": ctx,
