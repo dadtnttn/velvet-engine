@@ -254,7 +254,7 @@ function draw_world_panel(m: map) {
     list_push(lines, "Idioma: " + c.lang)
     list_push(lines, "Gobierno: " + gov_name(c.gov) + " · " + by_gender(L.gender, c.lead_m, c.lead_f))
     list_push(lines, "Religión: " + rel_summary(c.id))
-    list_push(lines, "Ingreso " + wealth_word(c.gdp) + " · vida " + str(c.life) + " años · seguridad " + str(c.safe) + "%")
+    list_push(lines, cap_first(wealth_phrase(c.gdp)) + " · vida " + str(c.life) + " años · seguridad " + str(c.safe) + "%")
     let st = ""
     if at_war(c.id) { st = war_of(c.id).n + "." }
     if civil_war(c.id) != "" { st = st + " " + civil_war(c.id) + "." }

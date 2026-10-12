@@ -331,7 +331,7 @@ function cre_ctry_summary(c: map) {
         return "Naces en algún país de " + region_name(c.region) + "."
     }
     let x = ctry(c.ctry)
-    return x.n + ": " + pop_text(x.pop) + " · " + x.lang + " · " + rel_summary(x.id) + " · ingreso " + wealth_word(x.gdp) + "."
+    return x.n + " · " + pop_text(x.pop) + " · " + x.lang + " · " + rel_summary(x.id) + " · " + wealth_phrase(x.gdp)
 }
 
 function pop_text(k: int) {
@@ -345,12 +345,13 @@ function pop_text(k: int) {
     return str(k) + " mil habitantes"
 }
 
-function wealth_word(gdp: int) {
-    if gdp >= 60 { return "muy alto" }
-    if gdp >= 35 { return "alto" }
-    if gdp >= 15 { return "medio" }
-    if gdp >= 6 { return "bajo" }
-    return "muy bajo"
+// La frase entera («ingreso bajo»): cada idioma la ordena a su manera.
+function wealth_phrase(gdp: int) {
+    if gdp >= 60 { return "ingreso muy alto" }
+    if gdp >= 35 { return "ingreso alto" }
+    if gdp >= 15 { return "ingreso medio" }
+    if gdp >= 6 { return "ingreso bajo" }
+    return "ingreso muy bajo"
 }
 
 // Se llama al nacer (después de crear a tus padres).
@@ -441,7 +442,7 @@ function pais_fx(out: list) {
     let g = L.gender
     if L.age >= 16 {
         let m = pais_pay_mult()
-        if m != 100 { list_push(out, fx("p_eco", "Economía de " + c.n, m > 100, "Sueldos y precios de " + c.n + " (ingreso " + wealth_word(c.gdp) + ").", {"pay": m - 100})) }
+        if m != 100 { list_push(out, fx("p_eco", "Economía de " + c.n, m > 100, "Sueldos y precios de " + c.n + " (" + wealth_phrase(c.gdp) + ").", {"pay": m - 100})) }
         if c.unemp >= 10 { list_push(out, fx("p_unemp", "Desempleo alto", false, "En " + c.n + " el " + str(c.unemp) + "% de la gente busca trabajo.", {"hire": 0 - c.unemp / 2})) }
     }
     if c.hap >= 70 { list_push(out, fx("p_hap", "País feliz", true, c.n + " está entre los países más felices del mundo.", {"hap": 1})) }
