@@ -913,7 +913,7 @@ function dlg_show(id: string, prefix: string) {
     }
     G.dlg.opts = opts
     let title = str_upper(p.first) + " · " + str_upper(style_name(npc_style(p), p))
-    open_choice(title, prefix + dlg_say(node, p), labels, locks, "dialog", {"person": p})
+    open_choice(title, dlg_tagged(prefix, dlg_say(node, p)), labels, locks, "dialog", {"person": p})
     G.modal.tags = tags
     return null
 }
@@ -926,15 +926,23 @@ function dlg_choose(index: int) {
     let ctx = {"person": p}
     if o.fx != null { apply(o.fx, ctx) }
     if o.roll != null {
-        if chance(dlg_chance(o, p)) { return dlg_show(o.ok, "[ÉXITO] ") }
-        return dlg_show(o.fail, "[FALLO] ")
+        if chance(dlg_chance(o, p)) { return dlg_show(o.ok, "ok") }
+        return dlg_show(o.fail, "fail")
     }
     return dlg_show(o.go, "")
 }
 
+// Resultado de una tirada delante de lo que se dice: plantilla entera para
+// que cada idioma la traduzca («[ÉXITO] {0}»).
+function dlg_tagged(tag: string, said: string) {
+    if tag == "ok" { return "[ÉXITO] " + said }
+    if tag == "fail" { return "[FALLO] " + said }
+    return said
+}
+
 function dlg_finish(node: map, p: map, prefix: string) {
     let ctx = {"person": p}
-    let msg = prefix + dlg_say(node, p)
+    let msg = dlg_tagged(prefix, dlg_say(node, p))
     if node.fx != null {
         let extra = apply(node.fx, ctx)
         if extra != "" { msg = msg + " " + extra }

@@ -90,7 +90,7 @@ function world_tick() {
     if m == 0 && wd.last_y != world_year() {
         wd.last_y = world_year()
         for r in RIVALS {
-            if !at_war_between(r.a, r.b) && chance_tenths(int(r.pct * 3.5)) { start_war(r.a, r.b, "Guerra " + war_adj(r.a, r.b), false) }
+            if !at_war_between(r.a, r.b) && chance_tenths(int(r.pct * 3.5)) { start_war(r.a, r.b, war_between(r.a, r.b), false) }
         }
         for c in COUNTRIES {
             if c.safe <= 22 && civil_war(c.id) == "" && chance_tenths(8) {
@@ -152,8 +152,10 @@ function chance_tenths(t: int) {
     return rint(1, 1000) <= t
 }
 
-function war_adj(a: string, b: string) {
-    return "entre " + cname(a) + " y " + cname(b)
+// El nombre entero en una plantilla: «Guerra {0}» + «entre…» se traducía
+// por partes («between Israel and Syria War»).
+function war_between(a: string, b: string) {
+    return "Guerra entre " + cname(a) + " y " + cname(b)
 }
 
 function world_headline(text: string, id: string) {
@@ -232,9 +234,10 @@ function end_war(w: map) {
     let me = here_id()
     let side = war_sides(w, me)
     if rint(1, 100) <= 40 {
-        world_headline("Alto el fuego: termina la guerra " + str_replace(w.n, "Guerra ", "") + " sin un claro vencedor.", w.a)
+        // El nombre va entero y entre comillas: «Guerra de Gaza», «Conflicto en…».
+        world_headline("Alto el fuego en «" + w.n + "»: no hay un claro vencedor.", w.a)
     } else {
-        world_headline("Termina la guerra " + str_replace(w.n, "Guerra ", "") + ": " + cname(winner) + " se impone.", w.a)
+        world_headline("Termina «" + w.n + "»: " + cname(winner) + " se impone.", w.a)
         if side > 0 {
             if (side == 1) == a_wins {
                 L.happy += 8
