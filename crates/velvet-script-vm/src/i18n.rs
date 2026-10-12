@@ -346,16 +346,29 @@ const MAX_CANDIDATES: usize = 24;
 
 /// One to three words, each starting with a capital letter: a proper name
 /// ("Hanna", "Hanna Krawczyk") that no catalog is expected to translate.
-/// Common words count in any case ("TU MAMÁ" is not a name).
-fn looks_like_name(v: &str) -> bool {
+/// A common word of the source makes it text ("Hace", "TU MAMÁ"), unless
+/// `unknown` says the rest is foreign to the catalog: "Si Thu" and "Shwe
+/// Sin" are names.
+fn looks_like_name(v: &str, unknown: impl Fn(&str) -> bool) -> bool {
     let words: Vec<&str> = v.split_whitespace().collect();
-    !words.is_empty()
-        && words.len() <= 3
-        && words.iter().all(|w| {
-            let core = w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase();
-            w.chars().next().is_some_and(char::is_uppercase)
-                && !COMMON_WORDS.iter().any(|c| c.to_lowercase() == core)
-        })
+    if words.is_empty()
+        || words.len() > 3
+        || !words
+            .iter()
+            .all(|w| w.chars().next().is_some_and(char::is_uppercase))
+    {
+        return false;
+    }
+    let cores: Vec<String> = words
+        .iter()
+        .map(|w| w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase())
+        .collect();
+    let common = |w: &str| COMMON_WORDS.iter().any(|c| c.to_lowercase() == w);
+    if !cores.iter().any(|w| common(w)) {
+        return true;
+    }
+    let rest: Vec<&String> = cores.iter().filter(|w| !common(w)).collect();
+    !rest.is_empty() && unknown(&v.to_lowercase()) && rest.iter().all(|w| unknown(w))
 }
 
 /// Capitalized words of the source language that are never names (a line
@@ -554,6 +567,12 @@ fn restore_case(src: &str, translated: String) -> String {
 }
 
 impl Translator {
+    /// A proper name, judged with this catalog: next to a common word
+    /// ("Si Thu"), the other words must be unknown to it ("TU MAMÁ" is not).
+    fn is_name(&self, v: &str) -> bool {
+        looks_like_name(v, |w| !self.cat.lower.contains_key(w))
+    }
+
     fn new(cat: Catalog) -> Self {
         let misses = std::env::var_os("VELVET_I18N_MISSES")
             .filter(|p| !p.is_empty())
@@ -736,7 +755,7 @@ impl Translator {
             inner.to_owned()
         } else if let Some(t) = self.lookup(inner, depth + 1) {
             t
-        } else if looks_like_name(inner) {
+        } else if self.is_name(inner) {
             inner.to_owned()
         } else {
             return None;
@@ -783,7 +802,7 @@ impl Translator {
                         any |= t != piece;
                         out.push(t);
                     }
-                    None if looks_like_name(core) => out.push(piece.to_owned()),
+                    None if self.is_name(core) => out.push(piece.to_owned()),
                     None => continue 'seps,
                 }
             }
@@ -879,7 +898,7 @@ impl Translator {
             // "¿Salimos este finde?"), or something said instead of a name
             // that translates ("Tu mamá").
             if raw && !plain {
-                if looks_like_name(v) || self.lookup(v, depth + 1).is_some() {
+                if self.is_name(v) || self.lookup(v, depth + 1).is_some() {
                     continue;
                 }
                 return false;
@@ -889,7 +908,7 @@ impl Translator {
                 continue;
             }
             let long = v.split_whitespace().count() > 3;
-            if strict || long || !looks_like_name(v) {
+            if strict || long || !self.is_name(v) {
                 return false;
             }
         }
@@ -931,7 +950,7 @@ impl Translator {
                         None if keep_raw => {
                             // Names stay; a role said instead ("Tu mamá")
                             // translates.
-                            let shown = if looks_like_name(raw) || !has_letters(raw) {
+                            let shown = if self.is_name(raw) || !has_letters(raw) {
                                 None
                             } else {
                                 self.lookup(raw, depth + 1)
@@ -1339,6 +1358,26 @@ mod tests {
         assert_eq!(t.tr("TU MAMÁ TE BUSCA"), "YOUR MOM IS LOOKING FOR YOU");
         // Neither a name nor translatable: the template does not apply.
         assert_eq!(t.tr("Algo raro te saluda."), "Algo raro te saluda.");
+    }
+
+    #[test]
+    fn names_with_a_spanish_looking_word_are_still_names() {
+        let c = cat(&[
+            ("{0} te saluda.", "{0!} says hi."),
+            ("{0} TE BUSCA", "{0!} IS LOOKING FOR YOU"),
+            ("Tu {0} {1} murió.", "Your {0} {1} died."),
+            ("abuelo", "grandfather"),
+            ("tu mamá", "your mom"),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(t.tr("Shwe Sin te saluda."), "Shwe Sin says hi.");
+        assert_eq!(t.tr("SI THU TE BUSCA"), "SI THU IS LOOKING FOR YOU");
+        assert_eq!(
+            t.tr("Tu abuelo Si Thu murió."),
+            "Your grandfather Si Thu died."
+        );
+        // A common word next to a known one is still text, not a name.
+        assert_eq!(t.tr("TU MAMÁ TE BUSCA"), "YOUR MOM IS LOOKING FOR YOU");
     }
 
     #[test]
