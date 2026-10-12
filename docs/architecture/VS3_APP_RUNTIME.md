@@ -112,6 +112,10 @@ El paquete VS3 decide si una tecla significa mover, atacar, abrir un menú o cua
 
 ## Resolución y redibujado
 
+`window_width`/`window_height` (y `window.set_size`) son tamaños lógicos: el
+sistema los escala, así que en una pantalla 4K al 150 % la ventana abre a
+1920×1080 píxeles reales en vez de verse diminuta.
+
 El paquete maqueta en su lienzo lógico (`canvas_width`×`canvas_height` del
 manifiesto) y el host lo dibuja a la resolución real de la ventana: en una
 pantalla 4K, un lienzo de 1280×720 se dibuja 3 veces más grande, con texto,

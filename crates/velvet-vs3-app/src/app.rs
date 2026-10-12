@@ -616,7 +616,8 @@ impl Vs3App {
                     payload_i64(event, "width"),
                     payload_i64(event, "height"),
                 ) {
-                    let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(
+                    // Logical, like the window it opens with (screen scaling).
+                    let _ = window.request_inner_size(winit::dpi::LogicalSize::new(
                         w.max(1) as u32,
                         h.max(1) as u32,
                     ));
