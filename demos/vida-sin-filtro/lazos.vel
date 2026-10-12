@@ -682,7 +682,7 @@ function open_bday(p: map) {
     if L.money < local_price(1500) { locks[0] = money_str(local_price(1500)) }
     if L.money < local_price(500) { locks[1] = money_str(local_price(500)) }
     if L.money < local_price(200) { locks[2] = money_str(local_price(200)) }
-    open_choice("CUMPLEAÑOS DE " + str_upper(p.first), fmt("{x} cumple años este mes. ¿Cómo lo celebras?", ctx), labels, locks, "z_bday", ctx)
+    open_choice("CUMPLEAÑOS DE " + str_upper(who(p)), fmt("{x} cumple años este mes. ¿Cómo lo celebras?", ctx), labels, locks, "z_bday", ctx)
     return null
 }
 
@@ -1393,18 +1393,27 @@ function maybe_anniversary() {
     return true
 }
 
-// La gente también te busca: cada tanto alguien te invita a lo que quiere este mes.
+// Lo que alguien te puede proponer hacer juntos: planes, no pendientes
+// (nadie «te busca» para que le pidas perdón).
+const INVITE_ACTS = ["movies", "picnic", "concert", "dance", "gym_together", "cook", "trivia", "videogames", "series",
+    "party", "park", "park_kids", "sleepover", "coffee", "karaoke", "stargaze", "dance_class", "visit", "family_dinner",
+    "cousin_play", "story", "z_blocks", "z_bike", "z_festival", "z_game", "z_mischief", "z_cousinparty", "z_nplay",
+    "z_nicecream", "z_recipe", "z_techhelp", "z_walkgp", "z_fishing", "z_inlawlunch", "z_cwcoffee", "z_cwlunch", "z_cwhappy"]
+
+// La gente también te busca: cada tanto alguien te invita a lo que quiere
+// este mes. La misma persona, como mucho una vez al año.
 function maybe_npc_initiative() {
     if L.jail > 0 || L.age < 5 || G.modal != null { return false }
-    if L.npc_init_tm != null && L.tm - L.npc_init_tm < 2 { return false }
+    if L.npc_init_tm != null && L.tm - L.npc_init_tm < 3 { return false }
     if !chance(20) { return false }
     let best = null
     let best_a = null
     let best_w = -1
     for p in L.people {
         if !p.alive || p.bond < 45 || p.blocked == true || p.id == L.partner_id || p.age < 4 { continue }
+        if p.inv_tm != null && L.tm - p.inv_tm < 12 { continue }
         ensure_want(p)
-        if p.want == null || p.want == "" || p.want_tm != L.tm { continue }
+        if p.want == null || p.want == "" || p.want_tm != L.tm || !list_contains(INVITE_ACTS, p.want) { continue }
         let a = rel_act(p.want)
         if a == null || rel_hidden(a, p) || rel_lock(a, p) != "" { continue }
         let w = p.bond + rint(0, 40)
@@ -1416,15 +1425,28 @@ function maybe_npc_initiative() {
     }
     if best == null { return false }
     L.npc_init_tm = L.tm
+    best.inv_tm = L.tm
     let ctx = {"person": best}
     let what = fmt(best_a.t, ctx)
-    let text = fmt("{x} te manda un mensaje: «¿Te late? Tengo ganas de verte.» Quiere: ", ctx)
-    let band = age_band(best.age)
-    if band == "kid" { text = fmt("{x} te jala de la mano, emocionad{xa}. Quiere: ", ctx) }
-    if band == "teen" { text = fmt("{x} te escribe: «Oye... ¿y si hacemos algo juntos?» Quiere: ", ctx) }
-    if band == "elder" { text = fmt("{x} te llama por teléfono: «¿Me acompañas? Ya casi no salgo.» Quiere: ", ctx) }
-    open_choice(str_upper(best.first) + " TE BUSCA", text + what + ".", ["Aceptar", "Otro día", "No puedo"], ["", "", ""], "npc_invite", {"person": best, "act": best_a.id})
+    let labels = ["Aceptar", "Otro día", "No puedo"]
+    if L.age < 13 { labels = ["¡Vamos!", "Otro día", "No quiero"] }
+    let text = fmt(invite_text(best), {"person": best, "plan": what})
+    open_choice(str_upper(who(best)) + " TE BUSCA", text, labels, ["", "", ""], "npc_invite", {"person": best, "act": best_a.id})
     return true
+}
+
+// Cómo te invita según quién es y cuántos años tienen los dos (la frase
+// entera, con el plan dentro, para que se traduzca de una pieza).
+function invite_text(p: map) {
+    let family = p.rel == "madre" || p.rel == "padre" || p.rel == "abuelo"
+    if family && L.age < 13 { return "{x} te dice con una sonrisa: «¡Hoy salimos tú y yo!» Quiere: {plan}." }
+    if family && L.age < 18 { return "{x} se asoma a tu cuarto: «¿Tienes un rato? Me gustaría pasar tiempo contigo.» Quiere: {plan}." }
+    if family { return "{x} te llama: «¿Cuándo nos vemos? Te extraño.» Quiere: {plan}." }
+    let band = age_band(p.age)
+    if band == "kid" { return "{x} te jala de la mano, emocionad{xa}. Quiere: {plan}." }
+    if band == "teen" { return "{x} te escribe: «Oye... ¿y si hacemos algo juntos?» Quiere: {plan}." }
+    if band == "elder" { return "{x} te llama por teléfono: «¿Me acompañas? Ya casi no salgo.» Quiere: {plan}." }
+    return "{x} te manda un mensaje: «¿Te late? Hace mucho que no nos vemos.» Quiere: {plan}."
 }
 
 function resolve_npc_invite(index: int, ctx: map) {
@@ -1433,10 +1455,10 @@ function resolve_npc_invite(index: int, ctx: map) {
     if index == 0 { return rel_do(ctx.act, p) }
     if index == 1 {
         bond_gain(p, -2)
-        return finish(p.first, "Le dijiste que otro día. «Va, pero no se te olvide.»", "n")
+        return finish(cap_first(who(p)), "Le dijiste que otro día. «Va, pero no se te olvide.»", "n")
     }
     bond_gain(p, -4)
-    return finish(p.first, p.first + " se quedó con las ganas.", "b")
+    return finish(cap_first(who(p)), fmt("{x} se quedó con las ganas.", ctx), "b")
 }
 
 function ensure_want(p: map) {
@@ -1470,7 +1492,7 @@ function want_bonus(p: map, act_id: string) {
     if p.want == null || p.want != act_id || p.want_tm != L.tm { return "" }
     p.want = ""
     bond_gain(p, 6)
-    list_push(G.toasts, {"head": "¡JUSTO LO QUE QUERÍA!", "title": str_upper(p.first), "sub": "Cercanía extra por leerle la mente.", "t0": G.t})
+    list_push(G.toasts, {"head": "¡JUSTO LO QUE QUERÍA!", "title": str_upper(who(p)), "sub": "Cercanía extra por leerle la mente.", "t0": G.t})
     return " ¡Era justo lo que " + p.first + " quería!"
 }
 
