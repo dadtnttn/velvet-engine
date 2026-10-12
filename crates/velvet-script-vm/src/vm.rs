@@ -459,8 +459,7 @@ impl Vm {
             return Ok(());
         };
         self.reset_execution_budget();
-        self.call_function(main, 0)?;
-        self.execute()?;
+        self.run_call(main, 0, 0, self.stack.len())?;
         let _ = self.pop();
         Ok(())
     }
@@ -484,12 +483,30 @@ impl Vm {
                 location: None,
                 stack_trace: vec![],
             })?;
+        let (frames, stack) = (self.frames.len(), self.stack.len());
         for a in args {
             self.push(a.clone())?;
         }
-        self.call_function(fidx, args.len() as u8)?;
-        self.execute()?;
+        self.run_call(fidx, args.len() as u8, frames, stack)?;
         Ok(self.pop().unwrap_or(Value::Null))
+    }
+
+    /// Call `fidx` (its `argc` args already pushed) and run it to the end. If
+    /// it fails, the frames and values it left behind are dropped, so the next
+    /// call starts clean instead of resuming the failed one.
+    fn run_call(
+        &mut self,
+        fidx: u16,
+        argc: u8,
+        frames: usize,
+        stack: usize,
+    ) -> Result<(), VmError> {
+        let result = self.call_function(fidx, argc).and_then(|()| self.execute());
+        if result.is_err() {
+            self.frames.truncate(frames);
+            self.truncate_stack(stack);
+        }
+        result
     }
 
     /// Start a cooperative task: call export `name` on this VM (sharing its
@@ -1610,6 +1627,23 @@ function add(a, b) {
             .call_name("add", &[Value::Int(2), Value::Int(40)])
             .unwrap();
         assert_eq!(v, Value::Int(42));
+    }
+
+    #[test]
+    fn a_failed_call_does_not_leak_into_the_next() {
+        let src = r#"
+function boom(x) {
+    return len(x)
+}
+function ok() {
+    return 7
+}
+"#;
+        let compiled = compile_source(src, Some("err.vel")).unwrap();
+        let mut vm = Vm::new(compiled.module, VmLimits::default());
+        assert!(vm.call_name("boom", &[Value::Int(1)]).is_err());
+        assert_eq!(vm.call_name("ok", &[]).unwrap(), Value::Int(7));
+        assert_eq!(vm.call_name("ok", &[]).unwrap(), Value::Int(7));
     }
 
     #[test]
