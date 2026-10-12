@@ -452,20 +452,26 @@ pub fn wrap_lines(text: &str, max_width: f64, measure: impl Fn(&str) -> f64) -> 
                 line = candidate;
                 continue;
             }
-            if !line.is_empty() {
-                lines.push(std::mem::take(&mut line));
-            }
             if measure(word) <= max_width {
+                if !line.is_empty() {
+                    lines.push(std::mem::take(&mut line));
+                }
                 line = word.to_owned();
                 continue;
+            }
+            // Too long for any line: it is broken by character from right
+            // here, so "Shwe" is not left alone before a Japanese sentence.
+            if !line.is_empty() {
+                line.push(' ');
             }
             for c in word.chars() {
                 let mut next = line.clone();
                 next.push(c);
-                if !line.is_empty() && measure(&next) > max_width {
+                if !line.trim_end().is_empty() && measure(&next) > max_width {
                     let keep = break_point(&line, c);
                     let carried = line.split_off(keep);
-                    lines.push(std::mem::replace(&mut line, carried));
+                    let done = std::mem::replace(&mut line, carried);
+                    lines.push(done.trim_end().to_owned());
                     line.push(c);
                 } else {
                     line = next;
@@ -814,6 +820,11 @@ mod tests {
         assert_eq!(wrap("あいう「えお」", 4.0), ["あいう", "「えお」"]);
         // A number is not split.
         assert_eq!(wrap("キーはF11です", 5.0), ["キーは", "F11です"]);
+        // A name before a sentence with no spaces stays on the same line.
+        assert_eq!(
+            wrap("Shwe Sinと中学校で出会った", 10.0),
+            ["Shwe Sinと中", "学校で出会った"]
+        );
         for line in wrap(
             "性的な内容（露骨な場面はなし）、ドラッグ、飲酒、犯罪、そして最悪の判断",
             9.0,
