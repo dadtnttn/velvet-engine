@@ -372,7 +372,7 @@ function phone_list(items: list, y0: int) {
         }
         textw(tx, iy + 20, it.t, 15, color, "impact", avail)
         if locked {
-            textw(tx, iy + 37, "REQUIERE: " + str_upper(it.lock), 11, C_RED, "impact", avail)
+            textw(tx, iy + 37, lock_text(it.lock, true), 11, C_RED, "impact", avail)
         } else {
             textw(tx, iy + 37, it.s, 11, sub_color, "bold", avail)
         }

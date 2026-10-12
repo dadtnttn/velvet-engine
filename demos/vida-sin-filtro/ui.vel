@@ -118,6 +118,24 @@ function hot(x: any, y: any, w: any, h: any, action: string) {
     return null
 }
 
+// Texto de una opción bloqueada. Los requisitos llevan «REQUIERE:» delante
+// (si `prefix`); los estados se dicen tal cual («SIN FONDOS»).
+function lock_text(lock: string, prefix: bool) {
+    let l = str_lower(lock)
+    if l == "este mes ya" { return str_upper("Ya lo hiciste este mes") }
+    if l == "este año ya" { return str_upper("Ya lo hiciste este año") }
+    if prefix && lock_is_requirement(lock) { return "REQUIERE: " + str_upper(lock) }
+    return str_upper(lock)
+}
+
+function lock_is_requirement(lock: string) {
+    for pre in ["Edad ", "Rango ", "Crédito ", "Salud ", "Calificación ", "Promedio ", "Nivel ", "Etapa ", "$"] {
+        if str_starts_with(lock, pre) { return true }
+    }
+    let c = str_sub(lock, 0, 1)
+    return c != "" && str_contains("0123456789", c)
+}
+
 function hovered(action: string) {
     return !block && G.hover == action
 }
@@ -1159,7 +1177,7 @@ function dialog_option(x: int, y: int, w: int, lbl: string, i: int, action: stri
     textw(x + dx + 60, y + 30, lbl, 17, color, "bold", w - 230)
     if locked {
         svg(x + dx + w - 190, y + 8, 30, 30, lock_doc())
-        textw(x + dx + w - 156, y + 30, str_upper(locks[i]), 14, C_RED, "impact", 146)
+        textw(x + dx + w - 156, y + 30, lock_text(locks[i], false), 14, C_RED, "impact", 146)
     } else if tag_text != "" {
         textw(x + dx + w - 150, y + 30, "[" + str_upper(tag_text) + "]", 14, C_YELLOW, "impact", 140)
     }
@@ -1257,7 +1275,7 @@ function draw_list(title: string, cats: list, cat: int, items: list, back: strin
         if on { sub_color = C_RED }
         if locked {
             svg(ix + dx + 372, iy + 8, 28, 28, lock_doc())
-            textw(ix + dx + 404, iy + 29, str_upper(it.lock), 13, C_RED, "impact", 100)
+            textw(ix + dx + 404, iy + 29, lock_text(it.lock, false), 13, C_RED, "impact", 100)
         } else {
             // El subtítulo usa el espacio que deja el título (hasta 230 px).
             let title_end = ix + dx + 30 + min(298, measure(it.t, 19, "impact")) + 18
@@ -1357,7 +1375,7 @@ function draw_detail(it: any, kind: string) {
     if it.lock != "" {
         svg(x + 40, y + h - 120, 380, 58, slant_doc(372, 50, 14, HEX_INK, HEX_RED, 3, HEX_RED, 6))
         svg(x + 58, y + h - 110, 30, 30, lock_doc())
-        textw(x + 96, y + h - 87, "REQUIERE: " + str_upper(it.lock), 18, C_WHITE, "impact", 316)
+        textw(x + 96, y + h - 87, lock_text(it.lock, true), 18, C_WHITE, "impact", 316)
     }
     if kind == "jobs" && it.ok != null {
         let msg = "CUMPLES LOS REQUISITOS"
