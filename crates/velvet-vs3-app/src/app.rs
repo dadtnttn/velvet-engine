@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use softbuffer::{Context as SoftContext, Surface};
+use winit::dpi::LogicalSize;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window};
 
@@ -157,6 +158,7 @@ pub struct Vs3App {
     /// (`None`: all of it).
     unpresented: Option<Vec<Rect>>,
     pub(crate) window: Option<Arc<Window>>,
+    pub(crate) early_window: EarlyWindow,
     pub(crate) context: Option<SoftContext<Arc<Window>>>,
     pub(crate) surface: Option<Surface<Arc<Window>, Arc<Window>>>,
     pub(crate) last_frame: Instant,
@@ -216,6 +218,7 @@ impl Vs3App {
             damage: Damage::default(),
             unpresented: None,
             window: None,
+            early_window: EarlyWindow::default(),
             context: None,
             surface: None,
             last_frame: Instant::now(),
@@ -609,33 +612,52 @@ impl Vs3App {
                     self.runtime.set_profiling(false);
                 }
             }
+            // Before the window opens (settings loaded at startup) the
+            // request is kept and the window opens with it.
             "window.set_title" => {
-                if let (Some(window), Some(title)) = (&self.window, payload_string(event, "title"))
-                {
-                    window.set_title(&title)
+                if let Some(title) = payload_string(event, "title") {
+                    match &self.window {
+                        Some(window) => window.set_title(&title),
+                        None => self.early_window.title = Some(title),
+                    }
                 }
             }
             "window.set_size" => {
-                if let (Some(window), Some(w), Some(h)) = (
-                    &self.window,
-                    payload_i64(event, "width"),
-                    payload_i64(event, "height"),
-                ) {
+                if let (Some(w), Some(h)) =
+                    (payload_i64(event, "width"), payload_i64(event, "height"))
+                {
                     // Logical, like the window it opens with (screen scaling).
-                    let _ = window.request_inner_size(winit::dpi::LogicalSize::new(
-                        w.max(1) as u32,
-                        h.max(1) as u32,
-                    ));
+                    let size = LogicalSize::new(w.max(1) as u32, h.max(1) as u32);
+                    match &self.window {
+                        Some(window) => {
+                            let _ = window.request_inner_size(size);
+                        }
+                        None => self.early_window.size = Some(size),
+                    }
                 }
             }
             "window.set_fullscreen" => {
-                if let (Some(window), Some(on)) = (&self.window, payload_bool(event, "enabled")) {
-                    window.set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
+                if let Some(on) = payload_bool(event, "enabled") {
+                    match &self.window {
+                        Some(window) => window.set_fullscreen(fullscreen(on)),
+                        None => self.early_window.fullscreen = on,
+                    }
                 }
             }
             _ => {}
         }
     }
+}
+/// Window requests made before the window exists: the first frames run
+/// while the app loads, before the event loop opens it.
+#[derive(Debug, Default)]
+pub(crate) struct EarlyWindow {
+    pub(crate) title: Option<String>,
+    pub(crate) size: Option<LogicalSize<u32>>,
+    pub(crate) fullscreen: bool,
+}
+pub(crate) fn fullscreen(on: bool) -> Option<Fullscreen> {
+    on.then_some(Fullscreen::Borderless(None))
 }
 fn is_frame_packet(value: &velvet_script_vs3::Value) -> bool {
     matches!(value.map_get("commands"), Ok(Some(_)))

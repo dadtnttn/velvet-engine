@@ -1,4 +1,4 @@
-use crate::app::Vs3App;
+use crate::app::{fullscreen, Vs3App};
 use crate::graphics::window_to_canvas;
 use softbuffer::{Context as SoftContext, Surface};
 use std::sync::Arc;
@@ -15,15 +15,22 @@ impl ApplicationHandler for Vs3App {
             return;
         }
         let spec = &self.manifest.app;
+        // What the app asked for while loading (saved fullscreen, title...).
+        let early = std::mem::take(&mut self.early_window);
         // Logical sizes: the window keeps its size on screens with scaling
         // (150% on a 4K monitor opens it at 1920x1080 real pixels, which the
         // renderer then fills at that resolution).
         let attrs = Window::default_attributes()
-            .with_title(spec.title.clone())
-            .with_inner_size(LogicalSize::new(spec.window_width, spec.window_height))
+            .with_title(early.title.unwrap_or_else(|| spec.title.clone()))
+            .with_inner_size(
+                early
+                    .size
+                    .unwrap_or(LogicalSize::new(spec.window_width, spec.window_height)),
+            )
             .with_min_inner_size(LogicalSize::new(spec.minimum_width, spec.minimum_height))
             .with_resizable(spec.resizable)
-            .with_position(PhysicalPosition::new(80, 50));
+            .with_position(PhysicalPosition::new(80, 50))
+            .with_fullscreen(fullscreen(early.fullscreen));
         match event_loop.create_window(attrs) {
             Ok(window) => {
                 // Text input for names and chat: also lets the platform IME
