@@ -493,7 +493,7 @@ function draw_create() {
         let r = route_def(c.route)
         stepper(x0 + 170, y - 26, r.short, "cre:route")
         let ty = y + 34
-        text(x0 + 170, ty, str_upper(r.n), 16, C_YELLOW, "impact")
+        textw(x0 + 170, ty, str_upper(r.n), 16, C_YELLOW, "impact", 390)
         ty += 24
         for line in wrap_px(r.d, 560, 15) {
             text(x0 + 170, ty, line, 15, C_WHITE, "bold")

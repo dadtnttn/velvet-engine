@@ -383,7 +383,7 @@ function apps_action(action: string) {
             touch(p)
             d.hbd = map_get(d, "hbd", 0) + 1
             if d.hbd >= 15 { flag("bday_keeper") }
-            return finish(p.first, "«¡Feliz cumpleaños! 🎂» " + p.first + " te contestó con un montón de corazones.", "g")
+            return finish(p.first, "«¡Feliz cumpleaños!» " + p.first + " te contestó con un montón de corazones.", "g")
         }
         "voice" => {
             let p = ph_love()

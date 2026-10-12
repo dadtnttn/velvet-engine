@@ -1137,7 +1137,9 @@ function special(name: string, ctx: map) {
         return ""
     }
     if name == "hookup" {
-        if ctx["person"] == null { ctx["person"] = stranger() }
+        // Alguien de la familia o un menor nunca: entonces es otra persona.
+        let p = ctx["person"]
+        if p == null || blood_rel(p) || is_family(p) || p.age < 18 { ctx["person"] = stranger() }
         open_hookup(ctx)
         return ""
     }

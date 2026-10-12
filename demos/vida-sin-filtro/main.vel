@@ -93,7 +93,8 @@ export function app_manifest() {
             {"id": "kr", "path": "fonts/NotoSansKR-Regular.otf", "langs": ["ko"]},
             {"id": "deva", "path": "fonts/NotoSansDevanagari-Regular.ttf", "langs": ["hi"]},
             {"id": "thai", "path": "fonts/NotoSansThai-Regular.ttf", "langs": ["th"]},
-            {"id": "hebr", "path": "fonts/NotoSansHebrew-Regular.ttf", "langs": ["he"]}
+            {"id": "hebr", "path": "fonts/NotoSansHebrew-Regular.ttf", "langs": ["he"]},
+            {"id": "sym", "path": "system:seguisym.ttf", "langs": ["*"]}
         ],
         "images": [],
         "sounds": [
@@ -348,7 +349,8 @@ function handle_input(input: map) {
         if input.wheel > 0.0 { G.scroll += 3 } else { G.scroll = max(0, G.scroll - 3) }
         G.dirty = true
     }
-    if len(input.pressed) == 0 { return null }
+    // Lo que se escribe con IME (chino, japonés, coreano...) llega sin tecla.
+    if len(input.pressed) == 0 && !(G.mode == "create" && len(input.text) > 0) { return null }
     G.dirty = true
     if G.cfg_on == true {
         if pressed(input, "Escape") { handle_action("cfg:close") }
