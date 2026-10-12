@@ -172,52 +172,167 @@ function school_month() {
     let target = 35 + L.smarts / 2 + rank("know") * 3 + fx_sum("grades") + school_bonus()
     if L.grades < target { L.grades += rint(0, 1) } else if L.grades > target { L.grades -= rint(0, 1) }
     L.grades = clamp(L.grades + rint(-1, 1), 0, 100)
-    // Abril y octubre: la boleta de fin de año (mes 11) no debe chocar con un examen abierto.
-    if (L.month == 4 || L.month == 10) && G.modal == null && L.age >= 7 {
-        open_exam("school")
+    // Los parciales de abril se resuelven solos; el examen de octubre se vive
+    // (la boleta de fin de año, mes 11, no debe chocar con un examen abierto).
+    if L.month == 4 && L.age >= 7 { auto_exam("school") }
+    if L.month == 10 && G.modal == null && L.age >= 7 { open_exam("school") }
+    return null
+}
+
+// Cada examen es distinto: la materia, el tipo y lo que puedes hacer cambian.
+const EXAM_KINDS = [
+    {"id": "final", "t": "EXAMEN FINAL", "d": "Llega el examen final de {materia}. Tus calificaciones: {cal}.", "o": ["play", "cram", "cheat", "skip"]},
+    {"id": "pop", "t": "¡EXAMEN SORPRESA!", "d": "Entra tu profe de {materia} con una sonrisa sospechosa: «Saquen una hoja.»", "o": ["play", "wing", "blank"]},
+    {"id": "oral", "t": "EXAMEN ORAL", "d": "Hoy pasas al frente: examen oral de {materia} delante de toda la clase.", "o": ["play", "charm", "sick"]},
+    {"id": "strict", "t": "EL PROFE MÁS ESTRICTO", "d": "Tu profe de {materia} es leyenda: en su examen nadie copia. Nadie.", "o": ["play", "crib", "skip"]},
+    {"id": "team", "t": "EXAMEN EN EQUIPO", "d": "Examen de {materia} en equipos de tres. Te tocaron dos compañeros... interesantes.", "o": ["play", "lazy", "steal"]}
+]
+
+const EXAM_OPTS = {
+    "play": "Presentar el examen (minijuego)",
+    "cram": "Desvelarte estudiando y presentarlo (minijuego)",
+    "cheat": "Copiar",
+    "skip": "No presentarlo",
+    "wing": "Improvisar y que sea lo que tenga que ser",
+    "blank": "Entregar la hoja en blanco",
+    "charm": "Hablar bonito aunque no sepas",
+    "sick": "Fingir que te sientes mal",
+    "crib": "Esconder un acordeón",
+    "lazy": "Dejar que tus compañeros hagan todo",
+    "steal": "Espiar las respuestas del otro equipo"
+}
+
+// Un examen que no se juega: sale según tus calificaciones.
+function auto_exam(kind: string) {
+    let base = L.grades
+    if kind == "uni" && L.study != null { base = L.study.gpa }
+    if chance(base) {
+        exam_apply(kind, 4)
+        log_add(pick(["Pasaste los parciales sin drama.", "Parciales aprobados. Hasta te sobró tiempo.", "Te fue bien en los parciales: tus papás ni se enteraron."]), "n")
+    } else {
+        exam_apply(kind, -4)
+        log_add(pick(["Los parciales no te fueron bien.", "Reprobaste un par de parciales. Toca ponerse las pilas.", "Los parciales fueron un desastre silencioso."]), "b")
     }
     return null
 }
 
 function open_exam(kind: string) {
     // Mientras adelantas años, el examen se resuelve solo según tus calificaciones.
-    if G.skip != null {
-        let base = L.grades
-        if kind == "uni" && L.study != null { base = L.study.gpa }
-        let delta = -4
-        if chance(base) { delta = 4 }
-        exam_apply(kind, delta)
-        if delta > 0 { log_add("Pasaste tus exámenes sin drama.", "n") } else { log_add("Los exámenes no te fueron bien.", "b") }
-        return null
+    if G.skip != null { return auto_exam(kind) }
+    let subj = pick(map_keys(SUBJECT_NAMES))
+    let ek = pick(EXAM_KINDS)
+    // Nunca el mismo tipo dos veces seguidas; de chico, nada de orales ni del
+    // profe más estricto.
+    let last = map_get(L, "exam_last", "")
+    let tries = 0
+    while tries < 8 && (ek.id == last || (L.age < 10 && (ek.id == "oral" || ek.id == "strict"))) {
+        ek = pick(EXAM_KINDS)
+        tries += 1
     }
-    let title = "EXÁMENES"
-    let text = "Llegan los exámenes de fin de semestre. Tus calificaciones: " + str(L.grades) + "."
+    L["exam_last"] = ek.id
+    let ctx = {"kind": kind, "subject": subj, "materia": str_lower(SUBJECT_NAMES[subj]), "cal": str(L.grades)}
+    let title = ek.t
+    let text = fmt(ek.d, ctx)
+    let opts = ek.o
     if kind == "uni" {
         let d = degree_def(L.study.deg)
         title = "FINALES DE " + str_upper(d.n)
         text = "Semana de exámenes finales en la carrera. Tu promedio: " + str(L.study.gpa) + "."
+        opts = ["play", "cram", "cheat", "skip"]
+        ctx["subject"] = ""
     }
-    open_choice(title, text, ["Presentar el examen (minijuego)", "Copiar", "No presentarlo"], ["", "", ""], "exam", {"kind": kind})
+    ctx["opts"] = opts
+    let labels = []
+    let locks = []
+    for o in opts {
+        list_push(labels, EXAM_OPTS[o])
+        list_push(locks, "")
+    }
+    open_choice(title, text, labels, locks, "exam", ctx)
     return null
 }
 
 function resolve_exam(index: int, ctx: map) {
     G.modal = null
-    if index == 0 {
-        return mg_start("quiz", "Examen", "exam", ctx)
-    }
-    if index == 1 {
-        if chance(55 + rank("guts") * 5) {
-            exam_apply(ctx.kind, 8)
-            L.karma -= 3
-            return finish("Exámenes", "Copiaste sin que nadie lo notara. Sacaste buena nota.", "g")
+    let opts = map_get(ctx, "opts", ["play", "cheat", "skip"])
+    let id = "skip"
+    if index < len(opts) { id = opts[index] }
+    let kind = ctx.kind
+    match id {
+        "play" => return mg_start("quiz", "Examen", "exam", ctx)
+        "cram" => {
+            L.health -= 3
+            ctx["bonus"] = 6
+            return mg_start("quiz", "Examen", "exam", ctx)
         }
-        exam_apply(ctx.kind, -15)
-        L.karma -= 3
-        return finish("Exámenes", "Te atraparon copiando. Cero y reporte.", "b")
+        "cheat" => {
+            L.karma -= 3
+            if chance(55 + rank("guts") * 5) {
+                exam_apply(kind, 8)
+                return finish("Exámenes", "Copiaste sin que nadie lo notara. Sacaste buena nota.", "g")
+            }
+            exam_apply(kind, -15)
+            return finish("Exámenes", "Te atraparon copiando. Cero y reporte.", "b")
+        }
+        "steal" => {
+            L.karma -= 2
+            if chance(50 + rank("guts") * 5) {
+                exam_apply(kind, 6)
+                return finish("Exámenes", "Le copiaste al equipo de al lado... y ellos sí sabían. Buena nota.", "g")
+            }
+            exam_apply(kind, -10)
+            return finish("Exámenes", "El otro equipo te cachó espiando y te acusó. Todo tu equipo reprobó.", "b")
+        }
+        "wing" => {
+            if chance(30 + L.smarts / 2) {
+                exam_apply(kind, 3)
+                return finish("Exámenes", "Improvisaste con una seguridad envidiable. Pasaste de milagro.", "n")
+            }
+            exam_apply(kind, -6)
+            return finish("Exámenes", "Improvisaste... y se notó. Reprobaste.", "b")
+        }
+        "blank" => {
+            exam_apply(kind, -8)
+            L.happy += 1
+            return finish("Exámenes", "Entregaste la hoja en blanco. Tu profe te miró con una decepción infinita.", "b")
+        }
+        "charm" => {
+            if chance(25 + rank("charm") * 12) {
+                exam_apply(kind, 5)
+                gain("charm", 1)
+                return finish("Exámenes", "No sabías nada, pero lo dijiste con tanta seguridad que te pusieron buena nota.", "g")
+            }
+            exam_apply(kind, -6)
+            return finish("Exámenes", "Hablaste mucho y dijiste poco. Toda la clase se dio cuenta.", "b")
+        }
+        "sick" => {
+            L.karma -= 1
+            if chance(50) { return finish("Exámenes", "Te creyeron. El examen se movió a otro día... que nunca llegó.", "n") }
+            exam_apply(kind, -6)
+            return finish("Exámenes", "Nadie te creyó el dolor de panza. Presentaste igual y nervios" + oa(L.gender) + ": reprobaste.", "b")
+        }
+        "crib" => {
+            L.karma -= 3
+            if chance(35 + rank("guts") * 4) {
+                exam_apply(kind, 10)
+                return finish("Exámenes", "El acordeón en la manga funcionó. Ni el profe más estricto lo vio.", "g")
+            }
+            exam_apply(kind, -15)
+            let more = ""
+            if kind == "school" && L.sc != null { more = detention() }
+            return finish("Exámenes", "El profe encontró tu acordeón y lo leyó en voz alta frente a todos." + more, "b")
+        }
+        "lazy" => {
+            L.karma -= 1
+            exam_apply(kind, 2)
+            if kind == "school" && L.sc != null { sc().pop = clamp100(sc().pop - 2) }
+            return finish("Exámenes", "Tus compañeros hicieron todo y tú pusiste tu nombre. Te odian un poquito.", "n")
+        }
+        _ => {
+            exam_apply(kind, -10)
+            return finish("Exámenes", "No te presentaste. Tus calificaciones lo resienten.", "b")
+        }
     }
-    exam_apply(ctx.kind, -10)
-    return finish("Exámenes", "No te presentaste. Tus calificaciones lo resienten.", "b")
 }
 
 function exam_apply(kind: string, delta: any) {
@@ -229,7 +344,10 @@ function exam_apply(kind: string, delta: any) {
 }
 
 function exam_result(score: any, ctx: map) {
-    exam_apply(ctx.kind, (score - 50) / 4)
+    // Desvelarte estudiando suma un poco (si no reprobaste).
+    let bonus = 0
+    if score >= 50 { bonus = int(map_get(ctx, "bonus", 0)) }
+    exam_apply(ctx.kind, (score - 50) / 4 + bonus)
     gain("know", 2 + score / 25)
     if score >= 100 { hito_once("exam100", "Estudios", "Sacaste 100 en un examen") }
     if score >= 80 { return finish("Exámenes", "¡Examen brillante! Sacaste " + str(score) + ". Tus calificaciones suben.", "g") }
@@ -414,7 +532,8 @@ function study_month() {
     if s.gpa < target { s.gpa += rint(0, 1) } else if s.gpa > target { s.gpa -= rint(0, 1) }
     s.gpa = clamp(s.gpa + rint(-1, 1), 0, 100)
     L.smarts = clamp100(L.smarts + rint(0, 1))
-    if (L.month == 5 || L.month == 11) && G.modal == null { open_exam("uni") }
+    if L.month == 5 { auto_exam("uni") }
+    if L.month == 11 && G.modal == null { open_exam("uni") }
     s.months -= 1
     if s.months <= 0 {
         if s.gpa >= 50 { return graduate() }
