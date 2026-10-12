@@ -290,7 +290,11 @@ impl Catalog {
                     // replaces an identity one (a code id that is also a word).
                     for (map, k, v) in [
                         (&mut cat.upper, src.to_uppercase(), dst.to_uppercase()),
-                        (&mut cat.lower, src.to_lowercase(), dst.to_lowercase()),
+                        (
+                            &mut cat.lower,
+                            src.to_lowercase(),
+                            lower_form(&cat.lang, &dst),
+                        ),
                     ] {
                         let keep = map.get(&k).is_some_and(|old| *old != k || v == k);
                         if !keep {
@@ -519,6 +523,29 @@ fn match_from(parts: &[Part], s: &str, holes: &mut Holes, depth: usize, out: &mu
     }
 }
 
+/// A translation as `lower` keeps it, for lines in another case: all in
+/// lowercase, except in German, whose nouns stay capitalized ("niedriges
+/// Einkommen"); only its first letter then follows the line.
+fn lower_form(lang: &str, dst: &str) -> String {
+    if lang == "de" && !is_upper_text(dst) {
+        dst.to_owned()
+    } else {
+        dst.to_lowercase()
+    }
+}
+
+fn first_upper(s: &str) -> String {
+    let mut cs = s.chars();
+    cs.next()
+        .map_or_else(String::new, |f| f.to_uppercase().chain(cs).collect())
+}
+
+fn first_lower(s: &str) -> String {
+    let mut cs = s.chars();
+    cs.next()
+        .map_or_else(String::new, |f| f.to_lowercase().chain(cs).collect())
+}
+
 fn restore_case(src: &str, translated: String) -> String {
     if is_upper_text(src) {
         return translated.to_uppercase();
@@ -609,8 +636,10 @@ impl Translator {
             // it has a translation under "Piojos": that one wins.
             if t == s {
                 if let Some(l) = self.cat.lower.get(&s.to_lowercase()) {
-                    if *l != s.to_lowercase() && s.chars().next().is_some_and(char::is_lowercase) {
-                        return Some(l.clone());
+                    if l.to_lowercase() != s.to_lowercase()
+                        && s.chars().next().is_some_and(char::is_lowercase)
+                    {
+                        return Some(first_lower(l));
                     }
                 }
             }
@@ -631,19 +660,16 @@ impl Translator {
             }
         } else if let Some(t) = self.cat.lower.get(s) {
             if s.chars().next().is_some_and(char::is_lowercase) {
-                return Some(t.clone());
+                return Some(first_lower(t));
             }
         }
         // A capitalized form of a lowercase entry (and vice versa).
         if let Some(t) = self.cat.lower.get(&s.to_lowercase()) {
-            let mut out = t.clone();
-            if s.chars().next().is_some_and(char::is_uppercase) {
-                let mut cs = out.chars();
-                if let Some(f) = cs.next() {
-                    out = f.to_uppercase().collect::<String>() + cs.as_str();
-                }
-            }
-            return Some(out);
+            return Some(match s.chars().next() {
+                Some(c) if c.is_uppercase() => first_upper(t),
+                Some(c) if c.is_lowercase() => first_lower(t),
+                _ => t.clone(),
+            });
         }
         if depth > 6 {
             return None;
@@ -1047,6 +1073,30 @@ mod tests {
         assert_eq!(t.tr("3 años"), "3 года");
         assert_eq!(t.tr("21 años"), "21 год");
         assert_eq!(t.tr("12 años"), "12 лет");
+    }
+
+    #[test]
+    fn a_line_in_another_case_keeps_german_nouns_capitalized() {
+        let de = Catalog::new(
+            "de",
+            vec![
+                (
+                    "ingreso bajo".to_string(),
+                    "niedriges Einkommen".to_string(),
+                ),
+                ("Ponerte en forma".to_string(), "In Form kommen".to_string()),
+            ],
+        );
+        let mut t = Translator::new(de);
+        assert_eq!(t.tr("Ingreso bajo"), "Niedriges Einkommen");
+        assert_eq!(t.tr("ponerte en forma"), "in Form kommen");
+        // Elsewhere a label used inside a sentence is all lowercase.
+        let mut t = Translator::new(cat(&[
+            ("INFANCIA", "INFANCY"),
+            ("Ponerte en forma", "Get in Shape"),
+        ]));
+        assert_eq!(t.tr("infancia"), "infancy");
+        assert_eq!(t.tr("ponerte en forma"), "get in shape");
     }
 
     #[test]
