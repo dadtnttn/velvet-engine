@@ -10,11 +10,12 @@ use winit::window::{Fullscreen, Window};
 
 use crate::assets::{AppManifest, GameAssets};
 use crate::graphics::{
-    scale_letterboxed, Canvas, FontSystem, SvgCache, MAX_SVG_BYTES, MAX_SVG_SIDE,
+    blit_letterboxed, render_scale, scale_letterboxed, Canvas, FontSystem, Rect, SvgCache,
+    MAX_SVG_BYTES, MAX_SVG_SIDE,
 };
 use crate::input::InputState;
 use crate::model::{FrameView, RuntimeEvent};
-use crate::scene::{action_at, render_scene};
+use crate::scene::{action_at, render_scene, Damage};
 use crate::script::InputFrame;
 use crate::script::ScriptRuntime;
 use crate::storage::SaveStore;
@@ -150,6 +151,11 @@ pub struct Vs3App {
     pub(crate) fonts: FontSystem,
     pub(crate) svg: SvgCache,
     pub(crate) canvas: Canvas,
+    /// What the last frame redrew, so the next one redraws only changes.
+    pub(crate) damage: Damage,
+    /// Canvas areas redrawn since the window last showed the canvas
+    /// (`None`: all of it).
+    unpresented: Option<Vec<Rect>>,
     pub(crate) window: Option<Arc<Window>>,
     pub(crate) context: Option<SoftContext<Arc<Window>>>,
     pub(crate) surface: Option<Surface<Arc<Window>, Arc<Window>>>,
@@ -207,6 +213,8 @@ impl Vs3App {
             fonts,
             svg,
             canvas,
+            damage: Damage::default(),
+            unpresented: None,
             window: None,
             context: None,
             surface: None,
@@ -256,6 +264,7 @@ impl Vs3App {
         velvet_script_vs3::i18n::set_catalog(Some(catalog));
         self.fonts.set_language(lang);
         self.svg.set_fallbacks(&self.fonts.chain());
+        self.damage.invalidate();
         velvet_script_vs3::i18n::set_measurer(Some(self.fonts.measurer()));
     }
     pub(crate) fn update(&mut self, dt: f32) {
@@ -322,7 +331,27 @@ impl Vs3App {
         }
         Ok(())
     }
+    /// Draw the frame at the window's real resolution (the app keeps its
+    /// logical canvas size; text and SVG are rasterized at the window scale,
+    /// so nothing is stretched). Without a window, at the logical size.
     pub(crate) fn render(&mut self) {
+        let (lw, lh) = (
+            self.manifest.app.canvas_width,
+            self.manifest.app.canvas_height,
+        );
+        let scale = match &self.window {
+            Some(window) => {
+                let size = window.inner_size();
+                render_scale(size.width as usize, size.height as usize, lw, lh)
+            }
+            None => 1.0,
+        };
+        let w = ((lw as f32 * scale).round() as usize).max(1);
+        let h = ((lh as f32 * scale).round() as usize).max(1);
+        if self.canvas.width != w || self.canvas.height != h {
+            self.canvas = Canvas::new(w, h);
+        }
+        self.svg.set_scale(scale);
         render_scene(
             &mut self.canvas,
             &self.fonts,
@@ -331,7 +360,16 @@ impl Vs3App {
             &self.frame,
             self.cursor,
             self.mouse_down,
-        )
+            scale,
+            &mut self.damage,
+        );
+        self.unpresented = match (self.unpresented.take(), &self.damage.redrawn) {
+            (Some(mut pending), Some(redrawn)) if pending.len() < 64 => {
+                pending.extend_from_slice(redrawn);
+                Some(pending)
+            }
+            _ => None,
+        };
     }
     pub(crate) fn present(&mut self) {
         let (Some(window), Some(surface)) = (&self.window, &mut self.surface) else {
@@ -347,15 +385,73 @@ impl Vs3App {
         let Ok(mut buffer) = surface.buffer_mut() else {
             return;
         };
-        scale_letterboxed(
-            &self.canvas.pixels,
-            self.canvas.width,
-            self.canvas.height,
-            &mut buffer,
-            size.width as usize,
-            size.height as usize,
+        let (width, height) = (size.width as usize, size.height as usize);
+        let (lw, lh) = (
+            self.manifest.app.canvas_width,
+            self.manifest.app.canvas_height,
         );
-        let _ = buffer.present();
+        let scale = render_scale(width, height, lw, lh);
+        let canvas = &self.canvas;
+        let drawn_for_window = canvas.width == (lw as f32 * scale).round() as usize
+            && canvas.height == (lh as f32 * scale).round() as usize
+            && canvas.width <= width
+            && canvas.height <= height;
+        // The buffer still shows the last frame: copy only what changed (and
+        // everything now and then, in case the window lost its contents).
+        let pending = self.unpresented.take();
+        let refresh = self.frame_count % 120 == 0;
+        match pending {
+            Some(regions) if drawn_for_window && buffer.age() == 1 && !refresh => {
+                let x0 = (width - canvas.width) / 2;
+                let y0 = (height - canvas.height) / 2;
+                let mut damage = Vec::with_capacity(regions.len());
+                for r in &regions {
+                    let (x, y, w, h) = (r.x as usize, r.y as usize, r.w as usize, r.h as usize);
+                    for row in y..y + h {
+                        let from = row * canvas.width + x;
+                        let at = (y0 + row) * width + x0 + x;
+                        buffer[at..at + w].copy_from_slice(&canvas.pixels[from..from + w]);
+                    }
+                    if let (Some(w), Some(h)) =
+                        (NonZeroU32::new(r.w as u32), NonZeroU32::new(r.h as u32))
+                    {
+                        damage.push(softbuffer::Rect {
+                            x: (x0 + x) as u32,
+                            y: (y0 + y) as u32,
+                            width: w,
+                            height: h,
+                        });
+                    }
+                }
+                if !damage.is_empty() {
+                    let _ = buffer.present_with_damage(&damage);
+                }
+            }
+            _ => {
+                if drawn_for_window {
+                    blit_letterboxed(
+                        &canvas.pixels,
+                        canvas.width,
+                        canvas.height,
+                        &mut buffer,
+                        width,
+                        height,
+                    );
+                } else {
+                    // Past the largest render scale (or mid-resize): stretch.
+                    scale_letterboxed(
+                        &canvas.pixels,
+                        canvas.width,
+                        canvas.height,
+                        &mut buffer,
+                        width,
+                        height,
+                    );
+                }
+                let _ = buffer.present();
+            }
+        }
+        self.unpresented = Some(Vec::new());
     }
     pub(crate) fn click(&mut self) {
         let Some(cursor) = self.cursor else {

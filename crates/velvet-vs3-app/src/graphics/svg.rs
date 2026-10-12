@@ -14,6 +14,7 @@ use resvg::{tiny_skia, usvg};
 use usvg::fontdb::{Database, Source, ID};
 
 use super::fonts::LoadedFont;
+use super::image_ops::Spans;
 use crate::assets::ImageAsset;
 
 /// Largest side accepted for one rasterized SVG.
@@ -22,9 +23,12 @@ pub const MAX_SVG_SIDE: u32 = 4096;
 pub const MAX_SVG_BYTES: usize = 256 * 1024;
 /// Pixel budget kept in the raster cache before least-recently-used eviction.
 const CACHE_PIXEL_BUDGET: usize = 24_000_000;
+/// Cap for the scaled budget (a 4K window keeps ~384 MB of rasters at most).
+const MAX_CACHE_PIXELS: usize = 96_000_000;
 
 struct Entry {
     image: Option<ImageAsset>,
+    spans: Option<Spans>,
     last_used: u64,
 }
 
@@ -41,6 +45,8 @@ pub struct SvgCache {
     entries: HashMap<u64, Entry>,
     pixels: usize,
     clock: u64,
+    budget: usize,
+    scale: f32,
 }
 
 impl SvgCache {
@@ -67,6 +73,18 @@ impl SvgCache {
         self.clear();
     }
     /// Forget every cached raster (fonts changed).
+    /// Rasters are made `scale` times bigger than their logical size: the
+    /// budget grows with the area (up to a cap), and rasters of the old size
+    /// are dropped.
+    pub fn set_scale(&mut self, scale: f32) {
+        if scale == self.scale {
+            return;
+        }
+        self.scale = scale;
+        let area = (scale * scale).max(1.0);
+        self.budget = ((CACHE_PIXEL_BUDGET as f32 * area) as usize).min(MAX_CACHE_PIXELS);
+        self.clear();
+    }
     pub fn clear(&mut self) {
         self.entries.clear();
         self.pixels = 0;
@@ -95,11 +113,25 @@ impl SvgCache {
             entries: HashMap::new(),
             pixels: 0,
             clock: 0,
+            budget: CACHE_PIXEL_BUDGET,
+            scale: 1.0,
         }
     }
 
     /// Returns the raster for `svg` at `width`×`height`, or `None` if it is invalid.
+    #[cfg(test)]
     pub fn raster(&mut self, svg: &str, width: u32, height: u32) -> Option<&ImageAsset> {
+        self.raster_spans(svg, width, height)
+            .map(|(image, _)| image)
+    }
+
+    /// The raster and, when it helps, its drawable spans.
+    pub fn raster_spans(
+        &mut self,
+        svg: &str,
+        width: u32,
+        height: u32,
+    ) -> Option<(&ImageAsset, Option<&Spans>)> {
         if width == 0 || height == 0 || width > MAX_SVG_SIDE || height > MAX_SVG_SIDE {
             return None;
         }
@@ -107,6 +139,7 @@ impl SvgCache {
         let key = cache_key(svg, width, height);
         if !self.entries.contains_key(&key) {
             let image = rasterize(svg, width, height, &self.fontdb, &self.fallbacks);
+            let spans = image.as_ref().and_then(Spans::of);
             if let Some(image) = &image {
                 self.pixels += image.pixels.len();
             }
@@ -114,6 +147,7 @@ impl SvgCache {
                 key,
                 Entry {
                     image,
+                    spans,
                     last_used: self.clock,
                 },
             );
@@ -121,7 +155,8 @@ impl SvgCache {
         }
         let entry = self.entries.get_mut(&key)?;
         entry.last_used = self.clock;
-        entry.image.as_ref()
+        let image = entry.image.as_ref()?;
+        Some((image, entry.spans.as_ref()))
     }
 
     /// Number of cached rasters (including failed parses).
@@ -131,7 +166,7 @@ impl SvgCache {
     }
 
     fn evict(&mut self, keep: u64) {
-        while self.pixels > CACHE_PIXEL_BUDGET {
+        while self.pixels > self.budget {
             let oldest = self
                 .entries
                 .iter()

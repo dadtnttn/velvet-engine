@@ -1,4 +1,4 @@
-use super::canvas::Canvas;
+use super::canvas::{alpha_table, Canvas};
 use super::fonts::FontChain;
 use super::layout;
 
@@ -13,29 +13,49 @@ impl Canvas {
         color: u32,
     ) -> i32 {
         let (glyphs, width) = layout::layout(chain, text, size);
-        let mut bitmap = Vec::new();
+        let alpha = alpha_table(self.opacity());
         for g in &glyphs {
-            let (metrics, coverage) = self.glyph(&g.font, g.glyph, size);
-            bitmap.clear();
-            bitmap.extend_from_slice(coverage);
-            let gx = (x as f32 + g.x).round() as i32 + metrics.xmin;
-            let gy = baseline - metrics.height as i32 - metrics.ymin - g.dy.round() as i32;
-            for row in 0..metrics.height {
-                for col in 0..metrics.width {
-                    let alpha = bitmap[row * metrics.width + col] as u32;
-                    if alpha == 0 {
-                        continue;
-                    }
-                    self.put(
-                        gx + col as i32,
-                        gy + row as i32,
-                        (alpha << 24) | (color & 0x00ff_ffff),
-                        true,
-                    );
-                }
-            }
+            self.glyph(
+                &g.font,
+                g.glyph,
+                size,
+                x as f32 + g.x,
+                baseline - g.dy.round() as i32,
+                color,
+                &alpha,
+            );
         }
         (x as f32 + width).round() as i32
+    }
+    /// `text_line` with an outline of `radius` pixels in `stroke` behind
+    /// every glyph.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_line_outlined(
+        &mut self,
+        chain: &FontChain,
+        text: &str,
+        x: i32,
+        baseline: i32,
+        size: f32,
+        color: u32,
+        stroke: u32,
+        radius: f32,
+    ) -> i32 {
+        let (glyphs, _) = layout::layout(chain, text, size);
+        let alpha = alpha_table(self.opacity());
+        for g in &glyphs {
+            self.glyph_outline(
+                &g.font,
+                g.glyph,
+                size,
+                x as f32 + g.x,
+                baseline - g.dy.round() as i32,
+                stroke,
+                radius,
+                &alpha,
+            );
+        }
+        self.text_line(chain, text, x, baseline, size, color)
     }
     pub fn measure_text(chain: &FontChain, text: &str, size: f32) -> f32 {
         layout::measure(chain, text, size)
