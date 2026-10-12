@@ -272,7 +272,6 @@ const QUIZ = [
     {"q": "¿Qué empresa creó el iPhone?", "a": ["Apple", "Samsung", "Nokia", "Google"], "c": 0},
     {"q": "¿Qué moneda se usa en la mayor parte de la Unión Europea?", "a": ["El euro", "El dólar", "La libra", "El franco"], "c": 0},
     {"q": "¿Cuántos años tiene un siglo?", "a": ["100", "10", "1,000", "50"], "c": 0},
-    {"q": "¿Cuál es el océano más grande?", "a": ["El Pacífico", "El Atlántico", "El Índico", "El Ártico"], "c": 0},
     {"q": "¿En qué deporte se batea y se corre entre bases?", "a": ["Béisbol", "Críquet", "Hockey", "Golf"], "c": 0},
     {"q": "¿Quién pintó «La noche estrellada»?", "a": ["Vincent van Gogh", "Pablo Picasso", "Salvador Dalí", "Claude Monet"], "c": 0},
     {"q": "¿Cuántos lados tiene un hexágono?", "a": ["6", "5", "7", "8"], "c": 0},
