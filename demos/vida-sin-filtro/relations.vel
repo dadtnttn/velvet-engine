@@ -695,7 +695,7 @@ function open_gift(p: map) {
     if L.money < local_price(300) { locks[0] = money_str(local_price(300)) }
     if L.money < local_price(1500) { locks[1] = money_str(local_price(1500)) }
     if L.money < local_price(8000) { locks[2] = money_str(local_price(8000)) }
-    open_choice("REGALO PARA " + str_upper(p.first), fmt("¿Qué le regalas a {x}? A cada quien le gusta algo distinto.", ctx), labels, locks, "gift", ctx)
+    open_choice("REGALO PARA " + str_upper(who(p)), fmt("¿Qué le regalas a {x}? A cada quien le gusta algo distinto.", ctx), labels, locks, "gift", ctx)
     G.modal.tags = ["", "", "", "Destreza", ""]
     return null
 }

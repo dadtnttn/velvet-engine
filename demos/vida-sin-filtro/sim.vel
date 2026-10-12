@@ -165,6 +165,16 @@ function wrap(text: string, max_chars: int) {
 }
 
 // Sustituye {marcadores} de género y nombres en los textos de eventos.
+// Cómo se nombra a alguien en los textos: a tus padres, abuelos y suegros
+// por lo que son para ti («tu mamá»); a los demás, por su nombre.
+function who(p: map) {
+    if p.rel == "madre" { return "tu mamá" }
+    if p.rel == "padre" { return "tu papá" }
+    if p.rel == "abuelo" { return by_gender(p.gender, "tu abuelo", "tu abuela") }
+    if p.rel == "suegro" { return by_gender(p.gender, "tu suegro", "tu suegra") }
+    return p.first
+}
+
 function fmt(text: string, ctx: map) {
     let out = str_replace(text, "{a}", oa(L.gender))
     out = str_replace(out, "{tia}", by_gender(L.gender, "tío", "tía"))
@@ -180,7 +190,15 @@ function fmt(text: string, ctx: map) {
     }
     let x = ctx["person"]
     if x != null {
-        out = str_replace(out, "{x}", x.first)
+        // A tus padres y abuelos se les dice «tu mamá», «tu abuelo»...: con
+        // mayúscula si abren la frase.
+        let xn = who(x)
+        if xn != x.first {
+            let cap = cap_first(xn)
+            if str_starts_with(out, "{x}") { out = cap + str_sub(out, 3) }
+            for lead in ["¡", "¿", ". ", "! ", "? ", "» ", "\n"] { out = str_replace(out, lead + "{x}", lead + cap) }
+        }
+        out = str_replace(out, "{x}", xn)
         out = str_replace(out, "{xa}", oa(x.gender))
         out = str_replace(out, "{xel}", by_gender(x.gender, "él", "ella"))
         // Los textos escriben "l{xlo}" (Invitarl{xlo}) o "{xlo}" a secas: ambos dan lo/la.
