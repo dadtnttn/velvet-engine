@@ -423,9 +423,9 @@ impl Vs3App {
                         });
                     }
                 }
-                if !damage.is_empty() {
-                    let _ = buffer.present_with_damage(&damage);
-                }
+                // Even with nothing new, presenting validates the window (on
+                // Windows an unvalidated window keeps asking to repaint).
+                let _ = buffer.present_with_damage(&damage);
             }
             _ => {
                 if drawn_for_window {
@@ -452,6 +452,11 @@ impl Vs3App {
             }
         }
         self.unpresented = Some(Vec::new());
+    }
+    /// The window may have lost what it showed (uncovered, resized, back
+    /// from the taskbar): copy the whole canvas next time.
+    pub(crate) fn present_all(&mut self) {
+        self.unpresented = None;
     }
     pub(crate) fn click(&mut self) {
         let Some(cursor) = self.cursor else {

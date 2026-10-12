@@ -122,7 +122,11 @@ impl ApplicationHandler for Vs3App {
                 self.present();
                 self.frame_count += 1;
             }
-            WindowEvent::Resized(_) => {
+            WindowEvent::Resized(_)
+            | WindowEvent::ScaleFactorChanged { .. }
+            | WindowEvent::Occluded(false)
+            | WindowEvent::Focused(true) => {
+                self.present_all();
                 if let Some(window) = &self.window {
                     window.request_redraw();
                 }
