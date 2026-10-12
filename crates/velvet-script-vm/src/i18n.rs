@@ -8,7 +8,8 @@
 //! translated too (a job title inside a sentence), and a translation can pick
 //! a word by the raw hole value with `{0|o=Bienvenido|a=Bienvenida|*=...}`
 //! (handy for gender endings produced by the source language). `{0!}` keeps
-//! the raw value (names that happen to be words, like "Rosa").
+//! the raw value (names that happen to be words, like "Rosa"); a value that is
+//! not a name but translates ("Tu mamá" said instead of a name) is translated.
 //!
 //! Translations can also pick by a global variable the game sets (the
 //! player's gender, say): `{@g|m=Ты пошёл|f=Ты пошла}` — see [`set_var`].
@@ -341,13 +342,15 @@ const MAX_CANDIDATES: usize = 24;
 
 /// One to three words, each starting with a capital letter: a proper name
 /// ("Hanna", "Hanna Krawczyk") that no catalog is expected to translate.
+/// Common words count in any case ("TU MAMÁ" is not a name).
 fn looks_like_name(v: &str) -> bool {
     let words: Vec<&str> = v.split_whitespace().collect();
     !words.is_empty()
         && words.len() <= 3
         && words.iter().all(|w| {
+            let core = w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase();
             w.chars().next().is_some_and(char::is_uppercase)
-                && !COMMON_WORDS.contains(&w.trim_matches(|c: char| !c.is_alphabetic()))
+                && !COMMON_WORDS.iter().any(|c| c.to_lowercase() == core)
         })
 }
 
@@ -847,9 +850,10 @@ impl Translator {
                 continue;
             }
             // A hole kept as it is must really be a name ("Hanna", not
-            // "¿Salimos este finde?").
+            // "¿Salimos este finde?"), or something said instead of a name
+            // that translates ("Tu mamá").
             if raw && !plain {
-                if looks_like_name(v) {
+                if looks_like_name(v) || self.lookup(v, depth + 1).is_some() {
                     continue;
                 }
                 return false;
@@ -898,7 +902,16 @@ impl Translator {
                     let raw = value(i).unwrap_or("");
                     match select {
                         Some(options) => out.push_str(&pick_plural(options, raw, &self.cat.lang)),
-                        None if keep_raw => out.push_str(raw),
+                        None if keep_raw => {
+                            // Names stay; a role said instead ("Tu mamá")
+                            // translates.
+                            let shown = if looks_like_name(raw) || !has_letters(raw) {
+                                None
+                            } else {
+                                self.lookup(raw, depth + 1)
+                            };
+                            out.push_str(shown.as_deref().unwrap_or(raw));
+                        }
                         None => {
                             let shown = if raw.trim().is_empty() || !has_letters(raw) {
                                 raw.to_owned()
@@ -1261,6 +1274,21 @@ mod tests {
             t.tr("Tío · cariñoso · Hace 29 años"),
             "Uncle · loving · 29 years ago"
         );
+    }
+
+    #[test]
+    fn name_holes_translate_roles_said_instead_of_names() {
+        let c = cat(&[
+            ("{0} te saluda.", "{0!} says hi."),
+            ("tu mamá", "your mom"),
+            ("{0} TE BUSCA", "{0!} IS LOOKING FOR YOU"),
+        ]);
+        let mut t = Translator::new(c);
+        assert_eq!(t.tr("Tu mamá te saluda."), "Your mom says hi.");
+        assert_eq!(t.tr("Rosa te saluda."), "Rosa says hi.");
+        assert_eq!(t.tr("TU MAMÁ TE BUSCA"), "YOUR MOM IS LOOKING FOR YOU");
+        // Neither a name nor translatable: the template does not apply.
+        assert_eq!(t.tr("Algo raro te saluda."), "Algo raro te saluda.");
     }
 
     #[test]
