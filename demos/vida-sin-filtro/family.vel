@@ -846,6 +846,11 @@ function continue_as_heir() {
     L.smarts = clamp100(kid.smarts)
     L.grades = kid.grades
     L.money = money
+    // Si heredas de menor, lo grande te lo guardan hasta los 18.
+    if L.age < 18 && money > kid_cash_cap() {
+        L.fund = money - kid_cash_cap()
+        L.money = kid_cash_cap()
+    }
     L.family = family
     vida_heir()
     pais_heir(old)

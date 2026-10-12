@@ -433,15 +433,17 @@ function check_missions() {
         if !mission_met(m.id) { continue }
         list_push(L.done, m.id)
         let r = m.reward
-        for key in ["happy", "health", "money"] {
+        for key in ["happy", "health"] {
             if map_has(r, key) { L[key] = L[key] + r[key] }
         }
+        let note = ""
+        if map_has(r, "money") { note = kid_money(r.money) }
         for key in SOCIAL_KEYS {
             if map_has(r, key) { gain(key, r[key]) }
         }
         clamp_stats()
         list_push(G.toasts, {"head": "¡MISIÓN CUMPLIDA!", "title": str_upper(m.t), "sub": "Recompensa: " + m.r, "t0": G.t})
-        log_add("Misión cumplida: " + m.t + ".", "x")
+        log_add("Misión cumplida: " + m.t + "." + note, "x")
     }
     return null
 }

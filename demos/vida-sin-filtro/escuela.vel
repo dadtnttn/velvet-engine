@@ -429,10 +429,13 @@ function pop_word() {
     return "Invisible"
 }
 
+// El domingo de un niño: unos pesos para dulces, más en la adolescencia.
 function allowance_base() {
-    if L.family == "rica" { return 600 }
-    if L.family == "pobre" { return 40 }
-    return 150
+    let b = 20
+    if L.family == "rica" { b = 80 }
+    if L.family == "pobre" { b = 5 }
+    if L.age >= 13 { b = b * 2 }
+    return local_price(b)
 }
 
 // ---------------------------------------------------------------- menú de la escuela
@@ -618,7 +621,7 @@ function escuela_action(action: string) {
         }
         "candy" => {
             if used_once("es_candy") { return null }
-            let earned = rint(1, 4) * 100
+            let earned = local_price(rint(2, 8) * 5)
             L.money += earned
             gain("skill", 1)
             if chance(20) {
@@ -783,11 +786,11 @@ function ask_allowance() {
     if style == "toxico" { odds -= 20 }
     if L.family == "pobre" { odds -= 25 }
     if chance(clamp(odds, 5, 90)) {
-        s.allow = min(200, s.allow + 50)
-        return finish("Domingo", p.first + " aceptó: ahora recibes " + money_str(allowance_now()) + " al mes.", "g")
+        s.allow = min(100, s.allow + 25)
+        return finish("Domingo", cap_first(who(p)) + " aceptó: ahora recibes " + money_str(allowance_now()) + " al mes.", "g")
     }
     if L.family == "pobre" { return finish("Domingo", "«No alcanza, mij" + oa(L.gender) + ".» Lo entiendes, aunque duela.", "n") }
-    return finish("Domingo", p.first + " dijo que no. «El dinero no crece en los árboles.»", "b")
+    return finish("Domingo", cap_first(who(p)) + " dijo que no. «El dinero no crece en los árboles.»", "b")
 }
 
 function open_prom() {
@@ -1282,8 +1285,10 @@ function escuela_month() {
     if L.sc == null || L.age >= 18 { return null }
     let s = L.sc
     if s.grounded > 0 { s.grounded -= 1 }
-    // Domingo
-    if L.age >= 8 && len(parents_alive()) > 0 && s.grounded == 0 { L.money += allowance_now() }
+    // Domingo: casi todo se va en dulces y salidas; lo que se ahorra no pasa
+    // de un año de domingos.
+    let allow = allowance_now()
+    if L.age >= 8 && len(parents_alive()) > 0 && s.grounded == 0 && L.money < allow * 12 { L.money += allow }
     if !in_school() { return null }
     // Popularidad: tiende a tu nivel natural.
     let target = 15 + looks_eff() / 4 + rank("charm") * 6 + sc_kind().pop * 3 + s.medals * 2
@@ -1408,8 +1413,9 @@ function resolve_report(index: int, ctx: map) {
         }
         "estricto" => {
             if g >= 85 {
-                L.money += 1000
-                return finish("Boleta", p.first + " asintió con aprobación y te dio $1,000. «Así se hace.»", "g")
+                let prize = local_price(100)
+                L.money += prize
+                return finish("Boleta", p.first + " asintió con aprobación y te dio " + money_str(prize) + ". «Así se hace.»", "g")
             }
             if g < 75 {
                 s.grounded = max(s.grounded, 3)

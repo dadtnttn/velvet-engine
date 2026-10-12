@@ -283,7 +283,7 @@ function menu_items(tab: string, cat: string) {
             if a.need != null && rank(a.need) < a.rank { lock = need_text(a.need, a.rank) }
             let lock2 = lock
             if lock2 == "" { lock2 = body_lock(a.id) }
-            if lock2 == "" && a.cost > 0 && L.money < local_price(a.cost) { lock2 = money_str(local_price(a.cost)) }
+            if lock2 == "" && a.cost > 0 && L.money < local_price(a.cost) && !parents_pay(a.cost) { lock2 = money_str(local_price(a.cost)) }
             let desc = a.desc
             if L.age < 13 && a.desc_kid != null { desc = a.desc_kid }
             list_push(items, {"action": "act:" + a.id, "t": a.t, "s": local_text(fmt(a.s, {}), a.cost), "desc": fmt(desc, {}), "lock": lock2})
@@ -293,7 +293,7 @@ function menu_items(tab: string, cat: string) {
         if a.tab == tab && a.cat == cat && L.age >= a.min {
             let lock = ocio_lock(a)
             if lock == "" && L.used[a.id] != null { lock = "Este mes ya" }
-            if lock == "" && a.cost > 0 && L.money < local_price(a.cost) { lock = money_str(local_price(a.cost)) }
+            if lock == "" && a.cost > 0 && L.money < local_price(a.cost) && !parents_pay(a.cost) { lock = money_str(local_price(a.cost)) }
             let t = a.t
             if a.id == "bigheist" { t = heist_title() }
             list_push(items, {"action": "act:" + a.id, "t": t, "s": local_text(fmt(a.s, {}), a.cost), "desc": local_text(fmt(a.desc, {}), a.cost), "lock": lock})
@@ -462,6 +462,8 @@ function do_act(id: string) {
         return info(a.t, "Necesitas " + SOCIAL_NAMES[a.need] + " rango " + str(a.rank) + " para esto.")
     }
     let price = local_price(a.cost)
+    // De menor lo pagan tus papás, si les alcanza.
+    if parents_pay(a.cost) { price = 0 }
     if a.cost > 0 && L.money < price {
         return info(a.t, "No te alcanza. Necesitas " + money_str(price) + " y tienes " + money_str(L.money) + ".")
     }

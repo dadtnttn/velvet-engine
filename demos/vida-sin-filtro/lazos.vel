@@ -1231,8 +1231,7 @@ function lazos_on_death(p: map) {
     let r = p.rel
     if (r == "abuelo" || r == "tio") && p.bond >= 60 && chance(45) {
         let m = rint(5, 60) * 1000
-        L.money += m
-        log_add("Tu " + str_lower(rel_label(p)) + " " + p.first + " te dejó " + money_str(m) + " en su testamento.", "g")
+        log_add("Tu " + str_lower(rel_label(p)) + " " + p.first + " te dejó " + money_str(m) + " en su testamento." + kid_money(m), "g")
         hito_me("Familia", "Heredaste de tu " + str_lower(rel_label(p)) + " " + p.first)
     }
     if p.recorded == true {
