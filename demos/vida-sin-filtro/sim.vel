@@ -312,9 +312,23 @@ function make_person(gender: string, rel: string, age: int) {
         "wild": rint(0, 100)
     }
     pais_person(p, pc)
-    if p.first == L.first { p.first = pais_first(gender, pc) }
+    // Que no se llame como tú ni como alguien cercano (dos Hannas confunden).
+    let tries = 0
+    while tries < 6 && name_taken(p.first) {
+        p.first = pais_first(gender, pc)
+        tries += 1
+    }
     L.next_id += 1
     return p
+}
+
+function name_taken(first: string) {
+    if first == L.first { return true }
+    if L.people == null { return false }
+    for q in L.people {
+        if q.alive && q.first == first && (is_family(q) || q.id == L.partner_id || q.rel == "pareja" || q.rel == "esposo") { return true }
+    }
+    return false
 }
 
 function random_look(gender: string) {

@@ -335,7 +335,12 @@ function cre_ctry_summary(c: map) {
 }
 
 function pop_text(k: int) {
-    if k >= 1000000 { return str(k / 1000000) + " mil millones" }
+    // India: 1.4 mil millones, no «1».
+    if k >= 1000000 {
+        let tenths = (k + 50000) / 100000
+        if tenths % 10 == 0 { return str(tenths / 10) + " mil millones" }
+        return str(tenths / 10) + "." + str(tenths % 10) + " mil millones"
+    }
     if k >= 1000 { return str(k / 1000) + " millones" }
     return str(k) + " mil habitantes"
 }
