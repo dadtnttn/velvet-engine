@@ -180,3 +180,21 @@ lcov.info
 !/demos/demon-queen/data/loading/ref/queen_chew.png
 !/demos/demon-queen/data/loading/ref/queen_grab.png
 !/demos/demon-queen/data/loading/ref/queen_rest.png
+
+# Demon Queen's story stays private (2026-10-14): drafts, prologue texts, the game's scripts and
+# lore live only on the dev machine (also purged from the published history).
+/demos/demon-queen/ACT1_*.md
+/demos/demon-queen/ACTO1_*.md
+/demos/demon-queen/BORRADOR_*.md
+/demos/demon-queen/CHARACTER_GUIDE_*.md
+/demos/demon-queen/CHECKPOINT_*.md
+/demos/demon-queen/HIPNO_*.md
+/demos/demon-queen/MISIONES_SECUNDARIAS_*.md
+/demos/demon-queen/PROLOGUE_*.md
+/demos/demon-queen/STORY_IDEAS.md
+/demos/demon-queen/hipno_storyboard.html
+/demos/demon-queen/data/guiones/*.md
+/demos/demon-queen/data/pelis/**/*.peli.md
+/demos/demon-queen/story/prologue.json
+/demos/demon-queen/world-editor/**/*lore*.json
+/demos/demon-queen/docs/comfyui/PROMPTS_*.md
