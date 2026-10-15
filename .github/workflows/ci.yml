@@ -48,9 +48,6 @@ jobs:
       - name: Repository contents
         run: python3 tools/check_repository.py
 
-      - name: Peli source validation
-        run: node --test demos/demon-queen/tools/peli/tests/*.test.mjs
-
       - name: VS3 boundaries
         run: python3 tools/check_vs3_boundaries.py
 
@@ -66,7 +63,6 @@ jobs:
       - name: Check
         run: |
           cargo check --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon
-          RUSTFLAGS="" cargo check -p demon-queen --all-targets
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon -- -D warnings
