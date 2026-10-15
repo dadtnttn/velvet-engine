@@ -16,6 +16,10 @@ una segunda copia de la historia.
 
 Desarrollado por **Velvet Weaver**. *Woven with Velvet Engine.*
 
+> Hi F95zone staff! I'm **Velvet Weaver**, the developer of this game
+> ([thread 312490](https://f95zone.to/threads/312490/)). This is its source code, built on my own
+> engine. I added this note on 2026-10-15 as proof for my Game Developer badge ticket.
+
 ## Código público y recursos locales
 
 Git incluye código Rust, editor, herramientas de Peli/ComfyUI, guiones,
