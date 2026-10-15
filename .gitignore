@@ -198,3 +198,46 @@ lcov.info
 /demos/demon-queen/story/prologue.json
 /demos/demon-queen/world-editor/**/*lore*.json
 /demos/demon-queen/docs/comfyui/PROMPTS_*.md
+
+# Story design notes, routes and rules are private too (2026-10-14): they live in
+# C:\Hijosdelsol\DemonQueen-Lore (not a repository) or in demos/demon-queen/privado/.
+/demos/demon-queen/privado/
+/demos/demon-queen/*IDEAS*.md
+/demos/demon-queen/RUTA_*.md
+/demos/demon-queen/ZONAS_*.md
+/demos/demon-queen/LORE*.md
+
+# Only code is public (2026-10-15): tools, docs, art, the story's text (locales, dialogue,
+# missions, venues) and internal notes stay on the dev machine, and are purged from the published
+# history too. Local build folders as well.
+/target-*/
+/PRODUCT.md
+/docs/reports/
+/docs/CHIBI_3D_MINI_PIPELINE.md
+/docs/VLZ_REPORT.md
+/tools/vendor/
+/tools/_*.py
+/tools/fantasy_village_to_glb.py
+/tools/model_preview.html
+/tools/module_test.html
+/tools/render_glb_preview_cpu.py
+/demos/demon-queen/*.md
+!/demos/demon-queen/README.md
+/demos/demon-queen/*.html
+/demos/demon-queen/tools/
+/demos/demon-queen/docs/
+/demos/demon-queen/world-editor/
+/demos/demon-queen/worlds/
+/demos/demon-queen/assets/
+/demos/demon-queen/story/*
+!/demos/demon-queen/story/schema.json
+/demos/demon-queen/data/assets/
+/demos/demon-queen/data/loading/
+/demos/demon-queen/data/fonts/
+/demos/demon-queen/data/maps/*.png
+/demos/demon-queen/data/locales/
+/demos/demon-queen/data/npc_dialogues.json
+/demos/demon-queen/data/misiones/
+/demos/demon-queen/data/venues/
+/demos/demon-queen/data/shops/
+/demos/demon-queen/data/achievements/*.md
