@@ -170,9 +170,9 @@ cargo run -p velvet-cli --release -- style check templates/visual-novel/styles/u
 | Studio GUI *(alpha)* | `cargo run -p velvet-editor --release -- gui templates/visual-novel --interactive` | Visual / Script / Nodes |
 
 Supported demos: `cellular-arena`, `fx-forge`, `ui-gallery`, `terraflow`,
-`third-person`, `rpg-quest-vs3` and `demon-queen`. Demon Queen includes source,
-story data and reviewed non-explicit resources; its private media pack is
-distributed separately. See [repository contents](docs/engineering/REPOSITORY_CONTENTS.md)
+`third-person`, `rpg-quest-vs3` and `demon-queen`. Demon Queen is published as
+source code only: its story, data and art stay private, so it does not build from
+this repository alone. See [repository contents](docs/engineering/REPOSITORY_CONTENTS.md)
 and [Demon Queen setup](demos/demon-queen/README.md).
 
 ---
@@ -203,13 +203,9 @@ and [Demon Queen setup](demos/demon-queen/README.md).
 | Velvet Style (VCSS) | [docs/language/VELVET_STYLE.md](docs/language/VELVET_STYLE.md) |
 | Velvet Script (JS-lite) | [docs/language/VELVET_SCRIPT.md](docs/language/VELVET_SCRIPT.md) · [v2](docs/language/VELVET_SCRIPT_2.md) · [v3](docs/language/VELVET_SCRIPT_3.md) |
 | Velvet Story | [docs/language/VELVET_STORY.md](docs/language/VELVET_STORY.md) · [2.5](docs/language/VELVET_2_5.md) · [VS3 roadmap](docs/language/VS3_ROADMAP.md) |
-| UI animation / interaction | [docs/reports/UI_ANIM.md](docs/reports/UI_ANIM.md) |
-| Scene3D | [docs/reports/SCENE3D.md](docs/reports/SCENE3D.md) |
 | Demon Queen NPCs | [docs/engineering/DEMON_QUEEN_NPCS.md](docs/engineering/DEMON_QUEEN_NPCS.md) |
 | Cellular (alpha) | [docs/architecture/CELLULAR.md](docs/architecture/CELLULAR.md) |
 | Studio (alpha) | [docs/editor/STUDIO.md](docs/editor/STUDIO.md) |
-| Ren’Py parity notes | [docs/reports/RENPY_PARITY.md](docs/reports/RENPY_PARITY.md) |
-| Limitations (honest) | [docs/reports/LIMITATIONS.md](docs/reports/LIMITATIONS.md) |
 | Tutorials | [docs/tutorials/](docs/tutorials/) |
 | ADRs | [docs/adr/](docs/adr/) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |

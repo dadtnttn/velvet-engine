@@ -36,6 +36,8 @@ def main() -> int:
     demos = set(policy["demos"])
     media = set(policy["public_media"])
     media_dirs = tuple(policy["public_media_directories"])
+    # Source-only demos read private data (include_str!/include_bytes!) that stays off Git.
+    source_only = tuple(f"demos/{name}/" for name in policy.get("source_only_demos", []))
     for path in sorted(paths):
         parts = path.split("/")
         if parts[0] == "demos" and len(parts) > 1 and parts[1] not in demos:
@@ -44,7 +46,7 @@ def main() -> int:
             if path not in media and not path.startswith(media_dirs):
                 errors.append(f"unreviewed Demon Queen media: {path}")
         source = ROOT / path
-        if path.endswith(".rs") and source.is_file():
+        if path.endswith(".rs") and source.is_file() and not path.startswith(source_only):
             text = source.read_text(encoding="utf-8")
             for relative in re.findall(r'include_(?:bytes|str)!\s*\(\s*"([^"\n]+)"\s*\)', text):
                 included = posixpath.normpath(posixpath.join(posixpath.dirname(path), relative))
