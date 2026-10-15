@@ -23,6 +23,12 @@ pub(super) struct SmokeTest {
     cycle: usize,
     /// Seconds to stay in the world instead (VELVET_SMOKE_IDLE), the memory every ten.
     idle: u64,
+    /// Seconds to stay in the world changing the native resolution and the graphics settings
+    /// over and over (VELVET_SMOKE_GFX); it fails when no frame is shown for 3 s.
+    gfx: u64,
+    /// The frames shown when that last went up, and when.
+    shown: (u64, Instant),
+    step: u64,
 }
 
 /// The process's private memory in MB (what it has committed; 0 off Windows).
@@ -78,6 +84,12 @@ impl SmokeTest {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0),
+            gfx: std::env::var("VELVET_SMOKE_GFX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0),
+            shown: (0, now),
+            step: 0,
         })
     }
     fn next(&mut self) {
@@ -117,7 +129,8 @@ impl SmokeTest {
     }
     pub fn tick(&mut self, host: &mut WinitApp, event_loop: &ActiveEventLoop) -> Result<()> {
         anyhow::ensure!(
-            self.started.elapsed() < Duration::from_secs(180 + 40 * self.cycles as u64 + self.idle),
+            self.started.elapsed()
+                < Duration::from_secs(180 + 40 * self.cycles as u64 + self.idle + self.gfx),
             "unified smoke timed out at stage {}",
             self.stage
         );
@@ -239,6 +252,13 @@ impl SmokeTest {
                 self.next();
             }
             3 if host.world_ready && host.transition.is_none() => {
+                if self.gfx > 0 {
+                    self.record(host, "gfx_0")?;
+                    self.stage = 41;
+                    self.stage_started = Instant::now();
+                    self.shown = (0, Instant::now());
+                    return Ok(());
+                }
                 // Only staying in the world: walking about, the memory every ten seconds.
                 if self.idle > 0 {
                     self.record(host, "idle_0")?;
@@ -313,6 +333,9 @@ impl SmokeTest {
                     "menu-smoke",
                 )?;
                 host.app.set_menu_page(pause_menu::Page::Save);
+                // Her own progress goes in with the save: gold, an item, a story mark.
+                host.world.as_mut().unwrap().smoke_mark_progress();
+                host.checkpoint_world(true);
                 host.app.save_menu_slot(1);
                 let slots = host.app.game.as_ref().unwrap().save_slots();
                 anyhow::ensure!(
@@ -408,6 +431,13 @@ impl SmokeTest {
                         && saved.village_entered == expected.village_entered,
                     "manual 3D slot lost transform or flags"
                 );
+                anyhow::ensure!(
+                    saved.gold == 1234
+                        && saved.inventory.get("pocion_reforzada") == Some(&2)
+                        && saved.story.get("smoke_guardado") == 1,
+                    "manual 3D slot lost her gold, bag or story (gold {})",
+                    saved.gold
+                );
                 self.record(host, "manual_3d_slot_restored_after_vn")?;
                 if self.cycles > 0 {
                     host.menu_back();
@@ -459,6 +489,75 @@ impl SmokeTest {
                 }
                 if seconds >= self.idle {
                     self.record(host, "idle_done")?;
+                    self.write("passed", None)?;
+                    event_loop.exit();
+                }
+            }
+            41 => {
+                let shown = host.app.display.as_ref().map_or(0, |d| d.presented_frames);
+                if shown != self.shown.0 {
+                    self.shown = (shown, Instant::now());
+                }
+                if window.is_minimized() == Some(true) {
+                    self.shown.1 = Instant::now();
+                }
+                if self.shown.1.elapsed() > Duration::from_secs(3) {
+                    self.record(host, "gfx_stall")?;
+                    anyhow::bail!("no frame shown for 3 s at step {}", self.step);
+                }
+                // VELVET_SMOKE_SHOTS=1 (with the zones): standing at each place's arrival, a
+                // picture of it (zone-<step>.png beside the report), to compare two builds.
+                let shots = std::env::var("VELVET_SMOKE_SHOTS").is_ok_and(|v| v == "1");
+                if let Some(world) = host.world.as_mut().filter(|_| !shots) {
+                    world.set_key(KeyCode::KeyW, true);
+                    world.set_key(KeyCode::KeyA, (elapsed.as_millis() / 1500) % 3 == 0);
+                }
+                // Every 0.7 s another change, as a player going through the settings would;
+                // with VELVET_SMOKE_ZONES=1 the place changes instead every 2.1 s (native on).
+                let step = elapsed.as_millis() as u64 / 700;
+                let zones = std::env::var("VELVET_SMOKE_ZONES").is_ok_and(|v| v == "1");
+                if zones && step != self.step {
+                    self.step = step;
+                    if step % 3 == 0 {
+                        if let Some(world) = host.world.as_mut() {
+                            let place = world.qa_next_zone();
+                            eprintln!("[smoke-gfx] step {step} at {} ms: shown {shown}, to {place}", elapsed.as_millis());
+                        }
+                    }
+                    if shots && step % 3 == 2 {
+                        if let Some(world) = host.world.as_mut() {
+                            world.capture(&self.report.with_file_name(format!("zone-{step:03}.png")))?;
+                        }
+                    }
+                }
+                if !zones && step != self.step {
+                    self.step = step;
+                    if step % 5 == 0 {
+                        exploration3d::prefs::set_native_resolution(!exploration3d::prefs::native_resolution());
+                    }
+                    let mut g = exploration3d::prefs::graphics();
+                    match step % 7 {
+                        0 => g.shadows = (g.shadows + 1) % 4,
+                        1 => g.bloom = (g.bloom + 1) % 3,
+                        2 => g.render_scale = [50, 67, 85, 100][(step / 7 % 4) as usize],
+                        3 => g.upscaler = (g.upscaler + 1) % 2,
+                        4 => g.reflections = !g.reflections,
+                        5 => g.lod = (g.lod + 1) % 3,
+                        _ => g.prepass = !g.prepass,
+                    }
+                    g.preset = 4;
+                    exploration3d::prefs::set_graphics(g);
+                    eprintln!(
+                        "[smoke-gfx] step {step} at {} ms: shown {shown}, native {}, {g:?}",
+                        elapsed.as_millis(),
+                        exploration3d::prefs::native_resolution()
+                    );
+                    if step % 10 == 0 {
+                        self.record(host, &format!("gfx_{step}"))?;
+                    }
+                }
+                if elapsed.as_secs() >= self.gfx {
+                    self.record(host, "gfx_done")?;
                     self.write("passed", None)?;
                     event_loop.exit();
                 }

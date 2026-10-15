@@ -40,6 +40,7 @@ mod game_overlay;
 mod hipno_overlay;
 mod mage_overlay;
 mod persona;
+mod persona_screens;
 pub(crate) use game_overlay::{chip_hit as game_chip_hit, pose_hit as game_pose_hit};
 pub(crate) use mage_overlay::{hit as mage_hit, MageLine, MageOption, MageView};
 mod scene_overlay;
@@ -55,10 +56,11 @@ pub(crate) fn scene_picture_rect(width: f32, height: f32) -> [f32; 4] {
 }
 mod stage_overlay;
 mod ui_paint;
-pub(crate) use stage_overlay::{StageActor, StageItem, StageView};
+pub(crate) use stage_overlay::{StageActor, StageItem, StagePanel, StageView};
 mod shop_overlay;
 pub(crate) use shop_overlay::{
-    FavorTile, FuseShow, FuseView, HaggleView, Pick as ShopPick, ShopView,
+    favor_hit as scene_favor_hit, FavorDeal, FavorTile, FuseShow, FuseView, HaggleView,
+    Pick as ShopPick, ShopView,
 };
 #[path = "shop_preview.rs"]
 mod shop_preview;
@@ -66,10 +68,13 @@ use map_kit::Place;
 pub(crate) use map_kit::{hit_test as map_hit_test, MapHit};
 pub(crate) mod venue_overlay;
 
-const FONT_ATLAS_SIZE: u32 = 4096;
+/// (The font atlas is 4096 square, or 8192 for a big script: see `FontAtlas::new`.)
 /// Mip levels of the font atlas (text is drawn well below its raster size).
 const FONT_ATLAS_MIPS: u32 = 4;
 const FONT_RASTER_SIZE: f32 = 64.0;
+/// The glyphs are kept as distance fields (0.5 the outline, this many raster pixels each way),
+/// so text stays sharp drawn at any size: a stamp four times the raster size has clean edges.
+const FONT_SPREAD: u32 = 6;
 const ICON_ATLAS_SIZE: u32 = 4096;
 const ICON_RASTER_SIZE: u32 = 256;
 
@@ -384,7 +389,17 @@ fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
     }
     var coverage = 1.0;
     if (mode > 0.5) {
-        coverage = glyph;
+        // The glyphs are distance fields: 0.5 is the outline, softened over about a pixel.
+        let edge = max(fwidth(glyph) * 0.7, 0.002);
+        coverage = smoothstep(0.5 - edge, 0.5 + edge, glyph);
+        // A rim round the letters (shape.x: how far out, in field units; color2: its colour),
+        // traced from the same field: round, even and clean however thick.
+        if (input.shape.x > 0.0) {
+            let out = smoothstep(0.5 - input.shape.x - edge, 0.5 - input.shape.x + edge, glyph);
+            let fill = premul(input.color, coverage);
+            let rim = premul(input.color2, out);
+            return straight(over(rim, fill));
+        }
     }
     return vec4<f32>(input.color.rgb, input.color.a * coverage);
 }
@@ -416,6 +431,18 @@ impl MapVertex {
     };
 }
 
+/// CPU time spent laying out and uploading the overlay (nanoseconds, summed): for profiling.
+pub(crate) static OVERLAY_CPU_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Adds the time since it was made to `OVERLAY_CPU_NS` when dropped.
+struct CpuTimer(std::time::Instant);
+
+impl Drop for CpuTimer {
+    fn drop(&mut self) {
+        OVERLAY_CPU_NS.fetch_add(self.0.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 #[derive(Clone, Copy)]
 struct GlyphEntry {
     uv_min: [f32; 2],
@@ -430,6 +457,81 @@ pub(crate) struct FontAtlas {
     glyphs: HashMap<char, GlyphEntry>,
     ascent: f32,
     shop_faces: Vec<FontFace>,
+    /// The language's own font under the game's faces (see [`ScriptFace`]).
+    script: Option<ScriptFace>,
+    /// The language generation these glyphs were made for (`i18n::generation`).
+    pub(crate) generation: u64,
+    /// Lines already laid out (shaping is not free), by face and text.
+    runs: std::sync::Mutex<HashMap<(u8, String), std::sync::Arc<Run>>>,
+}
+
+/// One line of text laid out: each glyph with its pen position along the line and its offset
+/// from the baseline (raster units), and the line's advance.
+pub(crate) struct Run {
+    pub(crate) glyphs: Vec<(GlyphEntry, f32, f32)>,
+    pub(crate) advance: f32,
+}
+
+/// The language's own font, under the game's faces: the glyphs they lack (another script, accents
+/// past Latin-1) by character, and for scripts whose letters join and reorder (Devanagari, Thai,
+/// Hebrew) the shaped glyphs of every text the catalog draws, by glyph id.
+struct ScriptFace {
+    glyphs: HashMap<char, GlyphEntry>,
+    ids: HashMap<u16, GlyphEntry>,
+    bytes: std::sync::Arc<Vec<u8>>,
+    index: u32,
+    /// Its height in font units (to turn shaped positions into raster units).
+    height_units: f32,
+    shaped: bool,
+}
+
+use demon_queen_dungeon::i18n::script_font;
+
+/// `line` shaped in the script font, in raster units.
+fn shape_line(bytes: &[u8], index: u32, height_units: f32, line: &str) -> Vec<(u16, f32, f32, f32)> {
+    demon_queen_dungeon::i18n::shape_line(bytes, index, FONT_RASTER_SIZE / height_units.max(1.0), line)
+}
+
+impl FontAtlas {
+    /// One line laid out in `glyphs` (a face's), falling back to the language's font for what the
+    /// face lacks; lines in a shaped script go through the shaper.
+    pub(crate) fn run(&self, face_key: u8, glyphs: &HashMap<char, GlyphEntry>, line: &str) -> std::sync::Arc<Run> {
+        let key = (face_key, line.to_owned());
+        if let Some(run) = self.runs.lock().unwrap().get(&key) {
+            return run.clone();
+        }
+        let mut placed = Vec::new();
+        let mut pen = 0.0;
+        match &self.script {
+            Some(sc) if sc.shaped && line.chars().any(demon_queen_dungeon::i18n::needs_shaping) => {
+                for (id, advance, dx, dy) in shape_line(&sc.bytes, sc.index, sc.height_units, line) {
+                    if let Some(g) = sc.ids.get(&id) {
+                        placed.push((*g, pen + dx, dy));
+                    }
+                    pen += advance;
+                }
+            }
+            _ => {
+                for c in line.chars() {
+                    let g = glyphs
+                        .get(&c)
+                        .or_else(|| self.script.as_ref().and_then(|s| s.glyphs.get(&c)))
+                        .or_else(|| glyphs.get(&'?'));
+                    if let Some(g) = g {
+                        placed.push((*g, pen, 0.0));
+                        pen += g.advance;
+                    }
+                }
+            }
+        }
+        let run = std::sync::Arc::new(Run { glyphs: placed, advance: pen });
+        let mut runs = self.runs.lock().unwrap();
+        if runs.len() > 20_000 {
+            runs.clear();
+        }
+        runs.insert(key, run.clone());
+        run
+    }
 }
 
 struct FontFace {
@@ -592,7 +694,7 @@ impl MapPictures {
             return None;
         }
         let path = self.root.join(format!("{name}.png"));
-        let Ok(picture) = image::open(&path) else {
+        let Ok(picture) = velvet_avif::open_image(path.as_ref()) else {
             eprintln!("[map] picture missing: {}", path.display());
             self.failed.insert(name.to_owned());
             return None;
@@ -732,7 +834,7 @@ impl PortraitAtlas {
                     return None;
                 }
                 let path = self.root.join(format!("{}.png", portrait.image));
-                let Ok(image) = image::open(&path) else {
+                let Ok(image) = velvet_avif::open_image(path.as_ref()) else {
                     eprintln!("[dialogue] portrait missing: {}", path.display());
                     self.failed.insert(portrait.clone());
                     return None;
@@ -935,7 +1037,7 @@ impl IconAtlas {
                 let bitmap = if shop_vector {
                     None
                 } else {
-                    image::open(path.with_extension("png")).ok()
+                    velvet_avif::open_image(&path.with_extension("png")).ok()
                 };
                 let vector = if bitmap.is_none() {
                     std::fs::read_to_string(&path).ok()
@@ -1078,6 +1180,19 @@ struct Rect {
     h: f32,
 }
 
+/// A place to go in on the screen (a door, a path, a stall): over it, its icon on a slanted card
+/// in the Persona manner, an arrow down at the spot, and the F key once she is in reach.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WorldMarker {
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) icon: prompt_icons::Icon,
+    /// 0..1 as she comes near.
+    pub(crate) fade: f32,
+    /// In reach: F does it.
+    pub(crate) ready: bool,
+}
+
 /// Screen-space speech bubble anchored to a non-player character.
 ///
 /// The world renderer projects the NPC's head into logical 1920×1080 pixels;
@@ -1194,6 +1309,88 @@ struct MapBounds {
     max_z: f32,
 }
 
+/// A glyph's coverage (`w`×`h`, 0..1) as a signed distance field in bytes: 128 on the outline,
+/// higher inside, `spread` pixels to 0 or 255. Exact Euclidean distances to the nearest pixel of
+/// the other side (Felzenszwalb's transform, by rows then columns), refined at the edge by the
+/// coverage itself.
+fn distance_field(coverage: &[f32], w: usize, h: usize, spread: f32) -> Vec<u8> {
+    const FAR: f64 = 1.0e12;
+    // Squared distance along one line to the nearest zero of `f` (0 at the set, FAR elsewhere).
+    fn line(f: &[f64], d: &mut [f64], v: &mut [usize], z: &mut [f64]) {
+        let n = f.len();
+        let parabola = |q: usize, p: usize| {
+            ((f[q] + (q * q) as f64) - (f[p] + (p * p) as f64)) / (2.0 * q as f64 - 2.0 * p as f64)
+        };
+        let mut k = 0;
+        v[0] = 0;
+        z[0] = f64::NEG_INFINITY;
+        z[1] = f64::INFINITY;
+        for q in 1..n {
+            let mut s = parabola(q, v[k]);
+            while s <= z[k] {
+                k -= 1;
+                s = parabola(q, v[k]);
+            }
+            k += 1;
+            v[k] = q;
+            z[k] = s;
+            z[k + 1] = f64::INFINITY;
+        }
+        k = 0;
+        for q in 0..n {
+            while z[k + 1] < q as f64 {
+                k += 1;
+            }
+            let p = v[k];
+            d[q] = (q as f64 - p as f64).powi(2) + f[p];
+        }
+    }
+    let squared = |inside: bool| -> Vec<f64> {
+        let mut grid: Vec<f64> = coverage
+            .iter()
+            .map(|&c| if (c >= 0.5) == inside { 0.0 } else { FAR })
+            .collect();
+        let n = w.max(h);
+        let (mut f, mut d) = (vec![0.0; n], vec![0.0; n]);
+        let (mut v, mut z) = (vec![0usize; n], vec![0.0f64; n + 1]);
+        for x in 0..w {
+            for y in 0..h {
+                f[y] = grid[y * w + x];
+            }
+            line(&f[..h], &mut d[..h], &mut v, &mut z);
+            for y in 0..h {
+                grid[y * w + x] = d[y];
+            }
+        }
+        for y in 0..h {
+            f[..w].copy_from_slice(&grid[y * w..y * w + w]);
+            line(&f[..w], &mut d[..w], &mut v, &mut z);
+            grid[y * w..y * w + w].copy_from_slice(&d[..w]);
+        }
+        grid
+    };
+    let to_ink = squared(true);
+    let to_paper = squared(false);
+    coverage
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| {
+            let signed = if c >= 0.5 {
+                to_paper[i].sqrt() as f32 - 0.5
+            } else {
+                0.5 - to_ink[i].sqrt() as f32
+            };
+            // On the edge itself the coverage says where the outline falls within the pixel.
+            let signed = if c > 0.0 && c < 1.0 && signed.abs() <= 1.0 {
+                c - 0.5
+            } else {
+                signed
+            };
+            ((0.5 + signed / (2.0 * spread)).clamp(0.0, 1.0) * 255.0).round() as u8
+        })
+        .collect()
+}
+
 impl FontAtlas {
     fn new(device: &wgpu::Device, queue: &wgpu::Queue, layout: &wgpu::BindGroupLayout) -> Self {
         let fonts = [
@@ -1211,9 +1408,44 @@ impl FontAtlas {
             load_game_font("Nunito-SemiBoldItalic.ttf"),
         ];
         let scale = PxScale::from(FONT_RASTER_SIZE);
-        let mut pixels = vec![0_u8; (FONT_ATLAS_SIZE * FONT_ATLAS_SIZE) as usize];
         let mut characters = (32_u8..=126_u8).map(char::from).collect::<Vec<_>>();
         characters.extend("ÁÉÍÓÚÑÜáéíóúñü¿¡“”•—◆★☆…«»‘’×–·−".chars());
+        // The language's own characters: the game's faces take those they have, the language's
+        // font the rest (and, for a shaped script, the shaped glyphs of every text).
+        let language = demon_queen_dungeon::i18n::language();
+        let generation = demon_queen_dungeon::i18n::generation();
+        let texts = demon_queen_dungeon::i18n::catalog_texts();
+        let mut extra: Vec<char> = {
+            let mut set = std::collections::BTreeSet::new();
+            for t in &texts {
+                for c in t.chars() {
+                    if !c.is_control() && !characters.contains(&c) {
+                        set.insert(c);
+                    }
+                }
+            }
+            set.into_iter().collect()
+        };
+        let script_source = if extra.is_empty() { None } else { script_font(&language) };
+        let script_font_arc = script_source.as_ref().and_then(|(bytes, index, _)| {
+            ab_glyph::FontVec::try_from_vec_and_index(bytes.as_ref().clone(), *index)
+                .ok()
+                .map(FontArc::new)
+        });
+        // Roughly how much room the glyphs need: a bigger atlas for a big script.
+        // A small alphabet (Cyrillic, Hebrew…) drawn finer: the stamps blow its letters up big.
+        let script_raster = if extra.len() > 600 {
+            48.0
+        } else if extra.len() > 220 {
+            FONT_RASTER_SIZE
+        } else {
+            FONT_RASTER_SIZE * 1.5
+        };
+        let estimate = fonts.len() as f32 * (characters.len() + extra.len().min(400)) as f32 * 4200.0
+            + extra.len() as f32 * (script_raster + 22.0).powi(2) * 1.2;
+        let atlas_size: u32 = if estimate > 15_000_000.0 { 8192 } else { 4096 };
+        let mut pixels = vec![0_u8; (atlas_size * atlas_size) as usize];
+        extra.retain(|c| !demon_queen_dungeon::i18n::needs_shaping(*c) || script_source.as_ref().is_some_and(|s| !s.2));
         // Room around each glyph so the smaller mips do not bleed into their neighbours.
         let padding = 10_u32;
         let mut pen_x = padding;
@@ -1225,7 +1457,12 @@ impl FontAtlas {
             let scaled = font.as_scaled(scale);
             let ascent = scaled.ascent();
             let mut glyphs = HashMap::new();
-            for &character in &characters {
+            let own: Vec<char> = characters
+                .iter()
+                .copied()
+                .chain(extra.iter().copied().filter(|c| font.glyph_id(*c).0 != 0))
+                .collect();
+            for &character in &own {
                 let glyph_id = font.glyph_id(character);
                 let advance = scaled.h_advance(glyph_id);
                 let glyph = glyph_id.with_scale_and_position(scale, point(0.0, 0.0));
@@ -1243,33 +1480,51 @@ impl FontAtlas {
                     continue;
                 };
                 let bounds = outlined.px_bounds();
-                let width = (bounds.max.x - bounds.min.x).ceil().max(1.0) as u32;
-                let height = (bounds.max.y - bounds.min.y).ceil().max(1.0) as u32;
-                if pen_x + width + padding > FONT_ATLAS_SIZE {
+                let ink_w = (bounds.max.x - bounds.min.x).ceil().max(1.0) as u32;
+                let ink_h = (bounds.max.y - bounds.min.y).ceil().max(1.0) as u32;
+                // The glyph's field reaches FONT_SPREAD past its ink on every side.
+                let width = ink_w + 2 * FONT_SPREAD;
+                let height = ink_h + 2 * FONT_SPREAD;
+                if pen_x + width + padding > atlas_size {
                     pen_x = padding;
                     pen_y += row_height + padding;
                     row_height = 0;
                 }
-                assert!(
-                    pen_y + height + padding <= FONT_ATLAS_SIZE,
-                    "map font atlas is too small"
-                );
-                outlined.draw(|x, y, coverage| {
-                    let destination_x = pen_x + x;
-                    let destination_y = pen_y + y;
-                    let index = (destination_y * FONT_ATLAS_SIZE + destination_x) as usize;
-                    pixels[index] = (coverage.clamp(0.0, 1.0) * 255.0).round() as u8;
+                if pen_y + height + padding > atlas_size {
+                    eprintln!("[fonts] atlas full");
+                    break;
+                }
+                let mut coverage = vec![0.0_f32; (width * height) as usize];
+                outlined.draw(|x, y, c| {
+                    let i = ((y + FONT_SPREAD) * width + x + FONT_SPREAD) as usize;
+                    if let Some(cell) = coverage.get_mut(i) {
+                        *cell = c.clamp(0.0, 1.0);
+                    }
                 });
+                let field = distance_field(&coverage, width as usize, height as usize, FONT_SPREAD as f32);
+                for y in 0..height {
+                    for x in 0..width {
+                        let index = ((pen_y + y) * atlas_size + pen_x + x) as usize;
+                        pixels[index] = field[(y * width + x) as usize];
+                    }
+                }
+                let bounds = ab_glyph::Rect {
+                    min: point(
+                        bounds.min.x - FONT_SPREAD as f32,
+                        bounds.min.y - FONT_SPREAD as f32,
+                    ),
+                    max: bounds.max,
+                };
                 glyphs.insert(
                     character,
                     GlyphEntry {
                         uv_min: [
-                            pen_x as f32 / FONT_ATLAS_SIZE as f32,
-                            pen_y as f32 / FONT_ATLAS_SIZE as f32,
+                            pen_x as f32 / atlas_size as f32,
+                            pen_y as f32 / atlas_size as f32,
                         ],
                         uv_max: [
-                            (pen_x + width) as f32 / FONT_ATLAS_SIZE as f32,
-                            (pen_y + height) as f32 / FONT_ATLAS_SIZE as f32,
+                            (pen_x + width) as f32 / atlas_size as f32,
+                            (pen_y + height) as f32 / atlas_size as f32,
                         ],
                         size: [width as f32, height as f32],
                         bearing: [bounds.min.x, bounds.min.y],
@@ -1281,13 +1536,104 @@ impl FontAtlas {
             }
             faces.push(FontFace { glyphs, ascent });
         }
+        // The language's font: by character what no face drew, by glyph id what is shaped.
+        let mut script = None;
+        if let (Some((bytes, index, shaped)), Some(sfont)) = (script_source, script_font_arc) {
+            let height_units = sfont.height_unscaled();
+            let up = FONT_RASTER_SIZE / script_raster;
+            // The field spans as much of a letter as the faces' do (their rims read the same).
+            let spread = (FONT_SPREAD as f32 / up).round() as u32;
+            let sscale = PxScale::from(script_raster);
+            let full = sfont.as_scaled(scale);
+            let mut by_char = HashMap::new();
+            let mut by_id = HashMap::new();
+            let mut jobs: Vec<(Option<char>, ab_glyph::GlyphId)> = Vec::new();
+            for &c in &extra {
+                let id = sfont.glyph_id(c);
+                if id.0 != 0 && !faces.iter().all(|f| f.glyphs.contains_key(&c)) {
+                    jobs.push((Some(c), id));
+                }
+            }
+            if shaped {
+                let mut ids = std::collections::BTreeSet::new();
+                let base: String = (32_u8..=126_u8).map(char::from).collect();
+                for t in texts.iter().map(String::as_str).chain([base.as_str()]) {
+                    for line in t.split('\n') {
+                        for (id, ..) in shape_line(&bytes, index, height_units, line) {
+                            ids.insert(id);
+                        }
+                    }
+                }
+                jobs.extend(ids.into_iter().map(|id| (None, ab_glyph::GlyphId(id))));
+            }
+            for (character, glyph_id) in jobs {
+                let advance = full.h_advance(glyph_id);
+                let glyph = glyph_id.with_scale_and_position(sscale, point(0.0, 0.0));
+                let entry = match sfont.outline_glyph(glyph) {
+                    None => GlyphEntry { uv_min: [0.0; 2], uv_max: [0.0; 2], size: [0.0; 2], bearing: [0.0; 2], advance },
+                    Some(outlined) => {
+                        let bounds = outlined.px_bounds();
+                        let ink_w = (bounds.max.x - bounds.min.x).ceil().max(1.0) as u32;
+                        let ink_h = (bounds.max.y - bounds.min.y).ceil().max(1.0) as u32;
+                        let width = ink_w + 2 * spread;
+                        let height = ink_h + 2 * spread;
+                        if pen_x + width + padding > atlas_size {
+                            pen_x = padding;
+                            pen_y += row_height + padding;
+                            row_height = 0;
+                        }
+                        if pen_y + height + padding > atlas_size {
+                            eprintln!("[fonts] atlas full ({language})");
+                            break;
+                        }
+                        let mut coverage = vec![0.0_f32; (width * height) as usize];
+                        outlined.draw(|x, y, c| {
+                            let i = ((y + FONT_SPREAD) * width + x + FONT_SPREAD) as usize;
+                            if let Some(cell) = coverage.get_mut(i) {
+                                *cell = c.clamp(0.0, 1.0);
+                            }
+                        });
+                        let field = distance_field(&coverage, width as usize, height as usize, FONT_SPREAD as f32);
+                        for y in 0..height {
+                            for x in 0..width {
+                                pixels[((pen_y + y) * atlas_size + pen_x + x) as usize] = field[(y * width + x) as usize];
+                            }
+                        }
+                        let entry = GlyphEntry {
+                            uv_min: [pen_x as f32 / atlas_size as f32, pen_y as f32 / atlas_size as f32],
+                            uv_max: [(pen_x + width) as f32 / atlas_size as f32, (pen_y + height) as f32 / atlas_size as f32],
+                            size: [width as f32 * up, height as f32 * up],
+                            bearing: [(bounds.min.x - FONT_SPREAD as f32) * up, (bounds.min.y - FONT_SPREAD as f32) * up],
+                            advance,
+                        };
+                        pen_x += width + padding;
+                        row_height = row_height.max(height);
+                        entry
+                    }
+                };
+                match character {
+                    Some(c) => {
+                        by_char.insert(c, entry);
+                    }
+                    None => {
+                        by_id.insert(glyph_id.0, entry);
+                    }
+                }
+            }
+            eprintln!(
+                "[fonts] {language}: {} glyphs by character, {} shaped, atlas {atlas_size}",
+                by_char.len(),
+                by_id.len()
+            );
+            script = Some(ScriptFace { glyphs: by_char, ids: by_id, bytes, index, height_units, shaped });
+        }
         let primary = faces.remove(0);
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("demon-queen-map-font-atlas"),
             size: wgpu::Extent3d {
-                width: FONT_ATLAS_SIZE,
-                height: FONT_ATLAS_SIZE,
+                width: atlas_size,
+                height: atlas_size,
                 depth_or_array_layers: 1,
             },
             mip_level_count: FONT_ATLAS_MIPS,
@@ -1300,7 +1646,7 @@ impl FontAtlas {
         // The glyphs and their mips (each a 2×2 average of the one above), so text drawn small
         // stays smooth instead of shimmering.
         let mut level = pixels;
-        let mut side = FONT_ATLAS_SIZE;
+        let mut side = atlas_size;
         for mip in 0..FONT_ATLAS_MIPS {
             queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
@@ -1367,6 +1713,9 @@ impl FontAtlas {
             glyphs: primary.glyphs,
             ascent: primary.ascent,
             shop_faces: faces,
+            script,
+            generation,
+            runs: std::sync::Mutex::new(HashMap::new()),
         }
     }
 }
@@ -1451,6 +1800,8 @@ pub struct AchievementsView {
 pub struct WardrobeView {
     pub outfits: Vec<(String, String)>,
     pub locked: Vec<bool>,
+    /// The Queen in each outfit (her status cut-out), when there is one.
+    pub pictures: Vec<Option<PortraitRef>>,
 }
 
 pub struct MapOverlay {
@@ -1460,6 +1811,8 @@ pub struct MapOverlay {
     pub penascal: bool,
     /// The followed mission: its panel, its way, its mark, the notices.
     missions: Option<MissionView>,
+    /// The places to go in on the screen this frame.
+    markers: Vec<WorldMarker>,
     /// The fight with Varrak's HUD (`None`: no fight).
     boss: Option<BossView>,
     /// Open: the achievements screen (over everything else).
@@ -1474,6 +1827,8 @@ pub struct MapOverlay {
     vertex_count: u32,
     last_signature: Option<MapSignature>,
     font: FontAtlas,
+    /// Kept to make the font atlas again when the language changes.
+    font_layout: wgpu::BindGroupLayout,
     icons: IconAtlas,
     portraits: PortraitAtlas,
     /// The place's picture under the map's marks.
@@ -1560,6 +1915,10 @@ impl MapOverlay {
     }
 
     /// The followed mission's panel, way and mark (`None`: none open).
+    pub(crate) fn set_markers(&mut self, markers: Vec<WorldMarker>) {
+        self.markers = markers;
+    }
+
     pub fn set_missions(&mut self, view: Option<MissionView>) {
         self.missions = view;
     }
@@ -1751,6 +2110,7 @@ impl MapOverlay {
             hidden: false,
             penascal: false,
             missions: None,
+            markers: Vec::new(),
             boss: None,
             pipeline,
             vertex_buffer,
@@ -1762,6 +2122,7 @@ impl MapOverlay {
             dialogue: None,
             dialogue_age: 0.0,
             font,
+            font_layout,
             icons,
             portraits,
             pictures,
@@ -1830,8 +2191,15 @@ impl MapOverlay {
         brothel_level: Option<(u8, bool)>,
         baths: bool,
     ) {
-        if self.hidden {
+        // QA: `VELVET_NO_HUD=1` draws the world alone (pictures of the places for the guide).
+        if self.hidden || std::env::var("VELVET_NO_HUD").is_ok_and(|v| v == "1") {
             return;
+        }
+        let _timer = CpuTimer(std::time::Instant::now());
+        // Another language: its glyphs (another script, maybe shaped) in a new atlas.
+        if self.font.generation != demon_queen_dungeon::i18n::generation() {
+            self.font = FontAtlas::new(device, queue, &self.font_layout);
+            self.last_signature = None;
         }
         let width = size.0.max(1) as f32;
         let height = size.1.max(1) as f32;
@@ -1928,6 +2296,27 @@ impl MapOverlay {
             .and_then(|view| view.result.as_ref())
             .and_then(|result| result.quote.portrait.clone())
             .and_then(|p| self.portraits.ensure(queue, &p));
+        // A favour of the shop: the shopkeeper's face of the moment (and the one fading out), and
+        // what the pointer is on.
+        let favor_faces = match self.scene.as_ref().and_then(|view| view.deal.as_ref()) {
+            Some(deal) => (
+                deal.face
+                    .clone()
+                    .and_then(|p| self.portraits.ensure(queue, &p)),
+                deal.face_from
+                    .clone()
+                    .filter(|_| deal.face_ms < 400)
+                    .and_then(|p| self.portraits.ensure(queue, &p)),
+            ),
+            None => (None, None),
+        };
+        let favor_hover = self
+            .scene
+            .as_ref()
+            .filter(|view| view.deal.is_some())
+            .and_then(|view| {
+                shop_pointer.and_then(|(x, y)| shop_overlay::favor_hit(x, y, view.result.is_some()))
+            });
         // A minigame's girl, for its rules card.
         let game_face = self
             .scene
@@ -1967,6 +2356,17 @@ impl MapOverlay {
                     .and_then(|p| self.portraits.ensure(queue, &p)),
             ),
             None => (None, None),
+        };
+        // The wardrobe's Queens, one per outfit.
+        let wardrobe_faces: Vec<Option<([f32; 2], [f32; 2])>> = if wardrobe_open {
+            self.wardrobe_view
+                .pictures
+                .clone()
+                .iter()
+                .map(|p| p.as_ref().and_then(|p| self.portraits.ensure(queue, p)))
+                .collect()
+        } else {
+            Vec::new()
         };
         let shop_face = self
             .shop
@@ -2094,6 +2494,7 @@ impl MapOverlay {
                 || self.shop.is_some()
                 || self.mascot_view.is_some()
                 || !self.floats.is_empty()
+                || !self.markers.is_empty()
                 || venue.is_some_and(|menu| menu.open)
             {
                 (ui_time * 60.0) as u32
@@ -2109,17 +2510,21 @@ impl MapOverlay {
             let mut stage_vertices: Vec<MapVertex> = Vec::new();
             self.stage_runs.clear();
             if let Some(view) = self.stage.as_ref() {
+                // The scene's pictures load ahead; what has arrived goes up a few a frame.
+                self.stage_pictures.prefetch(&view.preload);
+                self.stage_pictures.pump(device, queue);
                 let mut names: Vec<&str> = Vec::new();
                 names.extend(view.bg_prev.as_deref());
                 names.extend(view.bg.as_deref());
                 for a in &view.actors {
                     names.push(&a.image);
                     names.extend(a.prev.as_deref());
-                    if let Some((frames, _)) = &a.spin {
+                    if let Some((frames, _, before)) = &a.spin {
                         names.extend(frames.iter().map(String::as_str));
+                        names.push(before);
                     }
                 }
-                names.extend(view.panels.iter().flatten().map(|(p, _)| p.as_str()));
+                names.extend(view.panels.iter().flatten().map(|p| p.image.as_str()));
                 names.extend(view.reveal.as_ref().map(|(p, _)| p.as_str()));
                 names.extend(view.item.as_ref().map(|i| i.icon.as_str()));
                 for name in names {
@@ -2140,7 +2545,8 @@ impl MapOverlay {
             if let Some(view) = &self.stage {
                 // The stage looks as the web scenes do: its own box, cards and flourishes.
                 stage_overlay::draw_ui(font, &mut vertices, width, height, view, ui_time);
-                if let Some(d) = &self.dialogue {
+                // While a beat plays (a title, a reveal, a turn, an item shown off) the box waits.
+                if let Some(d) = self.dialogue.as_ref().filter(|_| !view.waiting) {
                     stage_overlay::draw_box(
                         font,
                         &mut vertices,
@@ -2149,23 +2555,41 @@ impl MapOverlay {
                         d,
                         portrait_uv,
                         view.line_age,
+                        view.box_age,
                         ui_time,
+                        mascot_on,
+                        view.theme,
                     );
                 }
                 stage_overlay::draw_top(font, &mut vertices, width, height, view, ui_time);
             } else if let Some(view) = &self.scene {
-                scene_overlay::draw_scene(
-                    font,
-                    &mut vertices,
-                    width,
-                    height,
-                    view,
-                    &scene_faces,
-                    quote_face,
-                    game_face,
-                    self.scene_picture.has_frame(),
-                    ui_time,
-                );
+                match view.deal.as_ref() {
+                    // A favour of the shop plays as a page of the shop.
+                    Some(deal) => shop_overlay::draw_favor(
+                        font,
+                        icons,
+                        &mut vertices,
+                        view,
+                        deal,
+                        favor_faces.0,
+                        favor_faces.1,
+                        self.scene_picture.has_frame(),
+                        favor_hover,
+                        ui_time,
+                    ),
+                    None => scene_overlay::draw_scene(
+                        font,
+                        &mut vertices,
+                        width,
+                        height,
+                        view,
+                        &scene_faces,
+                        quote_face,
+                        game_face,
+                        self.scene_picture.has_frame(),
+                        ui_time,
+                    ),
+                }
             } else if let Some(view) = &self.drink {
                 drink_overlay::draw(font, &mut vertices, width, height, view, ui_time);
             } else if let Some(view) = &self.mage {
@@ -2232,9 +2656,9 @@ impl MapOverlay {
             } else if let Some(view) = &self.boss {
                 boss_overlay::draw(font, &mut vertices, width, height, view);
             } else if let Some(view) = &self.achievements {
-                draw_achievements(font, &mut vertices, width, height, view);
+                persona_screens::draw_achievements(font, &mut vertices, width, height, view, ui_time);
             } else if wardrobe_open {
-                draw_wardrobe(
+                persona_screens::draw_wardrobe(
                     font,
                     &mut vertices,
                     width,
@@ -2242,6 +2666,8 @@ impl MapOverlay {
                     wardrobe_selection,
                     outfit,
                     &self.wardrobe_view,
+                    &wardrobe_faces,
+                    ui_time,
                 );
             } else {
                 // Draw NPC speech first. The compact map panel is intentionally
@@ -2269,10 +2695,16 @@ impl MapOverlay {
                                 view,
                                 portrait_uv,
                                 self.dialogue_age,
+                                self.dialogue_age,
                                 ui_time,
+                                false,
+                                0,
                             );
                         }
                     } else {
+                        for marker in &self.markers {
+                            draw_world_marker(font, &mut vertices, marker, ui_time);
+                        }
                         for layout in layout_npc_speech_bubbles(font, width, height, speech_bubbles)
                         {
                             draw_npc_speech_bubble(font, &mut vertices, &layout);
@@ -2626,7 +3058,7 @@ impl MapOverlay {
                     }
                 }
                 if let Some(view) = &self.missions {
-                    mission_overlay::draw_notice(font, &mut vertices, width, view);
+                    mission_overlay::draw_notice(font, &mut vertices, width, view, ui_time);
                 }
             }
 
@@ -3767,7 +4199,9 @@ fn draw_village_map(
         let screen = village_polygon_screen(&house.polygon, center, bounds, map);
         draw_village_building(vertices, &screen, house.name.as_str());
         let (x, y) = map_point(world_x, world_z, bounds, map);
-        let label = village_map_label(house.name.as_str());
+        let Some(label) = village_map_label(house.name.as_str()) else {
+            continue;
+        };
         if expanded {
             let (label_x, label_y) = if house.name == "Casa del Burgomaestre" {
                 (x, y - 54.0)
@@ -3863,7 +4297,9 @@ fn draw_village_picture(
             continue;
         }
         let (x, y) = map_point(wx, -wz, bounds, map);
-        let label = village_map_label(house.name.as_str());
+        let Some(label) = village_map_label(house.name.as_str()) else {
+            continue;
+        };
         if expanded {
             // A sign beside the house, on the side away from the square.
             let label_x = if wx < middle_x { x - 124.0 } else { x + 124.0 };
@@ -3942,13 +4378,13 @@ fn village_footprint_center(points: &[[f32; 2]]) -> (f32, f32) {
     )
 }
 
-fn village_map_label(name: &str) -> &str {
+/// A house's name on the village's map; `None` for the doors with nothing behind them yet (the
+/// map names only the places with something to do).
+fn village_map_label(name: &str) -> Option<&str> {
     match name {
-        "Casa del Burgomaestre" => "Burgomaestre",
-        "Casa de aldeanos A" => "Casa A",
-        "Casa de aldeanos B" => "Casa B",
-        "Baños termales" => "Termas",
-        other => other,
+        "Casa del Burgomaestre" | "Casa de aldeanos A" | "Casa de aldeanos B" | "Taberna" => None,
+        "Baños termales" => Some("Termas"),
+        other => Some(other),
     }
 }
 
@@ -4116,57 +4552,16 @@ fn draw_village_sign(
     center_y: f32,
     label: &str,
 ) {
-    let font_size = 19.5;
-    let width = (label_width(font, label, font_size) + 38.0).clamp(100.0, 220.0);
-    let center_x = center_x.clamp(map.x + width * 0.5 + 4.0, map.x + map.w - width * 0.5 - 4.0);
-    let center_y = center_y.clamp(map.y + 23.0, map.y + map.h - 23.0);
-    let plate = Rect::new(center_x - width * 0.5, center_y - 21.0, width, 42.0);
-    let edge_x = if center_x < anchor_x {
-        plate.x + plate.w
-    } else {
-        plate.x
-    };
-    push_segment(
-        vertices,
-        anchor_x,
-        anchor_y,
-        edge_x,
-        center_y,
-        2.0,
-        [0.79, 0.63, 0.36, 0.92],
-    );
-    push_rect(
-        vertices,
-        Rect::new(plate.x + 2.0, plate.y + 3.0, plate.w, plate.h),
-        [0.04, 0.06, 0.04, 0.45],
-    );
-    push_rect(vertices, plate, [0.54, 0.35, 0.18, 1.0]);
-    push_rect(
-        vertices,
-        Rect::new(plate.x + 2.0, plate.y + 2.0, plate.w - 4.0, plate.h - 4.0),
-        [0.96, 0.87, 0.65, 1.0],
-    );
-    push_border(vertices, plate, 1.0, [1.0, 0.75, 0.37, 1.0]);
-    for x in [plate.x + 7.0, plate.x + plate.w - 10.0] {
-        push_triangle(
-            vertices,
-            [
-                [x, center_y],
-                [x + 3.0, center_y - 3.0],
-                [x + 6.0, center_y],
-            ],
-            [0.62, 0.39, 0.16, 0.96],
-        );
-    }
-    push_label_centered_bold_shadowed(
-        font,
-        vertices,
-        label,
-        center_x,
-        center_y - font_size * 0.56,
-        font_size,
-        [0.10, 0.08, 0.06, 1.0],
-    );
+    // A dot on the house, a leader of the village's colour, the name on its Persona tag.
+    let place = Place::Village;
+    let accent = ui_paint::rgba(map_kit::accent(place), 0.95);
+    let size = 28.0;
+    let tag = map_kit::name_tag(font, vertices, map, center_x, center_y, label, size, place);
+    let edge_x = if tag.x + tag.w * 0.5 < anchor_x { tag.x + tag.w } else { tag.x };
+    push_segment(vertices, anchor_x, anchor_y, edge_x, tag.y + tag.h * 0.5, 3.0, accent);
+    push_circle(vertices, anchor_x, anchor_y, 6.0, accent, 16);
+    // Over the leader's end.
+    map_kit::name_tag(font, vertices, map, center_x, center_y, label, size, place);
 }
 
 fn draw_village_vegetation(
@@ -4407,6 +4802,104 @@ fn push_prompt_icon(
     }
 }
 
+/// A place to go in, over it on the screen: a slanted ink card with a wedge of the interaction's
+/// colour, its icon in cream, a white rim and a halo once she is in reach, an arrow bobbing down at
+/// the spot and the F key on a cap at its corner.
+fn draw_world_marker(font: &FontAtlas, v: &mut Vec<MapVertex>, m: &WorldMarker, time: f32) {
+    use ui_paint::{keycap, rgba};
+    let a = m.fade.clamp(0.0, 1.0);
+    if a <= 0.01 {
+        return;
+    }
+    let accent = m.icon.accent();
+    let to = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u32;
+    let hex = (to(accent[0]) << 16) | (to(accent[1]) << 8) | to(accent[2]);
+    let bob = (time * 2.6).sin() * 4.0;
+    let scale = 0.82 + 0.18 * a + if m.ready { 0.05 * (time * 5.0).sin().abs() } else { 0.0 };
+    let (cx, cy) = (m.x, m.y + bob);
+    let (w, h, lean) = (80.0 * scale, 64.0 * scale, 15.0 * scale);
+    let q = |dx: f32, dy: f32, ww: f32, hh: f32| -> [[f32; 2]; 4] {
+        let (x, y) = (cx - ww * 0.5 + dx, cy - hh * 0.5 + dy);
+        [[x + lean, y], [x + ww + lean, y], [x + ww - lean, y + hh], [x - lean, y + hh]]
+    };
+    let fill = |v: &mut Vec<MapVertex>, c: [[f32; 2]; 4], color: [f32; 4]| {
+        push_triangle(v, [c[0], c[1], c[2]], color);
+        push_triangle(v, [c[0], c[2], c[3]], color);
+        push_outline_fringe(v, &c, color);
+    };
+    if m.ready {
+        let pulse = 0.5 + 0.5 * (time * 4.0).sin();
+        push_circle(v, cx, cy, 58.0 * scale, rgba(hex, (0.14 + 0.1 * pulse) * a), 40);
+    }
+    // The arrow down at the spot: ink under, the colour over, a white edge.
+    let tip = cy + h * 0.5 + 30.0 * scale + (time * 3.2).sin() * 4.0;
+    let arrow = |v: &mut Vec<MapVertex>, grow: f32, dy: f32, color: [f32; 4]| {
+        let top = cy + h * 0.5 + 8.0 * scale + dy;
+        push_triangle(
+            v,
+            [
+                [cx - 16.0 * scale - grow, top - grow * 0.5],
+                [cx + 16.0 * scale + grow, top - grow * 0.5],
+                [cx, tip + dy + grow],
+            ],
+            color,
+        );
+    };
+    arrow(v, 3.0, 4.0, rgba(0x000000, 0.5 * a));
+    arrow(v, 3.0, 0.0, rgba(0xffffff, a));
+    arrow(v, 0.0, 0.0, rgba(hex, a));
+    // The card: shadow, ink plate, the colour's wedge, the rim.
+    fill(v, q(7.0, 7.0, w, h), rgba(0x000000, 0.55 * a));
+    fill(v, q(0.0, 0.0, w, h), rgba(0x0e0816, 0.96 * a));
+    let wedge = {
+        let c = q(0.0, 0.0, w, h);
+        [c[0], [c[0][0] + 14.0 * scale, c[0][1]], [c[3][0] + 14.0 * scale, c[3][1]], c[3]]
+    };
+    fill(v, wedge, rgba(hex, a));
+    let rim = q(0.0, 0.0, w, h);
+    let edge = if m.ready { rgba(0xffffff, a) } else { rgba(hex, 0.75 * a) };
+    for k in 0..4 {
+        let (p0, p1) = (rim[k], rim[(k + 1) % 4]);
+        let d = [p1[0] - p0[0], p1[1] - p0[1]];
+        let len = (d[0] * d[0] + d[1] * d[1]).sqrt().max(0.001);
+        let n = [-d[1] / len, d[0] / len];
+        let t = if m.ready { 2.4 } else { 1.4 };
+        let quad = [
+            p0,
+            p1,
+            [p1[0] - n[0] * t, p1[1] - n[1] * t],
+            [p0[0] - n[0] * t, p0[1] - n[1] * t],
+        ];
+        push_triangle(v, [quad[0], quad[1], quad[2]], edge);
+        push_triangle(v, [quad[0], quad[2], quad[3]], edge);
+    }
+    // The icon in cream, its cut-outs in the plate's ink.
+    push_prompt_icon(
+        v,
+        m.icon,
+        cx + 5.0 * scale,
+        cy,
+        50.0 * scale,
+        [1.0, 0.95, 0.88, a],
+        [0.055, 0.031, 0.086, a],
+    );
+    // In reach: F on its cap at the card's corner.
+    if m.ready {
+        let k = 34.0 * scale;
+        keycap(
+            font,
+            v,
+            Rect::new(cx + w * 0.5 - 4.0, cy - h * 0.5 - k * 0.55, k, k),
+            "F",
+            18.0 * scale,
+            true,
+            false,
+            hex,
+            a,
+        );
+    }
+}
+
 /// A round medallion holding an interaction's icon, rimmed in its colour.
 fn push_prompt_badge(
     vertices: &mut Vec<MapVertex>,
@@ -4527,102 +5020,100 @@ fn draw_action_prompt(
     height: f32,
     prompt: &prompt_icons::Prompt,
 ) {
+    // In the game's Persona manner: a slanted dark plate with a wedge of the interaction's colour,
+    // the key on its cap, the interaction's badge, the verb big with an ink rim and its detail.
+    use ui_paint::{keycap, rgba, text_outline, text_shadow, text_width, Face};
     let accent = prompt.icon.accent();
-    let verb_size = 27.0;
-    let detail_size = 17.0;
-    let key = 50.0;
-    let badge = 30.0;
-    let verb_width = label_width(font, &prompt.verb, verb_size);
-    let detail_width = prompt
+    let to = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
+    let hex = (to(accent[0]) << 16) | (to(accent[1]) << 8) | to(accent[2]);
+    let (verb_size, detail_size) = (30.0, 18.0);
+    let verb_w = text_width(font, Face::Title, &prompt.verb, verb_size);
+    let detail_w = prompt
         .detail
         .as_deref()
-        .map_or(0.0, |d| label_width(font, d, detail_size));
-    let key_space = if prompt.keyed { key + 18.0 } else { 0.0 };
-    let text_x = 20.0 + key_space + badge * 2.0 + 16.0;
-    let plate_w = (text_x + verb_width.max(detail_width) + 34.0).min(width - 80.0);
-    let plate_h = 82.0;
-    let plate = Rect::new((width - plate_w) * 0.5, height - 190.0, plate_w, plate_h);
-    // Shadow, dark plate, a rim in the interaction's colour, a hairline.
-    push_rounded_rect(
-        vertices,
-        Rect::new(plate.x + 3.0, plate.y + 7.0, plate.w, plate.h),
-        20.0,
-        [0.0, 0.0, 0.0, 0.38],
-    );
-    push_rounded_rect(vertices, plate, 20.0, [0.028, 0.03, 0.05, 0.93]);
-    push_rounded_border(
-        vertices,
-        plate,
-        20.0,
-        2.0,
-        [accent[0], accent[1], accent[2], 0.85],
-    );
-    push_rounded_border(
-        vertices,
-        Rect::new(plate.x + 5.0, plate.y + 5.0, plate.w - 10.0, plate.h - 10.0),
-        15.0,
-        1.0,
-        [accent[0], accent[1], accent[2], 0.22],
-    );
-    // A band of the accent along the top, like a lit edge.
-    push_rounded_rect(
-        vertices,
-        Rect::new(plate.x + 26.0, plate.y + 1.5, plate.w - 52.0, 3.0),
-        1.5,
-        [accent[0], accent[1], accent[2], 0.55],
-    );
-    let mid = plate.y + plate.h * 0.5;
-    let mut x = plate.x + 20.0;
+        .map_or(0.0, |d| text_width(font, Face::Italic, d, detail_size));
+    let key_space = if prompt.keyed { 62.0 } else { 0.0 };
+    let badge = 26.0;
+    let text_x0 = 34.0 + key_space + badge * 2.0 + 18.0;
+    let w = (text_x0 + verb_w.max(detail_w) + 44.0).min(width - 80.0);
+    let h = 76.0;
+    let lean = 14.0;
+    // A second action on its own plate to the right: both centred together.
+    let second = prompt.second.as_ref().map(|(key, verb)| {
+        let kw = text_width(font, Face::Title, key, 20.0) + 26.0;
+        (key, verb, kw, kw + 30.0 + text_width(font, Face::Title, verb, 26.0) + 40.0)
+    });
+    let second_w = second.as_ref().map_or(0.0, |s| s.3 + 22.0);
+    let (x, y) = ((width - w - second_w) * 0.5, height - 190.0);
+    let q = |x: f32, y: f32, w: f32, h: f32, lean: f32| -> [[f32; 2]; 4] {
+        [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+    };
+    let fill = |v: &mut Vec<MapVertex>, c: [[f32; 2]; 4], color: [f32; 4]| {
+        push_triangle(v, [c[0], c[1], c[2]], color);
+        push_triangle(v, [c[0], c[2], c[3]], color);
+        push_outline_fringe(v, &c, color);
+    };
+    fill(vertices, q(x + 9.0, y + 9.0, w, h, lean), rgba(0x000000, 0.55));
+    fill(vertices, q(x, y, w, h, lean), rgba(0x0e0816, 0.95));
+    fill(vertices, q(x, y, 18.0, h, lean), rgba(hex, 1.0));
+    let top = q(x, y, w, h, lean);
+    push_fringe(vertices, top[0], top[1], [0.0, -1.0], 2.5, [accent[0], accent[1], accent[2], 0.9]);
+    let mid = y + h * 0.5;
+    let mut cx = x + 34.0;
     if prompt.keyed {
-        push_keycap(font, vertices, "F", x, mid - key * 0.5, key);
-        x += key + 18.0;
-        // A thin divider between the key and what it does.
-        push_rect(
-            vertices,
-            Rect::new(x - 10.0, plate.y + 16.0, 1.0, plate.h - 32.0),
-            [accent[0], accent[1], accent[2], 0.3],
-        );
+        keycap(font, vertices, Rect::new(cx, mid - 22.0, 46.0, 44.0), "F", 22.0, false, false, hex, 1.0);
+        cx += key_space;
     }
-    push_prompt_badge(vertices, prompt.icon, x + badge, mid, badge, 1.0);
-    let text_x = x + badge * 2.0 + 16.0;
-    let max_text = plate.x + plate.w - 24.0 - text_x;
-    let verb_size = fit_label_size(font, &prompt.verb, max_text, verb_size, 18.0);
-    match prompt.detail.as_deref() {
-        Some(detail) => {
-            let detail_size = fit_label_size(font, detail, max_text, detail_size, 12.0);
-            push_label_centered_bold_shadowed(
-                font,
-                vertices,
-                &prompt.verb,
-                text_x + label_width(font, &prompt.verb, verb_size) * 0.5,
-                mid - verb_size - 1.0,
-                verb_size,
-                [0.98, 0.95, 0.87, 1.0],
-            );
-            push_label_shadowed(
-                font,
-                vertices,
-                detail,
-                text_x,
-                mid + 5.0,
-                detail_size,
-                [
-                    0.55 + accent[0] * 0.4,
-                    0.55 + accent[1] * 0.4,
-                    0.55 + accent[2] * 0.4,
-                    0.95,
-                ],
-            );
-        }
-        None => push_label_centered_bold_shadowed(
+    push_prompt_badge(vertices, prompt.icon, cx + badge, mid, badge, 1.0);
+    if let Some((key, verb, kw, sw)) = second {
+        // Red for a fight: the plate, its wedge, the key on its cap, the verb.
+        let red = 0xff4a5a;
+        let sx = x + w + 22.0;
+        let sy = y + 8.0;
+        let sh = h - 16.0;
+        fill(vertices, q(sx + 8.0, sy + 8.0, sw, sh, lean), rgba(0x000000, 0.5));
+        fill(vertices, q(sx, sy, sw, sh, lean), rgba(0x1a0610, 0.95));
+        fill(vertices, q(sx, sy, 14.0, sh, lean), rgba(red, 1.0));
+        let smid = sy + sh * 0.5;
+        keycap(font, vertices, Rect::new(sx + 28.0, smid - 19.0, kw, 38.0), key, 20.0, false, false, red, 1.0);
+        text_outline(
             font,
             vertices,
-            &prompt.verb,
-            text_x + label_width(font, &prompt.verb, verb_size) * 0.5,
-            mid - verb_size * 0.55,
-            verb_size,
-            [0.98, 0.95, 0.87, 1.0],
-        ),
+            Face::Title,
+            verb,
+            sx + 28.0 + kw + 16.0,
+            smid - 26.0 * 0.58,
+            26.0,
+            rgba(0xfff0f0, 1.0),
+            rgba(0x000000, 0.85),
+        );
+    }
+    let tx = cx + badge * 2.0 + 18.0;
+    let max = x + w - 26.0 - tx;
+    let fit = |s: &str, face: Face, size: f32| {
+        let w = text_width(font, face, s, size);
+        if w <= max { size } else { (size * max / w).max(size * 0.6) }
+    };
+    match prompt.detail.as_deref() {
+        Some(detail) => {
+            let vs = fit(&prompt.verb, Face::Title, verb_size);
+            text_outline(font, vertices, Face::Title, &prompt.verb, tx, mid - vs - 2.0, vs, rgba(0xfff6ee, 1.0), rgba(0x000000, 0.85));
+            let ds = fit(detail, Face::Italic, detail_size);
+            text_shadow(
+                font,
+                vertices,
+                Face::Italic,
+                detail,
+                tx + 2.0,
+                mid + 4.0,
+                ds,
+                [0.6 + accent[0] * 0.4, 0.6 + accent[1] * 0.4, 0.6 + accent[2] * 0.4, 1.0],
+            );
+        }
+        None => {
+            let vs = fit(&prompt.verb, Face::Title, verb_size);
+            text_outline(font, vertices, Face::Title, &prompt.verb, tx, mid - vs * 0.58, vs, rgba(0xfff6ee, 1.0), rgba(0x000000, 0.85));
+        }
     }
 }
 
@@ -5138,6 +5629,57 @@ fn push_vertices(vertices: &mut Vec<MapVertex>, positions: [[f32; 2]; 6], color:
     }
 }
 
+/// A soft edge outside a flat shape: from `a` to `b` (its outline, wound so `out` is outward) a
+/// strip `width` pixels wide fading from `color` to clear. Flat triangles have hard, stepped
+/// edges; this gives them the painter's shapes' smooth ones.
+pub(super) fn push_fringe(
+    vertices: &mut Vec<MapVertex>,
+    a: [f32; 2],
+    b: [f32; 2],
+    out: [f32; 2],
+    width: f32,
+    color: [f32; 4],
+) {
+    let clear = [color[0], color[1], color[2], 0.0];
+    let a2 = [a[0] + out[0] * width, a[1] + out[1] * width];
+    let b2 = [b[0] + out[0] * width, b[1] + out[1] * width];
+    for (position, c) in [(a, color), (b, color), (b2, clear), (a, color), (b2, clear), (a2, clear)] {
+        vertices.push(MapVertex {
+            position,
+            uv: [0.0; 2],
+            color: c,
+            text: 0.0,
+            ..MapVertex::BLANK
+        });
+    }
+}
+
+/// The soft edge round a convex outline (corners in order, either way round).
+pub(super) fn push_outline_fringe(vertices: &mut Vec<MapVertex>, pts: &[[f32; 2]], color: [f32; 4]) {
+    let n = pts.len();
+    if n < 3 || color[3] <= 0.0 {
+        return;
+    }
+    // Which way round: the sign of the area.
+    let mut area = 0.0;
+    for i in 0..n {
+        let (p, q) = (pts[i], pts[(i + 1) % n]);
+        area += p[0] * q[1] - q[0] * p[1];
+    }
+    let turn = if area >= 0.0 { 1.0 } else { -1.0 };
+    for i in 0..n {
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        let d = [b[0] - a[0], b[1] - a[1]];
+        let len = (d[0] * d[0] + d[1] * d[1]).sqrt();
+        if len < 1e-3 {
+            continue;
+        }
+        // Outward: to the right of a→b on screen (y down) when wound with positive area.
+        let out = [-d[1] / len * turn, d[0] / len * turn];
+        push_fringe(vertices, a, b, [-out[0], -out[1]], 1.1, color);
+    }
+}
+
 fn push_triangle(vertices: &mut Vec<MapVertex>, positions: [[f32; 2]; 3], color: [f32; 4]) {
     for position in positions {
         vertices.push(MapVertex {
@@ -5229,33 +5771,24 @@ fn push_label(
     size: f32,
     color: [f32; 4],
 ) {
+    let text = &*demon_queen_dungeon::i18n::tr(text);
     let size = size.max(7.0);
     let ratio = size / FONT_RASTER_SIZE;
-    let mut cursor_x = x;
     let mut baseline = y + font.ascent * ratio;
-    for character in text.chars() {
-        if character == '\n' {
-            cursor_x = x;
-            baseline += size * 1.22;
-            continue;
+    for line in text.split('\n') {
+        let run = font.run(0, &font.glyphs, line);
+        for (glyph, pen, dy) in &run.glyphs {
+            if glyph.size[0] > 0.0 && glyph.size[1] > 0.0 {
+                let rect = Rect::new(
+                    x + (pen + glyph.bearing[0]) * ratio,
+                    baseline + (dy + glyph.bearing[1]) * ratio,
+                    glyph.size[0] * ratio,
+                    glyph.size[1] * ratio,
+                );
+                push_textured_rect(vertices, rect, glyph.uv_min, glyph.uv_max, color);
+            }
         }
-        let Some(glyph) = font
-            .glyphs
-            .get(&character)
-            .or_else(|| font.glyphs.get(&'?'))
-        else {
-            continue;
-        };
-        if glyph.size[0] > 0.0 && glyph.size[1] > 0.0 {
-            let rect = Rect::new(
-                cursor_x + glyph.bearing[0] * ratio,
-                baseline + glyph.bearing[1] * ratio,
-                glyph.size[0] * ratio,
-                glyph.size[1] * ratio,
-            );
-            push_textured_rect(vertices, rect, glyph.uv_min, glyph.uv_max, color);
-        }
-        cursor_x += glyph.advance * ratio;
+        baseline += size * 1.22;
     }
 }
 
@@ -5309,6 +5842,28 @@ fn push_icon_rect(vertices: &mut Vec<MapVertex>, rect: Rect, icon: IconEntry, co
     }
 }
 
+/// A glyph with a rim traced round it from its field: `rim` in screen pixels, `rim_color`.
+pub(super) fn push_rimmed_glyph(
+    vertices: &mut Vec<MapVertex>,
+    rect: Rect,
+    uv_min: [f32; 2],
+    uv_max: [f32; 2],
+    color: [f32; 4],
+    rim: f32,
+    rim_color: [f32; 4],
+    scale: f32,
+) {
+    // Screen pixels → field units: the field spans FONT_SPREAD raster pixels from 0.5 to 0 or 1,
+    // and a raster pixel is `scale` screen pixels.
+    let width = (rim / (scale * FONT_SPREAD as f32 * 2.0)).min(0.49);
+    let start = vertices.len();
+    push_textured_rect(vertices, rect, uv_min, uv_max, color);
+    for vertex in &mut vertices[start..] {
+        vertex.shape = [width, 0.0, 0.0, 0.0];
+        vertex.color2 = rim_color;
+    }
+}
+
 fn push_textured_rect(
     vertices: &mut Vec<MapVertex>,
     rect: Rect,
@@ -5354,24 +5909,17 @@ fn fit_label_size(
 }
 
 pub(crate) fn label_width(font: &FontAtlas, text: &str, size: f32) -> f32 {
+    let text = &*demon_queen_dungeon::i18n::tr(text);
     let ratio = size / FONT_RASTER_SIZE;
     text.split('\n')
-        .map(|line| {
-            line.chars()
-                .filter_map(|character| {
-                    font.glyphs
-                        .get(&character)
-                        .or_else(|| font.glyphs.get(&'?'))
-                })
-                .map(|glyph| glyph.advance * ratio)
-                .sum::<f32>()
-        })
+        .map(|line| font.run(0, &font.glyphs, line).advance * ratio)
         .fold(0.0, f32::max)
 }
 
 /// Wrap dialogue at word boundaries while preserving explicit line breaks.
 /// Oversized words are split by glyph so names/URLs cannot escape the panel.
 fn wrap_label_text(font: &FontAtlas, text: &str, size: f32, max_width: f32) -> String {
+    let text = &*demon_queen_dungeon::i18n::tr(text);
     let max_width = max_width.max(size * 4.0);
     let mut lines = Vec::new();
     for source_line in text.lines() {

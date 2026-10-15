@@ -21,6 +21,13 @@ fn generate_portable_bundle() {
     println!("cargo:rerun-if-changed={LOCALES}");
     println!("cargo:rerun-if-changed={ASSETS}/native_1080p");
     println!("cargo:rerun-if-changed={ASSETS}/{MENU_OVERLAY}");
+    // The release's packed art (tools/build_release.py): the same pictures under the same
+    // names, AVIF inside; embedded instead of the originals where there.
+    println!("cargo:rerun-if-env-changed=DEMON_QUEEN_PACKED_ART");
+    let packed = std::env::var_os("DEMON_QUEEN_PACKED_ART").map(PathBuf::from);
+    if let Some(packed) = &packed {
+        println!("cargo:rerun-if-changed={}", packed.display());
+    }
 
     let manifest = PathBuf::from(
         std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is available"),
@@ -80,6 +87,12 @@ fn generate_portable_bundle() {
         "        _ => None,\n    }\n}\n\npub fn asset_bytes(path: &str) -> Option<&'static [u8]> {\n    match path {\n",
     );
     for path in &asset_paths {
+        let packed_file = packed.as_ref().map(|dir| dir.join(path)).filter(|file| file.is_file());
+        if let Some(file) = packed_file {
+            let file = file.to_string_lossy().replace('\\', "/");
+            generated.push_str(&format!("        {path:?} => Some(include_bytes!({file:?})),\n"));
+            continue;
+        }
         let include_path = format!("/data/assets/{path}");
         generated.push_str(&format!(
             "        {path:?} => Some(include_bytes!(concat!(env!(\"CARGO_MANIFEST_DIR\"), {include_path:?}))),\n"
@@ -92,6 +105,26 @@ fn generate_portable_bundle() {
     fs::write(&output, generated).expect("portable source catalog can be written");
 }
 
+/// Folders kept beside the art for review, which the game never asks for: not embedded.
+const NOT_EMBEDDED: &[&str] = &["pre_4k_1080_approved", "review_only"];
+
+/// Pictures no code, guion or story names, so the game never asks for them: not embedded.
+const UNUSED_PICTURES: &[&str] = &[
+    "native_1080p/cg/approved_cg11_memory_question_legacy.png",
+    "native_1080p/cg/approved_cg12_seal_abdomen.png",
+    "native_1080p/cg/approved_cg13_diagnosis_maids.png",
+    "native_1080p/cg/approved_cg14_hidden_relief.png",
+    "native_1080p/cg/approved_cg15_request_privacy.png",
+    "native_1080p/cg/approved_cg18_explore_reflection_legacy.png",
+    "native_1080p/cg/approved_promoted_p04_examination.png",
+    "native_1080p/cg/approved_promoted_p04_nyxara_enters.png",
+    "native_1080p/cg/hipno_etapa1_final.png",
+    "native_1080p/cg/p01_avoid_reply.png",
+    "native_1080p/cg/p01_button.png",
+    "native_1080p/cg/p01_two_dorayaki.png",
+    "native_1080p/cg/p01_two_messages.png",
+];
+
 fn collect_png_paths(root: &Path, directory: &Path, output: &mut Vec<String>) {
     let mut entries = fs::read_dir(directory)
         .unwrap_or_else(|error| panic!("cannot read {}: {error}", directory.display()))
@@ -101,14 +134,19 @@ fn collect_png_paths(root: &Path, directory: &Path, output: &mut Vec<String>) {
     for entry in entries {
         let path = entry.path();
         if path.is_dir() {
-            collect_png_paths(root, &path, output);
+            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            if !NOT_EMBEDDED.contains(&name) {
+                collect_png_paths(root, &path, output);
+            }
         } else if path.extension().and_then(|ext| ext.to_str()) == Some("png") {
             let relative = path
                 .strip_prefix(root)
                 .expect("asset stays below data/assets")
                 .to_string_lossy()
                 .replace('\\', "/");
-            output.push(relative);
+            if !UNUSED_PICTURES.contains(&relative.as_str()) {
+                output.push(relative);
+            }
         }
     }
 }

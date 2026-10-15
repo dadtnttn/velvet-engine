@@ -7,7 +7,7 @@ use super::*;
 use dungeon::combat_fx;
 use dungeon::fp;
 use varrak_fight::{BladeMode, Clip, Fight, Phase, VState};
-use velvet_render::ToonFire3D;
+use velvet_render::{Finish3D, ToonFire3D};
 
 const PI: f32 = std::f32::consts::PI;
 
@@ -18,6 +18,28 @@ struct Part {
     transform: Mat4,
     material: Material3D,
     texture: Option<TextureHandle>,
+    /// Its mesh's own box (least and greatest corner).
+    lo: Vec3,
+    hi: Vec3,
+}
+
+/// How far below its origin a mesh with box `lo..hi` reaches once turned and scaled by `m` (no
+/// translation): what lifts it so it rests on the ground.
+fn lowest(m: Mat4, lo: Vec3, hi: Vec3) -> f32 {
+    let mut least = f32::MAX;
+    for i in 0..8 {
+        let c = Vec3::new(
+            if i & 1 == 0 { lo.x } else { hi.x },
+            if i & 2 == 0 { lo.y } else { hi.y },
+            if i & 4 == 0 { lo.z } else { hi.z },
+        );
+        least = least.min(m.transform_point3(c).y);
+    }
+    if least == f32::MAX {
+        0.0
+    } else {
+        least
+    }
 }
 
 fn load_parts(
@@ -29,11 +51,14 @@ fn load_parts(
 ) -> Result<Vec<(String, Part)>> {
     let path = runtime_3d_root().join("penascal").join(file);
     let asset = upload_static_asset(renderer, device, queue, &path, cache)?;
+    let bounds = asset.part_bounds;
     Ok(asset
         .parts
         .into_iter()
         .zip(asset.part_names)
-        .map(|(part, name)| {
+        .enumerate()
+        .map(|(i, (part, name))| {
+            let (lo, hi) = bounds.get(i).copied().unwrap_or(([0.0; 3], [0.0; 3]));
             let material = if name.ends_with("lampGlass") {
                 part.material.with_emission(1.3)
             } else {
@@ -46,6 +71,8 @@ fn load_parts(
                     transform: part.local_transform,
                     material,
                     texture: part.texture,
+                    lo: Vec3::new(lo[0], lo[1], lo[2]),
+                    hi: Vec3::new(hi[0], hi[1], hi[2]),
                 },
             )
         })
@@ -172,6 +199,121 @@ fn column_mesh() -> Mesh3D {
         indices,
         ..Mesh3D::plane(1.0, Material3D::rgb(1.0, 1.0, 1.0))
     }
+}
+
+/// Where the moon hangs (from the plaza): low in the west, as the night's light comes from.
+const MOON_DIR: Vec3 = Vec3::new(-0.55, 0.42, -0.72);
+
+/// The night over the crags, as a dome round her eyes (radius 1; drawn 170 m out): deep indigo
+/// overhead, violet lower down, a smoulder of rose and ember along the horizon (brightest under the
+/// moon), and stars, more of them high up, as tiny bright quads on the dome. Its faces look in.
+fn sky_mesh() -> Mesh3D {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let moon = MOON_DIR.normalize_or_zero();
+    let (rings, segments) = (28u32, 64u32);
+    let colour = |d: Vec3| -> [f32; 4] {
+        let up = d.y.clamp(-0.2, 1.0);
+        let zenith = Vec3::new(0.020, 0.012, 0.052);
+        let mid = Vec3::new(0.085, 0.042, 0.165);
+        let horizon = Vec3::new(0.24, 0.07, 0.13);
+        let ember = Vec3::new(0.42, 0.13, 0.06);
+        let toward_moon = d.dot(moon).max(0.0);
+        let low = (1.0 - (up / 0.35).clamp(0.0, 1.0)).powf(1.6);
+        let high = (up / 0.8).clamp(0.0, 1.0);
+        let mut c = mid.lerp(zenith, high);
+        c = c.lerp(horizon.lerp(ember, toward_moon.powf(3.0) * 0.8), low);
+        // The moon's glow over the sky round it.
+        c += Vec3::new(0.10, 0.08, 0.16) * toward_moon.powf(18.0);
+        [c.x, c.y, c.z, 1.0]
+    };
+    for i in 0..=rings {
+        // From a little below the horizon to the top.
+        let a = -0.25 + (i as f32 / rings as f32) * (std::f32::consts::FRAC_PI_2 + 0.25);
+        for j in 0..=segments {
+            let b = j as f32 / segments as f32 * std::f32::consts::TAU;
+            let d = Vec3::new(a.cos() * b.cos(), a.sin(), a.cos() * b.sin());
+            let mut v = MeshVertex3D::new(d.to_array(), (-d).to_array(), [0.0, 0.0]);
+            v.color = colour(d);
+            vertices.push(v);
+        }
+    }
+    let row = segments + 1;
+    for i in 0..rings {
+        for j in 0..segments {
+            let (a, b, c, d) = (i * row + j, i * row + j + 1, (i + 1) * row + j + 1, (i + 1) * row + j);
+            indices.extend([a, c, b, a, d, c]);
+        }
+    }
+    // The stars.
+    let mut seed = 0x2545_f491u32;
+    let mut next = || {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        (seed as f32) / (u32::MAX as f32)
+    };
+    for _ in 0..420 {
+        let b = next() * std::f32::consts::TAU;
+        let y: f32 = 0.08 + next().powf(0.7) * 0.92;
+        let r = (1.0 - y * y).max(0.0).sqrt();
+        let d = Vec3::new(r * b.cos(), y, r * b.sin()).normalize_or_zero();
+        if d.dot(moon) > 0.97 {
+            continue;
+        }
+        let size = 0.0012 + next() * next() * 0.0034;
+        let bright = 0.6 + next() * 2.4;
+        let tint = if next() > 0.75 {
+            [1.0, 0.85, 0.7]
+        } else if next() > 0.6 {
+            [0.75, 0.8, 1.0]
+        } else {
+            [0.95, 0.9, 1.0]
+        };
+        let side = d.cross(Vec3::Y).normalize_or_zero();
+        let up = side.cross(d).normalize_or_zero();
+        let at = d * 0.995;
+        let base = vertices.len() as u32;
+        for (sx, sy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+            let p = at + side * (sx * size) + up * (sy * size);
+            let mut v = MeshVertex3D::new(p.to_array(), (-d).to_array(), [0.0, 0.0]);
+            v.color = [tint[0] * bright, tint[1] * bright, tint[2] * bright, 1.0];
+            vertices.push(v);
+        }
+        indices.extend([base, base + 2, base + 1, base, base + 3, base + 2]);
+        indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+    Mesh3D {
+        vertices,
+        indices,
+        ..Mesh3D::plane(1.0, Material3D::rgb(1.0, 1.0, 1.0))
+    }
+}
+
+/// A spark of the seal in the air: where, how fast, how long it has and has had, its size, gold
+/// or violet.
+#[derive(Clone, Copy)]
+struct Mote {
+    at: Vec3,
+    v: Vec3,
+    life: f32,
+    age: f32,
+    size: f32,
+    gold: bool,
+}
+
+fn ease_out_cubic(x: f32) -> f32 {
+    1.0 - (1.0 - x.clamp(0.0, 1.0)).powi(3)
+}
+
+/// An ember rising from a brazier: where it is, how it drifts, how long it has and has had.
+#[derive(Clone, Copy)]
+struct Ember {
+    at: Vec3,
+    v: Vec3,
+    life: f32,
+    age: f32,
+    size: f32,
 }
 
 /// The spark's ribbon: `n` points, two vertices each, both faces.
@@ -344,8 +486,36 @@ fn blend(a: Mat4, b: Mat4, k: f32) -> Mat4 {
     )
 }
 
+/// Her arms as she sees them (`tools/fp_queen_blender.py` → `penascal/fp_queen.glb`): her hands
+/// closed round what they hold, her gown's sleeves, the royal sword with its runes and the seal's
+/// sceptre with its stone. All in the grip frame of `dungeon::fp`; the sleeves in its limb space.
+struct Arms {
+    hand_r: Vec<Part>,
+    hand_l: Vec<Part>,
+    sleeve: Vec<Part>,
+    sleeve_upper: Vec<Part>,
+    sword: Vec<Part>,
+    runes: Vec<Part>,
+    sceptre: Vec<Part>,
+    gem: Vec<Part>,
+}
+
 /// The fight's GPU side.
 pub(super) struct BossScene {
+    arms: Option<Arms>,
+    sky: MeshHandle,
+    embers: Vec<Ember>,
+    /// The spark's forks, its sparks in the air, the ring of light, the memories seen and when
+    /// the last one burst.
+    forks: [MeshHandle; 4],
+    motes: Vec<Mote>,
+    mote_seed: u32,
+    ring: TextureHandle,
+    memories_seen: usize,
+    burst_at: f32,
+    /// The objective on show and since when (it slides in when it changes).
+    objective: (String, f32),
+    ember_seed: u32,
     statics: Vec<Part>,
     breakables: Vec<Vec<Part>>,
     piece_r: HashMap<String, f32>,
@@ -369,6 +539,7 @@ pub(super) struct BossScene {
     quad: MeshHandle,
     column: MeshHandle,
     halo: TextureHandle,
+    moon: TextureHandle,
     crown: TextureHandle,
     light_column: TextureHandle,
     flame: MeshHandle,
@@ -469,6 +640,49 @@ impl BossScene {
             }
         }
         let varrak = load_varrak(renderer, device, queue)?;
+        // Her arms, if they are made (else the dungeon's).
+        let arms = match load_parts(renderer, device, queue, &mut cache, "fp_queen.glb") {
+            Ok(parts) => {
+                let mut arms = Arms {
+                    hand_r: Vec::new(),
+                    hand_l: Vec::new(),
+                    sleeve: Vec::new(),
+                    sleeve_upper: Vec::new(),
+                    sword: Vec::new(),
+                    runes: Vec::new(),
+                    sceptre: Vec::new(),
+                    gem: Vec::new(),
+                };
+                for (name, part) in parts {
+                    let list = match name.split(':').next().unwrap_or("") {
+                        "hand_r" => &mut arms.hand_r,
+                        "hand_l" => &mut arms.hand_l,
+                        "sleeve" => &mut arms.sleeve,
+                        "sleeve_upper" => &mut arms.sleeve_upper,
+                        "sword" => &mut arms.sword,
+                        "sword_runes" => &mut arms.runes,
+                        "sceptre" => &mut arms.sceptre,
+                        "sceptre_gem" => &mut arms.gem,
+                        _ => continue,
+                    };
+                    // Gems and runes shine; what is gold or steel keeps its own light.
+                    let part = if name.ends_with(":gem") || name.ends_with(":rune") {
+                        Part {
+                            material: part.material.with_emission(1.2),
+                            ..part
+                        }
+                    } else {
+                        part
+                    };
+                    list.push(part);
+                }
+                (!arms.hand_r.is_empty() && !arms.sword.is_empty()).then_some(arms)
+            }
+            Err(error) => {
+                eprintln!("[3d] the fight's arms are not made yet (tools/fp_queen_blender.py): {error:#}");
+                None
+            }
+        };
         let white = Material3D::rgb(1.0, 1.0, 1.0);
         let cube = renderer.upload_mesh(device, &Mesh3D::cube(1.0, white))?;
         let orb = renderer.upload_mesh(device, &Mesh3D::uv_sphere(1.0, 12, 8, white))?;
@@ -498,6 +712,27 @@ impl BossScene {
             }),
         )?;
         let crown = renderer.upload_texture(device, queue, &crown_texture())?;
+        // The moon: a full disc with a soft rim, its seas a little dimmer.
+        let moon = renderer.upload_texture(
+            device,
+            queue,
+            &texture(128, 128, |u, v| {
+                let (x, y) = (u - 0.5, v - 0.5);
+                let d = (x * x + y * y).sqrt() * 2.0;
+                if d > 1.0 {
+                    return 0.0;
+                }
+                let rim = ((1.0 - d) / 0.05).clamp(0.0, 1.0);
+                let sea = |cx: f32, cy: f32, r: f32| {
+                    let e = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() / r;
+                    (1.0 - e).clamp(0.0, 1.0).powf(0.6)
+                };
+                let seas = sea(-0.12, -0.08, 0.17) * 0.32
+                    + sea(0.12, 0.10, 0.13) * 0.26
+                    + sea(0.05, -0.2, 0.08) * 0.2;
+                rim * (0.95 - seas - d * d * 0.15)
+            }),
+        )?;
         let mut fires = Vec::new();
         for f in varrak_fight::plan()
             .flames
@@ -512,6 +747,30 @@ impl BossScene {
             )?);
         }
         let scene = Self {
+            arms,
+            sky: renderer.upload_mesh(device, &sky_mesh())?,
+            forks: [
+                renderer.upload_mesh(device, &beam_mesh())?,
+                renderer.upload_mesh(device, &beam_mesh())?,
+                renderer.upload_mesh(device, &beam_mesh())?,
+                renderer.upload_mesh(device, &beam_mesh())?,
+            ],
+            motes: Vec::new(),
+            mote_seed: 0x1234_5679,
+            ring: renderer.upload_texture(
+                device,
+                queue,
+                &texture(128, 128, |u, v| {
+                    let d = ((u - 0.5).hypot(v - 0.5) * 2.0).min(1.0);
+                    let band = 1.0 - ((d - 0.82) / 0.12).abs().min(1.0);
+                    band * band * (3.0 - 2.0 * band) + (1.0 - d).max(0.0) * 0.08
+                }),
+            )?,
+            memories_seen: 0,
+            burst_at: -99.0,
+            objective: (String::new(), 0.0),
+            embers: Vec::new(),
+            ember_seed: 0x9e37_79b9,
             statics,
             breakables,
             piece_r,
@@ -535,6 +794,7 @@ impl BossScene {
             quad: renderer.upload_mesh(device, &quad_mesh())?,
             column: renderer.upload_mesh(device, &column_mesh())?,
             halo,
+            moon,
             crown,
             light_column,
             flame: orb,
@@ -573,6 +833,9 @@ impl BossScene {
         self.blade_from = None;
         self.blade_mode = BladeMode::Ground;
         self.blade_lying = None;
+        self.motes.clear();
+        self.memories_seen = 0;
+        self.burst_at = -99.0;
     }
 }
 
@@ -616,6 +879,31 @@ fn view_arm(
     grip
 }
 
+/// The arm from a shoulder off screen to the hand, round what it holds, made of her own parts (the
+/// sleeves in `fp::limb_transform`'s space, the hand in the grip frame).
+#[allow(clippy::too_many_arguments)]
+fn view_arm_parts(
+    draws: &mut Vec<MeshDraw3D>,
+    hand_parts: &[Part],
+    fore: &[Part],
+    upper: &[Part],
+    hand: Vec3,
+    blade: Vec3,
+    shoulder: Vec3,
+    pole: Vec3,
+    right: bool,
+    roll: f32,
+) -> Mat4 {
+    let grip = fp::grip_frame(hand, blade, shoulder, roll);
+    let wrist = fp::wrist(grip, right);
+    let (shoulder, elbow) = fp::arm_ik(shoulder, wrist, pole);
+    let s = fp::VIEW_SCALE;
+    push(draws, upper, fp::limb_transform(elbow, shoulder));
+    push(draws, fore, fp::limb_transform(wrist, elbow));
+    push(draws, hand_parts, grip * Mat4::from_scale(Vec3::new(s, s, s)));
+    grip
+}
+
 /// Nightfall over the hills: violet sky light, the moon low in the west, a violet haze.
 fn mood(env: EnvironmentFrame3D) -> EnvironmentFrame3D {
     let mut e = env;
@@ -624,10 +912,11 @@ fn mood(env: EnvironmentFrame3D) -> EnvironmentFrame3D {
     e.lighting.ambient_color = [0.30, 0.25, 0.42];
     e.lighting.bounce_color = [0.10, 0.08, 0.12];
     e.lighting.shadow_extent = 26.0;
-    e.atmosphere.fog_color = [0.024, 0.011, 0.040];
-    e.atmosphere.fog_start = 30.0;
-    e.atmosphere.fog_end = 120.0;
-    e.clear_color = [0.10, 0.06, 0.20, 1.0];
+    e.atmosphere.fog_color = [0.040, 0.018, 0.062];
+    e.atmosphere.fog_start = 60.0;
+    e.atmosphere.fog_end = 420.0;
+    // Black behind the sky dome (it is added over it).
+    e.clear_color = [0.0, 0.0, 0.0, 1.0];
     e
 }
 
@@ -687,6 +976,42 @@ impl RenderState {
         let plan = varrak_fight::plan();
         let mut draws = Vec::with_capacity(4096);
         let mut lights = Vec::new();
+        // The night: the dome round her eyes, and the moon in it with its halo.
+        draws.push(MeshDraw3D {
+            mesh: scene.sky,
+            transform: Mat4::from_translation(camera.position)
+                * Mat4::from_scale(Vec3::new(170.0, 170.0, 170.0)),
+            // Added over a black clear, unlit (the scene's ambient would wash it lavender); its
+            // haze at 170 m (≈0.3) made up for.
+            material: Material3D::additive([1.45, 1.45, 1.45, 1.0]),
+            texture: None,
+        });
+        {
+            let moon_at = camera.position + MOON_DIR.normalize_or_zero() * 150.0;
+            let f = (camera.position - moon_at).normalize_or_zero();
+            let right = Vec3::Y.cross(f).normalize_or_zero();
+            let up = f.cross(right).normalize_or_zero();
+            let billboard = |size: f32| {
+                Mat4::from_cols(
+                    [right.x * size, right.y * size, right.z * size, 0.0],
+                    [up.x * size, up.y * size, up.z * size, 0.0],
+                    [f.x, f.y, f.z, 0.0],
+                    [moon_at.x, moon_at.y, moon_at.z, 1.0],
+                )
+            };
+            draws.push(MeshDraw3D {
+                mesh: scene.quad,
+                transform: billboard(70.0),
+                material: Material3D::additive([0.40, 0.30, 0.62, 0.55]),
+                texture: Some(scene.halo),
+            });
+            draws.push(MeshDraw3D {
+                mesh: scene.quad,
+                transform: billboard(13.0),
+                material: Material3D::additive([3.2, 3.0, 3.6, 1.0]),
+                texture: Some(scene.moon),
+            });
+        }
         // The plaza; what is still whole; what flies.
         push(&mut draws, &scene.statics, Mat4::IDENTITY);
         for (i, parts) in scene.breakables.iter().enumerate() {
@@ -749,7 +1074,11 @@ impl RenderState {
                 p.v.y -= 18.0 * dt;
                 p.at = p.at + p.v * dt;
                 p.rot = p.rot + p.w * dt;
-                let floor = p.r * 0.45;
+                // Its lowest corner, as it lies now, on the ground.
+                let turn = Mat4::from_rotation_z(p.rot.z)
+                    * Mat4::from_rotation_y(p.rot.y)
+                    * Mat4::from_rotation_x(p.rot.x);
+                let floor = -lowest(turn, p.part.lo, p.part.hi);
                 if p.at.y < floor {
                     p.at.y = floor;
                     p.v.y = if p.v.y < -2.5 { -p.v.y * 0.3 } else { 0.0 };
@@ -777,9 +1106,19 @@ impl RenderState {
         let v = &fight.varrak;
         let vm = &scene.varrak;
         let s = varrak_fight::VARRAK_SCALE;
-        let root = Mat4::from_translation(v.root())
-            * Mat4::from_rotation_y(v.yaw)
-            * Mat4::from_scale(Vec3::new(s, s, s));
+        // His body carried, not stiff: leaning into a run, rolled into a turn, thrown back by a
+        // blow, his chest rising with his breath.
+        let breath = (v.life * 2.3).sin();
+        let flinch = v.flinch * v.flinch;
+        let root = Mat4::from_translation(v.root() - Vec3::new(0.0, flinch * 0.05, 0.0))
+            * Mat4::from_rotation_y(v.yaw + (v.life * 37.0).sin() * 0.04 * flinch)
+            * Mat4::from_rotation_z(v.tilt)
+            * Mat4::from_rotation_x(v.lean - 0.2 * flinch)
+            * Mat4::from_scale(Vec3::new(
+                s * (1.0 - 0.006 * breath),
+                s * (1.0 + 0.014 * breath),
+                s * (1.0 + 0.008 * breath),
+            ));
         let sample = |clip: Clip, time: f32, backwards: bool| {
             let i = clip.index();
             let index = vm.clips.get(i).copied().flatten()?;
@@ -804,13 +1143,33 @@ impl RenderState {
         if let Some(pose) = &pose {
             pose_skinned_meshes(&mut self.renderer, &self.queue, &vm.model, &vm.meshes, pose);
         }
+        // Struck: a white flash over him for an instant.
+        let struck = if a.clip == Clip::Hit {
+            (1.0 - a.t / 0.14).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         for (index, (mesh, material, texture)) in vm.meshes.iter().enumerate() {
+            let mut material = (*material).with_ambient_occlusion(0.28);
+            if struck > 0.0 {
+                material = material.with_emission(struck * 1.8);
+            }
             draws.push(MeshDraw3D {
                 mesh: *mesh,
                 transform: root * vm.model.mesh_transform(index),
-                material: (*material).with_ambient_occlusion(0.28),
+                material,
                 texture: *texture,
             });
+        }
+        // A cold rim of moonlight behind him, so his bulk stands out of the dark plaza.
+        {
+            let to = Vec3::new(v.x - camera.position.x, 0.0, v.z - camera.position.z).normalize_or_zero();
+            lights.push(PointLight3D::new(
+                Vec3::new(v.x, 0.0, v.z) + to * 2.6 + Vec3::new(0.0, 3.2, 0.0),
+                [0.55, 0.62, 1.0],
+                6.5,
+                7.5,
+            ));
         }
         let chest_bone = bone("CC_Base_Spine02").unwrap_or(Mat4::IDENTITY);
         let head_bone = bone("CC_Base_Head").unwrap_or(Mat4::IDENTITY);
@@ -1014,14 +1373,22 @@ impl RenderState {
         for (i, r) in fight.rocks.iter().enumerate() {
             let k = r.r / 0.5;
             let turn = if r.rest { 0.4 } else { t } + i as f32 * 1.7;
+            let shape = Mat4::from_rotation_x(r.spin.x * turn * 0.3 + i as f32)
+                * Mat4::from_rotation_y(r.spin.y * turn * 0.3)
+                * Mat4::from_rotation_z(r.spin.z * turn * 0.3)
+                * Mat4::from_scale(Vec3::new(k, k, k));
+            // Resting, its lowest point on the ground (not its middle at a guessed height); in the
+            // air, never through it.
+            let low = scene
+                .rock
+                .iter()
+                .map(|part| lowest(shape * part.transform, part.lo, part.hi))
+                .fold(0.0f32, f32::min);
+            let y = if r.rest { -low } else { r.at.y.max(-low) };
             push(
                 &mut draws,
                 &scene.rock,
-                Mat4::from_translation(r.at)
-                    * Mat4::from_rotation_x(r.spin.x * turn * 0.3 + i as f32)
-                    * Mat4::from_rotation_y(r.spin.y * turn * 0.3)
-                    * Mat4::from_rotation_z(r.spin.z * turn * 0.3)
-                    * Mat4::from_scale(Vec3::new(k, k, k)),
+                Mat4::from_translation(Vec3::new(r.at.x, y, r.at.z)) * shape,
             );
         }
         for w in &fight.waves {
@@ -1070,6 +1437,75 @@ impl RenderState {
         for fire in &scene.fires {
             fire.draws(t, flat_toward, &mut draws);
         }
+        // Embers rising off the braziers, drifting and winking out.
+        {
+            let next = |seed: &mut u32| {
+                *seed ^= *seed << 13;
+                *seed ^= *seed >> 17;
+                *seed ^= *seed << 5;
+                (*seed as f32) / (u32::MAX as f32)
+            };
+            let braziers: Vec<Vec3> = plan
+                .flames
+                .iter()
+                .filter(|f| f.kind == "brazier")
+                .map(|f| Vec3::new(f.x, f.y + 0.2, f.z))
+                .collect();
+            if !braziers.is_empty() && dt > 0.0 {
+                let mut want = dt * 14.0 * braziers.len() as f32;
+                while want > 0.0 && scene.embers.len() < 260 {
+                    if want < 1.0 && next(&mut scene.ember_seed) > want {
+                        break;
+                    }
+                    want -= 1.0;
+                    let k = (next(&mut scene.ember_seed) * braziers.len() as f32) as usize;
+                    let at = braziers[k.min(braziers.len() - 1)]
+                        + Vec3::new(
+                            (next(&mut scene.ember_seed) - 0.5) * 0.5,
+                            0.0,
+                            (next(&mut scene.ember_seed) - 0.5) * 0.5,
+                        );
+                    scene.embers.push(Ember {
+                        at,
+                        v: Vec3::new(
+                            (next(&mut scene.ember_seed) - 0.5) * 0.5,
+                            1.0 + next(&mut scene.ember_seed) * 1.4,
+                            (next(&mut scene.ember_seed) - 0.5) * 0.5,
+                        ),
+                        life: 1.6 + next(&mut scene.ember_seed) * 2.2,
+                        age: 0.0,
+                        size: 0.025 + next(&mut scene.ember_seed) * 0.04,
+                    });
+                }
+            }
+            for (i, e) in scene.embers.iter_mut().enumerate() {
+                e.age += dt;
+                let sway = Vec3::new(
+                    (t * 1.7 + i as f32 * 0.9).sin(),
+                    0.0,
+                    (t * 1.3 + i as f32 * 1.7).cos(),
+                ) * 0.35;
+                e.at += (e.v + sway) * dt;
+                e.v.y *= 1.0 - 0.25 * dt;
+            }
+            scene.embers.retain(|e| e.age < e.life);
+            for (i, e) in scene.embers.iter().enumerate() {
+                let k = e.age / e.life;
+                let wink = 0.65 + 0.35 * (t * 13.0 + i as f32 * 2.1).sin();
+                let fade = (1.0 - k) * (k / 0.1).min(1.0) * wink;
+                draws.push(MeshDraw3D {
+                    mesh: scene.quad,
+                    transform: face(e.at, e.size * (1.0 - 0.5 * k)),
+                    material: Material3D::additive([
+                        3.0,
+                        1.2 + 0.6 * (1.0 - k),
+                        0.35,
+                        fade,
+                    ]),
+                    texture: Some(scene.halo),
+                });
+            }
+        }
         // Won: the seal's light rising over the crags, seen from far away.
         if let Some(at) = fight.won_at {
             let k = ((t - at) / 2.5).min(1.0);
@@ -1091,24 +1527,66 @@ impl RenderState {
         // Her arms: the sword in her right, the seal in her left.
         let p = &fight.player;
         let held = fp::world_pose(camera, p.pose, 0.0, 0.0, 0.0);
-        let grip_r = view_arm(
-            &mut draws,
-            scene.fist_r,
-            scene.cuff,
-            scene.upper,
-            held.hand,
-            held.blade,
-            held.shoulder,
-            fp::camera_vector(camera, Vec3::new(0.7, -1.0, 0.25)).normalize_or_zero(),
-            true,
-            p.pose.roll,
-        );
+        let pole_r = fp::camera_vector(camera, Vec3::new(0.7, -1.0, 0.25)).normalize_or_zero();
         let vs = fp::VIEW_SCALE;
-        push(
-            &mut draws,
-            &scene.sword,
-            grip_r * Mat4::from_scale(Vec3::new(vs, vs, vs)),
-        );
+        match &scene.arms {
+            Some(arms) => {
+                let grip = view_arm_parts(
+                    &mut draws,
+                    &arms.hand_r,
+                    &arms.sleeve,
+                    &arms.sleeve_upper,
+                    held.hand,
+                    held.blade,
+                    held.shoulder,
+                    pole_r,
+                    true,
+                    p.pose.roll,
+                );
+                let world = grip * Mat4::from_scale(Vec3::new(vs, vs, vs));
+                push(&mut draws, &arms.sword, world);
+                // The runes: a low violet glow, flaring as the blade cuts.
+                let cutting = match p.swing {
+                    Some((combo, st)) => ((st / fp::SWINGS[combo].duration).min(1.0) * PI).sin(),
+                    None => 0.0,
+                };
+                for part in &arms.runes {
+                    draws.push(MeshDraw3D {
+                        mesh: part.mesh,
+                        transform: world * part.transform,
+                        material: part.material.with_emission(1.0 + cutting * 2.2),
+                        texture: part.texture,
+                    });
+                }
+                if cutting > 0.2 {
+                    lights.push(PointLight3D::new(
+                        world.transform_point3(Vec3::new(0.0, 0.45, 0.0)),
+                        [0.66, 0.45, 1.0],
+                        cutting * 1.6,
+                        1.6,
+                    ));
+                }
+            }
+            None => {
+                let grip = view_arm(
+                    &mut draws,
+                    scene.fist_r,
+                    scene.cuff,
+                    scene.upper,
+                    held.hand,
+                    held.blade,
+                    held.shoulder,
+                    pole_r,
+                    true,
+                    p.pose.roll,
+                );
+                push(
+                    &mut draws,
+                    &scene.sword,
+                    grip * Mat4::from_scale(Vec3::new(vs, vs, vs)),
+                );
+            }
+        }
         if let Some((combo, st)) = p.swing {
             let clip = fp::SWINGS[combo];
             if (clip.trail.0..=clip.trail.1).contains(&st) {
@@ -1164,37 +1642,75 @@ impl RenderState {
         let hand_l = camera.position + fp::camera_vector(camera, local);
         let up_l = fp::camera_vector(camera, seal_up).normalize_or_zero();
         let shoulder_l = camera.position + fp::camera_vector(camera, Vec3::new(-0.22, -0.48, 0.06));
-        let grip_l = view_arm(
-            &mut draws,
-            scene.fist_l,
-            scene.cuff,
-            scene.upper,
-            hand_l,
-            up_l,
-            shoulder_l,
-            fp::camera_vector(camera, Vec3::new(-0.7, -1.0, 0.25)).normalize_or_zero(),
-            false,
-            0.0,
-        );
-        let fist_l = grip_l * Mat4::from_scale(Vec3::new(vs, vs, vs));
-        push(&mut draws, &scene.seal_rod, fist_l);
-        let spin = p.time * (0.4 + p.glow * 6.0);
-        let face_m = fist_l
-            * Mat4::from_translation(Vec3::new(0.0, 0.13, 0.0))
-            * Mat4::from_rotation_y(spin)
-            * Mat4::from_rotation_z(-PI / 2.0);
-        push(&mut draws, &scene.seal_face, face_m);
+        let pole_l = fp::camera_vector(camera, Vec3::new(-0.7, -1.0, 0.25)).normalize_or_zero();
         let pulse = 0.5 + 0.5 * (p.time * if p.channeling { 22.0 } else { 3.0 }).sin();
         let gem_glow = 0.7 + p.glow * (0.9 + pulse * 0.5) + p.cast * 0.3;
-        for part in &scene.seal_gem {
-            draws.push(MeshDraw3D {
-                mesh: part.mesh,
-                transform: face_m * part.transform,
-                material: part.material.with_emission(gem_glow * 1.4),
-                texture: part.texture,
-            });
-        }
-        let tip = face_m.transform_point3(Vec3::new(0.0, 0.014, 0.0));
+        let tip = match &scene.arms {
+            Some(arms) => {
+                let grip_l = view_arm_parts(
+                    &mut draws,
+                    &arms.hand_l,
+                    &arms.sleeve,
+                    &arms.sleeve_upper,
+                    hand_l,
+                    up_l,
+                    shoulder_l,
+                    pole_l,
+                    false,
+                    0.0,
+                );
+                let fist_l = grip_l * Mat4::from_scale(Vec3::new(vs, vs, vs));
+                push(&mut draws, &arms.sceptre, fist_l);
+                for part in &arms.gem {
+                    draws.push(MeshDraw3D {
+                        mesh: part.mesh,
+                        transform: fist_l * part.transform,
+                        material: part.material.with_emission(gem_glow * 1.6),
+                        texture: part.texture,
+                    });
+                }
+                // Its stone always lights her hand a little.
+                let stone = fist_l.transform_point3(Vec3::new(0.0, 0.255, 0.0));
+                lights.push(PointLight3D::new(
+                    stone,
+                    [0.63, 0.44, 1.0],
+                    0.35 + gem_glow * 0.25,
+                    0.9,
+                ));
+                stone
+            }
+            None => {
+                let grip_l = view_arm(
+                    &mut draws,
+                    scene.fist_l,
+                    scene.cuff,
+                    scene.upper,
+                    hand_l,
+                    up_l,
+                    shoulder_l,
+                    pole_l,
+                    false,
+                    0.0,
+                );
+                let fist_l = grip_l * Mat4::from_scale(Vec3::new(vs, vs, vs));
+                push(&mut draws, &scene.seal_rod, fist_l);
+                let spin = p.time * (0.4 + p.glow * 6.0);
+                let face_m = fist_l
+                    * Mat4::from_translation(Vec3::new(0.0, 0.13, 0.0))
+                    * Mat4::from_rotation_y(spin)
+                    * Mat4::from_rotation_z(-PI / 2.0);
+                push(&mut draws, &scene.seal_face, face_m);
+                for part in &scene.seal_gem {
+                    draws.push(MeshDraw3D {
+                        mesh: part.mesh,
+                        transform: face_m * part.transform,
+                        material: part.material.with_emission(gem_glow * 1.4),
+                        texture: part.texture,
+                    });
+                }
+                face_m.transform_point3(Vec3::new(0.0, 0.014, 0.0))
+            }
+        };
         if p.glow > 0.0 {
             lights.push(PointLight3D::new(
                 tip,
@@ -1203,7 +1719,51 @@ impl RenderState {
                 2.4,
             ));
         }
-        // The spark: a jagged ribbon of violet and gold from the seal to his chest.
+        // The spark. While she holds the seal its stone gathers light: motes spiral into it and a
+        // ring of light turns round it. Sent, a beam of violet round a white-gold core runs to his
+        // chest, branching in short-lived forks, with beads of light racing along it; where it
+        // strikes, the emblem flares, rings of light spread from it and sparks spray off. Each
+        // memory it wakes (a third of the spark) bursts in a great ring and a shower; off target,
+        // it crackles off the stone.
+        let charging = p.channeling || p.glow > 0.05;
+        let charge = p.glow.clamp(0.0, 1.0).max(if p.channeling { 0.35 } else { 0.0 });
+        if charging {
+            let n = 10;
+            for m in 0..n {
+                let seed = m as f32 * 1.618;
+                let u = ((t * (0.9 + hash(seed) * 0.6) + hash(seed + 3.0)) % 1.0).abs();
+                let r = 0.16 * (1.0 - u) * (0.6 + charge * 0.7);
+                let a = seed * 2.4 + t * (5.0 + 3.0 * hash(seed + 1.0)) + u * 4.0;
+                let right = fp::camera_vector(camera, Vec3::X);
+                let up = fp::camera_vector(camera, Vec3::Y);
+                let at = tip + (right * a.cos() + up * a.sin()) * r;
+                let c = if m % 3 == 0 { [1.0, 0.85, 0.55] } else { [0.72, 0.52, 1.0] };
+                draws.push(MeshDraw3D {
+                    mesh: scene.quad,
+                    transform: face(at, 0.012 + 0.016 * u),
+                    material: Material3D::additive([c[0] * 3.0, c[1] * 3.0, c[2] * 3.0, u * charge]),
+                    texture: Some(scene.halo),
+                });
+            }
+            let turn = t * 2.4;
+            let f = (camera.position - tip).normalize_or_zero();
+            let right = Vec3::Y.cross(f).normalize_or_zero();
+            let up = f.cross(right).normalize_or_zero();
+            let size = 0.07 + 0.05 * charge + 0.01 * (t * 9.0).sin();
+            let (s, c) = turn.sin_cos();
+            let (rx, ry) = (right * c + up * s, up * c - right * s);
+            draws.push(MeshDraw3D {
+                mesh: scene.quad,
+                transform: Mat4::from_cols(
+                    [rx.x * size, rx.y * size, rx.z * size, 0.0],
+                    [ry.x * size, ry.y * size, ry.z * size, 0.0],
+                    [f.x, f.y, f.z, 0.0],
+                    [tip.x, tip.y, tip.z, 1.0],
+                ),
+                material: Material3D::additive([1.6, 1.2, 2.6, 0.5 + 0.4 * charge]),
+                texture: Some(scene.ring),
+            });
+        }
         if fight.beam > 0.01 {
             let to = if fight.flowing {
                 emblem
@@ -1215,85 +1775,231 @@ impl RenderState {
             let len = (to - tip).length();
             let side = dir.cross(Vec3::Y).normalize_or_zero();
             let up = side.cross(dir).normalize_or_zero();
-            for (k, mesh) in scene.beam.iter().enumerate() {
-                let seed = t * (30.0 + k as f32 * 7.0);
-                let width = if k == 0 {
-                    0.016
-                } else {
-                    0.03 + k as f32 * 0.012
-                };
+            // A path through the air: the jagged line the beam takes this frame (it changes some 25
+            // times a second, as a spark does), so the layers and the beads follow the same bolt.
+            let snap = (t * 25.0).floor();
+            let path = |u: f32, k: f32| {
+                let amp = (u * PI).sin() * (0.10 + k * 0.06) * (len / 4.0).min(1.0);
+                let n = |w: f32| (hash(snap * 1.37 + u * w + k * 5.1) - 0.5) * 2.0;
+                tip.lerp(to, u)
+                    + side * ((t * 9.0 + u * 11.0 + k).sin() * amp * 0.5 + n(7.3) * amp)
+                    + up * ((t * 7.0 + u * 13.0 + k * 2.0).cos() * amp * 0.5 + n(9.1) * amp)
+            };
+            let ribbon = |mesh: MeshHandle,
+                          from_u: f32,
+                          to_u: f32,
+                          width: f32,
+                          k: f32,
+                          offset: &dyn Fn(f32) -> Vec3,
+                          renderer: &mut Wgpu3DRenderer,
+                          queue: &wgpu::Queue|
+             -> bool {
                 let mut vertices = Vec::with_capacity(BEAM_POINTS * 2);
                 for i in 0..BEAM_POINTS {
-                    let u = i as f32 / (BEAM_POINTS - 1) as f32;
-                    let amp = (u * PI).sin() * (0.12 + k as f32 * 0.08) * (len / 4.0).min(1.0);
-                    let jitter = |n: f32| (hash(seed + i as f32 * n) - 0.5) * amp * 0.8;
-                    let at = tip.lerp(to, u)
-                        + side * ((seed + i as f32 * 1.7).sin() * amp + jitter(3.3))
-                        + up * ((seed * 1.3 + i as f32 * 2.3).cos() * amp + jitter(5.1));
+                    let s = i as f32 / (BEAM_POINTS - 1) as f32;
+                    let u = from_u + (to_u - from_u) * s;
+                    let at = path(u, k) + offset(s);
                     let to_cam = (camera.position - at).normalize_or_zero();
-                    let wv = dir.cross(to_cam).normalize_or_zero()
-                        * (width * (0.6 + 0.4 * (u * PI).sin()));
+                    let taper = (s * PI).sin().max(0.25);
+                    let wv = dir.cross(to_cam).normalize_or_zero() * (width * taper);
                     for sgn in [1.0f32, -1.0] {
                         let q = at + wv * sgn;
-                        vertices.push(MeshVertex3D::new(q.to_array(), [0.0, 1.0, 0.0], [u, 0.0]));
+                        vertices.push(MeshVertex3D::new(q.to_array(), [0.0, 1.0, 0.0], [s, 0.0]));
                     }
                 }
-                if self
-                    .renderer
-                    .update_mesh_vertices(&self.queue, *mesh, &vertices)
-                    .is_ok()
-                {
-                    let (c, a) = if k == 0 {
-                        ([1.0, 0.88, 0.63], 0.9)
-                    } else {
-                        ([0.63, 0.38, 1.0], 0.4)
-                    };
+                renderer.update_mesh_vertices(queue, mesh, &vertices).is_ok()
+            };
+            let none = |_: f32| Vec3::ZERO;
+            let surge = 0.85 + 0.15 * (t * 31.0).sin();
+            // The violet sheath, the lilac glow and the white-gold core.
+            for (k, (width, colour, alpha)) in [
+                (0.11, [0.55, 0.30, 1.0], 0.35),
+                (0.05, [0.80, 0.55, 1.0], 0.55),
+                (0.018, [1.0, 0.92, 0.72], 1.0),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                if ribbon(scene.beam[k], 0.0, 1.0, width * surge, 0.0, &none, &mut self.renderer, &self.queue) {
                     draws.push(MeshDraw3D {
-                        mesh: *mesh,
+                        mesh: scene.beam[k],
                         transform: Mat4::IDENTITY,
                         material: Material3D::additive([
-                            c[0] * 1.5,
-                            c[1] * 1.5,
-                            c[2] * 1.5,
-                            fight.beam * a,
+                            colour[0] * 2.2,
+                            colour[1] * 2.2,
+                            colour[2] * 2.2,
+                            fight.beam * alpha,
                         ]),
                         texture: None,
                     });
                 }
             }
-            for m in 0..18 {
-                let u = (t * (0.9 + hash(m as f32) * 0.4) + hash(m as f32 * 3.0)).fract();
-                let at = tip.lerp(to, u)
-                    + Vec3::new(
-                        hash(t + m as f32) - 0.5,
-                        hash(t * 1.3 + m as f32) - 0.5,
-                        hash(t * 1.7 + m as f32) - 0.5,
-                    ) * 0.15;
-                let c = if m % 2 == 0 {
-                    [1.0, 0.82, 0.48]
-                } else {
-                    [0.69, 0.48, 1.0]
+            // The forks: short bolts leaving the beam, each living a few frames.
+            for (f, mesh) in scene.forks.iter().enumerate() {
+                let life = (snap + f as f32 * 3.0) / 3.0;
+                let seed = life.floor() * 7.1 + f as f32 * 13.3;
+                let start = 0.15 + hash(seed) * 0.7;
+                let reach = 0.25 + hash(seed + 1.0) * 0.45;
+                let a = hash(seed + 2.0) * std::f32::consts::TAU;
+                let out = (side * a.cos() + up * a.sin()) * reach;
+                let offset = move |s: f32| {
+                    let along = dir * (s * 0.25);
+                    let wiggle = (side * (hash(seed + s * 9.0) - 0.5) + up * (hash(seed + s * 5.0) - 0.5)) * 0.08;
+                    out * s + along + wiggle
                 };
+                if ribbon(*mesh, start, start, 0.012, 0.0, &offset, &mut self.renderer, &self.queue) {
+                    draws.push(MeshDraw3D {
+                        mesh: *mesh,
+                        transform: Mat4::IDENTITY,
+                        material: Material3D::additive([1.6, 1.2, 2.6, fight.beam * 0.8]),
+                        texture: None,
+                    });
+                }
+            }
+            // Beads racing along it.
+            for m in 0..7 {
+                let u = (t * (1.6 + 0.3 * hash(m as f32)) + m as f32 / 7.0) % 1.0;
+                let gold = m % 2 == 0;
                 draws.push(MeshDraw3D {
                     mesh: scene.quad,
-                    transform: face(at, 0.08),
-                    material: Material3D::additive([
-                        c[0] * 2.0,
-                        c[1] * 2.0,
-                        c[2] * 2.0,
-                        fight.beam * if fight.flowing { 0.6 } else { 0.3 },
-                    ]),
+                    transform: face(path(u, 0.0), 0.05 + 0.03 * (u * PI).sin()),
+                    material: Material3D::additive(if gold {
+                        [3.0, 2.4, 1.4, fight.beam]
+                    } else {
+                        [2.0, 1.4, 3.2, fight.beam]
+                    }),
                     texture: Some(scene.halo),
                 });
             }
+            // At the stone: a flare.
+            draws.push(MeshDraw3D {
+                mesh: scene.quad,
+                transform: face(tip, 0.16 + 0.04 * (t * 23.0).sin()),
+                material: Material3D::additive([2.6, 2.2, 3.4, 0.8 * fight.beam]),
+                texture: Some(scene.halo),
+            });
+            lights.push(PointLight3D::new(
+                tip.lerp(to, 0.5),
+                [0.7, 0.5, 1.0],
+                3.5 * fight.beam * surge,
+                5.0,
+            ));
             if fight.flowing {
-                lights.push(PointLight3D::new(
-                    tip.lerp(to, 0.5),
-                    [0.7, 0.5, 1.0],
-                    3.5 * fight.beam,
-                    5.0,
-                ));
+                // Where it strikes: the flare, rings spreading off his chest, sparks spraying.
+                draws.push(MeshDraw3D {
+                    mesh: scene.quad,
+                    transform: face(emblem + toward * 0.08, 0.7 + 0.15 * (t * 17.0).sin()),
+                    material: Material3D::additive([2.4, 1.9, 3.2, 0.7 * fight.beam]),
+                    texture: Some(scene.halo),
+                });
+                for r in 0..3 {
+                    let k = (t * 1.8 + r as f32 / 3.0) % 1.0;
+                    draws.push(MeshDraw3D {
+                        mesh: scene.quad,
+                        transform: face(emblem + toward * 0.06, 0.3 + k * 1.6),
+                        material: Material3D::additive([1.6, 1.1, 2.6, (1.0 - k) * 0.7 * fight.beam]),
+                        texture: Some(scene.ring),
+                    });
+                }
+                for _ in 0..3 {
+                    let s = scene.mote_seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    scene.mote_seed = s;
+                    let r = |n: u32| ((s.rotate_left(n) >> 8) as f32) / 16_777_216.0;
+                    let out = (toward * 0.6
+                        + side * (r(3) - 0.5) * 2.0
+                        + Vec3::Y * (r(7) * 1.2 - 0.2))
+                        .normalize_or_zero();
+                    scene.motes.push(Mote {
+                        at: emblem,
+                        v: out * (2.0 + r(11) * 3.0),
+                        life: 0.35 + r(13) * 0.4,
+                        age: 0.0,
+                        size: 0.025 + r(17) * 0.03,
+                        gold: r(19) > 0.5,
+                    });
+                }
+            } else if fight.fizzle {
+                // Off target: it crackles off the stone.
+                for _ in 0..2 {
+                    let s = scene.mote_seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    scene.mote_seed = s;
+                    let r = |n: u32| ((s.rotate_left(n) >> 8) as f32) / 16_777_216.0;
+                    let out = Vec3::new(r(3) - 0.5, r(5) * 0.8, r(7) - 0.5).normalize_or_zero();
+                    scene.motes.push(Mote {
+                        at: tip,
+                        v: out * (1.0 + r(11) * 1.5),
+                        life: 0.2 + r(13) * 0.25,
+                        age: 0.0,
+                        size: 0.015 + r(17) * 0.015,
+                        gold: r(19) > 0.6,
+                    });
+                }
             }
+        }
+        // A memory woken (a third of the spark): a great ring of light, a flash, a shower.
+        if v.memories > scene.memories_seen {
+            scene.memories_seen = v.memories;
+            scene.burst_at = t;
+            for i in 0..70 {
+                let s = scene.mote_seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223 + i);
+                scene.mote_seed = s;
+                let r = |n: u32| ((s.rotate_left(n) >> 8) as f32) / 16_777_216.0;
+                let a = r(3) * std::f32::consts::TAU;
+                let e = r(5) * 1.4 - 0.4;
+                let out = Vec3::new(a.cos() * e.cos(), e.sin() + 0.3, a.sin() * e.cos()).normalize_or_zero();
+                scene.motes.push(Mote {
+                    at: emblem,
+                    v: out * (3.0 + r(11) * 5.0),
+                    life: 0.6 + r(13) * 0.9,
+                    age: 0.0,
+                    size: 0.03 + r(17) * 0.05,
+                    gold: r(19) > 0.4,
+                });
+            }
+        }
+        if v.memories < scene.memories_seen {
+            scene.memories_seen = v.memories;
+        }
+        let since = t - scene.burst_at;
+        if (0.0..1.2).contains(&since) {
+            let k = since / 1.2;
+            for (grow, alpha) in [(6.0, 0.9), (3.5, 0.6)] {
+                draws.push(MeshDraw3D {
+                    mesh: scene.quad,
+                    transform: face(emblem + toward * 0.1, 0.4 + ease_out_cubic(k) * grow),
+                    material: Material3D::additive([2.6, 2.0, 3.4, (1.0 - k) * alpha]),
+                    texture: Some(scene.ring),
+                });
+            }
+            draws.push(MeshDraw3D {
+                mesh: scene.quad,
+                transform: face(emblem + toward * 0.12, 2.6 * (1.0 - k * 0.5)),
+                material: Material3D::additive([3.0, 2.5, 3.6, (1.0 - k).powi(2) * 0.9]),
+                texture: Some(scene.halo),
+            });
+            lights.push(PointLight3D::new(emblem, [0.85, 0.65, 1.0], 18.0 * (1.0 - k).powi(2), 12.0));
+        }
+        // The sparks in the air: flung out, falling, winking out.
+        for m in &mut scene.motes {
+            m.age += dt;
+            m.v.y -= 6.0 * dt;
+            m.v = m.v * (1.0 - 1.6 * dt);
+            m.at = m.at + m.v * dt;
+        }
+        scene.motes.retain(|m| m.age < m.life);
+        if scene.motes.len() > 400 {
+            let extra = scene.motes.len() - 400;
+            scene.motes.drain(0..extra);
+        }
+        for m in &scene.motes {
+            let k = m.age / m.life;
+            let c = if m.gold { [3.0, 2.3, 1.2] } else { [2.0, 1.4, 3.4] };
+            draws.push(MeshDraw3D {
+                mesh: scene.quad,
+                transform: face(m.at, m.size * (1.0 - 0.6 * k)),
+                material: Material3D::additive([c[0], c[1], c[2], 1.0 - k]),
+                texture: Some(scene.halo),
+            });
         }
         // The lamps nearest her (the braziers first: they light the throne).
         let me = Vec3::new(p.x, 1.0, p.z);
@@ -1320,17 +2026,25 @@ impl RenderState {
                 14.0,
             ));
         }
-        let saved = self.renderer.replace_finish(penascal3d::finish());
+        let saved = self.renderer.replace_finish(Finish3D {
+            bloom: 0.55,
+            bloom_threshold: 1.05,
+            contrast: 1.07,
+            saturation: 1.1,
+            ..penascal3d::finish()
+        });
+        let (scene_view, scene_size) = self.scene_target();
         self.renderer.render_with_environment_and_lights(
             &self.device,
             &self.queue,
-            &self.target_view,
-            (WINDOW_WIDTH, WINDOW_HEIGHT),
+            &scene_view,
+            scene_size,
             camera,
             mood(frame.environment),
             &lights,
             &draws,
         );
+        self.finish_scene(&scene_view, scene_size);
         self.renderer.replace_finish(saved);
         // The HUD.
         let float = fight.float.and_then(|(text, growl, until)| {
@@ -1398,6 +2112,14 @@ impl RenderState {
             vignette: fight.vignette,
             flash: fight.flash,
             card,
+            objective: fight.objective().map(|(head, detail, urgency)| {
+                if scene.objective.0 != head {
+                    scene.objective = (head.clone(), t);
+                }
+                (head, detail, urgency, scene.objective.1)
+            }),
+            running: p.running,
+            channeling: p.channeling,
         };
         self.boss_scene = Some(scene);
         self.map_overlay.set_boss(Some(view));
@@ -1488,6 +2210,8 @@ impl App {
         };
         let seed = (self.elapsed * 1000.0) as u32 ^ 0x5eed_1234;
         self.boss = Some(Fight::new(wolves, hunted, seed));
+        // The sword she wears: its weight and what it carries.
+        self.apply_equipment();
         self.boss_input = BossInput::default();
         // Night is falling over the hills.
         self.environment_cycle.set_phase(0.86);
@@ -1561,7 +2285,14 @@ impl App {
         self.release_dungeon_mouse();
         self.clear_input();
         self.enter_penascal_by_the_stone();
-        if won {
+        let practice = std::mem::take(&mut self.boss_practice);
+        if won && practice {
+            self.float_chiquita_after(
+                "—Ensayo superado. Cuando llegue la de verdad, quiero verte igual de rápida.",
+                mascot::Cue::Talk,
+                0.6,
+            );
+        } else if won {
             self.story.values.insert("varrak_vencido".to_owned(), 1);
             self.start_talk_at("acto1.varrak_final");
         } else {
@@ -1583,6 +2314,7 @@ impl App {
         match code {
             KeyCode::Space => self.boss_input.jump = true,
             KeyCode::KeyF | KeyCode::Enter => self.boss_input.attack = true,
+            KeyCode::KeyQ => self.quick_cure(),
             _ => {}
         }
     }

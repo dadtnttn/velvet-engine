@@ -17,6 +17,9 @@ mod plugin;
 mod refcount;
 mod registry;
 mod source;
+mod streaming;
+#[cfg(feature = "vlz")]
+mod vlz_source;
 
 pub mod prelude;
 
@@ -42,7 +45,15 @@ pub use platform::{
 pub use plugin::AssetsPlugin;
 pub use refcount::{LiveSet, RcHandle, RefCountTable, TrackedStrongHandle};
 pub use registry::{AssetEvent, Assets};
-pub use source::{FileSource, MemorySource, Source};
+pub use source::{FileSource, LayeredSource, MemorySource, Source, SourceError};
+pub use streaming::{
+    AssetStreamer, StreamCompletion, StreamConfig, StreamPayload, StreamStats, StreamTicket,
+};
+/// The VLZ container crate (packing, archive inspection, codecs).
+#[cfg(feature = "vlz")]
+pub use velvet_vlz as vlz;
+#[cfg(feature = "vlz")]
+pub use vlz_source::VlzSource;
 
 /// Bytes asset (generic raw payload).
 #[derive(Debug, Clone, PartialEq, Eq)]

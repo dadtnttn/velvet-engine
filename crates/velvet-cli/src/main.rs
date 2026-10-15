@@ -19,6 +19,7 @@ mod script_cmd;
 mod story_cmd;
 mod style_cmd;
 mod terrain_cmd;
+mod vlz_cmd;
 mod vs3_cmd;
 mod workspace_cmd;
 
@@ -59,6 +60,9 @@ use style_cmd::{
     cmd_style_run, cmd_style_snapshot,
 };
 use terrain_cmd::cmd_terrain_generate;
+use vlz_cmd::{
+    cmd_vlz_extract, cmd_vlz_list, cmd_vlz_pack, cmd_vlz_stats, cmd_vlz_verify, VlzPackArgs,
+};
 use vs3_cmd::{
     cmd_vs3_check, cmd_vs3_conform, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_natives, cmd_vs3_run,
 };
@@ -375,6 +379,80 @@ enum Commands {
     Crypto {
         #[command(subcommand)]
         command: CryptoCommands,
+    },
+    /// VLZ (Velvet Compressed) archives: pack, list, extract, verify, stats.
+    Vlz {
+        #[command(subcommand)]
+        command: VlzCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum VlzCommands {
+    /// Pack a directory (or one file) into a .vlz archive.
+    Pack {
+        /// Input directory or file.
+        input: PathBuf,
+        /// Output .vlz path.
+        output: PathBuf,
+        /// auto | raw | lz4 | zstd | zstd-high.
+        #[arg(long, default_value = "auto")]
+        method: String,
+        /// Profile of the automatic method: speed | balanced | size.
+        #[arg(long, default_value = "balanced")]
+        profile: String,
+        /// Uniform block size in KiB (4–16384; default: chosen per resource).
+        #[arg(long)]
+        block_size: Option<u32>,
+        /// Alignment of block payloads in bytes (power of two, up to 65536).
+        #[arg(long, default_value_t = 16)]
+        align: u32,
+        /// Compression threads (0 = all cores; the output is identical either way).
+        #[arg(long, default_value_t = 0)]
+        threads: usize,
+        /// Zstandard level of the `zstd` method.
+        #[arg(long, default_value_t = 3)]
+        zstd_level: i32,
+        /// Zstandard level of the `zstd-high` method.
+        #[arg(long, default_value_t = 19)]
+        zstd_high_level: i32,
+        /// Include-only glob (repeatable).
+        #[arg(long)]
+        include: Vec<String>,
+        /// Exclude glob (repeatable).
+        #[arg(long)]
+        exclude: Vec<String>,
+    },
+    /// List the entries of an archive.
+    List {
+        /// Archive path.
+        archive: PathBuf,
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Extract entries (all by default) into a directory.
+    Extract {
+        /// Archive path.
+        archive: PathBuf,
+        /// Output directory.
+        output: PathBuf,
+        /// Only this entry (repeatable).
+        #[arg(long)]
+        entry: Vec<String>,
+    },
+    /// Decode everything and check every checksum.
+    Verify {
+        /// Archive path.
+        archive: PathBuf,
+    },
+    /// Size and compression statistics.
+    Stats {
+        /// Archive path.
+        archive: PathBuf,
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -1323,6 +1401,41 @@ fn dispatch(cli: Cli) -> Result<()> {
                     command: HybridCommands::Fingerprint { public },
                 },
         } => cmd_hybrid_fingerprint(public),
+        Commands::Vlz { command } => match command {
+            VlzCommands::Pack {
+                input,
+                output,
+                method,
+                profile,
+                block_size,
+                align,
+                threads,
+                zstd_level,
+                zstd_high_level,
+                include,
+                exclude,
+            } => cmd_vlz_pack(VlzPackArgs {
+                input,
+                output,
+                method,
+                profile,
+                block_size_kib: block_size,
+                align,
+                threads,
+                zstd_level,
+                zstd_high_level,
+                include,
+                exclude,
+            }),
+            VlzCommands::List { archive, json } => cmd_vlz_list(archive, json),
+            VlzCommands::Extract {
+                archive,
+                output,
+                entry,
+            } => cmd_vlz_extract(archive, output, entry),
+            VlzCommands::Verify { archive } => cmd_vlz_verify(archive),
+            VlzCommands::Stats { archive, json } => cmd_vlz_stats(archive, json),
+        },
     }
 }
 

@@ -5,6 +5,8 @@
 
 #![deny(missing_docs)]
 
+/// CPU time spent in the 3D renderer's frame calls (nanoseconds, summed): for profiling.
+pub static RENDER3D_CPU_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 mod animation;
 mod atlas;
 mod batch;
@@ -35,9 +37,11 @@ mod stats;
 mod texture;
 mod toon;
 mod toon_fire;
+mod upscale3d;
+pub use upscale3d::{Antialias3D, Finishing3D, Upscale3D, Upscaler3D};
 mod water3d;
 mod water_life;
-mod work;
+pub mod work;
 
 pub mod prelude;
 
@@ -55,10 +59,11 @@ pub use letterbox::{compute_letterbox, Letterbox, ScalingMode};
 pub use material::{BlendMode, Material};
 pub use mesh3d::{
     AnimatedMesh3D, AnimationClip3D, Atmosphere3D, Camera3D, Celestial3D, DayNightCycle3D,
-    EnvironmentFrame3D, EnvironmentPreset3D, Finish3D, GltfModel, Lighting3D, Material3D, Mesh3D,
+    EnvironmentFrame3D, EnvironmentPreset3D, Finish3D, GltfModel, Lighting3D, Material3D, Mesh3D, Quality3D,
     MeshDraw3D, MeshHandle, MeshVertex3D, PointLight3D, PreparedTexture3D, Render3DError,
     RotationTracks3D, SkinWeights3D, TextureData3D, TextureHandle, Transform3D, Wgpu3DRenderer,
 };
+pub use mesh3d::{image_original, set_image_override, ImageOverride};
 pub use particles::{Particle, ParticleBatch, ParticleEmitter, ParticleGpu};
 pub use plugin::RenderPlugin;
 pub use postprocess::{PostEffect, PostProcessStack};

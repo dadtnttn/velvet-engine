@@ -1,7 +1,8 @@
 //! Expedition chrome: native 1920x1080, one vector batch, shared glyph atlas.
-//! Glass panes tinted by the biome the Queen stands in; icons come from the
-//! same set as the world's F prompts. All values remain live.
-use super::{rect, triangle, Dungeon, Hud, RenderStats, Vertex};
+//! The game's Persona look: slanted ink plates edged in the colour of the biome the Queen
+//! stands in, kicker tags, slanted keys and segmented bars; icons come from the same set as the
+//! world's F prompts. All values remain live.
+use super::{rect, triangle, Dungeon, Face, Hud, RenderStats, Vertex};
 use std::f32::consts::{FRAC_PI_2, TAU};
 #[path = "hud_glass.rs"]
 mod glass;
@@ -10,7 +11,7 @@ mod map;
 #[path = "hud_map3d.rs"]
 mod map3d;
 use super::super::prompt_icons::{self, Icon, Prompt};
-use glass::{Rgba, Tone, CRIMSON, GREEN, IVORY, MUTED};
+use glass::{Rgba, Tone, CRIMSON, GREEN, INK, IVORY, MUTED};
 
 const GOLD: [f32; 4] = [0.93, 0.57, 0.16, 1.0];
 const PALE: [f32; 4] = [1.0, 0.79, 0.42, 1.0];
@@ -86,10 +87,7 @@ fn leaf(v: &mut Vec<Vertex>, p: [f32; 2]) {
 
 impl Hud {
     fn width(&self, text: &str, size: f32) -> f32 {
-        text.chars()
-            .filter_map(|c| self.glyphs.get(&c))
-            .map(|g| g.advance * size / 38.0)
-            .sum()
+        self.measure(text, size)
     }
     fn fitted(
         &self,
@@ -127,125 +125,109 @@ impl Hud {
     fn right(&self, v: &mut Vec<Vertex>, text: &str, right: f32, cy: f32, size: f32, color: Rgba) {
         self.mid(v, text, right - self.width(text, size), cy, size, color);
     }
-    /// A key cap with its legend; returns its width.
+    /// A slanted key cap with its legend, as the menus' footers draw them; returns its width.
     fn key(&self, v: &mut Vec<Vertex>, label: &str, x: f32, y: f32) -> f32 {
-        let size = 15.0;
-        let w = (self.width(label, size) + 18.0).max(28.0);
-        let h = 28.0;
-        glass::round(
-            v,
-            [x, y + 3.0, w, h - 3.0],
-            7.0,
-            [0.0, 0.0, 0.0, 0.85],
-            [0.0, 0.0, 0.0, 0.85],
-        );
-        glass::round(
-            v,
-            [x, y, w, h - 3.0],
-            7.0,
-            [0.075, 0.08, 0.095, 0.97],
-            [0.03, 0.032, 0.04, 0.97],
-        );
-        glass::round_outline(v, [x, y, w, h - 1.0], 7.0, 1.0, [1.0, 1.0, 1.0, 0.20]);
-        self.centered(v, label, x + w * 0.5, y + (h - 3.0) * 0.5, size, IVORY);
+        let size = 14.0;
+        let w = (self.width(label, size) + 22.0).max(32.0);
+        let h = 27.0;
+        glass::slant(v, [x + 3.0, y + 3.0, w, h], 5.0, [0.0, 0.0, 0.0, 0.6]);
+        glass::slant(v, [x, y, w, h], 5.0, glass::alpha(INK, 0.96));
+        glass::slant_outline(v, [x, y, w, h], 5.0, 1.3, [0.86, 0.82, 0.74, 0.55]);
+        self.centered(v, label, x + w * 0.5, y + h * 0.5, size, IVORY);
         w
     }
-    /// A pill with a leading label; returns its width.
+    /// A slanted tag with a leading diamond; returns its width.
     fn tag(&self, v: &mut Vec<Vertex>, text: &str, x: f32, y: f32, color: Rgba) -> f32 {
         let size = 15.0;
-        let w = self.width(text, size) + 30.0;
+        let w = self.width(text, size) + 34.0;
         glass::chip(v, [x, y, w, 28.0], color, 0.16);
-        disc(v, [x + 13.0, y + 14.0], 3.0, color);
+        diamond(v, [x + 15.0, y + 14.0], 4.0, color);
         self.mid(
             v,
             text,
-            x + 24.0,
+            x + 26.0,
             y + 14.0,
             size,
-            glass::mix(color, [1.0, 1.0, 1.0, 1.0], 0.5),
+            glass::mix(color, [1.0, 1.0, 1.0, 1.0], 0.55),
         );
         w
     }
-    /// The F prompt: key, the interaction's icon in its colour, the action
-    /// and what it acts on, on a glass plate.
-    fn action_prompt(&self, v: &mut Vec<Vertex>, prompt: &Prompt, tone: &Tone) {
+    /// A kicker over a block, like the menus' «LUST RANK»: dark capitals on a slanted plate of
+    /// `color`, its top at `y`; returns its width.
+    fn kicker(&self, v: &mut Vec<Vertex>, text: &str, x: f32, y: f32, color: Rgba) -> f32 {
+        let size = 13.0;
+        let w = self.width(text, size) + 26.0;
+        let h = 23.0;
+        glass::slant(v, [x + 3.0, y + 3.0, w, h], 6.0, [0.0, 0.0, 0.0, 0.5]);
+        glass::slant(v, [x, y, w, h], 6.0, glass::alpha(color, 1.0));
+        self.mid(v, text, x + 13.0, y + h * 0.5 + 0.5, size, INK);
+        w
+    }
+    /// Text in the serif the menus give to names.
+    fn serif(&self, v: &mut Vec<Vertex>, text: &str, x: f32, cy: f32, size: f32, max: f32, color: Rgba) {
+        self.in_face(Face::Serif, || self.mid_fit(v, text, x, cy, size, max, color));
+    }
+    /// Text in the menus' italic, for asides.
+    fn aside(&self, v: &mut Vec<Vertex>, text: &str, x: f32, cy: f32, size: f32, max: f32, color: Rgba) {
+        self.in_face(Face::Italic, || self.mid_fit(v, text, x, cy, size, max, color));
+    }
+    /// The F prompt, in the game's Persona manner: a slanted dark plate with a wedge of the
+    /// interaction's colour, the key on a slanted cap, the interaction's icon, the action big and
+    /// what it acts on under it.
+    fn action_prompt(&self, v: &mut Vec<Vertex>, prompt: &Prompt, _tone: &Tone) {
         let a = prompt.icon.accent();
         let accent = [a[0].min(1.0), a[1].min(1.0), a[2].min(1.0), 1.0];
-        let (verb_size, detail_size) = (27.0, 17.0);
+        let (verb_size, detail_size) = (29.0, 17.0);
         let detail = prompt.detail.as_deref().unwrap_or("");
         let key = if prompt.keyed { 62.0 } else { 0.0 };
         let text_w = self
             .width(&prompt.verb, verb_size)
             .max(self.width(detail, detail_size));
-        let width = (28.0 + key + 64.0 + 18.0 + text_w + 34.0).clamp(360.0, 1000.0);
-        let (x, y, h) = ((1920.0 - width) * 0.5, 770.0, 84.0);
-        glass::pane(v, [x, y, width, h], 28.0, tone, 1.0);
-        // A lit edge of the interaction's colour along the top.
+        let width = (40.0 + key + 60.0 + 18.0 + text_w + 44.0).clamp(340.0, 1000.0);
+        let (x, y, h, lean) = ((1920.0 - width) * 0.5, 770.0, 78.0, 14.0);
+        let slant = |x: f32, y: f32, w: f32, h: f32, lean: f32| -> [[f32; 2]; 4] {
+            [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+        };
+        polygon(v, &slant(x + 9.0, y + 9.0, width, h, lean), [0.0, 0.0, 0.0, 0.55]);
+        // (This HUD's colours are linear: the game's ink 0e0816.)
+        polygon(v, &slant(x, y, width, h, lean), [0.0045, 0.0025, 0.0075, 0.95]);
+        polygon(v, &slant(x, y, 18.0, h, lean), accent);
         line(
             v,
-            [x + 34.0, y + 2.5],
-            [x + width - 34.0, y + 2.5],
-            1.8,
-            glass::alpha(accent, 0.7),
+            [x + lean, y + 1.2],
+            [x + width + lean, y + 1.2],
+            2.4,
+            glass::alpha(accent, 0.9),
         );
         let mid = y + h * 0.5;
-        let mut cx = x + 26.0;
+        let mut cx = x + 36.0;
         if prompt.keyed {
-            let size = 48.0;
-            let top = mid - size * 0.5;
-            glass::round(
+            let (kw, kh) = (46.0, 44.0);
+            let top = mid - kh * 0.5;
+            polygon(v, &slant(cx + 3.0, top + 4.0, kw, kh, 5.0), [0.0, 0.0, 0.0, 0.7]);
+            polygon(v, &slant(cx, top, kw, kh, 5.0), accent);
+            polygon(
                 v,
-                [cx, top + 4.0, size, size - 2.0],
-                12.0,
-                [0.0, 0.0, 0.0, 0.8],
-                [0.0, 0.0, 0.0, 0.8],
+                &slant(cx + 3.0, top + 3.0, kw - 6.0, kh - 6.0, 4.0),
+                [0.006, 0.003, 0.01, 1.0],
             );
-            glass::round(
-                v,
-                [cx, top, size, size - 3.0],
-                12.0,
-                [1.0, 0.86, 0.5, 1.0],
-                [0.86, 0.6, 0.24, 1.0],
-            );
-            glass::round(
-                v,
-                [cx + 3.5, top + 3.0, size - 7.0, size - 10.0],
-                9.0,
-                [0.03, 0.02, 0.05, 1.0],
-                [0.05, 0.03, 0.07, 1.0],
-            );
-            self.centered(
-                v,
-                "F",
-                cx + size * 0.5,
-                top + (size - 3.0) * 0.5,
-                27.0,
-                PALE,
-            );
-            cx += size + 14.0;
-            line(
-                v,
-                [cx, y + 20.0],
-                [cx, y + h - 20.0],
-                1.0,
-                glass::alpha(accent, 0.35),
-            );
-            cx += 14.0;
+            self.centered(v, "F", cx + kw * 0.5, top + kh * 0.5, 25.0, IVORY);
+            cx += key;
         }
-        glass::icon_disc(v, prompt.icon, [cx + 30.0, mid], 30.0, accent, true);
-        let tx = cx + 30.0 + 30.0 + 18.0;
+        glass::icon_disc(v, prompt.icon, [cx + 27.0, mid], 27.0, accent, true);
+        let tx = cx + 27.0 * 2.0 + 18.0;
         let room = x + width - 26.0 - tx;
         if detail.is_empty() {
             self.mid_fit(v, &prompt.verb, tx, mid, verb_size, room, IVORY);
         } else {
-            self.mid_fit(v, &prompt.verb, tx, mid - 14.0, verb_size, room, IVORY);
+            self.mid_fit(v, &prompt.verb, tx, mid - 13.0, verb_size, room, IVORY);
             let soft = [
-                0.55 + accent[0] * 0.4,
-                0.55 + accent[1] * 0.4,
-                0.55 + accent[2] * 0.4,
+                0.6 + accent[0] * 0.4,
+                0.6 + accent[1] * 0.4,
+                0.6 + accent[2] * 0.4,
                 0.95,
             ];
-            self.mid_fit(v, detail, tx, mid + 17.0, detail_size, room, soft);
+            self.mid_fit(v, detail, tx + 2.0, mid + 17.0, detail_size, room, soft);
         }
     }
 
@@ -285,14 +267,7 @@ impl Hud {
         let biome = &run.catalog.biomes[room.biome];
         glass::pane(v, [36.0, 36.0, 600.0, 116.0], 26.0, tone, 1.0);
         self.compass(v, [100.0, 94.0], run.controller.yaw, tone);
-        self.text(
-            v,
-            "LAS CAVERNAS DEL SELLO",
-            154.0,
-            49.0,
-            14.0,
-            glass::alpha(tone.accent, 0.95),
-        );
+        self.kicker(v, "LAS CAVERNAS DEL SELLO", 154.0, 30.0, tone.accent);
         let room_label = if run
             .map
             .spawns
@@ -307,7 +282,7 @@ impl Hud {
                 .map(|theme| theme.title())
                 .unwrap_or_else(|| room.role.label())
         };
-        self.mid_fit(v, room_label, 154.0, 86.0, 31.0, 410.0, IVORY);
+        self.serif(v, room_label, 156.0, 82.0, 33.0, 410.0, IVORY);
         let subtitle = if biome.id == "forgotten_masonry" {
             "Vestíbulos olvidados"
         } else {
@@ -317,12 +292,12 @@ impl Hud {
         x += self.tag(v, subtitle, x, 104.0, tone.accent) + 8.0;
         let y = run.controller.position.y;
         let label = format!("ALT {:+.0} m", y);
-        let w = self.width(&label, 15.0) + 30.0;
+        let w = self.width(&label, 15.0) + 34.0;
         let alt = glass::altitude_color(self.altitude_fraction(run, y));
         glass::chip(v, [x, 104.0, w, 28.0], alt, 0.22);
         glass::caret(
             v,
-            [x + 13.0, 118.0],
+            [x + 15.0, 118.0],
             4.2,
             if y >= 0.0 { -1.0 } else { 1.0 },
             glass::mix(alt, [1.0, 1.0, 1.0, 1.0], 0.4),
@@ -330,7 +305,7 @@ impl Hud {
         self.mid(
             v,
             &label,
-            x + 24.0,
+            x + 26.0,
             118.0,
             15.0,
             glass::mix(alt, [1.0, 1.0, 1.0, 1.0], 0.55),
@@ -389,7 +364,7 @@ impl Hud {
 
     /// Top right: the seal and the key, and the next thing to do.
     fn objective_card(&self, run: &Dungeon, tone: &Tone, v: &mut Vec<Vertex>) {
-        let r = [1436.0, 36.0, 448.0, 136.0];
+        let r = [1436.0, 36.0, 448.0, 140.0];
         glass::pane(v, r, 26.0, tone, 1.0);
         for (i, (icon, label, done, yes, no)) in [
             (Icon::Rune, "SELLO", run.seal, "Alineado", "Sin alinear"),
@@ -398,7 +373,7 @@ impl Hud {
         .into_iter()
         .enumerate()
         {
-            let x = 1456.0 + i as f32 * 212.0;
+            let x = 1462.0 + i as f32 * 206.0;
             let color = if done {
                 GREEN
             } else {
@@ -406,7 +381,7 @@ impl Hud {
             };
             glass::chip(
                 v,
-                [x, 54.0, 196.0, 48.0],
+                [x, 54.0, 194.0, 48.0],
                 color,
                 if done { 0.20 } else { 0.10 },
             );
@@ -416,19 +391,19 @@ impl Hud {
                 glass::lift(color, 0.85)
             };
             glass::icon_disc(v, icon, [x + 27.0, 78.0], 18.0, badge, done);
-            self.text(v, label, x + 54.0, 60.0, 12.0, glass::alpha(color, 0.95));
+            self.text(v, label, x + 54.0, 59.0, 12.0, glass::alpha(color, 0.95));
             self.mid_fit(
                 v,
                 if done { yes } else { no },
                 x + 54.0,
                 88.0,
                 17.0,
-                136.0,
+                120.0,
                 if done { IVORY } else { MUTED },
             );
             if done {
                 // A check mark in the corner.
-                let c = [x + 176.0, 78.0];
+                let c = [x + 172.0, 78.0];
                 line(v, [c[0] - 5.0, c[1]], [c[0] - 1.5, c[1] + 4.0], 2.2, GREEN);
                 line(
                     v,
@@ -439,13 +414,6 @@ impl Hud {
                 );
             }
         }
-        line(
-            v,
-            [1456.0, 116.0],
-            [1864.0, 116.0],
-            1.0,
-            glass::alpha(tone.accent, 0.28),
-        );
         let aligned = (0..3).filter(|i| run.sigils[*i] as usize == i + 1).count();
         let objective = if !run.seal {
             "Alinea las runas del sello".to_string()
@@ -456,37 +424,30 @@ impl Hud {
         } else {
             "Regresa al altar de salida".to_string()
         };
-        diamond(v, [1463.0, 134.0], 5.0, tone.accent);
-        self.text(
-            v,
-            "OBJETIVO",
-            1476.0,
-            124.0,
-            12.0,
-            glass::alpha(tone.accent, 0.95),
-        );
-        let room = if !run.seal { 300.0 } else { 388.0 };
-        self.mid_fit(v, &objective, 1456.0, 155.0, 20.0, room, IVORY);
+        let kw = self.kicker(v, "OBJETIVO", 1458.0, 114.0, tone.accent);
+        let room = if !run.seal { 290.0 } else { 400.0 } - kw * 0.0;
+        self.mid_fit(v, &objective, 1460.0, 156.0, 19.0, room, IVORY);
         if !run.seal {
+            // The three runes: slanted cells, lit as they fall into phase.
             for k in 0..3 {
                 let lit = k < aligned;
-                let c = [1794.0 + k as f32 * 24.0, 155.0];
-                disc(
+                let cell = [1782.0 + k as f32 * 28.0, 146.0, 22.0, 20.0];
+                glass::slant(
                     v,
-                    c,
-                    8.0,
+                    cell,
+                    5.0,
                     if lit {
                         glass::alpha(tone.bright, 1.0)
                     } else {
-                        [0.02, 0.03, 0.04, 0.9]
+                        glass::alpha(INK, 0.95)
                     },
                 );
-                ring(
+                glass::slant_outline(
                     v,
-                    c,
-                    8.0,
-                    1.4,
-                    glass::alpha(tone.accent, if lit { 1.0 } else { 0.55 }),
+                    cell,
+                    5.0,
+                    1.2,
+                    glass::alpha(tone.accent, if lit { 1.0 } else { 0.6 }),
                 );
             }
         }
@@ -498,9 +459,16 @@ impl Hud {
         let fraction = (run.health / 100.0).clamp(0.0, 1.0);
         let low = fraction < 0.3;
         let pulse = 0.5 + 0.5 * (run.elapsed * 6.0).sin();
-        glass::pane(v, r, 26.0, tone, 1.0);
+        let blood = [0.98, 0.16, 0.20, 1.0];
+        glass::plate(v, r, blood, 1.0);
         if low {
-            glass::round_outline(v, r, 26.0, 2.0, glass::alpha(CRIMSON, 0.35 + 0.4 * pulse));
+            glass::slant_outline(
+                v,
+                r,
+                glass::lean_for(r[3]),
+                2.4,
+                glass::alpha(CRIMSON, 0.35 + 0.45 * pulse),
+            );
         }
         glass::icon_disc(
             v,
@@ -510,20 +478,14 @@ impl Hud {
             [1.0, 0.30, 0.36, 1.0],
             low,
         );
-        self.text(
-            v,
-            "VITALIDAD",
-            126.0,
-            902.0,
-            14.0,
-            glass::alpha(tone.accent, 0.95),
-        );
+        let _ = tone;
+        self.kicker(v, "VITALIDAD", 124.0, 872.0, blood);
         let value = format!("{:.0}", run.health.max(0.0).ceil());
-        self.mid(v, &value, 126.0, 934.0, 34.0, IVORY);
-        let vw = self.width(&value, 34.0);
-        self.mid(v, "/ 100", 126.0 + vw + 8.0, 938.0, 18.0, MUTED);
+        self.mid(v, &value, 126.0, 934.0, 40.0, IVORY);
+        let vw = self.width(&value, 40.0);
+        self.mid(v, "/ 100", 126.0 + vw + 10.0, 940.0, 18.0, MUTED);
         // The bar, with quarter marks.
-        let bar = [60.0, 968.0, 428.0, 18.0];
+        let bar = [60.0, 966.0, 432.0, 20.0];
         let (dark, bright) = if low {
             (
                 [0.55, 0.02, 0.02, 1.0],
@@ -533,16 +495,7 @@ impl Hud {
             ([0.50, 0.018, 0.02, 1.0], [0.98, 0.20, 0.13, 1.0])
         };
         glass::meter(v, bar, fraction, dark, bright);
-        for q in [0.25, 0.5, 0.75] {
-            let x = bar[0] + bar[2] * q;
-            line(
-                v,
-                [x, bar[1] + 3.0],
-                [x, bar[1] + bar[3] - 3.0],
-                1.0,
-                [0.0, 0.0, 0.0, 0.5],
-            );
-        }
+
         // Consumables and gold.
         let y = 1000.0;
         let mut x = 60.0;
@@ -578,7 +531,7 @@ impl Hud {
     /// Bottom right: the keys, kept quiet.
     fn controls_card(&self, tone: &Tone, v: &mut Vec<Vertex>) {
         let r = [1236.0, 916.0, 648.0, 128.0];
-        glass::pane(v, r, 24.0, tone, 0.72);
+        glass::pane(v, r, 24.0, tone, 0.8);
         let rows: [&[(&[&str], &str)]; 3] = [
             &[
                 (&["W", "A", "S", "D"], "Mover"),
@@ -605,8 +558,8 @@ impl Hud {
                     x += self.key(v, key, x, y) + 4.0;
                 }
                 x += 4.0;
-                self.mid(v, label, x, y + 14.0, 17.0, glass::mix(IVORY, MUTED, 0.35));
-                x += self.width(label, 17.0) + 26.0;
+                self.mid(v, label, x, y + 13.5, 16.0, glass::mix(IVORY, MUTED, 0.35));
+                x += self.width(label, 16.0) + 24.0;
             }
         }
     }
@@ -623,20 +576,21 @@ impl Hud {
         } else {
             [0.95, 0.16, 0.16, 1.0]
         };
-        glass::pane(v, [x, y, w, h], 28.0, tone, 1.0);
+        let _ = tone;
+        glass::plate(v, [x, y, w, h], heat, 1.0);
         if enraged {
-            glass::round_outline(
+            glass::slant_outline(
                 v,
                 [x, y, w, h],
-                28.0,
-                2.2,
+                glass::lean_for(h),
+                2.4,
                 glass::alpha(heat, 0.35 + 0.45 * pulse),
             );
         }
         glass::icon_disc(v, Icon::Crown, [x + 50.0, y + h * 0.5], 28.0, heat, enraged);
         let tx = x + 96.0;
         let right = x + w - 28.0;
-        self.text(
+        self.kicker(
             v,
             if enraged {
                 "CAMPEÓN · FURIOSO"
@@ -644,9 +598,8 @@ impl Hud {
                 "CAMPEÓN"
             },
             tx,
-            y + 14.0,
-            12.0,
-            glass::alpha(heat, 0.95),
+            y - 8.0,
+            heat,
         );
         self.mid_fit(
             v,
@@ -721,7 +674,7 @@ impl Hud {
                 44.0
             };
             glass::pane(v, [x, y, width, 52.0], 26.0, &tone, 1.0);
-            diamond(v, [x + 26.0, y + 26.0], 5.0, tone.accent);
+            diamond(v, [x + 30.0, y + 26.0], 5.0, tone.accent);
             self.mid_fit(
                 v,
                 &run.notice,

@@ -859,20 +859,8 @@ impl Hud {
             if let Some(label) = label {
                 let w = self.width(&label, 13.0) + 14.0;
                 let (x, y) = (up[0] - w * 0.5, up[1] + radius + 4.0);
-                glass::round(
-                    v,
-                    [x, y, w, 20.0],
-                    10.0,
-                    [0.0, 0.01, 0.02, 0.86],
-                    [0.0, 0.01, 0.02, 0.86],
-                );
-                glass::round_outline(
-                    v,
-                    [x, y, w, 20.0],
-                    10.0,
-                    1.0,
-                    alpha(cx.alt(room.center.y), 0.85),
-                );
+                glass::slant(v, [x, y, w, 20.0], 4.0, [0.0, 0.01, 0.02, 0.88]);
+                glass::slant_outline(v, [x, y, w, 20.0], 4.0, 1.0, alpha(cx.alt(room.center.y), 0.85));
                 self.centered(
                     v,
                     &label,

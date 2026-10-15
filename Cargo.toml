@@ -8,6 +8,8 @@ members = [
     "crates/velvet-core",
     "crates/velvet-app",
     "crates/velvet-assets",
+    "crates/velvet-vlz",
+    "crates/velvet-avif",
     "crates/velvet-render",
     "crates/velvet-text",
     "crates/velvet-audio",
@@ -50,6 +52,7 @@ members = [
     "crates/velvet-build",
     "crates/velvet-cli",
     "crates/velvet-editor",
+    "crates/velvet-editor3d",
     "crates/velvet-runtime",
     "crates/velvet-test-utils",
     "crates/velvet-integration-tests",
@@ -101,6 +104,7 @@ velvet-events = { path = "crates/velvet-events" }
 velvet-core = { path = "crates/velvet-core" }
 velvet-app = { path = "crates/velvet-app" }
 velvet-assets = { path = "crates/velvet-assets" }
+velvet-vlz = { path = "crates/velvet-vlz" }
 velvet-render = { path = "crates/velvet-render" }
 velvet-text = { path = "crates/velvet-text" }
 velvet-audio = { path = "crates/velvet-audio" }

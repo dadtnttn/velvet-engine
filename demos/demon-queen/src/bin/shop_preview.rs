@@ -282,7 +282,7 @@ fn sort_back_to_front(triangles: &mut [(bool, f32, [usize; 3])]) {
 fn load(path: &str) -> Option<Preview> {
     let (asset_reference, pink_liquid) = preview_asset_reference(path);
     let has_liquid_physics = asset_reference.ends_with("health_potion.glb");
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root = crate::exploration3d_state::source_root();
     let path = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|p| p.join(asset_reference)))
@@ -735,7 +735,7 @@ mod tests {
     #[test]
     fn every_catalog_item_has_a_renderable_svg() {
         let products = &super::super::super::shop::catalog().products;
-        assert_eq!(products.len(), 22);
+        assert_eq!(products.len(), 24);
         let mut ids = std::collections::HashSet::new();
         for p in products {
             assert!(ids.insert(&p.id));

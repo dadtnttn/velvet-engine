@@ -7,7 +7,9 @@
 //! ahead of the one on show (and the next loop's first ones as a loop nears its end).
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::ArtBitmap;
@@ -37,12 +39,22 @@ pub(crate) struct TitleReel {
     turns: HashMap<String, usize>,
     playing: Option<Playing>,
     ask: Sender<(String, usize, PathBuf)>,
-    got: Receiver<(String, usize, ArtBitmap)>,
+    got: Receiver<(String, usize, ArtBitmap, Option<Scaled>)>,
     decoded: Vec<(String, usize, ArtBitmap)>,
+    /// The decoded frames also scaled to the size they are drawn at (made on the thread).
+    scaled: HashMap<(String, usize), Scaled>,
+    /// That size (width << 32 | height; 0: none), told by whoever draws.
+    target: Arc<AtomicU64>,
+    /// Scaled frames no longer needed, given back to the thread to fill again (freeing and
+    /// making 15 MB buffers on the screen's thread every frame cost it).
+    recycle: Option<Sender<Vec<u32>>>,
     asked: Vec<(String, usize)>,
     /// The frame on show last (kept while the next one is decoding).
     shown: Option<(String, usize)>,
 }
+
+/// A frame scaled to the size it is drawn at: (width, height) and its pixels.
+type Scaled = ((i32, i32), Vec<u32>);
 
 /// The place a loop belongs to (`trono#2` → `trono`).
 fn place_of(clip: &str) -> &str {
@@ -58,18 +70,10 @@ impl TitleReel {
             if !dir.is_dir() {
                 continue;
             }
-            let mut frames: Vec<PathBuf> = std::fs::read_dir(&dir)
-                .map(|d| {
-                    d.flatten()
-                        .map(|e| e.path())
-                        .filter(|p| p.extension().is_some_and(|x| x == "jpg" || x == "png"))
-                        .collect()
-                })
-                .unwrap_or_default();
+            let frames = crate::exploration3d::clip_video::frames(&dir);
             if frames.is_empty() {
                 continue;
             }
-            frames.sort();
             let name = dir.file_name()?.to_string_lossy().into_owned();
             clips.insert(name, frames);
         }
@@ -87,28 +91,42 @@ impl TitleReel {
                 .push(name.clone());
         }
         let (ask, asks) = channel::<(String, usize, PathBuf)>();
-        let (send, got) = channel::<(String, usize, ArtBitmap)>();
+        let (send, got) = channel::<(String, usize, ArtBitmap, Option<Scaled>)>();
+        let target = Arc::new(AtomicU64::new(0));
+        let wanted = Arc::clone(&target);
+        let (recycle, spares) = channel::<Vec<u32>>();
         std::thread::Builder::new()
             .name("title-reel".into())
             .spawn(move || {
                 while let Ok((clip, index, path)) = asks.recv() {
-                    let Ok(bytes) = std::fs::read(&path) else {
+                    let Some(rgba) = crate::exploration3d::clip_video::load(&path) else {
                         continue;
                     };
-                    let Ok(image) = image::load_from_memory(&bytes) else {
-                        continue;
-                    };
-                    let rgba = image.to_rgba8();
                     let (w, h) = (rgba.width() as usize, rgba.height() as usize);
                     let bitmap = ArtBitmap {
                         w,
                         h,
                         rgba: rgba.into_raw(),
                     };
-                    if send.send((clip, index, bitmap)).is_err() {
+                    // Scaled here to the size it is drawn at, so the screen only copies it.
+                    let size = wanted.load(Ordering::Relaxed);
+                    let (dw, dh) = ((size >> 32) as i32, (size & 0xffff_ffff) as i32);
+                    let scaled = (size != 0 && (dw as usize, dh as usize) != (bitmap.w, bitmap.h))
+                        .then(|| {
+                            // A spare of this size, the others let go here.
+                            let mut spare = None;
+                            while let Ok(buffer) = spares.try_recv() {
+                                if spare.is_none() && buffer.len() == (dw * dh) as usize {
+                                    spare = Some(buffer);
+                                }
+                            }
+                            ((dw, dh), crate::render::prescale(&bitmap, dw, dh, spare))
+                        });
+                    if send.send((clip, index, bitmap, scaled)).is_err() {
                         break;
                     }
                 }
+                crate::exploration3d::clip_video::close_all();
             })
             .ok()?;
         eprintln!("[title] reel: {} clips, loops {:?}", clips.len(), loops);
@@ -120,9 +138,25 @@ impl TitleReel {
             ask,
             got,
             decoded: Vec::new(),
+            scaled: HashMap::new(),
+            target,
+            recycle: Some(recycle),
             asked: Vec::new(),
             shown: None,
         })
+    }
+
+    /// The size its frames are drawn at (they come scaled to it from now on).
+    pub(crate) fn set_target(&self, size: (i32, i32)) {
+        let value = ((size.0.max(0) as u64) << 32) | size.1.max(0) as u64;
+        self.target.store(value, Ordering::Relaxed);
+    }
+
+    /// The frame on show (as [`Self::frame`] left it) scaled to `size`, if it came so.
+    pub(crate) fn shown_scaled(&self, size: (i32, i32)) -> Option<&[u32]> {
+        let key = self.shown.as_ref()?;
+        let (at, pixels) = self.scaled.get(key)?;
+        (*at == size).then_some(pixels.as_slice())
     }
 
     pub(crate) fn has(&self, clip: &str) -> bool {
@@ -183,6 +217,19 @@ impl TitleReel {
             Some(clip) => self.start_loop(place, clip),
             None => self.playing = None,
         }
+    }
+
+    /// Clip `clip` alone, round and round (the gallery's scenes); nothing when there is none.
+    pub(crate) fn play(&mut self, clip: &str) {
+        self.playing = self.has(clip).then(|| Playing {
+            clip: clip.to_owned(),
+            started: Instant::now(),
+            looping: true,
+            backwards: false,
+            then: None,
+            place: None,
+            next: None,
+        });
     }
 
     /// The camera's flight from one place to the other, then the place's loop; false when there
@@ -268,8 +315,11 @@ impl TitleReel {
             (p.backwards, self.clips.get(&clip)?.len(), p.next.clone())
         };
         // What came back from the thread.
-        while let Ok((c, i, bitmap)) = self.got.try_recv() {
+        while let Ok((c, i, bitmap, scaled)) = self.got.try_recv() {
             self.asked.retain(|(ac, ai)| !(ac == &c && *ai == i));
+            if let Some(scaled) = scaled {
+                self.scaled.insert((c.clone(), i), scaled);
+            }
             self.decoded.push((c, i, bitmap));
         }
         // Ask for this frame and the next few (into the next loop's first ones at a loop's end).
@@ -297,6 +347,16 @@ impl TitleReel {
                 || shown.as_ref().is_some_and(|(sc, si)| sc == c && *si == i)
         };
         self.decoded.retain(|(c, i, _)| near(c, *i));
+        let recycle = self.recycle.clone();
+        self.scaled.retain(|(c, i), scaled| {
+            let keep = near(c, *i);
+            if !keep {
+                if let Some(back) = &recycle {
+                    let _ = back.send(std::mem::take(&mut scaled.1));
+                }
+            }
+            keep
+        });
         if self
             .decoded
             .iter()
@@ -340,6 +400,9 @@ mod tests {
             ask,
             got,
             decoded: Vec::new(),
+            scaled: HashMap::new(),
+            target: Arc::new(AtomicU64::new(0)),
+            recycle: None,
             asked: Vec::new(),
             shown: None,
         }

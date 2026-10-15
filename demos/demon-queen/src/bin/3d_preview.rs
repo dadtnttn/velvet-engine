@@ -11,6 +11,8 @@ mod exploration3d_state;
 mod window_display;
 
 fn main() -> anyhow::Result<()> {
+    velvet_avif::register_image_hooks();
+    exploration3d::prefs::load();
     #[cfg(windows)]
     unsafe {
         use windows_sys::Win32::UI::HiDpi::*;

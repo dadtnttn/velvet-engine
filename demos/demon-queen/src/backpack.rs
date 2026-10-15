@@ -59,6 +59,9 @@ pub fn info(id: &str) -> Info {
         "tela_resistente" => info_of(2, 1, 4, None),
         "espada_de_madera" => info_of(1, 4, 1, Some(Slot::Weapon)),
         "espada_reliquia" => info_of(1, 5, 1, Some(Slot::Weapon)),
+        "espada_pegajosa" | "espada_pegajosa_azul" => info_of(1, 4, 1, Some(Slot::Weapon)),
+        "espada_piedra_pegajosa" | "espada_piedra_pegajosa_azul" => info_of(1, 5, 1, Some(Slot::Weapon)),
+        "espada_brasas" | "espada_corazon" => info_of(1, 5, 1, Some(Slot::Weapon)),
         "pocion_misteriosa" => info_of(1, 2, 2, None),
         "esencia_carmesi" => info_of(1, 1, 4, None),
         "tinta_runica" => info_of(1, 2, 3, None),
@@ -98,7 +101,7 @@ pub struct Extra {
     pub category: &'static str,
 }
 
-pub const EXTRAS: [Extra; 7] = [
+pub const EXTRAS: [Extra; 13] = [
     Extra {
         id: "cataplasma_herbal",
         name: "Cataplasma de hierbas",
@@ -148,6 +151,54 @@ pub const EXTRAS: [Extra; 7] = [
         category: "special",
     },
     Extra {
+        id: "espada_pegajosa",
+        name: "Espada de madera pegajosa",
+        description: "La espada de madera untada de gelatina de slime. Mancha, apesta y se pega: a quien toca le cuesta moverse.",
+        icon: "P",
+        icon_svg: "item_sword_sticky.svg",
+        category: "equipment",
+    },
+    Extra {
+        id: "espada_pegajosa_azul",
+        name: "Espada de madera pegajosa azul",
+        description: "La espada de madera untada de gelatina de limo azul. Fría, viscosa y se pega: a quien toca le cuesta moverse.",
+        icon: "P",
+        icon_svg: "item_sword_sticky_blue.svg",
+        category: "equipment",
+    },
+    Extra {
+        id: "espada_piedra_pegajosa",
+        name: "Espada de piedra pegajosa",
+        description: "La espada de piedra cubierta de gelatina verde. Corta hondo y deja al enemigo pegado.",
+        icon: "P",
+        icon_svg: "item_stone_sword_sticky.svg",
+        category: "equipment",
+    },
+    Extra {
+        id: "espada_piedra_pegajosa_azul",
+        name: "Espada de piedra pegajosa azul",
+        description: "La espada de piedra cubierta de gelatina azul. Corta hondo y deja al enemigo pegado.",
+        icon: "P",
+        icon_svg: "item_stone_sword_sticky_blue.svg",
+        category: "equipment",
+    },
+    Extra {
+        id: "espada_brasas",
+        name: "Espada de brasas",
+        description: "La espada de piedra con ceniza arcana metida en sus runas. Las runas arden por dentro.",
+        icon: "B",
+        icon_svg: "item_sword_ember.svg",
+        category: "equipment",
+    },
+    Extra {
+        id: "espada_corazon",
+        name: "Espada del corazón",
+        description: "La espada de piedra con una esquirla del Corazón engastada. Late cuando corta.",
+        icon: "C",
+        icon_svg: "item_sword_heart.svg",
+        category: "equipment",
+    },
+    Extra {
         id: "pendulo_practica",
         name: "Péndulo de práctica",
         description: "Una tuerca atada a un cordel. «Para practicar en casa», dijo el mago. No hace nada. Chiquita dice que es una estafa.",
@@ -168,7 +219,7 @@ pub struct Recipe {
     pub result: &'static str,
 }
 
-pub const RECIPES: [Recipe; 4] = [
+pub const RECIPES: [Recipe; 10] = [
     Recipe {
         a: "hierbas_curativas",
         b: "hierbas_curativas",
@@ -189,7 +240,132 @@ pub const RECIPES: [Recipe; 4] = [
         b: "tinta_runica",
         result: "sello_inscrito",
     },
+    Recipe {
+        a: "espada_de_madera",
+        b: "gelatina_verde",
+        result: "espada_pegajosa",
+    },
+    Recipe {
+        a: "espada_de_madera",
+        b: "gelatina_azul",
+        result: "espada_pegajosa_azul",
+    },
+    Recipe {
+        a: "espada_reliquia",
+        b: "gelatina_verde",
+        result: "espada_piedra_pegajosa",
+    },
+    Recipe {
+        a: "espada_reliquia",
+        b: "gelatina_azul",
+        result: "espada_piedra_pegajosa_azul",
+    },
+    Recipe {
+        a: "espada_reliquia",
+        b: "ceniza_arcana",
+        result: "espada_brasas",
+    },
+    Recipe {
+        a: "espada_reliquia",
+        b: "esquirla_corazon",
+        result: "espada_corazon",
+    },
 ];
+
+/// What eating or drinking an item does: vitality back (in the mine and in a fight).
+pub fn cure(id: &str) -> Option<f32> {
+    Some(match id {
+        "pan_del_dia" => 15.0,
+        "hierbas_curativas" => 20.0,
+        "cataplasma_herbal" => 40.0,
+        "pocion_pequena" => 45.0,
+        "pocion_reforzada" => 80.0,
+        "elixir_carmesi" => 100.0,
+        _ => return None,
+    })
+}
+
+/// The cure to take when `missing` vitality is gone, among what she `has`: the smallest that
+/// fills the gap, else the strongest there is.
+pub fn best_cure(missing: f32, has: impl Fn(&str) -> bool) -> Option<&'static str> {
+    const ALL: [&str; 6] = [
+        "pan_del_dia",
+        "hierbas_curativas",
+        "cataplasma_herbal",
+        "pocion_pequena",
+        "pocion_reforzada",
+        "elixir_carmesi",
+    ];
+    let owned: Vec<&'static str> = ALL.iter().copied().filter(|id| has(id)).collect();
+    owned
+        .iter()
+        .copied()
+        .find(|id| cure(id).is_some_and(|c| c >= missing))
+        .or_else(|| owned.last().copied())
+}
+
+/// The stone swords (the relic and what it becomes): its blade, its weight.
+pub fn stone_sword(id: &str) -> bool {
+    matches!(
+        id,
+        "espada_reliquia"
+            | "espada_brasas"
+            | "espada_corazon"
+            | "espada_piedra_pegajosa"
+            | "espada_piedra_pegajosa_azul"
+    )
+}
+
+/// Every sword (what the hand holds when it is worn).
+pub fn sword(id: &str) -> bool {
+    stone_sword(id)
+        || matches!(id, "espada_de_madera" | "espada_pegajosa" | "espada_pegajosa_azul")
+}
+
+/// The slime a sword is coated in, as its colour (linear RGB): green or blue goo.
+pub fn sword_goo(id: &str) -> Option<[f32; 3]> {
+    match id {
+        "espada_pegajosa" | "espada_piedra_pegajosa" => Some([0.30, 0.85, 0.22]),
+        "espada_pegajosa_azul" | "espada_piedra_pegajosa_azul" => Some([0.22, 0.58, 1.0]),
+        _ => None,
+    }
+}
+
+/// What a sword adds to a blow, in the mine and against Varrak.
+pub fn weapon_fx(id: &str) -> super::dungeon::WeaponFx {
+    let mut fx = super::dungeon::WeaponFx::default();
+    match id {
+        "espada_pegajosa"
+        | "espada_pegajosa_azul"
+        | "espada_piedra_pegajosa"
+        | "espada_piedra_pegajosa_azul" => fx.slow = 3.0,
+        "espada_brasas" => fx.burn = 4.0,
+        "espada_corazon" => fx.leech = 4.0,
+        _ => {}
+    }
+    fx
+}
+
+/// A line for an item's card: what it does when used or worn.
+pub fn use_line(id: &str) -> Option<String> {
+    if let Some(heal) = cure(id) {
+        return Some(format!(
+            "Usar: +{heal:.0} de vitalidad. En la mina o en combate: «Usar» en la mochila, o Q (la cura que mejor encaje)."
+        ));
+    }
+    Some(
+        match id {
+            "espada_de_madera" => "Arma: daño normal.",
+            "espada_reliquia" => "Arma: corta un 30 % más hondo.",
+            "espada_pegajosa" | "espada_pegajosa_azul" => "Arma: cada golpe deja al enemigo pegado 3 s (se mueve y ataca a mitad de ritmo).",
+            "espada_piedra_pegajosa" | "espada_piedra_pegajosa_azul" => "Arma: corta un 30 % más y cada golpe deja al enemigo pegado 3 s.",
+            "espada_brasas" => "Arma: corta un 30 % más y el golpe deja ardiendo al enemigo 4 s.",
+            "espada_corazon" => "Arma: corta un 30 % más y cada golpe te devuelve 4 de vitalidad.",
+            _ => return None,
+        }
+        .to_owned(),
+    )
+}
 
 pub fn recipe_for(a: &str, b: &str) -> Option<&'static Recipe> {
     RECIPES
@@ -204,9 +380,10 @@ pub fn recipes_with(id: &str) -> Vec<&'static Recipe> {
 
 /// Damage multiplier of a weapon, and a line for the equipment screen.
 pub fn weapon_damage(id: &str) -> f32 {
-    match id {
-        "espada_reliquia" => super::dungeon::RELIC_SWORD_BONUS,
-        _ => 1.0,
+    if stone_sword(id) {
+        super::dungeon::RELIC_SWORD_BONUS
+    } else {
+        1.0
     }
 }
 
@@ -249,6 +426,10 @@ pub struct Equipment {
     /// Upgrades fitted to the weapon, one per socket.
     #[serde(default)]
     pub weapon_mods: Vec<Option<String>>,
+    /// The weapon was taken off by hand: she fights bare-handed (else, with nothing worn, the
+    /// best sword she owns is used, as saves from before the equipment page expect).
+    #[serde(default)]
+    pub bare_hands: bool,
 }
 
 impl Equipment {
@@ -676,6 +857,9 @@ impl Backpack {
                 return Err(Refuse::NoRoom);
             }
         }
+        if slot == Slot::Weapon {
+            trial.equipment.bare_hands = false;
+        }
         *self = trial;
         Ok(slot)
     }
@@ -688,6 +872,9 @@ impl Backpack {
         };
         if trial.add(&id, 1) > 0 {
             return Err(Refuse::NoRoom);
+        }
+        if slot == Slot::Weapon {
+            trial.equipment.bare_hands = true;
         }
         *self = trial;
         Ok(())
@@ -782,6 +969,38 @@ mod tests {
         "cataplasma_herbal",
         "sello_inscrito",
     ];
+
+    #[test]
+    fn the_new_swords_come_from_their_recipes_and_fit_the_pack() {
+        for (a, b, out) in [
+            ("espada_de_madera", "gelatina_verde", "espada_pegajosa"),
+            ("gelatina_azul", "espada_de_madera", "espada_pegajosa_azul"),
+            ("espada_reliquia", "gelatina_verde", "espada_piedra_pegajosa"),
+            ("gelatina_azul", "espada_reliquia", "espada_piedra_pegajosa_azul"),
+            ("espada_reliquia", "ceniza_arcana", "espada_brasas"),
+            ("esquirla_corazon", "espada_reliquia", "espada_corazon"),
+        ] {
+            assert_eq!(recipe_for(a, b).map(|r| r.result), Some(out));
+            assert_eq!(info(out).slot, Some(Slot::Weapon));
+            assert!(Backpack::new().find_space(out).is_some());
+            assert!(extra(out).is_some());
+        }
+        assert!(weapon_fx("espada_pegajosa").slow > 0.0);
+        assert!(weapon_fx("espada_brasas").burn > 0.0);
+        assert!(weapon_fx("espada_corazon").leech > 0.0);
+        assert!(weapon_damage("espada_brasas") > 1.0);
+    }
+
+    #[test]
+    fn the_best_cure_fills_the_gap_without_wasting_a_big_one() {
+        let has = |list: &'static [&'static str]| move |id: &str| list.contains(&id);
+        let all: &[&str] = &["hierbas_curativas", "pocion_pequena", "pocion_reforzada"];
+        assert_eq!(best_cure(18.0, has(all)), Some("hierbas_curativas"));
+        assert_eq!(best_cure(40.0, has(all)), Some("pocion_pequena"));
+        assert_eq!(best_cure(70.0, has(all)), Some("pocion_reforzada"));
+        assert_eq!(best_cure(95.0, has(all)), Some("pocion_reforzada"));
+        assert_eq!(best_cure(30.0, has(&[])), None);
+    }
 
     #[test]
     fn every_item_fits_the_empty_grid_upright_or_turned() {

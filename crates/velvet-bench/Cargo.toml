@@ -18,3 +18,7 @@ velvet-play = { workspace = true }
 velvet-math = { workspace = true }
 velvet-ecs = { workspace = true }
 velvet-text = { workspace = true }
+velvet-assets = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

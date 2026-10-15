@@ -2,6 +2,7 @@
 //! con las muescas de los tres recuerdos, y la guardia), la vida de la Reina abajo a la izquierda, la
 //! mira, la palabra que dice sobre su cabeza, la frase de Chiquita abajo, el rojo en los bordes cuando
 //! duele, el destello del sello y las tarjetas de antes y después.
+use super::persona::{faded, speech_box};
 use super::ui_paint::*;
 use super::*;
 
@@ -42,6 +43,12 @@ pub struct BossView {
     pub vignette: f32,
     pub flash: f32,
     pub card: Option<BossCard>,
+    /// What to do now: heading, detail, urgency (0 usual, 1 an opening, 2 a danger), and since
+    /// when it says so (s).
+    pub objective: Option<(String, String, u8, f32)>,
+    /// Held now: running, the seal.
+    pub running: bool,
+    pub channeling: bool,
 }
 
 impl Hash for BossView {
@@ -61,6 +68,11 @@ impl Hash for BossView {
         self.line.hash(h);
         (q(self.vignette), q(self.flash)).hash(h);
         self.card.hash(h);
+        self.objective
+            .as_ref()
+            .map(|(a, b, u, t)| (a, b, u, q(*t)))
+            .hash(h);
+        (self.running, self.channeling).hash(h);
     }
 }
 
@@ -198,55 +210,176 @@ pub(super) fn draw(
             rgba(shadow, 0.9 * alpha),
         );
     }
-    // Chiquita's line.
+    // Chiquita's line: the game's comic speech card, her name on a pink tab. Its left edge and
+    // its bottom stay put while the words type out, so it only grows to the right and upwards.
     if let Some(line) = &view.line {
         if !line.is_empty() {
-            let size = 22.0;
-            let who = "CHIQUITA";
-            let lines = wrap(font, Face::Body, line, size, 760.0);
-            let ww = text_width(font, Face::Ui, who, 15.0);
-            let tw = lines
-                .iter()
-                .map(|l| text_width(font, Face::Body, l, size))
-                .fold(0.0, f32::max);
-            let w = (ww + 18.0 + tw + 50.0).max(260.0);
-            let h = 26.0 + lines.len() as f32 * size * 1.35;
-            let r = Rect::new((width - w) * 0.5, height - 40.0 - h, w, h);
-            soft(v, r, 6.0, 12.0, rgba(SHADOW, 0.7), false);
-            panel(
-                v,
-                r,
-                5.0,
-                Panel::fill(0x2a1440, 0x140a22, 0.94)
-                    .rim(GOLD, 1.0, 2.0)
-                    .hairline(4.0, 0.3),
-            );
-            text(
+            speech_box(
                 font,
                 v,
-                Face::Ui,
-                who,
-                r.x + 24.0,
-                r.y + 16.0,
-                15.0,
-                rgba(0xff8ad8, 1.0),
+                [width * 0.5 - 400.0, height - 34.0],
+                800.0,
+                "Chiquita",
+                line,
+                0xff4fa8,
+                -0.012,
+                1.0,
+                0.82,
             );
-            for (i, l) in lines.iter().enumerate() {
-                text_shadow(
-                    font,
-                    v,
-                    Face::Body,
-                    l,
-                    r.x + 24.0 + ww + 18.0,
-                    r.y + 12.0 + i as f32 * size * 1.35,
-                    size,
-                    rgba(0xf6ecd0, 1.0),
-                );
-            }
         }
+    }
+    if view.bars && view.card.is_none() {
+        draw_objective(font, v, view);
+        draw_keys(font, v, width, height, view);
     }
     if let Some(card) = &view.card {
         draw_card(font, v, width, height, card, view.time);
+    }
+}
+
+/// A slanted plate (Persona's): its corners for a box `x, y, w, h` leaning `lean`.
+fn slant(x: f32, y: f32, w: f32, h: f32, lean: f32) -> [[f32; 2]; 4] {
+    [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+}
+
+fn fill4(v: &mut Vec<MapVertex>, q: [[f32; 2]; 4], color: [f32; 4]) {
+    push_triangle(v, [q[0], q[1], q[2]], color);
+    push_triangle(v, [q[0], q[2], q[3]], color);
+    push_outline_fringe(v, &q, color);
+}
+
+/// What to do now, top left: a tag «OBJETIVO», the heading on a slanted dark plate with a wedge
+/// of its colour (violet as usual, gold for an opening, red for a danger, beating), its detail
+/// under it. A new one slides in.
+fn draw_objective(font: &FontAtlas, v: &mut Vec<MapVertex>, view: &BossView) {
+    let Some((head, detail, urgency, since)) = view.objective.as_ref() else {
+        return;
+    };
+    let age = view.time - since;
+    let k = (age / 0.3).clamp(0.0, 1.0);
+    let come = 1.0 - (1.0 - k).powi(3);
+    let accent = match urgency {
+        1 => 0xf0c050,
+        2 => 0xe2334a,
+        _ => 0x9a5cff,
+    };
+    let beat = if *urgency > 0 {
+        0.5 + 0.5 * (view.time * 7.0).sin()
+    } else {
+        0.0
+    };
+    let hs = 34.0;
+    let hw = text_width(font, Face::Title, head, hs);
+    let w = hw + 110.0;
+    let (x, y) = (34.0 - (1.0 - come) * (w + 80.0), 96.0);
+    faded(v, k.max(0.05), |v| {
+        fill4(v, slant(x + 8.0, y + 8.0, w, 60.0, 12.0), rgba(0x000000, 0.5));
+        fill4(v, slant(x, y, w, 60.0, 12.0), rgba(0x120a1a, 0.94));
+        fill4(v, slant(x, y, 44.0, 60.0, 12.0), rgba(accent, 1.0));
+        if beat > 0.0 {
+            soft(v, Rect::new(x, y, w, 60.0), 6.0, 16.0, rgba(accent, 0.35 * beat), true);
+        }
+        // The tag.
+        let tag = "OBJETIVO";
+        let tw = text_width(font, Face::Display, tag, 15.0) + 24.0;
+        fill4(v, slant(x + 60.0, y - 14.0, tw, 24.0, 6.0), rgba(accent, 1.0));
+        text(font, v, Face::Display, tag, x + 72.0, y - 12.0, 15.0, rgba(0x0e0816, 1.0));
+        text_outline(
+            font,
+            v,
+            Face::Title,
+            head,
+            x + 62.0,
+            y + 12.0,
+            hs,
+            rgba(0xfff6ee, 1.0),
+            rgba(0x000000, 0.9),
+        );
+        let lines = wrap(font, Face::Body, detail, 21.0, 560.0);
+        let dw = lines
+            .iter()
+            .map(|l| text_width(font, Face::Body, l, 21.0))
+            .fold(0.0, f32::max)
+            + 44.0;
+        let dh = 16.0 + lines.len() as f32 * 28.0;
+        fill4(v, slant(x + 16.0, y + 68.0, dw, dh, 8.0), rgba(0x0a0612, 0.82));
+        for (i, l) in lines.iter().enumerate() {
+            text_shadow(
+                font,
+                v,
+                Face::Body,
+                l,
+                x + 34.0,
+                y + 74.0 + i as f32 * 28.0,
+                21.0,
+                rgba(0xf6ecd8, 1.0),
+            );
+        }
+    });
+}
+
+/// The controls, always there at the right: each key on a cap, lit while it is held.
+fn draw_keys(font: &FontAtlas, v: &mut Vec<MapVertex>, width: f32, height: f32, view: &BossView) {
+    let keys: [(&str, &str, bool); 6] = [
+        ("Clic", "espada", false),
+        ("Clic dcho.", "sello (mantener)", view.channeling),
+        ("Mayús", "correr", view.running),
+        ("Espacio", "saltar", false),
+        ("Q", "curarse (mochila)", false),
+        ("Esc", "pausa", false),
+    ];
+    let size = 16.0;
+    let mut y = height - 52.0 - keys.len() as f32 * 40.0;
+    // A slanted ink plate behind them, its violet edge on the left, so they read on any ground.
+    let (px, pw, ph) = (width - 316.0, 300.0, keys.len() as f32 * 40.0 + 20.0);
+    fill4(v, slant(px + 8.0, y - 6.0, pw, ph, 10.0), rgba(0x000000, 0.45));
+    fill4(v, slant(px, y - 14.0, pw, ph, 10.0), rgba(0x0e0816, 0.86));
+    fill4(v, slant(px, y - 14.0, 8.0, ph, 10.0), rgba(0x9a5cff, 1.0));
+    for (key, what, lit) in keys {
+        let kw = text_width(font, Face::Ui, key, size) + 26.0;
+        let ww = text_width(font, Face::Body, what, 19.0);
+        let x = width - 44.0 - ww - 14.0 - kw;
+        // The key on a slanted cap: ink with a pale rim, violet while it is held.
+        fill4(v, slant(x + 3.0, y + 3.0, kw, 30.0, 5.0), rgba(0x000000, 0.6));
+        fill4(
+            v,
+            slant(x, y, kw, 30.0, 5.0),
+            rgba(if lit { 0x9a5cff } else { 0x0e0816 }, 1.0),
+        );
+        let rim = slant(x, y, kw, 30.0, 5.0);
+        for i in 0..4 {
+            wire(
+                v,
+                rim[i],
+                rim[(i + 1) % 4],
+                1.4,
+                rgba(0xf1e4cc, 0.6),
+                rgba(0xf1e4cc, 0.6),
+                0.0,
+                false,
+            );
+        }
+        text(
+            font,
+            v,
+            Face::Ui,
+            key,
+            x + 13.0,
+            y + 6.0,
+            size,
+            rgba(0xfff6ee, 1.0),
+        );
+        text_shadow(
+            font,
+            v,
+            Face::Body,
+            what,
+            x + kw + 14.0,
+            y + 4.0,
+            19.0,
+            rgba(if lit { 0xe6d0ff } else { 0xf1e4cc }, 0.95),
+        );
+        y += 40.0;
     }
 }
 
@@ -397,143 +530,63 @@ fn draw_card(
     card: &BossCard,
     time: f32,
 ) {
-    // The world behind, dimmed.
-    panel(
-        v,
-        Rect::new(0.0, 0.0, width, height),
-        0.0,
-        Panel::fill(0x0a0612, 0x0a0612, 0.62),
-    );
-    let w = 640.0;
-    let lead = wrap(font, Face::Body, &card.text, 19.0, w - 80.0);
-    let keys_h = if card.keys { 3.0 * 34.0 + 10.0 } else { 0.0 };
-    let h = 70.0 + 58.0 + lead.len() as f32 * 28.0 + 18.0 + keys_h + 64.0;
-    let r = Rect::new((width - w) * 0.5, (height - h) * 0.5, w, h);
-    soft(v, r, 8.0, 22.0, rgba(SHADOW, 0.8), false);
-    panel(
-        v,
-        r,
-        6.0,
-        Panel::velvet(0.96, 2.0)
-            .hairline(6.0, 0.35)
-            .sheen(time * 0.08),
-    );
-    let cx = width * 0.5;
-    let mut y = r.y + 28.0;
-    let kw = text_width(font, Face::Italic, &card.kicker, 18.0);
-    text(
-        font,
-        v,
-        Face::Italic,
-        &card.kicker,
-        cx - kw * 0.5,
-        y,
-        18.0,
-        rgba(0xc9b08a, 1.0),
-    );
-    y += 34.0;
-    let tw = text_width(font, Face::Title, &card.title, 44.0);
-    text_shadow(
-        font,
-        v,
-        Face::Title,
-        &card.title,
-        cx - tw * 0.5,
-        y,
-        44.0,
-        rgba(0xf4e6c8, 1.0),
-    );
-    y += 66.0;
-    for l in &lead {
-        let lw = text_width(font, Face::Body, l, 19.0);
-        text(
-            font,
-            v,
-            Face::Body,
-            l,
-            cx - lw * 0.5,
-            y,
-            19.0,
-            rgba(0xe8dcc0, 1.0),
-        );
-        y += 28.0;
+    // The world behind, dimmed, and a band of violet across it.
+    push_rect(v, Rect::new(0.0, 0.0, width, height), rgba(0x07040c, 0.66));
+    let (w, lean) = (1080.0, 30.0);
+    let lead = wrap(font, Face::Body, &card.text, 22.0, w - 200.0);
+    let keys_h = if card.keys { 4.0 * 52.0 + 16.0 } else { 0.0 };
+    let h = 150.0 + lead.len() as f32 * 32.0 + 24.0 + keys_h + 80.0;
+    let x = (width - w) * 0.5;
+    let y = (height - h) * 0.5;
+    fill4(v, slant(x - 400.0, y + h * 0.5 - 90.0, w + 800.0, 180.0, 40.0), rgba(0x3a1a6a, 0.45));
+    fill4(v, slant(x + 16.0, y + 16.0, w, h, lean), rgba(0x000000, 0.6));
+    fill4(v, slant(x, y, w, h, lean), rgba(0x0e0816, 0.97));
+    fill4(v, slant(x, y, 22.0, h, lean), rgba(0x9a5cff, 1.0));
+    let rim = slant(x, y, w, h, lean);
+    for i in 0..4 {
+        wire(v, rim[i], rim[(i + 1) % 4], 2.0, rgba(0xd6b8ff, 0.8), rgba(0xd6b8ff, 0.8), 0.0, false);
     }
-    y += 10.0;
+    // The kicker on its tag, the title big.
+    let (tx, mut ty) = (x + 80.0, y + 34.0);
+    let kw = text_width(font, Face::Display, &card.kicker.to_uppercase(), 17.0) + 30.0;
+    fill4(v, slant(tx, ty, kw, 30.0, 8.0), rgba(0xd6b8ff, 1.0));
+    text(font, v, Face::Display, &card.kicker.to_uppercase(), tx + 15.0, ty + 3.0, 17.0, rgba(0x0e0816, 1.0));
+    ty += 44.0;
+    text_outline(font, v, Face::Title, &card.title, tx, ty, 58.0, rgba(0xfff6ee, 1.0), rgba(0x000000, 0.9));
+    ty += 82.0;
+    for l in &lead {
+        text_shadow(font, v, Face::Body, l, tx, ty, 22.0, rgba(0xf1e4cc, 1.0));
+        ty += 32.0;
+    }
+    ty += 18.0;
     if card.keys {
         let keys = [
             ("WASD", "moverte"),
-            ("Mayús", "correr"),
+            ("Mayús", "correr y esquivar"),
             ("Espacio", "saltar la onda"),
-            ("Clic", "espada"),
-            ("Clic dcho.", "el sello (mantener)"),
-            ("Esc", "pausa"),
+            ("Clic", "espada: rompe su guardia"),
+            ("Clic dcho.", "mantén: la chispa del sello"),
+            ("Q", "curarte con la mochila"),
+            ("Esc", "pausa · usar objetos"),
         ];
         for (i, (key, what)) in keys.iter().enumerate() {
             let col = (i % 2) as f32;
             let row = (i / 2) as f32;
-            let kx = r.x + 60.0 + col * 280.0;
-            let ky = y + row * 34.0;
-            let kw = text_width(font, Face::Title, key, 15.0) + 22.0;
-            keycap(
-                font,
-                v,
-                Rect::new(kx, ky, kw, 28.0),
-                key,
-                15.0,
-                false,
-                false,
-                GOLD,
-                1.0,
-            );
-            text(
-                font,
-                v,
-                Face::Body,
-                what,
-                kx + kw + 10.0,
-                ky + 4.0,
-                17.0,
-                rgba(0xe8dcc0, 1.0),
-            );
+            let kx = tx + col * 470.0;
+            let ky = ty + row * 52.0;
+            let kw = text_width(font, Face::Title, key, 18.0) + 28.0;
+            keycap(font, v, Rect::new(kx, ky, kw, 38.0), key, 18.0, false, false, 0x9a5cff, 1.0);
+            text_shadow(font, v, Face::Body, what, kx + kw + 14.0, ky + 7.0, 20.0, rgba(0xf1e4cc, 1.0));
         }
-        y += keys_h;
+        ty += keys_h;
     }
-    // What to do now.
-    let total: f32 = card
-        .actions
-        .iter()
-        .map(|(k, a)| {
-            text_width(font, Face::Title, k, 16.0)
-                + 22.0
-                + 10.0
-                + text_width(font, Face::Ui, a, 18.0)
-                + 36.0
-        })
-        .sum();
-    let mut ax = cx - total * 0.5;
+    // What to do now, on bright plates.
+    let mut ax = tx;
     for (key, what) in &card.actions {
-        let kw = text_width(font, Face::Title, key, 16.0) + 22.0;
-        keycap(
-            font,
-            v,
-            Rect::new(ax, y + 6.0, kw, 30.0),
-            key,
-            16.0,
-            true,
-            false,
-            0xffd27a,
-            1.0,
-        );
-        text_shadow(
-            font,
-            v,
-            Face::Ui,
-            what,
-            ax + kw + 10.0,
-            y + 10.0,
-            18.0,
-            rgba(0xffe6b0, 1.0),
-        );
-        ax += kw + 10.0 + text_width(font, Face::Ui, what, 18.0) + 36.0;
+        let kw = text_width(font, Face::Title, key, 18.0) + 28.0;
+        let pulse = 0.5 + 0.5 * (time * 4.0).sin();
+        keycap(font, v, Rect::new(ax, ty, kw, 40.0), key, 18.0, true, false, 0xffd27a, 0.85 + 0.15 * pulse);
+        text_outline(font, v, Face::Title, what, ax + kw + 14.0, ty + 4.0, 26.0, rgba(0xffe6b0, 1.0), rgba(0x000000, 0.8));
+        ax += kw + 14.0 + text_width(font, Face::Title, what, 26.0) + 50.0;
     }
 }

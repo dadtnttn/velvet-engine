@@ -26,48 +26,6 @@ pub(super) fn fantasy_village_center() -> Vec3 {
     )
 }
 
-/// A directional, low-poly arrow that points down the trail (+Z) toward the
-/// village.  The marker is one closed extruded solid: the top is the arrow
-/// silhouette and every boundary edge gets a real side wall.  Keep the side
-/// tint on the vertices instead of layering scaled copies in the scene; those
-/// copies used to expose disconnected-looking "legs" when the camera turned.
-pub(super) fn build_village_arrow_mesh() -> Mesh3D {
-    let points = [
-        // A few short chamfers keep the silhouette soft and intentional at
-        // close range, without turning the directional marker into a paper
-        // cut-out or losing its readable arrow shape.
-        [-0.14, -0.68],
-        [0.14, -0.68],
-        [0.18, -0.64],
-        [0.18, -0.15],
-        [0.40, -0.15],
-        [0.45, -0.10],
-        [0.06, 0.53],
-        [0.0, 0.60],
-        [-0.06, 0.53],
-        [-0.45, -0.10],
-        [-0.40, -0.15],
-        [-0.18, -0.15],
-        [-0.18, -0.64],
-    ];
-    let mut mesh = build_extruded_marker_mesh(&points, 0.13, Material3D::rgb(1.0, 0.28, 0.035));
-    // The first two rings are the top and bottom caps.  The remaining
-    // duplicated vertices belong to the side quads, so tint them darker to
-    // make the extrusion read as a solid toy-like 3D prop.
-    for vertex in mesh.vertices.iter_mut().skip(points.len() * 2) {
-        vertex.color = [0.70, 0.22, 0.035, 1.0];
-    }
-    for vertex in mesh
-        .vertices
-        .iter_mut()
-        .skip(points.len())
-        .take(points.len())
-    {
-        vertex.color = [0.42, 0.095, 0.014, 1.0];
-    }
-    mesh
-}
-
 /// The villa ready to draw, with what the time of day changes. It was built in the Three.js
 /// prototype (`demos/demon-queen-village-threejs`) and exported by its
 /// `tools/export-game.mjs` into `data/assets/3d/villa/` (the plan is `village::plan()`).
@@ -519,13 +477,18 @@ impl App {
                         return true;
                     }
                     if building.id == "villa_burdel" {
-                        // Through the door: the house itself, with
-                        // Rosalía and her book at the desk inside.
-                        self.enter_brothel();
+                        // Through the door (at night, in the cloak, until Rosalía's token):
+                        // the house itself, with Rosalía and her book at the desk inside.
+                        self.try_enter_brothel();
                         return true;
                     }
                     // A guion written for this door plays in the box.
                     if self.start_talk(None, Some(building.id)) {
+                        return true;
+                    }
+                    // Nothing behind it yet: the notice says it is being made.
+                    if let Some(place) = village::in_development(building.id) {
+                        self.notice_in_development(place.to_owned());
                         return true;
                     }
                     self.map_open = false;
@@ -603,6 +566,31 @@ impl Zone for VillageZone {
 }
 
 impl App {
+    /// A place read ahead stays decoded (~700 MB for the brothel) until she goes in or walks
+    /// off; a zone lets go of what it read only while she is in it. Leaving it any other way (a
+    /// door to the castle, a jump in the story) let go of nothing, and the memory stayed taken
+    /// for the rest of the game: what no longer belongs to where she is goes here.
+    pub(super) fn release_stale_prefetches(&mut self, zone: ZoneId) {
+        let stale: Vec<&'static str> = self
+            .prefetched
+            .iter()
+            .copied()
+            .filter(|key| match *key {
+                "baths" | "brothel" => !matches!(zone, ZoneId::Village | ZoneId::Baths | ZoneId::Brothel),
+                "villa" => !matches!(zone, ZoneId::Forest | ZoneId::Village),
+                _ => false,
+            })
+            .collect();
+        for key in stale {
+            self.prefetched.remove(key);
+            let root = match key {
+                "villa" => fantasy_village_asset_root(),
+                other => runtime_3d_root().join(other),
+            };
+            prefetch::forget(&root);
+        }
+    }
+
     /// In the villa: the springs and the brothel behind their doors, read ahead from within 9 m of
     /// the nearest one and let go beyond 25 m (12 m when another is nearer).
     pub(super) fn prefetch_villa_doors(&mut self) {

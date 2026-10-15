@@ -50,6 +50,8 @@ pub struct SceneView {
     pub black: bool,
     /// A girl's minigame (Alba's words, Noa's silence): it takes the key's place.
     pub game: Option<GameView>,
+    /// A favour of the village shop: the scene plays as a page of the shop instead of this stage.
+    pub deal: Option<super::shop_overlay::FavorDeal>,
 }
 
 /// A brothel girl's minigame on the stage (`explore/play_scene.rs`): what it shows instead of the
@@ -1927,7 +1929,13 @@ fn draw_result(
                 );
             });
             let mut y = band.y + band.h + 30.0 * s;
-            let who = format!("{} · {} s", res.who, res.seconds);
+            // Each part in the player's language before they are joined (the joined line has no
+            // entry of its own).
+            let who = format!(
+                "{} · {}",
+                demon_queen_dungeon::i18n::tr(&res.who),
+                demon_queen_dungeon::i18n::tr(&format!("{} s", res.seconds))
+            );
             let ww = text_width(font, Face::Italic, &who, 25.0 * s);
             text_shadow(
                 font,

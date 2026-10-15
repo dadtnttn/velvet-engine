@@ -11,7 +11,8 @@ impl ApplicationHandler for App {
     ) {
         if let (DeviceEvent::MouseMotion { delta }, Some(fight)) = (&event, self.boss.as_mut()) {
             if self.dungeon_mouse_captured && self.window.as_ref().is_some_and(|w| w.has_focus()) {
-                fight.player.look(delta.0 as f32, delta.1 as f32);
+                let k = crate::exploration3d::prefs::look_scale();
+                fight.player.look(delta.0 as f32 * k, delta.1 as f32 * k);
             }
             return;
         }
@@ -24,7 +25,8 @@ impl ApplicationHandler for App {
                 && !self.dungeon.map_open
                 && self.window.as_ref().is_some_and(|w| w.has_focus())
             {
-                self.dungeon.controller.look(delta.0 as f32, delta.1 as f32);
+                let k = crate::exploration3d::prefs::look_scale();
+                self.dungeon.controller.look(delta.0 as f32 * k, delta.1 as f32 * k);
             }
         }
     }
@@ -305,6 +307,14 @@ impl ApplicationHandler for App {
                         self.set_key(code, event.state == ElementState::Pressed);
                     }
                     let was_modal = self.dungeon.seed_input.is_some() || self.dungeon.map_open;
+                    if code == KeyCode::KeyQ
+                        && event.state == ElementState::Pressed
+                        && !event.repeat
+                        && !was_modal
+                    {
+                        self.quick_cure();
+                        return;
+                    }
                     self.dungeon.key(
                         code,
                         event.state == ElementState::Pressed,
@@ -558,7 +568,14 @@ impl ApplicationHandler for App {
                                 }
                             }
                             KeyCode::Enter | KeyCode::Space => {
-                                self.outfit = self.wardrobe_selection % wardrobe_outfit_count();
+                                let chosen = self.wardrobe_selection % wardrobe_outfit_count();
+                                if !self.wardrobe_allows(chosen) {
+                                    self.wardrobe_selection = self.outfit;
+                                    self.wardrobe_open = false;
+                                    self.clear_input();
+                                    return;
+                                }
+                                self.outfit = chosen;
                                 ui_sfx::play(UiSfx::Equip);
                                 if let Some(o) = achievements::catalog().outfit_in_slot(self.outfit)
                                 {
@@ -589,6 +606,8 @@ impl ApplicationHandler for App {
                         }
                         // The followed mission: the next open one.
                         KeyCode::KeyJ if !self.dungeon_mode => self.cycle_mission(),
+                        // By Varrak: fight him now (a rehearsal or a rematch).
+                        KeyCode::KeyR if self.penascal.is_some() => self.fight_varrak_now(),
                         KeyCode::KeyQ => self.iso.zoom_in(0.4),
                         KeyCode::KeyE => self.iso.zoom_out(0.4),
                         KeyCode::KeyM => {

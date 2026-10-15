@@ -1558,12 +1558,15 @@ impl PlayScene {
         String,
     ) {
         let h = &self.hipno;
-        let mut how = format!(
+        // In the player's language part by part (the joined line has no entry of its own).
+        let tr = |s: String| demon_queen_dungeon::i18n::tr(&s).into_owned();
+        let mut how = tr(format!(
             "Órdenes: {} sí · {} no · {} burlas",
             h.obeyed, h.refused, h.mocked
-        );
+        ));
         if h.stare_total >= 1.0 {
-            how.push_str(&format!(" · mirándolo {} s", h.stare_total.round() as i32));
+            how.push_str(" · ");
+            how.push_str(&tr(format!("mirándolo {} s", h.stare_total.round() as i32)));
         }
         if !done {
             return (

@@ -513,7 +513,9 @@ impl App {
 
     /// Buys or sells the lit product, at `unit` each when a haggle set the price; whether it
     /// went through.
-    pub(super) fn commit_shop_at(&mut self, unit: Option<u32>) -> bool {
+    /// Buys or sells the chosen quantity, at the shelf's price or for `total` (the whole lot,
+    /// as a haggle left it).
+    pub(super) fn commit_shop_at(&mut self, total: Option<u32>) -> bool {
         let Some(product_index) = self.selected_shop_product_index() else {
             self.shop_notice = Some("No tienes objetos para vender.".to_owned());
             return false;
@@ -523,9 +525,9 @@ impl App {
         };
         let id = product.id.clone();
         let name = product.name.clone();
-        let buy_price = unit.unwrap_or(product.buy_price);
-        let sell_price = unit.unwrap_or(product.sell_price);
         let quantity = self.shop_quantity.max(1);
+        let buy_cost = total.unwrap_or(product.buy_price.saturating_mul(quantity));
+        let sell_reward = total.unwrap_or(product.sell_price.saturating_mul(quantity));
         match self.shop_tab {
             shop::Tab::Buy => {
                 if let Some(stock) = product.stock {
@@ -535,7 +537,7 @@ impl App {
                         return false;
                     }
                 }
-                let cost = buy_price.saturating_mul(quantity);
+                let cost = buy_cost;
                 if self.gold < cost {
                     self.shop_notice = Some(format!("Te faltan {} de oro.", cost - self.gold));
                     return false;
@@ -554,6 +556,7 @@ impl App {
                 }
                 self.shop_notice = Some(format!("Compraste {quantity} × {name}."));
                 self.ui_sound(dungeon::sound::Sfx::Coins, 0.7);
+                self.on_bought(&product.id);
                 let mut pack = self.backpack.clone();
                 pack.reconcile(&self.inventory);
                 if pack.equip_if_empty(&product.id) {
@@ -567,7 +570,7 @@ impl App {
                     self.shop_notice = Some(format!("Solo tienes {owned} unidades."));
                     return false;
                 }
-                let reward = sell_price.saturating_mul(quantity);
+                let reward = sell_reward;
                 self.gold = self.gold.saturating_add(reward);
                 if owned == quantity {
                     self.inventory.remove(&id);

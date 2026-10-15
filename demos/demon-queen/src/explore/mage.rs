@@ -296,7 +296,9 @@ impl App {
     /// How many of its letters are out by now.
     fn mage_shown(&self, text: &str) -> usize {
         let at = self.mage.as_ref().map_or(0.0, |m| m.line_at);
-        (((self.elapsed - at).max(0.0) * 52.0) as usize).min(text.chars().count())
+        // (Counted in the player's language: the overlay types the translated line.)
+        (((self.elapsed - at).max(0.0) * crate::exploration3d::prefs::text_rate(52.0)) as usize)
+            .min(demon_queen_dungeon::i18n::tr(text).chars().count())
     }
 
     /// F, Enter or a click in the talk: the whole line at once, else the next; or the question.
@@ -305,7 +307,7 @@ impl App {
         let Some((_, text)) = self.mage_line() else {
             return;
         };
-        if self.mage_shown(text) < text.chars().count() {
+        if self.mage_shown(text) < demon_queen_dungeon::i18n::tr(text).chars().count() {
             if let Some(m) = self.mage.as_mut() {
                 m.line_at = -1.0e6;
             }

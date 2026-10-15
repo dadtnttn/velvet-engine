@@ -14,6 +14,7 @@ mod backpack_menu;
 mod exploration3d;
 mod exploration3d_state;
 mod game;
+mod gallery_menu;
 mod loading;
 mod localization;
 mod menu_ui;
@@ -23,6 +24,8 @@ mod portable;
 mod quick_actions;
 mod render;
 mod scene_transition;
+mod settings_menu;
+mod thanks_screen;
 mod title_menu;
 mod title_reel;
 mod unified_smoke;
@@ -167,6 +170,8 @@ fn decoded_art_bytes(width: u32, height: u32) -> Option<usize> {
 struct ArtCache {
     entries: HashMap<String, Option<ArtBitmap>>,
     bytes: usize,
+    /// The pictures asked for since the last scene began (kept by [`Self::keep_recent`]).
+    recent: std::collections::HashSet<String>,
 }
 
 impl ArtCache {
@@ -193,11 +198,23 @@ impl ArtCache {
     fn clear(&mut self) {
         self.entries.clear();
         self.bytes = 0;
+        self.recent.clear();
+    }
+
+    /// A new scene begins: what the scene before it showed stays decoded (the next line of the
+    /// same room shows the same background and CG again); what it did not show goes.
+    fn keep_recent(&mut self) {
+        let recent = std::mem::take(&mut self.recent);
+        self.entries.retain(|key, _| recent.contains(key));
+        self.bytes = self.entries.values().flatten().map(ArtBitmap::byte_len).sum();
     }
 
     fn fitted(&mut self, key: &str, fit: ArtFit) -> Option<&ArtBitmap> {
         let cache_key = format!("{key}#{fit:?}");
         self.load_or_insert(cache_key.clone(), || load_art(key, fit));
+        if !self.recent.contains(&cache_key) {
+            self.recent.insert(cache_key.clone());
+        }
         self.entries
             .get(&cache_key)
             .expect("just inserted")
@@ -210,6 +227,20 @@ impl ArtCache {
 
     fn original(&mut self, key: &str) -> Option<&ArtBitmap> {
         self.fitted(key, ArtFit::Original)
+    }
+
+    /// Like [`Self::original`], for a picture only tried in case it is there (a scene's own CG
+    /// by its name): not there is no missing art, so nothing is said.
+    fn optional_original(&mut self, key: &str) -> Option<&ArtBitmap> {
+        QUIET_MISSING.with(|quiet| quiet.set(true));
+        self.fitted(key, ArtFit::Original);
+        QUIET_MISSING.with(|quiet| quiet.set(false));
+        self.peek_original(key)
+    }
+
+    /// A picture [`Self::original`] loaded, if it is still in the cache.
+    fn peek_original(&self, key: &str) -> Option<&ArtBitmap> {
+        self.entries.get(&format!("{key}#{:?}", ArtFit::Original))?.as_ref()
     }
 }
 
@@ -235,17 +266,50 @@ enum ArtFit {
 
 fn assets_root() -> PathBuf {
     [
+        // Beside the game (a release), wherever it is started from.
+        exploration3d_state::game_dir().join("data/assets"),
         PathBuf::from("demos/demon-queen/data/assets"),
         PathBuf::from("data/assets"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/assets"),
     ]
     .into_iter()
     .find(|p| p.is_dir())
-    .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/assets"))
+    .unwrap_or_else(|| exploration3d_state::source_root().join("data/assets"))
+}
+
+/// A picture's bytes decoded (PNG, JPEG or the release's AVIF, told by their content), refused
+/// before decoding when it would be too big.
+fn decode_art(bytes: &[u8]) -> Option<image::DynamicImage> {
+    if velvet_avif::is_avif(bytes) {
+        return velvet_avif::decode_avif(bytes).ok().map(image::DynamicImage::ImageRgba8);
+    }
+    let dimensions = image::ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()?
+        .into_dimensions()
+        .ok()?;
+    if decoded_art_bytes(dimensions.0, dimensions.1)? > MAX_ART_BITMAP_BYTES {
+        return None;
+    }
+    image::load_from_memory(bytes).ok()
+}
+
+thread_local! {
+    /// Set while a picture is only tried ([`ArtCache::optional_original`]).
+    static QUIET_MISSING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Decode a pre-sized art asset; `None` when missing or unreadable.
 fn load_art(key: &str, fit: ArtFit) -> Option<ArtBitmap> {
+    let t = Instant::now();
+    let art = load_art_inner(key, fit);
+    let ms = t.elapsed().as_secs_f64() * 1000.0;
+    if ms > 5.0 {
+        window_display::frame_note(&format!("art {key} {ms:.1} ms"));
+    }
+    art
+}
+
+fn load_art_inner(key: &str, fit: ArtFit) -> Option<ArtBitmap> {
     let relative = PathBuf::from(key);
     let relative = if relative.extension().is_some() {
         relative
@@ -253,27 +317,30 @@ fn load_art(key: &str, fit: ArtFit) -> Option<ArtBitmap> {
         PathBuf::from(format!("{key}.png"))
     };
     let portable_path = relative.to_string_lossy().replace('\\', "/");
-    let decoded = if portable::enabled() {
-        let bytes = portable::asset_bytes(&portable_path)?;
-        let dimensions = image::ImageReader::new(Cursor::new(bytes))
-            .with_guessed_format()
-            .ok()?
-            .into_dimensions()
-            .ok()?;
-        if decoded_art_bytes(dimensions.0, dimensions.1)? > MAX_ART_BITMAP_BYTES {
-            return None;
-        }
-        image::load_from_memory(bytes).ok()?
+    // The picture drawn again in the player's language comes first; then the one inside a
+    // portable build; then the one on disk (all the art the bundle does not carry).
+    let localized = demon_queen_dungeon::i18n::localized_picture(&relative);
+    let embedded = if localized.is_none() && portable::enabled() {
+        portable::asset_bytes(&portable_path)
     } else {
-        let path = assets_root().join(&relative);
-        let dimensions = image::ImageReader::open(&path)
-            .ok()?
-            .into_dimensions()
-            .ok()?;
-        if decoded_art_bytes(dimensions.0, dimensions.1)? > MAX_ART_BITMAP_BYTES {
+        None
+    };
+    let decoded = if let Some(bytes) = embedded {
+        decode_art(bytes)?
+    } else {
+        let path = localized.unwrap_or_else(|| assets_root().join(&relative));
+        if !path.is_file() {
+            // Said once per picture: a release missing one shows here.
+            static TOLD: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+            let key = portable_path.clone();
+            let mut told = TOLD.lock().unwrap();
+            if !told.contains(&key) && !QUIET_MISSING.with(|quiet| quiet.get()) {
+                eprintln!("[art] falta {}", path.display());
+                told.push(key);
+            }
             return None;
         }
-        image::open(path).ok()?
+        decode_art(&std::fs::read(&path).ok()?)?
     };
     let source_bytes = decoded_art_bytes(decoded.width(), decoded.height())?;
     if source_bytes > MAX_ART_BITMAP_BYTES {
@@ -326,6 +393,8 @@ enum Screen {
     Explore,
     End,
     GameMenu,
+    /// The thanks at the end of act 1, over the world.
+    Thanks,
 }
 
 struct App {
@@ -333,6 +402,16 @@ struct App {
     menu_sel: usize,
     choice_sel: usize,
     options_sel: usize,
+    /// On the options screen: the keyboard is in the settings panel (else on the list).
+    options_panel: bool,
+    options_settings: settings_menu::SettingsUi,
+    /// When the options screen came up (its entrance counts from here).
+    options_since: Instant,
+    /// The language changed since the world last looked (its signs follow it).
+    language_changed: bool,
+    /// The world under the thanks at the end of act 1, and when it came up.
+    thanks_backdrop: Vec<u32>,
+    thanks_since: Instant,
     gallery_sel: usize,
     quit: bool,
     game: Option<game::Game>,
@@ -340,10 +419,18 @@ struct App {
     localizer: Localizer,
     gallery: game::GalleryLibrary,
     gallery_return: Screen,
+    /// The gallery's albums, cards and viewer.
+    gallery_ui: gallery_menu::GalleryUi,
     fonts: Option<Fonts>,
     native_label_fonts: HashMap<&'static str, Option<NativeLabelFont>>,
     canvas: Canvas,
     art: ArtCache,
+    /// The castle's music under the visual novel, quieter than in the world (the world plays
+    /// its own); faded out anywhere else.
+    vn_music: Option<exploration3d::soundtrack::Music>,
+    vn_music_tried: bool,
+    vn_music_wanted: bool,
+    vn_music_tick: Option<Instant>,
     styles: Stylesheet,
     window: Option<Arc<Window>>,
     display: Option<window_display::WindowDisplay>,
@@ -369,6 +456,12 @@ struct App {
     /// The title's moving places (`None` until looked for, or when there are no clips).
     title_reel: Option<title_reel::TitleReel>,
     title_reel_tried: bool,
+    /// The title's guide (the round «i»): open, and since when.
+    title_info: bool,
+    title_info_since: Instant,
+    /// The guide's page, and while one turns: the page going out, since when, which way.
+    title_info_page: usize,
+    title_info_turn: Option<(usize, Instant, i32)>,
     reduced_motion: bool,
     choice_hover_progress: [f32; 8],
     choice_hover_last_tick: Instant,
@@ -414,6 +507,10 @@ struct App {
     pause_story: std::collections::BTreeMap<String, i64>,
     /// What the Queen wears as the menu opens (the wardrobe's slot), for the status page's art.
     pause_outfit: u8,
+    /// Her vitality where it counts (the mine, a fight) as the menu opens: what «Usar» heals.
+    pause_vitality: Option<(f32, f32)>,
+    /// Cures used from the menu's backpack, for the world to take when it gets the bag back.
+    pause_uses: Vec<String>,
     /// When the pause menu paints its next moving frame.
     menu_next_frame: Instant,
     /// Counts the window's events: the pause menu repaints in full only after one (or when
@@ -439,6 +536,12 @@ impl Default for App {
             menu_sel: 0,
             choice_sel: 0,
             options_sel: 0,
+            options_panel: true,
+            options_settings: Default::default(),
+            options_since: Instant::now(),
+            language_changed: false,
+            thanks_backdrop: Vec::new(),
+            thanks_since: Instant::now(),
             gallery_sel: 0,
             quit: false,
             game: None,
@@ -446,10 +549,15 @@ impl Default for App {
             localizer,
             gallery: game::GalleryLibrary::default(),
             gallery_return: Screen::Options,
+            gallery_ui: Default::default(),
             fonts,
             native_label_fonts: HashMap::new(),
             canvas: Canvas::new(WIN_W as usize, WIN_H as usize, 0xff120a16),
             art: ArtCache::default(),
+            vn_music: None,
+            vn_music_tried: false,
+            vn_music_wanted: false,
+            vn_music_tick: None,
             styles: load_menu_styles(),
             window: None,
             display: None,
@@ -472,6 +580,10 @@ impl Default for App {
             title_lights: [None; 4],
             title_reel: None,
             title_reel_tried: false,
+            title_info: false,
+            title_info_since: Instant::now(),
+            title_info_page: 0,
+            title_info_turn: None,
             reduced_motion: reduced_motion_requested(),
             choice_hover_progress: [0.0; 8],
             choice_hover_last_tick: Instant::now(),
@@ -506,6 +618,8 @@ impl Default for App {
             pause_backpack_craft: false,
             pause_story: std::collections::BTreeMap::new(),
             pause_outfit: 0,
+            pause_vitality: None,
+            pause_uses: Vec::new(),
             menu_next_frame: Instant::now(),
             input_generation: 0,
             backpack_dirty: false,
@@ -582,7 +696,7 @@ fn relaunch_current_executable() -> Result<()> {
 }
 
 fn load_menu_styles() -> Stylesheet {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/styles/main_menu.vcss");
+    let path = exploration3d_state::source_root().join("data/styles/main_menu.vcss");
     let source = if portable::enabled() {
         portable::menu_styles()
             .map(str::to_owned)
@@ -613,51 +727,8 @@ fn title_menu_layout(styles: &Stylesheet) -> MenuLayout {
     )
 }
 
-const OPTIONS_GALLERY_INDEX: usize = Language::ALL.len();
-const OPTIONS_BACK_INDEX: usize = Language::ALL.len() + 1;
-const OPTIONS_ITEM_COUNT: usize = Language::ALL.len() + 2;
-
-fn options_language_rect(index: usize) -> (i32, i32, i32, i32) {
-    let column = index / 6;
-    let row = index % 6;
-    (184 + column as i32 * 520, 350 + row as i32 * 74, 492, 60)
-}
-
-fn options_gallery_rect() -> (i32, i32, i32, i32) {
-    (1308, 608, 420, 74)
-}
-
-fn options_back_rect() -> (i32, i32, i32, i32) {
-    (1308, 732, 420, 68)
-}
-
 fn rect_contains(rect: (i32, i32, i32, i32), x: i32, y: i32) -> bool {
     x >= rect.0 && x <= rect.0 + rect.2 && y >= rect.1 && y <= rect.1 + rect.3
-}
-
-fn options_hit_test(x: i32, y: i32) -> Option<usize> {
-    (0..Language::ALL.len())
-        .find(|&index| rect_contains(options_language_rect(index), x, y))
-        .or_else(|| rect_contains(options_gallery_rect(), x, y).then_some(OPTIONS_GALLERY_INDEX))
-        .or_else(|| rect_contains(options_back_rect(), x, y).then_some(OPTIONS_BACK_INDEX))
-}
-
-const GALLERY_PAGE_SIZE: usize = 8;
-
-fn gallery_list_rect(slot: usize) -> (i32, i32, i32, i32) {
-    (68, 258 + slot as i32 * 73, 432, 60)
-}
-
-fn gallery_previous_rect() -> (i32, i32, i32, i32) {
-    (1370, 914, 205, 58)
-}
-
-fn gallery_next_rect() -> (i32, i32, i32, i32) {
-    (1590, 914, 250, 58)
-}
-
-fn gallery_back_rect() -> (i32, i32, i32, i32) {
-    (68, 878, 432, 66)
 }
 
 fn end_gallery_rect() -> (i32, i32, i32, i32) {
@@ -1679,9 +1750,10 @@ impl App {
     }
 
     fn begin_scene_reveal(&mut self) {
-        // Keep only assets needed by the scene being revealed.  Without this
-        // boundary, every visited VN image stayed decoded for the whole run.
-        self.art.clear();
+        // Keep only the art the last scene used (the next line most often shows the same
+        // room): without this boundary every visited VN image stayed decoded for the whole run,
+        // and with a full clear every line decoded its background and CG again (~80 ms).
+        self.art.keep_recent();
         self.quick_action_focus = None;
         self.reveal_started = Instant::now();
         self.reveal_complete = false;
@@ -1693,6 +1765,44 @@ impl App {
 
     fn world_vn_active(&self) -> bool {
         self.world_vn_return.is_some()
+    }
+
+    /// The castle's music under the visual novel (the prologue and its scenes), at this part of
+    /// the world's loudness; the pause menu over it keeps it, lower; anywhere else it fades out.
+    /// Whether it still sounds (it wants a tick now and then to hand tracks over and fade).
+    fn tick_vn_music(&mut self) -> bool {
+        const VN_MUSIC_LEVEL: f32 = 0.45;
+        let now = Instant::now();
+        let dt = self
+            .vn_music_tick
+            .map_or(0.0, |t| now.duration_since(t).as_secs_f32());
+        self.vn_music_tick = Some(now);
+        let in_vn = match self.screen {
+            Screen::Play | Screen::End => self.game.is_some() && !self.world_vn_active(),
+            // As it was when the menu opened (over the novel, or over the world).
+            Screen::GameMenu => self.vn_music_wanted,
+            _ => false,
+        };
+        self.vn_music_wanted = in_vn;
+        if in_vn && self.vn_music.is_none() && !self.vn_music_tried {
+            self.vn_music_tried = true;
+            self.vn_music = exploration3d::ui_sfx::mixer().and_then(|mixer| {
+                let mut music =
+                    exploration3d::soundtrack::Music::new(mixer, &exploration3d::soundtrack::music_dir())?;
+                music.set_level(VN_MUSIC_LEVEL);
+                Some(music)
+            });
+        }
+        let Some(music) = self.vn_music.as_mut() else {
+            return false;
+        };
+        if in_vn {
+            let paused = self.screen == Screen::GameMenu;
+            music.update(exploration3d::soundtrack::Zone::Castle, dt, 0.0, paused);
+            true
+        } else {
+            music.fade_out(dt)
+        }
     }
 
     fn request_world_return(&mut self) {
@@ -1822,9 +1932,30 @@ impl App {
             exploration3d_state::default_spawn(entry.spawn.as_str()).0,
             exploration3d_state::default_spawn(entry.spawn.as_str()).1,
         );
-        // The story's variables: what the world had, then what the visual novel says now.
+        // What she owns and has done carries over whatever the place: her purse, her bag and its
+        // layout, the shop's shelves, the brothel's book, the mine, her achievements, her outfit
+        // and the story. Only where she stands depends on the place.
         if let Some(previous) = previous.as_ref() {
             session.story = previous.story.clone();
+            session.gold = previous.gold;
+            session.inventory = previous.inventory.clone();
+            session.backpack = previous.backpack.clone();
+            session.shop_stock = previous.shop_stock.clone();
+            session.venue = previous.venue.clone();
+            session.dungeon = previous.dungeon.clone();
+            session.achievements = previous.achievements.clone();
+            session.outfit = previous.outfit;
+            session.seen_interactions = previous.seen_interactions.clone();
+            if previous.world == entry.world && previous.spawn == entry.spawn {
+                // The same place: exactly where she was (her floor and her mode too).
+                session.x = previous.x;
+                session.z = previous.z;
+                session.y = previous.y;
+                session.yaw = previous.yaw;
+                session.nature_mode = previous.nature_mode;
+                session.village_entered = previous.village_entered;
+                session.dungeon_active = previous.dungeon_active;
+            }
         }
         if let Some(game) = self.game.as_ref() {
             for (key, value) in game.story_variables() {
@@ -1835,21 +1966,19 @@ impl App {
             }
         }
         if let Some(saved) = saved.filter(|saved| saved.world == entry.world) {
-            if let Some(previous) =
-                previous.filter(|old| old.world == entry.world && old.spawn == entry.spawn)
-            {
-                session.nature_mode = previous.nature_mode;
-                session.village_entered = previous.village_entered;
-                // Keep the wardrobe selection when returning from the VN or
-                // loading the 3D scene. Without this copy the session starts
-                // at outfit 0 even though the checkpoint contains outfit 1.
-                session.outfit = previous.outfit;
+            let (x, z) = (
+                saved.x_milli as f32 / 1000.0,
+                saved.y_milli as f32 / 1000.0,
+            );
+            // The story's checkpoint is rounded to millimetres: the same spot keeps her floor.
+            if (x - session.x).abs() > 0.01 || (z - session.z).abs() > 0.01 {
+                session.y = 0.0;
             }
-            session.x = saved.x_milli as f32 / 1000.0;
-            session.z = saved.y_milli as f32 / 1000.0;
+            session.x = x;
+            session.z = z;
             session.yaw =
                 (saved.facing_x_milli as f32 / 1000.0).atan2(saved.facing_y_milli as f32 / 1000.0);
-            session.seen_interactions = saved.seen_interactions.clone();
+            session.seen_interactions.extend(saved.seen_interactions.iter().cloned());
         }
         exploration3d_state::write(&mut session)
     }
@@ -1868,10 +1997,7 @@ impl App {
     fn open_options(&mut self) {
         self.refresh_gallery();
         self.ensure_native_label_fonts();
-        self.options_sel = Language::ALL
-            .iter()
-            .position(|language| *language == self.localizer.language())
-            .unwrap_or(0);
+        self.options_reset();
         self.screen = Screen::Options;
         self.ui_hidden = false;
         self.needs_paint = true;
@@ -1913,6 +2039,7 @@ impl App {
         }
         self.fonts = Fonts::new_for_language(language.code()).or_else(Fonts::new);
         self.refresh_localized_view();
+        self.language_changed = true;
         self.needs_paint = true;
     }
 
@@ -1948,6 +2075,7 @@ impl App {
 
     fn open_gallery(&mut self, return_to: Screen) {
         self.refresh_gallery();
+        self.gallery_ui.reload();
         self.gallery_return = return_to;
         self.gallery_sel = self
             .gallery_sel
@@ -1958,6 +2086,10 @@ impl App {
     }
 
     fn leave_gallery(&mut self) {
+        // A picture or a scene open closes first.
+        if self.gallery_close_viewer() {
+            return;
+        }
         self.screen = self.gallery_return;
         self.ui_hidden = false;
         self.needs_paint = true;
@@ -2015,10 +2147,16 @@ impl App {
             return;
         }
         let choice_id = choice.id.clone();
+        let decision = view.choices.len() > 1;
+        // The next line: a soft low pluck (the menus' bright chime on every line wore on the ear);
+        // a decision: two soft notes. Nothing while the lines are skipped.
+        if !self.skipping_dialogue {
+            use exploration3d::ui_sfx::{play, UiSfx};
+            play(if decision { UiSfx::Choose } else { UiSfx::Advance });
+        }
         let Some(game) = self.game.as_mut() else {
             return;
         };
-        exploration3d::ui_sfx::play(exploration3d::ui_sfx::UiSfx::Select);
         if let Err(error) = game.decide(index) {
             eprintln!("falló la decisión {choice_id}: {error:#}");
             return;
@@ -2125,6 +2263,7 @@ impl App {
         self.scroll_accumulator = 0.0;
         match self.screen {
             Screen::GameMenu => self.menu_scroll(scroll_up),
+            Screen::Thanks => {}
             Screen::Play | Screen::End if scroll_up => self.rollback_scene(),
             Screen::Play => self.advance_play(),
             Screen::Resume => {
@@ -2134,34 +2273,31 @@ impl App {
                 self.needs_paint = true;
             }
             Screen::Title => self.title_scroll(scroll_up),
-            Screen::Options => {
-                let direction = if scroll_up { -1 } else { 1 };
-                self.options_sel = (self.options_sel as i32 + direction)
-                    .rem_euclid(Language::ALL.len() as i32 + 2)
-                    as usize;
-                self.needs_paint = true;
-            }
-            Screen::Gallery => {
-                if !self.gallery.entries.is_empty() {
-                    let direction = if scroll_up { -1 } else { 1 };
-                    self.gallery_sel = (self.gallery_sel as i32 + direction)
-                        .rem_euclid(self.gallery.entries.len() as i32)
-                        as usize;
-                    self.needs_paint = true;
-                }
-            }
+            Screen::Options => self.options_scroll(scroll_up),
+            Screen::Gallery => self.gallery_scroll(scroll_up),
             Screen::Explore => {}
             Screen::End => {}
         }
     }
 
     fn paint(&mut self) {
+        // The canvas in the screen's own pixels (or 1920×1080, as the settings say): a new size
+        // starts black, and every screen paints itself whole again.
+        let window_size = self.window.as_ref().map(|w| (w.inner_size().width, w.inner_size().height));
+        let forced = exploration3d::prefs::forced_render_size();
+        if let Some(inner) = window_size.or(forced) {
+            let (pw, ph) = exploration3d::prefs::render_size(inner);
+            if self.canvas.set_physical(pw as usize, ph as usize) {
+                eprintln!("[game] canvas {pw}x{ph}");
+            }
+        }
         self.demon_hover_animating = false;
         self.choice_hover_animating = false;
         self.ambient_animating = false;
         title_menu::note_screen(self);
         match self.screen {
             Screen::GameMenu => self.paint_game_menu(),
+            Screen::Thanks => self.paint_thanks(),
             Screen::Title => self.paint_title_persona(),
             Screen::Resume => self.paint_resume(),
             Screen::Options => self.paint_options(),
@@ -2196,9 +2332,9 @@ impl App {
             self.chiquita_shown = over.is_some();
             let presented = match over {
                 Some(over) => {
-                    display.present_canvas_over(Some(&self.canvas.pixels), 1.0, Some(over))
+                    display.present_canvas_over(Some(self.canvas.frame()), 1.0, Some(over))
                 }
-                None => display.present_canvas(&self.canvas.pixels, 1.0),
+                None => display.present_canvas(self.canvas.frame(), 1.0),
             };
             match presented {
                 Ok(true) => {}
@@ -2688,457 +2824,11 @@ impl App {
     }
 
     fn paint_options(&mut self) {
-        self.ensure_native_label_fonts();
-        let has_options_background = self.art.original(OPTIONS_BACKGROUND_KEY).is_some();
-        let background = if has_options_background {
-            self.art.original(OPTIONS_BACKGROUND_KEY)
-        } else {
-            self.art.original(TITLE_ART_KEY)
-        };
-        if let Some(art) = background {
-            self.canvas.blit_rgba(0, 0, art);
-        } else {
-            self.canvas.vgradient(0xff0d0611, 0xff2a1030);
-        }
-        if self.ui_hidden {
-            return;
-        }
-        self.canvas
-            .rect(0, 0, WIN_W as i32, WIN_H as i32, 0xc408040e);
-        let Some(fonts) = self.fonts.as_ref() else {
-            return;
-        };
-        let shell = component_style(&self.styles, "options-shell", "panel");
-        self.canvas.styled_panel(104, 116, 1712, 826, &shell);
-        self.canvas.gothic_crest(960, 108, 0xffff8ec1);
-        centered_text(
-            &mut self.canvas,
-            fonts,
-            self.localizer.ui("options.kicker"),
-            148,
-            14.0,
-            0xffd998b7,
-            true,
-        );
-        centered_display(
-            &mut self.canvas,
-            fonts,
-            self.localizer.ui("options.title"),
-            174,
-            55.0,
-            0xffffd9e8,
-        );
-        centered_text(
-            &mut self.canvas,
-            fonts,
-            self.localizer.ui("options.subtitle"),
-            241,
-            18.0,
-            0xffc9a9b9,
-            false,
-        );
-        self.canvas.ornament_rule(960, 282, 1390, 0xffb74f7d);
-
-        let section = component_style(&self.styles, "options-section", "panel");
-        self.canvas.styled_panel(148, 302, 1090, 554, &section);
-        self.canvas.styled_panel(1274, 302, 498, 554, &section);
-        self.canvas.text(
-            fonts,
-            self.localizer.ui("options.language"),
-            184,
-            316,
-            17.0,
-            0xffffc6dc,
-            true,
-        );
-        self.canvas.text(
-            fonts,
-            self.localizer.ui("options.gallery"),
-            1308,
-            316,
-            17.0,
-            0xffffc6dc,
-            true,
-        );
-
-        let hovered = options_hit_test(self.mouse.0, self.mouse.1);
-        for (index, language) in Language::ALL.iter().copied().enumerate() {
-            let rect = options_language_rect(index);
-            let selected = self.options_sel == index;
-            let active = self.localizer.language() == language;
-            let is_hovered = hovered == Some(index);
-            let style = interactive_panel_style(
-                &self.styles,
-                "language-option",
-                format!("language-{}", language.code()),
-                selected,
-                is_hovered,
-                is_hovered && self.mouse_down,
-            );
-            self.canvas
-                .styled_panel(rect.0, rect.1, rect.2, rect.3, &style);
-            let code_style = component_style(&self.styles, "language-code", "panel");
-            self.canvas
-                .styled_panel(rect.0 + 13, rect.1 + 11, 74, rect.3 - 22, &code_style);
-            let code = language.short_code();
-            let code_size = 13.0;
-            let code_x = rect.0 + 13 + (74 - fonts.text_width(code, code_size, true)) / 2;
-            self.canvas.text(
-                fonts,
-                code,
-                code_x,
-                rect.1 + 20,
-                code_size,
-                0xffffd4e6,
-                true,
-            );
-            let native_font = self
-                .native_label_fonts
-                .get(language.font_profile())
-                .and_then(Option::as_ref);
-            let label = language.display_name();
-            let label_color = if active { 0xfffff0cc } else { 0xfff2dce7 };
-            let label_size = if native_font
-                .map(|font| font.text_width(label, 21.0))
-                .unwrap_or_else(|| fonts.text_width(label, 21.0, active))
-                > rect.2 - 250
-            {
-                18.0
-            } else {
-                21.0
-            };
-            if let Some(native_font) = native_font {
-                self.canvas.native_label_text(
-                    native_font,
-                    label,
-                    rect.0 + 105,
-                    rect.1 + 17,
-                    label_size,
-                    label_color,
-                );
-            } else {
-                self.canvas.text(
-                    fonts,
-                    label,
-                    rect.0 + 105,
-                    rect.1 + 17,
-                    label_size,
-                    label_color,
-                    active,
-                );
-            }
-            if active {
-                let label = self.localizer.ui("common.current");
-                let size = 11.5;
-                let width = fonts.text_width(label, size, true);
-                self.canvas.text(
-                    fonts,
-                    label,
-                    rect.0 + rect.2 - width - 22,
-                    rect.1 + 22,
-                    size,
-                    0xfff4c77e,
-                    true,
-                );
-            }
-        }
-
-        self.canvas.paragraph(
-            fonts,
-            self.localizer.ui("options.language_help"),
-            184,
-            806,
-            1014,
-            24,
-            15.0,
-            0xffbfa4b3,
-            false,
-        );
-
-        let unlocked = self.gallery.entries.len();
-        let count = self.localizer.formatted(
-            "options.gallery_count",
-            &[
-                ("{unlocked}", unlocked.to_string()),
-                ("{total}", self.gallery.total.to_string()),
-            ],
-        );
-        centered_in_rect(
-            &mut self.canvas,
-            fonts,
-            &count,
-            (1308, 382, 430, 56),
-            24.0,
-            0xfff4c77e,
-            true,
-        );
-        self.canvas.paragraph(
-            fonts,
-            self.localizer.ui("options.gallery_help"),
-            1320,
-            458,
-            406,
-            30,
-            18.0,
-            0xffd6bac8,
-            false,
-        );
-        for (index, rect, key) in [
-            (
-                OPTIONS_GALLERY_INDEX,
-                options_gallery_rect(),
-                "options.open_gallery",
-            ),
-            (OPTIONS_BACK_INDEX, options_back_rect(), "options.back"),
-        ] {
-            let is_hovered = hovered == Some(index);
-            let style = interactive_panel_style(
-                &self.styles,
-                "options-action",
-                format!("options-action-{index}"),
-                self.options_sel == index,
-                is_hovered,
-                is_hovered && self.mouse_down,
-            );
-            self.canvas
-                .styled_panel(rect.0, rect.1, rect.2, rect.3, &style);
-            centered_in_rect(
-                &mut self.canvas,
-                fonts,
-                self.localizer.ui(key),
-                rect,
-                20.0,
-                0xffffedf6,
-                true,
-            );
-        }
-        centered_text(
-            &mut self.canvas,
-            fonts,
-            self.localizer.ui("options.controls"),
-            900,
-            15.0,
-            0xffb99aaa,
-            false,
-        );
+        self.paint_options_persona();
     }
 
     fn paint_gallery(&mut self) {
-        let selected = self.gallery.entries.get(self.gallery_sel).cloned();
-        let painted = selected
-            .as_ref()
-            .and_then(|entry| self.art.original(&entry.asset))
-            .map(|art| {
-                self.canvas.blit_rgba(0, 0, art);
-            })
-            .is_some();
-        if !painted {
-            if let Some(art) = self.art.original(OPTIONS_BACKGROUND_KEY) {
-                self.canvas.blit_rgba(0, 0, art);
-            } else {
-                self.canvas.vgradient(0xff090512, 0xff24102c);
-            }
-        }
-        if self.ui_hidden {
-            return;
-        }
-        self.canvas.rect(0, 0, 548, WIN_H as i32, 0xe508040e);
-        self.canvas.rect(548, 0, 1372, 154, 0xa6090512);
-        self.canvas.rect(548, 788, 1372, 292, 0xdb090512);
-        let Some(fonts) = self.fonts.as_ref() else {
-            return;
-        };
-
-        let sidebar = component_style(&self.styles, "gallery-sidebar", "panel");
-        self.canvas.styled_panel(34, 34, 500, 1012, &sidebar);
-        self.canvas.text(
-            fonts,
-            self.localizer.ui("gallery.kicker"),
-            68,
-            72,
-            13.0,
-            0xffd998b7,
-            true,
-        );
-        self.canvas.display_text(
-            fonts,
-            self.localizer.ui("gallery.title"),
-            68,
-            101,
-            48.0,
-            0xffffe0ed,
-        );
-        let unlocked_text = self.localizer.formatted(
-            "options.gallery_count",
-            &[
-                ("{unlocked}", self.gallery.entries.len().to_string()),
-                ("{total}", self.gallery.total.to_string()),
-            ],
-        );
-        self.canvas
-            .text(fonts, &unlocked_text, 68, 168, 14.0, 0xfff4c77e, true);
-        self.canvas.ornament_rule(284, 222, 400, 0xffa94772);
-
-        if self.gallery.entries.is_empty() {
-            self.canvas.display_text(
-                fonts,
-                self.localizer.ui("gallery.empty_title"),
-                626,
-                400,
-                39.0,
-                0xffffd8e8,
-            );
-            self.canvas.paragraph(
-                fonts,
-                self.localizer.ui("gallery.empty_body"),
-                630,
-                470,
-                1000,
-                38,
-                23.0,
-                0xffd3b6c5,
-                false,
-            );
-        } else {
-            let page_start = (self.gallery_sel / GALLERY_PAGE_SIZE) * GALLERY_PAGE_SIZE;
-            let page_end = (page_start + GALLERY_PAGE_SIZE).min(self.gallery.entries.len());
-            for (slot, index) in (page_start..page_end).enumerate() {
-                let entry = &self.gallery.entries[index];
-                let rect = gallery_list_rect(slot);
-                let hovered = rect_contains(rect, self.mouse.0, self.mouse.1);
-                let style = interactive_panel_style(
-                    &self.styles,
-                    "gallery-item",
-                    format!("gallery-{index}"),
-                    index == self.gallery_sel,
-                    hovered,
-                    hovered && self.mouse_down,
-                );
-                self.canvas
-                    .styled_panel(rect.0, rect.1, rect.2, rect.3, &style);
-                let number = format!("{:02}", index + 1);
-                self.canvas.text(
-                    fonts,
-                    &number,
-                    rect.0 + 18,
-                    rect.1 + 18,
-                    15.0,
-                    0xfff4c77e,
-                    true,
-                );
-                let speaker = self
-                    .localizer
-                    .character_name(&entry.speaker_id, &entry.speaker);
-                let room = self.localizer.room_name(&entry.room_id, &entry.room_name);
-                let label = ellipsize(fonts, &format!("{speaker} · {room}"), 330, 17.0, false);
-                self.canvas.text(
-                    fonts,
-                    &label,
-                    rect.0 + 65,
-                    rect.1 + 17,
-                    17.0,
-                    if index == self.gallery_sel {
-                        0xfffff3f8
-                    } else {
-                        0xffdec4d1
-                    },
-                    false,
-                );
-            }
-
-            if let Some(entry) = selected {
-                let speaker = self
-                    .localizer
-                    .character_name(&entry.speaker_id, &entry.speaker);
-                let room = self.localizer.room_name(&entry.room_id, &entry.room_name);
-                let text = self.localizer.node_text(&entry.node_id, &entry.text);
-                let counter = self.localizer.formatted(
-                    "gallery.count",
-                    &[
-                        ("{current}", (self.gallery_sel + 1).to_string()),
-                        ("{total}", self.gallery.entries.len().to_string()),
-                    ],
-                );
-                self.canvas
-                    .text(fonts, &counter, 598, 70, 15.0, 0xfff4c77e, true);
-                self.canvas
-                    .display_text(fonts, &speaker, 598, 96, 36.0, 0xffffe4ef);
-                self.canvas
-                    .text(fonts, &room, 600, 139, 16.0, 0xffc9a8b9, false);
-
-                let caption = component_style(&self.styles, "gallery-caption", "panel");
-                self.canvas.styled_panel(580, 810, 1280, 184, &caption);
-                self.canvas.text(
-                    fonts,
-                    self.localizer.ui("gallery.scene"),
-                    620,
-                    838,
-                    13.0,
-                    0xffe59bbd,
-                    true,
-                );
-                self.canvas
-                    .paragraph(fonts, &text, 620, 870, 700, 31, 19.0, 0xffffedf5, false);
-                let controls = self.localizer.ui("gallery.controls");
-                self.canvas
-                    .text(fonts, controls, 620, 955, 13.5, 0xffb99aaa, false);
-            }
-        }
-
-        let back_rect = gallery_back_rect();
-        let back_hovered = rect_contains(back_rect, self.mouse.0, self.mouse.1);
-        let back_style = interactive_panel_style(
-            &self.styles,
-            "gallery-action",
-            "gallery-back",
-            false,
-            back_hovered,
-            back_hovered && self.mouse_down,
-        );
-        self.canvas.styled_panel(
-            back_rect.0,
-            back_rect.1,
-            back_rect.2,
-            back_rect.3,
-            &back_style,
-        );
-        centered_in_rect(
-            &mut self.canvas,
-            fonts,
-            self.localizer.ui("gallery.back"),
-            back_rect,
-            18.0,
-            0xffffedf5,
-            true,
-        );
-
-        if !self.gallery.entries.is_empty() {
-            for (rect, key) in [
-                (gallery_previous_rect(), "gallery.previous"),
-                (gallery_next_rect(), "gallery.next"),
-            ] {
-                let hovered = rect_contains(rect, self.mouse.0, self.mouse.1);
-                let style = interactive_panel_style(
-                    &self.styles,
-                    "gallery-action",
-                    key,
-                    false,
-                    hovered,
-                    hovered && self.mouse_down,
-                );
-                self.canvas
-                    .styled_panel(rect.0, rect.1, rect.2, rect.3, &style);
-                centered_in_rect(
-                    &mut self.canvas,
-                    fonts,
-                    self.localizer.ui(key),
-                    rect,
-                    16.0,
-                    0xffffedf5,
-                    true,
-                );
-            }
-        }
+        self.paint_gallery_persona();
     }
 
     fn paint_play(&mut self) {
@@ -3154,14 +2844,17 @@ impl App {
         }
         if view.layers.is_empty() {
             let mut cg_keys = Vec::with_capacity(3);
+            // The scene's named CG, else one called as the scene (when there is one: a scene
+            // with none shows its room).
             if let Some(asset) = &view.image_asset {
-                cg_keys.push(asset.clone());
+                cg_keys.push((asset.clone(), false));
             }
-            cg_keys.push(scene_art_key(&view.id));
-            cg_keys.push(legacy_scene_art_key(&view.id));
-            cg_keys.dedup();
-            for key in cg_keys {
-                if let Some(cg) = self.art.original(&key) {
+            cg_keys.push((scene_art_key(&view.id), true));
+            cg_keys.push((legacy_scene_art_key(&view.id), true));
+            cg_keys.dedup_by(|a, b| a.0 == b.0);
+            for (key, optional) in cg_keys {
+                let cg = if optional { self.art.optional_original(&key) } else { self.art.original(&key) };
+                if let Some(cg) = cg {
                     self.canvas.blit_rgba(0, 0, cg);
                     light_key = key;
                     break;
@@ -3348,7 +3041,7 @@ impl App {
         let visible_characters = if self.reveal_complete {
             total_characters
         } else {
-            (self.reveal_started.elapsed().as_secs_f32() * 72.0)
+            (self.reveal_started.elapsed().as_secs_f32() * exploration3d::prefs::text_rate(72.0))
                 .floor()
                 .max(1.0) as usize
         }
@@ -3881,6 +3574,7 @@ impl App {
         }
         match self.screen {
             Screen::GameMenu => self.menu_key(key),
+            Screen::Thanks => self.thanks_key(key),
             Screen::Title => {
                 // The title in Persona's manner (`title_menu.rs`).
                 self.title_key(key);
@@ -3899,62 +3593,8 @@ impl App {
                 KeyCode::Enter | KeyCode::Space => self.activate_resume_choice(),
                 _ => {}
             },
-            Screen::Options => match key {
-                KeyCode::ArrowUp => {
-                    self.options_sel = (self.options_sel as i32 - 1)
-                        .rem_euclid(OPTIONS_ITEM_COUNT as i32)
-                        as usize;
-                    self.needs_paint = true;
-                }
-                KeyCode::ArrowDown => {
-                    self.options_sel = (self.options_sel + 1) % OPTIONS_ITEM_COUNT;
-                    self.needs_paint = true;
-                }
-                KeyCode::ArrowLeft if self.options_sel < Language::ALL.len() => {
-                    self.options_sel = self.options_sel.saturating_sub(6);
-                    self.needs_paint = true;
-                }
-                KeyCode::ArrowRight if self.options_sel < 6 => {
-                    let candidate = self.options_sel + 6;
-                    if candidate < Language::ALL.len() {
-                        self.options_sel = candidate;
-                        self.needs_paint = true;
-                    }
-                }
-                KeyCode::Enter | KeyCode::Space => {
-                    if self.options_sel < Language::ALL.len() {
-                        self.select_language(self.options_sel);
-                    } else if self.options_sel == OPTIONS_GALLERY_INDEX {
-                        self.open_gallery(Screen::Options);
-                    } else {
-                        self.screen = self.options_return;
-                        self.needs_paint = true;
-                    }
-                }
-                KeyCode::Escape => {
-                    self.screen = self.options_return;
-                    self.needs_paint = true;
-                }
-                _ => {}
-            },
-            Screen::Gallery => match key {
-                KeyCode::ArrowLeft | KeyCode::ArrowUp | KeyCode::PageUp => {
-                    if !self.gallery.entries.is_empty() {
-                        self.gallery_sel = (self.gallery_sel as i32 - 1)
-                            .rem_euclid(self.gallery.entries.len() as i32)
-                            as usize;
-                        self.needs_paint = true;
-                    }
-                }
-                KeyCode::ArrowRight | KeyCode::ArrowDown | KeyCode::PageDown => {
-                    if !self.gallery.entries.is_empty() {
-                        self.gallery_sel = (self.gallery_sel + 1) % self.gallery.entries.len();
-                        self.needs_paint = true;
-                    }
-                }
-                KeyCode::Escape => self.leave_gallery(),
-                _ => {}
-            },
+            Screen::Options => self.options_key(key),
+            Screen::Gallery => self.gallery_key(key),
             Screen::Play => {
                 match key {
                     KeyCode::PageUp => {
@@ -4052,6 +3692,7 @@ impl App {
         }
         match self.screen {
             Screen::GameMenu => self.menu_click(x, y),
+            Screen::Thanks => self.thanks_click(x, y),
             Screen::Title => self.title_click(x, y),
             Screen::Resume => {
                 let layout = resume_choices_layout(&self.styles);
@@ -4065,49 +3706,8 @@ impl App {
                     }
                 }
             }
-            Screen::Options => {
-                let Some(hit) = options_hit_test(x, y) else {
-                    return;
-                };
-                self.options_sel = hit;
-                if hit < Language::ALL.len() {
-                    self.select_language(hit);
-                } else if hit == OPTIONS_GALLERY_INDEX {
-                    self.open_gallery(Screen::Options);
-                } else {
-                    self.screen = self.options_return;
-                    self.needs_paint = true;
-                }
-            }
-            Screen::Gallery => {
-                if rect_contains(gallery_back_rect(), x, y) {
-                    self.leave_gallery();
-                    return;
-                }
-                if !self.gallery.entries.is_empty() {
-                    if rect_contains(gallery_previous_rect(), x, y) {
-                        self.gallery_sel = (self.gallery_sel as i32 - 1)
-                            .rem_euclid(self.gallery.entries.len() as i32)
-                            as usize;
-                        self.needs_paint = true;
-                        return;
-                    }
-                    if rect_contains(gallery_next_rect(), x, y) {
-                        self.gallery_sel = (self.gallery_sel + 1) % self.gallery.entries.len();
-                        self.needs_paint = true;
-                        return;
-                    }
-                    let page_start = (self.gallery_sel / GALLERY_PAGE_SIZE) * GALLERY_PAGE_SIZE;
-                    let page_end = (page_start + GALLERY_PAGE_SIZE).min(self.gallery.entries.len());
-                    for (slot, index) in (page_start..page_end).enumerate() {
-                        if rect_contains(gallery_list_rect(slot), x, y) {
-                            self.gallery_sel = index;
-                            self.needs_paint = true;
-                            return;
-                        }
-                    }
-                }
-            }
+            Screen::Options => self.options_click(x, y),
+            Screen::Gallery => self.gallery_click(x, y),
             Screen::Play => {
                 if !self.reveal_complete {
                     self.reveal_complete = true;
@@ -4556,14 +4156,9 @@ impl WinitApp {
         }
         self.checkpoint_world(true);
         if let Some(world) = &mut self.world {
-            match world.capture_pixels() {
-                Ok(pixels) => {
-                    self.app.canvas.pixels = pixels
-                        .chunks_exact(4)
-                        .map(|p| {
-                            0xff000000 | (p[0] as u32) << 16 | (p[1] as u32) << 8 | p[2] as u32
-                        })
-                        .collect();
+            match world.capture_frame() {
+                Ok((pixels, w, h)) => {
+                    self.app.canvas.fill_from_rgba(&pixels, w as usize, h as usize);
                 }
                 Err(error) => {
                     eprintln!("[vn] captura 3D antes de la conversación: {error}");
@@ -4708,6 +4303,7 @@ impl WinitApp {
         }
         self.app.backpack_dirty = false;
         if let (Some(pack), Some(world)) = (&self.app.pause_backpack, &mut self.world) {
+            world.use_from_menu(&std::mem::take(&mut self.app.pause_uses));
             world.commit_backpack(pack.clone());
             self.checkpoint_world(true);
         }
@@ -4725,7 +4321,20 @@ impl WinitApp {
         if let Some(game) = &mut self.app.game {
             game.checkpoint_3d(saved);
             self.app.autosave_error = game.take_autosave_error();
-            self.app.continue_available = game::has_continue();
+            // Reading the save back (megabytes, and the whole story with it) every second cost
+            // ~22 ms a frame: while she plays, an autosaving game has its continue save.
+            self.app.continue_available = if force || !game.autosaves() {
+                game::has_continue()
+            } else {
+                true
+            };
+        }
+        // Leaving: on disk before going on. Else: a write that failed says so.
+        if force {
+            exploration3d_state::background::flush();
+        }
+        if let Some(error) = exploration3d_state::background::take_error() {
+            self.app.autosave_error = Some(error);
         }
         self.next_world_checkpoint = Instant::now() + Duration::from_secs(1);
     }
@@ -4749,14 +4358,9 @@ impl WinitApp {
             self.checkpoint_world(true);
             if let Some(world) = &mut self.world {
                 world.close_overlays_for_pause();
-                match world.capture_pixels() {
-                    Ok(pixels) => {
-                        self.app.canvas.pixels = pixels
-                            .chunks_exact(4)
-                            .map(|p| {
-                                0xff000000 | (p[0] as u32) << 16 | (p[1] as u32) << 8 | p[2] as u32
-                            })
-                            .collect()
+                match world.capture_frame() {
+                    Ok((pixels, w, h)) => {
+                        self.app.canvas.fill_from_rgba(&pixels, w as usize, h as usize)
                     }
                     Err(error) => {
                         eprintln!("[menu] capture: {error}");
@@ -4793,13 +4397,33 @@ impl WinitApp {
             let (pack, craft) = world.backpack_for_menu();
             self.app.pause_backpack = Some(pack);
             self.app.pause_backpack_craft = craft;
+            self.app.pause_vitality = world.vitality();
         } else {
+            self.app.pause_vitality = None;
             self.app.pause_inventory_gold = 0;
             self.app.pause_inventory_items.clear();
             self.app.pause_backpack = None;
         }
         self.app.backpack_dirty = false;
+        self.app.pause_uses.clear();
         self.app.open_pause(page);
+        self.world_paused = self.world.is_some();
+    }
+
+    /// The thanks at the end of act 1 over the world as it is now (the world waits under it).
+    fn open_thanks(&mut self) {
+        if let Some(world) = &mut self.world {
+            world.close_overlays_for_pause();
+            match world.capture_frame() {
+                Ok((pixels, w, h)) => self.app.canvas.fill_from_rgba(&pixels, w as usize, h as usize),
+                Err(error) => {
+                    eprintln!("[gracias] capture: {error}");
+                    self.app.canvas.clear(0xff181220);
+                }
+            }
+            world.clear_input();
+        }
+        self.app.open_thanks();
         self.world_paused = self.world.is_some();
     }
 
@@ -4821,6 +4445,7 @@ impl WinitApp {
                 }
             }
             Screen::Gallery => self.app.leave_gallery(),
+            Screen::Thanks => self.app.close_thanks(),
             Screen::Options => {
                 self.app.screen = self.app.options_return;
                 self.app.needs_paint = true;
@@ -4829,6 +4454,7 @@ impl WinitApp {
                 self.app.screen = Screen::Title;
                 self.app.needs_paint = true;
             }
+            Screen::Title if self.app.title_info => self.app.title_info_toggle(),
             Screen::Title => {
                 self.open_game_menu(pause_menu::Page::Load);
                 self.app.ask_menu_confirmation(pause_menu::Confirm::Quit);
@@ -4889,6 +4515,15 @@ impl WinitApp {
     }
 
     fn draw_world(&mut self, event_loop: &ActiveEventLoop, id: WindowId) {
+        let t = Instant::now();
+        self.draw_world_inner(event_loop, id);
+        let ms = t.elapsed().as_secs_f64() * 1000.0;
+        if ms > 25.0 {
+            window_display::frame_note(&format!("world frame {ms:.1} ms"));
+        }
+    }
+
+    fn draw_world_inner(&mut self, event_loop: &ActiveEventLoop, id: WindowId) {
         let signature = (
             self.app.localizer.language(),
             rect_contains(pause_menu::TRIGGER, self.app.mouse.0, self.app.mouse.1),
@@ -4932,7 +4567,7 @@ impl WinitApp {
                         }
                     }
                     let shown = display.present_canvas(
-                        &self.app.canvas.pixels,
+                        self.app.canvas.frame(),
                         if opacity == 0.0 { 1.0 } else { opacity },
                     );
                     if matches!(shown, Ok(true)) && opacity == 0.0 {
@@ -5023,6 +4658,7 @@ impl ApplicationHandler for WinitApp {
             }
         };
         self.app.window = Some(window);
+        self.app.apply_fullscreen();
         self.app.display = Some(display);
         self.app.needs_paint = true;
         // Do not expose a white OS window while the first frame initializes.
@@ -5059,9 +4695,16 @@ impl ApplicationHandler for WinitApp {
                 .and_then(|v| v.physical_to_virtual(position.x, position.y))
                 .map(|(x, y)| (x.floor() as i32, y.floor() as i32))
                 .unwrap_or((-1, -1));
+            if self.app.mouse_down {
+                self.app.settings_drag();
+            }
         }
         if let WindowEvent::KeyboardInput { event: ref key, .. } = event {
             if key.state == ElementState::Pressed && !key.repeat {
+                if key.physical_key == PhysicalKey::Code(KeyCode::F11) {
+                    self.app.toggle_fullscreen();
+                    return;
+                }
                 if key.physical_key == PhysicalKey::Code(KeyCode::Backspace)
                     && self.app.world_vn_active()
                 {
@@ -5133,6 +4776,16 @@ impl ApplicationHandler for WinitApp {
                 && self.app.screen == Screen::GameMenu
                 && self.app.backpack_right_click()
             {
+                return;
+            }
+            // In the fight the right button is the seal (held): it is the world's, not «back».
+            if button == MouseButton::Right
+                && self.app.screen == Screen::Explore
+                && self.world.as_ref().is_some_and(|world| world.owns_right_button())
+            {
+                if let Some(world) = &mut self.world {
+                    world.window_event(event_loop, window_id, event);
+                }
                 return;
             }
             if matches!(button, MouseButton::Right | MouseButton::Back) {
@@ -5240,6 +4893,7 @@ impl ApplicationHandler for WinitApp {
                         dungeon_changed,
                         dungeon_active,
                         guion_vn,
+                        thanks,
                     ) = {
                         let Some(world) = &mut self.world else {
                             return;
@@ -5254,17 +4908,18 @@ impl ApplicationHandler for WinitApp {
                             world
                                 .take_guion_vn()
                                 .map(|node| (node, world.story_values())),
+                            world.take_thanks(),
                         )
                     };
+                    if thanks {
+                        self.open_thanks();
+                    }
                     if dungeon_changed {
                         if let Some(window) = &self.app.window {
-                            let title = if dungeon_active {
-                                "Demon Queen — Mazmorra procedural | Ratón: mirar · WASD: mover · Shift: correr · G: volver · Esc: pausa"
-                                    .to_owned()
-                            } else {
-                                title_lines().join(" ")
-                            };
-                            window.set_title(&title);
+                            // The game's name, in the mine too (its keys are on its HUD, in
+                            // the player's language).
+                            let _ = dungeon_active;
+                            window.set_title(&title_lines().join(" "));
                         }
                     }
                     if story_requested {
@@ -5340,12 +4995,21 @@ impl ApplicationHandler for WinitApp {
                 }
             }
             WindowEvent::Focused(false) => {
-                self.app.stop_dialogue_skip();
+                // (The smoke test drives the game itself: a window in the background, as in a
+                // Windows Sandbox nobody is looking at, must not stop it.)
+                if self.smoke.is_none() {
+                    self.app.stop_dialogue_skip();
+                }
                 self.app.mouse_down = false;
                 self.app.set_ui_hidden(false);
             }
             WindowEvent::RedrawRequested if self.app.needs_paint => {
+                let t = Instant::now();
                 self.app.paint();
+                let ms = t.elapsed().as_secs_f64() * 1000.0;
+                if ms > 20.0 {
+                    window_display::frame_note(&format!("paint {:?} {ms:.1} ms", self.app.screen));
+                }
             }
             WindowEvent::RedrawRequested if self.app.chiquita_moving() => {
                 self.app.present_chiquita();
@@ -5356,6 +5020,11 @@ impl ApplicationHandler for WinitApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if std::mem::take(&mut self.app.language_changed) {
+            if let Some(world) = self.world.as_mut() {
+                world.relocalize_signs();
+            }
+        }
         self.tick_chiquita_check(event_loop);
         self.sync_backpack();
         self.process_menu_action();
@@ -5383,6 +5052,8 @@ impl ApplicationHandler for WinitApp {
             self.open_game_menu(pause_menu::Page::Status);
             self.app.ask_menu_confirmation(pause_menu::Confirm::Quit);
         }
+        // The visual novel's music (faded out in the world, which plays its own).
+        let vn_music = self.app.tick_vn_music();
         if self.app.screen == Screen::Explore && self.world.is_some() {
             if self.world_paused {
                 if let Some(world) = &mut self.world {
@@ -5421,9 +5092,19 @@ impl ApplicationHandler for WinitApp {
         // The pause menu moves (embers, the turning sigil, entrances): ~30 frames a second while
         // it is open, unless motion is reduced.
         let menu_moving = ((self.app.screen == Screen::GameMenu && self.app.pause.is_some())
-            || self.app.screen == Screen::Title)
+            || self.app.screen == Screen::Title
+            || self.app.screen == Screen::Options
+            || self.app.screen == Screen::Thanks)
             && !self.app.reduced_motion;
-        if menu_moving && now >= self.app.menu_next_frame {
+        // The gallery moves while a scene plays and while its cards come in; the grid at rest is
+        // painted again only on input (a full paint of it is heavy).
+        let gallery_moving = self.app.screen == Screen::Gallery
+            && (self.app.gallery_ui.playing()
+                || (!self.app.reduced_motion
+                    && self.app.gallery_ui.since.elapsed() < Duration::from_millis(1200)));
+        if (menu_moving || gallery_moving || self.app.settings_typing())
+            && now >= self.app.menu_next_frame
+        {
             self.app.menu_next_frame = now + Duration::from_millis(33);
             self.app.needs_paint = true;
         }
@@ -5474,6 +5155,15 @@ impl ApplicationHandler for WinitApp {
         if menu_moving {
             event_loop.set_control_flow(ControlFlow::WaitUntil(self.app.menu_next_frame));
         }
+        // The music hands its tracks over and fades by these ticks: never asleep for long.
+        if vn_music {
+            let soon = now + Duration::from_millis(250);
+            match event_loop.control_flow() {
+                ControlFlow::WaitUntil(at) if at <= soon => {}
+                ControlFlow::Poll => {}
+                _ => event_loop.set_control_flow(ControlFlow::WaitUntil(soon)),
+            }
+        }
     }
 }
 
@@ -5517,7 +5207,7 @@ fn headless(route: usize) -> Result<()> {
 }
 
 fn save_note_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".headless-ok")
+    exploration3d_state::source_root().join(".headless-ok")
 }
 
 fn optional_path_after(args: &[String], flag: &str) -> Option<PathBuf> {
@@ -5652,6 +5342,8 @@ fn capture_menu(path: &Path, page: usize, focus: usize, confirm: Option<usize>) 
         app.pause_inventory_items = items;
         app.pause_backpack = Some(pack);
         app.pause_backpack_craft = true;
+        // As in the mine: a little hurt, so «Usar» has something to do.
+        app.pause_vitality = Some((62.0, 100.0));
     }
     for (key, value) in [
         ("ero_masturbaciones", 7),
@@ -5683,8 +5375,20 @@ fn capture_menu(path: &Path, page: usize, focus: usize, confirm: Option<usize>) 
         app.pause_outfit = outfit;
     }
     app.open_pause(page);
+    // VELVET_MENU_ITEM=id: the backpack's cursor on that item (its card on the right).
+    let item_cell = std::env::var("VELVET_MENU_ITEM").ok().and_then(|id| {
+        let p = app.pause_backpack.as_ref()?.placed.iter().find(|p| p.id == id)?.clone();
+        Some((p.x, p.y))
+    });
     if let Some(menu) = &mut app.pause {
         menu.focus = focus;
+        // VELVET_OPTIONS_TAB=n: the settings page on that tab.
+        if let Some(tab) = std::env::var("VELVET_OPTIONS_TAB").ok().and_then(|v| v.parse().ok()) {
+            menu.settings.tab = tab;
+        }
+        if let Some(cell) = item_cell {
+            menu.bp.cursor = cell;
+        }
         // VELVET_MENU_LIGHT=rrggbb: as if the scene behind had cast that light.
         if let Some(light) = std::env::var("VELVET_MENU_LIGHT")
             .ok()
@@ -5730,11 +5434,38 @@ fn capture_menu(path: &Path, page: usize, focus: usize, confirm: Option<usize>) 
             started.elapsed().as_secs_f64() * 1000.0 / n as f64
         );
     }
+    bench_paint(&mut app, "pausa");
     save_canvas(path, &app.canvas, "del menú de pausa")
 }
 
 fn native_resolution_app() -> App {
-    App::default()
+    let mut app = App::default();
+    // QA: `VELVET_RENDER_SIZE` paints the captures in that many pixels.
+    if let Some((w, h)) = exploration3d::prefs::forced_render_size() {
+        app.canvas.set_physical(w as usize, h as usize);
+    }
+    app
+}
+
+/// QA: `VELVET_BENCH_PAINT=n` paints the screen being captured n times more, as the game does
+/// each frame, and says how long one took.
+fn bench_paint(app: &mut App, label: &str) {
+    let Some(n) = std::env::var("VELVET_BENCH_PAINT").ok().and_then(|v| v.parse::<u32>().ok()) else {
+        return;
+    };
+    let mut worst = 0.0f64;
+    let started = Instant::now();
+    for _ in 0..n.max(1) {
+        let t = Instant::now();
+        app.needs_paint = true;
+        app.paint();
+        worst = worst.max(t.elapsed().as_secs_f64() * 1000.0);
+    }
+    let avg = started.elapsed().as_secs_f64() * 1000.0 / n.max(1) as f64;
+    eprintln!(
+        "[bench] {label} {}x{}: {avg:.2} ms per paint (worst {worst:.2})",
+        app.canvas.pw, app.canvas.ph
+    );
 }
 
 fn save_canvas(path: &Path, canvas: &Canvas, label: &str) -> Result<()> {
@@ -5750,8 +5481,8 @@ fn save_canvas(path: &Path, canvas: &Canvas, label: &str) -> Result<()> {
     image::save_buffer(
         path,
         &rgba,
-        canvas.w as u32,
-        canvas.h as u32,
+        canvas.pw as u32,
+        canvas.ph as u32,
         image::ColorType::Rgba8,
     )?;
     println!("captura {label}: {}", path.display());
@@ -5770,6 +5501,20 @@ fn capture_title(path: &Path, focus: usize, cross: f32) -> Result<()> {
     app.title_background_transition_active = cross < 1.0;
     app.title_background_transition_started =
         Instant::now() - Duration::from_secs_f32(0.45 * cross.clamp(0.0, 1.0));
+    // VELVET_TITLE_INFO=1: with the guide open.
+    // (`VELVET_TITLE_INFO=n`: on page n; `VELVET_TITLE_TURN=t`: turned to it from the page
+    // before, t of the way.)
+    if let Some(value) = std::env::var_os("VELVET_TITLE_INFO") {
+        app.title_info = true;
+        app.title_info_since = Instant::now() - Duration::from_secs(2);
+        app.title_info_page = value.to_string_lossy().parse::<usize>().unwrap_or(0).min(title_menu::GUIDE_PAGES - 1);
+        if let Some(t) = std::env::var("VELVET_TITLE_TURN").ok().and_then(|v| v.parse::<f32>().ok()) {
+            let back = Duration::from_secs_f32(0.42 * t.clamp(0.0, 0.99));
+            let from = app.title_info_page.saturating_sub(1);
+            app.title_info_turn = Some((from, Instant::now() - back, 1));
+        }
+    }
+    bench_paint(&mut app, "titulo");
     app.paint_title_persona();
     save_canvas(path, &app.canvas, "del menú")
 }
@@ -5829,8 +5574,32 @@ fn capture_options(path: &Path, language: &str) -> Result<()> {
     let mut app = native_resolution_app();
     app.preview_language(language)?;
     app.open_options();
+    // Shown once it has come in, on the tab `VELVET_OPTIONS_TAB` (0-3) with the preview typed
+    // part of the way; `VELVET_OPTIONS_ROW` puts the keyboard on a row.
+    let settled = Instant::now() - Duration::from_secs(4);
+    app.options_since = settled;
+    app.title_since = settled;
+    if let Some(tab) = std::env::var("VELVET_OPTIONS_TAB").ok().and_then(|v| v.parse().ok()) {
+        app.options_settings.tab = tab;
+    }
+    app.options_settings.row = std::env::var("VELVET_OPTIONS_ROW").ok().and_then(|v| v.parse().ok());
+    app.options_settings.preview_since = Instant::now() - Duration::from_millis(1100);
     app.paint_options();
+    bench_paint(&mut app, "opciones");
     save_canvas(path, &app.canvas, "de opciones")
+}
+
+/// The thanks at the end of act 1, over one of the title's places (as the world would be).
+fn capture_thanks(path: &Path, language: &str) -> Result<()> {
+    let mut app = native_resolution_app();
+    app.preview_language(language)?;
+    if let Some(place) = app.art.original(title_menu::PLACES[0].0) {
+        app.canvas.blit_rgba(0, 0, place);
+    }
+    app.open_thanks();
+    app.thanks_since = Instant::now() - Duration::from_secs(5);
+    app.paint_thanks();
+    save_canvas(path, &app.canvas, "del agradecimiento")
 }
 
 fn capture_gallery(path: &Path, steps: usize, language: &str) -> Result<()> {
@@ -5845,7 +5614,31 @@ fn capture_gallery(path: &Path, steps: usize, language: &str) -> Result<()> {
         app.confirm_choice();
     }
     app.open_gallery(Screen::Options);
-    app.gallery_sel = app.gallery.entries.len().saturating_sub(1);
+    // VELVET_GALLERY_ALBUM=n opens album n (0 the prologue); VELVET_GALLERY_CARD=n opens card n,
+    // VELVET_GALLERY_SHOT=n plays shot n of a scene (a scene's shots show as seen).
+    let number = |name: &str| std::env::var(name).ok().and_then(|v| v.parse::<usize>().ok());
+    if let Some(album) = number("VELVET_GALLERY_ALBUM") {
+        app.gallery_ui.album = album;
+        app.gallery_ui.list = album;
+        app.gallery_ui.on_grid = true;
+    }
+    app.gallery_ui.since = Instant::now() - Duration::from_secs(3);
+    if let Some(card) = number("VELVET_GALLERY_CARD") {
+        app.gallery_capture_card(card, number("VELVET_GALLERY_SHOT"));
+    }
+    // VELVET_GALLERY_BENCH=n: n frames painted as the viewer would, timed.
+    if let Some(n) = number("VELVET_GALLERY_BENCH") {
+        let start = Instant::now();
+        for _ in 0..n {
+            app.paint_gallery();
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        eprintln!(
+            "[galería] {n} fotogramas: {:.1} ms de media",
+            start.elapsed().as_secs_f64() * 1000.0 / n as f64 - 1.0
+        );
+    }
+    bench_paint(&mut app, "galeria");
     app.paint_gallery();
     save_canvas(path, &app.canvas, "de la galería")
 }
@@ -5915,6 +5708,7 @@ fn capture_play(path: &Path, steps: usize, language: &str) -> Result<()> {
             }
         }
     }
+    bench_paint(&mut app, "escena");
     save_canvas(path, &app.canvas, "de escena")
 }
 
@@ -5958,7 +5752,7 @@ fn composite_premultiplied(canvas: &mut Canvas, w: u32, h: u32, rgba: &[u8]) {
         };
         (s * 255.0).round() as u32
     };
-    let (cw, ch) = (canvas.w as u32, canvas.h as u32);
+    let (cw, ch) = (canvas.pw as u32, canvas.ph as u32);
     for y in 0..h.min(ch) {
         for x in 0..w.min(cw) {
             let i = ((y * w + x) * 4) as usize;
@@ -5992,6 +5786,7 @@ fn capture_play_hover(path: &Path, steps: usize, index: usize) -> Result<()> {
     if count == 0 {
         return Err(anyhow!("scene has no choices to capture"));
     }
+    eprintln!("decisión con {count} opciones");
     let index = index.min(count - 1);
     let dialogue = dialogue_layout(&app.styles);
     let choices = story_choices_layout(&app.styles, count, dialogue.y);
@@ -6006,7 +5801,11 @@ fn capture_play_hover(path: &Path, steps: usize, index: usize) -> Result<()> {
     save_canvas(path, &app.canvas, "del hover de una decisión")
 }
 
+
 fn main() -> Result<()> {
+    // The release's pictures may be AVIF under their usual names: the image crate tells them by
+    // their bytes from now on.
+    velvet_avif::register_image_hooks();
     // Keep Windows from virtualizing the fixed 1920×1080 physical framebuffer.
     // Assets and UI pixels are presented 1:1; runtime display scaling is banned.
     #[cfg(windows)]
@@ -6017,6 +5816,7 @@ fn main() -> Result<()> {
         );
     }
     let args: Vec<String> = std::env::args().collect();
+    exploration3d::prefs::load();
     if portable::enabled() {
         eprintln!(
             "Demon Queen portable · {} imágenes incrustadas · Velvet Weaver",
@@ -6075,6 +5875,17 @@ fn main() -> Result<()> {
             .map(String::as_str)
             .unwrap_or(Language::DEFAULT.code());
         return capture_options(&path, language);
+    }
+    if let Some(pos) = args.iter().position(|a| a == "--capture-thanks") {
+        let path = args
+            .get(pos + 1)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("demon-queen-thanks.png"));
+        let language = args
+            .get(pos + 2)
+            .map(String::as_str)
+            .unwrap_or(Language::DEFAULT.code());
+        return capture_thanks(&path, language);
     }
     if let Some(pos) = args
         .iter()
@@ -6232,6 +6043,8 @@ fn main() -> Result<()> {
         });
     }
     event_loop.run_app(&mut winit_app)?;
+    // The saves still on their way to the disk.
+    exploration3d_state::background::flush();
     Ok(())
 }
 
@@ -6240,8 +6053,75 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_settings_panel_answers_keys_and_clicks_on_the_title_and_in_the_pause_menu() {
+        use exploration3d::prefs::{self, Channel};
+        let mut app = App::default();
+        app.open_options();
+        assert_eq!(app.screen, Screen::Options);
+        assert!(app.options_panel);
+        // Q E between tabs; down to the last sound row, its bar down three steps.
+        app.handle_key(KeyCode::KeyE);
+        assert_eq!(app.options_settings.tab, 1);
+        for _ in 0..5 {
+            app.handle_key(KeyCode::ArrowDown);
+        }
+        assert_eq!(app.options_settings.row, Some(4));
+        for _ in 0..3 {
+            app.handle_key(KeyCode::ArrowLeft);
+        }
+        assert_eq!(prefs::volume(Channel::Scenes), prefs::VOLUME_STEPS - 3);
+        // A click on its second segment.
+        let area = title_menu::OPTIONS_AREA;
+        let y = area.1 + 88 + 4 * 92 + 40;
+        let x = area.0 + area.2 - 470 - 24 + 38 + 17;
+        app.options_click(x, y);
+        assert_eq!(prefs::volume(Channel::Scenes), 2);
+        // Up to the tabs, left along them and out to the list; the list's last item goes back.
+        for _ in 0..6 {
+            app.handle_key(KeyCode::ArrowUp);
+        }
+        assert!(!app.options_panel, "Up from the tabs leaves the panel");
+        app.handle_key(KeyCode::ArrowDown);
+        app.handle_key(KeyCode::ArrowDown);
+        assert_eq!(app.options_sel, 2);
+        app.handle_key(KeyCode::Enter);
+        assert_eq!(app.screen, Screen::Title);
+
+        // The pause menu: right from the list into the panel, a tab along, a row down, a step.
+        app.start_game().expect("new VN");
+        app.open_pause(pause_menu::Page::Settings);
+        app.menu_key(KeyCode::ArrowRight);
+        assert!(app.pause.as_ref().unwrap().focus >= pause_menu::NAV_COUNT);
+        app.menu_key(KeyCode::KeyE);
+        app.menu_key(KeyCode::ArrowDown);
+        app.menu_key(KeyCode::ArrowDown);
+        app.menu_key(KeyCode::ArrowDown);
+        app.menu_key(KeyCode::ArrowDown);
+        app.menu_key(KeyCode::ArrowDown);
+        app.menu_key(KeyCode::ArrowRight);
+        assert_eq!(prefs::volume(Channel::Scenes), 3);
+        // The display tab's reduced motion, by a click on its row.
+        let before = app.reduced_motion;
+        let area = pause_menu::SETTINGS_AREA;
+        let tab = (area.2 - 4 * 14) / 5;
+        app.menu_click(area.0 + 2 * (tab + 14) + tab / 2, area.1 + 29);
+        assert_eq!(app.pause.as_ref().unwrap().settings.tab, 2);
+        // Its second row: the native resolution, off and on again.
+        let native = prefs::native_resolution();
+        app.menu_click(area.0 + 200, area.1 + 88 + 92 + 40);
+        assert_eq!(prefs::native_resolution(), !native);
+        app.menu_click(area.0 + 200, area.1 + 88 + 92 + 40);
+        assert_eq!(prefs::native_resolution(), native);
+        app.menu_click(area.0 + 200, area.1 + 88 + 2 * 92 + 40);
+        assert_eq!(app.reduced_motion, !before);
+        prefs::set_volume(Channel::Scenes, prefs::VOLUME_STEPS);
+    }
+
+    #[test]
     fn embedded_world_gate_preserves_the_final_vn_dialogue() {
         let mut app = App::default();
+        // The lines are checked in Spanish, whatever language the player last chose.
+        app.preview_language("es").expect("Spanish");
         app.start_game().expect("new VN");
         for _ in 0..256 {
             if app
@@ -6494,6 +6374,26 @@ mod tests {
     }
 
     #[test]
+    fn a_new_scene_keeps_the_art_the_last_one_showed_and_drops_the_rest() {
+        let mut cache = ArtCache::default();
+        let one = |cache: &mut ArtCache, key: &str| {
+            cache.insert_loaded(format!("{key}#Original"), Some(ArtBitmap { w: 1, h: 1, rgba: vec![0; 4] }));
+        };
+        one(&mut cache, "bg");
+        one(&mut cache, "old_cg");
+        // The scene shows only the background (asked for through the cache, as painting does).
+        cache.recent.insert("bg#Original".into());
+        cache.keep_recent();
+        assert!(cache.entries.contains_key("bg#Original"));
+        assert!(!cache.entries.contains_key("old_cg#Original"));
+        assert_eq!(cache.bytes, 4);
+        // A scene that showed nothing leaves nothing.
+        cache.keep_recent();
+        assert!(cache.entries.is_empty());
+        assert_eq!(cache.bytes, 0);
+    }
+
+    #[test]
     fn art_cache_drops_old_frames_before_budget_overflow() {
         let mut cache = ArtCache::default();
         cache.entries.insert("old-scene".into(), None);
@@ -6673,7 +6573,7 @@ mod tests {
                 Screen::End => app.paint_end(),
                 Screen::Play => unreachable!(),
                 Screen::Explore => unreachable!(),
-                Screen::GameMenu => unreachable!(),
+                Screen::GameMenu | Screen::Thanks => unreachable!(),
             }
             let background_only = sample_indices.map(|index| app.canvas.pixels[index]);
 
@@ -6686,7 +6586,7 @@ mod tests {
                 Screen::End => app.paint_end(),
                 Screen::Play => unreachable!(),
                 Screen::Explore => unreachable!(),
-                Screen::GameMenu => unreachable!(),
+                Screen::GameMenu | Screen::Thanks => unreachable!(),
             }
             let with_chrome = sample_indices.map(|index| app.canvas.pixels[index]);
 

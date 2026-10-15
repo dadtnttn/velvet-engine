@@ -3,6 +3,64 @@
 //! (orientation and a list of places). The village keeps its own map code.
 use super::map_kit::{self, with_alpha, Place};
 use super::*;
+
+// The maps' boxes in the Persona manner of the menus: these stand in for the rounded ones of
+// the old look in this file (corners cut on the diagonal instead of rounded; tiny swatches and
+// pills keep a plain shape).
+fn cut_points(rect: Rect, radius: f32) -> Vec<[f32; 2]> {
+    let c = (radius * 0.8).min(rect.w * 0.3).min(rect.h * 0.3);
+    vec![
+        [rect.x + c, rect.y],
+        [rect.x + rect.w, rect.y],
+        [rect.x + rect.w, rect.y + rect.h - c],
+        [rect.x + rect.w - c, rect.y + rect.h],
+        [rect.x, rect.y + rect.h],
+        [rect.x, rect.y + c],
+    ]
+}
+
+fn push_rounded_rect(vertices: &mut Vec<MapVertex>, rect: Rect, radius: f32, color: [f32; 4]) {
+    if radius < 6.0 || rect.w < 16.0 || rect.h < 12.0 {
+        super::push_rounded_rect(vertices, rect, radius.min(2.0), color);
+        return;
+    }
+    map_kit::cut_plate(vertices, rect, radius * 0.8, color);
+}
+
+fn push_rounded_border(
+    vertices: &mut Vec<MapVertex>,
+    rect: Rect,
+    radius: f32,
+    width: f32,
+    color: [f32; 4],
+) {
+    if radius < 6.0 || rect.w < 16.0 || rect.h < 12.0 {
+        super::push_rounded_border(vertices, rect, radius.min(2.0), width, color);
+        return;
+    }
+    let pts = cut_points(rect, radius);
+    for k in 0..pts.len() {
+        let (a, b) = (pts[k], pts[(k + 1) % pts.len()]);
+        push_segment(vertices, a[0], a[1], b[0], b[1], width, color);
+    }
+}
+
+fn persona_gradient(
+    vertices: &mut Vec<MapVertex>,
+    rect: Rect,
+    radius: f32,
+    top: [f32; 4],
+    bottom: [f32; 4],
+) {
+    let mid = [
+        (top[0] + bottom[0]) * 0.5,
+        (top[1] + bottom[1]) * 0.5,
+        (top[2] + bottom[2]) * 0.5,
+        (top[3] + bottom[3]) * 0.5,
+    ];
+    map_kit::cut_plate(vertices, Rect::new(rect.x + 5.0, rect.y + 6.0, rect.w, rect.h), radius * 0.8, [0.0, 0.0, 0.0, 0.45]);
+    map_kit::cut_plate(vertices, rect, radius * 0.8, mid);
+}
 use prompt_icons::Icon;
 
 /// Colours of the brothel's floors on its plan: (top, bottom).
@@ -33,7 +91,7 @@ pub(super) fn draw_brothel(
     let tone = map_kit::tone(place);
     let plan = super::super::brothel::plan();
     let ppm = map.w / (bounds.max_x - bounds.min_x).max(0.001); // pixels per metre
-    map_kit::round_gradient(
+    persona_gradient(
         vertices,
         map,
         16.0,
@@ -463,7 +521,7 @@ pub(super) fn draw_brothel_orientation(
         "El Corazón Carmesí",
     );
     let card = Rect::new(panel.x + 14.0, panel.y + 96.0, panel.w - 28.0, 112.0);
-    map_kit::round_gradient(
+    persona_gradient(
         vertices,
         card,
         14.0,
@@ -746,7 +804,7 @@ pub(super) fn draw_castle(
     let p = super::super::castle3d::plan();
     let rect =
         |x0: f32, x1: f32, z0: f32, z1: f32| map_world_rect_coords(x0, x1, -z1, -z0, bounds, map);
-    map_kit::round_gradient(
+    persona_gradient(
         vertices,
         map,
         16.0,
@@ -1155,7 +1213,7 @@ pub(super) fn draw_castle_orientation(
         "Tu lugar en el refugio",
     );
     let card = Rect::new(panel.x + 14.0, panel.y + 96.0, panel.w - 28.0, 104.0);
-    map_kit::round_gradient(
+    persona_gradient(
         vertices,
         card,
         14.0,
@@ -1489,7 +1547,7 @@ pub(super) fn draw_forest_orientation(
         "Tu paso por el bosque",
     );
     let card = Rect::new(panel.x + 14.0, panel.y + 96.0, panel.w - 28.0, 104.0);
-    map_kit::round_gradient(
+    persona_gradient(
         vertices,
         card,
         14.0,
@@ -1730,7 +1788,7 @@ pub(super) fn draw_village_orientation(
     );
     let centre = super::super::fantasy_village_center();
     let card = Rect::new(panel.x + 14.0, panel.y + 96.0, panel.w - 28.0, 104.0);
-    map_kit::round_gradient(
+    persona_gradient(
         vertices,
         card,
         14.0,
@@ -2076,7 +2134,7 @@ pub(super) fn draw_baths(
     }
     let scale = map.w / (bounds.max_x - bounds.min_x).max(0.001);
     let at = |x: f32, z: f32| map_point(x, -z, bounds, map);
-    map_kit::round_gradient(
+    persona_gradient(
         vertices,
         map,
         16.0,

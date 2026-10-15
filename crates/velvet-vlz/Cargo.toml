@@ -1,0 +1,16 @@
+[package]
+name = "velvet-vlz"
+description = "VLZ (Velvet Compressed): block-compressed, random-access resource container for Velvet Engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+lz4_flex = { version = "0.14", default-features = false, features = ["std", "safe-encode", "safe-decode"] }
+zstd = { version = "0.13", default-features = false }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[dev-dependencies]
+tempfile = "3"

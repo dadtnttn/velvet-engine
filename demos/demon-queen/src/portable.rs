@@ -90,7 +90,7 @@ mod tests {
         assert!(asset_bytes("native_1080p/cg/p01_last_tray.png").is_some());
         assert!(asset_bytes("title/demon_queen_menu_overlay_native_705x1050.png").is_some());
         for code in [
-            "en", "es", "de", "zh-Hans", "zh-Hant", "hi", "ru", "ja", "ko", "la", "eo",
+            "en", "es", "pt-BR", "de", "fr", "it", "pl", "ru", "zh-Hans", "zh-Hant", "ja", "ko", "he", "hi", "th",
         ] {
             assert!(
                 locale_bytes(code).is_some(),

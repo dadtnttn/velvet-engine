@@ -16,9 +16,10 @@ use dungeon::sound::{Sfx, Sound};
 pub(crate) const VARRAK_SCALE: f32 = 4.6;
 /// Spark per second while it flows (a quarter takes ~3.6 s of a stun).
 const SPARK_RATE: f32 = 7.0;
-const STUN_SECONDS: f32 = 5.2;
-const CRASH_STUN_SECONDS: f32 = 6.0;
-const GALLOP_SPEED: f32 = 10.5;
+/// Stunned by the sword (his guard broken) he shakes it off sooner than after a crash.
+const STUN_SECONDS: f32 = 3.6;
+const CRASH_STUN_SECONDS: f32 = 6.5;
+const GALLOP_SPEED: f32 = 12.5;
 /// Her eyes above her feet.
 pub(crate) const EYE: f32 = 1.62;
 const GRAVITY: f32 = 18.0;
@@ -767,6 +768,10 @@ pub(crate) enum VState {
     Hit,
     Smash,
     Sweep,
+    /// A full turn with the cleaver out: what she gets for standing behind him.
+    Spin,
+    /// A leap at her that lands with the cleaver in the ground.
+    Leap,
     Drop,
     Gallop,
     GetUp,
@@ -817,6 +822,8 @@ pub(crate) enum Event {
     BreakSpire(usize),
     BreakProp(usize),
     RamCliff(f32, f32),
+    /// A heavy footfall at (x, z): how heavy (dust and a tremor when she is near).
+    Step(f32, f32, f32),
     Stunned(Why),
     Memory(usize),
     Awake,
@@ -849,6 +856,34 @@ pub(crate) struct Varrak {
     pub blade: BladeMode,
     /// The cleaver flying to where it goes next (seconds left).
     pub blade_fly: f32,
+    /// Seconds left in the sticky sword's goo (everything he does at a slower pace).
+    pub slowed: f32,
+    /// Seconds left smouldering (the ember sword): his guard burns away.
+    pub burning: f32,
+    /// Off the ground in a leap (m).
+    pub hop: f32,
+    /// How his body is carried, for the renderer: leaning forward, rolled into a turn, thrown
+    /// back by a blow (radians), and a clock for his breath.
+    pub lean: f32,
+    pub tilt: f32,
+    pub flinch: f32,
+    pub life: f32,
+    last: (f32, f32, f32),
+    /// Seconds she has stood behind him; blows taken in the back.
+    behind: f32,
+    rage: u32,
+    /// Blows chained (a smash into a sweep, a charge into another).
+    combo: u8,
+    leap_ready: f32,
+    leap_from: (f32, f32),
+    leap_to: (f32, f32),
+    step_t: f32,
+    told_back: bool,
+    told_leap: bool,
+    /// Seconds since a blow last landed (left alone, his guard comes back).
+    since_hit: f32,
+    /// Seconds before a blow can make him stagger again (between, he only flinches).
+    stagger_cd: f32,
 }
 
 impl Varrak {
@@ -866,7 +901,7 @@ impl Varrak {
             spark_this_stun: 0.0,
             stun_left: 0.0,
             cooldown: 1.5,
-            charge_ready: 5.0,
+            charge_ready: 3.0,
             struck: false,
             gallop: Gallop::default(),
             awake: false,
@@ -875,10 +910,29 @@ impl Varrak {
             anim: Anim::new(Clip::Sit),
             blade: BladeMode::Ground,
             blade_fly: 0.0,
+            slowed: 0.0,
+            burning: 0.0,
+            hop: 0.0,
+            lean: 0.0,
+            tilt: 0.0,
+            flinch: 0.0,
+            life: 0.0,
+            last: (t.x, t.z, 0.0),
+            behind: 0.0,
+            rage: 0,
+            combo: 0,
+            leap_ready: 7.0,
+            leap_from: (t.x, t.z),
+            leap_to: (t.x, t.z),
+            step_t: 0.0,
+            told_back: false,
+            told_leap: false,
+            since_hit: 0.0,
+            stagger_cd: 0.0,
         }
     }
 
-    /// Where his root stands (on the stone while he sits on it).
+    /// Where his root stands (on the stone while he sits on it; in the air mid-leap).
     pub(crate) fn root(&self) -> Vec3 {
         let t = plan().throne;
         let z = if matches!(self.state, VState::Throne | VState::ThroneRoar) {
@@ -886,7 +940,74 @@ impl Varrak {
         } else {
             self.z
         };
-        Vec3::new(self.x, 0.0, z)
+        Vec3::new(self.x, self.hop, z)
+    }
+
+    /// A step of his feet: every so often a footfall (dust and a tremor when running).
+    fn footfall(&mut self, dt: f32, rate: f32, heavy: f32, ev: &mut Vec<Event>) {
+        self.step_t += dt * rate;
+        if self.step_t >= 1.0 {
+            self.step_t -= 1.0;
+            ev.push(Event::Step(self.x, self.z, heavy));
+        }
+    }
+
+    /// She stands behind him: he whirls round with the cleaver out.
+    fn start_spin(&mut self, ev: &mut Vec<Event>) {
+        self.set(VState::Spin);
+        self.anim.play(Clip::Sweep, 0.1, 1.3, false);
+        self.rage = 0;
+        self.behind = 0.0;
+        ev.push(Event::Float("¡GRRR!", true, 1.2));
+        ev.push(Event::Sfx(Sfx::Roar, Some(self.root()), 0.55));
+    }
+
+    /// From mid-range he leaps at her and lands cleaver first.
+    fn start_leap(&mut self, px: f32, pz: f32, ev: &mut Vec<Event>) {
+        self.set(VState::Leap);
+        self.anim.play(Clip::Smash, 0.12, 1.0, false);
+        self.leap_from = (self.x, self.z);
+        self.leap_to = (px, pz);
+        ev.push(Event::Sfx(Sfx::Roar, Some(self.root()), 0.6));
+        ev.push(Event::Float("¡HRAAH!", true, 1.2));
+        if !self.told_leap {
+            self.told_leap = true;
+            ev.push(Event::Chiquita(
+                "¡Que salta! Apártate, y cuando caiga, Espacio para saltar la onda.",
+                0.0,
+                3.6,
+            ));
+        }
+    }
+
+    /// How he carries his body this step (for the renderer): forward into a run, rolled into a
+    /// turn, a breath; thrown back by a blow.
+    fn carry(&mut self, dt: f32) {
+        self.life += dt;
+        let (lx, lz, lyaw) = self.last;
+        let speed = (self.x - lx).hypot(self.z - lz) / dt.max(1e-3);
+        let turn = wrap(self.yaw - lyaw) / dt.max(1e-3);
+        self.last = (self.x, self.z, self.yaw);
+        let upright = !self.on_fours();
+        let lean = if upright {
+            (speed * 0.035).min(0.2)
+        } else {
+            0.0
+        } + match self.state {
+            VState::Leap if self.t < 0.3 => 0.18,
+            VState::Leap => -0.12,
+            VState::Roar => -0.08,
+            _ => 0.0,
+        };
+        let tilt = if upright {
+            (-turn * 0.05).clamp(-0.16, 0.16)
+        } else {
+            0.0
+        };
+        let k = (dt * 8.0).min(1.0);
+        self.lean += (lean - self.lean) * k;
+        self.tilt += (tilt - self.tilt) * k;
+        self.flinch = (self.flinch - dt * 3.5).max(0.0);
     }
 
     fn set(&mut self, state: VState) {
@@ -969,7 +1090,14 @@ impl Varrak {
     }
 
     /// The sword reaches him? `eye`, `dir` from her. Whether it struck him.
-    fn strike(&mut self, eye: Vec3, dir: Vec3, power: f32, ev: &mut Vec<Event>) -> bool {
+    fn strike(
+        &mut self,
+        eye: Vec3,
+        dir: Vec3,
+        power: f32,
+        fx: dungeon::WeaponFx,
+        ev: &mut Vec<Event>,
+    ) -> bool {
         let (dx, dz) = (self.x - eye.x, self.z - eye.z);
         let d = dx.hypot(dz).max(1e-3);
         if d - 1.15 > 2.5 {
@@ -992,20 +1120,46 @@ impl Varrak {
             ev.push(Event::Burst(at, [0.85, 0.78, 1.0], 14, 4.0));
             return true;
         }
-        let mut loss = 9.0 * power;
+        if fx.slow > 0.0 {
+            self.slowed = fx.slow;
+            ev.push(Event::Burst(at, [0.45, 0.95, 0.42], 14, 2.2));
+        }
+        if fx.burn > 0.0 {
+            self.burning = fx.burn;
+            ev.push(Event::Burst(at, [1.0, 0.55, 0.15], 16, 3.0));
+        }
+        let mut loss = 5.0 * power;
         // A blow in the opening after his own swing bites deeper.
-        if (self.state == VState::Smash && self.t > 1.0)
+        let opening = (self.state == VState::Smash && self.t > 1.0)
             || (self.state == VState::Sweep && self.t > 0.9)
-            || matches!(self.state, VState::Recover | VState::GetUp)
-        {
+            || (self.state == VState::Leap && self.t > 1.0)
+            || matches!(self.state, VState::Recover | VState::GetUp | VState::Dazed);
+        if opening {
             loss *= 1.5;
         }
+        // His back is hide like rock: a blow there hardly counts, and it makes him turn.
+        if !opening && self.off_facing(eye.x, eye.z).abs() > 1.9 {
+            loss *= 0.3;
+            self.rage += 1;
+            if !self.told_back {
+                self.told_back = true;
+                ev.push(Event::Chiquita(
+                    "¡Por la espalda solo le haces cosquillas! Tiene el lomo de piedra: haz que se estrelle.",
+                    0.0,
+                    4.2,
+                ));
+            }
+        }
+        self.flinch = 1.0;
+        self.since_hit = 0.0;
         self.guard = (self.guard - loss).max(0.0);
         ev.push(Event::Sfx(Sfx::HitBone, Some(at), 1.0));
         ev.push(Event::Burst(at, [1.0, 0.81, 0.54], 16, 4.0));
         if self.guard <= 0.0 {
             self.stun(STUN_SECONDS, Why::Guard, ev);
-        } else if matches!(self.state, VState::Chase | VState::Recover) {
+        } else if matches!(self.state, VState::Chase | VState::Recover) && self.stagger_cd <= 0.0 {
+            // He staggers now and then; between, blows only make him flinch and come on.
+            self.stagger_cd = 3.5;
             self.set(VState::Hit);
             self.anim.play(Clip::Hit, 0.08, 1.0, false);
         }
@@ -1085,7 +1239,8 @@ impl Varrak {
     fn after(&mut self, seconds: f32, rng: &mut Rng) {
         self.set(VState::Recover);
         self.recover = seconds;
-        self.cooldown = 0.6 + rng.next() * 0.9;
+        self.combo = 0;
+        self.cooldown = 0.25 + rng.next() * 0.45;
         self.anim.play(Clip::Idle, 0.3, 1.0, false);
     }
 
@@ -1127,6 +1282,30 @@ impl Varrak {
         rng: &mut Rng,
         ev: &mut Vec<Event>,
     ) {
+        // In the goo he goes at a slower pace; the embers eat at his guard.
+        let slow = self.slowed > 0.0;
+        self.slowed = (self.slowed - dt).max(0.0);
+        if self.burning > 0.0 {
+            self.burning = (self.burning - dt).max(0.0);
+            if self.fighting() && !self.open() && self.guard > 0.0 {
+                self.guard = (self.guard - 3.0 * dt).max(0.0);
+                if self.guard <= 0.0 {
+                    self.stun(STUN_SECONDS, Why::Guard, ev);
+                }
+            }
+        }
+        let dt = if slow { dt * 0.6 } else { dt };
+        self.carry(dt);
+        // Left alone a while, his guard closes again: the sword alone is slow work.
+        self.since_hit += dt;
+        self.stagger_cd = (self.stagger_cd - dt).max(0.0);
+        if self.awake && !matches!(self.state, VState::Drop | VState::Gallop) {
+            self.charge_ready -= dt;
+            self.leap_ready -= dt;
+        }
+        if self.awake && self.fighting() && !self.open() && self.since_hit > 2.5 {
+            self.guard = (self.guard + 5.0 * dt).min(100.0);
+        }
         self.t += dt;
         let (px, pz) = (p.x, p.z);
         let d = (px - self.x).hypot(pz - self.z);
@@ -1181,12 +1360,21 @@ impl Varrak {
             }
             VState::Chase => {
                 self.cooldown -= dt;
-                self.charge_ready -= dt;
-                let off = self.turn_to(px, pz, 1.9, dt);
-                // Now and then, from a distance: down on all fours and charge.
-                if d > 7.0 && self.charge_ready <= 0.0 && off < 0.6 {
+                let off = self.turn_to(px, pz, 3.0, dt);
+                // Behind him she does not stay long.
+                if self.off_facing(px, pz).abs() > 1.9 && d < 4.2 {
+                    self.behind += dt;
+                } else {
+                    self.behind = (self.behind - dt).max(0.0);
+                }
+                if (self.behind > 0.55 || self.rage >= 3) && d < 5.2 {
+                    self.start_spin(ev);
+                } else if self.charge_ready <= 0.0 && off < 0.7 && (d > 5.0 || self.cooldown <= 0.0) {
+                    // Down on all fours and charge (from close, he backs off first).
                     self.start_drop(ev);
-                } else if d < 4.4 && off < 0.5 && self.cooldown <= 0.0 {
+                } else if d > 6.0 && d < 12.0 && self.leap_ready <= 0.0 && off < 0.5 {
+                    self.start_leap(px, pz, ev);
+                } else if d < 4.8 && off < 0.55 && self.cooldown <= 0.0 {
                     let side = self.off_facing(px, pz).abs();
                     let sweep = if d < 3.0 || side > 0.3 {
                         rng.next() < 0.65
@@ -1201,9 +1389,18 @@ impl Varrak {
                         false,
                     );
                     ev.push(Event::Sfx(Sfx::EnemySwing, Some(self.root()), 0.6));
-                } else if d > 3.2 {
-                    self.anim.play(Clip::Walk, 0.25, 1.0, false);
-                    self.step(arena, 2.25, dt, 1.05);
+                } else if d > 3.0 {
+                    // Far off he comes at a run.
+                    let run = d > 6.0;
+                    self.anim
+                        .play(Clip::Walk, 0.2, if run { 1.75 } else { 1.3 }, false);
+                    self.step(arena, if run { 4.8 } else { 3.3 }, dt, 1.05);
+                    self.footfall(
+                        dt,
+                        if run { 2.6 } else { 1.9 },
+                        if run { 1.0 } else { 0.55 },
+                        ev,
+                    );
                 } else {
                     self.anim.play(Clip::Idle, 0.3, 1.0, false);
                 }
@@ -1230,8 +1427,16 @@ impl Varrak {
                         p.hurt(28.0, hx, hz, 10.0);
                     }
                 }
-                if self.t > 2.0 {
-                    self.after(1.3, rng);
+                // Still in front of him: the swing goes on into a sweep.
+                if self.t > 1.45 && self.combo == 0 && d < 4.8 && self.off_facing(px, pz).abs() < 0.9
+                    && rng.next() < 0.55
+                {
+                    self.combo = 1;
+                    self.set(VState::Sweep);
+                    self.anim.play(Clip::Sweep, 0.12, 1.15, false);
+                    ev.push(Event::Sfx(Sfx::EnemySwing, Some(self.root()), 0.7));
+                } else if self.t > 1.75 {
+                    self.after(0.8, rng);
                 }
             }
             VState::Sweep => {
@@ -1252,13 +1457,73 @@ impl Varrak {
                         self.struck = true;
                     }
                 }
-                if self.t > 1.7 {
-                    self.after(1.1, rng);
+                if self.t > 1.25 && self.combo == 0 && d < 4.6 && rng.next() < 0.4 {
+                    self.combo = 1;
+                    self.set(VState::Smash);
+                    self.anim.play(Clip::Smash, 0.12, 1.15, false);
+                    ev.push(Event::Sfx(Sfx::EnemySwing, Some(self.root()), 0.7));
+                } else if self.t > 1.5 {
+                    self.after(0.7, rng);
+                }
+            }
+            VState::Spin => {
+                // A whole turn, cleaver out: nobody stands within its reach.
+                if self.t > 0.2 && self.t < 0.85 {
+                    self.yaw = wrap(self.yaw + std::f32::consts::TAU / 0.65 * dt);
+                }
+                if self.t > 0.3 && self.t - dt <= 0.3 {
+                    ev.push(Event::Ring(self.x, self.z, 5.5));
+                    ev.push(Event::Sfx(Sfx::EnemySwing, Some(self.root()), 1.0));
+                }
+                if !self.struck && self.t > 0.35 && self.t < 0.8 && d < 5.0 && p.y < 1.0 {
+                    self.struck = true;
+                    p.hurt(20.0, self.x, self.z, 13.0);
+                }
+                if self.t > 1.25 {
+                    self.after(0.5, rng);
+                }
+            }
+            VState::Leap => {
+                if self.t < 0.3 {
+                    // He crouches and fixes on where she is.
+                    self.turn_to(px, pz, 4.0, dt);
+                    self.leap_from = (self.x, self.z);
+                    self.leap_to = (px, pz);
+                } else if self.t < 0.95 {
+                    let k = ((self.t - 0.3) / 0.65).clamp(0.0, 1.0);
+                    let (fx, fz) = self.leap_from;
+                    let (tx, tz) = self.leap_to;
+                    // He lands a stride short of her, the cleaver coming down on her.
+                    let dd = (tx - fx).hypot(tz - fz).max(0.01);
+                    let reach = ((dd - 2.2) / dd).max(0.0) * k;
+                    let c = arena.collide(fx + (tx - fx) * reach, fz + (tz - fz) * reach, 1.0);
+                    self.x = c.x;
+                    self.z = c.z;
+                    self.hop = 2.6 * 4.0 * k * (1.0 - k);
+                } else if !self.struck {
+                    self.struck = true;
+                    self.hop = 0.0;
+                    ev.push(Event::Smash(
+                        self.x + self.yaw.sin() * 1.8,
+                        self.z + self.yaw.cos() * 1.8,
+                    ));
+                    ev.push(Event::Ring(self.x, self.z, 6.0));
+                    if d < 3.8 && p.y < 0.6 {
+                        p.hurt(30.0, self.x, self.z, 14.0);
+                    }
+                }
+                if self.t > 1.9 {
+                    self.leap_ready = 7.0 + rng.next() * 3.0;
+                    self.after(0.9, rng);
                 }
             }
             VState::Drop => {
-                // He paws the ground and fixes on her.
+                // He paws the ground and fixes on her; too close, he backs off for a run-up.
                 self.turn_to(px, pz, 2.4, dt);
+                if d < 6.5 && self.t < 1.0 {
+                    self.step(arena, -4.5, dt, 1.05);
+                    self.footfall(dt, 3.0, 0.7, ev);
+                }
                 if self.t > 0.45 && self.t - dt <= 0.45 {
                     ev.push(Event::Dust(
                         self.x + self.yaw.sin() * 1.4,
@@ -1281,10 +1546,11 @@ impl Varrak {
                 // He homes in on her at first, then runs blind in a straight line.
                 if !self.gallop.locked {
                     self.turn_to(px, pz, 2.2, dt);
-                    if self.t > 0.45 || d < 8.5 {
+                    if self.t > 0.6 || d < 7.0 {
                         self.gallop.locked = true;
                     }
                 }
+                self.footfall(dt, 5.5, 1.3, ev);
                 // Whatever is in the way flies to pieces; a spire stops him dead.
                 let (fx, fz) = (self.x + self.yaw.sin() * 0.9, self.z + self.yaw.cos() * 0.9);
                 for thing in arena.touching(fx, fz, 1.1) {
@@ -1293,7 +1559,8 @@ impl Varrak {
                         ev.push(Event::BreakSpire(thing));
                         self.guard = 0.0;
                         self.stun(CRASH_STUN_SECONDS, Why::Spire, ev);
-                        self.charge_ready = 9.0 + rng.next() * 4.0;
+                        self.combo = 0;
+                        self.charge_ready = 4.0 + rng.next() * 2.0;
                         self.anim.advance(dt);
                         return;
                     }
@@ -1310,10 +1577,11 @@ impl Varrak {
                         self.x + self.yaw.sin() * 1.5,
                         self.z + self.yaw.cos() * 1.5,
                     ));
-                    self.guard = (self.guard - 35.0).max(0.0);
-                    self.charge_ready = 8.0 + rng.next() * 4.0;
+                    self.guard = (self.guard - 55.0).max(0.0);
+                    self.combo = 0;
+                    self.charge_ready = 4.0 + rng.next() * 2.0;
                     if self.guard <= 0.0 {
-                        self.stun(STUN_SECONDS, Why::Cliff, ev);
+                        self.stun(CRASH_STUN_SECONDS, Why::Cliff, ev);
                     } else {
                         self.set(VState::Dazed);
                         self.anim.play(Clip::Stun, 0.15, 1.0, false);
@@ -1322,8 +1590,17 @@ impl Varrak {
                         ev.push(Event::Float("…grr…", true, 2.0));
                     }
                 } else if self.gallop.left <= 0.0 || (self.gallop.hit_her && self.t > 1.0) {
-                    self.charge_ready = 8.0 + rng.next() * 4.0;
-                    self.get_up(0.8);
+                    if self.combo == 0 && rng.next() < 0.45 {
+                        // He skids round and comes again at once.
+                        self.combo = 1;
+                        ev.push(Event::Float("¡GRAAAH!", true, 1.4));
+                        self.start_drop(ev);
+                        self.t = 0.5;
+                    } else {
+                        self.combo = 0;
+                        self.charge_ready = 3.0 + rng.next() * 2.0;
+                        self.get_up(0.6);
+                    }
                 }
             }
             VState::GetUp => {
@@ -1342,8 +1619,13 @@ impl Varrak {
                 }
             }
             VState::Recover => {
-                self.turn_to(px, pz, 1.2, dt);
-                if self.t > self.recover {
+                self.turn_to(px, pz, 2.6, dt);
+                if self.off_facing(px, pz).abs() > 1.9 && d < 4.2 {
+                    self.behind += dt;
+                }
+                if self.behind > 0.8 && d < 5.0 {
+                    self.start_spin(ev);
+                } else if self.t > self.recover {
                     self.set(VState::Chase);
                     self.anim.play(Clip::Walk, 0.3, 1.0, false);
                 }
@@ -1412,6 +1694,10 @@ pub(crate) struct Wolf {
     pub variant: u8,
     pub body_y: f32,
     pub body_pitch: f32,
+    /// Seconds left in the sticky sword's goo.
+    slowed: f32,
+    /// Seconds left smouldering.
+    burning: f32,
     /// (hip, knee) of each leg: front left, front right, back left, back right.
     pub legs: [(f32, f32); 4],
     pub neck: f32,
@@ -1457,6 +1743,8 @@ impl Pack {
             variant: (id % 2) as u8,
             body_y: 0.78,
             body_pitch: 0.0,
+            slowed: 0.0,
+            burning: 0.0,
             legs: [(0.0, 0.0); 4],
             neck: 0.25,
             jaw: 0.1,
@@ -1525,7 +1813,14 @@ impl Pack {
     }
 
     /// The sword: every wolf in the arc in front of her takes the blow. How many it hit.
-    fn strike(&mut self, eye: Vec3, dir: Vec3, power: f32, ev: &mut Vec<Event>) -> usize {
+    fn strike(
+        &mut self,
+        eye: Vec3,
+        dir: Vec3,
+        power: f32,
+        fx: dungeon::WeaponFx,
+        ev: &mut Vec<Event>,
+    ) -> usize {
         let mut hits = 0;
         for (i, w) in self.wolves.iter_mut().enumerate() {
             let able = matches!(
@@ -1550,6 +1845,24 @@ impl Pack {
                 continue;
             }
             w.hp -= 12.0 * power;
+            if fx.slow > 0.0 {
+                w.slowed = fx.slow;
+                ev.push(Event::Burst(
+                    Vec3::new(w.x, 0.8, w.z),
+                    [0.45, 0.95, 0.42],
+                    10,
+                    1.8,
+                ));
+            }
+            if fx.burn > 0.0 {
+                w.burning = fx.burn;
+                ev.push(Event::Burst(
+                    Vec3::new(w.x, 0.8, w.z),
+                    [1.0, 0.55, 0.15],
+                    10,
+                    2.4,
+                ));
+            }
             w.push = (dx / d.max(1e-3) * 5.0, dz / d.max(1e-3) * 5.0);
             hits += 1;
             ev.push(Event::Burst(
@@ -1602,6 +1915,16 @@ impl Pack {
             if self.wolves[i].gone {
                 continue;
             }
+            let slow = self.wolves[i].slowed > 0.0;
+            {
+                let w = &mut self.wolves[i];
+                w.slowed = (w.slowed - dt).max(0.0);
+                if w.burning > 0.0 {
+                    w.burning = (w.burning - dt).max(0.0);
+                    w.hp = (w.hp - 4.0 * dt).max(1.0);
+                }
+            }
+            let dt = if slow { dt * 0.5 } else { dt };
             let w = &mut self.wolves[i];
             w.t += dt;
             let (dx, dz) = (p.x - w.x, p.z - w.z);
@@ -1865,6 +2188,9 @@ pub(crate) enum Phase {
     Lost,
 }
 
+/// How long the pack holds the plaza before he rises anyway.
+const PACK_SECS: f32 = 25.0;
+
 #[derive(Clone, Copy, Debug)]
 enum Timed {
     Wake,
@@ -1924,6 +2250,14 @@ pub(crate) struct Fight {
     pub over: Option<Vec3>,
     /// How the Council chose to deal with the apagados (fewer wolves if they were hunted).
     hunted: bool,
+    /// The sword she wears: how deep it cuts and what it carries (from the backpack).
+    pub blade_damage: f32,
+    pub blade: dungeon::WeaponFx,
+    /// The last cure taken (the next one waits a moment).
+    cured_at: f32,
+    /// When he last crashed into rock (Chiquita reminds her how to win if it is long ago).
+    last_crash: f32,
+    crash_hints: usize,
 }
 
 impl Fight {
@@ -1964,12 +2298,51 @@ impl Fight {
             chest: None,
             over: None,
             hunted,
+            blade_damage: 1.0,
+            blade: dungeon::WeaponFx::default(),
+            cured_at: -99.0,
+            last_crash: 0.0,
+            crash_hints: 0,
         }
+    }
+
+    /// Whether a cure would do anything now (hurt, in the fight, not just after another).
+    pub(crate) fn can_cure(&self) -> bool {
+        matches!(self.phase, Phase::Pack | Phase::Duel)
+            && self.player.health > 0.0
+            && self.player.health < self.player.max_health
+            && self.time - self.cured_at > 1.2
+    }
+
+    /// Vitality she is missing.
+    pub(crate) fn missing(&self) -> f32 {
+        self.player.max_health - self.player.health
+    }
+
+    /// A line from Chiquita now.
+    pub(crate) fn say(&mut self, text: &str) {
+        self.chiquita(text, 0.0, 2.8);
+    }
+
+    /// Something from the backpack drunk or eaten mid-fight.
+    pub(crate) fn cure(&mut self, amount: f32) {
+        self.cured_at = self.time;
+        self.player.heal(amount);
+        self.sfx(Sfx::Drink, None, 0.8);
+        let line = if amount >= 80.0 {
+            "Eso es. Hasta la última gota: este cuerpo lo quiero entero."
+        } else if amount >= 40.0 {
+            "Bebe, bebe. Y no me lo vuelvas a abollar."
+        } else {
+            "Algo es algo. Mastica rápido."
+        };
+        self.chiquita(line, 0.0, 2.8);
     }
 
     fn chiquita(&mut self, text: &str, delay: f32, keep: f32) {
         self.lines.push_back(Line {
-            text: text.to_owned(),
+            // Typed out letter by letter: in the player's language from the start.
+            text: demon_queen_dungeon::i18n::tr_string(text),
             at: self.time + delay,
             keep,
         });
@@ -1982,6 +2355,73 @@ impl Fight {
     /// Her chest's emblem (the spark goes there).
     pub(crate) fn varrak_chest(&self) -> Vec3 {
         self.chest.unwrap_or_else(|| self.varrak.chest_guess())
+    }
+
+    /// What she should do now, for the HUD: a heading, its detail, and how urgent it is
+    /// (0 the usual, 1 an opening to take, 2 a danger to dodge).
+    pub(crate) fn objective(&self) -> Option<(String, String, u8)> {
+        let v = &self.varrak;
+        Some(match self.phase {
+            Phase::Intro | Phase::Won | Phase::Lost => return None,
+            Phase::Pack => {
+                let left = self.pack.fighting();
+                let wait = (PACK_SECS - (self.time - self.started)).max(0.0).ceil() as u32;
+                if left == 0 {
+                    ("Varrak se levanta".into(), "Prepárate: viene a por ti.".into(), 0)
+                } else {
+                    (
+                        format!("Acaba con la manada · {left}"),
+                        format!("Clic: espada. Varrak se levanta en {wait} s o al caer el último lobo."),
+                        0,
+                    )
+                }
+            }
+            Phase::Duel => match v.state {
+                VState::Rise | VState::Roar => (
+                    "Varrak se levanta".into(),
+                    "Aléjate y mira su emblema: es lo que hay que despertar.".into(),
+                    0,
+                ),
+                VState::Stunned | VState::Memory => (
+                    "¡Aturdido! Mantén el sello".into(),
+                    "Mantén clic derecho apuntando a su emblema hasta que lo suelte.".into(),
+                    1,
+                ),
+                VState::Drop | VState::Gallop => (
+                    "¡Carga a cuatro patas!".into(),
+                    "Ponte delante de un peñasco y apártate (Mayús) en el último momento.".into(),
+                    2,
+                ),
+                VState::Smash => (
+                    "¡Golpe al suelo!".into(),
+                    "Salta la onda con Espacio.".into(),
+                    2,
+                ),
+                VState::Spin => (
+                    "¡Gira con el hacha!".into(),
+                    "Fuera de su alcance. Por la espalda no se le pega.".into(),
+                    2,
+                ),
+                VState::Leap => (
+                    "¡Salta hacia ti!".into(),
+                    "Apártate y, al caer, salta la onda con Espacio.".into(),
+                    2,
+                ),
+                VState::Dazed | VState::Recover => (
+                    "Está atontado".into(),
+                    "¡Ataca! Clic con la espada para romperle la guardia.".into(),
+                    1,
+                ),
+                _ => (
+                    "Rómpele la guardia".into(),
+                    format!(
+                        "Clic: espada. Guardia {}%. Aturdido, la chispa le devuelve un recuerdo.",
+                        v.guard.round() as i32
+                    ),
+                    0,
+                ),
+            },
+        })
     }
 
     /// The fight begins (the click on the card): the pack wakes at his roar.
@@ -2003,10 +2443,11 @@ impl Fight {
         }
         self.phase = Phase::Duel;
         self.varrak.rise();
+        self.last_crash = self.time;
         self.chiquita(
-            "Ahí viene él. Rómpele la guardia y luego, el sello.",
+            "Ahí viene. Nunca por la espalda: gira. Que se estrelle contra las agujas de roca o la pared, y luego el sello.",
             1.0,
-            3.6,
+            4.6,
         );
     }
 
@@ -2036,8 +2477,13 @@ impl Fight {
             return;
         }
         let dir = self.player.forward();
-        let wolves = self.pack.strike(eye, dir, power, ev);
-        let him = self.varrak.strike(eye, dir, power, ev);
+        let power = power * self.blade_damage;
+        let wolves = self.pack.strike(eye, dir, power, self.blade, ev);
+        let him = self.varrak.strike(eye, dir, power, self.blade, ev);
+        if (wolves > 0 || him) && self.blade.leech > 0.0 {
+            // The heart sword drinks a little back.
+            self.player.heal(self.blade.leech);
+        }
         if wolves > 0 || him {
             // The blade bites: a beat of hit-stop and a small jolt.
             self.player.impact(if him { 0.1 } else { 0.065 });
@@ -2059,9 +2505,10 @@ impl Fight {
         if let Some(power) = self.player.update(input, dt, &self.arena) {
             self.strike(power, &mut ev);
         }
+        // He rises when the pack is down, or once she has had a fair while with it.
         if self.phase == Phase::Pack
             && self.time - self.started > 3.5
-            && (self.pack.fighting() == 0 || self.time - self.started > 50.0)
+            && (self.pack.fighting() == 0 || self.time - self.started > PACK_SECS)
         {
             self.start_duel();
         }
@@ -2129,6 +2576,22 @@ impl Fight {
                 self.last_body_line = self.time;
                 self.chiquita("¡Que este cuerpo es mío!", 0.0, 3.6);
             }
+        }
+        // Long without a crash: Chiquita reminds her what beats him.
+        if self.phase == Phase::Duel
+            && self.varrak.awake
+            && !self.varrak.open()
+            && self.time - self.last_crash > 24.0
+        {
+            self.last_crash = self.time;
+            let lines = [
+                "La espada sola no lo tumba. ¡Que cargue contra una aguja de roca!",
+                "Ponte delante del risco. Cuando cargue, Mayús y fuera de su camino.",
+                "Aléjate y se pondrá a cuatro patas. Eso es lo que quieres.",
+            ];
+            let line = lines[self.crash_hints % lines.len()];
+            self.crash_hints += 1;
+            self.chiquita(line, 0.0, 4.0);
         }
         self.update_effects(dt);
         if fighting && self.player.health <= 0.0 {
@@ -2236,6 +2699,7 @@ impl Fight {
                 }
             }
             Event::BreakSpire(i) => {
+                self.last_crash = self.time;
                 let b = &plan().breakables[i];
                 let (bx, bz) = (b.x, b.z);
                 self.breaks.push(Break {
@@ -2292,7 +2756,20 @@ impl Fight {
                 self.fx.push(Fx::dust(Vec3::new(bx, 0.3, bz), seed));
                 self.sfx(Sfx::BoneCrack, Some(Vec3::new(bx, 0.6, bz)), 0.9);
             }
+            Event::Step(x, z, heavy) => {
+                let d = (self.player.x - x).hypot(self.player.z - z);
+                if d < 16.0 {
+                    self.player
+                        .kick(0.12, 0.035 * heavy * (1.0 - d / 16.0));
+                }
+                if heavy >= 1.0 {
+                    let seed = (self.rng.next() * 1e6) as u32;
+                    self.fx.push(Fx::dust(Vec3::new(x, 0.15, z), seed));
+                }
+                self.sfx(Sfx::Land, Some(Vec3::new(x, 0.1, z)), 0.3 * heavy.min(1.2));
+            }
             Event::RamCliff(x, z) => {
+                self.last_crash = self.time;
                 self.sfx(Sfx::Rubble, Some(Vec3::new(x, 1.0, z)), 1.0);
                 for k in 0..2 {
                     let seed = (self.rng.next() * 1e6) as u32 + k;
@@ -2448,7 +2925,8 @@ impl Fight {
                 }
                 self.start_duel();
             }
-            "smash" | "sweep" | "gallop" | "spire" | "spark" | "memory" | "won" => {
+            "smash" | "sweep" | "gallop" | "spire" | "spark" | "memory" | "won" | "spin" | "leap"
+            | "run" => {
                 for w in &mut self.pack.wolves {
                     w.gone = true;
                     w.visible = false;
@@ -2469,6 +2947,23 @@ impl Fight {
                         in_front(self, 3.4);
                         self.varrak.set(VState::Sweep);
                         self.varrak.anim.play(Clip::Sweep, 0.0, 1.0, false);
+                    }
+                    "spin" => {
+                        // She stands at his back: he whirls round.
+                        in_front(self, -2.6);
+                        self.varrak.start_spin(&mut ev);
+                    }
+                    "leap" => {
+                        in_front(self, 9.0);
+                        let (px, pz) = (self.player.x, self.player.z);
+                        self.varrak.start_leap(px, pz, &mut ev);
+                    }
+                    "run" => {
+                        in_front(self, 12.0);
+                        self.varrak.set(VState::Chase);
+                        self.varrak.cooldown = 9.0;
+                        self.varrak.charge_ready = 9.0;
+                        self.varrak.leap_ready = 9.0;
                     }
                     "gallop" => {
                         in_front(self, 11.0);
@@ -2712,6 +3207,73 @@ mod tests {
             f.varrak.charges,
             f.breaks.len()
         );
+    }
+
+    #[test]
+    fn the_fused_swords_slow_burn_and_heal_and_a_cure_heals() {
+        if !available() {
+            return;
+        }
+        let mut f = Fight::new(4, false, 11);
+        f.player.god = true;
+        f.blade = dungeon::WeaponFx {
+            slow: 3.0,
+            burn: 4.0,
+            leech: 4.0,
+        };
+        f.begin();
+        let (mut slowed, mut burned) = (false, false);
+        for _ in 0..(60 * 120) {
+            aim(&mut f);
+            let input = bot(&f);
+            f.update(input, 1.0 / 60.0);
+            slowed |= f.varrak.slowed > 0.0 || f.pack.wolves.iter().any(|w| w.slowed > 0.0);
+            burned |= f.varrak.burning > 0.0 || f.pack.wolves.iter().any(|w| w.burning > 0.0);
+            if slowed && burned {
+                break;
+            }
+        }
+        assert!(slowed && burned, "the sword's gifts never reached a foe");
+        f.player.health = 40.0;
+        f.cured_at = -99.0;
+        assert!(f.can_cure());
+        f.cure(45.0);
+        assert_eq!(f.player.health, 85.0);
+        assert!(!f.can_cure(), "a second cure waits a moment");
+    }
+
+    #[test]
+    fn he_fights_hard_charges_often_and_answers_her_at_his_back() {
+        if !available() {
+            return;
+        }
+        let mut f = Fight::new(2, true, 7);
+        f.player.god = true;
+        f.begin();
+        let mut spun = false;
+        let mut charges = 0;
+        let mut time_in = std::collections::BTreeMap::<String, f32>::new();
+        for i in 0..(60 * 90) {
+            aim(&mut f);
+            let mut input = bot(&f);
+            if i == 60 * 70 {
+                charges = f.varrak.charges;
+            }
+            // The last 20 s she sneaks behind him and hacks at his back.
+            if i >= 60 * 70 && f.phase == Phase::Duel && !f.varrak.open() {
+                let v = &f.varrak;
+                let (bx, bz) = (v.x - v.yaw.sin() * 2.4, v.z - v.yaw.cos() * 2.4);
+                f.player.x = bx;
+                f.player.z = bz;
+                input.attack = true;
+            }
+            f.update(input, 1.0 / 60.0);
+            spun |= f.varrak.state == VState::Spin;
+            *time_in.entry(format!("{:?}/{:?}", f.phase, f.varrak.state)).or_insert(0.0) += 1.0 / 60.0;
+        }
+        eprintln!("[test] 70 s: {charges} charges, then spun {spun}; {time_in:.1?}");
+        assert!(charges >= 4, "only {charges} charges in 70 s");
+        assert!(spun, "standing at his back never made him turn on her");
     }
 
     #[test]

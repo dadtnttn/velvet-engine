@@ -18,6 +18,12 @@
       "slot": 2,
       "name": "Bikini",
       "model": "queen_bikini.glb"
+    },
+    {
+      "id": "capa",
+      "slot": 3,
+      "name": "Capa con capucha",
+      "model": "queen_capa.glb"
     }
   ],
   "achievements": []

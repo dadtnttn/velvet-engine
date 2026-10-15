@@ -1,11 +1,14 @@
 [package]
 name = "demon-queen-dungeon"
 description = "Demon Queen's procedural dungeon: the run, its first-person scene, combat, HUD and art"
-version.workspace = true
+version = "0.2.0"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 publish = false
+
+[features]
+portable = []
 
 [dependencies]
 ab_glyph = "0.2.32"
@@ -13,9 +16,12 @@ winit = { workspace = true }
 velvet-dungeon = { path = "../../../crates/velvet-dungeon" }
 velvet-math = { workspace = true }
 velvet-render = { workspace = true }
+velvet-avif = { path = "../../../crates/velvet-avif" }
 anyhow = { workspace = true }
 bytemuck = { workspace = true }
 image = { workspace = true }
+unicode-bidi = "0.3"
+rustybuzz = "0.20"
 serde = { workspace = true }
 serde_json = { workspace = true }
 wgpu = { workspace = true }

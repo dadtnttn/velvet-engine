@@ -729,12 +729,10 @@ pub(super) struct Decoder {
 
 /// A frame from disk (black when it cannot be read).
 fn load_frame(path: &Path) -> image::RgbaImage {
-    image::open(path)
-        .map(|p| p.to_rgba8())
-        .unwrap_or_else(|error| {
-            eprintln!("[escena] {}: {error}", path.display());
-            image::RgbaImage::new(1, 1)
-        })
+    super::clip_video::load(path).unwrap_or_else(|| {
+        eprintln!("[escena] {} no se pudo leer", path.display());
+        image::RgbaImage::new(1, 1)
+    })
 }
 
 impl Decoder {
@@ -764,6 +762,7 @@ impl Decoder {
                         break;
                     }
                 }
+                super::clip_video::close_all();
             });
         Self {
             ask,
@@ -837,31 +836,11 @@ impl BedScene {
         let root = crate::exploration3d_state::data_dir()
             .join("assets")
             .join(spec.dir);
-        let frames = Part::ALL.map(|part| {
-            let mut list: Vec<PathBuf> = std::fs::read_dir(root.join(part.dir()))
-                .map(|dir| {
-                    dir.filter_map(|e| e.ok().map(|e| e.path()))
-                        .filter(|p| p.extension().is_some_and(|x| x == "jpg" || x == "png"))
-                        .collect()
-                })
-                .unwrap_or_default();
-            list.sort();
-            list
-        });
+        let frames = Part::ALL.map(|part| super::clip_video::frames(&root.join(part.dir())));
         let poses: Vec<Vec<PathBuf>> = spec
             .poses
             .iter()
-            .map(|pose| {
-                let mut list: Vec<PathBuf> = std::fs::read_dir(root.join(pose.dir))
-                    .map(|dir| {
-                        dir.filter_map(|e| e.ok().map(|e| e.path()))
-                            .filter(|p| p.extension().is_some_and(|x| x == "jpg" || x == "png"))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                list.sort();
-                list
-            })
+            .map(|pose| super::clip_video::frames(&root.join(pose.dir)))
             .collect();
         // The eager loop is optional, and a climax heard over black has no frames; every other
         // part is needed.
@@ -1402,6 +1381,7 @@ impl BedScene {
                 && self.ended.is_none(),
             black: self.black(),
             game: None,
+            deal: None,
         }
     }
 }
@@ -1451,6 +1431,9 @@ impl App {
         };
         if want != scene.sound_for {
             scene.sound_for = want;
+            if let Some((part, pose)) = want {
+                super::gallery_seen::shot(&scene.clip_dir(part, pose));
+            }
             let path = want.map(|(part, pose)| scene.clip_dir(part, pose).join("audio.ogg"));
             if let Some(audio) = &mut self.audio {
                 audio.scene_sound(

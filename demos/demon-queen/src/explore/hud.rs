@@ -42,6 +42,10 @@ pub(super) fn building_prompt(building: village::BuildingAnchor) -> Prompt {
         "villa_casa_aldeanos_a" | "villa_casa_aldeanos_b" => (Icon::House, "Llamar a la puerta"),
         _ => (Icon::Door, "Entrar"),
     };
+    // A door with nothing behind it yet says so before it is tried.
+    if village::in_development(building.id).is_some() {
+        return Prompt::new(icon, verb).detail(format!("{} · En desarrollo", building.label));
+    }
     Prompt::new(icon, verb).detail(building.label)
 }
 
@@ -98,21 +102,49 @@ pub(super) fn push_villa_building_prompt(
     );
 }
 
-/// The medallion floating over an interaction: a rim and glowing icon in the
-/// interaction's own colour, `lift` metres over `base`. It fades in over the
-/// approach and grows, glows and pulses once the Queen is in reach.
+thread_local! {
+    /// The places to go in this frame, as the zones note them: (icon, world point, fade, ready).
+    static MARKERS: std::cell::RefCell<Vec<(Icon, Vec3, f32, bool)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Forgets the places noted so far (a new frame begins).
+pub(super) fn take_world_markers_raw() -> usize {
+    MARKERS.with(|m| {
+        let mut m = m.borrow_mut();
+        let n = m.len();
+        m.clear();
+        n
+    })
+}
+
+/// The places to go in noted this frame, on the screen (and the list emptied for the next one).
+pub(super) fn take_world_markers(camera: Camera3D) -> Vec<map_overlay::WorldMarker> {
+    MARKERS.with(|m| {
+        m.borrow_mut()
+            .drain(..)
+            .filter_map(|(icon, at, fade, ready)| {
+                let (x, y) = project_npc_anchor(camera, at)?;
+                Some(map_overlay::WorldMarker { x, y, icon, fade, ready })
+            })
+            .collect()
+    })
+}
+
+/// A place to go in, `lift` metres over `base`: noted for the screen, where it fades in over the
+/// approach and lights up once the Queen is in reach.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn push_prompt_medallion(
-    draws: &mut Vec<MeshDraw3D>,
-    meshes: PromptMeshes,
+    _draws: &mut Vec<MeshDraw3D>,
+    _meshes: PromptMeshes,
     icon: Icon,
     base: Vec3,
     lift: f32,
     distance: f32,
     show_radius: f32,
     interact_radius: f32,
-    elapsed: f32,
-    camera_yaw: f32,
+    _elapsed: f32,
+    _camera_yaw: f32,
 ) {
     if distance > show_radius {
         return;
@@ -121,81 +153,22 @@ pub(super) fn push_prompt_medallion(
     if fade <= 0.01 {
         return;
     }
+    // Drawn on the screen in the interface's manner (`map_overlay::WorldMarker`), not as a model
+    // in the scene.
     let ready = distance <= interact_radius;
-    let bob = (elapsed * 2.6).sin() * 0.06;
-    let pulse = if ready {
-        1.0 + (elapsed * 5.0).sin().abs() * 0.07
-    } else {
-        1.0
-    };
-    let size = (0.78 + fade * 0.22) * pulse;
-    let at = base + Vec3::Y * (lift + bob);
-    let rotation = Vec3::new(0.12, camera_yaw, 0.0);
-    // Scene light washes pale colours out: shade with a saturated, darker
-    // version of the accent and let emission carry the brightness.
-    let accent = icon.accent().map(|c| c.clamp(0.0, 1.0).powf(2.2));
-    let glyph = icon.accent().map(|c| c.clamp(0.0, 1.0).powf(1.6));
-    let glow = if ready { 0.65 } else { 0.25 };
-    let mut push = |mesh, offset: f32, scale: f32, color: [f32; 3], emission: f32| {
-        let mut material = Material3D::rgb(color[0], color[1], color[2]).with_emission(emission);
-        material.base_color[3] = fade;
-        draws.push(MeshDraw3D {
-            mesh,
-            transform: Transform3D {
-                position: at + Vec3::Y * offset,
-                scale: Vec3::new(scale * size, scale * size, scale * size),
-                rotation,
-            }
-            .matrix(),
-            material,
-            texture: None,
-        });
-    };
-    // A rim of the interaction's colour, a deep face tinted by it, the icon.
-    push(
-        meshes.rim,
-        0.0,
-        0.62,
-        accent.map(|c| c * 0.8),
-        0.25 + glow * 0.4,
-    );
-    push(
-        meshes.face,
-        0.05,
-        0.62,
-        [
-            0.025 + accent[0] * 0.07,
-            0.02 + accent[1] * 0.07,
-            0.04 + accent[2] * 0.07,
-        ],
-        0.0,
-    );
-    push(meshes.glyphs[icon.index()], 0.1, 0.6, glyph, 0.35 + glow);
-    // A small arrow under the medallion, pointing down at the spot.
-    let point = (elapsed * 3.2).sin() * 0.05;
-    let mut material = Material3D::rgb(accent[0], accent[1], accent[2]).with_emission(glow * 0.35);
-    material.base_color[3] = fade;
-    draws.push(MeshDraw3D {
-        mesh: meshes.pointer,
-        transform: Transform3D {
-            position: at - Vec3::Y * (0.62 + point),
-            scale: Vec3::new(0.34 * size, 0.34 * size, 0.34 * size),
-            rotation: Vec3::new(0.0, camera_yaw, 0.0),
-        }
-        .matrix(),
-        material,
-        texture: None,
-    });
+    MARKERS.with(|m| m.borrow_mut().push((icon, base + Vec3::Y * lift, fade, ready)));
 }
 
-/// A disc of `radius` for the medallion, lying flat like the other markers.
-pub(super) fn build_prompt_disc_mesh(radius: f32, half_height: f32) -> Mesh3D {
-    let points: Vec<[f32; 2]> = (0..32)
-        .map(|k| {
-            let a = k as f32 / 32.0 * std::f32::consts::TAU;
-            [a.cos() * radius, a.sin() * radius]
-        })
-        .collect();
+/// The plate the interaction's icon sits on, in the game's Persona manner: a slanted card
+/// `radius` across (half its width), not a round coin.
+pub(super) fn build_prompt_plate_mesh(radius: f32, half_height: f32) -> Mesh3D {
+    let (w, h, lean) = (radius * 1.08, radius * 0.86, radius * 0.3);
+    let points: Vec<[f32; 2]> = vec![
+        [-w - lean, -h],
+        [w - lean, -h],
+        [w + lean, h],
+        [-w + lean, h],
+    ];
     let mut mesh = build_extruded_marker_mesh(&points, half_height, Material3D::rgb(1.0, 1.0, 1.0));
     for vertex in &mut mesh.vertices {
         vertex.color = [1.0, 1.0, 1.0, 1.0];
@@ -332,6 +305,16 @@ pub(super) fn npc_speech_bubbles(
     bubbles
 }
 
+thread_local! {
+    /// What the hypnotist blurts out instead of his usual lines, and until when.
+    static MAGE_SAYS: std::cell::Cell<Option<(&'static str, f32)>> = const { std::cell::Cell::new(None) };
+}
+
+/// The hypnotist says `text` over his head until `until` (the world's clock).
+pub(super) fn mage_says(text: &'static str, until: f32) {
+    MAGE_SAYS.with(|m| m.set(Some((text, until))));
+}
+
 pub(super) fn npc_speech_bubbles_of_others(
     camera: Camera3D,
     player: Vec3,
@@ -355,8 +338,18 @@ pub(super) fn npc_speech_bubbles_of_others(
         if distance > NPC_COMMENT_SHOW_RADIUS {
             return Vec::new();
         }
-        let Some((line, line_opacity)) = active_npc_comment(elapsed) else {
-            return Vec::new();
+        let blurt = MAGE_SAYS
+            .with(|m| m.get())
+            .filter(|(_, until)| elapsed < *until)
+            .map(|(text, _)| (text, 1.0));
+        let (text, accent, line_opacity) = match blurt {
+            Some((text, opacity)) => (text, [0.62, 0.44, 0.96, 1.0], opacity),
+            None => {
+                let Some((line, line_opacity)) = active_npc_comment(elapsed) else {
+                    return Vec::new();
+                };
+                (line.text, line.accent, line_opacity)
+            }
         };
         let mage = mage_position();
         let ground_y = nature_walk_surface_height(mage.x, mage.z);
@@ -372,9 +365,9 @@ pub(super) fn npc_speech_bubbles_of_others(
             x,
             y,
             speaker: "Mago",
-            text: line.text,
+            text,
             opacity: line_opacity * distance_opacity,
-            accent: line.accent,
+            accent,
         }];
     }
 
@@ -545,7 +538,13 @@ impl App {
             .map(|slot| {
                 catalog
                     .outfit_in_slot(slot)
-                    .map(|o| (o.name.clone(), String::new()))
+                    .map(|o| {
+                        let detail = match o.id.as_str() {
+                            "capa" => "Para colarse en el burdel de noche",
+                            _ => "",
+                        };
+                        (o.name.clone(), detail.to_owned())
+                    })
                     .or_else(|| {
                         extra_outfit_specs()
                             .iter()
@@ -563,7 +562,32 @@ impl App {
         let locked = (0..wardrobe_outfit_count())
             .map(|slot| !self.achievements.outfit_available(catalog, slot))
             .collect();
-        map_overlay::WardrobeView { outfits, locked }
+        // The Queen in each outfit: her own card picture (`vestidor_*`), else her status picture
+        // (royal, green, bikini), when it exists.
+        let pictures = (0..wardrobe_outfit_count())
+            .map(|slot| {
+                let (own, status) = match slot {
+                    0 => ("ui/status/vestidor_reina", "ui/status/reina_status_0"),
+                    1 => ("ui/status/vestidor_verde", "ui/status/reina_status_verde_0"),
+                    2 => ("ui/status/vestidor_bikini", "ui/status/reina_status_bikini_0"),
+                    3 => ("ui/status/vestidor_capa", "ui/status/vestidor_capa"),
+                    _ => return None,
+                };
+                let assets = crate::exploration3d_state::data_dir().join("assets");
+                let name = if assets.join(format!("{own}.png")).exists() { own } else { status };
+                let path = assets.join(format!("{name}.png"));
+                let (w, h) = image::image_dimensions(path).ok()?;
+                Some(map_overlay::PortraitRef {
+                    image: name.to_owned(),
+                    crop: [0, 0, w, h],
+                })
+            })
+            .collect();
+        map_overlay::WardrobeView {
+            outfits,
+            locked,
+            pictures,
+        }
     }
 }
 

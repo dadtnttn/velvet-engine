@@ -1,0 +1,30 @@
+[package]
+name = "velvet-editor3d"
+description = "Velvet Engine editor: docked scene tree, inspector, files, scripts and the engine's own 3D viewport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# egui 0.31 needs 1.81 (the rest of the workspace declares 1.80).
+rust-version = "1.81"
+
+[[bin]]
+name = "velvet-editor"
+path = "src/main.rs"
+
+[dependencies]
+velvet-math = { workspace = true }
+velvet-render = { workspace = true }
+velvet-scene3d = { workspace = true }
+velvet-image = { workspace = true }
+velvet-avif = { path = "../velvet-avif" }
+wgpu = { workspace = true }
+winit = { workspace = true }
+pollster = { workspace = true }
+image = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+# egui 0.31 is the release built on the engine's wgpu 24 / winit 0.30.
+egui = "0.31"
+egui-wgpu = { version = "0.31", features = ["winit"] }
+egui-winit = "0.31"
+egui_dock = "0.16"

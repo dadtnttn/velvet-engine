@@ -1,6 +1,7 @@
 //! Asset registry and cache.
 
 use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -8,10 +9,12 @@ use indexmap::IndexMap;
 use slotmap::SlotMap;
 use tracing::{debug, warn};
 
+use crate::async_queue::LoadPriority;
 use crate::handle::{next_generation, AssetId, AssetState, Handle};
 use crate::loader::{LoadError, LoadRequest, LoaderRegistry};
 use crate::path::AssetPath;
 use crate::source::{FileSource, MemorySource, Source};
+use crate::streaming::{AssetStreamer, StreamPayload, StreamTicket};
 
 /// Events emitted by the asset system.
 #[derive(Debug, Clone)]
@@ -59,6 +62,8 @@ pub struct Assets {
     source: Arc<dyn Source>,
     events: Vec<AssetEvent>,
     hot_reload: bool,
+    /// Background loads in flight: streamer ticket → entry waiting for it.
+    async_pending: HashMap<u64, AssetId>,
 }
 
 impl Default for Assets {
@@ -87,7 +92,158 @@ impl Assets {
             source,
             events: Vec::new(),
             hot_reload: true,
+            async_pending: HashMap::new(),
         }
+    }
+
+    /// The current source (shared with streamers and tools).
+    pub fn source(&self) -> Arc<dyn Source> {
+        Arc::clone(&self.source)
+    }
+
+    /// Start loading in the background and return the handle at once.
+    ///
+    /// The entry is [`AssetState::Loading`] (and [`Assets::get`] returns `None`) until a later
+    /// [`Assets::pump_async`] picks up the result; reading and decoding happen on the
+    /// streamer's workers, never on the calling thread. A path already loaded or loading as
+    /// `T` returns its existing handle.
+    pub fn load_async<T: 'static + Send + Sync>(
+        &mut self,
+        streamer: &AssetStreamer,
+        path: impl Into<AssetPath>,
+        priority: LoadPriority,
+    ) -> Handle<T> {
+        let path = path.into();
+        let key = path.to_string();
+        let existing = self.by_path.get(&key).copied();
+        if let Some(entry) = existing.and_then(|id| self.entries.get(id)) {
+            if entry.type_id == TypeId::of::<T>()
+                && matches!(
+                    entry.state,
+                    AssetState::Loaded | AssetState::Reloading | AssetState::Loading
+                )
+            {
+                return Handle::new(existing.expect("found"), entry.generation);
+            }
+        }
+        let Some(loader) = self.loaders.for_type::<T>() else {
+            let message = LoadError::NoLoader(std::any::type_name::<T>().into()).to_string();
+            warn!(path = %path, %message, "async load refused");
+            self.events.push(AssetEvent::Failed { path, message });
+            return Handle::none();
+        };
+        let generation = next_generation();
+        let id = match existing.filter(|id| self.entries.contains_key(*id)) {
+            Some(id) => {
+                let entry = &mut self.entries[id];
+                entry.type_id = TypeId::of::<T>();
+                entry.state = AssetState::Loading;
+                entry.generation = generation;
+                entry.data = None;
+                entry.error = None;
+                id
+            }
+            None => {
+                let id = self.entries.insert(Entry {
+                    path: path.clone(),
+                    type_id: TypeId::of::<T>(),
+                    state: AssetState::Loading,
+                    generation,
+                    data: None,
+                    error: None,
+                    refcount: 1,
+                });
+                self.by_path.insert(key, id);
+                id
+            }
+        };
+        let ticket = streamer.request_decode(self.source(), path, loader, priority);
+        self.async_pending.insert(ticket.0, id);
+        Handle::new(id, generation)
+    }
+
+    /// Move up to `max_items` finished background loads into the registry (emitting
+    /// [`AssetEvent::Loaded`] / [`AssetEvent::Failed`]). Never blocks: call it once a frame;
+    /// `max_items` bounds the work done on this thread per call.
+    pub fn pump_async(&mut self, streamer: &AssetStreamer, max_items: usize) -> usize {
+        let pending = &self.async_pending;
+        let finished = streamer.take_completions(max_items, |t| pending.contains_key(&t.0));
+        let mut applied = 0;
+        for done in finished {
+            let Some(id) = self.async_pending.remove(&done.ticket.0) else {
+                continue;
+            };
+            let Some(entry) = self.entries.get_mut(id) else {
+                continue;
+            };
+            if entry.state != AssetState::Loading {
+                continue; // loaded synchronously meanwhile
+            }
+            applied += 1;
+            match done.result {
+                Ok(StreamPayload::Asset(data)) => {
+                    entry.data = Some(data);
+                    entry.state = AssetState::Loaded;
+                    entry.error = None;
+                    debug!(path = %done.path, "asset loaded (async)");
+                    self.events.push(AssetEvent::Loaded {
+                        path: done.path,
+                        id,
+                    });
+                }
+                Ok(StreamPayload::Bytes(_)) => {
+                    let message = "streamer returned bytes for a typed load".to_string();
+                    entry.state = AssetState::Failed;
+                    entry.error = Some(message.clone());
+                    self.events.push(AssetEvent::Failed {
+                        path: done.path,
+                        message,
+                    });
+                }
+                Err(e) => {
+                    let message = e.to_string();
+                    warn!(path = %done.path, error = %message, "async asset load failed");
+                    entry.state = AssetState::Failed;
+                    entry.error = Some(message.clone());
+                    self.events.push(AssetEvent::Failed {
+                        path: done.path,
+                        message,
+                    });
+                }
+            }
+        }
+        applied
+    }
+
+    /// Cancel a background load. The entry goes back to [`AssetState::Unloaded`]; returns
+    /// false when there was nothing in flight for it.
+    pub fn cancel_async<T>(&mut self, streamer: &AssetStreamer, handle: Handle<T>) -> bool {
+        let Some(ticket) = self
+            .async_pending
+            .iter()
+            .find(|(_, id)| **id == handle.id)
+            .map(|(t, _)| *t)
+        else {
+            return false;
+        };
+        self.async_pending.remove(&ticket);
+        streamer.cancel(StreamTicket(ticket));
+        if let Some(entry) = self.entries.get_mut(handle.id) {
+            if entry.state == AssetState::Loading {
+                entry.state = AssetState::Unloaded;
+            }
+        }
+        true
+    }
+
+    /// Background loads not yet picked up by [`Assets::pump_async`].
+    pub fn pending_async(&self) -> usize {
+        self.async_pending.len()
+    }
+
+    /// Error message of a failed entry.
+    pub fn error<T>(&self, handle: Handle<T>) -> Option<&str> {
+        self.entries.get(handle.id)?.error.as_deref()
     }
 
     /// Mutable loader registry.

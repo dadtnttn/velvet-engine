@@ -63,7 +63,50 @@ impl App {
         state.dungeon = (!self.dungeon.visited.is_empty() || self.dungeon_mode)
             .then(|| self.dungeon.snapshot());
         state.dungeon_active = self.dungeon_mode;
+        state.brothel_rope_open =
+            self.brothel_rope_open || self.brothel.as_ref().is_some_and(|b| b.rope_open);
+        state.inside = if let Some(b) = &self.brothel {
+            Some(exploration3d_state::Inside {
+                place: "burdel".into(),
+                x: b.walker.x,
+                z: b.walker.z,
+                yaw: self.player_yaw,
+                level: b.walker.level,
+                room: None,
+                outfit_before: None,
+            })
+        } else if let Some(b) = &self.baths {
+            Some(exploration3d_state::Inside {
+                place: "termas".into(),
+                x: b.x,
+                z: b.z,
+                yaw: self.player_yaw,
+                level: 0,
+                room: b.room.clone(),
+                outfit_before: self.outfit_before_baths,
+            })
+        } else if let (Some(p), None) = (&self.penascal, &self.dungeon_return) {
+            Some(exploration3d_state::Inside {
+                place: "penascal".into(),
+                x: p.x,
+                z: p.z,
+                yaw: self.player_yaw,
+                level: 0,
+                room: None,
+                outfit_before: None,
+            })
+        } else {
+            None
+        };
         state
+    }
+
+    /// Smoke test: some progress of her own (gold, an item, a story mark) a save must keep.
+    #[allow(dead_code)]
+    pub(crate) fn smoke_mark_progress(&mut self) {
+        self.gold = 1234;
+        self.inventory.insert("pocion_reforzada".into(), 2);
+        self.story.values.insert("smoke_guardado".into(), 1);
     }
 
     pub(crate) fn persist_3d_state(&mut self, force: bool) {
@@ -72,7 +115,14 @@ impl App {
             return;
         }
         let mut state = self.snapshot();
-        if let Err(error) = exploration3d_state::write_to(&self.session_path, &mut state) {
+        // Every second while she walks: on the save writer's thread (written now when forced,
+        // as on leaving).
+        let written = if force {
+            exploration3d_state::write_to(&self.session_path, &mut state)
+        } else {
+            exploration3d_state::write_in_background(&self.session_path, &mut state)
+        };
+        if let Err(error) = written {
             eprintln!("[3d] autosave falló: {error:#}");
         } else {
             eprintln!(
@@ -103,6 +153,9 @@ pub(super) struct Start {
     pub(super) backpack: backpack::Backpack,
     pub(super) shop_stock: BTreeMap<String, u32>,
     pub(super) venue: venue::Menu,
+    /// Back inside the place she was saved in.
+    pub(super) inside: Option<exploration3d_state::Inside>,
+    pub(super) brothel_rope_open: bool,
 }
 
 /// Where a world starts: its saved session when it is this world's, else fresh (a new dungeon from
@@ -137,7 +190,25 @@ pub(super) fn starting_point(
     let mut backpack = backpack::Backpack::new();
     let mut shop_stock = shop::default_stock();
     let mut venue = venue::Menu::default();
+    let mut inside = None;
+    let mut brothel_rope_open = false;
     if let Ok(Some(saved)) = exploration3d_state::load_from(session_path) {
+        brothel_rope_open = saved.brothel_rope_open;
+        // Hers wherever she is: the purse, the bag, the shop, the book, the achievements, the
+        // story, the outfit.
+        outfit = saved.outfit % wardrobe_outfit_count();
+        seen_interactions = saved.seen_interactions.clone();
+        achievement_progress = saved.achievements.clone();
+        story = saved.story.clone();
+        gold = saved.gold;
+        inventory = saved.inventory.clone();
+        if let Some(saved_pack) = saved.backpack.clone() {
+            backpack = saved_pack;
+        }
+        venue.progress = saved.venue.clone();
+        if !saved.shop_stock.is_empty() {
+            shop_stock = saved.shop_stock.clone();
+        }
         if saved.world == world_id && saved.spawn == spawn_id {
             if let Some(snapshot) = &saved.dungeon {
                 match dungeon::Dungeon::restore(snapshot) {
@@ -152,18 +223,9 @@ pub(super) fn starting_point(
             player_yaw = saved.yaw;
             nature_mode = saved.nature_mode;
             village_entered = saved.village_entered;
-            outfit = saved.outfit % wardrobe_outfit_count();
-            seen_interactions = saved.seen_interactions;
-            achievement_progress = saved.achievements;
-            story = saved.story;
-            gold = saved.gold;
-            inventory = saved.inventory;
-            if let Some(saved_pack) = saved.backpack {
-                backpack = saved_pack;
-            }
-            venue.progress = saved.venue.clone();
-            if !saved.shop_stock.is_empty() {
-                shop_stock = saved.shop_stock;
+            // Not in the mine: the place she was in (the mine comes back on its own).
+            if !saved.dungeon_active {
+                inside = saved.inside.clone();
             }
             eprintln!(
                 "[3d] checkpoint restaurado: world={} spawn={} pos={:.2},{:.2}",
@@ -206,5 +268,54 @@ pub(super) fn starting_point(
         backpack,
         shop_stock,
         venue,
+        inside,
+        brothel_rope_open,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn session_file(name: &str) -> std::path::PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("dq-save-{name}-{}-{stamp}.json", std::process::id()))
+    }
+
+    #[test]
+    fn what_she_owns_comes_back_wherever_the_world_starts() {
+        let path = session_file("own");
+        let mut saved = exploration3d_state::State::new("act1_castle", "bedroom_inside", 3.0, 4.0);
+        saved.gold = 999;
+        saved.inventory.insert("pocion_pequena".into(), 3);
+        saved.outfit = 1;
+        saved.story.values.insert("consejo_1_hecho".into(), 1);
+        exploration3d_state::write_to(&path, &mut saved).unwrap();
+        // Another spawn of the same world (the story put her at the gate): her things, not her place.
+        let start = starting_point("act1_castle", "castle_gate", &path, Some(7));
+        assert_eq!(start.gold, 999);
+        assert_eq!(start.inventory.get("pocion_pequena"), Some(&3));
+        assert_eq!(start.outfit, 1);
+        assert_eq!(start.story.get("consejo_1_hecho"), 1);
+        assert_ne!((start.player.x, start.player.z), (3.0, 4.0));
+        // The same spawn: her place too.
+        let start = starting_point("act1_castle", "bedroom_inside", &path, Some(7));
+        assert_eq!((start.player.x, start.player.z), (3.0, 4.0));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn a_save_in_the_mine_comes_back_in_the_mine() {
+        let path = session_file("mine");
+        let mut saved = exploration3d_state::State::new("act1_castle", "bedroom_inside", 3.0, 4.0);
+        saved.dungeon = Some(dungeon::Dungeon::generate(42).snapshot());
+        saved.dungeon_active = true;
+        exploration3d_state::write_to(&path, &mut saved).unwrap();
+        let start = starting_point("act1_castle", "bedroom_inside", &path, Some(1));
+        assert!(start.dungeon_resume);
+        std::fs::remove_file(path).unwrap();
     }
 }

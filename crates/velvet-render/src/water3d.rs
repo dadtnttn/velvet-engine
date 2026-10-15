@@ -1056,6 +1056,31 @@ impl Water3D {
     }
 
     /// The level of the visible water nearest `focus` (the surface the frame mirrors).
+    /// Whether any shown body's surface may be on screen (`outside` says a box is not).
+    pub(crate) fn any_body_on_screen(&self, outside: impl Fn([[f32; 3]; 2]) -> bool) -> bool {
+        self.bodies.iter().filter(|b| b.visible).any(|b| {
+            let d = &b.desc;
+            let x1 = d.origin[0] + d.size.0 as f32 * d.cell;
+            let z1 = d.origin[1] + d.size.1 as f32 * d.cell;
+            // A little above and below the still level (rings, wobble).
+            !outside([[d.origin[0], d.level - 0.5, d.origin[1]], [x1, d.level + 0.5, z1]])
+        })
+    }
+
+    /// The boxes of the shown bodies at `level` (those that show the frame's reflection).
+    pub(crate) fn bodies_at_level(&self, level: f32) -> Vec<[[f32; 3]; 2]> {
+        self.bodies
+            .iter()
+            .filter(|b| b.visible && (b.desc.level - level).abs() < 0.05)
+            .map(|b| {
+                let d = &b.desc;
+                let x1 = d.origin[0] + d.size.0 as f32 * d.cell;
+                let z1 = d.origin[1] + d.size.1 as f32 * d.cell;
+                [[d.origin[0], d.level - 0.5, d.origin[1]], [x1, d.level + 0.5, z1]]
+            })
+            .collect()
+    }
+
     pub(crate) fn reflection_level(&self, focus: Vec3) -> Option<f32> {
         self.bodies
             .iter()

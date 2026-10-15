@@ -180,7 +180,7 @@ triangle/texture report. No Tripo API call or generation credit is required.
 From the repository root (PowerShell):
 
 ```powershell
-& 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe' --background --factory-startup --python demos/demon-queen/tools/import_dungeon_art.py -- 'C:\Users\usuario\Downloads\Nueva carpeta (3)'
+& 'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe' --background --factory-startup --python demos/demon-queen/tools/import_dungeon_art.py -- "$HOME\Downloads\Nueva carpeta (3)"
 ```
 
 Outputs: `demos/demon-queen/data/assets/3d/dungeon_tripo/`. Media remain local/

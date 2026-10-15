@@ -9,6 +9,10 @@ use std::collections::BinaryHeap;
 use super::missions;
 use super::*;
 
+/// No guide at all (the presentation video's footage: its running arrows and light column read
+/// as flicker there).
+pub(crate) static GUIDE_HIDDEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// How near the target counts as there.
 const ARRIVED: f32 = 2.0;
 
@@ -430,7 +434,8 @@ impl App {
     /// Each step: the followed mission's guide (its way found again when she has moved off it, the
     /// target has moved, or it has grown old).
     pub(super) fn tick_guide(&mut self) {
-        let Some((mission, step)) = self.followed_mission() else {
+        let hidden = GUIDE_HIDDEN.load(std::sync::atomic::Ordering::Relaxed);
+        let Some((mission, step)) = self.followed_mission().filter(|_| !hidden) else {
             self.guide = None;
             self.route = None;
             return;

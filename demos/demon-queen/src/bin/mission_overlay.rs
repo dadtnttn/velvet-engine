@@ -223,34 +223,38 @@ pub(super) fn draw_panel(
             0.0
         };
     let r = Rect::new(map.x, map.y + map.h + 12.0, w, h);
-    soft(v, r, 14.0, 10.0, rgba(SHADOW, 0.55), false);
-    panel(v, r, 14.0, Panel::velvet(0.88, 1.6).hairline(5.0, 0.35));
     let accent = if view.main { GOLD_HI } else { LILAC };
-    // The heading: a gem, its kind, and J on the right.
+    // A slanted dark plate (Persona's), a wedge of the mission's colour at its left.
+    let lean = 8.0;
+    let plate = |x: f32, y: f32, w: f32, h: f32| -> [[f32; 2]; 4] {
+        [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+    };
+    let fill = |v: &mut Vec<MapVertex>, q: [[f32; 2]; 4], color: [f32; 4]| {
+        push_triangle(v, [q[0], q[1], q[2]], color);
+        push_triangle(v, [q[0], q[2], q[3]], color);
+        push_outline_fringe(v, &q, color);
+    };
+    fill(v, plate(r.x + 8.0, r.y + 8.0, r.w, r.h), rgba(0x000000, 0.5));
+    fill(v, plate(r.x, r.y, r.w, r.h), rgba(0x0e0816, 0.92));
+    fill(v, plate(r.x, r.y, 8.0, r.h), rgba(accent, 1.0));
+    // The heading on a tag of its colour, J on the right.
     let mut y = r.y + 14.0;
-    gem(
-        v,
-        [r.x + pad + 7.0, y + 9.0],
-        6.0,
-        8.5,
-        if view.main { 0xffcf5a } else { 0xb48cff },
-        1.0,
-        4.0,
-    );
     let heading = if view.main {
         "MISIÓN PRINCIPAL"
     } else {
         "MISIÓN SECUNDARIA"
     };
+    let hw = text_width(font, Face::Display, heading, 16.0) + 22.0;
+    fill(v, plate(r.x + pad, y - 4.0, hw, 26.0), rgba(accent, 1.0));
     text(
         font,
         v,
         Face::Display,
         heading,
-        r.x + pad + 22.0,
-        y,
+        r.x + pad + 11.0,
+        y - 1.0,
         16.0,
-        rgba(accent, 0.95),
+        rgba(0x0e0816, 1.0),
     );
     if view.can_cycle {
         let key = Rect::new(r.x + w - pad - 34.0, y - 4.0, 34.0, 28.0);
@@ -269,15 +273,16 @@ pub(super) fn draw_panel(
         );
     }
     y += 28.0;
-    text_shadow(
+    text_outline(
         font,
         v,
         Face::Title,
         &view.title,
         r.x + pad,
         y,
-        25.0,
-        rgba(CREAM, 1.0),
+        26.0,
+        rgba(0xfff6ee, 1.0),
+        rgba(0x000000, 0.85),
     );
     y += 38.0;
     // The step, and how far (or where) on the right.
@@ -401,165 +406,282 @@ pub(super) fn draw_marker(font: &FontAtlas, v: &mut Vec<MapVertex>, view: &Missi
         return;
     };
     let pulse = 0.5 + 0.5 * (time * 3.0).sin();
-    if inside {
-        halo(
-            v,
-            p,
-            22.0 + 4.0 * pulse,
-            14.0,
-            rgba(GOLD_HI, 0.30 + 0.15 * pulse),
-        );
-        gem(v, p, 11.0, 15.0, 0xffcf5a, 1.0, 8.0);
-        let label = if view.marker_distance.is_empty() {
-            view.marker_label.clone()
+    let accent = if view.main { 0xffcf5a } else { 0xb48cff };
+    let fill4 = |v: &mut Vec<MapVertex>, q: [[f32; 2]; 4], color: [f32; 4]| {
+        push_triangle(v, [q[0], q[1], q[2]], color);
+        push_triangle(v, [q[0], q[2], q[3]], color);
+        push_outline_fringe(v, &q, color);
+    };
+    let slant = |x: f32, y: f32, w: f32, h: f32, lean: f32| -> [[f32; 2]; 4] {
+        [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+    };
+    // The name on a slanted dark plate, the distance on a chip of the mission's colour.
+    let plate = |v: &mut Vec<MapVertex>, cx: f32, top: f32| {
+        let ns = 21.0;
+        let nw = text_width(font, Face::Title, &view.marker_label, ns);
+        let ds = 19.0;
+        let dw = if view.marker_distance.is_empty() {
+            0.0
         } else {
-            format!("{} · {}", view.marker_label, view.marker_distance)
+            text_width(font, Face::Display, &view.marker_distance, ds) + 22.0
         };
-        let size = 17.0;
-        let lw = text_width(font, Face::Ui, &label, size);
-        let plate = Rect::new(p[0] - lw * 0.5 - 12.0, p[1] + 22.0, lw + 24.0, size + 12.0);
-        panel(
+        let w = nw + 34.0 + if dw > 0.0 { dw + 10.0 } else { 0.0 };
+        let x = cx - w * 0.5;
+        fill4(v, slant(x + 5.0, top + 5.0, w, 34.0, 7.0), rgba(0x000000, 0.5));
+        fill4(v, slant(x, top, w, 34.0, 7.0), rgba(0x0e0816, 0.92));
+        fill4(v, slant(x, top, 6.0, 34.0, 7.0), rgba(accent, 1.0));
+        text_outline(font, v, Face::Title, &view.marker_label, x + 17.0, top + 4.0, ns, rgba(0xfff6ee, 1.0), rgba(0x000000, 0.8));
+        if dw > 0.0 {
+            let dx = x + w - dw - 8.0;
+            fill4(v, slant(dx, top + 5.0, dw, 24.0, 5.0), rgba(accent, 1.0));
+            text(font, v, Face::Display, &view.marker_distance, dx + 11.0, top + 6.0, ds, rgba(0x0e0816, 1.0));
+        }
+    };
+    if inside {
+        // A bobbing arrow pointing down at it, a turning ring, the gem, its light.
+        let bob = (time * 4.0).sin() * 6.0;
+        halo(v, p, 30.0 + 6.0 * pulse, 18.0, rgba(accent, 0.28 + 0.15 * pulse));
+        arc(v, p, 24.0, 3.0, time * 0.4, 0.7, rgba(accent, 0.9), rgba(accent, 0.15));
+        gem(v, p, 13.0, 18.0, accent, 1.0, 8.0);
+        let tip = [p[0], p[1] - 34.0 + bob];
+        push_triangle(
             v,
-            plate,
-            plate.h * 0.5,
-            Panel::fill(0x1a0c22, 0x0a0410, 0.82).rim(GOLD, 0.8, 1.2),
+            [[tip[0], tip[1] + 3.0], [tip[0] - 15.0, tip[1] - 22.0], [tip[0] + 15.0, tip[1] - 22.0]],
+            rgba(0x0e0816, 0.9),
         );
-        text(
-            font,
+        push_triangle(
             v,
-            Face::Ui,
-            &label,
-            plate.x + 12.0,
-            plate.y + 5.0,
-            size,
-            rgba(CREAM, 1.0),
+            [tip, [tip[0] - 11.0, tip[1] - 19.0], [tip[0] + 11.0, tip[1] - 19.0]],
+            rgba(accent, 1.0),
         );
+        plate(v, p[0], p[1] + 30.0);
     } else {
-        // The edge arrow, pointing away from the middle of the screen.
+        // The edge arrow, pointing away from the middle of the screen, and the name by it.
         let c = [WINDOW_W * 0.5, WINDOW_H * 0.5];
         let d = [p[0] - c[0], p[1] - c[1]];
         let len = d[0].hypot(d[1]).max(1e-3);
         let (ux, uy) = (d[0] / len, d[1] / len);
-        let s = 20.0;
+        let s = 30.0;
+        let push = (time * 5.0).sin() * 4.0;
+        let p = [p[0] + ux * push, p[1] + uy * push];
         let tip = [p[0] + ux * s, p[1] + uy * s];
-        let left = [
-            p[0] - uy * s * 0.8 - ux * s * 0.5,
-            p[1] + ux * s * 0.8 - uy * s * 0.5,
-        ];
-        let right = [
-            p[0] + uy * s * 0.8 - ux * s * 0.5,
-            p[1] - ux * s * 0.8 - uy * s * 0.5,
-        ];
-        halo(v, p, 26.0, 16.0, rgba(GOLD_HI, 0.25 + 0.15 * pulse));
+        let left = [p[0] - uy * s * 0.8 - ux * s * 0.5, p[1] + ux * s * 0.8 - uy * s * 0.5];
+        let right = [p[0] + uy * s * 0.8 - ux * s * 0.5, p[1] - ux * s * 0.8 - uy * s * 0.5];
+        halo(v, p, 34.0, 18.0, rgba(accent, 0.25 + 0.15 * pulse));
         push_triangle(
             v,
             [
-                [tip[0] + ux * 3.0, tip[1] + uy * 3.0],
-                [left[0] - ux * 3.0, left[1] - uy * 3.0],
-                [right[0] - ux * 3.0, right[1] - uy * 3.0],
+                [tip[0] + ux * 4.0, tip[1] + uy * 4.0],
+                [left[0] - ux * 4.0 - uy * 3.0, left[1] - uy * 4.0 + ux * 3.0],
+                [right[0] - ux * 4.0 + uy * 3.0, right[1] - uy * 4.0 - ux * 3.0],
             ],
-            rgba(SHADOW, 0.9),
+            rgba(0x0e0816, 0.92),
         );
-        push_triangle(v, [tip, left, right], rgba(0xffcf5a, 1.0));
-        if !view.marker_distance.is_empty() {
-            let size = 16.0;
-            let lw = text_width(font, Face::Title, &view.marker_distance, size);
-            let at = [p[0] - ux * 34.0, p[1] - uy * 34.0];
-            text_outline(
-                font,
-                v,
-                Face::Title,
-                &view.marker_distance,
-                at[0] - lw * 0.5,
-                at[1] - size * 0.6,
-                size,
-                rgba(CREAM, 1.0),
-                rgba(SHADOW, 0.9),
-            );
+        push_triangle(v, [tip, left, right], rgba(accent, 1.0));
+        // The plate inward of the arrow, kept on screen.
+        let at = [p[0] - ux * 70.0, p[1] - uy * 60.0];
+        let cx = at[0].clamp(180.0, WINDOW_W - 180.0);
+        let mut top = (at[1] - 17.0).clamp(150.0, WINDOW_H - 220.0);
+        // Never under the corner map and the mission's panel (top right).
+        if cx > WINDOW_W - 640.0 && top < 640.0 {
+            top = 640.0;
         }
+        plate(v, cx, top);
     }
 }
 
 const WINDOW_W: f32 = 1920.0;
 const WINDOW_H: f32 = 1080.0;
 
-/// The notice at the top: a band across with its heading and the mission's name, sliding in and
-/// fading out.
+/// The notice at the top, in the manner of the game's Persona menus: a slanted dark plate slams in
+/// from the left with a white streak running over it, its colour wedge at the left holding a gem
+/// (a new mission, violet) or a seal (done, gold); its heading on a small tag, the mission's name
+/// big with an ink rim; a comic «¡HECHO!» stamped at its end when it is done. It slides off to the
+/// right at the end.
 pub(super) fn draw_notice(
     font: &FontAtlas,
     v: &mut Vec<MapVertex>,
     width: f32,
     view: &MissionView,
+    time: f32,
 ) {
     let Some((heading, title, age)) = view.notice.as_ref() else {
         return;
     };
-    let fade_in = entrance(*age, 0.0, 0.35);
-    let fade_out = 1.0 - ((age - (NOTICE_SECS - 0.6)) / 0.6).clamp(0.0, 1.0);
-    let alpha = fade_in * fade_out;
+    let age = *age;
+    let come = entrance(age, 0.0, 0.32);
+    let go = ((age - (NOTICE_SECS - 0.45)) / 0.45).clamp(0.0, 1.0);
+    let alpha = entrance(age, 0.0, 0.12) * (1.0 - go);
     if alpha <= 0.01 {
         return;
     }
     let done = heading == "Misión completada";
-    let ink = if done { GOLD_HI } else { LILAC };
-    let cy = 168.0;
+    // A place still being made: orange, a warning sign, and a line saying so under it.
+    // A note on what to do comes the same way, its line under it.
+    let note_line = (heading == "Nota")
+        .then(|| title.split_once('\n').map(|(_, l)| l.to_owned()))
+        .flatten();
+    let title = &title.split('\n').next().unwrap_or(title).to_owned();
+    let building = heading == "En desarrollo" || heading == "Nota";
+    let main = view.main || done;
+    let accent = if building {
+        0xff7a2e
+    } else if done {
+        GOLD
+    } else if main {
+        0x9a5cff
+    } else {
+        0x3fc7b0
+    };
+    let accent_hi = if building {
+        0xffc08a
+    } else if done {
+        GOLD_HI
+    } else if main {
+        0xd6b8ff
+    } else {
+        0x9ff0e0
+    };
+    // Its size: the name decides it.
+    let ts = 50.0;
+    let name = fit(font, Face::Title, title, ts, 900.0);
+    let tw = text_width(font, Face::Title, &name, ts);
+    let w = (tw + 230.0).max(560.0);
+    let h = 104.0;
+    let cx = width * 0.5 - 40.0;
+    let x0 = cx - w * 0.5;
+    let y0 = 112.0;
+    let lean = 26.0;
+    let slide = (1.0 - come) * -(w + 300.0) + go * 260.0;
+    let plate = |dx: f32, dy: f32, ww: f32| -> [[f32; 2]; 4] {
+        [
+            [x0 + dx + lean, y0 + dy],
+            [x0 + dx + ww + lean, y0 + dy],
+            [x0 + dx + ww - lean, y0 + dy + h],
+            [x0 + dx - lean, y0 + dy + h],
+        ]
+    };
     faded(v, alpha, |v| {
-        shifted(v, [(1.0 - fade_in) * -60.0, 0.0], |v| {
-            // Clear of the corner map (it starts some 535 px from the right edge).
-            slash(
-                v,
-                [width * 0.5, cy + 6.0],
-                780.0,
-                112.0,
-                -0.02,
-                rgba(0x2a0f38, 0.92),
-                rgba(0x0e0616, 0.92),
-            );
-            slash(
-                v,
-                [width * 0.5, cy + 62.0],
-                800.0,
-                4.0,
-                -0.02,
-                rgba(GOLD, 0.9),
-                rgba(GOLD, 0.9),
-            );
+        shifted(v, [slide, 0.0], |v| {
+            // Its shadow, the plate, its rims.
+            let sh = plate(12.0, 12.0, w);
+            push_triangle(v, [sh[0], sh[1], sh[2]], rgba(0x000000, 0.55));
+            push_triangle(v, [sh[0], sh[2], sh[3]], rgba(0x000000, 0.55));
+            let p = plate(0.0, 0.0, w);
+            push_triangle(v, [p[0], p[1], p[2]], rgba(0x0e0816, 0.96));
+            push_triangle(v, [p[0], p[2], p[3]], rgba(0x0e0816, 0.96));
+            push_outline_fringe(v, &p, rgba(0x0e0816, 0.96));
+            // The colour wedge at its left with its sign.
+            let wedge = plate(0.0, 0.0, 120.0);
+            push_triangle(v, [wedge[0], wedge[1], wedge[2]], rgba(accent, 1.0));
+            push_triangle(v, [wedge[0], wedge[2], wedge[3]], rgba(mix(accent, 0x000000, 0.25), 1.0));
+            push_outline_fringe(v, &wedge, rgba(accent, 1.0));
+            let sign = [x0 + 58.0, y0 + h * 0.5];
+            if building {
+                // A warning sign: a dark triangle with a light one in it and a «!».
+                let tri = |r: f32| {
+                    [
+                        [sign[0], sign[1] - r],
+                        [sign[0] + r * 0.95, sign[1] + r * 0.72],
+                        [sign[0] - r * 0.95, sign[1] + r * 0.72],
+                    ]
+                };
+                push_triangle(v, tri(34.0), rgba(0x0e0816, 0.95));
+                push_triangle(v, tri(27.0), rgba(0xffe2c4, 1.0));
+                text(font, v, Face::Display, "!", sign[0] - 5.0, sign[1] - 15.0, 30.0, rgba(0x0e0816, 1.0));
+            } else if done {
+                // A seal: a gold disc, its rim and a tick.
+                disc(v, sign, 30.0, rgba(0x0e0816, 0.9));
+                disc(v, sign, 26.0, rgba(GOLD_HI, 1.0));
+                arc(v, sign, 21.0, 2.5, 0.0, 1.0, rgba(GOLD_DEEP, 1.0), [0.0; 4]);
+                wire(v, [sign[0] - 11.0, sign[1] + 1.0], [sign[0] - 3.0, sign[1] + 9.0], 6.0, rgba(0x0e0816, 1.0), rgba(0x0e0816, 1.0), 0.0, false);
+                wire(v, [sign[0] - 3.0, sign[1] + 9.0], [sign[0] + 12.0, sign[1] - 9.0], 6.0, rgba(0x0e0816, 1.0), rgba(0x0e0816, 1.0), 0.0, false);
+            } else {
+                let pulse = 0.5 + 0.5 * (time * 3.0).sin();
+                halo(v, sign, 30.0, 14.0, rgba(accent_hi, 0.25 + 0.2 * pulse));
+                gem(v, sign, 20.0, 27.0, mix(accent, 0xffffff, 0.2), 1.0, 0.6 + 0.4 * pulse);
+            }
+            // Gold lines along its top and foot.
+            let line = |v: &mut Vec<MapVertex>, a: [f32; 2], b: [f32; 2]| {
+                wire(v, a, b, 3.0, rgba(accent_hi, 0.0), rgba(accent_hi, 0.95), 0.0, false);
+            };
+            line(v, [p[0][0] + 120.0, p[0][1] + 6.0], [p[1][0] - 10.0, p[1][1] + 6.0]);
+            line(v, [p[3][0] + 120.0, p[3][1] - 6.0], [p[2][0] - 10.0, p[2][1] - 6.0]);
+            // The heading on its tag.
             let caps = heading.to_uppercase();
-            let hs = 22.0;
-            let hw = text_width(font, Face::Display, &caps, hs);
-            text(
-                font,
-                v,
-                Face::Display,
-                &caps,
-                width * 0.5 - hw * 0.5,
-                cy - 38.0,
-                hs,
-                rgba(ink, 1.0),
-            );
-            let ts = 46.0;
-            let tw = text_width(font, Face::Title, title, ts);
-            shout(
+            let hs = 19.0;
+            let hw = text_width(font, Face::Display, &caps, hs) + 30.0;
+            let tag = [x0 + 150.0, y0 - 16.0];
+            let tq = [
+                [tag[0] + 8.0, tag[1]],
+                [tag[0] + hw + 8.0, tag[1]],
+                [tag[0] + hw - 8.0, tag[1] + 30.0],
+                [tag[0] - 8.0, tag[1] + 30.0],
+            ];
+            push_triangle(v, [tq[0], tq[1], tq[2]], rgba(accent_hi, 1.0));
+            push_triangle(v, [tq[0], tq[2], tq[3]], rgba(accent_hi, 1.0));
+            push_outline_fringe(v, &tq, rgba(accent_hi, 1.0));
+            text(font, v, Face::Display, &caps, tag[0] + 15.0, tag[1] + 3.0, hs, rgba(0x0e0816, 1.0));
+            // The name.
+            text_outline(
                 font,
                 v,
                 Face::Title,
-                title,
-                width * 0.5 - tw * 0.5,
-                cy - 8.0,
+                &name,
+                x0 + 150.0,
+                y0 + h * 0.5 - ts * 0.52,
                 ts,
-                0xfff6ee,
-                if done { 0x8a6436 } else { 0x5a2a8a },
-                1.0,
+                rgba(0xfff6ee, 1.0),
+                rgba(0x000000, 0.9),
             );
-            for side in [-1.0f32, 1.0] {
-                sparkle(
-                    v,
-                    [width * 0.5 + side * (tw * 0.5 + 34.0), cy + 16.0],
-                    9.0,
-                    rgba(ink, 1.0),
-                    6.0,
-                );
+            // A white streak running over it as it lands.
+            let k = ((age - 0.18) / 0.5).clamp(0.0, 1.0);
+            if k > 0.0 && k < 1.0 {
+                let sx = x0 - 60.0 + (w + 120.0) * k;
+                let q = [
+                    [sx + lean + 40.0, y0],
+                    [sx + lean + 90.0, y0],
+                    [sx - lean + 50.0, y0 + h],
+                    [sx - lean, y0 + h],
+                ];
+                let a = 0.35 * (1.0 - (k * 2.0 - 1.0).abs());
+                push_triangle(v, [q[0], q[1], q[2]], rgba(0xffffff, a));
+                push_triangle(v, [q[0], q[2], q[3]], rgba(0xffffff, a));
             }
         });
     });
+    // Being made: when it comes, under the plate.
+    if building {
+        let line = note_line.as_deref().unwrap_or("Llegará en una próxima versión.");
+        let ls = {
+            let w = text_width(font, Face::Body, line, 21.0);
+            if w > 1100.0 { 21.0 * 1100.0 / w } else { 21.0 }
+        };
+        let lw = text_width(font, Face::Body, line, ls);
+        let at = [x0 + 150.0 + slide, y0 + h + 14.0];
+        faded(v, alpha, |v| {
+            let q = [
+                [at[0] - 12.0, at[1]],
+                [at[0] + lw + 24.0, at[1]],
+                [at[0] + lw + 14.0, at[1] + 34.0],
+                [at[0] - 22.0, at[1] + 34.0],
+            ];
+            push_triangle(v, [q[0], q[1], q[2]], rgba(0x0e0816, 0.9));
+            push_triangle(v, [q[0], q[2], q[3]], rgba(0x0e0816, 0.9));
+            text(font, v, Face::Body, line, at[0], at[1] + 5.0, ls, rgba(0xffe2c4, 1.0));
+        });
+    }
+    // Done: «¡HECHO!» stamped at its end, a beat after it lands.
+    if done {
+        let t = age - 0.35;
+        if t > 0.0 {
+            let pop = if t < 0.16 { 1.0 + 1.2 * (1.0 - t / 0.16) } else { 1.0 };
+            let c = [x0 + w + 10.0 + slide, y0 + h * 0.5 + 6.0];
+            faded(v, alpha * (t / 0.08).min(1.0), |v| {
+                turned(v, c, -0.16, |v| {
+                    comic_stamp(font, v, Face::Display, "¡HECHO!", c, 46.0 * pop, GOLD_HI, false, (t / 0.3).min(1.0), time);
+                });
+            });
+        }
+    }
 }

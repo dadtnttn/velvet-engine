@@ -52,14 +52,14 @@ fn pool() -> &'static Pool {
 }
 
 /// How many threads the pool has: how many parts work is best split into.
-pub(crate) fn threads() -> usize {
+pub fn threads() -> usize {
     pool().threads
 }
 
 /// Runs `work` on every part, on the pool's threads, and returns once all are done (a panic in
 /// one is raised here). On one of the pool's own threads the parts run in turn (it would wait on
 /// itself).
-pub(crate) fn each<'a, T: Send + 'a>(parts: Vec<T>, work: &'a (dyn Fn(T) + Sync + 'a)) {
+pub fn each<'a, T: Send + 'a>(parts: Vec<T>, work: &'a (dyn Fn(T) + Sync + 'a)) {
     if parts.len() <= 1 || IN_POOL.with(|p| p.get()) {
         for part in parts {
             work(part);

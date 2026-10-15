@@ -2155,15 +2155,19 @@ impl Scene {
             true,
             sword_pose.roll,
         );
-        if let Some(triangles) = self.assets.draw_held_sword(
-            &mut draws,
-            held.hand,
-            held.blade,
-            held.shoulder,
-            sword_pose.roll,
-            run.relic_sword,
-        ) {
-            self.stats.triangles += triangles;
+        // The sword, when one is worn (taken off, the fist is empty), slime and all.
+        if run.armed {
+            if let Some(triangles) = self.assets.draw_held_sword(
+                &mut draws,
+                held.hand,
+                held.blade,
+                held.shoulder,
+                sword_pose.roll,
+                run.relic_sword,
+                run.sword_goo.map(|c| (c, run.elapsed)),
+            ) {
+                self.stats.triangles += triangles;
+            }
         }
         if run.sword_swing > 0.0 {
             let clip = fp::SWINGS[run.sword_combo];

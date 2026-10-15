@@ -9,7 +9,7 @@ use std::f32::consts::TAU;
 use std::time::{Duration, Instant};
 
 use rodio::buffer::SamplesBuffer;
-use rodio::{OutputStream, OutputStreamBuilder, Sink};
+use rodio::{OutputStream, OutputStreamBuilder, Sink, Source};
 
 const RATE: u32 = 44_100;
 
@@ -48,10 +48,14 @@ pub(crate) enum UiSfx {
     Fuse,
     /// A small tick (a needle passing a mark, a counter).
     Tick,
+    /// The visual novel's next line: a soft, low pluck (heard on every line, so barely there).
+    Advance,
+    /// A decision taken in the visual novel: two soft notes, rising.
+    Choose,
 }
 
 impl UiSfx {
-    const ALL: [UiSfx; 16] = [
+    const ALL: [UiSfx; 18] = [
         UiSfx::Move,
         UiSfx::Select,
         UiSfx::Back,
@@ -68,11 +72,15 @@ impl UiSfx {
         UiSfx::Fail,
         UiSfx::Fuse,
         UiSfx::Tick,
+        UiSfx::Advance,
+        UiSfx::Choose,
     ];
 
     /// How loud it plays (the menus stay under the music).
     fn volume(self) -> f32 {
         match self {
+            UiSfx::Advance => 0.13,
+            UiSfx::Choose => 0.2,
             UiSfx::Move | UiSfx::Tick => 0.22,
             UiSfx::Page | UiSfx::Rotate => 0.30,
             UiSfx::Open | UiSfx::Close => 0.34,
@@ -85,6 +93,7 @@ impl UiSfx {
     fn spacing(self) -> Duration {
         Duration::from_millis(match self {
             UiSfx::Move | UiSfx::Tick => 28,
+            UiSfx::Advance => 90,
             _ => 60,
         })
     }
@@ -96,6 +105,8 @@ struct UiAudio {
     stream: std::mem::ManuallyDrop<OutputStream>,
     bank: HashMap<UiSfx, Vec<f32>>,
     last: HashMap<UiSfx, Instant>,
+    /// A scene's sound looping in the gallery.
+    voice: Option<Sink>,
 }
 
 thread_local! {
@@ -105,6 +116,18 @@ thread_local! {
 
 fn muted() -> bool {
     std::env::var_os("VELVET_MUTE").is_some()
+}
+
+/// The menus' sound output, for music under the visual novel (`None` muted or without a device).
+pub(crate) fn mixer() -> Option<rodio::mixer::Mixer> {
+    if cfg!(test) || muted() {
+        return None;
+    }
+    AUDIO.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        let audio = slot.get_or_insert_with(open);
+        audio.as_ref().map(|audio| audio.stream.mixer().clone())
+    })
 }
 
 /// Plays a menu sound (nothing when muted or without a sound device).
@@ -133,7 +156,7 @@ pub(crate) fn play(sfx: UiSfx) {
         };
         let sink = Sink::connect_new(audio.stream.mixer());
         sink.append(SamplesBuffer::new(1, RATE, samples.clone()));
-        sink.set_volume(sfx.volume());
+        sink.set_volume(sfx.volume() * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Effects));
         sink.detach();
     });
 }
@@ -152,7 +175,44 @@ fn open() -> Option<UiAudio> {
         stream: std::mem::ManuallyDrop::new(stream),
         bank,
         last: HashMap::new(),
+        voice: None,
     })
+}
+
+/// A scene's sound file looping (the gallery's), at the scenes' volume; `None` stops it.
+pub(crate) fn scene_loop(path: Option<&std::path::Path>) {
+    if cfg!(test) || muted() {
+        return;
+    }
+    AUDIO.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        let audio = slot.get_or_insert_with(open);
+        let Some(audio) = audio.as_mut() else {
+            return;
+        };
+        if let Some(old) = audio.voice.take() {
+            old.stop();
+        }
+        let Some(path) = path else {
+            return;
+        };
+        let Ok(file) = std::fs::File::open(path) else {
+            return;
+        };
+        let decoder = match rodio::Decoder::new(std::io::BufReader::new(file)) {
+            Ok(decoder) => decoder,
+            Err(error) => {
+                eprintln!("[ui-sfx] {}: {error}", path.display());
+                return;
+            }
+        };
+        let (channels, rate) = (decoder.channels(), decoder.sample_rate());
+        let samples: Vec<f32> = decoder.collect();
+        let sink = Sink::connect_new(audio.stream.mixer());
+        sink.append(SamplesBuffer::new(channels, rate, samples).repeat_infinite());
+        sink.set_volume(0.9 * super::prefs::gain(super::prefs::Channel::Scenes));
+        audio.voice = Some(sink);
+    });
 }
 
 // ------------------------------------------------------------------ synthesis
@@ -189,6 +249,21 @@ fn note(out: &mut [f32], at: f32, freq: f32, length: f32, gain: f32) {
             * (p.sin()
                 + 0.28 * (2.0 * p).sin() * (-t / (length * 0.5)).exp()
                 + 0.08 * (3.01 * p).sin());
+    }
+}
+
+/// A soft, warm note: the fundamental and a little of its octave, nothing bright (no shimmer,
+/// no noise): what plays on every line of the visual novel must not tire the ear.
+fn soft(out: &mut [f32], at: f32, freq: f32, length: f32, gain: f32) {
+    let start = (at * RATE as f32) as usize;
+    for i in start..out.len() {
+        let t = t_of(i - start);
+        if t > length * 5.0 {
+            break;
+        }
+        let e = env(t, 0.008, length);
+        let p = TAU * freq * t;
+        out[i] += gain * e * (p.sin() + 0.12 * (2.0 * p).sin() * (-t / (length * 0.4)).exp());
     }
 }
 
@@ -355,6 +430,16 @@ fn synthesise(sfx: UiSfx) -> Vec<f32> {
             glide(&mut s, 0.0, 520.0, 240.0, 0.36, 0.6);
             glide(&mut s, 0.0, 780.0, 360.0, 0.36, 0.25);
         }
+        UiSfx::Advance => {
+            s = buffer(0.32);
+            soft(&mut s, 0.0, 392.0, 0.07, 0.8);
+            soft(&mut s, 0.0, 196.0, 0.09, 0.25);
+        }
+        UiSfx::Choose => {
+            s = buffer(0.5);
+            soft(&mut s, 0.0, 392.0, 0.08, 0.7);
+            soft(&mut s, 0.07, 523.25, 0.12, 0.65);
+        }
         UiSfx::Fuse => {
             s = buffer(1.1);
             swish(&mut s, 0.0, 500.0, 5200.0, 0.55, 0.6, 91);
@@ -383,6 +468,58 @@ mod tests {
             assert!(peak > 0.5 && peak <= 0.91, "{sfx:?} peak {peak}");
             assert!(s.iter().all(|v| v.is_finite()), "{sfx:?}");
             assert!(s.last().unwrap().abs() < 0.01, "{sfx:?} ends with a click");
+        }
+    }
+
+    /// Crossings of zero a second: how high a sound sits (a bright chime or noise crosses far
+    /// more often than a low note).
+    fn crossings_per_second(s: &[f32]) -> f32 {
+        let loud: Vec<f32> = s.iter().copied().filter(|v| v.abs() > 0.02).collect();
+        let n = loud.windows(2).filter(|w| (w[0] < 0.0) != (w[1] < 0.0)).count();
+        n as f32 / (loud.len().max(1) as f32 / RATE as f32)
+    }
+
+    #[test]
+    fn the_novels_line_sounds_are_low_and_soft_unlike_the_menus_chime() {
+        for sfx in [UiSfx::Advance, UiSfx::Choose] {
+            let rate = crossings_per_second(&synthesise(sfx));
+            assert!(rate < 1300.0, "{sfx:?} sits too high: {rate:.0} crossings/s");
+            assert!(sfx.volume() < UiSfx::Select.volume(), "{sfx:?} louder than the menus' chime");
+        }
+        assert!(crossings_per_second(&synthesise(UiSfx::Select)) > 2000.0);
+    }
+
+    /// The sounds as WAV files to listen to (QA, by hand):
+    /// `VELVET_SFX_PREVIEW=<folder> cargo test … sfx_previews -- --ignored`.
+    #[test]
+    #[ignore]
+    fn sfx_previews() {
+        let Some(dir) = std::env::var_os("VELVET_SFX_PREVIEW").map(std::path::PathBuf::from) else {
+            return;
+        };
+        std::fs::create_dir_all(&dir).unwrap();
+        for sfx in UiSfx::ALL {
+            let s = synthesise(sfx);
+            let mut wav = Vec::new();
+            let data = (s.len() * 2) as u32;
+            wav.extend_from_slice(b"RIFF");
+            wav.extend_from_slice(&(36 + data).to_le_bytes());
+            wav.extend_from_slice(b"WAVEfmt ");
+            wav.extend_from_slice(&16u32.to_le_bytes());
+            wav.extend_from_slice(&1u16.to_le_bytes());
+            wav.extend_from_slice(&1u16.to_le_bytes());
+            wav.extend_from_slice(&RATE.to_le_bytes());
+            wav.extend_from_slice(&(RATE * 2).to_le_bytes());
+            wav.extend_from_slice(&2u16.to_le_bytes());
+            wav.extend_from_slice(&16u16.to_le_bytes());
+            wav.extend_from_slice(b"data");
+            wav.extend_from_slice(&data.to_le_bytes());
+            for v in s {
+                // At the volume the game plays it.
+                let v = (v * sfx.volume() * 32767.0).round().clamp(-32768.0, 32767.0) as i16;
+                wav.extend_from_slice(&v.to_le_bytes());
+            }
+            std::fs::write(dir.join(format!("{sfx:?}.wav")), wav).unwrap();
         }
     }
 }

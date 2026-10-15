@@ -87,12 +87,23 @@ pub struct Assets {
     root: PathBuf,
 }
 
+fn packaged_root() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.join("data/assets/3d")))
+}
+
+/// The 3D models: beside the executable when it carries them (a published build does), else the
+/// project's.
+#[cfg(feature = "portable")]
+pub fn root() -> PathBuf {
+    packaged_root().unwrap_or_default()
+}
+
+#[cfg(not(feature = "portable"))]
 pub fn root() -> PathBuf {
     let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/assets/3d");
-    let packaged = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.join("data/assets/3d")));
-    packaged.filter(|p| p.is_dir()).unwrap_or(source)
+    packaged_root().filter(|p| p.is_dir()).unwrap_or(source)
 }
 
 type TextureCache = BTreeMap<(u32, u32, u64, u64), TextureHandle>;
@@ -494,6 +505,7 @@ impl Assets {
         shoulder: Vec3,
         roll: f32,
         relic: bool,
+        goo: Option<([f32; 3], f32)>,
     ) -> Option<usize> {
         let asset = relic
             .then(|| self.entries.get("relic_sword"))
@@ -509,6 +521,37 @@ impl Assets {
                 texture: part.texture,
             });
             triangles += part.triangles;
+        }
+        // Slime: a wet, glowing coat over the blade (the parts again, a little fuller and
+        // see-through, breathing as it wobbles) and its sheen added on top.
+        if let Some((color, time)) = goo {
+            let wobble = 1.045 + (time * 3.1).sin() * 0.012;
+            let coat = Mat4::from_scale(Vec3::new(wobble, 1.012, wobble));
+            for part in &asset.parts {
+                draws.push(MeshDraw3D {
+                    mesh: part.mesh,
+                    transform: world * coat * part.transform,
+                    material: Material3D {
+                        base_color: [color[0], color[1], color[2], 0.46],
+                        texture: None,
+                        // A little light of its own, so it reads in the dark caves.
+                        occlusion_window: [0.28, 0.0, 0.0, 0.0],
+                    },
+                    texture: None,
+                });
+                draws.push(MeshDraw3D {
+                    mesh: part.mesh,
+                    transform: world * Mat4::from_scale(Vec3::new(wobble + 0.02, 1.02, wobble + 0.02)) * part.transform,
+                    material: Material3D::additive([
+                        color[0] * 0.22,
+                        color[1] * 0.22,
+                        color[2] * 0.22,
+                        0.35 + (time * 4.7).sin() * 0.12,
+                    ]),
+                    texture: None,
+                });
+                triangles += part.triangles * 2;
+            }
         }
         Some(triangles)
     }

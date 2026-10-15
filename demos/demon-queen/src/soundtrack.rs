@@ -170,6 +170,9 @@ pub(crate) struct Music {
     voices: Vec<Voice>,
     zone: Option<Zone>,
     duck: f32,
+    /// How loud this soundtrack is against the game's (1: the world's; the visual novel's is
+    /// lower).
+    level: f32,
 }
 
 impl Music {
@@ -188,7 +191,38 @@ impl Music {
             voices: Vec::new(),
             zone: None,
             duck: 1.0,
+            level: 1.0,
         })
+    }
+
+    /// Plays at `level` times the world's loudness.
+    pub(crate) fn set_level(&mut self, level: f32) {
+        self.level = level.clamp(0.0, 1.0);
+    }
+
+    /// Fades everything out (over a second and a half); whether anything still sounds.
+    pub(crate) fn fade_out(&mut self, dt: f32) -> bool {
+        let dt = dt.clamp(0.0, 0.25);
+        for voice in &mut self.voices {
+            if voice.target > 0.0 {
+                voice.target = 0.0;
+                voice.fade_seconds = 1.5;
+            }
+            voice.fade = approach(voice.fade, 0.0, 1.0 / voice.fade_seconds, dt);
+            voice.sink.set_volume(
+                MUSIC_VOLUME
+                    * self.level
+                    * self.duck
+                    * equal_power(voice.fade)
+                    * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Music),
+            );
+        }
+        self.voices.retain(|v| v.fade > 0.001);
+        // Back in, it starts its zone afresh.
+        if self.voices.is_empty() {
+            self.zone = None;
+        }
+        !self.voices.is_empty()
     }
 
     fn start(&mut self, zone: Zone, fade_seconds: f32) -> bool {
@@ -293,7 +327,7 @@ impl Music {
             voice.fade = approach(voice.fade, voice.target, 1.0 / voice.fade_seconds, dt);
             voice
                 .sink
-                .set_volume(MUSIC_VOLUME * self.duck * equal_power(voice.fade));
+                .set_volume(MUSIC_VOLUME * self.level * self.duck * equal_power(voice.fade) * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Music));
         }
         self.voices
             .retain(|v| !(v.target == 0.0 && v.fade <= 0.001));
@@ -305,7 +339,7 @@ impl Music {
         for voice in &self.voices {
             voice
                 .sink
-                .set_volume(MUSIC_VOLUME * self.duck * equal_power(voice.fade));
+                .set_volume(MUSIC_VOLUME * self.level * self.duck * equal_power(voice.fade) * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Music));
         }
     }
 

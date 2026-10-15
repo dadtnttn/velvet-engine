@@ -1,5 +1,6 @@
 //! Shared look of the world maps (the corner minimap and the full map on M):
-//! a rounded, tinted frame with a place badge, a Close button with its Esc
+//! in the Persona manner of the menus: ink panes with cut corners and the place's colour,
+//! the title on a slanted plate with the place badge, a Close button with its Esc
 //! key, side panels, a scale bar, a compass and the player's marker. The
 //! castle, the forest and the village keep their own maps and share this.
 use super::*;
@@ -183,6 +184,78 @@ pub(super) fn compact_rect(width: f32, height: f32) -> Rect {
 // ---------------------------------------------------------------- primitives
 
 /// A rounded rectangle with a vertical gradient.
+/// The place's colour made vivid: the maps' accent (their spine, their tags, the lit row).
+pub(super) fn accent(place: Place) -> u32 {
+    match place {
+        Place::Castle => 0x9a5cff,
+        Place::Forest => 0x46c98a,
+        Place::Village => 0xe8a33c,
+        Place::Brothel => 0xff4f7a,
+        Place::Baths => 0x3fc8c4,
+        Place::Penascal => 0xb48cf0,
+    }
+}
+
+/// Black words on a bright colour, white on a deep one.
+fn ink_on(c: u32) -> u32 {
+    let (r, g, b) = ((c >> 16) & 255, (c >> 8) & 255, c & 255);
+    if r * 299 + g * 587 + b * 114 > 150_000 {
+        0x0e0816
+    } else {
+        0xffffff
+    }
+}
+
+fn hex(c: u32, a: f32) -> [f32; 4] {
+    ui_paint::rgba(c, a)
+}
+
+/// A plate with its corners cut on the diagonal (top left and bottom right), as the pause
+/// menu's panes.
+pub(super) fn cut_plate(vertices: &mut Vec<MapVertex>, r: Rect, cut: f32, color: [f32; 4]) {
+    let c = cut.min(r.w * 0.3).min(r.h * 0.3);
+    let pts = [
+        [r.x + c, r.y],
+        [r.x + r.w, r.y],
+        [r.x + r.w, r.y + r.h - c],
+        [r.x + r.w - c, r.y + r.h],
+        [r.x, r.y + r.h],
+        [r.x, r.y + c],
+    ];
+    push_polygon(vertices, &pts, color);
+    push_outline_fringe(vertices, &pts, color);
+}
+
+/// A slanted plate (a parallelogram leaning `lean` to the right at its top).
+pub(super) fn slant(vertices: &mut Vec<MapVertex>, r: Rect, lean: f32, color: [f32; 4]) {
+    let q = [
+        [r.x + lean, r.y],
+        [r.x + r.w + lean, r.y],
+        [r.x + r.w - lean, r.y + r.h],
+        [r.x - lean, r.y + r.h],
+    ];
+    push_triangle(vertices, [q[0], q[1], q[2]], color);
+    push_triangle(vertices, [q[0], q[2], q[3]], color);
+    push_outline_fringe(vertices, &q, color);
+}
+
+/// A pane in the Persona manner: a hard black shadow, the ink plate with cut corners, the
+/// accent's spine down its left and halftone in its far corner.
+pub(super) fn pane(vertices: &mut Vec<MapVertex>, r: Rect, place: Place, cut: f32) {
+    let a = accent(place);
+    cut_plate(vertices, Rect::new(r.x + 8.0, r.y + 9.0, r.w, r.h), cut, [0.0, 0.0, 0.0, 0.55]);
+    cut_plate(vertices, r, cut, hex(0x0d0814, 0.95));
+    persona::halftone(
+        vertices,
+        Rect::new(r.x + r.w * 0.55, r.y + r.h * 0.6, r.w * 0.45 - 8.0, r.h * 0.4 - 8.0),
+        14.0,
+        2.6,
+        [1.0, 1.0],
+        hex(a, 0.18),
+    );
+    push_rect(vertices, Rect::new(r.x, r.y + cut.min(r.h * 0.3), 5.0, r.h - cut.min(r.h * 0.3)), hex(a, 0.95));
+}
+
 pub(super) fn round_gradient(
     vertices: &mut Vec<MapVertex>,
     rect: Rect,
@@ -229,8 +302,10 @@ pub(super) fn soft_shadow(
 
 /// A rounded pill with a coloured rim.
 pub(super) fn pill(vertices: &mut Vec<MapVertex>, rect: Rect, fill: [f32; 4], rim: [f32; 4]) {
-    push_rounded_rect(vertices, rect, rect.h * 0.5, fill);
-    push_rounded_border(vertices, rect, rect.h * 0.5, 1.4, rim);
+    let lean = (rect.h * 0.22).min(10.0);
+    slant(vertices, Rect::new(rect.x + 5.0, rect.y + 5.0, rect.w, rect.h), lean, [0.0, 0.0, 0.0, 0.55]);
+    slant(vertices, Rect::new(rect.x - 1.4, rect.y - 1.4, rect.w + 2.8, rect.h + 2.8), lean, rim);
+    slant(vertices, rect, lean, fill);
 }
 
 /// A small key cap with a caption after it.
@@ -244,25 +319,9 @@ pub(super) fn key_caption(
     size: f32,
     color: [f32; 4],
 ) -> f32 {
-    let key_w = (label_width(font, key, size * 0.86) + 16.0).max(size * 1.5);
+    let key_w = (label_width(font, key, size * 0.86) + 22.0).max(size * 1.6);
     let cap = Rect::new(x, cy - size * 0.72, key_w, size * 1.44);
-    push_rounded_rect(
-        vertices,
-        Rect::new(cap.x, cap.y + 2.5, cap.w, cap.h),
-        6.0,
-        [0.02, 0.014, 0.03, 0.9],
-    );
-    push_rounded_rect(vertices, cap, 6.0, [0.20, 0.15, 0.24, 0.98]);
-    push_rounded_border(vertices, cap, 6.0, 1.1, [0.86, 0.70, 0.42, 0.85]);
-    push_label_centered(
-        font,
-        vertices,
-        key,
-        cap.x + cap.w * 0.5,
-        cap.y + (cap.h - size * 0.86) * 0.5 - 1.0,
-        size * 0.86,
-        [1.0, 0.88, 0.58, 1.0],
-    );
+    ui_paint::keycap(font, vertices, cap, key, size * 0.86, false, false, 0xffffff, 1.0);
     let text_x = x + key_w + 8.0;
     push_label(
         font,
@@ -307,35 +366,16 @@ pub(super) fn draw_frame(
         return Frame { content };
     }
     let panel = panel_rect(width, height, expanded);
-    let radius = if expanded { 26.0 } else { 18.0 };
+    let a = accent(place);
     if expanded {
         push_rect(
             vertices,
             Rect::new(0.0, 0.0, width, height),
-            [0.004, 0.008, 0.014, 0.74],
+            [0.004, 0.006, 0.012, 0.80],
         );
     }
-    soft_shadow(
-        vertices,
-        panel,
-        radius,
-        if expanded { 22.0 } else { 14.0 },
-        0.9,
-    );
-    round_gradient(vertices, panel, radius, tone.top, tone.bottom);
-    push_rounded_border(vertices, panel, radius, 2.0, tone.rim);
-    let inner = Rect::new(panel.x + 7.0, panel.y + 7.0, panel.w - 14.0, panel.h - 14.0);
-    push_rounded_border(vertices, inner, radius - 6.0, 1.0, tone.rim_soft);
-
+    pane(vertices, panel, place, 30.0);
     let header = if expanded { 92.0 } else { 76.0 };
-    let band = Rect::new(panel.x + 9.0, panel.y + 9.0, panel.w - 18.0, header - 6.0);
-    round_gradient(
-        vertices,
-        band,
-        radius - 9.0,
-        tone.band_top,
-        tone.band_bottom,
-    );
 
     let badge = match place {
         Place::Castle => prompt_icons::Icon::Castle,
@@ -345,70 +385,47 @@ pub(super) fn draw_frame(
         Place::Baths => prompt_icons::Icon::Bath,
         Place::Penascal => prompt_icons::Icon::Crown,
     };
-    let (badge_x, text_x, title_size, subtitle_size, badge_r) = if expanded {
-        (panel.x + 66.0, panel.x + 118.0, 36.0, 17.0, 31.0)
-    } else {
-        // The compositor keeps the menu button over the header's left part.
-        (panel.x + panel.w - 44.0, panel.x + 232.0, 25.0, 14.0, 22.0)
-    };
-    push_prompt_badge(
-        vertices,
-        badge,
-        badge_x,
-        panel.y + 9.0 + (header - 6.0) * 0.5,
-        badge_r,
-        1.0,
-    );
-    push_label_shadowed(
+    // The title on a slanted plate of the accent, the place's badge at its start, the
+    // subtitle on a small bone tag under it.
+    let title_size = if expanded { 40.0 } else { 26.0 };
+    let title_w = ui_paint::text_width(font, ui_paint::Face::Display, title, title_size);
+    let plate = Rect::new(panel.x + 34.0, panel.y + 18.0, title_w + 128.0, header - 26.0);
+    slant(vertices, Rect::new(plate.x + 7.0, plate.y + 7.0, plate.w, plate.h), 16.0, [0.0, 0.0, 0.0, 0.55]);
+    slant(vertices, plate, 16.0, hex(a, 1.0));
+    push_prompt_badge(vertices, badge, plate.x + 44.0, plate.y + plate.h * 0.5, 24.0, 1.0);
+    let ink = ui_paint::rgba(0x0e0816, 1.0);
+    ui_paint::text(
         font,
         vertices,
+        ui_paint::Face::Display,
         title,
-        text_x,
-        panel.y + if expanded { 17.0 } else { 12.0 },
+        plate.x + 86.0,
+        plate.y + (plate.h - title_size) * 0.5 - title_size * 0.1,
         title_size,
-        tone.title,
+        ink,
     );
-    push_label(
+    let sub_size = 15.0;
+    let sub_w = ui_paint::text_width(font, ui_paint::Face::Ui, subtitle, sub_size) + 30.0;
+    let tag = Rect::new(plate.x + plate.w + 26.0, plate.y + plate.h * 0.5 - 14.0, sub_w, 28.0);
+    slant(vertices, tag, 8.0, hex(0xf6eef3, 0.95));
+    ui_paint::text(
         font,
         vertices,
+        ui_paint::Face::Ui,
         subtitle,
-        text_x + 2.0,
-        panel.y + if expanded { 60.0 } else { 44.0 },
-        subtitle_size,
-        tone.subtitle,
+        tag.x + 15.0,
+        tag.y + 5.0,
+        sub_size,
+        ink,
     );
-    // A rule under the header with a diamond in the middle.
-    let rule_y = panel.y + header + 8.0;
-    push_segment(
+    // A rule of the accent under the header.
+    push_rect(
         vertices,
-        panel.x + 26.0,
-        rule_y,
-        panel.x + panel.w - 26.0,
-        rule_y,
-        1.4,
-        with_alpha(tone.rim, 0.62),
+        Rect::new(panel.x + 30.0, panel.y + header + 6.0, panel.w - 60.0, 2.0),
+        hex(a, 0.7),
     );
-    let cx = panel.x + panel.w * 0.5;
-    for (dx, r) in [(0.0, 5.0), (-16.0, 3.0), (16.0, 3.0)] {
-        push_triangle(
-            vertices,
-            [
-                [cx + dx - r, rule_y],
-                [cx + dx, rule_y - r],
-                [cx + dx + r, rule_y],
-            ],
-            tone.rim,
-        );
-        push_triangle(
-            vertices,
-            [
-                [cx + dx - r, rule_y],
-                [cx + dx + r, rule_y],
-                [cx + dx, rule_y + r],
-            ],
-            tone.rim,
-        );
-    }
+    let radius = 18.0;
+    let _ = radius;
 
     if expanded {
         let close = close_button_rect(panel);
@@ -416,16 +433,8 @@ pub(super) fn draw_frame(
         pill(
             vertices,
             close,
-            if hot {
-                [0.30, 0.13, 0.15, 0.99]
-            } else {
-                [0.10, 0.06, 0.09, 0.96]
-            },
-            if hot {
-                [1.0, 0.78, 0.42, 1.0]
-            } else {
-                with_alpha(tone.rim, 0.9)
-            },
+            if hot { hex(a, 1.0) } else { hex(0x120c18, 0.97) },
+            if hot { [1.0, 1.0, 1.0, 1.0] } else { hex(0xffffff, 0.35) },
         );
         let text = "Cerrar";
         let key_w = label_width(font, "ESC", 17.0) + 16.0;
@@ -491,23 +500,7 @@ pub(super) fn draw_frame(
 
 /// A side panel of the full map: rounded, tinted, with a soft rim.
 pub(super) fn side_panel(vertices: &mut Vec<MapVertex>, rect: Rect, place: Place) {
-    let tone = tone(place);
-    soft_shadow(vertices, rect, 18.0, 10.0, 0.6);
-    round_gradient(
-        vertices,
-        rect,
-        18.0,
-        lerp4(tone.top, tone.band_top, 0.5),
-        tone.bottom,
-    );
-    push_rounded_border(vertices, rect, 18.0, 1.5, with_alpha(tone.rim, 0.82));
-    push_rounded_border(
-        vertices,
-        Rect::new(rect.x + 5.0, rect.y + 5.0, rect.w - 10.0, rect.h - 10.0),
-        14.0,
-        1.0,
-        tone.rim_soft,
-    );
+    pane(vertices, rect, place, 18.0);
 }
 
 /// A side panel's title with an icon badge and a rule.
@@ -521,33 +514,31 @@ pub(super) fn side_heading(
     subtitle: &str,
 ) {
     let tone = tone(place);
+    let a = accent(place);
     push_prompt_badge(vertices, icon, panel.x + 40.0, panel.y + 42.0, 22.0, 1.0);
-    push_label_shadowed(
+    ui_paint::text_shadow(
         font,
         vertices,
+        ui_paint::Face::Display,
         title,
         panel.x + 74.0,
-        panel.y + 15.0,
-        23.0,
-        tone.title,
+        panel.y + 14.0,
+        25.0,
+        hex(0xffffff, 1.0),
     );
     push_label(
         font,
         vertices,
         subtitle,
         panel.x + 75.0,
-        panel.y + 47.0,
+        panel.y + 49.0,
         13.5,
         tone.subtitle,
     );
-    push_segment(
+    push_rect(
         vertices,
-        panel.x + 18.0,
-        panel.y + 80.0,
-        panel.x + panel.w - 18.0,
-        panel.y + 80.0,
-        1.2,
-        with_alpha(tone.rim, 0.6),
+        Rect::new(panel.x + 18.0, panel.y + 79.0, panel.w - 36.0, 2.0),
+        hex(a, 0.65),
     );
 }
 
@@ -565,18 +556,14 @@ pub(super) fn place_row(
     here: bool,
 ) {
     let tone = tone(place);
+    let a = accent(place);
+    let lean = 8.0;
+    slant(vertices, Rect::new(rect.x + 5.0, rect.y + 5.0, rect.w, rect.h), lean, [0.0, 0.0, 0.0, 0.45]);
     if here {
-        round_gradient(
-            vertices,
-            rect,
-            14.0,
-            [0.20, 0.13, 0.08, 0.98],
-            [0.12, 0.08, 0.06, 0.98],
-        );
-        push_rounded_border(vertices, rect, 14.0, 1.6, [1.0, 0.80, 0.44, 0.96]);
+        slant(vertices, rect, lean, hex(a, 0.95));
     } else {
-        push_rounded_rect(vertices, rect, 14.0, [0.0, 0.0, 0.0, 0.26]);
-        push_rounded_border(vertices, rect, 14.0, 1.0, with_alpha(tone.rim_soft, 0.5));
+        slant(vertices, rect, lean, hex(0x1a1222, 0.92));
+        push_rect(vertices, Rect::new(rect.x + 2.0, rect.y + 4.0, 3.0, rect.h - 8.0), hex(a, 0.7));
     }
     push_prompt_badge(
         vertices,
@@ -595,7 +582,7 @@ pub(super) fn place_row(
         rect.y + rect.h * 0.5 - size * 1.05,
         size,
         if here {
-            [1.0, 0.95, 0.80, 1.0]
+            ui_paint::rgba(ink_on(a), 1.0)
         } else {
             tone.ink
         },
@@ -609,7 +596,7 @@ pub(super) fn place_row(
         rect.y + rect.h * 0.5 + 3.0,
         note_size,
         if here {
-            [1.0, 0.82, 0.48, 1.0]
+            ui_paint::rgba(ink_on(a), 0.8)
         } else {
             tone.soft
         },
@@ -867,21 +854,57 @@ pub(super) fn landmark(
     expanded: bool,
     label_above: bool,
 ) {
-    let tone = tone(place);
     let (x, y) = map_point(world.0, world.1, bounds, map);
     let radius = if expanded { 25.0 } else { 17.0 };
     push_prompt_badge(vertices, icon, x, y, radius, 1.0);
-    let size = if expanded { 18.0 } else { 14.0 };
-    let width = label_width(font, label, size) + 18.0;
-    let plate_y = if label_above {
-        y - radius - size - 14.0
+    let size = if expanded { 26.0 } else { 16.0 };
+    let h = size * 1.45;
+    let cy = if label_above {
+        y - radius - h * 0.5 - 8.0
     } else {
-        y + radius + 6.0
+        y + radius + h * 0.5 + 6.0
     };
-    let plate = Rect::new(x - width * 0.5, plate_y, width, size + 8.0);
-    push_rounded_rect(vertices, plate, 8.0, [0.02, 0.02, 0.03, 0.82]);
-    push_rounded_border(vertices, plate, 8.0, 1.0, with_alpha(tone.rim, 0.75));
-    push_label_centered(font, vertices, label, x, plate.y + 3.5, size, tone.ink);
+    name_tag(font, vertices, map, x, cy, label, size, place);
+}
+
+/// A place's name on the map in the Persona manner: a slanted ink plate with a hard shadow and a
+/// bone rim, a wedge of the place's colour at its start and the name in the display face,
+/// centred on (`cx`, `cy`) and kept inside `map`.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn name_tag(
+    font: &FontAtlas,
+    vertices: &mut Vec<MapVertex>,
+    map: Rect,
+    cx: f32,
+    cy: f32,
+    label: &str,
+    size: f32,
+    place: Place,
+) -> Rect {
+    let a = accent(place);
+    let face = ui_paint::Face::Display;
+    let text_w = ui_paint::text_width(font, face, label, size);
+    let h = size * 1.45;
+    let lean = h * 0.22;
+    let w = text_w + size * 1.6;
+    let cx = cx.clamp(map.x + w * 0.5 + lean + 4.0, map.x + map.w - w * 0.5 - lean - 4.0);
+    let cy = cy.clamp(map.y + h * 0.5 + 4.0, map.y + map.h - h * 0.5 - 4.0);
+    let r = Rect::new(cx - w * 0.5, cy - h * 0.5, w, h);
+    slant(vertices, Rect::new(r.x + 4.0, r.y + 4.0, r.w, r.h), lean, [0.0, 0.0, 0.0, 0.6]);
+    slant(vertices, Rect::new(r.x - 1.2, r.y - 1.2, r.w + 2.4, r.h + 2.4), lean, hex(0xf6eef3, 0.9));
+    slant(vertices, r, lean, hex(0x0d0814, 0.96));
+    slant(vertices, Rect::new(r.x, r.y, size * 0.45, r.h), lean, hex(a, 1.0));
+    ui_paint::text(
+        font,
+        vertices,
+        face,
+        label,
+        r.x + size * 0.85,
+        cy - size * 0.56,
+        size,
+        hex(0xffffff, 1.0),
+    );
+    r
 }
 
 #[cfg(test)]

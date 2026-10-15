@@ -54,44 +54,17 @@ impl Clip {
     }
 }
 
-/// Her gesture for a line: the guion's mood, else what the words sound like.
+/// Her gesture for a line: the guion's mood, else what the words sound like (the same reading as
+/// the world's Chiquita: `mascot::line_cue`).
 pub(crate) fn gesture(mood: Option<&str>, text: &str) -> Clip {
-    if let Some(m) = mood {
-        // The guion hands moods over as slugs (`de_espaldas`, `reganona`).
-        let m = crate::exploration3d::guion::slug(m);
-        let has = |words: &[&str]| words.iter().any(|w| m.contains(w));
-        return if has(&["enfad", "enoj", "regan", "furios", "mandon", "brava"]) {
-            // A hand on her hip, wagging a finger.
-            Clip::Scold
-        } else if has(&[
-            "celos", "enfurrun", "molest", "harta", "seca", "sarcas", "altiv", "orgullos", "digna",
-        ]) {
-            // Arms crossed, chin up, tapping her foot.
-            Clip::Jealous
-        } else if has(&[
-            "avergon", "sonroj", "colorad", "nervios", "apurad", "incomod",
-        ]) {
-            // Hands on her cheeks, shaking her head.
-            Clip::Flustered
-        } else if has(&[
-            "content", "animad", "feliz", "triunf", "burlon", "ufan", "alegr",
-        ]) {
-            // Jumping, arms up.
-            Clip::Cheer
-        } else if has(&["espaldas", "ofendid", "dolid"]) {
-            // Her back to the scene, peeking.
-            Clip::Away
-        } else {
-            Clip::Talk
-        };
-    }
-    let t = text.trim_start_matches(['—', ' ', '«']);
-    if t.starts_with('¡') || t.contains('!') {
-        Clip::Scold
-    } else if t.starts_with('…') {
-        Clip::Flustered
-    } else {
-        Clip::Talk
+    use crate::exploration3d::mascot::{line_cue, Cue};
+    match line_cue(mood, text) {
+        Cue::Scold => Clip::Scold,
+        Cue::Jealous => Clip::Jealous,
+        Cue::Flustered => Clip::Flustered,
+        Cue::Cheer => Clip::Cheer,
+        Cue::Away => Clip::Away,
+        _ => Clip::Talk,
     }
 }
 

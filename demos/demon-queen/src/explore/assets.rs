@@ -133,6 +133,7 @@ pub(super) fn upload_texture_pair(
         texture_cache.insert(cache_key, handle);
         handle
     };
+    super::sign_textures::note_upload(cache_key.2, normal_data.is_some(), handle);
     Ok(Some(handle))
 }
 
@@ -165,6 +166,9 @@ pub(super) struct StaticAsset {
     pub(super) parts: Vec<StaticMeshPart>,
     /// glTF mesh name of each part, so authored pieces can be left out.
     pub(super) part_names: Vec<String>,
+    /// Each part's mesh's own box (its vertices' least and greatest corner): to stand a loose
+    /// piece on the ground whichever way it lies.
+    pub(super) part_bounds: Vec<([f32; 3], [f32; 3])>,
 }
 
 /// Every model file of a zone's folder.
@@ -189,6 +193,7 @@ pub(super) fn upload_static_asset(
     let model =
         prefetch::load(path).with_context(|| format!("load room asset: {}", path.display()))?;
     let mut parts = Vec::with_capacity(model.meshes.len());
+    let mut part_bounds = Vec::with_capacity(model.meshes.len());
     let white_texture = TextureData3D {
         width: 1,
         height: 1,
@@ -211,6 +216,18 @@ pub(super) fn upload_static_asset(
             texture_cache,
             &white_texture,
         )?;
+        let mut lo = [f32::MAX; 3];
+        let mut hi = [f32::MIN; 3];
+        for v in &mesh.vertices {
+            for k in 0..3 {
+                lo[k] = lo[k].min(v.position[k]);
+                hi[k] = hi[k].max(v.position[k]);
+            }
+        }
+        if mesh.vertices.is_empty() {
+            (lo, hi) = ([0.0; 3], [0.0; 3]);
+        }
+        part_bounds.push((lo, hi));
         parts.push(StaticMeshPart {
             mesh: renderer.upload_mesh(device, mesh)?,
             local_transform,
@@ -221,6 +238,7 @@ pub(super) fn upload_static_asset(
     Ok(StaticAsset {
         parts,
         part_names: model.mesh_names.clone(),
+        part_bounds,
     })
 }
 

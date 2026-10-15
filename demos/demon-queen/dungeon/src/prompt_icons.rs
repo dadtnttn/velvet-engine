@@ -119,6 +119,8 @@ pub struct Prompt {
     pub detail: Option<String>,
     /// False when F does nothing here yet (a sealed threshold): no key shown.
     pub keyed: bool,
+    /// A second thing to do here, on its own key: (key, verb).
+    pub second: Option<(String, String)>,
 }
 
 impl Prompt {
@@ -128,7 +130,14 @@ impl Prompt {
             verb: verb.into(),
             detail: None,
             keyed: true,
+            second: None,
         }
+    }
+
+    /// A second action beside the first, on its own key.
+    pub fn also(mut self, key: impl Into<String>, verb: impl Into<String>) -> Self {
+        self.second = Some((key.into(), verb.into()));
+        self
     }
 
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
@@ -145,9 +154,13 @@ impl Prompt {
     /// Plain text form, for logs, tests and the window title.
     pub fn text(&self) -> String {
         let key = if self.keyed { "F  " } else { "" };
-        match &self.detail {
+        let main = match &self.detail {
             Some(detail) => format!("{key}{} · {detail}", self.verb),
             None => format!("{key}{}", self.verb),
+        };
+        match &self.second {
+            Some((k, verb)) => format!("{main}   {k}  {verb}"),
+            None => main,
         }
     }
 }

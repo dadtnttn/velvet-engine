@@ -76,12 +76,16 @@ impl App {
 
     /// Characters of the line on show that are out by now (it types itself out).
     pub(super) fn talk_shown(&self, text: &str) -> usize {
-        let chars = ((self.elapsed - self.talk_line_at).max(0.0) * 52.0) as usize;
+        let chars = ((self.elapsed - self.talk_line_at).max(0.0) * crate::exploration3d::prefs::text_rate(52.0)) as usize;
         chars.min(text.chars().count())
     }
 
     /// F: the whole line at once, else the next; or take the chosen option.
     pub(super) fn talk_confirm(&mut self) {
+        // A beat of the stage playing (or an item shown off, put away now) takes the key.
+        if self.stage_confirm() {
+            return;
+        }
         let lib = guion::library();
         let shown = self.talk.as_ref().map(|t| t.shown(lib, &self.story));
         match shown {
@@ -119,6 +123,9 @@ impl App {
     }
 
     pub(super) fn talk_pick(&mut self, index: usize) {
+        if self.stage_waiting() {
+            return;
+        }
         let lib = guion::library();
         if let Some(talk) = self.talk.as_mut() {
             if talk.choose(lib, &mut self.story, index) {
@@ -137,6 +144,21 @@ impl App {
     pub(super) fn settle_talk(&mut self) {
         let lib = guion::library();
         self.stage_take();
+        // On the stage she says her lines herself, up in her corner, looking as they say.
+        if self.stage_up() {
+            if let Some(guion::Shown::Line { who, text, kind: guion::LineKind::Dialogue, mood, .. }) =
+                self.talk.as_ref().map(|t| t.shown(lib, &self.story))
+            {
+                if who == "chiquita" {
+                    // After the beat on show, if one plays (an item shown off, a reveal).
+                    if self.stage_waiting() {
+                        self.stage_cue_later();
+                    } else {
+                        self.mascot_say(mascot::line_cue(mood.as_deref(), &text), &text, 0.0);
+                    }
+                }
+            }
+        }
         for _ in 0..32 {
             // On the stage she speaks in the box like everyone else.
             if self.stage_up() {
@@ -188,23 +210,10 @@ impl App {
             self.stage = None;
             self.persist_3d_state(true);
         }
-        // The springs' welcome gives her the house's bikini (`@var termas_bikini`): she wears it
-        // from then on (the wardrobe changes it back).
+        // The springs' welcome gives her the house's bikini (`@var termas_bikini`): she puts it
+        // on there and then, and at the springs from then on (her clothes wait for the way out).
         if self.story.get("termas_bikini") > 0 && self.achievements.grant_outfit("bikini") {
-            if let Some(o) = achievements::catalog()
-                .outfits
-                .iter()
-                .find(|o| o.id == "bikini")
-            {
-                if self
-                    .achievements
-                    .outfit_available(achievements::catalog(), o.slot)
-                    && o.slot < wardrobe_outfit_count()
-                {
-                    self.outfit = o.slot;
-                    self.wardrobe_selection = o.slot;
-                }
-            }
+            self.change_into_bikini();
             self.persist_3d_state(true);
         }
         // The bed's guion says «Descansar» with `@var dormir`.
@@ -265,7 +274,8 @@ impl App {
         // hypnosis art), `gorou_real` the royal dress's, `gorou_bikini` the bikini's; a mood one of
         // them lacks falls back to that set's normal, a set that is not there to `gorou`.
         let dressed = match self.outfit {
-            0 => Some("gorou_real"),
+            // The cloak is worn over the royal dress.
+            0 | 3 => Some("gorou_real"),
             2 => Some("gorou_bikini"),
             _ => None,
         };

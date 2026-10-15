@@ -104,7 +104,20 @@ pub(crate) fn paint_quick_button(
     } else {
         INK
     };
-    let (main_size, key_size, gap) = (17.0, 14.0, 7);
+    let (key_size, gap) = (14.0, 7);
+    // The action's word shrinks when a language's is too long for the button.
+    let room = w as i32 - 26
+        - if key.is_empty() {
+            0
+        } else {
+            fonts.stage_width(StageFace::RoundSoft, key, key_size) + gap
+        };
+    let full = fonts.stage_width(StageFace::Round, main, 17.0).max(1);
+    let main_size = if full > room {
+        (17.0 * room as f32 / full as f32).max(11.0)
+    } else {
+        17.0
+    };
     let main_w = fonts.stage_width(StageFace::Round, main, main_size);
     let key_w = if key.is_empty() {
         0
@@ -562,13 +575,18 @@ impl App {
                 self.vn_card_animating = true;
             }
         }
-        // The choices: slanted cards with a big number; the one in focus white with a red shadow.
+        // The choices: slanted cards with a big number; the one in focus (one only: the pointer's
+        // when it is over one, else the keys') white with a red shadow and the red pointer at it.
         if self.reveal_complete && !is_inline_continue(view) && !view.choices.is_empty() {
             let choices = story_choices_layout(&self.styles, view.choices.len(), dialogue.y);
             let hovered = (0..view.choices.len()).find(|&i| {
                 view.choices[i].enabled && choices.contains(i, self.mouse.0, self.mouse.1)
             });
             self.choice_hover_animating = false;
+            if let Some(h) = hovered {
+                self.choice_sel = h;
+            }
+            let focus = self.choice_sel;
             let canvas = &mut self.canvas;
             canvas.vertical_scrim(0, choices.y - 160, 1920, 160, 0x0a0410, 0.0, 0.45);
             for (i, choice) in view.choices.iter().enumerate() {
@@ -578,12 +596,15 @@ impl App {
                     choices.width as f32 - 120.0,
                     choices.height as f32 - 16.0,
                 );
-                let sel = choice.enabled && (self.choice_sel == i || hovered == Some(i));
+                let sel = choice.enabled && focus == i;
                 let c = skewed(x, y, w, h, -10.0);
                 if sel {
                     card(canvas, c, RED, 14.0, INK, INK);
                 } else {
                     card(canvas, c, 0xb3ff4f9a, 10.0, BOX, INK);
+                }
+                if sel {
+                    crate::title_menu::pointer(canvas, (x - 4.0, y + h * 0.5), 22.0);
                 }
                 let num = format!("{}", i + 1);
                 canvas.stage_text(

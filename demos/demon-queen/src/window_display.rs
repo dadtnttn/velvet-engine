@@ -6,6 +6,9 @@ use std::sync::Arc;
 use velvet_render::SoftwareViewport;
 use winit::window::Window;
 
+/// A canvas's pixels (0xAARRGGBB) and its size in them.
+pub type CanvasPixels<'a> = (&'a [u32], (u32, u32));
+
 pub const WIDTH: u32 = 1920;
 pub const HEIGHT: u32 = 1080;
 // The world menu sits inside the minimap header. Keeping it in the shared
@@ -76,14 +79,26 @@ impl WindowDisplay {
         let surface = instance
             .create_surface(window.clone())
             .context("game window surface")?;
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .context("game graphics adapter")?;
+        // QA: `VELVET_ADAPTER=intel` plays on the graphics card whose name holds that (to measure
+        // a weaker one on a machine with two).
+        let wanted = std::env::var("VELVET_ADAPTER").ok().map(|name| name.to_lowercase());
+        let chosen = wanted.and_then(|name| {
+            instance
+                .enumerate_adapters(wgpu::Backends::all())
+                .into_iter()
+                .find(|a| a.get_info().name.to_lowercase().contains(&name) && a.is_surface_supported(&surface))
+        });
+        let adapter = match chosen {
+            Some(adapter) => adapter,
+            None => instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    compatible_surface: Some(&surface),
+                    force_fallback_adapter: false,
+                })
+                .await
+                .context("game graphics adapter")?,
+        };
         eprintln!("[game] graphics adapter: {:?}", adapter.get_info());
         let (device, queue) = adapter
             .request_device(
@@ -312,17 +327,38 @@ impl WindowDisplay {
         size.width == 0 || size.height == 0 || self.window.is_minimized() == Some(true)
     }
 
-    pub fn present_canvas(&mut self, pixels: &[u32], opacity: f32) -> Result<bool> {
-        anyhow::ensure!(
-            pixels.len() == (WIDTH * HEIGHT) as usize,
-            "canvas must be native 1080p"
-        );
-        // A minimised window presents nothing, so the canvas is not written either: each write
-        // takes an 8 MB staging copy that only a submission frees, and the caller asks again at
-        // once (it piled up gigabytes a minute while the game sat minimised on a VN screen).
-        if self.is_hidden() {
-            return Ok(false);
+    /// The canvas texture at `w`×`h` (made again when the canvas's own pixels change size).
+    fn ensure_canvas(&mut self, w: u32, h: u32) {
+        let size = self.canvas.size();
+        if (size.width, size.height) == (w, h) {
+            return;
         }
+        self.canvas = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("vn-canvas"),
+            size: wgpu::Extent3d {
+                width: w.max(1),
+                height: h.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            // Canvas u32s are 0xAARRGGBB; little-endian bytes are BGRA.
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.canvas_view = self.canvas.create_view(&Default::default());
+    }
+
+    /// The canvas's pixels into its texture.
+    fn upload_canvas(&mut self, canvas: CanvasPixels) -> Result<()> {
+        let (pixels, (w, h)) = canvas;
+        anyhow::ensure!(
+            pixels.len() == (w * h) as usize,
+            "canvas pixels do not match its size"
+        );
+        self.ensure_canvas(w, h);
         self.gpu.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.canvas,
@@ -333,61 +369,50 @@ impl WindowDisplay {
             bytemuck::cast_slice(pixels),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(WIDTH * 4),
-                rows_per_image: Some(HEIGHT),
+                bytes_per_row: Some(w * 4),
+                rows_per_image: Some(h),
             },
             wgpu::Extent3d {
-                width: WIDTH,
-                height: HEIGHT,
+                width: w,
+                height: h,
                 depth_or_array_layers: 1,
             },
         );
+        Ok(())
+    }
+
+    pub fn present_canvas(&mut self, canvas: CanvasPixels, opacity: f32) -> Result<bool> {
+        // A minimised window presents nothing, so the canvas is not written either: each write
+        // takes a staging copy that only a submission frees, and the caller asks again at
+        // once (it piled up gigabytes a minute while the game sat minimised on a VN screen).
+        if self.is_hidden() {
+            return Ok(false);
+        }
+        self.upload_canvas(canvas)?;
         let view = self.canvas_view.clone();
         // Canvas uploads use a temporary wgpu staging allocation.  Drain it
         // before returning; title/VN frames can be seconds apart and otherwise
-        // each 8 MB upload remains resident until another frame is submitted.
+        // each upload remains resident until another frame is submitted.
         self.present_final(&view, opacity, false, true, None)
     }
 
     /// The canvas with a picture laid over it (premultiplied by its own transparency): Chiquita
-    /// alive over the visual novel. `pixels`: a new canvas, or `None` to show the last one again
+    /// alive over the visual novel. `canvas`: a new canvas, or `None` to show the last one again
     /// (only she has moved).
     pub fn present_canvas_over(
         &mut self,
-        pixels: Option<&[u32]>,
+        canvas: Option<CanvasPixels>,
         opacity: f32,
         over: Option<(&wgpu::TextureView, f32)>,
     ) -> Result<bool> {
         if self.is_hidden() {
             return Ok(false);
         }
-        if let Some(pixels) = pixels {
-            anyhow::ensure!(
-                pixels.len() == (WIDTH * HEIGHT) as usize,
-                "canvas must be native 1080p"
-            );
-            self.gpu.queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &self.canvas,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                bytemuck::cast_slice(pixels),
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(WIDTH * 4),
-                    rows_per_image: Some(HEIGHT),
-                },
-                wgpu::Extent3d {
-                    width: WIDTH,
-                    height: HEIGHT,
-                    depth_or_array_layers: 1,
-                },
-            );
+        if let Some(canvas) = canvas {
+            self.upload_canvas(canvas)?;
         }
         let view = self.canvas_view.clone();
-        self.present_final(&view, opacity, false, pixels.is_some(), over)
+        self.present_final(&view, opacity, false, canvas.is_some(), over)
     }
 
     pub fn present_texture(&mut self, source: &wgpu::TextureView, opacity: f32) -> Result<bool> {
@@ -599,8 +624,10 @@ impl WindowDisplay {
                     0.0,
                     1.0,
                 );
+                pass.set_pipeline(&self.over_pipeline);
                 pass.set_bind_group(0, bindings, &[]);
                 pass.draw(0..3, 0..1);
+                pass.set_pipeline(&self.pipeline);
             }
         }
         self.gpu.queue.submit(Some(encoder.finish()));
@@ -617,6 +644,43 @@ impl WindowDisplay {
         };
         let _ = self.gpu.device.poll(maintenance);
         self.presented_frames += 1;
+        frame_log();
         Ok(true)
     }
+}
+
+/// QA: `VELVET_FRAMELOG=<file>` writes when each frame was shown (ms since the first, and since
+/// the one before), to find the hitches a player feels.
+type FrameLog = Option<(std::io::BufWriter<std::fs::File>, std::time::Instant, f64)>;
+static FRAME_LOG: std::sync::Mutex<FrameLog> = std::sync::Mutex::new(None);
+
+fn frame_log_open() -> Option<std::sync::MutexGuard<'static, FrameLog>> {
+    static PATH: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    let path = PATH.get_or_init(|| std::env::var("VELVET_FRAMELOG").ok()).as_ref()?;
+    let mut log = FRAME_LOG.lock().unwrap();
+    if log.is_none() {
+        let file = std::fs::File::create(path).ok()?;
+        *log = Some((std::io::BufWriter::new(file), std::time::Instant::now(), 0.0));
+    }
+    Some(log)
+}
+
+fn frame_log() {
+    use std::io::Write;
+    let Some(mut log) = frame_log_open() else { return };
+    let (out, start, last) = log.as_mut().unwrap();
+    let now = start.elapsed().as_secs_f64() * 1000.0;
+    let _ = writeln!(out, "{now:.2} {:.2}", now - *last);
+    *last = now;
+    let _ = out.flush();
+}
+
+/// QA: a note in the frame log (what took long between two frames), when it is on.
+pub(crate) fn frame_note(text: &str) {
+    use std::io::Write;
+    let Some(mut log) = frame_log_open() else { return };
+    let (out, start, _) = log.as_mut().unwrap();
+    let now = start.elapsed().as_secs_f64() * 1000.0;
+    let _ = writeln!(out, "# {now:.2} {text}");
+    let _ = out.flush();
 }

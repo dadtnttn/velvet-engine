@@ -76,16 +76,18 @@ impl RenderState {
             self.renderer.replace_finish(village::finish()),
             self.renderer.replace_toon_style(village::toon_style()),
         );
+        let (scene_view, scene_size) = self.scene_target();
         self.renderer.render_with_environment_and_lights(
             &self.device,
             &self.queue,
-            &self.target_view,
-            (WINDOW_WIDTH, WINDOW_HEIGHT),
+            &scene_view,
+            scene_size,
             camera,
             mood,
             &lights,
             &draws,
         );
+        self.finish_scene(&scene_view, scene_size);
         self.renderer.replace_finish(saved.0);
         self.renderer.replace_toon_style(saved.1);
         let bubbles = queen_thought_bubble(
@@ -169,6 +171,7 @@ impl App {
         self.map_open = false;
         self.footprints.clear();
         self.baths = Some(inside);
+        self.change_into_bikini();
         self.queen_thought = Some(("El vapor huele a azufre y a yuzu.", self.elapsed + 4.0));
         self.clear_input();
         eprintln!("[3d] entered the baths");
@@ -188,6 +191,8 @@ impl App {
         self.camera_focus = self.player;
         self.iso.distance = ISO.max_distance;
         self.clear_input();
+        // Her own clothes back (out in the bikini too soon, Chiquita will not have it).
+        self.left_baths_in_bikini();
         eprintln!("[3d] left the baths");
     }
 

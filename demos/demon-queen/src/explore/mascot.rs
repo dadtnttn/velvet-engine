@@ -14,7 +14,7 @@ use super::*;
 
 /// What she is asked to do: by what she says, or by what happens.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Cue {
+pub(crate) enum Cue {
     Talk,
     Jealous,
     /// She turns her back on the scene ("me voy a mirar la pared"), peeking now and then.
@@ -124,6 +124,44 @@ pub(super) const DAZED_SECS: f32 = 3.4;
 const CORNER: ([f32; 2], f32) = ([1790.0, 1078.0], 290.0);
 /// Beside the Queen's bed menu, when she is the one being teased.
 const STAGE: ([f32; 2], f32) = ([1690.0, 612.0], 430.0);
+/// On a guion's stage, saying her line herself: up in the corner, as big as in the visual novel
+/// (her bubble hangs beside her head: `stage_overlay::draw_box`).
+const STAGE_CORNER: ([f32; 2], f32) = ([1738.0, 1082.0], 520.0);
+
+/// How she looks saying a line: the guion's mood (`**Chiquita (enfadada):**`, handed over as a
+/// slug), else what the words sound like. The visual novel's Chiquita reads it too.
+pub(crate) fn line_cue(mood: Option<&str>, text: &str) -> Cue {
+    if let Some(m) = mood {
+        let m = guion::slug(m);
+        let has = |words: &[&str]| words.iter().any(|w| m.contains(w));
+        return if has(&["enfad", "enoj", "regan", "furios", "mandon", "brava"]) {
+            // A hand on her hip, wagging a finger.
+            Cue::Scold
+        } else if has(&["celos", "enfurrun", "molest", "harta", "seca", "sarcas", "altiv", "orgullos", "digna"]) {
+            // Arms crossed, chin up, tapping her foot.
+            Cue::Jealous
+        } else if has(&["avergon", "sonroj", "colorad", "nervios", "apurad", "incomod"]) {
+            // Hands on her cheeks, shaking her head.
+            Cue::Flustered
+        } else if has(&["content", "animad", "feliz", "triunf", "burlon", "ufan", "alegr"]) {
+            // Jumping, arms up.
+            Cue::Cheer
+        } else if has(&["espaldas", "ofendid", "dolid"]) {
+            // Her back to the scene, peeking.
+            Cue::Away
+        } else {
+            Cue::Talk
+        };
+    }
+    let t = text.trim_start_matches(['—', ' ', '«']);
+    if t.starts_with('¡') || t.contains('!') {
+        Cue::Scold
+    } else if t.starts_with('…') {
+        Cue::Flustered
+    } else {
+        Cue::Talk
+    }
+}
 /// In front of a scene's picture.
 const CENTER: ([f32; 2], f32) = ([960.0, 800.0], 620.0);
 /// Where she lands on the glass when she splats against it, and how big she is there.
@@ -627,6 +665,9 @@ impl App {
     pub(super) fn tick_mascot(&mut self, dt: f32) {
         let now = self.elapsed;
         let in_scene = self.bed_scene_open();
+        // On a guion's stage she is up only while she says her own line (the box is the others').
+        let on_stage = self.stage_up();
+        let stage_line = on_stage && self.stage_chiquita_speaking();
         let black = self.scene_black();
         let teased = self
             .alcove
@@ -701,12 +742,16 @@ impl App {
         }
         // Up or down: she springs up into view and ducks back down.
         let wanted = !map
-            && (in_scene
-                || in_bed
-                || m.gag.is_some()
-                || now - m.last_word < 7.0
-                || m.held.is_some()
-                || m.fly.is_some());
+            && if on_stage {
+                stage_line || m.gag.is_some() || m.held.is_some() || m.fly.is_some()
+            } else {
+                in_scene
+                    || in_bed
+                    || m.gag.is_some()
+                    || now - m.last_word < 7.0
+                    || m.held.is_some()
+                    || m.fly.is_some()
+            };
         if wanted && !m.rising {
             m.rising = true;
             if m.out <= 0.0 {
@@ -721,8 +766,15 @@ impl App {
             m.out = (m.out + rate).clamp(0.0, 1.0);
         }
         // Where she stands (where she was put, while her place is the same), eased there.
-        let (mut spot, tall) = if teased { STAGE } else { CORNER };
+        let (mut spot, tall) = if stage_line {
+            STAGE_CORNER
+        } else if teased {
+            STAGE
+        } else {
+            CORNER
+        };
         match m.placed {
+            _ if stage_line => {}
             Some((at, c)) if c == ctx => spot = at,
             Some(_) => m.placed = None,
             None => {}

@@ -138,7 +138,7 @@ impl Loader {
     }
 
     pub fn kicker(&self) -> String {
-        format!("Pantalla {} / {}", self.index + 1, self.scenes.len())
+        format!("Pantalla {} de {}", self.index + 1, self.scenes.len())
     }
     pub fn title(&self) -> &'static str {
         self.scenes[self.index].title()
