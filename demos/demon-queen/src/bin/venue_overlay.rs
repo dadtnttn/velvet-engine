@@ -666,7 +666,9 @@ fn card(
         rgba(if can_pay { GOLD_HI } else { 0xe0566b }, 1.0),
     );
     y += 50.0 * s;
-    for line in e.summary.lines().take(2) {
+    // Translated whole (the catalogs hold both lines as one), then split.
+    let summary = demon_queen_dungeon::i18n::tr(&e.summary);
+    for line in summary.lines().take(2) {
         text_shadow(
             font,
             v,

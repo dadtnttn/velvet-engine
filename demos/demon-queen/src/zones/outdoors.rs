@@ -215,21 +215,24 @@ impl RenderState {
         if let Some(guide) = frame.mission {
             self.mission_draws(guide, elapsed, &mut draws);
         }
-        let view = &self.target_view;
+        let (scene_view, scene_size) = self.scene_target();
         self.renderer.render_with_environment_and_lights(
             &self.device,
             &self.queue,
-            view,
-            (WINDOW_WIDTH, WINDOW_HEIGHT),
+            &scene_view,
+            scene_size,
             camera,
             environment,
             &local_lights,
             &draws,
         );
+        self.finish_scene(&scene_view, scene_size);
         if let Some((finish, toon)) = villa_look {
             self.renderer.replace_finish(finish);
             self.renderer.replace_toon_style(toon);
         }
+        self.map_overlay.set_markers(take_world_markers(camera));
+        let view = &self.target_view;
         let speech_bubbles = npc_speech_bubbles(
             camera,
             player,
@@ -418,6 +421,7 @@ impl App {
             }
         }
         let zone = self.zone();
+        self.release_stale_prefetches(zone.id());
         zone.prefetch(self);
         // Keep the camera focus exactly on the gameplay position. A lagged
         // focus makes the Queen drift away from the centre at close zoom and,

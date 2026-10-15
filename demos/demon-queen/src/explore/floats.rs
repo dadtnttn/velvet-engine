@@ -89,6 +89,10 @@ impl App {
 
     /// The floats for the overlay, oldest first (those still to be said are not there yet).
     pub(super) fn floats_view(&self) -> Vec<map_overlay::FloatLine> {
+        // On a guion's stage she speaks in the scene itself (her bubble beside her): no asides.
+        if self.stage_up() {
+            return Vec::new();
+        }
         let face = |jealous: bool| {
             guion::portraits()
                 .find("chiquita", jealous.then_some("celosa"))

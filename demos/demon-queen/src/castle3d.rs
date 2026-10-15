@@ -602,6 +602,9 @@ pub(crate) struct State {
     pub talk: Option<Talk>,
     /// A maid kept still (the Queen is in a conversation with her).
     pub held: Option<usize>,
+    /// A maid kept at a place of her own instead of her round (Nemi at the arena while she is
+    /// training the Queen): where she stands.
+    pub maid_post: [Option<(f32, f32)>; 2],
     /// Every wall up whatever the camera (the castle seen from above, for its map).
     pub keep_walls: bool,
     /// The doctor upstairs, where her round has her now (and how long she has been held talking).
@@ -660,6 +663,7 @@ impl State {
             maid_along: [0.0, 3.0],
             talk: None,
             held: None,
+            maid_post: [None, None],
             keep_walls: false,
             doctor: doctor_at(0.0),
             doctor_clock: 0.0,
@@ -745,15 +749,61 @@ impl State {
     }
 
     fn maid_positions(&self) -> [Vec3; 2] {
-        [
-            on_round(ROUNDS[0], self.maid_along[0]).0,
-            on_round(ROUNDS[1], self.maid_along[1]).0,
-        ]
+        [self.maid(0).0, self.maid(1).0]
     }
 
-    /// Where maid `i` is and which way she faces.
+    /// Where maid `i` is and which way she faces: at her post (turned to the Queen), else along
+    /// her round.
     pub(crate) fn maid(&self, i: usize) -> (Vec3, f32) {
-        on_round(ROUNDS[i], self.maid_along[i])
+        match self.maid_post[i] {
+            Some((x, z)) => (Vec3::new(x, 0.0, z), (self.x - x).atan2(self.z - z)),
+            None => on_round(ROUNDS[i], self.maid_along[i]),
+        }
+    }
+
+    /// The place of a hotspot by its id (a maid's: where she is now), and its floor.
+    pub(crate) fn place_of(&self, id: &str) -> Option<(f32, f32, u8)> {
+        match id {
+            "lira" | "nemi" => {
+                let (at, _) = self.maid(usize::from(id == "nemi"));
+                Some((at.x, at.z, 0))
+            }
+            _ => plan()
+                .hotspots
+                .iter()
+                .find(|h| h.id == id)
+                .map(|h| (h.x, h.z, h.level)),
+        }
+    }
+
+    /// The Queen brought to (x, z) on floor `level`: on the free spot nearest it a step and a half
+    /// away (on the side she comes from, if it is free), turned to it. Whether she could be placed.
+    pub(crate) fn bring_to(&mut self, x: f32, z: f32, level: u8) -> Option<f32> {
+        let p = plan();
+        let from = (self.x - x).atan2(self.z - z);
+        for ring in [1.5f32, 2.0, 2.6, 3.2] {
+            for k in 0..16 {
+                let turn = (k as f32 / 2.0).ceil() * if k % 2 == 0 { 1.0 } else { -1.0 };
+                let a = from + turn * std::f32::consts::TAU / 16.0;
+                let (qx, qz) = (x + a.sin() * ring, z + a.cos() * ring);
+                if p.blocked(qx, qz, RADIUS, level) {
+                    continue;
+                }
+                let placed = Self::placed(Walker {
+                    x: qx,
+                    z: qz,
+                    level,
+                    on_stair: false,
+                });
+                self.x = placed.x;
+                self.z = placed.z;
+                self.level = placed.level;
+                self.on_stair = false;
+                self.room = placed.room;
+                return Some((x - qx).atan2(z - qz));
+            }
+        }
+        None
     }
 
     /// Where a step to (x, z) puts her, if she can take it: nothing solid there, and no maid in
@@ -842,9 +892,21 @@ impl State {
         let p = plan();
         let room = &p.rooms[self.room];
         let keep_walls = self.keep_walls;
+        let before: Vec<bool> = (0..p.walls.len()).map(|i| self.walls.dressed(i)).collect();
         self.walls.update(dt, |i| {
             !keep_walls && p.wall_faces_camera(&p.walls[i], room, camera_yaw)
         });
+        // VELVET_WALL_LOG: say when a wall puts on or takes off what hangs on it (and its door).
+        if std::env::var_os("VELVET_WALL_LOG").is_some() {
+            for (i, was) in before.iter().enumerate() {
+                if *was != self.walls.dressed(i) {
+                    eprintln!(
+                        "[walls] {i} door={} dressed {} -> {} (room {}, at {:.2},{:.2})",
+                        p.walls[i].door, was, !was, room.id, self.x, self.z
+                    );
+                }
+            }
+        }
         if self.talk.as_ref().is_some_and(|t| elapsed > t.until) {
             self.talk = None;
         }

@@ -122,16 +122,18 @@ impl RenderState {
         }
         let lights = inside.lights(elapsed);
         let saved = self.renderer.replace_finish(penascal3d::finish());
+        let (scene_view, scene_size) = self.scene_target();
         self.renderer.render_with_environment_and_lights(
             &self.device,
             &self.queue,
-            &self.target_view,
-            (WINDOW_WIDTH, WINDOW_HEIGHT),
+            &scene_view,
+            scene_size,
             camera,
             penascal3d::mood(environment),
             &lights,
             &draws,
         );
+        self.finish_scene(&scene_view, scene_size);
         self.renderer.replace_finish(saved);
         let bubbles: Vec<_> = queen_thought_bubble(
             camera,
@@ -228,6 +230,56 @@ impl App {
             return;
         }
         self.enter_penascal(penascal3d::State::by_the_stone());
+    }
+
+    /// Back inside the place a game was saved in: through its door as usual (the brothel's and
+    /// the baths' welcome play again if they were not seen), then where she stood.
+    pub(crate) fn resume_inside(&mut self, inside: &exploration3d_state::Inside) {
+        let back = self.player;
+        match inside.place.as_str() {
+            "burdel" => {
+                self.enter_brothel();
+                if let Some(b) = self.brothel.as_mut() {
+                    let walker = brothel::Walker {
+                        x: inside.x,
+                        z: inside.z,
+                        level: inside.level,
+                        on_stair: false,
+                    };
+                    if !brothel::plan().blocked(walker.x, walker.z, walker.level) {
+                        b.walker = walker;
+                    }
+                    b.return_to = back;
+                    self.player = b.position();
+                }
+            }
+            "termas" => {
+                self.enter_baths();
+                if let Some(b) = self.baths.as_mut() {
+                    b.room = inside.room.clone();
+                    b.x = inside.x;
+                    b.z = inside.z;
+                    b.return_to = back;
+                    self.player = b.position();
+                }
+                // What she came in still waits in the changing room.
+                if inside.outfit_before.is_some() {
+                    self.outfit_before_baths = inside.outfit_before;
+                }
+            }
+            "penascal" => {
+                self.enter_penascal(penascal3d::State::restore(Vec3::new(
+                    inside.x, 0.0, inside.z,
+                )));
+            }
+            _ => return,
+        }
+        self.player_yaw = inside.yaw;
+        self.camera_focus = self.player;
+        eprintln!(
+            "[3d] de vuelta dentro: {} {:.2},{:.2}",
+            inside.place, inside.x, inside.z
+        );
     }
 
     fn enter_penascal(&mut self, inside: penascal3d::State) {
@@ -344,6 +396,21 @@ impl App {
         }
     }
 
+    /// R by Varrak: the fight at once, whatever the story says. Before the story reaches him it
+    /// is a rehearsal (winning it changes nothing); once he is awake, a rematch.
+    pub(super) fn fight_varrak_now(&mut self) {
+        if !self
+            .penascal
+            .as_ref()
+            .and_then(|p| p.nearest())
+            .is_some_and(|h| h.id == "varrak")
+        {
+            return;
+        }
+        self.boss_practice = self.story.get("consejo_2_hecho") == 0 && !self.varrak_awake();
+        self.start_boss_fight();
+    }
+
     /// The chief on his stone: not before the Council has decided (she does not even know who he
     /// is); then the fight; once he is awake, a word with him.
     pub(super) fn challenge_varrak(&mut self) {
@@ -395,9 +462,24 @@ impl Zone for PenascalZone {
     }
     fn prompt(&self, app: &App) -> Option<Prompt> {
         let awake = app.varrak_awake();
-        app.penascal
-            .as_ref()
-            .and_then(|inside| inside.prompt(awake))
+        let inside = app.penascal.as_ref()?;
+        let prompt = inside.prompt(awake)?;
+        // By Varrak, always a second button: fight him now (a rehearsal before the story gets
+        // there, a rematch once he is awake).
+        Some(if inside.nearest().is_some_and(|h| h.id == "varrak") {
+            prompt.also(
+                "R",
+                if awake {
+                    "Revancha"
+                } else if app.story.get("consejo_2_hecho") == 0 {
+                    "Luchar (ensayo)"
+                } else {
+                    "Luchar ya"
+                },
+            )
+        } else {
+            prompt
+        })
     }
     fn interact(&self, app: &mut App) -> bool {
         app.interact_penascal()
@@ -408,7 +490,8 @@ impl Zone for PenascalZone {
     fn render(&self, state: &mut RenderState, frame: &Frame) {
         let (bob, _) = state.prepare_above_ground(frame);
         if let Some(inside) = frame.penascal_state {
-            if state.penascal_scene.is_some() {
+            // Loaded on first sight (a game saved in el Peñascal starts in it).
+            if state.ensure_penascal_loaded() {
                 state.render_penascal(frame, inside, bob);
             }
         }

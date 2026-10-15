@@ -294,19 +294,20 @@ impl Hud {
         glass::pane(v, [48.0, 36.0, 1824.0, 84.0], 26.0, &tone, 1.0);
         glass::diamond(v, [78.0, 78.0], 7.0, tone.accent);
         glass::diamond(v, [78.0, 78.0], 3.0, [0.0, 0.0, 0.0, 1.0]);
-        self.text(
+        self.serif(
             v,
             if run.debug {
-                "ATLAS TÉCNICO"
+                "Atlas técnico"
             } else {
-                "CARTA DE LA EXPEDICIÓN"
+                "Carta de la expedición"
             },
             98.0,
-            44.0,
-            29.0,
-            glass::mix(tone.bright, IVORY, 0.4),
+            64.0,
+            34.0,
+            900.0,
+            IVORY,
         );
-        self.text(
+        self.aside(
             v,
             if run.debug {
                 "Todo el complejo revelado · diagnóstico del generador"
@@ -314,8 +315,9 @@ impl Hud {
                 "Solo lo que has pisado se traza sólido; lo entrevisto, punteado"
             },
             100.0,
-            86.0,
+            98.0,
             15.0,
+            900.0,
             MUTED,
         );
         let region = if biome.id == "forgotten_masonry" {
@@ -326,30 +328,33 @@ impl Hud {
         let seed = run.seed().to_string();
         let seed_w = self.width(&seed, 22.0).max(90.0);
         let sx = 1840.0 - seed_w;
-        self.text(v, "SEMILLA", sx, 50.0, 12.0, alpha(tone.accent, 0.95));
-        self.mid(v, &seed, sx, 84.0, 22.0, IVORY);
+        self.kicker(v, "SEMILLA", sx, 46.0, tone.accent);
+        self.mid(v, &seed, sx, 92.0, 22.0, IVORY);
         let rx = sx - 60.0 - 250.0;
-        self.text(v, "REGIÓN", rx, 50.0, 12.0, alpha(tone.accent, 0.95));
-        self.mid_fit(v, region, rx, 84.0, 22.0, 250.0, IVORY);
+        self.kicker(v, "REGIÓN", rx, 46.0, tone.accent);
+        self.serif(v, region, rx, 92.0, 23.0, 250.0, IVORY);
 
         // The 3D chart.
         let vp = VIEWPORT;
+        super::rect(v, [vp[0] + 8.0, vp[1] + 8.0, vp[2], vp[3]], [0.0, 0.0, 0.0, 0.5]);
         glass::round(
             v,
             vp,
-            28.0,
-            [0.010, 0.026, 0.038, 0.97],
-            [0.004, 0.010, 0.018, 0.98],
+            0.5,
+            [0.008, 0.016, 0.026, 0.97],
+            [0.003, 0.006, 0.012, 0.98],
         );
         let clip_start = v.len();
         self.draw_chart(run, &known, &tone, vp, v);
         let clip_end = v.len();
-        glass::round_outline(
+        // A frame in the menus' manner: a fine rim, the place's colour along the top and a
+        // wedge in the corner.
+        glass::round_outline(v, vp, 0.5, 1.2, [1.0, 1.0, 1.0, 0.14]);
+        super::rect(v, [vp[0], vp[1], vp[2], 3.0], alpha(tone.accent, 0.9));
+        polygon(
             v,
-            vp,
-            28.0,
-            1.4,
-            alpha(mix(tone.accent, [1.0, 0.92, 0.75, 1.0], 0.25), 0.55),
+            &[[vp[0], vp[1]], [vp[0] + 46.0, vp[1]], [vp[0], vp[1] + 46.0]],
+            tone.accent,
         );
         self.chart_overlays(run, &tone, vp, v);
 
@@ -364,7 +369,7 @@ impl Hud {
         let (low, high) = self.altitude_range(run);
         let (x, y) = (vp[0] + 30.0, vp[1] + 26.0);
         glass::pane(v, [x - 14.0, y - 12.0, 262.0, 74.0], 18.0, tone, 0.8);
-        self.text(v, "ALTITUD", x, y - 2.0, 12.0, alpha(tone.accent, 0.95));
+        self.text(v, "ALTITUD", x + 4.0, y - 3.0, 12.0, alpha(tone.accent, 0.95));
         let bar = [x, y + 22.0, 232.0, 10.0];
         let slices = 14;
         for i in 0..slices {
@@ -386,7 +391,7 @@ impl Hud {
                 });
             }
         }
-        glass::round_outline(v, bar, 5.0, 1.0, [1.0, 1.0, 1.0, 0.25]);
+        glass::round_outline(v, bar, 0.5, 1.0, [1.0, 1.0, 1.0, 0.25]);
         self.text(
             v,
             &format!("{:+.0} m", low.round()),
@@ -407,13 +412,14 @@ impl Hud {
         let c = [vp[0] + vp[2] - 84.0, vp[1] + 84.0];
         self.compass(v, c, -run.map_yaw, tone);
         self.centered(v, "N", c[0], c[1] - 52.0, 14.0, alpha(tone.bright, 0.9));
-        self.text(
+        self.aside(
             v,
             "A D girar  ·  W S inclinar  ·  Q E zoom",
             vp[0] + 34.0,
-            vp[1] + vp[3] - 36.0,
-            13.0,
-            alpha(MUTED, 0.85),
+            vp[1] + vp[3] - 28.0,
+            14.0,
+            600.0,
+            alpha(MUTED, 0.9),
         );
         let note = format!("Alturas ×{:.1}", super::map3d::EXAGGERATION);
         self.right(
@@ -494,7 +500,7 @@ impl Hud {
         let w = r[2] - 64.0;
         let mut y = r[1] + 26.0;
         let heading = |v: &mut Vec<Vertex>, y: f32, label: &str| {
-            self.text(v, label, x, y, 14.0, alpha(tone.accent, 0.95));
+            self.kicker(v, label, x - 4.0, y - 6.0, tone.accent);
         };
         let divider = |v: &mut Vec<Vertex>, y: f32| {
             glass::segment(v, [x, y], [x + w, y], 1.0, alpha(tone.accent, 0.25));
@@ -527,28 +533,9 @@ impl Hud {
             let cy = y + 14.0;
             let color = altitude_color(self.altitude_fraction(run, band.y));
             if band.here {
-                glass::round(
-                    v,
-                    [x - 10.0, y, w + 20.0, 30.0],
-                    15.0,
-                    alpha(color, 0.20),
-                    alpha(color, 0.08),
-                );
-                glass::round_outline(
-                    v,
-                    [x - 10.0, y, w + 20.0, 30.0],
-                    15.0,
-                    1.2,
-                    alpha(mix(color, [1.0, 1.0, 1.0, 1.0], 0.3), 0.85),
-                );
+                glass::chip(v, [x - 10.0, y, w + 20.0, 30.0], color, 0.18);
             }
-            glass::round(
-                v,
-                [x, cy - 8.0, 28.0, 16.0],
-                6.0,
-                lift(color, 1.25),
-                lift(color, 0.75),
-            );
+            glass::slant(v, [x, cy - 8.0, 28.0, 16.0], 4.0, lift(color, 1.1));
             self.mid(
                 v,
                 &format!("{:+.0} m", band.y),
@@ -671,20 +658,21 @@ impl Hud {
         ];
         for (done, title, note) in &objectives {
             let c = [x + 11.0, y + 16.0];
-            disc(
+            let cell = [c[0] - 11.0, c[1] - 10.0, 24.0, 20.0];
+            glass::slant(
                 v,
-                c,
-                10.0,
+                cell,
+                5.0,
                 if *done {
-                    alpha(GREEN, 0.28)
+                    alpha(GREEN, 0.3)
                 } else {
-                    [0.0, 0.01, 0.015, 0.9]
+                    alpha(glass::INK, 0.95)
                 },
             );
-            ring(
+            glass::slant_outline(
                 v,
-                c,
-                10.0,
+                cell,
+                5.0,
                 1.4,
                 if *done {
                     GREEN
@@ -721,7 +709,7 @@ impl Hud {
                     alpha(MUTED, 0.7),
                 );
             }
-            self.mid_fit(
+            self.aside(
                 v,
                 note,
                 x + 34.0,
@@ -765,30 +753,23 @@ impl Hud {
         y += 8.0;
         let here = [x - 10.0, y, w + 20.0, r[1] + r[3] - 22.0 - y];
         if here[3] >= 52.0 {
-            glass::round(
-                v,
-                here,
-                20.0,
-                alpha(tone.accent, 0.16),
-                alpha(tone.accent, 0.05),
-            );
-            glass::round_outline(v, here, 20.0, 1.0, alpha(tone.accent, 0.45));
+            glass::chip(v, here, tone.accent, 0.14);
             let cy = here[1] + here[3] * 0.5;
-            glass::diamond(v, [x + 8.0, cy], 6.0, tone.bright);
+            glass::diamond(v, [x + 10.0, cy], 6.0, tone.bright);
             self.text(
                 v,
                 "AQUÍ",
-                x + 26.0,
-                cy - 21.0,
+                x + 28.0,
+                cy - 22.0,
                 12.0,
                 alpha(tone.accent, 0.95),
             );
-            self.mid_fit(
+            self.serif(
                 v,
                 current.role.label(),
-                x + 26.0,
+                x + 28.0,
                 cy + 8.0,
-                21.0,
+                22.0,
                 250.0,
                 IVORY,
             );
@@ -815,20 +796,22 @@ impl Hud {
         let x = r[0] + 46.0;
         let w = r[2] - 92.0;
         self.compass(v, [x + 30.0, r[1] + 62.0], 0.0, &tone);
-        self.text(
+        self.serif(
             v,
-            "REPRODUCIR UNA EXPEDICIÓN",
+            "Reproducir una expedición",
             x + 84.0,
-            r[1] + 32.0,
-            30.0,
-            PALE,
+            r[1] + 52.0,
+            32.0,
+            w - 90.0,
+            IVORY,
         );
-        self.text(
+        self.aside(
             v,
             "Cada semilla talla siempre la misma caverna",
             x + 86.0,
-            r[1] + 78.0,
+            r[1] + 92.0,
             17.0,
+            w - 90.0,
             MUTED,
         );
         glass::segment(
@@ -838,14 +821,7 @@ impl Hud {
             1.0,
             alpha(tone.accent, 0.3),
         );
-        self.text(
-            v,
-            "SEMILLA",
-            x,
-            r[1] + 142.0,
-            13.0,
-            alpha(tone.accent, 0.95),
-        );
+        self.kicker(v, "SEMILLA", x, r[1] + 136.0, tone.accent);
         self.right(
             v,
             &format!("actual: {}", run.seed()),
@@ -856,14 +832,9 @@ impl Hud {
         );
         // Input well with a blinking caret.
         let field = [x, r[1] + 170.0, w, 72.0];
-        glass::round(
-            v,
-            field,
-            20.0,
-            [0.0, 0.006, 0.010, 0.95],
-            [0.004, 0.010, 0.016, 0.95],
-        );
-        glass::round_outline(v, field, 20.0, 1.6, alpha(tone.accent, 0.8));
+        glass::slant(v, [field[0] + 5.0, field[1] + 5.0, field[2], field[3]], 10.0, [0.0, 0.0, 0.0, 0.5]);
+        glass::slant(v, field, 10.0, alpha(glass::INK, 0.97));
+        glass::slant_outline(v, field, 10.0, 1.8, alpha(tone.accent, 0.85));
         let shown = if seed.is_empty() { "" } else { seed };
         self.mid(
             v,

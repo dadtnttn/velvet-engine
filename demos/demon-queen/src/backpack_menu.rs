@@ -19,10 +19,11 @@ pub const CELL: i32 = 88;
 pub const PANE_L: Rect = (480, 226, 800, 744);
 pub const PANE_R: Rect = (1304, 226, 506, 744);
 const GRID_Y: i32 = 292;
-const BTN_SORT: Rect = (512, 832, 172, 54);
-const BTN_ROTATE: Rect = (700, 832, 172, 54);
-const BTN_EQUIP: Rect = (888, 832, 172, 54);
-const BTN_SPLIT: Rect = (1076, 832, 172, 54);
+const BTN_SORT: Rect = (512, 832, 138, 54);
+const BTN_ROTATE: Rect = (659, 832, 138, 54);
+const BTN_EQUIP: Rect = (806, 832, 138, 54);
+const BTN_SPLIT: Rect = (953, 832, 138, 54);
+const BTN_USE: Rect = (1100, 832, 148, 54);
 /// Where the equipment cards and candidate rows sit.
 pub fn slot_card(i: usize) -> Rect {
     (512, 268 + i as i32 * 146, 736, 130)
@@ -36,8 +37,10 @@ pub fn candidate_row(k: usize) -> Rect {
 }
 pub const MAX_CANDIDATES: usize = 7;
 
+/// English keeps its own words; every other language draws the Spanish source, which the
+/// draw-time translation (the game's text catalogs) turns into that language.
 pub fn tr(language: Language, es: &'static str, en: &'static str) -> &'static str {
-    if language == Language::Spanish {
+    if language != Language::English {
         es
     } else {
         en
@@ -414,6 +417,53 @@ impl App {
         }
     }
 
+    /// Eats or drinks what is in hand (or under the cursor): only where vitality counts.
+    fn bp_use(&mut self) {
+        let language = self.localizer.language();
+        let Some(index) = self.bp_target() else {
+            return;
+        };
+        let Some(id) = self.pause_backpack.as_ref().map(|p| p.placed[index].id.clone()) else {
+            return;
+        };
+        let Some(amount) = backpack::cure(&id) else {
+            self.bp_sound(UiSfx::Error);
+            self.bp_say(tr(language, "Eso no se usa así.", "That is not used that way."));
+            return;
+        };
+        let Some((now, most)) = self.pause_vitality else {
+            self.bp_sound(UiSfx::Error);
+            self.bp_say(tr(
+                language,
+                "Guárdalo para la mina o un combate: ahí cura.",
+                "Keep it for the mine or a fight: it heals there.",
+            ));
+            return;
+        };
+        if now >= most {
+            self.bp_sound(UiSfx::Error);
+            self.bp_say(tr(language, "Ya tienes toda la vitalidad.", "Your vitality is full."));
+            return;
+        }
+        if let Some(pack) = self.pause_backpack.as_mut() {
+            pack.remove(&id, 1);
+        }
+        if let Some(menu) = &mut self.pause {
+            menu.bp.held = None;
+        }
+        self.pause_vitality = Some(((now + amount).min(most), most));
+        self.pause_uses.push(id.clone());
+        let name = name_of(&self.pause_inventory_items, &id);
+        if let Some(item) = self.pause_inventory_items.iter_mut().find(|i| i.id == id) {
+            item.quantity = item.quantity.saturating_sub(1);
+        }
+        self.bp_sound(UiSfx::Fuse);
+        // The word in the player's language before the numbers join it (the whole line is no entry).
+        let word = demon_queen_dungeon::i18n::tr(tr(language, "vitalidad", "vitality")).into_owned();
+        self.bp_say(format!("{name}: +{amount:.0} {word}"));
+        self.bp_changed();
+    }
+
     fn bp_sort(&mut self) {
         let language = self.localizer.language();
         if let Some(menu) = &mut self.pause {
@@ -470,6 +520,10 @@ impl App {
                 self.bp_sort();
                 return true;
             }
+            KeyCode::KeyU => {
+                self.bp_use();
+                return true;
+            }
             KeyCode::Escape if menu.bp.held.is_some() => {
                 menu.bp.held = None;
                 ui_sfx::play(UiSfx::Back);
@@ -503,6 +557,8 @@ impl App {
             self.bp_equip();
         } else if rect_contains(BTN_SPLIT, x, y) {
             self.bp_split();
+        } else if rect_contains(BTN_USE, x, y) {
+            self.bp_use();
         } else {
             return false;
         }
@@ -661,6 +717,8 @@ pub struct View<'a> {
     pub mouse: (i32, i32),
     pub light: u32,
     pub craft: bool,
+    /// Her vitality where cures count (the mine, a fight), now and at most.
+    pub vitality: Option<(f32, f32)>,
 }
 
 fn paint_tile(c: &mut Canvas, v: &View, id: &str, rect: Rect, qty: u32, hot: bool, selected: bool) {
@@ -794,7 +852,10 @@ pub fn paint_backpack(c: &mut Canvas, v: &View) {
     // Capacity chip and gold.
     let used = pack.used_cells();
     let cap = pack.capacity();
-    let label = format!("{used} / {cap} {}", t("espacios", "slots"));
+    let label = format!(
+        "{used} / {cap} {}",
+        demon_queen_dungeon::i18n::tr(t("espacios", "slots"))
+    );
     let full = used * 10 >= cap * 9;
     let cw = v.fonts.text_width(&label, 17.0, true) + 34;
     let chip_color = if full {
@@ -1029,6 +1090,10 @@ pub fn paint_backpack(c: &mut Canvas, v: &View) {
     let turnable = target
         .and_then(|i| pack.placed.get(i))
         .is_some_and(|p| backpack::info(&p.id).w != backpack::info(&p.id).h);
+    let can_use = target
+        .and_then(|i| pack.placed.get(i))
+        .is_some_and(|p| backpack::cure(&p.id).is_some())
+        && v.vitality.is_some_and(|(now, most)| now < most);
     ui::pill(
         c,
         v.fonts,
@@ -1069,7 +1134,17 @@ pub fn paint_backpack(c: &mut Canvas, v: &View) {
         v.light,
         false,
     );
-    ui::key_hints(
+    ui::pill(
+        c,
+        v.fonts,
+        BTN_USE,
+        t("Usar", "Use"),
+        rect_contains(BTN_USE, v.mouse.0, v.mouse.1),
+        can_use,
+        v.light,
+        false,
+    );
+    let hints_w = ui::key_hints(
         c,
         v.fonts,
         512,
@@ -1079,8 +1154,31 @@ pub fn paint_backpack(c: &mut Canvas, v: &View) {
             ("R", t("girar", "rotate")),
             ("E", t("equipar", "equip")),
             ("V", t("dividir", "split")),
+            ("U", t("usar", "use")),
         ],
     );
+    // Her vitality where cures count: a bar at the right of the hints' row, or above the
+    // buttons when a language's hints reach that far.
+    if let Some((now, most)) = v.vitality {
+        let (bx, by, bw) = if 512 + hints_w + 16 <= 1090 {
+            (1090, 918, 158)
+        } else {
+            (1090, 812, 158)
+        };
+        let k = (now / most.max(1.0)).clamp(0.0, 1.0);
+        let label = format!(
+            "{} {:.0}/{:.0}",
+            demon_queen_dungeon::i18n::tr(t("Vitalidad", "Vitality")),
+            now,
+            most
+        );
+        ui::text_mid(c, v.fonts, &label, bx, by - 12, 15.0, ui::INK, true);
+        c.round_rect(bx, by, bw, 12, 6, 0xc0140d1c, 0xc0140d1c);
+        let fill = if k < 0.35 { 0xffe0455a } else { 0xff5fd08a };
+        if k > 0.0 {
+            c.round_rect(bx, by, ((bw as f32) * k).max(12.0) as i32, 12, 6, fill, fill);
+        }
+    }
     if let Some(note) = v.ui.note() {
         ui::text_mid(
             c,
@@ -1277,7 +1375,7 @@ fn paint_details(c: &mut Canvas, v: &View, pack: &Backpack, index: Option<usize>
         let label = format!(
             "{} · {}",
             t("Equipable", "Equippable"),
-            slot.label(v.language == Language::Spanish)
+            slot.label(v.language != Language::English)
         );
         ui::text_mid(
             c,
@@ -1375,7 +1473,7 @@ fn paint_details(c: &mut Canvas, v: &View, pack: &Backpack, index: Option<usize>
 /// The equipment page: worn slots on the left, what could go on them on the right.
 pub fn paint_equipment(c: &mut Canvas, v: &View) {
     let t = |es, en| tr(v.language, es, en);
-    let spanish = v.language == Language::Spanish;
+    let spanish = v.language != Language::English;
     ui::glass(c, PANE_L, 22, v.light, 0.0);
     ui::glass(c, PANE_R, 22, v.light, 0.0);
     let Some(pack) = v.pack else {
@@ -1863,7 +1961,7 @@ mod tests {
         let (gx, gy) = grid_origin(&p);
         assert!(gx >= PANE_L.0 && gx + p.cols as i32 * CELL <= PANE_L.0 + PANE_L.2);
         assert!(gy + p.rows as i32 * CELL < BTN_SORT.1);
-        for b in [BTN_SORT, BTN_ROTATE, BTN_EQUIP, BTN_SPLIT] {
+        for b in [BTN_SORT, BTN_ROTATE, BTN_EQUIP, BTN_SPLIT, BTN_USE] {
             assert!(
                 b.0 >= PANE_L.0
                     && b.0 + b.2 <= PANE_L.0 + PANE_L.2
@@ -2009,10 +2107,11 @@ mod tests {
             rot: false,
             qty: 1,
         });
+        // (Bones: slime would combine with the stone sword.)
         for x in 1..8u8 {
             for y in 0..5u8 {
                 p.placed.push(backpack::Placed {
-                    id: "gelatina_azul".into(),
+                    id: "hueso_viejo".into(),
                     x,
                     y,
                     rot: false,

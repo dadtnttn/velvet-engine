@@ -1,0 +1,15 @@
+[package]
+name = "velvet-avif"
+description = "AV1 decoding for Velvet Engine: AVIF pictures and AV1 clips (IVF), on rav1d (pure Rust)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8", "bitdepth_16", "asm"] }
+avif-parse = "1"
+image = { version = "0.25", default-features = false }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }

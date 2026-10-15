@@ -1295,6 +1295,59 @@ struct GpuMesh3D {
     updated: std::cell::Cell<u64>,
     /// Its skin, when the GPU deforms it (see [`crate::skin3d`]).
     skin: Option<usize>,
+    /// Simpler versions of it (about half and a quarter of its triangles, the same vertices),
+    /// drawn instead when it is small on screen and the quality asks for it.
+    lods: Vec<(wgpu::Buffer, u32)>,
+}
+
+/// Triangles a mesh needs before simpler versions of it are made.
+const LOD_MIN_TRIANGLES: usize = 1200;
+
+/// Index lists of about half and a quarter of `mesh`'s triangles (meshoptimizer's simplifier,
+/// its borders kept), uploaded; none for small meshes.
+fn build_lods(device: &wgpu::Device, mesh: &Mesh3D) -> Vec<(wgpu::Buffer, u32)> {
+    if mesh.indices.len() / 3 < LOD_MIN_TRIANGLES {
+        return Vec::new();
+    }
+    let bytes: &[u8] = bytemuck::cast_slice(&mesh.vertices);
+    let Ok(adapter) = meshopt::VertexDataAdapter::new(bytes, std::mem::size_of::<MeshVertex3D>(), 0) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut previous = mesh.indices.len();
+    for (share, error) in [(0.5f32, 0.01f32), (0.25, 0.03)] {
+        let target = ((mesh.indices.len() as f32 * share) as usize / 3) * 3;
+        let simplified = meshopt::simplify(
+            &mesh.indices,
+            &adapter,
+            target,
+            error,
+            meshopt::SimplifyOptions::LockBorder,
+            None,
+        );
+        // Not simpler enough to be worth a level.
+        if simplified.is_empty() || simplified.len() * 10 > previous * 8 {
+            break;
+        }
+        previous = simplified.len();
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("velvet-3d-lod-indices"),
+            contents: bytemuck::cast_slice(&simplified),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        out.push((buffer, simplified.len() as u32));
+    }
+    out
+}
+
+impl GpuMesh3D {
+    /// The index buffer and count of level `lod` (0: the full mesh; past its levels, its last).
+    fn level(&self, lod: u8) -> (&wgpu::Buffer, u32) {
+        match lod.checked_sub(1).and_then(|l| self.lods.get(l as usize).or(self.lods.last())) {
+            Some((buffer, count)) if lod > 0 => (buffer, *count),
+            _ => (&self.index_buffer, self.index_count),
+        }
+    }
 }
 
 /// Axis-aligned bounds of a vertex set.
@@ -1394,6 +1447,8 @@ struct CameraUniform {
     gi_view_projection: [f32; 16],
     gi_camera: [f32; 4],
     gi_forward: [f32; 4],
+    /// x: the sun shadow's samples per pixel (see [`Quality3D`]).
+    quality: [f32; 4],
 }
 
 #[repr(C)]
@@ -1405,6 +1460,48 @@ struct ObjectUniform {
     /// Normal matrix (inverse transpose up to scale, mirror-corrected),
     /// computed once per draw instead of once per vertex.
     normal_matrix: [[f32; 4]; 3],
+    /// x: the point lights whose reach touches this draw's box (bit i: light i). A light adds
+    /// exactly nothing past its radius, so the shader walks only these: the same picture for
+    /// a fraction of the work where many lamps are about.
+    light_mask: [u32; 4],
+}
+
+/// The lights of `positions` (xyz, radius in w; the first `count`) that reach the box `bounds`
+/// placed by `transform`, as bits.
+fn light_mask(transform: Mat4, bounds: [[f32; 3]; 2], positions: &[[f32; 4]], count: usize) -> u32 {
+    if count == 0 {
+        return 0;
+    }
+    let count = count.min(32);
+    let [lo, hi] = bounds;
+    let center = [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, (lo[2] + hi[2]) * 0.5];
+    let half = [(hi[0] - lo[0]) * 0.5, (hi[1] - lo[1]) * 0.5, (hi[2] - lo[2]) * 0.5];
+    // Column-major: m[c * 4 + r].
+    let m = transform.to_cols_array();
+    // The placed box: its centre, and its half size along each world axis (the absolute matrix
+    // on the half size), a centimetre more for the rounding of the fragments' positions.
+    let mut world = [0.0f32; 3];
+    let mut extent = [0.0f32; 3];
+    for r in 0..3 {
+        world[r] = m[r] * center[0] + m[4 + r] * center[1] + m[8 + r] * center[2] + m[12 + r];
+        extent[r] = m[r].abs() * half[0] + m[4 + r].abs() * half[1] + m[8 + r].abs() * half[2] + 0.01;
+    }
+    if !world.iter().chain(extent.iter()).all(|v| v.is_finite()) {
+        return u32::MAX >> (32 - count);
+    }
+    let mut mask = 0u32;
+    for (index, light) in positions.iter().take(count).enumerate() {
+        let mut d2 = 0.0f32;
+        for r in 0..3 {
+            let outside = ((light[r] - world[r]).abs() - extent[r]).max(0.0);
+            d2 += outside * outside;
+        }
+        let radius = light[3].max(0.05);
+        if d2 < radius * radius {
+            mask |= 1 << index;
+        }
+    }
+    mask
 }
 
 /// Cofactor matrix of the model's upper 3x3 (the inverse transpose up to a
@@ -1431,6 +1528,39 @@ const SHADOW_DISTANCE: f32 = 80.0;
 const SHADOW_DEPTH: f32 = 160.0;
 /// Casters lower than this (metres) are left out of the shadow map.
 const SHADOW_MIN_HEIGHT: f32 = 0.3;
+
+/// How much work the 3D frame does: the game's graphics settings. `Default` is the full look
+/// (what the game has always drawn).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Quality3D {
+    /// Samples per pixel softening the sun's shadow: 16 (full), 8, 4; 0 draws no sun shadows.
+    pub shadow_samples: u32,
+    /// The light bounced off nearby surfaces (screen-space GI).
+    pub bounced_light: bool,
+    /// The scene mirrored in still water.
+    pub water_reflections: bool,
+    /// Bloom levels: 6 (full halo), 3 (lighter), 0 (none).
+    pub bloom_levels: u32,
+    /// Simpler versions of things small on screen: 0 never (full detail), 1 balanced, 2 for
+    /// speed.
+    pub lod: u32,
+    /// The opaque surfaces' depth drawn first, so hidden pixels are never shaded. Faster; where
+    /// two surfaces lie exactly on each other the other one may show.
+    pub depth_prepass: bool,
+}
+
+impl Default for Quality3D {
+    fn default() -> Self {
+        Self {
+            shadow_samples: 16,
+            bounced_light: true,
+            water_reflections: true,
+            bloom_levels: 6,
+            lod: 0,
+            depth_prepass: false,
+        }
+    }
+}
 
 /// Errors returned by the 3D asset and renderer layer.
 #[derive(Debug, Error)]
@@ -1478,6 +1608,8 @@ pub struct GltfModel {
     pub animation_clips: Vec<AnimationClip3D>,
     /// Embedded/external texture data in document order.
     pub textures: Vec<TextureData3D>,
+    /// The file's image each of `textures` was made from (its index among the file's images).
+    pub texture_sources: Vec<usize>,
     /// Bind-pose transform of each primitive's mesh node.
     ///
     /// glTF files exported from FBX tools often keep a unit-conversion scale
@@ -1554,19 +1686,161 @@ struct Skin3D {
     inverse_bind_matrices: Vec<Mat4>,
 }
 
+/// A picture to use instead of one a file holds: the file, the picture's index in it and its
+/// size, and the replacement (same size), if there is one. Set once by the host (a game showing
+/// signs in the player's language).
+pub type ImageOverride = fn(&Path, usize, u32, u32) -> Option<image::RgbaImage>;
+
+static IMAGE_OVERRIDE: std::sync::OnceLock<ImageOverride> = std::sync::OnceLock::new();
+
+/// The pictures an override replaced, as the file had them (by file and image index), so the
+/// host can put them back (a player going back to the language the files are written in).
+type Originals = std::collections::HashMap<(std::path::PathBuf, usize), image::RgbaImage>;
+
+fn originals() -> &'static std::sync::Mutex<Originals> {
+    static ORIGINALS: std::sync::OnceLock<std::sync::Mutex<Originals>> = std::sync::OnceLock::new();
+    ORIGINALS.get_or_init(Default::default)
+}
+
+/// The picture image `index` of file `path` had before an override replaced it (`None` when
+/// none did).
+pub fn image_original(path: &Path, index: usize) -> Option<image::RgbaImage> {
+    originals()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&(path.to_path_buf(), index))
+        .cloned()
+}
+
+/// Sets how pictures inside model files can be replaced as they load.
+pub fn set_image_override(hook: ImageOverride) {
+    let _ = IMAGE_OVERRIDE.set(hook);
+}
+
+fn apply_image_overrides(path: &Path, images: &mut [gltf::image::Data]) {
+    let Some(hook) = IMAGE_OVERRIDE.get() else {
+        return;
+    };
+    for (index, data) in images.iter_mut().enumerate() {
+        let Some(rgba) = hook(path, index, data.width, data.height) else {
+            continue;
+        };
+        if rgba.dimensions() != (data.width, data.height) {
+            continue;
+        }
+        let original = match data.format {
+            gltf::image::Format::R8G8B8A8 => {
+                image::RgbaImage::from_raw(data.width, data.height, data.pixels.clone())
+            }
+            gltf::image::Format::R8G8B8 => image::RgbaImage::from_raw(
+                data.width,
+                data.height,
+                data.pixels
+                    .chunks_exact(3)
+                    .flat_map(|p| [p[0], p[1], p[2], 255])
+                    .collect(),
+            ),
+            _ => None,
+        };
+        if let Some(original) = original {
+            originals()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert((path.to_path_buf(), index), original);
+        }
+        match data.format {
+            gltf::image::Format::R8G8B8A8 => data.pixels = rgba.into_raw(),
+            gltf::image::Format::R8G8B8 => {
+                data.pixels = rgba.pixels().flat_map(|p| [p[0], p[1], p[2]]).collect();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A glTF file's document, buffers and decoded images, as `gltf::import` gives them, except that
+/// an image stored in the file as AVIF (as the release packs them) is decoded too (to RGBA). Any
+/// other image goes through the glTF crate's own decoding, unchanged.
+fn import_gltf(
+    gltf: gltf::Gltf,
+    base: Option<&Path>,
+) -> Result<(gltf::Document, Vec<gltf::buffer::Data>, Vec<gltf::image::Data>), Render3DError> {
+    let gltf::Gltf { document, blob } = gltf;
+    let error = |e: gltf::Error| Render3DError::Gltf(e.to_string());
+    let buffers = gltf::import_buffers(&document, base, blob).map_err(error)?;
+    let mut images = Vec::new();
+    for image in document.images() {
+        let file;
+        let bytes = match image.source() {
+            gltf::image::Source::View { view, .. } => {
+                let start = view.offset();
+                Some(&buffers[view.buffer().index()].0[start..start + view.length()])
+            }
+            // A picture beside a `.gltf` (its name as written, spaces as %20).
+            gltf::image::Source::Uri { uri, .. } if !uri.starts_with("data:") => {
+                file = base.and_then(|base| std::fs::read(base.join(uri.replace("%20", " "))).ok());
+                file.as_deref()
+            }
+            _ => None,
+        };
+        if let Some(bytes) = bytes {
+            if velvet_avif::is_avif(bytes) {
+                let rgba = velvet_avif::decode_avif(bytes).map_err(|e| Render3DError::Gltf(e.to_string()))?;
+                let (width, height) = rgba.dimensions();
+                images.push(gltf::image::Data {
+                    pixels: rgba.into_raw(),
+                    format: gltf::image::Format::R8G8B8A8,
+                    width,
+                    height,
+                });
+                continue;
+            }
+        }
+        images.push(gltf::image::Data::from_source(image.source(), base, &buffers).map_err(error)?);
+    }
+    Ok((document, buffers, images))
+}
+
+/// The head of a model file packed whole (tools/pack_media.py): `VGLZ`, the format's version
+/// (1, little-endian u32), the unpacked length (u64) and then the file as one zlib stream.
+const PACKED_MODEL: &[u8; 4] = b"VGLZ";
+
+/// A model file's bytes as glTF: unpacked when the release packed them, else as they are.
+pub fn unpack_model_bytes(bytes: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, Render3DError> {
+    if bytes.len() < 16 || &bytes[..4] != PACKED_MODEL {
+        return Ok(std::borrow::Cow::Borrowed(bytes));
+    }
+    let version = u32::from_le_bytes(bytes[4..8].try_into().expect("4"));
+    let length = u64::from_le_bytes(bytes[8..16].try_into().expect("8")) as usize;
+    if version != 1 {
+        return Err(Render3DError::Gltf(format!("packed model of version {version}")));
+    }
+    let unpacked = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(&bytes[16..], length)
+        .map_err(|error| Render3DError::Gltf(format!("packed model: {error:?}")))?;
+    if unpacked.len() != length {
+        return Err(Render3DError::Gltf("packed model cut short".into()));
+    }
+    Ok(std::borrow::Cow::Owned(unpacked))
+}
+
 impl GltfModel {
-    /// Load a `.glb` or `.gltf` file using the bundled glTF importer.
+    /// Load a `.glb` or `.gltf` file using the bundled glTF importer (or one the release packed).
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Render3DError> {
-        let (document, buffers, _images) =
-            gltf::import(path.as_ref()).map_err(|error| Render3DError::Gltf(error.to_string()))?;
-        parse_gltf(document, buffers, _images)
+        let path = path.as_ref();
+        let bytes = std::fs::read(path).map_err(|error| Render3DError::Gltf(error.to_string()))?;
+        let bytes = unpack_model_bytes(&bytes)?;
+        let gltf = gltf::Gltf::from_slice(&bytes).map_err(|error| Render3DError::Gltf(error.to_string()))?;
+        let (document, buffers, mut images) = import_gltf(gltf, Some(path.parent().unwrap_or(Path::new("./"))))?;
+        apply_image_overrides(path, &mut images);
+        parse_gltf(document, buffers, images)
     }
 
-    /// Load from in-memory glTF/GLB bytes.
+    /// Load from in-memory glTF/GLB bytes (or bytes the release packed).
     pub fn load_bytes(bytes: &[u8]) -> Result<Self, Render3DError> {
-        let (document, buffers, _images) =
-            gltf::import_slice(bytes).map_err(|error| Render3DError::Gltf(error.to_string()))?;
-        parse_gltf(document, buffers, _images)
+        let bytes = unpack_model_bytes(bytes)?;
+        let gltf = gltf::Gltf::from_slice(&bytes).map_err(|error| Render3DError::Gltf(error.to_string()))?;
+        let (document, buffers, images) = import_gltf(gltf, None)?;
+        parse_gltf(document, buffers, images)
     }
 
     /// Rest pose of every node: (name, parent index, translation, rotation
@@ -2457,6 +2731,7 @@ fn parse_gltf(
             .and_then(|source_index| image_remap.get(source_index).copied().flatten());
     }
     let mut images = images.into_iter().map(Some).collect::<Vec<_>>();
+    let texture_sources = used_images.clone();
     let textures = used_images
         .into_iter()
         .filter_map(|source_index| images.get_mut(source_index)?.take())
@@ -2468,6 +2743,7 @@ fn parse_gltf(
         animations,
         animation_clips,
         textures,
+        texture_sources,
         mesh_transforms,
         mesh_nodes,
         node_names,
@@ -2515,6 +2791,9 @@ pub struct Wgpu3DRenderer {
     toon_style: ToonStyle3D,
     /// Shading pipelines by `[cutout][normal_map]`.
     pipelines: [[wgpu::RenderPipeline; 2]; 2],
+    /// The depth pre-pass: depth only, and the opaque draws after it testing LessEqual.
+    probe_depth_pipeline: wgpu::RenderPipeline,
+    probe_equal_pipelines: [wgpu::RenderPipeline; 2],
     /// Soft translucent surfaces (smoke, mist, fading markers): blended without the
     /// alpha-to-coverage dither, and without writing depth.
     translucent_pipeline: wgpu::RenderPipeline,
@@ -2569,6 +2848,11 @@ pub struct Wgpu3DRenderer {
     shadow_bind_group_layout: wgpu::BindGroupLayout,
     shadow_sampler: wgpu::Sampler,
     shadow_cache: ShadowCache,
+    /// The graphics settings.
+    quality: Quality3D,
+    /// Puts the cached map back into the frame's map over small rectangles only (where last
+    /// frame's moving casters were), instead of copying all of its 4096² every frame.
+    shadow_restore: ShadowRestore,
     /// The light bounced off what is on screen.
     gi: crate::gi3d::ScreenGi,
     /// Simulated water: bodies, droplets, their solvers.
@@ -2636,9 +2920,10 @@ impl Wgpu3DRenderer {
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                // Every draw's data, read by the instance index (see `MESH_SHADER`).
                 ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
                     min_binding_size: NonZeroU64::new(std::mem::size_of::<ObjectUniform>() as u64),
                 },
                 count: None,
@@ -2758,7 +3043,14 @@ impl Wgpu3DRenderer {
             });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("velvet-3d-shader"),
-            source: wgpu::ShaderSource::Wgsl(MESH_SHADER.into()),
+            // (`VELVET_EXP=pcf1`: one shadow tap, to measure what the sixteen cost.)
+            source: wgpu::ShaderSource::Wgsl(if experiment("pcf1") {
+                MESH_SHADER.replace("i < 16; i = i + 1) {
+        let offset = rot", "i < 1; i = i + 1) {
+        let offset = rot").replace("return visibility / 16.0;", "return visibility;").into()
+            } else {
+                MESH_SHADER.into()
+            }),
         });
         let shadow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("velvet-3d-shadow-shader"),
@@ -2870,6 +3162,50 @@ impl Wgpu3DRenderer {
                     false,
                 )
             })
+        });
+        let probe_depth_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("velvet-3d-probe-depth"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<MeshVertex3D>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x4],
+                }],
+                compilation_options: Default::default(),
+            },
+            fragment: None,
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState { count: sample_count, mask: !0, alpha_to_coverage_enabled: false },
+            multiview: None,
+            cache: None,
+        });
+        let probe_equal_pipelines = [false, true].map(|normal_map| {
+            create_mesh_pipeline_with(
+                device,
+                &pipeline_layout,
+                &shader,
+                crate::post3d::HDR_FORMAT,
+                sample_count,
+                false,
+                normal_map,
+                BlendMode3D::Solid,
+                false,
+                Some(wgpu::CompareFunction::LessEqual),
+            )
         });
         // The water's reflection: the scene mirrored in its surface, at half size, unsampled.
         let reflect_pipelines = [false, true].map(|cutout| {
@@ -3008,13 +3344,13 @@ impl Wgpu3DRenderer {
             }],
         });
         let object_size = std::mem::size_of::<ObjectUniform>() as u64;
-        let alignment = device.limits().min_uniform_buffer_offset_alignment as u64;
-        let object_stride = align_uniform_offset(object_size, alignment);
+        // Packed: an array the shaders index (its stride is the struct's size).
+        let object_stride = object_size;
         let object_capacity = OBJECT_UNIFORM_CAPACITY;
         let object_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("velvet-3d-object-buffer"),
             size: object_stride * object_capacity as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let object_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -3022,11 +3358,7 @@ impl Wgpu3DRenderer {
             layout: &object_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &object_buffer,
-                    offset: 0,
-                    size: NonZeroU64::new(object_size),
-                }),
+                resource: object_buffer.as_entire_binding(),
             }],
         });
         let white_texture = TextureData3D {
@@ -3078,13 +3410,14 @@ impl Wgpu3DRenderer {
                 resource: build_camera.as_entire_binding(),
             }],
         });
+        let shadow_restore = ShadowRestore::new(device, &cached_views);
         let shadow_cache = ShadowCache {
             maps: cached,
             views: cached_views,
             front: 0,
             current: None,
             build: None,
-            previous: std::collections::HashSet::new(),
+            previous: KeySet::default(),
             build_camera,
             build_camera_bind_group,
         };
@@ -3113,6 +3446,8 @@ impl Wgpu3DRenderer {
             directional_shadows: true,
             toon_style: ToonStyle3D::default(),
             pipelines,
+            probe_depth_pipeline,
+            probe_equal_pipelines,
             translucent_pipeline,
             additive_pipeline,
             shadow_pipeline,
@@ -3150,6 +3485,8 @@ impl Wgpu3DRenderer {
             shadow_sampler,
             gi,
             shadow_cache,
+            quality: Quality3D::default(),
+            shadow_restore,
             water,
             skinner: crate::skin3d::Skinner3D::new(device),
             recycled_skins: false,
@@ -3249,6 +3586,16 @@ impl Wgpu3DRenderer {
         self.gi.read(device, queue)
     }
 
+    /// The graphics settings from now on.
+    pub fn set_quality(&mut self, quality: Quality3D) {
+        self.quality = quality;
+    }
+
+    /// The graphics settings in use.
+    pub fn quality(&self) -> Quality3D {
+        self.quality
+    }
+
     /// Set the finish (ink lines and colour grade) of the frames that follow; the default has
     /// none. Returns the previous one, so a scene can set its own and give it back.
     pub fn replace_finish(&mut self, finish: Finish3D) -> Finish3D {
@@ -3276,11 +3623,10 @@ impl Wgpu3DRenderer {
         while capacity < required {
             capacity = capacity.saturating_mul(2);
         }
-        let object_size = std::mem::size_of::<ObjectUniform>() as u64;
         self.object_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("velvet-3d-object-buffer-grown"),
             size: self.object_stride * capacity as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         self.object_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -3288,11 +3634,7 @@ impl Wgpu3DRenderer {
             layout: &self.object_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &self.object_buffer,
-                    offset: 0,
-                    size: NonZeroU64::new(object_size),
-                }),
+                resource: self.object_buffer.as_entire_binding(),
             }],
         });
         self.object_capacity = capacity;
@@ -3326,6 +3668,7 @@ impl Wgpu3DRenderer {
             usage: wgpu::BufferUsages::INDEX,
         });
         let handle = MeshHandle(self.meshes.len() as u32);
+        let lods = build_lods(device, mesh);
         self.meshes.push(GpuMesh3D {
             vertex_buffer,
             index_buffer,
@@ -3334,6 +3677,7 @@ impl Wgpu3DRenderer {
             bounds: std::cell::Cell::new(vertex_bounds(&mesh.vertices)),
             updated: std::cell::Cell::new(0),
             skin: None,
+            lods,
         });
         Ok(handle)
     }
@@ -3386,6 +3730,7 @@ impl Wgpu3DRenderer {
             bounds: std::cell::Cell::new(vertex_bounds(&mesh.vertices)),
             updated: std::cell::Cell::new(0),
             skin,
+            lods: Vec::new(),
         });
         Ok(handle)
     }
@@ -3504,6 +3849,7 @@ impl Wgpu3DRenderer {
         slot.index_buffer = index_buffer;
         slot.vertex_count = mesh.vertices.len();
         slot.index_count = mesh.indices.len() as u32;
+        slot.lods = if skin.is_none() { build_lods(device, mesh) } else { Vec::new() };
         slot.bounds.set(vertex_bounds(&mesh.vertices));
         slot.updated.set(self.frame_index);
         slot.skin = skin;
@@ -3556,6 +3902,29 @@ impl Wgpu3DRenderer {
         let handle = TextureHandle(self.textures.len() as u32);
         self.textures.push(gpu);
         handle
+    }
+
+    /// Puts `texture` in place of the albedo uploaded as `handle` (same handle, flat normal), so
+    /// every draw that uses it shows the new picture from the next frame.
+    pub fn replace_texture(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        handle: TextureHandle,
+        texture: &TextureData3D,
+    ) -> Result<(), Render3DError> {
+        let prepared = PreparedTexture3D::new(texture, None)?;
+        let gpu = create_gpu_texture(
+            device,
+            queue,
+            &self.texture_bind_group_layout,
+            &self.sampler,
+            &prepared,
+        );
+        if let Some(slot) = self.textures.get_mut(handle.0 as usize) {
+            *slot = gpu;
+        }
+        Ok(())
     }
 
     /// Render one 3D pass into a target view.
@@ -3692,10 +4061,18 @@ impl Wgpu3DRenderer {
         draws: &[MeshDraw3D],
         clear: wgpu::Color,
     ) {
+        let cpu_started = std::time::Instant::now();
+        let mut marks: Vec<(&str, std::time::Instant)> = Vec::new();
+        let profiling = experiment("cpuprof");
+        let mut mark = |name: &'static str| {
+            if profiling {
+                marks.push((name, std::time::Instant::now()));
+            }
+        };
         self.resize(device, size);
         self.ensure_object_capacity(device, draws.len());
         let saved_shadows = self.directional_shadows;
-        if experiment("noshadow") {
+        if experiment("noshadow") || self.quality.shadow_samples == 0 {
             self.directional_shadows = false;
         }
         let local_lights = if experiment("nolights") {
@@ -3755,6 +4132,7 @@ impl Wgpu3DRenderer {
         } else {
             Vec::new()
         };
+        mark("casters");
         // Finish a build: its map takes over.
         if self
             .shadow_cache
@@ -3765,6 +4143,7 @@ impl Wgpu3DRenderer {
             let build = self.shadow_cache.build.take().expect("a finished build");
             self.shadow_cache.front = 1 - self.shadow_cache.front;
             self.shadow_cache.current = Some(build.frame);
+            self.shadow_restore.version += 1;
         }
         let cell = (
             (camera.target.x / SHADOW_CELL).round() as i32,
@@ -3783,7 +4162,7 @@ impl Wgpu3DRenderer {
                 .iter()
                 .filter(|c| c.2)
                 .map(|c| c.1)
-                .collect::<std::collections::HashSet<u64>>()
+                .collect::<KeySet>()
         };
         let turn = |a: Vec3, b: Vec3| a.dot(b).clamp(-1.0, 1.0).acos();
         // Redraw at once: nothing cached yet, the sun jumped, the view jumped, or the extent
@@ -3802,6 +4181,7 @@ impl Wgpu3DRenderer {
         if full {
             self.shadow_cache.build = None;
             self.shadow_cache.current = Some(wanted(still_keys()));
+            self.shadow_restore.version += 1;
         } else if self.directional_shadows && self.shadow_cache.build.is_none() {
             // Follow gradually: the sun turned a little, the view entered the next cell,
             // something new keeps still now, or something cached has gone (moved, hidden, or
@@ -3809,7 +4189,7 @@ impl Wgpu3DRenderer {
             if let Some(f) = &self.shadow_cache.current {
                 let newly_still = casters.iter().any(|c| c.2 && !f.keys.contains(&c.1));
                 let gone = {
-                    let seen: std::collections::HashSet<u64> = casters
+                    let seen: KeySet = casters
                         .iter()
                         .map(|c| c.1)
                         .filter(|k| f.keys.contains(k))
@@ -3866,7 +4246,8 @@ impl Wgpu3DRenderer {
         }
         // The light bounced off the frame before: gathered (and submitted) before this frame's
         // passes, which overwrite the depth and colour it reads.
-        let gi_on = self.finish.gi > 0.0 && !experiment("nogi");
+        mark("shadow-plan+lights");
+        let gi_on = self.finish.gi > 0.0 && self.quality.bounced_light && !experiment("nogi");
         if gi_on {
             let mut gi_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("velvet-3d-gi"),
@@ -3910,6 +4291,7 @@ impl Wgpu3DRenderer {
             self.gi.result().0,
             self.gi.sampler(),
         );
+        mark("gi");
         let toon = self.toon_style;
         let camera_uniform = CameraUniform {
             view_projection: camera.view_projection(aspect).to_cols_array(),
@@ -4018,6 +4400,7 @@ impl Wgpu3DRenderer {
             gi_view_projection,
             gi_camera,
             gi_forward,
+            quality: [self.quality.shadow_samples.clamp(1, 16) as f32, 0.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
         // Preserve dynamic-uniform alignment while issuing one staging copy.
@@ -4025,20 +4408,84 @@ impl Wgpu3DRenderer {
         // on top of the animated character vertex uploads each frame.
         self.object_upload
             .resize(self.object_stride as usize * draws.len(), 0);
-        for (draw_index, draw) in draws.iter().enumerate() {
-            let object = ObjectUniform {
-                model: draw.transform.to_cols_array(),
-                base_color: draw.material.base_color,
-                occlusion_window: draw.material.occlusion_window,
-                normal_matrix: normal_matrix(draw.transform),
-            };
-            let offset = self.object_stride as usize * draw_index;
-            let bytes = bytemuck::bytes_of(&object);
-            self.object_upload[offset..offset + bytes.len()].copy_from_slice(bytes);
-        }
+        // Each draw's uniform (placement, normal matrix, the lights that reach it), in chunks on
+        // the worker pool: thousands of draws in a forest.
+        let bounds: Vec<Option<[[f32; 3]; 2]>> = draws
+            .iter()
+            .map(|d| self.meshes.get(d.mesh.0 as usize).map(|m| m.bounds.get()))
+            .collect();
+        let every = if local_light_count == 0 {
+            0
+        } else {
+            u32::MAX >> (32 - local_light_count.min(32))
+        };
+        let all_lights = experiment("allights");
+        let stride = self.object_stride as usize;
+        const CHUNK: usize = 512;
+        // And whether each is on screen at all (its box outside the camera's view: skipped).
+        let screen_vp = camera.view_projection(aspect);
+        let culling = self.frustum_culling;
+        let mut on_screen = vec![true; draws.len()];
+        // And which of its levels of detail: by how tall it shows (pixels), when the quality
+        // allows simpler ones at all.
+        let mut levels = vec![0u8; draws.len()];
+        let lod_px: Option<(f32, f32)> = match self.quality.lod {
+            0 => None,
+            1 => Some((40.0, 16.0)),
+            _ => Some((120.0, 48.0)),
+        };
+        let parts: Vec<(usize, &mut [u8], &mut [bool], &mut [u8])> = self
+            .object_upload
+            .chunks_mut(stride * CHUNK)
+            .zip(on_screen.chunks_mut(CHUNK))
+            .zip(levels.chunks_mut(CHUNK))
+            .enumerate()
+            .map(|(chunk, ((out, seen), lod))| (chunk, out, seen, lod))
+            .collect();
+        let fill = |(chunk, out, seen, lod): (usize, &mut [u8], &mut [bool], &mut [u8])| {
+            for (k, slot) in out.chunks_mut(stride).enumerate() {
+                let draw_index = chunk * CHUNK + k;
+                let draw = &draws[draw_index];
+                if culling {
+                    if let Some(b) = bounds[draw_index] {
+                        seen[k] = !outside_view(&(screen_vp * draw.transform).to_cols_array(), b);
+                    }
+                }
+                if let (Some((one, two)), Some(b)) = (lod_px, bounds[draw_index]) {
+                    if let Some(r) = screen_rect(screen_vp * draw.transform, b, size) {
+                        let tall = (r[3] - r[1]).max(r[2] - r[0]);
+                        lod[k] = if tall < two {
+                            2
+                        } else if tall < one {
+                            1
+                        } else {
+                            0
+                        };
+                    }
+                }
+                let mask = if all_lights {
+                    every
+                } else {
+                    bounds[draw_index].map_or(0, |b| {
+                        light_mask(draw.transform, b, &local_light_positions, local_light_count)
+                    })
+                };
+                let object = ObjectUniform {
+                    model: draw.transform.to_cols_array(),
+                    base_color: draw.material.base_color,
+                    occlusion_window: draw.material.occlusion_window,
+                    normal_matrix: normal_matrix(draw.transform),
+                    light_mask: [mask, 0, 0, 0],
+                };
+                let bytes = bytemuck::bytes_of(&object);
+                slot[..bytes.len()].copy_from_slice(bytes);
+            }
+        };
+        crate::work::each(parts, &fill);
         if !self.object_upload.is_empty() {
             queue.write_buffer(&self.object_buffer, 0, &self.object_upload);
         }
+        mark("objects");
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("velvet-3d-frame"),
         });
@@ -4057,6 +4504,10 @@ impl Wgpu3DRenderer {
                                 list: &mut dyn Iterator<Item = usize>,
                                 view_projection: Mat4| {
                 let mut bound_solid = None;
+                let mut bound_texture: Option<u32> = None;
+                let mut bound_mesh: Option<u32> = None;
+                let mut run: Option<DrawRun> = None;
+                pass.set_bind_group(1, &self.object_bind_group, &[]);
                 for draw_index in list {
                     let draw = &draws[draw_index];
                     let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) else {
@@ -4071,8 +4522,6 @@ impl Wgpu3DRenderer {
                     {
                         continue;
                     }
-                    let offset = self.object_stride * draw_index as u64;
-                    pass.set_bind_group(1, &self.object_bind_group, &[offset as u32]);
                     let texture = draw
                         .texture
                         .or(draw.material.texture)
@@ -4082,6 +4531,18 @@ impl Wgpu3DRenderer {
                     // Revealed walls still cast: the cut-out shader removes only their circle.
                     let solid =
                         texture.is_some_and(|t| !t.cutout) && !(window[2] > 0.0 && window[3] > 0.0);
+                    let texture_id = draw.texture.or(draw.material.texture).unwrap_or(self.white_texture).0;
+                    let level = levels.get(draw_index).copied().unwrap_or(0);
+                    let (indices, index_count) = mesh.level(level);
+                    let geometry = draw.mesh.0 * 4 + u32::from(level);
+                    let key = (geometry, texture_id, usize::from(solid));
+                    if DrawRun::extends(&run, draw_index, key) {
+                        if let Some(r) = run.as_mut() {
+                            r.end += 1;
+                        }
+                        continue;
+                    }
+                    DrawRun::flush(&mut run, pass);
                     if bound_solid != Some(solid) {
                         pass.set_pipeline(if solid {
                             &self.shadow_solid_pipeline
@@ -4091,12 +4552,24 @@ impl Wgpu3DRenderer {
                         bound_solid = Some(solid);
                     }
                     if let Some(texture) = texture {
-                        pass.set_bind_group(2, &texture.bind_group, &[]);
+                        if bound_texture != Some(texture_id) {
+                            pass.set_bind_group(2, &texture.bind_group, &[]);
+                            bound_texture = Some(texture_id);
+                        }
                     }
-                    pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                    pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                    if bound_mesh != Some(geometry) {
+                        pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                        pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                        bound_mesh = Some(geometry);
+                    }
+                    run = Some(DrawRun {
+                        first: draw_index as u32,
+                        end: draw_index as u32 + 1,
+                        count: index_count,
+                        key,
+                    });
                 }
+                DrawRun::flush(&mut run, pass);
             };
             let depth_pass = |encoder: &mut wgpu::CommandEncoder,
                               view: &wgpu::TextureView,
@@ -4157,45 +4630,91 @@ impl Wgpu3DRenderer {
                         build.frame.view_projection,
                     );
                 }
-                // This frame's map: the cached one, and whatever moves on top.
-                encoder.copy_texture_to_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &cache.maps[front],
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &self.shadow_texture,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::Extent3d {
-                        width: SHADOW_MAP_SIZE,
-                        height: SHADOW_MAP_SIZE,
-                        depth_or_array_layers: 1,
-                    },
-                );
+                // This frame's map: the cached one, and whatever moves on top. It already holds the
+                // cached map but where last frame's moving casters drew, unless the cached map
+                // changed since: then it is copied whole; else only those rectangles are put back.
+                let source = (front, self.shadow_restore.version);
+                if experiment("fullcopy") || self.shadow_restore.synced != Some(source) {
+                    encoder.copy_texture_to_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &cache.maps[front],
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &self.shadow_texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::Extent3d {
+                            width: SHADOW_MAP_SIZE,
+                            height: SHADOW_MAP_SIZE,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                } else if !self.shadow_restore.dirty.is_empty() {
+                    let mut pass = depth_pass(&mut encoder, &self.shadow_view, false);
+                    pass.set_pipeline(&self.shadow_restore.pipeline);
+                    pass.set_bind_group(0, &self.shadow_restore.groups[front], &[]);
+                    for r in &self.shadow_restore.dirty {
+                        pass.set_scissor_rect(r[0], r[1], r[2], r[3]);
+                        pass.draw(0..3, 0..1);
+                    }
+                }
+                // Where this frame's moving casters land on the map (texels), to put back next.
+                let mut dirty = Vec::new();
+                for c in casters.iter().filter(|c| !keys_of_current(cache).contains(&c.1)) {
+                    let draw = &draws[c.0];
+                    if let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) {
+                        if let Some(r) = shadow_footprint(light_view_projection * draw.transform, mesh.bounds.get()) {
+                            dirty.push(r);
+                        }
+                    }
+                }
+                let whole = experiment("fullcopy") || self.shadow_restore.synced != Some(source);
+                self.shadow_restore.synced = Some(source);
+                self.shadow_restore.dirty = merge_rects(dirty);
+                if experiment("shadowstats") {
+                    let area: u64 = self.shadow_restore.dirty.iter().map(|r| r[2] as u64 * r[3] as u64).sum();
+                    eprintln!(
+                        "[shadow] frame {frame_index}: whole copy {whole}, movers {}, rects {}, area {:.1}% , full {full}, build {:?}",
+                        casters.iter().filter(|c| !keys_of_current(cache).contains(&c.1)).count(),
+                        self.shadow_restore.dirty.len(),
+                        area as f64 * 100.0 / (SHADOW_MAP_SIZE as f64 * SHADOW_MAP_SIZE as f64),
+                        cache.build.as_ref().map(|b| b.step),
+                    );
+                }
                 let mut pass = depth_pass(&mut encoder, &self.shadow_view, false);
                 pass.set_bind_group(0, &self.camera_bind_group, &[]);
                 let keys = &cache.current.as_ref().expect("a cached frame").keys;
-                draw_casters(
-                    &mut pass,
-                    &mut casters.iter().filter(|c| !keys.contains(&c.1)).map(|c| c.0),
-                    light_view_projection,
-                );
+                if !experiment("nomovers") {
+                    draw_casters(
+                        &mut pass,
+                        &mut casters.iter().filter(|c| !keys.contains(&c.1)).map(|c| c.0),
+                        light_view_projection,
+                    );
+                }
             } else {
                 // Cleared once: every fragment lit.
                 let _pass = depth_pass(&mut encoder, &self.shadow_view, true);
+                self.shadow_restore.synced = None;
             }
         }
         if let Some(build) = self.shadow_cache.build.as_mut() {
             build.step += 1;
         }
         self.shadow_cache.previous = casters.iter().map(|c| c.1).collect();
+        mark("shadow-pass");
         // The water's reflection: what stands above the nearest water, seen in its surface.
-        let mirror = if water_on && !experiment("norefl") {
+        // Only when some water is on screen to show it (nothing else reads it).
+        let screen = camera.view_projection(aspect).to_cols_array();
+        let mirror = if water_on
+            && self.quality.water_reflections
+            && !experiment("norefl")
+            && (experiment("allrefl") || self.water.any_body_on_screen(|b| outside_view(&screen, b)))
+        {
             self.water.reflection_level(camera.target)
         } else {
             None
@@ -4223,6 +4742,30 @@ impl Wgpu3DRenderer {
                 0,
                 bytemuck::bytes_of(&uniform),
             );
+            // Only where the water showing it is on screen (a margin for its wobble and the
+            // half-size target's filtering) is the reflection ever read: drawn there only.
+            let screen_vp = camera.view_projection(aspect);
+            let water_rect = if experiment("allrefl") {
+                None
+            } else {
+                self.water.bodies_at_level(level).into_iter().try_fold(
+                    [f32::MAX, f32::MAX, f32::MIN, f32::MIN],
+                    |acc, b| {
+                        screen_rect(screen_vp, b, size)
+                            .map(|r| [acc[0].min(r[0]), acc[1].min(r[1]), acc[2].max(r[2]), acc[3].max(r[3])])
+                    },
+                )
+            }
+            .map(|r| {
+                const MARGIN: f32 = 24.0;
+                [
+                    (r[0] - MARGIN).max(0.0),
+                    (r[1] - MARGIN).max(0.0),
+                    (r[2] + MARGIN).min(size.0 as f32),
+                    (r[3] + MARGIN).min(size.1 as f32),
+                ]
+            })
+            .filter(|r| r[2] > r[0] && r[3] > r[1]);
             let views = self.reflection.views.as_ref().expect("reflection target");
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("velvet-3d-reflection-pass"),
@@ -4249,7 +4792,19 @@ impl Wgpu3DRenderer {
             });
             pass.set_bind_group(0, &self.reflection.camera_bind_group, &[]);
             pass.set_bind_group(3, &self.shadow_bind_group, &[]);
+            if let Some(r) = water_rect {
+                // In the half-size target's pixels.
+                let x0 = (r[0] * 0.5).floor() as u32;
+                let y0 = (r[1] * 0.5).floor() as u32;
+                let x1 = ((r[2] * 0.5).ceil() as u32).min(half.0);
+                let y1 = ((r[3] * 0.5).ceil() as u32).min(half.1);
+                if x1 > x0 && y1 > y0 {
+                    pass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0);
+                }
+            }
             let mut bound = None;
+            let mut run: Option<DrawRun> = None;
+            pass.set_bind_group(1, &self.object_bind_group, &[]);
             for (draw_index, draw) in draws.iter().enumerate() {
                 if draw.material.is_shadow_only()
                     || draw.material.is_additive()
@@ -4266,6 +4821,15 @@ impl Wgpu3DRenderer {
                 ) {
                     continue;
                 }
+                // Its image misses the water altogether: nothing of it would be read.
+                if let (Some(w), Some(r)) = (
+                    water_rect,
+                    screen_rect(mirrored_vp * draw.transform, mesh.bounds.get(), size),
+                ) {
+                    if r[2] < w[0] || r[0] > w[2] || r[3] < w[1] || r[1] > w[3] {
+                        continue;
+                    }
+                }
                 let texture = self.textures.get(
                     draw.texture
                         .or(draw.material.texture)
@@ -4277,22 +4841,84 @@ impl Wgpu3DRenderer {
                     texture.map_or(true, |t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0);
                 let normal_map = texture.map_or(true, |t| t.normal_map);
                 let variant = (usize::from(cutout), usize::from(normal_map));
+                let texture_id = draw.texture.or(draw.material.texture).unwrap_or(self.white_texture).0;
+                let key = (draw.mesh.0, texture_id, variant.0 * 2 + variant.1);
+                if DrawRun::extends(&run, draw_index, key) {
+                    if let Some(r) = run.as_mut() {
+                        r.end += 1;
+                    }
+                    continue;
+                }
+                DrawRun::flush(&mut run, &mut pass);
                 if bound != Some(variant) {
                     pass.set_pipeline(&self.reflect_pipelines[variant.0][variant.1]);
                     bound = Some(variant);
                 }
-                pass.set_bind_group(
-                    1,
-                    &self.object_bind_group,
-                    &[(self.object_stride * draw_index as u64) as u32],
-                );
                 if let Some(texture) = texture {
                     pass.set_bind_group(2, &texture.bind_group, &[]);
                 }
                 pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+                run = Some(DrawRun {
+                    first: draw_index as u32,
+                    end: draw_index as u32 + 1,
+                    count: mesh.index_count,
+                    key,
+                });
             }
+            DrawRun::flush(&mut run, &mut pass);
+        }
+        mark("reflection");
+        let prepass = self.quality.depth_prepass || experiment("prepass");
+        let in_prepass = |draw: &MeshDraw3D| -> bool {
+            if draw.material.is_shadow_only() || draw.material.is_additive() || draw.material.base_color[3] < 0.99 {
+                return false;
+            }
+            let window = draw.material.occlusion_window;
+            let texture = self.textures.get(draw.texture.or(draw.material.texture).unwrap_or(self.white_texture).0 as usize);
+            !(texture.map_or(true, |t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0))
+        };
+        if prepass {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("velvet-3d-probe-prepass"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_view,
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&self.probe_depth_pipeline);
+            pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            pass.set_bind_group(1, &self.object_bind_group, &[]);
+            pass.set_bind_group(3, &self.shadow_bind_group, &[]);
+            let mut run: Option<DrawRun> = None;
+            let mut bound_mesh: Option<u32> = None;
+            for (draw_index, draw) in draws.iter().enumerate() {
+                if !on_screen[draw_index] || !in_prepass(draw) {
+                    continue;
+                }
+                let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) else { continue };
+                let tex = draw.texture.or(draw.material.texture).unwrap_or(self.white_texture);
+                let key = (draw.mesh.0, 0, 0);
+                if DrawRun::extends(&run, draw_index, key) {
+                    if let Some(r) = run.as_mut() { r.end += 1; }
+                    continue;
+                }
+                DrawRun::flush(&mut run, &mut pass);
+                if let Some(t) = self.textures.get(tex.0 as usize) {
+                    pass.set_bind_group(2, &t.bind_group, &[]);
+                }
+                if bound_mesh != Some(draw.mesh.0) {
+                    pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                    pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    bound_mesh = Some(draw.mesh.0);
+                }
+                run = Some(DrawRun { first: draw_index as u32, end: draw_index as u32 + 1, count: mesh.index_count, key });
+            }
+            DrawRun::flush(&mut run, &mut pass);
         }
         // The water reads it (or the empty one, with the flag down).
         {
@@ -4324,7 +4950,7 @@ impl Wgpu3DRenderer {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_view,
                     depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
+                        load: if prepass { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(1.0) },
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
@@ -4335,12 +4961,15 @@ impl Wgpu3DRenderer {
             pass.set_bind_group(0, &self.camera_bind_group, &[]);
             pass.set_bind_group(3, &self.shadow_bind_group, &[]);
             let mut bound_variant = None;
+            let mut bound_texture: Option<u32> = None;
+            let mut bound_mesh: Option<u32> = None;
+            let mut run: Option<DrawRun> = None;
+            pass.set_bind_group(1, &self.object_bind_group, &[]);
             self.last_cutout_draws = 0;
             self.last_culled_draws = 0;
             self.last_drawn_triangles = 0;
             self.last_draw_triangles.clear();
             self.last_draw_triangles.resize(draws.len(), 0);
-            let view_projection = camera.view_projection(aspect);
             // Solid surfaces first, then what blends over them (translucent and added light,
             // which write no depth), each group in the order given.
             let blended = |draw: &MeshDraw3D| {
@@ -4362,10 +4991,14 @@ impl Wgpu3DRenderer {
                 );
             for entry in ordered {
                 let Some((draw_index, draw)) = entry else {
+                    DrawRun::flush(&mut run, &mut pass);
                     if water_on && self.water.any_visible() {
                         self.water.draw(&mut pass);
-                        // The water changed the pipeline and group 1.
+                        // The water changed the pipeline, its groups and buffers.
                         bound_variant = None;
+                        bound_texture = None;
+                        bound_mesh = None;
+                        pass.set_bind_group(1, &self.object_bind_group, &[]);
                     }
                     continue;
                 };
@@ -4375,18 +5008,12 @@ impl Wgpu3DRenderer {
                 let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) else {
                     continue;
                 };
-                // Entirely off screen: skip its vertex work altogether.
-                if self.frustum_culling
-                    && outside_view(
-                        &(view_projection * draw.transform).to_cols_array(),
-                        mesh.bounds.get(),
-                    )
-                {
+                // Entirely off screen: skip its vertex work altogether (worked out with the
+                // uniforms, on the worker pool).
+                if !on_screen[draw_index] {
                     self.last_culled_draws += 1;
                     continue;
                 }
-                let offset = self.object_stride * draw_index as u64;
-                pass.set_bind_group(1, &self.object_bind_group, &[offset as u32]);
                 let texture = draw
                     .texture
                     .or(draw.material.texture)
@@ -4405,24 +5032,53 @@ impl Wgpu3DRenderer {
                 } else {
                     usize::from(cutout) * 2 + usize::from(normal_map)
                 };
+                let (indices, index_count) = mesh.level(levels[draw_index]);
+                self.last_drawn_triangles += index_count as usize / 3;
+                self.last_draw_triangles[draw_index] = index_count / 3;
+                let texture_id = draw.texture.or(draw.material.texture).unwrap_or(self.white_texture).0;
+                // The mesh and its level: what the buffers bound are.
+                let geometry = draw.mesh.0 * 4 + u32::from(levels[draw_index]);
+                let key = (geometry, texture_id, variant);
+                if DrawRun::extends(&run, draw_index, key) {
+                    if let Some(r) = run.as_mut() {
+                        r.end += 1;
+                    }
+                    continue;
+                }
+                DrawRun::flush(&mut run, &mut pass);
+                let variant = if prepass && variant < 2 { 10 + variant } else { variant };
                 if bound_variant != Some(variant) {
                     pass.set_pipeline(match variant {
                         4 => &self.translucent_pipeline,
                         5 => &self.additive_pipeline,
+                        10 | 11 => &self.probe_equal_pipelines[variant - 10],
                         v => &self.pipelines[v / 2][v % 2],
                     });
                     bound_variant = Some(variant);
                 }
+                // What is still bound from the draw before is not bound again (the water's
+                // drawing in between forgets it).
                 if let Some(texture) = texture {
-                    pass.set_bind_group(2, &texture.bind_group, &[]);
+                    if bound_texture != Some(texture_id) {
+                        pass.set_bind_group(2, &texture.bind_group, &[]);
+                        bound_texture = Some(texture_id);
+                    }
                 }
-                pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..mesh.index_count, 0, 0..1);
-                self.last_drawn_triangles += mesh.index_count as usize / 3;
-                self.last_draw_triangles[draw_index] = mesh.index_count / 3;
+                if bound_mesh != Some(geometry) {
+                    pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                    bound_mesh = Some(geometry);
+                }
+                run = Some(DrawRun {
+                    first: draw_index as u32,
+                    end: draw_index as u32 + 1,
+                    count: index_count,
+                    key,
+                });
             }
+            DrawRun::flush(&mut run, &mut pass);
         }
+        mark("main-pass");
         let finish = self.finish;
         self.post.finish(
             queue,
@@ -4439,18 +5095,49 @@ impl Wgpu3DRenderer {
                 saturation: finish.saturation,
                 contrast: finish.contrast,
                 exposure: finish.exposure.max(0.0),
+                bloom_levels: self.quality.bloom_levels as usize,
             },
             clear,
         );
         if self.finish.ink > 0.0 || self.finish.occlusion > 0.0 {
             self.draw_outline(device, queue, &mut encoder, target, size, camera);
         }
+        mark("post");
         queue.submit(std::iter::once(encoder.finish()));
+        mark("submit");
+        if profiling {
+            thread_local! {
+                static SUMS: std::cell::RefCell<(u32, Vec<(&'static str, f64)>)> = std::cell::RefCell::new((0, Vec::new()));
+            }
+            SUMS.with(|sums| {
+                let mut sums = sums.borrow_mut();
+                let mut last = cpu_started;
+                for (i, (name, at)) in marks.iter().enumerate() {
+                    let ms = at.duration_since(last).as_secs_f64() * 1000.0;
+                    last = *at;
+                    if sums.1.len() <= i {
+                        sums.1.push((name, 0.0));
+                    }
+                    sums.1[i].1 += ms;
+                }
+                sums.0 += 1;
+                if sums.0 == 120 {
+                    let line: Vec<String> = sums.1.iter().map(|(n, t)| format!("{n} {:.2}", t / 120.0)).collect();
+                    eprintln!("[cpuprof] {} (draws {})", line.join(", "), draws.len());
+                    sums.0 = 0;
+                    sums.1.clear();
+                }
+            });
+        }
         if gi_on {
             self.gi
                 .shaded(crate::gi3d::GiCamera::of(&camera, self.depth_size));
         }
         self.directional_shadows = saved_shadows;
+        crate::RENDER3D_CPU_NS.fetch_add(
+            cpu_started.elapsed().as_nanos() as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
     }
 
     /// The ink lines of the finish, over the frame just drawn into `target`, read from its depth.
@@ -4747,6 +5434,295 @@ fn create_depth_texture(
 /// when it is done. Each frame starts from a copy of the cached map and adds only what moves
 /// (her, people, animated or moving things). A caster is "still" when the same mesh stood with
 /// the same transform last frame and its vertices have not been animated for a while.
+/// Where a box (`bounds`, placed by `clip`) lands on a `size` screen, in pixels (x0, y0, x1, y1);
+/// `None` when part of it is behind the camera (then it may be anywhere).
+fn screen_rect(clip: Mat4, bounds: [[f32; 3]; 2], size: (u32, u32)) -> Option<[f32; 4]> {
+    let [lo, hi] = bounds;
+    let m = clip.to_cols_array();
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for i in 0..8 {
+        let p = [
+            if i & 1 == 0 { lo[0] } else { hi[0] },
+            if i & 2 == 0 { lo[1] } else { hi[1] },
+            if i & 4 == 0 { lo[2] } else { hi[2] },
+        ];
+        let x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
+        let y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
+        let w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+        if !(w > 1e-4) || !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        let (u, v) = ((x / w * 0.5 + 0.5) * size.0 as f32, (0.5 - y / w * 0.5) * size.1 as f32);
+        x0 = x0.min(u);
+        y0 = y0.min(v);
+        x1 = x1.max(u);
+        y1 = y1.max(v);
+    }
+    Some([x0, y0, x1, y1])
+}
+
+/// Draws next to each other in the list with the same mesh, texture and pipeline: drawn as one
+/// call, its instances the draws (each reads its own data by its index), in the same order.
+struct DrawRun {
+    first: u32,
+    end: u32,
+    count: u32,
+    key: (u32, u32, usize),
+}
+
+impl DrawRun {
+    /// Draw `index` (key `key`, `count` indices) joins this run if it comes right after it.
+    fn extends(run: &Option<DrawRun>, index: usize, key: (u32, u32, usize)) -> bool {
+        run.as_ref().is_some_and(|r| r.end as usize == index && r.key == key)
+    }
+
+    /// The run so far, drawn (if any).
+    fn flush(run: &mut Option<DrawRun>, pass: &mut wgpu::RenderPass<'_>) {
+        if let Some(r) = run.take() {
+            pass.draw_indexed(0..r.count, 0, r.first..r.end);
+        }
+    }
+}
+
+/// The keys of the cached frame in use.
+fn keys_of_current(cache: &ShadowCache) -> &KeySet {
+    static EMPTY: std::sync::OnceLock<KeySet> = std::sync::OnceLock::new();
+    cache
+        .current
+        .as_ref()
+        .map_or_else(|| EMPTY.get_or_init(Default::default), |f| &f.keys)
+}
+
+/// The texels of the shadow map a box (`bounds`, placed by `clip`: light projection * model)
+/// can draw into, two texels wider all round; `None` when it falls outside the map.
+fn shadow_footprint(clip: Mat4, bounds: [[f32; 3]; 2]) -> Option<[u32; 4]> {
+    let [lo, hi] = bounds;
+    let m = clip.to_cols_array();
+    let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for i in 0..8 {
+        let p = [
+            if i & 1 == 0 { lo[0] } else { hi[0] },
+            if i & 2 == 0 { lo[1] } else { hi[1] },
+            if i & 4 == 0 { lo[2] } else { hi[2] },
+        ];
+        let x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
+        let y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
+        let w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+        if !(x.is_finite() && y.is_finite() && w.is_finite()) || w.abs() < 1e-6 {
+            // Unprojectable: the whole map.
+            return Some([0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]);
+        }
+        let (u, v) = ((x / w) * 0.5 + 0.5, 1.0 - ((y / w) * 0.5 + 0.5));
+        x0 = x0.min(u);
+        y0 = y0.min(v);
+        x1 = x1.max(u);
+        y1 = y1.max(v);
+    }
+    let size = SHADOW_MAP_SIZE as f32;
+    let to = |v: f32, pad: f32| (v * size + pad).clamp(0.0, size);
+    let (ax, ay, bx, by) = (to(x0, -2.0).floor(), to(y0, -2.0).floor(), to(x1, 2.0).ceil(), to(y1, 2.0).ceil());
+    if bx <= ax || by <= ay {
+        return None;
+    }
+    Some([ax as u32, ay as u32, (bx - ax) as u32, (by - ay) as u32])
+}
+
+/// Rectangles whose union is hardly bigger than the two of them become one (no area is put back
+/// for nothing); past 128 of them, the smallest unions are taken until they fit.
+fn merge_rects(rects: Vec<[u32; 4]>) -> Vec<[u32; 4]> {
+    // Many (the frames after a zone change, when every caster is still a mover): the pairwise
+    // merge below would take seconds, so they go to a coarse grid of the map first.
+    if rects.len() > 48 {
+        return grid_rects(&rects);
+    }
+    pair_rects(rects)
+}
+
+/// Rectangles covering `rects`, made of a 32×32 grid's cells: each row's runs of touched cells,
+/// runs of the same span in rows one under the other joined. Always covers them.
+fn grid_rects(rects: &[[u32; 4]]) -> Vec<[u32; 4]> {
+    const CELLS: u32 = 32;
+    let tile = SHADOW_MAP_SIZE.div_ceil(CELLS);
+    let mut touched = [[false; CELLS as usize]; CELLS as usize];
+    for r in rects {
+        if r[2] == 0 || r[3] == 0 {
+            continue;
+        }
+        let (x0, y0) = (r[0] / tile, r[1] / tile);
+        let x1 = ((r[0] + r[2] - 1) / tile).min(CELLS - 1);
+        let y1 = ((r[1] + r[3] - 1) / tile).min(CELLS - 1);
+        for row in touched.iter_mut().take(y1 as usize + 1).skip(y0 as usize) {
+            for cell in row.iter_mut().take(x1 as usize + 1).skip(x0 as usize) {
+                *cell = true;
+            }
+        }
+    }
+    let mut out: Vec<[u32; 4]> = Vec::new();
+    // The runs of the row above, as indices into `out`, to grow down when the span matches.
+    let mut above: Vec<usize> = Vec::new();
+    for (y, row) in touched.iter().enumerate() {
+        let mut here = Vec::new();
+        let mut x = 0;
+        while x < CELLS as usize {
+            if !row[x] {
+                x += 1;
+                continue;
+            }
+            let start = x;
+            while x < CELLS as usize && row[x] {
+                x += 1;
+            }
+            let (rx, rw) = (start as u32 * tile, (x - start) as u32 * tile);
+            let rw = rw.min(SHADOW_MAP_SIZE - rx);
+            let ry = y as u32 * tile;
+            let rh = tile.min(SHADOW_MAP_SIZE - ry);
+            if let Some(&i) = above.iter().find(|&&i| out[i][0] == rx && out[i][2] == rw) {
+                out[i][3] += rh;
+                here.push(i);
+            } else {
+                out.push([rx, ry, rw, rh]);
+                here.push(out.len() - 1);
+            }
+        }
+        above = here;
+    }
+    out
+}
+
+/// Pairs of rectangles joined while that wastes little (or while there are over 128).
+fn pair_rects(mut rects: Vec<[u32; 4]>) -> Vec<[u32; 4]> {
+    let area = |r: &[u32; 4]| r[2] as u64 * r[3] as u64;
+    let union = |a: [u32; 4], b: [u32; 4]| {
+        let (x0, y0) = (a[0].min(b[0]), a[1].min(b[1]));
+        let (x1, y1) = ((a[0] + a[2]).max(b[0] + b[2]), (a[1] + a[3]).max(b[1] + b[3]));
+        [x0, y0, x1 - x0, y1 - y0]
+    };
+    loop {
+        let mut best: Option<(usize, usize, u64)> = None;
+        for i in 0..rects.len() {
+            for j in i + 1..rects.len() {
+                let u = union(rects[i], rects[j]);
+                let waste = area(&u).saturating_sub(area(&rects[i]) + area(&rects[j]));
+                let cheap = area(&u) * 10 <= (area(&rects[i]) + area(&rects[j])) * 11;
+                if (cheap || rects.len() > 128) && best.is_none_or(|b| waste < b.2) {
+                    best = Some((i, j, waste));
+                }
+            }
+        }
+        let Some((i, j, _)) = best else {
+            return rects;
+        };
+        let b = rects.swap_remove(j);
+        rects[i] = union(rects[i], b);
+    }
+}
+
+/// Writes the cached map's depth into the frame's map inside a scissor (no copy of a part of a
+/// depth texture exists): a full-screen triangle that loads each texel and outputs it as depth.
+struct ShadowRestore {
+    pipeline: wgpu::RenderPipeline,
+    groups: [wgpu::BindGroup; 2],
+    /// Last frame's moving casters' rectangles on the frame's map.
+    dirty: Vec<[u32; 4]>,
+    /// Which cached map (and of which version) the frame's map holds outside `dirty`.
+    synced: Option<(usize, u64)>,
+    /// Bumped whenever the map in use changes content (redrawn, or swapped for a new build).
+    version: u64,
+}
+
+const SHADOW_RESTORE_SHADER: &str = r#"
+@group(0) @binding(0) var cached: texture_depth_2d;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32((index << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(index & 2u) * 2.0 - 1.0;
+    return vec4<f32>(x, y, 0.0, 1.0);
+}
+
+struct Out {
+    @builtin(frag_depth) depth: f32,
+};
+
+@fragment
+fn fs_main(@builtin(position) position: vec4<f32>) -> Out {
+    var out: Out;
+    out.depth = textureLoad(cached, vec2<i32>(position.xy), 0);
+    return out;
+}
+"#;
+
+impl ShadowRestore {
+    fn new(device: &wgpu::Device, views: &[wgpu::TextureView; 2]) -> Self {
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("velvet-3d-shadow-restore-layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Depth,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            }],
+        });
+        let group = |view: &wgpu::TextureView| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("velvet-3d-shadow-restore-group"),
+                layout: &layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(view),
+                }],
+            })
+        };
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("velvet-3d-shadow-restore-shader"),
+            source: wgpu::ShaderSource::Wgsl(SHADOW_RESTORE_SHADER.into()),
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("velvet-3d-shadow-restore-pipeline-layout"),
+            bind_group_layouts: &[&layout],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("velvet-3d-shadow-restore-pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &module,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        Self {
+            pipeline,
+            groups: [group(&views[0]), group(&views[1])],
+            dirty: Vec::new(),
+            synced: None,
+            version: 0,
+        }
+    }
+}
+
 struct ShadowCache {
     maps: [wgpu::Texture; 2],
     views: [wgpu::TextureView; 2],
@@ -4755,7 +5731,7 @@ struct ShadowCache {
     current: Option<ShadowFrame>,
     build: Option<ShadowBuild>,
     /// Every caster's key last frame.
-    previous: std::collections::HashSet<u64>,
+    previous: KeySet,
     /// A camera uniform for the build pass (its light projection is the new frame's).
     build_camera: wgpu::Buffer,
     build_camera_bind_group: wgpu::BindGroup,
@@ -4767,7 +5743,7 @@ struct ShadowFrame {
     direction: Vec3,
     center: (i32, i32),
     extent: f32,
-    keys: std::collections::HashSet<u64>,
+    keys: KeySet,
 }
 
 struct ShadowBuild {
@@ -4802,17 +5778,44 @@ fn shadow_projection(direction: Vec3, center: (i32, i32), extent: f32) -> Mat4 {
         * Mat4::look_at_rh(target + direction * SHADOW_DISTANCE, target, up)
 }
 
+/// A caster's identity from frame to frame: its mesh, its placement (bit for bit) and whether it
+/// is see-through. A quick multiply-and-rotate mix: these keys only meet each other in one run.
 fn caster_key(draw: &MeshDraw3D) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    draw.mesh.0.hash(&mut h);
-    for v in draw.transform.to_cols_array() {
-        v.to_bits().hash(&mut h);
+    const K: u64 = 0x9e37_79b9_7f4a_7c15;
+    let mix = |h: u64, v: u64| (h.rotate_left(5) ^ v).wrapping_mul(K);
+    let mut h = mix(0x51_7cc1_b727_220a, u64::from(draw.mesh.0));
+    let m = draw.transform.to_cols_array();
+    for pair in m.chunks_exact(2) {
+        h = mix(h, u64::from(pair[0].to_bits()) | u64::from(pair[1].to_bits()) << 32);
     }
     let window = draw.material.occlusion_window;
-    (window[2] > 0.0 && window[3] > 0.0).hash(&mut h);
-    h.finish()
+    h = mix(h, u64::from(window[2] > 0.0 && window[3] > 0.0));
+    // A final avalanche, so the low bits (the build's step picks by them) are well spread.
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xff51_afd7_ed55_8ccd);
+    h ^ (h >> 33)
 }
+
+/// Hashes nothing more: the keys put in it are hashes already.
+#[derive(Default, Clone, Copy)]
+struct KeyHasher(u64);
+
+impl std::hash::Hasher for KeyHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0 << 8) | u64::from(b);
+        }
+    }
+    fn write_u64(&mut self, n: u64) {
+        self.0 = n;
+    }
+}
+
+/// A set of caster keys.
+type KeySet = std::collections::HashSet<u64, std::hash::BuildHasherDefault<KeyHasher>>;
 
 fn create_shadow_texture(device: &wgpu::Device) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
@@ -4832,11 +5835,6 @@ fn create_shadow_texture(device: &wgpu::Device) -> wgpu::Texture {
             | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     })
-}
-
-fn align_uniform_offset(size: u64, alignment: u64) -> u64 {
-    let alignment = alignment.max(1);
-    size.div_ceil(alignment) * alignment
 }
 
 fn validate_texture_data(texture: &TextureData3D) -> Result<(), Render3DError> {
@@ -5084,6 +6082,7 @@ enum BlendMode3D {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn create_mesh_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -5094,6 +6093,22 @@ fn create_mesh_pipeline(
     normal_map: bool,
     mode: BlendMode3D,
     mirrored: bool,
+) -> wgpu::RenderPipeline {
+    create_mesh_pipeline_with(device, layout, shader, format, sample_count, cutout, normal_map, mode, mirrored, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_mesh_pipeline_with(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader: &wgpu::ShaderModule,
+    format: wgpu::TextureFormat,
+    sample_count: u32,
+    cutout: bool,
+    normal_map: bool,
+    mode: BlendMode3D,
+    mirrored: bool,
+    compare: Option<wgpu::CompareFunction>,
 ) -> wgpu::RenderPipeline {
     let constants = std::collections::HashMap::from([(
         "NORMAL_MAP".to_string(),
@@ -5179,11 +6194,11 @@ fn create_mesh_pipeline(
         depth_stencil: Some(wgpu::DepthStencilState {
             format: wgpu::TextureFormat::Depth32Float,
             depth_write_enabled: mode == BlendMode3D::Solid,
-            depth_compare: if mode == BlendMode3D::Solid {
+            depth_compare: compare.unwrap_or(if mode == BlendMode3D::Solid {
                 wgpu::CompareFunction::Less
             } else {
                 wgpu::CompareFunction::LessEqual
-            },
+            }),
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         }),
@@ -5406,15 +6421,19 @@ struct Camera {
     gi_view_projection: mat4x4<f32>,
     gi_camera: vec4<f32>,
     gi_forward: vec4<f32>,
+    quality: vec4<f32>,
 };
 struct Object {
     model: mat4x4<f32>,
     base_color: vec4<f32>,
     occlusion_window: vec4<f32>,
     normal_matrix: mat3x3<f32>,
+    light_mask: vec4<u32>,
 };
 @group(0) @binding(0) var<uniform> camera: Camera;
-@group(1) @binding(0) var<uniform> object: Object;
+// Every draw's data; this one's, read at the top of each stage by its instance.
+@group(1) @binding(0) var<storage, read> objects: array<Object>;
+var<private> object: Object;
 @group(2) @binding(0) var albedo_texture: texture_2d<f32>;
 @group(2) @binding(1) var albedo_sampler: sampler;
 @group(2) @binding(2) var normal_texture: texture_2d<f32>;
@@ -5455,6 +6474,7 @@ struct VertexIn {
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
     @location(3) color: vec4<f32>,
+    @builtin(instance_index) instance: u32,
 };
 struct VertexOut {
     @builtin(position) clip: vec4<f32>,
@@ -5463,12 +6483,22 @@ struct VertexOut {
     @location(2) uv: vec2<f32>,
     @location(3) world_position: vec3<f32>,
     @location(4) light_clip: vec4<f32>,
+    @location(5) @interpolate(flat) instance: u32,
+    // The draw's own values the fragments read, handed down so they need no buffer read.
+    @location(6) @interpolate(flat) base_color: vec4<f32>,
+    @location(7) @interpolate(flat) occlusion_window: vec4<f32>,
+    @location(8) @interpolate(flat) light_mask: u32,
 };
 
 @vertex
 fn vs_main(input: VertexIn) -> VertexOut {
+    object = objects[input.instance];
     let world = object.model * vec4<f32>(input.position, 1.0);
     var out: VertexOut;
+    out.instance = input.instance;
+    out.base_color = object.base_color;
+    out.occlusion_window = object.occlusion_window;
+    out.light_mask = object.light_mask.x;
     out.clip = camera.view_projection * world;
     // Inverse transpose via cofactors (computed per draw on the CPU):
     // non-uniformly fitted cave art must not bend its lighting normals.
@@ -5513,12 +6543,14 @@ fn shadow_visibility(light_clip: vec4<f32>, normal: vec3<f32>) -> f32 {
     // A per-pixel turn of the disc: banding becomes a fine grain the toon ramp smooths.
     let angle = fract(sin(dot(floor(uv / texel), vec2<f32>(12.9898, 78.233))) * 43758.5453) * 6.2831853;
     let rot = mat2x2<f32>(cos(angle), sin(angle), -sin(angle), cos(angle));
+    // As many of the disc's taps as the quality asks (all sixteen: the full look).
+    let taps = i32(clamp(camera.quality.x, 1.0, 16.0));
     var visibility = 0.0;
-    for (var i: i32 = 0; i < 16; i = i + 1) {
+    for (var i: i32 = 0; i < taps; i = i + 1) {
         let offset = rot * POISSON[i] * texel * 1.5;
         visibility = visibility + textureSampleCompareLevel(shadow_texture, shadow_sampler, uv + offset, ndc.z - bias);
     }
-    return visibility / 16.0;
+    return visibility / f32(taps);
 }
 
 // Pipeline constant: false for textures without a normal map, which then
@@ -5633,11 +6665,14 @@ fn local_lighting(
     roughness: f32,
 ) -> vec3<f32> {
     var total = vec3<f32>(0.0);
-    let count = u32(clamp(camera.local_light_meta.x, 0.0, 32.0));
-    for (var index: u32 = 0u; index < 32u; index = index + 1u) {
-        if (index >= count) {
+    // Only the lights that reach this draw (worked out per draw on the CPU), in order.
+    var mask = object.light_mask.x;
+    loop {
+        if (mask == 0u) {
             break;
         }
+        let index = firstTrailingBit(mask);
+        mask = mask & (mask - 1u);
         let packed_position = camera.local_light_positions[index];
         let packed_color = camera.local_light_colors[index];
         let to_light = packed_position.xyz - world_position;
@@ -5679,6 +6714,9 @@ fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
 }
 
 fn shade(input: VertexOut, cutout: bool) -> vec4<f32> {
+    object.base_color = input.base_color;
+    object.occlusion_window = input.occlusion_window;
+    object.light_mask = vec4<u32>(input.light_mask, 0u, 0u, 0u);
     if (dot(camera.clip_plane.xyz, input.world_position) + camera.clip_plane.w < 0.0) {
         discard;
     }
@@ -5693,12 +6731,13 @@ fn shade(input: VertexOut, cutout: bool) -> vec4<f32> {
     // entire room floor black; contact AO still anchors props to the tiles.
     // `local_light_meta.y` marks a frame without directional shadows: the
     // map is empty, so skip its nine samples.
+    // (Not worked out where it is not used: a floor receiver is always lit, and with no sun at
+    // all the visibility multiplies nothing.)
     var visibility = 1.0;
-    if (camera.local_light_meta.y < 0.5) {
+    if (camera.local_light_meta.y < 0.5
+        && object.occlusion_window.x >= -0.5
+        && any(camera.light_color.rgb != vec3<f32>(0.0))) {
         visibility = shadow_visibility(input.light_clip, normal);
-    }
-    if (object.occlusion_window.x < -0.5) {
-        visibility = 1.0;
     }
     if (camera.toon_params.x > 0.5) {
         visibility = smoothstep(0.32, 0.68, visibility);
@@ -5765,14 +6804,18 @@ fn shade(input: VertexOut, cutout: bool) -> vec4<f32> {
         camera.light_color.rgb * 2.35 * mix(0.24, 1.0, visibility),
         roughness,
     );
-    let moon = evaluate_brdf(
-        base,
-        normal,
-        view_dir,
-        moon_dir,
-        camera.moon_color.rgb * camera.moon_color.a * 1.8,
-        roughness,
-    );
+    // (By day the moon gives nothing: not worked out.)
+    var moon = vec3<f32>(0.0);
+    if (any(camera.moon_color.rgb * camera.moon_color.a != vec3<f32>(0.0))) {
+        moon = evaluate_brdf(
+            base,
+            normal,
+            view_dir,
+            moon_dir,
+            camera.moon_color.rgb * camera.moon_color.a * 1.8,
+            roughness,
+        );
+    }
     let local = local_lighting(base, normal, view_dir, input.world_position, roughness);
     var rim = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.065;
     if (camera.toon_params.x > 0.5) {
@@ -6000,32 +7043,43 @@ struct Camera {
     grade: vec4<f32>,
     clip_plane: vec4<f32>,
 };
+// The same layout as the mesh shader's (an array: every field counts for its stride).
 struct Object {
     model: mat4x4<f32>,
     base_color: vec4<f32>,
     occlusion_window: vec4<f32>,
     normal_matrix: mat3x3<f32>,
+    light_mask: vec4<u32>,
 };
 @group(0) @binding(0) var<uniform> camera: Camera;
-@group(1) @binding(0) var<uniform> object: Object;
+@group(1) @binding(0) var<storage, read> objects: array<Object>;
+var<private> object: Object;
 @group(2) @binding(0) var albedo_texture: texture_2d<f32>;
 @group(2) @binding(1) var albedo_sampler: sampler;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
     @location(2) uv: vec2<f32>,
+    @builtin(instance_index) instance: u32,
 };
 
 struct ShadowOut {
     @builtin(position) light_clip: vec4<f32>,
     @location(0) camera_clip: vec4<f32>,
     @location(1) uv: vec2<f32>,
+    @location(2) @interpolate(flat) instance: u32,
+    @location(3) @interpolate(flat) base_color: vec4<f32>,
+    @location(4) @interpolate(flat) occlusion_window: vec4<f32>,
 };
 
 @vertex
 fn vs_shadow(input: VertexIn) -> ShadowOut {
+    object = objects[input.instance];
     let world = object.model * vec4<f32>(input.position, 1.0);
     var out: ShadowOut;
+    out.instance = input.instance;
+    out.base_color = object.base_color;
+    out.occlusion_window = object.occlusion_window;
     out.light_clip = camera.light_view_projection * world;
     out.camera_clip = camera.view_projection * world;
     out.uv = input.uv;
@@ -6034,6 +7088,8 @@ fn vs_shadow(input: VertexIn) -> ShadowOut {
 
 @fragment
 fn fs_shadow(input: ShadowOut) {
+    object.base_color = input.base_color;
+    object.occlusion_window = input.occlusion_window;
     let window = object.occlusion_window;
     let albedo = textureSample(albedo_texture, albedo_sampler, input.uv);
     if (object.base_color.a > 0.95 && albedo.a < 0.38) {
@@ -6065,6 +7121,37 @@ fn fs_shadow(input: ShadowOut) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thousands_of_shadow_rects_merge_at_once_and_stay_covered() {
+        // As after a zone change: every caster of the forest a mover.
+        let mut seed = 7u32;
+        let mut next = |m: u32| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 8) % m
+        };
+        let rects: Vec<[u32; 4]> = (0..5000)
+            .map(|_| {
+                let (x, y) = (next(SHADOW_MAP_SIZE - 300), next(SHADOW_MAP_SIZE - 300));
+                [x, y, 1 + next(250), 1 + next(250)]
+            })
+            .collect();
+        let started = std::time::Instant::now();
+        let merged = merge_rects(rects.clone());
+        assert!(started.elapsed() < std::time::Duration::from_millis(50), "{:?}", started.elapsed());
+        assert!(merged.len() <= 32 * 16);
+        let inside = |p: (u32, u32)| {
+            merged.iter().any(|m| p.0 >= m[0] && p.1 >= m[1] && p.0 < m[0] + m[2] && p.1 < m[1] + m[3])
+        };
+        for r in &rects {
+            for p in [(r[0], r[1]), (r[0] + r[2] - 1, r[1] + r[3] - 1), (r[0] + r[2] / 2, r[1] + r[3] / 2)] {
+                assert!(inside(p), "{r:?} left out");
+            }
+        }
+        for m in &merged {
+            assert!(m[0] + m[2] <= SHADOW_MAP_SIZE && m[1] + m[3] <= SHADOW_MAP_SIZE);
+        }
+    }
 
     #[test]
     fn heightfield_builds_indexed_grid() {
@@ -6348,6 +7435,76 @@ mod tests {
             .sample_animation(0, walk, 0.15)
             .expect("skinned mesh sample");
         assert_eq!(sampled.len(), model.meshes[0].vertices.len());
+    }
+
+    #[test]
+    fn a_model_packed_whole_loads_as_the_original() {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../demos/demon-queen/data/assets/3d/characters/queen_chibi_v2_animated.glb");
+        let Ok(original) = std::fs::read(&path) else {
+            return;
+        };
+        let mut packed = b"VGLZ".to_vec();
+        packed.extend_from_slice(&1u32.to_le_bytes());
+        packed.extend_from_slice(&(original.len() as u64).to_le_bytes());
+        packed.extend_from_slice(&miniz_oxide::deflate::compress_to_vec_zlib(&original, 9));
+        assert!(packed.len() < original.len());
+        assert_eq!(unpack_model_bytes(&packed).unwrap().as_ref(), original.as_slice());
+        // Not packed: given back as it is.
+        assert!(matches!(unpack_model_bytes(&original).unwrap(), std::borrow::Cow::Borrowed(_)));
+        let a = GltfModel::load_bytes(&original).unwrap();
+        let b = GltfModel::load_bytes(&packed).unwrap();
+        assert_eq!(format!("{:?}", a.meshes), format!("{:?}", b.meshes));
+        assert_eq!(format!("{:?}", a.textures), format!("{:?}", b.textures));
+        assert_eq!(a.animations, b.animations);
+        // A cut stream is an error, not a short model.
+        assert!(unpack_model_bytes(&packed[..packed.len() / 2]).is_err());
+    }
+
+    /// Every model of a packed release loads as its original: the same geometry, animations
+    /// and texture sizes, the textures close (QA, by hand, after tools/build_release.py):
+    /// `VELVET_PACKED_RELEASE=<release folder> cargo test … every_packed_model -- --ignored`.
+    #[test]
+    #[ignore]
+    fn every_packed_model_loads_as_its_original() {
+        let Some(release) = std::env::var_os("VELVET_PACKED_RELEASE").map(std::path::PathBuf::from) else {
+            return;
+        };
+        let project = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../demos/demon-queen");
+        fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else if path.extension().is_some_and(|e| e == "glb") {
+                    out.push(path);
+                }
+            }
+        }
+        let mut files = Vec::new();
+        walk(&release.join("data/assets/3d"), &mut files);
+        assert!(!files.is_empty());
+        let (mut checked, mut worst) = (0, (f64::MAX, String::new()));
+        for packed_path in &files {
+            let rel = packed_path.strip_prefix(&release).unwrap();
+            let original = GltfModel::load(project.join(rel)).unwrap_or_else(|e| panic!("{}: {e}", rel.display()));
+            let packed = GltfModel::load(packed_path).unwrap_or_else(|e| panic!("{} packed: {e}", rel.display()));
+            assert_eq!(format!("{:?}", original.meshes), format!("{:?}", packed.meshes), "{}", rel.display());
+            assert_eq!(original.animations, packed.animations, "{}", rel.display());
+            assert_eq!(original.textures.len(), packed.textures.len(), "{}", rel.display());
+            for (a, b) in original.textures.iter().zip(&packed.textures) {
+                assert_eq!((a.width, a.height), (b.width, b.height), "{}", rel.display());
+                let mse = a.rgba.iter().zip(&b.rgba).map(|(x, y)| (*x as f64 - *y as f64).powi(2)).sum::<f64>()
+                    / a.rgba.len().max(1) as f64;
+                let psnr = 10.0 * (255.0f64 * 255.0 / mse.max(1e-9)).log10();
+                assert!(psnr > 30.0, "{}: a texture at {psnr:.1} dB", rel.display());
+                if psnr < worst.0 {
+                    worst = (psnr, rel.display().to_string());
+                }
+            }
+            checked += 1;
+        }
+        eprintln!("{checked} packed models load as their originals (worst texture {:.1} dB, {})", worst.0, worst.1);
     }
 
     #[test]

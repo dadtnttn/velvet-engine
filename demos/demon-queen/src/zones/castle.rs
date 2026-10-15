@@ -1,6 +1,9 @@
 //! El castillo como lugar: lo que el mundo hace con él (dibujarlo, recorrerlo, entrar y salir).
 use super::*;
 
+/// Where Nemi waits to train the Queen: in the arena of the patio.
+pub(crate) const NEMI_ARENA: (f32, f32) = (-12.0, 30.4);
+
 impl RenderState {
     // Inside the castle: its rooms, its flames, the maids on their rounds; the same Queen.
     pub(super) fn render_castle(&mut self, frame: &Frame, inside: &castle3d::State, bob: f32) {
@@ -148,16 +151,18 @@ impl RenderState {
         }
         let lights = inside.lights(elapsed);
         let saved = self.renderer.replace_finish(castle3d::finish());
+        let (scene_view, scene_size) = self.scene_target();
         self.renderer.render_with_environment_and_lights(
             &self.device,
             &self.queue,
-            &self.target_view,
-            (WINDOW_WIDTH, WINDOW_HEIGHT),
+            &scene_view,
+            scene_size,
             camera,
             castle3d::mood(environment),
             &lights,
             &draws,
         );
+        self.finish_scene(&scene_view, scene_size);
         self.renderer.replace_finish(saved);
         let mut bubbles = inside.bubbles(camera);
         bubbles.extend(queen_thought_bubble(
@@ -310,6 +315,12 @@ impl App {
             }
             self.player_yaw = direction.x.atan2(direction.z);
         }
+        // Nemi waits at the arena in the patio from the moment her gift is due (after the first
+        // Council) until she has trained the Queen three times.
+        let gift_due = self.story.get("consejo_1_hecho") > 0 && self.story.get("espada_regalo") == 0;
+        let training = self.story.get("espada_regalo") > 0 && self.story.get("entreno") < 3;
+        let training = gift_due || training;
+        inside.maid_post[1] = training.then_some(NEMI_ARENA);
         inside.held = self
             .talk
             .as_ref()

@@ -20,6 +20,11 @@ wgpu = { workspace = true }
 pollster = { workspace = true }
 image = { workspace = true }
 gltf = { workspace = true }
+# AVIF textures inside GLB files (the release packs them so).
+velvet-avif = { path = "../velvet-avif" }
+# Models the release packs whole (zlib).
+miniz_oxide = "0.8"
+meshopt = "0.6"
 raw-window-handle = { workspace = true }
 winit = { workspace = true, optional = true }
 

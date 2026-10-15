@@ -112,14 +112,7 @@ impl Reel {
         let mut shots = Vec::with_capacity(list.len());
         for &(name, looping) in list {
             let dir = root.join(name);
-            let mut frames: Vec<PathBuf> = std::fs::read_dir(&dir)
-                .map(|d| {
-                    d.filter_map(|e| e.ok().map(|e| e.path()))
-                        .filter(|p| p.extension().is_some_and(|x| x == "jpg" || x == "png"))
-                        .collect()
-                })
-                .unwrap_or_default();
-            frames.sort();
+            let frames = super::clip_video::frames(&dir);
             if frames.is_empty() {
                 eprintln!("[juego] falta la toma {}", dir.display());
                 return None;
@@ -589,16 +582,29 @@ struct AlbaGame {
 }
 
 /// How she says `want` this hot: plainly; stammering; or the letters all in a heap.
+/// In the player's language: the whole shout and her word are translated as they are (the
+/// catalogs hold both), and the word is stammered or jumbled inside the translated shout.
 fn garble(want: &Want, heat: f32, dice: &mut Dice) -> (String, bool) {
+    let tr = |s: &str| demon_queen_dungeon::i18n::tr(s).into_owned();
     let (pre, word, post) = want.shout;
+    let shout = tr(&format!("{pre}{word}{post}"));
     if heat < 0.35 {
-        return (format!("{pre}{word}{post}"), false);
+        return (shout, false);
     }
+    let word = tr(word);
+    // Her word put back in the shout as she says it.
+    let say = |said: &str| {
+        if shout.contains(word.as_str()) {
+            shout.replacen(word.as_str(), said, 1)
+        } else {
+            format!("{said}!")
+        }
+    };
     let letters: Vec<char> = word.chars().collect();
     if heat < 0.7 {
         let head: String = letters.iter().take(2).collect();
         let rest: String = letters.iter().skip(2).collect::<String>().to_lowercase();
-        return (format!("{pre}{head}… {head}~{rest}{post}"), false);
+        return (say(&format!("{head}… {head}~{rest}")), false);
     }
     let mut mixed = letters.clone();
     for _ in 0..12 {
@@ -610,7 +616,7 @@ fn garble(want: &Want, heat: f32, dice: &mut Dice) -> (String, bool) {
             break;
         }
     }
-    (format!("¡{}!", mixed.iter().collect::<String>()), true)
+    (say(&mixed.iter().collect::<String>()), true)
 }
 
 // ───────────────────────────── Noa ─────────────────────────────
@@ -1381,7 +1387,10 @@ impl PlayScene {
         // Chiquita whispers a hint now and then (not always the truth).
         if self.dice.roll() < 0.24 {
             let hint = if self.dice.roll() < 0.72 {
-                format!("—Psst. Ha dicho «{}». De nada.", wants[want].word)
+                format!(
+                    "—Psst. Ha dicho «{}». De nada.",
+                    demon_queen_dungeon::i18n::tr(wants[want].word)
+                )
             } else {
                 let wrong: Vec<&str> = words
                     .iter()
@@ -1479,11 +1488,15 @@ impl PlayScene {
             });
             let line = match picked {
                 None => (*self.dice.pick(&ALBA_LATE)).to_owned(),
-                Some(word) => self
-                    .dice
-                    .pick(&ALBA_BAD)
-                    .replace("{w}", &said(word))
-                    .replace("{W}", word),
+                Some(word) => {
+                    // In the player's language: the line, then the word put in it (said and
+                    // shouted), each translated on its own.
+                    let tr = |s: &str| demon_queen_dungeon::i18n::tr(s).into_owned();
+                    let shouted = tr(word);
+                    tr(self.dice.pick(&ALBA_BAD))
+                        .replace("{w}", &said(&shouted))
+                        .replace("{W}", &shouted)
+                }
             };
             self.talk.reply(Voice::Alba, &line);
             self.flash([0x7a, 0x8a, 0xff], 0.6);
@@ -1588,7 +1601,10 @@ impl PlayScene {
         if right {
             self.talk.reply(
                 Voice::Alba,
-                &format!("—¡{}! ¡JA! ¡Rima! Eres de las mías, Majestad.", copla.rhyme),
+                &format!(
+                    "—¡{}! ¡JA! ¡Rima! Eres de las mías, Majestad.",
+                    demon_queen_dungeon::i18n::tr(copla.rhyme)
+                ),
             );
             self.flash([0xff, 0xe0, 0x8a], 1.0);
             self.stamp("¡RIMA!", [0xff, 0xc0, 0x40]);
@@ -2318,7 +2334,8 @@ impl PlayScene {
             }
             if let (Some(verse), Some(copla)) = (&self.alba.verse, self.copla()) {
                 if self.phase == Phase::Verse {
-                    game.verse = Some(format!("«{}»", copla.verse.replace(" / ", "\n")));
+                    let said = demon_queen_dungeon::i18n::tr(copla.verse);
+                    game.verse = Some(format!("«{}»", said.replace(" / ", "\n")));
                     game.chips_age = ((now - verse.start) * 1000.0) as u32;
                     if verse.picked.is_none() {
                         game.chips_left = Some(
@@ -2390,6 +2407,7 @@ impl PlayScene {
             pose_active: false,
             black: self.reel.black,
             game: Some(game),
+            deal: None,
         }
     }
 
@@ -2592,10 +2610,16 @@ impl App {
             }
         }
         scene.step(dt);
+        if matches!(scene.game, Game::Tienda(_)) {
+            scene.tienda_face();
+        }
         let want = scene.ended.is_none().then_some(scene.reel.on);
         let mut sound = None;
         if want != scene.sound_for {
             scene.sound_for = want;
+            if let Some(i) = want {
+                super::gallery_seen::shot(&scene.reel.shots[i].dir);
+            }
             sound = Some(want.map(|i| {
                 (
                     scene.reel.shots[i].dir.join("audio.ogg"),
@@ -2721,6 +2745,15 @@ impl App {
                 self.close_play_scene();
             }
             return;
+        }
+        // A favour's page: «Echarse atrás» (once sealed, «Saltar») is Esc.
+        if pressed && matches!(scene.game, Game::Tienda(_)) {
+            if let Some((x, y)) = pointer {
+                if map_overlay::scene_favor_hit(x, y, false) == Some(1) {
+                    scene.stop();
+                    return;
+                }
+            }
         }
         if pressed {
             if let Some((x, y)) = pointer {
@@ -2861,17 +2894,73 @@ impl App {
         self.persist_3d_state(true);
     }
 
+    /// A favour of the shop plays as a page of the shop: the haggle under it (what it buys, the
+    /// price as it stands and once the favour is paid), the favour, her gold, and the
+    /// shopkeeper's face of the moment (grinning while she pays, swamped while she hurries him,
+    /// shaking his head if she backs out).
+    fn favor_deal(&self) -> Option<map_overlay::FavorDeal> {
+        let scene = self.play_scene.as_ref()?;
+        let Game::Tienda(favor) = scene.game else {
+            return None;
+        };
+        let now = scene.clock;
+        let (face, before, changed) = scene.tienda.face;
+        let said_ms = scene
+            .talk
+            .said
+            .iter()
+            .rev()
+            .find(|l| matches!(l.voice, Voice::Tendero))
+            .map(|l| ((now - l.at).max(0.0) * 1000.0) as u32);
+        let index = (favor as usize).min(tienda::FAVORS.len() - 1);
+        let f = &tienda::FAVORS[index];
+        let (_, fresh) = tienda::available(&self.story);
+        let art = super::shop_games::merchant_art();
+        let portrait = |name: &'static str| {
+            art.map(|crop| {
+                super::shop_games::merchant_face(if name.is_empty() { "contento" } else { name }, crop)
+            })
+        };
+        let mut deal = map_overlay::FavorDeal {
+            quantity: 1,
+            favor: f.name.to_owned(),
+            cut: f.percent,
+            step: index as u8 + 1,
+            steps: tienda::FAVORS.len() as u8,
+            new: fresh == Some(index),
+            gold: self.gold,
+            face: portrait(face),
+            face_from: portrait(before),
+            face_ms: ((now - changed).max(0.0) * 1000.0) as u32,
+            said_ms,
+            open_ms: (now.max(0.0) * 1000.0) as u32,
+            ..Default::default()
+        };
+        if let Some(h) = self.haggle.as_ref() {
+            deal.product = Some(h.product);
+            deal.quantity = h.quantity;
+            deal.base = h.base;
+            deal.price = h.price();
+            deal.after = h.price_at((h.percent + f.percent).min(100));
+            deal.percent = h.percent;
+        }
+        Some(deal)
+    }
+
     /// The stage for the overlay, and the frame waiting to go up to the GPU.
     pub(super) fn play_scene_view(
         &mut self,
     ) -> Option<(map_overlay::SceneView, Option<image::RgbaImage>)> {
         let elapsed = self.elapsed;
+        let deal = self.favor_deal();
         let scene = self.play_scene.as_mut()?;
         let upload = scene.reel.upload.take();
         if upload.is_some() {
             scene.reel.uploads = scene.reel.uploads.wrapping_add(1);
         }
-        Some((scene.view(elapsed), upload))
+        let mut view = scene.view(elapsed);
+        view.deal = deal;
+        Some((view, upload))
     }
 
     /// Visual QA: waits for the frame being decoded, so a capture shows the clock's frame.

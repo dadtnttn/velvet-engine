@@ -4,6 +4,7 @@
 //! [`SceneView`], while this module owns rooms, characters, conditions,
 //! effects, choices, validation and persistence.
 
+use std::sync::Arc;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 use std::fs;
@@ -926,11 +927,13 @@ impl StoryRuntime {
 pub struct Game {
     story: StoryRuntime,
     state: StoryState,
-    rollback: Vec<StoryState>,
+    /// The states to step back to. Shared (`Arc`): the autosave, every second in the world, takes
+    /// a copy of the list for the save writer's thread, which costs nothing this way.
+    rollback: Vec<Arc<StoryState>>,
     /// Separate history for a VN launched from the 3D world.  It must not
     /// consume the prologue history, but the wheel still needs to step back
     /// through the dialogue before closing the side scene.
-    world_vn_rollback: Vec<StoryState>,
+    world_vn_rollback: Vec<Arc<StoryState>>,
     world_vn_active: bool,
     autosave: bool,
     last_autosave_error: Option<String>,
@@ -1071,7 +1074,7 @@ impl Game {
         } else {
             &mut self.rollback
         };
-        rollback.push(previous);
+        rollback.push(Arc::new(previous));
         if rollback.len() > ROLLBACK_LIMIT {
             rollback.remove(0);
         }
@@ -1103,7 +1106,7 @@ impl Game {
         let Some(previous) = self.world_vn_rollback.pop() else {
             return Ok(false);
         };
-        self.state = self.story.migrate_state(previous)?;
+        self.state = self.story.migrate_state(Arc::unwrap_or_clone(previous))?;
         self.autosave_best_effort();
         Ok(true)
     }
@@ -1117,7 +1120,7 @@ impl Game {
         let Some(previous) = self.rollback.pop() else {
             return Ok(false);
         };
-        self.state = self.story.migrate_state(previous)?;
+        self.state = self.story.migrate_state(Arc::unwrap_or_clone(previous))?;
         self.autosave_best_effort();
         Ok(true)
     }
@@ -1126,12 +1129,68 @@ impl Game {
         !self.rollback.is_empty()
     }
 
+    /// Does this game write its continue save as it goes?
+    pub fn autosaves(&self) -> bool {
+        self.autosave
+    }
+
     pub fn take_autosave_error(&mut self) -> Option<String> {
         self.last_autosave_error.take()
     }
 
     pub fn save_continue(&self) -> Result<()> {
         self.save_to_path(&continue_path())
+    }
+
+    /// The continue save, made into JSON and written by the save writer: here only shared copies
+    /// are taken (the history is megabytes; turning it into text took 25-40 ms every second in
+    /// the world). Nothing is written when only its time changed.
+    fn save_continue_in_background(&self) -> Result<()> {
+        use std::hash::{Hash, Hasher};
+        let mut world3d = self.world3d.clone();
+        let saved_at = now_unix();
+        // The key: the state, the place (without the time of saving) and which history it is.
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        serde_json::to_vec(&self.state)?.hash(&mut hasher);
+        if let Some(world) = world3d.as_mut() {
+            let at = world.saved_at;
+            world.saved_at = 0;
+            serde_json::to_vec(world)?.hash(&mut hasher);
+            world.saved_at = at;
+        }
+        for state in &self.rollback {
+            (Arc::as_ptr(state) as usize).hash(&mut hasher);
+        }
+        let key = hasher.finish();
+        let state = self.state.clone();
+        let rollback = self.rollback.clone();
+        crate::exploration3d_state::background::write_with(
+            continue_path(),
+            true,
+            key,
+            Box::new(move || {
+                #[derive(Serialize)]
+                struct Out<'a> {
+                    format: &'a str,
+                    schema: u32,
+                    saved_at: u64,
+                    state: &'a StoryState,
+                    rollback: Vec<&'a StoryState>,
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    world3d: Option<&'a crate::exploration3d_state::State>,
+                }
+                let out = Out {
+                    format: SAVE_FORMAT,
+                    schema: SAVE_SCHEMA,
+                    saved_at,
+                    state: &state,
+                    rollback: rollback.iter().map(|s| &**s).collect(),
+                    world3d: world3d.as_ref(),
+                };
+                serde_json::to_vec_pretty(&out).unwrap_or_default()
+            }),
+        );
+        Ok(())
     }
 
     /// The story's variables (shared with the guiones in the 3D world).
@@ -1159,6 +1218,13 @@ impl Game {
         self.world3d.as_ref()
     }
 
+    /// The bag as she has just laid it out in the pause menu (saved with the next save).
+    pub fn set_world_backpack(&mut self, pack: crate::exploration3d::backpack::Backpack) {
+        if let Some(world) = self.world3d.as_mut() {
+            world.backpack = Some(pack);
+        }
+    }
+
     pub fn checkpoint_3d(&mut self, state: crate::exploration3d_state::State) {
         self.state.exploration = Some(ExplorationState {
             world: state.world.clone(),
@@ -1176,6 +1242,7 @@ impl Game {
     pub fn history_views(&self) -> Vec<SceneView> {
         self.rollback
             .iter()
+            .map(|state| &**state)
             .chain(std::iter::once(&self.state))
             .filter_map(|state| self.story.view(state).ok())
             .collect()
@@ -1249,7 +1316,8 @@ impl Game {
             self.last_autosave_error = None;
             return;
         }
-        let save_error = self.save_continue().err();
+        // On the save writer's thread: this runs every second while she walks in the world.
+        let save_error = self.save_continue_in_background().err();
         let gallery_error = self.record_gallery().err();
         self.last_autosave_error = save_error
             .or(gallery_error)
@@ -1266,11 +1334,25 @@ impl Game {
     }
 
     fn record_gallery(&self) -> Result<()> {
+        // Asked every second in the world: read and written only when something new shows.
+        static KNOWN: std::sync::Mutex<Option<(PathBuf, BTreeSet<String>)>> = std::sync::Mutex::new(None);
         let path = gallery_path();
+        let wanted = self.story.gallery_assets_for_state(&self.state);
+        let mut known = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((known_path, assets)) = known.as_ref() {
+            if *known_path == path && wanted.iter().all(|a| assets.contains(a)) {
+                return Ok(());
+            }
+        }
+        // The file as it is on disk (a write of it may still be on its way).
+        crate::exploration3d_state::background::flush();
         let mut file = load_gallery_file(&path)?;
-        file.unlocked_assets
-            .extend(self.story.gallery_assets_for_state(&self.state));
-        write_json_atomic(&path, &file)
+        file.unlocked_assets.extend(wanted);
+        let bytes = serde_json::to_vec_pretty(&file).context("no se pudo serializar la galería")?;
+        let key = crate::exploration3d_state::background::key_of(&bytes);
+        crate::exploration3d_state::background::write(path.clone(), bytes, true, key);
+        *known = Some((path, file.unlocked_assets.iter().cloned().collect()));
+        Ok(())
     }
 
     fn save_to_path(&self, path: &Path) -> Result<()> {
@@ -1283,7 +1365,7 @@ impl Game {
             schema: SAVE_SCHEMA,
             saved_at: now_unix(),
             state: self.state.clone(),
-            rollback: self.rollback.clone(),
+            rollback: self.rollback.iter().map(|state| (**state).clone()).collect(),
             world3d: self.world3d.clone(),
             thumbnail: None,
         }
@@ -1337,6 +1419,7 @@ impl Game {
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
+            .map(Arc::new)
             .collect();
         self.last_autosave_error = None;
         self.world3d = file.world3d;
@@ -1413,11 +1496,10 @@ pub fn story_path() -> PathBuf {
     [
         PathBuf::from("demos/demon-queen/story/prologue.json"),
         PathBuf::from("story/prologue.json"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("story/prologue.json"),
     ]
     .into_iter()
     .find(|path| path.is_file())
-    .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("story/prologue.json"))
+    .unwrap_or_else(|| crate::exploration3d_state::source_root().join("story/prologue.json"))
 }
 
 fn story_override_path() -> Option<PathBuf> {
@@ -1441,23 +1523,19 @@ pub fn continue_path() -> PathBuf {
             .join("saves")
             .join("continue.json");
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/saves/continue.json")
+    crate::exploration3d_state::source_root().join("data/saves/continue.json")
 }
 
 pub fn gallery_path() -> PathBuf {
-    if let Some(path) = std::env::var_os("DEMON_QUEEN_GALLERY") {
-        return PathBuf::from(path);
-    }
-    if let Some(path) = std::env::var_os("DEMON_QUEEN_SAVES") {
-        return PathBuf::from(path).join("gallery.json");
-    }
-    if let Some(appdata) = std::env::var_os("APPDATA") {
-        return PathBuf::from(appdata)
-            .join("VelvetEngine")
-            .join("DemonQueen")
-            .join("gallery.json");
-    }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/gallery.json")
+    crate::exploration3d::gallery_seen::gallery_path()
+}
+
+/// Everything the gallery has been shown: the pictures' keys and the scenes' shots
+/// (`gallery_seen::PREFIX`).
+pub fn gallery_unlocked() -> BTreeSet<String> {
+    load_gallery_file(&gallery_path())
+        .map(|file| file.unlocked_assets)
+        .unwrap_or_default()
 }
 
 fn load_gallery_file(path: &Path) -> Result<GalleryFile> {
@@ -1958,6 +2036,9 @@ fn apply_effects(variables: &mut BTreeMap<String, i64>, effects: &[EffectSpec]) 
 }
 
 fn write_json_atomic(path: &Path, value: &impl Serialize) -> Result<()> {
+    // Written now: whatever the save writer still holds for it is older.
+    crate::exploration3d_state::background::flush();
+    crate::exploration3d_state::background::forget(path);
     let parent = path
         .parent()
         .ok_or_else(|| anyhow!("ruta sin carpeta padre: {}", path.display()))?;

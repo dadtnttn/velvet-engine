@@ -69,7 +69,7 @@ pub(super) fn visible_indices(
         .filter_map(|(i, p)| {
             ((category == Category::All || p.category == category)
                 && match tab {
-                    Tab::Buy => !p.sell_only,
+                    Tab::Buy => !p.sell_only && !p.hidden,
                     Tab::Sell => inventory.get(&p.id).copied().unwrap_or(0) > 0,
                 })
             .then_some(i)
@@ -135,6 +135,10 @@ pub(super) struct Product {
     /// Loot the shop buys but never stocks (materials from the calabozo).
     #[serde(default)]
     pub sell_only: bool,
+    /// Kept in the catalog but not offered in this version (nothing uses it yet); she can still
+    /// sell it if she has one.
+    #[serde(default)]
+    pub hidden: bool,
     #[serde(default)]
     pub stock: Option<u32>,
 }

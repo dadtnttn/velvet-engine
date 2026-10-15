@@ -217,7 +217,7 @@ impl RenderState {
                 &self.device,
                 &self.queue,
                 &self.target_view,
-                (WINDOW_WIDTH, WINDOW_HEIGHT),
+                self.render_size,
                 camera,
             );
         }

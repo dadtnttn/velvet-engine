@@ -5,13 +5,32 @@
 //! - story pump (~10k ops)
 //! - play world step (1k entities × frames)
 
+//!
+//! `velvet-bench vlz --input <dir>` runs the VLZ compression benchmark instead (see
+//! `vlz_bench.rs`).
+
+mod alloc_stats;
+mod cpu;
+mod vlz_bench;
+
 use std::time::Instant;
 
 use velvet_math::{Transform2D, Vec2};
 use velvet_play::prelude::*;
 use velvet_story::{load_program_from_source, StoryPlayer};
 
+#[global_allocator]
+static ALLOCATOR: alloc_stats::Counting = alloc_stats::Counting;
+
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("vlz") {
+        if let Err(e) = vlz_bench::run(&args[1..]) {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     println!("Velvet Bench");
     println!("============");
     println!(

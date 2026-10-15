@@ -73,6 +73,16 @@ impl Tactic {
     }
 }
 
+/// The tiles' names, for the haggle's ticket.
+const TACTIC_NAMES: [&str; 6] = [
+    "Halagar",
+    "Regatear",
+    "Intimidar",
+    "Cerrar trato",
+    "Dejarlo",
+    "Otro trato",
+];
+
 /// What came of a try.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Outcome {
@@ -146,6 +156,18 @@ pub(super) struct Haggle {
     pub offer: Option<usize>,
     pub offer_at: f32,
     pub favor_done: bool,
+    /// What has been tried, in order (its ticket on the page).
+    pub log: Vec<Try>,
+}
+
+/// One try of a haggle, for its ticket: the tile played, what came of it, how far the price moved
+/// (percent) and, for «Otro trato», which favour.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Try {
+    pub tile: usize,
+    pub outcome: Outcome,
+    pub moved: u32,
+    pub favor: Option<usize>,
 }
 
 impl Haggle {
@@ -166,21 +188,47 @@ impl Haggle {
             offer: None,
             offer_at: now,
             favor_done: false,
+            log: Vec::new(),
         }
     }
 
     /// The unit price as it stands: lower when she buys, higher when she sells.
     pub(super) fn price(&self) -> u32 {
+        self.price_at(self.percent)
+    }
+
+    /// The unit price once it has moved `percent` (a favour's cut on top of the haggle's).
+    pub(super) fn price_at(&self, percent: u32) -> u32 {
         // A favour can bring it all the way down.
-        if !self.selling && self.percent >= 100 {
+        if !self.selling && percent >= 100 {
             return 0;
         }
         let moved = if self.selling {
-            100 + self.percent
+            100 + percent
         } else {
-            100 - self.percent
+            100 - percent
         };
         ((self.base * moved + 50) / 100).max(1)
+    }
+
+    /// What the whole lot comes to as it stands: the haggle's percent on the lot, not on each
+    /// piece (a cheap thing sold by the dozen moves too: 28 bones at 1 gold, +40 %, fetch 39).
+    pub(super) fn total(&self) -> u32 {
+        self.total_at(self.percent)
+    }
+
+    /// The whole lot once the price has moved `percent`.
+    pub(super) fn total_at(&self, percent: u32) -> u32 {
+        if !self.selling && percent >= 100 {
+            return 0;
+        }
+        let moved = if self.selling {
+            100 + percent
+        } else {
+            100 - percent
+        };
+        let lot = self.base.saturating_mul(self.quantity.max(1));
+        ((lot * moved + 50) / 100).max(1)
     }
 
     /// Where the needle is (0..1): back and forth along the bar, quicker each round.
@@ -209,6 +257,7 @@ impl Haggle {
         };
         // Words alone go no further than `MOST` (a favour may have gone past it already).
         let most = MOST.max(self.percent);
+        let before = self.percent;
         match outcome {
             Outcome::Perfect => self.percent = (self.percent + perfect).min(most),
             Outcome::Good => self.percent = (self.percent + good).min(most),
@@ -222,6 +271,12 @@ impl Haggle {
             self.closed = Some(now);
         }
         self.result = Some((outcome, now));
+        self.log.push(Try {
+            tile: Tactic::ALL.iter().position(|t| *t == tactic).unwrap_or(0),
+            outcome,
+            moved: self.percent - before,
+            favor: None,
+        });
         Some(outcome)
     }
 
@@ -294,6 +349,12 @@ pub(super) fn line(outcome: Outcome, tactic: Tactic, selling: bool, n: usize) ->
 const HINT_FIRST: &str =
     "—Mire, Majestad… si el oro no llega, hay otras formas de pagar. Usted ya me entiende.";
 const HINT_AGAIN: &str = "—¿Lo de siempre, Majestad? …O algo más.";
+/// The same when he has dared his new one today already: tomorrow, more (sleeping passes the day).
+const HINT_TOMORROW: &str = "—¿Lo de siempre, Majestad? Para algo más… vuelva mañana.";
+/// When she has done them all.
+const HINT_ALL: &str = "—¿Lo de siempre, Majestad? Elija usted. Ya no me queda nada por pedirle.";
+/// After a new one, while there are more.
+const AFTER_NEW: &str = "…Y mañana, si quiere, algo más.";
 
 /// The fusion altar.
 #[derive(Clone, Debug, Default)]
@@ -375,13 +436,19 @@ impl App {
         {
             return;
         }
-        let short = h.price() * h.quantity > gold;
+        let short = h.total() > gold;
         if !(known || h.rounds >= 2 || h.patience < PATIENCE || short) {
             return;
         }
         h.offer = fresh.or(choices.last().copied());
         h.offer_at = now;
-        self.shop_say(if known { HINT_AGAIN } else { HINT_FIRST });
+        let all = choices.len() >= play_scene::tienda::FAVORS.len() && fresh.is_none();
+        self.shop_say(match (known, fresh.is_some(), all) {
+            (false, _, _) => HINT_FIRST,
+            (true, true, _) => HINT_AGAIN,
+            (true, false, true) => HINT_ALL,
+            (true, false, false) => HINT_TOMORROW,
+        });
     }
 
     /// A/D on the favour's tile: the other favours she can offer (the new one, the old ones).
@@ -409,7 +476,8 @@ impl App {
     pub(super) fn after_favor(&mut self, favor: usize, done: bool) {
         use play_scene::tienda::{FAVORS, LADDER, TODAY};
         let now = self.elapsed;
-        if done && favor as i32 >= self.story.get(LADDER) {
+        let new = done && favor as i32 >= self.story.get(LADDER);
+        if new {
             self.story
                 .values
                 .insert(LADDER.to_owned(), favor as i32 + 1);
@@ -420,7 +488,14 @@ impl App {
         };
         if let Some(h) = self.haggle.as_mut() {
             if done {
+                let before = h.percent;
                 h.percent = (h.percent + f.percent).min(100);
+                h.log.push(Try {
+                    tile: Tactic::FAVOR,
+                    outcome: Outcome::Favor,
+                    moved: h.percent - before,
+                    favor: Some(favor),
+                });
                 h.favor_done = true;
                 h.offer = None;
                 h.tactic = Tactic::ALL
@@ -430,11 +505,17 @@ impl App {
                 h.result = Some((Outcome::Favor, now));
             }
         }
-        self.shop_say(if done {
-            f.after
-        } else {
-            "—¿Ya? Pues el precio sigue como estaba, Majestad."
-        });
+        // A new one done: he says what he will dare tomorrow (one new a day; sleeping passes it).
+        let words = match (done, new && favor + 1 < FAVORS.len()) {
+            // Two lines in one: each translated on its own (the pair has no entry).
+            (true, true) => {
+                let tr = |s: &str| demon_queen_dungeon::i18n::tr(s).into_owned();
+                format!("{} {}", tr(f.after), tr(AFTER_NEW))
+            }
+            (true, false) => f.after.to_owned(),
+            (false, _) => "—¿Ya? Pues el precio sigue como estaba, Majestad.".to_owned(),
+        };
+        self.shop_say(&words);
         ui_sfx::play(if done { UiSfx::Deal } else { UiSfx::Back });
     }
 
@@ -546,9 +627,9 @@ impl App {
                 ui_sfx::play(UiSfx::Back);
             }
             Tactic::Deal => {
-                let (unit, quantity, selling) = (h.price(), h.quantity, h.selling);
+                let (total, quantity, selling) = (h.total(), h.quantity, h.selling);
                 self.shop_quantity = quantity;
-                if self.commit_shop_at(Some(unit)) {
+                if self.commit_shop_at(Some(total)) {
                     if let Some(h) = self.haggle.as_mut() {
                         h.closed = Some(now);
                         h.result = Some((Outcome::Deal, now));
@@ -782,6 +863,7 @@ impl App {
                 quantity: h.quantity,
                 base: h.base,
                 price: h.price(),
+                total: h.total(),
                 percent: h.percent,
                 patience: h.patience,
                 rounds: h.rounds,
@@ -793,8 +875,19 @@ impl App {
                 result: h.result.map(|(o, at)| (o.code(), ms(at))),
                 closed: h.closed.is_some(),
                 gold_short: (!h.selling)
-                    .then(|| (h.price() * h.quantity).saturating_sub(self.gold))
+                    .then(|| h.total().saturating_sub(self.gold))
                     .unwrap_or(0),
+                log: h
+                    .log
+                    .iter()
+                    .map(|t| {
+                        let label = match t.favor {
+                            Some(i) => play_scene::tienda::FAVORS[i].name.to_owned(),
+                            None => TACTIC_NAMES[t.tile.min(TACTIC_NAMES.len() - 1)].to_owned(),
+                        };
+                        (label, t.outcome.code(), t.moved)
+                    })
+                    .collect(),
                 favor: h.offer.map(|i| {
                     let f = &play_scene::tienda::FAVORS[i];
                     let (choices, fresh) = play_scene::tienda::available(&self.story);
@@ -802,6 +895,7 @@ impl App {
                         name: f.name.to_owned(),
                         percent: f.percent,
                         new: fresh == Some(i),
+                        tomorrow: fresh.is_none() && choices.len() < play_scene::tienda::FAVORS.len(),
                         choices: choices.len() as u8,
                         age_ms: ms(h.offer_at),
                     }
@@ -885,7 +979,7 @@ impl App {
 
 /// His picture with `face` («normal» is his illustration itself), or his illustration when that
 /// face has not been drawn yet.
-fn merchant_face(face: &'static str, crop: [u32; 4]) -> map_overlay::PortraitRef {
+pub(super) fn merchant_face(face: &'static str, crop: [u32; 4]) -> map_overlay::PortraitRef {
     static FOUND: OnceLock<std::collections::HashSet<&'static str>> = OnceLock::new();
     let found = FOUND.get_or_init(|| {
         let dir = crate::exploration3d_state::data_dir().join("assets");
@@ -913,7 +1007,7 @@ fn merchant_face(face: &'static str, crop: [u32; 4]) -> map_overlay::PortraitRef
 pub(super) const FUSE_COLUMNS: usize = 4;
 
 /// His illustration's square (the top of it, full width), if it exists (looked for once).
-fn merchant_art() -> Option<[u32; 4]> {
+pub(super) fn merchant_art() -> Option<[u32; 4]> {
     static FOUND: OnceLock<Option<[u32; 4]>> = OnceLock::new();
     *FOUND.get_or_init(|| {
         let path = crate::exploration3d_state::data_dir()
@@ -946,6 +1040,25 @@ mod tests {
     }
 
     #[test]
+    fn each_try_goes_on_the_ticket_with_how_far_it_moved_the_price() {
+        let mut h = Haggle::new(0, false, 1, 100, 10.0);
+        let at = 10.0 + 1.7 * 0.5 * h.zone;
+        h.play(Tactic::Threaten, at);
+        let from = h.needle_from;
+        h.play(Tactic::Flatter, from);
+        let tries: Vec<(usize, Outcome, u32)> =
+            h.log.iter().map(|t| (t.tile, t.outcome, t.moved)).collect();
+        assert_eq!(
+            tries,
+            vec![(2, Outcome::Perfect, 20), (0, Outcome::Miss, 0)]
+        );
+        assert!(h.log.iter().all(|t| t.favor.is_none()));
+        // A favour's cut on top of the haggle's: the price it would come to.
+        assert_eq!(h.price_at(h.percent + 10), 70);
+        assert_eq!(h.price_at(100), 0);
+    }
+
+    #[test]
     fn misses_cost_patience_and_his_patience_ends_it() {
         let mut h = Haggle::new(3, false, 1, 50, 0.0);
         // Far from any zone: the needle at an end (0), the zone never below 0.22.
@@ -971,6 +1084,19 @@ mod tests {
         assert_eq!(h.percent, MOST);
         assert_eq!(h.price(), 42);
         assert_eq!(h.play(Tactic::Flatter, 99.0), None, "no tries left");
+    }
+
+    #[test]
+    fn a_cheap_lot_sold_by_the_dozen_fetches_more_too() {
+        // 28 old bones at 1 gold each: +40 % on the lot, not 1 gold each rounded back to 1.
+        let mut h = Haggle::new(0, true, 28, 1, 0.0);
+        assert_eq!(h.total(), 28);
+        h.percent = 40;
+        assert_eq!(h.total(), 39);
+        // Buying, the cut is on the lot as well.
+        let mut b = Haggle::new(0, false, 3, 5, 0.0);
+        b.percent = 20;
+        assert_eq!(b.total(), 12);
     }
 
     #[test]

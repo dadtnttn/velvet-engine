@@ -3,6 +3,7 @@
 //! glass with a metal rim, soft shadows and glows, wire strokes and filigree curls, cut gems,
 //! crescent horns, sparkles, progress arcs, faces and pictures masked to rounded frames. The
 //! dialogue box and the intimate scenes are built from these and text, with no images.
+use demon_queen_dungeon::i18n::tr;
 use std::f32::consts::{PI, TAU};
 
 use super::*;
@@ -721,8 +722,9 @@ pub(super) fn corner(
     );
 }
 
-/// A keycap: a raised key with a lit face and its `label` in the display face. `lit` (held):
-/// the face glows in `accent`; `dim`: greyed. Pressing never moves it — only its light changes.
+/// A key on its cap in the Persona manner: a slanted ink plate with a hard shadow and a rim, its
+/// legend in the display face; lit, the plate is bone-white with the accent's rim and a glow.
+/// Its shape never changes with the light.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn keycap(
     font: &FontAtlas,
@@ -735,59 +737,61 @@ pub(super) fn keycap(
     accent: u32,
     alpha: f32,
 ) {
-    let radius = (r.h * 0.26).max(4.0);
-    if lit {
-        soft(v, r, radius, r.h * 0.45, rgba(accent, 0.55 * alpha), true);
-    }
-    soft(
-        v,
-        Rect::new(r.x, r.y + r.h * 0.12, r.w, r.h),
-        radius,
-        r.h * 0.18,
-        rgba(SHADOW, 0.7 * alpha),
-        false,
-    );
-    // The key's skirt, then its face.
-    panel(
-        v,
-        r,
-        radius,
-        Panel::fill(0x1a0c22, 0x07030a, alpha).rim(
-            if dim { 0x5a5262 } else { GOLD_DEEP },
-            alpha,
-            1.6,
-        ),
-    );
-    let face_r = Rect::new(r.x + 3.0, r.y + 3.0, r.w - 6.0, r.h - r.h * 0.16 - 3.0);
-    let (top, bottom, rim) = if dim {
-        (0x2c2632, 0x1c1822, 0x6a6074)
-    } else if lit {
-        (
-            mix(0x4a1c5c, accent, 0.45),
-            mix(0x2a0f36, accent, 0.25),
-            GOLD_HI,
-        )
-    } else {
-        (0x3a1f4e, 0x1e0e2a, GOLD)
+    let lean = (r.h * 0.18).min(8.0);
+    let quad = |dx: f32, dy: f32, grow: f32| -> [[f32; 2]; 4] {
+        let (x, y, w, h) = (r.x + dx - grow, r.y + dy - grow, r.w + grow * 2.0, r.h + grow * 2.0);
+        [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
     };
-    panel(
-        v,
-        face_r,
-        radius * 0.85,
-        Panel::fill(top, bottom, alpha)
-            .rim(rim, alpha, 1.4)
-            .bevel(1.0),
-    );
-    let ink = if dim { 0x9a90a6 } else { INK };
-    let w = text_width(font, Face::Title, label, size);
-    text_shadow(
+    let fill = |v: &mut Vec<MapVertex>, q: [[f32; 2]; 4], c: [f32; 4]| {
+        push_triangle(v, [q[0], q[1], q[2]], c);
+        push_triangle(v, [q[0], q[2], q[3]], c);
+        push_outline_fringe(v, &q, c);
+    };
+    if lit {
+        soft(v, r, 4.0, r.h * 0.45, rgba(accent, 0.45 * alpha), true);
+    }
+    fill(v, quad(3.5, 3.5, 0.0), rgba(SHADOW, 0.75 * alpha));
+    // The rim (a slightly bigger plate under the face), then the face.
+    let rim = if dim {
+        0x5a5262
+    } else if lit {
+        accent
+    } else {
+        0xf6eef3
+    };
+    fill(v, quad(0.0, 0.0, 1.6), rgba(rim, alpha));
+    let face = if dim {
+        0x1c1822
+    } else if lit {
+        0xf6eef3
+    } else {
+        0x0e0816
+    };
+    fill(v, quad(0.0, 0.0, 0.0), rgba(face, alpha));
+    let ink = if dim {
+        0x9a90a6
+    } else if lit {
+        0x0e0816
+    } else {
+        0xffffff
+    };
+    let face_kind = Face::Display;
+    let fitted = {
+        let room = r.w - lean - 2.0;
+        // Anton is narrow: a size up, so the legend reads as the old face did.
+        let size = size * 1.3;
+        let w = text_width(font, face_kind, label, size);
+        if w > room { size * room / w } else { size }
+    };
+    let w = text_width(font, face_kind, label, fitted);
+    text(
         font,
         v,
-        Face::Title,
+        face_kind,
         label,
-        face_r.x + (face_r.w - w) * 0.5,
-        face_r.y + (face_r.h - size) * 0.5 - size * 0.08,
-        size,
+        r.x + (r.w - w) * 0.5,
+        r.y + (r.h - fitted) * 0.5 - fitted * 0.12,
+        fitted,
         rgba(ink, alpha),
     );
 }
@@ -914,20 +918,64 @@ fn face_glyphs(font: &FontAtlas, face: Face) -> (&HashMap<char, GlyphEntry>, f32
 }
 
 pub(super) fn text_width(font: &FontAtlas, face: Face, s: &str, size: f32) -> f32 {
+    let s = &*tr(s);
     let (glyphs, _) = face_glyphs(font, face);
     let k = size / FONT_RASTER_SIZE;
     s.split('\n')
-        .map(|line| {
-            line.chars()
-                .filter_map(|c| glyphs.get(&c).or_else(|| glyphs.get(&'?')))
-                .map(|g| g.advance * k)
-                .sum::<f32>()
-        })
+        .map(|line| font.run(face as u8 + 1, glyphs, line).advance * k)
         .fold(0.0, f32::max)
 }
 
 /// Text from its top-left; `\n` breaks lines (1.42 × size apart).
 #[allow(clippy::too_many_arguments)]
+/// Text with a rim traced round its letters (`rim` screen pixels wide): one pass, round and even,
+/// for stamps and titles.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn text_rimmed(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    face: Face,
+    s: &str,
+    x: f32,
+    y: f32,
+    size: f32,
+    color: [f32; 4],
+    rim: f32,
+    rim_color: [f32; 4],
+) {
+    let s = &*tr(s);
+    let (glyphs, ascent) = face_glyphs(font, face);
+    let k = size / FONT_RASTER_SIZE;
+    // The rims of the whole text first, then the letters over them: a letter's rim never cuts into
+    // its neighbour (as a sticker's outline would).
+    let clear = [color[0], color[1], color[2], 0.0];
+    let mut baseline = y + ascent * k;
+    for line in s.split('\n') {
+        let run = font.run(face as u8 + 1, glyphs, line);
+        for (g, pen, dy) in &run.glyphs {
+            if g.size[0] > 0.0 {
+                push_rimmed_glyph(
+                    v,
+                    Rect::new(
+                        x + (pen + g.bearing[0]) * k,
+                        baseline + (dy + g.bearing[1]) * k,
+                        g.size[0] * k,
+                        g.size[1] * k,
+                    ),
+                    g.uv_min,
+                    g.uv_max,
+                    clear,
+                    rim,
+                    rim_color,
+                    k,
+                );
+            }
+        }
+        baseline += size * 1.42;
+    }
+    text(font, v, face, s, x, y, size, color);
+}
+
 pub(super) fn text(
     font: &FontAtlas,
     v: &mut Vec<MapVertex>,
@@ -938,34 +986,29 @@ pub(super) fn text(
     size: f32,
     color: [f32; 4],
 ) {
+    let s = &*tr(s);
     let (glyphs, ascent) = face_glyphs(font, face);
     let k = size / FONT_RASTER_SIZE;
-    let mut pen = x;
     let mut baseline = y + ascent * k;
-    for ch in s.chars() {
-        if ch == '\n' {
-            pen = x;
-            baseline += size * 1.42;
-            continue;
+    for line in s.split('\n') {
+        let run = font.run(face as u8 + 1, glyphs, line);
+        for (g, pen, dy) in &run.glyphs {
+            if g.size[0] > 0.0 {
+                push_textured_rect(
+                    v,
+                    Rect::new(
+                        x + (pen + g.bearing[0]) * k,
+                        baseline + (dy + g.bearing[1]) * k,
+                        g.size[0] * k,
+                        g.size[1] * k,
+                    ),
+                    g.uv_min,
+                    g.uv_max,
+                    color,
+                );
+            }
         }
-        let Some(g) = glyphs.get(&ch).or_else(|| glyphs.get(&'?')) else {
-            continue;
-        };
-        if g.size[0] > 0.0 {
-            push_textured_rect(
-                v,
-                Rect::new(
-                    pen + g.bearing[0] * k,
-                    baseline + g.bearing[1] * k,
-                    g.size[0] * k,
-                    g.size[1] * k,
-                ),
-                g.uv_min,
-                g.uv_max,
-                color,
-            );
-        }
-        pen += g.advance * k;
+        baseline += size * 1.42;
     }
 }
 
@@ -1009,19 +1052,6 @@ pub(super) fn text_outline(
     outline: [f32; 4],
 ) {
     let w = (size * 0.05).clamp(1.0, 2.4);
-    for k in 0..8 {
-        let a = k as f32 * TAU / 8.0;
-        text(
-            font,
-            v,
-            face,
-            s,
-            x + a.cos() * w,
-            y + a.sin() * w,
-            size,
-            outline,
-        );
-    }
     text(
         font,
         v,
@@ -1032,7 +1062,7 @@ pub(super) fn text_outline(
         size,
         [outline[0], outline[1], outline[2], outline[3] * 0.6],
     );
-    text(font, v, face, s, x, y, size, color);
+    text_rimmed(font, v, face, s, x, y, size, color, w, outline);
 }
 
 /// Text centred on `cx`.
@@ -1059,20 +1089,43 @@ pub(super) fn wrap(
     size: f32,
     max_width: f32,
 ) -> Vec<String> {
+    use unicode_segmentation::UnicodeSegmentation;
+    let s = &*tr(s);
     let mut lines = Vec::new();
     for paragraph in s.split('\n') {
         let mut line = String::new();
         for word in paragraph.split(' ') {
-            let candidate = if line.is_empty() {
-                word.to_owned()
+            // A word too wide for a line by itself (a language written without spaces: Chinese,
+            // Japanese, Thai) is broken between its letters.
+            let pieces: Vec<String> = if text_width(font, face, word, size) > max_width {
+                let mut out = Vec::new();
+                let mut piece = String::new();
+                for g in word.graphemes(true) {
+                    let longer = format!("{piece}{g}");
+                    if !piece.is_empty() && text_width(font, face, &longer, size) > max_width {
+                        out.push(std::mem::take(&mut piece));
+                    }
+                    piece.push_str(g);
+                }
+                out.push(piece);
+                out
             } else {
-                format!("{line} {word}")
+                vec![word.to_owned()]
             };
-            if text_width(font, face, &candidate, size) <= max_width || line.is_empty() {
-                line = candidate;
-            } else {
-                lines.push(std::mem::take(&mut line));
-                line = word.to_owned();
+            let spaced = pieces.len() == 1;
+            for (i, piece) in pieces.into_iter().enumerate() {
+                let joint = if spaced || i == 0 { " " } else { "" };
+                let candidate = if line.is_empty() {
+                    piece.clone()
+                } else {
+                    format!("{line}{joint}{piece}")
+                };
+                if text_width(font, face, &candidate, size) <= max_width || line.is_empty() {
+                    line = candidate;
+                } else {
+                    lines.push(std::mem::take(&mut line));
+                    line = piece;
+                }
             }
         }
         lines.push(line);

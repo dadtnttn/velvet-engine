@@ -614,7 +614,7 @@ pub fn parse(source: &str, path: &Path, cast: &Cast) -> (Guion, Vec<Problem>) {
                 w @ ("sala" | "fondo" | "cg" | "quitar" | "sprite" | "musica" | "izq" | "der"
                 | "pose" | "titulo" | "sello" | "sacude" | "bote" | "destello" | "barrido"
                 | "objeto" | "panel" | "revela" | "giro" | "desbloquea" | "cierre"
-                | "teclas") => Some(Step::Stage {
+                | "teclas" | "llevar") => Some(Step::Stage {
                     cmd: w.to_owned(),
                     arg: arg.to_owned(),
                 }),
@@ -1007,6 +1007,19 @@ pub enum Shown {
     End,
 }
 
+/// How the words a conversation shows reach the player's language: the host sets it once; with
+/// none, the text is shown as written.
+static TRANSLATOR: std::sync::OnceLock<fn(&str) -> String> = std::sync::OnceLock::new();
+
+/// Sets how lines, names, prompts and options are translated before they are shown.
+pub fn set_translator(translate: fn(&str) -> String) {
+    let _ = TRANSLATOR.set(translate);
+}
+
+fn translated(s: &str) -> String {
+    TRANSLATOR.get().map_or_else(|| s.to_owned(), |t| t(s))
+}
+
 /// A conversation in progress: which scene, which step.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Conversation {
@@ -1133,20 +1146,20 @@ impl Conversation {
                 ..
             }) => Shown::Line {
                 who: who.clone(),
-                name: name.clone(),
-                text: text.clone(),
+                name: translated(name),
+                text: translated(text),
                 kind: *kind,
                 mood: mood.clone(),
             },
             Some(Step::Choice {
                 prompt, options, ..
             }) => Shown::Choice {
-                prompt: prompt.clone(),
+                prompt: prompt.as_deref().map(translated),
                 options: options
                     .iter()
                     .map(|o| {
                         (
-                            o.label.clone(),
+                            translated(&o.label),
                             o.cond.iter().all(|c| c.holds(vars.get(&c.var))),
                         )
                     })

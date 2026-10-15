@@ -21,6 +21,8 @@ pub(crate) use ambience::Amb as ambience_amb;
 pub(crate) use ambience::{Emitter, Ground, Scene};
 
 const RATE: u32 = 44_100;
+/// A scene's sound, at full slider.
+const SCENE_VOLUME: f32 = 0.9;
 
 // ------------------------------------------------------------ synthesis
 
@@ -995,7 +997,7 @@ impl GameAudio {
                 clip.samples.clone(),
             ));
         }
-        sink.set_volume(volume);
+        sink.set_volume(volume * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Effects));
         sink.detach();
     }
 
@@ -1008,6 +1010,10 @@ impl GameAudio {
             music.update(scene.zone, dt, self.effect_level, scene.paused);
         }
         self.ambience.update(self.stream.mixer(), &scene, dt);
+        // A scene's sound follows its slider as it is moved.
+        if let Some(sink) = &self.scene {
+            sink.set_volume(SCENE_VOLUME * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Scenes));
+        }
         self.update_cave(
             scene.zone == Zone::Cave,
             rain,
@@ -1048,7 +1054,7 @@ impl GameAudio {
         } else {
             sink.append(buffer);
         }
-        sink.set_volume(0.9);
+        sink.set_volume(SCENE_VOLUME * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Scenes));
         self.scene = Some(sink);
     }
 
@@ -1069,12 +1075,13 @@ impl GameAudio {
         listener: Vec3,
         forward: Vec3,
     ) {
-        let air = if underground { 0.32 } else { 0.0 };
+        let ambience = crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience);
+        let air = if underground { 0.32 * ambience } else { 0.0 };
         let current = self.air.volume();
         self.air
             .set_volume(current + (air - current) * (dt * 1.5).min(1.0));
         self.rain.set_volume(if underground {
-            rain.clamp(0.0, 1.0) * 0.55
+            rain.clamp(0.0, 1.0) * 0.55 * ambience
         } else {
             0.0
         });

@@ -229,6 +229,14 @@ pub(crate) fn unstick(vars: &mut guion::Vars) -> Vec<String> {
     freed
 }
 
+/// The story's mark that the thanks at the end of act 1 has come up (the host shows it).
+pub(crate) const THANKS_SHOWN: &str = "gracias_acto1";
+
+/// The heading of the notice at a place still being made (see `notice_in_development`).
+pub(crate) const IN_DEVELOPMENT: &str = "En desarrollo";
+/// The heading of a note on what to do next («title\nwhat to do»).
+pub(crate) const NOTE: &str = "Nota";
+
 /// What the world remembers of the missions between steps: which were open and done when last
 /// looked at (for the notices), and the notices themselves.
 #[derive(Default)]
@@ -270,6 +278,39 @@ impl App {
         self.route = None;
         ui_sfx::play(UiSfx::Select);
         eprintln!("[misiones] siguiendo «{}»", open[next].0.title);
+    }
+
+    /// The notice that `place` is still being made, at once: a mission's notice on show waits
+    /// its turn again, and the same place tried twice does not stack.
+    pub(super) fn notice_in_development(&mut self, place: String) {
+        self.notice_now(IN_DEVELOPMENT, place);
+    }
+
+    /// A note on what to do («title\nwhat to do»), at once.
+    pub(super) fn notice_note(&mut self, text: String) {
+        self.notice_now(NOTE, text);
+    }
+
+    /// An orange notice at once: a mission's notice on show waits its turn again, and the same
+    /// one twice does not stack.
+    fn notice_now(&mut self, kind: &'static str, text: String) {
+        let showing = self
+            .missions
+            .shown
+            .as_ref()
+            .is_some_and(|(heading, title, _)| *heading == kind && *title == text);
+        if showing {
+            return;
+        }
+        let urgent = |h: &str| h == IN_DEVELOPMENT || h == NOTE;
+        if let Some((heading, title, _)) = self.missions.shown.take() {
+            if !urgent(heading) {
+                self.missions.queue.push_front((heading, title));
+            }
+        }
+        self.missions.queue.retain(|(heading, _)| !urgent(heading));
+        ui_sfx::play(UiSfx::Back);
+        self.missions.shown = Some((kind, text, self.elapsed));
     }
 
     /// Each step: notices for the missions that opened or closed since the last look (held while
@@ -330,6 +371,14 @@ impl App {
             .is_some_and(|(_, _, at)| self.elapsed - at > NOTICE_SECS)
         {
             self.missions.shown = None;
+        }
+        // The last scene of act 1 has played: the thanks comes up, once.
+        if !busy
+            && self.story.get("ajedrez_hecho") > 0
+            && self.story.get(THANKS_SHOWN) == 0
+        {
+            self.story.values.insert(THANKS_SHOWN.to_owned(), 1);
+            self.thanks_pending = true;
         }
         if self.missions.shown.is_none() && !busy {
             if let Some((heading, title)) = self.missions.queue.pop_front() {

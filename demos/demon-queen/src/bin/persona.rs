@@ -191,6 +191,19 @@ pub(super) fn burst(
         for k in 0..n {
             push_triangle(v, [c, at(k), at((k + 1) % n)], color);
         }
+        let outline: Vec<[f32; 2]> = (0..n).map(at).collect();
+        for k in 0..n {
+            let (a, b) = (outline[k], outline[(k + 1) % n]);
+            let d = [b[0] - a[0], b[1] - a[1]];
+            let len = (d[0] * d[0] + d[1] * d[1]).sqrt().max(1e-3);
+            // Outward from the centre's side of the edge.
+            let mid = [(a[0] + b[0]) * 0.5 - c[0], (a[1] + b[1]) * 0.5 - c[1]];
+            let mut out = [-d[1] / len, d[0] / len];
+            if out[0] * mid[0] + out[1] * mid[1] < 0.0 {
+                out = [-out[0], -out[1]];
+            }
+            push_fringe(v, a, b, out, 1.1, color);
+        }
     };
     if rim_width > 0.0 {
         star(v, rim_width, rim);
@@ -329,6 +342,86 @@ pub(super) fn shout(
         rgba(ink, alpha),
         rgba(0x0b0508, alpha),
     );
+}
+
+/// A comic stamp's words (¡ZAS!, ¡GRAAAH!, REGALO…) centred on `c`: the letters in their colour
+/// with a dark ink outline, a clean white edge round that, and a hard shadow in a deep shade of
+/// the colour; `burst` puts a jagged burst of the colour's dark behind them. `slam` (0..1, how far
+/// the impact has played) throws impact lines out from behind for an instant. All of it is drawn
+/// from the glyphs' distance fields: clean at any size.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn comic_stamp(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    face: Face,
+    words: &str,
+    c: [f32; 2],
+    size: f32,
+    color: u32,
+    burst_behind: bool,
+    slam: f32,
+    time: f32,
+) {
+    let w = text_width(font, face, words, size);
+    let (x, y) = (c[0] - w * 0.5, c[1] - size * 0.56);
+    let ink = 0x0b0508;
+    let deep = mix(color, 0x000000, 0.62);
+    let line = (size * 0.045).max(2.5);
+    let edge = (size * 0.035).max(2.0);
+    if burst_behind {
+        // Just round the words: its spikes reach a little past them.
+        let r = w * 0.5 + size * 0.2;
+        burst(
+            v,
+            [c[0], c[1] + size * 0.04],
+            r * 0.78,
+            r,
+            18,
+            0.3 + time * 0.12,
+            rgba(mix(deep, color, 0.25), 0.88),
+            rgba(ink, 0.95),
+            line * 0.9,
+        );
+    }
+    // Impact lines out from behind it, the moment it lands.
+    if slam < 1.0 {
+        let k = slam.clamp(0.0, 1.0);
+        let n = 14;
+        for i in 0..n {
+            let a = i as f32 / n as f32 * TAU + 0.21 * (i % 3) as f32;
+            let (sn, cs) = a.sin_cos();
+            let r0 = w * 0.45 + size * 0.2 + k * size * 0.9;
+            let r1 = r0 + size * (0.5 + 0.35 * ((i * 7 % 5) as f32 / 5.0)) * (1.0 - k);
+            wire(
+                v,
+                [c[0] + cs * r0, c[1] + sn * r0 * 0.6],
+                [c[0] + cs * r1, c[1] + sn * r1 * 0.6],
+                size * 0.05 * (1.0 - k) + 1.0,
+                rgba(0xffffff, 0.9 * (1.0 - k)),
+                rgba(color, 0.0),
+                0.0,
+                false,
+            );
+        }
+    }
+    // The shadow: the whole stamp, outline and all, in a deep shade.
+    let sh = size * 0.06;
+    text_rimmed(font, v, face, words, x + sh, y + sh, size, rgba(deep, 0.9), line + edge, rgba(deep, 0.9));
+    // The white edge, the ink outline, the letters.
+    text_rimmed(font, v, face, words, x, y, size, rgba(ink, 1.0), line + edge, rgba(0xfff8f0, 1.0));
+    text_rimmed(font, v, face, words, x, y, size, rgba(color, 1.0), line, rgba(ink, 1.0));
+    // A glint along the letters' tops.
+    text(
+        font,
+        v,
+        face,
+        words,
+        x - size * 0.012,
+        y - size * 0.018,
+        size,
+        rgba(mix(color, 0xffffff, 0.55), 0.35),
+    );
+    text(font, v, face, words, x, y, size, rgba(color, 1.0));
 }
 
 /// The cursor that points at the lit tile: a red arrowhead with a white edge, bobbing.

@@ -374,6 +374,10 @@ impl App {
         if close_to_mage {
             self.map_open = false;
             self.clear_input();
+            // Not to the Queen in her royal dress: he only stammers.
+            if !self.mage_will_talk() {
+                return true;
+            }
             self.persist_3d_state(true);
             // His stall: talk, buy, or go (`explore/mage.rs`).
             self.open_mage();
@@ -805,28 +809,8 @@ impl RenderState {
                         },
                         texture: None,
                     });
-                    let arrow_y = ground_y + 2.56 + pulse;
-                    // One closed mesh is enough.  The old dark-underlay and
-                    // inset copies were scaled/offset independently, which
-                    // made their exposed side walls look like loose legs.
-                    // A tiny tilt lets the real side faces catch the key
-                    // light while the arrow still reads clearly from above.
-                    let arrow_rotation = Vec3::new(0.10, (elapsed * 0.9).sin() * 0.025, -0.035);
-                    draws.push(MeshDraw3D {
-                        mesh: self.village_arrow,
-                        transform: Transform3D {
-                            position: Vec3::new(entry.x, arrow_y, entry.z + 0.12),
-                            rotation: arrow_rotation,
-                            scale: Vec3::new(1.0, 1.0, 1.0),
-                        }
-                        .matrix(),
-                        material: Material3D {
-                            base_color: [1.12, 0.26 + proximity * 0.20, 0.020, fade * 0.96],
-                            texture: None,
-                            occlusion_window: [0.0; 4],
-                        },
-                        texture: None,
-                    });
+                    // Its arrow is the marker's own, on the screen (`push_prompt_medallion`).
+                    let _ = pulse;
                 }
             }
             // Fireflies drift slowly above the ground cover.  The motion is

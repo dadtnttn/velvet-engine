@@ -222,6 +222,9 @@ pub(crate) fn available(story: &guion::Vars) -> (Vec<usize>, Option<usize>) {
 #[derive(Default)]
 pub(super) struct TiendaGame {
     pub favor: usize,
+    /// The shopkeeper's face on the page: now, the one before, and when it changed (the scene's
+    /// clock).
+    pub(super) face: (&'static str, &'static str, f32),
     /// His lines said while it fills.
     said: usize,
     /// When the deal was sealed.
@@ -297,6 +300,19 @@ impl PlayScene {
                 ),
             ],
         )
+    }
+
+    /// The shopkeeper's face on the page, followed each step: grinning while she pays, swamped
+    /// while she hurries him, shaking his head if she backs out.
+    pub(super) fn tienda_face(&mut self) {
+        let want = match self.ended {
+            Some(false) => "negando",
+            _ if self.phase == Phase::Play && self.holding => "arruinado",
+            _ => "contento",
+        };
+        if self.tienda.face.0 != want {
+            self.tienda.face = (want, self.tienda.face.0, self.clock);
+        }
     }
 
     /// The scene's words for the stage's top line.

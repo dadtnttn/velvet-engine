@@ -151,7 +151,8 @@ impl App {
         let Some(fonts) = &self.fonts else {
             return;
         };
-        let spanish = self.localizer.language() == Language::Spanish;
+        // Spanish source for every language but English: the canvas translates it as it draws.
+        let spanish = self.localizer.language() != Language::English;
         let labels = [
             if !self.reveal_complete {
                 if spanish {

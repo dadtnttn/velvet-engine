@@ -29,6 +29,8 @@ mod finish;
 pub mod fp;
 #[path = "hud.rs"]
 pub mod hud;
+/// Text in the player's language (shared with the game).
+pub mod i18n;
 #[path = "incidents.rs"]
 mod incidents;
 #[path = "prompt_icons.rs"]
@@ -136,6 +138,12 @@ pub struct Actor {
     /// Seconds spent trying to walk without getting anywhere.
     #[serde(skip)]
     pub stuck: f32,
+    /// Seconds left stuck in the sticky sword's goo: it moves and strikes slower.
+    #[serde(default)]
+    pub slowed: f32,
+    /// Seconds left smouldering from the ember sword.
+    #[serde(default)]
+    pub burning: f32,
 }
 
 fn long_dead() -> f32 {
@@ -152,6 +160,32 @@ const SWORD_DAMAGE_SHARE: f32 = 0.1;
 const SWORD_FINISHER: f32 = 1.45;
 /// The relic sword from the treasuries cuts a little deeper.
 pub const RELIC_SWORD_BONUS: f32 = 1.3;
+/// How fast a foe in the sticky sword's goo goes (moves, blows).
+pub const SLOWED_PACE: f32 = 0.5;
+/// Share of a foe's health the ember sword's fire takes each second (it never finishes one off).
+pub const BURN_SHARE: f32 = 0.035;
+
+/// What the worn sword adds to each blow: set by the game from the backpack.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponFx {
+    /// Seconds a struck foe stays slowed.
+    pub slow: f32,
+    /// Seconds a struck foe smoulders.
+    pub burn: f32,
+    /// Vitality she takes back with each blow that lands.
+    pub leech: f32,
+}
+
+impl Default for WeaponFx {
+    fn default() -> Self {
+        Self {
+            slow: 0.0,
+            burn: 0.0,
+            leech: 0.0,
+        }
+    }
+}
+
 /// Chance that a treasury chest holds the relic sword (until it is found).
 const RELIC_SWORD_CHANCE: f32 = 0.3;
 
@@ -504,6 +538,12 @@ pub struct Dungeon {
     pub relic_sword: bool,
     /// Found on this expedition, not yet carried back to the villa.
     pub unbanked_relic_sword: bool,
+    /// What the worn sword adds to a blow (sticky, embers, heart).
+    pub weapon_fx: WeaponFx,
+    /// A sword is in her hand (the weapon taken off: she punches, at half the damage).
+    pub armed: bool,
+    /// The slime coating the sword (its colour), if any.
+    pub sword_goo: Option<[f32; 3]>,
     pub gold: u32,
     pub seal: bool,
     pub sigils: [u8; 3],
@@ -601,6 +641,8 @@ impl Dungeon {
                 nav_timer: 0.0,
                 gait: combat::Gait::Idle,
                 stuck: 0.0,
+                slowed: 0.0,
+                burning: 0.0,
             })
             .collect();
         let actors_len = actors.len();
@@ -636,6 +678,9 @@ impl Dungeon {
             materials: Default::default(),
             relic_sword: false,
             unbanked_relic_sword: false,
+            armed: true,
+            sword_goo: None,
+            weapon_fx: WeaponFx::default(),
             gold: 0,
             seal: false,
             sigils: [0; 3],
@@ -700,7 +745,8 @@ impl Dungeon {
                 .iter()
                 .find(|(m, _)| *m == id)
                 .map_or(id, |(_, name)| *name);
-            parts.push(format!("+{count} {name}"));
+            // In the player's language (the whole message is put together here).
+            parts.push(format!("+{count} {}", crate::i18n::tr(name)));
         }
         parts.join(", ")
     }
@@ -917,6 +963,8 @@ impl Dungeon {
                 nav_timer: 0.0,
                 gait: combat::Gait::Idle,
                 stuck: 0.0,
+                slowed: 0.0,
+                burning: 0.0,
             });
             fx.push(combat::Fx::Summon { at, age: 0.0 });
             raised += 1;
@@ -1330,7 +1378,37 @@ impl Dungeon {
                     (actor.chest_open_progress + dt / CHEST_OPEN_SECONDS).min(1.0);
                 actor.chest_opening = actor.chest_open_progress < 1.0;
             }
-            actor.cooldown = (actor.cooldown - dt).max(0.0);
+            // In the goo everything it does goes at half pace.
+            let pace = if actor.slowed > 0.0 { SLOWED_PACE } else { 1.0 };
+            actor.slowed = (actor.slowed - dt).max(0.0);
+            if actor.burning > 0.0 && actor.health > 0.0 {
+                let before = (actor.burning * 2.5).floor();
+                actor.burning = (actor.burning - dt).max(0.0);
+                // The fire eats at it but leaves the last blow to her.
+                let floor = spawn.health * 0.04;
+                if actor.health > floor {
+                    actor.health = (actor.health
+                        - spawn.health * BURN_SHARE * dt / combat::toughness(spawn.kind))
+                    .max(floor);
+                }
+                if (actor.burning * 2.5).floor() != before {
+                    let size = combat::body_size(spawn.kind);
+                    self.fx.push(combat::Fx::Burst {
+                        at: actor.position + Vec3::Y * (0.9 * size),
+                        color: [1.0, 0.52, 0.16],
+                        count: 6,
+                        speed: 1.1,
+                        life: 0.55,
+                        gravity: -2.5,
+                        up: 0.9,
+                        length: 0.05,
+                        seed: (actor.spawn as u32).wrapping_mul(2654435761)
+                            ^ (actor.burning * 1000.0) as u32,
+                        age: 0.0,
+                    });
+                }
+            }
+            actor.cooldown = (actor.cooldown - dt * pace).max(0.0);
             actor.stagger = (actor.stagger - dt).max(0.0);
             actor.stand = (actor.stand - dt).max(0.0);
             if spawn.kind == SpawnKind::Trap
@@ -1409,7 +1487,7 @@ impl Dungeon {
                     } else {
                         1.0
                     };
-                swing.t += dt * speed;
+                swing.t += dt * speed * pace;
                 if swing.t < mv.strike - 0.15 && mv.kind != combat::MoveKind::Whirl {
                     combat::turn_toward(
                         &mut actor.yaw,
@@ -1861,7 +1939,7 @@ impl Dungeon {
                     actor.yaw = facing;
                     actor.path.clear();
                     let away = -delta.normalize_or_zero();
-                    let p = actor.position + away * (spawn.speed * 1.05 * dt);
+                    let p = actor.position + away * (spawn.speed * 1.05 * dt * pace);
                     if self
                         .map
                         .capsule_floor(p, 0.4)
@@ -1949,7 +2027,7 @@ impl Dungeon {
                         _ => (0.7, combat::Gait::Walk),
                     };
                     actor.gait = gait;
-                    let pace = spawn.speed * stride;
+                    let pace = spawn.speed * stride * pace;
                     let mut steering = travel;
                     // Keep a little personal space so melee rigs don't
                     // occupy one another's capsule and jitter at the player.
@@ -2194,6 +2272,7 @@ impl Dungeon {
             } else {
                 1.0
             }
+            * if self.armed { 1.0 } else { 0.5 }
     }
 
     fn resolve_sword_hit(&mut self) {
@@ -2337,6 +2416,41 @@ impl Dungeon {
         } else {
             self.sound(sound::Sfx::HitBone, Some(at), 0.8);
         }
+        // What the sword carries: goo, embers, a sip of life.
+        let fx = self.weapon_fx;
+        if fx.slow > 0.0 && !dead {
+            self.actors[index].slowed = fx.slow;
+            self.fx.push(combat::Fx::Burst {
+                at: chest_at,
+                color: [0.45, 0.95, 0.42],
+                count: 12,
+                speed: 1.6,
+                life: 0.7,
+                gravity: 6.0,
+                up: 0.3,
+                length: 0.06,
+                seed: seed ^ 0x51ee,
+                age: 0.0,
+            });
+        }
+        if fx.burn > 0.0 && !dead {
+            self.actors[index].burning = fx.burn;
+            self.fx.push(combat::Fx::Burst {
+                at: chest_at,
+                color: [1.0, 0.55, 0.15],
+                count: 14,
+                speed: 2.2,
+                life: 0.6,
+                gravity: -3.0,
+                up: 1.0,
+                length: 0.07,
+                seed: seed ^ 0xf17e,
+                age: 0.0,
+            });
+        }
+        if fx.leech > 0.0 && self.health > 0.0 {
+            self.health = (self.health + fx.leech).min(100.0);
+        }
         let actor = &mut self.actors[index];
         actor.damage_hits = actor.damage_hits.saturating_add(1).min(3);
         actor.hit_reaction = 0.42;
@@ -2380,6 +2494,18 @@ impl Dungeon {
             }
         }
     }
+    /// Something from the backpack drunk or eaten: `amount` of vitality and a line.
+    pub fn cure(&mut self, amount: f32, line: impl Into<String>) {
+        self.health = (self.health + amount).min(100.0);
+        self.sound(sound::Sfx::Drink, None, 0.7);
+        self.message(line);
+    }
+
+    /// Whether the expedition still has its own tonics or herbs.
+    pub fn has_supplies(&self) -> bool {
+        self.potions > 0 || self.herbs > 0
+    }
+
     pub fn heal(&mut self) {
         if self.health >= 100.0 {
             return;
@@ -2536,6 +2662,9 @@ impl Dungeon {
                         self.sound(sound::Sfx::Relic, None, 0.9);
                         self.relic_sword = true;
                         self.unbanked_relic_sword = true;
+                        // It goes to her hand at once.
+                        self.armed = true;
+                        self.sword_goo = None;
                         self.message(format!(
                             "¡Una espada de piedra entre el oro! La empuñas. +1 tónico, +{} hierbas y +{} oro.",
                             herbs, s.gold

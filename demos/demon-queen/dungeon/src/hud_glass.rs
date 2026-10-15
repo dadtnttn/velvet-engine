@@ -1,6 +1,7 @@
-//! Glass look for the expedition HUD: rounded, softly lit panes, pills, bars
-//! and icon discs, drawn as anti-aliased vertex batches in native 1920x1080
-//! space. Colours are linear RGB, like the rest of the HUD batch.
+//! The expedition HUD's shapes, in the manner of the game's Persona menus: slanted ink plates
+//! with a hard shadow and a wedge of the place's colour, slanted chips, keys and segmented bars,
+//! and round icon badges, drawn as anti-aliased vertex batches in native 1920x1080 space.
+//! Colours are linear RGB, like the rest of the HUD batch.
 use super::prompt_icons::{self, Icon};
 use super::{triangle, Vertex};
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
@@ -58,6 +59,63 @@ impl Tone {
 }
 
 pub(super) const IVORY: Rgba = [0.93, 0.90, 0.78, 1.0];
+/// The menus' ink (0e0816), linear.
+pub(super) const INK: Rgba = [0.0044, 0.0024, 0.0080, 1.0];
+
+/// How far a plate `h` tall leans.
+pub(super) fn lean_for(h: f32) -> f32 {
+    (h * 0.12).clamp(4.0, 14.0)
+}
+
+/// The corners of `r` leaning forward: its top edge starts `lean` in, its bottom edge ends `lean`
+/// short (so the plate stays inside `r`). Clockwise on screen.
+pub(super) fn slant_path(r: [f32; 4], lean: f32) -> Vec<[f32; 2]> {
+    let [x, y, w, h] = r;
+    vec![[x + lean, y], [x + w, y], [x + w - lean, y + h], [x, y + h]]
+}
+
+pub(super) fn slant(v: &mut Vec<Vertex>, r: [f32; 4], lean: f32, color: Rgba) {
+    fill_flat(v, &slant_path(r, lean), color);
+}
+
+pub(super) fn slant_outline(v: &mut Vec<Vertex>, r: [f32; 4], lean: f32, width: f32, color: Rgba) {
+    stroke(v, &slant_path(r, lean), true, width, color);
+}
+
+/// A slanted plate of ink with its hard shadow, `edge` coloured along its leading edge.
+pub(super) fn plate(v: &mut Vec<Vertex>, r: [f32; 4], edge: Rgba, strength: f32) {
+    let [x, y, w, h] = r;
+    let lean = lean_for(h);
+    slant(v, [x + 8.0, y + 8.0, w, h], lean, [0.0, 0.0, 0.0, 0.42 * strength + 0.08]);
+    fill(
+        v,
+        &slant_path(r, lean),
+        alpha(mix(INK, edge, 0.012), 0.9 * strength + 0.08),
+        alpha(INK, 0.93 * strength + 0.06),
+        y,
+        y + h,
+    );
+    // A faint hatch across it, leaning with it.
+    let mut s = 30.0;
+    while s < w - lean - 6.0 {
+        segment(
+            v,
+            [x + lean + s, y + 3.0],
+            [x + s + lean * 3.0 / h, y + h - 3.0],
+            1.0,
+            [1.0, 1.0, 1.0, 0.008 * strength],
+        );
+        s += 26.0;
+    }
+    let k = 8.0;
+    fill_flat(
+        v,
+        &[[x + lean, y], [x + lean + k, y], [x + k, y + h], [x, y + h]],
+        alpha(edge, 0.95),
+    );
+    segment(v, [x + lean + k, y + 1.0], [x + w, y + 1.0], 2.0, alpha(edge, 0.8 * strength));
+    slant_outline(v, r, lean, 1.0, [1.0, 1.0, 1.0, 0.08 * strength]);
+}
 pub(super) const MUTED: Rgba = [0.55, 0.63, 0.62, 1.0];
 pub(super) const CRIMSON: Rgba = [0.78, 0.045, 0.03, 1.0];
 pub(super) const GREEN: Rgba = [0.28, 0.78, 0.42, 1.0];
@@ -285,98 +343,57 @@ pub(super) fn round_outline(
 /// A pane of dark glass: soft shadow, tinted body that lets the world show
 /// through, a sheen under the top edge and a fine lit rim. `strength` (0..1)
 /// scales how opaque and how bright the rim is.
-pub(super) fn pane(v: &mut Vec<Vertex>, r: [f32; 4], radius: f32, tone: &Tone, strength: f32) {
-    let [x, y, w, h] = r;
-    round(
-        v,
-        [x - 5.0, y + 5.0, w + 10.0, h + 8.0],
-        radius + 6.0,
-        [0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.20 * strength],
-    );
-    round(
-        v,
-        [x - 1.5, y + 3.0, w + 3.0, h + 3.0],
-        radius + 2.0,
-        [0.0, 0.0, 0.0, 0.16 * strength],
-        [0.0, 0.0, 0.0, 0.26 * strength],
-    );
-    let top = alpha(mix(tone.glass, tone.accent, 0.10), 0.90 * strength + 0.04);
-    let bottom = alpha(lift(tone.glass, 0.7), 0.95 * strength + 0.03);
-    round(v, r, radius, top, bottom);
-    let sheen = (h * 0.34).clamp(14.0, 46.0);
-    round(
-        v,
-        [x + 2.0, y + 2.0, w - 4.0, sheen],
-        (radius - 2.0).max(3.0),
-        alpha(mix(tone.accent, [1.0, 1.0, 1.0, 1.0], 0.3), 0.10 * strength),
-        alpha(tone.accent, 0.0),
-    );
-    round_outline(
-        v,
-        r,
-        radius,
-        1.3,
-        alpha(
-            mix(tone.accent, [1.0, 0.92, 0.75, 1.0], 0.25),
-            0.50 * strength + 0.06,
-        ),
-    );
-    // A brighter hairline along the top edge, fading toward the corners.
-    let inset = radius + 4.0;
-    segment(
-        v,
-        [x + inset, y + 1.2],
-        [x + w - inset, y + 1.2],
-        1.0,
-        alpha(tone.bright, 0.30 * strength),
-    );
+pub(super) fn pane(v: &mut Vec<Vertex>, r: [f32; 4], _radius: f32, tone: &Tone, strength: f32) {
+    plate(v, r, tone.accent, strength);
 }
 
-/// A smaller inset well (chips, slots): faint fill and outline in `color`.
+/// A slanted chip (tags, slots): a dark plate tinted with `color`, outlined in it.
 pub(super) fn chip(v: &mut Vec<Vertex>, r: [f32; 4], color: Rgba, fill_alpha: f32) {
-    let radius = r[3] * 0.5;
-    round(
-        v,
-        r,
-        radius,
-        alpha(color, fill_alpha * 1.25),
-        alpha(color, fill_alpha * 0.7),
-    );
-    round_outline(v, r, radius, 1.1, alpha(color, 0.55));
+    let lean = (r[3] * 0.22).clamp(3.0, 9.0);
+    slant(v, [r[0] + 3.0, r[1] + 3.0, r[2], r[3]], lean, [0.0, 0.0, 0.0, 0.45]);
+    slant(v, r, lean, alpha(mix(INK, color, (fill_alpha * 0.45).min(0.12)), 0.95));
+    slant_outline(v, r, lean, 1.2, alpha(color, 0.8));
 }
 
-/// A rounded meter: dark track and a glossy filled part.
+/// A slanted bar: an ink track and the filled part shading from `low` to `high`, cut in slanted
+/// segments like the menus' gauges.
 pub(super) fn meter(v: &mut Vec<Vertex>, r: [f32; 4], fraction: f32, low: Rgba, high: Rgba) {
     let [x, y, w, h] = r;
-    let radius = h * 0.5;
-    round(
-        v,
-        r,
-        radius,
-        [0.0, 0.003, 0.006, 0.92],
-        [0.02, 0.02, 0.03, 0.88],
-    );
+    let lean = (h * 0.6).clamp(2.0, 9.0);
+    slant(v, [x + 3.0, y + 3.0, w, h], lean, [0.0, 0.0, 0.0, 0.45]);
+    slant(v, r, lean, alpha(INK, 0.94));
     let filled = (w * fraction.clamp(0.0, 1.0)).max(0.0);
-    if filled >= h * 0.9 {
-        let inner = [x + 1.5, y + 1.5, filled - 3.0, h - 3.0];
-        round(v, inner, radius - 1.5, high, low);
-        round(
+    if filled > lean + 1.0 {
+        let right = x + filled;
+        quad(
             v,
-            [
-                inner[0] + 2.0,
-                inner[1] + 1.2,
-                (inner[2] - 4.0).max(1.0),
-                inner[3] * 0.38,
-            ],
-            (radius - 3.0).max(2.0),
-            [1.0, 1.0, 1.0, 0.30],
-            [1.0, 1.0, 1.0, 0.02],
+            ([x + lean, y], low),
+            ([right, y], high),
+            ([right - lean, y + h], high),
+            ([x, y + h], low),
         );
-    } else if filled > 1.0 {
-        disc(v, [x + radius, y + radius], radius - 1.5, low);
+        quad(
+            v,
+            ([x + lean, y], [1.0, 1.0, 1.0, 0.22]),
+            ([right, y], [1.0, 1.0, 1.0, 0.22]),
+            ([right - lean * 0.6, y + h * 0.4], [1.0, 1.0, 1.0, 0.0]),
+            ([x + lean * 0.4, y + h * 0.4], [1.0, 1.0, 1.0, 0.0]),
+        );
+        if h >= 9.0 {
+            let mut s = 14.0;
+            while s < filled - 3.0 {
+                segment(
+                    v,
+                    [x + s + lean, y + 1.0],
+                    [x + s, y + h - 1.0],
+                    1.6,
+                    [0.0, 0.0, 0.0, 0.32],
+                );
+                s += 14.0;
+            }
+        }
     }
-    round_outline(v, r, radius, 1.0, [1.0, 1.0, 1.0, 0.16]);
+    slant_outline(v, r, lean, 1.0, [1.0, 1.0, 1.0, 0.22]);
 }
 
 /// The icon at `c`, `size` wide, in `ink` on `face`.

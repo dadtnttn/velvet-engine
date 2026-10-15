@@ -79,14 +79,17 @@ pub(crate) fn load(path: &Path) -> Result<GltfModel> {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(path);
-    match job {
+    let mut model = match job {
         Some(job) => match job.join() {
-            Ok(Ok(model)) => Ok(model),
-            Ok(Err(error)) => Err(anyhow::anyhow!("{error}")),
-            Err(_) => Err(anyhow::anyhow!("prefetch of {} panicked", path.display())),
+            Ok(Ok(model)) => model,
+            Ok(Err(error)) => return Err(anyhow::anyhow!("{error}")),
+            Err(_) => return Err(anyhow::anyhow!("prefetch of {} panicked", path.display())),
         },
-        None => Ok(GltfModel::load(path)?),
-    }
+        None => GltfModel::load(path)?,
+    };
+    // Its signs in the player's language (it may have been read ahead in another).
+    super::sign_textures::note_model(path, &mut model);
+    Ok(model)
 }
 
 /// Textures prepared ahead, by the key `upload_texture_pair` caches them by.

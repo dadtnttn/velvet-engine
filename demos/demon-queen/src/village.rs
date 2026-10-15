@@ -409,6 +409,17 @@ fn building_metadata(id: &str) -> (&'static str, &'static str) {
     }
 }
 
+/// The doors that open on nothing yet: the place's name for the «En desarrollo» notice. `None`
+/// for a door with something behind it.
+pub(super) fn in_development(id: &str) -> Option<&'static str> {
+    match id {
+        "villa_taberna" => Some("Taberna «El Jabalí Dorado»"),
+        "villa_consejo" => Some("Casa del Burgomaestre"),
+        "villa_casa_aldeanos_a" | "villa_casa_aldeanos_b" => Some("Casa de aldeanos"),
+        _ => None,
+    }
+}
+
 /// The spot in front of a building's door (where the prototype's hotspot is), in the plan.
 fn door_spot(b: &Building) -> (f32, f32) {
     plan()

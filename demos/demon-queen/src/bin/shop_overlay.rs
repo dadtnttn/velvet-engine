@@ -12,6 +12,11 @@ use super::persona::*;
 use super::ui_paint::*;
 use super::*;
 
+// «Otro trato»: a favour plays as a page of the shop.
+#[path = "shop_favor.rs"]
+mod favor;
+pub(crate) use favor::{draw_favor, favor_hit, FavorDeal};
+
 type Uv = ([f32; 2], [f32; 2]);
 
 /// What the overlay shows of the shop beyond its shelves.
@@ -45,6 +50,8 @@ pub struct HaggleView {
     /// The unit price before, and now; how far it moved (percent).
     pub base: u32,
     pub price: u32,
+    /// The whole lot as it stands (the percent taken on the lot, not on each piece).
+    pub total: u32,
     pub percent: u32,
     pub patience: u8,
     pub rounds: u8,
@@ -62,6 +69,9 @@ pub struct HaggleView {
     pub gold_short: u32,
     /// «Otro trato», once he has hinted at it.
     pub favor: Option<FavorTile>,
+    /// The tries so far, for the ticket: what was played (a favour by its name), what came of it
+    /// (as `result`, 6 a favour paid) and how far the price moved (percent).
+    pub log: Vec<(String, u8, u32)>,
 }
 
 /// «Otro trato» on show: the favour he asks, the cut it buys, whether it is a new one, how many
@@ -71,6 +81,8 @@ pub struct FavorTile {
     pub name: String,
     pub percent: u32,
     pub new: bool,
+    /// He has dared his new one today: the next waits until tomorrow (a badge says so).
+    pub tomorrow: bool,
     pub choices: u8,
     pub age_ms: u32,
 }
@@ -137,6 +149,8 @@ impl Layout {
     pub const BAR: Rect = Rect::new(650.0, 604.0, 730.0, 56.0);
     /// «Otro trato»: above the tactics, once he has hinted at it.
     pub const FAVOR: Rect = Rect::new(1452.0, 312.0, 418.0, 116.0);
+    /// The haggle's ticket of tries, under the bar.
+    pub const RECEIPT: Rect = Rect::new(650.0, 722.0, 520.0, 266.0);
 
     pub fn row(row: usize) -> Rect {
         Rect::new(620.0, 250.0 + row as f32 * 84.0, 560.0, 74.0)
@@ -344,7 +358,20 @@ pub(super) fn draw(
     let open = view.open_ms as f32 / 1000.0;
     let age = view.page_ms as f32 / 1000.0;
     backdrop(v, open, f.time);
-    figure(font, v, view, merchant, merchant_from, open, f.time);
+    figure(
+        font,
+        v,
+        Moves {
+            said_ms: view.said.as_ref().map(|(_, ms)| *ms),
+            face_ms: view.merchant_ms,
+            result: view.haggle.as_ref().and_then(|h| h.result),
+        },
+        merchant,
+        merchant_from,
+        open,
+        f.time,
+        "Tienda de la villa · se aceptan regateos",
+    );
     let title = match view.page {
         1 => "¡A regatear!",
         2 => "El altar de fusión",
@@ -483,35 +510,45 @@ fn backdrop(v: &mut Vec<MapVertex>, open: f32, time: f32) {
     });
 }
 
-/// The shopkeeper at the left, his name across his chest. In a haggle he shakes at a miss,
-/// flushes at an offence and bobs at a good try; his face changes with each outcome (the new one
-/// fading in over the old with a little hop), and he bobs as he talks.
+/// How the shopkeeper moves this frame: since his last word (ms), since his face changed (ms),
+/// and a haggle's last try (its code and age, ms).
+#[derive(Clone, Copy, Default)]
+struct Moves {
+    said_ms: Option<u32>,
+    face_ms: u32,
+    result: Option<(u8, u32)>,
+}
+
+/// The shopkeeper at the left, his name across his chest and `subtitle` under it. In a haggle he
+/// shakes at a miss, flushes at an offence and bobs at a good try; his face changes with each
+/// outcome (the new one fading in over the old with a little hop), and he bobs as he talks.
 #[allow(clippy::too_many_arguments)]
 fn figure(
     font: &FontAtlas,
     v: &mut Vec<MapVertex>,
-    view: &ShopView,
+    moves: Moves,
     uv: Option<Uv>,
     from: Option<Uv>,
     open: f32,
     time: f32,
+    subtitle: &str,
 ) {
     let a = entrance(open, 0.06, 0.4);
     let r = Rect::new(-10.0, 400.0, 680.0, 680.0);
     let breathe = (time * 1.3).sin() * 3.0;
     let (mut shake, mut bob, mut tint) = (0.0, 0.0, [1.0; 4]);
     // A word just said: a few quick bobs, as if he were talking.
-    if let Some((_, said_ms)) = view.said.as_ref() {
-        let t = *said_ms as f32 / 1000.0;
+    if let Some(said_ms) = moves.said_ms {
+        let t = said_ms as f32 / 1000.0;
         if t < 0.7 {
             bob -= (t * 15.0).sin().abs() * 7.0 * (1.0 - t / 0.7);
         }
     }
     // A new face: it fades in over the old one and he hops a little as it lands.
-    let change = ease_out(view.merchant_ms as f32 / 220.0);
+    let change = ease_out(moves.face_ms as f32 / 220.0);
     let hop = (1.0 - change) * 14.0;
     let grow = 1.0 + (1.0 - change) * 0.04;
-    if let Some((code, ms)) = view.haggle.as_ref().and_then(|h| h.result) {
+    if let Some((code, ms)) = moves.result {
         let t = ms as f32 / 1000.0;
         let fade = (1.0 - t / 0.5).max(0.0);
         match code {
@@ -569,7 +606,7 @@ fn figure(
                     font,
                     v,
                     Face::Italic,
-                    "Tienda de la villa · se aceptan regateos",
+                    subtitle,
                     base[0] + 14.0,
                     base[1] + 112.0,
                     27.0,
@@ -1252,6 +1289,12 @@ fn card(
             rgba(0x0b1a14, 1.0),
         );
     });
+    let owned = f.inventory.get(&p.id).copied().unwrap_or(0);
+    let available = if f.tab == Tab::Sell {
+        Some(owned)
+    } else {
+        p.stock.map(|s| f.stock.get(&p.id).copied().unwrap_or(s))
+    };
     let kind = p.category.singular();
     let kind_w = text_width(font, Face::Ui, kind, 17.0) + 28.0;
     panel(
@@ -1270,9 +1313,35 @@ fn card(
         17.0,
         rgba(0xffffff, 1.0),
     );
+    // How many he has left, beside it (a shelf that runs out).
+    if let (Tab::Buy, Some(left)) = (f.tab, available) {
+        let words = if left == 0 {
+            "Agotado".to_owned()
+        } else {
+            format!("Quedan {left}")
+        };
+        let w = text_width(font, Face::Ui, &words, 17.0) + 28.0;
+        let chip = Rect::new(1556.0 + kind_w + 10.0, 338.0, w, 30.0);
+        panel(
+            v,
+            chip,
+            15.0,
+            Panel::fill(0x1a2a24, 0x0a1410, 1.0).rim(GOLD_DEEP, 1.0, 1.4),
+        );
+        text(
+            font,
+            v,
+            Face::Ui,
+            &words,
+            chip.x + 14.0,
+            342.0,
+            17.0,
+            rgba(if left == 0 { 0xff9aa8 } else { CREAM }, 1.0),
+        );
+    }
     for (i, line) in wrap(font, Face::Body, &p.description, 21.0, 312.0)
         .iter()
-        .take(8)
+        .take(4)
         .enumerate()
     {
         text_shadow(
@@ -1286,56 +1355,161 @@ fn card(
             rgba(INK, 0.95),
         );
     }
-    let quote = p
-        .queen_thought
-        .as_deref()
-        .unwrap_or("Todo objeto tiene una historia. Quizá esta merezca la pena.");
-    speech_box(
-        font,
-        v,
-        [1240.0, 764.0],
-        620.0,
-        "Reina",
-        &format!("«{}»", quote.trim_matches(['«', '»'])),
-        QUEEN,
-        -0.012,
-        1.0,
-        0.86,
-    );
-    // What it does.
-    let effect = if p.effect.is_empty() {
-        &p.description
+    // What it costs (what he pays, selling): big, under its words; with more than one, the
+    // price of each beside the total.
+    let unit = if f.tab == Tab::Buy {
+        p.buy_price
     } else {
-        &p.effect
+        p.sell_price
     };
-    let effect_size = fit(font, Face::Italic, effect, 20.0, 540.0);
-    text_shadow(
-        font,
+    let total = unit.saturating_mul(f.quantity);
+    wire(
         v,
-        Face::Title,
-        "Efecto",
-        1236.0,
-        778.0,
-        21.0,
-        rgba(GOLD_HI, 1.0),
+        [1552.0, 498.0],
+        [1862.0, 498.0],
+        2.0,
+        rgba(GOLD_DEEP, 0.9),
+        rgba(GOLD_DEEP, 0.0),
+        0.0,
+        false,
     );
     text_shadow(
         font,
         v,
         Face::Italic,
-        effect,
-        1314.0,
-        779.0,
-        effect_size,
-        rgba(0xc8ffe8, 1.0),
+        if f.tab == Tab::Buy {
+            "Precio"
+        } else {
+            "Él te paga"
+        },
+        1552.0,
+        508.0,
+        20.0,
+        rgba(CREAM, 0.85),
     );
+    coin(v, [1574.0, 556.0], 19.0, 1.0);
+    let price = total.to_string();
+    text_outline(
+        font,
+        v,
+        Face::Title,
+        &price,
+        1602.0,
+        530.0,
+        46.0,
+        rgba(GOLD_HI, 1.0),
+        rgba(EDGE, 0.9),
+    );
+    let pw = text_width(font, Face::Title, &price, 46.0);
+    text_shadow(
+        font,
+        v,
+        Face::Title,
+        "oro",
+        1610.0 + pw,
+        546.0,
+        24.0,
+        rgba(GOLD, 1.0),
+    );
+    if f.quantity > 1 {
+        let each = format!("{unit} c/u");
+        let ew = text_width(font, Face::Italic, &each, 19.0);
+        text_shadow(
+            font,
+            v,
+            Face::Italic,
+            &each,
+            1862.0 - ew,
+            548.0,
+            19.0,
+            rgba(CREAM, 0.8),
+        );
+    }
+    let quote = p
+        .queen_thought
+        .as_deref()
+        .unwrap_or("Todo objeto tiene una historia. Quizá esta merezca la pena.");
+    // Her word right under the picture; under it what it does (unless its words already say
+    // it) and the fusions it goes into, as far as the room above the quantity allows.
+    let words = format!("«{}»", quote.trim_matches(['«', '»']));
+    let said = speech_box(
+        font,
+        v,
+        [1240.0, 606.0 + speech_height(font, &words, 620.0, 0.84)],
+        620.0,
+        "Reina",
+        &words,
+        QUEEN,
+        -0.012,
+        1.0,
+        0.84,
+    );
+    let mut y = said.y + said.h + 18.0;
+    // The values start after the longer label in the player's language (never over it).
+    let value_x = (1236.0
+        + text_width(font, Face::Title, "Efecto", 21.0).max(text_width(font, Face::Title, "Fusión", 21.0))
+        + 16.0)
+        .max(1314.0);
+    let value_w = 1854.0 - value_x;
+    let effect = p.effect.trim().trim_end_matches('.');
+    if !effect.is_empty() && !p.description.contains(effect) && y + 26.0 <= 812.0 {
+        let effect_size = fit(font, Face::Italic, &p.effect, 20.0, value_w);
+        text_shadow(
+            font,
+            v,
+            Face::Title,
+            "Efecto",
+            1236.0,
+            y,
+            21.0,
+            rgba(GOLD_HI, 1.0),
+        );
+        text_shadow(
+            font,
+            v,
+            Face::Italic,
+            &p.effect,
+            value_x,
+            y + 1.0,
+            effect_size,
+            rgba(0xc8ffe8, 1.0),
+        );
+        y += 32.0;
+    }
+    for recipe in super::super::backpack::recipes_with(&p.id) {
+        if y + 26.0 > 812.0 {
+            break;
+        }
+        let line = format!(
+            "{} + {} = {}",
+            thing_name(recipe.a),
+            thing_name(recipe.b),
+            thing_name(recipe.result)
+        );
+        let size = fit(font, Face::Italic, &line, 20.0, value_w - 20.0);
+        text_shadow(
+            font,
+            v,
+            Face::Title,
+            "Fusión",
+            1236.0,
+            y,
+            21.0,
+            rgba(GOLD_HI, 1.0),
+        );
+        text_shadow(
+            font,
+            v,
+            Face::Italic,
+            &line,
+            value_x,
+            y + 1.0,
+            size,
+            rgba(0xe8d8ff, 1.0),
+        );
+        y += 30.0;
+    }
     // How many.
-    let owned = f.inventory.get(&p.id).copied().unwrap_or(0);
-    let available = if f.tab == Tab::Sell {
-        Some(owned)
-    } else {
-        p.stock.map(|s| f.stock.get(&p.id).copied().unwrap_or(s))
-    };
     text_shadow(
         font,
         v,
@@ -1398,13 +1572,7 @@ fn card(
         19.0,
         rgba(0xbfe8d0, 1.0),
     );
-    // What it costs, or what is wrong.
-    let unit = if f.tab == Tab::Buy {
-        p.buy_price
-    } else {
-        p.sell_price
-    };
-    let total = unit.saturating_mul(f.quantity);
+    // Whether it can be done, or what is wrong.
     let can_act =
         available.is_none_or(|n| n >= f.quantity) && (f.tab == Tab::Sell || f.gold >= total);
     let status = f.notice.map(str::to_owned).unwrap_or_else(|| {
@@ -1429,30 +1597,19 @@ fn card(
         status_size,
         rgba(if can_act { 0xc8ffe8 } else { 0xff9aa8 }, 1.0),
     );
-    let price = total.to_string();
-    let pw = text_width(font, Face::Title, &price, 36.0);
-    coin(v, [1840.0 - pw - 22.0, 896.0], 14.0, 1.0);
-    text_outline(
-        font,
-        v,
-        Face::Title,
-        &price,
-        1840.0 - pw,
-        874.0,
-        36.0,
-        rgba(GOLD_HI, 1.0),
-        rgba(EDGE, 0.85),
+    let label = format!(
+        "{} · {total} oro",
+        if f.tab == Tab::Buy {
+            "Comprar"
+        } else {
+            "Vender"
+        }
     );
-    let label = if f.tab == Tab::Buy {
-        "Comprar"
-    } else {
-        "Vender"
-    };
     plate(
         font,
         v,
         Layout::ACTION,
-        label,
+        &label,
         true,
         f.hover == Some(ShopHit::Action),
         can_act,
@@ -1475,6 +1632,24 @@ fn card(
         26.0,
         f.time,
     );
+}
+
+/// How tall [`speech_box`] makes a box of `words` (to set it under something).
+fn speech_height(font: &FontAtlas, words: &str, max_width: f32, s: f32) -> f32 {
+    let size = 27.0 * s;
+    let lines = wrap(font, Face::Body, words, size, max_width - 56.0 * s).len();
+    58.0 * s + lines as f32 * size * 1.38 + 18.0 * s
+}
+
+/// A thing's name: a product of the shop, or something made at the altar.
+fn thing_name(id: &str) -> String {
+    shop::catalog()
+        .products
+        .iter()
+        .find(|p| p.id == id)
+        .map(|p| p.name.clone())
+        .or_else(|| super::super::backpack::extra(id).map(|e| e.name.to_owned()))
+        .unwrap_or_else(|| id.to_owned())
 }
 
 /// The haggle: the deal as it stands, his patience, the bar with its needle, the tactics, and
@@ -1595,7 +1770,7 @@ fn draw_haggle(
                     20.0,
                     rgba(CREAM, 0.85),
                 );
-                let now = (h.price * h.quantity).to_string();
+                let now = h.total.to_string();
                 coin(v, [r.x + 200.0, r.y + 222.0], 20.0, 1.0);
                 // The price swells a moment when it moves.
                 let pop = if fresh < 0.4 && matches!(h.result, Some((0 | 1 | 6, _))) {
@@ -1624,17 +1799,6 @@ fn draw_haggle(
                         r.y + 262.0,
                         20.0,
                         rgba(0xff9aa8, 1.0),
-                    );
-                } else {
-                    text_shadow(
-                        font,
-                        v,
-                        Face::Italic,
-                        &format!("Intento {} / {}", h.rounds, h.max_rounds),
-                        r.x + 26.0,
-                        r.y + 262.0,
-                        20.0,
-                        rgba(CREAM, 0.85),
                     );
                 }
                 // His patience: hearts.
@@ -1778,8 +1942,16 @@ fn draw_haggle(
             rgba(CREAM, 0.9),
         );
     });
+    // ---- the ticket of the tries
+    let paper = Layout::RECEIPT;
+    let a = entrance(age, 0.2, 0.3);
+    faded(v, a, |v| {
+        shifted(v, [0.0, (1.0 - a) * 40.0], |v| {
+            turned(v, mid(paper), 0.014, |v| receipt(font, v, paper, h));
+        });
+    });
     // ---- the tactics
-    let total = h.price * h.quantity;
+    let total = h.total;
     let tiles = [
         ("Halagar", "Zona amplia · poco · sin riesgo".to_owned()),
         (
@@ -1849,9 +2021,11 @@ fn draw_haggle(
                 6 => ("¡TRATO!", 0xffc4dc, 0x8a1a4a),
                 _ => ("¡FUERA!", 0xff6a7a, 0x6a0a1a),
             };
-            let size = 84.0 * (0.6 + 0.4 * pop);
+            // Between the ticket and the tiles, a long word smaller so it keeps to that gap.
+            let room = (250.0 / text_width(font, Face::Title, words, 84.0)).min(1.0);
+            let size = 84.0 * room * (0.6 + 0.4 * pop);
             let tw = text_width(font, Face::Title, words, size);
-            let c = [1015.0, 828.0];
+            let c = [1318.0, 872.0];
             faded(v, alpha, |v| {
                 turned(v, c, -0.12, |v| {
                     burst(
@@ -1880,6 +2054,154 @@ fn draw_haggle(
                 });
             });
         }
+    }
+}
+
+/// The haggle's ticket: till paper with a line for each try (its number, what was played, what
+/// came of it, how far the price moved), the favour's in rose with its heart; the newest at the
+/// foot, as many as fit.
+fn receipt(font: &FontAtlas, v: &mut Vec<MapVertex>, r: Rect, h: &HaggleView) {
+    const INK_GREEN: u32 = 0x0b3a2c;
+    soft(
+        v,
+        Rect::new(r.x + 10.0, r.y + 14.0, r.w, r.h),
+        6.0,
+        14.0,
+        rgba(SHADOW, 0.7),
+        false,
+    );
+    panel(v, grow(r, 4.0), 8.0, Panel::fill(EDGE, EDGE, 1.0));
+    panel(v, r, 6.0, Panel::fill(0xfcf8ef, 0xeadfcb, 1.0));
+    // The till's holes down its sides.
+    for k in 0..8 {
+        let y = r.y + 28.0 + k as f32 * 32.0;
+        disc(v, [r.x + 9.0, y], 3.0, rgba(0xc8b89a, 1.0));
+        disc(v, [r.x + r.w - 9.0, y], 3.0, rgba(0xc8b89a, 1.0));
+    }
+    text(
+        font,
+        v,
+        Face::Title,
+        "Tique del regateo",
+        r.x + 26.0,
+        r.y + 13.0,
+        27.0,
+        rgba(INK_GREEN, 1.0),
+    );
+    let tries = format!("Intento {} de {}", h.rounds, h.max_rounds);
+    let w = text_width(font, Face::Italic, &tries, 20.0);
+    text(
+        font,
+        v,
+        Face::Italic,
+        &tries,
+        r.x + r.w - 26.0 - w,
+        r.y + 19.0,
+        20.0,
+        rgba(0x5a6a62, 1.0),
+    );
+    let mut x = r.x + 22.0;
+    while x < r.x + r.w - 22.0 {
+        wire(
+            v,
+            [x, r.y + 54.0],
+            [(x + 10.0).min(r.x + r.w - 22.0), r.y + 54.0],
+            2.0,
+            rgba(0x8a7a5a, 0.8),
+            rgba(0x8a7a5a, 0.8),
+            0.0,
+            false,
+        );
+        x += 17.0;
+    }
+    if h.log.is_empty() {
+        let lines = wrap(
+            font,
+            Face::Italic,
+            "Aún no hay nada apuntado. Elige una táctica y para la aguja dentro de su zona.",
+            22.0,
+            r.w - 52.0,
+        );
+        for (i, line) in lines.iter().enumerate() {
+            text(
+                font,
+                v,
+                Face::Italic,
+                line,
+                r.x + 26.0,
+                r.y + 72.0 + i as f32 * 30.0,
+                22.0,
+                rgba(0x5a6a62, 1.0),
+            );
+        }
+        return;
+    }
+    let fit_rows = 6;
+    let start = h.log.len().saturating_sub(fit_rows);
+    for (row, (i, (label, code, moved))) in h.log.iter().enumerate().skip(start).enumerate() {
+        let y = r.y + 66.0 + row as f32 * 32.0;
+        let favor = *code == 6;
+        text(
+            font,
+            v,
+            Face::Title,
+            &format!("{}", i + 1),
+            r.x + 26.0,
+            y,
+            21.0,
+            rgba(0x8a7a5a, 1.0),
+        );
+        let mut lx = r.x + 54.0;
+        if favor {
+            heart(v, [lx + 10.0, y + 13.0], 9.0, QUEEN, 1.0);
+            lx += 26.0;
+        }
+        let size = fit(font, Face::Ui, label, 22.0, r.x + 300.0 - lx);
+        text(
+            font,
+            v,
+            Face::Ui,
+            label,
+            lx,
+            y + 1.0,
+            size,
+            rgba(if favor { 0xb0285a } else { INK_GREEN }, 1.0),
+        );
+        let (word, ink) = match code {
+            0 => ("¡GENIAL!", 0x9a6a10),
+            1 => ("¡BIEN!", 0x0b6a4a),
+            2 => ("FALLO", 0x6a7480),
+            3 => ("¡OFENDIDO!", 0xb01a3a),
+            5 => ("¡FUERA!", 0xb01a3a),
+            _ => ("TRATO", 0xc0306a),
+        };
+        text(
+            font,
+            v,
+            Face::Title,
+            word,
+            r.x + 312.0,
+            y,
+            21.0,
+            rgba(ink, 1.0),
+        );
+        // Selling, the price goes up.
+        let cut = if *moved > 0 {
+            format!("{}{moved} %", if h.selling { "+" } else { "−" })
+        } else {
+            "—".to_owned()
+        };
+        let w = text_width(font, Face::Title, &cut, 22.0);
+        text(
+            font,
+            v,
+            Face::Title,
+            &cut,
+            r.x + r.w - 26.0 - w,
+            y,
+            22.0,
+            rgba(if *moved > 0 { INK_GREEN } else { 0x9a9a8a }, 1.0),
+        );
     }
 }
 
@@ -2028,6 +2350,26 @@ fn favor_tile(
             b.y + 3.0,
             20.0,
             rgba(EDGE, 1.0),
+        );
+    } else if fv.tomorrow {
+        // The next favour waits for tomorrow (sleeping passes the day).
+        let b = Rect::new(r.x + r.w - 142.0, r.y + 12.0, 126.0, 30.0);
+        panel(
+            v,
+            b,
+            6.0,
+            Panel::fill(0x3a2448, 0x22142c, 1.0).rim(GOLD_DEEP, 1.0, 1.6),
+        );
+        let w = text_width(font, Face::Title, "MAÑANA +1", 18.0);
+        text_shadow(
+            font,
+            v,
+            Face::Title,
+            "MAÑANA +1",
+            b.x + (b.w - w) * 0.5,
+            b.y + 4.0,
+            18.0,
+            rgba(CREAM, 1.0),
         );
     }
     if fv.choices > 1 {
@@ -2768,6 +3110,23 @@ fn hints(font: &FontAtlas, v: &mut Vec<MapVertex>, keys: &[(&str, &str)]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_favours_page_answers_the_pointer_on_its_tiles() {
+        for i in 0..2 {
+            let c = mid(Layout::favor_action(i));
+            assert_eq!(favor_hit(c[0], c[1], false), Some(i as u8));
+            // With the card up, «Continuar» takes the whole row.
+            assert_eq!(favor_hit(c[0], c[1], true), Some(2));
+        }
+        let go = mid(Layout::FAVOR_GO);
+        assert_eq!(favor_hit(go[0], go[1], true), Some(2));
+        // The picture and the ticket are not buttons.
+        let pic = mid(Layout::FAVOR_PICTURE);
+        assert_eq!(favor_hit(pic[0], pic[1], false), None);
+        let ticket = mid(Layout::FAVOR_TICKET);
+        assert_eq!(favor_hit(ticket[0], ticket[1], true), None);
+    }
 
     #[test]
     fn pages_filters_and_buttons_share_layout() {

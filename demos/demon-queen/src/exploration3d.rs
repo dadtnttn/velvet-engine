@@ -67,6 +67,8 @@ pub(crate) mod ero;
 pub(crate) mod gait;
 #[path = "game_audio.rs"]
 mod game_audio;
+#[path = "clip_video.rs"]
+pub(crate) mod clip_video;
 #[path = "mine.rs"]
 mod mine;
 #[path = "mugo.rs"]
@@ -83,6 +85,12 @@ pub(crate) mod soundtrack;
 pub(crate) mod spa_life;
 #[path = "ui_sfx.rs"]
 pub(crate) mod ui_sfx;
+#[path = "prefs.rs"]
+pub(crate) mod prefs;
+#[path = "gallery_seen.rs"]
+pub(crate) mod gallery_seen;
+#[path = "sign_textures.rs"]
+pub(crate) mod sign_textures;
 #[path = "village.rs"]
 mod village;
 #[path = "explore/walk.rs"]
@@ -152,8 +160,10 @@ mod drink;
 mod floats;
 #[path = "explore/mage.rs"]
 mod mage;
+#[path = "explore/rules.rs"]
+mod rules;
 #[path = "explore/mascot.rs"]
-mod mascot;
+pub(crate) mod mascot;
 #[path = "explore/play_scene.rs"]
 mod play_scene;
 #[path = "explore/shop_games.rs"]
@@ -295,6 +305,23 @@ struct Frame<'a> {
 pub(crate) struct RenderState {
     target: wgpu::Texture,
     pub(crate) target_view: wgpu::TextureView,
+    target_format: wgpu::TextureFormat,
+    /// The world drawn smaller than it is shown (the render scale), or with finishing passes
+    /// (FXAA, sharpening): its own picture, brought to `target` by `upscaler` before the overlays.
+    scene: Option<(wgpu::Texture, wgpu::TextureView)>,
+    upscaler: velvet_render::Upscaler3D,
+    /// The graphics settings' finishing passes and render scale (1: as shown).
+    finishing: velvet_render::Finishing3D,
+    render_scale: f32,
+    /// Dynamic resolution: the frame time it keeps under (ms), its smoothed measure, and the
+    /// scale it has come to (within `render_scale`).
+    dynamic_budget: Option<f32>,
+    dynamic_ms: f32,
+    dynamic_scale: f32,
+    last_render: Option<std::time::Instant>,
+    /// The size the world is drawn at (the screen's own, or 1920×1080); its overlays are laid
+    /// out at 1920×1080 all the same.
+    pub(crate) render_size: (u32, u32),
     device: wgpu::Device,
     queue: wgpu::Queue,
     renderer: Wgpu3DRenderer,
@@ -339,7 +366,6 @@ pub(crate) struct RenderState {
     player_marker: MeshHandle,
     nature_mote: MeshHandle,
     celestial_orb: MeshHandle,
-    village_arrow: MeshHandle,
     village_entry_marker: MeshHandle,
     /// The villa's interaction medallion.
     village_prompt_meshes: PromptMeshes,
@@ -397,8 +423,115 @@ impl Drop for RenderState {
     }
 }
 
+/// The world's frame at `size`.
+fn make_target(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32)) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("exploration-frame"),
+        size: wgpu::Extent3d {
+            width: size.0.max(1),
+            height: size.1.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    })
+}
+
 impl RenderState {
+    /// The graphics settings: the renderer's quality, the finishing passes, the render scale and
+    /// dynamic resolution (`budget_ms`: the frame time it keeps under; `None` off).
+    pub(crate) fn set_graphics(
+        &mut self,
+        quality: velvet_render::Quality3D,
+        finishing: velvet_render::Finishing3D,
+        render_scale: f32,
+        budget_ms: Option<f32>,
+    ) {
+        if self.renderer.quality() != quality {
+            self.renderer.set_quality(quality);
+        }
+        self.finishing = finishing;
+        self.render_scale = render_scale.clamp(0.33, 1.0);
+        if budget_ms != self.dynamic_budget {
+            self.dynamic_budget = budget_ms;
+            self.dynamic_scale = 1.0;
+            self.dynamic_ms = 0.0;
+        }
+    }
+
+    /// Where this frame's world is drawn and at what size: straight into the shown target when
+    /// nothing is to be done to it, else into the scene picture (smaller with a render scale).
+    pub(crate) fn scene_target(&mut self) -> (wgpu::TextureView, (u32, u32)) {
+        // Dynamic resolution: the time since the last frame, smoothed, steers the scale.
+        let now = std::time::Instant::now();
+        if let (Some(budget), Some(last)) = (self.dynamic_budget, self.last_render) {
+            let ms = now.duration_since(last).as_secs_f32() * 1000.0;
+            if ms < 250.0 {
+                self.dynamic_ms = if self.dynamic_ms == 0.0 { ms } else { self.dynamic_ms * 0.9 + ms * 0.1 };
+                if self.dynamic_ms > budget * 1.06 {
+                    self.dynamic_scale = (self.dynamic_scale - 0.02).max(0.5);
+                } else if self.dynamic_ms < budget * 0.8 {
+                    self.dynamic_scale = (self.dynamic_scale + 0.01).min(1.0);
+                }
+            }
+        }
+        self.last_render = Some(now);
+        let scale = self.render_scale * if self.dynamic_budget.is_some() { self.dynamic_scale } else { 1.0 };
+        let shown = self.render_size;
+        let drawn = (
+            ((shown.0 as f32 * scale).round() as u32).max(320),
+            ((shown.1 as f32 * scale).round() as u32).max(180),
+        );
+        let drawn = (drawn.0.min(shown.0), drawn.1.min(shown.1));
+        if !self.finishing.needed(drawn, shown) {
+            self.scene = None;
+            return (self.target_view.clone(), shown);
+        }
+        let fits = self
+            .scene
+            .as_ref()
+            .is_some_and(|(t, _)| (t.width(), t.height()) == drawn);
+        if !fits {
+            let texture = make_target(&self.device, self.target_format, drawn);
+            let view = texture.create_view(&Default::default());
+            self.scene = Some((texture, view));
+        }
+        let view = self.scene.as_ref().expect("made above").1.clone();
+        (view, drawn)
+    }
+
+    /// The world, drawn into `scene` (at `drawn`), brought to the shown target.
+    pub(crate) fn finish_scene(&mut self, scene: &wgpu::TextureView, drawn: (u32, u32)) {
+        if self.scene.is_none() {
+            return;
+        }
+        let shown = self.render_size;
+        let target = self.target_view.clone();
+        self.upscaler
+            .run(&self.device, &self.queue, scene, drawn, &target, shown, self.finishing);
+    }
+
+    /// The world drawn at `size` from now on (the frame made again when it changes).
+    pub(crate) fn set_render_size(&mut self, size: (u32, u32)) {
+        let size = (size.0.max(1), size.1.max(1));
+        if size == self.render_size {
+            return;
+        }
+        self.target = make_target(&self.device, self.target_format, size);
+        self.target_view = self.target.create_view(&Default::default());
+        self.render_size = size;
+        eprintln!("[3d] render size {}x{}", size.0, size.1);
+    }
+
     pub(crate) fn load(gpu: GpuContext, model_file: &Path, dungeon_seed: u64) -> Result<Self> {
+        // A new renderer: the signs it uploads are noted afresh.
+        sign_textures::forget_uploads();
         let GpuContext {
             device,
             queue,
@@ -406,22 +539,7 @@ impl RenderState {
             msaa_samples,
         } = gpu;
         let (width, height) = (WINDOW_WIDTH, WINDOW_HEIGHT);
-        let target = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("exploration-native-1080p"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let target = make_target(&device, format, (width, height));
         let target_view = target.create_view(&Default::default());
         eprintln!("[3d] MSAA samples={msaa_samples}");
         let mut renderer =
@@ -499,6 +617,19 @@ impl RenderState {
             &mut model_texture_cache,
             &white_texture,
         )?;
+        // The characters' pictures are on the GPU now: their decoded copies are not kept in RAM
+        // (only their animation and skin data is read from here on).
+        let (mut model, mut green_model, mut mage_model, mut maid_model, mut maid_alt_model) =
+            (model, green_model, mage_model, maid_model, maid_alt_model);
+        let mut freed = 0usize;
+        for m in [Some(&mut model), green_model.as_mut(), Some(&mut mage_model), Some(&mut maid_model), maid_alt_model.as_mut()]
+            .into_iter()
+            .flatten()
+        {
+            freed += m.textures.iter().map(|t| t.rgba.len()).sum::<usize>();
+            m.textures = Vec::new();
+        }
+        eprintln!("[3d] character textures freed from RAM: {} MB", freed >> 20);
         let player_marker = renderer.upload_mesh(
             &device,
             &Mesh3D::ring(
@@ -526,7 +657,6 @@ impl RenderState {
             &device,
             &Mesh3D::uv_sphere(0.90, 20, 10, Material3D::rgb(1.0, 1.0, 1.0)),
         )?;
-        let village_arrow = renderer.upload_mesh(&device, &build_village_arrow_mesh())?;
         let village_entry_marker = renderer.upload_mesh(
             &device,
             &Mesh3D::ring(
@@ -549,8 +679,8 @@ impl RenderState {
         let prompt_glyphs: [MeshHandle; Icon::ALL.len()] =
             prompt_glyphs.try_into().expect("one glyph per icon");
         let village_prompt_meshes = PromptMeshes {
-            rim: renderer.upload_mesh(&device, &build_prompt_disc_mesh(0.72, 0.05))?,
-            face: renderer.upload_mesh(&device, &build_prompt_disc_mesh(0.6, 0.05))?,
+            rim: renderer.upload_mesh(&device, &build_prompt_plate_mesh(0.72, 0.05))?,
+            face: renderer.upload_mesh(&device, &build_prompt_plate_mesh(0.6, 0.05))?,
             glyphs: prompt_glyphs,
             pointer: renderer.upload_mesh(&device, &build_prompt_pointer_mesh())?,
         };
@@ -577,6 +707,16 @@ impl RenderState {
         Ok(Self {
             target,
             target_view,
+            target_format: format,
+            scene: None,
+            upscaler: velvet_render::Upscaler3D::new(&device, format),
+            finishing: velvet_render::Finishing3D::default(),
+            render_scale: 1.0,
+            dynamic_budget: None,
+            dynamic_ms: 0.0,
+            dynamic_scale: 1.0,
+            last_render: None,
+            render_size: (width, height),
             device,
             queue,
             renderer,
@@ -618,7 +758,6 @@ impl RenderState {
             player_marker,
             nature_mote,
             celestial_orb,
-            village_arrow,
             village_entry_marker,
             village_prompt_meshes,
             nature_draws,
@@ -716,6 +855,8 @@ pub(crate) struct App {
     /// separate from the mage story request lets every house get an `F`
     /// affordance before its individual script is authored.
     pending_villa_interaction: Option<String>,
+    /// Act 1 is over: the host shows its thanks (taken once).
+    thanks_pending: bool,
     /// Sound, opened on first need (the first descent); `audio_tried`
     /// stops retrying when there is no sound device.
     audio: Option<game_audio::GameAudio>,
@@ -764,6 +905,8 @@ pub(crate) struct App {
     wardrobe_open: bool,
     wardrobe_selection: u8,
     outfit: u8,
+    /// What she came to the springs in, waiting in the changing room while she wears the bikini.
+    outfit_before_baths: Option<u8>,
     shop_open: bool,
     venue: venue::Menu,
     /// Inside the brothel: where she stands there and what has opened.
@@ -776,6 +919,9 @@ pub(crate) struct App {
     penascal: Option<penascal3d::State>,
     /// Varrak's arrival is playing: the fight starts when it ends.
     pending_boss_fight: bool,
+    /// The fight started from the R button before the story reached him: winning it changes
+    /// nothing.
+    boss_practice: bool,
     /// The missions' notices; the followed one's guide and the way it last found.
     missions: missions::Tracker,
     guide: Option<guide::Guide>,
@@ -881,6 +1027,8 @@ impl App {
             backpack,
             shop_stock,
             venue,
+            inside,
+            brothel_rope_open,
         } = starting_point(&world_id, &spawn_id, &session_path, seed);
         let mut app = Self {
             model_file,
@@ -894,6 +1042,7 @@ impl App {
             embedded: false,
             pending_story_request: false,
             pending_villa_interaction: None,
+            thanks_pending: false,
             audio: None,
             audio_tried: false,
             audio_boot: None,
@@ -933,6 +1082,7 @@ impl App {
             wardrobe_open: false,
             wardrobe_selection: outfit,
             outfit,
+            outfit_before_baths: None,
             shop_open: false,
             venue,
             brothel: None,
@@ -940,6 +1090,7 @@ impl App {
             castle: None,
             penascal: None,
             pending_boss_fight: false,
+            boss_practice: false,
             missions: missions::Tracker::default(),
             guide: None,
             route: None,
@@ -959,7 +1110,7 @@ impl App {
             talk_line_at: 0.0,
             stage: None,
             pending_guion_vn: None,
-            brothel_rope_open: false,
+            brothel_rope_open,
             shop_tab: shop::Tab::Buy,
             shop_category: shop::Category::All,
             shop_selection: 0,
@@ -1001,6 +1152,8 @@ impl App {
             app.dungeon.controller = controller;
             app.player = app.dungeon.controller.position;
             app.camera_focus = app.player;
+        } else if let Some(inside) = inside {
+            app.resume_inside(&inside);
         }
         app
     }
@@ -1051,15 +1204,18 @@ impl App {
     }
 
     pub(crate) fn capture(&self, path: &Path) -> Result<()> {
-        let pixels = self.capture_pixels()?;
-        image::save_buffer(
-            path,
-            &pixels,
-            WINDOW_WIDTH,
-            WINDOW_HEIGHT,
-            image::ColorType::Rgba8,
-        )?;
+        // As drawn: 1920×1080, or the size `VELVET_RENDER_SIZE` asks for.
+        let (pixels, w, h) = self.capture_frame()?;
+        image::save_buffer(path, &pixels, w, h, image::ColorType::Rgba8)?;
         Ok(())
+    }
+
+    /// The world's frame as drawn (RGBA, and its size): the frozen world under a menu.
+    pub(crate) fn capture_frame(&self) -> Result<(Vec<u8>, u32, u32)> {
+        let state = self.state.as_ref().context("3D not loaded")?;
+        let pixels = velvet_render::read_texture_rgba(&state.device, &state.queue, &state.target)?;
+        anyhow::ensure!(!velvet_render::frame_is_blank(&pixels), "3D frame is blank");
+        Ok((pixels, state.render_size.0, state.render_size.1))
     }
 
     /// Readback only when opening the pause menu; the live world is retained and frozen.
@@ -1067,7 +1223,19 @@ impl App {
         let state = self.state.as_ref().context("3D not loaded")?;
         let pixels = velvet_render::read_texture_rgba(&state.device, &state.queue, &state.target)?;
         anyhow::ensure!(!velvet_render::frame_is_blank(&pixels), "3D frame is blank");
-        Ok(pixels)
+        if state.render_size == (WINDOW_WIDTH, WINDOW_HEIGHT) {
+            return Ok(pixels);
+        }
+        // Drawn at the screen's size: brought to the logical frame the callers expect.
+        let (w, h) = state.render_size;
+        let image = image::RgbaImage::from_raw(w, h, pixels).context("3D frame size")?;
+        Ok(image::imageops::resize(
+            &image,
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT,
+            image::imageops::FilterType::Triangle,
+        )
+        .into_raw())
     }
 
     pub(crate) fn clear_input(&mut self) {
@@ -1078,6 +1246,8 @@ impl App {
         self.move_left = false;
         self.move_right = false;
         self.sprint = false;
+        // Nothing held in the fight either (a seal held through a pause stayed on).
+        self.boss_input = BossInput::default();
         self.shop_preview_dragging = false;
         self.shop_preview_drag_anchor = None;
         self.last_frame = Instant::now();
@@ -1118,6 +1288,11 @@ impl App {
         }
     }
 
+    /// The right button is the world's own (the fight's seal), not the menu's «back».
+    pub(crate) fn owns_right_button(&self) -> bool {
+        self.boss.is_some()
+    }
+
     pub(crate) fn resume_after_pause(&mut self) {
         if let Some(audio) = &mut self.audio {
             audio.set_paused(false);
@@ -1143,8 +1318,39 @@ impl App {
     /// Consumed by the host once the player presses `F` beside a villa
     /// building.  IDs map to the authored footprints in `village.rs` and can
     /// be connected to `open_world_vn` when their scripts are ready.
+    /// Act 1 has just ended: the host puts up its thanks.
+    pub(crate) fn take_thanks(&mut self) -> bool {
+        std::mem::take(&mut self.thanks_pending)
+    }
+
+    /// The language changed: the signs on show drawn again in it.
+    pub(crate) fn relocalize_signs(&mut self) {
+        if let Some(state) = self.state.as_mut() {
+            state.relocalize_signs();
+        }
+    }
+
     pub(crate) fn take_villa_interaction(&mut self) -> Option<String> {
         self.pending_villa_interaction.take()
+    }
+
+    /// QA (the smoke's zone round): castle → wood → village → wood → castle, one hop per call.
+    pub(crate) fn qa_next_zone(&mut self) -> &'static str {
+        if !self.nature_mode {
+            self.enter_nature_from_castle();
+            "forest"
+        } else if !self.village_entered {
+            let (spawn, _) = village::spawn();
+            self.player = spawn;
+            self.camera_focus = spawn;
+            self.village_entered = true;
+            eprintln!("[3d] entered Fantasy Village");
+            "village"
+        } else {
+            // Out of the village by the wood's own way back: to the castle.
+            self.enter_castle_from_nature();
+            "castle"
+        }
     }
 
     pub(crate) fn set_key(&mut self, code: KeyCode, pressed: bool) {
@@ -1173,6 +1379,7 @@ impl App {
         self.tick_bed_scene(dt);
         self.tick_drink();
         self.tick_floats();
+        self.tick_stage();
         self.tick_mascot(dt);
     }
 
@@ -1219,6 +1426,27 @@ impl App {
     }
 
     fn render_frame(&mut self) {
+        // The world at the size the window shows it (or 1920×1080, as the settings say).
+        if let (Some(window), Some(state)) = (self.window.as_ref(), self.state.as_mut()) {
+            let inner = window.inner_size();
+            state.set_render_size(prefs::render_size((inner.width, inner.height)));
+        } else if let (Some(size), Some(state)) = (prefs::forced_render_size(), self.state.as_mut()) {
+            state.set_render_size(size);
+        }
+        // The graphics settings (QA: `VELVET_GFX_PRESET=0..3` tries a preset).
+        if let Some(state) = self.state.as_mut() {
+            let g = std::env::var("VELVET_GFX_PRESET")
+                .ok()
+                .and_then(|v| v.parse::<u8>().ok())
+                .map_or_else(prefs::graphics, prefs::Graphics::preset);
+            state.set_graphics(g.quality(), g.finishing(), g.render_scale as f32 / 100.0, g.budget_ms());
+        }
+        // Places to go in are noted afresh each frame by the zone that shows them; any other
+        // place shows none (the last ones would stay up over the castle otherwise).
+        let _ = hud::take_world_markers_raw();
+        if let Some(state) = self.state.as_mut() {
+            state.map_overlay.set_markers(Vec::new());
+        }
         let achievements_view = self.achievements_open.then(|| {
             self.achievements_preview
                 .clone()
@@ -1429,6 +1657,7 @@ pub(crate) fn run_standalone() -> Result<()> {
         "--movement-smoke requires an explicit --session test save"
     );
     event_loop.run_app(&mut app)?;
+    exploration3d_state::background::flush();
     Ok(())
 }
 
@@ -1456,24 +1685,26 @@ mod shop_integration_tests {
         app.open_shop();
         assert!(app.modal_is_open());
         app.change_shop_page(1);
+        // (The stone sword on the first page pushed the ring over to the second.)
         assert_eq!(
             shop::catalog().products[app.selected_shop_product_index().unwrap()].id,
             "anillo_misterioso"
         );
+        // (The hidden ones, like the cloth, are not on the shelves.)
         app.select_shop_category(shop::Category::Materials);
         assert_eq!(
             shop::catalog().products[app.selected_shop_product_index().unwrap()].id,
-            "tela_resistente"
+            "esencia_carmesi"
         );
         app.adjust_shop_quantity(1);
         app.commit_shop_transaction();
-        assert_eq!(app.gold, 205);
-        assert_eq!(app.inventory.get("tela_resistente"), Some(&2));
+        assert_eq!(app.gold, 115);
+        assert_eq!(app.inventory.get("esencia_carmesi"), Some(&2));
         app.toggle_shop_tab();
         assert_eq!(app.shop_quantity, 1);
         app.commit_shop_transaction();
-        assert_eq!(app.gold, 215);
-        assert_eq!(app.inventory.get("tela_resistente"), Some(&1));
+        assert_eq!(app.gold, 147);
+        assert_eq!(app.inventory.get("esencia_carmesi"), Some(&1));
         // Tab goes round the three: to sell, to the fusion altar, back to buying.
         app.toggle_shop_tab();
         assert_eq!(app.shop_page, shop_games::Page::Fuse);
@@ -1487,17 +1718,17 @@ mod shop_integration_tests {
         app.adjust_shop_quantity(98);
         assert_eq!(app.shop_quantity, 2);
         app.commit_shop_transaction();
-        assert_eq!(app.gold, 135);
+        assert_eq!(app.gold, 67);
         assert_eq!(app.inventory.get("espada_de_madera"), Some(&2));
         app.commit_shop_transaction(); // Out of stock must never charge twice.
-        assert_eq!(app.gold, 135);
+        assert_eq!(app.gold, 67);
         app.select_shop_category(shop::Category::Special);
         app.gold = 0;
         app.commit_shop_transaction();
         assert_eq!(app.gold, 0);
         assert!(!app.inventory.contains_key("anillo_misterioso"));
         let saved = exploration3d_state::load_from(&session).unwrap().unwrap();
-        assert_eq!(saved.gold, 135);
+        assert_eq!(saved.gold, 67);
         assert_eq!(saved.inventory.get("espada_de_madera"), Some(&2));
         app.close_shop();
         assert!(!app.modal_is_open());
@@ -1653,6 +1884,86 @@ mod dungeon_mode_tests {
     }
 
     #[test]
+    fn the_brothel_opens_at_night_to_the_cloak_until_the_token() {
+        let mut app = backpack_world("brothel-door");
+        app.environment_cycle.set_phase(0.5);
+        app.try_enter_brothel();
+        assert!(app.brothel.is_none(), "not by day");
+        assert_eq!(app.missions.shown.as_ref().map(|s| s.0), Some(missions::NOTE));
+        app.environment_cycle.set_phase(0.95);
+        app.try_enter_brothel();
+        assert!(app.brothel.is_none(), "not without the cloak");
+        app.inventory.insert(rules::CAPE_ITEM.to_owned(), 1);
+        app.on_bought(rules::CAPE_ITEM);
+        app.try_enter_brothel();
+        assert!(app.brothel.is_some(), "at night in the cloak");
+        assert_eq!(Some(app.outfit), rules::outfit_slot("capa"));
+        app.leave_brothel();
+        // With Rosalía's token, any time of day and dressed as she likes.
+        app.story.values.insert("burdel_bienvenida".to_owned(), 1);
+        app.inventory.remove(rules::CAPE_ITEM);
+        app.outfit = 0;
+        app.environment_cycle.set_phase(0.5);
+        app.try_enter_brothel();
+        assert!(app.brothel.is_some());
+        assert_eq!(app.outfit, 0);
+    }
+
+    #[test]
+    fn the_mage_talks_to_the_green_dress_and_the_bikini_stays_at_the_springs() {
+        let mut app = backpack_world("rules");
+        app.outfit = 0;
+        assert!(!app.mage_will_talk(), "he only stammers at the royal dress");
+        app.outfit = 1;
+        assert!(app.mage_will_talk());
+        let bikini = rules::outfit_slot("bikini").expect("the bikini");
+        app.outfit = bikini;
+        app.left_baths_in_bikini();
+        assert_eq!(app.outfit, 0, "out of the springs too soon: dressed again");
+        assert!(!app.wardrobe_allows(bikini));
+        app.story.values.insert(ero::ORGASMOS.to_owned(), 4);
+        app.outfit = bikini;
+        app.left_baths_in_bikini();
+        assert_eq!(app.outfit, bikini, "awake enough: she may");
+        assert!(app.wardrobe_allows(bikini));
+    }
+
+    #[test]
+    fn the_springs_changing_room_puts_the_bikini_on_and_gives_her_clothes_back() {
+        let mut app = backpack_world("changing-room");
+        app.story.values.insert("termas_bienvenida".to_owned(), 1);
+        let bikini = rules::outfit_slot("bikini").expect("the bikini");
+        app.outfit = 1;
+        app.enter_baths();
+        assert_eq!(app.outfit, 1, "not hers yet: the welcome gives it");
+        app.leave_baths();
+        app.achievements.grant_outfit("bikini");
+        app.enter_baths();
+        assert_eq!(app.outfit, bikini, "in the bikini at the springs");
+        let saved = app.snapshot();
+        assert_eq!(saved.inside.as_ref().and_then(|i| i.outfit_before), Some(1));
+        app.leave_baths();
+        assert_eq!(app.outfit, 1, "the green dress back on the way out");
+        assert_eq!(app.story.get("termas_bikini_aviso"), 1, "Chiquita says it once");
+        app.enter_baths();
+        app.leave_baths();
+        assert_eq!(app.outfit, 1);
+    }
+
+    #[test]
+    fn the_thanks_comes_up_once_when_the_last_scene_of_act_one_has_played() {
+        let mut app = backpack_world("thanks");
+        app.tick_missions();
+        assert!(!app.take_thanks(), "not before the act ends");
+        app.story.values.insert("ajedrez_hecho".to_owned(), 1);
+        app.tick_missions();
+        assert!(app.take_thanks());
+        assert_eq!(app.story.get(missions::THANKS_SHOWN), 1);
+        app.tick_missions();
+        assert!(!app.take_thanks(), "only once");
+    }
+
+    #[test]
     fn the_villa_is_walked_from_its_gate_to_every_door_and_back() {
         let mut app = backpack_world("villa-walk");
         app.nature_mode = true;
@@ -1673,9 +1984,15 @@ mod dungeon_mode_tests {
             let prompt = app
                 .interaction_prompt()
                 .unwrap_or_else(|| panic!("no prompt at {}", anchor.id));
+            // Its name; a door with nothing behind it yet says so too.
+            let expected = if village::in_development(anchor.id).is_some() {
+                format!("{} · En desarrollo", anchor.label)
+            } else {
+                anchor.label.to_owned()
+            };
             assert_eq!(
                 prompt.detail.as_deref(),
-                Some(anchor.label),
+                Some(expected.as_str()),
                 "the prompt at {}",
                 anchor.id
             );
@@ -1882,6 +2199,67 @@ mod dungeon_mode_tests {
     }
 
     #[test]
+    fn a_sword_taken_off_in_the_caves_leaves_the_hand_empty_and_is_not_doubled() {
+        let mut app = backpack_world("backpack-unequip-cave");
+        app.inventory.insert("espada_de_madera".into(), 1);
+        app.dungeon_mode = true;
+        let (mut pack, _) = app.backpack_for_menu();
+        let wooden = pack.placed.iter().position(|p| p.id == "espada_de_madera").unwrap();
+        pack.equip(wooden).unwrap();
+        app.commit_backpack(pack);
+        assert!(app.dungeon.armed);
+        let (mut pack, _) = app.backpack_for_menu();
+        pack.unequip(backpack::Slot::Weapon).unwrap();
+        app.commit_backpack(pack);
+        assert!(!app.dungeon.armed, "taken off: the fist is empty");
+        let (pack, _) = app.backpack_for_menu();
+        assert_eq!(pack.count("espada_de_madera"), 1, "one sword, in the bag");
+        assert_eq!(pack.equipment.weapon, None);
+        // Worn again: in her hand again.
+        let mut pack = pack;
+        let wooden = pack.placed.iter().position(|p| p.id == "espada_de_madera").unwrap();
+        pack.equip(wooden).unwrap();
+        app.commit_backpack(pack);
+        assert!(app.dungeon.armed);
+    }
+
+    #[test]
+    fn slime_coats_either_sword_green_or_blue_and_the_stone_one_is_listed_once() {
+        let mut app = backpack_world("backpack-slime");
+        app.inventory.insert("espada_de_madera".into(), 1);
+        app.inventory.insert(RELIC_SWORD_ID.into(), 1);
+        app.inventory.insert("gelatina_azul".into(), 1);
+        app.inventory.insert("gelatina_verde".into(), 1);
+        let (_, items) = app.inventory_for_menu();
+        assert_eq!(items.iter().filter(|i| i.id == RELIC_SWORD_ID).count(), 1);
+        let (mut pack, craft) = app.backpack_for_menu();
+        assert!(craft);
+        let at = |pack: &backpack::Backpack, id: &str| pack.placed.iter().position(|p| p.id == id).unwrap();
+        let (w, b) = (at(&pack, "espada_de_madera"), at(&pack, "gelatina_azul"));
+        assert_eq!(pack.combine(w, b).as_deref(), Ok("espada_pegajosa_azul"));
+        let (r, g) = (at(&pack, RELIC_SWORD_ID), at(&pack, "gelatina_verde"));
+        assert_eq!(pack.combine(r, g).as_deref(), Ok("espada_piedra_pegajosa"));
+        app.commit_backpack(pack);
+        assert_eq!(app.inventory.get("espada_pegajosa_azul"), Some(&1));
+        assert_eq!(app.inventory.get("espada_piedra_pegajosa"), Some(&1));
+        // Worn: its goo on the blade, its slowing touch; the stone one still cuts deeper.
+        let (mut pack, _) = app.backpack_for_menu();
+        let blue = at(&pack, "espada_pegajosa_azul");
+        pack.equip(blue).unwrap();
+        app.commit_backpack(pack);
+        assert_eq!(app.dungeon.sword_goo, backpack::sword_goo("espada_pegajosa_azul"));
+        assert!(app.dungeon.sword_goo.unwrap()[2] > 0.9, "blue");
+        assert_eq!(app.dungeon.weapon_fx.slow, 3.0);
+        assert!(!app.dungeon.relic_sword);
+        let (mut pack, _) = app.backpack_for_menu();
+        let stone = at(&pack, "espada_piedra_pegajosa");
+        pack.equip(stone).unwrap();
+        app.commit_backpack(pack);
+        assert!(app.dungeon.relic_sword);
+        assert!(app.dungeon.sword_goo.unwrap()[1] > 0.8, "green");
+    }
+
+    #[test]
     fn the_worn_weapon_decides_whether_the_relic_bonus_applies() {
         let mut app = backpack_world("backpack-weapon");
         app.inventory.insert(RELIC_SWORD_ID.into(), 1);
@@ -2049,5 +2427,118 @@ mod dungeon_mode_tests {
         assert!(!saved.inventory.contains_key("hierbas_curativas"));
         assert_eq!(saved.gold, 264);
         std::fs::remove_file(session).unwrap();
+    }
+
+    #[test]
+    fn q_in_the_mine_cures_from_the_bag_once_the_tonics_are_gone() {
+        let session = std::env::temp_dir().join(format!(
+            "demon-queen-cure-test-{}.json",
+            std::process::id()
+        ));
+        let mut app = App::new(
+            PathBuf::new(),
+            "cure-test".into(),
+            "bedroom_inside".into(),
+            session,
+        );
+        app.inventory.insert("pocion_reforzada".into(), 1);
+        app.inventory.insert("hierbas_curativas".into(), 2);
+        app.dungeon_mode = true;
+        app.dungeon.potions = 0;
+        app.dungeon.herbs = 0;
+        app.dungeon.health = 30.0;
+        // 70 missing: the strong potion (the herbs would not do).
+        app.quick_cure();
+        assert_eq!(app.dungeon.health, 100.0);
+        assert!(!app.inventory.contains_key("pocion_reforzada"));
+        // 15 missing: one herb.
+        app.dungeon.health = 85.0;
+        app.quick_cure();
+        assert_eq!(app.dungeon.health, 100.0);
+        assert_eq!(app.inventory.get("hierbas_curativas"), Some(&1));
+        // From the menu: a herb used there heals and leaves the bag.
+        app.dungeon.health = 50.0;
+        app.use_from_menu(&["hierbas_curativas".to_owned()]);
+        assert_eq!(app.dungeon.health, 70.0);
+        assert!(!app.inventory.contains_key("hierbas_curativas"));
+    }
+
+    #[test]
+    fn a_worn_sticky_sword_reaches_the_mine() {
+        let session = std::env::temp_dir().join(format!(
+            "demon-queen-sticky-test-{}.json",
+            std::process::id()
+        ));
+        let mut app = App::new(
+            PathBuf::new(),
+            "sticky-test".into(),
+            "bedroom_inside".into(),
+            session,
+        );
+        app.inventory.insert("espada_pegajosa".into(), 1);
+        let mut pack = app.backpack.clone();
+        pack.reconcile(&app.inventory.clone());
+        let at = pack
+            .placed
+            .iter()
+            .position(|p| p.id == "espada_pegajosa")
+            .unwrap();
+        pack.equip(at).unwrap();
+        app.commit_backpack(pack);
+        assert!(app.dungeon.weapon_fx.slow > 0.0);
+        assert!(!app.dungeon.relic_sword);
+        assert!(app.has_weapon());
+    }
+
+    #[test]
+    fn a_game_saved_inside_a_place_starts_inside_it() {
+        for (place, x, z, room) in [
+            ("burdel", 0.0f32, 0.0f32, None),
+            ("termas", -6.0, 8.0, None),
+            ("penascal", 1.5, 6.5, None::<String>),
+        ] {
+            let session = std::env::temp_dir().join(format!(
+                "demon-queen-inside-{place}-{}.json",
+                std::process::id()
+            ));
+            // Saved by the world itself: in, then the snapshot.
+            let mut app = App::new(
+                PathBuf::new(),
+                "inside-test".into(),
+                "bedroom_inside".into(),
+                session.clone(),
+            );
+            app.nature_mode = true;
+            app.village_entered = true;
+            app.resume_inside(&exploration3d_state::Inside {
+                place: place.into(),
+                x,
+                z,
+                yaw: 1.0,
+                level: 0,
+                room: room.clone(),
+                outfit_before: None,
+            });
+            let at = app.player;
+            app.gold = 777;
+            let mut state = app.snapshot();
+            assert_eq!(state.inside.as_ref().map(|i| i.place.as_str()), Some(place));
+            exploration3d_state::write_to(&session, &mut state).unwrap();
+            let back = App::new(
+                PathBuf::new(),
+                "inside-test".into(),
+                "bedroom_inside".into(),
+                session.clone(),
+            );
+            let inside = match place {
+                "burdel" => back.brothel.is_some(),
+                "termas" => back.baths.is_some(),
+                _ => back.penascal.is_some(),
+            };
+            assert!(inside, "{place}: not back inside");
+            assert!((back.player - at).length() < 0.05, "{place}: {:?} vs {:?}", back.player, at);
+            assert_eq!(back.gold, 777);
+            std::fs::remove_file(session).unwrap();
+        }
     }
 }

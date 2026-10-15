@@ -82,16 +82,18 @@ impl RenderState {
         }
         let lights = inside.lights(elapsed);
         let saved = self.renderer.replace_finish(brothel::finish());
+        let (scene_view, scene_size) = self.scene_target();
         self.renderer.render_with_environment_and_lights(
             &self.device,
             &self.queue,
-            &self.target_view,
-            (WINDOW_WIDTH, WINDOW_HEIGHT),
+            &scene_view,
+            scene_size,
             camera,
             brothel::mood(environment),
             &lights,
             &draws,
         );
+        self.finish_scene(&scene_view, scene_size);
         self.renderer.replace_finish(saved);
         let mut bubbles = inside.bubbles(camera);
         bubbles.extend(queen_thought_bubble(

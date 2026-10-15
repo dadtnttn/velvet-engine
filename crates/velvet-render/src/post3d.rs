@@ -37,6 +37,9 @@ pub(crate) struct PostSettings {
     pub saturation: f32,
     pub contrast: f32,
     pub exposure: f32,
+    /// How many of the bloom's levels are used (all six for the full halo; fewer: a lighter,
+    /// cheaper one).
+    pub bloom_levels: usize,
 }
 
 struct Level {
@@ -321,7 +324,8 @@ impl Post3D {
         clear: wgpu::Color,
     ) {
         let Some(groups) = &self.groups else { return };
-        let bloom_on = settings.bloom_strength > 0.0;
+        let levels = settings.bloom_levels.clamp(1, BLOOM_LEVELS);
+        let bloom_on = settings.bloom_strength > 0.0 && settings.bloom_levels > 0;
         let make = |first: bool| PostUniform {
             bloom: [
                 settings.bloom_threshold,
@@ -376,7 +380,7 @@ impl Post3D {
                 &self.down,
                 &groups.first_down,
             );
-            for k in 1..BLOOM_LEVELS {
+            for k in 1..levels {
                 pass(
                     encoder,
                     &self.levels[k].view,
@@ -385,7 +389,7 @@ impl Post3D {
                     &groups.downs[k - 1],
                 );
             }
-            for k in (1..BLOOM_LEVELS).rev() {
+            for k in (1..levels).rev() {
                 pass(
                     encoder,
                     &self.levels[k - 1].view,

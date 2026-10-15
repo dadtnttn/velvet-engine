@@ -193,6 +193,43 @@ fn bake_maps(app: &mut App, out: &Path) -> Result<()> {
 use velvet_qa::private_mb;
 
 pub(super) fn capture(out: &Path) -> Result<()> {
+    // VELVET_I18N_DUMP=<file>: every text the guiones show (names, lines, prompts, options, what
+    // the stage writes), for the translation catalogs (tools/i18n_extract.py reads it).
+    if let Ok(path) = std::env::var("VELVET_I18N_DUMP") {
+        let lib = guion::library();
+        let mut texts = std::collections::BTreeSet::new();
+        for g in &lib.guiones {
+            for scene in &g.scenes {
+                for step in &scene.steps {
+                    match step {
+                        guion::Step::Line { name, text, .. } => {
+                            texts.insert(name.clone());
+                            texts.insert(text.clone());
+                        }
+                        guion::Step::Choice { prompt, options, .. } => {
+                            texts.extend(prompt.clone());
+                            texts.extend(options.iter().map(|o| o.label.clone()));
+                        }
+                        guion::Step::Stage { arg, .. } => {
+                            texts.insert(arg.clone());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        texts.retain(|t| !t.trim().is_empty());
+        std::fs::write(&path, serde_json::to_string_pretty(&texts)?)?;
+        eprintln!("[i18n] {} guion texts in {path}", texts.len());
+        return Ok(());
+    }
+    // VELVET_LANG=<code>: the world drawn in that language.
+    if let Ok(code) = std::env::var("VELVET_LANG") {
+        demon_queen_dungeon::i18n::set_locale_dir(exploration3d_state::data_dir().join("locales"));
+        demon_queen_dungeon::i18n::set_language(&code);
+        velvet_guion::set_translator(demon_queen_dungeon::i18n::tr_string);
+        velvet_render::set_image_override(demon_queen_dungeon::i18n::image_override);
+    }
     fs::create_dir_all(out)?;
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
         backends: if cfg!(windows) {
@@ -202,9 +239,18 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         },
         ..Default::default()
     });
-    let adapter =
-        pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-            .context("toon QA adapter")?;
+    // `VELVET_ADAPTER=intel`: the graphics card whose name holds that (to measure a weak one).
+    let wanted = std::env::var("VELVET_ADAPTER").ok().map(|n| n.to_lowercase());
+    let adapter = match wanted.and_then(|n| {
+        instance
+            .enumerate_adapters(wgpu::Backends::all())
+            .into_iter()
+            .find(|a| a.get_info().name.to_lowercase().contains(&n))
+    }) {
+        Some(adapter) => adapter,
+        None => pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+            .context("toon QA adapter")?,
+    };
     eprintln!("[toon-qa] {:?}", adapter.get_info());
     let (device, queue) = pollster::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
@@ -217,7 +263,11 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         device,
         queue,
         format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        msaa_samples: 4,
+        // The game itself draws without MSAA; `VELVET_MSAA=1` measures it as it plays.
+        msaa_samples: std::env::var("VELVET_MSAA")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(4),
     };
     if let Some(rounds) = std::env::args()
         .skip_while(|a| a != "--soak-reload")
@@ -565,6 +615,8 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.iso.distance = 12.0;
             let mut times = Vec::with_capacity(frames);
             let mut cpu = Vec::with_capacity(frames);
+            let take = |a: &std::sync::atomic::AtomicU64| a.swap(0, std::sync::atomic::Ordering::Relaxed);
+            let (mut render_ns, mut overlay_ns) = (0u64, 0u64);
             for frame in 0..frames + 30 {
                 let t = frame as f32 / 60.0;
                 app.player = if in_village {
@@ -589,11 +641,22 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 let submitted = started.elapsed().as_secs_f32() * 1000.0;
                 app.wait_for_gpu();
                 // The first frames load and upload the scene: not counted.
+                let (r, o) = (take(&velvet_render::RENDER3D_CPU_NS), take(&map_overlay::OVERLAY_CPU_NS));
                 if frame >= 30 {
                     times.push(started.elapsed().as_secs_f32() * 1000.0);
                     cpu.push(submitted);
+                    render_ns += r;
+                    overlay_ns += o;
                 }
             }
+            let n = frames.max(1) as f64 * 1e6;
+            let cpu_avg = cpu.iter().sum::<f32>() as f64 / cpu.len().max(1) as f64;
+            eprintln!(
+                "[frame-times] {name} cpu split: renderer {:.2} ms, overlay {:.2} ms, game {:.2} ms",
+                render_ns as f64 / n,
+                overlay_ns as f64 / n,
+                cpu_avg - (render_ns + overlay_ns) as f64 / n
+            );
             report(name, &mut times);
             report(&format!("{name} (cpu)"), &mut cpu);
         }
@@ -1322,6 +1385,16 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.player = near(anchor, Vec3::new(0.6, 0.0, 0.8));
             app.camera_focus = app.player;
             save(&mut app, out, name)?;
+            // In the royal dress the hypnotist only stammers.
+            if name == "prompt-mage" {
+                app.outfit = 0;
+                app.interact_forest();
+                for _ in 0..30 {
+                    app.tick(1.0 / 30.0);
+                    app.elapsed += 1.0 / 30.0;
+                }
+                save(&mut app, out, "mage-stammer")?;
+            }
         }
         // Without a weapon the Queen will not go down: her thought over her head.
         app.player = near(mine::entry_position(), Vec3::new(0.6, 0.0, 0.8));
@@ -1337,7 +1410,45 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                     app.player = door + out_dir * 1.4;
                     app.camera_focus = app.player;
                     save(&mut app, out, &format!("prompt-{id}"))?;
+                    // The tavern has nothing behind its door yet: F says so.
+                    if id == "villa_taberna" {
+                        app.interact_village();
+                        for _ in 0..24 {
+                            app.tick(1.0 / 30.0);
+                            app.elapsed += 1.0 / 30.0;
+                        }
+                        save(&mut app, out, "tavern-in-development")?;
+                    }
                 }
+            }
+        }
+        // The brothel's door: by day a note; at night in the cloak she goes in, hood up.
+        let settle = |app: &mut App| {
+            for _ in 0..24 {
+                app.tick(1.0 / 30.0);
+                app.elapsed += 1.0 / 30.0;
+            }
+        };
+        if let Some(anchor) = village::building_anchors().iter().find(|a| a.id == "villa_burdel") {
+            if let Some((door, out_dir)) = village::door_anchor(anchor.footprint_index) {
+                app.player = door + out_dir * 1.4;
+                app.camera_focus = app.player;
+                app.environment_cycle.set_phase(0.5);
+                app.interact_village();
+                settle(&mut app);
+                save(&mut app, out, "brothel-day-note")?;
+                app.environment_cycle.set_phase(0.95);
+                app.inventory.insert(rules::CAPE_ITEM.to_owned(), 1);
+                app.on_bought(rules::CAPE_ITEM);
+                settle(&mut app);
+                save(&mut app, out, "cape-bought")?;
+                app.interact_village();
+                app.talk = None;
+                app.stage = None;
+                settle(&mut app);
+                save(&mut app, out, "brothel-in-cape")?;
+                app.leave_brothel();
+                app.environment_cycle.set_phase(0.5);
             }
         }
         app.player = village::entrance() + Vec3::new(0.0, 0.0, -1.2);
@@ -1377,7 +1488,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.player = at;
             app.camera_focus = app.player;
             app.map_open = false;
-            save(&mut app, out, &format!("map-mini-{name}"))?;
+            // A place this run has not loaded (the castle when the world starts outdoors) shows
+            // nothing: it is skipped, not the whole run.
+            if let Err(error) = save(&mut app, out, &format!("map-mini-{name}")) {
+                eprintln!("[toon-qa] map {name}: {error}");
+                continue;
+            }
             app.map_open = true;
             save(&mut app, out, &format!("map-full-{name}"))?;
         }
@@ -1428,6 +1544,21 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         step(&mut app, 3.0);
         save(&mut app, out, "favor-scene")?;
         app.bed_scene_key(KeyCode::Space, true, false);
+        for _ in 0..300 {
+            if app.play_scene_qa().is_some_and(|q| q.heat >= 0.55) {
+                break;
+            }
+            step(&mut app, 0.1);
+        }
+        save(&mut app, out, "favor-hurry")?;
+        for _ in 0..300 {
+            if app.play_scene_qa().is_some_and(|q| q.phase == "relax") {
+                break;
+            }
+            step(&mut app, 0.1);
+        }
+        step(&mut app, 0.25);
+        save(&mut app, out, "favor-sealed")?;
         for _ in 0..400 {
             if app.play_scene_qa().is_some_and(|q| q.ended) {
                 break;
@@ -1450,6 +1581,14 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.story.get(play_scene::tienda::TODAY),
         );
         save(&mut app, out, "favor-back")?;
+        // The same day, another haggle: he offers the one done; the next waits for tomorrow.
+        app.haggle = None;
+        app.start_haggle();
+        app.shop_page_at = app.elapsed - 10.0;
+        if let Some(h) = app.haggle.as_mut() {
+            h.offer_at = app.elapsed - 2.0;
+        }
+        save(&mut app, out, "favor-manana")?;
         // The next day, three done: the fourth is new, the three old ones can be picked again.
         app.haggle = None;
         app.story
@@ -1486,6 +1625,8 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             "tinta_runica",
             "hueso_viejo",
             "amuleto_ocultacion",
+            "capa_reina",
+            "espada_reliquia",
         ] {
             app.shop_tab = shop::Tab::Buy;
             app.shop_category = shop::Category::All;
@@ -1521,6 +1662,19 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             h.patience = 2;
             h.rounds = 3;
             h.tactic = 1;
+            // Its ticket: a flattery that worked, a press that missed, a press dead on.
+            for (tile, outcome, moved) in [
+                (0, shop_games::Outcome::Good, 4),
+                (1, shop_games::Outcome::Miss, 0),
+                (1, shop_games::Outcome::Perfect, 11),
+            ] {
+                h.log.push(shop_games::Try {
+                    tile,
+                    outcome,
+                    moved,
+                    favor: None,
+                });
+            }
             h.needle_from = app.elapsed - 0.4;
             h.result = Some((shop_games::Outcome::Good, app.elapsed - 0.3));
         }
@@ -1557,7 +1711,18 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         // middle of the wood, the clearing and the mine, by day and by night.
         app.nature_mode = true;
         app.village_entered = false;
-        let stops: [(&str, Vec3, f32); 7] = [
+        // VELVET_SWITCH_LANG=<code>: the world loaded in one language, then switched to this one
+        // (its signs drawn again in place, as when the player changes it in the menu).
+        if let Ok(code) = std::env::var("VELVET_SWITCH_LANG") {
+            demon_queen_dungeon::i18n::set_language(&code);
+            app.relocalize_signs();
+        }
+        let stops: [(&str, Vec3, f32); 8] = [
+            (
+                "forest-sign",
+                Vec3::new(nature_trail_center(-2.2) - 1.2, 0.0, -1.2),
+                6.0,
+            ),
             (
                 "forest-gate",
                 Vec3::new(nature_trail_center(-11.0), 0.0, -11.0),
@@ -1713,6 +1878,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.wardrobe_open = true;
         app.wardrobe_selection = 1;
         save(&mut app, out, "wardrobe")?;
+        // The cloak bought: its own card, next to the royal dress.
+        app.achievements.grant_outfit("capa");
+        for (name, selection) in [("wardrobe-royal", 0u8), ("wardrobe-cape", 3u8)] {
+            app.wardrobe_selection = selection;
+            save(&mut app, out, name)?;
+        }
         return Ok(());
     }
     if std::env::args().any(|a| a == "--qa-bot") {
@@ -2091,6 +2262,582 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.penascal = None;
         return Ok(());
     }
+    if std::env::args().any(|a| a == "--promo") {
+        // Clips for the welcome video: the Queen walking through each place, filmed at 30 fps
+        // (`<out>/<clip>/f0000.jpg`, 1280×720). `VELVET_PROMO=castillo,villa` films only those.
+        let only: Option<Vec<String>> = std::env::var("VELVET_PROMO")
+            .ok()
+            .map(|v| v.split(',').map(str::to_owned).collect());
+        let wanted = |clip: &str| only.as_ref().is_none_or(|o| o.iter().any(|c| c == clip));
+        /// The keys that take her toward `to` as the camera stands (as a player would press them).
+        fn steer(app: &mut App, to: Vec3) {
+            let d = Vec3::new(to.x - app.player.x, 0.0, to.z - app.player.z);
+            let len = d.length().max(1e-3);
+            let (forward, right) = app.iso.walk_axes();
+            let (f, r) = (d.dot(forward) / len, d.dot(right) / len);
+            app.move_forward = f > 0.38;
+            app.move_back = f < -0.38;
+            app.move_right = r > 0.38;
+            app.move_left = r < -0.38;
+        }
+        /// Films `secs` of the world, calling `step` before every tick (60 ticks a second, a
+        /// frame every other one).
+        fn film(
+            app: &mut App,
+            out: &Path,
+            clip: &str,
+            secs: f32,
+            mut step: impl FnMut(&mut App, f32),
+        ) -> Result<()> {
+            let dir = out.join(clip);
+            std::fs::create_dir_all(&dir)?;
+            for i in 0..(secs * 30.0) as usize {
+                for _ in 0..2 {
+                    step(app, i as f32 / 30.0);
+                    app.elapsed += 1.0 / 60.0;
+                    app.tick(1.0 / 60.0);
+                }
+                app.render_frame();
+                let pixels = app.capture_pixels()?;
+                let frame = image::RgbaImage::from_raw(WINDOW_WIDTH, WINDOW_HEIGHT, pixels)
+                    .context("frame")?;
+                // The fight fills the screen in the videos: it keeps its full size.
+                let frame = if clip == "varrak" {
+                    frame
+                } else {
+                    image::imageops::resize(&frame, 1280, 720, image::imageops::FilterType::Triangle)
+                };
+                let file = std::io::BufWriter::new(std::fs::File::create(
+                    dir.join(format!("f{i:04}.jpg")),
+                )?);
+                image::DynamicImage::ImageRgba8(frame)
+                    .to_rgb8()
+                    .write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(file, 88))?;
+                if i % 45 == 0 {
+                    eprintln!("[promo] {clip} {:.1}s at {:.2},{:.2}", i as f32 / 30.0, app.player.x, app.player.z);
+                }
+            }
+            app.clear_input();
+            eprintln!("[promo] {clip}: {} frames", (secs * 30.0) as usize);
+            Ok(())
+        }
+        /// Walks the waypoints in turn (the next once she is within 0.5 m).
+        fn walker(path: Vec<Vec3>) -> impl FnMut(&mut App, f32) {
+            let mut at = 0usize;
+            move |app: &mut App, _| {
+                while at < path.len() {
+                    let d = Vec3::new(path[at].x - app.player.x, 0.0, path[at].z - app.player.z);
+                    if d.length() < 0.5 {
+                        at += 1;
+                    } else {
+                        break;
+                    }
+                }
+                match path.get(at) {
+                    Some(&to) => steer(app, to),
+                    None => app.clear_input(),
+                }
+            }
+        }
+        let settle = |app: &mut App| {
+            for _ in 0..30 {
+                app.elapsed += 1.0 / 60.0;
+                app.tick(1.0 / 60.0);
+                app.render_frame();
+            }
+        };
+        app.story = guion::Vars::default();
+        // (and Chiquita's castle tips said: they would float up over a later clip)
+        for v in [
+            "burdel_bienvenida",
+            "termas_bienvenida",
+            "consejo_1_hecho",
+            "lamento_visto",
+            "tutorial_castillo",
+        ] {
+            app.story.values.insert(v.to_owned(), 1);
+        }
+        app.environment_cycle_enabled = false;
+        // Nothing over the world (the fight keeps its own HUD).
+        let clean = |app: &mut App, on: bool| {
+            if let Some(state) = app.state.as_mut() {
+                state.map_overlay.hidden = on;
+            }
+        };
+        clean(&mut app, true);
+        super::guide::GUIDE_HIDDEN.store(true, std::sync::atomic::Ordering::Relaxed);
+
+        if wanted("castillo") {
+            app.penascal = None;
+            app.nature_mode = false;
+            app.village_entered = false;
+            app.castle = None;
+            app.outfit = 0;
+            app.environment_cycle.set_phase(0.82);
+            app.player = Vec3::new(0.0, 0.0, 18.6);
+            app.camera_focus = app.player;
+            app.iso.distance = 5.6;
+            settle(&mut app);
+            film(&mut app, out, "castillo", 6.0, walker(vec![
+                Vec3::new(0.0, 0.0, 12.0),
+                Vec3::new(-0.6, 0.0, 4.0),
+                Vec3::new(0.0, 0.0, -4.0),
+                Vec3::new(1.0, 0.0, -12.0),
+            ]))?;
+        }
+        if wanted("misiones") {
+            // The first mission's guide: its panel under the corner map, the arrows on the floor,
+            // and she walks the way it draws (from the bedroom to the war table).
+            let promo_story = std::mem::take(&mut app.story);
+            app.story.values.insert("tutorial_castillo".into(), 1);
+            app.penascal = None;
+            app.nature_mode = false;
+            app.village_entered = false;
+            app.castle = None;
+            app.outfit = 0;
+            app.environment_cycle.set_phase(0.42);
+            app.player = Vec3::new(-17.6, 0.0, -12.6);
+            app.camera_focus = app.player;
+            app.iso.yaw = std::f32::consts::FRAC_PI_4;
+            app.iso.yaw_target = app.iso.yaw;
+            app.iso.distance = 6.5;
+            clean(&mut app, false);
+            super::guide::GUIDE_HIDDEN.store(false, std::sync::atomic::Ordering::Relaxed);
+            settle(&mut app);
+            film(&mut app, out, "misiones", 6.0, |app, _| {
+                // A point of the way a little ahead of her feet.
+                let feet = Vec3::new(app.player.x, 0.0, app.player.z);
+                let ahead = app.guide.as_ref().and_then(|g| {
+                    g.route
+                        .iter()
+                        .copied()
+                        .find(|p| (Vec3::new(p.x, 0.0, p.z) - feet).length() > 1.2)
+                });
+                match ahead {
+                    Some(to) => steer(app, to),
+                    None => app.clear_input(),
+                }
+            })?;
+            super::guide::GUIDE_HIDDEN.store(true, std::sync::atomic::Ordering::Relaxed);
+            clean(&mut app, true);
+            app.story = promo_story;
+        }
+        if wanted("villa") {
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = true;
+            app.outfit = 1;
+            app.environment_cycle.set_phase(0.42);
+            let (spawn, _) = village::spawn();
+            let (plaza, _) = village::clearing();
+            app.player = spawn;
+            app.camera_focus = app.player;
+            app.iso.distance = 8.5;
+            settle(&mut app);
+            film(&mut app, out, "villa", 6.0, walker(vec![plaza]))?;
+        }
+        if wanted("tienda") {
+            // The shop: the shelves, the stone sword picked, and a haggle played as a good player
+            // would (each try stopped with the needle in its zone) to a deal.
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = true;
+            app.outfit = 1;
+            app.environment_cycle.set_phase(0.42);
+            // At the shop's door, as when she walks in.
+            let door = village::building_anchors()
+                .iter()
+                .find(|b| b.id == "villa_tienda")
+                .and_then(|b| village::door_anchor(b.footprint_index));
+            app.player = match door {
+                Some((at, out)) => at + out * 1.2,
+                None => village::clearing().0,
+            };
+            app.camera_focus = app.player;
+            app.iso.distance = 8.5;
+            app.gold = 600;
+            settle(&mut app);
+            // The shop's pages are over the world (the HUD stays hidden under them).
+            clean(&mut app, false);
+            app.open_shop();
+            let sword = app
+                .shop_product_indices()
+                .iter()
+                .position(|i| shop::catalog().products[*i].id == "espada_reliquia")
+                .unwrap_or(0);
+            let mut done = 0usize;
+            film(&mut app, out, "tienda", 7.0, move |app, t| {
+                const TRIES: [KeyCode; 3] = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3];
+                match done {
+                    0 if t > 0.6 => {
+                        app.shop_selection = sword.saturating_sub(2);
+                        done = 1;
+                    }
+                    1 if t > 0.95 => {
+                        app.shop_selection = sword.saturating_sub(1);
+                        done = 2;
+                    }
+                    2 if t > 1.3 => {
+                        app.shop_selection = sword;
+                        done = 3;
+                    }
+                    3 if t > 2.0 => {
+                        app.start_haggle();
+                        done = 4;
+                    }
+                    4..=6 if t > 2.7 + (done - 4) as f32 * 0.9 => {
+                        let now = app.elapsed;
+                        let on_zone = app
+                            .haggle
+                            .as_ref()
+                            .is_some_and(|h| (h.needle(now) - h.zone).abs() < 0.02);
+                        if on_zone {
+                            app.haggle_key(TRIES[done - 4]);
+                            done += 1;
+                        }
+                    }
+                    7 if t > 5.6 => {
+                        app.haggle_key(KeyCode::Digit4);
+                        done = 8;
+                    }
+                    _ => {}
+                }
+            })?;
+            app.haggle = None;
+            app.close_shop();
+            clean(&mut app, true);
+        }
+        if wanted("bosque") {
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = false;
+            // The green dress, as at the mage's stall a little further on.
+            app.outfit = 1;
+            app.environment_cycle.set_phase(0.9);
+            app.player = Vec3::new(nature_trail_center(-11.0), 0.0, -11.0);
+            app.camera_focus = app.player;
+            app.iso.distance = 8.0;
+            settle(&mut app);
+            let path = (0..8)
+                .map(|k| {
+                    let z = -9.5 + k as f32 * 1.6;
+                    Vec3::new(nature_trail_center(z), 0.0, z)
+                })
+                .collect();
+            film(&mut app, out, "bosque", 6.0, walker(path))?;
+        }
+        if wanted("mago") {
+            // The hypnotist's stall in the wood (she goes in the green dress, the one he dares to
+            // talk to): his greeting, then his wares.
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = false;
+            app.outfit = 1;
+            app.environment_cycle.set_phase(0.35);
+            let mage = mage_position();
+            app.player = Vec3::new(mage.x + 1.4, 0.0, mage.z + 1.2);
+            app.camera_focus = app.player;
+            app.iso.distance = 6.5;
+            app.gold = 120;
+            settle(&mut app);
+            app.queen_thought = None;
+            clean(&mut app, false);
+            let mut done = 0usize;
+            film(&mut app, out, "mago", 6.0, move |app, t| match done {
+                0 if t > 0.3 => {
+                    app.interact_forest();
+                    done = 1;
+                }
+                1 if t > 2.6 => {
+                    app.mage_key(KeyCode::ArrowDown);
+                    done = 2;
+                }
+                2 if t > 3.0 => {
+                    app.mage_key(KeyCode::Enter);
+                    done = 3;
+                }
+                3 if t > 4.4 => {
+                    app.mage_key(KeyCode::ArrowDown);
+                    done = 4;
+                }
+                _ => {}
+            })?;
+            app.mage = None;
+            clean(&mut app, true);
+        }
+        if wanted("termas") {
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = true;
+            app.outfit = 2;
+            app.environment_cycle.set_phase(0.74);
+            let mut state = baths::State::enter(Vec3::ZERO, 0.0);
+            (state.x, state.z) = (-8.2, 10.6);
+            app.player = state.position();
+            app.baths = Some(state);
+            app.camera_focus = app.player;
+            app.iso.distance = 7.0;
+            settle(&mut app);
+            film(&mut app, out, "termas", 6.0, walker(vec![
+                Vec3::new(-6.0, 0.0, 8.0),
+                Vec3::new(-3.5, 0.0, 5.5),
+                Vec3::new(-0.8, 0.0, 2.4),
+            ]))?;
+            app.baths = None;
+        }
+        if wanted("mugo") || wanted("fotos") {
+            // Mugo leading her to a spot for a photo (she keeps a step and a half behind him), then
+            // the photo on the stage.
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = true;
+            app.environment_cycle.set_phase(0.5);
+            app.story.values.remove("mugo_guia");
+            app.enter_baths();
+            app.outfit = 2;
+            app.queen_thought = None;
+            let mugo_at = |app: &App| {
+                app.state
+                    .as_ref()
+                    .and_then(|s| s.baths_scene.as_ref())
+                    .and_then(|scene| scene.mugo_report())
+            };
+            for _ in 0..180 {
+                app.elapsed += 1.0 / 60.0;
+                app.tick(1.0 / 60.0);
+                app.render_frame();
+            }
+            if let Some(([mx, mz], _)) = mugo_at(&app) {
+                if let Some(inside) = app.baths.as_mut() {
+                    (inside.x, inside.z) = (mx - 1.2, mz + 0.9);
+                    app.player = inside.position();
+                    app.camera_focus = app.player;
+                }
+            }
+            app.iso.distance = 6.5;
+            settle(&mut app);
+            let follow = move |app: &mut App| match mugo_at(app) {
+                Some(([mx, mz], _)) => {
+                    let gap = Vec3::new(mx - app.player.x, 0.0, mz - app.player.z).length();
+                    if gap > 1.6 {
+                        steer(app, Vec3::new(mx, 0.0, mz));
+                    } else {
+                        app.clear_input();
+                    }
+                }
+                None => app.clear_input(),
+            };
+            app.story.values.insert("mugo_guia".into(), 1);
+            for _ in 0..50 {
+                follow(&mut app);
+                app.elapsed += 1.0 / 60.0;
+                app.tick(1.0 / 60.0);
+            }
+            if wanted("mugo") {
+                film(&mut app, out, "mugo", 5.0, |app, _| follow(app))?;
+            }
+            // On to the spot unfilmed, then the photo.
+            for _ in 0..(60 * 90) {
+                if mugo_at(&app).is_none_or(|(_, there)| there) {
+                    break;
+                }
+                follow(&mut app);
+                app.elapsed += 1.0 / 60.0;
+                app.tick(1.0 / 60.0);
+            }
+            app.clear_input();
+            if let Some(spot) = app.baths.as_ref().and_then(|b| b.guide) {
+                let [sx, sz] = mugo::PHOTO_SPOTS[spot].stand();
+                if let Some(inside) = app.baths.as_mut() {
+                    (inside.x, inside.z) = (sx, sz);
+                    app.player = inside.position();
+                    app.camera_focus = app.player;
+                }
+                settle(&mut app);
+                // He makes room for her and points again: then the photo can be taken.
+                for _ in 0..300 {
+                    if app.baths.as_ref().and_then(|b| b.photo_here()).is_some() {
+                        break;
+                    }
+                    app.elapsed += 1.0 / 60.0;
+                    app.tick(1.0 / 60.0);
+                }
+                if wanted("fotos") {
+                    clean(&mut app, false);
+                    let mut taken = false;
+                    film(&mut app, out, "fotos", 5.0, move |app, t| {
+                        // The photo, as F on the spot takes it (he may still be making room).
+                        if !taken && t > 0.4 {
+                            let hour = app.environment_cycle.phase() * 24.0;
+                            app.story
+                                .values
+                                .insert("hora_tarde".to_owned(), i32::from(!(6.5..16.5).contains(&hour)));
+                            let scene = format!("termas_foto_{}", mugo::PHOTO_SPOTS[spot].id);
+                            app.start_talk(None, Some(&scene));
+                            taken = true;
+                        }
+                    })?;
+                    clean(&mut app, true);
+                }
+            } else {
+                eprintln!("[promo] Mugo set no spot: no photo");
+            }
+            app.stage = None;
+            app.baths = None;
+            app.outfit_before_baths = None;
+        }
+        if wanted("burdel") {
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = true;
+            app.outfit = 0;
+            app.environment_cycle.set_phase(0.95);
+            app.enter_brothel();
+            app.talk = None;
+            let desk = brothel::plan()
+                .hotspots
+                .iter()
+                .find(|h| h.id == "recepcionista")
+                .map(|h| Vec3::new(h.x, 0.0, h.z));
+            settle(&mut app);
+            if let Some(desk) = desk {
+                app.iso.distance = 9.0;
+                let _ = desk;
+                film(&mut app, out, "burdel", 5.0, walker(vec![
+                    Vec3::new(5.6, 0.0, 1.2),
+                    Vec3::new(4.4, 0.0, -1.4),
+                    Vec3::new(3.6, 0.0, -3.6),
+                ]))?;
+            }
+            app.leave_brothel();
+        }
+        if wanted("libro") {
+            // Rosalía's book at her desk, its pages turning.
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = true;
+            app.outfit = 0;
+            app.environment_cycle.set_phase(0.95);
+            app.player = village::entrance();
+            app.enter_brothel();
+            app.talk = None;
+            app.queen_thought = None;
+            app.gold = 300;
+            let desk = brothel::plan()
+                .hotspots
+                .iter()
+                .find(|h| h.id == "recepcionista")
+                .map(|h| (h.x, h.z));
+            if let (Some(desk), Some(inside)) = (desk, app.brothel.as_mut()) {
+                inside.walker = brothel::Walker {
+                    x: desk.0,
+                    z: desk.1 + 0.2,
+                    level: 0,
+                    on_stair: false,
+                };
+                inside.rope_open = true;
+                app.player = inside.position();
+                app.camera_focus = app.player;
+            }
+            app.player_yaw = std::f32::consts::PI;
+            app.iso.distance = 7.5;
+            settle(&mut app);
+            app.venue = venue::Menu::default();
+            clean(&mut app, false);
+            let mut done = 0usize;
+            film(&mut app, out, "libro", 5.0, move |app, t| match done {
+                0 if t > 0.2 => {
+                    app.open_venue_book();
+                    done = 1;
+                }
+                1 if t > 2.0 => {
+                    app.venue_key(KeyCode::ArrowRight);
+                    done = 2;
+                }
+                2 if t > 3.4 => {
+                    app.venue_key(KeyCode::ArrowRight);
+                    done = 3;
+                }
+                _ => {}
+            })?;
+            app.close_shop();
+            clean(&mut app, true);
+            app.leave_brothel();
+        }
+        if wanted("penascal") {
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = false;
+            app.outfit = 0;
+            app.environment_cycle.set_phase(0.8);
+            app.enter_penascal_from_forest();
+            app.penascal = Some(penascal3d::State::restore(Vec3::new(0.0, 0.0, 22.0)));
+            if let Some(inside) = &app.penascal {
+                app.player = inside.position();
+                app.camera_focus = inside.focus();
+            }
+            app.iso.distance = 9.5;
+            settle(&mut app);
+            film(&mut app, out, "penascal", 6.0, walker(vec![
+                Vec3::new(0.5, 0.0, 15.0),
+                Vec3::new(1.5, 0.0, 8.0),
+            ]))?;
+            app.penascal = None;
+        }
+        if wanted("mina") {
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = false;
+            app.inventory.insert("espada_de_madera".into(), 1);
+            app.enter_dungeon_unchecked();
+            settle(&mut app);
+            app.dungeon.auto_walk = true;
+            film(&mut app, out, "mina", 6.0, |_, _| {})?;
+            app.dungeon.auto_walk = false;
+            app.leave_dungeon();
+        }
+        if wanted("varrak") {
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = false;
+            app.story.values.insert("consejo_2_hecho".into(), 1);
+            app.enter_penascal_from_forest();
+            app.start_boss_fight();
+            clean(&mut app, false);
+            if let Some(f) = app.boss.as_mut() {
+                f.player.god = true;
+                f.qa("run");
+            }
+            settle(&mut app);
+            // He comes at a run, leaps, she swings; he drops on all fours and charges; the spark.
+            let mut beat = 0;
+            film(&mut app, out, "varrak", 9.0, |app, t| {
+                if let Some(f) = app.boss.as_mut() {
+                    f.qa_look();
+                    let next = match t {
+                        t if t > 6.2 => 4,
+                        t if t > 3.6 => 3,
+                        t if t > 1.2 => 2,
+                        _ => 1,
+                    };
+                    if next != beat {
+                        beat = next;
+                        match next {
+                            2 => f.qa("leap"),
+                            3 => f.qa("gallop"),
+                            4 => f.qa("spark"),
+                            _ => {}
+                        }
+                    }
+                }
+                app.boss_input.channel = beat == 4;
+                app.boss_input.attack = beat == 2 && (t * 2.0).fract() < 0.05;
+            })?;
+            app.boss = None;
+            app.penascal = None;
+        }
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--boss") {
         // The fight with Varrak: the card, the pack at his roar, him rising with his cleaver, the
         // duel, the smash and its wave, on all fours, a spire broken by his head, the spark, a
@@ -2124,6 +2871,16 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.boss_input.attack = true;
         run(&mut app, 3.4, false);
         save(&mut app, out, "boss-02-pack")?;
+        // The seal held (the right button) shows on its key; let go, it stops.
+        app.boss_button(winit::event::MouseButton::Right, true);
+        run(&mut app, 0.4, false);
+        save(&mut app, out, "boss-02b-sello")?;
+        app.boss_button(winit::event::MouseButton::Right, false);
+        run(&mut app, 0.2, false);
+        eprintln!(
+            "[boss-qa] seal after release: {}",
+            app.boss.as_ref().is_some_and(|f| f.player.channeling)
+        );
         qa(&mut app, "duel");
         run(&mut app, 2.0, true);
         save(&mut app, out, "boss-03-rise")?;
@@ -2137,6 +2894,17 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         qa(&mut app, "sweep");
         run(&mut app, 0.75, true);
         save(&mut app, out, "boss-07-sweep")?;
+        qa(&mut app, "run");
+        run(&mut app, 1.1, true);
+        save(&mut app, out, "boss-07b-run")?;
+        qa(&mut app, "spin");
+        run(&mut app, 0.55, true);
+        save(&mut app, out, "boss-07c-spin")?;
+        qa(&mut app, "leap");
+        run(&mut app, 0.62, true);
+        save(&mut app, out, "boss-07d-leap")?;
+        run(&mut app, 0.36, true);
+        save(&mut app, out, "boss-07e-land")?;
         qa(&mut app, "gallop");
         run(&mut app, 1.35, true);
         save(&mut app, out, "boss-08-fours")?;
@@ -2176,6 +2944,78 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         save(&mut app, out, "boss-14-lost")?;
         app.boss = None;
         app.penascal = None;
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--nemi-arena") {
+        // Nemi waits in the arena once she has given the sword: the guide points there; a
+        // training session brings the Queen to her (behind the scene).
+        let settle = |app: &mut App, frames: usize| {
+            for _ in 0..frames {
+                app.tick(1.0 / 60.0);
+                app.render_frame();
+            }
+        };
+        app.penascal = None;
+        app.nature_mode = false;
+        app.village_entered = false;
+        app.castle = None;
+        app.player = Vec3::new(-17.6, 0.0, -12.6);
+        app.environment_cycle.set_phase(0.42);
+        // The gift first: Nemi already waits at the arena, and the scene brings the Queen there.
+        app.story = guion::Vars::default();
+        for v in ["consejo_1_hecho", "lamento_visto"] {
+            app.story.values.insert(v.to_owned(), 1);
+        }
+        settle(&mut app, 60);
+        let nemi = app.castle.as_ref().map(|c| c.maid(1).0);
+        eprintln!("[nemi-qa] gift due: nemi at {nemi:?}, queen at {:?}", app.player);
+        anyhow::ensure!(app.start_talk(Some("nemi"), None), "no gift scene");
+        settle(&mut app, 30);
+        let scene = app.talk.as_ref().map(|t| t.scene_id(guion::library()).to_owned());
+        let d = nemi.map(|n| (n.x - app.player.x).hypot(n.z - app.player.z));
+        eprintln!("[nemi-qa] {scene:?}: queen at {:?}, {d:?} m from Nemi", app.player);
+        app.talk = None;
+        app.stage = None;
+        settle(&mut app, 60);
+        save(&mut app, out, "nemi-00-gift-arena")?;
+        app.castle = None;
+        app.player = Vec3::new(-17.6, 0.0, -12.6);
+        app.story = guion::Vars::default();
+        for v in ["consejo_1_hecho", "lamento_visto", "espada_regalo"] {
+            app.story.values.insert(v.to_owned(), 1);
+        }
+        settle(&mut app, 60);
+        save(&mut app, out, "nemi-01-guide-from-bedroom")?;
+        let nemi = app.castle.as_ref().map(|c| c.maid(1).0);
+        eprintln!("[nemi-qa] nemi at {nemi:?}");
+        anyhow::ensure!(app.start_talk_at("acto1.entreno"), "no training scene");
+        for _ in 0..12 {
+            let shown = app.talk.as_ref().map(|t| t.shown(guion::library(), &app.story));
+            if matches!(shown, Some(guion::Shown::Choice { .. })) {
+                break;
+            }
+            app.elapsed += 3.0;
+            app.talk_confirm();
+            settle(&mut app, 2);
+        }
+        app.talk_pick(0);
+        for _ in 0..8 {
+            settle(&mut app, 10);
+        }
+        let d = nemi.map(|n| (n.x - app.player.x).hypot(n.z - app.player.z));
+        eprintln!("[nemi-qa] after @llevar: queen at {:?}, {d:?} m from Nemi", app.player);
+        while app.talk.is_some() {
+            app.elapsed += 3.0;
+            app.talk_confirm();
+            settle(&mut app, 4);
+            if app.stage.as_ref().is_some_and(|s| s.outro_at.is_some()) {
+                app.talk_confirm();
+                app.end_talk();
+            }
+        }
+        app.stage = None;
+        settle(&mut app, 90);
+        save(&mut app, out, "nemi-02-arena")?;
         return Ok(());
     }
     if std::env::args().any(|a| a == "--missions") {
@@ -2399,7 +3239,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         }
         let (mut shot, mut chosen) = (0, 0);
         while app.talk.is_some() && shot < 40 {
-            app.elapsed += 5.0;
+            // The world runs on a while (the stage's people come and go, Chiquita springs up).
+            for _ in 0..36 {
+                app.tick(1.0 / 30.0);
+                app.elapsed += 1.0 / 30.0;
+            }
+            app.elapsed += 3.0;
             let lib = guion::library();
             let shown = app.talk.as_ref().map(|t| t.shown(lib, &app.story));
             let choice = matches!(shown, Some(guion::Shown::Choice { .. }));
@@ -2443,7 +3288,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         let (mut steps, mut chosen) = (0, 0);
         while app.talk.is_some() && steps < 240 {
             steps += 1;
-            app.elapsed += 2.6;
+            // The world runs on a while (Chiquita springs up for her lines and ducks for the rest).
+            for _ in 0..24 {
+                app.tick(1.0 / 30.0);
+                app.elapsed += 1.0 / 30.0;
+            }
+            app.elapsed += 1.8;
             let lib = guion::library();
             let shown = app.talk.as_ref().map(|t| t.shown(lib, &app.story));
             let choice = matches!(shown, Some(guion::Shown::Choice { .. }));
@@ -2460,6 +3310,25 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             } else {
                 app.talk_confirm();
             }
+            // VELVET_STAGE_FILM=all (or `3,7,12`): those steps filmed, a frame every 1/15 s for
+            // 1.1 s (3.3 s when a reveal or a turn plays), to see their animations. (A tick moves
+            // the clock itself here, through the zone; a capture moves it 4/30 s, taken back.)
+            let film = std::env::var("VELVET_STAGE_FILM").ok().is_some_and(|v| {
+                v == "all" || v.split(',').any(|n| n.trim().parse() == Ok(steps))
+            });
+            if film {
+                let long = app.stage.as_ref().is_some_and(|s| {
+                    s.reveal.as_ref().is_some_and(|(_, t)| *t >= before - 0.01)
+                        || s.actors.iter().any(|a| a.spin.as_ref().is_some_and(|(_, t, _)| *t >= before - 0.01))
+                });
+                for f in 0..if long { 50 } else { 17 } {
+                    save(&mut app, out, &format!("film-{steps:03}-{f:02}"))?;
+                    app.elapsed -= 4.0 / 30.0;
+                    for _ in 0..2 {
+                        app.tick(1.0 / 30.0);
+                    }
+                }
+            }
             // A flourish that just came on: caught while it plays.
             app.elapsed += 0.3;
             let fresh = |t: f32| t >= before - 0.01;
@@ -2474,12 +3343,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                     Some("barrido")
                 } else if stage.reveal.as_ref().is_some_and(|(_, t)| fresh(*t)) {
                     Some("revela")
-                } else if stage.panels.iter().flatten().any(|(_, t)| fresh(*t)) {
+                } else if stage.panels.iter().flatten().any(|p| fresh(p.at)) {
                     Some("panel")
                 } else if stage
                     .actors
                     .iter()
-                    .any(|a| a.spin.as_ref().is_some_and(|(_, t)| fresh(*t)))
+                    .any(|a| a.spin.as_ref().is_some_and(|(_, t, _)| fresh(*t)))
                 {
                     Some("giro")
                 } else {
@@ -2512,16 +3381,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
     {
         // The whole way in: Rosalía's book, the girl paid for (the elixir drunk first when it is
         // asked for), her escort, her guion, and her game opening: `alba`, `alba-futa`, `noa`.
-        app.nature_mode = false;
-        app.village_entered = false;
+        // At the brothel's desk, as in the game.
         app.environment_cycle.set_phase(0.0);
-        app.player = Vec3::new(-17.6, 0.0, -12.6);
-        app.castle = None;
-        for _ in 0..60 {
-            app.tick(1.0 / 60.0);
-            app.render_frame();
-        }
         app.story = guion::Vars::default();
+        into_brothel_room(&mut app, "");
         app.gold = app.gold.max(200);
         let (girl, ask) = match which.as_str() {
             "alba-futa" => (1, "sello"),
@@ -2571,15 +3434,28 @@ pub(super) fn capture(out: &Path) -> Result<()> {
     }
     if let Some(which) = std::env::args().skip_while(|a| a != "--play-scene").nth(1) {
         // A brothel girl's minigame played by a script, a shot at each moment worth seeing:
-        // `--play-scene alba|alba-futa|noa`.
-        app.nature_mode = false;
-        app.village_entered = false;
+        // `--play-scene alba|alba-futa|noa`. The girls' games in their rooms upstairs, as in the
+        // game; the rest in the castle (its first walk's tips kept quiet).
+        let girl = if which.starts_with("alba") {
+            Some("alba")
+        } else if which.starts_with("noa") {
+            Some("noa")
+        } else {
+            None
+        };
         app.environment_cycle.set_phase(0.0);
-        app.player = Vec3::new(-17.6, 0.0, -12.6);
-        app.castle = None;
-        for _ in 0..60 {
-            app.tick(1.0 / 60.0);
-            app.render_frame();
+        if let Some(id) = girl {
+            into_brothel_room(&mut app, id);
+        } else {
+            app.story.values.insert("tutorial_castillo".to_owned(), 1);
+            app.nature_mode = false;
+            app.village_entered = false;
+            app.player = Vec3::new(-17.6, 0.0, -12.6);
+            app.castle = None;
+            for _ in 0..60 {
+                app.tick(1.0 / 60.0);
+                app.render_frame();
+            }
         }
         let game = match which.as_str() {
             "alba-futa" => play_scene::Game::AlbaFuta,
@@ -2599,6 +3475,24 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             // Something from his stall in her bag: two sniffs of salts and the amulet.
             app.inventory.insert(play_scene::SALTS.to_owned(), 2);
             app.inventory.insert(play_scene::AMULET.to_owned(), 1);
+        }
+        if matches!(game, play_scene::Game::Tienda(_)) {
+            // As in the game, a haggle under it: the crimson essence, a little haggled already,
+            // and not gold enough for it.
+            app.shop_open = true;
+            app.shop_opened_at = app.elapsed - 10.0;
+            app.shop_tab = shop::Tab::Buy;
+            app.shop_category = shop::Category::All;
+            app.shop_selection = app
+                .shop_product_indices()
+                .iter()
+                .position(|i| shop::catalog().products[*i].id == "esencia_carmesi")
+                .unwrap_or(0);
+            app.gold = 40;
+            app.start_haggle();
+            if let Some(h) = app.haggle.as_mut() {
+                h.percent = 15;
+            }
         }
         app.open_play_scene(game);
         eprintln!("[play-qa] {which}: open {}", app.play_scene.is_some());
@@ -3793,8 +4687,11 @@ pub(super) fn capture(out: &Path) -> Result<()> {
     }
     if std::env::args().any(|a| a == "--baths-only") {
         // The hot springs: the gate, the pools (wading), the falls, by day, dusk and night; the rooms.
+        // In the bikini, as she is there once the welcome has given it to her.
         app.nature_mode = true;
         app.village_entered = true;
+        app.achievements.grant_outfit("bikini");
+        app.change_into_bikini();
         let stops: [(&str, Option<&str>, f32, f32, f32); 13] = [
             ("baths-gate", None, -8.2, 10.6, 18.0),
             ("baths-close", None, -1.2, -13.4, 6.0),
@@ -3845,6 +4742,76 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             }
         }
         app.baths = None;
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--mine-hud") {
+        // The mine's own screen: the play chrome at the mouth (its F prompt), a notice with low
+        // health and full pockets, a champion's bar, the map and the seed dialog.
+        app.castle = None;
+        app.nature_mode = true;
+        app.village_entered = false;
+        app.inventory.insert("espada_de_madera".into(), 1);
+        app.enter_dungeon_unchecked();
+        for _ in 0..60 {
+            app.elapsed += 1.0 / 60.0;
+            app.tick(1.0 / 60.0);
+            app.render_frame();
+        }
+        save(&mut app, out, "minehud-play")?;
+        // Each sword in her hand (none: the fist), slime and all, mid-swing and at rest.
+        for (id, name) in [
+            ("", "minehud-sword-none"),
+            ("espada_de_madera", "minehud-sword-wood"),
+            ("espada_pegajosa", "minehud-sword-wood-green"),
+            ("espada_pegajosa_azul", "minehud-sword-wood-blue"),
+            ("espada_reliquia", "minehud-sword-stone"),
+            ("espada_piedra_pegajosa", "minehud-sword-stone-green"),
+            ("espada_piedra_pegajosa_azul", "minehud-sword-stone-blue"),
+        ] {
+            app.backpack.equipment.weapon = (!id.is_empty()).then(|| id.to_owned());
+            app.backpack.equipment.bare_hands = id.is_empty();
+            if !id.is_empty() {
+                app.inventory.insert(id.to_owned(), 1);
+            }
+            app.apply_equipment();
+            for _ in 0..20 {
+                app.elapsed += 1.0 / 60.0;
+                app.tick(1.0 / 60.0);
+                app.render_frame();
+            }
+            save(&mut app, out, name)?;
+        }
+        app.backpack.equipment.weapon = Some("espada_de_madera".into());
+        app.backpack.equipment.bare_hands = false;
+        app.apply_equipment();
+        let d = &mut app.dungeon;
+        d.notice = "Has encontrado un tónico".into();
+        d.notice_until = d.elapsed + 60.0;
+        d.health = 22.0;
+        d.seal = true;
+        d.potions = 2;
+        d.herbs = 3;
+        d.gold = 145;
+        save(&mut app, out, "minehud-low")?;
+        let boss = app.dungeon.map.spawns.iter().find(|s| {
+            matches!(s.kind, velvet_dungeon::gameplay::SpawnKind::Miniboss | velvet_dungeon::gameplay::SpawnKind::Boss)
+        });
+        if let Some(spawn) = boss.cloned() {
+            let room = &app.dungeon.map.rooms[spawn.room];
+            let at = room.center + (spawn.position - room.center) * 0.4;
+            app.dungeon.controller.position = at;
+            let to = spawn.position - at;
+            app.dungeon.controller.yaw = to.x.atan2(-to.z);
+            app.dungeon.notice_until = 0.0;
+            save(&mut app, out, "minehud-boss")?;
+        }
+        app.dungeon.map_open = true;
+        save(&mut app, out, "minehud-map")?;
+        app.dungeon.map_open = false;
+        app.dungeon.seed_input = Some("4242".into());
+        save(&mut app, out, "minehud-seed")?;
+        app.dungeon.seed_input = None;
+        app.leave_dungeon();
         return Ok(());
     }
     if std::env::args().any(|a| a == "--mine-only") {
@@ -4000,6 +4967,55 @@ pub(super) fn load_cycle(cycles: usize) -> Result<()> {
         std::thread::sleep(std::time::Duration::from_secs(3));
     }
     Ok(())
+}
+
+/// Into the brothel, past Rosalía's first welcome: with a girl's id up in her room, the escort
+/// over and her talk not begun (her game opens there); without one at the desk.
+fn into_brothel_room(app: &mut App, id: &str) {
+    app.story.values.insert("burdel_bienvenida".to_owned(), 1);
+    app.story.values.insert("tutorial_castillo".to_owned(), 1);
+    app.castle = None;
+    app.nature_mode = true;
+    app.village_entered = true;
+    app.player = village::entrance();
+    app.enter_brothel();
+    app.queen_thought = None;
+    app.talk = None;
+    if let Some(inside) = app.brothel.as_mut() {
+        inside.rope_open = true;
+        if id.is_empty() {
+            if let Some(desk) = brothel::plan().hotspots.iter().find(|h| h.id == "recepcionista") {
+                inside.walker = brothel::Walker {
+                    x: desk.x,
+                    z: desk.z,
+                    level: 0,
+                    on_stair: false,
+                };
+            }
+        } else {
+            let room = venue::catalog()
+                .company
+                .iter()
+                .find(|e| e.id == id)
+                .map_or(1, |e| e.room);
+            inside.start_escort(id, room, "—Sígame.");
+        }
+    }
+    if !id.is_empty() {
+        app.skip_escort();
+    }
+    if let Some(inside) = app.brothel.as_ref() {
+        app.player = inside.position();
+    }
+    app.camera_focus = app.player;
+    for _ in 0..60 {
+        app.tick(1.0 / 60.0);
+        app.render_frame();
+    }
+    if !id.is_empty() {
+        app.talk = None;
+        app.stage = None;
+    }
 }
 
 /// The hypnotist's game played by a script (`--play-scene hipno|hipno-escape|hipno-fall`): resisting

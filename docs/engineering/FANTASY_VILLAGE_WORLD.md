@@ -5,7 +5,7 @@
 The source supplied for this world was the POLY Fantasy Village Blender pack.
 The ZIP found on the development machine is:
 
-`C:\Users\usuario\Downloads\POLY_FantasyVillage_Blender.zip`
+`%USERPROFILE%\Downloads\POLY_FantasyVillage_Blender.zip`
 
 It contains `POLY_FantasyVillage_Blender.blend` and no external texture files
 (the texture is packed in the blend). The scene is a showcase with multiple
@@ -17,7 +17,7 @@ downloaded filename are the escaped `POLY\_FantasyVillage\_Blender.zip` name
 from the request):
 
 ```powershell
-$zip = "C:\Users\usuario\Downloads\POLY_FantasyVillage_Blender.zip"
+$zip = "$HOME\Downloads\POLY_FantasyVillage_Blender.zip"
 $source = Join-Path $env:TEMP "fantasy_village_source"
 Expand-Archive -LiteralPath $zip -DestinationPath $source -Force
 $blend = Get-ChildItem -LiteralPath $source -Filter *.blend -Recurse | Select-Object -First 1

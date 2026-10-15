@@ -147,7 +147,7 @@ pub(super) fn over_picture(
             v,
             at,
             pic.w - 52.0 * s,
-            &format!("{} · copla", game.who),
+            &format!("{} · {}", game.who, demon_queen_dungeon::i18n::tr("copla")),
             verse,
             hex3(game.accent),
             -0.015,
@@ -321,33 +321,20 @@ fn draw_stamp(
     let fade = 1.0 - ((age - (life - 0.45)) / 0.45).clamp(0.0, 1.0);
     let c = [pic.x + pic.w * 0.5, pic.y + pic.h - 34.0 * s];
     let size = 48.0 * s * (0.6 + 0.4 * k);
-    let tw = text_width(font, Face::Title, words, size);
     faded(v, fade, |v| {
         turned(v, c, -0.09, |v| {
-            let outer = (tw * 0.5 + 46.0 * s) * k;
-            burst(
-                v,
-                c,
-                outer * 0.66,
-                outer,
-                14,
-                time * 0.6,
-                rgba(mix(color, 0xffffff, 0.15), 0.92),
-                rgba(0x0b0508, 0.95),
-                6.0 * s,
-            );
-            halo(v, c, outer * 0.5, 30.0 * s, rgba(color, 0.35));
-            shout(
+            halo(v, c, size * 1.6, 30.0 * s, rgba(color, 0.3));
+            comic_stamp(
                 font,
                 v,
-                Face::Title,
+                Face::Display,
                 words,
-                c[0] - tw * 0.5,
-                c[1] - size * 0.6,
-                size,
-                0xffffff,
-                mix(color, 0x000000, 0.45),
-                1.0,
+                c,
+                size * 1.25,
+                color,
+                true,
+                (age / 0.3).min(1.0),
+                time,
             );
         });
     });

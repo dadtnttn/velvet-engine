@@ -13,7 +13,7 @@ use crate::{
     localization::Language,
     rect_contains,
     render::{Canvas, Fonts},
-    App, ArtBitmap, Screen, WIN_H, WIN_W,
+    App, ArtBitmap, Screen,
 };
 use winit::keyboard::KeyCode;
 
@@ -116,10 +116,14 @@ pub struct PauseMenu {
     portrait: Option<ArtBitmap>,
     /// When the menu was last painted in full, and after which of the window's events.
     painted: Option<(Instant, u64)>,
+    /// The settings page's panel (tab, row in focus).
+    pub settings: crate::settings_menu::SettingsUi,
 }
 
+/// English keeps its own words; every other language draws the Spanish source, which the
+/// draw-time translation (the game's text catalogs) turns into that language.
 fn tr(language: Language, es: &'static str, en: &'static str) -> &'static str {
-    if language == Language::Spanish {
+    if language != Language::English {
         es
     } else {
         en
@@ -140,6 +144,10 @@ const PREVIOUS: (i32, i32, i32, i32) = (1548, 898, 112, 56);
 const NEXT: (i32, i32, i32, i32) = (1692, 898, 112, 56);
 const AUTO: (i32, i32, i32, i32) = (474, 898, 480, 56);
 const CANCEL: (i32, i32, i32, i32) = (650, 600, 280, 62);
+/// The settings panel's place on its page.
+pub(crate) const SETTINGS_AREA: crate::settings_menu::Area = (486, 236, 1306);
+/// The settings page's place in the list down the left.
+const SETTINGS_NAV: usize = 7;
 const ACCEPT: (i32, i32, i32, i32) = (990, 600, 280, 62);
 
 /// The shop's vector icon `file` (in `assets/ui/shop`) at 256 px.
@@ -300,43 +308,81 @@ fn age(saved_at: u64, language: Language) -> String {
     }
 }
 
-pub fn trigger_bitmap(fonts: &Fonts, language: Language, hover: bool) -> ArtBitmap {
-    // Keep the world trigger visually attached to the map overlay.  The map
-    // uses a teal header, warm gold frame and small corner markers; reusing
-    // those tokens here avoids the old VN-purple button looking like a
-    // separate widget on top of the panel.
-    let mut canvas = Canvas::new(204, 58, 0xff091517);
-    let rect = (0, 0, 204, 58);
-    frame(
-        &mut canvas,
-        rect,
-        if hover { 0xff12383a } else { 0xff091517 },
-        if hover { 0xffffd98a } else { 0xffb8853d },
-    );
-    for (x, y) in [(7, 7), (189, 7), (7, 43), (189, 43)] {
-        canvas.rect(x, y, 8, 8, if hover { 0xffffd98a } else { 0xffb8853d });
+/// The corner button that opens the menu, in the game's Persona manner: a slanted dark card with
+/// a wedge of colour, the key on its own slanted cap and the word beside it. `(x, y)`: its corner.
+pub fn paint_trigger(
+    canvas: &mut Canvas,
+    fonts: &Fonts,
+    (x, y): (i32, i32),
+    key: &str,
+    label: &str,
+    hover: bool,
+    mask: bool,
+) {
+    let (x, y) = (x as f32, y as f32);
+    let accent = if hover { 0xffffd98a } else { 0xff9a5cff };
+    let pick = |c: u32| if mask { 0xffffffff } else { c };
+    ui::plate(canvas, x + 10.0, y + 8.0, 190.0, 46.0, 12.0, pick(0xb0000000));
+    ui::plate(canvas, x + 4.0, y + 4.0, 190.0, 46.0, 12.0, pick(0xf00e0816));
+    ui::plate(canvas, x + 4.0, y + 4.0, 22.0, 46.0, 12.0, pick(accent));
+    if mask {
+        return;
     }
-    centered_in_rect(
-        &mut canvas,
+    ui::outline(
+        canvas,
+        &ui::plate_points(x + 4.0, y + 4.0, 190.0, 46.0, 12.0),
+        if hover { 1.8 } else { 1.0 },
+        ui::argb(0xc0, accent & 0xffffff),
+    );
+    // The key on its slanted cap.
+    let kw = fonts.text_width(key, 17.0, true) as f32 + 26.0;
+    ui::plate(canvas, x + 32.0, y + 12.0, kw, 30.0, 7.0, accent);
+    ui::plate(canvas, x + 35.0, y + 14.5, kw - 6.0, 25.0, 6.0, 0xff160c22);
+    ui::text_center(
+        canvas,
         fonts,
-        tr(language, "Menú · ESC", "Menu · ESC"),
-        rect,
-        23.0,
-        0xffffe7ae,
+        key,
+        (x + 32.0 + kw * 0.5) as i32,
+        (y + 27.0) as i32,
+        17.0,
+        0xfffff6ee,
         true,
     );
+    ui::text_mid(
+        canvas,
+        fonts,
+        label,
+        (x + 44.0 + kw) as i32,
+        (y + 27.0) as i32,
+        23.0,
+        if hover { 0xffffe7ae } else { 0xfffff6ee },
+        true,
+    );
+}
+
+pub fn trigger_bitmap(fonts: &Fonts, language: Language, hover: bool) -> ArtBitmap {
+    // Painted on black (so the colour comes out premultiplied) and again in white as its mask:
+    // the card's own transparency, with soft edges, over the world.
+    let (w, h) = (204usize, 58usize);
+    let label = tr(language, "Menú", "Menu");
+    let mut colour = Canvas::new(w, h, 0xff000000);
+    paint_trigger(&mut colour, fonts, (0, 0), "ESC", label, hover, false);
+    let mut mask = Canvas::new(w, h, 0xff000000);
+    paint_trigger(&mut mask, fonts, (0, 0), "ESC", label, hover, true);
     ArtBitmap {
-        w: 204,
-        h: 58,
-        rgba: canvas
+        w,
+        h,
+        rgba: colour
             .pixels
             .iter()
-            .flat_map(|p| {
+            .zip(&mask.pixels)
+            .flat_map(|(p, m)| {
+                let a = ((m >> 8) & 255) as u8;
                 [
-                    ((p >> 16) & 255) as u8,
-                    ((p >> 8) & 255) as u8,
-                    (p & 255) as u8,
-                    255,
+                    (((p >> 16) & 255) as u8).min(a),
+                    (((p >> 8) & 255) as u8).min(a),
+                    ((p & 255) as u8).min(a),
+                    a,
                 ]
             })
             .collect(),
@@ -379,7 +425,7 @@ impl App {
                 notice: String::new(),
                 confirm: None,
                 confirm_yes: false,
-                light: ui::light_from_pixels(&self.canvas.pixels, self.canvas.w, self.canvas.h),
+                light: ui::light_from_pixels(&self.canvas.pixels, self.canvas.pw, self.canvas.ph),
                 page_since: Instant::now(),
                 backdrop: Vec::new(),
                 portrait: load_status_portrait(
@@ -387,6 +433,7 @@ impl App {
                     self.pause_outfit,
                 ),
                 painted: None,
+                settings: Default::default(),
             });
             self.refresh_slots();
         }
@@ -408,7 +455,7 @@ impl App {
             ui_sfx::play(UiSfx::Close);
             self.screen = menu.origin;
             self.reveal_started += menu.opened.elapsed();
-            self.canvas.pixels = menu.background;
+            self.canvas.restore(&menu.background);
             self.mouse_down = false;
             self.needs_paint = true;
         }
@@ -474,16 +521,30 @@ impl App {
                     ]
                 })
                 .collect();
-            let image = image::RgbaImage::from_raw(WIN_W, WIN_H, bytes)
+            // The frozen world is in the canvas's own pixels (the screen's, with native
+            // resolution), whatever size that is.
+            let (w, h) = if menu.background.len() == self.canvas.pw * self.canvas.ph {
+                (self.canvas.pw as u32, self.canvas.ph as u32)
+            } else {
+                let w = ((menu.background.len() as f64 * 16.0 / 9.0).sqrt().round() as u32).max(1);
+                (w, menu.background.len() as u32 / w)
+            };
+            let image = image::RgbaImage::from_raw(w, h, bytes)
                 .ok_or_else(|| anyhow::anyhow!("captura inválida"))?;
             let thumb =
                 image::imageops::resize(&image, 368, 207, image::imageops::FilterType::Triangle);
             let mut output = Cursor::new(Vec::new());
             thumb.write_to(&mut output, image::ImageFormat::Png)?;
-            self.game
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("sin partida"))?
-                .save_slot(index, Some(output.into_inner()))
+            // The bag as she has laid it out in this menu goes in too.
+            let pack = self.pause_backpack.clone();
+            let game = self
+                .game
+                .as_mut()
+                .ok_or_else(|| anyhow::anyhow!("sin partida"))?;
+            if let Some(pack) = pack {
+                game.set_world_backpack(pack);
+            }
+            game.save_slot(index, Some(output.into_inner()))
         })();
         let language = self.localizer.language();
         if let Some(menu) = &mut self.pause {
@@ -598,53 +659,32 @@ impl App {
                 _ => {}
             },
             Page::History => self.menu_scroll(index == 0),
-            Page::Settings => match index {
-                0 | 1 => {
-                    let current = Language::ALL
-                        .iter()
-                        .position(|l| *l == self.localizer.language())
-                        .unwrap_or(0);
-                    let next = (current as i32 + if index == 0 { -1 } else { 1 })
-                        .rem_euclid(Language::ALL.len() as i32)
-                        as usize;
-                    self.select_language(next);
-                    if let Some(menu) = &mut self.pause {
-                        menu.history = self
-                            .game
-                            .as_ref()
-                            .map(|g| g.history_views())
-                            .unwrap_or_default();
-                        for view in &mut menu.history {
-                            self.localizer.localize_scene(view);
-                        }
-                        menu.wrapped_history = self
-                            .fonts
-                            .as_ref()
-                            .map(|fonts| wrap_history(&self.canvas, fonts, &menu.history))
-                            .unwrap_or_default();
-                        menu.history_offset = 0;
-                    }
-                }
-                2 => {
-                    let value = !self.reduced_motion;
-                    match crate::localization::save_reduced_motion(value, self.localizer.language())
-                    {
-                        Ok(()) => {
-                            self.reduced_motion = value;
-                        }
-                        Err(error) => {
-                            if let Some(menu) = &mut self.pause {
-                                menu.notice = error.to_string();
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            },
+            Page::Settings => {}
             Page::Status | Page::Inventory => {}
             Page::Equipment => self.equipment_control(index),
         }
         self.needs_paint = true;
+    }
+
+    /// The dialogue history again, in the language now chosen.
+    pub(crate) fn refresh_pause_history(&mut self) {
+        let history = self
+            .game
+            .as_ref()
+            .map(|g| g.history_views())
+            .unwrap_or_default();
+        if let Some(menu) = &mut self.pause {
+            menu.history = history;
+            for view in &mut menu.history {
+                self.localizer.localize_scene(view);
+            }
+            menu.wrapped_history = self
+                .fonts
+                .as_ref()
+                .map(|fonts| wrap_history(&self.canvas, fonts, &menu.history))
+                .unwrap_or_default();
+            menu.history_offset = 0;
+        }
     }
 
     pub fn menu_key(&mut self, key: KeyCode) {
@@ -692,11 +732,21 @@ impl App {
                 }
                 _ => {}
             }
+        } else if menu.page == Page::Settings
+            && menu.focus >= NAV_COUNT
+            && key != KeyCode::Escape
+        {
+            let outcome = crate::settings_menu::key(&mut menu.settings, key);
+            if outcome == crate::settings_menu::Outcome::Leave {
+                menu.focus = SETTINGS_NAV;
+            }
+            self.settings_outcome(outcome);
+            return;
         } else {
             let controls = match menu.page {
                 Page::Save | Page::Load => 9,
                 Page::History => 2,
-                Page::Settings => 3,
+                Page::Settings => 1,
                 Page::Inventory => 1,
                 Page::Equipment => equipment_controls,
                 _ => 0,
@@ -833,11 +883,15 @@ impl App {
                 .chain([AUTO, PREVIOUS, NEXT])
                 .collect(),
             Page::History => vec![PREVIOUS, NEXT],
-            Page::Settings => vec![
-                (1310, 286, 112, 64),
-                (1442, 286, 112, 64),
-                (506, 494, 640, 66),
-            ],
+            Page::Settings => {
+                if let Some(outcome) =
+                    crate::settings_menu::click(&mut menu.settings, SETTINGS_AREA, x, y)
+                {
+                    menu.focus = NAV_COUNT;
+                    self.settings_outcome(outcome);
+                }
+                return;
+            }
             _ => vec![],
         };
         if let Some(index) = rects.iter().position(|r| rect_contains(*r, x, y)) {
@@ -852,18 +906,20 @@ impl App {
             return;
         }
         if let Some(fonts) = &self.fonts {
-            let label = if self.screen == Screen::Resume {
-                tr(self.localizer.language(), "Cargar · F9", "Load · F9")
+            let language = self.localizer.language();
+            let (key, label) = if self.screen == Screen::Resume {
+                ("F9", tr(language, "Cargar", "Load"))
             } else {
-                tr(self.localizer.language(), "Menú · ESC", "Menu · ESC")
+                ("ESC", tr(language, "Menú", "Menu"))
             };
-            button(
+            paint_trigger(
                 &mut self.canvas,
                 fonts,
-                TRIGGER,
+                (TRIGGER.0, TRIGGER.1),
+                key,
                 label,
                 rect_contains(TRIGGER, self.mouse.0, self.mouse.1),
-                true,
+                false,
             );
         }
     }
@@ -877,8 +933,9 @@ impl App {
         if motion {
             if let (Some(menu), Some(fonts)) = (self.pause.as_ref(), self.fonts.as_ref()) {
                 let menu_age = menu.opened.elapsed().as_secs_f32();
-                let settled =
-                    menu_age > ENTER + 0.8 && menu.page_since.elapsed().as_secs_f32() > 1.5;
+                let settled = menu_age > ENTER + 0.8
+                    && menu.page_since.elapsed().as_secs_f32() > 1.5
+                    && !(menu.page == Page::Settings && menu.settings.animating());
                 let fresh = menu.painted.is_some_and(|(at, painted_after)| {
                     painted_after == generation && at.elapsed().as_secs_f32() < 1.0
                 });
@@ -912,7 +969,12 @@ impl App {
             if t >= 1.0 && menu.backdrop.len() == self.canvas.pixels.len() {
                 self.canvas.pixels.copy_from_slice(&menu.backdrop);
             } else {
-                self.canvas.pixels.clone_from(&menu.background);
+                if menu.background.len() != self.canvas.pixels.len() {
+                    // The window changed size under the menu: its frozen world follows.
+                    self.canvas.restore(&menu.background);
+                    menu.background.clone_from(&self.canvas.pixels);
+                }
+                self.canvas.restore(&menu.background);
                 paint_backdrop(&mut self.canvas, menu.light, t);
                 if t >= 1.0 {
                     menu.backdrop.clone_from(&self.canvas.pixels);
@@ -1231,6 +1293,7 @@ impl App {
                     mouse: self.mouse,
                     light,
                     craft: self.pause_backpack_craft,
+                    vitality: self.pause_vitality,
                 };
                 if menu.page == Page::Inventory {
                     bpm::paint_backpack(canvas, &view);
@@ -1379,136 +1442,18 @@ impl App {
                 );
             }
             Page::Settings => {
-                ui::glass(canvas, (486, 240, 1306, 174), 22, light, 0.0);
-                ui::text_mid(
+                crate::settings_menu::paint(
                     canvas,
                     fonts,
-                    &t("IDIOMA", "LANGUAGE"),
-                    522,
-                    274,
-                    18.0,
-                    GOLD,
-                    true,
-                );
-                ui::text_mid(
-                    canvas,
-                    fonts,
-                    language.display_name(),
-                    522,
-                    340,
-                    36.0,
-                    INK,
-                    false,
-                );
-                let previous = (1310, 286, 112, 64);
-                let next = (1442, 286, 112, 64);
-                ui::pill(
-                    canvas,
-                    fonts,
-                    previous,
-                    "‹",
-                    focused(0, previous),
-                    true,
-                    light,
-                    false,
-                );
-                ui::pill(
-                    canvas,
-                    fonts,
-                    next,
-                    "›",
-                    focused(1, next),
-                    true,
-                    light,
-                    false,
-                );
-
-                ui::glass(canvas, (486, 440, 1306, 236), 22, light, 0.0);
-                ui::text_mid(
-                    canvas,
-                    fonts,
-                    &t("ACCESIBILIDAD", "ACCESSIBILITY"),
-                    522,
-                    474,
-                    18.0,
-                    GOLD,
-                    true,
-                );
-                let rect = (506, 494, 640, 66);
-                let hot = focused(2, rect);
-                canvas.round_rect(
-                    rect.0,
-                    rect.1,
-                    rect.2,
-                    rect.3,
-                    18,
-                    if hot {
-                        ui::argb(0xf0, ui::mix(0x2a1a36, light, 0.26))
-                    } else {
-                        0x9a1a1224
+                    &menu.settings,
+                    SETTINGS_AREA,
+                    &crate::settings_menu::Shown {
+                        language,
+                        reduced_motion: !motion,
+                        light,
+                        mouse: self.mouse,
+                        keyboard: menu.focus >= NAV_COUNT,
                     },
-                    if hot {
-                        ui::argb(0xf2, ui::mix(0x180e22, light, 0.14))
-                    } else {
-                        0x9a140d1c
-                    },
-                );
-                canvas.round_outline(
-                    rect.0,
-                    rect.1,
-                    rect.2,
-                    rect.3,
-                    18,
-                    if hot { 1.8 } else { 1.0 },
-                    if hot {
-                        ui::argb(0xe6, ui::mix(light, 0xffffff, 0.2))
-                    } else {
-                        0x30ffffff
-                    },
-                );
-                ui::text_mid(
-                    canvas,
-                    fonts,
-                    t("Movimiento reducido", "Reduced motion"),
-                    rect.0 + 26,
-                    rect.1 + rect.3 / 2,
-                    23.0,
-                    INK,
-                    true,
-                );
-                ui::toggle(
-                    canvas,
-                    rect.0 + rect.2 - 64 - 24,
-                    rect.1 + (rect.3 - 34) / 2,
-                    self.reduced_motion,
-                    light,
-                );
-                canvas.paragraph(fonts, t("Mismo menú, guardados y mochila en novela y exploración. La ventana conserva su tamaño y proporción.", "The same menu, saves and backpack in story and exploration. Window size and aspect ratio stay unchanged."), 522, 586, 1230, 36, 23.0, MUTED, false);
-
-                ui::glass(canvas, (486, 700, 1306, 130), 22, light, 0.0);
-                ui::text_mid(
-                    canvas,
-                    fonts,
-                    &t("ATAJOS", "SHORTCUTS"),
-                    522,
-                    734,
-                    18.0,
-                    GOLD,
-                    true,
-                );
-                ui::key_hints(
-                    canvas,
-                    fonts,
-                    522,
-                    764,
-                    &[
-                        ("F5", t("guardar", "save")),
-                        ("F9", t("cargar", "load")),
-                        (
-                            t("Rueda ↑", "Wheel ↑"),
-                            t("diálogo anterior", "previous dialogue"),
-                        ),
-                    ],
                 );
             }
         }
@@ -1656,8 +1601,8 @@ fn paint_sidebar(
         0x46000000,
     );
     paint_embers(canvas, clock, slide, accent);
-    canvas.display_text(fonts, "Demon Queen", 64 + sx + 4, 62 + 4, 48.0, 0xff000000);
-    canvas.display_text(fonts, "Demon Queen", 64 + sx, 62, 48.0, 0xffffffff);
+    canvas.brand_text(fonts, "Demon Queen", 64 + sx + 4, 62 + 4, 48.0, 0xff000000);
+    canvas.brand_text(fonts, "Demon Queen", 64 + sx, 62, 48.0, 0xffffffff);
     ui::tag(
         canvas,
         fonts,
@@ -1774,13 +1719,17 @@ fn paint_moving(
     mouse: (i32, i32),
     menu_age: f32,
 ) {
-    let w = canvas.w;
-    for y in 0..canvas.h {
+    // In the canvas's own pixels (`k` per layout pixel).
+    let (w, k) = (canvas.pw, canvas.k);
+    let px = |v: usize| ((v as f32 * k).round() as usize).min(w);
+    let sidebar = px(SIDEBAR_W);
+    for y in 0..canvas.ph {
         let row = y * w;
-        canvas.pixels[row..row + SIDEBAR_W].copy_from_slice(&menu.backdrop[row..row + SIDEBAR_W]);
+        canvas.pixels[row..row + sidebar].copy_from_slice(&menu.backdrop[row..row + sidebar]);
     }
     let (x0, y0, x1, y1) = SEAL_BOX;
-    for y in y0..y1 {
+    let (x0, x1) = (px(x0), px(x1));
+    for y in px(y0)..px(y1).min(canvas.ph) {
         let row = y * w;
         canvas.pixels[row + x0..row + x1].copy_from_slice(&menu.backdrop[row + x0..row + x1]);
     }
@@ -2320,8 +2269,11 @@ fn paint_status(
         ink,
         true,
     );
-    let word_w = fonts.display_width(word, 40.0);
-    canvas.display_text(fonts, word, vxi + 135 - word_w / 2, vyi + 44, 40.0, ink);
+    // The stamp's word fits inside its frame in every language.
+    let word_size = (40.0 * 230.0 / fonts.display_width(word, 40.0).max(1) as f32).min(40.0);
+    let word_w = fonts.display_width(word, word_size);
+    let word_y = vyi + 44 + ((40.0 - word_size) * 0.5).round() as i32;
+    canvas.display_text(fonts, word, vxi + 135 - word_w / 2, word_y, word_size, ink);
 
     // ---- how many times
     let tiles = [
@@ -2688,6 +2640,29 @@ fn ero_tile(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_corner_menu_button_is_a_card_with_see_through_corners() {
+        let Some(fonts) = Fonts::new() else {
+            return;
+        };
+        for hover in [false, true] {
+            let b = trigger_bitmap(&fonts, Language::Spanish, hover);
+            let alpha = |x: usize, y: usize| b.rgba[(y * b.w + x) * 4 + 3];
+            assert_eq!(alpha(0, 0), 0, "the corner shows the world");
+            assert_eq!(alpha(100, 28), 255, "the card is solid");
+            if let Ok(dir) = std::env::var("VELVET_DUMP") {
+                image::save_buffer(
+                    std::path::Path::new(&dir).join(format!("trigger-{hover}.png")),
+                    &b.rgba,
+                    b.w as u32,
+                    b.h as u32,
+                    image::ColorType::Rgba8,
+                )
+                .unwrap();
+            }
+        }
+    }
     fn host() -> crate::WinitApp {
         let mut app = App::default();
         app.start_game().unwrap();
@@ -2738,11 +2713,11 @@ mod tests {
         assert!(host.app.pause.as_ref().unwrap().focus < NAV_COUNT + 9);
         for size in [(1280, 800), (1000, 1000), (1920, 1080), (2560, 1440)] {
             let viewport =
-                velvet_render::SoftwareViewport::letterbox(size.0, size.1, WIN_W, WIN_H).unwrap();
+                velvet_render::SoftwareViewport::letterbox(size.0, size.1, crate::WIN_W, crate::WIN_H).unwrap();
             let x = viewport.x as f64
-                + (TRIGGER.0 + TRIGGER.2 / 2) as f64 * viewport.width as f64 / WIN_W as f64;
+                + (TRIGGER.0 + TRIGGER.2 / 2) as f64 * viewport.width as f64 / crate::WIN_W as f64;
             let y = viewport.y as f64
-                + (TRIGGER.1 + TRIGGER.3 / 2) as f64 * viewport.height as f64 / WIN_H as f64;
+                + (TRIGGER.1 + TRIGGER.3 / 2) as f64 * viewport.height as f64 / crate::WIN_H as f64;
             let (vx, vy) = viewport.physical_to_virtual(x, y).unwrap();
             assert!(rect_contains(TRIGGER, vx as i32, vy as i32));
         }
