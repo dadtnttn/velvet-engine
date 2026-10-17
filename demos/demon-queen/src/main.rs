@@ -13,8 +13,8 @@
 mod backpack_menu;
 mod exploration3d;
 mod exploration3d_state;
-mod game;
 mod gallery_menu;
+mod game;
 mod loading;
 mod localization;
 mod menu_ui;
@@ -41,7 +41,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
 use localization::{Language, Localizer};
-use render::{Canvas, ChoiceTreatment, Fonts, NativeLabelFont};
+use render::{Canvas, ChoiceTreatment, Fonts};
 use unicode_segmentation::UnicodeSegmentation;
 use velvet_render::SoftwareViewport;
 use velvet_style::{parse_stylesheet, resolve, ComputedStyle, StyleQuery, StyleValue, Stylesheet};
@@ -121,6 +121,7 @@ const TITLE_FOOTER_HINTS: [(&str, &str, &str); 5] = [
 const DEVELOPER_CREDIT: &str = "A GAME BY VELVET WEAVER";
 const ENGINE_CREDIT: &str = "WOVEN WITH VELVET ENGINE";
 const RESUME_BACKGROUND_KEY: &str = "native_1080p/title/menu_bg_gold";
+#[cfg(test)]
 const OPTIONS_BACKGROUND_KEY: &str = "native_1080p/title/menu_bg_candy";
 const END_BACKGROUND_KEY: &str = "native_1080p/title/menu_bg_glitch";
 
@@ -206,7 +207,12 @@ impl ArtCache {
     fn keep_recent(&mut self) {
         let recent = std::mem::take(&mut self.recent);
         self.entries.retain(|key, _| recent.contains(key));
-        self.bytes = self.entries.values().flatten().map(ArtBitmap::byte_len).sum();
+        self.bytes = self
+            .entries
+            .values()
+            .flatten()
+            .map(ArtBitmap::byte_len)
+            .sum();
     }
 
     fn fitted(&mut self, key: &str, fit: ArtFit) -> Option<&ArtBitmap> {
@@ -240,7 +246,9 @@ impl ArtCache {
 
     /// A picture [`Self::original`] loaded, if it is still in the cache.
     fn peek_original(&self, key: &str) -> Option<&ArtBitmap> {
-        self.entries.get(&format!("{key}#{:?}", ArtFit::Original))?.as_ref()
+        self.entries
+            .get(&format!("{key}#{:?}", ArtFit::Original))?
+            .as_ref()
     }
 }
 
@@ -280,7 +288,9 @@ fn assets_root() -> PathBuf {
 /// before decoding when it would be too big.
 fn decode_art(bytes: &[u8]) -> Option<image::DynamicImage> {
     if velvet_avif::is_avif(bytes) {
-        return velvet_avif::decode_avif(bytes).ok().map(image::DynamicImage::ImageRgba8);
+        return velvet_avif::decode_avif(bytes)
+            .ok()
+            .map(image::DynamicImage::ImageRgba8);
     }
     let dimensions = image::ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
@@ -422,7 +432,6 @@ struct App {
     /// The gallery's albums, cards and viewer.
     gallery_ui: gallery_menu::GalleryUi,
     fonts: Option<Fonts>,
-    native_label_fonts: HashMap<&'static str, Option<NativeLabelFont>>,
     canvas: Canvas,
     art: ArtCache,
     /// The castle's music under the visual novel, quieter than in the world (the world plays
@@ -551,7 +560,6 @@ impl Default for App {
             gallery_return: Screen::Options,
             gallery_ui: Default::default(),
             fonts,
-            native_label_fonts: HashMap::new(),
             canvas: Canvas::new(WIN_W as usize, WIN_H as usize, 0xff120a16),
             art: ArtCache::default(),
             vn_music: None,
@@ -1787,8 +1795,10 @@ impl App {
         if in_vn && self.vn_music.is_none() && !self.vn_music_tried {
             self.vn_music_tried = true;
             self.vn_music = exploration3d::ui_sfx::mixer().and_then(|mixer| {
-                let mut music =
-                    exploration3d::soundtrack::Music::new(mixer, &exploration3d::soundtrack::music_dir())?;
+                let mut music = exploration3d::soundtrack::Music::new(
+                    mixer,
+                    &exploration3d::soundtrack::music_dir(),
+                )?;
                 music.set_level(VN_MUSIC_LEVEL);
                 Some(music)
             });
@@ -1966,10 +1976,7 @@ impl App {
             }
         }
         if let Some(saved) = saved.filter(|saved| saved.world == entry.world) {
-            let (x, z) = (
-                saved.x_milli as f32 / 1000.0,
-                saved.y_milli as f32 / 1000.0,
-            );
+            let (x, z) = (saved.x_milli as f32 / 1000.0, saved.y_milli as f32 / 1000.0);
             // The story's checkpoint is rounded to millimetres: the same spot keeps her floor.
             if (x - session.x).abs() > 0.01 || (z - session.z).abs() > 0.01 {
                 session.y = 0.0;
@@ -1978,7 +1985,9 @@ impl App {
             session.z = z;
             session.yaw =
                 (saved.facing_x_milli as f32 / 1000.0).atan2(saved.facing_y_milli as f32 / 1000.0);
-            session.seen_interactions.extend(saved.seen_interactions.iter().cloned());
+            session
+                .seen_interactions
+                .extend(saved.seen_interactions.iter().cloned());
         }
         exploration3d_state::write(&mut session)
     }
@@ -1996,20 +2005,10 @@ impl App {
 
     fn open_options(&mut self) {
         self.refresh_gallery();
-        self.ensure_native_label_fonts();
         self.options_reset();
         self.screen = Screen::Options;
         self.ui_hidden = false;
         self.needs_paint = true;
-    }
-
-    fn ensure_native_label_fonts(&mut self) {
-        for language in Language::ALL {
-            let profile = language.font_profile();
-            self.native_label_fonts
-                .entry(profile)
-                .or_insert_with(|| NativeLabelFont::new_for_language(profile));
-        }
     }
 
     fn refresh_localized_view(&mut self) {
@@ -2152,7 +2151,11 @@ impl App {
         // a decision: two soft notes. Nothing while the lines are skipped.
         if !self.skipping_dialogue {
             use exploration3d::ui_sfx::{play, UiSfx};
-            play(if decision { UiSfx::Choose } else { UiSfx::Advance });
+            play(if decision {
+                UiSfx::Choose
+            } else {
+                UiSfx::Advance
+            });
         }
         let Some(game) = self.game.as_mut() else {
             return;
@@ -2283,7 +2286,10 @@ impl App {
     fn paint(&mut self) {
         // The canvas in the screen's own pixels (or 1920×1080, as the settings say): a new size
         // starts black, and every screen paints itself whole again.
-        let window_size = self.window.as_ref().map(|w| (w.inner_size().width, w.inner_size().height));
+        let window_size = self
+            .window
+            .as_ref()
+            .map(|w| (w.inner_size().width, w.inner_size().height));
         let forced = exploration3d::prefs::forced_render_size();
         if let Some(inner) = window_size.or(forced) {
             let (pw, ph) = exploration3d::prefs::render_size(inner);
@@ -2853,7 +2859,11 @@ impl App {
             cg_keys.push((legacy_scene_art_key(&view.id), true));
             cg_keys.dedup_by(|a, b| a.0 == b.0);
             for (key, optional) in cg_keys {
-                let cg = if optional { self.art.optional_original(&key) } else { self.art.original(&key) };
+                let cg = if optional {
+                    self.art.optional_original(&key)
+                } else {
+                    self.art.original(&key)
+                };
                 if let Some(cg) = cg {
                     self.canvas.blit_rgba(0, 0, cg);
                     light_key = key;
@@ -4158,7 +4168,9 @@ impl WinitApp {
         if let Some(world) = &mut self.world {
             match world.capture_frame() {
                 Ok((pixels, w, h)) => {
-                    self.app.canvas.fill_from_rgba(&pixels, w as usize, h as usize);
+                    self.app
+                        .canvas
+                        .fill_from_rgba(&pixels, w as usize, h as usize);
                 }
                 Err(error) => {
                     eprintln!("[vn] captura 3D antes de la conversación: {error}");
@@ -4359,9 +4371,10 @@ impl WinitApp {
             if let Some(world) = &mut self.world {
                 world.close_overlays_for_pause();
                 match world.capture_frame() {
-                    Ok((pixels, w, h)) => {
-                        self.app.canvas.fill_from_rgba(&pixels, w as usize, h as usize)
-                    }
+                    Ok((pixels, w, h)) => self
+                        .app
+                        .canvas
+                        .fill_from_rgba(&pixels, w as usize, h as usize),
                     Err(error) => {
                         eprintln!("[menu] capture: {error}");
                         self.app.canvas.clear(0xff181220);
@@ -4411,11 +4424,34 @@ impl WinitApp {
     }
 
     /// The thanks at the end of act 1 over the world as it is now (the world waits under it).
+    /// The castle's portraits: the gallery over the paused world (back to it on leaving).
+    fn open_gallery_over_world(&mut self) {
+        if let Some(world) = &mut self.world {
+            world.close_overlays_for_pause();
+            match world.capture_frame() {
+                Ok((pixels, w, h)) => self
+                    .app
+                    .canvas
+                    .fill_from_rgba(&pixels, w as usize, h as usize),
+                Err(error) => {
+                    eprintln!("[galería] capture: {error}");
+                    self.app.canvas.clear(0xff181220);
+                }
+            }
+            world.clear_input();
+        }
+        self.app.open_gallery(Screen::Explore);
+        self.world_paused = self.world.is_some();
+    }
+
     fn open_thanks(&mut self) {
         if let Some(world) = &mut self.world {
             world.close_overlays_for_pause();
             match world.capture_frame() {
-                Ok((pixels, w, h)) => self.app.canvas.fill_from_rgba(&pixels, w as usize, h as usize),
+                Ok((pixels, w, h)) => self
+                    .app
+                    .canvas
+                    .fill_from_rgba(&pixels, w as usize, h as usize),
                 Err(error) => {
                     eprintln!("[gracias] capture: {error}");
                     self.app.canvas.clear(0xff181220);
@@ -4781,7 +4817,10 @@ impl ApplicationHandler for WinitApp {
             // In the fight the right button is the seal (held): it is the world's, not «back».
             if button == MouseButton::Right
                 && self.app.screen == Screen::Explore
-                && self.world.as_ref().is_some_and(|world| world.owns_right_button())
+                && self
+                    .world
+                    .as_ref()
+                    .is_some_and(|world| world.owns_right_button())
             {
                 if let Some(world) = &mut self.world {
                     world.window_event(event_loop, window_id, event);
@@ -4894,6 +4933,7 @@ impl ApplicationHandler for WinitApp {
                         dungeon_active,
                         guion_vn,
                         thanks,
+                        gallery,
                     ) = {
                         let Some(world) = &mut self.world else {
                             return;
@@ -4909,10 +4949,14 @@ impl ApplicationHandler for WinitApp {
                                 .take_guion_vn()
                                 .map(|node| (node, world.story_values())),
                             world.take_thanks(),
+                            world.take_gallery(),
                         )
                     };
                     if thanks {
                         self.open_thanks();
+                    }
+                    if gallery {
+                        self.open_gallery_over_world();
                     }
                     if dungeon_changed {
                         if let Some(window) = &self.app.window {
@@ -5377,13 +5421,22 @@ fn capture_menu(path: &Path, page: usize, focus: usize, confirm: Option<usize>) 
     app.open_pause(page);
     // VELVET_MENU_ITEM=id: the backpack's cursor on that item (its card on the right).
     let item_cell = std::env::var("VELVET_MENU_ITEM").ok().and_then(|id| {
-        let p = app.pause_backpack.as_ref()?.placed.iter().find(|p| p.id == id)?.clone();
+        let p = app
+            .pause_backpack
+            .as_ref()?
+            .placed
+            .iter()
+            .find(|p| p.id == id)?
+            .clone();
         Some((p.x, p.y))
     });
     if let Some(menu) = &mut app.pause {
         menu.focus = focus;
         // VELVET_OPTIONS_TAB=n: the settings page on that tab.
-        if let Some(tab) = std::env::var("VELVET_OPTIONS_TAB").ok().and_then(|v| v.parse().ok()) {
+        if let Some(tab) = std::env::var("VELVET_OPTIONS_TAB")
+            .ok()
+            .and_then(|v| v.parse().ok())
+        {
             menu.settings.tab = tab;
         }
         if let Some(cell) = item_cell {
@@ -5450,7 +5503,10 @@ fn native_resolution_app() -> App {
 /// QA: `VELVET_BENCH_PAINT=n` paints the screen being captured n times more, as the game does
 /// each frame, and says how long one took.
 fn bench_paint(app: &mut App, label: &str) {
-    let Some(n) = std::env::var("VELVET_BENCH_PAINT").ok().and_then(|v| v.parse::<u32>().ok()) else {
+    let Some(n) = std::env::var("VELVET_BENCH_PAINT")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+    else {
         return;
     };
     let mut worst = 0.0f64;
@@ -5507,8 +5563,15 @@ fn capture_title(path: &Path, focus: usize, cross: f32) -> Result<()> {
     if let Some(value) = std::env::var_os("VELVET_TITLE_INFO") {
         app.title_info = true;
         app.title_info_since = Instant::now() - Duration::from_secs(2);
-        app.title_info_page = value.to_string_lossy().parse::<usize>().unwrap_or(0).min(title_menu::GUIDE_PAGES - 1);
-        if let Some(t) = std::env::var("VELVET_TITLE_TURN").ok().and_then(|v| v.parse::<f32>().ok()) {
+        app.title_info_page = value
+            .to_string_lossy()
+            .parse::<usize>()
+            .unwrap_or(0)
+            .min(title_menu::GUIDE_PAGES - 1);
+        if let Some(t) = std::env::var("VELVET_TITLE_TURN")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+        {
             let back = Duration::from_secs_f32(0.42 * t.clamp(0.0, 0.99));
             let from = app.title_info_page.saturating_sub(1);
             app.title_info_turn = Some((from, Instant::now() - back, 1));
@@ -5579,10 +5642,15 @@ fn capture_options(path: &Path, language: &str) -> Result<()> {
     let settled = Instant::now() - Duration::from_secs(4);
     app.options_since = settled;
     app.title_since = settled;
-    if let Some(tab) = std::env::var("VELVET_OPTIONS_TAB").ok().and_then(|v| v.parse().ok()) {
+    if let Some(tab) = std::env::var("VELVET_OPTIONS_TAB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
         app.options_settings.tab = tab;
     }
-    app.options_settings.row = std::env::var("VELVET_OPTIONS_ROW").ok().and_then(|v| v.parse().ok());
+    app.options_settings.row = std::env::var("VELVET_OPTIONS_ROW")
+        .ok()
+        .and_then(|v| v.parse().ok());
     app.options_settings.preview_since = Instant::now() - Duration::from_millis(1100);
     app.paint_options();
     bench_paint(&mut app, "opciones");
@@ -5616,7 +5684,11 @@ fn capture_gallery(path: &Path, steps: usize, language: &str) -> Result<()> {
     app.open_gallery(Screen::Options);
     // VELVET_GALLERY_ALBUM=n opens album n (0 the prologue); VELVET_GALLERY_CARD=n opens card n,
     // VELVET_GALLERY_SHOT=n plays shot n of a scene (a scene's shots show as seen).
-    let number = |name: &str| std::env::var(name).ok().and_then(|v| v.parse::<usize>().ok());
+    let number = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+    };
     if let Some(album) = number("VELVET_GALLERY_ALBUM") {
         app.gallery_ui.album = album;
         app.gallery_ui.list = album;
@@ -5800,7 +5872,6 @@ fn capture_play_hover(path: &Path, steps: usize, index: usize) -> Result<()> {
     app.paint_play();
     save_canvas(path, &app.canvas, "del hover de una decisión")
 }
-
 
 fn main() -> Result<()> {
     // The release's pictures may be AVIF under their usual names: the image crate tells them by
@@ -6377,7 +6448,14 @@ mod tests {
     fn a_new_scene_keeps_the_art_the_last_one_showed_and_drops_the_rest() {
         let mut cache = ArtCache::default();
         let one = |cache: &mut ArtCache, key: &str| {
-            cache.insert_loaded(format!("{key}#Original"), Some(ArtBitmap { w: 1, h: 1, rgba: vec![0; 4] }));
+            cache.insert_loaded(
+                format!("{key}#Original"),
+                Some(ArtBitmap {
+                    w: 1,
+                    h: 1,
+                    rgba: vec![0; 4],
+                }),
+            );
         };
         one(&mut cache, "bg");
         one(&mut cache, "old_cg");

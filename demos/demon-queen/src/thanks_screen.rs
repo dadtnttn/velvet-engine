@@ -59,7 +59,11 @@ impl App {
         }
         if matches!(
             key,
-            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space | KeyCode::Escape | KeyCode::KeyF
+            KeyCode::Enter
+                | KeyCode::NumpadEnter
+                | KeyCode::Space
+                | KeyCode::Escape
+                | KeyCode::KeyF
         ) {
             self.close_thanks();
         }
@@ -123,7 +127,11 @@ impl App {
         let canvas = &mut self.canvas;
 
         // ── The card, slamming in from the left.
-        let come = if motion { ui::entrance(age, 0.0, 0.42) } else { 1.0 };
+        let come = if motion {
+            ui::entrance(age, 0.0, 0.42)
+        } else {
+            1.0
+        };
         let dx = -(PANEL.2 + 200.0) * (1.0 - come);
         let (px, py, pw, ph) = (PANEL.0 + dx, PANEL.1, PANEL.2, PANEL.3);
         ui::plate(canvas, px + 14.0, py + 14.0, pw, ph, 60.0, 0xb4000000);

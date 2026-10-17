@@ -86,7 +86,12 @@ pub(super) fn slant_outline(v: &mut Vec<Vertex>, r: [f32; 4], lean: f32, width: 
 pub(super) fn plate(v: &mut Vec<Vertex>, r: [f32; 4], edge: Rgba, strength: f32) {
     let [x, y, w, h] = r;
     let lean = lean_for(h);
-    slant(v, [x + 8.0, y + 8.0, w, h], lean, [0.0, 0.0, 0.0, 0.42 * strength + 0.08]);
+    slant(
+        v,
+        [x + 8.0, y + 8.0, w, h],
+        lean,
+        [0.0, 0.0, 0.0, 0.42 * strength + 0.08],
+    );
     fill(
         v,
         &slant_path(r, lean),
@@ -113,7 +118,13 @@ pub(super) fn plate(v: &mut Vec<Vertex>, r: [f32; 4], edge: Rgba, strength: f32)
         &[[x + lean, y], [x + lean + k, y], [x + k, y + h], [x, y + h]],
         alpha(edge, 0.95),
     );
-    segment(v, [x + lean + k, y + 1.0], [x + w, y + 1.0], 2.0, alpha(edge, 0.8 * strength));
+    segment(
+        v,
+        [x + lean + k, y + 1.0],
+        [x + w, y + 1.0],
+        2.0,
+        alpha(edge, 0.8 * strength),
+    );
     slant_outline(v, r, lean, 1.0, [1.0, 1.0, 1.0, 0.08 * strength]);
 }
 pub(super) const MUTED: Rgba = [0.55, 0.63, 0.62, 1.0];
@@ -350,8 +361,18 @@ pub(super) fn pane(v: &mut Vec<Vertex>, r: [f32; 4], _radius: f32, tone: &Tone, 
 /// A slanted chip (tags, slots): a dark plate tinted with `color`, outlined in it.
 pub(super) fn chip(v: &mut Vec<Vertex>, r: [f32; 4], color: Rgba, fill_alpha: f32) {
     let lean = (r[3] * 0.22).clamp(3.0, 9.0);
-    slant(v, [r[0] + 3.0, r[1] + 3.0, r[2], r[3]], lean, [0.0, 0.0, 0.0, 0.45]);
-    slant(v, r, lean, alpha(mix(INK, color, (fill_alpha * 0.45).min(0.12)), 0.95));
+    slant(
+        v,
+        [r[0] + 3.0, r[1] + 3.0, r[2], r[3]],
+        lean,
+        [0.0, 0.0, 0.0, 0.45],
+    );
+    slant(
+        v,
+        r,
+        lean,
+        alpha(mix(INK, color, (fill_alpha * 0.45).min(0.12)), 0.95),
+    );
     slant_outline(v, r, lean, 1.2, alpha(color, 0.8));
 }
 

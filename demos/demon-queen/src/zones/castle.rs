@@ -149,7 +149,26 @@ impl RenderState {
         if let Some(guide) = frame.mission {
             self.mission_draws(guide, elapsed, &mut draws);
         }
-        let lights = inside.lights(elapsed);
+        let mut lights = inside.lights(elapsed);
+        if !self.castle_life_tried {
+            self.castle_life_tried = true;
+            match castle_life::Scene::load(&mut self.renderer, &self.device) {
+                Ok(life) => self.castle_life = Some(life),
+                Err(error) => eprintln!("[3d] the castle's life failed to build: {error:#}"),
+            }
+        }
+        if let Some(life) = self.castle_life.as_mut() {
+            life.draws(
+                &mut self.renderer,
+                &self.queue,
+                inside.life,
+                inside.view_level(),
+                elapsed,
+                camera.position - camera.target,
+                &mut draws,
+                &mut lights,
+            );
+        }
         let saved = self.renderer.replace_finish(castle3d::finish());
         let (scene_view, scene_size) = self.scene_target();
         self.renderer.render_with_environment_and_lights(
@@ -296,12 +315,19 @@ impl App {
         if self.move_right {
             direction += view_right;
         }
-        let busy = self.shop_open || self.wardrobe_open || self.map_open || self.talk.is_some();
+        let busy = self.shop_open
+            || self.wardrobe_open
+            || self.map_open
+            || self.talk.is_some()
+            || self.court.is_some();
         let elapsed = self.elapsed;
         let yaw = self.iso.yaw;
+        let life = castle_life::life(&self.story);
+        self.tick_routine();
         let Some(inside) = self.castle.as_mut() else {
             return;
         };
+        inside.life = life;
         let before = inside.position();
         if direction.length_squared() > 0.0 && !busy {
             let direction = direction.normalize_or_zero();
@@ -317,9 +343,15 @@ impl App {
         }
         // Nemi waits at the arena in the patio from the moment her gift is due (after the first
         // Council) until she has trained the Queen three times.
-        let gift_due = self.story.get("consejo_1_hecho") > 0 && self.story.get("espada_regalo") == 0;
+        let gift_due =
+            self.story.get("consejo_1_hecho") > 0 && self.story.get("espada_regalo") == 0;
         let training = self.story.get("espada_regalo") > 0 && self.story.get("entreno") < 3;
-        let training = gift_due || training;
+        // …and while she trains the Queen there (the court's training).
+        let sparring = matches!(
+            self.court.as_ref().map(|c| &c.page),
+            Some(court::Page::Training(_))
+        );
+        let training = gift_due || training || sparring;
         inside.maid_post[1] = training.then_some(NEMI_ARENA);
         inside.held = self
             .talk
@@ -456,6 +488,13 @@ impl App {
             self.open_alcove();
             return true;
         }
+        // The court's places: the throne's audiences, Lira's accounts, the restored rooms, the
+        // portraits, Nyxara's lessons and Nemi's arena.
+        if let Some(id) = near.as_deref() {
+            if self.interact_court(id) {
+                return true;
+            }
+        }
         if let Some(id) = near.as_deref() {
             let person = matches!(id, "lira" | "nemi");
             let own_use = matches!(id, castle3d::GATE | "vestidor");
@@ -494,6 +533,56 @@ impl App {
 }
 
 impl App {
+    /// A scene of the story (one that plays once) waits at this place.
+    fn story_scene_at(&self, place: &str) -> bool {
+        story_waits(guion::library(), place, &self.story)
+    }
+
+    /// F on one of the court's places. Whether it took the key (else the place's guion or its own
+    /// use, as before).
+    pub(super) fn interact_court(&mut self, id: &str) -> bool {
+        match id {
+            "trono" => self.open_audience(),
+            "mesa-guerra" => {
+                // a story scene at the table (Act 1's councils) plays before the war's own menu
+                if self.story_scene_at("mesa-guerra") {
+                    return self.start_talk(None, Some("mesa-guerra"));
+                }
+                self.open_war_table();
+                true
+            }
+            "despensa" => self.open_works(),
+            "armero" => {
+                if self.story.get("obra_armeria") > 0 {
+                    self.open_armory();
+                    true
+                } else {
+                    self.float_chiquita_cue(
+                        "—Lanzas oxidadas y escudos sin correas. Si Lira restaura la armería (las obras, en la despensa), aquí habrá espadas que comprar.",
+                        mascot::Cue::Talk,
+                    );
+                    true
+                }
+            }
+            "botiquin" => self.use_cabinet(),
+            "hogar" => self.use_kitchen(),
+            "literas" => self.use_barracks(),
+            "retratos" => {
+                self.gallery_pending = true;
+                ui_sfx::play(ui_sfx::UiSfx::Open);
+                true
+            }
+            "arena" => self.open_training(),
+            "nyxara" => self.open_lessons(),
+            "catalejo" => self.open_telescope(),
+            "estudio" => self.open_codex(),
+            "tocador" => self.open_dates(),
+            _ => false,
+        }
+    }
+}
+
+impl App {
     /// Sleeping: to the morning if it is night, to the night otherwise. A new day lets the body
     /// be explored again (`explorado_hoy`).
     pub(super) fn sleep_in_bed(&mut self) {
@@ -508,6 +597,8 @@ impl App {
         };
         self.queen_thought = Some((thought, self.elapsed + 4.5));
         self.story.values.insert("explorado_hoy".to_owned(), 0);
+        // The court's daily uses come back (and a guard's morning brings the village's thanks).
+        self.court_new_day(night);
         // A new day: the shopkeeper dares one more favour.
         self.story
             .values
@@ -715,4 +806,38 @@ pub(super) fn load_maids(
         maid_alt_meshes,
         maid_alt_walk_animation,
     })
+}
+
+/// Whether the scene a place would play now is one of the story's (it plays once), not the place's
+/// everyday words.
+fn story_waits(lib: &guion::Library, place: &str, story: &guion::Vars) -> bool {
+    lib.entry(None, Some(place), story)
+        .is_some_and(|(f, s)| lib.guiones[f].scenes[s].attrs.una_vez)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_war_table_lets_act_1_councils_play_before_its_menu() {
+        let lib = guion::library();
+        let mut v = guion::Vars::default();
+        // the first council waits at the table: F plays it, not the war's menu
+        let (f, s) = lib
+            .entry(None, Some("mesa-guerra"), &v)
+            .expect("a scene at the table");
+        assert!(story_waits(lib, "mesa-guerra", &v));
+        assert!(
+            lib.guiones[f].scenes[s].id.ends_with("consejo_1"),
+            "{}",
+            lib.guiones[f].scenes[s].id
+        );
+        // once seen, the table's own words are no story: the menu opens
+        v.seen.insert(lib.guiones[f].scenes[s].id.clone());
+        assert!(!story_waits(lib, "mesa-guerra", &v));
+        // Varrak seen: the second council waits there
+        v.values.insert("varrak_visto".into(), 1);
+        assert!(story_waits(lib, "mesa-guerra", &v));
+    }
 }

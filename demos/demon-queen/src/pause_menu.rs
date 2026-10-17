@@ -21,7 +21,6 @@ pub const TRIGGER: (i32, i32, i32, i32) = crate::window_display::MENU_RECT;
 const GOLD: u32 = 0xffd9b67b;
 const INK: u32 = 0xfff5eaf3;
 const MUTED: u32 = 0xffbaacbf;
-const EDGE: u32 = 0xff58435d;
 const DANGER: u32 = 0xffe8737f;
 pub(crate) const NAV_COUNT: usize = 10;
 const HISTORY_VISIBLE_LINES: usize = 18;
@@ -253,44 +252,6 @@ pub(crate) fn paint_item_icon(
     }
 }
 
-fn frame(canvas: &mut Canvas, rect: (i32, i32, i32, i32), fill: u32, edge: u32) {
-    let (x, y, w, h) = rect;
-    canvas.rect(x, y, w, h, fill);
-    canvas.rect(x, y, w, 1, edge);
-    canvas.rect(x, y + h - 1, w, 1, edge);
-    canvas.rect(x, y, 1, h, edge);
-    canvas.rect(x + w - 1, y, 1, h, edge);
-}
-fn button(
-    canvas: &mut Canvas,
-    fonts: &Fonts,
-    rect: (i32, i32, i32, i32),
-    text: &str,
-    focused: bool,
-    enabled: bool,
-) {
-    frame(
-        canvas,
-        rect,
-        if focused { 0xff38223e } else { 0xff201727 },
-        if focused { GOLD } else { EDGE },
-    );
-    centered_in_rect(
-        canvas,
-        fonts,
-        text,
-        rect,
-        23.0,
-        if !enabled {
-            MUTED
-        } else if focused {
-            GOLD
-        } else {
-            INK
-        },
-        true,
-    );
-}
 fn age(saved_at: u64, language: Language) -> String {
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -322,8 +283,24 @@ pub fn paint_trigger(
     let (x, y) = (x as f32, y as f32);
     let accent = if hover { 0xffffd98a } else { 0xff9a5cff };
     let pick = |c: u32| if mask { 0xffffffff } else { c };
-    ui::plate(canvas, x + 10.0, y + 8.0, 190.0, 46.0, 12.0, pick(0xb0000000));
-    ui::plate(canvas, x + 4.0, y + 4.0, 190.0, 46.0, 12.0, pick(0xf00e0816));
+    ui::plate(
+        canvas,
+        x + 10.0,
+        y + 8.0,
+        190.0,
+        46.0,
+        12.0,
+        pick(0xb0000000),
+    );
+    ui::plate(
+        canvas,
+        x + 4.0,
+        y + 4.0,
+        190.0,
+        46.0,
+        12.0,
+        pick(0xf00e0816),
+    );
     ui::plate(canvas, x + 4.0, y + 4.0, 22.0, 46.0, 12.0, pick(accent));
     if mask {
         return;
@@ -732,10 +709,7 @@ impl App {
                 }
                 _ => {}
             }
-        } else if menu.page == Page::Settings
-            && menu.focus >= NAV_COUNT
-            && key != KeyCode::Escape
-        {
+        } else if menu.page == Page::Settings && menu.focus >= NAV_COUNT && key != KeyCode::Escape {
             let outcome = crate::settings_menu::key(&mut menu.settings, key);
             if outcome == crate::settings_menu::Outcome::Leave {
                 menu.focus = SETTINGS_NAV;
@@ -2712,8 +2686,13 @@ mod tests {
         }
         assert!(host.app.pause.as_ref().unwrap().focus < NAV_COUNT + 9);
         for size in [(1280, 800), (1000, 1000), (1920, 1080), (2560, 1440)] {
-            let viewport =
-                velvet_render::SoftwareViewport::letterbox(size.0, size.1, crate::WIN_W, crate::WIN_H).unwrap();
+            let viewport = velvet_render::SoftwareViewport::letterbox(
+                size.0,
+                size.1,
+                crate::WIN_W,
+                crate::WIN_H,
+            )
+            .unwrap();
             let x = viewport.x as f64
                 + (TRIGGER.0 + TRIGGER.2 / 2) as f64 * viewport.width as f64 / crate::WIN_W as f64;
             let y = viewport.y as f64

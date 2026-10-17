@@ -26,7 +26,9 @@ impl ApplicationHandler for App {
                 && self.window.as_ref().is_some_and(|w| w.has_focus())
             {
                 let k = crate::exploration3d::prefs::look_scale();
-                self.dungeon.controller.look(delta.0 as f32 * k, delta.1 as f32 * k);
+                self.dungeon
+                    .controller
+                    .look(delta.0 as f32 * k, delta.1 as f32 * k);
             }
         }
     }
@@ -55,6 +57,10 @@ impl ApplicationHandler for App {
                 self.last_frame = Instant::now();
                 self.next_frame_at = self.last_frame;
                 self.persist_3d_state(true);
+                // QA: VELVET_WAR_TABLE opens the war table at once (to try its menus with the mouse).
+                if std::env::var_os("VELVET_WAR_TABLE").is_some() {
+                    self.open_war_table();
+                }
                 window.request_redraw();
                 eprintln!("[3d] first redraw requested");
             }
@@ -95,6 +101,18 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_position = Some((position.x as f32, position.y as f32));
+                if self.war.is_some() {
+                    self.war_pointer();
+                }
+                if self.talk.is_some() && !self.dungeon_mode {
+                    self.talk_hover();
+                }
+                if self.court_open() && self.talk.is_none() {
+                    self.court_hover();
+                }
+                if self.caricias_open() {
+                    self.caricias_pointer();
+                }
                 if self.mascot_held() {
                     if let Some((x, y)) = self.shop_pointer_position() {
                         self.mascot_drag_to(x, y);
@@ -124,6 +142,17 @@ impl ApplicationHandler for App {
             WindowEvent::MouseInput { state, button, .. } if self.boss.is_some() => {
                 self.boss_button(button, state == ElementState::Pressed);
             }
+            // At the war table the mouse is the general's.
+            WindowEvent::MouseInput { state, button, .. } if self.war.is_some() => {
+                self.war_button(button, state == ElementState::Pressed);
+            }
+            WindowEvent::MouseWheel { delta, .. } if self.war.is_some() => {
+                let amount = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => y,
+                    winit::event::MouseScrollDelta::PixelDelta(p) => p.y as f32 / 100.0,
+                };
+                self.war_wheel(amount);
+            }
             // Chiquita can be poked and picked up wherever she is: that click is hers.
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
@@ -144,6 +173,26 @@ impl ApplicationHandler for App {
                 ..
             } if self.mascot_held() => {
                 self.mascot_release();
+            }
+            WindowEvent::MouseInput { state, button, .. }
+                if self.caricias_open()
+                    && matches!(button, MouseButton::Left | MouseButton::Right) =>
+            {
+                self.caricias_button(button == MouseButton::Right, state == ElementState::Pressed);
+            }
+            WindowEvent::MouseWheel { delta, .. } if self.caricias_open() => {
+                let down = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => y < 0.0,
+                    winit::event::MouseScrollDelta::PixelDelta(p) => p.y < 0.0,
+                };
+                self.caricias_wheel(down);
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } if self.court_open() && self.talk.is_none() => {
+                self.court_click();
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
@@ -212,6 +261,41 @@ impl ApplicationHandler for App {
                         self.move_shop_selection(if amount > 0.0 { -1 } else { 1 });
                     }
                 }
+            }
+            // The wardrobe: a click chooses a card, a second one puts it on.
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } if self.wardrobe_open && !self.dungeon_mode && self.talk.is_none() => {
+                self.wardrobe_click();
+            }
+            // A conversation takes the click as it takes F: the next line, or the option under the
+            // pointer. A stage scene's last card goes down with a click too.
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } if !self.dungeon_mode
+                && !self.shop_open
+                && !self.escort_active()
+                && (self.talk.is_some()
+                    || self.stage.as_ref().is_some_and(|s| s.outro_at.is_some())) =>
+            {
+                if self.talk.is_some() {
+                    self.talk_click();
+                } else if self
+                    .stage
+                    .as_ref()
+                    .and_then(|s| s.outro_at)
+                    .is_some_and(|t| self.elapsed - t > 0.8)
+                {
+                    if let Some(stage) = self.stage.as_mut() {
+                        stage.unlocks.clear();
+                    }
+                    self.end_talk();
+                }
+                self.clear_input();
             }
             WindowEvent::MouseInput {
                 state: ElementState::Released,
@@ -286,6 +370,10 @@ impl ApplicationHandler for App {
                 };
                 if self.boss.is_some() {
                     self.boss_key(code, event.state == ElementState::Pressed, event.repeat);
+                    return;
+                }
+                if self.war.is_some() {
+                    self.war_key(code, event.state == ElementState::Pressed, event.repeat);
                     return;
                 }
                 if self.dungeon_mode && matches!(code, KeyCode::SuperLeft | KeyCode::SuperRight) {
@@ -409,6 +497,22 @@ impl ApplicationHandler for App {
                             }
                             _ => {}
                         }
+                    }
+                    self.clear_input();
+                    return;
+                }
+                // A night's touch game takes the keys while it is up.
+                if self.caricias_open() {
+                    if event.state == ElementState::Pressed && !event.repeat {
+                        self.caricias_key(code);
+                    }
+                    self.clear_input();
+                    return;
+                }
+                // The court takes the keys while it is up.
+                if self.court_open() {
+                    if event.state == ElementState::Pressed && !event.repeat {
+                        self.court_key(code);
                     }
                     self.clear_input();
                     return;
@@ -567,25 +671,7 @@ impl ApplicationHandler for App {
                                     self.wardrobe_selection = slot;
                                 }
                             }
-                            KeyCode::Enter | KeyCode::Space => {
-                                let chosen = self.wardrobe_selection % wardrobe_outfit_count();
-                                if !self.wardrobe_allows(chosen) {
-                                    self.wardrobe_selection = self.outfit;
-                                    self.wardrobe_open = false;
-                                    self.clear_input();
-                                    return;
-                                }
-                                self.outfit = chosen;
-                                ui_sfx::play(UiSfx::Equip);
-                                if let Some(o) = achievements::catalog().outfit_in_slot(self.outfit)
-                                {
-                                    let event = format!("outfit:{}", o.id);
-                                    self.achievement_event(&event);
-                                }
-                                self.wardrobe_open = false;
-                                self.clear_input();
-                                self.persist_3d_state(true);
-                            }
+                            KeyCode::Enter | KeyCode::Space => self.wardrobe_confirm(),
                             KeyCode::KeyF => {
                                 self.wardrobe_open = false;
                                 self.wardrobe_selection = self.outfit;

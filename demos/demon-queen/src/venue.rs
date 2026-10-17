@@ -69,8 +69,6 @@ pub enum Page {
     Leaflet,
 }
 
-/// The offer's options, in the order the keys go through them.
-pub const OFFER_BUY: usize = 0;
 pub const OFFER_DECLINE: usize = 1;
 pub const OFFER_LEAFLET: usize = 2;
 
@@ -110,7 +108,10 @@ pub struct Menu {
     pub offer_from: Page,
 }
 
+/// One entry of a venue's data file. Some of its fields are there for the writers and the web
+/// pages, not read by the game.
 #[derive(Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct Entry {
     pub id: String,
     pub name: String,
@@ -358,6 +359,7 @@ impl Menu {
         self.progress.room.is_some() && self.progress.room_until > self.progress.hours
     }
 
+    #[cfg(test)]
     pub fn room_name(&self) -> &str {
         if !self.has_room() {
             return "Ninguna";
@@ -368,10 +370,6 @@ impl Menu {
             .find(|e| Some(&e.id) == self.progress.room.as_ref())
             .map(|e| e.name.as_str())
             .unwrap_or("Ninguna")
-    }
-
-    pub fn available_rooms_count(&self) -> u32 {
-        catalog().rooms.iter().map(|r| r.available).sum()
     }
 
     pub fn blocked(&self, gold: u32) -> Option<&'static str> {

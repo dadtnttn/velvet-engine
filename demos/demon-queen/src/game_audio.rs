@@ -997,7 +997,10 @@ impl GameAudio {
                 clip.samples.clone(),
             ));
         }
-        sink.set_volume(volume * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Effects));
+        sink.set_volume(
+            volume
+                * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Effects),
+        );
         sink.detach();
     }
 
@@ -1012,7 +1015,12 @@ impl GameAudio {
         self.ambience.update(self.stream.mixer(), &scene, dt);
         // A scene's sound follows its slider as it is moved.
         if let Some(sink) = &self.scene {
-            sink.set_volume(SCENE_VOLUME * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Scenes));
+            sink.set_volume(
+                SCENE_VOLUME
+                    * crate::exploration3d::prefs::gain(
+                        crate::exploration3d::prefs::Channel::Scenes,
+                    ),
+            );
         }
         self.update_cave(
             scene.zone == Zone::Cave,
@@ -1054,7 +1062,10 @@ impl GameAudio {
         } else {
             sink.append(buffer);
         }
-        sink.set_volume(SCENE_VOLUME * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Scenes));
+        sink.set_volume(
+            SCENE_VOLUME
+                * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Scenes),
+        );
         self.scene = Some(sink);
     }
 
@@ -1075,7 +1086,8 @@ impl GameAudio {
         listener: Vec3,
         forward: Vec3,
     ) {
-        let ambience = crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience);
+        let ambience =
+            crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience);
         let air = if underground { 0.32 * ambience } else { 0.0 };
         let current = self.air.volume();
         self.air

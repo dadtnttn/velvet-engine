@@ -39,18 +39,37 @@ pub(crate) fn shot_key(dir: &Path) -> Option<String> {
     (!rest.is_empty()).then(|| format!("{PREFIX}{rest}"))
 }
 
+/// How a date's memory is named in the gallery's file (`cita:<picture under data/assets>`).
+pub(crate) const MEMORY: &str = "cita:";
+
+/// A date's memory has been shown (`@recuerdo`): the gallery's «Citas» album can show it now.
+pub(crate) fn memory(picture: &str) {
+    let picture = picture.trim().trim_matches('/');
+    if !picture.is_empty() {
+        note(format!("{MEMORY}{picture}"));
+    }
+}
+
 /// The shot in folder `dir` has been played: the gallery can show it from now on.
 pub(crate) fn shot(dir: &Path) {
     let Some(key) = shot_key(dir) else {
         return;
     };
+    note(key);
+}
+
+/// `key` into the gallery's file, once.
+fn note(key: String) {
     // The tests play scenes too; they leave the player's gallery alone.
     if cfg!(test) {
         return;
     }
     {
         let mut written = WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
-        if !written.get_or_insert_with(BTreeSet::new).insert(key.clone()) {
+        if !written
+            .get_or_insert_with(BTreeSet::new)
+            .insert(key.clone())
+        {
             return;
         }
     }
@@ -98,7 +117,10 @@ mod tests {
     #[test]
     fn a_shot_is_named_by_its_folder_under_the_assets_and_written_once() {
         assert_eq!(
-            shot_key(Path::new(r"C:\x\demon-queen\data\assets\burdel\alba\escena\rapido")).as_deref(),
+            shot_key(Path::new(
+                r"C:\x\demon-queen\data\assets\burdel\alba\escena\rapido"
+            ))
+            .as_deref(),
             Some("escena:burdel/alba/escena/rapido")
         );
         assert_eq!(shot_key(Path::new("nowhere/else")), None);

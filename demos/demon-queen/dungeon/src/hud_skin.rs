@@ -163,13 +163,68 @@ impl Hud {
         self.mid(v, text, x + 13.0, y + h * 0.5 + 0.5, size, INK);
         w
     }
+    /// A page's name on a ribbon, the Persona way: a slanted plate of the place's colour with a
+    /// hard shadow, the name in dark serif on it (shrunk to `max`); returns the ribbon's width.
+    fn title_ribbon(
+        &self,
+        v: &mut Vec<Vertex>,
+        text: &str,
+        x: f32,
+        y: f32,
+        size: f32,
+        max: f32,
+        tone: &Tone,
+    ) -> f32 {
+        let pad = size * 0.9;
+        let text_w = self
+            .in_face(Face::Serif, || self.width(text, size))
+            .min(max);
+        let w = text_w + pad * 2.0;
+        let h = size * 1.55;
+        let lean = glass::lean_for(h) * 1.6;
+        glass::slant(v, [x + 8.0, y + 8.0, w, h], lean, [0.0, 0.0, 0.0, 0.6]);
+        glass::slant(v, [x, y, w, h], lean, glass::alpha(tone.accent, 1.0));
+        glass::slant(v, [x, y, w, 3.0], 0.5, glass::alpha(tone.bright, 0.9));
+        glass::slant(
+            v,
+            [x - 12.0, y + h * 0.5, 10.0, h * 0.5],
+            2.0,
+            glass::alpha(tone.bright, 0.95),
+        );
+        self.in_face(Face::Serif, || {
+            self.mid_fit(v, text, x + pad, y + h * 0.5 + 1.0, size, max, INK)
+        });
+        w
+    }
     /// Text in the serif the menus give to names.
-    fn serif(&self, v: &mut Vec<Vertex>, text: &str, x: f32, cy: f32, size: f32, max: f32, color: Rgba) {
-        self.in_face(Face::Serif, || self.mid_fit(v, text, x, cy, size, max, color));
+    fn serif(
+        &self,
+        v: &mut Vec<Vertex>,
+        text: &str,
+        x: f32,
+        cy: f32,
+        size: f32,
+        max: f32,
+        color: Rgba,
+    ) {
+        self.in_face(Face::Serif, || {
+            self.mid_fit(v, text, x, cy, size, max, color)
+        });
     }
     /// Text in the menus' italic, for asides.
-    fn aside(&self, v: &mut Vec<Vertex>, text: &str, x: f32, cy: f32, size: f32, max: f32, color: Rgba) {
-        self.in_face(Face::Italic, || self.mid_fit(v, text, x, cy, size, max, color));
+    fn aside(
+        &self,
+        v: &mut Vec<Vertex>,
+        text: &str,
+        x: f32,
+        cy: f32,
+        size: f32,
+        max: f32,
+        color: Rgba,
+    ) {
+        self.in_face(Face::Italic, || {
+            self.mid_fit(v, text, x, cy, size, max, color)
+        });
     }
     /// The F prompt, in the game's Persona manner: a slanted dark plate with a wedge of the
     /// interaction's colour, the key on a slanted cap, the interaction's icon, the action big and
@@ -186,11 +241,24 @@ impl Hud {
         let width = (40.0 + key + 60.0 + 18.0 + text_w + 44.0).clamp(340.0, 1000.0);
         let (x, y, h, lean) = ((1920.0 - width) * 0.5, 770.0, 78.0, 14.0);
         let slant = |x: f32, y: f32, w: f32, h: f32, lean: f32| -> [[f32; 2]; 4] {
-            [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+            [
+                [x + lean, y],
+                [x + w + lean, y],
+                [x + w - lean, y + h],
+                [x - lean, y + h],
+            ]
         };
-        polygon(v, &slant(x + 9.0, y + 9.0, width, h, lean), [0.0, 0.0, 0.0, 0.55]);
+        polygon(
+            v,
+            &slant(x + 9.0, y + 9.0, width, h, lean),
+            [0.0, 0.0, 0.0, 0.55],
+        );
         // (This HUD's colours are linear: the game's ink 0e0816.)
-        polygon(v, &slant(x, y, width, h, lean), [0.0045, 0.0025, 0.0075, 0.95]);
+        polygon(
+            v,
+            &slant(x, y, width, h, lean),
+            [0.0045, 0.0025, 0.0075, 0.95],
+        );
         polygon(v, &slant(x, y, 18.0, h, lean), accent);
         line(
             v,
@@ -204,7 +272,11 @@ impl Hud {
         if prompt.keyed {
             let (kw, kh) = (46.0, 44.0);
             let top = mid - kh * 0.5;
-            polygon(v, &slant(cx + 3.0, top + 4.0, kw, kh, 5.0), [0.0, 0.0, 0.0, 0.7]);
+            polygon(
+                v,
+                &slant(cx + 3.0, top + 4.0, kw, kh, 5.0),
+                [0.0, 0.0, 0.0, 0.7],
+            );
             polygon(v, &slant(cx, top, kw, kh, 5.0), accent);
             polygon(
                 v,

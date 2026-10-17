@@ -373,10 +373,7 @@ impl App {
             self.missions.shown = None;
         }
         // The last scene of act 1 has played: the thanks comes up, once.
-        if !busy
-            && self.story.get("ajedrez_hecho") > 0
-            && self.story.get(THANKS_SHOWN) == 0
-        {
+        if !busy && self.story.get("ajedrez_hecho") > 0 && self.story.get(THANKS_SHOWN) == 0 {
             self.story.values.insert(THANKS_SHOWN.to_owned(), 1);
             self.thanks_pending = true;
         }

@@ -76,12 +76,6 @@ pub struct MascotView {
 }
 
 impl MascotView {
-    /// The top of her head on the screen (px): where her words hang from.
-    pub fn head(&self) -> [f32; 2] {
-        let h = self.height as f32 * self.squash[1] as f32 / 1000.0;
-        [self.feet[0] as f32, self.feet[1] as f32 - h * 0.98]
-    }
-
     pub fn shown(&self) -> bool {
         self.alpha > 0 && self.height > 0
     }

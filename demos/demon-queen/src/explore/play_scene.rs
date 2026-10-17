@@ -2918,7 +2918,10 @@ impl App {
         let art = super::shop_games::merchant_art();
         let portrait = |name: &'static str| {
             art.map(|crop| {
-                super::shop_games::merchant_face(if name.is_empty() { "contento" } else { name }, crop)
+                super::shop_games::merchant_face(
+                    if name.is_empty() { "contento" } else { name },
+                    crop,
+                )
             })
         };
         let mut deal = map_overlay::FavorDeal {
@@ -3018,9 +3021,6 @@ impl App {
             trance: s.hipno.trance,
             awake: s.hipno.awake,
             order: s.hipno.order.is_some(),
-            on_ring: s.hipno.on_ring,
-            lucid: s.hipno.lucid,
-            pleasure: s.hipno.pleasure,
             clip: s.reel.name(),
             gaze: s.hipno.gaze,
             ring: s.hipno.ring().1[0],
@@ -3056,15 +3056,11 @@ pub(super) struct PlayQa {
     pub(super) pose: usize,
     pub(super) listening: bool,
     pub(super) knocks: u32,
-    /// The hypnotist's game: the stage, trance, waking, an order open, on the ring, lucidity,
-    /// pleasure, the clip on show.
+    /// The hypnotist's game: the stage, trance, waking, an order open, the clip on show.
     pub(super) stage: usize,
     pub(super) trance: f32,
     pub(super) awake: f32,
     pub(super) order: bool,
-    pub(super) on_ring: bool,
-    pub(super) lucid: f32,
-    pub(super) pleasure: f32,
     pub(super) clip: &'static str,
     /// Her gaze and the ring across the picture (0..1); her mouth is busy.
     pub(super) gaze: f32,

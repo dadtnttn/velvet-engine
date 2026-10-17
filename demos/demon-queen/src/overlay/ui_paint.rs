@@ -498,6 +498,29 @@ pub(super) fn cutout(v: &mut Vec<MapVertex>, r: Rect, uv: ([f32; 2], [f32; 2]), 
     );
 }
 
+/// A cut of the portrait atlas masked to a rounded frame (`radius` half its side: a circle).
+pub(super) fn cutout_round(
+    v: &mut Vec<MapVertex>,
+    r: Rect,
+    uv: ([f32; 2], [f32; 2]),
+    tint: [f32; 4],
+    radius: f32,
+) {
+    let half = [r.w * 0.5, r.h * 0.5];
+    quad(
+        v,
+        center_of(r),
+        AXIS,
+        [half[0] + 1.5, half[1] + 1.5],
+        FACE,
+        [tint; 4],
+        [half[0], half[1], radius, 0.0],
+        [0.0; 4],
+        [0.0; 4],
+        Some((uv.0, uv.1, half)),
+    );
+}
+
 /// The scene's picture (bind group 3), masked to a rounded frame.
 pub(super) fn picture(v: &mut Vec<MapVertex>, r: Rect, radius: f32) {
     let half = [r.w * 0.5, r.h * 0.5];
@@ -739,8 +762,18 @@ pub(super) fn keycap(
 ) {
     let lean = (r.h * 0.18).min(8.0);
     let quad = |dx: f32, dy: f32, grow: f32| -> [[f32; 2]; 4] {
-        let (x, y, w, h) = (r.x + dx - grow, r.y + dy - grow, r.w + grow * 2.0, r.h + grow * 2.0);
-        [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+        let (x, y, w, h) = (
+            r.x + dx - grow,
+            r.y + dy - grow,
+            r.w + grow * 2.0,
+            r.h + grow * 2.0,
+        );
+        [
+            [x + lean, y],
+            [x + w + lean, y],
+            [x + w - lean, y + h],
+            [x - lean, y + h],
+        ]
     };
     let fill = |v: &mut Vec<MapVertex>, q: [[f32; 2]; 4], c: [f32; 4]| {
         push_triangle(v, [q[0], q[1], q[2]], c);
@@ -775,13 +808,20 @@ pub(super) fn keycap(
     } else {
         0xffffff
     };
-    let face_kind = Face::Display;
+    // A single letter in Anton (H, R, M…) closes up into a block at key size: those take the
+    // interface's sans.
+    let single = label.chars().count() == 1;
+    let face_kind = if single { Face::Ui } else { Face::Display };
     let fitted = {
         let room = r.w - lean - 2.0;
         // Anton is narrow: a size up, so the legend reads as the old face did.
-        let size = size * 1.3;
+        let size = if single { size * 1.15 } else { size * 1.3 };
         let w = text_width(font, face_kind, label, size);
-        if w > room { size * room / w } else { size }
+        if w > room {
+            size * room / w
+        } else {
+            size
+        }
     };
     let w = text_width(font, face_kind, label, fitted);
     text(
@@ -1089,26 +1129,17 @@ pub(super) fn wrap(
     size: f32,
     max_width: f32,
 ) -> Vec<String> {
-    use unicode_segmentation::UnicodeSegmentation;
     let s = &*tr(s);
     let mut lines = Vec::new();
     for paragraph in s.split('\n') {
         let mut line = String::new();
         for word in paragraph.split(' ') {
             // A word too wide for a line by itself (a language written without spaces: Chinese,
-            // Japanese, Thai) is broken between its letters.
+            // Japanese, Thai) is broken between its letters, by those languages' rules.
             let pieces: Vec<String> = if text_width(font, face, word, size) > max_width {
-                let mut out = Vec::new();
-                let mut piece = String::new();
-                for g in word.graphemes(true) {
-                    let longer = format!("{piece}{g}");
-                    if !piece.is_empty() && text_width(font, face, &longer, size) > max_width {
-                        out.push(std::mem::take(&mut piece));
-                    }
-                    piece.push_str(g);
-                }
-                out.push(piece);
-                out
+                demon_queen_dungeon::i18n::wrap_letters(word, max_width, |s| {
+                    text_width(font, face, s, size)
+                })
             } else {
                 vec![word.to_owned()]
             };

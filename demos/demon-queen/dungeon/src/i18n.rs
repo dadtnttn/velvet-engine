@@ -99,6 +99,42 @@ pub fn catalog_texts() -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// What never opens a line in Japanese or Chinese (kinsoku): closing marks, stops, small kana, the
+/// long vowel, the repeat marks.
+const NO_LINE_START: &str = "、。，．,.!?！？）)」』】〕〉》〙〗〟’”…‥ーゝゞヽヾぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ々〻・：；:;%％";
+/// What never ends one: opening marks.
+const NO_LINE_END: &str = "（(「『【〔〈《〘〖〝‘“";
+
+/// `text` (a script written without spaces between words: Chinese, Japanese, Thai) broken between
+/// its letters into lines no wider than `max` as `width` measures them, by the kinsoku rules: a
+/// closing mark, a small kana or the long vowel never opens a line (it hangs at the end of the one
+/// before), and an opening mark never ends one (it goes down with what it opens).
+pub fn wrap_letters(text: &str, max: f32, width: impl Fn(&str) -> f32) -> Vec<String> {
+    use unicode_segmentation::UnicodeSegmentation;
+    let starts = |g: &str| g.chars().next().is_some_and(|c| NO_LINE_START.contains(c));
+    let ends = |g: &str| g.chars().last().is_some_and(|c| NO_LINE_END.contains(c));
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for g in text.graphemes(true) {
+        if !line.is_empty() && !starts(g) && width(&format!("{line}{g}")) > max {
+            let mut keep = line.len();
+            for (i, h) in line.grapheme_indices(true).rev() {
+                if !ends(h) {
+                    break;
+                }
+                keep = i;
+            }
+            if keep > 0 {
+                let carry = line.split_off(keep);
+                lines.push(std::mem::replace(&mut line, carry));
+            }
+        }
+        line.push_str(if line.is_empty() { g.trim_start() } else { g });
+    }
+    lines.push(line);
+    lines
+}
+
 /// Whether the language is written right to left.
 pub fn is_rtl_language(code: &str) -> bool {
     matches!(code, "he" | "ar" | "fa" | "ur")
@@ -164,7 +200,10 @@ pub fn shape_line(bytes: &[u8], index: u32, k: f32, line: &str) -> Vec<(u16, f32
 /// One line in display order: its runs left to right, each with whether it reads right to left
 /// (the Unicode bidirectional algorithm; a line with no right-to-left text is one run).
 pub fn visual_runs(line: &str) -> Vec<(String, bool)> {
-    if !line.chars().any(|c| matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF)) {
+    if !line
+        .chars()
+        .any(|c| matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF))
+    {
         return vec![(line.to_owned(), false)];
     }
     let info = unicode_bidi::BidiInfo::new(line, None);
@@ -247,7 +286,10 @@ fn load(folders: &[PathBuf], code: &str) -> Option<Catalog> {
         let (a, b) = (sentences(source), sentences(target));
         if a.len() > 1 && a.len() == b.len() {
             for k in 1..a.len() {
-                prefixes.push((a[..k].concat().trim_end().to_owned(), b[..k].concat().trim_end().to_owned()));
+                prefixes.push((
+                    a[..k].concat().trim_end().to_owned(),
+                    b[..k].concat().trim_end().to_owned(),
+                ));
             }
         }
     }
@@ -329,7 +371,10 @@ fn template(source: &str, out: &str) -> Option<Template> {
 fn fill(t: &Template, s: &str) -> Option<Vec<String>> {
     let first = &t.parts[0];
     let last = t.parts.last().unwrap();
-    if !s.starts_with(first.as_str()) || !s.ends_with(last.as_str()) || s.len() < first.len() + last.len() {
+    if !s.starts_with(first.as_str())
+        || !s.ends_with(last.as_str())
+        || s.len() < first.len() + last.len()
+    {
         return None;
     }
     let body = &s[first.len()..s.len() - last.len()];
@@ -411,8 +456,16 @@ fn translate(catalog: &Catalog, s: &str, depth: u8) -> Option<String> {
                 let mut taken = false;
                 for j in (i + 1..=parts.len()).rev() {
                     let run = parts[i..j].concat();
+                    // The space or line break before a sentence comes with it: keep it, or the
+                    // sentences come out glued («One.Two.»). A space after a full-width stop is
+                    // not written in Chinese or Japanese.
+                    let lead = &run[..run.len() - run.trim_start().len()];
                     let tail = &run[run.trim_end().len()..];
                     if let Some(t) = translate(catalog, run.trim(), depth + 1) {
+                        let cjk_stop = out.ends_with(['。', '！', '？', '」', '』']);
+                        if lead.contains('\n') || !cjk_stop {
+                            out.push_str(lead);
+                        }
                         out.push_str(&t);
                         out.push_str(tail);
                         any = true;
@@ -494,9 +547,12 @@ pub fn tr(s: &str) -> Cow<'_, str> {
     let found = translate(&catalog, s, 0);
     // In a language not written in Latin letters, any word in them with no entry is suspect too
     // («mirarlo» reads as nothing in particular, but it is no Russian).
-    let latin_left = !matches!(catalog.code.as_str(), "es" | "en" | "pt-BR" | "de" | "fr" | "it" | "pl")
-        && s.split(|c: char| !c.is_ascii_alphabetic())
-            .any(|w| w.len() >= 3 && w.chars().any(|c| c.is_ascii_lowercase()));
+    let latin_left = !matches!(
+        catalog.code.as_str(),
+        "es" | "en" | "pt-BR" | "de" | "fr" | "it" | "pl"
+    ) && s
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .any(|w| w.len() >= 3 && w.chars().any(|c| c.is_ascii_lowercase()));
     if found.is_none() && !catalog.outputs.contains(s) && (looks_spanish(s) || latin_left) {
         note_missing(s);
     }
@@ -580,9 +636,13 @@ pub fn is_sign(path: &std::path::Path, index: usize) -> bool {
         return false;
     };
     languages.flatten().any(|language| {
-        ["png", "jpg"]
-            .iter()
-            .any(|ext| language.path().join(file).join(format!("{index}.{ext}")).is_file())
+        ["png", "jpg"].iter().any(|ext| {
+            language
+                .path()
+                .join(file)
+                .join(format!("{index}.{ext}"))
+                .is_file()
+        })
     })
 }
 
@@ -597,10 +657,10 @@ pub fn looks_spanish(s: &str) -> bool {
         return true;
     }
     const WORDS: [&str; 44] = [
-        "de", "la", "el", "los", "las", "que", "con", "por", "para", "una", "del", "al", "tu", "su",
-        "sus", "es", "se", "lo", "le", "mi", "y", "ya", "muy", "pero", "un", "en", "te", "me", "sin",
-        "hay", "esto", "eso", "aquí", "ahora", "hoy", "nada", "algo", "todo", "otra", "otro", "usted",
-        "puedo", "oro", "señora",
+        "de", "la", "el", "los", "las", "que", "con", "por", "para", "una", "del", "al", "tu",
+        "su", "sus", "es", "se", "lo", "le", "mi", "y", "ya", "muy", "pero", "un", "en", "te",
+        "me", "sin", "hay", "esto", "eso", "aquí", "ahora", "hoy", "nada", "algo", "todo", "otra",
+        "otro", "usted", "puedo", "oro", "señora",
     ];
     s.split(|c: char| !c.is_alphabetic())
         .any(|w| WORDS.contains(&w.to_lowercase().as_str()))
@@ -615,7 +675,11 @@ fn note_missing(s: &str) {
     if !seen.lock().unwrap().insert(s.to_owned()) {
         return;
     }
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
         let _ = writeln!(f, "{}", serde_json::to_string(s).unwrap_or_default());
     }
 }
@@ -645,6 +709,27 @@ mod tests {
     }
 
     #[test]
+    fn letters_break_by_kinsoku() {
+        let chars = |s: &str| s.chars().count() as f32;
+        // A stop or a comma hangs at the end of the line instead of opening the next one.
+        assert_eq!(
+            wrap_letters("あいうえお、かきくけこ。", 5.0, chars),
+            ["あいうえお、", "かきくけこ。"]
+        );
+        // An opening mark goes down with what it opens.
+        assert_eq!(
+            wrap_letters("あいうえ「かきく」", 5.0, chars),
+            ["あいうえ", "「かきく」"]
+        );
+        // The small kana and the long vowel stay with the letter before them.
+        assert_eq!(
+            wrap_letters("あいうえおっー", 5.0, chars),
+            ["あいうえおっー"]
+        );
+        assert_eq!(wrap_letters("短い", 5.0, chars), ["短い"]);
+    }
+
+    #[test]
     fn exact_holes_nested_and_lines() {
         let c = catalog(&[
             ("Hablar", "Talk"),
@@ -655,19 +740,36 @@ mod tests {
         ]);
         assert_eq!(translate(&c, "Hablar", 0).as_deref(), Some("Talk"));
         assert_eq!(translate(&c, "  Hablar ", 0).as_deref(), Some("  Talk "));
-        assert_eq!(translate(&c, "Guardia 45%", 0).as_deref(), Some("Guard 45%"));
+        assert_eq!(
+            translate(&c, "Guardia 45%", 0).as_deref(),
+            Some("Guard 45%")
+        );
         assert_eq!(
             translate(&c, "Poción reforzada: +80 vitalidad.", 0).as_deref(),
             Some("Strong potion: +80 vitality.")
         );
-        assert_eq!(translate(&c, "Hablar\nMañana", 0).as_deref(), Some("Talk\nTomorrow"));
+        assert_eq!(
+            translate(&c, "Hablar\nMañana", 0).as_deref(),
+            Some("Talk\nTomorrow")
+        );
         assert_eq!(translate(&c, "Nada que ver", 0), None);
+        // Sentences translated one by one keep the space or the line break between them.
+        let s = catalog(&[("Uno.", "One."), ("Dos.", "Two."), ("Tres.", "三。")]);
+        assert_eq!(translate(&s, "Uno. Dos.", 0).as_deref(), Some("One. Two."));
+        assert_eq!(
+            translate(&s, "Uno.\nDos.", 0).as_deref(),
+            Some("One.\nTwo.")
+        );
+        assert_eq!(translate(&s, "Tres. Tres.", 0).as_deref(), Some("三。三。"));
         // Holes of a template with hardly any words only take numbers.
         let c = catalog(&[("{0} de {1}", "{0} of {1}"), ("Hablar", "Talk")]);
         assert_eq!(translate(&c, "3 de 5", 0).as_deref(), Some("3 of 5"));
         assert_eq!(translate(&c, "nunca está de más", 0), None);
         // Decorations and pieces.
         assert_eq!(translate(&c, "«Hablar»", 0).as_deref(), Some("“Talk”"));
-        assert_eq!(translate(&c, "Hablar · 3 de 5", 0).as_deref(), Some("Talk · 3 of 5"));
+        assert_eq!(
+            translate(&c, "Hablar · 3 de 5", 0).as_deref(),
+            Some("Talk · 3 of 5")
+        );
     }
 }

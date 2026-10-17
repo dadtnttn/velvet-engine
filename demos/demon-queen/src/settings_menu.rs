@@ -13,8 +13,8 @@ use crate::exploration3d::prefs::{self, Channel};
 use crate::exploration3d::ui_sfx::{self, UiSfx};
 use crate::localization::Language;
 use crate::menu_ui::{self as ui, Rect, GOLD, INK, MUTED};
-use crate::render::{Canvas, Fonts};
 use crate::pause_menu::{Page, SETTINGS_AREA};
+use crate::render::{Canvas, Fonts};
 use crate::title_menu::OPTIONS_AREA;
 use crate::{App, Screen};
 
@@ -326,7 +326,10 @@ fn step(row: Row, delta: i32) -> Effect {
         }
         Row::Sensitivity | Row::Volume(_) | Row::Gfx(_) => {
             let (now, least, most) = bar(row).unwrap_or((0, 0, 10));
-            set(row, (now as i32 + delta).clamp(least as i32, most as i32) as u8)
+            set(
+                row,
+                (now as i32 + delta).clamp(least as i32, most as i32) as u8,
+            )
         }
     }
 }
@@ -362,7 +365,11 @@ fn step_graphics(row: Gfx, delta: i32) -> prefs::Graphics {
     match row {
         Gfx::Preset => {
             // Low, medium, high, maximum (custom is only reached by hand).
-            let from = if g.preset >= prefs::PRESET_CUSTOM { 3 } else { g.preset };
+            let from = if g.preset >= prefs::PRESET_CUSTOM {
+                3
+            } else {
+                g.preset
+            };
             return prefs::Graphics::preset(cycle(from, 4));
         }
         Gfx::Shadows => g.shadows = cycle(g.shadows, 4),
@@ -370,8 +377,12 @@ fn step_graphics(row: Gfx, delta: i32) -> prefs::Graphics {
         Gfx::Reflections => g.reflections = !g.reflections,
         Gfx::Bloom => g.bloom = cycle(g.bloom, 3),
         Gfx::RenderScale => {
-            let at = prefs::RENDER_SCALES.iter().position(|&v| v == g.render_scale).unwrap_or(5);
-            g.render_scale = prefs::RENDER_SCALES[cycle(at as u8, prefs::RENDER_SCALES.len() as u8) as usize];
+            let at = prefs::RENDER_SCALES
+                .iter()
+                .position(|&v| v == g.render_scale)
+                .unwrap_or(5);
+            g.render_scale =
+                prefs::RENDER_SCALES[cycle(at as u8, prefs::RENDER_SCALES.len() as u8) as usize];
         }
         Gfx::Upscaler => g.upscaler = cycle(g.upscaler, 2),
         Gfx::Dynamic => g.dynamic = cycle(g.dynamic, 3),
@@ -743,13 +754,7 @@ fn speed_name(language: Language, speed: u8) -> &'static str {
 }
 
 /// Paints the panel at `area`.
-pub(crate) fn paint(
-    canvas: &mut Canvas,
-    fonts: &Fonts,
-    s: &SettingsUi,
-    area: Area,
-    shown: &Shown,
-) {
+pub(crate) fn paint(canvas: &mut Canvas, fonts: &Fonts, s: &SettingsUi, area: Area, shown: &Shown) {
     let language = shown.language;
     let light = shown.light;
     let accent = ui::accent(light);
@@ -795,7 +800,16 @@ pub(crate) fn paint(
         );
         let ink = if open { ui::ink_on(accent) } else { INK };
         let size = ui::fit_size(fonts, name, r.2 - 40, 21.0, true);
-        ui::text_center(canvas, fonts, name, r.0 + r.2 / 2, r.1 + r.3 / 2, size, ink, true);
+        ui::text_center(
+            canvas,
+            fonts,
+            name,
+            r.0 + r.2 / 2,
+            r.1 + r.3 / 2,
+            size,
+            ink,
+            true,
+        );
     }
 
     // ---- the rows
@@ -821,9 +835,27 @@ pub(crate) fn paint(
         let (name, hint) = label(language, row);
         let words_w = r.2 - CONTROL_W - 90;
         let name_size = ui::fit_size(fonts, name, words_w, 24.0, true);
-        ui::text_mid(canvas, fonts, name, r.0 + 34, r.1 + 29, name_size, INK, true);
+        ui::text_mid(
+            canvas,
+            fonts,
+            name,
+            r.0 + 34,
+            r.1 + 29,
+            name_size,
+            INK,
+            true,
+        );
         let hint_size = ui::fit_size(fonts, hint, words_w, 16.0, false);
-        ui::text_mid(canvas, fonts, hint, r.0 + 34, r.1 + 57, hint_size, MUTED, false);
+        ui::text_mid(
+            canvas,
+            fonts,
+            hint,
+            r.0 + 34,
+            r.1 + 57,
+            hint_size,
+            MUTED,
+            false,
+        );
 
         if let Some((value, least, most)) = bar(row) {
             for step in 0..10usize {
@@ -894,7 +926,16 @@ pub(crate) fn paint(
         } else {
             let previous = previous_rect(r);
             let next = next_rect(r);
-            ui::pill(canvas, fonts, previous, "‹", over(previous), true, light, false);
+            ui::pill(
+                canvas,
+                fonts,
+                previous,
+                "‹",
+                over(previous),
+                true,
+                light,
+                false,
+            );
             ui::pill(canvas, fonts, next, "›", over(next), true, light, false);
             let gfx_value;
             let value = match row {
@@ -931,16 +972,36 @@ pub(crate) fn paint(
         let more = format!(
             "{}{} {}–{} / {}",
             if first > 0 { "▲ " } else { "" },
-            if first + shown_rows < rows(s.tab).len() { "▼" } else { "" },
+            if first + shown_rows < rows(s.tab).len() {
+                "▼"
+            } else {
+                ""
+            },
             first + 1,
             first + shown_rows,
             rows(s.tab).len()
         );
-        ui::text_right(canvas, fonts, &more, area.0 + area.2 - 8, below + 18, 17.0, MUTED, true);
+        ui::text_right(
+            canvas,
+            fonts,
+            &more,
+            area.0 + area.2 - 8,
+            below + 18,
+            17.0,
+            MUTED,
+            true,
+        );
         note_right = Some(area.0 + area.2 - 8 - fonts.text_width(&more, 17.0, true) - 28);
     }
     match s.tab {
-        0 => paint_preview(canvas, fonts, s, (area.0, below, area.2, 150), language, light),
+        0 => paint_preview(
+            canvas,
+            fonts,
+            s,
+            (area.0, below, area.2, 150),
+            language,
+            light,
+        ),
         1 => {
             ui::text_mid(
                 canvas,
@@ -984,11 +1045,26 @@ pub(crate) fn paint(
                     ui::text_right(canvas, fonts, note, right, below + 18, 17.0, MUTED, false)
                 }
                 None => {
-                    ui::text_mid(canvas, fonts, note, area.0 + 8, below + 18, 17.0, MUTED, false);
+                    ui::text_mid(
+                        canvas,
+                        fonts,
+                        note,
+                        area.0 + 8,
+                        below + 18,
+                        17.0,
+                        MUTED,
+                        false,
+                    );
                 }
             }
         }
-        _ => paint_controls(canvas, fonts, (area.0, area.1 + ROWS_TOP, area.2), language, light),
+        _ => paint_controls(
+            canvas,
+            fonts,
+            (area.0, area.1 + ROWS_TOP, area.2),
+            language,
+            light,
+        ),
     }
 }
 
@@ -1076,7 +1152,10 @@ fn paint_controls(canvas: &mut Canvas, fonts: &Fonts, area: Area, language: Lang
             t("COMBATE · VARRAK", "FIGHT · VARRAK"),
             &[
                 (t("Clic", "Click"), t("espada", "sword")),
-                (t("Clic dcho.", "Right click"), t("sello (mantener)", "seal (hold)")),
+                (
+                    t("Clic dcho.", "Right click"),
+                    t("sello (mantener)", "seal (hold)"),
+                ),
                 ("Mayús", t("correr", "run")),
                 (t("Espacio", "Space"), t("saltar la onda", "jump the wave")),
                 ("Q", t("curarse (mochila)", "heal (backpack)")),
@@ -1091,7 +1170,10 @@ fn paint_controls(canvas: &mut Canvas, fonts: &Fonts, area: Area, language: Lang
                 ("F9", t("cargar", "load")),
                 ("F11", t("pantalla completa", "full screen")),
                 ("Enter", t("avanzar · aceptar", "next · accept")),
-                (t("Rueda ↑", "Wheel ↑"), t("diálogo anterior", "previous line")),
+                (
+                    t("Rueda ↑", "Wheel ↑"),
+                    t("diálogo anterior", "previous line"),
+                ),
                 ("1-4", t("elegir respuesta", "pick an answer")),
                 ("U", t("usar (en la mochila)", "use (backpack)")),
             ],
@@ -1253,7 +1335,10 @@ mod tests {
         assert_eq!(changed.preset, prefs::PRESET_CUSTOM);
         assert_eq!(changed.shadows, 1);
         // Maximum is the renderer's full look.
-        assert_eq!(prefs::Graphics::MAXIMUM.quality(), velvet_render::Quality3D::default());
+        assert_eq!(
+            prefs::Graphics::MAXIMUM.quality(),
+            velvet_render::Quality3D::default()
+        );
         prefs::set_graphics(prefs::Graphics::MAXIMUM);
     }
 
@@ -1262,13 +1347,22 @@ mod tests {
         let mut s = SettingsUi::default();
         for i in 0..TABS {
             let r = tab_rect(AREA, i);
-            assert_eq!(hit(&s, AREA, r.0 + r.2 / 2, r.1 + r.3 / 2), Some(Hit::Tab(i)));
+            assert_eq!(
+                hit(&s, AREA, r.0 + r.2 / 2, r.1 + r.3 / 2),
+                Some(Hit::Tab(i))
+            );
         }
         let row = row_rect(AREA, 0);
         let p = previous_rect(row);
         let n = next_rect(row);
-        assert_eq!(hit(&s, AREA, p.0 + p.2 / 2, p.1 + p.3 / 2), Some(Hit::Row(0, Part::Previous)));
-        assert_eq!(hit(&s, AREA, n.0 + n.2 / 2, n.1 + n.3 / 2), Some(Hit::Row(0, Part::Next)));
+        assert_eq!(
+            hit(&s, AREA, p.0 + p.2 / 2, p.1 + p.3 / 2),
+            Some(Hit::Row(0, Part::Previous))
+        );
+        assert_eq!(
+            hit(&s, AREA, n.0 + n.2 / 2, n.1 + n.3 / 2),
+            Some(Hit::Row(0, Part::Next))
+        );
         s.set_tab(1);
         let row = row_rect(AREA, 2);
         for step in 0..10 {
@@ -1279,7 +1373,10 @@ mod tests {
             );
         }
         let first = segment_rect(row, 0);
-        assert_eq!(hit(&s, AREA, first.0 - 10, first.1 + 4), Some(Hit::Row(2, Part::Set(0))));
+        assert_eq!(
+            hit(&s, AREA, first.0 - 10, first.1 + 4),
+            Some(Hit::Row(2, Part::Set(0)))
+        );
         assert_eq!(hit(&s, AREA, AREA.0 - 20, row.1 + 10), None);
     }
 }

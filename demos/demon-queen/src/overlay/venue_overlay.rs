@@ -20,7 +20,6 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Hit {
-    Tab(usize),
     Item(usize),
     Action,
     Talk,

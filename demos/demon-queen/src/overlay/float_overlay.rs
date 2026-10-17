@@ -68,7 +68,9 @@ fn pop(t: f32, over: f32) -> f32 {
 }
 
 /// `over`: her feet and how tall she stands on the screen when she is out in 3D (the balloons come
-/// from her head); `None`: from her medallion.
+/// from her head); `None`: from her medallion. `dock`: over a full page of cards (the court's) only
+/// the newest is shown, hung by its top right corner at that point in the page's free strip, so it
+/// never sits on what is being chosen.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw(
     font: &FontAtlas,
@@ -78,12 +80,27 @@ pub(super) fn draw(
     floats: &[FloatLine],
     faces: &[Option<Uv>],
     over: Option<([f32; 2], f32)>,
+    dock: Option<[f32; 2]>,
     time: f32,
 ) {
     if floats.is_empty() {
         return;
     }
     let s = h / 1080.0;
+    if let Some(at) = dock {
+        let left = docked(font, v, floats.last().expect("a float"), at, time, s);
+        if let Some(x) = left {
+            medallion(
+                v,
+                [x - 44.0 * s, at[1] + 52.0 * s],
+                floats,
+                faces,
+                time,
+                s * 0.75,
+            );
+        }
+        return;
+    }
     let (mouth, top) = match over {
         Some((feet, tall)) => {
             // Her mouth, a little to the side her face is on, and the top of her head.
@@ -343,6 +360,70 @@ fn balloons(
         }
         let _ = h;
     }
+}
+
+/// The newest balloon alone, hung from `at` (its top right corner), popping in where it hangs;
+/// returns its left edge (her medallion goes there), `None` once it has faded.
+fn docked(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    f: &FloatLine,
+    at: [f32; 2],
+    time: f32,
+    s: f32,
+) -> Option<f32> {
+    let age = f.age_ms as f32 / 1000.0;
+    let left = (f.life_ms as f32 - f.age_ms as f32) / 1000.0;
+    let alpha = (left / 0.45).clamp(0.0, 1.0);
+    if alpha <= 0.0 {
+        return None;
+    }
+    // A little smaller and wider than over her head: the strip is wide and short.
+    let lk = look(f.mood, s * 0.9);
+    let pad = [24.0 * s, 16.0 * s];
+    let lines = wrap(font, lk.face, &f.text, lk.size, 500.0 * s - pad[0] * 2.0);
+    let text_w = lines
+        .iter()
+        .map(|l| text_width(font, lk.face, l, lk.size))
+        .fold(0.0, f32::max);
+    let line_h = lk.size * 1.32;
+    let (mut bw, mut bh) = (
+        (text_w + pad[0] * 2.0).max(150.0 * s),
+        lines.len() as f32 * line_h + pad[1] * 2.0,
+    );
+    if f.mood == 4 {
+        bw *= 1.22;
+        bh *= 1.35;
+    }
+    // Under her name's tab, which stands above the balloon's top.
+    let r = Rect::new(at[0] - bw, at[1] + 14.0 * s, bw, bh);
+    let grow = pop(age / 0.24, if f.mood == 4 { 2.2 } else { 1.4 }).max(0.05);
+    let shake = if f.mood == 1 || f.mood == 4 {
+        (age * 46.0).sin() * 6.0 * s * (-age * 4.0).exp()
+    } else {
+        0.0
+    };
+    faded(v, alpha, |v| {
+        scaled(v, [r.x + r.w, r.y], grow, |v| {
+            shifted(v, [shake, 0.0], |v| {
+                balloon(
+                    font,
+                    v,
+                    r,
+                    None,
+                    f,
+                    &lk,
+                    &lines,
+                    line_h,
+                    pad,
+                    age,
+                    time,
+                    s * 0.9,
+                );
+            });
+        });
+    });
+    Some(r.x)
 }
 
 /// One balloon: its shadow, its tail, its shape by mood, her name on a tab, and its words typing out.

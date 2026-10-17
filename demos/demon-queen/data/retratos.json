@@ -607,5 +607,31 @@
     "piensa": "duda",
     "pensativa": "duda",
     "sorprendida": "sorpresa"
+  },
+  "maren": {
+    "normal": {
+      "imagen": "corte_vn/prisionera_normal",
+      "recorte": [340, 20, 420, 420]
+    },
+    "seria": {
+      "imagen": "corte_vn/prisionera_seria",
+      "recorte": [340, 20, 420, 420]
+    },
+    "enfadada": {
+      "imagen": "corte_vn/prisionera_enfadada",
+      "recorte": [340, 20, 420, 420]
+    },
+    "triste": {
+      "imagen": "corte_vn/prisionera_triste",
+      "recorte": [340, 20, 420, 420]
+    },
+    "sorpresa": {
+      "imagen": "corte_vn/prisionera_sorpresa",
+      "recorte": [340, 20, 420, 420]
+    },
+    "sonrisa": {
+      "imagen": "corte_vn/prisionera_sonrisa",
+      "recorte": [340, 20, 420, 420]
+    }
   }
 }

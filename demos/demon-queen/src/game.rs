@@ -4,11 +4,11 @@
 //! [`SceneView`], while this module owns rooms, characters, conditions,
 //! effects, choices, validation and persistence.
 
-use std::sync::Arc;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -134,11 +134,11 @@ pub struct ImagePlanEntry {
 
 #[derive(Debug, Clone)]
 pub struct GalleryEntry {
+    /// The scene node it comes from (the tests check the gallery is the new prologue's).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub node_id: String,
     pub asset: String,
-    pub room_id: String,
     pub room_name: String,
-    pub speaker_id: String,
     pub speaker: String,
     pub text: String,
 }
@@ -566,9 +566,7 @@ impl StoryRuntime {
             entries.push(GalleryEntry {
                 node_id: node.id.clone(),
                 asset: asset.to_string(),
-                room_id: node.room.clone(),
                 room_name: room.name.clone(),
-                speaker_id: node.speaker.clone(),
                 speaker,
                 text: node.text.clone(),
             });
@@ -1335,7 +1333,8 @@ impl Game {
 
     fn record_gallery(&self) -> Result<()> {
         // Asked every second in the world: read and written only when something new shows.
-        static KNOWN: std::sync::Mutex<Option<(PathBuf, BTreeSet<String>)>> = std::sync::Mutex::new(None);
+        static KNOWN: std::sync::Mutex<Option<(PathBuf, BTreeSet<String>)>> =
+            std::sync::Mutex::new(None);
         let path = gallery_path();
         let wanted = self.story.gallery_assets_for_state(&self.state);
         let mut known = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
@@ -1365,7 +1364,11 @@ impl Game {
             schema: SAVE_SCHEMA,
             saved_at: now_unix(),
             state: self.state.clone(),
-            rollback: self.rollback.iter().map(|state| (**state).clone()).collect(),
+            rollback: self
+                .rollback
+                .iter()
+                .map(|state| (**state).clone())
+                .collect(),
             world3d: self.world3d.clone(),
             thumbnail: None,
         }

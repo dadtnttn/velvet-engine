@@ -292,20 +292,18 @@ impl Hud {
 
         // Header.
         glass::pane(v, [48.0, 36.0, 1824.0, 84.0], 26.0, &tone, 1.0);
-        glass::diamond(v, [78.0, 78.0], 7.0, tone.accent);
-        glass::diamond(v, [78.0, 78.0], 3.0, [0.0, 0.0, 0.0, 1.0]);
-        self.serif(
+        let title_w = self.title_ribbon(
             v,
             if run.debug {
                 "Atlas técnico"
             } else {
                 "Carta de la expedición"
             },
-            98.0,
-            64.0,
-            34.0,
-            900.0,
-            IVORY,
+            74.0,
+            44.0,
+            30.0,
+            700.0,
+            &tone,
         );
         self.aside(
             v,
@@ -314,11 +312,11 @@ impl Hud {
             } else {
                 "Solo lo que has pisado se traza sólido; lo entrevisto, punteado"
             },
-            100.0,
-            98.0,
-            15.0,
-            900.0,
-            MUTED,
+            74.0 + title_w + 30.0,
+            68.0,
+            16.0,
+            1180.0 - title_w,
+            IVORY,
         );
         let region = if biome.id == "forgotten_masonry" {
             "Vestíbulos olvidados"
@@ -336,7 +334,11 @@ impl Hud {
 
         // The 3D chart.
         let vp = VIEWPORT;
-        super::rect(v, [vp[0] + 8.0, vp[1] + 8.0, vp[2], vp[3]], [0.0, 0.0, 0.0, 0.5]);
+        super::rect(
+            v,
+            [vp[0] + 8.0, vp[1] + 8.0, vp[2], vp[3]],
+            [0.0, 0.0, 0.0, 0.5],
+        );
         glass::round(
             v,
             vp,
@@ -369,7 +371,14 @@ impl Hud {
         let (low, high) = self.altitude_range(run);
         let (x, y) = (vp[0] + 30.0, vp[1] + 26.0);
         glass::pane(v, [x - 14.0, y - 12.0, 262.0, 74.0], 18.0, tone, 0.8);
-        self.text(v, "ALTITUD", x + 4.0, y - 3.0, 12.0, alpha(tone.accent, 0.95));
+        self.text(
+            v,
+            "ALTITUD",
+            x + 4.0,
+            y - 3.0,
+            12.0,
+            alpha(tone.accent, 0.95),
+        );
         let bar = [x, y + 22.0, 232.0, 10.0];
         let slices = 14;
         for i in 0..slices {
@@ -796,23 +805,23 @@ impl Hud {
         let x = r[0] + 46.0;
         let w = r[2] - 92.0;
         self.compass(v, [x + 30.0, r[1] + 62.0], 0.0, &tone);
-        self.serif(
+        self.title_ribbon(
             v,
             "Reproducir una expedición",
             x + 84.0,
-            r[1] + 52.0,
-            32.0,
-            w - 90.0,
-            IVORY,
+            r[1] + 26.0,
+            28.0,
+            w - 170.0,
+            &tone,
         );
         self.aside(
             v,
             "Cada semilla talla siempre la misma caverna",
-            x + 86.0,
-            r[1] + 92.0,
+            x + 92.0,
+            r[1] + 98.0,
             17.0,
-            w - 90.0,
-            MUTED,
+            w - 100.0,
+            IVORY,
         );
         glass::segment(
             v,
@@ -832,7 +841,12 @@ impl Hud {
         );
         // Input well with a blinking caret.
         let field = [x, r[1] + 170.0, w, 72.0];
-        glass::slant(v, [field[0] + 5.0, field[1] + 5.0, field[2], field[3]], 10.0, [0.0, 0.0, 0.0, 0.5]);
+        glass::slant(
+            v,
+            [field[0] + 5.0, field[1] + 5.0, field[2], field[3]],
+            10.0,
+            [0.0, 0.0, 0.0, 0.5],
+        );
         glass::slant(v, field, 10.0, alpha(glass::INK, 0.97));
         glass::slant_outline(v, field, 10.0, 1.8, alpha(tone.accent, 0.85));
         let shown = if seed.is_empty() { "" } else { seed };

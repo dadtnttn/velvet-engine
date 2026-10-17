@@ -75,6 +75,8 @@ pub(crate) struct StageView {
     pub stamp: Option<(String, bool, f32)>,
     /// Seconds since the last flash (large: none).
     pub flash: f32,
+    /// A date's memory coming on (`@recuerdo`): its name and seconds since (the ribbon).
+    pub memory: Option<(String, f32)>,
     pub item: Option<StageItem>,
     /// The triptych's panels, left to right.
     pub panels: Vec<Option<StagePanel>>,
@@ -201,7 +203,9 @@ fn actor_rect(
     height: f32,
 ) -> Rect {
     let scale = if scale > 0.0 { scale } else { 1.0 };
-    let cx = x.map_or(if right { width * 0.735 } else { width * 0.265 }, |f| width * f);
+    let cx = x.map_or(if right { width * 0.735 } else { width * 0.265 }, |f| {
+        width * f
+    });
     if let Some(part) = window {
         let h = height * scale;
         let w = h * info.size[0] / info.size[1].max(1.0);
@@ -228,7 +232,9 @@ fn bezier(x1: f32, y1: f32, x2: f32, y2: f32, t: f32) -> f32 {
         3.0 * (1.0 - u) * (1.0 - u) * u * a + 3.0 * (1.0 - u) * u * u * b + u * u * u
     };
     let slope = |u: f32| {
-        3.0 * (1.0 - u) * (1.0 - u) * x1 + 6.0 * (1.0 - u) * u * (x2 - x1) + 3.0 * u * u * (1.0 - x2)
+        3.0 * (1.0 - u) * (1.0 - u) * x1
+            + 6.0 * (1.0 - u) * u * (x2 - x1)
+            + 3.0 * u * u * (1.0 - x2)
     };
     let mut u = t;
     for _ in 0..8 {
@@ -312,10 +318,26 @@ pub(crate) fn pictures(
         let moved = bezier(0.2, 0.9, 0.25, 1.0, t / 0.45);
         let shown = ease(t / 0.3);
         if let Some(prev) = view.speaker_prev.filter(|p| Some(*p) != view.speaker) {
-            speaker_slash(&mut run.vertices, width, height, prev, 1.0 - shown, moved, &lk);
+            speaker_slash(
+                &mut run.vertices,
+                width,
+                height,
+                prev,
+                1.0 - shown,
+                moved,
+                &lk,
+            );
         }
         if let Some(side) = view.speaker {
-            speaker_slash(&mut run.vertices, width, height, side, shown, 1.0 - moved, &lk);
+            speaker_slash(
+                &mut run.vertices,
+                width,
+                height,
+                side,
+                shown,
+                1.0 - moved,
+                &lk,
+            );
         }
     }
     // The cast: the dimmed one first, the one speaking over her.
@@ -629,7 +651,12 @@ fn an(css: f32) -> f32 {
 fn soft_rect(v: &mut Vec<MapVertex>, r: Rect, color: [f32; 4]) {
     poly(
         v,
-        &[[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]],
+        &[
+            [r.x, r.y],
+            [r.x + r.w, r.y],
+            [r.x + r.w, r.y + r.h],
+            [r.x, r.y + r.h],
+        ],
         color,
     );
 }
@@ -690,23 +717,6 @@ fn rim(v: &mut Vec<MapVertex>, c: &[[f32; 2]], width: f32, color: [f32; 4]) {
     for i in 0..c.len() {
         line(v, c[i], c[(i + 1) % c.len()], width, color);
     }
-}
-
-/// Words with a thick rim around them (a stamp's), the rim drawn as the words shifted all round.
-#[allow(clippy::too_many_arguments)]
-fn stroked(
-    font: &FontAtlas,
-    v: &mut Vec<MapVertex>,
-    face: Face,
-    s: &str,
-    x: f32,
-    y: f32,
-    size: f32,
-    fill: [f32; 4],
-    stroke: [f32; 4],
-    width: f32,
-) {
-    text_rimmed(font, v, face, s, x, y, size, fill, width, stroke);
 }
 
 /// `lines` with only their first `shown` characters (the line typing itself out).
@@ -831,7 +841,8 @@ pub(crate) fn draw_box(
 ) {
     let s = height / 1080.0;
     let lk = look(theme);
-    let chiquita = view.kind == 0 && view.name.to_lowercase().starts_with("chiquita");
+    // By her id: her name on show is translated («Tiny» in English), and then her line went nowhere.
+    let chiquita = view.kind == 0 && view.speaker == "chiquita";
     if !view.choices.is_empty() {
         draw_choices(font, v, width, height, view, line_age, &lk);
         return;
@@ -903,7 +914,11 @@ pub(crate) fn draw_box(
             let (right, bottom) = (width - 316.0 * s, 628.0 * s);
             let b = Rect::new(right - bw, bottom - bh + (1.0 - a) * 20.0 * s, bw, bh);
             let tip = [width - 258.0 * s, 668.0 * s];
-            let tail = [[right - 2.0 * s, b.y + b.h - 70.0 * s], [right - 2.0 * s, b.y + b.h - 26.0 * s], tip];
+            let tail = [
+                [right - 2.0 * s, b.y + b.h - 70.0 * s],
+                [right - 2.0 * s, b.y + b.h - 26.0 * s],
+                tip,
+            ];
             (b, Some(tail))
         } else {
             let x0 = width - 70.0 * s - 620.0 * s;
@@ -927,7 +942,11 @@ pub(crate) fn draw_box(
                 }
             }
             if let Some(t) = &tail {
-                poly(v, &t.map(|p| [p[0] + 8.0 * s, p[1] + 8.0 * s]), rgba(W_VIOLET, 1.0));
+                poly(
+                    v,
+                    &t.map(|p| [p[0] + 8.0 * s, p[1] + 8.0 * s]),
+                    rgba(W_VIOLET, 1.0),
+                );
             }
             panel(
                 v,
@@ -982,7 +1001,11 @@ pub(crate) fn draw_box(
     });
     // The speaker's plate: white, turned a little, the Queen's shadow violet, the others' rose.
     let speaking = view.kind == 0 && !view.name.is_empty();
-    let queen = matches!(view.name.as_str(), "Reina" | "La Reina" | "Gorou");
+    // By her id, as Chiquita above: her name on show is translated («Queen», «女王»…).
+    let queen = matches!(
+        view.speaker.trim_end_matches("_thought"),
+        "gorou" | "reina" | "queen" | "queen_original"
+    );
     // Their face, when they are not on stage (a conversation out in the world): a slanted card
     // by the plate, half over the box's edge.
     let card = face.filter(|_| speaking);
@@ -1256,6 +1279,80 @@ pub(crate) fn draw_top(
             });
         }
     }
+    // A date's memory: a night plate edged in gold slides in at the top right, «RECUERDO» small
+    // over its name, a glint running across; it stands and slides back out.
+    if let Some((name, age)) = &view.memory {
+        let k = bezier(0.2, 0.9, 0.25, 1.0, (age - 0.25) / 0.5)
+            * (1.0 - bezier(0.2, 0.9, 0.25, 1.0, (age - 3.7) / 0.5));
+        if k > 0.0 {
+            let label = "RECUERDO";
+            let (small, big) = (an(24.0) * s, 46.0 * s);
+            let w = text_width(font, Face::Title, name, big).max(text_width(
+                font,
+                Face::Display,
+                label,
+                small,
+            )) + 150.0 * s;
+            let h = 34.0 * s + small * 1.2 + big * 1.15;
+            let x = width + 40.0 * s - (w + 100.0 * s) * k;
+            let r = Rect::new(x, 70.0 * s, w, h);
+            let c = skewed(r, -12.0);
+            poly(v, &moved4(c, 12.0 * s, 12.0 * s), rgba(0x000000, 0.55));
+            poly(v, &c, rgba(W_NIGHT, 0.94));
+            poly(
+                v,
+                &skewed(Rect::new(r.x, r.y, 12.0 * s, r.h), -12.0),
+                rgba(W_GOLD, 1.0),
+            );
+            // the glint, once across
+            let g = ((age - 0.6) / 0.7).clamp(0.0, 1.0);
+            if g > 0.0 && g < 1.0 {
+                let gx = r.x + (r.w + 60.0 * s) * g - 60.0 * s;
+                poly(
+                    v,
+                    &skewed(Rect::new(gx, r.y, 40.0 * s, r.h), -12.0),
+                    rgba(0xffffff, 0.22 * (1.0 - (g - 0.5).abs() * 2.0)),
+                );
+            }
+            // a four-pointed sparkle beside the words
+            let sc = [r.x + 58.0 * s, r.y + r.h * 0.5];
+            let sr = 22.0 * s * (1.0 + 0.08 * (time * 3.0).sin());
+            for (dx, dy) in [(1.0, 0.0), (0.0, 1.0)] {
+                let (ax, ay) = (dx * sr, dy * sr);
+                let (bx, by) = (dy * sr * 0.28, dx * sr * 0.28);
+                poly(
+                    v,
+                    &[
+                        [sc[0] - ax, sc[1] - ay],
+                        [sc[0] + bx, sc[1] + by],
+                        [sc[0] + ax, sc[1] + ay],
+                        [sc[0] - bx, sc[1] - by],
+                    ],
+                    rgba(W_GOLD, 1.0),
+                );
+            }
+            text(
+                font,
+                v,
+                Face::Display,
+                label,
+                r.x + 100.0 * s,
+                r.y + 14.0 * s,
+                small,
+                rgba(W_GOLD, 1.0),
+            );
+            text(
+                font,
+                v,
+                Face::Title,
+                name,
+                r.x + 100.0 * s,
+                r.y + 18.0 * s + small * 1.2,
+                big,
+                rgba(W_INK, 1.0),
+            );
+        }
+    }
     // The item: a gold panel on a darkened stage, rays turning behind; the panel grows in with the
     // web's overshoot.
     if let Some(item) = &view.item {
@@ -1362,7 +1459,8 @@ pub(crate) fn draw_top(
             // Its words fit across the screen whatever the language makes of them (turned, a
             // little narrower than the screen).
             let base = an(170.0) * s;
-            let fit = (width * 0.84 / text_width(font, Face::Display, words, base).max(1.0)).min(1.0);
+            let fit =
+                (width * 0.84 / text_width(font, Face::Display, words, base).max(1.0)).min(1.0);
             let size = base * fit * pop;
             // Where the web slams it: over the middle, an item's panel and all (no burst over an
             // item's card: it would hide it).
@@ -1536,7 +1634,8 @@ pub(crate) fn speaker_slash(
     let r = Rect::new(x, height + 60.0 * s - 1250.0 * s, w, 1250.0 * s);
     let c = skewed(r, -14.0);
     let ([mid, foot], [a_mid, a_foot]) = lk.bands[usize::from(right)];
-    let at = |a: [f32; 2], b: [f32; 2], t: f32| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    let at =
+        |a: [f32; 2], b: [f32; 2], t: f32| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
     let (l30, r30) = (at(c[0], c[3], 0.3), at(c[1], c[2], 0.3));
     quad_grad(
         v,
@@ -1803,6 +1902,48 @@ impl StagePictures {
         self.loaded.get(name).map(|(_, i)| *i)
     }
 
+    /// A picture made in the game (not read from a file), put up under `name` (replacing one of
+    /// that name).
+    pub(crate) fn insert_rgba(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        name: &str,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+    ) {
+        let Some(img) = image::RgbaImage::from_raw(width, height, rgba.to_vec()) else {
+            return;
+        };
+        let mut levels = vec![img];
+        while levels
+            .last()
+            .is_some_and(|l| l.width() > 1 && l.height() > 1)
+            && levels.len() < 6
+        {
+            let last = levels.last().expect("a level");
+            let next = image::imageops::resize(
+                last,
+                (last.width() / 2).max(1),
+                (last.height() / 2).max(1),
+                image::imageops::FilterType::Triangle,
+            );
+            levels.push(next);
+        }
+        self.loaded.remove(name);
+        self.order.retain(|n| n != name);
+        self.failed.remove(name);
+        self.asked.remove(name);
+        let group = upload_levels(device, queue, &self.layout, &self.sampler, &levels);
+        let info = PictureInfo {
+            size: [width as f32, height as f32],
+            top: 0.0,
+        };
+        self.loaded.insert(name.to_owned(), (group, info));
+        self.order.push(name.to_owned());
+    }
+
     pub(crate) fn group(&self, name: &str) -> Option<&wgpu::BindGroup> {
         self.loaded.get(name).map(|(g, _)| g)
     }
@@ -1821,9 +1962,7 @@ fn upload_levels(
     sampler: &wgpu::Sampler,
     levels: &[image::RgbaImage],
 ) -> wgpu::BindGroup {
-    let (width, height) = levels
-        .first()
-        .map_or((1, 1), |l| (l.width(), l.height()));
+    let (width, height) = levels.first().map_or((1, 1), |l| (l.width(), l.height()));
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("demon-queen-stage-picture"),
         size: wgpu::Extent3d {

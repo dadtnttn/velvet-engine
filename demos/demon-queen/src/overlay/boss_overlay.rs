@@ -239,7 +239,12 @@ pub(super) fn draw(
 
 /// A slanted plate (Persona's): its corners for a box `x, y, w, h` leaning `lean`.
 fn slant(x: f32, y: f32, w: f32, h: f32, lean: f32) -> [[f32; 2]; 4] {
-    [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+    [
+        [x + lean, y],
+        [x + w + lean, y],
+        [x + w - lean, y + h],
+        [x - lean, y + h],
+    ]
 }
 
 fn fill4(v: &mut Vec<MapVertex>, q: [[f32; 2]; 4], color: [f32; 4]) {
@@ -273,17 +278,41 @@ fn draw_objective(font: &FontAtlas, v: &mut Vec<MapVertex>, view: &BossView) {
     let w = hw + 110.0;
     let (x, y) = (34.0 - (1.0 - come) * (w + 80.0), 96.0);
     faded(v, k.max(0.05), |v| {
-        fill4(v, slant(x + 8.0, y + 8.0, w, 60.0, 12.0), rgba(0x000000, 0.5));
+        fill4(
+            v,
+            slant(x + 8.0, y + 8.0, w, 60.0, 12.0),
+            rgba(0x000000, 0.5),
+        );
         fill4(v, slant(x, y, w, 60.0, 12.0), rgba(0x120a1a, 0.94));
         fill4(v, slant(x, y, 44.0, 60.0, 12.0), rgba(accent, 1.0));
         if beat > 0.0 {
-            soft(v, Rect::new(x, y, w, 60.0), 6.0, 16.0, rgba(accent, 0.35 * beat), true);
+            soft(
+                v,
+                Rect::new(x, y, w, 60.0),
+                6.0,
+                16.0,
+                rgba(accent, 0.35 * beat),
+                true,
+            );
         }
         // The tag.
         let tag = "OBJETIVO";
         let tw = text_width(font, Face::Display, tag, 15.0) + 24.0;
-        fill4(v, slant(x + 60.0, y - 14.0, tw, 24.0, 6.0), rgba(accent, 1.0));
-        text(font, v, Face::Display, tag, x + 72.0, y - 12.0, 15.0, rgba(0x0e0816, 1.0));
+        fill4(
+            v,
+            slant(x + 60.0, y - 14.0, tw, 24.0, 6.0),
+            rgba(accent, 1.0),
+        );
+        text(
+            font,
+            v,
+            Face::Display,
+            tag,
+            x + 72.0,
+            y - 12.0,
+            15.0,
+            rgba(0x0e0816, 1.0),
+        );
         text_outline(
             font,
             v,
@@ -302,7 +331,11 @@ fn draw_objective(font: &FontAtlas, v: &mut Vec<MapVertex>, view: &BossView) {
             .fold(0.0, f32::max)
             + 44.0;
         let dh = 16.0 + lines.len() as f32 * 28.0;
-        fill4(v, slant(x + 16.0, y + 68.0, dw, dh, 8.0), rgba(0x0a0612, 0.82));
+        fill4(
+            v,
+            slant(x + 16.0, y + 68.0, dw, dh, 8.0),
+            rgba(0x0a0612, 0.82),
+        );
         for (i, l) in lines.iter().enumerate() {
             text_shadow(
                 font,
@@ -332,7 +365,11 @@ fn draw_keys(font: &FontAtlas, v: &mut Vec<MapVertex>, width: f32, height: f32, 
     let mut y = height - 52.0 - keys.len() as f32 * 40.0;
     // A slanted ink plate behind them, its violet edge on the left, so they read on any ground.
     let (px, pw, ph) = (width - 316.0, 300.0, keys.len() as f32 * 40.0 + 20.0);
-    fill4(v, slant(px + 8.0, y - 6.0, pw, ph, 10.0), rgba(0x000000, 0.45));
+    fill4(
+        v,
+        slant(px + 8.0, y - 6.0, pw, ph, 10.0),
+        rgba(0x000000, 0.45),
+    );
     fill4(v, slant(px, y - 14.0, pw, ph, 10.0), rgba(0x0e0816, 0.86));
     fill4(v, slant(px, y - 14.0, 8.0, ph, 10.0), rgba(0x9a5cff, 1.0));
     for (key, what, lit) in keys {
@@ -340,7 +377,11 @@ fn draw_keys(font: &FontAtlas, v: &mut Vec<MapVertex>, width: f32, height: f32, 
         let ww = text_width(font, Face::Body, what, 19.0);
         let x = width - 44.0 - ww - 14.0 - kw;
         // The key on a slanted cap: ink with a pale rim, violet while it is held.
-        fill4(v, slant(x + 3.0, y + 3.0, kw, 30.0, 5.0), rgba(0x000000, 0.6));
+        fill4(
+            v,
+            slant(x + 3.0, y + 3.0, kw, 30.0, 5.0),
+            rgba(0x000000, 0.6),
+        );
         fill4(
             v,
             slant(x, y, kw, 30.0, 5.0),
@@ -538,21 +579,57 @@ fn draw_card(
     let h = 150.0 + lead.len() as f32 * 32.0 + 24.0 + keys_h + 80.0;
     let x = (width - w) * 0.5;
     let y = (height - h) * 0.5;
-    fill4(v, slant(x - 400.0, y + h * 0.5 - 90.0, w + 800.0, 180.0, 40.0), rgba(0x3a1a6a, 0.45));
-    fill4(v, slant(x + 16.0, y + 16.0, w, h, lean), rgba(0x000000, 0.6));
+    fill4(
+        v,
+        slant(x - 400.0, y + h * 0.5 - 90.0, w + 800.0, 180.0, 40.0),
+        rgba(0x3a1a6a, 0.45),
+    );
+    fill4(
+        v,
+        slant(x + 16.0, y + 16.0, w, h, lean),
+        rgba(0x000000, 0.6),
+    );
     fill4(v, slant(x, y, w, h, lean), rgba(0x0e0816, 0.97));
     fill4(v, slant(x, y, 22.0, h, lean), rgba(0x9a5cff, 1.0));
     let rim = slant(x, y, w, h, lean);
     for i in 0..4 {
-        wire(v, rim[i], rim[(i + 1) % 4], 2.0, rgba(0xd6b8ff, 0.8), rgba(0xd6b8ff, 0.8), 0.0, false);
+        wire(
+            v,
+            rim[i],
+            rim[(i + 1) % 4],
+            2.0,
+            rgba(0xd6b8ff, 0.8),
+            rgba(0xd6b8ff, 0.8),
+            0.0,
+            false,
+        );
     }
     // The kicker on its tag, the title big.
     let (tx, mut ty) = (x + 80.0, y + 34.0);
     let kw = text_width(font, Face::Display, &card.kicker.to_uppercase(), 17.0) + 30.0;
     fill4(v, slant(tx, ty, kw, 30.0, 8.0), rgba(0xd6b8ff, 1.0));
-    text(font, v, Face::Display, &card.kicker.to_uppercase(), tx + 15.0, ty + 3.0, 17.0, rgba(0x0e0816, 1.0));
+    text(
+        font,
+        v,
+        Face::Display,
+        &card.kicker.to_uppercase(),
+        tx + 15.0,
+        ty + 3.0,
+        17.0,
+        rgba(0x0e0816, 1.0),
+    );
     ty += 44.0;
-    text_outline(font, v, Face::Title, &card.title, tx, ty, 58.0, rgba(0xfff6ee, 1.0), rgba(0x000000, 0.9));
+    text_outline(
+        font,
+        v,
+        Face::Title,
+        &card.title,
+        tx,
+        ty,
+        58.0,
+        rgba(0xfff6ee, 1.0),
+        rgba(0x000000, 0.9),
+    );
     ty += 82.0;
     for l in &lead {
         text_shadow(font, v, Face::Body, l, tx, ty, 22.0, rgba(0xf1e4cc, 1.0));
@@ -575,8 +652,27 @@ fn draw_card(
             let kx = tx + col * 470.0;
             let ky = ty + row * 52.0;
             let kw = text_width(font, Face::Title, key, 18.0) + 28.0;
-            keycap(font, v, Rect::new(kx, ky, kw, 38.0), key, 18.0, false, false, 0x9a5cff, 1.0);
-            text_shadow(font, v, Face::Body, what, kx + kw + 14.0, ky + 7.0, 20.0, rgba(0xf1e4cc, 1.0));
+            keycap(
+                font,
+                v,
+                Rect::new(kx, ky, kw, 38.0),
+                key,
+                18.0,
+                false,
+                false,
+                0x9a5cff,
+                1.0,
+            );
+            text_shadow(
+                font,
+                v,
+                Face::Body,
+                what,
+                kx + kw + 14.0,
+                ky + 7.0,
+                20.0,
+                rgba(0xf1e4cc, 1.0),
+            );
         }
         ty += keys_h;
     }
@@ -585,8 +681,28 @@ fn draw_card(
     for (key, what) in &card.actions {
         let kw = text_width(font, Face::Title, key, 18.0) + 28.0;
         let pulse = 0.5 + 0.5 * (time * 4.0).sin();
-        keycap(font, v, Rect::new(ax, ty, kw, 40.0), key, 18.0, true, false, 0xffd27a, 0.85 + 0.15 * pulse);
-        text_outline(font, v, Face::Title, what, ax + kw + 14.0, ty + 4.0, 26.0, rgba(0xffe6b0, 1.0), rgba(0x000000, 0.8));
+        keycap(
+            font,
+            v,
+            Rect::new(ax, ty, kw, 40.0),
+            key,
+            18.0,
+            true,
+            false,
+            0xffd27a,
+            0.85 + 0.15 * pulse,
+        );
+        text_outline(
+            font,
+            v,
+            Face::Title,
+            what,
+            ax + kw + 14.0,
+            ty + 4.0,
+            26.0,
+            rgba(0xffe6b0, 1.0),
+            rgba(0x000000, 0.8),
+        );
         ax += kw + 14.0 + text_width(font, Face::Title, what, 26.0) + 50.0;
     }
 }

@@ -107,8 +107,16 @@ impl Hud {
             }
             set.into_iter().collect()
         };
-        let script_source = if extra.is_empty() { None } else { crate::i18n::script_font(&language) };
-        let atlas = if script_source.is_some() { ATLAS * 2 } else { ATLAS };
+        let script_source = if extra.is_empty() {
+            None
+        } else {
+            crate::i18n::script_font(&language)
+        };
+        let atlas = if script_source.is_some() {
+            ATLAS * 2
+        } else {
+            ATLAS
+        };
         let side = atlas as usize;
         let mut data = vec![0u8; side * side];
         // The solid corner the shapes sample (at 0.0015 of the atlas, whatever its size).
@@ -154,7 +162,12 @@ impl Hud {
                     });
                     let k = atlas as f32;
                     entry = Glyph {
-                        uv: [x as f32 / k, y as f32 / k, (x + w) as f32 / k, (y + h) as f32 / k],
+                        uv: [
+                            x as f32 / k,
+                            y as f32 / k,
+                            (x + w) as f32 / k,
+                            (y + h) as f32 / k,
+                        ],
                         size: [w as f32, h as f32],
                         offset: [bounds.min.x, bounds.min.y + shift],
                         advance: scaled.h_advance(id),
@@ -167,7 +180,9 @@ impl Hud {
         // The language's glyphs, in 64-pixel cells over the rest of the atlas.
         let mut script = None;
         if let Some((bytes, index, shaped)) = script_source {
-            if let Ok(font) = ab_glyph::FontVec::try_from_vec_and_index(bytes.as_ref().clone(), index) {
+            if let Ok(font) =
+                ab_glyph::FontVec::try_from_vec_and_index(bytes.as_ref().clone(), index)
+            {
                 let scaled = font.as_scaled(PxScale::from(38.0));
                 let k = 38.0 / font.height_unscaled().max(1.0);
                 let cap = font
@@ -201,19 +216,30 @@ impl Hud {
                 let mut ids = std::collections::HashMap::new();
                 for ((character, id), (x, y)) in jobs.into_iter().zip(cells) {
                     let g = id.with_scale_and_position(38.0, point(0.0, scaled.ascent()));
-                    let mut entry = Glyph { uv: [0.0; 4], size: [0.0; 2], offset: [0.0; 2], advance: scaled.h_advance(id) };
+                    let mut entry = Glyph {
+                        uv: [0.0; 4],
+                        size: [0.0; 2],
+                        offset: [0.0; 2],
+                        advance: scaled.h_advance(id),
+                    };
                     if let Some(outline) = font.outline_glyph(g) {
                         let bounds = outline.px_bounds();
                         let w = (bounds.width().ceil() as u32).min(60);
                         let h = (bounds.height().ceil() as u32).min(60);
                         outline.draw(|gx, gy, coverage| {
                             if gx < 60 && gy < 60 {
-                                data[(y + gy) as usize * side + (x + gx) as usize] = (coverage * 255.0) as u8;
+                                data[(y + gy) as usize * side + (x + gx) as usize] =
+                                    (coverage * 255.0) as u8;
                             }
                         });
                         let a = atlas as f32;
                         entry = Glyph {
-                            uv: [x as f32 / a, y as f32 / a, (x + w) as f32 / a, (y + h) as f32 / a],
+                            uv: [
+                                x as f32 / a,
+                                y as f32 / a,
+                                (x + w) as f32 / a,
+                                (y + h) as f32 / a,
+                            ],
                             size: [w as f32, h as f32],
                             offset: [bounds.min.x, bounds.min.y + shift],
                             advance: scaled.h_advance(id),
@@ -228,7 +254,15 @@ impl Hud {
                         }
                     }
                 }
-                script = Some(ScriptGlyphs { chars, ids, bytes, index, k, shift, shaped });
+                script = Some(ScriptGlyphs {
+                    chars,
+                    ids,
+                    bytes,
+                    index,
+                    k,
+                    shift,
+                    shaped,
+                });
             }
         }
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -366,7 +400,9 @@ impl Hud {
         let mut pen = 0.0;
         match &self.script {
             Some(sc) if sc.shaped && line.chars().any(crate::i18n::needs_shaping) => {
-                for (id, advance, dx, dy) in crate::i18n::shape_line(&sc.bytes, sc.index, sc.k, line) {
+                for (id, advance, dx, dy) in
+                    crate::i18n::shape_line(&sc.bytes, sc.index, sc.k, line)
+                {
                     if let Some(g) = sc.ids.get(&id) {
                         placed.push((g, pen + dx, dy));
                     }
@@ -378,7 +414,9 @@ impl Hud {
                 for c in line.chars() {
                     let g = glyphs
                         .get(&c)
-                        .filter(|g| g.size[0] > 0.0 || c == ' ' || g.advance > 0.0 && (c as u32) < 256)
+                        .filter(|g| {
+                            g.size[0] > 0.0 || c == ' ' || g.advance > 0.0 && (c as u32) < 256
+                        })
                         .or_else(|| self.script.as_ref().and_then(|s| s.chars.get(&c)))
                         .or_else(|| glyphs.get(&'?'));
                     if let Some(g) = g {

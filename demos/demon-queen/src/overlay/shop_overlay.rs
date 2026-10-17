@@ -1447,7 +1447,12 @@ fn card(
     let mut y = said.y + said.h + 18.0;
     // The values start after the longer label in the player's language (never over it).
     let value_x = (1236.0
-        + text_width(font, Face::Title, "Efecto", 21.0).max(text_width(font, Face::Title, "Fusión", 21.0))
+        + text_width(font, Face::Title, "Efecto", 21.0).max(text_width(
+            font,
+            Face::Title,
+            "Fusión",
+            21.0,
+        ))
         + 16.0)
         .max(1314.0);
     let value_w = 1854.0 - value_x;

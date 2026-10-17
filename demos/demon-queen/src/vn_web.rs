@@ -106,7 +106,8 @@ pub(crate) fn paint_quick_button(
     };
     let (key_size, gap) = (14.0, 7);
     // The action's word shrinks when a language's is too long for the button.
-    let room = w as i32 - 26
+    let room = w as i32
+        - 26
         - if key.is_empty() {
             0
         } else {

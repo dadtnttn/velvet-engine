@@ -81,12 +81,17 @@ impl WindowDisplay {
             .context("game window surface")?;
         // QA: `VELVET_ADAPTER=intel` plays on the graphics card whose name holds that (to measure
         // a weaker one on a machine with two).
-        let wanted = std::env::var("VELVET_ADAPTER").ok().map(|name| name.to_lowercase());
+        let wanted = std::env::var("VELVET_ADAPTER")
+            .ok()
+            .map(|name| name.to_lowercase());
         let chosen = wanted.and_then(|name| {
             instance
                 .enumerate_adapters(wgpu::Backends::all())
                 .into_iter()
-                .find(|a| a.get_info().name.to_lowercase().contains(&name) && a.is_surface_supported(&surface))
+                .find(|a| {
+                    a.get_info().name.to_lowercase().contains(&name)
+                        && a.is_surface_supported(&surface)
+                })
         });
         let adapter = match chosen {
             Some(adapter) => adapter,
@@ -656,18 +661,26 @@ static FRAME_LOG: std::sync::Mutex<FrameLog> = std::sync::Mutex::new(None);
 
 fn frame_log_open() -> Option<std::sync::MutexGuard<'static, FrameLog>> {
     static PATH: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-    let path = PATH.get_or_init(|| std::env::var("VELVET_FRAMELOG").ok()).as_ref()?;
+    let path = PATH
+        .get_or_init(|| std::env::var("VELVET_FRAMELOG").ok())
+        .as_ref()?;
     let mut log = FRAME_LOG.lock().unwrap();
     if log.is_none() {
         let file = std::fs::File::create(path).ok()?;
-        *log = Some((std::io::BufWriter::new(file), std::time::Instant::now(), 0.0));
+        *log = Some((
+            std::io::BufWriter::new(file),
+            std::time::Instant::now(),
+            0.0,
+        ));
     }
     Some(log)
 }
 
 fn frame_log() {
     use std::io::Write;
-    let Some(mut log) = frame_log_open() else { return };
+    let Some(mut log) = frame_log_open() else {
+        return;
+    };
     let (out, start, last) = log.as_mut().unwrap();
     let now = start.elapsed().as_secs_f64() * 1000.0;
     let _ = writeln!(out, "{now:.2} {:.2}", now - *last);
@@ -678,7 +691,9 @@ fn frame_log() {
 /// QA: a note in the frame log (what took long between two frames), when it is on.
 pub(crate) fn frame_note(text: &str) {
     use std::io::Write;
-    let Some(mut log) = frame_log_open() else { return };
+    let Some(mut log) = frame_log_open() else {
+        return;
+    };
     let (out, start, _) = log.as_mut().unwrap();
     let now = start.elapsed().as_secs_f64() * 1000.0;
     let _ = writeln!(out, "# {now:.2} {text}");

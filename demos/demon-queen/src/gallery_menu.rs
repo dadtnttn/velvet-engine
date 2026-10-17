@@ -1,9 +1,10 @@
 //! The gallery in the title's manner: the band down the left with the albums (the prologue's
-//! pictures in one, then the animated scenes by place: the castle, the brothel, the dark forest,
-//! the shop), a grid of slanted cards on the right (what has not been seen yet, locked), and a
-//! viewer: a picture whole with its line, or a scene's shots playing in a loop with their sound,
-//! one card per shot. The pictures unlock as the visual novel shows them; a scene's shots, as
-//! they play in the game (`exploration3d::gallery_seen`). Thumbnails are made at their size by
+//! pictures in one, the castle's dates' memories in another, then the animated scenes by place:
+//! the castle, the brothel, the dark forest, the shop), a grid of slanted cards on the right (what
+//! has not been seen yet, locked), and a viewer: a picture whole with its line, or a scene's shots
+//! playing in a loop with their sound, one card per shot. The pictures unlock as the visual novel
+//! shows them; a date's memories, as its `@recuerdo` plays; a scene's shots, as they play in the
+//! game (`exploration3d::gallery_seen`). Thumbnails are made at their size by
 //! `tools/gallery_thumbs.py` and drawn 1:1. Focus only recolours; nothing moves under the pointer.
 
 use std::path::PathBuf;
@@ -30,16 +31,29 @@ struct AlbumDef {
     es: &'static str,
     en: &'static str,
     icon: Icon,
-    /// Empty: the prologue's pictures.
+    /// Empty: the prologue's pictures (or, with `memories`, the dates').
     scenes: &'static [SceneDef],
+    /// The dates' memories (`exploration3d::dates`).
+    memories: bool,
 }
 
-const ALBUMS: [AlbumDef; 5] = [
+/// The dates' album.
+const MEMORIES: usize = 1;
+
+const ALBUMS: [AlbumDef; 6] = [
     AlbumDef {
         es: "Prólogo",
         en: "Prologue",
         icon: Icon::Memory,
         scenes: &[],
+        memories: false,
+    },
+    AlbumDef {
+        es: "Citas",
+        en: "Dates",
+        icon: Icon::Feast,
+        scenes: &[],
+        memories: true,
     },
     AlbumDef {
         es: "Castillo",
@@ -50,6 +64,7 @@ const ALBUMS: [AlbumDef; 5] = [
             en: "The alcove",
             dir: "castillo/escena_cama",
         }],
+        memories: false,
     },
     AlbumDef {
         es: "Burdel",
@@ -87,6 +102,7 @@ const ALBUMS: [AlbumDef; 5] = [
                 dir: "burdel/noa/escena_futa",
             },
         ],
+        memories: false,
     },
     AlbumDef {
         es: "Bosque Oscuro",
@@ -97,6 +113,7 @@ const ALBUMS: [AlbumDef; 5] = [
             en: "Don't look at the ring",
             dir: "hipno/escena",
         }],
+        memories: false,
     },
     AlbumDef {
         es: "Tienda",
@@ -107,6 +124,7 @@ const ALBUMS: [AlbumDef; 5] = [
             en: "Another deal",
             dir: "tienda/escena",
         }],
+        memories: false,
     },
 ];
 
@@ -140,6 +158,8 @@ impl Shots {
 pub(crate) enum Viewer {
     /// The `n`th picture of the prologue.
     Still(usize),
+    /// The `n`th of the dates' memories.
+    Memory(usize),
     /// A scene (album, scene) and the shot playing.
     Scene {
         album: usize,
@@ -158,6 +178,8 @@ pub(crate) struct GalleryUi {
     pub since: Instant,
     /// Each scene album's scenes (the prologue's entry is empty).
     scenes: Vec<Vec<Shots>>,
+    /// The dates' memories: the girl's name, the memory, and whether it has played.
+    memories: Vec<(String, Memory, bool)>,
     pub viewer: Option<Viewer>,
     /// The still layer under the grid (the place, its shade, the band) once the entrance is
     /// over, and the place it was painted for: copied instead of painted again.
@@ -174,11 +196,20 @@ impl Default for GalleryUi {
             tile: 0,
             since: Instant::now(),
             scenes: Vec::new(),
+            memories: Vec::new(),
             viewer: None,
             backdrop: Vec::new(),
             backdrop_place: None,
         }
     }
+}
+
+/// One of the dates' memories: its picture (under `data/assets`), name and line.
+#[derive(Clone, Debug)]
+pub(crate) struct Memory {
+    pub picture: String,
+    pub title: String,
+    pub line: String,
 }
 
 /// Where a shot comes in its scene: the way in first, the end and the calm last.
@@ -251,7 +282,9 @@ impl GalleryUi {
                         let mut names: Vec<String> = std::fs::read_dir(&dir)
                             .map(|d| {
                                 d.flatten()
-                                    .filter(|e| crate::exploration3d::clip_video::is_shot(&e.path()))
+                                    .filter(|e| {
+                                        crate::exploration3d::clip_video::is_shot(&e.path())
+                                    })
                                     .map(|e| e.file_name().to_string_lossy().into_owned())
                                     .collect()
                             })
@@ -270,6 +303,21 @@ impl GalleryUi {
                     .collect()
             })
             .collect();
+        self.memories = crate::exploration3d::dates::memories()
+            .into_iter()
+            .map(|(girl, m)| {
+                let key = format!("{}{}", gallery_seen::MEMORY, m.imagen);
+                (
+                    girl.nombre.clone(),
+                    Memory {
+                        picture: m.imagen.clone(),
+                        title: m.titulo.clone(),
+                        line: m.frase.clone(),
+                    },
+                    seen.contains(&key),
+                )
+            })
+            .collect();
         self.album = self.album.min(ALBUMS.len() - 1);
         self.list = self.list.min(LIST - 1);
         self.viewer = None;
@@ -286,6 +334,11 @@ impl GalleryUi {
         self.shots(album, scene).is_some_and(|s| s.seen() > 0)
     }
 
+    /// Has the dates' memory `n` played?
+    fn memory_open(&self, n: usize) -> bool {
+        self.memories.get(n).is_some_and(|(_, _, seen)| *seen)
+    }
+
     /// Does the gallery move by itself (a scene playing)?
     pub(crate) fn playing(&self) -> bool {
         matches!(self.viewer, Some(Viewer::Scene { .. }))
@@ -295,8 +348,17 @@ impl GalleryUi {
 impl App {
     /// The cards of album `album`: how many, and how many of them open.
     fn gallery_counts(&self, album: usize) -> (usize, usize) {
-        if album == 0 {
-            (self.gallery.total.max(self.gallery.entries.len()), self.gallery.entries.len())
+        if ALBUMS[album].memories {
+            let all = self.gallery_ui.memories.len();
+            (
+                all,
+                (0..all).filter(|&n| self.gallery_ui.memory_open(n)).count(),
+            )
+        } else if album == 0 {
+            (
+                self.gallery.total.max(self.gallery.entries.len()),
+                self.gallery.entries.len(),
+            )
         } else {
             let scenes = ALBUMS[album].scenes.len();
             let open = (0..scenes)
@@ -310,6 +372,9 @@ impl App {
     fn gallery_totals(&self) -> (usize, usize) {
         let mut seen = self.gallery.entries.len();
         let mut all = self.gallery.total.max(seen);
+        let (memories, open) = self.gallery_counts(MEMORIES);
+        seen += open;
+        all += memories;
         for album in &self.gallery_ui.scenes {
             for scene in album {
                 seen += scene.seen();
@@ -320,7 +385,9 @@ impl App {
     }
 
     fn gallery_card_open(&self, album: usize, index: usize) -> bool {
-        if album == 0 {
+        if ALBUMS[album].memories {
+            self.gallery_ui.memory_open(index)
+        } else if album == 0 {
             index < self.gallery.entries.len()
         } else {
             self.gallery_ui.scene_open(album, index)
@@ -335,7 +402,9 @@ impl App {
             return;
         }
         ui_sfx::play(UiSfx::Select);
-        if album == 0 {
+        if ALBUMS[album].memories {
+            self.gallery_ui.viewer = Some(Viewer::Memory(index));
+        } else if album == 0 {
             self.gallery_ui.viewer = Some(Viewer::Still(index));
         } else {
             let Some(shots) = self.gallery_ui.shots(album, index) else {
@@ -391,6 +460,19 @@ impl App {
                 let count = self.gallery.entries.len().max(1) as i32;
                 let next = (*n as i32 + by).rem_euclid(count) as usize;
                 self.gallery_ui.viewer = Some(Viewer::Still(next));
+                ui_sfx::play(UiSfx::Move);
+            }
+            Some(Viewer::Memory(n)) => {
+                // The next (or last) memory that has played.
+                let count = self.gallery_ui.memories.len().max(1) as i32;
+                let mut at = *n as i32;
+                for _ in 0..count {
+                    at = (at + by).rem_euclid(count);
+                    if self.gallery_ui.memory_open(at as usize) {
+                        break;
+                    }
+                }
+                self.gallery_ui.viewer = Some(Viewer::Memory(at as usize));
                 ui_sfx::play(UiSfx::Move);
             }
             Some(Viewer::Scene {
@@ -514,7 +596,7 @@ impl App {
 
     pub(crate) fn gallery_click(&mut self, x: i32, y: i32) {
         match &self.gallery_ui.viewer {
-            Some(Viewer::Still(_)) => {
+            Some(Viewer::Still(_)) | Some(Viewer::Memory(_)) => {
                 self.gallery_viewer_step(if x < 960 { -1 } else { 1 });
                 return;
             }
@@ -567,8 +649,17 @@ impl App {
     /// `shot` playing (its first frame decoded before this returns).
     pub(crate) fn gallery_capture_card(&mut self, card: usize, shot: Option<usize>) {
         let album = self.gallery_ui.album;
-        if album > 0 {
-            if let Some(shots) = self.gallery_ui.scenes.get_mut(album).and_then(|a| a.get_mut(card)) {
+        if ALBUMS[album].memories {
+            for m in &mut self.gallery_ui.memories {
+                m.2 = true;
+            }
+        } else if album > 0 {
+            if let Some(shots) = self
+                .gallery_ui
+                .scenes
+                .get_mut(album)
+                .and_then(|a| a.get_mut(card))
+            {
                 for (_, seen) in &mut shots.shots {
                     *seen = true;
                 }
@@ -579,7 +670,10 @@ impl App {
         if let Some(shot) = shot {
             self.gallery_play_shot(shot);
         }
-        if let Some(Viewer::Scene { reel: Some(reel), .. }) = &mut self.gallery_ui.viewer {
+        if let Some(Viewer::Scene {
+            reel: Some(reel), ..
+        }) = &mut self.gallery_ui.viewer
+        {
             for _ in 0..200 {
                 if reel.frame().is_some() {
                     break;
@@ -593,7 +687,11 @@ impl App {
         if self.gallery_ui.viewer.is_some() {
             self.gallery_viewer_step(if up { -1 } else { 1 });
         } else {
-            self.gallery_key(if up { KeyCode::PageUp } else { KeyCode::PageDown });
+            self.gallery_key(if up {
+                KeyCode::PageUp
+            } else {
+                KeyCode::PageDown
+            });
         }
     }
 
@@ -602,6 +700,11 @@ impl App {
             Some(Viewer::Still(n)) => {
                 let n = *n;
                 self.paint_gallery_still(n);
+                return;
+            }
+            Some(Viewer::Memory(n)) => {
+                let n = *n;
+                self.paint_gallery_memory(n);
                 return;
             }
             Some(Viewer::Scene { .. }) => {
@@ -613,12 +716,16 @@ impl App {
         let motion = !self.reduced_motion;
         let age = self.gallery_ui.since.elapsed().as_secs_f32();
         let clock = self.title_since.elapsed().as_secs_f32();
-        let place = self.title_background_current.min(title_menu::PLACES.len() - 1);
+        let place = self
+            .title_background_current
+            .min(title_menu::PLACES.len() - 1);
         let cached = self.gallery_ui.backdrop_place == Some(place)
             && self.gallery_ui.backdrop.len() == self.canvas.pixels.len()
             && !self.ui_hidden;
         if cached {
-            self.canvas.pixels.copy_from_slice(&self.gallery_ui.backdrop);
+            self.canvas
+                .pixels
+                .copy_from_slice(&self.gallery_ui.backdrop);
         } else {
             self.canvas.clear(0xff0b0710);
             if let Some(b) = self.art.original(title_menu::PLACES[place].0) {
@@ -635,7 +742,8 @@ impl App {
         let album = self.gallery_ui.album;
         let (count, open) = self.gallery_counts(album);
         let (seen, all) = self.gallery_totals();
-        let counts: Vec<(usize, usize)> = (0..ALBUMS.len()).map(|a| self.gallery_counts(a)).collect();
+        let counts: Vec<(usize, usize)> =
+            (0..ALBUMS.len()).map(|a| self.gallery_counts(a)).collect();
         let ui_state = (
             self.gallery_ui.on_grid,
             self.gallery_ui.list,
@@ -682,7 +790,15 @@ impl App {
             true,
         );
         let k = all.max(1) as f32;
-        ui::meter(canvas, 190, 270, 250, 22, seen as f32 / k, GOLD & 0x00ff_ffff);
+        ui::meter(
+            canvas,
+            190,
+            270,
+            250,
+            22,
+            seen as f32 / k,
+            GOLD & 0x00ff_ffff,
+        );
         for i in 0..LIST {
             let rect = list_rect(i);
             let over = inside(rect, mouse.0, mouse.1);
@@ -697,7 +813,11 @@ impl App {
             } else {
                 t("Volver", "Back").to_string()
             };
-            let icon = if i < ALBUMS.len() { ALBUMS[i].icon } else { Icon::Leave };
+            let icon = if i < ALBUMS.len() {
+                ALBUMS[i].icon
+            } else {
+                Icon::Leave
+            };
             let selected = keyed || over || (i == album && i < ALBUMS.len());
             title_menu::plate(
                 canvas,
@@ -715,21 +835,38 @@ impl App {
                 over && self.mouse_down,
             );
             if keyed {
-                title_menu::pointer(canvas, (rect.0 as f32 - 12.0, (rect.1 + rect.3 / 2) as f32), 20.0);
+                title_menu::pointer(
+                    canvas,
+                    (rect.0 as f32 - 12.0, (rect.1 + rect.3 / 2) as f32),
+                    20.0,
+                );
             }
         }
 
         // ── The album: its name, what it holds, its page.
         let name = t(ALBUMS[album].es, ALBUMS[album].en);
         ui::plate(canvas, 700.0, 70.0, 640.0, 74.0, 26.0, 0xb4000000);
-        ui::plate(canvas, 690.0, 60.0, 640.0, 74.0, 26.0, ui::argb(0xff, accent));
+        ui::plate(
+            canvas,
+            690.0,
+            60.0,
+            640.0,
+            74.0,
+            26.0,
+            ui::argb(0xff, accent),
+        );
         let ink = ui::ink_on(accent);
         let size = ui::fit_size(fonts, name, 520, 46.0, false);
         if ink == 0xffff_ffff {
             canvas.display_text(fonts, name, 742 + 3, 66 + 3, size, 0xff000000);
         }
         canvas.display_text(fonts, name, 742, 66, size, ink);
-        let what = if album == 0 {
+        let what = if ALBUMS[album].memories {
+            t(
+                "Los recuerdos de las citas del castillo: cada uno se abre al vivirlo.",
+                "The memories of the castle's dates: each opens once you live it.",
+            )
+        } else if album == 0 {
             t(
                 "Las imágenes de la novela visual, según las vas viendo.",
                 "The visual novel's pictures, as you see them.",
@@ -795,12 +932,19 @@ impl App {
             let (x, y, w, h) = rect;
             let over = inside(rect, mouse.0, mouse.1);
             let focused = (ui_state.0 && ui_state.2 == index) || over;
-            let open = if album == 0 {
+            let open = if ALBUMS[album].memories {
+                self.gallery_ui.memory_open(index)
+            } else if album == 0 {
                 index < self.gallery.entries.len()
             } else {
                 self.gallery_ui.scene_open(album, index)
             };
-            let (fx, fy, fw, fh) = (x as f32 - 8.0, y as f32 - 8.0, w as f32 + 16.0, h as f32 + 16.0);
+            let (fx, fy, fw, fh) = (
+                x as f32 - 8.0,
+                y as f32 - 8.0,
+                w as f32 + 16.0,
+                h as f32 + 16.0,
+            );
             ui::plate(canvas, fx + 10.0, fy + 10.0, fw, fh, 16.0, 0xb0000000);
             ui::plate(
                 canvas,
@@ -818,6 +962,8 @@ impl App {
             canvas.rect(x + 8, y + 8, 256, 144, 0xff0c0811);
             let key = if !open {
                 None
+            } else if ALBUMS[album].memories {
+                Some(thumb_key(&self.gallery_ui.memories[index].1.picture))
             } else if album == 0 {
                 Some(thumb_key(&self.gallery.entries[index].asset))
             } else {
@@ -861,7 +1007,13 @@ impl App {
                 if focused { ui::BONE } else { ui::ABYSS },
                 if focused { ui::ABYSS } else { ui::BONE },
             );
-            if album > 0 {
+            if ALBUMS[album].memories {
+                let (girl, memory, _) = &self.gallery_ui.memories[index];
+                let label = if open { memory.title.as_str() } else { "???" };
+                let size = ui::fit_size(fonts, label, w - 110, 20.0, true);
+                ui::text_mid(canvas, fonts, label, x, y + h + 26, size, INK, true);
+                ui::text_right(canvas, fonts, girl, x + w, y + h + 26, 17.0, MUTED, true);
+            } else if album > 0 {
                 let scene = &ALBUMS[album].scenes[index];
                 let label = if open { t(scene.es, scene.en) } else { "???" };
                 let shots = self.gallery_ui.shots(album, index);
@@ -875,7 +1027,11 @@ impl App {
                     x + w,
                     y + h + 26,
                     17.0,
-                    if s_seen == s_all && s_all > 0 { GOLD } else { MUTED },
+                    if s_seen == s_all && s_all > 0 {
+                        GOLD
+                    } else {
+                        MUTED
+                    },
                     true,
                 );
             }
@@ -944,13 +1100,104 @@ impl App {
             format!("{} · {}", entry.speaker, entry.room_name)
         };
         let sw = fonts.text_width(&speaker, 20.0, true) + 60;
-        ui::plate(canvas, 92.0, 832.0, sw as f32, 46.0, 14.0, ui::argb(0xff, accent));
-        ui::text_mid(canvas, fonts, &speaker, 118, 855, 20.0, ui::ink_on(accent), true);
+        ui::plate(
+            canvas,
+            92.0,
+            832.0,
+            sw as f32,
+            46.0,
+            14.0,
+            ui::argb(0xff, accent),
+        );
+        ui::text_mid(
+            canvas,
+            fonts,
+            &speaker,
+            118,
+            855,
+            20.0,
+            ui::ink_on(accent),
+            true,
+        );
         canvas.paragraph(fonts, &entry.text, 116, 900, 1260, 34, 25.0, INK, false);
         ui::text_right(
             canvas,
             fonts,
             &format!("{} / {total}", n + 1),
+            1850,
+            60,
+            24.0,
+            0xffffffff,
+            true,
+        );
+        ui::key_hints(
+            canvas,
+            fonts,
+            1478,
+            970,
+            &[("←→", t("pasar", "browse")), ("ESC", t("volver", "back"))],
+        );
+    }
+
+    /// One of the dates' memories whole, with her name, its name and its line on the box's plate.
+    fn paint_gallery_memory(&mut self, n: usize) {
+        let Some((girl, memory, true)) = self.gallery_ui.memories.get(n).cloned() else {
+            self.gallery_ui.viewer = None;
+            return;
+        };
+        self.canvas.clear(0xff0b0710);
+        if let Some(b) = self.art.original(&memory.picture) {
+            self.canvas.blit_rgba(0, 0, b);
+        }
+        if self.ui_hidden {
+            return;
+        }
+        let light = ui::light_from_pixels(&self.canvas.pixels, self.canvas.pw, self.canvas.ph);
+        let accent = ui::accent(light);
+        let language = self.localizer.language();
+        let t = |es, en| t(language, es, en);
+        let shown = self.gallery_ui.memories.iter().filter(|m| m.2).count();
+        let place = self.gallery_ui.memories[..=n]
+            .iter()
+            .filter(|m| m.2)
+            .count();
+        let Some(fonts) = self.fonts.as_ref() else {
+            return;
+        };
+        let canvas = &mut self.canvas;
+        ui::plate(canvas, 70.0, 898.0, 1380.0, 120.0, 34.0, 0xb4000000);
+        ui::plate(canvas, 60.0, 888.0, 1380.0, 120.0, 34.0, 0xec100a16);
+        // («Nyxara, en la cama» already names her.)
+        let speaker = if memory.title.contains(&girl) {
+            memory.title.clone()
+        } else {
+            format!("{girl} · {}", memory.title)
+        };
+        let sw = fonts.text_width(&speaker, 20.0, true) + 60;
+        ui::plate(
+            canvas,
+            92.0,
+            862.0,
+            sw as f32,
+            46.0,
+            14.0,
+            ui::argb(0xff, accent),
+        );
+        ui::text_mid(
+            canvas,
+            fonts,
+            &speaker,
+            118,
+            885,
+            20.0,
+            ui::ink_on(accent),
+            true,
+        );
+        canvas.paragraph(fonts, &memory.line, 116, 930, 1260, 34, 25.0, INK, false);
+        ui::text_right(
+            canvas,
+            fonts,
+            &format!("{place} / {shown}"),
             1850,
             60,
             24.0,
@@ -974,7 +1221,9 @@ impl App {
             _ => return,
         };
         self.canvas.clear(0xff07040b);
-        let place = self.title_background_current.min(title_menu::PLACES.len() - 1);
+        let place = self
+            .title_background_current
+            .min(title_menu::PLACES.len() - 1);
         let light = self.title_light(place);
         let accent = ui::accent(light);
         ui::halftone(
@@ -987,7 +1236,10 @@ impl App {
             ui::argb(0x26, accent),
         );
         // The shot playing, 1:1 in the middle-right.
-        let frame_w = if let Some(Viewer::Scene { reel: Some(reel), .. }) = &mut self.gallery_ui.viewer {
+        let frame_w = if let Some(Viewer::Scene {
+            reel: Some(reel), ..
+        }) = &mut self.gallery_ui.viewer
+        {
             reel.frame().map(|b| {
                 let (x, y) = (1180 - b.w as i32 / 2, (1080 - b.h as i32) / 2);
                 self.canvas.blit_rgba(x, y, b);
@@ -1011,11 +1263,27 @@ impl App {
         if let Some(w) = frame_w {
             // A frame of the accent round the picture.
             let (x, y) = (1180 - w / 2, (1080 - w.min(1080)) / 2);
-            canvas.round_outline(x - 4, y.max(0) - 4, w + 8, w.min(1080) + 8, 0, 3.0, ui::argb(0xff, accent));
+            canvas.round_outline(
+                x - 4,
+                y.max(0) - 4,
+                w + 8,
+                w.min(1080) + 8,
+                0,
+                3.0,
+                ui::argb(0xff, accent),
+            );
         }
         // The band of the scene on the left: album, name, shots.
         ui::plate(canvas, -40.0, 0.0, 690.0, 1080.0, 90.0, 0xe60b0710);
-        ui::plate(canvas, 600.0, 0.0, 10.0, 1080.0, 1.5, ui::argb(0xff, accent));
+        ui::plate(
+            canvas,
+            600.0,
+            0.0,
+            10.0,
+            1080.0,
+            1.5,
+            ui::argb(0xff, accent),
+        );
         ui::tag(
             canvas,
             fonts,
@@ -1074,7 +1342,15 @@ impl App {
                     true,
                 );
             } else {
-                ui::icon(canvas, Icon::Lock, r.0 + r.2 / 2, r.1 + r.3 / 2, 18, 0xff5a4d63, 0xff0e0a12);
+                ui::icon(
+                    canvas,
+                    Icon::Lock,
+                    r.0 + r.2 / 2,
+                    r.1 + r.3 / 2,
+                    18,
+                    0xff5a4d63,
+                    0xff0e0a12,
+                );
             }
         }
         let rows = shots.shots.len().div_ceil(SHOT_COLS) as i32;
@@ -1107,6 +1383,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_date_memory_has_its_picture_and_its_thumbnail() {
+        let root = crate::assets_root();
+        let memories = crate::exploration3d::dates::memories();
+        assert!(!memories.is_empty());
+        for (_, m) in memories {
+            assert!(
+                root.join(format!("{}.png", m.imagen)).is_file(),
+                "{}",
+                m.imagen
+            );
+            assert!(
+                root.join(thumb_key(&m.imagen)).is_file(),
+                "{} has no thumbnail",
+                m.imagen
+            );
+        }
+        assert!(ALBUMS[MEMORIES].memories);
+    }
+
+    #[test]
     fn every_scene_has_its_shots_and_its_cover() {
         let root = crate::assets_root();
         for album in &ALBUMS[1..] {
@@ -1136,7 +1432,8 @@ mod tests {
         assert_eq!((app.gallery_ui.album, app.gallery_ui.on_grid), (0, false));
         app.gallery_key(KeyCode::ArrowDown);
         app.gallery_key(KeyCode::ArrowDown);
-        assert_eq!(app.gallery_ui.album, 2);
+        app.gallery_key(KeyCode::ArrowDown);
+        assert_eq!(app.gallery_ui.album, 3, "the brothel");
         app.gallery_key(KeyCode::ArrowRight);
         assert!(app.gallery_ui.on_grid);
         app.gallery_key(KeyCode::ArrowRight);
@@ -1145,9 +1442,12 @@ mod tests {
         assert_eq!(app.gallery_ui.tile, 5);
         app.gallery_key(KeyCode::ArrowLeft);
         app.gallery_key(KeyCode::ArrowLeft);
-        assert!(!app.gallery_ui.on_grid, "left from the first column goes back to the list");
+        assert!(
+            !app.gallery_ui.on_grid,
+            "left from the first column goes back to the list"
+        );
         // A scene opened for a capture plays its shot; Esc closes it, then leaves.
-        app.gallery_ui.album = 4;
+        app.gallery_ui.album = 5;
         app.gallery_capture_card(0, Some(0));
         assert!(app.gallery_ui.playing());
         app.gallery_key(KeyCode::Escape);

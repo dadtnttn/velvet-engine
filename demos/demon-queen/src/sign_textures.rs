@@ -73,7 +73,11 @@ pub(crate) fn note_model(path: &Path, model: &mut GltfModel) {
         }
         let shown = hash(&data.rgba);
         with(|s| {
-            if !s.signs.iter().any(|g| g.path == path && g.image == image && g.shown == shown) {
+            if !s
+                .signs
+                .iter()
+                .any(|g| g.path == path && g.image == image && g.shown == shown)
+            {
                 s.signs.push(Sign {
                     path: path.to_path_buf(),
                     image,

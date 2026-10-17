@@ -834,12 +834,13 @@ checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
 name = "demon-queen"
-version = "0.2.0"
+version = "0.2.0+fix1"
 dependencies = [
  "ab_glyph",
  "anyhow",
  "bytemuck",
  "demon-queen-dungeon",
+ "demon-queen-war",
  "image",
  "pollster",
  "rodio",
@@ -866,7 +867,7 @@ dependencies = [
 
 [[package]]
 name = "demon-queen-dungeon"
-version = "0.2.0"
+version = "0.2.0+fix1"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -876,12 +877,25 @@ dependencies = [
  "serde",
  "serde_json",
  "unicode-bidi",
+ "unicode-segmentation",
  "velvet-avif",
  "velvet-dungeon",
  "velvet-math",
  "velvet-render",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "demon-queen-war"
+version = "0.2.0+fix1"
+dependencies = [
+ "anyhow",
+ "gltf",
+ "serde",
+ "serde_json",
+ "velvet-math",
+ "velvet-render",
 ]
 
 [[package]]

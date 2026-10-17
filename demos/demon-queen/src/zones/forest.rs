@@ -360,6 +360,9 @@ impl App {
         if penascal_way_near(self.player) {
             return Some(Prompt::new(Icon::Forest, "Subir").detail("El camino del Peñascal"));
         }
+        if shrine_near(self.player) {
+            return Some(Prompt::new(Icon::Forest, "Mirar").detail("Santuario en ruinas"));
+        }
         return None;
     }
 }
@@ -399,6 +402,14 @@ impl App {
             self.enter_dungeon();
             return true;
         }
+        if self.nature_mode && !self.village_entered && shrine_near(self.player) {
+            if !self.start_talk(None, Some("bosque_santuario")) {
+                if let Some((_, text)) = dark_forest::spot("santuario") {
+                    self.queen_thought = Some((text, self.elapsed + 5.0));
+                }
+            }
+            return true;
+        }
         if self.nature_mode && !self.village_entered && penascal_way_near(self.player) {
             // Up the way between the crags: el Peñascal.
             self.enter_penascal_from_forest();
@@ -421,6 +432,12 @@ impl App {
         }
         false
     }
+}
+
+/// Whether she is by the shrine in the wood (its spot in `data/bosque/bosque.json`).
+fn shrine_near(player: Vec3) -> bool {
+    dark_forest::spot("santuario")
+        .is_some_and(|(at, _)| (at.x - player.x).hypot(at.z - player.z) <= 2.4)
 }
 
 impl App {
@@ -630,7 +647,6 @@ impl RenderState {
         let Frame {
             camera,
             player,
-            camera_yaw,
             elapsed,
             village_entered,
             environment,
@@ -710,16 +726,12 @@ impl RenderState {
             let mine_distance = mine::entry_distance(player);
             if mine_distance <= mine::SHOW_RADIUS {
                 push_prompt_medallion(
-                    draws,
-                    self.village_prompt_meshes,
                     Icon::Mine,
                     mine::entry_position() + Vec3::new(1.3, 0.0, 0.0),
                     2.05,
                     mine_distance,
                     mine::SHOW_RADIUS,
                     mine::INTERACT_RADIUS,
-                    elapsed,
-                    camera_yaw,
                 );
             }
             // The mage's interaction key floats above the NPC in the same
@@ -732,16 +744,12 @@ impl RenderState {
                 let mage = mage_position();
                 let ground_y = nature_walk_surface_height(mage.x, mage.z);
                 push_prompt_medallion(
-                    draws,
-                    self.village_prompt_meshes,
                     Icon::Talk,
                     Vec3::new(mage.x, ground_y, mage.z),
                     2.72,
                     mage_distance,
                     MAGE_SHOW_RADIUS,
                     MAGE_INTERACT_RADIUS,
-                    elapsed,
-                    camera_yaw,
                 );
             }
             // The castle gate is the return route to the interior.  Its
@@ -751,16 +759,12 @@ impl RenderState {
                 let entry = castle_entry_position();
                 let ground_y = nature_walk_surface_height(entry.x, entry.z);
                 push_prompt_medallion(
-                    draws,
-                    self.village_prompt_meshes,
                     Icon::Castle,
                     Vec3::new(entry.x, ground_y, entry.z),
                     4.05,
                     castle_distance,
                     CASTLE_ENTRY_SHOW_RADIUS,
                     CASTLE_ENTRY_INTERACT_RADIUS,
-                    elapsed,
-                    camera_yaw,
                 );
             }
             // The final stone marks the village entrance.  Keep the marker in
@@ -774,16 +778,12 @@ impl RenderState {
                     let entry = village_entry_position();
                     let ground_y = nature_walk_surface_height(entry.x, entry.z);
                     push_prompt_medallion(
-                        draws,
-                        self.village_prompt_meshes,
                         Icon::House,
                         Vec3::new(entry.x, ground_y, entry.z),
                         2.6,
                         village_distance,
                         VILLAGE_ARROW_SHOW_RADIUS,
                         VILLAGE_INTERACT_RADIUS,
-                        elapsed,
-                        camera_yaw,
                     );
                     let proximity =
                         (1.0 - village_distance / VILLAGE_ARROW_SHOW_RADIUS).clamp(0.0, 1.0);

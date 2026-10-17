@@ -521,19 +521,26 @@ impl SmokeTest {
                     if step % 3 == 0 {
                         if let Some(world) = host.world.as_mut() {
                             let place = world.qa_next_zone();
-                            eprintln!("[smoke-gfx] step {step} at {} ms: shown {shown}, to {place}", elapsed.as_millis());
+                            eprintln!(
+                                "[smoke-gfx] step {step} at {} ms: shown {shown}, to {place}",
+                                elapsed.as_millis()
+                            );
                         }
                     }
                     if shots && step % 3 == 2 {
                         if let Some(world) = host.world.as_mut() {
-                            world.capture(&self.report.with_file_name(format!("zone-{step:03}.png")))?;
+                            world.capture(
+                                &self.report.with_file_name(format!("zone-{step:03}.png")),
+                            )?;
                         }
                     }
                 }
                 if !zones && step != self.step {
                     self.step = step;
                     if step % 5 == 0 {
-                        exploration3d::prefs::set_native_resolution(!exploration3d::prefs::native_resolution());
+                        exploration3d::prefs::set_native_resolution(
+                            !exploration3d::prefs::native_resolution(),
+                        );
                     }
                     let mut g = exploration3d::prefs::graphics();
                     match step % 7 {

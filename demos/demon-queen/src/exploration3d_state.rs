@@ -67,6 +67,12 @@ pub struct State {
     /// Rosalía has taken the rope off the brothel's stair.
     #[serde(default)]
     pub brothel_rope_open: bool,
+    /// The war table's campaign under way (as `demon_queen_war::rules::Campaign` writes it).
+    #[serde(default)]
+    pub war: Option<serde_json::Value>,
+    /// Men per regiment in the war's battles.
+    #[serde(default)]
+    pub war_scale: Option<f32>,
 }
 
 /// Where she stands inside a place: `place` is `burdel`, `termas` or `penascal`.
@@ -116,6 +122,8 @@ impl State {
             story: Default::default(),
             inside: None,
             brothel_rope_open: false,
+            war: None,
+            war_scale: None,
         }
     }
 }
@@ -267,18 +275,33 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("dq-bg-save-{}", std::process::id()));
         let file = dir.join("s.json");
         for text in ["one", "two", "three"] {
-            background::write(file.clone(), text.as_bytes().to_vec(), false, background::key_of(text.as_bytes()));
+            background::write(
+                file.clone(),
+                text.as_bytes().to_vec(),
+                false,
+                background::key_of(text.as_bytes()),
+            );
         }
         background::flush();
         assert_eq!(fs::read_to_string(&file).unwrap(), "three");
         // The same content again (say, only the time of saving changed): not written.
         fs::write(&file, "touched by hand").unwrap();
-        background::write(file.clone(), b"three".to_vec(), false, background::key_of(b"three"));
+        background::write(
+            file.clone(),
+            b"three".to_vec(),
+            false,
+            background::key_of(b"three"),
+        );
         background::flush();
         assert_eq!(fs::read_to_string(&file).unwrap(), "touched by hand");
         // A synchronous write after queued ones: the queued (older) ones never land after it.
         let mut state = State::new("castle", "spawn", 1.0, 2.0);
-        background::write(file.clone(), b"old".to_vec(), false, background::key_of(b"old"));
+        background::write(
+            file.clone(),
+            b"old".to_vec(),
+            false,
+            background::key_of(b"old"),
+        );
         write_to(&file, &mut state).unwrap();
         background::flush();
         assert!(fs::read_to_string(&file).unwrap().contains("\"castle\""));
@@ -394,7 +417,12 @@ pub mod background {
     }
 
     /// As [`write`], the bytes made by `make` on the writer's thread (when it is costly).
-    pub fn write_with(path: PathBuf, sync: bool, key: u64, make: Box<dyn FnOnce() -> Vec<u8> + Send>) {
+    pub fn write_with(
+        path: PathBuf,
+        sync: bool,
+        key: u64,
+        make: Box<dyn FnOnce() -> Vec<u8> + Send>,
+    ) {
         queue(path, Content::Make(make), sync, key);
     }
 
@@ -408,7 +436,12 @@ pub mod background {
         if let Some(at) = waiting {
             queue.pending.remove(at);
         }
-        queue.pending.push(Job { path, content, sync, key });
+        queue.pending.push(Job {
+            path,
+            content,
+            sync,
+            key,
+        });
         wake.notify_all();
     }
 

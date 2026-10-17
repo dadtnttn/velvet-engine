@@ -431,7 +431,9 @@ impl App {
         } else if crate::rect_contains(GUIDE_NEXT, x, y) {
             self.guide_step(1);
         } else if self.title_info_page == 0 {
-            if let Some(i) = (0..GUIDE.len()).find(|&i| crate::rect_contains(guide_index_rect(i), x, y)) {
+            if let Some(i) =
+                (0..GUIDE.len()).find(|&i| crate::rect_contains(guide_index_rect(i), x, y))
+            {
                 self.guide_turn_to(i + 1);
             }
         }
@@ -630,16 +632,50 @@ impl App {
         {
             let (cx, cy, r) = INFO_BUTTON;
             let over = info_button_at(self.mouse.0, self.mouse.1) || self.title_info;
-            let pulse = if motion { 0.5 + 0.5 * (clock * 2.4).sin() } else { 0.5 };
+            let pulse = if motion {
+                0.5 + 0.5 * (clock * 2.4).sin()
+            } else {
+                0.5
+            };
             canvas.smooth_disc(cx + 4.0, cy + 5.0, r, 0x99000000);
-            canvas.smooth_ring(cx, cy, r + 7.0, 3.0, ui::argb((0x50 as f32 + 0x60 as f32 * pulse) as u32, accent));
-            canvas.smooth_disc(cx, cy, r, if over { ui::argb(0xff, accent) } else { ui::argb(0xff, ui::BONE) });
-            canvas.smooth_ring(cx, cy, r, 3.0, if over { 0xffffffff } else { ui::argb(0xff, accent) });
+            canvas.smooth_ring(
+                cx,
+                cy,
+                r + 7.0,
+                3.0,
+                ui::argb((0x50 as f32 + 0x60 as f32 * pulse) as u32, accent),
+            );
+            canvas.smooth_disc(
+                cx,
+                cy,
+                r,
+                if over {
+                    ui::argb(0xff, accent)
+                } else {
+                    ui::argb(0xff, ui::BONE)
+                },
+            );
+            canvas.smooth_ring(
+                cx,
+                cy,
+                r,
+                3.0,
+                if over {
+                    0xffffffff
+                } else {
+                    ui::argb(0xff, accent)
+                },
+            );
             let ink = if over { 0xffffffff } else { 0xff120b17 };
             // The «i»: its dot and its stem.
             canvas.smooth_disc(cx, cy - 13.0, 4.6, ink);
             canvas.convex(
-                &[(cx - 4.2, cy - 4.0), (cx + 4.2, cy - 4.0), (cx + 4.2, cy + 17.0), (cx - 4.2, cy + 17.0)],
+                &[
+                    (cx - 4.2, cy - 4.0),
+                    (cx + 4.2, cy - 4.0),
+                    (cx + 4.2, cy + 17.0),
+                    (cx - 4.2, cy + 17.0),
+                ],
                 ink,
             );
             // Its word ends just before the seal, however long a language makes it.
@@ -840,7 +876,13 @@ impl App {
                 accent,
                 language,
                 k,
-                GuideView { page, turn, now_art, old_art, mouse: self.mouse },
+                GuideView {
+                    page,
+                    turn,
+                    now_art,
+                    old_art,
+                    mouse: self.mouse,
+                },
             );
         }
     }
@@ -888,7 +930,12 @@ fn paint_info(
     ui::plate(canvas, x + 14.0, y + 14.0, w, h, 26.0, a(0xb0000000));
     ui::plate(canvas, x, y, w, h, 26.0, a(0xf6100a16));
     ui::plate(canvas, x, y, 16.0, h, 8.0, a(ui::argb(0xff, accent)));
-    ui::outline(canvas, &ui::plate_points(x, y, w, h, 26.0), 2.0, a(ui::argb(0xff, accent)));
+    ui::outline(
+        canvas,
+        &ui::plate_points(x, y, w, h, 26.0),
+        2.0,
+        a(ui::argb(0xff, accent)),
+    );
     let (xi, yi) = (x as i32, y as i32);
     // The pages. Turning, a slanted edge sweeps across the plate the way it turns: past it the
     // new page (drawn whole, then kept only there), before it the old one, a shadow on the old
@@ -896,11 +943,31 @@ fn paint_info(
     match view.turn {
         Some((from, e, dir)) => {
             let base = canvas.pixels.clone();
-            paint_guide_page(canvas, fonts, accent, language, view.page, view.now_art, view.mouse,
-                (xi, yi), dir as f32 * 50.0 * (1.0 - e), k);
+            paint_guide_page(
+                canvas,
+                fonts,
+                accent,
+                language,
+                view.page,
+                view.now_art,
+                view.mouse,
+                (xi, yi),
+                dir as f32 * 50.0 * (1.0 - e),
+                k,
+            );
             let fresh = std::mem::replace(&mut canvas.pixels, base);
-            paint_guide_page(canvas, fonts, accent, language, from, view.old_art, view.mouse,
-                (xi, yi), -(dir as f32) * 30.0 * e, k);
+            paint_guide_page(
+                canvas,
+                fonts,
+                accent,
+                language,
+                from,
+                view.old_art,
+                view.mouse,
+                (xi, yi),
+                -(dir as f32) * 30.0 * e,
+                k,
+            );
             let slant = 64.0;
             let ex = if dir > 0 {
                 x + w + 10.0 - e * (w + slant + 30.0)
@@ -915,7 +982,11 @@ fn paint_info(
             for py in top..bottom {
                 let edge = (edge_at(py as f32 / kk) * kk).round().clamp(0.0, pw as f32) as usize;
                 let row = py * pw;
-                let span = if dir > 0 { row + edge..row + pw } else { row..row + edge };
+                let span = if dir > 0 {
+                    row + edge..row + pw
+                } else {
+                    row..row + edge
+                };
                 canvas.pixels[span.clone()].copy_from_slice(&fresh[span]);
             }
             // The shadow the turning page casts on the old one, then the edge.
@@ -931,13 +1002,33 @@ fn paint_info(
                 ];
                 canvas.convex(&band, a(ui::argb((0x50 - i * 9) as u32, 0x000000)));
             }
-            let edge = [(ex - 10.0, y + h), (ex + 10.0, y + h), (ex + 10.0 + slant, y), (ex - 10.0 + slant, y)];
+            let edge = [
+                (ex - 10.0, y + h),
+                (ex + 10.0, y + h),
+                (ex + 10.0 + slant, y),
+                (ex - 10.0 + slant, y),
+            ];
             canvas.convex(&edge, a(ui::argb(0xe0, accent)));
-            let line = [(ex - 1.5, y + h), (ex + 1.5, y + h), (ex + 1.5 + slant, y), (ex - 1.5 + slant, y)];
+            let line = [
+                (ex - 1.5, y + h),
+                (ex + 1.5, y + h),
+                (ex + 1.5 + slant, y),
+                (ex - 1.5 + slant, y),
+            ];
             canvas.convex(&line, a(0xffffffff));
         }
-        None => paint_guide_page(canvas, fonts, accent, language, view.page, view.now_art, view.mouse,
-            (xi, yi), 0.0, k),
+        None => paint_guide_page(
+            canvas,
+            fonts,
+            accent,
+            language,
+            view.page,
+            view.now_art,
+            view.mouse,
+            (xi, yi),
+            0.0,
+            k,
+        ),
     }
     // The foot, which stays: the arrows, a dot per page and the keys.
     let dots_w = GUIDE_PAGES as i32 * 22;
@@ -945,14 +1036,27 @@ fn paint_info(
     for i in 0..GUIDE_PAGES {
         let on = i == view.page;
         let r = if on { 6.5 } else { 4.5 };
-        canvas.smooth_disc((dx + 11) as f32, (yi + 836) as f32, r,
-            a(if on { ui::argb(0xff, accent) } else { 0x66ffffff }));
+        canvas.smooth_disc(
+            (dx + 11) as f32,
+            (yi + 836) as f32,
+            r,
+            a(if on {
+                ui::argb(0xff, accent)
+            } else {
+                0x66ffffff
+            }),
+        );
         dx += 22;
     }
     ui::text_center(
         canvas,
         fonts,
-        &format!("{} {} / {}", t("Página", "Page"), view.page + 1, GUIDE_PAGES),
+        &format!(
+            "{} {} / {}",
+            t("Página", "Page"),
+            view.page + 1,
+            GUIDE_PAGES
+        ),
         xi + pw / 2,
         yi + 866,
         15.0,
@@ -965,12 +1069,42 @@ fn paint_info(
     ] {
         let (rx, ry, rw, rh) = (rect.0, rect.1 + dy as i32, rect.2, rect.3);
         let over = enabled && crate::rect_contains((rx, ry, rw, rh), view.mouse.0, view.mouse.1);
-        let fill = if !enabled { 0x30ffffff } else if over { ui::argb(0xff, accent) } else { 0xe0141019 };
-        ui::plate(canvas, rx as f32, ry as f32, rw as f32, rh as f32, 12.0, a(fill));
-        ui::outline(canvas, &ui::plate_points(rx as f32, ry as f32, rw as f32, rh as f32, 12.0), 1.5,
-            a(if enabled { ui::argb(0xff, accent) } else { 0x40ffffff }));
-        ui::text_center(canvas, fonts, label, rx + rw / 2, ry + rh / 2 - 2, 34.0,
-            a(if enabled { 0xffffffff } else { 0x60ffffff }), true);
+        let fill = if !enabled {
+            0x30ffffff
+        } else if over {
+            ui::argb(0xff, accent)
+        } else {
+            0xe0141019
+        };
+        ui::plate(
+            canvas,
+            rx as f32,
+            ry as f32,
+            rw as f32,
+            rh as f32,
+            12.0,
+            a(fill),
+        );
+        ui::outline(
+            canvas,
+            &ui::plate_points(rx as f32, ry as f32, rw as f32, rh as f32, 12.0),
+            1.5,
+            a(if enabled {
+                ui::argb(0xff, accent)
+            } else {
+                0x40ffffff
+            }),
+        );
+        ui::text_center(
+            canvas,
+            fonts,
+            label,
+            rx + rw / 2,
+            ry + rh / 2 - 2,
+            34.0,
+            a(if enabled { 0xffffffff } else { 0x60ffffff }),
+            true,
+        );
     }
     ui::text_right(
         canvas,
@@ -1002,55 +1136,128 @@ fn paint_guide_page(
         return;
     }
     let t = |p: (&'static str, &'static str)| tr(language, p.0, p.1);
-    let a = |c: u32| ui::argb(((c >> 24) as f32 * alpha.clamp(0.0, 1.0)) as u32, c & 0x00ff_ffff);
+    let a = |c: u32| {
+        ui::argb(
+            ((c >> 24) as f32 * alpha.clamp(0.0, 1.0)) as u32,
+            c & 0x00ff_ffff,
+        )
+    };
     let x = x + shift.round() as i32;
     let soft = a(ui::argb(0xff, ui::mix(accent, 0xffffff, 0.55)));
     let heading = |canvas: &mut crate::render::Canvas, text: &str, hx: i32, hy: i32| {
-        ui::text_mid(canvas, fonts, text, hx, hy, 22.0, a(ui::argb(0xff, accent)), true);
+        ui::text_mid(
+            canvas,
+            fonts,
+            text,
+            hx,
+            hy,
+            22.0,
+            a(ui::argb(0xff, accent)),
+            true,
+        );
     };
     // The header: the tag, the title, a line under it.
     let (tag, title, sub) = match page.checked_sub(1).and_then(|i| GUIDE.get(i)) {
         None => (
             t(("GUÍA", "GUIDE")),
             t(("Antes de empezar", "Before you start")),
-            t(("Demon Queen está en desarrollo.", "Demon Queen is in development.")),
+            t((
+                "Demon Queen está en desarrollo.",
+                "Demon Queen is in development.",
+            )),
         ),
         Some(g) => (t(("GUÍA", "GUIDE")), t(g.name), t(g.place)),
     };
-    ui::tag(canvas, fonts, x + 70, y + 34, tag, 16.0, ui::ABYSS, ui::BONE);
+    ui::tag(
+        canvas,
+        fonts,
+        x + 70,
+        y + 34,
+        tag,
+        16.0,
+        ui::ABYSS,
+        ui::BONE,
+    );
     let size = ui::fit_size(fonts, title, 1300, 56.0, false).min(56.0);
     canvas.display_text(fonts, title, x + 70 + 3, y + 84 + 3, size, a(0xff000000));
     canvas.display_text(fonts, title, x + 70, y + 84, size, a(0xffffffff));
     ui::text_mid(canvas, fonts, sub, x + 74, y + 172, 20.0, soft, true);
-    canvas.line(((x + 70) as f32, (y + 198) as f32), ((x + 1500) as f32, (y + 194) as f32), 2.0, a(0x55ffffff));
+    canvas.line(
+        ((x + 70) as f32, (y + 198) as f32),
+        ((x + 1500) as f32, (y + 194) as f32),
+        2.0,
+        a(0x55ffffff),
+    );
 
     let Some(g) = page.checked_sub(1).and_then(|i| GUIDE.get(i)) else {
         // The cover: the index of the places (each opens its page) and the notes on this build.
         let (lx, ly) = (x + 70, y + 230);
-        heading(canvas, t(("SITIOS DE INTERÉS", "PLACES OF INTEREST")), lx, ly);
+        heading(
+            canvas,
+            t(("SITIOS DE INTERÉS", "PLACES OF INTEREST")),
+            lx,
+            ly,
+        );
         for (i, place) in GUIDE.iter().enumerate() {
             let (rx, ry, rw, rh) = guide_index_rect(i);
             let (rx, ry) = (rx + (x - GUIDE_PLATE.0), ry + (y - GUIDE_PLATE.1));
             let over = crate::rect_contains((rx, ry, rw, rh), mouse.0, mouse.1);
             if over {
-                ui::plate(canvas, rx as f32, ry as f32, rw as f32, rh as f32, 10.0, a(ui::argb(0x40, accent)));
+                ui::plate(
+                    canvas,
+                    rx as f32,
+                    ry as f32,
+                    rw as f32,
+                    rh as f32,
+                    10.0,
+                    a(ui::argb(0x40, accent)),
+                );
             }
             let cy = ry + rh / 2;
             canvas.smooth_disc((rx + 14) as f32, cy as f32, 5.0, a(ui::argb(0xff, accent)));
-            let nw = ui::text_mid(canvas, fonts, t(place.name), rx + 32, cy, 21.0, a(0xffffffff), true);
+            let nw = ui::text_mid(
+                canvas,
+                fonts,
+                t(place.name),
+                rx + 32,
+                cy,
+                21.0,
+                a(0xffffffff),
+                true,
+            );
             if place.animated {
                 let cx = rx + 32 + nw + 14;
                 let label = t(("ANIMADO", "ANIMATED"));
                 let lw = fonts.text_width(label, 13.0, true) + 20;
-                ui::plate(canvas, cx as f32, (cy - 12) as f32, lw as f32, 24.0, 6.0, a(ui::argb(0xff, accent)));
+                ui::plate(
+                    canvas,
+                    cx as f32,
+                    (cy - 12) as f32,
+                    lw as f32,
+                    24.0,
+                    6.0,
+                    a(ui::argb(0xff, accent)),
+                );
                 ui::text_mid(canvas, fonts, label, cx + 10, cy, 13.0, a(0xffffffff), true);
             }
-            ui::text_right(canvas, fonts, &format!("{}", i + 2), rx + rw - 12, cy, 17.0, a(0x90ffffff), true);
+            ui::text_right(
+                canvas,
+                fonts,
+                &format!("{}", i + 2),
+                rx + rw - 12,
+                cy,
+                17.0,
+                a(0x90ffffff),
+                true,
+            );
         }
         ui::text_mid(
             canvas,
             fonts,
-            t(("Clic en un sitio para abrir su página.", "Click a place to open its page.")),
+            t((
+                "Clic en un sitio para abrir su página.",
+                "Click a place to open its page.",
+            )),
             lx,
             y + 352 + GUIDE.len() as i32 * 56 + 14,
             16.0,
@@ -1058,7 +1265,12 @@ fn paint_guide_page(
             false,
         );
         let (rx, mut ry) = (x + 860, y + 230);
-        heading(canvas, t(("NOTAS DE DESARROLLO", "DEVELOPMENT NOTES")), rx, ry);
+        heading(
+            canvas,
+            t(("NOTAS DE DESARROLLO", "DEVELOPMENT NOTES")),
+            rx,
+            ry,
+        );
         ry += 34;
         for note in NOTES {
             canvas.convex(
@@ -1070,7 +1282,17 @@ fn paint_guide_page(
                 ],
                 a(ui::argb(0xff, accent)),
             );
-            let bottom = canvas.paragraph(fonts, note, rx + 24, ry - 12, 640, 27, 18.0, a(0xeef1e9f5), false);
+            let bottom = canvas.paragraph(
+                fonts,
+                note,
+                rx + 24,
+                ry - 12,
+                640,
+                27,
+                18.0,
+                a(0xeef1e9f5),
+                false,
+            );
             ry = bottom + 18;
         }
         return;
@@ -1084,25 +1306,84 @@ fn paint_guide_page(
         let label = t(("ANIMADO", "ANIMATED"));
         let hw = fonts.text_width(t(("QUÉ HAY", "WHAT'S THERE")), 22.0, true);
         let lw = fonts.text_width(label, 13.0, true) + 20;
-        ui::plate(canvas, (lx + hw + 16) as f32, (ly - 12) as f32, lw as f32, 24.0, 6.0, a(ui::argb(0xff, accent)));
-        ui::text_mid(canvas, fonts, label, lx + hw + 26, ly, 13.0, a(0xffffffff), true);
+        ui::plate(
+            canvas,
+            (lx + hw + 16) as f32,
+            (ly - 12) as f32,
+            lw as f32,
+            24.0,
+            6.0,
+            a(ui::argb(0xff, accent)),
+        );
+        ui::text_mid(
+            canvas,
+            fonts,
+            label,
+            lx + hw + 26,
+            ly,
+            13.0,
+            a(0xffffffff),
+            true,
+        );
     }
     ly += 30;
     for line in g.what {
-        canvas.smooth_disc((lx + 6) as f32, (ly + 1) as f32, 4.0, a(ui::argb(0xff, accent)));
-        let bottom = canvas.paragraph(fonts, t(*line), lx + 22, ly - 12, left_w, 27, 18.0, a(0xeef1e9f5), false);
+        canvas.smooth_disc(
+            (lx + 6) as f32,
+            (ly + 1) as f32,
+            4.0,
+            a(ui::argb(0xff, accent)),
+        );
+        let bottom = canvas.paragraph(
+            fonts,
+            t(*line),
+            lx + 22,
+            ly - 12,
+            left_w,
+            27,
+            18.0,
+            a(0xeef1e9f5),
+            false,
+        );
         ly = bottom + 14;
     }
     if !g.needs.is_empty() {
         ly += 14;
         // What it asks of her, in the warm colour of a condition, each with its key.
         let warm = 0xffffc36b;
-        ui::text_mid(canvas, fonts, t(("CONDICIONES", "CONDITIONS")), lx, ly, 22.0, a(warm), true);
+        ui::text_mid(
+            canvas,
+            fonts,
+            t(("CONDICIONES", "CONDITIONS")),
+            lx,
+            ly,
+            22.0,
+            a(warm),
+            true,
+        );
         ly += 30;
         for need in g.needs {
             let (kx, ky) = (lx as f32, ly as f32);
-            canvas.convex(&[(kx + 6.0, ky - 7.0), (kx + 13.0, ky), (kx + 6.0, ky + 7.0), (kx - 1.0, ky)], a(warm));
-            let bottom = canvas.paragraph(fonts, t(*need), lx + 22, ly - 12, left_w, 27, 18.0, a(0xfff6e2c4), false);
+            canvas.convex(
+                &[
+                    (kx + 6.0, ky - 7.0),
+                    (kx + 13.0, ky),
+                    (kx + 6.0, ky + 7.0),
+                    (kx - 1.0, ky),
+                ],
+                a(warm),
+            );
+            let bottom = canvas.paragraph(
+                fonts,
+                t(*need),
+                lx + 22,
+                ly - 12,
+                left_w,
+                27,
+                18.0,
+                a(0xfff6e2c4),
+                false,
+            );
             ly = bottom + 14;
         }
     }
@@ -1263,7 +1544,9 @@ mod tests {
         assert_eq!(app.title_info_page, 0);
         app.title_key(KeyCode::ArrowRight);
         assert_eq!(app.title_info_page, 1);
-        assert!(app.title_info_turn.is_some_and(|(from, _, dir)| from == 0 && dir == 1));
+        assert!(app
+            .title_info_turn
+            .is_some_and(|(from, _, dir)| from == 0 && dir == 1));
         app.title_scroll(false);
         assert_eq!(app.title_info_page, 2);
         app.title_scroll(true);
@@ -1322,76 +1605,82 @@ mod tests {
 /// The title's backdrop over its place: a shade from the left, the band down the left in a deep
 /// shade of `accent` (shadow, a lighter slash, halftone at its foot, a white hairline along its
 /// edge), the embers and the seals. `slide` moves the band out to the left as it comes in.
-pub(crate) fn paint_band(canvas: &mut crate::render::Canvas, accent: u32, slide: f32, clock: f32, motion: bool) {
-        // ── A shade from the left (the band and its words read on any place).
-        for k in 0..10 {
-            let x = 640.0 + k as f32 * 60.0;
-            let a = (0x58 as f32 * (1.0 - k as f32 / 10.0)) as u32;
-            canvas.convex(
-                &[(0.0, 0.0), (x, 0.0), (x - 90.0, 1080.0), (0.0, 1080.0)],
-                ui::argb(a / 3, 0x07030c),
-            );
-        }
-        // ── The band down the left: its shadow, a deep shade of the accent, a lighter slash,
-        // halftone at its foot and a white hairline along its edge.
-        let band = [
-            (-slide, 0.0),
-            (600.0 - slide, 0.0),
-            (512.0 - slide, 1080.0),
-            (-slide, 1080.0),
-        ];
-        canvas.convex(&ui::moved(&band, 16.0, 0.0), 0x9a000000);
-        canvas.convex(&band, ui::argb(0xe8, ui::deepen(accent, 0.66, 0.14)));
-        let edge = |y: f32| 600.0 - 88.0 * y / 1080.0 - slide;
+pub(crate) fn paint_band(
+    canvas: &mut crate::render::Canvas,
+    accent: u32,
+    slide: f32,
+    clock: f32,
+    motion: bool,
+) {
+    // ── A shade from the left (the band and its words read on any place).
+    for k in 0..10 {
+        let x = 640.0 + k as f32 * 60.0;
+        let a = (0x58 as f32 * (1.0 - k as f32 / 10.0)) as u32;
         canvas.convex(
-            &[
-                (-slide, 300.0),
-                (edge(170.0), 170.0),
-                (edge(250.0), 250.0),
-                (-slide, 400.0),
-            ],
-            ui::argb(0x5c, accent),
+            &[(0.0, 0.0), (x, 0.0), (x - 90.0, 1080.0), (0.0, 1080.0)],
+            ui::argb(a / 3, 0x07030c),
         );
-        ui::halftone(
-            canvas,
-            (-slide, 700.0, 520.0, 380.0),
-            15.0,
-            5.6,
-            (-slide, 1080.0),
-            470.0,
-            0x55000000,
-        );
-        canvas.line(
-            (606.0 - slide, 0.0),
-            (518.0 - slide, 1080.0),
-            2.0,
-            0xd8ffffff,
-        );
-        canvas.line(
-            (618.0 - slide, 0.0),
-            (530.0 - slide, 1080.0),
-            6.0,
-            ui::argb(0xff, accent),
-        );
-        if motion {
-            crate::pause_menu::paint_embers(canvas, clock, slide, accent);
-        }
-        crate::pause_menu::paint_sigil(
-            canvas,
-            262.0 - slide,
-            1010.0,
-            196.0,
-            clock * 0.08,
-            0x40000000,
-        );
-        crate::pause_menu::paint_sigil(
-            canvas,
-            1812.0,
-            108.0,
-            62.0,
-            -clock * 0.2,
-            ui::argb(0x90, accent),
-        );
+    }
+    // ── The band down the left: its shadow, a deep shade of the accent, a lighter slash,
+    // halftone at its foot and a white hairline along its edge.
+    let band = [
+        (-slide, 0.0),
+        (600.0 - slide, 0.0),
+        (512.0 - slide, 1080.0),
+        (-slide, 1080.0),
+    ];
+    canvas.convex(&ui::moved(&band, 16.0, 0.0), 0x9a000000);
+    canvas.convex(&band, ui::argb(0xe8, ui::deepen(accent, 0.66, 0.14)));
+    let edge = |y: f32| 600.0 - 88.0 * y / 1080.0 - slide;
+    canvas.convex(
+        &[
+            (-slide, 300.0),
+            (edge(170.0), 170.0),
+            (edge(250.0), 250.0),
+            (-slide, 400.0),
+        ],
+        ui::argb(0x5c, accent),
+    );
+    ui::halftone(
+        canvas,
+        (-slide, 700.0, 520.0, 380.0),
+        15.0,
+        5.6,
+        (-slide, 1080.0),
+        470.0,
+        0x55000000,
+    );
+    canvas.line(
+        (606.0 - slide, 0.0),
+        (518.0 - slide, 1080.0),
+        2.0,
+        0xd8ffffff,
+    );
+    canvas.line(
+        (618.0 - slide, 0.0),
+        (530.0 - slide, 1080.0),
+        6.0,
+        ui::argb(0xff, accent),
+    );
+    if motion {
+        crate::pause_menu::paint_embers(canvas, clock, slide, accent);
+    }
+    crate::pause_menu::paint_sigil(
+        canvas,
+        262.0 - slide,
+        1010.0,
+        196.0,
+        clock * 0.08,
+        0x40000000,
+    );
+    crate::pause_menu::paint_sigil(
+        canvas,
+        1812.0,
+        108.0,
+        62.0,
+        -clock * 0.2,
+        ui::argb(0x90, accent),
+    );
 }
 
 /// The options' list down the band: the settings, the gallery, back to the title.
@@ -1454,7 +1743,9 @@ impl App {
             KeyCode::ArrowDown | KeyCode::KeyS | KeyCode::Tab => {
                 self.options_sel = (self.options_sel + 1) % count
             }
-            KeyCode::ArrowRight | KeyCode::KeyD if self.options_sel == 0 => self.options_activate(0),
+            KeyCode::ArrowRight | KeyCode::KeyD if self.options_sel == 0 => {
+                self.options_activate(0)
+            }
             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
                 self.options_activate(self.options_sel)
             }
@@ -1484,7 +1775,11 @@ impl App {
     /// The wheel: through the rows in the panel, through the list on the band.
     pub(crate) fn options_scroll(&mut self, up: bool) {
         if self.options_panel {
-            let key = if up { KeyCode::ArrowUp } else { KeyCode::ArrowDown };
+            let key = if up {
+                KeyCode::ArrowUp
+            } else {
+                KeyCode::ArrowDown
+            };
             let outcome = crate::settings_menu::key(&mut self.options_settings, key);
             if outcome == crate::settings_menu::Outcome::Leave {
                 return;
@@ -1538,10 +1833,19 @@ impl App {
         let accent = ui::accent(light);
         let language = self.localizer.language();
         let t = |es, en| tr(language, es, en);
-        let enter = if motion { ui::entrance(age, 0.0, ENTER) } else { 1.0 };
-        let panel_in = if motion { ui::entrance(age, 0.12, 0.34) } else { 1.0 };
+        let enter = if motion {
+            ui::entrance(age, 0.0, ENTER)
+        } else {
+            1.0
+        };
+        let panel_in = if motion {
+            ui::entrance(age, 0.12, 0.34)
+        } else {
+            1.0
+        };
         let slide = 620.0 * (1.0 - enter);
-        let (options_sel, options_panel, mouse) = (self.options_sel, self.options_panel, self.mouse);
+        let (options_sel, options_panel, mouse) =
+            (self.options_sel, self.options_panel, self.mouse);
         let gallery_count = format!("{}/{}", self.gallery.entries.len(), self.gallery.total);
         let canvas = &mut self.canvas;
 
@@ -1568,7 +1872,12 @@ impl App {
             ui::ABYSS,
             ui::BONE,
         );
-        canvas.line((80.0 - slide, 246.0), (470.0 - slide, 236.0), 2.0, 0xccffffff);
+        canvas.line(
+            (80.0 - slide, 246.0),
+            (470.0 - slide, 236.0),
+            2.0,
+            0xccffffff,
+        );
         ui::text_mid(
             canvas,
             fonts,
@@ -1616,7 +1925,11 @@ impl App {
                 over && self.mouse_down,
             );
             if (keyed || (index == 0 && options_panel)) && come > 0.99 {
-                let bob = if motion { (clock * 5.0).sin() * 5.0 } else { 0.0 };
+                let bob = if motion {
+                    (clock * 5.0).sin() * 5.0
+                } else {
+                    0.0
+                };
                 pointer(
                     canvas,
                     (rect.0 as f32 - 14.0 + bob, (rect.1 + rect.3 / 2) as f32),

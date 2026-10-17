@@ -87,10 +87,15 @@ fn generate_portable_bundle() {
         "        _ => None,\n    }\n}\n\npub fn asset_bytes(path: &str) -> Option<&'static [u8]> {\n    match path {\n",
     );
     for path in &asset_paths {
-        let packed_file = packed.as_ref().map(|dir| dir.join(path)).filter(|file| file.is_file());
+        let packed_file = packed
+            .as_ref()
+            .map(|dir| dir.join(path))
+            .filter(|file| file.is_file());
         if let Some(file) = packed_file {
             let file = file.to_string_lossy().replace('\\', "/");
-            generated.push_str(&format!("        {path:?} => Some(include_bytes!({file:?})),\n"));
+            generated.push_str(&format!(
+                "        {path:?} => Some(include_bytes!({file:?})),\n"
+            ));
             continue;
         }
         let include_path = format!("/data/assets/{path}");
@@ -134,7 +139,10 @@ fn collect_png_paths(root: &Path, directory: &Path, output: &mut Vec<String>) {
     for entry in entries {
         let path = entry.path();
         if path.is_dir() {
-            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
             if !NOT_EMBEDDED.contains(&name) {
                 collect_png_paths(root, &path, output);
             }

@@ -10,7 +10,7 @@ pub(super) const PAGE_SIZE: usize = 8;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Hash)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum Category {
+pub(crate) enum Category {
     #[default]
     All,
     Consumables,
@@ -43,15 +43,6 @@ impl Category {
             Self::Equipment => "Equipamiento",
             Self::Materials => "Material",
             Self::Special => "Especial",
-        }
-    }
-    pub fn icon(self) -> &'static str {
-        match self {
-            Self::All => "category_all",
-            Self::Consumables => "tab_sell",
-            Self::Equipment => "category_equipment",
-            Self::Materials => "category_materials",
-            Self::Special => "category_special",
         }
     }
 }
@@ -87,19 +78,12 @@ pub(super) fn page_selection(selection: usize, count: usize, delta: isize) -> us
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Tab {
+pub(crate) enum Tab {
     Buy,
     Sell,
 }
 
 impl Tab {
-    pub(super) fn toggled(self) -> Self {
-        match self {
-            Self::Buy => Self::Sell,
-            Self::Sell => Self::Buy,
-        }
-    }
-
     pub(super) fn as_u8(self) -> u8 {
         match self {
             Self::Buy => 0,
@@ -147,7 +131,10 @@ pub(super) struct Product {
 pub(super) struct Catalog {
     #[allow(dead_code)]
     pub shop_id: String,
+    // (the shop's own words, kept with its data: the interface names it by its place)
+    #[allow(dead_code)]
     pub title: String,
+    #[allow(dead_code)]
     pub currency: String,
     pub products: Vec<Product>,
 }

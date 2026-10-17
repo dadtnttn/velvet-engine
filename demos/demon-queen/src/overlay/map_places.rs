@@ -58,7 +58,12 @@ fn persona_gradient(
         (top[2] + bottom[2]) * 0.5,
         (top[3] + bottom[3]) * 0.5,
     ];
-    map_kit::cut_plate(vertices, Rect::new(rect.x + 5.0, rect.y + 6.0, rect.w, rect.h), radius * 0.8, [0.0, 0.0, 0.0, 0.45]);
+    map_kit::cut_plate(
+        vertices,
+        Rect::new(rect.x + 5.0, rect.y + 6.0, rect.w, rect.h),
+        radius * 0.8,
+        [0.0, 0.0, 0.0, 0.45],
+    );
     map_kit::cut_plate(vertices, rect, radius * 0.8, mid);
 }
 use prompt_icons::Icon;

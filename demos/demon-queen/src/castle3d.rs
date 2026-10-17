@@ -558,7 +558,8 @@ fn verb(id: &str) -> &'static str {
         "cama" => "Descansar",
         "tocador" => "Arreglarse",
         "balcon" => "Asomarse",
-        "mesa-guerra" => "Estudiar el mapa",
+        "catalejo" => "Mirar por el catalejo",
+        "mesa-guerra" => "Planear la guerra",
         "estudio" => "Leer",
         "sello" => "Tocar el sello",
         "hogar" => "Mirar",
@@ -583,6 +584,85 @@ pub(crate) struct Talk {
     pub maid: usize,
     pub text: &'static str,
     pub until: f32,
+}
+
+/// What the court has done to the castle: the rooms Lira's works restored and what the throne
+/// decided, as the castle shows it (the court's life in its rooms, `zones/castle_life.rs`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Life {
+    pub infirmary: bool,
+    pub armory: bool,
+    pub kitchen: bool,
+    pub barracks: bool,
+    pub library: bool,
+    /// Bertila in the yard: 0 not yet, 1 a goat, 2 the crown's goat (with her crown).
+    pub goat: u8,
+    /// Her kids: 0 none, 1 two kids, 2 two kids and a bell for her.
+    pub kids: u8,
+    /// The refugees from the north: 0 none, 1 camped and fed, 2 working for their roof.
+    pub refugees: u8,
+    /// The smith's new swords (a crate by the yard's rack), her ploughs (by the wall).
+    pub swords: bool,
+    pub ploughs: bool,
+    /// Durgo and Pimpa's wedding garlands on the gate; the village's feast lanterns.
+    pub wedding: bool,
+    pub feast: bool,
+    /// The stone with the capital's dead.
+    pub memorial: bool,
+}
+
+/// Where the court's people stand: the guards at the gate and in the barracks (x, z, facing), the
+/// armoury's smith at her anvil, the refugees' fire, their tents and themselves round it.
+pub(crate) const GATE_GUARDS: [(f32, f32, f32); 2] = [(-2.45, 35.3, 0.0), (2.45, 35.3, 0.0)];
+pub(crate) const BARRACK_GUARDS: [(f32, f32, f32); 2] = [(16.0, 20.9, 1.82), (20.0, 21.0, -1.86)];
+pub(crate) const SMITH: (f32, f32) = (20.9, 10.62);
+/// The armoury's forge against its back wall, and the anvil before it.
+pub(crate) const FORGE: (f32, f32) = (20.85, 8.72);
+pub(crate) const ANVIL: (f32, f32) = (20.9, 9.95);
+pub(crate) const CAMPFIRE: (f32, f32) = (18.3, 28.9);
+pub(crate) const TENTS: [(f32, f32, f32); 2] = [(15.4, 30.4, 0.5), (21.4, 31.2, -0.4)];
+pub(crate) const REFUGEES: [(f32, f32); 4] = [
+    (19.45, 29.15),
+    (18.75, 27.85),
+    (17.2, 28.35),
+    (17.55, 29.85),
+];
+
+impl Life {
+    /// What stands in her way because of it: boxes (x, z, half width, half depth, floor).
+    pub(crate) fn obstacles(&self) -> Vec<[f32; 5]> {
+        let mut out = Vec::new();
+        // the armoury's forge and anvil are there restored or not (cold until it is)
+        out.extend([
+            [FORGE.0, FORGE.1, 0.76, 0.42, 1.0],
+            [ANVIL.0, ANVIL.1, 0.32, 0.22, 1.0],
+        ]);
+        if self.armory {
+            out.push([SMITH.0, SMITH.1, 0.28, 0.28, 1.0]);
+        }
+        if !self.library {
+            out.extend([[-23.2, -1.8, 0.85, 0.65, 0.0], [-12.7, 5.5, 0.7, 0.6, 0.0]]);
+        }
+        if self.barracks {
+            out.extend(GATE_GUARDS.map(|(x, z, _)| [x, z, 0.3, 0.3, 0.0]));
+            out.extend(BARRACK_GUARDS.map(|(x, z, _)| [x, z, 0.3, 0.3, 1.0]));
+        }
+        if self.refugees > 0 {
+            out.extend(TENTS.map(|(x, z, _)| [x, z, 1.1, 0.95, 0.0]));
+            out.push([CAMPFIRE.0, CAMPFIRE.1, 0.55, 0.55, 0.0]);
+            out.extend(REFUGEES.map(|(x, z)| [x, z, 0.26, 0.26, 0.0]));
+        }
+        if self.swords {
+            out.push([-22.9, 27.7, 0.5, 0.35, 0.0]);
+        }
+        if self.ploughs {
+            out.push([-7.4, 22.95, 1.0, 0.3, 0.0]);
+        }
+        if self.memorial {
+            out.push([-18.0, 36.35, 0.55, 0.4, 0.0]);
+        }
+        out
+    }
 }
 
 /// The castle as the Queen lives it: where she is, which walls are down, where the maids are.
@@ -610,6 +690,8 @@ pub(crate) struct State {
     /// The doctor upstairs, where her round has her now (and how long she has been held talking).
     pub doctor: Doctor,
     doctor_clock: f32,
+    /// What the court has done to the castle (set by the game every frame from the story).
+    pub life: Life,
 }
 
 fn round_length(points: &[(f32, f32)]) -> f32 {
@@ -667,6 +749,7 @@ impl State {
             keep_walls: false,
             doctor: doctor_at(0.0),
             doctor_clock: 0.0,
+            life: Life::default(),
         }
     }
 
@@ -822,7 +905,16 @@ impl State {
         } else {
             near(self.doctor.at, DOCTOR_RADIUS)
         };
-        clear.then_some(next)
+        // What the court put in the rooms (she may still step out of it if she is in it).
+        let inside = |b: &[f32; 5], x: f32, z: f32| {
+            (x - b[0]).abs() < b[2] + RADIUS && (z - b[1]).abs() < b[3] + RADIUS
+        };
+        let free =
+            next.on_stair
+                || self.life.obstacles().iter().all(|b| {
+                    b[4] as u8 != next.level || !inside(b, x, z) || inside(b, self.x, self.z)
+                });
+        (clear && free).then_some(next)
     }
 
     /// One step, sliding along whatever is in the way: straight on, else along the wall (one axis),
@@ -1210,6 +1302,9 @@ pub(crate) struct Scene {
     halo_texture: TextureHandle,
     /// The great fires (hearths and braziers), with their floor.
     fires: Vec<(u8, ToonFire3D)>,
+    /// The kitchen's hearth (its place among the fires) and the one small fire it keeps until
+    /// the kitchen is restored.
+    kitchen_fire: Option<(usize, ToonFire3D)>,
     seal_centre: Vec3,
 }
 
@@ -1273,6 +1368,7 @@ impl Scene {
         let halo = renderer.upload_mesh(device, &quad())?;
         let halo_texture = renderer.upload_texture(device, queue, &halo_texture())?;
         let mut fires = Vec::new();
+        let mut kitchen_fire = None;
         for f in p
             .flames
             .iter()
@@ -1288,6 +1384,11 @@ impl Scene {
                 } else {
                     fire
                 };
+            }
+            if f.kind == "hearth" && f.level == 0 && f.x > 10.0 && f.z < 8.0 {
+                let small =
+                    ToonFire3D::new(renderer, device, Vec3::new(f.x, f.y - 0.05, f.z), 0.32)?;
+                kitchen_fire = Some((fires.len(), small));
             }
             fires.push((f.level, fire));
         }
@@ -1316,6 +1417,7 @@ impl Scene {
             halo,
             halo_texture,
             fires,
+            kitchen_fire,
             seal_centre,
         })
     }
@@ -1406,8 +1508,8 @@ impl Scene {
                 texture: part.texture,
             });
         }
-        // The books turning over the desk.
-        if let Some(c) = &p.books {
+        // The books turning over the desk (once the library is in order again).
+        if let Some(c) = p.books.as_ref().filter(|_| state.life.library) {
             let n = self.books.len().max(1) as f32;
             for (i, part) in self.books.iter().enumerate() {
                 let a = elapsed * 0.35 + i as f32 / n * std::f32::consts::TAU;
@@ -1478,8 +1580,16 @@ impl Scene {
                 texture: Some(self.halo_texture),
             });
         }
-        for (_, fire) in self.fires.iter().filter(|(level, _)| *level == view) {
-            fire.draws(elapsed, toward, draws);
+        for (i, (level, fire)) in self.fires.iter().enumerate() {
+            if *level != view {
+                continue;
+            }
+            match &self.kitchen_fire {
+                Some((k, small)) if *k == i && !state.life.kitchen => {
+                    small.draws(elapsed, toward, draws)
+                }
+                _ => fire.draws(elapsed, toward, draws),
+            }
         }
     }
 }

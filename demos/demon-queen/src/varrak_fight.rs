@@ -6,7 +6,7 @@
 //!
 //! Aquí está lo que pasa: la plaza y sus obstáculos (`data/penascal/combate.json`, exportado del
 //! prototipo con `tools/export-combate.mjs`), la Reina, Varrak, la manada, lo que vuela y hace daño
-//! y las frases de Chiquita. Lo que se ve lo dibuja `zones/boss.rs`; el HUD, `bin/boss_overlay.rs`.
+//! y las frases de Chiquita. Lo que se ve lo dibuja `zones/boss.rs`; el HUD, `overlay/boss_overlay.rs`.
 use super::*;
 use dungeon::combat::Fx;
 use dungeon::fp;
@@ -844,6 +844,10 @@ pub(crate) struct Varrak {
     pub memories: usize,
     spark_this_stun: f32,
     stun_left: f32,
+    /// Spark per second while it flows (Nyxara's «chispa viva» quickens it).
+    pub spark_rate: f32,
+    /// Seconds added to every daze (her «sello firme»).
+    pub stun_bonus: f32,
     cooldown: f32,
     charge_ready: f32,
     struck: bool,
@@ -900,6 +904,8 @@ impl Varrak {
             memories: 0,
             spark_this_stun: 0.0,
             stun_left: 0.0,
+            spark_rate: SPARK_RATE,
+            stun_bonus: 0.0,
             cooldown: 1.5,
             charge_ready: 3.0,
             struck: false,
@@ -1168,7 +1174,7 @@ impl Varrak {
 
     fn stun(&mut self, seconds: f32, why: Why, ev: &mut Vec<Event>) {
         self.set(VState::Stunned);
-        self.stun_left = seconds;
+        self.stun_left = seconds + self.stun_bonus;
         self.spark_this_stun = 0.0;
         self.guard = 0.0;
         self.anim.play(Clip::Stun, 0.25, 1.0, false);
@@ -1199,7 +1205,7 @@ impl Varrak {
         }
         let before = self.spark;
         let next = MEMORIES.get(self.memories);
-        self.spark = (self.spark + SPARK_RATE * dt).min(next.map_or(100.0, |m| m.at));
+        self.spark = (self.spark + self.spark_rate * dt).min(next.map_or(100.0, |m| m.at));
         self.spark_this_stun += self.spark - before;
         // A memory torn loose at each quarter.
         if let Some(m) = next {
@@ -1369,7 +1375,8 @@ impl Varrak {
                 }
                 if (self.behind > 0.55 || self.rage >= 3) && d < 5.2 {
                     self.start_spin(ev);
-                } else if self.charge_ready <= 0.0 && off < 0.7 && (d > 5.0 || self.cooldown <= 0.0) {
+                } else if self.charge_ready <= 0.0 && off < 0.7 && (d > 5.0 || self.cooldown <= 0.0)
+                {
                     // Down on all fours and charge (from close, he backs off first).
                     self.start_drop(ev);
                 } else if d > 6.0 && d < 12.0 && self.leap_ready <= 0.0 && off < 0.5 {
@@ -1428,7 +1435,10 @@ impl Varrak {
                     }
                 }
                 // Still in front of him: the swing goes on into a sweep.
-                if self.t > 1.45 && self.combo == 0 && d < 4.8 && self.off_facing(px, pz).abs() < 0.9
+                if self.t > 1.45
+                    && self.combo == 0
+                    && d < 4.8
+                    && self.off_facing(px, pz).abs() < 0.9
                     && rng.next() < 0.55
                 {
                     self.combo = 1;
@@ -2307,16 +2317,23 @@ impl Fight {
     }
 
     /// Whether a cure would do anything now (hurt, in the fight, not just after another).
+    /// Nyxara's gifts in this fight: the spark flows `spark` times as fast, every daze lasts
+    /// `stun` seconds longer, and her vitality is `vitality` times as much.
+    pub(crate) fn set_gifts(&mut self, spark: f32, stun: f32, vitality: f32) {
+        self.varrak.spark_rate = SPARK_RATE * spark;
+        self.varrak.stun_bonus = stun;
+        let full = self.player.health >= self.player.max_health;
+        self.player.max_health = 100.0 * vitality;
+        if full {
+            self.player.health = self.player.max_health;
+        }
+    }
+
     pub(crate) fn can_cure(&self) -> bool {
         matches!(self.phase, Phase::Pack | Phase::Duel)
             && self.player.health > 0.0
             && self.player.health < self.player.max_health
             && self.time - self.cured_at > 1.2
-    }
-
-    /// Vitality she is missing.
-    pub(crate) fn missing(&self) -> f32 {
-        self.player.max_health - self.player.health
     }
 
     /// A line from Chiquita now.
@@ -2367,11 +2384,17 @@ impl Fight {
                 let left = self.pack.fighting();
                 let wait = (PACK_SECS - (self.time - self.started)).max(0.0).ceil() as u32;
                 if left == 0 {
-                    ("Varrak se levanta".into(), "Prepárate: viene a por ti.".into(), 0)
+                    (
+                        "Varrak se levanta".into(),
+                        "Prepárate: viene a por ti.".into(),
+                        0,
+                    )
                 } else {
                     (
                         format!("Acaba con la manada · {left}"),
-                        format!("Clic: espada. Varrak se levanta en {wait} s o al caer el último lobo."),
+                        format!(
+                            "Clic: espada. Varrak se levanta en {wait} s o al caer el último lobo."
+                        ),
                         0,
                     )
                 }
@@ -2759,8 +2782,7 @@ impl Fight {
             Event::Step(x, z, heavy) => {
                 let d = (self.player.x - x).hypot(self.player.z - z);
                 if d < 16.0 {
-                    self.player
-                        .kick(0.12, 0.035 * heavy * (1.0 - d / 16.0));
+                    self.player.kick(0.12, 0.035 * heavy * (1.0 - d / 16.0));
                 }
                 if heavy >= 1.0 {
                     let seed = (self.rng.next() * 1e6) as u32;
@@ -2925,8 +2947,8 @@ impl Fight {
                 }
                 self.start_duel();
             }
-            "smash" | "sweep" | "gallop" | "spire" | "spark" | "memory" | "won" | "spin" | "leap"
-            | "run" => {
+            "smash" | "sweep" | "gallop" | "spire" | "spark" | "memory" | "won" | "spin"
+            | "leap" | "run" => {
                 for w in &mut self.pack.wolves {
                     w.gone = true;
                     w.visible = false;
@@ -3269,7 +3291,9 @@ mod tests {
             }
             f.update(input, 1.0 / 60.0);
             spun |= f.varrak.state == VState::Spin;
-            *time_in.entry(format!("{:?}/{:?}", f.phase, f.varrak.state)).or_insert(0.0) += 1.0 / 60.0;
+            *time_in
+                .entry(format!("{:?}/{:?}", f.phase, f.varrak.state))
+                .or_insert(0.0) += 1.0 / 60.0;
         }
         eprintln!("[test] 70 s: {charges} charges, then spun {spun}; {time_in:.1?}");
         assert!(charges >= 4, "only {charges} charges in 70 s");
