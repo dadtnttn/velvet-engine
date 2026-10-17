@@ -20,7 +20,7 @@ checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
 
 [[package]]
 name = "action-arena"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "velvet-action",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "branching-story"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "tempfile",
@@ -1553,7 +1553,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hello-velvet"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "tracing",
  "tracing-subscriber",
@@ -1598,7 +1598,7 @@ dependencies = [
 
 [[package]]
 name = "hotline-rush"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "velvet-action",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "hybrid-demo"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "velvet-action",
@@ -3030,7 +3030,7 @@ dependencies = [
 
 [[package]]
 name = "rpg-quest-vs3"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "velvet-script-vs3",
@@ -3604,7 +3604,7 @@ dependencies = [
 
 [[package]]
 name = "terraflow"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "pollster",
@@ -3622,7 +3622,7 @@ dependencies = [
 
 [[package]]
 name = "third-person"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "pollster",
@@ -3825,7 +3825,7 @@ checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
 name = "top-down-rpg"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "tracing",
@@ -3930,7 +3930,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "ui-gallery"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "velvet-anim",
@@ -4059,7 +4059,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "velvet-action"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4076,7 +4076,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-anim"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4089,7 +4089,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-app"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "parking_lot",
  "pretty_assertions",
@@ -4105,7 +4105,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-assets"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "image",
@@ -4127,7 +4127,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-audio"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "parking_lot",
  "serde",
@@ -4141,7 +4141,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-avif"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "avif-parse",
  "image",
@@ -4150,7 +4150,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-bench"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "libc",
  "velvet-assets",
@@ -4164,7 +4164,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-build"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "indexmap",
@@ -4182,7 +4182,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-cards"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4209,7 +4209,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-cli"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "camino",
@@ -4249,7 +4249,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-core"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "parking_lot",
@@ -4268,7 +4268,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-crypto"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "chacha20poly1305",
  "getrandom 0.2.17",
@@ -4285,7 +4285,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-document"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4296,7 +4296,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-dungeon"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4305,7 +4305,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-ecs"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "parking_lot",
@@ -4322,7 +4322,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-editor"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "camino",
@@ -4353,7 +4353,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-editor3d"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "egui",
@@ -4374,14 +4374,14 @@ dependencies = [
 
 [[package]]
 name = "velvet-events"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "parking_lot",
 ]
 
 [[package]]
 name = "velvet-fx"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "image",
  "pretty_assertions",
@@ -4394,7 +4394,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-guion"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4402,7 +4402,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-image"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "image",
  "pretty_assertions",
@@ -4412,7 +4412,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-input"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bitflags 2.13.1",
  "indexmap",
@@ -4429,7 +4429,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-integration-tests"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "serde_json",
@@ -4455,7 +4455,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-liquid"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4464,7 +4464,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-math"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "pretty_assertions",
  "serde",
@@ -4472,14 +4472,14 @@ dependencies = [
 
 [[package]]
 name = "velvet-nav"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "velvet-math",
 ]
 
 [[package]]
 name = "velvet-play"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bitflags 2.13.1",
  "indexmap",
@@ -4497,7 +4497,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-project"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "camino",
  "ron",
@@ -4509,7 +4509,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-qa"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4519,7 +4519,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-render"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bytemuck",
  "gltf",
@@ -4545,7 +4545,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-render-rtx"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "ash",
  "bytemuck",
@@ -4557,7 +4557,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-rpg"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4574,7 +4574,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-runtime"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "tempfile",
@@ -4588,7 +4588,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-scene"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "ron",
@@ -4605,7 +4605,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-scene3d"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4617,21 +4617,21 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-ast"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "velvet-script-lexer",
 ]
 
 [[package]]
 name = "velvet-script-bytecode"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "velvet-script-compiler"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "thiserror 2.0.18",
  "velvet-script-ast",
@@ -4643,7 +4643,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-corpus"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "velvet-script-hir",
  "velvet-script-i18n",
@@ -4656,7 +4656,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-format"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "thiserror 2.0.18",
  "velvet-script-ast",
@@ -4666,11 +4666,11 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-hir"
-version = "0.1.0"
+version = "0.3.0"
 
 [[package]]
 name = "velvet-script-i18n"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "serde",
@@ -4680,7 +4680,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-layers"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -4690,7 +4690,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-lexer"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "logos",
  "thiserror 2.0.18",
@@ -4698,7 +4698,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-lsp"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4713,7 +4713,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-parser"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "pretty_assertions",
  "thiserror 2.0.18",
@@ -4723,7 +4723,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-resolve"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "pretty_assertions",
  "thiserror 2.0.18",
@@ -4732,7 +4732,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-stdlib"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "velvet-script-hir",
  "velvet-script-i18n",
@@ -4741,14 +4741,14 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-syntax"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "velvet-script-types"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "thiserror 2.0.18",
  "velvet-script-hir",
@@ -4756,7 +4756,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-vm"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4768,7 +4768,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-vs3"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "pretty_assertions",
  "semver",
@@ -4787,7 +4787,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-script-vs3-engine"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "thiserror 2.0.18",
  "velvet-liquid",
@@ -4797,7 +4797,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-story"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4822,7 +4822,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-story-lang"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4840,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-style"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "indexmap",
  "pretty_assertions",
@@ -4852,7 +4852,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-terrain"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4860,7 +4860,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-test-utils"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "velvet-app",
  "velvet-core",
@@ -4868,7 +4868,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-text"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "fontdue",
  "pretty_assertions",
@@ -4882,14 +4882,14 @@ dependencies = [
 
 [[package]]
 name = "velvet-time"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "velvet-ui"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bitflags 2.13.1",
  "indexmap",
@@ -4904,7 +4904,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-video"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "pretty_assertions",
  "serde",
@@ -4915,7 +4915,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-vlz"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "lz4_flex",
  "tempfile",
@@ -4926,7 +4926,7 @@ dependencies = [
 
 [[package]]
 name = "velvet-vs3-app"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "fontdue",
@@ -4945,7 +4945,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "visual-novel"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",

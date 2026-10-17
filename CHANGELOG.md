@@ -5,6 +5,59 @@ All notable changes to Velvet Engine are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-10-16
+
+Velvet Engine 0.2 was never tagged on its own: it shipped inside Demon Queen 0.2.0. This release
+gathers everything since 0.1.0, and the workspace version moves to 0.3.0.
+
+### Added
+
+- **3D renderer** (`velvet-render`): toon shading with depth ink lines and grading
+  (`ToonStyle3D`, `Finish3D`), HDR with bloom, cached directional shadows, blend modes, up to 32
+  point lights with per-mesh light masks, GPU skinning, screen-space global illumination and
+  ambient occlusion, reflections with culling, toon fire (`ToonFire3D`), water bodies with ripples
+  and spray (`WaterLife3D`), BC7 textures, FXAA and FSR 1 upscaling, and output at the screen's
+  native resolution.
+- **GPU crowds** (`velvet-render::crowd3d`): thousands of animated soldiers of one model drawn as a
+  single mesh; a compute pass animates them (walk, swing, thrust, shot, fall, cape, flight) from
+  eight numbers per instance (`upload_crowd`, `set_crowd`).
+- **`Material3D::sky`**: an unlit sky dome that is never hazed.
+- **AV1** (`velvet-avif`): AVIF pictures and AV1 clips in IVF, decoded by rav1d (pure Rust, no
+  system codec).
+- **VLZ** (`velvet-vlz`): a block-compressed, random-access resource container; specification in
+  [`docs/formats/VLZ_FORMAT.md`](docs/formats/VLZ_FORMAT.md).
+- **Navigation and QA**: `velvet-nav` (navmeshes from a game's own walkability, A* with a funnel
+  pass, ORCA crowds) and `velvet-qa` (a walker that plays a zone and reports where it gets stuck and
+  the frame times).
+- **World generation**: `velvet-terrain` (noise, erosion, meshing, LOD, biomes), `velvet-liquid`
+  (shallow water, SPH), `velvet-dungeon` (deterministic dungeon blueprints).
+- **Guiones** (`velvet-guion`): dialogue and visual-novel scenes written as Markdown, played as
+  conversations or compiled to story nodes; stage directives include the new `@recuerdo` (a
+  remembered picture, shown with a ribbon and kept in the gallery).
+- **Velvet Editor** (`velvet-editor3d`, **alpha**): docked scene tree, inspector, files and
+  scripts around the engine's own 3D viewport.
+- **Video** (`velvet-video`): a frame-sequence player for openings and cutscenes.
+- **Docs**: [`docs/README.md`](docs/README.md) index, the module map now covers all 65 crates,
+  `docs/formats/` for shared file formats, and the plan for a JavaScript framework
+  ([`JS_FRAMEWORK_PLAN.md`](docs/architecture/JS_FRAMEWORK_PLAN.md),
+  [ADR 0009](docs/adr/0009-rust-and-js-runtimes.md)).
+
+### Changed
+
+- Workspace version **0.3.0** (`velvet-cellular` stays `0.1.0-alpha.1`).
+- The VLZ specification moved to `docs/formats/VLZ_FORMAT.md`.
+
+### Demon Queen (flagship demo)
+
+Source only in this repository; its story, locales and art stay private. Highlights of this cycle:
+the castle court (audiences, works, lessons, training, the cell, nights) and a dating sim whose
+rewards are remembered pictures; the war table with quick battles and a turn-based campaign
+(`demos/demon-queen/war`: battle simulation, campaign rules, field and map scenery); battle banners
+that follow their troops through a reusable world-anchored label layout; campaign armies drawn as
+formations, destination chips, multi-turn marches, and militias that make every taken province a
+fight; redesigned Persona-style menus; terrain detail and lighting for the battlefields. The game's
+GPU HUD modules moved from `src/bin/` to `src/overlay/` (`src/bin/` holds only binaries).
+
 ## [0.1.0] - Unreleased
 
 ### Added

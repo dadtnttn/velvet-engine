@@ -6,13 +6,14 @@
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/language-Rust-DEA584?style=for-the-badge&logo=rust&logoColor=white" alt="Rust"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-9B59B6?style=for-the-badge" alt="License"/></a>
   <a href="rust-toolchain.toml"><img src="https://img.shields.io/badge/rustc-1.80%2B-orange?style=for-the-badge&logo=rust&logoColor=white" alt="Rust 1.80+"/></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.3.0-6E3FB0?style=for-the-badge" alt="Version 0.3.0"/></a>
   <a href="docs/architecture/ROADMAP.md"><img src="https://img.shields.io/badge/status-early%20development-2A1545?style=for-the-badge" alt="Early development"/></a>
   <a href="docs/architecture/CELLULAR.md"><img src="https://img.shields.io/badge/cellular-alpha-E67E22?style=for-the-badge" alt="Cellular alpha"/></a>
   <a href="docs/editor/STUDIO.md"><img src="https://img.shields.io/badge/studio-alpha-E67E22?style=for-the-badge" alt="Studio alpha"/></a>
 </p>
 
 <p align="center">
-  <strong>Modular Rust game engine</strong> for visual novels, narrative adventures, and 2D interactive play.<br/>
+  <strong>Modular Rust game engine</strong> for visual novels, narrative adventures, 2D play and toon-shaded 3D worlds.<br/>
   Shared core · installable modules · dedicated languages: <strong>Velvet Script</strong>, <strong>Velvet Story</strong>, <strong>Velvet Style</strong>
 </p>
 
@@ -39,6 +40,7 @@ minigame; action can cut to narrative — all styled with one UI language.
 | **Velvet Story** | Visual novels, branching dialogue, choices, rollback, saves, i18n |
 | **Velvet Play / RPG / Action** | Top-down maps, collisions, stats, quests, combat loops |
 | **Velvet Style** | CSS-like UI styling with cascade, `var()`, math, color functions and motion scripting |
+| **Velvet 3D** | Toon-shaded 3D worlds: HDR, shadows, skinning, GPU crowds, water, navigation, AV1 video |
 | **Velvet Cellular** *(alpha)* | Falling-sand / Noita-like materials for authors |
 
 > **Status:** early development — see [`docs/architecture/ROADMAP.md`](docs/architecture/ROADMAP.md).<br/>
@@ -115,6 +117,21 @@ full Ren'Py-shaped starter: change names, images and dialogue only.
 Docs: [`docs/language/VELVET_STORY.md`](docs/language/VELVET_STORY.md) ·
 [2.5 notes](docs/language/VELVET_2_5.md) ·
 [VS3 roadmap](docs/language/VS3_ROADMAP.md).
+
+### Toon 3D, crowds and media
+
+- **3D renderer** (`velvet-render`): toon shading with depth ink lines and grading, HDR + bloom,
+  cached shadows, up to 32 point lights, GPU skinning, screen-space GI and AO, reflections, toon
+  fire, living water, BC7 textures, FXAA / FSR 1 upscaling, native-resolution output.
+- **GPU crowds** (`crowd3d`): thousands of animated soldiers of one model drawn as a single mesh,
+  animated by a compute pass — the battles of Demon Queen run on it.
+- **Media and packs**: AV1 pictures and clips decoded in pure Rust (`velvet-avif`), the VLZ
+  random-access container (`velvet-vlz`, [format](docs/formats/VLZ_FORMAT.md)).
+- **World**: navmeshes with ORCA crowds (`velvet-nav`), terrain and liquid synthesis, automatic QA
+  walkers (`velvet-qa`).
+- **Guiones** (`velvet-guion`): dialogue and visual-novel scenes written as Markdown.
+- **Velvet Editor** *(alpha, `velvet-editor3d`)*: docked scene tree, inspector and scripts around
+  the engine's own viewport.
 
 ### UI, animation and 3D building blocks
 
@@ -198,7 +215,10 @@ and [Demon Queen setup](demos/demon-queen/README.md).
 |-------|------|
 | Vision | [docs/architecture/VISION.md](docs/architecture/VISION.md) |
 | Architecture | [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) |
-| Modules map | [docs/architecture/MODULES.md](docs/architecture/MODULES.md) |
+| Docs index | [docs/README.md](docs/README.md) |
+| Modules map (all crates) | [docs/architecture/MODULES.md](docs/architecture/MODULES.md) |
+| File formats | [docs/formats/](docs/formats/) |
+| Velvet JS plan (JavaScript framework) | [docs/architecture/JS_FRAMEWORK_PLAN.md](docs/architecture/JS_FRAMEWORK_PLAN.md) · [ADR 0009](docs/adr/0009-rust-and-js-runtimes.md) |
 | Roadmap | [docs/architecture/ROADMAP.md](docs/architecture/ROADMAP.md) |
 | Velvet Style (VCSS) | [docs/language/VELVET_STYLE.md](docs/language/VELVET_STYLE.md) |
 | Velvet Script (JS-lite) | [docs/language/VELVET_SCRIPT.md](docs/language/VELVET_SCRIPT.md) · [v2](docs/language/VELVET_SCRIPT_2.md) · [v3](docs/language/VELVET_SCRIPT_3.md) |
@@ -217,17 +237,17 @@ Brand assets used on this page: [`docs/assets/`](docs/assets/).
 ## Workspace
 
 ```text
-crates/      Engine libraries (core, story, style, ui, scene3d, script, cli, …)
+crates/      Engine libraries — 65 crates: core, render (2D + 3D), media, world, story, script, tools
 examples/    Focused runnable examples (run from a fresh clone)
 demos/       Supported engine demos and Demon Queen source
 templates/   Project starters for `velvet new`
 samples/     Ship-shaped sample projects (short-novella, vs3-logic)
-docs/        Architecture, language, reports, tutorials
+docs/        Architecture, ADRs, formats, languages, tutorials (index: docs/README.md)
 editors/     VS Code language support
-tools/       Author and quality tooling
+tools/       Quality tooling and velvet-three-kit (the JS / Three.js prototyping kit)
 ```
 
-50+ crates, one workspace, ~2000 tests behind a single gate:
+65 crates, one workspace, ~1950 tests behind a single gate:
 
 ```bash
 cargo fmt --all -- --check
@@ -265,5 +285,5 @@ Contributions are accepted under the same terms ([CONTRIBUTING.md](CONTRIBUTING.
 
 <p align="center">
   <img src="docs/assets/velvet-mark.svg" alt="Velvet mark" width="64"/><br/>
-  <sub>Velvet Engine · early development</sub>
+  <sub>Velvet Engine 0.3.0 · early development</sub>
 </p>
