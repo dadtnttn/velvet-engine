@@ -69,7 +69,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon -- -D warnings
 
       - name: Test
-        run: cargo test --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon
+        run: cargo test --workspace --all-targets --all-features --exclude demon-queen --exclude demon-queen-dungeon --no-fail-fast
 
       - name: Doc
         run: cargo doc --workspace --all-features --no-deps --exclude demon-queen --exclude demon-queen-dungeon
