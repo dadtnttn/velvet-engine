@@ -65,6 +65,11 @@ impl App {
         state.dungeon_active = self.dungeon_mode;
         state.brothel_rope_open =
             self.brothel_rope_open || self.brothel.as_ref().is_some_and(|b| b.rope_open);
+        state.war = self
+            .war_campaign
+            .as_ref()
+            .and_then(|c| serde_json::to_value(c).ok());
+        state.war_scale = Some(self.war_scale);
         state.inside = if let Some(b) = &self.brothel {
             Some(exploration3d_state::Inside {
                 place: "burdel".into(),
@@ -156,6 +161,8 @@ pub(super) struct Start {
     /// Back inside the place she was saved in.
     pub(super) inside: Option<exploration3d_state::Inside>,
     pub(super) brothel_rope_open: bool,
+    pub(super) war: Option<demon_queen_war::rules::Campaign>,
+    pub(super) war_scale: f32,
 }
 
 /// Where a world starts: its saved session when it is this world's, else fresh (a new dungeon from
@@ -192,8 +199,16 @@ pub(super) fn starting_point(
     let mut venue = venue::Menu::default();
     let mut inside = None;
     let mut brothel_rope_open = false;
+    let mut war = None;
+    let mut war_scale = 1.0;
     if let Ok(Some(saved)) = exploration3d_state::load_from(session_path) {
         brothel_rope_open = saved.brothel_rope_open;
+        // The war table's campaign goes wherever she does.
+        war = saved
+            .war
+            .clone()
+            .and_then(|v| serde_json::from_value::<demon_queen_war::rules::Campaign>(v).ok());
+        war_scale = saved.war_scale.unwrap_or(1.0).clamp(0.5, 2.0);
         // Hers wherever she is: the purse, the bag, the shop, the book, the achievements, the
         // story, the outfit.
         outfit = saved.outfit % wardrobe_outfit_count();
@@ -270,6 +285,8 @@ pub(super) fn starting_point(
         venue,
         inside,
         brothel_rope_open,
+        war,
+        war_scale,
     }
 }
 
@@ -282,7 +299,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("dq-save-{name}-{}-{stamp}.json", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "dq-save-{name}-{}-{stamp}.json",
+            std::process::id()
+        ))
     }
 
     #[test]

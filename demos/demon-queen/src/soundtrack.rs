@@ -99,6 +99,7 @@ impl Playlist {
     pub(crate) fn new(tracks: Vec<Track>) -> Self {
         Self { tracks, next: 0 }
     }
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.tracks.is_empty()
     }
@@ -214,7 +215,9 @@ impl Music {
                     * self.level
                     * self.duck
                     * equal_power(voice.fade)
-                    * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Music),
+                    * crate::exploration3d::prefs::gain(
+                        crate::exploration3d::prefs::Channel::Music,
+                    ),
             );
         }
         self.voices.retain(|v| v.fade > 0.001);
@@ -325,9 +328,15 @@ impl Music {
         self.duck = approach(self.duck, want, rate, dt);
         for voice in &mut self.voices {
             voice.fade = approach(voice.fade, voice.target, 1.0 / voice.fade_seconds, dt);
-            voice
-                .sink
-                .set_volume(MUSIC_VOLUME * self.level * self.duck * equal_power(voice.fade) * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Music));
+            voice.sink.set_volume(
+                MUSIC_VOLUME
+                    * self.level
+                    * self.duck
+                    * equal_power(voice.fade)
+                    * crate::exploration3d::prefs::gain(
+                        crate::exploration3d::prefs::Channel::Music,
+                    ),
+            );
         }
         self.voices
             .retain(|v| !(v.target == 0.0 && v.fade <= 0.001));
@@ -337,9 +346,15 @@ impl Music {
     pub(crate) fn hush(&mut self, paused: bool) {
         self.duck = duck_gain(0.0, paused);
         for voice in &self.voices {
-            voice
-                .sink
-                .set_volume(MUSIC_VOLUME * self.level * self.duck * equal_power(voice.fade) * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Music));
+            voice.sink.set_volume(
+                MUSIC_VOLUME
+                    * self.level
+                    * self.duck
+                    * equal_power(voice.fade)
+                    * crate::exploration3d::prefs::gain(
+                        crate::exploration3d::prefs::Channel::Music,
+                    ),
+            );
         }
     }
 

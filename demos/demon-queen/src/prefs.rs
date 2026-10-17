@@ -294,7 +294,11 @@ impl Graphics {
 
     fn from_json(map: &Map<String, Value>) -> Graphics {
         let mut g = Graphics::MAXIMUM;
-        let n = |k: &str, d: u8| map.get(k).and_then(Value::as_u64).map_or(d, |v| v.min(255) as u8);
+        let n = |k: &str, d: u8| {
+            map.get(k)
+                .and_then(Value::as_u64)
+                .map_or(d, |v| v.min(255) as u8)
+        };
         let b = |k: &str, d: bool| map.get(k).and_then(Value::as_bool).unwrap_or(d);
         g.preset = n("preset", g.preset).min(PRESET_CUSTOM);
         g.shadows = n("shadows", g.shadows).min(3);
@@ -302,7 +306,11 @@ impl Graphics {
         g.reflections = b("reflections", g.reflections);
         g.bloom = n("bloom", g.bloom).min(2);
         let scale = n("render_scale", g.render_scale);
-        g.render_scale = if RENDER_SCALES.contains(&scale) { scale } else { 100 };
+        g.render_scale = if RENDER_SCALES.contains(&scale) {
+            scale
+        } else {
+            100
+        };
         g.upscaler = n("upscaler", g.upscaler).min(1);
         g.dynamic = n("dynamic", g.dynamic).min(2);
         g.antialias = n("antialias", g.antialias).min(1);
@@ -381,7 +389,11 @@ pub(crate) fn load() {
 
 fn load_from(path: &std::path::Path) {
     let map = read_file(path);
-    let number = |key: &str| map.get(key).and_then(Value::as_u64).map(|v| v.min(255) as u8);
+    let number = |key: &str| {
+        map.get(key)
+            .and_then(Value::as_u64)
+            .map(|v| v.min(255) as u8)
+    };
     if let Some(Value::Object(volumes)) = map.get("volumes") {
         for channel in Channel::ALL {
             if let Some(v) = volumes.get(channel.key()).and_then(Value::as_u64) {
@@ -453,7 +465,10 @@ mod tests {
         set_text_speed(1);
         set_sensitivity(SENSITIVITY_DEFAULT);
         load_from(&path);
-        assert_eq!((volume(Channel::Music), text_speed(), sensitivity()), (3, 2, 8));
+        assert_eq!(
+            (volume(Channel::Music), text_speed(), sensitivity()),
+            (3, 2, 8)
+        );
         assert_eq!(read_file(&path).get("language"), Some(&Value::from("ja")));
         set_volume(Channel::Music, VOLUME_STEPS);
         set_text_speed(1);

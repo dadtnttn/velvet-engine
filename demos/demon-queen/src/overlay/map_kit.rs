@@ -243,17 +243,31 @@ pub(super) fn slant(vertices: &mut Vec<MapVertex>, r: Rect, lean: f32, color: [f
 /// accent's spine down its left and halftone in its far corner.
 pub(super) fn pane(vertices: &mut Vec<MapVertex>, r: Rect, place: Place, cut: f32) {
     let a = accent(place);
-    cut_plate(vertices, Rect::new(r.x + 8.0, r.y + 9.0, r.w, r.h), cut, [0.0, 0.0, 0.0, 0.55]);
+    cut_plate(
+        vertices,
+        Rect::new(r.x + 8.0, r.y + 9.0, r.w, r.h),
+        cut,
+        [0.0, 0.0, 0.0, 0.55],
+    );
     cut_plate(vertices, r, cut, hex(0x0d0814, 0.95));
     persona::halftone(
         vertices,
-        Rect::new(r.x + r.w * 0.55, r.y + r.h * 0.6, r.w * 0.45 - 8.0, r.h * 0.4 - 8.0),
+        Rect::new(
+            r.x + r.w * 0.55,
+            r.y + r.h * 0.6,
+            r.w * 0.45 - 8.0,
+            r.h * 0.4 - 8.0,
+        ),
         14.0,
         2.6,
         [1.0, 1.0],
         hex(a, 0.18),
     );
-    push_rect(vertices, Rect::new(r.x, r.y + cut.min(r.h * 0.3), 5.0, r.h - cut.min(r.h * 0.3)), hex(a, 0.95));
+    push_rect(
+        vertices,
+        Rect::new(r.x, r.y + cut.min(r.h * 0.3), 5.0, r.h - cut.min(r.h * 0.3)),
+        hex(a, 0.95),
+    );
 }
 
 pub(super) fn round_gradient(
@@ -303,8 +317,18 @@ pub(super) fn soft_shadow(
 /// A rounded pill with a coloured rim.
 pub(super) fn pill(vertices: &mut Vec<MapVertex>, rect: Rect, fill: [f32; 4], rim: [f32; 4]) {
     let lean = (rect.h * 0.22).min(10.0);
-    slant(vertices, Rect::new(rect.x + 5.0, rect.y + 5.0, rect.w, rect.h), lean, [0.0, 0.0, 0.0, 0.55]);
-    slant(vertices, Rect::new(rect.x - 1.4, rect.y - 1.4, rect.w + 2.8, rect.h + 2.8), lean, rim);
+    slant(
+        vertices,
+        Rect::new(rect.x + 5.0, rect.y + 5.0, rect.w, rect.h),
+        lean,
+        [0.0, 0.0, 0.0, 0.55],
+    );
+    slant(
+        vertices,
+        Rect::new(rect.x - 1.4, rect.y - 1.4, rect.w + 2.8, rect.h + 2.8),
+        lean,
+        rim,
+    );
     slant(vertices, rect, lean, fill);
 }
 
@@ -321,7 +345,17 @@ pub(super) fn key_caption(
 ) -> f32 {
     let key_w = (label_width(font, key, size * 0.86) + 22.0).max(size * 1.6);
     let cap = Rect::new(x, cy - size * 0.72, key_w, size * 1.44);
-    ui_paint::keycap(font, vertices, cap, key, size * 0.86, false, false, 0xffffff, 1.0);
+    ui_paint::keycap(
+        font,
+        vertices,
+        cap,
+        key,
+        size * 0.86,
+        false,
+        false,
+        0xffffff,
+        1.0,
+    );
     let text_x = x + key_w + 8.0;
     push_label(
         font,
@@ -389,10 +423,27 @@ pub(super) fn draw_frame(
     // subtitle on a small bone tag under it.
     let title_size = if expanded { 40.0 } else { 26.0 };
     let title_w = ui_paint::text_width(font, ui_paint::Face::Display, title, title_size);
-    let plate = Rect::new(panel.x + 34.0, panel.y + 18.0, title_w + 128.0, header - 26.0);
-    slant(vertices, Rect::new(plate.x + 7.0, plate.y + 7.0, plate.w, plate.h), 16.0, [0.0, 0.0, 0.0, 0.55]);
+    let plate = Rect::new(
+        panel.x + 34.0,
+        panel.y + 18.0,
+        title_w + 128.0,
+        header - 26.0,
+    );
+    slant(
+        vertices,
+        Rect::new(plate.x + 7.0, plate.y + 7.0, plate.w, plate.h),
+        16.0,
+        [0.0, 0.0, 0.0, 0.55],
+    );
     slant(vertices, plate, 16.0, hex(a, 1.0));
-    push_prompt_badge(vertices, badge, plate.x + 44.0, plate.y + plate.h * 0.5, 24.0, 1.0);
+    push_prompt_badge(
+        vertices,
+        badge,
+        plate.x + 44.0,
+        plate.y + plate.h * 0.5,
+        24.0,
+        1.0,
+    );
     let ink = ui_paint::rgba(0x0e0816, 1.0);
     ui_paint::text(
         font,
@@ -406,7 +457,12 @@ pub(super) fn draw_frame(
     );
     let sub_size = 15.0;
     let sub_w = ui_paint::text_width(font, ui_paint::Face::Ui, subtitle, sub_size) + 30.0;
-    let tag = Rect::new(plate.x + plate.w + 26.0, plate.y + plate.h * 0.5 - 14.0, sub_w, 28.0);
+    let tag = Rect::new(
+        plate.x + plate.w + 26.0,
+        plate.y + plate.h * 0.5 - 14.0,
+        sub_w,
+        28.0,
+    );
     slant(vertices, tag, 8.0, hex(0xf6eef3, 0.95));
     ui_paint::text(
         font,
@@ -433,8 +489,16 @@ pub(super) fn draw_frame(
         pill(
             vertices,
             close,
-            if hot { hex(a, 1.0) } else { hex(0x120c18, 0.97) },
-            if hot { [1.0, 1.0, 1.0, 1.0] } else { hex(0xffffff, 0.35) },
+            if hot {
+                hex(a, 1.0)
+            } else {
+                hex(0x120c18, 0.97)
+            },
+            if hot {
+                [1.0, 1.0, 1.0, 1.0]
+            } else {
+                hex(0xffffff, 0.35)
+            },
         );
         let text = "Cerrar";
         let key_w = label_width(font, "ESC", 17.0) + 16.0;
@@ -558,12 +622,21 @@ pub(super) fn place_row(
     let tone = tone(place);
     let a = accent(place);
     let lean = 8.0;
-    slant(vertices, Rect::new(rect.x + 5.0, rect.y + 5.0, rect.w, rect.h), lean, [0.0, 0.0, 0.0, 0.45]);
+    slant(
+        vertices,
+        Rect::new(rect.x + 5.0, rect.y + 5.0, rect.w, rect.h),
+        lean,
+        [0.0, 0.0, 0.0, 0.45],
+    );
     if here {
         slant(vertices, rect, lean, hex(a, 0.95));
     } else {
         slant(vertices, rect, lean, hex(0x1a1222, 0.92));
-        push_rect(vertices, Rect::new(rect.x + 2.0, rect.y + 4.0, 3.0, rect.h - 8.0), hex(a, 0.7));
+        push_rect(
+            vertices,
+            Rect::new(rect.x + 2.0, rect.y + 4.0, 3.0, rect.h - 8.0),
+            hex(a, 0.7),
+        );
     }
     push_prompt_badge(
         vertices,
@@ -887,13 +960,31 @@ pub(super) fn name_tag(
     let h = size * 1.45;
     let lean = h * 0.22;
     let w = text_w + size * 1.6;
-    let cx = cx.clamp(map.x + w * 0.5 + lean + 4.0, map.x + map.w - w * 0.5 - lean - 4.0);
+    let cx = cx.clamp(
+        map.x + w * 0.5 + lean + 4.0,
+        map.x + map.w - w * 0.5 - lean - 4.0,
+    );
     let cy = cy.clamp(map.y + h * 0.5 + 4.0, map.y + map.h - h * 0.5 - 4.0);
     let r = Rect::new(cx - w * 0.5, cy - h * 0.5, w, h);
-    slant(vertices, Rect::new(r.x + 4.0, r.y + 4.0, r.w, r.h), lean, [0.0, 0.0, 0.0, 0.6]);
-    slant(vertices, Rect::new(r.x - 1.2, r.y - 1.2, r.w + 2.4, r.h + 2.4), lean, hex(0xf6eef3, 0.9));
+    slant(
+        vertices,
+        Rect::new(r.x + 4.0, r.y + 4.0, r.w, r.h),
+        lean,
+        [0.0, 0.0, 0.0, 0.6],
+    );
+    slant(
+        vertices,
+        Rect::new(r.x - 1.2, r.y - 1.2, r.w + 2.4, r.h + 2.4),
+        lean,
+        hex(0xf6eef3, 0.9),
+    );
     slant(vertices, r, lean, hex(0x0d0814, 0.96));
-    slant(vertices, Rect::new(r.x, r.y, size * 0.45, r.h), lean, hex(a, 1.0));
+    slant(
+        vertices,
+        Rect::new(r.x, r.y, size * 0.45, r.h),
+        lean,
+        hex(a, 1.0),
+    );
     ui_paint::text(
         font,
         vertices,

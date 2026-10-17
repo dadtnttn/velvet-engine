@@ -241,7 +241,12 @@ fn sky_mesh() -> Mesh3D {
     let row = segments + 1;
     for i in 0..rings {
         for j in 0..segments {
-            let (a, b, c, d) = (i * row + j, i * row + j + 1, (i + 1) * row + j + 1, (i + 1) * row + j);
+            let (a, b, c, d) = (
+                i * row + j,
+                i * row + j + 1,
+                (i + 1) * row + j + 1,
+                (i + 1) * row + j,
+            );
             indices.extend([a, c, b, a, d, c]);
         }
     }
@@ -371,7 +376,6 @@ struct Piece {
     v: Vec3,
     rot: Vec3,
     w: Vec3,
-    r: f32,
     rest: bool,
 }
 
@@ -679,7 +683,9 @@ impl BossScene {
                 (!arms.hand_r.is_empty() && !arms.sword.is_empty()).then_some(arms)
             }
             Err(error) => {
-                eprintln!("[3d] the fight's arms are not made yet (tools/fp_queen_blender.py): {error:#}");
+                eprintln!(
+                    "[3d] the fight's arms are not made yet (tools/fp_queen_blender.py): {error:#}"
+                );
                 None
             }
         };
@@ -900,7 +906,11 @@ fn view_arm_parts(
     let s = fp::VIEW_SCALE;
     push(draws, upper, fp::limb_transform(elbow, shoulder));
     push(draws, fore, fp::limb_transform(wrist, elbow));
-    push(draws, hand_parts, grip * Mat4::from_scale(Vec3::new(s, s, s)));
+    push(
+        draws,
+        hand_parts,
+        grip * Mat4::from_scale(Vec3::new(s, s, s)),
+    );
     grip
 }
 
@@ -1063,7 +1073,6 @@ impl RenderState {
                     v,
                     rot: Vec3::ZERO,
                     w,
-                    r,
                     rest: false,
                 });
             }
@@ -1163,7 +1172,8 @@ impl RenderState {
         }
         // A cold rim of moonlight behind him, so his bulk stands out of the dark plaza.
         {
-            let to = Vec3::new(v.x - camera.position.x, 0.0, v.z - camera.position.z).normalize_or_zero();
+            let to = Vec3::new(v.x - camera.position.x, 0.0, v.z - camera.position.z)
+                .normalize_or_zero();
             lights.push(PointLight3D::new(
                 Vec3::new(v.x, 0.0, v.z) + to * 2.6 + Vec3::new(0.0, 3.2, 0.0),
                 [0.55, 0.62, 1.0],
@@ -1496,12 +1506,7 @@ impl RenderState {
                 draws.push(MeshDraw3D {
                     mesh: scene.quad,
                     transform: face(e.at, e.size * (1.0 - 0.5 * k)),
-                    material: Material3D::additive([
-                        3.0,
-                        1.2 + 0.6 * (1.0 - k),
-                        0.35,
-                        fade,
-                    ]),
+                    material: Material3D::additive([3.0, 1.2 + 0.6 * (1.0 - k), 0.35, fade]),
                     texture: Some(scene.halo),
                 });
             }
@@ -1726,7 +1731,10 @@ impl RenderState {
         // memory it wakes (a third of the spark) bursts in a great ring and a shower; off target,
         // it crackles off the stone.
         let charging = p.channeling || p.glow > 0.05;
-        let charge = p.glow.clamp(0.0, 1.0).max(if p.channeling { 0.35 } else { 0.0 });
+        let charge = p
+            .glow
+            .clamp(0.0, 1.0)
+            .max(if p.channeling { 0.35 } else { 0.0 });
         if charging {
             let n = 10;
             for m in 0..n {
@@ -1737,11 +1745,20 @@ impl RenderState {
                 let right = fp::camera_vector(camera, Vec3::X);
                 let up = fp::camera_vector(camera, Vec3::Y);
                 let at = tip + (right * a.cos() + up * a.sin()) * r;
-                let c = if m % 3 == 0 { [1.0, 0.85, 0.55] } else { [0.72, 0.52, 1.0] };
+                let c = if m % 3 == 0 {
+                    [1.0, 0.85, 0.55]
+                } else {
+                    [0.72, 0.52, 1.0]
+                };
                 draws.push(MeshDraw3D {
                     mesh: scene.quad,
                     transform: face(at, 0.012 + 0.016 * u),
-                    material: Material3D::additive([c[0] * 3.0, c[1] * 3.0, c[2] * 3.0, u * charge]),
+                    material: Material3D::additive([
+                        c[0] * 3.0,
+                        c[1] * 3.0,
+                        c[2] * 3.0,
+                        u * charge,
+                    ]),
                     texture: Some(scene.halo),
                 });
             }
@@ -1807,7 +1824,9 @@ impl RenderState {
                         vertices.push(MeshVertex3D::new(q.to_array(), [0.0, 1.0, 0.0], [s, 0.0]));
                     }
                 }
-                renderer.update_mesh_vertices(queue, mesh, &vertices).is_ok()
+                renderer
+                    .update_mesh_vertices(queue, mesh, &vertices)
+                    .is_ok()
             };
             let none = |_: f32| Vec3::ZERO;
             let surge = 0.85 + 0.15 * (t * 31.0).sin();
@@ -1820,7 +1839,16 @@ impl RenderState {
             .into_iter()
             .enumerate()
             {
-                if ribbon(scene.beam[k], 0.0, 1.0, width * surge, 0.0, &none, &mut self.renderer, &self.queue) {
+                if ribbon(
+                    scene.beam[k],
+                    0.0,
+                    1.0,
+                    width * surge,
+                    0.0,
+                    &none,
+                    &mut self.renderer,
+                    &self.queue,
+                ) {
                     draws.push(MeshDraw3D {
                         mesh: scene.beam[k],
                         transform: Mat4::IDENTITY,
@@ -1844,10 +1872,21 @@ impl RenderState {
                 let out = (side * a.cos() + up * a.sin()) * reach;
                 let offset = move |s: f32| {
                     let along = dir * (s * 0.25);
-                    let wiggle = (side * (hash(seed + s * 9.0) - 0.5) + up * (hash(seed + s * 5.0) - 0.5)) * 0.08;
+                    let wiggle = (side * (hash(seed + s * 9.0) - 0.5)
+                        + up * (hash(seed + s * 5.0) - 0.5))
+                        * 0.08;
                     out * s + along + wiggle
                 };
-                if ribbon(*mesh, start, start, 0.012, 0.0, &offset, &mut self.renderer, &self.queue) {
+                if ribbon(
+                    *mesh,
+                    start,
+                    start,
+                    0.012,
+                    0.0,
+                    &offset,
+                    &mut self.renderer,
+                    &self.queue,
+                ) {
                     draws.push(MeshDraw3D {
                         mesh: *mesh,
                         transform: Mat4::IDENTITY,
@@ -1897,18 +1936,25 @@ impl RenderState {
                     draws.push(MeshDraw3D {
                         mesh: scene.quad,
                         transform: face(emblem + toward * 0.06, 0.3 + k * 1.6),
-                        material: Material3D::additive([1.6, 1.1, 2.6, (1.0 - k) * 0.7 * fight.beam]),
+                        material: Material3D::additive([
+                            1.6,
+                            1.1,
+                            2.6,
+                            (1.0 - k) * 0.7 * fight.beam,
+                        ]),
                         texture: Some(scene.ring),
                     });
                 }
                 for _ in 0..3 {
-                    let s = scene.mote_seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    let s = scene
+                        .mote_seed
+                        .wrapping_mul(1_664_525)
+                        .wrapping_add(1_013_904_223);
                     scene.mote_seed = s;
                     let r = |n: u32| ((s.rotate_left(n) >> 8) as f32) / 16_777_216.0;
-                    let out = (toward * 0.6
-                        + side * (r(3) - 0.5) * 2.0
-                        + Vec3::Y * (r(7) * 1.2 - 0.2))
-                        .normalize_or_zero();
+                    let out =
+                        (toward * 0.6 + side * (r(3) - 0.5) * 2.0 + Vec3::Y * (r(7) * 1.2 - 0.2))
+                            .normalize_or_zero();
                     scene.motes.push(Mote {
                         at: emblem,
                         v: out * (2.0 + r(11) * 3.0),
@@ -1921,7 +1967,10 @@ impl RenderState {
             } else if fight.fizzle {
                 // Off target: it crackles off the stone.
                 for _ in 0..2 {
-                    let s = scene.mote_seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    let s = scene
+                        .mote_seed
+                        .wrapping_mul(1_664_525)
+                        .wrapping_add(1_013_904_223);
                     scene.mote_seed = s;
                     let r = |n: u32| ((s.rotate_left(n) >> 8) as f32) / 16_777_216.0;
                     let out = Vec3::new(r(3) - 0.5, r(5) * 0.8, r(7) - 0.5).normalize_or_zero();
@@ -1941,12 +1990,16 @@ impl RenderState {
             scene.memories_seen = v.memories;
             scene.burst_at = t;
             for i in 0..70 {
-                let s = scene.mote_seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223 + i);
+                let s = scene
+                    .mote_seed
+                    .wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223 + i);
                 scene.mote_seed = s;
                 let r = |n: u32| ((s.rotate_left(n) >> 8) as f32) / 16_777_216.0;
                 let a = r(3) * std::f32::consts::TAU;
                 let e = r(5) * 1.4 - 0.4;
-                let out = Vec3::new(a.cos() * e.cos(), e.sin() + 0.3, a.sin() * e.cos()).normalize_or_zero();
+                let out = Vec3::new(a.cos() * e.cos(), e.sin() + 0.3, a.sin() * e.cos())
+                    .normalize_or_zero();
                 scene.motes.push(Mote {
                     at: emblem,
                     v: out * (3.0 + r(11) * 5.0),
@@ -1977,7 +2030,12 @@ impl RenderState {
                 material: Material3D::additive([3.0, 2.5, 3.6, (1.0 - k).powi(2) * 0.9]),
                 texture: Some(scene.halo),
             });
-            lights.push(PointLight3D::new(emblem, [0.85, 0.65, 1.0], 18.0 * (1.0 - k).powi(2), 12.0));
+            lights.push(PointLight3D::new(
+                emblem,
+                [0.85, 0.65, 1.0],
+                18.0 * (1.0 - k).powi(2),
+                12.0,
+            ));
         }
         // The sparks in the air: flung out, falling, winking out.
         for m in &mut scene.motes {
@@ -1993,7 +2051,11 @@ impl RenderState {
         }
         for m in &scene.motes {
             let k = m.age / m.life;
-            let c = if m.gold { [3.0, 2.3, 1.2] } else { [2.0, 1.4, 3.4] };
+            let c = if m.gold {
+                [3.0, 2.3, 1.2]
+            } else {
+                [2.0, 1.4, 3.4]
+            };
             draws.push(MeshDraw3D {
                 mesh: scene.quad,
                 transform: face(m.at, m.size * (1.0 - 0.6 * k)),
@@ -2210,7 +2272,19 @@ impl App {
         };
         let seed = (self.elapsed * 1000.0) as u32 ^ 0x5eed_1234;
         self.boss = Some(Fight::new(wolves, hunted, seed));
-        // The sword she wears: its weight and what it carries.
+        // Nyxara's gifts: a quicker spark, longer dazes, more vitality.
+        let gift = |on: bool, value: f32| if on { value } else { 1.0 };
+        let spark = gift(self.has_gift(court::DON_CHISPA), 1.25);
+        let stun = if self.has_gift(court::DON_SELLO) {
+            1.0
+        } else {
+            0.0
+        };
+        let vitality = gift(self.has_gift(court::DON_AGUANTE), 1.25);
+        if let Some(fight) = self.boss.as_mut() {
+            fight.set_gifts(spark, stun, vitality);
+        }
+        // The sword she wears: its weight and what it carries (and her skill with it).
         self.apply_equipment();
         self.boss_input = BossInput::default();
         // Night is falling over the hills.

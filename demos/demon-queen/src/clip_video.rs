@@ -24,11 +24,20 @@ const FPS: f64 = 30.0;
 /// The video a shot folder plays from, when it has one.
 fn video_of(dir: &Path) -> Option<(PathBuf, usize)> {
     // QA: `VELVET_CLIP_FRAMES=1` plays the frames even where the video is (to compare the two).
-    if std::env::var("VELVET_CLIP_FRAMES").is_ok_and(|v| v == "1") && dir.join("frame_0001.jpg").is_file() {
+    if std::env::var("VELVET_CLIP_FRAMES").is_ok_and(|v| v == "1")
+        && dir.join("frame_0001.jpg").is_file()
+    {
         return None;
     }
-    let video = [VIDEO_AV1, VIDEO].iter().map(|name| dir.join(name)).find(|v| v.is_file())?;
-    let count = std::fs::read_to_string(dir.join(COUNT)).ok()?.trim().parse().ok()?;
+    let video = [VIDEO_AV1, VIDEO]
+        .iter()
+        .map(|name| dir.join(name))
+        .find(|v| v.is_file())?;
+    let count = std::fs::read_to_string(dir.join(COUNT))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
     Some((video, count))
 }
 
@@ -41,7 +50,9 @@ pub(crate) fn is_shot(dir: &Path) -> bool {
 pub(crate) fn frames(dir: &Path) -> Vec<PathBuf> {
     if let Some((video, count)) = video_of(dir) {
         let name = video.to_string_lossy().into_owned();
-        return (0..count).map(|i| PathBuf::from(format!("{name}#{i:05}"))).collect();
+        return (0..count)
+            .map(|i| PathBuf::from(format!("{name}#{i:05}")))
+            .collect();
     }
     let mut list: Vec<PathBuf> = std::fs::read_dir(dir)
         .map(|d| {
@@ -182,7 +193,10 @@ struct Reader {
 /// Worker threads a video's decoder gets (QA: `VELVET_CLIP_THREADS`).
 #[cfg(windows)]
 fn decoder_threads() -> u32 {
-    std::env::var("VELVET_CLIP_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(2)
+    std::env::var("VELVET_CLIP_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2)
 }
 
 #[cfg(windows)]
@@ -200,10 +214,12 @@ fn media_foundation() -> windows::core::Result<()> {
     COM.with(|_| ());
     // SAFETY: MFStartup is counted and may be called from any thread; it is never shut down.
     STARTED
-        .get_or_init(|| match unsafe { MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET) } {
-            Ok(()) => windows::core::HRESULT(0),
-            Err(e) => e.code(),
-        })
+        .get_or_init(
+            || match unsafe { MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET) } {
+                Ok(()) => windows::core::HRESULT(0),
+                Err(e) => e.code(),
+            },
+        )
         .ok()
 }
 
@@ -230,13 +246,19 @@ impl Reader {
             // ~5 ms; the low-latency mode would save more but decodes at half the speed).
             let mut raw = std::ptr::null_mut();
             if source
-                .GetServiceForStream(stream, &windows::core::GUID::zeroed(), &<IMFTransform as windows::core::Interface>::IID, &mut raw)
+                .GetServiceForStream(
+                    stream,
+                    &windows::core::GUID::zeroed(),
+                    &<IMFTransform as windows::core::Interface>::IID,
+                    &mut raw,
+                )
                 .is_ok()
                 && !raw.is_null()
             {
                 let decoder = <IMFTransform as windows::core::Interface>::from_raw(raw);
                 if let Ok(attributes) = decoder.GetAttributes() {
-                    let _ = attributes.SetUINT32(&CODECAPI_AVDecNumWorkerThreads, decoder_threads());
+                    let _ =
+                        attributes.SetUINT32(&CODECAPI_AVDecNumWorkerThreads, decoder_threads());
                 }
             }
             let got = source.GetCurrentMediaType(stream)?;
@@ -272,17 +294,25 @@ impl Reader {
             }
         }
         // Onwards from here when it is a little ahead; else back to the keyframe before it.
-        let ahead = self.next.is_some_and(|next| index >= next && index - next < 45);
+        let ahead = self
+            .next
+            .is_some_and(|next| index >= next && index - next < 45);
         if !ahead {
             // To its time (the last frames' times can lie past what the file calls its length:
             // then a little before, and on from there).
             let time = self.start + (index as f64 * 10_000_000.0 / FPS) as i64;
             let frame = (10_000_000.0 / FPS) as i64;
-            let landed = [time, time - self.start, time - 3 * frame, time - 30 * frame].into_iter().any(|t| {
-                let position = windows::core::PROPVARIANT::from(t.max(0));
-                // SAFETY: a seek on the reader this thread owns.
-                unsafe { self.source.SetCurrentPosition(&windows::core::GUID::zeroed(), &position) }.is_ok()
-            });
+            let landed = [time, time - self.start, time - 3 * frame, time - 30 * frame]
+                .into_iter()
+                .any(|t| {
+                    let position = windows::core::PROPVARIANT::from(t.max(0));
+                    // SAFETY: a seek on the reader this thread owns.
+                    unsafe {
+                        self.source
+                            .SetCurrentPosition(&windows::core::GUID::zeroed(), &position)
+                    }
+                    .is_ok()
+                });
             if !landed {
                 return self.last.as_ref().map(|(_, p)| p.clone());
             }
@@ -306,7 +336,9 @@ impl Reader {
 
     /// The number of the frame shown at `time`.
     fn index_at(&self, time: i64) -> usize {
-        ((time - self.start) as f64 * FPS / 10_000_000.0).round().max(0.0) as usize
+        ((time - self.start) as f64 * FPS / 10_000_000.0)
+            .round()
+            .max(0.0) as usize
     }
 
     /// The next sample and its time (`None` at the end or on an error).
@@ -319,10 +351,19 @@ impl Reader {
             // SAFETY: a synchronous read on the reader this thread owns, into locals.
             unsafe {
                 self.source
-                    .ReadSample(stream, 0, None, Some(&mut flags), Some(&mut time), Some(&mut sample))
+                    .ReadSample(
+                        stream,
+                        0,
+                        None,
+                        Some(&mut flags),
+                        Some(&mut time),
+                        Some(&mut sample),
+                    )
                     .ok()?;
             }
-            if flags & (MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 | MF_SOURCE_READERF_ERROR.0 as u32) != 0 {
+            if flags & (MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 | MF_SOURCE_READERF_ERROR.0 as u32)
+                != 0
+            {
                 return None;
             }
             if let Some(sample) = sample {
@@ -344,7 +385,11 @@ impl Reader {
             let bytes = std::slice::from_raw_parts(data, length as usize);
             // The decoder's rows can be wider and its planes taller than the picture
             // (1080 rows are decoded as 1088): NV12 is Y rows then half as many UV rows.
-            let pitch = if bytes.len() >= self.pitch * h * 3 / 2 { self.pitch } else { w };
+            let pitch = if bytes.len() >= self.pitch * h * 3 / 2 {
+                self.pitch
+            } else {
+                w
+            };
             let rows = bytes.len() * 2 / 3 / pitch.max(1);
             let picture = (pitch >= w && rows >= h && bytes.len() >= pitch * rows * 3 / 2)
                 .then(|| nv12_to_rgba(bytes, w, h, pitch, pitch * rows));
@@ -366,7 +411,13 @@ impl Reader {
 
 /// NV12 (BT.601, studio range, as the videos are made) to RGBA, the colour planes filled in
 /// between their samples.
-fn nv12_to_rgba(bytes: &[u8], w: usize, h: usize, pitch: usize, uv_start: usize) -> image::RgbaImage {
+fn nv12_to_rgba(
+    bytes: &[u8],
+    w: usize,
+    h: usize,
+    pitch: usize,
+    uv_start: usize,
+) -> image::RgbaImage {
     let mut out = vec![0u8; w * h * 4];
     let (cw, ch) = (w.div_ceil(2), h.div_ceil(2));
     let chroma = |cx: isize, cy: isize| -> (i32, i32) {
@@ -414,7 +465,9 @@ fn nv12_to_rgba(bytes: &[u8], w: usize, h: usize, pitch: usize, uv_start: usize)
 mod rayon_like {
     pub(super) fn rows(out: &mut [u8], stride: usize, f: impl Fn(usize, &mut [u8]) + Sync) {
         let height = out.len() / stride.max(1);
-        let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8);
+        let threads = std::thread::available_parallelism()
+            .map_or(4, |n| n.get())
+            .clamp(1, 8);
         let band = height.div_ceil(threads).max(1);
         // On the engine's kept threads (one made for every frame of a video would leak a little).
         let parts: Vec<(usize, &mut [u8])> = out.chunks_mut(band * stride).enumerate().collect();
@@ -433,7 +486,10 @@ mod tests {
     #[test]
     fn a_video_frame_is_named_by_its_number() {
         let path = PathBuf::from("data/assets/x/clip.mp4#00012");
-        assert_eq!(video_frame(&path), Some((PathBuf::from("data/assets/x/clip.mp4"), 12)));
+        assert_eq!(
+            video_frame(&path),
+            Some((PathBuf::from("data/assets/x/clip.mp4"), 12))
+        );
         assert_eq!(video_frame(Path::new("data/assets/x/frame_0001.jpg")), None);
     }
 
@@ -454,7 +510,8 @@ mod tests {
     #[ignore]
     fn every_video_matches_its_frames() {
         let project = crate::exploration3d_state::data_dir().join("assets");
-        let release = std::env::var_os("VELVET_PACKED_RELEASE").map(|r| PathBuf::from(r).join("data/assets"));
+        let release =
+            std::env::var_os("VELVET_PACKED_RELEASE").map(|r| PathBuf::from(r).join("data/assets"));
         let root = release.clone().unwrap_or_else(|| project.clone());
         // AV1 at the release's make sits a little further from the frames than the H.264.
         let floor = if release.is_some() { 33.0 } else { 38.0 };
@@ -462,7 +519,9 @@ mod tests {
         let mut worst = f64::MAX;
         let mut worst_at = String::new();
         for dir in walk(&root) {
-            let Some((video, count)) = video_of(&dir) else { continue };
+            let Some((video, count)) = video_of(&dir) else {
+                continue;
+            };
             let frames_dir = project.join(dir.strip_prefix(&root).unwrap());
             let jpgs: Vec<PathBuf> = {
                 let mut l: Vec<PathBuf> = std::fs::read_dir(&frames_dir)
@@ -479,7 +538,20 @@ mod tests {
             }
             assert_eq!(count, jpgs.len(), "{}", dir.display());
             // In order, then jumping about (back, near the end, the last, the first again).
-            let order = [0, 1, 2, count / 2, count / 2 + 1, count - 1, count - 2, 1, count / 3, count - 31, 5, 0];
+            let order = [
+                0,
+                1,
+                2,
+                count / 2,
+                count / 2 + 1,
+                count - 1,
+                count - 2,
+                1,
+                count / 3,
+                count - 31,
+                5,
+                0,
+            ];
             for i in order.into_iter().filter(|&i| i < count) {
                 let a = decode(&video, i).unwrap_or_else(|| panic!("{} #{i}", video.display()));
                 let b = image::open(&jpgs[i]).unwrap().to_rgba8();
@@ -521,23 +593,34 @@ mod tests {
         let video_ms = t.elapsed().as_secs_f64() * 1000.0 / count as f64;
         let t = std::time::Instant::now();
         for i in 1..=count {
-            image::open(dir.join(format!("frame_{i:04}.jpg"))).unwrap().to_rgba8();
+            std::hint::black_box(
+                image::open(dir.join(format!("frame_{i:04}.jpg")))
+                    .unwrap()
+                    .to_rgba8(),
+            );
         }
         let jpg_ms = t.elapsed().as_secs_f64() * 1000.0 / count as f64;
         let t = std::time::Instant::now();
         decode(&video, count / 2).unwrap();
         decode(&video, 3).unwrap();
         let seek_ms = t.elapsed().as_secs_f64() * 1000.0 / 2.0;
-        let other = crate::exploration3d_state::data_dir().join("assets/burdel/nina/escena/intro/clip.mp4");
+        let other =
+            crate::exploration3d_state::data_dir().join("assets/burdel/nina/escena/intro/clip.mp4");
         let t = std::time::Instant::now();
         let again = Reader::open(&other).map(|_| ()).is_ok();
-        eprintln!("a second video opened {again} in {:.0} ms", t.elapsed().as_secs_f64() * 1000.0);
+        eprintln!(
+            "a second video opened {again} in {:.0} ms",
+            t.elapsed().as_secs_f64() * 1000.0
+        );
         let before = velvet_qa::private_mb();
         let mut readers = Vec::new();
         for name in ["bucle", "bucle_rapido", "climax", "intro", "relax"] {
             readers.push(Reader::open(&dir.with_file_name(name).join(VIDEO)).unwrap());
         }
-        eprintln!("5 readers: {} MB", velvet_qa::private_mb() as i64 - before as i64);
+        eprintln!(
+            "5 readers: {} MB",
+            velvet_qa::private_mb() as i64 - before as i64
+        );
         drop(readers);
         close_all();
         eprintln!("open {opened} {open_ms:.0} ms; per frame: video {video_ms:.1} ms, jpg {jpg_ms:.1} ms; a jump {seek_ms:.0} ms");

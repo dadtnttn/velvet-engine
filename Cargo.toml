@@ -69,6 +69,7 @@ members = [
     "demos/rpg-quest-vs3",
     "demos/demon-queen",
     "demos/demon-queen/dungeon",
+    "demos/demon-queen/war",
     "crates/velvet-fx",
     "crates/velvet-render-rtx",
     "crates/velvet-video",

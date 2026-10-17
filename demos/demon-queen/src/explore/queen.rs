@@ -1,4 +1,5 @@
 //! La Reina: su escala, sus atuendos y tintes, el pelo del vestido verde ajustado a su cabeza, el posado de sus mallas animadas y las huellas que deja.
+use super::ui_sfx::{self, UiSfx};
 use super::*;
 
 pub(super) const QUEEN_WORLD_SCALE: f32 = 2.0;
@@ -281,6 +282,61 @@ impl RenderState {
 }
 
 impl App {
+    /// The wardrobe's card under the pointer (the 1920×1080 screen), as
+    /// `persona_screens::draw_wardrobe` lays them out: side by side from y 236, 720 tall.
+    pub(super) fn wardrobe_card_at(&self, x: f32, y: f32) -> Option<u8> {
+        let count = self.wardrobe_view().outfits.len().max(2);
+        let width = WINDOW_WIDTH as f32;
+        let gap = 46.0;
+        let card_w = ((width - 260.0 - gap * (count as f32 - 1.0)) / count as f32).min(430.0);
+        let x0 = (width - (card_w * count as f32 + gap * (count as f32 - 1.0))) * 0.5;
+        if !(236.0..956.0).contains(&y) || x < x0 {
+            return None;
+        }
+        let i = ((x - x0) / (card_w + gap)) as usize;
+        (i < count && x - x0 - i as f32 * (card_w + gap) <= card_w).then_some(i as u8)
+    }
+
+    /// Puts on the outfit chosen in the wardrobe (Enter, or a second click on its card) and
+    /// closes it; one the place does not allow is refused (and its note shown).
+    pub(super) fn wardrobe_confirm(&mut self) {
+        let chosen = self.wardrobe_selection % wardrobe_outfit_count();
+        if !self.wardrobe_allows(chosen) {
+            self.wardrobe_selection = self.outfit;
+            self.wardrobe_open = false;
+            self.clear_input();
+            return;
+        }
+        self.outfit = chosen;
+        ui_sfx::play(UiSfx::Equip);
+        if let Some(o) = achievements::catalog().outfit_in_slot(self.outfit) {
+            let event = format!("outfit:{}", o.id);
+            self.achievement_event(&event);
+        }
+        self.wardrobe_open = false;
+        self.clear_input();
+        self.persist_3d_state(true);
+    }
+
+    /// A click in the wardrobe: a card is chosen, and a second click on it puts it on.
+    pub(super) fn wardrobe_click(&mut self) {
+        let Some(slot) = self
+            .shop_pointer_position()
+            .and_then(|(x, y)| self.wardrobe_card_at(x, y))
+        else {
+            return;
+        };
+        if slot == self.wardrobe_selection {
+            self.wardrobe_confirm();
+        } else if self
+            .achievements
+            .outfit_available(achievements::catalog(), slot)
+        {
+            self.wardrobe_selection = slot;
+            ui_sfx::play(UiSfx::Move);
+        }
+    }
+
     /// The wardrobe slot after `from`, `step` (±1) at a time, skipping outfits not yet earned.
     pub(super) fn wardrobe_step(&self, from: u8, step: i32) -> u8 {
         let n = wardrobe_outfit_count() as i32;

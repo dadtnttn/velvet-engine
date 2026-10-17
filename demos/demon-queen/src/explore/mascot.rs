@@ -137,13 +137,19 @@ pub(crate) fn line_cue(mood: Option<&str>, text: &str) -> Cue {
         return if has(&["enfad", "enoj", "regan", "furios", "mandon", "brava"]) {
             // A hand on her hip, wagging a finger.
             Cue::Scold
-        } else if has(&["celos", "enfurrun", "molest", "harta", "seca", "sarcas", "altiv", "orgullos", "digna"]) {
+        } else if has(&[
+            "celos", "enfurrun", "molest", "harta", "seca", "sarcas", "altiv", "orgullos", "digna",
+        ]) {
             // Arms crossed, chin up, tapping her foot.
             Cue::Jealous
-        } else if has(&["avergon", "sonroj", "colorad", "nervios", "apurad", "incomod"]) {
+        } else if has(&[
+            "avergon", "sonroj", "colorad", "nervios", "apurad", "incomod",
+        ]) {
             // Hands on her cheeks, shaking her head.
             Cue::Flustered
-        } else if has(&["content", "animad", "feliz", "triunf", "burlon", "ufan", "alegr"]) {
+        } else if has(&[
+            "content", "animad", "feliz", "triunf", "burlon", "ufan", "alegr",
+        ]) {
             // Jumping, arms up.
             Cue::Cheer
         } else if has(&["espaldas", "ofendid", "dolid"]) {
@@ -467,11 +473,6 @@ impl App {
         self.mascot.cover_at = at;
     }
 
-    /// She is hypnotised right now.
-    pub(super) fn mascot_dazed(&self) -> bool {
-        self.mascot.mood == Cue::Dazed && self.elapsed < self.mascot.mood_until
-    }
-
     /// Whether the pointer at (x, y) (the 1920×1080 screen) is on her: her big head, or her body
     /// under it.
     pub(super) fn mascot_hit(&self, x: f32, y: f32) -> bool {
@@ -675,6 +676,9 @@ impl App {
             .is_some_and(|a| a.page == alcove::Page::Chiquita);
         let in_bed = self.alcove.is_some();
         let map = self.map_open;
+        // Over the court's full pages she keeps out of the cards' way: her words come in a
+        // balloon docked at the top, with her medallion.
+        let court = self.court.is_some();
         let ctx = u8::from(teased);
         if let Some((line, cue)) = self.mascot_physics(dt, ctx) {
             self.float_chiquita_cue(line, cue);
@@ -742,6 +746,7 @@ impl App {
         }
         // Up or down: she springs up into view and ducks back down.
         let wanted = !map
+            && (!court || m.gag.is_some())
             && if on_stage {
                 stage_line || m.gag.is_some() || m.held.is_some() || m.fly.is_some()
             } else {

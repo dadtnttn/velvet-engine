@@ -59,6 +59,8 @@ pub(super) struct Stage {
     pub panels: [Option<Panel>; 3],
     pub reveal: Option<(String, f32)>,
     pub unlocks: Vec<String>,
+    /// Un recuerdo (`@recuerdo`): su nombre y cuándo llegó (la cinta de arriba a la derecha).
+    pub memory: Option<(String, f32)>,
     /// El rótulo del final (`@cierre FOTO GUARDADA`; si no, «ESCENA COMPLETA»).
     pub outro_title: Option<String>,
     /// La escena terminó y se enseña lo desbloqueado hasta que se pulse F.
@@ -99,6 +101,9 @@ const WIPE_COVER: f32 = 0.42;
 const REVEAL_SECS: f32 = 3.01;
 /// Los destellos del revelado: al empezar sus cortes y con cada uno (segundos desde que empieza).
 const REVEAL_FLASHES: [f32; 4] = [0.56, 0.68, 1.01, 1.34];
+/// Un recuerdo (`@recuerdo`) se ve solo, sin caja, este rato; su cinta, este otro.
+const MEMORY_HOLD: f32 = 2.2;
+const MEMORY_RIBBON: f32 = 4.4;
 /// Lo que tarda un panel en salir volando.
 const PANEL_OUT: f32 = 0.5;
 /// Lo que tarda en fundirse la luz de quien deja de hablar (o empieza).
@@ -152,8 +157,11 @@ impl Stage {
                     if self.bg_prev.is_some() {
                         // Barre: lo que había se va cuando las franjas lo tapan.
                         self.wipe_at = now;
-                        self.pending
-                            .push((Some(now + WIPE_COVER), "_despeja".to_owned(), String::new()));
+                        self.pending.push((
+                            Some(now + WIPE_COVER),
+                            "_despeja".to_owned(),
+                            String::new(),
+                        ));
                         return;
                     }
                     self.wipe_at = LONG_AGO;
@@ -289,9 +297,10 @@ impl Stage {
             "panel" => {
                 // `@panel 2 termas_vn/vest_2 [alto x y]`: el encuadre de la web, si lo trae.
                 let mut words = arg.split_whitespace();
-                let (Some(n), Some(image)) =
-                    (words.next().and_then(|n| n.parse::<usize>().ok()), words.next())
-                else {
+                let (Some(n), Some(image)) = (
+                    words.next().and_then(|n| n.parse::<usize>().ok()),
+                    words.next(),
+                ) else {
                     return;
                 };
                 let numbers: Vec<f32> = words.filter_map(|w| w.parse().ok()).collect();
@@ -339,11 +348,34 @@ impl Stage {
             }
             "cierre" => self.outro_title = Some(arg.trim().to_owned()).filter(|t| !t.is_empty()),
             "desbloquea" => {
-                self.unlocks = parts()
-                    .into_iter()
-                    .filter(|p| !p.is_empty())
-                    .map(str::to_owned)
-                    .collect()
+                for p in parts().into_iter().filter(|p| !p.is_empty()) {
+                    if !self.unlocks.iter().any(|u| u == p) {
+                        self.unlocks.push(p.to_owned());
+                    }
+                }
+            }
+            "recuerdo" => {
+                // `@recuerdo citas/lira/1_cocina | Pan en la cocina`: the shot comes on whole with a
+                // flash (the cast steps out of it), its ribbon slides in at the top right, and the
+                // last card names it.
+                let p = parts();
+                let image = p.first().copied().unwrap_or("").to_owned();
+                if image.is_empty() {
+                    return;
+                }
+                for a in self.actors.iter_mut() {
+                    a.left_at.get_or_insert(now);
+                }
+                self.bg_prev = self.bg.replace(image);
+                self.wipe_at = LONG_AGO;
+                self.clear_panels();
+                self.flash_at = now;
+                let title = p.get(1).copied().unwrap_or("");
+                self.memory = Some((title.to_owned(), now));
+                let line = format!("Recuerdo · {title}");
+                if !title.is_empty() && !self.unlocks.contains(&line) {
+                    self.unlocks.push(line);
+                }
             }
             _ => {}
         }
@@ -354,8 +386,7 @@ impl Stage {
         self.actors
             .retain(|a| a.left_at.is_none_or(|t| now - t < 0.6));
         for p in self.panels.iter_mut() {
-            if p
-                .as_ref()
+            if p.as_ref()
                 .is_some_and(|p| p.out_at.is_some_and(|t| now - t > PANEL_OUT))
             {
                 *p = None;
@@ -410,10 +441,12 @@ fn scene_pictures(text: &str, scene: &str) -> Vec<String> {
         let arg = arg.trim();
         match cmd {
             "fondo" | "revela" => push(&mut out, arg),
+            "recuerdo" => push(&mut out, arg.split('|').next().unwrap_or("")),
             "izq" | "der" => {
                 if let Some((name, image)) = arg.split_once(char::is_whitespace) {
                     let mut words: Vec<&str> = image.split_whitespace().collect();
-                    while words.len() > 1 && words.last().is_some_and(|w| w.parse::<f32>().is_ok()) {
+                    while words.len() > 1 && words.last().is_some_and(|w| w.parse::<f32>().is_ok())
+                    {
                         words.pop();
                     }
                     let image = words.join(" ");
@@ -479,6 +512,12 @@ impl App {
         for place in brings {
             self.bring_queen_to(&place);
         }
+        // A date's memory goes into the gallery as it comes on.
+        for (cmd, arg) in &staged {
+            if cmd == "recuerdo" {
+                super::gallery_seen::memory(arg.split('|').next().unwrap_or(""));
+            }
+        }
         // Solo las órdenes del escenario lo levantan (las del VN, como `@sala`, no).
         let opens = |cmd: &str| !matches!(cmd, "sala" | "cg" | "sprite" | "musica");
         if staged.is_empty() || (self.stage.is_none() && !staged.iter().any(|(c, _)| opens(c))) {
@@ -487,7 +526,11 @@ impl App {
         let now = self.elapsed;
         let lib = guion::library();
         let who_of = |name: &str| lib.cast.speaker_id(name);
-        let scene = self.talk.as_ref().map_or("", |t| t.scene_id(lib)).to_owned();
+        let scene = self
+            .talk
+            .as_ref()
+            .map_or("", |t| t.scene_id(lib))
+            .to_owned();
         let theme = theme_of(&scene);
         let stage = self.stage.get_or_insert_with(|| {
             let mut stage = Stage::new(now, theme);
@@ -517,7 +560,8 @@ impl App {
             }
             stage.apply(cmd, arg, now, &who_of);
             // Lo que este hace esperar al resto del paso.
-            let hold = |stage: &mut Stage, until: f32| stage.hold_until = stage.hold_until.max(until);
+            let hold =
+                |stage: &mut Stage, until: f32| stage.hold_until = stage.hold_until.max(until);
             match cmd.as_str() {
                 "titulo" => hold(stage, now + TITLE_HOLD),
                 "barrido" => {
@@ -529,6 +573,7 @@ impl App {
                     hold(stage, now + WIPE_COVER);
                 }
                 "revela" => hold(stage, now + REVEAL_SECS),
+                "recuerdo" => hold(stage, now + MEMORY_HOLD),
                 "giro" => {
                     let end = now + arg.split_whitespace().count() as f32 * SPIN_FRAME + 0.06;
                     at = Some(end);
@@ -822,6 +867,11 @@ impl App {
                 .filter(|(_, _, t)| age(*t) < 1.6)
                 .map(|(w, g, t)| (w.clone(), *g, age(*t))),
             flash,
+            memory: stage
+                .memory
+                .as_ref()
+                .filter(|(_, t)| age(*t) < MEMORY_RIBBON)
+                .map(|(m, t)| (m.clone(), age(*t))),
             item: stage
                 .item
                 .as_ref()
@@ -938,10 +988,49 @@ mod tests {
     }
 
     #[test]
+    fn a_memory_comes_on_whole_stamped_and_is_named_on_the_last_card() {
+        let mut s = Stage::new(0.0, 0);
+        s.apply("fondo", "corte_vn/fondos/cocina", 0.0, &who);
+        s.apply("der", "Lira castillo_vn/lira_normal", 0.0, &who);
+        s.apply("desbloquea", "Algo", 1.0, &who);
+        s.apply(
+            "recuerdo",
+            "citas/lira/1_cocina | Pan en la cocina",
+            2.0,
+            &who,
+        );
+        assert_eq!(s.bg.as_deref(), Some("citas/lira/1_cocina"));
+        assert!(
+            s.actors.iter().all(|a| a.left_at.is_some()),
+            "the cast steps out"
+        );
+        assert_eq!(
+            s.memory.as_ref().map(|(m, at)| (m.as_str(), *at)),
+            Some(("Pan en la cocina", 2.0))
+        );
+        assert_eq!(s.flash_at, 2.0);
+        assert_eq!(s.unlocks, ["Algo", "Recuerdo · Pan en la cocina"]);
+        s.apply(
+            "recuerdo",
+            "citas/lira/1_cocina | Pan en la cocina",
+            3.0,
+            &who,
+        );
+        assert_eq!(s.unlocks.len(), 2, "named once");
+        let text = "## a\n@recuerdo citas/lira/2_vals | El vals\n";
+        assert_eq!(scene_pictures(text, "a"), ["citas/lira/2_vals"]);
+    }
+
+    #[test]
     fn a_turn_plays_whole_and_ends_on_the_pose_that_follows_it() {
         let mut s = Stage::new(0.0, 1);
         s.apply("izq", "Reina termas_vn/reina_bikini_risa", 0.0, &who);
-        s.apply("giro", "termas_vn/reina_giro1 termas_vn/reina_giro2", 1.0, &who);
+        s.apply(
+            "giro",
+            "termas_vn/reina_giro1 termas_vn/reina_giro2",
+            1.0,
+            &who,
+        );
         // A pose given mid-turn does not cut it short: it is where she ends.
         s.apply("pose", "Reina giro2", 1.2, &who);
         let a = &s.actors[0];
@@ -966,7 +1055,10 @@ mod tests {
         s.apply("revela", "termas_vn/reina_bikini_timida", 2.0, &who);
         assert!(s.panels.iter().flatten().all(|p| p.out_at == Some(2.0)));
         s.tidy(2.0 + PANEL_OUT + 0.01);
-        assert!(s.panels.iter().all(Option::is_none), "gone once they have flown");
+        assert!(
+            s.panels.iter().all(Option::is_none),
+            "gone once they have flown"
+        );
         assert!(s.reveal.is_some());
         s.tidy(2.0 + REVEAL_SECS + 0.2);
         assert!(s.reveal.is_none());
@@ -1001,7 +1093,15 @@ mod tests {
 ";
         assert_eq!(
             scene_pictures(text, "hola"),
-            ["x/bg", "x/reina_normal", "x/reina_duda", "x/vest_1", "x/g1", "x/g2", "x/item"]
+            [
+                "x/bg",
+                "x/reina_normal",
+                "x/reina_duda",
+                "x/vest_1",
+                "x/g1",
+                "x/g2",
+                "x/item"
+            ]
         );
     }
 

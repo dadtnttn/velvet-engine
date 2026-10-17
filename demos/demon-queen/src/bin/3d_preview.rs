@@ -5,6 +5,7 @@
 #[allow(dead_code)] // The preview does not use the embedded-host/test entry points.
 mod exploration3d;
 #[path = "../exploration3d_state.rs"]
+#[allow(dead_code)] // Its save writers serve the full game's host, not the preview.
 mod exploration3d_state;
 #[path = "../window_display.rs"]
 #[allow(dead_code)] // The preview presents only 3D, not the VN canvas.

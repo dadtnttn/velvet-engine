@@ -28,7 +28,9 @@ pub fn upscale(canvas: &mut Canvas, frame: &Surface) {
         return;
     }
     // Another size: each of the canvas's pixels takes the art pixel it falls in.
-    let columns: Vec<usize> = (0..cw).map(|x| (x * frame.w / cw.max(1)).min(frame.w - 1)).collect();
+    let columns: Vec<usize> = (0..cw)
+        .map(|x| (x * frame.w / cw.max(1)).min(frame.w - 1))
+        .collect();
     for y in 0..ch {
         let sy = (y * frame.h / ch.max(1)).min(frame.h - 1);
         let row = y * cw;
@@ -92,8 +94,24 @@ pub fn paint(canvas: &mut Canvas, fonts: &Fonts, loader: &mut Loader, fade: f32)
         .max(fonts.text_width(subtitle, 21.0, false)) as f32;
     let plate_w = title_w + 96.0;
     ui::plate(canvas, 46.0, 52.0, plate_w, 112.0, 26.0, 0xb4000000);
-    ui::plate(canvas, 36.0, 42.0, plate_w, 112.0, 26.0, ui::argb(0xf0, 0x0d0814));
-    ui::plate(canvas, 36.0, 42.0, 18.0, 112.0, 26.0, ui::argb(0xff, accent));
+    ui::plate(
+        canvas,
+        36.0,
+        42.0,
+        plate_w,
+        112.0,
+        26.0,
+        ui::argb(0xf0, 0x0d0814),
+    );
+    ui::plate(
+        canvas,
+        36.0,
+        42.0,
+        18.0,
+        112.0,
+        26.0,
+        ui::argb(0xff, accent),
+    );
     ui::outline(
         canvas,
         &ui::plate_points(36.0, 42.0, plate_w, 112.0, 26.0),
@@ -102,8 +120,24 @@ pub fn paint(canvas: &mut Canvas, fonts: &Fonts, loader: &mut Loader, fade: f32)
     );
     let kicker = tr(&loader.kicker()).to_uppercase();
     ui::tag(canvas, fonts, 72, 22, &kicker, 14.0, ui::ABYSS, ui::BONE);
-    canvas.stage_text(fonts, StageFace::Display, title, 84 + 3, 62 + 3, title_size, 0xff000000);
-    canvas.stage_text(fonts, StageFace::Display, title, 84, 62, title_size, 0xffffffff);
+    canvas.stage_text(
+        fonts,
+        StageFace::Display,
+        title,
+        84 + 3,
+        62 + 3,
+        title_size,
+        0xff000000,
+    );
+    canvas.stage_text(
+        fonts,
+        StageFace::Display,
+        title,
+        84,
+        62,
+        title_size,
+        0xffffffff,
+    );
     ui::text_mid(
         canvas,
         fonts,
@@ -123,8 +157,24 @@ pub fn paint(canvas: &mut Canvas, fonts: &Fonts, loader: &mut Loader, fade: f32)
     let card_w = (fonts.text_width(&label, 14.0, true) + 90).max(200) as f32;
     let cx = w as f32 - 44.0 - card_w;
     ui::plate(canvas, cx + 10.0, 52.0, card_w, 112.0, 22.0, 0xb4000000);
-    ui::plate(canvas, cx, 42.0, card_w, 112.0, 22.0, ui::argb(0xf0, 0x0d0814));
-    ui::plate(canvas, cx + card_w - 30.0, 42.0, 30.0, 112.0, 22.0, ui::argb(0xff, accent));
+    ui::plate(
+        canvas,
+        cx,
+        42.0,
+        card_w,
+        112.0,
+        22.0,
+        ui::argb(0xf0, 0x0d0814),
+    );
+    ui::plate(
+        canvas,
+        cx + card_w - 30.0,
+        42.0,
+        30.0,
+        112.0,
+        22.0,
+        ui::argb(0xff, accent),
+    );
     ui::halftone(
         canvas,
         (cx + card_w * 0.5, 98.0, card_w * 0.5, 56.0),
@@ -134,17 +184,42 @@ pub fn paint(canvas: &mut Canvas, fonts: &Fonts, loader: &mut Loader, fade: f32)
         card_w * 0.7,
         ui::argb(0x26, ui::mix(accent, 0xffffff, 0.4)),
     );
-    ui::tag(canvas, fonts, cx as i32 + 20, 22, &label, 14.0, ui::BONE, ui::ABYSS);
+    ui::tag(
+        canvas,
+        fonts,
+        cx as i32 + 20,
+        22,
+        &label,
+        14.0,
+        ui::BONE,
+        ui::ABYSS,
+    );
     let vw = fonts.stage_width(StageFace::Display, &value, value_size);
     let vx = (cx + card_w * 0.5) as i32 - vw / 2 - 10;
     let vy = 60 - (12.0 * bump) as i32;
-    canvas.stage_text(fonts, StageFace::Display, &value, vx + 4, vy + 4, value_size, 0xff000000);
+    canvas.stage_text(
+        fonts,
+        StageFace::Display,
+        &value,
+        vx + 4,
+        vy + 4,
+        value_size,
+        0xff000000,
+    );
     let value_ink = if bump > 0.0 {
         ui::argb(0xff, bright)
     } else {
         0xffffffff
     };
-    canvas.stage_text(fonts, StageFace::Display, &value, vx, vy, value_size, value_ink);
+    canvas.stage_text(
+        fonts,
+        StageFace::Display,
+        &value,
+        vx,
+        vy,
+        value_size,
+        value_ink,
+    );
 
     // ── The tip, bottom left: an ink plate with the accent's spine and its tag.
     let tip = loader.tip();
@@ -209,16 +284,48 @@ pub fn paint(canvas: &mut Canvas, fonts: &Fonts, loader: &mut Loader, fade: f32)
     } else {
         ui::argb(0xff, bright)
     };
-    canvas.stage_text(fonts, StageFace::Display, &now, now_x + 5, now_y + 5, now_size, 0xff000000);
-    canvas.stage_text(fonts, StageFace::Display, &now, now_x, now_y, now_size, word_ink);
+    canvas.stage_text(
+        fonts,
+        StageFace::Display,
+        &now,
+        now_x + 5,
+        now_y + 5,
+        now_size,
+        0xff000000,
+    );
+    canvas.stage_text(
+        fonts,
+        StageFace::Display,
+        &now,
+        now_x,
+        now_y,
+        now_size,
+        word_ink,
+    );
     if !done {
         let dot_w = fonts.stage_width(StageFace::Display, ".", now_size);
         for i in 0..3 {
             let phase = ((clock / 1.2) - i as f32 * (0.2 / 1.2)).rem_euclid(1.0);
             let hop = if phase > 0.3 && phase < 0.55 { -12 } else { 0 };
             let dx = now_x + now_w + i * dot_w;
-            canvas.stage_text(fonts, StageFace::Display, ".", dx + 5, now_y + hop + 5, now_size, 0xff000000);
-            canvas.stage_text(fonts, StageFace::Display, ".", dx, now_y + hop, now_size, word_ink);
+            canvas.stage_text(
+                fonts,
+                StageFace::Display,
+                ".",
+                dx + 5,
+                now_y + hop + 5,
+                now_size,
+                0xff000000,
+            );
+            canvas.stage_text(
+                fonts,
+                StageFace::Display,
+                ".",
+                dx,
+                now_y + hop,
+                now_size,
+                word_ink,
+            );
         }
     }
     let bar_x = right - bar_w;
@@ -240,7 +347,10 @@ pub fn paint(canvas: &mut Canvas, fonts: &Fonts, loader: &mut Loader, fade: f32)
     let hints_w: i32 = hints
         .iter()
         .map(|(k, t)| {
-            (fonts.text_width(k, 15.0, true) + 24).max(36) + 10 + fonts.text_width(t, 17.0, false) + 26
+            (fonts.text_width(k, 15.0, true) + 24).max(36)
+                + 10
+                + fonts.text_width(t, 17.0, false)
+                + 26
         })
         .sum::<i32>()
         - 26;

@@ -76,7 +76,8 @@ impl App {
 
     /// Characters of the line on show that are out by now (it types itself out).
     pub(super) fn talk_shown(&self, text: &str) -> usize {
-        let chars = ((self.elapsed - self.talk_line_at).max(0.0) * crate::exploration3d::prefs::text_rate(52.0)) as usize;
+        let chars = ((self.elapsed - self.talk_line_at).max(0.0)
+            * crate::exploration3d::prefs::text_rate(52.0)) as usize;
         chars.min(text.chars().count())
     }
 
@@ -106,6 +107,56 @@ impl App {
             _ => {}
         }
         self.settle_talk();
+    }
+
+    /// The option under the pointer (on the 1920×1080 screen) while a choice is on show: its card as
+    /// the stage draws them, centred, one under another from y 330, 88 tall every 110.
+    fn talk_option_at(&self, x: f32, y: f32) -> Option<usize> {
+        let lib = guion::library();
+        let Some(guion::Shown::Choice { options, .. }) =
+            self.talk.as_ref().map(|t| t.shown(lib, &self.story))
+        else {
+            return None;
+        };
+        if !(100.0..WINDOW_WIDTH as f32 - 100.0).contains(&x) || y < 330.0 {
+            return None;
+        }
+        let k = ((y - 330.0) / 110.0) as usize;
+        (y - 330.0 - k as f32 * 110.0 <= 88.0 && k < options.len()).then_some(k)
+    }
+
+    /// A left click in a conversation: the option under the pointer, else what F does. A click
+    /// beside the options does nothing.
+    pub(super) fn talk_click(&mut self) {
+        let at = self.shop_pointer_position();
+        self.talk_click_at(at);
+    }
+
+    /// A click at `at` (the 1920×1080 screen; `None`: off the picture).
+    pub(super) fn talk_click_at(&mut self, at: Option<(f32, f32)>) {
+        let lib = guion::library();
+        let choosing = matches!(
+            self.talk.as_ref().map(|t| t.shown(lib, &self.story)),
+            Some(guion::Shown::Choice { .. })
+        );
+        if !choosing {
+            self.talk_confirm();
+        } else if let Some(k) = at.and_then(|(x, y)| self.talk_option_at(x, y)) {
+            self.talk_pick(k);
+        }
+    }
+
+    /// The option under the pointer is the one lit.
+    pub(super) fn talk_hover(&mut self) {
+        if let Some(k) = self
+            .shop_pointer_position()
+            .and_then(|(x, y)| self.talk_option_at(x, y))
+        {
+            if k != self.talk_choice {
+                self.talk_choice = k;
+                ui_sfx::play(UiSfx::Move);
+            }
+        }
     }
 
     pub(super) fn talk_move(&mut self, by: i32) {
@@ -146,8 +197,13 @@ impl App {
         self.stage_take();
         // On the stage she says her lines herself, up in her corner, looking as they say.
         if self.stage_up() {
-            if let Some(guion::Shown::Line { who, text, kind: guion::LineKind::Dialogue, mood, .. }) =
-                self.talk.as_ref().map(|t| t.shown(lib, &self.story))
+            if let Some(guion::Shown::Line {
+                who,
+                text,
+                kind: guion::LineKind::Dialogue,
+                mood,
+                ..
+            }) = self.talk.as_ref().map(|t| t.shown(lib, &self.story))
             {
                 if who == "chiquita" {
                     // After the beat on show, if one plays (an item shown off, a reveal).
@@ -215,6 +271,24 @@ impl App {
         if self.story.get("termas_bikini") > 0 && self.achievements.grant_outfit("bikini") {
             self.change_into_bikini();
             self.persist_3d_state(true);
+        }
+        // A night with Lira or Nyxara that went further (`@var caricias_<girl>`): the touch game.
+        for girl in ["lira", "nyxara", "maren"] {
+            let var = format!("caricias_{girl}");
+            if self.story.get(&var) > 0 {
+                self.story.values.insert(var, 0);
+                if self.open_caricias(girl) {
+                    return;
+                }
+            }
+        }
+        // Lira prepares the royal bath (`@var corte_bano`): its scene, on the stage.
+        if self.story.get("corte_bano") > 0 {
+            self.story.values.insert("corte_bano".to_owned(), 0);
+            self.story.values.insert("bano_hoy".to_owned(), 1);
+            if self.start_talk_at("corte.bano_lira") {
+                return;
+            }
         }
         // The bed's guion says «Descansar» with `@var dormir`.
         if self.story.get("dormir") > 0 {
@@ -329,6 +403,7 @@ impl App {
                 } else {
                     name
                 },
+                speaker: who.clone(),
                 shown: self.talk_shown(&text),
                 text,
                 kind: match kind {
@@ -350,6 +425,7 @@ impl App {
                     portrait("gorou", Some("piensa"))
                 },
                 name: "Reina".into(),
+                speaker: "gorou".into(),
                 text: String::new(),
                 shown: 0,
                 kind: 0,

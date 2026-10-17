@@ -156,7 +156,10 @@ pub(crate) fn play(sfx: UiSfx) {
         };
         let sink = Sink::connect_new(audio.stream.mixer());
         sink.append(SamplesBuffer::new(1, RATE, samples.clone()));
-        sink.set_volume(sfx.volume() * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Effects));
+        sink.set_volume(
+            sfx.volume()
+                * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Effects),
+        );
         sink.detach();
     });
 }
@@ -475,7 +478,10 @@ mod tests {
     /// more often than a low note).
     fn crossings_per_second(s: &[f32]) -> f32 {
         let loud: Vec<f32> = s.iter().copied().filter(|v| v.abs() > 0.02).collect();
-        let n = loud.windows(2).filter(|w| (w[0] < 0.0) != (w[1] < 0.0)).count();
+        let n = loud
+            .windows(2)
+            .filter(|w| (w[0] < 0.0) != (w[1] < 0.0))
+            .count();
         n as f32 / (loud.len().max(1) as f32 / RATE as f32)
     }
 
@@ -483,8 +489,14 @@ mod tests {
     fn the_novels_line_sounds_are_low_and_soft_unlike_the_menus_chime() {
         for sfx in [UiSfx::Advance, UiSfx::Choose] {
             let rate = crossings_per_second(&synthesise(sfx));
-            assert!(rate < 1300.0, "{sfx:?} sits too high: {rate:.0} crossings/s");
-            assert!(sfx.volume() < UiSfx::Select.volume(), "{sfx:?} louder than the menus' chime");
+            assert!(
+                rate < 1300.0,
+                "{sfx:?} sits too high: {rate:.0} crossings/s"
+            );
+            assert!(
+                sfx.volume() < UiSfx::Select.volume(),
+                "{sfx:?} louder than the menus' chime"
+            );
         }
         assert!(crossings_per_second(&synthesise(UiSfx::Select)) > 2000.0);
     }
@@ -516,7 +528,9 @@ mod tests {
             wav.extend_from_slice(&data.to_le_bytes());
             for v in s {
                 // At the volume the game plays it.
-                let v = (v * sfx.volume() * 32767.0).round().clamp(-32768.0, 32767.0) as i16;
+                let v = (v * sfx.volume() * 32767.0)
+                    .round()
+                    .clamp(-32768.0, 32767.0) as i16;
                 wav.extend_from_slice(&v.to_le_bytes());
             }
             std::fs::write(dir.join(format!("{sfx:?}.wav")), wav).unwrap();

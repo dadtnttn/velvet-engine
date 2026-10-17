@@ -19,6 +19,8 @@ pub(crate) enum ZoneId {
     /// The fight with Varrak in its plaza, in first person.
     Boss,
     Dungeon,
+    /// The war table: its page, the campaign's map, a battle.
+    War,
 }
 
 /// What every place does in the world.
@@ -65,6 +67,8 @@ impl App {
     pub(crate) fn zone_id(&self) -> ZoneId {
         if self.dungeon_mode {
             ZoneId::Dungeon
+        } else if self.war.is_some() {
+            ZoneId::War
         } else if self.boss.is_some() {
             ZoneId::Boss
         } else if self.brothel.is_some() {
@@ -109,5 +113,6 @@ pub(super) fn zone(id: ZoneId) -> &'static dyn Zone {
         ZoneId::Penascal => &zone_penascal::PenascalZone,
         ZoneId::Boss => &zone_boss::BossZone,
         ZoneId::Dungeon => &zone_dungeon::DungeonZone,
+        ZoneId::War => &zone_war::WarZone,
     }
 }

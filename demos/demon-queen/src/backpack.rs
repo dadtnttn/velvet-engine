@@ -60,7 +60,9 @@ pub fn info(id: &str) -> Info {
         "espada_de_madera" => info_of(1, 4, 1, Some(Slot::Weapon)),
         "espada_reliquia" => info_of(1, 5, 1, Some(Slot::Weapon)),
         "espada_pegajosa" | "espada_pegajosa_azul" => info_of(1, 4, 1, Some(Slot::Weapon)),
-        "espada_piedra_pegajosa" | "espada_piedra_pegajosa_azul" => info_of(1, 5, 1, Some(Slot::Weapon)),
+        "espada_piedra_pegajosa" | "espada_piedra_pegajosa_azul" => {
+            info_of(1, 5, 1, Some(Slot::Weapon))
+        }
         "espada_brasas" | "espada_corazon" => info_of(1, 5, 1, Some(Slot::Weapon)),
         "pocion_misteriosa" => info_of(1, 2, 2, None),
         "esencia_carmesi" => info_of(1, 1, 4, None),
@@ -316,12 +318,6 @@ pub fn stone_sword(id: &str) -> bool {
     )
 }
 
-/// Every sword (what the hand holds when it is worn).
-pub fn sword(id: &str) -> bool {
-    stone_sword(id)
-        || matches!(id, "espada_de_madera" | "espada_pegajosa" | "espada_pegajosa_azul")
-}
-
 /// The slime a sword is coated in, as its colour (linear RGB): green or blue goo.
 pub fn sword_goo(id: &str) -> Option<[f32; 3]> {
     match id {
@@ -357,8 +353,12 @@ pub fn use_line(id: &str) -> Option<String> {
         match id {
             "espada_de_madera" => "Arma: daño normal.",
             "espada_reliquia" => "Arma: corta un 30 % más hondo.",
-            "espada_pegajosa" | "espada_pegajosa_azul" => "Arma: cada golpe deja al enemigo pegado 3 s (se mueve y ataca a mitad de ritmo).",
-            "espada_piedra_pegajosa" | "espada_piedra_pegajosa_azul" => "Arma: corta un 30 % más y cada golpe deja al enemigo pegado 3 s.",
+            "espada_pegajosa" | "espada_pegajosa_azul" => {
+                "Arma: cada golpe deja al enemigo pegado 3 s (se mueve y ataca a mitad de ritmo)."
+            }
+            "espada_piedra_pegajosa" | "espada_piedra_pegajosa_azul" => {
+                "Arma: corta un 30 % más y cada golpe deja al enemigo pegado 3 s."
+            }
             "espada_brasas" => "Arma: corta un 30 % más y el golpe deja ardiendo al enemigo 4 s.",
             "espada_corazon" => "Arma: corta un 30 % más y cada golpe te devuelve 4 de vitalidad.",
             _ => return None,
@@ -917,6 +917,7 @@ impl Backpack {
     }
 
     /// Whether every stack lies inside the grid without overlap.
+    #[cfg(test)]
     pub fn is_valid(&self) -> bool {
         self.placed.iter().enumerate().all(|(i, p)| {
             let (w, h) = p.size();
@@ -975,8 +976,16 @@ mod tests {
         for (a, b, out) in [
             ("espada_de_madera", "gelatina_verde", "espada_pegajosa"),
             ("gelatina_azul", "espada_de_madera", "espada_pegajosa_azul"),
-            ("espada_reliquia", "gelatina_verde", "espada_piedra_pegajosa"),
-            ("gelatina_azul", "espada_reliquia", "espada_piedra_pegajosa_azul"),
+            (
+                "espada_reliquia",
+                "gelatina_verde",
+                "espada_piedra_pegajosa",
+            ),
+            (
+                "gelatina_azul",
+                "espada_reliquia",
+                "espada_piedra_pegajosa_azul",
+            ),
             ("espada_reliquia", "ceniza_arcana", "espada_brasas"),
             ("esquirla_corazon", "espada_reliquia", "espada_corazon"),
         ] {

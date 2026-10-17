@@ -640,7 +640,11 @@ fn ticket(
     coin(v, [r.x + 46.0, r.y + 368.0], 19.0, 1.0);
     // The new price lands with a little swell.
     let land = over.map_or(1.0, |res| entrance(res.age_ms as f32 / 1000.0, 0.0, 0.3));
-    let pop = if sealed { 1.0 + 0.2 * (1.0 - land) } else { 1.0 };
+    let pop = if sealed {
+        1.0 + 0.2 * (1.0 - land)
+    } else {
+        1.0
+    };
     let size = 56.0 * pop;
     text_outline(
         font,
@@ -747,7 +751,10 @@ fn deal_bar(v: &mut Vec<MapVertex>, bar: Rect, heat: f32, hurry: bool, sealed: b
                 fill,
                 8.0,
                 12.0,
-                rgba(if sealed { GOLD_HI } else { MINT }, 0.4 + 0.15 * wave(time, 1.4)),
+                rgba(
+                    if sealed { GOLD_HI } else { MINT },
+                    0.4 + 0.15 * wave(time, 1.4),
+                ),
                 true,
             );
         }
@@ -800,7 +807,8 @@ fn effects(font: &FontAtlas, v: &mut Vec<MapVertex>, r: Rect, res: &SceneResult)
         let up = *by > 0;
         let tone = if up { QUEEN } else { 0x6ab0ff };
         let value = format!("{}{}", if up { "+" } else { "−" }, by.abs());
-        let w = text_width(font, Face::Ui, name, 19.0) + text_width(font, Face::Title, &value, 22.0)
+        let w = text_width(font, Face::Ui, name, 19.0)
+            + text_width(font, Face::Title, &value, 22.0)
             + 70.0;
         let chip = Rect::new(x, r.y + 254.0, w, 40.0);
         faded(v, a, |v| {
@@ -948,11 +956,7 @@ fn actions(
         ),
         (
             "Esc",
-            if building {
-                "Echarse atrás"
-            } else {
-                "Saltar"
-            },
+            if building { "Echarse atrás" } else { "Saltar" },
             if building {
                 "El precio sigue como estaba"
             } else {

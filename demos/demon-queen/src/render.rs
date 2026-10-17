@@ -7,7 +7,6 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use ab_glyph::{point, Font as AbFont, FontRef, GlyphId, ScaleFont};
-use unicode_segmentation::UnicodeSegmentation;
 use velvet_math::{Rect, Vec2};
 use velvet_style::{Color as StyleColor, ComputedStyle};
 use velvet_ui::{
@@ -133,7 +132,12 @@ impl FontFace {
             static SHAPED: RefCell<HashMap<(u64, u32, u32, String), Option<Vec<ShapedGlyph>>>> =
                 RefCell::new(HashMap::new());
         }
-        let key = (self.id, self.collection_index, size.to_bits(), value.to_owned());
+        let key = (
+            self.id,
+            self.collection_index,
+            size.to_bits(),
+            value.to_owned(),
+        );
         if let Some(found) = SHAPED.with(|c| c.borrow().get(&key).cloned()) {
             return found;
         }
@@ -459,8 +463,11 @@ impl Fonts {
             let latin = if profile.0 == latin_profile.0 {
                 None
             } else {
-                pick_font(dir, latin_profile.0, latin_profile.3)
-                    .zip(pick_font(dir, latin_profile.1, latin_profile.4))
+                pick_font(dir, latin_profile.0, latin_profile.3).zip(pick_font(
+                    dir,
+                    latin_profile.1,
+                    latin_profile.4,
+                ))
             };
             let brand = if profile.2 == latin_profile.2 {
                 None
@@ -545,7 +552,8 @@ impl Fonts {
     /// Advance width of one character at `size`.
     pub(crate) fn advance(&self, ch: char, size: f32, bold: bool) -> f32 {
         let value = ch.to_string();
-        self.face_for(self.font(bold), &value, bold).width(&value, size)
+        self.face_for(self.font(bold), &value, bold)
+            .width(&value, size)
     }
 
     pub(crate) fn display_width(&self, value: &str, size: f32) -> i32 {
@@ -596,17 +604,11 @@ impl Fonts {
         for paragraph in value.split('\n') {
             // Scripts written without spaces between words break between characters.
             if uses_character_line_breaks(paragraph) {
-                let mut line = String::new();
-                for grapheme in paragraph.graphemes(true) {
-                    let candidate = format!("{line}{grapheme}");
-                    if !line.is_empty() && self.stage_width(face, &candidate, size) > max {
-                        lines.push(std::mem::take(&mut line));
-                        line.push_str(grapheme.trim_start());
-                    } else {
-                        line = candidate;
-                    }
-                }
-                lines.push(line);
+                lines.extend(demon_queen_dungeon::i18n::wrap_letters(
+                    paragraph,
+                    max as f32,
+                    |s| self.stage_width(face, s, size) as f32,
+                ));
                 continue;
             }
             let mut line = String::new();
@@ -626,27 +628,6 @@ impl Fonts {
             lines.push(line);
         }
         lines
-    }
-}
-
-/// One lightweight script-specific face used for language autonyms.
-///
-/// Keeping only one face per script avoids loading three full CJK font
-/// collections merely to paint the language selector.
-pub struct NativeLabelFont {
-    face: FontFace,
-}
-
-impl NativeLabelFont {
-    pub fn new_for_language(language: &str) -> Option<Self> {
-        let profile = font_profile(language);
-        system_font_directories()
-            .into_iter()
-            .find_map(|dir| pick_font(&dir, profile.0, profile.3).map(|face| Self { face }))
-    }
-
-    pub(crate) fn text_width(&self, value: &str, size: f32) -> i32 {
-        self.face.width(value, size).round() as i32
     }
 }
 
@@ -698,7 +679,11 @@ pub fn prescale(image: &crate::ArtBitmap, dw: i32, dh: i32, reuse: Option<Vec<u3
 
 fn canvas_threads() -> usize {
     static N: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *N.get_or_init(|| std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 8))
+    *N.get_or_init(|| {
+        std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .clamp(1, 8)
+    })
 }
 
 /// ARGB canvas (0xAARRGGBB, alpha 255 = opaque). Laid out in `w`×`h` pixels (1920×1080 in the
@@ -850,7 +835,7 @@ impl Canvas {
         tint: Option<(u8, u8, u8)>,
     ) {
         let (sx, sy, sw, sh) = source;
-        let (dx, dy, dw, dh) = dest;
+        let (_, _, dw, dh) = dest;
         if sw <= 0.0 || sh <= 0.0 || dw <= 0 || dh <= 0 || image.w == 0 || image.h == 0 {
             return;
         }
@@ -865,7 +850,13 @@ impl Canvas {
     }
 
     /// A picture already scaled to `dest`'s size (`dw`×`dh` straight ARGB) over the canvas.
-    fn blit_scaled_pixels(&mut self, scaled: &[u32], dest: (i32, i32, i32, i32), brightness: f32, opacity: f32) {
+    fn blit_scaled_pixels(
+        &mut self,
+        scaled: &[u32],
+        dest: (i32, i32, i32, i32),
+        brightness: f32,
+        opacity: f32,
+    ) {
         let (dx, dy, dw, dh) = dest;
         let opacity = opacity.clamp(0.0, 1.0);
         {
@@ -886,11 +877,18 @@ impl Canvas {
                     }
                     if brightness != 1.0 || opacity < 1.0 {
                         let a = ((color >> 24) as f32 * opacity).round() as u32;
-                        let c = |v: u32| ((v & 0xff) as f32 * brightness).round().clamp(0.0, 255.0) as u32;
-                        color = (a << 24) | (c(color >> 16) << 16) | (c(color >> 8) << 8) | c(color);
+                        let c = |v: u32| {
+                            ((v & 0xff) as f32 * brightness).round().clamp(0.0, 255.0) as u32
+                        };
+                        color =
+                            (a << 24) | (c(color >> 16) << 16) | (c(color >> 8) << 8) | c(color);
                     }
                     let pixel = &mut dst[px as usize];
-                    *pixel = if color >> 24 == 0xff { color } else { blend(*pixel, color) };
+                    *pixel = if color >> 24 == 0xff {
+                        color
+                    } else {
+                        blend(*pixel, color)
+                    };
                 }
             };
             // Large pictures (backgrounds) in bands on every core: rows are independent.
@@ -905,7 +903,8 @@ impl Canvas {
                 // On the engine's kept threads (a thread made for each frame costs time, and on
                 // Windows a little memory that is never given back).
                 let band = ((y_hi - y_lo) as usize).div_ceil(threads);
-                let parts: Vec<(usize, &mut [u32])> = rows.chunks_mut(band * pw).enumerate().collect();
+                let parts: Vec<(usize, &mut [u32])> =
+                    rows.chunks_mut(band * pw).enumerate().collect();
                 velvet_render::work::each(parts, &|(b, chunk): (usize, &mut [u32])| {
                     for (k, dst) in chunk.chunks_mut(pw).enumerate() {
                         row(y_lo + (b * band + k) as i32, dst);
@@ -1001,7 +1000,12 @@ impl Canvas {
     /// [`Self::blit_rgba`]; `false` when the copy is not of that size.
     pub fn blit_prescaled(&mut self, x: i32, y: i32, w: usize, h: usize, scaled: &[u32]) -> bool {
         let dest = self.dest_physical(x as f32, y as f32, w as f32, h as f32);
-        if self.k == 1.0 || dest.2 <= 0 || dest.3 <= 0 || scaled.len() != (dest.2 * dest.3) as usize || dest.2 * dest.3 > 3840 * 2160 {
+        if self.k == 1.0
+            || dest.2 <= 0
+            || dest.3 <= 0
+            || scaled.len() != (dest.2 * dest.3) as usize
+            || dest.2 * dest.3 > 3840 * 2160
+        {
             return false;
         }
         self.blit_scaled_pixels(scaled, dest, 1.0, 1.0);
@@ -1050,7 +1054,13 @@ impl Canvas {
     }
 
     /// `source` of `image` into the whole of this (transparent) canvas, `dw`×`dh`: straight ARGB.
-    fn scale_into(&mut self, image: &crate::ArtBitmap, source: (f32, f32, f32, f32), dw: i32, dh: i32) {
+    fn scale_into(
+        &mut self,
+        image: &crate::ArtBitmap,
+        source: (f32, f32, f32, f32),
+        dw: i32,
+        dh: i32,
+    ) {
         let (sx, sy, sw, sh) = source;
         let step_x = sw / dw as f32;
         let step_y = sh / dh as f32;
@@ -1063,7 +1073,8 @@ impl Canvas {
         let columns: Vec<(i32, f32)> = (0..dw)
             .flat_map(|column| {
                 (0..taps_x).map(move |tx| {
-                    let fx = sx + (column as f32 + (tx as f32 + 0.5) / taps_x as f32) * step_x - 0.5;
+                    let fx =
+                        sx + (column as f32 + (tx as f32 + 0.5) / taps_x as f32) * step_x - 0.5;
                     let x0 = fx.floor();
                     (x0 as i32, fx - x0)
                 })
@@ -1080,7 +1091,9 @@ impl Canvas {
             for column in 0..dw {
                 let (mut a_sum, mut r_sum, mut g_sum, mut b_sum) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
                 for &(y0, wy) in &lines {
-                    for &(x0, wx) in &columns[column as usize * taps_x..(column as usize + 1) * taps_x] {
+                    for &(x0, wx) in
+                        &columns[column as usize * taps_x..(column as usize + 1) * taps_x]
+                    {
                         for (ox, oy, wgt) in [
                             (0, 0, (1.0 - wx) * (1.0 - wy)),
                             (1, 0, wx * (1.0 - wy)),
@@ -1106,19 +1119,25 @@ impl Canvas {
                 }
                 let d = a_sum.max(f32::EPSILON);
                 let c = |v: f32| (v / d).round().clamp(0.0, 255.0) as u32;
-                out[column as usize] = (alpha << 24) | (c(r_sum) << 16) | (c(g_sum) << 8) | c(b_sum);
+                out[column as usize] =
+                    (alpha << 24) | (c(r_sum) << 16) | (c(g_sum) << 8) | c(b_sum);
             }
         };
         let stride = dw as usize;
         let rows = &mut self.pixels[..stride * dh as usize];
-        let threads = if stride * dh as usize > 200_000 { canvas_threads() } else { 1 };
+        let threads = if stride * dh as usize > 200_000 {
+            canvas_threads()
+        } else {
+            1
+        };
         if threads <= 1 {
             for (row, out) in rows.chunks_mut(stride).enumerate() {
                 scale_row(row as i32, out);
             }
         } else {
             let band = (dh as usize).div_ceil(threads);
-            let parts: Vec<(usize, &mut [u32])> = rows.chunks_mut(band * stride).enumerate().collect();
+            let parts: Vec<(usize, &mut [u32])> =
+                rows.chunks_mut(band * stride).enumerate().collect();
             velvet_render::work::each(parts, &|(b, chunk): (usize, &mut [u32])| {
                 for (r, out) in chunk.chunks_mut(stride).enumerate() {
                     scale_row((b * band + r) as i32, out);
@@ -1185,7 +1204,12 @@ impl Canvas {
             .iter()
             .map(|&(x, y)| (x as f32 * k, y as f32 * k))
             .collect();
-        let min_y = points.iter().map(|p| p.1).fold(f32::MAX, f32::min).floor().max(0.0) as i32;
+        let min_y = points
+            .iter()
+            .map(|p| p.1)
+            .fold(f32::MAX, f32::min)
+            .floor()
+            .max(0.0) as i32;
         let max_y = (points.iter().map(|p| p.1).fold(f32::MIN, f32::max).ceil() as i32)
             .min(self.ph as i32 - 1);
         for y in min_y..=max_y {
@@ -1336,7 +1360,11 @@ impl Canvas {
         let rows = &mut self.pixels[min_y as usize * pw..(max_y as usize + 1) * pw];
         let height = (max_y - min_y + 1) as usize;
         // Handing rows to other threads costs more than a middling plate takes to fill now.
-        let threads = if width * height > 700_000 { canvas_threads() } else { 1 };
+        let threads = if width * height > 700_000 {
+            canvas_threads()
+        } else {
+            1
+        };
         if threads <= 1 {
             let mut coverage = vec![0.0f32; width + 1];
             for (r, dst) in rows.chunks_mut(pw).enumerate() {
@@ -1503,7 +1531,14 @@ impl Canvas {
         bold: bool,
     ) -> i32 {
         let value = &*demon_queen_dungeon::i18n::tr(value);
-        self.text_with_font(fonts.face_for(fonts.font(bold), value, bold), value, x, y, size, color)
+        self.text_with_font(
+            fonts.face_for(fonts.font(bold), value, bold),
+            value,
+            x,
+            y,
+            size,
+            color,
+        )
     }
 
     /// Text in one of the web scenes' faces.
@@ -1519,20 +1554,14 @@ impl Canvas {
         color: u32,
     ) -> i32 {
         let value = &*demon_queen_dungeon::i18n::tr(value);
-        self.text_with_font(fonts.face_for(fonts.stage_font(face), value, true), value, x, y, size, color)
-    }
-
-    /// Text painted with the script-specific face assigned to an autonym.
-    pub fn native_label_text(
-        &mut self,
-        font: &NativeLabelFont,
-        value: &str,
-        x: i32,
-        y: i32,
-        size: f32,
-        color: u32,
-    ) -> i32 {
-        self.text_with_font(&font.face, value, x, y, size, color)
+        self.text_with_font(
+            fonts.face_for(fonts.stage_font(face), value, true),
+            value,
+            x,
+            y,
+            size,
+            color,
+        )
     }
 
     /// Display-serif text for editorial title treatments.
@@ -1546,7 +1575,14 @@ impl Canvas {
         color: u32,
     ) -> i32 {
         let value = &*demon_queen_dungeon::i18n::tr(value);
-        self.text_with_font(fonts.face_for(&fonts.display, value, true), value, x, y, size, color)
+        self.text_with_font(
+            fonts.face_for(&fonts.display, value, true),
+            value,
+            x,
+            y,
+            size,
+            color,
+        )
     }
 
     /// The game's name, in the Latin display serif in every language (a script's own display face
@@ -1561,8 +1597,19 @@ impl Canvas {
         color: u32,
     ) -> i32 {
         let value = &*demon_queen_dungeon::i18n::tr(value);
-        let wanted = fonts.brand.as_ref().filter(|face| face.covers(value)).unwrap_or(&fonts.display);
-        self.text_with_font(fonts.face_for(wanted, value, true), value, x, y, size, color)
+        let wanted = fonts
+            .brand
+            .as_ref()
+            .filter(|face| face.covers(value))
+            .unwrap_or(&fonts.display);
+        self.text_with_font(
+            fonts.face_for(wanted, value, true),
+            value,
+            x,
+            y,
+            size,
+            color,
+        )
     }
 
     fn text_with_font(
@@ -1596,7 +1643,8 @@ impl Canvas {
                         }
                         let px = gx + col as i32;
                         let py = gy + row as i32;
-                        if px < 0 || py < 0 || (px as usize) >= self.pw || (py as usize) >= self.ph {
+                        if px < 0 || py < 0 || (px as usize) >= self.pw || (py as usize) >= self.ph
+                        {
                             continue;
                         }
                         let idx = py as usize * self.pw + px as usize;
@@ -1623,16 +1671,11 @@ impl Canvas {
         let mut lines = Vec::new();
         for hard_line in text.split('\n') {
             if uses_character_line_breaks(hard_line) {
-                let mut current = String::new();
-                for grapheme in hard_line.graphemes(true) {
-                    let mut candidate = current.clone();
-                    candidate.push_str(grapheme);
-                    if !current.is_empty() && fonts.text_width(&candidate, size, bold) > max_width {
-                        lines.push(std::mem::take(&mut current));
-                    }
-                    current.push_str(grapheme);
-                }
-                lines.push(current);
+                lines.extend(demon_queen_dungeon::i18n::wrap_letters(
+                    hard_line,
+                    max_width as f32,
+                    |s| fonts.text_width(s, size, bold) as f32,
+                ));
             } else {
                 let mut current = String::new();
                 for word in hard_line.split_whitespace() {
@@ -2142,7 +2185,16 @@ impl Canvas {
 
     /// `round_rect` in its own pixels (a canvas of more pixels than its layout).
     #[allow(clippy::too_many_arguments)]
-    fn round_rect_physical(&mut self, x: i32, y: i32, w: i32, h: i32, r: i32, top: u32, bottom: u32) {
+    fn round_rect_physical(
+        &mut self,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        r: i32,
+        top: u32,
+        bottom: u32,
+    ) {
         let k = self.k;
         let r = r.clamp(0, w.min(h) / 2) as f32 * k;
         let (fx, fy) = (x as f32 * k, y as f32 * k);
@@ -2159,8 +2211,12 @@ impl Canvas {
                 let inner = cx >= fx + r && cx <= fx + fw - r;
                 let d = if in_band || inner {
                     // Straight edges: the coverage of the pixel by the box.
-                    let left = (cx - fx + 0.5).clamp(0.0, 1.0).min((fx + fw - cx + 0.5).clamp(0.0, 1.0));
-                    let up = (cy - fy + 0.5).clamp(0.0, 1.0).min((fy + fh - cy + 0.5).clamp(0.0, 1.0));
+                    let left = (cx - fx + 0.5)
+                        .clamp(0.0, 1.0)
+                        .min((fx + fw - cx + 0.5).clamp(0.0, 1.0));
+                    let up = (cy - fy + 0.5)
+                        .clamp(0.0, 1.0)
+                        .min((fy + fh - cy + 0.5).clamp(0.0, 1.0));
                     0.5 - left.min(up)
                 } else {
                     rounded_distance(cx, cy, fx, fy, fw, fh, r)
@@ -2176,7 +2232,16 @@ impl Canvas {
     }
 
     /// `round_outline` in its own pixels.
-    fn round_outline_physical(&mut self, x: i32, y: i32, w: i32, h: i32, r: i32, thickness: f32, color: u32) {
+    fn round_outline_physical(
+        &mut self,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        r: i32,
+        thickness: f32,
+        color: u32,
+    ) {
         let k = self.k;
         let r = r.clamp(0, w.min(h) / 2) as f32 * k;
         let (fx, fy) = (x as f32 * k, y as f32 * k);
@@ -2832,7 +2897,12 @@ impl Canvas {
                 source_w as f32,
                 source_h as f32,
             );
-            let source = (source_x as f32, source_y as f32, source_w as f32, source_h as f32);
+            let source = (
+                source_x as f32,
+                source_y as f32,
+                source_w as f32,
+                source_h as f32,
+            );
             self.blit_scaled_physical(image, source, dest, brightness, opacity, None);
             return;
         }
@@ -3114,7 +3184,11 @@ fn blend_span(dst: &mut [u32], src: u32) {
         return;
     }
     let da = 255 - sa;
-    let (r, g, b) = (((src >> 16) & 0xff) * sa, ((src >> 8) & 0xff) * sa, (src & 0xff) * sa);
+    let (r, g, b) = (
+        ((src >> 16) & 0xff) * sa,
+        ((src >> 8) & 0xff) * sa,
+        (src & 0xff) * sa,
+    );
     for pixel in dst {
         let d = *pixel;
         *pixel = 0xff00_0000
@@ -3281,7 +3355,13 @@ mod reference {
             }
         }
 
-        pub fn scale_into_reference(&mut self, image: &crate::ArtBitmap, source: (f32, f32, f32, f32), dw: i32, dh: i32) {
+        pub fn scale_into_reference(
+            &mut self,
+            image: &crate::ArtBitmap,
+            source: (f32, f32, f32, f32),
+            dw: i32,
+            dh: i32,
+        ) {
             let (sx, sy, sw, sh) = source;
             let step_x = sw / dw as f32;
             let step_y = sh / dh as f32;
@@ -3291,12 +3371,15 @@ mod reference {
             let at = |x: i32, y: i32| ((y.clamp(0, ih - 1) * iw + x.clamp(0, iw - 1)) * 4) as usize;
             for row in 0..dh {
                 for column in 0..dw {
-                    let (mut a_sum, mut r_sum, mut g_sum, mut b_sum) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+                    let (mut a_sum, mut r_sum, mut g_sum, mut b_sum) =
+                        (0.0f32, 0.0f32, 0.0f32, 0.0f32);
                     for ty in 0..taps_y {
-                        let fy = sy + (row as f32 + (ty as f32 + 0.5) / taps_y as f32) * step_y - 0.5;
+                        let fy =
+                            sy + (row as f32 + (ty as f32 + 0.5) / taps_y as f32) * step_y - 0.5;
                         for tx in 0..taps_x {
-                            let fx =
-                                sx + (column as f32 + (tx as f32 + 0.5) / taps_x as f32) * step_x - 0.5;
+                            let fx = sx
+                                + (column as f32 + (tx as f32 + 0.5) / taps_x as f32) * step_x
+                                - 0.5;
                             let (x0, y0) = (fx.floor(), fy.floor());
                             let (wx, wy) = (fx - x0, fy - y0);
                             let (x0, y0) = (x0 as i32, y0 as i32);
@@ -3356,7 +3439,10 @@ mod speed_tests {
     struct Dice(u64);
     impl Dice {
         fn next(&mut self) -> u32 {
-            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             (self.0 >> 33) as u32
         }
         fn f(&mut self, lo: f32, hi: f32) -> f32 {
@@ -3378,12 +3464,19 @@ mod speed_tests {
         let mut dice = Dice(3);
         for _ in 0..200_000 {
             let (d, s) = (dice.next() | 0xff00_0000, dice.next());
-            assert_eq!(blend(d, s), reference::blend_reference(d, s), "{d:08x} {s:08x}");
+            assert_eq!(
+                blend(d, s),
+                reference::blend_reference(d, s),
+                "{d:08x} {s:08x}"
+            );
         }
         for sa in 0..=255u32 {
             let src = (sa << 24) | (dice.next() & 0x00ff_ffff);
             let mut row: Vec<u32> = (0..64).map(|_| dice.next() | 0xff00_0000).collect();
-            let want: Vec<u32> = row.iter().map(|&d| reference::blend_reference(d, src)).collect();
+            let want: Vec<u32> = row
+                .iter()
+                .map(|&d| reference::blend_reference(d, src))
+                .collect();
             blend_span(&mut row, src);
             assert_eq!(row, want);
         }
@@ -3395,7 +3488,14 @@ mod speed_tests {
         for &(pw, ph) in &[(1920usize, 1080usize), (2560, 1440), (1280, 720)] {
             for case in 0..120 {
                 let mut a = canvas(1920, 1080, pw, ph, &mut dice);
-                let mut b = Canvas { w: a.w, h: a.h, pw: a.pw, ph: a.ph, k: a.k, pixels: a.pixels.clone() };
+                let mut b = Canvas {
+                    w: a.w,
+                    h: a.h,
+                    pw: a.pw,
+                    ph: a.ph,
+                    k: a.k,
+                    pixels: a.pixels.clone(),
+                };
                 // Big slanted plates, thin slashes, triangles, parts off the canvas.
                 let size = match case % 4 {
                     0 => 1400.0,
@@ -3408,18 +3508,29 @@ mod speed_tests {
                 let mut points: Vec<(f32, f32)> = (0..n)
                     .map(|i| {
                         let t = i as f32 / n as f32 * std::f32::consts::TAU + dice.f(-0.2, 0.2);
-                        (cx + t.cos() * size * dice.f(0.4, 1.0), cy + t.sin() * size * dice.f(0.2, 1.0))
+                        (
+                            cx + t.cos() * size * dice.f(0.4, 1.0),
+                            cy + t.sin() * size * dice.f(0.2, 1.0),
+                        )
                     })
                     .collect();
                 if case % 5 == 0 {
                     // A slanted plate, as the menus draw them.
-                    let (x, y, w, h) = (dice.f(-50.0, 1500.0), dice.f(-50.0, 900.0), dice.f(2.0, 1300.0), dice.f(1.0, 700.0));
+                    let (x, y, w, h) = (
+                        dice.f(-50.0, 1500.0),
+                        dice.f(-50.0, 900.0),
+                        dice.f(2.0, 1300.0),
+                        dice.f(1.0, 700.0),
+                    );
                     points = vec![(x + 18.0, y), (x + w, y), (x + w - 18.0, y + h), (x, y + h)];
                 }
                 let color = (dice.next() % 256) << 24 | (dice.next() & 0x00ff_ffff);
                 a.convex(&points, color);
                 b.convex_reference(&points, color);
-                assert!(a.pixels == b.pixels, "case {case} at {pw}x{ph}: {points:?} {color:08x}");
+                assert!(
+                    a.pixels == b.pixels,
+                    "case {case} at {pw}x{ph}: {points:?} {color:08x}"
+                );
             }
         }
     }
@@ -3427,10 +3538,30 @@ mod speed_tests {
     #[test]
     fn the_fast_scaling_gives_the_same_picture() {
         let mut dice = Dice(5);
-        for &(w, h, dw, dh) in &[(64usize, 36usize, 640i32, 360i32), (192, 108, 2560, 1440), (300, 200, 97, 61), (1920, 1080, 853, 480)] {
-            let rgba: Vec<u8> = (0..w * h * 4).map(|i| if i % 4 == 3 { (dice.next() % 3 * 127) as u8 } else { dice.next() as u8 }).collect();
+        for &(w, h, dw, dh) in &[
+            (64usize, 36usize, 640i32, 360i32),
+            (192, 108, 2560, 1440),
+            (300, 200, 97, 61),
+            (1920, 1080, 853, 480),
+        ] {
+            let rgba: Vec<u8> = (0..w * h * 4)
+                .map(|i| {
+                    if i % 4 == 3 {
+                        (dice.next() % 3 * 127) as u8
+                    } else {
+                        dice.next() as u8
+                    }
+                })
+                .collect();
             let image = crate::ArtBitmap { w, h, rgba };
-            let blank = || Canvas { w: dw as usize, h: dh as usize, pw: dw as usize, ph: dh as usize, k: 1.0, pixels: vec![0; (dw * dh) as usize] };
+            let blank = || Canvas {
+                w: dw as usize,
+                h: dh as usize,
+                pw: dw as usize,
+                ph: dh as usize,
+                k: 1.0,
+                pixels: vec![0; (dw * dh) as usize],
+            };
             let (mut a, mut b) = (blank(), blank());
             a.scale_into(&image, (0.0, 0.0, w as f32, h as f32), dw, dh);
             b.scale_into_reference(&image, (0.0, 0.0, w as f32, h as f32), dw, dh);

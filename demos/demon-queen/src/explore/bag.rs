@@ -13,7 +13,7 @@ impl App {
                 "espada_corazon",
             ]
             .iter()
-                .any(|id| self.inventory.get(*id).is_some_and(|n| *n > 0))
+            .any(|id| self.inventory.get(*id).is_some_and(|n| *n > 0))
             || self.dungeon.unbanked_relic_sword
     }
 
@@ -207,10 +207,7 @@ impl App {
         };
         self.dungeon.armed = !bare;
         self.dungeon.sword_goo = worn.as_deref().and_then(backpack::sword_goo);
-        self.dungeon.weapon_fx = worn
-            .as_deref()
-            .map(backpack::weapon_fx)
-            .unwrap_or_default();
+        self.dungeon.weapon_fx = worn.as_deref().map(backpack::weapon_fx).unwrap_or_default();
         let damage = worn.as_deref().map_or(
             if bare {
                 0.5
@@ -222,8 +219,11 @@ impl App {
             backpack::weapon_damage,
         );
         let fx = self.dungeon.weapon_fx;
+        // Nemi's training: each level of skill a little more in every blow.
+        let skill = self.skill_multiplier();
+        self.dungeon.skill_bonus = skill;
         if let Some(fight) = self.boss.as_mut() {
-            fight.blade_damage = damage;
+            fight.blade_damage = damage * skill;
             fight.blade = fx;
         }
     }
@@ -281,6 +281,12 @@ impl App {
 
     /// The vitality goes in: the mine's or the fight's.
     fn take_cure(&mut self, id: &str, amount: f32) {
+        // Nyxara's «manos de sanadora»: every cure heals a quarter more.
+        let amount = if self.has_gift(court::DON_CURA) {
+            amount * 1.25
+        } else {
+            amount
+        };
         let name = backpack::extra(id)
             .map(|e| e.name.to_owned())
             .or_else(|| {

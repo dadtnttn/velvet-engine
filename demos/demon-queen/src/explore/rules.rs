@@ -151,7 +151,9 @@ impl App {
         };
         if self.outfit == slot
             || slot >= wardrobe_outfit_count()
-            || !self.achievements.outfit_available(achievements::catalog(), slot)
+            || !self
+                .achievements
+                .outfit_available(achievements::catalog(), slot)
         {
             return;
         }
@@ -177,7 +179,9 @@ impl App {
         self.wardrobe_selection = outfit;
         if too_soon && (waiting.is_none() || self.story.get(BIKINI_OUT_NOTE) == 0) {
             self.story.values.insert(BIKINI_OUT_NOTE.to_owned(), 1);
-            self.bikini_note("—¿Salir así a la calle? Ni loca. Que te vea media villa en bikini… Vístete.");
+            self.bikini_note(
+                "—¿Salir así a la calle? Ni loca. Que te vea media villa en bikini… Vístete.",
+            );
         }
         self.persist_3d_state(true);
     }

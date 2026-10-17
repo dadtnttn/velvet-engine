@@ -576,7 +576,9 @@ impl App {
             .iter()
             .copied()
             .filter(|key| match *key {
-                "baths" | "brothel" => !matches!(zone, ZoneId::Village | ZoneId::Baths | ZoneId::Brothel),
+                "baths" | "brothel" => {
+                    !matches!(zone, ZoneId::Village | ZoneId::Baths | ZoneId::Brothel)
+                }
                 "villa" => !matches!(zone, ZoneId::Forest | ZoneId::Village),
                 _ => false,
             })
@@ -650,7 +652,6 @@ impl RenderState {
         let Frame {
             camera,
             player,
-            camera_yaw,
             elapsed,
             environment,
             ..
@@ -756,14 +757,7 @@ impl RenderState {
                 continue;
             };
             let building_distance = village::building_distance(player, footprint_index);
-            push_villa_building_prompt(
-                draws,
-                self.village_prompt_meshes,
-                building,
-                building_distance,
-                elapsed,
-                camera_yaw,
-            );
+            push_villa_building_prompt(building, building_distance);
         }
         // The village uses the same gate marker for a reversible return
         // to the forest.  Keep the prompt close to the actual threshold,
@@ -773,16 +767,12 @@ impl RenderState {
         if distance <= VILLAGE_ARROW_SHOW_RADIUS {
             let ground_y = village::surface_height(entry.x, entry.z);
             push_prompt_medallion(
-                draws,
-                self.village_prompt_meshes,
                 Icon::Forest,
                 Vec3::new(entry.x, ground_y, entry.z),
                 2.85,
                 distance,
                 VILLAGE_ARROW_SHOW_RADIUS,
                 VILLAGE_INTERACT_RADIUS,
-                elapsed,
-                camera_yaw,
             );
         }
     }

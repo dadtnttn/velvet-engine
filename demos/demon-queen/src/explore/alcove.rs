@@ -12,6 +12,43 @@ pub(super) enum Page {
     Main,
     Explore,
     Chiquita,
+    /// Who she asks to come to her room tonight.
+    Invite,
+}
+
+/// Who may be asked to come at night: her name, the scene in `corte.md`, and the bond it needs.
+pub(super) const GUESTS: [(&str, &str); 3] = [
+    ("Lira", "noche_lira"),
+    ("Nyxara", "noche_nyxara"),
+    ("Maren", "noche_maren"),
+];
+
+/// The guests' faces on their cards (portrait and mood in retratos.json).
+const GUEST_FACES: [(&str, &str); 3] = [
+    ("lira", "sonrojada"),
+    ("nyxara", "sonrojada"),
+    ("maren", "sonrisa"),
+];
+
+impl App {
+    /// Whether `guest` (an index of `GUESTS`) would come, and if not, why.
+    pub(super) fn guest_ready(&self, guest: usize) -> Result<(), &'static str> {
+        match guest {
+            0 if self.story.get("maids_trust") >= 3 || self.story.get("afecto_lira") >= 1 => Ok(()),
+            0 => Err("Aún no hay confianza: habla más con ella."),
+            1 if self.story.get("afecto_nyxara") >= 2 => Ok(()),
+            1 => Err("Aún no: aprende dos lecciones con ella."),
+            // Maren only once she stays of her own will, with the door open, and is at home here.
+            2 if self.story.get("prisionera_queda") == 0
+                || self.story.get("prisionera_encerrada") > 0 =>
+            {
+                Err("No está en el castillo por su propio pie.")
+            }
+            2 if self.story.get("maren_afecto") >= 2 => Ok(()),
+            2 => Err("Aún no: dale tiempo en la corte (la rutina de la mañana)."),
+            _ => Err(""),
+        }
+    }
 }
 
 /// One way to tease Chiquita: its card, what the Queen does or says, what Chiquita answers, and how
@@ -144,6 +181,7 @@ pub(super) fn card(label: &str, hint: &str, icon: &str, locked: bool) -> map_ove
         label: label.to_owned(),
         hint: hint.to_owned(),
         icon: icon.to_owned(),
+        face: None,
         locked,
     }
 }
@@ -240,6 +278,22 @@ impl App {
                     "chiquita",
                     false,
                 ),
+                {
+                    let night = self.alcove_night();
+                    let done = self.story.get("noche_hoy") >= 1;
+                    card(
+                        "Invitar a alguien",
+                        if !night {
+                            "Solo de noche."
+                        } else if done {
+                            "Por esta noche ya está."
+                        } else {
+                            "Que alguien venga a tu cuarto esta noche."
+                        },
+                        "moonheart",
+                        !night || done,
+                    )
+                },
                 card("Levantarse", "Volver a la alcoba.", "back", false),
             ],
             Page::Explore => vec![
@@ -262,6 +316,37 @@ impl App {
                 ),
                 card("Volver", "A la cama.", "back", false),
             ],
+            Page::Invite => {
+                let mut cards: Vec<_> = GUESTS
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (name, _))| {
+                        // Maren has no card before the Queen has met her.
+                        let name = if i == 2 && self.story.get("prisionera_n") == 0 {
+                            "· · ·"
+                        } else {
+                            name
+                        };
+                        let mut c = match self.guest_ready(i) {
+                            Ok(()) => card(name, "Que venga esta noche.", "heart", false),
+                            Err(why) => card(name, why, "heart", true),
+                        };
+                        // Her face in the card's window, once the Queen knows it.
+                        if name != "· · ·" {
+                            let (who, mood) = GUEST_FACES[i];
+                            c.face = guion::portraits().find(who, Some(mood)).map(|p| {
+                                map_overlay::PortraitRef {
+                                    image: p.image,
+                                    crop: p.crop,
+                                }
+                            });
+                        }
+                        c
+                    })
+                    .collect();
+                cards.push(card("Volver", "A la cama.", "back", false));
+                cards
+            }
             Page::Chiquita => {
                 let mut cards: Vec<_> = TEASES
                     .iter()
@@ -314,10 +399,15 @@ impl App {
 
     /// A guion of the bed's (`castillo.<scene>`) plays over her; the menu waits for it.
     fn alcove_tell(&mut self, scene: &str) {
+        self.alcove_tell_at(&format!("castillo.{scene}"));
+    }
+
+    /// A guion scene (`file.scene`) plays over her; the menu waits for it.
+    fn alcove_tell_at(&mut self, at: &str) {
         if let Some(a) = self.alcove.as_mut() {
             a.busy = true;
         }
-        if !self.start_talk_at(&format!("castillo.{scene}")) {
+        if !self.start_talk_at(at) {
             if let Some(a) = self.alcove.as_mut() {
                 a.busy = false;
             }
@@ -352,7 +442,13 @@ impl App {
             (Page::Main, 1) => self.alcove_show(Page::Explore),
             (Page::Main, 2) => self.alcove_tell("cama_sello"),
             (Page::Main, 3) => self.alcove_show(Page::Chiquita),
+            (Page::Main, 4) => self.alcove_show(Page::Invite),
             (Page::Main, _) => self.close_alcove(),
+            (Page::Invite, i) if i < GUESTS.len() => {
+                self.story.values.insert("noche_hoy".to_owned(), 1);
+                self.alcove_tell_at(&format!("corte.{}", GUESTS[i].1));
+            }
+            (Page::Invite, _) => self.alcove_show(Page::Main),
             (Page::Explore, 0) => {
                 self.story.values.insert("explorado_hoy".to_owned(), 1);
                 *self.story.values.entry("deseo".to_owned()).or_insert(0) += 1;
@@ -403,7 +499,7 @@ impl App {
     /// night passes when she sleeps.
     pub(super) fn tick_alcove(&mut self) {
         let now = self.elapsed;
-        let free = self.talk.is_none() && !self.bed_scene_open();
+        let free = self.talk.is_none() && !self.bed_scene_open() && self.caricias.is_none();
         let Some(a) = self.alcove.as_mut() else {
             return;
         };
@@ -556,6 +652,7 @@ impl App {
                 Page::Main => 0,
                 Page::Explore => 1,
                 Page::Chiquita => 2,
+                Page::Invite => 3,
             },
             cards: self.alcove_cards(),
             choice: a.choice as u8,

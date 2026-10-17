@@ -27,7 +27,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 use crate::exploration3d_state;
 use crate::window_display::{GpuContext, WindowDisplay};
 pub(crate) use demon_queen_dungeon as dungeon;
-#[path = "bin/map_overlay.rs"]
+#[path = "overlay/map_overlay.rs"]
 pub(crate) mod map_overlay;
 use dungeon::prompt_icons::{Icon, Prompt};
 #[path = "achievements.rs"]
@@ -57,6 +57,8 @@ use velvet_nav as nav;
 pub(crate) mod backpack;
 #[path = "castle.rs"]
 mod castle;
+#[path = "clip_video.rs"]
+pub(crate) mod clip_video;
 #[path = "dark_forest.rs"]
 mod dark_forest;
 #[path = "elixir.rs"]
@@ -65,32 +67,30 @@ pub(crate) mod elixir;
 pub(crate) mod ero;
 #[path = "gait.rs"]
 pub(crate) mod gait;
+#[path = "gallery_seen.rs"]
+pub(crate) mod gallery_seen;
 #[path = "game_audio.rs"]
 mod game_audio;
-#[path = "clip_video.rs"]
-pub(crate) mod clip_video;
 #[path = "mine.rs"]
 mod mine;
 #[path = "mugo.rs"]
 pub(crate) mod mugo;
 #[path = "prefetch.rs"]
 pub(crate) mod prefetch;
+#[path = "prefs.rs"]
+pub(crate) mod prefs;
 #[path = "qa_bot.rs"]
 pub(crate) mod qa_bot;
 #[path = "retarget.rs"]
 pub(crate) mod retarget;
+#[path = "sign_textures.rs"]
+pub(crate) mod sign_textures;
 #[path = "soundtrack.rs"]
 pub(crate) mod soundtrack;
 #[path = "spa_life.rs"]
 pub(crate) mod spa_life;
 #[path = "ui_sfx.rs"]
 pub(crate) mod ui_sfx;
-#[path = "prefs.rs"]
-pub(crate) mod prefs;
-#[path = "gallery_seen.rs"]
-pub(crate) mod gallery_seen;
-#[path = "sign_textures.rs"]
-pub(crate) mod sign_textures;
 #[path = "village.rs"]
 mod village;
 #[path = "explore/walk.rs"]
@@ -112,6 +112,8 @@ mod input;
 #[path = "zones/zone.rs"]
 mod zone;
 use zone::*;
+#[path = "zones/castle_life.rs"]
+mod castle_life;
 #[path = "zones/castle.rs"]
 mod zone_castle;
 #[path = "zones/outdoors.rs"]
@@ -130,8 +132,12 @@ use zone_penascal::penascal_return;
 mod act_one;
 #[path = "explore/guide.rs"]
 mod guide;
+#[path = "zones/war_render.rs"]
+mod war_render;
 #[path = "zones/boss.rs"]
 mod zone_boss;
+#[path = "zones/war.rs"]
+mod zone_war;
 use camera::*;
 use zone_boss::{boss_camera, BossInput};
 #[path = "explore/queen.rs"]
@@ -154,18 +160,26 @@ mod audio;
 mod bag;
 #[path = "explore/bed_scene.rs"]
 mod bed_scene;
+#[path = "explore/caricias.rs"]
+mod caricias;
+#[path = "explore/court.rs"]
+mod court;
+#[path = "explore/court_days.rs"]
+mod court_days;
+#[path = "explore/dates.rs"]
+pub(crate) mod dates;
 #[path = "explore/drink.rs"]
 mod drink;
 #[path = "explore/floats.rs"]
 mod floats;
 #[path = "explore/mage.rs"]
 mod mage;
-#[path = "explore/rules.rs"]
-mod rules;
 #[path = "explore/mascot.rs"]
 pub(crate) mod mascot;
 #[path = "explore/play_scene.rs"]
 mod play_scene;
+#[path = "explore/rules.rs"]
+mod rules;
 #[path = "explore/shop_games.rs"]
 mod shop_games;
 #[path = "explore/shop_ui.rs"]
@@ -174,6 +188,8 @@ mod shop_ui;
 mod stage;
 #[path = "explore/talk.rs"]
 mod talk;
+#[path = "explore/world_tags.rs"]
+pub(crate) mod world_tags;
 
 /// Compact item data exposed to the pause-menu renderer. The shop remains
 /// data-driven; this view gives the menu catalog labels and quantities
@@ -259,7 +275,6 @@ struct Frame<'a> {
     camera: Camera3D,
     player: Vec3,
     yaw: f32,
-    camera_yaw: f32,
     moving: bool,
     running: bool,
     elapsed: f32,
@@ -296,6 +311,9 @@ struct Frame<'a> {
     mission: Option<&'a guide::Guide>,
     /// The fight with Varrak, in first person.
     boss: Option<&'a varrak_fight::Fight>,
+    /// The war table, a battle or the campaign.
+    war: Option<&'a zone_war::WarSession>,
+    war_campaign: Option<&'a demon_queen_war::rules::Campaign>,
     /// She is drinking Rosalía's elixir: seconds into her clip.
     drink: Option<f32>,
     /// She lies in her bed (the alcove's menu).
@@ -368,7 +386,6 @@ pub(crate) struct RenderState {
     celestial_orb: MeshHandle,
     village_entry_marker: MeshHandle,
     /// The villa's interaction medallion.
-    village_prompt_meshes: PromptMeshes,
     nature_draws: Vec<MeshDraw3D>,
     /// The Dark Forest's lantern glass and glowing things among `nature_draws`, the pieces that
     /// can hide her, and the campfire's puff (empty unless the exported wood is in use).
@@ -402,6 +419,9 @@ pub(crate) struct RenderState {
     baths_load_attempted: bool,
     /// The castle from its prototype, loaded the first time she walks in.
     castle_scene: Option<castle3d::Scene>,
+    /// The court's life in the castle's rooms (built the first time the castle is drawn).
+    castle_life: Option<castle_life::Scene>,
+    castle_life_tried: bool,
     castle_load_attempted: bool,
     /// El Peñascal, loaded the first time she climbs to it.
     penascal_scene: Option<penascal3d::Scene>,
@@ -411,6 +431,9 @@ pub(crate) struct RenderState {
     /// The fight with Varrak, loaded the first time she challenges him.
     boss_scene: Option<zone_boss::BossScene>,
     boss_load_attempted: bool,
+    war_scene: Option<war_render::WarScene>,
+    /// The battle whose minimap the overlay holds.
+    war_minimap_serial: u64,
     map_overlay: map_overlay::MapOverlay,
 }
 
@@ -424,7 +447,11 @@ impl Drop for RenderState {
 }
 
 /// The world's frame at `size`.
-fn make_target(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32)) -> wgpu::Texture {
+fn make_target(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    size: (u32, u32),
+) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("exploration-frame"),
         size: wgpu::Extent3d {
@@ -473,7 +500,11 @@ impl RenderState {
         if let (Some(budget), Some(last)) = (self.dynamic_budget, self.last_render) {
             let ms = now.duration_since(last).as_secs_f32() * 1000.0;
             if ms < 250.0 {
-                self.dynamic_ms = if self.dynamic_ms == 0.0 { ms } else { self.dynamic_ms * 0.9 + ms * 0.1 };
+                self.dynamic_ms = if self.dynamic_ms == 0.0 {
+                    ms
+                } else {
+                    self.dynamic_ms * 0.9 + ms * 0.1
+                };
                 if self.dynamic_ms > budget * 1.06 {
                     self.dynamic_scale = (self.dynamic_scale - 0.02).max(0.5);
                 } else if self.dynamic_ms < budget * 0.8 {
@@ -482,7 +513,12 @@ impl RenderState {
             }
         }
         self.last_render = Some(now);
-        let scale = self.render_scale * if self.dynamic_budget.is_some() { self.dynamic_scale } else { 1.0 };
+        let scale = self.render_scale
+            * if self.dynamic_budget.is_some() {
+                self.dynamic_scale
+            } else {
+                1.0
+            };
         let shown = self.render_size;
         let drawn = (
             ((shown.0 as f32 * scale).round() as u32).max(320),
@@ -513,8 +549,15 @@ impl RenderState {
         }
         let shown = self.render_size;
         let target = self.target_view.clone();
-        self.upscaler
-            .run(&self.device, &self.queue, scene, drawn, &target, shown, self.finishing);
+        self.upscaler.run(
+            &self.device,
+            &self.queue,
+            scene,
+            drawn,
+            &target,
+            shown,
+            self.finishing,
+        );
     }
 
     /// The world drawn at `size` from now on (the frame made again when it changes).
@@ -622,9 +665,15 @@ impl RenderState {
         let (mut model, mut green_model, mut mage_model, mut maid_model, mut maid_alt_model) =
             (model, green_model, mage_model, maid_model, maid_alt_model);
         let mut freed = 0usize;
-        for m in [Some(&mut model), green_model.as_mut(), Some(&mut mage_model), Some(&mut maid_model), maid_alt_model.as_mut()]
-            .into_iter()
-            .flatten()
+        for m in [
+            Some(&mut model),
+            green_model.as_mut(),
+            Some(&mut mage_model),
+            Some(&mut maid_model),
+            maid_alt_model.as_mut(),
+        ]
+        .into_iter()
+        .flatten()
         {
             freed += m.textures.iter().map(|t| t.rgba.len()).sum::<usize>();
             m.textures = Vec::new();
@@ -672,18 +721,6 @@ impl RenderState {
         )?;
         // Floating medallions show each interaction's own icon in the scene;
         // the on-screen plate names the key and the action.
-        let mut prompt_glyphs = Vec::with_capacity(Icon::ALL.len());
-        for icon in Icon::ALL {
-            prompt_glyphs.push(renderer.upload_mesh(&device, &build_prompt_icon_mesh(icon))?);
-        }
-        let prompt_glyphs: [MeshHandle; Icon::ALL.len()] =
-            prompt_glyphs.try_into().expect("one glyph per icon");
-        let village_prompt_meshes = PromptMeshes {
-            rim: renderer.upload_mesh(&device, &build_prompt_plate_mesh(0.72, 0.05))?,
-            face: renderer.upload_mesh(&device, &build_prompt_plate_mesh(0.6, 0.05))?,
-            glyphs: prompt_glyphs,
-            pointer: renderer.upload_mesh(&device, &build_prompt_pointer_mesh())?,
-        };
         let dungeon_scene = dungeon::Scene::new(&mut renderer, &device, &queue, format)?;
         eprintln!("[3d] dungeon v2 ready, seed {dungeon_seed}; geometry streams on entry");
         let nature_footprint = renderer.upload_mesh(&device, &build_nature_footprint_mesh())?;
@@ -759,7 +796,6 @@ impl RenderState {
             nature_mote,
             celestial_orb,
             village_entry_marker,
-            village_prompt_meshes,
             nature_draws,
             forest_lamps,
             forest_glows,
@@ -784,12 +820,16 @@ impl RenderState {
             baths_scene: None,
             baths_load_attempted: false,
             castle_scene: None,
+            castle_life: None,
+            castle_life_tried: false,
             castle_load_attempted: false,
             penascal_scene: None,
             penascal_load_attempted: false,
             guide_meshes: None,
             boss_scene: None,
             boss_load_attempted: false,
+            war_scene: None,
+            war_minimap_serial: 0,
             map_overlay,
         })
     }
@@ -857,6 +897,8 @@ pub(crate) struct App {
     pending_villa_interaction: Option<String>,
     /// Act 1 is over: the host shows its thanks (taken once).
     thanks_pending: bool,
+    /// The portraits' gallery asked for (the host opens it over the world).
+    gallery_pending: bool,
     /// Sound, opened on first need (the first descent); `audio_tried`
     /// stops retrying when there is no sound device.
     audio: Option<game_audio::GameAudio>,
@@ -929,6 +971,12 @@ pub(crate) struct App {
     /// The fight with Varrak (over el Peñascal while it lasts), and the mouse's doings in it.
     boss: Option<varrak_fight::Fight>,
     boss_input: BossInput,
+    /// The war table open (its page, a battle, the campaign).
+    war: Option<zone_war::WarSession>,
+    /// The campaign under way (it rides in the saves).
+    war_campaign: Option<demon_queen_war::rules::Campaign>,
+    /// Men per regiment in the war's battles.
+    war_scale: f32,
     /// The story's variables and seen scenes (saved; shared with the visual novel).
     story: guion::Vars,
     /// A conversation playing in the dialogue box.
@@ -950,6 +998,17 @@ pub(crate) struct App {
     floats: Vec<floats::Float>,
     /// In her own bed, its menu open.
     alcove: Option<alcove::Alcove>,
+    /// The court: audiences, works, lessons, training (`court.rs`).
+    court: Option<court::Court>,
+    /// What each of the court told this morning, and whether its page is still to be seen.
+    court_report: Vec<court_days::Report>,
+    court_morning_pending: bool,
+    /// A letter from Maren came this morning.
+    court_letter: bool,
+    /// A night's touch game (`caricias.rs`), its clip's last frame to upload, its clip's sound.
+    caricias: Option<caricias::Caricias>,
+    caricias_frame: Option<image::RgbaImage>,
+    caricias_sound: Option<std::path::PathBuf>,
     /// The hypnotist's stall in the wood, while it is open.
     mage: Option<mage::MageMenu>,
     /// Chiquita out on the screen in 3D.
@@ -1029,6 +1088,8 @@ impl App {
             venue,
             inside,
             brothel_rope_open,
+            war: war_saved,
+            war_scale,
         } = starting_point(&world_id, &spawn_id, &session_path, seed);
         let mut app = Self {
             model_file,
@@ -1043,6 +1104,7 @@ impl App {
             pending_story_request: false,
             pending_villa_interaction: None,
             thanks_pending: false,
+            gallery_pending: false,
             audio: None,
             audio_tried: false,
             audio_boot: None,
@@ -1096,6 +1158,9 @@ impl App {
             route: None,
             boss: None,
             boss_input: BossInput::default(),
+            war: None,
+            war_campaign: war_saved,
+            war_scale,
             story,
             talk: None,
             talk_story_before: None,
@@ -1104,6 +1169,13 @@ impl App {
             drink: None,
             floats: Vec::new(),
             alcove: None,
+            court: None,
+            court_report: Vec::new(),
+            court_morning_pending: false,
+            court_letter: false,
+            caricias: None,
+            caricias_frame: None,
+            caricias_sound: None,
             mage: None,
             mascot: mascot::Mascot::default(),
             talk_choice: 0,
@@ -1190,6 +1262,10 @@ impl App {
         }
         self.last_frame = Instant::now();
         self.next_frame_at = self.last_frame;
+        // QA: VELVET_WAR_TABLE opens the war table at once (the full game's way in).
+        if std::env::var_os("VELVET_WAR_TABLE").is_some() {
+            self.open_war_table();
+        }
     }
 
     pub(crate) fn texture_view(&self) -> Option<&wgpu::TextureView> {
@@ -1248,6 +1324,10 @@ impl App {
         self.sprint = false;
         // Nothing held in the fight either (a seal held through a pause stayed on).
         self.boss_input = BossInput::default();
+        if let Some(w) = self.war.as_mut() {
+            w.keys = Default::default();
+            w.press = None;
+        }
         self.shop_preview_dragging = false;
         self.shop_preview_drag_anchor = None;
         self.last_frame = Instant::now();
@@ -1276,7 +1356,8 @@ impl App {
     /// The host's "Menú · ESC" button steps aside while a panel with its own Close is up
     /// (a modal, or the full map on M with its "ESC Cerrar").
     pub(crate) fn covers_menu_button(&self) -> bool {
-        self.modal_is_open() || (self.map_open && !self.dungeon_mode)
+        // (the war has its own controls in that corner)
+        self.modal_is_open() || (self.map_open && !self.dungeon_mode) || self.war.is_some()
     }
 
     pub(crate) fn close_map_if_open(&mut self) -> bool {
@@ -1290,7 +1371,7 @@ impl App {
 
     /// The right button is the world's own (the fight's seal), not the menu's «back».
     pub(crate) fn owns_right_button(&self) -> bool {
-        self.boss.is_some()
+        self.boss.is_some() || self.war.is_some()
     }
 
     pub(crate) fn resume_after_pause(&mut self) {
@@ -1304,12 +1385,15 @@ impl App {
     }
 
     pub(crate) fn modal_is_open(&self) -> bool {
-        self.wardrobe_open
+        self.war_modal()
+            || self.wardrobe_open
             || self.shop_open
             || self.achievements_open
             || self.bed_scene_open()
             || self.drink.is_some()
             || self.alcove.is_some()
+            || self.court.is_some()
+            || self.caricias.is_some()
             || self.mage.is_some()
             || self.brothel.as_ref().is_some_and(|b| b.escort.is_some())
             || (self.dungeon_mode && (self.dungeon.seed_input.is_some() || self.dungeon.map_open))
@@ -1321,6 +1405,11 @@ impl App {
     /// Act 1 has just ended: the host puts up its thanks.
     pub(crate) fn take_thanks(&mut self) -> bool {
         std::mem::take(&mut self.thanks_pending)
+    }
+
+    /// The castle's portraits were asked for: the host puts up the gallery over the world.
+    pub(crate) fn take_gallery(&mut self) -> bool {
+        std::mem::take(&mut self.gallery_pending)
     }
 
     /// The language changed: the signs on show drawn again in it.
@@ -1374,6 +1463,8 @@ impl App {
         self.tick_missions();
         self.tick_guide();
         self.tick_alcove();
+        self.tick_court();
+        self.tick_caricias(dt);
         self.tick_mage();
         self.tick_shop();
         self.tick_bed_scene(dt);
@@ -1417,6 +1508,8 @@ impl App {
             || self.bed_scene_open()
             || self.drink.is_some()
             || self.alcove.is_some()
+            || self.court.is_some()
+            || self.caricias.is_some()
             || self.mage.is_some()
             || self.brothel.as_ref().is_some_and(|b| b.escort.is_some())
         {
@@ -1430,7 +1523,8 @@ impl App {
         if let (Some(window), Some(state)) = (self.window.as_ref(), self.state.as_mut()) {
             let inner = window.inner_size();
             state.set_render_size(prefs::render_size((inner.width, inner.height)));
-        } else if let (Some(size), Some(state)) = (prefs::forced_render_size(), self.state.as_mut()) {
+        } else if let (Some(size), Some(state)) = (prefs::forced_render_size(), self.state.as_mut())
+        {
             state.set_render_size(size);
         }
         // The graphics settings (QA: `VELVET_GFX_PRESET=0..3` tries a preset).
@@ -1439,7 +1533,12 @@ impl App {
                 .ok()
                 .and_then(|v| v.parse::<u8>().ok())
                 .map_or_else(prefs::graphics, prefs::Graphics::preset);
-            state.set_graphics(g.quality(), g.finishing(), g.render_scale as f32 / 100.0, g.budget_ms());
+            state.set_graphics(
+                g.quality(),
+                g.finishing(),
+                g.render_scale as f32 / 100.0,
+                g.budget_ms(),
+            );
         }
         // Places to go in are noted afresh each frame by the zone that shows them; any other
         // place shows none (the last ones would stay up over the castle otherwise).
@@ -1462,6 +1561,9 @@ impl App {
         let drink_view = self.drink_view();
         let floats_view = self.floats_view();
         let alcove_view = self.alcove_view();
+        let court_view = self.court_view();
+        let caricias_view = self.caricias_view();
+        let caricias_frame = self.caricias_frame.take();
         let mage_view = self.mage_view();
         let shop_view = self.shop_view();
         let mascot_view = self.mascot_view();
@@ -1477,6 +1579,17 @@ impl App {
             state.map_overlay.set_drink(drink_view);
             state.map_overlay.set_floats(floats_view);
             state.map_overlay.set_alcove(alcove_view);
+            state.map_overlay.set_court(court_view);
+            state.map_overlay.set_caricias(caricias_view);
+            if let Some(frame) = caricias_frame {
+                state.map_overlay.upload_scene_frame(
+                    &state.device,
+                    &state.queue,
+                    frame.width(),
+                    frame.height(),
+                    frame.as_raw(),
+                );
+            }
             state.map_overlay.set_mage(mage_view);
             state.map_overlay.set_shop(shop_view);
             state.map_overlay.set_mascot(mascot_view);
@@ -1534,7 +1647,6 @@ impl App {
                 camera,
                 player: self.player,
                 yaw: self.player_yaw,
-                camera_yaw: self.iso.yaw,
                 moving,
                 running: moving && self.sprint,
                 elapsed: self.elapsed,
@@ -1574,6 +1686,8 @@ impl App {
                     .as_ref()
                     .filter(|_| !matches!(zone, ZoneId::Dungeon | ZoneId::Boss)),
                 boss: self.boss.as_ref(),
+                war: self.war.as_ref(),
+                war_campaign: self.war_campaign.as_ref(),
                 drink,
                 lying,
             });
@@ -1889,7 +2003,10 @@ mod dungeon_mode_tests {
         app.environment_cycle.set_phase(0.5);
         app.try_enter_brothel();
         assert!(app.brothel.is_none(), "not by day");
-        assert_eq!(app.missions.shown.as_ref().map(|s| s.0), Some(missions::NOTE));
+        assert_eq!(
+            app.missions.shown.as_ref().map(|s| s.0),
+            Some(missions::NOTE)
+        );
         app.environment_cycle.set_phase(0.95);
         app.try_enter_brothel();
         assert!(app.brothel.is_none(), "not without the cloak");
@@ -1944,7 +2061,11 @@ mod dungeon_mode_tests {
         assert_eq!(saved.inside.as_ref().and_then(|i| i.outfit_before), Some(1));
         app.leave_baths();
         assert_eq!(app.outfit, 1, "the green dress back on the way out");
-        assert_eq!(app.story.get("termas_bikini_aviso"), 1, "Chiquita says it once");
+        assert_eq!(
+            app.story.get("termas_bikini_aviso"),
+            1,
+            "Chiquita says it once"
+        );
         app.enter_baths();
         app.leave_baths();
         assert_eq!(app.outfit, 1);
@@ -2204,7 +2325,11 @@ mod dungeon_mode_tests {
         app.inventory.insert("espada_de_madera".into(), 1);
         app.dungeon_mode = true;
         let (mut pack, _) = app.backpack_for_menu();
-        let wooden = pack.placed.iter().position(|p| p.id == "espada_de_madera").unwrap();
+        let wooden = pack
+            .placed
+            .iter()
+            .position(|p| p.id == "espada_de_madera")
+            .unwrap();
         pack.equip(wooden).unwrap();
         app.commit_backpack(pack);
         assert!(app.dungeon.armed);
@@ -2217,7 +2342,11 @@ mod dungeon_mode_tests {
         assert_eq!(pack.equipment.weapon, None);
         // Worn again: in her hand again.
         let mut pack = pack;
-        let wooden = pack.placed.iter().position(|p| p.id == "espada_de_madera").unwrap();
+        let wooden = pack
+            .placed
+            .iter()
+            .position(|p| p.id == "espada_de_madera")
+            .unwrap();
         pack.equip(wooden).unwrap();
         app.commit_backpack(pack);
         assert!(app.dungeon.armed);
@@ -2234,7 +2363,9 @@ mod dungeon_mode_tests {
         assert_eq!(items.iter().filter(|i| i.id == RELIC_SWORD_ID).count(), 1);
         let (mut pack, craft) = app.backpack_for_menu();
         assert!(craft);
-        let at = |pack: &backpack::Backpack, id: &str| pack.placed.iter().position(|p| p.id == id).unwrap();
+        let at = |pack: &backpack::Backpack, id: &str| {
+            pack.placed.iter().position(|p| p.id == id).unwrap()
+        };
         let (w, b) = (at(&pack, "espada_de_madera"), at(&pack, "gelatina_azul"));
         assert_eq!(pack.combine(w, b).as_deref(), Ok("espada_pegajosa_azul"));
         let (r, g) = (at(&pack, RELIC_SWORD_ID), at(&pack, "gelatina_verde"));
@@ -2247,7 +2378,10 @@ mod dungeon_mode_tests {
         let blue = at(&pack, "espada_pegajosa_azul");
         pack.equip(blue).unwrap();
         app.commit_backpack(pack);
-        assert_eq!(app.dungeon.sword_goo, backpack::sword_goo("espada_pegajosa_azul"));
+        assert_eq!(
+            app.dungeon.sword_goo,
+            backpack::sword_goo("espada_pegajosa_azul")
+        );
         assert!(app.dungeon.sword_goo.unwrap()[2] > 0.9, "blue");
         assert_eq!(app.dungeon.weapon_fx.slow, 3.0);
         assert!(!app.dungeon.relic_sword);
@@ -2431,10 +2565,8 @@ mod dungeon_mode_tests {
 
     #[test]
     fn q_in_the_mine_cures_from_the_bag_once_the_tonics_are_gone() {
-        let session = std::env::temp_dir().join(format!(
-            "demon-queen-cure-test-{}.json",
-            std::process::id()
-        ));
+        let session =
+            std::env::temp_dir().join(format!("demon-queen-cure-test-{}.json", std::process::id()));
         let mut app = App::new(
             PathBuf::new(),
             "cure-test".into(),
@@ -2536,7 +2668,12 @@ mod dungeon_mode_tests {
                 _ => back.penascal.is_some(),
             };
             assert!(inside, "{place}: not back inside");
-            assert!((back.player - at).length() < 0.05, "{place}: {:?} vs {:?}", back.player, at);
+            assert!(
+                (back.player - at).length() < 0.05,
+                "{place}: {:?} vs {:?}",
+                back.player,
+                at
+            );
             assert_eq!(back.gold, 777);
             std::fs::remove_file(session).unwrap();
         }

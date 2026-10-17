@@ -395,7 +395,6 @@ impl App {
                 y,
                 &self.venue,
             ) {
-                Some(Hit::Tab(i)) => self.venue.select_tab(i),
                 Some(Hit::Item(i)) => {
                     if i < self.venue.entries().len() {
                         // A second click on the chosen one goes on, as Enter.

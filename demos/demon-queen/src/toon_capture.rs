@@ -206,7 +206,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                             texts.insert(name.clone());
                             texts.insert(text.clone());
                         }
-                        guion::Step::Choice { prompt, options, .. } => {
+                        guion::Step::Choice {
+                            prompt, options, ..
+                        } => {
                             texts.extend(prompt.clone());
                             texts.extend(options.iter().map(|o| o.label.clone()));
                         }
@@ -240,7 +242,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         ..Default::default()
     });
     // `VELVET_ADAPTER=intel`: the graphics card whose name holds that (to measure a weak one).
-    let wanted = std::env::var("VELVET_ADAPTER").ok().map(|n| n.to_lowercase());
+    let wanted = std::env::var("VELVET_ADAPTER")
+        .ok()
+        .map(|n| n.to_lowercase());
     let adapter = match wanted.and_then(|n| {
         instance
             .enumerate_adapters(wgpu::Backends::all())
@@ -248,8 +252,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             .find(|a| a.get_info().name.to_lowercase().contains(&n))
     }) {
         Some(adapter) => adapter,
-        None => pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-            .context("toon QA adapter")?,
+        None => {
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+                .context("toon QA adapter")?
+        }
     };
     eprintln!("[toon-qa] {:?}", adapter.get_info());
     let (device, queue) = pollster::block_on(adapter.request_device(
@@ -615,7 +621,8 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.iso.distance = 12.0;
             let mut times = Vec::with_capacity(frames);
             let mut cpu = Vec::with_capacity(frames);
-            let take = |a: &std::sync::atomic::AtomicU64| a.swap(0, std::sync::atomic::Ordering::Relaxed);
+            let take =
+                |a: &std::sync::atomic::AtomicU64| a.swap(0, std::sync::atomic::Ordering::Relaxed);
             let (mut render_ns, mut overlay_ns) = (0u64, 0u64);
             for frame in 0..frames + 30 {
                 let t = frame as f32 / 60.0;
@@ -641,7 +648,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 let submitted = started.elapsed().as_secs_f32() * 1000.0;
                 app.wait_for_gpu();
                 // The first frames load and upload the scene: not counted.
-                let (r, o) = (take(&velvet_render::RENDER3D_CPU_NS), take(&map_overlay::OVERLAY_CPU_NS));
+                let (r, o) = (
+                    take(&velvet_render::RENDER3D_CPU_NS),
+                    take(&map_overlay::OVERLAY_CPU_NS),
+                );
                 if frame >= 30 {
                     times.push(started.elapsed().as_secs_f32() * 1000.0);
                     cpu.push(submitted);
@@ -1429,7 +1439,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.elapsed += 1.0 / 30.0;
             }
         };
-        if let Some(anchor) = village::building_anchors().iter().find(|a| a.id == "villa_burdel") {
+        if let Some(anchor) = village::building_anchors()
+            .iter()
+            .find(|a| a.id == "villa_burdel")
+        {
             if let Some((door, out_dir)) = village::door_anchor(anchor.footprint_index) {
                 app.player = door + out_dir * 1.4;
                 app.camera_focus = app.player;
@@ -2124,6 +2137,398 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.castle = None;
         return Ok(());
     }
+    if std::env::args().any(|a| a == "--war") {
+        // QA: the war table's page, the campaign (its intro, the map, an army chosen, a battle
+        // asked), a quick battle (deployed, fought by both generals, close, the spark, the end) and
+        // el Peñascal with Varrak.
+        use zone_war::{Sel, WarPage};
+        app.nature_mode = false;
+        app.village_entered = false;
+        app.castle = None;
+        let only = std::env::args()
+            .skip_while(|a| a != "--war")
+            .nth(1)
+            .filter(|a| !a.starts_with("--"));
+        let want = |name: &str| only.as_deref().is_none_or(|o| name.contains(o));
+        let step = |app: &mut App, frames: usize| {
+            for _ in 0..frames {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        app.open_war_table();
+        step(&mut app, 20);
+        if want("table") {
+            save(&mut app, out, "war-table")?;
+            // the focus on the units' size (the keys move it), then the quick battles on the second
+            if let Some(w) = app.war.as_mut() {
+                w.focus = 2;
+            }
+            step(&mut app, 10);
+            save(&mut app, out, "war-table-size")?;
+            app.war_hit(map_overlay::WarHit::Table(2));
+            if let Some(w) = app.war.as_mut() {
+                w.focus = 1;
+            }
+            step(&mut app, 10);
+            save(&mut app, out, "war-quick")?;
+        }
+        if want("campaign") {
+            app.war_campaign = None;
+            if let Some(w) = app.war.as_mut() {
+                w.page = WarPage::Table(0);
+            }
+            app.war_hit(map_overlay::WarHit::Table(1));
+            step(&mut app, 30);
+            save(&mut app, out, "war-campaign-intro")?;
+            app.war_hit(map_overlay::WarHit::Modal(0));
+            step(&mut app, 30);
+            save(&mut app, out, "war-campaign")?;
+            let queen = app
+                .war_campaign
+                .as_ref()
+                .and_then(|s| s.queen_army())
+                .map(|a| a.id.clone());
+            if let (Some(id), Some(c)) = (queen, app.war.as_mut().and_then(|w| w.camp.as_mut())) {
+                c.sel = Some(Sel::Army(id));
+                c.paint_version += 1;
+            }
+            step(&mut app, 10);
+            save(&mut app, out, "war-campaign-army")?;
+            // three regiments bought in the castle: they stand in the army's formation
+            for _ in 0..3 {
+                app.war_hit(map_overlay::WarHit::Panel(0));
+                step(&mut app, 2);
+            }
+            if let Some(w) = app.war.as_mut() {
+                w.cam.zoom(-900.0);
+            }
+            step(&mut app, 30);
+            save(&mut app, out, "war-campaign-close")?;
+            // a march to the fallen capital: it sets out at once, its route and turns on the map
+            if let Some(w) = app.war.as_mut() {
+                w.cam.zoom(900.0);
+            }
+            if let Some(p) = demon_queen_war::data::PROVINCES
+                .iter()
+                .position(|p| p.id == "capital")
+            {
+                app.campaign_go(p);
+            }
+            step(&mut app, 80);
+            save(&mut app, out, "war-campaign-march")?;
+            app.war_hit(map_overlay::WarHit::EndTurn);
+            step(&mut app, 200);
+            save(&mut app, out, "war-campaign-turn2")?;
+        }
+        for (index, name) in [
+            (0usize, "vado"),
+            (1, "penascal"),
+            (2, "cienaga"),
+            (3, "atalaya"),
+            (4, "puerta"),
+        ] {
+            if !want(name) {
+                continue;
+            }
+            if let Some(w) = app.war.as_mut() {
+                w.page = WarPage::Table(1);
+                w.battle = None;
+            }
+            app.war_hit(map_overlay::WarHit::Quick(index as u8));
+            step(&mut app, 20);
+            save(&mut app, out, &format!("war-{name}-deploy"))?;
+            app.war_hit(map_overlay::WarHit::Begin);
+            if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+                run.b.auto_player = Some(demon_queen_war::ai::BattleAi::new(
+                    0,
+                    demon_queen_war::ai::Posture::Attack,
+                ));
+                run.b.speed = 3.0;
+            }
+            // the armies meet
+            for k in 0..900 {
+                app.tick(1.0 / 30.0);
+                if k % 6 == 0 {
+                    app.render_frame();
+                }
+                let fighting = app
+                    .war
+                    .as_ref()
+                    .and_then(|w| w.battle.as_ref())
+                    .is_some_and(|r| {
+                        r.b.sim
+                            .regiments
+                            .iter()
+                            .filter(|g| g.state == demon_queen_war::sim::RState::Melee)
+                            .count()
+                            >= 4
+                    });
+                if fighting && k > 200 {
+                    break;
+                }
+            }
+            let hot = |app: &App| {
+                let run = app.war.as_ref()?.battle.as_ref()?;
+                let regs: Vec<&demon_queen_war::sim::Regiment> =
+                    run.b.sim.regiments.iter().filter(|r| r.alive > 0).collect();
+                let mut hot: Vec<&&demon_queen_war::sim::Regiment> = regs
+                    .iter()
+                    .filter(|r| r.state == demon_queen_war::sim::RState::Melee)
+                    .collect();
+                if hot.is_empty() {
+                    hot = regs.iter().collect();
+                }
+                let n: f32 = hot.iter().map(|r| r.alive as f32).sum::<f32>().max(1.0);
+                Some((
+                    hot.iter().map(|r| r.cx * r.alive as f32).sum::<f32>() / n,
+                    hot.iter().map(|r| r.cz * r.alive as f32).sum::<f32>() / n,
+                ))
+            };
+            if let Some((x, z)) = hot(&app) {
+                if let Some(w) = app.war.as_mut() {
+                    let run = w.battle.as_ref().expect("a battle");
+                    let field = &run.b.sim.field;
+                    w.cam
+                        .frame(x, z, Some(110.0), Some(0.4), true, &|a: f32, b: f32| {
+                            field.walk_height(a, b)
+                        });
+                }
+            }
+            step(&mut app, 4);
+            save(&mut app, out, &format!("war-{name}-fight"))?;
+            if let Some((x, z)) = hot(&app) {
+                if let Some(w) = app.war.as_mut() {
+                    let run = w.battle.as_ref().expect("a battle");
+                    let field = &run.b.sim.field;
+                    w.cam
+                        .frame(x, z, Some(34.0), Some(-0.5), true, &|a: f32, b: f32| {
+                            field.walk_height(a, b)
+                        });
+                }
+            }
+            step(&mut app, 4);
+            save(&mut app, out, &format!("war-{name}-close"))?;
+            // the Queen's spark, seen from near her
+            let queen_at = app
+                .war
+                .as_ref()
+                .and_then(|w| w.battle.as_ref())
+                .and_then(|r| {
+                    r.b.queen
+                        .map(|q| (r.b.sim.regiments[q].cx, r.b.sim.regiments[q].cz))
+                });
+            if let Some((x, z)) = queen_at {
+                if let Some(w) = app.war.as_mut() {
+                    let run = w.battle.as_mut().expect("a battle");
+                    if let Some(q) = run.b.queen {
+                        if let Some(ab) = run.b.sim.regiments[q].ability.as_mut() {
+                            ab.cd = 0.0;
+                        }
+                    }
+                    let field = &run.b.sim.field;
+                    w.cam
+                        .frame(x, z, Some(60.0), Some(0.2), true, &|a: f32, b: f32| {
+                            field.walk_height(a, b)
+                        });
+                }
+                app.war_hit(map_overlay::WarHit::Order(4));
+                if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+                    run.b.speed = 1.0;
+                }
+                step(&mut app, 14);
+                save(&mut app, out, &format!("war-{name}-spark"))?;
+            }
+            if name == "penascal" {
+                let varrak = app
+                    .war
+                    .as_ref()
+                    .and_then(|w| w.battle.as_ref())
+                    .and_then(|r| {
+                        r.b.sim
+                            .regiments
+                            .iter()
+                            .find(|g| g.ty.model == "varrak" && g.alive > 0)
+                            .map(|g| (g.cx, g.cz))
+                    });
+                if let Some((x, z)) = varrak {
+                    if let Some(w) = app.war.as_mut() {
+                        let run = w.battle.as_ref().expect("a battle");
+                        let field = &run.b.sim.field;
+                        w.cam
+                            .frame(x, z, Some(24.0), Some(0.6), true, &|a: f32, b: f32| {
+                                field.walk_height(a, b)
+                            });
+                    }
+                    step(&mut app, 8);
+                    save(&mut app, out, "war-penascal-varrak")?;
+                }
+            }
+            if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+                run.b.skip(900.0, true);
+            }
+            step(&mut app, 120);
+            save(&mut app, out, &format!("war-{name}-end"))?;
+        }
+        app.leave_war();
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--castle-life") {
+        // The castle before and after the court's works and audiences: each room that changes,
+        // first as she finds it and then with everything restored and decided.
+        app.nature_mode = false;
+        app.village_entered = false;
+        let up = castle3d::plan().level_h;
+        let stops: [(&str, f32, f32, f32); 9] = [
+            ("patio", -4.0, 0.0, 29.0),
+            ("patio-arena", -12.0, 0.0, 27.0),
+            ("comedor", 20.0, 0.0, 0.4),
+            ("biblioteca", -16.0, 0.0, 3.6),
+            ("trono", 1.4, 0.0, -15.0),
+            ("enfermeria", -15.6, up, 12.0),
+            ("armeria", 17.4, up, 11.0),
+            ("barracones", 17.0, up, 18.8),
+            ("balcon", -20.0, 0.0, -25.6),
+        ];
+        let only = std::env::var("VELVET_CASTLE_LIFE").unwrap_or_default();
+        app.environment_cycle.set_phase(0.5);
+        for (tag, done) in [("antes", false), ("despues", true)] {
+            let mut vars = guion::Vars::default();
+            vars.values.insert("varrak_despierto".into(), 1);
+            vars.values.insert("consejo_1_hecho".into(), 1);
+            if done {
+                for (k, v) in [
+                    ("obra_enfermeria", 1),
+                    ("obra_armeria", 1),
+                    ("obra_cocina", 1),
+                    ("obra_barracones", 1),
+                    ("obra_bano", 1),
+                    ("obra_biblioteca", 1),
+                    ("aud_cabra_grubbo", 3),
+                    ("aud_cabra", 2),
+                    ("aud_cabra_trono", 2),
+                    ("aud_refugiados_norte", 2),
+                    ("aud_herrera_armaduras", 2),
+                    ("aud_boda_orca", 2),
+                    ("aud_dulces_villa", 2),
+                    ("aud_lapida_capital", 1),
+                    ("prisionera_n", 5),
+                    ("prisionera_queda", 1),
+                ] {
+                    vars.values.insert(k.into(), v);
+                }
+            }
+            for (name, x, y, z) in stops {
+                if !only.is_empty() && !only.split(',').any(|o| name.starts_with(o)) {
+                    continue;
+                }
+                app.story = vars.clone();
+                app.player = Vec3::new(x, y, z);
+                app.castle = None;
+                app.iso.yaw = std::f32::consts::FRAC_PI_4;
+                app.iso.yaw_target = app.iso.yaw;
+                app.iso.distance = ISO.max_distance;
+                for _ in 0..90 {
+                    app.tick(1.0 / 60.0);
+                    if let Some(inside) = &app.castle {
+                        app.camera_focus = inside.focus();
+                    }
+                    app.guide = None;
+                    app.render_frame();
+                }
+                save(&mut app, out, &format!("vida-{name}-{tag}"))?;
+            }
+        }
+        app.castle = None;
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--castle-vn-spots") {
+        // QA only: each castle room seen from its four corners at eye height, every wall up and
+        // the Queen behind the camera: references for the court's VN backgrounds. The game's own
+        // camera is not touched outside this capture.
+        app.nature_mode = false;
+        app.village_entered = false;
+        if let Some(state) = app.state.as_mut() {
+            state.map_overlay.hidden = true;
+        }
+        let p = castle3d::plan();
+        let rooms = [
+            ("dormitorio", 0.0f32),
+            ("dormitorio", 0.5),
+            ("biblioteca", 0.5),
+            ("barracones", 0.5),
+            ("enfermeria", 0.5),
+            ("armeria", 0.5),
+            ("comedor", 0.5),
+            ("almacen", 0.5),
+        ];
+        for (id, phase) in rooms {
+            let Some(room) = p.rooms.iter().find(|r| r.id == id) else {
+                continue;
+            };
+            app.environment_cycle.set_phase(phase);
+            let floor = if room.level == 1 { p.level_h } else { 0.0 };
+            let (cx, cz) = room.centre();
+            let tag = if phase < 0.25 { "noche" } else { "dia" };
+            let along = |a: f32, b: f32, t: f32| a + (b - a) * t;
+            for (k, (fx, fz)) in [(0.0f32, 0.0f32), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+                .into_iter()
+                .enumerate()
+            {
+                // She stands in the corner, the camera a step in front of her.
+                // (Out of the furniture and the walls, or the castle puts her back in bed.)
+                let (mut qx, mut qz) = (
+                    along(room.x0, room.x1, 0.06 + fx * 0.88),
+                    along(room.z0, room.z1, 0.06 + fz * 0.88),
+                );
+                for _ in 0..40 {
+                    if !p.blocked(qx, qz, 0.45, room.level) {
+                        break;
+                    }
+                    qx += (cx - qx) * 0.06;
+                    qz += (cz - qz) * 0.06;
+                }
+                let (ex, ez) = (
+                    along(room.x0, room.x1, 0.16 + fx * 0.68),
+                    along(room.z0, room.z1, 0.16 + fz * 0.68),
+                );
+                app.player = Vec3::new(qx, floor, qz);
+                app.castle = None;
+                for _ in 0..3 {
+                    app.tick(1.0 / 60.0);
+                }
+                if let Some(inside) = app.castle.as_mut() {
+                    inside.keep_walls = true;
+                }
+                let eye = Vec3::new(ex, floor + 1.6, ez);
+                let target = Vec3::new(cx + (cx - ex) * 0.5, floor + 1.35, cz + (cz - ez) * 0.5);
+                app.camera_override = Some(Camera3D {
+                    position: eye,
+                    target,
+                    up: Vec3::Y,
+                    fov_y_radians: 64f32.to_radians(),
+                    orthographic_height: None,
+                    near: 0.05,
+                    far: 220.0,
+                });
+                for _ in 0..90 {
+                    app.tick(1.0 / 60.0);
+                    // No mission arrows on the floor.
+                    app.guide = None;
+                    app.render_frame();
+                }
+                if let Err(error) = save(&mut app, out, &format!("castillo-{id}-{tag}-{k}")) {
+                    eprintln!("[castle-vn] {id}: {error:#}");
+                }
+            }
+        }
+        app.camera_override = None;
+        app.castle = None;
+        if let Some(state) = app.state.as_mut() {
+            state.map_overlay.hidden = false;
+        }
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--penascal") {
         // El Peñascal: the way in, the plaza with Varrak on his stone (and kneeling, awake), the
         // quarters round it, by day and by night; its map, small and full.
@@ -2305,16 +2710,28 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 let frame = if clip == "varrak" {
                     frame
                 } else {
-                    image::imageops::resize(&frame, 1280, 720, image::imageops::FilterType::Triangle)
+                    image::imageops::resize(
+                        &frame,
+                        1280,
+                        720,
+                        image::imageops::FilterType::Triangle,
+                    )
                 };
                 let file = std::io::BufWriter::new(std::fs::File::create(
                     dir.join(format!("f{i:04}.jpg")),
                 )?);
                 image::DynamicImage::ImageRgba8(frame)
                     .to_rgb8()
-                    .write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(file, 88))?;
+                    .write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(
+                        file, 88,
+                    ))?;
                 if i % 45 == 0 {
-                    eprintln!("[promo] {clip} {:.1}s at {:.2},{:.2}", i as f32 / 30.0, app.player.x, app.player.z);
+                    eprintln!(
+                        "[promo] {clip} {:.1}s at {:.2},{:.2}",
+                        i as f32 / 30.0,
+                        app.player.x,
+                        app.player.z
+                    );
                 }
             }
             app.clear_input();
@@ -2378,12 +2795,18 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.camera_focus = app.player;
             app.iso.distance = 5.6;
             settle(&mut app);
-            film(&mut app, out, "castillo", 6.0, walker(vec![
-                Vec3::new(0.0, 0.0, 12.0),
-                Vec3::new(-0.6, 0.0, 4.0),
-                Vec3::new(0.0, 0.0, -4.0),
-                Vec3::new(1.0, 0.0, -12.0),
-            ]))?;
+            film(
+                &mut app,
+                out,
+                "castillo",
+                6.0,
+                walker(vec![
+                    Vec3::new(0.0, 0.0, 12.0),
+                    Vec3::new(-0.6, 0.0, 4.0),
+                    Vec3::new(0.0, 0.0, -4.0),
+                    Vec3::new(1.0, 0.0, -12.0),
+                ]),
+            )?;
         }
         if wanted("misiones") {
             // The first mission's guide: its panel under the corner map, the arrows on the floor,
@@ -2578,11 +3001,17 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.camera_focus = app.player;
             app.iso.distance = 7.0;
             settle(&mut app);
-            film(&mut app, out, "termas", 6.0, walker(vec![
-                Vec3::new(-6.0, 0.0, 8.0),
-                Vec3::new(-3.5, 0.0, 5.5),
-                Vec3::new(-0.8, 0.0, 2.4),
-            ]))?;
+            film(
+                &mut app,
+                out,
+                "termas",
+                6.0,
+                walker(vec![
+                    Vec3::new(-6.0, 0.0, 8.0),
+                    Vec3::new(-3.5, 0.0, 5.5),
+                    Vec3::new(-0.8, 0.0, 2.4),
+                ]),
+            )?;
             app.baths = None;
         }
         if wanted("mugo") || wanted("fotos") {
@@ -2669,9 +3098,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                         // The photo, as F on the spot takes it (he may still be making room).
                         if !taken && t > 0.4 {
                             let hour = app.environment_cycle.phase() * 24.0;
-                            app.story
-                                .values
-                                .insert("hora_tarde".to_owned(), i32::from(!(6.5..16.5).contains(&hour)));
+                            app.story.values.insert(
+                                "hora_tarde".to_owned(),
+                                i32::from(!(6.5..16.5).contains(&hour)),
+                            );
                             let scene = format!("termas_foto_{}", mugo::PHOTO_SPOTS[spot].id);
                             app.start_talk(None, Some(&scene));
                             taken = true;
@@ -2703,11 +3133,17 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             if let Some(desk) = desk {
                 app.iso.distance = 9.0;
                 let _ = desk;
-                film(&mut app, out, "burdel", 5.0, walker(vec![
-                    Vec3::new(5.6, 0.0, 1.2),
-                    Vec3::new(4.4, 0.0, -1.4),
-                    Vec3::new(3.6, 0.0, -3.6),
-                ]))?;
+                film(
+                    &mut app,
+                    out,
+                    "burdel",
+                    5.0,
+                    walker(vec![
+                        Vec3::new(5.6, 0.0, 1.2),
+                        Vec3::new(4.4, 0.0, -1.4),
+                        Vec3::new(3.6, 0.0, -3.6),
+                    ]),
+                )?;
             }
             app.leave_brothel();
         }
@@ -2778,10 +3214,13 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             }
             app.iso.distance = 9.5;
             settle(&mut app);
-            film(&mut app, out, "penascal", 6.0, walker(vec![
-                Vec3::new(0.5, 0.0, 15.0),
-                Vec3::new(1.5, 0.0, 8.0),
-            ]))?;
+            film(
+                &mut app,
+                out,
+                "penascal",
+                6.0,
+                walker(vec![Vec3::new(0.5, 0.0, 15.0), Vec3::new(1.5, 0.0, 8.0)]),
+            )?;
             app.penascal = None;
         }
         if wanted("mina") {
@@ -2968,12 +3407,21 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         }
         settle(&mut app, 60);
         let nemi = app.castle.as_ref().map(|c| c.maid(1).0);
-        eprintln!("[nemi-qa] gift due: nemi at {nemi:?}, queen at {:?}", app.player);
+        eprintln!(
+            "[nemi-qa] gift due: nemi at {nemi:?}, queen at {:?}",
+            app.player
+        );
         anyhow::ensure!(app.start_talk(Some("nemi"), None), "no gift scene");
         settle(&mut app, 30);
-        let scene = app.talk.as_ref().map(|t| t.scene_id(guion::library()).to_owned());
+        let scene = app
+            .talk
+            .as_ref()
+            .map(|t| t.scene_id(guion::library()).to_owned());
         let d = nemi.map(|n| (n.x - app.player.x).hypot(n.z - app.player.z));
-        eprintln!("[nemi-qa] {scene:?}: queen at {:?}, {d:?} m from Nemi", app.player);
+        eprintln!(
+            "[nemi-qa] {scene:?}: queen at {:?}, {d:?} m from Nemi",
+            app.player
+        );
         app.talk = None;
         app.stage = None;
         settle(&mut app, 60);
@@ -2990,7 +3438,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         eprintln!("[nemi-qa] nemi at {nemi:?}");
         anyhow::ensure!(app.start_talk_at("acto1.entreno"), "no training scene");
         for _ in 0..12 {
-            let shown = app.talk.as_ref().map(|t| t.shown(guion::library(), &app.story));
+            let shown = app
+                .talk
+                .as_ref()
+                .map(|t| t.shown(guion::library(), &app.story));
             if matches!(shown, Some(guion::Shown::Choice { .. })) {
                 break;
             }
@@ -3003,7 +3454,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             settle(&mut app, 10);
         }
         let d = nemi.map(|n| (n.x - app.player.x).hypot(n.z - app.player.z));
-        eprintln!("[nemi-qa] after @llevar: queen at {:?}, {d:?} m from Nemi", app.player);
+        eprintln!(
+            "[nemi-qa] after @llevar: queen at {:?}, {d:?} m from Nemi",
+            app.player
+        );
         while app.talk.is_some() {
             app.elapsed += 3.0;
             app.talk_confirm();
@@ -3303,23 +3757,35 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 shot += 1;
             }
             let before = app.elapsed;
+            // VELVET_STAGE_MOUSE=1: played with the mouse, a click on each option's card (and one
+            // beside them first, which must do nothing) and on the screen for each line.
+            let mouse = std::env::var("VELVET_STAGE_MOUSE").is_ok_and(|v| v == "1");
             if choice {
                 let pick = picks.get(chosen).copied().unwrap_or(0);
                 chosen += 1;
-                app.talk_pick(pick);
+                if mouse {
+                    app.talk_click_at(Some((40.0, 340.0)));
+                    app.talk_click_at(Some((960.0, 330.0 + pick as f32 * 110.0 + 44.0)));
+                } else {
+                    app.talk_pick(pick);
+                }
+            } else if mouse {
+                app.talk_click_at(Some((960.0, 900.0)));
             } else {
                 app.talk_confirm();
             }
             // VELVET_STAGE_FILM=all (or `3,7,12`): those steps filmed, a frame every 1/15 s for
             // 1.1 s (3.3 s when a reveal or a turn plays), to see their animations. (A tick moves
             // the clock itself here, through the zone; a capture moves it 4/30 s, taken back.)
-            let film = std::env::var("VELVET_STAGE_FILM").ok().is_some_and(|v| {
-                v == "all" || v.split(',').any(|n| n.trim().parse() == Ok(steps))
-            });
+            let film = std::env::var("VELVET_STAGE_FILM")
+                .ok()
+                .is_some_and(|v| v == "all" || v.split(',').any(|n| n.trim().parse() == Ok(steps)));
             if film {
                 let long = app.stage.as_ref().is_some_and(|s| {
                     s.reveal.as_ref().is_some_and(|(_, t)| *t >= before - 0.01)
-                        || s.actors.iter().any(|a| a.spin.as_ref().is_some_and(|(_, t, _)| *t >= before - 0.01))
+                        || s.actors
+                            .iter()
+                            .any(|a| a.spin.as_ref().is_some_and(|(_, t, _)| *t >= before - 0.01))
                 });
                 for f in 0..if long { 50 } else { 17 } {
                     save(&mut app, out, &format!("film-{steps:03}-{f:02}"))?;
@@ -4321,6 +4787,537 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         }
         return Ok(());
     }
+    if let Some(girl) = std::env::args()
+        .position(|a| a == "--caricias")
+        .and_then(|i| std::env::args().nth(i + 1))
+    {
+        // A night's touch game: her coming in, the hand on her hair, a garment off, her warmed
+        // up, the end with its clip and its card.
+        app.nature_mode = false;
+        app.village_entered = false;
+        app.environment_cycle.set_phase(0.0);
+        app.castle = None;
+        // Her first walk of the castle (its keys from Chiquita) is long gone by her nights.
+        app.story.values.insert("tutorial_castillo".to_owned(), 1);
+        for _ in 0..60 {
+            app.tick(1.0 / 60.0);
+            app.render_frame();
+        }
+        eprintln!("[caricias-qa] open: {}", app.open_caricias(&girl));
+        let wait = |app: &mut App, secs: f32| {
+            for _ in 0..(secs * 30.0).round() as usize {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        let point = |app: &mut App, p: [f32; 2]| {
+            if let Some(c) = app.caricias.as_mut() {
+                c.pointer(p[0], p[1]);
+            }
+        };
+        wait(&mut app, 0.6);
+        save(&mut app, out, "caricias-01-enter")?;
+        // The hand on her hair, slowly back and forth.
+        let hair = caricias::from_art([if girl == "lira" { 850.0 } else { 890.0 }, 100.0]);
+        point(&mut app, hair);
+        if let Some(c) = app.caricias.as_mut() {
+            c.press(false);
+        }
+        for k in 0..90 {
+            point(
+                &mut app,
+                [hair[0] + (k as f32 * 0.25).sin() * 40.0, hair[1]],
+            );
+            wait(&mut app, 1.0 / 30.0);
+        }
+        save(&mut app, out, "caricias-02-hair")?;
+        if let Some(c) = app.caricias.as_mut() {
+            c.release();
+            // Warmed up enough for the cap to come off (QA shortcut), then pulled down off her.
+            c.deseo = 45.0;
+        }
+        let handle = app
+            .caricias
+            .as_ref()
+            .map(|c| c.handle(0))
+            .unwrap_or([0.0; 2]);
+        point(&mut app, handle);
+        if let Some(c) = app.caricias.as_mut() {
+            c.press(false);
+        }
+        for k in 0..20 {
+            point(
+                &mut app,
+                [handle[0] + k as f32 * 9.0, handle[1] - k as f32 * 3.0],
+            );
+            wait(&mut app, 1.0 / 30.0);
+        }
+        save(&mut app, out, "caricias-03-pulling")?;
+        if let Some(c) = app.caricias.as_mut() {
+            c.release();
+        }
+        wait(&mut app, 0.6);
+        save(&mut app, out, "caricias-04-undressed")?;
+        // A grab on her chest: her body answers.
+        if let Some(c) = app.caricias.as_mut() {
+            c.set_tool(2);
+            c.deseo = 70.0;
+        }
+        let chest = caricias::from_art([if girl == "lira" { 850.0 } else { 888.0 }, 520.0]);
+        point(&mut app, chest);
+        if let Some(c) = app.caricias.as_mut() {
+            c.press(false);
+        }
+        wait(&mut app, 0.35);
+        save(&mut app, out, "caricias-05-grab")?;
+        if let Some(c) = app.caricias.as_mut() {
+            c.release();
+            // Everything off, and to the end.
+            for i in 0..c.worn.len() {
+                c.worn[i] = false;
+            }
+            c.deseo = 99.5;
+            c.set_tool(5);
+        }
+        let lips = caricias::from_art([if girl == "lira" { 846.0 } else { 885.0 }, 266.0]);
+        point(&mut app, lips);
+        if let Some(c) = app.caricias.as_mut() {
+            c.press(true);
+        }
+        wait(&mut app, 0.3);
+        save(&mut app, out, "caricias-06-climax")?;
+        wait(&mut app, 2.0);
+        save(&mut app, out, "caricias-07-clip")?;
+        for _ in 0..40 {
+            if app.caricias.as_ref().is_some_and(|c| c.card) {
+                break;
+            }
+            wait(&mut app, 0.25);
+        }
+        wait(&mut app, 0.5);
+        save(&mut app, out, "caricias-08-card")?;
+        eprintln!(
+            "[caricias-qa] ended: {:?}",
+            app.caricias.as_ref().and_then(|c| c.ended).map(|(k, _)| k)
+        );
+        app.caricias_key(KeyCode::Enter);
+        eprintln!(
+            "[caricias-qa] closed: {} afecto_{girl} {}",
+            app.caricias.is_none(),
+            app.story.get(&format!("afecto_{girl}"))
+        );
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--court") {
+        // The court: an audience at the throne and its answer, the works and one restored, the
+        // armoury, Nyxara's lessons (her words, the runes shown, repeated and won, the gift), and
+        // Nemi's training (a blow coming, parries, the end).
+        app.nature_mode = false;
+        app.village_entered = false;
+        app.environment_cycle.set_phase(0.35);
+        app.player = Vec3::new(0.0, 0.0, -14.0);
+        app.castle = None;
+        for _ in 0..90 {
+            app.tick(1.0 / 60.0);
+            app.render_frame();
+        }
+        app.story = guion::Vars::default();
+        for (k, v) in [
+            ("consejo_1_hecho", 1),
+            ("espada_regalo", 1),
+            ("entreno", 3),
+            ("maids_trust", 3),
+            ("reputacion", 2),
+            ("obra_biblioteca", 1),
+        ] {
+            app.story.values.insert(k.into(), v);
+        }
+        app.gold = 640;
+        app.story.values.insert("tutorial_castillo".to_owned(), 1);
+        let wait = |app: &mut App, secs: f32| {
+            for _ in 0..(secs * 30.0).round() as usize {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        let shots: Vec<&str> = std::env::var("VELVET_COURT")
+            .map(|v| {
+                v.split(',')
+                    .map(|s| Box::leak(s.to_owned().into_boxed_str()) as &str)
+                    .collect()
+            })
+            .unwrap_or_else(|_| {
+                vec![
+                    "audiencia",
+                    "obras",
+                    "armeria",
+                    "lecciones",
+                    "entreno",
+                    "manana",
+                    "catalejo",
+                    "codice",
+                ]
+            });
+        if shots.contains(&"noche_maren") {
+            // Maren's night, the way a player gets there: she stayed, she trusts the Queen, and
+            // «Quédate esta noche» ends in her touch game.
+            for (k, v) in [
+                ("prisionera_queda", 1),
+                ("prisionera_n", 1),
+                ("maren_afecto", 2),
+            ] {
+                app.story.values.insert(k.into(), v);
+            }
+            let started = app.start_talk_at("corte.noche_maren");
+            eprintln!("[court-qa] noche_maren: {started}");
+            for step in 0..60 {
+                if app.talk.is_none() {
+                    break;
+                }
+                let lib = guion::library();
+                let shown = app.talk.as_ref().map(|t| t.shown(lib, &app.story));
+                match shown {
+                    Some(guion::Shown::Choice { .. }) => {
+                        wait(&mut app, 0.6);
+                        save(&mut app, out, "court-40-maren-night")?;
+                        app.talk_pick(0);
+                    }
+                    _ => {
+                        app.elapsed += 5.0;
+                        app.talk_confirm();
+                    }
+                }
+                if step == 59 {
+                    eprintln!("[court-qa] noche_maren: the talk never ended");
+                }
+            }
+            wait(&mut app, 1.0);
+            eprintln!(
+                "[court-qa] noche_maren: talk over {}, caricias {}",
+                app.talk.is_none(),
+                app.caricias.as_ref().map(|c| c.girl.id).unwrap_or("-")
+            );
+            save(&mut app, out, "court-41-maren-caricias")?;
+            app.caricias = None;
+        }
+        if shots.contains(&"citas") {
+            // The vanity's dates: the page as it opens (Nyxara still waits for affection), Lira's
+            // first date played through (its choice, the memory coming on, the end card), the page
+            // after it, then the night: Nyxara's first night and both its memories.
+            // (Run with DEMON_QUEEN_GALLERY pointing elsewhere: the memories go into the gallery.)
+            let play = |app: &mut App, tag: &str| -> anyhow::Result<()> {
+                let mut chose = false;
+                let mut memories: Vec<String> = Vec::new();
+                for _ in 0..160 {
+                    let outro = app.stage.as_ref().is_some_and(|s| s.outro_at.is_some());
+                    if app.talk.is_none() {
+                        if outro {
+                            wait(app, 1.2);
+                            save(app, out, &format!("court-{tag}-outro"))?;
+                            if let Some(stage) = app.stage.as_mut() {
+                                stage.unlocks.clear();
+                            }
+                            app.end_talk();
+                        }
+                        break;
+                    }
+                    let lib = guion::library();
+                    match app.talk.as_ref().map(|t| t.shown(lib, &app.story)) {
+                        Some(guion::Shown::Choice { .. }) => {
+                            wait(app, 0.8);
+                            if !chose {
+                                save(app, out, &format!("court-{tag}-choice"))?;
+                                chose = true;
+                            }
+                            app.talk_pick(0);
+                        }
+                        _ => {
+                            app.elapsed += 5.0;
+                            app.talk_confirm();
+                        }
+                    }
+                    wait(app, 0.05);
+                    let shown = app
+                        .stage
+                        .as_ref()
+                        .and_then(|s| s.bg.clone())
+                        .filter(|b| b.starts_with("citas/") && !b.contains("/fondo_"));
+                    if let Some(memory) = shown.filter(|m| !memories.contains(m)) {
+                        wait(app, 0.7);
+                        save(
+                            app,
+                            out,
+                            &format!("court-{tag}-memory{}", memories.len() + 1),
+                        )?;
+                        wait(app, 1.5);
+                        save(
+                            app,
+                            out,
+                            &format!("court-{tag}-memory{}-line", memories.len() + 1),
+                        )?;
+                        memories.push(memory);
+                    }
+                }
+                eprintln!("[court-qa] citas {tag}: memories {memories:?}");
+                Ok(())
+            };
+            app.story.values.insert("afecto_nyxara".into(), 0);
+            app.open_dates();
+            wait(&mut app, 1.2);
+            save(&mut app, out, "court-50-dates")?;
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.3);
+            play(&mut app, "51-lira1")?;
+            eprintln!(
+                "[court-qa] citas: cita_lira {} afecto_lira {} cita_hoy {}",
+                app.story.get("cita_lira"),
+                app.story.get("afecto_lira"),
+                app.story.get("cita_hoy")
+            );
+            app.open_dates();
+            wait(&mut app, 1.2);
+            save(&mut app, out, "court-52-dates-after")?;
+            app.close_court();
+            for (k, v) in [
+                ("cita_nyxara", 4),
+                ("afecto_nyxara", 10),
+                ("cita_hoy", 0),
+                ("noche_hoy", 0),
+                ("cita_lira", 5),
+            ] {
+                app.story.values.insert(k.into(), v);
+            }
+            app.environment_cycle.set_phase(0.95);
+            app.open_dates();
+            wait(&mut app, 1.2);
+            save(&mut app, out, "court-53-dates-night")?;
+            if let Some(c) = app.court.as_mut() {
+                c.choice = 1;
+            }
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.3);
+            play(&mut app, "54-nyx5")?;
+            eprintln!(
+                "[court-qa] citas: cita_nyxara {} noche_hoy {}",
+                app.story.get("cita_nyxara"),
+                app.story.get("noche_hoy")
+            );
+            app.environment_cycle.set_phase(0.35);
+        }
+        if shots.contains(&"manana") {
+            // A morning: yesterday's tasks done and told, today's to give.
+            for (k, v) in [
+                ("obra_cocina", 1),
+                ("obra_enfermeria", 1),
+                ("prisionera_queda", 1),
+                ("tarea_lira", 2),
+                ("tarea_nemi", 3),
+                ("tarea_nyxara", 3),
+            ] {
+                app.story.values.insert(k.into(), v);
+            }
+            app.court_new_day(true);
+            eprintln!("[court-qa] morning: {} reports", app.court_report.len());
+            app.open_routine();
+            wait(&mut app, 1.2);
+            save(&mut app, out, "court-20-morning")?;
+            app.court_key(KeyCode::ArrowDown);
+            app.court_key(KeyCode::ArrowRight);
+            wait(&mut app, 0.3);
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.4);
+            save(&mut app, out, "court-21-morning-given")?;
+            app.close_court();
+        }
+        if shots.contains(&"catalejo") {
+            for (k, v) in [
+                ("varrak_despierto", 1),
+                ("consejo_2_hecho", 1),
+                ("prisionera_queda", 1),
+            ] {
+                app.story.values.insert(k.into(), v);
+            }
+            app.open_telescope();
+            wait(&mut app, 1.0);
+            save(&mut app, out, "court-22-telescope")?;
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 1.2);
+            save(&mut app, out, "court-23-telescope-north")?;
+            app.court_key(KeyCode::Enter);
+            app.court_key(KeyCode::KeyS);
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 1.2);
+            save(&mut app, out, "court-24-telescope-south")?;
+            app.close_court();
+        }
+        if shots.contains(&"codice") {
+            for (k, v) in [
+                ("codice_pista", 2),
+                ("maren_informes", 2),
+                ("varrak_despierto", 1),
+            ] {
+                app.story.values.insert(k.into(), v);
+            }
+            app.open_codex();
+            wait(&mut app, 1.0);
+            save(&mut app, out, "court-25-codex")?;
+            app.court_key(KeyCode::Enter);
+            app.court_key(KeyCode::ArrowDown);
+            wait(&mut app, 0.12);
+            save(&mut app, out, "court-26-codex-turning")?;
+            wait(&mut app, 0.6);
+            save(&mut app, out, "court-27-codex-page")?;
+            app.close_court();
+        }
+        if shots.contains(&"audiencia") {
+            let heard = app.open_audience();
+            eprintln!(
+                "[court-qa] audience: {heard} view: {}",
+                app.court_view().is_some()
+            );
+            wait(&mut app, 0.07);
+            save(&mut app, out, "court-00-opening")?;
+            wait(&mut app, 0.83);
+            save(&mut app, out, "court-01-audience")?;
+            app.court_key(KeyCode::ArrowDown);
+            wait(&mut app, 0.3);
+            save(&mut app, out, "court-02-audience-lit")?;
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 1.0);
+            save(&mut app, out, "court-03-answer")?;
+            app.close_court();
+        }
+        if shots.contains(&"obras") {
+            eprintln!("[court-qa] works: {}", app.open_works());
+            wait(&mut app, 0.9);
+            save(&mut app, out, "court-04-works")?;
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.5);
+            save(&mut app, out, "court-05-restored")?;
+            app.close_court();
+        }
+        if shots.contains(&"armeria") {
+            app.story.values.insert("obra_armeria".into(), 1);
+            app.open_armory();
+            wait(&mut app, 0.9);
+            save(&mut app, out, "court-06-armory")?;
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.3);
+            save(&mut app, out, "court-06b-bought")?;
+            app.close_court();
+        }
+        if shots.contains(&"lecciones") {
+            eprintln!("[court-qa] lessons: {}", app.open_lessons());
+            wait(&mut app, 0.9);
+            save(&mut app, out, "court-07-lessons")?;
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.6);
+            save(&mut app, out, "court-08-lesson-talk")?;
+            for _ in 0..12 {
+                if !matches!(
+                    app.court.as_ref().map(|c| &c.page),
+                    Some(court::Page::LessonTalk { .. })
+                ) {
+                    break;
+                }
+                app.court_key(KeyCode::Enter);
+                wait(&mut app, 0.1);
+            }
+            wait(&mut app, 1.0);
+            save(&mut app, out, "court-09-runes-showing")?;
+            // Repeat each row as it is shown (reading it off the game).
+            for _ in 0..3 {
+                for _ in 0..240 {
+                    let turn = matches!(
+                        app.court.as_ref().map(|c| &c.page),
+                        Some(court::Page::Runes { game, .. }) if game.showing.is_none() && game.next_round_at.is_none()
+                    );
+                    if turn {
+                        break;
+                    }
+                    wait(&mut app, 1.0 / 30.0);
+                }
+                let row: Vec<u8> = match app.court.as_ref().map(|c| &c.page) {
+                    Some(court::Page::Runes { game, .. }) => game.sequence.clone(),
+                    _ => Vec::new(),
+                };
+                if row.is_empty() {
+                    break;
+                }
+                save(&mut app, out, &format!("court-10-runes-turn-{}", row.len()))?;
+                for r in row {
+                    let key = [
+                        KeyCode::Digit1,
+                        KeyCode::Digit2,
+                        KeyCode::Digit3,
+                        KeyCode::Digit4,
+                        KeyCode::Digit5,
+                        KeyCode::Digit6,
+                    ][r as usize % 6];
+                    app.court_key(key);
+                    wait(&mut app, 0.15);
+                }
+            }
+            wait(&mut app, 0.3);
+            save(&mut app, out, "court-11-runes-won")?;
+            wait(&mut app, 1.4);
+            save(&mut app, out, "court-12-lesson-end")?;
+            eprintln!(
+                "[court-qa] gifts: chispa {} afecto_nyxara {}",
+                app.story.get(court::DON_CHISPA),
+                app.story.get("afecto_nyxara")
+            );
+            app.close_court();
+        }
+        if shots.contains(&"entreno") {
+            eprintln!("[court-qa] training: {}", app.open_training());
+            wait(&mut app, 1.0);
+            save(&mut app, out, "court-13-training")?;
+            // Parry most blows on time (the first two let through), reading them off the game.
+            let mut saved_coming = false;
+            for step in 0..(60 * 30) {
+                let now = app.elapsed;
+                let (due, over) = match app.court.as_ref().map(|c| &c.page) {
+                    Some(court::Page::Training(d)) => (
+                        d.blows
+                            .iter()
+                            .enumerate()
+                            .find(|(_, b)| b.result.is_none())
+                            .map(|(i, b)| (i, b.from, b.at - (now - d.started))),
+                        d.over.is_some(),
+                    ),
+                    _ => (None, true),
+                };
+                if over {
+                    break;
+                }
+                if let Some((i, from, left)) = due {
+                    if !saved_coming && left < 0.5 {
+                        saved_coming = true;
+                        save(&mut app, out, "court-14-blow-coming")?;
+                    }
+                    if i >= 2 && left.abs() < 0.05 {
+                        app.court_key(match from {
+                            0 => KeyCode::KeyA,
+                            1 => KeyCode::KeyD,
+                            _ => KeyCode::KeyW,
+                        });
+                        if i == 4 {
+                            wait(&mut app, 0.15);
+                            save(&mut app, out, "court-15-parried")?;
+                        }
+                    }
+                }
+                let _ = step;
+                wait(&mut app, 1.0 / 30.0);
+            }
+            wait(&mut app, 0.6);
+            save(&mut app, out, "court-16-training-end")?;
+            eprintln!("[court-qa] skill: {}", app.story.get("destreza"));
+            app.close_court();
+        }
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--alcove") {
         // Her own bed: the menu over her lying there, exploring, teasing Chiquita, the bed scene
         // with her in bed behind it, and a night's sleep.
@@ -4336,6 +5333,19 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.story = guion::Vars::default();
         app.story.values.insert("deseo".into(), 6);
         app.story.values.insert("chiquita_afecto".into(), 3);
+        // VELVET_ALCOVE=invite: the night's «Invitar a alguien» page, every guest able to come.
+        let invite = std::env::var("VELVET_ALCOVE").is_ok_and(|v| v == "invite");
+        if invite {
+            for (k, v) in [
+                ("maids_trust", 3),
+                ("afecto_nyxara", 2),
+                ("prisionera_queda", 1),
+                ("prisionera_n", 1),
+                ("maren_afecto", 2),
+            ] {
+                app.story.values.insert(k.into(), v);
+            }
+        }
         app.open_alcove();
         eprintln!("[alcove-qa] open: {}", app.alcove.is_some());
         let wait = |app: &mut App, secs: f32| {
@@ -4349,6 +5359,19 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         save(&mut app, out, "alcove-00-entering")?;
         wait(&mut app, 1.2);
         save(&mut app, out, "alcove-01-bed")?;
+        if invite {
+            for _ in 0..4 {
+                app.alcove_key(KeyCode::ArrowRight);
+            }
+            app.alcove_key(KeyCode::Enter);
+            wait(&mut app, 0.7);
+            save(&mut app, out, "alcove-20-invite")?;
+            app.alcove_key(KeyCode::ArrowRight);
+            app.alcove_key(KeyCode::ArrowRight);
+            wait(&mut app, 0.4);
+            save(&mut app, out, "alcove-21-invite-maren")?;
+            return Ok(());
+        }
         app.alcove_key(KeyCode::ArrowRight);
         app.alcove_key(KeyCode::ArrowRight);
         wait(&mut app, 0.3);
@@ -4794,7 +5817,11 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         d.gold = 145;
         save(&mut app, out, "minehud-low")?;
         let boss = app.dungeon.map.spawns.iter().find(|s| {
-            matches!(s.kind, velvet_dungeon::gameplay::SpawnKind::Miniboss | velvet_dungeon::gameplay::SpawnKind::Boss)
+            matches!(
+                s.kind,
+                velvet_dungeon::gameplay::SpawnKind::Miniboss
+                    | velvet_dungeon::gameplay::SpawnKind::Boss
+            )
         });
         if let Some(spawn) = boss.cloned() {
             let room = &app.dungeon.map.rooms[spawn.room];
@@ -4984,7 +6011,11 @@ fn into_brothel_room(app: &mut App, id: &str) {
     if let Some(inside) = app.brothel.as_mut() {
         inside.rope_open = true;
         if id.is_empty() {
-            if let Some(desk) = brothel::plan().hotspots.iter().find(|h| h.id == "recepcionista") {
+            if let Some(desk) = brothel::plan()
+                .hotspots
+                .iter()
+                .find(|h| h.id == "recepcionista")
+            {
                 inside.walker = brothel::Walker {
                     x: desk.x,
                     z: desk.z,

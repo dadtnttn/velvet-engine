@@ -1507,14 +1507,19 @@ impl Ambience {
     pub(crate) fn hush(&mut self, paused: bool) {
         for bed in self.beds.values() {
             bed.sink.set_volume(
-                bed.level * if paused { 0.3 } else { 1.0 } * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience),
+                bed.level
+                    * if paused { 0.3 } else { 1.0 }
+                    * crate::exploration3d::prefs::gain(
+                        crate::exploration3d::prefs::Channel::Ambience,
+                    ),
             );
         }
     }
 
     pub(crate) fn update(&mut self, mixer: &rodio::mixer::Mixer, scene: &Scene, dt: f32) {
         let dt = dt.clamp(0.0, 0.2);
-        let hush = if scene.paused { 0.3 } else { 1.0 } * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience);
+        let hush = if scene.paused { 0.3 } else { 1.0 }
+            * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience);
         for (name, target) in Self::bed_targets(scene) {
             if let Some(bed) = self.beds.get_mut(name) {
                 bed.level += (target - bed.level) * (dt * 0.6).min(1.0);
@@ -1600,7 +1605,11 @@ impl Ambience {
             let sink = Sink::connect_new(mixer);
             sink.append(SamplesBuffer::new(2, RATE, samples).speed(speed));
             sink.set_volume(
-                volume * if scene.paused { 0.0 } else { 1.0 } * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience),
+                volume
+                    * if scene.paused { 0.0 } else { 1.0 }
+                    * crate::exploration3d::prefs::gain(
+                        crate::exploration3d::prefs::Channel::Ambience,
+                    ),
             );
             sink.detach();
         }
@@ -1629,7 +1638,10 @@ impl Ambience {
         }
         let sink = Sink::connect_new(mixer);
         sink.append(SamplesBuffer::new(2, RATE, samples).speed(speed));
-        sink.set_volume(volume * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience));
+        sink.set_volume(
+            volume
+                * crate::exploration3d::prefs::gain(crate::exploration3d::prefs::Channel::Ambience),
+        );
         sink.detach();
     }
 }

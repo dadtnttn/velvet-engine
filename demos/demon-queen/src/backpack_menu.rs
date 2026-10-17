@@ -423,12 +423,20 @@ impl App {
         let Some(index) = self.bp_target() else {
             return;
         };
-        let Some(id) = self.pause_backpack.as_ref().map(|p| p.placed[index].id.clone()) else {
+        let Some(id) = self
+            .pause_backpack
+            .as_ref()
+            .map(|p| p.placed[index].id.clone())
+        else {
             return;
         };
         let Some(amount) = backpack::cure(&id) else {
             self.bp_sound(UiSfx::Error);
-            self.bp_say(tr(language, "Eso no se usa así.", "That is not used that way."));
+            self.bp_say(tr(
+                language,
+                "Eso no se usa así.",
+                "That is not used that way.",
+            ));
             return;
         };
         let Some((now, most)) = self.pause_vitality else {
@@ -442,7 +450,11 @@ impl App {
         };
         if now >= most {
             self.bp_sound(UiSfx::Error);
-            self.bp_say(tr(language, "Ya tienes toda la vitalidad.", "Your vitality is full."));
+            self.bp_say(tr(
+                language,
+                "Ya tienes toda la vitalidad.",
+                "Your vitality is full.",
+            ));
             return;
         }
         if let Some(pack) = self.pause_backpack.as_mut() {
@@ -459,7 +471,8 @@ impl App {
         }
         self.bp_sound(UiSfx::Fuse);
         // The word in the player's language before the numbers join it (the whole line is no entry).
-        let word = demon_queen_dungeon::i18n::tr(tr(language, "vitalidad", "vitality")).into_owned();
+        let word =
+            demon_queen_dungeon::i18n::tr(tr(language, "vitalidad", "vitality")).into_owned();
         self.bp_say(format!("{name}: +{amount:.0} {word}"));
         self.bp_changed();
     }
@@ -1176,7 +1189,15 @@ pub fn paint_backpack(c: &mut Canvas, v: &View) {
         c.round_rect(bx, by, bw, 12, 6, 0xc0140d1c, 0xc0140d1c);
         let fill = if k < 0.35 { 0xffe0455a } else { 0xff5fd08a };
         if k > 0.0 {
-            c.round_rect(bx, by, ((bw as f32) * k).max(12.0) as i32, 12, 6, fill, fill);
+            c.round_rect(
+                bx,
+                by,
+                ((bw as f32) * k).max(12.0) as i32,
+                12,
+                6,
+                fill,
+                fill,
+            );
         }
     }
     if let Some(note) = v.ui.note() {

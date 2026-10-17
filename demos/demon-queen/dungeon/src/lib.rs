@@ -542,6 +542,8 @@ pub struct Dungeon {
     pub weapon_fx: WeaponFx,
     /// A sword is in her hand (the weapon taken off: she punches, at half the damage).
     pub armed: bool,
+    /// Her skill with the sword (Nemi's training): every blow × this.
+    pub skill_bonus: f32,
     /// The slime coating the sword (its colour), if any.
     pub sword_goo: Option<[f32; 3]>,
     pub gold: u32,
@@ -679,6 +681,7 @@ impl Dungeon {
             relic_sword: false,
             unbanked_relic_sword: false,
             armed: true,
+            skill_bonus: 1.0,
             sword_goo: None,
             weapon_fx: WeaponFx::default(),
             gold: 0,
@@ -2273,6 +2276,7 @@ impl Dungeon {
                 1.0
             }
             * if self.armed { 1.0 } else { 0.5 }
+            * self.skill_bonus.max(0.1)
     }
 
     fn resolve_sword_hit(&mut self) {

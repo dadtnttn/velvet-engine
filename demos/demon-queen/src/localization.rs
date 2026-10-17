@@ -60,7 +60,10 @@ impl Language {
     /// speaks it, English otherwise (a saved choice still wins).
     pub fn system_default() -> Self {
         // QA: `VELVET_UI_LANGID=0x0419` starts as if Windows were in that language (its LANGID).
-        if let Some(id) = std::env::var("VELVET_UI_LANGID").ok().and_then(|v| parse_langid(&v)) {
+        if let Some(id) = std::env::var("VELVET_UI_LANGID")
+            .ok()
+            .and_then(|v| parse_langid(&v))
+        {
             return Self::from_windows_langid(id).unwrap_or(Self::DEFAULT);
         }
         #[cfg(windows)]
@@ -77,7 +80,10 @@ impl Language {
         }
         #[cfg(not(windows))]
         {
-            if let Some(language) = std::env::var("LANG").ok().and_then(|tag| Self::from_locale_tag(&tag)) {
+            if let Some(language) = std::env::var("LANG")
+                .ok()
+                .and_then(|tag| Self::from_locale_tag(&tag))
+            {
                 return language;
             }
         }
@@ -112,8 +118,13 @@ impl Language {
     }
 
     /// The same for a locale tag such as `de_DE.UTF-8` or `zh-TW` (`LANG` outside Windows).
+    #[cfg(test)]
     pub fn from_locale_tag(tag: &str) -> Option<Self> {
-        let tag = tag.split(['.', '@']).next()?.to_ascii_lowercase().replace('_', "-");
+        let tag = tag
+            .split(['.', '@'])
+            .next()?
+            .to_ascii_lowercase()
+            .replace('_', "-");
         let mut parts = tag.split('-');
         Some(match parts.next()? {
             "es" => Self::Spanish,
@@ -124,7 +135,9 @@ impl Language {
             "it" => Self::Italian,
             "pl" => Self::Polish,
             "ru" => Self::Russian,
-            "zh" if parts.any(|p| matches!(p, "tw" | "hk" | "mo" | "hant")) => Self::ChineseTraditional,
+            "zh" if parts.any(|p| matches!(p, "tw" | "hk" | "mo" | "hant")) => {
+                Self::ChineseTraditional
+            }
             "zh" => Self::ChineseSimplified,
             "ja" => Self::Japanese,
             "ko" => Self::Korean,
@@ -172,41 +185,6 @@ impl Language {
             Self::Hebrew => "עברית",
             Self::Hindi => "हिन्दी",
             Self::Thai => "ไทย",
-        }
-    }
-
-    /// Font profile needed to render the language's autonym in the selector.
-    /// Latin and Cyrillic labels share the broadly covered default profile.
-    pub const fn font_profile(self) -> &'static str {
-        match self {
-            Self::ChineseSimplified => "zh-Hans",
-            Self::ChineseTraditional => "zh-Hant",
-            Self::Hindi => "hi",
-            Self::Japanese => "ja",
-            Self::Korean => "ko",
-            Self::Thai => "th",
-            Self::Hebrew => "he",
-            _ => "en",
-        }
-    }
-
-    pub const fn short_code(self) -> &'static str {
-        match self {
-            Self::Spanish => "ES",
-            Self::English => "EN",
-            Self::PortugueseBrazil => "PT-BR",
-            Self::German => "DE",
-            Self::French => "FR",
-            Self::Italian => "IT",
-            Self::Polish => "PL",
-            Self::Russian => "RU",
-            Self::ChineseSimplified => "ZH-CN",
-            Self::ChineseTraditional => "ZH-TW",
-            Self::Japanese => "JA",
-            Self::Korean => "KO",
-            Self::Hebrew => "HE",
-            Self::Hindi => "HI",
-            Self::Thai => "TH",
         }
     }
 
@@ -345,7 +323,10 @@ impl Localizer {
         self.active
             .ui
             .get(key)
-            .or_else(|| self.english_fallback().and_then(|english| english.ui.get(key)))
+            .or_else(|| {
+                self.english_fallback()
+                    .and_then(|english| english.ui.get(key))
+            })
             .or_else(|| self.spanish.ui.get(key))
             .map(String::as_str)
             .unwrap_or(key)
@@ -363,7 +344,10 @@ impl Localizer {
         self.active
             .rooms
             .get(id)
-            .or_else(|| self.english_fallback().and_then(|english| english.rooms.get(id)))
+            .or_else(|| {
+                self.english_fallback()
+                    .and_then(|english| english.rooms.get(id))
+            })
             .cloned()
             .unwrap_or_else(|| fallback.to_string())
     }
@@ -372,7 +356,10 @@ impl Localizer {
         self.active
             .characters
             .get(id)
-            .or_else(|| self.english_fallback().and_then(|english| english.characters.get(id)))
+            .or_else(|| {
+                self.english_fallback()
+                    .and_then(|english| english.characters.get(id))
+            })
             .cloned()
             .unwrap_or_else(|| fallback.to_string())
     }
@@ -383,7 +370,10 @@ impl Localizer {
         self.active
             .nodes
             .get(id)
-            .or_else(|| self.english_fallback().and_then(|english| english.nodes.get(id)))
+            .or_else(|| {
+                self.english_fallback()
+                    .and_then(|english| english.nodes.get(id))
+            })
             .cloned()
             .unwrap_or_else(|| fallback.to_string())
     }
@@ -400,15 +390,10 @@ impl Localizer {
                 continue;
             }
             let key = format!("{}.{}", view.id, choice.id);
-            if let Some(label) = self
-                .active
-                .choices
-                .get(&key)
-                .or_else(|| {
-                    self.english_fallback()
-                        .and_then(|english| english.choices.get(&key))
-                })
-            {
+            if let Some(label) = self.active.choices.get(&key).or_else(|| {
+                self.english_fallback()
+                    .and_then(|english| english.choices.get(&key))
+            }) {
                 choice.label.clone_from(label);
             } else {
                 choice.label = tr(&choice.label);
@@ -586,14 +571,29 @@ mod tests {
             assert_eq!(Language::from_windows_langid(id), want, "LANGID {id:#06x}");
         }
         for language in Language::ALL {
-            assert!(cases.iter().any(|&(_, want)| want == Some(language)), "{language:?} unreachable");
+            assert!(
+                cases.iter().any(|&(_, want)| want == Some(language)),
+                "{language:?} unreachable"
+            );
         }
         assert_eq!(parse_langid("0x0419"), Some(0x0419));
         assert_eq!(parse_langid("1049"), Some(0x0419));
-        assert_eq!(Language::from_locale_tag("de_DE.UTF-8"), Some(Language::German));
-        assert_eq!(Language::from_locale_tag("zh_TW.UTF-8"), Some(Language::ChineseTraditional));
-        assert_eq!(Language::from_locale_tag("zh-Hans-CN"), Some(Language::ChineseSimplified));
-        assert_eq!(Language::from_locale_tag("pt_PT"), Some(Language::PortugueseBrazil));
+        assert_eq!(
+            Language::from_locale_tag("de_DE.UTF-8"),
+            Some(Language::German)
+        );
+        assert_eq!(
+            Language::from_locale_tag("zh_TW.UTF-8"),
+            Some(Language::ChineseTraditional)
+        );
+        assert_eq!(
+            Language::from_locale_tag("zh-Hans-CN"),
+            Some(Language::ChineseSimplified)
+        );
+        assert_eq!(
+            Language::from_locale_tag("pt_PT"),
+            Some(Language::PortugueseBrazil)
+        );
         assert_eq!(Language::from_locale_tag("C"), None);
     }
 

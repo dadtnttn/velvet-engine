@@ -541,7 +541,9 @@ impl Assets {
                 });
                 draws.push(MeshDraw3D {
                     mesh: part.mesh,
-                    transform: world * Mat4::from_scale(Vec3::new(wobble + 0.02, 1.02, wobble + 0.02)) * part.transform,
+                    transform: world
+                        * Mat4::from_scale(Vec3::new(wobble + 0.02, 1.02, wobble + 0.02))
+                        * part.transform,
                     material: Material3D::additive([
                         color[0] * 0.22,
                         color[1] * 0.22,

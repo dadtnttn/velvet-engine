@@ -377,6 +377,17 @@ impl App {
 
     /// F in el Peñascal: down to the wood, the chief, or a look at something.
     pub(super) fn interact_penascal(&mut self) -> bool {
+        // A scene written for this place (`{en=penascal_<id>}`) plays first.
+        if let Some(id) = self
+            .penascal
+            .as_ref()
+            .and_then(|p| p.nearest())
+            .map(|h| h.id.clone())
+        {
+            if self.start_talk(None, Some(&format!("penascal_{id}"))) {
+                return true;
+            }
+        }
         let action = self.penascal.as_ref().map(|inside| inside.interact());
         match action {
             Some(penascal3d::Action::Leave) => {

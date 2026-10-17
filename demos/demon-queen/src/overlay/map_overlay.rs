@@ -29,6 +29,18 @@ mod mission_overlay;
 pub(crate) use mission_overlay::MissionView;
 mod boss_overlay;
 pub(crate) use boss_overlay::{BossCard, BossView};
+mod war_overlay;
+pub(crate) use war_overlay::{
+    ArmyTag, BannerTag, BattleView, CampPanel, CampaignView, Glyph, MarchView, MiniDot, Minimap,
+    Modal, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus, WarButton,
+    WarHit, WarView, MINIMAP as WAR_MINIMAP,
+};
+mod caricias_overlay;
+mod court_overlay;
+pub(crate) use caricias_overlay::{CariciasCard, CariciasView};
+pub(crate) use court_overlay::{
+    hit as court_hit, CourtCard, CourtChip, CourtRow, CourtView, DateView, DuelView, RuneView,
+};
 mod float_overlay;
 pub(crate) use float_overlay::FloatLine;
 mod glass_fx;
@@ -407,7 +419,7 @@ fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct MapVertex {
+pub(crate) struct MapVertex {
     position: [f32; 2],
     uv: [f32; 2],
     color: [f32; 4],
@@ -432,19 +444,23 @@ impl MapVertex {
 }
 
 /// CPU time spent laying out and uploading the overlay (nanoseconds, summed): for profiling.
-pub(crate) static OVERLAY_CPU_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(crate) static OVERLAY_CPU_NS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 /// Adds the time since it was made to `OVERLAY_CPU_NS` when dropped.
 struct CpuTimer(std::time::Instant);
 
 impl Drop for CpuTimer {
     fn drop(&mut self) {
-        OVERLAY_CPU_NS.fetch_add(self.0.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+        OVERLAY_CPU_NS.fetch_add(
+            self.0.elapsed().as_nanos() as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
     }
 }
 
 #[derive(Clone, Copy)]
-struct GlyphEntry {
+pub(crate) struct GlyphEntry {
     uv_min: [f32; 2],
     uv_max: [f32; 2],
     size: [f32; 2],
@@ -488,14 +504,29 @@ struct ScriptFace {
 use demon_queen_dungeon::i18n::script_font;
 
 /// `line` shaped in the script font, in raster units.
-fn shape_line(bytes: &[u8], index: u32, height_units: f32, line: &str) -> Vec<(u16, f32, f32, f32)> {
-    demon_queen_dungeon::i18n::shape_line(bytes, index, FONT_RASTER_SIZE / height_units.max(1.0), line)
+fn shape_line(
+    bytes: &[u8],
+    index: u32,
+    height_units: f32,
+    line: &str,
+) -> Vec<(u16, f32, f32, f32)> {
+    demon_queen_dungeon::i18n::shape_line(
+        bytes,
+        index,
+        FONT_RASTER_SIZE / height_units.max(1.0),
+        line,
+    )
 }
 
 impl FontAtlas {
     /// One line laid out in `glyphs` (a face's), falling back to the language's font for what the
     /// face lacks; lines in a shaped script go through the shaper.
-    pub(crate) fn run(&self, face_key: u8, glyphs: &HashMap<char, GlyphEntry>, line: &str) -> std::sync::Arc<Run> {
+    pub(crate) fn run(
+        &self,
+        face_key: u8,
+        glyphs: &HashMap<char, GlyphEntry>,
+        line: &str,
+    ) -> std::sync::Arc<Run> {
         let key = (face_key, line.to_owned());
         if let Some(run) = self.runs.lock().unwrap().get(&key) {
             return run.clone();
@@ -504,7 +535,8 @@ impl FontAtlas {
         let mut pen = 0.0;
         match &self.script {
             Some(sc) if sc.shaped && line.chars().any(demon_queen_dungeon::i18n::needs_shaping) => {
-                for (id, advance, dx, dy) in shape_line(&sc.bytes, sc.index, sc.height_units, line) {
+                for (id, advance, dx, dy) in shape_line(&sc.bytes, sc.index, sc.height_units, line)
+                {
                     if let Some(g) = sc.ids.get(&id) {
                         placed.push((*g, pen + dx, dy));
                     }
@@ -524,7 +556,10 @@ impl FontAtlas {
                 }
             }
         }
-        let run = std::sync::Arc::new(Run { glyphs: placed, advance: pen });
+        let run = std::sync::Arc::new(Run {
+            glyphs: placed,
+            advance: pen,
+        });
         let mut runs = self.runs.lock().unwrap();
         if runs.len() > 20_000 {
             runs.clear();
@@ -1173,7 +1208,7 @@ impl IconAtlas {
 }
 
 #[derive(Clone, Copy)]
-struct Rect {
+pub(crate) struct Rect {
     x: f32,
     y: f32,
     w: f32,
@@ -1426,7 +1461,11 @@ impl FontAtlas {
             }
             set.into_iter().collect()
         };
-        let script_source = if extra.is_empty() { None } else { script_font(&language) };
+        let script_source = if extra.is_empty() {
+            None
+        } else {
+            script_font(&language)
+        };
         let script_font_arc = script_source.as_ref().and_then(|(bytes, index, _)| {
             ab_glyph::FontVec::try_from_vec_and_index(bytes.as_ref().clone(), *index)
                 .ok()
@@ -1441,11 +1480,15 @@ impl FontAtlas {
         } else {
             FONT_RASTER_SIZE * 1.5
         };
-        let estimate = fonts.len() as f32 * (characters.len() + extra.len().min(400)) as f32 * 4200.0
-            + extra.len() as f32 * (script_raster + 22.0).powi(2) * 1.2;
+        let estimate =
+            fonts.len() as f32 * (characters.len() + extra.len().min(400)) as f32 * 4200.0
+                + extra.len() as f32 * (script_raster + 22.0).powi(2) * 1.2;
         let atlas_size: u32 = if estimate > 15_000_000.0 { 8192 } else { 4096 };
         let mut pixels = vec![0_u8; (atlas_size * atlas_size) as usize];
-        extra.retain(|c| !demon_queen_dungeon::i18n::needs_shaping(*c) || script_source.as_ref().is_some_and(|s| !s.2));
+        extra.retain(|c| {
+            !demon_queen_dungeon::i18n::needs_shaping(*c)
+                || script_source.as_ref().is_some_and(|s| !s.2)
+        });
         // Room around each glyph so the smaller mips do not bleed into their neighbours.
         let padding = 10_u32;
         let mut pen_x = padding;
@@ -1501,7 +1544,12 @@ impl FontAtlas {
                         *cell = c.clamp(0.0, 1.0);
                     }
                 });
-                let field = distance_field(&coverage, width as usize, height as usize, FONT_SPREAD as f32);
+                let field = distance_field(
+                    &coverage,
+                    width as usize,
+                    height as usize,
+                    FONT_SPREAD as f32,
+                );
                 for y in 0..height {
                     for x in 0..width {
                         let index = ((pen_y + y) * atlas_size + pen_x + x) as usize;
@@ -1570,7 +1618,13 @@ impl FontAtlas {
                 let advance = full.h_advance(glyph_id);
                 let glyph = glyph_id.with_scale_and_position(sscale, point(0.0, 0.0));
                 let entry = match sfont.outline_glyph(glyph) {
-                    None => GlyphEntry { uv_min: [0.0; 2], uv_max: [0.0; 2], size: [0.0; 2], bearing: [0.0; 2], advance },
+                    None => GlyphEntry {
+                        uv_min: [0.0; 2],
+                        uv_max: [0.0; 2],
+                        size: [0.0; 2],
+                        bearing: [0.0; 2],
+                        advance,
+                    },
                     Some(outlined) => {
                         let bounds = outlined.px_bounds();
                         let ink_w = (bounds.max.x - bounds.min.x).ceil().max(1.0) as u32;
@@ -1593,17 +1647,32 @@ impl FontAtlas {
                                 *cell = c.clamp(0.0, 1.0);
                             }
                         });
-                        let field = distance_field(&coverage, width as usize, height as usize, FONT_SPREAD as f32);
+                        let field = distance_field(
+                            &coverage,
+                            width as usize,
+                            height as usize,
+                            FONT_SPREAD as f32,
+                        );
                         for y in 0..height {
                             for x in 0..width {
-                                pixels[((pen_y + y) * atlas_size + pen_x + x) as usize] = field[(y * width + x) as usize];
+                                pixels[((pen_y + y) * atlas_size + pen_x + x) as usize] =
+                                    field[(y * width + x) as usize];
                             }
                         }
                         let entry = GlyphEntry {
-                            uv_min: [pen_x as f32 / atlas_size as f32, pen_y as f32 / atlas_size as f32],
-                            uv_max: [(pen_x + width) as f32 / atlas_size as f32, (pen_y + height) as f32 / atlas_size as f32],
+                            uv_min: [
+                                pen_x as f32 / atlas_size as f32,
+                                pen_y as f32 / atlas_size as f32,
+                            ],
+                            uv_max: [
+                                (pen_x + width) as f32 / atlas_size as f32,
+                                (pen_y + height) as f32 / atlas_size as f32,
+                            ],
                             size: [width as f32 * up, height as f32 * up],
-                            bearing: [(bounds.min.x - FONT_SPREAD as f32) * up, (bounds.min.y - FONT_SPREAD as f32) * up],
+                            bearing: [
+                                (bounds.min.x - FONT_SPREAD as f32) * up,
+                                (bounds.min.y - FONT_SPREAD as f32) * up,
+                            ],
                             advance,
                         };
                         pen_x += width + padding;
@@ -1625,7 +1694,14 @@ impl FontAtlas {
                 by_char.len(),
                 by_id.len()
             );
-            script = Some(ScriptFace { glyphs: by_char, ids: by_id, bytes, index, height_units, shaped });
+            script = Some(ScriptFace {
+                glyphs: by_char,
+                ids: by_id,
+                bytes,
+                index,
+                height_units,
+                shaped,
+            });
         }
         let primary = faces.remove(0);
 
@@ -1815,6 +1891,7 @@ pub struct MapOverlay {
     markers: Vec<WorldMarker>,
     /// The fight with Varrak's HUD (`None`: no fight).
     boss: Option<BossView>,
+    war: Option<WarView>,
     /// Open: the achievements screen (over everything else).
     achievements: Option<AchievementsView>,
     wardrobe_view: WardrobeView,
@@ -1843,6 +1920,10 @@ pub struct MapOverlay {
     floats: Vec<FloatLine>,
     /// Her own bed's menu.
     alcove: Option<AlcoveView>,
+    /// The court: audiences, works, lessons, training.
+    court: Option<CourtView>,
+    /// A night's touch game (`None`: none).
+    caricias: Option<CariciasView>,
     /// The hypnotist's stall in the wood.
     mage: Option<MageView>,
     /// The shop's page, its haggle and its altar.
@@ -1928,6 +2009,25 @@ impl MapOverlay {
         self.boss = view;
     }
 
+    /// The war table's HUD (`None`: not at the table).
+    pub fn set_war(&mut self, view: Option<WarView>) {
+        self.war = view;
+    }
+
+    /// A picture made in the game (the war's minimap), put up under `name` for the stage's runs.
+    pub fn set_picture_rgba(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        name: &str,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+    ) {
+        self.stage_pictures
+            .insert_rgba(device, queue, name, width, height, rgba);
+    }
+
     /// A guion scene on the full-screen stage (`None`: none).
     pub fn set_stage(&mut self, view: Option<StageView>) {
         self.stage = view;
@@ -1970,6 +2070,16 @@ impl MapOverlay {
 
     pub fn set_alcove(&mut self, view: Option<AlcoveView>) {
         self.alcove = view;
+    }
+
+    /// The court's page (`None`: closed).
+    pub fn set_court(&mut self, view: Option<CourtView>) {
+        self.court = view;
+    }
+
+    /// A night's touch game (`None`: none).
+    pub fn set_caricias(&mut self, view: Option<CariciasView>) {
+        self.caricias = view;
     }
 
     /// Chiquita over the screen (`None`: she is not out).
@@ -2112,6 +2222,7 @@ impl MapOverlay {
             missions: None,
             markers: Vec::new(),
             boss: None,
+            war: None,
             pipeline,
             vertex_buffer,
             vertex_capacity,
@@ -2132,6 +2243,8 @@ impl MapOverlay {
             drink: None,
             floats: Vec::new(),
             alcove: None,
+            court: None,
+            caricias: None,
             mage: None,
             shop: None,
             mascot: None,
@@ -2388,8 +2501,79 @@ impl MapOverlay {
                 view.queen
                     .clone()
                     .and_then(|p| self.portraits.ensure(queue, &p)),
+                view.cards
+                    .clone()
+                    .iter()
+                    .map(|c| {
+                        c.face
+                            .as_ref()
+                            .and_then(|p| self.portraits.ensure(queue, p))
+                    })
+                    .collect::<Vec<_>>(),
             ),
-            None => (None, None),
+            None => (None, None, Vec::new()),
+        };
+        // The court's portrait and its cards' pictures.
+        let court_faces = match self.court.as_ref() {
+            Some(view) => court_overlay::CourtFaces {
+                portrait: view
+                    .portrait
+                    .clone()
+                    .and_then(|p| self.portraits.ensure(queue, &p)),
+                cards: view
+                    .cards
+                    .clone()
+                    .iter()
+                    .map(|c| {
+                        c.picture
+                            .as_ref()
+                            .and_then(|p| self.portraits.ensure(queue, p))
+                    })
+                    .collect(),
+                rows: view
+                    .rows
+                    .clone()
+                    .iter()
+                    .map(|r| {
+                        r.portrait
+                            .as_ref()
+                            .and_then(|p| self.portraits.ensure(queue, p))
+                    })
+                    .collect(),
+                icons: view
+                    .cards
+                    .iter()
+                    .map(|c| {
+                        (!c.icon.is_empty())
+                            .then(|| self.icons.get(&c.icon))
+                            .flatten()
+                    })
+                    .collect(),
+                dates: view
+                    .dates
+                    .clone()
+                    .iter()
+                    .map(|d| {
+                        d.memories
+                            .iter()
+                            .map(|(p, open)| {
+                                if *open {
+                                    self.portraits.ensure(queue, p)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect()
+                    })
+                    .collect(),
+            },
+            None => court_overlay::CourtFaces {
+                portrait: None,
+                cards: Vec::new(),
+                rows: Vec::new(),
+                icons: Vec::new(),
+                dates: Vec::new(),
+            },
         };
         // Chiquita's face beside her comments.
         let float_faces: Vec<Option<([f32; 2], [f32; 2])>> = self
@@ -2415,6 +2599,8 @@ impl MapOverlay {
             self.drink.hash(&mut h);
             self.floats.hash(&mut h);
             self.alcove.hash(&mut h);
+            self.court.hash(&mut h);
+            self.caricias.hash(&mut h);
             self.mage.hash(&mut h);
             if self.mage.is_some() {
                 shop_pointer
@@ -2486,10 +2672,13 @@ impl MapOverlay {
             ui_anim_tick: if self.scene.is_some()
                 || self.missions.as_ref().is_some_and(MissionView::animating)
                 || self.boss.is_some()
+                || self.war.is_some()
                 || self.stage.is_some()
                 || self.dialogue.is_some()
                 || self.drink.is_some()
                 || self.alcove.is_some()
+                || self.court.is_some()
+                || self.caricias.is_some()
                 || self.mage.is_some()
                 || self.shop.is_some()
                 || self.mascot_view.is_some()
@@ -2541,6 +2730,39 @@ impl MapOverlay {
                         stage_vertices.len() as u32 - start,
                     ));
                 }
+            } else if let Some(view) = self.war.as_ref() {
+                // The war's minimap, under its HUD.
+                for run in war_overlay::pictures(view, width, height) {
+                    if self.stage_pictures.info(&run.image).is_none() {
+                        continue;
+                    }
+                    let start = stage_vertices.len() as u32;
+                    stage_vertices.extend(run.vertices);
+                    self.stage_runs.push((
+                        run.image,
+                        run.over,
+                        start,
+                        stage_vertices.len() as u32 - start,
+                    ));
+                }
+            } else if let Some(view) = self.caricias.as_ref() {
+                // A night's touch game: her room, her bent body and her faces, loaded ahead.
+                self.stage_pictures.prefetch(&view.preload);
+                self.stage_pictures.pump(device, queue);
+                for name in caricias_overlay::shown(view) {
+                    self.stage_pictures.ensure(device, queue, name);
+                }
+                let pictures = &self.stage_pictures;
+                for run in caricias_overlay::pictures(view, &|n| pictures.info(n), width, height) {
+                    let start = stage_vertices.len() as u32;
+                    stage_vertices.extend(run.vertices);
+                    self.stage_runs.push((
+                        run.image,
+                        run.over,
+                        start,
+                        stage_vertices.len() as u32 - start,
+                    ));
+                }
             }
             if let Some(view) = &self.stage {
                 // The stage looks as the web scenes do: its own box, cards and flourishes.
@@ -2562,6 +2784,8 @@ impl MapOverlay {
                     );
                 }
                 stage_overlay::draw_top(font, &mut vertices, width, height, view, ui_time);
+            } else if let Some(view) = &self.caricias {
+                caricias_overlay::draw(font, &mut vertices, width, height, view, ui_time);
             } else if let Some(view) = &self.scene {
                 match view.deal.as_ref() {
                     // A favour of the shop plays as a page of the shop.
@@ -2592,6 +2816,16 @@ impl MapOverlay {
                 }
             } else if let Some(view) = &self.drink {
                 drink_overlay::draw(font, &mut vertices, width, height, view, ui_time);
+            } else if let Some(view) = &self.court {
+                court_overlay::draw(
+                    font,
+                    &mut vertices,
+                    width,
+                    height,
+                    view,
+                    &court_faces,
+                    ui_time,
+                );
             } else if let Some(view) = &self.mage {
                 mage_overlay::draw(
                     font,
@@ -2613,6 +2847,7 @@ impl MapOverlay {
                     view,
                     alcove_faces.0,
                     alcove_faces.1,
+                    &alcove_faces.2,
                     ui_time,
                 );
             } else if let Some(menu) = venue.filter(|v| v.open) {
@@ -2653,10 +2888,19 @@ impl MapOverlay {
                     shop_face,
                     shop_face_from,
                 );
+            } else if let Some(view) = &self.war {
+                war_overlay::draw(font, &mut vertices, width, height, view);
             } else if let Some(view) = &self.boss {
                 boss_overlay::draw(font, &mut vertices, width, height, view);
             } else if let Some(view) = &self.achievements {
-                persona_screens::draw_achievements(font, &mut vertices, width, height, view, ui_time);
+                persona_screens::draw_achievements(
+                    font,
+                    &mut vertices,
+                    width,
+                    height,
+                    view,
+                    ui_time,
+                );
             } else if wardrobe_open {
                 persona_screens::draw_wardrobe(
                     font,
@@ -3090,6 +3334,10 @@ impl MapOverlay {
                 &self.floats,
                 &float_faces,
                 anchor,
+                // Over the court's pages: in the strip between the title and the stats.
+                self.court
+                    .as_ref()
+                    .map(|_| [1380.0 * width / 1920.0, 34.0 * height / 1080.0]),
                 ui_time,
             );
             // The blow shakes the screen for a moment.
@@ -3184,7 +3432,7 @@ impl MapOverlay {
             }
             pass.set_bind_group(
                 3,
-                if self.scene.is_some() {
+                if self.scene.is_some() || self.caricias.as_ref().is_some_and(|c| c.reel) {
                     &self.scene_picture.bind_group
                 } else {
                     &self.pictures.bind_group
@@ -3494,337 +3742,6 @@ fn draw_outfit_figure(
     }
 }
 
-fn draw_wardrobe(
-    font: &FontAtlas,
-    vertices: &mut Vec<MapVertex>,
-    width: f32,
-    height: f32,
-    selection: u8,
-    equipped: u8,
-    view: &WardrobeView,
-) {
-    let tone = map_kit::tone(Place::Castle);
-    let panel_width = (width * 0.68).clamp(660.0, 1_020.0).min(width - 36.0);
-    let panel_height = (height * 0.74).clamp(470.0, 690.0).min(height - 36.0);
-    let panel = Rect::new(
-        (width - panel_width) * 0.5,
-        (height - panel_height) * 0.5,
-        panel_width,
-        panel_height,
-    );
-    push_rect(
-        vertices,
-        Rect::new(0.0, 0.0, width, height),
-        [0.006, 0.008, 0.022, 0.72],
-    );
-    map_kit::soft_shadow(vertices, panel, 26.0, 26.0, 0.9);
-    map_kit::round_gradient(vertices, panel, 26.0, tone.top, tone.bottom);
-    push_rounded_border(vertices, panel, 26.0, 2.6, tone.rim);
-    push_rounded_border(
-        vertices,
-        Rect::new(panel.x + 7.0, panel.y + 7.0, panel.w - 14.0, panel.h - 14.0),
-        20.0,
-        1.0,
-        tone.rim_soft,
-    );
-
-    // Header: the wardrobe's badge, its name, and how many outfits there are.
-    let header = Rect::new(panel.x + 12.0, panel.y + 12.0, panel.w - 24.0, 92.0);
-    map_kit::round_gradient(vertices, header, 18.0, tone.band_top, tone.band_bottom);
-    push_rounded_border(vertices, header, 18.0, 1.0, tone.rim_soft);
-    push_prompt_badge(
-        vertices,
-        prompt_icons::Icon::Wardrobe,
-        header.x + 52.0,
-        header.y + header.h * 0.5,
-        30.0,
-        1.0,
-    );
-    push_label_shadowed(
-        font,
-        vertices,
-        "Ropero de la Reina",
-        header.x + 100.0,
-        header.y + 16.0,
-        32.0,
-        tone.title,
-    );
-    push_label(
-        font,
-        vertices,
-        "Elige un atuendo para la exploración",
-        header.x + 102.0,
-        header.y + 58.0,
-        16.0,
-        tone.subtitle,
-    );
-    let count = view.outfits.len().max(2);
-    let badge = Rect::new(header.x + header.w - 132.0, header.y + 30.0, 108.0, 32.0);
-    map_kit::pill(vertices, badge, [0.10, 0.05, 0.12, 0.96], tone.rim);
-    push_label_centered(
-        font,
-        vertices,
-        &format!("{} atuendos", count),
-        badge.x + badge.w * 0.5,
-        badge.y + 7.0,
-        15.0,
-        tone.title,
-    );
-
-    // Cards.
-    let looks = outfit_looks_n(count);
-    let cards_top = header.y + header.h + 22.0;
-    let cards_bottom = panel.y + panel.h - 84.0;
-    let gap = 18.0;
-    let card_width = ((panel.w - 48.0) - gap * (count as f32 - 1.0)) / count as f32;
-    let card_height = (cards_bottom - cards_top).max(200.0);
-    for (index, look) in looks.iter().enumerate() {
-        let card = Rect::new(
-            panel.x + 24.0 + index as f32 * (card_width + gap),
-            cards_top,
-            card_width,
-            card_height,
-        );
-        let selected = index as u8 == selection % count as u8;
-        let worn = index as u8 == equipped % count as u8;
-        if selected {
-            // A halo in the outfit's own colour, only colour, never geometry.
-            for k in 1..=4 {
-                let grow = k as f32 * 3.0;
-                push_rounded_border(
-                    vertices,
-                    Rect::new(
-                        card.x - grow,
-                        card.y - grow,
-                        card.w + grow * 2.0,
-                        card.h + grow * 2.0,
-                    ),
-                    20.0 + grow,
-                    3.0,
-                    map_kit::with_alpha(look.glow, 0.30 - k as f32 * 0.06),
-                );
-            }
-        }
-        let (fill_top, fill_bottom) = if selected {
-            ([0.16, 0.10, 0.20, 0.99], [0.08, 0.05, 0.11, 0.99])
-        } else {
-            ([0.085, 0.052, 0.110, 0.98], [0.050, 0.030, 0.068, 0.98])
-        };
-        map_kit::round_gradient(vertices, card, 20.0, fill_top, fill_bottom);
-        push_rounded_border(
-            vertices,
-            card,
-            20.0,
-            if selected { 2.8 } else { 1.2 },
-            if selected {
-                [1.0, 0.78, 0.32, 1.0]
-            } else {
-                map_kit::with_alpha(tone.rim_soft, 0.75)
-            },
-        );
-
-        // The stage: a pool of light behind her.
-        let stage = Rect::new(card.x + 12.0, card.y + 12.0, card.w - 24.0, card.h - 132.0);
-        map_kit::round_gradient(
-            vertices,
-            stage,
-            14.0,
-            [0.03, 0.02, 0.05, 0.98],
-            map_kit::with_alpha(look.dress_dark, if selected { 0.95 } else { 0.70 }),
-        );
-        push_circle(
-            vertices,
-            stage.x + stage.w * 0.5,
-            stage.y + stage.h * 0.55,
-            stage.h * 0.42,
-            map_kit::with_alpha(look.glow, if selected { 0.16 } else { 0.08 }),
-            32,
-        );
-        push_circle(
-            vertices,
-            stage.x + stage.w * 0.5,
-            stage.y + stage.h * 0.55,
-            stage.h * 0.28,
-            map_kit::with_alpha(look.glow, if selected { 0.14 } else { 0.06 }),
-            32,
-        );
-        draw_outfit_figure(
-            vertices,
-            stage.x + stage.w * 0.5,
-            stage.y + stage.h - 12.0,
-            stage.h - 30.0,
-            index,
-            look,
-        );
-
-        // Key cap in the corner.
-        let key = format!("{}", index + 1);
-        let key = key.as_str();
-        let cap = Rect::new(card.x + 20.0, card.y + 20.0, 30.0, 30.0);
-        push_rounded_rect(vertices, cap, 8.0, [0.16, 0.06, 0.16, 0.96]);
-        push_rounded_border(vertices, cap, 8.0, 1.2, [0.88, 0.62, 0.42, 0.92]);
-        push_label_centered(
-            font,
-            vertices,
-            key,
-            cap.x + cap.w * 0.5,
-            cap.y + 5.0,
-            17.0,
-            [1.0, 0.90, 0.72, 1.0],
-        );
-
-        // Name, line, and the state (the catalog's name when it gives one).
-        let text_y = stage.y + stage.h + 14.0;
-        let (name, detail) = view
-            .outfits
-            .get(index)
-            .map(|(n, d)| {
-                (
-                    n.as_str(),
-                    if d.is_empty() {
-                        look.detail
-                    } else {
-                        d.as_str()
-                    },
-                )
-            })
-            .unwrap_or((look.name, look.detail));
-        let locked = view.locked.get(index).copied().unwrap_or(false);
-        push_label_centered(
-            font,
-            vertices,
-            name,
-            card.x + card.w * 0.5,
-            text_y,
-            21.0,
-            if selected { tone.title } else { tone.ink },
-        );
-        push_label_centered(
-            font,
-            vertices,
-            if locked {
-                "Se gana con un logro"
-            } else {
-                detail
-            },
-            card.x + card.w * 0.5,
-            text_y + 32.0,
-            13.5,
-            tone.soft,
-        );
-        if locked {
-            // Veiled: the figure behind a dark glass, a padlock on it.
-            push_rounded_rect(vertices, stage, 14.0, [0.02, 0.01, 0.04, 0.72]);
-            let (cx, cy) = (stage.x + stage.w * 0.5, stage.y + stage.h * 0.5);
-            push_rounded_rect(
-                vertices,
-                Rect::new(cx - 22.0, cy - 4.0, 44.0, 34.0),
-                6.0,
-                [0.80, 0.64, 0.36, 0.95],
-            );
-            push_rounded_border(
-                vertices,
-                Rect::new(cx - 14.0, cy - 26.0, 28.0, 30.0),
-                12.0,
-                5.0,
-                [0.80, 0.64, 0.36, 0.95],
-            );
-            push_circle(vertices, cx, cy + 10.0, 4.5, [0.10, 0.06, 0.12, 1.0], 16);
-        }
-        if worn {
-            let pill_rect = Rect::new(
-                card.x + card.w * 0.5 - 62.0,
-                card.y + card.h - 40.0,
-                124.0,
-                26.0,
-            );
-            map_kit::pill(
-                vertices,
-                pill_rect,
-                [0.05, 0.20, 0.11, 0.98],
-                [0.42, 0.95, 0.60, 0.95],
-            );
-            push_label_centered(
-                font,
-                vertices,
-                "EQUIPADO",
-                pill_rect.x + pill_rect.w * 0.5,
-                pill_rect.y + 5.0,
-                13.0,
-                [0.62, 1.0, 0.76, 1.0],
-            );
-        } else if selected {
-            let pill_rect = Rect::new(
-                card.x + card.w * 0.5 - 62.0,
-                card.y + card.h - 40.0,
-                124.0,
-                26.0,
-            );
-            map_kit::pill(
-                vertices,
-                pill_rect,
-                [0.20, 0.13, 0.04, 0.98],
-                [1.0, 0.78, 0.32, 0.95],
-            );
-            push_label_centered(
-                font,
-                vertices,
-                "ENTER Equipar",
-                pill_rect.x + pill_rect.w * 0.5,
-                pill_rect.y + 5.0,
-                13.0,
-                [1.0, 0.90, 0.60, 1.0],
-            );
-        }
-    }
-
-    // Footer with the keys.
-    let footer = Rect::new(
-        panel.x + 24.0,
-        panel.y + panel.h - 68.0,
-        panel.w - 48.0,
-        46.0,
-    );
-    push_rounded_rect(vertices, footer, 14.0, [0.0, 0.0, 0.0, 0.32]);
-    push_rounded_border(
-        vertices,
-        footer,
-        14.0,
-        1.0,
-        map_kit::with_alpha(tone.rim_soft, 0.7),
-    );
-    let items: [(&str, &str); 4] = [
-        ("Flechas", "Cambiar"),
-        ("1 2", "Elegir"),
-        ("ENTER", "Equipar"),
-        ("F / ESC", "Cerrar"),
-    ];
-    let widths: Vec<f32> = items
-        .iter()
-        .map(|(key, caption)| {
-            (label_width(font, key, 14.0 * 0.86) + 16.0).max(21.0)
-                + 8.0
-                + label_width(font, caption, 14.0)
-        })
-        .collect();
-    let spacing = 34.0;
-    let total: f32 = widths.iter().sum::<f32>() + spacing * (items.len() as f32 - 1.0);
-    let mut x = footer.x + (footer.w - total) * 0.5;
-    for ((key, caption), w) in items.iter().zip(widths) {
-        map_kit::key_caption(
-            font,
-            vertices,
-            x,
-            footer.y + footer.h * 0.5,
-            key,
-            caption,
-            14.0,
-            tone.ink,
-        );
-        x += w + spacing;
-    }
-}
-
 fn hash_inventory(inventory: &BTreeMap<String, u32>) -> u64 {
     let mut hasher = DefaultHasher::new();
     for (id, amount) in inventory {
@@ -3842,177 +3759,6 @@ fn hash_notice(notice: Option<&str>) -> u64 {
     let mut hasher = DefaultHasher::new();
     notice.unwrap_or_default().hash(&mut hasher);
     hasher.finish()
-}
-
-fn push_shop_coin(icons: &IconAtlas, vertices: &mut Vec<MapVertex>, x: f32, y: f32, radius: f32) {
-    if let Some(icon) = icons.get("coin") {
-        let size = radius * 2.8;
-        push_icon_rect(
-            vertices,
-            Rect::new(x - size * 0.5, y - size * 0.5, size, size),
-            icon,
-            [1.0, 1.0, 1.0, 1.0],
-        );
-        return;
-    }
-
-    push_circle(
-        vertices,
-        x + 1.4,
-        y + 1.8,
-        radius + 1.4,
-        [0.30, 0.16, 0.04, 0.38],
-        18,
-    );
-    push_circle(vertices, x, y, radius + 1.0, [0.57, 0.31, 0.05, 1.0], 18);
-    push_circle(vertices, x, y, radius, [1.0, 0.67, 0.12, 1.0], 18);
-    push_circle(
-        vertices,
-        x - radius * 0.18,
-        y - radius * 0.20,
-        radius * 0.54,
-        [1.0, 0.78, 0.27, 0.96],
-        16,
-    );
-}
-
-fn push_shop_corner_ornament(vertices: &mut Vec<MapVertex>, x: f32, y: f32, sx: f32, sy: f32) {
-    let gold = [0.92, 0.70, 0.31, 0.96];
-    let soft = [0.62, 0.45, 0.20, 0.70];
-    push_segment(vertices, x, y, x + sx * 24.0, y, 2.2, gold);
-    push_segment(vertices, x, y, x, y + sy * 24.0, 2.2, gold);
-    push_segment(
-        vertices,
-        x + sx * 8.0,
-        y + sy * 8.0,
-        x + sx * 22.0,
-        y + sy * 22.0,
-        1.4,
-        soft,
-    );
-    push_triangle(
-        vertices,
-        [
-            [x + sx * 7.0, y + sy * 2.0],
-            [x + sx * 16.0, y + sy * 6.0],
-            [x + sx * 7.0, y + sy * 10.0],
-        ],
-        gold,
-    );
-    push_triangle(
-        vertices,
-        [
-            [x + sx * 2.0, y + sy * 7.0],
-            [x + sx * 6.0, y + sy * 16.0],
-            [x + sx * 10.0, y + sy * 7.0],
-        ],
-        gold,
-    );
-}
-
-fn push_shop_button(
-    font: &FontAtlas,
-    vertices: &mut Vec<MapVertex>,
-    rect: Rect,
-    label: &str,
-    active: bool,
-    disabled: bool,
-    hovered: bool,
-    ui_time: f32,
-    size: f32,
-) {
-    let pulse = if hovered && !disabled {
-        0.5 + 0.5 * (ui_time * 8.0).sin().abs()
-    } else {
-        0.0
-    };
-    let grow = if hovered && !disabled {
-        2.0 + pulse * 1.5
-    } else {
-        0.0
-    };
-    let draw_rect = Rect::new(
-        rect.x - grow,
-        rect.y - grow,
-        rect.w + grow * 2.0,
-        rect.h + grow * 2.0,
-    );
-    let fill = if disabled {
-        [0.38, 0.39, 0.35, 0.72]
-    } else if hovered {
-        if active {
-            [0.17 + pulse * 0.025, 0.38 + pulse * 0.035, 0.29, 1.0]
-        } else {
-            [0.06 + pulse * 0.025, 0.17 + pulse * 0.035, 0.16, 1.0]
-        }
-    } else if active {
-        [0.12, 0.30, 0.24, 0.99]
-    } else {
-        [0.035, 0.09, 0.10, 0.98]
-    };
-    let border = if disabled {
-        [0.42, 0.44, 0.40, 0.60]
-    } else if hovered {
-        [1.0, 0.78 + pulse * 0.12, 0.31, 1.0]
-    } else if active {
-        [1.0, 0.76, 0.28, 1.0]
-    } else {
-        [0.48, 0.68, 0.62, 0.86]
-    };
-    if hovered && !disabled {
-        push_border(
-            vertices,
-            Rect::new(
-                draw_rect.x - 3.0,
-                draw_rect.y - 3.0,
-                draw_rect.w + 6.0,
-                draw_rect.h + 6.0,
-            ),
-            1.5 + pulse,
-            [0.94, 0.69, 0.23, 0.20 + pulse * 0.28],
-        );
-    }
-    push_rect(vertices, draw_rect, fill);
-    push_border(
-        vertices,
-        draw_rect,
-        if active || hovered { 2.5 } else { 1.2 },
-        border,
-    );
-    if (active || hovered) && !disabled {
-        push_border(
-            vertices,
-            Rect::new(
-                draw_rect.x + 5.0,
-                draw_rect.y + 5.0,
-                draw_rect.w - 10.0,
-                draw_rect.h - 10.0,
-            ),
-            1.0,
-            [0.78, 0.61, 0.30, 0.56 + pulse * 0.18],
-        );
-    }
-    let color = if disabled {
-        [0.70, 0.70, 0.64, 0.82]
-    } else if hovered {
-        [1.0, 0.95, 0.77, 1.0]
-    } else {
-        [0.98, 0.91, 0.71, 1.0]
-    };
-    let text_size = if hovered && !disabled {
-        size + 0.8 + pulse * 0.7
-    } else {
-        size
-    };
-    push_label_centered(
-        font,
-        vertices,
-        label,
-        draw_rect.x + draw_rect.w * 0.5,
-        draw_rect.y + (draw_rect.h - text_size) * 0.5,
-        text_size,
-        color,
-    );
 }
 
 fn fit_map_rect(content: Rect, bounds: MapBounds) -> Rect {
@@ -4557,8 +4303,20 @@ fn draw_village_sign(
     let accent = ui_paint::rgba(map_kit::accent(place), 0.95);
     let size = 28.0;
     let tag = map_kit::name_tag(font, vertices, map, center_x, center_y, label, size, place);
-    let edge_x = if tag.x + tag.w * 0.5 < anchor_x { tag.x + tag.w } else { tag.x };
-    push_segment(vertices, anchor_x, anchor_y, edge_x, tag.y + tag.h * 0.5, 3.0, accent);
+    let edge_x = if tag.x + tag.w * 0.5 < anchor_x {
+        tag.x + tag.w
+    } else {
+        tag.x
+    };
+    push_segment(
+        vertices,
+        anchor_x,
+        anchor_y,
+        edge_x,
+        tag.y + tag.h * 0.5,
+        3.0,
+        accent,
+    );
     push_circle(vertices, anchor_x, anchor_y, 6.0, accent, 16);
     // Over the leader's end.
     map_kit::name_tag(font, vertices, map, center_x, center_y, label, size, place);
@@ -4815,12 +4573,23 @@ fn draw_world_marker(font: &FontAtlas, v: &mut Vec<MapVertex>, m: &WorldMarker, 
     let to = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u32;
     let hex = (to(accent[0]) << 16) | (to(accent[1]) << 8) | to(accent[2]);
     let bob = (time * 2.6).sin() * 4.0;
-    let scale = 0.82 + 0.18 * a + if m.ready { 0.05 * (time * 5.0).sin().abs() } else { 0.0 };
+    let scale = 0.82
+        + 0.18 * a
+        + if m.ready {
+            0.05 * (time * 5.0).sin().abs()
+        } else {
+            0.0
+        };
     let (cx, cy) = (m.x, m.y + bob);
     let (w, h, lean) = (80.0 * scale, 64.0 * scale, 15.0 * scale);
     let q = |dx: f32, dy: f32, ww: f32, hh: f32| -> [[f32; 2]; 4] {
         let (x, y) = (cx - ww * 0.5 + dx, cy - hh * 0.5 + dy);
-        [[x + lean, y], [x + ww + lean, y], [x + ww - lean, y + hh], [x - lean, y + hh]]
+        [
+            [x + lean, y],
+            [x + ww + lean, y],
+            [x + ww - lean, y + hh],
+            [x - lean, y + hh],
+        ]
     };
     let fill = |v: &mut Vec<MapVertex>, c: [[f32; 2]; 4], color: [f32; 4]| {
         push_triangle(v, [c[0], c[1], c[2]], color);
@@ -4829,7 +4598,14 @@ fn draw_world_marker(font: &FontAtlas, v: &mut Vec<MapVertex>, m: &WorldMarker, 
     };
     if m.ready {
         let pulse = 0.5 + 0.5 * (time * 4.0).sin();
-        push_circle(v, cx, cy, 58.0 * scale, rgba(hex, (0.14 + 0.1 * pulse) * a), 40);
+        push_circle(
+            v,
+            cx,
+            cy,
+            58.0 * scale,
+            rgba(hex, (0.14 + 0.1 * pulse) * a),
+            40,
+        );
     }
     // The arrow down at the spot: ink under, the colour over, a white edge.
     let tip = cy + h * 0.5 + 30.0 * scale + (time * 3.2).sin() * 4.0;
@@ -4853,11 +4629,20 @@ fn draw_world_marker(font: &FontAtlas, v: &mut Vec<MapVertex>, m: &WorldMarker, 
     fill(v, q(0.0, 0.0, w, h), rgba(0x0e0816, 0.96 * a));
     let wedge = {
         let c = q(0.0, 0.0, w, h);
-        [c[0], [c[0][0] + 14.0 * scale, c[0][1]], [c[3][0] + 14.0 * scale, c[3][1]], c[3]]
+        [
+            c[0],
+            [c[0][0] + 14.0 * scale, c[0][1]],
+            [c[3][0] + 14.0 * scale, c[3][1]],
+            c[3],
+        ]
     };
     fill(v, wedge, rgba(hex, a));
     let rim = q(0.0, 0.0, w, h);
-    let edge = if m.ready { rgba(0xffffff, a) } else { rgba(hex, 0.75 * a) };
+    let edge = if m.ready {
+        rgba(0xffffff, a)
+    } else {
+        rgba(hex, 0.75 * a)
+    };
     for k in 0..4 {
         let (p0, p1) = (rim[k], rim[(k + 1) % 4]);
         let d = [p1[0] - p0[0], p1[1] - p0[1]];
@@ -4971,46 +4756,6 @@ fn push_prompt_badge(
     );
 }
 
-/// A raised keyboard key with its letter.
-fn push_keycap(
-    font: &FontAtlas,
-    vertices: &mut Vec<MapVertex>,
-    key: &str,
-    x: f32,
-    y: f32,
-    size: f32,
-) {
-    let cap = Rect::new(x, y, size, size);
-    push_rounded_rect(
-        vertices,
-        Rect::new(cap.x, cap.y + 4.0, cap.w, cap.h),
-        9.0,
-        [0.30, 0.19, 0.07, 1.0],
-    );
-    push_rounded_rect(
-        vertices,
-        Rect::new(cap.x, cap.y, cap.w, cap.h - 3.0),
-        9.0,
-        [0.96, 0.78, 0.40, 1.0],
-    );
-    push_rounded_rect(
-        vertices,
-        Rect::new(cap.x + 3.5, cap.y + 3.0, cap.w - 7.0, cap.h - 11.0),
-        7.0,
-        [0.16, 0.09, 0.19, 1.0],
-    );
-    let text = size * 0.52;
-    push_label_centered_bold_shadowed(
-        font,
-        vertices,
-        key,
-        cap.x + cap.w * 0.5,
-        cap.y + (cap.h - 7.0 - text) * 0.5 - 1.0,
-        text,
-        [1.0, 0.88, 0.55, 1.0],
-    );
-}
-
 /// The on-screen F prompt: key, the interaction's own icon and colour, the
 /// action in large type and what it acts on beneath.
 fn draw_action_prompt(
@@ -5041,27 +4786,58 @@ fn draw_action_prompt(
     // A second action on its own plate to the right: both centred together.
     let second = prompt.second.as_ref().map(|(key, verb)| {
         let kw = text_width(font, Face::Title, key, 20.0) + 26.0;
-        (key, verb, kw, kw + 30.0 + text_width(font, Face::Title, verb, 26.0) + 40.0)
+        (
+            key,
+            verb,
+            kw,
+            kw + 30.0 + text_width(font, Face::Title, verb, 26.0) + 40.0,
+        )
     });
     let second_w = second.as_ref().map_or(0.0, |s| s.3 + 22.0);
     let (x, y) = ((width - w - second_w) * 0.5, height - 190.0);
     let q = |x: f32, y: f32, w: f32, h: f32, lean: f32| -> [[f32; 2]; 4] {
-        [[x + lean, y], [x + w + lean, y], [x + w - lean, y + h], [x - lean, y + h]]
+        [
+            [x + lean, y],
+            [x + w + lean, y],
+            [x + w - lean, y + h],
+            [x - lean, y + h],
+        ]
     };
     let fill = |v: &mut Vec<MapVertex>, c: [[f32; 2]; 4], color: [f32; 4]| {
         push_triangle(v, [c[0], c[1], c[2]], color);
         push_triangle(v, [c[0], c[2], c[3]], color);
         push_outline_fringe(v, &c, color);
     };
-    fill(vertices, q(x + 9.0, y + 9.0, w, h, lean), rgba(0x000000, 0.55));
+    fill(
+        vertices,
+        q(x + 9.0, y + 9.0, w, h, lean),
+        rgba(0x000000, 0.55),
+    );
     fill(vertices, q(x, y, w, h, lean), rgba(0x0e0816, 0.95));
     fill(vertices, q(x, y, 18.0, h, lean), rgba(hex, 1.0));
     let top = q(x, y, w, h, lean);
-    push_fringe(vertices, top[0], top[1], [0.0, -1.0], 2.5, [accent[0], accent[1], accent[2], 0.9]);
+    push_fringe(
+        vertices,
+        top[0],
+        top[1],
+        [0.0, -1.0],
+        2.5,
+        [accent[0], accent[1], accent[2], 0.9],
+    );
     let mid = y + h * 0.5;
     let mut cx = x + 34.0;
     if prompt.keyed {
-        keycap(font, vertices, Rect::new(cx, mid - 22.0, 46.0, 44.0), "F", 22.0, false, false, hex, 1.0);
+        keycap(
+            font,
+            vertices,
+            Rect::new(cx, mid - 22.0, 46.0, 44.0),
+            "F",
+            22.0,
+            false,
+            false,
+            hex,
+            1.0,
+        );
         cx += key_space;
     }
     push_prompt_badge(vertices, prompt.icon, cx + badge, mid, badge, 1.0);
@@ -5071,11 +4847,25 @@ fn draw_action_prompt(
         let sx = x + w + 22.0;
         let sy = y + 8.0;
         let sh = h - 16.0;
-        fill(vertices, q(sx + 8.0, sy + 8.0, sw, sh, lean), rgba(0x000000, 0.5));
+        fill(
+            vertices,
+            q(sx + 8.0, sy + 8.0, sw, sh, lean),
+            rgba(0x000000, 0.5),
+        );
         fill(vertices, q(sx, sy, sw, sh, lean), rgba(0x1a0610, 0.95));
         fill(vertices, q(sx, sy, 14.0, sh, lean), rgba(red, 1.0));
         let smid = sy + sh * 0.5;
-        keycap(font, vertices, Rect::new(sx + 28.0, smid - 19.0, kw, 38.0), key, 20.0, false, false, red, 1.0);
+        keycap(
+            font,
+            vertices,
+            Rect::new(sx + 28.0, smid - 19.0, kw, 38.0),
+            key,
+            20.0,
+            false,
+            false,
+            red,
+            1.0,
+        );
         text_outline(
             font,
             vertices,
@@ -5092,12 +4882,26 @@ fn draw_action_prompt(
     let max = x + w - 26.0 - tx;
     let fit = |s: &str, face: Face, size: f32| {
         let w = text_width(font, face, s, size);
-        if w <= max { size } else { (size * max / w).max(size * 0.6) }
+        if w <= max {
+            size
+        } else {
+            (size * max / w).max(size * 0.6)
+        }
     };
     match prompt.detail.as_deref() {
         Some(detail) => {
             let vs = fit(&prompt.verb, Face::Title, verb_size);
-            text_outline(font, vertices, Face::Title, &prompt.verb, tx, mid - vs - 2.0, vs, rgba(0xfff6ee, 1.0), rgba(0x000000, 0.85));
+            text_outline(
+                font,
+                vertices,
+                Face::Title,
+                &prompt.verb,
+                tx,
+                mid - vs - 2.0,
+                vs,
+                rgba(0xfff6ee, 1.0),
+                rgba(0x000000, 0.85),
+            );
             let ds = fit(detail, Face::Italic, detail_size);
             text_shadow(
                 font,
@@ -5107,12 +4911,27 @@ fn draw_action_prompt(
                 tx + 2.0,
                 mid + 4.0,
                 ds,
-                [0.6 + accent[0] * 0.4, 0.6 + accent[1] * 0.4, 0.6 + accent[2] * 0.4, 1.0],
+                [
+                    0.6 + accent[0] * 0.4,
+                    0.6 + accent[1] * 0.4,
+                    0.6 + accent[2] * 0.4,
+                    1.0,
+                ],
             );
         }
         None => {
             let vs = fit(&prompt.verb, Face::Title, verb_size);
-            text_outline(font, vertices, Face::Title, &prompt.verb, tx, mid - vs * 0.58, vs, rgba(0xfff6ee, 1.0), rgba(0x000000, 0.85));
+            text_outline(
+                font,
+                vertices,
+                Face::Title,
+                &prompt.verb,
+                tx,
+                mid - vs * 0.58,
+                vs,
+                rgba(0xfff6ee, 1.0),
+                rgba(0x000000, 0.85),
+            );
         }
     }
 }
@@ -5407,7 +5226,6 @@ struct BubbleLayout {
     rect: Rect,
     text: String,
     text_size: f32,
-    name_size: f32,
 }
 
 fn layout_npc_speech_bubble(
@@ -5441,7 +5259,6 @@ fn layout_npc_speech_bubble(
         rect: Rect::new(centre - half, top, bubble_width, bubble_height),
         text,
         text_size,
-        name_size,
     })
 }
 
@@ -5491,6 +5308,9 @@ pub(crate) fn classic_dialogue() -> bool {
 pub(crate) struct DialogueView {
     /// The speaker's name (empty for narration and sounds).
     pub name: String,
+    /// Who speaks, by the guion's id («chiquita», «reina»…): the same in every language, unlike the
+    /// name on show («Tiny» in English).
+    pub speaker: String,
     pub text: String,
     /// How many characters of `text` are shown (the line types itself out).
     pub shown: usize,
@@ -5643,7 +5463,14 @@ pub(super) fn push_fringe(
     let clear = [color[0], color[1], color[2], 0.0];
     let a2 = [a[0] + out[0] * width, a[1] + out[1] * width];
     let b2 = [b[0] + out[0] * width, b[1] + out[1] * width];
-    for (position, c) in [(a, color), (b, color), (b2, clear), (a, color), (b2, clear), (a2, clear)] {
+    for (position, c) in [
+        (a, color),
+        (b, color),
+        (b2, clear),
+        (a, color),
+        (b2, clear),
+        (a2, clear),
+    ] {
         vertices.push(MapVertex {
             position,
             uv: [0.0; 2],
@@ -5655,7 +5482,11 @@ pub(super) fn push_fringe(
 }
 
 /// The soft edge round a convex outline (corners in order, either way round).
-pub(super) fn push_outline_fringe(vertices: &mut Vec<MapVertex>, pts: &[[f32; 2]], color: [f32; 4]) {
+pub(super) fn push_outline_fringe(
+    vertices: &mut Vec<MapVertex>,
+    pts: &[[f32; 2]],
+    color: [f32; 4],
+) {
     let n = pts.len();
     if n < 3 || color[3] <= 0.0 {
         return;
@@ -5789,33 +5620,6 @@ fn push_label(
             }
         }
         baseline += size * 1.22;
-    }
-}
-
-/// A portrait from the portrait atlas (the shader's third texture).
-fn push_portrait_rect(
-    vertices: &mut Vec<MapVertex>,
-    rect: Rect,
-    uv_min: [f32; 2],
-    uv_max: [f32; 2],
-    color: [f32; 4],
-) {
-    let (x0, y0, x1, y1) = (rect.x, rect.y, rect.x + rect.w, rect.y + rect.h);
-    for (position, uv) in [
-        ([x0, y0], [uv_min[0], uv_min[1]]),
-        ([x1, y0], [uv_max[0], uv_min[1]]),
-        ([x1, y1], [uv_max[0], uv_max[1]]),
-        ([x0, y0], [uv_min[0], uv_min[1]]),
-        ([x1, y1], [uv_max[0], uv_max[1]]),
-        ([x0, y1], [uv_min[0], uv_max[1]]),
-    ] {
-        vertices.push(MapVertex {
-            position,
-            uv,
-            color,
-            text: 3.0,
-            ..MapVertex::BLANK
-        });
     }
 }
 
@@ -5966,6 +5770,7 @@ fn wrap_label_text(font: &FontAtlas, text: &str, size: f32, max_width: f32) -> S
 
 /// The achievements screen: a panel of every achievement (earned ones lit, hidden ones veiled)
 /// and, beside it, a few counts of what she has done.
+#[allow(dead_code)] // The achievements page: its catalog is empty on purpose and no screen opens it yet.
 fn draw_achievements(
     font: &FontAtlas,
     vertices: &mut Vec<MapVertex>,

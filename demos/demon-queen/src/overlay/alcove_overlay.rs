@@ -15,6 +15,8 @@ pub struct AlcoveCard {
     pub label: String,
     pub hint: String,
     pub icon: String,
+    /// A face in its window instead of the icon (a guest's).
+    pub face: Option<PortraitRef>,
     pub locked: bool,
 }
 
@@ -454,6 +456,7 @@ fn card(
     c: &AlcoveCard,
     lit: bool,
     chiquita: Option<Uv>,
+    face_uv: Option<Uv>,
     time: f32,
     s: f32,
 ) {
@@ -564,8 +567,38 @@ fn card(
         );
     }
     let pic_c = [cx, (spring - ww * 0.15 + sill) * 0.5];
-    faded(v, dim, |v| {
-        picture(font, v, &c.icon, pic_c, ww * 0.26, lit, chiquita, time, s)
+    faded(v, dim, |v| match face_uv {
+        // A guest: her face in the window's round, a heart pinned at its edge.
+        Some(uv) => {
+            let k = ww * 0.36;
+            let fr = Rect::new(pic_c[0] - k, pic_c[1] - k, k * 2.0, k * 2.0);
+            soft(
+                v,
+                fr,
+                k,
+                k * 0.4,
+                rgba(0xff6aa8, if lit { 0.5 } else { 0.25 }),
+                true,
+            );
+            panel(
+                v,
+                grow(fr, 3.0 * s),
+                k + 3.0 * s,
+                Panel::fill(0x3a2058, 0x1c0e2e, 1.0).rim(
+                    if lit { MOON } else { SILVER },
+                    1.0,
+                    2.4 * s,
+                ),
+            );
+            face(v, fr, k, uv, 1.0);
+            heart(
+                v,
+                [pic_c[0] + k * 0.78, pic_c[1] + k * 0.72],
+                k * 0.32,
+                rgba(if lit { 0xff8cc0 } else { 0xd85a92 }, 1.0),
+            );
+        }
+        None => picture(font, v, &c.icon, pic_c, ww * 0.26, lit, chiquita, time, s),
     });
     if c.locked {
         padlock(
@@ -606,6 +639,7 @@ pub(super) fn draw(
     view: &AlcoveView,
     chiquita: Option<Uv>,
     queen: Option<Uv>,
+    card_faces: &[Option<Uv>],
     time: f32,
 ) {
     let s = h / 1080.0;
@@ -659,6 +693,7 @@ pub(super) fn draw(
             let title = match view.page {
                 1 => "Explorar el cuerpo",
                 2 => "Molestar a Chiquita",
+                3 => "Invitar a alguien",
                 _ => "El lecho de la Reina",
             };
             text_outline(
@@ -675,6 +710,7 @@ pub(super) fn draw(
             let sub = match view.page {
                 1 => "Es tu cuerpo. Técnicamente.",
                 2 => "Vive en tu sello. No tiene adónde huir.",
+                3 => "Que no tenga que ser a solas esta noche.",
                 _ => "A solas. Bueno: tú, el sello y Chiquita.",
             };
             text_shadow(
@@ -708,7 +744,8 @@ pub(super) fn draw(
         faded(v, a, |v| {
             shifted(v, [0.0, (1.0 - a) * 240.0 * s], |v| {
                 turned(v, [r.x + r.w * 0.5, r.y + r.h], *angle, |v| {
-                    card(font, v, *r, c, lit, chiquita, time, s);
+                    let face_uv = card_faces.get(i).copied().flatten();
+                    card(font, v, *r, c, lit, chiquita, face_uv, time, s);
                 });
             });
         });
@@ -747,8 +784,9 @@ pub(super) fn draw(
             rgba(if c.locked { 0xc8a8c8 } else { MOON }, 1.0),
         );
     }
-    // The keys: ◀ ▶ (drawn), Enter, Esc.
-    let mut x = w - 470.0 * s;
+    // The keys: ◀ ▶ (drawn), Enter, Esc; at the left foot, as on the other pages (Chiquita
+    // stands at the right one).
+    let mut x = 110.0 * s;
     let ky = h - 60.0 * s;
     for (key, what) in [
         ("", "elegir"),

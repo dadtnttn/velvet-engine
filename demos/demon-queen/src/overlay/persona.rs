@@ -406,10 +406,43 @@ pub(super) fn comic_stamp(
     }
     // The shadow: the whole stamp, outline and all, in a deep shade.
     let sh = size * 0.06;
-    text_rimmed(font, v, face, words, x + sh, y + sh, size, rgba(deep, 0.9), line + edge, rgba(deep, 0.9));
+    text_rimmed(
+        font,
+        v,
+        face,
+        words,
+        x + sh,
+        y + sh,
+        size,
+        rgba(deep, 0.9),
+        line + edge,
+        rgba(deep, 0.9),
+    );
     // The white edge, the ink outline, the letters.
-    text_rimmed(font, v, face, words, x, y, size, rgba(ink, 1.0), line + edge, rgba(0xfff8f0, 1.0));
-    text_rimmed(font, v, face, words, x, y, size, rgba(color, 1.0), line, rgba(ink, 1.0));
+    text_rimmed(
+        font,
+        v,
+        face,
+        words,
+        x,
+        y,
+        size,
+        rgba(ink, 1.0),
+        line + edge,
+        rgba(0xfff8f0, 1.0),
+    );
+    text_rimmed(
+        font,
+        v,
+        face,
+        words,
+        x,
+        y,
+        size,
+        rgba(color, 1.0),
+        line,
+        rgba(ink, 1.0),
+    );
     // A glint along the letters' tops.
     text(
         font,

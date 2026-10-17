@@ -466,50 +466,6 @@ pub(crate) const DEF_FROM_MIXAMO: [(&str, &str, Option<(&str, &str)>); 20] = [
     ),
 ];
 
-/// The brothel girls' rigs driven by the Queen's authored rig (`queen_chibi_v2_animated.glb`).
-pub(crate) const DEF_FROM_AUTHORED: [(&str, &str, Option<(&str, &str)>); 20] = [
-    ("DEF-pelvis", "pelvis", Some(("DEF-spine", "spine_lower"))),
-    (
-        "DEF-spine",
-        "spine_lower",
-        Some(("DEF-spine1", "spine_mid")),
-    ),
-    ("DEF-spine1", "spine_mid", Some(("DEF-chest", "chest"))),
-    ("DEF-chest", "chest", Some(("DEF-neck", "neck"))),
-    ("DEF-neck", "neck", Some(("DEF-head", "head"))),
-    ("DEF-head", "head", None),
-    (
-        "DEF-shoulderL",
-        "shoulder.L",
-        Some(("DEF-upper_armL", "upper_arm.L")),
-    ),
-    (
-        "DEF-upper_armL",
-        "upper_arm.L",
-        Some(("DEF-forearmL", "forearm.L")),
-    ),
-    ("DEF-forearmL", "forearm.L", Some(("DEF-handL", "hand.L"))),
-    ("DEF-handL", "hand.L", None),
-    (
-        "DEF-shoulderR",
-        "shoulder.R",
-        Some(("DEF-upper_armR", "upper_arm.R")),
-    ),
-    (
-        "DEF-upper_armR",
-        "upper_arm.R",
-        Some(("DEF-forearmR", "forearm.R")),
-    ),
-    ("DEF-forearmR", "forearm.R", Some(("DEF-handR", "hand.R"))),
-    ("DEF-handR", "hand.R", None),
-    ("DEF-thighL", "thigh.L", Some(("DEF-shinL", "shin.L"))),
-    ("DEF-shinL", "shin.L", Some(("DEF-footL", "foot.L"))),
-    ("DEF-footL", "foot.L", Some(("DEF-toeL", "toe.L"))),
-    ("DEF-thighR", "thigh.R", Some(("DEF-shinR", "shin.R"))),
-    ("DEF-shinR", "shin.R", Some(("DEF-footR", "foot.R"))),
-    ("DEF-footR", "foot.R", Some(("DEF-toeR", "toe.R"))),
-];
-
 struct Bone {
     node: usize,
     src: String,

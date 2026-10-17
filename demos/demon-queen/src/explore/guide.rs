@@ -2,7 +2,7 @@
 //! la zona donde está), el camino hasta allí por el suelo que se puede pisar (A* sobre una rejilla de
 //! cada lugar, con las esquinas recortadas), y cómo se ve: flechas que corren por el suelo delante de
 //! la Reina y una columna de luz en el destino. La línea del minimapa, el rombo en pantalla y el
-//! panel de la misión los dibuja el overlay (`bin/mission_overlay.rs`).
+//! panel de la misión los dibuja el overlay (`overlay/mission_overlay.rs`).
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
@@ -11,7 +11,8 @@ use super::*;
 
 /// No guide at all (the presentation video's footage: its running arrows and light column read
 /// as flicker there).
-pub(crate) static GUIDE_HIDDEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static GUIDE_HIDDEN: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// How near the target counts as there.
 const ARRIVED: f32 = 2.0;
@@ -41,6 +42,7 @@ pub(super) fn zone_title(zone: ZoneId) -> &'static str {
         ZoneId::Brothel => "el burdel",
         ZoneId::Dungeon => "la mina",
         ZoneId::Boss => "el combate",
+        ZoneId::War => "la mesa de guerra",
     }
 }
 
@@ -53,7 +55,7 @@ fn neighbours(zone: ZoneId) -> &'static [ZoneId] {
         ZoneId::Penascal => &[ZoneId::Forest],
         ZoneId::Baths | ZoneId::Brothel => &[ZoneId::Village],
         ZoneId::Dungeon => &[ZoneId::Forest],
-        ZoneId::Boss => &[],
+        ZoneId::Boss | ZoneId::War => &[],
     }
 }
 

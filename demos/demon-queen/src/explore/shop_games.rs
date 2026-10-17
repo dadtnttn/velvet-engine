@@ -895,7 +895,8 @@ impl App {
                         name: f.name.to_owned(),
                         percent: f.percent,
                         new: fresh == Some(i),
-                        tomorrow: fresh.is_none() && choices.len() < play_scene::tienda::FAVORS.len(),
+                        tomorrow: fresh.is_none()
+                            && choices.len() < play_scene::tienda::FAVORS.len(),
                         choices: choices.len() as u8,
                         age_ms: ms(h.offer_at),
                     }

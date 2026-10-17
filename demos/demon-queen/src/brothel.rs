@@ -95,6 +95,8 @@ pub(crate) struct Room {
     pub x1: f32,
     pub z0: f32,
     pub z1: f32,
+    /// Where its door is (part of the data file; the tests check it lies on the room's wall).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub door_x: f32,
     #[serde(default)]
     pub locked: bool,
@@ -110,8 +112,10 @@ pub(crate) struct Npc {
     pub yaw: f32,
     #[serde(default)]
     pub model: Option<String>,
-    /// How the prototype placed her: `desk`, `tray`, `sit`, `stand`.
+    /// How the prototype placed her: `desk`, `tray`, `sit`, `stand` (in the data file; the game
+    /// poses her by her model for now).
     #[serde(default)]
+    #[allow(dead_code)]
     pub pose: String,
 }
 
