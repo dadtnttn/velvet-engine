@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "velvet-project"
 description = "Project model and velvet.project"
 version.workspace = true
