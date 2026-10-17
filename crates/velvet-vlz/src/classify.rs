@@ -281,7 +281,7 @@ pub fn sample_ranges(len: u64) -> Vec<(u64, usize)> {
 }
 
 /// The codec the automatic method picks for an entry of `raw_len` bytes whose sample is
-/// `sample` (the concatenated [`sample_ranges`]).
+/// `sample` (the concatenated `sample_ranges`).
 pub fn choose_codec(
     class: ContentClass,
     raw_len: u64,

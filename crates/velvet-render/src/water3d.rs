@@ -1063,7 +1063,10 @@ impl Water3D {
             let x1 = d.origin[0] + d.size.0 as f32 * d.cell;
             let z1 = d.origin[1] + d.size.1 as f32 * d.cell;
             // A little above and below the still level (rings, wobble).
-            !outside([[d.origin[0], d.level - 0.5, d.origin[1]], [x1, d.level + 0.5, z1]])
+            !outside([
+                [d.origin[0], d.level - 0.5, d.origin[1]],
+                [x1, d.level + 0.5, z1],
+            ])
         })
     }
 
@@ -1076,7 +1079,10 @@ impl Water3D {
                 let d = &b.desc;
                 let x1 = d.origin[0] + d.size.0 as f32 * d.cell;
                 let z1 = d.origin[1] + d.size.1 as f32 * d.cell;
-                [[d.origin[0], d.level - 0.5, d.origin[1]], [x1, d.level + 0.5, z1]]
+                [
+                    [d.origin[0], d.level - 0.5, d.origin[1]],
+                    [x1, d.level + 0.5, z1],
+                ]
             })
             .collect()
     }

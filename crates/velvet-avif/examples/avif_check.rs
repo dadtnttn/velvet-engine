@@ -4,9 +4,20 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let input = std::path::Path::new(&args[1]);
     if input.extension().is_some_and(|e| e == "ivf") {
-        let mut clip = velvet_avif::Clip::open(input, std::env::var("THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(1)).expect("clip");
+        let mut clip = velvet_avif::Clip::open(
+            input,
+            std::env::var("THREADS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1),
+        )
+        .expect("clip");
         let t = std::time::Instant::now();
-        let list: Vec<usize> = if args.len() > 3 { args[3..].iter().map(|a| a.parse().unwrap()).collect() } else { (0..clip.len()).collect() };
+        let list: Vec<usize> = if args.len() > 3 {
+            args[3..].iter().map(|a| a.parse().unwrap()).collect()
+        } else {
+            (0..clip.len()).collect()
+        };
         let mut n = 0;
         for i in &list {
             let f = clip.frame(*i).expect("frame");
@@ -15,12 +26,22 @@ fn main() {
             }
             n += 1;
         }
-        eprintln!("{} frames of {} in {:.1} ms each", n, clip.len(), t.elapsed().as_secs_f64() * 1000.0 / n as f64);
+        eprintln!(
+            "{} frames of {} in {:.1} ms each",
+            n,
+            clip.len(),
+            t.elapsed().as_secs_f64() * 1000.0 / n as f64
+        );
     } else {
         let bytes = std::fs::read(input).unwrap();
         let t = std::time::Instant::now();
         let img = velvet_avif::decode_avif(&bytes).expect("decode");
-        eprintln!("{}x{} in {:.1} ms", img.width(), img.height(), t.elapsed().as_secs_f64() * 1000.0);
+        eprintln!(
+            "{}x{} in {:.1} ms",
+            img.width(),
+            img.height(),
+            t.elapsed().as_secs_f64() * 1000.0
+        );
         img.save(&args[2]).unwrap();
     }
 }

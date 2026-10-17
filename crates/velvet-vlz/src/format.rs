@@ -1,5 +1,5 @@
 //! VLZ v1 binary layout: header, entry and block records, and the checks that make a file
-//! safe to read. The full specification is `docs/VLZ_FORMAT.md`; every multi-byte field is
+//! safe to read. The full specification is `docs/formats/VLZ_FORMAT.md`; every multi-byte field is
 //! little-endian, whatever the host.
 //!
 //! ```text

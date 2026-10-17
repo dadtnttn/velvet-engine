@@ -4,7 +4,9 @@
 use std::path::{Path, PathBuf};
 
 fn data(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data").join(name)
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/data")
+        .join(name)
 }
 
 fn reference(name: &str) -> image::RgbaImage {
@@ -64,7 +66,10 @@ fn the_image_crate_reads_avif_by_its_bytes_once_hooked() {
     std::fs::create_dir_all(&dir).unwrap();
     let named = dir.join("cg.png");
     std::fs::write(&named, &bytes).unwrap();
-    assert_eq!(velvet_avif::open_image(&named).unwrap().to_rgba8(), via_image);
+    assert_eq!(
+        velvet_avif::open_image(&named).unwrap().to_rgba8(),
+        via_image
+    );
     std::fs::remove_dir_all(&dir).ok();
     assert!(!velvet_avif::is_avif(b"\x89PNG\r\n\x1a\n0000"));
 }
@@ -79,7 +84,10 @@ fn a_clip_gives_every_frame_in_order_and_jumping_about() {
         let source = reference(&format!("clip_{i:02}.source.png"));
         let ours = psnr(frame, &source);
         let theirs = psnr(&reference(&format!("clip_{i:02}.ffmpeg.png")), &source);
-        assert!(ours > theirs - 0.5, "frame {i}: {ours:.1} dB against ffmpeg's {theirs:.1}");
+        assert!(
+            ours > theirs - 0.5,
+            "frame {i}: {ours:.1} dB against ffmpeg's {theirs:.1}"
+        );
     }
     // Back, forward past a keyframe, the same twice, past the end: the same pictures.
     let mut other = velvet_avif::Clip::open(&data("clip.ivf"), 2).unwrap();

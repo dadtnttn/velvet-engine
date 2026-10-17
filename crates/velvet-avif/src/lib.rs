@@ -20,13 +20,13 @@ use image::RgbaImage;
 use rav1d::include::dav1d::data::Dav1dData;
 use rav1d::include::dav1d::dav1d::{Dav1dContext, Dav1dSettings};
 use rav1d::include::dav1d::headers::{
-    DAV1D_MC_BT2020_CL, DAV1D_MC_BT2020_NCL, DAV1D_MC_BT709, DAV1D_MC_IDENTITY, DAV1D_PIXEL_LAYOUT_I400,
-    DAV1D_PIXEL_LAYOUT_I420, DAV1D_PIXEL_LAYOUT_I422,
+    DAV1D_MC_BT2020_CL, DAV1D_MC_BT2020_NCL, DAV1D_MC_BT709, DAV1D_MC_IDENTITY,
+    DAV1D_PIXEL_LAYOUT_I400, DAV1D_PIXEL_LAYOUT_I420, DAV1D_PIXEL_LAYOUT_I422,
 };
 use rav1d::include::dav1d::picture::Dav1dPicture;
 use rav1d::src::lib::{
-    dav1d_close, dav1d_data_create, dav1d_data_unref, dav1d_default_settings, dav1d_flush, dav1d_get_picture,
-    dav1d_open, dav1d_picture_unref, dav1d_send_data,
+    dav1d_close, dav1d_data_create, dav1d_data_unref, dav1d_default_settings, dav1d_flush,
+    dav1d_get_picture, dav1d_open, dav1d_picture_unref, dav1d_send_data,
 };
 
 /// What can go wrong reading AV1.
@@ -99,7 +99,13 @@ impl Decoder {
         settings.max_frame_delay = 1;
         let mut ctx: Option<Dav1dContext> = None;
         // SAFETY: both pointers are to live locals.
-        let code = unsafe { dav1d_open(Some(NonNull::from(&mut ctx)), Some(NonNull::from(&mut settings))) }.0;
+        let code = unsafe {
+            dav1d_open(
+                Some(NonNull::from(&mut ctx)),
+                Some(NonNull::from(&mut settings)),
+            )
+        }
+        .0;
         if code < 0 || ctx.is_none() {
             return Err(Error::Decode(code));
         }
@@ -119,7 +125,7 @@ impl Decoder {
         }
         loop {
             // SAFETY: the context is open; `data` is valid.
-            let code = unsafe { dav1d_send_data(self.ctx.clone(), Some(NonNull::from(&mut data))) }.0;
+            let code = unsafe { dav1d_send_data(self.ctx, Some(NonNull::from(&mut data))) }.0;
             if code >= 0 && data.sz == 0 {
                 break;
             }
@@ -146,7 +152,7 @@ impl Decoder {
     fn take(&mut self) -> Result<Option<Picture>> {
         let mut pic = Dav1dPicture::default();
         // SAFETY: the context is open; `pic` is a live local the decoder writes.
-        let code = unsafe { dav1d_get_picture(self.ctx.clone(), Some(NonNull::from(&mut pic))) }.0;
+        let code = unsafe { dav1d_get_picture(self.ctx, Some(NonNull::from(&mut pic))) }.0;
         if code >= 0 {
             return Ok(Some(Picture(pic)));
         }
@@ -159,7 +165,7 @@ impl Decoder {
     /// Forgets everything queued (before jumping to another keyframe).
     fn flush(&mut self) {
         // SAFETY: the context is open.
-        unsafe { dav1d_flush(self.ctx.clone().expect("open")) };
+        unsafe { dav1d_flush(self.ctx.expect("open")) };
     }
 
     /// One unit in, its picture out (sends, then asks; asks again for a picture held back).
@@ -215,14 +221,23 @@ impl Picture {
             // BT.601 (BT470BG, SMPTE 170M) and unspecified, as other decoders read it.
             _ => (0.299, 0.114),
         };
-        ColorMath { identity: mtrx == DAV1D_MC_IDENTITY, kr, kb, full: range != 0 }
+        ColorMath {
+            identity: mtrx == DAV1D_MC_IDENTITY,
+            kr,
+            kb,
+            full: range != 0,
+        }
     }
 
     /// A plane's rows: (data, stride).
     fn plane(&self, i: usize) -> Option<(*const u8, isize)> {
         let data = self.0.data[i]?;
-        let stride = if i == 0 { self.0.stride[0] } else { self.0.stride[1] };
-        Some((data.as_ptr() as *const u8, stride as isize))
+        let stride = if i == 0 {
+            self.0.stride[0]
+        } else {
+            self.0.stride[1]
+        };
+        Some((data.as_ptr() as *const u8, stride))
     }
 
     /// The luma (or grey) samples, row by row, for an alpha plane.
@@ -256,7 +271,11 @@ impl Picture {
                 // SAFETY: as in `luma`.
                 let line = unsafe { std::slice::from_raw_parts(y.offset(row as isize * ys), w) };
                 for (x, &v) in line.iter().enumerate() {
-                    let g = if math.full { v } else { (((v as f32 - 16.0) * 255.0 / 219.0).round()).clamp(0.0, 255.0) as u8 };
+                    let g = if math.full {
+                        v
+                    } else {
+                        (((v as f32 - 16.0) * 255.0 / 219.0).round()).clamp(0.0, 255.0) as u8
+                    };
                     out[(row * w + x) * 4..(row * w + x) * 4 + 4].copy_from_slice(&[g, g, g, 255]);
                 }
             }
@@ -271,7 +290,11 @@ impl Picture {
         };
         let (cw, ch) = ((w + sx) >> sx, (h + sy) >> sy);
         // The sums, in fixed point (16 fractional bits).
-        let (ys_k, yo, cs_k) = if math.full { (1.0f32, 0.0f32, 1.0f32) } else { (255.0 / 219.0, 16.0, 255.0 / 224.0) };
+        let (ys_k, yo, cs_k) = if math.full {
+            (1.0f32, 0.0f32, 1.0f32)
+        } else {
+            (255.0 / 219.0, 16.0, 255.0 / 224.0)
+        };
         let kr = math.kr;
         let kb = math.kb;
         let kg = 1.0 - kr - kb;
@@ -362,12 +385,15 @@ fn decode_still(obus: &[u8]) -> Result<Picture> {
 
 /// Is `bytes` an AVIF file (an ISO-BMFF `ftyp` box with an AVIF brand)?
 pub fn is_avif(bytes: &[u8]) -> bool {
-    bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && (&bytes[8..12] == b"avif" || &bytes[8..12] == b"avis")
+    bytes.len() >= 12
+        && &bytes[4..8] == b"ftyp"
+        && (&bytes[8..12] == b"avif" || &bytes[8..12] == b"avis")
 }
 
 /// An AVIF picture as RGBA (its alpha plane, if any, as alpha; premultiplied alpha undone).
 pub fn decode_avif(bytes: &[u8]) -> Result<RgbaImage> {
-    let parsed = avif_parse::read_avif(&mut Cursor::new(bytes)).map_err(|e| Error::Container(e.to_string()))?;
+    let parsed = avif_parse::read_avif(&mut Cursor::new(bytes))
+        .map_err(|e| Error::Container(e.to_string()))?;
     let colour = decode_still(&parsed.primary_item)?;
     let mut rgba = colour.to_rgba()?;
     if let Some(alpha_data) = parsed.alpha_item.as_ref() {
@@ -379,7 +405,11 @@ pub fn decode_avif(bytes: &[u8]) -> Result<RgbaImage> {
         let full = alpha.math().full;
         let a = alpha.luma()?;
         for (px, &av) in rgba.pixels_mut().zip(&a) {
-            let av = if full { av } else { (((av as f32 - 16.0) * 255.0 / 219.0).round()).clamp(0.0, 255.0) as u8 };
+            let av = if full {
+                av
+            } else {
+                (((av as f32 - 16.0) * 255.0 / 219.0).round()).clamp(0.0, 255.0) as u8
+            };
             px.0[3] = av;
             if parsed.premultiplied_alpha && av > 0 && av < 255 {
                 for c in 0..3 {
@@ -429,7 +459,9 @@ pub fn register_image_hooks() {
             EXT.into(),
             Box::new(|mut reader| {
                 let mut bytes = Vec::new();
-                reader.read_to_end(&mut bytes).map_err(image::ImageError::IoError)?;
+                reader
+                    .read_to_end(&mut bytes)
+                    .map_err(image::ImageError::IoError)?;
                 let rgba = decode_avif(&bytes).map_err(|e| {
                     image::ImageError::Decoding(image::error::DecodingError::new(
                         image::error::ImageFormatHint::Name("AVIF".into()),
@@ -528,8 +560,19 @@ impl Clip {
             .filter(|(_, &(o, n))| starts_keyframe(&bytes[o..o + n]))
             .map(|(i, _)| i)
             .collect();
-        let keyframes = if keyframes.first() == Some(&0) { keyframes } else { vec![0] };
-        Ok(Self { bytes, frames, keyframes, decoder: Decoder::new(threads)?, next: Some(0), last: None })
+        let keyframes = if keyframes.first() == Some(&0) {
+            keyframes
+        } else {
+            vec![0]
+        };
+        Ok(Self {
+            bytes,
+            frames,
+            keyframes,
+            decoder: Decoder::new(threads)?,
+            next: Some(0),
+            last: None,
+        })
     }
 
     /// How many frames it has.
@@ -551,7 +594,12 @@ impl Clip {
         }
         // On from here when it is ahead and no keyframe lies between; else from the keyframe
         // before it.
-        let key = *self.keyframes.iter().rev().find(|&&k| k <= index).unwrap_or(&0);
+        let key = *self
+            .keyframes
+            .iter()
+            .rev()
+            .find(|&&k| k <= index)
+            .unwrap_or(&0);
         let from = match self.next {
             Some(next) if next <= index && next > key => next,
             Some(next) if next == key => key,
@@ -570,7 +618,9 @@ impl Clip {
                 picture = got;
             }
         }
-        let rgba = picture.ok_or(Error::Container("the frame gave no picture".into()))?.to_rgba()?;
+        let rgba = picture
+            .ok_or(Error::Container("the frame gave no picture".into()))?
+            .to_rgba()?;
         self.last = Some((index, rgba.clone()));
         Ok(rgba)
     }

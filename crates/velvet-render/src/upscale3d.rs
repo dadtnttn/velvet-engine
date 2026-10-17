@@ -197,7 +197,8 @@ impl Upscaler3D {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: self.format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
             let view = texture.create_view(&Default::default());
@@ -231,13 +232,23 @@ impl Upscaler3D {
                     shown.0 as f32,
                     shown.1 as f32,
                 ],
-                sharp: [(-stops).exp2(), if sharp > 0.0 { 1.0 } else { 0.0 }, 0.0, 0.0],
+                sharp: [
+                    (-stops).exp2(),
+                    if sharp > 0.0 { 1.0 } else { 0.0 },
+                    0.0,
+                    0.0,
+                ],
             }),
         );
         // The in-between pictures first (they may be made anew).
         let sharpen = sharp > 0.0;
-        let fxaa_out = (finishing.antialias == Antialias3D::Fxaa).then(|| self.temp(device, 0, drawn));
-        let scaled = if sharpen { self.temp(device, 1, shown) } else { output.clone() };
+        let fxaa_out =
+            (finishing.antialias == Antialias3D::Fxaa).then(|| self.temp(device, 0, drawn));
+        let scaled = if sharpen {
+            self.temp(device, 1, shown)
+        } else {
+            output.clone()
+        };
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("velvet-upscale"),
         });
