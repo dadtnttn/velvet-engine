@@ -353,15 +353,26 @@ fn rewrite_stable_imports(
 fn checksum_package(package: &ResolvedPackage) -> String {
     let mut digest = Sha256::new();
     digest.update(b"velvet-package-v1\0");
-    digest.update(package.manifest_source.as_bytes());
+    update_text(&mut digest, &package.manifest_source);
     digest.update([0]);
     for (path, source) in &package.sources {
         digest.update(path.as_bytes());
         digest.update([0]);
-        digest.update(source.as_bytes());
+        update_text(&mut digest, source);
         digest.update([0xff]);
     }
     format!("sha256:{:x}", digest.finalize())
+}
+
+/// Hashes source text with `\r\n` read as `\n`: a checkout that turns line endings into CRLF
+/// (Git on Windows) leaves the program the same, so its lock must stay current.
+fn update_text(digest: &mut Sha256, text: &str) {
+    for (index, line) in text.split("\r\n").enumerate() {
+        if index > 0 {
+            digest.update(b"\n");
+        }
+        digest.update(line.as_bytes());
+    }
 }
 
 fn locate_manifest(path: &Path) -> Result<PathBuf, Vs3Error> {
@@ -629,5 +640,22 @@ game = { version = "^1", path = "../game" }
         );
         let error = resolve_locked(&fixture.root.join("game")).unwrap_err();
         assert!(error.to_string().contains("stale"));
+    }
+
+    #[test]
+    fn a_crlf_checkout_keeps_the_lock_current() {
+        let fixture = Fixture::new();
+        write_graph(&fixture, "^2.0");
+        update_lock(&fixture.root.join("game")).unwrap();
+        for file in [
+            "game/entry.vel",
+            "game/velvet.package.toml",
+            "math/core.vel",
+        ] {
+            let path = fixture.root.join(path_from_virtual(file));
+            let source = fs::read_to_string(&path).unwrap();
+            fs::write(&path, source.replace('\n', "\r\n")).unwrap();
+        }
+        resolve_locked(&fixture.root.join("game")).unwrap();
     }
 }

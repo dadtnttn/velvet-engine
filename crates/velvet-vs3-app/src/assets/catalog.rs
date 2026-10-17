@@ -103,6 +103,13 @@ impl GameAssets {
 }
 
 fn safe_join(root: &Path, relative: &str) -> Result<PathBuf> {
+    // A package's asset paths are portable: `/` between folders and no drive. A backslash or a
+    // colon means one thing on Windows (`..\x` climbs out, `C:x` names a drive) and a plain file
+    // name elsewhere, so no package may rely on them on any system.
+    anyhow::ensure!(
+        !relative.contains(['\\', ':']),
+        "asset paths use `/` and no drive letter: {relative}"
+    );
     let requested = Path::new(relative);
     anyhow::ensure!(
         !requested.is_absolute(),
@@ -135,6 +142,8 @@ mod tests {
     fn path_traversal_is_rejected() {
         let root = std::env::temp_dir();
         assert!(safe_join(&root, "../secret.png").is_err());
-        assert!(safe_join(&root, r"C:\\secret.png").is_err());
+        assert!(safe_join(&root, r"..\secret.png").is_err());
+        assert!(safe_join(&root, r"C:\secret.png").is_err());
+        assert!(safe_join(&root, "C:secret.png").is_err());
     }
 }
