@@ -7,6 +7,7 @@ fn package() -> PathBuf {
 }
 
 #[test]
+#[ignore = "loads the art of demos/rpg-quest (not published) and Windows' segoeui.ttf; run with --ignored on a dev machine"]
 fn official_app_contract_loads() {
     let manifest = validate_package(package()).unwrap();
     assert_eq!(manifest.app.canvas_width, 960);
