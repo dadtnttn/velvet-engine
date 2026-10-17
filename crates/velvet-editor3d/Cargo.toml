@@ -10,6 +10,8 @@ rust-version = "1.81"
 [[bin]]
 name = "velvet-editor"
 path = "src/main.rs"
+# (its docs would land where the `velvet-editor` crate's library docs are)
+doc = false
 
 [dependencies]
 velvet-math = { workspace = true }

@@ -12,6 +12,7 @@ mod atlas;
 mod batch;
 mod bc7;
 mod camera;
+pub mod crowd3d;
 mod culling;
 mod debug_overlay;
 mod gi3d;
@@ -49,6 +50,7 @@ pub use animation::{AnimFrame, AnimLoop, SpriteAnimation};
 pub use atlas::TextureAtlas;
 pub use batch::{DrawCommand, SpriteBatch};
 pub use camera::Camera2D;
+pub use crowd3d::{CrowdInstance3D, CrowdMesh3D, CrowdVertex3D};
 pub use culling::{
     count_visible, cull_aabbs, expanded_visible_bounds, is_on_screen, CameraFrustum2D, CullResult,
 };
@@ -57,13 +59,14 @@ pub use gpu::{GpuContext, GpuError, RenderSurface, SurfaceFrame};
 pub use iso::{CutawayWalls3D, IsoCamera3D, IsoSettings3D, PlanRoom3D, PlanWall3D};
 pub use letterbox::{compute_letterbox, Letterbox, ScalingMode};
 pub use material::{BlendMode, Material};
+pub use mesh3d::{image_original, set_image_override, unpack_model_bytes, ImageOverride};
 pub use mesh3d::{
     AnimatedMesh3D, AnimationClip3D, Atmosphere3D, Camera3D, Celestial3D, DayNightCycle3D,
-    EnvironmentFrame3D, EnvironmentPreset3D, Finish3D, GltfModel, Lighting3D, Material3D, Mesh3D, Quality3D,
-    MeshDraw3D, MeshHandle, MeshVertex3D, PointLight3D, PreparedTexture3D, Render3DError,
-    RotationTracks3D, SkinWeights3D, TextureData3D, TextureHandle, Transform3D, Wgpu3DRenderer,
+    EnvironmentFrame3D, EnvironmentPreset3D, Finish3D, GltfModel, Lighting3D, Material3D, Mesh3D,
+    MeshDraw3D, MeshHandle, MeshVertex3D, PointLight3D, PreparedTexture3D, Quality3D,
+    Render3DError, RotationTracks3D, SkinWeights3D, TextureData3D, TextureHandle, Transform3D,
+    Wgpu3DRenderer,
 };
-pub use mesh3d::{image_original, set_image_override, ImageOverride};
 pub use particles::{Particle, ParticleBatch, ParticleEmitter, ParticleGpu};
 pub use plugin::RenderPlugin;
 pub use postprocess::{PostEffect, PostProcessStack};

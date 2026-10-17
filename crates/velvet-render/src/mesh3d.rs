@@ -424,6 +424,16 @@ impl Material3D {
         }
     }
 
+    /// Light added as [`Self::additive`] but never hazed: a sky dome far out round the camera
+    /// (everything nearer covers it; where nothing does, its colour shows over the clear).
+    pub fn sky(base_color: [f32; 4]) -> Self {
+        Self {
+            base_color,
+            texture: None,
+            occlusion_window: [ADDITIVE_FLAG, 0.0, 0.0, -1.0],
+        }
+    }
+
     /// Whether this material adds light rather than covering what lies behind.
     pub fn is_additive(&self) -> bool {
         let x = self.occlusion_window[0];
@@ -1310,7 +1320,9 @@ fn build_lods(device: &wgpu::Device, mesh: &Mesh3D) -> Vec<(wgpu::Buffer, u32)> 
         return Vec::new();
     }
     let bytes: &[u8] = bytemuck::cast_slice(&mesh.vertices);
-    let Ok(adapter) = meshopt::VertexDataAdapter::new(bytes, std::mem::size_of::<MeshVertex3D>(), 0) else {
+    let Ok(adapter) =
+        meshopt::VertexDataAdapter::new(bytes, std::mem::size_of::<MeshVertex3D>(), 0)
+    else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -1343,7 +1355,10 @@ fn build_lods(device: &wgpu::Device, mesh: &Mesh3D) -> Vec<(wgpu::Buffer, u32)> 
 impl GpuMesh3D {
     /// The index buffer and count of level `lod` (0: the full mesh; past its levels, its last).
     fn level(&self, lod: u8) -> (&wgpu::Buffer, u32) {
-        match lod.checked_sub(1).and_then(|l| self.lods.get(l as usize).or(self.lods.last())) {
+        match lod
+            .checked_sub(1)
+            .and_then(|l| self.lods.get(l as usize).or(self.lods.last()))
+        {
             Some((buffer, count)) if lod > 0 => (buffer, *count),
             _ => (&self.index_buffer, self.index_count),
         }
@@ -1474,8 +1489,16 @@ fn light_mask(transform: Mat4, bounds: [[f32; 3]; 2], positions: &[[f32; 4]], co
     }
     let count = count.min(32);
     let [lo, hi] = bounds;
-    let center = [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, (lo[2] + hi[2]) * 0.5];
-    let half = [(hi[0] - lo[0]) * 0.5, (hi[1] - lo[1]) * 0.5, (hi[2] - lo[2]) * 0.5];
+    let center = [
+        (lo[0] + hi[0]) * 0.5,
+        (lo[1] + hi[1]) * 0.5,
+        (lo[2] + hi[2]) * 0.5,
+    ];
+    let half = [
+        (hi[0] - lo[0]) * 0.5,
+        (hi[1] - lo[1]) * 0.5,
+        (hi[2] - lo[2]) * 0.5,
+    ];
     // Column-major: m[c * 4 + r].
     let m = transform.to_cols_array();
     // The placed box: its centre, and its half size along each world axis (the absolute matrix
@@ -1484,7 +1507,8 @@ fn light_mask(transform: Mat4, bounds: [[f32; 3]; 2], positions: &[[f32; 4]], co
     let mut extent = [0.0f32; 3];
     for r in 0..3 {
         world[r] = m[r] * center[0] + m[4 + r] * center[1] + m[8 + r] * center[2] + m[12 + r];
-        extent[r] = m[r].abs() * half[0] + m[4 + r].abs() * half[1] + m[8 + r].abs() * half[2] + 0.01;
+        extent[r] =
+            m[r].abs() * half[0] + m[4 + r].abs() * half[1] + m[8 + r].abs() * half[2] + 0.01;
     }
     if !world.iter().chain(extent.iter()).all(|v| v.is_finite()) {
         return u32::MAX >> (32 - count);
@@ -1764,7 +1788,14 @@ fn apply_image_overrides(path: &Path, images: &mut [gltf::image::Data]) {
 fn import_gltf(
     gltf: gltf::Gltf,
     base: Option<&Path>,
-) -> Result<(gltf::Document, Vec<gltf::buffer::Data>, Vec<gltf::image::Data>), Render3DError> {
+) -> Result<
+    (
+        gltf::Document,
+        Vec<gltf::buffer::Data>,
+        Vec<gltf::image::Data>,
+    ),
+    Render3DError,
+> {
     let gltf::Gltf { document, blob } = gltf;
     let error = |e: gltf::Error| Render3DError::Gltf(e.to_string());
     let buffers = gltf::import_buffers(&document, base, blob).map_err(error)?;
@@ -1785,7 +1816,8 @@ fn import_gltf(
         };
         if let Some(bytes) = bytes {
             if velvet_avif::is_avif(bytes) {
-                let rgba = velvet_avif::decode_avif(bytes).map_err(|e| Render3DError::Gltf(e.to_string()))?;
+                let rgba = velvet_avif::decode_avif(bytes)
+                    .map_err(|e| Render3DError::Gltf(e.to_string()))?;
                 let (width, height) = rgba.dimensions();
                 images.push(gltf::image::Data {
                     pixels: rgba.into_raw(),
@@ -1813,7 +1845,9 @@ pub fn unpack_model_bytes(bytes: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, Re
     let version = u32::from_le_bytes(bytes[4..8].try_into().expect("4"));
     let length = u64::from_le_bytes(bytes[8..16].try_into().expect("8")) as usize;
     if version != 1 {
-        return Err(Render3DError::Gltf(format!("packed model of version {version}")));
+        return Err(Render3DError::Gltf(format!(
+            "packed model of version {version}"
+        )));
     }
     let unpacked = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(&bytes[16..], length)
         .map_err(|error| Render3DError::Gltf(format!("packed model: {error:?}")))?;
@@ -1829,8 +1863,10 @@ impl GltfModel {
         let path = path.as_ref();
         let bytes = std::fs::read(path).map_err(|error| Render3DError::Gltf(error.to_string()))?;
         let bytes = unpack_model_bytes(&bytes)?;
-        let gltf = gltf::Gltf::from_slice(&bytes).map_err(|error| Render3DError::Gltf(error.to_string()))?;
-        let (document, buffers, mut images) = import_gltf(gltf, Some(path.parent().unwrap_or(Path::new("./"))))?;
+        let gltf = gltf::Gltf::from_slice(&bytes)
+            .map_err(|error| Render3DError::Gltf(error.to_string()))?;
+        let (document, buffers, mut images) =
+            import_gltf(gltf, Some(path.parent().unwrap_or(Path::new("./"))))?;
         apply_image_overrides(path, &mut images);
         parse_gltf(document, buffers, images)
     }
@@ -1838,7 +1874,8 @@ impl GltfModel {
     /// Load from in-memory glTF/GLB bytes (or bytes the release packed).
     pub fn load_bytes(bytes: &[u8]) -> Result<Self, Render3DError> {
         let bytes = unpack_model_bytes(bytes)?;
-        let gltf = gltf::Gltf::from_slice(&bytes).map_err(|error| Render3DError::Gltf(error.to_string()))?;
+        let gltf = gltf::Gltf::from_slice(&bytes)
+            .map_err(|error| Render3DError::Gltf(error.to_string()))?;
         let (document, buffers, images) = import_gltf(gltf, None)?;
         parse_gltf(document, buffers, images)
     }
@@ -2859,6 +2896,9 @@ pub struct Wgpu3DRenderer {
     water: crate::water3d::Water3D,
     /// GPU skinning of characters.
     skinner: crate::skin3d::Skinner3D,
+    /// GPU crowds (armies of one model each), and which mesh each one fills.
+    crowds: crate::crowd3d::Crowds3D,
+    crowd_meshes: Vec<(MeshHandle, usize)>,
     /// `replace_mesh` gives a GPU skin to a skinned mesh even in a slot that had none (set once
     /// a mesh was uploaded with [`Self::upload_skinned_mesh`]: such slots get recycled).
     recycled_skins: bool,
@@ -3045,9 +3085,15 @@ impl Wgpu3DRenderer {
             label: Some("velvet-3d-shader"),
             // (`VELVET_EXP=pcf1`: one shadow tap, to measure what the sixteen cost.)
             source: wgpu::ShaderSource::Wgsl(if experiment("pcf1") {
-                MESH_SHADER.replace("i < 16; i = i + 1) {
-        let offset = rot", "i < 1; i = i + 1) {
-        let offset = rot").replace("return visibility / 16.0;", "return visibility;").into()
+                MESH_SHADER
+                    .replace(
+                        "i < 16; i = i + 1) {
+        let offset = rot",
+                        "i < 1; i = i + 1) {
+        let offset = rot",
+                    )
+                    .replace("return visibility / 16.0;", "return visibility;")
+                    .into()
             } else {
                 MESH_SHADER.into()
             }),
@@ -3489,6 +3535,8 @@ impl Wgpu3DRenderer {
             shadow_restore,
             water,
             skinner: crate::skin3d::Skinner3D::new(device),
+            crowds: crate::crowd3d::Crowds3D::new(device),
+            crowd_meshes: Vec::new(),
             recycled_skins: false,
             reflect_pipelines,
             reflection,
@@ -3735,6 +3783,92 @@ impl Wgpu3DRenderer {
         Ok(handle)
     }
 
+    /// Uploads a crowd: up to `capacity` soldiers of one model, drawn as one mesh (see
+    /// [`crate::crowd3d`]). Draw it with an identity transform; place its soldiers each frame with
+    /// [`Self::set_crowd`].
+    pub fn upload_crowd(
+        &mut self,
+        device: &wgpu::Device,
+        model: &crate::crowd3d::CrowdMesh3D,
+        capacity: usize,
+    ) -> Result<MeshHandle, Render3DError> {
+        if model.vertices.is_empty() || model.indices.is_empty() {
+            return Err(Render3DError::EmptyMesh);
+        }
+        let capacity = capacity.max(1);
+        let per = model.vertices.len();
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("velvet-3d-crowd-vertices"),
+            size: (per * capacity * std::mem::size_of::<MeshVertex3D>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+        let mut indices = Vec::with_capacity(model.indices.len() * capacity);
+        for s in 0..capacity {
+            let base = (s * per) as u32;
+            indices.extend(model.indices.iter().map(|i| i + base));
+        }
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("velvet-3d-crowd-indices"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        let crowd = self
+            .crowds
+            .add(device, model, capacity as u32, &vertex_buffer);
+        let handle = MeshHandle(self.meshes.len() as u32);
+        self.meshes.push(GpuMesh3D {
+            vertex_buffer,
+            index_buffer,
+            vertex_count: per * capacity,
+            index_count: 0,
+            bounds: std::cell::Cell::new([[0.0; 3], [0.0; 3]]),
+            updated: std::cell::Cell::new(0),
+            skin: None,
+            lods: Vec::new(),
+        });
+        self.crowd_meshes.push((handle, crowd));
+        Ok(handle)
+    }
+
+    /// This frame's soldiers of a crowd from [`Self::upload_crowd`] (at most its capacity; `time`
+    /// drives the idle sway and the capes). Returns how many it holds.
+    pub fn set_crowd(
+        &mut self,
+        queue: &wgpu::Queue,
+        handle: MeshHandle,
+        instances: &[crate::crowd3d::CrowdInstance3D],
+        time: f32,
+    ) -> usize {
+        let Some(&(_, crowd)) = self.crowd_meshes.iter().find(|(h, _)| *h == handle) else {
+            return 0;
+        };
+        let n = self.crowds.set(queue, crowd, instances, time);
+        let per_indices = self.crowds.crowds[crowd].index_count;
+        let frame = self.frame_index;
+        if let Some(mesh) = self.meshes.get_mut(handle.0 as usize) {
+            mesh.index_count = n * per_indices;
+            let mut lo = [f32::INFINITY; 3];
+            let mut hi = [f32::NEG_INFINITY; 3];
+            for inst in &instances[..n as usize] {
+                let reach = 3.0 * inst.scale.max(0.1);
+                for a in 0..3 {
+                    lo[a] = lo[a].min(inst.position[a] - reach);
+                    hi[a] = hi[a].max(inst.position[a] + reach);
+                }
+            }
+            mesh.bounds.set(if n > 0 {
+                [lo, hi]
+            } else {
+                [[0.0; 3], [0.0; 3]]
+            });
+            mesh.updated.set(frame);
+        }
+        n as usize
+    }
+
     /// Poses a mesh from [`Self::upload_skinned_mesh`]: the GPU deforms it before the next frame
     /// is drawn.
     pub fn set_skin_joints(
@@ -3849,7 +3983,11 @@ impl Wgpu3DRenderer {
         slot.index_buffer = index_buffer;
         slot.vertex_count = mesh.vertices.len();
         slot.index_count = mesh.indices.len() as u32;
-        slot.lods = if skin.is_none() { build_lods(device, mesh) } else { Vec::new() };
+        slot.lods = if skin.is_none() {
+            build_lods(device, mesh)
+        } else {
+            Vec::new()
+        };
         slot.bounds.set(vertex_bounds(&mesh.vertices));
         slot.updated.set(self.frame_index);
         slot.skin = skin;
@@ -4400,7 +4538,12 @@ impl Wgpu3DRenderer {
             gi_view_projection,
             gi_camera,
             gi_forward,
-            quality: [self.quality.shadow_samples.clamp(1, 16) as f32, 0.0, 0.0, 0.0],
+            quality: [
+                self.quality.shadow_samples.clamp(1, 16) as f32,
+                0.0,
+                0.0,
+                0.0,
+            ],
         };
         queue.write_buffer(&self.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
         // Preserve dynamic-uniform alignment while issuing one staging copy.
@@ -4434,6 +4577,7 @@ impl Wgpu3DRenderer {
             1 => Some((40.0, 16.0)),
             _ => Some((120.0, 48.0)),
         };
+        #[allow(clippy::type_complexity)]
         let parts: Vec<(usize, &mut [u8], &mut [bool], &mut [u8])> = self
             .object_upload
             .chunks_mut(stride * CHUNK)
@@ -4491,6 +4635,8 @@ impl Wgpu3DRenderer {
         });
         // Skinned characters, deformed on the GPU.
         self.skinner.dispatch(&mut encoder);
+        // Crowds, posed on the GPU.
+        self.crowds.dispatch(&mut encoder);
         // The water's solvers.
         let water_on = !experiment("nowater");
         if water_on {
@@ -4531,7 +4677,11 @@ impl Wgpu3DRenderer {
                     // Revealed walls still cast: the cut-out shader removes only their circle.
                     let solid =
                         texture.is_some_and(|t| !t.cutout) && !(window[2] > 0.0 && window[3] > 0.0);
-                    let texture_id = draw.texture.or(draw.material.texture).unwrap_or(self.white_texture).0;
+                    let texture_id = draw
+                        .texture
+                        .or(draw.material.texture)
+                        .unwrap_or(self.white_texture)
+                        .0;
                     let level = levels.get(draw_index).copied().unwrap_or(0);
                     let (indices, index_count) = mesh.level(level);
                     let geometry = draw.mesh.0 * 4 + u32::from(level);
@@ -4665,10 +4815,16 @@ impl Wgpu3DRenderer {
                 }
                 // Where this frame's moving casters land on the map (texels), to put back next.
                 let mut dirty = Vec::new();
-                for c in casters.iter().filter(|c| !keys_of_current(cache).contains(&c.1)) {
+                for c in casters
+                    .iter()
+                    .filter(|c| !keys_of_current(cache).contains(&c.1))
+                {
                     let draw = &draws[c.0];
                     if let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) {
-                        if let Some(r) = shadow_footprint(light_view_projection * draw.transform, mesh.bounds.get()) {
+                        if let Some(r) = shadow_footprint(
+                            light_view_projection * draw.transform,
+                            mesh.bounds.get(),
+                        ) {
                             dirty.push(r);
                         }
                     }
@@ -4677,7 +4833,12 @@ impl Wgpu3DRenderer {
                 self.shadow_restore.synced = Some(source);
                 self.shadow_restore.dirty = merge_rects(dirty);
                 if experiment("shadowstats") {
-                    let area: u64 = self.shadow_restore.dirty.iter().map(|r| r[2] as u64 * r[3] as u64).sum();
+                    let area: u64 = self
+                        .shadow_restore
+                        .dirty
+                        .iter()
+                        .map(|r| r[2] as u64 * r[3] as u64)
+                        .sum();
                     eprintln!(
                         "[shadow] frame {frame_index}: whole copy {whole}, movers {}, rects {}, area {:.1}% , full {full}, build {:?}",
                         casters.iter().filter(|c| !keys_of_current(cache).contains(&c.1)).count(),
@@ -4713,7 +4874,8 @@ impl Wgpu3DRenderer {
         let mirror = if water_on
             && self.quality.water_reflections
             && !experiment("norefl")
-            && (experiment("allrefl") || self.water.any_body_on_screen(|b| outside_view(&screen, b)))
+            && (experiment("allrefl")
+                || self.water.any_body_on_screen(|b| outside_view(&screen, b)))
         {
             self.water.reflection_level(camera.target)
         } else {
@@ -4751,8 +4913,14 @@ impl Wgpu3DRenderer {
                 self.water.bodies_at_level(level).into_iter().try_fold(
                     [f32::MAX, f32::MAX, f32::MIN, f32::MIN],
                     |acc, b| {
-                        screen_rect(screen_vp, b, size)
-                            .map(|r| [acc[0].min(r[0]), acc[1].min(r[1]), acc[2].max(r[2]), acc[3].max(r[3])])
+                        screen_rect(screen_vp, b, size).map(|r| {
+                            [
+                                acc[0].min(r[0]),
+                                acc[1].min(r[1]),
+                                acc[2].max(r[2]),
+                                acc[3].max(r[3]),
+                            ]
+                        })
                     },
                 )
             }
@@ -4841,7 +5009,11 @@ impl Wgpu3DRenderer {
                     texture.map_or(true, |t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0);
                 let normal_map = texture.map_or(true, |t| t.normal_map);
                 let variant = (usize::from(cutout), usize::from(normal_map));
-                let texture_id = draw.texture.or(draw.material.texture).unwrap_or(self.white_texture).0;
+                let texture_id = draw
+                    .texture
+                    .or(draw.material.texture)
+                    .unwrap_or(self.white_texture)
+                    .0;
                 let key = (draw.mesh.0, texture_id, variant.0 * 2 + variant.1);
                 if DrawRun::extends(&run, draw_index, key) {
                     if let Some(r) = run.as_mut() {
@@ -4871,11 +5043,19 @@ impl Wgpu3DRenderer {
         mark("reflection");
         let prepass = self.quality.depth_prepass || experiment("prepass");
         let in_prepass = |draw: &MeshDraw3D| -> bool {
-            if draw.material.is_shadow_only() || draw.material.is_additive() || draw.material.base_color[3] < 0.99 {
+            if draw.material.is_shadow_only()
+                || draw.material.is_additive()
+                || draw.material.base_color[3] < 0.99
+            {
                 return false;
             }
             let window = draw.material.occlusion_window;
-            let texture = self.textures.get(draw.texture.or(draw.material.texture).unwrap_or(self.white_texture).0 as usize);
+            let texture = self.textures.get(
+                draw.texture
+                    .or(draw.material.texture)
+                    .unwrap_or(self.white_texture)
+                    .0 as usize,
+            );
             !(texture.map_or(true, |t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0))
         };
         if prepass {
@@ -4884,7 +5064,10 @@ impl Wgpu3DRenderer {
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_view,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
                     stencil_ops: None,
                 }),
                 timestamp_writes: None,
@@ -4900,11 +5083,18 @@ impl Wgpu3DRenderer {
                 if !on_screen[draw_index] || !in_prepass(draw) {
                     continue;
                 }
-                let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) else { continue };
-                let tex = draw.texture.or(draw.material.texture).unwrap_or(self.white_texture);
+                let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) else {
+                    continue;
+                };
+                let tex = draw
+                    .texture
+                    .or(draw.material.texture)
+                    .unwrap_or(self.white_texture);
                 let key = (draw.mesh.0, 0, 0);
                 if DrawRun::extends(&run, draw_index, key) {
-                    if let Some(r) = run.as_mut() { r.end += 1; }
+                    if let Some(r) = run.as_mut() {
+                        r.end += 1;
+                    }
                     continue;
                 }
                 DrawRun::flush(&mut run, &mut pass);
@@ -4916,7 +5106,12 @@ impl Wgpu3DRenderer {
                     pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                     bound_mesh = Some(draw.mesh.0);
                 }
-                run = Some(DrawRun { first: draw_index as u32, end: draw_index as u32 + 1, count: mesh.index_count, key });
+                run = Some(DrawRun {
+                    first: draw_index as u32,
+                    end: draw_index as u32 + 1,
+                    count: mesh.index_count,
+                    key,
+                });
             }
             DrawRun::flush(&mut run, &mut pass);
         }
@@ -4950,7 +5145,11 @@ impl Wgpu3DRenderer {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_view,
                     depth_ops: Some(wgpu::Operations {
-                        load: if prepass { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(1.0) },
+                        load: if prepass {
+                            wgpu::LoadOp::Load
+                        } else {
+                            wgpu::LoadOp::Clear(1.0)
+                        },
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
@@ -5035,7 +5234,11 @@ impl Wgpu3DRenderer {
                 let (indices, index_count) = mesh.level(levels[draw_index]);
                 self.last_drawn_triangles += index_count as usize / 3;
                 self.last_draw_triangles[draw_index] = index_count / 3;
-                let texture_id = draw.texture.or(draw.material.texture).unwrap_or(self.white_texture).0;
+                let texture_id = draw
+                    .texture
+                    .or(draw.material.texture)
+                    .unwrap_or(self.white_texture)
+                    .0;
                 // The mesh and its level: what the buffers bound are.
                 let geometry = draw.mesh.0 * 4 + u32::from(levels[draw_index]);
                 let key = (geometry, texture_id, variant);
@@ -5046,7 +5249,11 @@ impl Wgpu3DRenderer {
                     continue;
                 }
                 DrawRun::flush(&mut run, &mut pass);
-                let variant = if prepass && variant < 2 { 10 + variant } else { variant };
+                let variant = if prepass && variant < 2 {
+                    10 + variant
+                } else {
+                    variant
+                };
                 if bound_variant != Some(variant) {
                     pass.set_pipeline(match variant {
                         4 => &self.translucent_pipeline,
@@ -5107,7 +5314,7 @@ impl Wgpu3DRenderer {
         mark("submit");
         if profiling {
             thread_local! {
-                static SUMS: std::cell::RefCell<(u32, Vec<(&'static str, f64)>)> = std::cell::RefCell::new((0, Vec::new()));
+                static SUMS: std::cell::RefCell<(u32, Vec<(&'static str, f64)>)> = const { std::cell::RefCell::new((0, Vec::new())) };
             }
             SUMS.with(|sums| {
                 let mut sums = sums.borrow_mut();
@@ -5122,7 +5329,11 @@ impl Wgpu3DRenderer {
                 }
                 sums.0 += 1;
                 if sums.0 == 120 {
-                    let line: Vec<String> = sums.1.iter().map(|(n, t)| format!("{n} {:.2}", t / 120.0)).collect();
+                    let line: Vec<String> = sums
+                        .1
+                        .iter()
+                        .map(|(n, t)| format!("{n} {:.2}", t / 120.0))
+                        .collect();
                     eprintln!("[cpuprof] {} (draws {})", line.join(", "), draws.len());
                     sums.0 = 0;
                     sums.1.clear();
@@ -5449,10 +5660,13 @@ fn screen_rect(clip: Mat4, bounds: [[f32; 3]; 2], size: (u32, u32)) -> Option<[f
         let x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
         let y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
         let w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
-        if !(w > 1e-4) || !x.is_finite() || !y.is_finite() {
+        if w.is_nan() || w <= 1e-4 || !x.is_finite() || !y.is_finite() {
             return None;
         }
-        let (u, v) = ((x / w * 0.5 + 0.5) * size.0 as f32, (0.5 - y / w * 0.5) * size.1 as f32);
+        let (u, v) = (
+            (x / w * 0.5 + 0.5) * size.0 as f32,
+            (0.5 - y / w * 0.5) * size.1 as f32,
+        );
         x0 = x0.min(u);
         y0 = y0.min(v);
         x1 = x1.max(u);
@@ -5473,7 +5687,8 @@ struct DrawRun {
 impl DrawRun {
     /// Draw `index` (key `key`, `count` indices) joins this run if it comes right after it.
     fn extends(run: &Option<DrawRun>, index: usize, key: (u32, u32, usize)) -> bool {
-        run.as_ref().is_some_and(|r| r.end as usize == index && r.key == key)
+        run.as_ref()
+            .is_some_and(|r| r.end as usize == index && r.key == key)
     }
 
     /// The run so far, drawn (if any).
@@ -5520,7 +5735,12 @@ fn shadow_footprint(clip: Mat4, bounds: [[f32; 3]; 2]) -> Option<[u32; 4]> {
     }
     let size = SHADOW_MAP_SIZE as f32;
     let to = |v: f32, pad: f32| (v * size + pad).clamp(0.0, size);
-    let (ax, ay, bx, by) = (to(x0, -2.0).floor(), to(y0, -2.0).floor(), to(x1, 2.0).ceil(), to(y1, 2.0).ceil());
+    let (ax, ay, bx, by) = (
+        to(x0, -2.0).floor(),
+        to(y0, -2.0).floor(),
+        to(x1, 2.0).ceil(),
+        to(y1, 2.0).ceil(),
+    );
     if bx <= ax || by <= ay {
         return None;
     }
@@ -5594,7 +5814,10 @@ fn pair_rects(mut rects: Vec<[u32; 4]>) -> Vec<[u32; 4]> {
     let area = |r: &[u32; 4]| r[2] as u64 * r[3] as u64;
     let union = |a: [u32; 4], b: [u32; 4]| {
         let (x0, y0) = (a[0].min(b[0]), a[1].min(b[1]));
-        let (x1, y1) = ((a[0] + a[2]).max(b[0] + b[2]), (a[1] + a[3]).max(b[1] + b[3]));
+        let (x1, y1) = (
+            (a[0] + a[2]).max(b[0] + b[2]),
+            (a[1] + a[3]).max(b[1] + b[3]),
+        );
         [x0, y0, x1 - x0, y1 - y0]
     };
     loop {
@@ -5604,7 +5827,7 @@ fn pair_rects(mut rects: Vec<[u32; 4]>) -> Vec<[u32; 4]> {
                 let u = union(rects[i], rects[j]);
                 let waste = area(&u).saturating_sub(area(&rects[i]) + area(&rects[j]));
                 let cheap = area(&u) * 10 <= (area(&rects[i]) + area(&rects[j])) * 11;
-                if (cheap || rects.len() > 128) && best.is_none_or(|b| waste < b.2) {
+                if (cheap || rects.len() > 128) && best.map_or(true, |b| waste < b.2) {
                     best = Some((i, j, waste));
                 }
             }
@@ -5786,7 +6009,10 @@ fn caster_key(draw: &MeshDraw3D) -> u64 {
     let mut h = mix(0x51_7cc1_b727_220a, u64::from(draw.mesh.0));
     let m = draw.transform.to_cols_array();
     for pair in m.chunks_exact(2) {
-        h = mix(h, u64::from(pair[0].to_bits()) | u64::from(pair[1].to_bits()) << 32);
+        h = mix(
+            h,
+            u64::from(pair[0].to_bits()) | u64::from(pair[1].to_bits()) << 32,
+        );
     }
     let window = draw.material.occlusion_window;
     h = mix(h, u64::from(window[2] > 0.0 && window[3] > 0.0));
@@ -6082,7 +6308,6 @@ enum BlendMode3D {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 fn create_mesh_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -6094,7 +6319,18 @@ fn create_mesh_pipeline(
     mode: BlendMode3D,
     mirrored: bool,
 ) -> wgpu::RenderPipeline {
-    create_mesh_pipeline_with(device, layout, shader, format, sample_count, cutout, normal_map, mode, mirrored, None)
+    create_mesh_pipeline_with(
+        device,
+        layout,
+        shader,
+        format,
+        sample_count,
+        cutout,
+        normal_map,
+        mode,
+        mirrored,
+        None,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -6769,7 +7005,11 @@ fn shade(input: VertexOut, cutout: bool) -> vec4<f32> {
     if (object.occlusion_window.x < -1.5) {
         let to_camera = length(camera.camera_position.xyz - input.world_position);
         let haze_span = max(camera.fog_params.y - camera.fog_params.x, 0.001);
-        let haze = clamp((to_camera - camera.fog_params.x) / haze_span, 0.0, 1.0);
+        var haze = clamp((to_camera - camera.fog_params.x) / haze_span, 0.0, 1.0);
+        // A sky dome is never hazed (`Material3D::sky`).
+        if (object.occlusion_window.w < -0.5) {
+            haze = 0.0;
+        }
         return vec4<f32>(base * (1.0 - haze), clamp(object.base_color.a * input.color.a * albedo.a, 0.0, 1.0));
     }
     let luminance = dot(base, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -7138,13 +7378,23 @@ mod tests {
             .collect();
         let started = std::time::Instant::now();
         let merged = merge_rects(rects.clone());
-        assert!(started.elapsed() < std::time::Duration::from_millis(50), "{:?}", started.elapsed());
+        assert!(
+            started.elapsed() < std::time::Duration::from_millis(50),
+            "{:?}",
+            started.elapsed()
+        );
         assert!(merged.len() <= 32 * 16);
         let inside = |p: (u32, u32)| {
-            merged.iter().any(|m| p.0 >= m[0] && p.1 >= m[1] && p.0 < m[0] + m[2] && p.1 < m[1] + m[3])
+            merged
+                .iter()
+                .any(|m| p.0 >= m[0] && p.1 >= m[1] && p.0 < m[0] + m[2] && p.1 < m[1] + m[3])
         };
         for r in &rects {
-            for p in [(r[0], r[1]), (r[0] + r[2] - 1, r[1] + r[3] - 1), (r[0] + r[2] / 2, r[1] + r[3] / 2)] {
+            for p in [
+                (r[0], r[1]),
+                (r[0] + r[2] - 1, r[1] + r[3] - 1),
+                (r[0] + r[2] / 2, r[1] + r[3] / 2),
+            ] {
                 assert!(inside(p), "{r:?} left out");
             }
         }
@@ -7449,9 +7699,15 @@ mod tests {
         packed.extend_from_slice(&(original.len() as u64).to_le_bytes());
         packed.extend_from_slice(&miniz_oxide::deflate::compress_to_vec_zlib(&original, 9));
         assert!(packed.len() < original.len());
-        assert_eq!(unpack_model_bytes(&packed).unwrap().as_ref(), original.as_slice());
+        assert_eq!(
+            unpack_model_bytes(&packed).unwrap().as_ref(),
+            original.as_slice()
+        );
         // Not packed: given back as it is.
-        assert!(matches!(unpack_model_bytes(&original).unwrap(), std::borrow::Cow::Borrowed(_)));
+        assert!(matches!(
+            unpack_model_bytes(&original).unwrap(),
+            std::borrow::Cow::Borrowed(_)
+        ));
         let a = GltfModel::load_bytes(&original).unwrap();
         let b = GltfModel::load_bytes(&packed).unwrap();
         assert_eq!(format!("{:?}", a.meshes), format!("{:?}", b.meshes));
@@ -7467,10 +7723,12 @@ mod tests {
     #[test]
     #[ignore]
     fn every_packed_model_loads_as_its_original() {
-        let Some(release) = std::env::var_os("VELVET_PACKED_RELEASE").map(std::path::PathBuf::from) else {
+        let Some(release) = std::env::var_os("VELVET_PACKED_RELEASE").map(std::path::PathBuf::from)
+        else {
             return;
         };
-        let project = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../demos/demon-queen");
+        let project =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../demos/demon-queen");
         fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
             for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
                 let path = entry.path();
@@ -7487,14 +7745,36 @@ mod tests {
         let (mut checked, mut worst) = (0, (f64::MAX, String::new()));
         for packed_path in &files {
             let rel = packed_path.strip_prefix(&release).unwrap();
-            let original = GltfModel::load(project.join(rel)).unwrap_or_else(|e| panic!("{}: {e}", rel.display()));
-            let packed = GltfModel::load(packed_path).unwrap_or_else(|e| panic!("{} packed: {e}", rel.display()));
-            assert_eq!(format!("{:?}", original.meshes), format!("{:?}", packed.meshes), "{}", rel.display());
+            let original = GltfModel::load(project.join(rel))
+                .unwrap_or_else(|e| panic!("{}: {e}", rel.display()));
+            let packed = GltfModel::load(packed_path)
+                .unwrap_or_else(|e| panic!("{} packed: {e}", rel.display()));
+            assert_eq!(
+                format!("{:?}", original.meshes),
+                format!("{:?}", packed.meshes),
+                "{}",
+                rel.display()
+            );
             assert_eq!(original.animations, packed.animations, "{}", rel.display());
-            assert_eq!(original.textures.len(), packed.textures.len(), "{}", rel.display());
+            assert_eq!(
+                original.textures.len(),
+                packed.textures.len(),
+                "{}",
+                rel.display()
+            );
             for (a, b) in original.textures.iter().zip(&packed.textures) {
-                assert_eq!((a.width, a.height), (b.width, b.height), "{}", rel.display());
-                let mse = a.rgba.iter().zip(&b.rgba).map(|(x, y)| (*x as f64 - *y as f64).powi(2)).sum::<f64>()
+                assert_eq!(
+                    (a.width, a.height),
+                    (b.width, b.height),
+                    "{}",
+                    rel.display()
+                );
+                let mse = a
+                    .rgba
+                    .iter()
+                    .zip(&b.rgba)
+                    .map(|(x, y)| (*x as f64 - *y as f64).powi(2))
+                    .sum::<f64>()
                     / a.rgba.len().max(1) as f64;
                 let psnr = 10.0 * (255.0f64 * 255.0 / mse.max(1e-9)).log10();
                 assert!(psnr > 30.0, "{}: a texture at {psnr:.1} dB", rel.display());
@@ -7504,7 +7784,10 @@ mod tests {
             }
             checked += 1;
         }
-        eprintln!("{checked} packed models load as their originals (worst texture {:.1} dB, {})", worst.0, worst.1);
+        eprintln!(
+            "{checked} packed models load as their originals (worst texture {:.1} dB, {})",
+            worst.0, worst.1
+        );
     }
 
     #[test]

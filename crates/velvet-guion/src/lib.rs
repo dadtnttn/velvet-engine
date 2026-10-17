@@ -155,7 +155,7 @@ pub enum Step {
     /// Staging: the visual novel's (`@sala`, `@fondo`, `@cg`, `@quitar`, `@sprite`) and the
     /// world's full-screen stage's (`@izq`, `@der`, `@pose`, `@titulo`, `@sello`, `@sacude`,
     /// `@bote`, `@destello`, `@barrido`, `@objeto`, `@panel`, `@revela`, `@giro`, `@desbloquea`,
-    /// `@cierre`).
+    /// `@cierre`, `@recuerdo`).
     /// The 3D box shows none of it; a [`Conversation`] hands it over with [`Conversation::take_staging`].
     Stage {
         cmd: String,
@@ -614,7 +614,7 @@ pub fn parse(source: &str, path: &Path, cast: &Cast) -> (Guion, Vec<Problem>) {
                 w @ ("sala" | "fondo" | "cg" | "quitar" | "sprite" | "musica" | "izq" | "der"
                 | "pose" | "titulo" | "sello" | "sacude" | "bote" | "destello" | "barrido"
                 | "objeto" | "panel" | "revela" | "giro" | "desbloquea" | "cierre"
-                | "teclas" | "llevar") => Some(Step::Stage {
+                | "teclas" | "llevar" | "recuerdo") => Some(Step::Stage {
                     cmd: w.to_owned(),
                     arg: arg.to_owned(),
                 }),

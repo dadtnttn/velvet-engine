@@ -12,7 +12,7 @@
 //!   bit-exact, so their own decoders work on what comes out.
 //! - Every size, offset and count is validated before use; blocks cannot inflate past the
 //!   size their record declares; header, index and blocks carry XXH3-64 checksums.
-//! - Little-endian everywhere; the layout is in `docs/VLZ_FORMAT.md`.
+//! - Little-endian everywhere; the layout is in `docs/formats/VLZ_FORMAT.md`.
 //!
 //! ```no_run
 //! use velvet_vlz::{pack_directory, PackOptions, VlzArchive};
