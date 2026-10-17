@@ -1065,18 +1065,12 @@ impl Parser {
         self.bump(); // for
         self.expect(&Tok::LParen)?;
         // for (let i = 0; cond; update)
-        let var;
-        let init;
         if matches!(self.peek(), Tok::Ident(id) if id == "let") {
             self.bump();
-            var = self.expect_ident()?;
-            self.expect(&Tok::Assign)?;
-            init = self.parse_expr()?;
-        } else {
-            var = self.expect_ident()?;
-            self.expect(&Tok::Assign)?;
-            init = self.parse_expr()?;
         }
+        let var = self.expect_ident()?;
+        self.expect(&Tok::Assign)?;
+        let init = self.parse_expr()?;
         self.expect(&Tok::Semi)?;
         let cond = self.parse_expr()?;
         self.expect(&Tok::Semi)?;
