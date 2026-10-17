@@ -20,7 +20,7 @@ depender de una demo excluida.
 
 ## Demon Queen
 
-Desde el 2026-10-15 se publica solo el código: `src/`, `dungeon/`, `build.rs`, el
+Desde el 2026-10-15 se publica solo el código: `src/`, `dungeon/`, `war/`, `build.rs`, el
 esquema de la historia (`story/schema.json`), los planos de las zonas y los estilos
 que el código lee. La historia y sus textos (catálogos de idioma, diálogos,
 misiones, locales), el arte (modelos, iconos, escenas de carga, mapas, fuentes),
@@ -28,9 +28,14 @@ las herramientas y los documentos internos quedan en la máquina de desarrollo,
 ignorados por `.gitignore`, y también se retiraron del historial publicado.
 `tools/repository-policy.json` marca la demo como `source_only_demos`.
 
-Por eso el juego no compila solo con este repositorio: CI comprueba, prueba y
+Por eso el juego no se ejecuta solo con este repositorio: CI comprueba, prueba y
 documenta el motor y excluye los paquetes `demon-queen` y `demon-queen-dungeon`,
-cuya compilación y QA dependen de los datos privados.
+cuya compilación y QA dependen de los datos privados. `demon-queen-war` sí entra en CI:
+sus reglas, simulación y mapas son datos en código; los dos tests que leen sus modelos
+están marcados `#[ignore]` y se ejecutan en local con `--ignored`.
+
+La corte del castillo (`data/castillo/`: audiencias, lecciones, citas) es texto de la
+historia y también queda privada.
 
 ## Artefactos locales
 

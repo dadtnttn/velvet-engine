@@ -18,6 +18,20 @@ Phases are sequential. Keep the tree compiling after every phase.
 | **11** | Saves, localization, export | Desktop export + i18n commands |
 | **12** | Polish, hybrid demo, reports | 50k LOC, docs, security/perf reports |
 
+## Where 0.3.0 stands (2026-10-16)
+
+The phases above are done. Since then the engine grew a 3D track, driven by Demon Queen: the toon
+3D renderer (HDR, shadows, skinning, GPU crowds, water, upscaling, native resolution), AV1 video and
+pictures (`velvet-avif`), the VLZ container, navigation and automatic QA, Markdown guiones and the
+Velvet Editor. See [CHANGELOG](../../CHANGELOG.md) and the [module map](MODULES.md).
+
+| Track | Status | Notes |
+|-------|--------|-------|
+| **3D renderer** (`velvet-render` 3D) | **active** | Driven by Demon Queen's places, battles and campaign map. |
+| **Media and packs** (`velvet-avif`, `velvet-video`, `velvet-vlz`) | **active** | Release builds ship AVIF/AV1 and VLZ packs. |
+| **Velvet Editor** (`velvet-editor3d`) | **alpha** | Docked editor around the engine's own viewport. |
+| **Velvet JS** (JavaScript framework) | **proposed** | [Plan](JS_FRAMEWORK_PLAN.md) · [ADR 0009](../adr/0009-rust-and-js-runtimes.md): grow `tools/velvet-three-kit` into a JS framework, then split into Rust and JS runtimes sharing their formats. |
+
 ## Near-term priorities (post Phase 12 track)
 
 | Priority | Item | Status | Notes |
@@ -30,7 +44,7 @@ Phases are sequential. Keep the tree compiling after every phase.
 | **Now** | **Action tools** (`velvet-action`) | **active** | Aim, loadout, hitscan, weapons, combat — room loop only in `recipes` / demos. |
 | Demo | `velvet-stakes` / `card-duel` / `hotline-rush` / `velvet-novella` | **examples** | Illustrate tools; not the API. |
 | Later | Full TCG rules / Hotline product game | **out of scope near-term** | Games are built *with* tools, not shipped as the engine surface. |
-| Later | Web / multi-target hosts (incl. web-oriented) | **design only** | VS3 game logic first; no Web3 product in first usable cut. |
+| Later | Web / multi-target hosts (incl. web-oriented) | **design only** | VS3 game logic first; no Web3 product in first usable cut. Browser games: see the [Velvet JS plan](JS_FRAMEWORK_PLAN.md). |
 
 ## Parallelizable work (within a phase)
 
