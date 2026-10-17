@@ -94,9 +94,7 @@ impl Chunk {
 
     /// Fill all with cell.
     pub fn fill(&mut self, cell: Cell) {
-        for c in &mut self.cells {
-            *c = cell;
-        }
+        self.cells.fill(cell);
         self.revision = self.revision.wrapping_add(1);
         self.active = true;
         self.sleeping = false;
