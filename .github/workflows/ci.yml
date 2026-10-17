@@ -40,7 +40,8 @@ jobs:
       - name: System deps (Linux)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev
+          # nasm: rav1d (velvet-avif) builds its x86 assembly with it
+          sudo apt-get install -y libasound2-dev libudev-dev nasm
 
       - name: Test quality
         run: python3 tools/check_test_quality.py

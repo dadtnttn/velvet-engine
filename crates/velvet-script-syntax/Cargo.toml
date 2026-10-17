@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "velvet-script-syntax"
 description = "Lossless syntax tree (Phase 4)"
 version.workspace = true

@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "velvet-runtime"
 description = "Velvet Engine game runtime"
 version.workspace = true

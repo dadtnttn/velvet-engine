@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "velvet-test-utils"
 description = "Shared test utilities"
 version.workspace = true
