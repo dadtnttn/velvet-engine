@@ -1,0 +1,110 @@
+{
+  "format": "velvet-artprep",
+  "version": 1,
+  "kind": "shots",
+  "shots": [
+    {
+      "id": "ada-master",
+      "art": "character.ada.fullbody",
+      "characters": ["ada"],
+      "variation": {
+        "framing": "full body, standing, arms relaxed at her sides",
+        "setting": "plain white background",
+        "light": "even soft studio light",
+        "palette": "cream, blue and brown"
+      }
+    },
+    {
+      "id": "bex-master",
+      "art": "character.bex.fullbody",
+      "characters": ["bex"],
+      "variation": {
+        "framing": "full body, standing, arms relaxed at the sides",
+        "setting": "plain white background",
+        "light": "even soft studio light",
+        "palette": "teal, yellow and grey"
+      }
+    },
+    {
+      "id": "ada-portrait-neutral",
+      "art": "character.ada.portrait",
+      "variant": "neutral",
+      "characters": ["ada"],
+      "references": ["character.ada.fullbody"],
+      "variation": {
+        "framing": "half length, facing the viewer",
+        "expression": "calm, closed mouth",
+        "setting": "bakery counter with bread loaves behind her",
+        "light": "morning light from a window on the left",
+        "palette": "cream, blue and warm brown"
+      }
+    },
+    {
+      "id": "ada-portrait-happy",
+      "art": "character.ada.portrait",
+      "variant": "happy",
+      "characters": ["ada"],
+      "references": [{ "id": "character.ada.fullbody" }],
+      "variation": {
+        "framing": "half length, facing the viewer",
+        "expression": "a wide smile, eyes crinkled",
+        "setting": "bakery counter with bread loaves behind her",
+        "light": "morning light from a window on the left"
+      }
+    },
+    {
+      "id": "bex-portrait-neutral",
+      "art": "character.bex.portrait",
+      "variant": "neutral",
+      "characters": ["bex"],
+      "references": [{ "id": "character.bex.fullbody" }],
+      "variation": {
+        "framing": "half length, three-quarter view",
+        "expression": "curious, eyebrows raised",
+        "setting": "a rainy street corner",
+        "light": "soft grey daylight"
+      }
+    },
+    {
+      "id": "pair-morning",
+      "art": "scene.bakery.pair",
+      "variant": "morning",
+      "characters": ["ada", "bex"],
+      "references": ["character.ada.fullbody", "character.bex.fullbody"],
+      "variation": {
+        "framing": "wide shot, both at the counter",
+        "pose": "Ada hands a roll across the counter to Bex",
+        "setting": "a bakery counter with a window",
+        "light": "morning light",
+        "palette": "cream and teal"
+      }
+    },
+    {
+      "id": "basket",
+      "art": "prop.bread_basket",
+      "variation": {
+        "framing": "three-quarter view",
+        "setting": "a wooden table",
+        "light": "soft morning light"
+      }
+    },
+    {
+      "id": "ada-wave-edit",
+      "art": "character.ada.portrait",
+      "variant": "waving",
+      "characters": ["ada"],
+      "variation": {
+        "pose": "the right arm raised to shoulder height, bent at the elbow, the hand waving beside her head"
+      },
+      "edit": { "base": { "id": "character.ada.portrait", "variant": "neutral" }, "change": "pose" }
+    },
+    {
+      "id": "ada-scarf-edit",
+      "art": "character.ada.portrait",
+      "variant": "scarf",
+      "characters": ["ada"],
+      "variation": { "outfit": "a green wool scarf wrapped twice around her neck" },
+      "edit": { "base": { "id": "character.ada.portrait", "variant": "neutral" }, "change": "outfit" }
+    }
+  ]
+}

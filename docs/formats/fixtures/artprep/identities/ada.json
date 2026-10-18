@@ -1,0 +1,16 @@
+{
+  "format": "velvet-artprep",
+  "version": 1,
+  "kind": "identity",
+  "id": "ada",
+  "name": "Ada",
+  "species": "human",
+  "body": "slim build",
+  "skin": "light olive skin",
+  "hair": "short curly dark brown hair tied back with a red ribbon",
+  "eyes": "green eyes",
+  "outfit": "a cream apron over a blue linen dress with rolled sleeves",
+  "has": ["a small silver ring on her left hand"],
+  "lacks": ["horns", "tail"],
+  "fixed": ["matte dry skin"]
+}

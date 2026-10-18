@@ -1,0 +1,16 @@
+{
+  "format": "velvet-artprep",
+  "version": 1,
+  "kind": "identity",
+  "id": "bex",
+  "name": "Bex",
+  "species": "goat-folk courier",
+  "body": "tall and lean",
+  "skin": "grey-brown fur",
+  "hair": "short cropped dark fur on the head",
+  "eyes": "amber eyes",
+  "outfit": "a teal rain jacket with a yellow satchel strap",
+  "has": ["two short curved horns", "a long tail with a white tip"],
+  "lacks": ["wings"],
+  "fixed": ["matte dry fur", { "text": "horizontal pupils", "weight": 1.2 }]
+}

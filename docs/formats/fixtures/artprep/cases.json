@@ -1,0 +1,173 @@
+{
+  "profiles": "profiles.json",
+  "style": "style.json",
+  "manifest": "manifest.json",
+  "identities": ["identities/ada.json", "identities/bex.json"],
+  "shots": "shots.json",
+  "builds": [
+    {
+      "name": "the niji base: a master, a second master and a prop, with the trigger word",
+      "profile": "krea2-niji-base",
+      "shots": ["ada-master", "bex-master", "basket"],
+      "expect": "expected/krea2-niji-base.json"
+    },
+    {
+      "name": "the reference profile: masters, portraits from references, and a pair of two characters",
+      "profile": "krea2-reference",
+      "shots": ["ada-master", "ada-portrait-neutral", "ada-portrait-happy", "bex-portrait-neutral", "pair-morning", "basket"],
+      "expect": "expected/krea2-reference.json"
+    },
+    {
+      "name": "the edit profile: one change each, the guard added to a moved pose",
+      "profile": "krea2-edit",
+      "shots": ["ada-wave-edit", "ada-scarf-edit"],
+      "expect": "expected/krea2-edit.json"
+    },
+    {
+      "name": "the generic profile: tags, weights, negatives and the notes of the manifest",
+      "profile": "generic-sd",
+      "shots": ["ada-master", "bex-master", "ada-portrait-neutral", "basket"],
+      "expect": "expected/generic-sd.json"
+    }
+  ],
+  "refused": [
+    {
+      "name": "a pair of two characters needs a profile that allows two",
+      "profile": "krea2-niji-base",
+      "shots": ["pair-morning"],
+      "error": "identities"
+    },
+    {
+      "name": "references over the limit of the profile",
+      "profile": "krea2-niji-base",
+      "shots": ["ada-portrait-neutral"],
+      "error": "references"
+    },
+    {
+      "name": "a profile that makes new pictures refuses an edit",
+      "profile": "krea2-niji-base",
+      "shots": ["ada-wave-edit"],
+      "error": "edit"
+    },
+    {
+      "name": "an edit profile refuses a shot that makes a new picture",
+      "profile": "krea2-edit",
+      "shots": ["ada-master"],
+      "error": "edit"
+    },
+    {
+      "name": "an edit that changes two things",
+      "profile": "krea2-edit",
+      "shots": [
+        {
+          "id": "ada-two-changes",
+          "art": "character.ada.portrait",
+          "variant": "waving",
+          "characters": ["ada"],
+          "variation": { "pose": "the left arm raised", "outfit": "a red scarf" },
+          "edit": { "base": { "id": "character.ada.portrait", "variant": "neutral" }, "change": "pose" }
+        }
+      ],
+      "error": "edit"
+    },
+    {
+      "name": "an art id that the manifest does not have",
+      "profile": "krea2-reference",
+      "shots": [
+        {
+          "id": "missing-art",
+          "art": "character.ada.hat",
+          "characters": ["ada"],
+          "variation": { "framing": "half length" }
+        }
+      ],
+      "error": "unknown-id"
+    },
+    {
+      "name": "a variant that the art id does not declare",
+      "profile": "krea2-reference",
+      "shots": [
+        {
+          "id": "ada-sad",
+          "art": "character.ada.portrait",
+          "variant": "sad",
+          "characters": ["ada"],
+          "variation": { "expression": "sad" }
+        }
+      ],
+      "error": "unknown-variant"
+    },
+    {
+      "name": "a character that has no identity layer",
+      "profile": "krea2-reference",
+      "shots": [
+        {
+          "id": "ghost",
+          "art": "character.ada.fullbody",
+          "characters": ["cy"],
+          "variation": { "framing": "full body" }
+        }
+      ],
+      "error": "unknown-character"
+    },
+    {
+      "name": "a reference to an art id that the manifest does not have",
+      "profile": "krea2-reference",
+      "shots": [
+        {
+          "id": "bad-reference",
+          "art": "character.ada.fullbody",
+          "characters": ["ada"],
+          "references": ["character.ada.hat"]
+        }
+      ],
+      "error": "unknown-id"
+    },
+    {
+      "name": "two shots that make the same picture",
+      "profile": "krea2-reference",
+      "shots": [
+        "ada-master",
+        {
+          "id": "ada-master-again",
+          "art": "character.ada.fullbody",
+          "characters": ["ada"],
+          "variation": { "framing": "full body" }
+        }
+      ],
+      "error": "duplicate"
+    },
+    {
+      "name": "a seed that is listed twice",
+      "profile": "krea2-reference",
+      "shots": ["ada-master"],
+      "seeds": [101, 101],
+      "error": "duplicate"
+    },
+    {
+      "name": "no seeds at all",
+      "profile": "krea2-reference",
+      "shots": ["ada-master"],
+      "seeds": [],
+      "error": "value"
+    }
+  ],
+  "gallery": {
+    "results": "gallery/results.json",
+    "contains": [
+      "<title>Bakery round 1</title>",
+      "<h1>Bakery round 1</h1>",
+      "2 shots, 2 candidates.",
+      "data-code=\"character.ada.portrait.happy_101\"",
+      "src=\"ada-portrait-happy/character.ada.portrait.happy_101.png\"",
+      "A friendly baker &lt;at the counter&gt; &amp; &quot;smiling&quot;",
+      "No candidates yet."
+    ],
+    "not_contains": ["<at the counter>", "& \"smiling\"", "<script>alert"],
+    "counts": {
+      "<section": 2,
+      "<figure": 2,
+      "data-code=\"": 2
+    }
+  }
+}

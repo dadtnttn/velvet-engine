@@ -1,0 +1,53 @@
+{
+  "format": "velvet-art",
+  "version": 1,
+  "entries": [
+    {
+      "id": "character.ada.fullbody",
+      "kind": "fullbody",
+      "size": [640, 1080],
+      "anchor": [0.5, 1],
+      "meta": { "notes": "master reference on a plain white background" }
+    },
+    {
+      "id": "character.ada.portrait",
+      "kind": "portrait",
+      "size": [480, 640],
+      "anchor": [0.5, 1],
+      "variants": ["neutral", "happy", "waving", "scarf"],
+      "meta": {
+        "prompt": "a friendly baker at the bread counter",
+        "style": ["soft lines"],
+        "negative": "extra fingers, smudged text"
+      }
+    },
+    {
+      "id": "character.bex.fullbody",
+      "kind": "fullbody",
+      "size": [640, 1080],
+      "anchor": [0.5, 1],
+      "meta": { "notes": "master reference on a plain white background" }
+    },
+    {
+      "id": "character.bex.portrait",
+      "kind": "portrait",
+      "size": [480, 640],
+      "anchor": [0.5, 1],
+      "variants": ["neutral"],
+      "meta": { "prompt": "a courier pausing on a rainy street" }
+    },
+    {
+      "id": "scene.bakery.pair",
+      "kind": "background",
+      "size": [1920, 1080],
+      "variants": ["morning"],
+      "meta": { "prompt": "a shared morning at the bakery" }
+    },
+    {
+      "id": "prop.bread_basket",
+      "kind": "prop",
+      "size": [128, 160],
+      "anchor": [0.5, 1]
+    }
+  ]
+}

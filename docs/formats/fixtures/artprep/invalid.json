@@ -1,0 +1,524 @@
+[
+  {
+    "name": "a profiles text that is not JSON",
+    "as": "profiles",
+    "text": "{ \"format\": \"velvet-artprep\", ",
+    "error": "json"
+  },
+  {
+    "name": "the wrong format tag",
+    "as": "profiles",
+    "document": { "format": "velvet-art", "version": 1, "kind": "profiles", "profiles": [] },
+    "error": "format"
+  },
+  {
+    "name": "a version this reader does not read",
+    "as": "profiles",
+    "document": { "format": "velvet-artprep", "version": 2, "kind": "profiles", "profiles": [] },
+    "error": "version"
+  },
+  {
+    "name": "a shots document read as profiles",
+    "as": "profiles",
+    "document": { "format": "velvet-artprep", "version": 1, "kind": "shots", "shots": [] },
+    "error": "kind"
+  },
+  {
+    "name": "a name in a profile that the format does not define",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "typo",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1, "stepz": 4 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose" }
+        }
+      ]
+    },
+    "error": "unknown-field"
+  },
+  {
+    "name": "a profile id with capitals and a space",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "Krea2 Niji",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose" }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "the same profile id twice",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "base",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose" }
+        },
+        {
+          "id": "base",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose" }
+        }
+      ]
+    },
+    "error": "duplicate"
+  },
+  {
+    "name": "quality tags in a prose profile",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "prose-tags",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose", "quality_tags": ["masterpiece"] }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "the paren weight syntax in a prose profile",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "prose-paren",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose", "weights": "paren" }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "a layer order that leaves out the variation",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "short-order",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "tags", "order": ["style", "identity"] }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "a long side that is not a multiple of its rounding step",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "odd-size",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1000, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose" }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "an edit profile without a reference for the picture it edits",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "edit-none",
+          "mode": "edit",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "max_references": 0,
+          "negative": false,
+          "prompt": { "style": "prose" }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "edit guards in a profile that makes new pictures",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "generate-guard",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose" },
+          "edit_guards": { "pose": "nothing left where it was" }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "an edit guard for a name that is not a variation field",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "edit-hair",
+          "mode": "edit",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "max_references": 1,
+          "negative": false,
+          "prompt": { "style": "prose" },
+          "edit_guards": { "hair": "nothing left" }
+        }
+      ]
+    },
+    "error": "unknown-field"
+  },
+  {
+    "name": "a profile without its generation settings",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "no-generation",
+          "mode": "generate",
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose" }
+        }
+      ]
+    },
+    "error": "structure"
+  },
+  {
+    "name": "more identities per picture than the format allows",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "crowd",
+          "mode": "generate",
+          "generation": { "model": "m", "sampler": "euler", "steps": 8, "cfg": 1 },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "max_identities": 3,
+          "negative": false,
+          "prompt": { "style": "prose" }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "a LoRA strength above 2",
+    "as": "profiles",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "profiles",
+      "profiles": [
+        {
+          "id": "strong-lora",
+          "mode": "generate",
+          "generation": {
+            "model": "m",
+            "loras": [{ "name": "style", "weight": 3 }],
+            "sampler": "euler",
+            "steps": 8,
+            "cfg": 1
+          },
+          "size": { "long_side": 1024, "multiple_of": 64 },
+          "negative": false,
+          "prompt": { "style": "prose" }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "a style phrase with a weight above 2",
+    "as": "style",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "style",
+      "phrases": [{ "text": "sharp lines", "weight": 3 }]
+    },
+    "error": "value"
+  },
+  {
+    "name": "a style phrase that is only spaces",
+    "as": "style",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "style",
+      "phrases": ["   "]
+    },
+    "error": "value"
+  },
+  {
+    "name": "an identity without a name",
+    "as": "identity",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "identity",
+      "id": "nameless"
+    },
+    "error": "structure"
+  },
+  {
+    "name": "an identity that misspells lacks",
+    "as": "identity",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "identity",
+      "id": "mira",
+      "name": "Mira",
+      "lack": ["horns"]
+    },
+    "error": "unknown-field"
+  },
+  {
+    "name": "an identity id with a capital letter",
+    "as": "identity",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "identity",
+      "id": "Ada",
+      "name": "Ada"
+    },
+    "error": "value"
+  },
+  {
+    "name": "lacks given as one text instead of a list",
+    "as": "identity",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "identity",
+      "id": "mira",
+      "name": "Mira",
+      "lacks": "horns"
+    },
+    "error": "structure"
+  },
+  {
+    "name": "a fixed phrase with a weight of 0",
+    "as": "identity",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "identity",
+      "id": "mira",
+      "name": "Mira",
+      "fixed": [{ "text": "matte dry skin", "weight": 0 }]
+    },
+    "error": "value"
+  },
+  {
+    "name": "a variation field that is misspelled",
+    "as": "shots",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "shots",
+      "shots": [
+        {
+          "id": "typo",
+          "art": "character.ada.portrait",
+          "variation": { "expresion": "calm" }
+        }
+      ]
+    },
+    "error": "unknown-field"
+  },
+  {
+    "name": "two shots with the same id",
+    "as": "shots",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "shots",
+      "shots": [
+        { "id": "same", "art": "character.ada.fullbody" },
+        { "id": "same", "art": "prop.bread_basket" }
+      ]
+    },
+    "error": "duplicate"
+  },
+  {
+    "name": "an art id with a capital letter",
+    "as": "shots",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "shots",
+      "shots": [{ "id": "capital", "art": "Character.ada.portrait" }]
+    },
+    "error": "value"
+  },
+  {
+    "name": "an edit without the field that it changes",
+    "as": "shots",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "shots",
+      "shots": [
+        {
+          "id": "no-change",
+          "art": "character.ada.portrait",
+          "variation": { "pose": "the hand raised" },
+          "edit": { "base": "character.ada.portrait" }
+        }
+      ]
+    },
+    "error": "structure"
+  },
+  {
+    "name": "an edit that changes a field outside the variation layer",
+    "as": "shots",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "shots",
+      "shots": [
+        {
+          "id": "hair-change",
+          "art": "character.ada.portrait",
+          "variation": { "pose": "the hand raised" },
+          "edit": { "base": { "id": "character.ada.portrait" }, "change": "hair" }
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "a candidate whose name is not the output name of its seed",
+    "as": "results",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "results",
+      "shots": [
+        {
+          "shot": "happy",
+          "art": "character.ada.portrait",
+          "variant": "happy",
+          "candidates": [
+            { "seed": 101, "name": "character.ada.portrait.neutral_101", "image": "happy/101.png" }
+          ]
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "an image that is a javascript address",
+    "as": "results",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "results",
+      "shots": [
+        {
+          "shot": "bad",
+          "art": "prop.bread_basket",
+          "candidates": [
+            { "seed": 101, "name": "prop.bread_basket_101", "image": "javascript:alert(1)" }
+          ]
+        }
+      ]
+    },
+    "error": "value"
+  },
+  {
+    "name": "an image with an absolute path",
+    "as": "results",
+    "document": {
+      "format": "velvet-artprep",
+      "version": 1,
+      "kind": "results",
+      "shots": [
+        {
+          "shot": "absolute",
+          "art": "prop.bread_basket",
+          "candidates": [
+            { "seed": 101, "name": "prop.bread_basket_101", "image": "/var/images/101.png" }
+          ]
+        }
+      ]
+    },
+    "error": "value"
+  }
+]

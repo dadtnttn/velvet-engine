@@ -1,0 +1,68 @@
+[
+  {
+    "format": "velvet-artprep",
+    "version": 1,
+    "kind": "job",
+    "shot": "ada-wave-edit",
+    "profile": "krea2-edit",
+    "art": "character.ada.portrait",
+    "variant": "waving",
+    "characters": ["ada"],
+    "prompt": "Soft-edged illustration, warm morning light, flat painted colours, clean ink outlines, soft lines. Ada, human, slim build, light olive skin, short curly dark brown hair tied back with a red ribbon, green eyes, a small silver ring on her left hand, a cream apron over a blue linen dress with rolled sleeves, no horns, no tail, matte dry skin. A friendly baker at the bread counter, the right arm raised to shoulder height, bent at the elbow, the hand waving beside her head, nothing left where the moved part was.",
+    "negative": null,
+    "references": [],
+    "edit": { "base": { "id": "character.ada.portrait", "variant": "neutral" }, "change": "pose" },
+    "size": [768, 1024],
+    "generation": {
+      "model": "Krea2 Edit",
+      "loras": [{ "name": "Character identity", "weight": 0.8 }],
+      "sampler": "er_sde",
+      "scheduler": null,
+      "steps": 8,
+      "cfg": 1,
+      "shift": null
+    },
+    "seeds": [101, 102, 103, 104, 105, 106],
+    "outputs": [
+      { "seed": 101, "name": "character.ada.portrait.waving_101" },
+      { "seed": 102, "name": "character.ada.portrait.waving_102" },
+      { "seed": 103, "name": "character.ada.portrait.waving_103" },
+      { "seed": 104, "name": "character.ada.portrait.waving_104" },
+      { "seed": 105, "name": "character.ada.portrait.waving_105" },
+      { "seed": 106, "name": "character.ada.portrait.waving_106" }
+    ]
+  },
+  {
+    "format": "velvet-artprep",
+    "version": 1,
+    "kind": "job",
+    "shot": "ada-scarf-edit",
+    "profile": "krea2-edit",
+    "art": "character.ada.portrait",
+    "variant": "scarf",
+    "characters": ["ada"],
+    "prompt": "Soft-edged illustration, warm morning light, flat painted colours, clean ink outlines, soft lines. Ada, human, slim build, light olive skin, short curly dark brown hair tied back with a red ribbon, green eyes, a small silver ring on her left hand, a cream apron over a blue linen dress with rolled sleeves, no horns, no tail, matte dry skin. A friendly baker at the bread counter, a green wool scarf wrapped twice around her neck.",
+    "negative": null,
+    "references": [],
+    "edit": { "base": { "id": "character.ada.portrait", "variant": "neutral" }, "change": "outfit" },
+    "size": [768, 1024],
+    "generation": {
+      "model": "Krea2 Edit",
+      "loras": [{ "name": "Character identity", "weight": 0.8 }],
+      "sampler": "er_sde",
+      "scheduler": null,
+      "steps": 8,
+      "cfg": 1,
+      "shift": null
+    },
+    "seeds": [101, 102, 103, 104, 105, 106],
+    "outputs": [
+      { "seed": 101, "name": "character.ada.portrait.scarf_101" },
+      { "seed": 102, "name": "character.ada.portrait.scarf_102" },
+      { "seed": 103, "name": "character.ada.portrait.scarf_103" },
+      { "seed": 104, "name": "character.ada.portrait.scarf_104" },
+      { "seed": 105, "name": "character.ada.portrait.scarf_105" },
+      { "seed": 106, "name": "character.ada.portrait.scarf_106" }
+    ]
+  }
+]

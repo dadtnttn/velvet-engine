@@ -20,6 +20,7 @@ packages by path.
 | `packages/cards` (`@velvet/cards`) | Cards on a board: stacks, recipes and timed jobs from velvet-stacks (`docs/formats/STACKS.md`). |
 | `packages/assets` (`@velvet/assets`) | Art by id: the `velvet-art` manifest, files in AVIF, WebP, PNG or SVG, generated placeholders, preloading and the missing-art report (`docs/formats/ART_MANIFEST.md`). |
 | `packages/characters` (`@velvet/characters`) | Characters: stats with formulas, needs with thresholds, professions with experience curves, affinity between characters, traits and saves (`docs/formats/CHARACTER.md`). |
+| `packages/artprep` (`@velvet/artprep`) | Tooling, not runtime: prompts in three layers (style, identity, variation) for each generation profile, jobs for an external batch runner, and the selection gallery (`docs/formats/ART_PREP.md`). |
 
 Packages are TypeScript **source**. Each `exports` entry points at `src/index.ts`, which Vite
 consumes directly, so there is no build step for them. The one built part is the WebAssembly in

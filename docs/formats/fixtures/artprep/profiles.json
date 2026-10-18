@@ -1,0 +1,124 @@
+{
+  "format": "velvet-artprep",
+  "version": 1,
+  "kind": "profiles",
+  "profiles": [
+    {
+      "id": "krea2-niji-base",
+      "label": "Krea2 with the Niji base: master references and new illustrations",
+      "mode": "generate",
+      "generation": {
+        "model": "RedCraft Krea2 3.0 bf16",
+        "loras": [
+          {
+            "name": "Niji Sweet Spot Krea2 v2A",
+            "weight": 1
+          }
+        ],
+        "sampler": "euler",
+        "scheduler": "simple",
+        "steps": 15,
+        "cfg": 1,
+        "shift": 1.31
+      },
+      "size": {
+        "long_side": 1024,
+        "multiple_of": 64
+      },
+      "max_references": 0,
+      "max_identities": 1,
+      "negative": false,
+      "trigger_words": [
+        "@NJSW33T"
+      ],
+      "prompt": {
+        "style": "prose"
+      }
+    },
+    {
+      "id": "krea2-reference",
+      "label": "Krea2 with references: one or two characters",
+      "mode": "generate",
+      "generation": {
+        "model": "RedCraft Krea2 3.0 bf16",
+        "loras": [
+          {
+            "name": "Niji Sweet Spot Krea2 v2A",
+            "weight": 1
+          }
+        ],
+        "sampler": "er_sde",
+        "scheduler": "simple",
+        "steps": 12,
+        "cfg": 1,
+        "shift": 1.31
+      },
+      "size": {
+        "long_side": 1024,
+        "multiple_of": 64
+      },
+      "max_references": 2,
+      "max_identities": 2,
+      "negative": false,
+      "prompt": {
+        "style": "prose"
+      }
+    },
+    {
+      "id": "krea2-edit",
+      "label": "Krea2 Edit: one change to a picture that already exists",
+      "mode": "edit",
+      "generation": {
+        "model": "Krea2 Edit",
+        "loras": [
+          {
+            "name": "Character identity",
+            "weight": 0.8
+          }
+        ],
+        "sampler": "er_sde",
+        "steps": 8,
+        "cfg": 1
+      },
+      "size": {
+        "long_side": 1024,
+        "multiple_of": 64
+      },
+      "max_references": 1,
+      "max_identities": 2,
+      "negative": false,
+      "prompt": {
+        "style": "prose"
+      },
+      "edit_guards": {
+        "pose": "nothing left where the moved part was"
+      }
+    },
+    {
+      "id": "generic-sd",
+      "label": "A generic diffusion model: tags, weights and a negative prompt",
+      "mode": "generate",
+      "generation": {
+        "model": "Example checkpoint",
+        "loras": [],
+        "sampler": "euler",
+        "steps": 28,
+        "cfg": 7
+      },
+      "size": {
+        "long_side": 768,
+        "multiple_of": 64
+      },
+      "max_references": 1,
+      "max_identities": 2,
+      "negative": true,
+      "prompt": {
+        "style": "tags",
+        "quality_tags": [
+          "masterpiece",
+          "best quality"
+        ]
+      }
+    }
+  ]
+}

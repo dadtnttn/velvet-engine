@@ -1,0 +1,7 @@
+{
+  "format": "velvet-artprep",
+  "version": 1,
+  "kind": "style",
+  "phrases": ["soft-edged illustration", "warm morning light", "flat painted colours", "clean ink outlines"],
+  "negative": ["photo", "3d render", "blurry", "watermark", "text", "extra arms"]
+}

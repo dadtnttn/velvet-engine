@@ -1,0 +1,32 @@
+{
+  "format": "velvet-artprep",
+  "version": 1,
+  "kind": "results",
+  "title": "Bakery round 1",
+  "shots": [
+    {
+      "shot": "ada-portrait-happy",
+      "art": "character.ada.portrait",
+      "variant": "happy",
+      "prompt": "A friendly baker <at the counter> & \"smiling\"",
+      "candidates": [
+        {
+          "seed": 101,
+          "name": "character.ada.portrait.happy_101",
+          "image": "ada-portrait-happy/character.ada.portrait.happy_101.png"
+        },
+        {
+          "seed": 102,
+          "name": "character.ada.portrait.happy_102",
+          "image": "ada-portrait-happy/character.ada.portrait.happy_102.png"
+        }
+      ]
+    },
+    {
+      "shot": "basket",
+      "art": "prop.bread_basket",
+      "variant": null,
+      "candidates": []
+    }
+  ]
+}

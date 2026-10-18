@@ -1,0 +1,134 @@
+[
+  {
+    "format": "velvet-artprep",
+    "version": 1,
+    "kind": "job",
+    "shot": "ada-master",
+    "profile": "generic-sd",
+    "art": "character.ada.fullbody",
+    "variant": null,
+    "characters": ["ada"],
+    "prompt": "masterpiece, best quality, soft-edged illustration, warm morning light, flat painted colours, clean ink outlines, Ada, human, slim build, light olive skin, short curly dark brown hair tied back with a red ribbon, green eyes, a small silver ring on her left hand, a cream apron over a blue linen dress with rolled sleeves, matte dry skin, full body, standing, arms relaxed at her sides, plain white background, even soft studio light, cream, blue and brown",
+    "negative": "photo, 3d render, blurry, watermark, text, extra arms, horns, tail",
+    "references": [],
+    "edit": null,
+    "size": [448, 768],
+    "generation": {
+      "model": "Example checkpoint",
+      "loras": [],
+      "sampler": "euler",
+      "scheduler": null,
+      "steps": 28,
+      "cfg": 7,
+      "shift": null
+    },
+    "seeds": [101, 102, 103, 104, 105, 106],
+    "outputs": [
+      { "seed": 101, "name": "character.ada.fullbody_101" },
+      { "seed": 102, "name": "character.ada.fullbody_102" },
+      { "seed": 103, "name": "character.ada.fullbody_103" },
+      { "seed": 104, "name": "character.ada.fullbody_104" },
+      { "seed": 105, "name": "character.ada.fullbody_105" },
+      { "seed": 106, "name": "character.ada.fullbody_106" }
+    ]
+  },
+  {
+    "format": "velvet-artprep",
+    "version": 1,
+    "kind": "job",
+    "shot": "bex-master",
+    "profile": "generic-sd",
+    "art": "character.bex.fullbody",
+    "variant": null,
+    "characters": ["bex"],
+    "prompt": "masterpiece, best quality, soft-edged illustration, warm morning light, flat painted colours, clean ink outlines, Bex, goat-folk courier, tall and lean, grey-brown fur, short cropped dark fur on the head, amber eyes, two short curved horns, a long tail with a white tip, a teal rain jacket with a yellow satchel strap, matte dry fur, (horizontal pupils:1.2), full body, standing, arms relaxed at the sides, plain white background, even soft studio light, teal, yellow and grey",
+    "negative": "photo, 3d render, blurry, watermark, text, extra arms, wings",
+    "references": [],
+    "edit": null,
+    "size": [448, 768],
+    "generation": {
+      "model": "Example checkpoint",
+      "loras": [],
+      "sampler": "euler",
+      "scheduler": null,
+      "steps": 28,
+      "cfg": 7,
+      "shift": null
+    },
+    "seeds": [101, 102, 103, 104, 105, 106],
+    "outputs": [
+      { "seed": 101, "name": "character.bex.fullbody_101" },
+      { "seed": 102, "name": "character.bex.fullbody_102" },
+      { "seed": 103, "name": "character.bex.fullbody_103" },
+      { "seed": 104, "name": "character.bex.fullbody_104" },
+      { "seed": 105, "name": "character.bex.fullbody_105" },
+      { "seed": 106, "name": "character.bex.fullbody_106" }
+    ]
+  },
+  {
+    "format": "velvet-artprep",
+    "version": 1,
+    "kind": "job",
+    "shot": "ada-portrait-neutral",
+    "profile": "generic-sd",
+    "art": "character.ada.portrait",
+    "variant": "neutral",
+    "characters": ["ada"],
+    "prompt": "masterpiece, best quality, soft-edged illustration, warm morning light, flat painted colours, clean ink outlines, soft lines, Ada, human, slim build, light olive skin, short curly dark brown hair tied back with a red ribbon, green eyes, a small silver ring on her left hand, a cream apron over a blue linen dress with rolled sleeves, matte dry skin, a friendly baker at the bread counter, half length, facing the viewer, calm, closed mouth, bakery counter with bread loaves behind her, morning light from a window on the left, cream, blue and warm brown",
+    "negative": "photo, 3d render, blurry, watermark, text, extra arms, extra fingers, smudged text, horns, tail",
+    "references": [{ "id": "character.ada.fullbody", "variant": null }],
+    "edit": null,
+    "size": [576, 768],
+    "generation": {
+      "model": "Example checkpoint",
+      "loras": [],
+      "sampler": "euler",
+      "scheduler": null,
+      "steps": 28,
+      "cfg": 7,
+      "shift": null
+    },
+    "seeds": [101, 102, 103, 104, 105, 106],
+    "outputs": [
+      { "seed": 101, "name": "character.ada.portrait.neutral_101" },
+      { "seed": 102, "name": "character.ada.portrait.neutral_102" },
+      { "seed": 103, "name": "character.ada.portrait.neutral_103" },
+      { "seed": 104, "name": "character.ada.portrait.neutral_104" },
+      { "seed": 105, "name": "character.ada.portrait.neutral_105" },
+      { "seed": 106, "name": "character.ada.portrait.neutral_106" }
+    ]
+  },
+  {
+    "format": "velvet-artprep",
+    "version": 1,
+    "kind": "job",
+    "shot": "basket",
+    "profile": "generic-sd",
+    "art": "prop.bread_basket",
+    "variant": null,
+    "characters": [],
+    "prompt": "masterpiece, best quality, soft-edged illustration, warm morning light, flat painted colours, clean ink outlines, three-quarter view, a wooden table, soft morning light",
+    "negative": "photo, 3d render, blurry, watermark, text, extra arms",
+    "references": [],
+    "edit": null,
+    "size": [576, 768],
+    "generation": {
+      "model": "Example checkpoint",
+      "loras": [],
+      "sampler": "euler",
+      "scheduler": null,
+      "steps": 28,
+      "cfg": 7,
+      "shift": null
+    },
+    "seeds": [101, 102, 103, 104, 105, 106],
+    "outputs": [
+      { "seed": 101, "name": "prop.bread_basket_101" },
+      { "seed": 102, "name": "prop.bread_basket_102" },
+      { "seed": 103, "name": "prop.bread_basket_103" },
+      { "seed": 104, "name": "prop.bread_basket_104" },
+      { "seed": 105, "name": "prop.bread_basket_105" },
+      { "seed": 106, "name": "prop.bread_basket_106" }
+    ]
+  }
+]
