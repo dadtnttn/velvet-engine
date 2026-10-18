@@ -1,0 +1,18 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "note": "Places and endings of the story. The dialogue lives in faro.en.md, a guion, not here.",
+  "entries": {
+    "scene.puerto": "Brisa Baja pier",
+    "scene.taberna": "The Crooked Anchor tavern",
+    "scene.faro": "Brisa Baja lighthouse",
+    "ending.heading": "Ending",
+    "ending.back": "Back to title",
+    "ending.boxes": { "one": "You have read {count} line of text.", "other": "You have read {count} lines of text." },
+    "ending.luz.title": "The light returns to the bay",
+    "ending.luz.body": "Lupa's sea glass cuts through the fog like a golden thread. A slow boat sails into the harbour, and Tomé cries a little and says it's the salt.",
+    "ending.campana.title": "A bell in the fog",
+    "ending.campana.body": "The bell rings until your arms ache. The boats follow the sound, one by one, and Brisa Baja falls asleep at ease."
+  }
+}

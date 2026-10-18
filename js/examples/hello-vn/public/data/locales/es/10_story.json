@@ -1,0 +1,18 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "es",
+  "note": "Lugares y finales de la historia. Los diálogos de faro.md no están aquí: son guiones.",
+  "entries": {
+    "scene.puerto": "Muelle de Brisa Baja",
+    "scene.taberna": "Taberna El Ancla Torcida",
+    "scene.faro": "Faro de Brisa Baja",
+    "ending.heading": "Final",
+    "ending.back": "Volver al título",
+    "ending.boxes": { "one": "Has leído {count} caja de texto.", "other": "Has leído {count} cajas de texto." },
+    "ending.luz.title": "La luz vuelve a la bahía",
+    "ending.luz.body": "El vidrio de Lupa cruza la niebla como un hilo de oro. Un barco lento entra en el puerto, y Tomé llora un poco y dice que es por la sal.",
+    "ending.campana.title": "Una campana en la niebla",
+    "ending.campana.body": "La campana suena hasta que te duelen los brazos. Los barcos siguen el sonido, uno a uno, y Brisa Baja se duerme tranquila."
+  }
+}

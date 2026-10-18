@@ -23,6 +23,7 @@ import {
   type SettingsStore,
 } from "@velvet/core";
 import { GuionLibrary } from "@velvet/guion";
+import type { Devtools } from "@velvet/devtools";
 import type { I18n, LocaleArgs } from "@velvet/i18n";
 import { createStage, createToast, type Stage, type Toast, type ToastTone } from "@velvet/ui";
 import { BoardView, type ViewLabels } from "./board-view";
@@ -124,6 +125,7 @@ export class Game {
   private readonly loop: GameLoop;
   private board: Board;
   private fullscreenOn = false;
+  private devtools: Devtools | null = null;
 
   /**
    * Builds the game inside the page's host element, loads the catalog, the texts and the guiones, and
@@ -154,6 +156,18 @@ export class Game {
     const game = new Game(stage, texts, catalog, library, board, settings);
     game.fullscreenOn = await isFullscreen().catch(() => false);
     game.draw();
+    if (import.meta.env.DEV) {
+      // Dev builds only: the module is loaded here, so a release build leaves it out of the bundle.
+      const { mountDevtools } = await import("./devtools");
+      game.devtools = mountDevtools({
+        host,
+        clock: game.clock,
+        loop: game.loop,
+        stage,
+        board: () => game.board,
+        flushEvents: () => game.flushEvents(),
+      });
+    }
     game.loop.start();
     game.begin();
     return game;
@@ -254,6 +268,7 @@ export class Game {
   /** Stops the loop, the key and pointer listeners, and the stage. A page never needs it; the tests do. */
   dispose(): void {
     this.loop.stop();
+    this.devtools?.destroy();
     this.keys.detach();
     this.shortcuts.detach();
     window.removeEventListener("keydown", this.onKeyDown);

@@ -32,6 +32,15 @@ consumes directly, so there is no build step for them. The one built part is the
 missing or older than the Rust sources. That needs Rust with the `wasm32-unknown-unknown` target
 (`rustup target add wasm32-unknown-unknown`) and `cargo install wasm-bindgen-cli --version 0.2.126`.
 
+## Examples
+
+| Example | What it shows | Run it | Tutorial |
+|---|---|---|---|
+| `examples/hello-cards` | A cards-on-a-board game in the style of Stacklands: the card rules, the board view, drags, the guide's conversation, saves, and the developer tools. | `pnpm --filter hello-cards dev` (port 5173) | [03](../docs/tutorials/js/03_cards_on_a_board.md) |
+| `examples/hello-vn` | A short visual novel: a screen stack, a guion in the dialogue box, save slots, settings, two languages, art and sound by id, motion, and the developer tools. | `pnpm --filter hello-vn dev` (port 5174) | [02](../docs/tutorials/js/02_visual_novel.md) |
+
+The tutorials for the whole workspace are in `docs/tutorials/js/`, starting with [01: your first game](../docs/tutorials/js/01_first_game.md).
+
 ## Commands
 
     pnpm install      # once, and after changing a package.json
@@ -45,7 +54,7 @@ Run them from `js/`. Developed with Node.js 25 and pnpm 11.
 
     js/
       packages/             libraries (private, source only)
-      examples/             small games that use them (none yet)
+      examples/             small games that use them: hello-cards and hello-vn (see Examples)
       tsconfig.base.json    shared compiler options: strict, ES2022, bundler resolution
       tsconfig.json         typecheck entry point for all packages and examples
       vitest.config.ts      test discovery

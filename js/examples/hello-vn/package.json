@@ -1,0 +1,27 @@
+{
+  "name": "hello-vn",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A short visual novel that shows the general-purpose Velvet JS packages: screens, dialogue, saves, settings, audio and devtools.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@velvet/assets": "workspace:*",
+    "@velvet/audio": "workspace:*",
+    "@velvet/core": "workspace:*",
+    "@velvet/devtools": "workspace:*",
+    "@velvet/guion": "workspace:*",
+    "@velvet/i18n": "workspace:*",
+    "@velvet/tween": "workspace:*",
+    "@velvet/ui": "workspace:*",
+    "@velvet/wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@velvet/testing": "workspace:*",
+    "vite": "8.3.4"
+  }
+}

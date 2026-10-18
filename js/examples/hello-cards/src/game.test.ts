@@ -141,4 +141,19 @@ describe("the game in a page", () => {
       host.remove();
     }
   });
+
+  it("mounts the developer tools in a development build, and removes them when the game is disposed", async () => {
+    expect(import.meta.env.DEV).toBe(true);
+    stubLayout();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const game = await Game.start(host);
+    try {
+      expect(host.querySelector(".vdt-root")).not.toBeNull();
+    } finally {
+      game.dispose();
+      expect(host.querySelector(".vdt-root")).toBeNull();
+      host.remove();
+    }
+  });
 });

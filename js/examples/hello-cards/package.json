@@ -12,6 +12,7 @@
   "dependencies": {
     "@velvet/cards": "workspace:*",
     "@velvet/core": "workspace:*",
+    "@velvet/devtools": "workspace:*",
     "@velvet/guion": "workspace:*",
     "@velvet/i18n": "workspace:*",
     "@velvet/ui": "workspace:*",

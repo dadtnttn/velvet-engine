@@ -1,0 +1,46 @@
+{
+  "format": "velvet-art",
+  "version": 1,
+  "entries": [
+    {
+      "id": "bg.titulo",
+      "kind": "background",
+      "size": [1920, 1080],
+      "meta": { "prompt": "a lighthouse on a cliff above a grey harbour at dusk, painted", "style": ["soft painted"] }
+    },
+    {
+      "id": "bg.puerto",
+      "kind": "background",
+      "size": [1920, 1080],
+      "meta": { "prompt": "a foggy wooden pier with lanterns going dark, night", "style": ["soft painted"] }
+    },
+    {
+      "id": "bg.taberna",
+      "kind": "background",
+      "size": [1920, 1080],
+      "meta": { "prompt": "a warm tavern with a long bar, bread and fishing nets on the walls", "style": ["soft painted"] }
+    },
+    {
+      "id": "bg.faro",
+      "kind": "background",
+      "size": [1920, 1080],
+      "meta": { "prompt": "the inside of a lighthouse, spiral stairs, a dark lamp, fog at the windows", "style": ["soft painted"] }
+    },
+    {
+      "id": "portrait.tome",
+      "kind": "portrait",
+      "size": [360, 520],
+      "anchor": [0.5, 1],
+      "variants": ["preocupado", "sonriente"],
+      "meta": { "prompt": "a kind old lighthouse keeper with a grey beard and a wool coat", "style": ["soft painted"] }
+    },
+    {
+      "id": "portrait.lupa",
+      "kind": "portrait",
+      "size": [360, 520],
+      "anchor": [0.5, 1],
+      "variants": ["picara"],
+      "meta": { "prompt": "a tavern keeper with a sly smile, rolled sleeves and freckles", "style": ["soft painted"] }
+    }
+  ]
+}

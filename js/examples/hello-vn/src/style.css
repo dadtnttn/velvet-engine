@@ -1,0 +1,198 @@
+/*
+ * hello-vn: the look of the visual novel, on top of the HUD defaults of @velvet/ui.
+ *
+ * The theme is set with the ui's custom properties, on .vu-root, so every component follows it. The geometry of
+ * the screens is in logical pixels (the stage draws the 1920 by 1080 surface and scales it). Hover, focus and
+ * press change colour, brightness or opacity only, never a size or a position.
+ */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #07090f;
+}
+
+.game-host {
+  position: fixed;
+  inset: 0;
+}
+
+.vu-viewport {
+  --vu-bars: #07090f;
+}
+
+.vu-root {
+  --vu-ink: #17141f;
+  --vu-paper: #f5efe3;
+  --vu-accent: #7b5cc4;
+  --vu-accent-ink: #f8f4ff;
+  --vu-gold: #d8ad55;
+  --vu-gold-hi: #ffe7a6;
+  --vu-danger: #d9556e;
+  --vu-muted: #8a8398;
+  --vu-scrim: rgb(8 8 16 / 0.7);
+  --vu-font: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --vu-size: 26px;
+  --vu-size-small: 19px;
+  --vu-size-title: 30px;
+  --vu-slant: 18px;
+  --vu-pad-x: 24px;
+  --vu-pad-y: 8px;
+  --vu-gap: 12px;
+  --vu-meter-height: 14px;
+  background: #0b0d16;
+}
+
+/* Every screen covers the stage. The pictures of a screen sit under its plate. */
+.vn-screen-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.vn-bg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  object-fit: cover;
+}
+
+.vn-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The title: the picture, and the plate on the left with the name and the three choices. */
+.vn-title .vn-page {
+  justify-content: flex-start;
+  padding-left: 160px;
+}
+
+.vn-title .vn-plate {
+  width: 640px;
+}
+
+.vn-title-text {
+  margin: 0 0 8px;
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--vu-ink);
+}
+
+.vn-title-sub {
+  margin: 0 0 var(--vu-gap);
+  color: var(--vu-muted);
+  font-size: var(--vu-size-small);
+}
+
+/* The menus and the cards on top of the game: a plate of a fixed width, in the middle. */
+.vn-pause .vu-plate,
+.vn-settings .vu-plate,
+.vn-saves .vu-plate,
+.vn-ending .vu-plate {
+  width: 760px;
+}
+
+.vn-saves .vu-plate {
+  width: 980px;
+}
+
+.vn-ending .vu-plate {
+  width: 900px;
+}
+
+.vn-ending-title {
+  margin: 0 0 var(--vu-gap);
+  font-size: var(--vu-size-title);
+  font-weight: 800;
+  color: var(--vu-ink);
+}
+
+.vn-ending-body,
+.vn-ending-boxes {
+  margin: 0 0 var(--vu-gap);
+  font-size: var(--vu-size);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--vu-ink);
+}
+
+.vn-ending-boxes {
+  font-size: var(--vu-size-small);
+  color: var(--vu-muted);
+}
+
+.vn-saves .vn-screen-root,
+.vn-saves .vu-button {
+  margin-top: var(--vu-gap);
+}
+
+/* The game screen: the backdrop, the top bar and the key hints. The dialogue box is placed by @velvet/ui. */
+.vn-game {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #0b0d16;
+}
+
+.vn-backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.vn-topbar {
+  position: absolute;
+  top: 28px;
+  right: 56px;
+  left: 56px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--vu-gap);
+}
+
+.vn-topbar .vu-menu-item {
+  white-space: nowrap;
+}
+
+.vn-hints {
+  position: absolute;
+  right: 56px;
+  bottom: 14px;
+  left: 56px;
+  z-index: 20;
+  display: flex;
+  gap: 28px;
+  color: var(--vu-paper);
+  font-size: var(--vu-size-small);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.8);
+}
+
+.vn-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vn-start-error {
+  margin: 0;
+  padding: 48px;
+  color: var(--vu-paper);
+  font-size: 24px;
+}
+
+/* A portrait in the dialogue box: the box keeps the size of the box's slot, and the picture fills it. */
+.vn-portrait {
+  display: flex;
+  width: 360px;
+  height: 520px;
+  align-items: flex-end;
+}

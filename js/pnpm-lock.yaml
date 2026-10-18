@@ -29,6 +29,9 @@ importers:
       '@velvet/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@velvet/devtools':
+        specifier: workspace:*
+        version: link:../../packages/devtools
       '@velvet/guion':
         specifier: workspace:*
         version: link:../../packages/guion
@@ -42,6 +45,43 @@ importers:
         specifier: workspace:*
         version: link:../../packages/wasm
     devDependencies:
+      vite:
+        specifier: 8.3.4
+        version: 8.3.4(@types/node@25.9.9)
+
+  examples/hello-vn:
+    dependencies:
+      '@velvet/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
+      '@velvet/audio':
+        specifier: workspace:*
+        version: link:../../packages/audio
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@velvet/devtools':
+        specifier: workspace:*
+        version: link:../../packages/devtools
+      '@velvet/guion':
+        specifier: workspace:*
+        version: link:../../packages/guion
+      '@velvet/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@velvet/tween':
+        specifier: workspace:*
+        version: link:../../packages/tween
+      '@velvet/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@velvet/wasm':
+        specifier: workspace:*
+        version: link:../../packages/wasm
+    devDependencies:
+      '@velvet/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
       vite:
         specifier: 8.3.4
         version: 8.3.4(@types/node@25.9.9)

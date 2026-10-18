@@ -1,0 +1,33 @@
+{
+  "format": "velvet-audio",
+  "version": 1,
+  "sounds": [
+    {
+      "id": "ui.blip",
+      "files": ["ui/blip.wav"],
+      "bus": "ui",
+      "volume": 0.5,
+      "cooldown_ms": 45,
+      "max_voices": 2,
+      "preload": true,
+      "meta": { "note": "one short blip per letter of the text" }
+    },
+    {
+      "id": "ui.click",
+      "files": ["ui/click.wav"],
+      "bus": "ui",
+      "volume": 0.8,
+      "preload": true,
+      "meta": { "note": "a select click for choices and menus" }
+    },
+    {
+      "id": "music.pad",
+      "files": ["music/pad.wav"],
+      "bus": "music",
+      "volume": 0.7,
+      "loop": true,
+      "loop_points": { "start": 0, "end": 4 },
+      "meta": { "note": "a soft pad of four seconds, made to loop without a seam" }
+    }
+  ]
+}
