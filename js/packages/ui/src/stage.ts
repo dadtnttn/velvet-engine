@@ -10,7 +10,9 @@
 //       .vu-root          logical size, scaled around its top-left corner and centred
 //
 // Pointer conversion reads the root's rectangle on screen, which is the rectangle the browser
-// draws, so the inverse is exact at any window size, pixel ratio or scroll position.
+// draws, so the inverse is exact at any window size, pixel ratio or scroll position. `toLogical`
+// gives null on the bars; `toLogicalClamped` clamps to the nearest edge instead, for a drag that
+// may leave the surface.
 //
 // Pixels: a canvas inside the stage is sized to `pixelWidth` by `pixelHeight` and drawn with
 // `k` pixels per logical pixel. With `native` on (the default), those are the screen's own
@@ -244,6 +246,28 @@ export class Stage {
     return { x, y };
   }
 
+  /**
+   * Like {@link Stage.toLogical}, but it never returns null. A point on the bars or outside the
+   * window is clamped to the nearest edge of the logical rectangle (0 to width, 0 to height), so a
+   * drag that leaves the surface keeps following the pointer at that edge. A window with no area
+   * gives the origin.
+   */
+  toLogicalClamped(clientX: number, clientY: number): LogicalPoint {
+    const frame = this.root.getBoundingClientRect();
+    if (frame.width <= 0 || frame.height <= 0) return { x: 0, y: 0 };
+    const x = ((clientX - frame.left) * this.logicalWidth) / frame.width;
+    const y = ((clientY - frame.top) * this.logicalHeight) / frame.height;
+    return { x: clampTo(x, this.logicalWidth), y: clampTo(y, this.logicalHeight) };
+  }
+
+  /**
+   * True when a client (CSS pixel) position lies on the presented 16:9 area, and false on the bars
+   * and outside the window. It gives the same answer as `toLogical(x, y) !== null`.
+   */
+  isInside(clientX: number, clientY: number): boolean {
+    return this.toLogical(clientX, clientY) !== null;
+  }
+
   /** The client (CSS pixel) position of a logical point. The inverse of {@link Stage.toLogical}. */
   toClient(x: number, y: number): { readonly x: number; readonly y: number } {
     const frame = this.root.getBoundingClientRect();
@@ -394,6 +418,12 @@ function isPositive(value: number): boolean {
 /** The value, or zero when it is not a finite positive number. */
 function nonNegative(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/** Clamps a value into [0, max]. A NaN becomes 0, so the result is always inside the range. */
+function clampTo(value: number, max: number): number {
+  if (Number.isNaN(value)) return 0;
+  return Math.min(max, Math.max(0, value));
 }
 
 /** The device pixel ratio of the window, or 1 when the host gives none that makes sense. */

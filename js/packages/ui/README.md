@@ -57,6 +57,8 @@ Load the look once, and create the stage in the page's game element:
 | `k` | Backing-store pixels per logical pixel. In native mode these are device pixels. With `native: false`, `k` is 1 and the compositor scales the canvas. |
 | `scale`, `layout` | CSS pixels per logical pixel, and a snapshot of the whole presentation. |
 | `toLogical(x, y)` | Client pixels to logical pixels, or `null` on the bars and outside the window. |
+| `toLogicalClamped(x, y)` | Like `toLogical`, but never `null`: a point on the bars or outside the window is clamped to the nearest edge of the surface. Use it for a drag that may leave the surface. A window with no area gives the origin. |
+| `isInside(x, y)` | `true` on the presented 16:9 area, `false` on the bars. The same answer as `toLogical(x, y) !== null`. |
 | `toClient(x, y)` | The inverse of `toLogical`. |
 | `rectOf(element)` | An element's box in logical pixels. |
 | `onResize(listener)` | Runs after a change of the layout: a window resize, a new device pixel ratio, or `setNative`. It returns a function that removes the listener. |
@@ -67,7 +69,8 @@ Rules that the stage keeps:
 
 - The picture keeps 16:9 (the logical aspect) and is never stretched. The rest of the window is bars.
 - The bars are not interactive: clicks and moves on them stop at the viewport, so the game's window
-  listeners never see them. `toLogical` returns `null` for them.
+  listeners never see them. `toLogical` returns `null` for them. A drag that may leave the surface uses
+  `toLogicalClamped`, which keeps following the pointer at the nearest edge.
 - The root's size and position are inline styles, so the stage works without the stylesheet.
 - Canvases should be sized to `pixelWidth` by `pixelHeight` and drawn with `k`. When the backing store
   already matches the area's device pixels, the compositor copies it directly.
@@ -87,7 +90,7 @@ that is left out keeps its value. To clear a text or an optional value, pass `nu
 | `createTooltip({ stage })` | `anchor`, `text`, `placement` | Points at `anchor`, above it by default, and stays inside the stage. `anchor: null` hides it. |
 | `createToast({ maxVisible, duration, fadeMs })` | see left | Adds `show(message, tone?)`. Notices queue, and fade after `duration` ms. |
 | `createModal({ title, body, actions, closeOnEscape })` | see left | Adds `open()` (a promise of the chosen action id, or `null` on Escape) and `close(result?)`. Focus stays inside while it is open. |
-| `createMenu({ items, label, onSelect })` | see left | Arrow keys, Home, End, Enter and Space. Hovering an item moves the focus to it. |
+| `createMenu({ items, label, onSelect })` | see left | Arrow keys, Home, End, Enter and Space. Hovering an item moves the focus to it. Adds `focus(index)` and the read-only `focusedIndex`. `focus` clamps an index past either end, and a disabled item gives the focus to the nearest enabled one. The menu follows the DOM focus, so an item that a click or `el.focus()` focuses becomes the focused item. Its keys call `preventDefault`, so a game's `ActionMap` ignores them. |
 
 Each factory appends nothing by itself: put `el` in the stage's `root` (or in any element of the page).
 

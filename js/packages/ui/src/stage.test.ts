@@ -235,6 +235,95 @@ describe("pointer conversion", () => {
   });
 });
 
+describe("clamped pointer conversion", () => {
+  it("clamps a point on the left or right bar to the nearest side in a wide window", () => {
+    // 2560x900: the surface is 1600 wide and starts at client x 480. Its height maps 900 to 1080.
+    const stage = stageIn(2560, 900);
+    const left = stage.toLogicalClamped(100, 450);
+    expect(left.x).toBe(0);
+    expect(left.y).toBeCloseTo(540, 6);
+    const right = stage.toLogicalClamped(2400, 450);
+    expect(right.x).toBe(1920);
+    expect(right.y).toBeCloseTo(540, 6);
+  });
+
+  it("clamps a point above or below a wide window to the top or bottom edge", () => {
+    const stage = stageIn(2560, 900);
+    const above = stage.toLogicalClamped(1280, -50);
+    expect(above.x).toBeCloseTo(960, 6);
+    expect(above.y).toBe(0);
+    const below = stage.toLogicalClamped(1280, 2000);
+    expect(below.y).toBe(1080);
+  });
+
+  it("clamps a point on the top or bottom bar to the nearest edge in a tall window", () => {
+    // 800x1000: the surface is 450 tall and starts at client y 275. Its width maps 800 to 1920.
+    const stage = stageIn(800, 1000);
+    const top = stage.toLogicalClamped(400, 100);
+    expect(top.x).toBeCloseTo(960, 6);
+    expect(top.y).toBe(0);
+    const bottom = stage.toLogicalClamped(400, 900);
+    expect(bottom.x).toBeCloseTo(960, 6);
+    expect(bottom.y).toBe(1080);
+    const outsideLeft = stage.toLogicalClamped(-30, 500);
+    expect(outsideLeft.x).toBe(0);
+    expect(outsideLeft.y).toBeCloseTo(540, 6);
+  });
+
+  it("agrees with toLogical on the presented area", () => {
+    const stage = stageIn(2560, 900);
+    for (const [x, y] of [
+      [1280, 450],
+      [482, 1],
+      [2078, 899],
+    ] as const) {
+      const exact = stage.toLogical(x, y);
+      const clamped = stage.toLogicalClamped(x, y);
+      expect(exact).not.toBeNull();
+      expect(clamped.x).toBeCloseTo(exact?.x ?? Number.NaN, 9);
+      expect(clamped.y).toBeCloseTo(exact?.y ?? Number.NaN, 9);
+    }
+  });
+
+  it("keeps every clamped point inside the logical rectangle, wide and tall", () => {
+    for (const [width, height] of [
+      [2560, 900],
+      [800, 1000],
+    ] as const) {
+      const stage = stageIn(width, height);
+      for (let x = -600; x <= width + 600; x += 97) {
+        for (let y = -600; y <= height + 600; y += 89) {
+          const point = stage.toLogicalClamped(x, y);
+          expect(point.x).toBeGreaterThanOrEqual(0);
+          expect(point.x).toBeLessThanOrEqual(1920);
+          expect(point.y).toBeGreaterThanOrEqual(0);
+          expect(point.y).toBeLessThanOrEqual(1080);
+        }
+      }
+      destroyAndReset(stage);
+    }
+  });
+
+  it("gives the origin for a window with no area", () => {
+    const stage = stageIn(0, 0);
+    expect(stage.toLogicalClamped(50, 50)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("tells whether a client point is on the presented area", () => {
+    // Wide window: the surface is at x 480 to 2080. Tall window: at y 275 to 725.
+    const wide = stageIn(2560, 900);
+    expect(wide.isInside(1280, 450)).toBe(true);
+    expect(wide.isInside(100, 450)).toBe(false);
+    expect(wide.isInside(2400, 450)).toBe(false);
+    destroyAndReset(wide);
+
+    const tall = stageIn(800, 1000);
+    expect(tall.isInside(400, 500)).toBe(true);
+    expect(tall.isInside(400, 100)).toBe(false);
+    expect(tall.isInside(400, 900)).toBe(false);
+  });
+});
+
 describe("the presented root", () => {
   it("places and scales the root with inline styles, so the browser draws it in the centre", () => {
     const stage = stageIn(2560, 900);

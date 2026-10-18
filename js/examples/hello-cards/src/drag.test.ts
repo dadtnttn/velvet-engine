@@ -183,4 +183,23 @@ describe("dragging on the table", () => {
     expect(card?.y ?? Number.NaN).toBeCloseTo(expectedTop / 160, 3);
     table.close();
   });
+
+  it("takes a pointer that leaves the surface to the nearest edge, not to where it last was inside", async () => {
+    // A release far past the right edge lands the stack where a release on the edge itself does.
+    const releasedAt = async (x: number): Promise<{ x: number; y: number }> => {
+      let wood = 0;
+      const table = await makeTable((board) => {
+        wood = board.spawn("wood", 0, 0);
+      });
+      const start = centreOf(table.element(wood));
+      table.dragCard(wood, [start, { x: 1500, y: 500 }, { x, y: 500 }]);
+      const card = table.board.cards().find((candidate) => candidate.id === wood);
+      table.close();
+      return { x: card?.x ?? Number.NaN, y: card?.y ?? Number.NaN };
+    };
+    const beyond = await releasedAt(2600);
+    const onEdge = await releasedAt(1920);
+    expect(beyond.x).toBeCloseTo(onEdge.x, 9);
+    expect(beyond.y).toBeCloseTo(onEdge.y, 9);
+  });
 });

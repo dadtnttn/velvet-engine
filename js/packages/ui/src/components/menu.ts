@@ -4,6 +4,10 @@
 // the first and last enabled item. Enter or Space chooses the focused item. Moving the mouse over
 // an item moves the focus to it, and a click chooses it. The focus is the DOM focus, so a screen
 // reader announces each item as it is reached. Only the focused item is in the Tab order.
+//
+// The menu follows the DOM focus in both directions. `focus(index)` gives an item the focus from
+// the game's side. An item that the page focuses by itself (a click, or `element.focus()`) becomes
+// the focused item too, so the arrows and Enter act on the item that the player can see.
 
 import { mergeDefined, type VuComponent } from "./component";
 import { createElement } from "./dom";
@@ -28,13 +32,26 @@ export interface MenuProps {
   readonly onSelect?: (id: string) => void;
 }
 
+/** A menu. It adds the means to focus an item by its index to the usual component methods. */
+export interface Menu extends VuComponent<MenuProps> {
+  /**
+   * Gives the DOM focus to the item at `index`, counting from 0. An index past either end is clamped
+   * to the first or the last item. A disabled item cannot take the focus, so the nearest enabled item
+   * takes it: the next one after the index, or else the one before it. Does nothing when no item is
+   * enabled, and ignores an index that is not a number.
+   */
+  focus(index: number): void;
+  /** The index of the focused item, or -1 when no item can take the focus. Read-only. */
+  readonly focusedIndex: number;
+}
+
 const DEFAULTS: MenuProps = { items: [], label: "" };
 
 /**
  * Creates a menu.
  * @param props - the starting props.
  */
-export function createMenu(props: MenuProps = {}): VuComponent<MenuProps> {
+export function createMenu(props: MenuProps = {}): Menu {
   const el = createElement("div", "vu-menu");
   el.setAttribute("role", "menu");
   el.setAttribute("aria-orientation", "vertical");
@@ -89,6 +106,29 @@ export function createMenu(props: MenuProps = {}): VuComponent<MenuProps> {
   /** The first enabled index, or -1 when none. */
   const firstEnabled = (): number => step(-1, 1);
 
+  /**
+   * The nearest enabled index to `from`: the first enabled one at or after it, or else the last one
+   * before it. -1 when no item is enabled. `from` must be a valid index.
+   */
+  const nearestEnabled = (from: number): number => {
+    const count = itemList().length;
+    for (let index = from; index < count; index += 1) {
+      if (isEnabled(index)) return index;
+    }
+    for (let index = from - 1; index >= 0; index -= 1) {
+      if (isEnabled(index)) return index;
+    }
+    return -1;
+  };
+
+  /** Gives the focus to the item at an index, clamped into the list (see `Menu.focus`). */
+  const focusByIndex = (index: number): void => {
+    const count = itemList().length;
+    if (count === 0 || !Number.isFinite(index)) return;
+    const wanted = Math.min(Math.max(Math.trunc(index), 0), count - 1);
+    focusItem(nearestEnabled(wanted));
+  };
+
   const choose = (index: number): void => {
     if (!isEnabled(index)) return;
     const item = itemList()[index];
@@ -121,6 +161,15 @@ export function createMenu(props: MenuProps = {}): VuComponent<MenuProps> {
   };
   el.addEventListener("keydown", onKeyDown);
 
+  /** The DOM focus moved onto an item, by a click, a script or the keyboard: the menu follows it. */
+  const onFocusIn = (event: FocusEvent): void => {
+    const index = rows.findIndex((row) => row === event.target);
+    if (index < 0 || index === focusIndex) return;
+    focusIndex = index;
+    applyTabStops();
+  };
+  el.addEventListener("focusin", onFocusIn);
+
   const render = (): void => {
     const hadFocus = el.contains(document.activeElement);
     const label = current.label ?? "";
@@ -152,12 +201,17 @@ export function createMenu(props: MenuProps = {}): VuComponent<MenuProps> {
 
   return {
     el,
+    get focusedIndex(): number {
+      return focusIndex;
+    },
+    focus: focusByIndex,
     update(next: Partial<MenuProps>): void {
       current = mergeDefined(current, next);
       render();
     },
     destroy(): void {
       el.removeEventListener("keydown", onKeyDown);
+      el.removeEventListener("focusin", onFocusIn);
       el.remove();
     },
   };

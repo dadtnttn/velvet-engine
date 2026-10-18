@@ -3,9 +3,8 @@
 // so `refresh` rewrites them without closing the menu.
 
 import type { I18n } from "@velvet/i18n";
-import { createMenu, createPlate, type MenuItem, type MenuProps, type Plate, type VuComponent } from "@velvet/ui";
+import { createMenu, createPlate, type Menu, type MenuItem, type Plate } from "@velvet/ui";
 import { LANGUAGE_NAMES, LANGUAGES, type Language } from "./config";
-import { keepKeysInMenu } from "./keys";
 
 /** What the menu's choices do. Continue is handled by the menu itself. */
 export interface PauseActions {
@@ -36,7 +35,7 @@ export class PauseMenu {
   private readonly stateOf: () => PauseState;
   private readonly overlay: HTMLElement;
   private readonly plate: Plate;
-  private menu: VuComponent<MenuProps> | null = null;
+  private menu: Menu | null = null;
 
   /**
    * @param parent - the element that the overlay is appended to (the stage's root).
@@ -70,10 +69,9 @@ export class PauseMenu {
       items: this.items(),
       onSelect: (id) => this.select(id),
     });
-    keepKeysInMenu(this.menu.el);
     this.plate.body.replaceChildren(this.menu.el);
     this.overlay.hidden = false;
-    this.menu.el.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    this.menu.focus(0);
   }
 
   /** Closes the menu. Focus goes back to the page. */

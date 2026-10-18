@@ -49,17 +49,28 @@ import { PauseMenu } from "./pause-menu";
 import { buildSaveData, parseSaveData, type GameSaveData } from "./save-data";
 import { asLanguage, createTexts } from "./texts";
 import { isFullscreen, logLine, quitApp, readSetting, setFullscreen, writeSetting } from "./platform";
-import { focusIsControl } from "./keys";
 
-/** The keys and buttons that the game listens to, by name. */
-type Action = "pause" | "speed1" | "speed2" | "speed3" | "quickSave" | "quickLoad" | "menu" | "confirm";
+/**
+ * The game's own keys, by name. Enter and Space are not counted while a control has the focus: a
+ * focused button clicks, and a focused menu item chooses, so the game must not act as well.
+ */
+type Action = "pause" | "confirm";
 
-/** The keys, with the speed each of the first three speed actions sets. */
-const SPEED_ACTIONS: readonly Action[] = ["speed1", "speed2", "speed3"];
+/** The shortcuts, by name. They work while a control has the focus too, as they always have. */
+type Shortcut = "speed1" | "speed2" | "speed3" | "quickSave" | "quickLoad" | "menu";
 
-/** The bindings of the actions. Enter and Space both confirm a line of dialogue. */
+/** The speed shortcuts, in the order of the speeds they set. */
+const SPEED_SHORTCUTS: readonly Shortcut[] = ["speed1", "speed2", "speed3"];
+
+/** The bindings of the game's own keys. Enter and Space both confirm a line of dialogue. */
 const BINDINGS: readonly Binding<Action>[] = [
   { action: "pause", control: { type: "key", key: "Space" } },
+  { action: "confirm", control: { type: "key", key: "Enter" } },
+  { action: "confirm", control: { type: "key", key: "NumpadEnter" } },
+];
+
+/** The bindings of the shortcuts. Their map counts keys from controls, so F5 still works after a click. */
+const SHORTCUT_BINDINGS: readonly Binding<Shortcut>[] = [
   { action: "speed1", control: { type: "key", key: "Digit1" } },
   { action: "speed1", control: { type: "key", key: "Numpad1" } },
   { action: "speed2", control: { type: "key", key: "Digit2" } },
@@ -69,8 +80,6 @@ const BINDINGS: readonly Binding<Action>[] = [
   { action: "quickSave", control: { type: "key", key: "F5" } },
   { action: "quickLoad", control: { type: "key", key: "F9" } },
   { action: "menu", control: { type: "key", key: "Escape" } },
-  { action: "confirm", control: { type: "key", key: "Enter" } },
-  { action: "confirm", control: { type: "key", key: "NumpadEnter" } },
 ];
 
 /** Fetches a text file, and rejects when the server does not have it. */
@@ -103,6 +112,7 @@ export class Game {
   private readonly defs = new Map<string, CardDef>();
   private readonly clock: GameClock;
   private readonly keys: ActionMap<Action>;
+  private readonly shortcuts: ActionMap<Shortcut>;
   private readonly saves: SaveStore;
   private readonly view: BoardView;
   private readonly hud: Hud;
@@ -212,6 +222,9 @@ export class Game {
 
     this.keys = new ActionMap<Action>(BINDINGS);
     this.keys.attach(window);
+    this.shortcuts = new ActionMap<Shortcut>(SHORTCUT_BINDINGS, { captureControls: true });
+    this.shortcuts.attach(window);
+    // Added after the maps: they read F5 and F9 before this listener cancels the page's reload.
     window.addEventListener("keydown", this.onKeyDown);
     this.saves = createSaveStore({ game: GAME_ID, version: SAVE_VERSION });
     this.loop = new GameLoop({
@@ -230,6 +243,7 @@ export class Game {
   dispose(): void {
     this.loop.stop();
     this.keys.detach();
+    this.shortcuts.detach();
     window.removeEventListener("keydown", this.onKeyDown);
     this.drag.detach();
     this.stage.destroy();
@@ -266,21 +280,25 @@ export class Game {
     }
     this.applyEvents(this.board.tick(gameSeconds));
     this.keys.endFrame();
+    this.shortcuts.endFrame();
   }
 
-  /** Reads the keys of this step. Space and Enter belong to a focused button or menu item when one has the focus. */
+  /**
+   * Reads the keys of this step. The shortcuts always work. Space and Enter act only when no control
+   * took them: the key map does not count the keys of a focused button or menu item.
+   */
   private handleKeys(): void {
-    const keys = this.keys;
-    if (keys.pressed("menu")) this.toggleMenu();
-    if (keys.pressed("quickSave")) void this.save(QUICK_SLOT);
-    if (keys.pressed("quickLoad")) void this.load(QUICK_SLOT);
+    const shortcuts = this.shortcuts;
+    if (shortcuts.pressed("menu")) this.toggleMenu();
+    if (shortcuts.pressed("quickSave")) void this.save(QUICK_SLOT);
+    if (shortcuts.pressed("quickLoad")) void this.load(QUICK_SLOT);
     if (this.playable()) {
-      SPEED_ACTIONS.forEach((action, index) => {
+      SPEED_SHORTCUTS.forEach((action, index) => {
         const speed = SPEEDS[index];
-        if (speed !== undefined && keys.pressed(action)) this.setSpeed(speed);
+        if (speed !== undefined && shortcuts.pressed(action)) this.setSpeed(speed);
       });
     }
-    if (focusIsControl()) return;
+    const keys = this.keys;
     if (this.dialogue.isOpen) {
       if (keys.pressed("pause") || keys.pressed("confirm")) this.dialogue.advance();
       return;

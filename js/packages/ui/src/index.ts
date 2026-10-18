@@ -26,4 +26,4 @@ export type { Toast, ToastProps, ToastTone } from "./components/toast";
 export { createModal } from "./components/modal";
 export type { Modal, ModalAction, ModalProps } from "./components/modal";
 export { createMenu } from "./components/menu";
-export type { MenuItem, MenuProps } from "./components/menu";
+export type { Menu, MenuItem, MenuProps } from "./components/menu";

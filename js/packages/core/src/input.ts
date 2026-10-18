@@ -18,6 +18,24 @@
 //
 // Keys are KeyboardEvent.code values, which name physical keys whatever the layout. Pointer
 // events cover mouse, pen and touch; a touch counts as the left button.
+//
+// Scope and handled events. A map listens on the target it is attached to: window for the whole
+// page, or an element, which then sees only the events inside it. A key held inside such an
+// element is released when focus leaves it, because its key up would go elsewhere.
+//
+// A press is a keydown, a pointerdown or a wheel tick. A press does not count when:
+//   - its target is a control: an input, textarea, select, button, [contenteditable] element or
+//     [role="menuitem"]. A control keeps its own keys: Enter on a focused button clicks it, and a
+//     text field receives its letters. The captureControls option lifts this for one map;
+//   - its defaultPrevented flag is already set when the map sees it. Only a preventDefault that
+//     ran before the map counts, which is the case for a listener on the element the event went
+//     to. A listener on window that runs after the map does not affect it;
+//   - markHandled(event) was called for it, which is the way to use an event without preventDefault.
+// Releases (keyup, pointerup, pointercancel) and blur always count, so a press that counted is
+// always released. Pointer moves always update the pointer position, whatever their target.
+//
+// consume(action) hides an action for the rest of the frame, so that one part of the game can
+// take an action that no later part should see.
 
 /** A KeyboardEvent.code value: a physical key such as "KeyW", "Space" or "ArrowUp". */
 export type KeyCode = string;
@@ -56,6 +74,12 @@ export interface Vector2 {
 export interface ActionMapOptions {
   /** The least value, or vector length, at which an action counts as active. Default 0.5. */
   threshold?: number;
+  /**
+   * Counts presses whose target is a control, such as a button or a text field. Default false,
+   * which leaves a control's own keys to the control. Turn it on for keys that work while a control
+   * has the focus, such as a game's function keys.
+   */
+  captureControls?: boolean;
 }
 
 const DEFAULT_THRESHOLD = 0.5;
@@ -70,6 +94,25 @@ const DELTA_MODE_PAGE = 2;
 /** Approximate pixels per wheel line and per wheel page, used when a browser reports lines or pages. */
 const PIXELS_PER_LINE = 16;
 const PIXELS_PER_PAGE = 100;
+
+/**
+ * The controls that keep their own keys. A press whose target is one of these, or is inside one,
+ * does not count, unless the map was made with captureControls.
+ */
+const CONTROL_SELECTOR =
+  'input, textarea, select, button, [contenteditable]:not([contenteditable="false"]), [role="menuitem"]';
+
+/** The events that a UI has used. No map counts a press that is in this set. */
+const handledEvents = new WeakSet<Event>();
+
+/**
+ * Marks an event as used by the UI, so that no ActionMap counts it as a press. Use it in a handler
+ * that acts on a key when it should not call preventDefault, which might cancel an action the
+ * browser needs. Releases of the key still count.
+ */
+export function markHandled(event: Event): void {
+  handledEvents.add(event);
+}
 
 /** A binding in the form the map keeps it. */
 interface StoredBinding<Action extends string> {
@@ -98,11 +141,14 @@ interface Attachment {
  */
 export class ActionMap<Action extends string = string> {
   private readonly threshold: number;
+  private readonly captureControls: boolean;
   private bindings: StoredBinding<Action>[] = [];
   private readonly downControls = new Set<string>();
   private readonly pulseControls = new Set<string>();
   private readonly pressedActions = new Set<Action>();
   private readonly releasedActions = new Set<Action>();
+  /** The actions that the game consumed in this frame. They read as idle until endFrame. */
+  private readonly consumedActions = new Set<Action>();
   private wheelX = 0;
   private wheelY = 0;
   private pointerX = 0;
@@ -124,6 +170,7 @@ export class ActionMap<Action extends string = string> {
       throw new RangeError(`threshold must be a positive number, got ${threshold}`);
     }
     this.threshold = threshold;
+    this.captureControls = options.captureControls ?? false;
     for (const binding of bindings) this.bind(binding);
   }
 
@@ -155,8 +202,9 @@ export class ActionMap<Action extends string = string> {
   }
 
   /**
-   * Listens for keyboard, pointer and wheel events on `target`, usually `window`. Attaching
-   * again moves the listeners: the previous target is detached first.
+   * Listens for keyboard, pointer and wheel events on `target`: usually `window`, or an element to
+   * see only the events inside it (see the rule at the top of this file). Attaching again moves the
+   * listeners: the previous target is detached first.
    */
   attach(target: EventTarget): void {
     this.detach();
@@ -170,6 +218,11 @@ export class ActionMap<Action extends string = string> {
       ["wheel", (event) => this.onWheel(event)],
       ["blur", () => this.releaseWhere(() => true)],
     ];
+    if (isNode(target)) {
+      // Focus that leaves a scoping element takes its held keys with it: their key ups go elsewhere.
+      const scope: Node = target;
+      listeners.push(["focusout", (event) => this.onFocusOut(event, scope)]);
+    }
     for (const [type, listener] of listeners) target.addEventListener(type, listener);
     this.attachment = { target, listeners };
   }
@@ -187,28 +240,39 @@ export class ActionMap<Action extends string = string> {
 
   /** True on the frame in which the action became active (since the last endFrame). */
   pressed(action: Action): boolean {
-    return this.pressedActions.has(action);
+    return !this.consumedActions.has(action) && this.pressedActions.has(action);
   }
 
   /** True while the action is active. */
   held(action: Action): boolean {
-    return this.isActive(action);
+    return !this.consumedActions.has(action) && this.isActive(action);
   }
 
   /** True on the frame in which the action stopped being active (since the last endFrame). */
   released(action: Action): boolean {
-    return this.releasedActions.has(action);
+    return !this.consumedActions.has(action) && this.releasedActions.has(action);
   }
 
-  /** The value of a digital action in [-1, 1], or the x component of a 2D action. */
+  /** The value of a digital action in [-1, 1], or the x component of a 2D action. Zero once consumed. */
   axis1(action: Action): number {
-    return this.sample(action).vector.x;
+    return this.consumedActions.has(action) ? 0 : this.sample(action).vector.x;
   }
 
-  /** The value of a 2D action. For a digital action this is `{ x: value, y: 0 }`. */
+  /** The value of a 2D action. For a digital action this is `{ x: value, y: 0 }`. Zero once consumed. */
   axis2(action: Action): Vector2 {
+    if (this.consumedActions.has(action)) return { x: 0, y: 0 };
     const { x, y } = this.sample(action).vector;
     return { x, y };
+  }
+
+  /**
+   * Marks an action as handled for the rest of this frame. Until endFrame, `pressed`, `held` and
+   * `released` read false, and the axis values read zero. The control state is kept, so a key that
+   * is still down is still held in the next frame. Use it when one part of the game has acted on an
+   * action, so that no later part acts on it again.
+   */
+  consume(action: Action): void {
+    this.consumedActions.add(action);
   }
 
   /**
@@ -230,12 +294,13 @@ export class ActionMap<Action extends string = string> {
   }
 
   /**
-   * Clears the edges and the wheel and pointer deltas. Call it once per frame, after the
-   * frame has read the input.
+   * Clears the edges, the consumed actions, and the wheel and pointer deltas. Call it once per
+   * frame, after the frame has read the input.
    */
   endFrame(): void {
     this.pressedActions.clear();
     this.releasedActions.clear();
+    this.consumedActions.clear();
     this.wheelX = 0;
     this.wheelY = 0;
     this.pointerDeltaX = 0;
@@ -249,12 +314,15 @@ export class ActionMap<Action extends string = string> {
   }
 
   private onKey(event: Event, down: boolean): void {
+    // A keydown that does not count is dropped. A keyup always counts, so no key stays down.
+    if (down && this.skipsPress(event)) return;
     this.setControl(controlId({ type: "key", key: (event as KeyboardEvent).code }), down);
   }
 
   private onPointerButton(event: Event, down: boolean): void {
     const pointer = event as PointerEvent;
     this.moveTo(pointer.clientX, pointer.clientY);
+    if (down && this.skipsPress(event)) return;
     const name = BUTTON_NAMES[pointer.button];
     if (name !== undefined) this.setControl(controlId({ type: "mouse", button: name }), down);
   }
@@ -275,6 +343,7 @@ export class ActionMap<Action extends string = string> {
   }
 
   private onWheel(event: Event): void {
+    if (this.skipsPress(event)) return;
     const wheel = event as WheelEvent;
     const scale = pixelsPerUnit(wheel.deltaMode);
     const dx = wheel.deltaX * scale;
@@ -293,6 +362,22 @@ export class ActionMap<Action extends string = string> {
     if (this.downControls.has(id)) return;
     this.pulseControls.add(id);
     this.setControl(id, true);
+  }
+
+  /**
+   * True when a press must not count: the UI has used the event, or it came from a control that
+   * keeps its own keys. The rule is at the top of this file.
+   */
+  private skipsPress(event: Event): boolean {
+    if (event.defaultPrevented || handledEvents.has(event)) return true;
+    return !this.captureControls && isControlTarget(event.target);
+  }
+
+  /** Focus left the scoping element for a place outside it: the keys that it counted are released. */
+  private onFocusOut(event: Event, scope: Node): void {
+    const next = (event as FocusEvent).relatedTarget;
+    if (next instanceof Node && scope.contains(next)) return;
+    this.releaseWhere(() => true);
   }
 
   /**
@@ -369,6 +454,17 @@ function controlId(control: Control): string {
 /** True for the id of a mouse button control. */
 function isMouseControl(id: string): boolean {
   return id.startsWith("mouse:");
+}
+
+/** True when the target is an element inside a control (the control itself counts). */
+function isControlTarget(target: EventTarget | null): boolean {
+  if (typeof Element === "undefined" || !(target instanceof Element)) return false;
+  return target.closest(CONTROL_SELECTOR) !== null;
+}
+
+/** True for a DOM node. It is false where there is no DOM, as in a plain Node.js test. */
+function isNode(target: EventTarget): target is Node {
+  return typeof Node !== "undefined" && target instanceof Node;
 }
 
 /** The pixels that one unit of a wheel delta stands for, given its deltaMode. */

@@ -9,7 +9,7 @@ export { GameClock } from "./clock";
 export type { GameClockOptions, GameClockState } from "./clock";
 export { EventEmitter } from "./events";
 export type { EmitArgs, Listener, Unsubscribe } from "./events";
-export { ActionMap } from "./input";
+export { ActionMap, markHandled } from "./input";
 export type {
   ActionMapOptions,
   Binding,

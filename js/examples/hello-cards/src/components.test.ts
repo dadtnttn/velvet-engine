@@ -4,6 +4,7 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Board, loadCatalog } from "@velvet/cards";
+import { ActionMap } from "@velvet/core";
 import { GuionLibrary } from "@velvet/guion";
 import { I18n, type CatalogFile } from "@velvet/i18n";
 import { BoardView, type ViewLabels } from "./board-view";
@@ -111,16 +112,15 @@ describe("the intro plate", () => {
     expect(parent.querySelector(".hc-prompt")?.textContent).toBe("¿Qué te apetece?");
     expect(all(parent, '[role="menuitem"]')).toHaveLength(2);
 
-    // Enter chooses the first option. The game's own keys must not see that Enter.
-    const seen: string[] = [];
-    const listener = (event: KeyboardEvent): void => {
-      seen.push(event.key);
-    };
-    window.addEventListener("keydown", listener);
+    // Enter chooses the first option. The game's own keys must not act on that Enter: the menu uses it
+    // (it prevents the default), and the action map does not count a press that a menu item took. The
+    // press still reaches the window, which is why the check is on the map and not on the window.
+    const keys = new ActionMap<"confirm">([{ action: "confirm", control: { type: "key", key: "Enter" } }]);
+    keys.attach(window);
     const first = parent.querySelector<HTMLElement>('[role="menuitem"]');
-    first?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    window.removeEventListener("keydown", listener);
-    expect(seen).toEqual([]);
+    first?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(keys.pressed("confirm")).toBe(false);
+    keys.detach();
     expect(parent.querySelector(".hc-line")?.textContent).toContain("Arrastra una carta");
 
     // The controls scene jumps back to the choice; the second option ends the conversation.

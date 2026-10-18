@@ -10,11 +10,10 @@ import {
   createMenu,
   createPlate,
   type ButtonProps,
-  type MenuProps,
+  type Menu,
   type Plate,
   type VuComponent,
 } from "@velvet/ui";
-import { keepKeysInMenu } from "./keys";
 
 /**
  * The plate. It is created once, appended to the parent, and hidden until a conversation starts.
@@ -30,7 +29,7 @@ export class Dialogue {
   private conversation: Conversation | null = null;
   private box: Shown | null = null;
   private button: VuComponent<ButtonProps> | null = null;
-  private menu: VuComponent<MenuProps> | null = null;
+  private menu: Menu | null = null;
 
   /**
    * @param parent - the element that the plate is appended to (the stage's root).
@@ -127,9 +126,8 @@ export class Dialogue {
       onSelect: (id) => this.choose(Number(id)),
     });
     this.menu.el.classList.add("hc-options");
-    keepKeysInMenu(this.menu.el);
     this.plate.body.append(prompt, this.menu.el);
-    this.menu.el.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')?.focus();
+    this.menu.focus(0);
   }
 
   /** Takes an option of the choice on screen. */

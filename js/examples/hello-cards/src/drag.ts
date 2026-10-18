@@ -4,7 +4,9 @@
 // own stack, which then follows the pointer (`moveStack`). Letting go either drops that stack on the
 // card under the pointer (`dropOn`), or places it on the table. A drop that the rules refuse springs
 // back to where it came from, with a notice. Pointer positions go through Stage.toLogical, so they
-// map exactly onto the 16:9 surface, whatever the window size.
+// map exactly onto the 16:9 surface, whatever the window size. Once a drag has started, the pointer
+// may leave the surface, so its moves and its release use Stage.toLogicalClamped: the stack follows
+// the pointer to the nearest edge instead of freezing where the pointer left.
 
 import { CardsError, type Board } from "@velvet/cards";
 import type { Stage } from "@velvet/ui";
@@ -43,8 +45,6 @@ interface Drag {
   readonly grab: Point;
   /** Where the press happened, in logical pixels. */
   readonly start: Point;
-  /** The latest pointer position, in logical pixels. */
-  last: Point;
   /** True once the pointer has moved far enough to count as a drag rather than a click. */
   moved: boolean;
 }
@@ -112,7 +112,6 @@ export class DragController {
       origin: { x: stack.x, y: stack.y },
       grab: { x: local.x - cardLeft, y: local.y - cardTop },
       start: point,
-      last: point,
       moved: false,
     };
     window.addEventListener("pointermove", this.onMove);
@@ -125,9 +124,8 @@ export class DragController {
   private readonly onMove = (event: PointerEvent): void => {
     const drag = this.drag;
     if (drag === null || event.pointerId !== drag.pointerId) return;
-    // Off the surface (over the bars, or outside the window) the last inside position is kept.
-    const point = this.host.stage.toLogical(event.clientX, event.clientY) ?? drag.last;
-    drag.last = point;
+    // Off the surface (over the bars, or outside the window) the point is clamped to the nearest edge.
+    const point = this.host.stage.toLogicalClamped(event.clientX, event.clientY);
     if (!drag.moved) {
       if (isClick(drag.start, point)) return;
       drag.moved = true;
@@ -141,7 +139,7 @@ export class DragController {
   private readonly onRelease = (event: PointerEvent): void => {
     const drag = this.drag;
     if (drag === null || event.pointerId !== drag.pointerId) return;
-    const point = this.host.stage.toLogical(event.clientX, event.clientY) ?? drag.last;
+    const point = this.host.stage.toLogicalClamped(event.clientX, event.clientY);
     this.end();
     if (!drag.moved) {
       // A click on a stacked card must not leave it split: it goes back on the card below.

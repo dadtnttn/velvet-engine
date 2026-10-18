@@ -3,12 +3,17 @@
 // an EventTarget, so the attach and detach paths run for real.
 
 import { describe, expect, it } from "vitest";
-import { ActionMap, type ActionMapOptions, type Binding } from "./input";
+import { ActionMap, markHandled, type ActionMapOptions, type Binding } from "./input";
 
 type Action = "confirm" | "attack" | "menu" | "zoom" | "move" | "half";
 
 function keyEvent(type: "keydown" | "keyup", code: string): Event {
   return Object.assign(new Event(type), { code, repeat: false });
+}
+
+/** A key event that can be cancelled, as a real keyboard event is. */
+function cancelableKeyEvent(type: "keydown" | "keyup", code: string): Event {
+  return Object.assign(new Event(type, { cancelable: true }), { code, repeat: false });
 }
 
 function pointerEvent(
@@ -317,5 +322,130 @@ describe("ActionMap bind and unbind", () => {
       () => new ActionMap<Action>([{ action: "attack", control: { type: "key", key: "KeyZ" }, scale: Number.NaN }]),
     ).toThrow(RangeError);
     expect(() => new ActionMap<Action>([], { threshold: 0 })).toThrow(RangeError);
+  });
+});
+
+describe("ActionMap consume", () => {
+  it("reads a consumed action as idle until endFrame, then as it really is", () => {
+    const { target, map } = attachedMap([enter]);
+    target.dispatchEvent(keyEvent("keydown", "Enter"));
+    map.consume("confirm");
+    expect(map.pressed("confirm")).toBe(false);
+    expect(map.held("confirm")).toBe(false);
+    expect(map.released("confirm")).toBe(false);
+
+    map.endFrame();
+    expect(map.held("confirm")).toBe(true); // the key is still down
+    expect(map.pressed("confirm")).toBe(false); // the press belonged to the frame before
+
+    target.dispatchEvent(keyEvent("keyup", "Enter"));
+    expect(map.released("confirm")).toBe(true);
+    expect(map.held("confirm")).toBe(false);
+  });
+
+  it("hides a press that arrives after the consume in the same frame", () => {
+    const { target, map } = attachedMap([enter]);
+    map.consume("confirm");
+    target.dispatchEvent(keyEvent("keydown", "Enter"));
+    expect(map.pressed("confirm")).toBe(false);
+    expect(map.held("confirm")).toBe(false);
+    map.endFrame();
+    expect(map.held("confirm")).toBe(true);
+  });
+
+  it("hides only the action that was consumed", () => {
+    const { target, map } = attachedMap([
+      enter,
+      { action: "attack", control: { type: "mouse", button: "left" } },
+    ]);
+    target.dispatchEvent(keyEvent("keydown", "Enter"));
+    target.dispatchEvent(pointerEvent("pointerdown", { button: 0 }));
+    map.consume("confirm");
+    expect(map.pressed("confirm")).toBe(false);
+    expect(map.pressed("attack")).toBe(true);
+    expect(map.held("attack")).toBe(true);
+  });
+
+  it("reads the axes of a consumed action as zero, and restores them at endFrame", () => {
+    const { target, map } = attachedMap([
+      { action: "move", control: { type: "key", key: "KeyW" }, axisComponent: "y" },
+      { action: "move", control: { type: "key", key: "KeyD" }, axisComponent: "x" },
+    ]);
+    target.dispatchEvent(keyEvent("keydown", "KeyW"));
+    target.dispatchEvent(keyEvent("keydown", "KeyD"));
+    map.consume("move");
+    expect(map.axis2("move")).toEqual({ x: 0, y: 0 });
+    expect(map.axis1("move")).toBe(0);
+    map.endFrame();
+    expect(map.axis2("move")).toEqual({ x: 1, y: 1 });
+  });
+
+  it("does not change what the map records for the next frame", () => {
+    const { target, map } = attachedMap([enter]);
+    target.dispatchEvent(keyEvent("keydown", "Enter"));
+    map.consume("confirm");
+    map.endFrame();
+    // The release that follows is recorded normally, even though the press was consumed.
+    target.dispatchEvent(keyEvent("keyup", "Enter"));
+    expect(map.released("confirm")).toBe(true);
+  });
+});
+
+describe("ActionMap handled events", () => {
+  it("does not count a keydown that was marked, and the mark does not prevent the default", () => {
+    const { target, map } = attachedMap([enter]);
+    const down = cancelableKeyEvent("keydown", "Enter");
+    markHandled(down);
+    target.dispatchEvent(down);
+    expect(map.held("confirm")).toBe(false);
+    expect(map.pressed("confirm")).toBe(false);
+    expect(down.defaultPrevented).toBe(false);
+  });
+
+  it("still releases a key that counted, even when its keyup was marked", () => {
+    const { target, map } = attachedMap([enter]);
+    target.dispatchEvent(keyEvent("keydown", "Enter"));
+    expect(map.held("confirm")).toBe(true);
+    const up = keyEvent("keyup", "Enter");
+    markHandled(up);
+    target.dispatchEvent(up);
+    expect(map.released("confirm")).toBe(true);
+    expect(map.held("confirm")).toBe(false);
+  });
+
+  it("does not count a keydown whose default a listener prevented before the map", () => {
+    const target = new EventTarget();
+    target.addEventListener("keydown", (event) => {
+      event.preventDefault();
+    });
+    const map = new ActionMap<Action>([enter]);
+    map.attach(target);
+    target.dispatchEvent(cancelableKeyEvent("keydown", "Enter"));
+    expect(map.held("confirm")).toBe(false);
+  });
+
+  it("counts a keydown whose default a listener prevented only after the map ran", () => {
+    const target = new EventTarget();
+    const map = new ActionMap<Action>([enter]);
+    map.attach(target);
+    target.addEventListener("keydown", (event) => {
+      event.preventDefault();
+    });
+    target.dispatchEvent(cancelableKeyEvent("keydown", "Enter"));
+    expect(map.held("confirm")).toBe(true);
+  });
+
+  it("does not turn a marked wheel tick into a pulse, and keeps the pointer position", () => {
+    const { target, map } = attachedMap([{ action: "zoom", control: { type: "wheel", direction: "up" } }]);
+    const tick = wheelEvent({ deltaY: -120 });
+    markHandled(tick);
+    target.dispatchEvent(tick);
+    expect(map.pressed("zoom")).toBe(false);
+    expect(map.wheelDelta()).toEqual({ x: 0, y: 0 });
+
+    const press = pointerEvent("pointerdown", { button: 0, clientX: 30, clientY: 40 });
+    markHandled(press);
+    target.dispatchEvent(press);
+    expect(map.pointer()).toEqual({ x: 30, y: 40 });
   });
 });

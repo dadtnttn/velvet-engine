@@ -3,7 +3,7 @@
 // disabled items, choosing with Enter, Space or a click, and the focus that follows the mouse.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMenu, type MenuItem } from "./menu";
+import { createMenu, type Menu, type MenuItem } from "./menu";
 
 const ITEMS: readonly MenuItem[] = [
   { id: "new", label: "Nueva partida" },
@@ -16,11 +16,16 @@ afterEach(() => {
 });
 
 /** A menu in the document, with a spy for its selections. */
-function setup(): { el: HTMLElement; onSelect: ReturnType<typeof vi.fn>; update: (items: readonly MenuItem[]) => void } {
+function setup(): {
+  el: HTMLElement;
+  menu: Menu;
+  onSelect: ReturnType<typeof vi.fn>;
+  update: (items: readonly MenuItem[]) => void;
+} {
   const onSelect = vi.fn();
   const menu = createMenu({ items: ITEMS, label: "Menú principal", onSelect });
   document.body.append(menu.el);
-  return { el: menu.el, onSelect, update: (items) => menu.update({ items }) };
+  return { el: menu.el, menu, onSelect, update: (items) => menu.update({ items }) };
 }
 
 /** Presses a key on the menu, the way a keyboard does while an item has the focus. */
@@ -120,6 +125,106 @@ describe("menu keyboard", () => {
     ]);
     expect(el.querySelectorAll('[role="menuitem"]')).toHaveLength(2);
     expect(item(el, "a").tabIndex).toBe(0);
+  });
+});
+
+describe("menu focus by index", () => {
+  it("gives the focus to the item at an index, and reports that index", () => {
+    const { el, menu } = setup();
+    menu.focus(2);
+    expect(focusedId()).toBe("quit");
+    expect(menu.focusedIndex).toBe(2);
+    expect(item(el, "quit").tabIndex).toBe(0);
+    expect(item(el, "new").tabIndex).toBe(-1);
+  });
+
+  it("starts with the first enabled item as the focused index, without taking the DOM focus", () => {
+    const { menu } = setup();
+    expect(menu.focusedIndex).toBe(0);
+    expect(focusedId()).toBeNull();
+  });
+
+  it("takes the next enabled item when the index is disabled", () => {
+    const { menu } = setup();
+    menu.focus(1); // "load" is disabled
+    expect(focusedId()).toBe("quit");
+    expect(menu.focusedIndex).toBe(2);
+  });
+
+  it("takes the enabled item before the index when none after it is enabled", () => {
+    const menu = createMenu({
+      items: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+        { id: "c", label: "C", disabled: true },
+      ],
+    });
+    document.body.append(menu.el);
+    menu.focus(2);
+    expect(focusedId()).toBe("b");
+    expect(menu.focusedIndex).toBe(1);
+  });
+
+  it("clamps an index past either end to the first or the last item", () => {
+    const { menu } = setup();
+    menu.focus(-4);
+    expect(focusedId()).toBe("new");
+    expect(menu.focusedIndex).toBe(0);
+    menu.focus(99);
+    expect(focusedId()).toBe("quit");
+    expect(menu.focusedIndex).toBe(2);
+  });
+
+  it("ignores an index that is not a number", () => {
+    const { menu } = setup();
+    menu.focus(2);
+    menu.focus(Number.NaN);
+    expect(focusedId()).toBe("quit");
+    expect(menu.focusedIndex).toBe(2);
+  });
+
+  it("has no focused index when no item can take the focus", () => {
+    const menu = createMenu({ items: [{ id: "a", label: "A", disabled: true }] });
+    document.body.append(menu.el);
+    expect(menu.focusedIndex).toBe(-1);
+    menu.focus(0);
+    expect(menu.focusedIndex).toBe(-1);
+    expect(focusedId()).toBeNull();
+  });
+
+  it("makes the arrows and Enter act on the item that was focused by index", () => {
+    const { el, menu, onSelect } = setup();
+    menu.focus(2);
+    press(el, "ArrowDown");
+    expect(focusedId()).toBe("new");
+    menu.focus(2);
+    press(el, "Enter");
+    expect(onSelect).toHaveBeenLastCalledWith("quit");
+  });
+});
+
+describe("menu follows the DOM focus", () => {
+  it("takes the focused index from an item that the page focuses itself", () => {
+    const { el, menu } = setup();
+    item(el, "quit").focus();
+    expect(menu.focusedIndex).toBe(2);
+    expect(item(el, "quit").tabIndex).toBe(0);
+    expect(item(el, "new").tabIndex).toBe(-1);
+  });
+
+  it("moves from that item with the arrows, not from the item it last had", () => {
+    const { el } = setup();
+    item(el, "quit").focus();
+    press(el, "ArrowDown"); // from "quit" the next enabled item wraps to "new"
+    expect(focusedId()).toBe("new");
+  });
+
+  it("chooses the item with the focus on Enter after an outside focus", () => {
+    const { el, onSelect } = setup();
+    item(el, "quit").focus();
+    press(el, "Enter");
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenLastCalledWith("quit");
   });
 });
 

@@ -33,6 +33,16 @@ function pauseLabel(): string {
   return buttons[buttons.length - 1]?.querySelector(".vu-button-label")?.textContent ?? "";
 }
 
+/** A keydown sent to one element, as a keyboard sends it to the element that has the focus. */
+function keyDownOn(target: EventTarget, key: string, code: string): void {
+  target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }));
+}
+
+/** Lets the game loop run for a few frames, so that the keys pressed so far have been read. */
+function settle(): Promise<void> {
+  return new Promise((done) => setTimeout(done, 150));
+}
+
 beforeAll(async () => {
   await loadWasmForTests();
   fetchFromPublicFolder();
@@ -90,6 +100,45 @@ describe("the game in a page", () => {
       expect(cardsOf("wood").length).toBeGreaterThan(0);
     } finally {
       game.dispose();
+    }
+  });
+
+  it("lets a focused control keep Space, and keeps the shortcuts working while it has the focus", async () => {
+    stubLayout();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const game = await Game.start(host);
+    try {
+      // Finish the intro: three lines, then the choice that ends it.
+      const panel = must<HTMLElement>(document, ".hc-dialogue");
+      for (let index = 0; index < 3; index += 1) must<HTMLElement>(panel, ".vu-button").click();
+      must<HTMLElement>(panel, '[data-id="1"]').click();
+
+      // Escape opens the pause menu, and its first item ("Continue") takes the focus. Space on that item
+      // chooses it: the menu closes, and the clock keeps running, because the menu kept the key.
+      pressKey("Escape", "Escape");
+      await waitUntil(() => !must<HTMLElement>(document, ".hc-pause").hidden);
+      const continueItem = must<HTMLElement>(document, '[data-id="continue"]');
+      expect(document.activeElement).toBe(continueItem);
+      keyDownOn(continueItem, " ", "Space");
+      expect(must<HTMLElement>(document, ".hc-pause").hidden).toBe(true);
+      await settle();
+      expect(pauseLabel()).toBe("Pausa");
+
+      // The HUD's pause button takes the focus. Space on it does not toggle the clock from the key map (in a
+      // browser, the button's own click does that, once), while F5 still quick-saves.
+      const buttons = Array.from(document.querySelectorAll<HTMLElement>(".hc-speed .vu-button"));
+      const pauseButton = buttons[buttons.length - 1];
+      if (pauseButton === undefined) throw new Error("the HUD has no pause button");
+      pauseButton.focus();
+      keyDownOn(pauseButton, " ", "Space");
+      await settle();
+      expect(pauseLabel()).toBe("Pausa");
+      keyDownOn(pauseButton, "F5", "F5");
+      await waitUntil(() => noticesText().includes("Partida guardada"));
+    } finally {
+      game.dispose();
+      host.remove();
     }
   });
 });

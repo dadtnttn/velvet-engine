@@ -10,6 +10,7 @@ describe("@velvet/core entry point", () => {
     expect(typeof core.GameClock).toBe("function");
     expect(typeof core.EventEmitter).toBe("function");
     expect(typeof core.ActionMap).toBe("function");
+    expect(typeof core.markHandled).toBe("function");
     expect(core.SLOT_PATTERN).toBeInstanceOf(RegExp);
     expect(typeof core.getBridge).toBe("function");
     expect(typeof core.isValidSlot).toBe("function");
