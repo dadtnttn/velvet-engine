@@ -1,0 +1,37 @@
+{
+  "file": "sin-cabecera.md",
+  "parse": {
+    "file": "sin-cabecera.md",
+    "id": "sin_cabecera",
+    "title": "",
+    "sala": null,
+    "scenes": [
+      {
+        "id": "sin_cabecera.inicio", "label": "inicio", "title": "Inicio", "line": 1, "targeted": false,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "sin_cabecera.despierta", "label": "despierta", "title": "despierta", "line": 3, "targeted": false,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      }
+    ],
+    "problems": []
+  },
+  "entries": [
+    { "who": "narrator", "place": null, "vars": { "values": {}, "seen": [] }, "scene": null }
+  ],
+  "runs": [
+    {
+      "scene": "sin_cabecera.inicio",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "sin_cabecera.inicio", "stage": [], "who": "thought", "name": "", "text": "Hmm, sin nadie.", "kind": "thought", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "sin_cabecera.inicio", "stage": [], "who": "narrator", "name": "", "text": "Llueve sin parar.", "kind": "narration", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "sin_cabecera.despierta", "stage": [], "who": "narrator", "name": "", "text": "Un trueno.", "kind": "sound", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "sin_cabecera.despierta", "stage": [], "who": "narrator", "name": "Narrador", "text": "Hola.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "sin_cabecera.despierta", "stage": [] } }
+      ],
+      "varsAfter": { "values": {}, "seen": ["sin_cabecera.despierta", "sin_cabecera.inicio"] }
+    }
+  ]
+}

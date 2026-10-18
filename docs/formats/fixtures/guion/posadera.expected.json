@@ -1,0 +1,65 @@
+{
+  "file": "posadera.md",
+  "cast": {
+    "characters": { "guardia": ["Bruno", "el guardia"] },
+    "thinker": { "id": "viajera", "name": "La viajera" }
+  },
+  "parse": {
+    "file": "posadera.md",
+    "id": "posadera",
+    "title": "La posada del Cuervo",
+    "sala": "taberna",
+    "scenes": [
+      {
+        "id": "posadera.llegada", "label": "llegada", "title": "llegada", "line": 9, "targeted": false,
+        "attrs": { "quien": null, "en": "puerta", "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "posadera.caldo", "label": "caldo", "title": "caldo", "line": 20, "targeted": true,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "posadera.habitacion", "label": "habitacion", "title": "habitacion", "line": 25, "targeted": true,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      }
+    ],
+    "problems": []
+  },
+  "entries": [
+    { "who": "greta", "place": "puerta", "vars": { "values": {}, "seen": [] }, "scene": "posadera.llegada" },
+    { "who": "bruno", "place": null, "vars": { "values": {}, "seen": [] }, "scene": null },
+    { "who": null, "place": "barra", "vars": { "values": {}, "seen": [] }, "scene": null }
+  ],
+  "runs": [
+    {
+      "scene": "posadera.llegada",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "posadera.llegada", "stage": [{ "cmd": "titulo", "arg": "LA POSADA DEL CUERVO | DE NOCHE" }], "who": "greta", "name": "Greta", "text": "Pasa, viajera, que llueve a cántaros.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "posadera.llegada", "stage": [], "who": "narrator", "name": "", "text": "La puerta cruje al cerrarse.", "kind": "sound", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "posadera.llegada", "stage": [], "who": "viajera_thought", "name": "La viajera", "text": "Huele a pan recién hecho. Podría quedarme.", "kind": "thought", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "posadera.llegada", "stage": [], "who": "narrator", "name": "", "text": "La posadera limpia una jarra con el delantal.", "kind": "narration", "mood": null } },
+        { "do": "next", "expect": { "type": "choice", "scene": "posadera.llegada", "stage": [], "prompt": "¿Qué le ofreces?", "options": [{ "label": "Un caldo caliente", "available": true }, { "label": "Una habitación", "available": false }, { "label": "Nada, sigo camino", "available": true }] } },
+        { "do": { "choose": 1 }, "expect": { "code": "unavailable" } },
+        { "do": { "choose": 0 }, "expect": { "type": "line", "scene": "posadera.caldo", "stage": [], "who": "greta", "name": "Greta", "text": "Enseguida. Siéntate junto al fuego.", "kind": "dialogue", "mood": "sonriendo" } },
+        { "do": "next", "expect": { "type": "line", "scene": "posadera.caldo", "stage": [], "who": "guardia", "name": "Bruno", "text": "Yo también quiero uno, Greta.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "posadera.caldo", "stage": [] } }
+      ],
+      "varsAfter": { "values": { "caldo_servido": 1, "greta_confianza": 1 }, "seen": ["posadera.caldo", "posadera.llegada"] }
+    },
+    {
+      "scene": "posadera.llegada",
+      "vars": { "values": { "oro": 5 }, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "posadera.llegada", "stage": [{ "cmd": "titulo", "arg": "LA POSADA DEL CUERVO | DE NOCHE" }], "who": "greta", "name": "Greta", "text": "Pasa, viajera, que llueve a cántaros.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "posadera.llegada", "stage": [], "who": "narrator", "name": "", "text": "La puerta cruje al cerrarse.", "kind": "sound", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "posadera.llegada", "stage": [], "who": "viajera_thought", "name": "La viajera", "text": "Huele a pan recién hecho. Podría quedarme.", "kind": "thought", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "posadera.llegada", "stage": [], "who": "narrator", "name": "", "text": "La posadera limpia una jarra con el delantal.", "kind": "narration", "mood": null } },
+        { "do": "next", "expect": { "type": "choice", "scene": "posadera.llegada", "stage": [], "prompt": "¿Qué le ofreces?", "options": [{ "label": "Un caldo caliente", "available": true }, { "label": "Una habitación", "available": true }, { "label": "Nada, sigo camino", "available": true }] } },
+        { "do": { "choose": 1 }, "expect": { "type": "line", "scene": "posadera.habitacion", "stage": [], "who": "greta", "name": "Greta", "text": "Arriba, la última puerta. Son cinco monedas.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "posadera.habitacion", "stage": [] } }
+      ],
+      "varsAfter": { "values": { "oro": 0 }, "seen": ["posadera.habitacion", "posadera.llegada"] }
+    }
+  ]
+}

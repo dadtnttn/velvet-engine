@@ -1,0 +1,64 @@
+{
+  "file": "errores.md",
+  "parse": {
+    "file": "errores.md",
+    "id": "errores",
+    "title": "",
+    "sala": null,
+    "scenes": [
+      {
+        "id": "errores.inicio", "label": "inicio", "title": "inicio", "line": 5, "targeted": false,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "errores.vacia", "label": "vacia", "title": "vacia", "line": 15, "targeted": false,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "errores.repetida", "label": "repetida", "title": "repetida", "line": 18, "targeted": false,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "errores.repetida", "label": "repetida", "title": "repetida", "line": 20, "targeted": false,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      }
+    ],
+    "problems": [
+      { "file": "errores.md", "line": 3, "message": "clave desconocida en la cabecera: autor" },
+      { "file": "errores.md", "line": 5, "message": "atributos ilegibles en: inicio {quien=greta, tiempo=noche}" },
+      { "file": "errores.md", "line": 6, "message": "orden desconocida o ilegible: @nada hace algo" },
+      { "file": "errores.md", "line": 7, "message": "línea sin texto" },
+      { "file": "errores.md", "line": 11, "message": "opción ilegible: Opción rota [oro >>> 2]" },
+      { "file": "errores.md", "line": 12, "message": "orden desconocida o ilegible: @si oro >= 1" },
+      { "file": "errores.md", "line": 13, "message": "orden desconocida o ilegible: @var oro +uno" },
+      { "file": "errores.md", "line": 20, "message": "escena repetida: repetida" },
+      { "file": "errores.md", "line": 9, "message": "no hay ninguna escena «ninguna» en este guion" },
+      { "file": "errores.md", "line": 16, "message": "una elección sin opciones" },
+      { "file": "errores.md", "line": 21, "message": "no hay ninguna escena «inexistente» en este guion" }
+    ]
+  },
+  "entries": [
+    { "who": "greta", "place": null, "vars": { "values": {}, "seen": [] }, "scene": null }
+  ],
+  "runs": [
+    {
+      "scene": "errores.inicio",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "errores.inicio", "stage": [], "who": "narrator", "name": "", "text": "- suelta", "kind": "narration", "mood": null } },
+        { "do": "next", "expect": { "type": "choice", "scene": "errores.inicio", "stage": [], "prompt": "Pregunta", "options": [{ "label": "Opción sin destino", "available": true }] } },
+        { "do": { "choose": 0 }, "expect": { "type": "end", "scene": "errores.inicio", "stage": [] } }
+      ],
+      "varsAfter": { "values": {}, "seen": ["errores.inicio"] }
+    },
+    {
+      "scene": "errores.vacia",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "choice", "scene": "errores.vacia", "stage": [], "prompt": "¿Qué?", "options": [] } },
+        { "do": { "choose": 0 }, "expect": { "code": "no-such-option" } }
+      ],
+      "varsAfter": { "values": {}, "seen": ["errores.vacia"] }
+    }
+  ]
+}

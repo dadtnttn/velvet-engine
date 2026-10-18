@@ -1,0 +1,50 @@
+{
+  "file": "escena.md",
+  "parse": {
+    "file": "escena.md",
+    "id": "escena",
+    "title": "",
+    "sala": null,
+    "scenes": [
+      {
+        "id": "escena.asomada", "label": "asomada", "title": "asomada", "line": 4, "targeted": false,
+        "attrs": { "quien": null, "en": "ventana", "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "escena.despedida", "label": "despedida", "title": "despedida", "line": 15, "targeted": true,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "escena.adios_vn", "label": "adios_vn", "title": "adios_vn", "line": 20, "targeted": true,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": true }
+      }
+    ],
+    "problems": []
+  },
+  "entries": [
+    { "who": null, "place": "ventana", "vars": { "values": {}, "seen": [] }, "scene": "escena.asomada" },
+    { "who": "greta", "place": null, "vars": { "values": {}, "seen": [] }, "scene": null }
+  ],
+  "runs": [
+    {
+      "scene": "escena.asomada",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "escena.asomada", "stage": [{ "cmd": "fondo", "arg": "posada/ventana_noche" }, { "cmd": "izq", "arg": "Greta posada/greta_normal" }, { "cmd": "titulo", "arg": "LA VENTANA | UNA NOCHE DESPUÉS" }], "who": "greta", "name": "Greta", "text": "Ya no llueve.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "escena.asomada", "stage": [{ "cmd": "pose", "arg": "Greta sonriente" }, { "cmd": "sello", "arg": "¡HOLA! | oro" }], "who": "greta", "name": "Greta", "text": "Vuelve cuando quieras.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "escena.despedida", "stage": [{ "cmd": "cierre", "arg": "" }, { "cmd": "destello", "arg": "blanco" }], "who": "greta", "name": "Greta", "text": "Adiós, viajera.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "vn", "scene": "escena.despedida", "stage": [], "to": "escena.adios_vn" } }
+      ],
+      "varsAfter": { "values": {}, "seen": ["escena.asomada", "escena.despedida"] }
+    },
+    {
+      "scene": "escena.adios_vn",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "escena.adios_vn", "stage": [], "who": "greta", "name": "Greta", "text": "Esta parte es de la novela visual.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "escena.adios_vn", "stage": [] } }
+      ],
+      "varsAfter": { "values": {}, "seen": ["escena.adios_vn"] }
+    }
+  ]
+}

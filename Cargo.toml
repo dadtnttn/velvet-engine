@@ -80,6 +80,7 @@ members = [
     "crates/velvet-qa",
     "crates/velvet-stacks",
     "crates/velvet-desktop",
+    "crates/velvet-wasm",
     "crates/velvet-scene3d",
     "demos/fx-forge",
     "demos/third-person",

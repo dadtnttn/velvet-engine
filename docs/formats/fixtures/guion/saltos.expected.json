@@ -1,0 +1,77 @@
+{
+  "file": "saltos.md",
+  "parse": {
+    "file": "saltos.md",
+    "id": "saltos",
+    "title": "",
+    "sala": null,
+    "scenes": [
+      {
+        "id": "saltos.fiesta", "label": "fiesta", "title": "fiesta", "line": 4, "targeted": false,
+        "attrs": { "quien": "greta", "en": null, "si": [{ "var": "noche", "op": "gt", "value": 0 }], "unaVez": true, "vn": false }
+      },
+      {
+        "id": "saltos.saludo", "label": "saludo", "title": "saludo", "line": 8, "targeted": false,
+        "attrs": { "quien": "greta", "en": null, "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "saltos.confianza", "label": "confianza", "title": "confianza", "line": 13, "targeted": true,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "saltos.cuenta_atras", "label": "cuenta_atras", "title": "cuenta_atras", "line": 16, "targeted": false,
+        "attrs": { "quien": null, "en": "reloj", "si": [], "unaVez": false, "vn": false }
+      },
+      {
+        "id": "saltos.campanada", "label": "campanada", "title": "campanada", "line": 22, "targeted": true,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      }
+    ],
+    "problems": []
+  },
+  "entries": [
+    { "who": "greta", "place": null, "vars": { "values": {}, "seen": [] }, "scene": "saltos.saludo" },
+    { "who": "greta", "place": null, "vars": { "values": { "noche": 1 }, "seen": [] }, "scene": "saltos.fiesta" },
+    { "who": "greta", "place": null, "vars": { "values": { "noche": 1 }, "seen": ["saltos.fiesta"] }, "scene": "saltos.saludo" },
+    { "who": null, "place": "reloj", "vars": { "values": {}, "seen": [] }, "scene": "saltos.cuenta_atras" },
+    { "who": "greta", "place": "reloj", "vars": { "values": {}, "seen": [] }, "scene": "saltos.saludo" }
+  ],
+  "runs": [
+    {
+      "scene": "saltos.saludo",
+      "vars": { "values": { "greta_confianza": 3 }, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "saltos.confianza", "stage": [], "who": "greta", "name": "Greta", "text": "Ya eres de la casa.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "saltos.confianza", "stage": [] } }
+      ],
+      "varsAfter": { "values": { "greta_confianza": 3 }, "seen": ["saltos.confianza", "saltos.saludo"] }
+    },
+    {
+      "scene": "saltos.saludo",
+      "vars": { "values": { "greta_confianza": 1 }, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "saltos.saludo", "stage": [], "who": "greta", "name": "Greta", "text": "Otra vez por aquí, viajera.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "saltos.saludo", "stage": [] } }
+      ],
+      "varsAfter": { "values": { "greta_confianza": 1, "saludos": 1 }, "seen": ["saltos.saludo"] }
+    },
+    {
+      "scene": "saltos.cuenta_atras",
+      "vars": { "values": { "reloj_visto": 1 }, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "saltos.campanada", "stage": [], "who": "greta", "name": "Greta", "text": "¡Medianoche!", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "saltos.campanada", "stage": [] } }
+      ],
+      "varsAfter": { "values": { "reloj_visto": 2 }, "seen": ["saltos.campanada", "saltos.cuenta_atras"] }
+    },
+    {
+      "scene": "saltos.cuenta_atras",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "saltos.cuenta_atras", "stage": [], "who": "greta", "name": "Greta", "text": "Aún no es medianoche.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "saltos.cuenta_atras", "stage": [] } }
+      ],
+      "varsAfter": { "values": { "reloj_visto": 1 }, "seen": ["saltos.cuenta_atras"] }
+    }
+  ]
+}
