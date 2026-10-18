@@ -1,0 +1,17 @@
+{
+  "name": "@velvet/scene2d",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velvet JS 2D drawing on a canvas: a scene of layers and nodes (sprites, nine-slices, text, shapes) with a camera, drawn at the stage's native pixels, with hit testing.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@velvet/core": "workspace:*"
+  }
+}

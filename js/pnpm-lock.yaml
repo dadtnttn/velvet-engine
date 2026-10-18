@@ -133,6 +133,12 @@ importers:
 
   packages/i18n: {}
 
+  packages/scene2d:
+    dependencies:
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/testing:
     dependencies:
       '@velvet/core':
