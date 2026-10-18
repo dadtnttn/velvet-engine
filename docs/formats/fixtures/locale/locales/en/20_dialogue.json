@@ -1,0 +1,13 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "entries": {
+    "dialogue.merchant.greet": "Welcome to the square, {name}!",
+    "dialogue.merchant.ask": "Do you want to buy a lantern?",
+    "dialogue.merchant.lanterns": {
+      "one": "You have {count} lantern.",
+      "other": "You have {count} lanterns."
+    }
+  }
+}

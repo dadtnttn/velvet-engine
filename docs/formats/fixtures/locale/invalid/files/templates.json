@@ -1,0 +1,14 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "entries": {
+    "ok.escaped": "{{0}} is written as {{0}}",
+    "bad.unclosed": "a {0",
+    "bad.lone-close": "b }",
+    "bad.empty-hole": "c {}",
+    "bad.spaces": "d { 0 }",
+    "bad.leading-zero": "e {01}",
+    "bad.name": "f {a-b}"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "es",
+  "note": "Source language of the example game. Its id keys hold the source text.",
+  "meta": {
+    "name": "Español",
+    "script": "Latn",
+    "direction": "ltr"
+  },
+  "entries": {
+    "menu.title": "Plaza del Farol",
+    "menu.start": "Empezar",
+    "menu.options": "Opciones",
+    "menu.quit": "Salir"
+  }
+}

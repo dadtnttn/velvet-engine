@@ -1,0 +1,21 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "entries": {
+    "ok.plural": {
+      "one": "{count} item",
+      "other": "{count} items"
+    },
+    "bad.no-other": {
+      "one": "{count} item"
+    },
+    "bad.category": {
+      "other": "{count} items",
+      "some": "{count} items?"
+    },
+    "bad.form": {
+      "other": 3
+    }
+  }
+}

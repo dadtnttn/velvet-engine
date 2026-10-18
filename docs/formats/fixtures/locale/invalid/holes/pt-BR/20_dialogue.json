@@ -1,0 +1,13 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "pt-BR",
+  "entries": {
+    "dialogue.merchant.greet": "Bem-vinda à praça, {name}!",
+    "dialogue.merchant.ask": "Quer comprar um lampião?",
+    "dialogue.merchant.lanterns": {
+      "one": "Você tem {count} lampião.",
+      "other": "Você tem {count} lampiões."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "es",
+  "entries": {
+    "dialogue.merchant.greet": "¡Bienvenida a la plaza, {name}!",
+    "dialogue.merchant.ask": "¿Quieres comprar un farol?",
+    "dialogue.merchant.lanterns": {
+      "one": "Tienes {count} farol.",
+      "other": "Tienes {count} faroles."
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "pt-BR",
+  "entries": {
+    "menu.title": "Praça do Lampião",
+    "menu.start": "Começar",
+    "menu.options": "Opções",
+    "menu.quit": "Sair"
+  }
+}

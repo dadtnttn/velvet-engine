@@ -1,0 +1,16 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "he",
+  "meta": {
+    "name": "עברית",
+    "script": "Hebr",
+    "direction": "rtl",
+    "shaping": true
+  },
+  "entries": {
+    "menu.start": "התחל",
+    "menu.options": "אפשרויות",
+    "menu.quit": "יציאה"
+  }
+}

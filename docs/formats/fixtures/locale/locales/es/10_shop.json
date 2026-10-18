@@ -1,0 +1,16 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "es",
+  "entries": {
+    "shop.title": "Tienda",
+    "shop.buy": "Comprar {item} por {gold} monedas",
+    "shop.coins": {
+      "one": "{count} moneda",
+      "other": "{count} monedas"
+    },
+    "shop.discount": "Descuento del {0}%",
+    "shop.restock": "Reposición mañana a las {hour}",
+    "shop.literal": "Escribe {{nombre}} para el nombre: {name}"
+  }
+}

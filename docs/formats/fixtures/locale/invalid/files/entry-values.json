@@ -1,0 +1,11 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "entries": {
+    "ok.valid": "Valid",
+    "bad.number": 42,
+    "bad.null": null,
+    "bad.array": ["one", "two"]
+  }
+}

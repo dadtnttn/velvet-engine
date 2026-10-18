@@ -1,0 +1,16 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "pt-BR",
+  "meta": {
+    "name": "Português (Brasil)",
+    "script": "Latn",
+    "direction": "ltr",
+    "font": "sans"
+  },
+  "entries": {
+    "menu.start": "Começar",
+    "menu.options": "Opções",
+    "menu.quit": "Sair"
+  }
+}

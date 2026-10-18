@@ -1,0 +1,8 @@
+{
+  "format": "some-other-format",
+  "version": 1,
+  "language": "en",
+  "entries": {
+    "menu.start": "Start"
+  }
+}

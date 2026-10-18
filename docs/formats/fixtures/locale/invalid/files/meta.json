@@ -1,0 +1,15 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "extra": true,
+  "meta": {
+    "direction": "up",
+    "script": "latin",
+    "shaping": "yes",
+    "flavour": "salty"
+  },
+  "entries": {
+    "ok.meta": "Meta test"
+  }
+}

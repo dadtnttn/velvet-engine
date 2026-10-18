@@ -1,0 +1,11 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "pt",
+  "meta": {
+    "name": "Português"
+  },
+  "entries": {
+    "menu.title": "Praça do Lampião"
+  }
+}

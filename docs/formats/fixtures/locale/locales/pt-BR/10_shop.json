@@ -1,0 +1,14 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "pt-BR",
+  "entries": {
+    "shop.title": "Loja",
+    "shop.buy": "Comprar {item} por {gold} moedas",
+    "shop.coins": {
+      "one": "{count} moeda",
+      "other": "{count} moedas"
+    },
+    "shop.literal": "Digite {{nome}} para o nome: {name}"
+  }
+}

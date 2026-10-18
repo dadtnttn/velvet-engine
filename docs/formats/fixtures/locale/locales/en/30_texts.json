@@ -1,0 +1,9 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "entries": {
+    "¿Cuánto cuesta?": "How much does it cost?",
+    "Quedan {0} faroles": "{0} lanterns are left"
+  }
+}

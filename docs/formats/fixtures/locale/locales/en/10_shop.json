@@ -1,0 +1,15 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "entries": {
+    "shop.title": "Shop",
+    "shop.buy": "Buy {item} for {gold} coins",
+    "shop.coins": {
+      "one": "{count} coin",
+      "other": "{count} coins"
+    },
+    "shop.discount": "{0}% off",
+    "shop.literal": "Type {{name}} for the name: {name}"
+  }
+}

@@ -1,0 +1,275 @@
+{
+  "format": "velvet-locale-cases",
+  "version": 1,
+  "description": "Conformance cases for velvet-locale v1 (docs/formats/LOCALE.md). Folders and files are relative to this file. Issues are compared as a set: severity, code and, when given, key. Every reader must produce the expected keys, texts, chain steps, reports and issues.",
+  "files": [
+    {
+      "name": "a version other than 1 is refused",
+      "language": "en",
+      "file": "invalid/files/version-2.json",
+      "expect": { "keys": [], "issues": [{ "severity": "error", "code": "version" }] }
+    },
+    {
+      "name": "a format tag other than velvet-locale is refused",
+      "language": "en",
+      "file": "invalid/files/format-wrong.json",
+      "expect": { "keys": [], "issues": [{ "severity": "error", "code": "format" }] }
+    },
+    {
+      "name": "text that is not JSON is refused",
+      "language": "en",
+      "file": "invalid/files/broken-json.json",
+      "expect": { "keys": [], "issues": [{ "severity": "error", "code": "json" }] }
+    },
+    {
+      "name": "a top level that is not an object is refused",
+      "language": "en",
+      "file": "invalid/files/not-object.json",
+      "expect": { "keys": [], "issues": [{ "severity": "error", "code": "structure" }] }
+    },
+    {
+      "name": "entries that are not an object are refused",
+      "language": "en",
+      "file": "invalid/files/entries-array.json",
+      "expect": { "keys": [], "issues": [{ "severity": "error", "code": "structure" }] }
+    },
+    {
+      "name": "a file that names another language is refused",
+      "language": "en",
+      "file": "invalid/files/language-mismatch.json",
+      "expect": { "keys": [], "issues": [{ "severity": "error", "code": "language-mismatch" }] }
+    },
+    {
+      "name": "a tag that is not in canonical case is refused",
+      "language": "pt-BR",
+      "file": "invalid/files/bad-tag.json",
+      "expect": { "keys": [], "issues": [{ "severity": "error", "code": "language" }] }
+    },
+    {
+      "name": "entry values of the wrong type are dropped one by one",
+      "language": "en",
+      "file": "invalid/files/entry-values.json",
+      "expect": {
+        "keys": ["ok.valid"],
+        "issues": [
+          { "severity": "error", "code": "value", "key": "bad.number" },
+          { "severity": "error", "code": "value", "key": "bad.null" },
+          { "severity": "error", "code": "value", "key": "bad.array" }
+        ]
+      }
+    },
+    {
+      "name": "bad plural objects are dropped, the valid one is kept",
+      "language": "en",
+      "file": "invalid/files/plurals.json",
+      "expect": {
+        "keys": ["ok.plural"],
+        "issues": [
+          { "severity": "error", "code": "plural", "key": "bad.no-other" },
+          { "severity": "error", "code": "plural", "key": "bad.category" },
+          { "severity": "error", "code": "plural", "key": "bad.form" }
+        ]
+      }
+    },
+    {
+      "name": "bad template syntax drops only the entry that has it",
+      "language": "en",
+      "file": "invalid/files/templates.json",
+      "expect": {
+        "keys": ["ok.escaped"],
+        "issues": [
+          { "severity": "error", "code": "template", "key": "bad.unclosed" },
+          { "severity": "error", "code": "template", "key": "bad.lone-close" },
+          { "severity": "error", "code": "template", "key": "bad.empty-hole" },
+          { "severity": "error", "code": "template", "key": "bad.spaces" },
+          { "severity": "error", "code": "template", "key": "bad.leading-zero" },
+          { "severity": "error", "code": "template", "key": "bad.name" }
+        ]
+      }
+    },
+    {
+      "name": "bad meta fields are ignored and unknown fields only warn",
+      "language": "en",
+      "file": "invalid/files/meta.json",
+      "expect": {
+        "keys": ["ok.meta"],
+        "meta": {},
+        "issues": [
+          { "severity": "error", "code": "meta" },
+          { "severity": "error", "code": "meta" },
+          { "severity": "error", "code": "meta" },
+          { "severity": "warning", "code": "unknown-field" },
+          { "severity": "warning", "code": "unknown-field" }
+        ]
+      }
+    },
+    {
+      "name": "an empty text for a key with letters is dropped, punctuation may be empty",
+      "language": "en",
+      "file": "invalid/files/empty.json",
+      "expect": {
+        "keys": ["¡", "menu.full"],
+        "issues": [{ "severity": "warning", "code": "empty", "key": "menu.empty" }]
+      }
+    }
+  ],
+  "validations": [
+    {
+      "name": "a translation that drops or adds a hole is reported",
+      "source": "locales/es",
+      "sourceLanguage": "es",
+      "translation": "invalid/holes/pt-BR",
+      "translationLanguage": "pt-BR",
+      "expect": {
+        "issues": [
+          { "severity": "error", "code": "holes", "key": "shop.buy" },
+          { "severity": "error", "code": "holes", "key": "shop.coins" }
+        ]
+      }
+    },
+    {
+      "name": "a partial Brazilian translation reports the keys it lacks",
+      "source": "locales/es",
+      "sourceLanguage": "es",
+      "translation": "locales/pt-BR",
+      "translationLanguage": "pt-BR",
+      "expect": {
+        "issues": [
+          { "severity": "warning", "code": "missing-key", "key": "menu.title" },
+          { "severity": "warning", "code": "missing-key", "key": "shop.discount" },
+          { "severity": "warning", "code": "missing-key", "key": "shop.restock" },
+          { "severity": "warning", "code": "missing-key", "key": "dialogue.merchant.greet" },
+          { "severity": "warning", "code": "missing-key", "key": "dialogue.merchant.ask" },
+          { "severity": "warning", "code": "missing-key", "key": "dialogue.merchant.lanterns" }
+        ]
+      }
+    },
+    {
+      "name": "text keys that the source does not list are unknown",
+      "source": "locales/es",
+      "sourceLanguage": "es",
+      "translation": "locales/en",
+      "translationLanguage": "en",
+      "expect": {
+        "issues": [
+          { "severity": "warning", "code": "missing-key", "key": "shop.restock" },
+          { "severity": "warning", "code": "unknown-key", "key": "¿Cuánto cuesta?" },
+          { "severity": "warning", "code": "unknown-key", "key": "Quedan {0} faroles" }
+        ]
+      }
+    },
+    {
+      "name": "Hebrew lacks the menu title, the discount, the restock, the literal and the dialogue",
+      "source": "locales/es",
+      "sourceLanguage": "es",
+      "translation": "locales/he",
+      "translationLanguage": "he",
+      "expect": {
+        "issues": [
+          { "severity": "warning", "code": "missing-key", "key": "menu.title" },
+          { "severity": "warning", "code": "missing-key", "key": "shop.discount" },
+          { "severity": "warning", "code": "missing-key", "key": "shop.restock" },
+          { "severity": "warning", "code": "missing-key", "key": "shop.literal" },
+          { "severity": "warning", "code": "missing-key", "key": "dialogue.merchant.greet" },
+          { "severity": "warning", "code": "missing-key", "key": "dialogue.merchant.ask" },
+          { "severity": "warning", "code": "missing-key", "key": "dialogue.merchant.lanterns" }
+        ]
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "the example game in every language",
+      "source": "es",
+      "fallback": "en",
+      "languages": {
+        "es": "locales/es",
+        "en": "locales/en",
+        "pt": "locales/pt",
+        "pt-BR": "locales/pt-BR",
+        "he": "locales/he"
+      },
+      "loadIssues": [],
+      "lookups": [
+        { "language": "en", "key": "menu.start", "expect": { "text": "Start game", "via": "en" } },
+        { "language": "es", "key": "menu.start", "expect": { "text": "Empezar", "via": "es" } },
+        { "language": "pt-BR", "key": "menu.start", "expect": { "text": "Começar", "via": "pt-BR" } },
+        { "language": "pt-BR", "key": "menu.title", "expect": { "text": "Praça do Lampião", "via": "pt" } },
+        { "language": "pt-BR", "key": "shop.discount", "args": [10], "expect": { "text": "10% off", "via": "en" } },
+        { "language": "pt-BR", "key": "shop.restock", "args": { "hour": 9 }, "expect": { "text": "Reposición mañana a las 9", "via": "es" } },
+        { "language": "he", "key": "dialogue.merchant.greet", "args": { "name": "Ana" }, "expect": { "text": "Welcome to the square, Ana!", "via": "en" } },
+        { "language": "he", "key": "shop.buy", "args": { "item": "פנס", "gold": 5 }, "expect": { "text": "לקנות פנס ב-5 מטבעות", "via": "he" } },
+        { "language": "he", "key": "shop.coins", "count": 1, "expect": { "text": "1 מטבע", "via": "he" } },
+        { "language": "he", "key": "shop.coins", "count": 2, "expect": { "text": "שני מטבעות", "via": "he" } },
+        { "language": "he", "key": "shop.coins", "count": 3, "expect": { "text": "3 מטבעות", "via": "he" } },
+        { "language": "he", "key": "shop.coins", "count": 0, "expect": { "text": "0 מטבעות", "via": "he" } },
+        { "language": "en", "key": "shop.coins", "count": 0, "expect": { "text": "0 coins", "via": "en" } },
+        { "language": "en", "key": "shop.coins", "count": 1, "expect": { "text": "1 coin", "via": "en" } },
+        { "language": "pt-BR", "key": "shop.coins", "count": 0, "expect": { "text": "0 moeda", "via": "pt-BR" } },
+        { "language": "pt-BR", "key": "shop.coins", "count": 2, "expect": { "text": "2 moedas", "via": "pt-BR" } },
+        { "language": "es", "key": "dialogue.merchant.lanterns", "count": 1, "expect": { "text": "Tienes 1 farol.", "via": "es" } },
+        { "language": "es", "key": "dialogue.merchant.lanterns", "count": 2, "expect": { "text": "Tienes 2 faroles.", "via": "es" } },
+        { "language": "en", "key": "shop.literal", "args": { "name": "Ana" }, "expect": { "text": "Type {name} for the name: Ana", "via": "en" } },
+        { "language": "pt-BR", "key": "shop.literal", "args": { "name": "Ana" }, "expect": { "text": "Digite {nome} para o nome: Ana", "via": "pt-BR" } },
+        { "language": "en", "key": "¿Cuánto cuesta?", "expect": { "text": "How much does it cost?", "via": "en" } },
+        { "language": "pt-BR", "key": "¿Cuánto cuesta?", "expect": { "text": "How much does it cost?", "via": "en" } },
+        { "language": "es", "key": "¿Cuánto cuesta?", "expect": { "text": "¿Cuánto cuesta?", "via": "key" } },
+        { "language": "en", "key": "Quedan {0} faroles", "args": [7], "expect": { "text": "7 lanterns are left", "via": "en" } },
+        { "language": "he", "key": "¿Cuánto cuesta?", "expect": { "text": "How much does it cost?", "via": "en" } },
+        { "language": "en", "key": "shop.unknown", "expect": { "text": "shop.unknown", "via": "key", "missing": true } },
+        { "language": "en", "key": "shop.unknown", "expect": { "text": "shop.unknown", "via": "key" } },
+        { "language": "en", "key": "¿Dónde está la tienda?", "expect": { "text": "¿Dónde está la tienda?", "via": "key", "missing": true } },
+        { "language": "es", "key": "shop.unknown", "expect": { "text": "shop.unknown", "via": "key" } },
+        { "language": "he", "key": "menu.title", "expect": { "text": "Lantern Square", "via": "en" } },
+        { "language": "en", "key": "shop.buy", "args": { "item": "lantern" }, "expect": { "text": "Buy lantern for {gold} coins", "via": "en", "issues": ["missing-argument"] } },
+        { "language": "es", "key": "shop.discount", "args": [15], "expect": { "text": "Descuento del 15%", "via": "es" } },
+        { "language": "pt-BR", "key": "shop.buy", "args": { "item": "lanterna", "gold": 5 }, "expect": { "text": "Comprar lanterna por 5 moedas", "via": "pt-BR" } },
+        { "language": "he", "key": "shop.unknown", "expect": { "text": "shop.unknown", "via": "key", "missing": true } },
+        { "language": "he-IL", "key": "menu.start", "expect": { "text": "התחל", "via": "he" } }
+      ],
+      "directions": [
+        { "language": "es", "direction": "ltr" },
+        { "language": "en", "direction": "ltr" },
+        { "language": "pt", "direction": "ltr" },
+        { "language": "pt-BR", "direction": "ltr" },
+        { "language": "he", "direction": "rtl" },
+        { "language": "he-IL", "direction": "rtl" }
+      ]
+    },
+    {
+      "name": "a translation that drops or adds a hole is ignored when the game loads",
+      "source": "es",
+      "fallback": "en",
+      "languages": {
+        "es": "locales/es",
+        "en": "locales/en",
+        "pt-BR": "invalid/holes/pt-BR"
+      },
+      "loadIssues": [
+        { "language": "pt-BR", "severity": "error", "code": "holes", "key": "shop.buy" },
+        { "language": "pt-BR", "severity": "error", "code": "holes", "key": "shop.coins" }
+      ],
+      "lookups": [
+        { "language": "pt-BR", "key": "shop.buy", "args": { "item": "lanterna", "gold": 5 }, "expect": { "text": "Buy lanterna for 5 coins", "via": "en" } },
+        { "language": "pt-BR", "key": "shop.coins", "count": 0, "expect": { "text": "0 coins", "via": "en" } },
+        { "language": "pt-BR", "key": "shop.title", "expect": { "text": "Loja", "via": "pt-BR" } },
+        { "language": "pt-BR", "key": "shop.discount", "args": [10], "expect": { "text": "Desconto de 10%", "via": "pt-BR" } }
+      ]
+    },
+    {
+      "name": "files are read in name order, whatever order they arrive in",
+      "source": "es",
+      "fallback": "en",
+      "order": "reversed",
+      "languages": {
+        "es": "locales/es",
+        "en": "locales/en"
+      },
+      "loadIssues": [],
+      "lookups": [
+        { "language": "en", "key": "menu.start", "expect": { "text": "Start game", "via": "en" } },
+        { "language": "en", "key": "shop.coins", "count": 2, "expect": { "text": "2 coins", "via": "en" } }
+      ]
+    }
+  ]
+}

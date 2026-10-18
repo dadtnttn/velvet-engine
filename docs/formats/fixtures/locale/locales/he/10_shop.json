@@ -1,0 +1,15 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "he",
+  "entries": {
+    "shop.title": "חנות",
+    "shop.buy": "לקנות {item} ב-{gold} מטבעות",
+    "shop.coins": {
+      "one": "{count} מטבע",
+      "two": "שני מטבעות",
+      "many": "{count} מטבעות",
+      "other": "{count} מטבעות"
+    }
+  }
+}

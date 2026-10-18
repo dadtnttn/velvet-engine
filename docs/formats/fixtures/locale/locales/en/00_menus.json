@@ -1,0 +1,16 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "meta": {
+    "name": "English",
+    "script": "Latn",
+    "direction": "ltr"
+  },
+  "entries": {
+    "menu.title": "Lantern Square",
+    "menu.start": "Start",
+    "menu.options": "Options",
+    "menu.quit": "Quit"
+  }
+}

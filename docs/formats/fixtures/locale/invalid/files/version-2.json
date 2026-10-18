@@ -1,0 +1,8 @@
+{
+  "format": "velvet-locale",
+  "version": 2,
+  "language": "en",
+  "entries": {
+    "menu.start": "Start"
+  }
+}
