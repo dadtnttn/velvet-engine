@@ -243,3 +243,6 @@ lcov.info
 /demos/demon-queen/data/venues/
 /demos/demon-queen/data/shops/
 /demos/demon-queen/data/achievements/*.md
+
+# Velvet JS: WebAssembly built from the Rust crates (pnpm build:wasm).
+/js/packages/wasm/gen/

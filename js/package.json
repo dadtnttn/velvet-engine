@@ -1,0 +1,20 @@
+{
+  "name": "velvet-js",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Velvet JS: TypeScript packages for games that run inside Velvet Desktop. Private workspace, not published to npm.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "build:wasm": "node packages/wasm/build.mjs",
+    "test": "vitest run",
+    "typecheck": "node packages/wasm/build.mjs --if-stale && tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.9",
+    "happy-dom": "21.0.3",
+    "typescript": "7.0.2",
+    "vitest": "4.1.12"
+  }
+}

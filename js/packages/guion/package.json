@@ -1,0 +1,17 @@
+{
+  "name": "@velvet/guion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velvet JS guion: guiones (Markdown dialogue) parsed and played by velvet-guion through WebAssembly.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@velvet/wasm": "workspace:*"
+  }
+}
