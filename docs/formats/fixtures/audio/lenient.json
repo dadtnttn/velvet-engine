@@ -1,0 +1,12 @@
+{
+  "format": "velvet-audio",
+  "version": 1,
+  "buses": ["ambience"],
+  "sounds": [
+    { "id": "ui.click", "bus": "ui", "files": ["ui/click.opus"] },
+    { "id": "Ui.Bad", "files": ["ui/bad.opus"] },
+    { "id": "ui.click", "files": ["ui/other.opus"] },
+    { "id": "sfx.door.open", "bus": "battle", "files": ["sfx/door.opus"] },
+    { "id": "sfx.door.close", "files": ["sfx/door_close.opus"] }
+  ]
+}

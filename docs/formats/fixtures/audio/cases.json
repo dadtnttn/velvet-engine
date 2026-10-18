@@ -1,0 +1,119 @@
+{
+  "manifest": "manifest.json",
+  "buses": ["ambience"],
+  "invalid": [
+    { "file": "invalid/not-json.json", "code": "json" },
+    { "file": "invalid/wrong-format.json", "code": "format" },
+    { "file": "invalid/wrong-version.json", "code": "version" },
+    { "file": "invalid/sounds-not-array.json", "code": "structure", "path": "sounds" },
+    { "file": "invalid/buses-not-array.json", "code": "structure", "path": "buses" },
+    { "file": "invalid/sound-not-object.json", "code": "structure", "path": "sounds[0]" },
+    { "file": "invalid/bad-id.json", "code": "value", "path": "sounds[0].id" },
+    { "file": "invalid/duplicate-id.json", "code": "duplicate", "path": "sounds[1].id" },
+    { "file": "invalid/missing-files.json", "code": "structure", "path": "sounds[0]" },
+    { "file": "invalid/files-and-variants.json", "code": "value", "path": "sounds[0]" },
+    { "file": "invalid/empty-files.json", "code": "value", "path": "sounds[0].files" },
+    { "file": "invalid/too-many-files.json", "code": "value", "path": "sounds[0].files" },
+    { "file": "invalid/bad-extension.json", "code": "value", "path": "sounds[0].files[1]" },
+    { "file": "invalid/bad-path.json", "code": "value", "path": "sounds[0].files[0]" },
+    { "file": "invalid/duplicate-candidate.json", "code": "duplicate", "path": "sounds[0].files[2]" },
+    { "file": "invalid/one-variant.json", "code": "value", "path": "sounds[0].variants" },
+    { "file": "invalid/variant-without-files.json", "code": "structure", "path": "sounds[0].variants[1].files" },
+    { "file": "invalid/unknown-bus.json", "code": "value", "path": "sounds[0].bus" },
+    { "file": "invalid/bus-master.json", "code": "value", "path": "buses[0]" },
+    { "file": "invalid/bus-builtin.json", "code": "duplicate", "path": "buses[0]" },
+    { "file": "invalid/volume-too-loud.json", "code": "value", "path": "sounds[0].volume" },
+    { "file": "invalid/volume-not-number.json", "code": "structure", "path": "sounds[0].volume" },
+    { "file": "invalid/loop-points-without-loop.json", "code": "value", "path": "sounds[0].loop_points" },
+    { "file": "invalid/loop-points-backwards.json", "code": "value", "path": "sounds[0].loop_points" },
+    { "file": "invalid/max-voices-zero.json", "code": "value", "path": "sounds[0].max_voices" },
+    { "file": "invalid/cooldown-negative.json", "code": "value", "path": "sounds[0].cooldown_ms" },
+    { "file": "invalid/preload-not-boolean.json", "code": "structure", "path": "sounds[0].preload" },
+    { "file": "invalid/meta-not-object.json", "code": "structure", "path": "sounds[0].meta" },
+    { "file": "lenient.json", "code": "value", "path": "sounds[1].id" },
+    { "file": "lenient-bus.json", "code": "value", "path": "buses[0]" }
+  ],
+  "lenient": [
+    {
+      "file": "lenient.json",
+      "kept": ["ui.click", "sfx.door.close"],
+      "codes": ["value", "duplicate", "value"]
+    },
+    {
+      "file": "lenient-bus.json",
+      "kept": ["ambience.wind"],
+      "codes": ["value", "duplicate", "value"]
+    }
+  ],
+  "sounds": [
+    {
+      "id": "ui.click",
+      "fields": {
+        "bus": "ui",
+        "volume": 0.8,
+        "loop": false,
+        "loop_points": null,
+        "max_voices": null,
+        "cooldown_ms": 0,
+        "preload": true,
+        "variants": [{ "files": ["ui/click.opus", "ui/click.ogg", "ui/click.mp3", "ui/click.wav"] }]
+      }
+    },
+    {
+      "id": "sfx.door.open",
+      "fields": {
+        "bus": "sfx",
+        "volume": 1,
+        "preload": false,
+        "variants": [{ "files": ["sfx/door_open.opus", "sfx/door_open.wav"] }]
+      }
+    },
+    {
+      "id": "sfx.footstep.stone",
+      "fields": {
+        "bus": "sfx",
+        "cooldown_ms": 250,
+        "max_voices": 2,
+        "variants": [
+          { "files": ["sfx/stone_1.opus", "sfx/stone_1.wav"] },
+          { "files": ["sfx/stone_2.opus", "sfx/stone_2.wav"] },
+          { "files": ["sfx/stone_3.opus", "sfx/stone_3.wav"] }
+        ]
+      }
+    },
+    {
+      "id": "music.village.day",
+      "fields": {
+        "bus": "music",
+        "loop": true,
+        "loop_points": { "start": 12.5, "end": 96 },
+        "volume": 0.7
+      }
+    },
+    {
+      "id": "voice.narrator.hello",
+      "fields": {
+        "bus": "voice",
+        "volume": 1,
+        "variants": [
+          { "files": ["voice/narrator_hello_1.opus", "voice/narrator_hello_1.wav"] },
+          { "files": ["voice/narrator_hello_2.opus", "voice/narrator_hello_2.wav"] }
+        ]
+      }
+    },
+    {
+      "id": "ambience.wind",
+      "fields": {
+        "bus": "ambience",
+        "loop": true,
+        "volume": 0.5
+      }
+    }
+  ],
+  "curve": [
+    { "volume": 0, "gain": 0 },
+    { "volume": 0.1, "gain": 0.001, "decibels": -60 },
+    { "volume": 0.5, "gain": 0.125, "decibels": -18.0618 },
+    { "volume": 1, "gain": 1, "decibels": 0 }
+  ]
+}

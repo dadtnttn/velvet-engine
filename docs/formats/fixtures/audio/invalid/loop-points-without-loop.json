@@ -1,0 +1,1 @@
+{ "format": "velvet-audio", "version": 1, "sounds": [ { "id": "music.a", "bus": "music", "files": ["music/a.opus"], "loop_points": { "start": 1, "end": 2 } } ] }

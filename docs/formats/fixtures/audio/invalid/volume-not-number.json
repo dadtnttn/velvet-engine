@@ -1,0 +1,1 @@
+{ "format": "velvet-audio", "version": 1, "sounds": [ { "id": "ui.click", "files": ["ui/click.opus"], "volume": "loud" } ] }

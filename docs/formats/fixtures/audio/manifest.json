@@ -1,0 +1,52 @@
+{
+  "format": "velvet-audio",
+  "version": 1,
+  "buses": ["ambience"],
+  "sounds": [
+    {
+      "id": "ui.click",
+      "bus": "ui",
+      "files": ["ui/click.opus", "ui/click.ogg", "ui/click.mp3", "ui/click.wav"],
+      "volume": 0.8,
+      "preload": true,
+      "meta": { "notes": "a short tick for every button" }
+    },
+    {
+      "id": "sfx.door.open",
+      "files": ["sfx/door_open.opus", "sfx/door_open.wav"]
+    },
+    {
+      "id": "sfx.footstep.stone",
+      "variants": [
+        { "files": ["sfx/stone_1.opus", "sfx/stone_1.wav"] },
+        { "files": ["sfx/stone_2.opus", "sfx/stone_2.wav"] },
+        { "files": ["sfx/stone_3.opus", "sfx/stone_3.wav"] }
+      ],
+      "cooldown_ms": 250,
+      "max_voices": 2
+    },
+    {
+      "id": "music.village.day",
+      "bus": "music",
+      "files": ["music/village_day.opus", "music/village_day.ogg", "music/village_day.mp3"],
+      "loop": true,
+      "loop_points": { "start": 12.5, "end": 96 },
+      "volume": 0.7
+    },
+    {
+      "id": "voice.narrator.hello",
+      "bus": "voice",
+      "variants": [
+        { "files": ["voice/narrator_hello_1.opus", "voice/narrator_hello_1.wav"] },
+        { "files": ["voice/narrator_hello_2.opus", "voice/narrator_hello_2.wav"] }
+      ]
+    },
+    {
+      "id": "ambience.wind",
+      "bus": "ambience",
+      "files": ["ambience/wind.opus"],
+      "loop": true,
+      "volume": 0.5
+    }
+  ]
+}

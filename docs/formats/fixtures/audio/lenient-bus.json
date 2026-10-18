@@ -1,0 +1,9 @@
+{
+  "format": "velvet-audio",
+  "version": 1,
+  "buses": ["master", "ambience", "ambience"],
+  "sounds": [
+    { "id": "ambience.wind", "bus": "ambience", "files": ["ambience/wind.opus"], "loop": true },
+    { "id": "sfx.lost", "bus": "master", "files": ["sfx/lost.opus"] }
+  ]
+}
