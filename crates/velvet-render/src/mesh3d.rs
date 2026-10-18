@@ -4973,31 +4973,48 @@ impl Wgpu3DRenderer {
             let mut bound = None;
             let mut run: Option<DrawRun> = None;
             pass.set_bind_group(1, &self.object_bind_group, &[]);
+            // Which draws the mirror needs, worked out in chunks on the worker pool (thousands of
+            // draws in a forest): solid, inside the mirrored view, and with an image that lands on
+            // the water.
+            let mut mirrored = vec![false; draws.len()];
+            {
+                let parts: Vec<(usize, &mut [bool])> =
+                    mirrored.chunks_mut(CHUNK).enumerate().collect();
+                let test = |(chunk, out): (usize, &mut [bool])| {
+                    for (k, keep) in out.iter_mut().enumerate() {
+                        let i = chunk * CHUNK + k;
+                        let draw = &draws[i];
+                        if draw.material.is_shadow_only()
+                            || draw.material.is_additive()
+                            || draw.material.base_color[3] < 0.99
+                        {
+                            continue;
+                        }
+                        let Some(b) = bounds[i] else {
+                            continue;
+                        };
+                        let m = mirrored_vp * draw.transform;
+                        if outside_view(&m.to_cols_array(), b) {
+                            continue;
+                        }
+                        // Its image misses the water altogether: nothing of it would be read.
+                        if let (Some(w), Some(r)) = (water_rect, screen_rect(m, b, size)) {
+                            if r[2] < w[0] || r[0] > w[2] || r[3] < w[1] || r[1] > w[3] {
+                                continue;
+                            }
+                        }
+                        *keep = true;
+                    }
+                };
+                crate::work::each(parts, &test);
+            }
             for (draw_index, draw) in draws.iter().enumerate() {
-                if draw.material.is_shadow_only()
-                    || draw.material.is_additive()
-                    || draw.material.base_color[3] < 0.99
-                {
+                if !mirrored[draw_index] {
                     continue;
                 }
                 let Some(mesh) = self.meshes.get(draw.mesh.0 as usize) else {
                     continue;
                 };
-                if outside_view(
-                    &(mirrored_vp * draw.transform).to_cols_array(),
-                    mesh.bounds.get(),
-                ) {
-                    continue;
-                }
-                // Its image misses the water altogether: nothing of it would be read.
-                if let (Some(w), Some(r)) = (
-                    water_rect,
-                    screen_rect(mirrored_vp * draw.transform, mesh.bounds.get(), size),
-                ) {
-                    if r[2] < w[0] || r[0] > w[2] || r[3] < w[1] || r[1] > w[3] {
-                        continue;
-                    }
-                }
                 let texture = self.textures.get(
                     draw.texture
                         .or(draw.material.texture)
@@ -6782,6 +6799,27 @@ fn shadow_visibility(light_clip: vec4<f32>, normal: vec3<f32>) -> f32 {
     // As many of the disc's taps as the quality asks (all sixteen: the full look).
     let taps = i32(clamp(camera.quality.x, 1.0, 16.0));
     var visibility = 0.0;
+    if (taps == 16) {
+        // The four taps at the disc's rim first: when they agree (all lit, all in shadow: most of
+        // the screen) the inner twelve would too, and are skipped; in a penumbra the other twelve
+        // are added and the sum is the full disc's, as before.
+        let rim = array<i32, 4>(0, 1, 7, 13);
+        for (var k: i32 = 0; k < 4; k = k + 1) {
+            let offset = rot * POISSON[rim[k]] * texel * 1.5;
+            visibility = visibility + textureSampleCompareLevel(shadow_texture, shadow_sampler, uv + offset, ndc.z - bias);
+        }
+        if (visibility < 0.0001 || visibility > 3.9999) {
+            return visibility * 0.25;
+        }
+        for (var i: i32 = 0; i < 16; i = i + 1) {
+            if (i == 0 || i == 1 || i == 7 || i == 13) {
+                continue;
+            }
+            let offset = rot * POISSON[i] * texel * 1.5;
+            visibility = visibility + textureSampleCompareLevel(shadow_texture, shadow_sampler, uv + offset, ndc.z - bias);
+        }
+        return visibility / 16.0;
+    }
     for (var i: i32 = 0; i < taps; i = i + 1) {
         let offset = rot * POISSON[i] * texel * 1.5;
         visibility = visibility + textureSampleCompareLevel(shadow_texture, shadow_sampler, uv + offset, ndc.z - bias);
