@@ -1,0 +1,49 @@
+{
+  "height": 3,
+  "infinite": false,
+  "layers": [
+    {
+      "data": [1, 2, 0, 3, 4, 0, 0, 0, 6],
+      "height": 3,
+      "id": 1,
+      "name": "trees",
+      "opacity": 1,
+      "type": "tilelayer",
+      "visible": true,
+      "width": 3,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "nextlayerid": 2,
+  "nextobjectid": 1,
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "tiledversion": "1.10.2",
+  "tileheight": 16,
+  "tilesets": [
+    { "firstgid": 1, "source": "tilesets/forest.tsj" },
+    {
+      "columns": 2,
+      "firstgid": 5,
+      "image": "props.png",
+      "imageheight": 32,
+      "imagewidth": 32,
+      "margin": 0,
+      "name": "props",
+      "spacing": 0,
+      "tilecount": 4,
+      "tileheight": 16,
+      "tiles": [
+        { "id": 1, "properties": [{ "name": "solid", "type": "bool", "value": true }] }
+      ],
+      "tilewidth": 16,
+      "type": "tileset",
+      "version": "1.10"
+    }
+  ],
+  "tilewidth": 16,
+  "type": "map",
+  "version": "1.10",
+  "width": 3
+}

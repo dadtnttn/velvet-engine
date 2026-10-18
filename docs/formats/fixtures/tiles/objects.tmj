@@ -1,0 +1,164 @@
+{
+  "height": 2,
+  "infinite": false,
+  "layers": [
+    {
+      "draworder": "topdown",
+      "id": 1,
+      "name": "objects",
+      "objects": [
+        {
+          "height": 32,
+          "id": 1,
+          "name": "spawn",
+          "properties": [
+            { "name": "label", "value": "start" },
+            { "name": "count", "type": "int", "value": 3 },
+            { "name": "speed", "type": "float", "value": 1.5 },
+            { "name": "hidden", "type": "bool", "value": false },
+            { "name": "tint", "type": "color", "value": "#ff00ff00" },
+            { "name": "sprite", "type": "file", "value": "sprites/guard.png" },
+            { "name": "target", "type": "object", "value": 12 },
+            {
+              "name": "stats",
+              "propertytype": "Stats",
+              "type": "class",
+              "value": { "alive": true, "hp": 10, "inner": { "level": 2 }, "name": "orc", "scale": 0.5 }
+            }
+          ],
+          "rotation": 0,
+          "type": "spawn",
+          "visible": true,
+          "width": 32,
+          "x": 40,
+          "y": 48
+        },
+        {
+          "height": 0,
+          "id": 2,
+          "name": "shrine",
+          "point": true,
+          "rotation": 0,
+          "visible": true,
+          "width": 0,
+          "x": 100,
+          "y": 20
+        },
+        {
+          "ellipse": true,
+          "height": 24,
+          "id": 3,
+          "name": "pool",
+          "rotation": 0,
+          "visible": true,
+          "width": 40,
+          "x": 60,
+          "y": 60
+        },
+        {
+          "height": 0,
+          "id": 4,
+          "name": "gate",
+          "polygon": [{ "x": 0, "y": 0 }, { "x": 16, "y": 0 }, { "x": 8, "y": 12 }],
+          "rotation": 90,
+          "visible": true,
+          "width": 0,
+          "x": 10,
+          "y": 10
+        },
+        {
+          "height": 0,
+          "id": 5,
+          "name": "path",
+          "polyline": [{ "x": 0, "y": 0 }, { "x": 20, "y": 4 }, { "x": 40, "y": 0 }],
+          "rotation": 0,
+          "visible": false,
+          "width": 0,
+          "x": 0,
+          "y": 90
+        },
+        {
+          "gid": 1073741832,
+          "height": 16,
+          "id": 6,
+          "name": "spikes",
+          "rotation": 0,
+          "visible": true,
+          "width": 16,
+          "x": 16,
+          "y": 32
+        },
+        {
+          "height": 20,
+          "id": 7,
+          "name": "sign",
+          "rotation": 0,
+          "text": {
+            "bold": false,
+            "color": "#ffffffff",
+            "fontfamily": "sans-serif",
+            "halign": "center",
+            "italic": false,
+            "pixelsize": 12,
+            "text": "Hello",
+            "valign": "center",
+            "wrap": true
+          },
+          "visible": true,
+          "width": 80,
+          "x": 120,
+          "y": 40
+        }
+      ],
+      "opacity": 1,
+      "type": "objectgroup",
+      "visible": true,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "draworder": "index",
+      "id": 2,
+      "name": "markers",
+      "objects": [
+        { "height": 0, "id": 8, "name": "b", "point": true, "rotation": 0, "visible": true, "width": 0, "x": 5, "y": 5 },
+        { "height": 0, "id": 9, "name": "a", "point": true, "rotation": 0, "visible": true, "width": 0, "x": 1, "y": 1 }
+      ],
+      "opacity": 1,
+      "type": "objectgroup",
+      "visible": true,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "nextlayerid": 3,
+  "nextobjectid": 10,
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "tiledversion": "1.10.2",
+  "tileheight": 16,
+  "tilesets": [
+    {
+      "columns": 4,
+      "firstgid": 1,
+      "image": "terrain.png",
+      "imageheight": 32,
+      "imagewidth": 64,
+      "margin": 0,
+      "name": "terrain",
+      "spacing": 0,
+      "tilecount": 8,
+      "tileheight": 16,
+      "tilewidth": 16,
+      "tiles": [
+        { "id": 7, "properties": [{ "name": "damage", "type": "int", "value": 3 }] }
+      ],
+      "type": "tileset",
+      "version": "1.10"
+    }
+  ],
+  "tilewidth": 16,
+  "type": "map",
+  "version": "1.10",
+  "width": 2
+}

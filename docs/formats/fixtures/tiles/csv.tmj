@@ -1,0 +1,152 @@
+{
+  "backgroundcolor": "#ff202020",
+  "compressionlevel": -1,
+  "height": 4,
+  "infinite": false,
+  "layers": [
+    {
+      "data": [2, 2, 2, 2, 2,
+               2, 0, 0, 0, 2,
+               3, 0, 0, 0, 3,
+               6, 6, 6, 6, 6],
+      "height": 4,
+      "id": 1,
+      "name": "ground",
+      "opacity": 1,
+      "type": "tilelayer",
+      "visible": true,
+      "width": 5,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "data": [0, 0, 0, 0, 0,
+               0, 7, 0, 0, 0,
+               0, 4, 0, 0, 0,
+               0, 0, 0, 8, 0],
+      "height": 4,
+      "id": 2,
+      "name": "decor",
+      "opacity": 1,
+      "type": "tilelayer",
+      "visible": true,
+      "width": 5,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "nextlayerid": 3,
+  "nextobjectid": 1,
+  "orientation": "orthogonal",
+  "properties": [
+    {
+      "name": "title",
+      "type": "string",
+      "value": "Test map"
+    }
+  ],
+  "renderorder": "right-down",
+  "tiledversion": "1.10.2",
+  "tileheight": 16,
+  "tilesets": [
+    {
+      "columns": 4,
+      "firstgid": 1,
+      "image": "terrain.png",
+      "imageheight": 32,
+      "imagewidth": 64,
+      "margin": 0,
+      "name": "terrain",
+      "spacing": 0,
+      "tilecount": 8,
+      "tileheight": 16,
+      "tiles": [
+        {
+          "id": 1,
+          "properties": [
+            {
+              "name": "solid",
+              "type": "bool",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "objectgroup": {
+            "draworder": "index",
+            "id": 2,
+            "name": "",
+            "objects": [
+              {
+                "height": 6,
+                "id": 1,
+                "name": "",
+                "rotation": 0,
+                "type": "",
+                "visible": true,
+                "width": 16,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "opacity": 1,
+            "type": "objectgroup",
+            "visible": true,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "animation": [
+            {
+              "duration": 200,
+              "tileid": 3
+            },
+            {
+              "duration": 200,
+              "tileid": 4
+            }
+          ],
+          "id": 3
+        },
+        {
+          "id": 5,
+          "properties": [
+            {
+              "name": "oneWay",
+              "type": "bool",
+              "value": true
+            },
+            {
+              "name": "solid",
+              "type": "bool",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "decor"
+        },
+        {
+          "id": 7,
+          "properties": [
+            {
+              "name": "damage",
+              "type": "int",
+              "value": 3
+            }
+          ]
+        }
+      ],
+      "tilewidth": 16,
+      "type": "tileset",
+      "version": "1.10"
+    }
+  ],
+  "tilewidth": 16,
+  "type": "map",
+  "version": "1.10",
+  "width": 5
+}

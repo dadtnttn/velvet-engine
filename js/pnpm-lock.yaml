@@ -139,6 +139,8 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/tiles: {}
+
   packages/tools:
     dependencies:
       '@velvet/artprep':

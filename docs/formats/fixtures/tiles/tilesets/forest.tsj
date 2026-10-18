@@ -1,0 +1,45 @@
+{
+  "columns": 2,
+  "image": "forest.png",
+  "imageheight": 32,
+  "imagewidth": 32,
+  "margin": 0,
+  "name": "forest",
+  "spacing": 0,
+  "tilecount": 4,
+  "tileheight": 16,
+  "tileoffset": { "x": 0, "y": -4 },
+  "tiles": [
+    {
+      "id": 0,
+      "objectgroup": {
+        "draworder": "index",
+        "id": 2,
+        "name": "",
+        "objects": [
+          { "height": 12, "id": 1, "name": "trunk", "rotation": 0, "type": "solid", "visible": true, "width": 12, "x": 2, "y": 4 }
+        ],
+        "opacity": 1,
+        "type": "objectgroup",
+        "visible": true,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "animation": [
+        { "duration": 300, "tileid": 1 },
+        { "duration": 300, "tileid": 2 }
+      ],
+      "id": 1
+    },
+    {
+      "id": 3,
+      "properties": [{ "name": "wood", "type": "int", "value": 2 }],
+      "type": "log"
+    }
+  ],
+  "tilewidth": 16,
+  "type": "tileset",
+  "version": "1.10"
+}

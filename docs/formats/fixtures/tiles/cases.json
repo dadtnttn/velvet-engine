@@ -1,0 +1,822 @@
+{
+  "description": "Conformance cases for the Tiled reader (docs/formats/TILEMAP.md). Each case states what a reader gives back: sizes, tilesets, layers with their effective values, cell ids, flip flags, chunks, or the code and path of a refusal.",
+  "valid": [
+    {
+      "file": "csv.tmj",
+      "infinite": false,
+      "width": 5,
+      "height": 4,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "backgroundColor": "#ff202020",
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layers": [
+        {
+          "name": "ground",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "name": "decor",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "cells": {
+        "ground": [
+          [
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            2
+          ],
+          [
+            3,
+            0,
+            0,
+            0,
+            3
+          ],
+          [
+            6,
+            6,
+            6,
+            6,
+            6
+          ]
+        ],
+        "decor": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            7,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            8,
+            0
+          ]
+        ]
+      },
+      "animations": {
+        "terrain": {
+          "3": [
+            [
+              3,
+              200
+            ],
+            [
+              4,
+              200
+            ]
+          ]
+        }
+      },
+      "collisionCounts": {
+        "terrain": {
+          "2": 1
+        }
+      }
+    },
+    {
+      "file": "base64.tmj",
+      "infinite": false,
+      "width": 5,
+      "height": 4,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "backgroundColor": "#ff202020",
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layers": [
+        {
+          "name": "ground",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "name": "decor",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "cells": {
+        "ground": [
+          [
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            2
+          ],
+          [
+            3,
+            0,
+            0,
+            0,
+            3
+          ],
+          [
+            6,
+            6,
+            6,
+            6,
+            6
+          ]
+        ],
+        "decor": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            7,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            8,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "file": "gzip.tmj",
+      "infinite": false,
+      "width": 5,
+      "height": 4,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "backgroundColor": "#ff202020",
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layers": [
+        {
+          "name": "ground",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "name": "decor",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "cells": {
+        "ground": [
+          [
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            2
+          ],
+          [
+            3,
+            0,
+            0,
+            0,
+            3
+          ],
+          [
+            6,
+            6,
+            6,
+            6,
+            6
+          ]
+        ],
+        "decor": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            7,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            8,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "file": "zlib.tmj",
+      "infinite": false,
+      "width": 5,
+      "height": 4,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "backgroundColor": "#ff202020",
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layers": [
+        {
+          "name": "ground",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "name": "decor",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "cells": {
+        "ground": [
+          [
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            2
+          ],
+          [
+            3,
+            0,
+            0,
+            0,
+            3
+          ],
+          [
+            6,
+            6,
+            6,
+            6,
+            6
+          ]
+        ],
+        "decor": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            7,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            8,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "file": "flips.tmj",
+      "infinite": false,
+      "width": 4,
+      "height": 1,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layers": [
+        {
+          "name": "flip",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "cells": {
+        "flip": [
+          [
+            2,
+            2,
+            2,
+            2
+          ]
+        ]
+      },
+      "flips": {
+        "flip": [
+          [
+            1,
+            2,
+            4,
+            7
+          ]
+        ]
+      }
+    },
+    {
+      "file": "infinite.tmj",
+      "infinite": true,
+      "width": 0,
+      "height": 0,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layers": [
+        {
+          "name": "ground",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "chunks": {
+        "ground": [
+          {
+            "x": -2,
+            "y": -1,
+            "width": 2,
+            "height": 2,
+            "gids": [
+              2,
+              2,
+              2,
+              2
+            ]
+          },
+          {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2,
+            "gids": [
+              0,
+              3,
+              0,
+              2
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "external.tmj",
+      "infinite": false,
+      "width": 3,
+      "height": 3,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "external": {
+        "tilesets/forest.tsj": "tilesets/forest.tsj"
+      },
+      "tilesets": [
+        {
+          "name": "forest",
+          "firstGid": 1,
+          "tileCount": 4,
+          "columns": 2,
+          "offsetX": 0,
+          "offsetY": -4
+        },
+        {
+          "name": "props",
+          "firstGid": 5,
+          "tileCount": 4,
+          "columns": 2,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "layers": [
+        {
+          "name": "trees",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "cells": {
+        "trees": [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            3,
+            4,
+            0
+          ],
+          [
+            0,
+            0,
+            6
+          ]
+        ]
+      },
+      "animations": {
+        "forest": {
+          "1": [
+            [
+              1,
+              300
+            ],
+            [
+              2,
+              300
+            ]
+          ]
+        }
+      },
+      "collisionCounts": {
+        "forest": {
+          "0": 1
+        }
+      }
+    },
+    {
+      "file": "objects.tmj",
+      "infinite": false,
+      "width": 2,
+      "height": 2,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layers": [
+        {
+          "name": "objects",
+          "kind": "objects",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "name": "markers",
+          "kind": "objects",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ],
+      "objectShapes": {
+        "objects": [
+          "rectangle",
+          "point",
+          "ellipse",
+          "polygon",
+          "polyline",
+          "tile",
+          "text"
+        ],
+        "markers": [
+          "point",
+          "point"
+        ]
+      },
+      "objectsNamed": {
+        "spikes": {
+          "shape": "tile",
+          "gid": 8,
+          "flips": 2
+        },
+        "sign": {
+          "shape": "text",
+          "text": {
+            "text": "Hello",
+            "halign": "center",
+            "valign": "center",
+            "wrap": true,
+            "pixelSize": 12
+          }
+        },
+        "gate": {
+          "shape": "polygon",
+          "points": 3,
+          "rotation": 90
+        },
+        "path": {
+          "shape": "polyline",
+          "points": 3,
+          "visible": false
+        }
+      }
+    },
+    {
+      "file": "groups.tmj",
+      "infinite": false,
+      "width": 2,
+      "height": 2,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layerOrder": [
+        "back",
+        "front",
+        "hidden",
+        "sky"
+      ],
+      "layers": [
+        {
+          "name": "back",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 0.25,
+          "offsetX": 8,
+          "offsetY": 4
+        },
+        {
+          "name": "front",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 0.5,
+          "offsetX": 12,
+          "offsetY": 4
+        },
+        {
+          "name": "hidden",
+          "kind": "tiles",
+          "visible": false,
+          "opacity": 0.5,
+          "offsetX": 12,
+          "offsetY": 4
+        },
+        {
+          "name": "sky",
+          "kind": "image",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "file": "invalid/not-json.tmj",
+      "code": "json"
+    },
+    {
+      "file": "invalid/hexagonal.tmj",
+      "code": "unsupported",
+      "path": "orientation"
+    },
+    {
+      "file": "invalid/zstd.tmj",
+      "code": "unsupported",
+      "path": "layers[0].data"
+    },
+    {
+      "file": "invalid/data-count.tmj",
+      "code": "data",
+      "path": "layers[0].data"
+    },
+    {
+      "file": "invalid/unknown-gid.tmj",
+      "code": "value",
+      "path": "layers[0].data"
+    },
+    {
+      "file": "invalid/bad-base64.tmj",
+      "code": "data",
+      "path": "layers[0].data"
+    },
+    {
+      "file": "invalid/corrupt-gzip.tmj",
+      "code": "data",
+      "path": "layers[0].data"
+    },
+    {
+      "file": "invalid/missing-tilecount.tmj",
+      "code": "structure",
+      "path": "tilesets[0].tilecount"
+    },
+    {
+      "file": "invalid/image-collection.tmj",
+      "code": "unsupported",
+      "path": "tilesets[0].image"
+    },
+    {
+      "file": "invalid/template-object.tmj",
+      "code": "unsupported",
+      "path": "layers[1].objects[0].template"
+    },
+    {
+      "file": "invalid/bad-int-property.tmj",
+      "code": "value",
+      "path": "layers[1].objects[0].properties[0].value"
+    },
+    {
+      "file": "invalid/unknown-property-type.tmj",
+      "code": "unsupported",
+      "path": "layers[0].properties[0].type"
+    },
+    {
+      "file": "invalid/duplicate-tileset.tmj",
+      "code": "duplicate",
+      "path": "tilesets[1]"
+    },
+    {
+      "file": "invalid/overlapping-tilesets.tmj",
+      "code": "value",
+      "path": "tilesets[1].firstgid"
+    },
+    {
+      "file": "invalid/zero-duration.tmj",
+      "code": "value",
+      "path": "tilesets[0].tiles[0].animation[0].duration"
+    },
+    {
+      "file": "invalid/parallax.tmj",
+      "code": "unsupported",
+      "path": "layers[0].parallaxx"
+    },
+    {
+      "file": "invalid/layer-size.tmj",
+      "code": "value",
+      "path": "layers[0].width"
+    },
+    {
+      "file": "invalid/unknown-layer-type.tmj",
+      "code": "value",
+      "path": "layers[0].type"
+    },
+    {
+      "file": "invalid/opacity-range.tmj",
+      "code": "value",
+      "path": "layers[0].opacity"
+    },
+    {
+      "file": "invalid/missing-map-width.tmj",
+      "code": "structure",
+      "path": "width"
+    }
+  ]
+}
