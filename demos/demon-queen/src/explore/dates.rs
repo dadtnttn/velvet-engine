@@ -1,5 +1,5 @@
 //! The castle's dating sim. At the vanity («Citas», a page of the court) the Queen picks whom to
-//! spend the day with, Lira or Nyxara: four day dates and a first night each (texts in
+//! spend the day with, Lira, Nyxara or Nemi: four day dates and a first night each (texts in
 //! `data/castillo/citas.json`, scenes in `data/guiones/citas.md`). A date opens once the one before
 //! is had and her affection (`afecto_<id>`) reaches its mark; one date a day (`cita_hoy`), the
 //! nights only at night and with the alcove free (`noche_hoy`). Each date plays on the stage and
@@ -31,7 +31,19 @@ pub(crate) struct Chica {
     pub humor: String,
     /// Her colour (0xRRGGBB).
     pub color: u32,
+    /// What her card says once her route is done (empty: the night's invitation from the bed).
+    pub fin: String,
+    /// Her tall portrait on the page: a 3:4 cut of her sprite (else her square portrait).
+    pub busto: Option<Busto>,
     pub citas: Vec<Cita>,
+}
+
+/// A picture under `data/assets` and the cut of it to show `[x, y, w, h]`.
+#[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
+pub(crate) struct Busto {
+    pub imagen: String,
+    pub recorte: [u32; 4],
 }
 
 /// One date: where, what affection opens it, its scene and the memories it gives.
@@ -170,10 +182,14 @@ impl App {
             }
             DateState::Done => {
                 ui_sfx::play(UiSfx::Error);
-                self.court_notice(format!(
-                    "Ruta de {} completa. De noche, invítala desde la cama.",
-                    g.nombre
-                ));
+                self.court_notice(if g.fin.is_empty() {
+                    format!(
+                        "Ruta de {} completa. De noche, invítala desde la cama.",
+                        g.nombre
+                    )
+                } else {
+                    g.fin.clone()
+                });
             }
         }
     }
@@ -228,7 +244,14 @@ impl App {
                 title: g.nombre.clone(),
                 detail: g.oficio.clone(),
                 chips: Vec::new(),
-                picture: self.court_portrait(&g.id, Some(&g.humor)),
+                picture: g
+                    .busto
+                    .as_ref()
+                    .map(|b| PortraitRef {
+                        image: b.imagen.clone(),
+                        crop: b.recorte,
+                    })
+                    .or_else(|| self.court_portrait(&g.id, Some(&g.humor))),
                 icon: String::new(),
                 state: match state {
                     DateState::Ready(_) => 0,
@@ -246,9 +269,16 @@ impl App {
                 total: g.citas.len() as u8,
                 next: next.map_or_else(|| "Ruta completa".to_owned(), |c| c.titulo.clone()),
                 place: next.map_or_else(
-                    || "De noche, invítala desde la cama.".to_owned(),
+                    || {
+                        if g.fin.is_empty() {
+                            "De noche, invítala desde la cama.".to_owned()
+                        } else {
+                            g.fin.clone()
+                        }
+                    },
                     |c| c.lugar.clone(),
                 ),
+                nights: g.fin.is_empty(),
                 why: match state {
                     DateState::Waiting(_, why) => why,
                     _ => String::new(),
@@ -272,7 +302,7 @@ mod tests {
     #[test]
     fn the_dates_file_reads_and_every_date_has_its_scene_and_pictures() {
         let c = citas();
-        assert_eq!(c.chicas.len(), 2);
+        assert_eq!(c.chicas.len(), 3);
         let lib = guion::library();
         let root = crate::exploration3d_state::data_dir().join("assets");
         for g in &c.chicas {
@@ -308,7 +338,7 @@ mod tests {
                 g.id
             );
         }
-        assert_eq!(memories().len(), 12);
+        assert_eq!(memories().len(), 18);
     }
 
     #[test]

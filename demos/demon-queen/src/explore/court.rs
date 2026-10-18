@@ -1031,6 +1031,14 @@ impl App {
             self.story.values.insert("destreza".to_owned(), level + 1);
             self.apply_equipment();
         }
+        // a good morning with Nemi (the first of the day) brings her closer (the dates' affection)
+        if good && !already_today {
+            *self
+                .story
+                .values
+                .entry("afecto_nemi".to_owned())
+                .or_insert(0) += 1;
+        }
         self.story.values.insert("entreno_hoy".to_owned(), 1);
         if let Some(Court {
             page: Page::Training(d),

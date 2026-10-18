@@ -62,6 +62,24 @@ pub(super) fn shifted(
     }
 }
 
+/// What `paint` draws, scaled by `s` about `at` (a card laid out at full size, drawn smaller).
+pub(super) fn scaled(
+    v: &mut Vec<MapVertex>,
+    at: [f32; 2],
+    s: f32,
+    paint: impl FnOnce(&mut Vec<MapVertex>),
+) {
+    let start = v.len();
+    paint(v);
+    if (s - 1.0).abs() < 1e-4 {
+        return;
+    }
+    for vertex in &mut v[start..] {
+        vertex.position[0] = at[0] + (vertex.position[0] - at[0]) * s;
+        vertex.position[1] = at[1] + (vertex.position[1] - at[1]) * s;
+    }
+}
+
 /// 0 → 1 with a quick start and a soft landing.
 pub(super) fn ease_out(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);

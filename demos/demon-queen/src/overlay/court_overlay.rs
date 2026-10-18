@@ -139,6 +139,8 @@ pub struct DateView {
     /// Why the next date waits (empty: it can be had now).
     pub why: String,
     pub night: bool,
+    /// Her route done opens nights that go further (Lira's, Nyxara's), else it just ends.
+    pub nights: bool,
     pub memories: Vec<(PortraitRef, bool)>,
 }
 
@@ -445,7 +447,7 @@ pub fn hit(width: f32, height: f32, view: &CourtView, x: f32, y: f32) -> Option<
         8 => (0..view.cards.len()).find(|&i| morning_slot(view, i).is_some_and(inside)),
         9 if !view.scope => (0..view.cards.len()).find(|&d| inside(compass_card(d))),
         10 => (0..view.cards.len()).find(|&i| inside(codex_row(i, view.cards.len()))),
-        11 => (0..view.dates.len()).find(|&i| inside(date_card(i))),
+        11 => (0..view.dates.len()).find(|&i| inside(date_card(i, view.dates.len()))),
         _ => None,
     }
 }
@@ -499,11 +501,25 @@ fn codex_row(i: usize, n: usize) -> Rect {
 }
 
 // The dates: a card for each girl, side by side.
-const DATE_W: f32 = 830.0;
-const DATE_H: f32 = 700.0;
+const DATE_W: f32 = 540.0;
+const DATE_H: f32 = 730.0;
 
-fn date_card(i: usize) -> Rect {
-    Rect::new(LEFT_X + i as f32 * (DATE_W + 40.0), TOP_Y, DATE_W, DATE_H)
+/// Where girl `i` of `n` has her tall card and its scale: centred side by side; more than three are made
+/// smaller to share the page's width (the card is laid out at full size and scaled about its corner).
+fn date_slot(i: usize, n: usize) -> ([f32; 2], f32) {
+    let n = n.max(1) as f32;
+    let gap = 40.0;
+    let room = 1920.0 - 2.0 * LEFT_X;
+    let s = ((room - gap * (n - 1.0)) / n / DATE_W).min(1.0);
+    let total = n * DATE_W * s + (n - 1.0) * gap;
+    let x = (1920.0 - total) * 0.5 + i as f32 * (DATE_W * s + gap);
+    let y = TOP_Y - 14.0 + DATE_H * (1.0 - s) * 0.3;
+    ([x, y], s)
+}
+
+fn date_card(i: usize, n: usize) -> Rect {
+    let (o, s) = date_slot(i, n);
+    Rect::new(o[0], o[1], DATE_W * s, DATE_H * s)
 }
 
 /// A ring from r0 to r1 about c.
@@ -1993,9 +2009,10 @@ fn fitted_size(font: &FontAtlas, face: Face, s: &str, size: f32, max: f32) -> f3
     }
 }
 
-/// The vanity's dates: a card for each girl, her bust, name and affection as hearts against the
-/// next date's mark, the next date (or why it waits), and her memories along the foot (the ones
-/// not had yet, dark with a question mark). Lighting one only brightens it.
+/// The vanity's dates: a tall card for each girl side by side (centred; more than three share the width,
+/// smaller): her bust from her sprite with her name on a plate of her colour, her affection as hearts
+/// against the next date's mark, the route's chips, the next date (or why it waits) and her memories
+/// along the foot (the ones not had yet, dark with a question mark). The lit card rises a little.
 fn draw_dates(
     font: &FontAtlas,
     v: &mut Vec<MapVertex>,
@@ -2004,298 +2021,182 @@ fn draw_dates(
     time: f32,
 ) {
     let age = view.page_ms as f32 / 1000.0;
+    let n = view.dates.len();
     for (i, d) in view.dates.iter().enumerate() {
-        let r = date_card(i);
+        let (o, scale) = date_slot(i, n);
         let lit = view.choice as usize == i;
         let state = view.cards.get(i).map_or(0, |c| c.state);
         let (waiting, complete) = (state == 1, state == 2);
         let color = if d.color == 0 { GOLD } else { d.color };
         let k = entrance(age, 0.08 * i as f32, 0.38);
-        shifted(v, [0.0, (1.0 - k) * 46.0], |v| {
-            faded(v, k, |v| {
-                let lean = 16.0;
-                fill(
-                    v,
-                    slanted(r.x + 14.0, r.y + 16.0, r.w, r.h, lean),
-                    rgba(0x000000, 0.55),
-                );
-                if lit {
-                    soft(
-                        v,
-                        r,
-                        14.0,
-                        34.0,
-                        rgba(color, 0.4 + 0.1 * wave(time, 0.8)),
-                        true,
-                    );
-                }
-                fill(v, slanted(r.x, r.y, r.w, r.h, lean), rgba(0x0d0814, 0.96));
-                halo(
-                    v,
-                    [r.x + 170.0, r.y + 180.0],
-                    220.0,
-                    120.0,
-                    rgba(color, if lit { 0.22 } else { 0.1 }),
-                );
-                fill(v, slanted(r.x, r.y, r.w, 10.0, 0.6), rgba(color, 1.0));
-
-                // Her bust.
-                framed(
-                    v,
-                    Rect::new(r.x + 30.0, r.y + 40.0, 270.0, 270.0),
-                    faces.cards.get(i).copied().flatten(),
-                    color,
-                    lit,
-                    time,
-                );
-                // Her name and what she is.
-                let size = fitted_size(font, Face::Title, &d.name, 60.0, r.w - 370.0);
-                text_outline(
-                    font,
-                    v,
-                    Face::Title,
-                    &d.name,
-                    r.x + 330.0,
-                    r.y + 40.0,
-                    size,
-                    rgba(BONE, 1.0),
-                    rgba(0x000000, 0.85),
-                );
-                let size = fitted_size(font, Face::Italic, &d.role, 24.0, r.w - 370.0);
-                text_shadow(
-                    font,
-                    v,
-                    Face::Italic,
-                    &d.role,
-                    r.x + 332.0,
-                    r.y + 118.0,
-                    size,
-                    rgba(CREAM, 0.9),
-                );
-                // Her affection: ten hearts, the one the next date asks for ringed in gold.
-                let full = if complete { 10 } else { d.hearts.clamp(0, 10) };
-                let mark = if complete || d.need <= 0 {
-                    None
-                } else {
-                    Some(d.need.min(10))
-                };
-                for h in 0..10 {
-                    let c = [r.x + 350.0 + h as f32 * 38.0, r.y + 176.0];
-                    let ringed = mark == Some(h + 1);
-                    heart(
-                        v,
-                        [c[0], c[1] + 1.2],
-                        if ringed { 18.5 } else { 16.5 },
-                        rgba(if ringed { GOLD_HI } else { INK_DARK }, 1.0),
-                    );
-                    let colour = if h < full {
-                        rgba(mix(color, 0xffffff, 0.25), if lit { 1.0 } else { 0.9 })
-                    } else {
-                        rgba(0x2a2032, 1.0)
-                    };
-                    heart(v, c, 14.0, colour);
-                    if h < full {
-                        disc(v, [c[0] - 6.0, c[1] - 6.0], 3.0, rgba(0xffffff, 0.7));
-                    }
-                }
-                if let Some(need) = mark {
-                    text_shadow(
-                        font,
-                        v,
-                        Face::Display,
-                        &format!("{} / {need}", d.hearts.max(0)),
-                        r.x + 732.0,
-                        r.y + 162.0,
-                        24.0,
-                        rgba(if d.hearts >= need { GOLD_HI } else { CREAM }, 1.0),
-                    );
-                }
-                // The route: dates had.
-                let mut chips = vec![if complete {
-                    CourtChip {
-                        text: "RUTA COMPLETA".into(),
-                        tone: 1,
-                    }
-                } else {
-                    CourtChip {
-                        text: format!("CITA {} / {}", d.done + 1, d.total),
-                        tone: 3,
-                    }
-                }];
-                if d.night && !complete {
-                    chips.push(CourtChip {
-                        text: "DE NOCHE".into(),
-                        tone: 0,
-                    });
-                }
-                chip_row(font, v, r.x + 332.0, r.y + 230.0, &chips, 22.0);
-
-                // The next date.
-                let label = if complete {
-                    "TODAS LAS CITAS"
-                } else {
-                    "SIGUIENTE CITA"
-                };
-                text_shadow(
-                    font,
-                    v,
-                    Face::Ui,
-                    label,
-                    r.x + 40.0,
-                    r.y + 338.0,
-                    20.0,
-                    rgba(mix(color, 0xffffff, 0.35), 1.0),
-                );
-                let size = fitted_size(font, Face::Title, &d.next, 46.0, r.w - 80.0);
-                text_outline(
-                    font,
-                    v,
-                    Face::Title,
-                    &d.next,
-                    r.x + 40.0,
-                    r.y + 368.0,
-                    size,
-                    rgba(BONE, 1.0),
-                    rgba(0x000000, 0.85),
-                );
-                let size = fitted_size(font, Face::Italic, &d.place, 26.0, r.w - 80.0);
-                text_shadow(
-                    font,
-                    v,
-                    Face::Italic,
-                    &d.place,
-                    r.x + 42.0,
-                    r.y + 434.0,
-                    size,
-                    rgba(CREAM, 0.9),
-                );
-                // Can it be had now? Why not?
-                let plate = slanted(r.x + 36.0, r.y + 482.0, r.w - 72.0, 62.0, 10.0);
-                if waiting {
-                    fill(v, plate, rgba(0x2a1020, 0.95));
-                    rim(v, plate, 1.5, rgba(CRIMSON, 0.9));
-                    let size = if wrap(font, Face::Body, &d.why, 22.0, r.w - 130.0).len() > 2 {
-                        18.0
-                    } else {
-                        22.0
-                    };
-                    let lines = wrap(font, Face::Body, &d.why, size, r.w - 130.0);
-                    let top = r.y + 513.0 - lines.len().min(2) as f32 * size * 0.68;
-                    for (n, line) in lines.iter().take(2).enumerate() {
-                        text_shadow(
-                            font,
-                            v,
-                            Face::Body,
-                            line,
-                            r.x + 62.0,
-                            top + n as f32 * size * 1.3,
-                            size,
-                            rgba(CREAM, 1.0),
-                        );
-                    }
-                } else {
-                    let (back, words) = if complete {
-                        (GOOD, "LAS NOCHES CON ELLA YA PUEDEN IR A MÁS")
-                    } else {
-                        (color, "ENTER · ¡A LA CITA!")
-                    };
-                    fill(v, plate, rgba(back, if lit { 1.0 } else { 0.82 }));
-                    let size = fitted_size(font, Face::Display, words, 30.0, r.w - 130.0);
-                    text(
-                        font,
-                        v,
-                        Face::Display,
-                        words,
-                        r.x + 62.0,
-                        r.y + 494.0,
-                        size,
-                        rgba(INK_DARK, 1.0),
-                    );
-                }
-
-                // Her memories.
-                let got = d.memories.iter().filter(|(_, open)| *open).count();
-                text_shadow(
-                    font,
-                    v,
-                    Face::Display,
-                    &format!("RECUERDOS · {got} / {}", d.memories.len()),
-                    r.x + 40.0,
-                    r.y + 556.0,
-                    22.0,
-                    rgba(mix(color, 0xffffff, 0.35), 1.0),
-                );
-                let side = 104.0;
-                for (m, (_, open)) in d.memories.iter().enumerate() {
-                    let q = Rect::new(
-                        r.x + 38.0 + m as f32 * (side + 14.0),
-                        r.y + 584.0,
-                        side,
-                        side,
-                    );
-                    fill(
-                        v,
-                        slanted(q.x + 6.0, q.y + 7.0, q.w, q.h, 6.0),
-                        rgba(0x000000, 0.5),
-                    );
-                    let uv = faces
-                        .dates
-                        .get(i)
-                        .and_then(|row| row.get(m))
-                        .copied()
-                        .flatten();
-                    match (open, uv) {
-                        (true, Some(uv)) => {
-                            let tint = if lit {
-                                [1.0; 4]
-                            } else {
-                                [0.86, 0.84, 0.9, 1.0]
-                            };
-                            cutout(v, q, uv, tint);
-                            rim(v, slanted(q.x, q.y, q.w, q.h, 0.0), 2.0, rgba(BONE, 1.0));
-                        }
-                        _ => {
-                            fill(v, slanted(q.x, q.y, q.w, q.h, 0.0), rgba(0x150d1c, 1.0));
-                            halo(
-                                v,
-                                [q.x + q.w * 0.5, q.y + q.h * 0.5],
-                                34.0,
-                                30.0,
-                                rgba(color, 0.12),
-                            );
-                            let w = text_width(font, Face::Display, "?", 52.0);
-                            text(
-                                font,
-                                v,
-                                Face::Display,
-                                "?",
-                                q.x + (q.w - w) * 0.5,
-                                q.y + 20.0,
-                                52.0,
-                                rgba(mix(color, 0x000000, 0.45), 1.0),
-                            );
-                            rim(
-                                v,
-                                slanted(q.x, q.y, q.w, q.h, 0.0),
-                                1.5,
-                                rgba(mix(color, 0x000000, 0.4), 1.0),
-                            );
-                        }
-                    }
-                }
-
-                // The card's edge: bright while lit.
-                rim(
-                    v,
-                    slanted(r.x, r.y, r.w, r.h, lean),
-                    if lit { 3.0 } else { 1.5 },
-                    rgba(if lit { BONE } else { mix(color, 0x000000, 0.3) }, 1.0),
-                );
-                if waiting && !lit {
-                    fill(v, slanted(r.x, r.y, r.w, r.h, lean), rgba(0x000000, 0.18));
-                }
-            });
+        let lift = if lit { -14.0 } else { 0.0 };
+        let r = Rect::new(o[0], o[1] + lift, DATE_W, DATE_H);
+        scaled(v, o, scale, |v| {
+            shifted(v, [0.0, (1.0 - k) * 46.0], |v| {
+                faded(v, k, |v| date_card_tall(font, v, r, d, faces, i, color, lit, waiting, complete, time));
+            })
         });
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn date_card_tall(
+    font: &FontAtlas,
+    v: &mut Vec<MapVertex>,
+    r: Rect,
+    d: &DateView,
+    faces: &CourtFaces,
+    i: usize,
+    color: u32,
+    lit: bool,
+    waiting: bool,
+    complete: bool,
+    time: f32,
+) {
+    let lean = 14.0;
+    // the card: its shadow, its glow when lit, the plate, a band of her colour at the top
+    fill(v, slanted(r.x + 14.0, r.y + 18.0, r.w, r.h, lean), rgba(0x000000, 0.55));
+    if lit {
+        soft(v, r, 14.0, 30.0, rgba(color, 0.32 + 0.08 * wave(time, 0.8)), true);
+    }
+    fill(v, slanted(r.x, r.y, r.w, r.h, lean), rgba(0x0d0814, 0.97));
+    halo(v, [r.x + 140.0, r.y + 190.0], 220.0, 120.0, rgba(color, if lit { 0.15 } else { 0.07 }));
+    fill(v, slanted(r.x, r.y, r.w, 10.0, 0.6), rgba(color, 1.0));
+
+    // her bust (tall), and her name on a plate of her colour across its foot
+    let bust = Rect::new(r.x + 24.0, r.y + 30.0, 228.0, 304.0);
+    framed(v, bust, faces.cards.get(i).copied().flatten(), color, lit, time);
+    let name_size = fitted_size(font, Face::Title, &d.name, 54.0, r.w - 300.0);
+    text_outline(font, v, Face::Title, &d.name, r.x + 272.0, r.y + 34.0, name_size, rgba(BONE, 1.0), rgba(0x000000, 0.85));
+    let role_lines = wrap(font, Face::Italic, &d.role, 21.0, r.w - 296.0);
+    for (k, line) in role_lines.iter().take(2).enumerate() {
+        text_shadow(font, v, Face::Italic, line, r.x + 274.0, r.y + 100.0 + k as f32 * 26.0, 21.0, rgba(CREAM, 0.9));
+    }
+
+    // her affection: ten hearts, the next date's mark ringed in gold
+    let full = if complete { 10 } else { d.hearts.clamp(0, 10) };
+    let mark = if complete || d.need <= 0 { None } else { Some(d.need.min(10)) };
+    let hy = r.y + 200.0;
+    text_shadow(font, v, Face::Ui, "AFECTO", r.x + 274.0, hy - 32.0, 17.0, rgba(mix(color, 0xffffff, 0.35), 1.0));
+    for h in 0..10 {
+        let c = [r.x + 288.0 + h as f32 * 23.0, hy];
+        let ringed = mark == Some(h + 1);
+        heart(v, [c[0], c[1] + 1.0], if ringed { 13.0 } else { 11.5 }, rgba(if ringed { GOLD_HI } else { INK_DARK }, 1.0));
+        let colour = if h < full {
+            rgba(mix(color, 0xffffff, 0.25), if lit { 1.0 } else { 0.9 })
+        } else {
+            rgba(0x2a2032, 1.0)
+        };
+        heart(v, c, 9.5, colour);
+        if h < full {
+            disc(v, [c[0] - 4.0, c[1] - 4.0], 2.0, rgba(0xffffff, 0.7));
+        }
+    }
+    if let Some(need) = mark {
+        text_shadow(
+            font,
+            v,
+            Face::Display,
+            &format!("{} / {need}", d.hearts.max(0)),
+            r.x + 274.0,
+            hy + 20.0,
+            21.0,
+            rgba(if d.hearts >= need { GOLD_HI } else { CREAM }, 1.0),
+        );
+    }
+    // the route
+    let mut chips = vec![if complete {
+        CourtChip { text: "RUTA COMPLETA".into(), tone: 1 }
+    } else {
+        CourtChip { text: format!("CITA {} / {}", d.done + 1, d.total), tone: 3 }
+    }];
+    if d.night && !complete {
+        chips.push(CourtChip { text: "DE NOCHE".into(), tone: 0 });
+    }
+    chip_row(font, v, r.x + 274.0, r.y + 276.0, &chips, 19.0);
+
+    // the next date
+    fill(v, slanted(r.x + 24.0, r.y + 356.0, r.w - 48.0, 2.0, 0.0), rgba(mix(color, 0x000000, 0.4), 1.0));
+    let label = if complete { "TODAS LAS CITAS" } else { "SIGUIENTE CITA" };
+    text_shadow(font, v, Face::Ui, label, r.x + 30.0, r.y + 372.0, 18.0, rgba(mix(color, 0xffffff, 0.35), 1.0));
+    let size = fitted_size(font, Face::Title, &d.next, 42.0, r.w - 60.0);
+    text_outline(font, v, Face::Title, &d.next, r.x + 30.0, r.y + 398.0, size, rgba(BONE, 1.0), rgba(0x000000, 0.85));
+    let size = fitted_size(font, Face::Italic, &d.place, 23.0, r.w - 60.0);
+    text_shadow(font, v, Face::Italic, &d.place, r.x + 32.0, r.y + 456.0, size, rgba(CREAM, 0.9));
+
+    // can it be had now? why not?
+    let plate = slanted(r.x + 26.0, r.y + 500.0, r.w - 52.0, 64.0, 10.0);
+    if waiting {
+        fill(v, plate, rgba(0x2a1020, 0.95));
+        rim(v, plate, 1.5, rgba(CRIMSON, 0.9));
+        let mut size = 21.0;
+        let mut lines = wrap(font, Face::Body, &d.why, size, r.w - 110.0);
+        if lines.len() > 2 {
+            size = 17.0;
+            lines = wrap(font, Face::Body, &d.why, size, r.w - 110.0);
+        }
+        let top = r.y + 532.0 - lines.len().min(2) as f32 * size * 0.68;
+        for (k, line) in lines.iter().take(2).enumerate() {
+            text_shadow(font, v, Face::Body, line, r.x + 50.0, top + k as f32 * size * 1.3, size, rgba(CREAM, 1.0));
+        }
+    } else {
+        let (back, words) = if complete && d.nights {
+            (GOOD, "LAS NOCHES PUEDEN IR A MÁS")
+        } else if complete {
+            (GOOD, "RUTA COMPLETA")
+        } else {
+            (color, "ENTER · ¡A LA CITA!")
+        };
+        fill(v, plate, rgba(back, if lit { 1.0 } else { 0.82 }));
+        let size = fitted_size(font, Face::Display, words, 28.0, r.w - 110.0);
+        text(font, v, Face::Display, words, r.x + 50.0, r.y + 516.0, size, rgba(INK_DARK, 1.0));
+    }
+
+    // her memories
+    let got = d.memories.iter().filter(|(_, open)| *open).count();
+    text_shadow(
+        font,
+        v,
+        Face::Display,
+        &format!("RECUERDOS · {got} / {}", d.memories.len()),
+        r.x + 30.0,
+        r.y + 584.0,
+        20.0,
+        rgba(mix(color, 0xffffff, 0.35), 1.0),
+    );
+    let count = d.memories.len().max(1) as f32;
+    let gap = 8.0;
+    let side = ((r.w - 56.0 - gap * (count - 1.0)) / count).min(96.0);
+    for (m, (_, open)) in d.memories.iter().enumerate() {
+        let q = Rect::new(r.x + 28.0 + m as f32 * (side + gap), r.y + 614.0, side, side);
+        fill(v, slanted(q.x + 5.0, q.y + 6.0, q.w, q.h, 5.0), rgba(0x000000, 0.5));
+        let uv = faces.dates.get(i).and_then(|row| row.get(m)).copied().flatten();
+        match (open, uv) {
+            (true, Some(uv)) => {
+                let tint = if lit { [1.0; 4] } else { [0.86, 0.84, 0.9, 1.0] };
+                cutout(v, q, uv, tint);
+                rim(v, slanted(q.x, q.y, q.w, q.h, 0.0), 2.0, rgba(BONE, 1.0));
+            }
+            _ => {
+                fill(v, slanted(q.x, q.y, q.w, q.h, 0.0), rgba(0x150d1c, 1.0));
+                halo(v, [q.x + q.w * 0.5, q.y + q.h * 0.5], side * 0.33, 26.0, rgba(color, 0.12));
+                let qs = side * 0.5;
+                let w = text_width(font, Face::Display, "?", qs);
+                text(font, v, Face::Display, "?", q.x + (q.w - w) * 0.5, q.y + side * 0.2, qs, rgba(mix(color, 0x000000, 0.45), 1.0));
+                rim(v, slanted(q.x, q.y, q.w, q.h, 0.0), 1.5, rgba(mix(color, 0x000000, 0.4), 1.0));
+            }
+        }
+    }
+
+    // the card's edge: bright while lit
+    rim(
+        v,
+        slanted(r.x, r.y, r.w, r.h, lean),
+        if lit { 3.0 } else { 1.5 },
+        rgba(if lit { BONE } else { mix(color, 0x000000, 0.3) }, 1.0),
+    );
+    if waiting && !lit {
+        fill(v, slanted(r.x, r.y, r.w, r.h, lean), rgba(0x000000, 0.18));
     }
 }
 
