@@ -1,0 +1,18 @@
+[package]
+name = "velvet-desktop"
+description = "Velvet Desktop: runs a JavaScript game (Velvet JS) as a desktop program in a system webview, with a native bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version = "1.99"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tao = "0.37"
+wry = "0.57"
+
+[dev-dependencies]
+tempfile = "3"

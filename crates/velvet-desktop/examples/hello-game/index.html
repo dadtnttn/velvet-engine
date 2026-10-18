@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hello Velvet</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #151021;
+        color: #f1e9ff;
+      }
+      main { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+      h1 { margin: 0 0 8px; font-size: 28px; }
+      p.note { margin: 0 0 24px; color: #b9a9d6; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+      button {
+        font: inherit;
+        padding: 9px 14px;
+        border: 0;
+        border-radius: 8px;
+        background: #7b4bd6;
+        color: #fff;
+        cursor: pointer;
+      }
+      button:hover { background: #8f62e6; }
+      pre {
+        min-height: 240px;
+        margin: 0;
+        padding: 14px;
+        border-radius: 10px;
+        background: #0d0918;
+        color: #d8ccf0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="title">Hello Velvet</h1>
+      <p class="note">Each button calls the native bridge (window.velvet) and prints the result below.</p>
+      <div class="actions">
+        <button data-action="info">Bridge info</button>
+        <button data-action="save">Save slot "hello"</button>
+        <button data-action="load">Load slot "hello"</button>
+        <button data-action="list">List saves</button>
+        <button data-action="remove">Remove slot "hello"</button>
+        <button data-action="fullscreen">Toggle fullscreen</button>
+        <button data-action="log">Write a log line</button>
+      </div>
+      <pre id="output"></pre>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>
