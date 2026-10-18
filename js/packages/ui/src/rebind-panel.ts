@@ -14,7 +14,7 @@
 
 import { createButton } from "./components/button";
 import { mergeDefined, type VuComponent } from "./components/component";
-import { createElement } from "./components/dom";
+import { createElement, releaseFocus } from "./components/dom";
 import { createMenu, type Menu, type MenuItem } from "./components/menu";
 
 /** A lookup from a text key to its text. Arguments such as {action} fill the text's placeholders. */
@@ -371,6 +371,7 @@ export function createRebindPanel<Action extends string>(options: RebindPanelOpt
       capture = null;
       active?.controller.abort();
       el.removeEventListener("keydown", onKeyDown);
+      releaseFocus(el);
       menu.destroy();
       resetOne.destroy();
       resetEvery.destroy();

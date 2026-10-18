@@ -16,8 +16,14 @@
 // world units and the item under it. The stage absorbs presses and wheel turns on its bars, so none of
 // these fire there. A drag that leaves the surface keeps going: the pressed element captures the pointer,
 // and the position is clamped to the nearest edge (Stage.toLogicalClamped).
+//
+// Visible area. A HUD panel can cover part of the surface, such as a top bar or a side panel. The board can be
+// told the insets of that cover (the `visibleArea` option, or `setVisibleArea`), and then it frames the world in
+// the rest: the centring, `fit`, the zoom around the centre and the clamp of the pan all use the visible area.
+// `visibleWorldRect` gives the world rectangle that the visible area shows now.
 
-import type { LogicalPoint, Stage } from "./stage";
+import { releaseFocus } from "./components/dom";
+import type { LogicalPoint, LogicalRect, Stage } from "./stage";
 
 /** The smallest zoom when the options name none. */
 const DEFAULT_MIN_ZOOM = 0.25;
@@ -61,6 +67,21 @@ export interface WorldRect {
   readonly h: number;
 }
 
+/**
+ * The part of the stage's surface that the board frames, given as the insets of the HUD panels that cover it, in
+ * logical pixels. A side that is left out is 0.
+ */
+export interface BoardInsets {
+  /** The space above the visible area, in logical pixels. Default 0. */
+  readonly top?: number;
+  /** The space on the right of the visible area, in logical pixels. Default 0. */
+  readonly right?: number;
+  /** The space below the visible area, in logical pixels. Default 0. */
+  readonly bottom?: number;
+  /** The space on the left of the visible area, in logical pixels. Default 0. */
+  readonly left?: number;
+}
+
 /** Where an item sits on the board, in world units. */
 export interface ItemSpec extends WorldRect {
   /** The stacking order: a higher item is drawn above, and hit first. An integer. Default 0. */
@@ -101,6 +122,12 @@ export interface BoardOptions {
    * is out of it.
    */
   readonly initialZoom?: number;
+  /**
+   * The part of the surface that the view frames, as insets from its edges, for HUD panels that cover it. The
+   * world is centred and fitted in what is left, and the zoom goes around its centre. Default: the whole surface.
+   * @throws RangeError when a side is negative, or the sides leave no room.
+   */
+  readonly visibleArea?: BoardInsets;
 }
 
 /** A drag of an item, as the callbacks of {@link BoardView.enableDrag} see it. */
@@ -150,7 +177,7 @@ export interface BoardView {
   /** The largest zoom allowed. */
   readonly maxZoom: number;
   /**
-   * The zoom, in logical pixels per world unit. Setting it zooms around the centre of the surface. The
+   * The zoom, in logical pixels per world unit. Setting it zooms around the centre of the visible area. The
    * value is clamped to the zoom range, and the view to the world bounds.
    * @throws RangeError when the value is not a finite number.
    */
@@ -174,18 +201,27 @@ export interface BoardView {
    */
   panBy(dx: number, dy: number): void;
   /**
-   * Shows a world rectangle as large as the surface allows, centred on it. The zoom is clamped to the zoom
+   * Shows a world rectangle as large as the visible area allows, centred in it. The zoom is clamped to the zoom
    * range, and the view to the world bounds.
    * @throws RangeError when the rectangle's width or height is not a positive number.
    */
   fit(rect: WorldRect): void;
+  /**
+   * Sets the part of the surface that the view frames (see the `visibleArea` option). A side that is left out is
+   * 0. The view is clamped again to the new area, and the change listeners run whenever the area changes, even
+   * when the view stays where it is. Setting the same area again does nothing.
+   * @throws RangeError when a side is negative or not finite, or the sides leave no room.
+   */
+  setVisibleArea(insets: BoardInsets): void;
+  /** The world rectangle that the visible area shows at this moment. */
+  visibleWorldRect(): WorldRect;
   /** Converts a world point to logical pixels. */
   worldToLogical(x: number, y: number): LogicalPoint;
   /** Converts a logical point to world units. The inverse of {@link BoardView.worldToLogical}. */
   logicalToWorld(x: number, y: number): WorldPoint;
   /**
-   * Adds a listener that runs after the view changes: a pan or a zoom, by any means. It does not run for
-   * item moves, and not for a change that the clamp undoes.
+   * Adds a listener that runs after the view changes: a pan or a zoom, by any means, or a change of the visible
+   * area. It does not run for item moves, and not for a change that the clamp undoes.
    * @returns a function that removes the listener.
    */
   onChange(listener: BoardListener): () => void;
@@ -240,6 +276,13 @@ interface ItemRecord {
   readonly seq: number;
 }
 
+/** A view after the clamp: the zoom, and the pan as two numbers. */
+interface ClampedView {
+  readonly zoom: number;
+  readonly x: number;
+  readonly y: number;
+}
+
 /** A drag in progress, from the press until the release or the cancel. */
 interface DragSession {
   readonly pointerId: number;
@@ -280,6 +323,8 @@ class Board implements BoardView {
   private zoomLevel: number;
   private panX = 0;
   private panY = 0;
+  /** The part of the surface that the view frames, with every side given. */
+  private insets: Required<BoardInsets>;
   private sequence = 0;
   /** Stops following the pointer of a pan in progress, or null when no pan is in progress. */
   private panStop: (() => void) | null = null;
@@ -306,12 +351,14 @@ class Board implements BoardView {
     if (initialZoom < minZoom || initialZoom > maxZoom) {
       throw new RangeError(`initialZoom (${initialZoom}) is outside ${minZoom} to ${maxZoom}`);
     }
+    const insets = normaliseInsets(options.visibleArea ?? {}, stage);
 
     this.stage = stage;
     this.bounds = { x, y, w, h };
     this.minZoom = minZoom;
     this.maxZoom = maxZoom;
     this.zoomLevel = initialZoom;
+    this.insets = insets;
 
     this.el = document.createElement("div");
     this.el.className = "vu-board";
@@ -340,9 +387,10 @@ class Board implements BoardView {
     return this.zoomLevel;
   }
 
-  /** Sets the zoom around the centre of the surface. */
+  /** Sets the zoom around the centre of the visible area. */
   set zoom(value: number) {
-    this.zoomAt(value, { x: this.stage.width / 2, y: this.stage.height / 2 });
+    const box = this.visibleBox();
+    this.zoomAt(value, { x: box.left + box.width / 2, y: box.top + box.height / 2 });
   }
 
   /** Where the world's origin sits, in logical pixels. */
@@ -377,10 +425,30 @@ class Board implements BoardView {
     requireFinite(rect.y, "rect.y");
     requirePositive(rect.w, "rect.w");
     requirePositive(rect.h, "rect.h");
-    const wanted = Math.min(this.stage.width / rect.w, this.stage.height / rect.h);
+    const box = this.visibleBox();
+    const wanted = Math.min(box.width / rect.w, box.height / rect.h);
     const zoom = clampTo(wanted, this.minZoom, this.maxZoom);
     const centre = this.viewCentred(rect.x + rect.w / 2, rect.y + rect.h / 2, zoom);
     this.apply(zoom, centre.x, centre.y);
+  }
+
+  setVisibleArea(insets: BoardInsets): void {
+    const next = normaliseInsets(insets, this.stage);
+    if (sameInsets(next, this.insets)) return;
+    this.insets = next;
+    // The view is clamped to the new area, and the listeners hear of the change even when the view stays put.
+    const view = this.clampView(this.zoomLevel, this.panX, this.panY);
+    this.zoomLevel = view.zoom;
+    this.panX = view.x;
+    this.panY = view.y;
+    this.writeLayer();
+    this.emit();
+  }
+
+  visibleWorldRect(): WorldRect {
+    const box = this.visibleBox();
+    const origin = this.logicalToWorld(box.left, box.top);
+    return { x: origin.x, y: origin.y, w: box.width / this.zoomLevel, h: box.height / this.zoomLevel };
   }
 
   worldToLogical(x: number, y: number): LogicalPoint {
@@ -446,6 +514,7 @@ class Board implements BoardView {
   removeItem(el: HTMLElement): void {
     if (!this.items.delete(el)) return;
     this.stopDrags(el);
+    releaseFocus(el);
     if (el.parentElement === this.el) el.remove();
   }
 
@@ -537,6 +606,7 @@ class Board implements BoardView {
     for (const el of [...this.dragHelpers.keys()]) this.stopDrags(el);
     this.stage.root.removeEventListener("pointerdown", this.onRootPress);
     this.stage.root.removeEventListener("wheel", this.onWheel);
+    releaseFocus(this.el);
     this.el.remove();
     this.items.clear();
     this.listeners.clear();
@@ -544,25 +614,46 @@ class Board implements BoardView {
 
   /** Sets the view, clamped to the zoom range and to the world bounds. Listeners run only on a change. */
   private apply(zoom: number, x: number, y: number): void {
-    const nextZoom = clampTo(zoom, this.minZoom, this.maxZoom);
-    const nextX = clampAxis(x, nextZoom, this.bounds.x, this.bounds.w, this.stage.width);
-    const nextY = clampAxis(y, nextZoom, this.bounds.y, this.bounds.h, this.stage.height);
-    if (nextZoom === this.zoomLevel && nextX === this.panX && nextY === this.panY) return;
-    this.zoomLevel = nextZoom;
-    this.panX = nextX;
-    this.panY = nextY;
+    const next = this.clampView(zoom, x, y);
+    if (next.zoom === this.zoomLevel && next.x === this.panX && next.y === this.panY) return;
+    this.zoomLevel = next.zoom;
+    this.panX = next.x;
+    this.panY = next.y;
     this.writeLayer();
-    const state: BoardViewState = { zoom: nextZoom, pan: { x: nextX, y: nextY } };
+    this.emit();
+  }
+
+  /** The view as it would be set: the zoom clamped to its range, and the pan clamped on the visible area. */
+  private clampView(zoom: number, x: number, y: number): ClampedView {
+    const box = this.visibleBox();
+    const nextZoom = clampTo(zoom, this.minZoom, this.maxZoom);
+    return {
+      zoom: nextZoom,
+      x: clampAxis(x, nextZoom, this.bounds.x, this.bounds.w, box.left, box.width),
+      y: clampAxis(y, nextZoom, this.bounds.y, this.bounds.h, box.top, box.height),
+    };
+  }
+
+  /** Tells the listeners the current view. */
+  private emit(): void {
+    const state: BoardViewState = { zoom: this.zoomLevel, pan: { x: this.panX, y: this.panY } };
     for (const listener of [...this.listeners]) listener(state);
   }
 
-  /** The view that puts a world point at the centre of the surface, clamped to the world bounds. */
+  /** The visible area in logical pixels: its left and top edges, and its width and height. */
+  private visibleBox(): LogicalRect {
+    const { left, top, right, bottom } = this.insets;
+    return { left, top, width: this.stage.width - left - right, height: this.stage.height - top - bottom };
+  }
+
+  /** The view that puts a world point at the centre of the visible area, clamped to the world bounds. */
   private viewCentred(worldX: number, worldY: number, zoom: number): LogicalPoint {
-    const x = this.stage.width / 2 - worldX * zoom;
-    const y = this.stage.height / 2 - worldY * zoom;
+    const box = this.visibleBox();
+    const x = box.left + box.width / 2 - worldX * zoom;
+    const y = box.top + box.height / 2 - worldY * zoom;
     return {
-      x: clampAxis(x, zoom, this.bounds.x, this.bounds.w, this.stage.width),
-      y: clampAxis(y, zoom, this.bounds.y, this.bounds.h, this.stage.height),
+      x: clampAxis(x, zoom, this.bounds.x, this.bounds.w, box.left, box.width),
+      y: clampAxis(y, zoom, this.bounds.y, this.bounds.h, box.top, box.height),
     };
   }
 
@@ -699,20 +790,53 @@ function clampTo(value: number, low: number, high: number): number {
 }
 
 /**
- * The pan along one axis that keeps the world on the view. A world longer than the view stays covering
- * it: its near edge is at or before 0 and its far edge is at or after the view's length. A shorter world
- * is centred on the view, and its pan is fixed.
+ * The pan along one axis that keeps the world on the visible part of the view. A world longer than the visible
+ * part stays covering it: its near edge is at or before the visible part's near edge, and its far edge is at or
+ * after the far edge. A shorter world is centred on the visible part, and its pan is fixed.
  * @param pan - the wanted pan, in logical pixels.
  * @param zoom - the zoom.
  * @param start - the world's near edge on this axis.
  * @param length - the world's length on this axis.
- * @param view - the view's length in logical pixels.
+ * @param viewStart - where the visible part starts on this axis, in logical pixels.
+ * @param viewLength - the length of the visible part, in logical pixels.
  */
-function clampAxis(pan: number, zoom: number, start: number, length: number, view: number): number {
+function clampAxis(pan: number, zoom: number, start: number, length: number, viewStart: number, viewLength: number): number {
   const size = length * zoom;
-  if (size <= view) return (view - size) / 2 - start * zoom;
-  // Written as 0 minus the product, so that a world starting at zero gives +0 and not -0.
-  return clampTo(pan, view - (start + length) * zoom, 0 - start * zoom);
+  if (size <= viewLength) return viewStart + (viewLength - size) / 2 - start * zoom;
+  // Written as the view's start minus the product, so that a world starting at zero, with the view at zero, gives +0 and not -0.
+  return clampTo(pan, viewStart + viewLength - (start + length) * zoom, viewStart - start * zoom);
+}
+
+/** True when two sets of insets have the same four sides. */
+function sameInsets(a: Required<BoardInsets>, b: Required<BoardInsets>): boolean {
+  return a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left;
+}
+
+/**
+ * The insets as the board keeps them: every side given, and a side that is left out as 0. Each side must be a
+ * finite number, zero or above, and the sides must leave room for the view on both axes.
+ * @param insets - the insets that were given.
+ * @param stage - the stage whose surface they cover.
+ * @throws RangeError when a side is not valid, or the sides leave no room.
+ */
+function normaliseInsets(insets: BoardInsets, stage: Stage): Required<BoardInsets> {
+  const next: Required<BoardInsets> = {
+    top: insets.top ?? 0,
+    right: insets.right ?? 0,
+    bottom: insets.bottom ?? 0,
+    left: insets.left ?? 0,
+  };
+  requireNonNegative(next.top, "visibleArea.top");
+  requireNonNegative(next.right, "visibleArea.right");
+  requireNonNegative(next.bottom, "visibleArea.bottom");
+  requireNonNegative(next.left, "visibleArea.left");
+  if (next.left + next.right >= stage.width) {
+    throw new RangeError(`visibleArea leaves no width: left (${next.left}) and right (${next.right}) fill the ${stage.width} wide surface`);
+  }
+  if (next.top + next.bottom >= stage.height) {
+    throw new RangeError(`visibleArea leaves no height: top (${next.top}) and bottom (${next.bottom}) fill the ${stage.height} high surface`);
+  }
+  return next;
 }
 
 /** True when a world point is inside an item: its left and top edges are inside, its right and bottom are not. */

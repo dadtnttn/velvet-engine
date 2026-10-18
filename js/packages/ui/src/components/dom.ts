@@ -54,3 +54,26 @@ export function focusableWithin(container: HTMLElement): HTMLElement[] {
     (node) => !node.hidden && node.getAttribute("aria-disabled") !== "true",
   );
 }
+
+/**
+ * Takes the keyboard focus off a container that is about to be hidden or removed. A focus outside the
+ * container is left alone. A focus inside it moves to `fallback` when that is given and can take the
+ * focus now, and otherwise the focused element is blurred, so the focus goes to the page.
+ *
+ * @param container - the element that is being hidden or removed.
+ * @param fallback - where the focus should go instead, such as the button that opened the container.
+ */
+export function releaseFocus(container: Element, fallback: HTMLElement | null = null): void {
+  if (!container.contains(document.activeElement)) return;
+  if (fallback !== null && !container.contains(fallback) && canTakeFocus(fallback)) {
+    fallback.focus({ preventScroll: true });
+    return;
+  }
+  const focused = document.activeElement;
+  if (focused instanceof HTMLElement || focused instanceof SVGElement) focused.blur();
+}
+
+/** True when an element can take the focus now: it is connected, enabled, and not inside a hidden or inert part. */
+function canTakeFocus(node: HTMLElement): boolean {
+  return node.isConnected && node.closest("[hidden], [inert], [disabled], [aria-disabled='true']") === null;
+}

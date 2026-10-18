@@ -2,7 +2,7 @@
 // so Tab, Enter and Space work without extra code. A toggle button carries aria-pressed.
 
 import { mergeDefined, type VuComponent } from "./component";
-import { createElement } from "./dom";
+import { createElement, releaseFocus } from "./dom";
 import { createKeycap, type KeycapProps } from "./keycap";
 
 /** Props of a button. */
@@ -69,6 +69,7 @@ export function createButton(props: ButtonProps): VuComponent<ButtonProps> {
       render();
     },
     destroy(): void {
+      releaseFocus(el);
       el.removeEventListener("click", onClick);
       hint?.destroy();
       el.remove();

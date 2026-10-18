@@ -250,3 +250,33 @@ describe("meter", () => {
     hoverAndCheckStyle(meter.el);
   });
 });
+
+describe("keycap text case", () => {
+  it("draws its text in capitals by default, as a keyboard's keys are drawn", () => {
+    const keycap = createKeycap({ key: "Escape" });
+    expect(keycap.el.classList.contains("vu-keycap-as-is")).toBe(false);
+    expect(keycap.el.textContent).toBe("Esc");
+  });
+
+  it("keeps the case of the text as written when the case is as-is", () => {
+    const keycap = createKeycap({ key: "Espacio", textCase: "as-is" });
+    expect(keycap.el.classList.contains("vu-keycap-as-is")).toBe(true);
+    expect(keycap.el.textContent).toBe("Espacio");
+  });
+
+  it("switches the class with update, and goes back to capitals with upper", () => {
+    const keycap = createKeycap({ key: "Esc", textCase: "as-is" });
+    keycap.update({ textCase: "upper" });
+    expect(keycap.el.classList.contains("vu-keycap-as-is")).toBe(false);
+    keycap.update({ textCase: "as-is" });
+    expect(keycap.el.classList.contains("vu-keycap-as-is")).toBe(true);
+    expect(keycap.el.textContent).toBe("Esc");
+  });
+
+  it("gives a mouse key the same class without changing its drawing", () => {
+    const keycap = createKeycap({ key: "MouseLeft", textCase: "as-is" });
+    expect(keycap.el.getAttribute("aria-label")).toBe("Left mouse button");
+    expect(keycap.el.querySelector("svg")).not.toBeNull();
+    expect(keycap.el.classList.contains("vu-keycap-as-is")).toBe(true);
+  });
+});

@@ -8,10 +8,18 @@
 import { mergeDefined, type VuComponent } from "./component";
 import { createElement, createSvgElement } from "./dom";
 
+/**
+ * How the text of a keycap is cased. "upper" draws capitals, as a keyboard's keys are drawn, and is the default.
+ * "as-is" keeps the case that the text is written in, so that "Esc" and "Espacio" show as written.
+ */
+export type KeycapTextCase = "upper" | "as-is";
+
 /** Props of a keycap. */
 export interface KeycapProps {
   /** A KeyboardEvent.code, a label, or one of the mouse names: "MouseLeft", "MouseRight", "MouseMiddle", "MouseWheel". */
   readonly key: string;
+  /** How the text is cased. Default "upper". A mouse key has no text, so it ignores this. */
+  readonly textCase?: KeycapTextCase;
 }
 
 /** Labels for keys whose names are too long to show as they are. */
@@ -76,6 +84,8 @@ export function createKeycap(props: KeycapProps): VuComponent<KeycapProps> {
 
   const render = (): void => {
     el.replaceChildren();
+    // The stylesheet capitalises a keycap by default; this class turns that off for the text as written.
+    el.classList.toggle("vu-keycap-as-is", current.textCase === "as-is");
     const mouse = MOUSE_KEYS.get(current.key);
     if (mouse !== undefined) {
       el.classList.add("vu-keycap-mouse");

@@ -4,7 +4,7 @@ The 2D layer of a Velvet JS game: a stage that draws a fixed 16:9 surface in any
 HUD primitives of the Persona look (slanted plates, keycaps, chips, meters, buttons, tooltips,
 toasts, modals and menus). It is DOM, SVG and CSS, with no framework, and it sits over a 3D canvas.
 
-It has five parts:
+It has six parts:
 
 - **The stage** (`createStage`): every position, size and click is written in logical pixels, 1920 by 1080
   unless the game says otherwise. The stage scales the logical surface into the window with letterbox
@@ -19,6 +19,8 @@ It has five parts:
   (`createNotices`), a visual-novel dialogue box (`createDialogueBox`), stat bars (`createBar`) and dirty marks that
   batch DOM writes per frame (`createDirtyMarks`). They are the screen-level pieces that every game rebuilds, and
   none of them knows a game's names or data.
+- **The form controls and the settings panel**: a slider (`createSlider`), a toggle (`createToggle`), a choice between
+  options (`createChoice`), and the settings screen that binds them to a game's settings store (`createSettingsPanel`).
 
 ## Usage
 
@@ -92,7 +94,7 @@ that is left out keeps its value. To clear a text or an optional value, pass `nu
 |---|---|---|
 | `createPlate({ title })` | `title` | A slanted ink panel with a title tab. Content goes in `body`. |
 | `createButton({ label, hotkey, pressed, disabled, onPress })` | see left | A native `<button>`. `pressed` makes it a toggle (`aria-pressed`); the game owns the state. |
-| `createKeycap({ key })` | `key` | A key drawn as a keycap: `"KeyE"` shows `E`, `"Space"` shows `Space`. `"MouseLeft"`, `"MouseRight"`, `"MouseMiddle"` and `"MouseWheel"` draw a mouse with that part lit. `keyLabel(code)` gives the label. |
+| `createKeycap({ key, textCase })` | `key`, `textCase` | A key drawn as a keycap: `"KeyE"` shows `E`, `"Space"` shows `Space`. `"MouseLeft"`, `"MouseRight"`, `"MouseMiddle"` and `"MouseWheel"` draw a mouse with that part lit. `keyLabel(code)` gives the label. `textCase` is `"upper"` (the default: the stylesheet draws capitals, so `Esc` shows `ESC`) or `"as-is"`, which keeps the case as written, such as `Esc` or `Espacio`. |
 | `createChip({ label, count })` | see left | A small label with an optional count badge. |
 | `createMeter({ label, value, max, segments, tone })` | see left | `role="meter"`. `segments` draws cells instead of a fill. `tone` is `accent`, `gold` or `danger`. |
 | `createTooltip({ stage })` | `anchor`, `text`, `placement` | Points at `anchor`, above it by default, and stays inside the stage. `anchor: null` hides it. |
@@ -101,6 +103,24 @@ that is left out keeps its value. To clear a text or an optional value, pass `nu
 | `createMenu({ items, label, onSelect })` | see left | Arrow keys, Home, End, Enter and Space. Hovering an item moves the focus to it. Adds `focus(index)` and the read-only `focusedIndex`. `focus` clamps an index past either end, and a disabled item gives the focus to the nearest enabled one. The menu follows the DOM focus, so an item that a click or `el.focus()` focuses becomes the focused item. Its keys call `preventDefault`, so a game's `ActionMap` ignores them. |
 
 Each factory appends nothing by itself: put `el` in the stage's `root` (or in any element of the page).
+
+## Focus
+
+A hidden or removed element must never keep the keyboard focus, or a key the game listens for can stop working. Every
+piece of the package that hides or destroys something with focus (the menus, buttons, modals, screens, save slots,
+notices, the dialogue box, the rebinding panel, the settings panel, the controls, the board's items, the stage, and an
+element that `setShown` hides) gives the focus up when it does. `releaseFocus` does the same for the game's own elements:
+
+    import { releaseFocus } from "@velvet/ui";
+
+    function closeInventory(): void {
+      releaseFocus(inventoryEl, openerButton); // the focus moves to the button that opened it
+      inventoryEl.hidden = true;
+    }
+
+`releaseFocus(container, fallback?)` does nothing when the focus is outside `container`. When it is inside, the focus
+moves to `fallback` if that is given and can take the focus now (connected, enabled, and not in a hidden or inert part),
+and otherwise the focused element is blurred. Call it before the element is hidden or removed.
 
 ## The board view
 
@@ -126,13 +146,15 @@ changes only the layer's transform. Neither causes a layout.
 
 | Member | What it is |
 |---|---|
-| `createBoardView(stage, { worldBounds, minZoom, maxZoom, initialZoom })` | Adds the layer. `worldBounds` is `{ x, y, w, h }`. The zoom range defaults to 0.25 to 4, and the view starts at zoom 1 (or the nearest zoom in range) with the world centred. |
+| `createBoardView(stage, { worldBounds, minZoom, maxZoom, initialZoom, visibleArea })` | Adds the layer. `worldBounds` is `{ x, y, w, h }`. The zoom range defaults to 0.25 to 4, and the view starts at zoom 1 (or the nearest zoom in range) with the world centred in the visible area. `visibleArea` is the insets `{ top, right, bottom, left }` of the HUD panels that cover the stage (see below); a side left out is 0. |
 | `el` | The world layer, inside the stage's root. It has the class `vu-board`, and its look is set inline. |
-| `zoom` | Logical pixels per world unit. Settable: it zooms around the centre of the surface, within the range. |
+| `zoom` | Logical pixels per world unit. Settable: it zooms around the centre of the visible area, within the range. |
 | `zoomAt(zoom, point)` | Zooms around a logical point, which keeps the world point under it in place unless the bounds clamp the pan. |
 | `pan` | Where the world's origin sits, in logical pixels. Settable, and clamped. |
 | `panBy(dx, dy)` | Pans by a distance in logical pixels, the same space as the stage. Use it from the keyboard. |
-| `fit({ x, y, w, h })` | Shows a world rectangle centred, as large as the zoom range allows. |
+| `fit({ x, y, w, h })` | Shows a world rectangle centred in the visible area, as large as that area and the zoom range allow. |
+| `setVisibleArea({ top, right, bottom, left })` | Sets the part of the stage that the view frames. The view is clamped to it again, and `onChange` runs whenever the area changes, even when the view stays put. Setting the same area again does nothing. |
+| `visibleWorldRect()` | The world rectangle that the visible area shows now. A game whose cards are placed in world units can pass it as the `bounds` of `board.freeSpot` (`@velvet/cards`), so that a new stack lands where the player sees it. The cards board counts its own steps, so the game must map them to world units first. |
 | `worldToLogical(x, y)`, `logicalToWorld(x, y)` | Convert between world units and the stage's logical pixels. |
 | `onChange(listener)` | Runs after a pan or a zoom, with `{ zoom, pan }`. It returns the function that removes the listener. It does not run for item moves. |
 | `addItem(el, { x, y, w, h, z })` | Adds an element as an item, at a box in world units. `z` is an integer and defaults to 0. Throws for an element that is already an item. |
@@ -157,6 +179,14 @@ Rules that the board keeps:
   pieces do, and never with a change of size or position.
 - An element in the layer that is not an item (a background plate that the game draws, for example) counts as
   empty space: a press on it pans the view. Make an element interactive by adding it as an item.
+
+**The visible area.** A top bar or a side panel can cover part of the stage. Tell the board the insets, and it frames
+the world in what is left: the first centring, `fit`, the zoom around the centre and the pan clamp all use that part.
+
+    const board = createBoardView(stage, { worldBounds, visibleArea: { top: 96, right: 360 } });
+    // when a panel opens or closes:
+    board.setVisibleArea(panelOpen ? { top: 96, right: 360 } : { top: 96 });
+    const spot = board.visibleWorldRect(); // the world rectangle the player can see now
 
 ## The rebinding panel
 
@@ -497,6 +527,99 @@ value is already there: `setText(node, text)`, `setShown(element, shown)` and `s
     marks.register("gold", () => setText(goldEl, String(run.gold)));
     marks.mark("gold"); // drawn at the next frame, once however many marks came in
 
+## Form controls
+
+`createSlider`, `createToggle` and `createChoice` are the controls of a settings screen. Each one returns
+`{ el, value, setValue(value, { silent? }), onChange, setDisabled(disabled), destroy() }`. A silent `setValue` moves
+the control without calling `onChange`, which is how a change of the store reaches the control without being written
+back. The pad drives them through the keys that `startPadMenuKeys` from `@velvet/core` sends: the arrows, Enter (A)
+and Escape (B).
+
+    import { createChoice, createSlider, createToggle } from "@velvet/ui";
+
+    const music = createSlider({
+      label: "Música",
+      min: 0,
+      max: 10,
+      format: (value) => `${value * 10} %`,
+      value: 7,
+      onChange: (value) => audio.setMusic(value / 10),
+    });
+    const subtitles = createToggle({ label: "Subtítulos", value: true, onChange: (on) => settings.set("subtitles", on) });
+    const language = createChoice({
+      label: "Idioma",
+      options: [{ value: "es", label: "Español" }, { value: "en", label: "English" }],
+      wrap: false,
+    });
+    stage.root.append(music.el, subtitles.el, language.el);
+
+| Factory | Options | Keys and pointer |
+|---|---|---|
+| `createSlider({ min, max, step?, value?, format?, label?, onChange?, disabled? })` | `step` defaults to 1. `format(value)` gives the text beside the track. | Left and Down lower it, Right and Up raise it, Home and End go to the ends. A press or a drag on the track sets it. |
+| `createToggle({ label?, value?, onChange?, disabled? })` | `value` defaults to false. | Enter and Space turn it over, and so does a click. |
+| `createChoice({ label?, options, value?, wrap?, onChange?, disabled? })` | `options` are `{ value, label }`, at least one. `wrap` defaults to true: the arrows go round the ends. | Left and Up give the previous option, Right and Down the next, Home and End the first and the last. The two arrows on the sides do the same for the mouse. |
+
+The slider moves in steps from `min`, and a value is snapped to the nearest step and kept in range. Its largest value
+is the last step that is not above `max`, which is also `aria-valuemax`. The slider has role `slider`, the toggle
+`switch` with `aria-checked`, and the choice `listbox`, whose one visible option is its active descendant. A disabled
+control leaves the Tab order and gets `aria-disabled`. Hover and focus change colour only.
+
+The toggle is a `div` on purpose: a pad's A reaches it as an Enter key, and a focused button would turn twice on that.
+
+## Settings panel
+
+`createSettingsPanel({ store, sections, t?, onReset? })` builds a settings screen from sections of rows. Each row is a
+label and one control, bound to one setting of a store. The store is the one that `@velvet/core` makes with
+`createSettingsStore`. The panel declares only the methods it uses, so this package does not import core.
+
+    import { createSettingsStore } from "@velvet/core";
+    import { createSettingsPanel } from "@velvet/ui";
+
+    const settings = createSettingsStore({
+      namespace: "my-game",
+      version: 1,
+      defaults: { volume: 7, subtitles: true, language: "es" },
+    });
+    await settings.load();
+
+    const panel = createSettingsPanel({
+      store: settings,
+      t: (key, args) => i18n.t(key, args), // the game's text lookup
+      sections: [
+        {
+          title: "settings.sound",
+          items: [{ kind: "slider", key: "volume", label: "settings.volume", min: 0, max: 10, format: (v) => `${v * 10} %` }],
+        },
+        {
+          title: "settings.screen",
+          items: [
+            { kind: "toggle", key: "subtitles", label: "settings.subtitles" },
+            {
+              kind: "choice",
+              key: "language",
+              label: "settings.language",
+              options: [{ value: "es", label: "Español" }, { value: "en", label: "English" }],
+            },
+          ],
+        },
+      ],
+    });
+    screens.push({ id: "settings", el: panel.el, kind: "overlay" });
+
+| Member | What it is |
+|---|---|
+| `createSettingsPanel({ store, sections, t?, onReset? })` | Builds the panel with a row for each item, at the store's values. |
+| `store` | `get(key)`, `set(key, value)` and `subscribe(key, listener)` are required. `reset()` is optional: when the store has it, the panel shows a "Reset to defaults" button that calls it, and then `onReset`. The settings store of `@velvet/core` has no `reset` yet, so the button stays hidden with it. |
+| `sections` | `{ title, items }`. An item is `{ kind: "slider" \| "toggle" \| "choice", key, label, ...options }`, with the options of its control. A key may be in one row only. |
+| `t` | The text lookup. The titles, the labels, the option labels and the reset text (`settings.reset`) go through it. A lookup with no text returns the key, which is then shown as it is. |
+| `el`, `destroy()` | The panel. `destroy` removes it and stops following the store; the store keeps its values. |
+
+A change of a control writes the store at once. A change that the store makes (another part of the game) moves the
+control silently, so nothing is written back. Up and Down move the focus through the rows and the reset button, and
+wrap at the ends; Left and Right change the focused control, and Enter or Space turn a toggle. A key that the store
+does not have makes the panel throw a RangeError when it is created, and a stored value of the wrong type shows the
+control's own default. The panel is built once: to show the texts in another language, make it again.
+
 ## Theme
 
 Colours, fonts and sizes are custom properties on `.vu-root`: `--vu-ink`, `--vu-paper`, `--vu-accent`,
@@ -516,7 +639,10 @@ the pointer round trip, the bars, the focus trap, the toast timing, the board's 
 stylesheet, and the rebinding panel's rows, captures, resets, keys, cleanup and language change. The screen kit has its own suites:
 the screen stack (layers, hooks, focus, Escape and transitions), the save list (rows, writes, confirmations, keys and
 damaged slots), the notices (queue, expiry, repeats, history and the avoided rectangle), the dialogue box (writing,
-choices, skip, auto-advance, backlog), the stat bar and the dirty marks, and the stylesheet's rules for them.
+choices, skip, auto-advance, backlog), the stat bar and the dirty marks, and the stylesheet's rules for them. The focus
+suite (`focus.test.ts`) drives each surface to the state where it holds the focus, hides or destroys it, and checks
+that the focus is outside it. The form controls, the settings panel and their stylesheet rules have suites of their own
+(`components/slider.test.ts`, `toggle.test.ts`, `choice.test.ts`, `settings-panel.test.ts`, `form-css.test.ts`).
 
 `demo/index.html` and `demo/main.ts` show the stage and every component. They load the stylesheet from
 `../src/velvet-ui.css`. Vite is not added yet, so open the page with Vite (or another server that runs

@@ -19,6 +19,8 @@
 // pixels, so text stays sharp. With `native` off they are the logical size, and the compositor
 // scales the canvas up. That is the fallback for weak GPUs.
 
+import { releaseFocus } from "./components/dom";
+
 /** Logical width and height when the options name none. */
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
@@ -323,6 +325,7 @@ export class Stage {
     this.destroyed = true;
     for (const cleanup of this.cleanups.splice(0)) cleanup();
     this.listeners.clear();
+    releaseFocus(this.viewport);
     this.viewport.remove();
     if (this.previousHostPosition !== null) this.host.style.position = this.previousHostPosition;
   }

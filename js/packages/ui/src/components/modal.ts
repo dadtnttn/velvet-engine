@@ -6,7 +6,7 @@
 // `open()` returns a promise of the id of the action that was chosen.
 
 import { mergeDefined, type VuComponent } from "./component";
-import { createElement, focusableWithin, uniqueId } from "./dom";
+import { createElement, focusableWithin, releaseFocus, uniqueId } from "./dom";
 
 /** One button of a modal. */
 export interface ModalAction {
@@ -160,6 +160,8 @@ export function createModal(props: ModalProps = {}): Modal {
     const back = returnFocusTo;
     returnFocusTo = null;
     if (back !== null && back.isConnected) back.focus();
+    // A dialog that had no element to return to must not keep the focus inside itself while hidden.
+    releaseFocus(el);
     resolve?.(result);
   };
 
@@ -178,6 +180,7 @@ export function createModal(props: ModalProps = {}): Modal {
     },
     destroy(): void {
       close(null);
+      releaseFocus(el);
       el.remove();
     },
   };

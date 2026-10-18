@@ -1,6 +1,7 @@
 // @velvet/ui: the 16:9 stage that every Velvet JS game draws in, the board view (a pannable, zoomable
-// world inside the stage, for cards and maps), and the Persona HUD primitives (plates, buttons, keycaps,
-// chips, meters, tooltips, toasts, modals and menus) that sit over it.
+// world inside the stage, for cards and maps), the Persona HUD primitives (plates, buttons, keycaps,
+// chips, meters, tooltips, toasts, modals and menus) that sit over it, the form controls (sliders, toggles
+// and choices) and the settings panel that binds them to a game's settings.
 //
 // Import from the package root, for example:
 //   import { createStage, createBoardView, createButton, createMenu } from "@velvet/ui";
@@ -13,6 +14,7 @@ export { createBoardView } from "./board";
 export type {
   BoardDrag,
   BoardDragCallbacks,
+  BoardInsets,
   BoardListener,
   BoardOptions,
   BoardView,
@@ -24,12 +26,13 @@ export type {
   WorldRect,
 } from "./board";
 export type { VuComponent } from "./components/component";
+export { releaseFocus } from "./components/dom";
 export { createPlate } from "./components/plate";
 export type { Plate, PlateProps } from "./components/plate";
 export { createButton } from "./components/button";
 export type { ButtonProps } from "./components/button";
 export { createKeycap, keyLabel } from "./components/keycap";
-export type { KeycapProps } from "./components/keycap";
+export type { KeycapProps, KeycapTextCase } from "./components/keycap";
 export { createChip } from "./components/chip";
 export type { ChipProps } from "./components/chip";
 export { createMeter } from "./components/meter";
@@ -55,3 +58,20 @@ export { createDirtyMarks, setActive, setShown, setText } from "./dirty";
 export type { DirtyMarks, DirtyOptions } from "./dirty";
 export { createBar } from "./bar";
 export type { BarProps, BarTone } from "./bar";
+export { createSlider } from "./components/slider";
+export type { Slider, SliderOptions } from "./components/slider";
+export { createToggle } from "./components/toggle";
+export type { Toggle, ToggleOptions } from "./components/toggle";
+export { createChoice } from "./components/choice";
+export type { Choice, ChoiceOption, ChoiceOptions, ChoiceValue } from "./components/choice";
+export { createSettingsPanel } from "./settings-panel";
+export type {
+  ChoiceItem,
+  SettingItem,
+  SettingsPanel,
+  SettingsPanelOptions,
+  SettingsPanelStore,
+  SettingsSection,
+  SliderItem,
+  ToggleItem,
+} from "./settings-panel";

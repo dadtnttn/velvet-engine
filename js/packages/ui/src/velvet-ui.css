@@ -174,6 +174,11 @@
   border-radius: 12px;
 }
 
+/* A keycap whose text keeps the case it is written in, such as "Esc" or "Espacio". */
+.vu-keycap-as-is {
+  text-transform: none;
+}
+
 .vu-mouse {
   display: block;
   width: 1.1em;
@@ -850,6 +855,237 @@
 
 .vu-bar-text[hidden] {
   display: none;
+}
+
+/* Slider: a track with a fill and a thumb, and the value's text beside it. The fill is scaled with a transform and
+   the thumb is placed with its left offset, so a change of value moves nothing else. */
+.vu-slider {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--vu-gap);
+  width: 420px;
+  max-width: 100%;
+  min-height: 48px;
+  color: var(--vu-paper);
+  font-size: var(--vu-size-small);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vu-slider-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 14px;
+  background: var(--vu-ink);
+}
+
+.vu-slider-fill {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--vu-accent);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform var(--vu-duration) linear;
+}
+
+.vu-slider-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  box-sizing: border-box;
+  width: 22px;
+  height: 36px;
+  background: var(--vu-paper);
+  transform: translate(-50%, -50%);
+}
+
+.vu-slider-value {
+  min-width: 4.5em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.vu-slider:hover:not([aria-disabled="true"]) .vu-slider-track {
+  filter: brightness(1.35);
+}
+
+.vu-slider:focus-visible .vu-slider-thumb {
+  background-color: var(--vu-gold-hi);
+}
+
+.vu-slider[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Toggle: a switch with a knob. The knob moves when the switch is turned, and the track takes the accent colour
+   when it is on. The switch is a div, so the pad's A (an Enter key) turns it once. */
+.vu-toggle {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 96px;
+  height: 48px;
+  border: 2px solid var(--vu-paper);
+  background: var(--vu-ink);
+  cursor: pointer;
+  transition:
+    filter var(--vu-duration) ease,
+    background-color var(--vu-duration) ease,
+    opacity var(--vu-duration) ease;
+}
+
+.vu-toggle-knob {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 32px;
+  height: 32px;
+  background: var(--vu-paper);
+  transition: transform var(--vu-duration) ease, background-color var(--vu-duration) ease;
+}
+
+.vu-toggle[aria-checked="true"] {
+  background-color: var(--vu-accent);
+}
+
+.vu-toggle[aria-checked="true"] .vu-toggle-knob {
+  transform: translateX(48px);
+  background-color: var(--vu-accent-ink);
+}
+
+.vu-toggle:hover:not([aria-disabled="true"]) {
+  filter: brightness(1.35);
+}
+
+.vu-toggle:active:not([aria-disabled="true"]) {
+  filter: brightness(0.8);
+}
+
+.vu-toggle:focus-visible .vu-toggle-knob {
+  background-color: var(--vu-gold-hi);
+}
+
+.vu-toggle[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Choice: one option between two arrows. The text is centred between the arrows, which are for the mouse. */
+.vu-choice {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 320px;
+  max-width: 100%;
+  min-height: 60px;
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+  font-size: var(--vu-size);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  clip-path: var(--vu-cut);
+  transition:
+    filter var(--vu-duration) ease,
+    background-color var(--vu-duration) ease,
+    color var(--vu-duration) ease,
+    opacity var(--vu-duration) ease;
+}
+
+.vu-choice:focus-visible {
+  background-color: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+.vu-choice[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.vu-choice[aria-disabled="true"] .vu-choice-arrow {
+  cursor: not-allowed;
+}
+
+.vu-choice-arrow {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  color: var(--vu-gold-hi);
+  cursor: pointer;
+}
+
+.vu-choice-arrow:hover {
+  filter: brightness(1.35);
+}
+
+.vu-choice-value {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  padding: var(--vu-pad-y) var(--vu-pad-x);
+  white-space: nowrap;
+}
+
+/* Settings panel: sections of rows. Each row has its label on the left and its control on the right. */
+.vu-settings {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--vu-gap) * 2);
+  width: 960px;
+  max-width: 100%;
+}
+
+.vu-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vu-settings-title {
+  margin: 0;
+  color: var(--vu-gold-hi);
+  font-size: var(--vu-size-title);
+  font-weight: 900;
+}
+
+.vu-settings-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--vu-gap);
+  min-height: 64px;
+  padding: var(--vu-pad-y) var(--vu-pad-x);
+  background: var(--vu-ink);
+}
+
+.vu-settings-label {
+  font-size: var(--vu-size);
+  font-weight: 800;
+}
+
+.vu-settings-control {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.vu-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--vu-gap);
 }
 
 /* Reduced motion: no fades, no hover transitions, no animations. */

@@ -8,6 +8,8 @@
 //   marks.mark("gold");   // any number of marks in this frame ...
 //                         // ... are drawn once, at the next animation frame
 
+import { releaseFocus } from "./components/dom";
+
 /** Options for {@link createDirtyMarks}. */
 export interface DirtyOptions {
   /**
@@ -140,6 +142,8 @@ export function setShown(node: HTMLElement, shown: boolean): boolean {
   const hidden = !shown;
   if (node.hidden === hidden) return false;
   node.hidden = hidden;
+  // A hidden element must not keep the keyboard focus, so the focus leaves it here.
+  if (hidden) releaseFocus(node);
   return true;
 }
 

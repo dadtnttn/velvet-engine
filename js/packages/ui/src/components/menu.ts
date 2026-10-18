@@ -10,7 +10,7 @@
 // the focused item too, so the arrows and Enter act on the item that the player can see.
 
 import { mergeDefined, type VuComponent } from "./component";
-import { createElement } from "./dom";
+import { createElement, releaseFocus } from "./dom";
 
 /** One item of a menu. */
 export interface MenuItem {
@@ -210,6 +210,7 @@ export function createMenu(props: MenuProps = {}): Menu {
       render();
     },
     destroy(): void {
+      releaseFocus(el);
       el.removeEventListener("keydown", onKeyDown);
       el.removeEventListener("focusin", onFocusIn);
       el.remove();

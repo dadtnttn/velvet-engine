@@ -2,7 +2,7 @@
 // its top edge. Its body holds whatever the game puts in it.
 
 import { mergeDefined, type VuComponent } from "./component";
-import { createElement } from "./dom";
+import { createElement, releaseFocus } from "./dom";
 
 /** Props of a plate. */
 export interface PlateProps {
@@ -49,6 +49,7 @@ export function createPlate(props: PlateProps = {}): Plate {
       render();
     },
     destroy(): void {
+      releaseFocus(el);
       el.remove();
     },
   };

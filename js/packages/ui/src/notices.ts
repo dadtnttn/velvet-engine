@@ -12,7 +12,7 @@
 
 import type { TranslateFn } from "./rebind-panel";
 import type { VuComponent } from "./components/component";
-import { createElement } from "./components/dom";
+import { createElement, releaseFocus } from "./components/dom";
 import type { LogicalRect } from "./stage";
 
 /** The colour of a notice: information, a warning, or a loss or a refusal. */
@@ -248,12 +248,14 @@ export function createNotices(options: NoticesOptions): Notices {
   const hide = (entry: Entry): void => {
     stopTimer(entry);
     entry.state = "waiting";
+    releaseFocus(entry.el);
     entry.el.remove();
   };
 
   /** Removes an entry from the list, and from the page. */
   const forget = (entry: Entry): void => {
     stopTimer(entry);
+    releaseFocus(entry.el);
     entry.el.remove();
     entries = entries.filter((other) => other !== entry);
   };
@@ -453,6 +455,8 @@ export function createNotices(options: NoticesOptions): Notices {
     const back = returnFocus;
     returnFocus = null;
     if (back !== null && back.isConnected) back.focus();
+    // With no element to return to, the focus must not stay on a button inside the hidden drawer.
+    releaseFocus(drawer);
   };
 
   closeButton.addEventListener("click", closeDrawer);
@@ -517,6 +521,7 @@ export function createNotices(options: NoticesOptions): Notices {
     clear(): void {
       if (destroyed) return;
       for (const entry of entries) stopTimer(entry);
+      releaseFocus(column);
       for (const entry of entries) entry.el.remove();
       entries = [];
     },
@@ -552,8 +557,10 @@ export function createNotices(options: NoticesOptions): Notices {
       for (const entry of entries) stopTimer(entry);
       entries = [];
       history.length = 0;
+      releaseFocus(column);
       column.remove();
       drawer.removeEventListener("keydown", onDrawerKeyDown);
+      releaseFocus(drawer);
       drawer.remove();
     },
   };

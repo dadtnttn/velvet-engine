@@ -17,7 +17,7 @@
 
 import { createButton } from "./components/button";
 import type { VuComponent } from "./components/component";
-import { createElement } from "./components/dom";
+import { createElement, releaseFocus } from "./components/dom";
 import { createMenu, type Menu, type MenuItem } from "./components/menu";
 import { createPlate, type Plate } from "./components/plate";
 import { setShown } from "./dirty";
@@ -350,6 +350,7 @@ export function createDialogueBox(options: DialogueBoxOptions): DialogueBox {
     shown = end;
     letters = [];
     el.hidden = true;
+    releaseFocus(el);
     options.onEnd?.(end);
   };
 
@@ -424,6 +425,7 @@ export function createDialogueBox(options: DialogueBoxOptions): DialogueBox {
     logReturnFocus = null;
     if (back !== null && back.isConnected && el.contains(back)) back.focus({ preventScroll: true });
     else if (!el.hidden) nextButton.el.focus({ preventScroll: true });
+    releaseFocus(backlogPlate.el);
   }
 
   /** Escape closes the backlog, and the box keeps the key otherwise. */
@@ -473,6 +475,7 @@ export function createDialogueBox(options: DialogueBoxOptions): DialogueBox {
       letters = [];
       el.hidden = true;
       if (!backlogPlate.el.hidden) closeBacklog();
+      releaseFocus(el);
     },
     tick(seconds: number): void {
       if (destroyed || session === null || shown === null || shown.type !== "line") return;
@@ -517,6 +520,7 @@ export function createDialogueBox(options: DialogueBoxOptions): DialogueBox {
       logClose.destroy();
       panel.destroy();
       backlogPlate.destroy();
+      releaseFocus(el);
       el.remove();
     },
   };

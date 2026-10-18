@@ -24,7 +24,7 @@
 // Transitions fade a screen in and out, and move it a little, with CSS opacity and transform only. Reduced
 // motion turns them off.
 
-import { createElement, focusableWithin } from "./components/dom";
+import { createElement, focusableWithin, releaseFocus } from "./components/dom";
 
 /** How a screen sits on the stack. A screen covers the screens below it; an overlay sits over them. */
 export type ScreenKind = "screen" | "overlay";
@@ -187,6 +187,7 @@ export function createScreenStack(host: HTMLElement, options: ScreenStackOptions
    */
   const detach = (node: HTMLElement): void => {
     node.setAttribute("inert", "");
+    releaseFocus(node);
     const previous = leaving.get(node);
     if (previous !== undefined) clearTimeout(previous);
     leaving.delete(node);
@@ -218,6 +219,7 @@ export function createScreenStack(host: HTMLElement, options: ScreenStackOptions
     entries.forEach((entry, index) => {
       const node = entry.screen.el;
       node.hidden = index < base;
+      if (node.hidden) releaseFocus(node);
       if (index === last) node.removeAttribute("inert");
       else node.setAttribute("inert", "");
     });
@@ -412,6 +414,7 @@ export function createScreenStack(host: HTMLElement, options: ScreenStackOptions
       leaving.clear();
       entries.length = 0;
       listeners.clear();
+      releaseFocus(layer);
       layer.remove();
       if (hostChange !== null) host.style.position = hostChange.previous;
     },

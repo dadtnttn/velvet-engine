@@ -613,3 +613,101 @@ describe("listeners and clean-up", () => {
     expect(stage.root.children.length).toBe(0);
   });
 });
+
+describe("the visible area", () => {
+  it("centres the world in the part of the surface that is visible, not on the whole surface", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD, visibleArea: { left: 400, top: 100 } });
+    // The visible part starts at (400, 100) and is 1520 by 980. The world centre goes to its centre, (1160, 590).
+    expect(board.pan.x).toBeCloseTo(400 + 760 - 1500, 6);
+    expect(board.pan.y).toBeCloseTo(100 + 490 - 1000, 6);
+  });
+
+  it("centres a world smaller than the visible part inside it, and leaves the panels' side empty", () => {
+    const board = createBoardView(stageIn(), { worldBounds: { x: 0, y: 0, w: 400, h: 300 }, visibleArea: { left: 400 } });
+    // The visible part is 1520 wide from 400, so the 400 wide world sits 560 in from its left edge.
+    expect(board.pan.x).toBeCloseTo(400 + 560, 6);
+    expect(board.pan.y).toBeCloseTo((1080 - 300) / 2, 6);
+  });
+
+  it("zooms around the centre of the visible part, which keeps the world point there in place", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD, visibleArea: { left: 400 } });
+    const centre = { x: 400 + 1520 / 2, y: 540 };
+    const world = board.logicalToWorld(centre.x, centre.y);
+    board.zoom = 2;
+    const after = board.worldToLogical(world.x, world.y);
+    expect(board.zoom).toBe(2);
+    expect(after.x).toBeCloseTo(centre.x, 6);
+    expect(after.y).toBeCloseTo(centre.y, 6);
+  });
+
+  it("clamps the pan to the visible part, so the world covers it and not the space under the panels", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD, visibleArea: { left: 400 } });
+    board.pan = { x: 900, y: 0 };
+    // The world's left edge may not pass the visible part's left edge, which is at 400. With no area it would stop at 0.
+    expect(board.pan.x).toBe(400);
+    board.pan = { x: -5000, y: 0 };
+    // The world's right edge may not come in past the visible part's right edge: 400 + 1520 - 3000.
+    expect(board.pan.x).toBeCloseTo(-1080, 6);
+  });
+
+  it("fits a rectangle in the visible part, as large as that part allows, and centres it there", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD, visibleArea: { left: 400 } });
+    board.fit({ x: 1000, y: 900, w: 800, h: 100 });
+    // The visible part is 1520 wide, so the width limits the zoom: 1520 / 800 = 1.9.
+    expect(board.zoom).toBeCloseTo(1.9, 9);
+    const centre = board.worldToLogical(1400, 950);
+    expect(centre.x).toBeCloseTo(400 + 760, 6);
+    expect(centre.y).toBeCloseTo(540, 6);
+  });
+
+  it("reports the world rectangle that the visible part shows, at the current zoom", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD, visibleArea: { left: 400, top: 100 } });
+    board.zoom = 2;
+    const origin = board.logicalToWorld(400, 100);
+    const rect = board.visibleWorldRect();
+    expect(rect.x).toBeCloseTo(origin.x, 6);
+    expect(rect.y).toBeCloseTo(origin.y, 6);
+    expect(rect.w).toBeCloseTo(1520 / 2, 6);
+    expect(rect.h).toBeCloseTo(980 / 2, 6);
+  });
+
+  it("reports the whole surface as the visible part when no area is given", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD });
+    board.pan = { x: 0, y: 0 };
+    expect(board.visibleWorldRect()).toEqual({ x: 0, y: 0, w: 1920, h: 1080 });
+  });
+
+  it("re-clamps the view and tells the listeners when the area changes, even when the view stays put", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD });
+    const seen: BoardViewState[] = [];
+    board.onChange((state) => seen.push(state));
+    board.setVisibleArea({ top: 96 });
+    // The view is still inside the new area, so it does not move, but the change itself is reported.
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.zoom).toBe(1);
+    board.setVisibleArea({ top: 96 });
+    expect(seen).toHaveLength(1);
+    board.setVisibleArea({});
+    expect(seen).toHaveLength(2);
+  });
+
+  it("moves the view when the visible part gets smaller and the world is centred in it again", () => {
+    const board = createBoardView(stageIn(), { worldBounds: { x: 0, y: 0, w: 400, h: 300 } });
+    const seen: BoardViewState[] = [];
+    board.onChange((state) => seen.push(state));
+    board.setVisibleArea({ right: 1000 });
+    // The visible part is 920 wide now, so the 400 wide world is centred in it: (920 - 400) / 2.
+    expect(board.pan.x).toBeCloseTo(260, 6);
+    expect(seen.at(-1)?.pan.x).toBeCloseTo(260, 6);
+  });
+
+  it("rejects insets that are negative or leave no room, and keeps the area it had", () => {
+    const stage = stageIn();
+    expect(() => createBoardView(stage, { worldBounds: WORLD, visibleArea: { top: 600, bottom: 600 } })).toThrow(RangeError);
+    const board = createBoardView(stage, { worldBounds: WORLD, visibleArea: { left: 400 } });
+    expect(() => board.setVisibleArea({ left: -1 })).toThrow(RangeError);
+    expect(() => board.setVisibleArea({ left: 1000, right: 1000 })).toThrow(RangeError);
+    expect(() => board.setVisibleArea({ top: Number.NaN })).toThrow(RangeError);
+    expect(board.visibleWorldRect().w).toBeCloseTo(1520, 6);
+  });
+});

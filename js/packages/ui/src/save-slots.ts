@@ -13,7 +13,7 @@
 
 import { createButton } from "./components/button";
 import type { VuComponent } from "./components/component";
-import { createElement } from "./components/dom";
+import { createElement, releaseFocus } from "./components/dom";
 import { createModal, type Modal } from "./components/modal";
 import type { TranslateFn } from "./rebind-panel";
 
@@ -469,6 +469,7 @@ export function createSaveSlots(options: SaveSlotsOptions): SaveSlots {
       destroyed = true;
       list.removeEventListener("keydown", onListKeyDown);
       list.removeEventListener("focusin", onListFocusIn);
+      releaseFocus(el);
       deleteButton.destroy();
       modal.destroy();
       el.remove();
