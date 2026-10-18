@@ -1,0 +1,166 @@
+// Game time controls: pause, resume, step, speed and slow motion, driven through the core clock.
+//
+// A paused clock keeps game time still, so logic that reads the clock stands still with it. Once the
+// loop is wrapped (Devtools.wrapLoop), the devtools also hold the game's update while they are paused,
+// so the game logic stops too. A step then runs that update once, with the clock running for that call.
+// Without a wrapped loop, a step only moves the clock on by one loop step.
+
+import type { GameClock } from "@velvet/core";
+
+/** The step length used when no loop is given: one frame at 60 Hz. */
+export const DEFAULT_STEP_SECONDS = 1 / 60;
+
+/** What the Time tab shows about the clock and the controls. */
+export interface TimeState {
+  /** False when no clock was given to the devtools. */
+  readonly hasClock: boolean;
+  /** True while game time is stopped, by the devtools or by the game. */
+  readonly paused: boolean;
+  /** The clock's speed, or null without a clock. */
+  readonly speed: number | null;
+  /** The speeds that the clock allows, ascending. */
+  readonly speeds: readonly number[];
+  /** True while slow motion is on. */
+  readonly slowMotion: boolean;
+  /** The speed that slow motion uses. */
+  readonly slowSpeed: number;
+  /** True when the clock allows the slow-motion speed. */
+  readonly slowAllowed: boolean;
+}
+
+/** Holds the state of the controls, and applies them to the clock. */
+export class TimeControls {
+  private readonly clock: GameClock | null;
+  private readonly slowSpeed: number;
+  private readonly stepSeconds: number;
+  private frozen = false;
+  private clockPausedHere = false;
+  private stepRequested = false;
+  private speedBeforeSlow: number | null = null;
+  private wrapped = false;
+
+  /**
+   * @param clock - the game clock, or null when none was given.
+   * @param slowSpeed - the speed that slow motion uses.
+   * @param stepSeconds - the length of one loop step, in seconds.
+   */
+  constructor(clock: GameClock | null, slowSpeed: number, stepSeconds: number) {
+    this.clock = clock;
+    this.slowSpeed = slowSpeed;
+    this.stepSeconds = stepSeconds;
+  }
+
+  /** Records that the loop is wrapped. From then on, a pause holds the game's update. */
+  markWrapped(): void {
+    this.wrapped = true;
+  }
+
+  /** Stops game time. A wrapped loop also holds the game's update. Calling it while paused does nothing. */
+  pause(): void {
+    if (this.frozen) return;
+    this.frozen = true;
+    if (this.clock !== null && !this.clock.paused) {
+      this.clock.pause();
+      this.clockPausedHere = true;
+    }
+  }
+
+  /** Lets game time run again. Calling it while running does nothing. */
+  resume(): void {
+    if (!this.frozen) return;
+    this.frozen = false;
+    this.stepRequested = false;
+    if (this.clockPausedHere) this.clock?.resume();
+    this.clockPausedHere = false;
+  }
+
+  /** Moves game time on by one step. Pauses first when the game is running. */
+  step(): void {
+    this.pause();
+    if (this.wrapped) {
+      this.stepRequested = true;
+      return;
+    }
+    if (this.clock === null) return;
+    const wasPaused = this.clock.paused;
+    this.clock.resume();
+    this.clock.advance(this.stepSeconds);
+    if (wasPaused) this.clock.pause();
+  }
+
+  /**
+   * Runs one game update under the controls. Returns false, and does not call `update`, while the devtools
+   * hold the game. A requested step calls it once, with the clock running for that call.
+   */
+  runUpdate(update: () => void): boolean {
+    if (this.frozen && !this.stepRequested) return false;
+    const stepping = this.frozen;
+    this.stepRequested = false;
+    const lift = stepping && (this.clock?.paused ?? false);
+    if (lift) this.clock?.resume();
+    try {
+      update();
+    } finally {
+      if (lift) this.clock?.pause();
+    }
+    return true;
+  }
+
+  /**
+   * Sets the clock's speed. This also turns slow motion off.
+   * @throws Error when there is no clock, or RangeError when the clock does not allow the speed.
+   */
+  setSpeed(speed: number): void {
+    this.requireClock().setSpeed(speed);
+    this.speedBeforeSlow = null;
+  }
+
+  /**
+   * Turns slow motion on or off. On: the clock runs at the slow speed. Off: it returns to the speed it had.
+   * @throws Error when there is no clock, or RangeError when the clock does not allow the slow speed.
+   */
+  setSlowMotion(on: boolean): void {
+    const clock = this.requireClock();
+    if (on === (this.speedBeforeSlow !== null)) return;
+    if (on) {
+      const current = clock.speed;
+      clock.setSpeed(this.slowSpeed);
+      this.speedBeforeSlow = current;
+    } else {
+      clock.setSpeed(this.speedBeforeSlow ?? clock.speed);
+      this.speedBeforeSlow = null;
+    }
+  }
+
+  /** The state of the controls, for the Time tab. */
+  state(): TimeState {
+    const clock = this.clock;
+    return {
+      hasClock: clock !== null,
+      paused: this.frozen || (clock?.paused ?? false),
+      speed: clock?.speed ?? null,
+      speeds: clock?.speeds ?? [],
+      slowMotion: this.speedBeforeSlow !== null,
+      slowSpeed: this.slowSpeed,
+      slowAllowed: clock !== null && clock.speeds.includes(this.slowSpeed),
+    };
+  }
+
+  /**
+   * Lets go of the clock. Game time runs again when the devtools stopped it, and a slow motion that is on
+   * is undone, so that the game is not left at the slow speed.
+   */
+  dispose(): void {
+    this.resume();
+    if (this.speedBeforeSlow !== null) {
+      this.clock?.setSpeed(this.speedBeforeSlow);
+      this.speedBeforeSlow = null;
+    }
+  }
+
+  /** The clock, or an error that tells the developer how to give one. */
+  private requireClock(): GameClock {
+    if (this.clock === null) throw new Error("the devtools have no game clock: pass clock to createDevtools");
+    return this.clock;
+  }
+}
