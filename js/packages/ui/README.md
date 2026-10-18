@@ -4,7 +4,7 @@ The 2D layer of a Velvet JS game: a stage that draws a fixed 16:9 surface in any
 HUD primitives of the Persona look (slanted plates, keycaps, chips, meters, buttons, tooltips,
 toasts, modals and menus). It is DOM, SVG and CSS, with no framework, and it sits over a 3D canvas.
 
-It has four parts:
+It has five parts:
 
 - **The stage** (`createStage`): every position, size and click is written in logical pixels, 1920 by 1080
   unless the game says otherwise. The stage scales the logical surface into the window with letterbox
@@ -15,6 +15,10 @@ It has four parts:
   the stage have a few extra methods (`open`, `show`, `setNative`); their docs say which.
 - **The rebinding panel** (`createRebindPanel`): the game's actions, each with the control in each slot, a
   capture state for the next input, and reset buttons. It works through a port that `@velvet/core` builds.
+- **The screen kit**: a screen stack (`createScreenStack`), the save list (`createSaveSlots`), notices with a history
+  (`createNotices`), a visual-novel dialogue box (`createDialogueBox`), stat bars (`createBar`) and dirty marks that
+  batch DOM writes per frame (`createDirtyMarks`). They are the screen-level pieces that every game rebuilds, and
+  none of them knows a game's names or data.
 
 ## Usage
 
@@ -230,6 +234,269 @@ The control names are the display keys of `@velvet/core` (`input.key.Space`, `in
 The panel sets no hover or focus geometry. A row and a button change colour only, from the menu and button styles.
 The panel's own width is set inline, and its list scrolls when it is taller than 640 logical pixels.
 
+## Screens
+
+`createScreenStack(host, options)` keeps the game's screens in one order: the title, the game, the pause menu, the
+save list and the dialogues are pushed, popped and replaced on it. The top screen is the one the player uses.
+
+    import { createScreenStack, type Screen } from "@velvet/ui";
+
+    const screens = createScreenStack(stage.root);
+    const game: Screen = {
+      id: "game",
+      el: gameEl,
+      onBack: () => {
+        screens.push(pause); // Escape or a pad's B opens the pause menu over the game
+        return false; // the game stays on the stack
+      },
+    };
+    let pausedBefore = false;
+    const pause: Screen = {
+      id: "pause",
+      el: pauseEl,
+      kind: "overlay",
+      onEnter: () => {
+        pausedBefore = clock.paused; // remember whether the player had paused the game first
+        clock.pause();
+      },
+      onLeave: () => {
+        if (!pausedBefore) clock.resume();
+      },
+      onBack: () => {
+        screens.pop(); // Escape closes the menu
+        return false;
+      },
+    };
+
+    screens.push(game);
+
+A screen has an `id` (no two screens on the stack share one), an `el` and optional hooks. Its `kind` is `"screen"`
+(the default), which covers the screens below it so that they are hidden, or `"overlay"`, which sits over the screen
+below under a scrim and leaves it visible. The screens under the top one are inert, so neither the pointer nor the
+keyboard reaches them.
+
+| Member | What it is |
+|---|---|
+| `createScreenStack(host, { transitionMs? })` | Makes the stack inside `host`. A static host is made relative, and `destroy` puts it back. `transitionMs` defaults to 180, and is zero under reduced motion. |
+| `push(screen)`, `pop()`, `replace(screen)` | Put a screen on top, take the top one off (and return it), or swap the top one. `replace` leaves the screens below as they are. |
+| `popTo(id)` | Takes every screen above `id` off, in one step. Returns false when no such screen is on the stack. |
+| `back()` | The back action. The stack calls it itself for Escape and a pad's B. Returns true when the key was taken. |
+| `top`, `depth`, `has(id)`, `ids()` | What is on the stack, from the bottom up. |
+| `onChange(listener)` | Runs after each change, with the top screen (or null). Returns the function that removes it. |
+| `el`, `destroy()` | The layer that holds the screens. `destroy` removes it and the listeners, and runs no hooks. |
+
+The hooks, in the order they run:
+
+- `onEnter` when the screen comes on the stack, or replaces another.
+- `onPause` when another screen is pushed over it, and `onResume` when that screen leaves.
+- `onLeave` when the screen leaves the stack, or is replaced.
+- `onBack` on Escape or a pad's B, while the screen is on top. Return `false` to keep the screen (for example after it
+  pushed another one). Any other result pops it. A screen without `onBack` is popped too, unless it is the only one.
+- `focusTarget()` gives the element that takes the focus when the screen comes on top. By default it is the first
+  focusable element of the screen.
+
+**Pausing.** A menu stops the clock when it opens (`onEnter`) and starts it again when it leaves (`onLeave`). Remember
+whether the player had paused the game before the menu, so that closing the menu does not restart a clock that the
+player stopped; the example above does that. A screen that is covered by another one gets `onPause` and `onResume`
+instead, for the things that must stop while it is not on top.
+
+**Focus.** Each screen gets back the element that had the focus when another screen covered it. While a screen is on
+the stack, the focus stays in it: a click on empty space that takes the focus away brings it back to the top screen.
+
+**Keys.** Escape reaches the stack on the window, after the controls have had it. A control that already took the key
+(a menu, a modal, a list) prevents the default, so the stack leaves it alone. A pad's B is an Escape key from
+`startPadMenuKeys` in `@velvet/core`, so it works the same way.
+
+**Changes.** Do not push or pop from inside a hook: the change would run inside the one that made it. `onBack` is the
+exception: it may push a screen, if it returns `false`. From a hook that must change the stack, use an event or a
+microtask.
+
+**Transitions.** A screen fades and moves a little with CSS opacity and transform. The stack sets the fade length on
+its layer as `--vu-screen-ms`, so the stylesheet and the timer agree.
+
+## Save slots
+
+`createSaveSlots(options)` is the list of a game's save slots: an autosave row and a set of manual rows (three by
+default). Each row shows the save's title, its play time, when it was written, and a thumbnail when there is one. In
+`"load"` mode the player reads a saved slot. In `"save"` mode the player writes a manual slot, and the autosave is
+read-only.
+
+    import { createSaveStore } from "@velvet/core";
+    import { createSaveSlots } from "@velvet/ui";
+
+    const store = createSaveStore({ game: "my-game", version: 1 });
+    const saves = createSaveSlots({
+      store,
+      mode: "save",
+      t: (key, args) => i18n.t(key, args), // the game's text lookup
+      collect: () => ({
+        title: "Town square",
+        playTimeMs: clock.elapsed * 1000,
+        thumbnail: snapshotDataUrl(), // a PNG, JPEG or WebP data URL, or null
+        state: game.toJSON(), // the game's data, as JSON
+      }),
+      onLoad: (record) => game.fromJSON(record.state),
+      onSaved: () => notices.notify({ message: "Game saved." }),
+    });
+    screens.push({ id: "saves", el: saves.el, kind: "overlay", focusTarget: () => saves.focusTarget() });
+
+The store is any object with `list`, `load`, `save` and `remove`, and the store of `@velvet/core` fits. A slot holds a
+record `{ meta, state }`: the `meta` (title, play time and thumbnail) is what the list shows, and the `state` is the
+game's data as `collect` gave it. The list writes this wrapper, so the store's version covers it.
+
+| Option or prop | What it is |
+|---|---|
+| `store` | The store. `list()`, `load(slot)`, `save(slot, data)` and `remove(slot)`. |
+| `mode` | `"load"` (the default) or `"save"`. |
+| `manualSlots` | How many manual slots, from 1 to 99. Default 3. Their names are `slot-1`, `slot-2` and so on; `slotPrefix` changes the start. |
+| `autosave` | The autosave's slot name. Default `"auto"`. `null` gives no autosave row. |
+| `collect(slot)` | Gives the draft to write: `title`, `playTimeMs`, `thumbnail` and `state`. The state must be JSON data and must not be undefined. The thumbnail must be a PNG, JPEG or WebP data URL, or null, and another value fails the save. `collect` is needed to save, and for `autosave()`. |
+| `onLoad(record)`, `onSaved(record)`, `onDeleted(slot)` | Run after the player's pick, with the record or the name of the slot. |
+| `onError(error, slot)` | Runs when a read, write or delete fails. `slot` is null when the list of slots itself could not be read. |
+| `t`, `locale` | The text lookup, and the language tag for the dates (null uses the page's language). |
+
+| Member | What it is |
+|---|---|
+| `el` | The list. It is a component, so `update({ mode, t, locale })` redraws it. |
+| `refresh()` | Reads every slot again and draws the rows. |
+| `autosave()` | Writes the autosave now, without a question, from `collect`. It rejects when the write fails, so the game can react. |
+| `focusTarget()` | The first row that can be picked, or null. |
+| `destroy()` | Removes the list. |
+
+**Keys.** The arrows, Home and End move between the rows, skipping the ones that cannot be picked. Enter or Space
+picks the focused row. Delete asks to delete it. A pad drives the list through the same keys. A write over a save asks
+first, and so does a delete. A thumbnail from any other source than a PNG, JPEG or WebP data URL is not shown.
+
+**Helpers.** `formatPlayTime(ms)` gives `"1:02:03"`. `formatSaveTime(iso, locale)` gives a short date and time.
+`isSafeThumbnail(value)` tells a thumbnail that the list will show.
+
+**Texts.** The keys are `save.autosave`, `save.slot` (with `number`), `save.empty`, `save.damaged`, `save.untitled`,
+`save.delete`, `save.confirm.overwrite.title` and `.body`, `save.confirm.delete.title` and `.body` (both with `name`),
+`save.confirm.yes`, `save.confirm.no`, and `save.status.saved`, `.loaded`, `.deleted`, `.empty` and `.failed`. Each
+falls back to English when the lookup has no text for it.
+
+## Notices
+
+`createNotices(options)` is a column of short messages in one corner of the surface. The notices queue by priority: the
+most important shows first, and at most `maxVisible` show at once (three by default). A notice stays for its duration,
+then fades. A notice can carry buttons. A sticky one stays until it is dismissed.
+
+    import { createNotices } from "@velvet/ui";
+
+    const notices = createNotices({
+      host: stage.root,
+      anchor: "bottom-right",
+      avoid: () => (dialogue.isOpen ? stage.rectOf(dialogue.el) : null), // the column never covers this
+    });
+    notices.notify({ message: "Sold for 3" });
+    notices.notify({ message: "Ana is hungry", tone: "warn", key: "hunger-ana" }); // a repeat is counted
+    notices.notify({
+      message: "Accept the offer?",
+      priority: 10,
+      durationMs: null,
+      actions: [
+        { id: "yes", label: "Yes" },
+        { id: "no", label: "No" },
+      ],
+      onAction: (id) => offer(id === "yes"),
+    });
+
+| Member | What it is |
+|---|---|
+| `createNotices({ host, anchor, avoid, maxVisible, t, width, height, margin, durationMs, fadeMs, historyLimit })` | Makes the column and the history drawer inside `host`. The surface is 1920 by 1080 by default. `durationMs` is the default time on screen (4000). `historyLimit` is 50 by default. |
+| `notify(spec)` | Raises a notice, and returns its id. `spec`: `message` (plain text), `tone` (`"info"`, `"warn"` or `"danger"`), `priority` (default 0; a higher one shows first and can take the place of a lower one), `durationMs` (`null` is sticky), `key` (while a notice with the same key is on screen, the count goes up instead), `actions` with `onAction(id)`. |
+| `dismiss(id)`, `clear()` | Take a notice off, with its fade, or every notice off at once. The history stays. |
+| `visible()`, `history()` | The ids on screen, and the history newest first, each with its `count`. |
+| `openHistory()`, `closeHistory()`, `toggleHistory()`, `historyOpen` | The drawer of past notices. Escape closes it, and the focus goes back to where it was. |
+| `relayout()`, `update({ anchor, avoid, maxVisible, t })` | Place the column again. `avoid` is a rectangle in logical pixels, or a function that gives one or null. Call `relayout` when the rectangle moves. |
+| `el`, `destroy()` | The column. `destroy` removes the column and the drawer. |
+
+**Focus.** A notice never takes the focus. Its buttons are reached with Tab, or the game moves the focus to one of them.
+
+**Avoiding a rectangle.** The column never covers `avoid`. When it would, the column moves above or below the rectangle,
+whichever side has more room. The notices that do not fit wait in the queue, and come back when the rectangle moves.
+Make the notices after the screens, so they are drawn above them.
+
+**Texts.** `notice.history.title`, `notice.history.close` and `notice.history.empty` (the drawer). The counts are
+written as `×2`.
+
+## Dialogue box
+
+`createDialogueBox(options)` plays a conversation. It shows the speaker's name on the plate, a portrait, the text
+written out letter by letter, the choices under the text, and a backlog. It plays a guion conversation as it is, and
+its types match `@velvet/guion`'s `Shown` and `Conversation`, so the UI package does not import guion.
+
+    import { GuionLibrary } from "@velvet/guion";
+    import { createDialogueBox } from "@velvet/ui";
+
+    const dialogue = createDialogueBox({
+      speed: 40, // letters a second; 0 writes each line at once
+      portrait: (line) => portraitOf(line.who, line.mood), // the caller resolves the art
+      onLine: (line) => voice.play(line.who),
+      onEnd: (end) => {
+        if (end.type === "vn") game.startScene(end.to);
+      },
+    });
+    stage.root.append(dialogue.el);
+
+    const library = await GuionLibrary.create();
+    dialogue.play(library.start("intro.arrival"));
+
+    // once per update of the game's loop, so that the text stops when the game is paused:
+    dialogue.tick(seconds);
+
+| Option or prop | What it is |
+|---|---|
+| `speed` | Letters a second. Default 40. Zero writes each line at once. |
+| `fastForwardFactor` | How much faster the text runs while fast-forward is on. Default 4. |
+| `autoAdvance`, `autoDelaySeconds` | Go on by themselves, a while (1.5 seconds by default) after a line is written. |
+| `portrait(line)` | Gives the element for the portrait, or null for none. |
+| `t` | The text lookup for the buttons and the backlog. |
+| `onLine(line)`, `onLetter(letter)`, `onChoice(choice)` | Hooks for voice and sound. `onLetter` runs for each letter that is written, not for spaces, so throttle it if it is loud. |
+| `onEnd(shown)` | Runs once, when the conversation ends or hands over to a visual-novel scene. The box hides itself first. |
+
+| Member | What it is |
+|---|---|
+| `play(session)` | Plays a conversation, which replaces one that is playing. A session has `current()`, `next()` and `choose(index)`. |
+| `tick(seconds)` | Moves the text and the auto-advance on by `seconds` of game time. The box has no timers of its own. |
+| `advance()` | Finishes a line that is being written, or goes on to the next box. |
+| `choose(index)` | Takes an option of the choice on screen. An option that is closed is ignored. |
+| `setFastForward(on)`, `setSkipping(on)` | Fast-forward runs the text faster. Skip writes each line at once and goes on until a choice or the end. |
+| `openBacklog()`, `closeBacklog()`, `backlog` | The lines and the choices so far, oldest first. |
+| `stop()` | Hides the box without calling `onEnd`. |
+| `isOpen`, `shown`, `fastForward`, `skipping` | What the box is doing now. `shown` keeps the end or the hand-over after the conversation ends. |
+| `update(props)`, `el`, `destroy()` | Change the props, the element, and the cleanup. |
+
+**Keys.** The first line of a conversation takes the focus into the box, and so does a line that comes on while the
+focus is in the box or nowhere. The Next button then has the focus, so Enter or Space goes on, and so does a pad's A
+(through `startPadMenuKeys`). A click on the text goes on too. A choice takes the arrows and Enter. Auto and Skip are
+toggles, Log opens the backlog, and Escape closes it.
+
+**Texts.** `dialogue.next`, `dialogue.auto`, `dialogue.skip`, `dialogue.log`, `dialogue.log.title`, `dialogue.log.close`
+and `dialogue.choices`.
+
+The box never decides a rule. The conversation says what it shows, and the box hands back the player's choices.
+
+**With a screen stack.** Put the box in an overlay screen when a stack runs the game. The stack keeps the focus on
+its top screen, so the box's buttons need to be inside that screen to take the focus and to answer Enter.
+
+## Stat bars and dirty marks
+
+`createBar({ label, value, max, tone, text })` is a thin bar with role `meter`. Its fill is drawn with a transform, so a
+change of value moves no layout. `tone` is `"accent"`, `"gold"` or `"danger"`, and `text` is drawn over the bar (such as
+`"70 / 100"`) or hidden with null.
+
+`createDirtyMarks({ schedule? })` batches DOM writes. Each element registers the function that draws it. `mark(name)`
+asks for a redraw, and every mark made in a frame is drawn once, in one flush. The flush is scheduled on the next
+animation frame, or the game can call `flush()` itself with `schedule: null`. The write helpers write nothing when the
+value is already there: `setText(node, text)`, `setShown(element, shown)` and `setActive(element, active)`.
+
+    const marks = createDirtyMarks();
+    const hunger = createBar({ label: "Hunger", value: 70, max: 100, text: "70 / 100" });
+    stage.root.append(hunger.el);
+    marks.register("gold", () => setText(goldEl, String(run.gold)));
+    marks.mark("gold"); // drawn at the next frame, once however many marks came in
+
 ## Theme
 
 Colours, fonts and sizes are custom properties on `.vu-root`: `--vu-ink`, `--vu-paper`, `--vu-accent`,
@@ -246,7 +513,10 @@ a padding. The stylesheet test checks this rule. With `prefers-reduced-motion`, 
 From `js/`, run `pnpm test` and `pnpm typecheck`. The tests use happy-dom with a fake browser geometry
 (`src/test-support.ts`), so they check the letterbox maths, the pixel sizes at pixel ratios 1, 1.5 and 2,
 the pointer round trip, the bars, the focus trap, the toast timing, the board's transforms, zoom, clamp, hit testing and drags, the
-stylesheet, and the rebinding panel's rows, captures, resets, keys, cleanup and language change.
+stylesheet, and the rebinding panel's rows, captures, resets, keys, cleanup and language change. The screen kit has its own suites:
+the screen stack (layers, hooks, focus, Escape and transitions), the save list (rows, writes, confirmations, keys and
+damaged slots), the notices (queue, expiry, repeats, history and the avoided rectangle), the dialogue box (writing,
+choices, skip, auto-advance, backlog), the stat bar and the dirty marks, and the stylesheet's rules for them.
 
 `demo/index.html` and `demo/main.ts` show the stage and every component. They load the stylesheet from
 `../src/velvet-ui.css`. Vite is not added yet, so open the page with Vite (or another server that runs

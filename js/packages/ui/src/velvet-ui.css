@@ -405,6 +405,453 @@
   cursor: not-allowed;
 }
 
+/*
+ * Screens: the layer that holds the screens of the stack. A screen covers the screens below it, which the
+ * stack hides; an overlay sits over them under a scrim. The stack sets the geometry inline, and marks a screen
+ * that is fading in or out with data-phase, so the fade is CSS opacity and transform only. The length comes
+ * from --vu-screen-ms, which the stack sets on the layer.
+ */
+.vu-screens {
+  z-index: 40;
+}
+
+.vu-screen {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transition:
+    opacity var(--vu-screen-ms, 180ms) ease,
+    transform var(--vu-screen-ms, 180ms) ease;
+}
+
+.vu-screen[data-phase="enter"],
+.vu-screen[data-phase="leave"] {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.vu-screen-overlay {
+  background: var(--vu-scrim);
+}
+
+/* Save slots: the list of saves. Each row is a slanted button; its state shows by colour and brightness. */
+.vu-slots {
+  position: relative;
+  box-sizing: border-box;
+  width: 960px;
+  max-width: 100%;
+}
+
+.vu-slots-status {
+  min-height: 1.4em;
+  margin: 0 0 var(--vu-gap);
+  color: var(--vu-gold-hi);
+  font-size: var(--vu-size-small);
+}
+
+.vu-slots-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  max-height: 720px;
+  overflow-y: auto;
+}
+
+.vu-slot {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--vu-gap);
+  width: 100%;
+  min-height: 96px;
+  margin: 0;
+  padding: var(--vu-pad-y) var(--vu-pad-x) var(--vu-pad-y) calc(var(--vu-pad-x) + var(--vu-slant));
+  border: 0;
+  border-radius: 0;
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+  font-family: inherit;
+  font-size: var(--vu-size);
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  clip-path: var(--vu-cut);
+  transition:
+    filter var(--vu-duration) ease,
+    background-color var(--vu-duration) ease,
+    color var(--vu-duration) ease,
+    opacity var(--vu-duration) ease;
+}
+
+.vu-slot-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vu-slot-name {
+  color: var(--vu-gold-hi);
+  font-size: var(--vu-size-small);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.vu-slot-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vu-slot-detail {
+  color: var(--vu-muted);
+  font-size: var(--vu-size-small);
+  font-weight: 700;
+}
+
+.vu-slot-thumb {
+  flex: 0 0 auto;
+  width: 128px;
+  height: 72px;
+  object-fit: cover;
+  background: var(--vu-ink);
+}
+
+.vu-slot[data-state="damaged"] .vu-slot-title {
+  color: var(--vu-danger);
+}
+
+.vu-slot[data-state="empty"] .vu-slot-title {
+  color: var(--vu-muted);
+}
+
+.vu-slot:hover:not([aria-disabled="true"]) {
+  filter: brightness(1.35);
+}
+
+.vu-slot:active:not([aria-disabled="true"]) {
+  filter: brightness(0.8);
+}
+
+.vu-slot:focus-visible {
+  background-color: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+.vu-slot[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.vu-slots-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--vu-gap);
+  margin-top: var(--vu-gap);
+}
+
+/* Notices: the column of short messages. It takes no clicks, except on its own buttons. The stage places it. */
+.vu-notices {
+  position: absolute;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 640px;
+  pointer-events: none;
+}
+
+.vu-notice {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6em;
+  max-width: 100%;
+  padding: 0.5em 1.2em 0.5em calc(1.2em + var(--vu-slant));
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+  font-size: var(--vu-size-small);
+  font-weight: 700;
+  clip-path: var(--vu-cut);
+  transition: opacity var(--vu-duration) ease;
+}
+
+.vu-notice[data-tone="warn"] {
+  background: var(--vu-gold);
+  color: var(--vu-ink);
+}
+
+.vu-notice[data-tone="danger"] {
+  background: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+.vu-notice[data-state="leaving"] {
+  opacity: 0;
+}
+
+.vu-notice-text {
+  white-space: pre-wrap;
+}
+
+.vu-notice-count {
+  padding: 0 0.4em;
+  background: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+.vu-notice-count[hidden] {
+  display: none;
+}
+
+.vu-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--vu-gap);
+  width: 100%;
+  pointer-events: none;
+}
+
+.vu-notice-actions .vu-button {
+  min-height: 48px;
+  font-size: var(--vu-size-small);
+  pointer-events: auto;
+}
+
+/* History: the drawer of past notices, along the right of the stage. */
+.vu-history {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-width: 100%;
+  padding: var(--vu-pad-y) var(--vu-pad-x);
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+}
+
+.vu-history[hidden] {
+  display: none;
+}
+
+.vu-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--vu-gap);
+  margin-bottom: var(--vu-gap);
+}
+
+.vu-history-title {
+  margin: 0;
+  color: var(--vu-gold-hi);
+  font-size: var(--vu-size-title);
+  font-weight: 900;
+}
+
+.vu-history-list {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.vu-history-item {
+  display: flex;
+  gap: 0.6em;
+  padding: 0.5em 0;
+  border-bottom: 2px solid var(--vu-muted);
+  font-size: var(--vu-size-small);
+}
+
+.vu-history-item[data-tone="warn"] .vu-history-text {
+  color: var(--vu-gold-hi);
+}
+
+.vu-history-item[data-tone="danger"] .vu-history-text {
+  color: var(--vu-danger);
+}
+
+.vu-history-text {
+  white-space: pre-wrap;
+}
+
+.vu-history-count {
+  color: var(--vu-muted);
+  font-weight: 900;
+}
+
+.vu-history-count[hidden] {
+  display: none;
+}
+
+.vu-history-empty {
+  color: var(--vu-muted);
+  font-size: var(--vu-size-small);
+}
+
+/* Dialogue box: the visual-novel box along the bottom of the stage. The portrait stands on the left; the plate
+   holds the speaker's name, the text, the choices and the buttons. The backlog opens above the plate. */
+.vu-dialogue {
+  position: absolute;
+  right: 96px;
+  bottom: 48px;
+  left: 96px;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+}
+
+.vu-dialogue[hidden] {
+  display: none;
+}
+
+.vu-dialogue-portrait {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  width: 360px;
+  height: 520px;
+}
+
+.vu-dialogue-portrait[hidden] {
+  display: none;
+}
+
+.vu-dialogue-portrait > * {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.vu-dialogue-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vu-dialogue-text {
+  min-height: 3.6em;
+  margin: 0 0 var(--vu-gap);
+  font-size: var(--vu-size);
+  font-weight: 700;
+  white-space: pre-wrap;
+}
+
+.vu-dialogue-choices {
+  margin-bottom: var(--vu-gap);
+}
+
+.vu-dialogue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--vu-gap);
+}
+
+.vu-dialogue-backlog {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.vu-dialogue-backlog[hidden] {
+  display: none;
+}
+
+.vu-dialogue-log {
+  max-height: 480px;
+  margin: 0 0 var(--vu-gap);
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.vu-dialogue-log-item {
+  display: flex;
+  gap: 0.6em;
+  padding: 0.35em 0;
+  font-size: var(--vu-size-small);
+}
+
+.vu-dialogue-log-item[data-kind="choice"] {
+  color: var(--vu-gold-hi);
+}
+
+.vu-dialogue-log-name {
+  color: var(--vu-gold-hi);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.vu-dialogue-log-text {
+  white-space: pre-wrap;
+}
+
+/* Stat bar: a thin bar whose fill is a transform, so a change of value moves no layout. */
+.vu-bar {
+  position: relative;
+  box-sizing: border-box;
+  height: var(--vu-meter-height);
+  background: var(--vu-ink);
+  overflow: hidden;
+  clip-path: var(--vu-cut);
+}
+
+.vu-bar-fill {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--vu-accent);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform var(--vu-duration) linear;
+}
+
+.vu-bar[data-tone="gold"] .vu-bar-fill {
+  background: var(--vu-gold);
+}
+
+.vu-bar[data-tone="danger"] .vu-bar-fill {
+  background: var(--vu-danger);
+}
+
+.vu-bar-text {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vu-paper);
+  font-size: var(--vu-size-small);
+  font-weight: 900;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.vu-bar-text[hidden] {
+  display: none;
+}
+
 /* Reduced motion: no fades, no hover transitions, no animations. */
 @media (prefers-reduced-motion: reduce) {
   .vu-root {
