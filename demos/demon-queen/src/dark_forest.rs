@@ -647,14 +647,14 @@ pub(super) fn hours(env: &EnvironmentFrame3D) -> (f32, f32, f32) {
 
 /// The mist's patches: (x, z, width, depth).
 const MIST: [(f32, f32, f32, f32); 8] = [
-    (-8.6, 13.2, 11.0, 8.0),
-    (-11.5, -5.2, 10.0, 9.0),
-    (-15.0, 6.0, 12.0, 10.0),
-    (14.0, -9.0, 12.0, 9.0),
-    (15.0, 15.0, 12.0, 9.0),
-    (-16.0, -11.0, 12.0, 10.0),
-    (0.0, 8.0, 9.0, 7.0),
-    (0.0, -6.0, 8.0, 7.0),
+    (-8.6, 13.2, 12.0, 9.0),
+    (-13.5, -4.2, 13.0, 11.0),
+    (-17.0, -1.0, 14.0, 12.0),
+    (-19.0, -9.0, 12.0, 10.0),
+    (-14.0, 6.0, 12.0, 10.0),
+    (8.0, 12.5, 11.0, 7.0),
+    (15.0, -9.0, 12.0, 9.0),
+    (0.0, -9.0, 7.0, 9.0),
 ];
 
 /// The air's draws for this frame, round `near`.
@@ -726,7 +726,7 @@ pub(super) fn air(
         (-11.5, -5.2),
         (-8.6, 13.2),
         (8.0, 12.5),
-        (-6.2, -9.4),
+        (-9.4, -10.2),
         (6.0, -2.0),
     ]
     .into_iter()
@@ -742,7 +742,7 @@ pub(super) fn air(
     ];
     let mist_alpha = 0.11 * day + 0.2 * dusk + 0.3 * night;
     for (i, (x, z, w, d)) in MIST.iter().copied().enumerate() {
-        let x = if i >= 6 { nature_trail_center(z) } else { x };
+        let x = if i >= 7 { nature_trail_center(z) } else { x };
         if !close(x, z, 34.0) {
             continue;
         }
