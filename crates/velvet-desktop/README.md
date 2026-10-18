@@ -136,6 +136,15 @@ interface VelvetBridge {
   types, wasm, glb and gltf). Other extensions are `application/octet-stream`.
 - Files are read whole into memory and sent with `Cache-Control: no-store`.
 
+## Windows processes
+
+WebView2 starts its processes (the browser, the renderers, the helpers) as children of the host. At
+start-up the host joins a job object that ends its processes when the host ends, however it ends
+(`src/job.rs`, `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`). Without that, a host that is killed rather than
+closed can leave the browser running (reproduced by ending the host with the msys `timeout` command),
+and the browser keeps the game's profile in use, so the next start fails. If the job cannot be set
+up, the host runs without it and logs why.
+
 ## Tests
 
 ```sh

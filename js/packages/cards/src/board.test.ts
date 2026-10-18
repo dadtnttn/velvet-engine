@@ -223,6 +223,84 @@ describe("events, moves and snapshots", () => {
   });
 });
 
+describe("split", () => {
+  /** A worker with a piece of wood on it, at (x, y): two cards that start no job. */
+  async function workerWithWood(
+    x: number,
+    y: number,
+  ): Promise<{ board: Board; worker: number; wood: number }> {
+    const board = await Board.create(await shared(), 1);
+    const worker = board.spawn("worker", x, y);
+    const wood = board.spawn("wood", x, y);
+    board.dropOn(wood, worker);
+    board.takeEvents();
+    return { board, worker, wood };
+  }
+
+  it("leaves the new stack where the old one is, on top of it, by default", async () => {
+    const { board, worker, wood } = await workerWithWood(4, -2);
+    const stack = board.split(wood);
+    expect(board.stacks().map(({ cards, x, y }) => ({ cards, x, y }))).toEqual([
+      { cards: [worker], x: 4, y: -2 },
+      { cards: [wood], x: 4, y: -2 },
+    ]);
+    expect(board.stacks().find((view) => view.cards.includes(wood))?.id).toBe(stack);
+    board.free();
+  });
+
+  it("moves the new stack to the position given, and leaves the old stack in place", async () => {
+    const { board, worker, wood } = await workerWithWood(4, -2);
+    const stack = board.split(wood, { x: 9, y: 1.5 });
+    expect(board.stacks().find((view) => view.id === stack)).toMatchObject({
+      cards: [wood],
+      x: 9,
+      y: 1.5,
+    });
+    expect(board.stacks().find((view) => view.cards.includes(worker))).toMatchObject({
+      x: 4,
+      y: -2,
+    });
+    board.free();
+  });
+
+  it("queues the same events with a position as without one", async () => {
+    const plain = await workerWithWood(4, -2);
+    plain.board.split(plain.wood);
+    const placed = await workerWithWood(4, -2);
+    placed.board.split(placed.wood, { x: 9, y: 1.5 });
+    expect(placed.board.takeEvents()).toEqual(plain.board.takeEvents());
+    plain.board.free();
+    placed.board.free();
+  });
+
+  it("moves the whole stack when the bottom card is split with a position", async () => {
+    const { board, worker, wood } = await workerWithWood(4, -2);
+    const stack = board.split(worker, { x: 0, y: 0 });
+    expect(board.stacks()).toEqual([
+      expect.objectContaining({ id: stack, cards: [worker, wood], x: 0, y: 0 }),
+    ]);
+    board.free();
+  });
+
+  it("refuses a position that is not two finite numbers, and changes nothing", async () => {
+    const { board, worker, wood } = await workerWithWood(4, -2);
+    expectFailure(() => board.split(wood, { x: Number.NaN, y: 0 }), "bad-input");
+    expectFailure(() => board.split(wood, { x: 0, y: Number.POSITIVE_INFINITY }), "bad-input");
+    // Larger than a binary32 number, so the module would hold it as infinity.
+    expectFailure(() => board.split(wood, { x: 0, y: 1e39 }), "bad-input");
+    expect(board.stacks().map((view) => view.cards)).toEqual([[worker, wood]]);
+    expect(board.takeEvents()).toEqual([]);
+    board.free();
+  });
+
+  it("refuses a card that is not on the table, and moves nothing", async () => {
+    const { board, worker, wood } = await workerWithWood(4, -2);
+    expectFailure(() => board.split(99, { x: 0, y: 0 }), "no-such-card");
+    expect(board.stacks().map((view) => view.cards)).toEqual([[worker, wood]]);
+    board.free();
+  });
+});
+
 describe("saves", () => {
   it("continues a job that a save holds, with the same events later", async () => {
     const catalog = await shared();

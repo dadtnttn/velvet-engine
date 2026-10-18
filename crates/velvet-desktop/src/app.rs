@@ -106,6 +106,8 @@ pub fn run(launch: Launch) -> Result<(), AppError> {
             "velvet-desktop: no data folder on this machine; saves and settings are unavailable",
         ),
     }
+    tie_webview_to_host();
+
     // The webview's own profile (cache, local storage) lives in the data folder too, not next to
     // the program, which may be installed where it cannot write.
     let mut web_context = WebContext::new(data_dir.as_ref().map(|dir| dir.join("webview")));
@@ -211,6 +213,20 @@ fn handle_message(
                 window.set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
             }
             WindowAction::Close => *control_flow = ControlFlow::Exit,
+        }
+    }
+}
+
+/// Ties the webview's processes to this host, so that they do not outlive a killed host (on Windows,
+/// see `job.rs`). A failure is logged, and the window runs on without it.
+fn tie_webview_to_host() {
+    #[cfg(windows)]
+    {
+        if let Err(error) = crate::job::end_with_host() {
+            log::line(&format!(
+                "velvet-desktop: cannot tie the webview's processes to this host ({error}); \
+                 if the host is killed, they may keep running"
+            ));
         }
     }
 }

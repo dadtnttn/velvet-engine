@@ -63,7 +63,7 @@ const restored = await Board.load(catalog, saved);
 | `spawn(def, x, y)` | A new card in its own stack. Returns its id. |
 | `moveStack(card, x, y)` | Moves the whole stack of `card`. Queues no events. |
 | `dropOn(card, onto)` | Drops the stack from `card` upward onto the stack of `onto`, if the rules allow it. |
-| `split(card)` | Takes `card` and the cards above it into a new stack. Returns the stack's id. |
+| `split(card, at?)` | Takes `card` and the cards above it into a new stack. Returns the stack's id. The new stack stays where the old one is, on top of it, unless `at` (`{ x, y }`) moves it there in the same call. |
 | `remove(card)` | Takes `card` off the table. The cards above stay in place. |
 | `tick(dt)` | Advances time and returns the events, in order. |
 | `takeEvents()` | Returns the events that actions queued, without advancing time. |
@@ -81,6 +81,9 @@ const restored = await Board.load(catalog, saved);
   because its digits would not be the seed that was meant.
 - **Positions and times** are binary32 numbers. JSON writes them in their shortest decimal form, so
   `Math.fround` gives back the exact value when arithmetic on them matters.
+- **Split** keeps the new stack where the old one is: its bottom card takes the old position, so the
+  new stack lies on top of the old one. A UI that shows the two apart passes `at` to `split`, or
+  calls `moveStack(card, x, y)` on the new stack's bottom card (`card`) right after.
 - **Events** are tagged by `event` (`job_started`, `job_cancelled`, `job_finished`, `card_spawned`,
   `card_consumed`, `stack_changed`). A refused action changes nothing and queues no events.
 - **Failures** are `CardsError`s with a `code` (see `src/error.ts`): `bad-input`, `bad-id`,

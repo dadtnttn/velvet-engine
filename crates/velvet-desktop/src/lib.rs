@@ -21,6 +21,8 @@
 pub mod app;
 pub mod bridge;
 pub mod cli;
+#[cfg(all(windows, feature = "window"))]
+mod job;
 pub mod log;
 pub mod manifest;
 pub mod origin;

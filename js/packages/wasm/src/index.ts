@@ -31,11 +31,19 @@ export class WasmLoadError extends Error {
 
 /** The part of `fs/promises` that the loader uses in Node. */
 interface NodeFsPromises {
-  readFile(path: URL): Promise<Uint8Array>;
+  readFile(path: string): Promise<Uint8Array>;
 }
 
-/** The module name, kept in a variable so that browser bundles do not try to resolve it. */
+/** The part of `node:url` that the loader uses in Node. */
+interface NodeUrl {
+  /** Node's own URL class: a test environment may replace the global one. */
+  readonly URL: new (input: string, base: string) => object;
+  fileURLToPath(url: string): string;
+}
+
+/** The module names, kept in variables so that browser bundles do not try to resolve them. */
 const NODE_FS_PROMISES = "node:fs/promises";
+const NODE_URL = "node:url";
 
 /** The load in progress or done; cleared when it fails, so that a later call can retry. */
 let loading: Promise<VelvetWasm> | undefined;
@@ -73,13 +81,19 @@ async function instantiate(source?: WasmSource): Promise<VelvetWasm> {
 
 /**
  * The bytes or the URL to start the module from. The default is the file next to this package.
- * A browser fetches a URL; Node cannot fetch a file URL, so there the file is read from disk.
+ * A browser fetches a URL. Node cannot fetch a file URL, so there the file is read from disk, by
+ * path: the URL is written as text and turned into a path, which works for any URL class.
+ *
+ * The default address is made with Node's own URL class. A test environment may replace the global
+ * one, and its relative addresses do not resolve against this module (happy-dom's do not).
  */
 async function resolveSource(source?: WasmSource): Promise<WasmSource> {
-  const location: WasmSource = source ?? new URL("../gen/velvet_wasm_bg.wasm", import.meta.url);
-  if (!(location instanceof URL) || !runsInNode()) return location;
+  if (!runsInNode()) return source ?? new URL("../gen/velvet_wasm_bg.wasm", import.meta.url);
+  if (source instanceof Uint8Array || source instanceof ArrayBuffer) return source;
+  const url = (await import(/* @vite-ignore */ NODE_URL)) as NodeUrl;
   const fs = (await import(/* @vite-ignore */ NODE_FS_PROMISES)) as NodeFsPromises;
-  return fs.readFile(location);
+  const address = source ?? new url.URL("../gen/velvet_wasm_bg.wasm", import.meta.url);
+  return fs.readFile(url.fileURLToPath(String(address)));
 }
 
 /** True when this code runs in Node.js (which has a `process` with a `node` version). */

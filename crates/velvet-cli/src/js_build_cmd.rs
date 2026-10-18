@@ -15,8 +15,11 @@
 //! copy rules are tested on temporary folders.
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::Value;
@@ -178,26 +181,23 @@ pub fn assemble(
     fs::create_dir_all(&release_root)
         .with_context(|| format!("cannot create {}", release_root.display()))?;
     let staging = release_root.join(format!(".{name}.partial"));
-    if staging.exists() {
-        fs::remove_dir_all(&staging)
-            .with_context(|| format!("cannot clear {}", staging.display()))?;
-    }
-    if let Err(error) = stage(
+    // A staging folder that an earlier build left behind is cleared first.
+    remove_folder(&staging).with_context(|| format!("cannot clear {}", staging.display()))?;
+    let placed = stage(
         &staging,
         &web_root,
         project,
         &host_exe,
         &host_name,
         options.sourcemaps,
-    ) {
-        let _ = fs::remove_dir_all(&staging);
+    )
+    .and_then(|()| move_into_place(&staging, &dir));
+    if let Err(error) = placed {
+        // Whichever step failed, the staging folder goes. If removing it fails too, the next build
+        // clears it before it starts.
+        let _ = remove_folder(&staging);
         return Err(error);
     }
-    if dir.exists() {
-        fs::remove_dir_all(&dir).with_context(|| format!("cannot replace {}", dir.display()))?;
-    }
-    fs::rename(&staging, &dir)
-        .with_context(|| format!("cannot move the release into {}", dir.display()))?;
 
     let (files, bytes) = measure(&dir)?;
     Ok(Release {
@@ -206,6 +206,44 @@ pub fn assemble(
         files,
         bytes,
     })
+}
+
+/// How many times a file operation is tried in all. A move or a removal can fail for a moment when
+/// Windows antivirus holds one of the files.
+const FILE_OP_ATTEMPTS: u32 = 5;
+
+/// The wait between two tries of a file operation.
+const FILE_OP_WAIT: Duration = Duration::from_millis(200);
+
+/// Moves the finished staging folder to `dir`, replacing the release that is there, if any.
+fn move_into_place(staging: &Path, dir: &Path) -> Result<()> {
+    remove_folder(dir).with_context(|| format!("cannot replace {}", dir.display()))?;
+    retrying(|| fs::rename(staging, dir))
+        .with_context(|| format!("cannot move the release into {}", dir.display()))
+}
+
+/// Removes a folder with everything in it. A folder that is not there is not an error.
+fn remove_folder(path: &Path) -> io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    retrying(|| fs::remove_dir_all(path))
+}
+
+/// Runs a file operation again after a short wait when it fails, up to [`FILE_OP_ATTEMPTS`] tries
+/// in all. The error of the last try is the one returned.
+fn retrying<T>(mut operation: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    let mut attempt = 1;
+    loop {
+        match operation() {
+            Ok(value) => return Ok(value),
+            Err(error) if attempt >= FILE_OP_ATTEMPTS => return Err(error),
+            Err(_) => {
+                attempt += 1;
+                thread::sleep(FILE_OP_WAIT);
+            }
+        }
+    }
 }
 
 /// Writes the release contents into `staging`: the game folder and the host executable.
@@ -758,6 +796,79 @@ mod tests {
             .join(PACKAGED_GAME_DIR)
             .join("index.html")
             .is_file());
+    }
+
+    #[test]
+    fn a_stale_staging_folder_is_cleared_before_the_build() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = static_project(dir.path());
+        let stale = project.join(RELEASE_DIR).join(".demo-1.2.3.partial");
+        write(&stale.join("left-over.txt"), "from a build that stopped");
+        let host = fake_host(dir.path());
+
+        let release = assemble(&project, ReleaseOptions::default(), no_web_build, || {
+            Ok(host.clone())
+        })
+        .expect("packaged");
+
+        assert!(!stale.exists(), "the stale folder is gone");
+        assert!(!release.dir.join("left-over.txt").exists());
+        assert!(release
+            .dir
+            .join(PACKAGED_GAME_DIR)
+            .join("index.html")
+            .is_file());
+    }
+
+    #[test]
+    fn a_release_that_cannot_be_replaced_leaves_no_staging_folder() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = static_project(dir.path());
+        // A file where the release folder should be: it cannot be removed as a folder.
+        let blocked = project.join(RELEASE_DIR).join("demo-1.2.3");
+        write(&blocked, "not a folder");
+        let host = fake_host(dir.path());
+        let forced = ReleaseOptions {
+            sourcemaps: false,
+            force: true,
+        };
+
+        let error = assemble(&project, forced, no_web_build, || Ok(host.clone()))
+            .expect_err("the release cannot be replaced");
+        assert!(error.to_string().contains("cannot replace"), "{error:#}");
+        assert!(!project
+            .join(RELEASE_DIR)
+            .join(".demo-1.2.3.partial")
+            .exists());
+        assert!(blocked.is_file(), "the file in the way is untouched");
+    }
+
+    #[test]
+    fn a_file_operation_is_tried_again_when_it_fails_for_a_moment() {
+        let tries = Cell::new(0);
+        let value = retrying(|| {
+            tries.set(tries.get() + 1);
+            if tries.get() < 3 {
+                Err(io::Error::other("held by another program"))
+            } else {
+                Ok(7)
+            }
+        })
+        .expect("the third try works");
+        assert_eq!(value, 7);
+        assert_eq!(tries.get(), 3);
+    }
+
+    #[test]
+    fn a_file_operation_gives_up_after_its_last_try() {
+        let tries = Cell::new(0);
+        let error = retrying(|| -> io::Result<()> {
+            tries.set(tries.get() + 1);
+            Err(io::Error::other("still held"))
+        })
+        .expect_err("it gives up");
+        assert_eq!(tries.get(), FILE_OP_ATTEMPTS);
+        assert!(error.to_string().contains("still held"));
     }
 
     #[test]

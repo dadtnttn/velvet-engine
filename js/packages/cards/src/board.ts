@@ -37,6 +37,17 @@ function seedText(seed: Seed): string {
 }
 
 /**
+ * Refuses a position that the module cannot hold. The module keeps positions as binary32 numbers,
+ * so a number too large for that is refused like NaN.
+ * @throws {CardsError} with code `bad-input` for a position that is not two finite numbers.
+ */
+function checkPosition(x: number, y: number): void {
+  if (!Number.isFinite(Math.fround(x)) || !Number.isFinite(Math.fround(y))) {
+    throw new CardsError("bad-input", `a position must be two finite numbers, not (${x}, ${y})`);
+  }
+}
+
+/**
  * A board of cards. Make one with `Board.create` (a new board) or `Board.load` (the board of a
  * save), then act on it: spawn, move, drop, split and remove cards, and call `tick` as time passes.
  * Card and stack ids are numbers that count from 1. Call `free` when a board is no longer needed.
@@ -146,10 +157,23 @@ export class Board {
    * Takes `card` and the cards above it into a new stack, and returns the new stack's id. Splitting
    * the bottom card changes nothing and returns the stack the card is in.
    *
-   * @throws {CardsError} with code `no-such-card` or `bad-id` for an id that is not valid.
+   * By default the new stack stays where the old one is: its bottom card keeps the old position, so
+   * the new stack lies on top of the old one. Pass `at` to put it somewhere else in the same call,
+   * with no extra events. When `card` is the bottom card nothing is split, and the stack that holds
+   * it moves to `at` as a whole.
+   *
+   * @param card - the card to take, and the cards above it.
+   * @param at - where the bottom card of the new stack goes, in board units. Default: the position
+   *   of the old stack.
+   * @returns the id of the new stack, or of the stack that holds `card` when it is the bottom card.
+   * @throws {CardsError} with code `no-such-card` or `bad-id` for an id that is not valid, and
+   *   `bad-input` for a position that is not two finite numbers. A refused call changes nothing.
    */
-  split(card: number): number {
-    return decode<{ stack: number }>(this.#live().split(card)).stack;
+  split(card: number, at?: { readonly x: number; readonly y: number }): number {
+    if (at !== undefined) checkPosition(at.x, at.y);
+    const stack = decode<{ stack: number }>(this.#live().split(card)).stack;
+    if (at !== undefined) this.moveStack(card, at.x, at.y);
+    return stack;
   }
 
   /**
