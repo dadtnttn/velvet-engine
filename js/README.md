@@ -21,6 +21,10 @@ packages by path.
 | `packages/assets` (`@velvet/assets`) | Art by id: the `velvet-art` manifest, files in AVIF, WebP, PNG or SVG, generated placeholders, preloading and the missing-art report (`docs/formats/ART_MANIFEST.md`). |
 | `packages/characters` (`@velvet/characters`) | Characters: stats with formulas, needs with thresholds, professions with experience curves, affinity between characters, traits and saves (`docs/formats/CHARACTER.md`). |
 | `packages/artprep` (`@velvet/artprep`) | Tooling, not runtime: prompts in three layers (style, identity, variation) for each generation profile, jobs for an external batch runner, and the selection gallery (`docs/formats/ART_PREP.md`). |
+| `packages/tween` (`@velvet/tween`) | Motion: easings (CSS `cubicBezier` and `steps`), tweens of numbers, arrays, objects and OKLab colours, timelines with labels and seek, springs, and DOM transform and opacity helpers, on tickers that follow the game clock or run in real time (`packages/tween/README.md`). |
+| `packages/audio` (`@velvet/audio`) | Sounds by id: the `velvet-audio` manifest (files in preference order, buses, volumes, loops, voice limits, cooldowns, variants), Web Audio buses with a dB volume curve, the music channel with crossfades, ducking, the pause and the browser's autoplay rule, saved mix (`docs/formats/AUDIO.md`). |
+| `packages/devtools` (`@velvet/devtools`) | Developer tools for dev builds only: an F3 overlay with frame times and memory numbers, game time controls, an event log, a state inspector, a console with typed commands and watches (`packages/devtools/README.md`). |
+| `packages/tools` (`@velvet/tools`) | The command-line tools, run as `pnpm velvet-js`: `new` scaffolds a game from the template, `check` validates a game's data against every format and the links between its files, `i18n` reports each language's missing, unused and untranslated keys and writes a pseudo-locale for layout tests (`packages/tools/README.md`). |
 
 Packages are TypeScript **source**. Each `exports` entry points at `src/index.ts`, which Vite
 consumes directly, so there is no build step for them. The one built part is the WebAssembly in

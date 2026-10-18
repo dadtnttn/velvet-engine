@@ -1,0 +1,21 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "note": "Interface texts. Spanish is the source language; English falls back to it for any missing id.",
+  "meta": { "name": "English", "script": "Latn", "direction": "ltr", "font": "sans" },
+  "entries": {
+    "title.heading": "Sample game",
+    "title.subtitle": "A Velvet JS template",
+    "title.new": "New game",
+    "title.continue": "Continue",
+    "title.language": "Language",
+    "game.turns": { "one": "{count} turn", "other": "{count} turns" },
+    "game.turn": "Take a turn",
+    "game.save": "Save",
+    "game.saved": "Game saved.",
+    "game.menu": "Main menu",
+    "error.load": "Could not load: {reason}",
+    "error.save": "Could not save: {reason}"
+  }
+}

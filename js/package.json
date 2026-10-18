@@ -8,6 +8,7 @@
   "packageManager": "pnpm@11.20.0",
   "scripts": {
     "build:wasm": "node packages/wasm/build.mjs",
+    "velvet-js": "node packages/tools/bin/velvet-js.mjs",
     "test": "vitest run",
     "typecheck": "node packages/wasm/build.mjs --if-stale && tsc --noEmit"
   },

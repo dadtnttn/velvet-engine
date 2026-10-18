@@ -54,6 +54,12 @@ importers:
 
   packages/assets: {}
 
+  packages/audio:
+    dependencies:
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/cards:
     dependencies:
       '@velvet/wasm':
@@ -64,6 +70,15 @@ importers:
 
   packages/core: {}
 
+  packages/devtools:
+    dependencies:
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../core
+      '@velvet/ui':
+        specifier: workspace:*
+        version: link:../ui
+
   packages/guion:
     dependencies:
       '@velvet/wasm':
@@ -71,6 +86,39 @@ importers:
         version: link:../wasm
 
   packages/i18n: {}
+
+  packages/tools:
+    dependencies:
+      '@velvet/artprep':
+        specifier: workspace:*
+        version: link:../artprep
+      '@velvet/assets':
+        specifier: workspace:*
+        version: link:../assets
+      '@velvet/cards':
+        specifier: workspace:*
+        version: link:../cards
+      '@velvet/characters':
+        specifier: workspace:*
+        version: link:../characters
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../core
+      '@velvet/guion':
+        specifier: workspace:*
+        version: link:../guion
+      '@velvet/i18n':
+        specifier: workspace:*
+        version: link:../i18n
+      '@velvet/wasm':
+        specifier: workspace:*
+        version: link:../wasm
+
+  packages/tween:
+    dependencies:
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/ui: {}
 

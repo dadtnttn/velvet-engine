@@ -1,0 +1,26 @@
+{
+  "name": "{{GAME_ID}}",
+  "version": "0.1.0",
+  "private": true,
+  "description": "{{GAME_TITLE_JSON}}",
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check:data": "node {{ENGINE_RELATIVE_JSON}}/packages/tools/bin/velvet-js.mjs check ."
+  },
+  "dependencies": {
+    "@velvet/core": "{{LINK_CORE_JSON}}",
+    "@velvet/i18n": "{{LINK_I18N_JSON}}",
+    "@velvet/ui": "{{LINK_UI_JSON}}"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.9",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "4.1.12"
+  }
+}

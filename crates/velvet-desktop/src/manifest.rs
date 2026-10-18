@@ -1,7 +1,8 @@
 //! The game folder's manifest, `velvet-game.json`.
 //!
 //! Only `id` and `title` are required; every other field has a default. Unknown keys are
-//! rejected, so a misspelled key fails loudly instead of being ignored.
+//! rejected, so a misspelled key fails loudly instead of being ignored. The optional `data` object
+//! holds hints for the `velvet-js` tools and is not read by the host.
 
 use std::fs;
 use std::io;
@@ -131,6 +132,11 @@ struct RawManifest {
     entry: String,
     #[serde(default)]
     window: WindowConfig,
+    /// Hints for the `velvet-js` tools: where the game keeps its data. The host does not read
+    /// them, so any JSON value is accepted here; `velvet-js check` validates the hints.
+    #[serde(default)]
+    #[allow(dead_code)]
+    data: Option<serde_json::Value>,
 }
 
 fn default_version() -> String {
@@ -338,6 +344,14 @@ mod tests {
             parse(r#"{"id":"demo","title":"Demo","window":{"fullscreen_":true}}"#),
             Err(ManifestError::Parse(_))
         ));
+    }
+
+    #[test]
+    fn the_tools_data_hints_are_accepted_and_ignored() {
+        let manifest =
+            parse(r#"{"id":"demo","title":"Demo","data":{"roots":["data"],"source":"es"}}"#)
+                .expect("data hints are allowed");
+        assert_eq!(manifest.id, "demo");
     }
 
     #[test]

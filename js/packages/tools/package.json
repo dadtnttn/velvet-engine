@@ -1,0 +1,24 @@
+{
+  "name": "@velvet/tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velvet JS command-line tools (not runtime): scaffold a new game, check a game's data against every Velvet format, and report locale keys.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@velvet/core": "workspace:*",
+    "@velvet/assets": "workspace:*",
+    "@velvet/characters": "workspace:*",
+    "@velvet/cards": "workspace:*",
+    "@velvet/guion": "workspace:*",
+    "@velvet/i18n": "workspace:*",
+    "@velvet/artprep": "workspace:*",
+    "@velvet/wasm": "workspace:*"
+  }
+}

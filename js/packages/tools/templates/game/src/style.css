@@ -1,0 +1,34 @@
+/* The page's own look. The HUD defaults come from @velvet/ui (velvet-ui.css), which main.ts loads first. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #14101c;
+}
+
+.game-host {
+  position: fixed;
+  inset: 0;
+}
+
+.panel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  gap: 32px;
+  justify-items: center;
+  align-content: center;
+  color: #f4eee6;
+  font-family: system-ui, sans-serif;
+  font-size: 40px;
+}
+
+.panel h1 {
+  margin: 0;
+  font-size: 96px;
+}
+
+.panel p {
+  margin: 0;
+}

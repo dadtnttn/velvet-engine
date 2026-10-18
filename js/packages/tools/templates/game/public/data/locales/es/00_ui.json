@@ -1,0 +1,21 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "es",
+  "note": "Textos de la interfaz. El español es la lengua fuente: cada id tiene aquí su texto.",
+  "meta": { "name": "Español", "script": "Latn", "direction": "ltr", "font": "sans" },
+  "entries": {
+    "title.heading": "Juego de ejemplo",
+    "title.subtitle": "Una plantilla de Velvet JS",
+    "title.new": "Nueva partida",
+    "title.continue": "Continuar",
+    "title.language": "Idioma",
+    "game.turns": { "one": "{count} turno", "other": "{count} turnos" },
+    "game.turn": "Dar un turno",
+    "game.save": "Guardar",
+    "game.saved": "Partida guardada.",
+    "game.menu": "Menú principal",
+    "error.load": "No se pudo cargar: {reason}",
+    "error.save": "No se pudo guardar: {reason}"
+  }
+}
