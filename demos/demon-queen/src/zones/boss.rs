@@ -548,6 +548,8 @@ pub(super) struct BossScene {
     light_column: TextureHandle,
     flame: MeshHandle,
     fires: Vec<ToonFire3D>,
+    /// The cauldron's oil burning on the ground once it has gone over.
+    spill_fires: Vec<ToonFire3D>,
     beam: [MeshHandle; 3],
     pieces: Vec<Piece>,
     breaks_seen: usize,
@@ -614,6 +616,15 @@ impl BossScene {
         let mut sword = Vec::new();
         let (mut seal_rod, mut seal_face, mut seal_gem, mut rock) =
             (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        // The loose rock modelled with the plaza (Blender), if it is there: textured like the cliffs.
+        let new_rock: Vec<Part> = if runtime_3d_root().join("penascal").join("combate_rock.glb").exists() {
+            load_parts(renderer, device, queue, &mut cache, "combate_rock.glb")?
+                .into_iter()
+                .map(|(_, p)| p)
+                .collect()
+        } else {
+            Vec::new()
+        };
         for (name, part) in load_parts(renderer, device, queue, &mut cache, "combate_parts.glb")? {
             let tag = name.split(':').next().unwrap_or("");
             match tag {
@@ -752,7 +763,29 @@ impl BossScene {
                 0.62,
             )?);
         }
+        // The cauldron's oil, if it goes over: fires round where it stood.
+        let mut spill_fires = Vec::new();
+        if let Some(c) = varrak_fight::plan()
+            .breakables
+            .iter()
+            .find(|b| b.kind == "cauldron")
+        {
+            for k in 0..10 {
+                let (r, a) = match k {
+                    0 => (0.0, 0.0),
+                    1..=4 => (1.4, k as f32 * 1.57 + 0.3),
+                    _ => (2.55, k as f32 * 1.26 + 0.7),
+                };
+                spill_fires.push(ToonFire3D::new(
+                    renderer,
+                    device,
+                    Vec3::new(c.x + a.cos() * r, 0.02, c.z + a.sin() * r),
+                    if k == 0 { 0.95 } else { 0.7 },
+                )?);
+            }
+        }
         let scene = Self {
+            spill_fires,
             arms,
             sky: renderer.upload_mesh(device, &sky_mesh())?,
             forks: [
@@ -789,7 +822,7 @@ impl BossScene {
             seal_rod,
             seal_face,
             seal_gem,
-            rock,
+            rock: if new_rock.is_empty() { rock } else { new_rock },
             varrak,
             fist_r: renderer.upload_mesh(device, &recoloured(fp::fist_mesh(true)))?,
             fist_l: renderer.upload_mesh(device, &recoloured(fp::fist_mesh(false)))?,
@@ -914,17 +947,32 @@ fn view_arm_parts(
     grip
 }
 
-/// Nightfall over the hills: violet sky light, the moon low in the west, a violet haze.
+/// Night over the plaza, lit the way a night scene is (one dominant cold light, warm pools that
+/// lead the eye, little fill so the shadows keep their shape): the moonlight comes from behind the
+/// throne, the side the moon hangs in the sky, but high enough to clear the north cliffs (from as
+/// low as the moon itself their shadow covers the whole plaza); it backlights Varrak and throws
+/// the spires' shadows towards her. The fill is dim and cold, so the fires' pools read; a violet
+/// haze lays the crest and the far peaks back.
 fn mood(env: EnvironmentFrame3D) -> EnvironmentFrame3D {
     let mut e = env;
-    e.lighting.direction_to_light = Vec3::new(-36.0, 52.0, -28.0).normalize_or_zero();
-    e.lighting.key_color = [0.46, 0.41, 0.66];
-    e.lighting.ambient_color = [0.30, 0.25, 0.42];
-    e.lighting.bounce_color = [0.10, 0.08, 0.12];
+    let moon = MOON_DIR.normalize_or_zero();
+    let key = Vec3::new(moon.x * 0.62, 0.82, moon.z * 0.62).normalize_or_zero();
+    e.lighting.direction_to_light = key;
+    e.lighting.key_color = [0.38, 0.42, 0.78];
+    e.lighting.ambient_color = [0.18, 0.18, 0.33];
+    e.lighting.bounce_color = [0.07, 0.04, 0.06];
     e.lighting.shadow_extent = 26.0;
-    e.atmosphere.fog_color = [0.040, 0.018, 0.062];
-    e.atmosphere.fog_start = 60.0;
-    e.atmosphere.fog_end = 420.0;
+    e.celestial.moon_direction = key;
+    e.celestial.moon_color = [0.55, 0.64, 1.0];
+    e.celestial.moon_intensity = e.celestial.moon_intensity.min(0.12);
+    e.celestial.reflection_color = [0.45, 0.55, 1.0];
+    e.celestial.reflection_strength = 0.10;
+    e.celestial.horizon_strength = 0.0;
+    e.atmosphere.fog_color = [0.030, 0.020, 0.065];
+    e.atmosphere.fog_start = 24.0;
+    e.atmosphere.fog_end = 240.0;
+    e.atmosphere.fog_density = 0.0035;
+    e.atmosphere.height_falloff = 0.012;
     // Black behind the sky dome (it is added over it).
     e.clear_color = [0.0, 0.0, 0.0, 1.0];
     e
@@ -932,6 +980,51 @@ fn mood(env: EnvironmentFrame3D) -> EnvironmentFrame3D {
 
 /// The first-person camera: her eyes, where she looks, the flinch of a blow.
 pub(super) fn boss_camera(fight: &Fight) -> Camera3D {
+    let own = eye_camera(fight);
+    let Some(ride) = fight.ride else {
+        return own;
+    };
+    // Up on his back (looking down over his head at his nape) or held in his fist before his
+    // face; it eases in from her own eyes, and shakes as he bucks.
+    let v = &fight.varrak;
+    let (s, c) = v.yaw.sin_cos();
+    let root = v.root();
+    let t = fight.clock;
+    let shake = Vec3::new(
+        (t * 23.0).sin() + (t * 41.0).sin() * 0.5,
+        (t * 31.0).sin() * 0.6,
+        (t * 17.0).cos(),
+    ) * (0.025 + 0.11 * ride.buck);
+    let (eye, target, fov) = if ride.kind == varrak_fight::QteKind::Grab {
+        let face = fight.face();
+        (
+            Vec3::new(root.x + s * 2.6, root.y + 2.85, root.z + c * 2.6) + shake,
+            face - Vec3::Y * 0.15 + shake * 0.5,
+            60.0f32,
+        )
+    } else {
+        let nape = fight.nape();
+        let rear = 0.18 * ride.buck * (t * 9.0).sin();
+        (
+            Vec3::new(root.x - s * 1.0, root.y + 3.85 + rear, root.z - c * 1.0) + shake,
+            nape + Vec3::new(s * 1.4, -0.35, c * 1.4),
+            70.0f32,
+        )
+    };
+    let k = ease_out_cubic((ride.t / 0.4).clamp(0.0, 1.0));
+    let position = own.position.lerp(eye, k);
+    let target = (own.position + (own.target - own.position).normalize_or_zero() * 3.0).lerp(target, k);
+    Camera3D {
+        position,
+        target,
+        up: Vec3::Y,
+        fov_y_radians: (72.0 + (fov - 72.0) * k).to_radians(),
+        ..own
+    }
+}
+
+/// Her own eyes.
+fn eye_camera(fight: &Fight) -> Camera3D {
     let p = &fight.player;
     let eye = Vec3::new(p.x, p.y + varrak_fight::EYE + p.bob, p.z);
     let yaw = p.yaw + p.shake.y;
@@ -1170,15 +1263,24 @@ impl RenderState {
                 texture: *texture,
             });
         }
-        // A cold rim of moonlight behind him, so his bulk stands out of the dark plaza.
+        // A cold rim of moonlight behind him, so his bulk stands out of the dark plaza, and a
+        // low warm light on the side she sees (the fires' glow on him): the boss lit like the
+        // focus of the scene, cold edge and warm face.
         {
             let to = Vec3::new(v.x - camera.position.x, 0.0, v.z - camera.position.z)
                 .normalize_or_zero();
             lights.push(PointLight3D::new(
                 Vec3::new(v.x, 0.0, v.z) + to * 2.6 + Vec3::new(0.0, 3.2, 0.0),
-                [0.55, 0.62, 1.0],
-                6.5,
+                [0.55, 0.64, 1.0],
+                8.0,
                 7.5,
+            ));
+            let side = Vec3::new(-to.z, 0.0, to.x);
+            lights.push(PointLight3D::new(
+                Vec3::new(v.x, 0.0, v.z) - to * 2.4 + side * 1.2 + Vec3::new(0.0, 1.9, 0.0),
+                [1.0, 0.66, 0.42],
+                3.2,
+                5.5,
             ));
         }
         let chest_bone = bone("CC_Base_Spine02").unwrap_or(Mat4::IDENTITY);
@@ -1446,6 +1548,38 @@ impl RenderState {
         }
         for fire in &scene.fires {
             fire.draws(t, flat_toward, &mut draws);
+        }
+        // Where the stones will land: a red ring closing on its spot, brighter as it nears.
+        for &(mx, mz, r, at) in &fight.marks {
+            let left = (at - t).max(0.0);
+            let k = (1.0 - left / 1.8).clamp(0.0, 1.0);
+            let pulse = 1.0 + 0.08 * (t * (10.0 + 14.0 * k)).sin();
+            for (size, alpha) in [(r * 2.0 * pulse, 0.22 + 0.3 * k), (r * 2.0 * (1.0 - 0.55 * k) + 0.4, 0.14 + 0.24 * k)] {
+                draws.push(MeshDraw3D {
+                    mesh: scene.quad,
+                    transform: Mat4::from_cols(
+                        [size, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, -size, 0.0],
+                        [0.0, 1.0, 0.0, 0.0],
+                        [mx, 0.05, mz, 1.0],
+                    ),
+                    material: Material3D::additive([1.3, 0.3, 0.18, alpha]),
+                    texture: Some(scene.ring),
+                });
+            }
+        }
+        if let Some((sx, sz, _, until)) = fight.spill {
+            for fire in &scene.spill_fires {
+                fire.draws(t, flat_toward, &mut draws);
+            }
+            let k = ((until - t) / 2.0).clamp(0.0, 1.0);
+            let flicker = 1.0 + 0.15 * (t * 11.0).sin() + 0.08 * (t * 27.0).sin();
+            lights.push(PointLight3D::new(
+                Vec3::new(sx, 1.3, sz),
+                [1.0, 0.55, 0.22],
+                9.0 * k * flicker,
+                11.0,
+            ));
         }
         // Embers rising off the braziers, drifting and winking out.
         {
@@ -2077,22 +2211,31 @@ impl RenderState {
             })
             .collect();
         near.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (_, i) in near.into_iter().take(14) {
+        // As many as the frame has room for (the renderer takes 32; two kept for what flares
+        // late). The big fires reach far; a torch or a lantern lights a pool round itself, so the
+        // rock between them stays in the moon's cold light.
+        let room = 30usize.saturating_sub(lights.len());
+        for (_, i) in near.into_iter().take(room) {
             let l = &plan.lamps[i];
             let flicker =
                 1.0 + (t * 7.0 + i as f32 * 1.7).sin() * 0.07 + (t * 17.0 + i as f32).sin() * 0.04;
+            let (strength, reach) = if l.power > 0.9 { (9.5, 12.0) } else { (7.0, 7.5) };
             lights.push(PointLight3D::new(
                 Vec3::new(l.x, l.y, l.z),
                 colour(&l.color),
-                9.0 * l.power * flicker,
-                14.0,
+                strength * l.power * flicker,
+                reach,
             ));
         }
+        if std::env::var_os("VELVET_BOSS_LIGHTS").is_some() {
+            eprintln!("[boss-lights] {} lights", lights.len());
+        }
         let saved = self.renderer.replace_finish(Finish3D {
-            bloom: 0.55,
-            bloom_threshold: 1.05,
-            contrast: 1.07,
-            saturation: 1.1,
+            bloom: 0.62,
+            bloom_threshold: 1.0,
+            contrast: 1.12,
+            saturation: 1.08,
+            gi: 1.5,
             ..penascal3d::finish()
         });
         let (scene_view, scene_size) = self.scene_target();
@@ -2182,6 +2325,33 @@ impl RenderState {
             }),
             running: p.running,
             channeling: p.channeling,
+            qte: fight.qte.as_ref().map(|q| {
+                use varrak_fight::QteAsk;
+                let at = project_npc_anchor(camera, q.anchor)
+                    .map(|(x, y)| [x, y])
+                    .unwrap_or([WINDOW_WIDTH as f32 * 0.5, WINDOW_HEIGHT as f32 * 0.62]);
+                map_overlay::BossQte {
+                    key: q.key.to_owned(),
+                    text: q.text.to_owned(),
+                    sub: q.sub.to_owned(),
+                    at,
+                    ring: match q.ask {
+                        QteAsk::Beat { beat, slack } => Some(((beat - q.t) / beat, slack / beat)),
+                        _ => None,
+                    },
+                    fill: matches!(q.ask, QteAsk::Hold { .. } | QteAsk::Mash { .. }).then_some(q.fill),
+                    left: (q.window > 0.0).then(|| (1.0 - q.t / q.window).clamp(0.0, 1.0)),
+                    step: q.step,
+                    steps: q.steps,
+                    danger: matches!(
+                        q.kind,
+                        varrak_fight::QteKind::Dodge | varrak_fight::QteKind::Grab
+                    ),
+                    age: q.t,
+                }
+            }),
+            stamp: fight.stamp.map(|(good, at)| (good, fight.clock - at)),
+            slow: fight.time_scale,
         };
         self.boss_scene = Some(scene);
         self.map_overlay.set_boss(Some(view));

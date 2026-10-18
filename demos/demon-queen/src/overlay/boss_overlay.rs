@@ -18,6 +18,25 @@ pub struct BossCard {
     pub actions: Vec<(String, String)>,
 }
 
+/// A quick event on show: its key, what to do, the line under, where on the screen, the closing
+/// ring (how far it still has to close, 1 at the start, 0 on the mark; and its slack), how full
+/// (held, mashed), how much of the window is left, which step of how many, whether it is a danger,
+/// and how long it has been up.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BossQte {
+    pub key: String,
+    pub text: String,
+    pub sub: String,
+    pub at: [f32; 2],
+    pub ring: Option<(f32, f32)>,
+    pub fill: Option<f32>,
+    pub left: Option<f32>,
+    pub step: u8,
+    pub steps: u8,
+    pub danger: bool,
+    pub age: f32,
+}
+
 /// What the HUD shows this frame.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BossView {
@@ -49,6 +68,10 @@ pub struct BossView {
     /// Held now: running, the seal.
     pub running: bool,
     pub channeling: bool,
+    /// The quick event, the last verdict (good, how long ago) and the clock's pace (1 normal).
+    pub qte: Option<BossQte>,
+    pub stamp: Option<(bool, f32)>,
+    pub slow: f32,
 }
 
 impl Hash for BossView {
@@ -73,6 +96,21 @@ impl Hash for BossView {
             .map(|(a, b, u, t)| (a, b, u, q(*t)))
             .hash(h);
         (self.running, self.channeling).hash(h);
+        self.qte.as_ref().map(|qte| {
+            (
+                &qte.key,
+                &qte.text,
+                qte.at.map(|x| x as i32),
+                qte.ring.map(|(a, b)| (q(a), q(b))),
+                qte.fill.map(q),
+                qte.left.map(q),
+                qte.step,
+                q(qte.age),
+            )
+        })
+        .hash(h);
+        self.stamp.map(|(g, a)| (g, q(a))).hash(h);
+        q(self.slow).hash(h);
     }
 }
 
@@ -232,6 +270,7 @@ pub(super) fn draw(
         draw_objective(font, v, view);
         draw_keys(font, v, width, height, view);
     }
+    draw_qte(font, v, width, height, view);
     if let Some(card) = &view.card {
         draw_card(font, v, width, height, card, view.time);
     }
@@ -704,5 +743,121 @@ fn draw_card(
             rgba(0x000000, 0.8),
         );
         ax += kw + 14.0 + text_width(font, Face::Title, what, 26.0) + 50.0;
+    }
+}
+
+/// The quick event: the world slowed (violet at the edges), a key badge pinned where it happens,
+/// the ring closing on it, its fill, the time left, a plate with what to do; the verdict stamped.
+fn draw_qte(font: &FontAtlas, v: &mut Vec<MapVertex>, width: f32, height: f32, view: &BossView) {
+    if view.slow < 0.97 {
+        let k = ((1.0 - view.slow) / 0.84).clamp(0.0, 1.0);
+        vignette(
+            v,
+            Rect::new(0.0, 0.0, width, height),
+            0.0,
+            height * 0.3,
+            rgba(0x5a1aa8, 0.55 * k),
+        );
+    }
+    if let Some(q) = &view.qte {
+        let accent = if q.danger { 0xe2334a } else { 0xf0c050 };
+        // Pinned where it happens, but never off the screen nor over the bars.
+        let c = [
+            q.at[0].clamp(140.0, width - 520.0),
+            q.at[1].clamp(190.0, height - 210.0),
+        ];
+        let pop = 1.0 + 0.35 * (1.0 - (q.age / 0.18).clamp(0.0, 1.0)).powi(2);
+        let r = 46.0 * pop;
+        let beat = 0.5 + 0.5 * (view.time * 10.0).sin();
+        // The badge.
+        halo(v, c, r * 1.9, r * 1.3, rgba(accent, 0.22 + 0.18 * beat));
+        disc(v, c, r + 5.0, rgba(0x000000, 0.55));
+        disc(v, c, r, rgba(0x120a1a, 0.95));
+        arc(v, c, r - 3.0, 3.0, 0.0, 1.0, rgba(accent, 1.0), rgba(accent, 0.0));
+        let ks = if q.key.chars().count() > 5 { 17.0 } else { 24.0 };
+        let kw = text_width(font, Face::Display, &q.key, ks);
+        text_outline(
+            font,
+            v,
+            Face::Display,
+            &q.key,
+            c[0] - kw * 0.5,
+            c[1] - ks * 0.62,
+            ks,
+            rgba(0xfff3d6, 1.0),
+            rgba(0x000000, 0.8),
+        );
+        // The ring closing on its mark: gold inside the slack.
+        if let Some((k, slack)) = q.ring {
+            let on = k.abs() <= slack;
+            let rr = r + 4.0 + k.max(0.0) * 120.0;
+            let ink = if on { 0xfff0a0 } else { 0xf4e6c8 };
+            arc(v, c, rr, if on { 6.0 } else { 3.0 }, 0.0, 1.0, rgba(ink, if on { 1.0 } else { 0.8 }), rgba(ink, 0.0));
+            arc(v, c, r + 4.0, 2.0, 0.0, 1.0, rgba(0xffffff, 0.35), rgba(0xffffff, 0.0));
+        }
+        // How full (held, mashed).
+        if let Some(fill) = q.fill {
+            arc(v, c, r + 10.0, 8.0, 0.75, fill, rgba(mix(0x9a5cff, 0xffe08a, fill), 1.0), rgba(0x2a1d33, 0.85));
+        }
+        // The time left.
+        if let Some(left) = q.left {
+            let ink = if q.danger { 0xe2334a } else { 0xb070ff };
+            arc(v, c, r + 22.0, 3.0, 0.75, left, rgba(ink, 0.9), rgba(0x000000, 0.25));
+        }
+        // The plate: what to do, the line under, the steps.
+        let ts = 34.0;
+        let tw = text_width(font, Face::Title, &q.text, ts);
+        let sw = text_width(font, Face::Round, &q.sub, 17.0);
+        let w = tw.max(sw) + 56.0;
+        let (x, y) = (c[0] + r + 30.0, c[1] - 40.0);
+        fill4(v, slant(x + 7.0, y + 7.0, w, 80.0, 12.0), rgba(0x000000, 0.5));
+        fill4(v, slant(x, y, w, 80.0, 12.0), rgba(0x120a1a, 0.94));
+        fill4(v, slant(x, y, w, 5.0, 1.0), rgba(accent, 1.0));
+        text_outline(
+            font,
+            v,
+            Face::Title,
+            &q.text,
+            x + 26.0,
+            y + 10.0,
+            ts,
+            rgba(0xfff3d6, 1.0),
+            rgba(0x000000, 0.6),
+        );
+        text(
+            font,
+            v,
+            Face::Round,
+            &q.sub,
+            x + 24.0,
+            y + 50.0,
+            17.0,
+            rgba(0xd8c8f0, 0.92),
+        );
+        if q.steps > 1 {
+            for i in 0..q.steps {
+                let done = i < q.step;
+                let now = i == q.step;
+                let p = [x + w - 22.0 - (q.steps - 1 - i) as f32 * 18.0, y + 64.0];
+                disc(v, p, if now { 6.0 } else { 4.5 }, rgba(if done || now { accent } else { 0x4a3a5a }, 1.0));
+            }
+        }
+    }
+    // The verdict.
+    if let Some((good, age)) = view.stamp {
+        if age < 0.75 {
+            let k = (age / 0.75).clamp(0.0, 1.0);
+            let alpha = 1.0 - k * k;
+            let size = 72.0 * (1.0 + 0.4 * (1.0 - (age / 0.12).clamp(0.0, 1.0)));
+            let (word, ink, rim) = if good { ("¡BIEN!", 0xffe08a, 0x6a3a00) } else { ("¡FALLO!", 0xff6a6a, 0x4a0010) };
+            let w = text_width(font, Face::Display, word, size);
+            let (x, y) = (width * 0.5 - w * 0.5, height * 0.3 - size * 0.6 - k * 24.0);
+            fill4(
+                v,
+                slant(x - 30.0, y + size * 0.1, w + 60.0, size * 1.05, 18.0),
+                rgba(0x120a1a, 0.75 * alpha),
+            );
+            text_outline(font, v, Face::Display, word, x, y, size, rgba(ink, alpha), rgba(rim, alpha));
+        }
     }
 }

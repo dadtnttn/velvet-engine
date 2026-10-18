@@ -772,6 +772,12 @@ pub(crate) enum VState {
     Spin,
     /// A leap at her that lands with the cleaver in the ground.
     Leap,
+    /// He reaches for her with his free fist (she has stood too close too long).
+    Reach,
+    /// He holds her up in his fist before his face (a quick event decides).
+    Grab,
+    /// She is up on his back, the sword in his shoulder (a quick event decides).
+    Ridden,
     Drop,
     Gallop,
     GetUp,
@@ -798,6 +804,8 @@ pub(crate) enum Why {
     Guard,
     Spire,
     Cliff,
+    /// The goblins' net of stones dropped on him.
+    Net,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -827,6 +835,8 @@ pub(crate) enum Event {
     Stunned(Why),
     Memory(usize),
     Awake,
+    /// He has her in his fist.
+    Grab,
 }
 
 /// Varrak, el Colmillo: where he is, what he does, his guard and the spark in him.
@@ -888,6 +898,12 @@ pub(crate) struct Varrak {
     since_hit: f32,
     /// Seconds before a blow can make him stagger again (between, he only flinches).
     stagger_cd: f32,
+    /// A quick event has him: only his animation goes on.
+    pub held: bool,
+    /// Seconds before he can reach for her again.
+    grab_ready: f32,
+    /// What stunned him last.
+    pub why: Why,
 }
 
 impl Varrak {
@@ -935,6 +951,9 @@ impl Varrak {
             told_leap: false,
             since_hit: 0.0,
             stagger_cd: 0.0,
+            held: false,
+            grab_ready: 9.0,
+            why: Why::Guard,
         }
     }
 
@@ -1174,6 +1193,7 @@ impl Varrak {
 
     fn stun(&mut self, seconds: f32, why: Why, ev: &mut Vec<Event>) {
         self.set(VState::Stunned);
+        self.why = why;
         self.stun_left = seconds + self.stun_bonus;
         self.spark_this_stun = 0.0;
         self.guard = 0.0;
@@ -1302,12 +1322,22 @@ impl Varrak {
         }
         let dt = if slow { dt * 0.6 } else { dt };
         self.carry(dt);
+        if self.held {
+            // A quick event has him (she rides him, he holds her, he kneels): it decides.
+            self.t += dt;
+            self.anim.advance(dt);
+            if self.blade_fly > 0.0 {
+                self.blade_fly -= dt;
+            }
+            return;
+        }
         // Left alone a while, his guard closes again: the sword alone is slow work.
         self.since_hit += dt;
         self.stagger_cd = (self.stagger_cd - dt).max(0.0);
         if self.awake && !matches!(self.state, VState::Drop | VState::Gallop) {
             self.charge_ready -= dt;
             self.leap_ready -= dt;
+            self.grab_ready -= dt;
         }
         if self.awake && self.fighting() && !self.open() && self.since_hit > 2.5 {
             self.guard = (self.guard + 5.0 * dt).min(100.0);
@@ -1375,6 +1405,17 @@ impl Varrak {
                 }
                 if (self.behind > 0.55 || self.rage >= 3) && d < 5.2 {
                     self.start_spin(ev);
+                } else if self.spark >= 50.0
+                    && self.grab_ready <= 0.0
+                    && d < 2.8
+                    && off < 0.5
+                    && p.y < 0.6
+                {
+                    // From halfway on: stand in his face and he grabs at her.
+                    self.set(VState::Reach);
+                    self.anim.play(Clip::Sweep, 0.15, 0.7, false);
+                    ev.push(Event::Sfx(Sfx::EnemySwing, Some(self.root()), 0.8));
+                    ev.push(Event::Float("¡TE TENGO!", true, 1.4));
                 } else if self.charge_ready <= 0.0 && off < 0.7 && (d > 5.0 || self.cooldown <= 0.0)
                 {
                     // Down on all fours and charge (from close, he backs off first).
@@ -1527,6 +1568,35 @@ impl Varrak {
                     self.after(0.9, rng);
                 }
             }
+            VState::Reach => {
+                if self.t < 0.35 {
+                    self.turn_to(px, pz, 3.2, dt);
+                }
+                if self.t >= 0.55 && !self.struck {
+                    self.struck = true;
+                    if d < 3.0
+                        && self.off_facing(px, pz).abs() < 0.75
+                        && p.y < 0.9
+                        && p.vulnerable
+                        && p.untouchable <= 0.0
+                    {
+                        self.set(VState::Grab);
+                        self.held = true;
+                        self.anim.play(Clip::Roar, 0.2, 0.8, false);
+                        ev.push(Event::Grab);
+                    } else {
+                        self.grab_ready = 6.0;
+                    }
+                }
+                if self.state == VState::Reach && self.t > 1.1 {
+                    self.grab_ready = self.grab_ready.max(6.0);
+                    self.after(0.5, rng);
+                }
+            }
+            VState::Grab | VState::Ridden => {
+                // Let go without a verdict (it should not happen): back to the fight.
+                self.after(0.4, rng);
+            }
             VState::Drop => {
                 // He paws the ground and fixes on her; too close, he backs off for a run-up.
                 self.turn_to(px, pz, 2.4, dt);
@@ -1565,7 +1635,7 @@ impl Varrak {
                 let (fx, fz) = (self.x + self.yaw.sin() * 0.9, self.z + self.yaw.cos() * 0.9);
                 for thing in arena.touching(fx, fz, 1.1) {
                     arena.broken[thing] = true;
-                    if plan().breakables[thing].kind == "spire" {
+                    if matches!(plan().breakables[thing].kind.as_str(), "spire" | "cauldron") {
                         ev.push(Event::BreakSpire(thing));
                         self.guard = 0.0;
                         self.stun(CRASH_STUN_SECONDS, Why::Spire, ev);
@@ -2187,6 +2257,69 @@ pub(crate) struct Break {
     pub spin: f32,
 }
 
+// ------------------------------------------------------------------ the quick events
+/// The quick events (DemonQueen-Lore/VARRAK_COMBATE_2.md): earned, rare, on the fight's own keys,
+/// slowed down and pinned to where it happens; failing one costs a blow, never a replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum QteKind {
+    /// He is about to run her down on all fours: Space, and she leaps aside.
+    Dodge,
+    /// Crashed and dazed: up on his back, the sword in his shoulder, the seal on his nape.
+    Mount,
+    /// He has her in his fist: the sword in his hand to get free.
+    Grab,
+    /// He walks under the goblins' net of stones while she is by its post: cut the rope.
+    Rope,
+    /// The spark is full and he kneels: hold the seal, then call him by his name.
+    Awaken,
+}
+
+/// What a quick event asks for.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum QteAsk {
+    /// A click before the window closes.
+    Press,
+    /// Space before the window closes.
+    Jump,
+    /// A click when the closing ring meets its mark (`beat` s in, give or take `slack`).
+    Beat { beat: f32, slack: f32 },
+    /// The seal held `need` s in all (it drains `decay` a second let go).
+    Hold { need: f32, decay: f32 },
+    /// Clicks (`per` each) or the seal held (`hold` a second) to fill it.
+    Mash { per: f32, hold: f32 },
+}
+
+/// A quick event on show.
+#[derive(Clone, Debug)]
+pub(crate) struct Qte {
+    pub kind: QteKind,
+    pub ask: QteAsk,
+    /// Real seconds into it, and how long it waits (0: for ever).
+    pub t: f32,
+    pub window: f32,
+    /// 0..1 (held, mashed).
+    pub fill: f32,
+    /// Which step of how many (the ride is four: the jump up, two stabs, the seal).
+    pub step: u8,
+    pub steps: u8,
+    /// The clock's pace while it is up.
+    pub slow: f32,
+    /// Where it happens (the prompt sits there).
+    pub anchor: Vec3,
+    /// The key, what to do, a line under.
+    pub key: &'static str,
+    pub text: &'static str,
+    pub sub: &'static str,
+}
+
+/// Up on his back or held in his fist: which, for how long, how hard he bucks (the camera).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Ride {
+    pub kind: QteKind,
+    pub t: f32,
+    pub buck: f32,
+}
+
 // ------------------------------------------------------------------ the fight
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Phase {
@@ -2268,6 +2401,37 @@ pub(crate) struct Fight {
     /// When he last crashed into rock (Chiquita reminds her how to win if it is long ago).
     last_crash: f32,
     crash_hints: usize,
+    /// The quick event up, the clock's pace (slow while one is up), her ride on him or in his
+    /// fist (the camera follows him then).
+    pub qte: Option<Qte>,
+    pub time_scale: f32,
+    pub ride: Option<Ride>,
+    /// Real seconds (quick events time themselves in it), and the last verdict: good, when.
+    pub clock: f32,
+    pub stamp: Option<(bool, f32)>,
+    dodge_cd: f32,
+    rope_cd: f32,
+    /// The goblins' net is down, and when it lands.
+    pub rope_cut: bool,
+    net_falls: Option<f32>,
+    /// The ride was offered in this daze.
+    mounted: bool,
+    /// Chiquita has told her about each quick event once.
+    taught: [bool; 5],
+    last_dodge: f32,
+    /// The seal held in the last call (the spark pours in the awakening).
+    pouring: bool,
+    /// The cauldron's oil burning on the ground: where, how far, until when.
+    pub spill: Option<(f32, f32, f32, f32)>,
+    told_fire: bool,
+    /// The last phase (three memories out): the cliffs shake stones loose on her, each marked
+    /// on the ground before it lands. Seconds to the next one.
+    rockfall: f32,
+    told_rockfall: bool,
+    /// Sparks off his nape while the seal is held there.
+    nape_fx: f32,
+    /// Where a stone will land: the mark on the ground (x, z, radius, when it lands).
+    pub marks: Vec<(f32, f32, f32, f32)>,
 }
 
 impl Fight {
@@ -2313,6 +2477,25 @@ impl Fight {
             cured_at: -99.0,
             last_crash: 0.0,
             crash_hints: 0,
+            qte: None,
+            time_scale: 1.0,
+            ride: None,
+            clock: 0.0,
+            stamp: None,
+            dodge_cd: 0.0,
+            rope_cd: 0.0,
+            rope_cut: false,
+            net_falls: None,
+            mounted: false,
+            taught: [false; 5],
+            last_dodge: -99.0,
+            pouring: false,
+            spill: None,
+            told_fire: false,
+            rockfall: 3.0,
+            told_rockfall: false,
+            nape_fx: 0.0,
+            marks: Vec::new(),
         }
     }
 
@@ -2405,11 +2588,22 @@ impl Fight {
                     "Aléjate y mira su emblema: es lo que hay que despertar.".into(),
                     0,
                 ),
+                VState::Stunned if v.why != Why::Guard && !self.mounted => (
+                    "¡Estrellado! Súbete o el sello".into(),
+                    "Acércate y clic: a su lomo (vale más). O mantén clic derecho a su emblema.".into(),
+                    1,
+                ),
                 VState::Stunned | VState::Memory => (
                     "¡Aturdido! Mantén el sello".into(),
                     "Mantén clic derecho apuntando a su emblema hasta que lo suelte.".into(),
                     1,
                 ),
+                VState::Reach => (
+                    "¡Va a agarrarte!".into(),
+                    "Apártate de su puño.".into(),
+                    2,
+                ),
+                VState::Grab | VState::Ridden | VState::Kneel => return None,
                 VState::Drop | VState::Gallop => (
                     "¡Carga a cuatro patas!".into(),
                     "Ponte delante de un peñasco y apártate (Mayús) en el último momento.".into(),
@@ -2468,7 +2662,7 @@ impl Fight {
         self.varrak.rise();
         self.last_crash = self.time;
         self.chiquita(
-            "Ahí viene. Nunca por la espalda: gira. Que se estrelle contra las agujas de roca o la pared, y luego el sello.",
+            "Ahí viene. Nunca por la espalda: gira. Que se estrelle contra las agujas, el caldero o la pared, o llévalo bajo la red de la grúa.",
             1.0,
             4.6,
         );
@@ -2516,15 +2710,22 @@ impl Fight {
 
     /// One step of the fight.
     pub(crate) fn update(&mut self, input: Input, dt: f32) {
-        self.time += dt;
         self.sounds.clear();
         let mut ev = Vec::new();
         let fighting = matches!(self.phase, Phase::Pack | Phase::Duel);
-        let input = if self.phase == Phase::Intro {
+        let mut input = if self.phase == Phase::Intro {
             Input::default()
         } else {
             input
         };
+        // The quick event takes the keys it asks for first, and slows the clock while it is up.
+        let real = dt;
+        self.clock += real;
+        self.update_qte(&mut input, real, &mut ev);
+        let pace = self.qte.as_ref().map_or(1.0, |q| q.slow);
+        self.time_scale += (pace - self.time_scale) * (real * 12.0).min(1.0);
+        let dt = real * self.time_scale;
+        self.time += dt;
         if let Some(power) = self.player.update(input, dt, &self.arena) {
             self.strike(power, &mut ev);
         }
@@ -2562,6 +2763,11 @@ impl Fight {
                     3.6,
                 );
             }
+        }
+        if self.pouring {
+            // The awakening: the seal pours into him on its own (no aim needed now).
+            self.flowing = true;
+            self.fizzle = false;
         }
         self.player.glow = if self.flowing {
             1.0
@@ -2617,6 +2823,73 @@ impl Fight {
             self.chiquita(line, 0.0, 4.0);
         }
         self.update_effects(dt);
+        // The burning oil: it hurts her if she stands in it, and eats his guard while he is up.
+        if let Some((sx, sz, r, until)) = self.spill {
+            if self.time > until {
+                self.spill = None;
+            } else if fighting && self.ride.is_none() {
+                let p = &mut self.player;
+                if (p.x - sx).hypot(p.z - sz) < r && p.y < 0.6 && p.untouchable <= 0.0 && p.hurt(5.0, sx, sz, 2.0) {
+                    if !self.told_fire {
+                        self.told_fire = true;
+                        self.chiquita("¡Que quema! ¡Fuera del aceite!", 0.0, 2.6);
+                    }
+                }
+                let v = &mut self.varrak;
+                if (v.x - sx).hypot(v.z - sz) < r + 0.6 && v.fighting() && !v.open() && !v.held {
+                    v.burning = v.burning.max(3.0);
+                }
+            }
+        }
+        // The last phase: stones off the cliffs, a mark on the ground where each will land.
+        if self.phase == Phase::Duel
+            && self.varrak.memories >= MEMORIES.len()
+            && self.varrak.fighting()
+            && !self.varrak.held
+            && self.ride.is_none()
+        {
+            self.rockfall -= dt;
+            if self.rockfall <= 0.0 {
+                self.rockfall = 4.0 + self.rng.next() * 3.0;
+                if !self.told_rockfall {
+                    self.told_rockfall = true;
+                    self.lines.clear();
+                    self.line = None;
+                    self.chiquita("¡El risco se viene abajo! Donde veas el círculo, cae una piedra.", 0.0, 3.6);
+                }
+                for k in 0..2 {
+                    let a = self.rng.next() * std::f32::consts::TAU;
+                    let d = if k == 0 { self.rng.next() * 1.2 } else { 2.5 + self.rng.next() * 2.5 };
+                    let to = self
+                        .arena
+                        .collide(self.player.x + a.cos() * d, self.player.z + a.sin() * d, 0.6);
+                    let r = 0.5 + self.rng.next() * 0.4;
+                    let delay = 0.5 + k as f32 * 0.5;
+                    self.rocks.push(Rock {
+                        at: Vec3::new(to.x, 15.0, to.z),
+                        v: Vec3::ZERO,
+                        r,
+                        spin: Vec3::new(2.0, 1.0, 3.0),
+                        delay,
+                        falling: true,
+                        rest: false,
+                    });
+                    // 15 m of fall takes ~1.3 s.
+                    self.marks.push((to.x, to.z, r + 1.2, self.time + delay + 1.3));
+                }
+                let a = angle_of(self.player.x, self.player.z);
+                let (cx, cz) = ring_point(a, 0.5);
+                self.sfx(Sfx::Rubble, Some(Vec3::new(cx, 6.0, cz)), 0.6);
+            }
+        }
+        let now = self.time;
+        self.marks.retain(|m| m.3 > now - 0.2);
+        // The goblins' net lands.
+        if self.net_falls.is_some_and(|at| self.time >= at) {
+            self.net_falls = None;
+            self.net_lands();
+        }
+        self.offer_qte();
         if fighting && self.player.health <= 0.0 {
             self.lose();
         }
@@ -2725,6 +2998,12 @@ impl Fight {
                 self.last_crash = self.time;
                 let b = &plan().breakables[i];
                 let (bx, bz) = (b.x, b.z);
+                if b.kind == "cauldron" {
+                    // The oil goes over the ground and catches: a patch of fire for a while.
+                    self.spill = Some((bx, bz, 3.4, self.time + 16.0));
+                    self.sfx(Sfx::SpellBurst, Some(Vec3::new(bx, 0.6, bz)), 1.0);
+                    self.chiquita("¡El caldero! Ahora arde todo eso: no te metas en el fuego.", 0.4, 3.4);
+                }
                 self.breaks.push(Break {
                     index: i,
                     from: (self.varrak.x, self.varrak.z),
@@ -2820,10 +3099,15 @@ impl Fight {
                 }
             }
             Event::Stunned(why) => {
+                self.mounted = false;
                 let line = match why {
+                    _ if why != Why::Guard && self.clock - self.last_dodge < 3.0 => {
+                        "¡Olé! Se ha comido la roca. ¡Súbete o el sello!"
+                    }
                     Why::Guard => "¡Ahora! El sello.",
                     Why::Spire => "¡Se ha dado de morros contra la roca! ¡El sello, ya!",
                     Why::Cliff => "¡Contra la pared! Ahora, el sello.",
+                    Why::Net => "¡Enterrado en piedras! ¡Súbete a su lomo, ya!",
                 };
                 self.chiquita(line, 0.0, 3.6);
             }
@@ -2842,6 +3126,7 @@ impl Fight {
                 }
             }
             Event::Awake => self.win(),
+            Event::Grab => self.grabbed(),
         }
     }
 
@@ -2947,8 +3232,8 @@ impl Fight {
                 }
                 self.start_duel();
             }
-            "smash" | "sweep" | "gallop" | "spire" | "spark" | "memory" | "won" | "spin"
-            | "leap" | "run" => {
+            "smash" | "sweep" | "gallop" | "spire" | "cauldron" | "spark" | "memory" | "won"
+            | "spin" | "leap" | "run" => {
                 for w in &mut self.pack.wolves {
                     w.gone = true;
                     w.visible = false;
@@ -2992,9 +3277,9 @@ impl Fight {
                         self.player.x += 3.0;
                         self.varrak.start_drop(&mut ev);
                     }
-                    "spire" => {
-                        // A spire between him and her, he charges.
-                        if let Some(i) = plan().breakables.iter().position(|b| b.kind == "spire") {
+                    "spire" | "cauldron" => {
+                        // A spire (or the cauldron) between him and her, he charges.
+                        if let Some(i) = plan().breakables.iter().position(|b| b.kind == what) {
                             let (sx, sz) = (plan().breakables[i].x, plan().breakables[i].z);
                             self.varrak.x = sx;
                             self.varrak.z = sz + 6.5;
@@ -3022,6 +3307,85 @@ impl Fight {
             "lost" => {
                 self.player.health = 0.0;
             }
+            "dodge" | "mount" | "ride" | "grab" | "rope" | "awaken" | "rockfall" => {
+                for w in &mut self.pack.wolves {
+                    w.gone = true;
+                    w.visible = false;
+                }
+                self.phase = Phase::Duel;
+                self.varrak.awake = true;
+                self.varrak.blade = BladeMode::Hand;
+                self.varrak.held = false;
+                self.qte = None;
+                self.ride = None;
+                self.player.frozen = false;
+                self.varrak.x = 0.0;
+                self.varrak.z = -1.0;
+                self.varrak.yaw = 0.0;
+                match what {
+                    "dodge" => {
+                        // He charges at her from far off, a spire behind her.
+                        in_front(self, 11.0);
+                        self.dodge_cd = 0.0;
+                        self.varrak.start_drop(&mut ev);
+                    }
+                    "mount" | "ride" => {
+                        in_front(self, 2.6);
+                        self.varrak.spark = 30.0;
+                        self.varrak.memories = 1;
+                        self.varrak.stun(30.0, Why::Spire, &mut ev);
+                        self.mounted = false;
+                        if what == "ride" {
+                            self.mounted = true;
+                            self.mount(&mut ev);
+                        }
+                    }
+                    "rockfall" => {
+                        // The last phase: he keeps off a while, the cliffs let stones go.
+                        self.varrak.z = -8.0;
+                        in_front(self, 9.0);
+                        self.player.yaw = 0.0;
+                        self.varrak.spark = 78.0;
+                        self.varrak.memories = MEMORIES.len();
+                        self.varrak.set(VState::Chase);
+                        self.varrak.cooldown = 9.0;
+                        self.varrak.charge_ready = 9.0;
+                        self.varrak.leap_ready = 9.0;
+                        self.rockfall = 0.2;
+                    }
+                    "grab" => {
+                        in_front(self, 2.2);
+                        self.varrak.spark = 55.0;
+                        self.varrak.memories = 2;
+                        self.varrak.set(VState::Grab);
+                        self.varrak.held = true;
+                        self.varrak.anim.play(Clip::Roar, 0.0, 0.8, false);
+                        ev.push(Event::Grab);
+                    }
+                    "rope" => {
+                        if let Some((rope, net)) = self.rope_and_net() {
+                            let (r, n) = (&plan().breakables[rope], &plan().breakables[net]);
+                            self.player.x = r.x + 0.5;
+                            self.player.z = r.z + 0.5;
+                            self.varrak.x = n.x - 5.0;
+                            self.varrak.z = n.z - 0.5;
+                            self.varrak.set(VState::Chase);
+                            self.varrak.cooldown = 9.0;
+                            self.varrak.charge_ready = 9.0;
+                            self.varrak.leap_ready = 9.0;
+                            self.rope_cd = 0.0;
+                        }
+                    }
+                    _ => {
+                        in_front(self, 5.0);
+                        self.varrak.spark = 100.0;
+                        self.varrak.memories = MEMORIES.len();
+                        self.varrak.set(VState::Kneel);
+                        self.varrak.anim.play(Clip::Kneel, 0.0, 1.0, false);
+                        self.varrak.blade = BladeMode::Dropped;
+                    }
+                }
+            }
             _ => {}
         }
         for e in ev {
@@ -3039,6 +3403,637 @@ impl Fight {
     }
 }
 
+
+// ------------------------------------------------------------------ the quick events at work
+impl Fight {
+    #[allow(clippy::too_many_arguments)]
+    fn ask(
+        &mut self,
+        kind: QteKind,
+        ask: QteAsk,
+        window: f32,
+        slow: f32,
+        (step, steps): (u8, u8),
+        anchor: Vec3,
+        key: &'static str,
+        text: &'static str,
+        sub: &'static str,
+    ) {
+        self.qte = Some(Qte {
+            kind,
+            ask,
+            t: 0.0,
+            window,
+            fill: 0.0,
+            step,
+            steps,
+            slow,
+            anchor,
+            key,
+            text,
+            sub,
+        });
+    }
+
+    /// Chiquita tells her about a quick event the first time it comes up.
+    fn teach(&mut self, kind: QteKind, line: &'static str) {
+        let i = kind as usize;
+        if !self.taught[i] {
+            self.taught[i] = true;
+            // A quick event will not wait for the line before it: this one goes first.
+            self.lines.clear();
+            self.line = None;
+            self.chiquita(line, 0.0, 3.2);
+        }
+    }
+
+    /// The goblins' rope post and their net of stones, if the plaza has them.
+    fn rope_and_net(&self) -> Option<(usize, usize)> {
+        let b = &plan().breakables;
+        let rope = b.iter().position(|b| b.kind == "rope")?;
+        let net = b.iter().position(|b| b.kind == "net")?;
+        Some((rope, net))
+    }
+
+    /// The back of his neck (where the seal goes when she rides him).
+    pub(crate) fn nape(&self) -> Vec3 {
+        let v = &self.varrak;
+        let r = v.root();
+        Vec3::new(r.x - v.yaw.sin() * 0.3, r.y + 2.75, r.z - v.yaw.cos() * 0.3)
+    }
+
+    /// His face (where she hangs in his fist).
+    pub(crate) fn face(&self) -> Vec3 {
+        let v = &self.varrak;
+        let r = v.root();
+        Vec3::new(r.x + v.yaw.sin() * 0.35, r.y + 2.95, r.z + v.yaw.cos() * 0.35)
+    }
+
+    /// Takes the keys the quick event asks for, times it and decides it.
+    fn update_qte(&mut self, input: &mut Input, real: f32, ev: &mut Vec<Event>) {
+        let seal = input.channel;
+        self.dodge_cd -= real;
+        self.rope_cd -= real;
+        self.pouring = false;
+        if let Some(r) = self.ride.as_mut() {
+            r.t += real;
+            r.buck = (r.buck - real * 2.2).max(0.0);
+            // Up there nothing else reaches her.
+            self.player.untouchable = self.player.untouchable.max(0.2);
+        }
+        let Some(mut q) = self.qte.take() else {
+            return;
+        };
+        q.t += real;
+        let (click, jump) = (input.attack, input.jump);
+        match q.ask {
+            QteAsk::Jump => input.jump = false,
+            QteAsk::Hold { .. } => input.attack = false,
+            _ => input.attack = false,
+        }
+        if q.kind == QteKind::Mount && q.step == 3 && seal {
+            self.nape_fx -= real;
+            if self.nape_fx <= 0.0 {
+                self.nape_fx = 0.09;
+                let nape = self.nape();
+                ev.push(Event::Burst(nape, [0.75, 0.55, 1.0], 6, 3.0));
+            }
+            if let Some(r) = self.ride.as_mut() {
+                r.buck = r.buck.max(0.45);
+            }
+        }
+        if q.kind == QteKind::Awaken {
+            // She looks at him while she calls him back.
+            let chest = self.varrak_chest();
+            let p = &mut self.player;
+            let (dx, dz) = (chest.x - p.x, chest.z - p.z);
+            let yaw = (-dx).atan2(-dz);
+            let k = (real * 3.0).min(1.0);
+            p.yaw += wrap(yaw - p.yaw) * k;
+            let pitch = (chest.y - (p.y + EYE)).atan2(dx.hypot(dz));
+            p.pitch += (pitch - p.pitch) * k;
+            self.pouring = seal && q.step == 0;
+        }
+        let late = q.window > 0.0 && q.t > q.window;
+        let before = q.fill;
+        let verdict = match q.ask {
+            QteAsk::Press => click.then_some(true).or(late.then_some(false)),
+            QteAsk::Jump => jump.then_some(true).or(late.then_some(false)),
+            QteAsk::Beat { beat, slack } => {
+                if click {
+                    Some((q.t - beat).abs() <= slack)
+                } else if q.t > beat + slack {
+                    Some(false)
+                } else {
+                    None
+                }
+            }
+            QteAsk::Hold { need, decay } => {
+                q.fill = if seal {
+                    q.fill + real / need
+                } else {
+                    q.fill - decay * real
+                }
+                .clamp(0.0, 1.0);
+                (q.fill >= 1.0).then_some(true).or(late.then_some(false))
+            }
+            QteAsk::Mash { per, hold } => {
+                let gain = (if click { per } else { 0.0 }) + (if seal { hold * real } else { 0.0 });
+                q.fill = (q.fill + gain - 0.1 * real).clamp(0.0, 1.0);
+                (q.fill >= 1.0).then_some(true).or(late.then_some(false))
+            }
+        };
+        // The awakening: his memories come up one by one as the seal pours in.
+        if q.kind == QteKind::Awaken && q.step == 0 {
+            for (i, m) in MEMORIES.iter().enumerate() {
+                let at = (i as f32 + 1.0) / (MEMORIES.len() as f32 + 1.0);
+                if before < at && q.fill >= at {
+                    ev.push(Event::Float(m.word, false, 1.6));
+                    ev.push(Event::Sfx(Sfx::RuneChime, Some(self.varrak_chest()), 0.8));
+                }
+            }
+        }
+        match verdict {
+            None => self.qte = Some(q),
+            Some(good) => self.decide(q, good, ev),
+        }
+    }
+
+    fn decide(&mut self, q: Qte, good: bool, ev: &mut Vec<Event>) {
+        let offer = q.kind == QteKind::Mount && q.step == 0;
+        if good || !offer {
+            self.stamp = Some((good, self.clock));
+        }
+        if good {
+            self.sfx(Sfx::RuneChime, None, 0.7);
+        }
+        match (q.kind, q.step) {
+            (QteKind::Dodge, _) => {
+                if good {
+                    self.dodge();
+                }
+            }
+            (QteKind::Mount, 0) => {
+                if good {
+                    self.mount(ev);
+                }
+            }
+            (QteKind::Mount, 1 | 2) => {
+                if good {
+                    self.stab(q.step, ev);
+                } else {
+                    self.thrown(ev);
+                }
+            }
+            (QteKind::Mount, _) => {
+                if good {
+                    self.seal_nape(ev);
+                } else {
+                    self.thrown(ev);
+                }
+            }
+            (QteKind::Grab, _) => {
+                if good {
+                    self.break_free(ev);
+                } else {
+                    self.slammed(ev);
+                }
+            }
+            (QteKind::Rope, _) => {
+                if good {
+                    self.cut_rope();
+                } else {
+                    self.rope_cd = 5.0;
+                }
+            }
+            (QteKind::Awaken, 0) => {
+                let chest = self.varrak_chest();
+                self.ask(
+                    QteKind::Awaken,
+                    QteAsk::Press,
+                    0.0,
+                    0.5,
+                    (1, 2),
+                    chest,
+                    "CLIC",
+                    "«¡Varrak!»",
+                    "Llámalo por su nombre",
+                );
+            }
+            (QteKind::Awaken, _) => {
+                self.varrak.held = false;
+                self.varrak.set(VState::Awake);
+                self.flash = 1.0;
+                ev.push(Event::Awake);
+            }
+        }
+    }
+
+    /// The moments the quick events wait for.
+    fn offer_qte(&mut self) {
+        if self.qte.is_some() || self.phase != Phase::Duel {
+            return;
+        }
+        let (px, pz) = (self.player.x, self.player.z);
+        let v = &self.varrak;
+        let (fx, fz) = (v.yaw.sin(), v.yaw.cos());
+        let (rx, rz) = (px - v.x, pz - v.z);
+        let d = rx.hypot(rz);
+        // The spark is full: he kneels, and she calls him back.
+        if v.state == VState::Kneel && !v.held {
+            self.varrak.held = true;
+            let chest = self.varrak_chest();
+            self.ask(
+                QteKind::Awaken,
+                QteAsk::Hold {
+                    need: 2.6,
+                    decay: 0.15,
+                },
+                0.0,
+                0.5,
+                (0, 2),
+                chest,
+                "CLIC DCHO.",
+                "Devuélvele su nombre",
+                "Mantén el sello",
+            );
+            self.teach(QteKind::Awaken, "No sueltes. Devuélveselo todo.");
+            return;
+        }
+        // On all fours, about to run her down.
+        if v.state == VState::Gallop
+            && v.gallop.locked
+            && !v.gallop.hit_her
+            && self.dodge_cd <= 0.0
+            && self.player.y < 0.5
+        {
+            let along = rx * fx + rz * fz;
+            let side = (fx * rz - fz * rx).abs();
+            if along > 0.8 && along < GALLOP_SPEED * 0.5 && side < 1.8 {
+                self.dodge_cd = 9.0;
+                let head = v.root() + Vec3::new(fx * 1.2, 1.5, fz * 1.2);
+                self.ask(
+                    QteKind::Dodge,
+                    QteAsk::Jump,
+                    1.0,
+                    0.16,
+                    (0, 1),
+                    head,
+                    "ESPACIO",
+                    "¡Apártate!",
+                    "Que se estrelle detrás de ti",
+                );
+                self.teach(QteKind::Dodge, "¡Ahora! ¡Espacio!");
+                return;
+            }
+        }
+        // Crashed and dazed, she close in front of him: up on his back.
+        if v.state == VState::Stunned
+            && v.why != Why::Guard
+            && !self.mounted
+            && d < 3.6
+            && v.stun_left > 1.0
+        {
+            let f = self.player.forward();
+            let facing = (f.x * -rx + f.z * -rz) / d.max(1e-3) > 0.3;
+            if facing {
+                self.mounted = true;
+                let window = (v.stun_left - 0.5).min(4.0);
+                let nape = self.nape();
+                self.ask(
+                    QteKind::Mount,
+                    QteAsk::Press,
+                    window,
+                    1.0,
+                    (0, 4),
+                    nape,
+                    "CLIC",
+                    "¡Súbete a su lomo!",
+                    "o mantén el sello desde aquí",
+                );
+                self.teach(
+                    QteKind::Mount,
+                    "¡Está en el suelo! Clic y súbete a su lomo: el sello en la nuca prende de golpe.",
+                );
+                return;
+            }
+        }
+        // Under the goblins' net while she stands by its post.
+        if !self.rope_cut && self.rope_cd <= 0.0 && v.fighting() && !v.open() && !v.held {
+            if let Some((rope, net)) = self.rope_and_net() {
+                let (r, n) = (&plan().breakables[rope], &plan().breakables[net]);
+                if (v.x - n.x).hypot(v.z - n.z) < 2.9 && (px - r.x).hypot(pz - r.z) < 5.5 {
+                    self.rope_cd = 6.0;
+                    self.ask(
+                        QteKind::Rope,
+                        QteAsk::Press,
+                        1.3,
+                        0.2,
+                        (0, 1),
+                        Vec3::new(r.x, 1.6, r.z),
+                        "CLIC",
+                        "¡Corta la cuerda!",
+                        "Está debajo de la red",
+                    );
+                    self.teach(QteKind::Rope, "¡Está debajo de la red de piedras! ¡Corta la cuerda!");
+                }
+            }
+        }
+    }
+
+    /// She leaps aside of his line; he runs on blind (into whatever is behind her).
+    fn dodge(&mut self) {
+        let v = &self.varrak;
+        let (fx, fz) = (v.yaw.sin(), v.yaw.cos());
+        let (rx, rz) = (self.player.x - v.x, self.player.z - v.z);
+        let cross = fx * rz - fz * rx;
+        let mut side = cross.signum();
+        if cross.abs() < 0.3 {
+            // Dead ahead: the side with more room.
+            let (x, z) = (self.player.x, self.player.z);
+            let l = self.arena.collide(x - fz * 3.0, z + fx * 3.0, 0.38);
+            let r = self.arena.collide(x + fz * 3.0, z - fx * 3.0, 0.38);
+            side = if (l.x - x).hypot(l.z - z) >= (r.x - x).hypot(r.z - z) {
+                1.0
+            } else {
+                -1.0
+            };
+        }
+        let (dx, dz) = (-fz * side, fx * side);
+        let to = self
+            .arena
+            .collide(self.player.x + dx * 1.2, self.player.z + dz * 1.2, 0.38);
+        let p = &mut self.player;
+        p.x = to.x;
+        p.z = to.z;
+        p.push = (dx * 15.0, dz * 15.0);
+        p.untouchable = 0.9;
+        p.vy = 4.0;
+        p.kick(0.25, 0.08);
+        self.last_dodge = self.clock;
+        self.sfx(Sfx::Jump, None, 0.9);
+    }
+
+    /// Up on his back: he rears and roars; the sword's turn.
+    fn mount(&mut self, ev: &mut Vec<Event>) {
+        let v = &mut self.varrak;
+        v.set(VState::Ridden);
+        v.held = true;
+        v.anim.play(Clip::Roar, 0.2, 1.0, false);
+        ev.push(Event::Sfx(Sfx::Roar, Some(v.root()), 1.0));
+        ev.push(Event::Float("¡¿GRAAH?!", true, 1.6));
+        self.player.frozen = true;
+        self.player.swing = None;
+        self.ride = Some(Ride {
+            kind: QteKind::Mount,
+            t: 0.0,
+            buck: 1.0,
+        });
+        let nape = self.nape();
+        self.ask(
+            QteKind::Mount,
+            QteAsk::Beat {
+                beat: 1.0,
+                slack: 0.22,
+            },
+            1.6,
+            1.0,
+            (1, 4),
+            nape,
+            "CLIC",
+            "¡Clávale la espada!",
+            "Cuando el anillo toque el centro",
+        );
+    }
+
+    /// The sword goes into his shoulder: he bucks; the next step.
+    fn stab(&mut self, step: u8, ev: &mut Vec<Event>) {
+        let nape = self.nape();
+        let side = if step == 1 { 0.45 } else { -0.45 };
+        let (s, c) = self.varrak.yaw.sin_cos();
+        let at = nape + Vec3::new(c * side, 0.1, -s * side);
+        ev.push(Event::Burst(at, [1.0, 0.82, 0.55], 28, 5.5));
+        ev.push(Event::Sfx(Sfx::HitBone, Some(at), 1.0));
+        ev.push(Event::Sfx(Sfx::Roar, Some(self.varrak.root()), 0.8));
+        ev.push(Event::Float("¡AAARGH!", true, 1.2));
+        self.varrak.anim.play(Clip::Hit, 0.08, 1.1, false);
+        self.varrak.flinch = 1.0;
+        self.player.start_swing(if step == 1 { 0 } else { 1 });
+        self.player.kick(0.35, 0.12);
+        if let Some(r) = self.ride.as_mut() {
+            r.buck = 1.0;
+        }
+        if step == 1 {
+            self.ask(
+                QteKind::Mount,
+                QteAsk::Beat {
+                    beat: 0.8,
+                    slack: 0.2,
+                },
+                1.4,
+                1.0,
+                (2, 4),
+                nape,
+                "CLIC",
+                "¡Agárrate!",
+                "Se encabrita: otra vez, al compás",
+            );
+        } else {
+            self.ask(
+                QteKind::Mount,
+                QteAsk::Hold {
+                    need: 1.5,
+                    decay: 0.35,
+                },
+                3.4,
+                1.0,
+                (3, 4),
+                nape,
+                "CLIC DCHO.",
+                "¡El sello en la nuca!",
+                "Mantenlo hasta que prenda",
+            );
+        }
+    }
+
+    /// The seal on his nape: a great share of the spark at once; she drops off in front of him.
+    fn seal_nape(&mut self, ev: &mut Vec<Event>) {
+        let nape = self.nape();
+        ev.push(Event::Burst(nape, [0.75, 0.5, 1.0], 60, 7.0));
+        ev.push(Event::Sfx(Sfx::SpellBurst, Some(nape), 1.0));
+        ev.push(Event::Sfx(Sfx::SealOpen, Some(nape), 0.8));
+        self.flash = 0.9;
+        self.dismount(3.8);
+        let v = &mut self.varrak;
+        v.held = false;
+        let next = MEMORIES.get(v.memories).map_or(100.0, |m| m.at);
+        v.spark = (v.spark + 24.0).min(next);
+        if v.spark >= next && v.memories < MEMORIES.len() {
+            v.memories += 1;
+            v.set(VState::Memory);
+            v.anim.play(Clip::Memory, 0.3, 1.0, false);
+            ev.push(Event::Memory(v.memories));
+        } else if v.spark >= 100.0 {
+            v.set(VState::Kneel);
+            v.anim.play(Clip::Kneel, 0.4, 1.0, false);
+            v.blade = BladeMode::Dropped;
+        } else {
+            v.set(VState::Stunned);
+            v.stun_left = 3.0;
+            v.anim.play(Clip::Stun, 0.25, 1.0, false);
+        }
+        self.mounted = true;
+    }
+
+    /// She comes down `ahead` m in front of him, facing him.
+    fn dismount(&mut self, ahead: f32) {
+        let v = &self.varrak;
+        let (x, z) = (v.x + v.yaw.sin() * ahead, v.z + v.yaw.cos() * ahead);
+        let to = self.arena.collide(x, z, 0.38);
+        let (vx, vz) = (v.x, v.z);
+        let p = &mut self.player;
+        p.x = to.x;
+        p.z = to.z;
+        p.y = 0.0;
+        p.vy = 0.0;
+        p.yaw = (-(vx - p.x)).atan2(-(vz - p.z));
+        p.pitch = 0.1;
+        p.frozen = false;
+        self.ride = None;
+    }
+
+    /// He throws her off his back and is up again with his guard back.
+    fn thrown(&mut self, ev: &mut Vec<Event>) {
+        self.varrak.held = false;
+        self.dismount(5.5);
+        let (vx, vz) = (self.varrak.x, self.varrak.z);
+        self.player.untouchable = 0.0;
+        self.player.hurt(14.0, vx, vz, 9.0);
+        self.varrak.shake_off(true, ev);
+        self.chiquita("¡Agárrate mejor, que la espalda que cae es la mía!", 0.3, 3.0);
+    }
+
+    /// He has her in his fist, up before his face.
+    fn grabbed(&mut self) {
+        self.player.frozen = true;
+        self.player.swing = None;
+        self.player.channeling = false;
+        self.ride = Some(Ride {
+            kind: QteKind::Grab,
+            t: 0.0,
+            buck: 0.6,
+        });
+        let face = self.face();
+        self.sfx(Sfx::Roar, Some(face), 1.0);
+        self.ask(
+            QteKind::Grab,
+            QteAsk::Mash {
+                per: 0.13,
+                hold: 0.55,
+            },
+            3.2,
+            1.0,
+            (0, 1),
+            face,
+            "CLIC",
+            "¡Suéltate!",
+            "Machaca clic, o mantén el sello",
+        );
+        self.teach(QteKind::Grab, "¡Te ha cogido! ¡Clávale la espada en la mano!");
+    }
+
+    /// The sword in his hand: he lets go with a howl and staggers.
+    fn break_free(&mut self, ev: &mut Vec<Event>) {
+        let face = self.face();
+        ev.push(Event::Burst(face - Vec3::Y * 0.8, [1.0, 0.8, 0.5], 30, 6.0));
+        ev.push(Event::Sfx(Sfx::HitBone, Some(face), 1.0));
+        ev.push(Event::Float("¡AAAARGH!", true, 1.6));
+        self.player.start_swing(0);
+        self.dismount(2.8);
+        let v = &mut self.varrak;
+        v.held = false;
+        v.grab_ready = 14.0;
+        v.guard = (v.guard - 40.0).max(0.0);
+        if v.guard <= 0.0 {
+            v.stun(STUN_SECONDS, Why::Guard, ev);
+        } else {
+            v.set(VState::Dazed);
+            v.anim.play(Clip::Stun, 0.15, 1.0, false);
+        }
+    }
+
+    /// He slams her down and throws her away.
+    fn slammed(&mut self, ev: &mut Vec<Event>) {
+        self.dismount(6.0);
+        let (vx, vz) = (self.varrak.x, self.varrak.z);
+        let v = &mut self.varrak;
+        v.held = false;
+        v.grab_ready = 12.0;
+        v.after(0.8, &mut self.rng);
+        ev.push(Event::Sfx(Sfx::Shockwave, Some(Vec3::new(vx, 0.2, vz)), 1.0));
+        self.player.untouchable = 0.0;
+        self.player.hurt(26.0, vx, vz, 14.0);
+    }
+
+    /// The rope parts: the net of stones drops.
+    fn cut_rope(&mut self) {
+        let Some((rope, net)) = self.rope_and_net() else {
+            return;
+        };
+        self.rope_cut = true;
+        let (r, n) = (&plan().breakables[rope], &plan().breakables[net]);
+        let (rx, rz, nx, nz) = (r.x, r.z, n.x, n.z);
+        for i in [rope, net] {
+            if let Some(b) = self.arena.broken.get_mut(i) {
+                *b = true;
+            }
+        }
+        self.breaks.push(Break {
+            index: rope,
+            from: (rx, rz),
+            force: 2.0,
+            lift: 1.5,
+            spin: 3.0,
+        });
+        self.breaks.push(Break {
+            index: net,
+            from: (nx, nz),
+            force: 1.0,
+            lift: 0.0,
+            spin: 1.2,
+        });
+        self.sfx(Sfx::BoneCrack, Some(Vec3::new(rx, 1.6, rz)), 1.0);
+        self.net_falls = Some(self.time + 0.45);
+    }
+
+    /// The stones come down: on him, if he is still there.
+    fn net_lands(&mut self) {
+        let Some((_, net)) = self.rope_and_net() else {
+            return;
+        };
+        let n = &plan().breakables[net];
+        let (nx, nz) = (n.x, n.z);
+        let mut ev = Vec::new();
+        ev.push(Event::Sfx(Sfx::Rubble, Some(Vec3::new(nx, 0.5, nz)), 1.0));
+        ev.push(Event::Ring(nx, nz, 6.0));
+        ev.push(Event::Dust(nx, nz));
+        ev.push(Event::Dust(nx + 1.0, nz - 0.8));
+        let d = (self.player.x - nx).hypot(self.player.z - nz);
+        self.player.kick(0.5, 0.16 * (1.0 - d / 14.0).max(0.25));
+        let v = &mut self.varrak;
+        if (v.x - nx).hypot(v.z - nz) < 3.4 && v.fighting() && !v.held && !v.open() {
+            v.guard = 0.0;
+            v.stun(CRASH_STUN_SECONDS + 2.0, Why::Net, &mut ev);
+            self.last_crash = self.time;
+        } else {
+            ev.push(Event::Chiquita("¡Se ha apartado! Las piedras para nada.", 0.2, 3.0));
+        }
+        for e in ev {
+            self.answer(e);
+        }
+    }
+}
+
 // ------------------------------------------------------------------ tests
 #[cfg(test)]
 mod tests {
@@ -3052,6 +4047,16 @@ mod tests {
         let mut input = Input::default();
         let (dx, dz) = (v.x - p.x, v.z - p.z);
         let d = dx.hypot(dz);
+        if let Some(q) = &f.qte {
+            match q.ask {
+                QteAsk::Press => input.attack = true,
+                QteAsk::Jump => input.jump = true,
+                QteAsk::Beat { beat, .. } => input.attack = (q.t - beat).abs() < 0.02,
+                QteAsk::Hold { .. } => input.channel = true,
+                QteAsk::Mash { .. } => input.attack = (q.t * 20.0).fract() < 0.5,
+            }
+            return input;
+        }
         if f.phase == Phase::Pack {
             if let Some(w) = f
                 .pack
@@ -3106,6 +4111,126 @@ mod tests {
         }
     }
 
+    fn step(f: &mut Fight, input: Input, secs: f32) {
+        for _ in 0..(secs * 60.0) as usize {
+            f.update(input, 1.0 / 60.0);
+        }
+    }
+
+    #[test]
+    fn a_charge_at_her_slows_time_and_space_leaps_her_aside() {
+        let mut f = Fight::new(2, false, 7);
+        f.player.god = true;
+        f.qa("dodge");
+        let mut asked = false;
+        for _ in 0..300 {
+            f.update(Input::default(), 1.0 / 60.0);
+            if f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Dodge) {
+                asked = true;
+                break;
+            }
+        }
+        assert!(asked, "no dodge offered");
+        step(&mut f, Input::default(), 0.3);
+        assert!(f.time_scale < 0.5, "time not slowed: {}", f.time_scale);
+        let before = f.player.health;
+        let jump = Input {
+            jump: true,
+            ..Input::default()
+        };
+        f.update(jump, 1.0 / 60.0);
+        assert!(f.qte.is_none());
+        f.player.god = false;
+        step(&mut f, Input::default(), 1.5);
+        assert!(f.player.health >= before, "the charge still hit her");
+    }
+
+    #[test]
+    fn after_a_crash_she_can_ride_him_and_seal_his_nape() {
+        let mut f = Fight::new(2, false, 9);
+        f.qa("mount");
+        f.qa_look();
+        step(&mut f, Input::default(), 0.1);
+        assert!(f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Mount), "no ride offered");
+        let spark = f.varrak.spark;
+        for _ in 0..600 {
+            let i = tests_bot_qte(&f);
+            f.update(i, 1.0 / 60.0);
+            if f.qte.is_none() && f.ride.is_none() {
+                break;
+            }
+        }
+        assert!(f.varrak.spark >= spark + 19.0, "spark {} -> {}", spark, f.varrak.spark);
+        assert!(!f.player.frozen);
+    }
+
+    #[test]
+    fn a_missed_beat_throws_her_off_his_back() {
+        let mut f = Fight::new(2, false, 11);
+        f.qa("ride");
+        let health = f.player.health;
+        // a click far too soon
+        f.update(
+            Input {
+                attack: true,
+                ..Input::default()
+            },
+            1.0 / 60.0,
+        );
+        assert!(f.ride.is_none(), "still riding");
+        assert!(f.player.health < health);
+        assert_eq!(f.varrak.state, VState::Roar);
+    }
+
+    #[test]
+    fn in_his_fist_mashing_or_holding_the_seal_frees_her_and_doing_nothing_hurts() {
+        let mut f = Fight::new(2, false, 13);
+        f.qa("grab");
+        step(&mut f, Input::default(), 0.05);
+        assert!(f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Grab));
+        let hold = Input {
+            channel: true,
+            ..Input::default()
+        };
+        step(&mut f, hold, 2.8);
+        assert!(f.ride.is_none(), "still held");
+        assert!(matches!(f.varrak.state, VState::Dazed | VState::Stunned));
+        let mut g = Fight::new(2, false, 13);
+        g.qa("grab");
+        let health = g.player.health;
+        step(&mut g, Input::default(), 3.6);
+        assert!(g.ride.is_none());
+        assert!(g.player.health < health - 20.0);
+    }
+
+    #[test]
+    fn the_awakening_cannot_be_failed_and_ends_in_his_name() {
+        let mut f = Fight::new(2, false, 17);
+        f.qa("awaken");
+        step(&mut f, Input::default(), 6.0);
+        assert!(f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Awaken && q.step == 0));
+        assert_eq!(f.phase, Phase::Duel);
+        let hold = Input {
+            channel: true,
+            ..Input::default()
+        };
+        step(&mut f, hold, 3.0);
+        assert!(f.qte.as_ref().is_some_and(|q| q.step == 1));
+        f.update(
+            Input {
+                attack: true,
+                ..Input::default()
+            },
+            1.0 / 60.0,
+        );
+        step(&mut f, Input::default(), 0.2);
+        assert_eq!(f.phase, Phase::Won);
+    }
+
+    fn tests_bot_qte(f: &Fight) -> Input {
+        bot(f)
+    }
+
     #[test]
     fn the_plaza_keeps_her_inside_and_out_of_the_stone() {
         if !available() {
@@ -3155,7 +4280,10 @@ mod tests {
                 f.varrak.stun(30.0, Why::Guard, &mut ev);
             }
             aim(&mut f);
-            f.update(input, 1.0 / 60.0);
+            // The last call of the awakening is a click.
+            let mut step_input = input;
+            step_input.attack = f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Awaken && q.step == 1);
+            f.update(step_input, 1.0 / 60.0);
             if f.phase == Phase::Won {
                 break;
             }
@@ -3289,7 +4417,12 @@ mod tests {
                 f.player.z = bz;
                 input.attack = true;
             }
+            // (No rides and no waking him here: this is about how he fights.)
+            if f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Mount && q.step == 0) {
+                input.attack = false;
+            }
             f.update(input, 1.0 / 60.0);
+            f.varrak.spark = f.varrak.spark.min(45.0);
             spun |= f.varrak.state == VState::Spin;
             *time_in
                 .entry(format!("{:?}/{:?}", f.phase, f.varrak.state))
