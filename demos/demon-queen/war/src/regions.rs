@@ -460,7 +460,6 @@ pub static PROVINCES: [Province; 26] = [
         recruit: &[(Faction::Alianza, &["caballeros", "lanceros", "ballesteros"]), (Faction::Reina, &["orcos", "esqueletos"])],
         lore: "Cayó mientras la corte huía. Sus agujas violetas siguen en pie bajo estandartes del este.",
         group: "corona",
-        ..P
     },
     Province {
         id: "minas",
@@ -486,10 +485,24 @@ pub static PROVINCES: [Province; 26] = [
 pub fn adjacent(id: &str) -> &'static [&'static str] {
     match id {
         "castillo" => &["bosque", "cantera", "cubil", "cueva", "madriguera", "villa"],
-        "villa" => &["bosque", "caleta", "castillo", "cienaga", "claro", "madriguera"],
+        "villa" => &[
+            "bosque",
+            "caleta",
+            "castillo",
+            "cienaga",
+            "claro",
+            "madriguera",
+        ],
         "cueva" => &["cantera", "castillo", "cubil", "nido"],
         "bosque" => &["castillo", "claro", "cubil", "penascal", "puerta", "villa"],
-        "claro" => &["bosque", "cienaga", "desembocadura", "puerta", "vado", "villa"],
+        "claro" => &[
+            "bosque",
+            "cienaga",
+            "desembocadura",
+            "puerta",
+            "vado",
+            "villa",
+        ],
         "madriguera" => &["caleta", "cantera", "castillo", "villa"],
         "cantera" => &["castillo", "cueva", "madriguera"],
         "caleta" => &["cienaga", "desembocadura", "madriguera", "villa"],
@@ -530,11 +543,26 @@ pub enum Crossing {
 
 /// The crossings: (one side, the other, how, its name).
 pub static CROSSINGS: [(&str, &str, Crossing, &str); 5] = [
-    ("puerta", "cabeza", Crossing::Puente, "El Puente de los Trolls"),
+    (
+        "puerta",
+        "cabeza",
+        Crossing::Puente,
+        "El Puente de los Trolls",
+    ),
     ("vado", "ribera", Crossing::Vado, "El Vado de los Juncos"),
     ("paso", "minas", Crossing::Paso, "El Paso del Lago"),
-    ("desembocadura", "caleta", Crossing::Mar, "La ruta de las barcas"),
-    ("desembocadura", "ribera", Crossing::Mar, "La ruta de las barcas"),
+    (
+        "desembocadura",
+        "caleta",
+        Crossing::Mar,
+        "La ruta de las barcas",
+    ),
+    (
+        "desembocadura",
+        "ribera",
+        Crossing::Mar,
+        "La ruta de las barcas",
+    ),
 ];
 
 /// The crossing between two regions, if they meet over one.

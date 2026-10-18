@@ -122,7 +122,7 @@ pub fn hex_encode(data: &[u8]) -> String {
 pub fn hex_decode(s: &str) -> Result<Vec<u8>, CryptoError> {
     check_len(s.len())?;
     let s = s.trim();
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err(CryptoError::Msg("hex length must be even".into()));
     }
     let mut out = Vec::with_capacity(s.len() / 2);

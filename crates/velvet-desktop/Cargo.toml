@@ -4,7 +4,7 @@ description = "Velvet Desktop: runs a JavaScript game (Velvet JS) as a desktop p
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-rust-version = "1.99"
+rust-version.workspace = true
 
 [features]
 # The window and the webview (the `app` module and the `velvet-desktop` program). Without it the

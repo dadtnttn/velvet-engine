@@ -749,7 +749,7 @@ fn suggest_name<'a>(
             continue;
         }
         let dist = edit_distance(wanted, candidate);
-        if dist <= 3 && best.map_or(true, |(_, d)| dist < d) {
+        if dist <= 3 && best.is_none_or(|(_, d)| dist < d) {
             best = Some((candidate, dist));
         }
     }

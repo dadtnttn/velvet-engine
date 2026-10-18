@@ -2590,7 +2590,8 @@ impl Fight {
                 ),
                 VState::Stunned if v.why != Why::Guard && !self.mounted => (
                     "¡Estrellado! Súbete o el sello".into(),
-                    "Acércate y clic: a su lomo (vale más). O mantén clic derecho a su emblema.".into(),
+                    "Acércate y clic: a su lomo (vale más). O mantén clic derecho a su emblema."
+                        .into(),
                     1,
                 ),
                 VState::Stunned | VState::Memory => (
@@ -2598,11 +2599,7 @@ impl Fight {
                     "Mantén clic derecho apuntando a su emblema hasta que lo suelte.".into(),
                     1,
                 ),
-                VState::Reach => (
-                    "¡Va a agarrarte!".into(),
-                    "Apártate de su puño.".into(),
-                    2,
-                ),
+                VState::Reach => ("¡Va a agarrarte!".into(), "Apártate de su puño.".into(), 2),
                 VState::Grab | VState::Ridden | VState::Kneel => return None,
                 VState::Drop | VState::Gallop => (
                     "¡Carga a cuatro patas!".into(),
@@ -2829,7 +2826,11 @@ impl Fight {
                 self.spill = None;
             } else if fighting && self.ride.is_none() {
                 let p = &mut self.player;
-                if (p.x - sx).hypot(p.z - sz) < r && p.y < 0.6 && p.untouchable <= 0.0 && p.hurt(5.0, sx, sz, 2.0) {
+                if (p.x - sx).hypot(p.z - sz) < r
+                    && p.y < 0.6
+                    && p.untouchable <= 0.0
+                    && p.hurt(5.0, sx, sz, 2.0)
+                {
                     if !self.told_fire {
                         self.told_fire = true;
                         self.chiquita("¡Que quema! ¡Fuera del aceite!", 0.0, 2.6);
@@ -2855,14 +2856,24 @@ impl Fight {
                     self.told_rockfall = true;
                     self.lines.clear();
                     self.line = None;
-                    self.chiquita("¡El risco se viene abajo! Donde veas el círculo, cae una piedra.", 0.0, 3.6);
+                    self.chiquita(
+                        "¡El risco se viene abajo! Donde veas el círculo, cae una piedra.",
+                        0.0,
+                        3.6,
+                    );
                 }
                 for k in 0..2 {
                     let a = self.rng.next() * std::f32::consts::TAU;
-                    let d = if k == 0 { self.rng.next() * 1.2 } else { 2.5 + self.rng.next() * 2.5 };
-                    let to = self
-                        .arena
-                        .collide(self.player.x + a.cos() * d, self.player.z + a.sin() * d, 0.6);
+                    let d = if k == 0 {
+                        self.rng.next() * 1.2
+                    } else {
+                        2.5 + self.rng.next() * 2.5
+                    };
+                    let to = self.arena.collide(
+                        self.player.x + a.cos() * d,
+                        self.player.z + a.sin() * d,
+                        0.6,
+                    );
                     let r = 0.5 + self.rng.next() * 0.4;
                     let delay = 0.5 + k as f32 * 0.5;
                     self.rocks.push(Rock {
@@ -2875,7 +2886,8 @@ impl Fight {
                         rest: false,
                     });
                     // 15 m of fall takes ~1.3 s.
-                    self.marks.push((to.x, to.z, r + 1.2, self.time + delay + 1.3));
+                    self.marks
+                        .push((to.x, to.z, r + 1.2, self.time + delay + 1.3));
                 }
                 let a = angle_of(self.player.x, self.player.z);
                 let (cx, cz) = ring_point(a, 0.5);
@@ -3002,7 +3014,11 @@ impl Fight {
                     // The oil goes over the ground and catches: a patch of fire for a while.
                     self.spill = Some((bx, bz, 3.4, self.time + 16.0));
                     self.sfx(Sfx::SpellBurst, Some(Vec3::new(bx, 0.6, bz)), 1.0);
-                    self.chiquita("¡El caldero! Ahora arde todo eso: no te metas en el fuego.", 0.4, 3.4);
+                    self.chiquita(
+                        "¡El caldero! Ahora arde todo eso: no te metas en el fuego.",
+                        0.4,
+                        3.4,
+                    );
                 }
                 self.breaks.push(Break {
                     index: i,
@@ -3403,7 +3419,6 @@ impl Fight {
     }
 }
 
-
 // ------------------------------------------------------------------ the quick events at work
 impl Fight {
     #[allow(clippy::too_many_arguments)]
@@ -3466,7 +3481,11 @@ impl Fight {
     pub(crate) fn face(&self) -> Vec3 {
         let v = &self.varrak;
         let r = v.root();
-        Vec3::new(r.x + v.yaw.sin() * 0.35, r.y + 2.95, r.z + v.yaw.cos() * 0.35)
+        Vec3::new(
+            r.x + v.yaw.sin() * 0.35,
+            r.y + 2.95,
+            r.z + v.yaw.cos() * 0.35,
+        )
     }
 
     /// Takes the keys the quick event asks for, times it and decides it.
@@ -3735,7 +3754,10 @@ impl Fight {
                         "¡Corta la cuerda!",
                         "Está debajo de la red",
                     );
-                    self.teach(QteKind::Rope, "¡Está debajo de la red de piedras! ¡Corta la cuerda!");
+                    self.teach(
+                        QteKind::Rope,
+                        "¡Está debajo de la red de piedras! ¡Corta la cuerda!",
+                    );
                 }
             }
         }
@@ -3910,7 +3932,11 @@ impl Fight {
         self.player.untouchable = 0.0;
         self.player.hurt(14.0, vx, vz, 9.0);
         self.varrak.shake_off(true, ev);
-        self.chiquita("¡Agárrate mejor, que la espalda que cae es la mía!", 0.3, 3.0);
+        self.chiquita(
+            "¡Agárrate mejor, que la espalda que cae es la mía!",
+            0.3,
+            3.0,
+        );
     }
 
     /// He has her in his fist, up before his face.
@@ -3939,7 +3965,10 @@ impl Fight {
             "¡Suéltate!",
             "Machaca clic, o mantén el sello",
         );
-        self.teach(QteKind::Grab, "¡Te ha cogido! ¡Clávale la espada en la mano!");
+        self.teach(
+            QteKind::Grab,
+            "¡Te ha cogido! ¡Clávale la espada en la mano!",
+        );
     }
 
     /// The sword in his hand: he lets go with a howl and staggers.
@@ -3970,7 +3999,11 @@ impl Fight {
         v.held = false;
         v.grab_ready = 12.0;
         v.after(0.8, &mut self.rng);
-        ev.push(Event::Sfx(Sfx::Shockwave, Some(Vec3::new(vx, 0.2, vz)), 1.0));
+        ev.push(Event::Sfx(
+            Sfx::Shockwave,
+            Some(Vec3::new(vx, 0.2, vz)),
+            1.0,
+        ));
         self.player.untouchable = 0.0;
         self.player.hurt(26.0, vx, vz, 14.0);
     }
@@ -4026,7 +4059,11 @@ impl Fight {
             v.stun(CRASH_STUN_SECONDS + 2.0, Why::Net, &mut ev);
             self.last_crash = self.time;
         } else {
-            ev.push(Event::Chiquita("¡Se ha apartado! Las piedras para nada.", 0.2, 3.0));
+            ev.push(Event::Chiquita(
+                "¡Se ha apartado! Las piedras para nada.",
+                0.2,
+                3.0,
+            ));
         }
         for e in ev {
             self.answer(e);
@@ -4151,7 +4188,10 @@ mod tests {
         f.qa("mount");
         f.qa_look();
         step(&mut f, Input::default(), 0.1);
-        assert!(f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Mount), "no ride offered");
+        assert!(
+            f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Mount),
+            "no ride offered"
+        );
         let spark = f.varrak.spark;
         for _ in 0..600 {
             let i = tests_bot_qte(&f);
@@ -4160,7 +4200,12 @@ mod tests {
                 break;
             }
         }
-        assert!(f.varrak.spark >= spark + 19.0, "spark {} -> {}", spark, f.varrak.spark);
+        assert!(
+            f.varrak.spark >= spark + 19.0,
+            "spark {} -> {}",
+            spark,
+            f.varrak.spark
+        );
         assert!(!f.player.frozen);
     }
 
@@ -4208,7 +4253,10 @@ mod tests {
         let mut f = Fight::new(2, false, 17);
         f.qa("awaken");
         step(&mut f, Input::default(), 6.0);
-        assert!(f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Awaken && q.step == 0));
+        assert!(f
+            .qte
+            .as_ref()
+            .is_some_and(|q| q.kind == QteKind::Awaken && q.step == 0));
         assert_eq!(f.phase, Phase::Duel);
         let hold = Input {
             channel: true,
@@ -4282,7 +4330,10 @@ mod tests {
             aim(&mut f);
             // The last call of the awakening is a click.
             let mut step_input = input;
-            step_input.attack = f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Awaken && q.step == 1);
+            step_input.attack = f
+                .qte
+                .as_ref()
+                .is_some_and(|q| q.kind == QteKind::Awaken && q.step == 1);
             f.update(step_input, 1.0 / 60.0);
             if f.phase == Phase::Won {
                 break;
@@ -4418,7 +4469,10 @@ mod tests {
                 input.attack = true;
             }
             // (No rides and no waking him here: this is about how he fights.)
-            if f.qte.as_ref().is_some_and(|q| q.kind == QteKind::Mount && q.step == 0) {
+            if f.qte
+                .as_ref()
+                .is_some_and(|q| q.kind == QteKind::Mount && q.step == 0)
+            {
                 input.attack = false;
             }
             f.update(input, 1.0 / 60.0);

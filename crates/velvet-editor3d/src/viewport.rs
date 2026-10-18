@@ -914,7 +914,7 @@ impl Viewport {
                 },
                 _ => t_box,
             };
-            if best.as_ref().map_or(true, |(_, bt)| t < *bt) {
+            if best.as_ref().is_none_or(|(_, bt)| t < *bt) {
                 best = Some((node.id.clone(), t));
             }
         }
@@ -966,7 +966,7 @@ fn ray_model(model: &Model, world: &Mat4, origin: Vec3, dir: Vec3) -> Option<f32
             Some(t) if t < best => {}
             _ => continue,
         }
-        for tri in part.indices.chunks_exact(3) {
+        for tri in part.indices.as_chunks::<3>().0 {
             let (Some(a), Some(b), Some(c)) = (
                 part.positions.get(tri[0] as usize),
                 part.positions.get(tri[1] as usize),

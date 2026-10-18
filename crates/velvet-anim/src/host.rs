@@ -229,7 +229,7 @@ impl StoryCommandHost for AnimStoryHost {
                     .split_whitespace()
                     .filter_map(|s| s.parse().ok())
                     .collect();
-                if nums.len() >= 2 && nums.len() % 2 == 0 {
+                if nums.len() >= 2 && nums.len().is_multiple_of(2) {
                     for pair in nums.chunks(2) {
                         track = track.key(pair[0], pair[1], ease);
                     }

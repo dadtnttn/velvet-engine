@@ -730,7 +730,8 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             for frame in 0..frames + 40 {
                 let t = frame as f32 / 60.0;
                 if walks {
-                    app.player = p0 + Vec3::new((t * 0.6).cos() * 2.0 - 2.0, 0.0, (t * 0.6).sin() * 2.0);
+                    app.player =
+                        p0 + Vec3::new((t * 0.6).cos() * 2.0 - 2.0, 0.0, (t * 0.6).sin() * 2.0);
                     app.camera_focus = app.player;
                 }
                 app.elapsed += 1.0 / 60.0;
@@ -770,7 +771,11 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             rows.push((name, avg, p95, cpu_avg));
         }
         let total: f32 = rows.iter().map(|r| r.1).sum();
-        eprintln!("[bench] {} zones, mean frame {:.2} ms", rows.len(), total / rows.len().max(1) as f32);
+        eprintln!(
+            "[bench] {} zones, mean frame {:.2} ms",
+            rows.len(),
+            total / rows.len().max(1) as f32
+        );
         return Ok(());
     }
     if let Some(frames) = std::env::args()
@@ -2334,19 +2339,33 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             if let Some(mut s) = run.b.sim.siege.take() {
                 s.ai_setup(&mut run.b.sim, 0, zone);
                 for e in &s.engines {
-                    eprintln!("[qa] engine {:?} side {} at ({:.0}, {:.0}) built {}", e.kind, e.side, e.x, e.z, e.built);
+                    eprintln!(
+                        "[qa] engine {:?} side {} at ({:.0}, {:.0}) built {}",
+                        e.kind, e.side, e.x, e.z, e.built
+                    );
                 }
-                eprintln!("[qa] wood {:?}, defender {:?}, zone {:?}", s.wood, s.defender, zone);
+                eprintln!(
+                    "[qa] wood {:?}, defender {:?}, zone {:?}",
+                    s.wood, s.defender, zone
+                );
                 run.b.sim.siege = Some(s);
             }
         }
         step(&mut app, 20);
         save(&mut app, out, &format!("map-{map}-deploy"))?;
         // the engines close to
-        let first = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| {
-            let s = r.b.sim.siege.as_ref()?;
-            s.engines.iter().find(|e| e.side == 0).or(s.engines.first()).map(|e| (e.x, e.z))
-        });
+        let first = app
+            .war
+            .as_ref()
+            .and_then(|w| w.battle.as_ref())
+            .and_then(|r| {
+                let s = r.b.sim.siege.as_ref()?;
+                s.engines
+                    .iter()
+                    .find(|e| e.side == 0)
+                    .or(s.engines.first())
+                    .map(|e| (e.x, e.z))
+            });
         if let (Some((ex, ez)), Some(w)) = (first, app.war.as_mut()) {
             if let Some(run) = w.battle.as_ref() {
                 let ground = |x: f32, z: f32| run.b.sim.field.walk_height(x, z);
@@ -2393,13 +2412,17 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             run.b.speed = 3.0;
         }
         // a siege: look at its gate from outside; frames as it goes
-        let gate = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| {
-            let s = r.b.sim.siege.as_ref()?;
-            s.works
-                .iter()
-                .find(|k| k.kind == demon_queen_war::baked::WorkKind::Gate)
-                .map(|g| (g.x, g.z))
-        });
+        let gate = app
+            .war
+            .as_ref()
+            .and_then(|w| w.battle.as_ref())
+            .and_then(|r| {
+                let s = r.b.sim.siege.as_ref()?;
+                s.works
+                    .iter()
+                    .find(|k| k.kind == demon_queen_war::baked::WorkKind::Gate)
+                    .map(|g| (g.x, g.z))
+            });
         let mut shots = 0;
         for k in 0..5400 {
             app.tick(1.0 / 30.0);
@@ -2411,7 +2434,14 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                         let (cx, cz) = ((p.x0 + p.x1) / 2.0, (p.z0 + p.z1) / 2.0);
                         let (dx, dz) = (gx - cx, gz - cz);
                         let l = dx.hypot(dz).max(1.0);
-                        w.cam.frame(gx - dx / l * 30.0, gz - dz / l * 30.0, Some(95.0), Some((-dx).atan2(-dz)), k == 0, &ground);
+                        w.cam.frame(
+                            gx - dx / l * 30.0,
+                            gz - dz / l * 30.0,
+                            Some(95.0),
+                            Some((-dx).atan2(-dz)),
+                            k == 0,
+                            &ground,
+                        );
                     }
                 }
                 app.render_frame();
@@ -2439,13 +2469,25 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         }
         step(&mut app, 4);
         save(&mut app, out, &format!("map-{map}-fight"))?;
-        if let Some(s) = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| r.b.sim.siege.as_ref()) {
+        if let Some(s) = app
+            .war
+            .as_ref()
+            .and_then(|w| w.battle.as_ref())
+            .and_then(|r| r.b.sim.siege.as_ref())
+        {
             eprintln!(
                 "[qa] siege: {} engines ({} standing), broken {:?}, winner {:?}",
                 s.engines.len(),
                 s.engines.iter().filter(|e| e.alive).count(),
-                s.works.iter().filter(|w| w.broken).map(|w| format!("{:?}", w.kind)).collect::<Vec<_>>(),
-                app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| r.b.sim.over.map(|o| o.winner))
+                s.works
+                    .iter()
+                    .filter(|w| w.broken)
+                    .map(|w| format!("{:?}", w.kind))
+                    .collect::<Vec<_>>(),
+                app.war
+                    .as_ref()
+                    .and_then(|w| w.battle.as_ref())
+                    .and_then(|r| r.b.sim.over.map(|o| o.winner))
             );
         }
         app.war = None;
@@ -2491,14 +2533,20 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             ("capital", 86.0, -42.0, 34.0, 0.5),
             ("valdesanto", 88.0, 8.0, 32.0, -0.4),
         ];
-        let only = std::env::args().skip_while(|a| a != "--war-overview").nth(1).filter(|a| !a.starts_with("--"));
+        let only = std::env::args()
+            .skip_while(|a| a != "--war-overview")
+            .nth(1)
+            .filter(|a| !a.starts_with("--"));
         for (name, x, z, d, yaw) in views {
             if only.as_deref().is_some_and(|o| o != name) {
                 continue;
             }
             if let Some(w) = app.war.as_mut() {
                 let land = demon_queen_war::campaign_map::Land::new();
-                w.cam.frame(x, z, Some(d), Some(yaw), true, &|a: f32, b: f32| land.top_at(a, b));
+                w.cam
+                    .frame(x, z, Some(d), Some(yaw), true, &|a: f32, b: f32| {
+                        land.top_at(a, b)
+                    });
             }
             step(&mut app, 30);
             save(&mut app, out, &format!("overview-{name}"))?;
@@ -2534,7 +2582,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                     }
                 }
                 let choice = matches!(
-                    app.talk.as_ref().map(|t| t.shown(guion::library(), &app.story)),
+                    app.talk
+                        .as_ref()
+                        .map(|t| t.shown(guion::library(), &app.story)),
                     Some(guion::Shown::Choice { .. })
                 );
                 if choice && pick_first {
@@ -2574,7 +2624,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 break;
             }
             let choice = matches!(
-                app.talk.as_ref().map(|t| t.shown(guion::library(), &app.story)),
+                app.talk
+                    .as_ref()
+                    .map(|t| t.shown(guion::library(), &app.story)),
                 Some(guion::Shown::Choice { .. })
             );
             if choice {
@@ -2596,7 +2648,11 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.story.seen("guerra.poder_bendicion")
         );
         // one purse: a regiment bought in the castle comes out of her gold
-        let queen = app.war_campaign.as_ref().and_then(|s| s.queen_army()).map(|a| a.id.clone());
+        let queen = app
+            .war_campaign
+            .as_ref()
+            .and_then(|s| s.queen_army())
+            .map(|a| a.id.clone());
         if let (Some(id), Some(c)) = (queen, app.war.as_mut().and_then(|w| w.camp.as_mut())) {
             c.sel = Some(Sel::Army(id));
             c.paint_version += 1;
@@ -2605,9 +2661,17 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         let before = app.gold;
         app.war_hit(map_overlay::WarHit::Panel(0));
         step(&mut app, 4);
-        eprintln!("[qa] recruit: gold {} → {} · treasury {:?}", before, app.gold, purse(&app));
+        eprintln!(
+            "[qa] recruit: gold {} → {} · treasury {:?}",
+            before,
+            app.gold,
+            purse(&app)
+        );
         // the river: closed until Varrak is woken
-        if let Some(p) = demon_queen_war::data::PROVINCES.iter().position(|p| p.id == "capital") {
+        if let Some(p) = demon_queen_war::data::PROVINCES
+            .iter()
+            .position(|p| p.id == "capital")
+        {
             app.campaign_go(p);
         }
         step(&mut app, 30);
@@ -2635,13 +2699,24 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.talk.is_some(),
             app.war_campaign.as_ref().map(|s| s.phase),
             app.story.get("guerra_turno_hoy"),
-            app.war.as_ref().and_then(|w| w.camp.as_ref()).is_some_and(|c| c.modal.is_some()),
-            app.war.as_ref().and_then(|w| w.camp.as_ref()).is_some_and(|c| c.busy),
+            app.war
+                .as_ref()
+                .and_then(|w| w.camp.as_ref())
+                .is_some_and(|c| c.modal.is_some()),
+            app.war
+                .as_ref()
+                .and_then(|w| w.camp.as_ref())
+                .is_some_and(|c| c.busy),
         );
         app.war_hit(map_overlay::WarHit::EndTurn);
         for _ in 0..40 {
             step(&mut app, 30);
-            if app.war_campaign.as_ref().is_some_and(|s| s.phase == demon_queen_war::rules::Phase::Player) && turn(&app) > t0 {
+            if app
+                .war_campaign
+                .as_ref()
+                .is_some_and(|s| s.phase == demon_queen_war::rules::Phase::Player)
+                && turn(&app) > t0
+            {
                 break;
             }
         }
@@ -2693,7 +2768,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         save(&mut app, out, "story-battle-relic")?;
         app.war_hit(map_overlay::WarHit::Begin);
         // a regiment of hers walks onto it (put there, for the QA)
-        if let (Some((x, z, _)), Some(run)) = (rel, app.war.as_mut().and_then(|w| w.battle.as_mut())) {
+        if let (Some((x, z, _)), Some(run)) =
+            (rel, app.war.as_mut().and_then(|w| w.battle.as_mut()))
+        {
             let sim = &mut run.b.sim;
             if let Some(r) = (0..sim.regiments.len()).find(|&r| sim.regiments[r].side == 0) {
                 let (dx, dz) = (x - sim.regiments[r].cx, z - sim.regiments[r].cz);
@@ -2719,17 +2796,25 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.gold
         );
         // her powers, on the enemy
-        let enemy = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| {
-            let s = &r.b.sim;
-            let regs: Vec<_> = s.regiments.iter().filter(|g| g.side == 1 && g.alive > 0).collect();
-            let n = regs.len().max(1) as f32;
-            (!regs.is_empty()).then(|| {
-                (
-                    regs.iter().map(|g| g.cx).sum::<f32>() / n,
-                    regs.iter().map(|g| g.cz).sum::<f32>() / n,
-                )
-            })
-        });
+        let enemy = app
+            .war
+            .as_ref()
+            .and_then(|w| w.battle.as_ref())
+            .and_then(|r| {
+                let s = &r.b.sim;
+                let regs: Vec<_> = s
+                    .regiments
+                    .iter()
+                    .filter(|g| g.side == 1 && g.alive > 0)
+                    .collect();
+                let n = regs.len().max(1) as f32;
+                (!regs.is_empty()).then(|| {
+                    (
+                        regs.iter().map(|g| g.cx).sum::<f32>() / n,
+                        regs.iter().map(|g| g.cz).sum::<f32>() / n,
+                    )
+                })
+            });
         if let (Some((ex, ez)), Some(w)) = (enemy, app.war.as_mut()) {
             if let Some(run) = w.battle.as_ref() {
                 let ground = |a: f32, b: f32| run.b.sim.field.walk_height(a, b);
@@ -2747,7 +2832,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 run.power_at = None;
             }
         }
-        if let (Some((ex, ez)), Some(run)) = (enemy, app.war.as_mut().and_then(|w| w.battle.as_mut())) {
+        if let (Some((ex, ez)), Some(run)) =
+            (enemy, app.war.as_mut().and_then(|w| w.battle.as_mut()))
+        {
             if let Some(mut pw) = run.b.sim.powers.take() {
                 use demon_queen_war::powers::Power;
                 let a = pw.cast(&mut run.b.sim, 0, Power::Brasas, ex, ez);
@@ -2758,7 +2845,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         }
         step(&mut app, 24);
         save(&mut app, out, "story-power-embers")?;
-        if let (Some((ex, ez)), Some(run)) = (enemy, app.war.as_mut().and_then(|w| w.battle.as_mut())) {
+        if let (Some((ex, ez)), Some(run)) =
+            (enemy, app.war.as_mut().and_then(|w| w.battle.as_mut()))
+        {
             if let Some(mut pw) = run.b.sim.powers.take() {
                 use demon_queen_war::powers::Power;
                 pw.unlocked.push(Power::Niebla);
@@ -4089,10 +4178,14 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 let centre = hot(&app).unwrap_or((0.0, 0.0));
                 let mut sparked = false;
                 film(&mut app, out, "guerra", 9.0, |app, t| {
-                    let queen = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| {
-                        r.b.queen
-                            .map(|q| (r.b.sim.regiments[q].cx, r.b.sim.regiments[q].cz))
-                    });
+                    let queen = app
+                        .war
+                        .as_ref()
+                        .and_then(|w| w.battle.as_ref())
+                        .and_then(|r| {
+                            r.b.queen
+                                .map(|q| (r.b.sim.regiments[q].cx, r.b.sim.regiments[q].cz))
+                        });
                     let (x, z, dist, turn) = if t < 5.6 {
                         let k = t / 5.6;
                         let s = k * k * (3.0 - 2.0 * k);
@@ -4122,9 +4215,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                     if let Some(w) = app.war.as_mut() {
                         if let Some(run) = w.battle.as_ref() {
                             let field = &run.b.sim.field;
-                            w.cam.frame(x, z, Some(dist), Some(turn), true, &|a: f32, b: f32| {
-                                field.walk_height(a, b)
-                            });
+                            w.cam
+                                .frame(x, z, Some(dist), Some(turn), true, &|a: f32, b: f32| {
+                                    field.walk_height(a, b)
+                                });
                         }
                     }
                 })?;
@@ -4149,8 +4243,7 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                     .as_ref()
                     .and_then(|s| s.queen_army())
                     .map(|a| a.id.clone());
-                if let (Some(id), Some(c)) =
-                    (queen, app.war.as_mut().and_then(|w| w.camp.as_mut()))
+                if let (Some(id), Some(c)) = (queen, app.war.as_mut().and_then(|w| w.camp.as_mut()))
                 {
                     c.sel = Some(Sel::Army(id));
                     c.paint_version += 1;
@@ -4428,7 +4521,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         save(&mut app, out, "boss-09f3-ride-done")?;
         eprintln!(
             "[boss-qa] after the ride: {:?}",
-            app.boss.as_ref().map(|f| (f.varrak.state, f.varrak.spark, f.ride.is_some()))
+            app.boss
+                .as_ref()
+                .map(|f| (f.varrak.state, f.varrak.spark, f.ride.is_some()))
         );
         qa(&mut app, "grab");
         run(&mut app, 0.7, false);
@@ -4452,7 +4547,9 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         save(&mut app, out, "boss-09j-net")?;
         eprintln!(
             "[boss-qa] after the net: {:?}",
-            app.boss.as_ref().map(|f| (f.varrak.state, f.varrak.why, f.rope_cut))
+            app.boss
+                .as_ref()
+                .map(|f| (f.varrak.state, f.varrak.why, f.rope_cut))
         );
         run(&mut app, 1.2, false);
         save(&mut app, out, "boss-09k-net-landed")?;
@@ -6243,7 +6340,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.court_key(KeyCode::Enter);
             wait(&mut app, 0.3);
             play(&mut app, "55-nemi1")?;
-            for (k, v) in [("cita_hoy", 0), ("noche_hoy", 0), ("cita_nemi", 4), ("afecto_nemi", 10)] {
+            for (k, v) in [
+                ("cita_hoy", 0),
+                ("noche_hoy", 0),
+                ("cita_nemi", 4),
+                ("afecto_nemi", 10),
+            ] {
                 app.story.values.insert(k.into(), v);
             }
             app.environment_cycle.set_phase(0.95);

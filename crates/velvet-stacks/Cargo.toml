@@ -4,7 +4,7 @@ description = "Cards on a board: stacks, recipes and timed jobs (a tool crate; s
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-rust-version = "1.99"
+rust-version.workspace = true
 
 [dependencies]
 serde = { workspace = true }

@@ -176,7 +176,7 @@ fn pick_adapter(
             .into_iter()
             .find(|a| {
                 a.get_info().name.to_lowercase().contains(&wanted)
-                    && surface.map_or(true, |s| a.is_surface_supported(s))
+                    && surface.is_none_or(|s| a.is_surface_supported(s))
             })
         {
             return Ok(a);

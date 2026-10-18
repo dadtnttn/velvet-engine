@@ -330,7 +330,7 @@ impl WaterBody3D {
                     self.origin[1] + (j as f32 + 0.5) * self.cell,
                 ];
                 let d = (p[0] - x).hypot(p[1] - z);
-                if d <= radius && best.map_or(true, |b| d < b.0) {
+                if d <= radius && best.is_none_or(|b| d < b.0) {
                     best = Some((d, p));
                 }
             }

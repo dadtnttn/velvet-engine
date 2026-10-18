@@ -140,7 +140,7 @@ scene end {
         ops += 1;
         if !player.choices().is_empty() {
             // alternate choices to exercise both edges; prefer loop for volume
-            let idx = if ops % 17 == 0 {
+            let idx = if ops.is_multiple_of(17) {
                 1.min(player.choices().len() - 1)
             } else {
                 0

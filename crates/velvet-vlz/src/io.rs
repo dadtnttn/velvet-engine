@@ -28,7 +28,7 @@ impl PositionalFile {
     pub(crate) fn read_exact_at(&self, mut buf: &mut [u8], mut offset: u64) -> io::Result<()> {
         if offset
             .checked_add(buf.len() as u64)
-            .map_or(true, |end| end > self.len)
+            .is_none_or(|end| end > self.len)
         {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,

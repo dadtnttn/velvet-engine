@@ -425,7 +425,8 @@ impl Sim {
                 while j >= 0 {
                     let ju = j as usize;
                     if self.state[ju] == S_ALIVE
-                        && (self.px[ju] - x) * (self.px[ju] - x) + (self.pz[ju] - z) * (self.pz[ju] - z)
+                        && (self.px[ju] - x) * (self.px[ju] - x)
+                            + (self.pz[ju] - z) * (self.pz[ju] - z)
                             < r * r
                     {
                         out.push(ju);
@@ -1158,7 +1159,7 @@ impl Sim {
             p.step(self, dt);
             self.powers = Some(p);
         }
-        if self.step_count % 15 == 0 {
+        if self.step_count.is_multiple_of(15) {
             for ri in 0..self.regiments.len() {
                 self.update_morale(ri);
             }
@@ -2259,7 +2260,7 @@ impl Sim {
             } else {
                 // a corner or a post: step round it at an angle (each soldier keeps to one side)
                 let (ox, oz) = (self.px[i], self.pz[i]);
-                let side = if i % 2 == 0 { 1.0 } else { -1.0 };
+                let side = if i.is_multiple_of(2) { 1.0 } else { -1.0 };
                 let mut moved = false;
                 for turn in [0.8f32, 1.4, -0.8, -1.4] {
                     let a = turn * side;

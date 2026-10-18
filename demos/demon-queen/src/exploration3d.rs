@@ -134,12 +134,12 @@ mod act_one;
 mod guide;
 #[path = "zones/war_render.rs"]
 mod war_render;
+#[path = "zones/war_story.rs"]
+mod war_story;
 #[path = "zones/boss.rs"]
 mod zone_boss;
 #[path = "zones/war.rs"]
 mod zone_war;
-#[path = "zones/war_story.rs"]
-mod war_story;
 use camera::*;
 use zone_boss::{boss_camera, BossInput};
 #[path = "explore/queen.rs"]

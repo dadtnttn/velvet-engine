@@ -447,8 +447,15 @@ fn baked_water(field: &Field) -> Option<Mesh3D> {
     let wet = |k: usize| l.water_banks[k] > crate::baked::NO_WATER;
     for j in 0..nz - 1 {
         for i in 0..nx - 1 {
-            let ks = [j * nx + i, j * nx + i + 1, (j + 1) * nx + i, (j + 1) * nx + i + 1];
-            if !ks.iter().any(|&k| l.water[k] > crate::baked::NO_WATER) || !ks.iter().all(|&k| wet(k)) {
+            let ks = [
+                j * nx + i,
+                j * nx + i + 1,
+                (j + 1) * nx + i,
+                (j + 1) * nx + i + 1,
+            ];
+            if !ks.iter().any(|&k| l.water[k] > crate::baked::NO_WATER)
+                || !ks.iter().all(|&k| wet(k))
+            {
                 continue;
             }
             let mut vid = [0u32; 4];
@@ -461,18 +468,27 @@ fn baked_water(field: &Field) -> Option<Mesh3D> {
                     let d = (depth / 1.6).clamp(0.0, 1.0);
                     let marshy = l.marsh[k] > 0.4;
                     let (sh, dp) = if marshy { marsh_c } else { (shallow, deep) };
-                    let mut col = mix(sh, dp, smooth(0.25, 0.45, d) * 0.7 + smooth(0.6, 0.85, d) * 0.3);
+                    let mut col = mix(
+                        sh,
+                        dp,
+                        smooth(0.25, 0.45, d) * 0.7 + smooth(0.6, 0.85, d) * 0.3,
+                    );
                     let r = noise(x * 0.22, z * 0.22, 5) * 0.6 + noise(x * 0.6, z * 0.6, 6) * 0.4;
                     if r > 0.74 {
                         col = scale3(col, 1.0 + 0.12 * (1.0 - d * 0.5));
                     }
-                    col = mix(col, rgb(0xf0a882), if marshy { 0.04 } else { 0.12 } * (1.0 - d));
+                    col = mix(
+                        col,
+                        rgb(0xf0a882),
+                        if marshy { 0.04 } else { 0.12 } * (1.0 - d),
+                    );
                     let shore = l.water[k] <= crate::baked::NO_WATER || depth < 0.12;
                     if shore && !marshy {
                         col = mix(col, foam, 0.45);
                     }
-                    let a = (if marshy { 0.88 } else { 0.74 } + (0.95 - 0.74) * smooth(0.1, 0.7, d))
-                        .min(0.96)
+                    let a = (if marshy { 0.88 } else { 0.74 }
+                        + (0.95 - 0.74) * smooth(0.1, 0.7, d))
+                    .min(0.96)
                         * smooth(-0.05, 0.05, depth);
                     let mut v = MeshVertex3D::new([x, y, z], [0.0, 1.0, 0.0], [0.0, 0.0]);
                     v.color = [col[0], col[1], col[2], a];
@@ -899,7 +915,15 @@ fn baked_scatter(field: &Field, out: &mut Vec<Instance>) {
         let s = t.scale;
         out.push(Instance {
             kind,
-            transform: place(t.x, field.height_at(t.x, t.z) - 0.12, t.z, t.rot, s * sxz, s * sy, s * sxz),
+            transform: place(
+                t.x,
+                field.height_at(t.x, t.z) - 0.12,
+                t.z,
+                t.rot,
+                s * sxz,
+                s * sy,
+                s * sxz,
+            ),
             tint: leaf(t.x, t.z),
         });
     }
@@ -964,7 +988,14 @@ fn baked_scatter(field: &Field, out: &mut Vec<Instance>) {
         } else if (l.grass[k] as f32) * 0.8 > roll && tufts < 3200 {
             if r.next() < 0.06 {
                 let hue = r.next();
-                let kind = FLOWER + if hue < 0.5 { 0 } else if hue < 0.8 { 1 } else { 2 };
+                let kind = FLOWER
+                    + if hue < 0.5 {
+                        0
+                    } else if hue < 0.8 {
+                        1
+                    } else {
+                        2
+                    };
                 let s = 0.8 + r.next() * 0.6;
                 out.push(Instance {
                     kind,

@@ -390,7 +390,7 @@ pub fn thousands(n: usize) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push('.');
         }
         out.push(c);
@@ -2275,10 +2275,7 @@ impl State {
         let mut acts = Vec::new();
         let filter = self.file_filter.trim().to_lowercase();
         if filter.chars().count() >= 2 {
-            let stale = self
-                .file_search
-                .as_ref()
-                .map_or(true, |(f, _)| *f != filter);
+            let stale = self.file_search.as_ref().is_none_or(|(f, _)| *f != filter);
             if stale {
                 let found = files::search(&self.root, &filter, 300);
                 self.file_search = Some((filter.clone(), found));

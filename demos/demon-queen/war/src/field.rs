@@ -782,15 +782,21 @@ impl Field {
             match self.structure(x, z) {
                 Some((SOLID, _, _)) => return true,
                 Some((DECK, _, _)) => return false,
-                Some((WORK, id, _)) if id > 0 && !self.open.get(id - 1).copied().unwrap_or(false) => {
-                    if !self.in_gap(x, z) {
-                        return true;
-                    }
+                Some((WORK, id, _))
+                    if id > 0
+                        && !self.open.get(id - 1).copied().unwrap_or(false)
+                        && !self.in_gap(x, z) =>
+                {
+                    return true;
                 }
                 _ => {}
             }
         }
-        let deep = if self.baked.is_some() { DEEP_BAKED } else { DEEP };
+        let deep = if self.baked.is_some() {
+            DEEP_BAKED
+        } else {
+            DEEP
+        };
         if self.depth_at(x, z) > deep && self.deck_at(x, z).is_none() {
             return true;
         }
@@ -862,7 +868,12 @@ impl Field {
                 let cz = pz0 + (j as f32 + 0.5) * pc;
                 let mut free = !self.blocked(cx, cz);
                 if free {
-                    for (ox, oz) in [(-probe, -probe), (probe, -probe), (-probe, probe), (probe, probe)] {
+                    for (ox, oz) in [
+                        (-probe, -probe),
+                        (probe, -probe),
+                        (-probe, probe),
+                        (probe, probe),
+                    ] {
                         if self.blocked(cx + ox, cz + oz) {
                             free = false;
                         }
@@ -1103,13 +1114,18 @@ impl Field {
     }
 }
 
+/// A battle map's kind, title and blurb.
+type MapNames = (&'static str, &'static str, &'static str);
+
 /// The battle map's names, as the field's spec wants them (static: one copy per map, kept).
-fn names(map: &BattleMap) -> (&'static str, &'static str, &'static str) {
+fn names(map: &BattleMap) -> MapNames {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
-    static NAMES: OnceLock<Mutex<HashMap<String, (&'static str, &'static str, &'static str)>>> =
-        OnceLock::new();
-    let mut m = NAMES.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
+    static NAMES: OnceLock<Mutex<HashMap<String, MapNames>>> = OnceLock::new();
+    let mut m = NAMES
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap();
     *m.entry(map.id.clone()).or_insert_with(|| {
         (
             Box::leak(map.id.clone().into_boxed_str()),

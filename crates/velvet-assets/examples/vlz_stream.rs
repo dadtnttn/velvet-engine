@@ -94,7 +94,7 @@ fn main() {
         assets.pump_async(&streamer, 8);
         busy.push(t.elapsed().as_secs_f64() * 1000.0);
         frames += 1;
-        if frames % 60 == 0 {
+        if frames.is_multiple_of(60) {
             let s = streamer.stats();
             println!(
                 "  t={:5.1}s pending {:5} · read {:7.1} MiB · in flight {:6.1} MiB · cache {:6.1} MiB",

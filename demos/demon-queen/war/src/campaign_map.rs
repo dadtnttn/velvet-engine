@@ -130,7 +130,10 @@ impl MapData {
         let meta: MapJson = serde_json::from_str(json)?;
         let ids: Vec<&str> = PROVINCES.iter().map(|p| p.id).collect();
         anyhow::ensure!(
-            meta.regions.iter().map(|s| s.as_str()).eq(ids.iter().copied()),
+            meta.regions
+                .iter()
+                .map(|s| s.as_str())
+                .eq(ids.iter().copied()),
             "the map's regions are not the campaign's"
         );
         let mut at = 0usize;
@@ -145,11 +148,17 @@ impl MapData {
         let f32_ = |b: &[u8]| f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
         let head = take(32)?;
         let (nx, nz) = (u32_(&head[4..8]) as usize, u32_(&head[8..12]) as usize);
-        let (x0, z0, step) = (f32_(&head[12..16]), f32_(&head[16..20]), f32_(&head[20..24]));
+        let (x0, z0, step) = (
+            f32_(&head[12..16]),
+            f32_(&head[16..20]),
+            f32_(&head[20..24]),
+        );
         let (lo, hi) = (f32_(&head[24..28]), f32_(&head[28..32]));
         let n = nx * nz;
         let h = take(n * 2)?
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| lo + (u16::from_le_bytes([c[0], c[1]]) as f32 / 65535.0) * (hi - lo))
             .collect();
         let lin = |v: u8| {
@@ -161,7 +170,9 @@ impl MapData {
             }
         };
         let color = take(n * 3)?
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|c| [lin(c[0]), lin(c[1]), lin(c[2])])
             .collect();
         let dims = take(8)?;
@@ -175,8 +186,17 @@ impl MapData {
         };
         let nt = u32_(take(4)?) as usize;
         let trees = take(nt * 16)?
-            .chunks_exact(16)
-            .map(|c| [f32_(&c[0..4]), f32_(&c[4..8]), f32_(&c[8..12]), f32_(&c[12..16])])
+            .as_chunks::<16>()
+            .0
+            .iter()
+            .map(|c| {
+                [
+                    f32_(&c[0..4]),
+                    f32_(&c[4..8]),
+                    f32_(&c[8..12]),
+                    f32_(&c[12..16]),
+                ]
+            })
             .collect();
         Ok(MapData {
             nx,
@@ -208,7 +228,12 @@ impl MapData {
     pub fn height(&self, x: f32, z: f32) -> f32 {
         let (i, j, u, v) = self.cell(x, z);
         let k = j * self.nx + i;
-        let (a, b, c, d) = (self.h[k], self.h[k + 1], self.h[k + self.nx], self.h[k + self.nx + 1]);
+        let (a, b, c, d) = (
+            self.h[k],
+            self.h[k + 1],
+            self.h[k + self.nx],
+            self.h[k + self.nx + 1],
+        );
         a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
     }
 
@@ -377,7 +402,12 @@ impl Land {
                 h[j * nx + i] = land_height(X0 + i as f32, Z0 + j as f32);
             }
         }
-        Land { nx, nz, h, step: 1.0 }
+        Land {
+            nx,
+            nz,
+            h,
+            step: 1.0,
+        }
     }
 
     pub fn height_at(&self, x: f32, z: f32) -> f32 {
@@ -555,7 +585,7 @@ pub fn water_web(land: &Land) -> Mesh3D {
         indices.extend([base, base + 1, base + 3, base, base + 3, base + 2]);
     }
     // whichever winding, face up
-    for t in indices.chunks_exact_mut(3) {
+    for t in indices.as_chunks_mut::<3>().0 {
         let p = |k: u32| Vec3::from_array(vertices[k as usize].position);
         let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
         if (b - a).cross(c - a).y < 0.0 {
@@ -585,7 +615,7 @@ pub fn wave_normals(size: usize, seed: u32) -> Vec<u8> {
         .map(|_| {
             let kx = (rnd() * 12.0 - 6.0).round();
             let ky = (rnd() * 12.0 - 6.0).round();
-            (kx, ky, rnd() * 6.28, 0.3 + rnd())
+            (kx, ky, rnd() * std::f32::consts::TAU, 0.3 + rnd())
         })
         .collect();
     let mut h = vec![0.0f32; size * size];
@@ -593,7 +623,11 @@ pub fn wave_normals(size: usize, seed: u32) -> Vec<u8> {
         for x in 0..size {
             h[y * size + x] = waves
                 .iter()
-                .map(|(kx, ky, p, a)| a * (((kx * x as f32 + ky * y as f32) / size as f32) * 6.283 + p).sin())
+                .map(|(kx, ky, p, a)| {
+                    a * (((kx * x as f32 + ky * y as f32) / size as f32) * std::f32::consts::TAU
+                        + p)
+                        .sin()
+                })
                 .sum();
         }
     }
@@ -936,7 +970,7 @@ pub fn roads(land: &Land) -> Option<Mesh3D> {
                 };
                 // the ribbon faces up whichever way it was wound
                 let mut s = s;
-                for t in s.tris.chunks_exact_mut(3) {
+                for t in s.tris.as_chunks_mut::<3>().0 {
                     let (a, bq, c) = (
                         Vec3::from_array(t[0]),
                         Vec3::from_array(t[1]),
@@ -954,7 +988,13 @@ pub fn roads(land: &Land) -> Option<Mesh3D> {
 }
 
 /// A dirt ribbon laid along a line on the land (skipping the bits `skip` says, and the water).
-fn road_ribbon(b: &mut Builder, land: &Land, line: &[LinePoint], road: [f32; 3], skip: impl Fn(&LinePoint) -> bool) {
+fn road_ribbon(
+    b: &mut Builder,
+    land: &Land,
+    line: &[LinePoint],
+    road: [f32; 3],
+    skip: impl Fn(&LinePoint) -> bool,
+) {
     for k in 0..line.len().saturating_sub(1) {
         let (p, q) = (line[k], line[k + 1]);
         if skip(&p) || skip(&q) {
@@ -975,7 +1015,7 @@ fn road_ribbon(b: &mut Builder, land: &Land, line: &[LinePoint], road: [f32; 3],
                 [q.x - nx, hb + 0.08, q.z - nz],
             ],
         };
-        for t in s.tris.chunks_exact_mut(3) {
+        for t in s.tris.as_chunks_mut::<3>().0 {
             let (a, bq, c) = (
                 Vec3::from_array(t[0]),
                 Vec3::from_array(t[1]),
@@ -1072,8 +1112,14 @@ impl Provinces {
             .filter(|m| m.rw == cw && m.rh == ch && m.edge_region.len() == cw * ch)
             .map(|m| {
                 (
-                    m.edge_region.iter().map(|&v| v as f32 / 255.0 * 2.0).collect(),
-                    m.edge_group.iter().map(|&v| v as f32 / 255.0 * 3.0).collect(),
+                    m.edge_region
+                        .iter()
+                        .map(|&v| v as f32 / 255.0 * 2.0)
+                        .collect(),
+                    m.edge_group
+                        .iter()
+                        .map(|&v| v as f32 / 255.0 * 3.0)
+                        .collect(),
                 )
             });
         // the painted picture, twice as fine: the region by the nearest raster texel, the
@@ -1087,7 +1133,10 @@ impl Provinces {
             let x0 = (fx.floor().max(0.0) as usize).min(cw - 1);
             let y0 = (fy.floor().max(0.0) as usize).min(ch - 1);
             let (x1, y1) = ((x0 + 1).min(cw - 1), (y0 + 1).min(ch - 1));
-            let (tx, ty) = ((fx - x0 as f32).clamp(0.0, 1.0), (fy - y0 as f32).clamp(0.0, 1.0));
+            let (tx, ty) = (
+                (fx - x0 as f32).clamp(0.0, 1.0),
+                (fy - y0 as f32).clamp(0.0, 1.0),
+            );
             let a = v[y0 * cw + x0] * (1.0 - tx) + v[y0 * cw + x1] * tx;
             let b = v[y1 * cw + x0] * (1.0 - tx) + v[y1 * cw + x1] * tx;
             a * (1.0 - ty) + b * ty
@@ -1114,7 +1163,16 @@ impl Provinces {
                 // the region across the border (only near one)
                 if id != 255 && pd[k] < 120 {
                     'look: for r in 1..=8i32 {
-                        for (dx, dy) in [(r, 0), (-r, 0), (0, r), (0, -r), (r, r), (-r, r), (r, -r), (-r, -r)] {
+                        for (dx, dy) in [
+                            (r, 0),
+                            (-r, 0),
+                            (0, r),
+                            (0, -r),
+                            (r, r),
+                            (-r, r),
+                            (r, -r),
+                            (-r, -r),
+                        ] {
                             let (qx, qy) = (bx as i32 + dx, by as i32 + dy);
                             if qx < 0 || qy < 0 || qx >= cw as i32 || qy >= ch as i32 {
                                 continue;
@@ -1160,15 +1218,12 @@ impl Provinces {
     /// core), faint between regions of one owner, a heavier line between the ten provinces; the
     /// reach, the chosen and the hovered region; the fog.
     pub fn paint(&self, state: &Campaign, p: &Paint) -> Vec<u8> {
-        let to8 = |hex: u32| {
-            let c = rgb(hex);
-            [c[0], c[1], c[2]].map(|v| (v.powf(1.0 / 2.2) * 255.0).round())
-        };
         let owners: Vec<Faction> = PROVINCES.iter().map(|pr| state.prov(pr.id).owner).collect();
-        let n = PROVINCES.len();
         let mut out = vec![0u8; self.pw * self.ph * 4];
         // rows in bands, one per core (the hover repaints it: it must be quick)
-        let threads = std::thread::available_parallelism().map_or(4, |t| t.get()).clamp(1, 16);
+        let threads = std::thread::available_parallelism()
+            .map_or(4, |t| t.get())
+            .clamp(1, 16);
         let rows = self.ph.div_ceil(threads);
         let pw = self.pw;
         std::thread::scope(|scope| {
@@ -1180,7 +1235,14 @@ impl Provinces {
         out
     }
 
-    fn paint_rows(&self, state: &Campaign, p: &Paint, owners: &[Faction], y0: usize, out: &mut [u8]) {
+    fn paint_rows(
+        &self,
+        state: &Campaign,
+        p: &Paint,
+        owners: &[Faction],
+        y0: usize,
+        out: &mut [u8],
+    ) {
         let to8 = |hex: u32| {
             let c = rgb(hex);
             [c[0], c[1], c[2]].map(|v| (v.powf(1.0 / 2.2) * 255.0).round())
@@ -1220,7 +1282,13 @@ impl Provinces {
                 let frontier = other < n && owners[other] != owners[id];
                 let [mut r, mut g, mut b] = c;
                 let mut a = 0.04f32;
-                let mut lay = |col: [f32; 3], alpha: f32, t: f32, r: &mut f32, g: &mut f32, b: &mut f32, a: &mut f32| {
+                let lay = |col: [f32; 3],
+                           alpha: f32,
+                           t: f32,
+                           r: &mut f32,
+                           g: &mut f32,
+                           b: &mut f32,
+                           a: &mut f32| {
                     let t = t.clamp(0.0, 1.0);
                     *r += (col[0] - *r) * t;
                     *g += (col[1] - *g) * t;
@@ -1243,13 +1311,41 @@ impl Provinces {
                 let _ = (bright, dp);
                 // the owner's colour washed in along a frontier (the lines are the ribbons')
                 if frontier {
-                    lay(c, 0.26, 1.0 - smooth(0.0, 0.85, d), &mut r, &mut g, &mut b, &mut a);
+                    lay(
+                        c,
+                        0.26,
+                        1.0 - smooth(0.0, 0.85, d),
+                        &mut r,
+                        &mut g,
+                        &mut b,
+                        &mut a,
+                    );
                 } else {
-                    lay(c, 0.1, 1.0 - smooth(0.0, 0.85, d), &mut r, &mut g, &mut b, &mut a);
+                    lay(
+                        c,
+                        0.1,
+                        1.0 - smooth(0.0, 0.85, d),
+                        &mut r,
+                        &mut g,
+                        &mut b,
+                        &mut a,
+                    );
                 }
                 if hi || sel || hover {
-                    let gold = if sel || hover { [255.0, 222.0, 150.0] } else { [242.0, 181.0, 74.0] };
-                    lay(gold, 0.3, 1.0 - smooth(0.0, 1.0, d), &mut r, &mut g, &mut b, &mut a);
+                    let gold = if sel || hover {
+                        [255.0, 222.0, 150.0]
+                    } else {
+                        [242.0, 181.0, 74.0]
+                    };
+                    lay(
+                        gold,
+                        0.3,
+                        1.0 - smooth(0.0, 1.0, d),
+                        &mut r,
+                        &mut g,
+                        &mut b,
+                        &mut a,
+                    );
                 }
                 if fog {
                     let nz = noise(x as f32 / 80.0, y as f32 / 80.0, 5) * 0.25;
@@ -1334,10 +1430,18 @@ impl Provinces {
                     };
                     lay(inf.c, 0.3, 1.0 - smooth(0.7, 1.05, d));
                     if inf.hi || inf.sel {
-                        let gold = if inf.sel { [255.0, 216.0, 138.0] } else { [242.0, 181.0, 74.0] };
+                        let gold = if inf.sel {
+                            [255.0, 216.0, 138.0]
+                        } else {
+                            [242.0, 181.0, 74.0]
+                        };
                         lay(gold, 0.45, 1.0 - smooth(0.9, 1.5, d));
                     }
-                    let band = if inf.sel || inf.hover { [255.0, 226.0, 150.0] } else { inf.b };
+                    let band = if inf.sel || inf.hover {
+                        [255.0, 226.0, 150.0]
+                    } else {
+                        inf.b
+                    };
                     lay(band, 0.92, 1.0 - smooth(0.42, 0.58, d));
                     lay([20.0, 10.0, 28.0], 0.85, 1.0 - smooth(0.1, 0.22, d));
                     lay([14.0, 8.0, 20.0], 0.95, 1.0 - smooth(0.2, 0.34, dp));
@@ -1449,7 +1553,10 @@ mod tests {
     #[test]
     fn the_war_map_2_reads_and_its_regions_are_the_campaigns() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../data/guerra");
-        let (Ok(bin), Ok(json)) = (std::fs::read(dir.join("mapa.bin")), std::fs::read_to_string(dir.join("mapa.json"))) else {
+        let (Ok(bin), Ok(json)) = (
+            std::fs::read(dir.join("mapa.bin")),
+            std::fs::read_to_string(dir.join("mapa.json")),
+        ) else {
             return; // not exported here
         };
         let m = MapData::parse(&bin, &json).expect("a war map");
@@ -1463,7 +1570,12 @@ mod tests {
         assert!(seen.iter().all(|&n| n > 200), "{seen:?}");
         for (i, p) in PROVINCES.iter().enumerate() {
             let (sx, sz) = p.site();
-            assert_eq!(m.region_near(sx, sz), i, "{} not under its settlement", p.id);
+            assert_eq!(
+                m.region_near(sx, sz),
+                i,
+                "{} not under its settlement",
+                p.id
+            );
             assert!(m.height(sx, sz) > WATER, "{} under water", p.id);
         }
         assert!(m.trees.len() > 1000);

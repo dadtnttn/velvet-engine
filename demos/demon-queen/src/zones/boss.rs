@@ -617,7 +617,11 @@ impl BossScene {
         let (mut seal_rod, mut seal_face, mut seal_gem, mut rock) =
             (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         // The loose rock modelled with the plaza (Blender), if it is there: textured like the cliffs.
-        let new_rock: Vec<Part> = if runtime_3d_root().join("penascal").join("combate_rock.glb").exists() {
+        let new_rock: Vec<Part> = if runtime_3d_root()
+            .join("penascal")
+            .join("combate_rock.glb")
+            .exists()
+        {
             load_parts(renderer, device, queue, &mut cache, "combate_rock.glb")?
                 .into_iter()
                 .map(|(_, p)| p)
@@ -1013,7 +1017,8 @@ pub(super) fn boss_camera(fight: &Fight) -> Camera3D {
     };
     let k = ease_out_cubic((ride.t / 0.4).clamp(0.0, 1.0));
     let position = own.position.lerp(eye, k);
-    let target = (own.position + (own.target - own.position).normalize_or_zero() * 3.0).lerp(target, k);
+    let target =
+        (own.position + (own.target - own.position).normalize_or_zero() * 3.0).lerp(target, k);
     Camera3D {
         position,
         target,
@@ -1554,7 +1559,10 @@ impl RenderState {
             let left = (at - t).max(0.0);
             let k = (1.0 - left / 1.8).clamp(0.0, 1.0);
             let pulse = 1.0 + 0.08 * (t * (10.0 + 14.0 * k)).sin();
-            for (size, alpha) in [(r * 2.0 * pulse, 0.22 + 0.3 * k), (r * 2.0 * (1.0 - 0.55 * k) + 0.4, 0.14 + 0.24 * k)] {
+            for (size, alpha) in [
+                (r * 2.0 * pulse, 0.22 + 0.3 * k),
+                (r * 2.0 * (1.0 - 0.55 * k) + 0.4, 0.14 + 0.24 * k),
+            ] {
                 draws.push(MeshDraw3D {
                     mesh: scene.quad,
                     transform: Mat4::from_cols(
@@ -2219,7 +2227,11 @@ impl RenderState {
             let l = &plan.lamps[i];
             let flicker =
                 1.0 + (t * 7.0 + i as f32 * 1.7).sin() * 0.07 + (t * 17.0 + i as f32).sin() * 0.04;
-            let (strength, reach) = if l.power > 0.9 { (9.5, 12.0) } else { (7.0, 7.5) };
+            let (strength, reach) = if l.power > 0.9 {
+                (9.5, 12.0)
+            } else {
+                (7.0, 7.5)
+            };
             lights.push(PointLight3D::new(
                 Vec3::new(l.x, l.y, l.z),
                 colour(&l.color),
@@ -2339,7 +2351,8 @@ impl RenderState {
                         QteAsk::Beat { beat, slack } => Some(((beat - q.t) / beat, slack / beat)),
                         _ => None,
                     },
-                    fill: matches!(q.ask, QteAsk::Hold { .. } | QteAsk::Mash { .. }).then_some(q.fill),
+                    fill: matches!(q.ask, QteAsk::Hold { .. } | QteAsk::Mash { .. })
+                        .then_some(q.fill),
                     left: (q.window > 0.0).then(|| (1.0 - q.t / q.window).clamp(0.0, 1.0)),
                     step: q.step,
                     steps: q.steps,

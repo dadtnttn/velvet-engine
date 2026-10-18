@@ -8,8 +8,8 @@ use std::collections::VecDeque;
 
 use super::map_overlay::{
     ArmyTag, BannerTag, BattleView, CampPanel, CampaignView, Glyph, MarchView, MiniDot, Minimap,
-    Modal, Objective, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus, WarButton,
-    WarHit, WarView,
+    Modal, Objective, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus,
+    WarButton, WarHit, WarView,
 };
 use super::*;
 use demon_queen_dungeon::i18n::tr;
@@ -709,8 +709,16 @@ impl App {
         let ez = theirs.iter().map(|r| r.cz).sum::<f32>() / m;
         let (dx, dz) = (ex - cx, ez - cz);
         let l = dx.hypot(dz).max(1.0);
-        let yaw = if b.sim.field.baked.is_some() { (-dx).atan2(-dz) } else { 0.0 };
-        let (fx, fz) = if b.sim.field.baked.is_some() { (dx / l, dz / l) } else { (0.0, -1.0) };
+        let yaw = if b.sim.field.baked.is_some() {
+            (-dx).atan2(-dz)
+        } else {
+            0.0
+        };
+        let (fx, fz) = if b.sim.field.baked.is_some() {
+            (dx / l, dz / l)
+        } else {
+            (0.0, -1.0)
+        };
         cam.frame(
             cx + fx * 40.0,
             cz + fz * 40.0,
@@ -1382,7 +1390,11 @@ impl App {
                     if let Some(mut pw) = run.b.sim.powers.take() {
                         let cast = pw.cast(&mut run.b.sim, 0, p, gx, gz);
                         run.b.sim.powers = Some(pw);
-                        ui_sfx::play(if cast { ui_sfx::UiSfx::Equip } else { ui_sfx::UiSfx::Error });
+                        ui_sfx::play(if cast {
+                            ui_sfx::UiSfx::Equip
+                        } else {
+                            ui_sfx::UiSfx::Error
+                        });
                     }
                     run.power_aim = None;
                     run.power_at = None;
@@ -1402,7 +1414,16 @@ impl App {
                 if let Some((gx, gz)) = gp {
                     let yaw = build_yaw(&run.b, kind, gx, gz);
                     if let Some(mut s) = run.b.sim.siege.take() {
-                        let ok = s.check(&run.b.sim, 0, kind, gx, gz, yaw, run.b.deploying, run.b.zone);
+                        let ok = s.check(
+                            &run.b.sim,
+                            0,
+                            kind,
+                            gx,
+                            gz,
+                            yaw,
+                            run.b.deploying,
+                            run.b.zone,
+                        );
                         match ok {
                             Ok(()) => {
                                 let deploying = run.b.deploying;
@@ -1591,7 +1612,11 @@ impl App {
                 }
                 31 | 32 => {
                     let n = wr::baked::BATTLE_MAPS.len();
-                    w.map_pick = if i == 31 { (w.map_pick + n - 1) % n } else { (w.map_pick + 1) % n };
+                    w.map_pick = if i == 31 {
+                        (w.map_pick + n - 1) % n
+                    } else {
+                        (w.map_pick + 1) % n
+                    };
                     ui_sfx::play(ui_sfx::UiSfx::Move);
                 }
                 33 => {
@@ -1698,8 +1723,13 @@ impl App {
             }
             WarHit::Build(k) => {
                 if let Some(run) = w.battle.as_mut() {
-                    let kind = wr::siege::Kind::ALL[(k as usize).min(wr::siege::Kind::ALL.len() - 1)];
-                    run.build = if run.build == Some(kind) { None } else { Some(kind) };
+                    let kind =
+                        wr::siege::Kind::ALL[(k as usize).min(wr::siege::Kind::ALL.len() - 1)];
+                    run.build = if run.build == Some(kind) {
+                        None
+                    } else {
+                        Some(kind)
+                    };
                     run.ghost = None;
                     Self::select_engine(run, None);
                     ui_sfx::play(ui_sfx::UiSfx::Select);
@@ -1904,7 +1934,12 @@ impl App {
                 0.0,
             ));
         }
-        let siege = run.b.sim.siege.as_ref().is_some_and(|s| s.mode == wr::siege::Mode::Siege);
+        let siege = run
+            .b
+            .sim
+            .siege
+            .as_ref()
+            .is_some_and(|s| s.mode == wr::siege::Mode::Siege);
         if siege {
             self.queue_war_scene("guerra.asedio");
         }
@@ -1964,8 +1999,17 @@ impl App {
                 (Some(kind), Some((gx, gz))) => {
                     let yaw = build_yaw(&run.b, kind, gx, gz);
                     let why = run.b.sim.siege.as_ref().and_then(|s| {
-                        s.check(&run.b.sim, 0, kind, gx, gz, yaw, run.b.deploying, run.b.zone)
-                            .err()
+                        s.check(
+                            &run.b.sim,
+                            0,
+                            kind,
+                            gx,
+                            gz,
+                            yaw,
+                            run.b.deploying,
+                            run.b.zone,
+                        )
+                        .err()
                     });
                     Some((gx, gz, yaw, why))
                 }
@@ -2295,7 +2339,11 @@ impl App {
                             Some(wr::baked::WorkKind::Palisade) => "¡La empalizada cede!",
                             _ => "¡Brecha en la muralla!",
                         };
-                        said.push((what.to_owned(), if mine_hold { 0xe2334a } else { 0x4fd08a }, false));
+                        said.push((
+                            what.to_owned(),
+                            if mine_hold { 0xe2334a } else { 0x4fd08a },
+                            false,
+                        ));
                     }
                     Se::GateDown { x, z, .. } => {
                         fx.push(Fx::Puff {
@@ -2343,10 +2391,18 @@ impl App {
                             n: 14,
                             color: [1.0, 0.55, 0.2],
                         });
-                        sounds.push(sound(dungeon::sound::Sfx::Rubble, at(en.x, en.z), near(en.x, en.z)));
+                        sounds.push(sound(
+                            dungeon::sound::Sfx::Rubble,
+                            at(en.x, en.z),
+                            near(en.x, en.z),
+                        ));
                         let name = en.spec().name;
                         if en.side == 0 {
-                            said.push((format!("Han destruido tu {}", name.to_lowercase()), 0xe2334a, false));
+                            said.push((
+                                format!("Han destruido tu {}", name.to_lowercase()),
+                                0xe2334a,
+                                false,
+                            ));
                         } else {
                             said.push((format!("{name} enemiga destruida"), 0x4fd08a, false));
                         }
@@ -2354,15 +2410,25 @@ impl App {
                     Se::Docked { engine } => {
                         let en = &siege.engines[engine];
                         let line = match en.kind {
-                            Eng::TorreAsedio => "La torre de asedio baja el puente sobre la muralla",
+                            Eng::TorreAsedio => {
+                                "La torre de asedio baja el puente sobre la muralla"
+                            }
                             _ => "El ariete llega a la puerta",
                         };
-                        said.push((line.to_owned(), if en.side == 0 { 0xf2b54a } else { 0xe2334a }, en.side == 1));
+                        said.push((
+                            line.to_owned(),
+                            if en.side == 0 { 0xf2b54a } else { 0xe2334a },
+                            en.side == 1,
+                        ));
                     }
                     Se::Ram { engine } => {
                         let en = &siege.engines[engine];
                         if thuds < 3 {
-                            sounds.push(sound(dungeon::sound::Sfx::HitBone, at(en.x, en.z), near(en.x, en.z)));
+                            sounds.push(sound(
+                                dungeon::sound::Sfx::HitBone,
+                                at(en.x, en.z),
+                                near(en.x, en.z),
+                            ));
                             thuds += 1;
                         }
                         fx.push(Fx::Puff {
@@ -3113,7 +3179,9 @@ impl App {
         let p = wd::province(&b.prov);
         let setup = Setup {
             // the region's own battle map (the war map 2.0's), else the field it used to have
-            map: wr::baked::map_of_region(p.id).unwrap_or(p.battle).to_owned(),
+            map: wr::baked::map_of_region(p.id)
+                .unwrap_or(p.battle)
+                .to_owned(),
             title: format!("Batalla de {}", p.name),
             kicker: format!("CAMPAÑA · TURNO {}", s.turn),
             subtitle: if player_attacks {
@@ -3463,7 +3531,14 @@ impl App {
         };
         match w.page {
             WarPage::Table(page) => {
-                table_view(&mut view, page, w.scale, campaign.as_ref(), w.focus, (w.map_pick, w.map_attack));
+                table_view(
+                    &mut view,
+                    page,
+                    w.scale,
+                    campaign.as_ref(),
+                    w.focus,
+                    (w.map_pick, w.map_attack),
+                );
                 if page == 2 {
                     relics_view(&mut view, w.focus, &relics_found, &powers);
                 }
@@ -3725,7 +3800,10 @@ fn table_view(
         t.title = "Batallas rápidas".into();
         // a battle on any of the continent's battle maps: which, and whether she attacks
         let (id, region) = wr::baked::BATTLE_MAPS[map_pick.min(wr::baked::BATTLE_MAPS.len() - 1)];
-        let place = wd::PROVINCES.iter().find(|p| p.id == region).map_or(id, |p| p.name);
+        let place = wd::PROVINCES
+            .iter()
+            .find(|p| p.id == region)
+            .map_or(id, |p| p.name);
         let siege = id.starts_with("asedio_");
         view.buttons.push(row(
             [x, y, w, 88.0],
@@ -3734,7 +3812,11 @@ fn table_view(
             &format!(
                 "{} · {}",
                 place,
-                if map_attack { "Atacas tú" } else { "Te atacan" }
+                if map_attack {
+                    "Atacas tú"
+                } else {
+                    "Te atacan"
+                }
             ),
             WarHit::Table(30),
             Glyph::Map,
@@ -3742,7 +3824,11 @@ fn table_view(
         for (k, (label, hit, on)) in [
             ("‹", WarHit::Table(31), false),
             ("›", WarHit::Table(32), false),
-            (if map_attack { "Ataque" } else { "Defensa" }, WarHit::Table(33), true),
+            (
+                if map_attack { "Ataque" } else { "Defensa" },
+                WarHit::Table(33),
+                true,
+            ),
         ]
         .into_iter()
         .enumerate()
@@ -3850,17 +3936,35 @@ fn relics_view(view: &mut WarView, focus: usize, found: &[bool], powers: &[wr::p
     );
     let (x, y0, w, h) = (120.0, 290.0, 382.0, 50.0);
     let mut cards: Vec<TableCard> = Vec::new();
-    let place = |id: &str| wd::PROVINCES.iter().find(|p| p.id == id).map_or(id.to_owned(), |p| p.name.to_owned());
+    let place = |id: &str| {
+        wd::PROVINCES
+            .iter()
+            .find(|p| p.id == id)
+            .map_or(id.to_owned(), |p| p.name.to_owned())
+    };
     for (k, r) in all.iter().enumerate() {
         let have = found.get(k).copied().unwrap_or(false);
-        let (cx, cy) = (x + (k % 2) as f32 * (w + 16.0), y0 + (k / 2) as f32 * (h + 8.0));
-        let hint = if r.on_field() { "En su campo de batalla" } else { "Al tomar la región" };
+        let (cx, cy) = (
+            x + (k % 2) as f32 * (w + 16.0),
+            y0 + (k / 2) as f32 * (h + 8.0),
+        );
+        let hint = if r.on_field() {
+            "En su campo de batalla"
+        } else {
+            "Al tomar la región"
+        };
         let (title, detail) = if have {
             (r.nombre.clone(), place(&r.region))
         } else {
             (place(&r.region), format!("Sin encontrar · {hint}"))
         };
-        let mut b = btn([cx, cy, w, h], &title, "", &detail, WarHit::Table(60 + k as u8));
+        let mut b = btn(
+            [cx, cy, w, h],
+            &title,
+            "",
+            &detail,
+            WarHit::Table(60 + k as u8),
+        );
         b.style = 4;
         b.icon = if have { Glyph::Crown } else { Glyph::Map };
         view.buttons.push(b);
@@ -3937,7 +4041,13 @@ fn relics_view(view: &mut WarView, focus: usize, found: &[bool], powers: &[wr::p
             .collect(),
         ..Default::default()
     });
-    let mut back = btn([x, y + 66.0, 360.0, 60.0], "Volver", "Esc", "", WarHit::Table(5));
+    let mut back = btn(
+        [x, y + 66.0, 360.0, 60.0],
+        "Volver",
+        "Esc",
+        "",
+        WarHit::Table(5),
+    );
     back.style = 4;
     back.icon = Glyph::Back;
     view.buttons.push(back);
@@ -4459,9 +4569,18 @@ fn battle_view(
                 wr::powers::Power::Niebla => "Niebla",
                 wr::powers::Power::Raices => "Raíces",
             };
-            let detail = if cd > 0.0 { format!("{} s", cd.ceil() as u32) } else { "lista".into() };
+            let detail = if cd > 0.0 {
+                format!("{} s", cd.ceil() as u32)
+            } else {
+                "lista".into()
+            };
             let mut bt = btn(
-                [x0 + k as f32 * (bw + gap), SCREEN_H - 24.0 - 104.0 - 150.0, bw, bh],
+                [
+                    x0 + k as f32 * (bw + gap),
+                    SCREEN_H - 24.0 - 104.0 - 150.0,
+                    bw,
+                    bh,
+                ],
                 short,
                 sp.key,
                 &detail,
@@ -4486,7 +4605,10 @@ fn battle_view(
                 edge: sp.color,
                 kicker: "PODER DE LA REINA".into(),
                 title: sp.name.into(),
-                rows: vec![("Radio".into(), format!("{} m", sp.radius as u32)), ("Espera".into(), format!("{} s", sp.cooldown as u32))],
+                rows: vec![
+                    ("Radio".into(), format!("{} m", sp.radius as u32)),
+                    ("Espera".into(), format!("{} s", sp.cooldown as u32)),
+                ],
                 text: sp.what.into(),
                 action: "Clic: lanzarlo aquí · Clic derecho: cancelar".into(),
             });
@@ -4498,7 +4620,10 @@ fn battle_view(
         let x = SCREEN_W - 24.0 - 250.0;
         for (k, kind) in s.allowed(0).iter().enumerate() {
             let sp = kind.spec();
-            let idx = wr::siege::Kind::ALL.iter().position(|q| q == kind).unwrap_or(0) as u8;
+            let idx = wr::siege::Kind::ALL
+                .iter()
+                .position(|q| q == kind)
+                .unwrap_or(0) as u8;
             let mut bt = btn(
                 [x, 300.0 + k as f32 * 54.0, 250.0, 46.0],
                 sp.name,
@@ -4551,7 +4676,8 @@ fn battle_view(
             bv.messages.truncate(3);
         }
         // the tip: what is being placed, or the engine under the pointer
-        if let (Some((_, _, _, why)), Some(kind), Some((px, py))) = (run.ghost, run.build, pointer) {
+        if let (Some((_, _, _, why)), Some(kind), Some((px, py))) = (run.ghost, run.build, pointer)
+        {
             let sp = kind.spec();
             view.tip = Some(Tip {
                 at: [px + 24.0, py + 24.0],
@@ -4559,7 +4685,10 @@ fn battle_view(
                 kicker: "CONSTRUIR".into(),
                 title: sp.name.into(),
                 rows: vec![
-                    ("Coste".into(), format!("{} de {} madera", sp.cost as u32, wood as u32)),
+                    (
+                        "Coste".into(),
+                        format!("{} de {} madera", sp.cost as u32, wood as u32),
+                    ),
                     (
                         "Tarda".into(),
                         if b.deploying {
@@ -4585,8 +4714,15 @@ fn battle_view(
                 } else {
                     "Arrimada a la muralla".into()
                 }
-            } else if matches!(e.kind, wr::siege::Kind::TorreAsedio | wr::siege::Kind::Ariete) {
-                if b.deploying { "Esperando".into() } else { "Avanzando".into() }
+            } else if matches!(
+                e.kind,
+                wr::siege::Kind::TorreAsedio | wr::siege::Kind::Ariete
+            ) {
+                if b.deploying {
+                    "Esperando".into()
+                } else {
+                    "Avanzando".into()
+                }
             } else if e.reload > 0.0 && (e.kind.stones() || e.kind.bolts()) {
                 "Recargando".into()
             } else {
@@ -4597,13 +4733,20 @@ fn battle_view(
                 ("Estado".into(), state),
             ];
             if e.kind.stones() || e.kind.bolts() {
-                rows.push(("Alcance".into(), format!("{:.0}–{:.0} m", sp.range.0, sp.range.1)));
+                rows.push((
+                    "Alcance".into(),
+                    format!("{:.0}–{:.0} m", sp.range.0, sp.range.1),
+                ));
             }
             let mine = e.side == 0;
             view.tip = Some(Tip {
                 at: [px + 24.0, py + 24.0],
                 edge: if mine { 0xf2b54a } else { 0xe2334a },
-                kicker: if mine { "TU MÁQUINA".into() } else { "MÁQUINA ENEMIGA".into() },
+                kicker: if mine {
+                    "TU MÁQUINA".into()
+                } else {
+                    "MÁQUINA ENEMIGA".into()
+                },
                 title: sp.name.into(),
                 rows,
                 text: sp.what.into(),

@@ -308,7 +308,7 @@ pub fn parse_track_line(parts: &[&str]) -> Result<ChannelTrack, String> {
         .map(|s| s.parse::<f32>())
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| "track numbers".to_string())?;
-    if nums.len() < 2 || nums.len() % 2 != 0 {
+    if nums.len() < 2 || !nums.len().is_multiple_of(2) {
         return Err("track needs time/value pairs".into());
     }
     let mut tr = ChannelTrack::new(channel);

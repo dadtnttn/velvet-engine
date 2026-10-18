@@ -138,7 +138,7 @@ fn main() -> Result<()> {
 
         // Attack every few frames once in range.
         let in_range = dist <= run.loadout.active().range + 4.0;
-        if in_range && frames % 8 == 0 {
+        if in_range && frames.is_multiple_of(8) {
             let candidates: Vec<(usize, Vec2)> = hostiles
                 .iter()
                 .filter(|h| h.health.is_alive())

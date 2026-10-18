@@ -98,7 +98,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/dadtnttn/velvet-engine"
 authors = ["Velvet Engine Contributors"]
-rust-version = "1.80"
+rust-version = "1.99"
 
 [workspace.dependencies]
 # Internal

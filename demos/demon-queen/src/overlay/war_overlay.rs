@@ -2309,13 +2309,35 @@ fn draw_battle(
             plate(v, x, y, w, 64.0, 10.0, o.edge, 1.0);
             kicker(font, v, &o.kicker, x + 26.0, y - 12.0, o.edge, 1.0);
             let ts = fit(font, Face::Title, &o.title, 20.0, w - 60.0);
-            text_shadow(font, v, Face::Title, &o.title, x + 28.0, y + 8.0, ts, rgba(BONE, 1.0));
+            text_shadow(
+                font,
+                v,
+                Face::Title,
+                &o.title,
+                x + 28.0,
+                y + 8.0,
+                ts,
+                rgba(BONE, 1.0),
+            );
             let ds = fit(font, Face::RoundItalic, &o.text, 14.0, w - 60.0);
-            text(font, v, Face::RoundItalic, &o.text, x + 30.0, y + 38.0, ds, rgba(0xd9cce8, 1.0));
+            text(
+                font,
+                v,
+                Face::RoundItalic,
+                &o.text,
+                x + 30.0,
+                y + 38.0,
+                ds,
+                rgba(0xd9cce8, 1.0),
+            );
             if let Some(p) = o.progress {
                 let (bx, by, bw) = (x + 28.0, y + 58.0, w - 60.0);
                 push_rect(v, Rect::new(bx, by, bw, 4.0), rgba(0x000000, 0.5));
-                push_rect(v, Rect::new(bx, by, bw * p.clamp(0.0, 1.0), 4.0), rgba(o.edge, 1.0));
+                push_rect(
+                    v,
+                    Rect::new(bx, by, bw * p.clamp(0.0, 1.0), 4.0),
+                    rgba(o.edge, 1.0),
+                );
             }
         }
     }
@@ -2404,7 +2426,10 @@ fn draw_battle(
         let with_aim;
         let d = match &b.objective {
             Some(o) => {
-                with_aim = format!("{}: {} Construye con el panel de la derecha antes de empezar.", o.title, o.text);
+                with_aim = format!(
+                    "{}: {} Construye con el panel de la derecha antes de empezar.",
+                    o.title, o.text
+                );
                 with_aim.as_str()
             }
             None => fallback,

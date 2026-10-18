@@ -304,7 +304,7 @@ mod tests {
         assert_eq!(mesh.vertex_count(), 33 * 33);
         assert_eq!(mesh.triangle_count(), 32 * 32 * 2);
         assert_eq!(mesh.uvs.len(), 33 * 33 * 2);
-        for n in mesh.normals.chunks_exact(3) {
+        for n in mesh.normals.as_chunks::<3>().0 {
             let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
             assert!((len - 1.0).abs() < 1e-4, "{len}");
             assert!(n[1] > 0.0, "normals point up: {n:?}");

@@ -124,10 +124,7 @@ impl Source for FileSource {
             _ => SourceError::Io(e),
         })?;
         let size = file.metadata()?.len();
-        if offset
-            .checked_add(len as u64)
-            .map_or(true, |end| end > size)
-        {
+        if offset.checked_add(len as u64).is_none_or(|end| end > size) {
             return Err(range_error(path, offset, len, size));
         }
         file.seek(SeekFrom::Start(offset))?;

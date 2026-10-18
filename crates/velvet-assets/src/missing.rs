@@ -68,7 +68,7 @@ pub fn pink_checker_rgba8(size: u32, cell: u32) -> Vec<u8> {
         for x in 0..size {
             let cx = x / cell;
             let cy = y / cell;
-            let pink = (cx + cy) % 2 == 0;
+            let pink = (cx + cy).is_multiple_of(2);
             if pink {
                 data.extend_from_slice(&PINK_CHECKER_RGBA);
             } else {

@@ -309,7 +309,11 @@ impl Campaign {
         if !touches {
             return Some("Tiene que tocar tus tierras");
         }
-        if self.armies.iter().any(|a| a.at == prov && a.faction != Faction::Reina && a.faction != Faction::Libres) {
+        if self
+            .armies
+            .iter()
+            .any(|a| a.at == prov && a.faction != Faction::Reina && a.faction != Faction::Libres)
+        {
             return Some("Hay un ejército enemigo allí");
         }
         if self.purse(Faction::Reina).spark < AWAKEN_SPARK {
@@ -325,7 +329,8 @@ impl Campaign {
             return false;
         }
         self.purse_mut(Faction::Reina).spark -= AWAKEN_SPARK;
-        self.armies.retain(|a| !(a.at == prov && a.faction == Faction::Libres));
+        self.armies
+            .retain(|a| !(a.at == prov && a.faction == Faction::Libres));
         self.set_owner(prov, Faction::Reina, true);
         let name = province(prov).name;
         self.note(
@@ -399,7 +404,7 @@ impl Campaign {
     ) -> impl Iterator<Item = &'a Army> + 'a {
         self.armies
             .iter()
-            .filter(move |a| a.at == prov && faction.map_or(true, |f| a.faction == f))
+            .filter(move |a| a.at == prov && faction.is_none_or(|f| a.faction == f))
     }
 
     pub fn enemies_at<'a>(
@@ -479,7 +484,7 @@ impl Campaign {
         self.armies
             .iter()
             .filter(|a| {
-                a.faction == Faction::Reina && queen_at.as_ref().map_or(true, |(id, _)| *id != a.id)
+                a.faction == Faction::Reina && queen_at.as_ref().is_none_or(|(id, _)| *id != a.id)
             })
             .filter(|a| a.units.iter().any(|u| unit(&u.ty).spark))
             .filter(|a| {
@@ -724,7 +729,10 @@ impl Campaign {
             match how {
                 Crossing::Vado | Crossing::Mar => {
                     a.mp = 0;
-                    (format!("{} cruza por {name}: el día se va en ello.", a.name), LogKind::Info)
+                    (
+                        format!("{} cruza por {name}: el día se va en ello.", a.name),
+                        LogKind::Info,
+                    )
                 }
                 Crossing::Paso => {
                     for u in &mut a.units {
@@ -732,12 +740,21 @@ impl Campaign {
                             u.men = ((u.men as f32 * 0.93).round() as u32).max(1);
                         }
                     }
-                    (format!("{} cruza {name}: el frío y la cuesta se llevan a algunos.", a.name), LogKind::Bad)
+                    (
+                        format!(
+                            "{} cruza {name}: el frío y la cuesta se llevan a algunos.",
+                            a.name
+                        ),
+                        LogKind::Bad,
+                    )
                 }
                 Crossing::Puente => return,
             }
         };
-        if self.army(army_id).is_some_and(|a| a.faction == Faction::Reina) {
+        if self
+            .army(army_id)
+            .is_some_and(|a| a.faction == Faction::Reina)
+        {
             self.note(line, kind);
         }
     }
@@ -755,7 +772,12 @@ impl Campaign {
             self.version = 2;
         }
         while self.purses.len() < 4 {
-            let (gold, food, spark) = start_purse(Faction::ALL.get(self.purses.len()).copied().unwrap_or(Faction::Libres));
+            let (gold, food, spark) = start_purse(
+                Faction::ALL
+                    .get(self.purses.len())
+                    .copied()
+                    .unwrap_or(Faction::Libres),
+            );
             self.purses.push(Purse {
                 gold,
                 food,
@@ -767,8 +789,19 @@ impl Campaign {
             return;
         }
         const OLD: [&str; 13] = [
-            "castillo", "villa", "bosque", "cueva", "madriguera", "cienaga", "penascal", "nido", "puerta",
-            "marca", "trigales", "valdesanto", "capital",
+            "castillo",
+            "villa",
+            "bosque",
+            "cueva",
+            "madriguera",
+            "cienaga",
+            "penascal",
+            "nido",
+            "puerta",
+            "marca",
+            "trigales",
+            "valdesanto",
+            "capital",
         ];
         let old = std::mem::take(&mut self.provinces);
         self.provinces = PROVINCES
@@ -786,7 +819,11 @@ impl Campaign {
         // armies standing where no region is any more go home
         for a in &mut self.armies {
             if !PROVINCES.iter().any(|p| p.id == a.at) {
-                a.at = if a.faction == Faction::Reina { "castillo".into() } else { "capital".into() };
+                a.at = if a.faction == Faction::Reina {
+                    "castillo".into()
+                } else {
+                    "capital".into()
+                };
             }
         }
     }
@@ -1500,7 +1537,7 @@ impl Campaign {
             self.ai_recruit(faction);
         }
         // the Alliance sends a new column every fifth turn
-        if self.turn % 5 == 0 && self.owner("capital") == Faction::Alianza {
+        if self.turn.is_multiple_of(5) && self.owner("capital") == Faction::Alianza {
             let n = self
                 .armies
                 .iter()
@@ -1540,7 +1577,7 @@ impl Campaign {
             }
         }
         // the dimmed gather round Varrak's village
-        if self.turn % 4 == 0 && self.owner("penascal") == Faction::Rebeldes {
+        if self.turn.is_multiple_of(4) && self.owner("penascal") == Faction::Rebeldes {
             if let Some(a) = self
                 .armies
                 .iter_mut()
@@ -1760,13 +1797,28 @@ mod tests {
         // as it was: three purses, the thirteen provinces in their old order
         v["purses"].as_array_mut().unwrap().truncate(3);
         let old = [
-            "castillo", "villa", "bosque", "cueva", "madriguera", "cienaga", "penascal", "nido",
-            "puerta", "marca", "trigales", "valdesanto", "capital",
+            "castillo",
+            "villa",
+            "bosque",
+            "cueva",
+            "madriguera",
+            "cienaga",
+            "penascal",
+            "nido",
+            "puerta",
+            "marca",
+            "trigales",
+            "valdesanto",
+            "capital",
         ];
         let provs: Vec<serde_json::Value> = old
             .iter()
             .map(|id| {
-                let owner = if *id == "cienaga" { "reina" } else { crate::data::province(id).owner.id() };
+                let owner = if *id == "cienaga" {
+                    "reina"
+                } else {
+                    crate::data::province(id).owner.id()
+                };
                 serde_json::json!({"owner": owner, "lit": true})
             })
             .collect();

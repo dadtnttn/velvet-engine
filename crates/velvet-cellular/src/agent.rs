@@ -357,7 +357,7 @@ pub fn dig_at(world: &mut World, particles: &mut ParticleWorld, x: i32, y: i32, 
                 world.set(cx, cy, Cell::air());
                 removed += 1;
                 // debris particles
-                if removed % 3 == 0 {
+                if removed.is_multiple_of(3) {
                     particles.spawn(
                         crate::particles::FreeParticle::new(
                             0,

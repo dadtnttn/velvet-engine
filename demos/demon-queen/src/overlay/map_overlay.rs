@@ -32,8 +32,8 @@ pub(crate) use boss_overlay::{BossCard, BossQte, BossView};
 mod war_overlay;
 pub(crate) use war_overlay::{
     ArmyTag, BannerTag, BattleView, CampPanel, CampaignView, Glyph, MarchView, MiniDot, Minimap,
-    Modal, Objective, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus, WarButton,
-    WarHit, WarView, MINIMAP as WAR_MINIMAP,
+    Modal, Objective, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus,
+    WarButton, WarHit, WarView, MINIMAP as WAR_MINIMAP,
 };
 mod caricias_overlay;
 mod court_overlay;

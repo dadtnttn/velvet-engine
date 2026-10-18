@@ -321,7 +321,7 @@ impl NavMesh {
                         self.z0 + (j as f32 + 0.5) * self.cell,
                     ];
                     let d = dist(p, [x, z]);
-                    if best.map_or(true, |(_, bd)| d < bd) {
+                    if best.is_none_or(|(_, bd)| d < bd) {
                         best = Some((p, d));
                     }
                 }
@@ -568,7 +568,7 @@ fn funnel(portals: &[([f32; 2], [f32; 2])]) -> Vec<[f32; 2]> {
         i += 1;
     }
     let end = portals[portals.len() - 1].0;
-    if out.last().map_or(true, |p| !same(*p, end)) {
+    if out.last().is_none_or(|p| !same(*p, end)) {
         out.push(end);
     }
     out

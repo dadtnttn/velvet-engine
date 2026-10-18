@@ -153,9 +153,7 @@ impl WaterLife3D {
             .map(|b| (b.handle, b.look))
             .collect();
         // Steps along the shore.
-        let moved = self
-            .last_touch
-            .map_or(true, |t| (t - walker).length() > 0.3);
+        let moved = self.last_touch.is_none_or(|t| (t - walker).length() > 0.3);
         if moved {
             for &(handle, _) in &in_view {
                 let Some(body) = renderer.water_body(handle) else {

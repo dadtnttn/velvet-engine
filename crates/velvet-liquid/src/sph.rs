@@ -563,7 +563,7 @@ mod tests {
 
     fn signed_volume_m3(positions: &[f32], indices: &[u32]) -> f64 {
         let mut vol = 0.0f64;
-        for t in indices.chunks_exact(3) {
+        for t in indices.as_chunks::<3>().0 {
             let a = [
                 positions[t[0] as usize * 3] as f64,
                 positions[t[0] as usize * 3 + 1] as f64,

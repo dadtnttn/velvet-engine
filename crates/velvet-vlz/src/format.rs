@@ -290,7 +290,12 @@ impl Index {
 
         let mut blocks = Vec::with_capacity(h.block_count as usize);
         let mut next_free = u64::from(h.header_size);
-        for (i, chunk) in block_table.chunks_exact(BLOCK_RECORD_SIZE).enumerate() {
+        for (i, chunk) in block_table
+            .as_chunks::<BLOCK_RECORD_SIZE>()
+            .0
+            .iter()
+            .enumerate()
+        {
             let b = BlockRecord::decode(chunk);
             if b.raw_size == 0 || b.raw_size > MAX_BLOCK_SIZE {
                 return Err(corrupt(format!("block {i}: raw size {}", b.raw_size)));
@@ -312,7 +317,7 @@ impl Index {
                     b.stored_size, b.raw_size
                 )));
             }
-            if b.offset % u64::from(h.alignment) != 0 {
+            if !b.offset.is_multiple_of(u64::from(h.alignment)) {
                 return Err(corrupt(format!(
                     "block {i}: offset {} is not aligned",
                     b.offset
@@ -332,7 +337,12 @@ impl Index {
         let mut entries = Vec::with_capacity(h.entry_count as usize);
         let mut next_block = 0u32;
         let mut previous: Option<&str> = None;
-        for (i, chunk) in entry_table.chunks_exact(ENTRY_RECORD_SIZE).enumerate() {
+        for (i, chunk) in entry_table
+            .as_chunks::<ENTRY_RECORD_SIZE>()
+            .0
+            .iter()
+            .enumerate()
+        {
             let e = EntryRecord::decode(chunk);
             let start = e.name_offset as usize;
             let stop = start

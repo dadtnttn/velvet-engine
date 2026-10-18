@@ -350,15 +350,19 @@ impl<'a> Reader<'a> {
     fn f32s(&mut self, n: usize) -> Result<Vec<f32>> {
         Ok(self
             .take(n * 4)?
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_le_bytes(*c))
             .collect())
     }
     fn u16s(&mut self, n: usize) -> Result<Vec<u16>> {
         Ok(self
             .take(n * 2)?
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes(c.try_into().unwrap()))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
             .collect())
     }
     fn u8s(&mut self, n: usize) -> Result<Vec<u8>> {
@@ -367,7 +371,9 @@ impl<'a> Reader<'a> {
     fn scatter(&mut self) -> Result<Vec<Scatter>> {
         let n = self.u32()? as usize;
         let v = self.f32s(n * 6)?;
-        Ok(v.chunks_exact(6)
+        Ok(v.as_chunks::<6>()
+            .0
+            .iter()
             .map(|c| Scatter {
                 x: c[0],
                 y: c[1],
@@ -392,16 +398,16 @@ fn read_land(bytes: &[u8]) -> Result<Land> {
     let n = nx * nz;
     let h = r.f32s(n)?;
     let water = r.f32s(n)?;
-    let unit = |v: Vec<u8>| v.into_iter().map(|b| b as f32 / 255.0).collect::<Vec<f32>>();
+    let unit = |v: Vec<u8>| {
+        v.into_iter()
+            .map(|b| b as f32 / 255.0)
+            .collect::<Vec<f32>>()
+    };
     let forest = unit(r.u8s(n)?);
     let marsh = unit(r.u8s(n)?);
     let road = unit(r.u8s(n)?);
     let cliff = unit(r.u8s(n)?);
-    let colour = r
-        .u8s(n * 3)?
-        .chunks_exact(3)
-        .map(|c| [c[0], c[1], c[2]])
-        .collect();
+    let colour = r.u8s(n * 3)?.as_chunks::<3>().0.to_vec();
     let grass = r.u8s(n)?;
     let crop = r.u8s(n)?;
     let reeds = r.u8s(n)?;

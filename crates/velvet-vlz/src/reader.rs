@@ -395,7 +395,7 @@ impl VlzArchive {
     }
 
     fn check_range(&self, e: &EntryRecord, offset: u64, len: u64) -> Result<()> {
-        if offset.checked_add(len).map_or(true, |end| end > e.raw_size) {
+        if offset.checked_add(len).is_none_or(|end| end > e.raw_size) {
             return Err(VlzError::Range {
                 name: self.index.name(e).to_owned(),
                 offset,
@@ -479,7 +479,7 @@ impl VlzArchive {
             if let Err(err) = self.decode_block(name, i, b, out) {
                 failed.store(true, Ordering::Relaxed);
                 let mut slot = first_error.lock().unwrap_or_else(|p| p.into_inner());
-                if slot.as_ref().map_or(true, |(at, _)| i < *at) {
+                if slot.as_ref().is_none_or(|(at, _)| i < *at) {
                     *slot = Some((i, err));
                 }
             }

@@ -447,15 +447,17 @@ impl Siege {
                 return Err("Fuera de tu zona");
             }
         } else {
-            let near_own = sim.regiments.iter().any(|r| {
-                r.side == side && r.alive > 0 && (r.cx - x).hypot(r.cz - z) < 45.0
-            });
+            let near_own = sim
+                .regiments
+                .iter()
+                .any(|r| r.side == side && r.alive > 0 && (r.cx - x).hypot(r.cz - z) < 45.0);
             if !near_own {
                 return Err("Lejos de tus tropas");
             }
-            let near_foe = sim.regiments.iter().any(|r| {
-                r.side != side && r.alive > 0 && (r.cx - x).hypot(r.cz - z) < 28.0
-            });
+            let near_foe = sim
+                .regiments
+                .iter()
+                .any(|r| r.side != side && r.alive > 0 && (r.cx - x).hypot(r.cz - z) < 28.0);
             if near_foe {
                 return Err("Demasiado cerca del enemigo");
             }
@@ -473,13 +475,7 @@ impl Siege {
                 .collect()
         } else {
             let r = sp.radius;
-            vec![
-                (x, z),
-                (x + r, z),
-                (x - r, z),
-                (x, z + r),
-                (x, z - r),
-            ]
+            vec![(x, z), (x + r, z), (x - r, z), (x, z + r), (x, z - r)]
         };
         // not on top of another engine
         for e in self.engines.iter().filter(|e| e.alive) {
@@ -572,21 +568,13 @@ impl Siege {
     fn aim(&self, sim: &Sim, t: Target) -> Option<(f32, f32)> {
         match t {
             Target::Auto => None,
-            Target::Work(w) => self
-                .works
-                .get(w)
-                .filter(|w| !w.broken)
-                .map(|w| (w.x, w.z)),
+            Target::Work(w) => self.works.get(w).filter(|w| !w.broken).map(|w| (w.x, w.z)),
             Target::Regiment(r) => sim
                 .regiments
                 .get(r)
                 .filter(|r| r.alive > 0 && !r.awake)
                 .map(|r| (r.cx, r.cz)),
-            Target::Engine(e) => self
-                .engines
-                .get(e)
-                .filter(|e| e.alive)
-                .map(|e| (e.x, e.z)),
+            Target::Engine(e) => self.engines.get(e).filter(|e| e.alive).map(|e| (e.x, e.z)),
         }
     }
 
@@ -669,7 +657,9 @@ impl Siege {
                     .map(|(w, x, z)| (Target::Work(w.id), x, z))
             };
             if self.openings.is_empty() {
-                if let Some(t) = pick(&[WorkKind::Gate]).or_else(|| pick(&[WorkKind::Wall, WorkKind::Palisade])) {
+                if let Some(t) =
+                    pick(&[WorkKind::Gate]).or_else(|| pick(&[WorkKind::Wall, WorkKind::Palisade]))
+                {
                     return Some(t);
                 }
             }
@@ -877,7 +867,11 @@ impl Siege {
         }
         let speed = self.engines[i].spec().speed;
         let en = &mut self.engines[i];
-        let at = en.path.get(en.path_i).copied().unwrap_or(Point { x: ax, z: az });
+        let at = en
+            .path
+            .get(en.path_i)
+            .copied()
+            .unwrap_or(Point { x: ax, z: az });
         let (mx, mz) = (at.x - en.x, at.z - en.z);
         let d = mx.hypot(mz);
         if d < 0.6 {
@@ -936,7 +930,8 @@ impl Siege {
                 }
                 for j in 0..self.engines.len() {
                     let e = &self.engines[j];
-                    if e.alive && e.side != s.side && (e.x - s.x).hypot(e.z - s.z) < e.spec().radius {
+                    if e.alive && e.side != s.side && (e.x - s.x).hypot(e.z - s.z) < e.spec().radius
+                    {
                         let dmg = if s.from == Kind::Balista { 45.0 } else { 25.0 };
                         self.hurt_engine(j, dmg);
                         s.done = true;
@@ -1035,7 +1030,11 @@ impl Siege {
         match kind {
             WorkKind::Gate => {
                 self.openings.push((wx, wz));
-                self.events.push(SiegeEvent::GateDown { work: w, x: wx, z: wz });
+                self.events.push(SiegeEvent::GateDown {
+                    work: w,
+                    x: wx,
+                    z: wz,
+                });
             }
             WorkKind::Keep => {
                 self.events.push(SiegeEvent::KeepDown { work: w });
@@ -1081,7 +1080,13 @@ impl Siege {
         for j in 0..self.engines.len() {
             let (alive, side, x, z, r) = {
                 let e = &self.engines[j];
-                (e.alive, e.side, e.x, e.z, e.spec().radius.max(e.spec().length / 2.0))
+                (
+                    e.alive,
+                    e.side,
+                    e.x,
+                    e.z,
+                    e.spec().radius.max(e.spec().length / 2.0),
+                )
             };
             if !alive {
                 continue;
@@ -1117,7 +1122,9 @@ impl Siege {
                         .filter(|r| r.side != defender && r.alive > 0)
                         .map(|r| m.works[w].nearest(r.cx, r.cz))
                         .min_by(|a, b| {
-                            (a[0] - x).hypot(a[1] - z).total_cmp(&(b[0] - x).hypot(b[1] - z))
+                            (a[0] - x)
+                                .hypot(a[1] - z)
+                                .total_cmp(&(b[0] - x).hypot(b[1] - z))
                         });
                     near.map_or((x, z), |p| (p[0], p[1]))
                 }
@@ -1247,16 +1254,27 @@ impl Siege {
             return;
         };
         let mut tries = 0;
-        let mut put = |s: &mut Siege, sim: &mut Sim, kind: Kind, x: f32, z: f32, yaw: f32| -> bool {
-            tries += 1;
-            for (ox, oz) in [(0.0, 0.0), (6.0, 0.0), (-6.0, 0.0), (0.0, 6.0), (0.0, -6.0), (9.0, 9.0), (-9.0, -9.0)] {
-                if s.check(sim, side, kind, x + ox, z + oz, yaw, true, zone).is_ok() {
-                    s.place(sim, side, kind, x + ox, z + oz, yaw, true);
-                    return true;
+        let mut put =
+            |s: &mut Siege, sim: &mut Sim, kind: Kind, x: f32, z: f32, yaw: f32| -> bool {
+                tries += 1;
+                for (ox, oz) in [
+                    (0.0, 0.0),
+                    (6.0, 0.0),
+                    (-6.0, 0.0),
+                    (0.0, 6.0),
+                    (0.0, -6.0),
+                    (9.0, 9.0),
+                    (-9.0, -9.0),
+                ] {
+                    if s.check(sim, side, kind, x + ox, z + oz, yaw, true, zone)
+                        .is_ok()
+                    {
+                        s.place(sim, side, kind, x + ox, z + oz, yaw, true);
+                        return true;
+                    }
                 }
-            }
-            false
-        };
+                false
+            };
         let centre = ((zone.x0 + zone.x1) / 2.0, (zone.z0 + zone.z1) / 2.0);
         if self.attacker(side) {
             let mut wide = zone;
@@ -1278,23 +1296,45 @@ impl Siege {
                 }
                 let yaw = (keep.0 - e.x).atan2(keep.1 - e.z);
                 // (the prototype's camp may stand beyond the deployment zone: allowed there)
-                if self.check(sim, side, kind, e.x, e.z, yaw, true, wide).is_ok() {
+                if self
+                    .check(sim, side, kind, e.x, e.z, yaw, true, wide)
+                    .is_ok()
+                {
                     self.place(sim, side, kind, e.x, e.z, yaw, true);
                 }
             }
-            if !self.engines.iter().any(|e| e.side == side && e.kind.stones()) {
+            if !self
+                .engines
+                .iter()
+                .any(|e| e.side == side && e.kind.stones())
+            {
                 let yaw = (keep.0 - centre.0).atan2(keep.1 - centre.1);
                 for dx in [-30.0, 30.0] {
                     put(self, sim, Kind::Catapulta, centre.0 + dx, centre.1, yaw);
                 }
             }
-            if !self.engines.iter().any(|e| e.side == side && e.kind == Kind::Ariete) {
+            if !self
+                .engines
+                .iter()
+                .any(|e| e.side == side && e.kind == Kind::Ariete)
+            {
                 let yaw = (keep.0 - centre.0).atan2(keep.1 - centre.1);
                 put(self, sim, Kind::Ariete, centre.0, centre.1 - 10.0, yaw);
             }
-            if !self.engines.iter().any(|e| e.side == side && e.kind == Kind::TorreAsedio) {
+            if !self
+                .engines
+                .iter()
+                .any(|e| e.side == side && e.kind == Kind::TorreAsedio)
+            {
                 let yaw = (keep.0 - centre.0).atan2(keep.1 - centre.1);
-                put(self, sim, Kind::TorreAsedio, centre.0 + 45.0, centre.1 - 6.0, yaw);
+                put(
+                    self,
+                    sim,
+                    Kind::TorreAsedio,
+                    centre.0 + 45.0,
+                    centre.1 - 6.0,
+                    yaw,
+                );
             }
         } else if self.mode == Mode::Siege {
             // ballistas behind each gate, a catapult by the keep
@@ -1311,11 +1351,25 @@ impl Siege {
                 let (bx, bz) = (gx + dx / l * 16.0, gz + dz / l * 16.0);
                 let yaw = (-dx).atan2(-dz);
                 for s in [-1.0, 1.0] {
-                    put(self, sim, Kind::Balista, bx - dz / l * 9.0 * s, bz + dx / l * 9.0 * s, yaw);
+                    put(
+                        self,
+                        sim,
+                        Kind::Balista,
+                        bx - dz / l * 9.0 * s,
+                        bz + dx / l * 9.0 * s,
+                        yaw,
+                    );
                 }
             }
             let yaw = 0.0;
-            put(self, sim, Kind::Catapulta, keep.0 + 14.0, keep.1 + 14.0, yaw);
+            put(
+                self,
+                sim,
+                Kind::Catapulta,
+                keep.0 + 14.0,
+                keep.1 + 14.0,
+                yaw,
+            );
         } else {
             // in the open: a scorpion behind the middle, stakes before the line
             let (fx, fz) = {
@@ -1335,10 +1389,27 @@ impl Siege {
                 }
             };
             let yaw = fx.atan2(fz);
-            put(self, sim, Kind::Escorpion, centre.0 - fx * 18.0, centre.1 - fz * 18.0, yaw);
+            put(
+                self,
+                sim,
+                Kind::Escorpion,
+                centre.0 - fx * 18.0,
+                centre.1 - fz * 18.0,
+                yaw,
+            );
             for s in [-1.0, 0.0, 1.0] {
-                let (x, z) = (centre.0 + fx * 30.0 - fz * 12.0 * s, centre.1 + fz * 30.0 + fx * 12.0 * s);
-                put(self, sim, Kind::Estacas, x, z, yaw + std::f32::consts::FRAC_PI_2);
+                let (x, z) = (
+                    centre.0 + fx * 30.0 - fz * 12.0 * s,
+                    centre.1 + fz * 30.0 + fx * 12.0 * s,
+                );
+                put(
+                    self,
+                    sim,
+                    Kind::Estacas,
+                    x,
+                    z,
+                    yaw + std::f32::consts::FRAC_PI_2,
+                );
             }
         }
         let _ = tries;

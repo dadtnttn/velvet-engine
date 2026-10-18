@@ -196,10 +196,10 @@ impl Battle {
         // a walled place is a siege (whoever holds it defends the walls); anywhere, both sides
         // may build: more wood for whoever brings a siege
         let map = b.sim.field.baked.clone();
-        let defender = map
-            .as_ref()
-            .filter(|m| m.is_siege())
-            .map(|_| if b.setup.player_attacks { 1u8 } else { 0 });
+        let defender =
+            map.as_ref()
+                .filter(|m| m.is_siege())
+                .map(|_| if b.setup.player_attacks { 1u8 } else { 0 });
         let wood = match defender {
             Some(d) => {
                 let mut w = [0.0f32; 2];
@@ -228,7 +228,11 @@ impl Battle {
     /// horse/wolves/harpies on the wings, the hero behind the centre.
     fn deploy_army(&mut self, side: u8, army: &ArmySetup, zone: Rect, heading: f32) {
         let heading = heading.rem_euclid(2.0 * PI);
-        let heading = if heading > PI { heading - 2.0 * PI } else { heading };
+        let heading = if heading > PI {
+            heading - 2.0 * PI
+        } else {
+            heading
+        };
         // forward (towards the enemy) and across the line (kept pointing east, or south)
         let (fx, fz) = (heading.sin(), heading.cos());
         let (mut lx, mut lz) = (-fz, fx);
@@ -242,7 +246,9 @@ impl Battle {
         let across = (lx.abs() * hw + lz.abs() * hd - 10.0).max(10.0);
         // the front line, 26 m inside the zone's edge towards the enemy
         let (bx, bz) = (zx + fx * (ahead - 26.0), zz + fz * (ahead - 26.0));
-        let at = move |lat: f32, fwd_off: f32| (bx + lx * lat + fx * fwd_off, bz + lz * lat + fz * fwd_off);
+        let at = move |lat: f32, fwd_off: f32| {
+            (bx + lx * lat + fx * fwd_off, bz + lz * lat + fz * fwd_off)
+        };
         let fwd = 1.0f32;
         let front = 0.0f32;
         let cx = 0.0f32;
@@ -357,7 +363,12 @@ impl Battle {
             return;
         }
         for d in [6.0, 12.0, 18.0, 24.0, 32.0, 40.0, 50.0, 62.0, 76.0] {
-            for (ox, oz) in [(fx * d, fz * d), (fz * d, -fx * d), (-fz * d, fx * d), (-fx * d, -fz * d)] {
+            for (ox, oz) in [
+                (fx * d, fz * d),
+                (fz * d, -fx * d),
+                (-fz * d, fx * d),
+                (-fx * d, -fz * d),
+            ] {
                 if bad(self, cx + ox, cz + oz) < 0.04 {
                     let (h, f) = (self.sim.regiments[ri].heading, self.sim.regiments[ri].files);
                     self.place(ri, cx + ox, cz + oz, h, f, false);
@@ -697,7 +708,8 @@ mod tests {
     #[test]
     #[ignore = "reads the battle maps (data/guerra/batallas); run with --ignored on a dev machine"]
     fn a_siege_on_a_battle_map_is_fought_to_its_end() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/guerra/batallas");
+        let root =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/guerra/batallas");
         for id in ["asedio_castillo", "asedio_fortaleza", "vado"] {
             crate::baked::ensure(id, &root).expect("the map");
             for attacks in [false, true] {
@@ -711,7 +723,14 @@ mod tests {
                 let mut s = b.sim.siege.take().unwrap();
                 s.ai_setup(&mut b.sim, 0, b.zone);
                 b.sim.siege = Some(s);
-                b.auto_player = Some(BattleAi::new(0, if attacks { Posture::Attack } else { Posture::Defend }));
+                b.auto_player = Some(BattleAi::new(
+                    0,
+                    if attacks {
+                        Posture::Attack
+                    } else {
+                        Posture::Defend
+                    },
+                ));
                 b.begin();
                 let t0 = std::time::Instant::now();
                 b.skip(16.0 * 60.0, false);

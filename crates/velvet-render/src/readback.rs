@@ -62,7 +62,7 @@ pub fn read_texture_rgba(
         texture.format(),
         wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
     ) {
-        for pixel in pixels.chunks_exact_mut(4) {
+        for pixel in pixels.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
     }
@@ -83,7 +83,11 @@ fn unpad_rows(data: &[u8], padded: usize, row: usize) -> Vec<u8> {
 /// Whether an RGBA8 frame shows nothing: no pixel lit above near-black in red and green (a
 /// capture of a frame that was never drawn).
 pub fn frame_is_blank(rgba: &[u8]) -> bool {
-    !rgba.chunks_exact(4).any(|p| p[0] > 10 && p[1] > 10)
+    !rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .any(|p| p[0] > 10 && p[1] > 10)
 }
 
 #[cfg(test)]

@@ -156,9 +156,19 @@ fn rgba8(img: &gltf::image::Data) -> Option<velvet_render::TextureData3D> {
     let px = &img.pixels;
     let rgba: Vec<u8> = match img.format {
         Format::R8G8B8A8 => px.clone(),
-        Format::R8G8B8 => px.chunks_exact(3).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
+        Format::R8G8B8 => px
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|c| [c[0], c[1], c[2], 255])
+            .collect(),
         Format::R8 => px.iter().flat_map(|&v| [v, v, v, 255]).collect(),
-        Format::R8G8 => px.chunks_exact(2).flat_map(|c| [c[0], c[1], 0, 255]).collect(),
+        Format::R8G8 => px
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .flat_map(|c| [c[0], c[1], 0, 255])
+            .collect(),
         _ => return None,
     };
     Some(velvet_render::TextureData3D {
@@ -187,11 +197,12 @@ pub fn load_textured(path: &Path) -> Result<Vec<TexturedPart>> {
         emissive: Option<[f32; 3]>,
     }
     let mut groups: Vec<Acc> = Vec::new();
-    let mut stack: Vec<(gltf::Node<'_>, Mat4)> = scene.nodes().map(|n| (n, Mat4::IDENTITY)).collect();
+    let mut stack: Vec<(gltf::Node<'_>, Mat4)> =
+        scene.nodes().map(|n| (n, Mat4::IDENTITY)).collect();
     while let Some((node, parent)) = stack.pop() {
         let world = parent * {
             let m = node.transform().matrix();
-            Mat4::from_cols(m[0].into(), m[1].into(), m[2].into(), m[3].into())
+            Mat4::from_cols(m[0], m[1], m[2], m[3])
         };
         if let Some(mesh) = node.mesh() {
             let normal_m = world.inverse().unwrap_or(Mat4::IDENTITY).transpose();
@@ -201,7 +212,10 @@ pub fn load_textured(path: &Path) -> Result<Vec<TexturedPart>> {
                     continue;
                 };
                 let positions: Vec<[f32; 3]> = positions.collect();
-                let normals: Vec<[f32; 3]> = reader.read_normals().map(|n| n.collect()).unwrap_or_default();
+                let normals: Vec<[f32; 3]> = reader
+                    .read_normals()
+                    .map(|n| n.collect())
+                    .unwrap_or_default();
                 let uvs: Vec<[f32; 2]> = reader
                     .read_tex_coords(0)
                     .map(|t| t.into_f32().collect())
@@ -243,9 +257,17 @@ pub fn load_textured(path: &Path) -> Result<Vec<TexturedPart>> {
                     let q = world.transform_point3(Vec3::new(p[0], p[1], p[2]));
                     let n = normals
                         .get(i)
-                        .map(|n| normal_m.transform_vector3(Vec3::new(n[0], n[1], n[2])).normalize_or_zero())
+                        .map(|n| {
+                            normal_m
+                                .transform_vector3(Vec3::new(n[0], n[1], n[2]))
+                                .normalize_or_zero()
+                        })
                         .unwrap_or(Vec3::Y);
-                    let mut v = MeshVertex3D::new([q.x, q.y, q.z], [n.x, n.y, n.z], uvs.get(i).copied().unwrap_or([0.0, 0.0]));
+                    let mut v = MeshVertex3D::new(
+                        [q.x, q.y, q.z],
+                        [n.x, n.y, n.z],
+                        uvs.get(i).copied().unwrap_or([0.0, 0.0]),
+                    );
                     if let Some(c) = colors.get(i) {
                         v.color = *c;
                     }
@@ -281,7 +303,7 @@ pub fn load_textured(path: &Path) -> Result<Vec<TexturedPart>> {
 
 fn flat_normals(positions: &[[f32; 3]], indices: &[u32]) -> Vec<[f32; 3]> {
     let mut n = vec![Vec3::ZERO; positions.len()];
-    for t in indices.chunks_exact(3) {
+    for t in indices.as_chunks::<3>().0 {
         let v = |i: u32| {
             let p = positions[i as usize];
             Vec3::new(p[0], p[1], p[2])
@@ -425,7 +447,7 @@ mod tests {
                 let pieces = load_glb(&path).unwrap();
                 let mesh = crowd_mesh(kind, &pieces, Faction::Reina);
                 assert!(
-                    !mesh.vertices.is_empty() && mesh.indices.len() % 3 == 0,
+                    !mesh.vertices.is_empty() && mesh.indices.len().is_multiple_of(3),
                     "{kind}{lod}"
                 );
                 let parts: std::collections::BTreeSet<i32> =

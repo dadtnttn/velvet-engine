@@ -75,7 +75,9 @@ impl Mesh3D {
             transform.transform_point3(Vec3::new(v[0], v[1], v[2]))
         };
         self.indices
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|t| [p(t[0]), p(t[1]), p(t[2])])
             .collect()
     }
@@ -92,7 +94,7 @@ impl Mesh3D {
         let mut order: Vec<(i32, i32)> = Vec::new();
         let mut groups: std::collections::HashMap<(i32, i32), Vec<u32>> =
             std::collections::HashMap::new();
-        for tri in self.indices.chunks_exact(3) {
+        for tri in self.indices.as_chunks::<3>().0 {
             let mut centre = [0.0f32; 3];
             for &i in tri {
                 let p = self.vertices[i as usize].position;
@@ -1760,7 +1762,9 @@ fn apply_image_overrides(path: &Path, images: &mut [gltf::image::Data]) {
                 data.width,
                 data.height,
                 data.pixels
-                    .chunks_exact(3)
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
                     .flat_map(|p| [p[0], p[1], p[2], 255])
                     .collect(),
             ),
@@ -2802,12 +2806,12 @@ fn texture_data(image: gltf::image::Data) -> TextureData3D {
             }
         }
         gltf::image::Format::R8G8 => {
-            for pair in image.pixels.chunks_exact(2) {
+            for pair in image.pixels.as_chunks::<2>().0 {
                 rgba.extend_from_slice(&[pair[0], pair[1], 0, 255]);
             }
         }
         gltf::image::Format::R8G8B8 => {
-            for rgb in image.pixels.chunks_exact(3) {
+            for rgb in image.pixels.as_chunks::<3>().0 {
                 rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
             }
         }
@@ -5023,8 +5027,8 @@ impl Wgpu3DRenderer {
                 );
                 let window = draw.material.occlusion_window;
                 let cutout =
-                    texture.map_or(true, |t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0);
-                let normal_map = texture.map_or(true, |t| t.normal_map);
+                    texture.is_none_or(|t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0);
+                let normal_map = texture.is_none_or(|t| t.normal_map);
                 let variant = (usize::from(cutout), usize::from(normal_map));
                 let texture_id = draw
                     .texture
@@ -5073,7 +5077,7 @@ impl Wgpu3DRenderer {
                     .unwrap_or(self.white_texture)
                     .0 as usize,
             );
-            !(texture.map_or(true, |t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0))
+            !(texture.is_none_or(|t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0))
         };
         if prepass {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -5237,8 +5241,8 @@ impl Wgpu3DRenderer {
                 let texture = self.textures.get(texture.0 as usize);
                 let window = draw.material.occlusion_window;
                 let cutout =
-                    texture.map_or(true, |t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0);
-                let normal_map = texture.map_or(true, |t| t.normal_map);
+                    texture.is_none_or(|t| t.cutout) || (window[2] > 0.0 && window[3] > 0.0);
+                let normal_map = texture.is_none_or(|t| t.normal_map);
                 self.last_cutout_draws += usize::from(cutout);
                 // 0..3 the solid variants, 4 translucent, 5 additive.
                 let variant = if draw.material.is_additive() {
@@ -5844,7 +5848,7 @@ fn pair_rects(mut rects: Vec<[u32; 4]>) -> Vec<[u32; 4]> {
                 let u = union(rects[i], rects[j]);
                 let waste = area(&u).saturating_sub(area(&rects[i]) + area(&rects[j]));
                 let cheap = area(&u) * 10 <= (area(&rects[i]) + area(&rects[j])) * 11;
-                if (cheap || rects.len() > 128) && best.map_or(true, |b| waste < b.2) {
+                if (cheap || rects.len() > 128) && best.is_none_or(|b| waste < b.2) {
                     best = Some((i, j, waste));
                 }
             }
@@ -6025,7 +6029,7 @@ fn caster_key(draw: &MeshDraw3D) -> u64 {
     let mix = |h: u64, v: u64| (h.rotate_left(5) ^ v).wrapping_mul(K);
     let mut h = mix(0x51_7cc1_b727_220a, u64::from(draw.mesh.0));
     let m = draw.transform.to_cols_array();
-    for pair in m.chunks_exact(2) {
+    for pair in m.as_chunks::<2>().0 {
         h = mix(
             h,
             u64::from(pair[0].to_bits()) | u64::from(pair[1].to_bits()) << 32,
@@ -6496,12 +6500,17 @@ impl PreparedTexture3D {
         };
         // The shader cuts out texels under alpha 0.38; filtering never
         // produces an alpha below the smallest source texel.
-        let cutout = texture.rgba.chunks_exact(4).any(|texel| texel[3] < 100);
+        let cutout = texture
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|texel| texel[3] < 100);
         let albedo = build_mip_chain(texture, false);
         // A quarter of the memory as BC7, unless the image would show it (a guard on its PSNR).
         let albedo_bc7 = (BC7_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
-            && texture.width % 4 == 0
-            && texture.height % 4 == 0
+            && texture.width.is_multiple_of(4)
+            && texture.height.is_multiple_of(4)
             && texture.width * texture.height >= 64 * 64
             && !experiment("nobc"))
         .then(|| {

@@ -349,7 +349,7 @@ impl Builder {
 
     /// Each triangle its own colour (a little jitter per face, like the prototype's `painted`).
     pub fn add_shaded(&mut self, shape: &Shape, mut color: impl FnMut(usize) -> [f32; 3]) {
-        for (k, t) in shape.tris.chunks_exact(3).enumerate() {
+        for (k, t) in shape.tris.as_chunks::<3>().0.iter().enumerate() {
             let (a, b, c) = (
                 Vec3::new(t[0][0], t[0][1], t[0][2]),
                 Vec3::new(t[1][0], t[1][1], t[1][2]),

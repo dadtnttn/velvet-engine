@@ -5,7 +5,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 # egui 0.31 needs 1.81 (the rest of the workspace declares 1.80).
-rust-version = "1.81"
+rust-version.workspace = true
 
 [[bin]]
 name = "velvet-editor"

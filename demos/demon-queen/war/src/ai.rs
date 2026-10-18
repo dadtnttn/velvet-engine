@@ -351,13 +351,14 @@ impl BattleAi {
         }
         let mut todo = Vec::new();
         let regs = &sim.regiments;
-        let nearest = |from: (f32, f32), pick: &dyn Fn(&Regiment) -> bool| -> Option<(usize, f32)> {
-            live.iter()
-                .map(|&f| &regs[f])
-                .filter(|f| pick(f))
-                .map(|f| (f.index, (f.cx - from.0).hypot(f.cz - from.1)))
-                .min_by(|a, b| a.1.total_cmp(&b.1))
-        };
+        let nearest =
+            |from: (f32, f32), pick: &dyn Fn(&Regiment) -> bool| -> Option<(usize, f32)> {
+                live.iter()
+                    .map(|&f| &regs[f])
+                    .filter(|f| pick(f))
+                    .map(|f| (f.index, (f.cx - from.0).hypot(f.cz - from.1)))
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+            };
         for &ri in mine {
             let r = &regs[ri];
             let me = (r.cx, r.cz);
@@ -418,7 +419,9 @@ impl BattleAi {
                     let (dx, dz) = (kx - ox, kz - oz);
                     let l = dx.hypot(dz).max(1.0);
                     let (x, z) = (ox + dx / l * 10.0, oz + dz / l * 10.0);
-                    if (x - me.0).hypot(z - me.1) > 12.0 && (time - m.at > 6.0 || !r.is_moving_order()) {
+                    if (x - me.0).hypot(z - me.1) > 12.0
+                        && (time - m.at > 6.0 || !r.is_moving_order())
+                    {
                         m.at = time;
                         m.target = None;
                         todo.push(Do::Move(ri, x, z, true));

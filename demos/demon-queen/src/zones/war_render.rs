@@ -250,7 +250,9 @@ struct BorderLine {
 }
 
 fn border_lines() -> Vec<BorderLine> {
-    let path = exploration3d_state::data_dir().join("guerra").join("fronteras.json");
+    let path = exploration3d_state::data_dir()
+        .join("guerra")
+        .join("fronteras.json");
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Vec::new();
     };
@@ -268,7 +270,11 @@ fn border_lines() -> Vec<BorderLine> {
             if a >= n || b >= n {
                 return None;
             }
-            let flat: Vec<f32> = l["pts"].as_array()?.iter().filter_map(|x| x.as_f64().map(|x| x as f32)).collect();
+            let flat: Vec<f32> = l["pts"]
+                .as_array()?
+                .iter()
+                .filter_map(|x| x.as_f64().map(|x| x as f32))
+                .collect();
             let pts: Vec<[f32; 2]> = flat.chunks_exact(2).map(|c| [c[0], c[1]]).collect();
             (pts.len() >= 2).then_some(BorderLine {
                 a,
@@ -304,7 +310,12 @@ fn border_ribbons(lines: &[BorderLine], look: &BorderLook, camera: Camera3D) -> 
     };
     let gold = [1.0, 0.86, 0.45];
     // one strip along a line: from offset o0 to o1 (left positive), colours at each edge, raised by `lift`
-    let mut strip = |pts: &[(Vec3, Vec3, f32)], o0: &dyn Fn(f32) -> f32, o1: &dyn Fn(f32) -> f32, c0: [f32; 4], c1: [f32; 4], lift: f32| {
+    let mut strip = |pts: &[(Vec3, Vec3, f32)],
+                     o0: &dyn Fn(f32) -> f32,
+                     o1: &dyn Fn(f32) -> f32,
+                     c0: [f32; 4],
+                     c1: [f32; 4],
+                     lift: f32| {
         let base = vertices.len() as u32;
         for &(p, nl, px) in pts {
             for (o, c) in [(o0(px), c0), (o1(px), c1)] {
@@ -315,7 +326,12 @@ fn border_ribbons(lines: &[BorderLine], look: &BorderLook, camera: Camera3D) -> 
             }
         }
         for i in 0..pts.len() as u32 - 1 {
-            let (a, b, c, d) = (base + i * 2, base + i * 2 + 1, base + i * 2 + 2, base + i * 2 + 3);
+            let (a, b, c, d) = (
+                base + i * 2,
+                base + i * 2 + 1,
+                base + i * 2 + 2,
+                base + i * 2 + 3,
+            );
             indices.extend([a, c, b, b, c, d]);
         }
     };
@@ -337,11 +353,17 @@ fn border_ribbons(lines: &[BorderLine], look: &BorderLook, camera: Camera3D) -> 
             .collect();
         let (oa, ob) = (look.owner[l.a], look.owner[l.b]);
         let frontier = oa != ob;
-        let hidden = look.fog.get(l.a).copied().unwrap_or(false) && look.fog.get(l.b).copied().unwrap_or(false);
+        let hidden = look.fog.get(l.a).copied().unwrap_or(false)
+            && look.fog.get(l.b).copied().unwrap_or(false);
         let tone = |c: [f32; 3], region: usize| -> [f32; 3] {
             let lit = if look.selected == Some(region) {
-                [c[0] * 0.3 + gold[0] * 0.7, c[1] * 0.3 + gold[1] * 0.7, c[2] * 0.3 + gold[2] * 0.7]
-            } else if look.hover == Some(region) || look.reach.get(region).copied().unwrap_or(false) {
+                [
+                    c[0] * 0.3 + gold[0] * 0.7,
+                    c[1] * 0.3 + gold[1] * 0.7,
+                    c[2] * 0.3 + gold[2] * 0.7,
+                ]
+            } else if look.hover == Some(region) || look.reach.get(region).copied().unwrap_or(false)
+            {
                 [c[0] * 1.18 + 0.05, c[1] * 1.18 + 0.05, c[2] * 1.18 + 0.05]
             } else {
                 c
@@ -359,13 +381,33 @@ fn border_ribbons(lines: &[BorderLine], look: &BorderLook, camera: Camera3D) -> 
         let w_reg = move |px: f32| (px * if strong { 3.0 } else { 1.3 }).clamp(0.04, 0.6);
         let w_prov = move |px: f32| (px * if strong { 3.6 } else { 2.6 }).clamp(0.06, 0.8);
         let prov = l.prov;
-        let band = move |px: f32| if prov { w_prov(px).max(w_reg(px)) } else { w_reg(px) };
+        let band = move |px: f32| {
+            if prov {
+                w_prov(px).max(w_reg(px))
+            } else {
+                w_reg(px)
+            }
+        };
         let glow_w = |px: f32| (px * 22.0).clamp(0.5, 2.6);
         let g_alpha = if strong { 0.24 } else { 0.08 } * 0.6;
         let a = |c: [f32; 3], al: f32| [c[0], c[1], c[2], al];
         // the glow off each side
-        strip(&pts, &|_| 0.0, &|px| glow_w(px), a(ca, g_alpha), a(ca, 0.0), 0.02);
-        strip(&pts, &|_| 0.0, &|px| -glow_w(px), a(cb, g_alpha), a(cb, 0.0), 0.02);
+        strip(
+            &pts,
+            &|_| 0.0,
+            &|px| glow_w(px),
+            a(ca, g_alpha),
+            a(ca, 0.0),
+            0.02,
+        );
+        strip(
+            &pts,
+            &|_| 0.0,
+            &|px| -glow_w(px),
+            a(cb, g_alpha),
+            a(cb, 0.0),
+            0.02,
+        );
         // the bands, each its own owner's colour
         let al = 0.88 * k_band;
         strip(&pts, &|_| 0.0, &|px| band(px), a(ca, al), a(ca, al), 0.05);
@@ -390,7 +432,9 @@ fn border_ribbons(lines: &[BorderLine], look: &BorderLook, camera: Camera3D) -> 
 
 /// Reads `data/guerra/mundo.json`: its anchors.
 fn world_anchors() -> Vec<WorldAnchor> {
-    let path = exploration3d_state::data_dir().join("guerra").join("mundo.json");
+    let path = exploration3d_state::data_dir()
+        .join("guerra")
+        .join("mundo.json");
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Vec::new();
     };
@@ -470,7 +514,9 @@ pub(crate) struct WarScene {
 
 /// Where the battle maps live (`data/guerra/batallas/<id>`).
 pub(crate) fn battle_maps_root() -> PathBuf {
-    exploration3d_state::data_dir().join("guerra").join("batallas")
+    exploration3d_state::data_dir()
+        .join("guerra")
+        .join("batallas")
 }
 
 fn upload(
@@ -638,13 +684,19 @@ impl WarScene {
                         let f = k as f32 / (n - 1) as f32;
                         let (x, z) = (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f);
                         for _ in 0..2 {
-                            pts.push((x + (rnd() - 0.5) * t * 2.2, z + (rnd() - 0.5) * t * 2.2, 0.9 + rnd() * 1.6));
+                            pts.push((
+                                x + (rnd() - 0.5) * t * 2.2,
+                                z + (rnd() - 0.5) * t * 2.2,
+                                0.9 + rnd() * 1.6,
+                            ));
                         }
                     }
                 }
                 _ => {
                     let [cx, cz] = spec.centre();
-                    let r = spec.r.unwrap_or_else(|| spec.w.unwrap_or(8.0).max(spec.d.unwrap_or(8.0)) * 0.5);
+                    let r = spec
+                        .r
+                        .unwrap_or_else(|| spec.w.unwrap_or(8.0).max(spec.d.unwrap_or(8.0)) * 0.5);
                     let n = (r * r * 0.5) as usize + 6;
                     for _ in 0..n.min(90) {
                         let a = rnd() * std::f32::consts::TAU;
@@ -698,7 +750,8 @@ impl WarScene {
                     p.node.split(':').next()?.strip_prefix('w')?.parse().ok()
                 };
                 for w in 0..map.works.len() {
-                    if let Some(m) = models::static_mesh(&pieces, |p| id_of(p) == Some(w), |_| None) {
+                    if let Some(m) = models::static_mesh(&pieces, |p| id_of(p) == Some(w), |_| None)
+                    {
                         self.works[w] = upload(renderer, device, &m).ok();
                     }
                 }
@@ -955,7 +1008,10 @@ impl WarScene {
         self.rubble.clear();
         if self.relic_meshes.is_none() {
             let (plinth, crystal) = wr::engines::relic();
-            if let (Ok(a), Ok(b)) = (upload(renderer, device, &plinth), upload(renderer, device, &crystal)) {
+            if let (Ok(a), Ok(b)) = (
+                upload(renderer, device, &plinth),
+                upload(renderer, device, &crystal),
+            ) {
                 self.relic_meshes = Some((a, b));
             }
         }
@@ -1265,16 +1321,18 @@ impl RenderState {
             return;
         };
         let battle = matches!(war.page, WarPage::Battle) && war.battle.is_some();
-        let saved_toon = self
-            .renderer
-            .replace_toon_style(if battle { war_toon() } else { campaign_toon() });
+        let saved_toon =
+            self.renderer
+                .replace_toon_style(if battle { war_toon() } else { campaign_toon() });
         // QA: VELVET_WAR_NOSHADOW draws the war without the sun's shadows.
         let saved_shadows = std::env::var_os("VELVET_WAR_NOSHADOW")
             .map(|_| self.renderer.replace_directional_shadows(false));
         let dist = war.cam.dist;
-        let saved_finish = self
-            .renderer
-            .replace_finish(if battle { war_finish(dist) } else { campaign_finish() });
+        let saved_finish = self.renderer.replace_finish(if battle {
+            war_finish(dist)
+        } else {
+            campaign_finish()
+        });
         match war.page {
             WarPage::Battle if war.battle.is_some() => {
                 self.render_war_battle(&mut scene, frame, war)
@@ -1461,7 +1519,12 @@ impl RenderState {
             blended.push(MeshDraw3D {
                 mesh: scene.spark_column,
                 transform: base * Mat4::from_scale(Vec3::new(1.4, 26.0, 1.4)),
-                material: Material3D::additive([1.0, 0.72, 0.3, 0.16 + 0.05 * (war.time * 2.0).sin()]),
+                material: Material3D::additive([
+                    1.0,
+                    0.72,
+                    0.3,
+                    0.16 + 0.05 * (war.time * 2.0).sin(),
+                ]),
                 texture: None,
             });
             lights.push(PointLight3D::new(
@@ -1498,7 +1561,12 @@ impl RenderState {
                     material: Material3D::additive([c[0], c[1], c[2], 0.25 + 0.2 * left]),
                     texture: None,
                 });
-                lights.push(PointLight3D::new(Vec3::new(a.x, y + 4.0, a.z), c, 4.0 * left + 1.0, a.r));
+                lights.push(PointLight3D::new(
+                    Vec3::new(a.x, y + 4.0, a.z),
+                    c,
+                    4.0 * left + 1.0,
+                    a.r,
+                ));
                 let n = match a.power {
                     wr::powers::Power::Niebla => 6,
                     wr::powers::Power::Raices | wr::powers::Power::Grito => 3,
@@ -1559,17 +1627,27 @@ impl RenderState {
                 if !e.alive && e.burn <= 0.0 && e.built < 1.0 {
                     continue;
                 }
-                let Some((body, arm)) =
-                    scene.engine_model(&mut self.renderer, &self.device, e.kind, looks[e.side as usize])
-                else {
+                let Some((body, arm)) = scene.engine_model(
+                    &mut self.renderer,
+                    &self.device,
+                    e.kind,
+                    looks[e.side as usize],
+                ) else {
                     continue;
                 };
                 let y = field.walk_height(e.x, e.z);
-                let mut t = Mat4::from_translation(Vec3::new(e.x, y, e.z)) * Mat4::from_rotation_y(e.yaw);
+                let mut t =
+                    Mat4::from_translation(Vec3::new(e.x, y, e.z)) * Mat4::from_rotation_y(e.yaw);
                 if !e.alive {
-                    t = t * Mat4::from_translation(Vec3::new(0.0, -0.5, 0.0)) * Mat4::from_rotation_z(0.22);
+                    t = t
+                        * Mat4::from_translation(Vec3::new(0.0, -0.5, 0.0))
+                        * Mat4::from_rotation_z(0.22);
                 }
-                let rise = if e.built < 1.0 { 0.12 + 0.88 * e.built } else { 1.0 };
+                let rise = if e.built < 1.0 {
+                    0.12 + 0.88 * e.built
+                } else {
+                    1.0
+                };
                 let tb = t * Mat4::from_scale(Vec3::new(1.0, rise, 1.0));
                 let material = if !e.alive {
                     Material3D::rgb(0.22, 0.19, 0.17)
@@ -1609,7 +1687,12 @@ impl RenderState {
                 }
                 if !e.alive && e.burn > 0.0 {
                     let c = Vec3::new(e.x, y + 1.5, e.z);
-                    lights.push(PointLight3D::new(c, [1.0, 0.55, 0.22], 3.0 * (e.burn / 9.0), 10.0));
+                    lights.push(PointLight3D::new(
+                        c,
+                        [1.0, 0.55, 0.22],
+                        3.0 * (e.burn / 9.0),
+                        10.0,
+                    ));
                     if scene.glow.rand() < 0.5 {
                         let a = scene.glow.rand() * std::f32::consts::TAU;
                         let up = 2.5 + scene.glow.rand() * 2.0;
@@ -1635,7 +1718,11 @@ impl RenderState {
                             * Mat4::from_rotation_y(yaw)
                             * Mat4::from_rotation_x(pitch)
                     } else {
-                        let k = if s.from == wr::siege::Kind::Trabuquete { 1.9 } else { 1.0 };
+                        let k = if s.from == wr::siege::Kind::Trabuquete {
+                            1.9
+                        } else {
+                            1.0
+                        };
                         Mat4::from_translation(Vec3::new(s.x, s.y, s.z))
                             * Mat4::from_rotation_x(war.time * 6.0)
                             * Mat4::from_scale(Vec3::new(k, k, k))
@@ -1653,9 +1740,14 @@ impl RenderState {
                 if let Some((body, arm)) =
                     scene.engine_model(&mut self.renderer, &self.device, kind, looks[0])
                 {
-                    let t = Mat4::from_translation(Vec3::new(gx, field.walk_height(gx, gz) + 0.05, gz))
-                        * Mat4::from_rotation_y(yaw);
-                    let c = if why.is_none() { [0.45, 1.25, 0.55] } else { [1.4, 0.35, 0.3] };
+                    let t =
+                        Mat4::from_translation(Vec3::new(gx, field.walk_height(gx, gz) + 0.05, gz))
+                            * Mat4::from_rotation_y(yaw);
+                    let c = if why.is_none() {
+                        [0.45, 1.25, 0.55]
+                    } else {
+                        [1.4, 0.35, 0.3]
+                    };
                     let m = Material3D::rgb(c[0], c[1], c[2]).with_emission(0.35);
                     draws.push(MeshDraw3D {
                         mesh: body,
@@ -1666,7 +1758,9 @@ impl RenderState {
                     if let Some((arm_mesh, pivot)) = arm {
                         draws.push(MeshDraw3D {
                             mesh: arm_mesh,
-                            transform: t * Mat4::from_translation(Vec3::new(pivot[0], pivot[1], pivot[2])),
+                            transform: t * Mat4::from_translation(Vec3::new(
+                                pivot[0], pivot[1], pivot[2],
+                            )),
                             material: m,
                             texture: None,
                         });
@@ -2627,7 +2721,13 @@ impl RenderState {
                     let flicker = 0.85 + 0.15 * (war.time * 9.0 + k as f32).sin();
                     figures.push((
                         Key::Cloud,
-                        facing(camera, an.at + Vec3::new(0.0, 0.25, 0.0), 0.9 * flicker, [1.0, 0.6, 0.25], 0.85),
+                        facing(
+                            camera,
+                            an.at + Vec3::new(0.0, 0.25, 0.0),
+                            0.9 * flicker,
+                            [1.0, 0.6, 0.25],
+                            0.85,
+                        ),
                     ));
                     if world_lights.len() < 24 {
                         world_lights.push(PointLight3D::new(
@@ -2645,14 +2745,25 @@ impl RenderState {
                         facing(camera, an.at, 1.6 * pulse, [0.7, 0.42, 1.0], 0.55),
                     ));
                     if world_lights.len() < 24 {
-                        world_lights.push(PointLight3D::new(an.at, [0.62, 0.32, 1.0], 2.6 * pulse, 7.0));
+                        world_lights.push(PointLight3D::new(
+                            an.at,
+                            [0.62, 0.32, 1.0],
+                            2.6 * pulse,
+                            7.0,
+                        ));
                     }
                 }
                 _ => {
                     let rise = (war.time * 0.4 + k as f32 * 0.3).fract();
                     figures.push((
                         Key::Cloud,
-                        facing(camera, an.at + Vec3::new(0.0, rise * 2.5, 0.0), 1.0 + rise, [0.95, 0.95, 1.0], 0.35 * (1.0 - rise)),
+                        facing(
+                            camera,
+                            an.at + Vec3::new(0.0, rise * 2.5, 0.0),
+                            1.0 + rise,
+                            [0.95, 0.95, 1.0],
+                            0.35 * (1.0 - rise),
+                        ),
                     ));
                 }
             }
@@ -2757,7 +2868,9 @@ fn load_camp(
         )
         .map_err(|e| anyhow::anyhow!("{e:?}"))?;
     // the map 2.0's world: every settlement and landmark of the prototype
-    let world_path = exploration3d_state::data_dir().join("guerra").join("mundo.glb");
+    let world_path = exploration3d_state::data_dir()
+        .join("guerra")
+        .join("mundo.glb");
     let mut world = Vec::new();
     match models::load_textured(&world_path) {
         Ok(parts) => {
@@ -2776,17 +2889,27 @@ fn load_camp(
                 };
                 let glow = p.emissive.map(|e| {
                     let m = e[0].max(e[1]).max(e[2]);
-                    if p.material == "fire" { 3.0 * m } else { 1.8 * m }
+                    if p.material == "fire" {
+                        3.0 * m
+                    } else {
+                        1.8 * m
+                    }
                 });
                 world.push((mesh, tex, glow));
             }
         }
         Err(e) => eprintln!("[guerra] {}: {e:#}", world_path.display()),
     }
-    let anchors = if world.is_empty() { Vec::new() } else { world_anchors() };
+    let anchors = if world.is_empty() {
+        Vec::new()
+    } else {
+        world_anchors()
+    };
     // the land's painted picture
     let land_tex = (|| -> Option<TextureHandle> {
-        let path = exploration3d_state::data_dir().join("guerra").join("tierra.jpg");
+        let path = exploration3d_state::data_dir()
+            .join("guerra")
+            .join("tierra.jpg");
         let img = velvet_avif::open_image(path.as_ref()).ok()?.to_rgba8();
         renderer
             .upload_texture(
@@ -2845,7 +2968,11 @@ fn load_camp(
         land: upload(
             renderer,
             device,
-            &if land_tex.is_some() { land.mesh_textured() } else { land.mesh(false) },
+            &if land_tex.is_some() {
+                land.mesh_textured()
+            } else {
+                land.mesh(false)
+            },
         )?,
         land_tex,
         sea: upload(renderer, device, &wr::campaign_map::sea())?,
@@ -2861,7 +2988,9 @@ fn load_camp(
                 height: size as u32,
                 rgba: vec![255u8; size * size * 4],
             };
-            renderer.upload_texture_with_normal(device, queue, &white, Some(&normal)).ok()
+            renderer
+                .upload_texture_with_normal(device, queue, &white, Some(&normal))
+                .ok()
         },
         borders: border_lines(),
         border_mesh: None,
@@ -2873,7 +3002,11 @@ fn load_camp(
         water: upload(
             renderer,
             device,
-            &if land_tex_present { wr::campaign_map::water_web(&land) } else { wr::campaign_map::water(&land) },
+            &if land_tex_present {
+                wr::campaign_map::water_web(&land)
+            } else {
+                wr::campaign_map::water(&land)
+            },
         )?,
         roads: roads.map(|r| upload(renderer, device, &r)).transpose()?,
         woods: wr::campaign_map::woods(&land),
