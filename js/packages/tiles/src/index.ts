@@ -53,4 +53,4 @@ export { PathSearch, findPath } from "./pathfinding";
 export type { PathCell, PathOptions } from "./pathfinding";
 
 export { drawTileLayer } from "./draw";
-export type { TileDrawingContext, TileImages, TileView } from "./draw";
+export type { TileDrawOptions, TileDrawingContext, TileImages, TileTransform, TileView } from "./draw";

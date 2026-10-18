@@ -35,6 +35,12 @@ export interface Context2D {
   shadowOffsetY: number;
   imageSmoothingEnabled: boolean;
   imageSmoothingQuality: ImageSmoothingQuality;
+  /** Saves the drawing state (transform, alpha, styles), for a node that changes it and must put it back. */
+  save(): void;
+  /** Restores the state that the matching `save` saved. */
+  restore(): void;
+  /** The transform in effect now. Drawing helpers read it to snap to device pixels (see @velvet/tiles). */
+  getTransform(): { readonly a: number; readonly b: number; readonly c: number; readonly d: number; readonly e: number; readonly f: number };
   setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void;
   transform(a: number, b: number, c: number, d: number, e: number, f: number): void;
   clearRect(x: number, y: number, width: number, height: number): void;

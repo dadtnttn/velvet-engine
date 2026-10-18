@@ -5,6 +5,12 @@
 // The context must already hold the camera transform: the drawing uses world (map) pixels, and `view` says
 // which of them are visible. The transforms that the flips need are applied on top of the camera and undone
 // afterwards. A layer with a parallax factor is moved by one more translation, which is undone the same way.
+//
+// Seams. A camera that scales or sits between pixels puts tile edges between device pixels, and two neighbours
+// then leave a faint line between them. When the context tells its transform (getTransform) and that transform
+// neither rotates nor skews, every tile's rectangle is snapped to whole device pixels, so neighbours share their
+// edges exactly. Smoothing can still blend in the pixels next to a tile in the picture: pixel art draws with
+// smoothing off, and a smoothed tileset keeps a spacing between its tiles with their edges repeated.
 
 import { TilesError } from "./error";
 import { resolveGid } from "./map";
@@ -32,6 +38,11 @@ export interface TileDrawingContext {
   restore(): void;
   /** Multiplies the transform by a matrix. The last call applies to a point first. */
   transform(a: number, b: number, c: number, d: number, e: number, f: number): void;
+  /**
+   * The current transform, as `CanvasRenderingContext2D.getTransform` gives it. Optional: without it the tiles are
+   * drawn where the map puts them, with no snapping to device pixels.
+   */
+  getTransform?(): TileTransform;
   /** Draws a part of an image into a rectangle, as `CanvasRenderingContext2D.drawImage` does. */
   drawImage(
     image: CanvasImageSource,
@@ -44,6 +55,53 @@ export interface TileDrawingContext {
     dw: number,
     dh: number,
   ): void;
+}
+
+/** A 2D transform as `DOMMatrix` gives it: a point (x, y) goes to (a x + c y + e, b x + d y + f). */
+export interface TileTransform {
+  readonly a: number;
+  readonly b: number;
+  readonly c: number;
+  readonly d: number;
+  readonly e: number;
+  readonly f: number;
+}
+
+/** Options of {@link drawTileLayer}. */
+export interface TileDrawOptions {
+  /**
+   * Snaps every tile's rectangle to whole device pixels, so that neighbours leave no seam. Default true. It needs the
+   * context's `getTransform`, and a transform that neither rotates nor skews; otherwise the tiles are not snapped.
+   */
+  readonly snap?: boolean;
+}
+
+/** One axis of a transform that only scales and moves: device = scale * map + offset. */
+interface Axis {
+  readonly scale: number;
+  readonly offset: number;
+}
+
+/**
+ * Snaps a span on one axis: the start and the length, in map pixels, of the span whose device edges are the
+ * rounded device edges of `start` and `start + length`.
+ */
+function snapSpan(axis: Axis, start: number, length: number): readonly [number, number] {
+  const first = Math.round(axis.scale * start + axis.offset);
+  const last = Math.round(axis.scale * (start + length) + axis.offset);
+  return [(first - axis.offset) / axis.scale, (last - first) / axis.scale];
+}
+
+/**
+ * The two axes of the context's transform when snapping can use it: the context tells its transform, which neither
+ * rotates nor skews and scales by a finite non-zero amount on both axes. Otherwise null.
+ */
+function snapAxes(ctx: TileDrawingContext): { readonly x: Axis; readonly y: Axis } | null {
+  const matrix = ctx.getTransform?.();
+  if (matrix === undefined) return null;
+  if (matrix.b !== 0 || matrix.c !== 0 || matrix.a === 0 || matrix.d === 0) return null;
+  if (![matrix.a, matrix.d, matrix.e, matrix.f].every((value) => Number.isFinite(value))) return null;
+  return { x: { scale: matrix.a, offset: matrix.e }, y: { scale: matrix.d, offset: matrix.f } };
 }
 
 /** The pictures of the tilesets, by tileset name. Each tileset that a visible tile uses must have one. */
@@ -90,6 +148,7 @@ function parallaxView(view: TileView, origin: TilePoint, parallax: TilePoint): T
  * @param timeMs - the time in milliseconds, for animated tiles.
  * @param origin - the parallax origin: with the camera here, every layer is drawn where the map puts it. Defaults to
  * the map's `parallaxOrigin`, which is Tiled's, and to 0 and 0 when the map sets none.
+ * @param options - whether tiles snap to device pixels (see {@link TileDrawOptions}).
  * @throws TilesError with code "missing-image" when a visible tile needs a tileset with no picture, and with code
  * "bad-input" when the view, the time or the origin is not a finite number.
  */
@@ -101,6 +160,7 @@ export function drawTileLayer(
   view: TileView,
   timeMs: number,
   origin: TilePoint = map.parallaxOrigin,
+  options: TileDrawOptions = {},
 ): void {
   if (![view.x, view.y, view.width, view.height, timeMs, origin.x, origin.y].every((value) => Number.isFinite(value))) {
     throw new TilesError("bad-input", "the view, the time and the parallax origin must be finite numbers");
@@ -131,6 +191,8 @@ export function drawTileLayer(
     ctx.globalAlpha = baseAlpha * layer.opacity;
     // Moves the layer from the camera's place to its own: the context already holds the camera's transform.
     if (scrolled) ctx.transform(1, 0, 0, 1, view.x - area.x, view.y - area.y);
+    // Read once, after the parallax move: every tile of the layer is drawn under this same transform.
+    const axes = options.snap === false ? null : snapAxes(ctx);
     for (const chunk of layer.chunks) {
       const startColumn = Math.max(chunk.x, firstColumn);
       const endColumn = Math.min(chunk.x + chunk.width - 1, lastColumn);
@@ -159,10 +221,12 @@ export function drawTileLayer(
 
           const image = imageOf(images, tileset);
           const flips = chunk.flips[index] ?? 0;
+          const [dx, dw] = axes === null ? [x, width] : snapSpan(axes.x, x, width);
+          const [dy, dh] = axes === null ? [y, height] : snapSpan(axes.y, y, height);
           if (flips === 0) {
-            ctx.drawImage(image, sx, sy, width, height, x, y, width, height);
+            ctx.drawImage(image, sx, sy, width, height, dx, dy, dw, dh);
           } else {
-            drawFlipped(ctx, image, { sx, sy, width, height, x, y, flips });
+            drawFlipped(ctx, image, { sx, sy, width, height, x: dx, y: dy, drawWidth: dw, drawHeight: dh, flips });
           }
         }
       }
@@ -172,7 +236,11 @@ export function drawTileLayer(
   }
 }
 
-/** The fields of a tile to draw: its place in the picture, its place on the map, and its flip flags. */
+/**
+ * The fields of a tile to draw: its place in the picture (`sx`, `sy`, `width`, `height`), the rectangle it fills on
+ * the map (`x`, `y`, `drawWidth`, `drawHeight`, which snapping may make a little larger or smaller than the tile),
+ * and its flip flags.
+ */
 interface TileDraw {
   readonly sx: number;
   readonly sy: number;
@@ -180,6 +248,8 @@ interface TileDraw {
   readonly height: number;
   readonly x: number;
   readonly y: number;
+  readonly drawWidth: number;
+  readonly drawHeight: number;
   readonly flips: number;
 }
 
@@ -189,11 +259,11 @@ interface TileDraw {
  * height swapped), then the horizontal flip, then the vertical one. The transforms are undone afterwards.
  */
 function drawFlipped(ctx: TileDrawingContext, image: CanvasImageSource, tile: TileDraw): void {
-  const centreX = tile.x + tile.width / 2;
-  const centreY = tile.y + tile.height / 2;
+  const centreX = tile.x + tile.drawWidth / 2;
+  const centreY = tile.y + tile.drawHeight / 2;
   const diagonal = (tile.flips & TILE_FLIP_DIAGONAL) !== 0;
-  const drawWidth = diagonal ? tile.height : tile.width;
-  const drawHeight = diagonal ? tile.width : tile.height;
+  const drawWidth = diagonal ? tile.drawHeight : tile.drawWidth;
+  const drawHeight = diagonal ? tile.drawWidth : tile.drawHeight;
 
   ctx.save();
   try {

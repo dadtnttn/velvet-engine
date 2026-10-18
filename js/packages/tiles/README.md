@@ -18,7 +18,9 @@ to a 2D canvas. It has no dependencies. The file format, the rules of each part 
 - **Paths** (`PathSearch`, `findPath`): A* over the grid, in four or eight directions, with costs, a node limit,
   and the same path for the same input. A `PathSearch` can be kept and reused.
 - **Drawing** (`drawTileLayer`): the visible tiles of one layer, with flips, animation and parallax (scrolled about
-  the map's parallax origin, or one given), on a context that already has the camera transform.
+  the map's parallax origin, or one given), on a context that already has the camera transform. Tiles snap to
+  whole device pixels when the context gives its transform, so neighbours leave no seam (`{ snap: false }` turns
+  it off); draw pixel-art tilesets with smoothing off.
 - **Queries**: `findLayer`, `tileLayers`, `resolveGid` and `animatedLocalId`.
 
 ## Usage

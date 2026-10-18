@@ -8,7 +8,7 @@
 
 export { createScene2D, Scene2D } from "./scene";
 export type { Scene2DCanvas, Scene2DOptions, SceneStats } from "./scene";
-export type { Context2D, MeasuredText, TextMeasure } from "./pass";
+export type { Context2D, DrawPass, MeasuredText, TextMeasure } from "./pass";
 export { Node, Group } from "./node";
 export type { NodeOptions } from "./node";
 export { Layer } from "./layer";

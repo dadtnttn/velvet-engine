@@ -388,3 +388,58 @@ describe("parallax and tint", () => {
     expect(() => drawTileLayer(new Recorder(), loaded, layer, images, wholeMap, 0, { x: Number.NaN, y: 0 })).toThrow(TilesError);
   });
 });
+
+/** A recorder that also tells its transform, as a canvas does, so the drawing can snap to device pixels. */
+class SnappingRecorder extends Recorder {
+  getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number } {
+    const [a, b, c, d, e, f] = this.matrix;
+    return { a, b, c, d, e, f };
+  }
+}
+
+/** The device-space left, top, right and bottom edges of a recorded draw. */
+function deviceEdges(draw: Draw): [number, number, number, number] {
+  const [dx, dy, dw, dh] = draw.dest as [number, number, number, number];
+  const [left, top] = apply(draw.matrix, dx, dy);
+  const [right, bottom] = apply(draw.matrix, dx + dw, dy + dh);
+  return [left, top, right, bottom];
+}
+
+describe("snapping to device pixels", () => {
+  it("puts every tile edge on a whole device pixel under a camera that scales and sits between pixels", async () => {
+    const { loaded, layer } = await loadWith(tileLayer("ground", 3, 2, [1, 1, 1, 1, 1, 1]));
+    const recorder = new SnappingRecorder();
+    recorder.transform(2.6667, 0, 0, 2.6667, 0.3, -0.45);
+    drawTileLayer(recorder, loaded, layer, images, wholeMap, 0);
+    expect(recorder.draws).toHaveLength(6);
+    for (const draw of recorder.draws) {
+      for (const edge of deviceEdges(draw)) expect(Math.abs(edge - Math.round(edge))).toBeLessThan(1e-6);
+    }
+    // Neighbours share their edges exactly, so no seam is left between them.
+    const rows = recorder.draws.map(deviceEdges).sort((p, q) => p[1] - q[1] || p[0] - q[0]);
+    expect(rows[0]![2]).toBeCloseTo(rows[1]![0], 9);
+    expect(rows[1]![2]).toBeCloseTo(rows[2]![0], 9);
+    expect(rows[0]![3]).toBeCloseTo(rows[3]![1], 9);
+  });
+
+  it("keeps the map's own rectangles with snap off, or under a transform that rotates", async () => {
+    const { loaded, layer } = await loadWith(tileLayer("ground", 1, 1, [1]));
+    const off = new SnappingRecorder();
+    off.transform(2.5, 0, 0, 2.5, 0.3, 0.3);
+    drawTileLayer(off, loaded, layer, images, wholeMap, 0, undefined, { snap: false });
+    expect(off.draws[0]?.dest).toEqual([0, 0, 16, 16]);
+
+    const turned = new SnappingRecorder();
+    turned.transform(0, 1, -1, 0, 0.3, 0.3);
+    drawTileLayer(turned, loaded, layer, images, wholeMap, 0);
+    expect(turned.draws[0]?.dest).toEqual([0, 0, 16, 16]);
+  });
+
+  it("snaps a flipped tile too, filling the same snapped rectangle", async () => {
+    const { loaded, layer } = await loadWith(tileLayer("ground", 1, 1, [1 + TILE_FLIP_HORIZONTAL]));
+    const recorder = new SnappingRecorder();
+    recorder.transform(2.6667, 0, 0, 2.6667, 0.3, 0.3);
+    drawTileLayer(recorder, loaded, layer, images, wholeMap, 0);
+    for (const edge of deviceEdges(recorder.draws[0]!)) expect(Math.abs(edge - Math.round(edge))).toBeLessThan(1e-6);
+  });
+});

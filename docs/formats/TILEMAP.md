@@ -282,8 +282,8 @@ with a search made for one call.
 
 ## Drawing
 
-`drawTileLayer(ctx, map, layer, images, view, timeMs, origin?)` draws the visible tiles of one tile layer to a 2D
-context.
+`drawTileLayer(ctx, map, layer, images, view, timeMs, origin?, options?)` draws the visible tiles of one tile layer
+to a 2D context.
 
 - The context already holds the **camera transform**. Drawing uses map pixels, and `view` is the part of the
   map that is visible (`x`, `y`, `width`, `height`). Only tiles that touch the view are drawn.
@@ -294,6 +294,12 @@ context.
   the camera on the origin, every layer is drawn where the map puts it. A factor of 0 keeps the layer where the
   origin puts it, and a factor of 1 leaves the view as it is.
 - **Tint.** Drawing does not apply the tint of a layer (see [Layers](#layers)).
+- **Snapping.** A camera that scales or sits between pixels puts tile edges between device pixels, and
+  neighbouring tiles then leave a faint seam. When the context gives its transform (`getTransform`) and that
+  transform neither rotates nor skews, each tile's rectangle is snapped to whole device pixels: both device edges
+  are rounded, so neighbours share their edges exactly. `options.snap: false` turns it off. Snapping cannot stop
+  smoothing from blending in the picture's pixels next to a tile: draw pixel art with smoothing off, and give a
+  smoothed tileset a spacing between its tiles with their edge pixels repeated.
 - A layer that is hidden, or that has no opacity, draws nothing. Otherwise the layer's opacity multiplies the
   context's alpha, and the state is restored when the layer is done, even when drawing fails.
 - A tile is drawn from its picture rectangle (the margin, the spacing and the local id in the picture) to its

@@ -86,10 +86,32 @@ export class FakeContext2D implements Context2D {
   /** The calls that put paint on the canvas, with their state. */
   readonly draws: RecordedDraw[] = [];
   private readonly matrix = new Matrix2D();
+  /** The states that `save` kept, for `restore`. */
+  private readonly saved: { matrix: TransformValues; alpha: number; smoothing: boolean }[] = [];
 
   /** The transform in effect now, as six numbers. */
   get currentTransform(): TransformValues {
     return [this.matrix.a, this.matrix.b, this.matrix.c, this.matrix.d, this.matrix.e, this.matrix.f];
+  }
+
+  save(): void {
+    this.log("save", []);
+    const m = this.matrix;
+    this.saved.push({ matrix: [m.a, m.b, m.c, m.d, m.e, m.f], alpha: this.globalAlpha, smoothing: this.imageSmoothingEnabled });
+  }
+
+  restore(): void {
+    this.log("restore", []);
+    const top = this.saved.pop();
+    if (top === undefined) return;
+    this.matrix.set(...top.matrix);
+    this.globalAlpha = top.alpha;
+    this.imageSmoothingEnabled = top.smoothing;
+  }
+
+  getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number } {
+    const m = this.matrix;
+    return { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f };
   }
 
   setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void {
