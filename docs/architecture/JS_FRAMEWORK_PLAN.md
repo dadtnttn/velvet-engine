@@ -1,6 +1,7 @@
 # Velvet JS — plan for a JavaScript game framework
 
-**Status:** proposed (2026-10-16), not started. Decision record: [ADR 0009](../adr/0009-rust-and-js-runtimes.md).
+**Status:** proposed (2026-10-16), not started; decisions of 2026-10-18 below (no npm, desktop
+only, shared rules through WebAssembly). Decision record: [ADR 0009](../adr/0009-rust-and-js-runtimes.md).
 
 Velvet Engine is a Rust engine. Most of its 3D work, though, starts in JavaScript: every Demon Queen
 place (castle, village, forest, baths, brothel, tavern, caves, el Peñascal, the war) was first built
@@ -73,10 +74,44 @@ development, Vitest for tests. The CI already installs pnpm and Node for the VS 
   Rust change to land.
 - **Same licence** (MIT OR Apache-2.0) and the same contribution rules.
 
+## Decisions of 2026-10-18
+
+- **No npm for now.** The packages live in the `js/` workspace; games link them by path. Publishing
+  waits for the split (phase 6) and an API worth freezing.
+- **Desktop only, for now.** JS games run inside **Velvet Desktop**, a small Rust host. There is no
+  browser release; the browser stays a development convenience.
+- **Rules that must match are Rust, used through WebAssembly**, from the first game on. The first
+  test game is a card game: its stacks and recipes engine extends the `velvet-cards` crate, and
+  `@velvet/cards` wraps its WebAssembly build. A native Rust build of the same game then shares the
+  rules and data and only rewrites the front end.
+- Phase 3's "an example ships as a static site" becomes "an example ships as a desktop folder".
+
+### Velvet Desktop (new crate)
+
+```text
+JS game  ── uses ──►  @velvet/* packages (js/packages)
+   │                        └─ @velvet/cards ── WebAssembly ──► velvet-cards (Rust)
+   ▼
+runs inside ► Velvet Desktop (.exe)
+               ├─ window (tao/winit) + system webview (wry: WebView2 on Windows, WebKitGTK on Linux)
+               ├─ the game served from a custom protocol (velvet://game/): no server, works offline
+               └─ native bridge `window.velvet`: saves under the user's data folder, settings,
+                  VLZ packs, window/fullscreen, quit, logging
+```
+
+- **Why a webview and not an embedded JS interpreter (QuickJS, V8) in the native renderer:** an
+  interpreter needs JS bindings for the renderer, UI and input, and gives up the DOM, SVG and
+  Three.js. A webview gives those for free, and on Windows it uses the WebView2 already installed,
+  so the host stays small.
+- **Development:** `pnpm dev` runs Vite, and the host loads the dev server's address with hot
+  reload, inside the real window.
+- **Release:** `velvet build --runtime js` (to add to the CLI) puts the host executable next to the
+  built game (or the game packed as VLZ), like the native games' release folders.
+- **Native games are unchanged.** Demon Queen stays fully native.
+
 ## Open questions
 
-- Publish to npm under one scope (`@velvet/…`) from the start, or keep the packages private until
-  phase 6?
+- ~~Publish to npm from the start?~~ No (2026-10-18): private until phase 6.
 - TypeScript sources or JSDoc types only?
 - Should the JS runtime read VLZ packs directly (a JS decoder) or only through WebAssembly?
 - One maintainer carries both runtimes: which Rust crates are worth a WebAssembly build first?
