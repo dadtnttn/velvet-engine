@@ -321,3 +321,38 @@ describe("loop frame hooks and input's endFrame", () => {
     expect(seen).toEqual(["beforeUpdate pressed=true", "update pressed=true", "afterUpdate pressed=false"]);
   });
 });
+
+describe("loop holds and single steps", () => {
+  it("renders but runs no step while held, drops the held time, and runs again once every hold ends", () => {
+    const frames = new ManualFrames();
+    const log: string[] = [];
+    const loop = new GameLoop({ rate: 10, scheduler: frames, update: () => log.push("update"), render: () => log.push("render") });
+    loop.start();
+    frames.runFrame(0);
+    const first = loop.hold();
+    const second = loop.hold();
+    expect(loop.held).toBe(true);
+    frames.runFrame(500);
+    expect(log).toEqual(["render", "render"]);
+    first();
+    first();
+    expect(loop.held).toBe(true);
+    second();
+    expect(loop.held).toBe(false);
+    frames.runFrame(600);
+    expect(log).toEqual(["render", "render", "update", "render"]);
+  });
+
+  it("runs one step with its hooks on demand, even while held or stopped", () => {
+    const frames = new ManualFrames();
+    const log: string[] = [];
+    const loop = new GameLoop({ rate: 10, scheduler: frames, update: (dt) => log.push(`update ${dt}`) });
+    loop.on("beforeUpdate", (step) => log.push(`before ${step.dt}`));
+    loop.on("afterUpdate", (step) => log.push(`after ${step.dt}`));
+    const release = loop.hold();
+    loop.stepOnce();
+    release();
+    loop.stepOnce();
+    expect(log).toEqual(["before 0.1", "update 0.1", "after 0.1", "before 0.1", "update 0.1", "after 0.1"]);
+  });
+});

@@ -108,12 +108,13 @@ alone adds nothing either.
 
 - Pause, resume, step and the speeds act on the core `GameClock`. While the clock is paused, game time stands
   still: logic that reads `clock.elapsed` stops with it.
-- `devtools.wrapLoop(options)` (deprecated, see below) also holds the game's `update` while the tools have
-  paused the game, so logic that does not read the clock stops too. A step runs `update` once, with the clock
-  running for that call. While the update is held, input edges still build up and are delivered on resume or
-  on the next step, because the game's `input.endFrame()` runs in that update.
-- Without `wrapLoop`, a pause only stops the clock, and a step moves the clock on by one loop step. The frame
-  hooks cannot hold an update, so this is the one difference that the loop option does not remove.
+- When the tools have the game loop (the `loop` option), a pause also holds the loop (`GameLoop.hold`): frames
+  still render, but no update runs, so logic that does not read the clock stops too. A step runs one update
+  (`GameLoop.stepOnce`), with the clock running for that update, so a day or a timer that the update settles
+  is settled. While the update is held, input edges still build up and are delivered on resume or on the next
+  step, because the game's `input.endFrame()` runs in that update.
+- Without the loop, a pause only stops the clock, and a step moves the clock on by one loop step without
+  running the game's update: pass the loop.
 - The clock allows only the speeds it was created with, so create it with `speeds: [0.25, 0.5, 1, 2, 4]` for
   the full range. Slow motion runs the clock at `slowSpeed` (default 0.25, which the clock must allow) and
   gives back the previous speed when turned off. Setting a speed by hand turns slow motion off.
@@ -155,9 +156,9 @@ stops the tap too.
 
 ## Deprecated
 
-- **`wrapLoop`** still works. It holds the game's update while the tools are paused, which the loop's frame
-  hooks cannot do, so a game that uses that hold keeps calling it. Its update and render times are no longer
-  needed when the loop is given to the tools, and it measures them only when it is used without the loop.
+- **`wrapLoop`** still works, for games that create the tools before the loop: it holds and steps the
+  update through a wrapper. With the loop given to the tools (`loop`), pause and step hold and step the loop
+  itself, and the update and render times come from its frame hooks, so the wrapper is not needed.
 - **`eventNames`** still works as a filter. The log records every event of the bus without it.
 
 ## Frame hooks

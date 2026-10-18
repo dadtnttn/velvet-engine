@@ -1,9 +1,10 @@
 // Game time controls: pause, resume, step, speed and slow motion, driven through the core clock.
 //
-// A paused clock keeps game time still, so logic that reads the clock stands still with it. Once the
-// loop is wrapped (Devtools.wrapLoop), the devtools also hold the game's update while they are paused,
-// so the game logic stops too. A step then runs that update once, with the clock running for that call.
-// Without a wrapped loop, a step only moves the clock on by one loop step.
+// A paused clock keeps game time still, so logic that reads the clock stands still with it. When the
+// devtools have the game loop, a pause also holds the loop (GameLoop.hold), so the game logic stops too,
+// and a step runs one update (GameLoop.stepOnce) with the clock running for that call. A wrapped loop
+// (Devtools.wrapLoop, older) does the same through the wrapper. With neither, a step only moves the clock
+// on by one loop step.
 
 import type { GameClock } from "@velvet/core";
 
@@ -28,6 +29,12 @@ export interface TimeState {
   readonly slowAllowed: boolean;
 }
 
+/** The part of the core GameLoop that the controls use to hold and step the game. */
+export interface HoldableLoop {
+  hold(): () => void;
+  stepOnce(): void;
+}
+
 /** Holds the state of the controls, and applies them to the clock. */
 export class TimeControls {
   private clock: GameClock | null;
@@ -38,16 +45,20 @@ export class TimeControls {
   private stepRequested = false;
   private speedBeforeSlow: number | null = null;
   private wrapped = false;
+  private readonly loop: HoldableLoop | null;
+  private releaseHold: (() => void) | null = null;
 
   /**
    * @param clock - the game clock, or null when none was given.
    * @param slowSpeed - the speed that slow motion uses.
    * @param stepSeconds - the length of one loop step, in seconds.
+   * @param loop - the game loop, which a pause holds and a step runs once, or null when none was given.
    */
-  constructor(clock: GameClock | null, slowSpeed: number, stepSeconds: number) {
+  constructor(clock: GameClock | null, slowSpeed: number, stepSeconds: number, loop: HoldableLoop | null = null) {
     this.clock = clock;
     this.slowSpeed = slowSpeed;
     this.stepSeconds = stepSeconds;
+    this.loop = loop;
   }
 
   /** Records that the loop is wrapped. From then on, a pause holds the game's update. */
@@ -77,6 +88,8 @@ export class TimeControls {
       this.clock.pause();
       this.clockPausedHere = true;
     }
+    // A wrapped loop holds the update itself; otherwise the loop, when there is one, is held.
+    if (!this.wrapped && this.loop !== null) this.releaseHold = this.loop.hold();
   }
 
   /** Lets game time run again. Calling it while running does nothing. */
@@ -86,6 +99,8 @@ export class TimeControls {
     this.stepRequested = false;
     if (this.clockPausedHere) this.clock?.resume();
     this.clockPausedHere = false;
+    this.releaseHold?.();
+    this.releaseHold = null;
   }
 
   /** Moves game time on by one step. Pauses first when the game is running. */
@@ -93,6 +108,18 @@ export class TimeControls {
     this.pause();
     if (this.wrapped) {
       this.stepRequested = true;
+      return;
+    }
+    if (this.loop !== null) {
+      // The held loop runs one update, with the clock running for that call only.
+      const clock = this.clock;
+      const lift = clock?.paused ?? false;
+      if (lift) clock?.resume();
+      try {
+        this.loop.stepOnce();
+      } finally {
+        if (lift) clock?.pause();
+      }
       return;
     }
     if (this.clock === null) return;

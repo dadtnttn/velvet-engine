@@ -353,6 +353,55 @@ describe("time controls drive the clock", () => {
   });
 });
 
+describe("the loop given to the tools", () => {
+  it("a pause holds the loop, and a step runs one update with the clock running, so its logic is settled", () => {
+    const clock = new GameClock({ speeds: [1, 2] });
+    const loopFrames = manualScheduler();
+    let updates = 0;
+    const loop = new GameLoop({
+      update(dt: number) {
+        updates += 1;
+        clock.advance(dt);
+      },
+      scheduler: loopFrames,
+    });
+    const devtools = devtoolsWith({ clock, loop, now: () => 0 });
+    loop.start();
+    loopFrames.tick(0);
+    loopFrames.tick(1000 / 60);
+    expect(updates).toBe(1);
+
+    devtools.pause();
+    expect(loop.held).toBe(true);
+    const paused = clock.elapsed;
+    loopFrames.tick((2 * 1000) / 60);
+    expect(updates).toBe(1);
+
+    devtools.step();
+    expect(updates).toBe(2);
+    expect(clock.elapsed).toBeCloseTo(paused + 1 / 60, 9);
+    expect(clock.paused).toBe(true);
+    loopFrames.tick((3 * 1000) / 60);
+    expect(updates).toBe(2);
+
+    devtools.resume();
+    expect(loop.held).toBe(false);
+    loopFrames.tick((4 * 1000) / 60);
+    expect(updates).toBe(3);
+    loop.stop();
+    devtools.destroy();
+  });
+
+  it("destroy ends a hold that the tools had put on the loop", () => {
+    const loop = new GameLoop({ update: () => undefined, scheduler: manualScheduler() });
+    const devtools = devtoolsWith({ loop });
+    devtools.pause();
+    expect(loop.held).toBe(true);
+    devtools.destroy();
+    expect(loop.held).toBe(false);
+  });
+});
+
 describe("the wrapped loop", () => {
   it("a pause holds the game's update, and a step runs it once with the clock running", () => {
     const clock = new GameClock({ speeds: [1, 2] });

@@ -205,6 +205,7 @@ export class GameLoop {
   private pendingFrame: number | null = null;
   private active = false;
   private frameNumber = 0;
+  private holds = 0;
 
   /**
    * @throws RangeError when `rate` is not a positive finite number, or `maxSteps` is not a
@@ -234,6 +235,43 @@ export class GameLoop {
   /** True between `start()` and `stop()`. */
   get running(): boolean {
     return this.active;
+  }
+
+  /** True while at least one {@link GameLoop.hold} is in place. */
+  get held(): boolean {
+    return this.holds > 0;
+  }
+
+  /**
+   * Holds the game's updates: frames go on and still render, but no fixed step runs, and the time that passes
+   * is dropped, so the game does not catch up when the hold ends. Holds add up; each one ends when the
+   * function it returns is called (a second call does nothing). Development tools use it to pause a game
+   * whose logic does not read the clock.
+   * @returns a function that ends this hold.
+   */
+  hold(): () => void {
+    this.holds += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.holds -= 1;
+    };
+  }
+
+  /**
+   * Runs one fixed step now, with its `beforeUpdate` and `afterUpdate` hooks, whether the loop is running,
+   * stopped or held. It does not render: the next frame does. Development tools use it to step a held game
+   * one update at a time.
+   */
+  stepOnce(): void {
+    const timed = this.isListening();
+    const frame = this.frameNumber;
+    const dt = this.stepSecondsValue;
+    if (timed) this.hooks.emit("beforeUpdate", { frame, step: 0, dt });
+    const startMs = timed ? this.now() : 0;
+    this.options.update(dt);
+    if (timed) this.hooks.emit("afterUpdate", { frame, step: 0, dt, durationMs: this.now() - startMs });
   }
 
   /**
@@ -300,7 +338,8 @@ export class GameLoop {
 
     const stepSeconds = this.stepSecondsValue;
     const budget = this.maxSteps * stepSeconds;
-    this.accumulator = Math.min(this.accumulator + elapsed, budget);
+    // While held, the time that passes is dropped, so no steps run now and none pile up for later.
+    this.accumulator = this.holds > 0 ? 0 : Math.min(this.accumulator + elapsed, budget);
 
     let steps = 0;
     let updateMs = 0;

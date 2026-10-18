@@ -227,6 +227,7 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
       options.clock ?? null,
       options.slowSpeed ?? DEFAULT_SLOW_SPEED,
       options.loop?.stepSeconds ?? DEFAULT_STEP_SECONDS,
+      options.loop ?? null,
     );
     this.eventLog = new EventLog(EVENT_LOG_LIMIT, this.readClock);
 

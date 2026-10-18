@@ -33,8 +33,9 @@ export interface DevtoolsOptions<Events extends object = object> {
    */
   readonly clock?: GameClock;
   /**
-   * The game loop. Its frame hooks give the tools the update and render times, its step length sets the size
-   * of a clock-only step, and its running state is shown. Create the loop before the tools, and pass it here.
+   * The game loop. Its frame hooks give the tools the update and render times, and its running state is shown.
+   * A pause also holds it (no update runs, whatever the game's logic reads), and a step runs one update of it,
+   * with the clock running for that update. Create the loop before the tools, and pass it here.
    */
   readonly loop?: GameLoop;
   /**
@@ -172,18 +173,20 @@ export interface Devtools {
   errorCount(): number;
 
   /**
-   * @deprecated Pass the loop to `createDevtools` as `loop`: the update and render times then come from the
-   * loop's frame hooks. This still returns the loop options with the hold that pause and step put on the
-   * game's update, which the hooks cannot do. Pass the result to `new GameLoop`. Without it, a pause only
-   * stops the clock.
+   * @deprecated Pass the loop to `createDevtools` as `loop`: the tools then take the update and render times
+   * from its frame hooks, and pause and step hold and step the loop itself. This still returns the loop
+   * options with the same hold and step done through a wrapper, for games that create the tools first.
    */
   wrapLoop<Options extends GameLoopOptions>(options: Options): Options;
 
-  /** Stops game time, and holds the game's update when the loop is wrapped. */
+  /** Stops game time, and holds the game's update when the tools have the loop (or a wrapped one). */
   pause(): void;
   /** Lets game time run again. */
   resume(): void;
-  /** Moves game time on by one loop step, pausing first when the game is running. */
+  /**
+   * Pauses, then runs one game update when the tools have the loop (or a wrapped one), with the clock running
+   * for that update. Without a loop it only moves the clock on by one loop step.
+   */
   step(): void;
   /**
    * Sets the clock's speed. Clears slow motion.

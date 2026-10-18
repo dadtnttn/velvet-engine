@@ -171,6 +171,8 @@ The order is fixed: `beforeFrame`, then for each step `beforeUpdate`, `update`, 
 
 **Cost and errors.** While no hook listens, a frame reads no clock and builds no payload. A listener added during a frame runs from the next phase that the frame reaches, and a frame that began with no listener runs none of them. A `stop()` during a frame ends its remaining steps and its render, and `afterFrame` still runs once for that frame. An error thrown by a listener stops the frame, as an error thrown by `update` does; the next frame is already scheduled.
 
+**Holds and single steps.** `loop.hold()` holds the updates: frames go on and render, but no step runs, and the time that passes is dropped, so nothing catches up afterwards. It returns the function that ends that hold; holds add up, and `loop.held` tells whether one is in place. `loop.stepOnce()` runs one step now, with its two step hooks, held or not. Development tools pause a game with the first and step it with the second (see `@velvet/devtools`).
+
 ## Clock events
 
 `clock.on`, `once` and `off` take these events:
