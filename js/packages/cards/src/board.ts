@@ -3,7 +3,19 @@
 
 import { loadVelvetWasm, type VelvetWasm } from "@velvet/wasm";
 import { CardsError } from "./error";
-import type { BoardEvent, BoardSave, Catalog, CardView, Seed, StackView } from "./types";
+import { findFreeSpot } from "./spot";
+import type {
+  BoardEvent,
+  BoardPoint,
+  BoardRect,
+  BoardSave,
+  BoardSize,
+  Catalog,
+  CardView,
+  FreeSpotOptions,
+  Seed,
+  StackView,
+} from "./types";
 import { attempt, decode } from "./wire";
 
 /** The module's board, as its class types it. */
@@ -44,6 +56,32 @@ function seedText(seed: Seed): string {
 function checkPosition(x: number, y: number): void {
   if (!Number.isFinite(Math.fround(x)) || !Number.isFinite(Math.fround(y))) {
     throw new CardsError("bad-input", `a position must be two finite numbers, not (${x}, ${y})`);
+  }
+}
+
+/**
+ * Refuses a size that a stack cannot have: both sides must be finite numbers above zero.
+ * @throws {CardsError} with code `bad-input`.
+ */
+function checkSize(size: BoardSize): void {
+  const { width, height } = size;
+  if (!(Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0)) {
+    throw new CardsError("bad-input", `a size must be two finite numbers above zero, not (${width}, ${height})`);
+  }
+}
+
+/**
+ * Refuses a rectangle of bounds whose corner or sides are not finite, or whose sides are negative.
+ * @throws {CardsError} with code `bad-input`.
+ */
+function checkBounds(bounds: BoardRect): void {
+  const { x, y, width, height } = bounds;
+  const finite = [x, y, width, height].every((value) => Number.isFinite(value));
+  if (!finite || width < 0 || height < 0) {
+    throw new CardsError(
+      "bad-input",
+      `bounds must be a finite rectangle with sides of zero or more, not ${JSON.stringify(bounds)}`,
+    );
   }
 }
 
@@ -237,6 +275,43 @@ export class Board {
    */
   stacks(): StackView[] {
     return decode<StackView[]>(this.#live().stacks());
+  }
+
+  /**
+   * The nearest spot to `near` where a new stack of `size` does not overlap the stacks on the table. Each stack
+   * covers `size` from its position, so two stacks overlap when their positions differ by less than `size` on
+   * both axes; stacks that only touch do not overlap. The search tries the spots on a grid of `size` steps around
+   * `near`, ring by ring outward, and returns the nearest one that is free (ties go to the smaller y, then x).
+   * It changes nothing and queues no events.
+   *
+   * @param near - where the search starts, in board units.
+   * @param size - the footprint of a stack, in board units. Every stack, the new one included, takes this size.
+   * @param options - `bounds`, a rectangle the spot's position must lie in; and `except`, a card whose stack is
+   *   not an obstacle (the stack being moved).
+   * @returns the spot, or null when every spot inside `bounds` is taken.
+   * @throws {CardsError} with code `bad-input` for a point, size or bounds that is not valid, and `no-such-card`
+   *   when `except` names no card on the table.
+   *
+   * @example
+   * const table = { x: 0, y: 0, width: 8, height: 6 };
+   * const spot = board.freeSpot({ x: 2, y: 3 }, { width: 1, height: 1 }, { bounds: table });
+   * if (spot !== null) board.moveStack(card, spot.x, spot.y);
+   */
+  freeSpot(near: BoardPoint, size: BoardSize, options: FreeSpotOptions = {}): BoardPoint | null {
+    checkPosition(near.x, near.y);
+    checkSize(size);
+    if (options.bounds !== undefined) checkBounds(options.bounds);
+    const stacks = this.stacks();
+    const except = options.except;
+    let obstacles = stacks;
+    if (except !== undefined) {
+      const holder = stacks.find((stack) => stack.cards.includes(except));
+      if (holder === undefined) {
+        throw new CardsError("no-such-card", `no card on the table has the id ${except}`);
+      }
+      obstacles = stacks.filter((stack) => stack.id !== holder.id);
+    }
+    return findFreeSpot(obstacles, near, size, options.bounds);
   }
 
   /**

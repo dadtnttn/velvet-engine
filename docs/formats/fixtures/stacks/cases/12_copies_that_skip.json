@@ -1,0 +1,34 @@
+{
+  "format": "velvet-stacks",
+  "version": 1,
+  "kind": "case",
+  "name": "a copy that does not appear takes no place: the copies that appear line up at 1.5 and 3.0 from the origin",
+  "seed": "1",
+  "steps": [
+    {
+      "op": "spawn", "def": "mushroom_grove", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 1, "def": "mushroom_grove", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 1, "cards": [1] },
+        { "event": "job_started", "stack": 1, "recipe": "forage_mushrooms" }
+      ]
+    },
+    {
+      "op": "tick", "dt": 1.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "forage_mushrooms" },
+        { "event": "card_consumed", "card": 1, "def": "mushroom_grove" },
+        { "event": "stack_changed", "stack": 1, "cards": [] },
+        { "event": "card_spawned", "card": 2, "def": "mushroom", "x": 1.5, "y": 0.0 },
+        { "event": "stack_changed", "stack": 2, "cards": [2] },
+        { "event": "card_spawned", "card": 3, "def": "mushroom", "x": 3.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 3, "cards": [3] }
+      ]
+    },
+    { "op": "check", "position": { "2": [1.5, 0.0], "3": [3.0, 0.0] } }
+  ],
+  "expect": {
+    "cards": { "mushroom": 2 },
+    "stacks": [[2], [3]]
+  }
+}

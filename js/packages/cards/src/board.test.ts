@@ -367,3 +367,65 @@ describe("disposal", () => {
     expectFailure(() => board.save(), "disposed");
   });
 });
+
+describe("free spots", () => {
+  it("finds the nearest spot that a new stack does not overlap, and never moves a card", async () => {
+    const board = await Board.create(await shared(), 1);
+    const worker = board.spawn("worker", 0, 0);
+    board.takeEvents();
+    expect(board.freeSpot({ x: 0, y: 0 }, { width: 1, height: 1 })).toEqual({ x: 0, y: -1 });
+    expect(board.freeSpot({ x: 3, y: 3 }, { width: 1, height: 1 })).toEqual({ x: 3, y: 3 });
+    expect(board.takeEvents(), "a search queues no events").toEqual([]);
+    expect(board.cards().map((card) => [card.id, card.x, card.y])).toEqual([[worker, 0, 0]]);
+    board.free();
+  });
+
+  it("ignores the stack named by except, so that a stack can stay where it is", async () => {
+    const board = await Board.create(await shared(), 1);
+    const worker = board.spawn("worker", 0, 0);
+    expect(board.freeSpot({ x: 0, y: 0 }, { width: 1, height: 1 }, { except: worker })).toEqual({ x: 0, y: 0 });
+    expectFailure(() => board.freeSpot({ x: 0, y: 0 }, { width: 1, height: 1 }, { except: 99 }), "no-such-card");
+    board.free();
+  });
+
+  it("keeps the spot inside the bounds, and returns null when none is left", async () => {
+    const board = await Board.create(await shared(), 1);
+    board.spawn("worker", 0, 0);
+    const bounds = { x: 0, y: 0, width: 4, height: 4 };
+    expect(board.freeSpot({ x: -3, y: 0 }, { width: 1, height: 1 }, { bounds })).toEqual({ x: 0, y: 1 });
+    const nowhere = { x: 0, y: 0, width: 0, height: 0 };
+    expect(board.freeSpot({ x: 0, y: 0 }, { width: 1, height: 1 }, { bounds: nowhere })).toBeNull();
+    board.free();
+  });
+
+  it("sees the stacks as they are after a move, and its spots are where a stack can be placed", async () => {
+    const board = await Board.create(await shared(), 1);
+    const size = { width: 1, height: 1 };
+    const first = board.spawn("worker", 0, 0);
+    board.spawn("forest", 0, -1);
+    board.moveStack(first, 5, 5);
+    const spot = board.freeSpot({ x: 5, y: 5 }, size);
+    expect(spot).toEqual({ x: 5, y: 4 });
+    if (spot === null) throw new Error("a free spot was expected");
+    board.spawn("worker", spot.x, spot.y);
+    const bottoms = board.stacks().map((stack) => ({ x: stack.x, y: stack.y }));
+    for (const [index, a] of bottoms.entries()) {
+      for (const b of bottoms.slice(index + 1)) {
+        const apart = Math.abs(a.x - b.x) >= size.width || Math.abs(a.y - b.y) >= size.height;
+        expect(apart, `stacks at (${a.x}, ${a.y}) and (${b.x}, ${b.y})`).toBe(true);
+      }
+    }
+    board.free();
+  });
+
+  it("refuses a point, a size or bounds that are not valid, with bad-input", async () => {
+    const board = await Board.create(await shared(), 1);
+    const size = { width: 1, height: 1 };
+    expectFailure(() => board.freeSpot({ x: Number.NaN, y: 0 }, size), "bad-input");
+    expectFailure(() => board.freeSpot({ x: 0, y: 0 }, { width: 0, height: 1 }), "bad-input");
+    expectFailure(() => board.freeSpot({ x: 0, y: 0 }, { width: 1, height: Number.POSITIVE_INFINITY }), "bad-input");
+    const inverted = { x: 0, y: 0, width: -1, height: 2 };
+    expectFailure(() => board.freeSpot({ x: 0, y: 0 }, size, { bounds: inverted }), "bad-input");
+    board.free();
+  });
+});

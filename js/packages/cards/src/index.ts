@@ -12,10 +12,14 @@ export { CardsError } from "./error";
 export type { CardsErrorCode } from "./error";
 export type {
   BoardEvent,
+  BoardPoint,
+  BoardRect,
   BoardSave,
+  BoardSize,
   Catalog,
   CardDef,
   CardView,
+  FreeSpotOptions,
   Ingredient,
   JobSave,
   Recipe,

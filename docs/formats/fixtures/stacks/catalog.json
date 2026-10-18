@@ -108,6 +108,21 @@
       "kind": "currency",
       "tags": ["money"],
       "value": 1
+    },
+    {
+      "id": "mushroom_grove",
+      "name": "card.mushroom_grove",
+      "kind": "zone",
+      "tags": ["place", "food"],
+      "stack": { "accepts": [{ "kind": "character" }], "max": 2 },
+      "value": 0
+    },
+    {
+      "id": "mushroom",
+      "name": "card.mushroom",
+      "kind": "resource",
+      "tags": ["food"],
+      "value": 1
     }
   ],
   "recipes": [
@@ -229,6 +244,15 @@
       ],
       "seconds": 3.0,
       "outputs": [{ "card": "garden", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "forage_mushrooms",
+      "ingredients": [
+        { "select": { "id": "mushroom_grove" }, "count": 1, "consume": true }
+      ],
+      "seconds": 1.0,
+      "outputs": [{ "card": "mushroom", "count": 3, "chance": 0.5 }],
       "priority": 0
     }
   ]

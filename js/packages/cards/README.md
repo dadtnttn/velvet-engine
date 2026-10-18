@@ -69,6 +69,7 @@ const restored = await Board.load(catalog, saved);
 | `takeEvents()` | Returns the events that actions queued, without advancing time. |
 | `progress(card)`, `runningRecipe(card)` | The progress (0 to 1) and recipe of the job on the card's stack, or null. |
 | `cards()`, `stacks()` | Snapshots of the table, sorted by id, for drawing. |
+| `freeSpot(near, size, options?)` | The nearest spot to `near` where a new stack of `size` does not overlap the stacks on the table, or null. Options: `bounds` (a rectangle the spot must lie in) and `except` (a card whose stack is not counted). Queues no events. |
 | `save()` | The board's state as a save document. |
 | `free()` | Frees the board in WebAssembly. Any call afterwards throws `disposed`. |
 
@@ -84,6 +85,11 @@ const restored = await Board.load(catalog, saved);
 - **Split** keeps the new stack where the old one is: its bottom card takes the old position, so the
   new stack lies on top of the old one. A UI that shows the two apart passes `at` to `split`, or
   calls `moveStack(card, x, y)` on the new stack's bottom card (`card`) right after.
+- **Free spots** are found in JavaScript, from the table's snapshot. Every stack covers the same `size`
+  from its position, so two stacks overlap when their positions differ by less than `size` on both
+  axes; stacks that only touch do not overlap. The search tries the grid of `size` steps around `near`,
+  ring by ring outward, and returns the nearest spot it tries; ties go to the smaller y, then x. It is
+  the nearest grid spot, not the nearest position in the plane.
 - **Events** are tagged by `event` (`job_started`, `job_cancelled`, `job_finished`, `card_spawned`,
   `card_consumed`, `stack_changed`). A refused action changes nothing and queues no events.
 - **Failures** are `CardsError`s with a `code` (see `src/error.ts`): `bad-input`, `bad-id`,

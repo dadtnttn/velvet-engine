@@ -98,6 +98,37 @@ export interface Catalog {
  */
 export type Seed = number | bigint | string;
 
+/** A point on the table, in board units. */
+export interface BoardPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** A size on the table, in board units. */
+export interface BoardSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** A rectangle on the table, in board units: its corner (`x`, `y`) and its size. */
+export interface BoardRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Options of `Board.freeSpot`. */
+export interface FreeSpotOptions {
+  /**
+   * The rectangle that the spot's position must lie in, edges included: the position of the new stack's
+   * bottom card. Default: the whole table.
+   */
+  readonly bounds?: BoardRect;
+  /** A card whose stack is not an obstacle: the stack that is being moved, for example. */
+  readonly except?: number;
+}
+
 /**
  * What happened on the board. Tagged by `event`. A `stack_changed` with an empty `cards` list means
  * the stack is gone.

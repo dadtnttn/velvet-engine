@@ -256,8 +256,15 @@ Events come in this order:
    another recipe starts at zero.
 
 Positions of the copies: the origin is the position the stack had before its cards were consumed.
-Copy `k` (counting from 0 across all outputs of this finish) lands at `x = origin.x + 1.5 * (k + 1)`,
-and `y = origin.y`. Copies that do not appear do not take a position.
+The copies **that appear** are numbered `k` from 0, across all outputs of this finish, in the order they
+appear. Copy `k` lands at `x = origin.x + 1.5 * (k + 1)`, and `y = origin.y`.
+
+A copy that does not appear takes no number and no position, so it does not move the copies after it.
+Only the copies that appear count. With three copies of which the first does not appear, the two that
+appear land at `origin.x + 1.5` and `origin.x + 3.0`. So the expected position of a repeated card in a case
+(a `position` in a `check`) is worked out from the copies that appear, never from the copies that were
+rolled. `cases/12_copies_that_skip.json` checks this rule: a skipped copy sits between two copies that
+appear, and the second of those lands at `3.0`, not at `4.5`.
 
 ### Progress
 
@@ -336,7 +343,7 @@ cases.
 | `move` | `card`, `to` (`[x, y]`) | Move a stack. Queues no events. |
 | `remove` | `card`, `events`? | Remove a card. |
 | `tick` | `dt`, `events`? | Advance time. `events` are those `tick` returns. |
-| `check` | `progress`?, `running`?, `position`? | Maps from card id: the expected progress (number or `null`), the expected running recipe (name or `null`), the expected position (`[x, y]`). |
+| `check` | `progress`?, `running`?, `position`? | Maps from card id: the expected progress (number or `null`), the expected running recipe (name or `null`), the expected position (`[x, y]`). The copies of an output that do not appear have no position: see "Positions of the copies" above. |
 | `reload` | none | Save the board to JSON and load it again with the same catalog. |
 
 When a step lists `events`, they must equal the events the step produced, in order, in their JSON
