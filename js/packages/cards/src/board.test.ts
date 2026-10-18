@@ -7,11 +7,16 @@ import {
   Board,
   loadCatalog,
   type BoardEvent,
+  type BoardPoint,
+  type BoardRect,
   type BoardSave,
+  type BoardSize,
   type Catalog,
+  type OutputPlacement,
   type Seed,
 } from "./index";
-import { expectFailure, expectRejection, SHARED_CATALOG } from "./test-support";
+import { findFreeSpot } from "./spot";
+import { expectFailure, expectRejection, generator, SHARED_CATALOG } from "./test-support";
 
 /** The shared catalog, read and checked. */
 async function shared(): Promise<Catalog> {
@@ -427,5 +432,169 @@ describe("free spots", () => {
     const inverted = { x: 0, y: 0, width: -1, height: 2 };
     expectFailure(() => board.freeSpot({ x: 0, y: 0 }, size, { bounds: inverted }), "bad-input");
     board.free();
+  });
+});
+
+describe("output placement", () => {
+  it("is the row by default, and a save does not hold it: a loaded board starts with the row", async () => {
+    const catalog = await shared();
+    const board = await Board.create(catalog, 1);
+    expect(board.outputPlacement()).toStrictEqual({ kind: "row" });
+    board.setOutputPlacement({ kind: "free", footprint: { width: 1, height: 1 } });
+    const save = board.save();
+    expect(JSON.stringify(save), "a save holds no placement").not.toContain("footprint");
+    const loaded = await Board.load(catalog, save);
+    expect(loaded.outputPlacement()).toStrictEqual({ kind: "row" });
+    loaded.free();
+    board.free();
+  });
+
+  it("returns the placement that was set, and leaves out the bounds when none were given", async () => {
+    const board = await Board.create(await shared(), 1);
+    const bounded: OutputPlacement = {
+      kind: "free",
+      footprint: { width: 2.5, height: 1 },
+      bounds: { x: 0, y: -1, width: 4, height: 2 },
+    };
+    board.setOutputPlacement(bounded);
+    expect(board.outputPlacement()).toStrictEqual(bounded);
+    board.setOutputPlacement({ kind: "free", footprint: { width: 2.5, height: 1 } });
+    expect(board.outputPlacement()).toStrictEqual({ kind: "free", footprint: { width: 2.5, height: 1 } });
+    board.setOutputPlacement({ kind: "row" });
+    expect(board.outputPlacement()).toStrictEqual({ kind: "row" });
+    board.free();
+  });
+
+  it("refuses a placement that cannot hold a stack with bad-placement, and keeps the one in use", async () => {
+    const board = await Board.create(await shared(), 1);
+    const kept: OutputPlacement = { kind: "free", footprint: { width: 1, height: 1 } };
+    board.setOutputPlacement(kept);
+    const size = { width: 1, height: 1 };
+    expectFailure(() => board.setOutputPlacement({ kind: "free", footprint: { width: 0, height: 1 } }), "bad-placement");
+    expectFailure(
+      () => board.setOutputPlacement({ kind: "free", footprint: size, bounds: { x: 0, y: 0, width: -1, height: 2 } }),
+      "bad-placement",
+    );
+    expectFailure(
+      () =>
+        board.setOutputPlacement({
+          kind: "free",
+          footprint: { width: 3e38, height: 3e38 },
+          bounds: { x: 3e38, y: 0, width: 3e38, height: 1 },
+        }),
+      "bad-placement",
+    );
+    expectFailure(() => board.setOutputPlacement({ kind: "free", footprint: { width: Number.NaN, height: 1 } }), "bad-input");
+    expectFailure(() => board.setOutputPlacement({ kind: "free", footprint: { width: 1e39, height: 1 } }), "bad-input");
+    expectFailure(
+      () => board.setOutputPlacement({ kind: "free", footprint: size, bounds: { x: Number.NaN, y: 0, width: 1, height: 1 } }),
+      "bad-input",
+    );
+    expect(board.outputPlacement()).toStrictEqual(kept);
+    board.free();
+  });
+
+  it("places a job's outputs by the placement given at creation, and refuses a bad one there", async () => {
+    const catalog = await shared();
+    const board = await Board.create(catalog, 1, {
+      outputPlacement: { kind: "free", footprint: { width: 1, height: 1 } },
+    });
+    const forest = board.spawn("forest", 0, 0);
+    board.dropOn(board.spawn("worker", 0, 0), forest);
+    board.takeEvents();
+    expect(board.tick(2)).toContainEqual({ event: "card_spawned", card: 3, def: "wood", x: 1, y: 0 });
+    board.free();
+
+    const bad: OutputPlacement = { kind: "free", footprint: { width: 0, height: 1 } };
+    await expectRejection(Board.create(catalog, 1, { outputPlacement: bad }), "bad-placement");
+    const plain = await Board.create(catalog, 1);
+    const saved = plain.save();
+    plain.free();
+    await expectRejection(Board.load(catalog, saved, { outputPlacement: bad }), "bad-placement");
+  });
+
+  it("falls back to the row positions when the bounds hold no free spot", async () => {
+    const board = await Board.create(await shared(), 1, {
+      outputPlacement: {
+        kind: "free",
+        footprint: { width: 1, height: 1 },
+        bounds: { x: 0, y: 0, width: 0, height: 0 },
+      },
+    });
+    const bush = board.spawn("berry_bush", 0, 0);
+    board.dropOn(board.spawn("worker", 0, 0), bush);
+    board.takeEvents();
+    // The only spot in the bounds is the bush's own, so the two copies use their row positions.
+    expect(board.tick(2).filter((event) => event.event === "card_spawned")).toEqual([
+      { event: "card_spawned", card: 3, def: "berries", x: 1.5, y: 0 },
+      { event: "card_spawned", card: 4, def: "berries", x: 3, y: 0 },
+    ]);
+    board.free();
+  });
+
+  it("refuses every placement call on a freed board with disposed", async () => {
+    const board = await Board.create(await shared(), 1);
+    board.free();
+    expectFailure(() => board.setOutputPlacement({ kind: "row" }), "disposed");
+    expectFailure(() => board.outputPlacement(), "disposed");
+  });
+});
+
+describe("the free output placement agrees with findFreeSpot", () => {
+  it("picks, copy by copy, the spot that findFreeSpot picks for the same table", async () => {
+    const catalog = await shared();
+    const random = generator(19);
+    const f32 = (value: number): number => Math.fround(value);
+    let compared = 0;
+    let fallbacks = 0;
+    for (let table = 0; table < 24; table += 1) {
+      const footprint: BoardSize = { width: f32(0.5 + random() * 1.5), height: f32(0.5 + random()) };
+      const origin: BoardPoint = { x: f32(random() * 4 - 2), y: f32(random() * 4 - 2) };
+      // Every fourth table has the origin itself as its only spot, which the forest holds, so every copy falls
+      // back to its row position. The others have no bounds, or bounds that may or may not hold a spot.
+      let bounds: BoardRect | undefined;
+      if (table % 4 === 3) {
+        bounds = { x: origin.x, y: origin.y, width: 0, height: 0 };
+      } else if (table % 3 === 1) {
+        bounds = {
+          x: f32(origin.x - 1 + random() * 2),
+          y: f32(origin.y - 1 + random() * 2),
+          width: f32(random() * 4),
+          height: f32(random() * 4),
+        };
+      }
+      const board = await Board.create(catalog, table + 1, { outputPlacement: { kind: "free", footprint, bounds } });
+      const forest = board.spawn("forest", origin.x, origin.y);
+      board.dropOn(board.spawn("worker", origin.x, origin.y), forest);
+      // Stones around the origin: some on the grid of the footprint (so that they touch the spots next to
+      // them), the others anywhere near it.
+      const stones = 1 + Math.floor(random() * 20);
+      for (let n = 0; n < stones; n += 1) {
+        const onGrid = random() < 0.5;
+        const cellX = Math.floor(random() * 7) - 3;
+        const cellY = Math.floor(random() * 7) - 3;
+        const x = onGrid ? origin.x + footprint.width * cellX : random() * 10 - 5;
+        const y = onGrid ? origin.y + footprint.height * cellY : random() * 10 - 5;
+        board.spawn("stone", f32(x), f32(y));
+      }
+      for (let copy = 0; copy < 3; copy += 1) {
+        // The table as the module holds it, before the job finishes: the job's stack and the earlier copies included.
+        const obstacles = board.stacks();
+        const near = { x: f32(origin.x + footprint.width), y: origin.y };
+        const found = findFreeSpot(obstacles, near, footprint, bounds);
+        if (found === null) fallbacks += 1;
+        const expected = found ?? { x: f32(origin.x + 1.5), y: origin.y };
+        board.takeEvents();
+        const spawned = board.tick(2).find((event) => event.event === "card_spawned");
+        // The module writes a binary32 position in its shortest decimal form, so Math.fround gives back the
+        // exact value that the module holds.
+        const got = spawned?.event === "card_spawned" ? { x: f32(spawned.x), y: f32(spawned.y) } : undefined;
+        expect(got, `table ${table}, copy ${copy}`).toEqual({ x: expected.x, y: expected.y });
+        compared += 1;
+      }
+      board.free();
+    }
+    expect(compared).toBe(72);
+    expect(fallbacks, "some tables must reach the row fallback too").toBeGreaterThan(0);
   });
 });

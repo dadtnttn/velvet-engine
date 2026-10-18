@@ -39,3 +39,16 @@ export function expectFailure(call: () => unknown, code: CardsErrorCode): void {
   }
   expect.fail(`expected a ${code} failure, but the call returned`);
 }
+
+/**
+ * A small deterministic generator of numbers in [0, 1), so that random tables repeat from run to run.
+ * @param seed - the first state of the generator.
+ * @returns the next number each time it is called.
+ */
+export function generator(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 1103515245 + 12345) % 2147483648;
+    return state / 2147483648;
+  };
+}

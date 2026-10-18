@@ -3,7 +3,14 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { Board, CardsError, loadCatalog, type BoardEvent, type Catalog } from "./index";
+import {
+  Board,
+  CardsError,
+  loadCatalog,
+  type BoardEvent,
+  type Catalog,
+  type OutputPlacement,
+} from "./index";
 import { SHARED_CATALOG } from "./test-support";
 
 /** The folder of the shared fixtures, found from this file (src, cards, packages, js, root). */
@@ -39,6 +46,15 @@ type Step =
     }
   | { readonly op: "reload" };
 
+/** The output placement of a case, as the case file writes it: sizes and rectangles as arrays. */
+type CasePlacement =
+  | { readonly kind: "row" }
+  | {
+      readonly kind: "free";
+      readonly footprint: readonly [number, number];
+      readonly bounds?: readonly [number, number, number, number];
+    };
+
 /** One case file: a seeded board, its steps, and what the table must hold at the end. */
 interface Case {
   readonly format: string;
@@ -46,6 +62,8 @@ interface Case {
   readonly kind: string;
   readonly name: string;
   readonly seed: string;
+  /** Where outputs land. Absent means the row. */
+  readonly placement?: CasePlacement;
   readonly steps: readonly Step[];
   readonly expect?: {
     readonly cards?: Readonly<Record<string, number>>;
@@ -73,6 +91,16 @@ async function loadCases(): Promise<LoadedCase[]> {
 }
 
 const cases = await loadCases();
+
+/** The output placement that a case file names, in the shape the cards API takes. */
+function placementOf(placement: CasePlacement | undefined): OutputPlacement {
+  if (placement === undefined || placement.kind === "row") return { kind: "row" };
+  const [width, height] = placement.footprint;
+  const bounds = placement.bounds;
+  if (bounds === undefined) return { kind: "free", footprint: { width, height } };
+  const [x, y, w, h] = bounds;
+  return { kind: "free", footprint: { width, height }, bounds: { x, y, width: w, height: h } };
+}
 
 /** The boundary code of an engine error name: `DropRefused` is `drop-refused`. */
 function codeOf(name: string): string {
@@ -115,7 +143,9 @@ async function playCase(file: string, text: string, catalog: Catalog): Promise<v
   expect(data.kind, file).toBe("case");
   const name = `${file} (${data.name})`;
 
-  let board = await Board.create(catalog, data.seed);
+  // A save does not hold the placement, so the case's placement is given again at every load.
+  const outputPlacement = placementOf(data.placement);
+  let board = await Board.create(catalog, data.seed, { outputPlacement });
   for (const [index, step] of data.steps.entries()) {
     const at = `${name}, step ${index}`;
     switch (step.op) {
@@ -172,7 +202,7 @@ async function playCase(file: string, text: string, catalog: Catalog): Promise<v
       case "reload": {
         const saved = board.save();
         board.free();
-        board = await Board.load(catalog, saved);
+        board = await Board.load(catalog, saved, { outputPlacement });
         break;
       }
     }

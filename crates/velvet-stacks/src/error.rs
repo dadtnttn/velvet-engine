@@ -95,6 +95,9 @@ pub enum StacksError {
         /// The height the stack would reach.
         height: u32,
     },
+    /// An output placement names a footprint or bounds that cannot hold a stack.
+    #[error("the output placement is not valid: {0}")]
+    BadPlacement(String),
     /// A save is internally inconsistent.
     #[error("invalid board save: {0}")]
     InvalidSave(String),

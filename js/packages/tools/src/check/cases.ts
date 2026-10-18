@@ -1,17 +1,24 @@
 // Runs the stacks case files of a game (`kind: "case"`, docs/formats/STACKS.md, "Conformance cases").
-// Each case is played step by step on a board of the game's catalog, through @velvet/cards, and the
-// events and the table are compared with what the case expects. It follows the same steps and checks as
+// Each case is played step by step on a board of the game's catalog, through @velvet/cards, with the case's
+// output placement (`placement`, the row when it names none), and the events and the table are compared
+// with what the case expects. It follows the same steps and checks as
 // the shared fixture runner in packages/cards/src/fixtures.test.ts, but it reports problems instead of
 // failing a test.
 
-import { Board, CardsError, type BoardEvent, type Catalog } from "@velvet/cards";
+import { Board, CardsError, type BoardEvent, type Catalog, type OutputPlacement } from "@velvet/cards";
 import { makeIssue, type Issue } from "../issues";
 
 /** A JSON object. */
 type Json = Record<string, unknown>;
 
-/** The fields that a case document may hold at the top. Any other field is an error in a case. */
-const CASE_FIELDS: readonly string[] = ["format", "version", "kind", "name", "seed", "steps", "expect"];
+/**
+ * The fields that a case document may hold at the top. Any other field is an error in a case. `placement`
+ * is optional: without it the board uses the row (docs/formats/STACKS.md, "Output placement").
+ */
+const CASE_FIELDS: readonly string[] = ["format", "version", "kind", "name", "seed", "placement", "steps", "expect"];
+
+/** The fields of a free placement, as a case writes it. */
+const FREE_PLACEMENT_FIELDS: readonly string[] = ["kind", "footprint", "bounds"];
 
 /** The operations a step may name. */
 const OPERATIONS: readonly string[] = ["spawn", "drop", "split", "move", "remove", "tick", "check", "reload"];
@@ -59,6 +66,80 @@ function integerOf(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) ? value : undefined;
 }
 
+/**
+ * A number written in a case that the cards API takes: finite, and still finite as binary32, which is how the
+ * engine holds every number of a placement (see `isBinary32` in @velvet/cards). JSON cannot hold NaN, but a
+ * number such as 1e400 reads as infinity, and 1e39 is too large for binary32.
+ */
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(Math.fround(value)) ? value : undefined;
+}
+
+/** Two finite numbers written in a case, such as a footprint: `[width, height]`. */
+function finitePairOf(value: unknown): [number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 2) return undefined;
+  const [first, second] = value.map(finiteNumber);
+  return first === undefined || second === undefined ? undefined : [first, second];
+}
+
+/** Four finite numbers written in a case, such as bounds: `[x, y, width, height]`. */
+function finiteQuadOf(value: unknown): [number, number, number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 4) return undefined;
+  const [a, b, c, d] = value.map(finiteNumber);
+  return a === undefined || b === undefined || c === undefined || d === undefined ? undefined : [a, b, c, d];
+}
+
+/**
+ * The output placement that a case names, in the shape the cards API takes (docs/formats/STACKS.md, "Output
+ * placement"). A case that names none has the row. The shape, the fields and the signs are checked here. The
+ * engine checks the rest, such as the binary32 range: `Board.create` refuses that with `bad-placement`.
+ * @param value - the case's `placement` field as written, or undefined.
+ * @returns the placement, or the code and the sentence of what is wrong with it.
+ */
+export function casePlacement(
+  value: unknown,
+): { readonly placement: OutputPlacement } | { readonly code: string; readonly message: string } {
+  if (value === undefined) return { placement: { kind: "row" } };
+  if (!isRecord(value)) {
+    return { code: "structure", message: 'a placement is an object: { "kind": "row" } or { "kind": "free", ... }' };
+  }
+  if (value["kind"] === "row") {
+    const extra = Object.keys(value).find((key) => key !== "kind");
+    if (extra !== undefined) return { code: "unknown-field", message: `"${extra}" is not a field of a row placement` };
+    return { placement: { kind: "row" } };
+  }
+  if (value["kind"] !== "free") return { code: "structure", message: 'the placement kind is "row" or "free"' };
+  const extra = Object.keys(value).find((key) => !FREE_PLACEMENT_FIELDS.includes(key));
+  if (extra !== undefined) return { code: "unknown-field", message: `"${extra}" is not a field of a free placement` };
+  const footprint = finitePairOf(value["footprint"]);
+  if (footprint === undefined) {
+    return { code: "structure", message: "a free placement needs footprint: two numbers that fit binary32, [width, height]" };
+  }
+  const [width, height] = footprint;
+  if (!(width > 0 && height > 0)) {
+    return { code: "bad-placement", message: "the footprint's width and height must be above zero" };
+  }
+  if (value["bounds"] === undefined) return { placement: { kind: "free", footprint: { width, height } } };
+  const bounds = finiteQuadOf(value["bounds"]);
+  if (bounds === undefined) {
+    return { code: "structure", message: "bounds needs four numbers that fit binary32: [x, y, width, height]" };
+  }
+  const [x, y, boundsWidth, boundsHeight] = bounds;
+  if (!(boundsWidth >= 0 && boundsHeight >= 0)) {
+    return { code: "bad-placement", message: "the bounds' width and height must be zero or more" };
+  }
+  if (!Number.isFinite(x + boundsWidth) || !Number.isFinite(y + boundsHeight)) {
+    return { code: "bad-placement", message: "the bounds must end at finite numbers" };
+  }
+  return {
+    placement: {
+      kind: "free",
+      footprint: { width, height },
+      bounds: { x, y, width: boundsWidth, height: boundsHeight },
+    },
+  };
+}
+
 /** The events a step lists, or undefined when it lists none. */
 function eventsOf(step: Json): readonly BoardEvent[] | undefined {
   const events = step["events"];
@@ -88,16 +169,25 @@ export async function runStacksCase(file: string, data: unknown, catalog: Catalo
     return [issue("(file)", "structure", "a case needs a seed (a string of digits) and a list of steps")];
   }
 
+  const named = casePlacement(data["placement"]);
+  if (!("placement" in named)) return [issue("placement", named.code, named.message)];
+  const outputPlacement = named.placement;
+
   let board: Board;
   try {
-    board = await Board.create(catalog, seed);
+    board = await Board.create(catalog, seed, { outputPlacement });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // A free placement that the engine refuses is the placement's fault, not the seed's.
+    if (outputPlacement.kind === "free" && error instanceof CardsError && error.code === "bad-placement") {
+      return [issue("placement", "bad-placement", `the placement is not valid: ${message}`)];
+    }
     return [issue("seed", "seed", `the seed is not valid: ${message}`)];
   }
 
   try {
-    return await playSteps(file, board, catalog, steps as readonly unknown[], isRecord(data["expect"]) ? data["expect"] : undefined);
+    const expect = isRecord(data["expect"]) ? data["expect"] : undefined;
+    return await playSteps(file, board, catalog, steps as readonly unknown[], outputPlacement, expect);
   } finally {
     board.free();
   }
@@ -109,6 +199,8 @@ export async function runStacksCase(file: string, data: unknown, catalog: Catalo
  * @param first - the board the case starts with. A `reload` step replaces it.
  * @param catalog - the catalog, for the reloads.
  * @param steps - the steps, as written.
+ * @param outputPlacement - the placement that the case names. A save does not hold it, so each reload gives it
+ *   again to `Board.load`.
  * @param expect - what the table must hold at the end, or undefined.
  */
 async function playSteps(
@@ -116,6 +208,7 @@ async function playSteps(
   first: Board,
   catalog: Catalog,
   steps: readonly unknown[],
+  outputPlacement: OutputPlacement,
   expect: Json | undefined,
 ): Promise<Issue[]> {
   let board = first;
@@ -133,7 +226,7 @@ async function playSteps(
       if (step["op"] === "reload") {
         const saved = board.save();
         board.free();
-        board = await Board.load(catalog, saved);
+        board = await Board.load(catalog, saved, { outputPlacement });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

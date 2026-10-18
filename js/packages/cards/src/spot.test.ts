@@ -1,28 +1,27 @@
 // Tests of the free-spot search (spot.ts), without WebAssembly: the nearest free grid spot, the rule for
-// touching stacks, the tie rule, the bounds, and a brute-force check of the ring search on random tables.
+// touching stacks, the tie rule, the bounds, the binary32 rounding, and a brute-force check of the ring
+// search on random tables.
 
 import { describe, expect, it } from "vitest";
 import { findFreeSpot } from "./spot";
+import { generator } from "./test-support";
 import type { BoardPoint, BoardSize } from "./types";
 
 const UNIT: BoardSize = { width: 1, height: 1 };
 
+/** Rounds to binary32, as the rules do. */
+const f32 = Math.fround;
+
 /**
  * Whether two stacks of `size` at these positions overlap: they differ by less than the size on both axes. The
- * tolerance is the one that findFreeSpot uses, so that touching stacks stay apart after rounding.
+ * arithmetic is binary32, as in findFreeSpot, so that touching stacks stay apart after rounding.
  */
 function overlapping(a: BoardPoint, b: BoardPoint, size: BoardSize): boolean {
-  const tolerance = 1e-5 * Math.max(size.width, size.height);
-  return Math.abs(a.x - b.x) < size.width - tolerance && Math.abs(a.y - b.y) < size.height - tolerance;
-}
-
-/** A small deterministic generator, so that the random tables are the same on every run. */
-function generator(seed: number): () => number {
-  let state = seed;
-  return () => {
-    state = (state * 1103515245 + 12345) % 2147483648;
-    return state / 2147483648;
-  };
+  const tolerance = f32(f32(1e-5) * Math.max(size.width, size.height));
+  return (
+    Math.abs(f32(a.x - b.x)) < f32(size.width - tolerance) &&
+    Math.abs(f32(a.y - b.y)) < f32(size.height - tolerance)
+  );
 }
 
 describe("findFreeSpot", () => {
@@ -64,32 +63,43 @@ describe("findFreeSpot", () => {
     expect(findFreeSpot([], { x: 5, y: 5 }, UNIT, bounds)).toEqual({ x: 0, y: 0 });
   });
 
+  it("rounds its inputs and its results to binary32, as the module does", () => {
+    // 0.1 is not a binary32 number: the spot is the binary32 value nearest to it.
+    expect(findFreeSpot([], { x: 0.1, y: 0 }, UNIT)).toEqual({ x: f32(0.1), y: 0 });
+    // A stack of width 0.3 steps to f32(0.3) from the origin; the left and right spots tie, and the left
+    // one has the smaller offset in x.
+    expect(findFreeSpot([{ x: 0, y: 0 }], { x: 0, y: 0 }, { width: 0.3, height: 1 })).toEqual({
+      x: -f32(0.3),
+      y: 0,
+    });
+  });
+
   it("finds the same spot as a scan of every grid spot, on random tables", () => {
     const random = generator(7);
     for (let table = 0; table < 40; table += 1) {
-      const size: BoardSize = { width: 1 + random(), height: 0.5 + random() };
-      const near: BoardPoint = { x: random() * 4 - 2, y: random() * 4 - 2 };
+      const size: BoardSize = { width: f32(1 + random()), height: f32(0.5 + random()) };
+      const near: BoardPoint = { x: f32(random() * 4 - 2), y: f32(random() * 4 - 2) };
       // Some stacks sit on the grid (so that they touch the spots next to them), the others anywhere.
       const obstacles: BoardPoint[] = Array.from({ length: 1 + Math.floor(random() * 25) }, () =>
         random() < 0.5
           ? {
-              x: near.x + (Math.floor(random() * 11) - 5) * size.width,
-              y: near.y + (Math.floor(random() * 11) - 5) * size.height,
+              x: f32(near.x + f32((Math.floor(random() * 11) - 5) * size.width)),
+              y: f32(near.y + f32((Math.floor(random() * 11) - 5) * size.height)),
             }
-          : { x: random() * 12 - 6, y: random() * 12 - 6 },
+          : { x: f32(random() * 12 - 6), y: f32(random() * 12 - 6) },
       );
 
       // The scan: every spot in a window, the free ones only, by the same rule as the search: the squared
-      // distance from `near`, then the offset in y, then the offset in x.
+      // distance from `near`, then the offset in y, then the offset in x. Every step is rounded to binary32.
       let expected: BoardPoint | null = null;
       let bestKey: [number, number, number] | null = null;
       for (let j = -40; j <= 40; j += 1) {
         for (let i = -40; i <= 40; i += 1) {
-          const dx = i * size.width;
-          const dy = j * size.height;
-          const spot = { x: near.x + dx, y: near.y + dy };
+          const dx = f32(i * size.width);
+          const dy = f32(j * size.height);
+          const spot = { x: f32(near.x + dx), y: f32(near.y + dy) };
           if (obstacles.some((stack) => overlapping(stack, spot, size))) continue;
-          const key: [number, number, number] = [dx * dx + dy * dy, j, i];
+          const key: [number, number, number] = [f32(f32(dx * dx) + f32(dy * dy)), j, i];
           const better =
             bestKey === null ||
             key[0] < bestKey[0] ||

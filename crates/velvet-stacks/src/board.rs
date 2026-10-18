@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::def::{CardDef, Catalog};
 use crate::error::StacksError;
+use crate::placement::OutputPlacement;
 use crate::rng::Xorshift64;
 
 /// One card on the board. Every card of a stack carries the position of the stack's bottom card.
@@ -117,10 +118,13 @@ pub struct Board {
     pub(crate) dirty: BTreeSet<u64>,
     pub(crate) running: BTreeSet<u64>,
     pub(crate) pending: Vec<BoardEvent>,
+    /// Where finished jobs put their copies. Configuration, so it is not in a save.
+    pub(crate) output_placement: OutputPlacement,
 }
 
 impl Board {
-    /// An empty board that plays with `catalog`. `seed` drives every chance roll.
+    /// An empty board that plays with `catalog`. `seed` drives every chance roll. The outputs of
+    /// finished jobs use the row placement until [`Board::set_output_placement`] changes it.
     pub fn new(catalog: Catalog, seed: u64) -> Self {
         Self {
             catalog,
@@ -133,6 +137,7 @@ impl Board {
             dirty: BTreeSet::new(),
             running: BTreeSet::new(),
             pending: Vec::new(),
+            output_placement: OutputPlacement::Row,
         }
     }
 
@@ -437,6 +442,8 @@ impl Board {
             dirty,
             running,
             pending: Vec::new(),
+            // The placement is not in a save: a loaded board starts with the row, and a game sets its own.
+            output_placement: OutputPlacement::Row,
         }
     }
 }

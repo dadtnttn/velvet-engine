@@ -23,6 +23,7 @@ const CODES: readonly CardsErrorCode[] = [
   "same-stack",
   "drop-refused",
   "stack-full",
+  "bad-placement",
   "invalid-save",
   "disposed",
   "internal",

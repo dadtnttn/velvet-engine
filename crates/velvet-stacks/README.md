@@ -14,6 +14,8 @@ same events on every platform. The rules are meant to run in WebAssembly for the
   read from JSON and checked once when the catalog is built.
 - `Board`: `spawn`, `move_stack`, `drop_on`, `split`, `remove`, `tick`, `progress`,
   `running_recipe`, `take_events`, and `save` / `load` (or `to_json` / `from_json`).
+- `OutputPlacement`: where a finished job's copies land, a row (the default) or the nearest free
+  spot. It is set with `set_output_placement`, is not part of a save, and is set again after a load.
 - `BoardEvent`: what happened (`job_started`, `job_finished`, `card_spawned`, and so on), for
   animation and logs.
 - `BoardSave`: the board's state as serde data.

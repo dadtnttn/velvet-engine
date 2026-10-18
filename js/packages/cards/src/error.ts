@@ -14,6 +14,8 @@
  * - "same-stack": a stack was dropped onto itself;
  * - "drop-refused": the card on top of the target does not accept the dragged card;
  * - "stack-full": the drop would make the stack taller than the target's rule allows;
+ * - "bad-placement": an output placement has a footprint or bounds that cannot hold a stack (a side that is
+ *   not above zero, or a negative bounds side); the placement in use stays;
  * - "invalid-save": a save is internally inconsistent, or the board cannot be written exactly;
  * - "disposed": the board was freed with `free()` and can no longer be used;
  * - "internal": the module failed in a way that is not the caller's mistake (a bug).
@@ -36,6 +38,7 @@ export type CardsErrorCode =
   | "same-stack"
   | "drop-refused"
   | "stack-full"
+  | "bad-placement"
   | "invalid-save"
   | "disposed"
   | "internal";

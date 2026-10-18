@@ -255,7 +255,7 @@ Events come in this order:
    starts at once with `job_started`. The same recipe starts with the carried time as its elapsed;
    another recipe starts at zero.
 
-Positions of the copies: the origin is the position the stack had before its cards were consumed.
+Positions of the copies, with the row placement (the default; see [Output placement](#output-placement)): the origin is the position the stack had before its cards were consumed.
 The copies **that appear** are numbered `k` from 0, across all outputs of this finish, in the order they
 appear. Copy `k` lands at `x = origin.x + 1.5 * (k + 1)`, and `y = origin.y`.
 
@@ -274,8 +274,71 @@ nothing (`null` in a case). `running_recipe(card)` names the job's recipe, or no
 
 ## Outputs and positions
 
-The layout rule above (`1.5` board units per copy, in a row to the right of the origin) is the only
-placement rule of version 1. Callers that want other layouts move the new stacks with `move`.
+Where the copies of a finished job land is the board's output placement. The row (`1.5` board units
+per copy, to the right of the origin) is the default. The other form, a search for free spots, is
+described in [Output placement](#output-placement). Callers that want any other layout move the new
+stacks with `move`.
+
+## Output placement
+
+Where the copies of a finished job appear is the board's **output placement**. It takes one of two
+forms, written as JSON:
+
+| Form | JSON | Meaning |
+|---|---|---|
+| Row (the default) | `{ "kind": "row" }` | The copies go in a row to the right of the origin, as in [Finishing a job](#finishing-a-job). |
+| Free | `{ "kind": "free", "footprint": [width, height], "bounds": [x, y, width, height] }` | Each copy lands on the nearest free spot. `bounds` may be left out, which means the whole table. |
+
+**Configuration, not state.** The placement is not part of a board save. A board that is created or
+loaded starts with the row, and a game sets its placement again after it loads a board, as it loads
+its catalog. The reference runner does the same after each `reload` step. Setting a placement changes
+nothing on the table: it affects only the copies that finish afterwards.
+
+**Checks.** `footprint` holds two binary32 numbers above zero. `bounds`, when given, holds four binary32
+numbers, with a width and a height of zero or more, and `x + width` and `y + height` must be finite
+too. A placement that breaks a check fails with `BadPlacement`, and the placement in use stays.
+
+**Free placement.** The copies of a finish are placed one at a time, in the order that
+[Finishing a job](#finishing-a-job) gives. Number the copies that appear `k` from 0, as the row does.
+For copy `k`:
+
+1. The search starts at `near = (origin.x + width, origin.y)`. `origin` is the position of the job's
+   stack before its cards were consumed, and `width` is the footprint's width.
+2. The obstacles are the positions of the bottom cards of every stack on the table at that moment:
+   the job's own stack, if cards are left on it, and the copies that this finish has already placed.
+3. The copy lands on the spot that the search below finds. When the search finds none (only possible
+   with bounds), the copy lands on its row position, `(origin.x + 1.5 * (k + 1), origin.y)`, even when
+   a stack is there already.
+
+Each copy is a `card_spawned` and a `stack_changed` event, as in the row.
+
+**The search.** Let `w` and `h` be the footprint, and `(bx, by, bw, bh)` the bounds. Every number is
+binary32, and every operation below rounds its result to binary32, in the order written.
+
+- *Overlap.* Two stacks overlap when `|x1 - x2| < w - t` and `|y1 - y2| < h - t`, where
+  `t = 1e-5 * max(w, h)`. Stacks that only touch do not overlap.
+- *Spots.* The spots are `near + (i * w, j * h)` for whole numbers `i` and `j`. A spot's *distance* is
+  `d = dx * dx + dy * dy`, where `dx = i * w` and `dy = j * h`. Its *ring* is `max(|i|, |j|)`.
+- *Candidates.* A spot is a candidate when it lies inside the bounds, edges included (without bounds,
+  every spot does), and no obstacle overlaps it.
+- *Choice.* The result is the candidate with the least `(d, j, i)`, compared in that order: the
+  nearest spot, then the smaller `j` (the offset in y), then the smaller `i` (the offset in x). When no
+  candidate is found, the copy falls back to its row position, as above.
+- *Rings searched.* Only the rings from `first` to `last` are searched. Let `s(x, y)` be
+  `max(|x - near.x| / w, |y - near.y| / h)`, and `F` the largest `s` over the obstacles (without bounds)
+  or over the four corners of the bounds (with bounds); `F` is 0 when there are none.
+  - Without bounds: `first = 0` and `last = ceil(F) + 2`.
+  - With bounds: `(cx, cy)` is the point of the bounds nearest to `near`, `g = s(cx, cy)`,
+    `first = max(0, floor(g) - 1)` and `last = ceil(F) + 1`.
+- *Stopping.* Once a candidate is known, the search stops at the first ring `r` where
+  `(r * min(w, h))^2` is greater than the candidate's `d`: no spot of that ring or a later one can win.
+
+The search tries every spot of the rings it visits, so its cost is the number of spots tried times the
+number of stacks. Large bounds that hold no free spot, far from `near`, make it slow: a board should
+keep its bounds near its stacks.
+
+The cards package (`findFreeSpot` in `js/packages/cards/src/spot.ts`) runs this search with `Math.fround`
+after every operation, so that both runtimes pick the same spot for the same table.
 
 ## Random numbers
 
@@ -314,6 +377,7 @@ The same catalog, seed, actions and ticks give the same events, ids and state, o
   A JavaScript runtime rounds every result with `Math.fround`.
 - The fixtures use only values that binary32 represents exactly (multiples of 1/4 here), so a
   decimal reading and a binary reading agree.
+- The free placement's search ([Output placement](#output-placement)) is binary32 in the same way.
 
 ## Versioning
 
@@ -327,13 +391,14 @@ The engine's refusals have these names. Conformance cases name them too:
 
 `Parse`, `UnsupportedDocument`, `EmptyCardId`, `DuplicateCard`, `ZeroMax`, `UnknownCard`,
 `DuplicateRecipe`, `UnknownRecipe`, `NoIngredients`, `ZeroCount`, `BadSeconds`, `BadChance`,
-`NoSuchCard`, `SameStack`, `DropRefused`, `StackFull`, `InvalidSave`.
+`NoSuchCard`, `SameStack`, `DropRefused`, `StackFull`, `BadPlacement`, `InvalidSave`.
 
 ## Conformance cases (`fixtures/stacks/cases/*.json`)
 
 A case is a document with `kind: "case"`, a `name` for humans, a `seed` (a decimal string), `steps`,
-and an optional `expect`. Runners read the cases in file name order. Unknown fields are an error in
-cases.
+and an optional `expect`. A case may also have an optional `placement`, an output placement as in
+[Output placement](#output-placement). Without it the board uses the row, the default. Runners read
+the cases in file name order. Unknown fields are an error in cases.
 
 | Step | Fields | Meaning |
 |---|---|---|
@@ -344,7 +409,7 @@ cases.
 | `remove` | `card`, `events`? | Remove a card. |
 | `tick` | `dt`, `events`? | Advance time. `events` are those `tick` returns. |
 | `check` | `progress`?, `running`?, `position`? | Maps from card id: the expected progress (number or `null`), the expected running recipe (name or `null`), the expected position (`[x, y]`). The copies of an output that do not appear have no position: see "Positions of the copies" above. |
-| `reload` | none | Save the board to JSON and load it again with the same catalog. |
+| `reload` | none | Save the board to JSON and load it again with the same catalog. The case's placement is set again afterwards, because a save does not hold it. |
 
 When a step lists `events`, they must equal the events the step produced, in order, in their JSON
 form (the `event` tag names the kind, as in `{ "event": "job_finished", "stack": 1, "recipe": "build_house" }`).

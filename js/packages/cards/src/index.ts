@@ -12,6 +12,7 @@ export { CardsError } from "./error";
 export type { CardsErrorCode } from "./error";
 export type {
   BoardEvent,
+  BoardOptions,
   BoardPoint,
   BoardRect,
   BoardSave,
@@ -22,6 +23,7 @@ export type {
   FreeSpotOptions,
   Ingredient,
   JobSave,
+  OutputPlacement,
   Recipe,
   RecipeOutput,
   Seed,

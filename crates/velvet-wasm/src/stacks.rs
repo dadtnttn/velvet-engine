@@ -7,8 +7,12 @@
 //! - `new StacksBoard(catalogJson, seed)` makes an empty board that plays with the catalog. Its
 //!   methods are `spawn(def, x, y)`, `moveStack(card, x, y)`, `dropOn(card, onto)`, `split(card)`,
 //!   `remove(card)`, `tick(dt)`, `takeEvents()`, `progress(card)`, `runningRecipe(card)`, `cards()`,
-//!   `stacks()` and `save()`.
+//!   `stacks()`, `save()`, `setOutputPlacement(placementJson)` and `outputPlacement()`.
 //! - `StacksBoard.load(catalogJson, saveJson)` restores a board from a save.
+//!
+//! The output placement is the document of `docs/formats/STACKS.md`: `{"kind": "row"}` (the default),
+//! or `{"kind": "free", "footprint": [w, h], "bounds": [x, y, width, height]}` with `bounds` left out
+//! for the whole table. It is not in a save, so a game sets it again after `load`.
 //!
 //! The JSON shapes are the ones in `docs/formats/STACKS.md`: the catalog, the board save, and the
 //! events (tagged by `event`). The two snapshots are `cards()`, a list of `{id, def, x, y}`, and
@@ -32,10 +36,10 @@
 //! The codes are the engine's refusals in kebab-case: `bad-input`, `bad-id`, `unsupported-document`,
 //! `empty-card-id`, `duplicate-card`, `zero-max`, `unknown-card`, `duplicate-recipe`,
 //! `unknown-recipe`, `no-ingredients`, `zero-count`, `bad-seconds`, `bad-chance`, `no-such-card`,
-//! `same-stack`, `drop-refused`, `stack-full`, `invalid-save` and `internal`.
+//! `same-stack`, `drop-refused`, `stack-full`, `bad-placement`, `invalid-save` and `internal`.
 
 use serde::Serialize;
-use velvet_stacks::{Board, BoardSave, Catalog, StacksError};
+use velvet_stacks::{Board, BoardSave, Catalog, OutputPlacement, StacksError};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::{json, respond, Failure};
@@ -68,8 +72,20 @@ fn code_of(error: &StacksError) -> &'static str {
         StacksError::SameStack(_) => "same-stack",
         StacksError::DropRefused { .. } => "drop-refused",
         StacksError::StackFull { .. } => "stack-full",
+        StacksError::BadPlacement(_) => "bad-placement",
         StacksError::InvalidSave(_) => "invalid-save",
     }
+}
+
+/// The output placement that a placement document names. Text that is not a placement fails with
+/// `bad-input`; a placement the rules refuse fails later, with `bad-placement`.
+fn parse_placement(text: &str) -> Result<OutputPlacement, Failure> {
+    serde_json::from_str(text).map_err(|error| {
+        Failure::new(
+            "bad-input",
+            format!("the output placement is not valid JSON of the expected shape: {error}"),
+        )
+    })
 }
 
 /// The id a JavaScript number names: a whole number from 1 up to 2^53 - 1. `what` names the
@@ -350,6 +366,26 @@ impl StacksBoard {
     pub fn save(&self) -> String {
         respond(self.checked_save())
     }
+
+    /// Sets where the outputs of finished jobs land, from the placement document `placementJson`
+    /// (see the module docs). Text that is not a placement fails with `bad-input`, and a placement the
+    /// rules refuse (a footprint side not above zero, a negative bounds side) fails with
+    /// `bad-placement`; a refused placement leaves the old one in place. Returns null.
+    #[wasm_bindgen(js_name = "setOutputPlacement")]
+    pub fn set_output_placement(&mut self, placement_json: &str) -> String {
+        let result = parse_placement(placement_json).and_then(|placement| {
+            self.board
+                .set_output_placement(placement)
+                .map_err(Failure::from)
+        });
+        respond(result)
+    }
+
+    /// The output placement in use, as the placement document that `setOutputPlacement` takes.
+    #[wasm_bindgen(js_name = "outputPlacement")]
+    pub fn output_placement(&self) -> String {
+        json(&self.board.output_placement())
+    }
 }
 
 /// Checks a catalog document and returns it in its normal form: every field written out, and the
@@ -625,6 +661,104 @@ mod tests {
         assert_eq!(
             reply(&board.stacks()),
             json!([{ "id": 1, "cards": [1, 2], "x": 1.0, "y": 2.0, "job": null }])
+        );
+    }
+
+    #[test]
+    fn the_output_placement_crosses_as_a_document() {
+        let mut board = StacksBoard::new(CATALOG, "1").expect("the shared catalog");
+        assert_eq!(reply(&board.output_placement()), json!({ "kind": "row" }));
+        assert_eq!(
+            reply(
+                &board.set_output_placement(
+                    r#"{"kind":"free","footprint":[1,1],"bounds":[0,0,4,4]}"#
+                )
+            ),
+            Value::Null
+        );
+        assert_eq!(
+            reply(&board.output_placement()),
+            json!({ "kind": "free", "footprint": [1.0, 1.0], "bounds": [0.0, 0.0, 4.0, 4.0] })
+        );
+        board.set_output_placement(r#"{"kind":"free","footprint":[2.5,1.0]}"#);
+        assert_eq!(
+            reply(&board.output_placement()),
+            json!({ "kind": "free", "footprint": [2.5, 1.0] }),
+            "without bounds the document leaves them out"
+        );
+        board.set_output_placement(r#"{"kind":"row"}"#);
+        assert_eq!(reply(&board.output_placement()), json!({ "kind": "row" }));
+    }
+
+    #[test]
+    fn a_placement_that_fails_keeps_the_old_one_and_names_its_code() {
+        let mut board = StacksBoard::new(CATALOG, "1").expect("the shared catalog");
+        board.set_output_placement(r#"{"kind":"free","footprint":[1,1]}"#);
+        for (text, code) in [
+            (r#"{"kind":"free","footprint":[0,1]}"#, "bad-placement"),
+            (
+                r#"{"kind":"free","footprint":[1,1],"bounds":[0,0,-1,2]}"#,
+                "bad-placement",
+            ),
+            (r#"{"kind":"grid"}"#, "bad-input"),
+            (r#"{"kind":"free","footprint":[1,null]}"#, "bad-input"),
+            ("not json", "bad-input"),
+        ] {
+            assert_eq!(
+                code_of_reply(&board.set_output_placement(text)).as_deref(),
+                Some(code),
+                "{text}"
+            );
+        }
+        assert_eq!(
+            reply(&board.output_placement()),
+            json!({ "kind": "free", "footprint": [1.0, 1.0] })
+        );
+    }
+
+    #[test]
+    fn free_placement_puts_a_job_output_beside_its_stack() {
+        let mut board = StacksBoard::new(CATALOG, "1").expect("the shared catalog");
+        board.set_output_placement(r#"{"kind":"free","footprint":[1,1]}"#);
+        board.spawn("forest", 0.0, 0.0);
+        board.spawn("worker", 0.0, 0.0);
+        board.drop_on(2.0, 1.0);
+        board.take_events();
+        assert_eq!(
+            events(&board.tick(2.0)),
+            vec![
+                BoardEvent::JobFinished {
+                    stack: 1,
+                    recipe: "gather_wood".into()
+                },
+                BoardEvent::CardSpawned {
+                    card: 3,
+                    def: "wood".into(),
+                    x: 1.0,
+                    y: 0.0
+                },
+                BoardEvent::StackChanged {
+                    stack: 3,
+                    cards: vec![3]
+                },
+                BoardEvent::JobStarted {
+                    stack: 1,
+                    recipe: "gather_wood".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_save_does_not_hold_the_placement() {
+        let mut board = StacksBoard::new(CATALOG, "1").expect("the shared catalog");
+        board.set_output_placement(r#"{"kind":"free","footprint":[1,1]}"#);
+        let save = board.save();
+        assert!(!save.contains("footprint"), "{save}");
+        let restored = StacksBoard::load(CATALOG, &save).expect("the save loads");
+        assert_eq!(
+            reply(&restored.output_placement()),
+            json!({ "kind": "row" })
         );
     }
 }

@@ -6,6 +6,7 @@ import { CardsError } from "./error";
 import { findFreeSpot } from "./spot";
 import type {
   BoardEvent,
+  BoardOptions,
   BoardPoint,
   BoardRect,
   BoardSave,
@@ -13,6 +14,7 @@ import type {
   Catalog,
   CardView,
   FreeSpotOptions,
+  OutputPlacement,
   Seed,
   StackView,
 } from "./types";
@@ -23,6 +25,21 @@ type NativeBoard = InstanceType<VelvetWasm["StacksBoard"]>;
 
 /** The largest 64-bit seed: 2^64 - 1. */
 const MAX_SEED = (1n << 64n) - 1n;
+
+/** Rounds to binary32, the precision the module keeps positions and sizes in. */
+const f32 = Math.fround;
+
+/**
+ * An output placement as the module reads it: a footprint `[width, height]` and bounds `[x, y, width,
+ * height]`, as arrays of numbers. The module writes it the same way (see docs/formats/STACKS.md).
+ */
+type WirePlacement =
+  | { readonly kind: "row" }
+  | {
+      readonly kind: "free";
+      readonly footprint: readonly [number, number];
+      readonly bounds?: readonly [number, number, number, number];
+    };
 
 /**
  * The decimal text that a seed crosses the boundary as. A number must be a safe integer, because
@@ -60,29 +77,96 @@ function checkPosition(x: number, y: number): void {
 }
 
 /**
- * Refuses a size that a stack cannot have: both sides must be finite numbers above zero.
+ * Refuses a size that a stack cannot have: both sides must be finite binary32 numbers above zero.
  * @throws {CardsError} with code `bad-input`.
  */
 function checkSize(size: BoardSize): void {
-  const { width, height } = size;
+  const width = f32(size.width);
+  const height = f32(size.height);
   if (!(Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0)) {
-    throw new CardsError("bad-input", `a size must be two finite numbers above zero, not (${width}, ${height})`);
+    throw new CardsError("bad-input", `a size must be two finite numbers above zero, not (${size.width}, ${size.height})`);
   }
 }
 
 /**
- * Refuses a rectangle of bounds whose corner or sides are not finite, or whose sides are negative.
+ * Refuses a rectangle of bounds whose corner or sides are not finite binary32 numbers, whose sides are
+ * negative, or whose far edges overflow.
  * @throws {CardsError} with code `bad-input`.
  */
 function checkBounds(bounds: BoardRect): void {
-  const { x, y, width, height } = bounds;
-  const finite = [x, y, width, height].every((value) => Number.isFinite(value));
-  if (!finite || width < 0 || height < 0) {
+  const fx = f32(bounds.x);
+  const fy = f32(bounds.y);
+  const fw = f32(bounds.width);
+  const fh = f32(bounds.height);
+  const finite = [fx, fy, fw, fh, f32(fx + fw), f32(fy + fh)].every((value) => Number.isFinite(value));
+  if (!finite || fw < 0 || fh < 0) {
     throw new CardsError(
       "bad-input",
       `bounds must be a finite rectangle with sides of zero or more, not ${JSON.stringify(bounds)}`,
     );
   }
+}
+
+/** True when `value` is a number that binary32 holds as a finite number. */
+function isBinary32(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(f32(value));
+}
+
+/**
+ * Turns a placement into the document the module reads. Every number in it must be a finite binary32
+ * number. The rules about sizes (a side above zero, a bounds side of zero or more) are the module's: it
+ * refuses them with `bad-placement`.
+ * @throws {CardsError} with code `bad-input` for a placement that is not of the expected shape, or a
+ *   number in it that is not finite.
+ */
+function toWire(placement: OutputPlacement): WirePlacement {
+  if (placement.kind === "row") return { kind: "row" };
+  const { footprint, bounds } = placement;
+  const numbers: unknown[] = [footprint?.width, footprint?.height];
+  if (bounds !== undefined) numbers.push(bounds.x, bounds.y, bounds.width, bounds.height);
+  if (placement.kind !== "free" || !numbers.every(isBinary32)) {
+    throw new CardsError(
+      "bad-input",
+      "an output placement is a row, or a free placement whose footprint and bounds are finite numbers, " +
+        `not ${JSON.stringify(placement)}`,
+    );
+  }
+  const wireFootprint: [number, number] = [f32(footprint.width), f32(footprint.height)];
+  if (bounds === undefined) return { kind: "free", footprint: wireFootprint };
+  const wireBounds: [number, number, number, number] = [
+    f32(bounds.x),
+    f32(bounds.y),
+    f32(bounds.width),
+    f32(bounds.height),
+  ];
+  return { kind: "free", footprint: wireFootprint, bounds: wireBounds };
+}
+
+/** The placement that the module wrote, in the shape the cards API uses. */
+function fromWire(wire: WirePlacement): OutputPlacement {
+  if (wire.kind === "row") return { kind: "row" };
+  const [width, height] = wire.footprint;
+  const footprint = { width, height };
+  if (wire.bounds === undefined) return { kind: "free", footprint };
+  const [x, y, w, h] = wire.bounds;
+  return { kind: "free", footprint, bounds: { x, y, width: w, height: h } };
+}
+
+/**
+ * Applies the options of `Board.create` or `Board.load` to a new board. A bad option frees the board and
+ * throws, so that nothing is left behind.
+ * @throws {CardsError} with the code of the option that is not valid (`bad-placement`, for one).
+ */
+function withOptions(board: Board, options: BoardOptions): Board {
+  if (options.outputPlacement !== undefined) {
+    try {
+      board.setOutputPlacement(options.outputPlacement);
+    } catch (error) {
+      board.free();
+      throw error;
+    }
+  }
+  return board;
 }
 
 /**
@@ -115,34 +199,39 @@ export class Board {
    * @param catalog - a catalog from `loadCatalog`.
    * @param seed - the seed of the chance rolls: a safe whole number, a bigint of up to 64 bits, or
    *   a string of decimal digits of up to 64 bits.
+   * @param options - the output placement, when it is not the row (see `setOutputPlacement`).
    * @returns the board.
-   * @throws {CardsError} with code `bad-input` for a seed that is not valid, and the code of the
-   *   rule that broke for a catalog that is not valid (see `loadCatalog`).
+   * @throws {CardsError} with code `bad-input` for a seed that is not valid, the code of the
+   *   rule that broke for a catalog that is not valid (see `loadCatalog`), and `bad-placement` for an
+   *   output placement that cannot hold a stack.
    */
-  static async create(catalog: Catalog, seed: Seed): Promise<Board> {
+  static async create(catalog: Catalog, seed: Seed, options: BoardOptions = {}): Promise<Board> {
     const text = seedText(seed);
     const wasm = await loadVelvetWasm();
     const native = attempt(() => new wasm.StacksBoard(JSON.stringify(catalog), text));
-    return new Board(native);
+    return withOptions(new Board(native), options);
   }
 
   /**
    * Restores a board from a save and the catalog it was played with. Stacks are matched again, so a
-   * job that no longer fits the catalog cannot run.
+   * job that no longer fits the catalog cannot run. A save does not hold the output placement, so a
+   * board starts with the row: pass `options` to set the placement the game uses.
    *
    * @param catalog - the catalog of the save.
    * @param save - the save document, as `save` returns it.
+   * @param options - the output placement, when it is not the row (see `setOutputPlacement`).
    * @returns the restored board.
    * @throws {CardsError} with code `invalid-save` for a save that is inconsistent, `unknown-card` or
    *   `unknown-recipe` for a save that names what the catalog does not have, `bad-id` for ids that a
-   *   JavaScript number cannot hold, and `bad-input` for a save that is not of the expected shape.
+   *   JavaScript number cannot hold, `bad-input` for a save that is not of the expected shape, and
+   *   `bad-placement` for an output placement that cannot hold a stack.
    */
-  static async load(catalog: Catalog, save: BoardSave): Promise<Board> {
+  static async load(catalog: Catalog, save: BoardSave, options: BoardOptions = {}): Promise<Board> {
     const wasm = await loadVelvetWasm();
     const native = attempt(() =>
       wasm.StacksBoard.load(JSON.stringify(catalog), JSON.stringify(save)),
     );
-    return new Board(native);
+    return withOptions(new Board(native), options);
   }
 
   /** The module's board; throws `disposed` once `free` has been called. */
@@ -312,6 +401,34 @@ export class Board {
       obstacles = stacks.filter((stack) => stack.id !== holder.id);
     }
     return findFreeSpot(obstacles, near, size, options.bounds);
+  }
+
+  /**
+   * Sets where the outputs of finished jobs land from now on: a row to the right of the stack (the
+   * default), or the nearest free spot of a grid (`free`). It changes no card, stack or job, and queues no
+   * events. The placement is not part of a save: a game sets it again after `Board.load`, or passes it to
+   * `Board.load` as an option.
+   *
+   * @param placement - the placement. For `free`, `footprint` is the size of a stack, and `bounds` (when
+   *   given) the rectangle that a spot must lie in, edges included.
+   * @throws {CardsError} with code `bad-input` for a number that is not finite (or not a placement of the
+   *   expected shape), and `bad-placement` for a footprint side that is not above zero, or a bounds side
+   *   that is negative. A refused placement changes nothing.
+   *
+   * @example
+   * board.setOutputPlacement({ kind: "free", footprint: { width: 1, height: 1 }, bounds: table });
+   */
+  setOutputPlacement(placement: OutputPlacement): void {
+    decode<null>(this.#live().setOutputPlacement(JSON.stringify(toWire(placement))));
+  }
+
+  /**
+   * The placement that finished jobs use now: `{ kind: "row" }` unless a game set another.
+   *
+   * @throws {CardsError} with code `disposed` once `free` has been called.
+   */
+  outputPlacement(): OutputPlacement {
+    return fromWire(decode<WirePlacement>(this.#live().outputPlacement()));
   }
 
   /**

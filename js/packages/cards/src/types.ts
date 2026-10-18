@@ -130,6 +130,23 @@ export interface FreeSpotOptions {
 }
 
 /**
+ * Where the outputs of a finished job land. `row` (the default) puts them in a row to the right of the
+ * stack, one step apart. `free` puts each one on the nearest free spot of a grid of `footprint` steps,
+ * around the point one footprint width right of the stack, and inside `bounds` when they are given. When
+ * no spot is free, the output lands in its row position, which may overlap a stack. The placement is not
+ * part of a save: a game sets it again after loading a board.
+ */
+export type OutputPlacement =
+  | { readonly kind: "row" }
+  | { readonly kind: "free"; readonly footprint: BoardSize; readonly bounds?: BoardRect };
+
+/** Options of `Board.create` and `Board.load`. */
+export interface BoardOptions {
+  /** Where the outputs of finished jobs land. Default: the row, `{ kind: "row" }`. */
+  readonly outputPlacement?: OutputPlacement;
+}
+
+/**
  * What happened on the board. Tagged by `event`. A `stack_changed` with an empty `cards` list means
  * the stack is gone.
  */

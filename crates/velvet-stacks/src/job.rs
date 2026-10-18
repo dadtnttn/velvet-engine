@@ -9,8 +9,9 @@
 use crate::board::{Board, BoardEvent, Job};
 use crate::def::CardDef;
 
-/// Distance, in board units, from a finished job's stack to its first output. Each further output
-/// lands one more step along the same row.
+/// Distance, in board units, from a finished job's stack to its first output under the row placement
+/// (the default). Each further output lands one more step along the same row. The free placement
+/// does not use it, except for the row position it falls back to (see [`crate::OutputPlacement`]).
 pub const OUTPUT_STEP: f32 = 1.5;
 
 /// The longest step one [`Board::tick`] takes, in seconds (an hour). A longer `dt` counts as this:
@@ -197,15 +198,16 @@ impl Board {
             self.touch_stack(stack);
         }
 
-        // Outputs appear in a row to the right of the stack, in the order the recipe lists them.
-        // Only a chance below 1 draws from the generator, once per copy.
+        // Outputs appear where the board's output placement puts them (a row to the right of the stack by
+        // default), in the order the recipe lists them. Only a chance below 1 draws from the generator,
+        // once per copy.
         let mut made = 0usize;
         for output in &recipe.outputs {
             for _ in 0..output.count {
                 if output.chance < 1.0 && self.rng_mut().next_unit() >= output.chance {
                     continue;
                 }
-                let pos = (origin.0 + OUTPUT_STEP * (made as f32 + 1.0), origin.1);
+                let pos = self.output_spot(origin, made);
                 self.create_card(&output.card, pos);
                 made += 1;
             }

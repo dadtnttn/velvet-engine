@@ -58,8 +58,8 @@ const restored = await Board.load(catalog, saved);
 | Call | What it does |
 |---|---|
 | `loadCatalog(json)` | Checks a catalog file and returns it in its normal form (recipes in precedence order). |
-| `Board.create(catalog, seed)` | An empty board. Equal seeds and equal actions give equal events. |
-| `Board.load(catalog, save)` | The board of a save, with the same job and random state. |
+| `Board.create(catalog, seed, options?)` | An empty board. Equal seeds and equal actions give equal events. `options.outputPlacement` sets where outputs land (see below). |
+| `Board.load(catalog, save, options?)` | The board of a save, with the same job and random state. A save does not hold the output placement, so pass it again here. |
 | `spawn(def, x, y)` | A new card in its own stack. Returns its id. |
 | `moveStack(card, x, y)` | Moves the whole stack of `card`. Queues no events. |
 | `dropOn(card, onto)` | Drops the stack from `card` upward onto the stack of `onto`, if the rules allow it. |
@@ -70,6 +70,8 @@ const restored = await Board.load(catalog, saved);
 | `progress(card)`, `runningRecipe(card)` | The progress (0 to 1) and recipe of the job on the card's stack, or null. |
 | `cards()`, `stacks()` | Snapshots of the table, sorted by id, for drawing. |
 | `freeSpot(near, size, options?)` | The nearest spot to `near` where a new stack of `size` does not overlap the stacks on the table, or null. Options: `bounds` (a rectangle the spot must lie in) and `except` (a card whose stack is not counted). Queues no events. |
+| `setOutputPlacement(placement)` | Sets where the outputs of finished jobs land: `{ kind: "row" }` (the default) or `{ kind: "free", footprint, bounds? }`. Queues no events and changes no card or job. |
+| `outputPlacement()` | The placement in use. |
 | `save()` | The board's state as a save document. |
 | `free()` | Frees the board in WebAssembly. Any call afterwards throws `disposed`. |
 
@@ -89,14 +91,26 @@ const restored = await Board.load(catalog, saved);
   from its position, so two stacks overlap when their positions differ by less than `size` on both
   axes; stacks that only touch do not overlap. The search tries the grid of `size` steps around `near`,
   ring by ring outward, and returns the nearest spot it tries; ties go to the smaller y, then x. It is
-  the nearest grid spot, not the nearest position in the plane.
+  the nearest grid spot, not the nearest position in the plane. Like the module, it computes in
+  binary32, rounding every result with `Math.fround`.
+- **Output placement** decides where the copies of a finished job appear. `row` (the default) puts
+  them in a row to the right of the stack, one step of 1.5 apart. `free` puts each copy on the nearest
+  free spot, found by the same search as `freeSpot`, from one footprint width to the right of the
+  stack. `footprint` is a `BoardSize` and `bounds` (optional) a `BoardRect`; when no spot inside the
+  bounds is free, the copy lands on its row position, even over a stack. The placement is set on the
+  board, not saved: pass it to `Board.create` or `Board.load` as `options.outputPlacement`, or call
+  `setOutputPlacement` after loading. The module's search and `freeSpot` agree, spot for spot, on the
+  same table (the tests check it).
 - **Events** are tagged by `event` (`job_started`, `job_cancelled`, `job_finished`, `card_spawned`,
   `card_consumed`, `stack_changed`). A refused action changes nothing and queues no events.
 - **Failures** are `CardsError`s with a `code` (see `src/error.ts`): `bad-input`, `bad-id`,
-  `unknown-card`, `drop-refused`, `stack-full`, `same-stack`, `no-such-card`, `invalid-save`, and
-  the catalog codes such as `duplicate-card`.
+  `unknown-card`, `drop-refused`, `stack-full`, `same-stack`, `no-such-card`, `bad-placement`,
+  `invalid-save`, and the catalog codes such as `duplicate-card`. `bad-placement` means a footprint side
+  that is not above zero, or a negative bounds side; `bad-input` means a number that is not finite.
 
 ## Tests
 
 `pnpm test` (from `js/`) runs the shared stacks fixtures in `docs/formats/fixtures/stacks`, the same
-cases that `crates/velvet-stacks` and `crates/velvet-wasm` run, and the unit tests next to the code.
+cases that `crates/velvet-stacks` and `crates/velvet-wasm` run, and the unit tests next to the code. The
+output placement is tested through the real WebAssembly module, and against `findFreeSpot` on random
+tables: the position the module picks for each copy must equal the one the JavaScript search picks.

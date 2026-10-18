@@ -31,6 +31,10 @@ struct Case {
     steps: Vec<Step>,
     #[serde(default)]
     expect: Option<Expect>,
+    /// Where finished jobs put their outputs; the row when absent. A save does not keep it, so it is set
+    /// again after every `reload` step.
+    #[serde(default)]
+    placement: Option<Value>,
 }
 
 /// One action or check. A step compares events only when it lists them.
@@ -104,6 +108,18 @@ fn reply(text: &str) -> Value {
     serde_json::from_str(text).expect("the boundary replies with JSON")
 }
 
+/// Sets the output placement of a case on `board`, when the case names one.
+fn place_outputs(board: &mut StacksBoard, placement: Option<&Value>, at: &str) {
+    if let Some(placement) = placement {
+        let outcome = reply(&board.set_output_placement(&placement.to_string()));
+        assert_eq!(
+            failure_code(&outcome),
+            None,
+            "{at}: placement refused: {outcome}"
+        );
+    }
+}
+
 /// The failure code of a reply, or None when the reply is not a failure.
 fn failure_code(outcome: &Value) -> Option<&str> {
     outcome["code"].as_str()
@@ -160,6 +176,7 @@ fn run_case(path: &Path, catalog_json: &str) {
 
     let mut board =
         StacksBoard::new(catalog_json, &case.seed).unwrap_or_else(|e| panic!("{name}: {e}"));
+    place_outputs(&mut board, case.placement.as_ref(), &name);
     for (index, step) in case.steps.iter().enumerate() {
         let at = format!("{name}, step {index}");
         match step {
@@ -252,6 +269,7 @@ fn run_case(path: &Path, catalog_json: &str) {
                 let save = board.save();
                 board =
                     StacksBoard::load(catalog_json, &save).unwrap_or_else(|e| panic!("{at}: {e}"));
+                place_outputs(&mut board, case.placement.as_ref(), &at);
             }
         }
     }

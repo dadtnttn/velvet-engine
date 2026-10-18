@@ -211,6 +211,37 @@ describe("check on games built from the shared fixtures", () => {
     expect(lines(failing.issues)).toContain("public/data/cases/01_gather_repeats.json expect.cards case-table");
   });
 
+  it("checks the output placement that a case names: its shape, its fields and its signs", async () => {
+    const path = "public/data/cases/13_free_placement_empty_area.json";
+    const folder = await fixtureGame({
+      "public/data/catalog.json": join(FIXTURES, "stacks", "catalog.json"),
+      [path]: join(FIXTURES, "stacks", "cases", "13_free_placement_empty_area.json"),
+    });
+    /** The issues of that case, as lines, once its placement is set to `placement`. */
+    const withPlacement = async (placement: unknown): Promise<string[]> => {
+      const doc = await readJson(folder, path);
+      doc["placement"] = placement;
+      await writeFiles(folder, { [path]: doc });
+      return lines((await checkGame(folder)).issues).filter((line) => line.startsWith(path));
+    };
+    expect(await withPlacement({ kind: "free", footprint: [1, 1] })).toEqual([]);
+    expect(await withPlacement({ kind: "free", footprint: [0, 1] })).toEqual([`${path} placement bad-placement`]);
+    expect(await withPlacement({ kind: "free", footprint: [1, 1], bounds: [0, 0, -1, 2] })).toEqual([
+      `${path} placement bad-placement`,
+    ]);
+    expect(await withPlacement({ kind: "free", footprint: [1e39, 1] })).toEqual([`${path} placement structure`]);
+    expect(await withPlacement({ kind: "free" })).toEqual([`${path} placement structure`]);
+    expect(await withPlacement({ kind: "free", footprint: [1, 1], bounds: [0, 0, 2] })).toEqual([
+      `${path} placement structure`,
+    ]);
+    expect(await withPlacement({ kind: "free", footprint: [1, 1], colour: 1 })).toEqual([
+      `${path} placement unknown-field`,
+    ]);
+    expect(await withPlacement({ kind: "row", footprint: [1, 1] })).toEqual([`${path} placement unknown-field`]);
+    expect(await withPlacement({ kind: "grid" })).toEqual([`${path} placement structure`]);
+    expect(await withPlacement("free")).toEqual([`${path} placement structure`]);
+  });
+
   it("warns, and skips the key checks, when a game has data but no locale catalogs", async () => {
     const folder = await fixtureGame({ "public/data/catalog.json": join(FIXTURES, "stacks", "catalog.json") });
     const result = await checkGame(folder);

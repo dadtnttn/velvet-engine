@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use pretty_assertions::assert_eq;
 use serde::Deserialize;
-use velvet_stacks::{Board, BoardEvent, Catalog};
+use velvet_stacks::{Board, BoardEvent, Catalog, OutputPlacement};
 
 /// The shared fixtures folder, next to the format specification.
 fn fixtures_dir() -> PathBuf {
@@ -32,6 +32,10 @@ struct Case {
     kind: String,
     name: String,
     seed: String,
+    /// Where the outputs of finished jobs land. Absent means the row, the default. A game sets the
+    /// placement again after loading, so the runner sets it again after every `reload` step.
+    #[serde(default)]
+    placement: Option<OutputPlacement>,
     steps: Vec<Step>,
     #[serde(default)]
     expect: Option<Expect>,
@@ -121,7 +125,11 @@ fn run_case(path: &Path, catalog: &Catalog) {
         .parse()
         .unwrap_or_else(|_| panic!("{name}: seed `{}` is not a number", case.seed));
 
+    let placement = case.placement.unwrap_or_default();
     let mut board = Board::new(catalog.clone(), seed);
+    board
+        .set_output_placement(placement)
+        .unwrap_or_else(|e| panic!("{name}: {e}"));
     for (index, step) in case.steps.iter().enumerate() {
         let at = format!("{name}, step {index}");
         match step {
@@ -196,6 +204,9 @@ fn run_case(path: &Path, catalog: &Catalog) {
             Step::Reload => {
                 let json = board.to_json().unwrap_or_else(|e| panic!("{at}: {e}"));
                 board = Board::from_json(catalog.clone(), &json)
+                    .unwrap_or_else(|e| panic!("{at}: {e}"));
+                board
+                    .set_output_placement(placement)
                     .unwrap_or_else(|e| panic!("{at}: {e}"));
             }
         }

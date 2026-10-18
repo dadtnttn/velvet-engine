@@ -1,0 +1,64 @@
+{
+  "format": "velvet-stacks",
+  "version": 1,
+  "kind": "case",
+  "name": "free placement: the first wood lands beside the forest, the next ones take the nearest free spots",
+  "seed": "1",
+  "placement": { "kind": "free", "footprint": [1.0, 1.0] },
+  "steps": [
+    {
+      "op": "spawn", "def": "forest", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 1, "def": "forest", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 1, "cards": [1] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "worker", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 2, "def": "worker", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 2, "cards": [2] }
+      ]
+    },
+    {
+      "op": "drop", "card": 2, "onto": 1,
+      "events": [
+        { "event": "stack_changed", "stack": 2, "cards": [] },
+        { "event": "stack_changed", "stack": 1, "cards": [1, 2] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_wood" }
+      ]
+    },
+    {
+      "op": "tick", "dt": 2.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "gather_wood" },
+        { "event": "card_spawned", "card": 3, "def": "wood", "x": 1.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 3, "cards": [3] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_wood" }
+      ]
+    },
+    {
+      "op": "tick", "dt": 2.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "gather_wood" },
+        { "event": "card_spawned", "card": 4, "def": "wood", "x": 1.0, "y": -1.0 },
+        { "event": "stack_changed", "stack": 4, "cards": [4] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_wood" }
+      ]
+    },
+    {
+      "op": "tick", "dt": 2.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "gather_wood" },
+        { "event": "card_spawned", "card": 5, "def": "wood", "x": 2.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 5, "cards": [5] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_wood" }
+      ]
+    },
+    { "op": "check", "position": { "3": [1.0, 0.0], "4": [1.0, -1.0], "5": [2.0, 0.0] } }
+  ],
+  "expect": {
+    "cards": { "forest": 1, "worker": 1, "wood": 3 },
+    "stacks": [[1, 2], [3], [4], [5]]
+  }
+}

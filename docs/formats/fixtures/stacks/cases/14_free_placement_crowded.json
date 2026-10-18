@@ -1,0 +1,72 @@
+{
+  "format": "velvet-stacks",
+  "version": 1,
+  "kind": "case",
+  "name": "free placement around neighbours: the wood skips the spots that stones cover and lines up beside them",
+  "seed": "1",
+  "placement": { "kind": "free", "footprint": [1.0, 1.0] },
+  "steps": [
+    {
+      "op": "spawn", "def": "forest", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 1, "def": "forest", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 1, "cards": [1] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "worker", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 2, "def": "worker", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 2, "cards": [2] }
+      ]
+    },
+    {
+      "op": "drop", "card": 2, "onto": 1,
+      "events": [
+        { "event": "stack_changed", "stack": 2, "cards": [] },
+        { "event": "stack_changed", "stack": 1, "cards": [1, 2] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_wood" }
+      ]
+    },
+    { "op": "spawn", "def": "stone", "at": [1.0, 0.0] },
+    { "op": "spawn", "def": "stone", "at": [0.0, 1.0] },
+    { "op": "spawn", "def": "stone", "at": [0.0, -1.0] },
+    { "op": "spawn", "def": "stone", "at": [-1.0, 0.0] },
+    { "op": "spawn", "def": "stone", "at": [1.0, 1.0] },
+    { "op": "spawn", "def": "stone", "at": [1.0, -1.0] },
+    { "op": "spawn", "def": "stone", "at": [-1.0, 1.0] },
+    { "op": "spawn", "def": "stone", "at": [-1.0, -1.0] },
+    {
+      "op": "tick", "dt": 2.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "gather_wood" },
+        { "event": "card_spawned", "card": 11, "def": "wood", "x": 2.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 11, "cards": [11] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_wood" }
+      ]
+    },
+    {
+      "op": "tick", "dt": 2.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "gather_wood" },
+        { "event": "card_spawned", "card": 12, "def": "wood", "x": 2.0, "y": -1.0 },
+        { "event": "stack_changed", "stack": 12, "cards": [12] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_wood" }
+      ]
+    },
+    {
+      "op": "tick", "dt": 2.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "gather_wood" },
+        { "event": "card_spawned", "card": 13, "def": "wood", "x": 2.0, "y": 1.0 },
+        { "event": "stack_changed", "stack": 13, "cards": [13] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_wood" }
+      ]
+    },
+    { "op": "check", "position": { "11": [2.0, 0.0], "12": [2.0, -1.0], "13": [2.0, 1.0] } }
+  ],
+  "expect": {
+    "cards": { "forest": 1, "worker": 1, "stone": 8, "wood": 3 },
+    "stacks": [[1, 2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13]]
+  }
+}
