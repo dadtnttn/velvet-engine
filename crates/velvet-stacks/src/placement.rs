@@ -2,8 +2,9 @@
 //!
 //! The default, [`OutputPlacement::Row`], is the rule of version 1: the copies make a row to the right
 //! of the stack, [`OUTPUT_STEP`] apart. [`OutputPlacement::Free`] puts each copy on the nearest free
-//! spot of a grid, inside optional bounds. The placement is configuration, like the catalog: a save
-//! does not hold it, and a game sets it again after it loads a board.
+//! spot of a grid, inside optional bounds, or anywhere on the table when the bounds hold none. The
+//! placement is configuration, like the catalog: a save does not hold it, and a game sets it again
+//! after it loads a board.
 //!
 //! The free search is the rule of `findFreeSpot` in `js/packages/cards/src/spot.ts`, computed in
 //! binary32 operation for operation, so the two pick the same spot for the same table. The cross-check
@@ -17,6 +18,13 @@ use crate::job::OUTPUT_STEP;
 
 /// A rectangle `(x, y, width, height)`, in board units.
 type Rect = (f32, f32, f32, f32);
+
+/// The most rings the search looks at without bounds: the constant `MAX_FREE_RING` of
+/// `docs/formats/STACKS.md`. A stack blocks at most four spots, so the rings up to this one hold a free
+/// spot for any table of fewer than about a million stacks, and an ordinary table finds its nearest free
+/// spot well inside them. The cap also keeps the search finite for footprints so small that its stopping
+/// rule underflows in binary32 (below about 3e-23 board units), where the search would otherwise run on.
+const MAX_FREE_RING: i64 = 1000;
 
 /// Where the copies that a finished job makes appear. Set with [`Board::set_output_placement`].
 ///
@@ -32,8 +40,9 @@ pub enum OutputPlacement {
     Row,
     /// Each copy lands on the nearest free spot of a grid. The grid steps by `footprint` and starts
     /// one footprint width to the right of the stack. A spot is free when no stack overlaps it and,
-    /// when `bounds` is given, it lies inside them. When no spot is free, the copy lands in its row
-    /// position instead, even when a stack is already there.
+    /// when `bounds` is given, it lies inside them. When no spot inside the bounds is free, the copy
+    /// takes the nearest free spot anywhere on the table. Only when there is none does it land in its
+    /// row position, even when a stack is already there.
     Free {
         /// The size of a stack, `[width, height]`: both sides finite and above zero. Every stack
         /// covers this size from its position.
@@ -96,7 +105,8 @@ impl Board {
     /// With the row placement the copy goes to `origin.x + OUTPUT_STEP * (made + 1)`, `origin.y`. With
     /// the free placement it goes to the nearest free spot from `(origin.x + footprint width, origin.y)`,
     /// judged against every stack on the table now, copies made earlier in this finish included. When no
-    /// spot inside the bounds is free, the copy falls back to its row position, which may overlap a stack.
+    /// spot inside the bounds is free, the search runs again without bounds. Only when that finds none
+    /// either, the copy falls back to its row position, which may overlap a stack.
     pub(crate) fn output_spot(&self, origin: (f32, f32), made: usize) -> (f32, f32) {
         let row = (origin.0 + OUTPUT_STEP * (made as f32 + 1.0), origin.1);
         match self.output_placement {
@@ -108,15 +118,22 @@ impl Board {
                     .keys()
                     .filter_map(|&stack| self.stack_position(stack))
                     .collect();
-                free_spot(&obstacles, near, footprint, bounds).unwrap_or(row)
+                let inside = free_spot(&obstacles, near, footprint, bounds);
+                let spot = if bounds.is_some() && inside.is_none() {
+                    free_spot(&obstacles, near, footprint, None)
+                } else {
+                    inside
+                };
+                spot.unwrap_or(row)
             }
         }
     }
 }
 
-/// The nearest free spot, or `None` when every spot inside `bounds` is taken (without bounds there
-/// is always one). It is the search of `findFreeSpot` in `spot.ts`, in binary32, and it returns the
-/// same spot for the same table.
+/// The nearest free spot, or `None` when the rings searched hold none. With bounds that happens when
+/// every spot inside them is taken. Without bounds it does not happen for a table of fewer than about a
+/// million stacks, unless binary32 cannot tell neighbouring spots apart (see [`Search::ring_range`]). It is
+/// the search of `findFreeSpot` in `spot.ts`, in binary32, and it returns the same spot for the same table.
 ///
 /// `obstacles` are the positions of the stacks on the table, `near` is where the search starts,
 /// `size` is the footprint, and `bounds` is the rectangle the spot must lie in, if any.
@@ -182,7 +199,8 @@ impl Search<'_> {
     /// The first and last ring to search. Rings outside them hold no candidate: with bounds, the
     /// rings start one short of the bounds' nearest point and end one past their far corners; without
     /// bounds, they end two past the farthest stack. Steps count the larger axis, in units of the
-    /// footprint, and a spot's ring is its number of steps.
+    /// footprint, and a spot's ring is its number of steps. Without bounds the last ring is capped at
+    /// [`MAX_FREE_RING`], which keeps the search finite.
     fn ring_range(&self) -> (i64, i64) {
         let (width, height) = self.size;
         let (near_x, near_y) = self.near;
@@ -193,7 +211,10 @@ impl Search<'_> {
                     .obstacles
                     .iter()
                     .fold(0.0_f32, |far, &(x, y)| far.max(steps(x, y)));
-                (0, whole_steps(farthest).saturating_add(2))
+                (
+                    0,
+                    whole_steps(farthest).saturating_add(2).min(MAX_FREE_RING),
+                )
             }
             Some((x, y, w, h)) => {
                 // The point of the bounds nearest to `near`, and how many steps away it is.
@@ -547,12 +568,13 @@ mod tests {
     }
 
     #[test]
-    fn copies_with_full_bounds_fall_back_to_their_row_positions() {
+    fn copies_with_full_bounds_go_to_the_nearest_free_spot_anywhere() {
         let mut board = Board::new(catalog(), 1);
         let bush = board.spawn("berry_bush", (0.0, 0.0)).expect("bush");
         let worker = board.spawn("worker", (0.0, 0.0)).expect("worker");
         board.drop_on(worker, bush).expect("drop");
-        // The only spot inside the bounds is the bush's own, so both copies use their row positions.
+        // The only spot inside the bounds is the bush's own, so the search runs again without bounds: the
+        // first copy takes the spot to the right of the bush, and the second one the spot at (1, -1).
         board
             .set_output_placement(OutputPlacement::Free {
                 footprint: (1.0, 1.0),
@@ -568,6 +590,57 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(spawned, vec![(1.5, 0.0), (3.0, 0.0)]);
+        assert_eq!(spawned, vec![(1.0, 0.0), (1.0, -1.0)]);
+    }
+
+    #[test]
+    fn a_search_without_bounds_looks_past_the_first_rings() {
+        // The bush and eight stones fill rings 0 and 1 around (1, 0). The nearest free spots are two steps
+        // out, and (1, -2) is the one with the smallest y.
+        let table = [
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, -1.0),
+            (2.0, -1.0),
+            (0.0, -1.0),
+            (2.0, 0.0),
+            (0.0, 1.0),
+            (1.0, 1.0),
+            (2.0, 1.0),
+        ];
+        assert_eq!(
+            free_spot(&table, (1.0, 0.0), (1.0, 1.0), None),
+            Some((1.0, -2.0))
+        );
+        // Bounds that hold only the bush's own spot find none.
+        assert_eq!(
+            free_spot(&table, (1.0, 0.0), (1.0, 1.0), Some((0.0, 0.0, 0.0, 0.0))),
+            None
+        );
+    }
+
+    #[test]
+    fn the_search_without_bounds_stops_at_the_ring_cap() {
+        // The stack is so far away, in steps of this footprint, that the last ring would lie past the cap.
+        let obstacles = [(1.0e3_f32, 0.0_f32)];
+        let search = Search {
+            obstacles: &obstacles,
+            near: (0.0, 0.0),
+            size: (1.0e-30, 1.0e-30),
+            bounds: None,
+            tolerance: 0.0,
+            best: None,
+        };
+        assert_eq!(search.ring_range(), (0, MAX_FREE_RING));
+    }
+
+    #[test]
+    fn a_footprint_too_small_for_the_stopping_rule_still_ends() {
+        // The squared distances of the rings round to zero here, so the stopping rule never fires: the cap ends it.
+        // The spot is the one the JavaScript search picks too (spot.test.ts), binary32 value for binary32 value.
+        assert_eq!(
+            free_spot(&[(1.0e3, 0.0)], (1.0e-30, 0.0), (1.0e-30, 1.0e-30), None),
+            Some((-9.99e-28_f32, -1.0e-27_f32))
+        );
     }
 }

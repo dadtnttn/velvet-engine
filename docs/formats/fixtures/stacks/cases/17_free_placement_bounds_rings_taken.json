@@ -1,0 +1,56 @@
+{
+  "format": "velvet-stacks",
+  "version": 1,
+  "kind": "case",
+  "name": "free placement with bounds that hold no free spot and the first two rings taken: the copies take the nearest free spots two rings out",
+  "seed": "1",
+  "placement": { "kind": "free", "footprint": [1.0, 1.0], "bounds": [0.0, 0.0, 0.0, 0.0] },
+  "steps": [
+    {
+      "op": "spawn", "def": "berry_bush", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 1, "def": "berry_bush", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 1, "cards": [1] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "worker", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 2, "def": "worker", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 2, "cards": [2] }
+      ]
+    },
+    {
+      "op": "drop", "card": 2, "onto": 1,
+      "events": [
+        { "event": "stack_changed", "stack": 2, "cards": [] },
+        { "event": "stack_changed", "stack": 1, "cards": [1, 2] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_berries_bonus" }
+      ]
+    },
+    { "op": "spawn", "def": "stone", "at": [1.0, 0.0] },
+    { "op": "spawn", "def": "stone", "at": [1.0, -1.0] },
+    { "op": "spawn", "def": "stone", "at": [2.0, -1.0] },
+    { "op": "spawn", "def": "stone", "at": [0.0, -1.0] },
+    { "op": "spawn", "def": "stone", "at": [2.0, 0.0] },
+    { "op": "spawn", "def": "stone", "at": [0.0, 1.0] },
+    { "op": "spawn", "def": "stone", "at": [1.0, 1.0] },
+    { "op": "spawn", "def": "stone", "at": [2.0, 1.0] },
+    {
+      "op": "tick", "dt": 2.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "gather_berries_bonus" },
+        { "event": "card_spawned", "card": 11, "def": "berries", "x": 1.0, "y": -2.0 },
+        { "event": "stack_changed", "stack": 11, "cards": [11] },
+        { "event": "card_spawned", "card": 12, "def": "berries", "x": -1.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 12, "cards": [12] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_berries_bonus" }
+      ]
+    },
+    { "op": "check", "position": { "11": [1.0, -2.0], "12": [-1.0, 0.0] } }
+  ],
+  "expect": {
+    "cards": { "berry_bush": 1, "worker": 1, "stone": 8, "berries": 2 },
+    "stacks": [[1, 2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12]]
+  }
+}

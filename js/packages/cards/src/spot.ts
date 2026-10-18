@@ -14,6 +14,13 @@ type Cell = readonly [number, number];
 const f32 = Math.fround;
 
 /**
+ * The most rings the search looks at without bounds: the constant `MAX_FREE_RING` of docs/formats/STACKS.md.
+ * velvet-stacks uses the same cap, so both runtimes stop at the same ring, and it keeps the search finite for
+ * footprints so small that its stopping rule underflows in binary32.
+ */
+const MAX_FREE_RING = 1000;
+
+/**
  * The cells of ring `r`: every cell whose larger offset, in absolute value, is `r`. Ring 0 is the
  * starting point itself. The rings are visited outward, which makes the search a spiral.
  * @param r - the ring, from 0 up.
@@ -45,7 +52,10 @@ function ringCells(r: number): Cell[] {
  * @param near - the point the search starts from.
  * @param size - the footprint of a stack, in board units; both sides above zero.
  * @param bounds - when given, the spot's position must lie inside this rectangle (its edges included).
- * @returns the spot, or null when every spot inside `bounds` is taken.
+ * @returns the spot, or null when no spot is free: with `bounds`, when every spot inside them is taken. Without
+ *   bounds the search finds one for a table of fewer than about a million stacks, for positions that binary32
+ *   can tell apart. The output placement relies on this: it searches inside its bounds first, and then again
+ *   without them.
  */
 export function findFreeSpot(
   obstacles: readonly BoardPoint[],
@@ -90,7 +100,7 @@ export function findFreeSpot(
     // An obstacle blocks only the cells within one step of it, so the rings past the farthest obstacle are free.
     let farthest = 0;
     for (const stack of stacks) farthest = Math.max(farthest, steps(stack.x, stack.y));
-    lastRing = Math.ceil(farthest) + 2;
+    lastRing = Math.min(Math.ceil(farthest) + 2, MAX_FREE_RING);
   } else {
     // Cells inside the bounds lie between the nearest point of the bounds and its far corner.
     const nearestX = Math.min(Math.max(start.x, area.x), area.right);

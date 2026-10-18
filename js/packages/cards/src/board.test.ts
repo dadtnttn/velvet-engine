@@ -513,7 +513,7 @@ describe("output placement", () => {
     await expectRejection(Board.load(catalog, saved, { outputPlacement: bad }), "bad-placement");
   });
 
-  it("falls back to the row positions when the bounds hold no free spot", async () => {
+  it("searches again without bounds when the bounds hold no free spot", async () => {
     const board = await Board.create(await shared(), 1, {
       outputPlacement: {
         kind: "free",
@@ -524,10 +524,11 @@ describe("output placement", () => {
     const bush = board.spawn("berry_bush", 0, 0);
     board.dropOn(board.spawn("worker", 0, 0), bush);
     board.takeEvents();
-    // The only spot in the bounds is the bush's own, so the two copies use their row positions.
+    // The only spot in the bounds is the bush's own, so the search runs again without bounds: the first copy takes
+    // the spot to the right of the bush, and the second one the spot at (1, -1).
     expect(board.tick(2).filter((event) => event.event === "card_spawned")).toEqual([
-      { event: "card_spawned", card: 3, def: "berries", x: 1.5, y: 0 },
-      { event: "card_spawned", card: 4, def: "berries", x: 3, y: 0 },
+      { event: "card_spawned", card: 3, def: "berries", x: 1, y: 0 },
+      { event: "card_spawned", card: 4, def: "berries", x: 1, y: -1 },
     ]);
     board.free();
   });
@@ -546,12 +547,13 @@ describe("the free output placement agrees with findFreeSpot", () => {
     const random = generator(19);
     const f32 = (value: number): number => Math.fround(value);
     let compared = 0;
-    let fallbacks = 0;
+    let widened = 0;
+    let rows = 0;
     for (let table = 0; table < 24; table += 1) {
       const footprint: BoardSize = { width: f32(0.5 + random() * 1.5), height: f32(0.5 + random()) };
       const origin: BoardPoint = { x: f32(random() * 4 - 2), y: f32(random() * 4 - 2) };
-      // Every fourth table has the origin itself as its only spot, which the forest holds, so every copy falls
-      // back to its row position. The others have no bounds, or bounds that may or may not hold a spot.
+      // Every fourth table has the origin itself as its only spot, which the forest holds, so every copy searches
+      // again without bounds. The others have no bounds, or bounds that may or may not hold a spot.
       let bounds: BoardRect | undefined;
       if (table % 4 === 3) {
         bounds = { x: origin.x, y: origin.y, width: 0, height: 0 };
@@ -581,8 +583,11 @@ describe("the free output placement agrees with findFreeSpot", () => {
         // The table as the module holds it, before the job finishes: the job's stack and the earlier copies included.
         const obstacles = board.stacks();
         const near = { x: f32(origin.x + footprint.width), y: origin.y };
-        const found = findFreeSpot(obstacles, near, footprint, bounds);
-        if (found === null) fallbacks += 1;
+        // The module searches inside the bounds first, and when no spot there is free, again without bounds.
+        const inside = findFreeSpot(obstacles, near, footprint, bounds);
+        if (inside === null) widened += 1;
+        const found = inside ?? findFreeSpot(obstacles, near, footprint);
+        if (found === null) rows += 1;
         const expected = found ?? { x: f32(origin.x + 1.5), y: origin.y };
         board.takeEvents();
         const spawned = board.tick(2).find((event) => event.event === "card_spawned");
@@ -595,6 +600,7 @@ describe("the free output placement agrees with findFreeSpot", () => {
       board.free();
     }
     expect(compared).toBe(72);
-    expect(fallbacks, "some tables must reach the row fallback too").toBeGreaterThan(0);
+    expect(widened, "some tables must reach the search without bounds too").toBeGreaterThan(0);
+    expect(rows, "the row position is only for a table with no free spot at all").toBe(0);
   });
 });

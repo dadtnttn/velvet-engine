@@ -63,6 +63,33 @@ describe("findFreeSpot", () => {
     expect(findFreeSpot([], { x: 5, y: 5 }, UNIT, bounds)).toEqual({ x: 0, y: 0 });
   });
 
+  it("looks past the first rings when no bounds are given, and finds nothing inside bounds that are taken", () => {
+    // The bush and eight stones fill rings 0 and 1 around (1, 0): the nearest free spots are two steps out, and
+    // (1, -2) is the one with the smallest y.
+    const table: BoardPoint[] = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: -1 },
+      { x: 2, y: -1 },
+      { x: 0, y: -1 },
+      { x: 2, y: 0 },
+      { x: 0, y: 1 },
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+    ];
+    expect(findFreeSpot(table, { x: 1, y: 0 }, UNIT)).toEqual({ x: 1, y: -2 });
+    expect(findFreeSpot(table, { x: 1, y: 0 }, UNIT, { x: 0, y: 0, width: 0, height: 0 })).toBeNull();
+  });
+
+  it("ends for a footprint so small that its squares underflow, at the spot velvet-stacks picks", () => {
+    // The squared distances of the rings round to zero here, so the stopping rule never fires: the cap ends it.
+    // The same spot as the Rust test in placement.rs, binary32 value for binary32 value.
+    expect(findFreeSpot([{ x: 1000, y: 0 }], { x: 1e-30, y: 0 }, { width: 1e-30, height: 1e-30 })).toEqual({
+      x: f32(-9.99e-28),
+      y: f32(-1e-27),
+    });
+  });
+
   it("rounds its inputs and its results to binary32, as the module does", () => {
     // 0.1 is not a binary32 number: the spot is the binary32 value nearest to it.
     expect(findFreeSpot([], { x: 0.1, y: 0 }, UNIT)).toEqual({ x: f32(0.1), y: 0 });

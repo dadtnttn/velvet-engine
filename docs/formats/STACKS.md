@@ -287,7 +287,7 @@ forms, written as JSON:
 | Form | JSON | Meaning |
 |---|---|---|
 | Row (the default) | `{ "kind": "row" }` | The copies go in a row to the right of the origin, as in [Finishing a job](#finishing-a-job). |
-| Free | `{ "kind": "free", "footprint": [width, height], "bounds": [x, y, width, height] }` | Each copy lands on the nearest free spot. `bounds` may be left out, which means the whole table. |
+| Free | `{ "kind": "free", "footprint": [width, height], "bounds": [x, y, width, height] }` | Each copy lands on the nearest free spot inside `bounds`, or on the nearest free spot anywhere when none is free inside them. `bounds` may be left out, which means the whole table. |
 
 **Configuration, not state.** The placement is not part of a board save. A board that is created or
 loaded starts with the row, and a game sets its placement again after it loads a board, as it loads
@@ -306,9 +306,10 @@ For copy `k`:
    stack before its cards were consumed, and `width` is the footprint's width.
 2. The obstacles are the positions of the bottom cards of every stack on the table at that moment:
    the job's own stack, if cards are left on it, and the copies that this finish has already placed.
-3. The copy lands on the spot that the search below finds. When the search finds none (only possible
-   with bounds), the copy lands on its row position, `(origin.x + 1.5 * (k + 1), origin.y)`, even when
-   a stack is there already.
+3. The copy lands on the spot that the search below finds. When bounds are given and the search finds
+   none inside them, the search runs again without bounds, and the copy lands on the nearest free spot
+   anywhere on the table. Only when no free spot is found at all does the copy land on its row position,
+   `(origin.x + 1.5 * (k + 1), origin.y)`, even when a stack is there already.
 
 Each copy is a `card_spawned` and a `stack_changed` event, as in the row.
 
@@ -323,15 +324,27 @@ binary32, and every operation below rounds its result to binary32, in the order 
   every spot does), and no obstacle overlaps it.
 - *Choice.* The result is the candidate with the least `(d, j, i)`, compared in that order: the
   nearest spot, then the smaller `j` (the offset in y), then the smaller `i` (the offset in x). When no
-  candidate is found, the copy falls back to its row position, as above.
+  candidate is found inside bounds, step 3 above applies: the search runs again without bounds, and only
+  if that finds no candidate either does the copy take its row position.
 - *Rings searched.* Only the rings from `first` to `last` are searched. Let `s(x, y)` be
   `max(|x - near.x| / w, |y - near.y| / h)`, and `F` the largest `s` over the obstacles (without bounds)
   or over the four corners of the bounds (with bounds); `F` is 0 when there are none.
-  - Without bounds: `first = 0` and `last = ceil(F) + 2`.
+  - Without bounds: `first = 0` and `last = min(ceil(F) + 2, 1000)`, where 1000 is the constant
+    `MAX_FREE_RING` (see the ring cap below).
   - With bounds: `(cx, cy)` is the point of the bounds nearest to `near`, `g = s(cx, cy)`,
     `first = max(0, floor(g) - 1)` and `last = ceil(F) + 1`.
 - *Stopping.* Once a candidate is known, the search stops at the first ring `r` where
   `(r * min(w, h))^2` is greater than the candidate's `d`: no spot of that ring or a later one can win.
+
+**The ring cap.** `MAX_FREE_RING` is 1000. Without bounds the search never looks past that ring. The cap
+keeps the search finite: for a footprint so small that the squares in the stopping rule underflow (below
+about 3e-23 board units), the search would otherwise run on for ever. A stack overlaps only spots within one
+footprint of it, and blocks at most four of them, so the rings up to 1000 hold over four million spots, and
+a table of fewer than about a million stacks always leaves a free spot among them. The cap changes nothing
+for an ordinary table, whose nearest free spot lies well inside it. Rounding to binary32 can spoil the
+search only where the table lies so far from the origin, in footprints, that neighbouring spots cannot be
+told apart (about 16 million footprints or more). There the search may find none, and the copy takes its
+row position, which is the only case in which a free placement uses it.
 
 The search tries every spot of the rings it visits, so its cost is the number of spots tried times the
 number of stacks. Large bounds that hold no free spot, far from `near`, make it slow: a board should

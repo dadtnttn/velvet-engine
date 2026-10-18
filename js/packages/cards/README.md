@@ -97,8 +97,10 @@ const restored = await Board.load(catalog, saved);
   them in a row to the right of the stack, one step of 1.5 apart. `free` puts each copy on the nearest
   free spot, found by the same search as `freeSpot`, from one footprint width to the right of the
   stack. `footprint` is a `BoardSize` and `bounds` (optional) a `BoardRect`; when no spot inside the
-  bounds is free, the copy lands on its row position, even over a stack. The placement is set on the
-  board, not saved: pass it to `Board.create` or `Board.load` as `options.outputPlacement`, or call
+  bounds is free, the search runs again without bounds, and the copy takes the nearest free spot anywhere
+  on the table. Only when there is none does it land on its row position, even over a stack. The
+  placement is set on the board, not saved: pass it to `Board.create` or `Board.load` as
+  `options.outputPlacement`, or call
   `setOutputPlacement` after loading. The module's search and `freeSpot` agree, spot for spot, on the
   same table (the tests check it).
 - **Events** are tagged by `event` (`job_started`, `job_cancelled`, `job_finished`, `card_spawned`,

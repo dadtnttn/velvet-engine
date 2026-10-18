@@ -11,7 +11,7 @@ use crate::def::CardDef;
 
 /// Distance, in board units, from a finished job's stack to its first output under the row placement
 /// (the default). Each further output lands one more step along the same row. The free placement
-/// does not use it, except for the row position it falls back to (see [`crate::OutputPlacement`]).
+/// uses it only when it finds no free spot at all (see [`crate::OutputPlacement`]).
 pub const OUTPUT_STEP: f32 = 1.5;
 
 /// The longest step one [`Board::tick`] takes, in seconds (an hour). A longer `dt` counts as this:

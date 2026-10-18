@@ -133,7 +133,8 @@ export interface FreeSpotOptions {
  * Where the outputs of a finished job land. `row` (the default) puts them in a row to the right of the
  * stack, one step apart. `free` puts each one on the nearest free spot of a grid of `footprint` steps,
  * around the point one footprint width right of the stack, and inside `bounds` when they are given. When
- * no spot is free, the output lands in its row position, which may overlap a stack. The placement is not
+ * no spot inside the bounds is free, the output takes the nearest free spot anywhere on the table; only
+ * when there is none does it land in its row position, which may overlap a stack. The placement is not
  * part of a save: a game sets it again after loading a board.
  */
 export type OutputPlacement =
