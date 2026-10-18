@@ -21,6 +21,31 @@ importers:
         specifier: 4.1.12
         version: 4.1.12(@types/node@25.9.9)(happy-dom@21.0.3)(vite@8.3.4(@types/node@25.9.9))
 
+  examples/hello-cards:
+    dependencies:
+      '@velvet/cards':
+        specifier: workspace:*
+        version: link:../../packages/cards
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@velvet/guion':
+        specifier: workspace:*
+        version: link:../../packages/guion
+      '@velvet/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@velvet/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@velvet/wasm':
+        specifier: workspace:*
+        version: link:../../packages/wasm
+    devDependencies:
+      vite:
+        specifier: 8.3.4
+        version: 8.3.4(@types/node@25.9.9)
+
   packages/cards:
     dependencies:
       '@velvet/wasm':

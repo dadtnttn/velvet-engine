@@ -1,0 +1,23 @@
+{
+  "name": "hello-cards",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small cards-on-a-board game that exercises every Velvet JS package inside Velvet Desktop.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@velvet/cards": "workspace:*",
+    "@velvet/core": "workspace:*",
+    "@velvet/guion": "workspace:*",
+    "@velvet/i18n": "workspace:*",
+    "@velvet/ui": "workspace:*",
+    "@velvet/wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "8.3.4"
+  }
+}

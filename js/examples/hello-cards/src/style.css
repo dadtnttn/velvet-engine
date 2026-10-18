@@ -1,0 +1,365 @@
+/*
+ * hello-cards: the look of the game, on top of the HUD defaults of @velvet/ui.
+ *
+ * The theme is set with the ui's custom properties, on .vu-root (so every component follows it).
+ * The geometry of the table, the cards and the HUD is fixed in logical pixels (the stage draws the
+ * 1920 by 1080 surface and scales it). Hover, focus and press change colour, brightness or opacity
+ * only, never a size or a position.
+ */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #050805;
+}
+
+.game-host {
+  position: fixed;
+  inset: 0;
+}
+
+.vu-viewport {
+  --vu-bars: #050805;
+}
+
+.vu-root {
+  --vu-ink: #16241c;
+  --vu-paper: #f6f0e1;
+  --vu-accent: #d9793a;
+  --vu-accent-ink: #1b140c;
+  --vu-gold: #d8a84a;
+  --vu-gold-hi: #ffe39a;
+  --vu-danger: #e0506a;
+  --vu-muted: #7c8f80;
+  --vu-scrim: rgb(6 14 9 / 0.72);
+  --vu-font: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --vu-size: 24px;
+  --vu-size-small: 18px;
+  --vu-size-title: 28px;
+  --vu-slant: 18px;
+  --vu-pad-x: 22px;
+  --vu-pad-y: 8px;
+  --vu-gap: 12px;
+  --vu-meter-height: 16px;
+  background: #0d160f;
+}
+
+/* The table: the felt where the cards lie. Its origin is the layout's table origin (40, 120). */
+.hc-table {
+  position: absolute;
+  left: 40px;
+  top: 120px;
+  width: 1840px;
+  height: 880px;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgb(255 255 255 / 0.07), transparent 60%),
+    radial-gradient(ellipse at 70% 90%, rgb(0 0 0 / 0.25), transparent 60%),
+    #2f6b4c;
+  box-shadow:
+    inset 0 0 0 6px #5b3d22,
+    inset 0 0 0 9px rgb(255 255 255 / 0.08);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* A card: 112 by 150 logical pixels. Its name band is the top 34 pixels, which is also the step
+   between the cards of a stack, so every card of a stack shows its name. */
+.hc-card {
+  position: absolute;
+  box-sizing: border-box;
+  width: 112px;
+  height: 150px;
+  overflow: hidden;
+  border: 3px solid #2a2118;
+  border-radius: 12px;
+  background: var(--vu-paper);
+  color: #1d1a16;
+  box-shadow: 0 6px 0 rgb(0 0 0 / 0.3);
+  cursor: grab;
+  touch-action: none;
+  transition: filter 160ms ease, opacity 160ms ease;
+}
+
+.hc-card-name {
+  height: 34px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: #fffaf0;
+  background: #6b6358;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 34px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hc-card[data-kind="character"] .hc-card-name {
+  background: #2f6fa8;
+}
+
+.hc-card[data-kind="zone"] .hc-card-name {
+  background: #3d7d3a;
+}
+
+.hc-card[data-kind="building"] .hc-card-name {
+  background: #8a5a2b;
+}
+
+.hc-card[data-kind="currency"] .hc-card-name {
+  background: #b8891f;
+}
+
+.hc-card-art {
+  position: absolute;
+  left: 8px;
+  top: 42px;
+  width: 90px;
+  height: 96px;
+}
+
+.hc-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hc-fill-a {
+  fill: #8fbf5a;
+}
+
+.hc-fill-b {
+  fill: #c9a06a;
+}
+
+.hc-fill-c {
+  fill: #3b2d22;
+}
+
+.hc-fill-d {
+  fill: #d9534f;
+}
+
+/* Card states: colour and brightness only. */
+.hc-card:hover {
+  filter: brightness(1.08);
+}
+
+.hc-card.is-dragging {
+  opacity: 0.92;
+  cursor: grabbing;
+}
+
+.hc-card.is-target {
+  box-shadow:
+    0 0 0 4px var(--vu-gold-hi),
+    0 6px 0 rgb(0 0 0 / 0.3);
+}
+
+.hc-card.is-new {
+  animation: hc-pop 360ms ease-out both;
+}
+
+.hc-card.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms ease;
+}
+
+@keyframes hc-pop {
+  from {
+    opacity: 0;
+    filter: brightness(1.9);
+  }
+
+  to {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+/* The progress bar under a running stack. It is drawn, not pressed, so it takes no pointer events. */
+.hc-table .hc-job {
+  position: absolute;
+  width: 112px;
+  height: 12px;
+  pointer-events: none;
+}
+
+/* The top bar and the hint line. Positions are fixed, in logical pixels. */
+.hc-topbar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  box-sizing: border-box;
+  width: 1920px;
+  height: 112px;
+  margin: 0;
+  background: linear-gradient(180deg, rgb(14 28 20 / 0.97), rgb(14 28 20 / 0.9));
+  border-bottom: 2px solid rgb(216 168 74 / 0.5);
+}
+
+.hc-title {
+  position: absolute;
+  left: 32px;
+  top: 16px;
+  margin: 0;
+  color: var(--vu-gold-hi);
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.hc-day {
+  position: absolute;
+  left: 32px;
+  top: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 460px;
+}
+
+.hc-day-label {
+  min-width: 120px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.hc-topbar .hc-daybar {
+  width: 300px;
+  height: 16px;
+}
+
+.hc-speed {
+  position: absolute;
+  left: 540px;
+  top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hc-speed .vu-button {
+  min-height: 56px;
+  padding-left: 18px;
+  padding-right: 18px;
+  font-size: 22px;
+}
+
+.hc-stock {
+  position: absolute;
+  left: 1000px;
+  top: 28px;
+  display: flex;
+  gap: 10px;
+}
+
+.hc-coins {
+  position: absolute;
+  left: 1500px;
+  top: 38px;
+  margin: 0;
+  color: var(--vu-gold-hi);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.hc-menu {
+  position: absolute;
+  right: 32px;
+  top: 22px;
+}
+
+.hc-hints {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 5;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  width: 1920px;
+  height: 56px;
+  margin: 0;
+  padding: 0 32px;
+  background: rgb(14 28 20 / 0.92);
+  color: var(--vu-paper);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.hc-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* The dialogue plate, at the bottom of the table. */
+.hc-dialogue {
+  position: absolute;
+  left: 240px;
+  top: 700px;
+  z-index: 20;
+  width: 1440px;
+}
+
+.hc-dialogue[hidden] {
+  display: none;
+}
+
+.hc-line {
+  min-height: 3.9em;
+  margin: 0 0 14px;
+  font-size: 28px;
+  line-height: 1.3;
+}
+
+.hc-line.is-thought {
+  font-style: italic;
+  opacity: 0.9;
+}
+
+.hc-prompt {
+  margin: 0 0 12px;
+  color: var(--vu-gold-hi);
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.hc-dialogue-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.hc-options {
+  align-items: flex-start;
+}
+
+/* The pause menu: a narrow plate over the dimmed table. */
+.hc-pause > .vu-plate {
+  width: 720px;
+}
+
+.hc-pause .vu-menu-item {
+  min-width: 560px;
+}
+
+.hc-start-error {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 40%;
+  margin: 0;
+  padding: 0 40px;
+  color: #fffaf0;
+  font: 700 28px/1.4 system-ui, sans-serif;
+  text-align: center;
+}

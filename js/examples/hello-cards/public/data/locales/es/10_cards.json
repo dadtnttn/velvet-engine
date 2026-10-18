@@ -1,0 +1,31 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "es",
+  "entries": {
+    "card.villager": "Aldeano",
+    "card.forest": "Bosque",
+    "card.quarry": "Cantera",
+    "card.berry_bush": "Arbusto de bayas",
+    "card.market": "Mercado",
+    "card.house": "Casa",
+    "card.wood": "Madera",
+    "card.plank": "Tablón",
+    "card.stone": "Piedra",
+    "card.berries": "Bayas",
+    "card.coin": "Moneda",
+    "recipe.gather_wood": "Talar madera",
+    "recipe.gather_stone": "Picar piedra",
+    "recipe.gather_berries": "Recoger bayas",
+    "recipe.make_planks": "Serrar tablones",
+    "recipe.build_house": "Levantar una casa",
+    "recipe.build_market": "Levantar un mercado",
+    "recipe.sell_berries": "Vender bayas",
+    "recipe.sell_planks": "Vender tablones",
+    "done.make_planks": "¡Tablón listo!",
+    "done.build_house": "¡Casa terminada!",
+    "done.build_market": "¡Mercado abierto!",
+    "done.sell_berries": "¡Venta hecha!",
+    "done.sell_planks": "¡Venta hecha!"
+  }
+}

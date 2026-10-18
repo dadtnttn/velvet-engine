@@ -1,0 +1,31 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "entries": {
+    "card.villager": "Villager",
+    "card.forest": "Forest",
+    "card.quarry": "Quarry",
+    "card.berry_bush": "Berry bush",
+    "card.market": "Market",
+    "card.house": "House",
+    "card.wood": "Wood",
+    "card.plank": "Plank",
+    "card.stone": "Stone",
+    "card.berries": "Berries",
+    "card.coin": "Coin",
+    "recipe.gather_wood": "Chop wood",
+    "recipe.gather_stone": "Mine stone",
+    "recipe.gather_berries": "Pick berries",
+    "recipe.make_planks": "Saw planks",
+    "recipe.build_house": "Build a house",
+    "recipe.build_market": "Build a market",
+    "recipe.sell_berries": "Sell berries",
+    "recipe.sell_planks": "Sell planks",
+    "done.make_planks": "Plank ready!",
+    "done.build_house": "House finished!",
+    "done.build_market": "Market open!",
+    "done.sell_berries": "Sold!",
+    "done.sell_planks": "Sold!"
+  }
+}

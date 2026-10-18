@@ -1,0 +1,14 @@
+{
+  "id": "hello-cards",
+  "title": "Hello Cards",
+  "version": "0.1.0",
+  "entry": "index.html",
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "min_width": 960,
+    "min_height": 540,
+    "resizable": true,
+    "fullscreen": false
+  }
+}
