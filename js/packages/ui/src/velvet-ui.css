@@ -1,0 +1,420 @@
+/*
+ * velvet-ui.css: the Persona look of the Velvet JS HUD.
+ *
+ * Colours, fonts and sizes are custom properties. The stage's root (.vu-root) defines them, so a
+ * game restyles the whole HUD by setting them on the root, or on any element above it. Sizes are
+ * logical pixels: the stage draws the root at 1920 by 1080 and scales it, so 24px is 24 logical
+ * pixels on every window.
+ *
+ * Hover, focus and press change colour, brightness or opacity only. They never change a size, a
+ * position, a padding, a border width or a transform, so an element keeps its place in every
+ * state. css.test.ts checks this rule against this file.
+ *
+ * The stage writes the geometry of the viewport and the root inline, so this file is only needed
+ * for the look. Import it once: import "@velvet/ui/velvet-ui.css";
+ */
+
+.vu-viewport {
+  --vu-bars: #000;
+  background: var(--vu-bars);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.vu-root {
+  /* Colours */
+  --vu-ink: #0e0816;
+  --vu-paper: #f6efe4;
+  --vu-accent: #e2304f;
+  --vu-accent-ink: #f6efe4;
+  --vu-gold: #c9a36a;
+  --vu-gold-hi: #f6dc9a;
+  --vu-danger: #ff5a8a;
+  --vu-muted: #7d6f8a;
+  --vu-scrim: rgb(5 3 10 / 0.7);
+
+  /* Type */
+  --vu-font: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --vu-size: 26px;
+  --vu-size-small: 20px;
+  --vu-size-title: 30px;
+
+  /* Shape and spacing */
+  --vu-slant: 22px;
+  --vu-cut: polygon(var(--vu-slant) 0, 100% 0, calc(100% - var(--vu-slant)) 100%, 0 100%);
+  --vu-pad-x: 26px;
+  --vu-pad-y: 10px;
+  --vu-gap: 14px;
+  --vu-meter-height: 22px;
+
+  /* Motion: the length of the hover and fade transitions */
+  --vu-duration: 160ms;
+
+  overflow: hidden;
+  font-family: var(--vu-font);
+  font-size: var(--vu-size);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--vu-paper);
+}
+
+/* Elements that carry the hidden attribute stay hidden, whatever their own display rule says. */
+.vu-root [hidden] {
+  display: none !important;
+}
+
+/* Plate: a slanted ink panel with an optional title tab. */
+.vu-plate {
+  position: relative;
+  box-sizing: border-box;
+  padding: var(--vu-pad-y) var(--vu-pad-x) var(--vu-pad-y) calc(var(--vu-pad-x) + var(--vu-slant));
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+  clip-path: var(--vu-cut);
+}
+
+.vu-plate-title {
+  box-sizing: border-box;
+  display: inline-block;
+  margin-bottom: var(--vu-gap);
+  padding: 2px var(--vu-pad-x) 4px var(--vu-pad-x);
+  background: var(--vu-accent);
+  color: var(--vu-accent-ink);
+  font-size: var(--vu-size-title);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  clip-path: var(--vu-cut);
+}
+
+.vu-plate-body {
+  position: relative;
+}
+
+/* Button: a native button in a slanted shape. Its state is shown by colour and brightness. */
+.vu-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  min-height: 60px;
+  margin: 0;
+  padding: var(--vu-pad-y) var(--vu-pad-x) var(--vu-pad-y) calc(var(--vu-pad-x) + var(--vu-slant));
+  border: 0;
+  border-radius: 0;
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+  font-family: inherit;
+  font-size: var(--vu-size);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  clip-path: var(--vu-cut);
+  transition:
+    filter var(--vu-duration) ease,
+    background-color var(--vu-duration) ease,
+    color var(--vu-duration) ease,
+    opacity var(--vu-duration) ease;
+}
+
+.vu-button-label {
+  white-space: nowrap;
+}
+
+.vu-button:hover:not(:disabled) {
+  filter: brightness(1.35);
+}
+
+.vu-button:active:not(:disabled) {
+  filter: brightness(0.8);
+}
+
+.vu-button:focus-visible {
+  background-color: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+.vu-button[aria-pressed="true"] {
+  background-color: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+.vu-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Keycap: a key drawn like a keyboard key. */
+.vu-keycap {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8em;
+  height: 1.8em;
+  margin: 0 0.1em;
+  padding: 0 0.45em;
+  border: 2px solid var(--vu-paper);
+  border-bottom-width: 5px;
+  border-radius: 8px;
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+  font-family: var(--vu-font);
+  font-size: var(--vu-size-small);
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.vu-keycap-mouse {
+  padding: 0.2em 0.3em;
+  height: 2.2em;
+  border-radius: 12px;
+}
+
+.vu-mouse {
+  display: block;
+  width: 1.1em;
+  height: 1.6em;
+}
+
+.vu-mouse-body {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.vu-mouse-part {
+  fill: var(--vu-muted);
+}
+
+.vu-mouse-part.is-lit {
+  fill: var(--vu-gold-hi);
+}
+
+/* Chip: a small label with an optional count badge. */
+.vu-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--vu-paper);
+  color: var(--vu-ink);
+  font-size: var(--vu-size-small);
+  font-weight: 800;
+  clip-path: var(--vu-cut);
+}
+
+.vu-chip-label {
+  padding: 0.2em 0.9em 0.2em calc(0.9em + var(--vu-slant) * 0.5);
+  white-space: nowrap;
+}
+
+.vu-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9em;
+  padding: 0 0.4em;
+  background: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+/* Meter: a bar with a continuous fill, or with lit cells when it has segments. */
+.vu-meter {
+  position: relative;
+  box-sizing: border-box;
+  height: var(--vu-meter-height);
+  background: var(--vu-ink);
+  overflow: hidden;
+  clip-path: var(--vu-cut);
+}
+
+.vu-meter-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--vu-accent);
+  transition: width var(--vu-duration) linear;
+}
+
+.vu-meter-segments {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  left: 3px;
+  display: flex;
+  gap: 3px;
+}
+
+.vu-meter-cell {
+  flex: 1 1 0;
+  background: var(--vu-muted);
+  opacity: 0.3;
+}
+
+.vu-meter-cell.is-lit {
+  background: var(--vu-accent);
+  opacity: 1;
+}
+
+.vu-meter[data-tone="gold"] .vu-meter-fill,
+.vu-meter[data-tone="gold"] .vu-meter-cell.is-lit {
+  background: var(--vu-gold);
+}
+
+.vu-meter[data-tone="danger"] .vu-meter-fill,
+.vu-meter[data-tone="danger"] .vu-meter-cell.is-lit {
+  background: var(--vu-danger);
+}
+
+/* Tooltip: a paper label that the stage keeps inside the logical surface. */
+.vu-tooltip {
+  position: absolute;
+  z-index: 50;
+  box-sizing: border-box;
+  max-width: 420px;
+  padding: 0.35em 0.8em;
+  background: var(--vu-paper);
+  color: var(--vu-ink);
+  font-size: var(--vu-size-small);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Toasts: notices in the bottom-right corner. They never take clicks. */
+.vu-toasts {
+  position: absolute;
+  right: 32px;
+  bottom: 32px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.vu-toast {
+  box-sizing: border-box;
+  padding: 0.5em 1.2em 0.5em calc(1.2em + var(--vu-slant));
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+  font-size: var(--vu-size-small);
+  font-weight: 700;
+  clip-path: var(--vu-cut);
+  transition: opacity var(--vu-duration) ease;
+}
+
+.vu-toast[data-tone="warn"] {
+  background: var(--vu-gold);
+  color: var(--vu-ink);
+}
+
+.vu-toast[data-tone="danger"] {
+  background: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+.vu-toast.is-leaving {
+  opacity: 0;
+}
+
+/* Modal: a plate over a dimmed backdrop. */
+.vu-modal {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--vu-scrim);
+}
+
+.vu-modal-dialog {
+  width: 720px;
+  max-width: calc(100% - 160px);
+}
+
+.vu-modal-title {
+  margin: 0 0 var(--vu-gap);
+  color: var(--vu-gold-hi);
+  font-size: var(--vu-size-title);
+  font-weight: 900;
+}
+
+.vu-modal-body {
+  margin: 0 0 var(--vu-gap);
+  font-size: var(--vu-size);
+}
+
+.vu-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--vu-gap);
+}
+
+/* Menu: a vertical list of slanted items. */
+.vu-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.vu-menu-item {
+  box-sizing: border-box;
+  min-width: 360px;
+  padding: var(--vu-pad-y) var(--vu-pad-x) var(--vu-pad-y) calc(var(--vu-pad-x) + var(--vu-slant));
+  background: var(--vu-ink);
+  color: var(--vu-paper);
+  font-size: var(--vu-size);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  clip-path: var(--vu-cut);
+  transition:
+    filter var(--vu-duration) ease,
+    background-color var(--vu-duration) ease,
+    color var(--vu-duration) ease,
+    opacity var(--vu-duration) ease;
+}
+
+.vu-menu-item:hover:not([aria-disabled="true"]) {
+  filter: brightness(1.35);
+}
+
+.vu-menu-item:active:not([aria-disabled="true"]) {
+  filter: brightness(0.8);
+}
+
+.vu-menu-item:focus {
+  background-color: var(--vu-accent);
+  color: var(--vu-accent-ink);
+}
+
+.vu-menu-item[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Reduced motion: no fades, no hover transitions, no animations. */
+@media (prefers-reduced-motion: reduce) {
+  .vu-root {
+    --vu-duration: 0ms;
+  }
+
+  .vu-root *,
+  .vu-root *::before,
+  .vu-root *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
