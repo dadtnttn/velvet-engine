@@ -1,13 +1,28 @@
-// @velvet/ui: the 16:9 stage that every Velvet JS game draws in, and the Persona HUD primitives
-// (plates, buttons, keycaps, chips, meters, tooltips, toasts, modals and menus) that sit over it.
+// @velvet/ui: the 16:9 stage that every Velvet JS game draws in, the board view (a pannable, zoomable
+// world inside the stage, for cards and maps), and the Persona HUD primitives (plates, buttons, keycaps,
+// chips, meters, tooltips, toasts, modals and menus) that sit over it.
 //
 // Import from the package root, for example:
-//   import { createStage, createButton, createMenu } from "@velvet/ui";
+//   import { createStage, createBoardView, createButton, createMenu } from "@velvet/ui";
 // and load the look once, with:
 //   import "@velvet/ui/velvet-ui.css";
 
 export { createStage, Stage, computeStageLayout } from "./stage";
 export type { LogicalPoint, LogicalRect, StageLayout, StageListener, StageOptions } from "./stage";
+export { createBoardView } from "./board";
+export type {
+  BoardDrag,
+  BoardDragCallbacks,
+  BoardListener,
+  BoardOptions,
+  BoardView,
+  BoardViewState,
+  DragOptions,
+  ItemMove,
+  ItemSpec,
+  WorldPoint,
+  WorldRect,
+} from "./board";
 export type { VuComponent } from "./components/component";
 export { createPlate } from "./components/plate";
 export type { Plate, PlateProps } from "./components/plate";

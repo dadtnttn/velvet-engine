@@ -1,11 +1,11 @@
 // Tests for ArtResolver beyond the shared fixtures: the base URL, caching, frozen results, the
 // accepted formats, the broken-file rule, and the errors for unknown ids and variants.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ArtError } from "./error";
 import { parseArtManifest } from "./manifest";
 import { ArtResolver } from "./resolver";
-import type { ArtManifest } from "./types";
+import type { ArtEntry, ArtManifest } from "./types";
 
 const MANIFEST: ArtManifest = parseArtManifest(
   JSON.stringify({
@@ -182,5 +182,81 @@ describe("ArtResolver: errors", () => {
     if (card === undefined) throw new Error("the test manifest lost its card entry");
     const repeated: ArtManifest = { format: "velvet-art", version: 1, entries: [card, card] };
     expect(codeThrown(() => new ArtResolver(repeated, []))).toBe("duplicate");
+  });
+});
+
+describe("ArtResolver: a runtime's own placeholder", () => {
+  /** A small SVG that names its id, so that a test can tell it from the generic placeholder. */
+  const own = (id: string): string => `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><title>${id}</title></svg>`;
+
+  it("shows the SVG that the hook gives, with the source placeholder and no path", () => {
+    const resolver = new ArtResolver(MANIFEST, [], { placeholder: (entry) => own(entry.id) });
+    const picture = resolver.resolve("card.wood");
+    expect(picture.source).toBe("placeholder");
+    expect(picture.path).toBeNull();
+    expect(picture.variant).toBeNull();
+    expect(picture.url).toBe(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(own("card.wood"))}`);
+  });
+
+  it("calls the hook once for a request and caches the answer", () => {
+    const hook = vi.fn((entry: ArtEntry) => own(entry.id));
+    const resolver = new ArtResolver(MANIFEST, [], { placeholder: hook });
+    const first = resolver.resolve("card.wood");
+    expect(resolver.resolve("card.wood")).toBe(first);
+    expect(hook).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives the hook the entry and the variant asked for, or null for the base picture", () => {
+    const asked: Array<[string, string, string | null]> = [];
+    const resolver = new ArtResolver(MANIFEST, [], {
+      placeholder: (entry, variant) => {
+        asked.push([entry.id, entry.kind, variant]);
+        return own(entry.id);
+      },
+    });
+    resolver.resolve("character.lyra.portrait", "happy");
+    resolver.resolve("character.lyra.portrait");
+    expect(asked).toEqual([
+      ["character.lyra.portrait", "portrait", "happy"],
+      ["character.lyra.portrait", "portrait", null],
+    ]);
+  });
+
+  it("is not asked when a file answers", () => {
+    const hook = vi.fn(() => own("unused"));
+    const resolver = new ArtResolver(MANIFEST, ["card/card.wood.png"], { placeholder: hook });
+    expect(resolver.resolve("card.wood").source).toBe("png");
+    expect(hook).not.toHaveBeenCalled();
+  });
+
+  it("shows the generic placeholder when the hook gives null or an empty string", () => {
+    const generic = new ArtResolver(MANIFEST, []).resolve("card.wood").url;
+    expect(new ArtResolver(MANIFEST, [], { placeholder: () => null }).resolve("card.wood").url).toBe(generic);
+    expect(new ArtResolver(MANIFEST, [], { placeholder: () => "" }).resolve("card.wood").url).toBe(generic);
+  });
+
+  it("gives an unknown id the hook as well, with the 128 by 128 prop and no variant, and caches it", () => {
+    const asked: Array<[string, string, number, string | null]> = [];
+    const resolver = new ArtResolver(MANIFEST, [], {
+      onUnknown: () => undefined,
+      placeholder: (entry, variant) => {
+        asked.push([entry.id, entry.kind, entry.size[0], variant]);
+        return own(entry.id);
+      },
+    });
+    const picture = resolver.resolve("character.mara.portrait");
+    expect(resolver.resolve("character.mara.portrait")).toBe(picture);
+    expect(picture.source).toBe("placeholder");
+    expect(picture.size).toEqual([128, 128]);
+    expect(asked).toEqual([["character.mara.portrait", "prop", 128, null]]);
+  });
+
+  it("lets an error of the hook reach the caller of resolve", () => {
+    const resolver = new ArtResolver(MANIFEST, [], {
+      placeholder: () => {
+        throw new Error("the sheet is missing");
+      },
+    });
+    expect(() => resolver.resolve("card.wood")).toThrow("the sheet is missing");
   });
 });

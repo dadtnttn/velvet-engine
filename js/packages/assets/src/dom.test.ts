@@ -105,3 +105,23 @@ describe("artElement errors", () => {
     expect(() => artElement(resolver, "character.mara.portrait")).toThrow(ArtError);
   });
 });
+
+describe("artElement with a runtime's own placeholder", () => {
+  it("shows the SVG that the hook gives, not the generic one", () => {
+    const resolver = new ArtResolver(MANIFEST, [], {
+      placeholder: () =>
+        '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="260" viewBox="0 0 180 260"><circle id="own-figure" cx="90" cy="130" r="40"/></svg>',
+    });
+    const element = artElement(resolver, "card.wood");
+    expect(element.localName).toBe("svg");
+    expect(element.dataset["artSource"]).toBe("placeholder");
+    expect(element.querySelector("#own-figure")).not.toBeNull();
+    expect(element.getAttribute("aria-label")).toBeNull();
+    expect(element.getAttribute("style")).toContain("width: 180px");
+  });
+
+  it("throws an ArtError when the hook's SVG is not well-formed", () => {
+    const resolver = new ArtResolver(MANIFEST, [], { placeholder: () => "<svg><g></svg>" });
+    expect(() => artElement(resolver, "card.wood")).toThrow(ArtError);
+  });
+});

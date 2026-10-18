@@ -262,3 +262,26 @@ export function placeholderSvg(id: string, kind: ArtKind, size: ArtSize, label?:
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(frame.text)}"><title>${escapeXml(id)}</title>${body}</svg>`;
 }
+
+/** The start of the data URL of a placeholder: an SVG document, encoded as UTF-8. */
+const PLACEHOLDER_URL_PREFIX = "data:image/svg+xml;charset=utf-8,";
+
+/**
+ * The data URL that shows a placeholder's SVG text. The resolver uses it for every placeholder, the
+ * generic one and a runtime's own, and {@link placeholderTextOf} reads the text back.
+ * @param svg - the SVG document as text.
+ */
+export function placeholderUrl(svg: string): string {
+  return `${PLACEHOLDER_URL_PREFIX}${encodeURIComponent(svg)}`;
+}
+
+/**
+ * The SVG text inside a placeholder's data URL, as {@link placeholderUrl} makes it.
+ * @throws ArtError with code "value" when the URL is not a placeholder's data URL.
+ */
+export function placeholderTextOf(url: string): string {
+  if (!url.startsWith(PLACEHOLDER_URL_PREFIX)) {
+    throw new ArtError("value", "a placeholder is shown as an SVG data URL");
+  }
+  return decodeURIComponent(url.slice(PLACEHOLDER_URL_PREFIX.length));
+}

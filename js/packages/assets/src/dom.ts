@@ -3,7 +3,7 @@
 // rest of the page.
 
 import { ArtError } from "./error";
-import { placeholderSvg, shortLabel } from "./placeholder";
+import { placeholderTextOf, shortLabel } from "./placeholder";
 import type { ArtResolver, ResolvedArt } from "./resolver";
 import type { ArtAnchor, ArtSize } from "./types";
 
@@ -24,11 +24,14 @@ function showPicture(image: HTMLImageElement, picture: ResolvedArt): void {
 }
 
 /**
- * Turns a placeholder's SVG text into an element of the page, in the SVG namespace.
- * @throws ArtError with code "value" if the text is not well-formed SVG. The generator never makes such text.
+ * Turns a placeholder's SVG text into an element of the page, in the SVG namespace. The text is the one
+ * in the picture's URL, so the element shows what the resolver resolved, the generic placeholder or a
+ * runtime's own.
+ * @throws ArtError with code "value" if the text is not well-formed SVG. The generic generator never
+ *   makes such text, but a runtime's own placeholder may.
  */
 function placeholderElement(picture: ResolvedArt): SVGElement {
-  const text = placeholderSvg(picture.id, picture.kind, picture.size);
+  const text = placeholderTextOf(picture.url);
   const parsed = new DOMParser().parseFromString(text, "image/svg+xml");
   const root = parsed.documentElement;
   if (root.localName !== "svg" || parsed.getElementsByTagName("parsererror").length > 0) {

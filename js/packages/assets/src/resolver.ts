@@ -4,7 +4,7 @@
 
 import { ArtError } from "./error";
 import { entryProblems } from "./manifest";
-import { placeholderSvg } from "./placeholder";
+import { placeholderSvg, placeholderUrl } from "./placeholder";
 import { preloadArt, type PreloadProgress, type PreloadResult } from "./preload";
 import {
   ART_FORMATS,
@@ -34,6 +34,16 @@ export interface ArtResolverOptions {
   readonly strict?: boolean;
   /** Told once per unknown id or variant when strict is false. Defaults to console.warn. */
   readonly onUnknown?: (error: ArtError) => void;
+  /**
+   * Makes the picture of a placeholder in place of the generic one, for a runtime that draws its own
+   * (for example stick figures made from a character sheet). It is called once for each request that
+   * ends in a placeholder, and the answer is cached. It gets the entry of the id, and the variant that
+   * was asked for: one of the entry's variants, or null for the base picture. An unknown id gets the
+   * 128 by 128 prop of a lenient resolver, with null. Return SVG text to show it. Return null, or an
+   * empty string, for the generic placeholder. The answer keeps the source "placeholder" and has no path.
+   * An error that the hook throws reaches the caller of resolve.
+   */
+  readonly placeholder?: (entry: ArtEntry, variant: string | null) => string | null;
 }
 
 /** The box of a placeholder for an id that the manifest does not declare. */
@@ -113,6 +123,7 @@ export class ArtResolver {
   private readonly cache = new Map<string, ResolvedArt>();
   private readonly strict: boolean;
   private readonly onUnknown: (error: ArtError) => void;
+  private readonly makePlaceholder: ArtResolverOptions["placeholder"];
   private readonly reported = new Set<string>();
 
   /**
@@ -135,6 +146,7 @@ export class ArtResolver {
     this.baseUrl = withSlash(options.baseUrl ?? "art/");
     this.strict = options.strict ?? false;
     this.onUnknown = options.onUnknown ?? ((error) => console.warn(`@velvet/assets: ${error.message}`));
+    this.makePlaceholder = options.placeholder;
   }
 
   /**
@@ -153,8 +165,10 @@ export class ArtResolver {
     const known = this.entries.get(id);
     if (known === undefined && !this.strict) {
       this.report(new ArtError("unknown-id", `art id "${id}" is not in the manifest`));
-      const stand: ArtEntry = { id, kind: "prop", size: UNKNOWN_SIZE, anchor: [0, 0], variants: [], meta: {} };
-      return this.placeholder(stand);
+      return this.remember(`${id}#`, () => {
+        const stand: ArtEntry = { id, kind: "prop", size: UNKNOWN_SIZE, anchor: [0, 0], variants: [], meta: {} };
+        return this.placeholder(stand, null);
+      });
     }
     const entry = this.entryFor(id);
     if (variant !== undefined && !entry.variants.includes(variant)) {
@@ -163,12 +177,9 @@ export class ArtResolver {
       this.report(error);
       return this.resolve(id);
     }
-    const key = `${id}#${variant ?? ""}`;
-    const cached = this.cache.get(key);
-    if (cached !== undefined) return cached;
-    const found = this.findFile(entry, variant) ?? this.placeholder(entry);
-    this.cache.set(key, found);
-    return found;
+    return this.remember(`${id}#${variant ?? ""}`, () => {
+      return this.findFile(entry, variant) ?? this.placeholder(entry, variant ?? null);
+    });
   }
 
   /**
@@ -263,11 +274,24 @@ export class ArtResolver {
     return undefined;
   }
 
-  /** The placeholder of an id: a data URL of its generated SVG. */
-  private placeholder(entry: ArtEntry): ResolvedArt {
-    const svg = placeholderSvg(entry.id, entry.kind, entry.size);
-    const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-    return this.answer(entry, null, "placeholder", url, null);
+  /** The result under a cache key, made by `make` the first time that the key is asked for. */
+  private remember(key: string, make: () => ResolvedArt): ResolvedArt {
+    const cached = this.cache.get(key);
+    if (cached !== undefined) return cached;
+    const made = make();
+    this.cache.set(key, made);
+    return made;
+  }
+
+  /**
+   * The placeholder of an entry, for the variant that was asked for (null for the base picture). The
+   * runtime's own SVG is used when its placeholder hook gives one, and the generic SVG otherwise. Either
+   * way it is a data URL, and the source is "placeholder".
+   */
+  private placeholder(entry: ArtEntry, variant: string | null): ResolvedArt {
+    const own = this.makePlaceholder?.(entry, variant) ?? null;
+    const svg = own !== null && own !== "" ? own : placeholderSvg(entry.id, entry.kind, entry.size);
+    return this.answer(entry, null, "placeholder", placeholderUrl(svg), null);
   }
 
   /** Builds a frozen result, with its own copies of the size and the anchor. */

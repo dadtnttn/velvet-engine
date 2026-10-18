@@ -41,7 +41,7 @@ console.log(JSON.stringify(art.missingReport(), null, 2));
 | Call | What it does |
 |---|---|
 | `parseArtManifest(json)` | Reads the text of `art/manifest.json` into its normal form. Throws `ArtError`; its `issues` list every problem, each with a path. |
-| `new ArtResolver(manifest, files, options?)` | Builds the resolver from a manifest and the paths of the art files. Options: `baseUrl` (default `art/`) and `accept` (the formats the reader can show; default all four). Throws `ArtError` for a repeated id or file name. |
+| `new ArtResolver(manifest, files, options?)` | Builds the resolver from a manifest and the paths of the art files. Options: `baseUrl` (default `art/`), `accept` (the formats the reader can show; default all four), `strict`, `onUnknown`, and `placeholder` (a runtime's own placeholder pictures, see below). Throws `ArtError` for a repeated id or file name. |
 | `resolve(id, variant?)` | `{ id, variant, kind, size, anchor, source, url, path }`. `source` is `avif`, `webp`, `png`, `svg` or `placeholder`. By default an unknown id draws a 128×128 placeholder and an unknown variant falls back to the base, each reported once through `onUnknown` (console.warn); with `{ strict: true }` they throw `unknown-id` / `unknown-variant`. |
 | `preload(requests, onProgress?)` | Decodes the pictures of some ids (strings, or `{ id, variant }`) with `Image.decode()`. Resolves to `{ broken }`, the paths that could not be decoded. Without a browser nothing is decoded, and every request counts as done. |
 | `markBroken(path)` | Marks a file that the browser cannot show. Later resolutions skip it and move on to the next format. |
@@ -64,6 +64,9 @@ The package also exports the format constants (`ART_FORMAT`, `ART_VERSION`, `ART
 - Art elements are sized in logical pixels with CSS, and they scale smoothly. They never set
   `image-rendering: pixelated`.
 - A placeholder is made from the id: the same id always gets the same colour and label.
+- A runtime may draw its own placeholders with the `placeholder` option. The hook gets the entry and the variant
+  asked for (null for the base picture), and returns SVG text, or null for the generic placeholder. The answer is
+  cached, and it is still a placeholder: source `placeholder`, no path. `artElement` shows the same SVG.
 
 ## Tests
 

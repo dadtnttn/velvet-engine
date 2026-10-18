@@ -114,6 +114,13 @@ export class DragController {
       start: point,
       moved: false,
     };
+    // Capture the pointer on the card, so the release still reaches us when it happens over the
+    // letterbox bars (the stage swallows events aimed at the bars).
+    try {
+      element.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic events in tests have no active pointer to capture; window listeners still work.
+    }
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onRelease);
     window.addEventListener("pointercancel", this.onCancel);

@@ -212,6 +212,12 @@ numbers. Each kind draws:
 The colour and the label are normative: another reader must produce the same ones. The drawing is
 described so that placeholders look alike; it is not a byte-level contract.
 
+A runtime may supply its own placeholder generator in place of the one above, for example one that draws
+stick figures from a character sheet. Its picture is still a placeholder: its source is `placeholder`, it has no
+file path, and a missing file is still not an error. Such a generator is the runtime's own code, so the colours,
+labels and drawing of this section do not bind it. The generator described here remains the reference, and a
+runtime falls back to it wherever its own generator gives no picture.
+
 ## Missing-art report
 
 The report is a JSON document. It lists the ids that still need art.
