@@ -294,6 +294,31 @@ affinities at that level or higher.
 Adding a trait that the character has, or removing one it does not have, changes nothing. A trait that
 the schema does not have is `unknown-trait`.
 
+### Membership of a roster
+
+A roster is a set of characters by id, and all of them follow one schema. Its constructor joins each
+character of its list, and after that the membership changes only through two calls:
+
+- `join(character)` adds a character. The id must not be in the roster (`duplicate-id`), and the schema
+  must be the roster's (`argument`). A roster that is empty takes the schema of its first character, and
+  keeps it when its members leave.
+- `leave(id)` removes a member and returns it (`unknown-character` when there is none).
+
+The state of a roster is the list of the states of its members, sorted by id, so a snapshot holds exactly
+the members at the time it was taken. A restore follows these rules:
+
+- Each state applies to the character with its id: a member, or a character that left the roster. A state
+  of an id that is neither is `unknown-character`.
+- A state of a character that left brings that character back into the roster, with the values of the
+  state. A save taken while a character was a member therefore loads with that character in the roster.
+- A restore never removes a member. A character that has no state in the list keeps its values and its
+  place, so a character that joined after the save stays until it leaves.
+- Each state is read as a restore of one character is (see [Save state](#save-state)). Either every state
+  applies, or none does: the characters keep their values, and the roster keeps its members.
+
+A roster keeps the characters that left, for as long as it lives, so that a restore can bring them back.
+Version 1 has no call that forgets one.
+
 ## Events
 
 Events are the reports of the runtime. Each one is tagged by `event`, and names its `character`.
@@ -330,7 +355,7 @@ every reader.
 | `cycle` | Derived stats depend on each other in a loop. |
 | `division-by-zero` | A formula divides by zero: a literal zero when it is read, any other zero when it is evaluated. |
 | `non-finite` | A formula gives a value that is infinite or not a number. |
-| `argument` | A call gives a value that it does not accept: a time step or a delta that is not finite, a negative experience, a character's own id as the other side of an affinity, or an empty or long reason. |
+| `argument` | A call gives a value that it does not accept: a time step or a delta that is not finite, a negative experience, a character's own id as the other side of an affinity, an empty or long reason, or a character of another schema joining a roster. |
 
 ## Versioning
 

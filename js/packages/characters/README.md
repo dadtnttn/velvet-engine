@@ -15,6 +15,7 @@ It has four parts:
 - `Character` is a character at runtime: `stat`, `need`, `level`, `affinity` and the methods that change
   them. Each change reports what it did as events.
 - `Roster` holds several characters and answers queries: by id, by tag, and the affinities between them.
+  Characters join and leave it (`join`, `leave`), and its snapshot and restore follow those changes.
 
 ## Example
 
@@ -74,10 +75,12 @@ roster.restore(loaded?.data); // checked and migrated; refused whole when it is 
 | `changeAffinity(other, delta, reason)` | Moves an affinity, clamped. Returns an `affinity_level` event when the level changed. |
 | `snapshot()`, `restore(state)` | The character's runtime state, as plain JSON; and a checked restore of such a state. |
 | `new Roster(characters)` | A set of characters that share one schema. Their ids must differ. |
+| `join(character)` | Adds a character, checked like the constructor: its id must be new, and its schema must be the roster's. |
+| `leave(id)` | Removes a character and returns it. Unknown ids fail with `unknown-character`. |
 | `get(id)`, `all()`, `byTag(tag)` | One character by id (or `undefined`); every character sorted by id; the characters that carry a tag. |
 | `relationsOf(id, { minLevel? })` | The affinities a character holds toward others. |
 | `opinionsOf(id, { minLevel? })` | The affinities that other roster members hold toward a character. |
-| `snapshot()`, `restore(states)` | The states of every character; a restore that applies all of its states or none. |
+| `snapshot()`, `restore(states)` | The states of the members; a restore that applies all of its states or none. A state for a character that left brings it back. |
 
 Errors are `CharacterError`s with a `code` (see `src/error.ts` and the error table in
 `docs/formats/CHARACTER.md`): for example `unknown-stat`, `derived-stat`, `division-by-zero`,
@@ -96,6 +99,10 @@ Errors are `CharacterError`s with a `code` (see `src/error.ts` and the error tab
 - **Saves**: `snapshot()` writes the runtime values only, with `format`, `version` and `kind`. The sheet and
   the schema are not in a save. A restore refuses a state of another character, a newer version, or a value
   of the wrong type; it clamps numbers to their ranges, and takes a missing entry from the sheet.
+- **Membership**: only `join` and `leave` change who is in a roster. A restore never removes a member, so a
+  character that joined after a save stays until it leaves. A state of a character that left brings it back,
+  with the state's values; the roster keeps the characters that left for this, and nothing else about them.
+- **Events**: a roster has no event listeners, so `join` and `leave` raise no events.
 
 ## Tests
 

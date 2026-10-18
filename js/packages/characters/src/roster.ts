@@ -15,36 +15,66 @@ export interface RelationQuery {
   readonly minLevel?: string;
 }
 
-/** A character's state, read for a restore, with the character it belongs to and the state it had before. */
+/**
+ * A character's state, read for a restore: the character it belongs to, the state it had before, and whether
+ * it had left the roster (a restore that names it brings it back).
+ */
 interface PendingRestore {
   readonly character: Character;
   readonly state: unknown;
   readonly before: CharacterState;
+  readonly rejoins: boolean;
 }
 
 /** The characters of a game, by id. */
 export class Roster {
   private readonly characters = new Map<string, Character>();
-  private readonly schema: StatSchema | undefined;
+  /** The characters that left, by id. A restore that names one of them brings it back. */
+  private readonly departed = new Map<string, Character>();
+  /** The schema that every character follows: the first character sets it, and it stays. */
+  private schema: StatSchema | undefined;
 
   /**
    * @param characters - the characters. Their ids must differ, and they must share one schema object.
    * @throws {CharacterError} with code "duplicate-id", or "argument" when the schemas differ.
    */
   constructor(characters: Iterable<Character>) {
-    let schema: StatSchema | undefined;
-    for (const character of characters) {
-      if (this.characters.has(character.id)) {
-        throw new CharacterError("duplicate-id", `the roster lists "${character.id}" twice`);
-      }
-      if (schema === undefined) {
-        schema = character.schema;
-      } else if (character.schema !== schema) {
-        throw new CharacterError("argument", `"${character.id}" follows another schema; a roster needs one schema`);
-      }
-      this.characters.set(character.id, character);
+    for (const character of characters) this.join(character);
+  }
+
+  /**
+   * Adds a character to the roster. It is checked the way the constructor checks its list: its id must not be
+   * in the roster yet, and its schema must be the roster's schema. A character that left earlier with the same
+   * id is replaced by this one.
+   *
+   * @param character - a character, made from its sheet: `new Character(schema, definition)`.
+   * @throws {CharacterError} with code "duplicate-id" when the roster already lists the id, or "argument" when
+   *   the character follows another schema.
+   */
+  join(character: Character): void {
+    if (this.characters.has(character.id)) {
+      throw new CharacterError("duplicate-id", `the roster already lists "${character.id}"`);
     }
-    this.schema = schema;
+    if (this.schema === undefined) {
+      this.schema = character.schema;
+    } else if (character.schema !== this.schema) {
+      throw new CharacterError("argument", `"${character.id}" follows another schema; a roster needs one schema`);
+    }
+    this.characters.set(character.id, character);
+    this.departed.delete(character.id);
+  }
+
+  /**
+   * Removes a character from the roster and returns it. The roster keeps the character, so that restoring a state
+   * that was written while it was a member brings it back (see `restore`). The other queries no longer see it.
+   *
+   * @throws {CharacterError} with code "unknown-character" when the roster has no character with the id.
+   */
+  leave(id: string): Character {
+    const character = this.require(id);
+    this.characters.delete(id);
+    this.departed.set(id, character);
+    return character;
   }
 
   /** The character with this id, or undefined when the roster has none. */
@@ -99,12 +129,16 @@ export class Roster {
   }
 
   /**
-   * Restores the states of some characters. A character that has no state in the list keeps its values.
-   * Either every state is applied, or none is: when one is refused, the characters keep their values.
+   * Restores the states of some characters. A character that has no state in the list keeps its values, and a
+   * restore never removes a member (`leave` does that). A state for a character that left brings it back into
+   * the roster with the state's values, so a save taken before the character left loads as it was.
+   * Either every state is applied, or none is: when one is refused, the characters keep their values and the
+   * roster keeps its members.
    *
    * @param states - a list of states, as `snapshot` writes them.
    * @throws {CharacterError} with code "invalid" (not a list, or a state without an id), "duplicate-id",
-   *   "unknown-character", or the code of the state that was refused.
+   *   "unknown-character" (the id is neither a member nor a character that left), or the code of the state
+   *   that was refused.
    */
   restore(states: unknown): void {
     if (!Array.isArray(states)) {
@@ -117,14 +151,24 @@ export class Roster {
       if (typeof id !== "string") throw new CharacterError("invalid", "every character state must have an id");
       if (seen.has(id)) throw new CharacterError("duplicate-id", `the roster state lists "${id}" twice`);
       seen.add(id);
-      const character = this.require(id);
-      return { character, state, before: character.snapshot() };
+      const member = this.characters.get(id);
+      const character = member ?? this.departed.get(id);
+      if (character === undefined) {
+        throw new CharacterError("unknown-character", `the roster has no character "${id}"`);
+      }
+      return { character, state, before: character.snapshot(), rejoins: member === undefined };
     });
     try {
       for (const { character, state } of pending) character.restore(state);
     } catch (error) {
       for (const { character, before } of pending) character.restore(before);
       throw error;
+    }
+    // Every state was applied: the characters that had left come back into the roster.
+    for (const { character, rejoins } of pending) {
+      if (!rejoins) continue;
+      this.characters.set(character.id, character);
+      this.departed.delete(character.id);
     }
   }
 

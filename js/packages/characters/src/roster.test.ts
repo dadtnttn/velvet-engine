@@ -134,4 +134,78 @@ describe("Roster", () => {
     expectCode(() => roster.restore([ada, ada]), "duplicate-id");
     expectCode(() => roster.restore([{ ...ada, id: "nobody" }]), "unknown-character");
   });
+
+  it("adds a character with join, and refuses an id that the roster lists or a character of another schema", () => {
+    const schema = makeSchema();
+    const roster = new Roster([character(schema, "ada")]);
+    roster.join(character(schema, "bea"));
+    expect(roster.all().map((entry) => entry.id)).toEqual(["ada", "bea"]);
+    expect(roster.snapshot().map((state) => state.id)).toEqual(["ada", "bea"]);
+    expectCode(() => roster.join(character(schema, "ada")), "duplicate-id");
+    expectCode(() => roster.join(character(makeSchema(), "cora")), "argument");
+    expect(roster.get("cora")).toBeUndefined();
+  });
+
+  it("takes the schema from the first character that joins an empty roster", () => {
+    const schema = makeSchema();
+    const roster = new Roster([]);
+    roster.join(character(schema, "ada"));
+    expectCode(() => roster.join(character(makeSchema(), "bea")), "argument");
+  });
+
+  it("removes a character with leave, returns it, and leaves the queries and the snapshot without it", () => {
+    const schema = makeSchema();
+    const bea = character(schema, "bea", { relationships: { ada: 5 } });
+    const roster = new Roster([character(schema, "ada", { relationships: { bea: 40 } }), bea]);
+    expect(roster.leave("bea")).toBe(bea);
+    expect(roster.get("bea")).toBeUndefined();
+    expect(roster.opinionsOf("ada")).toEqual([]);
+    expect(roster.snapshot().map((state) => state.id)).toEqual(["ada"]);
+    expectCode(() => roster.leave("bea"), "unknown-character");
+    expectCode(() => roster.relationsOf("bea"), "unknown-character");
+  });
+
+  it("brings a character that left back when a restore names a state written while it was a member", () => {
+    const schema = makeSchema();
+    const roster = new Roster([character(schema, "ada"), character(schema, "bea")]);
+    roster.get("bea")?.changeBase("wisdom", 4);
+    const saved = roster.snapshot();
+    roster.leave("bea");
+    roster.get("ada")?.changeBase("wisdom", 9);
+    roster.restore(JSON.parse(JSON.stringify(saved)));
+    expect(roster.snapshot()).toEqual(saved);
+    expect(roster.get("bea")?.baseStat("wisdom")).toBe(10);
+  });
+
+  it("brings nobody back when another state of the restore is refused", () => {
+    const schema = makeSchema();
+    const roster = new Roster([character(schema, "ada"), character(schema, "bea")]);
+    const saved = roster.snapshot();
+    roster.leave("bea");
+    const refusedAda = { ...saved[0], affinity: { ada: 1 } };
+    expectCode(() => roster.restore([refusedAda, saved[1]]), "invalid");
+    expect(roster.get("bea")).toBeUndefined();
+    expect(roster.snapshot().map((state) => state.id)).toEqual(["ada"]);
+  });
+
+  it("gives the id of a character that left to a new character, which a restore then updates", () => {
+    const schema = makeSchema();
+    const roster = new Roster([character(schema, "ada"), character(schema, "bea")]);
+    const saved = roster.snapshot();
+    roster.leave("bea");
+    const newBea = character(schema, "bea");
+    roster.join(newBea);
+    roster.restore(saved);
+    expect(roster.get("bea")).toBe(newBea);
+    expect(roster.snapshot()).toEqual(saved);
+  });
+
+  it("keeps a character that joined after the save, because a restore never removes a member", () => {
+    const schema = makeSchema();
+    const roster = new Roster([character(schema, "ada")]);
+    const saved = roster.snapshot();
+    roster.join(character(schema, "bea"));
+    roster.restore(saved);
+    expect(roster.all().map((entry) => entry.id)).toEqual(["ada", "bea"]);
+  });
 });
