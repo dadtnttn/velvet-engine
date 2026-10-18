@@ -30,6 +30,7 @@ velvet-terrain = { workspace = true }
 velvet-cards = { workspace = true }
 velvet-style = { workspace = true }
 velvet-image = { workspace = true }
+velvet-artbuild = { workspace = true }
 velvet-crypto = { workspace = true }
 velvet-audio = { workspace = true }
 velvet-build = { workspace = true }

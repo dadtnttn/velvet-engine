@@ -273,6 +273,9 @@ enum Commands {
         #[arg(long)]
         rust: bool,
     },
+    /// Build a Velvet JS game's `art/` folder from its source pictures, or check it
+    /// (see `docs/formats/ART_BUILD.md`).
+    Art(velvet_artbuild::ArtArgs),
     /// List / summarize assets (optionally write pack manifest).
     Assets {
         /// Assets directory.
@@ -1217,6 +1220,14 @@ fn dispatch(cli: Cli) -> Result<()> {
         } => cmd_build(path, release, package, runtime, js),
         Commands::Clean { path } => cmd_clean(path),
         Commands::Fmt { path, rust } => cmd_fmt(path, rust),
+        Commands::Art(args) => {
+            // The report is printed by `run`; a check that finds problems exits with 1.
+            let code = velvet_artbuild::run(&args)?;
+            if code != 0 {
+                std::process::exit(code);
+            }
+            Ok(())
+        }
         Commands::Assets { path, pack } => cmd_assets(path, pack),
         Commands::Inspect { path } => cmd_inspect(path),
         Commands::Document {

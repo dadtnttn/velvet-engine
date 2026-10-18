@@ -1,0 +1,17 @@
+[package]
+name = "velvet-artbuild"
+description = "Builds a Velvet JS game's art folder from source pictures: the sizes of the art manifest, PNG, and WebP or AVIF through ffmpeg when it is installed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+image = { workspace = true }
+walkdir = { workspace = true }
+sha2 = { workspace = true }
+velvet-avif = { path = "../velvet-avif" }

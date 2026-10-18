@@ -5225,6 +5225,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-artbuild"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "image",
+ "serde",
+ "serde_json",
+ "sha2",
+ "velvet-avif",
+ "walkdir",
+]
+
+[[package]]
 name = "velvet-assets"
 version = "0.3.0"
 dependencies = [
@@ -5342,6 +5356,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "velvet-app",
+ "velvet-artbuild",
  "velvet-audio",
  "velvet-build",
  "velvet-cards",

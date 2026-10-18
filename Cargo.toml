@@ -79,6 +79,7 @@ members = [
     "crates/velvet-guion",
     "crates/velvet-qa",
     "crates/velvet-stacks",
+    "crates/velvet-artbuild",
     "crates/velvet-desktop",
     "crates/velvet-wasm",
     "crates/velvet-scene3d",
@@ -160,6 +161,7 @@ velvet-nav = { path = "crates/velvet-nav" }
 velvet-guion = { path = "crates/velvet-guion" }
 velvet-qa = { path = "crates/velvet-qa" }
 velvet-stacks = { path = "crates/velvet-stacks" }
+velvet-artbuild = { path = "crates/velvet-artbuild" }
 velvet-desktop = { path = "crates/velvet-desktop", default-features = false }
 
 # External — foundation
