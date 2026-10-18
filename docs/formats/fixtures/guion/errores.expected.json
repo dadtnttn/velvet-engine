@@ -5,6 +5,7 @@
     "id": "errores",
     "title": "",
     "sala": null,
+    "meta": { "autor": "alguien" },
     "scenes": [
       {
         "id": "errores.inicio", "label": "inicio", "title": "inicio", "line": 5, "targeted": false,
@@ -24,7 +25,6 @@
       }
     ],
     "problems": [
-      { "file": "errores.md", "line": 3, "message": "clave desconocida en la cabecera: autor" },
       { "file": "errores.md", "line": 5, "message": "atributos ilegibles en: inicio {quien=greta, tiempo=noche}" },
       { "file": "errores.md", "line": 6, "message": "orden desconocida o ilegible: @nada hace algo" },
       { "file": "errores.md", "line": 7, "message": "línea sin texto" },

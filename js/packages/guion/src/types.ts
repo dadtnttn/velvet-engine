@@ -45,7 +45,7 @@ export interface GuionProblem {
   readonly message: string;
 }
 
-/** The summary of one guion file: its id, title, room, scenes and problems. */
+/** The summary of one guion file: its id, title, room, scenes, problems and metadata. */
 export interface GuionFile {
   readonly file: string;
   readonly id: string;
@@ -54,6 +54,13 @@ export interface GuionFile {
   readonly sala: string | null;
   readonly scenes: readonly SceneInfo[];
   readonly problems: readonly GuionProblem[];
+  /**
+   * The front matter's other keys (`categoria: escena`), with each value as written: a list such as
+   * `participantes: Lira, Nyxara` stays one string, and the game splits it. The keys are in the
+   * order of the file. Read it with `meta[key]`, or `Object.hasOwn(meta, key)` to tell an empty value
+   * from a missing key. See docs/formats/GUION.md, "Metadata".
+   */
+  readonly meta: Readonly<Record<string, string>>;
 }
 
 /** The story's variables and the scenes already seen. The shape is saved with the game. */

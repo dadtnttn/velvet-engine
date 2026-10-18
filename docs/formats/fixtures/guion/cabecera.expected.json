@@ -1,0 +1,34 @@
+{
+  "file": "cabecera.md",
+  "parse": {
+    "file": "cabecera.md",
+    "id": "cabecera",
+    "title": "La cabecera",
+    "sala": "posada",
+    "meta": { "categoria": "escena", "participantes": "Lira, Nyxara, Nemi", "ilustracion": "lira_bano", "hora": "10:30", "vacio": "" },
+    "scenes": [
+      {
+        "id": "cabecera.inicio", "label": "inicio", "title": "inicio", "line": 11, "targeted": false,
+        "attrs": { "quien": "lira", "en": null, "si": [], "unaVez": false, "vn": false }
+      }
+    ],
+    "problems": []
+  },
+  "entries": [
+    { "who": "lira", "place": null, "vars": { "values": {}, "seen": [] }, "scene": "cabecera.inicio" },
+    { "who": "nemi", "place": null, "vars": { "values": {}, "seen": [] }, "scene": null }
+  ],
+  "runs": [
+    {
+      "scene": "cabecera.inicio",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "cabecera.inicio", "stage": [], "who": "lira", "name": "Lira", "text": "Llegas a tiempo.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "line", "scene": "cabecera.inicio", "stage": [], "who": "narrator", "name": "", "text": "La puerta se cierra.", "kind": "sound", "mood": null } },
+        { "do": "next", "expect": { "type": "choice", "scene": "cabecera.inicio", "stage": [], "prompt": "¿Qué le dices?", "options": [{ "label": "Que sí", "available": true }, { "label": "Nada", "available": false }] } },
+        { "do": { "choose": 0 }, "expect": { "type": "end", "scene": "cabecera.inicio", "stage": [] } }
+      ],
+      "varsAfter": { "values": { "lira_confianza": 1 }, "seen": ["cabecera.inicio"] }
+    }
+  ]
+}

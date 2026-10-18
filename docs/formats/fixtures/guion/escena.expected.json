@@ -5,6 +5,7 @@
     "id": "escena",
     "title": "",
     "sala": null,
+    "meta": {},
     "scenes": [
       {
         "id": "escena.asomada", "label": "asomada", "title": "asomada", "line": 4, "targeted": false,

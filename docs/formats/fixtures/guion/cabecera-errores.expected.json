@@ -1,0 +1,35 @@
+{
+  "file": "cabecera-errores.md",
+  "parse": {
+    "file": "cabecera-errores.md",
+    "id": "cabecera_errores",
+    "title": "",
+    "sala": "a",
+    "meta": { "ok_1": "uno" },
+    "scenes": [
+      {
+        "id": "cabecera_errores.inicio", "label": "inicio", "title": "inicio", "line": 10, "targeted": false,
+        "attrs": { "quien": null, "en": null, "si": [], "unaVez": false, "vn": false }
+      }
+    ],
+    "problems": [
+      { "file": "cabecera-errores.md", "line": 2, "message": "clave no válida en la cabecera: Categoria (solo minúsculas, dígitos y _, y una letra al principio)" },
+      { "file": "cabecera-errores.md", "line": 3, "message": "clave no válida en la cabecera: 2da (solo minúsculas, dígitos y _, y una letra al principio)" },
+      { "file": "cabecera-errores.md", "line": 4, "message": "clave no válida en la cabecera: mi clave (solo minúsculas, dígitos y _, y una letra al principio)" },
+      { "file": "cabecera-errores.md", "line": 6, "message": "clave repetida en la cabecera: ok_1" },
+      { "file": "cabecera-errores.md", "line": 8, "message": "clave repetida en la cabecera: sala" }
+    ]
+  },
+  "entries": [],
+  "runs": [
+    {
+      "scene": "cabecera_errores.inicio",
+      "vars": { "values": {}, "seen": [] },
+      "steps": [
+        { "expect": { "type": "line", "scene": "cabecera_errores.inicio", "stage": [], "who": "ana", "name": "Ana", "text": "Hola.", "kind": "dialogue", "mood": null } },
+        { "do": "next", "expect": { "type": "end", "scene": "cabecera_errores.inicio", "stage": [] } }
+      ],
+      "varsAfter": { "values": {}, "seen": ["cabecera_errores.inicio"] }
+    }
+  ]
+}

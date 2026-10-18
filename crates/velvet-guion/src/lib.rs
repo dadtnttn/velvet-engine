@@ -24,6 +24,9 @@
 //! @fin
 //! ```
 //!
+//! Any other `key: value` line in the front matter is the file's metadata ([`Guion::meta`], read
+//! with [`Guion::meta_value`]), kept in file order with its value as written.
+//!
 //! Scene attributes, in braces after the heading: `quien=<npc>` (talking to that NPC can start it),
 //! `en=<place>` (using that hotspot can), `si=<condition>` (only while it holds), `una_vez` (only
 //! the first time), `vn` (a visual-novel scene: compiled into the story's nodes). Stage directions
@@ -203,8 +206,23 @@ pub struct Guion {
     pub id: String,
     pub title: String,
     pub sala: Option<String>,
+    /// The open keys of the front matter: every `key: value` line other than `id`, `sala` and
+    /// `titulo`, in the order the file gives them. Values are kept as written (a list stays
+    /// `a, b, c`; the game splits it). See docs/formats/GUION.md, "Metadata".
+    pub meta: Vec<(String, String)>,
     pub scenes: Vec<Scene>,
     pub path: PathBuf,
+}
+
+impl Guion {
+    /// The value of an open metadata key (`categoria`, say), or None when the front matter has no
+    /// such key.
+    pub fn meta_value(&self, key: &str) -> Option<&str> {
+        self.meta
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    }
 }
 
 /// A mistake in a guion, with where it is.
@@ -444,6 +462,15 @@ fn spoken(text: &str) -> String {
         .to_owned()
 }
 
+/// Whether `key` may name an open metadata entry: a lower-case ASCII letter, then lower-case letters,
+/// digits or `_`. Starting with a letter keeps a key apart from a number, so a JavaScript object
+/// keeps the keys in the order of the file (JavaScript sorts number-like keys first).
+fn is_meta_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
 /// Reads one guion, naming its speakers by `cast`. Problems are collected (with their lines)
 /// rather than stopping at the first.
 pub fn parse(source: &str, path: &Path, cast: &Cast) -> (Guion, Vec<Problem>) {
@@ -471,19 +498,35 @@ pub fn parse(source: &str, path: &Path, cast: &Cast) -> (Guion, Vec<Problem>) {
     };
     let lines: Vec<&str> = source.lines().collect();
     let mut i = 0;
-    // Front matter.
+    // Front matter: the keys it has set (a key given twice is reported and its second value dropped),
+    // then the open metadata of every other key.
     if lines.first().is_some_and(|l| l.trim() == "---") {
         i = 1;
+        let mut set: BTreeSet<&str> = BTreeSet::new();
         while i < lines.len() && lines[i].trim() != "---" {
             if let Some((k, v)) = lines[i].split_once(':') {
-                match slug(k).as_str() {
-                    "id" => g.id = slug(v),
-                    "sala" => g.sala = Some(slug(v)),
-                    "titulo" | "title" => g.title = v.trim().to_owned(),
-                    _ => problem(
+                let written = k.trim();
+                // The three known keys are matched as slugs, as they always were.
+                let known = match slug(written).as_str() {
+                    "id" => Some("id"),
+                    "sala" => Some("sala"),
+                    "titulo" | "title" => Some("titulo"),
+                    _ => None,
+                };
+                if known.is_none() && !is_meta_key(written) {
+                    problem(
                         i + 1,
-                        format!("clave desconocida en la cabecera: {}", k.trim()),
-                    ),
+                        format!("clave no válida en la cabecera: {written} (solo minúsculas, dígitos y _, y una letra al principio)"),
+                    );
+                } else if !set.insert(known.unwrap_or(written)) {
+                    problem(i + 1, format!("clave repetida en la cabecera: {written}"));
+                } else {
+                    match known {
+                        Some("id") => g.id = slug(v),
+                        Some("sala") => g.sala = Some(slug(v)),
+                        Some(_) => g.title = v.trim().to_owned(),
+                        None => g.meta.push((written.to_owned(), v.trim().to_owned())),
+                    }
                 }
             }
             i += 1;
@@ -2233,5 +2276,67 @@ La alcoba sigue.
             "@quitar takes her sprite off"
         );
         assert_eq!(vn.nodes[0]["tags"], json!(["mio"]));
+    }
+
+    #[test]
+    fn the_front_matter_keeps_its_other_keys_as_metadata_in_file_order() {
+        let text = "---\nid: escena\nzeta: último\ncategoria: escena\nparticipantes: Lira, Nyxara, Nemi\nilustracion: lira_bano\nsala: posada\nTitulo: La escena\n---\n## inicio\n**Ana:** —Hola.\n";
+        let (g, problems) = parse(text, Path::new("escena.md"), &Cast::new());
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(g.id, "escena");
+        assert_eq!(g.sala.as_deref(), Some("posada"));
+        assert_eq!(g.title, "La escena");
+        assert_eq!(
+            g.meta,
+            vec![
+                ("zeta".to_owned(), "último".to_owned()),
+                ("categoria".to_owned(), "escena".to_owned()),
+                ("participantes".to_owned(), "Lira, Nyxara, Nemi".to_owned()),
+                ("ilustracion".to_owned(), "lira_bano".to_owned()),
+            ]
+        );
+        assert_eq!(g.meta_value("participantes"), Some("Lira, Nyxara, Nemi"));
+        assert_eq!(
+            g.meta_value("sala"),
+            None,
+            "a known key is a field, not metadata"
+        );
+        assert_eq!(g.meta_value("nada"), None);
+    }
+
+    #[test]
+    fn a_metadata_value_keeps_its_colons_and_may_be_empty() {
+        let text = "---\nhora: 10:30\nvacio:\n---\n## inicio\n**Ana:** —Hola.\n";
+        let (g, problems) = parse(text, Path::new("hora.md"), &Cast::new());
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(g.meta_value("hora"), Some("10:30"));
+        assert_eq!(g.meta_value("vacio"), Some(""));
+        let (plain, _) = parse(
+            "## inicio\n**Ana:** —Hola.\n",
+            Path::new("sin.md"),
+            &Cast::new(),
+        );
+        assert!(plain.meta.is_empty(), "no front matter, no metadata");
+    }
+
+    #[test]
+    fn metadata_keys_follow_the_name_rule_and_are_given_once() {
+        let text = "---\nCategoria: x\n2da: x\nmi clave: x\n: x\nok_1: uno\nok_1: dos\nsala: a\nsala: b\ntitulo: uno\ntitle: dos\n---\n## inicio\n**Ana:** —Hola.\n";
+        let (g, problems) = parse(text, Path::new("cabeceras.md"), &Cast::new());
+        let lines: Vec<usize> = problems.iter().map(|p| p.line).collect();
+        assert_eq!(lines, vec![2, 3, 4, 5, 7, 9, 11], "{problems:?}");
+        assert!(problems[0]
+            .message
+            .starts_with("clave no válida en la cabecera: Categoria"));
+        assert_eq!(problems[4].message, "clave repetida en la cabecera: ok_1");
+        assert_eq!(problems[6].message, "clave repetida en la cabecera: title");
+        assert_eq!(g.meta, vec![("ok_1".to_owned(), "uno".to_owned())]);
+        assert_eq!(
+            g.sala.as_deref(),
+            Some("a"),
+            "the first value of a key is kept"
+        );
+        assert_eq!(g.title, "uno");
+        assert_eq!(g.scenes.len(), 1, "the body still plays");
     }
 }

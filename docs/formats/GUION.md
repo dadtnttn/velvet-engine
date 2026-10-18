@@ -41,7 +41,54 @@ A guion may begin with **front matter**: a first line `---`, then `key: value` l
 | `sala` | The room of the file's visual-novel scenes (a `@sala` directive changes it within a scene). Without it, the game's default room is used. |
 | `titulo` (or `title`) | The title of the file. |
 
-Any other key is a problem: `clave desconocida en la cabecera: <key>`.
+These three keys are matched as slugs, so `Titulo` and `título` are the same key. Any other key is
+**metadata** (below). A line in the front matter with no colon is ignored.
+
+### Metadata
+
+Any other `key: value` line of the front matter is the file's metadata: the game declares what it needs
+per file, such as a category, the participants or an illustration. The metadata is an open string map,
+kept in the order of the file:
+
+- A **key** is written in lower case: a letter first, then lower-case letters, digits or `_`
+  (`categoria`, `participantes`, `ilustracion_2`). A key starts with a letter, not a digit, because a
+  JavaScript object lists number-like keys first, whatever the file's order. A key that breaks the rule
+  is a problem: `clave no válida en la cabecera: <key>`.
+- A key given **twice** is a problem: `clave repetida en la cabecera: <key>`. The first value is kept.
+  `titulo` and `title` count as one key, so giving both is a problem too.
+- A **value** is the rest of the line after the first colon, trimmed, and kept as written. It may be
+  empty, and it may hold colons (`hora: 10:30`).
+- A **list** is written with commas and stays one string: `participantes: Lira, Nyxara, Nemi` has the
+  value `Lira, Nyxara, Nemi`. The game splits it, and trims the parts. velvet-guion does not split lists.
+
+```text
+---
+id: escena_bano
+sala: termas
+titulo: El baño
+categoria: escena
+participantes: Lira, Nyxara, Nemi
+ilustracion: lira_bano
+---
+```
+
+reads as the metadata `categoria` = `escena`, `participantes` = `Lira, Nyxara, Nemi`, and `ilustracion` =
+`lira_bano`, in that order. A file with no front matter, or with front matter that has no other keys,
+has no metadata.
+
+Reading it:
+
+- **Rust:** `guion.meta` is the list of `(key, value)` pairs in file order, and `guion.meta_value("categoria")`
+  finds one value (`None` when the key is missing).
+- **JavaScript:** `parseGuion` and `GuionLibrary.add` return `meta`, an object with the keys in file
+  order. Use `Object.hasOwn(meta, key)` to tell a missing key from an empty value.
+- **Splitting a list** (JavaScript):
+
+  ```ts
+  const names = (file.meta["participantes"] ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+  ```
+
+Metadata does not change how the file plays: the game reads the keys it needs from `meta`.
 
 Outside the front matter:
 
@@ -255,7 +302,8 @@ A file with problems still plays what it can. Each problem names its file and li
 
 | Message | Cause |
 |---|---|
-| `clave desconocida en la cabecera: <key>` | A front matter key that is not known. |
+| `clave no válida en la cabecera: <key>` | A front matter key (other than `id`, `sala`, `titulo`) that does not follow the metadata's name rule. |
+| `clave repetida en la cabecera: <key>` | A front matter key given twice (`titulo` and `title` count as one key). |
 | `atributos ilegibles en: <heading>` | Braces that are not valid attributes. |
 | `escena sin nombre` | A scene heading with no label. |
 | `escena repetida: <label>` | Two scenes with the same label in one file. |
@@ -277,14 +325,18 @@ plays, with those parts left out.
 `GuionLibrary` holds a game's files and finds scenes, `Conversation` plays a scene box by box, and
 `Portraits` finds the faces of the dialogue box.
 The boxes are the JSON that `crates/velvet-wasm` returns: `type` is `line`, `choice`, `vn` or `end`,
-and each box has its `scene` and its `stage`. The field names are camelCase.
+and each box has its `scene` and its `stage`. The field names are camelCase. A file's summary (what
+`parseGuion` and `add` return) has the fields `file`, `id`, `title`, `sala`, `scenes`, `problems` and
+`meta`, where `meta` is the object of the metadata (see [Metadata](#metadata)).
 
 ## Conformance
 
 The fixtures in `docs/formats/fixtures/guion/` are the shared tests of this format. Each fixture is a
 guion file `<name>.md` and an `<name>.expected.json` that gives:
 
-- `parse`: the summary of the file (its id, title, room, scenes with their attributes, and problems);
+- `parse`: the summary of the file (its id, title, room, scenes with their attributes, problems and
+  metadata). `cabecera.md` and `cabecera-errores.md` check the metadata: its order, its values, and the
+  keys that break the rule or repeat;
 - `entries`: what `entry` finds for given NPCs, places and variables;
 - `runs`: for each run, the variables, the start scene, the box after each action (`next`, or
   `choose` with an option index), the code of each refused action, and the variables at the end.

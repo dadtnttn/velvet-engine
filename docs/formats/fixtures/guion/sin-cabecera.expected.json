@@ -5,6 +5,7 @@
     "id": "sin_cabecera",
     "title": "",
     "sala": null,
+    "meta": {},
     "scenes": [
       {
         "id": "sin_cabecera.inicio", "label": "inicio", "title": "Inicio", "line": 1, "targeted": false,

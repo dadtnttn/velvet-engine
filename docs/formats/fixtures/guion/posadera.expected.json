@@ -9,6 +9,7 @@
     "id": "posadera",
     "title": "La posada del Cuervo",
     "sala": "taberna",
+    "meta": {},
     "scenes": [
       {
         "id": "posadera.llegada", "label": "llegada", "title": "llegada", "line": 9, "targeted": false,

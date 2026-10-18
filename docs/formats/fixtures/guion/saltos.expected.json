@@ -5,6 +5,7 @@
     "id": "saltos",
     "title": "",
     "sala": null,
+    "meta": {},
     "scenes": [
       {
         "id": "saltos.fiesta", "label": "fiesta", "title": "fiesta", "line": 4, "targeted": false,

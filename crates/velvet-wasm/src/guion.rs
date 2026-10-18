@@ -3,8 +3,8 @@
 //!
 //! The exports, as JavaScript sees them:
 //!
-//! - `parseGuion(text, file, castJson)` reads one guion and returns its id, title, room, scenes
-//!   and problems.
+//! - `parseGuion(text, file, castJson)` reads one guion and returns its id, title, room, scenes,
+//!   problems and metadata.
 //! - `GuionLibrary(castJson)` holds the guiones of one game, read with one cast. Its methods:
 //!   `add(file, text)`, `problems()`, `scenes()`, `entry(who, place, varsJson)` (the scene to play
 //!   on meeting someone or using a place) and `start(scene, varsJson)`.
@@ -21,6 +21,9 @@
 //!   `narrador` and `narrator` name the narrator.
 //! - **Vars:** `{"values": {"<var>": <integer>}, "seen": ["<file id>.<label>", ...]}`, the shape
 //!   velvet-guion's `Vars` serializes to. Both keys are optional.
+//! - **File:** the summary that `parseGuion` and `add` return: `{"file", "id", "title", "sala",
+//!   "scenes", "problems", "meta"}`. `meta` is an object of the front matter's other keys, written
+//!   in the order of the file, with each value as written (a list stays `a, b, c`).
 //! - **Problem:** `{"file", "line", "message"}`. Lines start at 1.
 //! - **Scene:** `{"id", "label", "title", "line", "targeted", "attrs": {"quien", "en", "si",
 //!   "unaVez", "vn"}}`. `si` lists conditions `{"var", "op", "value"}`, where `op` is one of `eq`,
@@ -145,6 +148,20 @@ struct FileJson {
     sala: Option<String>,
     scenes: Vec<SceneJson>,
     problems: Vec<ProblemJson>,
+    #[serde(serialize_with = "serialize_meta")]
+    meta: Vec<(String, String)>,
+}
+
+/// The open metadata of a file as a JSON object, its keys in the order the file gives them. The
+/// entries are written one by one, in that order, so no map on the way sorts them.
+fn serialize_meta<S: serde::Serializer>(
+    meta: &[(String, String)],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.collect_map(
+        meta.iter()
+            .map(|(key, value)| (key.as_str(), value.as_str())),
+    )
 }
 
 /// The summary of `guion`, read from `file`, with the problems found in it.
@@ -156,6 +173,7 @@ fn file_json(file: &str, guion: &Guion, problems: &[Problem]) -> FileJson {
         sala: guion.sala.clone(),
         scenes: guion.scenes.iter().map(SceneJson::from).collect(),
         problems: problems.iter().map(ProblemJson::from).collect(),
+        meta: guion.meta.clone(),
     }
 }
 
@@ -734,5 +752,26 @@ mod tests {
         let first = reply(&lib.start("cuento.inicio", "").expect("the scene").current());
         assert_eq!(first["who"], "narrator");
         assert_eq!(first["name"], "Narrador");
+    }
+
+    #[test]
+    fn the_metadata_crosses_in_file_order_and_bad_keys_are_problems() {
+        let text = "---\nid: escena\nzeta: 1\ncategoria: escena\nparticipantes: Lira, Nyxara\n---\n## inicio\n**Lira:** —Hola.\n";
+        let raw = parse_guion(text, "escena.md", "{}");
+        assert_eq!(
+            reply(&raw)["meta"],
+            json!({ "zeta": "1", "categoria": "escena", "participantes": "Lira, Nyxara" })
+        );
+        let zeta = raw.find("\"zeta\"").expect("the key is in the reply");
+        let categoria = raw.find("\"categoria\"").expect("the key is in the reply");
+        assert!(zeta < categoria, "the keys keep the file's order: {raw}");
+
+        let mut lib = GuionLibrary::new("{}").expect("the default cast");
+        let added = reply(&lib.add("escena.md", text));
+        assert_eq!(added["meta"]["participantes"], "Lira, Nyxara");
+
+        let bad = reply(&parse_guion("---\nCategoria: x\n---\n## a\n", "a.md", "{}"));
+        assert_eq!(bad["meta"], json!({}));
+        assert_eq!(bad["problems"][0]["line"], 2);
     }
 }
