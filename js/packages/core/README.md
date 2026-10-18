@@ -207,6 +207,7 @@ All three are opt-in: without a tap, an emit does no extra work for it.
     prefs.get("volume");                // 1 until a value is saved
     const stop = prefs.subscribe("volume", (volume) => applyVolume(volume));
     prefs.set("volume", 0.5);           // subscribers hear at once; the values are saved after 250 ms of quiet
+    prefs.reset("volume");              // back to the default; reset() with no key resets every setting
     await prefs.save();                 // writes now: resolves true, or false when the storage refused
 
 **Where the values go.** In Velvet Desktop, the bridge's settings, under the namespace as the key. In a browser, localStorage, under `velvet-settings:` and the namespace. Otherwise memory. Pass `bridge`, `storage` or `backend` to choose, or `null` to skip one. Two stores on one namespace share the saved values, and the last write wins, so each package takes its own namespace.

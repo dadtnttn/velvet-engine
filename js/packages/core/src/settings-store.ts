@@ -86,6 +86,12 @@ export interface SettingsStore<Values extends object> {
    */
   set<Key extends keyof Values>(key: Key, value: Values[Key]): void;
   /**
+   * Puts settings back to their defaults: the one setting `key` names, or every setting when `key` is left out.
+   * The subscribers of each value that changes hear of it, and the values are saved after the debounce, as with `set`.
+   * @throws RangeError when `key` is not one of the defaults.
+   */
+  reset(key?: keyof Values): void;
+  /**
    * Runs `listener` with the new value each time that value changes, by `set` or by `load`.
    * @throws RangeError when `key` is not one of the defaults.
    * @returns a function that removes the listener.
@@ -180,6 +186,19 @@ class Settings<Values extends object> implements SettingsStore<Values> {
     // The save is scheduled before the subscribers run, so a subscriber that throws cannot lose the change.
     this.scheduleSave();
     this.events.emit(name, value);
+  }
+
+  reset(key?: keyof Values): void {
+    const names = key === undefined ? [...this.defaults.keys()] : [this.nameOf(key)];
+    const changed: string[] = [];
+    for (const name of names) {
+      this.touched.add(name);
+      if (this.changeValue(name, this.defaults.get(name))) changed.push(name);
+    }
+    if (changed.length === 0) return;
+    // As in `set`, the save is scheduled before the subscribers run.
+    this.scheduleSave();
+    for (const name of changed) this.events.emit(name, this.values.get(name));
   }
 
   subscribe<Key extends keyof Values & string>(key: Key, listener: Listener<Values[Key]>): Unsubscribe {

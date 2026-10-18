@@ -287,6 +287,58 @@ describe("subscriptions", () => {
   });
 });
 
+describe("reset", () => {
+  it("puts every setting back to its default, and tells the subscribers of the values that changed", () => {
+    const memory = memoryBackend();
+    const store = createSettingsStore<Prefs>({ namespace: "game", version: 1, defaults, backend: memory.backend });
+    store.set("volume", 0.3);
+    store.set("language", "es");
+    const volumes: number[] = [];
+    let mutedCalls = 0;
+    store.subscribe("volume", (value) => {
+      volumes.push(value);
+    });
+    store.subscribe("muted", () => {
+      mutedCalls += 1;
+    });
+    store.reset();
+    expect(store.get("volume")).toBe(1);
+    expect(store.get("language")).toBeNull();
+    expect(volumes).toEqual([1]);
+    expect(mutedCalls).toBe(0);
+  });
+
+  it("puts one setting back when a key is given, and saves after the debounce", async () => {
+    vi.useFakeTimers();
+    const memory = memoryBackend();
+    const store = createSettingsStore<Prefs>({ namespace: "game", version: 1, defaults, backend: memory.backend });
+    store.set("volume", 0.3);
+    store.set("muted", true);
+    await vi.advanceTimersByTimeAsync(1000);
+    const before = memory.writes.length;
+    store.reset("volume");
+    expect(store.get("volume")).toBe(1);
+    expect(store.get("muted")).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+    expect(memory.writes.length).toBe(before + 1);
+    expect(memory.writes.at(-1)?.value).toEqual(envelope(1, { volume: 1, language: null, muted: true, keys: [] }));
+  });
+
+  it("keeps a reset value when the saved values arrive later", async () => {
+    const memory = memoryBackend({ game: envelope(1, { volume: 0.2 }) });
+    const store = createSettingsStore<Prefs>({ namespace: "game", version: 1, defaults, backend: memory.backend });
+    store.reset("volume");
+    await store.load();
+    expect(store.get("volume")).toBe(1);
+  });
+
+  it("refuses a key that is not a setting", () => {
+    const store = createSettingsStore<Prefs>({ namespace: "game", version: 1, defaults, backend: memoryBackend().backend });
+    expect(() => store.reset("nope" as keyof Prefs)).toThrow(RangeError);
+  });
+});
+
 describe("where the values are kept", () => {
   it("keeps them in the bridge's settings under the namespace, when the desktop host is present", async () => {
     const { bridge } = createFakeBridge();
