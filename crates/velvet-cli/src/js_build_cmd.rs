@@ -353,11 +353,43 @@ fn place_release(
 ) -> Result<()> {
     remove_folder(dir).with_context(|| format!("cannot replace {}", dir.display()))?;
     remove_file(archive).with_context(|| format!("cannot replace {}", archive.display()))?;
-    retrying(|| fs::rename(staging, dir))
+    move_or_copy_folder(staging, dir)
         .with_context(|| format!("cannot move the release into {}", dir.display()))?;
     if let Some(partial) = archive_partial {
         retrying(|| fs::rename(partial, archive))
             .with_context(|| format!("cannot move the archive into {}", archive.display()))?;
+    }
+    Ok(())
+}
+
+/// Moves the finished folder into place. A folder that another program watches cannot be renamed
+/// on Windows: a dev server (Vite) watching the game folder holds a handle on every folder under
+/// it, `release/` included, for as long as it runs. When the rename is still refused after the
+/// retries, the folder is copied into place instead, and the copy it came from is removed if it
+/// can be; the next build clears it otherwise.
+fn move_or_copy_folder(from: &Path, to: &Path) -> io::Result<()> {
+    match retrying(|| fs::rename(from, to)) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            copy_tree(from, to)?;
+            let _ = fs::remove_dir_all(from);
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Copies a folder and everything in it to `to`, which must not exist yet.
+fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
+    for entry in WalkDir::new(from) {
+        let entry = entry.map_err(io::Error::other)?;
+        let relative = entry.path().strip_prefix(from).map_err(io::Error::other)?;
+        let target = to.join(relative);
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&target)?;
+        } else {
+            fs::copy(entry.path(), &target)?;
+        }
     }
     Ok(())
 }

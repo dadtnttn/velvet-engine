@@ -6,6 +6,9 @@
 //
 // The engine's packages are linked from outside this folder, so Vite must be allowed to serve them:
 // `server.fs.allow` names the engine's js folder.
+//
+// The dev server does not watch `release/`: on Windows a watched folder cannot be renamed, and
+// `velvet build --runtime js` moves its finished release folder into place there.
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +22,7 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: { ignored: ["**/release/**"] },
     fs: { allow: [".", engine] },
   },
   build: {

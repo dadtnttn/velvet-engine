@@ -16,9 +16,10 @@ It printed these lines when it was run for this tutorial:
       16 files, 1.94 MiB
       run with no arguments: C:\dev\velvet-engine\js\examples\hello-cards\release\hello-cards-0.1.0\hello-cards.exe
 
-The first attempt on that checkout failed on Windows with `Acceso denegado` (access denied) when the finished folder was
-moved into place. The build clears its staging folder after a failure, so the second run started clean and succeeded.
-A failed move on Windows is usually a file that another process holds for a moment: run the command again.
+The release is written to a staging folder beside its final place and moved in at the end. On Windows a folder that
+another program watches cannot be renamed, and a running dev server (`pnpm dev`) watches the whole game folder. The
+examples and the `velvet-js new` template tell Vite not to watch `release/`, and when a move is still refused the build
+copies the folder into place instead, so you can build while the dev server runs.
 
 ## What it does
 
