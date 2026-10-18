@@ -101,3 +101,30 @@ export type {
   SettingsBackendChoice,
   SettingsBackendKind,
 } from "./settings-backend";
+export {
+  LOG_LEVELS,
+  createBridgeSink,
+  createConsoleSink,
+  createLogger,
+  isLogLevel,
+} from "./log";
+export type {
+  ConsoleLike,
+  JsonObject,
+  JsonValue,
+  LogEntry,
+  LogFields,
+  LogLevel,
+  LogSink,
+  LogTarget,
+  Logger,
+  LoggerOptions,
+} from "./log";
+export { captureError, formatReport, installErrorReporter } from "./error-report";
+export type {
+  ErrorReport,
+  ErrorReportKind,
+  ErrorReporter,
+  ErrorReporterOptions,
+  ReportGame,
+} from "./error-report";

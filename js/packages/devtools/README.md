@@ -1,17 +1,20 @@
 # @velvet/devtools
 
 Developer tools for a Velvet JS game, for development builds only. They draw an overlay over the game
-(F3 shows and hides it) with six parts:
+(F3 shows and hides it) with seven parts:
 
 - **Performance**: a graph of the last frames, FPS, median, 95th percentile and maximum frame times, the
   count of long frames (over 16.7 ms and over 33 ms), the update and render split of the loop, the number of
   DOM elements and the JavaScript heap where the browser reports it.
 - **Time**: pause, resume, step one frame, the speeds that the game clock allows, and slow motion.
 - **Events**: the events of a `@velvet/core` event bus, filtered by name, pausable and capped.
+- **Log**: the entries of the game's `@velvet/core` logger, newest first, with a level filter and a text filter.
+  The error reports of the reporter come first, each opening to its full text, with a button that copies it.
+  See "Log" below.
 - **State**: values that the game registers with `inspect`, shown as trees that open on demand, with refresh,
   auto-refresh and copy as JSON.
 - **Console**: typed commands with history, Tab completion and built-in commands (`help`, `pause`, `resume`,
-  `step`, `speed`, `clear`, `fps`).
+  `step`, `speed`, `clear`, `fps`, `log.level`).
 - **Watches**: numbers pinned to a small HUD in the corner, which stays on screen while the panel is hidden.
 
 The tools are plain DOM and CSS. Their stylesheet, scoped to `vdt-` classes, is added to the page once. The
@@ -178,19 +181,47 @@ A game can use the same hooks for its own timing, without wrapping the loop.
   A word of the wrong type, a missing required argument or an extra word prints an error, and the command
   does not run. A string argument with `choices` completes with Tab, and only those choices are accepted.
 - `run` may return text, which is printed. Throwing prints the message. A name that is already taken is
-  replaced. The name must start with a letter and use only letters, digits, `-` and `_`.
+  replaced. The name must start with a letter and use only letters, digits, `-` and `_`. Dots may group the
+  parts of a name, each starting with a letter, as the built-in `log.level` does.
 - Built-in commands: `help [name]`, `pause`, `resume`, `step`, `speed [value]` (shows the speed when no value
-  is given), `clear` and `fps`.
+  is given), `clear`, `fps`, and `log.level <name> <level>`, which sets the level of a logger of the game's
+  family by its full name (`game`, `game.combat`) to `debug`, `info`, `warn` or `error`.
 - In the prompt: Enter runs the line, Up and Down browse the history (the line being typed comes back after
   the newest), Tab completes a command name or a choice, and Escape leaves the prompt.
+
+## Log
+
+    import { createConsoleSink, createLogger, installErrorReporter } from "@velvet/core";
+
+    const logger = createLogger({ name: "game", sinks: [createConsoleSink()] });
+    const reporter = installErrorReporter({ logger, onReport: (report) => showErrorOverlay(report) });
+    const devtools = createDevtools({ host, enabled: true, logger, errorReports: reporter });
+    devtools.watch("errors", () => devtools.errorCount());
+
+- The Log tab lists the entries of the logger and of its children (the whole family), newest first, up to 200 of
+  them. The level filter keeps the entries at that level and above, and the text filter matches the logger's
+  name, the message or the fields, ignoring case. The summary counts the entries shown and the errors in the log.
+- The error reports of `errorReports` (any object with `reports()`, such as the reporter from `installErrorReporter`)
+  are listed above the entries, the newest five. Each report opens to the text of `formatReport`, and its button
+  copies that text. A report that is open stays open when another arrives.
+- `log.level <name> <level>` sets a logger's level from the console, and the Log tab shows the new level.
+- `errorCount()` counts the error entries that the logger holds, so a watch can show them. The reporter logs every
+  error it catches at the error level, so those count too.
+- Without a `logger` option the tab says that no logger was given, and `errorCount()` is zero.
 
 ## Watches
 
     const unpin = devtools.watch("enemies", () => world.enemies.length);
 
-A watch shows its number on the HUD at the top-left, and the HUD stays on while the panel is hidden. The
-value is read about every 100 ms. A read that throws shows its error in place of the number. The HUD is not
-interactive, so it never takes clicks from the game.
+A watch shows its number on the HUD, and the HUD stays on while the panel is hidden. The value is read about
+every 100 ms. A read that throws shows its error in place of the number. The HUD is not interactive, so it
+never takes clicks from the game.
+
+The HUD sits in the top-left corner by default. Choose another with `hudCorner: "top-right"` (or `"bottom-left"`,
+`"bottom-right"`), and move it later with `devtools.setHudCorner(corner)`; a corner that is not one of the four
+throws a RangeError. The panel opens at the top right, so a HUD there is under the panel while the panel is
+open. Pass `hud: false` to hide the HUD entirely: then no watch value is read, and the watches can still be
+added and removed. A game that draws its own HUD in a corner can use these to keep the two apart.
 
 ## Tests
 

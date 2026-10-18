@@ -33,4 +33,15 @@ describe("@velvet/core entry point", () => {
     expect(typeof core.EventEmitter.prototype.names).toBe("function");
     expect(typeof core.EventEmitter.prototype.listenerCount).toBe("function");
   });
+
+  it("exports the logger, its sinks and the error reports", () => {
+    expect(core.LOG_LEVELS).toEqual(["debug", "info", "warn", "error"]);
+    expect(typeof core.createLogger).toBe("function");
+    expect(typeof core.isLogLevel).toBe("function");
+    expect(typeof core.createConsoleSink).toBe("function");
+    expect(typeof core.createBridgeSink).toBe("function");
+    expect(typeof core.installErrorReporter).toBe("function");
+    expect(typeof core.captureError).toBe("function");
+    expect(typeof core.formatReport).toBe("function");
+  });
 });

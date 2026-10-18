@@ -16,5 +16,7 @@ export type {
   Devtools,
   DevtoolsOptions,
   DevtoolsStats,
+  ErrorReportSource,
+  HudCorner,
   InspectOptions,
 } from "./types";

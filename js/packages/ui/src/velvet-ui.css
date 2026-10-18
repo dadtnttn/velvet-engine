@@ -1088,6 +1088,63 @@
   gap: var(--vu-gap);
 }
 
+/* Error overlay: the panel that says the game broke. It covers the window, and its report box scrolls. The root
+   carries the tokens, so the panel looks the same outside a stage. The rest is the modal's look. */
+.vu-error-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.vu-error-root[hidden] {
+  display: none;
+}
+
+.vu-error-dialog {
+  width: 960px;
+  max-width: calc(100% - 64px);
+}
+
+.vu-error-message {
+  margin: 0 0 var(--vu-gap);
+  color: var(--vu-gold-hi);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.vu-error-id {
+  margin: 0 0 var(--vu-gap);
+  color: var(--vu-muted);
+  font-size: var(--vu-size-small);
+}
+
+.vu-error-report {
+  box-sizing: border-box;
+  max-height: 340px;
+  margin: 0 0 var(--vu-gap);
+  padding: 10px 14px;
+  overflow: auto;
+  background: rgb(0 0 0 / 0.35);
+  color: var(--vu-paper);
+  font-family: ui-monospace, Consolas, "Cascadia Mono", monospace;
+  font-size: var(--vu-size-small);
+  font-weight: 400;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.vu-error-report:focus-visible {
+  background-color: rgb(226 48 79 / 0.35);
+}
+
+.vu-error-status {
+  min-height: 1.3em;
+  margin: 0 0 var(--vu-gap);
+  color: var(--vu-gold-hi);
+  font-size: var(--vu-size-small);
+}
+
 /* Reduced motion: no fades, no hover transitions, no animations. */
 @media (prefers-reduced-motion: reduce) {
   .vu-root {

@@ -56,6 +56,18 @@ export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * The local time of day with milliseconds, as HH:MM:SS.mmm, for the Log tab. A dash when the time is not a
+ * finite number.
+ * @param epochMs - the time in milliseconds since the Unix epoch.
+ */
+export function clockText(epochMs: number): string {
+  if (!Number.isFinite(epochMs)) return "–";
+  const date = new Date(epochMs);
+  const pad = (value: number, size = 2): string => String(value).padStart(size, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+}
+
 /** Turns a value into plain JSON data within the walk's limits. Undefined stays undefined, so the caller can drop it. */
 function plainOf(value: unknown, walk: Walk): unknown {
   if (typeof value !== "object" || value === null) return primitiveOf(value);

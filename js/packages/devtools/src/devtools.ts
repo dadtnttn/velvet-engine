@@ -8,11 +8,15 @@
 // marked, and its default action (the browser's own F3 search) is cancelled.
 
 import {
+  LOG_LEVELS,
   createFrameScheduler,
+  isLogLevel,
   markHandled,
+  type ErrorReport,
   type FrameScheduler,
   type GameLoop,
   type GameLoopOptions,
+  type Logger,
 } from "@velvet/core";
 import type { Stage } from "@velvet/ui";
 import type { InspectView, LoopState, OverlayApi } from "./api";
@@ -30,7 +34,7 @@ import {
   type ConsoleKind,
 } from "./console";
 import { EventLog } from "./events";
-import { Overlay } from "./overlay";
+import { DEFAULT_HUD_CORNER, Overlay, isHudCorner } from "./overlay";
 import { FrameSampler, type FrameStats } from "./stats";
 import { installStyles } from "./styles";
 import { DEFAULT_STEP_SECONDS, TimeControls, type TimeState } from "./time";
@@ -41,6 +45,8 @@ import type {
   Devtools,
   DevtoolsOptions,
   DevtoolsStats,
+  ErrorReportSource,
+  HudCorner,
   InspectOptions,
 } from "./types";
 
@@ -80,6 +86,12 @@ function readHeapBytes(): number | null {
   return typeof used === "number" ? used : null;
 }
 
+/** The corner, when it is one of the four. Throws a RangeError for anything else. */
+function requireHudCorner(corner: unknown): HudCorner {
+  if (isHudCorner(corner)) return corner;
+  throw new RangeError(`hudCorner must be top-left, top-right, bottom-left or bottom-right, not ${String(corner)}`);
+}
+
 /**
  * Creates the developer tools for a game.
  *
@@ -108,6 +120,8 @@ function createDisabled(): Devtools {
     inspect: (): (() => void) => unsubscribe,
     command: (): (() => void) => unsubscribe,
     watch: (): (() => void) => unsubscribe,
+    setHudCorner: noop,
+    errorCount: (): number => 0,
     wrapLoop<Options extends GameLoopOptions>(options: Options): Options {
       return options;
     },
@@ -156,6 +170,14 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
   /** True when the loop was given to the tools, so that its frame hook reports the update and render times. */
   private readonly timingFromHooks: boolean;
   private readonly stage: Stage | undefined;
+  /** The corner where the pinned watches are drawn now. */
+  private hudCorner: HudCorner;
+  /** False when the game turned the pinned watches off with the `hud` option. */
+  private readonly hudOn: boolean;
+  /** The game's logger, whose entries the Log tab lists and whose levels `log.level` sets. */
+  private readonly gameLogger: Logger | undefined;
+  /** The error reporter, whose reports the Log tab shows above the entries. */
+  private readonly reporter: ErrorReportSource | undefined;
   private frameHandle: number | null = null;
   private lastTickMs = Number.NEGATIVE_INFINITY;
   private lastMemoryMs = Number.NEGATIVE_INFINITY;
@@ -182,6 +204,9 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
 
   /** Builds the overlay, subscribes to the events, and starts sampling frames. */
   constructor(options: DevtoolsOptions<Events>) {
+    // The corner is checked before any element is built, so a bad value leaves the page as it was.
+    this.hudCorner = requireHudCorner(options.hudCorner ?? DEFAULT_HUD_CORNER);
+    this.hudOn = options.hud ?? true;
     this.doc = options.host.ownerDocument;
     this.readClock = options.now ?? defaultNow;
     this.scheduler = options.scheduler ?? createFrameScheduler();
@@ -189,6 +214,8 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
     this.loop = options.loop;
     this.timingFromHooks = options.loop !== undefined;
     this.stage = options.stage;
+    this.gameLogger = options.logger;
+    this.reporter = options.errorReports;
     this.time = new TimeControls(
       options.clock ?? null,
       options.slowSpeed ?? DEFAULT_SLOW_SPEED,
@@ -198,6 +225,7 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
 
     installStyles(this.doc);
     this.overlay = new Overlay(this.doc, this, options.host, this.toggleKey);
+    this.overlay.setHudCorner(this.hudCorner);
     this.registerBuiltins();
     this.subscribe(options);
     this.listen();
@@ -231,7 +259,9 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
 
   command(name: string, spec: CommandSpec): () => void {
     if (!isValidCommandName(name)) {
-      throw new RangeError(`command name must be letters, digits, "-" or "_", starting with a letter: "${name}"`);
+      throw new RangeError(
+        `command name must be letters, digits, "-" or "_" (dots may group them, each group starting with a letter): "${name}"`,
+      );
     }
     for (const arg of spec.args ?? []) {
       if (arg.choices !== undefined && arg.type !== "string") {
@@ -249,6 +279,38 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
     return () => {
       if (this.watchMap.get(name) === read) this.watchMap.delete(name);
     };
+  }
+
+  /** Moves the pinned watches to another corner. Throws a RangeError for a corner that is not one of the four. */
+  setHudCorner(corner: HudCorner): void {
+    this.hudCorner = requireHudCorner(corner);
+    this.overlay.setHudCorner(this.hudCorner);
+  }
+
+  /** False when the game turned the pinned watches off with the `hud` option. */
+  hudEnabled(): boolean {
+    return this.hudOn;
+  }
+
+  /** How many error entries the game's logger holds. Zero when no logger was given. */
+  errorCount(): number {
+    const logger = this.gameLogger;
+    if (logger === undefined) return 0;
+    let count = 0;
+    for (const entry of logger.entries()) {
+      if (entry.level === "error") count += 1;
+    }
+    return count;
+  }
+
+  /** The logger whose entries the Log tab lists, or undefined when none was given. */
+  logger(): Logger | undefined {
+    return this.gameLogger;
+  }
+
+  /** The error reports, most recent first. Empty when no reporter was given. */
+  errorReports(): readonly ErrorReport[] {
+    return this.reporter?.reports() ?? [];
   }
 
   /**
@@ -523,6 +585,31 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
       help: "frame rate, frame times and long frames",
       run: () => this.fpsText(this.stats()),
     });
+    this.commandMap.set("log.level", {
+      args: [
+        { name: "name", type: "string" },
+        { name: "level", type: "string", choices: [...LOG_LEVELS] },
+      ],
+      help: "sets the level of a logger, by its full name: debug, info, warn or error",
+      run: (values) => this.setLogLevel(String(values["name"]), String(values["level"])),
+    });
+  }
+
+  /**
+   * Sets the level of one logger of the game's family, found by its full name. Returns the text to print, or
+   * throws for a name that is not a logger of the family.
+   */
+  private setLogLevel(name: string, level: string): string {
+    const logger = this.gameLogger;
+    if (logger === undefined) return "no logger was given: pass logger to createDevtools";
+    if (!isLogLevel(level)) throw new Error(`level must be debug, info, warn or error, not "${level}"`);
+    const target = logger.loggers().find((candidate) => candidate.name === name);
+    if (target === undefined) {
+      const names = logger.loggers().map((candidate) => candidate.name);
+      throw new Error(`no logger named "${name}": the loggers are ${names.join(", ")}`);
+    }
+    target.setLevel(level);
+    return `${name} is now ${level}`;
   }
 
   /** Help for all commands, or for one. */

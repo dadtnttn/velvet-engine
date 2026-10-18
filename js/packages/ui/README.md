@@ -620,6 +620,38 @@ wrap at the ends; Left and Right change the focused control, and Enter or Space 
 does not have makes the panel throw a RangeError when it is created, and a stored value of the wrong type shows the
 control's own default. The panel is built once: to show the texts in another language, make it again.
 
+## Error overlay
+
+    import { createErrorOverlay } from "@velvet/ui";
+    import { formatReport } from "@velvet/core";   // the overlay does not import core: it takes the text
+
+    const overlay = createErrorOverlay({
+      host: document.body,
+      report: { id: report.id, message: report.message, text: formatReport(report) },
+      onCopy: (copied) => log.info("report copied", { copied }),
+      onContinue: () => resumeGame(),
+      onReload: () => location.reload(),
+    });
+    // overlay.close() hides it and gives the focus back; overlay.destroy() removes it. Make a new one for a new report.
+
+A panel over the whole window, in the modal's look, titled "Something went wrong". The report text is shown in a box
+that scrolls, as text and never as markup. The report is a string, or an object with its `text` and, optionally, its
+`id` (shown as "Report {id}") and its `message` (shown as the headline). The overlay opens at once, with the focus on
+Continue.
+
+- **Copy** copies the text through the clipboard. When the page has no clipboard, or it refuses, the text is selected
+  so that Ctrl+C copies it, and the copy command is tried. `onCopy(copied)` says which way it went.
+- **Continue**, and Escape, close the overlay, and then call `onContinue`. `close()` closes it without the callback.
+- **Reload** calls `onReload`, which defaults to reloading the page. The overlay stays open, so the game can decide.
+- **Keys and pad.** Tab and Shift+Tab stay inside it. The left and right arrows move between the three buttons and wrap,
+  so a pad's d-pad works. The arrows scroll the report box when it has the focus. Enter presses the focused button;
+  a pad's A does too once the game maps the pad to the keys (`startPadMenuKeys` in @velvet/core).
+- **Labels.** `t(key, args)` gives every label, with the same shape as the rebinding panel's translator. The keys are
+  `error.title`, `error.body`, `error.reportText`, `error.reportId` (with `{id}`), `error.copy`, `error.copied`,
+  `error.copyFailed`, `error.continue` and `error.reload`. Without `t`, the English labels are used.
+- When the overlay closes, the focus goes back to the element that had it before it opened, or is released when that
+  element is gone. The look is in `velvet-ui.css`, under "Error overlay".
+
 ## Theme
 
 Colours, fonts and sizes are custom properties on `.vu-root`: `--vu-ink`, `--vu-paper`, `--vu-accent`,

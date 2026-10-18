@@ -2,7 +2,7 @@
   "name": "@velvet/core",
   "version": "0.1.0",
   "private": true,
-  "description": "Velvet JS core: fixed-step loop, game clock, typed events, input actions, the Velvet Desktop bridge and save slots.",
+  "description": "Velvet JS core: fixed-step loop, game clock, typed events, input actions, the Velvet Desktop bridge, save slots, logging and error reports.",
   "type": "module",
   "license": "MIT OR Apache-2.0",
   "sideEffects": false,

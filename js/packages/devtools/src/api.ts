@@ -1,6 +1,7 @@
 // What the overlay reads from the devtools and asks of them. The devtools class implements this interface,
 // so the overlay never reaches into the devtools' fields, and it can be read on its own.
 
+import type { ErrorReport, Logger } from "@velvet/core";
 import type { Completion, ConsoleKind, ConsoleOutput } from "./console";
 import type { EventLog } from "./events";
 import type { TimeState } from "./time";
@@ -57,6 +58,14 @@ export interface OverlayApi {
   views(): ReadonlyMap<string, InspectView>;
   /** The pinned numbers, by name. */
   watches(): ReadonlyMap<string, () => number>;
+  /** False when the game turned the pinned watches off with the `hud` option. */
+  hudEnabled(): boolean;
+  /** The logger whose entries the Log tab lists, or undefined when none was given. */
+  logger(): Logger | undefined;
+  /** The error reports, most recent first. Empty when no reporter was given. */
+  errorReports(): readonly ErrorReport[];
+  /** How many error entries the logger's buffer holds. */
+  errorCount(): number;
   /** The console's output lines. */
   output(): ConsoleOutput;
   /** Adds a line to the console output. */

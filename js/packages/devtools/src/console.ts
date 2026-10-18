@@ -30,8 +30,11 @@ const TRUE_WORDS: ReadonlySet<string> = new Set(["true", "on", "yes", "1"]);
 /** Words that mean false for a boolean argument. */
 const FALSE_WORDS: ReadonlySet<string> = new Set(["false", "off", "no", "0"]);
 
-/** A command name: a letter, then letters, digits, "-" or "_". */
-const COMMAND_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
+/**
+ * A command name: a letter, then letters, digits, "-" or "_". Names may be grouped with dots, each group starting
+ * with a letter, as the built-in `log.level` is.
+ */
+const COMMAND_NAME = /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z][A-Za-z0-9_-]*)*$/;
 
 /** True when a name can be used for a command. */
 export function isValidCommandName(name: string): boolean {

@@ -8,6 +8,7 @@ The core runtime for Velvet JS games. It has these parts:
 - `ActionMap`: keys, mouse buttons, the wheel and gamepads bound to named actions, read with `pressed`, `held` and `released`, and with analog values from `value`. It can be scoped to an element, it leaves a control's own keys to the control, `consume` hides an action for the rest of a frame, and its slots can be rebound at run time (see below).
 - `createSaveStore`: versioned save slots with migrations. Saves go to the Velvet Desktop bridge, then localStorage, then memory.
 - `createSettingsStore`: a few typed settings with defaults, for one namespace, saved through the bridge, then localStorage, then memory, with debounced writes and migrations (see "Settings").
+- `createLogger`: named loggers with a level each, a ring buffer of recent entries, and sinks for the console and for the Velvet Desktop log. `installErrorReporter` turns uncaught errors into reports, and `formatReport` makes the text that a player pastes into a bug report (see "Logging and error reports").
 
 The bridge contract (`VelvetBridge` and `getBridge`) lives in `src/bridge.ts`.
 
@@ -232,6 +233,28 @@ Two helpers ask Velvet Desktop for things that a browser page cannot do itself. 
 - `openExternalLink(url)` opens the link in the player's browser or mail program. The host refuses other schemes, spaces, quotes and user information before the host name, with the code `invalid_url`.
 
 A failure inside the host keeps the host's own `code`. Both calls work on Windows for now; elsewhere the host answers `unsupported`.
+
+## Logging and error reports
+
+    import { captureError, createBridgeSink, createConsoleSink, createLogger, formatReport, installErrorReporter } from "@velvet/core";
+
+    const log = createLogger({ name: "game", level: "info", sinks: [createConsoleSink()] });
+    const combat = log.child("combat");                 // "game.combat": it shares the buffer and the sinks
+    combat.warn("low health", { hp: 3 });               // fields are made JSON-safe on the way in
+
+    const reporter = installErrorReporter({
+      logger: log,
+      onReport: (report) => showErrorOverlay(formatReport(report)),   // @velvet/ui: createErrorOverlay
+    });
+    captureError(error, { scene: "mine" });             // an error the game recovered from
+
+- **Loggers.** `createLogger({ name, level, sinks, capacity })`: the level defaults to `info`, the sinks to the console, and the buffer keeps 500 entries. `child(name)` gives a dotted name and shares the buffer, the sinks and the `revision` with its family; each logger has its own level, and a child starts at its parent's level. `entries()` gives the buffer, oldest first, for the whole family, and `clear()` empties it. `revision` goes up on each change, so a view knows when to redraw, and `loggers()` lists the family. Names use letters, digits, `-` and `_`, with dots between the parts.
+- **Filtering costs nothing.** An entry below the level is dropped before anything is built, so a filtered call reads no field and formats no text. `isEnabled(level)` tells whether an entry would be kept, for a message that is expensive to build.
+- **Sinks.** `createConsoleSink()` writes to the console. `createBridgeSink()` writes each entry to the Velvet Desktop log through the bridge's `log` call, as `logger: message` followed by the fields as JSON. The host keeps 8 KiB of a message and writes it to `velvet-desktop.log`. Outside Velvet Desktop the bridge sink writes nothing. A release build can pass `[createBridgeSink()]` as its sinks. A sink that throws is skipped for that entry, so a broken sink never breaks the game.
+- **Fields are JSON.** An error becomes `{ name, message, stack }`, a cycle becomes `"[Circular]"`, a function becomes its name, and a value that is too deep, or a list that is too long, becomes a short marker. A getter that throws becomes `"[Unreadable]"`.
+- **Reports.** `installErrorReporter({ logger, onReport, game, maxPerMinute, target })` listens on the window for `error` and `unhandledrejection` (or on `target`). Each error is logged at the error level and becomes an `ErrorReport`: `id`, `time`, `kind` (`error`, `unhandledrejection` or `caught`), `message`, `stack`, `count`, `game` (`{ id, title, version }` from the `game` option or the bridge, else null), `userAgent`, `context` and `recentLog`, the last 50 entries of the log. A repeat of the same error is counted, not reported again: `reports()` lists every error seen, most recent first, with its current count. At most `maxPerMinute` new reports (default 5) reach `onReport` in a minute; the others are still counted and listed. `uninstall()` stops the listeners.
+- **Caught errors.** `captureError(error, context)` reports an error that the game caught, through the reporter that was installed last. It returns the report with its count, or null when no reporter is installed.
+- **Text for a player.** `formatReport(report)` gives plain text for a bug report: the report id, the game, the time, the kind, the count, the message, the stack, the context, the user agent and the recent log lines, oldest first. It adds nothing that the report does not already hold. Apart from the user agent, the report holds only what the game's own log entries and stack traces contain.
 
 ## Tests
 

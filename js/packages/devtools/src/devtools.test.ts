@@ -14,7 +14,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDevtools } from "./devtools";
 import { STYLE_ID } from "./styles";
-import type { Devtools, DevtoolsOptions } from "./types";
+import type { Devtools, DevtoolsOptions, HudCorner } from "./types";
 
 /** A frame scheduler that the test drives. `tick` runs the frames that are waiting. */
 interface ManualScheduler extends FrameScheduler {
@@ -148,13 +148,13 @@ function devtoolsWith<Events extends object = object>(options: Partial<DevtoolsO
 }
 
 describe("the panel", () => {
-  it("starts hidden, with the five tabs in order", () => {
+  it("starts hidden, with the six tabs in order", () => {
     const devtools = devtoolsWith();
     expect(devtools.enabled).toBe(true);
     expect(devtools.visible).toBe(false);
     expect(query(".vdt-panel").hidden).toBe(true);
     const labels = [...document.querySelectorAll('[role="tab"]')].map((button) => button.textContent);
-    expect(labels).toEqual(["Performance", "Time", "Events", "State", "Console"]);
+    expect(labels).toEqual(["Performance", "Time", "Events", "Log", "State", "Console"]);
   });
 
   it("is added to the host after the host's own children, and the host is otherwise untouched", () => {
@@ -530,6 +530,79 @@ describe("watches", () => {
     expect(hud.textContent).toContain("error: gone");
     expect(hud.textContent).toContain("ok");
     expect(hud.textContent).toContain("1");
+  });
+});
+
+/** The corners that the HUD carries, as names without the class prefix. */
+function corners(hud: HTMLElement): string[] {
+  return [...hud.classList].filter((name) => name.startsWith("vdt-corner-")).map((name) => name.slice(11));
+}
+
+describe("the pinned HUD", () => {
+  it("is drawn in the top-left corner by default", () => {
+    devtoolsWith();
+    expect(corners(query(".vdt-hud"))).toEqual(["top-left"]);
+  });
+
+  it("starts in the corner that the options name, with only that corner's class", () => {
+    devtoolsWith({ hudCorner: "bottom-right" });
+    expect(corners(query(".vdt-hud"))).toEqual(["bottom-right"]);
+  });
+
+  it("moves to another corner with setHudCorner, and drops the class of the old one", () => {
+    const devtools = devtoolsWith();
+    devtools.setHudCorner("top-right");
+    expect(corners(query(".vdt-hud"))).toEqual(["top-right"]);
+    devtools.setHudCorner("bottom-left");
+    expect(corners(query(".vdt-hud"))).toEqual(["bottom-left"]);
+  });
+
+  it("keeps the watch values on screen after it moves", () => {
+    const devtools = devtoolsWith({ hudCorner: "top-right" });
+    devtools.watch("gold", () => 12);
+    scheduler.tick(0);
+    devtools.setHudCorner("bottom-right");
+    scheduler.tick(200);
+    const hud = query<HTMLElement>(".vdt-hud");
+    expect(hud.hidden).toBe(false);
+    expect(hud.textContent).toContain("gold");
+    expect(hud.textContent).toContain("12");
+  });
+
+  it("refuses a corner that is not one of the four, and leaves the HUD where it was", () => {
+    const devtools = devtoolsWith({ hudCorner: "top-right" });
+    expect(() => devtools.setHudCorner("middle" as HudCorner)).toThrow(RangeError);
+    expect(corners(query(".vdt-hud"))).toEqual(["top-right"]);
+  });
+
+  it("refuses a bad corner in the options before it builds anything", () => {
+    expect(() => devtoolsWith({ hudCorner: "centre" as HudCorner })).toThrow(RangeError);
+    expect(document.querySelector(".vdt-root")).toBeNull();
+    expect(document.getElementById(STYLE_ID)).toBeNull();
+    expect(host.children).toHaveLength(0);
+  });
+
+  it("stays hidden with hud false, and its watches are never read", () => {
+    const devtools = devtoolsWith({ hud: false });
+    const read = vi.fn(() => 5);
+    devtools.watch("enemies", read);
+    scheduler.tick(0);
+    scheduler.tick(200);
+    expect(query<HTMLElement>(".vdt-hud").hidden).toBe(true);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("still takes a corner while it is off", () => {
+    const devtools = devtoolsWith({ hud: false });
+    expect(() => devtools.setHudCorner("bottom-left")).not.toThrow();
+    expect(corners(query(".vdt-hud"))).toEqual(["bottom-left"]);
+    expect(query<HTMLElement>(".vdt-hud").hidden).toBe(true);
+  });
+
+  it("does nothing when the tools are disabled", () => {
+    const devtools = createDevtools({ host, enabled: false, hudCorner: "bottom-left" });
+    expect(() => devtools.setHudCorner("top-right")).not.toThrow();
+    expect(document.querySelector(".vdt-root")).toBeNull();
   });
 });
 

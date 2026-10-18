@@ -1,14 +1,27 @@
-// The overlay: the panel with its five tabs, and the watch list that stays on screen while the panel is
+// The overlay: the panel with its six tabs, and the watch list that stays on screen while the panel is
 // hidden. The root is fixed to the window and lets pointer events through; only the panel and its
 // contents take them. The overlay writes only inside its own root.
 
 import type { OverlayApi } from "./api";
 import { element, button } from "./dom";
+import { LogTab } from "./log-tab";
 import { ConsoleTab, EventsTab, PerformanceTab, StateTab, TimeTab, type Tab } from "./tabs";
 import { formatFixed, messageOf } from "./text";
+import type { HudCorner } from "./types";
+
+/** The corners where the pinned watches can be drawn, and the class that places the HUD in each. */
+export const HUD_CORNERS: readonly HudCorner[] = ["top-left", "top-right", "bottom-left", "bottom-right"];
+
+/** The corner that the pinned watches start in. */
+export const DEFAULT_HUD_CORNER: HudCorner = "top-left";
+
+/** True when `value` is one of the four HUD corners. */
+export function isHudCorner(value: unknown): value is HudCorner {
+  return typeof value === "string" && (HUD_CORNERS as readonly string[]).includes(value);
+}
 
 /** The tabs in the order they show. */
-const TABS = ["performance", "time", "events", "state", "console"] as const;
+const TABS = ["performance", "time", "events", "log", "state", "console"] as const;
 
 /** One of the tab names. */
 type TabName = (typeof TABS)[number];
@@ -18,6 +31,7 @@ const TAB_LABELS: Readonly<Record<TabName, string>> = {
   performance: "Performance",
   time: "Time",
   events: "Events",
+  log: "Log",
   state: "State",
   console: "Console",
 };
@@ -68,6 +82,7 @@ export class Overlay {
     this.root = element(doc, "div", "vdt-root");
     this.hud = element(doc, "div", "vdt-hud");
     this.hud.hidden = true;
+    this.setHudCorner(DEFAULT_HUD_CORNER);
 
     this.panel = element(doc, "section", "vdt-panel");
     this.panel.hidden = true;
@@ -86,6 +101,7 @@ export class Overlay {
       performance: new PerformanceTab(doc, api),
       time: new TimeTab(doc, api),
       events: new EventsTab(doc, api),
+      log: new LogTab(doc, api),
       state: new StateTab(doc, api),
       console: new ConsoleTab(doc, api),
     };
@@ -133,6 +149,15 @@ export class Overlay {
     if (focused instanceof HTMLElement && this.root.contains(focused)) focused.blur();
   }
 
+  /**
+   * Moves the pinned watches to a corner: the HUD keeps one corner class, and the stylesheet places it.
+   * The caller checks the corner first; see {@link isHudCorner}.
+   */
+  setHudCorner(corner: HudCorner): void {
+    for (const name of HUD_CORNERS) this.hud.classList.remove(`vdt-corner-${name}`);
+    this.hud.classList.add(`vdt-corner-${corner}`);
+  }
+
   /** Refreshes the watch list, and the visible tab. Called on the devtools' tick. */
   update(): void {
     this.updateWatches();
@@ -155,9 +180,15 @@ export class Overlay {
     if (this.shown) this.tabs[name].update();
   }
 
-  /** Builds the watch rows when the set of names changes, and refreshes their values. */
+  /**
+   * Builds the watch rows when the set of names changes, and refreshes their values. While the HUD is off,
+   * or no watch is pinned, the HUD is hidden and no watch is read.
+   */
   private updateWatches(): void {
     const watches = this.api.watches();
+    const shown = this.api.hudEnabled() && watches.size > 0;
+    this.hud.hidden = !shown;
+    if (!shown) return;
     const key = [...watches.keys()].join(KEY_SEPARATOR);
     if (key !== this.hudKey) {
       this.hudKey = key;
@@ -171,7 +202,6 @@ export class Overlay {
       });
       this.hud.replaceChildren(...rows);
     }
-    this.hud.hidden = watches.size === 0;
     for (const [name, read] of watches) {
       const value = this.hudValues.get(name);
       if (value !== undefined) value.textContent = readWatch(read);

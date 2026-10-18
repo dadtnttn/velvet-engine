@@ -1,7 +1,8 @@
 // @velvet/ui: the 16:9 stage that every Velvet JS game draws in, the board view (a pannable, zoomable
 // world inside the stage, for cards and maps), the Persona HUD primitives (plates, buttons, keycaps,
 // chips, meters, tooltips, toasts, modals and menus) that sit over it, the form controls (sliders, toggles
-// and choices) and the settings panel that binds them to a game's settings.
+// and choices), the settings panel that binds them to a game's settings, and the error overlay that shows a
+// report when the game breaks.
 //
 // Import from the package root, for example:
 //   import { createStage, createBoardView, createButton, createMenu } from "@velvet/ui";
@@ -64,6 +65,14 @@ export { createToggle } from "./components/toggle";
 export type { Toggle, ToggleOptions } from "./components/toggle";
 export { createChoice } from "./components/choice";
 export type { Choice, ChoiceOption, ChoiceOptions, ChoiceValue } from "./components/choice";
+export { createErrorOverlay } from "./error-overlay";
+export type {
+  ErrorOverlay,
+  ErrorOverlayOptions,
+  ErrorOverlayReport,
+  ErrorOverlayReportObject,
+  ErrorOverlayTranslate,
+} from "./error-overlay";
 export { createSettingsPanel } from "./settings-panel";
 export type {
   ChoiceItem,

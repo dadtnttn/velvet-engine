@@ -27,8 +27,6 @@ const CSS = `
 .vdt-root [hidden] { display: none !important; }
 .vdt-hud {
   position: absolute;
-  top: 8px;
-  left: 8px;
   display: grid;
   gap: 2px;
   padding: 4px 8px;
@@ -36,6 +34,10 @@ const CSS = `
   border-radius: 4px;
   pointer-events: none;
 }
+.vdt-hud.vdt-corner-top-left { top: 8px; left: 8px; }
+.vdt-hud.vdt-corner-top-right { top: 8px; right: 8px; }
+.vdt-hud.vdt-corner-bottom-left { bottom: 8px; left: 8px; }
+.vdt-hud.vdt-corner-bottom-right { bottom: 8px; right: 8px; }
 .vdt-hud-row { display: flex; gap: 10px; justify-content: space-between; min-width: 140px; }
 .vdt-hud-name { color: var(--vdt-muted); }
 .vdt-hud-value { color: var(--vdt-accent); font-variant-numeric: tabular-nums; }
@@ -156,6 +158,34 @@ const CSS = `
 .vdt-line-error { color: var(--vdt-bad); }
 .vdt-prompt { display: grid; gap: 4px; }
 .vdt-prompt-hint { color: var(--vdt-muted); }
+.vdt-filters { display: grid; grid-template-columns: max-content 1fr; gap: 6px; }
+.vdt-reports { display: grid; gap: 6px; border: 1px solid var(--vdt-warn); border-radius: 4px; padding: 6px 8px; }
+.vdt-report { border: 1px solid var(--vdt-line); border-radius: 4px; padding: 4px 6px; display: grid; gap: 4px; }
+.vdt-report-head { cursor: pointer; color: var(--vdt-bad); overflow-wrap: anywhere; }
+.vdt-report-text {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #0a0a0f;
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--vdt-ink);
+}
+.vdt-entries { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; max-height: 300px; overflow: auto; }
+.vdt-entry { display: grid; grid-template-columns: 6.5em 5em 7em 1fr; gap: 0 8px; align-items: baseline; padding: 1px 2px; }
+.vdt-entry:nth-child(odd) { background: rgb(255 255 255 / 0.03); }
+.vdt-entry-time { color: var(--vdt-muted); font-variant-numeric: tabular-nums; }
+.vdt-entry-level { font-weight: 700; }
+.vdt-entry-logger { color: var(--vdt-accent); overflow-wrap: anywhere; }
+.vdt-entry-message { overflow-wrap: anywhere; }
+.vdt-entry-fields { grid-column: 2 / -1; color: var(--vdt-muted); overflow-wrap: anywhere; }
+.vdt-level-debug .vdt-entry-level { color: var(--vdt-muted); }
+.vdt-level-info .vdt-entry-level { color: var(--vdt-accent); }
+.vdt-level-warn .vdt-entry-level { color: var(--vdt-warn); }
+.vdt-level-error .vdt-entry-level,
+.vdt-level-error .vdt-entry-message { color: var(--vdt-bad); }
 `;
 
 /** Adds the overlay's rules to the document, once. Later calls see the element and do nothing. */

@@ -1,8 +1,25 @@
 // The public types of @velvet/devtools. The function that creates the tools is in devtools.ts.
 
-import type { EventEmitter, FrameScheduler, GameClock, GameLoop, GameLoopOptions } from "@velvet/core";
+import type {
+  ErrorReport,
+  EventEmitter,
+  FrameScheduler,
+  GameClock,
+  GameLoop,
+  GameLoopOptions,
+  Logger,
+} from "@velvet/core";
 import type { Stage } from "@velvet/ui";
 import type { FrameStats } from "./stats";
+
+/** Anything that lists error reports. The reporter from `installErrorReporter` in @velvet/core does. */
+export interface ErrorReportSource {
+  /** The reports, most recent first, each with its current count. */
+  reports(): readonly ErrorReport[];
+}
+
+/** The corners of the window where the pinned watches (the HUD) can be drawn. */
+export type HudCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 /** Options for {@link createDevtools}. */
 export interface DevtoolsOptions<Events extends object = object> {
@@ -34,6 +51,23 @@ export interface DevtoolsOptions<Events extends object = object> {
   readonly scheduler?: FrameScheduler;
   /** The clock for frame times, in milliseconds. Default: performance.now. */
   readonly now?: () => number;
+  /**
+   * The game's logger. The Log tab lists its entries and those of its children, and the `log.level` command sets
+   * their levels. Pass the root logger, or any logger of the family.
+   */
+  readonly logger?: Logger;
+  /** The error reporter from `installErrorReporter`. The Log tab shows its reports above the entries. */
+  readonly errorReports?: ErrorReportSource;
+  /**
+   * The corner of the window where the pinned watches are drawn. The panel opens at the top right, so a HUD
+   * there is under the panel while the panel is open. Default "top-left". `setHudCorner` moves it later.
+   */
+  readonly hudCorner?: HudCorner;
+  /**
+   * False hides the pinned watches entirely. Their values are then not read either, so a watch costs nothing
+   * while the HUD is off. Watches can still be added and removed. Default true.
+   */
+  readonly hud?: boolean;
 }
 
 /** Options for {@link Devtools.inspect}. */
@@ -106,7 +140,8 @@ export interface Devtools {
 
   /**
    * Adds a console command. A name that is already taken is replaced.
-   * @throws RangeError when the name is not letters, digits, "-" or "_", starting with a letter.
+   * @throws RangeError when the name is not letters, digits, "-" or "_", or a dotted group of it does not start
+   * with a letter. Names such as "log.level" are allowed.
    * @returns a function that removes the command.
    */
   command(name: string, spec: CommandSpec): () => void;
@@ -117,6 +152,18 @@ export interface Devtools {
    * @returns a function that unpins it.
    */
   watch(name: string, read: () => number): () => void;
+
+  /**
+   * Moves the pinned watches to another corner of the window. The panel stays at the top right.
+   * @throws RangeError when the corner is not one of the four.
+   */
+  setHudCorner(corner: HudCorner): void;
+
+  /**
+   * How many error entries the game's log holds, for a watch: `watch("errors", () => devtools.errorCount())`.
+   * Errors that the reporter catches are logged at the error level, so they count too. Zero when no logger was given.
+   */
+  errorCount(): number;
 
   /**
    * @deprecated Pass the loop to `createDevtools` as `loop`: the update and render times then come from the
