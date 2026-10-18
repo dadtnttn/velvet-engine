@@ -68,7 +68,7 @@ Finds the game's data and reads each file with the package that owns its format:
 | Kind | Format and kind | Read by | Checked |
 |---|---|---|---|
 | stacks catalog | `velvet-stacks`, `catalog` | `@velvet/cards` (`loadCatalog`, through WebAssembly) | every velvet-stacks rule |
-| stacks case | `velvet-stacks`, `case` | `check/cases.ts` (the steps of the shared fixture runner) | each step; expected events, drops, positions and the final table |
+| stacks case | `velvet-stacks`, `case` | `check/cases.ts` (the steps of the shared fixture runner) | the output placement (`placement`, the row when it is left out); each step; expected events, drops, positions and the final table |
 | stat schema | `velvet-character`, `schema` | `@velvet/characters` (`parseStatSchema`) | the schema's rules and formulas |
 | character sheet | `velvet-character`, `character` | `@velvet/characters` (`parseCharacter`) against a schema | the sheet against the schema; it may be any schema of the game |
 | art manifest | `velvet-art` | `@velvet/assets` (`parseArtManifest`) | every ART_MANIFEST rule |
@@ -145,8 +145,12 @@ translation is never overwritten.
 The tools find data by content, not by where a file sits. The rules, in order:
 
 1. **The manifest.** `velvet-game.json` must exist in the game folder. Its fields are read with the host's
-   rules (`crates/velvet-desktop/src/manifest.rs`): `id`, `title`, `version`, `entry` and `window` only, each
-   with the host's limits. The host refuses any other top-level key, so velvet-js reports it.
+   rules (`crates/velvet-desktop/src/manifest.rs`): `id`, `title`, `version`, `entry`, `window` and `icon`, each
+   with the host's limits. The host refuses any other top-level key, so velvet-js reports it. Two more keys are
+   read by the release step (`crates/velvet-cli/src/js_build_cmd.rs`) and not by the host: `release`
+   (`exclude` patterns, `include` paths, `archive` of `none` or `zip`), checked with the same rules as the
+   release. The icon must be a square PNG of at least 256 pixels (a smaller one is a warning), and every
+   included file must exist in the game folder.
 2. **The walk.** Every file under the game folder is visited, except the folders `node_modules`, `dist`,
    `release` and `coverage`, any hidden folder (its name starts with a dot), and the paths in the `ignore`
    hint. Symbolic links are not followed.

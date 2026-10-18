@@ -23,6 +23,7 @@ WebView2 runtime, which Windows 11 and Microsoft Edge already include.
 my-game/
   velvet-game.json   manifest (required)
   index.html         the entry page, and everything else the game loads
+  icon.png           the window and program icon (optional, square, 256 pixels or more)
 ```
 
 `velvet-game.json`: only `id` and `title` are required. Unknown keys are an error.
@@ -50,6 +51,9 @@ my-game/
 | `window.min_width`, `window.min_height` | 960, 540 | not larger than the size |
 | `window.resizable` | `true` | |
 | `window.fullscreen` | `false` | starts in borderless fullscreen |
+| `icon` | none | a PNG in the game folder, with the rule of `entry`. The window shows it; a missing or broken file is logged and the game starts without one |
+| `release` | none | hints for `velvet build`, not read by the host: `exclude` (patterns of web files to leave out), `include` (files to copy to the release root), `archive` (`"none"` or `"zip"`). See Release folders |
+| `data` | none | hints for the `velvet-js` tools, not read by the host |
 
 A leading byte order mark is accepted, since Windows editors often write one.
 
@@ -92,11 +96,25 @@ velvet-desktop --capture shot.png --after 3000 --size 1600x900 <game dir>
 
 ```text
 hello-game-0.1.0/
-  hello-game.exe     the host (no extension on Linux and macOS)
+  hello-game.exe     the host (no extension on Linux and macOS); on Windows it carries the icon
   game/
     velvet-game.json
+    icon.png         the window's icon, when the manifest names one
     index.html ...   the web files
+  LICENSE            a file that release.include names (optional)
+  build-info.json    the game, its version, the engine version, the git commit (null outside a repository), the build time in UTC
+  SHA256SUMS         a sha256sum checksum of every file above
 ```
+
+The manifest's `release` object sets the release: `exclude` (glob patterns of web files to leave out,
+such as `**/*.psd` or `dev/**`; `*` is one folder name's characters, `?` one character, `**` any
+number of folders; matching is case-sensitive, and the entry page and icon must stay), `include`
+(files of the game folder to copy to the release's top, with the rules of `entry`; the names the
+release writes itself are refused), and `archive` (`"none"`, or `"zip"`). `velvet build --zip` also
+writes `release/<id>-<version>.zip`, a zip of the folder whose entries start with the folder's name.
+`SOURCE_DATE_EPOCH` (seconds since 1970) sets the build time, so a repeated build gives the same
+`build-info.json` and archive. The icon is checked before anything is written: it must be a square PNG,
+and one under 256 pixels is built with a warning.
 
 Started with no arguments, the host looks for `game/velvet-game.json` next to its own executable
 and runs that folder, exactly as `velvet-desktop <folder>/game` would. Without that folder it
@@ -203,6 +221,8 @@ symbolic-link test runs on Unix only.
   Each finished page load is noted there too (`page loaded: <url>`).
 - The webview's profile (cache, local storage) is kept in `<data>/webview`, not next to the
   program.
+- The program's file icon (the icon resources of `<id>.exe`) is written on Windows only. The window's
+  icon, from `game/`, works everywhere.
 - Pictures (`--capture`, `window.capture()`) and `shell.openExternal` work on Windows only, for now.
   The checks (the link rules, the PNG size and the size limit) are plain code and run everywhere.
   Only the calls into the system are Windows-only, and elsewhere they answer `unsupported`.

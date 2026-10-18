@@ -5,7 +5,7 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { makeIssue, WHOLE_FILE, type Issue } from "../issues";
-import { NO_HINTS, readManifest, type DataHints, type ManifestInfo } from "./manifest";
+import { manifestFileIssues, NO_HINTS, readManifest, type DataHints, type ManifestInfo } from "./manifest";
 import { MANIFEST_FILE } from "./rules";
 
 /** The kinds of data document that velvet-js reads. */
@@ -218,6 +218,7 @@ export async function discoverGame(folder: string): Promise<GameDiscovery> {
 
   const manifest = readManifest(manifestText);
   const issues: Issue[] = [...manifest.issues];
+  if (manifest.info !== undefined) issues.push(...(await manifestFileIssues(folder, manifest.info)));
   const hints: DataHints = manifest.info?.hints ?? NO_HINTS;
 
   const starts: string[] = [];

@@ -14,6 +14,7 @@
 //! - [`shell`]: opening web and mail links in the player's programs, after checking them.
 //! - [`bridge`]: the `window.velvet` contract, its commands and the scripts it needs.
 //! - [`cli`]: command-line parsing for the `velvet-desktop` binary.
+//! - [`icon`]: the game's PNG icon, for the window and for a release's program file.
 //! - `app` (the `window` feature, on by default): the window, the webview and the event loop.
 //! - [`log`]: the terminal and the log file in the data folder.
 
@@ -24,6 +25,7 @@ pub mod app;
 pub mod bridge;
 pub mod capture;
 pub mod cli;
+pub mod icon;
 #[cfg(all(windows, feature = "window"))]
 mod job;
 pub mod log;

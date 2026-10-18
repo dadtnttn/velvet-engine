@@ -105,8 +105,11 @@ runs inside ► Velvet Desktop (.exe)
   so the host stays small.
 - **Development:** `pnpm dev` runs Vite, and the host loads the dev server's address with hot
   reload, inside the real window.
-- **Release:** `velvet build --runtime js` (to add to the CLI) puts the host executable next to the
-  built game (or the game packed as VLZ), like the native games' release folders.
+- **Release:** `velvet build --runtime js` writes `release/<id>-<version>/`: the host executable (with the
+  game's icon in its resources on Windows), `game/` with the built web files and the window icon, the
+  files of `release.include`, `build-info.json` and `SHA256SUMS`. `--zip`, or `release.archive: "zip"`,
+  also writes `release/<id>-<version>.zip`. The manifest's optional `icon` is a square PNG in the game
+  folder, shown by the window. Packing the game as VLZ is still open.
 - **Native games are unchanged.** Demon Queen stays fully native.
 
 ## Open questions

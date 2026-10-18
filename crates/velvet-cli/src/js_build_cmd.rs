@@ -2,31 +2,48 @@
 //!
 //! A release is the folder `<project>/release/<id>-<version>/`, holding:
 //!
-//! - the Velvet Desktop host, copied as `<id>.exe` (no extension on Linux and macOS);
-//! - `game/`, with the web files and `velvet-game.json`.
+//! - the Velvet Desktop host, copied as `<id>.exe` (no extension on Linux and macOS). On Windows the
+//!   game's icon is written into the file's resources;
+//! - `game/`, with the web files, `velvet-game.json` and the icon;
+//! - the files that `release.include` names, at the top;
+//! - `build-info.json`: the game, the engine version, the git commit when there is one, and the
+//!   build time in UTC;
+//! - `SHA256SUMS`: a checksum of every file above, in the format of `sha256sum`.
+//!
+//! With `release.archive` set to `"zip"`, or with `--zip`, the folder is also written as
+//! `release/<id>-<version>.zip`, a zip of the folder whose entries start with the folder's name.
 //!
 //! The web files are the project folder itself, or its `dist/` after `pnpm run build` when the
 //! project's `package.json` has a `build` script. The host is built with
 //! `cargo build -p velvet-desktop --release` in the engine workspace, unless `--host` names a
 //! prebuilt executable. Started with no arguments, the host runs `game/` (see the velvet-desktop
-//! README).
+//! README). `SOURCE_DATE_EPOCH`, when it is set, is the build time, so the same build gives the same
+//! `build-info.json` and archive.
 //!
 //! The two steps that run other programs are parameters of [`assemble`], so the checks and the
 //! copy rules are tested on temporary folders.
 
-use std::fs;
+use std::fmt::Write as _;
+use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
+use image::codecs::png::PngEncoder;
+use image::imageops::{self, FilterType};
+use image::{ExtendedColorType, ImageEncoder, RgbaImage};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use walkdir::{DirEntry, WalkDir};
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, DateTime as ZipDateTime, ZipWriter};
 
 use velvet_desktop::cli::PACKAGED_GAME_DIR;
-use velvet_desktop::manifest::MANIFEST_FILE;
+use velvet_desktop::icon::{self, IconImage};
+use velvet_desktop::manifest::{Archive, ReleaseHints, MANIFEST_FILE};
 use velvet_desktop::Manifest;
 
 use crate::workspace_cmd;
@@ -39,6 +56,36 @@ const HOST_CRATE: &str = "crates/velvet-desktop";
 
 /// The host's binary target name, as cargo reports it.
 const HOST_BIN: &str = "velvet-desktop";
+
+/// The file at the top of a release that records how it was built.
+pub const BUILD_INFO_FILE: &str = "build-info.json";
+
+/// The file at the top of a release that lists a checksum of every file, as `sha256sum` writes it.
+pub const CHECKSUM_FILE: &str = "SHA256SUMS";
+
+/// The sides, in pixels, of the images in the program's icon, largest first. Windows picks the size
+/// it needs.
+#[cfg(any(windows, test))]
+const ICON_SIZES: [u32; 5] = [256, 64, 48, 32, 16];
+
+/// An icon whose side is shorter than this is still built, with a warning: it will look soft.
+const ICON_WARN_SIDE: u32 = 256;
+
+/// The resource id of the first icon image in the program's file. The other images follow it.
+#[cfg(any(windows, test))]
+const FIRST_ICON_ID: u16 = 1;
+
+/// The resource id of the icon group, which names the images of the program's icon.
+#[cfg(any(windows, test))]
+const GROUP_ICON_ID: u16 = 1;
+
+/// The type in an icon header: 1 for icons (2 is for cursors).
+#[cfg(any(windows, test))]
+const ICON_TYPE: u16 = 1;
+
+/// The language of the icon resources: neutral, which is `MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL)`.
+#[cfg(windows)]
+const NEUTRAL_LANGUAGE: u16 = 0;
 
 /// The runtime that `velvet build` packages for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -61,6 +108,10 @@ pub struct JsBuildArgs {
     /// Replace the release folder when it already exists.
     #[arg(long)]
     pub force: bool,
+    /// Also write the release as a zip archive, `release/<id>-<version>.zip`, whatever the
+    /// manifest's `release.archive` says.
+    #[arg(long)]
+    pub zip: bool,
 }
 
 /// Options for [`assemble`].
@@ -68,8 +119,13 @@ pub struct JsBuildArgs {
 pub struct ReleaseOptions {
     /// Copy source maps into the game folder.
     pub sourcemaps: bool,
-    /// Replace a release folder that already exists.
+    /// Replace a release that already exists.
     pub force: bool,
+    /// Also write the zip archive, as `--zip` does.
+    pub zip: bool,
+    /// The build time, in whole seconds since 1970 (UTC), which `SOURCE_DATE_EPOCH` sets. None
+    /// takes the clock.
+    pub source_date_epoch: Option<u64>,
 }
 
 /// What [`assemble`] wrote.
@@ -79,7 +135,9 @@ pub struct Release {
     pub dir: PathBuf,
     /// The host executable inside `dir`.
     pub host: PathBuf,
-    /// How many files the release holds, the host included.
+    /// The zip archive beside `dir`, when one was written.
+    pub archive: Option<PathBuf>,
+    /// How many files the release folder holds, the host included.
     pub files: u64,
     /// Their total size in bytes.
     pub bytes: u64,
@@ -95,8 +153,8 @@ pub fn cmd_build(
 ) -> Result<()> {
     match runtime {
         Runtime::Rust => {
-            if js.host.is_some() || js.sourcemaps || js.force {
-                bail!("--host, --sourcemaps and --force only apply to `--runtime js`");
+            if js.host.is_some() || js.sourcemaps || js.force || js.zip {
+                bail!("--host, --sourcemaps, --force and --zip only apply to `--runtime js`");
             }
             workspace_cmd::cmd_build(path, release, package)
         }
@@ -117,6 +175,8 @@ fn cmd_build_js(project: &Path, js: &JsBuildArgs) -> Result<()> {
     let options = ReleaseOptions {
         sourcemaps: js.sourcemaps,
         force: js.force,
+        zip: js.zip,
+        source_date_epoch: source_date_epoch()?,
     };
     let release = match &js.host {
         Some(host) => assemble(&project, options, run_pnpm_build, || Ok(host.clone()))?,
@@ -126,6 +186,9 @@ fn cmd_build_js(project: &Path, js: &JsBuildArgs) -> Result<()> {
     };
     println!("release folder: {}", release.dir.display());
     println!("  {} files, {}", release.files, size_text(release.bytes));
+    if let Some(archive) = &release.archive {
+        println!("  archive: {}", archive.display());
+    }
     println!("  run with no arguments: {}", release.host.display());
     Ok(())
 }
@@ -135,6 +198,9 @@ fn cmd_build_js(project: &Path, js: &JsBuildArgs) -> Result<()> {
 /// `run_web_build` runs `pnpm run build` in the project; it is called only when the project's
 /// `package.json` has a `build` script. `host` gives the executable to copy as the game's host.
 /// Both are parameters, so that tests can replace the commands.
+///
+/// Everything that can be checked is checked before the first file is written: the manifest, its
+/// release hints, the icon, the included files, and whether the release already exists.
 pub fn assemble(
     project: &Path,
     options: ReleaseOptions,
@@ -143,13 +209,28 @@ pub fn assemble(
 ) -> Result<Release> {
     let manifest = load_manifest(project)?;
     let name = release_name(&manifest)?;
+    let hints = ReleaseHints::from_value(manifest.release.as_ref())?;
+    let icon = read_icon(project, &manifest)?;
+    check_includes(project, &manifest.id, &hints.include)?;
+    check_kept(
+        &manifest,
+        icon.as_ref().map(|plan| plan.relative.as_str()),
+        &hints.exclude,
+    )?;
+    let archive = options.zip || hints.archive == Archive::Zip;
+
     let release_root = project.join(RELEASE_DIR);
     let dir = release_root.join(&name);
-    if dir.exists() && !options.force {
-        bail!(
-            "{} already exists; pass --force to replace it",
-            dir.display()
-        );
+    let zip_path = release_root.join(format!("{name}.zip"));
+    if !options.force {
+        for taken in [&dir, &zip_path] {
+            if taken.exists() {
+                bail!(
+                    "{} already exists; pass --force to replace it",
+                    taken.display()
+                );
+            }
+        }
     }
 
     let web_root = if has_build_script(project)? {
@@ -174,38 +255,85 @@ pub fn assemble(
     if !host_exe.is_file() {
         bail!("the host executable {} is not a file", host_exe.display());
     }
-    let host_name = host_file_name(&manifest.id, cfg!(windows));
+
+    let plan = Plan {
+        project,
+        web_root: &web_root,
+        manifest: &manifest,
+        hints: &hints,
+        host_exe: &host_exe,
+        host_name: host_file_name(&manifest.id, cfg!(windows)),
+        icon,
+        sourcemaps: options.sourcemaps,
+        built_at: options.source_date_epoch.unwrap_or_else(now_seconds),
+        git_commit: git_commit(project),
+    };
 
     // The release is written beside its final place and moved in at the end, so a failed copy
     // never leaves a half-written release behind.
     fs::create_dir_all(&release_root)
         .with_context(|| format!("cannot create {}", release_root.display()))?;
     let staging = release_root.join(format!(".{name}.partial"));
-    // A staging folder that an earlier build left behind is cleared first.
+    let archive_partial = release_root.join(format!(".{name}.zip.partial"));
+    // Whatever an earlier build left behind is cleared first.
     remove_folder(&staging).with_context(|| format!("cannot clear {}", staging.display()))?;
-    let placed = stage(
-        &staging,
-        &web_root,
-        project,
-        &host_exe,
-        &host_name,
-        options.sourcemaps,
-    )
-    .and_then(|()| move_into_place(&staging, &dir));
+    remove_file(&archive_partial)
+        .with_context(|| format!("cannot clear {}", archive_partial.display()))?;
+    let placed = stage(&plan, &staging)
+        .and_then(|()| {
+            if archive {
+                write_zip(&staging, &archive_partial, &name, plan.built_at)
+            } else {
+                Ok(())
+            }
+        })
+        .and_then(|()| {
+            place_release(
+                &staging,
+                &dir,
+                &zip_path,
+                archive.then_some(archive_partial.as_path()),
+            )
+        });
     if let Err(error) = placed {
-        // Whichever step failed, the staging folder goes. If removing it fails too, the next build
-        // clears it before it starts.
+        // Whichever step failed, the partial files go. If removing them fails too, the next build
+        // clears them before it starts.
         let _ = remove_folder(&staging);
+        let _ = remove_file(&archive_partial);
         return Err(error);
     }
 
     let (files, bytes) = measure(&dir)?;
     Ok(Release {
-        host: dir.join(&host_name),
+        host: dir.join(&plan.host_name),
         dir,
+        archive: archive.then_some(zip_path),
         files,
         bytes,
     })
+}
+
+/// Everything that a release is written from, gathered before the first file is copied.
+struct Plan<'a> {
+    project: &'a Path,
+    web_root: &'a Path,
+    manifest: &'a Manifest,
+    hints: &'a ReleaseHints,
+    host_exe: &'a Path,
+    host_name: String,
+    icon: Option<IconPlan>,
+    sourcemaps: bool,
+    /// The build time, in seconds since 1970 (UTC).
+    built_at: u64,
+    /// The commit that the game folder's repository has checked out, when `git` answers.
+    git_commit: Option<String>,
+}
+
+/// The icon of a release: the path that the manifest names, relative to the game folder, and the
+/// decoded image.
+struct IconPlan {
+    relative: String,
+    image: IconImage,
 }
 
 /// How many times a file operation is tried in all. A move or a removal can fail for a moment when
@@ -215,11 +343,23 @@ const FILE_OP_ATTEMPTS: u32 = 5;
 /// The wait between two tries of a file operation.
 const FILE_OP_WAIT: Duration = Duration::from_millis(200);
 
-/// Moves the finished staging folder to `dir`, replacing the release that is there, if any.
-fn move_into_place(staging: &Path, dir: &Path) -> Result<()> {
+/// Puts the finished folder, and the archive when there is one, in place. An older release of the
+/// same name is replaced.
+fn place_release(
+    staging: &Path,
+    dir: &Path,
+    archive: &Path,
+    archive_partial: Option<&Path>,
+) -> Result<()> {
     remove_folder(dir).with_context(|| format!("cannot replace {}", dir.display()))?;
+    remove_file(archive).with_context(|| format!("cannot replace {}", archive.display()))?;
     retrying(|| fs::rename(staging, dir))
-        .with_context(|| format!("cannot move the release into {}", dir.display()))
+        .with_context(|| format!("cannot move the release into {}", dir.display()))?;
+    if let Some(partial) = archive_partial {
+        retrying(|| fs::rename(partial, archive))
+            .with_context(|| format!("cannot move the archive into {}", archive.display()))?;
+    }
+    Ok(())
 }
 
 /// Removes a folder with everything in it. A folder that is not there is not an error.
@@ -228,6 +368,14 @@ fn remove_folder(path: &Path) -> io::Result<()> {
         return Ok(());
     }
     retrying(|| fs::remove_dir_all(path))
+}
+
+/// Removes a file. A file that is not there is not an error.
+fn remove_file(path: &Path) -> io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    retrying(|| fs::remove_file(path))
 }
 
 /// Runs a file operation again after a short wait when it fails, up to [`FILE_OP_ATTEMPTS`] tries
@@ -246,26 +394,35 @@ fn retrying<T>(mut operation: impl FnMut() -> io::Result<T>) -> io::Result<T> {
     }
 }
 
-/// Writes the release contents into `staging`: the game folder and the host executable.
-fn stage(
-    staging: &Path,
-    web_root: &Path,
-    project: &Path,
-    host_exe: &Path,
-    host_name: &str,
-    sourcemaps: bool,
-) -> Result<()> {
+/// Writes the release contents into `staging`: the game folder, the host executable with its icon,
+/// the included files, and the two build files.
+fn stage(plan: &Plan, staging: &Path) -> Result<()> {
     let game = staging.join(PACKAGED_GAME_DIR);
-    copy_web_files(web_root, &game, sourcemaps)?;
-    copy_file(&project.join(MANIFEST_FILE), &game.join(MANIFEST_FILE))?;
-    copy_file(host_exe, &staging.join(host_name))
+    copy_web_files(plan.web_root, &game, plan.sourcemaps, &plan.hints.exclude)?;
+    copy_file(&plan.project.join(MANIFEST_FILE), &game.join(MANIFEST_FILE))?;
+    let host = staging.join(&plan.host_name);
+    copy_file(plan.host_exe, &host)?;
+    if let Some(icon) = &plan.icon {
+        // The window reads its icon from the game folder, even when the web files come from `dist/`.
+        copy_file(
+            &plan.project.join(&icon.relative),
+            &game.join(&icon.relative),
+        )?;
+        write_exe_icon(&host, &icon.image)?;
+    }
+    for path in &plan.hints.include {
+        copy_file(&plan.project.join(path), &staging.join(path))?;
+    }
+    write_build_info(plan, staging)?;
+    write_checksums(staging)
 }
 
-/// Copies the web files in `from` into `to`, under the rules of [`is_shipped`].
+/// Copies the web files in `from` into `to`, under the rules of [`is_shipped`]. A file that an
+/// exclude pattern names is left out.
 ///
 /// A symbolic link to a file is copied as the file it points to. A link to a folder, or a broken
 /// link, is refused: the walk does not follow links, so such a folder would be missing.
-fn copy_web_files(from: &Path, to: &Path, sourcemaps: bool) -> Result<()> {
+fn copy_web_files(from: &Path, to: &Path, sourcemaps: bool, exclude: &[String]) -> Result<()> {
     fs::create_dir_all(to).with_context(|| format!("cannot create {}", to.display()))?;
     let walk = WalkDir::new(from)
         .follow_links(false)
@@ -280,14 +437,21 @@ fn copy_web_files(from: &Path, to: &Path, sourcemaps: bool) -> Result<()> {
         let target = to.join(relative);
         let file_type = entry.file_type();
         if file_type.is_dir() {
-            fs::create_dir_all(&target)
-                .with_context(|| format!("cannot create {}", target.display()))?;
+            // A folder is made for the files that go into it (see `copy_file`). An empty folder is
+            // copied as it is, but a folder whose files are all left out does not appear.
+            if fs::read_dir(entry.path()).is_ok_and(|mut entries| entries.next().is_none()) {
+                fs::create_dir_all(&target)
+                    .with_context(|| format!("cannot create {}", target.display()))?;
+            }
         } else if file_type.is_symlink() && !fs::metadata(entry.path()).is_ok_and(|m| m.is_file()) {
             bail!(
                 "{} is a link to a folder, or a broken link, and a release cannot copy it",
                 entry.path().display()
             );
         } else {
+            if is_excluded(exclude, &relative_text(from, entry.path())?) {
+                continue;
+            }
             copy_file(entry.path(), &target)?;
         }
     }
@@ -324,6 +488,136 @@ fn copy_file(from: &Path, to: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Writes `build-info.json` at the top of `staging`.
+fn write_build_info(plan: &Plan, staging: &Path) -> Result<()> {
+    let info = serde_json::json!({
+        "id": plan.manifest.id,
+        "title": plan.manifest.title,
+        "version": plan.manifest.version,
+        "engine_version": env!("CARGO_PKG_VERSION"),
+        "git_commit": plan.git_commit,
+        "built_at": rfc3339(plan.built_at),
+    });
+    let mut text = serde_json::to_string_pretty(&info)?;
+    text.push('\n');
+    let path = staging.join(BUILD_INFO_FILE);
+    fs::write(&path, text).with_context(|| format!("cannot write {}", path.display()))
+}
+
+/// Writes `SHA256SUMS` at the top of `folder`: one line per file, `<sha256>  <path>`, in the layout
+/// of `sha256sum`, sorted by path. It lists every file of the folder except itself.
+fn write_checksums(folder: &Path) -> Result<()> {
+    let mut files = Vec::new();
+    for entry in WalkDir::new(folder) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            let relative = relative_text(folder, entry.path())?;
+            if relative != CHECKSUM_FILE {
+                files.push((relative, entry.into_path()));
+            }
+        }
+    }
+    files.sort();
+    let mut text = String::new();
+    for (relative, path) in &files {
+        writeln!(text, "{}  {relative}", sha256_of(path)?)?;
+    }
+    let path = folder.join(CHECKSUM_FILE);
+    fs::write(&path, text).with_context(|| format!("cannot write {}", path.display()))
+}
+
+/// The SHA-256 of a file, in lower-case hexadecimal.
+fn sha256_of(path: &Path) -> Result<String> {
+    let mut file = File::open(path).with_context(|| format!("cannot read {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    io::copy(&mut file, &mut hasher).with_context(|| format!("cannot read {}", path.display()))?;
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Writes `folder` as a zip archive at `archive`. Its entries start with `prefix/`, so unzipping
+/// makes the release folder. The entries are sorted, and they carry the build time, so the same
+/// build gives the same archive.
+fn write_zip(folder: &Path, archive: &Path, prefix: &str, built_at: u64) -> Result<()> {
+    let mut entries = Vec::new();
+    for entry in WalkDir::new(folder) {
+        let entry = entry?;
+        if entry.depth() > 0 {
+            let relative = relative_text(folder, entry.path())?;
+            entries.push((
+                relative,
+                entry.path().to_path_buf(),
+                entry.file_type().is_dir(),
+            ));
+        }
+    }
+    entries.sort();
+    let file =
+        File::create(archive).with_context(|| format!("cannot create {}", archive.display()))?;
+    let mut zip = ZipWriter::new(file);
+    let time = zip_time(built_at);
+    for (relative, path, is_dir) in entries {
+        let name = format!("{prefix}/{relative}");
+        let options = zip_options(&path, is_dir, time);
+        if is_dir {
+            zip.add_directory(format!("{name}/"), options)?;
+        } else {
+            zip.start_file(name, options)?;
+            let mut source =
+                File::open(&path).with_context(|| format!("cannot read {}", path.display()))?;
+            io::copy(&mut source, &mut zip)
+                .with_context(|| format!("cannot read {}", path.display()))?;
+        }
+    }
+    zip.finish()?;
+    Ok(())
+}
+
+/// The options of one zip entry: deflate-compressed, stamped with the build time, and with the
+/// file's permissions. Off Unix the permissions are 644 for a file and 755 for a folder.
+fn zip_options(path: &Path, is_dir: bool, time: ZipDateTime) -> SimpleFileOptions {
+    let default_mode = if is_dir { 0o755 } else { 0o644 };
+    SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .last_modified_time(time)
+        .unix_permissions(unix_mode(path).unwrap_or(default_mode))
+}
+
+/// The permission bits of a file on Unix, or None elsewhere.
+#[cfg(unix)]
+fn unix_mode(path: &Path) -> Option<u32> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path)
+        .ok()
+        .map(|metadata| metadata.permissions().mode() & 0o777)
+}
+
+/// The permission bits of a file on Unix, or None elsewhere.
+#[cfg(not(unix))]
+fn unix_mode(_path: &Path) -> Option<u32> {
+    None
+}
+
+/// The build time as a zip timestamp, in UTC. A time that zip cannot hold (before 1980 or after
+/// 2107) is written as 1980-01-01.
+fn zip_time(seconds: u64) -> ZipDateTime {
+    let (year, month, day, hour, minute, second) = utc_parts(seconds);
+    u16::try_from(year)
+        .ok()
+        .filter(|year| (1980..=2107).contains(year))
+        .and_then(|year| {
+            ZipDateTime::from_date_and_time(
+                year,
+                month as u8,
+                day as u8,
+                hour as u8,
+                minute as u8,
+                second as u8,
+            )
+            .ok()
+        })
+        .unwrap_or_default()
+}
+
 /// The number of files in `dir`, at any depth, and their total size in bytes.
 fn measure(dir: &Path) -> Result<(u64, u64)> {
     let mut files = 0;
@@ -336,6 +630,22 @@ fn measure(dir: &Path) -> Result<(u64, u64)> {
         }
     }
     Ok((files, bytes))
+}
+
+/// The path of `path` under `root`, with forward slashes: how a release names its files.
+fn relative_text(root: &Path, path: &Path) -> Result<String> {
+    let relative = path
+        .strip_prefix(root)
+        .with_context(|| format!("{} is not in {}", path.display(), root.display()))?;
+    let mut parts = Vec::new();
+    for part in relative.components() {
+        let text = part
+            .as_os_str()
+            .to_str()
+            .ok_or_else(|| anyhow!("{} is not a UTF-8 path", path.display()))?;
+        parts.push(text);
+    }
+    Ok(parts.join("/"))
 }
 
 /// Reads and checks the project's `velvet-game.json`.
@@ -362,6 +672,65 @@ fn release_name(manifest: &Manifest) -> Result<String> {
         );
     }
     Ok(format!("{}-{}", manifest.id, manifest.version))
+}
+
+/// Reads the icon that the manifest names, when there is one, and checks it: it must be a PNG in
+/// the game folder, and square. An icon shorter than [`ICON_WARN_SIDE`] is built, with a warning.
+fn read_icon(project: &Path, manifest: &Manifest) -> Result<Option<IconPlan>> {
+    let Some(relative) = manifest.icon.clone() else {
+        return Ok(None);
+    };
+    let path = project.join(&relative);
+    if !path.is_file() {
+        bail!("the icon `{relative}` is not a file in the game folder");
+    }
+    let image =
+        icon::load(&path).with_context(|| format!("the icon `{relative}` cannot be used"))?;
+    if image.width != image.height {
+        bail!(
+            "the icon `{relative}` must be square, but it is {} by {} pixels",
+            image.width,
+            image.height
+        );
+    }
+    if image.width < ICON_WARN_SIDE {
+        eprintln!(
+            "warning: the icon `{relative}` is {} pixels: use at least {ICON_WARN_SIDE}, so the \
+             program's icon stays sharp",
+            image.width
+        );
+    }
+    Ok(Some(IconPlan { relative, image }))
+}
+
+/// Checks `release.include`: every path is a file of the game folder, and none takes a name that
+/// the release writes itself (the game folder, the build files, or the host).
+fn check_includes(project: &Path, id: &str, include: &[String]) -> Result<()> {
+    let exe = host_file_name(id, true);
+    let plain = host_file_name(id, false);
+    for path in include {
+        let top = path.split('/').next().unwrap_or(path);
+        let reserved = top == PACKAGED_GAME_DIR
+            || [BUILD_INFO_FILE, CHECKSUM_FILE, exe.as_str(), plain.as_str()]
+                .contains(&path.as_str());
+        if reserved {
+            bail!("release.include `{path}` is a name that the release writes itself");
+        }
+        if !project.join(path).is_file() {
+            bail!("release.include `{path}` is not a file in the game folder");
+        }
+    }
+    Ok(())
+}
+
+/// The entry page and the icon must stay in the release: `release.exclude` may not leave them out.
+fn check_kept(manifest: &Manifest, icon: Option<&str>, exclude: &[String]) -> Result<()> {
+    for path in std::iter::once(manifest.entry.as_str()).chain(icon) {
+        if is_excluded(exclude, path) {
+            bail!("release.exclude leaves out `{path}`, which the release needs");
+        }
+    }
+    Ok(())
 }
 
 /// The host's file name in a release: `<id>.exe` on Windows, `<id>` elsewhere.
@@ -485,6 +854,303 @@ pub fn find_built_executable(report: &str, bin_name: &str) -> Option<PathBuf> {
         .next_back()
 }
 
+/// The commit that the game folder's repository has checked out (`HEAD`), when `git` answers.
+///
+/// A game that is not in a repository, and a machine without git, still builds: the commit is then
+/// None, and `build-info.json` says `null`.
+fn git_commit(project: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(project)
+        .args(["rev-parse", "HEAD"])
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let commit = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    (commit.len() >= 40 && commit.chars().all(|c| c.is_ascii_hexdigit())).then_some(commit)
+}
+
+/// The build time from `SOURCE_DATE_EPOCH` (whole seconds since 1970, UTC), when it is set and not
+/// empty. Otherwise None, and the build takes the clock.
+fn source_date_epoch() -> Result<Option<u64>> {
+    let Some(value) = std::env::var_os("SOURCE_DATE_EPOCH") else {
+        return Ok(None);
+    };
+    let text = value.to_string_lossy();
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    parse_epoch(text).map(Some)
+}
+
+/// Parses a `SOURCE_DATE_EPOCH` value: whole seconds since 1970.
+pub fn parse_epoch(text: &str) -> Result<u64> {
+    text.parse()
+        .map_err(|_| anyhow!("SOURCE_DATE_EPOCH must be whole seconds since 1970, not `{text}`"))
+}
+
+/// The current time in whole seconds since 1970.
+fn now_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs())
+}
+
+/// The UTC calendar date and clock time of `seconds` after 1970-01-01T00:00:00Z, as (year, month,
+/// day, hour, minute, second).
+fn utc_parts(seconds: u64) -> (i64, u32, u32, u32, u32, u32) {
+    let days = (seconds / 86_400) as i64;
+    let rest = seconds % 86_400;
+    // The civil calendar from a count of days since 1970-01-01 (Howard Hinnant's algorithm).
+    let shifted = days + 719_468;
+    let era = shifted.div_euclid(146_097);
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    (
+        year,
+        month as u32,
+        day as u32,
+        (rest / 3_600) as u32,
+        (rest % 3_600 / 60) as u32,
+        (rest % 60) as u32,
+    )
+}
+
+/// The UTC time as an RFC 3339 text, such as `2009-02-13T23:31:30Z`.
+pub fn rfc3339(seconds: u64) -> String {
+    let (year, month, day, hour, minute, second) = utc_parts(seconds);
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+}
+
+/// Whether an exclude pattern names a file path. Both use forward slashes, and the path is relative
+/// to the web folder.
+fn is_excluded(patterns: &[String], path: &str) -> bool {
+    patterns.iter().any(|pattern| glob_matches(pattern, path))
+}
+
+/// Whether a glob pattern matches a file path, both with forward slashes.
+///
+/// `*` matches any characters within one folder name, `?` one character, and a folder name that is
+/// `**` any number of folders. The last name of a path is the file's name, so a pattern that ends in
+/// `**` matches the files below its folder, and not the folder itself. Matching is case-sensitive.
+pub fn glob_matches(pattern: &str, path: &str) -> bool {
+    let pattern: Vec<&str> = pattern.split('/').collect();
+    let path: Vec<&str> = path.split('/').collect();
+    match_folders(&pattern, &path)
+}
+
+/// Matches the folder names of a pattern against those of a path.
+fn match_folders(pattern: &[&str], path: &[&str]) -> bool {
+    match pattern {
+        [] => path.is_empty(),
+        ["**"] => !path.is_empty(),
+        ["**", rest @ ..] => (0..path.len()).any(|skip| match_folders(rest, &path[skip..])),
+        [first, rest @ ..] => match path {
+            [name, path_rest @ ..] => match_name(first, name) && match_folders(rest, path_rest),
+            [] => false,
+        },
+    }
+}
+
+/// Matches one folder name, or a file name, against a pattern of `*` (any characters) and `?` (one
+/// character).
+fn match_name(pattern: &str, name: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let name: Vec<char> = name.chars().collect();
+    let (mut p, mut n) = (0, 0);
+    // The last `*` seen, with the place it started in the pattern and how much of the name it has
+    // taken. A failed match makes the star take one more character.
+    let mut star: Option<(usize, usize)> = None;
+    while n < name.len() {
+        if p < pattern.len() && pattern[p] == '*' {
+            star = Some((p, n));
+            p += 1;
+        } else if p < pattern.len() && (pattern[p] == '?' || pattern[p] == name[n]) {
+            p += 1;
+            n += 1;
+        } else if let Some((star_at, taken)) = star {
+            p = star_at + 1;
+            n = taken + 1;
+            star = Some((star_at, taken + 1));
+        } else {
+            return false;
+        }
+    }
+    pattern[p..].iter().all(|&c| c == '*')
+}
+
+/// One image of the program's icon: its side in pixels, and the image as PNG bytes.
+#[cfg(any(windows, test))]
+struct IconPng {
+    size: u32,
+    png: Vec<u8>,
+}
+
+/// The icon scaled to each of [`ICON_SIZES`], each encoded as a PNG.
+#[cfg(any(windows, test))]
+fn icon_images(icon: &IconImage) -> Result<Vec<IconPng>> {
+    let source = RgbaImage::from_raw(icon.width, icon.height, icon.rgba.clone())
+        .ok_or_else(|| anyhow!("the icon's pixels do not match its size"))?;
+    ICON_SIZES
+        .iter()
+        .map(|&size| -> Result<IconPng> {
+            let scaled = imageops::resize(&source, size, size, FilterType::Lanczos3);
+            let mut png = Vec::new();
+            PngEncoder::new(&mut png).write_image(
+                scaled.as_raw(),
+                size,
+                size,
+                ExtendedColorType::Rgba8,
+            )?;
+            Ok(IconPng { size, png })
+        })
+        .collect()
+}
+
+/// The icon group resource: the icon header, then one 14-byte entry per image. An entry gives the
+/// image's size, its colour depth, its byte count, and the resource id of its PNG. The layout is that
+/// of an `.ico` file's directory, with the file offset replaced by the id.
+#[cfg(any(windows, test))]
+fn group_resource(images: &[IconPng]) -> Vec<u8> {
+    let count = u16::try_from(images.len()).unwrap_or(u16::MAX);
+    let mut bytes = Vec::with_capacity(6 + 14 * images.len());
+    bytes.extend_from_slice(&0u16.to_le_bytes()); // reserved, always 0
+    bytes.extend_from_slice(&ICON_TYPE.to_le_bytes());
+    bytes.extend_from_slice(&count.to_le_bytes());
+    for (index, image) in images.iter().enumerate() {
+        let dimension = dimension_byte(image.size);
+        bytes.push(dimension); // width
+        bytes.push(dimension); // height
+        bytes.push(0); // colours: none, the image has 32 bits per pixel
+        bytes.push(0); // reserved
+        bytes.extend_from_slice(&1u16.to_le_bytes()); // colour planes
+        bytes.extend_from_slice(&32u16.to_le_bytes()); // bits per pixel
+        let length = u32::try_from(image.png.len()).unwrap_or(u32::MAX);
+        bytes.extend_from_slice(&length.to_le_bytes());
+        // The images are numbered from the first id, in the order of `images`.
+        let id = FIRST_ICON_ID + u16::try_from(index).unwrap_or(0);
+        bytes.extend_from_slice(&id.to_le_bytes());
+    }
+    bytes
+}
+
+/// The width or height byte of an icon entry. A side of 256 pixels is written as 0, as the format
+/// asks.
+#[cfg(any(windows, test))]
+fn dimension_byte(size: u32) -> u8 {
+    u8::try_from(size).unwrap_or(0)
+}
+
+/// Writes the icon into the program's file: the images as RT_ICON resources, and the group that
+/// names them as RT_GROUP_ICON. On Windows that is the file's icon, with a few tries when Windows
+/// holds the file.
+#[cfg(windows)]
+fn write_exe_icon(exe: &Path, icon: &IconImage) -> Result<()> {
+    let images = icon_images(icon)?;
+    retrying(|| update_icon_resources(exe, &images))
+        .with_context(|| format!("cannot write the icon into {}", exe.display()))
+}
+
+/// Off Windows a program's file has no icon resources, so nothing is written. The window still
+/// gets its icon from the game folder.
+#[cfg(not(windows))]
+fn write_exe_icon(_exe: &Path, _icon: &IconImage) -> Result<()> {
+    Ok(())
+}
+
+/// Replaces the icon resources of the program at `exe` with `images`. The changes are committed
+/// only when every write succeeds.
+#[cfg(windows)]
+fn update_icon_resources(exe: &Path, images: &[IconPng]) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{FALSE, HANDLE, TRUE};
+    use windows_sys::Win32::System::LibraryLoader::{BeginUpdateResourceW, EndUpdateResourceW};
+
+    let path: Vec<u16> = exe.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: `path` is a NUL-terminated UTF-16 string that lives until the call returns.
+    let handle: HANDLE = unsafe { BeginUpdateResourceW(path.as_ptr(), FALSE) };
+    if handle.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let written = write_icon_entries(handle, images);
+    // Changes are discarded when a write failed. The handle is ended here, once.
+    // SAFETY: `handle` came from BeginUpdateResourceW and is not used after this call.
+    let ended = unsafe { EndUpdateResourceW(handle, if written.is_ok() { FALSE } else { TRUE }) };
+    written?;
+    if ended == FALSE {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// Adds each image as an RT_ICON resource, and the group as RT_GROUP_ICON, to an open update.
+#[cfg(windows)]
+fn write_icon_entries(
+    handle: windows_sys::Win32::Foundation::HANDLE,
+    images: &[IconPng],
+) -> io::Result<()> {
+    use windows_sys::Win32::Foundation::FALSE;
+    use windows_sys::Win32::System::LibraryLoader::UpdateResourceW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{RT_GROUP_ICON, RT_ICON};
+
+    for (index, image) in images.iter().enumerate() {
+        let id = FIRST_ICON_ID + u16::try_from(index).unwrap_or(0);
+        let length = u32::try_from(image.png.len()).map_err(io::Error::other)?;
+        // SAFETY: the data pointer and its length describe `image.png`, which lives until the call
+        // returns.
+        let ok = unsafe {
+            UpdateResourceW(
+                handle,
+                RT_ICON,
+                int_resource(id),
+                NEUTRAL_LANGUAGE,
+                image.png.as_ptr().cast(),
+                length,
+            )
+        };
+        if ok == FALSE {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    let group = group_resource(images);
+    let length = u32::try_from(group.len()).map_err(io::Error::other)?;
+    // SAFETY: as above, for `group`.
+    let ok = unsafe {
+        UpdateResourceW(
+            handle,
+            RT_GROUP_ICON,
+            int_resource(GROUP_ICON_ID),
+            NEUTRAL_LANGUAGE,
+            group.as_ptr().cast(),
+            length,
+        )
+    };
+    if ok == FALSE {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// A resource type or name given as a number, as the Windows `MAKEINTRESOURCE` macro gives it.
+#[cfg(windows)]
+fn int_resource(id: u16) -> *const u16 {
+    usize::from(id) as *const u16
+}
+
 /// A size for people to read: bytes, KiB or MiB.
 pub fn size_text(bytes: u64) -> String {
     const KIB: f64 = 1024.0;
@@ -511,6 +1177,13 @@ mod tests {
         fs::write(path, text).expect("file");
     }
 
+    /// A PNG of the given size, filled with one colour.
+    fn write_png(path: &Path, width: u32, height: u32) {
+        fs::create_dir_all(path.parent().expect("a file has a folder")).expect("folder");
+        let image = RgbaImage::from_pixel(width, height, image::Rgba([200, 60, 20, 255]));
+        image.save(path).expect("png");
+    }
+
     /// A static game folder: the manifest and an index page.
     fn static_project(root: &Path) -> PathBuf {
         let project = root.join("demo");
@@ -524,6 +1197,26 @@ mod tests {
         let host = root.join("built-velvet-desktop");
         write(&host, "host bytes");
         host
+    }
+
+    /// A copy of this test program, to stand in for the built host. On Windows its icon resources
+    /// are written, so it has to be a real program.
+    fn program_host(root: &Path) -> PathBuf {
+        let host = root.join("built-velvet-desktop.exe");
+        fs::copy(
+            std::env::current_exe().expect("the test program's path"),
+            &host,
+        )
+        .expect("copy");
+        host
+    }
+
+    fn solid_icon(width: u32, height: u32) -> IconImage {
+        IconImage {
+            width,
+            height,
+            rgba: [200u8, 60, 20, 255].repeat((width * height) as usize),
+        }
     }
 
     fn no_web_build(_: &Path) -> Result<()> {
@@ -617,19 +1310,81 @@ mod tests {
             release.dir.join(host_file_name("demo", cfg!(windows)))
         );
         assert!(release.host.is_file());
+        assert!(release.archive.is_none());
         assert!(!project
             .join(RELEASE_DIR)
             .join(".demo-1.2.3.partial")
             .exists());
 
-        let expected_bytes = "<p>hi</p>".len()
-            + "console.log(1)".len()
-            + MANIFEST_TEXT.len()
-            + "logo".len()
-            + "notes".len()
-            + "host bytes".len();
-        assert_eq!(release.files, 6, "five game files and the host");
-        assert_eq!(release.bytes, expected_bytes as u64);
+        let listed = [
+            game.join("index.html"),
+            game.join("main.js"),
+            game.join(MANIFEST_FILE),
+            game.join("assets/logo.txt"),
+            game.join("assets/release/notes.txt"),
+            release.host.clone(),
+            release.dir.join(BUILD_INFO_FILE),
+            release.dir.join(CHECKSUM_FILE),
+        ];
+        assert_eq!(
+            release.files,
+            listed.len() as u64,
+            "five game files, the host, build-info.json and SHA256SUMS"
+        );
+        let expected_bytes: u64 = listed
+            .iter()
+            .map(|path| fs::metadata(path).expect("listed file").len())
+            .sum();
+        assert_eq!(release.bytes, expected_bytes);
+    }
+
+    #[test]
+    fn the_build_files_describe_the_release_and_its_checksums() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = static_project(dir.path());
+        write(&project.join("pages").join("about.html"), "<p>about</p>");
+        let host = fake_host(dir.path());
+        let options = ReleaseOptions {
+            source_date_epoch: Some(1_234_567_890),
+            ..Default::default()
+        };
+
+        let release =
+            assemble(&project, options, no_web_build, || Ok(host.clone())).expect("packaged");
+
+        let text = fs::read_to_string(release.dir.join(BUILD_INFO_FILE)).expect("build-info");
+        let info: Value = serde_json::from_str(&text).expect("json");
+        assert_eq!(info["id"], "demo");
+        assert_eq!(info["title"], "Demo");
+        assert_eq!(info["version"], "1.2.3");
+        assert_eq!(info["engine_version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(info["built_at"], "2009-02-13T23:31:30Z");
+        // The temporary folder is not in a repository, so the commit is null.
+        assert!(
+            info["git_commit"].is_null()
+                || info["git_commit"].as_str().is_some_and(|c| c.len() == 40)
+        );
+
+        let sums = fs::read_to_string(release.dir.join(CHECKSUM_FILE)).expect("SHA256SUMS");
+        let mut listed = Vec::new();
+        for line in sums.lines() {
+            let (digest, path) = line.split_once("  ").expect("`digest  path`");
+            let bytes = fs::read(release.dir.join(path)).expect("a listed file exists");
+            assert_eq!(digest, format!("{:x}", Sha256::digest(&bytes)), "{path}");
+            listed.push(path.to_string());
+        }
+        // Every file of the release is listed, except SHA256SUMS itself.
+        let mut everything: Vec<String> = WalkDir::new(&release.dir)
+            .into_iter()
+            .map(|entry| entry.expect("walk"))
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| relative_text(&release.dir, entry.path()).expect("relative"))
+            .filter(|path| path != CHECKSUM_FILE)
+            .collect();
+        everything.sort();
+        assert_eq!(listed, everything);
+        assert!(listed.contains(&BUILD_INFO_FILE.to_string()));
+        assert!(listed.contains(&host_file_name("demo", cfg!(windows))));
     }
 
     #[test]
@@ -640,7 +1395,7 @@ mod tests {
         let host = fake_host(dir.path());
         let options = ReleaseOptions {
             sourcemaps: true,
-            force: false,
+            ..Default::default()
         };
         let release =
             assemble(&project, options, no_web_build, || Ok(host.clone())).expect("packaged");
@@ -785,8 +1540,8 @@ mod tests {
         );
 
         let forced = ReleaseOptions {
-            sourcemaps: false,
             force: true,
+            ..Default::default()
         };
         let release =
             assemble(&project, forced, no_web_build, || Ok(host.clone())).expect("replaced");
@@ -829,8 +1584,8 @@ mod tests {
         write(&blocked, "not a folder");
         let host = fake_host(dir.path());
         let forced = ReleaseOptions {
-            sourcemaps: false,
             force: true,
+            ..Default::default()
         };
 
         let error = assemble(&project, forced, no_web_build, || Ok(host.clone()))
@@ -841,6 +1596,312 @@ mod tests {
             .join(".demo-1.2.3.partial")
             .exists());
         assert!(blocked.is_file(), "the file in the way is untouched");
+    }
+
+    #[test]
+    fn included_files_go_to_the_release_root_and_reserved_names_are_refused() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = static_project(dir.path());
+        write(
+            &project.join(MANIFEST_FILE),
+            r#"{"id":"demo","title":"Demo","version":"1.2.3","release":{"include":["LICENSE","docs/credits.txt"]}}"#,
+        );
+        write(&project.join("LICENSE"), "license");
+        write(&project.join("docs").join("credits.txt"), "credits");
+        let host = fake_host(dir.path());
+        let release = assemble(&project, ReleaseOptions::default(), no_web_build, || {
+            Ok(host.clone())
+        })
+        .expect("packaged");
+        assert_eq!(
+            fs::read_to_string(release.dir.join("LICENSE")).expect("license"),
+            "license"
+        );
+        assert!(release.dir.join("docs").join("credits.txt").is_file());
+
+        // Each of these is refused before anything is written, even though a release exists.
+        for (include, reason) in [
+            ("game/index.html", "writes itself"),
+            ("build-info.json", "writes itself"),
+            ("demo.exe", "writes itself"),
+            ("demo", "writes itself"),
+            ("missing.txt", "is not a file"),
+        ] {
+            write(
+                &project.join(MANIFEST_FILE),
+                &format!(
+                    r#"{{"id":"demo","title":"Demo","version":"1.2.3","release":{{"include":["{include}"]}}}}"#
+                ),
+            );
+            let error = assemble(&project, ReleaseOptions::default(), no_web_build, no_host)
+                .expect_err("refused");
+            assert!(
+                format!("{error:#}").contains(reason),
+                "{include}: {error:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_manifest_hints_leave_web_files_out_but_keep_the_entry_page() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = static_project(dir.path());
+        write(
+            &project.join(MANIFEST_FILE),
+            r#"{"id":"demo","title":"Demo","version":"1.2.3","release":{"exclude":["**/*.psd","dev/**"]}}"#,
+        );
+        write(&project.join("art").join("hero.psd"), "source art");
+        write(&project.join("art").join("hero.png"), "picture");
+        write(&project.join("dev").join("notes.txt"), "notes");
+        write(&project.join("dev").join("deep").join("a.txt"), "deep");
+        write(&project.join("devx.txt"), "kept");
+        let host = fake_host(dir.path());
+        let release = assemble(&project, ReleaseOptions::default(), no_web_build, || {
+            Ok(host.clone())
+        })
+        .expect("packaged");
+        let game = release.dir.join(PACKAGED_GAME_DIR);
+        assert!(game.join("art").join("hero.png").is_file());
+        assert!(game.join("devx.txt").is_file());
+        assert!(!game.join("art").join("hero.psd").exists());
+        assert!(!game.join("dev").join("notes.txt").exists());
+        assert!(!game.join("dev").join("deep").join("a.txt").exists());
+        assert!(
+            !game.join("dev").exists(),
+            "a folder with only excluded files does not appear"
+        );
+
+        // An exclude that would leave out the entry page is refused.
+        write(
+            &project.join(MANIFEST_FILE),
+            r#"{"id":"demo","title":"Demo","version":"1.2.3","release":{"exclude":["**/*.html"]}}"#,
+        );
+        let error = assemble(&project, ReleaseOptions::default(), no_web_build, no_host)
+            .expect_err("refused");
+        assert!(
+            format!("{error:#}").contains("leaves out `index.html`"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn the_archive_is_written_when_the_manifest_or_the_flag_asks_for_it() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = static_project(dir.path());
+        write(
+            &project.join(MANIFEST_FILE),
+            r#"{"id":"demo","title":"Demo","version":"1.2.3","release":{"archive":"zip"}}"#,
+        );
+        let host = fake_host(dir.path());
+        let release = assemble(&project, ReleaseOptions::default(), no_web_build, || {
+            Ok(host.clone())
+        })
+        .expect("packaged");
+        let archive = release
+            .archive
+            .clone()
+            .expect("the manifest asks for a zip");
+        assert_eq!(archive, project.join(RELEASE_DIR).join("demo-1.2.3.zip"));
+        let names: Vec<String> = zip::ZipArchive::new(File::open(&archive).expect("archive"))
+            .expect("a zip")
+            .file_names()
+            .map(str::to_string)
+            .collect();
+        assert!(
+            names.contains(&"demo-1.2.3/game/index.html".to_string()),
+            "{names:?}"
+        );
+        assert!(
+            names.contains(&"demo-1.2.3/build-info.json".to_string()),
+            "{names:?}"
+        );
+        assert!(
+            names.iter().all(|name| name.starts_with("demo-1.2.3/")),
+            "{names:?}"
+        );
+
+        // The flag writes an archive when the manifest does not ask, and a release with no archive
+        // leaves none behind once it replaces an older one.
+        write(&project.join(MANIFEST_FILE), MANIFEST_TEXT);
+        let forced = ReleaseOptions {
+            zip: true,
+            force: true,
+            ..Default::default()
+        };
+        let zipped =
+            assemble(&project, forced, no_web_build, || Ok(host.clone())).expect("packaged");
+        assert!(zipped.archive.is_some_and(|path| path.is_file()));
+        let plain = ReleaseOptions {
+            force: true,
+            ..Default::default()
+        };
+        let unzipped =
+            assemble(&project, plain, no_web_build, || Ok(host.clone())).expect("packaged");
+        assert!(unzipped.archive.is_none());
+        assert!(!archive.exists(), "the older archive is replaced");
+    }
+
+    #[test]
+    fn an_existing_archive_is_refused_unless_forced() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = static_project(dir.path());
+        write(&project.join(RELEASE_DIR).join("demo-1.2.3.zip"), "old");
+        let error = assemble(&project, ReleaseOptions::default(), no_web_build, no_host)
+            .expect_err("refused");
+        assert!(error.to_string().contains("--force"), "{error:#}");
+    }
+
+    #[test]
+    fn the_icon_is_copied_into_the_game_folder_and_built_into_the_program() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = static_project(dir.path());
+        write(
+            &project.join(MANIFEST_FILE),
+            r#"{"id":"demo","title":"Demo","version":"1.2.3","icon":"art/icon.png"}"#,
+        );
+        write_png(&project.join("art").join("icon.png"), 300, 300);
+        let host = program_host(dir.path());
+        let release = assemble(&project, ReleaseOptions::default(), no_web_build, || {
+            Ok(host.clone())
+        })
+        .expect("packaged");
+        let copied = fs::read(
+            release
+                .dir
+                .join(PACKAGED_GAME_DIR)
+                .join("art")
+                .join("icon.png"),
+        )
+        .expect("the window's icon is in the game folder");
+        assert_eq!(
+            copied,
+            fs::read(project.join("art").join("icon.png")).expect("the source icon")
+        );
+        assert!(release.host.is_file());
+    }
+
+    #[test]
+    fn a_broken_icon_stops_the_build_before_anything_is_written() {
+        /// Makes the icon file of a case, in the project folder.
+        type Setup = fn(&Path);
+        let cases: [(&str, Setup, &str); 3] = [
+            ("a missing icon", |_| {}, "is not a file in the game folder"),
+            (
+                "a text file",
+                |path| write(path, "not a picture"),
+                "cannot be used",
+            ),
+            (
+                "a wide picture",
+                |path| write_png(path, 300, 200),
+                "must be square",
+            ),
+        ];
+        for (case, setup, reason) in cases {
+            let dir = tempfile::tempdir().expect("temp dir");
+            let project = static_project(dir.path());
+            write(
+                &project.join(MANIFEST_FILE),
+                r#"{"id":"demo","title":"Demo","version":"1.2.3","icon":"icon.png"}"#,
+            );
+            setup(&project.join("icon.png"));
+            let error = assemble(&project, ReleaseOptions::default(), no_web_build, no_host)
+                .expect_err("refused");
+            assert!(format!("{error:#}").contains(reason), "{case}: {error:#}");
+            assert!(
+                !project.join(RELEASE_DIR).exists(),
+                "{case}: nothing is written"
+            );
+        }
+    }
+
+    #[test]
+    fn the_program_icon_has_five_sizes_and_a_group_that_names_them() {
+        let images = icon_images(&solid_icon(300, 300)).expect("images");
+        let sizes: Vec<u32> = images.iter().map(|image| image.size).collect();
+        assert_eq!(sizes, [256, 64, 48, 32, 16]);
+        for image in &images {
+            assert_eq!(&image.png[..8], [137, 80, 78, 71, 13, 10, 26, 10], "a PNG");
+            let decoded = icon::decode_png(&image.png).expect("decodes");
+            assert_eq!((decoded.width, decoded.height), (image.size, image.size));
+        }
+
+        let group = group_resource(&images);
+        assert_eq!(group.len(), 6 + 14 * 5);
+        assert_eq!(
+            group[..6],
+            [0, 0, 1, 0, 5, 0],
+            "reserved, icon type, five images"
+        );
+        // The first entry is the 256-pixel image: a side of 0, one colour plane, 32 bits, resource 1.
+        assert_eq!(group[6..8], [0, 0]);
+        assert_eq!(group[10..12], [1, 0]);
+        assert_eq!(group[12..14], [32, 0]);
+        let first_length = images[0].png.len() as u32;
+        assert_eq!(group[14..18], first_length.to_le_bytes());
+        assert_eq!(group[18..20], [1, 0]);
+        // The second entry is the 64-pixel image, resource 2.
+        assert_eq!(group[20..22], [64, 64]);
+        assert_eq!(group[32..34], [2, 0]);
+    }
+
+    #[test]
+    fn the_dimension_byte_writes_256_as_zero() {
+        assert_eq!(dimension_byte(256), 0);
+        assert_eq!(dimension_byte(64), 64);
+        assert_eq!(dimension_byte(16), 16);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_icon_resources_read_back_from_a_copy_of_a_program() {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
+        use windows_sys::Win32::System::LibraryLoader::{
+            FindResourceExW, LoadLibraryExW, LoadResource, LockResource, SizeofResource,
+            LOAD_LIBRARY_AS_DATAFILE,
+        };
+        use windows_sys::Win32::UI::WindowsAndMessaging::{RT_GROUP_ICON, RT_ICON};
+
+        /// The bytes of one resource of a loaded module.
+        fn resource_bytes(module: HMODULE, kind: *const u16, id: u16) -> Vec<u8> {
+            // SAFETY: the module was loaded by LoadLibraryExW and stays loaded until the caller frees
+            // it. Each call takes the values that the previous one returned.
+            unsafe {
+                let info = FindResourceExW(module, kind, int_resource(id), NEUTRAL_LANGUAGE);
+                assert!(!info.is_null(), "resource {id} is there");
+                let size = SizeofResource(module, info);
+                let data = LoadResource(module, info);
+                let pointer = LockResource(data).cast::<u8>();
+                std::slice::from_raw_parts(pointer, size as usize).to_vec()
+            }
+        }
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let host = program_host(dir.path());
+        let images = icon_images(&solid_icon(300, 300)).expect("images");
+        update_icon_resources(&host, &images).expect("written");
+
+        let path: Vec<u16> = host.as_os_str().encode_wide().chain(Some(0)).collect();
+        // SAFETY: `path` is NUL-terminated and lives for the call.
+        let module = unsafe {
+            LoadLibraryExW(
+                path.as_ptr(),
+                std::ptr::null_mut(),
+                LOAD_LIBRARY_AS_DATAFILE,
+            )
+        };
+        assert!(!module.is_null(), "the copy loads as a data file");
+        assert_eq!(
+            resource_bytes(module, RT_GROUP_ICON, GROUP_ICON_ID),
+            group_resource(&images)
+        );
+        for (index, image) in images.iter().enumerate() {
+            let id = FIRST_ICON_ID + index as u16;
+            assert_eq!(resource_bytes(module, RT_ICON, id), image.png, "image {id}");
+        }
+        // SAFETY: the module was loaded above and is freed once.
+        unsafe { FreeLibrary(module) };
     }
 
     #[test]
@@ -880,6 +1941,13 @@ mod tests {
         let error =
             cmd_build(PathBuf::from("."), false, None, Runtime::Rust, js).expect_err("refused");
         assert!(error.to_string().contains("--runtime js"), "{error:#}");
+        let zipped = JsBuildArgs {
+            zip: true,
+            ..Default::default()
+        };
+        let error =
+            cmd_build(PathBuf::from("."), false, None, Runtime::Rust, zipped).expect_err("refused");
+        assert!(error.to_string().contains("--zip"), "{error:#}");
     }
 
     #[test]
@@ -958,7 +2026,55 @@ mod tests {
     }
 
     #[test]
-    fn sizes_are_read_in_bytes_kibibytes_or_mebibytes() {
+    fn glob_patterns_match_file_paths_as_documented() {
+        let cases = [
+            ("**/*.psd", "hero.psd", true),
+            ("**/*.psd", "art/hero.psd", true),
+            ("**/*.psd", "art/hero.png", false),
+            ("dev/**", "dev/notes.txt", true),
+            ("dev/**", "dev/a/b.txt", true),
+            ("dev/**", "dev", false),
+            ("dev/**", "devx/a.txt", false),
+            ("*.html", "index.html", true),
+            ("*.html", "pages/index.html", false),
+            ("a?c.txt", "abc.txt", true),
+            ("a?c.txt", "ac.txt", false),
+            ("Art/*", "art/x.png", false),
+            ("file*.txt", "file-1.txt", true),
+            ("file*.txt", "file.txt", true),
+            ("img/*.png", "img/x/a.png", false),
+            ("**", "anything/at/all.bin", true),
+            ("a/**/b.txt", "a/b.txt", true),
+            ("a/**/b.txt", "a/x/y/b.txt", true),
+            ("a/**/b.txt", "a/x/c.txt", false),
+        ];
+        for (pattern, path, expected) in cases {
+            assert_eq!(
+                glob_matches(pattern, path),
+                expected,
+                "`{pattern}` against `{path}`"
+            );
+        }
+    }
+
+    #[test]
+    fn utc_times_are_written_as_rfc_3339() {
+        assert_eq!(rfc3339(0), "1970-01-01T00:00:00Z");
+        assert_eq!(rfc3339(1_234_567_890), "2009-02-13T23:31:30Z");
+        assert_eq!(rfc3339(951_782_400), "2000-02-29T00:00:00Z");
+        assert_eq!(rfc3339(1_709_164_800), "2024-02-29T00:00:00Z");
+        assert_eq!(rfc3339(1_735_689_599), "2024-12-31T23:59:59Z");
+    }
+
+    #[test]
+    fn source_date_epoch_must_be_whole_seconds() {
+        assert_eq!(parse_epoch("1234567890").expect("seconds"), 1_234_567_890);
+        assert!(parse_epoch("2009-02-13").is_err());
+        assert!(parse_epoch("-1").is_err());
+    }
+
+    #[test]
+    fn the_sizes_are_read_in_bytes_kibibytes_or_mebibytes() {
         assert_eq!(size_text(0), "0 bytes");
         assert_eq!(size_text(1536), "1.5 KiB");
         assert_eq!(size_text(3 * 1024 * 1024), "3.00 MiB");

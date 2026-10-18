@@ -27,13 +27,19 @@ and a counter of turns, a save slot, and one test. Replace the rules in `src/gam
 5. Run the tests and the type check: `pnpm test` and `pnpm typecheck`.
 
 6. Make a release, from the engine's repository. It runs `pnpm run build` here and writes the folder
-   `release/` in this game:
+   `release/<id>-<version>/` in this game: the program (`<id>.exe`), `game/`, the files that `release.include`
+   names, `build-info.json` and `SHA256SUMS`. Add `--zip` to also write `release/<id>-<version>.zip`:
 
-       cargo run -p velvet-cli -- build --runtime js --path <path to this folder>
+       cargo run -p velvet-cli -- build --runtime js --path <path to this folder> [--zip]
+
+   The `release` object of `velvet-game.json` sets what the release leaves out (`exclude`, patterns such as
+   `**/*.psd`), what it adds from this folder (`include`, such as `LICENSE`), and the archive (`archive`).
+   An optional `icon.png` (a square PNG, at least 256 pixels) is the window's icon and the program's icon.
 
 ## Files
 
-    velvet-game.json                 the manifest: id, title, window (only the fields Velvet Desktop reads)
+    velvet-game.json                 the manifest: id, title, version, entry, window and icon (the fields Velvet
+                                     Desktop reads), and release (for the release step)
     index.html                       the page; the game mounts in #game
     vite.config.ts                   base "./", and the engine's folder is allowed for the linked packages
     package.json                     the scripts, and the engine's packages linked with `link:`

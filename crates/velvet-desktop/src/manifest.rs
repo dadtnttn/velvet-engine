@@ -1,8 +1,12 @@
 //! The game folder's manifest, `velvet-game.json`.
 //!
 //! Only `id` and `title` are required; every other field has a default. Unknown keys are
-//! rejected, so a misspelled key fails loudly instead of being ignored. The optional `data` object
-//! holds hints for the `velvet-js` tools and is not read by the host.
+//! rejected, so a misspelled key fails loudly instead of being ignored.
+//!
+//! The optional `icon` is a PNG in the game folder, which the window shows. The optional `release`
+//! object and `data` object are hints: `release` for the packaging step (`velvet build`), `data` for
+//! the `velvet-js` tools. The host accepts both and does not read them, so a bad hint never stops a
+//! game from starting.
 
 use std::fs;
 use std::io;
@@ -21,7 +25,9 @@ pub const MAX_WINDOW_SIDE: u32 = 16_384;
 const MAX_ID_LEN: usize = 64;
 const MAX_TITLE_CHARS: usize = 120;
 const MAX_VERSION_CHARS: usize = 64;
-const MAX_ENTRY_LEN: usize = 256;
+/// Longest path in the manifest, in bytes: the entry page, the icon, the included files and the
+/// exclude patterns.
+const MAX_PATH_LEN: usize = 256;
 
 /// A game manifest that has been read and checked.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +42,12 @@ pub struct Manifest {
     pub entry: String,
     /// Window size, minimum size and state.
     pub window: WindowConfig,
+    /// The window's icon: a PNG path relative to the game folder, with forward slashes, or None.
+    /// The release writes the same icon into the program's file on Windows.
+    pub icon: Option<String>,
+    /// The `release` object as written, or None. The host does not read it: the packaging step
+    /// checks it with [`ReleaseHints::from_value`].
+    pub release: Option<serde_json::Value>,
 }
 
 /// Window settings from the manifest's `window` object.
@@ -66,6 +78,75 @@ impl Default for WindowConfig {
             resizable: true,
             fullscreen: false,
         }
+    }
+}
+
+/// The `release` object: what a release folder holds beside the game. `velvet build --runtime js`
+/// reads it; the host does not.
+///
+/// Every field is optional, and an unknown key is an error, as in the rest of the manifest.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ReleaseHints {
+    /// Patterns of files in the built web folder that the release leaves out, such as `**/*.psd`
+    /// or `dev/**`. `*` matches any characters within one folder name, `?` one character, and `**`
+    /// as a whole folder name any number of folders. Matching is case-sensitive, and a pattern
+    /// matches file paths only.
+    pub exclude: Vec<String>,
+    /// Files of the game folder that the release copies to its root, beside the game folder, such
+    /// as `LICENSE` or `docs/credits.txt`. Each path follows the rules of `entry`.
+    pub include: Vec<String>,
+    /// Whether the release is also written as a zip archive.
+    pub archive: Archive,
+}
+
+/// The archive that a release may be written as, beside its folder.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Archive {
+    /// The release is the folder only.
+    #[default]
+    None,
+    /// The release folder is also written as `<id>-<version>.zip`, beside it.
+    Zip,
+}
+
+impl ReleaseHints {
+    /// Reads a manifest's `release` value, or the defaults when there is none, and checks it.
+    ///
+    /// # Errors
+    ///
+    /// [`ManifestError::Invalid`] for an unknown key, a value of the wrong type, a pattern or path
+    /// that is not allowed, or an archive name other than `none` and `zip`.
+    pub fn from_value(value: Option<&serde_json::Value>) -> Result<Self, ManifestError> {
+        let Some(value) = value else {
+            return Ok(Self::default());
+        };
+        let hints: Self = serde_json::from_value(value.clone())
+            .map_err(|error| invalid("release", error.to_string()))?;
+        for pattern in &hints.exclude {
+            if !is_safe_pattern(pattern) {
+                return Err(invalid(
+                    "release.exclude",
+                    format!(
+                        "\"{pattern}\" must be a relative pattern with forward slashes, such as \
+                         **/*.psd or dev/**"
+                    ),
+                ));
+            }
+        }
+        for path in &hints.include {
+            if !is_safe_relative_path(path) {
+                return Err(invalid(
+                    "release.include",
+                    format!(
+                        "\"{path}\" must be a relative path inside the game folder with forward \
+                         slashes, such as LICENSE"
+                    ),
+                ));
+            }
+        }
+        Ok(hints)
     }
 }
 
@@ -132,6 +213,14 @@ struct RawManifest {
     entry: String,
     #[serde(default)]
     window: WindowConfig,
+    /// The window's icon, a PNG path with the rules of `entry`. A missing file is not checked
+    /// here: the window logs it and starts without an icon.
+    #[serde(default)]
+    icon: Option<String>,
+    /// Hints for the packaging step. The host does not read them, so any JSON value is accepted
+    /// here; `velvet build` checks them with [`ReleaseHints::from_value`].
+    #[serde(default)]
+    release: Option<serde_json::Value>,
     /// Hints for the `velvet-js` tools: where the game keeps its data. The host does not read
     /// them, so any JSON value is accepted here; `velvet-js check` validates the hints.
     #[serde(default)]
@@ -156,12 +245,21 @@ impl TryFrom<RawManifest> for Manifest {
         }
         check_text("title", &raw.title, MAX_TITLE_CHARS)?;
         check_text("version", &raw.version, MAX_VERSION_CHARS)?;
-        if !is_safe_entry(&raw.entry) {
+        if !is_safe_relative_path(&raw.entry) {
             return Err(invalid(
                 "entry",
                 "use a relative path inside the game folder with forward slashes, for example \
                  index.html or game/start.html",
             ));
+        }
+        if let Some(icon) = &raw.icon {
+            if !is_safe_relative_path(icon) {
+                return Err(invalid(
+                    "icon",
+                    "use a relative path inside the game folder with forward slashes, for example \
+                     icon.png or art/icon.png",
+                ));
+            }
         }
         raw.window.check()?;
         Ok(Self {
@@ -170,6 +268,8 @@ impl TryFrom<RawManifest> for Manifest {
             version: raw.version,
             entry: raw.entry,
             window: raw.window,
+            icon: raw.icon,
+            release: raw.release,
         })
     }
 }
@@ -219,13 +319,14 @@ pub fn is_valid_id(id: &str) -> bool {
         && !storage::is_reserved_name(id)
 }
 
-/// Whether `entry` is a relative path made of plain segments separated by `/`.
+/// Whether `path` is a relative path made of plain segments separated by `/`. This is the rule of
+/// `entry`, `icon` and `release.include`.
 ///
 /// Absolute paths, empty segments, `.` and `..`, backslashes and drive letters are refused.
-fn is_safe_entry(entry: &str) -> bool {
-    !entry.is_empty()
-        && entry.len() <= MAX_ENTRY_LEN
-        && entry.split('/').all(|segment| {
+fn is_safe_relative_path(path: &str) -> bool {
+    !path.is_empty()
+        && path.len() <= MAX_PATH_LEN
+        && path.split('/').all(|segment| {
             !segment.is_empty()
                 && segment != "."
                 && segment != ".."
@@ -233,6 +334,20 @@ fn is_safe_entry(entry: &str) -> bool {
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
         })
+}
+
+/// Whether `pattern` is a release pattern: a relative path with forward slashes, whose folder names
+/// may hold the glob characters `*` and `?`. Empty or blank text, empty folder names, `.` and `..`,
+/// backslashes, colons and control characters are refused.
+fn is_safe_pattern(pattern: &str) -> bool {
+    !pattern.trim().is_empty()
+        && pattern.len() <= MAX_PATH_LEN
+        && !pattern
+            .chars()
+            .any(|c| matches!(c, '\\' | ':') || c.is_control())
+        && pattern
+            .split('/')
+            .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
 }
 
 fn check_text(field: &'static str, value: &str, max_chars: usize) -> Result<(), ManifestError> {
@@ -486,5 +601,103 @@ mod tests {
             }
             other => panic!("expected a read error, got {other:?}"),
         }
+    }
+
+    /// The field that a refused release object names.
+    fn release_field(result: Result<ReleaseHints, ManifestError>) -> &'static str {
+        match result {
+            Err(ManifestError::Invalid { field, .. }) => field,
+            other => panic!("expected an invalid field, got {other:?}"),
+        }
+    }
+
+    /// Reads the release hints of a `release` object written as text.
+    fn release_of(text: &str) -> Result<ReleaseHints, ManifestError> {
+        let value: serde_json::Value = serde_json::from_str(text).expect("json");
+        ReleaseHints::from_value(Some(&value))
+    }
+
+    #[test]
+    fn the_icon_is_optional_and_follows_the_rules_of_entry() {
+        assert_eq!(
+            parse(r#"{"id":"d","title":"D"}"#).expect("valid").icon,
+            None
+        );
+        let manifest = parse(r#"{"id":"d","title":"D","icon":"art/icon.png"}"#).expect("valid");
+        assert_eq!(manifest.icon.as_deref(), Some("art/icon.png"));
+        for icon in [
+            "../icon.png",
+            "/icon.png",
+            "icon two.png",
+            "C:/icon.png",
+            "",
+        ] {
+            let text = format!(r#"{{"id":"d","title":"D","icon":"{icon}"}}"#);
+            assert_eq!(invalid_field(&text), "icon", "`{icon}` should be refused");
+        }
+    }
+
+    #[test]
+    fn the_host_keeps_the_release_object_and_does_not_read_it() {
+        // A bad release object does not stop the game from starting.
+        let manifest = parse(r#"{"id":"d","title":"D","release":{"archive":"tar","bogus":1}}"#)
+            .expect("the host ignores release");
+        assert_eq!(
+            manifest.release,
+            Some(serde_json::json!({"archive": "tar", "bogus": 1}))
+        );
+        assert_eq!(
+            release_field(ReleaseHints::from_value(manifest.release.as_ref())),
+            "release"
+        );
+    }
+
+    #[test]
+    fn release_hints_are_read_strictly() {
+        assert_eq!(
+            ReleaseHints::from_value(None).expect("no release object"),
+            ReleaseHints::default()
+        );
+        let good = release_of(
+            r#"{"exclude":["**/*.psd","dev/**"],"include":["LICENSE"],"archive":"zip"}"#,
+        )
+        .expect("valid hints");
+        assert_eq!(good.exclude, ["**/*.psd", "dev/**"]);
+        assert_eq!(good.include, ["LICENSE"]);
+        assert_eq!(good.archive, Archive::Zip);
+        assert_eq!(
+            release_of("{}").expect("an empty object").archive,
+            Archive::None
+        );
+        assert_eq!(release_field(release_of(r#"{"archive":"tar"}"#)), "release");
+        assert_eq!(release_field(release_of(r#"{"colour":1}"#)), "release");
+        assert_eq!(
+            release_field(release_of(r#"{"include":"LICENSE"}"#)),
+            "release"
+        );
+        assert_eq!(
+            release_field(release_of(r#"{"exclude":[""]}"#)),
+            "release.exclude"
+        );
+        assert_eq!(
+            release_field(release_of(r#"{"exclude":[" "]}"#)),
+            "release.exclude"
+        );
+        assert_eq!(
+            release_field(release_of(r#"{"exclude":["dev\\x"]}"#)),
+            "release.exclude"
+        );
+        assert_eq!(
+            release_field(release_of(r#"{"exclude":["dev/../x"]}"#)),
+            "release.exclude"
+        );
+        assert_eq!(
+            release_field(release_of(r#"{"exclude":["/abs/**"]}"#)),
+            "release.exclude"
+        );
+        assert_eq!(
+            release_field(release_of(r#"{"include":["../LICENSE"]}"#)),
+            "release.include"
+        );
     }
 }

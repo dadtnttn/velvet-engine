@@ -1,17 +1,28 @@
 // Reads velvet-game.json the way the Velvet Desktop host does (every rule of crates/velvet-desktop/src/
-// manifest.rs), and reads the optional `data` hints that velvet-js uses to find a game's files.
+// manifest.rs), reads the `release` object the way the release step does (crates/velvet-cli/src/
+// js_build_cmd.rs), and reads the optional `data` hints that velvet-js uses to find a game's files. The
+// files that the manifest names (the icon and the included files) are checked against the game folder.
 
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { isLanguageTag } from "@velvet/i18n";
 import { makeIssue, WHOLE_FILE, type Issue } from "../issues";
 import {
+  BUILD_INFO_FILE,
+  CHECKSUM_FILE,
   DEFAULT_ENTRY,
   DEFAULT_VERSION,
   DEFAULT_WINDOW,
   entryProblem,
   gameIdProblem,
+  ICON_WARN_PIXELS,
   MANIFEST_FIELDS,
   MANIFEST_FILE,
   MAX_WINDOW_SIDE,
+  patternProblem,
+  RELEASE_FIELDS,
+  RELEASE_GAME_FOLDER,
+  relativePathProblem,
   titleProblem,
   versionProblem,
   WINDOW_FIELDS,
@@ -38,6 +49,22 @@ export interface DataHints {
 /** The hints of a game that names none: every folder is searched, and the source is found by convention. */
 export const NO_HINTS: DataHints = { roots: [], guion: [], ignore: [], source: undefined };
 
+/**
+ * The `release` object of velvet-game.json: what a release folder leaves out of the web files, what it adds
+ * from the game folder, and the archive it is also written as.
+ */
+export interface ReleaseHints {
+  /** Patterns of files of the built web folder that the release leaves out. */
+  readonly exclude: readonly string[];
+  /** Files of the game folder that the release copies to its root. */
+  readonly include: readonly string[];
+  /** `none` (the folder only), or `zip` (also a zip archive beside the folder). */
+  readonly archive: "none" | "zip";
+}
+
+/** The release hints of a manifest that names none. */
+export const NO_RELEASE: ReleaseHints = { exclude: [], include: [], archive: "none" };
+
 /** The fields of a manifest that velvet-js uses. Missing fields have their defaults. */
 export interface ManifestInfo {
   /** The game id, as written. Empty when the manifest does not name one. */
@@ -46,6 +73,9 @@ export interface ManifestInfo {
   readonly title: string;
   readonly version: string;
   readonly entry: string;
+  /** The icon's path, relative to the game folder, or undefined when the manifest names none. */
+  readonly icon: string | undefined;
+  readonly release: ReleaseHints;
   readonly hints: DataHints;
 }
 
@@ -55,6 +85,9 @@ export interface ManifestReading {
   readonly info: ManifestInfo | undefined;
   readonly issues: Issue[];
 }
+
+/** Reports a problem against a path inside the manifest. */
+type ProblemReporter = (path: string, code: string, message: string) => void;
 
 /** The hint names that velvet-js reads inside `data`. */
 const HINT_FIELDS: readonly string[] = ["roots", "guion", "ignore", "source"];
@@ -92,7 +125,7 @@ export function readManifest(text: string): ManifestReading {
 
   let raw: unknown;
   try {
-    raw = JSON.parse(text.startsWith("\uFEFF") ? text.slice(1) : text);
+    raw = JSON.parse(text.startsWith("﻿") ? text.slice(1) : text);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     problem(WHOLE_FILE, "json", `the manifest is not valid JSON: ${reason}`);
@@ -126,6 +159,12 @@ export function readManifest(text: string): ManifestReading {
   const entry = readString(raw, "entry", DEFAULT_ENTRY, problem, entryProblem);
   readWindow(raw["window"], problem);
   const hints = readHints(raw["data"], problem);
+  const icon = readPath(raw, "icon", "icon.png", problem);
+  const release = readRelease(raw["release"], problem);
+  for (const path of release.include) {
+    const reason = reservedNameProblem(path, id ?? "");
+    if (reason !== undefined) problem("release.include", "value", reason);
+  }
 
   return {
     info: {
@@ -133,6 +172,8 @@ export function readManifest(text: string): ManifestReading {
       title: title ?? "",
       version,
       entry,
+      icon,
+      release,
       hints,
     },
     issues,
@@ -151,7 +192,7 @@ function readString(
   raw: Record<string, unknown>,
   key: string,
   fallback: string,
-  problem: (path: string, code: string, message: string) => void,
+  problem: ProblemReporter,
   check: (value: string) => string | undefined,
 ): string {
   const value = raw[key];
@@ -166,12 +207,103 @@ function readString(
 }
 
 /**
+ * Reads an optional path field, such as `icon`. A missing or null field is undefined. A path that is not
+ * valid is reported and left out.
+ * @param raw - the manifest object.
+ * @param key - the field name.
+ * @param example - a valid path, named in the message.
+ * @param problem - reports a problem against the field.
+ */
+function readPath(raw: Record<string, unknown>, key: string, example: string, problem: ProblemReporter): string | undefined {
+  const value = raw[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") {
+    problem(key, "structure", `${key} must be a string`);
+    return undefined;
+  }
+  const reason = relativePathProblem(value, example);
+  if (reason !== undefined) {
+    problem(key, key, reason);
+    return undefined;
+  }
+  return value;
+}
+
+/**
+ * Reads the `release` object: only the known fields, and patterns and paths that are valid. The archive is
+ * `none` (the default) or `zip`. A missing or null object means the defaults.
+ * @param value - the `release` field as written.
+ * @param problem - reports a problem against a path inside the manifest.
+ */
+function readRelease(value: unknown, problem: ProblemReporter): ReleaseHints {
+  if (value === undefined || value === null) return NO_RELEASE;
+  if (!isRecord(value)) {
+    problem("release", "structure", "release must be an object");
+    return NO_RELEASE;
+  }
+  for (const key of Object.keys(value)) {
+    if (!RELEASE_FIELDS.includes(key)) {
+      problem(`release.${key}`, "unknown-field", `"${key}" is not a release field: the release refuses unknown fields`);
+    }
+  }
+  const exclude = readList(value, "exclude", patternProblem, problem);
+  const include = readList(value, "include", (path) => relativePathProblem(path, "LICENSE"), problem);
+  let archive: "none" | "zip" = "none";
+  const kind = value["archive"];
+  if (kind !== undefined) {
+    if (kind === "none" || kind === "zip") archive = kind;
+    else problem("release.archive", "value", 'release.archive must be "none" or "zip"');
+  }
+  return { exclude, include, archive };
+}
+
+/**
+ * Reads a list of strings in the `release` object. An item that the check refuses is reported and left out.
+ * @param value - the `release` object.
+ * @param key - the list's name.
+ * @param check - returns why an item is not valid, or undefined.
+ * @param problem - reports a problem against a path inside the manifest.
+ */
+function readList(
+  value: Record<string, unknown>,
+  key: "exclude" | "include",
+  check: (item: string) => string | undefined,
+  problem: ProblemReporter,
+): string[] {
+  const list = value[key];
+  if (list === undefined) return [];
+  if (!Array.isArray(list) || !list.every((item): item is string => typeof item === "string")) {
+    problem(`release.${key}`, "structure", `release.${key} must be a list of strings`);
+    return [];
+  }
+  const kept: string[] = [];
+  for (const item of list) {
+    const reason = check(item);
+    if (reason === undefined) kept.push(item);
+    else problem(`release.${key}`, "value", reason);
+  }
+  return kept;
+}
+
+/**
+ * Why a file in the top folder of a release cannot be an included file: the game folder, the two build
+ * files and the host program (named after the id, with or without `.exe`) are written by the release itself.
+ * @param path - the included path.
+ * @param id - the game id, or an empty text when the manifest names none.
+ */
+function reservedNameProblem(path: string, id: string): string | undefined {
+  const top = path.split("/")[0] ?? path;
+  const reserved = top === RELEASE_GAME_FOLDER || [BUILD_INFO_FILE, CHECKSUM_FILE, id, `${id}.exe`].includes(path);
+  return reserved ? `"${path}" is a name that the release writes itself` : undefined;
+}
+
+/**
  * Checks the `window` object: only the known fields, whole sizes from 1 to 16384, minimum sizes that
  * are not larger than the sizes, and true or false for the two flags.
  * @param value - the `window` field as written, or undefined.
  * @param problem - reports a problem against a path inside the manifest.
  */
-function readWindow(value: unknown, problem: (path: string, code: string, message: string) => void): void {
+function readWindow(value: unknown, problem: ProblemReporter): void {
   if (value === undefined) return;
   if (!isRecord(value)) {
     problem("window", "structure", "window must be an object");
@@ -214,7 +346,7 @@ function readWindow(value: unknown, problem: (path: string, code: string, messag
  * @param value - the `data` field as written, or undefined.
  * @param problem - reports a problem against a path inside the manifest.
  */
-function readHints(value: unknown, problem: (path: string, code: string, message: string) => void): DataHints {
+function readHints(value: unknown, problem: ProblemReporter): DataHints {
   const hints: { roots: string[]; guion: string[]; ignore: string[]; source: string | undefined } = {
     roots: [],
     guion: [],
@@ -250,4 +382,86 @@ function readHints(value: unknown, problem: (path: string, code: string, message
     else problem("data.source", "value", "data.source must be a language tag in canonical case, such as es or pt-BR");
   }
   return hints;
+}
+
+/**
+ * The width and height of a PNG, read from its header. Undefined when the bytes do not start with the PNG
+ * signature and an IHDR chunk, or when a side is zero. The picture itself is not decoded.
+ * @param bytes - the file's bytes (at least the first 24).
+ */
+export function pngSize(bytes: Uint8Array): { readonly width: number; readonly height: number } | undefined {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length < 24 || !signature.every((byte, index) => bytes[index] === byte)) return undefined;
+  if (String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR") return undefined;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  return width === 0 || height === 0 ? undefined : { width, height };
+}
+
+/**
+ * Checks the files that the manifest names, against the game folder: the icon must be a file, a PNG, square,
+ * and at least `ICON_WARN_PIXELS` on a side (a smaller one is a warning); every included file must be a file of
+ * the game folder.
+ * @param folder - the game folder.
+ * @param info - the manifest's fields, from `readManifest`.
+ * @returns the problems found, each reported against velvet-game.json.
+ */
+export async function manifestFileIssues(folder: string, info: ManifestInfo): Promise<Issue[]> {
+  const issues: Issue[] = [];
+  if (info.icon !== undefined) issues.push(...(await iconIssues(folder, info.icon)));
+  for (const path of info.release.include) {
+    // A name that the release writes itself is reported by `readManifest`, once.
+    if (reservedNameProblem(path, info.id) !== undefined) continue;
+    if (!(await isFile(join(folder, path)))) {
+      issues.push(
+        makeIssue("error", MANIFEST_FILE, "release.include", "missing-file", `"${path}" is not a file in the game folder`),
+      );
+    }
+  }
+  return issues;
+}
+
+/**
+ * The problems of the icon: it must be a file of the game folder, a PNG, square, and at least
+ * `ICON_WARN_PIXELS` on a side.
+ * @param folder - the game folder.
+ * @param icon - the icon's path, relative to the game folder.
+ */
+async function iconIssues(folder: string, icon: string): Promise<Issue[]> {
+  const issue = (severity: "error" | "warning", code: string, message: string): Issue =>
+    makeIssue(severity, MANIFEST_FILE, "icon", code, message);
+  let bytes: Uint8Array;
+  try {
+    bytes = await readFile(join(folder, icon));
+  } catch {
+    return [issue("error", "missing-file", `the icon "${icon}" is not a file in the game folder`)];
+  }
+  const size = pngSize(bytes);
+  if (size === undefined) return [issue("error", "not-png", `the icon "${icon}" is not a PNG image`)];
+  if (size.width !== size.height) {
+    return [issue("error", "not-square", `the icon "${icon}" must be square, but it is ${size.width} by ${size.height} pixels`)];
+  }
+  if (size.width < ICON_WARN_PIXELS) {
+    return [
+      issue(
+        "warning",
+        "small-icon",
+        `the icon "${icon}" is ${size.width} pixels: use at least ${ICON_WARN_PIXELS}, so the program's icon stays sharp`,
+      ),
+    ];
+  }
+  return [];
+}
+
+/**
+ * True when a path is an existing file.
+ * @param path - the absolute path to test.
+ */
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
 }

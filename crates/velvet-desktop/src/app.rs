@@ -19,7 +19,7 @@ use tao::error::OsError;
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy};
 use tao::platform::run_return::EventLoopExtRunReturn;
-use tao::window::{Fullscreen, Window, WindowBuilder};
+use tao::window::{Fullscreen, Icon, Window, WindowBuilder};
 use wry::http::Request;
 #[cfg(windows)]
 use wry::WebViewBuilderExtWindows;
@@ -31,7 +31,7 @@ use crate::cli::{CaptureOptions, WindowSize};
 use crate::manifest::Manifest;
 use crate::origin::{is_same_origin, origin_of};
 use crate::serve::{Site, SiteError};
-use crate::{log, storage, webview_capture};
+use crate::{icon, log, storage, webview_capture};
 
 /// The custom protocol that serves the game folder. Its URLs are `velvet://game/...`.
 ///
@@ -308,7 +308,12 @@ pub fn run(launch: Launch) -> Result<(), AppError> {
     let mut web_context = WebContext::new(data_dir.as_ref().map(|dir| dir.join("webview")));
 
     let mut event_loop: EventLoop<UserEvent> = EventLoopBuilder::with_user_event().build();
-    let window = build_window(&event_loop, &manifest, size)?;
+    let window = build_window(
+        &event_loop,
+        &manifest,
+        size,
+        window_icon(&game_root, &manifest),
+    )?;
     let ipc_proxy = event_loop.create_proxy();
     let page_proxy = event_loop.create_proxy();
     let pictures_proxy = event_loop.create_proxy();
@@ -479,16 +484,43 @@ fn tie_webview_to_host() {
     }
 }
 
+/// The window's icon, from the manifest's `icon` in the game folder, or None when there is none.
+///
+/// A missing or broken icon is logged as a warning, and the game starts without one.
+fn window_icon(game_root: &Path, manifest: &Manifest) -> Option<Icon> {
+    let relative = manifest.icon.as_deref()?;
+    let image = match icon::load(&game_root.join(relative)) {
+        Ok(image) => image,
+        Err(error) => {
+            log::line(&format!(
+                "velvet-desktop: warning: the window icon is not used: {error}"
+            ));
+            return None;
+        }
+    };
+    match Icon::from_rgba(image.rgba, image.width, image.height) {
+        Ok(built) => Some(built),
+        Err(error) => {
+            log::line(&format!(
+                "velvet-desktop: warning: the window icon is not used: {error}"
+            ));
+            None
+        }
+    }
+}
+
 /// Opens the window. With `--size` it is exactly that many device pixels, and never full screen.
 fn build_window(
     event_loop: &EventLoop<UserEvent>,
     manifest: &Manifest,
     size: Option<WindowSize>,
+    icon: Option<Icon>,
 ) -> Result<Window, OsError> {
     let config = manifest.window;
     let builder = WindowBuilder::new()
         .with_title(manifest.title.as_str())
-        .with_resizable(config.resizable);
+        .with_resizable(config.resizable)
+        .with_window_icon(icon);
     match size {
         Some(size) => {
             let exact = PhysicalSize::new(size.width, size.height);

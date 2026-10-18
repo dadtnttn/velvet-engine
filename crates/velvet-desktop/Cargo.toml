@@ -24,6 +24,9 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 http = "1.5"
+# Decodes the game's icon (src/icon.rs), for the window and for the program's file. The locked
+# version, so no crate is downloaded.
+png = "0.18.1"
 tao = { version = "0.37", optional = true }
 wry = { version = "0.57", optional = true }
 

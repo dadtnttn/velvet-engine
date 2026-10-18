@@ -1,8 +1,23 @@
-// velvet-game.json, read the way the Velvet Desktop host reads it, and the data hints.
+// velvet-game.json, read the way the Velvet Desktop host reads it, the icon and the release hints, and the data hints.
 
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readManifest } from "./manifest";
+import { discoverGame } from "./discover";
+import { manifestFileIssues, NO_RELEASE, pngSize, readManifest } from "./manifest";
 import { entryProblem, gameIdProblem, isValidGameId, titleProblem, versionProblem } from "./rules";
+import { tempFolder, writeFiles } from "../test-support";
+
+/** The first bytes of a PNG of the given size: the signature and the IHDR chunk, which the checks read. */
+function pngHeader(width: number, height: number): Uint8Array {
+  const bytes = new Uint8Array(33);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52], 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  bytes.set([8, 6, 0, 0, 0], 24);
+  return bytes;
+}
 
 /** The codes and paths of the issues of a manifest text, for compact assertions. */
 function problemsOf(text: string): string[] {
@@ -104,5 +119,81 @@ describe("the rules of an id, a title, a version and an entry", () => {
     expect(entryProblem("C:/index.html")).toBeDefined();
     expect(entryProblem("game\\start.html")).toBeDefined();
     expect(entryProblem("game/start.html")).toBeUndefined();
+  });
+});
+
+describe("the icon and the release hints", () => {
+  it("reads the icon and the release hints", () => {
+    const reading = readManifest(
+      JSON.stringify({
+        id: "my-game",
+        title: "x",
+        icon: "art/icon.png",
+        release: { exclude: ["**/*.psd"], include: ["LICENSE"], archive: "zip" },
+      }),
+    );
+    expect(reading.issues).toEqual([]);
+    expect(reading.info?.icon).toBe("art/icon.png");
+    expect(reading.info?.release).toEqual({ exclude: ["**/*.psd"], include: ["LICENSE"], archive: "zip" });
+    expect(readManifest(JSON.stringify({ id: "my-game", title: "x" })).info?.release).toEqual(NO_RELEASE);
+  });
+
+  it("refuses the release hints that the release step refuses", () => {
+    const problems = (release: unknown): string[] =>
+      problemsOf(JSON.stringify({ id: "my-game", title: "x", release }));
+    expect(problems({ colour: 1 })).toEqual(["release.colour unknown-field"]);
+    expect(problems("zip")).toEqual(["release structure"]);
+    expect(problems({ exclude: "**/*.psd" })).toEqual(["release.exclude structure"]);
+    expect(problems({ exclude: [""] })).toEqual(["release.exclude value"]);
+    expect(problems({ exclude: ["dev\\x"] })).toEqual(["release.exclude value"]);
+    expect(problems({ include: ["../LICENSE"] })).toEqual(["release.include value"]);
+    expect(problems({ include: ["game/index.html"] })).toEqual(["release.include value"]);
+    expect(problems({ include: ["my-game.exe"] })).toEqual(["release.include value"]);
+    expect(problems({ archive: "tar" })).toEqual(["release.archive value"]);
+    expect(problems(null)).toEqual([]);
+  });
+
+  it("refuses an icon whose path leaves the game folder, as the host does", () => {
+    expect(problemsOf(JSON.stringify({ id: "my-game", title: "x", icon: "../icon.png" }))).toEqual(["icon icon"]);
+    expect(problemsOf(JSON.stringify({ id: "my-game", title: "x", icon: 3 }))).toEqual(["icon structure"]);
+  });
+
+  it("reads the size of a PNG from its header, and refuses bytes that are not a PNG", () => {
+    expect(pngSize(pngHeader(300, 200))).toEqual({ width: 300, height: 200 });
+    expect(pngSize(new TextEncoder().encode("not a picture, and long enough to be read"))).toBeUndefined();
+    expect(pngSize(pngHeader(0, 10))).toBeUndefined();
+  });
+
+  it("checks the icon and the included files against the game folder", async () => {
+    const folder = await tempFolder();
+    const check = async (icon: string | undefined, include: string[] = []): Promise<string[]> => {
+      const reading = readManifest(
+        JSON.stringify({ id: "my-game", title: "x", ...(icon === undefined ? {} : { icon }), release: { include } }),
+      );
+      if (reading.info === undefined) throw new Error("the manifest reads");
+      const issues = await manifestFileIssues(folder, reading.info);
+      return issues.map((issue) => `${issue.path} ${issue.code} ${issue.severity}`);
+    };
+    expect(await check("missing.png")).toEqual(["icon missing-file error"]);
+    await writeFile(join(folder, "text.png"), "not a picture at all");
+    expect(await check("text.png")).toEqual(["icon not-png error"]);
+    await writeFile(join(folder, "wide.png"), pngHeader(300, 200));
+    expect(await check("wide.png")).toEqual(["icon not-square error"]);
+    await writeFile(join(folder, "small.png"), pngHeader(128, 128));
+    expect(await check("small.png")).toEqual(["icon small-icon warning"]);
+    await writeFile(join(folder, "icon.png"), pngHeader(256, 256));
+    expect(await check("icon.png")).toEqual([]);
+    expect(await check(undefined, ["LICENSE"])).toEqual(["release.include missing-file error"]);
+    await writeFile(join(folder, "LICENSE"), "license");
+    expect(await check(undefined, ["LICENSE"])).toEqual([]);
+  });
+
+  it("is part of the discovery of a game folder", async () => {
+    const folder = await tempFolder();
+    await writeFiles(folder, { "velvet-game.json": { id: "my-game", title: "x", icon: "gone.png" } });
+    const discovery = await discoverGame(folder);
+    expect(discovery.issues.map((issue) => `${issue.file}: ${issue.path} ${issue.code}`)).toEqual([
+      "velvet-game.json: icon missing-file",
+    ]);
   });
 });

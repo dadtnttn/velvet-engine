@@ -46,6 +46,20 @@ indexmap = { workspace = true }
 walkdir = { workspace = true }
 softbuffer = { workspace = true }
 winit = { workspace = true }
+# The release's packaging (src/js_build_cmd.rs): the icon's sizes and PNG bytes, the SHA256SUMS file,
+# the release archive. Workspace versions, so the locked ones.
+image = { workspace = true }
+sha2 = { workspace = true }
+zip = { workspace = true }
+
+# Writes the program's icon into its resources (src/js_build_cmd.rs). The locked version, with the
+# functions it calls only.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
 tempfile = "3"
