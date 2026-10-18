@@ -1,0 +1,62 @@
+{
+  "format": "velvet-achievements",
+  "version": 1,
+  "kind": "definitions",
+  "counters": [
+    { "id": "coins", "persist": true },
+    { "id": "run_coins", "persist": false }
+  ],
+  "achievements": [
+    {
+      "id": "first_coin",
+      "name": "ach.first_coin.name",
+      "description": "ach.first_coin.desc",
+      "icon": "ach.first_coin",
+      "group": "level1",
+      "order": 1,
+      "points": 10,
+      "goal": { "counter": "coins", "at_least": 1 }
+    },
+    {
+      "id": "all_coins",
+      "name": "ach.all_coins.name",
+      "description": "ach.all_coins.desc",
+      "icon": "ach.all_coins",
+      "group": "level1",
+      "order": 2,
+      "points": 25,
+      "progress_steps": [0.5],
+      "goal": { "counter": "run_coins", "at_least": 29 }
+    },
+    {
+      "id": "clean_finish",
+      "name": "ach.clean_finish.name",
+      "description": "ach.clean_finish.desc",
+      "icon": "ach.clean_finish",
+      "group": "level1",
+      "order": 3,
+      "points": 25,
+      "goal": { "manual": true }
+    },
+    {
+      "id": "speedrun",
+      "name": "ach.speedrun.name",
+      "description": "ach.speedrun.desc",
+      "icon": "ach.speedrun",
+      "group": "level1",
+      "order": 4,
+      "points": 25,
+      "goal": { "manual": true }
+    },
+    {
+      "id": "completionist",
+      "name": "ach.completionist.name",
+      "description": "ach.completionist.desc",
+      "icon": "ach.completionist",
+      "group": "level1",
+      "order": 5,
+      "points": 50,
+      "goal": { "all": ["first_coin", "all_coins", "clean_finish", "speedrun"] }
+    }
+  ]
+}

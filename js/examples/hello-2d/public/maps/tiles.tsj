@@ -1,0 +1,27 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.10.2",
+  "name": "tiles",
+  "image": "../art/tiles.png",
+  "imagewidth": 160,
+  "imageheight": 64,
+  "margin": 0,
+  "spacing": 0,
+  "tilewidth": 32,
+  "tileheight": 32,
+  "columns": 5,
+  "tilecount": 9,
+  "tiles": [
+    {
+      "id": 3,
+      "properties": [
+        {
+          "name": "one_way",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "format": "velvet-audio",
+  "version": 1,
+  "sounds": [
+    {
+      "id": "sfx.jump",
+      "files": ["sfx/jump.wav"],
+      "bus": "sfx",
+      "volume": 0.6,
+      "max_voices": 2,
+      "preload": true,
+      "meta": { "note": "a quick rising chirp when the hero jumps" }
+    },
+    {
+      "id": "sfx.coin",
+      "files": ["sfx/coin.wav"],
+      "bus": "sfx",
+      "volume": 0.7,
+      "cooldown_ms": 40,
+      "max_voices": 4,
+      "preload": true,
+      "meta": { "note": "two bright notes for a coin" }
+    },
+    {
+      "id": "sfx.hurt",
+      "files": ["sfx/hurt.wav"],
+      "bus": "sfx",
+      "volume": 0.8,
+      "preload": true,
+      "meta": { "note": "a falling tone when the hero touches spikes or falls" }
+    },
+    {
+      "id": "sfx.win",
+      "files": ["sfx/win.wav"],
+      "bus": "sfx",
+      "volume": 0.8,
+      "preload": true,
+      "meta": { "note": "an arpeggio at the flag" }
+    },
+    {
+      "id": "ui.click",
+      "files": ["ui/click.wav"],
+      "bus": "ui",
+      "volume": 0.8,
+      "preload": true,
+      "meta": { "note": "a click in the menus" }
+    }
+  ]
+}

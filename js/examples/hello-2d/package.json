@@ -1,0 +1,27 @@
+{
+  "name": "hello-2d",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small 2D platformer that shows scene2d, tiles, input, sound, achievements and devtools working together.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@velvet/achievements": "workspace:*",
+    "@velvet/audio": "workspace:*",
+    "@velvet/core": "workspace:*",
+    "@velvet/devtools": "workspace:*",
+    "@velvet/i18n": "workspace:*",
+    "@velvet/scene2d": "workspace:*",
+    "@velvet/tiles": "workspace:*",
+    "@velvet/tween": "workspace:*",
+    "@velvet/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@velvet/testing": "workspace:*",
+    "vite": "8.3.4"
+  }
+}

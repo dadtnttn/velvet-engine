@@ -21,6 +21,43 @@ importers:
         specifier: 4.1.12
         version: 4.1.12(@types/node@25.9.9)(happy-dom@21.0.3)(vite@8.3.4(@types/node@25.9.9))
 
+  examples/hello-2d:
+    dependencies:
+      '@velvet/achievements':
+        specifier: workspace:*
+        version: link:../../packages/achievements
+      '@velvet/audio':
+        specifier: workspace:*
+        version: link:../../packages/audio
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@velvet/devtools':
+        specifier: workspace:*
+        version: link:../../packages/devtools
+      '@velvet/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@velvet/scene2d':
+        specifier: workspace:*
+        version: link:../../packages/scene2d
+      '@velvet/tiles':
+        specifier: workspace:*
+        version: link:../../packages/tiles
+      '@velvet/tween':
+        specifier: workspace:*
+        version: link:../../packages/tween
+      '@velvet/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+    devDependencies:
+      '@velvet/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      vite:
+        specifier: 8.3.4
+        version: 8.3.4(@types/node@25.9.9)
+
   examples/hello-cards:
     dependencies:
       '@velvet/cards':

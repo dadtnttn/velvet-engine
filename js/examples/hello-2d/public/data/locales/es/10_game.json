@@ -1,0 +1,24 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "es",
+  "note": "Textos del juego: el marcador, los avisos y los logros.",
+  "entries": {
+    "hud.coins": "Monedas {coins}/{total}",
+    "hud.time": "Tiempo {time}",
+    "hud.level": "Nivel 1 · El puente",
+    "hud.hint": "← → mover · Espacio saltar · Esc pausa",
+    "notice.checkpoint": "Punto de control",
+    "notice.achievement": "Logro: {name}",
+    "ach.first_coin.name": "Primera moneda",
+    "ach.first_coin.desc": "Recoge una moneda.",
+    "ach.all_coins.name": "Coleccionista",
+    "ach.all_coins.desc": "Recoge todas las monedas del nivel en una misma partida.",
+    "ach.clean_finish.name": "Sin un rasguño",
+    "ach.clean_finish.desc": "Llega a la bandera sin recibir ningún golpe.",
+    "ach.speedrun.name": "Relámpago",
+    "ach.speedrun.desc": "Llega a la bandera en menos de 45 segundos.",
+    "ach.completionist.name": "Completista",
+    "ach.completionist.desc": "Consigue los otros cuatro logros."
+  }
+}

@@ -41,6 +41,7 @@ missing or older than the Rust sources. That needs Rust with the `wasm32-unknown
 |---|---|---|---|
 | `examples/hello-cards` | A cards-on-a-board game in the style of Stacklands: the card rules, the board view, drags, the guide's conversation, saves, and the developer tools. | `pnpm --filter hello-cards dev` (port 5173) | [03](../docs/tutorials/js/03_cards_on_a_board.md) |
 | `examples/hello-vn` | A short visual novel: a screen stack, a guion in the dialogue box, save slots, settings, two languages, art and sound by id, motion, and the developer tools. | `pnpm --filter hello-vn dev` (port 5174) | [02](../docs/tutorials/js/02_visual_novel.md) |
+| `examples/hello-2d` | A small platformer: a Tiled level with a parallax background, one-way planks and spikes, scene2d sprites and a HUD, movement with `moveBox`, input actions for keys and pads, sounds, achievements, a screen stack, two languages, and the developer tools. | `pnpm --filter hello-2d dev` (port 5175) | — |
 
 The tutorials for the whole workspace are in `docs/tutorials/js/`, starting with [01: your first game](../docs/tutorials/js/01_first_game.md).
 

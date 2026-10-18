@@ -1,0 +1,24 @@
+{
+  "format": "velvet-locale",
+  "version": 1,
+  "language": "en",
+  "note": "Game texts: the score line, the notices and the achievements.",
+  "entries": {
+    "hud.coins": "Coins {coins}/{total}",
+    "hud.time": "Time {time}",
+    "hud.level": "Level 1 · The bridge",
+    "hud.hint": "← → move · Space jump · Esc pause",
+    "notice.checkpoint": "Checkpoint",
+    "notice.achievement": "Achievement: {name}",
+    "ach.first_coin.name": "First coin",
+    "ach.first_coin.desc": "Pick up a coin.",
+    "ach.all_coins.name": "Collector",
+    "ach.all_coins.desc": "Collect every coin of the level in one run.",
+    "ach.clean_finish.name": "Not a scratch",
+    "ach.clean_finish.desc": "Reach the flag without taking a hit.",
+    "ach.speedrun.name": "Lightning",
+    "ach.speedrun.desc": "Reach the flag in under 45 seconds.",
+    "ach.completionist.name": "Completionist",
+    "ach.completionist.desc": "Earn the other four achievements."
+  }
+}
