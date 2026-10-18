@@ -33,7 +33,7 @@ pub use board::{Board, BoardEvent, Card};
 pub use def::{CardDef, Catalog, Selector, StackRule, DEFAULT_MAX_STACK};
 pub use document::{FORMAT, VERSION};
 pub use error::StacksError;
-pub use job::OUTPUT_STEP;
+pub use job::{MAX_TICK, OUTPUT_STEP};
 pub use recipe::{Ingredient, Output, Recipe};
 pub use rng::Xorshift64;
 pub use save::{BoardSave, JobSave, StackSave};

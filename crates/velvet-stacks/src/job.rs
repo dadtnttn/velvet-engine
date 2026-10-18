@@ -13,6 +13,11 @@ use crate::def::CardDef;
 /// lands one more step along the same row.
 pub const OUTPUT_STEP: f32 = 1.5;
 
+/// The longest step one [`Board::tick`] takes, in seconds (an hour). A longer `dt` counts as this:
+/// a job finishes at most once per tick anyway, and it keeps the times finite (a huge `dt` would
+/// otherwise push a job's time to infinity, which no save can hold).
+pub const MAX_TICK: f32 = 3600.0;
+
 impl Board {
     /// Matches every stack marked dirty, in stack-id order, until none is left.
     pub(crate) fn settle(&mut self) {
@@ -54,11 +59,16 @@ impl Board {
     /// events queued since the last call.
     ///
     /// A job finishes at most once per tick. Time past its duration carries into its next run, so a
-    /// long tick never loses production. A negative or non-finite `dt` counts as zero. A job started
+    /// long tick never loses production. A negative or non-finite `dt` counts as zero, and one over
+    /// [`MAX_TICK`] as [`MAX_TICK`]. A job started
     /// during the tick begins at zero (or with the carried time, when it repeats a finished job) and
     /// advances from the next tick on.
     pub fn tick(&mut self, dt: f32) -> Vec<BoardEvent> {
-        let dt = if dt.is_finite() && dt > 0.0 { dt } else { 0.0 };
+        let dt = if dt.is_finite() && dt > 0.0 {
+            dt.min(MAX_TICK)
+        } else {
+            0.0
+        };
         let running: Vec<u64> = self.running.iter().copied().collect();
         let mut due = Vec::new();
         for stack in running {
@@ -449,6 +459,19 @@ mod tests {
             b.tick(1.0)
         };
         assert_eq!(run(5), run(5));
+    }
+
+    #[test]
+    fn a_huge_tick_keeps_the_job_time_finite() {
+        let mut board = board_with(7);
+        let worker = board.spawn("worker", (0.0, 0.0)).expect("worker");
+        let forest = board.spawn("forest", (5.0, 0.0)).expect("forest");
+        board.drop_on(worker, forest).expect("drop");
+        board.tick(0.0);
+        board.tick(f32::MAX);
+        board.tick(f32::MAX);
+        let saved = board.to_json().expect("a finite board saves");
+        assert!(!saved.contains("null"), "{saved}");
     }
 
     #[test]

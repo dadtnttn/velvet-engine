@@ -228,7 +228,8 @@ matched:
 
 `tick(dt)` advances time:
 
-1. A `dt` that is negative or not a finite number counts as 0.
+1. A `dt` that is negative or not a finite number counts as 0, and one over 3600 (an hour) counts
+   as 3600, which keeps every elapsed time finite.
 2. Every running job adds `dt` to its elapsed time.
 3. The jobs whose elapsed time is at least their recipe's `seconds` finish, in ascending stack id.
    Each job finishes at most once per tick.
