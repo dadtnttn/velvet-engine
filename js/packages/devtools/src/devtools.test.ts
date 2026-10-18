@@ -13,6 +13,7 @@ import {
 } from "@velvet/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDevtools } from "./devtools";
+import { EventLog } from "./events";
 import { STYLE_ID } from "./styles";
 import type { Devtools, DevtoolsOptions, HudCorner } from "./types";
 
@@ -806,5 +807,193 @@ describe("disabled and destroyed tools", () => {
     document.body.dispatchEvent(key("F3"));
     expect(devtools.visible).toBe(true);
     devtools.destroy();
+  });
+});
+
+/** The buttons of the Time tab that give a speed. Their text starts with the sign, unlike the slow-motion button. */
+function speedButtons(): HTMLButtonElement[] {
+  return [...tabPage("Time").querySelectorAll<HTMLButtonElement>("button")].filter(
+    (button) => button.textContent?.startsWith("×") === true,
+  );
+}
+
+/** The names of the events that the Events tab lists, newest first. */
+function listedEvents(): Array<string | null> {
+  return [...document.querySelectorAll(".vdt-event-name")].map((name) => name.textContent);
+}
+
+/** The notice of the Events tab, which is shown while no event bus is connected. */
+function eventsNotice(): HTMLElement {
+  const notice = tabPage("Events").querySelector<HTMLElement>(".vdt-note");
+  if (notice === null) throw new Error("no notice in the Events tab");
+  return notice;
+}
+
+describe("a clock and an event bus that are connected after the tools were made", () => {
+  it("connects a clock made later: the Time tab shows its speeds, and the controls act on it", () => {
+    const devtools = devtoolsWith();
+    devtools.show();
+    tabButton("Time").click();
+    scheduler.tick(0);
+    expect(tabPage("Time").textContent).toContain("No game clock is connected");
+    expect(speedButtons()).toHaveLength(0);
+
+    const clock = new GameClock({ speeds: [0.25, 1, 2] });
+    devtools.attachClock(clock);
+    scheduler.tick(200);
+    expect(speedButtons().map((button) => button.textContent)).toEqual(["×0.25", "×1", "×2"]);
+    expect(tabPage("Time").textContent).not.toContain("No game clock");
+
+    speedButtons()[2]?.click();
+    expect(clock.speed).toBe(2);
+    devtools.pause();
+    expect(clock.paused).toBe(true);
+  });
+
+  it("gives the clock back when it is detached: it runs again, slow motion is undone, and the Time tab says so", () => {
+    const clock = new GameClock({ speeds: [0.25, 1, 2] });
+    const devtools = devtoolsWith({ clock });
+    devtools.setSpeed(2);
+    devtools.setSlowMotion(true);
+    devtools.pause();
+    expect(clock.paused).toBe(true);
+    expect(clock.speed).toBe(0.25);
+
+    devtools.attachClock(null);
+    expect(clock.paused).toBe(false);
+    expect(clock.speed).toBe(2);
+    expect(() => devtools.setSpeed(1)).toThrow("pass clock to createDevtools");
+
+    devtools.show();
+    tabButton("Time").click();
+    scheduler.tick(0);
+    expect(tabPage("Time").textContent).toContain("No game clock is connected");
+    expect(speedButtons()).toHaveLength(0);
+  });
+
+  it("gives back the clock it replaces, and the controls then act on the new one only", () => {
+    const first = new GameClock({ speeds: [0.25, 1, 2] });
+    const second = new GameClock({ speeds: [0.25, 1, 2] });
+    const devtools = devtoolsWith({ clock: first });
+    devtools.setSpeed(2);
+    devtools.setSlowMotion(true);
+    const secondSpeed = second.speed;
+    devtools.attachClock(second);
+    expect(first.speed).toBe(2);
+    expect(second.speed).toBe(secondSpeed);
+    devtools.setSpeed(1);
+    expect(second.speed).toBe(1);
+    expect(first.speed).toBe(2);
+  });
+
+  it("pauses a clock connected while the tools are paused, and resumes it when the tools resume", () => {
+    const first = new GameClock({ speeds: [1, 2] });
+    const second = new GameClock({ speeds: [1, 2] });
+    const devtools = devtoolsWith({ clock: first });
+    devtools.pause();
+    devtools.attachClock(second);
+    expect(first.paused).toBe(false);
+    expect(second.paused).toBe(true);
+    devtools.resume();
+    expect(second.paused).toBe(false);
+  });
+
+  it("does not resume a clock that the game paused itself when the tools let go of it", () => {
+    const game = new GameClock({ speeds: [1, 2] });
+    const devtools = devtoolsWith({ clock: game });
+    game.pause();
+    devtools.pause();
+    devtools.attachClock(null);
+    expect(game.paused).toBe(true);
+  });
+
+  it("logs the events of a bus connected later, and clears the log when another bus is connected", () => {
+    interface Events {
+      day: { day: number };
+      save: void;
+    }
+    const first = new EventEmitter<Events>();
+    const second = new EventEmitter<Events>();
+    const devtools = devtoolsWith();
+    devtools.show();
+    tabButton("Events").click();
+    first.emit("day", { day: 1 });
+    scheduler.tick(0);
+    expect(listedEvents()).toEqual([]);
+    expect(eventsNotice().hidden).toBe(false);
+
+    devtools.attachEvents(first);
+    first.emit("day", { day: 2 });
+    scheduler.tick(200);
+    expect(listedEvents()).toEqual(["day"]);
+    expect(eventsNotice().hidden).toBe(true);
+
+    devtools.attachEvents(second);
+    scheduler.tick(400);
+    expect(listedEvents()).toEqual([]);
+    first.emit("save");
+    second.emit("save");
+    scheduler.tick(600);
+    expect(listedEvents()).toEqual(["save"]);
+  });
+
+  it("stops logging when the bus is detached, and the tab then says that no bus is connected", () => {
+    interface Events {
+      save: void;
+    }
+    const bus = new EventEmitter<Events>();
+    const devtools = devtoolsWith({ events: bus });
+    devtools.show();
+    tabButton("Events").click();
+    bus.emit("save");
+    scheduler.tick(0);
+    expect(listedEvents()).toEqual(["save"]);
+
+    const record = vi.spyOn(EventLog.prototype, "record");
+    devtools.attachEvents(null);
+    bus.emit("save");
+    expect(record).not.toHaveBeenCalled();
+    scheduler.tick(200);
+    expect(listedEvents()).toEqual([]);
+    expect(eventsNotice().hidden).toBe(false);
+  });
+
+  it("keeps only the names it is given when a bus is connected with names", () => {
+    interface Events {
+      day: { day: number };
+      save: void;
+    }
+    const bus = new EventEmitter<Events>();
+    const devtools = devtoolsWith();
+    devtools.show();
+    tabButton("Events").click();
+    devtools.attachEvents(bus, ["save"]);
+    bus.emit("day", { day: 1 });
+    bus.emit("save");
+    scheduler.tick(0);
+    expect(listedEvents()).toEqual(["save"]);
+  });
+
+  it("stops the tap of the connected bus when the tools are destroyed, and ignores a bus connected after that", () => {
+    interface Events {
+      save: void;
+    }
+    const bus = new EventEmitter<Events>();
+    const devtools = devtoolsWith({ events: bus });
+    const record = vi.spyOn(EventLog.prototype, "record");
+    devtools.destroy();
+    bus.emit("save");
+    expect(record).not.toHaveBeenCalled();
+
+    const later = new EventEmitter<Events>();
+    devtools.attachEvents(later);
+    later.emit("save");
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("ignores the clock and the bus that are connected later when the tools are disabled", () => {
+    const devtools = createDevtools({ host, enabled: false, scheduler });
+    expect(() => devtools.attachClock(new GameClock({ speeds: [1, 2] }))).not.toThrow();
+    expect(() => devtools.attachEvents(new EventEmitter<{ save: void }>())).not.toThrow();
   });
 });

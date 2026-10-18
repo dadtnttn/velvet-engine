@@ -20,6 +20,12 @@ export interface KeycapProps {
   readonly key: string;
   /** How the text is cased. Default "upper". A mouse key has no text, so it ignores this. */
   readonly textCase?: KeycapTextCase;
+  /**
+   * The text to draw exactly as written, in place of the key's label. Use it for a name that the label map would
+   * change, such as "Escape", or for a translated name such as "Espacio". Null or an empty string draws the label. A
+   * mouse key has no text, so it ignores this.
+   */
+  readonly text?: string | null;
 }
 
 /** Labels for keys whose names are too long to show as they are. */
@@ -96,7 +102,7 @@ export function createKeycap(props: KeycapProps): VuComponent<KeycapProps> {
       el.classList.remove("vu-keycap-mouse");
       el.removeAttribute("role");
       el.removeAttribute("aria-label");
-      el.textContent = keyLabel(current.key);
+      el.textContent = current.text ? current.text : keyLabel(current.key);
     }
   };
   render();

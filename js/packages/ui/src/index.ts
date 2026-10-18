@@ -21,6 +21,7 @@ export type {
   BoardView,
   BoardViewState,
   DragOptions,
+  FitOptions,
   ItemMove,
   ItemSpec,
   WorldPoint,

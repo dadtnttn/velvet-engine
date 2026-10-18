@@ -158,15 +158,21 @@ export class PerformanceTab implements Tab {
 export class TimeTab implements Tab {
   readonly element: HTMLElement;
   private readonly api: OverlayApi;
+  private readonly doc: Document;
   private readonly status: HTMLElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly stepButton: HTMLButtonElement;
   private readonly slowButton: HTMLButtonElement;
-  private readonly speedButtons = new Map<number, HTMLButtonElement>();
+  /** The row that holds one button for each speed that the connected clock allows. */
+  private readonly speedRow: HTMLElement;
+  private speedButtons = new Map<number, HTMLButtonElement>();
+  /** The speeds that the row was built for, joined in one string, so that another clock rebuilds the row. */
+  private shownSpeeds = "";
   private lastError: string | null = null;
 
   constructor(doc: Document, api: OverlayApi) {
     this.api = api;
+    this.doc = doc;
     this.element = element(doc, "div", "vdt-page");
     this.status = element(doc, "p", "vdt-status");
 
@@ -179,14 +185,7 @@ export class TimeTab implements Tab {
     const controls = element(doc, "div", "vdt-buttons");
     controls.append(this.pauseButton, this.stepButton);
 
-    const speeds = element(doc, "div", "vdt-buttons");
-    for (const speed of api.timeState().speeds) {
-      const speedButton = button(doc, `×${speed}`, () => {
-        this.attempt(() => api.setSpeed(speed));
-      });
-      this.speedButtons.set(speed, speedButton);
-      speeds.append(speedButton);
-    }
+    this.speedRow = element(doc, "div", "vdt-buttons");
 
     this.slowButton = button(doc, "Slow motion", () => {
       this.attempt(() => api.setSlowMotion(!api.timeState().slowMotion));
@@ -200,13 +199,14 @@ export class TimeTab implements Tab {
       "vdt-note",
       "The speeds are the clock's own. For ×0.25 to ×4, create the clock with speeds [0.25, 0.5, 1, 2, 4].",
     );
-    this.element.append(this.status, controls, speeds, slow, note);
+    this.element.append(this.status, controls, this.speedRow, slow, note);
   }
 
   /** Refreshes the buttons and the status line. */
   update(): void {
     const state = this.api.timeState();
     const loop = this.api.loopState();
+    this.showSpeeds(state.speeds);
     this.pauseButton.textContent = state.paused ? "Resume" : "Pause";
     this.stepButton.disabled = !state.paused;
     for (const [speed, speedButton] of this.speedButtons) {
@@ -222,7 +222,10 @@ export class TimeTab implements Tab {
       return;
     }
     if (!state.hasClock) {
-      this.setStatus("No game clock was given. Pass clock to createDevtools to control game time.", false);
+      this.setStatus(
+        "No game clock is connected. Pass clock to createDevtools, or connect one with attachClock.",
+        false,
+      );
       return;
     }
     const parts = [
@@ -232,6 +235,22 @@ export class TimeTab implements Tab {
       loop.held ? "" : "the game update is not held: wrap the loop with devtools.wrapLoop()",
     ].filter((part) => part !== "");
     this.setStatus(parts.join(" · "), false);
+  }
+
+  /** Builds one button for each speed of the connected clock. The row is built again when the speeds change. */
+  private showSpeeds(speeds: readonly number[]): void {
+    const key = speeds.join(",");
+    if (key === this.shownSpeeds) return;
+    this.shownSpeeds = key;
+    this.speedButtons = new Map();
+    const buttons = speeds.map((speed) => {
+      const speedButton = button(this.doc, `×${speed}`, () => {
+        this.attempt(() => this.api.setSpeed(speed));
+      });
+      this.speedButtons.set(speed, speedButton);
+      return speedButton;
+    });
+    this.speedRow.replaceChildren(...buttons);
   }
 
   /** Runs an action. A thrown error is kept on the status line until the next action. */
@@ -257,18 +276,26 @@ export class EventsTab implements Tab {
   readonly element: HTMLElement;
   private readonly api: OverlayApi;
   private readonly doc: Document;
+  private readonly notice: HTMLElement;
   private readonly filter: HTMLInputElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly summary: HTMLElement;
   private readonly list: HTMLElement;
   private shownRevision = -1;
   private shownFilter = "";
+  private shownConnected = false;
 
   constructor(doc: Document, api: OverlayApi) {
     this.api = api;
     this.doc = doc;
     this.element = element(doc, "div", "vdt-page");
 
+    this.notice = element(
+      doc,
+      "p",
+      "vdt-note",
+      "No event bus is connected. Pass events to createDevtools, or connect one with attachEvents.",
+    );
     this.filter = element(doc, "input", "vdt-input");
     this.filter.type = "search";
     this.filter.placeholder = "Filter by event name";
@@ -294,16 +321,25 @@ export class EventsTab implements Tab {
 
     this.summary = element(doc, "p", "vdt-status");
     this.list = element(doc, "ol", "vdt-list");
-    this.element.append(this.filter, toolbar, this.summary, this.list);
+    this.element.append(this.notice, this.filter, toolbar, this.summary, this.list);
   }
 
-  /** Redraws the list when the log or the filter changed. */
+  /** Redraws the list when the log, the filter or the connection changed. */
   update(): void {
     const log = this.api.events();
-    if (log.revision === this.shownRevision && this.filter.value === this.shownFilter) return;
+    const connected = this.api.eventsConnected();
+    if (
+      log.revision === this.shownRevision &&
+      this.filter.value === this.shownFilter &&
+      connected === this.shownConnected
+    ) {
+      return;
+    }
     this.shownRevision = log.revision;
     this.shownFilter = this.filter.value;
+    this.shownConnected = connected;
 
+    this.notice.hidden = connected;
     this.pauseButton.textContent = log.paused ? "Resume log" : "Pause log";
     this.pauseButton.setAttribute("aria-pressed", String(log.paused));
     const entries = log.list(this.filter.value);
@@ -312,7 +348,8 @@ export class EventsTab implements Tab {
       log.dropped > 0 ? `${log.dropped} dropped while paused` : "",
       log.paused ? "paused" : "",
     ].filter((note) => note !== "");
-    this.summary.textContent = notes.join(" · ");
+    // Without a bus there is nothing to count, so the summary stays empty and the notice says why.
+    this.summary.textContent = connected ? notes.join(" · ") : "";
 
     const doc = this.doc;
     const items = entries.map((entry) => {

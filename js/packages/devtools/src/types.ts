@@ -27,14 +27,20 @@ export interface DevtoolsOptions<Events extends object = object> {
   readonly host: HTMLElement;
   /** False makes every method a no-op, and adds nothing to the page. */
   readonly enabled: boolean;
-  /** The game clock. Pause, resume, step and the speed controls act on it. */
+  /**
+   * The game clock. Pause, resume, step and the speed controls act on it. A clock made later is connected with
+   * `attachClock`.
+   */
   readonly clock?: GameClock;
   /**
    * The game loop. Its frame hooks give the tools the update and render times, its step length sets the size
    * of a clock-only step, and its running state is shown. Create the loop before the tools, and pass it here.
    */
   readonly loop?: GameLoop;
-  /** The event bus whose events go to the event log. Every event of the bus is logged, through a tap. */
+  /**
+   * The event bus whose events go to the event log. Every event of the bus is logged, through a tap. A bus made later
+   * is connected with `attachEvents`.
+   */
   readonly events?: EventEmitter<Events>;
   /**
    * @deprecated The log records every event of `events`, so there is no need to list them. When names are given,
@@ -189,6 +195,21 @@ export interface Devtools {
    * @throws Error when no clock was given, or RangeError when the clock does not allow the slow speed.
    */
   setSlowMotion(on: boolean): void;
+
+  /**
+   * Connects a game clock, or disconnects the one that is there when `clock` is null. The Time tab and the speed and
+   * slow-motion controls follow the clock that is connected, and say so when there is none. The clock that was there
+   * is given back first: game time runs again on it when the tools had stopped it, and a slow motion on it is undone.
+   * A pause that the tools hold stays on, so a clock connected while paused is paused too.
+   */
+  attachClock(clock: GameClock | null): void;
+
+  /**
+   * Connects an event bus, or disconnects the one that is there when `bus` is null. The Events tab logs the events of
+   * the bus that is connected. `names` keeps only some of them, as the `eventNames` option does. Attaching clears the
+   * log, whose entries belonged to the bus before; detaching leaves the tab saying that no bus is connected.
+   */
+  attachEvents<Bus extends object>(bus: EventEmitter<Bus> | null, names?: ReadonlyArray<keyof Bus & string>): void;
 
   /** Frame and memory numbers at this moment. */
   stats(): DevtoolsStats;

@@ -118,6 +118,13 @@ alone adds nothing either.
   the full range. Slow motion runs the clock at `slowSpeed` (default 0.25, which the clock must allow) and
   gives back the previous speed when turned off. Setting a speed by hand turns slow motion off.
 - `destroy()` lets go of a clock that the tools paused, and undoes slow motion.
+- A clock made later, such as one per run, is connected with `attachClock(clock)`, and `attachClock(null)`
+  disconnects it. The Time tab and the speed buttons follow the clock that is connected, and say so while there is
+  none. The clock that was there is given back first: it runs again if the tools had paused it, and slow motion on it
+  is undone. A pause that the tools hold stays on, so a clock connected while paused is paused too.
+
+    devtools.attachClock(run.clock);   // when the run starts
+    devtools.attachClock(null);        // when it ends
 
 ## Performance numbers
 
@@ -137,6 +144,14 @@ alone adds nothing either.
 The tools tap the `events` bus, so every event that the game emits is logged, with its name and payload on one
 line. The log keeps the newest 200 events, whether or not the panel is open. Pausing the log counts the events
 that arrive meanwhile as dropped. The log can be narrowed with `eventNames` (deprecated, see below).
+
+A bus made later, such as one per run, is connected with `attachEvents(bus, names?)`, and `attachEvents(null)`
+disconnects it. `names` keeps only some events, as `eventNames` does. Attaching clears the log, because its entries
+belonged to the bus before. Detaching stops the tap, and the Events tab says that no bus is connected. `destroy()`
+stops the tap too.
+
+    devtools.attachEvents(run.events, ["day", "save"]); // when the run starts
+    devtools.attachEvents(null);                        // when it ends
 
 ## Deprecated
 

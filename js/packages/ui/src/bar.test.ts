@@ -75,13 +75,29 @@ describe("createBar", () => {
     expect(fillOf(bar.el).style.transform).toBe("scaleX(0.75)");
   });
 
-  it("refuses a value that is not finite, and a maximum that is not above zero", () => {
+  it("refuses a value that is not finite, and a maximum that is not finite", () => {
     expect(() => createBar({ label: "Bad", value: Number.NaN })).toThrow(RangeError);
-    expect(() => createBar({ label: "Bad", value: 1, max: 0 })).toThrow(RangeError);
+    expect(() => createBar({ label: "Bad", value: 1, max: Number.NaN })).toThrow(RangeError);
     expect(() => createBar({ label: "Bad", value: 1, max: Number.POSITIVE_INFINITY })).toThrow(RangeError);
     const bar = createBar({ label: "Good", value: 1, max: 4 });
-    expect(() => bar.update({ max: -1 })).toThrow(RangeError);
+    expect(() => bar.update({ max: Number.NEGATIVE_INFINITY })).toThrow(RangeError);
+    expect(() => bar.update({ value: Number.NaN })).toThrow(RangeError);
     expect(bar.el.getAttribute("aria-valuemax")).toBe("4");
+    expect(bar.el.getAttribute("aria-valuenow")).toBe("1");
+  });
+
+  it("draws an empty bar when the maximum is zero or less, and shows its text as given", () => {
+    const bar = createBar({ label: "Workers", value: 3, max: 0, text: "0 / 0" });
+    document.body.append(bar.el);
+    expect(fillOf(bar.el).style.transform).toBe("scaleX(0)");
+    expect(bar.el.getAttribute("aria-valuemax")).toBe("0");
+    expect(bar.el.getAttribute("aria-valuenow")).toBe("0");
+    expect(bar.el.querySelector(".vu-bar-text")?.textContent).toBe("0 / 0");
+    bar.update({ max: -4, value: 1 });
+    expect(fillOf(bar.el).style.transform).toBe("scaleX(0)");
+    expect(bar.el.getAttribute("aria-valuemax")).toBe("0");
+    bar.update({ max: 2, value: 1 });
+    expect(fillOf(bar.el).style.transform).toBe("scaleX(0.5)");
   });
 
   it("removes its element on destroy", () => {

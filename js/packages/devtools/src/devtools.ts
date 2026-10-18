@@ -13,10 +13,13 @@ import {
   isLogLevel,
   markHandled,
   type ErrorReport,
+  type EventEmitter,
   type FrameScheduler,
+  type GameClock,
   type GameLoop,
   type GameLoopOptions,
   type Logger,
+  type Unsubscribe,
 } from "@velvet/core";
 import type { Stage } from "@velvet/ui";
 import type { InspectView, LoopState, OverlayApi } from "./api";
@@ -130,6 +133,8 @@ function createDisabled(): Devtools {
     step: noop,
     setSpeed: noop,
     setSlowMotion: noop,
+    attachClock: noop,
+    attachEvents: noop,
     stats: (): DevtoolsStats => ({
       frames: 0,
       fps: null,
@@ -157,6 +162,8 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
   private readonly sampler = new FrameSampler();
   private readonly time: TimeControls;
   private readonly eventLog: EventLog;
+  /** Stops the tap on the connected event bus, or null when no bus is connected. */
+  private eventsTap: Unsubscribe | null = null;
   private readonly consoleOutput = new ConsoleOutput(OUTPUT_LIMIT);
   private readonly history = new ConsoleHistory(HISTORY_LIMIT);
   private readonly viewMap = new Map<string, InspectView>();
@@ -227,6 +234,7 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
     this.overlay = new Overlay(this.doc, this, options.host, this.toggleKey);
     this.overlay.setHudCorner(this.hudCorner);
     this.registerBuiltins();
+    this.attachEvents(options.events ?? null, options.eventNames);
     this.subscribe(options);
     this.listen();
     this.frameHandle = this.scheduler.request(this.onFrame);
@@ -369,6 +377,31 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
     this.time.setSlowMotion(on);
   }
 
+  attachClock(clock: GameClock | null): void {
+    if (this.stopped) return;
+    this.time.attach(clock);
+  }
+
+  attachEvents<Bus extends object>(bus: EventEmitter<Bus> | null, names?: ReadonlyArray<keyof Bus & string>): void {
+    // After destroy there is no log to feed, and a tap added now would never be removed.
+    if (this.stopped) return;
+    this.eventsTap?.();
+    this.eventsTap = null;
+    // The entries belong to the bus that was connected before, so the log starts again with the new one.
+    this.eventLog.clear();
+    if (bus === null) return;
+    const only = names === undefined ? null : new Set<string>(names);
+    this.eventsTap = bus.tap((event) => {
+      const name = String(event.type);
+      if (only === null || only.has(name)) this.eventLog.record(name, event.payload);
+    });
+  }
+
+  /** True while an event bus is connected, so that the Events tab has events to show. */
+  eventsConnected(): boolean {
+    return this.eventsTap !== null;
+  }
+
   stats(): DevtoolsStats {
     return { ...this.sampler.stats(), domNodes: this.domNodes, heapBytes: this.heapBytes };
   }
@@ -384,6 +417,8 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
     if (this.frameHandle !== null) this.scheduler.cancel(this.frameHandle);
     this.frameHandle = null;
     this.time.dispose();
+    this.eventsTap?.();
+    this.eventsTap = null;
     for (const cleanup of this.cleanups.splice(0)) cleanup();
     this.overlay.destroy();
     this.viewMap.clear();
@@ -478,20 +513,10 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
   // Internals.
 
   /**
-   * Connects the tools to the game: the event log taps the bus, and the loop's frame hook gives the update and
-   * render times. Every event of the bus is logged; when the options name events, only those are.
+   * Connects the tools to the game: the loop's frame hook gives the update and render times. The event bus is
+   * connected by `attachEvents`, which the constructor calls with the bus of the options.
    */
   private subscribe(options: DevtoolsOptions<Events>): void {
-    const bus = options.events;
-    if (bus !== undefined) {
-      const only = options.eventNames === undefined ? null : new Set<string>(options.eventNames);
-      this.cleanups.push(
-        bus.tap((event) => {
-          const name = String(event.type);
-          if (only === null || only.has(name)) this.eventLog.record(name, event.payload);
-        }),
-      );
-    }
     const loop = options.loop;
     if (loop !== undefined) {
       this.cleanups.push(

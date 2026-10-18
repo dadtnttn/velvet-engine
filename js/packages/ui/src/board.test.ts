@@ -225,6 +225,70 @@ describe("the world transform", () => {
   });
 });
 
+describe("fit with options", () => {
+  it("keeps the padding free inside the visible area, and stays centred", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD });
+    board.fit({ x: 1000, y: 900, w: 400, h: 300 }, { padding: 40 });
+    // The padded height is 1080 - 2 * 40 = 1000, and the height limits the zoom: 1000 / 300.
+    expect(board.zoom).toBeCloseTo(1000 / 300, 9);
+    const topLeft = board.worldToLogical(1000, 900);
+    const bottomRight = board.worldToLogical(1400, 1200);
+    expect(topLeft.y).toBeCloseTo(40, 6);
+    expect(bottomRight.y).toBeCloseTo(1040, 6);
+    expect(topLeft.x).toBeCloseTo((1920 - 400 * (1000 / 300)) / 2, 6);
+    expect(bottomRight.x).toBeCloseTo(1920 - topLeft.x, 6);
+  });
+
+  it("fits the same as before when no options are given", () => {
+    const plain = createBoardView(stageIn(), { worldBounds: WORLD });
+    plain.fit({ x: 1000, y: 900, w: 400, h: 300 });
+    const empty = createBoardView(stageIn(), { worldBounds: WORLD });
+    empty.fit({ x: 1000, y: 900, w: 400, h: 300 }, {});
+    expect(empty.zoom).toBe(plain.zoom);
+    expect(empty.pan).toEqual(plain.pan);
+  });
+
+  it("caps the zoom at maxZoom for this fit, and the board's own largest zoom still holds", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD });
+    board.fit({ x: 1000, y: 900, w: 10, h: 10 }, { maxZoom: 2 });
+    expect(board.zoom).toBe(2);
+    board.fit({ x: 1000, y: 900, w: 10, h: 10 }, { maxZoom: 9 });
+    expect(board.zoom).toBe(4);
+  });
+
+  it("keeps at least minZoom for this fit, and shows the middle of a rectangle too large for it", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD });
+    board.fit({ x: 1000, y: 900, w: 1000, h: 800 }, { minZoom: 2 });
+    // The rectangle would fit at about 1.35, below the minimum, so the zoom is 2 and the view centres on it.
+    expect(board.zoom).toBe(2);
+    const centre = board.worldToLogical(1500, 1300);
+    expect(centre.x).toBeCloseTo(960, 6);
+    expect(centre.y).toBeCloseTo(540, 6);
+  });
+
+  it("does not widen the board's zoom range", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD, maxZoom: 2 });
+    board.fit({ x: 1000, y: 900, w: 10, h: 10 }, { maxZoom: 8 });
+    expect(board.zoom).toBe(2);
+  });
+
+  it("refuses a bad option, and a zoom range that does not overlap the board's, and leaves the view as it was", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD });
+    board.fit({ x: 1000, y: 900, w: 400, h: 300 });
+    const before = { zoom: board.zoom, pan: board.pan };
+    const rect = { x: 0, y: 0, w: 10, h: 10 };
+    expect(() => board.fit(rect, { padding: -1 })).toThrow(RangeError);
+    expect(() => board.fit(rect, { padding: Number.NaN })).toThrow(RangeError);
+    expect(() => board.fit(rect, { maxZoom: 0 })).toThrow(RangeError);
+    expect(() => board.fit(rect, { minZoom: Number.POSITIVE_INFINITY })).toThrow(RangeError);
+    expect(() => board.fit(rect, { minZoom: 5 })).toThrow(RangeError);
+    expect(() => board.fit(rect, { maxZoom: 0.1 })).toThrow(RangeError);
+    expect(() => board.fit(rect, { padding: 540 })).toThrow(RangeError);
+    expect(board.zoom).toBe(before.zoom);
+    expect(board.pan).toEqual(before.pan);
+  });
+});
+
 describe("the view stays on the world", () => {
   it("keeps a world larger than the surface covering it", () => {
     const board = createBoardView(stageIn(), { worldBounds: WORLD });

@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SettingsBackend } from "./settings-backend";
-import { createSettingsStore, SETTINGS_FORMAT, type SettingsStore } from "./settings-store";
+import { createSettingsStore, SETTINGS_FORMAT, type SettingsStore, type SettingsStoreOptions } from "./settings-store";
 import type { MigrationMap } from "./save-format";
 import type { StorageLike } from "./save-backends";
 import { FakeStorage, createFakeBridge } from "./test-support";
@@ -339,6 +339,141 @@ describe("reset", () => {
   });
 });
 
+/** Settings with a fixed set of values (a language and a speed), and a number that has no list. */
+interface Choiced {
+  language: string;
+  speed: string;
+  volume: number;
+}
+
+const choiced: Choiced = { language: "es", speed: "normal", volume: 1 };
+const choices = { language: ["es", "en"], speed: ["slow", "normal", "fast"] };
+
+describe("choices", () => {
+  it("keeps a saved value that is one of its choices, and refuses one that is not, with the default", async () => {
+    const memory = memoryBackend({ game: envelope(1, { language: "en", speed: "turbo", volume: 0.5 }) });
+    const onInvalid = vi.fn();
+    const store = createSettingsStore<Choiced>({ namespace: "game", version: 1, defaults: choiced, choices, onInvalid, backend: memory.backend });
+    await store.load();
+    expect(store.get("language")).toBe("en");
+    expect(store.get("speed")).toBe("normal");
+    expect(store.get("volume")).toBe(0.5);
+    expect(onInvalid).toHaveBeenCalledTimes(1);
+    expect(onInvalid).toHaveBeenCalledWith("speed", "turbo");
+  });
+
+  it("reports each refused value once, when the values are read, and not again on a second load", async () => {
+    const memory = memoryBackend({ game: envelope(1, { language: "fr", speed: "warp" }) });
+    const onInvalid = vi.fn();
+    const store = createSettingsStore<Choiced>({ namespace: "game", version: 1, defaults: choiced, choices, onInvalid, backend: memory.backend });
+    await store.load();
+    await store.load();
+    expect(onInvalid.mock.calls).toEqual([
+      ["language", "fr"],
+      ["speed", "warp"],
+    ]);
+  });
+
+  it("does not report a value of the wrong type, which is still ignored as before", async () => {
+    const memory = memoryBackend({ game: envelope(1, { speed: 3 }) });
+    const onInvalid = vi.fn();
+    const store = createSettingsStore<Choiced>({ namespace: "game", version: 1, defaults: choiced, choices, onInvalid, backend: memory.backend });
+    await store.load();
+    expect(store.get("speed")).toBe("normal");
+    expect(onInvalid).not.toHaveBeenCalled();
+  });
+
+  it("writes the default in place of a refused value at the next save", async () => {
+    const memory = memoryBackend({ game: envelope(1, { language: "fr", speed: "fast" }) });
+    const store = createSettingsStore<Choiced>({ namespace: "game", version: 1, defaults: choiced, choices, backend: memory.backend });
+    await store.load();
+    await expect(store.save()).resolves.toBe(true);
+    expect(memory.writes[0]).toEqual({ key: "game", value: envelope(1, { language: "es", speed: "fast", volume: 1 }) });
+  });
+
+  it("takes null in the list when the default is null, and refuses any other value outside the list", async () => {
+    const memory = memoryBackend({ game: envelope(1, { language: "fr" }) });
+    const onInvalid = vi.fn();
+    const store = createSettingsStore<Prefs>({
+      namespace: "game",
+      version: 1,
+      defaults,
+      choices: { language: [null, "es", "en"] },
+      onInvalid,
+      backend: memory.backend,
+    });
+    await store.load();
+    expect(store.get("language")).toBeNull();
+    expect(onInvalid).toHaveBeenCalledWith("language", "fr");
+    store.set("language", "en");
+    expect(store.get("language")).toBe("en");
+    expect(() => store.set("language", "fr")).toThrow(RangeError);
+  });
+
+  it("applies a migrated value that is inside the choices, and refuses one that the migration leaves outside", async () => {
+    const memory = memoryBackend({ game: envelope(1, { speed: "medium", language: "en" }) });
+    const migrate: MigrationMap = {
+      1: (values) => {
+        const old = values as Record<string, unknown>;
+        return { ...old, speed: old["speed"] === "medium" ? "normal" : old["speed"] };
+      },
+    };
+    const onInvalid = vi.fn();
+    const store = createSettingsStore<Choiced>({ namespace: "game", version: 2, defaults: choiced, migrate, choices, onInvalid, backend: memory.backend });
+    await store.load();
+    expect(store.get("speed")).toBe("normal");
+    expect(store.get("language")).toBe("en");
+    expect(onInvalid).not.toHaveBeenCalled();
+
+    const kept = memoryBackend({ game: envelope(1, { speed: "medium" }) });
+    const unchanged = vi.fn();
+    const stale = createSettingsStore<Choiced>({
+      namespace: "game",
+      version: 2,
+      defaults: choiced,
+      migrate: { 1: (values) => values },
+      choices,
+      onInvalid: unchanged,
+      backend: kept.backend,
+    });
+    await stale.load();
+    expect(stale.get("speed")).toBe("normal");
+    expect(unchanged).toHaveBeenCalledWith("speed", "medium");
+  });
+
+  it("throws a RangeError for a set outside the choices, and leaves the value, the subscribers and the saves alone", async () => {
+    vi.useFakeTimers();
+    const memory = memoryBackend();
+    const store = createSettingsStore<Choiced>({ namespace: "game", version: 1, defaults: choiced, choices, backend: memory.backend, debounceMs: 250 });
+    const listener = vi.fn();
+    store.subscribe("speed", listener);
+    await store.load();
+    expect(() => store.set("speed", "turbo")).toThrow('"turbo" is not a choice of "speed" in "game"');
+    expect(store.get("speed")).toBe("normal");
+    expect(listener).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle();
+    expect(memory.writes).toHaveLength(0);
+  });
+
+  it("does not mark a refused set, so that the saved value still loads", async () => {
+    const memory = memoryBackend({ game: envelope(1, { speed: "fast" }) });
+    const store = createSettingsStore<Choiced>({ namespace: "game", version: 1, defaults: choiced, choices, backend: memory.backend });
+    expect(() => store.set("speed", "turbo")).toThrow(RangeError);
+    await store.load();
+    expect(store.get("speed")).toBe("fast");
+  });
+
+  it("accepts a set of a value in the choices, and saves it", async () => {
+    const memory = memoryBackend();
+    const store = createSettingsStore<Choiced>({ namespace: "game", version: 1, defaults: choiced, choices, backend: memory.backend });
+    store.set("speed", "fast");
+    expect(store.get("speed")).toBe("fast");
+    await expect(store.save()).resolves.toBe(true);
+    expect(memory.writes[0]).toEqual({ key: "game", value: envelope(1, { language: "es", speed: "fast", volume: 1 }) });
+  });
+});
+
 describe("where the values are kept", () => {
   it("keeps them in the bridge's settings under the namespace, when the desktop host is present", async () => {
     const { bridge } = createFakeBridge();
@@ -455,6 +590,46 @@ describe("checks of the options", () => {
 
   it("refuses a negative debounce", () => {
     expect(() => createSettingsStore<Prefs>({ namespace: "game", version: 1, defaults, debounceMs: -1, backend: memoryBackend().backend })).toThrow(RangeError);
+  });
+
+  it("refuses choices that name no setting, an empty list, a list without the default, or a value that is not a list", () => {
+    const backend = memoryBackend().backend;
+    const withChoices = (value: unknown) =>
+      createSettingsStore<Choiced>({
+        namespace: "game",
+        version: 1,
+        defaults: choiced,
+        choices: value as unknown as SettingsStoreOptions<Choiced>["choices"],
+        backend,
+      });
+    expect(() => withChoices({ colour: ["red"] })).toThrow(RangeError);
+    expect(() => withChoices({ speed: [] })).toThrow(RangeError);
+    expect(() => withChoices({ speed: ["slow", "fast"] })).toThrow(RangeError);
+    expect(() => withChoices({ speed: "normal" })).toThrow(RangeError);
+    expect(() => withChoices(choices)).not.toThrow();
+  });
+
+  it("refuses an onInvalid that is not a function, and types a choice as a value of its setting", () => {
+    const backend = memoryBackend().backend;
+    expect(() =>
+      createSettingsStore<Choiced>({
+        namespace: "game",
+        version: 1,
+        defaults: choiced,
+        onInvalid: "log" as unknown as (key: string, value: unknown) => void,
+        backend,
+      }),
+    ).toThrow(RangeError);
+    expect(() =>
+      createSettingsStore<Choiced>({
+        namespace: "game",
+        version: 1,
+        defaults: choiced,
+        // @ts-expect-error a list of numbers is not a list of the language's values
+        choices: { language: [1, 2] },
+        backend,
+      }),
+    ).toThrow(RangeError);
   });
 
   it("returns a store that names its namespace and version", () => {

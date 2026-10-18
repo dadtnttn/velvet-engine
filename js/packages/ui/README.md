@@ -93,8 +93,8 @@ that is left out keeps its value. To clear a text or an optional value, pass `nu
 | Factory | Props | Notes |
 |---|---|---|
 | `createPlate({ title })` | `title` | A slanted ink panel with a title tab. Content goes in `body`. |
-| `createButton({ label, hotkey, pressed, disabled, onPress })` | see left | A native `<button>`. `pressed` makes it a toggle (`aria-pressed`); the game owns the state. |
-| `createKeycap({ key, textCase })` | `key`, `textCase` | A key drawn as a keycap: `"KeyE"` shows `E`, `"Space"` shows `Space`. `"MouseLeft"`, `"MouseRight"`, `"MouseMiddle"` and `"MouseWheel"` draw a mouse with that part lit. `keyLabel(code)` gives the label. `textCase` is `"upper"` (the default: the stylesheet draws capitals, so `Esc` shows `ESC`) or `"as-is"`, which keeps the case as written, such as `Esc` or `Espacio`. |
+| `createButton({ label, hotkey, hotkeyLabel, hotkeyCase, pressed, disabled, onPress })` | see left | A native `<button>`. `pressed` makes it a toggle (`aria-pressed`); the game owns the state. The key hint is a keycap: `hotkeyLabel` draws a translated name as written (such as `Espacio`), and `hotkeyCase: "as-is"` keeps its case. The default case is capitals, as before. |
+| `createKeycap({ key, textCase, text })` | `key`, `textCase`, `text` | A key drawn as a keycap: `"KeyE"` shows `E`, `"Space"` shows `Space`. `"MouseLeft"`, `"MouseRight"`, `"MouseMiddle"` and `"MouseWheel"` draw a mouse with that part lit. `keyLabel(code)` gives the label. `textCase` is `"upper"` (the default: the stylesheet draws capitals, so `Esc` shows `ESC`) or `"as-is"`, which keeps the case as written, such as `Esc` or `Espacio`. `text` draws exactly that text in place of the label, for a name such as `Escape` that the label map would shorten. |
 | `createChip({ label, count })` | see left | A small label with an optional count badge. |
 | `createMeter({ label, value, max, segments, tone })` | see left | `role="meter"`. `segments` draws cells instead of a fill. `tone` is `accent`, `gold` or `danger`. |
 | `createTooltip({ stage })` | `anchor`, `text`, `placement` | Points at `anchor`, above it by default, and stays inside the stage. `anchor: null` hides it. |
@@ -152,7 +152,7 @@ changes only the layer's transform. Neither causes a layout.
 | `zoomAt(zoom, point)` | Zooms around a logical point, which keeps the world point under it in place unless the bounds clamp the pan. |
 | `pan` | Where the world's origin sits, in logical pixels. Settable, and clamped. |
 | `panBy(dx, dy)` | Pans by a distance in logical pixels, the same space as the stage. Use it from the keyboard. |
-| `fit({ x, y, w, h })` | Shows a world rectangle centred in the visible area, as large as that area and the zoom range allow. |
+| `fit({ x, y, w, h }, { padding, minZoom, maxZoom })` | Shows a world rectangle centred in the visible area, as large as that area and the zoom range allow. `padding` keeps that many logical pixels free on every side. `minZoom` and `maxZoom` narrow the zoom range for this call; they cannot widen the board's own range. All three are optional. |
 | `setVisibleArea({ top, right, bottom, left })` | Sets the part of the stage that the view frames. The view is clamped to it again, and `onChange` runs whenever the area changes, even when the view stays put. Setting the same area again does nothing. |
 | `visibleWorldRect()` | The world rectangle that the visible area shows now. A game whose cards are placed in world units can pass it as the `bounds` of `board.freeSpot` (`@velvet/cards`), so that a new stack lands where the player sees it. The cards board counts its own steps, so the game must map them to world units first. |
 | `worldToLogical(x, y)`, `logicalToWorld(x, y)` | Convert between world units and the stage's logical pixels. |
@@ -514,7 +514,8 @@ its top screen, so the box's buttons need to be inside that screen to take the f
 
 `createBar({ label, value, max, tone, text })` is a thin bar with role `meter`. Its fill is drawn with a transform, so a
 change of value moves no layout. `tone` is `"accent"`, `"gold"` or `"danger"`, and `text` is drawn over the bar (such as
-`"70 / 100"`) or hidden with null.
+`"70 / 100"`) or hidden with null. A `max` of zero or less gives an empty bar, and its text is drawn as given, such as
+`"0 / 0"` for a need with no workers yet.
 
 `createDirtyMarks({ schedule? })` batches DOM writes. Each element registers the function that draws it. `mark(name)`
 asks for a redraw, and every mark made in a frame is drawn once, in one flush. The flush is scheduled on the next
@@ -608,10 +609,11 @@ label and one control, bound to one setting of a store. The store is the one tha
 
 | Member | What it is |
 |---|---|
-| `createSettingsPanel({ store, sections, t?, onReset? })` | Builds the panel with a row for each item, at the store's values. |
+| `createSettingsPanel({ store, sections, t?, resetLabel?, onReset? })` | Builds the panel with a row for each item, at the store's values. |
 | `store` | `get(key)`, `set(key, value)` and `subscribe(key, listener)` are required. `reset()` is optional: when the store has it, the panel shows a "Reset to defaults" button that calls it, and then `onReset`. The settings store of `@velvet/core` has no `reset` yet, so the button stays hidden with it. |
 | `sections` | `{ title, items }`. An item is `{ kind: "slider" \| "toggle" \| "choice", key, label, ...options }`, with the options of its control. A key may be in one row only. |
-| `t` | The text lookup. The titles, the labels, the option labels and the reset text (`settings.reset`) go through it. A lookup with no text returns the key, which is then shown as it is. |
+| `t` | The text lookup. The titles, the labels and the option labels go through it. A lookup with no text returns the key, which is then shown as it is. |
+| `resetLabel` | The key of the reset button's text, which goes through `t`. Default `settings.reset`. When the lookup has no text for it, or there is no lookup, the button says "Reset to defaults". |
 | `el`, `destroy()` | The panel. `destroy` removes it and stops following the store; the store keeps its values. |
 
 A change of a control writes the store at once. A change that the store makes (another part of the game) moves the

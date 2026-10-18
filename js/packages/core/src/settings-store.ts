@@ -16,6 +16,10 @@
 // at a time, as save slots are. Values of a newer build are not read. A plain object without the
 // envelope is the first layout, which is version 1.
 //
+// Choices. A setting that has a fixed set of values, such as a language or a speed, can name them in
+// `choices`. A saved value outside its list is refused: the default stays, and `onInvalid` hears of it
+// once, when the values are read. `set` throws a RangeError for a value outside the list.
+//
 // Writing. `set` changes a value at once, for its subscribers, and saves every value after a short
 // debounce, so a burst of changes is one write. `save` writes now. A write waits for the load, so a
 // save never replaces stored values that have not been read yet. A storage that refuses a write makes
@@ -65,6 +69,19 @@ export interface SettingsStoreOptions<Values extends object> {
   readonly backend?: SettingsBackend;
   /** Milliseconds that `set` waits after the last change before it saves. Default 250. */
   readonly debounceMs?: number;
+  /**
+   * The values that a setting may take, for a setting with a fixed set of values: a list for each such key, such as
+   * `{ language: ["es", "en"] }`. A saved value that is not in its list is refused, and the default is used. `set`
+   * throws a RangeError for a value that is not in the list. The default must be in its list: put null in the list
+   * when the default is null.
+   */
+  readonly choices?: { readonly [Key in keyof Values]?: readonly Values[Key][] };
+  /**
+   * Runs when a saved value is refused by its `choices`, with the name of the setting and the value that was refused.
+   * It runs once for each such value, when the saved values are read. A value of the wrong type is ignored as before,
+   * without a call.
+   */
+  readonly onInvalid?: (key: string, value: unknown) => void;
 }
 
 /**
@@ -82,7 +99,7 @@ export interface SettingsStore<Values extends object> {
   get<Key extends keyof Values>(key: Key): Values[Key];
   /**
    * Sets a value. Its subscribers hear of the change at once, and every value is saved after the debounce.
-   * @throws RangeError when `key` is not one of the defaults.
+   * @throws RangeError when `key` is not one of the defaults, or the value is not one of the choices of `key`.
    */
   set<Key extends keyof Values>(key: Key, value: Values[Key]): void;
   /**
@@ -99,8 +116,8 @@ export interface SettingsStore<Values extends object> {
   subscribe<Key extends keyof Values & string>(key: Key, listener: Listener<Values[Key]>): Unsubscribe;
   /**
    * Reads the saved values. Repeated calls wait for the same read. Resolves when the values are in place. A
-   * read that fails leaves the defaults in place. Rejects only when a subscriber throws while the saved values
-   * are being applied.
+   * read that fails leaves the defaults in place. Rejects only when a subscriber or `onInvalid` throws while the
+   * saved values are being applied.
    */
   load(): Promise<void>;
   /**
@@ -122,19 +139,21 @@ interface SettingsEnvelope {
  * in localStorage in a browser, and in memory otherwise. One namespace is one store: two stores on the same
  * namespace share the saved values, and the last write wins.
  *
- * @throws RangeError when the namespace, the version, a migration key, the defaults or the debounce is not valid.
+ * @throws RangeError when the namespace, the version, a migration key, the defaults, the choices or the debounce is
+ * not valid.
  */
 export function createSettingsStore<Values extends object>(options: SettingsStoreOptions<Values>): SettingsStore<Values> {
   const migrate = options.migrate ?? {};
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   checkOptions(options, migrate, debounceMs);
+  const rules: SettingRules = { choices: choiceLists(options), onInvalid: options.onInvalid };
   const chosen: ChosenSettingsBackend = chooseSettingsBackend({
     explicit: options.backend,
     bridge: options.bridge,
     storage: options.storage,
     prefix: SETTINGS_STORAGE_PREFIX,
   });
-  return new Settings<Values>(options.namespace, options.version, options.defaults, migrate, chosen, debounceMs);
+  return new Settings<Values>(options.namespace, options.version, options.defaults, migrate, chosen, debounceMs, rules);
 }
 
 /** The settings store that {@link createSettingsStore} makes. Not exported: the game only sees the interface. */
@@ -152,6 +171,7 @@ class Settings<Values extends object> implements SettingsStore<Values> {
   private readonly migrations: MigrationMap;
   private readonly backend: SettingsBackend;
   private readonly debounceMs: number;
+  private readonly rules: SettingRules;
   private loading: Promise<void> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** The writes in order: each one waits for the one before, so the last value written is the last one set. */
@@ -164,6 +184,7 @@ class Settings<Values extends object> implements SettingsStore<Values> {
     migrations: MigrationMap,
     chosen: ChosenSettingsBackend,
     debounceMs: number,
+    rules: SettingRules,
   ) {
     this.namespace = namespace;
     this.version = version;
@@ -171,6 +192,7 @@ class Settings<Values extends object> implements SettingsStore<Values> {
     this.backend = chosen.backend;
     this.migrations = migrations;
     this.debounceMs = debounceMs;
+    this.rules = rules;
     this.defaults = new Map(Object.entries(defaults));
     this.values = new Map(this.defaults);
   }
@@ -181,6 +203,8 @@ class Settings<Values extends object> implements SettingsStore<Values> {
 
   set<Key extends keyof Values>(key: Key, value: Values[Key]): void {
     const name = this.nameOf(key);
+    // The check comes before the mark: a refused value must not stop a saved value from loading later.
+    this.requireChoice(name, value);
     this.touched.add(name);
     if (!this.changeValue(name, value)) return;
     // The save is scheduled before the subscribers run, so a subscriber that throws cannot lose the change.
@@ -237,6 +261,21 @@ class Settings<Values extends object> implements SettingsStore<Values> {
     return name;
   }
 
+  /** True when a value is one of the choices of a setting, or the setting has no list of choices. */
+  private isChoice(name: string, value: unknown): boolean {
+    const list = this.rules.choices.get(name);
+    return list === undefined || list.includes(value);
+  }
+
+  /** Throws a RangeError when a setting has a list of choices and the value is not in it. */
+  private requireChoice(name: string, value: unknown): void {
+    if (this.isChoice(name, value)) return;
+    const shown = (this.rules.choices.get(name) ?? []).map(describeValue).join(", ");
+    throw new RangeError(
+      `${describeValue(value)} is not a choice of "${name}" in "${this.namespace}": the choices are ${shown}`,
+    );
+  }
+
   /** Keeps a value. Returns false when it is the one already held, so that nothing changed. */
   private changeValue(name: string, value: unknown): boolean {
     if (Object.is(this.values.get(name), value)) return false;
@@ -249,7 +288,13 @@ class Settings<Values extends object> implements SettingsStore<Values> {
     for (const [name, fallback] of this.defaults) {
       if (this.touched.has(name) || !Object.hasOwn(saved, name)) continue;
       const value = saved[name];
-      if (!fitsDefault(value, fallback) || !this.changeValue(name, value)) continue;
+      if (!fitsDefault(value, fallback)) continue;
+      if (!this.isChoice(name, value)) {
+        // A value outside the choices keeps the default, and the owner of the store hears of it once.
+        this.rules.onInvalid?.(name, value);
+        continue;
+      }
+      if (!this.changeValue(name, value)) continue;
       this.events.emit(name, value);
     }
   }
@@ -314,6 +359,11 @@ function decodeSaved(raw: unknown, version: number, migrations: MigrationMap): R
   return isRecord(values) ? values : null;
 }
 
+/** A value for an error message: a string in quotes, anything else as it prints. */
+function describeValue(value: unknown): string {
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
+
 /** True when a saved value has the type of its default. A default of null takes any value. */
 function fitsDefault(value: unknown, fallback: unknown): boolean {
   if (value === undefined) return false;
@@ -322,6 +372,37 @@ function fitsDefault(value: unknown, fallback: unknown): boolean {
   if (typeof fallback === "number") return typeof value === "number" && Number.isFinite(value);
   if (typeof fallback === "object") return isRecord(value);
   return typeof value === typeof fallback;
+}
+
+/** What the store checks a value against, from the options: the choices of each setting, and the report of a refused value. */
+interface SettingRules {
+  /** The values that each setting may take, by name, for the settings that have a list. */
+  readonly choices: ReadonlyMap<string, readonly unknown[]>;
+  /** Runs when a saved value is refused by its choices. */
+  readonly onInvalid: ((key: string, value: unknown) => void) | undefined;
+}
+
+/**
+ * The lists of choices, by setting name. A setting with no list is left out of the map.
+ * @throws RangeError when a list names no setting, is empty, or does not hold the default of its setting.
+ */
+function choiceLists<Values extends object>(
+  options: SettingsStoreOptions<Values>,
+): ReadonlyMap<string, readonly unknown[]> {
+  const defaults = new Map<string, unknown>(Object.entries(options.defaults));
+  const lists = new Map<string, readonly unknown[]>();
+  for (const [key, list] of Object.entries<unknown>(options.choices ?? {})) {
+    if (list === undefined) continue;
+    if (!defaults.has(key)) {
+      throw new RangeError(`choices name "${key}", which is not a setting of "${options.namespace}"`);
+    }
+    if (!Array.isArray(list) || list.length === 0) {
+      throw new RangeError(`the choices of "${key}" must be a non-empty list`);
+    }
+    if (!list.includes(defaults.get(key))) throw new RangeError(`the default of "${key}" is not one of its choices`);
+    lists.set(key, list);
+  }
+  return lists;
 }
 
 /**
@@ -345,6 +426,9 @@ function checkOptions<Values extends object>(options: SettingsStoreOptions<Value
     }
     const step: unknown = migrate[from];
     if (typeof step !== "function") throw new RangeError(`migration "${key}" must be a function`);
+  }
+  if (options.onInvalid !== undefined && typeof options.onInvalid !== "function") {
+    throw new RangeError("onInvalid must be a function");
   }
   if (!Number.isFinite(debounceMs) || debounceMs < 0) {
     throw new RangeError(`debounceMs must be zero or a positive number, got ${debounceMs}`);

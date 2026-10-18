@@ -30,7 +30,7 @@ export interface TimeState {
 
 /** Holds the state of the controls, and applies them to the clock. */
 export class TimeControls {
-  private readonly clock: GameClock | null;
+  private clock: GameClock | null;
   private readonly slowSpeed: number;
   private readonly stepSeconds: number;
   private frozen = false;
@@ -53,6 +53,20 @@ export class TimeControls {
   /** Records that the loop is wrapped. From then on, a pause holds the game's update. */
   markWrapped(): void {
     this.wrapped = true;
+  }
+
+  /**
+   * Connects another game clock, or none. The clock that was there is given back first (see `releaseClock`). A pause
+   * that the tools hold stays on, so a clock connected while paused is paused too.
+   */
+  attach(clock: GameClock | null): void {
+    if (clock === this.clock) return;
+    this.releaseClock();
+    this.clock = clock;
+    if (clock !== null && this.frozen && !clock.paused) {
+      clock.pause();
+      this.clockPausedHere = true;
+    }
   }
 
   /** Stops game time. A wrapped loop also holds the game's update. Calling it while paused does nothing. */
@@ -96,12 +110,15 @@ export class TimeControls {
     if (this.frozen && !this.stepRequested) return false;
     const stepping = this.frozen;
     this.stepRequested = false;
-    const lift = stepping && (this.clock?.paused ?? false);
-    if (lift) this.clock?.resume();
+    // The clock is held by name, so that the step gives back the clock it lifted, even when the game connects another
+    // clock during the update.
+    const clock = this.clock;
+    const lift = stepping && (clock?.paused ?? false);
+    if (lift) clock?.resume();
     try {
       update();
     } finally {
-      if (lift) this.clock?.pause();
+      if (lift) clock?.pause();
     }
     return true;
   }
@@ -152,6 +169,16 @@ export class TimeControls {
    */
   dispose(): void {
     this.resume();
+    this.releaseClock();
+  }
+
+  /**
+   * Gives the clock back: game time runs again on it when the tools had stopped it, and a slow motion that is on is
+   * undone, so that the game is not left at the slow speed.
+   */
+  private releaseClock(): void {
+    if (this.clockPausedHere) this.clock?.resume();
+    this.clockPausedHere = false;
     if (this.speedBeforeSlow !== null) {
       this.clock?.setSpeed(this.speedBeforeSlow);
       this.speedBeforeSlow = null;

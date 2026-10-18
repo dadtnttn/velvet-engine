@@ -54,6 +54,8 @@ export interface OverlayApi {
   hide(): void;
   /** The event log. */
   events(): EventLog;
+  /** True while an event bus is connected, so that the log has events to show. */
+  eventsConnected(): boolean;
   /** The registered views, by name. */
   views(): ReadonlyMap<string, InspectView>;
   /** The pinned numbers, by name. */

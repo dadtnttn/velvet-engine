@@ -3,14 +3,27 @@
 
 import { mergeDefined, type VuComponent } from "./component";
 import { createElement, releaseFocus } from "./dom";
-import { createKeycap, type KeycapProps } from "./keycap";
+import { createKeycap, type KeycapProps, type KeycapTextCase } from "./keycap";
 
 /** Props of a button. */
 export interface ButtonProps {
   /** The text on the button. */
   readonly label: string;
-  /** A key hint drawn after the label, such as "E". Null or an empty string hides it. */
+  /**
+   * A key hint drawn after the label, such as "E". Null or an empty string hides it, unless `hotkeyLabel` gives the
+   * hint a text of its own.
+   */
   readonly hotkey?: string | null;
+  /**
+   * The text of the key hint, as written, in place of the key's own label: a translated name such as "Espacio". Null
+   * or an empty string keeps the label. A mouse key draws the mouse and ignores the text.
+   */
+  readonly hotkeyLabel?: string | null;
+  /**
+   * How the text of the key hint is cased. "upper" draws capitals, as a keyboard's keys are drawn, and is the default.
+   * "as-is" keeps the case the text is written in, such as "Esc" or "Espacio".
+   */
+  readonly hotkeyCase?: KeycapTextCase;
   /**
    * Toggle state. True or false makes the button a toggle, with aria-pressed. Null makes it a
    * plain button. The game owns the state: the button never flips it by itself.
@@ -43,12 +56,15 @@ export function createButton(props: ButtonProps): VuComponent<ButtonProps> {
       el.removeAttribute("aria-pressed");
     }
     const key = current.hotkey ?? "";
-    if (key !== "") {
+    const text = current.hotkeyLabel ?? "";
+    if (key !== "" || text !== "") {
+      // A hint that has only a text takes the text as its name too, since the keycap needs a key.
+      const props: KeycapProps = { key: key !== "" ? key : text, text, textCase: current.hotkeyCase ?? "upper" };
       if (hint === null) {
-        hint = createKeycap({ key });
+        hint = createKeycap(props);
         el.append(hint.el);
       } else {
-        hint.update({ key });
+        hint.update(props);
       }
     } else if (hint !== null) {
       hint.destroy();

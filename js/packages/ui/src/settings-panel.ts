@@ -10,8 +10,9 @@
 // keys go to the focused control: Left and Right change a slider or a choice, and Enter or Space turn a toggle.
 // A pad drives the panel through the same keys (startPadMenuKeys in @velvet/core).
 //
-// Texts. Section titles, row labels and choice options go through `t`, as in the rebinding panel. A lookup that
-// has no text returns the key, so the panel then shows the key as it is.
+// Texts. Section titles, row labels, choice options and the reset button's text go through `t`, as in the rebinding
+// panel. A lookup that has no text returns the key, so the panel then shows the key as it is (the reset button falls
+// back to English instead).
 
 import { createButton, type ButtonProps } from "./components/button";
 import { createChoice, type Choice, type ChoiceOption } from "./components/choice";
@@ -100,6 +101,11 @@ export interface SettingsPanelOptions {
   readonly sections: readonly SettingsSection[];
   /** The text lookup for the titles, labels and the reset button. Default: the texts are shown as they are. */
   readonly t?: TranslateFn;
+  /**
+   * The key of the reset button's text, which goes through `t`. Default "settings.reset". When the lookup has no text
+   * for the key, or there is no lookup, the button says "Reset to defaults".
+   */
+  readonly resetLabel?: string;
   /** Runs after the player resets the settings, once the controls show the store's values again. */
   readonly onReset?: () => void;
 }
@@ -184,8 +190,9 @@ export function createSettingsPanel(options: SettingsPanelOptions): SettingsPane
 
   /** The text of the reset button, or the English one when the lookup has none. */
   function resetText(): string {
-    const shown = options.t?.(RESET_KEY);
-    return shown === undefined || shown === RESET_KEY ? RESET_FALLBACK : shown;
+    const key = options.resetLabel ?? RESET_KEY;
+    const shown = options.t?.(key);
+    return shown === undefined || shown === key ? RESET_FALLBACK : shown;
   }
 
   /**

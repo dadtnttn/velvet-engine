@@ -166,6 +166,29 @@ export interface DragOptions {
 }
 
 /**
+ * Options of {@link BoardView.fit}. Each one is optional, and the default keeps the whole visible area and the
+ * board's own zoom range.
+ */
+export interface FitOptions {
+  /**
+   * The space that stays free inside the visible area, on every side, in logical pixels. The rectangle is fitted in
+   * what is left, and it stays centred. Default 0.
+   */
+  readonly padding?: number;
+  /**
+   * The largest zoom for this fit. It can narrow the board's zoom range, but not widen it. Default: the board's
+   * largest zoom.
+   */
+  readonly maxZoom?: number;
+  /**
+   * The smallest zoom for this fit. It can narrow the board's zoom range, but not widen it. When the rectangle is too
+   * large to show whole at this zoom, the view stays at it and shows the middle of the rectangle. Default: the
+   * board's smallest zoom.
+   */
+  readonly minZoom?: number;
+}
+
+/**
  * A pannable, zoomable world inside a stage. Create it with {@link createBoardView}. Every position
  * here is in world units unless the name says logical: logical pixels are the stage's own surface.
  */
@@ -202,10 +225,12 @@ export interface BoardView {
   panBy(dx: number, dy: number): void;
   /**
    * Shows a world rectangle as large as the visible area allows, centred in it. The zoom is clamped to the zoom
-   * range, and the view to the world bounds.
-   * @throws RangeError when the rectangle's width or height is not a positive number.
+   * range, and the view to the world bounds. The options keep a margin inside the visible area, and narrow the zoom
+   * range for this call (see {@link FitOptions}).
+   * @throws RangeError when the rectangle's width or height is not a positive number, an option is not valid, the
+   * zoom range of the options does not overlap the board's, or the padding leaves no room.
    */
-  fit(rect: WorldRect): void;
+  fit(rect: WorldRect, options?: FitOptions): void;
   /**
    * Sets the part of the surface that the view frames (see the `visibleArea` option). A side that is left out is
    * 0. The view is clamped again to the new area, and the change listeners run whenever the area changes, even
@@ -420,14 +445,31 @@ class Board implements BoardView {
     this.apply(this.zoomLevel, this.panX + dx, this.panY + dy);
   }
 
-  fit(rect: WorldRect): void {
+  fit(rect: WorldRect, options: FitOptions = {}): void {
     requireFinite(rect.x, "rect.x");
     requireFinite(rect.y, "rect.y");
     requirePositive(rect.w, "rect.w");
     requirePositive(rect.h, "rect.h");
+    const padding = options.padding ?? 0;
+    requireNonNegative(padding, "padding");
+    const minZoom = options.minZoom ?? this.minZoom;
+    const maxZoom = options.maxZoom ?? this.maxZoom;
+    requirePositive(minZoom, "minZoom");
+    requirePositive(maxZoom, "maxZoom");
+    // The fit's own range can only narrow the board's range: the zoom never leaves the limits of the board.
+    const low = Math.max(minZoom, this.minZoom);
+    const high = Math.min(maxZoom, this.maxZoom);
+    if (low > high) {
+      throw new RangeError(
+        `the zoom range ${minZoom} to ${maxZoom} does not overlap the board's range ${this.minZoom} to ${this.maxZoom}`,
+      );
+    }
     const box = this.visibleBox();
-    const wanted = Math.min(box.width / rect.w, box.height / rect.h);
-    const zoom = clampTo(wanted, this.minZoom, this.maxZoom);
+    const width = box.width - 2 * padding;
+    const height = box.height - 2 * padding;
+    if (!(width > 0 && height > 0)) throw new RangeError(`padding (${padding}) leaves no room in the visible area`);
+    const wanted = Math.min(width / rect.w, height / rect.h);
+    const zoom = clampTo(wanted, low, high);
     const centre = this.viewCentred(rect.x + rect.w / 2, rect.y + rect.h / 2, zoom);
     this.apply(zoom, centre.x, centre.y);
   }

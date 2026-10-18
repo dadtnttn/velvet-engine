@@ -270,6 +270,20 @@ describe("settings panel texts", () => {
     expect(resetButton(panel).textContent).toBe("Restore");
   });
 
+  it("reads the reset button's text from resetLabel, and falls back to English when the lookup has no text for it", () => {
+    const words: Record<string, string> = { "menu.restore": "Restaurar" };
+    const named = make(fakeStore({ volume: 5, subtitles: false, language: "es" }, true), {
+      t: (key) => words[key] ?? key,
+      resetLabel: "menu.restore",
+    });
+    expect(resetButton(named).textContent).toBe("Restaurar");
+    const missing = make(fakeStore({ volume: 5, subtitles: false, language: "es" }, true), {
+      t: (key) => key,
+      resetLabel: "menu.missing",
+    });
+    expect(resetButton(missing).textContent).toBe("Reset to defaults");
+  });
+
   it("shows a text as it is when the lookup has no translation for it", () => {
     const panel = make(fakeStore({ volume: 5, subtitles: false, language: "es" }, true), {
       t: (key) => (key === "Volumen" ? "Volume" : key),

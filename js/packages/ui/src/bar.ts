@@ -15,7 +15,10 @@ export interface BarProps {
   readonly label: string;
   /** The current value. A value below 0 draws an empty bar and one above `max` a full bar. */
   readonly value: number;
-  /** The value that means full. Default 100. Must be above zero. */
+  /**
+   * The value that means full. Default 100. Zero or less makes an empty bar: the fill stays at zero, and the text is
+   * drawn as given, such as "0 / 0" for a need with no workers yet.
+   */
   readonly max?: number;
   /** The colour of the fill. Default "accent". */
   readonly tone?: BarTone;
@@ -27,9 +30,9 @@ export interface BarProps {
 const DEFAULT_MAX = 100;
 
 /**
- * Creates a stat bar.
+ * Creates a stat bar. A maximum of zero or less gives an empty bar, not an error.
  * @param props - the starting props.
- * @throws RangeError when the value is not finite, or the maximum is not a finite number above zero.
+ * @throws RangeError when the value, or the maximum, is not a finite number.
  */
 export function createBar(props: BarProps): VuComponent<BarProps> {
   const el = createElement("div", "vu-bar");
@@ -44,9 +47,10 @@ export function createBar(props: BarProps): VuComponent<BarProps> {
   let lastRatio = Number.NaN;
 
   const render = (): void => {
-    const max = current.max ?? DEFAULT_MAX;
+    // A maximum of zero or less is an empty bar: its range is then zero, and the fill never leaves zero.
+    const max = Math.max(0, current.max ?? DEFAULT_MAX);
     const value = Math.min(max, Math.max(0, current.value));
-    const ratio = value / max;
+    const ratio = max > 0 ? value / max : 0;
     el.setAttribute("aria-label", current.label);
     el.setAttribute("aria-valuemax", String(max));
     el.setAttribute("aria-valuenow", String(value));
@@ -76,7 +80,8 @@ export function createBar(props: BarProps): VuComponent<BarProps> {
 }
 
 /**
- * Throws when the bar cannot show the props. The state is not changed when this throws.
+ * Throws when the bar cannot show the props. The state is not changed when this throws. A maximum of zero or less
+ * is allowed: the bar is then empty.
  * @param props - the props to check.
  */
 function validate(props: BarProps): void {
@@ -84,7 +89,7 @@ function validate(props: BarProps): void {
     throw new RangeError(`bar value must be a finite number, got ${props.value}`);
   }
   const max = props.max ?? DEFAULT_MAX;
-  if (!Number.isFinite(max) || max <= 0) {
-    throw new RangeError(`bar max must be a finite number above zero, got ${max}`);
+  if (!Number.isFinite(max)) {
+    throw new RangeError(`bar max must be a finite number, got ${max}`);
   }
 }

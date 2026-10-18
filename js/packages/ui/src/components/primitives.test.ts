@@ -114,6 +114,51 @@ describe("button", () => {
     expect(button.el.textContent).toBe("Usar");
   });
 
+  it("draws the key hint in capitals by default, as its keyboard keys are drawn", () => {
+    const button = createButton({ label: "Salir", hotkey: "Escape" });
+    const hint = button.el.querySelector("kbd");
+    expect(hint?.textContent).toBe("Esc");
+    expect(hint?.classList.contains("vu-keycap-as-is")).toBe(false);
+  });
+
+  it("shows a translated name as written when hotkeyLabel is given with the case as-is", () => {
+    const button = createButton({ label: "Saltar", hotkey: "Space", hotkeyLabel: "Espacio", hotkeyCase: "as-is" });
+    const hint = button.el.querySelector("kbd");
+    expect(hint?.textContent).toBe("Espacio");
+    expect(hint?.classList.contains("vu-keycap-as-is")).toBe(true);
+  });
+
+  it("shows a hotkeyLabel exactly, even when it is also a key name that the keycap would change", () => {
+    const button = createButton({ label: "Cerrar", hotkeyLabel: "Escape", hotkeyCase: "as-is" });
+    expect(button.el.querySelector("kbd")?.textContent).toBe("Escape");
+  });
+
+  it("draws a hint that has only a text, and removes it when the text is cleared", () => {
+    const button = createButton({ label: "Menú", hotkeyLabel: "Menú" });
+    expect(button.el.querySelector("kbd")?.textContent).toBe("Menú");
+    button.update({ hotkeyLabel: null });
+    expect(button.el.querySelector("kbd")).toBeNull();
+  });
+
+  it("updates the text and the case of the hint, and keeps them when update leaves them out", () => {
+    const button = createButton({ label: "Usar", hotkey: "Space", hotkeyLabel: "Espacio", hotkeyCase: "as-is" });
+    const hint = button.el.querySelector<HTMLElement>("kbd");
+    button.update({ label: "Usar ya" });
+    expect(hint?.textContent).toBe("Espacio");
+    expect(hint?.classList.contains("vu-keycap-as-is")).toBe(true);
+    button.update({ hotkeyCase: "upper" });
+    expect(hint?.classList.contains("vu-keycap-as-is")).toBe(false);
+    button.update({ hotkeyLabel: "" });
+    expect(hint?.textContent).toBe("Space");
+  });
+
+  it("draws the mouse for a mouse hotkey, and ignores the text", () => {
+    const button = createButton({ label: "Atacar", hotkey: "MouseLeft", hotkeyLabel: "Clic" });
+    const hint = button.el.querySelector("kbd");
+    expect(hint?.querySelector("svg")).not.toBeNull();
+    expect(hint?.textContent).toBe("");
+  });
+
   it("does not change its geometry on hover or press", () => {
     const button = createButton({ label: "Guardar" });
     document.body.append(button.el);
@@ -270,6 +315,13 @@ describe("keycap text case", () => {
     expect(keycap.el.classList.contains("vu-keycap-as-is")).toBe(false);
     keycap.update({ textCase: "as-is" });
     expect(keycap.el.classList.contains("vu-keycap-as-is")).toBe(true);
+    expect(keycap.el.textContent).toBe("Esc");
+  });
+
+  it("draws the text as written when a text is given, and the label again when it is cleared", () => {
+    const keycap = createKeycap({ key: "Escape", text: "Escape", textCase: "as-is" });
+    expect(keycap.el.textContent).toBe("Escape");
+    keycap.update({ text: null });
     expect(keycap.el.textContent).toBe("Esc");
   });
 
