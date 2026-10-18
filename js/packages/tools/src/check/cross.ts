@@ -1,11 +1,12 @@
 // The links between a game's documents: the art ids and variants that the sheets and the shots name must
-// be in an art manifest, the characters that a shot shows must have an identity, and the keys that the
-// data uses must be in the source language. Each reader checks its own file; these checks look across files.
+// be in an art manifest, the icons of the achievements too, the characters that a shot shows must have an
+// identity, and the keys that the data uses must be in the source language. Each reader checks its own file;
+// these checks look across files.
 
 import type { ArtEntry } from "@velvet/assets";
 import { makeIssue, WHOLE_FILE, type Issue } from "../issues";
 import type { GameDocument } from "../game/discover";
-import { isIdKey, keyFieldsOf } from "../game/keys";
+import { isIdKey, keyFieldsOf, keyFieldsOfKind } from "../game/keys";
 import type { LoadedLocales } from "../game/locales";
 import type { ValidatedDocuments } from "./documents";
 
@@ -78,11 +79,22 @@ export function crossCheck(
     });
   }
 
+  // An achievement's icon is an art id. The check runs only when the game has an art manifest, so a game without
+  // art is not told that every icon is missing.
+  if (validated.art.length > 0) {
+    for (const info of validated.achievements) {
+      info.catalog.achievements.forEach((achievement, index) => {
+        checkArt(info.file, `achievements[${index}].icon`, achievement.icon, null);
+      });
+    }
+  }
+
   const source = locales.source;
   let reportedNoSource = false;
   for (const doc of documents) {
-    if (doc.kind !== "stacks-catalog" && doc.kind !== "character-schema" && doc.kind !== "character-sheet") continue;
-    for (const field of keyFieldsOf(doc.json)) {
+    const fields = keyFieldsOfKind(doc.kind);
+    if (fields === undefined) continue;
+    for (const field of keyFieldsOf(doc.json, fields)) {
       if (!isIdKey(field.key)) continue;
       if (source === undefined) {
         if (!reportedNoSource) {

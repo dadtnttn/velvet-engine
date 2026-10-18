@@ -25,6 +25,7 @@ function tileset(name: string, firstGid: number, tileCount: number): Tileset {
     offsetY: 0,
     properties: {},
     tiles: new Map(),
+    source: undefined,
   };
 }
 

@@ -14,7 +14,8 @@ import type { TileFrame, TileInfo, Tileset } from "./types";
  * @param source - the tileset's JSON object (an embedded tileset, or the content of a .tsj file).
  * @param path - the path of the object, which prefixes the paths of its problems.
  * @param firstGid - the global id of its first tile, from the map.
- * @returns the tileset. Undefined only when the tileset is an image collection, which is refused.
+ * @returns the tileset, with no `source`: the map's reader sets it for an external tileset. Undefined only when the
+ * tileset is an image collection, which is refused.
  */
 export function readTileset(
   problems: Problems,
@@ -77,6 +78,7 @@ export function readTileset(
     offsetY,
     properties,
     tiles,
+    source: undefined,
   };
 }
 

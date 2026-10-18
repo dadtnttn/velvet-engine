@@ -7,7 +7,7 @@ import { isLanguageTag } from "@velvet/i18n";
 import { UsageError, type CommandSpec } from "../command";
 import { countIssues, formatIssue, makeIssue, WHOLE_FILE, type Issue } from "../issues";
 import { discoverGame, type GameDiscovery, type GameDocument } from "../game/discover";
-import { keyFieldsOf } from "../game/keys";
+import { keyFieldsOf, keyFieldsOfKind } from "../game/keys";
 import { NO_HINTS } from "../game/manifest";
 import { loadLocales, type LoadedLocales } from "../game/locales";
 import type { Output } from "../output";
@@ -17,9 +17,6 @@ import { PseudoError, writePseudoLocale } from "./write";
 
 /** The extensions of the files that the code scan reads. */
 const CODE_EXTENSIONS: ReadonlySet<string> = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".html"]);
-
-/** The documents whose key fields name texts of the game. */
-const DATA_KINDS: ReadonlySet<GameDocument["kind"]> = new Set(["stacks-catalog", "character-schema", "character-sheet"]);
 
 /** The result of reporting on a game's texts. */
 interface TextReport {
@@ -61,8 +58,9 @@ async function scanGameCode(discovery: GameDiscovery): Promise<CodeScan> {
 function dataKeysOf(documents: readonly GameDocument[]): Set<string> {
   const keys = new Set<string>();
   for (const doc of documents) {
-    if (!DATA_KINDS.has(doc.kind)) continue;
-    for (const field of keyFieldsOf(doc.json)) keys.add(field.key);
+    const fields = keyFieldsOfKind(doc.kind);
+    if (fields === undefined) continue;
+    for (const field of keyFieldsOf(doc.json, fields)) keys.add(field.key);
   }
   return keys;
 }
@@ -153,8 +151,10 @@ export const i18nCommand: CommandSpec = {
     "The source language is the one with every id: es when the game has it, else the first language folder.",
     "Missing: a key of the source (or a text the code shows) that a language has no entry for.",
     "Unused: a key that no string, call, prefix of a run-time key or data field of the game uses.",
-    "Untranslated: a text that is the same in a language and in the source. Warnings do not fail the command;",
-    "an error does (a key the code asks for as an id that the source lacks, or a broken catalog).",
+    "Untranslated: a text that is the same in a language and in the source, unless the language lists the key in",
+    "meta.same_as_source. A listed key that no longer exists, or no longer equals the source, is a warning.",
+    "Warnings do not fail the command; an error does (a key the code asks for as an id that the source lacks,",
+    "or a broken catalog).",
   ],
   async run(args, output) {
     if (args.positional.length !== 1) {

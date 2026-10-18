@@ -7,7 +7,7 @@ import { Fields, fieldPath, isRecord, itemPath, Problems } from "./reader";
 import type { TileProperties, TileProperty } from "./types";
 
 /** A colour as Tiled writes it: `#RRGGBB` or `#AARRGGBB`, or "" when the colour is not set. */
-const COLOUR_PATTERN = /^(?:#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8}))?$/;
+export const COLOUR_PATTERN = /^(?:#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8}))?$/;
 
 /** The property types that this reader knows. Any other name is refused as unsupported. */
 const KNOWN_TYPES = new Set(["string", "int", "float", "bool", "color", "file", "object", "class"]);

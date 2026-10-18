@@ -7,6 +7,7 @@ import { parseCatalog } from "@velvet/i18n";
 import { main } from "../cli";
 import { bufferedOutput } from "../output";
 import { checkGame } from "../check/check";
+import { ENGINE_JS_DIR } from "../paths";
 import { copyGame, HELLO_CARDS, readText, tempFolder, writeFiles } from "../test-support";
 
 /** Runs the command and returns its exit code and output. */
@@ -153,5 +154,50 @@ describe("i18n --pseudo", () => {
     expect(real.code).toBe(1);
     expect(real.stderr).toContain("is not a pseudo-locale");
     expect(await readFile(join(folder, "public/data/locales/en/00_ui.json"), "utf8")).toContain('"language": "en"');
+  });
+});
+
+describe("i18n: the texts a language keeps as the source text on purpose", () => {
+  /** Lists keys in the `same_as_source` meta of the English catalog of a copy of the example. */
+  async function markEnglish(folder: string, keys: string[]): Promise<void> {
+    const en = JSON.parse(await readText(folder, "public/data/locales/en/00_ui.json")) as { meta: Record<string, unknown> };
+    en.meta["same_as_source"] = keys;
+    await writeFiles(folder, { "public/data/locales/en/00_ui.json": en });
+  }
+
+  it("reports a text that equals the source as untranslated, until the language marks its key", async () => {
+    const folder = await copyOfExample();
+    const es = JSON.parse(await readText(folder, "public/data/locales/es/00_ui.json")) as { entries: Record<string, unknown> };
+    const en = JSON.parse(await readText(folder, "public/data/locales/en/00_ui.json")) as { entries: Record<string, unknown> };
+    en.entries["hud.menu"] = es.entries["hud.menu"];
+    await writeFiles(folder, { "public/data/locales/en/00_ui.json": en });
+    const flagged = await run(["i18n", folder]);
+    expect(flagged.stdout).toContain('public/data/locales/en: entries["hud.menu"]: warning: en keeps the source text of "hud.menu"');
+
+    await markEnglish(folder, ["hud.menu"]);
+    const marked = await run(["i18n", folder]);
+    expect(marked.code).toBe(0);
+    expect(marked.stdout).not.toContain('entries["hud.menu"]');
+    expect(marked.stdout).toMatch(/^en: \d+ missing, \d+ unused, \d+ untranslated$/mu);
+  });
+
+  it("warns about a marked key that no longer exists, and one whose text no longer equals the source", async () => {
+    const folder = await copyOfExample();
+    await markEnglish(folder, ["no.such.key", "hud.coins"]);
+    const result = await run(["i18n", folder]);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(
+      'public/data/locales/en: meta.same_as_source: warning: en marks "no.such.key" as the source text, but it has no entry for it',
+    );
+    expect(result.stdout).toContain(
+      'public/data/locales/en: meta.same_as_source: warning: en marks "hud.coins" as the source text, but its text is "{count} coins"',
+    );
+  });
+
+  it("reads the visual novel example with no untranslated text, since its English marks two keys", async () => {
+    const result = await run(["i18n", join(ENGINE_JS_DIR, "examples", "hello-vn")]);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("en: 0 missing, 0 unused, 0 untranslated");
+    expect(result.stdout).toContain("hello-vn: ok, 0 errors, 0 warnings");
   });
 });

@@ -21,9 +21,16 @@ export type DocumentKind =
   | "artprep-shots"
   | "artprep-results"
   | "guion"
-  | "locale";
+  | "locale"
+  | "audio-manifest"
+  | "achievement-definitions"
+  | "tile-map"
+  | "tileset";
 
-/** One data document of a game: its file, its text, and for JSON documents the parsed value. */
+/**
+ * One data document of a game: its file, its text, and for a velvet JSON document the parsed value. A Tiled file
+ * (`tile-map`, `tileset`) is read from its text by the tile reader, so its `json` is undefined.
+ */
 export interface GameDocument {
   readonly kind: DocumentKind;
   /** The file, relative to the game folder, with forward slashes. */
@@ -34,7 +41,7 @@ export interface GameDocument {
   readonly name: string;
   /** The text, without a byte order mark. */
   readonly text: string;
-  /** The parsed JSON of a JSON document. Undefined for a guion, which is Markdown. */
+  /** The parsed JSON of a velvet JSON document. Undefined for a guion (Markdown) and for a Tiled file. */
   readonly json: unknown;
 }
 
@@ -70,6 +77,7 @@ const DATA_FOLDERS: ReadonlySet<string> = new Set([
   "data",
   "locales",
   "art",
+  "audio",
   "characters",
   "artprep",
   "stacks",
@@ -109,9 +117,24 @@ function documentKind(format: string, kind: unknown): DocumentKind | "skip" | un
       return kind === "job" ? "skip" : undefined;
     case "velvet-locale":
       return "locale";
+    case "velvet-audio":
+      return "audio-manifest";
+    case "velvet-achievements":
+      if (kind === "definitions") return "achievement-definitions";
+      return kind === "progress" ? "skip" : undefined;
     default:
       return undefined;
   }
+}
+
+/**
+ * The kind of a Tiled file, from its `type` field: a map or a tileset. Any other value is not a Tiled file.
+ * @param type - the `type` field of a JSON document that has no velvet `format`.
+ */
+function tiledKindOf(type: unknown): DocumentKind | undefined {
+  if (type === "map") return "tile-map";
+  if (type === "tileset") return "tileset";
+  return undefined;
 }
 
 /**
@@ -194,8 +217,9 @@ async function readText(file: string, abs: string, issues: Issue[]): Promise<str
  * Finds the data of a game folder.
  *
  * It reads velvet-game.json and its `data` hints, walks the folder (or the hinted roots), and sorts
- * each file by content: a JSON file by its `format` and `kind`, a Markdown file inside a `guion`
- * folder as a guion. Files whose names start with `_` are tooling files and are skipped.
+ * each file by content: a JSON file by its `format` and `kind`, a Tiled file (`.tmj`, `.tsj`, or a JSON file
+ * whose `type` is `map` or `tileset`) as a tile document, a Markdown file inside a `guion` folder as a
+ * guion. Files whose names start with `_` are tooling files and are skipped.
  *
  * @param folder - the game folder, as given on the command line.
  * @returns what was found, with every problem met on the way.
@@ -250,6 +274,13 @@ export async function discoverGame(folder: string): Promise<GameDiscovery> {
       documents.push({ kind: "guion", file: file.file, folder: folderPath, name: file.name, text, json: undefined });
       continue;
     }
+    if (file.name.endsWith(".tmj") || file.name.endsWith(".tsj")) {
+      // A Tiled file is found by its extension. Its text goes to the tile reader, which reports its own problems.
+      const text = await readText(file.file, file.abs, issues);
+      const kind: DocumentKind = file.name.endsWith(".tmj") ? "tile-map" : "tileset";
+      documents.push({ kind, file: file.file, folder: folderPath, name: file.name, text, json: undefined });
+      continue;
+    }
     if (!file.name.endsWith(".json")) continue;
 
     const text = await readText(file.file, file.abs, issues);
@@ -265,7 +296,14 @@ export async function discoverGame(folder: string): Promise<GameDiscovery> {
     }
     if (typeof json !== "object" || json === null || Array.isArray(json)) continue;
     const format = Reflect.get(json, "format");
-    if (typeof format !== "string" || !format.startsWith("velvet-")) continue;
+    if (typeof format !== "string" || !format.startsWith("velvet-")) {
+      // A JSON file with no velvet format is a Tiled map or tileset when its `type` says so, and otherwise data.
+      const tiled = tiledKindOf(Reflect.get(json, "type"));
+      if (tiled !== undefined) {
+        documents.push({ kind: tiled, file: file.file, folder: folderPath, name: file.name, text, json: undefined });
+      }
+      continue;
+    }
 
     const kind = documentKind(format, Reflect.get(json, "kind"));
     if (kind === "skip") continue;

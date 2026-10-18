@@ -1,25 +1,25 @@
 {
   "height": 1,
   "infinite": false,
-  "orientation": "orthogonal",
   "layers": [
     {
-      "data": [
-        1,
-        0
-      ],
+      "data": [1, 0],
       "height": 1,
       "id": 1,
       "name": "ground",
       "opacity": 1,
+      "parallaxx": "0.5",
       "type": "tilelayer",
       "visible": true,
       "width": 2,
       "x": 0,
-      "y": 0,
-      "parallaxx": 0.5
+      "y": 0
     }
   ],
+  "nextlayerid": 2,
+  "nextobjectid": 1,
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
   "tilesets": [
     {
       "columns": 4,

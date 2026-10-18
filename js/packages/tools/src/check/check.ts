@@ -17,6 +17,10 @@ export interface CheckCounts {
   readonly stat_schemas: number;
   readonly characters: number;
   readonly art_manifests: number;
+  readonly audio_manifests: number;
+  readonly achievement_definitions: number;
+  readonly tile_maps: number;
+  readonly tilesets: number;
   readonly artprep: number;
   readonly guiones: number;
   readonly locale_files: number;
@@ -58,6 +62,10 @@ function countDocuments(documents: readonly GameDocument[], languages: number): 
     stat_schemas: of("character-schema"),
     characters: of("character-sheet"),
     art_manifests: of("art-manifest"),
+    audio_manifests: of("audio-manifest"),
+    achievement_definitions: of("achievement-definitions"),
+    tile_maps: of("tile-map"),
+    tilesets: of("tileset"),
     artprep: documents.filter((doc) => ARTPREP_KINDS.includes(doc.kind)).length,
     guiones: of("guion"),
     locale_files: of("locale"),
@@ -108,7 +116,7 @@ export async function checkGame(folder: string): Promise<CheckResult> {
   const issues: Issue[] = [...discovery.issues];
   const hints = discovery.info?.hints ?? NO_HINTS;
 
-  const validated = await validateDocuments(discovery.documents);
+  const validated = await validateDocuments(folder, discovery.documents);
   issues.push(...validated.issues);
 
   const locales = loadLocales(discovery.documents, hints);

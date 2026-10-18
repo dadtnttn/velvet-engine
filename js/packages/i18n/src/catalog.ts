@@ -48,7 +48,7 @@ export interface ParsedCatalog {
 const TOP_LEVEL_FIELDS = new Set(["format", "version", "language", "note", "meta", "entries"]);
 
 /** The fields the format defines in a `meta` block. */
-const META_FIELDS = new Set(["name", "script", "direction", "font", "shaping"]);
+const META_FIELDS = new Set(["name", "script", "direction", "font", "shaping", "same_as_source"]);
 
 const SCRIPT = /^[A-Z][a-z]{3}$/u;
 const LETTER = /\p{L}/u;
@@ -132,7 +132,14 @@ function readMeta(raw: unknown, file: string, issues: LocaleIssue[]): LocaleMeta
     issues.push(makeIssue("error", "meta", `${file}: meta must be a JSON object`, { file }));
     return {};
   }
-  const meta: { name?: string; font?: string; script?: string; direction?: Direction; shaping?: boolean } = {};
+  const meta: {
+    name?: string;
+    font?: string;
+    script?: string;
+    direction?: Direction;
+    shaping?: boolean;
+    sameAsSource?: string[];
+  } = {};
   const bad = (field: string, why: string): void => {
     issues.push(makeIssue("error", "meta", `${file}: meta.${field} ${why}`, { file }));
   };
@@ -161,9 +168,30 @@ function readMeta(raw: unknown, file: string, issues: LocaleIssue[]): LocaleMeta
         if (typeof value === "boolean") meta.shaping = value;
         else bad(field, "must be true or false");
         break;
+      case "same_as_source": {
+        const keys = keyListOf(value);
+        if (keys === undefined) bad(field, "must be a list of keys, each a non-empty text");
+        else meta.sameAsSource = keys;
+        break;
+      }
     }
   }
   return meta;
+}
+
+/**
+ * Reads a list of keys, such as `same_as_source`: an array in which every item is a non-empty text.
+ * @param value - the JSON value.
+ * @returns the keys, or undefined when the value is not such a list.
+ */
+function keyListOf(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const keys: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || item === "") return undefined;
+    keys.push(item);
+  }
+  return keys;
 }
 
 /** Compiles one entry: a plain string, or a plural object. */

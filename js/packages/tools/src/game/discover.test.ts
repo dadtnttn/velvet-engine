@@ -89,6 +89,39 @@ describe("discoverGame", () => {
     expect(discovery.issues.map((issue) => `${issue.severity} ${issue.code}`)).toEqual(["warning unknown-document"]);
   });
 
+  it("reads the Tiled files by their extension, and a JSON file by its type, and leaves other JSON as data", async () => {
+    const folder = await tempFolder();
+    await writeFiles(folder, {
+      "velvet-game.json": MANIFEST,
+      "public/maps/town.tmj": { type: "map" },
+      "public/maps/tilesets/forest.tsj": { type: "tileset" },
+      "public/maps/old.json": { type: "map", width: 1 },
+      "public/data/plain.json": { type: "item", name: "lamp" },
+      "public/audio/manifest.json": { format: "velvet-audio", version: 1, sounds: [] },
+    });
+    const discovery = await discoverGame(folder);
+    expect(discovery.issues).toEqual([]);
+    expect(documentsOf(discovery)).toEqual([
+      "audio-manifest public/audio/manifest.json",
+      "tile-map public/maps/old.json",
+      "tileset public/maps/tilesets/forest.tsj",
+      "tile-map public/maps/town.tmj",
+    ]);
+  });
+
+  it("reports a broken JSON file in the audio folder, which holds sounds, but not one elsewhere", async () => {
+    const folder = await tempFolder();
+    await writeFiles(folder, {
+      "velvet-game.json": MANIFEST,
+      "public/audio/manifest.json": "{ nope",
+      "public/tools/notes.json": "{ nope",
+    });
+    const discovery = await discoverGame(folder);
+    expect(discovery.issues.map((issue) => `${issue.severity} ${issue.code} ${issue.file}`)).toEqual([
+      "error json public/audio/manifest.json",
+    ]);
+  });
+
   it("searches only the hinted roots, and reports a root that does not exist", async () => {
     const folder = await tempFolder();
     await writeFiles(folder, {

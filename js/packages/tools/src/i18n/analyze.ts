@@ -19,7 +19,10 @@ export interface LanguageCoverage {
   readonly missing: readonly string[];
   /** Keys in this language that no code, string or data uses. */
   readonly unused: readonly string[];
-  /** Keys whose text is the same as the source text, in a language that is not the source. */
+  /**
+   * Keys whose text is the same as the source text, in a language that is not the source, and that the language does
+   * not mark as the same on purpose (`meta.sameAsSource`).
+   */
   readonly untranslated: readonly string[];
 }
 
@@ -51,7 +54,26 @@ export function textKeysOf(scan: CodeScan, source: LoadedLocale | undefined): st
 }
 
 /**
- * Compares the languages with each other and with the code.
+ * Why a key that a language marks as the same as the source text no longer is: the language has no entry for it, the
+ * source has no entry for an id, or the language's text is not the source's. Undefined when the mark holds.
+ * @param key - the marked key.
+ * @param language - the language that marks it.
+ * @param source - the source language.
+ */
+function staleMark(key: string, language: LoadedLocale, source: LoadedLocale): string | undefined {
+  const translated = language.locale.values.get(key);
+  if (translated === undefined) return `marks "${key}" as the source text, but it has no entry for it`;
+  if (isIdKey(key) && !source.locale.has(key)) return `marks "${key}", which the source language does not have`;
+  const sourceValue = source.locale.values.get(key);
+  const sourceText = sourceValue === undefined ? key : textOf(sourceValue);
+  const text = textOf(translated);
+  if (text === sourceText) return undefined;
+  return `marks "${key}" as the source text, but its text is "${text}" and the source's is "${sourceText}"`;
+}
+
+/**
+ * Compares the languages with each other and with the code. A key that a language marks as the same as the source
+ * text (`meta.sameAsSource`) is not untranslated; a mark that no longer holds is a warning.
  * @param locales - the loaded languages, with their own load problems.
  * @param scan - what the code uses.
  * @param dataKeys - the keys that the game's data names in its key fields.
@@ -94,6 +116,8 @@ export function coverageOf(locales: LoadedLocales, scan: CodeScan, dataKeys: Rea
     const { locale } = language;
     const missing = isSource ? [] : [...new Set(expected)].filter((key) => !locale.has(key));
     const unused = locale.keys().filter((key) => !used(key));
+    // The source language has no marks to check: a mark names a key that another language keeps as its source text.
+    const marked = new Set(isSource ? [] : (locale.meta.sameAsSource ?? []));
     const untranslated: string[] = [];
     if (!isSource && source !== undefined) {
       for (const key of locale.keys()) {
@@ -101,7 +125,7 @@ export function coverageOf(locales: LoadedLocales, scan: CodeScan, dataKeys: Rea
         const sourceText = sourceValue === undefined ? key : textOf(sourceValue);
         const translated = locale.values.get(key);
         if (translated === undefined) continue;
-        if (textOf(translated) === sourceText && /\p{L}/u.test(sourceText)) untranslated.push(key);
+        if (textOf(translated) === sourceText && /\p{L}/u.test(sourceText) && !marked.has(key)) untranslated.push(key);
       }
     }
     languages.push({
@@ -123,6 +147,20 @@ export function coverageOf(locales: LoadedLocales, scan: CodeScan, dataKeys: Rea
     }
     for (const key of coverage.untranslated) {
       issues.push(makeIssue("warning", coverage.folder, `entries["${key}"]`, "untranslated", `${coverage.tag} keeps the source text of "${key}"`));
+    }
+  }
+
+  // A mark that no longer holds is a warning, so that the list of marks stays true.
+  if (source !== undefined) {
+    for (const language of locales.languages) {
+      if (language.tag === source.tag) continue;
+      for (const key of [...new Set(language.locale.meta.sameAsSource ?? [])].sort()) {
+        const problem = staleMark(key, language, source);
+        if (problem !== undefined) {
+          const message = `${language.tag} ${problem}`;
+          issues.push(makeIssue("warning", language.folder, "meta.same_as_source", "stale-same-as-source", message));
+        }
+      }
     }
   }
   return { languages, issues };

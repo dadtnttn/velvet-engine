@@ -51,18 +51,28 @@ export interface NumberOptions {
   readonly default?: number;
 }
 
-/** The fields of one JSON object, read with checks. */
+/**
+ * The fields of one JSON object, read with checks. The class assigns its fields in the constructor, not through
+ * parameter properties: the velvet-js bin runs the sources with Node's type stripping, which refuses those.
+ */
 export class Fields {
+  /** The JSON object. */
+  readonly source: Record<string, unknown>;
+  /** The object's path in the document, "" for the top. */
+  readonly path: string;
+  /** Where the problems go. */
+  private readonly problems: Problems;
+
   /**
    * @param problems - where the problems go.
    * @param source - the JSON object.
    * @param path - the object's path in the document, "" for the top.
    */
-  constructor(
-    private readonly problems: Problems,
-    readonly source: Record<string, unknown>,
-    readonly path: string,
-  ) {}
+  constructor(problems: Problems, source: Record<string, unknown>, path: string) {
+    this.problems = problems;
+    this.source = source;
+    this.path = path;
+  }
 
   /** The path of one of this object's fields. */
   at(key: string): string {

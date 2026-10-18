@@ -108,7 +108,7 @@ export class Locale {
         );
         continue;
       }
-      meta = { ...meta, ...parsed.meta };
+      meta = mergeMeta(meta, parsed.meta);
       for (const [key, entry] of parsed.entries) {
         compiled.set(key, entry);
         fileOf.set(key, file.name);
@@ -198,6 +198,18 @@ export class Locale {
     }
     return renderTemplate(template, lookupFor(args, count));
   }
+}
+
+/**
+ * Merges the meta block of one file into the block of the files read before it. A field set later wins, except
+ * `sameAsSource`, whose lists are joined, so that each file may name its own keys.
+ * @param before - the block so far.
+ * @param after - the block of the file read next.
+ */
+function mergeMeta(before: LocaleMeta, after: LocaleMeta): LocaleMeta {
+  const merged: LocaleMeta = { ...before, ...after };
+  if (before.sameAsSource === undefined || after.sameAsSource === undefined) return merged;
+  return { ...merged, sameAsSource: [...new Set([...before.sameAsSource, ...after.sameAsSource])] };
 }
 
 /**

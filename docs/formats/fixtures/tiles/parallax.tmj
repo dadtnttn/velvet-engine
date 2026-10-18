@@ -1,0 +1,129 @@
+{
+  "compressionlevel": -1,
+  "height": 2,
+  "infinite": false,
+  "layers": [
+    {
+      "data": [1, 1, 1, 1, 1, 1, 1, 1],
+      "height": 2,
+      "id": 1,
+      "name": "sky",
+      "opacity": 1,
+      "parallaxx": 0.5,
+      "parallaxy": 0.25,
+      "tintcolor": "#80a0c0ff",
+      "type": "tilelayer",
+      "visible": true,
+      "width": 4,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": 2,
+      "layers": [
+        {
+          "data": [2, 2, 2, 2, 2, 2, 2, 2],
+          "height": 2,
+          "id": 3,
+          "name": "hills",
+          "opacity": 1,
+          "parallaxx": 0.5,
+          "tintcolor": "#ff00ff00",
+          "type": "tilelayer",
+          "visible": true,
+          "width": 4,
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "name": "far",
+      "opacity": 1,
+      "parallaxx": 0.5,
+      "type": "group",
+      "visible": true,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "data": [4, 4, 4, 4, 4, 4, 4, 4],
+      "height": 2,
+      "id": 4,
+      "name": "ground",
+      "opacity": 1,
+      "type": "tilelayer",
+      "visible": true,
+      "width": 4,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "draworder": "topdown",
+      "id": 5,
+      "name": "posts",
+      "objects": [
+        {
+          "height": 16,
+          "id": 1,
+          "name": "lamp",
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 16,
+          "x": 16,
+          "y": 16
+        }
+      ],
+      "opacity": 1,
+      "parallaxx": 2,
+      "parallaxy": 2,
+      "tintcolor": "#ffff0000",
+      "type": "objectgroup",
+      "visible": true,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": 6,
+      "image": "frame.png",
+      "imageheight": 32,
+      "imagewidth": 64,
+      "name": "frame",
+      "opacity": 1,
+      "parallaxx": 0,
+      "parallaxy": 0,
+      "repeatx": false,
+      "repeaty": false,
+      "tintcolor": "#40000000",
+      "type": "imagelayer",
+      "visible": true,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "nextlayerid": 7,
+  "nextobjectid": 2,
+  "orientation": "orthogonal",
+  "parallaxoriginx": 16,
+  "parallaxoriginy": 8,
+  "renderorder": "right-down",
+  "tilesets": [
+    {
+      "columns": 4,
+      "firstgid": 1,
+      "image": "terrain.png",
+      "imageheight": 32,
+      "imagewidth": 64,
+      "margin": 0,
+      "name": "terrain",
+      "spacing": 0,
+      "tilecount": 8,
+      "tileheight": 16,
+      "tilewidth": 16
+    }
+  ],
+  "tilewidth": 16,
+  "tileheight": 16,
+  "type": "map",
+  "version": "1.10",
+  "width": 4
+}

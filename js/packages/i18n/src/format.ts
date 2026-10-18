@@ -29,6 +29,11 @@ export interface LocaleMeta {
   readonly font?: string;
   /** True when the text needs complex shaping: joined or reordered letters, combining marks. */
   readonly shaping?: boolean;
+  /**
+   * The keys that this language keeps as the source text on purpose, such as `Esc` or a brand name. The tooling does
+   * not report them as untranslated. The lists of all the files of the language are joined.
+   */
+  readonly sameAsSource?: readonly string[];
 }
 
 /** The forms of a plural entry, keyed by CLDR category. `other` is always present. */

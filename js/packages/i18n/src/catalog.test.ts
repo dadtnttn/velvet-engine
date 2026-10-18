@@ -72,6 +72,20 @@ describe("parseCatalog: the meta block", () => {
     expect(parsed.meta).toEqual({});
     expect(parsed.issues.map((issue) => issue.code)).toEqual(["meta"]);
   });
+
+  it("reads same_as_source as a list of keys, without an unknown-field warning", () => {
+    const parsed = parseCatalog(file({ "game.key.menu": "Esc" }, { meta: { same_as_source: ["game.key.menu", "Esc"] } }));
+    expect(parsed.meta).toEqual({ sameAsSource: ["game.key.menu", "Esc"] });
+    expect(parsed.issues).toEqual([]);
+  });
+
+  it("refuses a same_as_source that is not a list of non-empty texts, and keeps the other fields", () => {
+    for (const value of ["game.key.menu", [""], ["ok", 3], [{ key: "a" }]]) {
+      const parsed = parseCatalog(file({ "a.b": "x" }, { meta: { same_as_source: value, name: "Ok" } }));
+      expect(parsed.meta, JSON.stringify(value)).toEqual({ name: "Ok" });
+      expect(parsed.issues.map((issue) => `${issue.severity}:${issue.code}`), JSON.stringify(value)).toEqual(["error:meta"]);
+    }
+  });
 });
 
 describe("parseCatalog: the entries", () => {

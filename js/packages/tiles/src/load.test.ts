@@ -409,4 +409,46 @@ describe("tile data and tilesets", () => {
     const error = await refusal(map({ tilesets: [terrainTileset({ name: "" })] }));
     expect(error.issues).toContainEqual(expect.objectContaining({ code: "value", path: "tilesets[0].name" }));
   });
+
+  it("keeps the source path of an external tileset, and none for an embedded one", async () => {
+    const loaded = await loadTileMap(
+      map({ tilesets: [terrainTileset({ name: "inner" }), { firstgid: 9, source: "tilesets/props.tsj" }] }),
+      { loadTileset: async () => terrainTileset({ name: "props" }) },
+    );
+    expect(loaded.tilesets.map((tileset) => [tileset.name, tileset.source])).toEqual([
+      ["inner", undefined],
+      ["props", "tilesets/props.tsj"],
+    ]);
+  });
+});
+
+describe("layer parallax, tint and the parallax origin", () => {
+  it("gives a map with no settings an origin of 0 and 0, and layers no parallax and no tint", async () => {
+    const loaded = await loadTileMap(map());
+    expect(loaded.parallaxOrigin).toEqual({ x: 0, y: 0 });
+    expect(findLayer(loaded, "ground")).toMatchObject({ parallax: { x: 1, y: 1 }, tint: null });
+  });
+
+  it("reads the parallax origin of the map", async () => {
+    const loaded = await loadTileMap(map({ extra: { parallaxoriginx: 32, parallaxoriginy: -8 } }));
+    expect(loaded.parallaxOrigin).toEqual({ x: 32, y: -8 });
+  });
+
+  it("multiplies the parallax factors of nested groups into their layers, and keeps a group's tint to the group", async () => {
+    const cells = Array.from({ length: 12 }, () => 1);
+    const inner = tileLayer("inner", 4, 3, cells, { parallaxx: 0.5, parallaxy: 2 });
+    const middle = { id: 3, name: "middle", type: "group", visible: true, opacity: 1, x: 0, y: 0, parallaxx: 0.5, layers: [inner] };
+    const outer = { id: 2, name: "outer", type: "group", visible: true, opacity: 1, x: 0, y: 0, parallaxx: 0.5, tintcolor: "#ff0000ff", layers: [middle] };
+    const loaded = await loadTileMap(map({ layers: [outer] }));
+    expect(findLayer(loaded, "inner")).toMatchObject({ parallax: { x: 0.125, y: 2 }, tint: null });
+    expect(findLayer(loaded, "outer")).toMatchObject({ parallax: { x: 0.5, y: 1 }, tint: "#ff0000ff" });
+  });
+
+  it("keeps a layer's tint as written, and refuses a tint that is not a colour, at the layer's tintcolor", async () => {
+    const cells = Array.from({ length: 12 }, () => 1);
+    const written = await loadTileMap(map({ layers: [tileLayer("ground", 4, 3, cells, { tintcolor: "#80a0c0" })] }));
+    expect(findLayer(written, "ground")).toMatchObject({ tint: "#80a0c0" });
+    const error = await refusal(map({ layers: [tileLayer("ground", 4, 3, cells, { tintcolor: "red" })] }));
+    expect(error.issues).toContainEqual(expect.objectContaining({ code: "value", path: "layers[0].tintcolor" }));
+  });
 });

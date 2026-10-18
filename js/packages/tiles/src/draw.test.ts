@@ -284,3 +284,107 @@ describe("opacity and state", () => {
     expect(() => drawTileLayer(recorder, loaded, layer, images, wholeMap, Infinity)).toThrow(TilesError);
   });
 });
+
+describe("parallax and tint", () => {
+  /** A recorder whose context holds the camera's transform for a view at (x, y), as drawing expects. */
+  function cameraAt(x: number, y: number): Recorder {
+    const recorder = new Recorder();
+    recorder.transform(1, 0, 0, 1, -x, -y);
+    return recorder;
+  }
+
+  /** Where the top-left corner of each drawn tile lands on the device, sorted by x and then y. */
+  function devicePlaces(recorder: Recorder): [number, number][] {
+    return recorder.draws.map((draw) => deviceOf(draw, 0, 0)).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  }
+
+  const ones = Array.from({ length: 100 }, () => 1);
+
+  it("scrolls a layer by its parallax factor, and keeps its tiles where the map puts them", async () => {
+    const { loaded, layer } = await loadWith(tileLayer("far", 10, 10, ones, { parallaxx: 0.5 }));
+    const recorder = cameraAt(64, 0);
+    drawTileLayer(recorder, loaded, layer, images, { x: 64, y: 0, width: 32, height: 32 }, 0);
+    // With the camera at x 64 and a factor of 0.5, the layer shows the part from x 32: its tiles at x 32 and 48
+    // land on the left of the screen.
+    expect(devicePlaces(recorder)).toEqual([
+      [0, 0],
+      [0, 16],
+      [16, 0],
+      [16, 16],
+    ]);
+  });
+
+  it("keeps a layer whose factor is 0 in place, whatever the camera does", async () => {
+    const { loaded, layer } = await loadWith(tileLayer("sky", 10, 10, ones, { parallaxx: 0, parallaxy: 0 }));
+    const recorder = cameraAt(200, 100);
+    drawTileLayer(recorder, loaded, layer, images, { x: 200, y: 100, width: 32, height: 32 }, 0);
+    expect(devicePlaces(recorder)).toEqual([
+      [0, 0],
+      [0, 16],
+      [16, 0],
+      [16, 16],
+    ]);
+  });
+
+  it("draws a parallax layer where the map puts it when the camera is on the origin", async () => {
+    const { loaded, layer } = await loadWith(tileLayer("far", 10, 10, ones, { parallaxx: 0.5, parallaxy: 0.5 }));
+    const recorder = cameraAt(64, 32);
+    drawTileLayer(recorder, loaded, layer, images, { x: 64, y: 32, width: 32, height: 32 }, 0, { x: 64, y: 32 });
+    expect(devicePlaces(recorder)).toEqual([
+      [0, 0],
+      [0, 16],
+      [16, 0],
+      [16, 16],
+    ]);
+  });
+
+  it("uses the map's parallax origin when the call gives none, and the given one when it does", async () => {
+    const loaded = await loadTileMap(
+      map({
+        width: 10,
+        height: 10,
+        layers: [tileLayer("far", 10, 10, ones, { parallaxx: 0.5 })],
+        extra: { parallaxoriginx: 64 },
+      }),
+    );
+    const layer = findLayer(loaded, "far") as TileLayer;
+    expect(loaded.parallaxOrigin).toEqual({ x: 64, y: 0 });
+    // The origin is at x 64, so the camera at x 64 does not scroll the layer: its tiles at x 64 and 80 are on the left.
+    const atOrigin = cameraAt(64, 0);
+    drawTileLayer(atOrigin, loaded, layer, images, { x: 64, y: 0, width: 32, height: 32 }, 0);
+    expect(devicePlaces(atOrigin)).toEqual([
+      [0, 0],
+      [0, 16],
+      [16, 0],
+      [16, 16],
+    ]);
+    // With the origin at 0 instead, the same view shows the layer at half speed, as in the first case.
+    const atZero = cameraAt(64, 0);
+    drawTileLayer(atZero, loaded, layer, images, { x: 64, y: 0, width: 32, height: 32 }, 0, { x: 0, y: 0 });
+    expect(devicePlaces(atZero)).toEqual([
+      [0, 0],
+      [0, 16],
+      [16, 0],
+      [16, 16],
+    ]);
+    expect(atZero.draws.map((draw) => draw.dest.slice(0, 2)).sort((a, b) => a[0]! - b[0]! || a[1]! - b[1]!)).toEqual([
+      [32, 0],
+      [32, 16],
+      [48, 0],
+      [48, 16],
+    ]);
+  });
+
+  it("does not apply a tint: a tinted layer is drawn with its opacity alone, and the tint stays data", async () => {
+    const { loaded, layer } = await loadWith(tileLayer("ground", 1, 1, [1], { tintcolor: "#80ff0000" }));
+    const recorder = new Recorder();
+    drawTileLayer(recorder, loaded, layer, images, wholeMap, 0);
+    expect(recorder.draws.map((draw) => draw.alpha)).toEqual([1]);
+    expect(layer.tint).toBe("#80ff0000");
+  });
+
+  it("refuses a parallax origin that is not a finite number", async () => {
+    const { loaded, layer } = await loadWith(tileLayer("ground", 1, 1, [1]));
+    expect(() => drawTileLayer(new Recorder(), loaded, layer, images, wholeMap, 0, { x: Number.NaN, y: 0 })).toThrow(TilesError);
+  });
+});

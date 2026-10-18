@@ -36,7 +36,9 @@ a code and, when it is about a value in the document, a path (see [Validation](#
 | Tile layers | Read. `encoding` `csv` (default) or `base64`; `compression` empty, `gzip` or `zlib`. `zstd` is refused. |
 | Object layers | Read: rectangles, points, ellipses, polygons, polylines, tile objects and text objects. |
 | Image layers | Read as data (the picture's path, repeat flags and transparent colour). |
-| Group layers | Read. Their visibility, opacity and offsets are combined into the layers they hold. |
+| Group layers | Read. Their visibility, opacity, offsets and parallax factors are combined into the layers they hold. |
+| Layer `parallaxx`, `parallaxy`, `tintcolor` | Read on every layer. The factors scroll tile layers when drawn; the tint is the layer's own, kept as data (see [Layers](#layers)). |
+| Map `parallaxoriginx`, `parallaxoriginy` | Read as the parallax origin of the map (see [Drawing](#drawing)). |
 | Tilesets | Read with one picture each: name, tile size, columns, tile count, margin, spacing, tile offset. |
 | Tile properties, collision groups and animations | Read per tile (see [Tilesets](#tilesets)). |
 | Custom properties | Read with their types: string (the default), int, float, bool, color, file, object and class. |
@@ -47,8 +49,7 @@ a code and, when it is about a value in the document, a path (see [Validation](#
 
 A refused part gives the code `unsupported`, and the path names the field.
 
-- A map that is not `orthogonal`, or a layer with `parallaxx` or `parallaxy` other than 1, or a layer with a
-  non-empty `tintcolor`.
+- A map that is not `orthogonal`.
 - Compression `zstd`.
 - An image collection tileset (a tileset with no `image`, whose tiles each have their own `image`), and an
   image tile in a tileset with a picture.
@@ -59,8 +60,7 @@ A refused part gives the code `unsupported`, and the path names the field.
 ### Read and ignored
 
 The reader accepts these fields and does not use them: `version`, `tiledversion`, `renderorder`,
-`compressionlevel`, `nextlayerid`, `nextobjectid`, the layer `x` and `y` of tile layers, the map's
-`parallaxoriginx` and `parallaxoriginy` (they only matter with parallax, which is refused), a tile's
+`compressionlevel`, `nextlayerid`, `nextobjectid`, the layer `x` and `y` of tile layers, a tile's
 `probability` and `terrain`, and the `wangsets`, `grid`, `transformations` and `terrains` of a tileset. A tile
 object's `visible` and an object's `visible` are read, but collision does not use them.
 
@@ -96,6 +96,16 @@ Every layer has the values that it is drawn with. A group's own values are combi
 - `visible`: true only when the layer and every group above it are visible.
 - `opacity`: the product of the layer's opacity and the opacities of its groups.
 - `offsetX` and `offsetY`: the sum of the layer's offset and the offsets of its groups.
+- `parallax` (`{ x, y }`): the product of the layer's factors, `parallaxx` and `parallaxy` (1 when left out), and of
+  those of its groups. A factor may be any finite number. Drawing scrolls a tile layer by its factors (see
+  [Drawing](#drawing)).
+
+The **tint** of a layer is its own `tintcolor`, as `#RRGGBB` or `#AARRGGBB` text, or null when the layer has none
+(`""` is no tint). A value that is not a colour is a `value` error. A group's tint is not passed to the layers it
+holds, so the game reads each group's tint from the group. The tint is data: drawing does not apply it, and the game
+decides what it does with it.
+
+Parallax and tint are read on object layers, image layers and groups too, as data for the game.
 
 A tile layer of a finite map has one chunk at 0,0 that is the size of the map, and its size must equal the
 map's size. A tile layer of an infinite map has one chunk per block: `x`, `y` (which may be negative), `width`,
@@ -167,6 +177,11 @@ fields are read as follows:
 
   A tile entry that says nothing is not kept. Two entries with one `id` are refused (`duplicate`).
 
+An external tileset keeps its `source`: the path as the map writes it, relative to the map's folder. An embedded
+tileset has none (`source` is undefined). The `image` of a tileset is relative to the tileset's own file: the `.tsj`
+file for an external tileset, and the map for an embedded one. A tool that checks the pictures of a game must resolve
+it that way.
+
 The **animation** of a tile loops over the total length of its frames. A tile shows the frame that is current
 at the time, so `timeMs` 0 shows the first frame, and any finite time, negative ones included, is allowed.
 
@@ -202,8 +217,8 @@ whatever its visibility.
   property named by `oneWayProperty`, on a tile that is also solid.
 - The grid covers the map's cells. An infinite map gets a grid over the bounds of its chunks. A cell outside
   the grid is empty. A grid of more than 16 777 216 cells is refused.
-- Layer offsets are **ignored** by collision. Drawing shifts a layer by its offset, but the collision of its
-  cells stays where the map puts them.
+- Layer offsets, parallax and tint are **ignored** by collision. Drawing shifts a layer by its offset and scrolls it
+  by its parallax, but the collision of its cells stays where the map puts them.
 
 A grid has a `kindAt` (empty, solid or partial), an `isOneWayAt`, and a `partsAt` for each cell.
 
@@ -267,11 +282,18 @@ with a search made for one call.
 
 ## Drawing
 
-`drawTileLayer(ctx, map, layer, images, view, timeMs)` draws the visible tiles of one tile layer to a 2D
+`drawTileLayer(ctx, map, layer, images, view, timeMs, origin?)` draws the visible tiles of one tile layer to a 2D
 context.
 
 - The context already holds the **camera transform**. Drawing uses map pixels, and `view` is the part of the
   map that is visible (`x`, `y`, `width`, `height`). Only tiles that touch the view are drawn.
+- **Parallax.** A layer whose factors are not both 1 scrolls at its own speed. `origin` is the parallax origin,
+  a point in map pixels, and it defaults to the map's `parallaxOrigin`. The part of the layer that is visible is
+  the view moved toward the origin by the factor on each axis: `origin + (view - origin) × factor`. The tiles keep
+  their places on the map, and drawing moves the context by the difference between the view and that part. With
+  the camera on the origin, every layer is drawn where the map puts it. A factor of 0 keeps the layer where the
+  origin puts it, and a factor of 1 leaves the view as it is.
+- **Tint.** Drawing does not apply the tint of a layer (see [Layers](#layers)).
 - A layer that is hidden, or that has no opacity, draws nothing. Otherwise the layer's opacity multiplies the
   context's alpha, and the state is restored when the layer is done, even when drawing fails.
 - A tile is drawn from its picture rectangle (the margin, the spacing and the local id in the picture) to its
@@ -317,8 +339,9 @@ rule above, is a new version. A new optional field that the reader may ignore do
   flips, the chunks of an infinite layer, the object shapes and some named objects. The cases cover the csv,
   base64, gzip and zlib encodings of one map (`csv.tmj`, `base64.tmj`, `gzip.tmj`, `zlib.tmj`), flips
   (`flips.tmj`), an infinite map (`infinite.tmj`), an external tileset with a second embedded one
-  (`external.tmj` and `tilesets/forest.tsj`), every object shape with typed properties (`objects.tmj`), and
-  nested groups with their combined opacity and offsets (`groups.tmj`). The tile animations and the collision
+  (`external.tmj` and `tilesets/forest.tsj`), every object shape with typed properties (`objects.tmj`), nested
+  groups with their combined opacity, offsets and parallax factors (`groups.tmj`), and the parallax factors, tints
+  and parallax origin of each kind of layer (`parallax.tmj`). The tile animations and the collision
   groups of the tilesets are checked too.
 - `invalid`: each file is a small map with one deliberate problem. Each case states the code, and the path
   where the case has one.

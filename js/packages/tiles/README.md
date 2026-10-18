@@ -6,7 +6,8 @@ to a 2D canvas. It has no dependencies. The file format, the rules of each part 
 `docs/formats/TILEMAP.md`, with the conformance cases in `docs/formats/fixtures/tiles/`.
 
 - **Loading** (`loadTileMap`): the map text or object, its embedded and external tilesets (through a loader
-  callback), its layers with their effective visibility, opacity and offsets, typed custom properties, object
+  callback), its layers with their effective visibility, opacity, offsets and parallax factors, each layer's own
+  tint (kept as data), typed custom properties, object
   shapes, tile flips, and the tile properties, collision groups and animations. Compressed data (gzip and zlib)
   is decoded with the platform's `DecompressionStream`, so loading is asynchronous. A refused map reports every
   problem, each with a code and a path such as `layers[2].data`.
@@ -16,8 +17,8 @@ to a 2D canvas. It has no dependencies. The file format, the rules of each part 
   reaches. It reports the contacts on each side and the cells that stopped it.
 - **Paths** (`PathSearch`, `findPath`): A* over the grid, in four or eight directions, with costs, a node limit,
   and the same path for the same input. A `PathSearch` can be kept and reused.
-- **Drawing** (`drawTileLayer`): the visible tiles of one layer, with flips and animation, on a context that
-  already has the camera transform.
+- **Drawing** (`drawTileLayer`): the visible tiles of one layer, with flips, animation and parallax (scrolled about
+  the map's parallax origin, or one given), on a context that already has the camera transform.
 - **Queries**: `findLayer`, `tileLayers`, `resolveGid` and `animatedLocalId`.
 
 ## Usage
@@ -66,7 +67,8 @@ to a 2D canvas. It has no dependencies. The file format, the rules of each part 
 ## Notes
 
 - Positions are in pixels and y grows downward. Cells are in map cells, which are the map's tile size.
-- Collision ignores layer offsets: drawing shifts a layer, but its cells keep their place in the grid.
+- Collision ignores layer offsets, parallax and tint: drawing shifts and scrolls a layer, but its cells keep their
+  place in the grid.
 - Shapes are approximated: an ellipse or a polygon counts as its bounding box. Slopes are not supported.
 - The search never enters a cell outside the grid, and a one-way cell is walkable for it.
 - Images are never loaded by this package. The caller gives the pictures to `drawTileLayer`, keyed by the

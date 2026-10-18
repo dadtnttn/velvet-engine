@@ -1,11 +1,11 @@
 // Reads the layers of a map, a group at a time. A tile layer is read in one of two forms: a finite layer has
 // its data at its own size, and an infinite layer has chunks. Each layer gets the values it is drawn with:
-// the visibility and the opacity of its groups are combined into it, and so are their offsets. Parallax
-// and tint are refused, because drawing does not apply them.
+// the visibility and the opacity of its groups are combined into it, and so are their offsets and their
+// parallax factors. A layer's tint is its own, and it is kept as data: drawing does not apply it.
 
 import { decodeCells } from "./data";
 import { readObjects } from "./objects";
-import { readProperties } from "./properties";
+import { COLOUR_PATTERN, readProperties } from "./properties";
 import { Fields, isRecord, itemPath, type Problems } from "./reader";
 import { findTileset } from "./tileset";
 import type {
@@ -14,6 +14,7 @@ import type {
   ObjectLayer,
   TileChunk,
   TileLayer,
+  TilePoint,
   TileProperties,
   Tileset,
 } from "./types";
@@ -36,10 +37,13 @@ interface Inherited {
   readonly opacity: number;
   readonly offsetX: number;
   readonly offsetY: number;
+  /** The parallax factors of the groups, multiplied together. */
+  readonly parallaxX: number;
+  readonly parallaxY: number;
 }
 
-/** What the top level of a map gives to its layers: everything shown, opaque, not offset. */
-export const TOP_LEVEL: Inherited = { visible: true, opacity: 1, offsetX: 0, offsetY: 0 };
+/** What the top level of a map gives to its layers: everything shown, opaque, not offset, and no parallax. */
+export const TOP_LEVEL: Inherited = { visible: true, opacity: 1, offsetX: 0, offsetY: 0, parallaxX: 1, parallaxY: 1 };
 
 /** The values that every layer shares, before its kind is known. */
 interface LayerBase {
@@ -49,6 +53,8 @@ interface LayerBase {
   readonly opacity: number;
   readonly offsetX: number;
   readonly offsetY: number;
+  readonly parallax: TilePoint;
+  readonly tint: string | null;
   readonly properties: TileProperties;
 }
 
@@ -91,24 +97,28 @@ async function readLayer(
     opacity: fields.number("opacity", { min: 0, max: 1, default: 1 }),
     offsetX: fields.number("offsetx", { default: 0 }),
     offsetY: fields.number("offsety", { default: 0 }),
+    parallaxX: fields.number("parallaxx", { default: 1 }),
+    parallaxY: fields.number("parallaxy", { default: 1 }),
   };
-  if (fields.number("parallaxx", { default: 1 }) !== 1 || fields.number("parallaxy", { default: 1 }) !== 1) {
-    fields.fail("unsupported", "parallax is not supported: leave parallaxx and parallaxy at 1", "parallaxx");
-  }
-  if (fields.string("tintcolor", "") !== "") {
-    fields.fail("unsupported", "a layer tint is not supported", "tintcolor");
-  }
+  const tint = readTint(fields);
   // The values the layer is drawn with: its groups are already combined into `inherited`.
   const effective: Inherited = {
     visible: inherited.visible && own.visible,
     opacity: inherited.opacity * own.opacity,
     offsetX: inherited.offsetX + own.offsetX,
     offsetY: inherited.offsetY + own.offsetY,
+    parallaxX: inherited.parallaxX * own.parallaxX,
+    parallaxY: inherited.parallaxY * own.parallaxY,
   };
   const base: LayerBase = {
     id: fields.int("id", { min: 0, default: 0 }),
     name: fields.string("name", ""),
-    ...effective,
+    visible: effective.visible,
+    opacity: effective.opacity,
+    offsetX: effective.offsetX,
+    offsetY: effective.offsetY,
+    parallax: { x: effective.parallaxX, y: effective.parallaxY },
+    tint,
     properties: readProperties(ctx.problems, fields.raw("properties"), fields.at("properties")),
   };
 
@@ -131,6 +141,20 @@ async function readLayer(
       );
       return undefined;
   }
+}
+
+/**
+ * Reads a layer's own tint: `#RRGGBB` or `#AARRGGBB` text as the layer writes it, or null when the layer has none.
+ * A value that is not a colour is refused, and the tint is then null.
+ * @param fields - the layer's fields.
+ */
+function readTint(fields: Fields): string | null {
+  const tint = fields.string("tintcolor", "");
+  if (!COLOUR_PATTERN.test(tint)) {
+    fields.fail("value", `"${tint}" is not a colour: use #RRGGBB or #AARRGGBB`, "tintcolor");
+    return null;
+  }
+  return tint === "" ? null : tint;
 }
 
 /** Reads a tile layer: its cells, in one block for a finite map or in chunks for an infinite map. */

@@ -162,6 +162,16 @@ export interface LayerBase {
   readonly offsetX: number;
   /** The vertical offset in pixels, with the offsets of its groups added in. Used for drawing; collision ignores it. */
   readonly offsetY: number;
+  /**
+   * The parallax factors, with the factors of its groups multiplied in. 1 is no parallax: the layer scrolls with the
+   * camera. Drawing a tile layer uses them (see `drawTileLayer`); collision ignores them.
+   */
+  readonly parallax: TilePoint;
+  /**
+   * The tint of the layer itself, as `#RRGGBB` or `#AARRGGBB` text the way the layer writes it, or null when the
+   * layer has none. A group's tint is not passed to its layers. The reader keeps it as data: drawing ignores it.
+   */
+  readonly tint: string | null;
   readonly properties: TileProperties;
 }
 
@@ -248,6 +258,11 @@ export interface Tileset {
   readonly properties: TileProperties;
   /** The tiles that say something, by local id. */
   readonly tiles: ReadonlyMap<number, TileInfo>;
+  /**
+   * The path of the tileset's own .tsj file, as the map writes it (relative to the map's folder). Undefined for a
+   * tileset embedded in the map. The `image` of an external tileset is relative to this file, not to the map.
+   */
+  readonly source: string | undefined;
 }
 
 /** The result of `resolveGid`: which tileset owns a global id, and which of its tiles it is. */
@@ -271,6 +286,11 @@ export interface TileMap {
   readonly infinite: boolean;
   /** The background colour as `#AARRGGBB` text, or undefined when the map sets none. */
   readonly backgroundColor: string | undefined;
+  /**
+   * The point that the parallax scrolls around. With the camera at this point, every layer is drawn where the map
+   * puts it, whatever its factor. It is Tiled's parallax origin, and 0 and 0 when the map sets none.
+   */
+  readonly parallaxOrigin: TilePoint;
   readonly properties: TileProperties;
   /** The tilesets, in order of their first global id. */
   readonly tilesets: readonly Tileset[];

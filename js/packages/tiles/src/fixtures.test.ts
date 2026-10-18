@@ -21,6 +21,8 @@ interface ValidCase {
   readonly tileWidth?: number;
   readonly tileHeight?: number;
   readonly backgroundColor?: string;
+  /** The map's parallax origin, when the case states it. */
+  readonly parallaxOrigin?: { readonly x: number; readonly y: number };
   readonly tilesets?: readonly {
     readonly name: string;
     readonly firstGid: number;
@@ -36,6 +38,10 @@ interface ValidCase {
     readonly opacity: number;
     readonly offsetX: number;
     readonly offsetY: number;
+    /** The effective parallax factors, when the case states them. */
+    readonly parallax?: { readonly x: number; readonly y: number };
+    /** The layer's own tint, when the case states it: null for none. */
+    readonly tint?: string | null;
   }[];
   readonly layerOrder?: readonly string[];
   readonly cells?: Readonly<Record<string, readonly (readonly number[])[]>>;
@@ -106,6 +112,7 @@ describe("tiles conformance: valid maps", () => {
         if (testCase.tileWidth !== undefined) expect(loaded.tileWidth).toBe(testCase.tileWidth);
         if (testCase.tileHeight !== undefined) expect(loaded.tileHeight).toBe(testCase.tileHeight);
         if (testCase.backgroundColor !== undefined) expect(loaded.backgroundColor).toBe(testCase.backgroundColor);
+        if (testCase.parallaxOrigin !== undefined) expect(loaded.parallaxOrigin).toEqual(testCase.parallaxOrigin);
       });
 
       it("has the tilesets of the case, in order of their first id", async () => {
@@ -136,6 +143,11 @@ describe("tiles conformance: valid maps", () => {
           expect(layer?.opacity).toBeCloseTo(expected.opacity, 12);
           expect(layer?.offsetX).toBe(expected.offsetX);
           expect(layer?.offsetY).toBe(expected.offsetY);
+          if (expected.parallax !== undefined) {
+            expect(layer?.parallax.x, `${expected.name} parallax x`).toBeCloseTo(expected.parallax.x, 12);
+            expect(layer?.parallax.y, `${expected.name} parallax y`).toBeCloseTo(expected.parallax.y, 12);
+          }
+          if (expected.tint !== undefined) expect(layer?.tint, `${expected.name} tint`).toBe(expected.tint);
         }
       });
 

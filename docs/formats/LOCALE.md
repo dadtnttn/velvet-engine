@@ -75,8 +75,30 @@ Any other top-level field is an `unknown-field` warning and is ignored.
 | `direction` | `"ltr"` or `"rtl"` | The main direction of the text. The default is in *Direction*. |
 | `font` | string | A hint for the platform's font choice, such as `sans`, `serif` or `cjk`. The engine decides what it means. |
 | `shaping` | boolean | `true` when the text needs complex shaping: joined or reordered letters, combining marks (Devanagari, Thai, Hebrew with points). Default `false`. |
+| `same_as_source` | list of keys | The keys that this language keeps as the source text on purpose (see [Same as source](#same-as-source)). |
 
 A field of the wrong type or value is a `meta` error and is ignored; the other fields still apply.
+
+### Same as source
+
+A text that is the same in two languages is not always untranslated: a key name such as `Esc`, a letter such as
+`F`, or a brand name is written alike on purpose. A language lists those keys in `meta.same_as_source`, an array of
+keys:
+
+```json
+"meta": { "name": "English", "same_as_source": ["game.key.menu", "game.key.fast"] }
+```
+
+- Each item is a non-empty text. Any other value, and an array with any other item, is a `meta` error, and the
+  field is ignored.
+- The lists of all the files of one language are joined, so that each file may list its own keys. This is the one
+  `meta` field that does not follow "a field set later wins".
+- The list changes no lookup. A listed key is looked up as any other key.
+- In the source language the list has no effect.
+- Tooling does not report a listed key as untranslated. It reports a listed key as a warning
+  (`stale-same-as-source`) when the language has no entry for it, when the source has no entry for it (an id key),
+  or when the language's text is not the source's. Such a key should come off the list.
+- A reader that predates the field reports it as `unknown-field`, which is only a warning.
 
 ## Keys
 

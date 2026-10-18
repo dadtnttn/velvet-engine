@@ -1,13 +1,20 @@
-// Validates each data document with the package that reads its format. A document that fails gives
-// one issue per problem the reader reports; a document that passes is kept for the cross-checks.
+// Validates each data document with the package that reads its format. A document that fails gives one issue per
+// problem the reader reports; a document that passes is kept for the cross-checks. The files that the formats name
+// (the sound files of an audio manifest, the pictures of the tilesets of a Tiled map) are checked against the game
+// folder too.
 
-import { ArtError, parseArtManifest, type ArtManifest } from "@velvet/assets";
-import { ArtPrepError, parseIdentity, parseProfiles, parseResults, parseShots, parseStyle, type CharacterIdentity, type Shot } from "@velvet/artprep";
-import { CharacterError, parseCharacter, parseStatSchema, type CharacterDefinition, type StatSchema } from "@velvet/characters";
-import { CardsError, loadCatalog, type Catalog } from "@velvet/cards";
+import { parseAchievements, type AchievementCatalog } from "@velvet/achievements";
+import { parseArtManifest, type ArtManifest } from "@velvet/assets";
+import { parseAudioManifest } from "@velvet/audio";
+import { parseIdentity, parseProfiles, parseResults, parseShots, parseStyle, type CharacterIdentity, type Shot } from "@velvet/artprep";
+import { parseCharacter, parseStatSchema, type CharacterDefinition, type StatSchema } from "@velvet/characters";
+import { loadCatalog, type Catalog } from "@velvet/cards";
 import { GuionLibrary } from "@velvet/guion";
 import { makeIssue, WHOLE_FILE, type Issue } from "../issues";
 import { compareText, type GameDocument } from "../game/discover";
+import { FileIndex } from "../game/files";
+import { failureIssues } from "./failures";
+import { checkAudioFiles, checkTiledFiles } from "./media";
 
 /** A stacks catalog that passed: its file, its folder and the checked catalog. */
 export interface CatalogInfo {
@@ -47,6 +54,12 @@ export interface ShotsInfo {
   readonly shots: readonly Shot[];
 }
 
+/** An achievements definitions file that passed: its file, and its definitions in their normal form. */
+export interface AchievementsInfo {
+  readonly file: string;
+  readonly catalog: AchievementCatalog;
+}
+
 /** Everything the validators checked, with the documents that passed, and the problems found. */
 export interface ValidatedDocuments {
   readonly issues: Issue[];
@@ -58,50 +71,16 @@ export interface ValidatedDocuments {
   readonly art: readonly ArtInfo[];
   readonly identities: readonly IdentityInfo[];
   readonly shots: readonly ShotsInfo[];
-}
-
-/**
- * The code of a failure: the reader's own code when it has one, otherwise "internal" (a bug, or a
- * module that could not load).
- * @param error - what was thrown.
- */
-export function codeOf(error: unknown): string {
-  const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
-  return typeof code === "string" ? code : "internal";
-}
-
-/**
- * The message of a failure.
- * @param error - what was thrown.
- */
-export function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-/**
- * The issues of a failure from a reader. A reader that lists its problems gives one issue for each;
- * any other failure gives one issue with the code and the message.
- * @param file - the document's file.
- * @param error - what the reader threw.
- */
-function failureIssues(file: string, error: unknown): Issue[] {
-  if (error instanceof ArtError || error instanceof ArtPrepError) {
-    return error.issues.map((item) =>
-      makeIssue("error", file, item.path ?? WHOLE_FILE, item.code, item.message),
-    );
-  }
-  if (error instanceof CardsError || error instanceof CharacterError) {
-    return [makeIssue("error", file, WHOLE_FILE, error.code, error.message)];
-  }
-  return [makeIssue("error", file, WHOLE_FILE, codeOf(error), messageOf(error))];
+  readonly achievements: readonly AchievementsInfo[];
 }
 
 /**
  * Validates the data documents of a game. Locale catalogs are not here: `loadLocales` reads them.
+ * @param folder - the game folder, which the files that the formats name are looked for in.
  * @param documents - the game's documents.
  * @returns the documents that passed, grouped by kind, and every problem found.
  */
-export async function validateDocuments(documents: readonly GameDocument[]): Promise<ValidatedDocuments> {
+export async function validateDocuments(folder: string, documents: readonly GameDocument[]): Promise<ValidatedDocuments> {
   const issues: Issue[] = [];
   const catalogs: CatalogInfo[] = [];
   const cases: GameDocument[] = [];
@@ -110,7 +89,10 @@ export async function validateDocuments(documents: readonly GameDocument[]): Pro
   const art: ArtInfo[] = [];
   const identities: IdentityInfo[] = [];
   const shots: ShotsInfo[] = [];
+  const achievements: AchievementsInfo[] = [];
   const guiones: GameDocument[] = [];
+  const tiled: GameDocument[] = [];
+  const files = new FileIndex();
 
   for (const doc of documents) {
     const text = doc.text;
@@ -149,6 +131,16 @@ export async function validateDocuments(documents: readonly GameDocument[]): Pro
         case "guion":
           guiones.push(doc);
           break;
+        case "audio-manifest":
+          issues.push(...(await checkAudioFiles(files, folder, doc, parseAudioManifest(text))));
+          break;
+        case "achievement-definitions":
+          achievements.push({ file: doc.file, catalog: parseAchievements(text) });
+          break;
+        case "tile-map":
+        case "tileset":
+          tiled.push(doc);
+          break;
         case "locale":
           break;
       }
@@ -159,7 +151,8 @@ export async function validateDocuments(documents: readonly GameDocument[]): Pro
 
   const sheets = checkSheets(sheetDocuments, schemas, issues);
   issues.push(...(await checkGuiones(guiones)));
-  return { issues, catalogs, cases, schemas, sheets, art, identities, shots };
+  issues.push(...(await checkTiledFiles(files, folder, tiled)));
+  return { issues, catalogs, cases, schemas, sheets, art, identities, shots, achievements };
 }
 
 /**

@@ -149,12 +149,18 @@ importers:
 
   packages/tools:
     dependencies:
+      '@velvet/achievements':
+        specifier: workspace:*
+        version: link:../achievements
       '@velvet/artprep':
         specifier: workspace:*
         version: link:../artprep
       '@velvet/assets':
         specifier: workspace:*
         version: link:../assets
+      '@velvet/audio':
+        specifier: workspace:*
+        version: link:../audio
       '@velvet/cards':
         specifier: workspace:*
         version: link:../cards
@@ -170,6 +176,9 @@ importers:
       '@velvet/i18n':
         specifier: workspace:*
         version: link:../i18n
+      '@velvet/tiles':
+        specifier: workspace:*
+        version: link:../tiles
       '@velvet/wasm':
         specifier: workspace:*
         version: link:../wasm

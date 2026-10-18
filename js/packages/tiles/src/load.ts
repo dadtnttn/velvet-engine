@@ -55,6 +55,10 @@ export async function loadTileMap(input: string | object, options: LoadOptions =
   const tileWidth = root.int("tilewidth", { min: 1 });
   const tileHeight = root.int("tileheight", { min: 1 });
   const background = root.string("backgroundcolor", "");
+  const parallaxOrigin = {
+    x: root.number("parallaxoriginx", { default: 0 }),
+    y: root.number("parallaxoriginy", { default: 0 }),
+  };
   const properties = readProperties(problems, root.raw("properties"), root.at("properties"));
 
   const entries: TilesetEntry[] = [];
@@ -93,6 +97,7 @@ export async function loadTileMap(input: string | object, options: LoadOptions =
     tileHeight,
     infinite,
     backgroundColor: background === "" ? undefined : background,
+    parallaxOrigin,
     properties,
     tilesets,
     layers,
@@ -147,7 +152,8 @@ async function loadExternal(
     return undefined;
   }
   checkType(new Fields(problems, data, `[${source}]`), "tileset");
-  return readTileset(problems, data, `[${source}]`, firstGid);
+  const tileset = readTileset(problems, data, `[${source}]`, firstGid);
+  return tileset === undefined ? undefined : { ...tileset, source };
 }
 
 /**

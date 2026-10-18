@@ -716,6 +716,86 @@
           "offsetY": 0
         }
       ]
+    },
+    {
+      "file": "parallax.tmj",
+      "infinite": false,
+      "width": 4,
+      "height": 2,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "parallaxOrigin": { "x": 16, "y": 8 },
+      "tilesets": [
+        {
+          "name": "terrain",
+          "firstGid": 1,
+          "tileCount": 8,
+          "columns": 4
+        }
+      ],
+      "layerOrder": ["sky", "hills", "ground", "posts", "frame"],
+      "layers": [
+        {
+          "name": "sky",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0,
+          "parallax": { "x": 0.5, "y": 0.25 },
+          "tint": "#80a0c0ff"
+        },
+        {
+          "name": "far",
+          "kind": "group",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0,
+          "parallax": { "x": 0.5, "y": 1 },
+          "tint": null
+        },
+        {
+          "name": "hills",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0,
+          "parallax": { "x": 0.25, "y": 1 },
+          "tint": "#ff00ff00"
+        },
+        {
+          "name": "ground",
+          "kind": "tiles",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0,
+          "parallax": { "x": 1, "y": 1 },
+          "tint": null
+        },
+        {
+          "name": "posts",
+          "kind": "objects",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0,
+          "parallax": { "x": 2, "y": 2 },
+          "tint": "#ffff0000"
+        },
+        {
+          "name": "frame",
+          "kind": "image",
+          "visible": true,
+          "opacity": 1,
+          "offsetX": 0,
+          "offsetY": 0,
+          "parallax": { "x": 0, "y": 0 },
+          "tint": "#40000000"
+        }
+      ]
     }
   ],
   "invalid": [
@@ -794,9 +874,14 @@
       "path": "tilesets[0].tiles[0].animation[0].duration"
     },
     {
-      "file": "invalid/parallax.tmj",
-      "code": "unsupported",
+      "file": "invalid/parallax-text.tmj",
+      "code": "structure",
       "path": "layers[0].parallaxx"
+    },
+    {
+      "file": "invalid/tintcolor-bad.tmj",
+      "code": "value",
+      "path": "layers[0].tintcolor"
     },
     {
       "file": "invalid/layer-size.tmj",

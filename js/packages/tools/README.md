@@ -75,14 +75,33 @@ Finds the game's data and reads each file with the package that owns its format:
 | artprep | `velvet-artprep`: `profiles`, `style`, `identity`, `shots`, `results` | `@velvet/artprep` | each document's rules |
 | guion | Markdown in a `guion` or `guiones` folder | `@velvet/guion` (`GuionLibrary.add`, through WebAssembly) | every problem with its line; two guiones with one id |
 | locale catalogs | `velvet-locale`, one folder per language | `@velvet/i18n` (`Locale`, `validateCatalog`) | the catalog rules, holes, missing and unknown keys against the source |
+| audio manifest | `velvet-audio` | `@velvet/audio` (`parseAudioManifest`) | every rule of AUDIO.md; each sound file exists in the audio folder (see below) |
+| achievements | `velvet-achievements`, kind `definitions` (kind `progress`, a save, is skipped) | `@velvet/achievements` (`parseAchievements`) | every rule of ACHIEVEMENTS.md |
+| Tiled map or tileset | `.tmj` or `.tsj`, or a JSON file whose `type` is `map` or `tileset` | `@velvet/tiles` (`loadTileMap`) | every problem the reader finds, with its path; the map's external tilesets are read from the game, and each tileset's picture exists (see below) |
+
+The counts of Tiled files are of files: `tile maps` counts the `.tmj` (and map-typed JSON) files, and `tilesets`
+counts the `.tsj` files; a tileset embedded in a map belongs to that map.
 
 The links are checked too:
 
 - an art id named by a sheet (`art.portrait`, `art.fullbody`) or a shot (`art`, `references`, `edit.base`)
   must be in an art manifest, and a variant must be declared by its entry;
 - a shot's `characters` must have an identity document;
-- an id key in a data field (`name`, `label`, `title`, `reason`, in the catalogs, schemas and sheets) must
-  have an entry in the source language. A text key (one with spaces or capitals, such as `Hola`) needs none.
+- an achievement's `icon` must be an art id of the art manifest, when the game has one;
+- an id key in a data field (`name`, `label`, `title`, `reason`, in the catalogs, schemas and sheets, and the
+  `name`, `description` and `hint` of the achievements) must have an entry in the source language. A text key
+  (one with spaces or capitals, such as `Hola`) needs none.
+
+The files that the data names must exist in the game, spelled as the data writes them, so that a name which differs
+only in case is missing, as it is on a case-sensitive server:
+
+- the sound files of an audio manifest are relative to the manifest's folder, which is the audio folder: the engine
+  serves it at `audio/` by default, with the manifest in it (`audio/manifest.json`). The tools cannot see a
+  `baseUrl` that a game gives the engine, so a manifest outside its audio folder gets a `missing-file` error for each
+  sound. Each file of each candidate list must exist;
+- the picture of a tileset is relative to the tileset's own file: the `.tsj` file of an external tileset, or the
+  map of an embedded one. A `.tsj` file that no map names is checked on its own, through a one-cell map that names
+  it, so the same reader and the same rules apply, and its problems are reported at the file.
 
 A case runs on the game's catalog: the one in its own folder, or the only catalog of the game. Otherwise it
 is not run, with a warning. Board saves (`board`), character states (`state`) and artprep jobs (`job`) are
@@ -91,7 +110,7 @@ not checked, because they are outputs of the game and of the tools, not inputs.
 Output, one line per problem, then a summary:
 
     public/data/locales/en: entries["hud.day"]: error: en "hud.day" uses {date} where its source uses {day}
-    checked hello-cards: 1 catalog, 0 cases, 0 stat schemas, 0 character sheets, 0 art manifests, 0 artprep documents, 2 guiones, 4 locale files in 2 languages
+    checked hello-cards: 1 catalog, 0 cases, 0 stat schemas, 0 character sheets, 0 art manifests, 0 audio manifests, 0 achievement definitions, 0 tile maps, 0 tilesets, 0 artprep documents, 2 guiones, 4 locale files in 2 languages
     hello-cards: ok, 0 errors, 0 warnings
 
 Each problem line is `file: path: severity: message`. The path is a JSON path into the file
@@ -107,7 +126,11 @@ For each language folder, the report lists:
 - **unused**: a key of this language that no string of the code, no call, no run-time prefix and no data
   field uses;
 - **untranslated**: a text that equals the source text (its letters are compared, so `{count}` or `42` is
-  not flagged).
+  not flagged), unless the language lists its key in `meta.same_as_source` (LOCALE.md, "Same as source").
+
+A listed key is not untranslated, so the list holds the texts that are the same on purpose (`Esc`, `F`). A listed
+key that the language no longer has, or whose text is no longer the source's, is a warning
+(`stale-same-as-source`) at `meta.same_as_source`. The source language's list is not checked.
 
 The code scan reads every `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.mts`, `.cts` and `.html` file of the
 game, except tests (`*.test.*`, `*.spec.*`) and `.d.ts` files. It finds:
@@ -157,12 +180,14 @@ The tools find data by content, not by where a file sits. The rules, in order:
 3. **Tooling files.** A file whose name starts with `_` is skipped (the locale format's rule, applied to all
    data).
 4. **JSON documents.** A JSON file is a document when its `format` starts with `velvet-`. Its `kind` (for the
-   formats that have one) says which reader checks it. JSON without a `format` (`package.json`,
-   `tsconfig.json`, the manifest) is not data and is not read. A `velvet-` document of a kind that the tools
-   do not read is a warning.
+   formats that have one) says which reader checks it. A `velvet-` document of a kind that the tools do not
+   read is a warning. A **Tiled** file is a tile document: a file that ends in `.tmj` (a map) or `.tsj` (a
+   tileset), wherever it is, or a JSON file whose `type` is `map` or `tileset`. Its text goes to the Tiled reader,
+   which parses it and reports its own problems. Any other JSON without a `format` (`package.json`,
+   `tsconfig.json`, the manifest, a game's own data) is not data for the checks and is not read.
 5. **Broken JSON.** A file that is not valid JSON is an error when a folder on its path is a data folder
-   (`data`, `locales`, `art`, `characters`, `artprep`, `stacks`, `cases`, `guion`, `guiones`), and it is
-   ignored elsewhere.
+   (`data`, `locales`, `art`, `audio`, `characters`, `artprep`, `stacks`, `cases`, `guion`, `guiones`), and it is
+   ignored elsewhere. A Tiled `.tmj` or `.tsj` file is always read, so its broken JSON is reported wherever it is.
 6. **Byte order marks.** A file that starts with a BOM is an error (the readers refuse it); the check reads it
    without the BOM, so the rest of its problems still show.
 7. **Guiones.** A Markdown file is a guion only inside a folder named `guion` or `guiones`, at any depth, or
@@ -201,6 +226,8 @@ only velvet-js reads. Without hints, the conventions above are all a game needs:
   portrait names that a cast defines are not checked.
 - Format readers stop at the first problem of a character sheet or a stat schema (their errors carry one
   message); an art manifest and an artprep document list every problem.
+- A sound file and a tileset picture are checked for existence only: their format, length and size are not read.
+  The achievements' icons are checked against the art manifest's ids, not against its files.
 - `check` does not run a game, and it does not render anything.
 
 ## Tests
@@ -209,10 +236,17 @@ From `js/`, `pnpm test` runs them with the rest of the workspace: `packages/tool
 `game/`, `check/`, `i18n/` and `new/` folders beside their code. They use temporary folders (removed after
 each test), the example `examples/hello-cards` (which must pass `check`), the shared stacks fixtures
 (`docs/formats/fixtures/stacks`, every case of which must pass the case runner), and the characters and artprep
-fixtures, which are copied into the games that the tests build. One test runs the bin as a program, so the
-hook is exercised the way `pnpm velvet-js` runs it.
+fixtures, which are copied into the games that the tests build. The audio, achievements and tiles fixtures
+(`docs/formats/fixtures/audio`, `achievements`, `tiles`) are built into games too: the tests write an empty file
+for each sound or picture that a fixture names, and remove the one they want missing. One test runs the bin as a
+program, so the hook is exercised the way `pnpm velvet-js` runs it.
+
+The bin runs the sources with Node's type stripping, so the packages that `check` loads must not use TypeScript
+syntax that stripping refuses, such as constructor parameter properties. The bin test runs the bin as a program, so
+it catches such a file at once: the other tests transform the sources and would not.
 
 Files of this package: `bin/velvet-js.mjs` (entry and resolver hook), `src/cli.ts` (the commands and the
-exit codes), `src/command.ts` (argument parsing and help), `src/game/` (manifest, discovery, locales, keys),
-`src/check/` (documents, cross-checks, cases, the command), `src/i18n/` (scan, coverage, pseudo, the command),
-`src/new/` (scaffold and the command), `templates/game/` (the template).
+exit codes), `src/command.ts` (argument parsing and help), `src/game/` (manifest, discovery, locales, keys, and the
+exact-spelling file index), `src/check/` (documents, failures, cross-checks, media files, cases, the command),
+`src/i18n/` (scan, coverage and the same-as-source marks, pseudo, the command), `src/new/` (scaffold and the
+command), `templates/game/` (the template).

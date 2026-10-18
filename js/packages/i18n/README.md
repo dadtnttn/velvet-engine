@@ -92,7 +92,7 @@ and key. The source language never reports a missing key, because its text is th
 | `has(key)`, `locale(tag)` | Whether a key has a text in the chain; the `Locale` of a tag. |
 | `onChange(listener)` | Calls the listener with each new language. Returns a function that removes it. |
 | `loadLocaleFromUrls(tag, urls, fetch?, options?)` | One language as a `Locale`, without a chain. |
-| `Locale` | One language: `t`, `plural`, `has`, `keys`, `holesOf`, `issues`, `meta`, `direction`. |
+| `Locale` | One language: `t`, `plural`, `has`, `keys`, `holesOf`, `issues`, `meta`, `direction`. `meta.sameAsSource` lists the keys the language keeps as the source text on purpose (LOCALE.md). |
 | `parseCatalog(text, name?)`, `validateCatalog(source, translation)` | Reads one file; checks a translation against its source, with its own load issues (for tooling). |
 | `parseTemplate`, `renderTemplate`, `isLanguageTag`, `baseLanguageTag`, `textDirection` | The rules, for tools and for games that need them. |
 

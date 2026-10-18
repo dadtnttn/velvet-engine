@@ -4,7 +4,7 @@
 //
 // The context must already hold the camera transform: the drawing uses world (map) pixels, and `view` says
 // which of them are visible. The transforms that the flips need are applied on top of the camera and undone
-// afterwards.
+// afterwards. A layer with a parallax factor is moved by one more translation, which is undone the same way.
 
 import { TilesError } from "./error";
 import { resolveGid } from "./map";
@@ -15,6 +15,7 @@ import {
   TILE_FLIP_VERTICAL,
   type TileLayer,
   type TileMap,
+  type TilePoint,
   type Tileset,
 } from "./types";
 
@@ -57,15 +58,40 @@ export interface TileView {
 }
 
 /**
+ * The part of a layer's own space that the view shows, for a layer with a parallax factor. The view is moved toward
+ * the origin by the factor on each axis: a factor of 0 keeps the layer where the origin puts it, and a factor of 1
+ * is the view itself.
+ * @param view - the visible part of the map.
+ * @param origin - the parallax origin.
+ * @param parallax - the layer's factors.
+ */
+function parallaxView(view: TileView, origin: TilePoint, parallax: TilePoint): TileView {
+  // A factor of 1 keeps the view's own value exactly, so that an axis without parallax has no rounding.
+  return {
+    x: parallax.x === 1 ? view.x : origin.x + (view.x - origin.x) * parallax.x,
+    y: parallax.y === 1 ? view.y : origin.y + (view.y - origin.y) * parallax.y,
+    width: view.width,
+    height: view.height,
+  };
+}
+
+/**
  * Draws the visible tiles of one layer.
+ *
+ * A layer whose parallax factor is not 1 scrolls at its own speed: with the camera at `view`, its tiles are drawn as
+ * they would be at the view moved toward `origin` by the factor. Its tiles keep their places on the map. The tint of
+ * a layer is not applied here: the game reads `layer.tint` and decides.
+ *
  * @param ctx - the context, with the camera transform already applied.
  * @param map - the map that the layer belongs to.
  * @param layer - the tile layer to draw. A hidden layer, or one with zero opacity, draws nothing.
  * @param images - the picture of each tileset, by name.
- * @param view - the visible part of the map, in map pixels.
+ * @param view - the visible part of the map, in map pixels: where the camera is.
  * @param timeMs - the time in milliseconds, for animated tiles.
+ * @param origin - the parallax origin: with the camera here, every layer is drawn where the map puts it. Defaults to
+ * the map's `parallaxOrigin`, which is Tiled's, and to 0 and 0 when the map sets none.
  * @throws TilesError with code "missing-image" when a visible tile needs a tileset with no picture, and with code
- * "bad-input" when the view or the time is not a finite number.
+ * "bad-input" when the view, the time or the origin is not a finite number.
  */
 export function drawTileLayer(
   ctx: TileDrawingContext,
@@ -74,11 +100,16 @@ export function drawTileLayer(
   images: TileImages,
   view: TileView,
   timeMs: number,
+  origin: TilePoint = map.parallaxOrigin,
 ): void {
-  if (![view.x, view.y, view.width, view.height, timeMs].every((value) => Number.isFinite(value))) {
-    throw new TilesError("bad-input", "the view and the time must be finite numbers");
+  if (![view.x, view.y, view.width, view.height, timeMs, origin.x, origin.y].every((value) => Number.isFinite(value))) {
+    throw new TilesError("bad-input", "the view, the time and the parallax origin must be finite numbers");
   }
   if (!layer.visible || layer.opacity <= 0) return;
+
+  // The part of the layer's own space that is visible. Without parallax it is the view itself.
+  const scrolled = layer.parallax.x !== 1 || layer.parallax.y !== 1;
+  const area = scrolled ? parallaxView(view, origin, layer.parallax) : view;
 
   // The largest reach of a tile beyond its cell, so that cells just outside the view are considered too.
   let reachX = 0;
@@ -87,17 +118,19 @@ export function drawTileLayer(
     reachX = Math.max(reachX, tileset.tileWidth + Math.abs(tileset.offsetX));
     reachY = Math.max(reachY, tileset.tileHeight + Math.abs(tileset.offsetY));
   }
-  const left = view.x - layer.offsetX;
-  const top = view.y - layer.offsetY;
+  const left = area.x - layer.offsetX;
+  const top = area.y - layer.offsetY;
   const firstColumn = Math.floor((left - reachX) / map.tileWidth);
-  const lastColumn = Math.floor((left + view.width + reachX) / map.tileWidth);
+  const lastColumn = Math.floor((left + area.width + reachX) / map.tileWidth);
   const firstRow = Math.floor((top - reachY) / map.tileHeight) - 1;
-  const lastRow = Math.floor((top + view.height + reachY) / map.tileHeight) + 1;
+  const lastRow = Math.floor((top + area.height + reachY) / map.tileHeight) + 1;
 
   const baseAlpha = ctx.globalAlpha;
   ctx.save();
   try {
     ctx.globalAlpha = baseAlpha * layer.opacity;
+    // Moves the layer from the camera's place to its own: the context already holds the camera's transform.
+    if (scrolled) ctx.transform(1, 0, 0, 1, view.x - area.x, view.y - area.y);
     for (const chunk of layer.chunks) {
       const startColumn = Math.max(chunk.x, firstColumn);
       const endColumn = Math.min(chunk.x + chunk.width - 1, lastColumn);
@@ -121,8 +154,8 @@ export function drawTileLayer(
           const height = tileset.tileHeight;
           const x = column * map.tileWidth + layer.offsetX + tileset.offsetX;
           const y = (row + 1) * map.tileHeight - height + layer.offsetY + tileset.offsetY;
-          if (x + width <= view.x || x >= view.x + view.width) continue;
-          if (y + height <= view.y || y >= view.y + view.height) continue;
+          if (x + width <= area.x || x >= area.x + area.width) continue;
+          if (y + height <= area.y || y >= area.y + area.height) continue;
 
           const image = imageOf(images, tileset);
           const flips = chunk.flips[index] ?? 0;

@@ -5,7 +5,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { formatIssue, type Issue } from "../issues";
-import { keyFieldsOf } from "../game/keys";
+import { ACHIEVEMENT_KEY_FIELDS, keyFieldsOf } from "../game/keys";
 import { ENGINE_JS_DIR } from "../paths";
 import { copyGame, HELLO_CARDS, tempFolder, writeFiles } from "../test-support";
 import { checkGame } from "./check";
@@ -72,6 +72,10 @@ describe("check on the example", () => {
       stat_schemas: 0,
       characters: 0,
       art_manifests: 0,
+      audio_manifests: 0,
+      achievement_definitions: 0,
+      tile_maps: 0,
+      tilesets: 0,
       artprep: 0,
       guiones: 2,
       locale_files: 4,
@@ -247,5 +251,227 @@ describe("check on games built from the shared fixtures", () => {
     const result = await checkGame(folder);
     expect(result.errors).toBe(0);
     expect(lines(result.issues)).toEqual(["public/data/catalog.json (file) no-source-locale"]);
+  });
+});
+
+/** The parsed JSON of a fixture file, for a copy with one change. */
+async function fixtureJson(path: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+}
+
+/** Every file that an audio manifest names, as the manifest writes its paths. */
+function namedSoundFiles(manifest: Record<string, unknown>): string[] {
+  const sounds = manifest["sounds"] as { files?: string[]; variants?: { files: string[] }[] }[];
+  return sounds.flatMap((sound) => sound.files ?? sound.variants?.flatMap((variant) => variant.files) ?? []);
+}
+
+describe("check on the example with the other formats", () => {
+  it("reads the visual novel example's audio manifest, and its sound files exist, with no warning", async () => {
+    const result = await checkGame(join(ENGINE_JS_DIR, "examples", "hello-vn"));
+    expect(lines(result.issues)).toEqual([]);
+    expect(result.warnings).toBe(0);
+    expect(result.counts.audio_manifests).toBe(1);
+  });
+});
+
+describe("check on an audio manifest", () => {
+  const AUDIO = join(FIXTURES, "audio", "manifest.json");
+
+  /** A game with the audio fixture at public/audio, and an empty file for each sound file except the skipped ones. */
+  async function audioGame(manifest: Record<string, unknown>, skip: readonly string[] = []): Promise<string> {
+    const folder = await fixtureGame({}, { "public/audio/manifest.json": manifest });
+    const sounds = namedSoundFiles(manifest).filter((file) => !skip.includes(file));
+    await writeFiles(folder, Object.fromEntries(sounds.map((file) => [`public/audio/${file}`, ""])));
+    return folder;
+  }
+
+  it("passes a manifest whose every sound file exists in the audio folder, which is the manifest's folder", async () => {
+    const result = await checkGame(await audioGame(await fixtureJson(AUDIO)));
+    expect(lines(result.issues)).toEqual([]);
+    expect(result.counts.audio_manifests).toBe(1);
+  });
+
+  it("reports a candidate file that is missing, at its path in the sound", async () => {
+    const result = await checkGame(await audioGame(await fixtureJson(AUDIO), ["sfx/door_open.wav"]));
+    expect(lines(result.issues)).toEqual(["public/audio/manifest.json sounds[1].files[1] missing-file"]);
+  });
+
+  it("reports a variant's file that is missing, at the variant's path", async () => {
+    const result = await checkGame(await audioGame(await fixtureJson(AUDIO), ["sfx/stone_1.opus"]));
+    expect(lines(result.issues)).toEqual(["public/audio/manifest.json sounds[2].variants[0].files[0] missing-file"]);
+  });
+
+  it("does not accept a file that differs from the name only in case, as a case-sensitive server would not", async () => {
+    const folder = await audioGame(await fixtureJson(AUDIO), ["sfx/door_open.opus"]);
+    await writeFiles(folder, { "public/audio/sfx/Door_Open.opus": "" });
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual(["public/audio/manifest.json sounds[1].files[0] missing-file"]);
+  });
+
+  it("reports the reader's problems with their paths, such as a wrong version", async () => {
+    const manifest = { ...(await fixtureJson(AUDIO)), version: 2 };
+    const result = await checkGame(await audioGame(manifest));
+    expect(result.errors).toBeGreaterThan(0);
+    expect(lines(result.issues)).toContain("public/audio/manifest.json version version");
+  });
+});
+
+describe("check on achievements", () => {
+  const ACHIEVEMENTS = join(FIXTURES, "achievements", "achievements.json");
+
+  /** The icons of the achievements fixture: each is an art id, which the art manifest must declare. */
+  const ICONS = ["ach.prologue", "ach.first_blood", "ach.veteran", "ach.butcher", "ach.purse", "ach.good_company", "ach.secret_ending", "ach.lantern", "ach.marathon"];
+
+  /** An art manifest that declares each of the ids as an icon. */
+  function artFor(ids: readonly string[]): Record<string, unknown> {
+    return { format: "velvet-art", version: 1, entries: ids.map((id) => ({ id, kind: "icon", size: [64, 64] })) };
+  }
+
+  /**
+   * The Spanish source and the English catalogs that hold every name, description and hint of the achievements, each
+   * key under its own text, so that every key of the data is in the source.
+   */
+  async function achievementLocales(path: string): Promise<Record<string, Record<string, unknown>>> {
+    const keys: Record<string, string> = {};
+    for (const field of keyFieldsOf(await fixtureJson(path), ACHIEVEMENT_KEY_FIELDS)) keys[field.key] = field.key;
+    const catalog = (language: string): Record<string, unknown> => ({
+      format: "velvet-locale",
+      version: 1,
+      language,
+      entries: { ...keys },
+    });
+    return {
+      "public/data/locales/es/00_ui.json": catalog("es"),
+      "public/data/locales/en/00_ui.json": catalog("en"),
+    };
+  }
+
+  it("passes definitions whose keys are in the source and whose icons are in the art manifest", async () => {
+    const folder = await fixtureGame(
+      { "public/data/achievements.json": ACHIEVEMENTS },
+      { ...(await achievementLocales(ACHIEVEMENTS)), "public/data/art/manifest.json": artFor(ICONS) },
+    );
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual([]);
+    expect(result.counts.achievement_definitions).toBe(1);
+  });
+
+  it("reports an icon that no art manifest declares, at the achievement's icon", async () => {
+    const folder = await fixtureGame(
+      { "public/data/achievements.json": ACHIEVEMENTS },
+      { ...(await achievementLocales(ACHIEVEMENTS)), "public/data/art/manifest.json": artFor(ICONS.filter((id) => id !== "ach.veteran")) },
+    );
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual(["public/data/achievements.json achievements[2].icon unknown-art-id"]);
+  });
+
+  it("does not check the icons when the game has no art manifest", async () => {
+    const folder = await fixtureGame(
+      { "public/data/achievements.json": ACHIEVEMENTS },
+      await achievementLocales(ACHIEVEMENTS),
+    );
+    expect(lines((await checkGame(folder)).issues)).toEqual([]);
+  });
+
+  it("reports a name that the source language does not have, at the achievement's name", async () => {
+    const locales = await achievementLocales(ACHIEVEMENTS);
+    for (const path of ["public/data/locales/es/00_ui.json", "public/data/locales/en/00_ui.json"]) {
+      delete (locales[path] as { entries: Record<string, string> }).entries["ach.purse.name"];
+    }
+    const folder = await fixtureGame(
+      { "public/data/achievements.json": ACHIEVEMENTS },
+      { ...locales, "public/data/art/manifest.json": artFor(ICONS) },
+    );
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual(["public/data/achievements.json achievements[4].name unknown-key"]);
+  });
+
+  it("skips a progress document, which the game saves and no check reads", async () => {
+    const folder = await fixtureGame(
+      { "public/data/achievements.json": ACHIEVEMENTS },
+      {
+        ...(await achievementLocales(ACHIEVEMENTS)),
+        "public/data/art/manifest.json": artFor(ICONS),
+        "public/data/saves/progress.json": { format: "velvet-achievements", version: 1, kind: "progress", counters: {}, unlocked: {} },
+      },
+    );
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual([]);
+    expect(result.counts.achievement_definitions).toBe(1);
+  });
+});
+
+describe("check on Tiled maps and tilesets", () => {
+  const TILES = join(FIXTURES, "tiles");
+
+  it("passes a map whose tileset picture is in the game, beside the map", async () => {
+    const folder = await fixtureGame(
+      { "public/maps/csv.tmj": join(TILES, "csv.tmj") },
+      { "public/maps/terrain.png": "" },
+    );
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual([]);
+    expect(result.counts.tile_maps).toBe(1);
+  });
+
+  it("reports a tileset picture that is not in the game, at the tileset", async () => {
+    const folder = await fixtureGame({ "public/maps/csv.tmj": join(TILES, "csv.tmj") });
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual(['public/maps/csv.tmj tilesets["terrain"].image missing-file']);
+  });
+
+  it("accepts a map with a parallax layer and a tint, as the Tiled reader does", async () => {
+    const folder = await fixtureGame(
+      { "public/maps/parallax.tmj": join(TILES, "parallax.tmj") },
+      { "public/maps/terrain.png": "" },
+    );
+    expect(lines((await checkGame(folder)).issues)).toEqual([]);
+  });
+
+  it("finds an external tileset beside the map, and its picture beside the tileset file", async () => {
+    const files = {
+      "public/maps/external.tmj": join(TILES, "external.tmj"),
+      "public/maps/tilesets/forest.tsj": join(TILES, "tilesets", "forest.tsj"),
+    };
+    const pictures = { "public/maps/props.png": "", "public/maps/tilesets/forest.png": "" };
+    const complete = await checkGame(await fixtureGame(files, pictures));
+    expect(lines(complete.issues)).toEqual([]);
+    expect(complete.counts.tile_maps).toBe(1);
+    expect(complete.counts.tilesets).toBe(1);
+
+    const withoutPicture = await checkGame(await fixtureGame(files, { "public/maps/props.png": "" }));
+    expect(lines(withoutPicture.issues)).toEqual(["public/maps/tilesets/forest.tsj image missing-file"]);
+  });
+
+  it("reports a map whose external tileset is not in the game, at the map", async () => {
+    const folder = await fixtureGame({ "public/maps/external.tmj": join(TILES, "external.tmj") }, { "public/maps/props.png": "" });
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual(["public/maps/external.tmj (file) loader"]);
+  });
+
+  it("checks a tileset that no map names on its own, and reports its problems at its own file", async () => {
+    const forest = await fixtureJson(join(TILES, "tilesets", "forest.tsj"));
+    delete forest["tilewidth"];
+    const folder = await fixtureGame({}, { "public/maps/tilesets/forest.tsj": forest });
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual(["public/maps/tilesets/forest.tsj tilewidth structure"]);
+    expect(result.counts.tilesets).toBe(1);
+  });
+
+  it("reads a JSON file whose type is map as a tile map", async () => {
+    const folder = await fixtureGame(
+      { "public/maps/csv.json": join(TILES, "csv.tmj") },
+      { "public/maps/terrain.png": "" },
+    );
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual([]);
+    expect(result.counts.tile_maps).toBe(1);
+  });
+
+  it("reports a .tmj file that is not JSON, at the file, as the Tiled reader does", async () => {
+    const folder = await fixtureGame({}, { "public/maps/broken.tmj": "{ not json" });
+    const result = await checkGame(folder);
+    expect(lines(result.issues)).toEqual(["public/maps/broken.tmj (file) json"]);
+    expect(result.counts.tile_maps).toBe(1);
   });
 });

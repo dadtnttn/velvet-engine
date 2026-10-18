@@ -65,6 +65,16 @@ describe("Locale: the files", () => {
     expect(locale.meta).toEqual({ name: "עברית", direction: "rtl", shaping: true });
     expect(locale.direction).toBe("rtl");
   });
+
+  it("joins the same_as_source lists of its files, so that each file names its own keys", () => {
+    const locale = new Locale("en", [
+      { name: "00_menus.json", text: catalog("en", {}, { meta: { same_as_source: ["game.key.menu"] } }) },
+      { name: "10_shop.json", text: catalog("en", {}, { meta: { same_as_source: ["shop.ok", "game.key.menu"] } }) },
+      { name: "20_none.json", text: catalog("en", {}) },
+    ]);
+    expect(locale.meta).toEqual({ sameAsSource: ["game.key.menu", "shop.ok"] });
+    expect(locale.issues).toEqual([]);
+  });
 });
 
 describe("Locale: direction", () => {

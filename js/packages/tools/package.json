@@ -19,6 +19,9 @@
     "@velvet/guion": "workspace:*",
     "@velvet/i18n": "workspace:*",
     "@velvet/artprep": "workspace:*",
-    "@velvet/wasm": "workspace:*"
+    "@velvet/wasm": "workspace:*",
+    "@velvet/audio": "workspace:*",
+    "@velvet/achievements": "workspace:*",
+    "@velvet/tiles": "workspace:*"
   }
 }
