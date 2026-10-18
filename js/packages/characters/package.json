@@ -1,0 +1,14 @@
+{
+  "name": "@velvet/characters",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velvet JS characters: the character sheet format (docs/formats/CHARACTER.md), validation, stats, affinity and traits helpers.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

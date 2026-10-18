@@ -1,0 +1,60 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "A value exactly on a line does not cross it; values clamp at both ends; a zero step changes nothing",
+  "characters": ["bram"],
+  "steps": [
+    { "do": "tick", "character": "bram", "dt": 80, "events": [] },
+    { "do": "check", "character": "bram", "needs": { "hunger": 30, "energy": 65, "mood": 60 } },
+    {
+      "do": "tick",
+      "character": "bram",
+      "dt": 8,
+      "events": [
+        { "event": "threshold_crossed", "character": "bram", "need": "hunger", "threshold": "hungry", "when": "below", "value": 29 }
+      ]
+    },
+    { "do": "check", "character": "bram", "needs": { "hunger": 29, "energy": 64.5 } },
+    { "do": "tick", "character": "bram", "dt": 0, "events": [] },
+    { "do": "tick", "character": "bram", "dt": -1, "error": "argument" },
+    {
+      "do": "change_need",
+      "character": "bram",
+      "need": "hunger",
+      "delta": 41,
+      "events": [
+        { "event": "threshold_crossed", "character": "bram", "need": "hunger", "threshold": "fed", "when": "above", "value": 70 }
+      ]
+    },
+    {
+      "do": "tick",
+      "character": "bram",
+      "dt": 1000,
+      "events": [
+        { "event": "threshold_crossed", "character": "bram", "need": "hunger", "threshold": "hungry", "when": "below", "value": 0 },
+        { "event": "threshold_crossed", "character": "bram", "need": "energy", "threshold": "exhausted", "when": "below", "value": 2 }
+      ]
+    },
+    { "do": "check", "character": "bram", "needs": { "hunger": 0, "energy": 2, "mood": 60 } },
+    {
+      "do": "change_need",
+      "character": "bram",
+      "need": "mood",
+      "delta": -100,
+      "events": [
+        { "event": "threshold_crossed", "character": "bram", "need": "mood", "threshold": "gloomy", "when": "below", "value": 0 }
+      ]
+    },
+    {
+      "do": "change_need",
+      "character": "bram",
+      "need": "mood",
+      "delta": 100,
+      "events": [
+        { "event": "threshold_crossed", "character": "bram", "need": "mood", "threshold": "cheerful", "when": "above", "value": 100 }
+      ]
+    },
+    { "do": "check", "character": "bram", "needs": { "mood": 100 }, "rates": { "mood": 0 } }
+  ]
+}

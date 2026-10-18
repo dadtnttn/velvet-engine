@@ -1,0 +1,70 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "Traits change stats and rates; adding and removing a trait moves the effective values, not the base values",
+  "characters": ["mara", "bram", "ines"],
+  "steps": [
+    {
+      "do": "check",
+      "character": "mara",
+      "base": { "strength": 12 },
+      "stats": { "strength": 13, "work_power": 31, "morale": 7 },
+      "rates": { "energy": -0.09375, "hunger": -0.125, "mood": 0 },
+      "traits": ["hardworking"]
+    },
+    {
+      "do": "check",
+      "character": "bram",
+      "base": { "strength": 18 },
+      "stats": { "strength": 20, "work_power": 44, "morale": 5 },
+      "rates": { "energy": -0.0625 },
+      "traits": ["brave"]
+    },
+    {
+      "do": "check",
+      "character": "ines",
+      "stats": { "strength": 6, "wisdom": 17, "work_power": 17, "morale": 12.5 },
+      "rates": { "energy": -0.09375 }
+    },
+    { "do": "add_trait", "character": "ines", "trait": "brave" },
+    {
+      "do": "check",
+      "character": "ines",
+      "stats": { "strength": 7.5, "work_power": 20, "morale": 12.5 },
+      "traits": ["brave", "curious"]
+    },
+    { "do": "remove_trait", "character": "ines", "trait": "curious" },
+    {
+      "do": "check",
+      "character": "ines",
+      "stats": { "wisdom": 15, "strength": 7.5, "work_power": 20, "morale": 11.5 },
+      "rates": { "energy": -0.0625 },
+      "traits": ["brave"]
+    },
+    { "do": "change_base", "character": "ines", "stat": "wisdom", "delta": 3 },
+    {
+      "do": "check",
+      "character": "ines",
+      "base": { "wisdom": 18 },
+      "stats": { "wisdom": 18, "work_power": 20, "morale": 13 }
+    },
+    { "do": "change_base", "character": "bram", "stat": "strength", "delta": 100 },
+    {
+      "do": "check",
+      "character": "bram",
+      "base": { "strength": 20 },
+      "stats": { "strength": 20, "work_power": 44 }
+    },
+    { "do": "change_base", "character": "mara", "stat": "work_power", "delta": 5, "error": "derived-stat" },
+    { "do": "add_trait", "character": "mara", "trait": "clumsy", "error": "unknown-trait" },
+    { "do": "remove_trait", "character": "mara", "trait": "hardworking" },
+    {
+      "do": "check",
+      "character": "mara",
+      "stats": { "strength": 12, "work_power": 29, "morale": 7 },
+      "rates": { "energy": -0.0625 },
+      "traits": []
+    }
+  ]
+}

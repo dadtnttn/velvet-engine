@@ -1,0 +1,85 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "schema",
+  "note": "The stat schema of the fixtures: a village with a farm, a guard post and a library.",
+  "stats": [
+    { "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 },
+    { "id": "wisdom", "label": "stat.wisdom", "min": 0, "max": 20, "default": 6 },
+    { "id": "charm", "label": "stat.charm", "min": 0, "max": 20, "default": 5 },
+    { "id": "work_power", "label": "stat.work_power", "min": 0, "max": 60, "formula": "strength * 2 + min(wisdom, 5)" },
+    { "id": "morale", "label": "stat.morale", "min": 0, "max": 20, "formula": "(charm + wisdom) / 2" }
+  ],
+  "needs": [
+    {
+      "id": "hunger",
+      "label": "need.hunger",
+      "min": 0,
+      "max": 100,
+      "default": 80,
+      "rate": -0.125,
+      "thresholds": [
+        { "id": "hungry", "at": 30, "when": "below" },
+        { "id": "fed", "at": 70, "when": "above" }
+      ]
+    },
+    {
+      "id": "energy",
+      "label": "need.energy",
+      "min": 0,
+      "max": 100,
+      "default": 90,
+      "rate": -0.0625,
+      "thresholds": [{ "id": "exhausted", "at": 20, "when": "below" }]
+    },
+    {
+      "id": "mood",
+      "label": "need.mood",
+      "min": 0,
+      "max": 100,
+      "default": 70,
+      "rate": 0,
+      "thresholds": [
+        { "id": "gloomy", "at": 30, "when": "below" },
+        { "id": "cheerful", "at": 80, "when": "above" }
+      ]
+    }
+  ],
+  "professions": [
+    { "id": "farming", "label": "profession.farming", "xp_thresholds": [0, 100, 250, 450, 700] },
+    { "id": "scholarship", "label": "profession.scholarship", "xp_thresholds": [0, 50, 150, 300] },
+    { "id": "guarding", "label": "profession.guarding", "xp_thresholds": [0, 80, 200, 400, 650] }
+  ],
+  "relationships": {
+    "min": -100,
+    "max": 100,
+    "default": 0,
+    "history_limit": 4,
+    "levels": [
+      { "id": "hostile", "label": "relation.hostile", "at": -100 },
+      { "id": "wary", "label": "relation.wary", "at": -30 },
+      { "id": "neutral", "label": "relation.neutral", "at": 0 },
+      { "id": "friendly", "label": "relation.friendly", "at": 30 },
+      { "id": "close", "label": "relation.close", "at": 70 }
+    ]
+  },
+  "traits": [
+    {
+      "id": "hardworking",
+      "label": "trait.hardworking",
+      "modifiers": [
+        { "stat": "strength", "add": 1 },
+        { "rate": "energy", "mul": 1.5 }
+      ]
+    },
+    { "id": "brave", "label": "trait.brave", "modifiers": [{ "stat": "strength", "mul": 1.25 }] },
+    {
+      "id": "curious",
+      "label": "trait.curious",
+      "modifiers": [
+        { "stat": "wisdom", "add": 2 },
+        { "rate": "energy", "mul": 1.5 }
+      ]
+    }
+  ]
+}

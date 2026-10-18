@@ -46,11 +46,15 @@ importers:
         specifier: 8.3.4
         version: 8.3.4(@types/node@25.9.9)
 
+  packages/assets: {}
+
   packages/cards:
     dependencies:
       '@velvet/wasm':
         specifier: workspace:*
         version: link:../wasm
+
+  packages/characters: {}
 
   packages/core: {}
 

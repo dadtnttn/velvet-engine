@@ -1,0 +1,96 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "A restored state is checked: values are clamped, unknown traits are dropped, missing entries take their starting values",
+  "characters": ["mara", "ines"],
+  "steps": [
+    {
+      "do": "restore",
+      "character": "mara",
+      "state": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "state",
+        "id": "mara",
+        "stats": { "strength": 99, "wisdom": -4, "charm": 9 },
+        "needs": { "hunger": 150, "energy": 10 },
+        "xp": { "farming": 9000 },
+        "traits": ["hardworking", "dragon"],
+        "affinity": { "ines": 500 },
+        "history": []
+      }
+    },
+    {
+      "do": "check",
+      "character": "mara",
+      "base": { "strength": 20, "wisdom": 0, "charm": 9 },
+      "stats": { "strength": 20, "wisdom": 0, "work_power": 40, "morale": 4.5 },
+      "needs": { "hunger": 100, "energy": 10, "mood": 70 },
+      "rates": { "energy": -0.09375 },
+      "xp": { "farming": 700 },
+      "levels": { "farming": 5 },
+      "traits": ["hardworking"],
+      "affinity": { "ines": 100, "bram": 0 },
+      "affinity_levels": { "ines": "close", "bram": "neutral" }
+    },
+    {
+      "do": "restore",
+      "character": "ines",
+      "state": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "state",
+        "id": "mara",
+        "stats": {},
+        "needs": {},
+        "xp": {},
+        "traits": [],
+        "affinity": {},
+        "history": []
+      },
+      "error": "invalid"
+    },
+    {
+      "do": "restore",
+      "character": "mara",
+      "state": {
+        "format": "velvet-character",
+        "version": 2,
+        "kind": "state",
+        "id": "mara",
+        "stats": {},
+        "needs": {},
+        "xp": {},
+        "traits": [],
+        "affinity": {},
+        "history": []
+      },
+      "error": "unsupported-document"
+    },
+    {
+      "do": "restore",
+      "character": "mara",
+      "state": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "mara",
+        "stats": {},
+        "needs": {},
+        "xp": {},
+        "traits": [],
+        "affinity": {},
+        "history": []
+      },
+      "error": "unsupported-document"
+    },
+    {
+      "do": "check",
+      "character": "ines",
+      "stats": { "wisdom": 17 },
+      "affinity": { "mara": 20 },
+      "affinity_levels": { "mara": "neutral" }
+    }
+  ]
+}

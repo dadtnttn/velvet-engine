@@ -1,0 +1,7 @@
+{
+  "format": "velvet-art",
+  "version": 1,
+  "entries": [
+    { "id": "Character.Lyra", "kind": "portrait", "size": [480, 640] }
+  ]
+}

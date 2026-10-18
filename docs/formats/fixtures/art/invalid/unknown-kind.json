@@ -1,0 +1,7 @@
+{
+  "format": "velvet-art",
+  "version": 1,
+  "entries": [
+    { "id": "card.wood", "kind": "sprite", "size": [180, 260] }
+  ]
+}

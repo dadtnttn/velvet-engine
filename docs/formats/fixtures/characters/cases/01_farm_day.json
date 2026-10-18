@@ -1,0 +1,59 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "Mara works the field and eats; hunger, energy and mood cross their lines",
+  "characters": ["mara"],
+  "steps": [
+    { "do": "tick", "character": "mara", "dt": 160, "events": [] },
+    { "do": "check", "character": "mara", "needs": { "hunger": 40, "energy": 65, "mood": 70 } },
+    {
+      "do": "tick",
+      "character": "mara",
+      "dt": 200,
+      "events": [
+        { "event": "threshold_crossed", "character": "mara", "need": "hunger", "threshold": "hungry", "when": "below", "value": 15 }
+      ]
+    },
+    { "do": "check", "character": "mara", "needs": { "hunger": 15, "energy": 46.25, "mood": 70 } },
+    { "do": "change_need", "character": "mara", "need": "hunger", "delta": 50, "events": [] },
+    {
+      "do": "change_need",
+      "character": "mara",
+      "need": "hunger",
+      "delta": 10,
+      "events": [
+        { "event": "threshold_crossed", "character": "mara", "need": "hunger", "threshold": "fed", "when": "above", "value": 75 }
+      ]
+    },
+    { "do": "tick", "character": "mara", "dt": 80, "events": [] },
+    { "do": "check", "character": "mara", "needs": { "hunger": 65, "energy": 38.75, "mood": 70 } },
+    {
+      "do": "change_need",
+      "character": "mara",
+      "need": "mood",
+      "delta": -50,
+      "events": [
+        { "event": "threshold_crossed", "character": "mara", "need": "mood", "threshold": "gloomy", "when": "below", "value": 20 }
+      ]
+    },
+    {
+      "do": "tick",
+      "character": "mara",
+      "dt": 300,
+      "events": [
+        { "event": "threshold_crossed", "character": "mara", "need": "hunger", "threshold": "hungry", "when": "below", "value": 27.5 },
+        { "event": "threshold_crossed", "character": "mara", "need": "energy", "threshold": "exhausted", "when": "below", "value": 10.625 }
+      ]
+    },
+    {
+      "do": "check",
+      "character": "mara",
+      "needs": { "hunger": 27.5, "energy": 10.625, "mood": 20 },
+      "rates": { "hunger": -0.125, "energy": -0.09375, "mood": 0 },
+      "base": { "strength": 12, "wisdom": 5, "charm": 9 },
+      "stats": { "strength": 13, "wisdom": 5, "charm": 9, "work_power": 31, "morale": 7 },
+      "traits": ["hardworking"]
+    }
+  ]
+}

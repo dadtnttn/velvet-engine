@@ -1,0 +1,15 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "character",
+  "id": "bram",
+  "name": "character.bram.name",
+  "title": "character.bram.title",
+  "art": { "portrait": "bram_portrait", "fullbody": "bram_fullbody" },
+  "tags": ["villager", "guard"],
+  "stats": { "strength": 18, "wisdom": 4, "charm": 6 },
+  "needs": { "hunger": 40, "energy": 70, "mood": 60 },
+  "professions": { "guarding": 190 },
+  "traits": ["brave"],
+  "relationships": { "mara": 0 }
+}

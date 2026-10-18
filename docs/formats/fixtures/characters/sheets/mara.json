@@ -1,0 +1,15 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "character",
+  "id": "mara",
+  "name": "character.mara.name",
+  "title": "character.mara.title",
+  "art": { "portrait": "mara_portrait", "fullbody": "mara_fullbody" },
+  "tags": ["villager", "farm"],
+  "stats": { "strength": 12, "wisdom": 5, "charm": 9 },
+  "needs": { "hunger": 60, "energy": 80, "mood": 70 },
+  "professions": { "farming": 120 },
+  "traits": ["hardworking"],
+  "relationships": { "bram": 10, "ines": -5 }
+}

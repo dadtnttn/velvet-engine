@@ -1,0 +1,54 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "Affinity moves between levels, clamps at the range, and keeps only the newest changes",
+  "characters": ["mara", "bram"],
+  "steps": [
+    {
+      "do": "change_affinity",
+      "character": "mara",
+      "other": "bram",
+      "delta": 25,
+      "reason": "gift.flowers",
+      "events": [{ "event": "affinity_level", "character": "mara", "other": "bram", "from": "neutral", "to": "friendly", "direction": "up" }]
+    },
+    {
+      "do": "change_affinity",
+      "character": "mara",
+      "other": "bram",
+      "delta": -80,
+      "reason": "argument.harbour",
+      "events": [{ "event": "affinity_level", "character": "mara", "other": "bram", "from": "friendly", "to": "hostile", "direction": "down" }]
+    },
+    { "do": "change_affinity", "character": "mara", "other": "bram", "delta": -200, "reason": "argument.shout", "events": [] },
+    { "do": "change_affinity", "character": "mara", "other": "bram", "delta": 10, "reason": "apology", "events": [] },
+    {
+      "do": "check",
+      "character": "mara",
+      "affinity": { "bram": -90 },
+      "affinity_levels": { "bram": "hostile" },
+      "history": [
+        { "other": "bram", "delta": 25, "value": 35, "reason": "gift.flowers" },
+        { "other": "bram", "delta": -80, "value": -45, "reason": "argument.harbour" },
+        { "other": "bram", "delta": -55, "value": -100, "reason": "argument.shout" },
+        { "other": "bram", "delta": 10, "value": -90, "reason": "apology" }
+      ]
+    },
+    { "do": "change_affinity", "character": "mara", "other": "bram", "delta": 5, "reason": "apology.small", "events": [] },
+    { "do": "change_affinity", "character": "mara", "other": "bram", "delta": 0, "reason": "nothing", "events": [] },
+    { "do": "change_affinity", "character": "mara", "other": "mara", "delta": 5, "reason": "self", "error": "argument" },
+    {
+      "do": "check",
+      "character": "mara",
+      "affinity": { "bram": -85, "ines": -5, "tomas": 0 },
+      "affinity_levels": { "bram": "hostile", "ines": "wary", "tomas": "neutral" },
+      "history": [
+        { "other": "bram", "delta": -80, "value": -45, "reason": "argument.harbour" },
+        { "other": "bram", "delta": -55, "value": -100, "reason": "argument.shout" },
+        { "other": "bram", "delta": 10, "value": -90, "reason": "apology" },
+        { "other": "bram", "delta": 5, "value": -85, "reason": "apology.small" }
+      ]
+    }
+  ]
+}

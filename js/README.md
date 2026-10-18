@@ -18,6 +18,8 @@ packages by path.
 | `packages/wasm` (`@velvet/wasm`) | The Rust crates that must match in both runtimes (`velvet-guion`, `velvet-stacks`), compiled to WebAssembly by `crates/velvet-wasm`. |
 | `packages/guion` (`@velvet/guion`) | Guiones (Markdown dialogue, `docs/formats/GUION.md`) played by velvet-guion through WebAssembly. |
 | `packages/cards` (`@velvet/cards`) | Cards on a board: stacks, recipes and timed jobs from velvet-stacks (`docs/formats/STACKS.md`). |
+| `packages/assets` (`@velvet/assets`) | Art by id: the `velvet-art` manifest, files in AVIF, WebP, PNG or SVG, generated placeholders, preloading and the missing-art report (`docs/formats/ART_MANIFEST.md`). |
+| `packages/characters` (`@velvet/characters`) | Characters: stats with formulas, needs with thresholds, professions with experience curves, affinity between characters, traits and saves (`docs/formats/CHARACTER.md`). |
 
 Packages are TypeScript **source**. Each `exports` entry points at `src/index.ts`, which Vite
 consumes directly, so there is no build step for them. The one built part is the WebAssembly in

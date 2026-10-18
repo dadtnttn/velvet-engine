@@ -1,0 +1,8 @@
+{
+  "format": "velvet-art",
+  "version": 1,
+  "entries": [
+    { "id": "card.wood", "kind": "card", "size": [180, 260] },
+    { "id": "card.wood", "kind": "card", "size": [200, 280] }
+  ]
+}

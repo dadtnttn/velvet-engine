@@ -1,0 +1,262 @@
+{
+  "manifest": "manifest.json",
+  "invalid": [
+    { "file": "invalid/not-json.json", "code": "json" },
+    { "file": "invalid/wrong-format.json", "code": "format" },
+    { "file": "invalid/wrong-version.json", "code": "version" },
+    { "file": "invalid/entries-not-array.json", "code": "structure" },
+    { "file": "invalid/meta-not-object.json", "code": "structure" },
+    { "file": "invalid/bad-id.json", "code": "value" },
+    { "file": "invalid/unknown-kind.json", "code": "value" },
+    { "file": "invalid/bad-size.json", "code": "value" },
+    { "file": "invalid/bad-anchor.json", "code": "value" },
+    { "file": "invalid/bad-variant.json", "code": "value" },
+    { "file": "invalid/duplicate-variant.json", "code": "duplicate" },
+    { "file": "invalid/duplicate-id.json", "code": "duplicate" },
+    { "file": "invalid/file-name-clash.json", "code": "duplicate" }
+  ],
+  "cases": [
+    {
+      "name": "AVIF is the first choice",
+      "files": [
+        "portrait/character.lyra.portrait.png",
+        "portrait/character.lyra.portrait.svg",
+        "portrait/character.lyra.portrait.webp",
+        "portrait/character.lyra.portrait.avif"
+      ],
+      "lookups": [
+        {
+          "id": "character.lyra.portrait",
+          "expect": { "source": "avif", "path": "portrait/character.lyra.portrait.avif", "from_variant": null }
+        }
+      ]
+    },
+    {
+      "name": "WebP beats PNG and a hand-made SVG",
+      "files": ["card/card.wood.svg", "card/card.wood.png", "card/card.wood.webp"],
+      "lookups": [
+        { "id": "card.wood", "expect": { "source": "webp", "path": "card/card.wood.webp", "from_variant": null } }
+      ]
+    },
+    {
+      "name": "PNG beats a hand-made SVG",
+      "files": ["icon/icon.coin.svg", "icon/icon.coin.png"],
+      "lookups": [
+        { "id": "icon.coin", "expect": { "source": "png", "path": "icon/icon.coin.png", "from_variant": null } }
+      ]
+    },
+    {
+      "name": "A hand-made SVG beats the placeholder",
+      "files": ["prop/prop.well.svg"],
+      "lookups": [
+        { "id": "prop.well", "expect": { "source": "svg", "path": "prop/prop.well.svg", "from_variant": null } }
+      ]
+    },
+    {
+      "name": "No file gives a placeholder, and the report lists every id",
+      "files": [],
+      "lookups": [
+        { "id": "card.wood", "expect": { "source": "placeholder", "path": null, "from_variant": null } },
+        {
+          "id": "character.lyra.portrait",
+          "variant": "happy",
+          "expect": { "source": "placeholder", "path": null, "from_variant": null }
+        }
+      ],
+      "report": [
+        { "id": "bg.forest", "kind": "background", "size": [1920, 1080], "base": false, "missing_variants": ["day", "night"] },
+        { "id": "card.wood", "kind": "card", "size": [180, 260], "base": false, "missing_variants": [] },
+        { "id": "character.lyra.fullbody", "kind": "fullbody", "size": [640, 1080], "base": false, "missing_variants": [] },
+        { "id": "character.lyra.portrait", "kind": "portrait", "size": [480, 640], "base": false, "missing_variants": ["neutral", "happy", "worried"] },
+        { "id": "icon.coin", "kind": "icon", "size": [64, 64], "base": false, "missing_variants": ["shiny"] },
+        { "id": "prop.well", "kind": "prop", "size": [128, 160], "base": false, "missing_variants": [] }
+      ]
+    },
+    {
+      "name": "A variant's own PNG beats a better base file",
+      "files": ["portrait/character.lyra.portrait.avif", "portrait/character.lyra.portrait.happy.png"],
+      "lookups": [
+        {
+          "id": "character.lyra.portrait",
+          "variant": "happy",
+          "expect": { "source": "png", "path": "portrait/character.lyra.portrait.happy.png", "from_variant": "happy" }
+        },
+        {
+          "id": "character.lyra.portrait",
+          "variant": "neutral",
+          "expect": { "source": "avif", "path": "portrait/character.lyra.portrait.avif", "from_variant": null }
+        }
+      ]
+    },
+    {
+      "name": "A variant falls back to the base id, in format order",
+      "files": ["portrait/character.lyra.portrait.png", "portrait/character.lyra.portrait.webp"],
+      "lookups": [
+        {
+          "id": "character.lyra.portrait",
+          "variant": "happy",
+          "expect": { "source": "webp", "path": "portrait/character.lyra.portrait.webp", "from_variant": null }
+        },
+        {
+          "id": "character.lyra.portrait",
+          "variant": "worried",
+          "expect": { "source": "webp", "path": "portrait/character.lyra.portrait.webp", "from_variant": null }
+        }
+      ]
+    },
+    {
+      "name": "A variant's SVG beats a base AVIF",
+      "files": ["background/bg.forest.avif", "background/bg.forest.night.svg"],
+      "lookups": [
+        {
+          "id": "bg.forest",
+          "variant": "night",
+          "expect": { "source": "svg", "path": "background/bg.forest.night.svg", "from_variant": "night" }
+        },
+        {
+          "id": "bg.forest",
+          "variant": "day",
+          "expect": { "source": "avif", "path": "background/bg.forest.avif", "from_variant": null }
+        }
+      ]
+    },
+    {
+      "name": "A variant with no base file, and a base with no variant file",
+      "files": ["background/bg.forest.night.png"],
+      "lookups": [
+        {
+          "id": "bg.forest",
+          "variant": "night",
+          "expect": { "source": "png", "path": "background/bg.forest.night.png", "from_variant": "night" }
+        },
+        { "id": "bg.forest", "variant": "day", "expect": { "source": "placeholder", "path": null, "from_variant": null } },
+        { "id": "bg.forest", "expect": { "source": "placeholder", "path": null, "from_variant": null } }
+      ]
+    },
+    {
+      "name": "Files in another kind's folder do not count",
+      "files": ["card/icon.coin.png", "icon/card.wood.png"],
+      "lookups": [
+        { "id": "icon.coin", "expect": { "source": "placeholder", "path": null, "from_variant": null } },
+        { "id": "card.wood", "expect": { "source": "placeholder", "path": null, "from_variant": null } }
+      ]
+    },
+    {
+      "name": "Backslashes and a leading ./ or / are read as paths",
+      "files": ["./card\\card.wood.png", "\\prop\\prop.well.webp"],
+      "lookups": [
+        { "id": "card.wood", "expect": { "source": "png", "path": "card/card.wood.png", "from_variant": null } },
+        { "id": "prop.well", "expect": { "source": "webp", "path": "prop/prop.well.webp", "from_variant": null } }
+      ]
+    },
+    {
+      "name": "The accept list skips formats, and keeps the order",
+      "files": ["card/card.wood.avif", "card/card.wood.webp", "card/card.wood.png"],
+      "accept": ["png", "svg", "webp"],
+      "lookups": [
+        { "id": "card.wood", "expect": { "source": "webp", "path": "card/card.wood.webp", "from_variant": null } }
+      ]
+    },
+    {
+      "name": "A format that is not accepted counts as missing in the report",
+      "files": ["card/card.wood.avif"],
+      "accept": ["webp"],
+      "lookups": [
+        { "id": "card.wood", "expect": { "source": "placeholder", "path": null, "from_variant": null } }
+      ],
+      "report": [
+        { "id": "bg.forest", "kind": "background", "size": [1920, 1080], "base": false, "missing_variants": ["day", "night"] },
+        { "id": "card.wood", "kind": "card", "size": [180, 260], "base": false, "missing_variants": [] },
+        { "id": "character.lyra.fullbody", "kind": "fullbody", "size": [640, 1080], "base": false, "missing_variants": [] },
+        { "id": "character.lyra.portrait", "kind": "portrait", "size": [480, 640], "base": false, "missing_variants": ["neutral", "happy", "worried"] },
+        { "id": "icon.coin", "kind": "icon", "size": [64, 64], "base": false, "missing_variants": ["shiny"] },
+        { "id": "prop.well", "kind": "prop", "size": [128, 160], "base": false, "missing_variants": [] }
+      ]
+    },
+    {
+      "name": "An id the manifest does not have is an error",
+      "files": [],
+      "lookups": [
+        { "id": "character.mara.portrait", "expect": { "error": "unknown-id" } }
+      ]
+    },
+    {
+      "name": "A variant the id does not declare is an error",
+      "files": [],
+      "lookups": [
+        { "id": "card.wood", "variant": "gold", "expect": { "error": "unknown-variant" } },
+        { "id": "character.lyra.portrait", "variant": "sad", "expect": { "error": "unknown-variant" } }
+      ]
+    },
+    {
+      "name": "Some files present: the report lists only what is missing",
+      "files": [
+        "portrait/character.lyra.portrait.png",
+        "portrait/character.lyra.portrait.happy.png",
+        "card/card.wood.webp",
+        "icon/icon.coin.png",
+        "icon/icon.coin.shiny.png",
+        "background/bg.forest.day.png"
+      ],
+      "lookups": [
+        {
+          "id": "character.lyra.portrait",
+          "variant": "neutral",
+          "expect": { "source": "png", "path": "portrait/character.lyra.portrait.png", "from_variant": null }
+        },
+        {
+          "id": "icon.coin",
+          "variant": "shiny",
+          "expect": { "source": "png", "path": "icon/icon.coin.shiny.png", "from_variant": "shiny" }
+        }
+      ],
+      "report": [
+        { "id": "bg.forest", "kind": "background", "size": [1920, 1080], "base": false, "missing_variants": ["night"] },
+        { "id": "character.lyra.fullbody", "kind": "fullbody", "size": [640, 1080], "base": false, "missing_variants": [] },
+        { "id": "character.lyra.portrait", "kind": "portrait", "size": [480, 640], "base": true, "missing_variants": ["neutral", "worried"] },
+        { "id": "prop.well", "kind": "prop", "size": [128, 160], "base": false, "missing_variants": [] }
+      ]
+    },
+    {
+      "name": "Every file present: the report is empty",
+      "files": [
+        "portrait/character.lyra.portrait.png",
+        "portrait/character.lyra.portrait.neutral.png",
+        "portrait/character.lyra.portrait.happy.png",
+        "portrait/character.lyra.portrait.worried.png",
+        "fullbody/character.lyra.fullbody.png",
+        "card/card.wood.png",
+        "icon/icon.coin.png",
+        "icon/icon.coin.shiny.png",
+        "background/bg.forest.png",
+        "background/bg.forest.day.png",
+        "background/bg.forest.night.png",
+        "prop/prop.well.png"
+      ],
+      "lookups": [
+        {
+          "id": "character.lyra.portrait",
+          "variant": "happy",
+          "expect": { "source": "png", "path": "portrait/character.lyra.portrait.happy.png", "from_variant": "happy" }
+        }
+      ],
+      "report": []
+    }
+  ],
+  "placeholders": [
+    { "id": "character.lyra.portrait", "kind": "portrait", "label": "lyra", "color": "#70c272" },
+    { "id": "character.lyra.fullbody", "kind": "fullbody", "label": "lyra", "color": "#baac5e" },
+    { "id": "card.wood", "kind": "card", "label": "wood", "color": "#8b3b9b" },
+    { "id": "icon.coin", "kind": "icon", "label": "coin", "color": "#be3754" },
+    { "id": "bg.forest", "kind": "background", "label": "forest", "color": "#9b814b" },
+    { "id": "prop.well", "kind": "prop", "label": "well", "color": "#91a145" },
+    { "id": "prop.hay-bale", "kind": "prop", "label": "hay bale", "color": "#9045a1" },
+    {
+      "id": "prop.the_old_stone_well_at_the_edge_of_town",
+      "kind": "prop",
+      "label": "the old stone well at...",
+      "color": "#a1457d"
+    },
+    { "id": "portrait", "kind": "portrait", "label": "portrait", "color": "#c27083" }
+  ]
+}

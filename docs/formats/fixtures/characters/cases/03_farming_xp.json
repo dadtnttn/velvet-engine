@@ -1,0 +1,34 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "Experience raises the level one threshold at a time and stops at the top of the curve",
+  "characters": ["mara"],
+  "steps": [
+    {
+      "do": "gain_xp",
+      "character": "mara",
+      "profession": "farming",
+      "amount": 150,
+      "events": [{ "event": "level_up", "character": "mara", "profession": "farming", "level": 3 }]
+    },
+    { "do": "check", "character": "mara", "xp": { "farming": 270 }, "levels": { "farming": 3 } },
+    {
+      "do": "gain_xp",
+      "character": "mara",
+      "profession": "farming",
+      "amount": 500,
+      "events": [
+        { "event": "level_up", "character": "mara", "profession": "farming", "level": 4 },
+        { "event": "level_up", "character": "mara", "profession": "farming", "level": 5 }
+      ]
+    },
+    { "do": "check", "character": "mara", "xp": { "farming": 700 }, "levels": { "farming": 5 } },
+    { "do": "gain_xp", "character": "mara", "profession": "farming", "amount": 10, "events": [] },
+    { "do": "check", "character": "mara", "xp": { "farming": 700 }, "levels": { "farming": 5 } },
+    { "do": "gain_xp", "character": "mara", "profession": "cooking", "amount": 5, "error": "unknown-profession" },
+    { "do": "gain_xp", "character": "mara", "profession": "farming", "amount": -5, "error": "argument" },
+    { "do": "gain_xp", "character": "mara", "profession": "scholarship", "amount": 0, "events": [] },
+    { "do": "check", "character": "mara", "xp": { "scholarship": 0 }, "levels": { "scholarship": 1 } }
+  ]
+}

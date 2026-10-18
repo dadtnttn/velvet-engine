@@ -1,0 +1,15 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "character",
+  "id": "ines",
+  "name": "character.ines.name",
+  "title": "character.ines.title",
+  "art": { "portrait": "ines_portrait" },
+  "tags": ["scholar"],
+  "stats": { "strength": 6, "wisdom": 15, "charm": 8 },
+  "needs": { "hunger": 75, "energy": 65, "mood": 80 },
+  "professions": { "scholarship": 140 },
+  "traits": ["curious"],
+  "relationships": { "mara": 20 }
+}

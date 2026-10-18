@@ -1,0 +1,7 @@
+{
+  "format": "velvet-art",
+  "version": 1,
+  "entries": [
+    { "id": "prop.well", "kind": "prop", "size": [128, 160], "anchor": [0.5, 1.5] }
+  ]
+}

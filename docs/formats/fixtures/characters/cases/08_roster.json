@@ -1,0 +1,53 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "The roster finds characters by tag, and lists the affinities between them in both directions",
+  "characters": ["mara", "bram", "ines"],
+  "steps": [
+    {
+      "do": "change_affinity",
+      "character": "bram",
+      "other": "mara",
+      "delta": 50,
+      "reason": "gift.bread",
+      "events": [{ "event": "affinity_level", "character": "bram", "other": "mara", "from": "neutral", "to": "friendly", "direction": "up" }]
+    }
+  ],
+  "queries": [
+    { "kind": "by_tag", "tag": "villager", "expect": ["bram", "mara"] },
+    { "kind": "by_tag", "tag": "guard", "expect": ["bram"] },
+    {
+      "kind": "relations",
+      "of": "mara",
+      "expect": [
+        { "other": "bram", "value": 10, "level": "neutral" },
+        { "other": "ines", "value": -5, "level": "wary" }
+      ]
+    },
+    { "kind": "relations", "of": "bram", "expect": [{ "other": "mara", "value": 50, "level": "friendly" }] },
+    {
+      "kind": "relations",
+      "of": "mara",
+      "min_level": "neutral",
+      "expect": [{ "other": "bram", "value": 10, "level": "neutral" }]
+    },
+    {
+      "kind": "opinions",
+      "of": "mara",
+      "expect": [
+        { "from": "bram", "value": 50, "level": "friendly" },
+        { "from": "ines", "value": 20, "level": "neutral" }
+      ]
+    },
+    {
+      "kind": "opinions",
+      "of": "mara",
+      "min_level": "friendly",
+      "expect": [{ "from": "bram", "value": 50, "level": "friendly" }]
+    },
+    { "kind": "opinions", "of": "ines", "expect": [{ "from": "mara", "value": -5, "level": "wary" }] },
+    { "kind": "relations", "of": "ghost", "error": "unknown-character" },
+    { "kind": "relations", "of": "mara", "min_level": "legend", "error": "unknown-level" }
+  ]
+}

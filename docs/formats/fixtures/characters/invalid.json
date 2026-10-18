@@ -1,0 +1,441 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "Documents that must be refused, each with the code of the rule that breaks",
+  "note": "Schema cases read the document as it is given (`text` as the file text, `document` as an object). Character cases are read against schema.json.",
+  "cases": [
+    { "name": "not JSON", "as": "schema", "text": "{ \"format\": ", "error": "json" },
+    {
+      "name": "another format",
+      "as": "schema",
+      "document": { "format": "velvet-stacks", "version": 1, "kind": "schema" },
+      "error": "unsupported-document"
+    },
+    {
+      "name": "a newer version",
+      "as": "schema",
+      "document": { "format": "velvet-character", "version": 2, "kind": "schema" },
+      "error": "unsupported-document"
+    },
+    {
+      "name": "a character given as a schema",
+      "as": "schema",
+      "document": { "format": "velvet-character", "version": 1, "kind": "character", "id": "x", "name": "x" },
+      "error": "unsupported-document"
+    },
+    {
+      "name": "a stat listed twice",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [
+          { "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 },
+          { "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 }
+        ]
+      },
+      "error": "duplicate-id"
+    },
+    {
+      "name": "a stat named after a formula function",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [{ "id": "max", "label": "stat.max", "min": 0, "max": 20, "default": 8 }]
+      },
+      "error": "bad-id"
+    },
+    {
+      "name": "a stat id with a capital letter",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [{ "id": "Strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 }]
+      },
+      "error": "bad-id"
+    },
+    {
+      "name": "a minimum above the maximum",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [{ "id": "strength", "label": "stat.strength", "min": 10, "max": 5, "default": 8 }]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "a default outside the range",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [{ "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 30 }]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "a derived stat with a default",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [
+          { "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 },
+          { "id": "double", "label": "stat.double", "min": 0, "max": 40, "formula": "strength * 2", "default": 3 }
+        ]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "a formula that reads an unknown stat",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [{ "id": "double", "label": "stat.double", "min": 0, "max": 40, "formula": "power * 2" }]
+      },
+      "error": "unknown-stat"
+    },
+    {
+      "name": "a formula that calls an unknown function",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [
+          { "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 },
+          { "id": "root", "label": "stat.root", "min": 0, "max": 20, "formula": "sqrt(strength)" }
+        ]
+      },
+      "error": "unknown-function"
+    },
+    {
+      "name": "a formula that calls a function with too few arguments",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [
+          { "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 },
+          { "id": "held", "label": "stat.held", "min": 0, "max": 20, "formula": "clamp(strength, 0)" }
+        ]
+      },
+      "error": "arity"
+    },
+    {
+      "name": "a formula with a missing operand",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [
+          { "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 },
+          { "id": "held", "label": "stat.held", "min": 0, "max": 20, "formula": "strength +" }
+        ]
+      },
+      "error": "expression"
+    },
+    {
+      "name": "a formula with a literal zero divisor",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [
+          { "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 },
+          { "id": "held", "label": "stat.held", "min": 0, "max": 20, "formula": "strength / 0" }
+        ]
+      },
+      "error": "division-by-zero"
+    },
+    {
+      "name": "two formulas that read each other",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [
+          { "id": "alpha", "label": "stat.alpha", "min": 0, "max": 20, "formula": "beta + 1" },
+          { "id": "beta", "label": "stat.beta", "min": 0, "max": 20, "formula": "alpha * 2" }
+        ]
+      },
+      "error": "cycle"
+    },
+    {
+      "name": "a threshold outside the range of its need",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "needs": [
+          {
+            "id": "hunger",
+            "label": "need.hunger",
+            "min": 0,
+            "max": 100,
+            "default": 50,
+            "thresholds": [{ "id": "hungry", "at": 150, "when": "below" }]
+          }
+        ]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "a threshold with an unknown direction",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "needs": [
+          {
+            "id": "hunger",
+            "label": "need.hunger",
+            "min": 0,
+            "max": 100,
+            "default": 50,
+            "thresholds": [{ "id": "hungry", "at": 30, "when": "sideways" }]
+          }
+        ]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "an experience curve that does not start at 0",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "professions": [{ "id": "farming", "label": "profession.farming", "xp_thresholds": [10, 100] }]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "an experience curve that does not rise",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "professions": [{ "id": "farming", "label": "profession.farming", "xp_thresholds": [0, 100, 90] }]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "affinity levels that do not start at the lowest affinity",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "relationships": { "levels": [{ "id": "wary", "label": "relation.wary", "at": -20 }] }
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "a trait that changes an unknown stat",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "traits": [{ "id": "lazy", "label": "trait.lazy", "modifiers": [{ "stat": "speed", "add": 1 }] }]
+      },
+      "error": "unknown-stat"
+    },
+    {
+      "name": "a trait that changes the rate of an unknown need",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "traits": [{ "id": "thirsty", "label": "trait.thirsty", "modifiers": [{ "rate": "thirst", "add": 1 }] }]
+      },
+      "error": "unknown-need"
+    },
+    {
+      "name": "a trait modifier with both add and mul",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [{ "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 }],
+        "traits": [{ "id": "strong", "label": "trait.strong", "modifiers": [{ "stat": "strength", "add": 1, "mul": 2 }] }]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "a trait modifier with a negative mul",
+      "as": "schema",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "schema",
+        "stats": [{ "id": "strength", "label": "stat.strength", "min": 0, "max": 20, "default": 8 }],
+        "traits": [{ "id": "weak", "label": "trait.weak", "modifiers": [{ "stat": "strength", "mul": -1 }] }]
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "a character with a trait the schema does not have",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "traits": ["dragon"]
+      },
+      "error": "unknown-trait"
+    },
+    {
+      "name": "a character that sets a derived stat",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "stats": { "work_power": 5 }
+      },
+      "error": "derived-stat"
+    },
+    {
+      "name": "a character whose starting stat is above its maximum",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "stats": { "strength": 99 }
+      },
+      "error": "out-of-range"
+    },
+    {
+      "name": "a character with a stat the schema does not have",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "stats": { "speed": 3 }
+      },
+      "error": "unknown-stat"
+    },
+    {
+      "name": "a character with a need the schema does not have",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "needs": { "thirst": 3 }
+      },
+      "error": "unknown-need"
+    },
+    {
+      "name": "a character with a profession the schema does not have",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "professions": { "cooking": 3 }
+      },
+      "error": "unknown-profession"
+    },
+    {
+      "name": "a character with more experience than its curve holds",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "professions": { "farming": 9000 }
+      },
+      "error": "out-of-range"
+    },
+    {
+      "name": "a character with an affinity toward itself",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "relationships": { "test_one": 5 }
+      },
+      "error": "invalid"
+    },
+    {
+      "name": "a tag listed twice",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "tags": ["farm", "farm"]
+      },
+      "error": "duplicate-id"
+    },
+    {
+      "name": "an art id with a space",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one",
+        "name": "character.test.name",
+        "art": { "portrait": "mara portrait" }
+      },
+      "error": "bad-id"
+    },
+    {
+      "name": "a character without a name",
+      "as": "character",
+      "document": {
+        "format": "velvet-character",
+        "version": 1,
+        "kind": "character",
+        "id": "test_one"
+      },
+      "error": "invalid"
+    }
+  ]
+}

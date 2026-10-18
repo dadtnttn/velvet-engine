@@ -1,0 +1,35 @@
+{
+  "format": "velvet-character",
+  "version": 1,
+  "kind": "case",
+  "name": "A save and a reload give back the same values; the reload is checked against the state before it",
+  "characters": ["mara", "bram"],
+  "steps": [
+    { "do": "tick", "character": "mara", "dt": 100, "events": [] },
+    {
+      "do": "change_affinity",
+      "character": "mara",
+      "other": "bram",
+      "delta": 15,
+      "reason": "chat.morning",
+      "events": []
+    },
+    { "do": "gain_xp", "character": "mara", "profession": "farming", "amount": 50, "events": [] },
+    { "do": "add_trait", "character": "mara", "trait": "brave" },
+    { "do": "change_need", "character": "mara", "need": "mood", "delta": -20, "events": [] },
+    { "do": "reload", "character": "mara" },
+    {
+      "do": "check",
+      "character": "mara",
+      "needs": { "hunger": 47.5, "energy": 70.625, "mood": 50 },
+      "stats": { "strength": 16.25, "work_power": 37.5 },
+      "xp": { "farming": 170 },
+      "levels": { "farming": 2 },
+      "affinity": { "bram": 25 },
+      "affinity_levels": { "bram": "neutral" },
+      "history": [{ "other": "bram", "delta": 15, "value": 25, "reason": "chat.morning" }],
+      "traits": ["brave", "hardworking"]
+    },
+    { "do": "check", "character": "bram", "affinity": { "mara": 0 }, "affinity_levels": { "mara": "neutral" } }
+  ]
+}
