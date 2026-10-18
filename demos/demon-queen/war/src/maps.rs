@@ -157,7 +157,7 @@ fn hill(x: f32, z: f32, r: f32, h: f32) -> Hill {
     Hill { x, z, r, h }
 }
 
-fn empty(
+pub(crate) fn empty(
     kind: &'static str,
     title: &'static str,
     blurb: &'static str,

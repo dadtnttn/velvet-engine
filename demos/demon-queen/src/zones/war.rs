@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 use super::map_overlay::{
     ArmyTag, BannerTag, BattleView, CampPanel, CampaignView, Glyph, MarchView, MiniDot, Minimap,
-    Modal, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus, WarButton,
+    Modal, Objective, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus, WarButton,
     WarHit, WarView,
 };
 use super::*;
@@ -30,6 +30,33 @@ fn smooth(a: f32, b: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
+/// The war map 2.0 (`data/guerra`, exported by the prototype's `export_war_game.py`), put in place
+/// once before the campaign's land is built; without it the land is the procedural one.
+pub(crate) fn install_war_map() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let dir = exploration3d_state::data_dir().join("guerra");
+        match (
+            std::fs::read(dir.join("mapa.bin")),
+            std::fs::read_to_string(dir.join("mapa.json")),
+        ) {
+            (Ok(bin), Ok(json)) => match wr::campaign_map::MapData::parse(&bin, &json) {
+                Ok(m) => {
+                    eprintln!(
+                        "[guerra] the war map 2.0: {}x{} land, {} trees",
+                        m.nx,
+                        m.nz,
+                        m.trees.len()
+                    );
+                    wr::campaign_map::install(m);
+                }
+                Err(e) => eprintln!("[guerra] the war map 2.0 did not read: {e}"),
+            },
+            _ => eprintln!("[guerra] no war map 2.0 in data/guerra: the land of before"),
+        }
+    });
+}
+
 // ------------------------------------------------------------------ the general's eye
 /// Pans over the field (WASD, arrows, the screen's edges; the middle button turns and tilts), Q/E
 /// turn, the wheel zooms from shoulder height up to a hawk's view; the closer, the flatter.
@@ -47,6 +74,10 @@ pub(crate) struct RtsCam {
     /// Where the focus may go: x0, x1, z0, z1.
     pub bounds: [f32; 4],
     pub fov: f32,
+    /// The pitch below the horizon close up and far out, and the distances it eases between.
+    pub pitch_near: f32,
+    pub pitch_far: f32,
+    pub pitch_span: [f32; 2],
 }
 
 impl RtsCam {
@@ -63,12 +94,25 @@ impl RtsCam {
             max_d,
             bounds,
             fov,
+            pitch_near: 0.36,
+            pitch_far: 1.06,
+            pitch_span: [10.0, 280.0],
         }
     }
 
+    /// The web map's campaign camera (Total War): close, low towards the horizon; far, a map's
+    /// top view.
+    pub(crate) fn campaign(bounds: [f32; 4]) -> Self {
+        let mut c = Self::new(bounds, 9.0, 175.0, 42.0);
+        c.pitch_near = 0.42;
+        c.pitch_far = 1.12;
+        c.pitch_span = [9.0, 150.0];
+        c
+    }
+
     pub(crate) fn pitch(&self) -> f32 {
-        let t = smooth(10.0, 280.0, self.dist);
-        (0.36 + (1.06 - 0.36) * t + self.tilt).clamp(0.2, 1.38)
+        let t = smooth(self.pitch_span[0], self.pitch_span[1], self.dist);
+        (self.pitch_near + (self.pitch_far - self.pitch_near) * t + self.tilt).clamp(0.2, 1.38)
     }
 
     /// Looks at (x, z), at once or gliding.
@@ -300,6 +344,18 @@ pub(crate) enum Fx {
         z: f32,
         color: [f32; 3],
     },
+    /// A power's ring going out on the ground.
+    Ring {
+        x: f32,
+        z: f32,
+        r: f32,
+        color: [f32; 3],
+    },
+    /// An ember falling from the sky onto (x, z).
+    Ember {
+        x: f32,
+        z: f32,
+    },
 }
 
 /// The ghost of an order just given: the slots it fills, fading.
@@ -337,6 +393,64 @@ pub(crate) struct BattleRun {
     pub scenario: Option<String>,
     /// The banners over the regiments, from one frame to the next (`world_tags`).
     pub tags: std::cell::RefCell<super::world_tags::TagLayout>,
+    /// What she is placing (the build bar), and where it would stand under the pointer: x, z, its
+    /// turn, why not (if not).
+    pub build: Option<wr::siege::Kind>,
+    pub ghost: Option<(f32, f32, f32, Option<&'static str>)>,
+    /// The engine of hers chosen (a click on it), and the one under the pointer.
+    pub engine_sel: Option<usize>,
+    pub engine_hover: Option<usize>,
+    /// Her war powers set and the field's relic laid (once, the first step of the battle).
+    pub armed: bool,
+    pub relic: Option<super::war_story::FieldRelic>,
+    /// The power she is aiming (its ring under the pointer), and where it would land.
+    pub power_aim: Option<wr::powers::Power>,
+    pub power_at: Option<(f32, f32)>,
+}
+
+/// Which way a thing built at (x, z) faces: an engine at what it is for (the keep for a siege's
+/// attackers, else the enemy's middle); a line across it.
+fn build_yaw(b: &Battle, kind: wr::siege::Kind, x: f32, z: f32) -> f32 {
+    let sim = &b.sim;
+    let at = sim
+        .siege
+        .as_ref()
+        .filter(|s| s.attacker(0))
+        .and_then(|s| s.hold_at.map(|(kx, kz, _)| (kx, kz)))
+        .unwrap_or_else(|| {
+            let foes: Vec<&wr::sim::Regiment> = sim
+                .regiments
+                .iter()
+                .filter(|r| r.side == 1 && r.alive > 0)
+                .collect();
+            let n = foes.len().max(1) as f32;
+            (
+                foes.iter().map(|r| r.cx).sum::<f32>() / n,
+                foes.iter().map(|r| r.cz).sum::<f32>() / n,
+            )
+        });
+    let face = (at.0 - x).atan2(at.1 - z);
+    if kind.line() {
+        face + std::f32::consts::FRAC_PI_2
+    } else {
+        face
+    }
+}
+
+/// The engine standing at (x, z), if any (alive), of `side` if given.
+fn engine_at(b: &Battle, x: f32, z: f32, side: Option<u8>) -> Option<usize> {
+    let s = b.sim.siege.as_ref()?;
+    s.engines
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.alive && side.is_none_or(|sd| e.side == sd))
+        .map(|(i, e)| {
+            let r = e.spec().radius.max(e.spec().length / 2.0) + 1.5;
+            (i, (e.x - x).hypot(e.z - z) - r)
+        })
+        .filter(|&(_, d)| d < 0.0)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(i, _)| i)
 }
 
 /// An army's token on the campaign map, sliding from one province to the next.
@@ -347,6 +461,18 @@ pub(crate) struct Token {
     pub to: Vec3,
     pub t: f32,
     pub yaw: f32,
+}
+
+/// What the campaign's view shows of the story (`war_story.rs`).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct StoryView {
+    pub objective: String,
+    /// Each region's relic: the line about it, and whether it has been found.
+    pub relic: HashMap<String, (String, bool)>,
+    /// The river is still closed to her armies.
+    pub river_closed: bool,
+    /// Today's turn has been ended already (the next one, after she sleeps).
+    pub turn_today: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -405,6 +531,14 @@ pub(crate) struct WarSession {
     pub battle_serial: u64,
     /// The war table's entry the keys are on (the mouse moves it too).
     pub focus: usize,
+    /// A pointer held where it is for the captures (QA), when the window has none.
+    pub qa_pointer: Option<(f32, f32)>,
+    /// The quick battles' map of the continent chosen (in `baked::BATTLE_MAPS`), and whether she
+    /// attacks on it.
+    pub map_pick: usize,
+    pub map_attack: bool,
+    /// The war's scenes waiting for a quiet moment (`war_story.rs`).
+    pub scenes: VecDeque<String>,
 }
 
 impl WarSession {
@@ -471,10 +605,15 @@ impl App {
             minimap_ready: false,
             battle_serial: 0,
             focus: 0,
+            qa_pointer: None,
+            map_pick: 0,
+            map_attack: true,
+            scenes: VecDeque::new(),
         });
         self.map_open = false;
         self.clear_input();
         ui_sfx::play(ui_sfx::UiSfx::Open);
+        self.treasury_in();
         self.build_war_view();
     }
 
@@ -517,12 +656,38 @@ impl App {
         eprintln!("[guerra] quick battle «{}»", sc.id);
     }
 
+    /// A battle on one of the war map 2.0's battle maps, the quick battles' armies (QA, the table).
+    pub(crate) fn start_map_battle(&mut self, map: &str, player_attacks: bool) {
+        let Some(w) = self.war.as_mut() else {
+            return;
+        };
+        let mut setup = Setup::scenario(SCENARIOS[0].id, w.scale);
+        setup.map = map.to_owned();
+        setup.player_attacks = player_attacks;
+        setup.title = String::new();
+        if let Some(m) = wr::baked::ensure(map, &super::war_render::battle_maps_root()) {
+            setup.kicker = m.kicker.clone();
+            setup.subtitle = m.blurb.clone();
+        }
+        setup.enemy_posture = Some(if player_attacks {
+            wr::ai::Posture::Defend
+        } else {
+            wr::ai::Posture::Attack
+        });
+        setup.seed = (self.elapsed * 1000.0) as u32 % 9973 + 1;
+        let again = format!("mapa:{map}:{}", player_attacks as u8);
+        Self::begin_battle(w, setup, None, Some(again));
+        eprintln!("[guerra] battle on the map «{map}»");
+    }
+
     fn begin_battle(
         w: &mut WarSession,
         setup: Setup,
         from_campaign: Option<CampaignFight>,
         scenario: Option<String>,
     ) {
+        // the battle maps of the war map 2.0 load the first time they are fought on
+        let _ = wr::baked::ensure(&setup.map, &super::war_render::battle_maps_root());
         let b = Battle::new(setup);
         let p = b.sim.field.play;
         let mut cam = RtsCam::new(
@@ -536,11 +701,21 @@ impl App {
         let n = mine.len().max(1) as f32;
         let cx = mine.iter().map(|r| r.cx).sum::<f32>() / n;
         let cz = mine.iter().map(|r| r.cz).sum::<f32>() / n;
+        // behind her army, looking at the enemy's (on the hand-made fields: north)
+        let theirs: Vec<&wr::sim::Regiment> =
+            b.sim.regiments.iter().filter(|r| r.side == 1).collect();
+        let m = theirs.len().max(1) as f32;
+        let ex = theirs.iter().map(|r| r.cx).sum::<f32>() / m;
+        let ez = theirs.iter().map(|r| r.cz).sum::<f32>() / m;
+        let (dx, dz) = (ex - cx, ez - cz);
+        let l = dx.hypot(dz).max(1.0);
+        let yaw = if b.sim.field.baked.is_some() { (-dx).atan2(-dz) } else { 0.0 };
+        let (fx, fz) = if b.sim.field.baked.is_some() { (dx / l, dz / l) } else { (0.0, -1.0) };
         cam.frame(
-            cx,
-            cz - 40.0,
+            cx + fx * 40.0,
+            cz + fz * 40.0,
             Some(150.0),
-            Some(0.0),
+            Some(yaw),
             true,
             &Self::battle_ground(&b),
         );
@@ -563,6 +738,14 @@ impl App {
             hover_t: 0.0,
             scenario,
             tags: Default::default(),
+            build: None,
+            ghost: None,
+            engine_sel: None,
+            engine_hover: None,
+            armed: false,
+            relic: None,
+            power_aim: None,
+            power_at: None,
         });
         w.page = WarPage::Battle;
         w.press = None;
@@ -575,17 +758,30 @@ impl App {
 
     /// The campaign: the saved one, or a new one.
     fn start_campaign(&mut self, fresh: bool) {
+        install_war_map();
         let varrak = self.varrak_awake();
+        // a campaign saved before the war map 2.0 moves onto it
+        if let Some(c) = self.war_campaign.as_mut() {
+            c.migrate();
+        }
         if fresh || self.war_campaign.is_none() {
             let seed = (self.elapsed * 1000.0) as u32 % 9973 + 1;
             self.war_campaign = Some(Campaign::new(seed, varrak));
+            if let Some(s) = self.war_campaign.as_mut() {
+                // (Varrak woken in the story is in it from the start: no scene for him joining)
+                s.story_mark("varrak");
+            }
         }
+        self.treasury_in();
+        // (the campaign's first scene before the ones the story asks for)
+        self.queue_war_scene("guerra.intro");
+        self.story_into_campaign();
         let Some(w) = self.war.as_mut() else {
             return;
         };
         let land = wr::campaign_map::Land::new();
         let land_ground = |x: f32, z: f32| land.top_at(x, z);
-        let mut cam = RtsCam::new([-104.0, 104.0, -60.0, 64.0], 24.0, 250.0, 32.0);
+        let mut cam = RtsCam::campaign([-110.0, 110.0, -67.0, 67.0]);
         let s = self.war_campaign.as_ref().expect("a campaign");
         let at = s
             .queen_army()
@@ -645,6 +841,28 @@ impl App {
 
     // ------------------------------------------------------------------ input
     pub(crate) fn war_key(&mut self, code: KeyCode, pressed: bool, repeat: bool) {
+        // a conversation over the war takes the keys (the war waits under it)
+        if self.talk.is_some() {
+            if pressed && !repeat {
+                match code {
+                    KeyCode::KeyF | KeyCode::Space | KeyCode::Enter | KeyCode::NumpadEnter => {
+                        self.talk_confirm()
+                    }
+                    KeyCode::ArrowUp | KeyCode::KeyW => self.talk_move(-1),
+                    KeyCode::ArrowDown | KeyCode::KeyS => self.talk_move(1),
+                    KeyCode::Digit1 | KeyCode::Numpad1 => self.talk_pick(0),
+                    KeyCode::Digit2 | KeyCode::Numpad2 => self.talk_pick(1),
+                    KeyCode::Digit3 | KeyCode::Numpad3 => self.talk_pick(2),
+                    KeyCode::Digit4 | KeyCode::Numpad4 => self.talk_pick(3),
+                    KeyCode::Escape | KeyCode::Backspace if !self.stage_up() => self.end_talk(),
+                    _ => {}
+                }
+            }
+            if let Some(w) = self.war.as_mut() {
+                w.keys = WarKeys::default();
+            }
+            return;
+        }
         let Some(w) = self.war.as_mut() else {
             return;
         };
@@ -690,7 +908,17 @@ impl App {
                         .filter(|b| b.style == 4)
                         .nth(w.focus)
                         .is_some_and(|b| b.hit == WarHit::Table(3));
-                    if on_size {
+                    let on_map = w
+                        .view
+                        .buttons
+                        .iter()
+                        .filter(|b| b.style == 4)
+                        .nth(w.focus)
+                        .is_some_and(|b| b.hit == WarHit::Table(30));
+                    if on_map {
+                        let right = matches!(code, KeyCode::ArrowRight | KeyCode::KeyD);
+                        self.war_hit(WarHit::Table(if right { 32 } else { 31 }));
+                    } else if on_size {
                         let at = SIZES
                             .iter()
                             .position(|&k| (k - w.scale).abs() < 0.01)
@@ -778,6 +1006,12 @@ impl App {
                     KeyCode::KeyG => self.war_hit(WarHit::Order(2)),
                     KeyCode::KeyK => self.war_hit(WarHit::Order(3)),
                     KeyCode::KeyF => self.war_hit(WarHit::Order(4)),
+                    KeyCode::KeyZ => self.war_hit(WarHit::Power(0)),
+                    KeyCode::KeyX => self.war_hit(WarHit::Power(1)),
+                    KeyCode::KeyC => self.war_hit(WarHit::Power(2)),
+                    KeyCode::KeyV => self.war_hit(WarHit::Power(3)),
+                    KeyCode::KeyB => self.war_hit(WarHit::Power(4)),
+                    KeyCode::KeyN => self.war_hit(WarHit::Power(5)),
                     KeyCode::F1 => self.war_hit(WarHit::Help),
                     KeyCode::Enter => self.war_hit(WarHit::Begin),
                     KeyCode::KeyA if ctrl => {
@@ -787,12 +1021,26 @@ impl App {
                         ui_sfx::play(ui_sfx::UiSfx::Move);
                     }
                     KeyCode::Escape | KeyCode::Backspace => {
-                        if run.help {
+                        if run.build.is_some() {
+                            run.build = None;
+                            run.ghost = None;
+                        } else if run.help {
                             run.help = false;
                         } else {
                             for r in &mut run.b.sim.regiments {
                                 r.selected = false;
                             }
+                            Self::select_engine(run, None);
+                        }
+                    }
+                    KeyCode::Delete => {
+                        if let (Some(i), true) = (run.engine_sel, run.b.deploying) {
+                            if let Some(mut s) = run.b.sim.siege.take() {
+                                s.unbuild(&mut run.b.sim, i);
+                                run.b.sim.siege = Some(s);
+                            }
+                            Self::select_engine(run, None);
+                            ui_sfx::play(ui_sfx::UiSfx::Move);
                         }
                     }
                     _ => {}
@@ -833,6 +1081,16 @@ impl App {
         };
         let pointer = self.shop_pointer_position();
         let now = self.elapsed;
+        // a conversation over the war takes the clicks
+        if self.talk.is_some() {
+            if pressed && b == 0 {
+                self.talk_click();
+            }
+            if let Some(w) = self.war.as_mut() {
+                w.press = None;
+            }
+            return;
+        }
         let Some(w) = self.war.as_mut() else {
             return;
         };
@@ -916,6 +1174,10 @@ impl App {
     /// The pointer moved: the middle button turns the camera, a held left draws the box, a held
     /// right the line.
     pub(crate) fn war_pointer(&mut self) {
+        if self.talk.is_some() {
+            self.talk_hover();
+            return;
+        }
         let pointer = self.shop_pointer_position();
         let Some(w) = self.war.as_mut() else {
             return;
@@ -1087,6 +1349,16 @@ impl App {
         best
     }
 
+    /// Chooses one of her engines (or none): the others let go.
+    fn select_engine(run: &mut BattleRun, i: Option<usize>) {
+        run.engine_sel = i;
+        if let Some(s) = run.b.sim.siege.as_mut() {
+            for (k, e) in s.engines.iter_mut().enumerate() {
+                e.selected = Some(k) == i;
+            }
+        }
+    }
+
     fn battle_release(&mut self, press: Press, x: f32, y: f32, now: f32) {
         let Some(w) = self.war.as_mut() else {
             return;
@@ -1097,6 +1369,101 @@ impl App {
         };
         if run.result.is_some() || run.help || run.confirm {
             return;
+        }
+        // a war power aimed: a click casts it there, the right button stops aiming
+        if let Some(p) = run.power_aim {
+            if press.button == 2 {
+                run.power_aim = None;
+                return;
+            }
+            if press.button == 0 && !press.moved {
+                let gp = ground_at(camera, x, y, &Self::battle_ground(&run.b), 2400.0);
+                if let Some((gx, gz)) = gp {
+                    if let Some(mut pw) = run.b.sim.powers.take() {
+                        let cast = pw.cast(&mut run.b.sim, 0, p, gx, gz);
+                        run.b.sim.powers = Some(pw);
+                        ui_sfx::play(if cast { ui_sfx::UiSfx::Equip } else { ui_sfx::UiSfx::Error });
+                    }
+                    run.power_aim = None;
+                    run.power_at = None;
+                }
+                return;
+            }
+        }
+        // building: a click puts it there (lines: one after another), the right button stops
+        if let Some(kind) = run.build {
+            if press.button == 2 {
+                run.build = None;
+                run.ghost = None;
+                return;
+            }
+            if press.button == 0 && !press.moved {
+                let gp = ground_at(camera, x, y, &Self::battle_ground(&run.b), 2400.0);
+                if let Some((gx, gz)) = gp {
+                    let yaw = build_yaw(&run.b, kind, gx, gz);
+                    if let Some(mut s) = run.b.sim.siege.take() {
+                        let ok = s.check(&run.b.sim, 0, kind, gx, gz, yaw, run.b.deploying, run.b.zone);
+                        match ok {
+                            Ok(()) => {
+                                let deploying = run.b.deploying;
+                                s.place(&mut run.b.sim, 0, kind, gx, gz, yaw, deploying);
+                                ui_sfx::play(ui_sfx::UiSfx::Equip);
+                                if !kind.line() || s.wood[0] < kind.spec().cost {
+                                    run.build = None;
+                                }
+                            }
+                            Err(why) => {
+                                ui_sfx::play(ui_sfx::UiSfx::Fail);
+                                run.messages.push_front((why.to_owned(), 0xe2334a, 0.0));
+                            }
+                        }
+                        run.b.sim.siege = Some(s);
+                    }
+                }
+                return;
+            }
+        }
+        // an engine of hers: a click chooses it; with it chosen, the right button gives it a target
+        if press.button == 0 && !press.moved {
+            let gp = ground_at(camera, x, y, &Self::battle_ground(&run.b), 2400.0);
+            if let Some((gx, gz)) = gp {
+                if let Some(i) = engine_at(&run.b, gx, gz, Some(0)) {
+                    if Self::pick_regiment(run, camera, x, y, Some(0)).is_none() {
+                        for r in &mut run.b.sim.regiments {
+                            r.selected = false;
+                        }
+                        Self::select_engine(run, Some(i));
+                        ui_sfx::play(ui_sfx::UiSfx::Move);
+                        return;
+                    }
+                }
+            }
+            Self::select_engine(run, None);
+        }
+        if press.button == 2 && !press.moved {
+            if let Some(i) = run.engine_sel {
+                let gp = ground_at(camera, x, y, &Self::battle_ground(&run.b), 2400.0);
+                let target = if let Some(foe) = Self::pick_regiment(run, camera, x, y, Some(1)) {
+                    Some(wr::siege::Target::Regiment(foe))
+                } else if let Some((gx, gz)) = gp {
+                    let f = &run.b.sim.field;
+                    let work = (-3..=3)
+                        .flat_map(|a| (-3..=3).map(move |c| (a as f32 * 1.5, c as f32 * 1.5)))
+                        .find_map(|(dx, dz)| f.work_at(gx + dx, gz + dz));
+                    match (engine_at(&run.b, gx, gz, Some(1)), work) {
+                        (Some(e), _) => Some(wr::siege::Target::Engine(e)),
+                        (None, Some(w)) => Some(wr::siege::Target::Work(w)),
+                        _ => Some(wr::siege::Target::Auto),
+                    }
+                } else {
+                    None
+                };
+                if let (Some(t), Some(s)) = (target, run.b.sim.siege.as_mut()) {
+                    s.order(i, t);
+                    ui_sfx::play(ui_sfx::UiSfx::Equip);
+                }
+                return;
+            }
         }
         match press.button {
             0 => {
@@ -1212,6 +1579,25 @@ impl App {
                     self.war_scale = w.scale;
                     ui_sfx::play(ui_sfx::UiSfx::Move);
                 }
+                6 => {
+                    w.page = WarPage::Table(2);
+                    w.focus = 0;
+                    ui_sfx::play(ui_sfx::UiSfx::Page);
+                }
+                60..=99 => ui_sfx::play(ui_sfx::UiSfx::Move),
+                30 => {
+                    let (map, attack) = (wr::baked::BATTLE_MAPS[w.map_pick].0, w.map_attack);
+                    self.start_map_battle(map, attack);
+                }
+                31 | 32 => {
+                    let n = wr::baked::BATTLE_MAPS.len();
+                    w.map_pick = if i == 31 { (w.map_pick + n - 1) % n } else { (w.map_pick + 1) % n };
+                    ui_sfx::play(ui_sfx::UiSfx::Move);
+                }
+                33 => {
+                    w.map_attack = !w.map_attack;
+                    ui_sfx::play(ui_sfx::UiSfx::Move);
+                }
                 4 => {
                     // The old way of the table: Chiquita and the Queen over the map.
                     self.war = None;
@@ -1292,6 +1678,33 @@ impl App {
                     }
                 }
             }
+            WarHit::Power(k) => {
+                if let Some(run) = w.battle.as_mut() {
+                    let p = wr::powers::Power::ALL[(k as usize).min(5)];
+                    let ready = run.b.sim.powers.as_ref().is_some_and(|pw| pw.ready(p));
+                    if run.power_aim == Some(p) {
+                        run.power_aim = None;
+                        ui_sfx::play(ui_sfx::UiSfx::Back);
+                    } else if ready && !run.b.deploying && run.result.is_none() {
+                        run.power_aim = Some(p);
+                        run.build = None;
+                        run.ghost = None;
+                        Self::select_engine(run, None);
+                        ui_sfx::play(ui_sfx::UiSfx::Select);
+                    } else {
+                        ui_sfx::play(ui_sfx::UiSfx::Error);
+                    }
+                }
+            }
+            WarHit::Build(k) => {
+                if let Some(run) = w.battle.as_mut() {
+                    let kind = wr::siege::Kind::ALL[(k as usize).min(wr::siege::Kind::ALL.len() - 1)];
+                    run.build = if run.build == Some(kind) { None } else { Some(kind) };
+                    run.ghost = None;
+                    Self::select_engine(run, None);
+                    ui_sfx::play(ui_sfx::UiSfx::Select);
+                }
+            }
             WarHit::Order(o) => {
                 if let Some(run) = w.battle.as_mut() {
                     let sel = run.b.selected();
@@ -1350,7 +1763,11 @@ impl App {
                     }
                     1 => {
                         if let Some(id) = run.scenario.clone() {
-                            if let Some(i) = SCENARIOS.iter().position(|s| s.id == id) {
+                            if let Some(rest) = id.strip_prefix("mapa:") {
+                                let (map, attack) = rest.split_once(':').unwrap_or((rest, "1"));
+                                let (map, attack) = (map.to_owned(), attack == "1");
+                                self.start_map_battle(&map, attack);
+                            } else if let Some(i) = SCENARIOS.iter().position(|s| s.id == id) {
                                 self.start_quick_battle(i);
                             }
                         }
@@ -1395,7 +1812,7 @@ impl App {
         };
         let dt = dt.min(0.1);
         w.time += dt;
-        w.pointer = pointer;
+        w.pointer = pointer.or(w.qa_pointer);
         let k = w.keys;
         let mut pan = (
             (k.right as u8 as f32) - (k.left as u8 as f32),
@@ -1417,6 +1834,14 @@ impl App {
             }
         }
         let turn = (k.turn_l as u8 as f32) - (k.turn_r as u8 as f32);
+        // while someone talks over it the war holds still
+        if self.talk.is_some() || self.stage.is_some() {
+            self.build_war_view();
+            return;
+        }
+        let Some(w) = self.war.as_mut() else {
+            return;
+        };
         match w.page {
             WarPage::Battle => {
                 if let Some(run) = w.battle.as_ref() {
@@ -1435,7 +1860,54 @@ impl App {
             }
             WarPage::Table(_) => {}
         }
+        self.arm_battle();
+        self.war_story_tick();
         self.build_war_view();
+    }
+
+    /// The first step of a battle: her war powers, the field's relic, the siege's scene.
+    fn arm_battle(&mut self) {
+        let powers = self.war_powers();
+        let found: Vec<String> = super::war_story::relics()
+            .iter()
+            .filter(|r| self.story.get(&format!("reliquia_{}", r.id)) > 0)
+            .map(|r| r.id.clone())
+            .collect();
+        let Some(run) = self.war.as_mut().and_then(|w| w.battle.as_mut()) else {
+            return;
+        };
+        if run.armed {
+            return;
+        }
+        run.armed = true;
+        run.b.sim.powers = Some(wr::powers::Powers::new(powers));
+        let region = wr::baked::BATTLE_MAPS
+            .iter()
+            .find(|(m, _)| *m == run.b.setup.map)
+            .map(|(_, r)| *r);
+        if let Some(r) = region.and_then(|reg| {
+            super::war_story::relics()
+                .iter()
+                .find(|r| r.region == reg && r.on_field() && !found.contains(&r.id))
+        }) {
+            let (x, z) = super::war_story::relic_spot(&run.b);
+            run.relic = Some(super::war_story::FieldRelic {
+                id: r.id.clone(),
+                name: r.nombre.clone(),
+                x,
+                z,
+                taken: false,
+            });
+            run.messages.push_front((
+                format!("Reliquia en el campo: {} (la luz dorada)", r.nombre),
+                0xf2b54a,
+                0.0,
+            ));
+        }
+        let siege = run.b.sim.siege.as_ref().is_some_and(|s| s.mode == wr::siege::Mode::Siege);
+        if siege {
+            self.queue_war_scene("guerra.asedio");
+        }
     }
 
     fn tick_battle(&mut self, dt: f32) {
@@ -1449,6 +1921,19 @@ impl App {
         };
         if run.result.is_none() && !run.help && !run.confirm {
             run.b.update(dt);
+        }
+        // a regiment of hers on the relic picks it up
+        let mut picked = None;
+        if let Some(rel) = run.relic.as_mut().filter(|r| !r.taken) {
+            let sim = &run.b.sim;
+            let near = sim
+                .soldiers_near(rel.x, rel.z, 5.0)
+                .into_iter()
+                .any(|i| sim.regiments[sim.reg[i]].side == 0);
+            if near {
+                rel.taken = true;
+                picked = Some((rel.id.clone(), rel.x, rel.z));
+            }
         }
         for g in &mut run.ghosts {
             g.t += dt;
@@ -1469,9 +1954,40 @@ impl App {
                 .pointer
                 .filter(|&(x, y)| !w.view.over_hud(x, y))
                 .and_then(|(x, y)| Self::pick_regiment(run, camera, x, y, None));
+            let at = w
+                .pointer
+                .filter(|&(x, y)| !w.view.over_hud(x, y))
+                .and_then(|(x, y)| ground_at(camera, x, y, &Self::battle_ground(&run.b), 2400.0));
+            run.engine_hover = at.and_then(|(gx, gz)| engine_at(&run.b, gx, gz, None));
+            run.power_at = run.power_aim.and(at);
+            run.ghost = match (run.build, at) {
+                (Some(kind), Some((gx, gz))) => {
+                    let yaw = build_yaw(&run.b, kind, gx, gz);
+                    let why = run.b.sim.siege.as_ref().and_then(|s| {
+                        s.check(&run.b.sim, 0, kind, gx, gz, yaw, run.b.deploying, run.b.zone)
+                            .err()
+                    });
+                    Some((gx, gz, yaw, why))
+                }
+                _ => None,
+            };
         }
         // What happened, as messages, effects and sounds.
         let events = std::mem::take(&mut run.b.sim.events);
+        let siege_events = run
+            .b
+            .sim
+            .siege
+            .as_mut()
+            .map(|s| std::mem::take(&mut s.events))
+            .unwrap_or_default();
+        let power_events = run
+            .b
+            .sim
+            .powers
+            .as_mut()
+            .map(|p| std::mem::take(&mut p.events))
+            .unwrap_or_default();
         let mut fx = Vec::new();
         let mut sounds = Vec::new();
         let (mut sparks, mut clashes, mut thuds) = (0, 0, 0);
@@ -1712,6 +2228,220 @@ impl App {
                 Event::Arrive { .. } | Event::End { .. } => {}
             }
         }
+        // the siege: stones landing, walls breaking, engines built and wrecked
+        if let Some(siege) = &sim.siege {
+            use wr::siege::{Kind as Eng, SiegeEvent as Se};
+            let mine_hold = siege.defender == Some(0);
+            let top = |x: f32, z: f32| field.top_at(x, z).0;
+            for e in &siege_events {
+                match *e {
+                    Se::Shot { engine } => {
+                        let en = &siege.engines[engine];
+                        if en.kind.stones() {
+                            fx.push(Fx::Puff {
+                                x: en.x,
+                                y: field.walk_height(en.x, en.z),
+                                z: en.z,
+                                n: 2,
+                                size: 1.6,
+                                strength: 1.0,
+                            });
+                        }
+                        if run.sound_budget < 6.0 {
+                            let s = if en.kind.bolts() {
+                                dungeon::sound::Sfx::CrossbowShot
+                            } else {
+                                dungeon::sound::Sfx::Swing
+                            };
+                            sounds.push(sound(s, at(en.x, en.z), 0.8 * near(en.x, en.z)));
+                            run.sound_budget += 1.0;
+                        }
+                    }
+                    Se::Impact { x, z, big } => {
+                        let y = top(x, z);
+                        fx.push(Fx::Puff {
+                            x,
+                            y,
+                            z,
+                            n: if big { 9 } else { 5 },
+                            size: if big { 3.6 } else { 2.4 },
+                            strength: 2.6,
+                        });
+                        fx.push(Fx::Sparks {
+                            x,
+                            y: y + 0.6,
+                            z,
+                            n: 8,
+                            color: [0.9, 0.82, 0.7],
+                        });
+                        sounds.push(sound(dungeon::sound::Sfx::Rubble, at(x, z), near(x, z)));
+                    }
+                    Se::WorkHit { .. } => {}
+                    Se::Breach { work, x, z } => {
+                        let y = top(x, z);
+                        for k in 0..3 {
+                            fx.push(Fx::Puff {
+                                x: x + k as f32 * 1.7 - 1.7,
+                                y: y + k as f32 * 2.0,
+                                z,
+                                n: 10,
+                                size: 5.0,
+                                strength: 3.0,
+                            });
+                        }
+                        sounds.push(sound(dungeon::sound::Sfx::Shockwave, at(x, z), 1.0));
+                        let what = match siege.works.get(work).map(|w| w.kind) {
+                            Some(wr::baked::WorkKind::Tower) => "¡Se derrumba una torre!",
+                            Some(wr::baked::WorkKind::Palisade) => "¡La empalizada cede!",
+                            _ => "¡Brecha en la muralla!",
+                        };
+                        said.push((what.to_owned(), if mine_hold { 0xe2334a } else { 0x4fd08a }, false));
+                    }
+                    Se::GateDown { x, z, .. } => {
+                        fx.push(Fx::Puff {
+                            x,
+                            y: field.walk_height(x, z) + 2.0,
+                            z,
+                            n: 14,
+                            size: 4.0,
+                            strength: 3.0,
+                        });
+                        sounds.push(sound(dungeon::sound::Sfx::Shockwave, at(x, z), 1.0));
+                        said.push((
+                            "¡La puerta ha caído!".to_owned(),
+                            if mine_hold { 0xe2334a } else { 0x4fd08a },
+                            false,
+                        ));
+                    }
+                    Se::KeepDown { .. } => {
+                        said.push((
+                            "¡El torreón se derrumba!".to_owned(),
+                            if mine_hold { 0xe2334a } else { 0x4fd08a },
+                            false,
+                        ));
+                    }
+                    Se::Built { engine } => {
+                        let en = &siege.engines[engine];
+                        if en.side == 0 && sim.time > 0.0 {
+                            said.push((format!("Construido: {}", en.spec().name), 0xf2b54a, false));
+                        }
+                    }
+                    Se::Wrecked { engine } => {
+                        let en = &siege.engines[engine];
+                        fx.push(Fx::Puff {
+                            x: en.x,
+                            y: field.walk_height(en.x, en.z) + 1.0,
+                            z: en.z,
+                            n: 8,
+                            size: 3.0,
+                            strength: 2.0,
+                        });
+                        fx.push(Fx::Sparks {
+                            x: en.x,
+                            y: field.walk_height(en.x, en.z) + 2.0,
+                            z: en.z,
+                            n: 14,
+                            color: [1.0, 0.55, 0.2],
+                        });
+                        sounds.push(sound(dungeon::sound::Sfx::Rubble, at(en.x, en.z), near(en.x, en.z)));
+                        let name = en.spec().name;
+                        if en.side == 0 {
+                            said.push((format!("Han destruido tu {}", name.to_lowercase()), 0xe2334a, false));
+                        } else {
+                            said.push((format!("{name} enemiga destruida"), 0x4fd08a, false));
+                        }
+                    }
+                    Se::Docked { engine } => {
+                        let en = &siege.engines[engine];
+                        let line = match en.kind {
+                            Eng::TorreAsedio => "La torre de asedio baja el puente sobre la muralla",
+                            _ => "El ariete llega a la puerta",
+                        };
+                        said.push((line.to_owned(), if en.side == 0 { 0xf2b54a } else { 0xe2334a }, en.side == 1));
+                    }
+                    Se::Ram { engine } => {
+                        let en = &siege.engines[engine];
+                        if thuds < 3 {
+                            sounds.push(sound(dungeon::sound::Sfx::HitBone, at(en.x, en.z), near(en.x, en.z)));
+                            thuds += 1;
+                        }
+                        fx.push(Fx::Puff {
+                            x: en.x + en.yaw.sin() * 3.2,
+                            y: field.walk_height(en.x, en.z) + 1.2,
+                            z: en.z + en.yaw.cos() * 3.2,
+                            n: 3,
+                            size: 1.8,
+                            strength: 1.6,
+                        });
+                    }
+                    Se::Held { side } => {
+                        said.push((
+                            if side == 0 {
+                                "¡Tus tropas toman el patio del torreón! Aguanta ahí".to_owned()
+                            } else {
+                                "¡El enemigo está tomando el torreón!".to_owned()
+                            },
+                            if side == 0 { 0x4fd08a } else { 0xe2334a },
+                            false,
+                        ));
+                    }
+                    Se::Captured { side } => {
+                        said.push((
+                            if side == 0 {
+                                "La plaza es tuya".to_owned()
+                            } else {
+                                "La plaza ha caído".to_owned()
+                            },
+                            if side == 0 { 0x4fd08a } else { 0xe2334a },
+                            false,
+                        ));
+                    }
+                }
+            }
+        }
+        // her powers
+        for e in &power_events {
+            use wr::powers::PowerEvent as Pe;
+            match *e {
+                Pe::Cast { power, x, z, r } => {
+                    let c = wd::rgb(power.spec().color);
+                    fx.push(Fx::Ring { x, z, r, color: c });
+                    fx.push(Fx::Pillar { x, z, color: c });
+                    sounds.push(sound(dungeon::sound::Sfx::SpellBurst, at(x, z), 1.0));
+                    said.push((format!("¡{}!", power.spec().name), 0x9a5cff, false));
+                }
+                Pe::Ember { x, z, .. } => {
+                    fx.push(Fx::Ember { x, z });
+                    if thuds < 3 {
+                        sounds.push(sound(dungeon::sound::Sfx::Rubble, at(x, z), near(x, z)));
+                        thuds += 1;
+                    }
+                }
+                Pe::Healed { x, z } => fx.push(Fx::Sparks {
+                    x,
+                    y: field.walk_height(x, z) + 1.2,
+                    z,
+                    n: 4,
+                    color: [0.5, 1.0, 0.8],
+                }),
+                Pe::Shaken { x, z } => fx.push(Fx::Puff {
+                    x,
+                    y: field.walk_height(x, z),
+                    z,
+                    n: 3,
+                    size: 2.2,
+                    strength: 2.4,
+                }),
+            }
+        }
+        if let Some((_, x, z)) = picked.as_ref() {
+            fx.push(Fx::Pillar {
+                x: *x,
+                z: *z,
+                color: [1.0, 0.8, 0.35],
+            });
+            sounds.push(sound(dungeon::sound::Sfx::SealOpen, at(*x, *z), 1.0));
+        }
         // crumbled once is told once
         for e in &events {
             if let Event::Crumble { reg } = *e {
@@ -1757,6 +2487,9 @@ impl App {
                     audio.play(s, listener, forward);
                 }
             }
+        }
+        if let Some((id, ..)) = picked {
+            self.grant_relic(&id);
         }
     }
 
@@ -2022,6 +2755,11 @@ impl App {
             }
             s.reachable(a).contains(&PROVINCES[p].id) && a.mp > 0
         };
+        // the story keeps her armies on this side of the river until the first act ends
+        if self.river_closed(PROVINCES[p].id) {
+            self.river_blocked();
+            return;
+        }
         if reach {
             self.campaign_order(p);
         } else {
@@ -2202,7 +2940,16 @@ impl App {
         t.yaw = (end.x - start.x).atan2(end.z - start.z);
     }
 
+    /// The tokens again, after the map changed under them.
+    pub(super) fn resync_tokens(c: &mut CampaignRun, s: &Campaign) {
+        Self::sync_tokens(c, s, true);
+    }
+
     fn campaign_panel(&mut self, i: u8) {
+        if i == 103 {
+            self.campaign_awaken();
+            return;
+        }
         let Some(w) = self.war.as_mut() else {
             return;
         };
@@ -2365,7 +3112,8 @@ impl App {
         };
         let p = wd::province(&b.prov);
         let setup = Setup {
-            map: p.battle.to_owned(),
+            // the region's own battle map (the war map 2.0's), else the field it used to have
+            map: wr::baked::map_of_region(p.id).unwrap_or(p.battle).to_owned(),
             title: format!("Batalla de {}", p.name),
             kicker: format!("CAMPAÑA · TURNO {}", s.turn),
             subtitle: if player_attacks {
@@ -2447,6 +3195,15 @@ impl App {
             );
         }
         self.start_campaign(false);
+        if fight.is_some() {
+            if res.winner == 0 {
+                let n = self.story.get("guerra_victorias");
+                self.story.values.insert("guerra_victorias".into(), n + 1);
+                self.queue_war_scene("guerra.primera_victoria");
+            } else {
+                self.queue_war_scene("guerra.primera_derrota");
+            }
+        }
         if let (Some(f), Some(c)) = (fight, self.war.as_mut().and_then(|w| w.camp.as_mut())) {
             c.toast = Some((
                 if res.winner == 0 {
@@ -2464,6 +3221,8 @@ impl App {
     }
 
     fn campaign_end_turn(&mut self) {
+        // one turn a day: the war's gold is hers, and turns are not to be farmed for it
+        let done_today = self.story.get(super::war_story::TURN_TODAY) > 0;
         let Some(w) = self.war.as_mut() else {
             return;
         };
@@ -2473,8 +3232,21 @@ impl App {
         if s.phase != CampPhase::Player || c.busy || s.winner.is_some() || c.modal.is_some() {
             return;
         }
+        if done_today {
+            ui_sfx::play(ui_sfx::UiSfx::Error);
+            c.toast = Some((
+                "Un turno al día".into(),
+                "El consejo de guerra se reúne mañana: duerme para el siguiente turno".into(),
+                0.0,
+            ));
+            c.paint_version += 1;
+            return;
+        }
         c.sel = None;
         s.end_player_turn();
+        self.story
+            .values
+            .insert(super::war_story::TURN_TODAY.to_owned(), 1);
         ui_sfx::play(ui_sfx::UiSfx::Page);
         c.toast = Some((
             "Fin del turno".into(),
@@ -2674,6 +3446,12 @@ impl App {
     // ------------------------------------------------------------------ the view
     pub(super) fn build_war_view(&mut self) {
         let campaign = self.war_campaign.clone();
+        let story = self.war_story_view();
+        let relics_found: Vec<bool> = super::war_story::relics()
+            .iter()
+            .map(|r| self.story.get(&format!("reliquia_{}", r.id)) > 0)
+            .collect();
+        let powers = self.war_powers();
         let Some(w) = self.war.as_mut() else {
             return;
         };
@@ -2685,7 +3463,10 @@ impl App {
         };
         match w.page {
             WarPage::Table(page) => {
-                table_view(&mut view, page, w.scale, campaign.as_ref(), w.focus)
+                table_view(&mut view, page, w.scale, campaign.as_ref(), w.focus, (w.map_pick, w.map_attack));
+                if page == 2 {
+                    relics_view(&mut view, w.focus, &relics_found, &powers);
+                }
             }
             WarPage::Battle => {
                 if let Some(run) = w.battle.as_ref() {
@@ -2694,7 +3475,7 @@ impl App {
             }
             WarPage::Campaign => {
                 if let (Some(c), Some(s)) = (w.camp.as_ref(), campaign.as_ref()) {
-                    campaign_view(&mut view, c, s, &w.cam, w.pointer);
+                    campaign_view(&mut view, c, s, &w.cam, w.pointer, &story);
                 }
             }
         }
@@ -2764,7 +3545,14 @@ fn size_label(size: f32) -> String {
 
 /// The war table's page: numbered rows (style 4, in order), the units' size as chips (style 5), and
 /// the card of the row the focus is on.
-fn table_view(view: &mut WarView, page: u8, scale: f32, campaign: Option<&Campaign>, focus: usize) {
+fn table_view(
+    view: &mut WarView,
+    page: u8,
+    scale: f32,
+    campaign: Option<&Campaign>,
+    focus: usize,
+    (map_pick, map_attack): (usize, bool),
+) {
     let mut t = TableView {
         title: "La mesa de guerra".into(),
         tag: "LA GUERRA DE LA CHISPA".into(),
@@ -2867,6 +3655,24 @@ fn table_view(view: &mut WarView, page: u8, scale: f32, campaign: Option<&Campai
         y += 106.0;
         view.buttons.push(row(
             [x, y, w, 92.0],
+            "Reliquias y poderes",
+            "",
+            "Lo encontrado en la guerra y lo que la Reina puede lanzar en batalla",
+            WarHit::Table(6),
+            Glyph::Crown,
+        ));
+        cards.push(TableCard {
+            kicker: "LA COLECCIÓN".into(),
+            title: "Reliquias y poderes".into(),
+            lines: lines(&[
+                "Las reliquias se encuentran tomando regiones o en los campos de batalla: llévale una tropa a la luz dorada.",
+                "Algunas dan oro, chispa o comida; otras, poderes de guerra. Otras tiran de un hilo de la historia.",
+            ]),
+            ..Default::default()
+        });
+        y += 106.0;
+        view.buttons.push(row(
+            [x, y, w, 92.0],
             "Tamaño de las unidades",
             "",
             "Soldados por regimiento",
@@ -2917,9 +3723,64 @@ fn table_view(view: &mut WarView, page: u8, scale: f32, campaign: Option<&Campai
         });
     } else {
         t.title = "Batallas rápidas".into();
+        // a battle on any of the continent's battle maps: which, and whether she attacks
+        let (id, region) = wr::baked::BATTLE_MAPS[map_pick.min(wr::baked::BATTLE_MAPS.len() - 1)];
+        let place = wd::PROVINCES.iter().find(|p| p.id == region).map_or(id, |p| p.name);
+        let siege = id.starts_with("asedio_");
+        view.buttons.push(row(
+            [x, y, w, 88.0],
+            "Batalla en un mapa del continente",
+            "",
+            &format!(
+                "{} · {}",
+                place,
+                if map_attack { "Atacas tú" } else { "Te atacan" }
+            ),
+            WarHit::Table(30),
+            Glyph::Map,
+        ));
+        for (k, (label, hit, on)) in [
+            ("‹", WarHit::Table(31), false),
+            ("›", WarHit::Table(32), false),
+            (if map_attack { "Ataque" } else { "Defensa" }, WarHit::Table(33), true),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let wdt = if k == 2 { 110.0 } else { 46.0 };
+            let cx = x + w - 36.0 - [214.0, 160.0, 110.0][k];
+            let mut chip = btn([cx, y + 24.0, wdt, 40.0], label, "", "", hit);
+            chip.style = 5;
+            chip.on = on;
+            view.buttons.push(chip);
+        }
+        cards.push(TableCard {
+            kicker: format!("LOS {} CAMPOS · {}", wr::baked::BATTLE_MAPS.len(), place.to_uppercase()),
+            title: "Batalla en un mapa del continente".into(),
+            lines: vec![
+                format!("{}: el campo de batalla de esta región, tal como es en el mapa de guerra.", place),
+                if siege {
+                    if map_attack {
+                        "Asedio: llevas madera para catapultas, trabuquetes, torres de asedio y arietes. Abre paso y toma el patio del torreón.".into()
+                    } else {
+                        "Asedio: defiendes los muros. Construye catapultas y balistas, tapa las brechas con empalizadas y aguanta hasta el final.".into()
+                    }
+                } else {
+                    "Campo abierto: con tu madera puedes levantar estacas contra la caballería, empalizadas y escorpiones.".into()
+                },
+                "‹ › (o las flechas) cambian de mapa; el botón de la derecha, de bando.".into(),
+            ],
+            warning: if map_attack {
+                "Atacas tú.".into()
+            } else {
+                "Te atacan: aguanta.".into()
+            },
+            ..Default::default()
+        });
+        y += 100.0;
         for (i, sc) in SCENARIOS.iter().enumerate() {
             view.buttons.push(row(
-                [x, y, w, 96.0],
+                [x, y, w, 88.0],
                 sc.title,
                 &format!("{}", i + 1),
                 sc.blurb,
@@ -2949,7 +3810,7 @@ fn table_view(view: &mut WarView, page: u8, scale: f32, campaign: Option<&Campai
                 },
                 ..Default::default()
             });
-            y += 110.0;
+            y += 100.0;
         }
         view.buttons.push(row(
             [x, y + 6.0, 360.0, 66.0],
@@ -2969,6 +3830,125 @@ fn table_view(view: &mut WarView, page: u8, scale: f32, campaign: Option<&Campai
     t.focus = focus.min(cards.len().saturating_sub(1));
     t.card = cards.swap_remove(t.focus);
     view.table = Some(t);
+}
+
+/// The war table's page of relics and powers: the relics in two columns (unknown ones as «¿?»), a row
+/// for her powers, back; the card of the one the keys are on.
+fn relics_view(view: &mut WarView, focus: usize, found: &[bool], powers: &[wr::powers::Power]) {
+    let Some(t) = view.table.as_mut() else {
+        return;
+    };
+    view.buttons.clear();
+    t.title = "Reliquias y poderes".into();
+    let all = super::war_story::relics();
+    t.tag = format!(
+        "{} / {} ENCONTRADAS · {} / {} PODERES",
+        found.iter().filter(|f| **f).count(),
+        all.len(),
+        powers.len(),
+        wr::powers::Power::ALL.len()
+    );
+    let (x, y0, w, h) = (120.0, 290.0, 382.0, 50.0);
+    let mut cards: Vec<TableCard> = Vec::new();
+    let place = |id: &str| wd::PROVINCES.iter().find(|p| p.id == id).map_or(id.to_owned(), |p| p.name.to_owned());
+    for (k, r) in all.iter().enumerate() {
+        let have = found.get(k).copied().unwrap_or(false);
+        let (cx, cy) = (x + (k % 2) as f32 * (w + 16.0), y0 + (k / 2) as f32 * (h + 8.0));
+        let hint = if r.on_field() { "En su campo de batalla" } else { "Al tomar la región" };
+        let (title, detail) = if have {
+            (r.nombre.clone(), place(&r.region))
+        } else {
+            (place(&r.region), format!("Sin encontrar · {hint}"))
+        };
+        let mut b = btn([cx, cy, w, h], &title, "", &detail, WarHit::Table(60 + k as u8));
+        b.style = 4;
+        b.icon = if have { Glyph::Crown } else { Glyph::Map };
+        view.buttons.push(b);
+        // what it gives, as the card's stats (hidden until it is found)
+        let rw = &r.recompensa;
+        let mut stats = Vec::new();
+        if have {
+            if let Some(p) = rw.poder.as_deref().and_then(super::war_story::power_of) {
+                stats.push((Glyph::Spark, format!("Poder: {}", p.spec().name)));
+            }
+            if rw.oro > 0 {
+                stats.push((Glyph::Gold, format!("+{} oro", rw.oro)));
+            }
+            if rw.chispa > 0 {
+                stats.push((Glyph::Flame, format!("+{} chispa", rw.chispa)));
+            }
+            if rw.comida > 0 {
+                stats.push((Glyph::Food, format!("+{} comida", rw.comida)));
+            }
+        }
+        cards.push(TableCard {
+            kicker: if have { "RELIQUIA ENCONTRADA".into() } else { "SIN ENCONTRAR".into() },
+            title: if have { r.nombre.clone() } else { "Una reliquia perdida".into() },
+            lines: if have {
+                let mut l = vec![r.texto.clone(), format!("Se encontró en {}.", place(&r.region))];
+                if rw.var.is_some() {
+                    l.push("Tira de un hilo de la historia.".into());
+                }
+                l
+            } else {
+                vec![
+                    format!("Dónde: {}", place(&r.region)),
+                    if r.on_field() {
+                        "Brilla en el campo de batalla de esa región: lleva una de tus tropas a la luz dorada.".into()
+                    } else {
+                        "Se encuentra al tomar esa región.".into()
+                    },
+                ]
+            },
+            stats,
+            ..Default::default()
+        });
+    }
+    let rows = all.len().div_ceil(2) as f32;
+    let y = y0 + rows * (h + 8.0) + 10.0;
+    let names: Vec<&str> = powers.iter().map(|p| p.spec().name).collect();
+    let mut b = btn(
+        [x, y, w * 2.0 + 16.0, 56.0],
+        "Poderes de la Reina",
+        "",
+        &if names.is_empty() {
+            "Ninguno todavía".to_owned()
+        } else {
+            names.join(" · ")
+        },
+        WarHit::Table(99),
+    );
+    b.style = 4;
+    b.icon = Glyph::Spark;
+    view.buttons.push(b);
+    cards.push(TableCard {
+        kicker: "EN BATALLA · TECLAS Z X C V B N".into(),
+        title: "Poderes de la Reina".into(),
+        lines: wr::powers::Power::ALL
+            .iter()
+            .map(|p| {
+                let sp = p.spec();
+                if powers.contains(p) {
+                    format!("{} ({}): {}", sp.name, sp.key, sp.what)
+                } else {
+                    format!("{}: bloqueado · {}", sp.name, sp.from)
+                }
+            })
+            .collect(),
+        ..Default::default()
+    });
+    let mut back = btn([x, y + 66.0, 360.0, 60.0], "Volver", "Esc", "", WarHit::Table(5));
+    back.style = 4;
+    back.icon = Glyph::Back;
+    view.buttons.push(back);
+    cards.push(TableCard {
+        kicker: "LA MESA".into(),
+        title: "Volver".into(),
+        lines: vec!["A la mesa de guerra.".into()],
+        ..Default::default()
+    });
+    t.focus = focus.min(cards.len().saturating_sub(1));
+    t.card = cards.swap_remove(t.focus);
 }
 
 /// One of the Queen's field armies with moves left this turn and no march to walk them.
@@ -3254,6 +4234,16 @@ fn battle_view(
         };
         mm.view.push(norm(pt.x, pt.z));
     }
+    if let Some(rel) = run.relic.as_ref().filter(|r| !r.taken) {
+        mm.dots.push(MiniDot {
+            at: norm(rel.x, rel.z),
+            width: 0.012,
+            heading: 0.0,
+            color: 0xffd27a,
+            hero: true,
+            selected: false,
+        });
+    }
     bv.minimap = Some(mm);
     // the cards
     let mine: Vec<&wr::sim::Regiment> = sim.regiments.iter().filter(|r| r.side == 0).collect();
@@ -3449,6 +4439,188 @@ fn battle_view(
             ));
         }
     }
+    // her war powers: a row over the cards, left of the spark
+    if let (Some(pw), None) = (sim.powers.as_ref(), &run.result) {
+        let list: Vec<wr::powers::Power> = wr::powers::Power::ALL
+            .iter()
+            .copied()
+            .filter(|p| pw.has(*p))
+            .collect();
+        let (bw, bh, gap) = (176.0, 50.0, 8.0);
+        let x0 = SCREEN_W - 24.0 - 160.0 - list.len() as f32 * (bw + gap);
+        for (k, p) in list.iter().enumerate() {
+            let sp = p.spec();
+            let cd = pw.cooldown[p.index()];
+            let short = match p {
+                wr::powers::Power::Grito => "Grito",
+                wr::powers::Power::Rugido => "Rugido",
+                wr::powers::Power::Bendicion => "Bendición",
+                wr::powers::Power::Brasas => "Brasas",
+                wr::powers::Power::Niebla => "Niebla",
+                wr::powers::Power::Raices => "Raíces",
+            };
+            let detail = if cd > 0.0 { format!("{} s", cd.ceil() as u32) } else { "lista".into() };
+            let mut bt = btn(
+                [x0 + k as f32 * (bw + gap), SCREEN_H - 24.0 - 104.0 - 150.0, bw, bh],
+                short,
+                sp.key,
+                &detail,
+                WarHit::Power(p.index() as u8),
+            );
+            bt.enabled = cd <= 0.0 && !b.deploying;
+            bt.on = run.power_aim == Some(*p);
+            bt.icon = match p {
+                wr::powers::Power::Grito => Glyph::Flag,
+                wr::powers::Power::Rugido => Glyph::Fang,
+                wr::powers::Power::Bendicion => Glyph::Staff,
+                wr::powers::Power::Brasas => Glyph::Flame,
+                wr::powers::Power::Niebla => Glyph::Wing,
+                wr::powers::Power::Raices => Glyph::Tail,
+            };
+            view.buttons.push(bt);
+        }
+        if let (Some(p), Some((px, py))) = (run.power_aim, pointer) {
+            let sp = p.spec();
+            view.tip = Some(Tip {
+                at: [px + 24.0, py + 24.0],
+                edge: sp.color,
+                kicker: "PODER DE LA REINA".into(),
+                title: sp.name.into(),
+                rows: vec![("Radio".into(), format!("{} m", sp.radius as u32)), ("Espera".into(), format!("{} s", sp.cooldown as u32))],
+                text: sp.what.into(),
+                action: "Clic: lanzarlo aquí · Clic derecho: cancelar".into(),
+            });
+        }
+    }
+    // the build bar (right, under the clock), what this battle is for
+    if let (Some(s), None) = (&sim.siege, &run.result) {
+        let wood = s.wood[0];
+        let x = SCREEN_W - 24.0 - 250.0;
+        for (k, kind) in s.allowed(0).iter().enumerate() {
+            let sp = kind.spec();
+            let idx = wr::siege::Kind::ALL.iter().position(|q| q == kind).unwrap_or(0) as u8;
+            let mut bt = btn(
+                [x, 300.0 + k as f32 * 54.0, 250.0, 46.0],
+                sp.name,
+                "",
+                &format!("{} madera", sp.cost as u32),
+                WarHit::Build(idx),
+            );
+            bt.enabled = wood + 1e-3 >= sp.cost;
+            bt.on = run.build == Some(*kind);
+            view.buttons.push(bt);
+        }
+        let attacking = s.attacker(0);
+        let left = (s.limit - sim.time).max(0.0) as u32;
+        let clock = format!("{}:{:02}", left / 60, left % 60);
+        bv.objective = Some(match s.mode {
+            wr::siege::Mode::Siege if attacking => Objective {
+                kicker: "ASEDIO · ATAQUE".into(),
+                title: "Toma el torreón".into(),
+                text: format!(
+                    "Abre paso (rompe la puerta, abre brecha o arrima una torre) y aguanta en el patio del torreón {:.0}/{:.0} s · Quedan {clock}",
+                    s.hold, s.hold_need
+                ),
+                progress: Some(s.hold / s.hold_need),
+                edge: 0x4fd08a,
+            },
+            wr::siege::Mode::Siege => Objective {
+                kicker: "ASEDIO · DEFENSA".into(),
+                title: "Que no caiga el torreón".into(),
+                text: if s.hold > 0.0 {
+                    format!("¡Están tomando el patio del torreón! {:.0}/{:.0} s · Aguanta {clock}", s.hold, s.hold_need)
+                } else {
+                    format!("Defiende los muros, cierra las brechas y aguanta {clock}")
+                },
+                progress: Some(if s.hold > 0.0 {
+                    s.hold / s.hold_need
+                } else {
+                    sim.time / s.limit
+                }),
+                edge: if s.hold > 0.0 { 0xe2334a } else { 0xf2b54a },
+            },
+            wr::siege::Mode::Field => Objective {
+                kicker: "CAMPO ABIERTO".into(),
+                title: "Derrota al enemigo".into(),
+                text: "Puedes levantar estacas contra la caballería, empalizadas y escorpiones con tu madera.".into(),
+                progress: None,
+                edge: 0xf2b54a,
+            },
+        });
+        if run.build.is_some() || run.engine_sel.is_some() {
+            bv.messages.truncate(3);
+        }
+        // the tip: what is being placed, or the engine under the pointer
+        if let (Some((_, _, _, why)), Some(kind), Some((px, py))) = (run.ghost, run.build, pointer) {
+            let sp = kind.spec();
+            view.tip = Some(Tip {
+                at: [px + 24.0, py + 24.0],
+                edge: if why.is_none() { 0x4fd08a } else { 0xe2334a },
+                kicker: "CONSTRUIR".into(),
+                title: sp.name.into(),
+                rows: vec![
+                    ("Coste".into(), format!("{} de {} madera", sp.cost as u32, wood as u32)),
+                    (
+                        "Tarda".into(),
+                        if b.deploying {
+                            "lista al empezar".into()
+                        } else {
+                            format!("{} s", sp.build as u32)
+                        },
+                    ),
+                ],
+                text: why.map_or_else(|| sp.what.to_owned(), |w| w.to_owned()),
+                action: "Clic: construir · Clic derecho: cancelar".into(),
+            });
+        } else if let (Some(i), Some((px, py))) = (run.engine_hover.or(run.engine_sel), pointer) {
+            let e = &s.engines[i];
+            let sp = e.spec();
+            let state = if !e.alive {
+                "Destruida".to_owned()
+            } else if e.built < 1.0 {
+                format!("Construyendo {:.0}%", e.built * 100.0)
+            } else if e.docked.is_some() {
+                if e.kind == wr::siege::Kind::Ariete {
+                    "Golpeando la puerta".into()
+                } else {
+                    "Arrimada a la muralla".into()
+                }
+            } else if matches!(e.kind, wr::siege::Kind::TorreAsedio | wr::siege::Kind::Ariete) {
+                if b.deploying { "Esperando".into() } else { "Avanzando".into() }
+            } else if e.reload > 0.0 && (e.kind.stones() || e.kind.bolts()) {
+                "Recargando".into()
+            } else {
+                "Lista".into()
+            };
+            let mut rows = vec![
+                ("Salud".into(), format!("{:.0}/{:.0}", e.hp.max(0.0), e.hp0)),
+                ("Estado".into(), state),
+            ];
+            if e.kind.stones() || e.kind.bolts() {
+                rows.push(("Alcance".into(), format!("{:.0}–{:.0} m", sp.range.0, sp.range.1)));
+            }
+            let mine = e.side == 0;
+            view.tip = Some(Tip {
+                at: [px + 24.0, py + 24.0],
+                edge: if mine { 0xf2b54a } else { 0xe2334a },
+                kicker: if mine { "TU MÁQUINA".into() } else { "MÁQUINA ENEMIGA".into() },
+                title: sp.name.into(),
+                rows,
+                text: sp.what.into(),
+                action: if !mine {
+                    "Mándale tropas: si la rodean, la destrozan".into()
+                } else if run.engine_sel == Some(i) {
+                    if b.deploying {
+                        "Clic derecho: objetivo · Supr: desmontarla".into()
+                    } else {
+                        "Clic derecho en un muro, una puerta o tropas: objetivo".into()
+                    }
+                } else {
+                    "Clic: elegirla".into()
+                },
+            });
+        }
+    }
     if b.deploying {
         let mut bt = btn(
             [SCREEN_W / 2.0 + 470.0 - 336.0, 120.0, 300.0, 58.0],
@@ -3608,6 +4780,12 @@ fn battle_view(
     };
     bv.speed_group = group(&|h| matches!(h, WarHit::Speed(_)));
     bv.orders_group = group(&|h| matches!(h, WarHit::Order(o) if o < 4));
+    bv.powers_group = group(&|h| matches!(h, WarHit::Power(_)));
+    if let Some(s) = &sim.siege {
+        if let Some(r) = group(&|h| matches!(h, WarHit::Build(_))) {
+            bv.build_group = Some((r, format!("CONSTRUIR · MADERA {}", s.wood[0] as u32)));
+        }
+    }
     view.battle = Some(bv);
 }
 
@@ -3637,6 +4815,7 @@ fn campaign_view(
     s: &Campaign,
     cam: &RtsCam,
     pointer: Option<(f32, f32)>,
+    story: &StoryView,
 ) {
     let camera = cam.camera();
     let fog = App::fogged(s);
@@ -3660,7 +4839,7 @@ fn campaign_view(
         season: format!("{} del año {}", SEASONS[((s.turn - 1) % 4) as usize], 1 + (s.turn - 1) / 4),
         toast: c.toast.clone(),
         hint: "CLIC: ELEGIR · CON UN EJÉRCITO, CLIC EN UNA PROVINCIA: MOVER, ATACAR O MARCHAR · TAB: SIGUIENTE EJÉRCITO · INTRO: FIN DEL TURNO".into(),
-        objective: "Toma la capital caída · No pierdas el castillo".into(),
+        objective: story.objective.clone(),
         ..Default::default()
     };
     // the names of the provinces (laid out at the end, off the HUD)
@@ -3938,6 +5117,17 @@ fn campaign_view(
                 format!("{} · sin chispa (rinde una cuarta parte)", fi.name)
             };
             panel.notes.push((p.lore.to_owned(), 0xd9cce8));
+            if let Some((line, found)) = story.relic.get(p.id) {
+                panel
+                    .notes
+                    .push((line.clone(), if *found { 0x4fd08a } else { 0xf2b54a }));
+            }
+            if story.river_closed && super::war_story::EAST.contains(&p.id) {
+                panel.notes.push((
+                    "Al otro lado del río: tus ejércitos no cruzarán hasta que despiertes a Varrak.".into(),
+                    0xe2334a,
+                ));
+            }
             if !hidden {
                 let k = if st.lit { 1.0 } else { 0.25 };
                 panel
@@ -3968,6 +5158,23 @@ fn campaign_view(
                 }
                 buttons_y = rect[1] + panel_height(&panel);
                 recruit_buttons(view, p.id, &mut buttons_y);
+                if st.owner == Faction::Libres {
+                    let why = s.awaken_blocked(p.id);
+                    let mut bt = btn(
+                        [rect[0] + 30.0, buttons_y, rect[2] - 60.0, 54.0],
+                        "Despertar con la chispa",
+                        "",
+                        &why.map_or_else(
+                            || format!("{} chispa · se une sin batalla", wr::rules::AWAKEN_SPARK),
+                            |w| w.to_owned(),
+                        ),
+                        WarHit::Panel(103),
+                    );
+                    bt.icon = Glyph::Flame;
+                    bt.enabled = why.is_none() && s.phase == CampPhase::Player;
+                    view.buttons.push(bt);
+                    buttons_y += 60.0;
+                }
             } else {
                 panel
                     .notes
@@ -4036,6 +5243,7 @@ fn campaign_view(
     let playing =
         s.phase == CampPhase::Player && !c.busy && s.winner.is_none() && c.modal.is_none();
     let waiting = match movable {
+        _ if story.turn_today => "Mañana: duerme para el siguiente turno".to_owned(),
         0 => String::new(),
         1 => "1 ejército puede moverse".to_owned(),
         n => format!("{n} ejércitos pueden moverse"),
@@ -4049,7 +5257,7 @@ fn campaign_view(
     );
     end.style = 1;
     end.icon = Glyph::Hourglass;
-    end.enabled = playing;
+    end.enabled = playing && !story.turn_today;
     view.buttons.push(end);
     let mut next = btn(
         [

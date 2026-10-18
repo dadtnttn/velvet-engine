@@ -180,7 +180,7 @@ pub(crate) const DON_CURA: &str = "don_cura";
 pub(crate) const DON_AGUANTE: &str = "don_aguante";
 
 /// What the day allows once (cleared when she sleeps).
-const TODAY: [&str; 9] = [
+const TODAY: [&str; 10] = [
     "aud_hoy",
     "botiquin_hoy",
     "cocina_hoy",
@@ -190,6 +190,8 @@ const TODAY: [&str; 9] = [
     "bano_hoy",
     "prisionera_hoy",
     "cita_hoy",
+    // one turn of the war campaign a day (its gold is the Queen's: no farming it by turns)
+    "guerra_turno_hoy",
 ];
 
 /// Her sword skill's top level (Nemi's training), and what each level adds to a blow.

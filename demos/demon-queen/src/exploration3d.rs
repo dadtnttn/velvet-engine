@@ -138,6 +138,8 @@ mod war_render;
 mod zone_boss;
 #[path = "zones/war.rs"]
 mod zone_war;
+#[path = "zones/war_story.rs"]
+mod war_story;
 use camera::*;
 use zone_boss::{boss_camera, BossInput};
 #[path = "explore/queen.rs"]

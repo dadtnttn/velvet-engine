@@ -216,8 +216,9 @@ impl App {
             }
         }
         for _ in 0..32 {
-            // On the stage she speaks in the box like everyone else.
-            if self.stage_up() {
+            // On the stage she speaks in the box like everyone else; over the war table too (no
+            // world for her to float in there).
+            if self.stage_up() || self.war.is_some() {
                 break;
             }
             let Some(guion::Shown::Line {

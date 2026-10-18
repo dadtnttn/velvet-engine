@@ -344,6 +344,10 @@ pub struct Sim {
     head: Vec<i32>,
     next: Vec<i32>,
     step_count: u64,
+    /// The siege, or what the armies build in the open (`siege.rs`).
+    pub siege: Option<crate::siege::Siege>,
+    /// The Queen's war powers (`powers.rs`).
+    pub powers: Option<crate::powers::Powers>,
 }
 
 impl Sim {
@@ -398,7 +402,51 @@ impl Sim {
             end_t: 0.0,
             next: Vec::new(),
             step_count: 0,
+            siege: None,
+            powers: None,
         }
+    }
+
+    /// How fast feet go for `side` at (x, z) by the powers working there.
+    fn power_speed(&self, x: f32, z: f32, side: u8) -> f32 {
+        self.powers.as_ref().map_or(1.0, |p| p.speed(x, z, side))
+    }
+
+    /// The living soldiers within `r` of (x, z).
+    pub fn soldiers_near(&self, x: f32, z: f32, r: f32) -> Vec<usize> {
+        let mut out = Vec::new();
+        let c0x = (((x - r - self.gx0) / CELL).floor() as i32).max(0);
+        let c1x = (((x + r - self.gx0) / CELL).floor() as i32).min(self.gw - 1);
+        let c0z = (((z - r - self.gz0) / CELL).floor() as i32).max(0);
+        let c1z = (((z + r - self.gz0) / CELL).floor() as i32).min(self.gh - 1);
+        for cz in c0z..=c1z {
+            for cx in c0x..=c1x {
+                let mut j = self.head[(cz * self.gw + cx) as usize];
+                while j >= 0 {
+                    let ju = j as usize;
+                    if self.state[ju] == S_ALIVE
+                        && (self.px[ju] - x) * (self.px[ju] - x) + (self.pz[ju] - z) * (self.pz[ju] - z)
+                            < r * r
+                    {
+                        out.push(ju);
+                    }
+                    j = self.next[ju];
+                }
+            }
+        }
+        out
+    }
+
+    /// Harm from a siege's stone, a bolt or stakes.
+    pub(crate) fn hurt(&mut self, i: usize, amount: f32) {
+        self.damage(i, amount.max(0.0), None);
+    }
+
+    /// Stops a soldier short (stakes): what is left of its speed.
+    pub(crate) fn stall(&mut self, i: usize, keep: f32) {
+        self.vx[i] *= keep;
+        self.vz[i] *= keep;
+        self.charge[i] = 0.0;
     }
 
     fn r(&mut self) -> f32 {
@@ -1102,6 +1150,14 @@ impl Sim {
         }
         self.update_soldiers(dt);
         self.update_missiles(dt);
+        if let Some(mut s) = self.siege.take() {
+            s.step(self, dt);
+            self.siege = Some(s);
+        }
+        if let Some(mut p) = self.powers.take() {
+            p.step(self, dt);
+            self.powers = Some(p);
+        }
         if self.step_count % 15 == 0 {
             for ri in 0..self.regiments.len() {
                 self.update_morale(ri);
@@ -1583,7 +1639,7 @@ impl Sim {
         };
         let mut v = if run { t.run * 0.92 } else { t.walk };
         if !t.flyer {
-            v *= self.field.speed_at(ax, az);
+            v *= self.field.speed_at(ax, az) * self.power_speed(ax, az, self.regiments[ri].side);
         }
         // wait for soldiers who are out of place
         let (mut lag, mut n) = (0.0, 0);
@@ -2188,7 +2244,8 @@ impl Sim {
         self.vz[i] += (want_vz - self.vz[i]) * a;
         let (mut vx, mut vz) = (self.vx[i], self.vz[i]);
         if !t.flyer || self.alt[i] < 2.0 {
-            let ground = self.field.speed_at(self.px[i], self.pz[i]);
+            let ground = self.field.speed_at(self.px[i], self.pz[i])
+                * self.power_speed(self.px[i], self.pz[i], self.regiments[self.reg[i]].side);
             vx *= ground;
             vz *= ground;
         }
@@ -2615,6 +2672,12 @@ impl Sim {
     }
 
     fn missile_hit(&mut self, m: &mut Missile, x: f32, y: f32, z: f32) -> bool {
+        // the Queen's fog: most of the enemy's shots into it are lost
+        if self.powers.as_ref().is_some_and(|p| p.fogged(x, z, m.side)) && self.r() < 0.8 {
+            m.done = true;
+            m.stuck = 0.05;
+            return true;
+        }
         let cx = ((x - self.gx0) / CELL).floor() as i32;
         let cz = ((z - self.gz0) / CELL).floor() as i32;
         let (mut best, mut bd) = (-1i32, 1.0f32);

@@ -132,6 +132,22 @@ fn field_pattern(x: f32, z: f32) -> (u8, f32) {
 fn ground_color(field: &Field, p: &Pal, i: usize, j: usize) -> [f32; 3] {
     let (nx, nz) = (field.nx, field.nz);
     let k = j * nx + i;
+    if let Some(m) = &field.baked {
+        // the prototype's own ground, mixed down per node by its exporter (sRGB)
+        let c = m.land.colour[k];
+        let lin = |v: u8| {
+            let s = v as f32 / 255.0;
+            if s <= 0.04045 {
+                s / 12.92
+            } else {
+                ((s + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let x = field.x0 + i as f32 * field.res;
+        let z = field.z0 + j as f32 * field.res;
+        let v = 0.94 + noise(x / 3.1, z / 3.1, 77) * 0.1;
+        return scale3([lin(c[0]), lin(c[1]), lin(c[2])], v / DETAIL_MEAN);
+    }
     let x = field.x0 + i as f32 * field.res;
     let z = field.z0 + j as f32 * field.res;
     let h = &field.h;
@@ -321,6 +337,9 @@ pub fn ground(field: &Field, tile: usize) -> Vec<Mesh3D> {
 /// One sheet of water at the water line where the ground dips under it: shallow to deep, a line
 /// of foam along the banks, clear at the very edge.
 pub fn water(field: &Field) -> Option<Mesh3D> {
+    if field.baked.is_some() {
+        return baked_water(field);
+    }
     let step = 3.0f32;
     let nx = (field.w / step).floor() as usize + 1;
     let nz = (field.d / step).floor() as usize + 1;
@@ -406,6 +425,71 @@ pub fn water(field: &Field) -> Option<Mesh3D> {
         metallic_factor: 0.0,
         // (a marsh is still and murky: the sky's glare off a glassy one turned its pools pale)
         roughness_factor: if marsh { 0.8 } else { 0.2 },
+        texture_index: None,
+        normal_texture_index: None,
+        skinning: None,
+    })
+}
+
+/// A baked map's water: a sheet at each pool's, river's or sea's own level on the land's grid,
+/// shallow to deep, foam where it meets the bank, murky where it is marsh.
+fn baked_water(field: &Field) -> Option<Mesh3D> {
+    let m = field.baked.as_ref()?;
+    let l = &m.land;
+    let (nx, nz) = (l.nx, l.nz);
+    let shallow = rgb(0x4f9a96);
+    let deep = rgb(0x23406a);
+    let marsh_c = (rgb(0x2e7468), rgb(0x1b4656));
+    let foam = rgb(0xf6ecd8);
+    let mut id = vec![u32::MAX; nx * nz];
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let wet = |k: usize| l.water_banks[k] > crate::baked::NO_WATER;
+    for j in 0..nz - 1 {
+        for i in 0..nx - 1 {
+            let ks = [j * nx + i, j * nx + i + 1, (j + 1) * nx + i, (j + 1) * nx + i + 1];
+            if !ks.iter().any(|&k| l.water[k] > crate::baked::NO_WATER) || !ks.iter().all(|&k| wet(k)) {
+                continue;
+            }
+            let mut vid = [0u32; 4];
+            for (c, &k) in ks.iter().enumerate() {
+                if id[k] == u32::MAX {
+                    let (ii, jj) = (k % nx, k / nx);
+                    let (x, z) = (l.x0 + ii as f32 * l.res, l.z0 + jj as f32 * l.res);
+                    let y = l.water_banks[k];
+                    let depth = y - l.h[k];
+                    let d = (depth / 1.6).clamp(0.0, 1.0);
+                    let marshy = l.marsh[k] > 0.4;
+                    let (sh, dp) = if marshy { marsh_c } else { (shallow, deep) };
+                    let mut col = mix(sh, dp, smooth(0.25, 0.45, d) * 0.7 + smooth(0.6, 0.85, d) * 0.3);
+                    let r = noise(x * 0.22, z * 0.22, 5) * 0.6 + noise(x * 0.6, z * 0.6, 6) * 0.4;
+                    if r > 0.74 {
+                        col = scale3(col, 1.0 + 0.12 * (1.0 - d * 0.5));
+                    }
+                    col = mix(col, rgb(0xf0a882), if marshy { 0.04 } else { 0.12 } * (1.0 - d));
+                    let shore = l.water[k] <= crate::baked::NO_WATER || depth < 0.12;
+                    if shore && !marshy {
+                        col = mix(col, foam, 0.45);
+                    }
+                    let a = (if marshy { 0.88 } else { 0.74 } + (0.95 - 0.74) * smooth(0.1, 0.7, d))
+                        .min(0.96)
+                        * smooth(-0.05, 0.05, depth);
+                    let mut v = MeshVertex3D::new([x, y, z], [0.0, 1.0, 0.0], [0.0, 0.0]);
+                    v.color = [col[0], col[1], col[2], a];
+                    id[k] = vertices.len() as u32;
+                    vertices.push(v);
+                }
+                vid[c] = id[k];
+            }
+            indices.extend([vid[0], vid[2], vid[1], vid[1], vid[2], vid[3]]);
+        }
+    }
+    (!indices.is_empty()).then(|| Mesh3D {
+        vertices,
+        indices,
+        material: Material3D::default(),
+        metallic_factor: 0.0,
+        roughness_factor: 0.25,
         texture_index: None,
         normal_texture_index: None,
         skinning: None,
@@ -793,8 +877,121 @@ fn place(x: f32, y: f32, z: f32, yaw: f32, sx: f32, sy: f32, sz: f32) -> Mat4 {
         * Mat4::from_scale(Vec3::new(sx, sy, sz))
 }
 
+/// A baked map's woods and rocks as the prototype placed them, its grass, crops and reeds by its
+/// densities, drawn with the battle's own toon models.
+fn baked_scatter(field: &Field, out: &mut Vec<Instance>) {
+    let Some(m) = &field.baked else {
+        return;
+    };
+    let l = &m.land;
+    let leaf = |x: f32, z: f32| {
+        let v = 0.88 + noise(x / 8.0, z / 8.0, 3) * 0.24;
+        [v, v, v]
+    };
+    for t in &l.trees {
+        let (kind, sy, sxz) = match t.kind {
+            0 => (PINE, 1.0, 1.0),
+            1 => (OAK, 1.0, 1.0),
+            2 => (VIOLET, 1.05, 1.0),
+            3 => (DEAD, 1.0, 1.0),
+            _ => (MOSS, 0.7, 1.25),
+        };
+        let s = t.scale;
+        out.push(Instance {
+            kind,
+            transform: place(t.x, field.height_at(t.x, t.z) - 0.12, t.z, t.rot, s * sxz, s * sy, s * sxz),
+            tint: leaf(t.x, t.z),
+        });
+    }
+    let mut r = Rng::new(7177);
+    for rk in &l.rocks {
+        let s = rk.scale;
+        let big = s > 1.6;
+        let sy = 0.55 + r.next() * 0.6;
+        let lt = 0.72 + r.next() * 0.22;
+        out.push(Instance {
+            kind: if big { CRAG } else { ROCK },
+            transform: place(
+                rk.x,
+                field.height_at(rk.x, rk.z) - 0.3 * s,
+                rk.z,
+                rk.rot,
+                s * if big { 1.6 } else { 1.0 },
+                s * sy * if big { 1.4 } else { 1.0 },
+                s * if big { 1.6 } else { 1.0 },
+            ),
+            tint: [lt * 1.02, lt, lt * 1.04],
+        });
+    }
+    let node = |x: f32, z: f32| {
+        let i = ((x - l.x0) / l.res).round().clamp(0.0, l.nx as f32 - 1.0) as usize;
+        let j = ((z - l.z0) / l.res).round().clamp(0.0, l.nz as f32 - 1.0) as usize;
+        j * l.nx + i
+    };
+    let play = field.play;
+    let (mut tufts, mut reeds, mut crops) = (0, 0, 0);
+    for _ in 0..60000 {
+        if tufts >= 3200 && reeds >= 600 && crops >= 900 {
+            break;
+        }
+        let px = play.x0 - 30.0 + r.next() * (play.x1 - play.x0 + 60.0);
+        let pz = play.z0 - 30.0 + r.next() * (play.z1 - play.z0 + 60.0);
+        if field.blocked(px, pz) && field.depth_at(px, pz) < 0.0 {
+            continue;
+        }
+        let k = node(px, pz);
+        let roll = r.next() * 255.0;
+        let y = field.height_at(px, pz) - 0.04;
+        let yaw = r.next() * TAU;
+        if (l.reeds[k] as f32) > roll && reeds < 600 {
+            let s = 0.75 + r.next() * 0.7;
+            out.push(Instance {
+                kind: REED,
+                transform: place(px, y, pz, yaw, s, s, s),
+                tint: [1.0; 3],
+            });
+            reeds += 1;
+        } else if field.depth_at(px, pz) > -0.1 {
+            continue;
+        } else if (l.crop[k] as f32) > roll && crops < 900 {
+            let s = 0.8 + r.next() * 0.5;
+            out.push(Instance {
+                kind: TUFT,
+                transform: place(px, y, pz, yaw, s, s * 1.3, s),
+                tint: [1.55, 1.2, 0.55],
+            });
+            crops += 1;
+        } else if (l.grass[k] as f32) * 0.8 > roll && tufts < 3200 {
+            if r.next() < 0.06 {
+                let hue = r.next();
+                let kind = FLOWER + if hue < 0.5 { 0 } else if hue < 0.8 { 1 } else { 2 };
+                let s = 0.8 + r.next() * 0.6;
+                out.push(Instance {
+                    kind,
+                    transform: place(px, y, pz, yaw, s, s, s),
+                    tint: [1.0; 3],
+                });
+            } else {
+                let s = 0.7 + r.next() * 0.8;
+                let hue = (noise(px / 20.0, pz / 20.0, 4) - 0.5) * 0.08;
+                let lt = 0.75 + r.next() * 0.3;
+                out.push(Instance {
+                    kind: TUFT,
+                    transform: place(px, y, pz, yaw, s, s, s),
+                    tint: [lt * (1.0 + hue), lt, lt * (1.0 - hue)],
+                });
+                tufts += 1;
+            }
+        }
+    }
+}
+
 /// Woods, rocks, reeds, grass and flowers from the field's maps, and the cliffs' crags.
 fn scatter(field: &Field, out: &mut Vec<Instance>) {
+    if field.baked.is_some() {
+        baked_scatter(field, out);
+        return;
+    }
     let seed = field.spec.seed;
     let mut r = Rng::new((seed * 31 + 5) as u32);
     let cell = 4.4f32;
@@ -1152,6 +1349,7 @@ pub fn standard(look: crate::data::Faction) -> velvet_render::CrowdMesh3D {
         Faction::Reina => (0x6a32c0, 0xf0b44a, 0xf6e2a8),
         Faction::Alianza => (0xece6d4, 0x3d6fd0, 0xe8b040),
         Faction::Rebeldes => (0xa8442a, 0x2e1e12, 0xefe2c8),
+        Faction::Libres => (0x6f7f68, 0x3a3226, 0xe8dcc0),
     };
     let mut vertices = Vec::new();
     let mut indices = Vec::new();

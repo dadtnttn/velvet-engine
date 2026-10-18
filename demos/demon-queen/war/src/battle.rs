@@ -118,24 +118,40 @@ pub struct Battle {
 
 impl Battle {
     pub fn new(setup: Setup) -> Battle {
-        let spec = map_spec(&setup.map, None);
-        let map_title = spec.title.to_owned();
-        let deploy_player = spec.deploy_player;
-        let deploy_enemy = spec.deploy_enemy;
-        let field = Field::build(spec);
-        let p = field.play;
-        let zone = deploy_player.unwrap_or(Rect {
-            x0: p.x0 + 40.0,
-            x1: p.x1 - 40.0,
-            z0: p.z1 - 95.0,
-            z1: p.z1 - 12.0,
-        });
-        let enemy_zone = deploy_enemy.unwrap_or(Rect {
-            x0: p.x0 + 40.0,
-            x1: p.x1 - 40.0,
-            z0: p.z0 + 12.0,
-            z1: p.z0 + 95.0,
-        });
+        // A battle map from the war map prototype, if one is installed by that name; else the
+        // hand-made fields (the player from the south, the enemy in the north).
+        let (field, map_title, zone, enemy_zone) = match crate::baked::get(&setup.map) {
+            Some(m) => {
+                let (zone, enemy_zone) = if setup.player_attacks {
+                    (m.attacker_zone, m.defender_zone)
+                } else {
+                    (m.defender_zone, m.attacker_zone)
+                };
+                let title = m.name.clone();
+                (Field::from_baked(m), title, zone, enemy_zone)
+            }
+            None => {
+                let spec = map_spec(&setup.map, None);
+                let map_title = spec.title.to_owned();
+                let deploy_player = spec.deploy_player;
+                let deploy_enemy = spec.deploy_enemy;
+                let field = Field::build(spec);
+                let p = field.play;
+                let zone = deploy_player.unwrap_or(Rect {
+                    x0: p.x0 + 40.0,
+                    x1: p.x1 - 40.0,
+                    z0: p.z1 - 95.0,
+                    z1: p.z1 - 12.0,
+                });
+                let enemy_zone = deploy_enemy.unwrap_or(Rect {
+                    x0: p.x0 + 40.0,
+                    x1: p.x1 - 40.0,
+                    z0: p.z0 + 12.0,
+                    z1: p.z0 + 95.0,
+                });
+                (field, map_title, zone, enemy_zone)
+            }
+        };
         let sim = Sim::new(field, setup.seed, setup.dimming);
         let posture = setup.enemy_posture.unwrap_or(if setup.player_attacks {
             Posture::Defend
@@ -164,8 +180,38 @@ impl Battle {
             setup,
         };
         let (player, enemy) = (b.setup.player.clone(), b.setup.enemy.clone());
-        b.deploy_army(0, &player, zone, PI);
-        b.deploy_army(1, &enemy, enemy_zone, 0.0);
+        // each side faces the other's ground (on the hand-made fields: north and south)
+        let mid = |r: Rect| ((r.x0 + r.x1) / 2.0, (r.z0 + r.z1) / 2.0);
+        let ((px, pz), (ex, ez)) = (mid(zone), mid(enemy_zone));
+        let toward = (ex - px).atan2(ez - pz);
+        let toward = if (toward - PI).abs() < 0.35 || (toward + PI).abs() < 0.35 {
+            PI
+        } else if toward.abs() < 0.35 {
+            0.0
+        } else {
+            toward
+        };
+        b.deploy_army(0, &player, zone, toward);
+        b.deploy_army(1, &enemy, enemy_zone, toward + PI);
+        // a walled place is a siege (whoever holds it defends the walls); anywhere, both sides
+        // may build: more wood for whoever brings a siege
+        let map = b.sim.field.baked.clone();
+        let defender = map
+            .as_ref()
+            .filter(|m| m.is_siege())
+            .map(|_| if b.setup.player_attacks { 1u8 } else { 0 });
+        let wood = match defender {
+            Some(d) => {
+                let mut w = [0.0f32; 2];
+                w[d as usize] = 90.0;
+                w[1 - d as usize] = 160.0;
+                w
+            }
+            None => [40.0, 40.0],
+        };
+        let mut siege = crate::siege::Siege::new(map.as_deref(), defender, wood);
+        siege.ai_setup(&mut b.sim, 1, enemy_zone);
+        b.sim.siege = Some(siege);
         b.queen = b
             .sim
             .regiments
@@ -181,13 +227,25 @@ impl Battle {
     /// Lays an army out in its zone: a line of infantry, skirmishers ahead, missiles behind,
     /// horse/wolves/harpies on the wings, the hero behind the centre.
     fn deploy_army(&mut self, side: u8, army: &ArmySetup, zone: Rect, heading: f32) {
-        let fwd = if heading == 0.0 { 1.0 } else { -1.0 };
-        let front = if side == 0 {
-            zone.z0 + 26.0
-        } else {
-            zone.z1 - 26.0
-        };
-        let cx = (zone.x0 + zone.x1) / 2.0;
+        let heading = heading.rem_euclid(2.0 * PI);
+        let heading = if heading > PI { heading - 2.0 * PI } else { heading };
+        // forward (towards the enemy) and across the line (kept pointing east, or south)
+        let (fx, fz) = (heading.sin(), heading.cos());
+        let (mut lx, mut lz) = (-fz, fx);
+        if lx < -1e-4 || (lx.abs() <= 1e-4 && lz < 0.0) {
+            lx = -lx;
+            lz = -lz;
+        }
+        let (zx, zz) = ((zone.x0 + zone.x1) / 2.0, (zone.z0 + zone.z1) / 2.0);
+        let (hw, hd) = ((zone.x1 - zone.x0) / 2.0, (zone.z1 - zone.z0) / 2.0);
+        let ahead = fx.abs() * hw + fz.abs() * hd;
+        let across = (lx.abs() * hw + lz.abs() * hd - 10.0).max(10.0);
+        // the front line, 26 m inside the zone's edge towards the enemy
+        let (bx, bz) = (zx + fx * (ahead - 26.0), zz + fz * (ahead - 26.0));
+        let at = move |lat: f32, fwd_off: f32| (bx + lx * lat + fx * fwd_off, bz + lz * lat + fz * fwd_off);
+        let fwd = 1.0f32;
+        let front = 0.0f32;
+        let cx = 0.0f32;
         let by = |roles: &[Role]| -> Vec<SetupUnit> {
             army.units
                 .iter()
@@ -208,12 +266,13 @@ impl Battle {
             for (u, w) in list.iter().zip(&widths) {
                 let rx = x + w / 2.0;
                 x += w + gap;
+                let (wx, wz) = at(rx, z);
                 b.sim.add_regiment(
                     &u.ty,
                     side,
                     u.men,
-                    rx,
-                    z,
+                    wx,
+                    wz,
                     Some(heading),
                     None,
                     Some(army.faction),
@@ -233,12 +292,13 @@ impl Battle {
         let heroes = by(&[Role::Hero]);
         let n = heroes.len() as f32;
         for (k, u) in heroes.iter().enumerate() {
+            let (wx, wz) = at(cx + (k as f32 - (n - 1.0) / 2.0) * 12.0, front - fwd * 14.0);
             self.sim.add_regiment(
                 &u.ty,
                 side,
                 Some(1),
-                cx + (k as f32 - (n - 1.0) / 2.0) * 12.0,
-                front - fwd * 14.0,
+                wx,
+                wz,
                 Some(heading),
                 None,
                 Some(army.faction),
@@ -252,17 +312,14 @@ impl Battle {
         {
             let s = if k % 2 == 0 { -1.0 } else { 1.0 };
             let lane = (k / 2) as f32;
-            let x = clamp(
-                cx + s * (half + 18.0 + lane * 40.0),
-                zone.x0 + 10.0,
-                zone.x1 - 10.0,
-            );
+            let lat = clamp(cx + s * (half + 18.0 + lane * 40.0), -across, across);
+            let (wx, wz) = at(lat, front - fwd * (6.0 + lane * 4.0));
             self.sim.add_regiment(
                 &u.ty,
                 side,
                 u.men,
-                x,
-                front - fwd * (6.0 + lane * 4.0),
+                wx,
+                wz,
                 Some(heading),
                 None,
                 Some(army.faction),
@@ -271,13 +328,13 @@ impl Battle {
         }
         for ri in 0..self.sim.regiments.len() {
             if self.sim.regiments[ri].side == side {
-                self.settle(ri, fwd);
+                self.settle(ri, fx, fz);
             }
         }
     }
 
     /// Steps a freshly deployed regiment off water, rock and walls (towards the front, then aside).
-    fn settle(&mut self, ri: usize, fwd: f32) {
+    fn settle(&mut self, ri: usize, fx: f32, fz: f32) {
         if self.sim.regiments[ri].ty.flyer {
             return;
         }
@@ -300,7 +357,7 @@ impl Battle {
             return;
         }
         for d in [6.0, 12.0, 18.0, 24.0, 32.0, 40.0, 50.0, 62.0, 76.0] {
-            for (ox, oz) in [(0.0, fwd * d), (d, 0.0), (-d, 0.0), (0.0, -fwd * d)] {
+            for (ox, oz) in [(fx * d, fz * d), (fz * d, -fx * d), (-fz * d, fx * d), (-fx * d, -fz * d)] {
                 if bad(self, cx + ox, cz + oz) < 0.04 {
                     let (h, f) = (self.sim.regiments[ri].heading, self.sim.regiments[ri].files);
                     self.place(ri, cx + ox, cz + oz, h, f, false);
@@ -634,6 +691,51 @@ impl Battle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A siege on the castle (the war map 2.0's battle map, from the game's data): both generals
+    /// fight it, the Queen holding it and then besieging it; the walls fall or hold, it ends.
+    #[test]
+    #[ignore = "reads the battle maps (data/guerra/batallas); run with --ignored on a dev machine"]
+    fn a_siege_on_a_battle_map_is_fought_to_its_end() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/guerra/batallas");
+        for id in ["asedio_castillo", "asedio_fortaleza", "vado"] {
+            crate::baked::ensure(id, &root).expect("the map");
+            for attacks in [false, true] {
+                let mut setup = Setup::scenario("vado", 0.5);
+                setup.map = id.into();
+                setup.player_attacks = attacks;
+                let mut b = Battle::new(setup);
+                let mine = b.sim.siege.as_ref().unwrap();
+                let (works, engines) = (mine.works.len(), mine.engines.len());
+                // the player's side builds what it may, as the AI would
+                let mut s = b.sim.siege.take().unwrap();
+                s.ai_setup(&mut b.sim, 0, b.zone);
+                b.sim.siege = Some(s);
+                b.auto_player = Some(BattleAi::new(0, if attacks { Posture::Attack } else { Posture::Defend }));
+                b.begin();
+                let t0 = std::time::Instant::now();
+                b.skip(16.0 * 60.0, false);
+                let s = b.sim.siege.as_ref().unwrap();
+                let broken: Vec<String> = s
+                    .works
+                    .iter()
+                    .filter(|w| w.broken)
+                    .map(|w| format!("{:?}", w.kind))
+                    .collect();
+                let alive = s.engines.iter().filter(|e| e.alive).count();
+                eprintln!(
+                    "{id} player_attacks={attacks}: {works} works, {engines}+{} engines ({alive} standing), broken {broken:?}, openings {}, held {:.0}s, winner {:?} at {:.0}s in {} ms",
+                    s.engines.len() - engines,
+                    s.openings.len(),
+                    s.hold,
+                    b.sim.over.map(|o| o.winner),
+                    b.sim.time,
+                    t0.elapsed().as_millis()
+                );
+                assert!(b.sim.over.is_some(), "{id}: the battle never ended");
+            }
+        }
+    }
 
     #[test]
     fn a_quick_battle_fought_by_both_generals_ends() {

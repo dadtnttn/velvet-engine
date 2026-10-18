@@ -2,6 +2,9 @@
 //! rock walls, the river with its ford and bridge, marsh and causeways, roads, woods, set pieces),
 //! and the queries the simulation needs: walk height, blocked ground, speed, cover, a 4 m
 //! passability grid with clearance (how wide a formation fits) and A* paths round obstacles.
+use std::sync::Arc;
+
+use crate::baked::{BattleMap, DECK, NO_WATER, SOLID, WORK};
 use crate::maps::{MapSpec, Rect};
 use crate::noise::{clamp, fbm, line_near, noise, resample, smooth, LinePoint};
 
@@ -9,6 +12,9 @@ use crate::noise::{clamp, fbm, line_near, noise, resample, smooth, LinePoint};
 pub const WATER_Y: f32 = -0.55;
 /// Water deeper than this cannot be waded.
 const DEEP: f32 = 0.72;
+/// On the war map 2.0's battle maps (their wide shallow rivers are waded waist-deep; the deep
+/// ones, the harbours and the sea are well past it).
+const DEEP_BAKED: f32 = 1.2;
 
 /// How wide each set piece stands in the way (0: walk through or round by its walls).
 pub fn prop_footprint(kind: &str) -> f32 {
@@ -165,6 +171,39 @@ pub struct Field {
     pub walls: Vec<WallLine>,
     solids: Vec<(f32, f32, f32)>,
     pub grid: Passability,
+    /// A battle map from the war map prototype (`baked.rs`), when the field is one: its land,
+    /// what stands on it and the works that can be broken.
+    pub baked: Option<Arc<BattleMap>>,
+    /// The works broken open so far (their ground passable, rubble), by index.
+    pub open: Vec<bool>,
+    /// What armies build or bring that stands in the way: palisades and engines (`None` once
+    /// gone), and where a siege tower's bridge is down on a wall (circles the wall is crossed in).
+    pub barriers: Vec<Option<Barrier>>,
+    pub gaps: Vec<Option<(f32, f32, f32)>>,
+}
+
+/// Something built on the field that feet cannot pass: a line (a palisade) or a disc (an engine).
+#[derive(Clone, Copy, Debug)]
+pub struct Barrier {
+    pub ax: f32,
+    pub az: f32,
+    pub bx: f32,
+    pub bz: f32,
+    /// Half its thickness (a disc: its radius, a = b).
+    pub half: f32,
+}
+
+impl Barrier {
+    pub fn dist(&self, x: f32, z: f32) -> f32 {
+        let (dx, dz) = (self.bx - self.ax, self.bz - self.az);
+        let l2 = dx * dx + dz * dz;
+        let t = if l2 > 1e-6 {
+            (((x - self.ax) * dx + (z - self.az) * dz) / l2).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        (x - self.ax - dx * t).hypot(z - self.az - dz * t)
+    }
 }
 
 impl Field {
@@ -456,6 +495,10 @@ impl Field {
                 pz0: 0.0,
                 pc: 4.0,
             },
+            baked: None,
+            open: Vec::new(),
+            barriers: Vec::new(),
+            gaps: Vec::new(),
         };
         field.build_grid();
         // crossings (for the minimap's labels and the AI's sense of the river)
@@ -489,6 +532,144 @@ impl Field {
         field
     }
 
+    /// The field of a battle map from the prototype: its land and its structures as baked.
+    pub fn from_baked(map: Arc<BattleMap>) -> Field {
+        let l = &map.land;
+        let (kind, title, blurb) = names(&map);
+        let mut spec = crate::maps::empty(kind, title, blurb, 3, 0.0);
+        spec.deploy_player = None;
+        spec.deploy_enemy = None;
+        let (nx, nz, res, x0, z0) = (l.nx, l.nz, l.res, l.x0, l.z0);
+        let w = (nx - 1) as f32 * res;
+        let d = (nz - 1) as f32 * res;
+        let play = spec.play;
+        let works = map.works.len();
+        let mut field = Field {
+            spec,
+            res,
+            nx,
+            nz,
+            x0,
+            z0,
+            w,
+            d,
+            play,
+            h: l.h.clone(),
+            forest: l.forest.clone(),
+            river_d: vec![1e3; nx * nz],
+            road: l.road.clone(),
+            marsh: l.marsh.clone(),
+            cliff: l.cliff.clone(),
+            river: None,
+            bridge: None,
+            crossings: Vec::new(),
+            cliffs: Vec::new(),
+            roads: Vec::new(),
+            walls: Vec::new(),
+            solids: Vec::new(),
+            grid: Passability {
+                pass: Vec::new(),
+                clear: Vec::new(),
+                pw: 0,
+                ph: 0,
+                px0: 0.0,
+                pz0: 0.0,
+                pc: 2.0,
+            },
+            baked: Some(map),
+            open: vec![false; works],
+            barriers: Vec::new(),
+            gaps: Vec::new(),
+        };
+        field.build_grid();
+        field
+    }
+
+    /// A work has been broken (or rebuilt): its ground opens (closes) to feet and to paths.
+    pub fn set_open(&mut self, work: usize, open: bool) {
+        if work < self.open.len() && self.open[work] != open {
+            self.open[work] = open;
+            self.build_grid();
+        }
+    }
+
+    /// Something built that stands in the way (paths go round it from now on); its index.
+    pub fn add_barrier(&mut self, b: Barrier) -> usize {
+        self.barriers.push(Some(b));
+        self.build_grid();
+        self.barriers.len() - 1
+    }
+
+    pub fn remove_barrier(&mut self, k: usize) {
+        if let Some(slot) = self.barriers.get_mut(k) {
+            if slot.take().is_some() {
+                self.build_grid();
+            }
+        }
+    }
+
+    /// A siege tower's bridge down on a wall: the wall is crossed there; its index.
+    pub fn add_gap(&mut self, x: f32, z: f32, r: f32) -> usize {
+        self.gaps.push(Some((x, z, r)));
+        self.build_grid();
+        self.gaps.len() - 1
+    }
+
+    pub fn remove_gap(&mut self, k: usize) {
+        if let Some(slot) = self.gaps.get_mut(k) {
+            if slot.take().is_some() {
+                self.build_grid();
+            }
+        }
+    }
+
+    fn in_gap(&self, x: f32, z: f32) -> bool {
+        self.gaps
+            .iter()
+            .flatten()
+            .any(|&(gx, gz, r)| (x - gx) * (x - gx) + (z - gz) * (z - gz) < r * r)
+    }
+
+    /// The top of whatever is here (ground, a deck, a wall's walk, a roof) and the work it is, if
+    /// one: where a stone coming down lands.
+    pub fn top_at(&self, x: f32, z: f32) -> (f32, Option<usize>) {
+        let g = self.height_at(x, z);
+        match self.structure(x, z) {
+            Some((WORK, id, top)) if id > 0 && !self.open.get(id - 1).copied().unwrap_or(false) => {
+                (top.max(g), Some(id - 1))
+            }
+            Some((SOLID, _, top)) | Some((DECK, _, top)) => (top.max(g), None),
+            _ => (g, None),
+        }
+    }
+
+    /// What stands on the baked map's ground here: (kind, work, top).
+    fn structure(&self, x: f32, z: f32) -> Option<(u8, usize, f32)> {
+        let b = &self.baked.as_ref()?.blocks;
+        let k = b.cell(x, z)?;
+        Some((b.kind[k], b.work[k] as usize, b.top[k]))
+    }
+
+    /// The work standing here (unbroken), if any.
+    pub fn work_at(&self, x: f32, z: f32) -> Option<usize> {
+        match self.structure(x, z)? {
+            (WORK, id, _) if id > 0 && !self.open.get(id - 1).copied().unwrap_or(false) => {
+                Some(id - 1)
+            }
+            _ => None,
+        }
+    }
+
+    /// The water's surface here (`None` on dry land).
+    fn water_surface(&self, x: f32, z: f32) -> Option<f32> {
+        let m = self.baked.as_ref()?;
+        let l = &m.land;
+        let i = clamp(((x - l.x0) / l.res).round(), 0.0, l.nx as f32 - 1.0) as usize;
+        let j = clamp(((z - l.z0) / l.res).round(), 0.0, l.nz as f32 - 1.0) as usize;
+        let s = l.water[j * l.nx + i];
+        (s > NO_WATER).then_some(s)
+    }
+
     fn sample(&self, a: &[f32], x: f32, z: f32) -> f32 {
         let fx = clamp((x - self.x0) / self.res, 0.0, self.nx as f32 - 1.001);
         let fz = clamp((z - self.z0) / self.res, 0.0, self.nz as f32 - 1.001);
@@ -505,6 +686,12 @@ impl Field {
 
     /// The bridge's deck height here, if on it.
     pub fn deck_at(&self, x: f32, z: f32) -> Option<f32> {
+        if self.baked.is_some() {
+            return match self.structure(x, z) {
+                Some((DECK, _, top)) => Some(top),
+                _ => None,
+            };
+        }
         let b = self.bridge?;
         let (dx, dz) = (x - b.x, z - b.z);
         let u = dx * b.ux + dz * b.uz;
@@ -525,7 +712,23 @@ impl Field {
     }
 
     pub fn depth_at(&self, x: f32, z: f32) -> f32 {
+        if self.baked.is_some() {
+            return match self.water_surface(x, z) {
+                Some(s) => s - self.height_at(x, z),
+                None => -10.0,
+            };
+        }
         WATER_Y - self.height_at(x, z)
+    }
+
+    /// The water's surface here, for what floats or splashes (the field's line, or the baked map's
+    /// own level; `None` on a baked map's dry land).
+    pub fn water_y(&self, x: f32, z: f32) -> Option<f32> {
+        if self.baked.is_some() {
+            self.water_surface(x, z)
+        } else {
+            Some(WATER_Y)
+        }
     }
 
     pub fn forest_at(&self, x: f32, z: f32) -> f32 {
@@ -545,6 +748,9 @@ impl Field {
     }
 
     pub fn wall_at(&self, x: f32, z: f32) -> bool {
+        if self.baked.is_some() {
+            return self.work_at(x, z).is_some();
+        }
         for w in &self.walls {
             let near = line_near(x, z, &w.line);
             if near.d < w.thick / 2.0 + 0.6 {
@@ -564,7 +770,28 @@ impl Field {
         if x < self.x0 + 4.0 || x > -self.x0 - 4.0 || z < self.z0 + 4.0 || z > -self.z0 - 4.0 {
             return true;
         }
-        if self.depth_at(x, z) > DEEP && self.deck_at(x, z).is_none() {
+        if self
+            .barriers
+            .iter()
+            .flatten()
+            .any(|b| b.dist(x, z) < b.half)
+        {
+            return true;
+        }
+        if self.baked.is_some() {
+            match self.structure(x, z) {
+                Some((SOLID, _, _)) => return true,
+                Some((DECK, _, _)) => return false,
+                Some((WORK, id, _)) if id > 0 && !self.open.get(id - 1).copied().unwrap_or(false) => {
+                    if !self.in_gap(x, z) {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let deep = if self.baked.is_some() { DEEP_BAKED } else { DEEP };
+        if self.depth_at(x, z) > deep && self.deck_at(x, z).is_none() {
             return true;
         }
         if self.cliff_at(x, z) {
@@ -616,8 +843,15 @@ impl Field {
     }
 
     // ---------------------------------------------------------- passability
+    /// Works out again where feet can go (after something was built or broke).
+    pub fn rebuild_grid(&mut self) {
+        self.build_grid();
+    }
+
     fn build_grid(&mut self) {
-        let pc = 4.0f32;
+        // (the baked maps' gates and lanes are narrow: a finer grid keeps them open to paths)
+        let pc = if self.baked.is_some() { 2.0f32 } else { 4.0 };
+        let probe = pc * 0.35;
         let (px0, pz0) = (self.x0 + 6.0, self.z0 + 6.0);
         let pw = ((self.w - 12.0) / pc).floor() as usize;
         let ph = ((self.d - 12.0) / pc).floor() as usize;
@@ -628,7 +862,7 @@ impl Field {
                 let cz = pz0 + (j as f32 + 0.5) * pc;
                 let mut free = !self.blocked(cx, cz);
                 if free {
-                    for (ox, oz) in [(-1.4, -1.4), (1.4, -1.4), (-1.4, 1.4), (1.4, 1.4)] {
+                    for (ox, oz) in [(-probe, -probe), (probe, -probe), (-probe, probe), (probe, probe)] {
                         if self.blocked(cx + ox, cz + oz) {
                             free = false;
                         }
@@ -867,6 +1101,22 @@ impl Field {
             d * 1.5 + 30.0
         }
     }
+}
+
+/// The battle map's names, as the field's spec wants them (static: one copy per map, kept).
+fn names(map: &BattleMap) -> (&'static str, &'static str, &'static str) {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static NAMES: OnceLock<Mutex<HashMap<String, (&'static str, &'static str, &'static str)>>> =
+        OnceLock::new();
+    let mut m = NAMES.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
+    *m.entry(map.id.clone()).or_insert_with(|| {
+        (
+            Box::leak(map.id.clone().into_boxed_str()),
+            Box::leak(map.name.clone().into_boxed_str()),
+            Box::leak(map.blurb.clone().into_boxed_str()),
+        )
+    })
 }
 
 /// An open A* node, smallest first.

@@ -96,6 +96,14 @@ impl BattleAi {
         let Some(foe_c) = center(&live_regs) else {
             return;
         };
+        if sim
+            .siege
+            .as_ref()
+            .is_some_and(|s| s.mode == crate::siege::Mode::Siege)
+        {
+            self.siege_orders(sim, &mine, &live);
+            return;
+        }
         let gap = dist(sim, (my_c.0, my_c.1, false), foe_c);
         if self.posture == Posture::Defend && (gap < 120.0 || sim.time > 75.0) {
             self.posture = Posture::Attack;
@@ -317,6 +325,115 @@ impl BattleAi {
                 Do::Move(ri, x, z, heading, run) => {
                     let files = sim.regiments[ri].files;
                     sim.order_move(ri, x, z, heading, Some(files), run, false);
+                }
+            }
+        }
+    }
+
+    /// A siege. The attackers' foot wait out of the archers' reach until there is a way in (a
+    /// gate down, a breach, a tower's bridge), then go through it for the keep; their archers
+    /// shoot at the walls; anything that comes out is fought. The defenders hold inside: they go
+    /// to every way in that opens and fall on whoever gets in.
+    fn siege_orders(&mut self, sim: &mut Sim, mine: &[usize], live: &[usize]) {
+        let side = self.side;
+        let Some(s) = sim.siege.as_ref() else {
+            return;
+        };
+        let attacking = s.attacker(side);
+        let openings = s.openings.clone();
+        let keep = s.hold_at.map(|(x, z, _)| (x, z));
+        let map = sim.field.baked.clone();
+        let inside = |x: f32, z: f32| map.as_ref().is_some_and(|m| m.inside(x, z));
+        let time = sim.time;
+        enum Do {
+            Attack(usize, usize, bool),
+            Move(usize, f32, f32, bool),
+        }
+        let mut todo = Vec::new();
+        let regs = &sim.regiments;
+        let nearest = |from: (f32, f32), pick: &dyn Fn(&Regiment) -> bool| -> Option<(usize, f32)> {
+            live.iter()
+                .map(|&f| &regs[f])
+                .filter(|f| pick(f))
+                .map(|f| (f.index, (f.cx - from.0).hypot(f.cz - from.1)))
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+        };
+        for &ri in mine {
+            let r = &regs[ri];
+            let me = (r.cx, r.cz);
+            let m = self.memo.entry(ri).or_default();
+            let ranged = r.ty.ranged.is_some() && r.ammo > 0;
+            let attack = |m: &mut Memo, t: usize, run: bool, todo: &mut Vec<Do>| {
+                if m.target == Some(t) && time - m.at < 6.0 && r.order_target().is_some() {
+                    return;
+                }
+                m.target = Some(t);
+                m.at = time;
+                todo.push(Do::Attack(ri, t, run));
+            };
+            if r.ty.flyer || ranged {
+                // over the walls, or from behind them: the nearest enemy
+                if let Some((t, d)) = nearest(me, &|_| true) {
+                    if r.ty.flyer || d < 230.0 {
+                        attack(m, t, false, &mut todo);
+                    }
+                }
+                continue;
+            }
+            if attacking {
+                if let Some((t, d)) = nearest(me, &|f| !inside(f.cx, f.cz)) {
+                    if d < 70.0 {
+                        attack(m, t, d < 40.0, &mut todo);
+                        continue;
+                    }
+                }
+                if openings.is_empty() {
+                    continue;
+                }
+                if let Some((t, d)) = nearest(me, &|_| true) {
+                    if d < 45.0 {
+                        attack(m, t, true, &mut todo);
+                        continue;
+                    }
+                }
+                if let Some((kx, kz)) = keep {
+                    if time - m.at > 6.0 || !r.is_moving_order() {
+                        m.at = time;
+                        m.target = None;
+                        todo.push(Do::Move(ri, kx, kz, (kx - me.0).hypot(kz - me.1) < 90.0));
+                    }
+                }
+            } else {
+                if let Some((t, d)) = nearest(me, &|f| inside(f.cx, f.cz)) {
+                    attack(m, t, d < 50.0, &mut todo);
+                    continue;
+                }
+                // to the nearest way in, just inside it
+                let way = openings.iter().min_by(|a, b| {
+                    (a.0 - me.0)
+                        .hypot(a.1 - me.1)
+                        .total_cmp(&(b.0 - me.0).hypot(b.1 - me.1))
+                });
+                if let (Some(&(ox, oz)), Some((kx, kz))) = (way, keep) {
+                    let (dx, dz) = (kx - ox, kz - oz);
+                    let l = dx.hypot(dz).max(1.0);
+                    let (x, z) = (ox + dx / l * 10.0, oz + dz / l * 10.0);
+                    if (x - me.0).hypot(z - me.1) > 12.0 && (time - m.at > 6.0 || !r.is_moving_order()) {
+                        m.at = time;
+                        m.target = None;
+                        todo.push(Do::Move(ri, x, z, true));
+                    }
+                }
+            }
+        }
+        for d in todo {
+            match d {
+                Do::Attack(ri, t, run) => {
+                    sim.order_attack(ri, t, run, false);
+                }
+                Do::Move(ri, x, z, run) => {
+                    let files = sim.regiments[ri].files;
+                    sim.order_move(ri, x, z, None, Some(files), run, false);
                 }
             }
         }

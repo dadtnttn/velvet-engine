@@ -6,14 +6,19 @@
 //! battlefields, the simulation, the enemy general, the campaign's rules; and the meshes the game
 //! draws them with. The game (`src/war/`) owns the camera, the input, the HUD and the sound.
 pub mod ai;
+pub mod baked;
 pub mod battle;
 pub mod campaign_map;
 pub mod data;
+pub mod engines;
 pub mod field;
 pub mod maps;
 pub mod models;
 pub mod noise;
+pub mod powers;
 pub mod prims;
+pub mod regions;
 pub mod rules;
 pub mod scene;
+pub mod siege;
 pub mod sim;

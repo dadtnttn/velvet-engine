@@ -28,11 +28,11 @@ pub(crate) use drink_overlay::DrinkView;
 mod mission_overlay;
 pub(crate) use mission_overlay::MissionView;
 mod boss_overlay;
-pub(crate) use boss_overlay::{BossCard, BossView};
+pub(crate) use boss_overlay::{BossCard, BossQte, BossView};
 mod war_overlay;
 pub(crate) use war_overlay::{
     ArmyTag, BannerTag, BattleView, CampPanel, CampaignView, Glyph, MarchView, MiniDot, Minimap,
-    Modal, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus, WarButton,
+    Modal, Objective, ProvLabel, ResultRow, Results, TableCard, TableView, Tip, UnitCard, Versus, WarButton,
     WarHit, WarView, MINIMAP as WAR_MINIMAP,
 };
 mod caricias_overlay;
@@ -788,10 +788,12 @@ fn push_map_picture(
     }
 }
 
-const PORTRAIT_ATLAS_SIZE: u32 = 2048;
+// Thirty-six cells: the dates' page alone shows three busts and eighteen memories at once (with
+// sixteen they took each other's cells every frame, and showed each other's pictures).
+const PORTRAIT_ATLAS_SIZE: u32 = 3072;
 const PORTRAIT_CELL: u32 = 512;
 
-/// The dialogue box's portraits: sixteen 512 px cells, each filled the first time its portrait is
+/// The dialogue box's portraits: thirty-six 512 px cells, each filled the first time its portrait is
 /// shown (decoded from the game's art, cropped to the head and shoulders); the oldest cell is
 /// reused once all are taken.
 struct PortraitAtlas {
@@ -2890,6 +2892,35 @@ impl MapOverlay {
                 );
             } else if let Some(view) = &self.war {
                 war_overlay::draw(font, &mut vertices, width, height, view);
+                // A conversation over the war (its own scenes, `guerra.md`): the box on top, the
+                // war still under it.
+                if let Some(d) = &self.dialogue {
+                    if classic_dialogue() {
+                        dialogue_overlay::draw_dialogue(
+                            font,
+                            &mut vertices,
+                            width,
+                            height,
+                            d,
+                            portrait_uv,
+                            ui_time,
+                        );
+                    } else {
+                        stage_overlay::draw_box(
+                            font,
+                            &mut vertices,
+                            width,
+                            height,
+                            d,
+                            portrait_uv,
+                            self.dialogue_age,
+                            self.dialogue_age,
+                            ui_time,
+                            false,
+                            0,
+                        );
+                    }
+                }
             } else if let Some(view) = &self.boss {
                 boss_overlay::draw(font, &mut vertices, width, height, view);
             } else if let Some(view) = &self.achievements {

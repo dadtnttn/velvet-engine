@@ -66,6 +66,10 @@ pub(crate) enum WarHit {
     Go(u8),
     /// The next army that can still move.
     NextArmy,
+    /// Build this (its place in `siege::Kind::ALL`): the placing begins (again: it ends).
+    Build(u8),
+    /// Aim this war power (its place in `powers::Power::ALL`; again: stop aiming).
+    Power(u8),
 }
 
 /// A button: where, what it says, its key, a line under it, its state.
@@ -254,6 +258,22 @@ pub(crate) struct BattleView {
     /// Where the speed buttons and the orders stand (their plates and kickers).
     pub speed_group: Option<[f32; 4]>,
     pub orders_group: Option<[f32; 4]>,
+    /// The build bar's buttons' plate, and its kicker (the wood left).
+    pub build_group: Option<([f32; 4], String)>,
+    /// The war powers' row's plate.
+    pub powers_group: Option<[f32; 4]>,
+    /// What this battle is for (a siege's keep, the clock), how far it has gone.
+    pub objective: Option<Objective>,
+}
+
+/// The battle's aim, on a plate under the balance of power.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Objective {
+    pub kicker: String,
+    pub title: String,
+    pub text: String,
+    pub progress: Option<f32>,
+    pub edge: u32,
 }
 
 /// A province's name over the map.
@@ -2278,6 +2298,26 @@ fn draw_battle(
         if let Some(r) = b.orders_group {
             group_plate(font, v, r, "ÓRDENES");
         }
+        if let Some((r, label)) = &b.build_group {
+            group_plate(font, v, *r, label);
+        }
+        if let Some(r) = b.powers_group {
+            group_plate(font, v, r, "PODERES DE LA REINA");
+        }
+        if let (Some(o), false) = (&b.objective, b.deploying) {
+            let (w, x, y) = (640.0, width / 2.0 - 320.0, 112.0);
+            plate(v, x, y, w, 64.0, 10.0, o.edge, 1.0);
+            kicker(font, v, &o.kicker, x + 26.0, y - 12.0, o.edge, 1.0);
+            let ts = fit(font, Face::Title, &o.title, 20.0, w - 60.0);
+            text_shadow(font, v, Face::Title, &o.title, x + 28.0, y + 8.0, ts, rgba(BONE, 1.0));
+            let ds = fit(font, Face::RoundItalic, &o.text, 14.0, w - 60.0);
+            text(font, v, Face::RoundItalic, &o.text, x + 30.0, y + 38.0, ds, rgba(0xd9cce8, 1.0));
+            if let Some(p) = o.progress {
+                let (bx, by, bw) = (x + 28.0, y + 58.0, w - 60.0);
+                push_rect(v, Rect::new(bx, by, bw, 4.0), rgba(0x000000, 0.5));
+                push_rect(v, Rect::new(bx, by, bw * p.clamp(0.0, 1.0), 4.0), rgba(o.edge, 1.0));
+            }
+        }
     }
     for c in &b.cards {
         draw_card(font, v, c, time);
@@ -2360,7 +2400,15 @@ fn draw_battle(
             ts,
             rgba(BONE, 1.0),
         );
-        let d = "Selecciona y usa el clic derecho en la zona marcada (arrastra para la anchura y el frente).";
+        let fallback = "Selecciona y usa el clic derecho en la zona marcada (arrastra para la anchura y el frente).";
+        let with_aim;
+        let d = match &b.objective {
+            Some(o) => {
+                with_aim = format!("{}: {} Construye con el panel de la derecha antes de empezar.", o.title, o.text);
+                with_aim.as_str()
+            }
+            None => fallback,
+        };
         let lines = wrap(font, Face::RoundItalic, d, 15.0, room);
         for (n, l) in lines.iter().take(2).enumerate() {
             text(

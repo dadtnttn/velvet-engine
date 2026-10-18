@@ -22,6 +22,7 @@ fn look_index(f: Faction) -> u8 {
         Faction::Reina => 0,
         Faction::Alianza => 1,
         Faction::Rebeldes => 2,
+        Faction::Libres => 3,
     }
 }
 
@@ -29,6 +30,7 @@ fn look_of(i: u8) -> Faction {
     match i {
         1 => Faction::Alianza,
         2 => Faction::Rebeldes,
+        3 => Faction::Libres,
         _ => Faction::Reina,
     }
 }
@@ -149,6 +151,8 @@ struct Burst {
     at: Vec3,
     radius: f32,
     t: f32,
+    /// A power's ring (its colour, no column), else the spark's (violet, with its column).
+    color: Option<[f32; 3]>,
 }
 
 /// Varrak in the battle: the game's own model with its clips.
@@ -198,14 +202,227 @@ struct CampScene {
     water: MeshHandle,
     roads: Option<MeshHandle>,
     woods: Vec<wr::scene::Instance>,
-    /// Each province's settlement, placed.
+    /// Each province's settlement, placed (the old models: only when the map 2.0's world is missing).
     settlements: Vec<(usize, Mat4)>,
-    bases: [(MeshHandle, MeshHandle); 3],
+    /// The map 2.0's world (`data/guerra/mundo.glb`): every settlement and landmark of the
+    /// prototype, textured as the web map, one draw per material (its texture, whether it
+    /// shines); and its anchors (`mundo.json`).
+    world: Vec<(MeshHandle, Option<TextureHandle>, Option<f32>)>,
+    anchors: Vec<WorldAnchor>,
+    /// The land's painted picture (`data/guerra/tierra.jpg`), when there is one: then `land` is
+    /// the white mesh it is laid on.
+    land_tex: Option<TextureHandle>,
+    sea: MeshHandle,
+    /// The waves' normal map on the water (the web map's).
+    water_tex: Option<TextureHandle>,
+    /// The regions' borders (`data/guerra/fronteras.json`) and their ribbons, rebuilt for the
+    /// camera (a line keeps its width on the screen) and for who holds what.
+    borders: Vec<BorderLine>,
+    border_mesh: Option<MeshHandle>,
+    border_key: Option<(Vec3, u64)>,
+    bases: [(MeshHandle, MeshHandle); 4],
     clouds: Vec<(f32, f32, f32, f32, usize, f32)>,
     cloud_alpha: Vec<f32>,
     /// A campaign to show behind the table's page when none has begun.
     preview: wr::rules::Campaign,
     provinces: wr::campaign_map::Provinces,
+}
+
+/// Something the map 2.0's world asks to be shown at a point: a banner in its region's colours, a
+/// fire, a glow (the Queen's crystals), steam.
+#[derive(Clone, Debug)]
+struct WorldAnchor {
+    kind: u8,
+    at: Vec3,
+    size: f32,
+    /// The region it belongs to (its index in `PROVINCES`), if any.
+    region: Option<usize>,
+}
+
+/// A stretch of border between regions `a` and `b` (a on the left of the line), from
+/// `fronteras.json`; `prov` when they lie in different provinces.
+#[derive(Clone, Debug)]
+struct BorderLine {
+    a: usize,
+    b: usize,
+    prov: bool,
+    pts: Vec<[f32; 2]>,
+}
+
+fn border_lines() -> Vec<BorderLine> {
+    let path = exploration3d_state::data_dir().join("guerra").join("fronteras.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let n = wr::data::PROVINCES.len();
+    v["lines"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|l| {
+            let a = l["a"].as_u64()? as usize;
+            let b = l["b"].as_u64()? as usize;
+            if a >= n || b >= n {
+                return None;
+            }
+            let flat: Vec<f32> = l["pts"].as_array()?.iter().filter_map(|x| x.as_f64().map(|x| x as f32)).collect();
+            let pts: Vec<[f32; 2]> = flat.chunks_exact(2).map(|c| [c[0], c[1]]).collect();
+            (pts.len() >= 2).then_some(BorderLine {
+                a,
+                b,
+                prov: l["prov"].as_bool().unwrap_or(false),
+                pts,
+            })
+        })
+        .collect()
+}
+
+/// What the borders show of the campaign (who holds each region, the fog, the chosen, the
+/// hovered and the reachable regions).
+struct BorderLook<'a> {
+    owner: &'a [Faction],
+    fog: &'a [bool],
+    reach: &'a [bool],
+    selected: Option<usize>,
+    hover: Option<usize>,
+}
+
+/// The borders as the web map draws them: on each side a band of that side's owner's colour (strong
+/// where two owners meet, faint between one owner's regions, wider between provinces), a dark core
+/// on the line, a soft glow off it; widths in screen pixels (from each point's distance to the
+/// camera), so a line looks the same close up and far out.
+fn border_ribbons(lines: &[BorderLine], look: &BorderLook, camera: Camera3D) -> Mesh3D {
+    let mut vertices: Vec<MeshVertex3D> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+    let fov_k = 2.0 * (camera.fov_y_radians * 0.5).tan() / 1080.0;
+    let col = |f: Faction| {
+        let c = wr::data::rgb(f.info().color);
+        [c[0] * 1.3 + 0.04, c[1] * 1.3 + 0.04, c[2] * 1.3 + 0.04]
+    };
+    let gold = [1.0, 0.86, 0.45];
+    // one strip along a line: from offset o0 to o1 (left positive), colours at each edge, raised by `lift`
+    let mut strip = |pts: &[(Vec3, Vec3, f32)], o0: &dyn Fn(f32) -> f32, o1: &dyn Fn(f32) -> f32, c0: [f32; 4], c1: [f32; 4], lift: f32| {
+        let base = vertices.len() as u32;
+        for &(p, nl, px) in pts {
+            for (o, c) in [(o0(px), c0), (o1(px), c1)] {
+                let q = p + nl * o + Vec3::new(0.0, lift, 0.0);
+                let mut v = MeshVertex3D::new([q.x, q.y, q.z], [0.0, 1.0, 0.0], [0.0, 0.0]);
+                v.color = c;
+                vertices.push(v);
+            }
+        }
+        for i in 0..pts.len() as u32 - 1 {
+            let (a, b, c, d) = (base + i * 2, base + i * 2 + 1, base + i * 2 + 2, base + i * 2 + 3);
+            indices.extend([a, c, b, b, c, d]);
+        }
+    };
+    for l in lines {
+        // each point: where (on the land), its left normal, a screen pixel's size there
+        let n = l.pts.len();
+        let pts: Vec<(Vec3, Vec3, f32)> = (0..n)
+            .map(|i| {
+                let [x, z] = l.pts[i];
+                let [px0, pz0] = l.pts[i.saturating_sub(1)];
+                let [px1, pz1] = l.pts[(i + 1).min(n - 1)];
+                let t = Vec3::new(px1 - px0, 0.0, pz1 - pz0).normalize_or_zero();
+                let nl = Vec3::new(-t.z, 0.0, t.x);
+                let y = wr::campaign_map::land_height(x, z).max(wr::campaign_map::WATER) + 0.04;
+                let p = Vec3::new(x, y, z);
+                let px = (p - camera.position).length() * fov_k;
+                (p, nl, px)
+            })
+            .collect();
+        let (oa, ob) = (look.owner[l.a], look.owner[l.b]);
+        let frontier = oa != ob;
+        let hidden = look.fog.get(l.a).copied().unwrap_or(false) && look.fog.get(l.b).copied().unwrap_or(false);
+        let tone = |c: [f32; 3], region: usize| -> [f32; 3] {
+            let lit = if look.selected == Some(region) {
+                [c[0] * 0.3 + gold[0] * 0.7, c[1] * 0.3 + gold[1] * 0.7, c[2] * 0.3 + gold[2] * 0.7]
+            } else if look.hover == Some(region) || look.reach.get(region).copied().unwrap_or(false) {
+                [c[0] * 1.18 + 0.05, c[1] * 1.18 + 0.05, c[2] * 1.18 + 0.05]
+            } else {
+                c
+            };
+            if hidden {
+                let g = lit[0] * 0.3 + lit[1] * 0.55 + lit[2] * 0.15;
+                [g * 0.45 + 0.02, g * 0.45 + 0.02, g * 0.45 + 0.035]
+            } else {
+                lit
+            }
+        };
+        let (ca, cb) = (tone(col(oa), l.a), tone(col(ob), l.b));
+        let strong = frontier || look.selected == Some(l.a) || look.selected == Some(l.b);
+        let k_band = if strong { 1.0 } else { 0.55 };
+        let w_reg = move |px: f32| (px * if strong { 3.0 } else { 1.3 }).clamp(0.04, 0.6);
+        let w_prov = move |px: f32| (px * if strong { 3.6 } else { 2.6 }).clamp(0.06, 0.8);
+        let prov = l.prov;
+        let band = move |px: f32| if prov { w_prov(px).max(w_reg(px)) } else { w_reg(px) };
+        let glow_w = |px: f32| (px * 22.0).clamp(0.5, 2.6);
+        let g_alpha = if strong { 0.24 } else { 0.08 } * 0.6;
+        let a = |c: [f32; 3], al: f32| [c[0], c[1], c[2], al];
+        // the glow off each side
+        strip(&pts, &|_| 0.0, &|px| glow_w(px), a(ca, g_alpha), a(ca, 0.0), 0.02);
+        strip(&pts, &|_| 0.0, &|px| -glow_w(px), a(cb, g_alpha), a(cb, 0.0), 0.02);
+        // the bands, each its own owner's colour
+        let al = 0.88 * k_band;
+        strip(&pts, &|_| 0.0, &|px| band(px), a(ca, al), a(ca, al), 0.05);
+        strip(&pts, &|_| 0.0, &|px| -band(px), a(cb, al), a(cb, al), 0.05);
+        // the dark core
+        let cw = |px: f32| (px * 0.75).clamp(0.02, 0.1);
+        let core = if prov || strong { 0.85 } else { 0.45 };
+        let dark = [0.03, 0.02, 0.05, core];
+        strip(&pts, &|px| -cw(px), &|px| cw(px), dark, dark, 0.08);
+    }
+    Mesh3D {
+        vertices,
+        indices,
+        material: Material3D::default(),
+        metallic_factor: 0.0,
+        roughness_factor: 1.0,
+        texture_index: None,
+        normal_texture_index: None,
+        skinning: None,
+    }
+}
+
+/// Reads `data/guerra/mundo.json`: its anchors.
+fn world_anchors() -> Vec<WorldAnchor> {
+    let path = exploration3d_state::data_dir().join("guerra").join("mundo.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for a in v["anchors"].as_array().into_iter().flatten() {
+        let kind = match a["kind"].as_str() {
+            Some("banner") => 0,
+            Some("fire") => 1,
+            Some("glow") => 2,
+            Some("steam") => 3,
+            _ => continue,
+        };
+        let p = &a["p"];
+        let at = Vec3::new(
+            p[0].as_f64().unwrap_or(0.0) as f32,
+            p[1].as_f64().unwrap_or(0.0) as f32,
+            p[2].as_f64().unwrap_or(0.0) as f32,
+        );
+        let region = a["region"]
+            .as_str()
+            .and_then(|id| wr::data::PROVINCES.iter().position(|q| q.id == id));
+        out.push(WorldAnchor {
+            kind,
+            at,
+            size: a["size"].as_f64().unwrap_or(0.5) as f32,
+            region,
+        });
+    }
+    out
 }
 
 pub(crate) struct WarScene {
@@ -238,6 +455,22 @@ pub(crate) struct WarScene {
     hero_failed: bool,
     camp: Option<CampScene>,
     sail_turn: f32,
+    /// A battle map's own structures (the war map prototype's): what stands still (and its lit
+    /// windows and fires apart), and each work that can be broken, by its index.
+    structures: Vec<(MeshHandle, bool)>,
+    works: Vec<Option<MeshHandle>>,
+    /// What armies build (per kind and look: the body, the arm and where it turns), the stone and
+    /// the bolt in the air, and the rubble of each work brought down.
+    engine_models: HashMap<(wr::siege::Kind, u8), (MeshHandle, Option<(MeshHandle, [f32; 3])>)>,
+    shot_meshes: Option<(MeshHandle, MeshHandle)>,
+    /// A relic on the field: its plinth and its crystal.
+    relic_meshes: Option<(MeshHandle, MeshHandle)>,
+    rubble: HashMap<usize, Vec<Mat4>>,
+}
+
+/// Where the battle maps live (`data/guerra/batallas/<id>`).
+pub(crate) fn battle_maps_root() -> PathBuf {
+    exploration3d_state::data_dir().join("guerra").join("batallas")
 }
 
 fn upload(
@@ -350,7 +583,128 @@ impl WarScene {
             hero_failed: false,
             camp: None,
             sail_turn: 0.0,
+            structures: Vec::new(),
+            works: Vec::new(),
+            engine_models: HashMap::new(),
+            shot_meshes: None,
+            relic_meshes: None,
+            rubble: HashMap::new(),
         })
+    }
+
+    fn engine_model(
+        &mut self,
+        renderer: &mut Wgpu3DRenderer,
+        device: &wgpu::Device,
+        kind: wr::siege::Kind,
+        look: Faction,
+    ) -> Option<(MeshHandle, Option<(MeshHandle, [f32; 3])>)> {
+        let key = (kind, look_index(look));
+        if !self.engine_models.contains_key(&key) {
+            let m = wr::engines::model(kind, look);
+            let body = upload(renderer, device, &m.body).ok()?;
+            let arm = m
+                .arm
+                .and_then(|(mesh, pivot)| upload(renderer, device, &mesh).ok().map(|h| (h, pivot)));
+            self.engine_models.insert(key, (body, arm));
+        }
+        self.engine_models.get(&key).copied()
+    }
+
+    /// The rubble of a work brought down: stones heaped along its footprint (worked out once).
+    fn rubble_of(&mut self, field: &wr::field::Field, w: usize) -> &[Mat4] {
+        self.rubble.entry(w).or_insert_with(|| {
+            let mut out = Vec::new();
+            let Some(m) = &field.baked else {
+                return out;
+            };
+            let Some(spec) = m.works.get(w) else {
+                return out;
+            };
+            let mut seed = (w as u32).wrapping_mul(2_654_435_761).wrapping_add(17);
+            let mut rnd = || {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                (seed % 10_000) as f32 / 10_000.0
+            };
+            let mut pts: Vec<(f32, f32, f32)> = Vec::new();
+            match (spec.a, spec.b) {
+                (Some(a), Some(b)) => {
+                    let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+                    let n = (len / 2.2) as usize + 2;
+                    let t = spec.thick.unwrap_or(3.0);
+                    for k in 0..n {
+                        let f = k as f32 / (n - 1) as f32;
+                        let (x, z) = (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f);
+                        for _ in 0..2 {
+                            pts.push((x + (rnd() - 0.5) * t * 2.2, z + (rnd() - 0.5) * t * 2.2, 0.9 + rnd() * 1.6));
+                        }
+                    }
+                }
+                _ => {
+                    let [cx, cz] = spec.centre();
+                    let r = spec.r.unwrap_or_else(|| spec.w.unwrap_or(8.0).max(spec.d.unwrap_or(8.0)) * 0.5);
+                    let n = (r * r * 0.5) as usize + 6;
+                    for _ in 0..n.min(90) {
+                        let a = rnd() * std::f32::consts::TAU;
+                        let d = rnd().sqrt() * r * 1.2;
+                        pts.push((cx + a.cos() * d, cz + a.sin() * d, 1.0 + rnd() * 2.0));
+                    }
+                }
+            }
+            for (x, z, s) in pts {
+                let y = field.height_at(x, z);
+                out.push(
+                    Mat4::from_translation(Vec3::new(x, y - 0.2, z))
+                        * Mat4::from_rotation_y(rnd() * std::f32::consts::TAU)
+                        * Mat4::from_scale(Vec3::new(s, s * (0.5 + rnd() * 0.5), s)),
+                );
+            }
+            out
+        })
+    }
+
+    /// A battle map's structures: `mundo.glb` (one mesh, its lit parts apart) and `obras.glb`
+    /// (one mesh per work, named `w<i>:...`).
+    fn load_structures(
+        &mut self,
+        renderer: &mut Wgpu3DRenderer,
+        device: &wgpu::Device,
+        map: &wr::baked::BattleMap,
+    ) {
+        self.structures.clear();
+        self.works = vec![None; map.works.len()];
+        let dir = battle_maps_root().join(&map.id);
+        match models::load_glb(&dir.join("mundo.glb")) {
+            Ok(pieces) => {
+                let lit = |p: &models::Piece| p.node.ends_with("lampGlass");
+                for (glow, mesh) in [
+                    (false, models::static_mesh(&pieces, |p| !lit(p), |_| None)),
+                    (true, models::static_mesh(&pieces, lit, |_| None)),
+                ] {
+                    if let Some(m) = mesh {
+                        if let Ok(h) = upload(renderer, device, &m) {
+                            self.structures.push((h, glow));
+                        }
+                    }
+                }
+            }
+            Err(e) => eprintln!("[guerra] {}: {e:#}", dir.join("mundo.glb").display()),
+        }
+        match models::load_glb(&dir.join("obras.glb")) {
+            Ok(pieces) => {
+                let id_of = |p: &models::Piece| -> Option<usize> {
+                    p.node.split(':').next()?.strip_prefix('w')?.parse().ok()
+                };
+                for w in 0..map.works.len() {
+                    if let Some(m) = models::static_mesh(&pieces, |p| id_of(p) == Some(w), |_| None) {
+                        self.works[w] = upload(renderer, device, &m).ok();
+                    }
+                }
+            }
+            Err(e) => eprintln!("[guerra] {}: {e:#}", dir.join("obras.glb").display()),
+        }
     }
 
     fn prop(
@@ -588,6 +942,31 @@ impl WarScene {
         let mut inst = s.instances;
         inst.sort_by_key(|i| i.kind);
         self.instances = inst;
+        match &field.baked {
+            Some(m) => {
+                let m = std::sync::Arc::clone(m);
+                self.load_structures(renderer, device, &m);
+            }
+            None => {
+                self.structures.clear();
+                self.works.clear();
+            }
+        }
+        self.rubble.clear();
+        if self.relic_meshes.is_none() {
+            let (plinth, crystal) = wr::engines::relic();
+            if let (Ok(a), Ok(b)) = (upload(renderer, device, &plinth), upload(renderer, device, &crystal)) {
+                self.relic_meshes = Some((a, b));
+            }
+        }
+        if self.shot_meshes.is_none() {
+            if let (Ok(s), Ok(b)) = (
+                upload(renderer, device, &wr::engines::stone()),
+                upload(renderer, device, &wr::engines::bolt()),
+            ) {
+                self.shot_meshes = Some((s, b));
+            }
+        }
         self.placed.clear();
         for p in &s.props {
             if self.prop(renderer, device, "props", p.kind) {
@@ -723,6 +1102,31 @@ fn war_mood(
     };
     let scale = |c: [f32; 3], k: f32| c.map(|v| v * k);
     env.lighting.direction_to_light = sun.normalize_or_zero();
+    if campaign {
+        // the web map's day: a warm high sun from the north-west, a sky-blue fill, the earth's
+        // brown bounce, a pale blue haze far off and the sea's horizon
+        let sun = Vec3::new(-90.0, 140.0, 70.0).normalize_or_zero();
+        env.lighting.direction_to_light = sun;
+        env.lighting.key_color = scale(lin(0xffe6c2), 1.45);
+        env.lighting.ambient_color = scale(lin(0xd6e6ff), 0.62);
+        env.lighting.bounce_color = scale(lin(0x5a4c34), 0.55);
+        env.lighting.shadow_extent = (dist * 1.1).clamp(40.0, 175.0);
+        env.atmosphere.fog_color = lin(0xa9b8c9);
+        env.atmosphere.fog_start = 150.0 + dist * 0.5;
+        env.atmosphere.fog_end = 420.0 + dist * 1.2;
+        env.atmosphere.fog_density = 0.0;
+        env.atmosphere.height_falloff = 0.0;
+        let sky = lin(0x7fa6cf);
+        env.clear_color = [sky[0], sky[1], sky[2], 1.0];
+        env.celestial.sun_direction = sun;
+        env.celestial.sun_visibility = 1.0;
+        env.celestial.moon_visibility = 0.0;
+        env.celestial.moon_intensity = 0.0;
+        env.celestial.reflection_strength = 0.0;
+        env.celestial.horizon_tint = [1.0, 0.95, 0.88];
+        env.celestial.horizon_strength = 0.1;
+        return env;
+    }
     env.lighting.key_color = if campaign {
         scale(lin(0xffcf9a), 0.386 * 2.25)
     } else {
@@ -785,6 +1189,30 @@ fn war_finish(dist: f32) -> Finish3D {
     }
 }
 
+/// The campaign map as the web map shades it: soft light (no hard toon bands), the textures'
+/// relief, no lines.
+fn campaign_toon() -> velvet_render::ToonStyle3D {
+    velvet_render::ToonStyle3D {
+        softness: 0.32,
+        specular: 0.06,
+        normal_detail: 0.9,
+        shadow_tint: [0.86, 0.9, 1.0],
+        rim: 0.02,
+    }
+}
+
+fn campaign_finish() -> Finish3D {
+    Finish3D {
+        ink: 0.0,
+        saturation: 1.04,
+        contrast: 1.02,
+        bloom: 0.28,
+        bloom_threshold: 0.92,
+        exposure: 1.12,
+        ..war_finish(100.0)
+    }
+}
+
 fn war_toon() -> velvet_render::ToonStyle3D {
     velvet_render::ToonStyle3D {
         normal_detail: 0.55,
@@ -836,12 +1264,17 @@ impl RenderState {
         let Some(mut scene) = self.war_scene() else {
             return;
         };
-        let saved_toon = self.renderer.replace_toon_style(war_toon());
+        let battle = matches!(war.page, WarPage::Battle) && war.battle.is_some();
+        let saved_toon = self
+            .renderer
+            .replace_toon_style(if battle { war_toon() } else { campaign_toon() });
         // QA: VELVET_WAR_NOSHADOW draws the war without the sun's shadows.
         let saved_shadows = std::env::var_os("VELVET_WAR_NOSHADOW")
             .map(|_| self.renderer.replace_directional_shadows(false));
         let dist = war.cam.dist;
-        let saved_finish = self.renderer.replace_finish(war_finish(dist));
+        let saved_finish = self
+            .renderer
+            .replace_finish(if battle { war_finish(dist) } else { campaign_finish() });
         match war.page {
             WarPage::Battle if war.battle.is_some() => {
                 self.render_war_battle(&mut scene, frame, war)
@@ -976,6 +1409,282 @@ impl RenderState {
                 material: Material3D::default().with_ambient_occlusion(0.3),
                 texture: None,
             });
+        }
+        // a battle map's structures, and its works still standing
+        for &(mesh, glow) in &scene.structures {
+            draws.push(MeshDraw3D {
+                mesh,
+                transform: Mat4::IDENTITY,
+                material: if glow {
+                    Material3D::default().with_emission(1.6)
+                } else {
+                    Material3D::default().with_ambient_occlusion(0.3)
+                },
+                texture: None,
+            });
+        }
+        for (w, mesh) in scene.works.iter().enumerate() {
+            if let Some(mesh) = *mesh {
+                if !field.open.get(w).copied().unwrap_or(false) {
+                    draws.push(MeshDraw3D {
+                        mesh,
+                        transform: Mat4::IDENTITY,
+                        material: Material3D::default().with_ambient_occlusion(0.3),
+                        texture: None,
+                    });
+                }
+            }
+        }
+        // what was built: engines (their arms swinging), stakes, palisades; the stones in the air;
+        // the rubble where a work came down
+        // the relic lying on the field: its plinth, its crystal turning, a column of light
+        if let (Some(rel), Some((plinth, crystal))) =
+            (run.relic.as_ref().filter(|r| !r.taken), scene.relic_meshes)
+        {
+            let y = field.walk_height(rel.x, rel.z);
+            let base = Mat4::from_translation(Vec3::new(rel.x, y, rel.z));
+            draws.push(MeshDraw3D {
+                mesh: plinth,
+                transform: base,
+                material: Material3D::default().with_ambient_occlusion(0.3),
+                texture: None,
+            });
+            let bob = (war.time * 1.6).sin() * 0.15;
+            draws.push(MeshDraw3D {
+                mesh: crystal,
+                transform: base
+                    * Mat4::from_translation(Vec3::new(0.0, bob, 0.0))
+                    * Mat4::from_rotation_y(war.time * 0.9),
+                material: Material3D::default().with_emission(2.2),
+                texture: None,
+            });
+            blended.push(MeshDraw3D {
+                mesh: scene.spark_column,
+                transform: base * Mat4::from_scale(Vec3::new(1.4, 26.0, 1.4)),
+                material: Material3D::additive([1.0, 0.72, 0.3, 0.16 + 0.05 * (war.time * 2.0).sin()]),
+                texture: None,
+            });
+            lights.push(PointLight3D::new(
+                Vec3::new(rel.x, y + 2.0, rel.z),
+                [1.0, 0.8, 0.45],
+                5.0,
+                12.0,
+            ));
+            if scene.glow.rand() < 0.4 {
+                let a = scene.glow.rand() * std::f32::consts::TAU;
+                let up = 2.0 + scene.glow.rand() * 2.0;
+                scene.glow.spawn(
+                    Vec3::new(rel.x + a.cos() * 0.8, y + 0.8, rel.z + a.sin() * 0.8),
+                    Vec3::new(0.0, up, 0.0),
+                    1.2,
+                    0.35,
+                    0.1,
+                    [1.0, 0.85, 0.5, 1.0],
+                    -0.3,
+                    0.4,
+                );
+            }
+        }
+        // her powers at work, and the ring of the one she aims
+        if let Some(pw) = sim.powers.as_ref() {
+            for a in &pw.active {
+                let c = wr::data::rgb(a.power.spec().color);
+                let y = field.walk_height(a.x, a.z);
+                let left = 1.0 - a.t / a.dur.max(0.01);
+                blended.push(MeshDraw3D {
+                    mesh: scene.spark_ring,
+                    transform: Mat4::from_translation(Vec3::new(a.x, y + 0.3, a.z))
+                        * Mat4::from_scale(Vec3::new(a.r, 1.0, a.r)),
+                    material: Material3D::additive([c[0], c[1], c[2], 0.25 + 0.2 * left]),
+                    texture: None,
+                });
+                lights.push(PointLight3D::new(Vec3::new(a.x, y + 4.0, a.z), c, 4.0 * left + 1.0, a.r));
+                let n = match a.power {
+                    wr::powers::Power::Niebla => 6,
+                    wr::powers::Power::Raices | wr::powers::Power::Grito => 3,
+                    _ => 0,
+                };
+                for _ in 0..n {
+                    let ang = scene.dust.rand() * std::f32::consts::TAU;
+                    let d = scene.dust.rand().sqrt() * a.r;
+                    let (px, pz) = (a.x + ang.cos() * d, a.z + ang.sin() * d);
+                    let py = field.walk_height(px, pz);
+                    match a.power {
+                        wr::powers::Power::Niebla => {
+                            let drift = scene.dust.rand() - 0.5;
+                            scene.dust.spawn(
+                                Vec3::new(px, py + 0.6, pz),
+                                Vec3::new(drift, 0.25, -drift),
+                                3.2,
+                                3.5,
+                                7.0,
+                                [0.62, 0.5, 0.95, 0.28],
+                                0.0,
+                                0.2,
+                            );
+                        }
+                        _ => {
+                            let up = 1.5 + scene.glow.rand() * 2.0;
+                            scene.glow.spawn(
+                                Vec3::new(px, py + 0.2, pz),
+                                Vec3::new(0.0, up, 0.0),
+                                0.9,
+                                0.45,
+                                0.1,
+                                [c[0], c[1], c[2], 1.0],
+                                -0.2,
+                                0.4,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        if let (Some(p), Some((gx, gz))) = (run.power_aim, run.power_at) {
+            let sp = p.spec();
+            let c = wr::data::rgb(sp.color);
+            let y = field.walk_height(gx, gz);
+            let pulse = 0.55 + 0.2 * (war.time * 5.0).sin();
+            blended.push(MeshDraw3D {
+                mesh: scene.spark_ring,
+                transform: Mat4::from_translation(Vec3::new(gx, y + 0.35, gz))
+                    * Mat4::from_scale(Vec3::new(sp.radius, 1.0, sp.radius)),
+                material: Material3D::additive([c[0] * 1.3, c[1] * 1.3, c[2] * 1.3, pulse]),
+                texture: None,
+            });
+        }
+        if let Some(siege) = &sim.siege {
+            let looks = [run.b.setup.player.faction, run.b.setup.enemy.faction];
+            for e in &siege.engines {
+                if !e.alive && e.burn <= 0.0 && e.built < 1.0 {
+                    continue;
+                }
+                let Some((body, arm)) =
+                    scene.engine_model(&mut self.renderer, &self.device, e.kind, looks[e.side as usize])
+                else {
+                    continue;
+                };
+                let y = field.walk_height(e.x, e.z);
+                let mut t = Mat4::from_translation(Vec3::new(e.x, y, e.z)) * Mat4::from_rotation_y(e.yaw);
+                if !e.alive {
+                    t = t * Mat4::from_translation(Vec3::new(0.0, -0.5, 0.0)) * Mat4::from_rotation_z(0.22);
+                }
+                let rise = if e.built < 1.0 { 0.12 + 0.88 * e.built } else { 1.0 };
+                let tb = t * Mat4::from_scale(Vec3::new(1.0, rise, 1.0));
+                let material = if !e.alive {
+                    Material3D::rgb(0.22, 0.19, 0.17)
+                } else if e.built < 1.0 {
+                    Material3D::rgb(0.85, 0.8, 0.72).with_ambient_occlusion(0.3)
+                } else if e.selected {
+                    Material3D::rgb(1.25, 1.18, 0.9).with_ambient_occlusion(0.3)
+                } else {
+                    Material3D::default().with_ambient_occlusion(0.3)
+                };
+                draws.push(MeshDraw3D {
+                    mesh: body,
+                    transform: tb,
+                    material,
+                    texture: None,
+                });
+                if let Some((arm_mesh, pivot)) = arm {
+                    let ang = if e.kind == wr::siege::Kind::TorreAsedio {
+                        if e.docked.is_some() {
+                            1.42
+                        } else {
+                            0.0
+                        }
+                    } else if e.alive {
+                        wr::engines::arm_angle(e.kind, e.fired, e.spec().reload)
+                    } else {
+                        0.6
+                    };
+                    let p = Vec3::new(pivot[0], pivot[1], pivot[2]);
+                    draws.push(MeshDraw3D {
+                        mesh: arm_mesh,
+                        // (an arm is modelled round its own pivot)
+                        transform: tb * Mat4::from_translation(p) * Mat4::from_rotation_x(ang),
+                        material,
+                        texture: None,
+                    });
+                }
+                if !e.alive && e.burn > 0.0 {
+                    let c = Vec3::new(e.x, y + 1.5, e.z);
+                    lights.push(PointLight3D::new(c, [1.0, 0.55, 0.22], 3.0 * (e.burn / 9.0), 10.0));
+                    if scene.glow.rand() < 0.5 {
+                        let a = scene.glow.rand() * std::f32::consts::TAU;
+                        let up = 2.5 + scene.glow.rand() * 2.0;
+                        scene.glow.spawn(
+                            c + Vec3::new(a.cos() * 1.2, 0.0, a.sin() * 1.2),
+                            Vec3::new(0.0, up, 0.0),
+                            0.6,
+                            0.6,
+                            0.1,
+                            [1.0, 0.6, 0.2, 1.0],
+                            8.0,
+                            1.0,
+                        );
+                    }
+                }
+            }
+            if let Some((stone, bolt)) = scene.shot_meshes {
+                for s in &siege.shots {
+                    let t = if s.from.bolts() {
+                        let yaw = s.vx.atan2(s.vz);
+                        let pitch = -(s.vy).atan2(s.vx.hypot(s.vz));
+                        Mat4::from_translation(Vec3::new(s.x, s.y, s.z))
+                            * Mat4::from_rotation_y(yaw)
+                            * Mat4::from_rotation_x(pitch)
+                    } else {
+                        let k = if s.from == wr::siege::Kind::Trabuquete { 1.9 } else { 1.0 };
+                        Mat4::from_translation(Vec3::new(s.x, s.y, s.z))
+                            * Mat4::from_rotation_x(war.time * 6.0)
+                            * Mat4::from_scale(Vec3::new(k, k, k))
+                    };
+                    draws.push(MeshDraw3D {
+                        mesh: if s.from.bolts() { bolt } else { stone },
+                        transform: t,
+                        material: Material3D::default(),
+                        texture: None,
+                    });
+                }
+            }
+            // what she is placing, under the pointer: green where it can go, red where not
+            if let (Some((gx, gz, yaw, why)), Some(kind)) = (run.ghost, run.build) {
+                if let Some((body, arm)) =
+                    scene.engine_model(&mut self.renderer, &self.device, kind, looks[0])
+                {
+                    let t = Mat4::from_translation(Vec3::new(gx, field.walk_height(gx, gz) + 0.05, gz))
+                        * Mat4::from_rotation_y(yaw);
+                    let c = if why.is_none() { [0.45, 1.25, 0.55] } else { [1.4, 0.35, 0.3] };
+                    let m = Material3D::rgb(c[0], c[1], c[2]).with_emission(0.35);
+                    draws.push(MeshDraw3D {
+                        mesh: body,
+                        transform: t,
+                        material: m,
+                        texture: None,
+                    });
+                    if let Some((arm_mesh, pivot)) = arm {
+                        draws.push(MeshDraw3D {
+                            mesh: arm_mesh,
+                            transform: t * Mat4::from_translation(Vec3::new(pivot[0], pivot[1], pivot[2])),
+                            material: m,
+                            texture: None,
+                        });
+                    }
+                }
+            }
+            let rock = scene.scatter[5].0;
+            let broken: Vec<usize> = (0..field.open.len()).filter(|&w| field.open[w]).collect();
+            for w in broken {
+                for t in scene.rubble_of(field, w).to_vec() {
+                    draws.push(MeshDraw3D {
+                        mesh: rock,
+                        transform: t,
+                        material: Material3D::rgb(0.62, 0.58, 0.66),
+                        texture: None,
+                    });
+                }
+            }
         }
         for i in &scene.instances {
             let (mesh, _) = scene.scatter[i.kind];
@@ -1424,6 +2133,23 @@ impl RenderState {
             let t = (b.t / 1.3).min(1.0);
             let s = b.radius * (0.15 + 0.95 * (1.0 - (1.0 - t) * (1.0 - t)));
             let a = (1.0 - t * t).max(0.0);
+            if let Some(c) = b.color {
+                // a power's ring: its colour, no column
+                blended.push(MeshDraw3D {
+                    mesh: scene.spark_ring,
+                    transform: Mat4::from_translation(b.at + Vec3::new(0.0, 0.4, 0.0))
+                        * Mat4::from_scale(Vec3::new(s, 1.0, s)),
+                    material: Material3D::additive([c[0] * 1.4, c[1] * 1.4, c[2] * 1.4, a]),
+                    texture: None,
+                });
+                lights.push(PointLight3D::new(
+                    b.at + Vec3::new(0.0, 3.0, 0.0),
+                    c,
+                    7.0 * (1.0 - t),
+                    b.radius * 1.2,
+                ));
+                continue;
+            }
             blended.push(MeshDraw3D {
                 mesh: scene.spark_ring,
                 transform: Mat4::from_translation(b.at + Vec3::new(0.0, 0.4, 0.0))
@@ -1598,8 +2324,41 @@ impl RenderState {
             h.finish()
         };
         let version = run.map_or(0, |c| c.paint_version);
+        // the borders' ribbons, again when the eye has moved or the map has changed
+        if !camp.borders.is_empty() {
+            let look_hash = owners ^ version.wrapping_mul(0x9e37_79b9);
+            let eye = (camera.position - camera.target).length().max(1.0);
+            let stale = match camp.border_key {
+                None => true,
+                Some((p, h)) => h != look_hash || (p - camera.position).length() > eye * 0.02,
+            };
+            if stale {
+                let owner_list: Vec<Faction> = s.provinces.iter().map(|p| p.owner).collect();
+                let mesh = border_ribbons(
+                    &camp.borders,
+                    &BorderLook {
+                        owner: &owner_list,
+                        fog: &fog,
+                        reach: &reach,
+                        selected,
+                        hover,
+                    },
+                    camera,
+                );
+                match camp.border_mesh {
+                    Some(h) => {
+                        let _ = self.renderer.replace_mesh(&self.device, h, &mesh);
+                    }
+                    None => {
+                        camp.border_mesh = self.renderer.upload_mesh(&self.device, &mesh).ok();
+                    }
+                }
+                camp.border_key = Some((camera.position, look_hash));
+            }
+        }
         if camp.painted != Some((version, owners)) {
             camp.painted = Some((version, owners));
+            let t_paint = std::time::Instant::now();
             let img = camp.provinces.paint(
                 s,
                 &wr::campaign_map::Paint {
@@ -1609,9 +2368,13 @@ impl RenderState {
                     hover,
                 },
             );
+            let ms = t_paint.elapsed().as_secs_f32() * 1000.0;
+            if ms > 25.0 {
+                eprintln!("[guerra] the provinces' picture took {ms:.0} ms");
+            }
             let tex = TextureData3D {
-                width: camp.provinces.cw as u32,
-                height: camp.provinces.ch as u32,
+                width: camp.provinces.pw as u32,
+                height: camp.provinces.ph as u32,
                 rgba: img,
             };
             let _ =
@@ -1630,16 +2393,23 @@ impl RenderState {
         draws.push(MeshDraw3D {
             mesh: camp.land,
             transform: Mat4::IDENTITY,
-            material: Material3D::default(),
-            texture: None,
+            material: Material3D {
+                texture: camp.land_tex,
+                ..Material3D::default()
+            },
+            texture: camp.land_tex,
         });
-        draws.push(MeshDraw3D {
-            mesh: camp.table,
-            transform: Mat4::IDENTITY,
-            material: Material3D::default(),
-            texture: None,
-        });
-        if let Some(r) = camp.roads {
+        // the sea to the horizon (the web map's; the old table and its frame are gone): in the
+        // water sheet when the land is painted, else its own plain sheet
+        if camp.land_tex.is_none() {
+            draws.push(MeshDraw3D {
+                mesh: camp.sea,
+                transform: Mat4::IDENTITY,
+                material: Material3D::default(),
+                texture: None,
+            });
+        }
+        if let Some(r) = camp.roads.filter(|_| camp.land_tex.is_none()) {
             draws.push(MeshDraw3D {
                 mesh: r,
                 transform: Mat4::from_translation(Vec3::new(0.0, 0.02, 0.0)),
@@ -1654,6 +2424,22 @@ impl RenderState {
                 transform: i.transform,
                 material: Material3D::default(),
                 texture: None,
+            });
+        }
+        for &(mesh, tex, glow) in &camp.world {
+            let material = match glow {
+                Some(e) => Material3D::default().with_emission(e),
+                None => Material3D {
+                    texture: tex,
+                    ..Material3D::default()
+                }
+                .with_ambient_occlusion(0.3),
+            };
+            draws.push(MeshDraw3D {
+                mesh,
+                transform: Mat4::IDENTITY,
+                material,
+                texture: tex,
             });
         }
         scene.sail_turn += dt * 0.8;
@@ -1706,11 +2492,11 @@ impl RenderState {
             mesh: camp.water,
             transform: Mat4::IDENTITY,
             material: Material3D {
-                base_color: [1.0, 1.0, 1.0, 0.97],
+                base_color: [1.0, 1.0, 1.0, 1.0],
+                texture: camp.water_tex,
                 ..Material3D::default()
-            }
-            .with_emission(0.3),
-            texture: None,
+            },
+            texture: camp.water_tex,
         });
         blended.push(MeshDraw3D {
             mesh: camp.overlay,
@@ -1720,9 +2506,17 @@ impl RenderState {
                 texture: Some(camp.overlay_tex),
                 occlusion_window: [0.0; 4],
             }
-            .with_emission(0.55),
+            .with_emission(0.22),
             texture: Some(camp.overlay_tex),
         });
+        if let Some(m) = camp.border_mesh {
+            blended.push(MeshDraw3D {
+                mesh: m,
+                transform: Mat4::IDENTITY,
+                material: Material3D::default().with_emission(0.35),
+                texture: None,
+            });
+        }
         // the armies on their bases
         scene.begin_frame();
         let mut figures: Vec<(Key, CrowdInstance3D)> = Vec::new();
@@ -1745,19 +2539,22 @@ impl RenderState {
             };
             let fi = look_index(a.faction) as usize;
             let (base, rim) = camp.bases[fi];
-            // the base grows to hold the army's regiments
+            // the base grows to hold the army's regiments; the whole token at the web map's scale
+            // (a general about as tall as a house, not as a tower)
+            const K: f32 = 0.6;
             let (spots, radius) = super::zone_war::formation(a.units.len());
-            let grow = Vec3::new(radius / 2.75, 1.0, radius / 2.75);
+            let radius = radius * K;
+            let grow = Vec3::new(radius / 2.75, K, radius / 2.75);
             draws.push(MeshDraw3D {
                 mesh: base,
-                transform: Mat4::from_translation(at + Vec3::new(0.0, 0.35, 0.0))
+                transform: Mat4::from_translation(at + Vec3::new(0.0, 0.35 * K, 0.0))
                     * Mat4::from_scale(grow),
                 material: Material3D::default(),
                 texture: None,
             });
             draws.push(MeshDraw3D {
                 mesh: rim,
-                transform: Mat4::from_translation(at + Vec3::new(0.0, 0.62, 0.0))
+                transform: Mat4::from_translation(at + Vec3::new(0.0, 0.62 * K, 0.0))
                     * Mat4::from_scale(grow),
                 material: Material3D::default(),
                 texture: None,
@@ -1784,14 +2581,14 @@ impl RenderState {
                     _ => 2.7,
                 };
                 // the lead stands full size, the regiments a little smaller
-                let scale = if k == 0 { full } else { full * 0.72 };
-                let p = at + right * spot[0] + fwd * spot[1];
-                let mut inst = CrowdInstance3D::at([p.x, at.y + 0.7, p.z], yaw, scale);
+                let scale = if k == 0 { full } else { full * 0.72 } * K;
+                let p = at + (right * spot[0] + fwd * spot[1]) * K;
+                let mut inst = CrowdInstance3D::at([p.x, at.y + 0.7 * K, p.z], yaw, scale);
                 inst.anim_a[0] = war.time * 0.4 + a.id.len() as f32 + k as f32 * 0.37;
                 figures.push((Key::Troop(kind, look_index(a.faction), 0), inst));
             }
             let back = at - fwd * (radius - 0.9) - right * (radius * 0.55);
-            let mut flag = CrowdInstance3D::at([back.x, at.y + 0.6, back.z], 0.0, 1.45);
+            let mut flag = CrowdInstance3D::at([back.x, at.y + 0.6 * K, back.z], 0.0, 1.45 * K);
             flag.anim_a = [a.id.len() as f32 * 1.7, 0.3, 0.0, 0.0];
             figures.push((Key::Standard(look_index(a.faction)), flag));
             let chosen = run.is_some_and(
@@ -1808,6 +2605,56 @@ impl RenderState {
                         pulse,
                     ),
                 ));
+            }
+        }
+        // the world's banners in their region's colours, its fires and the Queen's crystals glowing
+        let mut world_lights: Vec<PointLight3D> = Vec::new();
+        for (k, an) in camp.anchors.iter().enumerate() {
+            match an.kind {
+                0 => {
+                    let owner = an
+                        .region
+                        .map_or(Faction::Libres, |r| s.prov(wr::data::PROVINCES[r].id).owner);
+                    let mut flag = CrowdInstance3D::at(
+                        [an.at.x, an.at.y - 0.05, an.at.z],
+                        (k as f32 * 2.3).sin() * 0.6,
+                        an.size * 0.42,
+                    );
+                    flag.anim_a = [k as f32 * 1.7, 0.3, 0.0, 0.0];
+                    figures.push((Key::Standard(look_index(owner)), flag));
+                }
+                1 => {
+                    let flicker = 0.85 + 0.15 * (war.time * 9.0 + k as f32).sin();
+                    figures.push((
+                        Key::Cloud,
+                        facing(camera, an.at + Vec3::new(0.0, 0.25, 0.0), 0.9 * flicker, [1.0, 0.6, 0.25], 0.85),
+                    ));
+                    if world_lights.len() < 24 {
+                        world_lights.push(PointLight3D::new(
+                            an.at + Vec3::new(0.0, 0.6, 0.0),
+                            [1.0, 0.55, 0.22],
+                            2.2 * flicker,
+                            6.0,
+                        ));
+                    }
+                }
+                2 => {
+                    let pulse = 0.75 + 0.25 * (war.time * 1.6 + k as f32).sin();
+                    figures.push((
+                        Key::Cloud,
+                        facing(camera, an.at, 1.6 * pulse, [0.7, 0.42, 1.0], 0.55),
+                    ));
+                    if world_lights.len() < 24 {
+                        world_lights.push(PointLight3D::new(an.at, [0.62, 0.32, 1.0], 2.6 * pulse, 7.0));
+                    }
+                }
+                _ => {
+                    let rise = (war.time * 0.4 + k as f32 * 0.3).fract();
+                    figures.push((
+                        Key::Cloud,
+                        facing(camera, an.at + Vec3::new(0.0, rise * 2.5, 0.0), 1.0 + rise, [0.95, 0.95, 1.0], 0.35 * (1.0 - rise)),
+                    ));
+                }
             }
         }
         // the cloud over what the Queen cannot see
@@ -1867,7 +2714,7 @@ impl RenderState {
             scene_size,
             camera,
             env,
-            &[],
+            &world_lights,
             &draws,
         );
         self.finish_scene(&scene_view, scene_size);
@@ -1887,6 +2734,7 @@ fn load_camp(
     varrak: bool,
 ) -> Result<CampScene> {
     let t0 = std::time::Instant::now();
+    super::zone_war::install_war_map();
     let land = wr::campaign_map::Land::new();
     let provinces = wr::campaign_map::Provinces::new();
     let preview = wr::rules::Campaign::new(1, varrak);
@@ -1902,14 +2750,62 @@ fn load_camp(
             device,
             queue,
             &TextureData3D {
-                width: provinces.cw as u32,
-                height: provinces.ch as u32,
+                width: provinces.pw as u32,
+                height: provinces.ph as u32,
                 rgba: img,
             },
         )
         .map_err(|e| anyhow::anyhow!("{e:?}"))?;
+    // the map 2.0's world: every settlement and landmark of the prototype
+    let world_path = exploration3d_state::data_dir().join("guerra").join("mundo.glb");
+    let mut world = Vec::new();
+    match models::load_textured(&world_path) {
+        Ok(parts) => {
+            for p in parts {
+                if p.mesh.vertices.is_empty() {
+                    continue;
+                }
+                let mesh = upload(renderer, device, &p.mesh)?;
+                let tex = match &p.albedo {
+                    Some(a) => Some(
+                        renderer
+                            .upload_texture_with_normal(device, queue, a, p.normal.as_ref())
+                            .map_err(|e| anyhow::anyhow!("{e:?}"))?,
+                    ),
+                    None => None,
+                };
+                let glow = p.emissive.map(|e| {
+                    let m = e[0].max(e[1]).max(e[2]);
+                    if p.material == "fire" { 3.0 * m } else { 1.8 * m }
+                });
+                world.push((mesh, tex, glow));
+            }
+        }
+        Err(e) => eprintln!("[guerra] {}: {e:#}", world_path.display()),
+    }
+    let anchors = if world.is_empty() { Vec::new() } else { world_anchors() };
+    // the land's painted picture
+    let land_tex = (|| -> Option<TextureHandle> {
+        let path = exploration3d_state::data_dir().join("guerra").join("tierra.jpg");
+        let img = velvet_avif::open_image(path.as_ref()).ok()?.to_rgba8();
+        renderer
+            .upload_texture(
+                device,
+                queue,
+                &TextureData3D {
+                    width: img.width(),
+                    height: img.height(),
+                    rgba: img.into_raw(),
+                },
+            )
+            .ok()
+    })();
+    let land_tex_present = land_tex.is_some();
     let mut settlements = Vec::new();
     for (i, p) in wr::data::PROVINCES.iter().enumerate() {
+        if !world.is_empty() {
+            break;
+        }
         if scene.prop(renderer, device, "campaign", p.settlement) {
             let (sx, sz) = p.site();
             let y = wr::campaign_map::land_height(sx, sz).max(wr::campaign_map::WATER) - 0.1;
@@ -1941,19 +2837,49 @@ fn load_camp(
         base(Faction::Reina)?,
         base(Faction::Alianza)?,
         base(Faction::Rebeldes)?,
+        base(Faction::Libres)?,
     ];
     let roads = wr::campaign_map::roads(&land);
     let clouds = wr::campaign_map::clouds();
     let c = CampScene {
-        land: upload(renderer, device, &land.mesh(false))?,
+        land: upload(
+            renderer,
+            device,
+            &if land_tex.is_some() { land.mesh_textured() } else { land.mesh(false) },
+        )?,
+        land_tex,
+        sea: upload(renderer, device, &wr::campaign_map::sea())?,
+        water_tex: {
+            let size = 256usize;
+            let normal = TextureData3D {
+                width: size as u32,
+                height: size as u32,
+                rgba: wr::campaign_map::wave_normals(size, 7),
+            };
+            let white = TextureData3D {
+                width: size as u32,
+                height: size as u32,
+                rgba: vec![255u8; size * size * 4],
+            };
+            renderer.upload_texture_with_normal(device, queue, &white, Some(&normal)).ok()
+        },
+        borders: border_lines(),
+        border_mesh: None,
+        border_key: None,
         overlay: upload(renderer, device, &land.mesh(true))?,
         overlay_tex,
         painted: None,
         table: upload(renderer, device, &wr::campaign_map::table(&land))?,
-        water: upload(renderer, device, &wr::campaign_map::water(&land))?,
+        water: upload(
+            renderer,
+            device,
+            &if land_tex_present { wr::campaign_map::water_web(&land) } else { wr::campaign_map::water(&land) },
+        )?,
         roads: roads.map(|r| upload(renderer, device, &r)).transpose()?,
         woods: wr::campaign_map::woods(&land),
         settlements,
+        world,
+        anchors,
         bases,
         cloud_alpha: vec![0.0; clouds.len()],
         clouds,
@@ -2020,6 +2946,7 @@ fn spawn_fx(scene: &mut WarScene, field: &wr::field::Field, fx: Fx) {
                 at: Vec3::new(x, y, z),
                 radius: r,
                 t: 0.0,
+                color: None,
             });
             scene.glow.spawn(
                 Vec3::new(x, y + 2.0, z),
@@ -2063,6 +2990,71 @@ fn spawn_fx(scene: &mut WarScene, field: &wr::field::Field, fx: Fx) {
                     0.6,
                 );
             }
+        }
+        Fx::Ring { x, z, r, color } => {
+            let y = field.walk_height(x, z);
+            scene.bursts.push(Burst {
+                at: Vec3::new(x, y, z),
+                radius: r,
+                t: 0.0,
+                color: Some(color),
+            });
+            for _ in 0..80 {
+                let a = scene.glow.rand() * std::f32::consts::TAU;
+                let d = r * (0.85 + scene.glow.rand() * 0.15);
+                let up = 1.0 + scene.glow.rand() * 3.0;
+                let ttl = 0.9 + scene.glow.rand() * 0.6;
+                scene.glow.spawn(
+                    Vec3::new(x + a.cos() * d, y + 0.4, z + a.sin() * d),
+                    Vec3::new(0.0, up, 0.0),
+                    ttl,
+                    0.8,
+                    0.2,
+                    [color[0], color[1], color[2], 1.0],
+                    -0.4,
+                    0.6,
+                );
+            }
+        }
+        Fx::Ember { x, z } => {
+            let y = field.walk_height(x, z);
+            // its streak down from the sky, the blow, the fire and the dust
+            for k in 0..8 {
+                let h = 6.0 + k as f32 * 2.2;
+                scene.glow.spawn(
+                    Vec3::new(x + h * 0.25, y + h, z - h * 0.12),
+                    Vec3::new(-10.0, -40.0, 5.0),
+                    0.3,
+                    1.4 - k as f32 * 0.1,
+                    0.4,
+                    [1.0, 0.55 + k as f32 * 0.03, 0.2, 1.0],
+                    0.0,
+                    0.0,
+                );
+            }
+            for _ in 0..24 {
+                let a = scene.glow.rand() * std::f32::consts::TAU;
+                let s = 3.0 + scene.glow.rand() * 6.0;
+                let up = 3.0 + scene.glow.rand() * 5.0;
+                let ttl = 0.5 + scene.glow.rand() * 0.5;
+                scene.glow.spawn(
+                    Vec3::new(x, y + 0.5, z),
+                    Vec3::new(a.cos() * s, up, a.sin() * s),
+                    ttl,
+                    0.6,
+                    0.1,
+                    [1.0, 0.6, 0.2, 1.0],
+                    12.0,
+                    2.0,
+                );
+            }
+            puff(&mut scene.dust, Vec3::new(x, y, z), 4, 2.6, 2.4);
+            scene.bursts.push(Burst {
+                at: Vec3::new(x, y, z),
+                radius: 4.0,
+                t: 0.4,
+                color: Some([1.0, 0.45, 0.15]),
+            });
         }
         Fx::Pillar { x, z, color } => {
             let y = field.walk_height(x, z);

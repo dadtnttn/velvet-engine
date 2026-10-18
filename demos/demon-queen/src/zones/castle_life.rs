@@ -861,6 +861,7 @@ fn shape_piece(shape: &Shape, hex: u32, part: f32, pivot: [f32; 3]) -> Piece {
         positions,
         normals,
         indices,
+        colors: Vec::new(),
     }
 }
 

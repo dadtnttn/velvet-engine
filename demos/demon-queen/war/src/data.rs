@@ -5,13 +5,15 @@
 //! of a blow that goes through armour anyway. `shield` (0..100) is the chance to stop a missile from
 //! the front, and adds to melee defence from the front. Speeds in m/s. Morale 999 = unbreakable.
 
-/// The three powers of the war.
+/// The three powers of the war, and the free peoples who answer to none of them (they hold
+/// their land with a militia and take no turn).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Faction {
     Reina,
     Alianza,
     Rebeldes,
+    Libres,
 }
 
 impl Faction {
@@ -22,6 +24,7 @@ impl Faction {
             Faction::Reina => &FACTIONS[0],
             Faction::Alianza => &FACTIONS[1],
             Faction::Rebeldes => &FACTIONS[2],
+            Faction::Libres => &FACTIONS[3],
         }
     }
 
@@ -47,7 +50,7 @@ pub struct FactionInfo {
     pub trim: u32,
 }
 
-pub static FACTIONS: [FactionInfo; 3] = [
+pub static FACTIONS: [FactionInfo; 4] = [
     FactionInfo {
         id: "reina",
         name: "La Corte de la Reina",
@@ -83,6 +86,18 @@ pub static FACTIONS: [FactionInfo; 3] = [
         dark: 0x34140a,
         cloth: 0xa8442a,
         trim: 0x3a2614,
+    },
+    FactionInfo {
+        id: "libres",
+        name: "Los pueblos libres",
+        short: "Los libres",
+        kicker: "SIN SEÑOR",
+        color: 0x8fa08a,
+        bright: 0xc8d6c0,
+        accent: 0xd8c8a0,
+        dark: 0x1e2620,
+        cloth: 0x6f7f68,
+        trim: 0x3a3226,
     },
 ];
 
@@ -266,7 +281,7 @@ const BASE: UnitType = UnitType {
     row_gap: 1.45,
     files: 16,
     cost: Cost {
-        gold: 300,
+        gold: 75,
         spark: 0,
         food: 1,
     },
@@ -317,7 +332,7 @@ pub static UNITS: [UnitType; 16] = [
         row_gap: 1.6,
         files: 15,
         cost: Cost {
-            gold: 420,
+            gold: 105,
             spark: 2,
             food: 2,
         },
@@ -352,7 +367,7 @@ pub static UNITS: [UnitType; 16] = [
         files: 18,
         ranged: Some(JAVELINS),
         cost: Cost {
-            gold: 260,
+            gold: 65,
             spark: 1,
             food: 1,
         },
@@ -388,7 +403,7 @@ pub static UNITS: [UnitType; 16] = [
         row_gap: 2.4,
         files: 9,
         cost: Cost {
-            gold: 480,
+            gold: 120,
             spark: 2,
             food: 1,
         },
@@ -424,7 +439,7 @@ pub static UNITS: [UnitType; 16] = [
         row_gap: 2.2,
         files: 14,
         cost: Cost {
-            gold: 380,
+            gold: 95,
             spark: 2,
             food: 1,
         },
@@ -469,7 +484,7 @@ pub static UNITS: [UnitType; 16] = [
             cohesion: 0.0,
         }),
         cost: Cost {
-            gold: 300,
+            gold: 75,
             spark: 0,
             food: 0,
         },
@@ -547,7 +562,7 @@ pub static UNITS: [UnitType; 16] = [
         row_gap: 1.45,
         files: 18,
         cost: Cost {
-            gold: 340,
+            gold: 85,
             spark: 0,
             food: 1,
         },
@@ -583,7 +598,7 @@ pub static UNITS: [UnitType; 16] = [
         row_gap: 3.6,
         files: 10,
         cost: Cost {
-            gold: 620,
+            gold: 155,
             spark: 0,
             food: 2,
         },
@@ -628,7 +643,7 @@ pub static UNITS: [UnitType; 16] = [
             cohesion: 0.0,
         }),
         cost: Cost {
-            gold: 360,
+            gold: 90,
             spark: 0,
             food: 1,
         },
@@ -677,7 +692,7 @@ pub static UNITS: [UnitType; 16] = [
             radius: 38.0,
         }),
         cost: Cost {
-            gold: 440,
+            gold: 110,
             spark: 0,
             food: 1,
         },
@@ -712,7 +727,7 @@ pub static UNITS: [UnitType; 16] = [
         row_gap: 1.6,
         files: 15,
         cost: Cost {
-            gold: 400,
+            gold: 100,
             spark: 0,
             food: 2,
         },
@@ -746,7 +761,7 @@ pub static UNITS: [UnitType; 16] = [
         files: 18,
         ranged: Some(JAVELINS),
         cost: Cost {
-            gold: 240,
+            gold: 60,
             spark: 0,
             food: 1,
         },
@@ -779,7 +794,7 @@ pub static UNITS: [UnitType; 16] = [
         row_gap: 2.6,
         files: 8,
         cost: Cost {
-            gold: 300,
+            gold: 75,
             spark: 0,
             food: 1,
         },
@@ -813,7 +828,7 @@ pub static UNITS: [UnitType; 16] = [
         row_gap: 1.5,
         files: 16,
         cost: Cost {
-            gold: 160,
+            gold: 40,
             spark: 0,
             food: 1,
         },
@@ -1062,6 +1077,8 @@ pub struct Province {
     /// What each faction raises here once it holds the place.
     pub recruit: &'static [(Faction, &'static [&'static str])],
     pub lore: &'static str,
+    /// The province (of the ten) the region belongs to.
+    pub group: &'static str,
 }
 
 impl Province {
@@ -1077,7 +1094,7 @@ impl Province {
     }
 }
 
-const P: Province = Province {
+pub(crate) const P: Province = Province {
     id: "",
     name: "",
     kicker: "",
@@ -1095,220 +1112,10 @@ const P: Province = Province {
     garrison: &[],
     recruit: &[],
     lore: "",
+    group: "",
 };
 
-pub static PROVINCES: [Province; 13] = [
-    Province {
-        id: "castillo",
-        name: "El castillo",
-        kicker: "CAPITAL DE LA REINA",
-        x: -62.0,
-        z: 2.0,
-        settlement: "castle",
-        battle: "atalaya",
-        gold: 160.0,
-        food: 1.0,
-        spark: 1.0,
-        capital: true,
-        garrison: &["orcos", "esqueletos", "esqueletos"],
-        recruit: &[(Faction::Reina, &["orcos", "esqueletos"])],
-        lore: "Pequeño y viejo, con la sala de guerra, la alcoba y la mesa del Consejo. Una silla vacía espera a Varrak.",
-        ..P
-    },
-    Province {
-        id: "villa",
-        name: "La villa",
-        kicker: "AL PIE DE LA COLINA",
-        x: -42.0,
-        z: 27.0,
-        settlement: "village",
-        battle: "trigales",
-        gold: 180.0,
-        food: 3.0,
-        recruit: &[(Faction::Reina, &["trasgos", "orcos"])],
-        lore: "La taberna, la tienda, la casa del Consejo y las termas. Todos esperaban a su Reina.",
-        ..P
-    },
-    Province {
-        id: "bosque",
-        name: "El Bosque Oscuro",
-        kicker: "DE DÍA SE CAZA",
-        x: -20.0,
-        z: 2.0,
-        settlement: "lodge",
-        battle: "bosque",
-        gold: 60.0,
-        food: 3.0,
-        recruit: &[(Faction::Reina, &["trasgos"])],
-        lore: "El camino que lo une todo. De noche no es nuestro: en el norte rondan los apagados.",
-        ..P
-    },
-    Province {
-        id: "cueva",
-        name: "La cueva del sello",
-        kicker: "DONDE LA CHISPA ES FUERTE",
-        x: -90.0,
-        z: -18.0,
-        settlement: "cave",
-        battle: "atalaya",
-        gold: 40.0,
-        spark: 2.0,
-        recruit: &[(Faction::Reina, &["esqueletos"])],
-        lore: "Donde la magia de la Reina es más fuerte. Aquí se puede intentar algo con los apagados.",
-        ..P
-    },
-    Province {
-        id: "madriguera",
-        name: "La Madriguera trasga",
-        kicker: "BAJO LAS COLINAS",
-        x: -86.0,
-        z: 36.0,
-        settlement: "warren",
-        battle: "bosque",
-        gold: 90.0,
-        food: 2.0,
-        recruit: &[(Faction::Reina, &["trasgos"])],
-        lore: "El pueblo de Grizna, bajo las colinas: la camada, los túneles y los que se apagaron.",
-        ..P
-    },
-    Province {
-        id: "cienaga",
-        name: "La Ciénaga de las lamias",
-        kicker: "PANTANO Y LAGO",
-        x: -30.0,
-        z: 54.0,
-        settlement: "marsh",
-        battle: "cienaga",
-        gold: 70.0,
-        food: 2.0,
-        recruit: &[(Faction::Reina, &["lamias"])],
-        lore: "Agua, hierbas y alquimia. Dicen que el agua se envenena; las lamias se ríen de eso.",
-        ..P
-    },
-    Province {
-        id: "penascal",
-        name: "El Peñascal",
-        kicker: "LA ALDEA DE VARRAK",
-        x: -22.0,
-        z: -34.0,
-        owner: Faction::Rebeldes,
-        settlement: "rocks",
-        battle: "penascal",
-        gold: 80.0,
-        food: 1.0,
-        recruit: &[
-            (Faction::Rebeldes, &["apagados", "clan_trasgos", "lobos"]),
-            (Faction::Reina, &["trasgos", "orcos"]),
-        ],
-        lore: "La aldea trasga del norte, medio vacía. Los apagados que quedan siguen a Varrak.",
-        ..P
-    },
-    Province {
-        id: "nido",
-        name: "El Nido de las harpías",
-        kicker: "LOS RISCOS DEL NORTE",
-        x: -60.0,
-        z: -56.0,
-        owner: Faction::Rebeldes,
-        settlement: "nest",
-        battle: "atalaya",
-        gold: 60.0,
-        food: 1.0,
-        recruit: &[
-            (Faction::Rebeldes, &["clan_orcos", "clan_trasgos"]),
-            (Faction::Reina, &["arpias"]),
-        ],
-        lore: "Acantilados, puentes colgantes y viento. Los rebeldes del norte no pagan tributo.",
-        ..P
-    },
-    Province {
-        id: "puerta",
-        name: "La Puerta del Este",
-        kicker: "EL RÍO Y EL PUENTE DE LOS TROLLS",
-        x: 13.0,
-        z: -6.0,
-        settle: Some((19.0, -3.0)),
-        settlement: "gate",
-        battle: "puerta",
-        gold: 120.0,
-        food: 1.0,
-        recruit: &[
-            (Faction::Reina, &["orcos", "lamias"]),
-            (Faction::Alianza, &["lanceros"]),
-        ],
-        lore: "La puerta que sujetó Varrak mientras la corte huía. Desde aquí se pasa al reino humano.",
-        ..P
-    },
-    Province {
-        id: "marca",
-        name: "La Marca de Aldren",
-        kicker: "FRONTERA DE LA ALIANZA",
-        x: 48.0,
-        z: -16.0,
-        owner: Faction::Alianza,
-        settlement: "fort",
-        battle: "vado",
-        gold: 160.0,
-        food: 2.0,
-        recruit: &[
-            (Faction::Alianza, &["lanceros", "ballesteros"]),
-            (Faction::Reina, &["orcos"]),
-        ],
-        lore: "Una fortaleza de piedra blanca. Sus soldados vigilan el río y temen lo que hay al otro lado.",
-        ..P
-    },
-    Province {
-        id: "trigales",
-        name: "Los Trigales",
-        kicker: "LA TIERRA QUE LOS ALIMENTA",
-        x: 54.0,
-        z: 32.0,
-        owner: Faction::Alianza,
-        settlement: "farms",
-        battle: "trigales",
-        gold: 140.0,
-        food: 5.0,
-        recruit: &[(Faction::Alianza, &["lanceros"])],
-        lore: "Campos de trigo hasta donde alcanza la vista. Los campesinos cuentan historias de orcos que cantan.",
-        ..P
-    },
-    Province {
-        id: "valdesanto",
-        name: "Valdesanto",
-        kicker: "LA CIUDAD DEL DOGMA",
-        x: 88.0,
-        z: 8.0,
-        owner: Faction::Alianza,
-        settlement: "temple",
-        battle: "atalaya",
-        gold: 170.0,
-        food: 2.0,
-        recruit: &[(Faction::Alianza, &["sacerdotes", "caballeros"])],
-        lore: "Sus templos dicen que las bestias no tienen alma. Hay sacerdotes que saben que no es verdad, y callan.",
-        ..P
-    },
-    Province {
-        id: "capital",
-        name: "La capital caída",
-        kicker: "LA ANTIGUA CAPITAL DE LA REINA",
-        x: 86.0,
-        z: -42.0,
-        owner: Faction::Alianza,
-        settlement: "capital",
-        battle: "trigales",
-        gold: 240.0,
-        food: 2.0,
-        capital: true,
-        victory: true,
-        garrison: &["lanceros", "ballesteros", "caballeros"],
-        recruit: &[
-            (Faction::Alianza, &["caballeros", "lanceros", "ballesteros"]),
-            (Faction::Reina, &["orcos", "esqueletos"]),
-        ],
-        lore: "Cayó mientras la corte huía. Sus agujas violetas siguen en pie bajo estandartes del este.",
-        ..P
-    },
-];
+pub use crate::regions::{adjacent, crossing, Crossing, CROSSINGS, GROUPS, PROVINCES};
 
 pub fn province(id: &str) -> &'static Province {
     PROVINCES
@@ -1321,26 +1128,6 @@ pub fn province_index(id: &str) -> usize {
     PROVINCES.iter().position(|p| p.id == id).unwrap_or(0)
 }
 
-/// Which provinces touch (both ways).
-pub fn adjacent(id: &str) -> &'static [&'static str] {
-    match id {
-        "castillo" => &["villa", "bosque", "cueva", "madriguera"],
-        "villa" => &["castillo", "bosque", "cienaga", "madriguera"],
-        "bosque" => &["castillo", "villa", "penascal", "puerta", "cienaga"],
-        "cueva" => &["castillo", "nido"],
-        "madriguera" => &["castillo", "villa", "cienaga"],
-        "cienaga" => &["villa", "bosque", "madriguera"],
-        "penascal" => &["bosque", "nido", "puerta"],
-        "nido" => &["cueva", "penascal"],
-        "puerta" => &["bosque", "penascal", "marca", "trigales"],
-        "marca" => &["puerta", "capital", "valdesanto", "trigales"],
-        "trigales" => &["puerta", "marca", "valdesanto"],
-        "valdesanto" => &["marca", "trigales", "capital"],
-        "capital" => &["marca", "valdesanto"],
-        _ => &[],
-    }
-}
-
 pub struct StartArmy {
     pub id: &'static str,
     pub faction: Faction,
@@ -1349,7 +1136,7 @@ pub struct StartArmy {
     pub units: &'static [&'static str],
 }
 
-pub static START_ARMIES: [StartArmy; 6] = [
+pub static START_ARMIES: [StartArmy; 7] = [
     StartArmy {
         id: "a-reina",
         faction: Faction::Reina,
@@ -1414,14 +1201,23 @@ pub static START_ARMIES: [StartArmy; 6] = [
             "caballeros",
         ],
     },
+    StartArmy {
+        // The one the Alliance sends over first: across the bridge, at the Queen's gate.
+        id: "l-puente",
+        faction: Faction::Alianza,
+        name: "Guardia del Puente",
+        at: "cabeza",
+        units: &["lanceros", "lanceros", "ballesteros"],
+    },
 ];
 
 /// Gold, food and spark each faction starts with.
 pub fn start_purse(f: Faction) -> (i32, i32, i32) {
     match f {
-        Faction::Reina => (1400, 18, 9),
-        Faction::Rebeldes => (600, 10, 0),
-        Faction::Alianza => (1200, 20, 0),
+        Faction::Reina => (350, 18, 9),
+        Faction::Rebeldes => (150, 10, 0),
+        Faction::Alianza => (300, 20, 0),
+        Faction::Libres => (0, 0, 0),
     }
 }
 
@@ -1441,6 +1237,7 @@ pub fn army_names(f: Faction) -> &'static [&'static str] {
             "Lanzas de Aldren",
             "Los Juramentados",
         ],
+        Faction::Libres => &["Milicia libre"],
     }
 }
 

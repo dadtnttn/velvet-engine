@@ -25,6 +25,9 @@ pub struct Piece {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub indices: Vec<u32>,
+    /// Its vertices' own colours (`COLOR_0`; linear), when it has them: they multiply the
+    /// material's (the battle maps' structures carry their whole colour there).
+    pub colors: Vec<[f32; 4]>,
 }
 
 fn strip_suffix(name: &str) -> String {
@@ -100,6 +103,10 @@ pub fn load_glb(path: &Path) -> Result<Vec<Piece>> {
                 };
                 let material = prim.material();
                 let pbr = material.pbr_metallic_roughness();
+                let colors: Vec<[f32; 4]> = reader
+                    .read_colors(0)
+                    .map(|c| c.into_rgba_f32().collect())
+                    .unwrap_or_default();
                 out.push(Piece {
                     node: node_name.clone(),
                     part: part::by_name(&part_name),
@@ -110,6 +117,11 @@ pub fn load_glb(path: &Path) -> Result<Vec<Piece>> {
                         normals
                     } else {
                         flat_normals(&positions, &indices)
+                    },
+                    colors: if colors.len() == positions.len() {
+                        colors
+                    } else {
+                        Vec::new()
                     },
                     positions,
                     indices,
@@ -127,6 +139,146 @@ pub fn load_glb(path: &Path) -> Result<Vec<Piece>> {
 }
 
 /// Normals from the triangles (each vertex gets the sum of its faces').
+/// One material's share of a textured world model (the campaign map's settlements and landmarks):
+/// all its triangles in one mesh (positions placed, UVs, the vertex colours that carry each part's
+/// shade and tint), its photo texture and normal map (RGBA8), whether it shines.
+pub struct TexturedPart {
+    pub material: String,
+    pub mesh: Mesh3D,
+    pub albedo: Option<velvet_render::TextureData3D>,
+    pub normal: Option<velvet_render::TextureData3D>,
+    /// Its glTF emissive colour (windows, runes, the Queen's spires, fires), if it has one.
+    pub emissive: Option<[f32; 3]>,
+}
+
+fn rgba8(img: &gltf::image::Data) -> Option<velvet_render::TextureData3D> {
+    use gltf::image::Format;
+    let px = &img.pixels;
+    let rgba: Vec<u8> = match img.format {
+        Format::R8G8B8A8 => px.clone(),
+        Format::R8G8B8 => px.chunks_exact(3).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
+        Format::R8 => px.iter().flat_map(|&v| [v, v, v, 255]).collect(),
+        Format::R8G8 => px.chunks_exact(2).flat_map(|c| [c[0], c[1], 0, 255]).collect(),
+        _ => return None,
+    };
+    Some(velvet_render::TextureData3D {
+        width: img.width,
+        height: img.height,
+        rgba,
+    })
+}
+
+/// A textured GLB merged by material (see [`TexturedPart`]).
+pub fn load_textured(path: &Path) -> Result<Vec<TexturedPart>> {
+    let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let bytes = velvet_render::unpack_model_bytes(&bytes).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let (doc, buffers, images) =
+        gltf::import_slice(&bytes).with_context(|| format!("reading {}", path.display()))?;
+    let scene = doc
+        .default_scene()
+        .or_else(|| doc.scenes().next())
+        .context("no scene")?;
+    struct Acc {
+        material: String,
+        vertices: Vec<MeshVertex3D>,
+        indices: Vec<u32>,
+        albedo: Option<usize>,
+        normal: Option<usize>,
+        emissive: Option<[f32; 3]>,
+    }
+    let mut groups: Vec<Acc> = Vec::new();
+    let mut stack: Vec<(gltf::Node<'_>, Mat4)> = scene.nodes().map(|n| (n, Mat4::IDENTITY)).collect();
+    while let Some((node, parent)) = stack.pop() {
+        let world = parent * {
+            let m = node.transform().matrix();
+            Mat4::from_cols(m[0].into(), m[1].into(), m[2].into(), m[3].into())
+        };
+        if let Some(mesh) = node.mesh() {
+            let normal_m = world.inverse().unwrap_or(Mat4::IDENTITY).transpose();
+            for prim in mesh.primitives() {
+                let reader = prim.reader(|b| buffers.get(b.index()).map(|d| &d.0[..]));
+                let Some(positions) = reader.read_positions() else {
+                    continue;
+                };
+                let positions: Vec<[f32; 3]> = positions.collect();
+                let normals: Vec<[f32; 3]> = reader.read_normals().map(|n| n.collect()).unwrap_or_default();
+                let uvs: Vec<[f32; 2]> = reader
+                    .read_tex_coords(0)
+                    .map(|t| t.into_f32().collect())
+                    .unwrap_or_default();
+                let colors: Vec<[f32; 4]> = reader
+                    .read_colors(0)
+                    .map(|c| c.into_rgba_f32().collect())
+                    .unwrap_or_default();
+                let indices: Vec<u32> = match reader.read_indices() {
+                    Some(i) => i.into_u32().collect(),
+                    None => (0..positions.len() as u32).collect(),
+                };
+                let mat = prim.material();
+                let name = strip_suffix(mat.name().unwrap_or(""));
+                let albedo = mat
+                    .pbr_metallic_roughness()
+                    .base_color_texture()
+                    .map(|t| t.texture().source().index());
+                let normal = mat.normal_texture().map(|t| t.texture().source().index());
+                let e = mat.emissive_factor();
+                let emissive = (e.iter().any(|&v| v > 0.0)).then_some(e);
+                let k = match groups.iter().position(|g| g.material == name) {
+                    Some(k) => k,
+                    None => {
+                        groups.push(Acc {
+                            material: name,
+                            vertices: Vec::new(),
+                            indices: Vec::new(),
+                            albedo,
+                            normal,
+                            emissive,
+                        });
+                        groups.len() - 1
+                    }
+                };
+                let g = &mut groups[k];
+                let base = g.vertices.len() as u32;
+                for (i, p) in positions.iter().enumerate() {
+                    let q = world.transform_point3(Vec3::new(p[0], p[1], p[2]));
+                    let n = normals
+                        .get(i)
+                        .map(|n| normal_m.transform_vector3(Vec3::new(n[0], n[1], n[2])).normalize_or_zero())
+                        .unwrap_or(Vec3::Y);
+                    let mut v = MeshVertex3D::new([q.x, q.y, q.z], [n.x, n.y, n.z], uvs.get(i).copied().unwrap_or([0.0, 0.0]));
+                    if let Some(c) = colors.get(i) {
+                        v.color = *c;
+                    }
+                    g.vertices.push(v);
+                }
+                g.indices.extend(indices.iter().map(|i| i + base));
+            }
+        }
+        for child in node.children() {
+            stack.push((child, world));
+        }
+    }
+    Ok(groups
+        .into_iter()
+        .map(|g| TexturedPart {
+            material: g.material,
+            mesh: Mesh3D {
+                vertices: g.vertices,
+                indices: g.indices,
+                material: Material3D::default(),
+                metallic_factor: 0.0,
+                roughness_factor: 0.9,
+                texture_index: None,
+                normal_texture_index: None,
+                skinning: None,
+            },
+            albedo: g.albedo.and_then(|i| images.get(i)).and_then(rgba8),
+            normal: g.normal.and_then(|i| images.get(i)).and_then(rgba8),
+            emissive: g.emissive,
+        })
+        .collect())
+}
+
 fn flat_normals(positions: &[[f32; 3]], indices: &[u32]) -> Vec<[f32; 3]> {
     let mut n = vec![Vec3::ZERO; positions.len()];
     for t in indices.chunks_exact(3) {
@@ -166,6 +318,9 @@ pub fn look_color(look: Faction, role: &str) -> Option<[f32; 3]> {
         (Faction::Rebeldes, "skin_goblin") => 0x9a9a48,
         (Faction::Rebeldes, "feather") => 0x7a5e4a,
         (Faction::Rebeldes, "feather_dark") => 0x5a4436,
+        (Faction::Libres, "cloth") => 0x6f7f68,
+        (Faction::Libres, "trim") => 0xd8c8a0,
+        (Faction::Libres, "cloth_dark") => 0x3a4436,
         _ => return None,
     };
     Some(rgb(hex))
@@ -216,7 +371,8 @@ pub fn static_mesh(
         let base = vertices.len() as u32;
         for (k, pos) in p.positions.iter().enumerate() {
             let mut v = MeshVertex3D::new(*pos, p.normals[k], [0.0, 0.0]);
-            v.color = [c[0], c[1], c[2], 1.0];
+            let own = p.colors.get(k).copied().unwrap_or([1.0; 4]);
+            v.color = [c[0] * own[0], c[1] * own[1], c[2] * own[2], 1.0];
             vertices.push(v);
         }
         indices.extend(p.indices.iter().map(|i| i + base));

@@ -600,6 +600,180 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         return Ok(());
     }
     if let Some(frames) = std::env::args()
+        .skip_while(|a| a != "--bench-all")
+        .nth(1)
+        .and_then(|n| n.parse::<usize>().ok())
+    {
+        // Frame cost in every place of the game: each zone entered, then `frames` frames of it
+        // ticked and drawn (the GPU waited for each, so CPU and GPU add up), the player walking a
+        // small circle where there is a player. One line per zone: avg/p95 frame, CPU split.
+        // `--bench-only a,b` keeps some.
+        use zone_war::WarPage;
+        let only: Option<Vec<String>> = std::env::args()
+            .skip_while(|a| a != "--bench-only")
+            .nth(1)
+            .map(|s| s.split(',').map(str::to_owned).collect());
+        let take =
+            |a: &std::sync::atomic::AtomicU64| a.swap(0, std::sync::atomic::Ordering::Relaxed);
+        fn reset(app: &mut App) {
+            if app.dungeon_mode {
+                app.leave_dungeon();
+            }
+            if app.war.is_some() {
+                app.leave_war();
+            }
+            app.boss = None;
+            app.baths = None;
+            app.brothel = None;
+            app.penascal = None;
+            app.castle = None;
+            app.nature_mode = true;
+            app.village_entered = false;
+        }
+        let zones: [(&str, fn(&mut App) -> bool); 10] = [
+            ("castillo", |app| {
+                app.enter_castle_from_nature();
+                true
+            }),
+            ("villa", |app| {
+                let (spawn, _) = village::spawn();
+                app.player = spawn;
+                app.camera_focus = spawn;
+                app.village_entered = true;
+                true
+            }),
+            ("bosque", |app| {
+                app.player = mine::entry_position() - Vec3::new(3.0, 0.0, 2.0);
+                app.camera_focus = app.player;
+                true
+            }),
+            ("termas", |app| {
+                app.village_entered = true;
+                app.enter_baths();
+                true
+            }),
+            ("burdel", |app| {
+                app.village_entered = true;
+                app.enter_brothel();
+                true
+            }),
+            ("penascal", |app| {
+                app.enter_penascal_from_forest();
+                true
+            }),
+            ("varrak", |app| {
+                app.story.values.insert("consejo_2_hecho".into(), 1);
+                app.enter_penascal_from_forest();
+                app.start_boss_fight();
+                if let Some(f) = app.boss.as_mut() {
+                    f.player.god = true;
+                    f.qa("duel");
+                }
+                app.boss.is_some()
+            }),
+            ("mina", |app| {
+                app.enter_dungeon_unchecked();
+                app.dungeon_mode
+            }),
+            ("campana", |app| {
+                app.open_war_table();
+                app.war_campaign = None;
+                if let Some(w) = app.war.as_mut() {
+                    w.page = WarPage::Table(0);
+                }
+                app.war_hit(map_overlay::WarHit::Table(1));
+                for _ in 0..30 {
+                    app.tick(1.0 / 30.0);
+                    app.render_frame();
+                }
+                app.war_hit(map_overlay::WarHit::Modal(0));
+                app.war.is_some()
+            }),
+            ("batalla", |app| {
+                app.open_war_table();
+                if let Some(w) = app.war.as_mut() {
+                    w.page = WarPage::Table(1);
+                    w.battle = None;
+                }
+                app.war_hit(map_overlay::WarHit::Quick(0));
+                for _ in 0..20 {
+                    app.tick(1.0 / 30.0);
+                    app.render_frame();
+                }
+                app.war_hit(map_overlay::WarHit::Begin);
+                if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+                    run.b.auto_player = Some(demon_queen_war::ai::BattleAi::new(
+                        0,
+                        demon_queen_war::ai::Posture::Attack,
+                    ));
+                    run.b.speed = 2.0;
+                }
+                app.war.as_ref().is_some_and(|w| w.battle.is_some())
+            }),
+        ];
+        let mut rows = Vec::new();
+        for (name, enter) in zones {
+            if only.as_ref().is_some_and(|o| !o.iter().any(|z| z == name)) {
+                continue;
+            }
+            reset(&mut app);
+            if !enter(&mut app) {
+                eprintln!("[bench] {name}: could not enter");
+                continue;
+            }
+            let walks = !app.dungeon_mode && app.war.is_none() && app.boss.is_none();
+            let p0 = app.player;
+            let mut times = Vec::with_capacity(frames);
+            let mut cpu = Vec::with_capacity(frames);
+            let (mut render_ns, mut overlay_ns) = (0u64, 0u64);
+            let mut tick_ms = 0.0f32;
+            for frame in 0..frames + 40 {
+                let t = frame as f32 / 60.0;
+                if walks {
+                    app.player = p0 + Vec3::new((t * 0.6).cos() * 2.0 - 2.0, 0.0, (t * 0.6).sin() * 2.0);
+                    app.camera_focus = app.player;
+                }
+                app.elapsed += 1.0 / 60.0;
+                let started = std::time::Instant::now();
+                app.tick(1.0 / 60.0);
+                let ticked = started.elapsed().as_secs_f32() * 1000.0;
+                app.render_frame();
+                let submitted = started.elapsed().as_secs_f32() * 1000.0;
+                app.wait_for_gpu();
+                let (r, o) = (
+                    take(&velvet_render::RENDER3D_CPU_NS),
+                    take(&map_overlay::OVERLAY_CPU_NS),
+                );
+                if frame >= 40 {
+                    tick_ms += ticked;
+                    times.push(started.elapsed().as_secs_f32() * 1000.0);
+                    cpu.push(submitted);
+                    render_ns += r;
+                    overlay_ns += o;
+                }
+            }
+            if std::env::args().any(|a| a == "--bench-shots") {
+                save(&mut app, out, &format!("bench-{name}"))?;
+            }
+            times.sort_by(|a, b| a.total_cmp(b));
+            let avg = times.iter().sum::<f32>() / times.len().max(1) as f32;
+            let p95 = times[((times.len() as f32 * 0.95) as usize).min(times.len() - 1)];
+            let n = frames.max(1) as f32 * 1e6;
+            let cpu_avg = cpu.iter().sum::<f32>() / cpu.len().max(1) as f32;
+            let (rend, ov) = (render_ns as f32 / n, overlay_ns as f32 / n);
+            let tick = tick_ms / frames.max(1) as f32;
+            eprintln!(
+                "[bench] {name:9} frame avg {avg:6.2} ms p95 {p95:6.2} | cpu {cpu_avg:5.2} (render {rend:5.2}, overlay {ov:4.2}, tick {tick:4.2}, draws {:5.2}) | gpu~{:5.2}",
+                cpu_avg - rend - ov - tick,
+                (avg - cpu_avg).max(0.0)
+            );
+            rows.push((name, avg, p95, cpu_avg));
+        }
+        let total: f32 = rows.iter().map(|r| r.1).sum();
+        eprintln!("[bench] {} zones, mean frame {:.2} ms", rows.len(), total / rows.len().max(1) as f32);
+        return Ok(());
+    }
+    if let Some(frames) = std::env::args()
         .skip_while(|a| a != "--frame-times")
         .nth(1)
         .and_then(|n| n.parse::<usize>().ok())
@@ -2137,6 +2311,474 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.castle = None;
         return Ok(());
     }
+    if std::env::args().any(|a| a == "--war-map") {
+        // QA: a battle on a war map 2.0 battle map: deployed, seen from high, the armies met.
+        let args: Vec<String> = std::env::args().skip_while(|a| a != "--war-map").collect();
+        let map = args.get(1).cloned().unwrap_or_else(|| "vado".into());
+        let attack = args.get(2).is_none_or(|a| a != "defend");
+        app.nature_mode = false;
+        app.village_entered = false;
+        app.castle = None;
+        let step = |app: &mut App, frames: usize| {
+            for _ in 0..frames {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        app.open_war_table();
+        step(&mut app, 10);
+        app.start_map_battle(&map, attack);
+        // the player's side builds what the AI would, so both sides' engines show
+        if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+            let zone = run.b.zone;
+            if let Some(mut s) = run.b.sim.siege.take() {
+                s.ai_setup(&mut run.b.sim, 0, zone);
+                for e in &s.engines {
+                    eprintln!("[qa] engine {:?} side {} at ({:.0}, {:.0}) built {}", e.kind, e.side, e.x, e.z, e.built);
+                }
+                eprintln!("[qa] wood {:?}, defender {:?}, zone {:?}", s.wood, s.defender, zone);
+                run.b.sim.siege = Some(s);
+            }
+        }
+        step(&mut app, 20);
+        save(&mut app, out, &format!("map-{map}-deploy"))?;
+        // the engines close to
+        let first = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| {
+            let s = r.b.sim.siege.as_ref()?;
+            s.engines.iter().find(|e| e.side == 0).or(s.engines.first()).map(|e| (e.x, e.z))
+        });
+        if let (Some((ex, ez)), Some(w)) = (first, app.war.as_mut()) {
+            if let Some(run) = w.battle.as_ref() {
+                let ground = |x: f32, z: f32| run.b.sim.field.walk_height(x, z);
+                w.cam.frame(ex, ez, Some(38.0), Some(0.6), true, &ground);
+            }
+        }
+        step(&mut app, 6);
+        save(&mut app, out, &format!("map-{map}-engines"))?;
+        // the build bar on: a catapult under the pointer, in the middle of the screen
+        if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+            // (some wood back, for the look of it: the QA's side spent it all)
+            if let Some(s) = run.b.sim.siege.as_mut() {
+                s.wood[0] += 60.0;
+            }
+        }
+        if let Some(w) = app.war.as_mut() {
+            w.qa_pointer = Some((900.0, 640.0));
+        }
+        app.war_hit(map_overlay::WarHit::Build(0));
+        step(&mut app, 8);
+        save(&mut app, out, &format!("map-{map}-build"))?;
+        app.war_hit(map_overlay::WarHit::Build(0));
+        if let Some(w) = app.war.as_mut() {
+            w.qa_pointer = None;
+        }
+        if let Some(w) = app.war.as_mut() {
+            w.cam.zoom(900.0);
+        }
+        step(&mut app, 30);
+        save(&mut app, out, &format!("map-{map}-high"))?;
+        if let Some(w) = app.war.as_mut() {
+            w.cam.zoom(-900.0);
+        }
+        app.war_hit(map_overlay::WarHit::Begin);
+        if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+            run.b.auto_player = Some(demon_queen_war::ai::BattleAi::new(
+                0,
+                if attack {
+                    demon_queen_war::ai::Posture::Attack
+                } else {
+                    demon_queen_war::ai::Posture::Defend
+                },
+            ));
+            run.b.speed = 3.0;
+        }
+        // a siege: look at its gate from outside; frames as it goes
+        let gate = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| {
+            let s = r.b.sim.siege.as_ref()?;
+            s.works
+                .iter()
+                .find(|k| k.kind == demon_queen_war::baked::WorkKind::Gate)
+                .map(|g| (g.x, g.z))
+        });
+        let mut shots = 0;
+        for k in 0..5400 {
+            app.tick(1.0 / 30.0);
+            if k % 6 == 0 {
+                if let (Some((gx, gz)), Some(w)) = (gate, app.war.as_mut()) {
+                    if let Some(run) = w.battle.as_ref() {
+                        let ground = |x: f32, z: f32| run.b.sim.field.walk_height(x, z);
+                        let p = run.b.zone;
+                        let (cx, cz) = ((p.x0 + p.x1) / 2.0, (p.z0 + p.z1) / 2.0);
+                        let (dx, dz) = (gx - cx, gz - cz);
+                        let l = dx.hypot(dz).max(1.0);
+                        w.cam.frame(gx - dx / l * 30.0, gz - dz / l * 30.0, Some(95.0), Some((-dx).atan2(-dz)), k == 0, &ground);
+                    }
+                }
+                app.render_frame();
+            }
+            let t = app
+                .war
+                .as_ref()
+                .and_then(|w| w.battle.as_ref())
+                .map_or(0.0, |r| r.b.sim.time);
+            let over = app
+                .war
+                .as_ref()
+                .and_then(|w| w.battle.as_ref())
+                .is_none_or(|r| r.b.sim.over.is_some());
+            for (n, at) in [(0, 25.0f32), (1, 70.0), (2, 140.0), (3, 240.0)] {
+                if shots == n && t >= at {
+                    step(&mut app, 2);
+                    save(&mut app, out, &format!("map-{map}-t{}", at as u32))?;
+                    shots += 1;
+                }
+            }
+            if over || (gate.is_none() && t > 120.0) {
+                break;
+            }
+        }
+        step(&mut app, 4);
+        save(&mut app, out, &format!("map-{map}-fight"))?;
+        if let Some(s) = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| r.b.sim.siege.as_ref()) {
+            eprintln!(
+                "[qa] siege: {} engines ({} standing), broken {:?}, winner {:?}",
+                s.engines.len(),
+                s.engines.iter().filter(|e| e.alive).count(),
+                s.works.iter().filter(|w| w.broken).map(|w| format!("{:?}", w.kind)).collect::<Vec<_>>(),
+                app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| r.b.sim.over.map(|o| o.winner))
+            );
+        }
+        app.war = None;
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--war-overview") {
+        // QA: the campaign map seen whole and up close (castle, villa, the east, the capital), no fog,
+        // like the prototype's views.
+        app.nature_mode = false;
+        app.village_entered = false;
+        app.castle = None;
+        let step = |app: &mut App, frames: usize| {
+            for _ in 0..frames {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        app.story.values.insert("varrak_despierto".into(), 1);
+        app.open_war_table();
+        step(&mut app, 10);
+        app.war_campaign = None;
+        app.war_hit(map_overlay::WarHit::Table(1));
+        step(&mut app, 10);
+        app.war_hit(map_overlay::WarHit::Modal(0));
+        for _ in 0..60 {
+            if app.talk.is_some() {
+                app.end_talk();
+            }
+            step(&mut app, 2);
+        }
+        // the whole continent in sight (no fog: every region seen)
+        if let Some(s) = app.war_campaign.as_mut() {
+            for p in s.provinces.iter_mut() {
+                p.lit = true;
+            }
+        }
+        let views: [(&str, f32, f32, f32, f32); 7] = [
+            ("overview", 0.0, 4.0, 250.0, 0.0),
+            ("castle", -62.0, 2.0, 32.0, 0.4),
+            ("villa", -42.0, 27.0, 32.0, -0.3),
+            ("penascal", -22.0, -34.0, 38.0, 0.2),
+            ("east", 55.0, 5.0, 90.0, 0.0),
+            ("capital", 86.0, -42.0, 34.0, 0.5),
+            ("valdesanto", 88.0, 8.0, 32.0, -0.4),
+        ];
+        let only = std::env::args().skip_while(|a| a != "--war-overview").nth(1).filter(|a| !a.starts_with("--"));
+        for (name, x, z, d, yaw) in views {
+            if only.as_deref().is_some_and(|o| o != name) {
+                continue;
+            }
+            if let Some(w) = app.war.as_mut() {
+                let land = demon_queen_war::campaign_map::Land::new();
+                w.cam.frame(x, z, Some(d), Some(yaw), true, &|a: f32, b: f32| land.top_at(a, b));
+            }
+            step(&mut app, 30);
+            save(&mut app, out, &format!("overview-{name}"))?;
+        }
+        app.war = None;
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--war-story") {
+        // QA: the war and the story as one: one purse, the campaign's first scene in the dialogue
+        // box, the river closed, the relics' page; a battle with its relic and her powers.
+        use zone_war::{Sel, WarPage};
+        app.nature_mode = false;
+        app.village_entered = false;
+        app.castle = None;
+        let step = |app: &mut App, frames: usize| {
+            for _ in 0..frames {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        let purse = |app: &App| {
+            app.war_campaign
+                .as_ref()
+                .map(|s| s.purse(demon_queen_war::data::Faction::Reina).gold)
+        };
+        // through a conversation: its lines on, its choices by the first option
+        let talk_through = |app: &mut App, pick_first: bool| {
+            for _ in 0..80 {
+                if app.talk.is_none() {
+                    step(app, 4);
+                    if app.talk.is_none() {
+                        break;
+                    }
+                }
+                let choice = matches!(
+                    app.talk.as_ref().map(|t| t.shown(guion::library(), &app.story)),
+                    Some(guion::Shown::Choice { .. })
+                );
+                if choice && pick_first {
+                    app.talk_pick(0);
+                } else {
+                    app.talk_confirm();
+                    app.talk_confirm();
+                }
+                step(app, 2);
+            }
+        };
+        for (k, v) in [
+            ("gorou_cabeza_alta", 1),
+            ("afecto_nyxara", 3),
+            ("consejo_1_hecho", 1),
+            ("raciones_igual", 1),
+            ("apagados_encierro", 1),
+        ] {
+            app.story.values.insert(k.into(), v);
+        }
+        for k in ["varrak_despierto", "varrak_vencido"] {
+            app.story.values.remove(k);
+        }
+        app.gold = 420;
+        app.open_war_table();
+        step(&mut app, 10);
+        app.war_campaign = None;
+        app.war_hit(map_overlay::WarHit::Table(1));
+        step(&mut app, 10);
+        eprintln!("[qa] gold {} · treasury {:?}", app.gold, purse(&app));
+        app.war_hit(map_overlay::WarHit::Modal(0));
+        step(&mut app, 30);
+        eprintln!("[qa] talk after the intro card: {}", app.talk.is_some());
+        save(&mut app, out, "story-intro")?;
+        for _ in 0..12 {
+            if app.talk.is_none() {
+                break;
+            }
+            let choice = matches!(
+                app.talk.as_ref().map(|t| t.shown(guion::library(), &app.story)),
+                Some(guion::Shown::Choice { .. })
+            );
+            if choice {
+                break;
+            }
+            app.talk_confirm();
+            app.talk_confirm();
+            step(&mut app, 2);
+        }
+        step(&mut app, 20);
+        save(&mut app, out, "story-intro-choice")?;
+        app.talk_pick(1);
+        // the intro's end, then the powers' scenes queued at the start
+        talk_through(&mut app, true);
+        eprintln!(
+            "[qa] seen: intro {} · grito {} · bendición {}",
+            app.story.seen("guerra.intro"),
+            app.story.seen("guerra.poder_grito"),
+            app.story.seen("guerra.poder_bendicion")
+        );
+        // one purse: a regiment bought in the castle comes out of her gold
+        let queen = app.war_campaign.as_ref().and_then(|s| s.queen_army()).map(|a| a.id.clone());
+        if let (Some(id), Some(c)) = (queen, app.war.as_mut().and_then(|w| w.camp.as_mut())) {
+            c.sel = Some(Sel::Army(id));
+            c.paint_version += 1;
+        }
+        step(&mut app, 4);
+        let before = app.gold;
+        app.war_hit(map_overlay::WarHit::Panel(0));
+        step(&mut app, 4);
+        eprintln!("[qa] recruit: gold {} → {} · treasury {:?}", before, app.gold, purse(&app));
+        // the river: closed until Varrak is woken
+        if let Some(p) = demon_queen_war::data::PROVINCES.iter().position(|p| p.id == "capital") {
+            app.campaign_go(p);
+        }
+        step(&mut app, 30);
+        save(&mut app, out, "story-river")?;
+        talk_through(&mut app, true);
+        // a Libre region chosen: waking it with the spark
+        let libre = demon_queen_war::data::PROVINCES.iter().position(|p| {
+            app.war_campaign
+                .as_ref()
+                .is_some_and(|s| s.prov(p.id).owner == demon_queen_war::data::Faction::Libres)
+        });
+        if let Some(p) = libre {
+            if let Some(c) = app.war.as_mut().and_then(|w| w.camp.as_mut()) {
+                c.sel = Some(Sel::Province(p));
+                c.paint_version += 1;
+            }
+            step(&mut app, 6);
+            save(&mut app, out, "story-libres")?;
+        }
+        // one turn a day: the second end of turn waits for the night's sleep
+        let turn = |app: &App| app.war_campaign.as_ref().map_or(0, |s| s.turn);
+        let t0 = turn(&app);
+        eprintln!(
+            "[qa] before the turn: talk {} · phase {:?} · today {} · modal {} · busy {}",
+            app.talk.is_some(),
+            app.war_campaign.as_ref().map(|s| s.phase),
+            app.story.get("guerra_turno_hoy"),
+            app.war.as_ref().and_then(|w| w.camp.as_ref()).is_some_and(|c| c.modal.is_some()),
+            app.war.as_ref().and_then(|w| w.camp.as_ref()).is_some_and(|c| c.busy),
+        );
+        app.war_hit(map_overlay::WarHit::EndTurn);
+        for _ in 0..40 {
+            step(&mut app, 30);
+            if app.war_campaign.as_ref().is_some_and(|s| s.phase == demon_queen_war::rules::Phase::Player) && turn(&app) > t0 {
+                break;
+            }
+        }
+        eprintln!(
+            "[qa] after the turn: phase {:?} · today {} · talk {} · modal {:?} · steps {} · busy {}",
+            app.war_campaign.as_ref().map(|s| s.phase),
+            app.story.get("guerra_turno_hoy"),
+            app.talk.is_some(),
+            app.war.as_ref().and_then(|w| w.camp.as_ref()).and_then(|c| c.modal.as_ref().map(|m| format!("{m:?}").chars().take(60).collect::<String>())),
+            app.war.as_ref().and_then(|w| w.camp.as_ref()).map_or(0, |c| c.steps.len()),
+            app.war.as_ref().and_then(|w| w.camp.as_ref()).is_some_and(|c| c.busy),
+        );
+        let t1 = turn(&app);
+        app.war_hit(map_overlay::WarHit::EndTurn);
+        step(&mut app, 240);
+        eprintln!("[qa] turns: {t0} → {t1} → {} (one a day)", turn(&app));
+        save(&mut app, out, "story-turn-tomorrow")?;
+        // the relics' page
+        if let Some(w) = app.war.as_mut() {
+            w.page = WarPage::Table(0);
+            w.camp = None;
+        }
+        app.war_hit(map_overlay::WarHit::Table(6));
+        step(&mut app, 10);
+        save(&mut app, out, "story-relics")?;
+        // a battle on el Peñascal: its relic on the field, her powers
+        app.start_map_battle("penascal", true);
+        step(&mut app, 20);
+        talk_through(&mut app, true);
+        let rel = app
+            .war
+            .as_ref()
+            .and_then(|w| w.battle.as_ref())
+            .and_then(|r| r.relic.as_ref().map(|l| (l.x, l.z, l.name.clone())));
+        eprintln!("[qa] relic on the field: {rel:?}");
+        let powers = app
+            .war
+            .as_ref()
+            .and_then(|w| w.battle.as_ref())
+            .and_then(|r| r.b.sim.powers.as_ref().map(|p| p.unlocked.clone()));
+        eprintln!("[qa] powers: {powers:?}");
+        if let (Some((x, z, _)), Some(w)) = (rel.clone(), app.war.as_mut()) {
+            if let Some(run) = w.battle.as_ref() {
+                let ground = |a: f32, b: f32| run.b.sim.field.walk_height(a, b);
+                w.cam.frame(x, z, Some(40.0), Some(0.5), true, &ground);
+            }
+        }
+        step(&mut app, 10);
+        save(&mut app, out, "story-battle-relic")?;
+        app.war_hit(map_overlay::WarHit::Begin);
+        // a regiment of hers walks onto it (put there, for the QA)
+        if let (Some((x, z, _)), Some(run)) = (rel, app.war.as_mut().and_then(|w| w.battle.as_mut())) {
+            let sim = &mut run.b.sim;
+            if let Some(r) = (0..sim.regiments.len()).find(|&r| sim.regiments[r].side == 0) {
+                let (dx, dz) = (x - sim.regiments[r].cx, z - sim.regiments[r].cz);
+                for i in 0..sim.reg.len() {
+                    if sim.reg[i] == r {
+                        sim.px[i] += dx;
+                        sim.pz[i] += dz;
+                    }
+                }
+                sim.regiments[r].cx = x;
+                sim.regiments[r].cz = z;
+            }
+        }
+        step(&mut app, 8);
+        save(&mut app, out, "story-battle-pickup")?;
+        eprintln!(
+            "[qa] relic taken: {:?} · brasas {} · gold {}",
+            app.war
+                .as_ref()
+                .and_then(|w| w.battle.as_ref())
+                .and_then(|r| r.relic.as_ref().map(|l| l.taken)),
+            app.story.get("poder_brasas"),
+            app.gold
+        );
+        // her powers, on the enemy
+        let enemy = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| {
+            let s = &r.b.sim;
+            let regs: Vec<_> = s.regiments.iter().filter(|g| g.side == 1 && g.alive > 0).collect();
+            let n = regs.len().max(1) as f32;
+            (!regs.is_empty()).then(|| {
+                (
+                    regs.iter().map(|g| g.cx).sum::<f32>() / n,
+                    regs.iter().map(|g| g.cz).sum::<f32>() / n,
+                )
+            })
+        });
+        if let (Some((ex, ez)), Some(w)) = (enemy, app.war.as_mut()) {
+            if let Some(run) = w.battle.as_ref() {
+                let ground = |a: f32, b: f32| run.b.sim.field.walk_height(a, b);
+                w.cam.frame(ex, ez, Some(70.0), Some(0.5), true, &ground);
+            }
+            w.qa_pointer = Some((960.0, 560.0));
+        }
+        app.war_hit(map_overlay::WarHit::Power(3));
+        step(&mut app, 6);
+        save(&mut app, out, "story-power-aim")?;
+        if let Some(w) = app.war.as_mut() {
+            w.qa_pointer = None;
+            if let Some(run) = w.battle.as_mut() {
+                run.power_aim = None;
+                run.power_at = None;
+            }
+        }
+        if let (Some((ex, ez)), Some(run)) = (enemy, app.war.as_mut().and_then(|w| w.battle.as_mut())) {
+            if let Some(mut pw) = run.b.sim.powers.take() {
+                use demon_queen_war::powers::Power;
+                let a = pw.cast(&mut run.b.sim, 0, Power::Brasas, ex, ez);
+                let b = pw.cast(&mut run.b.sim, 0, Power::Rugido, ex + 12.0, ez);
+                eprintln!("[qa] cast brasas {a} · rugido {b}");
+                run.b.sim.powers = Some(pw);
+            }
+        }
+        step(&mut app, 24);
+        save(&mut app, out, "story-power-embers")?;
+        if let (Some((ex, ez)), Some(run)) = (enemy, app.war.as_mut().and_then(|w| w.battle.as_mut())) {
+            if let Some(mut pw) = run.b.sim.powers.take() {
+                use demon_queen_war::powers::Power;
+                pw.unlocked.push(Power::Niebla);
+                let a = pw.cast(&mut run.b.sim, 0, Power::Niebla, ex - 10.0, ez - 6.0);
+                eprintln!("[qa] cast niebla {a}");
+                run.b.sim.powers = Some(pw);
+            }
+        }
+        step(&mut app, 60);
+        save(&mut app, out, "story-power-fog")?;
+        // the relic's scene, over the battle paused
+        if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+            run.b.paused = true;
+        }
+        step(&mut app, 30);
+        eprintln!("[qa] talk over the battle: {}", app.talk.is_some());
+        save(&mut app, out, "story-battle-talk")?;
+        app.war = None;
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--war") {
         // QA: the war table's page, the campaign (its intro, the map, an army chosen, a battle
         // asked), a quick battle (deployed, fought by both generals, close, the spark, the end) and
@@ -2706,8 +3348,8 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 let pixels = app.capture_pixels()?;
                 let frame = image::RgbaImage::from_raw(WINDOW_WIDTH, WINDOW_HEIGHT, pixels)
                     .context("frame")?;
-                // The fight fills the screen in the videos: it keeps its full size.
-                let frame = if clip == "varrak" {
+                // The fight and the «coming soon» clips fill the screen in the videos: full size.
+                let frame = if matches!(clip, "varrak" | "corte" | "citas" | "guerra" | "campana") {
                     frame
                 } else {
                     image::imageops::resize(
@@ -3275,6 +3917,364 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.boss = None;
             app.penascal = None;
         }
+        // What 0.2.1 brings, for the «coming soon» part (full size, overlays on):
+        if wanted("corte") {
+            // An audience at the throne: the request types out, an answer lights, it is granted.
+            app.penascal = None;
+            app.nature_mode = false;
+            app.village_entered = false;
+            app.castle = None;
+            app.outfit = 0;
+            app.environment_cycle.set_phase(0.35);
+            app.player = Vec3::new(0.0, 0.0, -14.0);
+            app.camera_focus = app.player;
+            settle(&mut app);
+            let promo_story = std::mem::take(&mut app.story);
+            for (k, v) in [
+                ("consejo_1_hecho", 1),
+                ("tutorial_castillo", 1),
+                ("reputacion", 2),
+                ("obra_biblioteca", 1),
+            ] {
+                app.story.values.insert(k.into(), v);
+            }
+            app.gold = 640;
+            clean(&mut app, false);
+            eprintln!("[promo] corte: audience {}", app.open_audience());
+            let mut beat = 0;
+            film(&mut app, out, "corte", 6.5, |app, t| {
+                let next = match t {
+                    t if t > 3.9 => 2,
+                    t if t > 3.1 => 1,
+                    _ => 0,
+                };
+                if next != beat {
+                    beat = next;
+                    app.court_key(if beat == 1 {
+                        KeyCode::ArrowDown
+                    } else {
+                        KeyCode::Enter
+                    });
+                }
+            })?;
+            app.close_court();
+            clean(&mut app, true);
+            app.story = promo_story;
+        }
+        if wanted("citas") {
+            // The vanity's dates page, then Lira's second date (the waltz): its lines, the
+            // choice, the memory coming on with its ribbon.
+            let promo_story = std::mem::take(&mut app.story);
+            for (k, v) in [
+                ("tutorial_castillo", 1),
+                ("cita_lira", 1),
+                ("afecto_lira", 3),
+                ("afecto_nyxara", 2),
+                ("cita_nyxara", 1),
+            ] {
+                app.story.values.insert(k.into(), v);
+            }
+            app.environment_cycle.set_phase(0.6);
+            clean(&mut app, false);
+            eprintln!("[promo] citas: page {}", app.open_dates());
+            let (mut opened, mut next_at, mut memory_at) = (false, 0.0f32, None::<f32>);
+            film(&mut app, out, "citas", 22.0, |app, t| {
+                if !opened {
+                    if t > 2.4 {
+                        opened = true;
+                        next_at = t + 1.6;
+                        app.court_key(KeyCode::Enter);
+                    }
+                    return;
+                }
+                let memory = app
+                    .stage
+                    .as_ref()
+                    .and_then(|s| s.bg.as_deref())
+                    .is_some_and(|b| b.starts_with("citas/") && !b.contains("/fondo_"));
+                if memory && memory_at.is_none() {
+                    memory_at = Some(t);
+                }
+                // the memory stays on a while before the talk goes on
+                if memory_at.is_some_and(|m| t - m < 3.2) || t < next_at || app.talk.is_none() {
+                    return;
+                }
+                let lib = guion::library();
+                match app.talk.as_ref().map(|talk| talk.shown(lib, &app.story)) {
+                    Some(guion::Shown::Choice { .. }) => app.talk_pick(0),
+                    _ => app.talk_confirm(),
+                }
+                next_at = t + 1.0;
+            })?;
+            eprintln!("[promo] citas: memory at {memory_at:?}");
+            app.end_talk();
+            app.close_court();
+            clean(&mut app, true);
+            app.story = promo_story;
+        }
+        if wanted("guerra") || wanted("campana") {
+            use zone_war::{Sel, WarPage};
+            app.penascal = None;
+            app.nature_mode = false;
+            app.village_entered = false;
+            app.castle = None;
+            clean(&mut app, false);
+            let step = |app: &mut App, frames: usize| {
+                for _ in 0..frames {
+                    app.tick(1.0 / 30.0);
+                    app.render_frame();
+                }
+            };
+            app.open_war_table();
+            step(&mut app, 20);
+            if wanted("guerra") {
+                // El Peñascal's battle: the armies meet; the camera circles the thick of it, then
+                // flies to the Queen as she calls her spark.
+                if let Some(w) = app.war.as_mut() {
+                    w.page = WarPage::Table(1);
+                    w.battle = None;
+                }
+                app.war_hit(map_overlay::WarHit::Quick(1));
+                step(&mut app, 20);
+                app.war_hit(map_overlay::WarHit::Begin);
+                if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+                    run.b.auto_player = Some(demon_queen_war::ai::BattleAi::new(
+                        0,
+                        demon_queen_war::ai::Posture::Attack,
+                    ));
+                    run.b.speed = 3.0;
+                }
+                for k in 0..900 {
+                    app.tick(1.0 / 30.0);
+                    if k % 6 == 0 {
+                        app.render_frame();
+                    }
+                    let melee = app
+                        .war
+                        .as_ref()
+                        .and_then(|w| w.battle.as_ref())
+                        .map_or(0, |r| {
+                            r.b.sim
+                                .regiments
+                                .iter()
+                                .filter(|g| g.state == demon_queen_war::sim::RState::Melee)
+                                .count()
+                        });
+                    if melee >= 4 && k > 200 {
+                        break;
+                    }
+                }
+                if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+                    run.b.speed = 1.0;
+                }
+                let hot = |app: &App| -> Option<(f32, f32)> {
+                    let run = app.war.as_ref()?.battle.as_ref()?;
+                    let regs: Vec<&demon_queen_war::sim::Regiment> =
+                        run.b.sim.regiments.iter().filter(|r| r.alive > 0).collect();
+                    let melee: Vec<&&demon_queen_war::sim::Regiment> = regs
+                        .iter()
+                        .filter(|r| r.state == demon_queen_war::sim::RState::Melee)
+                        .collect();
+                    let pick: Vec<&&demon_queen_war::sim::Regiment> = if melee.is_empty() {
+                        regs.iter().collect()
+                    } else {
+                        melee
+                    };
+                    let n = pick.iter().map(|r| r.alive as f32).sum::<f32>().max(1.0);
+                    Some((
+                        pick.iter().map(|r| r.cx * r.alive as f32).sum::<f32>() / n,
+                        pick.iter().map(|r| r.cz * r.alive as f32).sum::<f32>() / n,
+                    ))
+                };
+                let centre = hot(&app).unwrap_or((0.0, 0.0));
+                let mut sparked = false;
+                film(&mut app, out, "guerra", 9.0, |app, t| {
+                    let queen = app.war.as_ref().and_then(|w| w.battle.as_ref()).and_then(|r| {
+                        r.b.queen
+                            .map(|q| (r.b.sim.regiments[q].cx, r.b.sim.regiments[q].cz))
+                    });
+                    let (x, z, dist, turn) = if t < 5.6 {
+                        let k = t / 5.6;
+                        let s = k * k * (3.0 - 2.0 * k);
+                        (centre.0, centre.1, 92.0 - 46.0 * s, 0.45 - 0.8 * s)
+                    } else {
+                        let (qx, qz) = queen.unwrap_or(centre);
+                        let k = ((t - 5.6) / 0.8).min(1.0);
+                        let s = k * k * (3.0 - 2.0 * k);
+                        (
+                            centre.0 + (qx - centre.0) * s,
+                            centre.1 + (qz - centre.1) * s,
+                            46.0 + 14.0 * s,
+                            -0.35 + 0.5 * s,
+                        )
+                    };
+                    if t > 6.6 && !sparked {
+                        sparked = true;
+                        if let Some(run) = app.war.as_mut().and_then(|w| w.battle.as_mut()) {
+                            if let Some(q) = run.b.queen {
+                                if let Some(ab) = run.b.sim.regiments[q].ability.as_mut() {
+                                    ab.cd = 0.0;
+                                }
+                            }
+                        }
+                        app.war_hit(map_overlay::WarHit::Order(4));
+                    }
+                    if let Some(w) = app.war.as_mut() {
+                        if let Some(run) = w.battle.as_ref() {
+                            let field = &run.b.sim.field;
+                            w.cam.frame(x, z, Some(dist), Some(turn), true, &|a: f32, b: f32| {
+                                field.walk_height(a, b)
+                            });
+                        }
+                    }
+                })?;
+                if let Some(w) = app.war.as_mut() {
+                    w.battle = None;
+                    w.page = WarPage::Table(0);
+                }
+            }
+            if wanted("campana") {
+                // The campaign: the map, the Queen's army chosen, a march drawn to the fallen
+                // capital, the turn handed over and the armies on the move.
+                app.war_campaign = None;
+                if let Some(w) = app.war.as_mut() {
+                    w.page = WarPage::Table(0);
+                }
+                app.war_hit(map_overlay::WarHit::Table(1));
+                step(&mut app, 30);
+                app.war_hit(map_overlay::WarHit::Modal(0));
+                step(&mut app, 30);
+                let queen = app
+                    .war_campaign
+                    .as_ref()
+                    .and_then(|s| s.queen_army())
+                    .map(|a| a.id.clone());
+                if let (Some(id), Some(c)) =
+                    (queen, app.war.as_mut().and_then(|w| w.camp.as_mut()))
+                {
+                    c.sel = Some(Sel::Army(id));
+                    c.paint_version += 1;
+                }
+                for _ in 0..3 {
+                    app.war_hit(map_overlay::WarHit::Panel(0));
+                    step(&mut app, 2);
+                }
+                let (mut marched, mut ended) = (false, false);
+                film(&mut app, out, "campana", 8.0, |app, t| {
+                    if let Some(w) = app.war.as_mut() {
+                        w.cam.zoom(if t < 3.2 { -2.4 } else { 1.2 });
+                    }
+                    if t > 1.2 && !marched {
+                        marched = true;
+                        if let Some(p) = demon_queen_war::data::PROVINCES
+                            .iter()
+                            .position(|p| p.id == "capital")
+                        {
+                            app.campaign_go(p);
+                        }
+                    }
+                    if t > 4.4 && !ended {
+                        ended = true;
+                        app.war_hit(map_overlay::WarHit::EndTurn);
+                    }
+                })?;
+            }
+            app.leave_war();
+            clean(&mut app, true);
+        }
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--boss-light") {
+        // The fight's lighting from where she comes in, all round, and Varrak close to.
+        app.castle = None;
+        app.nature_mode = true;
+        app.village_entered = false;
+        app.story = guion::Vars::default();
+        app.story.values.insert("consejo_2_hecho".into(), 1);
+        app.enter_penascal_from_forest();
+        app.start_boss_fight();
+        anyhow::ensure!(app.boss.is_some(), "the fight did not load");
+        let run = |app: &mut App, secs: f32| {
+            for _ in 0..(secs * 60.0) as usize {
+                app.tick(1.0 / 60.0);
+                app.render_frame();
+            }
+        };
+        run(&mut app, 0.3);
+        app.boss_input.attack = true;
+        run(&mut app, 1.0);
+        if let Some(f) = app.boss.as_mut() {
+            f.player.god = true;
+            f.qa("duel");
+        }
+        for (name, yaw, pitch) in [
+            ("light-01-north", 0.0f32, 0.04f32),
+            ("light-02-west", std::f32::consts::FRAC_PI_2, 0.0),
+            ("light-03-east", -std::f32::consts::FRAC_PI_2, 0.0),
+            ("light-04-south", std::f32::consts::PI, 0.12),
+            ("light-05-ground", 0.0, -0.32),
+        ] {
+            if let Some(f) = app.boss.as_mut() {
+                f.player.yaw = yaw;
+                f.player.pitch = pitch;
+            }
+            run(&mut app, 0.4);
+            save(&mut app, out, name)?;
+        }
+        if let Some(f) = app.boss.as_mut() {
+            f.qa("smash");
+            f.player.pitch = 0.1;
+        }
+        run(&mut app, 0.25);
+        save(&mut app, out, "light-06-varrak")?;
+        app.boss = None;
+        app.penascal = None;
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--boss-hands") {
+        // Her hands in the fight, for checking them: at rest, in a swing, holding the seal, and
+        // up on his back (the sword in his shoulder).
+        app.castle = None;
+        app.nature_mode = true;
+        app.village_entered = false;
+        app.story = guion::Vars::default();
+        app.story.values.insert("consejo_2_hecho".into(), 1);
+        app.enter_penascal_from_forest();
+        app.start_boss_fight();
+        anyhow::ensure!(app.boss.is_some(), "the fight did not load");
+        if let Some(f) = app.boss.as_mut() {
+            f.player.god = true;
+        }
+        let run = |app: &mut App, secs: f32| {
+            for _ in 0..(secs * 60.0) as usize {
+                app.tick(1.0 / 60.0);
+                app.render_frame();
+            }
+        };
+        run(&mut app, 0.3);
+        app.boss_input.attack = true;
+        run(&mut app, 1.5);
+        if let Some(f) = app.boss.as_mut() {
+            f.qa("duel");
+            f.player.pitch = -0.25;
+        }
+        run(&mut app, 0.6);
+        save(&mut app, out, "hands-01-rest")?;
+        app.boss_input.attack = true;
+        run(&mut app, 0.14);
+        save(&mut app, out, "hands-02-swing")?;
+        run(&mut app, 0.5);
+        app.boss_button(winit::event::MouseButton::Right, true);
+        run(&mut app, 0.5);
+        save(&mut app, out, "hands-03-seal")?;
+        app.boss_button(winit::event::MouseButton::Right, false);
+        if let Some(f) = app.boss.as_mut() {
+            f.qa("ride");
+        }
+        run(&mut app, 0.6);
+        save(&mut app, out, "hands-04-ride")?;
+        app.boss = None;
+        app.penascal = None;
         return Ok(());
     }
     if std::env::args().any(|a| a == "--boss") {
@@ -3289,6 +4289,10 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.enter_penascal_from_forest();
         app.start_boss_fight();
         anyhow::ensure!(app.boss.is_some(), "the fight did not load");
+        // She takes every test's blow in turn: keep her standing (the last test drops her itself).
+        if let Some(f) = app.boss.as_mut() {
+            f.player.god = true;
+        }
         fn run(app: &mut App, secs: f32, look: bool) {
             for _ in 0..(secs * 60.0) as usize {
                 if look {
@@ -3310,6 +4314,17 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.boss_input.attack = true;
         run(&mut app, 3.4, false);
         save(&mut app, out, "boss-02-pack")?;
+        // The way in behind her (the arch over the gate), and the plaza from its far end.
+        if let Some(f) = app.boss.as_mut() {
+            f.player.yaw = std::f32::consts::PI;
+            f.player.pitch = 0.42;
+        }
+        run(&mut app, 0.05, false);
+        save(&mut app, out, "boss-02c-gate")?;
+        if let Some(f) = app.boss.as_mut() {
+            f.player.yaw = 0.0;
+            f.player.pitch = 0.0;
+        }
         // The seal held (the right button) shows on its key; let go, it stops.
         app.boss_button(winit::event::MouseButton::Right, true);
         run(&mut app, 0.4, false);
@@ -3360,6 +4375,114 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         }
         run(&mut app, 0.25, true);
         save(&mut app, out, "boss-09-spire")?;
+        // The quick events (VARRAK_COMBATE_2.md): the dodge, the ride, the fist, the net.
+        let qte_up = |app: &App, kind: varrak_fight::QteKind| {
+            app.boss
+                .as_ref()
+                .is_some_and(|f| f.qte.as_ref().is_some_and(|q| q.kind == kind))
+        };
+        qa(&mut app, "dodge");
+        for _ in 0..300 {
+            run(&mut app, 1.0 / 60.0, true);
+            if qte_up(&app, varrak_fight::QteKind::Dodge) {
+                break;
+            }
+        }
+        run(&mut app, 0.35, true);
+        save(&mut app, out, "boss-09b-dodge")?;
+        app.boss_input.jump = true;
+        run(&mut app, 0.5, true);
+        save(&mut app, out, "boss-09c-dodged")?;
+        qa(&mut app, "mount");
+        run(&mut app, 0.4, true);
+        save(&mut app, out, "boss-09d-mount")?;
+        app.boss_input.attack = true;
+        run(&mut app, 0.55, false);
+        save(&mut app, out, "boss-09e-ride")?;
+        // Ride him through: each click on its beat, then the seal on his nape.
+        fn on_the_beat(app: &mut App) {
+            for _ in 0..240 {
+                let due = app.boss.as_ref().and_then(|f| f.qte.as_ref()).is_some_and(|q| {
+                    matches!(q.ask, varrak_fight::QteAsk::Beat { beat, .. } if q.t >= beat - 0.01)
+                });
+                if due {
+                    app.boss_input.attack = true;
+                    run(app, 1.0 / 60.0, false);
+                    return;
+                }
+                run(app, 1.0 / 60.0, false);
+            }
+        }
+        run(&mut app, 0.2, false);
+        save(&mut app, out, "boss-09f-ride-beat")?;
+        on_the_beat(&mut app);
+        run(&mut app, 0.15, false);
+        save(&mut app, out, "boss-09f1-ride-stab")?;
+        on_the_beat(&mut app);
+        app.boss_button(winit::event::MouseButton::Right, true);
+        run(&mut app, 0.8, false);
+        save(&mut app, out, "boss-09f2-ride-seal")?;
+        run(&mut app, 1.2, false);
+        app.boss_button(winit::event::MouseButton::Right, false);
+        run(&mut app, 0.3, false);
+        save(&mut app, out, "boss-09f3-ride-done")?;
+        eprintln!(
+            "[boss-qa] after the ride: {:?}",
+            app.boss.as_ref().map(|f| (f.varrak.state, f.varrak.spark, f.ride.is_some()))
+        );
+        qa(&mut app, "grab");
+        run(&mut app, 0.7, false);
+        save(&mut app, out, "boss-09g-grab")?;
+        for k in 0..60 {
+            app.boss_input.attack = k % 3 == 0;
+            run(&mut app, 1.0 / 60.0, false);
+        }
+        save(&mut app, out, "boss-09h-grab-mash")?;
+        qa(&mut app, "rope");
+        for _ in 0..360 {
+            run(&mut app, 1.0 / 60.0, false);
+            if qte_up(&app, varrak_fight::QteKind::Rope) {
+                break;
+            }
+        }
+        run(&mut app, 0.25, false);
+        save(&mut app, out, "boss-09i-rope")?;
+        app.boss_input.attack = true;
+        run(&mut app, 0.9, false);
+        save(&mut app, out, "boss-09j-net")?;
+        eprintln!(
+            "[boss-qa] after the net: {:?}",
+            app.boss.as_ref().map(|f| (f.varrak.state, f.varrak.why, f.rope_cut))
+        );
+        run(&mut app, 1.2, false);
+        save(&mut app, out, "boss-09k-net-landed")?;
+        qa(&mut app, "cauldron");
+        for _ in 0..240 {
+            run(&mut app, 1.0 / 60.0, true);
+            if app
+                .boss
+                .as_ref()
+                .is_some_and(|f| f.varrak.state == varrak_fight::VState::Stunned)
+            {
+                break;
+            }
+        }
+        run(&mut app, 0.8, true);
+        save(&mut app, out, "boss-09l-cauldron")?;
+        eprintln!(
+            "[boss-qa] the cauldron: spill {:?}",
+            app.boss.as_ref().map(|f| f.spill.is_some())
+        );
+        qa(&mut app, "rockfall");
+        run(&mut app, 0.9, false);
+        if let Some(f) = app.boss.as_mut() {
+            f.player.pitch = -0.45;
+            f.player.yaw = 0.0;
+        }
+        run(&mut app, 0.05, false);
+        save(&mut app, out, "boss-09m-rockfall")?;
+        run(&mut app, 1.1, false);
+        save(&mut app, out, "boss-09n-rock-lands")?;
         qa(&mut app, "spark");
         app.boss_input.channel = true;
         run(&mut app, 1.0, true);
@@ -3370,6 +4493,12 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         qa(&mut app, "won");
         run(&mut app, 2.6, true);
         save(&mut app, out, "boss-12-kneel")?;
+        // The awakening: the seal held while his memories come up, then his name.
+        run(&mut app, 2.0, true);
+        save(&mut app, out, "boss-12b-awaken")?;
+        run(&mut app, 1.4, true);
+        save(&mut app, out, "boss-12c-name")?;
+        app.boss_input.attack = true;
         app.boss_input.channel = false;
         run(&mut app, 3.0, false);
         save(&mut app, out, "boss-13-won")?;
@@ -5102,6 +6231,34 @@ pub(super) fn capture(out: &Path) -> Result<()> {
                 app.story.get("cita_nyxara"),
                 app.story.get("noche_hoy")
             );
+            // Nemi: her first date by day, then her first night
+            app.environment_cycle.set_phase(0.35);
+            for (k, v) in [("cita_hoy", 0), ("cita_nemi", 0), ("afecto_nemi", 0)] {
+                app.story.values.insert(k.into(), v);
+            }
+            app.open_dates();
+            if let Some(c) = app.court.as_mut() {
+                c.choice = 2;
+            }
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.3);
+            play(&mut app, "55-nemi1")?;
+            for (k, v) in [("cita_hoy", 0), ("noche_hoy", 0), ("cita_nemi", 4), ("afecto_nemi", 10)] {
+                app.story.values.insert(k.into(), v);
+            }
+            app.environment_cycle.set_phase(0.95);
+            app.open_dates();
+            if let Some(c) = app.court.as_mut() {
+                c.choice = 2;
+            }
+            app.court_key(KeyCode::Enter);
+            wait(&mut app, 0.3);
+            play(&mut app, "56-nemi5")?;
+            app.open_dates();
+            wait(&mut app, 1.2);
+            save(&mut app, out, "court-57-dates-nemi-done")?;
+            app.close_court();
+            eprintln!("[court-qa] citas: cita_nemi {}", app.story.get("cita_nemi"));
             app.environment_cycle.set_phase(0.35);
         }
         if shots.contains(&"manana") {

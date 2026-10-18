@@ -4,8 +4,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::data::{
-    adjacent, army_names, province, start_purse, unit, unit_power, Faction, Role, MAX_UNITS,
-    PROVINCES, START_ARMIES,
+    adjacent, army_names, province, start_purse, unit, unit_power, Crossing, Faction, Role,
+    MAX_UNITS, PROVINCES, START_ARMIES,
 };
 use crate::noise::Rng;
 
@@ -140,8 +140,9 @@ pub struct Campaign {
     pub seed: u32,
     pub turn: u32,
     pub phase: Phase,
-    /// Gold, food and spark of the Queen, the Alliance and the rebels (by `Faction::index`).
-    pub purses: [Purse; 3],
+    /// Gold, food and spark of the Queen, the Alliance, the rebels and the free peoples (by
+    /// `Faction::index`; saves from before the free peoples have three).
+    pub purses: Vec<Purse>,
     /// Each province's owner and whether it is lit (by the index of `PROVINCES`).
     pub provinces: Vec<ProvinceState>,
     pub armies: Vec<Army>,
@@ -155,9 +156,19 @@ pub struct Campaign {
     pub intro_seen: bool,
     #[serde(default)]
     pub varrak_awake: bool,
+    /// What of the story has reached the campaign already (each applied once).
+    #[serde(default)]
+    pub story_marks: Vec<String>,
+    /// Who held each region when the story last looked (empty: it has not looked yet); what
+    /// changed since is news for it.
+    #[serde(default)]
+    pub story_owners: Vec<Faction>,
     #[serde(skip)]
     rng: Option<Rng>,
 }
+
+/// What it costs in spark to wake a free people's land (`Campaign::awaken`).
+pub const AWAKEN_SPARK: i32 = 6;
 
 /// A battle's outcome, in the shape the battle mode and auto-resolve both give: the survivors of
 /// side 0 (`player`) and side 1 (`enemy`) by their place in their army (`u0`, `u1`…).
@@ -198,14 +209,15 @@ impl Campaign {
             }
         };
         let mut s = Campaign {
-            version: 1,
+            version: 2,
             seed,
             turn: 1,
             phase: Phase::Player,
-            purses: [
+            purses: vec![
                 purse(Faction::Reina),
                 purse(Faction::Alianza),
                 purse(Faction::Rebeldes),
+                purse(Faction::Libres),
             ],
             provinces: PROVINCES
                 .iter()
@@ -234,20 +246,12 @@ impl Campaign {
             next_id: 1,
             intro_seen: false,
             varrak_awake: false,
+            story_marks: Vec::new(),
+            story_owners: Vec::new(),
             rng: None,
         };
         if varrak_awake {
-            // He woke in the story: his pack broke up, his village came back to the Queen.
-            s.armies.retain(|a| a.id != "r-manada");
-            s.set_owner("penascal", Faction::Reina, true);
-            if let Some(q) = s.armies.iter_mut().find(|a| a.id == "a-reina") {
-                q.units.insert(1, new_unit("varrak_reina", Some(1)));
-            }
-            s.varrak_awake = true;
-            s.note(
-                "La Reina ha despertado a Varrak: el Peñascal vuelve a ser suyo. En el norte, el Nido sigue sin pagar tributo y la Alianza vigila el río.",
-                LogKind::Lore,
-            );
+            s.varrak_joins();
         } else {
             s.note(
                 "La Reina ha despertado. La chispa no llega a todos: los clanes del norte se rebelan y la Alianza vigila el río.",
@@ -255,6 +259,80 @@ impl Campaign {
             );
         }
         s
+    }
+
+    /// The story woke Varrak: his pack breaks up, his village comes back to the Queen and he rides
+    /// with her army. (Once: a campaign that has him already is left as it is.)
+    pub fn varrak_joins(&mut self) {
+        if self.varrak_awake {
+            return;
+        }
+        self.armies.retain(|a| a.id != "r-manada");
+        for a in &mut self.armies {
+            if a.faction == Faction::Rebeldes {
+                a.units.retain(|u| u.ty != "varrak");
+            }
+        }
+        self.armies.retain(|a| !a.units.is_empty());
+        self.set_owner("penascal", Faction::Reina, true);
+        if let Some(q) = self.armies.iter_mut().find(|a| a.id == "a-reina") {
+            if !q.has("varrak_reina") {
+                let at = 1.min(q.units.len());
+                q.units.insert(at, new_unit("varrak_reina", Some(1)));
+            }
+        }
+        self.varrak_awake = true;
+        self.note(
+            "La Reina ha despertado a Varrak: el Peñascal vuelve a ser suyo. En el norte, el Nido sigue sin pagar tributo y la Alianza vigila el río.",
+            LogKind::Lore,
+        );
+    }
+
+    /// Whether the story's mark `id` has reached the campaign; marks it (true the first time).
+    pub fn story_mark(&mut self, id: &str) -> bool {
+        if self.story_marks.iter().any(|m| m == id) {
+            return false;
+        }
+        self.story_marks.push(id.to_owned());
+        true
+    }
+
+    /// Why the free people of `prov` cannot be woken with the spark now, if they cannot: it must be
+    /// theirs, touch the Queen's land, and she must have the spark.
+    pub fn awaken_blocked(&self, prov: &str) -> Option<&'static str> {
+        if self.owner(prov) != Faction::Libres {
+            return Some("Solo se despierta a un pueblo sin señor");
+        }
+        let touches = PROVINCES
+            .iter()
+            .any(|p| self.owner(p.id) == Faction::Reina && adjacent(p.id).contains(&prov));
+        if !touches {
+            return Some("Tiene que tocar tus tierras");
+        }
+        if self.armies.iter().any(|a| a.at == prov && a.faction != Faction::Reina && a.faction != Faction::Libres) {
+            return Some("Hay un ejército enemigo allí");
+        }
+        if self.purse(Faction::Reina).spark < AWAKEN_SPARK {
+            return Some("No queda chispa bastante");
+        }
+        None
+    }
+
+    /// The Queen wakes a free people with her spark: their land is hers and lit, without a battle;
+    /// their militia goes home.
+    pub fn awaken(&mut self, prov: &str) -> bool {
+        if self.awaken_blocked(prov).is_some() {
+            return false;
+        }
+        self.purse_mut(Faction::Reina).spark -= AWAKEN_SPARK;
+        self.armies.retain(|a| !(a.at == prov && a.faction == Faction::Libres));
+        self.set_owner(prov, Faction::Reina, true);
+        let name = province(prov).name;
+        self.note(
+            format!("La chispa de la Reina despierta a la gente de {name}: se unen a ella sin una sola batalla."),
+            LogKind::Spark,
+        );
+        true
     }
 
     pub fn note(&mut self, text: impl Into<String>, kind: LogKind) {
@@ -299,7 +377,7 @@ impl Campaign {
         self.prov(id).owner
     }
 
-    fn set_owner(&mut self, id: &str, f: Faction, lit: bool) {
+    pub(crate) fn set_owner(&mut self, id: &str, f: Faction, lit: bool) {
         let p = self.prov_mut(id);
         p.owner = f;
         p.lit = lit;
@@ -625,11 +703,92 @@ impl Campaign {
             a.at = to.to_owned();
             a.mp = if own != faction { 0 } else { a.mp - 1 };
         }
+        self.cross(army_id, &from, to);
         if own != faction {
             self.capture(to, faction);
             return MoveResult::Capture;
         }
         MoveResult::Move
+    }
+
+    /// What crossing from `from` into `to` costs the army: the ford and the boats take the rest of
+    /// the day, the mountain pass some men of every regiment.
+    fn cross(&mut self, army_id: &str, from: &str, to: &str) {
+        let Some((how, name)) = crate::data::crossing(from, to) else {
+            return;
+        };
+        let (line, kind) = {
+            let Some(a) = self.army_mut(army_id) else {
+                return;
+            };
+            match how {
+                Crossing::Vado | Crossing::Mar => {
+                    a.mp = 0;
+                    (format!("{} cruza por {name}: el día se va en ello.", a.name), LogKind::Info)
+                }
+                Crossing::Paso => {
+                    for u in &mut a.units {
+                        if unit(&u.ty).role != Role::Hero {
+                            u.men = ((u.men as f32 * 0.93).round() as u32).max(1);
+                        }
+                    }
+                    (format!("{} cruza {name}: el frío y la cuesta se llevan a algunos.", a.name), LogKind::Bad)
+                }
+                Crossing::Puente => return,
+            }
+        };
+        if self.army(army_id).is_some_and(|a| a.faction == Faction::Reina) {
+            self.note(line, kind);
+        }
+    }
+
+    /// Fits a campaign saved before the war map 2.0 to it: the purses of the four powers, and the
+    /// thirteen provinces of before moved by id to their regions (the new ones as the map has them).
+    pub fn migrate(&mut self) {
+        // version 2: the realm's gold is the Queen's own purse, at the game's scale (a quarter)
+        if self.version < 2 {
+            for (i, p) in self.purses.iter_mut().enumerate() {
+                if i != Faction::Reina.index() {
+                    p.gold /= 4;
+                }
+            }
+            self.version = 2;
+        }
+        while self.purses.len() < 4 {
+            let (gold, food, spark) = start_purse(Faction::ALL.get(self.purses.len()).copied().unwrap_or(Faction::Libres));
+            self.purses.push(Purse {
+                gold,
+                food,
+                spark,
+                wounded: 0,
+            });
+        }
+        if self.provinces.len() == PROVINCES.len() {
+            return;
+        }
+        const OLD: [&str; 13] = [
+            "castillo", "villa", "bosque", "cueva", "madriguera", "cienaga", "penascal", "nido", "puerta",
+            "marca", "trigales", "valdesanto", "capital",
+        ];
+        let old = std::mem::take(&mut self.provinces);
+        self.provinces = PROVINCES
+            .iter()
+            .map(|p| {
+                OLD.iter()
+                    .position(|&id| id == p.id)
+                    .and_then(|k| old.get(k).cloned())
+                    .unwrap_or(ProvinceState {
+                        owner: p.owner,
+                        lit: true,
+                    })
+            })
+            .collect();
+        // armies standing where no region is any more go home
+        for a in &mut self.armies {
+            if !PROVINCES.iter().any(|p| p.id == a.at) {
+                a.at = if a.faction == Faction::Reina { "castillo".into() } else { "capital".into() };
+            }
+        }
     }
 
     /// Who rises to defend `prov` when an enemy walks in and no army of its owner is there: a
@@ -641,6 +800,17 @@ impl Campaign {
             return p.garrison.iter().map(|t| new_unit(t, None)).collect();
         }
         let st = self.prov(prov);
+        if st.owner == Faction::Libres {
+            // the free people of the place, near full strength: it is theirs
+            let mut kinds: Vec<&str> = p.recruits(Faction::Libres).to_vec();
+            if kinds.is_empty() {
+                kinds = vec!["trasgos", "trasgos"];
+            }
+            return kinds
+                .into_iter()
+                .map(|t| new_unit(t, Some((unit(t).men as f32 * 0.8).round() as u32)))
+                .collect();
+        }
         if st.owner != Faction::Reina || !st.lit {
             return Vec::new();
         }
@@ -697,6 +867,7 @@ impl Campaign {
     pub fn march_turns(&self, army: &Army, route: &[&str]) -> Vec<u32> {
         let mut turn = 1;
         let mut mp = army.mp;
+        let mut prev: &str = &army.at;
         let mut out = Vec::with_capacity(route.len());
         for &p in route {
             if mp == 0 {
@@ -706,7 +877,12 @@ impl Campaign {
             out.push(turn);
             let quiet =
                 self.owner(p) == army.faction && self.enemies_at(p, army.faction).next().is_none();
-            mp = if quiet { mp - 1 } else { 0 };
+            let slow = matches!(
+                crate::data::crossing(prev, p),
+                Some((Crossing::Vado | Crossing::Mar, _))
+            );
+            mp = if quiet && !slow { mp - 1 } else { 0 };
+            prev = p;
         }
         out
     }
@@ -1156,7 +1332,7 @@ impl Campaign {
                 .map(|u| unit_power(unit(&u.ty), u.men))
                 .sum();
             if mine > def * 1.2 {
-                30.0 + province(p).gold / 20.0
+                30.0 + province(p).gold / 5.0
             } else {
                 -30.0
             }
@@ -1241,8 +1417,11 @@ impl Campaign {
         self.phase = Phase::Player;
         self.rng = None;
         // the people who rose to defend their place go back to it
-        self.armies
-            .retain(|a| !(a.garrison && a.faction == Faction::Reina && a.id.starts_with("m-")));
+        self.armies.retain(|a| {
+            !(a.garrison
+                && matches!(a.faction, Faction::Reina | Faction::Libres)
+                && a.id.starts_with("m-"))
+        });
         for faction in [Faction::Reina, Faction::Rebeldes, Faction::Alianza] {
             let inc = self.income(faction);
             self.purse_mut(faction).gold += inc.net_gold;
@@ -1390,7 +1569,7 @@ impl Campaign {
             }
             let ty = list[((self.rand() * list.len() as f32) as usize).min(list.len() - 1)];
             let cost = unit(ty).cost.gold;
-            if self.purse(faction).gold > cost + 200 {
+            if self.purse(faction).gold > cost + 50 {
                 self.purse_mut(faction).gold -= cost;
                 self.armies[k].units.push(new_unit(ty, None));
             }
@@ -1399,6 +1578,10 @@ impl Campaign {
 
     /// Provinces the Queen's people can see (hers and next to hers, and round her armies).
     pub fn visible(&self) -> Vec<bool> {
+        // (QA: the whole continent in sight)
+        if std::env::var_os("VELVET_WAR_NOFOG").is_some() {
+            return vec![true; PROVINCES.len()];
+        }
         let mut vis = vec![false; PROVINCES.len()];
         let mut see = |id: &str| vis[crate::data::province_index(id)] = true;
         for (k, p) in PROVINCES.iter().enumerate() {
@@ -1528,11 +1711,74 @@ mod tests {
         assert!(s.reachable(s.army(&q).unwrap()).contains(&"villa"));
         assert_eq!(s.move_army(&q, "villa"), MoveResult::Move);
         assert!(s.recruit("castillo", "orcos", Faction::Reina).is_some());
-        // the guard walks east into the Alliance's march: a battle against the fort
+        // the guard walks over the Trolls' bridge into the Alliance's bridgehead: a battle
         let g = "a-guardia";
         s.army_mut(g).unwrap().at = "puerta".into();
         s.army_mut(g).unwrap().mp = 2;
-        assert!(matches!(s.move_army(g, "marca"), MoveResult::Battle(_)));
+        assert!(matches!(s.move_army(g, "cabeza"), MoveResult::Battle(_)));
+    }
+
+    #[test]
+    fn the_free_peoples_defend_their_land_and_the_crossings_cost() {
+        let mut s = Campaign::new(7, false);
+        assert_eq!(s.owner("cienaga"), Faction::Libres);
+        // the marsh's lamias rise against whoever walks in
+        let g = "a-guardia";
+        s.army_mut(g).unwrap().at = "villa".into();
+        s.army_mut(g).unwrap().mp = 2;
+        match s.move_army(g, "cienaga") {
+            MoveResult::Battle(b) => {
+                let d = s.army(&b.defender).unwrap();
+                assert_eq!(d.faction, Faction::Libres);
+                assert!(d.units.iter().any(|u| u.ty == "lamias"));
+            }
+            other => panic!("no fight for the marsh: {other:?}"),
+        }
+        // wading the ford takes the day
+        let mut s = Campaign::new(7, false);
+        s.set_owner("vado", Faction::Reina, true);
+        s.set_owner("ribera", Faction::Reina, true);
+        s.army_mut(g).unwrap().at = "vado".into();
+        s.army_mut(g).unwrap().mp = 2;
+        assert_eq!(s.move_army(g, "ribera"), MoveResult::Move);
+        assert_eq!(s.army(g).unwrap().mp, 0);
+        // the mountain pass costs men
+        let mut s = Campaign::new(7, false);
+        s.set_owner("paso", Faction::Reina, true);
+        s.set_owner("minas", Faction::Reina, true);
+        s.army_mut(g).unwrap().at = "paso".into();
+        s.army_mut(g).unwrap().mp = 2;
+        let men = s.army(g).unwrap().men();
+        assert_eq!(s.move_army(g, "minas"), MoveResult::Move);
+        assert!(s.army(g).unwrap().men() < men);
+    }
+
+    #[test]
+    fn a_campaign_saved_before_the_map_2_moves_to_it() {
+        let s = Campaign::new(9, false);
+        let mut v = serde_json::to_value(&s).unwrap();
+        // as it was: three purses, the thirteen provinces in their old order
+        v["purses"].as_array_mut().unwrap().truncate(3);
+        let old = [
+            "castillo", "villa", "bosque", "cueva", "madriguera", "cienaga", "penascal", "nido",
+            "puerta", "marca", "trigales", "valdesanto", "capital",
+        ];
+        let provs: Vec<serde_json::Value> = old
+            .iter()
+            .map(|id| {
+                let owner = if *id == "cienaga" { "reina" } else { crate::data::province(id).owner.id() };
+                serde_json::json!({"owner": owner, "lit": true})
+            })
+            .collect();
+        v["provinces"] = serde_json::Value::Array(provs);
+        let mut back: Campaign = serde_json::from_value(v).unwrap();
+        back.migrate();
+        assert_eq!(back.purses.len(), 4);
+        assert_eq!(back.provinces.len(), PROVINCES.len());
+        // the marsh she held stays hers; the new lands are as the map has them
+        assert_eq!(back.owner("cienaga"), Faction::Reina);
+        assert_eq!(back.owner("claro"), Faction::Libres);
+        assert_eq!(back.owner("minas"), Faction::Alianza);
     }
 
     #[test]
