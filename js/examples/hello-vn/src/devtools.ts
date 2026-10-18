@@ -40,6 +40,8 @@ export function mountDevtools(target: DevtoolsTarget): Devtools {
     loop: target.loop,
     events: target.events,
     stage: target.stage,
+    // The place and the sea glass chips are at the top left, so the pinned numbers go to the top right.
+    hudCorner: "top-right",
   });
   tools.watch("lente", () => Number(target.story.vars.values[GLASS_VAR] ?? 0));
   tools.watch("final", () => target.story.endingNumber);
