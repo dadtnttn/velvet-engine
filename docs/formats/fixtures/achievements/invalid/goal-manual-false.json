@@ -1,0 +1,17 @@
+{
+  "format": "velvet-achievements",
+  "version": 1,
+  "kind": "definitions",
+  "counters": [],
+  "achievements": [
+    {
+      "id": "prologue",
+      "name": "ach.prologue.name",
+      "description": "ach.prologue.desc",
+      "icon": "ach.prologue",
+      "goal": {
+        "manual": false
+      }
+    }
+  ]
+}

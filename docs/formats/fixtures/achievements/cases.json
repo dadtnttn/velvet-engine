@@ -1,0 +1,725 @@
+{
+  "definitions": "achievements.json",
+  "normal": {
+    "counters": [
+      { "id": "kills", "fields": { "max": 100, "persist": true } },
+      { "id": "gold", "fields": { "max": null, "persist": true } },
+      { "id": "steps", "fields": { "max": null, "persist": false } }
+    ],
+    "achievements": [
+      {
+        "id": "prologue",
+        "fields": {
+          "hidden": false,
+          "hint": null,
+          "points": 5,
+          "group": "story",
+          "order": 1,
+          "progress_steps": [],
+          "goal": { "kind": "manual" }
+        }
+      },
+      {
+        "id": "butcher",
+        "fields": {
+          "hidden": true,
+          "hint": "ach.butcher.hint",
+          "group": "combat",
+          "goal": { "kind": "all", "of": ["first_blood", "veteran"] }
+        }
+      },
+      {
+        "id": "good_company",
+        "fields": {
+          "group": "economy",
+          "order": 2,
+          "goal": { "kind": "any", "of": ["prologue", "purse", "butcher"], "count": 2 }
+        }
+      },
+      {
+        "id": "purse",
+        "fields": {
+          "progress_steps": [0.5],
+          "goal": { "kind": "counter", "counter": "gold", "at_least": 500 }
+        }
+      },
+      {
+        "id": "marathon",
+        "fields": {
+          "group": "default",
+          "order": 0,
+          "hidden": false,
+          "hint": null,
+          "points": 15,
+          "goal": { "kind": "counter", "counter": "kills", "at_least": 100 }
+        }
+      }
+    ]
+  },
+  "invalid": [
+    { "file": "invalid/not-json.json", "code": "json" },
+    { "file": "invalid/wrong-format.json", "code": "format", "path": "format" },
+    { "file": "invalid/wrong-kind.json", "code": "format", "path": "kind" },
+    { "file": "invalid/wrong-version.json", "code": "version", "path": "version" },
+    { "file": "invalid/counters-not-array.json", "code": "structure", "path": "counters" },
+    { "file": "invalid/achievements-not-array.json", "code": "structure", "path": "achievements" },
+    { "file": "invalid/counter-bad-id.json", "code": "bad-id", "path": "counters[0].id" },
+    { "file": "invalid/counter-duplicate.json", "code": "duplicate", "path": "counters[1].id" },
+    { "file": "invalid/counter-persist-missing.json", "code": "structure", "path": "counters[0].persist" },
+    { "file": "invalid/counter-max-zero.json", "code": "value", "path": "counters[0].max" },
+    { "file": "invalid/counter-max-fraction.json", "code": "value", "path": "counters[0].max" },
+    { "file": "invalid/achievement-id-duplicate.json", "code": "duplicate", "path": "achievements[1].id" },
+    { "file": "invalid/achievement-bad-id.json", "code": "bad-id", "path": "achievements[0].id" },
+    { "file": "invalid/name-missing.json", "code": "structure", "path": "achievements[0].name" },
+    { "file": "invalid/key-too-long.json", "code": "value", "path": "achievements[0].name" },
+    { "file": "invalid/bad-icon.json", "code": "bad-id", "path": "achievements[0].icon" },
+    { "file": "invalid/hidden-not-boolean.json", "code": "structure", "path": "achievements[0].hidden" },
+    { "file": "invalid/hint-without-hidden.json", "code": "value", "path": "achievements[0].hint" },
+    { "file": "invalid/points-negative.json", "code": "value", "path": "achievements[0].points" },
+    { "file": "invalid/order-out-of-range.json", "code": "value", "path": "achievements[0].order" },
+    { "file": "invalid/group-bad-id.json", "code": "bad-id", "path": "achievements[0].group" },
+    { "file": "invalid/goal-missing.json", "code": "structure", "path": "achievements[0].goal" },
+    { "file": "invalid/goal-two-kinds.json", "code": "value", "path": "achievements[0].goal" },
+    { "file": "invalid/goal-manual-false.json", "code": "value", "path": "achievements[0].goal.manual" },
+    { "file": "invalid/unknown-counter.json", "code": "unknown-counter", "path": "achievements[0].goal.counter" },
+    { "file": "invalid/at-least-zero.json", "code": "value", "path": "achievements[0].goal.at_least" },
+    { "file": "invalid/at-least-above-max.json", "code": "value", "path": "achievements[0].goal.at_least" },
+    { "file": "invalid/all-unknown-achievement.json", "code": "unknown-achievement", "path": "achievements[1].goal.all[1]" },
+    { "file": "invalid/all-duplicate.json", "code": "duplicate", "path": "achievements[1].goal.all[1]" },
+    { "file": "invalid/all-empty.json", "code": "value", "path": "achievements[0].goal.all" },
+    { "file": "invalid/any-count-missing.json", "code": "structure", "path": "achievements[1].goal.count" },
+    { "file": "invalid/any-count-above-length.json", "code": "value", "path": "achievements[2].goal.count" },
+    { "file": "invalid/cycle.json", "code": "cycle", "path": "achievements[1].goal.any[0]" },
+    { "file": "invalid/self-reference.json", "code": "cycle", "path": "achievements[0].goal.all[0]" },
+    { "file": "invalid/progress-steps-not-increasing.json", "code": "value", "path": "achievements[0].progress_steps[1]" },
+    { "file": "invalid/progress-step-out-of-range.json", "code": "value", "path": "achievements[0].progress_steps[0]" },
+    { "file": "invalid/progress-steps-manual.json", "code": "value", "path": "achievements[0].progress_steps" },
+    { "file": "invalid/progress-steps-hidden.json", "code": "value", "path": "achievements[0].progress_steps" },
+    { "file": "invalid/progress-steps-not-array.json", "code": "structure", "path": "achievements[0].progress_steps" }
+  ],
+  "cases": [
+    {
+      "name": "counter goals unlock and cascade through all and any goals",
+      "steps": [
+        {
+          "do": "check",
+          "list": [
+            { "id": "prologue", "group": "story", "masked": false, "name": "ach.prologue.name", "hint": null, "progress": { "current": 0, "target": 1, "fraction": 0 } },
+            { "id": "secret_ending", "group": "story", "masked": true, "name": null, "hint": "ach.secret_ending.hint", "progress": null },
+            { "id": "lantern", "group": "story", "masked": false, "name": "ach.lantern.name", "hint": null, "progress": { "current": 0, "target": 3, "fraction": 0 } },
+            { "id": "first_blood", "group": "combat", "masked": false, "name": "ach.first_blood.name", "hint": null, "progress": { "current": 0, "target": 1, "fraction": 0 } },
+            { "id": "veteran", "group": "combat", "masked": false, "name": "ach.veteran.name", "hint": null, "progress": { "current": 0, "target": 40, "fraction": 0 } },
+            { "id": "butcher", "group": "combat", "masked": true, "name": null, "hint": "ach.butcher.hint", "progress": null },
+            { "id": "purse", "group": "economy", "masked": false, "name": "ach.purse.name", "hint": null, "progress": { "current": 0, "target": 500, "fraction": 0 } },
+            { "id": "good_company", "group": "economy", "masked": false, "name": "ach.good_company.name", "hint": null, "progress": { "current": 0, "target": 2, "fraction": 0 } },
+            { "id": "marathon", "group": "default", "masked": false, "name": "ach.marathon.name", "hint": null, "progress": { "current": 0, "target": 100, "fraction": 0 } }
+          ],
+          "points": 0,
+          "unlocked_count": 0,
+          "total_count": 9,
+          "total_points": 240
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "returns": 1,
+          "events": [{ "type": "unlocked", "id": "first_blood", "time": 1000 }, { "type": "changed" }]
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "by": 9,
+          "returns": 10,
+          "events": [{ "type": "progress", "id": "veteran", "step": 0.25 }, { "type": "changed" }]
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "by": 10,
+          "returns": 20,
+          "events": [{ "type": "progress", "id": "veteran", "step": 0.5 }, { "type": "changed" }]
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "by": 20,
+          "returns": 40,
+          "events": [
+            { "type": "unlocked", "id": "veteran", "time": 1000 },
+            { "type": "unlocked", "id": "butcher", "time": 1000 },
+            { "type": "changed" }
+          ]
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 40 },
+          "unlocked": { "first_blood": 1000, "veteran": 1000, "butcher": 1000 },
+          "points": 85,
+          "unlocked_count": 3,
+          "progress": {
+            "good_company": { "current": 1, "target": 2, "fraction": 0.5 },
+            "marathon": { "current": 40, "target": 100, "fraction": 0.4 }
+          }
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "by": 60,
+          "returns": 100,
+          "events": [{ "type": "unlocked", "id": "marathon", "time": 1000 }, { "type": "changed" }]
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "by": 5,
+          "returns": 100,
+          "events": []
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "by": -1,
+          "error": "argument"
+        },
+        {
+          "do": "increment",
+          "counter": "nope",
+          "error": "unknown-counter"
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 100, "gold": 0 },
+          "unlocked": { "first_blood": 1000, "veteran": 1000, "butcher": 1000, "marathon": 1000 },
+          "points": 100,
+          "unlocked_count": 4
+        }
+      ]
+    },
+    {
+      "name": "manual unlocks, an any goal, and the progress of gold",
+      "steps": [
+        {
+          "do": "unlock",
+          "id": "prologue",
+          "returns": true,
+          "events": [{ "type": "unlocked", "id": "prologue", "time": 1000 }, { "type": "changed" }]
+        },
+        {
+          "do": "unlock",
+          "id": "prologue",
+          "returns": false,
+          "events": []
+        },
+        {
+          "do": "unlock",
+          "id": "first_blood",
+          "error": "not-manual"
+        },
+        {
+          "do": "unlock",
+          "id": "first_blood",
+          "force": true,
+          "error": "dev-only"
+        },
+        {
+          "do": "unlock",
+          "id": "nope",
+          "error": "unknown-achievement"
+        },
+        {
+          "do": "increment",
+          "counter": "gold",
+          "by": 250,
+          "returns": 250,
+          "events": [{ "type": "progress", "id": "purse", "step": 0.5 }, { "type": "changed" }]
+        },
+        {
+          "do": "increment",
+          "counter": "gold",
+          "by": 250,
+          "returns": 500,
+          "events": [
+            { "type": "unlocked", "id": "purse", "time": 1000 },
+            { "type": "unlocked", "id": "good_company", "time": 1000 },
+            { "type": "changed" }
+          ]
+        },
+        {
+          "do": "check",
+          "points": 35,
+          "unlocked_count": 3,
+          "progress": {
+            "secret_ending": { "current": 0, "target": 1, "fraction": 0 },
+            "good_company": { "current": 2, "target": 2, "fraction": 1 }
+          }
+        },
+        {
+          "do": "tick",
+          "now": 2000
+        },
+        {
+          "do": "unlock",
+          "id": "secret_ending",
+          "returns": true,
+          "events": [{ "type": "unlocked", "id": "secret_ending", "time": 2000 }, { "type": "changed" }]
+        },
+        {
+          "do": "check",
+          "unlocked": { "prologue": 1000, "purse": 1000, "good_company": 1000, "secret_ending": 2000 },
+          "points": 135,
+          "unlocked_count": 4,
+          "list": [
+            { "id": "prologue", "masked": false, "name": "ach.prologue.name", "hint": null },
+            { "id": "secret_ending", "masked": false, "name": "ach.secret_ending.name", "hint": null },
+            { "id": "lantern", "masked": false, "name": "ach.lantern.name", "hint": null },
+            { "id": "first_blood", "masked": false, "name": "ach.first_blood.name", "hint": null },
+            { "id": "veteran", "masked": false, "name": "ach.veteran.name", "hint": null },
+            { "id": "butcher", "masked": true, "name": null, "hint": "ach.butcher.hint" },
+            { "id": "purse", "masked": false, "name": "ach.purse.name", "hint": null },
+            { "id": "good_company", "masked": false, "name": "ach.good_company.name", "hint": null },
+            { "id": "marathon", "masked": false, "name": "ach.marathon.name", "hint": null }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a jump reports each step, and a decrease keeps the unlocks",
+      "steps": [
+        {
+          "do": "increment",
+          "counter": "kills",
+          "by": 30,
+          "returns": 30,
+          "events": [
+            { "type": "unlocked", "id": "first_blood", "time": 1000 },
+            { "type": "progress", "id": "veteran", "step": 0.25 },
+            { "type": "progress", "id": "veteran", "step": 0.5 },
+            { "type": "progress", "id": "veteran", "step": 0.75 },
+            { "type": "changed" }
+          ]
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "by": 10,
+          "returns": 40,
+          "events": [
+            { "type": "unlocked", "id": "veteran", "time": 1000 },
+            { "type": "unlocked", "id": "butcher", "time": 1000 },
+            { "type": "changed" }
+          ]
+        },
+        {
+          "do": "set_counter",
+          "counter": "kills",
+          "value": 5,
+          "returns": 40,
+          "events": []
+        },
+        {
+          "do": "set_counter",
+          "counter": "kills",
+          "value": 5,
+          "allow_decrease": true,
+          "returns": 5,
+          "events": [{ "type": "changed" }]
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 5 },
+          "unlocked": { "first_blood": 1000, "veteran": 1000, "butcher": 1000 },
+          "points": 85,
+          "unlocked_count": 3
+        },
+        {
+          "do": "set_counter",
+          "counter": "kills",
+          "value": 200,
+          "returns": 100,
+          "events": [{ "type": "unlocked", "id": "marathon", "time": 1000 }, { "type": "changed" }]
+        },
+        {
+          "do": "set_counter",
+          "counter": "kills",
+          "value": -1,
+          "error": "argument"
+        },
+        {
+          "do": "set_counter",
+          "counter": "kills",
+          "value": 3.5,
+          "error": "argument"
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 100 },
+          "points": 100,
+          "unlocked_count": 4
+        }
+      ]
+    },
+    {
+      "name": "persisted counters survive a restart, session counters do not",
+      "steps": [
+        {
+          "do": "increment",
+          "counter": "gold",
+          "by": 120,
+          "returns": 120,
+          "events": [{ "type": "changed" }]
+        },
+        {
+          "do": "increment",
+          "counter": "steps",
+          "by": 2,
+          "returns": 2,
+          "events": [{ "type": "changed" }]
+        },
+        {
+          "do": "save",
+          "returns": true,
+          "events": []
+        },
+        {
+          "do": "check",
+          "writes": 1,
+          "stored": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "progress",
+            "counters": { "kills": 0, "gold": 120 },
+            "unlocked": {}
+          }
+        },
+        {
+          "do": "restart",
+          "status": "loaded",
+          "events": [{ "type": "changed" }]
+        },
+        {
+          "do": "check",
+          "writes": 1,
+          "counters": { "kills": 0, "gold": 120, "steps": 0 },
+          "unlocked": {}
+        }
+      ]
+    },
+    {
+      "name": "a save that the game never wrote still unlocks on load",
+      "steps": [
+        {
+          "do": "load",
+          "saved": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "progress",
+            "counters": { "kills": 40, "gold": 0 },
+            "unlocked": {}
+          },
+          "status": "loaded",
+          "events": [
+            { "type": "unlocked", "id": "first_blood", "time": 1000 },
+            { "type": "unlocked", "id": "veteran", "time": 1000 },
+            { "type": "unlocked", "id": "butcher", "time": 1000 },
+            { "type": "changed" }
+          ]
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 40, "gold": 0 },
+          "unlocked": { "first_blood": 1000, "veteran": 1000, "butcher": 1000 },
+          "points": 85,
+          "unlocked_count": 3
+        }
+      ]
+    },
+    {
+      "name": "a damaged save loads empty, and the game goes on",
+      "steps": [
+        {
+          "do": "load",
+          "saved": "not an object",
+          "status": "damaged",
+          "codes": ["structure"],
+          "events": []
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 0 },
+          "unlocked": {},
+          "writes": 0
+        },
+        {
+          "do": "increment",
+          "counter": "kills",
+          "returns": 1,
+          "events": [{ "type": "unlocked", "id": "first_blood", "time": 1000 }, { "type": "changed" }]
+        }
+      ]
+    },
+    {
+      "name": "a damaged save applies nothing, not even its valid fields",
+      "steps": [
+        {
+          "do": "load",
+          "saved": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "progress",
+            "counters": { "kills": -3, "gold": 50 },
+            "unlocked": { "first_blood": 900 }
+          },
+          "status": "damaged",
+          "codes": ["value"],
+          "events": []
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 0, "gold": 0 },
+          "unlocked": {},
+          "points": 0
+        }
+      ]
+    },
+    {
+      "name": "a save of another kind is damaged",
+      "steps": [
+        {
+          "do": "load",
+          "saved": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "definitions",
+            "counters": { "kills": 5 },
+            "unlocked": {}
+          },
+          "status": "damaged",
+          "codes": ["format"],
+          "events": []
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 0 }
+        }
+      ]
+    },
+    {
+      "name": "a newer save is refused, never guessed at",
+      "steps": [
+        {
+          "do": "load",
+          "saved": {
+            "format": "velvet-achievements",
+            "version": 2,
+            "kind": "progress",
+            "counters": { "kills": 5 },
+            "unlocked": {}
+          },
+          "status": "damaged",
+          "codes": ["version"],
+          "events": []
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 0 }
+        }
+      ]
+    },
+    {
+      "name": "an unlock time that is not a number damages the save",
+      "steps": [
+        {
+          "do": "load",
+          "saved": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "progress",
+            "counters": { "kills": 1 },
+            "unlocked": { "first_blood": "1000" }
+          },
+          "status": "damaged",
+          "codes": ["structure"],
+          "events": []
+        },
+        {
+          "do": "check",
+          "unlocked": {},
+          "counters": { "kills": 0 }
+        }
+      ]
+    },
+    {
+      "name": "a save without its counters is damaged",
+      "steps": [
+        {
+          "do": "load",
+          "saved": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "progress",
+            "unlocked": { "first_blood": 900 }
+          },
+          "status": "damaged",
+          "codes": ["structure"],
+          "events": []
+        },
+        {
+          "do": "check",
+          "unlocked": {}
+        }
+      ]
+    },
+    {
+      "name": "unknown ids in a save are dropped",
+      "steps": [
+        {
+          "do": "load",
+          "saved": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "progress",
+            "counters": { "kills": 3, "ghost": 9 },
+            "unlocked": { "ghost_ach": 500, "first_blood": 500 }
+          },
+          "status": "loaded",
+          "events": [{ "type": "changed" }]
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 3 },
+          "unlocked": { "first_blood": 500 },
+          "points": 10,
+          "unlocked_count": 1
+        }
+      ]
+    },
+    {
+      "name": "a burst of changes is one write",
+      "steps": [
+        {
+          "do": "increment",
+          "counter": "gold",
+          "returns": 1,
+          "events": [{ "type": "changed" }]
+        },
+        { "do": "wait", "ms": 200 },
+        { "do": "check", "writes": 0 },
+        {
+          "do": "increment",
+          "counter": "gold",
+          "returns": 2,
+          "events": [{ "type": "changed" }]
+        },
+        { "do": "wait", "ms": 200 },
+        { "do": "check", "writes": 0 },
+        {
+          "do": "increment",
+          "counter": "gold",
+          "returns": 3,
+          "events": [{ "type": "changed" }]
+        },
+        { "do": "wait", "ms": 249 },
+        { "do": "check", "writes": 0 },
+        { "do": "wait", "ms": 1 },
+        {
+          "do": "check",
+          "writes": 1,
+          "stored": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "progress",
+            "counters": { "kills": 0, "gold": 3 },
+            "unlocked": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "dev builds can force an unlock and reset everything",
+      "dev": true,
+      "steps": [
+        {
+          "do": "unlock",
+          "id": "first_blood",
+          "force": true,
+          "returns": true,
+          "events": [{ "type": "unlocked", "id": "first_blood", "time": 1000 }, { "type": "changed" }]
+        },
+        {
+          "do": "unlock",
+          "id": "lantern",
+          "error": "not-manual"
+        },
+        {
+          "do": "unlock",
+          "id": "secret_ending",
+          "returns": true,
+          "events": [{ "type": "unlocked", "id": "secret_ending", "time": 1000 }, { "type": "changed" }]
+        },
+        {
+          "do": "reset_all",
+          "events": [{ "type": "changed" }]
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 0 },
+          "unlocked": {},
+          "points": 0,
+          "writes": 0
+        },
+        { "do": "wait", "ms": 250 },
+        {
+          "do": "check",
+          "writes": 1,
+          "stored": {
+            "format": "velvet-achievements",
+            "version": 1,
+            "kind": "progress",
+            "counters": { "kills": 0, "gold": 0 },
+            "unlocked": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "outside dev builds, force and reset are refused",
+      "steps": [
+        {
+          "do": "unlock",
+          "id": "first_blood",
+          "force": true,
+          "error": "dev-only"
+        },
+        {
+          "do": "reset_all",
+          "error": "dev-only"
+        },
+        {
+          "do": "check",
+          "counters": { "kills": 0 },
+          "unlocked": {},
+          "writes": 0
+        }
+      ]
+    },
+    {
+      "name": "the list leaves out masked achievements when asked",
+      "steps": [
+        {
+          "do": "check",
+          "include_hidden": false,
+          "list": [
+            { "id": "prologue", "masked": false },
+            { "id": "lantern", "masked": false },
+            { "id": "first_blood", "masked": false },
+            { "id": "veteran", "masked": false },
+            { "id": "purse", "masked": false },
+            { "id": "good_company", "masked": false },
+            { "id": "marathon", "masked": false }
+          ],
+          "total_count": 9
+        }
+      ]
+    }
+  ]
+}

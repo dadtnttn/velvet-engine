@@ -1,0 +1,17 @@
+{
+  "name": "@velvet/achievements",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velvet JS achievements: a data format of achievements with counters and goals, unlocks, hidden ones, saved progress, and the events a game shows as notices.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@velvet/core": "workspace:*"
+  }
+}

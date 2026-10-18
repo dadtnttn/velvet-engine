@@ -1,0 +1,27 @@
+{
+  "format": "velvet-achievements",
+  "version": 1,
+  "kind": "definitions",
+  "counters": [
+    {
+      "id": "kills",
+      "persist": true
+    }
+  ],
+  "achievements": [
+    {
+      "id": "veteran",
+      "name": "ach.veteran.name",
+      "description": "ach.veteran.desc",
+      "icon": "ach.veteran",
+      "goal": {
+        "counter": "kills",
+        "at_least": 40
+      },
+      "progress_steps": [
+        0.5,
+        0.25
+      ]
+    }
+  ]
+}

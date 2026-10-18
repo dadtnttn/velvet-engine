@@ -1,0 +1,19 @@
+{
+  "format": "velvet-achievements",
+  "version": 1,
+  "kind": "definitions",
+  "counters": [],
+  "achievements": [
+    {
+      "id": "a",
+      "name": "ach.a.name",
+      "description": "ach.a.desc",
+      "icon": "ach.a",
+      "goal": {
+        "all": [
+          "a"
+        ]
+      }
+    }
+  ]
+}

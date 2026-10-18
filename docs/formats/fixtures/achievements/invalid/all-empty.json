@@ -1,0 +1,17 @@
+{
+  "format": "velvet-achievements",
+  "version": 1,
+  "kind": "definitions",
+  "counters": [],
+  "achievements": [
+    {
+      "id": "butcher",
+      "name": "ach.butcher.name",
+      "description": "ach.butcher.desc",
+      "icon": "ach.butcher",
+      "goal": {
+        "all": []
+      }
+    }
+  ]
+}

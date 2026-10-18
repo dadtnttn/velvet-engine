@@ -1,0 +1,17 @@
+{
+  "format": "velvet-achievements",
+  "version": 1,
+  "kind": "definitions",
+  "counters": [],
+  "achievements": [
+    {
+      "id": "first-blood",
+      "name": "ach.first-blood.name",
+      "description": "ach.first-blood.desc",
+      "icon": "ach.first-blood",
+      "goal": {
+        "manual": true
+      }
+    }
+  ]
+}

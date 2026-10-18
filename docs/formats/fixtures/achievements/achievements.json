@@ -1,0 +1,106 @@
+{
+  "format": "velvet-achievements",
+  "version": 1,
+  "kind": "definitions",
+  "counters": [
+    { "id": "kills", "max": 100, "persist": true },
+    { "id": "gold", "persist": true },
+    { "id": "steps", "persist": false }
+  ],
+  "achievements": [
+    {
+      "id": "prologue",
+      "name": "ach.prologue.name",
+      "description": "ach.prologue.desc",
+      "icon": "ach.prologue",
+      "group": "story",
+      "order": 1,
+      "points": 5,
+      "goal": { "manual": true }
+    },
+    {
+      "id": "first_blood",
+      "name": "ach.first_blood.name",
+      "description": "ach.first_blood.desc",
+      "icon": "ach.first_blood",
+      "group": "combat",
+      "order": 1,
+      "points": 10,
+      "goal": { "counter": "kills", "at_least": 1 }
+    },
+    {
+      "id": "veteran",
+      "name": "ach.veteran.name",
+      "description": "ach.veteran.desc",
+      "icon": "ach.veteran",
+      "group": "combat",
+      "order": 2,
+      "points": 25,
+      "progress_steps": [0.25, 0.5, 0.75],
+      "goal": { "counter": "kills", "at_least": 40 }
+    },
+    {
+      "id": "butcher",
+      "name": "ach.butcher.name",
+      "description": "ach.butcher.desc",
+      "icon": "ach.butcher",
+      "hidden": true,
+      "hint": "ach.butcher.hint",
+      "group": "combat",
+      "order": 3,
+      "points": 50,
+      "goal": { "all": ["first_blood", "veteran"] }
+    },
+    {
+      "id": "purse",
+      "name": "ach.purse.name",
+      "description": "ach.purse.desc",
+      "icon": "ach.purse",
+      "group": "economy",
+      "order": 1,
+      "points": 10,
+      "progress_steps": [0.5],
+      "goal": { "counter": "gold", "at_least": 500 }
+    },
+    {
+      "id": "good_company",
+      "name": "ach.good_company.name",
+      "description": "ach.good_company.desc",
+      "icon": "ach.good_company",
+      "group": "economy",
+      "order": 2,
+      "points": 20,
+      "goal": { "any": ["prologue", "purse", "butcher"], "count": 2 }
+    },
+    {
+      "id": "secret_ending",
+      "name": "ach.secret_ending.name",
+      "description": "ach.secret_ending.desc",
+      "icon": "ach.secret_ending",
+      "hidden": true,
+      "hint": "ach.secret_ending.hint",
+      "group": "story",
+      "order": 2,
+      "points": 100,
+      "goal": { "manual": true }
+    },
+    {
+      "id": "lantern",
+      "name": "ach.lantern.name",
+      "description": "ach.lantern.desc",
+      "icon": "ach.lantern",
+      "group": "story",
+      "order": 2,
+      "points": 5,
+      "goal": { "counter": "steps", "at_least": 3 }
+    },
+    {
+      "id": "marathon",
+      "name": "ach.marathon.name",
+      "description": "ach.marathon.desc",
+      "icon": "ach.marathon",
+      "points": 15,
+      "goal": { "counter": "kills", "at_least": 100 }
+    }
+  ]
+}
