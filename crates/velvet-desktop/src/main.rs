@@ -1,7 +1,8 @@
 //! The `velvet-desktop` program: runs a JavaScript game in a desktop window.
 //!
-//! Usage: `velvet-desktop <game-folder> [--dev <url>] [--devtools]`, or with no arguments the game
-//! in `game/` next to the program (a release folder). See the crate README.
+//! Usage: `velvet-desktop <game-folder> [--dev <url>] [--devtools] [--size WxH]
+//! [--capture <file.png> [--after <ms>]]`, or with no arguments the game in `game/` next to the
+//! program (a release folder). See the crate README.
 //!
 //! A release build on Windows is a window program, without a console: its messages go to
 //! `velvet-desktop.log` in the game's data folder (see `velvet_desktop::log`).
@@ -55,6 +56,8 @@ fn run() -> anyhow::Result<()> {
                 manifest,
                 dev_url: options.dev_url,
                 devtools: options.devtools,
+                size: options.size,
+                capture: options.capture,
             })?;
             Ok(())
         }

@@ -11,7 +11,7 @@ rust-version.workspace = true
 # crate is only the manifest, the file server, the storage and the bridge's logic: what the CLI
 # needs to package a game, with no webview to build.
 default = ["window"]
-window = ["dep:tao", "dep:wry", "dep:windows-sys"]
+window = ["dep:tao", "dep:wry", "dep:windows-sys", "dep:webview2-com", "dep:windows"]
 
 [[bin]]
 name = "velvet-desktop"
@@ -27,13 +27,27 @@ http = "1.5"
 tao = { version = "0.37", optional = true }
 wry = { version = "0.57", optional = true }
 
-# The job object that ends the webview's processes with the host (see src/job.rs).
+# The job object that ends the webview's processes with the host (see src/job.rs), and the shell
+# call that opens a link (see src/shell.rs).
+#
+# The WebView2 binding (the version wry uses, as in Cargo.lock) and the `windows` crate that gives
+# the stream the picture is written into (see src/webview_capture.rs). Both are the locked versions,
+# so no crate is downloaded.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", optional = true, features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
+    # ShellExecuteW (src/shell.rs) and the show-command type in its signature.
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+webview2-com = { version = "=0.39.1", optional = true }
+windows = { version = "=0.62.2", optional = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
 ] }
 
 [dev-dependencies]

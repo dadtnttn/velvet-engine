@@ -5416,6 +5416,8 @@ dependencies = [
  "tao",
  "tempfile",
  "thiserror 2.0.18",
+ "webview2-com",
+ "windows 0.62.2",
  "windows-sys 0.61.2",
  "wry",
 ]

@@ -2,8 +2,17 @@
 // window.velvet.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SLOT_PATTERN, getBridge, isValidSlot, isVelvetBridge } from "./bridge";
-import { createFakeBridge } from "./test-support";
+import {
+  BridgeUnavailableError,
+  SLOT_PATTERN,
+  captureScreenshot,
+  getBridge,
+  isValidSlot,
+  isVelvetBridge,
+  openExternalLink,
+  type VelvetBridge,
+} from "./bridge";
+import { createFakeBridge, errorOf } from "./test-support";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -72,5 +81,102 @@ describe("getBridge", () => {
   it("ignores a global that only partly looks like the bridge", () => {
     vi.stubGlobal("velvet", { platform: "desktop" });
     expect(getBridge()).toBeNull();
+  });
+});
+
+/**
+ * A bridge with the newer calls: a shell that records the links it is given, and a picture of
+ * the page. The fake host keeps the rest of the contract.
+ */
+function bridgeWithNewCalls(): { bridge: VelvetBridge; opened: string[] } {
+  const { bridge } = createFakeBridge();
+  const opened: string[] = [];
+  const extended: VelvetBridge = {
+    ...bridge,
+    shell: {
+      openExternal: async (url) => {
+        opened.push(url);
+      },
+    },
+    window: {
+      ...bridge.window,
+      capture: async () => "data:image/png;base64,iVBORw0KGgo=",
+    },
+  };
+  return { bridge: extended, opened };
+}
+
+describe("the newer bridge calls are optional", () => {
+  it("a host from before them still counts as a bridge", () => {
+    const { bridge } = createFakeBridge();
+    expect(bridge.shell).toBeUndefined();
+    expect(bridge.window.capture).toBeUndefined();
+    expect(isVelvetBridge(bridge)).toBe(true);
+  });
+
+  it("a host with them counts too", () => {
+    const { bridge } = bridgeWithNewCalls();
+    expect(isVelvetBridge(bridge)).toBe(true);
+  });
+});
+
+describe("openExternalLink", () => {
+  it("rejects with no-desktop outside Velvet Desktop", async () => {
+    vi.stubGlobal("velvet", undefined);
+    const error = await errorOf(() => openExternalLink("https://example.com"));
+    expect(error).toBeInstanceOf(BridgeUnavailableError);
+    expect(error).toMatchObject({ code: "no-desktop" });
+    expect(String((error as Error).message)).toContain("browser");
+  });
+
+  it("rejects with unsupported when the host predates the shell", async () => {
+    const { bridge } = createFakeBridge();
+    vi.stubGlobal("velvet", bridge);
+    const error = await errorOf(() => openExternalLink("https://example.com"));
+    expect(error).toBeInstanceOf(BridgeUnavailableError);
+    expect(error).toMatchObject({ code: "unsupported" });
+  });
+
+  it("hands the link to the host", async () => {
+    const { bridge, opened } = bridgeWithNewCalls();
+    vi.stubGlobal("velvet", bridge);
+    await openExternalLink("mailto:someone@example.com");
+    expect(opened).toEqual(["mailto:someone@example.com"]);
+  });
+
+  it("passes on the host's own refusal, with its code", async () => {
+    const { bridge } = bridgeWithNewCalls();
+    const refusal = Object.assign(new Error("the link is refused"), { code: "invalid_url" });
+    vi.stubGlobal("velvet", {
+      ...bridge,
+      shell: {
+        openExternal: async () => {
+          throw refusal;
+        },
+      },
+    });
+    const error = await errorOf(() => openExternalLink("javascript:alert(1)"));
+    expect(error).toBe(refusal);
+  });
+});
+
+describe("captureScreenshot", () => {
+  it("rejects with no-desktop outside Velvet Desktop", async () => {
+    vi.stubGlobal("velvet", undefined);
+    const error = await errorOf(() => captureScreenshot());
+    expect(error).toMatchObject({ code: "no-desktop" });
+  });
+
+  it("rejects with unsupported when the host predates the picture", async () => {
+    const { bridge } = createFakeBridge();
+    vi.stubGlobal("velvet", bridge);
+    const error = await errorOf(() => captureScreenshot());
+    expect(error).toMatchObject({ code: "unsupported" });
+  });
+
+  it("returns the PNG data URL from the host", async () => {
+    const { bridge } = bridgeWithNewCalls();
+    vi.stubGlobal("velvet", bridge);
+    await expect(captureScreenshot()).resolves.toBe("data:image/png;base64,iVBORw0KGgo=");
   });
 });

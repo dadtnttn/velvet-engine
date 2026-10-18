@@ -4,7 +4,8 @@
 //! [`parse_request`] reads it, [`handle`] runs the command, and [`reply_script`] builds the
 //! JavaScript that settles the game's promise. Window commands do not touch the window: they
 //! queue a [`WindowAction`] in the [`BridgeCtx`], and the event loop performs it after the reply.
-//! Nothing here needs a window, so the logic is tested with temporary folders.
+//! A picture of the page ([`CAPTURE_CMD`]) finishes later, so the event loop answers it with
+//! [`capture_reply`]. Nothing here needs a window, so the logic is tested with temporary folders.
 
 use std::path::{Path, PathBuf};
 
@@ -12,11 +13,17 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use thiserror::Error;
 
+use crate::capture::{self, CaptureError};
 use crate::manifest::Manifest;
+use crate::shell::{self, ShellError};
 use crate::storage::{self, StorageError};
 
 /// The bridge script. It has one `__CONFIG__` placeholder for the game settings JSON.
 const INIT_TEMPLATE: &str = include_str!("bridge_init.js");
+
+/// The command that takes a picture of the page (`window.capture()`). The event loop answers it
+/// once WebView2 has the picture, so [`handle`] refuses to answer it.
+pub const CAPTURE_CMD: &str = "window.capture";
 
 /// The log levels that `window.velvet.log` accepts.
 const LOG_LEVELS: [&str; 4] = ["debug", "info", "warn", "error"];
@@ -119,6 +126,15 @@ pub enum BridgeError {
     /// A save or settings operation failed.
     #[error(transparent)]
     Storage(#[from] StorageError),
+    /// The link was not opened (see [`crate::shell`]).
+    #[error(transparent)]
+    Shell(#[from] ShellError),
+    /// The picture was not taken, or is too large to give (see [`crate::capture`]).
+    #[error(transparent)]
+    Capture(#[from] CaptureError),
+    /// A command reached the wrong place. This is a fault in the host, not in the game's call.
+    #[error("internal error: {0}")]
+    Internal(&'static str),
 }
 
 impl BridgeError {
@@ -130,6 +146,9 @@ impl BridgeError {
             Self::BadArgs(_) => "bad_args",
             Self::NoDataFolder => "no_data_folder",
             Self::Storage(error) => error.code(),
+            Self::Shell(error) => error.code(),
+            Self::Capture(error) => error.code(),
+            Self::Internal(_) => "internal",
         }
     }
 }
@@ -180,6 +199,13 @@ pub fn handle(cmd: &str, args: &Value, ctx: &mut BridgeCtx) -> Result<Value, Bri
             ctx.actions.push(WindowAction::Close);
             Ok(Value::Null)
         }
+        "shell.openExternal" => {
+            shell::open_external(str_arg(args, "url")?)?;
+            Ok(Value::Null)
+        }
+        CAPTURE_CMD => Err(BridgeError::Internal(
+            "window.capture is answered by the event loop, not by handle",
+        )),
         "log" => {
             let level = str_arg(args, "level")?;
             if !LOG_LEVELS.contains(&level) {
@@ -223,6 +249,13 @@ pub fn reply_script(id: u64, result: &Result<Value, BridgeError>) -> String {
     };
     let literal = Value::String(payload).to_string();
     format!("if (window.__velvetReply) {{ window.__velvetReply({id}, {ok}, {literal}); }}")
+}
+
+/// The value that settles `window.capture()`: the picture as a PNG data URL, or the error that
+/// stopped it (a picture over the size limit is `too_large`).
+pub fn capture_reply(picture: Result<Vec<u8>, CaptureError>) -> Result<Value, BridgeError> {
+    let png = picture?;
+    Ok(Value::String(capture::png_data_url(&png)?))
 }
 
 /// The script that defines `window.velvet`. The host injects it into every page before the
@@ -500,5 +533,55 @@ mod tests {
             .expect("prefix and marker");
         assert_eq!(kept.len(), MAX_LOG_BYTES);
         assert!(kept.chars().all(|character| character == '\u{e9}'));
+    }
+
+    /// A PNG header for a 2 by 2 picture, padded with zeros to `total` bytes.
+    fn png_bytes(total: usize) -> Vec<u8> {
+        let mut bytes = vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+        bytes.extend_from_slice(&13u32.to_be_bytes());
+        bytes.extend_from_slice(b"IHDR");
+        bytes.extend_from_slice(&2u32.to_be_bytes());
+        bytes.extend_from_slice(&2u32.to_be_bytes());
+        bytes.resize(total.max(bytes.len()), 0);
+        bytes
+    }
+
+    #[test]
+    fn a_link_that_is_not_web_or_mail_is_refused_before_anything_opens() {
+        let mut ctx = BridgeCtx::new("demo", None);
+        for url in ["javascript:alert(1)", "file:///C:/x", "https://a b.example"] {
+            let error =
+                call(&mut ctx, "shell.openExternal", json!({ "url": url })).expect_err("refused");
+            assert_eq!(error.code(), "invalid_url", "{url}");
+        }
+        let missing = call(&mut ctx, "shell.openExternal", Value::Null).expect_err("no url");
+        assert_eq!(missing.code(), "bad_args");
+    }
+
+    #[test]
+    fn the_capture_command_is_answered_by_the_event_loop_not_by_handle() {
+        let mut ctx = BridgeCtx::new("demo", None);
+        let error = call(&mut ctx, CAPTURE_CMD, Value::Null).expect_err("handled elsewhere");
+        assert_eq!(error.code(), "internal");
+    }
+
+    #[test]
+    fn a_picture_becomes_a_png_data_url_reply() {
+        let value = capture_reply(Ok(png_bytes(24))).expect("a PNG is returned");
+        let text = value.as_str().expect("the reply is a string");
+        assert!(text.starts_with("data:image/png;base64,iVBORw0KGgo"));
+    }
+
+    #[test]
+    fn a_picture_that_failed_or_is_too_large_settles_with_its_code() {
+        let timeout = capture_reply(Err(CaptureError::TimedOut(30))).expect_err("timed out");
+        assert_eq!(timeout.code(), "timeout");
+        let unsupported = capture_reply(Err(CaptureError::Unsupported)).expect_err("unsupported");
+        assert_eq!(unsupported.code(), "unsupported");
+        let too_big = capture_reply(Ok(png_bytes(capture::MAX_CAPTURE_BYTES + 1)))
+            .expect_err("over the limit");
+        assert_eq!(too_big.code(), "too_large");
+        let script = reply_script(4, &Err(BridgeError::from(CaptureError::Unsupported)));
+        assert!(script.contains(r#"\"code\":\"unsupported\""#));
     }
 }

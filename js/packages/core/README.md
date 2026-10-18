@@ -217,6 +217,21 @@ All three are opt-in: without a tap, an emit does no extra work for it.
 
 `chooseSettingsBackend({ prefix, explicit?, bridge?, storage? })` is the choice that the settings store and the bindings store share: the backend passed in, else the bridge's settings, else localStorage under the prefix, else memory. The bindings file keeps its own keys (`input.bindings` in the bridge, `velvet-input:input.bindings` in localStorage), so saved bindings still load.
 
+## Desktop calls: pictures and links
+
+Two helpers ask Velvet Desktop for things that a browser page cannot do itself. Outside Velvet Desktop they reject with a `BridgeUnavailableError`, whose `code` is `"no-desktop"`. A host from before the call rejects with `"unsupported"`.
+
+    import { captureScreenshot, openExternalLink } from "@velvet/core";
+
+    const png = await captureScreenshot();           // "data:image/png;base64,..." of the game's page
+    photo.src = png;
+    await openExternalLink("https://example.com");   // https, http or mailto only
+
+- `captureScreenshot()` gives a PNG of the page, for photo modes and bug reports. A picture over 8 MiB is refused with the code `too_large`.
+- `openExternalLink(url)` opens the link in the player's browser or mail program. The host refuses other schemes, spaces, quotes and user information before the host name, with the code `invalid_url`.
+
+A failure inside the host keeps the host's own `code`. Both calls work on Windows for now; elsewhere the host answers `unsupported`.
+
 ## Tests
 
 From `js/`, run `pnpm test` and `pnpm typecheck`. The tests use a fake frame scheduler, synthetic input events and

@@ -70,8 +70,15 @@ export type {
   BindingsStoreOptions,
   ParseBindingsOptions,
 } from "./input-store";
-export { SLOT_PATTERN, getBridge, isValidSlot } from "./bridge";
-export type { VelvetBridge } from "./bridge";
+export {
+  BridgeUnavailableError,
+  SLOT_PATTERN,
+  captureScreenshot,
+  getBridge,
+  isValidSlot,
+  openExternalLink,
+} from "./bridge";
+export type { BridgeUnavailableCode, VelvetBridge } from "./bridge";
 export { createSaveStore } from "./saves";
 export type { LoadedSave, SaveBackendKind, SaveStore, SaveStoreOptions } from "./saves";
 export { SaveError } from "./save-error";

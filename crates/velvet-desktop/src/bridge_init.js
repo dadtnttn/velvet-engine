@@ -65,7 +65,13 @@
     window: Object.freeze({
       setFullscreen: function (on) { return call("window.setFullscreen", { on: on }); },
       isFullscreen: function () { return call("window.isFullscreen"); },
-      close: function () { return call("window.close"); }
+      close: function () { return call("window.close"); },
+      // Resolves to a PNG data URL of the page.
+      capture: function () { return call("window.capture"); }
+    }),
+    shell: Object.freeze({
+      // Opens an https, http or mailto link in the player's own programs.
+      openExternal: function (url) { return call("shell.openExternal", { url: url }); }
     }),
     log: function (level, message) {
       // No reply id: the host writes the line and does not answer.

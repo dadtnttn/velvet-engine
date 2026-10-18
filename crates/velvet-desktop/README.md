@@ -2,7 +2,8 @@
 
 Velvet Desktop runs a JavaScript game as a desktop program. A native window hosts the system
 webview (WebView2 on Windows). The game's folder is served through a custom protocol, and a small
-native bridge gives the game `window.velvet`: saves, settings, window control and logs.
+native bridge gives the game `window.velvet`: saves, settings, window control, logs, pictures of
+the page and links to the player's own programs.
 
 ## Run the example
 
@@ -55,14 +56,35 @@ A leading byte order mark is accepted, since Windows editors often write one.
 ## Command line
 
 ```text
-velvet-desktop <game-folder> [--dev <url>] [--devtools]
+velvet-desktop <game-folder> [--dev <url>] [--devtools] [--size <W>x<H>]
+                             [--capture <file.png> [--after <ms>]]
 velvet-desktop                      (no arguments: runs the packaged game, see below)
 ```
 
 - `--dev <url>` loads a dev server, for example `http://localhost:5173`, instead of the folder's
   files. The manifest is still read from the folder, and the bridge is available on that page too.
 - `--devtools` opens the web inspector. Debug builds always have it.
+- `--size <W>x<H>` sets the window's client size in device pixels, for example `1600x900`, and
+  replaces the manifest's size. Each side is from 64 to 7680. Such a window is never full screen.
+  On a screen scaled to 150%, the picture can be one pixel wider than `W`, because WebView2 rounds
+  the page to whole logical pixels. The log line gives the picture's real size.
+- `--capture <file.png>` takes a picture of the page into that PNG file and then exits. The run
+  waits for the page to finish loading, then for `--after`. It exits 0 when the file is written,
+  and 1 with a message (in the terminal and in the log file) when it is not. Missing folders above
+  the file are created. A release folder is captured with its `game` folder, for example
+  `hello-game.exe --capture shot.png game`.
+- `--after <ms>` is the wait after the page loads, before the picture: from 0 to 600000, default
+  2000. It needs `--capture`.
 - The window does not bind Escape. The game decides what it does.
+
+Pictures and the links below work on Windows for now. Elsewhere they fail with the code
+`unsupported`.
+
+For QA, a screenshot of a game folder at a fixed size:
+
+```sh
+velvet-desktop --capture shot.png --after 3000 --size 1600x900 <game dir>
+```
 
 ## Release folders
 
@@ -96,16 +118,30 @@ interface VelvetBridge {
   game: { id: string; title: string; version: string };
   saves: { list(): Promise<string[]>; read(slot: string): Promise<string | null>; write(slot: string, text: string): Promise<void>; remove(slot: string): Promise<void> };
   settings: { get(key: string): Promise<unknown>; set(key: string, value: unknown): Promise<void> };
-  window: { setFullscreen(on: boolean): Promise<void>; isFullscreen(): Promise<boolean>; close(): Promise<void> };
+  window: {
+    setFullscreen(on: boolean): Promise<void>; isFullscreen(): Promise<boolean>; close(): Promise<void>;
+    capture?(): Promise<string>;  // a PNG data URL of the page; a host from before it lacks it
+  };
+  shell?: { openExternal(url: string): Promise<void> };  // a host from before it lacks it
   log(level: "debug" | "info" | "warn" | "error", message: string): void;
 }
 ```
 
 - A failed call rejects with an `Error` whose `code` is one of `invalid_name`, `too_large`,
-  `corrupt_settings`, `io`, `no_data_folder`, `bad_args`, `unknown_command` or `bad_message`.
+  `corrupt_settings`, `io`, `no_data_folder`, `bad_args`, `unknown_command`, `bad_message`,
+  `invalid_url`, `open_failed`, `unsupported`, `capture_failed`, `timeout` or `internal`.
 - `saves.read` of an empty slot and `settings.get` of a missing key resolve to `null`.
 - `saves.remove` of an empty slot is not an error.
 - `window.close()` ends the program.
+- `window.capture()` resolves to a PNG of the page as a data URL, `data:image/png;base64,...`. A
+  picture over 8 MiB of PNG is refused with `too_large`. A picture that does not come back within
+  30 seconds is refused with `timeout`. A failure in WebView2 is `capture_failed`.
+- `shell.openExternal(url)` opens the link in the player's own browser or mail program. Only
+  `https:`, `http:` and `mailto:` addresses are opened. The host refuses anything else with
+  `invalid_url`: an address over 2048 bytes, a space, a control character, a non-ASCII character,
+  a quote, `<`, `>`, `\`, `^`, a backtick, `{`, `|` or `}`, an address with no host name, and one
+  with user information before the host (`user@host`). Nothing is opened for a refused address.
+  When the system refuses the call, the code is `open_failed`.
 - `log` writes `[game-id] level: message` to the terminal. Messages over 8 KiB are cut.
 - Navigation to other sites and pop-up windows are refused, so no outside page gets the bridge.
 
@@ -153,8 +189,11 @@ cargo clippy -p velvet-desktop --all-targets -- -D warnings
 ```
 
 The unit tests cover the manifest, the file server, the storage, the bridge commands, the command
-line and the packaged-game lookup. The window and the webview need a desktop, so they are checked
-by running the example. The symbolic-link test runs on Unix only.
+line (including the `--size`, `--capture` and `--after` limits), the packaged-game lookup, the
+picture checks (PNG size, the data URL and its size limit) and the link rules. No test opens a
+link: refused addresses are the only ones the tests pass to the link call. The window and the
+webview need a desktop, so they are checked by running the example, or a `--capture` run. The
+symbolic-link test runs on Unix only.
 
 ## Known limits
 
@@ -164,3 +203,6 @@ by running the example. The symbolic-link test runs on Unix only.
   Each finished page load is noted there too (`page loaded: <url>`).
 - The webview's profile (cache, local storage) is kept in `<data>/webview`, not next to the
   program.
+- Pictures (`--capture`, `window.capture()`) and `shell.openExternal` work on Windows only, for now.
+  The checks (the link rules, the PNG size and the size limit) are plain code and run everywhere.
+  Only the calls into the system are Windows-only, and elsewhere they answer `unsupported`.

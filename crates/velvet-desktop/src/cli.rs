@@ -1,9 +1,10 @@
 //! Command-line arguments of the `velvet-desktop` binary.
 //!
-//! Usage: `velvet-desktop <game-folder> [--dev <url>] [--devtools]`. With no arguments, the program
-//! runs the game in `game/` next to its own executable, when that folder has a manifest (see
-//! [`packaged_game`]). The parser takes the arguments without the program name and the program's
-//! folder, so it can be tested without a process.
+//! Usage: `velvet-desktop <game-folder> [--dev <url>] [--devtools] [--size WxH]
+//! [--capture <file.png> [--after <ms>]]`. With no arguments, the program runs the game in `game/`
+//! next to its own executable, when that folder has a manifest (see [`packaged_game`]). The parser
+//! takes the arguments without the program name and the program's folder, so it can be tested
+//! without a process.
 
 use std::path::{Path, PathBuf};
 
@@ -15,14 +16,30 @@ use crate::origin::origin_of;
 /// The folder next to the program that holds a packaged game.
 pub const PACKAGED_GAME_DIR: &str = "game";
 
+/// The wait after the page loads, before a `--capture` picture, when `--after` is not given.
+pub const DEFAULT_AFTER_MS: u64 = 2000;
+
+/// The longest `--after` wait, in milliseconds (ten minutes).
+pub const MAX_AFTER_MS: u64 = 600_000;
+
+/// The smallest side that `--size` takes, in device pixels.
+pub const MIN_SIZE_SIDE: u32 = 64;
+
+/// The largest side that `--size` takes, in device pixels (8K).
+pub const MAX_SIZE_SIDE: u32 = 7680;
+
 /// The text that `--help` prints.
 pub const USAGE: &str = "\
-Usage: velvet-desktop <game-folder> [--dev <url>] [--devtools]
+Usage: velvet-desktop <game-folder> [--dev <url>] [--devtools] [--size <W>x<H>]
+[--capture <file.png> [--after <ms>]]
 
-  <game-folder>   folder with velvet-game.json and the game files
-  --dev <url>     load a dev server (for example http://localhost:5173) instead of the files
-  --devtools      open the web inspector (debug builds always have it)
-  -h, --help      show this help
+  <game-folder>        folder with velvet-game.json and the game files
+  --dev <url>          load a dev server (for example http://localhost:5173) instead of the files
+  --devtools           open the web inspector (debug builds always have it)
+  --size <W>x<H>       window size in device pixels, for example 1600x900 (never full screen)
+  --capture <file.png> save a picture of the page to this PNG file, then exit
+  --after <ms>         wait this long after the page loads, before the picture (default 2000)
+  -h, --help           show this help
 
 With no arguments, runs the game in game/ next to this program, if it has a velvet-game.json.";
 
@@ -44,6 +61,45 @@ pub struct RunOptions {
     pub dev_url: Option<String>,
     /// Whether `--devtools` was given.
     pub devtools: bool,
+    /// The window size, when `--size` was given.
+    pub size: Option<WindowSize>,
+    /// The picture to take, when `--capture` was given. The run then ends after the picture.
+    pub capture: Option<CaptureOptions>,
+}
+
+/// A window size from `--size`, in device pixels. Each side is from [`MIN_SIZE_SIDE`] to
+/// [`MAX_SIZE_SIDE`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WindowSize {
+    /// The width, in device pixels.
+    pub width: u32,
+    /// The height, in device pixels.
+    pub height: u32,
+}
+
+impl WindowSize {
+    /// Reads `WIDTHxHEIGHT`, with `x` or `X` between the two sides. Each side must be in range.
+    pub fn parse(text: &str) -> Result<Self, CliError> {
+        let refused = || CliError::BadSize(text.to_string());
+        let (width, height) = text.split_once(['x', 'X']).ok_or_else(refused)?;
+        let width: u32 = width.parse().map_err(|_| refused())?;
+        let height: u32 = height.parse().map_err(|_| refused())?;
+        let in_range = |side: u32| (MIN_SIZE_SIDE..=MAX_SIZE_SIDE).contains(&side);
+        if in_range(width) && in_range(height) {
+            Ok(Self { width, height })
+        } else {
+            Err(refused())
+        }
+    }
+}
+
+/// What `--capture` asks for: the PNG file to write, and the wait before the picture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureOptions {
+    /// The file to write. Its name ends in `.png`.
+    pub path: PathBuf,
+    /// The wait after the page has loaded, in milliseconds.
+    pub after_ms: u64,
 }
 
 /// A problem with the command line.
@@ -67,6 +123,27 @@ pub enum CliError {
     /// The dev address is not an http or https address.
     #[error("`{0}` is not an http:// or https:// address")]
     BadDevUrl(String),
+    /// An option that needs a value was given without one. The name is the option.
+    #[error("`{0}` needs a value, see --help")]
+    MissingValue(&'static str),
+    /// An option that may be given only once was given again. The name is the option.
+    #[error("`{0}` was given more than once")]
+    RepeatedOption(&'static str),
+    /// The picture file name does not end in `.png`.
+    #[error("the picture file `{0}` must end in .png")]
+    NotPng(String),
+    /// The `--after` value is not a whole number of milliseconds in range.
+    #[error("`{0}` is not a wait: use whole milliseconds, from 0 to 600000 (ten minutes)")]
+    BadAfter(String),
+    /// `--after` was given without `--capture`, so there is nothing to wait for.
+    #[error("`--after` only works together with `--capture`")]
+    AfterWithoutCapture,
+    /// The `--size` value is not WIDTHxHEIGHT with both sides in range.
+    #[error(
+        "`{0}` is not a size: use WIDTHxHEIGHT, for example 1600x900, with each side from 64 to \
+         7680 pixels"
+    )]
+    BadSize(String),
 }
 
 /// Reads the command-line arguments, without the program name.
@@ -86,6 +163,8 @@ where
                 game_dir,
                 dev_url: None,
                 devtools: false,
+                size: None,
+                capture: None,
             }),
             None => Command::Help,
         });
@@ -95,6 +174,9 @@ where
     let mut game_dir: Option<PathBuf> = None;
     let mut dev_url: Option<String> = None;
     let mut devtools = false;
+    let mut size: Option<WindowSize> = None;
+    let mut capture_path: Option<String> = None;
+    let mut after_ms: Option<u64> = None;
 
     while let Some(arg) = args.next() {
         if arg == "-h" || arg == "--help" {
@@ -108,6 +190,12 @@ where
         } else if let Some(url) = arg.strip_prefix("--dev=") {
             let url = url.to_string();
             set_dev_url(&mut dev_url, url)?;
+        } else if let Some(value) = option_value(&arg, "--size", &mut args) {
+            set_once(&mut size, WindowSize::parse(&value?)?, "--size")?;
+        } else if let Some(value) = option_value(&arg, "--capture", &mut args) {
+            set_once(&mut capture_path, value?, "--capture")?;
+        } else if let Some(value) = option_value(&arg, "--after", &mut args) {
+            set_once(&mut after_ms, parse_after(&value?)?, "--after")?;
         } else if arg.starts_with('-') {
             return Err(CliError::UnknownOption(arg));
         } else if game_dir.is_some() {
@@ -118,10 +206,25 @@ where
     }
 
     let game_dir = game_dir.ok_or(CliError::MissingFolder)?;
+    let capture = match (capture_path, after_ms) {
+        (Some(path), after) => {
+            if !has_png_extension(&path) {
+                return Err(CliError::NotPng(path));
+            }
+            Some(CaptureOptions {
+                path: PathBuf::from(path),
+                after_ms: after.unwrap_or(DEFAULT_AFTER_MS),
+            })
+        }
+        (None, Some(_)) => return Err(CliError::AfterWithoutCapture),
+        (None, None) => None,
+    };
     Ok(Command::Run(RunOptions {
         game_dir,
         dev_url,
         devtools,
+        size,
+        capture,
     }))
 }
 
@@ -132,6 +235,44 @@ where
 pub fn packaged_game(exe_dir: &Path) -> Option<PathBuf> {
     let game_dir = exe_dir.join(PACKAGED_GAME_DIR);
     game_dir.join(MANIFEST_FILE).is_file().then_some(game_dir)
+}
+
+/// Reads the value of an option that is written `--name value` or `--name=value`. Returns `None`
+/// when `arg` is another option, and an error when the value is missing.
+fn option_value(
+    arg: &str,
+    name: &'static str,
+    rest: &mut impl Iterator<Item = String>,
+) -> Option<Result<String, CliError>> {
+    if arg == name {
+        return Some(rest.next().ok_or(CliError::MissingValue(name)));
+    }
+    let inline = arg.strip_prefix(name)?.strip_prefix('=')?;
+    Some(Ok(inline.to_string()))
+}
+
+/// Stores the value of an option that may be given once. A second value is an error.
+fn set_once<T>(slot: &mut Option<T>, value: T, name: &'static str) -> Result<(), CliError> {
+    if slot.is_some() {
+        return Err(CliError::RepeatedOption(name));
+    }
+    *slot = Some(value);
+    Ok(())
+}
+
+/// Reads an `--after` wait: whole milliseconds, from 0 to [`MAX_AFTER_MS`].
+fn parse_after(text: &str) -> Result<u64, CliError> {
+    text.parse::<u64>()
+        .ok()
+        .filter(|ms| *ms <= MAX_AFTER_MS)
+        .ok_or_else(|| CliError::BadAfter(text.to_string()))
+}
+
+/// Whether a file name ends in `.png`, in any letter case.
+fn has_png_extension(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
 }
 
 fn set_dev_url(slot: &mut Option<String>, url: String) -> Result<(), CliError> {
@@ -159,6 +300,8 @@ mod tests {
             game_dir,
             dev_url: None,
             devtools: false,
+            size: None,
+            capture: None,
         }
     }
 
@@ -261,7 +404,15 @@ mod tests {
 
     #[test]
     fn the_usage_text_lists_every_option() {
-        for option in ["<game-folder>", "--dev <url>", "--devtools", "--help"] {
+        for option in [
+            "<game-folder>",
+            "--dev <url>",
+            "--devtools",
+            "--size <W>x<H>",
+            "--capture <file.png>",
+            "--after <ms>",
+            "--help",
+        ] {
             assert!(USAGE.contains(option), "usage lists {option}");
         }
     }
@@ -307,5 +458,167 @@ mod tests {
             packaged_game(program.path()),
             Some(program.path().join(PACKAGED_GAME_DIR))
         );
+    }
+
+    #[test]
+    fn a_capture_takes_a_png_file_and_the_default_wait() {
+        let expected = RunOptions {
+            capture: Some(CaptureOptions {
+                path: PathBuf::from("shot.png"),
+                after_ms: DEFAULT_AFTER_MS,
+            }),
+            ..run("game")
+        };
+        assert_eq!(
+            parse(["game", "--capture", "shot.png"], None),
+            Ok(Command::Run(expected))
+        );
+        assert_eq!(DEFAULT_AFTER_MS, 2000);
+    }
+
+    #[test]
+    fn capture_and_size_take_both_forms_in_any_order() {
+        let expected = RunOptions {
+            capture: Some(CaptureOptions {
+                path: PathBuf::from("out/shot.PNG"),
+                after_ms: 3000,
+            }),
+            size: Some(WindowSize {
+                width: 1600,
+                height: 900,
+            }),
+            ..run("game")
+        };
+        assert_eq!(
+            parse(
+                [
+                    "--capture=out/shot.PNG",
+                    "--size=1600x900",
+                    "game",
+                    "--after",
+                    "3000",
+                ],
+                None,
+            ),
+            Ok(Command::Run(expected))
+        );
+    }
+
+    #[test]
+    fn the_size_option_also_applies_to_a_normal_run() {
+        let expected = RunOptions {
+            size: Some(WindowSize {
+                width: 1280,
+                height: 720,
+            }),
+            ..run("game")
+        };
+        assert_eq!(
+            parse(["game", "--size", "1280x720"], None),
+            Ok(Command::Run(expected))
+        );
+    }
+
+    #[test]
+    fn a_capture_file_must_end_in_png() {
+        for path in ["shot.jpg", "shot", "shot.png.txt", ".png"] {
+            assert_eq!(
+                parse(["game", "--capture", path], None),
+                Err(CliError::NotPng(path.into())),
+                "`{path}` should be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn after_needs_a_capture_and_a_whole_number_of_milliseconds() {
+        assert_eq!(
+            parse(["game", "--after", "500"], None),
+            Err(CliError::AfterWithoutCapture)
+        );
+        for value in ["-1", "1.5", "abc", "600001", ""] {
+            assert_eq!(
+                parse(["game", "--capture", "a.png", "--after", value], None),
+                Err(CliError::BadAfter(value.into())),
+                "`{value}` should be refused"
+            );
+        }
+        assert!(matches!(
+            parse(["game", "--capture", "a.png", "--after", "600000"], None),
+            Ok(Command::Run(_))
+        ));
+    }
+
+    #[test]
+    fn capture_options_need_values_and_may_appear_once() {
+        assert_eq!(
+            parse(["game", "--size"], None),
+            Err(CliError::MissingValue("--size"))
+        );
+        assert_eq!(
+            parse(["game", "--capture"], None),
+            Err(CliError::MissingValue("--capture"))
+        );
+        assert_eq!(
+            parse(["game", "--after"], None),
+            Err(CliError::MissingValue("--after"))
+        );
+        assert_eq!(
+            parse(["game", "--capture", "a.png", "--capture", "b.png"], None),
+            Err(CliError::RepeatedOption("--capture"))
+        );
+        assert_eq!(
+            parse(["game", "--size", "800x600", "--size=900x700"], None),
+            Err(CliError::RepeatedOption("--size"))
+        );
+        assert_eq!(
+            parse(
+                ["game", "--capture", "a.png", "--after", "1", "--after=2"],
+                None
+            ),
+            Err(CliError::RepeatedOption("--after"))
+        );
+    }
+
+    #[test]
+    fn a_capture_needs_a_game_folder_too() {
+        assert_eq!(
+            parse(["--capture", "shot.png"], None),
+            Err(CliError::MissingFolder)
+        );
+    }
+
+    #[test]
+    fn window_sizes_are_read_with_either_case_of_x() {
+        let size = |width, height| WindowSize { width, height };
+        assert_eq!(WindowSize::parse("1600x900"), Ok(size(1600, 900)));
+        assert_eq!(WindowSize::parse("1600X900"), Ok(size(1600, 900)));
+        assert_eq!(WindowSize::parse("64x64"), Ok(size(64, 64)));
+        assert_eq!(WindowSize::parse("7680x4320"), Ok(size(7680, 4320)));
+    }
+
+    #[test]
+    fn window_sizes_outside_the_limits_are_refused() {
+        for text in [
+            "63x900",
+            "1600x7681",
+            "0x0",
+            "100000x100",
+            "1600",
+            "1600x",
+            "x900",
+            "axb",
+            "1600x900x1",
+            "",
+            " 1600x900",
+            "1600 x 900",
+            "-1600x900",
+        ] {
+            assert_eq!(
+                WindowSize::parse(text),
+                Err(CliError::BadSize(text.into())),
+                "`{text}` should be refused"
+            );
+        }
     }
 }
