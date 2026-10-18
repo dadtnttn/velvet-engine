@@ -1,0 +1,12 @@
+{
+  "format": "velvet-save",
+  "version": 1,
+  "game": "test-game",
+  "rate": 60,
+  "frames": 0,
+  "seeds": {},
+  "save": null,
+  "checkEvery": 60,
+  "checkpoints": [],
+  "inputs": []
+}

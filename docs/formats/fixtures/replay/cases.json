@@ -1,0 +1,20 @@
+[
+  { "file": "valid/empty.json", "valid": true },
+  { "file": "valid/session.json", "valid": true },
+  { "file": "valid/with-save.json", "valid": true },
+  { "file": "invalid/not-an-object.json", "valid": false, "error": "replay must be a JSON object" },
+  { "file": "invalid/wrong-format.json", "valid": false, "error": "format must be \"velvet-replay\"" },
+  { "file": "invalid/newer-version.json", "valid": false, "error": "version must be 1" },
+  { "file": "invalid/rate-zero.json", "valid": false, "error": "rate must be above 0" },
+  { "file": "invalid/frames-fraction.json", "valid": false, "error": "frames must be a whole number" },
+  { "file": "invalid/bad-seed.json", "valid": false, "error": "seeds.coins must be a safe whole number" },
+  { "file": "invalid/save-without-data.json", "valid": false, "error": "save.data is required" },
+  { "file": "invalid/checkpoint-off-grid.json", "valid": false, "error": "checkpoints[0].frame must be a multiple of checkEvery" },
+  { "file": "invalid/inputs-out-of-order.json", "valid": false, "error": "inputs[1].frame must not be below 5" },
+  { "file": "invalid/input-after-end.json", "valid": false, "error": "inputs[0].frame must be at most 120" },
+  { "file": "invalid/unknown-input-type.json", "valid": false, "error": "inputs[0].type must be key, button, pointer, wheel, pad or blur" },
+  { "file": "invalid/key-code-with-space.json", "valid": false, "error": "inputs[0].code must be 1 to 32 letters or digits" },
+  { "file": "invalid/skipped-false.json", "valid": false, "error": "inputs[0].skipped must be true" },
+  { "file": "invalid/pad-value-above-one.json", "valid": false, "error": "inputs[0].buttons[0].value must be at most 1" },
+  { "file": "invalid/wheel-delta-mode.json", "valid": false, "error": "inputs[0].deltaMode must be at most 2" }
+]

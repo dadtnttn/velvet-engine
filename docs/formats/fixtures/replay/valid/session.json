@@ -1,0 +1,27 @@
+{
+  "format": "velvet-replay",
+  "version": 1,
+  "game": "test-game",
+  "gameVersion": "0.1.0",
+  "rate": 60,
+  "frames": 120,
+  "seeds": {
+    "board": "18446744073709551615",
+    "coins": 7
+  },
+  "save": null,
+  "checkEvery": 60,
+  "checkpoints": [
+    { "frame": 60, "hash": "aaaaaaaaaaaaaaaa" },
+    { "frame": 120, "hash": "bbbbbbbbbbbbbbbb" }
+  ],
+  "inputs": [
+    { "frame": 0, "type": "pad", "pad": 0, "connected": true, "id": "Pad", "buttons": [{ "pressed": false, "value": 0 }], "axes": [0, 0] },
+    { "frame": 3, "type": "key", "code": "Space", "down": true },
+    { "frame": 3, "type": "button", "button": "left", "down": true, "x": 10, "y": 20, "skipped": true },
+    { "frame": 4, "type": "pointer", "x": 12.5, "y": 20 },
+    { "frame": 4, "type": "wheel", "deltaX": 0, "deltaY": -120, "deltaMode": 0 },
+    { "frame": 90, "type": "pad", "pad": 0, "connected": false },
+    { "frame": 120, "type": "blur" }
+  ]
+}

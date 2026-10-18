@@ -1,0 +1,14 @@
+{
+  "format": "velvet-replay",
+  "version": 1,
+  "game": "test-game",
+  "rate": 60,
+  "frames": 120,
+  "seeds": {},
+  "save": null,
+  "checkEvery": 60,
+  "checkpoints": [],
+  "inputs": [
+    { "frame": 1, "type": "key", "code": "Space Bar", "down": true }
+  ]
+}

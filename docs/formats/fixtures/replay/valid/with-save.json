@@ -1,0 +1,28 @@
+{
+  "format": "velvet-replay",
+  "version": 1,
+  "game": "test-game",
+  "rate": 30,
+  "frames": 90,
+  "seeds": {
+    "coins": 42
+  },
+  "save": {
+    "format": "velvet-save",
+    "version": 2,
+    "game": "test-game",
+    "savedAt": "2026-10-18T10:00:00.000Z",
+    "data": { "coins": 150, "day": 3 }
+  },
+  "checkEvery": 30,
+  "checkpoints": [
+    { "frame": 30, "hash": "0123456789abcdef" },
+    { "frame": 60, "hash": "fedcba9876543210" },
+    { "frame": 90, "hash": "0000000000000001" }
+  ],
+  "inputs": [
+    { "frame": 10, "type": "key", "code": "KeyW", "down": true },
+    { "frame": 12, "type": "key", "code": "KeyW", "down": false },
+    { "frame": 15, "type": "pointer", "x": 960, "y": 540 }
+  ]
+}

@@ -87,6 +87,12 @@ importers:
 
   packages/i18n: {}
 
+  packages/testing:
+    dependencies:
+      '@velvet/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/tools:
     dependencies:
       '@velvet/artprep':
