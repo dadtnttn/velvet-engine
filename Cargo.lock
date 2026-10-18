@@ -6089,6 +6089,7 @@ dependencies = [
  "serde",
  "serde_json",
  "velvet-guion",
+ "velvet-stacks",
  "wasm-bindgen",
 ]
 

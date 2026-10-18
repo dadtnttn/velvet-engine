@@ -1,0 +1,17 @@
+{
+  "name": "@velvet/cards",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Velvet JS cards: cards on a board, stacks, recipes and timed jobs from velvet-stacks through WebAssembly.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@velvet/wasm": "workspace:*"
+  }
+}
