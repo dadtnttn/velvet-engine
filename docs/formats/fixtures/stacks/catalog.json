@@ -1,0 +1,235 @@
+{
+  "format": "velvet-stacks",
+  "version": 1,
+  "kind": "catalog",
+  "cards": [
+    {
+      "id": "worker",
+      "name": "card.worker",
+      "kind": "character",
+      "tags": ["gather"],
+      "stack": { "accepts": [], "max": 3 },
+      "value": 0
+    },
+    {
+      "id": "forest",
+      "name": "card.forest",
+      "kind": "zone",
+      "tags": ["place", "forest"],
+      "stack": { "accepts": [{ "kind": "character" }], "max": 2 },
+      "value": 0
+    },
+    {
+      "id": "quarry",
+      "name": "card.quarry",
+      "kind": "zone",
+      "tags": ["place", "stone"],
+      "stack": { "accepts": [{ "kind": "character" }], "max": 2 },
+      "value": 0
+    },
+    {
+      "id": "berry_bush",
+      "name": "card.berry_bush",
+      "kind": "zone",
+      "tags": ["place", "food"],
+      "stack": { "accepts": [{ "kind": "character" }], "max": 2 },
+      "value": 0
+    },
+    {
+      "id": "garden",
+      "name": "card.garden",
+      "kind": "zone",
+      "tags": ["place", "food"],
+      "stack": { "accepts": [{ "kind": "character" }], "max": 2 },
+      "value": 0
+    },
+    {
+      "id": "sawmill",
+      "name": "card.sawmill",
+      "kind": "building",
+      "tags": ["workshop"],
+      "stack": { "accepts": [{ "kind": "character" }], "max": 2 },
+      "value": 0
+    },
+    {
+      "id": "market",
+      "name": "card.market",
+      "kind": "building",
+      "tags": ["trade"],
+      "stack": { "accepts": [], "max": 3 },
+      "value": 0
+    },
+    {
+      "id": "house",
+      "name": "card.house",
+      "kind": "building",
+      "tags": ["shelter"],
+      "stack": { "accepts": [], "max": 1 },
+      "value": 0
+    },
+    {
+      "id": "wood",
+      "name": "card.wood",
+      "kind": "resource",
+      "tags": ["material", "wood"],
+      "value": 1
+    },
+    {
+      "id": "stone",
+      "name": "card.stone",
+      "kind": "resource",
+      "tags": ["material", "stone"],
+      "value": 1
+    },
+    {
+      "id": "plank",
+      "name": "card.plank",
+      "kind": "resource",
+      "tags": ["material", "wood"],
+      "value": 2
+    },
+    {
+      "id": "berries",
+      "name": "card.berries",
+      "kind": "resource",
+      "tags": ["food"],
+      "value": 1
+    },
+    {
+      "id": "jam",
+      "name": "card.jam",
+      "kind": "resource",
+      "tags": ["food"],
+      "value": 4
+    },
+    {
+      "id": "coin",
+      "name": "card.coin",
+      "kind": "currency",
+      "tags": ["money"],
+      "value": 1
+    }
+  ],
+  "recipes": [
+    {
+      "id": "gather_wood",
+      "ingredients": [
+        { "select": { "tag": "gather" }, "count": 1, "consume": false },
+        { "select": { "id": "forest" }, "count": 1, "consume": false }
+      ],
+      "seconds": 2.0,
+      "outputs": [{ "card": "wood", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "gather_stone",
+      "ingredients": [
+        { "select": { "tag": "gather" }, "count": 1, "consume": false },
+        { "select": { "id": "quarry" }, "count": 1, "consume": false }
+      ],
+      "seconds": 2.5,
+      "outputs": [{ "card": "stone", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "gather_berries",
+      "ingredients": [
+        { "select": { "tag": "gather" }, "count": 1, "consume": false },
+        { "select": { "id": "berry_bush" }, "count": 1, "consume": false }
+      ],
+      "seconds": 2.0,
+      "outputs": [{ "card": "berries", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "gather_berries_bonus",
+      "ingredients": [
+        { "select": { "tag": "gather" }, "count": 1, "consume": false },
+        { "select": { "id": "berry_bush" }, "count": 1, "consume": false }
+      ],
+      "seconds": 2.0,
+      "outputs": [{ "card": "berries", "count": 2, "chance": 1.0 }],
+      "priority": 1
+    },
+    {
+      "id": "tend_garden",
+      "ingredients": [
+        { "select": { "tag": "gather" }, "count": 1, "consume": false },
+        { "select": { "id": "garden" }, "count": 1, "consume": false }
+      ],
+      "seconds": 3.0,
+      "outputs": [{ "card": "berries", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "build_house",
+      "ingredients": [
+        { "select": { "id": "wood" }, "count": 2, "consume": true },
+        { "select": { "id": "stone" }, "count": 1, "consume": true }
+      ],
+      "seconds": 4.0,
+      "outputs": [{ "card": "house", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "build_sawmill",
+      "ingredients": [
+        { "select": { "tag": "wood" }, "count": 2, "consume": true },
+        { "select": { "id": "stone" }, "count": 1, "consume": true }
+      ],
+      "seconds": 4.0,
+      "outputs": [{ "card": "sawmill", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "saw_planks",
+      "ingredients": [
+        { "select": { "tag": "gather" }, "count": 1, "consume": false },
+        { "select": { "id": "sawmill" }, "count": 1, "consume": false },
+        { "select": { "id": "wood" }, "count": 1, "consume": true }
+      ],
+      "seconds": 3.0,
+      "outputs": [{ "card": "plank", "count": 2, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "sell_berries",
+      "ingredients": [
+        { "select": { "id": "market" }, "count": 1, "consume": false },
+        { "select": { "id": "berries" }, "count": 2, "consume": true }
+      ],
+      "seconds": 1.0,
+      "outputs": [{ "card": "coin", "count": 1, "chance": 0.5 }],
+      "priority": 0
+    },
+    {
+      "id": "make_jam",
+      "ingredients": [
+        { "select": { "id": "berries" }, "count": 3, "consume": true }
+      ],
+      "seconds": 5.0,
+      "outputs": [{ "card": "jam", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "build_market",
+      "ingredients": [
+        { "select": { "id": "plank" }, "count": 2, "consume": true },
+        { "select": { "id": "coin" }, "count": 3, "consume": true }
+      ],
+      "seconds": 6.0,
+      "outputs": [{ "card": "market", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    },
+    {
+      "id": "build_garden",
+      "ingredients": [
+        { "select": { "id": "plank" }, "count": 1, "consume": true },
+        { "select": { "id": "berries" }, "count": 2, "consume": true }
+      ],
+      "seconds": 3.0,
+      "outputs": [{ "card": "garden", "count": 1, "chance": 1.0 }],
+      "priority": 0
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+[package]
+name = "velvet-stacks"
+description = "Cards on a board: stacks, recipes and timed jobs (a tool crate; shared with Velvet JS through WebAssembly)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version = "1.99"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+indexmap = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

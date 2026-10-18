@@ -1,0 +1,47 @@
+{
+  "format": "velvet-stacks",
+  "version": 1,
+  "kind": "case",
+  "name": "a worker at a berry bush runs the bonus recipe, which has the higher priority",
+  "seed": "1",
+  "steps": [
+    {
+      "op": "spawn", "def": "berry_bush", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 1, "def": "berry_bush", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 1, "cards": [1] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "worker", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 2, "def": "worker", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 2, "cards": [2] }
+      ]
+    },
+    {
+      "op": "drop", "card": 2, "onto": 1,
+      "events": [
+        { "event": "stack_changed", "stack": 2, "cards": [] },
+        { "event": "stack_changed", "stack": 1, "cards": [1, 2] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_berries_bonus" }
+      ]
+    },
+    {
+      "op": "tick", "dt": 2.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "gather_berries_bonus" },
+        { "event": "card_spawned", "card": 3, "def": "berries", "x": 1.5, "y": 0.0 },
+        { "event": "stack_changed", "stack": 3, "cards": [3] },
+        { "event": "card_spawned", "card": 4, "def": "berries", "x": 3.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 4, "cards": [4] },
+        { "event": "job_started", "stack": 1, "recipe": "gather_berries_bonus" }
+      ]
+    },
+    { "op": "check", "running": { "1": "gather_berries_bonus" }, "progress": { "1": 0.0 } }
+  ],
+  "expect": {
+    "cards": { "berry_bush": 1, "worker": 1, "berries": 2 },
+    "stacks": [[1, 2], [3], [4]]
+  }
+}

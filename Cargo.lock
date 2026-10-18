@@ -4796,6 +4796,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-stacks"
+version = "0.3.0"
+dependencies = [
+ "indexmap",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "velvet-story"
 version = "0.3.0"
 dependencies = [

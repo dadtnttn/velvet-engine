@@ -1,0 +1,51 @@
+{
+  "format": "velvet-stacks",
+  "version": 1,
+  "kind": "case",
+  "name": "a forest refuses wood, a house holds one card, a card cannot land on its own stack; a wood may land on a wood",
+  "seed": "1",
+  "steps": [
+    {
+      "op": "spawn", "def": "forest", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 1, "def": "forest", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 1, "cards": [1] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "wood", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 2, "def": "wood", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 2, "cards": [2] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "house", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 3, "def": "house", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 3, "cards": [3] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "wood", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 4, "def": "wood", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 4, "cards": [4] }
+      ]
+    },
+    { "op": "drop", "card": 2, "onto": 1, "error": "DropRefused", "events": [] },
+    { "op": "drop", "card": 4, "onto": 3, "error": "StackFull", "events": [] },
+    { "op": "drop", "card": 2, "onto": 2, "error": "SameStack", "events": [] },
+    {
+      "op": "drop", "card": 4, "onto": 2,
+      "events": [
+        { "event": "stack_changed", "stack": 4, "cards": [] },
+        { "event": "stack_changed", "stack": 2, "cards": [2, 4] }
+      ]
+    }
+  ],
+  "expect": {
+    "cards": { "forest": 1, "wood": 2, "house": 1 },
+    "stacks": [[1], [2, 4], [3]]
+  }
+}

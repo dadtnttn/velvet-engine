@@ -1,0 +1,61 @@
+{
+  "format": "velvet-stacks",
+  "version": 1,
+  "kind": "case",
+  "name": "a plank counts as wood for a tag selector, so a plank, a wood and a stone build a sawmill",
+  "seed": "1",
+  "steps": [
+    {
+      "op": "spawn", "def": "plank", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 1, "def": "plank", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 1, "cards": [1] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "wood", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 2, "def": "wood", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 2, "cards": [2] }
+      ]
+    },
+    {
+      "op": "spawn", "def": "stone", "at": [0.0, 0.0],
+      "events": [
+        { "event": "card_spawned", "card": 3, "def": "stone", "x": 0.0, "y": 0.0 },
+        { "event": "stack_changed", "stack": 3, "cards": [3] }
+      ]
+    },
+    {
+      "op": "drop", "card": 2, "onto": 1,
+      "events": [
+        { "event": "stack_changed", "stack": 2, "cards": [] },
+        { "event": "stack_changed", "stack": 1, "cards": [1, 2] }
+      ]
+    },
+    {
+      "op": "drop", "card": 3, "onto": 2,
+      "events": [
+        { "event": "stack_changed", "stack": 3, "cards": [] },
+        { "event": "stack_changed", "stack": 1, "cards": [1, 2, 3] },
+        { "event": "job_started", "stack": 1, "recipe": "build_sawmill" }
+      ]
+    },
+    {
+      "op": "tick", "dt": 4.0,
+      "events": [
+        { "event": "job_finished", "stack": 1, "recipe": "build_sawmill" },
+        { "event": "card_consumed", "card": 1, "def": "plank" },
+        { "event": "card_consumed", "card": 2, "def": "wood" },
+        { "event": "card_consumed", "card": 3, "def": "stone" },
+        { "event": "stack_changed", "stack": 1, "cards": [] },
+        { "event": "card_spawned", "card": 4, "def": "sawmill", "x": 1.5, "y": 0.0 },
+        { "event": "stack_changed", "stack": 4, "cards": [4] }
+      ]
+    }
+  ],
+  "expect": {
+    "cards": { "sawmill": 1 },
+    "stacks": [[4]]
+  }
+}

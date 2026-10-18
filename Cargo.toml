@@ -78,6 +78,7 @@ members = [
     "crates/velvet-nav",
     "crates/velvet-guion",
     "crates/velvet-qa",
+    "crates/velvet-stacks",
     "crates/velvet-scene3d",
     "demos/fx-forge",
     "demos/third-person",
@@ -156,6 +157,7 @@ velvet-scene3d = { path = "crates/velvet-scene3d" }
 velvet-nav = { path = "crates/velvet-nav" }
 velvet-guion = { path = "crates/velvet-guion" }
 velvet-qa = { path = "crates/velvet-qa" }
+velvet-stacks = { path = "crates/velvet-stacks" }
 
 # External — foundation
 serde = { version = "1", features = ["derive"] }
