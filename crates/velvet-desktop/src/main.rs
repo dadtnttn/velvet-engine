@@ -1,12 +1,14 @@
 //! The `velvet-desktop` program: runs a JavaScript game in a desktop window.
 //!
-//! Usage: `velvet-desktop <game-folder> [--dev <url>] [--devtools]`. See the crate README.
+//! Usage: `velvet-desktop <game-folder> [--dev <url>] [--devtools]`, or with no arguments the game
+//! in `game/` next to the program (a release folder). See the crate README.
 //!
 //! A release build on Windows is a window program, without a console: its messages go to
 //! `velvet-desktop.log` in the game's data folder (see `velvet_desktop::log`).
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+use std::path::Path;
 use std::process::ExitCode;
 
 use anyhow::anyhow;
@@ -35,7 +37,12 @@ fn run() -> anyhow::Result<()> {
         })
         .collect::<anyhow::Result<Vec<String>>>()?;
 
-    match cli::parse(args)? {
+    // A release keeps its game in `game/` next to the program, which is what a bare start runs.
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+
+    match cli::parse(args, exe_dir.as_deref())? {
         Command::Help => {
             println!("{}", cli::USAGE);
             Ok(())

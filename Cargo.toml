@@ -160,7 +160,7 @@ velvet-nav = { path = "crates/velvet-nav" }
 velvet-guion = { path = "crates/velvet-guion" }
 velvet-qa = { path = "crates/velvet-qa" }
 velvet-stacks = { path = "crates/velvet-stacks" }
-velvet-desktop = { path = "crates/velvet-desktop" }
+velvet-desktop = { path = "crates/velvet-desktop", default-features = false }
 
 # External — foundation
 serde = { version = "1", features = ["derive"] }

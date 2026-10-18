@@ -7,6 +7,7 @@ mod doctor;
 mod document_cmd;
 mod export_cmd;
 mod image_cmd;
+mod js_build_cmd;
 mod launch_cmd;
 mod loc_cmd;
 mod menu_cmd;
@@ -38,6 +39,7 @@ use doctor::cmd_doctor;
 use document_cmd::{cmd_document_patch, cmd_document_regions};
 use export_cmd::cmd_export;
 use image_cmd::{cmd_image_convert, cmd_image_info};
+use js_build_cmd::{cmd_build, JsBuildArgs, Runtime};
 use loc_cmd::{
     cmd_loc_convert, cmd_loc_extract, cmd_loc_extract_story, cmd_loc_langs, cmd_loc_validate,
     cmd_loc_validate_story,
@@ -66,7 +68,7 @@ use vlz_cmd::{
 use vs3_cmd::{
     cmd_vs3_check, cmd_vs3_conform, cmd_vs3_fmt, cmd_vs3_lock, cmd_vs3_natives, cmd_vs3_run,
 };
-use workspace_cmd::{cmd_assets, cmd_build, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
+use workspace_cmd::{cmd_assets, cmd_check, cmd_clean, cmd_fmt, cmd_inspect, cmd_test};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -238,17 +240,23 @@ enum Commands {
         /// Optional test name filter.
         filter: Option<String>,
     },
-    /// Build workspace or a package.
+    /// Build workspace or a package (`--runtime rust`), or package a JavaScript game folder
+    /// (`--runtime js`).
     Build {
-        /// Workspace root.
+        /// Workspace root, or the game folder for `--runtime js`.
         #[arg(long, default_value = ".")]
         path: PathBuf,
-        /// Release profile.
+        /// Release profile (`--runtime rust`; the js host is always a release build).
         #[arg(long)]
         release: bool,
-        /// Optional package name (`-p`).
+        /// Optional package name (`-p`), for `--runtime rust`.
         #[arg(long)]
         package: Option<String>,
+        /// What to build for: `rust` (cargo) or `js` (a game folder with the Velvet Desktop host).
+        #[arg(long, value_enum, default_value_t = Runtime::Rust)]
+        runtime: Runtime,
+        #[command(flatten)]
+        js: JsBuildArgs,
     },
     /// Clean build artifacts (`cargo clean`).
     Clean {
@@ -1204,7 +1212,9 @@ fn dispatch(cli: Cli) -> Result<()> {
             path,
             release,
             package,
-        } => cmd_build(path, release, package),
+            runtime,
+            js,
+        } => cmd_build(path, release, package, runtime, js),
         Commands::Clean { path } => cmd_clean(path),
         Commands::Fmt { path, rust } => cmd_fmt(path, rust),
         Commands::Assets { path, pack } => cmd_assets(path, pack),

@@ -5347,6 +5347,7 @@ dependencies = [
  "velvet-cards",
  "velvet-core",
  "velvet-crypto",
+ "velvet-desktop",
  "velvet-document",
  "velvet-image",
  "velvet-project",
@@ -5409,6 +5410,7 @@ name = "velvet-desktop"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "http",
  "serde",
  "serde_json",
  "tao",

@@ -56,12 +56,34 @@ A leading byte order mark is accepted, since Windows editors often write one.
 
 ```text
 velvet-desktop <game-folder> [--dev <url>] [--devtools]
+velvet-desktop                      (no arguments: runs the packaged game, see below)
 ```
 
 - `--dev <url>` loads a dev server, for example `http://localhost:5173`, instead of the folder's
   files. The manifest is still read from the folder, and the bridge is available on that page too.
 - `--devtools` opens the web inspector. Debug builds always have it.
 - The window does not bind Escape. The game decides what it does.
+
+## Release folders
+
+`velvet build --runtime js` makes a release folder, `<game>/release/<id>-<version>/`:
+
+```text
+hello-game-0.1.0/
+  hello-game.exe     the host (no extension on Linux and macOS)
+  game/
+    velvet-game.json
+    index.html ...   the web files
+```
+
+Started with no arguments, the host looks for `game/velvet-game.json` next to its own executable
+and runs that folder, exactly as `velvet-desktop <folder>/game` would. Without that folder it
+prints the usage. The host's file name does not matter: the data folder and the log file come from
+the manifest's `id`. Run the example as a release with:
+
+```sh
+cargo run -p velvet-cli -- build --runtime js --path crates/velvet-desktop/examples/hello-game
+```
 
 ## The bridge: `window.velvet`
 
@@ -121,15 +143,15 @@ cargo test -p velvet-desktop
 cargo clippy -p velvet-desktop --all-targets -- -D warnings
 ```
 
-The unit tests cover the manifest, the file server, the storage, the bridge commands and the
-command line. The window and the webview need a desktop, so they are checked by running the example.
-The symbolic-link test runs on Unix only.
+The unit tests cover the manifest, the file server, the storage, the bridge commands, the command
+line and the packaged-game lookup. The window and the webview need a desktop, so they are checked
+by running the example. The symbolic-link test runs on Unix only.
 
 ## Known limits
 
 - A release build on Windows has no console. Its messages and the game's `velvet.log` lines go to
   `velvet-desktop.log` in the data folder (rewritten on each run); debug builds also print them
   in the terminal. A start-up error (such as a missing WebView2 runtime) is only in that file.
+  Each finished page load is noted there too (`page loaded: <url>`).
 - The webview's profile (cache, local storage) is kept in `<data>/webview`, not next to the
   program.
-- Release packaging (a host executable next to the built game) is not part of this crate yet.

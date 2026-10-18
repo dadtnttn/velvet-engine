@@ -11,7 +11,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use wry::http::{header, HeaderName, HeaderValue, Method, Response, StatusCode};
+use http::{header, HeaderName, HeaderValue, Method, Response, StatusCode};
 
 /// Why a request path was not served from the game folder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

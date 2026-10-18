@@ -246,3 +246,6 @@ lcov.info
 
 # Velvet JS: WebAssembly built from the Rust crates (pnpm build:wasm).
 /js/packages/wasm/gen/
+# Release folders made by `velvet build --runtime js`.
+/js/examples/*/release/
+/crates/velvet-desktop/examples/*/release/

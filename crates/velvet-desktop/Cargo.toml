@@ -6,13 +6,26 @@ edition.workspace = true
 license.workspace = true
 rust-version = "1.99"
 
+[features]
+# The window and the webview (the `app` module and the `velvet-desktop` program). Without it the
+# crate is only the manifest, the file server, the storage and the bridge's logic: what the CLI
+# needs to package a game, with no webview to build.
+default = ["window"]
+window = ["dep:tao", "dep:wry"]
+
+[[bin]]
+name = "velvet-desktop"
+path = "src/main.rs"
+required-features = ["window"]
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
-tao = "0.37"
-wry = "0.57"
+http = "1.5"
+tao = { version = "0.37", optional = true }
+wry = { version = "0.57", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

@@ -34,6 +34,7 @@ velvet-crypto = { workspace = true }
 velvet-audio = { workspace = true }
 velvet-build = { workspace = true }
 velvet-vlz = { workspace = true }
+velvet-desktop = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
