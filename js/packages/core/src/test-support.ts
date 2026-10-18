@@ -1,9 +1,40 @@
-// Test doubles shared by the save and bridge tests: an in-memory stand-in for Web Storage,
-// a fake Velvet Desktop bridge, and a helper that captures the error an action throws.
-// Only the tests import this file. The package index does not export it.
+// Test doubles shared by the save, bridge, loop and settings tests: an in-memory stand-in for Web
+// Storage, a fake Velvet Desktop bridge, a frame scheduler that the test drives, and a helper that
+// captures the error an action throws. Only the tests import this file. The package index does not
+// export it.
 
 import type { VelvetBridge } from "./bridge";
+import type { FrameScheduler } from "./loop";
 import type { StorageLike } from "./save-backends";
+
+/** A frame scheduler that the test drives: `runFrame` runs the frames that are waiting, with the time it gives. */
+export class ManualFrames implements FrameScheduler {
+  private nextHandle = 1;
+  private readonly callbacks = new Map<number, (timeMs: number) => void>();
+
+  request(callback: (timeMs: number) => void): number {
+    const handle = this.nextHandle;
+    this.nextHandle += 1;
+    this.callbacks.set(handle, callback);
+    return handle;
+  }
+
+  cancel(handle: number): void {
+    this.callbacks.delete(handle);
+  }
+
+  /** The number of frames waiting to run. */
+  get pending(): number {
+    return this.callbacks.size;
+  }
+
+  /** Runs the frames that are waiting now, giving them `timeMs` as their timestamp. */
+  runFrame(timeMs: number): void {
+    const batch = [...this.callbacks.values()];
+    this.callbacks.clear();
+    for (const callback of batch) callback(timeMs);
+  }
+}
 
 /** An in-memory object with the Web Storage methods that the localStorage backend uses. */
 export class FakeStorage implements StorageLike {

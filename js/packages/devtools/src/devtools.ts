@@ -153,6 +153,8 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
   private readonly readClock: () => number;
   private readonly toggleKey: string;
   private readonly loop: GameLoop | undefined;
+  /** True when the loop was given to the tools, so that its frame hook reports the update and render times. */
+  private readonly timingFromHooks: boolean;
   private readonly stage: Stage | undefined;
   private frameHandle: number | null = null;
   private lastTickMs = Number.NEGATIVE_INFINITY;
@@ -185,6 +187,7 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
     this.scheduler = options.scheduler ?? createFrameScheduler();
     this.toggleKey = options.toggleKey ?? DEFAULT_TOGGLE_KEY;
     this.loop = options.loop;
+    this.timingFromHooks = options.loop !== undefined;
     this.stage = options.stage;
     this.time = new TimeControls(
       options.clock ?? null,
@@ -249,9 +252,11 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
   }
 
   /**
-   * Returns the loop options with three things added: the time of each update and render, so that the
-   * panel can show the split; a hold on the game's update while the devtools are paused; and one run of
-   * that update per step. The options' own update and render run unchanged otherwise.
+   * @deprecated Pass the loop to `createDevtools` as `loop`. The update and render times then come from the
+   * loop's frame hooks, and the tools need no wrapper for them. This still returns the loop options with the
+   * hold on the game's update while the tools are paused (which the hooks cannot do), and one run of that
+   * update per step. When the tools were not given the loop, it also measures the update and render times.
+   * The options' own update and render run unchanged otherwise.
    */
   wrapLoop<Options extends GameLoopOptions>(options: Options): Options {
     this.wrapped = true;
@@ -267,9 +272,13 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
         const ran = this.time.runUpdate(() => {
           options.update(dt);
         });
-        if (ran) this.updateMsThisFrame += this.readClock() - startMs;
+        if (ran && !this.timingFromHooks) this.updateMsThisFrame += this.readClock() - startMs;
       },
       render: (alpha: number): void => {
+        if (this.timingFromHooks) {
+          options.render?.(alpha);
+          return;
+        }
         const startMs = this.readClock();
         options.render?.(alpha);
         if (!this.stopped) this.sampler.onLoopFrame(this.updateMsThisFrame, this.readClock() - startMs);
@@ -331,7 +340,11 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
   }
 
   loopState(): LoopState {
-    return { wrapped: this.wrapped, running: this.loop === undefined ? null : this.loop.running };
+    return {
+      timed: this.timingFromHooks || this.wrapped,
+      held: this.wrapped,
+      running: this.loop === undefined ? null : this.loop.running,
+    };
   }
 
   stageText(): string {
@@ -402,14 +415,26 @@ class ActiveDevtools<Events extends object> implements Devtools, OverlayApi {
 
   // Internals.
 
-  /** Logs the events that the options name, from the bus that they came on. A name listed twice is logged once. */
+  /**
+   * Connects the tools to the game: the event log taps the bus, and the loop's frame hook gives the update and
+   * render times. Every event of the bus is logged; when the options name events, only those are.
+   */
   private subscribe(options: DevtoolsOptions<Events>): void {
     const bus = options.events;
-    if (bus === undefined) return;
-    for (const name of new Set(options.eventNames ?? [])) {
+    if (bus !== undefined) {
+      const only = options.eventNames === undefined ? null : new Set<string>(options.eventNames);
       this.cleanups.push(
-        bus.on(name, (payload) => {
-          this.eventLog.record(name, payload);
+        bus.tap((event) => {
+          const name = String(event.type);
+          if (only === null || only.has(name)) this.eventLog.record(name, event.payload);
+        }),
+      );
+    }
+    const loop = options.loop;
+    if (loop !== undefined) {
+      this.cleanups.push(
+        loop.on("afterFrame", (timing) => {
+          this.sampler.onLoopFrame(timing.updateMs, timing.renderMs);
         }),
       );
     }

@@ -17,9 +17,11 @@ export { decibelsToGain, volumeToDecibels, volumeToGain } from "./volume";
 export { createAudio } from "./engine";
 export { defaultSettingsStore } from "./settings";
 export type {
+  AudioClock,
   AudioEngine,
   AudioEvents,
   AudioHost,
+  AudioLoop,
   AudioOptions,
   AudioSettingsStore,
   DuckingOptions,

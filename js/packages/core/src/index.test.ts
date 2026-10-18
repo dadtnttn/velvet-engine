@@ -22,4 +22,15 @@ describe("@velvet/core entry point", () => {
     expect(typeof core.createBridgeBackend).toBe("function");
     expect(typeof core.getLocalStorage).toBe("function");
   });
+
+  it("exports the frame hooks' tools, the clock events and the settings store", () => {
+    expect(typeof core.createSettingsStore).toBe("function");
+    expect(core.SETTINGS_FORMAT).toBe("velvet-settings");
+    expect(typeof core.chooseSettingsBackend).toBe("function");
+    expect(typeof core.GameLoop.prototype.on).toBe("function");
+    expect(typeof core.GameClock.prototype.on).toBe("function");
+    expect(typeof core.EventEmitter.prototype.tap).toBe("function");
+    expect(typeof core.EventEmitter.prototype.names).toBe("function");
+    expect(typeof core.EventEmitter.prototype.listenerCount).toBe("function");
+  });
 });

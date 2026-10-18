@@ -46,9 +46,9 @@ export interface FrameStats {
   readonly longFrames16: number;
   /** Frames longer than 33 ms since the start or the last reset. */
   readonly longFrames33: number;
-  /** Mean time in game updates per loop frame over the window. Null unless the loop is wrapped. */
+  /** Mean time in game updates per loop frame over the window. Null until the loop's times are measured. */
   readonly updateMs: number | null;
-  /** Mean time in the render callback per loop frame over the window. Null unless the loop is wrapped. */
+  /** Mean time in the render callback per loop frame over the window. Null until the loop's times are measured. */
   readonly renderMs: number | null;
 }
 

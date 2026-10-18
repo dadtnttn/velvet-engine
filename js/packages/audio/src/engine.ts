@@ -1,14 +1,15 @@
 // The audio engine: plays sounds by id, runs the music channel and keeps the mix. It also holds the
 // plays that wait for the browser to let audio run, follows the game clock's pause and the page's
-// visibility, and saves the mix. createAudio is the only entry point; the class is not exported.
+// visibility, and saves the mix. The clock's pause arrives as its events, and the check of the audio
+// runs before each frame through the loop's hook, when the options give a loop; `update` runs the same
+// check by hand. createAudio is the only entry point; the class is not exported.
 
-import { EventEmitter, type Listener, type Unsubscribe } from "@velvet/core";
+import { EventEmitter, type Listener, type SettingsStore, type Unsubscribe } from "@velvet/core";
 import type {
   AudioEngine,
   AudioEvents,
   AudioHost,
   AudioOptions,
-  AudioSettingsStore,
   DuckingOptions,
   FetchLike,
   MusicOptions,
@@ -24,7 +25,7 @@ import { QUIET_HOST, browserHost } from "./host";
 import { Loader } from "./loader";
 import { Mixer, type DuckingSettings } from "./mixer";
 import { Playback } from "./playback";
-import { AUDIO_SETTINGS_KEY, defaultSettingsStore, readStoredMix, type StoredMix } from "./settings";
+import { createMixStore, readStoredMix, type MixValues, type StoredMix } from "./settings";
 import { AUDIO_MIME, BUILT_IN_BUSES, type AudioFormat, type AudioSound } from "./types";
 
 /** The bus of music. */
@@ -166,7 +167,9 @@ class Engine implements AudioEngine {
   private readonly staleAfterMs: number;
   private readonly now: () => number;
   private readonly random: () => number;
-  private readonly settingsStore: AudioSettingsStore | null;
+  private readonly mix: SettingsStore<MixValues>;
+  /** The subscriptions to the clock's events and the loop's hook, released by close. */
+  private readonly stopFollowing: Array<() => void> = [];
   private queue: PlayRequest[] = [];
   private context: AudioContextLike | null = null;
   private contextError: string | null = null;
@@ -202,7 +205,7 @@ class Engine implements AudioEngine {
     checkNonNegative(this.staleAfterMs, "staleAfterMs");
     this.now = options.now ?? defaultNow;
     this.random = options.random ?? Math.random;
-    this.settingsStore = options.settings === undefined ? defaultSettingsStore() : options.settings;
+    this.mix = createMixStore(options.settings);
     this.loader = new Loader({
       baseUrl: withSlash(options.baseUrl ?? DEFAULT_BASE_URL),
       fetch: options.fetch ?? defaultFetch,
@@ -220,6 +223,12 @@ class Engine implements AudioEngine {
       this.lastHidden = this.host.hidden;
       this.syncRunning();
     });
+    this.followClock(options.clock);
+    // A clock that is already paused when the engine starts mutes the game buses from the start.
+    this.followPause();
+    if (options.loop !== undefined) {
+      this.stopFollowing.push(options.loop.on("beforeFrame", () => this.update()));
+    }
     this.ready = this.readStored();
   }
 
@@ -360,13 +369,13 @@ class Engine implements AudioEngine {
     return true;
   }
 
+  /**
+   * Checks the clock's pause, the page's visibility and the start of the audio, and starts the plays that
+   * were waiting. Optional: the clock's events and the loop's hook already do this. Cheap when nothing changed.
+   */
   update(): void {
     if (this.closed) return;
-    const paused = this.clock?.paused ?? false;
-    if (paused !== this.lastPaused) {
-      this.lastPaused = paused;
-      this.mixer.setGate(paused && this.pauseWith === "game-buses");
-    }
+    this.followPause();
     this.lastHidden = this.host.hidden;
     const context = this.context;
     if (context !== null && !this.hasUnlocked && context.state === "running") {
@@ -379,10 +388,15 @@ class Engine implements AudioEngine {
     if (this.closed) return;
     this.stopAll(0);
     this.closed = true;
+    for (const stop of this.stopFollowing.splice(0)) stop();
     this.releaseGesture?.();
     this.releaseGesture = null;
     this.releaseVisibility?.();
     this.releaseVisibility = null;
+    // Keep the mix that was changed in the last moment before the audio goes away. The changes made before
+    // the saved mix was read are written by the `ready` callbacks, which run before this continuation.
+    await this.ready;
+    await this.mix.save();
     const context = this.context;
     if (context !== null) {
       try {
@@ -393,16 +407,41 @@ class Engine implements AudioEngine {
     }
   }
 
-  /** Reads the saved mix, if there is a store, and applies the buses that the game has not changed yet. */
-  private readStored(): Promise<void> {
-    const store = this.settingsStore;
-    if (store === null) return Promise.resolve();
-    return new Promise<unknown>((resolve) => resolve(store.get(AUDIO_SETTINGS_KEY))).then(
-      (value) => {
-        this.applyStored(readStoredMix(value));
-      },
-      () => undefined,
+  /** Subscribes to the pause events of a clock that has them. A plain clock is followed by `update` alone. */
+  private followClock(clock: AudioOptions["clock"]): void {
+    if (clock?.on === undefined) return;
+    this.stopFollowing.push(
+      clock.on("paused", () => this.onPauseChanged()),
+      clock.on("resumed", () => this.onPauseChanged()),
     );
+  }
+
+  /** A pause event: sets the game buses' gate, and starts or stops the context when the policy needs it. */
+  private onPauseChanged(): void {
+    if (this.closed) return;
+    if (this.followPause()) this.syncRunning();
+  }
+
+  /**
+   * Follows the clock's pause: the game buses are gated while it is paused (with the "game-buses" policy).
+   * Returns true when the pause changed since the last check.
+   */
+  private followPause(): boolean {
+    const paused = this.clock?.paused ?? false;
+    if (paused === this.lastPaused) return false;
+    this.lastPaused = paused;
+    this.mixer.setGate(paused && this.pauseWith === "game-buses");
+    return true;
+  }
+
+  /**
+   * Reads the saved mix, and applies the buses that the game has not changed yet. The promise resolves once
+   * the mix is in place, and never rejects: the store gives the defaults when it cannot read.
+   */
+  private readStored(): Promise<void> {
+    return this.mix.load().then(() => {
+      this.applyStored(readStoredMix({ volumes: this.mix.get("volumes"), muted: this.mix.get("muted") }));
+    });
   }
 
   /** Applies a saved mix. A bus that the game has already set keeps the game's value. */
@@ -415,17 +454,19 @@ class Engine implements AudioEngine {
     }
   }
 
-  /** Saves the mix. Calls made before the saved mix is read are written once it has been read. */
+  /**
+   * Saves the mix after a change. The store debounces the writes, so a burst of changes is one write. A call
+   * made before the saved mix has been read waits for the read, so that it does not replace stored values.
+   */
   private persist(): void {
-    const store = this.settingsStore;
-    if (store === null || this.persistQueued) return;
+    if (this.persistQueued) return;
     this.persistQueued = true;
-    void this.ready
-      .then(() => {
-        this.persistQueued = false;
-        return store.set(AUDIO_SETTINGS_KEY, this.snapshot());
-      })
-      .catch(() => undefined);
+    void this.ready.then(() => {
+      this.persistQueued = false;
+      const mix = this.snapshot();
+      this.mix.set("volumes", mix.volumes);
+      this.mix.set("muted", mix.muted);
+    });
   }
 
   /** The mix as it is saved: every bus volume, and the muted buses. */

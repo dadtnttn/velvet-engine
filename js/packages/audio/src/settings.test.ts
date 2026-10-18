@@ -1,12 +1,13 @@
-// Tests for the saved mix: the volumes and mutes are read at start, written after changes, and a
-// value that is not what this build expects is ignored. Also the stores that save them: the bridge in
-// Velvet Desktop, localStorage in a browser, and nothing at all.
+// Tests for the saved mix: the volumes and mutes are read at start, written after changes (once per burst,
+// by the core settings store), and a value that is not what this build expects is ignored. Also the store
+// that the runtime picks: the bridge in Velvet Desktop, localStorage in a browser, and nothing at all.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AudioError } from "./error";
 import type { AudioSettingsStore } from "./api";
-import { AUDIO_SETTINGS_KEY, defaultSettingsStore, localStorageStore, readStoredMix } from "./settings";
-import { createMemorySettings, createRig, settle, thrownBy } from "./test-support";
+import { createAudio } from "./engine";
+import { AUDIO_SETTINGS_KEY, defaultSettingsStore, readStoredMix } from "./settings";
+import { FakeHost, createMemorySettings, createRig, manifestOf, thrownBy } from "./test-support";
 
 const door = { id: "sfx.door", files: ["sfx/door.opus"] };
 
@@ -66,28 +67,50 @@ describe("reading the saved mix", () => {
 });
 
 describe("writing the saved mix", () => {
-  it("writes the whole mix once, after the saved mix has been read", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("writes the whole mix once, after the saved mix has been read and the burst of changes is over", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const memory = createMemorySettings();
     const rig = createRig({ sounds: [door], settings: memory.store });
     rig.audio.setVolume("sfx", 0.2);
     rig.audio.setVolume("sfx", 0.3);
     rig.audio.setMuted("ui", true);
     await rig.audio.ready;
-    await settle();
+    await vi.advanceTimersByTimeAsync(300);
     expect(memory.writes).toBe(1);
-    const saved = memory.values.get(AUDIO_SETTINGS_KEY);
-    expect(saved).toEqual({
-      volumes: { master: 1, music: 1, sfx: 0.3, voice: 1, ui: 1 },
-      muted: ["ui"],
+    expect(memory.values.get(AUDIO_SETTINGS_KEY)).toEqual({
+      format: "velvet-settings",
+      version: 1,
+      values: {
+        volumes: { master: 1, music: 1, sfx: 0.3, voice: 1, ui: 1 },
+        muted: ["ui"],
+      },
     });
   });
 
   it("writes the mute of the master", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const memory = createMemorySettings();
     const rig = createRig({ sounds: [door], settings: memory.store });
     rig.audio.setMuted("master", true);
-    await settle();
-    expect(memory.values.get(AUDIO_SETTINGS_KEY)).toMatchObject({ muted: ["master"] });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(memory.values.get(AUDIO_SETTINGS_KEY)).toMatchObject({ values: { muted: ["master"] } });
+  });
+
+  it("keeps the mix for the session when the store refuses the writes, and the game is not affected", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const refusing: AudioSettingsStore = {
+      get: async () => null,
+      set: () => Promise.reject(new Error("quota exceeded")),
+    };
+    const rig = createRig({ sounds: [door], settings: refusing });
+    rig.audio.setVolume("sfx", 0.4);
+    await rig.audio.ready;
+    await vi.advanceTimersByTimeAsync(300);
+    expect(rig.audio.getVolume("sfx")).toBe(0.4);
   });
 
   it("refuses a bus that does not exist, and a volume out of range", () => {
@@ -113,7 +136,7 @@ describe("readStoredMix", () => {
   });
 });
 
-describe("localStorageStore", () => {
+describe("the mix in localStorage", () => {
   /** A minimal storage in memory, with the methods of Web Storage. */
   function memoryStorage(): Storage {
     const items = new Map<string, string>();
@@ -133,22 +156,23 @@ describe("localStorageStore", () => {
     };
   }
 
-  it("keeps each value as JSON under a prefixed key, and reads it back", async () => {
+  it("reads a mix that a previous session saved in localStorage, and reads a damaged one as the defaults", async () => {
     const storage = memoryStorage();
-    const store = localStorageStore(storage);
-    await store.set("audio", { muted: ["sfx"] });
-    expect(storage.getItem("velvet-audio:audio")).toBe('{"muted":["sfx"]}');
-    await expect(store.get("audio")).resolves.toEqual({ muted: ["sfx"] });
-    await expect(store.get("missing")).resolves.toBeNull();
-  });
+    storage.setItem("velvet-settings:audio", '{"volumes":{"sfx":0.25},"muted":["ui"]}');
+    vi.stubGlobal("velvet", undefined);
+    vi.stubGlobal("localStorage", storage);
+    // No settings option: the engine picks the runtime's store, which is localStorage here.
+    const audio = createAudio({ manifest: manifestOf([door]), host: new FakeHost() });
+    await audio.ready;
+    expect(audio.getVolume("sfx")).toBe(0.25);
+    expect(audio.isMuted("ui")).toBe(true);
+    await audio.close();
 
-  it("reads a value that is not JSON as null, and survives a refused write", async () => {
-    const storage = memoryStorage();
-    storage.setItem("velvet-audio:audio", "{ broken");
-    const store = localStorageStore(storage);
-    await expect(store.get("audio")).resolves.toBeNull();
-    const refusing: Storage = { ...storage, setItem: () => { throw new Error("quota exceeded"); } };
-    await expect(localStorageStore(refusing).set("audio", {})).resolves.toBeUndefined();
+    storage.setItem("velvet-settings:audio", "{ broken");
+    const damaged = createAudio({ manifest: manifestOf([door]), host: new FakeHost() });
+    await expect(damaged.ready).resolves.toBeUndefined();
+    expect(damaged.getVolume("sfx")).toBe(1);
+    await damaged.close();
   });
 });
 
@@ -181,7 +205,7 @@ describe("defaultSettingsStore", () => {
     const store = defaultSettingsStore();
     expect(store).not.toBeNull();
     await store?.set("audio", { volumes: { sfx: 0.5 } });
-    expect(items.get("velvet-audio:audio")).toBe('{"volumes":{"sfx":0.5}}');
+    expect(items.get("velvet-settings:audio")).toBe('{"volumes":{"sfx":0.5}}');
   });
 });
 

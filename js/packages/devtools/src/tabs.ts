@@ -124,15 +124,15 @@ export class PerformanceTab implements Tab {
     set("Last frame", formatMs(stats.lastMs));
     set("Frames over 16.7 ms", String(stats.longFrames16));
     set("Frames over 33 ms", String(stats.longFrames33));
-    set("Update per frame", loop.wrapped ? formatMs(stats.updateMs) : "not measured");
-    set("Render per frame", loop.wrapped ? formatMs(stats.renderMs) : "not measured");
+    set("Update per frame", loop.timed ? formatMs(stats.updateMs) : "not measured");
+    set("Render per frame", loop.timed ? formatMs(stats.renderMs) : "not measured");
     set("Loop", loop.running === null ? "no loop given" : loop.running ? "running" : "stopped");
     set("Stage", this.api.stageText());
     set("DOM nodes", String(stats.domNodes));
     set("JS heap", formatHeap(stats.heapBytes));
-    this.note.textContent = loop.wrapped
+    this.note.textContent = loop.timed
       ? ""
-      : "Update and render times need the loop options to go through devtools.wrapLoop().";
+      : "Update and render times need the loop: pass it to createDevtools as loop, or wrap its options with devtools.wrapLoop().";
 
     this.graphLine.setAttribute("points", this.points(this.api.frameHistory()));
   }
@@ -229,7 +229,7 @@ export class TimeTab implements Tab {
       state.paused ? "Paused" : "Running",
       `×${state.speed ?? 1}`,
       state.slowMotion ? "slow motion" : "",
-      loop.wrapped ? "" : "the game update is not held: wrap the loop with devtools.wrapLoop()",
+      loop.held ? "" : "the game update is not held: wrap the loop with devtools.wrapLoop()",
     ].filter((part) => part !== "");
     this.setStatus(parts.join(" · "), false);
   }

@@ -2,9 +2,19 @@
 // the events, and the hooks for the host (the page, the context, the settings). The implementation
 // is in engine.ts; these types are what a game and its tests see.
 
-import type { GameClock, Listener, Unsubscribe } from "@velvet/core";
+import type { GameClock, GameLoop, Listener, Unsubscribe } from "@velvet/core";
 import type { AudioContextLike } from "./context";
 import type { AudioFormat, AudioManifest } from "./types";
+
+/**
+ * What the engine needs from a game clock: its `paused` flag, and its events when it has them. A `GameClock`
+ * has both, and the engine then follows the pause as the clock changes it. A plain object with a `paused`
+ * flag also works: the engine reads the flag in `update`.
+ */
+export type AudioClock = Pick<GameClock, "paused"> & Partial<Pick<GameClock, "on">>;
+
+/** What the engine needs from a game loop: its frame hooks. A `GameLoop` has them. */
+export type AudioLoop = Pick<GameLoop, "on">;
 
 /** Where a playback is: waiting to start, playing, or ended. */
 export type PlaybackStatus = "pending" | "playing" | "ended";
@@ -163,8 +173,16 @@ export interface AudioOptions {
    * format counts as playable, and a file that fails to decode moves on to the next candidate.
    */
   readonly canPlay?: (format: AudioFormat) => boolean;
-  /** The game clock. While it is paused the game buses go quiet, see `pauseWith`. Read by `update`. */
-  readonly clock?: Pick<GameClock, "paused">;
+  /**
+   * The game clock. While it is paused the game buses go quiet, see `pauseWith`. The engine follows its
+   * `paused` and `resumed` events, when the clock sends them, and reads its `paused` flag in `update`.
+   */
+  readonly clock?: AudioClock;
+  /**
+   * The game loop. When it is given, the engine checks the audio before each frame's updates, through the
+   * loop's `beforeFrame` hook, so the game needs no call to `update`. Optional.
+   */
+  readonly loop?: AudioLoop;
   /**
    * What a paused clock does. "game-buses" (the default) mutes music, sfx and voice and leaves `ui`
    * sounding. "context" suspends the whole audio context, `ui` included.
@@ -193,7 +211,7 @@ export interface AudioOptions {
 
 /**
  * The audio engine: plays sounds by id, runs the music channel, and keeps the mix. Created by
- * {@link createAudio}. Call `update()` once per frame, next to the game clock's `advance`.
+ * {@link createAudio}. It follows the game clock and the loop by itself, so `update()` is optional.
  */
 export interface AudioEngine {
   /** Resolves when the saved settings have been read and applied. Never rejects. */
@@ -256,8 +274,9 @@ export interface AudioEngine {
    */
   unlock(): Promise<boolean>;
   /**
-   * Follows the game clock's pause, the page's visibility and the start of the audio, and starts
-   * the plays that were waiting. Call it once per frame. It is cheap when nothing has changed.
+   * Checks the game clock's pause, the page's visibility and the start of the audio, and starts the plays
+   * that were waiting. Optional: the engine already follows the clock's events, and the loop's frame hook when
+   * the options give a loop. Calling it runs the same check by hand, and it is cheap when nothing has changed.
    */
   update(): void;
   /** Stops every play, releases the page's listeners and closes the audio context. */

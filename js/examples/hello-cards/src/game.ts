@@ -20,6 +20,7 @@ import {
   type Binding,
   type LoadedSave,
   type SaveStore,
+  type SettingsStore,
 } from "@velvet/core";
 import { GuionLibrary } from "@velvet/guion";
 import type { I18n, LocaleArgs } from "@velvet/i18n";
@@ -48,7 +49,7 @@ import { Hud, type HudState } from "./hud";
 import { PauseMenu } from "./pause-menu";
 import { buildSaveData, parseSaveData, type GameSaveData } from "./save-data";
 import { asLanguage, createTexts } from "./texts";
-import { isFullscreen, logLine, quitApp, readSetting, setFullscreen, writeSetting } from "./platform";
+import { createGameSettings, isFullscreen, logLine, quitApp, setFullscreen, type GameSettings } from "./platform";
 
 /**
  * The game's own keys, by name. Enter and Space are not counted while a control has the focus: a
@@ -134,7 +135,9 @@ export class Game {
   static async start(host: HTMLElement): Promise<Game> {
     const stage = createStage(host, { width: SURFACE.width, height: SURFACE.height });
     const texts = await createTexts();
-    const saved = asLanguage(await readSetting("language").catch(() => null));
+    const settings = createGameSettings();
+    await settings.load();
+    const saved = asLanguage(settings.get("language"));
     if (saved !== null) texts.setLanguage(saved);
 
     const catalog = await loadCatalog(await fetchText(CATALOG_URL));
@@ -148,7 +151,7 @@ export class Game {
     }
 
     const board = await newBoard(catalog);
-    const game = new Game(stage, texts, catalog, library, board);
+    const game = new Game(stage, texts, catalog, library, board, settings);
     game.fullscreenOn = await isFullscreen().catch(() => false);
     game.draw();
     game.loop.start();
@@ -157,7 +160,14 @@ export class Game {
   }
 
   /** Builds every part of the game. Use `Game.start`, which also loads the data it needs. */
-  private constructor(stage: Stage, texts: I18n, catalog: Catalog, library: GuionLibrary, board: Board) {
+  private constructor(
+    stage: Stage,
+    texts: I18n,
+    catalog: Catalog,
+    library: GuionLibrary,
+    board: Board,
+    settings: SettingsStore<GameSettings>,
+  ) {
     this.stage = stage;
     this.texts = texts;
     this.catalog = catalog;
@@ -233,9 +243,11 @@ export class Game {
     });
 
     this.paint();
+    // The settings store debounces its writes and never throws, so a change of language needs no error path.
     texts.onChange((language) => {
       this.paint();
-      void writeSetting("language", language).catch((error: unknown) => this.fail(error));
+      const picked = asLanguage(language);
+      if (picked !== null) settings.set("language", picked);
     });
   }
 

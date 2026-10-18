@@ -13,10 +13,12 @@ export interface InspectView {
   readonly refreshMs: number;
 }
 
-/** What the Performance tab needs to know about the loop. */
+/** What the Performance and Time tabs need to know about the loop. */
 export interface LoopState {
-  /** True once the loop options have gone through `wrapLoop`. */
-  readonly wrapped: boolean;
+  /** True when the update and render times are measured: the loop was given to the tools, or its options went through `wrapLoop`. */
+  readonly timed: boolean;
+  /** True once the loop options have gone through `wrapLoop`, so that a pause holds the game's update. */
+  readonly held: boolean;
   /** Whether the loop is running, or null when no loop was given. */
   readonly running: boolean | null;
 }

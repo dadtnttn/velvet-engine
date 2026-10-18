@@ -40,7 +40,17 @@ type from `@velvet/ui`.
       onDay: (day) => events.emit("day", { day }),
     });
 
-    // Dev builds only: see the next section.
+    const loop = new GameLoop({
+      update(dt: number) {
+        clock.advance(dt);
+        // ...game logic; read input with the ActionMap and call input.endFrame() here
+      },
+      render(alpha: number) {
+        // ...draw
+      },
+    });
+
+    // Dev builds only: see the next section. The loop exists first, so that the tools can read its frame hooks.
     let devtools: Devtools | undefined;
     if (import.meta.env.DEV) {
       const { createDevtools } = await import("@velvet/devtools");
@@ -49,7 +59,7 @@ type from `@velvet/ui`.
         enabled: true,
         clock,
         events,
-        eventNames: ["day", "save"],
+        loop,
         stage,
       });
       devtools.watch("fps", () => devtools?.stats().fps ?? 0);
@@ -61,22 +71,16 @@ type from `@velvet/ui`.
       });
     }
 
-    const options = {
-      update(dt: number) {
-        clock.advance(dt);
-        // ...game logic; read input with the ActionMap and call input.endFrame() here
-      },
-      render(alpha: number) {
-        // ...draw
-      },
-    };
-    // wrapLoop is the only change to the loop: without the tools, the options go in unchanged.
+    loop.start();
+
+    // The game's events reach the log by themselves: every event of `events` is logged. The loop needs no wrapper.
     const loop = new GameLoop(devtools ? devtools.wrapLoop(options) : options);
     loop.start();
 
 `import.meta.env.DEV` is typed by Vite's client types (`/// <reference types="vite/client" />`). The game lists
-`"@velvet/devtools": "workspace:*"` among its dependencies, like the other packages. The tools are created
-before the loop, because `wrapLoop` is how the loop gets the update and render split and the pause hold.
+`"@velvet/devtools": "workspace:*"` among its dependencies, like the other packages. The loop is created before
+the tools, and passed to them as `loop`: its frame hooks give the update and render split. The loop's options
+go in unchanged; `wrapLoop` is no longer needed for that (see "Deprecated" below for the one thing it still does).
 
 ## Dev builds only
 
@@ -101,11 +105,12 @@ alone adds nothing either.
 
 - Pause, resume, step and the speeds act on the core `GameClock`. While the clock is paused, game time stands
   still: logic that reads `clock.elapsed` stops with it.
-- `devtools.wrapLoop(options)` also holds the game's `update` while the tools have paused the game, so logic
-  that does not read the clock stops too. A step runs `update` once, with the clock running for that call.
-  While the update is held, input edges still build up and are delivered on resume or on the next step,
-  because the game's `input.endFrame()` runs in that update.
-- Without `wrapLoop`, a pause only stops the clock, and a step moves the clock on by one loop step.
+- `devtools.wrapLoop(options)` (deprecated, see below) also holds the game's `update` while the tools have
+  paused the game, so logic that does not read the clock stops too. A step runs `update` once, with the clock
+  running for that call. While the update is held, input edges still build up and are delivered on resume or
+  on the next step, because the game's `input.endFrame()` runs in that update.
+- Without `wrapLoop`, a pause only stops the clock, and a step moves the clock on by one loop step. The frame
+  hooks cannot hold an update, so this is the one difference that the loop option does not remove.
 - The clock allows only the speeds it was created with, so create it with `speeds: [0.25, 0.5, 1, 2, 4]` for
   the full range. Slow motion runs the clock at `slowSpeed` (default 0.25, which the clock must allow) and
   gives back the previous speed when turned off. Setting a speed by hand turns slow motion off.
@@ -119,15 +124,29 @@ alone adds nothing either.
 - The median and the 95th percentile use the nearest-rank method over the last 240 frames. The FPS is the
   mean interval of the last 60 frames.
 - A gap of more than a second, such as a hidden tab, is not counted as a frame.
-- The update and render split exists only when the loop goes through `wrapLoop`, because the core loop does
-  not report its timing. The Performance tab says so when the split is missing.
+- The update and render split comes from the loop's `afterFrame` hook when the tools are given the `loop`. It
+  also comes from `wrapLoop` when the tools were not given the loop. Without either, the Performance tab says
+  the split is not measured.
 - `devtools.stats()` returns the same numbers, and `devtools.resetCounters()` clears the long-frame counts.
 
 ## Event log
 
-Core's `EventEmitter` does not list its event names, so the game names the events it wants logged, with
-`events` and `eventNames`. The log keeps the newest 200 events, whether or not the panel is open. Its payload
-is shown on one line. Pausing the log counts the events that arrive meanwhile as dropped.
+The tools tap the `events` bus, so every event that the game emits is logged, with its name and payload on one
+line. The log keeps the newest 200 events, whether or not the panel is open. Pausing the log counts the events
+that arrive meanwhile as dropped. The log can be narrowed with `eventNames` (deprecated, see below).
+
+## Deprecated
+
+- **`wrapLoop`** still works. It holds the game's update while the tools are paused, which the loop's frame
+  hooks cannot do, so a game that uses that hold keeps calling it. Its update and render times are no longer
+  needed when the loop is given to the tools, and it measures them only when it is used without the loop.
+- **`eventNames`** still works as a filter. The log records every event of the bus without it.
+
+## Frame hooks
+
+The tools read the loop through `loop.on("afterFrame", ...)`, which is one of the five hooks that `GameLoop`
+offers (`beforeFrame`, `beforeUpdate`, `afterUpdate`, `afterRender` and `afterFrame`; see `@velvet/core`).
+A game can use the same hooks for its own timing, without wrapping the loop.
 
 ## State inspector
 

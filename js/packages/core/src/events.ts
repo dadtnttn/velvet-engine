@@ -11,6 +11,12 @@
 // from running in that emit; adding one during an emit leaves it for the next emit. The
 // same listener added twice to the same event runs once. An error thrown by a listener
 // stops the emit and reaches the caller.
+//
+// Tools can look at the whole bus. `tap` adds a listener for every event, which receives the
+// event's name and payload, and runs before the listeners of that event. `names` lists the
+// events that have a listener now, or that were emitted. Both are opt-in: a bus with no tap
+// does no extra work for a tap, and `listenerCount` lets a hot emitter skip building a payload
+// that nobody reads.
 
 /** Removes one subscription when called. */
 export type Unsubscribe = () => void;
@@ -20,6 +26,14 @@ export type Listener<Payload> = (payload: Payload) => void;
 
 /** The arguments `emit` takes: the payload, optional when the payload type is `void`. */
 export type EmitArgs<Payload> = [Payload] extends [void] ? [payload?: Payload] : [payload: Payload];
+
+/** One emitted event as a tap sees it: its name, and its payload typed by the event map. */
+export type TapEvent<Events extends object> = {
+  [Type in keyof Events]: { readonly type: Type; readonly payload: Events[Type] };
+}[keyof Events];
+
+/** A tap: a listener for every event of an emitter. */
+export type TapListener<Events extends object> = (event: TapEvent<Events>) => void;
 
 /** A listener with its payload type erased, so that one map can hold every event. */
 type AnyListener = (payload: never) => void;
@@ -34,6 +48,11 @@ type Subscriptions = Map<AnyListener, boolean>;
  */
 export class EventEmitter<Events extends object> {
   private readonly subscriptions = new Map<keyof Events, Subscriptions>();
+  private readonly taps = new Set<TapListener<Events>>();
+  /** Every event name that was listened to or emitted, in the order it first appeared. */
+  private readonly seen = new Set<keyof Events>();
+  /** The event names that were emitted at least once. */
+  private readonly emitted = new Set<keyof Events>();
 
   /**
    * Adds a listener for `type`.
@@ -58,11 +77,14 @@ export class EventEmitter<Events extends object> {
     this.subscriptions.get(type)?.delete(listener);
   }
 
-  /** Calls every listener of `type` with the payload, in the order they were added. */
+  /** Calls every tap, then every listener of `type`, with the payload, in the order they were added. */
   emit<Type extends keyof Events>(type: Type, ...args: EmitArgs<Events[Type]>): void {
+    const payload = args[0] as Events[Type];
+    this.emitted.add(type);
+    this.seen.add(type);
+    if (this.taps.size > 0) this.callTaps(type, payload);
     const subscriptions = this.subscriptions.get(type);
     if (subscriptions === undefined) return;
-    const payload = args[0] as Events[Type];
     for (const [listener, once] of [...subscriptions]) {
       // A listener removed earlier in this emit must not run.
       if (!subscriptions.has(listener)) continue;
@@ -71,12 +93,49 @@ export class EventEmitter<Events extends object> {
     }
   }
 
+  /**
+   * Adds a tap: a listener for every event of this emitter, whatever its name. A tap runs before the
+   * listeners of the event it sees, in the order the taps were added. Meant for tools such as an event
+   * log; a game should use `on`.
+   * @returns a function that removes the tap.
+   */
+  tap(listener: TapListener<Events>): Unsubscribe {
+    this.taps.add(listener);
+    return () => {
+      this.taps.delete(listener);
+    };
+  }
+
+  /**
+   * The names of the events that have a listener now, or that were emitted since the emitter was made,
+   * in the order each was first listened to or emitted. Cheap: it reads the bookkeeping, it does not scan
+   * the payloads.
+   */
+  names(): Array<keyof Events> {
+    return [...this.seen].filter((type) => this.listenerCount(type) > 0 || this.emitted.has(type));
+  }
+
+  /** The number of listeners of `type` now. Zero for an event nobody listens to. */
+  listenerCount(type: keyof Events): number {
+    return this.subscriptions.get(type)?.size ?? 0;
+  }
+
   private add<Type extends keyof Events>(type: Type, listener: Listener<Events[Type]>, once: boolean): void {
     let subscriptions = this.subscriptions.get(type);
     if (subscriptions === undefined) {
       subscriptions = new Map();
       this.subscriptions.set(type, subscriptions);
     }
+    this.seen.add(type);
     if (!subscriptions.has(listener)) subscriptions.set(listener, once);
+  }
+
+  /** Hands one emitted event to every tap that is still registered, in the order the taps were added. */
+  private callTaps(type: keyof Events, payload: unknown): void {
+    for (const tap of [...this.taps]) {
+      // A tap removed earlier in this emit must not run.
+      if (!this.taps.has(tap)) continue;
+      tap({ type, payload } as TapEvent<Events>);
+    }
   }
 }

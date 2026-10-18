@@ -4,6 +4,13 @@
 // `dt * speed`; while paused it does not move. Game time is counted in game seconds, and a
 // day lasts `dayLength` game seconds. Day 1 is the day the clock starts on, and `onDay(day)`
 // runs each time a later day begins.
+//
+// Events. The clock emits `paused` and `resumed` when its pause changes, `speed` when its speed
+// changes, and `stepped` each time `advance` moves it. They go through `on`, `once` and `off`, like
+// the other emitters. Pausing a paused clock, or setting the speed it has, sends nothing. A
+// `restore` sends the changes that it makes, so a listener stays right after a load.
+
+import { EventEmitter, type Listener, type Unsubscribe } from "./events";
 
 /** Speed multipliers offered by default. */
 const DEFAULT_SPEEDS: readonly number[] = [1, 2, 3];
@@ -31,11 +38,39 @@ export interface GameClockState {
   paused: boolean;
 }
 
+/**
+ * The clock's state for tools and the screen: what a save keeps, plus the day and the speeds. A copy:
+ * changing it changes nothing in the clock.
+ */
+export interface GameClockStatus extends GameClockState {
+  /** The current day, starting at 1. */
+  readonly day: number;
+  /** Game seconds into the current day, in the range [0, dayLength). */
+  readonly timeOfDay: number;
+  /** Length of one in-game day, in game seconds. */
+  readonly dayLength: number;
+  /** The speeds the clock allows, ascending. */
+  readonly speeds: readonly number[];
+}
+
+/** The events of a game clock, by name. */
+export interface GameClockEvents {
+  /** The clock was paused. Sent once per pause, with the state after it. */
+  paused: GameClockStatus;
+  /** The clock resumed. Sent once per resume, with the state after it. */
+  resumed: GameClockStatus;
+  /** The speed changed from `previous` to `current`. */
+  speed: { previous: number; current: number };
+  /** The clock moved on by one `advance` while it runs: `dt` real seconds became `gameSeconds` of game time. */
+  stepped: { dt: number; gameSeconds: number };
+}
+
 /** Game time with pause, speed multipliers and days. */
 export class GameClock {
   private readonly speedList: readonly number[];
   private readonly dayLengthSeconds: number;
   private readonly onNewDay: ((day: number) => void) | undefined;
+  private readonly events = new EventEmitter<GameClockEvents>();
   private speedIndex = 0;
   private isPaused = false;
   private elapsedSeconds = 0;
@@ -70,20 +105,24 @@ export class GameClock {
   }
 
   /**
-   * Sets the speed.
+   * Sets the speed. Sends a `speed` event when it changes.
    * @throws RangeError when `speed` is not one of the allowed speeds.
    */
   setSpeed(speed: number): void {
-    const index = this.speedList.indexOf(speed);
-    if (index < 0) {
-      throw new RangeError(`speed ${speed} is not allowed; the allowed speeds are ${this.speedList.join(", ")}`);
-    }
+    const index = this.indexOfSpeed(speed);
+    const previous = this.speed;
     this.speedIndex = index;
+    this.announceSpeed(previous);
   }
 
-  /** Moves to the next allowed speed, wrapping around after the last. Returns the new speed. */
+  /**
+   * Moves to the next allowed speed, wrapping around after the last. Returns the new speed. Sends a
+   * `speed` event when the speed changes.
+   */
   cycleSpeed(): number {
+    const previous = this.speed;
     this.speedIndex = (this.speedIndex + 1) % this.speedList.length;
+    this.announceSpeed(previous);
     return this.speed;
   }
 
@@ -94,12 +133,16 @@ export class GameClock {
 
   /** Stops game time. Calling it while paused does nothing. */
   pause(): void {
+    if (this.isPaused) return;
     this.isPaused = true;
+    this.events.emit("paused", this.state());
   }
 
-  /** Lets game time run again. */
+  /** Lets game time run again. Calling it while running does nothing. */
   resume(): void {
+    if (!this.isPaused) return;
     this.isPaused = false;
+    this.events.emit("resumed", this.state());
   }
 
   /** Game seconds elapsed since the clock started: speed applied, pauses excluded. */
@@ -128,23 +171,46 @@ export class GameClock {
   }
 
   /**
+   * The clock's state for tools and the screen: what `snapshot` keeps, plus the day, the time of the
+   * day, the length of the day and the speeds. It is a copy.
+   */
+  state(): GameClockStatus {
+    return {
+      elapsed: this.elapsedSeconds,
+      speed: this.speed,
+      paused: this.isPaused,
+      day: this.currentDay,
+      timeOfDay: this.timeOfDay,
+      dayLength: this.dayLengthSeconds,
+      speeds: [...this.speedList],
+    };
+  }
+
+  /**
    * Puts the clock back where a save left it. The day follows from the time, and `onDay` does
-   * not fire for the days skipped over.
+   * not fire for the days skipped over. The events for the changes it makes are sent after the
+   * clock has been set.
    * @throws RangeError when `elapsed` is negative or not finite, or `speed` is not allowed.
    */
   restore(state: GameClockState): void {
     if (!Number.isFinite(state.elapsed) || state.elapsed < 0) {
       throw new RangeError(`elapsed must be a non-negative finite number, got ${state.elapsed}`);
     }
-    this.setSpeed(state.speed);
+    const index = this.indexOfSpeed(state.speed);
+    const previousSpeed = this.speed;
+    const wasPaused = this.isPaused;
+    this.speedIndex = index;
     this.elapsedSeconds = state.elapsed;
     this.currentDay = 1 + Math.floor(state.elapsed / this.dayLengthSeconds);
     this.isPaused = state.paused;
+    this.announceSpeed(previousSpeed);
+    if (wasPaused !== this.isPaused) this.events.emit(this.isPaused ? "paused" : "resumed", this.state());
   }
 
   /**
    * Advances the clock by `dt` real seconds, the loop's step. Does nothing while paused.
-   * Each day that begins during the step triggers `onDay`, in order.
+   * Each day that begins during the step triggers `onDay`, in order. A running clock then sends a
+   * `stepped` event.
    * @throws RangeError when `dt` is negative or not finite.
    */
   advance(dt: number): void {
@@ -152,12 +218,45 @@ export class GameClock {
       throw new RangeError(`dt must be a non-negative finite number, got ${dt}`);
     }
     if (this.isPaused) return;
-    this.elapsedSeconds += dt * this.speed;
+    const gameSeconds = dt * this.speed;
+    this.elapsedSeconds += gameSeconds;
     const day = 1 + Math.floor(this.elapsedSeconds / this.dayLengthSeconds);
     while (this.currentDay < day) {
       this.currentDay += 1;
       this.onNewDay?.(this.currentDay);
     }
+    // Only build the payload when someone reads it: this runs once per loop step.
+    if (this.events.listenerCount("stepped") > 0) this.events.emit("stepped", { dt, gameSeconds });
+  }
+
+  /** Adds a listener for a clock event. @returns a function that removes it. */
+  on<Type extends keyof GameClockEvents>(type: Type, listener: Listener<GameClockEvents[Type]>): Unsubscribe {
+    return this.events.on(type, listener);
+  }
+
+  /** Adds a listener that runs once, at the next event of that type. @returns a function that removes it. */
+  once<Type extends keyof GameClockEvents>(type: Type, listener: Listener<GameClockEvents[Type]>): Unsubscribe {
+    return this.events.once(type, listener);
+  }
+
+  /** Removes a listener added with `on` or `once`. */
+  off<Type extends keyof GameClockEvents>(type: Type, listener: Listener<GameClockEvents[Type]>): void {
+    this.events.off(type, listener);
+  }
+
+  /** The index of an allowed speed. @throws RangeError when the speed is not allowed. */
+  private indexOfSpeed(speed: number): number {
+    const index = this.speedList.indexOf(speed);
+    if (index < 0) {
+      throw new RangeError(`speed ${speed} is not allowed; the allowed speeds are ${this.speedList.join(", ")}`);
+    }
+    return index;
+  }
+
+  /** Sends a `speed` event when the speed differs from `previous`. */
+  private announceSpeed(previous: number): void {
+    const current = this.speed;
+    if (current !== previous) this.events.emit("speed", { previous, current });
   }
 }
 

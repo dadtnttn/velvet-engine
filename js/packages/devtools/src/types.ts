@@ -12,11 +12,17 @@ export interface DevtoolsOptions<Events extends object = object> {
   readonly enabled: boolean;
   /** The game clock. Pause, resume, step and the speed controls act on it. */
   readonly clock?: GameClock;
-  /** The game loop. Its step length sets the size of a clock-only step, and its running state is shown. */
+  /**
+   * The game loop. Its frame hooks give the tools the update and render times, its step length sets the size
+   * of a clock-only step, and its running state is shown. Create the loop before the tools, and pass it here.
+   */
   readonly loop?: GameLoop;
-  /** The event bus whose events go to the event log. */
+  /** The event bus whose events go to the event log. Every event of the bus is logged, through a tap. */
   readonly events?: EventEmitter<Events>;
-  /** The events to log. A bus cannot list its names, so the game lists the ones it wants to see. */
+  /**
+   * @deprecated The log records every event of `events`, so there is no need to list them. When names are given,
+   * the log keeps only those events; the option still works for that.
+   */
   readonly eventNames?: ReadonlyArray<keyof Events & string>;
   /** The game's stage. The performance panel shows its pixel sizes and whether it draws natively. */
   readonly stage?: Stage;
@@ -113,9 +119,9 @@ export interface Devtools {
   watch(name: string, read: () => number): () => void;
 
   /**
-   * Returns the loop options with the devtools applied: frame timing, the update and render split, and
-   * the hold that pause and step put on the game's update. Pass the result to `new GameLoop`.
-   * Without this, the loop still runs, but the update and render split is not measured and a pause only
+   * @deprecated Pass the loop to `createDevtools` as `loop`: the update and render times then come from the
+   * loop's frame hooks. This still returns the loop options with the hold that pause and step put on the
+   * game's update, which the hooks cannot do. Pass the result to `new GameLoop`. Without it, a pause only
    * stops the clock.
    */
   wrapLoop<Options extends GameLoopOptions>(options: Options): Options;

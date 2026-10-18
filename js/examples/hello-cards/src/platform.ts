@@ -1,13 +1,17 @@
 // Platform access: what the game asks of Velvet Desktop (logs, settings, fullscreen, quit), with a
 // browser fallback for each call, so the same build runs in a plain page during development.
 
-import { getBridge, getLocalStorage } from "@velvet/core";
+import { createSettingsStore, getBridge, type SettingsStore } from "@velvet/core";
+import { GAME_ID, type Language } from "./config";
 
 /** The levels that the bridge's `log` takes. */
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
-/** The prefix of the settings keys in the browser fallback (localStorage). */
-const SETTING_PREFIX = "hello-cards:";
+/** What the game keeps between runs. A saved value replaces a default only when it has the right type. */
+export interface GameSettings {
+  /** The language of the texts, or null when none was chosen yet (the game then starts in Spanish). */
+  readonly language: Language | null;
+}
 
 /** A message for any thrown value. */
 function describe(value: unknown): string {
@@ -45,36 +49,12 @@ export function installErrorLog(): void {
   });
 }
 
-/** Reads a setting: the bridge's settings in Velvet Desktop, localStorage in a browser. */
-export async function readSetting(key: string): Promise<unknown> {
-  const bridge = getBridge();
-  if (bridge !== null) return bridge.settings.get(key);
-  const storage = getLocalStorage();
-  if (storage === null) return null;
-  try {
-    const text = storage.getItem(SETTING_PREFIX + key);
-    if (text === null) return null;
-    const value: unknown = JSON.parse(text);
-    return value;
-  } catch {
-    return null;
-  }
-}
-
-/** Writes a setting, in the same place that `readSetting` reads it from. */
-export async function writeSetting(key: string, value: unknown): Promise<void> {
-  const bridge = getBridge();
-  if (bridge !== null) {
-    await bridge.settings.set(key, value);
-    return;
-  }
-  const storage = getLocalStorage();
-  if (storage === null) return;
-  try {
-    storage.setItem(SETTING_PREFIX + key, JSON.stringify(value));
-  } catch {
-    // The browser refused the write (full or blocked storage): the setting simply is not kept.
-  }
+/**
+ * The store of the game's settings: the bridge's settings in Velvet Desktop, localStorage in a browser, and
+ * memory when neither is there. Call `load` before reading them.
+ */
+export function createGameSettings(): SettingsStore<GameSettings> {
+  return createSettingsStore<GameSettings>({ namespace: GAME_ID, version: 1, defaults: { language: null } });
 }
 
 /** True while the window is full screen. */

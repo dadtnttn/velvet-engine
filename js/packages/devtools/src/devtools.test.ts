@@ -633,6 +633,60 @@ describe("the event log", () => {
   });
 });
 
+describe("the loop's frame hooks and the event tap", () => {
+  it("reads the update and render times from the loop's frame hooks when the loop is given, without wrapLoop", () => {
+    const loopFrames = manualScheduler();
+    let nowMs = 0;
+    const loop = new GameLoop({
+      rate: 10,
+      scheduler: loopFrames,
+      now: () => nowMs,
+      update: () => {
+        nowMs += 4;
+      },
+      render: () => {
+        nowMs += 6;
+      },
+    });
+    const devtools = devtoolsWith({ loop });
+    loop.start();
+    loopFrames.tick(0);
+    loopFrames.tick(250);
+    // The first frame renders for 6 ms with no step. The second runs two steps of 4 ms, then renders for 6 ms.
+    expect(devtools.stats().updateMs).toBe(4);
+    expect(devtools.stats().renderMs).toBe(6);
+    loop.stop();
+  });
+
+  it("logs every event of the bus through a tap, newest first, when no names are given", () => {
+    interface Events {
+      day: { day: number };
+      save: void;
+    }
+    const bus = new EventEmitter<Events>();
+    devtoolsWith({ events: bus }).show();
+    bus.emit("day", { day: 1 });
+    bus.emit("save");
+    tabButton("Events").click();
+    const names = [...document.querySelectorAll(".vdt-event-name")].map((name) => name.textContent);
+    expect(names).toEqual(["save", "day"]);
+  });
+
+  it("logs only the names it is given, when names are given to narrow the log", () => {
+    interface Events {
+      day: { day: number };
+      save: void;
+    }
+    const bus = new EventEmitter<Events>();
+    devtoolsWith({ events: bus, eventNames: ["save"] }).show();
+    bus.emit("day", { day: 1 });
+    bus.emit("save");
+    tabButton("Events").click();
+    const names = [...document.querySelectorAll(".vdt-event-name")].map((name) => name.textContent);
+    expect(names).toEqual(["save"]);
+  });
+});
+
 describe("disabled and destroyed tools", () => {
   it("when disabled, adds no element, no style and no listener, and every method does nothing", () => {
     const clock = new GameClock({ speeds: [1, 2] });

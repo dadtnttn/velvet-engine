@@ -437,6 +437,33 @@ export function settle(): Promise<void> {
 }
 
 /**
+ * A frame scheduler that the test drives: `runFrame` runs the frames that are waiting, with the time it is
+ * given. A game loop built on it runs one frame each time the test says so.
+ */
+export class ManualFrames {
+  private nextHandle = 1;
+  private readonly callbacks = new Map<number, (timeMs: number) => void>();
+
+  request(callback: (timeMs: number) => void): number {
+    const handle = this.nextHandle;
+    this.nextHandle += 1;
+    this.callbacks.set(handle, callback);
+    return handle;
+  }
+
+  cancel(handle: number): void {
+    this.callbacks.delete(handle);
+  }
+
+  /** Runs the frames that are waiting now, giving them `timeMs` as their timestamp. */
+  runFrame(timeMs: number): void {
+    const batch = [...this.callbacks.values()];
+    this.callbacks.clear();
+    for (const callback of batch) callback(timeMs);
+  }
+}
+
+/**
  * Runs `action` and returns the error that it throws. Fails the test when nothing is thrown.
  * @param action - the call to make.
  */

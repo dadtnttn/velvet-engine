@@ -1,12 +1,13 @@
 # @velvet/core
 
-The core runtime for Velvet JS games. It has six parts:
+The core runtime for Velvet JS games. It has these parts:
 
-- `GameLoop`: a fixed-step loop. `update(dt)` runs at 60 Hz by default, and `render(alpha)` runs once per frame.
-- `GameClock`: game time fed by the loop, with pause, speed multipliers (1, 2, 3 by default) and days.
-- `EventEmitter`: typed events with `on`, `once`, `off` and `emit`.
+- `GameLoop`: a fixed-step loop. `update(dt)` runs at 60 Hz by default, and `render(alpha)` runs once per frame. Five frame hooks (`loop.on`) run around each frame, with its timings (see "Frame hooks").
+- `GameClock`: game time fed by the loop, with pause, speed multipliers (1, 2, 3 by default) and days. It sends `paused`, `resumed`, `speed` and `stepped` events, and `state()` gives a snapshot.
+- `EventEmitter`: typed events with `on`, `once`, `off` and `emit`, and two tools for the whole bus: `tap` and `names`.
 - `ActionMap`: keys, mouse buttons, the wheel and gamepads bound to named actions, read with `pressed`, `held` and `released`, and with analog values from `value`. It can be scoped to an element, it leaves a control's own keys to the control, `consume` hides an action for the rest of a frame, and its slots can be rebound at run time (see below).
 - `createSaveStore`: versioned save slots with migrations. Saves go to the Velvet Desktop bridge, then localStorage, then memory.
+- `createSettingsStore`: a few typed settings with defaults, for one namespace, saved through the bridge, then localStorage, then memory, with debounced writes and migrations (see "Settings").
 
 The bridge contract (`VelvetBridge` and `getBridge`) lives in `src/bridge.ts`.
 
@@ -150,6 +151,71 @@ a store.
 `startPadMenuKeys()` makes the d-pad, the left stick, A and B press the arrows, Enter and Escape of the focused
 element. A menu that follows the keyboard focus rules (`@velvet/ui`) then works with a pad too. Start it while a menu
 is open, and call the function it returns to stop. The keys are marked handled, so the game's map ignores them.
+
+## Frame hooks
+
+`loop.on(phase, listener)` runs code at five points of each frame, without wrapping the loop's options. It returns the function that removes the listener.
+
+| Phase | When it runs | Payload |
+|---|---|---|
+| `beforeFrame` | once, before the steps | `{ frame, timeMs, realDt }` |
+| `beforeUpdate` | before each fixed step | `{ frame, step, dt }` |
+| `afterUpdate` | after each fixed step | `{ frame, step, dt, durationMs }` |
+| `afterRender` | after `render`, which also runs when there is no render function (then its duration is zero) | `{ frame, alpha, durationMs }` |
+| `afterFrame` | last | `{ frame, timeMs, realDt, scaledDt, steps, updateMs, renderMs, frameMs }` |
+
+The order is fixed: `beforeFrame`, then for each step `beforeUpdate`, `update`, `afterUpdate`, then `render`, `afterRender` and `afterFrame`. A frame that runs no step skips the step phases. The times are in milliseconds, and they come from the loop's `now` option (default `performance.now`), so a test can pass its own clock. `realDt` is the real time since the previous frame, zero for the first one. `scaledDt` is the game-step time that the frame ran: the number of steps times the step length.
+
+**Input.** The loop never calls `input.endFrame()`: the game does, and the hooks see input as it stands at their point of the frame. Edges stay until the game clears them. In the example above, `endFrame()` is the last call of `update`, so `afterUpdate`, `afterRender` and `afterFrame` see the edges already cleared, while `beforeFrame` and `beforeUpdate` see the edges that the game has not yet cleared.
+
+**Cost and errors.** While no hook listens, a frame reads no clock and builds no payload. A listener added during a frame runs from the next phase that the frame reaches, and a frame that began with no listener runs none of them. A `stop()` during a frame ends its remaining steps and its render, and `afterFrame` still runs once for that frame. An error thrown by a listener stops the frame, as an error thrown by `update` does; the next frame is already scheduled.
+
+## Clock events
+
+`clock.on`, `once` and `off` take these events:
+
+- `paused` and `resumed`, sent when the pause changes, with the state after the change. Pausing a paused clock sends nothing.
+- `speed`, with `{ previous, current }`, when the speed changes: by `setSpeed`, by `cycleSpeed`, or by a `restore` that changes it.
+- `stepped`, with `{ dt, gameSeconds }`, after each `advance` of a running clock, once any day that began has been counted.
+
+`restore` sends the changes that it makes, after it has set the clock, so a listener is right after a load. `clock.state()` gives what `snapshot()` keeps (elapsed, speed and paused) and also the `day`, the `timeOfDay`, the `dayLength` and the `speeds`, as a copy that changes nothing when it is altered.
+
+## Event tools
+
+- `tap(listener)` receives every event of an emitter as `{ type, payload }`, before the listeners of that event. It is meant for tools such as an event log; a game uses `on`.
+- `names()` lists the events that have a listener now, or that were emitted since the emitter was made, in the order they first appeared.
+- `listenerCount(type)` tells how many listeners an event has, so that a hot emitter can skip a payload that nobody reads.
+
+All three are opt-in: without a tap, an emit does no extra work for it.
+
+## Settings
+
+    import { createSettingsStore } from "@velvet/core";
+
+    interface Prefs {
+      volume: number;
+      language: string | null;
+    }
+
+    const prefs = createSettingsStore<Prefs>({
+      namespace: "my-game",                        // one namespace per package or game area
+      version: 1,
+      defaults: { volume: 1, language: null },
+      // migrate: { 1: (values) => ({ ...values, volume: 1 }) }   // keyed by the version each step starts from
+    });
+    await prefs.load();                 // the saved values, or the defaults; never rejects
+    prefs.get("volume");                // 1 until a value is saved
+    const stop = prefs.subscribe("volume", (volume) => applyVolume(volume));
+    prefs.set("volume", 0.5);           // subscribers hear at once; the values are saved after 250 ms of quiet
+    await prefs.save();                 // writes now: resolves true, or false when the storage refused
+
+**Where the values go.** In Velvet Desktop, the bridge's settings, under the namespace as the key. In a browser, localStorage, under `velvet-settings:` and the namespace. Otherwise memory. Pass `bridge`, `storage` or `backend` to choose, or `null` to skip one. Two stores on one namespace share the saved values, and the last write wins, so each package takes its own namespace.
+
+**What is read.** The saved form is `{ "format": "velvet-settings", "version": N, "values": { ... } }`. A saved value is used only when its type matches its default: a number for a number, an array for an array, an object for an object. A default of `null` takes any value. A value of the wrong type is ignored, so a damaged setting never stops the game from starting. Values of an older version are migrated one step at a time, as save slots are. Values of a newer build are not read. A plain object saved without the envelope counts as version 1.
+
+**What is written.** `set` changes a value at once and saves every value after the debounce, so a burst of changes is one write (`debounceMs` changes the wait). `save` writes at once. A write waits for `load`, so it never replaces stored values that were not read yet. A value that was set before the load finished keeps its value, and the other saved values still load. A storage that refuses a write never throws into the game: `save` resolves false.
+
+`chooseSettingsBackend({ prefix, explicit?, bridge?, storage? })` is the choice that the settings store and the bindings store share: the backend passed in, else the bridge's settings, else localStorage under the prefix, else memory. The bindings file keeps its own keys (`input.bindings` in the bridge, `velvet-input:input.bindings` in localStorage), so saved bindings still load.
 
 ## Tests
 

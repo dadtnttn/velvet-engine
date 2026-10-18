@@ -4,11 +4,21 @@
 //   import { GameLoop, ActionMap, createSaveStore } from "@velvet/core";
 
 export { GameLoop, createFrameScheduler } from "./loop";
-export type { FrameScheduler, GameLoopOptions } from "./loop";
+export type {
+  FrameScheduler,
+  FrameStart,
+  FrameTiming,
+  GameLoopOptions,
+  LoopHooks,
+  LoopPhase,
+  RenderEnd,
+  StepEnd,
+  StepStart,
+} from "./loop";
 export { GameClock } from "./clock";
-export type { GameClockOptions, GameClockState } from "./clock";
+export type { GameClockEvents, GameClockOptions, GameClockState, GameClockStatus } from "./clock";
 export { EventEmitter } from "./events";
-export type { EmitArgs, Listener, Unsubscribe } from "./events";
+export type { EmitArgs, Listener, TapEvent, TapListener, Unsubscribe } from "./events";
 export { ActionMap, markHandled } from "./input";
 export type {
   ActionMapOptions,
@@ -59,7 +69,6 @@ export type {
   BindingsStore,
   BindingsStoreOptions,
   ParseBindingsOptions,
-  SettingsBackend,
 } from "./input-store";
 export { SLOT_PATTERN, getBridge, isValidSlot } from "./bridge";
 export type { VelvetBridge } from "./bridge";
@@ -76,3 +85,12 @@ export {
   getLocalStorage,
 } from "./save-backends";
 export type { SaveBackend, StorageLike } from "./save-backends";
+export { createSettingsStore, SETTINGS_FORMAT, SETTINGS_STORAGE_PREFIX } from "./settings-store";
+export type { SettingsStore, SettingsStoreOptions } from "./settings-store";
+export { chooseSettingsBackend } from "./settings-backend";
+export type {
+  ChosenSettingsBackend,
+  SettingsBackend,
+  SettingsBackendChoice,
+  SettingsBackendKind,
+} from "./settings-backend";

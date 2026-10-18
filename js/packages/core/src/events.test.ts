@@ -1,8 +1,8 @@
-// Tests for the typed event emitter: subscriptions, removal, one-time listeners and the
-// order of calls during an emit.
+// Tests for the typed event emitter: subscriptions, removal, one-time listeners, the order of calls
+// during an emit, and the tools: taps, the list of event names and the listener counts.
 
 import { describe, expect, it } from "vitest";
-import { EventEmitter } from "./events";
+import { EventEmitter, type TapEvent } from "./events";
 
 interface TestEvents {
   day: { day: number };
@@ -147,6 +147,124 @@ describe("EventEmitter during an emit", () => {
       throw new Error("boom");
     });
     expect(() => events.emit("note", "x")).toThrow("boom");
+  });
+});
+
+describe("EventEmitter taps", () => {
+  it("gives a tap every event, with its name and payload", () => {
+    const events = new EventEmitter<TestEvents>();
+    const seen: string[] = [];
+    events.tap((event) => {
+      seen.push(event.type === "day" ? `day ${event.payload.day}` : event.type === "note" ? `note ${event.payload}` : "save");
+    });
+    events.emit("day", { day: 4 });
+    events.emit("note", "hello");
+    events.emit("save");
+    expect(seen).toEqual(["day 4", "note hello", "save"]);
+  });
+
+  it("runs a tap for an event that nobody listens to, and before the listeners of that event", () => {
+    const events = new EventEmitter<TestEvents>();
+    const order: string[] = [];
+    events.on("note", () => {
+      order.push("listener");
+    });
+    events.tap(() => {
+      order.push("tap");
+    });
+    events.emit("note", "x");
+    events.emit("day", { day: 1 });
+    expect(order).toEqual(["tap", "listener", "tap"]);
+  });
+
+  it("runs the taps in the order they were added, and removes one with the function that tap returned", () => {
+    const events = new EventEmitter<TestEvents>();
+    const order: string[] = [];
+    events.tap(() => {
+      order.push("first");
+    });
+    const removeSecond = events.tap(() => {
+      order.push("second");
+    });
+    events.emit("save");
+    removeSecond();
+    events.emit("save");
+    expect(order).toEqual(["first", "second", "first"]);
+  });
+
+  it("types the payload of each event in the tap's union", () => {
+    const events = new EventEmitter<TestEvents>();
+    const kinds: Array<TapEvent<TestEvents>["type"]> = [];
+    events.tap((event) => {
+      kinds.push(event.type);
+    });
+    events.emit("note", "a");
+    expect(kinds).toEqual(["note"]);
+  });
+
+  it("does not run a tap that an earlier tap removed in the same emit", () => {
+    const events = new EventEmitter<TestEvents>();
+    const calls: string[] = [];
+    let removeSecond: () => void = () => undefined;
+    events.tap(() => {
+      calls.push("first");
+      removeSecond();
+    });
+    removeSecond = events.tap(() => {
+      calls.push("second");
+    });
+    events.emit("save");
+    expect(calls).toEqual(["first"]);
+  });
+
+  it("lets an error thrown by a tap reach the caller of emit, as a listener's error does", () => {
+    const events = new EventEmitter<TestEvents>();
+    events.tap(() => {
+      throw new Error("tap failed");
+    });
+    expect(() => events.emit("save")).toThrow("tap failed");
+  });
+});
+
+describe("EventEmitter names", () => {
+  it("lists the events with a listener, and the events that were emitted, in first-seen order", () => {
+    const events = new EventEmitter<TestEvents>();
+    expect(events.names()).toEqual([]);
+    events.on("note", () => undefined);
+    events.emit("save");
+    events.on("day", () => undefined);
+    expect(events.names()).toEqual(["note", "save", "day"]);
+  });
+
+  it("keeps an event that was emitted, and drops one that was only listened to and then removed", () => {
+    const events = new EventEmitter<TestEvents>();
+    const removeNote = events.on("note", () => undefined);
+    const removeDay = events.on("day", () => undefined);
+    events.emit("day", { day: 1 });
+    removeNote();
+    removeDay();
+    expect(events.names()).toEqual(["day"]);
+  });
+
+  it("does not change when a tap is added, and does not list a tap", () => {
+    const events = new EventEmitter<TestEvents>();
+    events.tap(() => undefined);
+    expect(events.names()).toEqual([]);
+  });
+});
+
+describe("EventEmitter listener counts", () => {
+  it("counts the listeners of one event, and counts none for an event nobody listens to", () => {
+    const events = new EventEmitter<TestEvents>();
+    expect(events.listenerCount("note")).toBe(0);
+    const listener = (): void => undefined;
+    events.on("note", listener);
+    events.once("note", () => undefined);
+    events.on("note", listener);
+    expect(events.listenerCount("note")).toBe(2);
+    events.off("note", listener);
+    expect(events.listenerCount("note")).toBe(1);
+    expect(events.listenerCount("day")).toBe(0);
   });
 });
 

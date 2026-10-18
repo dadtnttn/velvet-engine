@@ -9,13 +9,15 @@ audio. Nothing in the package is tied to one game.
 ## A game
 
 ```ts
-import { GameClock } from "@velvet/core";
+import { GameClock, GameLoop } from "@velvet/core";
 import { createAudio, parseAudioManifest } from "@velvet/audio";
 
 // The manifest, from the audio folder. The text can come from a fetch, a bundler or the desktop bridge.
 const manifest = parseAudioManifest(await (await fetch("audio/manifest.json")).text());
 const clock = new GameClock();
-const audio = createAudio({ manifest, clock });
+const loop = new GameLoop({ update: (dt) => clock.advance(dt) });
+// The engine follows the clock's pause events and the loop's frame hook by itself: no call per frame is needed.
+const audio = createAudio({ manifest, clock, loop });
 
 // Decode what the first scene needs. The callback drives a loading bar.
 const { failed } = await audio.preload(["ui.click", "music.village.day"], ({ done, total }) => setProgress(done / total));
@@ -35,15 +37,14 @@ const reason = await step.ended; // "finished", "stopped", "stolen", "skipped" o
 audio.setVolume("music", 0.6);
 audio.setMuted("ui", false);
 
-// Once per frame, next to the clock. Without this call the pause and the page are not followed.
-function frame(dt: number): void {
-  clock.advance(dt);
-  audio.update();
-}
+loop.start();
 ```
 
 A game that runs in a browser calls `audio.unlock()` from its own "start" button, or it simply waits for the
 first press: the engine unlocks on the first press, key or touch by itself.
+
+Without a `loop` option the engine still follows the clock's events, and the page's visibility. A game that
+drives its own frames can call `audio.update()` once per frame instead; it is optional, and it is cheap.
 
 ## API
 
@@ -61,31 +62,35 @@ first press: the engine unlocks on the first press, key or touch by itself.
 | `setVolume(bus, v)`, `getVolume(bus)` | The volume of a bus, or of `"master"`, from 0 to 1. |
 | `setMuted(bus, muted)`, `isMuted(bus)` | Mutes a bus, or `"master"`. |
 | `unlock()` | Asks the browser to start the audio. Resolves `true` once it runs. |
-| `update()` | Follows the clock's pause, the page's visibility and the start of the audio. Call it once per frame. |
+| `update()` | Optional. Checks the clock's pause, the page's visibility and the start of the audio. The engine already follows the clock's events and, with a `loop`, the loop's frame hook; calling it runs the same check by hand, and it is cheap when nothing changed. |
 | `on`, `once`, `off` | The events `loaded`, `error` and `music-changed`, through the core event system. |
 | `ready` | Resolves when the saved mix has been read. Never rejects. |
 | `unlocked` | True once the browser has let the audio run. |
 | `close()` | Stops every play, releases the page's listeners and closes the context. |
 | `volumeToGain`, `volumeToDecibels`, `decibelsToGain` | The volume curve, for tools and tests. |
-| `defaultSettingsStore()` | The store that the engine uses when none is given. |
+| `defaultSettingsStore()` | The backend that the engine's mix is saved in by default: the bridge's settings, else localStorage, else null. |
 
 The options of `createAudio`: `baseUrl` (default `audio/`), `fetch`, `createContext` (the audio context
-factory), `canPlay` (which formats the runtime plays), `clock` (a `GameClock` or anything with a `paused`
-flag), `pauseWith` (`"game-buses"` by default, or `"context"`), `host` (the page: visibility and
-gestures), `settings` (where the mix is saved; `null` keeps it for the session), `ducking` (or `false`),
-`now`, `random`, `queueLimit`, `staleAfterMs` and `suspendWhenHidden`. Every option has a default, and the
-defaults are the browser's own.
+factory), `canPlay` (which formats the runtime plays), `clock` (a `GameClock`, or anything with a `paused`
+flag; a clock with `on` is followed through its `paused` and `resumed` events), `loop` (a `GameLoop`, whose
+`beforeFrame` hook checks the audio each frame), `pauseWith` (`"game-buses"` by default, or `"context"`),
+`host` (the page: visibility and gestures), `settings` (where the mix is saved; `null` keeps it for the
+session), `ducking` (or `false`), `now`, `random`, `queueLimit`, `staleAfterMs` and `suspendWhenHidden`. Every
+option has a default, and the defaults are the browser's own.
 
 The package also exports `AudioError` (with `code` and `issues`), the format constants (`AUDIO_FORMAT`,
 `AUDIO_VERSION`, `AUDIO_FORMATS`, `AUDIO_MIME`, `BUILT_IN_BUSES`, `MASTER_BUS`, `isBuiltInBus`) and the types
-of the manifest, the handles, the options and the context that a custom host implements.
+of the manifest, the handles, the options, the clock and loop shapes (`AudioClock`, `AudioLoop`) and the
+context that a custom host implements.
 
 ## Rules to know
 
 - **Autoplay.** Plays made before the first gesture wait in a queue. The first press, key or touch starts them.
   The queue keeps the newest 32 plays, and a play that waits more than 3 seconds is skipped.
 - **Pause.** While the clock is paused, the music, sfx and voice buses are muted over a short ramp, and `ui`
-  keeps sounding. With `pauseWith: "context"` the whole context is suspended instead.
+  keeps sounding. With `pauseWith: "context"` the whole context is suspended instead. The change follows the
+  clock's `paused` and `resumed` events at once, and a clock that is already paused when the engine starts
+  mutes the buses from the start.
 - **Hidden page.** A hidden page suspends the context, and a visible one resumes it. Pass
   `suspendWhenHidden: false` to keep it running.
 - **Ducking.** While a `voice` sound plays, the `music` bus drops by 12 dB, over 60 ms, and comes back over
@@ -97,9 +102,12 @@ of the manifest, the handles, the options and the context that a custom host imp
   A sound with `max_voices` steals its oldest copy when a new one would pass the limit.
 - **Variants** are picked at random, and the one that played last is never picked again.
 - **Loop points** are clamped to the file's length. A start offset (`startAt`) is clamped the same way.
-- **Settings.** The mix is read at start, and written after changes. A burst of changes is one write. In Velvet Desktop it
-  goes to the bridge's `settings` object, in a browser to localStorage under `velvet-audio:audio`. Pass
-  `settings: getBridge()?.settings` or your own store with the same `get` and `set` shape to choose.
+- **Settings.** The mix is read at start, and written after changes, through the core settings store under the
+  namespace `audio`. A burst of changes is one write, made 250 ms after the last change; `close()` writes what is
+  still pending. In Velvet Desktop the mix is kept in the bridge's `settings` object under `audio`, in a browser
+  in localStorage under `velvet-settings:audio`. A mix that an older build left in the bridge is still read; the
+  localStorage key changed, so a mix saved in a browser by an older build is not. Pass `settings: getBridge()?.settings` or your own store with the same `get` and `set` shape to choose, or
+  `null` to keep the mix for the session only.
 - **Loading.** A file is fetched once and decoded once. The candidates of a sound are tried in order, and a
   file that is missing or does not decode moves on to the next one. A sound that loads nowhere reports an
   `error` event, and its play ends as `failed`.

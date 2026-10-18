@@ -7,14 +7,15 @@
 // actions that the game lists; the rest keep their defaults. A file from a newer build is refused,
 // and an older one is migrated with the migrations that the game passes in, exactly as save slots are.
 
-import { getBridge } from "./bridge";
 import { readControl } from "./input-controls";
 import { DEFAULT_CONTEXT } from "./input-rebind";
 import { SaveError } from "./save-error";
 import { isPositiveInteger, isRecord } from "./guards";
-import { getLocalStorage, type StorageLike } from "./save-backends";
 import { migrateData, type MigrationMap } from "./save-format";
+import { chooseSettingsBackend, type SettingsBackend, type SettingsBackendKind } from "./settings-backend";
 import type { ActionMap, Binding, Control } from "./input";
+
+export type { SettingsBackend } from "./settings-backend";
 
 /** The format tag of a bindings file. */
 export const BINDINGS_FORMAT = "velvet-input-bindings";
@@ -72,15 +73,7 @@ export interface ApplyBindingsResult {
 }
 
 /** Where a store keeps its file: the bridge's settings, localStorage, memory, or a backend that was passed in. */
-export type BindingsBackendKind = "bridge" | "localStorage" | "memory" | "custom";
-
-/** Stores settings values by key. The bridge's `settings` object has this shape. */
-export interface SettingsBackend {
-  /** Reads a value. Resolves to null (or undefined) when nothing is stored under the key. */
-  get(key: string): Promise<unknown>;
-  /** Stores a JSON value under the key. Storing null clears it. */
-  set(key: string, value: unknown): Promise<void>;
-}
+export type BindingsBackendKind = SettingsBackendKind;
 
 /** Options for {@link createBindingsStore}. */
 export interface BindingsStoreOptions {
@@ -201,7 +194,7 @@ export function createBindingsStore(options: BindingsStoreOptions = {}): Binding
   const version = options.version ?? BINDINGS_VERSION;
   if (!Number.isInteger(version) || version < 1) throw new RangeError(`version must be a whole number from 1 up, got ${version}`);
   const migrations = options.migrations ?? {};
-  const chosen = chooseSettings(options.settings);
+  const chosen = chooseSettingsBackend({ explicit: options.settings, prefix: SETTINGS_PREFIX });
   const backend = chosen.backend;
   return {
     key,
@@ -293,44 +286,3 @@ function readSlot(entry: unknown, action: string): BindingsFileSlot {
   };
 }
 
-/** Picks the settings backend: the one passed in, else the bridge, else localStorage, else memory. */
-function chooseSettings(explicit: SettingsBackend | undefined): { kind: BindingsBackendKind; backend: SettingsBackend } {
-  if (explicit !== undefined) return { kind: "custom", backend: explicit };
-  const bridge = getBridge();
-  if (bridge !== null) return { kind: "bridge", backend: bridge.settings };
-  const storage = getLocalStorage();
-  if (storage !== null) return { kind: "localStorage", backend: localStorageSettings(storage) };
-  return { kind: "memory", backend: memorySettings() };
-}
-
-/** Settings kept as JSON text in localStorage. A value that is not JSON is returned as its text. */
-function localStorageSettings(storage: StorageLike): SettingsBackend {
-  return {
-    async get(key) {
-      const text = storage.getItem(SETTINGS_PREFIX + key);
-      if (text === null) return null;
-      try {
-        const parsed: unknown = JSON.parse(text);
-        return parsed;
-      } catch {
-        return text;
-      }
-    },
-    async set(key, value) {
-      storage.setItem(SETTINGS_PREFIX + key, JSON.stringify(value));
-    },
-  };
-}
-
-/** Settings kept in memory. Nothing survives a reload. */
-function memorySettings(): SettingsBackend {
-  const values = new Map<string, unknown>();
-  return {
-    async get(key) {
-      return values.get(key) ?? null;
-    },
-    async set(key, value) {
-      values.set(key, value);
-    },
-  };
-}
