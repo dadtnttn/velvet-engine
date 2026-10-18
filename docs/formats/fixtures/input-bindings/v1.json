@@ -1,0 +1,42 @@
+{
+  "format": "velvet-input-bindings",
+  "version": 1,
+  "actions": [
+    {
+      "action": "confirm",
+      "slots": [
+        { "control": { "type": "key", "key": "Enter" } },
+        null,
+        { "control": { "type": "pad-button", "button": "a" } }
+      ]
+    },
+    {
+      "action": "move",
+      "slots": [
+        { "control": { "type": "key", "key": "KeyW" }, "axisComponent": "y" },
+        { "control": { "type": "key", "key": "KeyS" }, "axisComponent": "y", "scale": -1 },
+        { "control": { "type": "pad-axis", "axis": "leftX", "deadzone": 0.25 }, "axisComponent": "x" }
+      ]
+    },
+    {
+      "action": "attack",
+      "slots": [
+        { "control": { "type": "mouse", "button": "left" } },
+        { "control": { "type": "pad-button", "button": "rightTrigger", "threshold": 0.6 }, "context": "gameplay" }
+      ]
+    },
+    {
+      "action": "zoom",
+      "slots": [
+        { "control": { "type": "wheel", "direction": "up" } },
+        { "control": { "type": "pad-stick", "stick": "right", "direction": "up", "deadzone": 0.3 } }
+      ]
+    },
+    {
+      "action": "retired-action",
+      "slots": [
+        { "control": { "type": "key", "key": "KeyX" } }
+      ]
+    }
+  ]
+}

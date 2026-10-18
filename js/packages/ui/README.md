@@ -4,7 +4,7 @@ The 2D layer of a Velvet JS game: a stage that draws a fixed 16:9 surface in any
 HUD primitives of the Persona look (slanted plates, keycaps, chips, meters, buttons, tooltips,
 toasts, modals and menus). It is DOM, SVG and CSS, with no framework, and it sits over a 3D canvas.
 
-It has three parts:
+It has four parts:
 
 - **The stage** (`createStage`): every position, size and click is written in logical pixels, 1920 by 1080
   unless the game says otherwise. The stage scales the logical surface into the window with letterbox
@@ -13,6 +13,8 @@ It has three parts:
   maps. Items sit at world positions, and a drag helper reports the pointer and the drop target.
 - **The components**: small factories that return `{ el, update(props), destroy() }`. Modal, toast and
   the stage have a few extra methods (`open`, `show`, `setNative`); their docs say which.
+- **The rebinding panel** (`createRebindPanel`): the game's actions, each with the control in each slot, a
+  capture state for the next input, and reset buttons. It works through a port that `@velvet/core` builds.
 
 ## Usage
 
@@ -152,6 +154,82 @@ Rules that the board keeps:
 - An element in the layer that is not an item (a background plate that the game draws, for example) counts as
   empty space: a press on it pans the view. Make an element interactive by adding it as an item.
 
+## The rebinding panel
+
+A panel that lets the player change the controls. It lists each slot of each action with its control, and a
+row for a new binding when every slot is taken. Choosing a row starts a capture of the next input: a key, a mouse
+button, a gamepad button or a stick push, as the devices allow. A line under the list says what happened: the
+binding, a conflict with another action, a cancel.
+
+    import { createRebindPort } from "@velvet/core";
+    import { createRebindPanel } from "@velvet/ui";
+
+    const panel = createRebindPanel({
+      port: createRebindPort(input), // input: the game's ActionMap
+      actions: [
+        { id: "confirm", labelKey: "action.confirm" },
+        { id: "move", labelKey: "action.move" },
+      ],
+      t: (key, args) => i18n.t(key, args), // the game's text lookup
+      policy: "swap", // optional: "swap" (default), "refuse" or "allow"
+      devices: ["keyboard", "gamepad"], // optional: the default is all three
+    });
+    stage.root.append(panel.el);
+
+| Member | What it is |
+|---|---|
+| `createRebindPanel({ port, actions, t, policy?, devices?, timeoutMs? })` | Creates the panel. `timeoutMs` (default 8000) ends a capture that waits too long. |
+| `el` | The panel's element. Put it in the stage's root or in the page. |
+| `update({ actions?, t?, policy?, devices?, timeoutMs? })` | Changes what is given. A new `t` redraws every text, which is how a language change reaches the panel. |
+| `refresh()` | Reads the slots from the port again. Call it after a change that the panel did not make. |
+| `cancel()` | Ends the capture in progress. |
+| `capturing` | True while a capture waits for an input. |
+| `destroy()` | Ends a capture, removes the element and its listeners. |
+
+**Keys.** Enter, Space or a click on a row starts a capture for that slot. Escape cancels it, and so does a
+timeout. Delete clears the focused slot. The two buttons restore the action of the focused row, or every action.
+While a capture waits, no other choice starts, and the keys belong to the capture. The arrows, Home and End move
+the focus through the list, as they do in any menu.
+
+**A pad.** The panel follows the menu rules, so a gamepad drives it when the game forwards the pad as keys with
+`startPadMenuKeys` from `@velvet/core`. Start it while the panel is open and stop it when the panel closes.
+
+**The port.** `RebindPort` is the set of operations that the panel uses: `slots(action)`, `capture(action, slot,
+request)`, `clear`, `resetAction` and `resetAll`. The panel imports nothing from core, so the types are declared
+here, and `createRebindPort` in `@velvet/core` provides them.
+
+**Texts.** Every text comes from `t`. When the lookup has no text for a key, it returns the key itself. The panel
+then shows a plain form of the row (the action's id, the device's name and the control's code), so the screen still
+works while a catalog is incomplete.
+
+| Key | Arguments | Used for |
+|---|---|---|
+| `input.rebind.title` | | The panel's title. |
+| `input.rebind.list` | | The name of the list, for screen readers. |
+| `input.rebind.hint` | | The line shown when the panel opens. |
+| `input.rebind.capture` | | The prompt while a capture waits. |
+| `input.rebind.row` | `action`, `device`, `control` | A row with a bound slot. |
+| `input.rebind.row.empty` | `action` | A row with an empty slot. |
+| `input.rebind.row.capturing` | `action` | The row whose capture is waiting. |
+| `input.rebind.inverted` | `control` | A control that is an inverted axis. |
+| `input.rebind.bound` | `control` | A capture that was bound. |
+| `input.rebind.swapped` | `control`, `action` | A swap with another action. |
+| `input.rebind.shared` | `control`, `action` | A conflict that was allowed. |
+| `input.rebind.refused` | `control`, `action` | A conflict that was refused. |
+| `input.rebind.cancelled` | | A capture that was cancelled or timed out. |
+| `input.rebind.failed` | | A capture that failed. |
+| `input.rebind.cleared` | | After Delete. |
+| `input.rebind.reset.action` | | The button that resets the focused action. |
+| `input.rebind.reset.all` | | The button that resets every action. |
+| `input.rebind.reset.done` | | After a reset. |
+| `input.device.keyboard`, `input.device.mouse`, `input.device.gamepad` | | The device names. |
+
+The control names are the display keys of `@velvet/core` (`input.key.Space`, `input.pad.a` and so on); the list is in
+`docs/formats/INPUT_BINDINGS.md`.
+
+The panel sets no hover or focus geometry. A row and a button change colour only, from the menu and button styles.
+The panel's own width is set inline, and its list scrolls when it is taller than 640 logical pixels.
+
 ## Theme
 
 Colours, fonts and sizes are custom properties on `.vu-root`: `--vu-ink`, `--vu-paper`, `--vu-accent`,
@@ -167,8 +245,8 @@ a padding. The stylesheet test checks this rule. With `prefers-reduced-motion`, 
 
 From `js/`, run `pnpm test` and `pnpm typecheck`. The tests use happy-dom with a fake browser geometry
 (`src/test-support.ts`), so they check the letterbox maths, the pixel sizes at pixel ratios 1, 1.5 and 2,
-the pointer round trip, the bars, the focus trap, the toast timing, the board's transforms, zoom, clamp, hit testing and drags, and the
-stylesheet.
+the pointer round trip, the bars, the focus trap, the toast timing, the board's transforms, zoom, clamp, hit testing and drags, the
+stylesheet, and the rebinding panel's rows, captures, resets, keys, cleanup and language change.
 
 `demo/index.html` and `demo/main.ts` show the stage and every component. They load the stylesheet from
 `../src/velvet-ui.css`. Vite is not added yet, so open the page with Vite (or another server that runs

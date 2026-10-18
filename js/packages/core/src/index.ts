@@ -13,12 +13,54 @@ export { ActionMap, markHandled } from "./input";
 export type {
   ActionMapOptions,
   Binding,
+  BindingDisplay,
+  CaptureOptions,
+  CapturedInput,
   Control,
+  ConflictGroup,
+  ConflictPolicy,
+  GamepadChange,
+  GamepadInfo,
+  InputDevice,
   KeyCode,
   MouseButtonName,
+  PadAxisName,
+  PadButtonName,
+  PadControl,
+  PadDirection,
+  PadStickName,
+  RebindConflict,
+  RebindOutcome,
+  RebindStatus,
+  RumbleOptions,
   Vector2,
   WheelDirection,
 } from "./input";
+export { describeBinding } from "./input-controls";
+export {
+  DEFAULT_DEADZONE,
+  DEFAULT_PAD_THRESHOLD,
+  PAD_AXIS_NAMES,
+  PAD_BUTTON_NAMES,
+  PAD_DIRECTION_NAMES,
+  PAD_STICK_NAMES,
+} from "./input-pads";
+export { createRebindPort } from "./input-port";
+export type { RebindCaptureRequest, RebindPort, RebindPortOutcome, RebindPortSlot } from "./input-port";
+export { startPadMenuKeys } from "./pad-keys";
+export type { PadKeyMapping, PadMenuKeysOptions } from "./pad-keys";
+export { BINDINGS_FORMAT, BINDINGS_KEY, BINDINGS_VERSION, applyBindings, createBindingsStore, parseBindings, serializeBindings } from "./input-store";
+export type {
+  ApplyBindingsResult,
+  BindingsBackendKind,
+  BindingsFile,
+  BindingsFileAction,
+  BindingsFileSlot,
+  BindingsStore,
+  BindingsStoreOptions,
+  ParseBindingsOptions,
+  SettingsBackend,
+} from "./input-store";
 export { SLOT_PATTERN, getBridge, isValidSlot } from "./bridge";
 export type { VelvetBridge } from "./bridge";
 export { createSaveStore } from "./saves";

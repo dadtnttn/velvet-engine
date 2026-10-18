@@ -42,3 +42,4 @@ export { createModal } from "./components/modal";
 export type { Modal, ModalAction, ModalProps } from "./components/modal";
 export { createMenu } from "./components/menu";
 export type { Menu, MenuItem, MenuProps } from "./components/menu";
+export { createRebindPanel, type RebindAction, type RebindConflict, type RebindDevice, type RebindDisplay, type RebindPanel, type RebindPanelOptions, type RebindPanelProps, type RebindPolicy, type RebindPort, type RebindRequest, type RebindResult, type RebindSlot, type RebindStatus, type TranslateFn } from "./rebind-panel";

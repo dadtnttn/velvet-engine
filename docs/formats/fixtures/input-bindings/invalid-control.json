@@ -1,0 +1,12 @@
+{
+  "format": "velvet-input-bindings",
+  "version": 1,
+  "actions": [
+    {
+      "action": "confirm",
+      "slots": [
+        { "control": { "type": "pad-button", "button": "dpadCenter" } }
+      ]
+    }
+  ]
+}
