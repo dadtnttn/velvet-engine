@@ -343,6 +343,8 @@ class Board implements BoardView {
   private readonly bounds: WorldRect;
   private readonly items = new Map<Element, ItemRecord>();
   private readonly listeners = new Set<BoardListener>();
+  /** Stops following the stage's size. */
+  private readonly unwatchStage: () => void;
   /** The drag helpers of each element, so that taking an item off the board can release them. */
   private readonly dragHelpers = new Map<Element, Set<() => void>>();
   private zoomLevel: number;
@@ -405,6 +407,17 @@ class Board implements BoardView {
 
     stage.root.addEventListener("pointerdown", this.onRootPress);
     stage.root.addEventListener("wheel", this.onWheel, { passive: false });
+
+    // When the surface changes size (an expanding stage in a resized window), the world point at the centre of the
+    // visible area stays at its centre.
+    let box = this.visibleBox();
+    this.unwatchStage = stage.onResize(() => {
+      const worldX = (box.left + box.width / 2 - this.panX) / this.zoomLevel;
+      const worldY = (box.top + box.height / 2 - this.panY) / this.zoomLevel;
+      box = this.visibleBox();
+      const next = this.viewCentred(worldX, worldY, this.zoomLevel);
+      this.apply(this.zoomLevel, next.x, next.y);
+    });
   }
 
   /** The zoom, in logical pixels per world unit. */
@@ -644,6 +657,7 @@ class Board implements BoardView {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.unwatchStage();
     this.endPan();
     for (const el of [...this.dragHelpers.keys()]) this.stopDrags(el);
     this.stage.root.removeEventListener("pointerdown", this.onRootPress);

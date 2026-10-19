@@ -1,9 +1,15 @@
-// The stage: a fixed 16:9 surface that fits any window.
+// The stage: a 16:9 surface that fits any window.
 //
 // Games write every position, size and click in logical pixels, 1920 by 1080 unless the game
 // says otherwise. The stage holds a root element of exactly that size and scales it with a CSS
 // transform into the largest area of the host that keeps the logical aspect ratio. The rest of
 // the host is letterbox bars. The picture is never stretched.
+//
+// With `fit: "expand"` the logical size is the least the game gets instead: the scale is the
+// same, but the surface grows wider on a wide window (21:9) or taller on a tall one (16:10, 4:3)
+// so it fills the window with no bars, up to `maxAspect` and down to `minAspect`. Past those the
+// bars come back. A game that expands anchors its panels to the edges and reads `stage.width`
+// and `stage.height` (or listens to `onResize`) for the size of the moment.
 //
 //   host                  the element the game gives us; its size is the window area
 //     .vu-viewport        covers the host; its background is the bars, and bar clicks stop here
@@ -86,7 +92,30 @@ export interface StageOptions {
    * compositor to scale (false, for weak GPUs).
    */
   readonly native?: boolean;
+  /**
+   * How the surface meets a window of another shape. "keep" (the default) keeps the logical size
+   * and adds bars. "expand" keeps it as the least size and widens or heightens the surface to
+   * fill the window, between `minAspect` and `maxAspect`.
+   */
+  readonly fit?: StageFit;
+  /** With `fit: "expand"`, the widest shape (width over height) the surface takes. Default 32/9. */
+  readonly maxAspect?: number;
+  /** With `fit: "expand"`, the tallest shape (width over height) the surface takes. Default 4/3. */
+  readonly minAspect?: number;
 }
+
+/** How the surface meets a window of another shape: see {@link StageOptions.fit}. */
+export type StageFit = "keep" | "expand";
+
+/** The limits of an expanding surface, as width over height. */
+export interface StageExpand {
+  readonly minAspect: number;
+  readonly maxAspect: number;
+}
+
+/** The widest and the tallest shapes an expanding surface takes when the options name none. */
+const DEFAULT_MAX_ASPECT = 32 / 9;
+const DEFAULT_MIN_ASPECT = 4 / 3;
 
 /** A listener for {@link Stage.onResize}. It receives the new layout. */
 export type StageListener = (layout: StageLayout) => void;
@@ -99,32 +128,44 @@ export type StageListener = (layout: StageLayout) => void;
  * @param logical - the logical size of the surface.
  * @param devicePixelRatio - device pixels per CSS pixel.
  * @param native - whether the backing store uses the device pixels (true) or the logical size.
+ * @param expand - when given, the logical size is the least size, and the surface grows within these shapes to fill
+ *   the area (see {@link StageOptions.fit}).
  */
 export function computeStageLayout(
   area: { readonly width: number; readonly height: number },
   logical: { readonly width: number; readonly height: number },
   devicePixelRatio: number,
   native: boolean,
+  expand?: StageExpand,
 ): StageLayout {
   const areaWidth = nonNegative(area.width);
   const areaHeight = nonNegative(area.height);
   // The largest scale at which the logical surface fits: this keeps the aspect ratio.
   const scale = Math.min(areaWidth / logical.width, areaHeight / logical.height);
-  const cssWidth = logical.width * scale;
-  const cssHeight = logical.height * scale;
+  let width = logical.width;
+  let height = logical.height;
+  if (expand !== undefined && scale > 0) {
+    // The surface takes the area's extra width or height, in whole logical pixels, within the shapes allowed.
+    const maxWidth = Math.max(logical.width, Math.floor(logical.height * expand.maxAspect + 1e-6));
+    const maxHeight = Math.max(logical.height, Math.floor(logical.width / expand.minAspect + 1e-6));
+    width = Math.min(maxWidth, Math.max(logical.width, Math.floor(areaWidth / scale + 1e-6)));
+    height = Math.min(maxHeight, Math.max(logical.height, Math.floor(areaHeight / scale + 1e-6)));
+  }
+  const cssWidth = width * scale;
+  const cssHeight = height * scale;
   const pixelScale = native ? scale * devicePixelRatio : 1;
-  const pixelWidth = Math.max(1, Math.round(logical.width * pixelScale));
-  const pixelHeight = Math.max(1, Math.round(logical.height * pixelScale));
+  const pixelWidth = Math.max(1, Math.round(width * pixelScale));
+  const pixelHeight = Math.max(1, Math.round(height * pixelScale));
   return {
-    width: logical.width,
-    height: logical.height,
+    width,
+    height,
     scale,
     left: (areaWidth - cssWidth) / 2,
     top: (areaHeight - cssHeight) / 2,
     cssWidth,
     cssHeight,
     devicePixelRatio,
-    k: pixelWidth / logical.width,
+    k: pixelWidth / width,
     pixelWidth,
     pixelHeight,
   };
@@ -140,8 +181,11 @@ export class Stage {
 
   private readonly host: HTMLElement;
   private readonly viewport: HTMLElement;
+  /** The logical size the game is written for: the size of the surface, or the least size when it expands. */
   private readonly logicalWidth: number;
   private readonly logicalHeight: number;
+  /** The shapes an expanding surface takes, or undefined when it keeps its size. */
+  private readonly expand: StageExpand | undefined;
   /** The host's inline position before the stage changed it, or null when it did not change it. */
   private readonly previousHostPosition: string | null;
   private drawsNative: boolean;
@@ -162,6 +206,16 @@ export class Stage {
     if (!isPositive(height)) throw new RangeError(`height must be a positive number, got ${height}`);
     this.logicalWidth = width;
     this.logicalHeight = height;
+    if (options.fit === "expand") {
+      const maxAspect = options.maxAspect ?? DEFAULT_MAX_ASPECT;
+      const minAspect = options.minAspect ?? DEFAULT_MIN_ASPECT;
+      if (!isPositive(maxAspect)) throw new RangeError(`maxAspect must be a positive number, got ${maxAspect}`);
+      if (!isPositive(minAspect)) throw new RangeError(`minAspect must be a positive number, got ${minAspect}`);
+      if (minAspect > maxAspect) throw new RangeError(`minAspect (${minAspect}) is above maxAspect (${maxAspect})`);
+      this.expand = { minAspect, maxAspect };
+    } else {
+      this.expand = undefined;
+    }
     this.drawsNative = options.native ?? true;
     this.host = host;
 
@@ -191,13 +245,23 @@ export class Stage {
     return this.current;
   }
 
-  /** Logical width of the surface. */
+  /** Logical width of the surface. It changes with the window when the stage expands. */
   get width(): number {
+    return this.current.width;
+  }
+
+  /** Logical height of the surface. It changes with the window when the stage expands. */
+  get height(): number {
+    return this.current.height;
+  }
+
+  /** The logical size the game is written for: the surface's size, or its least size when it expands. */
+  get designWidth(): number {
     return this.logicalWidth;
   }
 
-  /** Logical height of the surface. */
-  get height(): number {
+  /** See {@link Stage.designWidth}. */
+  get designHeight(): number {
     return this.logicalHeight;
   }
 
@@ -242,9 +306,10 @@ export class Stage {
   toLogical(clientX: number, clientY: number): LogicalPoint | null {
     const frame = this.root.getBoundingClientRect();
     if (frame.width <= 0 || frame.height <= 0) return null;
-    const x = ((clientX - frame.left) * this.logicalWidth) / frame.width;
-    const y = ((clientY - frame.top) * this.logicalHeight) / frame.height;
-    if (x < 0 || y < 0 || x >= this.logicalWidth || y >= this.logicalHeight) return null;
+    const { width, height } = this.current;
+    const x = ((clientX - frame.left) * width) / frame.width;
+    const y = ((clientY - frame.top) * height) / frame.height;
+    if (x < 0 || y < 0 || x >= width || y >= height) return null;
     return { x, y };
   }
 
@@ -257,9 +322,10 @@ export class Stage {
   toLogicalClamped(clientX: number, clientY: number): LogicalPoint {
     const frame = this.root.getBoundingClientRect();
     if (frame.width <= 0 || frame.height <= 0) return { x: 0, y: 0 };
-    const x = ((clientX - frame.left) * this.logicalWidth) / frame.width;
-    const y = ((clientY - frame.top) * this.logicalHeight) / frame.height;
-    return { x: clampTo(x, this.logicalWidth), y: clampTo(y, this.logicalHeight) };
+    const { width, height } = this.current;
+    const x = ((clientX - frame.left) * width) / frame.width;
+    const y = ((clientY - frame.top) * height) / frame.height;
+    return { x: clampTo(x, width), y: clampTo(y, height) };
   }
 
   /**
@@ -274,8 +340,8 @@ export class Stage {
   toClient(x: number, y: number): { readonly x: number; readonly y: number } {
     const frame = this.root.getBoundingClientRect();
     return {
-      x: frame.left + (x * frame.width) / this.logicalWidth,
-      y: frame.top + (y * frame.height) / this.logicalHeight,
+      x: frame.left + (x * frame.width) / this.current.width,
+      y: frame.top + (y * frame.height) / this.current.height,
     };
   }
 
@@ -284,8 +350,8 @@ export class Stage {
     const frame = this.root.getBoundingClientRect();
     const box = element.getBoundingClientRect();
     if (frame.width <= 0 || frame.height <= 0) return { left: 0, top: 0, width: 0, height: 0 };
-    const across = this.logicalWidth / frame.width;
-    const down = this.logicalHeight / frame.height;
+    const across = this.current.width / frame.width;
+    const down = this.current.height / frame.height;
     return {
       left: (box.left - frame.left) * across,
       top: (box.top - frame.top) * down,
@@ -337,6 +403,7 @@ export class Stage {
       { width: this.logicalWidth, height: this.logicalHeight },
       currentDevicePixelRatio(),
       this.drawsNative,
+      this.expand,
     );
   }
 

@@ -524,3 +524,60 @@ function destroyAndReset(stage: Stage): void {
   host = document.createElement("div");
   document.body.append(host);
 }
+
+describe("an expanding stage", () => {
+  /** Makes an expanding stage in a window of the given size. */
+  function expandingIn(width: number, height: number): Stage {
+    setWindowSize(width, height);
+    return createStage(host, { fit: "expand" });
+  }
+
+  it("grows wider in a wide window, with no bars", () => {
+    // 2520x1080 is 21:9: the scale stays 1 and the surface is 2520 wide.
+    const stage = expandingIn(2520, 1080);
+    expect(stage.width).toBe(2520);
+    expect(stage.height).toBe(1080);
+    expect(stage.layout.left).toBe(0);
+    expect(stage.root.style.width).toBe("2520px");
+    expect(stage.designWidth).toBe(1920);
+  });
+
+  it("grows taller in a tall window, with no bars", () => {
+    // 1440x900 is 16:10: the width limits the scale to 0.75, and the surface is 1200 tall.
+    const stage = expandingIn(1440, 900);
+    expect(stage.scale).toBeCloseTo(0.75, 10);
+    expect(stage.width).toBe(1920);
+    expect(stage.height).toBe(1200);
+    expect(stage.layout.top).toBe(0);
+  });
+
+  it("stops at the widest and the tallest shapes, and the bars come back past them", () => {
+    const wide = computeStageLayout({ width: 5000, height: 1000 }, { width: 1920, height: 1080 }, 1, true, { minAspect: 4 / 3, maxAspect: 32 / 9 });
+    expect(wide.width).toBe(3840);
+    expect(wide.left).toBeGreaterThan(0);
+    const tall = computeStageLayout({ width: 1000, height: 1000 }, { width: 1920, height: 1080 }, 1, true, { minAspect: 4 / 3, maxAspect: 32 / 9 });
+    expect(tall.height).toBe(1440);
+    expect(tall.top).toBeGreaterThan(0);
+  });
+
+  it("converts the pointer on the whole grown surface", () => {
+    const stage = expandingIn(2520, 1080);
+    expect(stage.toLogical(2500, 10)).toEqual({ x: 2500, y: 10 });
+    expect(stage.toLogicalClamped(3000, 10)).toEqual({ x: 2520, y: 10 });
+  });
+
+  it("tells the listeners its new size when the window changes shape", () => {
+    const stage = expandingIn(1920, 1080);
+    const listener = vi.fn();
+    stage.onResize(listener);
+    resizeWindow(2520, 1080);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toMatchObject({ width: 2520, height: 1080 });
+  });
+
+  it("refuses shapes that are not numbers above zero, or that cross", () => {
+    setWindowSize(1920, 1080);
+    expect(() => createStage(host, { fit: "expand", maxAspect: 0 })).toThrow(RangeError);
+    expect(() => createStage(host, { fit: "expand", minAspect: 3, maxAspect: 2 })).toThrow(RangeError);
+  });
+});
