@@ -10,6 +10,8 @@
 //! - turns the pointer back into logical coordinates **exactly** (the inverse of the presentation);
 //! - runs the game in **fixed steps** (60 a second by default) and draws once a frame;
 //! - saves a **screenshot** of the canvas with F12 (into `captures_dir`);
+//! - shows a game's **2.5D stage** ([`velvet_stage::Stage`]: painted cards in 3D, composited on the graphics card)
+//!   when [`Game2D::stage`] gives one, with the canvas over it only if [`HostConfig::overlay`] says so;
 //! - and runs the same game **without a window** ([`Headless`]) for tests, bots and captures.
 //!
 //! ```ignore
@@ -34,6 +36,7 @@ use std::path::PathBuf;
 pub use headless::Headless;
 pub use input::{Button, Input, InputEvent, KeyCode};
 pub use velvet_canvas;
+pub use velvet_stage;
 pub use viewport::Viewport;
 pub use window::run;
 
@@ -57,6 +60,9 @@ pub struct HostConfig {
     pub step: f32,
     /// Where F12 saves screenshots (None: F12 does nothing).
     pub captures_dir: Option<PathBuf>,
+    /// With a stage, whether the canvas is drawn over it (a game whose HUD is made of screen cards says no, and is
+    /// spared painting and sending a whole canvas every frame).
+    pub overlay: bool,
 }
 
 impl HostConfig {
@@ -73,6 +79,7 @@ impl HostConfig {
             native: true,
             step: 1.0 / 60.0,
             captures_dir: Some(PathBuf::from("captures")),
+            overlay: true,
         }
     }
 
@@ -106,6 +113,15 @@ pub trait Game2D {
 
     /// The canvas's pixels changed (the window was resized): layers drawn at the old pixels are stale.
     fn pixels_changed(&mut self, _canvas: &Canvas) {}
+
+    /// The game's 2.5D stage, if it has one: drawn every frame under the canvas (or alone, see
+    /// [`HostConfig::overlay`]).
+    fn stage(&self) -> Option<&velvet_stage::Stage> {
+        None
+    }
+
+    /// The stage's pixels changed (the window was resized): pictures painted for the old size may be repainted.
+    fn stage_pixels_changed(&mut self, _width: u32, _height: u32) {}
 
     /// True to close the game.
     fn quit(&self) -> bool {

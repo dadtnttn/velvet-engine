@@ -1,0 +1,14 @@
+[package]
+name = "velvet-stage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "2.5D stages for Velvet Engine: pictures painted with velvet-canvas, placed in 3D as flat cards, seen through a perspective camera, lit by a few lights and composited on the graphics card; screen cards for the HUD; picking from the pointer; and an offscreen renderer for tests and captures"
+
+[dependencies]
+velvet-canvas = { path = "../velvet-canvas" }
+velvet-math = { path = "../velvet-math" }
+wgpu = { workspace = true }
+bytemuck = { workspace = true }
+pollster = { workspace = true }
+image = { workspace = true }

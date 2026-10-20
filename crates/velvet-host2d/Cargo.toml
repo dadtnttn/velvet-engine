@@ -3,10 +3,12 @@ name = "velvet-host2d"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The host of a Velvet Engine 2D game: a window that shows a velvet-canvas letterboxed at 16:9, drawn at the window's own pixels, with input in the game's logical coordinates, fixed-step updates, screenshots, and a windowless runner for tests and QA"
+description = "The host of a Velvet Engine 2D game: a window that shows a velvet-canvas letterboxed at 16:9, drawn at the window's own pixels, with input in the game's logical coordinates, fixed-step updates, screenshots, a 2.5D stage (velvet-stage) under or instead of the canvas, and a windowless runner for tests and QA"
 
 [dependencies]
 velvet-canvas = { path = "../velvet-canvas" }
+velvet-stage = { path = "../velvet-stage" }
 winit = { workspace = true }
 wgpu = { workspace = true }
 pollster = { workspace = true }
+image = { workspace = true }

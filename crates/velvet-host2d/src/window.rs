@@ -1,10 +1,11 @@
-//! The window: winit for the window and its events, wgpu to show the canvas letterboxed.
+//! The window: winit for the window and its events, wgpu to show the canvas (or the stage) letterboxed.
 
 use std::error::Error;
 use std::sync::Arc;
 use std::time::Instant;
 
 use velvet_canvas::{Canvas, Point};
+use velvet_stage::{Stage, StageRenderer};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -71,6 +72,9 @@ impl<G: Game2D> App<G> {
                 self.canvas.resize_pixels(pw, ph);
                 self.game.pixels_changed(&self.canvas);
             }
+            if self.game.stage().is_some() {
+                self.game.stage_pixels_changed(v.width, v.height);
+            }
         }
     }
 
@@ -94,20 +98,43 @@ impl<G: Game2D> App<G> {
         let Some(running) = self.running.as_mut() else { return };
         // A minimised window shows nothing: nothing is drawn nor sent to the graphics card.
         let Some(viewport) = running.viewport else { return };
-        self.game.draw(&mut self.canvas);
-        if let Err(e) = running.presenter.present(&self.canvas, &viewport) {
+        let staged = self.game.stage().is_some();
+        if !staged || self.config.overlay {
+            self.game.draw(&mut self.canvas);
+        }
+        let shown = match self.game.stage() {
+            Some(stage) => running.presenter.present_stage(stage, self.config.overlay.then_some(&self.canvas), &viewport),
+            None => running.presenter.present(&self.canvas, &viewport),
+        };
+        if let Err(e) = shown {
             eprintln!("[velvet-host2d] frame not shown: {e}");
         }
         self.frames += 1;
-        if let Some((after, path)) = &self.capture_after {
-            if self.frames >= *after {
-                match self.canvas.save_png(path) {
-                    Ok(()) => eprintln!("[velvet-host2d] {} after {} frames ({}×{} pixels)", path.display(), self.frames, self.canvas.pixel_width(), self.canvas.pixel_height()),
+        if let Some((after, path)) = self.capture_after.clone() {
+            if self.frames >= after {
+                match self.save_picture(&path) {
+                    Ok((w, h)) => eprintln!("[velvet-host2d] {} after {} frames ({w}×{h} pixels)", path.display(), self.frames),
                     Err(e) => eprintln!("[velvet-host2d] the capture failed: {e}"),
                 }
                 event_loop.exit();
             }
         }
+    }
+
+    /// Saves what the window shows: the stage (drawn again at the picture's pixels, or those of
+    /// VELVET_RENDER_SIZE), or the canvas.
+    fn save_picture(&mut self, path: &std::path::Path) -> Result<(u32, u32), String> {
+        if self.game.stage().is_none() {
+            self.canvas.save_png(path)?;
+            return Ok((self.canvas.pixel_width(), self.canvas.pixel_height()));
+        }
+        let running = self.running.as_mut().ok_or("no window")?;
+        let viewport = running.viewport.ok_or("a minimised window")?;
+        let (w, h) = self.config.canvas_pixels(viewport.width, viewport.height);
+        let stage = self.game.stage().ok_or("no stage")?;
+        let pixels = running.presenter.capture_stage(stage, w, h);
+        image::save_buffer(path, &pixels, w, h, image::ColorType::Rgba8).map_err(|e| e.to_string())?;
+        Ok((w, h))
     }
 
     fn pointer_to(&mut self, x: f64, y: f64) {
@@ -152,15 +179,15 @@ impl<G: Game2D> App<G> {
         }
     }
 
-    fn screenshot(&self) {
-        let Some(dir) = &self.config.captures_dir else { return };
-        if std::fs::create_dir_all(dir).is_err() {
+    fn screenshot(&mut self) {
+        let Some(dir) = self.config.captures_dir.clone() else { return };
+        if std::fs::create_dir_all(&dir).is_err() {
             return;
         }
         let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
         let path = dir.join(format!("captura-{stamp}.png"));
-        match self.canvas.save_png(&path) {
-            Ok(()) => eprintln!("[velvet-host2d] {}", path.display()),
+        match self.save_picture(&path) {
+            Ok(_) => eprintln!("[velvet-host2d] {}", path.display()),
             Err(e) => eprintln!("[velvet-host2d] the screenshot failed: {e}"),
         }
     }
@@ -267,6 +294,9 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 @fragment fn fs_main(v: Vertex) -> @location(0) vec4<f32> {
     return vec4<f32>(textureSample(source, filtering, v.uv).rgb, 1.0);
 }
+@fragment fn fs_overlay(v: Vertex) -> @location(0) vec4<f32> {
+    return textureSample(source, filtering, v.uv);
+}
 "#;
 
 /// Shows a canvas in the window.
@@ -280,6 +310,11 @@ struct Presenter {
     linear: wgpu::Sampler,
     nearest: wgpu::Sampler,
     source: Option<Source>,
+    /// The canvas laid over a stage (premultiplied).
+    overlay: wgpu::RenderPipeline,
+    /// The stage's renderer for the window, and one for captures (another texture format).
+    stage: Option<StageRenderer>,
+    capture: Option<StageRenderer>,
 }
 
 /// The canvas's texture, and its bindings with each sampler.
@@ -356,22 +391,26 @@ impl Presenter {
         });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("velvet-host2d"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("velvet-host2d"), bind_group_layouts: &[&layout], push_constant_ranges: &[] });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("velvet-host2d"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_main"), compilation_options: Default::default(), buffers: &[] },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState { format, blend: None, write_mask: wgpu::ColorWrites::ALL })],
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
+        let make = |entry: &str, blend: Option<wgpu::BlendState>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("velvet-host2d"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs_main"), compilation_options: Default::default(), buffers: &[] },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })],
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let pipeline = make("fs_main", None);
+        let overlay = make("fs_overlay", Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
         let sampler = |filter| {
             device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("velvet-host2d"),
@@ -384,7 +423,7 @@ impl Presenter {
         };
         let linear = sampler(wgpu::FilterMode::Linear);
         let nearest = sampler(wgpu::FilterMode::Nearest);
-        Ok(Presenter { surface, device, queue, config, layout, pipeline, linear, nearest, source: None })
+        Ok(Presenter { surface, device, queue, config, layout, pipeline, linear, nearest, source: None, overlay, stage: None, capture: None })
     }
 
     fn resize(&mut self, width: u32, height: u32) {
@@ -471,5 +510,58 @@ impl Presenter {
         // The upload's staging memory is freed now rather than when the next frame comes.
         let _ = self.device.poll(wgpu::Maintain::Poll);
         Ok(())
+    }
+
+    /// Shows a stage, and the canvas over it if given.
+    fn present_stage(&mut self, stage: &Stage, overlay: Option<&Canvas>, viewport: &Viewport) -> Result<(), String> {
+        if let Some(canvas) = overlay {
+            let size = (canvas.pixel_width(), canvas.pixel_height());
+            self.source(size);
+            let source = self.source.as_ref().expect("made above");
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo { texture: &source.texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                canvas.pixels(),
+                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(size.0 * 4), rows_per_image: Some(size.1) },
+                wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
+            );
+        }
+        let frame = match self.surface.get_current_texture() {
+            Ok(frame) => frame,
+            Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
+                self.surface.configure(&self.device, &self.config);
+                return Ok(());
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+        let view = frame.texture.create_view(&Default::default());
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("velvet-host2d stage") });
+        let format = self.config.format;
+        let renderer = self.stage.get_or_insert_with(|| StageRenderer::new(&self.device, &self.queue, format, 4));
+        let rect = [viewport.x as f32, viewport.y as f32, viewport.width as f32, viewport.height as f32];
+        renderer.render(&self.device, &self.queue, &mut encoder, &view, format, (self.config.width, self.config.height), rect, stage);
+        if let (Some(canvas), Some(source)) = (overlay, self.source.as_ref()) {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("velvet-host2d overlay"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            let same = (canvas.pixel_width(), canvas.pixel_height()) == (viewport.width, viewport.height);
+            pass.set_pipeline(&self.overlay);
+            pass.set_bind_group(0, if same { &source.exact } else { &source.smooth }, &[]);
+            pass.set_viewport(rect[0], rect[1], rect[2], rect[3], 0.0, 1.0);
+            pass.draw(0..3, 0..1);
+        }
+        self.queue.submit(Some(encoder.finish()));
+        frame.present();
+        let _ = self.device.poll(wgpu::Maintain::Poll);
+        Ok(())
+    }
+
+    /// The stage drawn again at a size and read back (sRGB RGBA), for screenshots and captures.
+    fn capture_stage(&mut self, stage: &Stage, width: u32, height: u32) -> Vec<u8> {
+        let renderer = self.capture.get_or_insert_with(|| StageRenderer::new(&self.device, &self.queue, wgpu::TextureFormat::Rgba8UnormSrgb, 4));
+        velvet_stage::render_rgba(&self.device, &self.queue, renderer, stage, width, height)
     }
 }

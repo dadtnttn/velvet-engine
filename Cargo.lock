@@ -5730,8 +5730,10 @@ dependencies = [
 name = "velvet-host2d"
 version = "0.3.0"
 dependencies = [
+ "image",
  "pollster",
  "velvet-canvas",
+ "velvet-stage",
  "wgpu",
  "winit",
 ]
@@ -6147,6 +6149,18 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "velvet-stage"
+version = "0.3.0"
+dependencies = [
+ "bytemuck",
+ "image",
+ "pollster",
+ "velvet-canvas",
+ "velvet-math",
+ "wgpu",
 ]
 
 [[package]]

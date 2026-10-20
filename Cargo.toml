@@ -5,6 +5,7 @@ members = [
     "crates/velvet-desk",
     "crates/velvet-host2d",
     "crates/velvet-sfx",
+    "crates/velvet-stage",
     "crates/velvet-dungeon",
     "crates/velvet-math",
     "crates/velvet-time",
