@@ -30,7 +30,7 @@ mod path;
 #[cfg(feature = "svg")]
 mod svg;
 
-pub use canvas::{Canvas, Fill, StrokeStyle};
+pub use canvas::{Blend, Canvas, Fill, StrokeStyle};
 pub use color::Color;
 pub use font::{Align, Font, FontError, TextStyle};
 pub use geometry::{Point, Rect};

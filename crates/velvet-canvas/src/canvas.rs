@@ -17,6 +17,40 @@ use crate::geometry::{Point, Rect};
 use crate::image::{Fit, Image};
 use crate::path::Path;
 
+/// How what is drawn next mixes with what is already there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Blend {
+    /// Over, by its opacity.
+    #[default]
+    Normal,
+    /// Darkens like ink soaking into paper.
+    Multiply,
+    /// Lightens like light on a surface.
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    /// Adds (glows).
+    Add,
+    /// Takes away what is under it, by its opacity (rubs out, tears edges).
+    Erase,
+}
+
+impl Blend {
+    fn mode(self) -> BlendMode {
+        match self {
+            Blend::Normal => BlendMode::SourceOver,
+            Blend::Multiply => BlendMode::Multiply,
+            Blend::Screen => BlendMode::Screen,
+            Blend::Overlay => BlendMode::Overlay,
+            Blend::Darken => BlendMode::Darken,
+            Blend::Lighten => BlendMode::Lighten,
+            Blend::Add => BlendMode::Plus,
+            Blend::Erase => BlendMode::DestinationOut,
+        }
+    }
+}
+
 /// How a shape is filled: one colour, or a gradient between colour stops (positions from 0 to 1).
 #[derive(Debug, Clone)]
 pub enum Fill {
@@ -64,6 +98,7 @@ struct State {
     transform: Transform,
     clip: Option<Arc<Mask>>,
     opacity: f32,
+    blend: Blend,
 }
 
 /// A blurred shadow already made: its shape and blur in pixels, and its colour.
@@ -114,7 +149,7 @@ impl Canvas {
             height,
             k,
             pixmap,
-            state: State { transform: Transform::identity(), clip: None, opacity: 1.0 },
+            state: State { transform: Transform::identity(), clip: None, opacity: 1.0, blend: Blend::Normal },
             saved: Vec::new(),
             shadows: HashMap::new(),
         }
@@ -181,7 +216,7 @@ impl Canvas {
 
     // ---- state ------------------------------------------------------------------------------------------------------
 
-    /// Keeps the transform, the clip and the opacity, to bring them back with `restore`.
+    /// Keeps the transform, the clip, the opacity and the blend, to bring them back with `restore`.
     pub fn save(&mut self) {
         self.saved.push(self.state.clone());
     }
@@ -209,6 +244,11 @@ impl Canvas {
     /// Multiplies the opacity of what is drawn next.
     pub fn multiply_opacity(&mut self, factor: f32) {
         self.state.opacity *= factor.clamp(0.0, 1.0);
+    }
+
+    /// How what is drawn next (shapes, text, images, layers) mixes with what is there, until `restore`.
+    pub fn set_blend(&mut self, blend: Blend) {
+        self.state.blend = blend;
     }
 
     /// Draws only inside a rectangle (inside the current clip too) until `restore`.
@@ -417,6 +457,34 @@ impl Canvas {
         width
     }
 
+    /// Draws a line of text along a circle, centred at `angle` (degrees, 0 at the top, clockwise), its baseline on the
+    /// circle. Over the top (`clockwise`) the letters stand outwards and read left to right; along the bottom (not
+    /// `clockwise`) they hang inwards and read left to right too: the two halves of a seal's ring.
+    pub fn text_on_arc(&mut self, text: &str, center: Point, radius: f32, angle: f32, clockwise: bool, style: &TextStyle) {
+        let radius = radius.max(1.0);
+        let letters: Vec<(String, f32)> = text.chars().map(|c| {
+            let s = c.to_string();
+            let w = style.measure(&s) + style.letter_spacing;
+            (s, w)
+        }).collect();
+        let total: f32 = letters.iter().map(|(_, w)| *w).sum::<f32>() - style.letter_spacing;
+        let span = total / radius;
+        let single = TextStyle { align: Align::Center, ..style.clone() };
+        let mut along = 0.0;
+        for (letter, w) in &letters {
+            let middle = (along + (w - style.letter_spacing) / 2.0) / radius;
+            along += w;
+            let theta = if clockwise { angle.to_radians() - span / 2.0 + middle } else { angle.to_radians() + span / 2.0 - middle };
+            let at = Point::new(center.x + radius * theta.sin(), center.y - radius * theta.cos());
+            self.save();
+            self.translate(at.x, at.y);
+            self.rotate(if clockwise { theta.to_degrees() } else { theta.to_degrees() - 180.0 });
+            let y = if clockwise { -single.baseline_offset() } else { -single.baseline_offset() + single.font.ascent(single.size) * 0.72 };
+            self.text(letter, 0.0, y, &single);
+            self.restore();
+        }
+    }
+
     /// Draws text wrapped to an area's width, line under line from its top, aligned inside it. Returns the height the
     /// lines took (they are not cut at the area's bottom).
     pub fn paragraph(&mut self, text: &str, area: Rect, style: &TextStyle) -> f32 {
@@ -451,7 +519,7 @@ impl Canvas {
 
     fn paint(&self, fill: &Fill) -> Option<Paint<'static>> {
         let opacity = self.state.opacity;
-        let mut paint = Paint { anti_alias: true, ..Paint::default() };
+        let mut paint = Paint { anti_alias: true, blend_mode: self.state.blend.mode(), ..Paint::default() };
         let stops = |stops: &[(f32, Color)]| -> Vec<GradientStop> {
             stops.iter().map(|(at, c)| GradientStop::new(*at, c.fade(opacity).to_skia())).collect()
         };
@@ -487,7 +555,7 @@ impl Canvas {
     }
 
     fn pixmap_paint(&self, opacity: f32) -> PixmapPaint {
-        PixmapPaint { opacity: (opacity * self.state.opacity).clamp(0.0, 1.0), blend_mode: BlendMode::SourceOver, quality: FilterQuality::Bilinear }
+        PixmapPaint { opacity: (opacity * self.state.opacity).clamp(0.0, 1.0), blend_mode: self.state.blend.mode(), quality: FilterQuality::Bilinear }
     }
 }
 
@@ -711,6 +779,36 @@ mod tests {
         let big = Image::from_rgba(400, 400, [0u8, 0, 255, 255].repeat(160_000)).unwrap();
         c.draw_image(&big, Rect::new(0.0, 40.0, 10.0, 10.0), 1.0);
         assert_eq!(c.pixel(5, 45), Some([0, 0, 255, 255]), "a big image drawn small");
+    }
+
+    #[test]
+    fn blends_multiply_erase_and_come_back_with_restore() {
+        let mut c = Canvas::new(40.0, 10.0);
+        c.fill_rect(Rect::new(0.0, 0.0, 40.0, 10.0), &Color::rgb(200, 100, 50).into());
+        c.save();
+        c.set_blend(Blend::Multiply);
+        c.fill_rect(Rect::new(0.0, 0.0, 10.0, 10.0), &Color::rgb(128, 128, 128).into());
+        c.set_blend(Blend::Erase);
+        c.fill_rect(Rect::new(10.0, 0.0, 10.0, 10.0), &Color::BLACK.into());
+        c.restore();
+        c.fill_rect(Rect::new(20.0, 0.0, 10.0, 10.0), &Color::rgb(0, 0, 255).into());
+        let multiplied = c.pixel(5, 5).unwrap();
+        assert!((multiplied[0] as i32 - 100).abs() <= 2 && (multiplied[1] as i32 - 50).abs() <= 2, "{multiplied:?}");
+        assert_eq!(c.pixel(15, 5).unwrap()[3], 0, "erased");
+        assert_eq!(c.pixel(25, 5), Some([0, 0, 255, 255]), "normal again after restore");
+    }
+
+    #[test]
+    fn text_on_an_arc_stays_on_its_half_of_the_ring() {
+        let font = test_font();
+        let mut c = Canvas::new(200.0, 200.0);
+        let style = TextStyle::new(&font, 16.0, Color::BLACK);
+        c.text_on_arc("ARRIBA", Point::new(100.0, 100.0), 70.0, 0.0, true, &style);
+        c.text_on_arc("ABAJO", Point::new(100.0, 100.0), 70.0, 180.0, false, &style);
+        let inked = |y0: u32, y1: u32| (y0..y1).any(|y| (0..200).any(|x| c.pixel(x, y).unwrap()[3] > 0));
+        assert!(inked(10, 45), "the top text sits round the top");
+        assert!(inked(150, 190), "the bottom text sits round the bottom");
+        assert!(!inked(60, 140), "nothing in the middle of the ring");
     }
 
     #[cfg(feature = "svg")]
