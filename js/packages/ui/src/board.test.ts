@@ -147,6 +147,13 @@ describe("the world transform", () => {
     expect(board.el.style.transform).toBe("translate(-2040px, -1460px) scale(2)");
   });
 
+  it("writes the pan at whole pixels of the screen with snapToPixels, and keeps the exact pan in the view", () => {
+    const board = createBoardView(stageIn(), { worldBounds: WORLD, snapToPixels: true });
+    board.pan = { x: -100.3, y: -50.6 };
+    expect(board.pan).toEqual({ x: -100.3, y: -50.6 });
+    expect(board.el.style.transform).toBe("translate(-100px, -51px) scale(1)");
+  });
+
   it("keeps the world point under the pointer when it zooms around that point", () => {
     const board = createBoardView(stageIn(), { worldBounds: WORLD });
     const point = { x: 700, y: 300 };

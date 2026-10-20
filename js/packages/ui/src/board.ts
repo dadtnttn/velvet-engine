@@ -128,6 +128,12 @@ export interface BoardOptions {
    * @throws RangeError when a side is negative, or the sides leave no room.
    */
   readonly visibleArea?: BoardInsets;
+  /**
+   * Draws the layer at whole pixels of the screen: the pan is rounded on the device's pixel grid when it is written
+   * into the transform (the view keeps the exact pan). A layer moved by part of a pixel is drawn again by the browser
+   * at every move, to keep it sharp, which makes panning a big world of items heavy. Default false.
+   */
+  readonly snapToPixels?: boolean;
 }
 
 /** A drag of an item, as the callbacks of {@link BoardView.enableDrag} see it. */
@@ -341,6 +347,8 @@ class Board implements BoardView {
 
   private readonly stage: Stage;
   private readonly bounds: WorldRect;
+  /** True when the layer is written at whole pixels of the screen (the `snapToPixels` option). */
+  private readonly snapToPixels: boolean;
   private readonly items = new Map<Element, ItemRecord>();
   private readonly listeners = new Set<BoardListener>();
   /** Stops following the stage's size. */
@@ -386,6 +394,7 @@ class Board implements BoardView {
     this.maxZoom = maxZoom;
     this.zoomLevel = initialZoom;
     this.insets = insets;
+    this.snapToPixels = options.snapToPixels ?? false;
 
     this.el = document.createElement("div");
     this.el.className = "vu-board";
@@ -713,9 +722,18 @@ class Board implements BoardView {
     };
   }
 
-  /** Writes the view into the layer's transform. */
+  /** Writes the view into the layer's transform, at whole pixels of the screen with `snapToPixels`. */
   private writeLayer(): void {
-    setStyles(this.el, { transform: `translate(${this.panX}px, ${this.panY}px) scale(${this.zoomLevel})` });
+    const x = this.snapToPixels ? this.toScreenPixel(this.panX) : this.panX;
+    const y = this.snapToPixels ? this.toScreenPixel(this.panY) : this.panY;
+    setStyles(this.el, { transform: `translate(${x}px, ${y}px) scale(${this.zoomLevel})` });
+  }
+
+  /** A logical length rounded to the device pixels that the stage is shown with. */
+  private toScreenPixel(value: number): number {
+    const { scale, devicePixelRatio } = this.stage.layout;
+    const unit = scale * devicePixelRatio;
+    return unit > 0 ? Math.round(value * unit) / unit : value;
   }
 
   /** Writes an item's place into its transform, in world units. */
