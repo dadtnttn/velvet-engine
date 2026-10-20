@@ -199,6 +199,12 @@ impl Canvas {
         self.pixmap.data()
     }
 
+    /// The pixels to change by hand (premultiplied RGBA, row after row): a filter over a whole picture, such as a
+    /// paper texture laid only where something was drawn.
+    pub fn pixels_mut(&mut self) -> &mut [u8] {
+        self.pixmap.data_mut()
+    }
+
     /// One pixel, premultiplied RGBA, or None outside the canvas.
     pub fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
         self.pixmap.pixel(x, y).map(|c| [c.red(), c.green(), c.blue(), c.alpha()])
