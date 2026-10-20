@@ -1,0 +1,12 @@
+[package]
+name = "velvet-host2d"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The host of a Velvet Engine 2D game: a window that shows a velvet-canvas letterboxed at 16:9, drawn at the window's own pixels, with input in the game's logical coordinates, fixed-step updates, screenshots, and a windowless runner for tests and QA"
+
+[dependencies]
+velvet-canvas = { path = "../velvet-canvas" }
+winit = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }

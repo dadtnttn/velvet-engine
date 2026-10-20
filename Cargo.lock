@@ -5717,6 +5717,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-host2d"
+version = "0.3.0"
+dependencies = [
+ "pollster",
+ "velvet-canvas",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "velvet-image"
 version = "0.3.0"
 dependencies = [

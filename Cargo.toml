@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/velvet-canvas",
     "crates/velvet-desk",
+    "crates/velvet-host2d",
     "crates/velvet-dungeon",
     "crates/velvet-math",
     "crates/velvet-time",
