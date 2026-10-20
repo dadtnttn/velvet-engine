@@ -1,0 +1,14 @@
+[package]
+name = "velvet-sfx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Sound effects made by code for Velvet Engine games (a stamp, paper, a chime, a buzz, coins, a click, a door) and a small player that keeps quiet without a sound device"
+
+[features]
+default = ["playback"]
+# Plays the sounds through the system's default output (rodio).
+playback = ["dep:rodio"]
+
+[dependencies]
+rodio = { version = "0.21", optional = true, default-features = false, features = ["playback"] }

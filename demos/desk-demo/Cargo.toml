@@ -10,3 +10,4 @@ description = "Velvet Engine 2D demo: papers on a desk (velvet-desk) drawn with 
 velvet-canvas = { path = "../../crates/velvet-canvas" }
 velvet-desk = { path = "../../crates/velvet-desk" }
 velvet-host2d = { path = "../../crates/velvet-host2d" }
+velvet-sfx = { path = "../../crates/velvet-sfx" }

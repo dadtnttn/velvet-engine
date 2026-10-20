@@ -14,6 +14,7 @@
 use velvet_canvas::{Align, Canvas, Color, Fill, Font, Point as CPoint, Rect as CRect, StrokeStyle, TextStyle};
 use velvet_desk::{Desk, DeskEvent, Point, Rect};
 use velvet_host2d::{Button, Game2D, Headless, HostConfig, Input, InputEvent, KeyCode};
+use velvet_sfx::{presets, Player, Sound};
 
 const FONT: &[u8] = include_bytes!("../../../crates/velvet-canvas/tests/fixtures/Nunito-ExtraBold.ttf");
 
@@ -120,11 +121,21 @@ struct Demo {
     pointer: Option<Point>,
     /// The office (the night, the window, the desk), drawn once: its gradients are the slowest thing to draw.
     office: Option<Canvas>,
+    /// The sounds, made by code, and where they play (none without a window).
+    sounds: Sounds,
+    player: Option<Player>,
+}
+
+struct Sounds {
+    paper: Sound,
+    stamp: Sound,
+    chime: Sound,
+    click: Sound,
 }
 
 impl Demo {
     fn new() -> Demo {
-        let mut demo = Demo { font: Font::from_bytes(FONT.to_vec()).expect("font"), desk: Desk::new(DESK), papers: papers(), magnifier: false, notice: None, time: 0.0, pointer: None, office: None };
+        let mut demo = Demo { font: Font::from_bytes(FONT.to_vec()).expect("font"), desk: Desk::new(DESK), papers: papers(), magnifier: false, notice: None, time: 0.0, pointer: None, office: None, sounds: Sounds { paper: presets::paper(), stamp: presets::stamp(), chime: presets::chime(), click: presets::click() }, player: None };
         demo.desk.add_zone("window", WINDOW);
         demo.lay_out();
         demo
@@ -144,6 +155,12 @@ impl Demo {
 
     fn paper(&self, id: u64) -> Option<&Paper> {
         self.papers.iter().find(|p| p.id == id)
+    }
+
+    fn sound(&mut self, which: fn(&Sounds) -> &Sound, name: &str) {
+        if let Some(player) = &mut self.player {
+            player.play(name, which(&self.sounds), 0.8, std::time::Duration::from_millis(60));
+        }
     }
 
     fn say(&mut self, text: String) {
@@ -234,7 +251,9 @@ impl Game2D for Demo {
                         self.desk.set_magnified(None);
                         continue;
                     }
-                    self.desk.pointer_down(Point::new(at.x, at.y), self.time);
+                    if let Some(DeskEvent::Picked { .. }) = self.desk.pointer_down(Point::new(at.x, at.y), self.time) {
+                        self.sound(|s| &s.paper, "paper");
+                    }
                 }
                 InputEvent::PointerDown { button: Button::Right, .. } => self.magnifier = !self.magnifier,
                 InputEvent::PointerUp { button: Button::Left, at } => match self.desk.pointer_up(Point::new(at.x, at.y), self.time) {
@@ -242,9 +261,11 @@ impl Game2D for Demo {
                         let title = self.paper(item).map(|p| p.title).unwrap_or("");
                         self.desk.remove_item(item);
                         self.say(format!("Devuelto: {}", title.to_lowercase()));
+                        self.sound(|s| &s.chime, "chime");
                     }
                     Some(DeskEvent::Clicked { item, field: Some(field), .. }) if self.magnifier => {
                         self.desk.mark_field(item, &field);
+                        self.sound(|s| &s.click, "click");
                     }
                     Some(DeskEvent::DoubleClicked { item, .. }) if !self.magnifier => self.desk.set_magnified(Some(item)),
                     _ => {}
@@ -255,6 +276,7 @@ impl Game2D for Demo {
                     if let Some(paper) = under.and_then(|id| self.papers.iter_mut().find(|p| p.id == id)) {
                         paper.stamp = Some((*key == KeyCode::KeyA, self.time));
                         paper.layer = None;
+                        self.sound(|s| &s.stamp, "stamp");
                     }
                 }
                 InputEvent::KeyDown(KeyCode::KeyN) => {
@@ -440,7 +462,9 @@ fn main() {
     }
     let mut config = HostConfig::new("Velvet · escritorio");
     config.captures_dir = Some("captures".into());
-    if let Err(e) = velvet_host2d::run(config, Demo::new()) {
+    let mut demo = Demo::new();
+    demo.player = Some(Player::new());
+    if let Err(e) = velvet_host2d::run(config, demo) {
         eprintln!("{e}");
         std::process::exit(1);
     }

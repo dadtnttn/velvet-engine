@@ -1109,6 +1109,7 @@ dependencies = [
  "velvet-canvas",
  "velvet-desk",
  "velvet-host2d",
+ "velvet-sfx",
 ]
 
 [[package]]
@@ -6128,6 +6129,13 @@ dependencies = [
  "velvet-liquid",
  "velvet-math",
  "velvet-script-vs3",
+]
+
+[[package]]
+name = "velvet-sfx"
+version = "0.3.0"
+dependencies = [
+ "rodio",
 ]
 
 [[package]]
