@@ -112,14 +112,64 @@ export function clamp01(value: number): number {
 }
 
 /**
+ * How often the browser's own pad reader is asked while it has shown no pad, in milliseconds. A browser shows a page no
+ * pad until one is used, and says so with a `gamepadconnected` event; asking it at every frame cost a few tenths of a
+ * millisecond each time for nothing. The slow read is a fallback for a browser that does not send the event.
+ */
+const IDLE_PAD_READ_MS = 1000;
+
+/** True once the browser has shown a pad (its event, or a read that found one): then the pads are read at every call. */
+let padsShown = false;
+
+/** True once the page listens for the browser's `gamepadconnected` event. */
+let watchingPads = false;
+
+/** When the browser's reader was last asked while no pad had been shown, in milliseconds. */
+let lastIdlePadRead = Number.NEGATIVE_INFINITY;
+
+/** True for a function of the browser itself, not a script's (a test's stub, or a fake of @velvet/testing). */
+function isNativeFunction(fn: (...args: never[]) => unknown): boolean {
+  try {
+    return /\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(fn));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the browser's own reader can be skipped now: no pad has been shown, and it was asked less than
+ * IDLE_PAD_READ_MS ago. The first call starts listening for the browser's connection event.
+ */
+function skipIdlePadRead(): boolean {
+  if (padsShown) return false;
+  if (!watchingPads) {
+    watchingPads = true;
+    const add: unknown = Reflect.get(globalThis, "addEventListener");
+    if (typeof add === "function") {
+      Reflect.apply(add, globalThis, ["gamepadconnected", () => {
+        padsShown = true;
+      }]);
+    }
+  }
+  const now = typeof performance === "undefined" ? Date.now() : performance.now();
+  if (now - lastIdlePadRead < IDLE_PAD_READ_MS) return true;
+  lastIdlePadRead = now;
+  return false;
+}
+
+/**
  * Reads every connected pad now. Returns an empty list where the browser has no gamepad API, or
- * where reading it fails (a page that is not in a secure context, for example).
+ * where reading it fails (a page that is not in a secure context, for example). While the browser has shown the page no
+ * pad, its reader is asked about once a second instead of at every call (see IDLE_PAD_READ_MS); a reader that is not the
+ * browser's own, such as a test's, is always asked.
  */
 export function readGamepads(): PadReading[] {
   const nav: unknown = Reflect.get(globalThis, "navigator");
   if (!isRecord(nav)) return [];
   const getGamepads: unknown = Reflect.get(nav, "getGamepads");
   if (typeof getGamepads !== "function") return [];
+  const native = isNativeFunction(getGamepads as (...args: never[]) => unknown);
+  if (native && skipIdlePadRead()) return [];
   let list: unknown;
   try {
     list = Reflect.apply(getGamepads, nav, []);
@@ -132,6 +182,7 @@ export function readGamepads(): PadReading[] {
     const reading = readPad(entry);
     if (reading !== null) readings.push(reading);
   }
+  if (native && readings.length > 0) padsShown = true;
   return readings;
 }
 
