@@ -20,7 +20,12 @@ use crate::{Game2D, HostConfig};
 pub fn run<G: Game2D + 'static>(config: HostConfig, game: G) -> Result<(), Box<dyn Error>> {
     let event_loop = EventLoop::new()?;
     let canvas = Canvas::new(config.logical_width, config.logical_height);
-    let mut app = App { config, game, canvas, input: Input::new(), running: None, last: None, behind: 0.0, error: None };
+    // QA: `VELVET_CAPTURE_AFTER=120:out.png` saves the canvas after that many frames and closes the window.
+    let capture_after = std::env::var("VELVET_CAPTURE_AFTER").ok().and_then(|v| {
+        let (frames, path) = v.split_once(':')?;
+        Some((frames.trim().parse().ok()?, std::path::PathBuf::from(path.trim())))
+    });
+    let mut app = App { config, game, canvas, input: Input::new(), running: None, last: None, behind: 0.0, error: None, frames: 0, capture_after };
     event_loop.run_app(&mut app)?;
     match app.error {
         Some(e) => Err(e.into()),
@@ -38,6 +43,10 @@ struct App<G: Game2D> {
     /// Game time not yet stepped.
     behind: f32,
     error: Option<String>,
+    /// Frames shown so far.
+    frames: u64,
+    /// After how many frames to save the canvas and close (QA).
+    capture_after: Option<(u64, std::path::PathBuf)>,
 }
 
 struct Running {
@@ -88,6 +97,16 @@ impl<G: Game2D> App<G> {
         self.game.draw(&mut self.canvas);
         if let Err(e) = running.presenter.present(&self.canvas, &viewport) {
             eprintln!("[velvet-host2d] frame not shown: {e}");
+        }
+        self.frames += 1;
+        if let Some((after, path)) = &self.capture_after {
+            if self.frames >= *after {
+                match self.canvas.save_png(path) {
+                    Ok(()) => eprintln!("[velvet-host2d] {} after {} frames ({}×{} pixels)", path.display(), self.frames, self.canvas.pixel_width(), self.canvas.pixel_height()),
+                    Err(e) => eprintln!("[velvet-host2d] the capture failed: {e}"),
+                }
+                event_loop.exit();
+            }
         }
     }
 

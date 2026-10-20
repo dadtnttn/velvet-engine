@@ -54,6 +54,7 @@ lcov.info
 !/demos/cellular-arena/
 !/demos/fx-forge/
 !/demos/ui-gallery/
+!/demos/desk-demo/
 !/demos/terraflow/
 !/demos/third-person/
 !/demos/rpg-quest-vs3/

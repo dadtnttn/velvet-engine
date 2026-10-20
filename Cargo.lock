@@ -1103,6 +1103,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "desk-demo"
+version = "0.3.0"
+dependencies = [
+ "velvet-canvas",
+ "velvet-desk",
+ "velvet-host2d",
+]
+
+[[package]]
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"

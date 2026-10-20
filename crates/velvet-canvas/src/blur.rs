@@ -1,45 +1,43 @@
-//! A box blur of premultiplied RGBA pixels, three passes each way: close to a gaussian, for soft shadows.
+//! A box blur of a one-channel mask, three passes each way: close to a gaussian, for soft shadows.
 
-/// Blurs the pixels in place with a box of `radius` pixels, three times horizontally and three times vertically.
-pub(crate) fn box_blur(data: &mut [u8], width: usize, height: usize, radius: usize) {
+/// Blurs the mask in place with a box of `radius` pixels, three times horizontally and three times vertically.
+pub(crate) fn blur_mask(mask: &mut [u8], width: usize, height: usize, radius: usize) {
     if radius == 0 || width == 0 || height == 0 {
         return;
     }
-    let mut scratch = vec![0u8; data.len()];
+    let mut line = vec![0u8; width.max(height)];
     for _ in 0..3 {
-        horizontal(data, &mut scratch, width, height, radius);
-        vertical(&scratch, data, width, height, radius);
-    }
-}
-
-fn horizontal(src: &[u8], dst: &mut [u8], width: usize, height: usize, radius: usize) {
-    let window = (2 * radius + 1) as u32;
-    for y in 0..height {
-        let row = y * width * 4;
-        for c in 0..4 {
-            let at = |x: isize| -> u32 { src[row + x.clamp(0, width as isize - 1) as usize * 4 + c] as u32 };
-            let mut sum: u32 = (-(radius as isize)..=radius as isize).map(at).sum();
-            for x in 0..width {
-                dst[row + x * 4 + c] = ((sum + window / 2) / window) as u8;
-                sum += at(x as isize + radius as isize + 1);
-                sum -= at(x as isize - radius as isize);
-            }
+        for y in 0..height {
+            let row = &mut mask[y * width..(y + 1) * width];
+            line[..width].copy_from_slice(row);
+            box_line(&line[..width], row, radius);
         }
-    }
-}
-
-fn vertical(src: &[u8], dst: &mut [u8], width: usize, height: usize, radius: usize) {
-    let window = (2 * radius + 1) as u32;
-    for x in 0..width {
-        for c in 0..4 {
-            let at = |y: isize| -> u32 { src[y.clamp(0, height as isize - 1) as usize * width * 4 + x * 4 + c] as u32 };
-            let mut sum: u32 = (-(radius as isize)..=radius as isize).map(at).sum();
+        let mut column = vec![0u8; height];
+        for x in 0..width {
             for y in 0..height {
-                dst[y * width * 4 + x * 4 + c] = ((sum + window / 2) / window) as u8;
-                sum += at(y as isize + radius as isize + 1);
-                sum -= at(y as isize - radius as isize);
+                line[y] = mask[y * width + x];
+            }
+            box_line(&line[..height], &mut column, radius);
+            for y in 0..height {
+                mask[y * width + x] = column[y];
             }
         }
+    }
+}
+
+/// One pass of a box blur along a line, the edges held.
+fn box_line(src: &[u8], dst: &mut [u8], radius: usize) {
+    let n = src.len();
+    let last = n - 1;
+    let window = (2 * radius + 1) as u32;
+    let mut sum: u32 = src[0] as u32 * (radius as u32 + 1);
+    for i in 1..=radius {
+        sum += src[i.min(last)] as u32;
+    }
+    for x in 0..n {
+        dst[x] = ((sum + window / 2) / window) as u8;
+        sum += src[(x + radius + 1).min(last)] as u32;
+        sum -= src[x.saturating_sub(radius)] as u32;
     }
 }
 
@@ -50,13 +48,19 @@ mod tests {
     #[test]
     fn a_single_dot_spreads_and_keeps_roughly_its_weight() {
         let (w, h) = (21usize, 21usize);
-        let mut data = vec![0u8; w * h * 4];
-        let centre = (10 * w + 10) * 4;
-        data[centre..centre + 4].copy_from_slice(&[255, 255, 255, 255]);
-        box_blur(&mut data, w, h, 2);
-        assert!(data[centre + 3] < 255 && data[centre + 3] > 0);
-        assert!(data[(10 * w + 13) * 4 + 3] > 0, "the dot spreads sideways");
-        let total: u32 = data.chunks(4).map(|p| p[3] as u32).sum();
+        let mut mask = vec![0u8; w * h];
+        mask[10 * w + 10] = 255;
+        blur_mask(&mut mask, w, h, 2);
+        assert!(mask[10 * w + 10] < 255 && mask[10 * w + 10] > 0);
+        assert!(mask[10 * w + 13] > 0, "the dot spreads sideways");
+        let total: u32 = mask.iter().map(|&a| a as u32).sum();
         assert!((200..=320).contains(&total), "weight {total}");
+    }
+
+    #[test]
+    fn a_full_mask_stays_full_and_edges_are_held() {
+        let mut mask = vec![255u8; 30 * 10];
+        blur_mask(&mut mask, 30, 10, 4);
+        assert!(mask.iter().all(|&a| a == 255));
     }
 }

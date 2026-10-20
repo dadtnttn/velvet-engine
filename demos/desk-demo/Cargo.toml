@@ -1,0 +1,12 @@
+[package]
+name = "desk-demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Velvet Engine 2D demo: papers on a desk (velvet-desk) drawn with velvet-canvas in a velvet-host2d window — drag, stack, magnify, compare two fields, stamp, hand back"
+
+[dependencies]
+velvet-canvas = { path = "../../crates/velvet-canvas" }
+velvet-desk = { path = "../../crates/velvet-desk" }
+velvet-host2d = { path = "../../crates/velvet-host2d" }

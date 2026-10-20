@@ -89,6 +89,7 @@ members = [
     "demos/fx-forge",
     "demos/third-person",
     "demos/ui-gallery",
+    "demos/desk-demo",
     "demos/terraflow",
 ]
 default-members = [

@@ -8,7 +8,9 @@ use tiny_skia::{
     RadialGradient, SpreadMode, Stroke, StrokeDash, Transform,
 };
 
-use crate::blur::box_blur;
+use std::collections::HashMap;
+
+use crate::blur::blur_mask;
 use crate::color::Color;
 use crate::font::{Align, TextStyle};
 use crate::geometry::{Point, Rect};
@@ -64,6 +66,16 @@ struct State {
     opacity: f32,
 }
 
+/// A blurred shadow already made: its shape and blur in pixels, and its colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct ShadowKey {
+    w: u32,
+    h: u32,
+    radius: u32,
+    blur: u32,
+    color: Color,
+}
+
 /// A canvas of a logical size, drawn at its own pixels.
 pub struct Canvas {
     width: f32,
@@ -72,6 +84,8 @@ pub struct Canvas {
     pixmap: Pixmap,
     state: State,
     saved: Vec<State>,
+    /// Shadows already blurred: a shadow of the same shape is only placed again.
+    shadows: HashMap<ShadowKey, Pixmap>,
 }
 
 impl std::fmt::Debug for Canvas {
@@ -95,13 +109,25 @@ impl Canvas {
         let (pw, ph) = (pw.max(1), ph.max(1));
         let k = (pw as f32 / width.max(1.0)).min(ph as f32 / height.max(1.0));
         let pixmap = Pixmap::new(pw, ph).expect("a canvas of at least one pixel");
-        Canvas { width, height, k, pixmap, state: State { transform: Transform::identity(), clip: None, opacity: 1.0 }, saved: Vec::new() }
+        Canvas {
+            width,
+            height,
+            k,
+            pixmap,
+            state: State { transform: Transform::identity(), clip: None, opacity: 1.0 },
+            saved: Vec::new(),
+            shadows: HashMap::new(),
+        }
     }
 
     /// A layer for this canvas: a canvas of its own of a logical size, at this canvas's pixels per logical pixel. What
     /// is drawn into it once can be drawn into this canvas many times with `draw_layer`.
     pub fn layer(&self, width: f32, height: f32) -> Canvas {
-        Canvas::with_pixels(width, height, (width * self.k).ceil() as u32, (height * self.k).ceil() as u32)
+        // The layer keeps this canvas's exact k (its pixels are rounded up around it): drawn back at scale 1 it is a
+        // plain copy, not a resampling.
+        let mut layer = Canvas::with_pixels(width, height, (width * self.k).ceil() as u32, (height * self.k).ceil() as u32);
+        layer.k = self.k;
+        layer
     }
 
     /// Changes the pixels the canvas is drawn at (the window was resized). The drawing is lost; the state is reset.
@@ -279,33 +305,34 @@ impl Canvas {
     }
 
     /// A soft shadow under a rounded rectangle: the shape moved by `offset` and blurred by about `blur` logical pixels.
+    /// The blurred shadow is made once for a shape, a blur and a colour, and placed again (turned with the transform)
+    /// the next times.
     pub fn shadow(&mut self, r: Rect, radius: f32, blur: f32, offset: Point, color: Color) {
         let t = self.to_pixels();
-        let shape = r.offset(offset.x, offset.y);
-        let area = shape.inflate(blur * 2.0 + 1.0);
-        let mut corners = [
-            tiny_skia::Point::from_xy(area.x, area.y),
-            tiny_skia::Point::from_xy(area.right(), area.y),
-            tiny_skia::Point::from_xy(area.x, area.bottom()),
-            tiny_skia::Point::from_xy(area.right(), area.bottom()),
-        ];
-        t.map_points(&mut corners);
-        let (pw, ph) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
-        let x0 = corners.iter().map(|p| p.x).fold(f32::MAX, f32::min).floor().max(0.0) as i32;
-        let y0 = corners.iter().map(|p| p.y).fold(f32::MAX, f32::min).floor().max(0.0) as i32;
-        let x1 = (corners.iter().map(|p| p.x).fold(f32::MIN, f32::max).ceil() as i32).min(pw);
-        let y1 = (corners.iter().map(|p| p.y).fold(f32::MIN, f32::max).ceil() as i32).min(ph);
-        if x1 <= x0 || y1 <= y0 {
+        let s = scale_of(&t);
+        let color = color.fade(self.state.opacity);
+        if color.a == 0 || r.w <= 0.0 || r.h <= 0.0 {
             return;
         }
-        let (w, h) = ((x1 - x0) as u32, (y1 - y0) as u32);
-        let Some(mut temp) = Pixmap::new(w, h) else { return };
-        let Some(path) = Path::round_rect(shape, radius) else { return };
-        let Some(paint) = self.paint(&Fill::Solid(color)) else { return };
-        temp.fill_path(&path.0, &paint, FillRule::Winding, t.post_translate(-x0 as f32, -y0 as f32), None);
-        let blur_px = blur * scale_of(&t);
-        box_blur(temp.data_mut(), w as usize, h as usize, (blur_px / 2.0).round().max(1.0) as usize);
-        self.pixmap.draw_pixmap(x0, y0, temp.as_ref(), &PixmapPaint::default(), Transform::identity(), self.state.clip.as_deref());
+        let pad = (blur * 2.0 + 1.0) * s;
+        let key = ShadowKey {
+            w: (r.w * s).round() as u32,
+            h: (r.h * s).round() as u32,
+            radius: (radius * s).round() as u32,
+            blur: (blur * s).round() as u32,
+            color,
+        };
+        if !self.shadows.contains_key(&key) {
+            let Some(pixmap) = blurred_shadow(key, pad) else { return };
+            if self.shadows.len() >= 48 {
+                self.shadows.clear();
+            }
+            self.shadows.insert(key, pixmap);
+        }
+        let pixmap = &self.shadows[&key];
+        let place = t.pre_translate(r.x + offset.x, r.y + offset.y).pre_scale(1.0 / s, 1.0 / s).pre_translate(-pad, -pad);
+        let paint = PixmapPaint { opacity: 1.0, blend_mode: BlendMode::SourceOver, quality: FilterQuality::Bilinear };
+        draw_pixels(&mut self.pixmap, pixmap, &paint, place, self.state.clip.as_deref());
     }
 
     // ---- pictures ---------------------------------------------------------------------------------------------------
@@ -468,11 +495,83 @@ impl Canvas {
 /// is: a layer drawn at its own size stays as sharp as when it was drawn.
 fn draw_pixels(target: &mut Pixmap, src: &Pixmap, paint: &PixmapPaint, t: Transform, mask: Option<&Mask>) {
     let only_moves = t.kx.abs() < 1e-5 && t.ky.abs() < 1e-5 && (t.sx - 1.0).abs() < 1e-4 && (t.sy - 1.0).abs() < 1e-4;
+    if only_moves && mask.is_none() && paint.opacity >= 1.0 && paint.blend_mode == BlendMode::SourceOver {
+        blend_over(target, src, t.tx.round() as i32, t.ty.round() as i32);
+        return;
+    }
     if only_moves {
         let paint = PixmapPaint { quality: FilterQuality::Nearest, ..*paint };
         target.draw_pixmap(t.tx.round() as i32, t.ty.round() as i32, src.as_ref(), &paint, Transform::identity(), mask);
     } else {
         target.draw_pixmap(0, 0, src.as_ref(), paint, t, mask);
+    }
+}
+
+/// A rounded rectangle of a shadow's size (in pixels) blurred into a pixmap, with `pad` pixels around it for the blur.
+fn blurred_shadow(key: ShadowKey, pad: f32) -> Option<Pixmap> {
+    let pad_px = pad.ceil() as u32;
+    let (w, h) = (key.w + 2 * pad_px, key.h + 2 * pad_px);
+    let mut mask = Mask::new(w, h)?;
+    let path = Path::round_rect(Rect::new(pad, pad, key.w as f32, key.h as f32), key.radius as f32)?;
+    mask.fill_path(&path.0, FillRule::Winding, true, Transform::identity());
+    let mut alpha = mask.data().to_vec();
+    blur_mask(&mut alpha, w as usize, h as usize, (key.blur as f32 / 2.0).round().max(1.0) as usize);
+    let mut pixmap = Pixmap::new(w, h)?;
+    let c = key.color;
+    let data = pixmap.data_mut();
+    for (i, a) in alpha.into_iter().enumerate() {
+        let a = a as u32 * c.a as u32 / 255;
+        data[i * 4] = (c.r as u32 * a / 255) as u8;
+        data[i * 4 + 1] = (c.g as u32 * a / 255) as u8;
+        data[i * 4 + 2] = (c.b as u32 * a / 255) as u8;
+        data[i * 4 + 3] = a as u8;
+    }
+    Some(pixmap)
+}
+
+/// Lays premultiplied pixels over others at a whole-pixel place: the plain "source over" of a copy that only moves, done
+/// row by row (a few times faster than the general path, which samples through a shader).
+fn blend_over(target: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
+    let (tw, th) = (target.width() as i32, target.height() as i32);
+    let (sw, sh) = (src.width() as i32, src.height() as i32);
+    let (x0, y0) = (x.max(0), y.max(0));
+    let (x1, y1) = ((x + sw).min(tw), (y + sh).min(th));
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+    let pixels = (x1 - x0) as usize;
+    let source = src.data();
+    let dest = target.data_mut();
+    for row in y0..y1 {
+        let s_start = (((row - y) * sw + (x0 - x)) * 4) as usize;
+        let d_start = ((row * tw + x0) * 4) as usize;
+        let s = &source[s_start..s_start + pixels * 4];
+        let d = &mut dest[d_start..d_start + pixels * 4];
+        let mut i = 0;
+        while i < pixels {
+            let a = s[i * 4 + 3];
+            if a == 255 {
+                // A run of opaque pixels is copied whole.
+                let start = i;
+                while i < pixels && s[i * 4 + 3] == 255 {
+                    i += 1;
+                }
+                d[start * 4..i * 4].copy_from_slice(&s[start * 4..i * 4]);
+            } else if a == 0 {
+                // A run of clear ones leaves the target as it is.
+                while i < pixels && s[i * 4 + 3] == 0 {
+                    i += 1;
+                }
+            } else {
+                let keep = 255 - a as u32;
+                for c in 0..4 {
+                    let x = d[i * 4 + c] as u32 * keep + 128;
+                    // x / 255, rounded, without a division.
+                    d[i * 4 + c] = s[i * 4 + c].saturating_add(((x + (x >> 8)) >> 8) as u8);
+                }
+                i += 1;
+            }
+        }
     }
 }
 
@@ -524,6 +623,31 @@ mod tests {
         assert_eq!(frame.pixel(60, 80), Some([255, 0, 0, 255]));
         assert_eq!(frame.pixel(79, 99), Some([255, 0, 0, 255]));
         assert_eq!(frame.pixel(80, 100), Some([0, 0, 0, 0]));
+    }
+
+    #[test]
+    fn a_layer_keeps_the_exact_scale_of_its_canvas() {
+        let frame = Canvas::with_pixels(1920.0, 1080.0, 2560, 1440);
+        let layer = frame.layer(584.0, 333.0);
+        assert_eq!(layer.k(), frame.k());
+        assert!(layer.pixel_width() as f32 >= 584.0 * frame.k());
+    }
+
+    #[test]
+    fn a_moved_layer_blends_like_the_general_path() {
+        let base = Canvas::new(40.0, 40.0);
+        let mut layer = base.layer(20.0, 20.0);
+        layer.fill_circle(Point::new(10.0, 10.0), 9.0, &Color::rgba(200, 40, 90, 160).into());
+        let mut fast = Canvas::new(40.0, 40.0);
+        fast.clear(Color::hex(0x336699));
+        let mut general = Canvas::new(40.0, 40.0);
+        general.clear(Color::hex(0x336699));
+        fast.draw_layer(&layer, Point::new(7.0, 9.0), 1.0, 0.0, 1.0);
+        general.clip_rect(Rect::new(0.0, 0.0, 40.0, 40.0));
+        general.draw_layer(&layer, Point::new(7.0, 9.0), 1.0, 0.0, 1.0);
+        for (a, b) in fast.pixels().iter().zip(general.pixels()) {
+            assert!((*a as i32 - *b as i32).abs() <= 2, "{a} vs {b}");
+        }
     }
 
     #[test]
