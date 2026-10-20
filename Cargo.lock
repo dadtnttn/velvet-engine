@@ -5578,6 +5578,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "velvet-desk"
+version = "0.3.0"
+
+[[package]]
 name = "velvet-desktop"
 version = "0.3.0"
 dependencies = [

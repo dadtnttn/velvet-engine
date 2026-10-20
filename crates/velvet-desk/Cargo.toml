@@ -1,0 +1,8 @@
+[package]
+name = "velvet-desk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A desk of objects for Velvet Engine 2D games: papers and tools that are picked up where they are grabbed, stacked, kept on the desk, dropped on zones, magnified, and whose named fields are marked in pairs to compare them"
+
+[dependencies]
