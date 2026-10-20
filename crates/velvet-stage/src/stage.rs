@@ -177,6 +177,13 @@ pub struct Fog {
     pub end: f32,
 }
 
+/// A version no picture of any stage has had: a renderer that drew an older stage never mistakes a new picture for
+/// one it already holds.
+fn next_version() -> u64 {
+    static VERSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    VERSION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The most lights a stage uses (the nearest to the camera's target win).
 pub const MAX_LIGHTS: usize = 16;
 
@@ -217,7 +224,6 @@ pub struct Stage {
     pictures: HashMap<PictureId, Picture>,
     next_picture: PictureId,
     next_card: CardId,
-    version: u64,
 }
 
 impl Stage {
@@ -234,7 +240,6 @@ impl Stage {
             pictures: HashMap::new(),
             next_picture: 1,
             next_card: 1,
-            version: 0,
         }
     }
 
@@ -247,15 +252,13 @@ impl Stage {
     pub fn add_picture(&mut self, canvas: Canvas) -> PictureId {
         let id = self.next_picture;
         self.next_picture += 1;
-        self.version += 1;
-        self.pictures.insert(id, Picture { canvas, version: self.version });
+        self.pictures.insert(id, Picture { canvas, version: next_version() });
         id
     }
 
     /// Paints a picture again (its cards show the new one).
     pub fn set_picture(&mut self, id: PictureId, canvas: Canvas) {
-        self.version += 1;
-        self.pictures.insert(id, Picture { canvas, version: self.version });
+        self.pictures.insert(id, Picture { canvas, version: next_version() });
     }
 
     pub fn remove_picture(&mut self, id: PictureId) {
