@@ -1,0 +1,18 @@
+[package]
+name = "velvet-canvas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "2D drawing for Velvet Engine games: anti-aliased shapes, paths, text, images and SVG on a canvas of logical size drawn at the screen's own pixels, with layers that keep what does not change"
+
+[features]
+default = ["svg"]
+# SVG drawn by code (or loaded) and rendered at the canvas's pixels, through resvg.
+svg = ["dep:resvg", "dep:usvg"]
+
+[dependencies]
+tiny-skia = "0.11"
+ab_glyph = "0.2.32"
+image = { workspace = true, features = ["webp"] }
+resvg = { version = "0.45", optional = true, default-features = false }
+usvg = { version = "0.45", optional = true, default-features = false }
