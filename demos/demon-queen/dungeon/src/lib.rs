@@ -241,6 +241,25 @@ pub fn enemy_style(definition: &str, kind: SpawnKind) -> EnemyStyle {
     }
 }
 
+/// How far round a foe looks for a walk to the Queen over a hand-made level's floors.
+const FOE_PATH_REACH: f32 = 18.0;
+/// How far from its post a foe of a hand-made level follows the Queen.
+const FOE_LEASH: f32 = 26.0;
+
+/// A foe's step to `to` (its feet at `to.y`): onto the floor there when that floor lies within a
+/// step of its feet, up or down (slopes, stairs, the rock's bumps), never off a ledge. Its feet
+/// follow the floor under its middle.
+fn foe_step(map: &Blueprint, to: Vec3) -> Option<Vec3> {
+    let reach = map.step_height().max(0.32);
+    map.capsule_floor(to, 0.4)
+        .filter(|y| (y - to.y).abs() <= reach)?;
+    let y = map
+        .surface(to.x, to.z, to.y, PLAYER_HEIGHT)
+        .filter(|y| (y - to.y).abs() <= reach)
+        .unwrap_or(to.y);
+    Some(Vec3::new(to.x, y, to.z))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EnemyIntent {
     Approach,
@@ -1954,11 +1973,7 @@ impl Dungeon {
                         actor.yaw += 13.0 * dt;
                         let p = actor.position
                             + horizontal(player - actor.position).normalize_or_zero() * (1.3 * dt);
-                        if self
-                            .map
-                            .capsule_floor(p, 0.4)
-                            .is_some_and(|y| (y - p.y).abs() < 0.32)
-                        {
+                        if let Some(p) = foe_step(&self.map, p) {
                             actor.position = p;
                         }
                     }
@@ -2159,14 +2174,25 @@ impl Dungeon {
             let delta = horizontal(player - actor.position);
             let distance = delta.length();
             // Out of its room, the Queen is only followed while she is close,
-            // in sight and on its level (into the corridor, not the dungeon).
-            if current != spawn.room
-                && !(distance < 7.0
+            // in sight and on its level (into the corridor, not the dungeon). The mine's
+            // places are lines drawn across its tunnels, not doors: there a foe follows her
+            // anywhere near its post while it sees her or she is close.
+            let followed = if self.authored.is_some() {
+                let sees = self
+                    .map
+                    .line_of_sight(actor.position + Vec3::Y, player + Vec3::Y);
+                distance < 16.0
+                    && (sees || distance < 6.0)
+                    && (actor.position.y - player.y).abs() < 2.5
+                    && horizontal(actor.position - spawn.position).length() < FOE_LEASH
+            } else {
+                distance < 7.0
                     && (actor.position.y - player.y).abs() < 1.5
                     && self
                         .map
-                        .line_of_sight(actor.position + Vec3::Y, player + Vec3::Y))
-            {
+                        .line_of_sight(actor.position + Vec3::Y, player + Vec3::Y)
+            };
+            if current != spawn.room && !followed {
                 actor.gait = combat::Gait::Idle;
                 actor.path.clear();
                 continue;
@@ -2372,11 +2398,7 @@ impl Dungeon {
                     actor.path.clear();
                     let away = -delta.normalize_or_zero();
                     let p = actor.position + away * (spawn.speed * 1.05 * dt * pace);
-                    if self
-                        .map
-                        .capsule_floor(p, 0.4)
-                        .is_some_and(|y| (y - p.y).abs() < 0.32)
-                    {
+                    if let Some(p) = foe_step(&self.map, p) {
                         actor.position = p;
                     }
                     actor.gait = combat::Gait::Run;
@@ -2414,13 +2436,20 @@ impl Dungeon {
                             EnemyStyle::Ranged => 0.42,
                             _ => 0.24,
                         };
-                        actor.path = navigation::room_path(
-                            &self.map,
-                            spawn.room,
-                            actor.position,
-                            path_target,
-                            0.44,
-                        );
+                        // over a hand-made level the floor map knows every barrel and cart: a
+                        // walk round them (straight at her when none is found)
+                        actor.path = match &self.map.floors {
+                            Some(grid) => {
+                                grid.path(actor.position, path_target, 0.4, FOE_PATH_REACH)
+                            }
+                            None => navigation::room_path(
+                                &self.map,
+                                spawn.room,
+                                actor.position,
+                                path_target,
+                                0.44,
+                            ),
+                        };
                         actor.nav_timer = refresh;
                     }
                     while actor
@@ -2487,11 +2516,7 @@ impl Dungeon {
                         p = actor.position + outward * (dt * pace).max(0.05);
                     }
                     let start = actor.position;
-                    if self
-                        .map
-                        .capsule_floor(p, 0.4)
-                        .is_some_and(|y| (y - p.y).abs() < 0.32)
-                    {
+                    if let Some(p) = foe_step(&self.map, p) {
                         actor.position = p;
                     }
                     // Walking into a wall or a corner: find another way, step
@@ -2511,11 +2536,7 @@ impl Dungeon {
                         let turn = if spawn.id % 2 == 0 { 1.0 } else { -1.0 };
                         let aside =
                             actor.position + Vec3::new(-travel.z, 0.0, travel.x) * (0.45 * turn);
-                        if self
-                            .map
-                            .capsule_floor(aside, 0.4)
-                            .is_some_and(|y| (y - aside.y).abs() < 0.32)
-                        {
+                        if let Some(aside) = foe_step(&self.map, aside) {
                             actor.position = aside;
                         }
                     }

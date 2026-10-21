@@ -17,6 +17,10 @@
 //! A floor whose ceiling is at the floor itself is a spot where something stands at body height (a
 //! thin wall, a post): no one fits there.
 
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
+use velvet_math::Vec3;
+
 /// One floor of a column.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FloorSpan {
@@ -233,7 +237,259 @@ impl FloorGrid {
     pub fn is_empty(&self) -> bool {
         self.spans.is_empty()
     }
+
+    /// A walk over the floors from `start` to `goal` (feet positions) for a body `radius` wide: A*
+    /// over the columns, eight ways round, at most a step up or down from one column to the next,
+    /// never cutting a corner, kept within `reach` metres of `start`. Returns where it turns (its
+    /// straight runs pulled tight), the last point being `goal` itself, or nothing when no walk is
+    /// found (the goal out of reach, or on no floor near it).
+    pub fn path(&self, start: Vec3, goal: Vec3, radius: f32, reach: f32) -> Vec<Vec3> {
+        let Some(from) = self.node_near(start, radius) else {
+            return Vec::new();
+        };
+        let Some(to) = self.node_near(goal, radius) else {
+            return Vec::new();
+        };
+        if from == to {
+            return vec![goal];
+        }
+        let width = self.width as usize;
+        let goal_column = (to.1 % width, to.1 / width);
+        let heuristic = |column: usize| {
+            let dx = (column % width).abs_diff(goal_column.0) as u32;
+            let dz = (column / width).abs_diff(goal_column.1) as u32;
+            10 * dx.max(dz) + 4 * dx.min(dz)
+        };
+        let window = (reach / self.cell).ceil() as usize;
+        let (sx, sz) = (from.1 % width, from.1 / width);
+        let inside = |column: usize| {
+            (column % width).abs_diff(sx) <= window && (column / width).abs_diff(sz) <= window
+        };
+        let mut fits = HashMap::new();
+        let mut best: HashMap<usize, (u32, usize)> = HashMap::new();
+        let mut open = BinaryHeap::new();
+        best.insert(from.0, (0, usize::MAX));
+        open.push(Reverse((heuristic(from.1), 0u32, from.0, from.1)));
+        let mut found = false;
+        let mut expanded = 0;
+        while let Some(Reverse((_, g, span, column))) = open.pop() {
+            if best.get(&span).is_some_and(|&(known, _)| known < g) {
+                continue;
+            }
+            if span == to.0 {
+                found = true;
+                break;
+            }
+            expanded += 1;
+            if expanded > 40_000 {
+                break;
+            }
+            let floor = self.spans[span].floor;
+            let ceiling = self.spans[span].ceiling;
+            for (dx, dz) in NEIGHBOURS {
+                let Some(next) = self.step_column(column, dx, dz) else {
+                    continue;
+                };
+                if !inside(next) {
+                    continue;
+                }
+                // a diagonal only past two open sides (no corner cut through a wall's end)
+                if dx != 0 && dz != 0 {
+                    let mut open_side = |ddx: i32, ddz: i32| {
+                        self.step_column(column, ddx, ddz)
+                            .and_then(|c| self.next_span(c, floor, ceiling))
+                            .is_some_and(|s| self.fits(s, radius, &mut fits))
+                    };
+                    if !open_side(dx, 0) || !open_side(0, dz) {
+                        continue;
+                    }
+                }
+                let Some(next_span) = self.next_span(next, floor, ceiling) else {
+                    continue;
+                };
+                if !self.fits(next_span, radius, &mut fits) {
+                    continue;
+                }
+                let rise = (self.spans[next_span].floor - floor).abs();
+                let cost = g + if dx != 0 && dz != 0 { 14 } else { 10 } + (rise * 20.0) as u32;
+                if best
+                    .get(&next_span)
+                    .is_some_and(|&(known, _)| known <= cost)
+                {
+                    continue;
+                }
+                best.insert(next_span, (cost, span));
+                open.push(Reverse((cost + heuristic(next), cost, next_span, next)));
+            }
+        }
+        if !found {
+            return Vec::new();
+        }
+        // back from the goal, then pulled tight from the start
+        let mut nodes = vec![to.0];
+        while let Some(&(_, previous)) = best.get(nodes.last().unwrap()) {
+            if previous == usize::MAX {
+                break;
+            }
+            nodes.push(previous);
+        }
+        nodes.reverse();
+        let points: Vec<Vec3> = nodes.iter().map(|&s| self.span_point(s)).collect();
+        let mut out = Vec::new();
+        let mut anchor = start;
+        let mut k = 0;
+        while k + 1 < points.len() {
+            let mut far = k + 1;
+            while far + 1 < points.len() && self.clear_walk(anchor, points[far + 1], radius) {
+                far += 1;
+            }
+            anchor = points[far];
+            out.push(anchor);
+            k = far;
+        }
+        if let Some(last) = out.last_mut() {
+            if (last.y - goal.y).abs() <= self.step && self.clear_walk(*last, goal, radius) {
+                *last = goal;
+            }
+        }
+        out
+    }
+
+    /// The column `dx`, `dz` columns over from `column`, if the grid goes that far.
+    fn step_column(&self, column: usize, dx: i32, dz: i32) -> Option<usize> {
+        let width = self.width as i32;
+        let x = (column as i32 % width) + dx;
+        let z = (column as i32 / width) + dz;
+        (x >= 0 && z >= 0 && x < width && z < self.height as i32).then(|| (z * width + x) as usize)
+    }
+
+    /// The floor of `column` one walks onto from a floor at `floor` (under `ceiling`): within a
+    /// step of it, with room for the body between the two.
+    fn next_span(&self, column: usize, floor: f32, ceiling: f32) -> Option<usize> {
+        (self.offsets[column] as usize..self.offsets[column + 1] as usize)
+            .filter(|&s| {
+                let span = &self.spans[s];
+                (span.floor - floor).abs() <= self.step
+                    && span.ceiling.min(ceiling) - span.floor.max(floor)
+                        >= crate::PLAYER_HEIGHT - 0.01
+                    && span.ceiling > span.floor
+            })
+            .max_by(|&a, &b| self.spans[a].floor.total_cmp(&self.spans[b].floor))
+    }
+
+    /// Whether a body `radius` wide fits on floor `span`: the bake already keeps its floors the
+    /// margin from walls; a wider body needs the columns round it to be floor too.
+    fn fits(&self, span: usize, radius: f32, known: &mut HashMap<usize, bool>) -> bool {
+        if let Some(&fit) = known.get(&span) {
+            return fit;
+        }
+        let rings = ((radius - self.margin) / self.cell).ceil().max(0.0) as i32;
+        let column = self.column_of(span);
+        let FloorSpan { floor, ceiling, .. } = self.spans[span];
+        let fit = (-rings..=rings).all(|dz| {
+            (-rings..=rings).all(|dx| {
+                (dx == 0 && dz == 0)
+                    || self
+                        .step_column(column, dx, dz)
+                        .and_then(|c| self.next_span(c, floor, ceiling))
+                        .is_some()
+            })
+        });
+        known.insert(span, fit);
+        fit
+    }
+
+    /// The column a floor belongs to.
+    fn column_of(&self, span: usize) -> usize {
+        self.offsets.partition_point(|&o| o as usize <= span) - 1
+    }
+
+    /// The middle of a floor, on it.
+    fn span_point(&self, span: usize) -> Vec3 {
+        let column = self.column_of(span);
+        let width = self.width as usize;
+        Vec3::new(
+            self.x0 + ((column % width) as f32 + 0.5) * self.cell,
+            self.spans[span].floor,
+            self.z0 + ((column / width) as f32 + 0.5) * self.cell,
+        )
+    }
+
+    /// The floor under feet at `p` (or the nearest one round it a body fits on), with its column.
+    fn node_near(&self, p: Vec3, radius: f32) -> Option<(usize, usize)> {
+        let mut fits = HashMap::new();
+        let (here, _, _) = self.column(p.x, p.z)?;
+        let mut best: Option<(f32, usize, usize)> = None;
+        for ring in 0..=3i32 {
+            for dz in -ring..=ring {
+                for dx in -ring..=ring {
+                    if dx.abs().max(dz.abs()) != ring {
+                        continue;
+                    }
+                    let Some(column) = self.step_column(here, dx, dz) else {
+                        continue;
+                    };
+                    for s in self.offsets[column] as usize..self.offsets[column + 1] as usize {
+                        let span = &self.spans[s];
+                        if span.floor > p.y + self.step + 0.015
+                            || span.floor < p.y - 1.0
+                            || span.ceiling - span.floor < crate::PLAYER_HEIGHT - 0.01
+                            || !self.fits(s, radius, &mut fits)
+                        {
+                            continue;
+                        }
+                        let d = (dx * dx + dz * dz) as f32 + (span.floor - p.y).abs();
+                        if best.is_none_or(|(b, _, _)| d < b) {
+                            best = Some((d, s, column));
+                        }
+                    }
+                }
+            }
+            if best.is_some() {
+                break;
+            }
+        }
+        best.map(|(_, s, c)| (s, c))
+    }
+
+    /// Whether a body walks straight from `a` to `b`: floor all along within a step from one spot
+    /// to the next, and room either side for its `radius`.
+    pub fn clear_walk(&self, a: Vec3, b: Vec3, radius: f32) -> bool {
+        let flat = Vec3::new(b.x - a.x, 0.0, b.z - a.z);
+        let length = flat.length();
+        let side = if length > 1.0e-4 {
+            Vec3::new(-flat.z / length, 0.0, flat.x / length) * (radius - self.margin).max(0.0)
+        } else {
+            Vec3::ZERO
+        };
+        let steps = (length / (self.cell * 0.5)).ceil().max(1.0) as usize;
+        [Vec3::ZERO, side, -side].iter().all(|&offset| {
+            let mut feet = a.y;
+            (1..=steps).all(|i| {
+                let p = a + (b - a) * (i as f32 / steps as f32) + offset;
+                match self.surface(p.x, p.z, feet, crate::PLAYER_HEIGHT) {
+                    Some(y) if (y - feet).abs() <= self.step => {
+                        feet = y;
+                        true
+                    }
+                    _ => false,
+                }
+            })
+        })
+    }
 }
+
+/// The eight columns round one.
+const NEIGHBOURS: [(i32, i32); 8] = [
+    (1, 0),
+    (-1, 0),
+    (0, 1),
+    (0, -1),
+    (1, 1),
+    (1, -1),
+    (-1, 1),
+    (-1, -1),
+];
 
 #[cfg(test)]
 mod tests {
@@ -326,5 +582,43 @@ mod tests {
         assert_eq!(grid.room_at(0.5, 0.2, 0.5), Some(7));
         assert_eq!(grid.room_at(0.5, -3.0, 0.5), None);
         assert!(FloorGrid::from_bytes(&bytes[..30]).is_err());
+    }
+
+    /// A room 6 m square on a 0.25 m grid with a wall across its middle, open at one end: the
+    /// walk from one side to the other goes round the wall's end, never through it.
+    #[test]
+    fn a_walk_goes_round_a_wall_not_through_it() {
+        let (w, h) = (24u32, 24u32);
+        let columns = (0..w * h)
+            .map(|i| {
+                let (x, z) = (i % w, i / w);
+                let wall = (11..=12).contains(&z) && x < 18;
+                vec![span(0.0, if wall { 0.0 } else { 4.0 }, None)]
+            })
+            .collect();
+        let grid = FloorGrid::new(0.0, 0.0, 0.25, w, h, columns);
+        let start = Vec3::new(1.0, 0.0, 1.0);
+        let goal = Vec3::new(1.0, 0.0, 5.0);
+        assert!(
+            !grid.clear_walk(start, goal, 0.4),
+            "the wall stands between"
+        );
+        let path = grid.path(start, goal, 0.4, 10.0);
+        assert!(!path.is_empty(), "a walk round the wall");
+        assert_eq!(*path.last().unwrap(), goal);
+        let mut from = start;
+        for &to in &path {
+            assert!(
+                grid.clear_walk(from, to, 0.4),
+                "{from:?} -> {to:?} is walkable"
+            );
+            from = to;
+        }
+        assert!(
+            path.iter().any(|p| p.x > 4.5),
+            "it goes round the wall's open end: {path:?}"
+        );
+        // out of reach, no walk
+        assert!(grid.path(start, goal, 0.4, 2.0).is_empty());
     }
 }

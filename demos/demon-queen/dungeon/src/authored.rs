@@ -1199,4 +1199,80 @@ mod tests {
         );
         assert!(run.materials.get("ceniza_arcana").copied().unwrap_or(0) >= 3);
     }
+
+    /// Foes walk round what stands on the floor to reach her, and their feet stay on the floor
+    /// the whole way (up and down the rock's slopes): for melee foes of the mine with something
+    /// between them and a spot of their own room, she waits there and each comes to her.
+    #[test]
+    fn foes_walk_round_things_with_their_feet_on_the_floor() {
+        use crate::Dungeon;
+        use velvet_dungeon::{controller::Input, horizontal};
+        if !available() {
+            return;
+        }
+        let base = Dungeon::mine().unwrap();
+        let grid = base.map.floors.clone().unwrap();
+        let mut tried = 0;
+        for (index, actor) in base.actors.iter().enumerate() {
+            let spawn = &base.map.spawns[actor.spawn];
+            if spawn.kind != SpawnKind::Enemy
+                || !matches!(
+                    spawn.definition.as_str(),
+                    "lurker" | "sentinel" | "bone_guard"
+                )
+            {
+                continue;
+            }
+            let home = actor.position;
+            // a spot of its room it cannot walk to straight, but can round something
+            let spot = (0..48).find_map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 16.0;
+                let r = 6.0 + (k / 16) as f32 * 1.5;
+                let at = home + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
+                let y = base.map.capsule_floor(at + Vec3::Y * 0.4, 0.28)?;
+                let at = Vec3::new(at.x, y, at.z);
+                ((y - home.y).abs() < 0.8
+                    && base.map.room_at(at) == Some(spawn.room)
+                    && !grid.clear_walk(home, at, 0.4)
+                    && !grid.path(home, at, 0.4, 18.0).is_empty())
+                .then_some(at)
+            });
+            let Some(spot) = spot else {
+                continue;
+            };
+            tried += 1;
+            let mut run = Dungeon::mine().unwrap();
+            run.controller.position = spot;
+            let mut closest = f32::MAX;
+            for frame in 0..(12 * 60) {
+                run.update(Input::default(), 1.0 / 60.0);
+                run.health = 100.0;
+                let foe = &run.actors[index];
+                let under = run
+                    .map
+                    .surface(foe.position.x, foe.position.z, foe.position.y, 1.78)
+                    .expect("a foe stands on a floor");
+                assert!(
+                    (foe.position.y - under).abs() < 0.12,
+                    "{} {index}: feet {} over a floor at {} (frame {frame})",
+                    spawn.definition,
+                    foe.position.y,
+                    under
+                );
+                closest = closest.min(horizontal(foe.position - spot).length());
+            }
+            assert!(
+                closest < 2.6,
+                "{} {index} from {home:?} reaches her at {spot:?} round what is between (closest {closest})",
+                spawn.definition
+            );
+            if tried == 4 {
+                break;
+            }
+        }
+        assert!(
+            tried >= 2,
+            "melee foes with something between them and her ({tried})"
+        );
+    }
 }
