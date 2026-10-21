@@ -14,6 +14,10 @@
 //!   battlefield; they fill the treasury, unlock war powers and pull threads of the story.
 //! - **The war powers** (`war/src/powers.rs`): what the story and the relics give her to cast in a
 //!   battle.
+//! - **The second act over the map** (`act_two_beats`): Varrak in his suit at the table, the first
+//!   Alliance line (hate and calm), Merin across the river, Medianoche found in a bank of the
+//!   Ribera and Zillah's account of it, the price of the spark, Nemi's guard, a night at the table;
+//!   each once, when the campaign has come that far.
 use serde::Deserialize;
 
 use super::*;
@@ -335,6 +339,10 @@ impl App {
             }
         }
         s.story_owners = owners;
+        // the first land across the river: an Alliance scout is brought to her
+        if taken.iter().any(|id| EAST.contains(id)) {
+            self.queue_war_scene("guerra.merin");
+        }
         for id in taken {
             let var = format!("guerra_{id}");
             let first = self.story.get(&var) == 0;
@@ -356,6 +364,43 @@ impl App {
             Some(Faction::Reina) => self.queue_war_scene("guerra.victoria_final"),
             Some(_) => self.queue_war_scene("guerra.castillo_caido"),
             None => {}
+        }
+        self.act_two_beats();
+    }
+
+    /// The second act's beats that wait on how far the campaign has come (each scene once), and
+    /// what their choices change in it.
+    fn act_two_beats(&mut self) {
+        let Some(s) = self.war_campaign.as_mut() else {
+            return;
+        };
+        let (turn, joined) = (s.turn, s.varrak_awake);
+        // Nemi's guard marches: a band more with the Queen's army
+        if self.story.get("nemi_guardia") > 0 && s.story_mark("guardia") {
+            if let Some(q) = s.armies.iter_mut().find(|a| a.id == "a-reina") {
+                if q.units.len() < wr::data::MAX_UNITS {
+                    q.units.push(wr::rules::new_unit("orcos", None));
+                }
+            }
+            s.note(
+                "La guardia de la Reina marcha con ella: una doncella, un orco y los que entrenan con ellos.",
+                wr::rules::LogKind::Good,
+            );
+        }
+        let suit = self.story.seen("guerra.consejo_traje");
+        let wins = self.story.get("guerra_victorias");
+        let mut beats = Vec::new();
+        if joined && turn >= 3 {
+            beats.push("guerra.consejo_traje");
+        }
+        if suit && joined && wins >= 2 {
+            beats.push("guerra.guardia");
+        }
+        if suit && turn >= 8 {
+            beats.push("guerra.noche_mesa");
+        }
+        for id in beats {
+            self.queue_war_scene(id);
         }
     }
 
@@ -446,6 +491,12 @@ impl App {
             Self::resync_tokens(c, s);
             c.paint_version += 1;
             self.queue_war_scene("guerra.despertar");
+            // the second people woken: what the spark costs her
+            let n = self.story.get("guerra_despertares") + 1;
+            self.story.values.insert("guerra_despertares".into(), n);
+            if n >= 2 {
+                self.queue_war_scene("guerra.precio_chispa");
+            }
         } else {
             ui_sfx::play(ui_sfx::UiSfx::Error);
         }
@@ -589,6 +640,14 @@ mod tests {
             "despertar",
             "castillo_caido",
             "victoria_final",
+            // the second act over the map
+            "consejo_traje",
+            "el_odio",
+            "merin",
+            "reliquia_medianoche",
+            "precio_chispa",
+            "guardia",
+            "noche_mesa",
         ] {
             assert!(
                 lib.find(&format!("guerra.{id}"), None).is_some(),

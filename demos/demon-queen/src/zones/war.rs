@@ -3157,6 +3157,8 @@ impl App {
         } else {
             (def, att)
         };
+        let alliance = theirs.faction == Faction::Alianza;
+        let medianoche = self.story.get("medianoche") > 0;
         let Some(w) = self.war.as_mut() else {
             return;
         };
@@ -3217,6 +3219,24 @@ impl App {
             }),
             None,
         );
+        // Medianoche, back in her hand, cuts the fear of whoever looks at it
+        if medianoche {
+            if let Some(run) = self.war.as_mut().and_then(|w| w.battle.as_mut()) {
+                for r in run.b.sim.regiments.iter_mut().filter(|r| r.side == 0) {
+                    r.morale_base = (r.morale_base + 8.0).min(100.0);
+                    r.morale = (r.morale + 8.0).min(100.0);
+                }
+                run.messages.push_front((
+                    "Medianoche: el miedo no llega a las filas de la Reina".into(),
+                    0xb48cff,
+                    0.0,
+                ));
+            }
+        }
+        // the first Alliance line in front of her
+        if alliance {
+            self.queue_war_scene("guerra.el_odio");
+        }
         self.persist_3d_state(true);
     }
 

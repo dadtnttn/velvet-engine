@@ -2554,6 +2554,111 @@ pub(super) fn capture(out: &Path) -> Result<()> {
         app.war = None;
         return Ok(());
     }
+    if std::env::args().any(|a| a == "--war-act2") {
+        // QA: the second act's scenes over the campaign, each at its first lines and at its
+        // choice (or its last line).
+        app.nature_mode = false;
+        app.village_entered = false;
+        app.castle = None;
+        let step = |app: &mut App, frames: usize| {
+            for _ in 0..frames {
+                app.tick(1.0 / 30.0);
+                app.render_frame();
+            }
+        };
+        for (k, v) in [("varrak_despierto", 1), ("consejo_1_hecho", 1), ("pista_merin", 1)] {
+            app.story.values.insert(k.into(), v);
+        }
+        app.gold = 420;
+        app.open_war_table();
+        step(&mut app, 10);
+        app.war_campaign = None;
+        app.war_hit(map_overlay::WarHit::Table(1));
+        step(&mut app, 10);
+        app.war_hit(map_overlay::WarHit::Modal(0));
+        step(&mut app, 10);
+        // whatever the campaign opened with, through
+        for _ in 0..200 {
+            if app.talk.is_none() {
+                step(&mut app, 4);
+                if app.talk.is_none() {
+                    break;
+                }
+            }
+            app.talk_confirm();
+            app.talk_confirm();
+            app.talk_pick(0);
+            step(&mut app, 2);
+        }
+        if let Some(w) = app.war.as_mut() {
+            w.scenes.clear();
+        }
+        let only = std::env::var("VELVET_WAR_ACT2").ok();
+        for id in [
+            "consejo_traje",
+            "el_odio",
+            "merin",
+            "reliquia_medianoche",
+            "precio_chispa",
+            "guardia",
+            "noche_mesa",
+        ] {
+            if only.as_deref().is_some_and(|o| !o.split(',').any(|v| v == id)) {
+                continue;
+            }
+            app.start_talk_at(&format!("guerra.{id}"));
+            step(&mut app, 24);
+            // VELVET_WAR_ACT2_STEPS: a picture after every line, to follow a scene through
+            if std::env::var_os("VELVET_WAR_ACT2_STEPS").is_some() {
+                for n in 0..40 {
+                    if app.talk.is_none() {
+                        break;
+                    }
+                    save(&mut app, out, &format!("act2-{id}-s{n:02}"))?;
+                    app.talk_pick(0);
+                    app.talk_confirm();
+                    app.talk_confirm();
+                    step(&mut app, 20);
+                }
+                continue;
+            }
+            for _ in 0..3 {
+                app.talk_confirm();
+                app.talk_confirm();
+                step(&mut app, 6);
+            }
+            step(&mut app, 30);
+            save(&mut app, out, &format!("act2-{id}-a"))?;
+            // on to its choice, or its end
+            for _ in 0..60 {
+                let choice = matches!(
+                    app.talk
+                        .as_ref()
+                        .map(|t| t.shown(guion::library(), &app.story)),
+                    Some(guion::Shown::Choice { .. })
+                );
+                if choice || app.talk.is_none() {
+                    break;
+                }
+                app.talk_confirm();
+                app.talk_confirm();
+                step(&mut app, 3);
+            }
+            step(&mut app, 30);
+            save(&mut app, out, &format!("act2-{id}-b"))?;
+            for _ in 0..80 {
+                if app.talk.is_none() {
+                    break;
+                }
+                app.talk_pick(0);
+                app.talk_confirm();
+                app.talk_confirm();
+                step(&mut app, 3);
+            }
+            step(&mut app, 10);
+        }
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--war-story") {
         // QA: the war and the story as one: one purse, the campaign's first scene in the dialogue
         // box, the river closed, the relics' page; a battle with its relic and her powers.
