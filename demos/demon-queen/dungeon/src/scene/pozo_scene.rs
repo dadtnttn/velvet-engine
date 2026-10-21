@@ -133,7 +133,7 @@ pub(super) struct PozoArt {
     version: u64,
 }
 
-fn load_texture(
+pub(super) fn load_texture(
     renderer: &mut Wgpu3DRenderer,
     device: &wgpu::Device,
     queue: &wgpu::Queue,

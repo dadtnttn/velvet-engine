@@ -3,6 +3,8 @@ use super::{fp, hud::Hud, runes, visual, Dungeon};
 mod pozo_scene;
 #[path = "scene/tendero.rs"]
 mod tendero;
+#[path = "scene/runas_scene.rs"]
+mod runas_scene;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use velvet_dungeon::*;
 use velvet_math::{Mat4, Vec3};
@@ -799,6 +801,8 @@ pub struct Scene {
     pozo_art: Option<pozo_scene::PozoArt>,
     headframe: Option<pozo_scene::Headframe>,
     headframe_tried: bool,
+    runas: Option<runas_scene::RuneArt>,
+    runas_tried: bool,
     /// The Tendero's model (tried once).
     tendero: Option<tendero::Tendero>,
     tendero_tried: bool,
@@ -940,6 +944,8 @@ impl Scene {
             pozo_art: None,
             headframe: None,
             headframe_tried: false,
+            runas: None,
+            runas_tried: false,
             tendero: None,
             tendero_tried: false,
             mine_waters: Vec::new(),
@@ -1626,6 +1632,10 @@ impl Scene {
                 self.tendero_tried = true;
                 self.tendero = tendero::Tendero::load(renderer, device, queue);
             }
+            if !self.runas_tried {
+                self.runas_tried = true;
+                self.runas = runas_scene::RuneArt::load(renderer, device, queue);
+            }
             for npc in &mine.npcs {
                 if npc.id == "tendero" {
                     if let Some(model) = self.tendero.as_mut() {
@@ -2184,25 +2194,43 @@ impl Scene {
                                 .unwrap_or(0)
                                 .min(2)
                         });
+                        // the hand-made mine's own stones (tools/runas_blender.py)
+                        let carved = if run.authored.is_some() {
+                            self.runas.as_ref()
+                        } else {
+                            None
+                        };
                         if let Some(index) = seal_index {
-                            self.draw(
-                                &mut draws,
-                                props.runestone,
-                                a.position,
-                                Vec3::new(0.72, 1.35, 0.52),
-                                yaw,
-                                [1.0; 3],
-                            );
-                            let facing = Vec3::new(yaw.sin(), 0.0, yaw.cos());
-                            self.draw_rotating(
-                                &mut draws,
-                                self.rune_spiral,
-                                a.position + Vec3::Y * 0.80 + facing * 0.10,
-                                Vec3::new(0.30, 0.30, 0.06),
-                                yaw,
-                                run.rune_angle(index),
-                                runes::phase_tint(run.sigils[index]),
-                            );
+                            if let Some(art) = carved {
+                                art.draw_seal(
+                                    &mut draws,
+                                    a.position,
+                                    yaw,
+                                    index,
+                                    run.sigils[index],
+                                    run.rune_angle(index),
+                                    run.elapsed,
+                                );
+                            } else {
+                                self.draw(
+                                    &mut draws,
+                                    props.runestone,
+                                    a.position,
+                                    Vec3::new(0.72, 1.35, 0.52),
+                                    yaw,
+                                    [1.0; 3],
+                                );
+                                let facing = Vec3::new(yaw.sin(), 0.0, yaw.cos());
+                                self.draw_rotating(
+                                    &mut draws,
+                                    self.rune_spiral,
+                                    a.position + Vec3::Y * 0.80 + facing * 0.10,
+                                    Vec3::new(0.30, 0.30, 0.06),
+                                    yaw,
+                                    run.rune_angle(index),
+                                    runes::phase_tint(run.sigils[index]),
+                                );
+                            }
                             runes::add_light(
                                 &mut lights,
                                 a.position,
@@ -2227,6 +2255,8 @@ impl Scene {
                                     .as_ref()
                                     .is_some_and(|t| t.0.vault.is_some()))
                         {
+                        } else if let (Rest, Some(art)) = (s.kind, carved) {
+                            art.draw_font(&mut draws, a.position, yaw, run.elapsed);
                         } else if s.kind == Rest {
                             self.draw(
                                 &mut draws,
@@ -2236,6 +2266,8 @@ impl Scene {
                                 yaw,
                                 [1.0; 3],
                             );
+                        } else if let (Memory, Some(art)) = (s.kind, carved) {
+                            art.draw_memory(&mut draws, a.position, yaw, run.elapsed);
                         } else {
                             self.draw(
                                 &mut draws,
@@ -2256,7 +2288,8 @@ impl Scene {
                                 [1.0, 0.78, 0.40],
                             );
                         }
-                        if s.kind != Seal && s.kind != Rest {
+                        if s.kind != Seal && s.kind != Rest && !(s.kind == Memory && carved.is_some())
+                        {
                             let float_height = if s.kind == Exit { 1.15 } else { 1.55 };
                             self.draw(
                                 &mut draws,

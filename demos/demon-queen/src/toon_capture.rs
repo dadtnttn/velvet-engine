@@ -7516,6 +7516,54 @@ pub(super) fn capture(out: &Path) -> Result<()> {
             app.player = app.dungeon.controller.position;
             save(&mut app, out, &format!("mina-cofre-{tier}"))?;
         }
+        // The seal's stones (I and II set right, III unlit), the memory stone and the font.
+        app.dungeon.sigils = [1, 2, 0];
+        for (index, angle) in [(0usize, 1.0f32), (1, 2.0), (2, 0.0)] {
+            app.dungeon.rune_start_angle[index] = angle * std::f32::consts::FRAC_PI_2;
+            app.dungeon.rune_target_angle[index] = angle * std::f32::consts::FRAC_PI_2;
+        }
+        for view in ["runa_0", "runa_1", "runa_2", "memoria", "pila"] {
+            if !only
+                .as_deref()
+                .is_some_and(|o| o.split(',').any(|v| v == view))
+            {
+                continue;
+            }
+            let found = app.dungeon.actors.iter().position(|a| {
+                let s = &app.dungeon.map.spawns[a.spawn];
+                match view {
+                    "memoria" => s.kind == velvet_dungeon::gameplay::SpawnKind::Memory,
+                    "pila" => s.kind == velvet_dungeon::gameplay::SpawnKind::Rest,
+                    v => {
+                        s.kind == velvet_dungeon::gameplay::SpawnKind::Seal
+                            && s.definition == format!("sigil_{}", &v[5..])
+                    }
+                }
+            });
+            let Some(index) = found else {
+                continue;
+            };
+            let at = app.dungeon.actors[index].position;
+            let face = app
+                .dungeon
+                .authored
+                .as_ref()
+                .and_then(|m| m.face(app.dungeon.actors[index].spawn))
+                .unwrap_or(Vec3::Z);
+            let eye = at + face * 3.4;
+            let floor = app
+                .dungeon
+                .map
+                .capsule_floor(eye + Vec3::Y * 1.2, 0.28)
+                .unwrap_or(at.y);
+            app.dungeon.controller.position = Vec3::new(eye.x, floor, eye.z);
+            app.dungeon.controller.yaw = (face.x).atan2(face.z);
+            let target = if view == "pila" { 0.5 } else { 1.2 };
+            let rise = at.y + target - (floor + 1.62);
+            app.dungeon.controller.pitch = rise.atan2(3.4);
+            app.player = app.dungeon.controller.position;
+            save(&mut app, out, &format!("mina-{view}"))?;
+        }
         // The chart, as if she had walked it all, from the loading hall.
         app.dungeon.visited = (0..app.dungeon.map.rooms.len()).collect();
         app.dungeon.controller.position = Vec3::new(0.0, -3.0, -50.0);

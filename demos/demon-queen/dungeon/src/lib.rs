@@ -3224,6 +3224,23 @@ impl Dungeon {
         }
     }
 
+    /// Where the seal's three stones stand (the names of their places), in the hand-made mine.
+    pub fn rune_places(&self) -> Option<[String; 3]> {
+        let mine = self.authored.as_ref()?;
+        let mut places: [Option<String>; 3] = Default::default();
+        for s in self.map.spawns.iter().filter(|s| s.kind == SpawnKind::Seal) {
+            let index = s
+                .definition
+                .trim_start_matches("sigil_")
+                .parse::<usize>()
+                .unwrap_or(0)
+                .min(2);
+            places[index] = mine.names.get(s.room).cloned();
+        }
+        let [a, b, c] = places;
+        Some([a?, b?, c?])
+    }
+
     /// Back at the sanctuary she rested at (on free floor by it).
     fn back_to_sanctuary(&mut self) {
         let yaw = self.controller.yaw;
@@ -3862,9 +3879,14 @@ impl Dungeon {
                 self.message("Santuario activado. Vitalidad restaurada.");
             }
             SpawnKind::Memory => {
-                self.message(
-                    "La piedra susurra: de izquierda a derecha, ALBA, CÉNIT y OCASO. Haz girar las espirales.",
-                );
+                // in the hand-made mine it says where each stone stands, too
+                let words = match self.rune_places() {
+                    Some([a, b, c]) => format!(
+                        "La piedra susurra: la runa I al ALBA, la II al CÉNIT, la III al OCASO.                          I en {a}, II en {b}, III en {c}. Gira sus diales."
+                    ),
+                    None => "La piedra susurra: de izquierda a derecha, ALBA, CÉNIT y OCASO. Haz girar las espirales.".to_owned(),
+                };
+                self.message(words);
             }
             _ => {}
         }

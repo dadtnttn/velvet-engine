@@ -267,6 +267,7 @@ impl Hud {
                 self.chart_stage(&cx, v);
             }
             self.chart_badges(&cx, v);
+            self.chart_runes(&cx, v);
             self.chart_player(&cx, v);
             self.chart_ruler(&cx, vp, v);
             return;
@@ -862,6 +863,60 @@ impl Hud {
         }
         let c = view.at(room.center.x, room.center.y, room.center.z);
         self.centered(v, "?", c[0], c[1], 22.0, [0.75, 0.85, 0.9, 0.7]);
+    }
+
+    /// The seal's three stones, always marked (the seal is the mine's first errand): high over
+    /// their floors on a stem, a disc with the stone's numeral, amber until it is set right, then
+    /// green; its place and phase under it.
+    fn chart_runes(&self, cx: &Ctx, v: &mut Vec<Vertex>) {
+        let (view, run) = (cx.view, cx.run);
+        let places = run.rune_places();
+        for a in &run.actors {
+            let s = &run.map.spawns[a.spawn];
+            if s.kind != velvet_dungeon::gameplay::SpawnKind::Seal {
+                continue;
+            }
+            let index = s
+                .definition
+                .trim_start_matches("sigil_")
+                .parse::<usize>()
+                .unwrap_or(0)
+                .min(2);
+            let p = a.position;
+            let floor = view.at(p.x, p.y, p.z);
+            let up = view.at(p.x, p.y + BADGE * 1.6, p.z);
+            let right = run.sigils[index] as usize == index + 1;
+            let color = if right {
+                glass::GREEN
+            } else {
+                [1.0, 0.7, 0.28, 1.0]
+            };
+            glass::segment(v, floor, up, 1.6, alpha(color, 0.85));
+            glass::disc(v, floor, 3.4, color);
+            glass::disc(v, up, 17.0, color);
+            glass::disc(v, up, 14.0, [0.03, 0.025, 0.02, 0.95]);
+            self.centered(
+                v,
+                crate::runes::stone_name(index),
+                up[0],
+                up[1],
+                15.0,
+                color,
+            );
+            let place = places
+                .as_ref()
+                .map_or(String::new(), |p| format!(" · {}", p[index]));
+            let label = format!(
+                "Runa {}{place} · {}",
+                crate::runes::stone_name(index),
+                crate::runes::phase_name(run.sigils[index]).to_lowercase()
+            );
+            let w = self.width(&label, 13.0) + 16.0;
+            let (x, y) = (up[0] - w * 0.5, up[1] + 21.0);
+            glass::slant(v, [x, y, w, 21.0], 4.0, [0.0, 0.01, 0.02, 0.9]);
+            glass::slant_outline(v, [x, y, w, 21.0], 4.0, 1.0, alpha(color, 0.9));
+            self.centered(v, &label, up[0], y + 10.5, 13.0, IVORY);
+        }
     }
 
     /// Room badges float above their floors on a thin stem, nearest last.
